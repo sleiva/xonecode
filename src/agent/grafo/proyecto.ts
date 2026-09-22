@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { CompositeBackend, FilesystemBackend, LocalShellBackend } from "deepagents";
 import { RUTA_MEMORIA_INTERNA, RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
 import { sinContenidoInvalido, validarConXoneLinter, type ValidarContenido } from "./validacionXone.js";
+import { escriturasEnSerie } from "./escriturasEnSerie.js";
 import { RAIZ_SKILLS, skillsConRuta, skillsMontables, type Montaje } from "./skills.js";
 import {
   artefactoFueraDeSitio,
@@ -499,12 +500,26 @@ export function backendDeAgente(opciones: {
    * 1» en vez de «es una vista aplanada, edita el .xne», que es lo único que le deja corregir.
    * Lo destapó un test que ya existía.
    */
+/**
+   * **Y la QUINTA va entre medias, porque no contesta una pregunta: espera un turno.**
+   *
+   * `escriturasEnSerie` va por DENTRO de las guardas de ruta —que siguen contestando primero,
+   * con su comparación de texto y sin parsear nada— y por FUERA de `sinContenidoInvalido`,
+   * para que leer el fichero de antes, validarlo y escribirlo sean un solo turno. Al revés,
+   * dos validaciones podrían intercalarse entre su lectura y su escritura, que es justo la
+   * carrera que esto quita.
+   *
+   * Y por eso tampoco tiene sentido más afuera: una escritura que las guardas de ruta van a
+   * rechazar no necesita hacer cola detrás de nadie.
+   */
   const delProyecto = sinDescargasEnElProyecto(
     sinArtefactosEnElProyecto(
       sinVistasAplanadas(
-        sinContenidoInvalido(
-          exponerMemoriaDeProyecto(base),
-          opciones.validar ?? validarConXoneLinter()
+        escriturasEnSerie(
+          sinContenidoInvalido(
+            exponerMemoriaDeProyecto(base),
+            opciones.validar ?? validarConXoneLinter()
+          )
         ),
         opciones.ficheros
       )

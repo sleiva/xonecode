@@ -156,6 +156,20 @@ Y las guardas del proyecto:
   error al modelo, que puede reintentar; una excepción se lleva el turno por delante y el agente
   no reintenta. Vale para `sinVistasAplanadas`, `sinArtefactosEnElProyecto` y
   `sinDescargasEnElProyecto`. `proyecto.test.ts` lo ata contra la librería real.
+- **Dos escrituras sobre el MISMO fichero no se solapan** (`core/serieDeEscrituras.ts` puro,
+  `agent/grafo/escriturasEnSerie.ts`). `write` y `edit` son leer-modificar-escribir sobre el
+  fichero entero, así que dos a la vez se pisan y **las dos contestan que bien**: una de ellas
+  no llega al disco y no avisa nadie. Un modelo las pide a la vez en cuanto agrupa varias
+  `tool_calls` en un mensaje. **Serializar BASTA, y por dónde va**: la segunda calculó su
+  `old_string` contra un contenido que la primera ya cambió, así que el envoltorio va por
+  FUERA de quien edita — cuando le llega el turno se vuelve a leer el fichero y se vuelve a
+  buscar el ancla contra lo que hay. Si sigue, la edición es correcta; si no, el backend
+  contesta que no lo encuentra y el modelo reintenta, que es el camino que ya existe. La
+  alternativa era perder el cambio en silencio. En la pila va por DENTRO de las guardas de
+  ruta —que siguen contestando primero— y por FUERA de `sinContenidoInvalido`, para que leer,
+  validar y escribir sean un solo turno. Solo `write` y `edit`: serializar lecturas no arregla
+  nada y volvería secuencial lo que sí puede ir en paralelo. **Y se prueba por `backendDeAgente`
+  y contra el backend REAL**, porque lo que hay que comprobar es que esté CABLEADA.
 - **`/artefactos/` → `.xonecode/sesiones/<id>/artefactos/`**: escribible y **sin aprobación**, por
   eso se ANUNCIA con el evento `artefacto` (nombre, tamaño, ruta virtual — nunca contenido).
   `esRutaDeArtefacto` es una lista BLANCA de forma, no un `startsWith`. La carpeta no se crea al
