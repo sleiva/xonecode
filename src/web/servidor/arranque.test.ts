@@ -4234,20 +4234,31 @@ describe("qué hay en la máquina: el mensaje «dispositivos»", () => {
     expect(medidas).toBe(2);
   });
 
-  it("la RUTA de cada herramienta no sale por el cable: es una ruta del home del usuario", async () => {
+  it("la RUTA de adb/emulator SÍ sale por el cable —la excepción declarada, como el workspace—, y la de xcrun/devicectl no", async () => {
     const servidor = servidorDeMentira();
     montarRutas(servidor, vestibuloDePrueba(), {
       detectarDispositivos: async () => ({
         ...informe,
-        herramientas: [{ nombre: "adb", plataforma: "android", estado: "ok", ruta: "/Users/alguien/Library/Android/sdk/platform-tools/adb" }],
+        herramientas: [
+          { nombre: "adb", plataforma: "android", estado: "ok", ruta: "/Users/alguien/Library/Android/sdk/platform-tools/adb" },
+          { nombre: "emulator", plataforma: "android", estado: "ok", ruta: "/Users/alguien/Library/Android/sdk/emulator/emulator" },
+          { nombre: "xcrun", plataforma: "ios", estado: "ok", ruta: "/usr/bin/xcrun" },
+        ],
       }),
     });
     const cliente = clienteDeMentira();
     await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
     await asentar();
     const foto = cliente.recibidos.find((m) => m.clase === "dispositivos") as Extract<MensajeAlCliente, { clase: "dispositivos" }>;
-    expect(foto.informe.herramientas).toEqual([{ nombre: "adb", plataforma: "android", estado: "ok" }]);
-    expect(JSON.stringify(foto)).not.toContain("/Users/alguien");
+    expect(foto.informe.herramientas).toEqual([
+      { nombre: "adb", plataforma: "android", estado: "ok", ruta: "/Users/alguien/Library/Android/sdk/platform-tools/adb" },
+      { nombre: "emulator", plataforma: "android", estado: "ok", ruta: "/Users/alguien/Library/Android/sdk/emulator/emulator" },
+      { nombre: "xcrun", plataforma: "ios", estado: "ok" },
+    ]);
+    // La de xcrun no viaja, pero la de adb/emulator sí: solo se comprueba que NO se cuela una
+    // ruta que nunca se declaró en el informe de arriba (evita un falso verde si `xcrun`
+    // llevara la misma cuenta de usuario en otra parte del mensaje).
+    expect(JSON.stringify(foto)).not.toContain("/usr/bin/xcrun");
   });
 
   /**
@@ -4332,6 +4343,47 @@ describe("qué hay en la máquina: el mensaje «dispositivos»", () => {
       expect(fotos(cliente).at(-1)!.informe.dispositivos[0]!.verificado).toBeUndefined();
     });
 
+    /**
+     * Medido en pantalla: se abre XoneCode con el emulador YA arrancado, se entra en Ajustes →
+     * Dispositivos —lo que dispara una remedida (`useMedirAlVolver`) que VACÍA el informe
+     * antes de volver a medir— y se pulsa Verificar de inmediato, porque el dispositivo ya
+     * está a la vista. Antes de esto el click caía en el hueco: `informeDeDispositivos` era
+     * `undefined`, la petición se perdía EN SILENCIO y el botón se quedaba en
+     * «Verificando…» para siempre —ni siquiera se podía reintentar, porque el propio botón
+     * se desactiva mientras «verifica»—. Ahora espera a que la medida en vuelo termine.
+     */
+    it("si la conexión llega con una medida en vuelo, espera a que termine en vez de perderla", async () => {
+      let llamadas = 0;
+      let resolverSegunda: (() => void) | undefined;
+      const servidor = servidorDeMentira();
+      montarRutas(servidor, vestibuloDePrueba(), {
+        detectarDispositivos: () => {
+          llamadas++;
+          if (llamadas === 1) return Promise.resolve(conDispositivos);
+          return new Promise<typeof conDispositivos>((resolve) => {
+            resolverSegunda = () => resolve(conDispositivos);
+          });
+        },
+        verificarDispositivo: async () => ({ ok: true, detalle: "responde: Pixel 8" }),
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+      // Entrar en la sección: vacía el informe y deja la segunda medida EN VUELO, sin
+      // resolver todavía.
+      await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "dispositivos" });
+      await asentar();
+      // El click de Verificar cae justo en el hueco: no hay informe con el que resolver "ABC".
+      await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "conexion", id: "ABC" });
+      await asentar();
+      expect(resolverSegunda).toBeDefined();
+      resolverSegunda!();
+      await asentar();
+      await asentar();
+      const ultima = fotos(cliente).at(-1)!;
+      expect(ultima.informe.dispositivos[0]!.verificado).toMatchObject({ ok: true, detalle: "responde: Pixel 8" });
+    });
+
     it("un verificador que revienta contesta como respuesta, sin la ruta de nada", async () => {
       const { servidor } = montar(async () => {
         throw Object.assign(new Error("ENOENT: no such file or directory, open '/Users/alguien/x'"), { code: "ENOENT" });
@@ -4367,6 +4419,76 @@ describe("qué hay en la máquina: el mensaje «dispositivos»", () => {
     expect(cliente.recibidos.some((m) => m.clase === "dispositivos")).toBe(false);
     // Y pedirlo tampoco revienta: 204 y silencio.
     expect(await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "dispositivos" })).toBe(204);
+  });
+
+  it("guardar `ajustes` con las dos rutas personalizadas las persiste, recortadas", async () => {
+    const guardados: unknown[] = [];
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      detectarDispositivos: async () => informe,
+      guardarAjustesDeDispositivos: (a) => {
+        guardados.push(a);
+      },
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, {
+      clase: "dispositivos",
+      ajustes: { android: false, rutaAdb: "  /opt/adb  ", rutaEmulator: "" },
+    });
+    await asentar();
+    expect(guardados).toEqual([{ android: false, rutaAdb: "/opt/adb" }]);
+  });
+
+  it("«abrirRuta» abre la carpeta de la herramienta y NO vuelve a medir", async () => {
+    let medidas = 0;
+    const abiertas: string[] = [];
+    const conRuta = {
+      ...informe,
+      herramientas: [{ nombre: "adb" as const, plataforma: "android" as const, estado: "ok" as const, ruta: "/opt/sdk/platform-tools/adb" }],
+    };
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      detectarDispositivos: async () => {
+        medidas++;
+        return conRuta;
+      },
+      abrirCarpetaDeHerramienta: (ruta) => {
+        abiertas.push(ruta);
+      },
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    expect(medidas).toBe(1);
+
+    expect(
+      await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "dispositivos", abrirRuta: "adb" })
+    ).toBe(204);
+    await asentar();
+    expect(abiertas).toEqual(["/opt/sdk/platform-tools/adb"]);
+    // No remide: la foto sigue siendo la de la única medida de arriba.
+    expect(medidas).toBe(1);
+  });
+
+  it("«abrirRuta» de una herramienta sin ruta en la última medida no llama a nada, y responde 204 igual", async () => {
+    const abiertas: string[] = [];
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      detectarDispositivos: async () => informe, // adb en "no-encontrada": sin `ruta`.
+      abrirCarpetaDeHerramienta: (ruta) => {
+        abiertas.push(ruta);
+      },
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    expect(
+      await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "dispositivos", abrirRuta: "adb" })
+    ).toBe(204);
+    await asentar();
+    expect(abiertas).toEqual([]);
   });
 });
 

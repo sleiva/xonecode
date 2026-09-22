@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, within } from "@testing-library/react";
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { Cabecera } from "./Cabecera.js";
 
@@ -73,5 +73,50 @@ describe("Cabecera: Ajustes es de la aplicación", () => {
     cleanup();
     render(<Cabecera titulo="Escritorio" conectado />);
     expect(screen.queryByRole("button", { name: "Ajustes" })).toBeNull();
+  });
+});
+
+describe("Cabecera: el conmutador de apariencia, junto a Ajustes", () => {
+  it("sin `apariencia` o sin manejador no se pinta: un control sin dato detrás no se pinta", () => {
+    render(<Cabecera titulo="Escritorio" conectado />);
+    expect(screen.queryByRole("group", { name: "apariencia" })).toBeNull();
+    cleanup();
+    render(<Cabecera titulo="Escritorio" conectado apariencia="sistema" />);
+    expect(screen.queryByRole("group", { name: "apariencia" })).toBeNull();
+  });
+
+  it("marca la puesta con `aria-pressed` y pulsar otra la elige", () => {
+    const alCambiarApariencia = vi.fn();
+    render(
+      <Cabecera
+        titulo="Escritorio"
+        conectado
+        apariencia="oscuro"
+        alCambiarApariencia={alCambiarApariencia}
+      />
+    );
+    const grupo = screen.getByRole("group", { name: "apariencia" });
+    expect(within(grupo).getByRole("button", { name: "Oscuro" }).getAttribute("aria-pressed")).toBe(
+      "true"
+    );
+    expect(within(grupo).getByRole("button", { name: "Claro" }).getAttribute("aria-pressed")).toBe(
+      "false"
+    );
+    fireEvent.click(within(grupo).getByRole("button", { name: "Claro" }));
+    expect(alCambiarApariencia).toHaveBeenCalledWith("claro");
+  });
+
+  it("pulsar la que ya está puesta no manda nada", () => {
+    const alCambiarApariencia = vi.fn();
+    render(
+      <Cabecera
+        titulo="Escritorio"
+        conectado
+        apariencia="oscuro"
+        alCambiarApariencia={alCambiarApariencia}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Oscuro" }));
+    expect(alCambiarApariencia).not.toHaveBeenCalled();
   });
 });

@@ -882,7 +882,14 @@ export type MensajeDelCliente =
    * Vuelve a mirar qué dispositivos hay; la respuesta llega por el SSE como `dispositivos`.
    * Con `ajustes`, además los guarda antes de medir.
    */
-  | { clase: "dispositivos"; ajustes?: AjustesDeDispositivos; instalar?: NombreDeHerramienta }
+  | {
+      clase: "dispositivos";
+      ajustes?: AjustesDeDispositivos;
+      instalar?: NombreDeHerramienta;
+      /** Abre, en el explorador del sistema donde corre la consola, la carpeta que contiene
+       *  el binario de esta herramienta. No remide ni cambia ningún estado. */
+      abrirRuta?: NombreDeHerramienta;
+    }
   /** Con qué dispositivo trabaja la sesión. Viaja el ID; sin él, se quita la elección. */
   | { clase: "dispositivo"; id?: string }
   /** «Arranca este AVD.» El nombre y nada más: el servidor comprueba que esté en SU última
@@ -1018,7 +1025,15 @@ export const PLATAFORMAS_DE_DISPOSITIVO = ["android", "androidEmulador", "ios", 
 
 export type PlataformaDeDispositivo = (typeof PLATAFORMAS_DE_DISPOSITIVO)[number];
 
-export type AjustesDeDispositivos = { [K in PlataformaDeDispositivo]?: boolean };
+/**
+ * Redeclarado de `core/settings.ts`. `rutaAdb`/`rutaEmulator` son la ruta personalizada a
+ * cada binario cuando la búsqueda automática (PATH y SDK) no lo encuentra sola: la segunda
+ * excepción declarada a `sinRutas`, igual que `workspace` — viaja ENTERA, sin abreviar.
+ */
+export type AjustesDeDispositivos = { [K in PlataformaDeDispositivo]?: boolean } & {
+  rutaAdb?: string;
+  rutaEmulator?: string;
+};
 
 /** ¿Se mira este destino? Ausente = sí. La misma función que el host (`core/settings.ts`). */
 export function seMira(ajustes: AjustesDeDispositivos | undefined, plataforma: PlataformaDeDispositivo): boolean {
@@ -1047,7 +1062,12 @@ export interface Herramienta {
   estado: "ok" | "no-encontrada" | "fallo" | "no-aplica" | "desactivada";
   /** Cómo se instala si falta. `automatico` = xonecode puede lanzarlo él. */
   instalar?: { comando: string; automatico: boolean };
-  /** Sin `ruta`: se queda en el host, es una ruta del home del usuario. */
+  /**
+   * Dónde se encontró. **Presente solo para `adb`/`emulator`** — la excepción declarada a
+   * `sinRutas`, igual que `workspace` (viaja ENTERA, sin abreviar con `~`). Para
+   * `xcrun`/`devicectl` se queda en el host, como el resto de rutas de la máquina.
+   */
+  ruta?: string;
   detalle?: string;
 }
 

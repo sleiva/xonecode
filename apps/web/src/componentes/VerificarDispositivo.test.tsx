@@ -94,6 +94,28 @@ describe("VerificarDispositivo", () => {
   });
 
   /**
+   * **`soloDefinicion` es OTRA cosa que «apagado», y el botón muerto de antes.** Un AVD sin
+   * arrancar no tiene ningún dispositivo real al que hablar: su `id` (`avd:pixel8`) es un
+   * invento de `inventarioDeDispositivos.ts` que no existe en `informe.dispositivos` del
+   * servidor. Medido: pulsar Verificar ahí mandaba el id, el servidor no encontraba nada y
+   * CALLABA —nunca vuelve un `verificado` nuevo—, así que el botón se quedaba diciendo
+   * «Verificando…» para siempre. La regla es la contraria a `ArrancarEmulador`, que solo se
+   * ofrece EN estas filas: aquí no se ofrece.
+   */
+  it("un AVD sin arrancar (`soloDefinicion`) NO ofrece Verificar: no hay con quién hablar", () => {
+    const soloDefinicion: Dispositivo & { soloDefinicion?: true } = {
+      id: "avd:pixel8",
+      nombre: "pixel8",
+      plataforma: "android",
+      clase: "emulador",
+      estado: "apagado",
+      soloDefinicion: true,
+    };
+    render(<VerificarDispositivo dispositivo={soloDefinicion} conectado alVerificar={() => {}} />);
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  /**
    * Medido en pantalla: se arranca un simulador a mano, se verifica, y la fila queda
    * leyéndose «apagado · ✓ responde» — que parece un fallo de la ventana cuando es
    * exactamente lo que esto distingue. Se dice cuál de las dos es más vieja.

@@ -8,6 +8,17 @@
   margin-left: auto;
 }
 
+/* `ArrancarEmulador.tsx` reusa esta MISMA hoja para su propio envoltorio, así que un AVD sin
+   arrancar pinta DOS `.envoltura` seguidas en la fila —Arrancar y Verificar—, cada una con su
+   `margin-left: auto`. Con las DOS, el hueco libre se REPARTE entre los dos márgenes y los
+   botones se separan, el mismo patrón que ya se documentó en el compositor
+   (`Compositor.module.css`) para el gasto y el botón de enviar. Solo el PRIMER `.envoltura`
+   de la fila empuja al PAR entero al borde derecho; el que viene detrás se queda pegado por
+   el `gap` de `.fila`. */
+.envoltura ~ .envoltura {
+  margin-left: 0;
+}
+
 .boton {
   flex: 0 0 auto;
   padding: 2px 9px;

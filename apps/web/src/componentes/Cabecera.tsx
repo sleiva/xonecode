@@ -1,8 +1,27 @@
 import clsx from "clsx";
-import { IconBranchOutline16, IconSettingsOutline16 } from "@deepseek-ai/dsh-client-ui-primitives";
+import {
+  IconBranchOutline16,
+  IconSettingsOutline16,
+  IconFollowsystemOutline16,
+  IconLightOutline16,
+  IconDarkOutline16,
+} from "@deepseek-ai/dsh-client-ui-primitives";
 import conversacion from "../../estilos/ConversationRoot.module.css";
 import pastilla from "../../estilos/AgentPresetLabel.module.css";
+import type { Apariencia } from "../apariencia.js";
 import estilos from "./Cabecera.module.css";
+
+/*
+ * Los tres pasos de apariencia, con el icono que dice exactamente lo que hace —seguir al
+ * sistema, claro, oscuro—: los mismos tres que ofrecía la sección «Apariencia» de Ajustes
+ * antes de mudarse aquí. Un solo gesto en la barra en vez de una sección propia: es un
+ * ajuste de un clic, no una materia que necesite su propia página.
+ */
+const APARIENCIAS: readonly { id: Apariencia; etiqueta: string; Icono: typeof IconSettingsOutline16 }[] = [
+  { id: "sistema", etiqueta: "Como el sistema", Icono: IconFollowsystemOutline16 },
+  { id: "claro", etiqueta: "Claro", Icono: IconLightOutline16 },
+  { id: "oscuro", etiqueta: "Oscuro", Icono: IconDarkOutline16 },
+];
 
 /**
  * La cabecera de la sesión, con el CSS de deepseek
@@ -21,7 +40,18 @@ import estilos from "./Cabecera.module.css";
  * `<button disabled>` que el original usa para la última: mismo elemento, mismo estado,
  * misma clase `.crumbCurrent`.
  */
-export function Cabecera({ titulo, proyecto, modo, conectado, barraContraida, alAlternarBarra, alAbrirAjustes, alIrAlEscritorio }: {
+export function Cabecera({
+  titulo,
+  proyecto,
+  modo,
+  conectado,
+  barraContraida,
+  alAlternarBarra,
+  alAbrirAjustes,
+  apariencia,
+  alCambiarApariencia,
+  alIrAlEscritorio,
+}: {
   titulo: string;
   /**
    * El proyecto al que pertenece `titulo`, cuando es una sesión. Medido: la miga decía
@@ -54,6 +84,16 @@ export function Cabecera({ titulo, proyecto, modo, conectado, barraContraida, al
    * barra lateral, así que plegada no había forma de llegar. Ausente = no se ofrece.
    */
   alAbrirAjustes?: () => void;
+  /**
+   * El claro/oscuro de ESTA ventana (`apariencia.ts`). **Ausente = no se pinta el
+   * conmutador**: un control sin dato detrás es la misma mentira que una lista vacía
+   * rellenada con un placeholder. Vive junto al botón de Ajustes y no dentro de la
+   * ventana: era una sección propia ahí, y un ajuste de un solo clic no necesita una
+   * página para él solo.
+   */
+  apariencia?: Apariencia;
+  /** Cambia la apariencia. Ausente = no se pinta el conmutador (misma regla que arriba). */
+  alCambiarApariencia?: (apariencia: Apariencia) => void;
   /**
    * Volver al ESCRITORIO, con la sesión abierta detrás. **Ausente = no se ofrece**, que es
    * lo que toca cuando ya estás en él: la marca se queda como rótulo y no como un botón
@@ -175,6 +215,29 @@ export function Cabecera({ titulo, proyecto, modo, conectado, barraContraida, al
           botón de ellos para rellenar el hueco sería prometer una descarga que no pasa.
         */}
         <div className={conversacion.headerUtilities}>
+          {apariencia === undefined || alCambiarApariencia === undefined ? null : (
+            <div className={estilos.temaGrupo} role="group" aria-label="apariencia">
+              {APARIENCIAS.map(({ id, etiqueta, Icono }) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={estilos.temaBoton}
+                  // Puesto SIEMPRE, también en el que no lo está: es lo que convierte los
+                  // tres botones en un conmutador y no en tres acciones sueltas.
+                  aria-pressed={id === apariencia}
+                  data-puesto={id === apariencia ? "" : undefined}
+                  title={etiqueta}
+                  aria-label={etiqueta}
+                  onClick={() => {
+                    // Pulsar el que ya está puesto no manda nada.
+                    if (id !== apariencia) alCambiarApariencia(id);
+                  }}
+                >
+                  <Icono size={16} />
+                </button>
+              ))}
+            </div>
+          )}
           {alAbrirAjustes === undefined ? null : (
             <button
               type="button"

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { carpetaDeLaSalida, comandoDelSelector } from "./selectorDeCarpeta.js";
+import { carpetaDeLaSalida, comandoDelSelector, comandoParaAbrirCarpeta } from "./selectorDeCarpeta.js";
 
 describe("comandoDelSelector", () => {
   it("en macOS abre el diálogo del sistema", () => {
@@ -58,5 +58,35 @@ describe("carpetaDeLaSalida", () => {
     // al campo como si fuera una carpeta.
     expect(carpetaDeLaSalida("User canceled.")).toBeUndefined();
     expect(carpetaDeLaSalida("execution error: …")).toBeUndefined();
+  });
+});
+
+describe("comandoParaAbrirCarpeta", () => {
+  it("en Windows abre `explorer.exe` sobre la carpeta CONTENEDORA, con el `dirname` de Windows", () => {
+    const comando = comandoParaAbrirCarpeta("win32", "C:\\Users\\ana\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe");
+    expect(comando).toEqual({
+      programa: "explorer.exe",
+      argumentos: ["C:\\Users\\ana\\AppData\\Local\\Android\\Sdk\\platform-tools"],
+    });
+  });
+
+  it("en macOS abre `open` sobre la carpeta contenedora", () => {
+    const comando = comandoParaAbrirCarpeta("darwin", "/Users/ana/Library/Android/sdk/platform-tools/adb");
+    expect(comando).toEqual({ programa: "open", argumentos: ["/Users/ana/Library/Android/sdk/platform-tools"] });
+  });
+
+  it("en Linux, y en cualquier otro, `xdg-open`", () => {
+    expect(comandoParaAbrirCarpeta("linux", "/home/ana/Android/Sdk/platform-tools/adb")).toEqual({
+      programa: "xdg-open",
+      argumentos: ["/home/ana/Android/Sdk/platform-tools"],
+    });
+    expect(comandoParaAbrirCarpeta("aix", "/opt/adb").programa).toBe("xdg-open");
+  });
+
+  it("el `dirname` es el de la plataforma pedida, no el del sistema donde corre el test", () => {
+    // Sin esto, un `npm test` en Linux/Mac partiría una ruta de Windows con el separador
+    // equivocado (no hay ninguna barra `/` que cortar) y devolvería la ruta entera tal cual.
+    const comando = comandoParaAbrirCarpeta("win32", "C:\\Sdk\\platform-tools\\adb.exe");
+    expect(comando.argumentos[0]).toBe("C:\\Sdk\\platform-tools");
   });
 });

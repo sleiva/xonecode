@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { recetaDeEmuladorAndroid, recetaDeSimuladorIos } from "../../core/dispositivos.js";
 import { EventEmitter } from "node:events";
+import { join } from "node:path";
+import { zipSync } from "fflate";
 import {
   correrPasoDeReceta,
   PASOS_EJECUTABLES,
@@ -55,15 +57,21 @@ const ANDROID = {
 
 describe("PASOS_EJECUTABLES", () => {
   it("es una tabla CERRADA: solo lo que no se puede quedar esperando a nadie", () => {
-    // Los tres pasos de la receta de Android están, y el 1 es el que INSTALA el SDK: exigirlo
-    // en él era el círculo que lo dejaba sin botón. Lo que sigue fuera no es un paso —los
-    // `export` del `.zshrc` se fueron a `Receta.aparte`— y la receta de iOS no tiene ninguno:
-    // un `sudo` escrito en el comando fallaría siempre, y `-downloadPlatform` pide
-    // autorización en una ventana del sistema.
+    // Los tres pasos de macOS y los cinco de Windows están, y la PLATAFORMA es parte de la
+    // clave: los 1-3 de Windows (descargas) y los 1-3 de macOS (Homebrew) son acciones
+    // completamente distintas bajo el mismo número, así que sin la plataforma se pisarían en
+    // este mapa. Lo que sigue fuera no es un paso —los `export` se fueron a `Receta.aparte`—
+    // y la receta de iOS no tiene ninguno: un `sudo` escrito en el comando fallaría siempre,
+    // y `-downloadPlatform` pide autorización en una ventana del sistema.
     expect([...PASOS_EJECUTABLES.keys()].sort()).toEqual([
-      "android-emulador:1",
-      "android-emulador:2",
-      "android-emulador:3",
+      "android-emulador:darwin:1",
+      "android-emulador:darwin:2",
+      "android-emulador:darwin:3",
+      "android-emulador:win32:1",
+      "android-emulador:win32:2",
+      "android-emulador:win32:3",
+      "android-emulador:win32:4",
+      "android-emulador:win32:5",
     ]);
   });
 });
@@ -253,48 +261,74 @@ describe("correrPasoDeReceta", () => {
  * que nadie puede usar. Se comparan las DOS direcciones.
  */
 describe("la tabla y las recetas dicen lo mismo", () => {
-  /** Una máquina con todo puesto: es donde cada receta ofrece todo lo que puede ofrecer. */
-  const conTodo = [
-    recetaDeEmuladorAndroid("darwin", {
-      brew: true,
-      sdkmanager: true,
-      emulator: true,
-      jdk: true,
-      avds: ["pixel8"],
-    })!,
-    recetaDeSimuladorIos("darwin", { xcode: true, licencia: true, runtimes: ["iOS 26.0"] })!,
+  /** Una máquina con todo puesto: es donde cada receta ofrece todo lo que puede ofrecer.
+   *  Con su PLATAFORMA al lado, porque `receta.id` sola no distingue la de macOS de la de
+   *  Windows —las dos se llaman "android-emulador"— y la clave de la tabla la necesita. */
+  const conTodo: { plataforma: string; receta: ReturnType<typeof recetaDeEmuladorAndroid> }[] = [
+    {
+      plataforma: "darwin",
+      receta: recetaDeEmuladorAndroid("darwin", {
+        brew: true,
+        adb: true,
+        sdkmanager: true,
+        emulator: true,
+        jdk: true,
+        avds: ["pixel8"],
+      }),
+    },
+    {
+      plataforma: "win32",
+      receta: recetaDeEmuladorAndroid("win32", {
+        brew: false,
+        adb: true,
+        sdkmanager: true,
+        emulator: true,
+        jdk: true,
+        avds: ["pixel8"],
+      }),
+    },
+    { plataforma: "darwin", receta: recetaDeSimuladorIos("darwin", { xcode: true, licencia: true, runtimes: ["iOS 26.0"] }) },
   ];
 
   it("todo paso marcado ejecutable está en la tabla", () => {
-    for (const receta of conTodo) {
-      receta.pasos.forEach((paso, i) => {
+    for (const { plataforma, receta } of conTodo) {
+      receta!.pasos.forEach((paso, i) => {
         if (!paso.ejecutable) return;
-        expect(PASOS_EJECUTABLES.has(`${receta.id}:${i + 1}`), `${receta.id}:${i + 1}`).toBe(true);
+        const clave = `${receta!.id}:${plataforma}:${i + 1}`;
+        expect(PASOS_EJECUTABLES.has(clave), clave).toBe(true);
       });
     }
   });
 
   it("y toda entrada de la tabla es un paso que se ofrece", () => {
     for (const clave of PASOS_EJECUTABLES.keys()) {
-      const [id, numero] = clave.split(":");
-      const receta = conTodo.find((r) => r.id === id);
-      expect(receta, clave).toBeDefined();
-      expect(receta!.pasos[Number(numero) - 1]?.ejecutable, clave).toBe(true);
+      const [id, plataforma, numero] = clave.split(":");
+      const par = conTodo.find((c) => c.receta!.id === id && c.plataforma === plataforma);
+      expect(par, clave).toBeDefined();
+      expect(par!.receta!.pasos[Number(numero) - 1]?.ejecutable, clave).toBe(true);
     }
   });
 
-  /** Lo que el paso 2 PIDE a `sdkmanager`, leído en frío: sin lanzar ningún proceso. */
-  const paquetesQueSeLanzan = (): string[] =>
-    (PASOS_EJECUTABLES.get("android-emulador:2")!.invocaciones.find((i) => i.args.includes("--install"))?.args ?? [])
-      .filter((a) => a !== "--install");
+  /** Lo que un paso `tipo: "proceso"` PIDE a `sdkmanager`, leído en frío. Lanza si la clave
+   *  no es un paso de proceso: aquí siempre lo es, y un `as` a ciegas se tragaría el error. */
+  const paquetesQueSeLanzan = (clave: string): string[] => {
+    const paso = PASOS_EJECUTABLES.get(clave)!;
+    if (paso.tipo !== "proceso") throw new Error(`${clave} no es un paso de proceso`);
+    return (paso.invocaciones.find((i) => i.args.includes("--install"))?.args ?? []).filter((a) => a !== "--install");
+  };
 
-  it("y los paquetes que la ventana ENSEÑA son los que se LANZAN", () => {
+  it("y los paquetes que la ventana ENSEÑA son los que se LANZAN, en macOS y en Windows", () => {
     // La lista está escrita DOS veces —el comando que se copia, en `core/dispositivos.ts`, y
     // los `args` que se ejecutan, aquí— y nada la ataba: es la clase de regla que en este repo
     // se ha caído por vivir en dos sitios. Divergir no da error, da un botón que instala algo
     // distinto de lo que la ventana dice, que es el peor sitio donde puede mentir.
-    const mostrados = [...conTodo[0]!.pasos[1]!.comandos[0]!.matchAll(/"([^"]+)"/g)].map((m) => m[1]!);
-    expect(new Set(paquetesQueSeLanzan())).toEqual(new Set(mostrados));
+    const macOs = conTodo.find((c) => c.plataforma === "darwin" && c.receta!.id === "android-emulador")!.receta!;
+    const mostradosMac = [...macOs.pasos[1]!.comandos[0]!.matchAll(/"([^"]+)"/g)].map((m) => m[1]!);
+    expect(new Set(paquetesQueSeLanzan("android-emulador:darwin:2"))).toEqual(new Set(mostradosMac));
+
+    const windows = conTodo.find((c) => c.plataforma === "win32")!.receta!;
+    const mostradosWin = [...windows.pasos[3]!.comandos[0]!.matchAll(/"([^"]+)"/g)].map((m) => m[1]!);
+    expect(new Set(paquetesQueSeLanzan("android-emulador:win32:4"))).toEqual(new Set(mostradosWin));
   });
 
   it("y `platform-tools` está entre ellos: sin ellos el emulador no arranca", () => {
@@ -304,7 +338,8 @@ describe("la tabla y las recetas dicen lo mismo", () => {
     // `ANDROID_HOME` apuntando a la raíz CORRECTA—, y el cask `android-commandlinetools` no los
     // trae: el `adb` del PATH viene del cask aparte, que los deja fuera. Sin esta palabra los
     // tres pasos salían «hechos» y `emulator -avd pixel8` fallaba igual.
-    expect(paquetesQueSeLanzan()).toContain("platform-tools");
+    expect(paquetesQueSeLanzan("android-emulador:darwin:2")).toContain("platform-tools");
+    expect(paquetesQueSeLanzan("android-emulador:win32:4")).toContain("platform-tools");
   });
 });
 
@@ -441,5 +476,164 @@ describe("el paso 1: brew", () => {
     expect(l.hijos[0]!.matado).toBe("SIGTERM");
     l.hijos[0]!.cerrar(null);
     expect(await trabajo.terminado).toMatchObject({ estado: "cancelada" });
+  });
+});
+
+describe("los pasos de Windows", () => {
+  const LOCALAPPDATA = "C:\\Users\\yo\\AppData\\Local";
+
+  const WINDOWS = {
+    plataforma: "win32",
+    entorno: { LOCALAPPDATA, Path: "" },
+    home: "C:\\Users\\yo",
+    existe: (ruta: string) =>
+      ruta === join(LOCALAPPDATA, "Android", "Sdk", "cmdline-tools", "latest", "bin", "sdkmanager.bat") ||
+      ruta === join(LOCALAPPDATA, "Android", "Sdk", "cmdline-tools", "latest", "bin", "avdmanager.bat") ||
+      ruta === join(LOCALAPPDATA, "Android", "Sdk") ||
+      ruta === join(LOCALAPPDATA, "Android", "jdk17"),
+  };
+
+  const lanzador = () => {
+    const llamadas: { binario: string; args: string[]; env: Record<string, string | undefined> }[] = [];
+    const hijos: ReturnType<typeof hijoFalso>[] = [];
+    return {
+      llamadas,
+      hijos,
+      lanzar: (binario: string, args: string[], opciones: { env: Record<string, string | undefined> }) => {
+        llamadas.push({ binario, args, env: opciones.env });
+        const h = hijoFalso();
+        hijos.push(h);
+        return h.hijo;
+      },
+    };
+  };
+
+  describe("los pasos 4 y 5 (proceso): `.bat`, no `.exe`", () => {
+    it("el paso 4 resuelve `sdkmanager.bat` con la RUTA resuelta, el entorno puesto y la imagen x86_64", async () => {
+      const l = lanzador();
+      const lineas: string[] = [];
+      const trabajo = correrPasoDeReceta("android-emulador", 4, { ...WINDOWS, lanzar: l.lanzar, alSalirLinea: (x) => lineas.push(x) });
+      // Las licencias primero, igual que en macOS.
+      expect(l.llamadas[0]!.args).toContain("--licenses");
+      l.hijos[0]!.cerrar(0);
+      await Promise.resolve();
+      expect(l.llamadas[1]!.binario).toBe(join(LOCALAPPDATA, "Android", "Sdk", "cmdline-tools", "latest", "bin", "sdkmanager.bat"));
+      expect(l.llamadas[1]!.args.join(" ")).toContain("system-images;android-35;google_apis;x86_64");
+      expect(l.llamadas[1]!.env["ANDROID_HOME"]).toBe(join(LOCALAPPDATA, "Android", "Sdk"));
+      expect(l.llamadas[1]!.env["JAVA_HOME"]).toBe(join(LOCALAPPDATA, "Android", "jdk17"));
+      l.hijos[1]!.cerrar(0);
+      expect(await trabajo.terminado).toMatchObject({ estado: "ok" });
+    });
+
+    it("el paso 5 resuelve `avdmanager.bat` y contesta `no` al perfil de hardware", async () => {
+      const l = lanzador();
+      correrPasoDeReceta("android-emulador", 5, { ...WINDOWS, lanzar: l.lanzar });
+      expect(l.llamadas[0]!.binario).toBe(join(LOCALAPPDATA, "Android", "Sdk", "cmdline-tools", "latest", "bin", "avdmanager.bat"));
+      expect(l.hijos[0]!.escrito).toContain("no\n");
+    });
+
+    it("sin sdkmanager.bat en la máquina no se lanza nada: se dice qué falta", async () => {
+      const l = lanzador();
+      const trabajo = correrPasoDeReceta("android-emulador", 4, { ...WINDOWS, existe: () => false, lanzar: l.lanzar });
+      const r = await trabajo.terminado;
+      expect(r.estado).toBe("fallo");
+      expect(r.motivo).toMatch(/paso 3/i);
+      expect(l.llamadas).toEqual([]);
+    });
+  });
+
+  describe("los pasos 1-3 (descarga)", () => {
+    /** Un `fetch` de mentira que contesta con el `.zip` dado, sin cuerpo en streaming — cae
+     *  al camino de `arrayBuffer()`, que es el que aquí importa probar: la RESOLUCIÓN del
+     *  destino y el cableado con `correrPasoDeReceta`. El streaming en sí ya tiene su propio
+     *  test en `descargaDeHerramientas.test.ts`. */
+    const fetchDe = (zip: Uint8Array, urlsPedidas: string[]) =>
+      (async (url: string) => {
+        urlsPedidas.push(url);
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          body: null,
+          arrayBuffer: async () => zip.slice().buffer,
+        } as unknown as Response;
+      }) as unknown as typeof fetch;
+
+    it("el paso 1 descarga platform-tools y lo deja bajo Sdk, TAL CUAL trae el zip", async () => {
+      const zip = zipSync({ "platform-tools/adb.exe": new Uint8Array([1, 2, 3]) });
+      const urlsPedidas: string[] = [];
+      const escritos: { ruta: string; datos: Uint8Array }[] = [];
+      const trabajo = correrPasoDeReceta("android-emulador", 1, {
+        ...WINDOWS,
+        fetch: fetchDe(zip, urlsPedidas),
+        crearCarpeta: () => {},
+        escribir: (ruta, datos) => escritos.push({ ruta, datos }),
+      });
+      expect(await trabajo.terminado).toMatchObject({ estado: "ok" });
+      expect(urlsPedidas[0]).toContain("platform-tools-latest-windows.zip");
+      expect(escritos.map((e) => e.ruta)).toContain(join(LOCALAPPDATA, "Android", "Sdk", "platform-tools", "adb.exe"));
+    });
+
+    it("el paso 2 renombra la carpeta versionada del JDK a `jdk17`", async () => {
+      // El zip de Adoptium trae la versión en el nombre de su carpeta: sin renombrar, la
+      // detección (`jdkDeLaMaquina`) nunca encontraría un sitio fijo que mirar.
+      const zip = zipSync({ "jdk-17.0.20.1+1/bin/java.exe": new Uint8Array([1]) });
+      const escritos: { ruta: string; datos: Uint8Array }[] = [];
+      const trabajo = correrPasoDeReceta("android-emulador", 2, {
+        ...WINDOWS,
+        fetch: fetchDe(zip, []),
+        crearCarpeta: () => {},
+        escribir: (ruta, datos) => escritos.push({ ruta, datos }),
+      });
+      expect(await trabajo.terminado).toMatchObject({ estado: "ok" });
+      expect(escritos.map((e) => e.ruta)).toContain(join(LOCALAPPDATA, "Android", "jdk17", "bin", "java.exe"));
+      expect(escritos.map((e) => e.ruta).join(" ")).not.toMatch(/17\.0\.20/);
+    });
+
+    it("el paso 3 renombra `cmdline-tools` a `latest`, dentro de `Sdk/cmdline-tools`", async () => {
+      const zip = zipSync({ "cmdline-tools/bin/sdkmanager.bat": new Uint8Array([1]) });
+      const escritos: { ruta: string; datos: Uint8Array }[] = [];
+      const trabajo = correrPasoDeReceta("android-emulador", 3, {
+        ...WINDOWS,
+        fetch: fetchDe(zip, []),
+        crearCarpeta: () => {},
+        escribir: (ruta, datos) => escritos.push({ ruta, datos }),
+      });
+      expect(await trabajo.terminado).toMatchObject({ estado: "ok" });
+      expect(escritos.map((e) => e.ruta)).toContain(
+        join(LOCALAPPDATA, "Android", "Sdk", "cmdline-tools", "latest", "bin", "sdkmanager.bat")
+      );
+    });
+
+    it("sin %LOCALAPPDATA%, el paso de descarga falla y lo DICE — nunca se cuelga sin saber dónde escribir", async () => {
+      const trabajo = correrPasoDeReceta("android-emulador", 1, {
+        plataforma: "win32",
+        entorno: {},
+        home: "C:\\Users\\yo",
+        existe: () => false,
+      });
+      expect(await trabajo.terminado).toMatchObject({ estado: "fallo" });
+      expect((await trabajo.terminado).motivo).toMatch(/LOCALAPPDATA/);
+    });
+
+    it("un HTTP que no es 200 es fallo, con el código en el motivo", async () => {
+      const fetch404 = (async () => ({ ok: false, status: 404 })) as unknown as typeof fetch;
+      const trabajo = correrPasoDeReceta("android-emulador", 1, { ...WINDOWS, fetch: fetch404 });
+      const r = await trabajo.terminado;
+      expect(r.estado).toBe("fallo");
+      expect(r.motivo).toMatch(/404/);
+    });
+
+    it("cancelar antes de que termine se reporta como cancelada", async () => {
+      // Un `fetch` que nunca resuelve: el `cancelar()` es lo único que puede sacar a la
+      // promesa de su espera, vía el `AbortController`.
+      const fetchColgado = ((_url: string, opciones: { signal: AbortSignal }) =>
+        new Promise((_resolver, rechazar) => {
+          opciones.signal.addEventListener("abort", () => rechazar(Object.assign(new Error("aborted"), { name: "AbortError" })));
+        })) as unknown as typeof fetch;
+      const trabajo = correrPasoDeReceta("android-emulador", 1, { ...WINDOWS, fetch: fetchColgado });
+      trabajo.cancelar();
+      expect(await trabajo.terminado).toMatchObject({ estado: "cancelada" });
+    });
   });
 });

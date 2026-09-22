@@ -55,8 +55,18 @@ export type PlataformaDeDispositivo = (typeof PLATAFORMAS_DE_DISPOSITIVO)[number
  * arranca el demonio de adb y se queda vivo, `xcrun` tarda segundos—, así que un destino
  * apagado no se consulta, y su herramienta se declara «desactivada» en vez de fingir que
  * no está.
+ *
+ * `rutaAdb`/`rutaEmulator` son la ruta a mano al binario, cuando `localizadorDeAndroid` no
+ * lo encuentra solo (PATH y SDK por omisión). Ausente = se sigue buscando como siempre.
+ * Son la SEGUNDA excepción declarada a `sinRutas`, igual que `Settings.workspace`: viajan
+ * ENTERAS por el cable (no abreviadas con `~` — eso se probó para el workspace y se
+ * descartó, ver `expandirConCasa`), y solo para `adb`/`emulator`; `xcrun`/`devicectl` se
+ * quedan en el host.
  */
-export type AjustesDeDispositivos = { [K in PlataformaDeDispositivo]?: boolean };
+export type AjustesDeDispositivos = { [K in PlataformaDeDispositivo]?: boolean } & {
+  rutaAdb?: string;
+  rutaEmulator?: string;
+};
 
 /** ¿Se mira este destino? Ausente = sí. */
 export function seMira(ajustes: AjustesDeDispositivos | undefined, plataforma: PlataformaDeDispositivo): boolean {
@@ -193,13 +203,14 @@ export function validarSettings(bruto: unknown): { settings: Settings; avisos: A
 
 
 /**
- * Solo BOOLEANOS, y solo los cuatro nombres conocidos: lo que no lo sea se descarta sin
- * aviso, como cualquier campo desconocido. Un `"false"` de cadena NO se toma por falso —es
- * verdadero en JavaScript, y esa es la trampa que este repo ya pagó con el `soloLectura`
- * de un subagente y con el `compartido` de CloudStudio—; se descarta, y entonces manda la
- * omisión, que es mirar. Un objeto sin ningún campo válido se devuelve como ausente: `{}`
- * y «no lo he dicho» significan lo mismo aquí, mirar todo, y guardar un objeto vacío solo
- * ensuciaría el fichero.
+ * Solo BOOLEANOS para los cuatro destinos y solo TEXTO para las dos rutas: lo que no lo sea
+ * se descarta sin aviso, como cualquier campo desconocido. Un `"false"` de cadena NO se toma
+ * por falso —es verdadero en JavaScript, y esa es la trampa que este repo ya pagó con el
+ * `soloLectura` de un subagente y con el `compartido` de CloudStudio—; se descarta, y
+ * entonces manda la omisión, que es mirar. Las rutas se recortan (`trim`), y una que queda
+ * vacía se trata como ausente: no hay diferencia entre «no lo he dicho» y «lo borré». Un
+ * objeto sin ningún campo válido se devuelve como ausente: `{}` y «no lo he dicho»
+ * significan lo mismo aquí, y guardar un objeto vacío solo ensuciaría el fichero.
  */
 function validarDispositivos(candidato: unknown): AjustesDeDispositivos | undefined {
   if (typeof candidato !== "object" || candidato === null) return undefined;
@@ -207,6 +218,10 @@ function validarDispositivos(candidato: unknown): AjustesDeDispositivos | undefi
   const salida: AjustesDeDispositivos = {};
   for (const plataforma of PLATAFORMAS_DE_DISPOSITIVO) {
     if (typeof c[plataforma] === "boolean") salida[plataforma] = c[plataforma] as boolean;
+  }
+  for (const campo of ["rutaAdb", "rutaEmulator"] as const) {
+    const valor = c[campo];
+    if (typeof valor === "string" && valor.trim() !== "") salida[campo] = valor.trim();
   }
   return Object.keys(salida).length === 0 ? undefined : salida;
 }

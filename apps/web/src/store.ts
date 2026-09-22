@@ -1073,6 +1073,11 @@ export function crearStoreDelCliente(): {
                   nombre: h.nombre,
                   plataforma: h.plataforma,
                   estado: h.estado,
+                  // Solo `adb`/`emulator` la llevan —la excepción declarada a `sinRutas`,
+                  // como el workspace—; sin nombrarla aquí la lista blanca se la comía y la
+                  // ventana enseñaba «no encontrada» con la herramienta en verde al lado,
+                  // que es justo la contradicción que este campo existe para evitar.
+                  ...(typeof h.ruta === "string" ? { ruta: h.ruta } : {}),
                   ...(h.detalle === undefined ? {} : { detalle: h.detalle }),
                   // `instalar` se copia campo a campo, y solo si viene: es lo que decide
                   // entre un botón «Instalar» y el comando para copiar. No estaba en esta

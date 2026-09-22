@@ -123,6 +123,19 @@ describe("los destinos de prueba en settings.json", () => {
     expect(validarSettings({ entornos: [], dispositivos: "no" }).settings.dispositivos).toBeUndefined();
     for (const p of PLATAFORMAS_DE_DISPOSITIVO) expect(seMira(undefined, p)).toBe(true);
   });
+
+  it("las dos rutas personalizadas se aceptan como texto, se recortan, y una vacía tras el recorte no se guarda", () => {
+    const { settings } = validarSettings({
+      entornos: [],
+      dispositivos: { rutaAdb: "  /opt/adb  ", rutaEmulator: "", android: false },
+    });
+    expect(settings.dispositivos).toEqual({ android: false, rutaAdb: "/opt/adb" });
+  });
+
+  it("una ruta que no es texto se descarta como cualquier campo desconocido", () => {
+    const { settings } = validarSettings({ entornos: [], dispositivos: { rutaAdb: 123, rutaEmulator: null } });
+    expect(settings.dispositivos).toBeUndefined();
+  });
 });
 
 describe("el tope de concurrencia de tareas en settings.json", () => {
