@@ -788,6 +788,11 @@ export async function abrirSesionReal(opciones: {
     let payload: unknown = { messages: [new HumanMessage(payloadInicial)] };
     let bitacora = null as Awaited<ReturnType<typeof correrTurno>> | null;
     let ronda = 0;
+    /**
+     * Las tool_calls ya contadas EN ESTE TURNO. Vive fuera del bucle a proposito: ver
+     * `aEventos`. Dentro, cada ronda recontaba las tools de las anteriores.
+     */
+    const vistasDelTurno = new Set<string>();
 
     // El bucle de aprobación, tal como está en `correrReal` (`cli/run.ts`): una pausa
     // TERMINA la ronda, el interrupt queda en el estado, y se reanuda con un `Command`
@@ -1240,7 +1245,8 @@ export async function abrirSesionReal(opciones: {
                 stream,
                 async () => (await leerPendientes()).lista,
                 ({ nombre, detalle, parametros, origen, respuesta }) =>
-                  diagnostico?.herramienta(nombre, detalle, parametros, tracker, origen, respuesta)
+                  diagnostico?.herramienta(nombre, detalle, parametros, tracker, origen, respuesta),
+                vistasDelTurno
               ),
               eventosExternos
             )

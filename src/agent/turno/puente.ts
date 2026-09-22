@@ -201,11 +201,30 @@ export type AlLlamarTool = (tool: {
 export async function* aEventos(
   stream: AsyncIterable<unknown>,
   pendientes?: () => Promise<PendienteDeAprobacion[]>,
-  alLlamarTool?: AlLlamarTool
+  alLlamarTool?: AlLlamarTool,
+  vistasDelTurno?: Set<string>
 ): AsyncIterable<DomainEvent> {
   const mensajes = new Mensajes();
-  /** Los `tool_call` ya contados, por id: el stream reenvía los mensajes acumulados. */
-  const vistas = new Set<string>();
+  /**
+   * Los `tool_call` ya contados, por id: el stream reenvía los mensajes acumulados.
+   *
+   * **Y el conjunto tiene que vivir por TURNO, no por RONDA** — por eso entra por parámetro.
+   * `turnoReal.ts` llama a `aEventos` DENTRO del bucle de rondas: una aprobación termina la
+   * ronda, se reanuda con un `Command` y el stream vuelve a entregar la historia acumulada.
+   * Con el conjunto local, cada ronda empezaba en blanco y volvía a contar todas las tools
+   * de las rondas anteriores.
+   *
+   * Medido sobre una sesión real de MyAllXOne: la traza decía OCHO `edit_file` sobre
+   * `/funciones.js` con seis "en la misma respuesta", y en la pantalla se había pedido UN
+   * permiso y escrito UNA vez. Las reemisiones caían 15 ms despues de cada ronda y con el
+   * MISMO id de mensaje — o sea que no eran del modelo, eran del stream. Eso mandó a
+   * diagnosticar un problema de escrituras concurrentes que la traza se habia inventado.
+   *
+   * Sin el parametro se comporta como antes (un turno de una ronda), asi que ningun otro
+   * llamador ni ningun doble de los tests cambia: la misma asimetria que los metodos
+   * opcionales de `Piel`.
+   */
+  const vistas = vistasDelTurno ?? new Set<string>();
   try {
     for await (const bruto of stream) {
       const chunk = normalizar(bruto);

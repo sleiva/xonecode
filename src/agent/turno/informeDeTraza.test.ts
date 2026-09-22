@@ -289,7 +289,7 @@ describe("paralelismo", () => {
       tool("edit_file", "m1", "/otro.js"),
     ]);
     expect(s?.paralelismo.escriturasALaVez).toEqual([{ detalle: "/funciones.js", veces: 2 }]);
-    expect(pintarSesion(s!).join("\n")).toContain("2 escrituras A LA VEZ sobre /funciones.js");
+    expect(pintarSesion(s!).join("\n")).toContain("2 escrituras sobre /funciones.js en UNA respuesta");
   });
 
   /** Dos ficheros distintos en la misma respuesta no chocan: cada uno tiene su contenido. */

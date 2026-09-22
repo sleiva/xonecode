@@ -376,3 +376,42 @@ describe("la historia acumulada de un subgrafo no se cuenta dos veces", () => {
     expect(eventos).toHaveLength(2);
   });
 });
+
+/**
+ * **Que una tool no se cuente dos veces porque hubo dos rondas.**
+ *
+ * `turnoReal.ts` llama a `aEventos` DENTRO del bucle de rondas: una aprobación termina la
+ * ronda, se reanuda con un `Command` y el stream vuelve a entregar la historia acumulada. Con
+ * el dedupe local, cada ronda empezaba en blanco y recontaba las tools de las anteriores.
+ *
+ * Medido sobre una sesión real: la traza decía OCHO `edit_file` sobre el mismo fichero, seis
+ * de ellas «en la misma respuesta», y en la pantalla se había pedido UN permiso y escrito UNA
+ * vez. Las reemisiones caían 15 ms después de cada ronda y con el MISMO id de mensaje. Eso
+ * mandó a diagnosticar escrituras concurrentes que la traza se había inventado.
+ */
+describe("el dedupe entre RONDAS", () => {
+  // La forma del stream con `subgraphs: true`: [namespace, modo, dato].
+  const chunk = () => [
+    [],
+    "updates",
+    { agent: { messages: [{ id: "msg-1", tool_calls: [{ id: "call-1", name: "edit_file", args: { file_path: "/f.js" } }] }] } },
+  ];
+  const correr = async (vistas?: Set<string>) => {
+    const salida: string[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for await (const e of aEventos((async function* () { yield chunk(); })() as any, undefined, (t) => salida.push(t.nombre), vistas)) void e;
+    return salida;
+  };
+
+  it("con el conjunto del TURNO, la segunda ronda no la vuelve a contar", async () => {
+    const vistas = new Set<string>();
+    expect(await correr(vistas)).toEqual(["edit_file"]);
+    expect(await correr(vistas)).toEqual([]); // la MISMA tool, reentregada: no se cuenta
+    expect(await correr(vistas)).toEqual([]);
+  });
+
+  it("sin el conjunto se cuenta otra vez — que es el fallo que esto cierra", async () => {
+    expect(await correr()).toEqual(["edit_file"]);
+    expect(await correr()).toEqual(["edit_file"]);
+  });
+});

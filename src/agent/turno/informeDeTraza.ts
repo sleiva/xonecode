@@ -394,7 +394,7 @@ export function pintarSesion(sesion: SesionDeTraza): string[] {
       // Al final de la sección y con el aviso delante: esto no es una estadística, es el
       // sitio donde se pierden cambios. Dos escrituras del mismo mensaje sobre el mismo
       // fichero se resuelven contra el MISMO contenido de partida, y gana la última.
-      lineas.push(`    ⚠ ${e.veces} escrituras A LA VEZ sobre ${e.detalle}`);
+      lineas.push(`    ⚠ ${e.veces} escrituras sobre ${e.detalle} en UNA respuesta`);
     }
   }
   if (par.sinRespuesta > 0) {
