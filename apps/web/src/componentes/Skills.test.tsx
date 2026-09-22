@@ -31,7 +31,7 @@ const manejadores = () => ({
   alBorrar: vi.fn(),
 });
 
-const irA = (titulo: "De xonecode" | "Tuyas"): void => {
+const irA = (titulo: "De XOneCode" | "Tuyas"): void => {
   fireEvent.click(screen.getByRole("tab", { name: new RegExp(`^${titulo}`) }));
 };
 
@@ -51,7 +51,7 @@ describe("Skills", () => {
     // contestaba. Esconder la vacía dejaría a quien no ha escrito ninguna sin saber dónde
     // van a aparecer las suyas.
     render(<Skills {...manejadores()} skills={[ARCHIFY]} />);
-    expect(screen.getByRole("tab", { name: /^De xonecode/ })).not.toBeNull();
+    expect(screen.getByRole("tab", { name: /^De XOneCode/ })).not.toBeNull();
     expect(screen.getByRole("tab", { name: /^Tuyas/ })).not.toBeNull();
     irA("Tuyas");
     expect(screen.getByText(/No has escrito ninguna/)).not.toBeNull();
@@ -59,7 +59,7 @@ describe("Skills", () => {
 
   it("la cuenta solo se pinta si hay alguna: un cero no es un dato que enseñar", () => {
     render(<Skills {...manejadores()} skills={[ARCHIFY]} />);
-    expect(screen.getByRole("tab", { name: /^De xonecode/ }).textContent).toContain("1");
+    expect(screen.getByRole("tab", { name: /^De XOneCode/ }).textContent).toContain("1");
     expect(screen.getByRole("tab", { name: /^Tuyas/ }).textContent).toBe("Tuyas");
   });
 

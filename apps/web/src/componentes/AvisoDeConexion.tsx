@@ -23,7 +23,7 @@ import estilos from "./AvisoDeConexion.module.css";
 export function AvisoDeConexion({ conectado }: { conectado: boolean }) {
   return (
     <div className={estilos.avisoDeConexion}>
-      <ConnectionBanner reconnecting={!conectado} label="sin conexión con xonecode — reintentando…" />
+      <ConnectionBanner reconnecting={!conectado} label="sin conexión con XOneCode — reintentando…" />
     </div>
   );
 }

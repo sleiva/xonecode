@@ -12,6 +12,7 @@ import {
   IconUserOutline16,
   IconSkillOutline16,
   IconLinkOutline16,
+  IconSearchOutline16,
 } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { EstadoDelCliente } from "../store.js";
 import type {
@@ -62,6 +63,7 @@ export function motivoDeWorkspaceInaceptable(ruta: string): string | undefined {
   return undefined;
 }
 import { PROYECTOS_POR_OMISION } from "./Barra.js";
+import { selloDeFecha } from "../selloDeFecha.js";
 import { IconoDeEntorno } from "./IconoDeEntorno.js";
 import { IconoDeProveedor } from "./IconoDeProveedor.js";
 import { PastillaDeModelo } from "./PastillaDeModelo.js";
@@ -257,6 +259,7 @@ export function Ajustes({
   proyectosPorEntorno = {},
   alPedirProyectosDeEntorno,
   entornoActivo,
+  seccionInicial,
   apariencia,
   secreto,
   alCambiarApariencia,
@@ -319,7 +322,7 @@ export function Ajustes({
    * lo traían y era este prop el que lo perdía. Se necesita para partir la lista en propios
    * y compartidos. Ausente NO es «es tuyo»: es que CloudStudio no lo dijo.
    */
-  proyectos?: readonly { id: string; nombre: string; compartido?: boolean }[];
+  proyectos?: readonly { id: string; nombre: string; compartido?: boolean; ultimoAcceso?: string }[];
   /**
    * Los proyectos de cada entorno NO activo, indexados por su id, tal como los contesta
    * `{clase:"proyectosDeEntorno"}`.
@@ -332,7 +335,10 @@ export function Ajustes({
   proyectosPorEntorno?: Readonly<
     Record<
       string,
-      { proyectos?: readonly { id: string; nombre: string; compartido?: boolean }[]; error?: string }
+      {
+        proyectos?: readonly { id: string; nombre: string; compartido?: boolean; ultimoAcceso?: string }[];
+        error?: string;
+      }
     >
   >;
   /**
@@ -342,6 +348,13 @@ export function Ajustes({
    */
   alPedirProyectosDeEntorno?: (entorno: string) => void;
   entornoActivo?: string;
+  /**
+   * En qué sección abrir, para quien llega desde un enlace concreto (el aviso de proyectos
+   * sin enseñar de la barra manda a «entornos»). Ausente = «general», la que ya se abría por
+   * omisión — este prop no cambia ese comportamiento por defecto, solo lo puede sobreescribir
+   * quien tenga un motivo.
+   */
+  seccionInicial?: SeccionDeAjustes;
   apariencia: Apariencia;
   /** Los subagentes y los `.md` ilegibles. Ausente = todavía no llegó el mensaje, que NO es
    *  lo mismo que «no hay ninguno»: la sección lo distingue y lo dice. */
@@ -483,7 +496,7 @@ export function Ajustes({
    * arregla la incoherencia: el orden va de lo general a lo particular, así que arrancar en
    * lo particular contradecía el propio orden que la lista declara.
    */
-  const [seccion, setSeccion] = useState<SeccionDeAjustes>("general");
+  const [seccion, setSeccion] = useState<SeccionDeAjustes>(() => seccionInicial ?? "general");
 
   /**
    * Lo que hay TECLEADO en el campo del workspace, que no es lo que hay guardado.
@@ -574,10 +587,18 @@ export function Ajustes({
    */
   const listaDe = (
     entorno: string | undefined
-  ): { proyectos?: readonly { id: string; nombre: string; compartido?: boolean }[]; error?: string } => {
+  ): {
+    proyectos?: readonly { id: string; nombre: string; compartido?: boolean; ultimoAcceso?: string }[];
+    error?: string;
+  } => {
     if (entorno === undefined) return {};
+    // Lo PEDIDO explícitamente (el `alta` inicial o un «Refrescar») es siempre lo más
+    // fresco. Sin este orden, refrescar el entorno ACTIVO no se vería nunca: su lista
+    // llegaría a `proyectosPorEntorno` pero esta función seguiría devolviendo el `alta`.
+    const pedida = proyectosPorEntorno[entorno];
+    if (pedida !== undefined) return pedida;
     if (entorno === entornoActivo && proyectos.length > 0) return { proyectos };
-    return proyectosPorEntorno[entorno] ?? {};
+    return {};
   };
 
   /**
@@ -591,6 +612,21 @@ export function Ajustes({
    * primero y el primer clic guardaría la elección de aquél BAJO éste.
    */
   const [elegidosPorEntorno, setElegidosPorEntorno] = useState<Record<string, string[]>>({});
+  /**
+   * «Refrescando…» de un botón que pulsa a `alPedirProyectosDeEntorno` directamente, sin
+   * pasar por el efecto de abajo (que solo pide si FALTA la lista). Indexado por entorno,
+   * como `elegidosPorEntorno`: si se cambia de pestaña a mitad de la respuesta, no se apaga
+   * el spinner de un entorno que no lo pidió.
+   */
+  const [refrescandoProyectos, setRefrescandoProyectos] = useState<Record<string, boolean>>({});
+  /**
+   * El texto de los buscadores de «Propios» y «Compartidos contigo», por entorno — el mismo
+   * patrón que `elegidosPorEntorno`: sin indexar por entorno, cambiar de pestaña dejaría el
+   * filtro de un entorno aplicado sobre la lista de otro.
+   */
+  const [filtroDeProyectos, setFiltroDeProyectos] = useState<
+    Record<string, { propios?: string; compartidos?: string }>
+  >({});
   const elegidosDe = (entorno: string | undefined): readonly string[] => {
     if (entorno === undefined) return [];
     const tocado = elegidosPorEntorno[entorno];
@@ -628,6 +664,19 @@ export function Ajustes({
     // tormenta por otro camino.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seccion, registrando, entornoEnPestana, suyosEnPestana, errorEnPestana]);
+
+  /**
+   * Apaga «Refrescando…» cuando llega una respuesta NUEVA para la pestaña en vuelo — el
+   * mismo patrón que `Equipo.tsx` (`useEffect(() => setMirando(false), [medido])`), aquí
+   * sobre el par lista/error de la pestaña abierta en vez de una hora de medida.
+   */
+  useEffect(() => {
+    if (entornoEnPestana === undefined) return;
+    setRefrescandoProyectos((previo) =>
+      previo[entornoEnPestana] === true ? { ...previo, [entornoEnPestana]: false } : previo
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suyosEnPestana, errorEnPestana]);
 
   /**
    * **Se mide al entrar en Dispositivos y al VOLVER a la ventana con la sección abierta.**
@@ -1260,7 +1309,7 @@ export function Ajustes({
                 conectar por red siguen sin estar, así que siguen dichos.
               */}
               <p className={estilos.nota}>
-                xonecode los DESCUBRE, instala lo que falta, arranca un emulador de Android y verifica la
+                XOneCode los DESCUBRE, instala lo que falta, arranca un emulador de Android y verifica la
                 conexión con uno. Elegir con cuál trabaja el agente es una decisión de la sesión, no de esta
                 ventana; conectar por red, arrancar un simulador de iOS o instalar la app no están cableados
                 todavía.
@@ -1446,7 +1495,7 @@ export function Ajustes({
 
               <h3 className={estilos.subencabezado}>Proveedores</h3>
               <p className={estilos.nota}>
-                La clave se guarda con permisos 0600 en el fichero de credenciales de xonecode,
+                La clave se guarda con permisos 0600 en el fichero de credenciales de XOneCode,
                 nunca en el navegador.
               </p>
               {proveedores.length === 0 ? (
@@ -1648,7 +1697,23 @@ export function Ajustes({
               {!registrando && entornoEnPestana !== undefined ? (
                 <div role="tabpanel" className={estilos.panelDePestana}>
                   <p className={estilos.url}>{entornos.find((e) => e.id === entornoEnPestana)?.url}</p>
-                  <h3 className={estilos.subencabezado}>Proyectos en la barra</h3>
+                  <div className={estilos.cabeceraDeProyectos}>
+                    <h3 className={estilos.subencabezado}>Proyectos en la barra</h3>
+                    {alPedirProyectosDeEntorno === undefined ? null : (
+                      <button
+                        type="button"
+                        className={estilos.recargar}
+                        title="Vuelve a preguntar a CloudStudio por los proyectos propios y compartidos de este entorno"
+                        disabled={!conectado || refrescandoProyectos[entornoEnPestana] === true}
+                        onClick={() => {
+                          setRefrescandoProyectos((previo) => ({ ...previo, [entornoEnPestana]: true }));
+                          alPedirProyectosDeEntorno(entornoEnPestana);
+                        }}
+                      >
+                        {refrescandoProyectos[entornoEnPestana] === true ? "Refrescando…" : "Refrescar"}
+                      </button>
+                    )}
+                  </div>
                   {(() => {
                     const { proyectos: suyos, error } = listaDe(entornoEnPestana);
                     if (error !== undefined) {
@@ -1682,12 +1747,36 @@ export function Ajustes({
                      * lista `marcados` y el mismo `p.id`, así que elegir no cambia de
                      * comportamiento por partir la lista en dos.
                      */
+                    // Más reciente arriba, y los que no traen fecha al final — el mismo
+                    // criterio que `ordenarPorUltimoTurno` en Barra.tsx, pero sobre el
+                    // último ACCESO de un proyecto y no el último turno de una sesión: son
+                    // dos campos y dos listas sin relación, así que se repite en vez de
+                    // forzar un genérico entre dos ficheros que no se conocen.
+                    const porUltimoAcceso = <T extends { ultimoAcceso?: string }>(lista: readonly T[]): T[] =>
+                      [...lista].sort((a, b) => (b.ultimoAcceso ?? "").localeCompare(a.ultimoAcceso ?? ""));
+                    const filtro = filtroDeProyectos[entornoEnPestana] ?? {};
+                    // El buscador filtra POR NOMBRE dentro de su columna; la presencia de la
+                    // columna (el `.filter` de más abajo) se decide con la lista ENTERA, no
+                    // con lo filtrado — así una búsqueda sin resultados enseña «ninguno
+                    // coincide» en vez de hacer desaparecer la columna entera.
+                    const conFiltro = <T extends { nombre: string }>(
+                      lista: readonly T[],
+                      aguja: string | undefined
+                    ): readonly T[] => {
+                      const q = (aguja ?? "").trim().toLowerCase();
+                      return q === "" ? lista : lista.filter((p) => p.nombre.toLowerCase().includes(q));
+                    };
                     const grupos = [
-                      { id: "propios", titulo: "Propios", suyos: suyos.filter((p) => p.compartido === false) },
-                      { id: "compartidos", titulo: "Compartidos contigo", suyos: suyos.filter((p) => p.compartido === true) },
-                      { id: "sinAtribuir", titulo: "Sin decir de quién son", suyos: suyos.filter((p) => p.compartido === undefined) },
-                    ].filter((g) => g.suyos.length > 0);
-                    const casilla = (p: { id: string; nombre: string }) => (
+                      { id: "propios" as const, titulo: "Propios", suyos: suyos.filter((p) => p.compartido === false), aguja: filtro.propios },
+                      { id: "compartidos" as const, titulo: "Compartidos contigo", suyos: suyos.filter((p) => p.compartido === true), aguja: filtro.compartidos },
+                      { id: "sinAtribuir" as const, titulo: "Sin decir de quién son", suyos: suyos.filter((p) => p.compartido === undefined), aguja: undefined as string | undefined },
+                    ]
+                      .map((g) => ({ ...g, suyos: porUltimoAcceso(g.suyos) }))
+                      .filter((g) => g.suyos.length > 0)
+                      .map((g) => ({ ...g, filtrados: conFiltro(g.suyos, g.aguja) }));
+                    const casilla = (p: { id: string; nombre: string; ultimoAcceso?: string }) => {
+                      const fecha = p.ultimoAcceso === undefined ? undefined : selloDeFecha(p.ultimoAcceso);
+                      return (
                       <li key={p.id} className={estilos.fila}>
                         <label className={estilos.casilla}>
                           <input
@@ -1704,10 +1793,16 @@ export function Ajustes({
                               alElegirProyectos(entornoEnPestana, siguiente);
                             }}
                           />
-                          <span className={estilos.nombre}>{p.nombre}</span>
+                          <span className={estilos.textoDeProyecto}>
+                            <span className={estilos.nombre}>{p.nombre}</span>
+                            {fecha === undefined ? null : (
+                              <span className={estilos.fechaDeProyecto}>{fecha}</span>
+                            )}
+                          </span>
                         </label>
                       </li>
-                    );
+                      );
+                    };
                     return (
                       <>
                         <p className={estilos.nota}>
@@ -1718,11 +1813,39 @@ export function Ajustes({
                           {grupos.map((g) => (
                             <section key={g.id} className={estilos.columnaDeProyectos}>
                               {/* La cuenta va en el encabezado porque con listas largas es
-                                  la mitad de la pregunta: cuántos tengo de cada. */}
+                                  la mitad de la pregunta: cuántos tengo de cada. Con el
+                                  buscador puesto, cuenta lo FILTRADO — un «3» tras buscar que
+                                  siguiera diciendo el total de la columna confundiría. */}
                               <h4 className={estilos.encabezadoDeColumna}>
-                                {g.titulo} <span className={estilos.cuenta}>{g.suyos.length}</span>
+                                {g.titulo} <span className={estilos.cuenta}>{g.filtrados.length}</span>
                               </h4>
-                              <ul className={estilos.filas}>{g.suyos.map(casilla)}</ul>
+                              {g.id === "sinAtribuir" ? null : (
+                                <span className={estilos.buscadorDeProyectos}>
+                                  <IconSearchOutline16 className={estilos.lupa} size={14} />
+                                  <input
+                                    type="search"
+                                    className={estilos.filtroDeProyectos}
+                                    value={g.aguja ?? ""}
+                                    onChange={(e) => {
+                                      const valor = e.target.value;
+                                      setFiltroDeProyectos((previo) => ({
+                                        ...previo,
+                                        [entornoEnPestana]: {
+                                          ...previo[entornoEnPestana],
+                                          ...(g.id === "propios" ? { propios: valor } : { compartidos: valor }),
+                                        },
+                                      }));
+                                    }}
+                                    placeholder="filtrar por nombre…"
+                                    aria-label={`filtrar ${g.titulo.toLowerCase()}`}
+                                  />
+                                </span>
+                              )}
+                              {g.filtrados.length === 0 ? (
+                                <p className={estilos.vacio}>Ninguno coincide con «{g.aguja}».</p>
+                              ) : (
+                                <ul className={estilos.filas}>{g.filtrados.map(casilla)}</ul>
+                              )}
                             </section>
                           ))}
                         </div>

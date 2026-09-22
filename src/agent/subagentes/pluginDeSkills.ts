@@ -62,7 +62,7 @@ export function manifiestoDelPluginDeSkills(): string {
       // nada, y colgar de `versionEnDisco` metería un lanzamiento de `git` en el arranque
       // de cada subagente para un campo que ningún consumidor mira.
       version: "0.0.0",
-      description: "Las skills que monta xonecode para sus subagentes",
+      description: "Las skills que monta XOneCode para sus subagentes",
       skills: "./skills/",
     },
     null,

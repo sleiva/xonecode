@@ -363,7 +363,7 @@ export async function correrOpencode(
        * hago», así que aquí no se aborta el turno (al contrario que en Codex, donde no había
        * forma medida de contestar que no): medido, el hijo lo encaja y sigue.
        */
-      mandar({ jsonrpc: "2.0", id, error: { code: -32601, message: "xonecode no implementa este método" } });
+      mandar({ jsonrpc: "2.0", id, error: { code: -32601, message: "XOneCode no implementa este método" } });
     };
 
     const responderPermiso = (id: number | string, optionId: "once" | "reject"): void =>

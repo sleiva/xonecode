@@ -47,13 +47,13 @@ type Grupo = "serie" | "propias";
 const GRUPOS: readonly { clave: Grupo; titulo: string; vacio: string }[] = [
   {
     clave: "serie",
-    titulo: "De xonecode",
-    vacio: "No se encontró el catálogo que trae xonecode.",
+    titulo: "De XOneCode",
+    vacio: "No se encontró el catálogo que trae XOneCode.",
   },
   {
     clave: "propias",
     titulo: "Tuyas",
-    vacio: "No has escrito ninguna. «Nueva skill» escribe la primera, o copia una de xonecode.",
+    vacio: "No has escrito ninguna. «Nueva skill» escribe la primera, o copia una de XOneCode.",
   },
 ];
 
@@ -68,7 +68,7 @@ const ANEXOS_A_LA_VISTA = 6;
 
 /** La pastilla de origen. Dato de máquina: dónde vive el fichero, no una valoración. */
 const PASTILLA: Record<SkillDelCable["origen"], string> = {
-  serie: "xonecode",
+  serie: "XOneCode",
   global: "global",
   proyecto: "proyecto",
 };
@@ -558,7 +558,7 @@ function FilaDeSkill({
                       camino en vez de con un botón apagado: editarla aquí la perdería el
                       siguiente `npm install`. */}
                   <span>
-                    Esta la trae xonecode y no se edita: el siguiente <code>npm install</code> se
+                    Esta la trae XOneCode y no se edita: el siguiente <code>npm install</code> se
                     llevaría el cambio.
                   </span>
                   <button

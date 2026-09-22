@@ -147,6 +147,43 @@
   font-style: italic;
 }
 
+/* El aviso de proyectos sin enseñar, en TARJETA y no en línea suelta italiza como
+   `.sinSesiones`: es un aviso accionable (hay un botón dentro) y quería leerse como tal,
+   no como una fila más de la lista que se confunde con el resto de texto atenuado. El
+   fondo es el mismo `bg-layer-2` que ya usa `.duenno` en esta hoja para una superficie
+   ligeramente elevada, sin inventar un tono nuevo. */
+.avisoOcultos {
+  margin: 6px 10px 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.textoDeAviso {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* El «Ajustes» pulsable dentro de la frase: mismo acento que la fila activa
+   (`--xonecode-cian`), para que se lea como lo único interactivo de la tarjeta. */
+.enlaceDeAviso {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--xonecode-cian);
+  font: inherit;
+  font-size: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.enlaceDeAviso:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
 /* Una sesión reabierta y sin turno nuevo se distingue de la viva. Iba en `label-dimmed`, y
    MEDIDO en pantalla no se podía leer: ese alias es el gris más flojo del alfabeto y las
    filas caen sobre un fondo gris, así que el título quedaba casi invisible — y como TODA
@@ -276,6 +313,20 @@
 .duenno[data-compartido] {
   background: var(--dsw-alias-state-business-tertiary);
   color: var(--dsw-alias-state-business-primary);
+}
+
+/* Descargado en local o no, con un icono y no con la pastilla de texto del Escritorio —esta
+   fila es de una sola línea—. Sin color de alarma para «no descargado»: no es un problema, es
+   un hecho, la misma regla que `Escritorio.module.css` documenta para su «sin descargar». */
+.estadoLocal {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.estadoLocal[data-local] {
+  color: var(--dsw-alias-state-success-primary);
 }
 
 
@@ -420,4 +471,25 @@
   .actividad {
     animation: none;
   }
+}
+
+/* El pie de la barra: separa el listado de proyectos del botón «Ajustes», y debajo de éste
+   la versión con la que corre este proceso. Van en esta hoja PROPIA y no en
+   `estilos/SidebarRoot.module.css` (copiada sin cambios de deepseek-harness) — se insertan
+   como hermanos de `.settingsArea` dentro de `.footArea`, que ya es columna. */
+.separadorDePie {
+  flex: none;
+  margin: 6px 2px 8px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.version {
+  flex: none;
+  margin: 4px 8px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 10px;
 }

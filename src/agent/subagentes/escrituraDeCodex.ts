@@ -123,14 +123,14 @@ function propuestasDeCambios(cambios: unknown): { propuestas: EscrituraPropuesta
     if (tipo === "delete") {
       return {
         motivo:
-          "xonecode no autoriza que un agente externo BORRE ficheros del proyecto: solo crear y modificar. " +
+          "XOneCode no autoriza que un agente externo BORRE ficheros del proyecto: solo crear y modificar. " +
           "Di qué habría que borrar y por qué.",
       };
     }
     if (crudo?.kind?.move_path !== undefined && crudo.kind.move_path !== null) {
       return {
         motivo:
-          "xonecode no autoriza que un agente externo RENOMBRE ni mueva ficheros del proyecto: solo crear y modificar.",
+          "XOneCode no autoriza que un agente externo RENOMBRE ni mueva ficheros del proyecto: solo crear y modificar.",
       };
     }
     if (tipo !== "add" && tipo !== "update") {

@@ -22,9 +22,15 @@
  * para ganar en especificidad sin depender de en qué orden acabe cada hoja en el bundle —
  * con una sola clase las dos empatan a 0,1,0 y quién gana lo decidiría el empaquetador.
  */
+/* La hoja copiada reserva `padding-bottom: 0` porque en el original el `.header` lleva
+ * DEBAJO una fila de pestañas pegada al borde inferior. Aquí `Cabecera.tsx` no pinta esa
+ * fila —solo `.titleRow`—, así que el único contenido se quedaba con 12px de aire arriba y
+ * 0 abajo: se veía empujado hacia el borde inferior en vez de centrado en el alto de la
+ * barra. Se iguala al `padding-top` del original para centrarlo. */
 .barraSuperior.barraSuperior {
   background: var(--xonecode-azul);
   border-bottom: 1px solid var(--xonecode-borde-azul);
+  padding-bottom: 12px;
 }
 
 /* La hairline de `.header::after` es la separación de la hoja copiada; sobre el azul sobra

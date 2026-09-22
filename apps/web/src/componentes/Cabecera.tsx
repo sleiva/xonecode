@@ -111,7 +111,7 @@ export function Cabecera({ titulo, proyecto, modo, conectado, barraContraida, al
           {alIrAlEscritorio === undefined ? (
             <span className={estilos.marca}>
               <img className={estilos.simbolo} src="/iconos/xonecode.png" alt="" width={22} height={22} />
-              xonecode
+              XOneCode
             </span>
           ) : (
             <button
@@ -121,7 +121,7 @@ export function Cabecera({ titulo, proyecto, modo, conectado, barraContraida, al
               title="Volver al escritorio"
             >
               <img className={estilos.simbolo} src="/iconos/xonecode.png" alt="" width={22} height={22} />
-              xonecode
+              XOneCode
             </button>
           )}
           <span className={estilos.separador} aria-hidden="true">

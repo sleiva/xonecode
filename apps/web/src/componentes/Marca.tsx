@@ -50,8 +50,8 @@ export function Marca({ grande }: { grande?: boolean }) {
           </svg>
         </div>
         <span className={estilos.textoDeMarca}>
-          <span className={estilos.xone}>xone</span>
-          <span className={estilos.code}>code</span>
+          <span className={estilos.xone}>XOne</span>
+          <span className={estilos.code}>Code</span>
         </span>
       </div>
       {/* El lema del fichero de origen viene en inglés («AI-Powered Development

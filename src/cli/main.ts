@@ -172,7 +172,7 @@ async function* conPrompt(
   }
 }
 
-const AYUDA = `xonecode — harness de XOne
+const AYUDA = `XOneCode — harness de XOne
 
   xonecode                       abre la consola WEB en el navegador (por defecto)
   xonecode --no-abrir            la web, pero sin abrir el navegador (imprime la URL)
@@ -528,7 +528,7 @@ export function crearEjecutorReal(
       const entorno = await inspeccionar(estado.raiz);
       if (!entorno.esProyectoXone) {
         consolaReal.escribir(`${entorno.raiz}  (no hay app.xml aquí)\n`);
-        consolaReal.escribir("✗ falta algo imprescindible: xonecode no puede trabajar aquí.\n");
+        consolaReal.escribir("✗ falta algo imprescindible: XOneCode no puede trabajar aquí.\n");
         return;
       }
       const persistente = checkpointerDeProyecto?.(estado.raiz);
@@ -1192,7 +1192,7 @@ export async function entrarEnConsola(
       .map((nombre) => `/${nombre}`)
       .join(" ");
     return (
-      `${BOLD}xonecode${RESET} · ${basename(raiz)} (${entorno.colecciones} colls) · ${modeloTrabajo} · ` +
+      `${BOLD}XOneCode${RESET} · ${basename(raiz)} (${entorno.colecciones} colls) · ${modeloTrabajo} · ` +
       `${formatearTokens(tracker.input + tracker.output)}\n` +
       `${DIM}${Object.keys(COMANDOS).length} comandos: ${comandos}${RESET}\n`
     );

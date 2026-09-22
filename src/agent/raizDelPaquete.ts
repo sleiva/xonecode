@@ -51,7 +51,7 @@ export function raizDelPaquete(desde: string = AQUI): string {
   const raiz = buscarRaizDelPaquete(desde);
   if (raiz === undefined) {
     throw new Error(
-      `instalación de xonecode inservible: no hay ningún package.json por encima de ${desde}`
+      `instalación de XOneCode inservible: no hay ningún package.json por encima de ${desde}`
     );
   }
   return raiz;

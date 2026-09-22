@@ -40,6 +40,6 @@ export async function cmdDoctor(escribir: Escribir = escribirEnStdout): Promise<
   linea(e.simulador.responde ? "✓" : "✗", `${e.simulador.ruta}${e.simulador.responde ? " responde" : " NO responde"}`);
 
   const falta = !e.esProyectoXone || !e.simulador.responde;
-  if (falta) escribir("\n✗ falta algo imprescindible: xonecode no puede trabajar aquí.\n");
+  if (falta) escribir("\n✗ falta algo imprescindible: XOneCode no puede trabajar aquí.\n");
   return falta ? 1 : 0;
 }

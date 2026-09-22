@@ -14,7 +14,7 @@ export function Bienvenida({ nombre }: { nombre?: string }) {
     <div className={estilos.bienvenida}>
       <p className={estilos.saludo}>{nombre === undefined ? "Hola" : `Hola, ${nombre}`}</p>
       <p className={estilos.texto}>
-        Esto es xonecode. Antes de empezar hace falta el modelo con el que vas a trabajar y
+        Esto es XOneCode. Antes de empezar hace falta el modelo con el que vas a trabajar y
         el entorno de CloudStudio de tu proyecto — solo hace falta una vez.
       </p>
     </div>

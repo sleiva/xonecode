@@ -281,7 +281,7 @@ export function veredictoDeRuta(opciones: {
       // LECTURA. De este mensaje sale lo que el modelo intenta a continuación, así que
       // decirle mal qué se le deniega es empujarlo al camino equivocado.
       motivo:
-        "esa ruta cae fuera de la carpeta del proyecto (o no es absoluta), y xonecode acota este agente al proyecto",
+        "esa ruta cae fuera de la carpeta del proyecto (o no es absoluta), y XOneCode acota este agente al proyecto",
     };
   }
 
@@ -422,7 +422,7 @@ export function decisionDePreToolUse(opciones: {
       ? {
           hookEventName: "PreToolUse",
           permissionDecision: "allow",
-          permissionDecisionReason: "xonecode permite leer y buscar dentro del proyecto",
+          permissionDecisionReason: "XOneCode permite leer y buscar dentro del proyecto",
         }
       : { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: v.motivo };
   }
@@ -433,7 +433,7 @@ export function decisionDePreToolUse(opciones: {
     return {
       hookEventName: "PreToolUse",
       permissionDecision: "ask",
-      permissionDecisionReason: "cada escritura de xonecode pasa por una autorización",
+      permissionDecisionReason: "cada escritura de XOneCode pasa por una autorización",
     };
   }
   return {
@@ -495,7 +495,7 @@ export function motivoDeToolDenegada(nombre: string, clase: ClaseDeToolExterna):
     );
   }
   return (
-    "xonecode no te concede escribir: tu papel es de solo lectura. " +
+    "XOneCode no te concede escribir: tu papel es de solo lectura. " +
     "Explica qué harías en vez de intentar hacerlo."
   );
 }
@@ -707,7 +707,7 @@ export async function decisionDeEscrituraExterna(opciones: {
     return {
       concedida: false,
       motivo:
-        "xonecode no tiene a quién pedir la autorización de esta escritura en esta sesión, así que no se concede.",
+        "XOneCode no tiene a quién pedir la autorización de esta escritura en esta sesión, así que no se concede.",
     };
   }
   const veredicto = veredictoDeEscriturasExternas(opciones);

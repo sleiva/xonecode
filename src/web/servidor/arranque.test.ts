@@ -2483,7 +2483,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
           pedidos.push(entorno.id);
           return {
             proyectos:
-              entorno.id === "casa" ? [{ id: "c1", nombre: "De casa" }] : [{ id: "p1", nombre: "Tienda" }],
+              entorno.id === "casa"
+                ? [{ id: "c1", nombre: "De casa", ultimoAcceso: "2026-09-02T04:41:38" }]
+                : [{ id: "p1", nombre: "Tienda" }],
           };
         },
       });
@@ -2504,6 +2506,8 @@ describe("montarRutas — el cable, por fin conectado", () => {
         .at(-1) as Extract<MensajeAlCliente, { clase: "proyectosDeEntorno" }>;
       expect(respuesta.entorno).toBe("casa");
       expect(respuesta.proyectos?.map((p) => p.id)).toEqual(["c1"]);
+      // Y el último acceso viaja con él, para que Ajustes pueda ordenar y pintarlo.
+      expect(respuesta.proyectos?.[0]?.ultimoAcceso).toBe("2026-09-02T04:41:38");
 
       // Y lo que sostiene todo el diseño: el activo sigue siendo el de antes, con SUS
       // proyectos. Sin esto, mirar la pestaña del on-premise le cambiaría la barra a quien
@@ -2514,6 +2518,60 @@ describe("montarRutas — el cable, por fin conectado", () => {
       >;
       expect(alta.entornoActivo).toBe("webstudio");
       expect(alta.proyectos.map((p) => p.id)).toEqual(["p1"]);
+    });
+
+    it("refrescar el entorno ACTIVO sí actualiza `alta.proyectos`: es su única fuente", async () => {
+      // La barra lateral (`Barra.tsx#alaVista`) cruza `alta.proyectos` (el listado completo)
+      // contra `alta.registrados[].proyectos` (los ids marcados en Ajustes). Si el entorno
+      // que se refresca es el ACTIVO, `alta.proyectos` tiene que traer lo nuevo — si no, un
+      // proyecto recién aparecido se puede marcar visible en Ajustes y nunca llegar a verse:
+      // el `filter` de la barra descarta en silencio un id sin proyecto con el que cruzar.
+      const servidor = servidorDeMentira();
+      let llamadas = 0;
+      const vestibulo = vestibuloDePrueba({
+        entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" }],
+        proyectosDeEntorno: async () => {
+          llamadas++;
+          // La primera llamada es la población automática al arrancar; la segunda, este
+          // «Refrescar», que descubre un proyecto que no estaba antes.
+          return {
+            proyectos:
+              llamadas === 1
+                ? [{ id: "p1", nombre: "Tienda" }]
+                : [{ id: "p1", nombre: "Tienda" }, { id: "p2", nombre: "Nueva" }],
+          };
+        },
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+
+      const altaInicial = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(altaInicial.entornoActivo).toBe("webstudio");
+      expect(altaInicial.proyectos.map((p) => p.id)).toEqual(["p1"]);
+
+      await enviarMensaje(accion, { clase: "entorno", accion: "proyectos", entorno: "webstudio" });
+      await asentar();
+
+      // El mensaje de la pestaña de Ajustes también trae lo nuevo...
+      const respuesta = cliente.recibidos
+        .filter((m) => m.clase === "proyectosDeEntorno")
+        .at(-1) as Extract<MensajeAlCliente, { clase: "proyectosDeEntorno" }>;
+      expect(respuesta.proyectos?.map((p) => p.id)).toEqual(["p1", "p2"]);
+
+      // ...y lo que arregla el bug: la barra también, porque `alta.proyectos` se refrescó.
+      const altaTrasRefrescar = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(altaTrasRefrescar.proyectos.map((p) => p.id)).toEqual(["p1", "p2"]);
+      // Sin mudar el activo: sigue siendo el mismo entorno, no uno «recién elegido».
+      expect(altaTrasRefrescar.entornoActivo).toBe("webstudio");
     });
 
     it("el entorno que no contesta lleva su error, y los demás siguen usables", async () => {
@@ -3798,9 +3856,9 @@ describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
       version: () => ({ version: "9.9.9", commit: "abc1234", sucio: true }),
     });
     const texto = salida.join("");
-    expect(texto).toContain("xonecode 9.9.9 · abc1234 + cambios sin commitear");
+    expect(texto).toContain("XOneCode 9.9.9 · abc1234 + cambios sin commitear");
     // Antes que la URL: es lo que se lee primero cuando uno viene a comprobar qué hay vivo.
-    expect(texto.indexOf("xonecode 9.9.9")).toBeLessThan(texto.indexOf("consola web en"));
+    expect(texto.indexOf("XOneCode 9.9.9")).toBeLessThan(texto.indexOf("consola web en"));
   });
 
   it("y sin saber la versión no se inventa ninguna línea", async () => {
@@ -3817,7 +3875,7 @@ describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
       escribir: (t) => salida.push(t),
       esperarCierre: async () => {},
     });
-    expect(salida.join("")).not.toContain("xonecode 0.");
+    expect(salida.join("")).not.toContain("XOneCode 0.");
   });
 
   /**

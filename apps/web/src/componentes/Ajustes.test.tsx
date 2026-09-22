@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Ajustes } from "./Ajustes.js";
 import { TITULO_DE_REFRESCAR_EQUIPO } from "./Equipo.js";
+import { selloDeFecha } from "../selloDeFecha.js";
 
 const MANEJADORES = {
   apariencia: "sistema" as const,
@@ -370,6 +371,17 @@ describe("Ajustes", () => {
   });
 
   /**
+   * `seccionInicial` es la puerta por la que entra el enlace «Ajustes» del aviso de
+   * proyectos sin enseñar (`Barra.tsx`): quien lo pulsa viene buscando esa lista, no la
+   * pantalla de General.
+   */
+  it("con seccionInicial, abre directamente en esa sección en vez de en General", () => {
+    render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} seccionInicial="entornos" />);
+    expect(screen.getByRole("heading", { name: /entornos/i })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "General" })).toBeNull();
+  });
+
+  /**
    * El punto dice lo que se puede AFIRMAR, y «borrar» solo se ofrece sobre lo que se puede
    * cumplir: una clave que vive en una variable de entorno no la podemos quitar.
    */
@@ -550,6 +562,96 @@ describe("Ajustes", () => {
     expect(alElegirProyectos).toHaveBeenCalledWith("webstudio", ["suyo"]);
   });
 
+  /**
+   * Las dos columnas de dueño —«Propios» y «Compartidos contigo»— llevan SIEMPRE su propio
+   * buscador, aunque tengan pocos proyectos: no es una ayuda para listas largas nada más,
+   * es la forma de encontrar un proyecto por nombre en cualquier entorno. «Sin decir de
+   * quién son» no lleva buscador: es el hueco residual que en la práctica no se pinta.
+   */
+  it("propios y compartidos llevan buscador siempre; sin atribuir, nunca", () => {
+    render(
+      <Ajustes
+        {...MANEJADORES}
+        entornos={[{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }]}
+        entornoActivo="webstudio"
+        proyectos={[
+          { id: "mio", nombre: "AppDemo", compartido: false },
+          { id: "suyo", nombre: "Bequikly", compartido: true },
+          { id: "quiensabe", nombre: "SinDueño" },
+        ]}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Entornos" }));
+
+    const grupoDePropios = screen.getByRole("heading", { name: /^propios/i }).parentElement as HTMLElement;
+    const grupoDeCompartidos = screen.getByRole("heading", { name: /compartidos contigo/i })
+      .parentElement as HTMLElement;
+    const grupoSinAtribuir = screen.getByRole("heading", { name: /sin decir de quién son/i })
+      .parentElement as HTMLElement;
+    expect(within(grupoDePropios).getByRole("searchbox")).toBeTruthy();
+    expect(within(grupoDeCompartidos).getByRole("searchbox")).toBeTruthy();
+    expect(within(grupoSinAtribuir).queryByRole("searchbox")).toBeNull();
+  });
+
+  /**
+   * Cada buscador filtra SOLO su columna: escribir en el de «Propios» no le toca ni una
+   * casilla a «Compartidos contigo», y la cuenta de la cabecera baja con lo que sobrevive.
+   */
+  it("el buscador de una columna filtra solo esa columna, y la cuenta baja con él", () => {
+    const propios = Array.from({ length: 9 }, (_, i) => ({
+      id: `mio${i}`,
+      nombre: `AppPropia${i}`,
+      compartido: false as const,
+    }));
+    const compartidos = [
+      { id: "suyo1", nombre: "Bequikly", compartido: true as const },
+      { id: "suyo2", nombre: "OtraCompartida", compartido: true as const },
+    ];
+    render(
+      <Ajustes
+        {...MANEJADORES}
+        entornos={[{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }]}
+        entornoActivo="webstudio"
+        proyectos={[...propios, ...compartidos]}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Entornos" }));
+
+    const grupoDePropios = screen.getByRole("heading", { name: /^propios/i }).parentElement as HTMLElement;
+    const grupoDeCompartidos = screen.getByRole("heading", { name: /compartidos contigo/i })
+      .parentElement as HTMLElement;
+
+    const buscadorDePropios = within(grupoDePropios).getByRole("searchbox");
+    fireEvent.change(buscadorDePropios, { target: { value: "Propia3" } });
+
+    expect(within(grupoDePropios).getAllByRole("checkbox")).toHaveLength(1);
+    expect(within(grupoDePropios).getByRole("checkbox", { name: "AppPropia3" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /^propios/i }).textContent).toContain("1");
+    // Compartidos sigue con sus dos, intacto, y su propio buscador vacío.
+    expect(within(grupoDeCompartidos).getAllByRole("checkbox")).toHaveLength(2);
+    expect((within(grupoDeCompartidos).getByRole("searchbox") as HTMLInputElement).value).toBe("");
+
+    // Y el de compartidos filtra el suyo sin tocar propios.
+    fireEvent.change(within(grupoDeCompartidos).getByRole("searchbox"), { target: { value: "Otra" } });
+    expect(within(grupoDeCompartidos).getAllByRole("checkbox")).toHaveLength(1);
+    expect(within(grupoDePropios).getAllByRole("checkbox")).toHaveLength(1);
+  });
+
+  it("sin ninguna coincidencia, la columna lo dice en vez de quedarse vacía en silencio", () => {
+    render(
+      <Ajustes
+        {...MANEJADORES}
+        entornos={[{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }]}
+        entornoActivo="webstudio"
+        proyectos={[{ id: "mio", nombre: "AppDemo", compartido: false }]}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Entornos" }));
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "nada-que-encuentre" } });
+    expect(screen.getByText(/ninguno coincide con/i)).toBeTruthy();
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+  });
+
   it("una elección guardada manda sobre la omisión, y desmarcar todo se manda como vacío", () => {
     const alElegirProyectos = vi.fn();
     const dos = [
@@ -571,6 +673,45 @@ describe("Ajustes", () => {
     fireEvent.click(casillas[1]!);
     // Vacío es «ninguno», que es una elección legítima — no un «no lo he dicho».
     expect(alElegirProyectos).toHaveBeenCalledWith("webstudio", []);
+  });
+
+  /**
+   * El último ACCESO manda el orden dentro de cada grupo —más reciente arriba— y se pinta
+   * bajo el nombre. El que no lo trae no se inventa una fecha: se queda sin línea de fecha y
+   * cae al final, el mismo criterio que ya usa la barra con las sesiones sin `ultimoTurno`.
+   */
+  it("ordena por último acceso descendente y pinta la fecha bajo el nombre; sin fecha, al final y sin línea", () => {
+    render(
+      <Ajustes
+        {...MANEJADORES}
+        entornos={[{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }]}
+        entornoActivo="webstudio"
+        proyectos={[
+          { id: "vieja", nombre: "AppVieja", compartido: false, ultimoAcceso: "2026-01-05T10:00:00" },
+          { id: "sinfecha", nombre: "AppSinFecha", compartido: false },
+          { id: "nueva", nombre: "AppNueva", compartido: false, ultimoAcceso: "2026-09-02T04:41:38" },
+        ]}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Entornos" }));
+
+    const grupoDePropios = screen.getByRole("heading", { name: /^propios/i }).parentElement as HTMLElement;
+    const nombres = within(grupoDePropios)
+      .getAllByRole("checkbox")
+      .map((c) => c.closest("li")?.textContent ?? "");
+    // La más reciente primero, la vieja después, y la que no tiene fecha AL FINAL.
+    expect(nombres[0]).toContain("AppNueva");
+    expect(nombres[1]).toContain("AppVieja");
+    expect(nombres[2]).toContain("AppSinFecha");
+
+    // La fecha se pinta bajo el nombre para las dos que la traen, con el MISMO formato que
+    // `selloDeFecha` — no se adivina la abreviatura del mes, se calcula con la función real.
+    expect(nombres[0]).toContain(selloDeFecha("2026-09-02T04:41:38"));
+    expect(nombres[1]).toContain(selloDeFecha("2026-01-05T10:00:00"));
+    // ...y NO se inventa ninguna para la que no la trae: el accesible-name del checkbox es
+    // EXACTAMENTE el nombre, sin fecha colgando detrás.
+    const filaSinFecha = within(grupoDePropios).getByRole("checkbox", { name: "AppSinFecha" });
+    expect(filaSinFecha).toBeTruthy();
   });
 
   /**

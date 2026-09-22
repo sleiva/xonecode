@@ -231,7 +231,7 @@ export function Compositor({
           // quedaría en la cola hasta que termine.
           placeholder={
             !conectado
-              ? "sin conexión con xonecode"
+              ? "sin conexión con XOneCode"
               : turnoEnVuelo
                 ? "el agente está trabajando…"
                 : // DOS líneas: lo que el harness sabe hacer, y debajo las teclas.

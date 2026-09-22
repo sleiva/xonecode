@@ -119,7 +119,7 @@ export function Sidebar(d: DatosDeSidebar): ReactNode {
       <Box flexDirection="column">
         <Text backgroundColor={fondo} wrap="truncate-end">
           <Text color={temaInk.exito}>{"● "}</Text>
-          <Text color={temaInk.mudo}>{`xonecode ${d.version}`}</Text>
+          <Text color={temaInk.mudo}>{`XOneCode ${d.version}`}</Text>
           {" ".repeat(anchoInterior)}
         </Text>
       </Box>

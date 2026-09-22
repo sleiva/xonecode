@@ -121,7 +121,7 @@ export async function decisionDeTool(opciones: {
     return {
       behavior: "deny",
       message:
-        "xonecode no tiene a quién pedir la autorización de esta escritura en esta sesión, así que no se concede. " +
+        "XOneCode no tiene a quién pedir la autorización de esta escritura en esta sesión, así que no se concede. " +
         "Explica qué querías cambiar.",
     };
   }
@@ -500,7 +500,7 @@ export function crearSubagenteExterno(opciones: {
               return {
                 behavior: "deny" as const,
                 message:
-                  "xonecode no pudo decidir sobre esa llamada, así que no se concede. Explica qué querías hacer.",
+                  "XOneCode no pudo decidir sobre esa llamada, así que no se concede. Explica qué querías hacer.",
               };
             }
           },

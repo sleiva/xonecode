@@ -74,6 +74,58 @@ describe("Barra: los tres niveles vacíos se explican solos", () => {
     expect(screen.getByText(/2 proyectos más sin enseñar/i).textContent).toMatch(/ajustes/i);
   });
 
+  /**
+   * El «Ajustes» del aviso es una entrada de verdad, con la misma exigencia que el botón
+   * del pie: un enlace que no llama a nadie es el fallo mudo de siempre. Y lleva a la
+   * pestaña Entornos — no a la general — porque quien lo pulsa viene buscando esa lista.
+   */
+  it("el «Ajustes» del aviso de ocultos llama a alAbrirAjustesEnEntornos, no al genérico", () => {
+    const seis = Array.from({ length: 6 }, (_, i) => ({ id: `p${i}`, nombre: `Proyecto ${i}`, sesiones: [] }));
+    const alAbrirAjustes = vi.fn();
+    const alAbrirAjustesEnEntornos = vi.fn();
+    render(
+      <Barra
+        entornos={[]}
+        entornoActivo=""
+        proyectos={seis}
+        alElegirEntorno={() => {}}
+        alAbrirSesion={() => {}}
+        alAbrirProyecto={() => {}}
+        alNuevaSesion={() => {}}
+        alAccionDeSesion={() => {}}
+        alAbrirAjustes={alAbrirAjustes}
+        alAbrirAjustesEnEntornos={alAbrirAjustesEnEntornos}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Ajustes, pestaña Entornos" }));
+    expect(alAbrirAjustesEnEntornos).toHaveBeenCalledTimes(1);
+    expect(alAbrirAjustes).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Sin el prop específico, el enlace no se queda mudo: cae al genérico. Un caller que no
+   * lo cablee sigue abriendo la ventana, solo que en la sección de siempre.
+   */
+  it("sin alAbrirAjustesEnEntornos, el aviso cae al genérico en vez de no hacer nada", () => {
+    const seis = Array.from({ length: 6 }, (_, i) => ({ id: `p${i}`, nombre: `Proyecto ${i}`, sesiones: [] }));
+    const alAbrirAjustes = vi.fn();
+    render(
+      <Barra
+        entornos={[]}
+        entornoActivo=""
+        proyectos={seis}
+        alElegirEntorno={() => {}}
+        alAbrirSesion={() => {}}
+        alAbrirProyecto={() => {}}
+        alNuevaSesion={() => {}}
+        alAccionDeSesion={() => {}}
+        alAbrirAjustes={alAbrirAjustes}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Ajustes, pestaña Entornos" }));
+    expect(alAbrirAjustes).toHaveBeenCalledTimes(1);
+  });
+
   it("una elección MANDA sobre el tope: quien pide seis, ve seis", () => {
     const seis = Array.from({ length: 6 }, (_, i) => ({ id: `p${i}`, nombre: `Proyecto ${i}`, sesiones: [] }));
     montar(seis, seis.map((p) => p.id));

@@ -4,7 +4,7 @@ import { lineaDeVersion } from "./version.js";
 describe("la versión que se imprime al arrancar", () => {
   it("con commit limpio, lo dice y nada más", () => {
     expect(lineaDeVersion({ version: "0.5.0", commit: "85219d4", sucio: false })).toBe(
-      "xonecode 0.5.0 · 85219d4"
+      "XOneCode 0.5.0 · 85219d4"
     );
   });
 
@@ -12,7 +12,7 @@ describe("la versión que se imprime al arrancar", () => {
     // Es el caso normal en desarrollo, y el que más falta hace: el commit solo no describe
     // lo que hay vivo en el proceso.
     expect(lineaDeVersion({ version: "0.5.0", commit: "85219d4", sucio: true })).toBe(
-      "xonecode 0.5.0 · 85219d4 + cambios sin commitear"
+      "XOneCode 0.5.0 · 85219d4 + cambios sin commitear"
     );
   });
 
@@ -26,6 +26,6 @@ describe("la versión que se imprime al arrancar", () => {
 
   it("sin git, solo la versión: un paquete instalado no tiene commit", () => {
     // No se inventa un «desconocido»: ahí el commit no existe como concepto.
-    expect(lineaDeVersion({ version: "0.5.0" })).toBe("xonecode 0.5.0");
+    expect(lineaDeVersion({ version: "0.5.0" })).toBe("XOneCode 0.5.0");
   });
 });

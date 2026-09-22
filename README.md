@@ -1,4 +1,4 @@
-# xonecode
+# XOneCode
 
 Consola CLI y harness de agente para desarrollar aplicaciones **XOne**, sobre LangChain,
 LangGraph y deepagents.
@@ -14,7 +14,7 @@ siempre, que es la que se ve aquí abajo.
 ```
 $ cd MiApp && xonecode --cli
 
-xonecode · MiApp (7 colls) · ollama/glm-5.3-flash:cloud · 0 tokens
+XOneCode · MiApp (7 colls) · ollama/glm-5.3-flash:cloud · 0 tokens
 17 comandos: /ayuda /config /describe /doctor /verify /modelo /modelos /sync … /salir
 
 ─ MiApp (7 colls) · ollama/glm-5.3-flash:cloud · 0 tokens · /ayuda

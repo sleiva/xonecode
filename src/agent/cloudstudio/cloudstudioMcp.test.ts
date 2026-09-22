@@ -160,8 +160,8 @@ describe("herramientaDeProyectos", () => {
 
 describe("proyectosDeResultado · forma real de studio_list_projects", () => {
   // Medido contra el servidor: no es una lista, es un MAPA indexado por id bajo
-  // «recents», y el identificador viaja en «pid». Los demás campos (permisos, correo
-  // del propietario, fechas) no salen de aquí.
+  // «recents», y el identificador viaja en «pid». De los demás campos, solo `last`
+  // (el último acceso) sale de aquí; permisos y correo del propietario, nunca.
   const respuestaReal = {
     recents: {
       "5cd2327f_53f3_40b9_9bb4_e6973fd0a938": {
@@ -181,9 +181,14 @@ describe("proyectosDeResultado · forma real de studio_list_projects", () => {
     },
   };
 
-  it("extrae los proyectos de un mapa indexado por id, con si están compartidos", () => {
+  it("extrae los proyectos de un mapa indexado por id, con si están compartidos y su último acceso", () => {
     expect(proyectosDeResultado(respuestaReal)).toEqual([
-      { id: "5cd2327f_53f3_40b9_9bb4_e6973fd0a938", nombre: "AppDemo", compartido: false },
+      {
+        id: "5cd2327f_53f3_40b9_9bb4_e6973fd0a938",
+        nombre: "AppDemo",
+        compartido: false,
+        ultimoAcceso: "2026-09-02T04:41:38",
+      },
       { id: "e01d2abe_25e7_47a0_9654_7bee94878a35", nombre: "AppDeve", compartido: true },
     ]);
   });
@@ -193,7 +198,7 @@ describe("proyectosDeResultado · forma real de studio_list_projects", () => {
     // Sin esto la comprobación de abajo pasaría también con una lista vacía.
     expect(extraidos).toHaveLength(2);
     const serializado = JSON.stringify(extraidos);
-    for (const filtrado of ["suser", "ejemplo.es", "rights", "studiopermissions", "last"]) {
+    for (const filtrado of ["suser", "ejemplo.es", "rights", "studiopermissions"]) {
       expect(serializado).not.toContain(filtrado);
     }
   });
@@ -201,13 +206,14 @@ describe("proyectosDeResultado · forma real de studio_list_projects", () => {
   /**
    * Las claves EXACTAS, no `toMatchObject`. Esta función es el punto de estrangulamiento del
    * listado remoto, y lo que la protege no es el comentario de arriba: es que un «ya que
-   * estamos, llevemos también la fecha» rompa un test. El correo del propietario viaja en la
-   * misma respuesta y no puede colarse de camino.
+   * estamos, llevemos también el correo» rompa un test. `ultimoAcceso` es opcional —el
+   * segundo proyecto del fixture no trae `last`— así que se comprueba objeto a objeto y no
+   * con una única forma para todo el array.
    */
-  it("las claves que salen son EXACTAMENTE id, nombre y compartido", () => {
-    for (const proyecto of proyectosDeResultado(respuestaReal)) {
-      expect(Object.keys(proyecto).sort()).toEqual(["compartido", "id", "nombre"]);
-    }
+  it("las claves que salen son EXACTAMENTE id, nombre, compartido y, si consta, ultimoAcceso", () => {
+    const [conFecha, sinFecha] = proyectosDeResultado(respuestaReal);
+    expect(Object.keys(conFecha!).sort()).toEqual(["compartido", "id", "nombre", "ultimoAcceso"]);
+    expect(Object.keys(sinFecha!).sort()).toEqual(["compartido", "id", "nombre"]);
   });
 
   /**
@@ -389,7 +395,7 @@ describe("la página del callback de OAuth", () => {
   it("sin URL de web, la de siempre: 200 y «ya puedes volver a xonecode»", () => {
     const r = respuestaDeCallback("abc", null);
     expect(r.estado).toBe(200);
-    expect(r.cuerpo).toMatch(/volver a xonecode/);
+    expect(r.cuerpo).toMatch(/volver a XOneCode/);
   });
 
   it("con URL de web, 302 a la web: en un navegador «vuelve a la terminal» es falso", () => {

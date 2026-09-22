@@ -628,7 +628,7 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
     const store = crearStoreDelCliente();
     render(<App store={store} enviar={vi.fn()} subirAdjunto={subirAdjuntoDeMentira} instalarSkill={instalarSkillDeMentira} />);
     // Sin `marcarConectado()`: `ESTADO_INICIAL` (`store.ts`) ya nace `conectado: false`.
-    expect(screen.getByText(/sin conexión con xonecode/i)).toBeTruthy();
+    expect(screen.getByText(/sin conexión con XOneCode/i)).toBeTruthy();
   });
 
   it("con el wizard de entorno pendiente pasa lo mismo: solo el alta, nada de maqueta", () => {
@@ -936,14 +936,14 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
     const { enviar } = montar();
     // Con sesión: hay pestañas y la marca es pulsable.
     expect(screen.queryByRole("tablist")).not.toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "xonecode" }));
+    fireEvent.click(screen.getByRole("button", { name: "XOneCode" }));
     // Se ve el escritorio: su saludo, y las pestañas de la sesión se van con ella.
     expect(screen.getByRole("heading", { level: 1 })).toBeTruthy();
     expect(screen.queryByRole("tablist")).toBeNull();
     // Y NO se ha soltado el proyecto: es estado de vista, no una orden al servidor.
     expect(enviar).not.toHaveBeenCalled();
     // Ya en el escritorio la marca deja de ser un botón: no lleva a ninguna parte.
-    expect(screen.queryByRole("button", { name: "xonecode" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "XOneCode" })).toBeNull();
   });
 
   it("el escritorio también lleva barra superior, y sin pestañas", () => {

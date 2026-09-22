@@ -40,7 +40,7 @@
 .ventana {
   position: relative;
   display: flex;
-  width: min(820px, 92vw);
+  width: min(1100px, 92vw);
   height: min(720px, 86vh);
   max-height: 100%;
   border: 0.5px solid var(--dsw-alias-border-l2);
@@ -194,6 +194,22 @@
 .nombre {
   color: var(--dsw-alias-label-primary);
   font-weight: 600;
+}
+
+/* Nombre y fecha de último acceso en dos líneas, dentro de la misma casilla — el checkbox
+   sigue en fila con este bloque (`.casilla` es `align-items: center`). */
+.textoDeProyecto {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* El mismo tono terciario que `.cuenta`: es el otro dato secundario de esta sección. */
+.fechaDeProyecto {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-weight: 400;
 }
 
 /* El logo del proveedor (`IconoDeProveedor.tsx`), monocromo y heredando el color: se pinta
@@ -669,6 +685,38 @@
    Ojo al escribir aquí: ese test busca el nombre de la consulta por TEXTO, comentarios
    incluidos, así que nombrarla en prosa pone la hoja en rojo — la misma trampa que
    `CLAUDE.md` avisa para el test de la documentación. Se nombra en palabras, no en sintaxis. */
+/* El título y el botón de refrescar comparten renglón, con el botón pegado a la derecha —
+   la misma fila que ya usan Revisión, Ficheros y el panel de CloudStudio. */
+.cabeceraDeProyectos {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+/* El mismo botón secundario de Revisión, Ficheros y CloudStudio, y a propósito: «volver a
+   mirar» es la MISMA acción en todas las pestañas y no hay motivo para que se vea distinta. */
+.recargar {
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.recargar:hover:enabled {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.recargar:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .columnasDeProyectos {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -701,4 +749,34 @@
 .cuenta {
   font-weight: 400;
   color: var(--dsw-alias-label-tertiary);
+}
+
+/* El buscador de «Propios» y de «Compartidos contigo», calcado de `.filtro` en
+   `PastillaDeModelo.module.css`: mismo trazo, mismo motivo. La lupa va DENTRO de la caja del
+   campo —posicionada sobre él, no al lado— para no repetir el borde ni el fondo en dos
+   elementos: es el mismo gesto que un `<input type="search">` con icono nativo. */
+.buscadorDeProyectos {
+  position: relative;
+  display: block;
+}
+
+.lupa {
+  position: absolute;
+  top: 50%;
+  left: 8px;
+  transform: translateY(-50%);
+  color: var(--dsw-alias-label-tertiary);
+  pointer-events: none;
+}
+
+.filtroDeProyectos {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 4px 8px 4px 26px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
 }

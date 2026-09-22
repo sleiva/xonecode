@@ -62,7 +62,7 @@ describe("sidebar", () => {
     );
     const salida = lastFrame() ?? "";
     expect(salida).toContain("MinitMT");
-    expect(salida).toContain("xonecode 0.3.0");
+    expect(salida).toContain("XOneCode 0.3.0");
     expect(salida).toContain("rapido: ollama/r");
   });
 
@@ -98,7 +98,7 @@ describe("sidebar", () => {
     const lineas = (lastFrame() ?? "").split("\n");
     expect(lineas).toHaveLength(20);
     const llenas = lineas.filter((l) => l.trim() !== "");
-    expect(llenas.at(-1)).toContain("xonecode 0.3.0");
+    expect(llenas.at(-1)).toContain("XOneCode 0.3.0");
     // El título vive arriba, como OpenCode; el hueco antes del pie demuestra que el
     // anclaje es elástico, no un margen fijo.
     expect(lineas.at(-2)?.trim()).toBe("");

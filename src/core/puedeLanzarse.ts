@@ -321,7 +321,7 @@ export function motivoDeBloqueo(causa: CausaDeBloqueo): string {
       // Larga a propósito: lo que un despliegue tiene que decir es QUÉ falta, DE DÓNDE sale y
       // qué pasa si se ignora. Una frase corta aquí manda a la persona a buscar sola y la deja
       // creyendo que el fichero lo pone xonecode.
-      return `app.xml declara la conexión «${causa.connstring}» y ese fichero no está en el proyecto. La base la genera el simulador fuera de xonecode —xonecode no la crea—, así que hay que abrir el proyecto en XOne Studio y arrancarlo una vez, o traerlo de donde se generó. Sin él la app recibe el lanzamiento y muere en un diálogo «Error opening database».`;
+      return `app.xml declara la conexión «${causa.connstring}» y ese fichero no está en el proyecto. La base la genera el simulador fuera de XOneCode —XOneCode no la crea—, así que hay que abrir el proyecto en XOne Studio y arrancarlo una vez, o traerlo de donde se generó. Sin él la app recibe el lanzamiento y muere en un diálogo «Error opening database».`;
     case "falta-la-base":
       // La hermana de la de arriba, y la que más veces va a salir: medido, tres de cada cuatro
       // proyectos reales NO declaran su base y la necesitan igual, porque la ruta es la de por
@@ -331,8 +331,8 @@ export function motivoDeBloqueo(causa: CausaDeBloqueo): string {
       // el PROYECTO, y una app que ya se lanzó antes en ese dispositivo tiene allí su copia, así
       // que volver a lanzarla no la necesita. No se puede preguntar al aparato todavía, así que
       // lo honesto es decir que no se puede prometer — y lo que hay que hacer si ese es el caso.
-      return `El proyecto no tiene ${RUTA_DE_LA_BASE}, que es la base local de XOne: la usa POR DEFECTO, se declare en app.xml o no, y sin ella la app recibe el lanzamiento y muere en un diálogo «Error opening database». La genera el simulador fuera de xonecode —xonecode no la crea—, así que hay que abrir el proyecto en XOne Studio y arrancarlo una vez, o traerla de donde se generó. (Se mira el proyecto, no el aparato: si esta app ya se lanzó antes en ese dispositivo, allí sigue su copia y no hace falta esto.)`;
+      return `El proyecto no tiene ${RUTA_DE_LA_BASE}, que es la base local de XOne: la usa POR DEFECTO, se declare en app.xml o no, y sin ella la app recibe el lanzamiento y muere en un diálogo «Error opening database». La genera el simulador fuera de XOneCode —XOneCode no la crea—, así que hay que abrir el proyecto en XOne Studio y arrancarlo una vez, o traerla de donde se generó. (Se mira el proyecto, no el aparato: si esta app ya se lanzó antes en ese dispositivo, allí sigue su copia y no hace falta esto.)`;
     case "plataforma-sin-camino":
-      return `Lanzar desde xonecode todavía solo está montado para Android —el túnel, el canal y la subida son los de esa plataforma—, así que sobre ${nombreDePlataforma(causa.plataforma)} no hay camino. Elige un dispositivo de Android en Ajustes → Dispositivos, o lanza la app desde XOne Studio.`;
+      return `Lanzar desde XOneCode todavía solo está montado para Android —el túnel, el canal y la subida son los de esa plataforma—, así que sobre ${nombreDePlataforma(causa.plataforma)} no hay camino. Elige un dispositivo de Android en Ajustes → Dispositivos, o lanza la app desde XOne Studio.`;
   }
 }

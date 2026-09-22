@@ -760,7 +760,7 @@ describe("la foto de la máquina («dispositivos»)", () => {
             pasos: [
               { titulo: "Descargar", comandos: ["sdkmanager --install x"], hecho: true, ejecutable: true, repetir: { etiqueta: "Actualizar", porQue: "lo sube de versión" } },
             ],
-            aparte: { titulo: "Declarar las variables", comandos: ["export ANDROID_HOME=x"], nota: "xonecode NO lo necesita." },
+            aparte: { titulo: "Declarar las variables", comandos: ["export ANDROID_HOME=x"], nota: "XOneCode NO lo necesita." },
             completa: false,
             despues: "emulator -avd pixel8",
           },
@@ -781,7 +781,7 @@ describe("la foto de la máquina («dispositivos»)", () => {
     // de los DOS campos del paso, y el consejo de `aparte` no es un paso.
     expect(foto.recetas[0]).toMatchObject({
       plataforma: "android",
-      aparte: { titulo: "Declarar las variables", nota: "xonecode NO lo necesita." },
+      aparte: { titulo: "Declarar las variables", nota: "XOneCode NO lo necesita." },
     });
     expect(foto.recetas[0]!.pasos[0]!.repetir).toEqual({ etiqueta: "Actualizar", porQue: "lo sube de versión" });
   });

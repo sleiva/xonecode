@@ -130,15 +130,15 @@ function montar(opciones: {
 
 /**
  * Las aserciones que la maqueta debe cumplir SIEMPRE, sea cual sea el estado. Con
- * sidebar (más de 120 columnas), «● xonecode» cierra la última fila junto al pie; sin
+ * sidebar (más de 120 columnas), «● XOneCode» cierra la última fila junto al pie; sin
  * ella, la versión no está en pantalla y el pie es lo único que cierra.
  */
 function laMaquetaCabe(frame: string, opciones: { sidebar?: boolean } = {}): void {
   const lineas = frame.split("\n");
   expect(lineas).toHaveLength(FILAS - 1); // la fila de reserva del borrado total de Ink
   expect(lineas.at(-1)).toContain("/ayuda");
-  if (opciones.sidebar ?? true) expect(lineas.at(-1)).toContain("● xonecode");
-  else expect(frame).not.toContain("● xonecode");
+  if (opciones.sidebar ?? true) expect(lineas.at(-1)).toContain("● XOneCode");
+  else expect(frame).not.toContain("● XOneCode");
 }
 
 describe("la maqueta de la App", () => {
