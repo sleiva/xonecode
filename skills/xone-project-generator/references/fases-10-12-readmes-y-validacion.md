@@ -66,14 +66,22 @@ Las tablas deben tener el prefijo `gen_` y estar en minúsculas (ej: `gen_empres
 
 | Tipo XOne | SQLite | Descripción |
 |-----------|--------|-------------|
-| T, L, TL, X, PH | TEXT | Texto |
-| D, DT | TEXT | Fechas |
-| IMG, VD, F, M | TEXT | Rutas |
+| T, L, TL, THTML, X | TEXT | Texto |
+| TN, TN2-TN6 | TEXT | Número almacenado como texto |
+| D, DT, TT | TEXT | Fechas y horas |
+| IMG, PH, VD, DR, AT, WEB | TEXT | Rutas a fichero o URL |
 | N | INTEGER | Entero |
-| NC, R | INTEGER | Boolean |
-| N1-N6 | REAL | Decimales |
-| C | TEXT | Combo |
-| B, Z, L, S, P, O | NO SE CREA | UI |
+| NC | INTEGER | Booleano (0/1) |
+| N2-N6 | REAL | Decimales |
+| B, Z, O | NO SE CREA | No persisten |
+
+> Los tipos de esta tabla son los 30 de la **lista autoritativa** de
+> `xone-help-docs` (`topics/02b-xml-prop-tipos.md`). Ojo con los que NO existen y
+> parecen tipos: **no hay `C` (combo), `M` (mapa), `A` (autocomplete), `F`, `S`, `P`,
+> `R` ni `N1`**. Un combo es `type="T"` (o `"N"`) con `mapcol` y `mapfld`; un mapa es
+> `type="Z" viewmode="mapview"`; los sliders y las barras de progreso son
+> **viewmodes** sobre `T`, `N` o `Z`. Si el modelo trae uno de esos nombres, el
+> arreglo es cambiar el tipo en el `.xne`, no crear una columna para él.
 
 ### 11.4 Tarea 2: Insertar Datos Iniciales
 
