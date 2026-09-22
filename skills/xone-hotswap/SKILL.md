@@ -32,6 +32,18 @@ No cuestan lo mismo, ni de lejos. Por orden de lo que vas a necesitar:
 | **qué hay en la pantalla** | `elements` | SOLO para explorar: decenas de miles de caracteres |
 | **si algo se VE mal** | `shot name=MAP_X` | y solo aquí |
 
+**Y la captura del CANAL no pinta los diálogos.** Lo dice la referencia del equipo del
+framework: `getScreenshot` dibuja la ventana de la ACTIVIDAD, así que un diálogo abierto —el
+«Error loading initial config» de XOne, por ejemplo— **no sale en ella** aunque la persona lo
+esté viendo. Para saber qué hay encima está `screen` (trae `dialogs`) o `elements`. La captura
+NATIVA (`xone-captura-android`, que es `adb screencap`) sí lo pinta, porque fotografía la
+pantalla entera y no la ventana — y ésa es toda la diferencia entre las dos, no el formato.
+
+**Antes de capturar, comprueba que hay algo que ver.** Si el log no da error y `screen`
+contesta con su colección, la app está bien: no hay nada que diagnosticar en una foto. El
+orden que sale barato es log → `screen` → y solo entonces, si lo que compruebas es VISUAL,
+la captura acotada.
+
 **Una captura NO es una herramienta de diagnóstico.** Para saber por qué algo falla están el
 LOG y `elements`. La captura es para lo **visual** —texto cortado, un control tapado, algo
 ilegible— o para cuando lo anterior no concluye.
@@ -83,7 +95,7 @@ xone-reiniciar-android --app MiApp
 # «lanza la app», «despliégala»: la cadena ENTERA (túnel, ZIP, subida, reinicio, lanzamiento)
 # y termina diciendo si la app está VIVA, con su árbol de controles.
 xone-desplegar-android
-xone-desplegar-android --captura                  # …y deja la captura, en la MISMA orden
+xone-desplegar-android --captura                  # …y además captura: solo si quieres VERLO
 xone-desplegar-android --app MiApp --serie emulator-5554
 
 # Cualquier comando del catálogo de más abajo (varios en orden, si le pasas varios):
@@ -111,10 +123,18 @@ sobre un proyecto real: la app arrancaba, el árbol de controles contestaba, y l
 una fuente. Ni la captura ni `getAllElements` lo cuentan.
 
 **Encadenar órdenes cuesta más que la orden.** Lo que devuelve cada una es pequeño —1,6 KB el
-árbol de controles, 108 bytes la captura—, pero cada ida y vuelta reenvía la conversación
-entera. Por eso «lanza la app y sácame una captura» es `xone-desplegar-android --captura`, un
-viaje, y no tres órdenes encadenadas. Y `xone-hotswap` acepta varios comandos de golpe, que es
-la misma idea.
+árbol de controles— pero cada ida y vuelta reenvía la conversación entera, así que lo que se
+paga son los VIAJES. Por eso `xone-hotswap` acepta varios comandos de golpe y los scripts
+hacen la cadena entera en una orden.
+
+**Pero una CAPTURA no entra en esa cuenta, y el número de antes engañaba.** Aquí decía «108
+bytes la captura», que es lo que devuelve el comando —el fichero se guarda aparte— y no lo
+que cuesta MIRARLA: medido contra el proveedor, una de 1080×2400 son **3.375 fichas** en el
+revisor visual, pesen 52 KB o 766 KB (se paga por píxeles). Así que `--captura` no es «gratis
+porque va en el mismo viaje»: sale cara en cuanto alguien la mira, y para diagnosticar un
+fallo de arranque no hace falta — eso lo dice el log, con fichero y línea, por unas 50.
+
+Úsala cuando quieras VER algo: que un control se ve cortado, tapado o ilegible.
 
 Tres cosas de `xone-hotswap` que conviene saber antes de leer su salida:
 

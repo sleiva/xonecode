@@ -138,6 +138,27 @@ if (!args.includes("--igualmente")) {
   } catch {
     // Sin log no hay nada que objetar: se captura.
   }
+  /**
+   * **Y si NO hay error, se dice también.** Es la otra mitad de la misma regla: si el log no
+   * da excepción y la app contesta en qué colección está, no hay nada que diagnosticar en una
+   * foto — y capturar «por si acaso» es el caso que más se repite. No se BLOQUEA, porque
+   * comprobar algo VISUAL sobre una app sana es legítimo y es para lo que la captura sirve;
+   * lo que se hace es decirle a quien la pidió lo que ya se sabe, para que no la pida por
+   * costumbre.
+   */
+  if (roto === undefined) {
+    try {
+      const cliente = join(import.meta.dirname, "xone-hotswap");
+      const donde = execFileSync("node", [cliente, "screen"], { encoding: "utf8" }).trim();
+      const m = /\\"collection\\":\\"([^\\"]+)/.exec(donde);
+      if (m) {
+        console.log(`(el log no da error y la app responde en «${m[1]}»: si buscabas un fallo,`);
+        console.log(" no lo hay. Capturo igual, que para lo VISUAL es la herramienta buena.)");
+      }
+    } catch {
+      // Sin canal no se puede decir nada del estado: se captura y ya.
+    }
+  }
   if (roto !== undefined) {
     console.log("NO capturo: XOne reventó al cargar y eso ya está en el log, en texto:");
     console.log("");
