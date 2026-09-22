@@ -6,7 +6,7 @@ export type Pestana = "ficheros" | "revision" | "artefactos" | "tareas" | "ejecu
 
 /**
  * La tira de pestañas del PANEL: Tareas, Ejecutar, Ficheros, Revisión y Trazas — más
- * Artefactos, si la sesión dejó alguno —, con el botón de cerrarlo al final.
+ * Artefactos, si la sesión dejó alguno —, con la salida del panel delante.
  *
  * **«Chat» ya no es una pestaña, y eso es el cambio.** Era la primera de la tira y significaba
  * «devuélveme la conversación», o sea que las otras seis se leían como sus alternativas: para

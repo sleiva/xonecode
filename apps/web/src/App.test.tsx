@@ -1703,6 +1703,25 @@ describe("App: el panel a la derecha del chat", () => {
     expect(screen.getByRole("button", { name: /ocultar la barra lateral/i })).toBeTruthy();
   });
 
+  it("el panel NO se va al escritorio con la sesión: ahí no hay botón que lo cierre", () => {
+    // La fuga sale SOLO en ventana ancha: con el panel en el centro vive dentro de la rama
+    // de la sesión y se va con ella, pero en su columna lo monta la maqueta, que no sabe
+    // nada de sesiones. El escritorio no ofrece el botón del panel —ahí no hay ficheros de
+    // nadie—, así que quedaba una columna con el Ficheros de la sesión anterior de la que no
+    // se salía. Y a 1200 la barra se quedaba además plegada en el escritorio.
+    conVentana(1600);
+    montar();
+    abrirPestana("Ficheros");
+    expect(screen.getByRole("region", { name: "Panel" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "XOneCode" }));
+    expect(screen.queryByRole("region", { name: "Panel" })).toBeNull();
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.getByRole("button", { name: /ocultar la barra lateral/i })).toBeTruthy();
+    // Lo que NO se tira es la ELECCIÓN: `vistaDelPanel` sigue puesta, así que al volver a la
+    // sesión el panel vuelve por donde estaba. No se prueba aquí porque este montaje no trae
+    // proyectos en el alta y desde el escritorio no hay ninguno que abrir.
+  });
+
   it("el panel se monta UNA vez: al mudarse de la columna al centro no quedan dos", () => {
     // Cada vista suya MIDE al montarse, así que dos copias duplicarían todas sus peticiones
     // — y un `getAllByRole` de dos `tablist` es el síntoma que lo delata.

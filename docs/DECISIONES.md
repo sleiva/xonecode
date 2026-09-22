@@ -6262,3 +6262,82 @@ reusan `.detalleDePulso`. Vale por lo mismo — quince permisos tampoco se leen 
 
 **Y una nota de forma**: esto obligó a extraer `TramoDeTrabajo` a su propio componente,
 porque un trozo de `map` no puede tener un `ref` ni un efecto.
+
+## El panel de vistas se abre AL LADO del chat, no encima (23-09-2026)
+
+Lo pidió él con dos capturas y el chat de ChatGPT delante: «que las tres secciones cambien, así
+podría ver los artefactos y el chat a la vez». La tira de pestañas llevaba a «Chat» como primera
+opción, o sea que las otras seis se leían como sus alternativas: **para mirar un fichero había
+que dejar de ver lo que el agente estaba escribiendo**, que es justo el momento en que más falta
+hace mirarlo.
+
+La decisión que ordena todo lo demás es que **la conversación deja de ser una vista**. No es una
+más entre siete: es la columna que se queda. Lo que las pestañas eligen pasa a ser «qué abro al
+lado», y volver al chat a secas es CERRAR el panel — por eso el sitio que ocupaba «Chat» lo ocupa
+una «×», y por eso la tira se muda DENTRO del panel, que es la cuarta casa que tiene.
+
+**La tercera columna ya estaba, y llevaba sin usar desde el principio.** `.detailsCol`, su
+tirador con pastilla (`data-side="details"`) y el `.frame[data-details-collapsed]` que le quita el
+borde a cero vienen en `estilos/AppFrame.module.css`, copiado de deepseek; `Maqueta.tsx` incluso
+lo decía por escrito («aquí no hay columna de detalles»). Lo que faltaba era la pista del grid y
+quién la habita, así que el asa, el plegado a cero y la animación salieron gratis.
+
+**Quién cabe lo decide código, no una hoja de estilos** (`apps/web/src/repartoDeColumnas.ts`,
+puro y con test), por dos motivos que se refuerzan: lo que no cabe se **DESMONTA** —un elemento
+invisible sigue siendo tabulable, la regla de siempre de esta consola—, y los anchos de la barra
+y del panel **los pone JS**, así que un `@media` no puede consultarlos: con la misma ventana y la
+barra estrecha caben tres columnas, y con la barra ancha no. El orden de las preguntas ES la
+política, de más generoso a menos: ¿caben las tres? ¿caben el chat y el panel sin la barra?
+¿ninguna de las dos?
+
+De ahí salen las dos decisiones que no son de forma:
+
+- **La única concesión automática es plegar la barra**, y es TRANSITORIA. Cuando no caben las tres
+  pero sí el chat y el panel, la barra se pliega sola para hacerle sitio — y `guardarBarraContraida`
+  **no se llama nunca** con eso. Si se guardara, estrechar la ventana una vez dejaría la barra
+  plegada para siempre, también en la pantalla grande de mañana.
+- **Pedir la barra de vuelta CIERRA el panel**, en vez de no hacer nada. Es la consecuencia
+  incómoda de lo anterior: el usuario no la plegó, así que su preferencia ya dice «abierta» y
+  volver a ponerla ahí no cambiaría nada — se pulsa «Mostrar la barra lateral» y no pasa nada, sin
+  ninguna pista de por qué. Gana quien pulsa: pide la barra, se le da la barra. **Y con el panel
+  CERRADO no hay concesión ninguna**, por lo mismo: si el ancho a secas plegara la barra, ese botón
+  quedaría muerto sin nada que hacer al respecto. Una ventana estrecha sin panel se comporta
+  exactamente como antes de que existiera la tercera columna.
+
+Sin sitio para los dos, **el panel ocupa el centro y el compositor se esconde —sin desmontarse,
+para no perder el borrador—**, que es el comportamiento que ya tenía esta consola; el mismo
+elemento se monta UNA vez en un sitio o en el otro, porque cada una de sus vistas MIDE al
+montarse y dos copias duplicarían todas esas peticiones. **Y el panel es de la SESIÓN**: en el
+escritorio no se pinta aunque la vista siga elegida, porque allí no se ofrece el botón que lo
+cierra y quedaría una columna de la que no se sale. La elección sí se conserva, así que al volver
+a la sesión el panel vuelve por donde estaba.
+
+Dos cosas menores que se decidieron aquí y no hay que volver a decidir: **la vista por omisión al
+abrir es Ficheros**, no Trazas, que son de otro destinatario —quien depura el harness, no quien
+desarrolla la app—; y **el ancho del panel se recuerda pero NO si estaba abierto ni con qué
+vista**, porque esas vistas miden al montarse y sería mandar peticiones al servidor por una
+preferencia de hace tres días.
+
+El gesto de los dos tiradores pasó a ser **una sola pieza** (`Tirador`, dentro de `Maqueta.tsx`):
+son noventa líneas con cuatro trampas medidas dentro —el `button > 0` de jsdom, la captura de
+puntero envuelta, el `pointercancel` y el `lostpointercapture`—, y una segunda copia para el panel
+sería el segundo sitio donde cada una de las cuatro puede volver. Lo único que los distingue es
+`medir`: la barra cuenta desde el borde izquierdo del marco y el panel desde el derecho, y las
+flechas del teclado van en el mismo espejo porque mueven el BORDE y no el ancho.
+
+### Y destapó un defecto de dos meses que ningún test veía
+
+`Ficheros` y `Artefactos` declaraban `container-type` en la MISMA caja que su `@container` ponía
+en columna. **Una consulta de contenedor solo alcanza a los DESCENDIENTES del elemento que la
+declara**, así que esa regla no se aplicaba nunca — y el resto del bloque sí: el árbol saltaba a
+la izquierda por su `order: -1` y salía recortado a una fracción del alto, en FILA con el visor.
+No es «no pasa nada», es medio encuadre, que es peor.
+
+No se vio en dos meses porque esas cajas vivían siempre en la columna central, más ancha que el
+umbral de la consulta; apareció a los cinco minutos de que hubiera una caja estrecha de verdad.
+El arreglo es un envoltorio que declara el contenedor, con la caja de antes como hija. Y va con
+su test en `Barra.test.tsx`, al lado del que ya exigía que una consulta declarara su contenedor en
+la misma hoja: ninguna regla dentro de un `@container` puede llevar el selector de una clase que
+declare `container-type`. Es el patrón de fallo de esta arquitectura —una regla escrita y no
+montada, con todo en verde— en su versión de CSS, y jsdom no lo puede ver porque no hace layout
+ni cascada.

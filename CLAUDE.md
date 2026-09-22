@@ -979,7 +979,22 @@ feedback del desarrollador** y no es terminal.
   CSS va HASHEADO, no se puede retirar desde un fichero el elemento de otro: al que vive en otro
   componente se le pone un envoltorio con clase propia del módulo que consulta. El ancho que se
   consulta suele ser el de un panel que pone JS —la barra lateral, el renglón del compositor—, y
-  por eso esto es contenedor y no `@media`.
+  por eso esto es contenedor y no `@media`. **Y no puede estilar a su PROPIO contenedor**, que es
+  el mismo test y la otra mitad de la regla: una consulta solo alcanza a los DESCENDIENTES del
+  elemento que declara `container-type`, así que una regla suya con el selector del contenedor no
+  se aplica nunca — y el resto del bloque SÍ, con lo que queda medio encuadre en vez de ninguno.
+  El arreglo es un envoltorio que declare el contenedor, con la caja de antes como hija.
+- **El encuadre de las TRES columnas lo decide `core`… del cliente, no una hoja**
+  (`apps/web/src/repartoDeColumnas.ts`, puro y con test): la barra, la conversación y el panel de
+  vistas compiten por el mismo ancho, y quien se queda fuera se DESMONTA — eso no lo sabe hacer un
+  `@media`, y además los anchos de la barra y del panel los pone JS. Tres salidas y **una sola
+  concesión automática**: si no caben las tres pero sí el chat y el panel, la barra se pliega SOLA
+  para hacerle sitio, transitoriamente y **sin tocar la preferencia del navegador** — si se
+  guardara, estrechar la ventana una vez la dejaría plegada para siempre. Y **pedir la barra de
+  vuelta cierra el panel**, en vez de no hacer nada: el usuario no la plegó, así que su preferencia
+  ya dice «abierta» y volver a ponerla ahí sería un botón muerto. **Con el panel cerrado no hay
+  concesión ninguna**, justamente por eso. La tercera columna no se inventó: `.detailsCol` y su
+  tirador llevaban sin usar en la hoja copiada desde el principio.
 - **Un control sin dato detrás no se pinta.** Ausente ≠ vacío en las cuatro capas (disco, cable,
   store, componente): `Entorno.proyectos`, `AjustesDeDispositivos`, `compartido`, `detalles`.
   Lo que falta se ROTULA; lo que queda fuera se CUENTA con el camino para arreglarlo.

@@ -179,23 +179,6 @@ export function App({
    * así que no la puede tomar una hoja de estilos.
    */
   const anchoDeVentana = usarAnchoDeVentana();
-  /**
-   * Quién cabe y quién no. Es la ÚNICA pieza que decide el encuadre, y vive fuera de este
-   * fichero a propósito: pura y con su test, porque una regla que solo existe dentro de un
-   * componente es de las que este repo llama «escritas y no probadas».
-   *
-   * De aquí salen las tres cosas que cambian la pantalla: si la barra se pinta plegada
-   * —que **no** es lo mismo que la preferencia del usuario, y por eso `guardarBarraContraida`
-   * no se llama nunca con esto—, si el panel va en su columna o en el centro, y si el
-   * compositor se esconde (solo se esconde cuando el panel ocupa el sitio del chat).
-   */
-  const reparto = repartoDeColumnas({
-    anchoVentana: anchoDeVentana,
-    anchoBarra: anchoBarra ?? ANCHO_BARRA_POR_OMISION,
-    anchoPanel: acotarAnchoDePanel(anchoPanel ?? ANCHO_PANEL_POR_OMISION),
-    barraPlegadaPorElUsuario: barraContraida,
-    panelAbierto: vistaDelPanel !== undefined,
-  });
 
   /**
    * Pedir la lista de ficheros de la sesión. Va en `useCallback` porque `Revision` la
@@ -836,6 +819,33 @@ export function App({
 
   const enSesion = proyectoAbierto && !enEscritorio;
 
+  /**
+   * **El panel es de la SESIÓN, así que en el escritorio no hay panel** aunque la vista
+   * elegida siga puesta. No es cosmético: el escritorio no ofrece el botón que lo cierra
+   * —ahí no hay ficheros ni revisión de nadie—, así que una columna con el Ficheros de la
+   * sesión anterior al lado del saludo sería una columna de la que no se sale. Se conserva
+   * `vistaDelPanel` a propósito: al volver a la sesión, el panel vuelve por donde estaba.
+   */
+  const panelAbierto = enSesion && vistaDelPanel !== undefined;
+
+  /**
+   * Quién cabe y quién no. Es la ÚNICA pieza que decide el encuadre, y vive fuera de este
+   * fichero a propósito: pura y con su test, porque una regla que solo existe dentro de un
+   * componente es de las que este repo llama «escritas y no probadas».
+   *
+   * De aquí salen las tres cosas que cambian la pantalla: si la barra se pinta plegada
+   * —que **no** es lo mismo que la preferencia del usuario, y por eso `guardarBarraContraida`
+   * no se llama nunca con esto—, si el panel va en su columna o en el centro, y si el
+   * compositor se esconde (solo se esconde cuando el panel ocupa el sitio del chat).
+   */
+  const reparto = repartoDeColumnas({
+    anchoVentana: anchoDeVentana,
+    anchoBarra: anchoBarra ?? ANCHO_BARRA_POR_OMISION,
+    anchoPanel: acotarAnchoDePanel(anchoPanel ?? ANCHO_PANEL_POR_OMISION),
+    barraPlegadaPorElUsuario: barraContraida,
+    panelAbierto,
+  });
+
   // El PRIMER acto de usuario, no el último: es la misma regla que titula una sesión en
   // disco (`web/servidor/sesiones.ts` — «titulo» se fija una vez y no se vuelve a tocar).
   // Dos reglas para el mismo título es cómo divergen — esta lo mira, no inventa una propia.
@@ -1317,7 +1327,7 @@ export function App({
    * un elemento invisible sigue siendo tabulable.
    */
   const elPanel =
-    vistaDelPanel === undefined ? undefined : (
+    !panelAbierto || vistaDelPanel === undefined ? undefined : (
       <Panel
         pestana={vistaDelPanel}
         alElegirPestana={abrirPanel}
