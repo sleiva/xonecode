@@ -1474,6 +1474,16 @@ export async function main(argv: string[]): Promise<number> {
       return await cmdVerify(ruta);
     }
 
+    if (comando === "podar") {
+      // La memoria del agente de TODO el workspace. El automático del cierre de turno solo
+      // alcanza a los proyectos en los que alguien vuelva a trabajar; esto es para lo que ya
+      // está gordo. La autorización es teclearlo.
+      const { cmdPodar, proyectosDelWorkspace } = await import("./podar.js");
+      const { baseDeWorkspacePorOmision } = await import("../web/servidor/vestibulo.js");
+      const base = cargarSettings().settings.workspace ?? baseDeWorkspacePorOmision();
+      return cmdPodar(proyectosDelWorkspace(base), escribirEnStdout);
+    }
+
     if (comando === "traza") {
       const ruta = resto.filter((a) => !a.startsWith("--"))[0] ?? process.cwd();
       return await cmdTraza(ruta, escribirEnStdout, { todas: resto.includes("--todas") });

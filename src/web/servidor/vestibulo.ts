@@ -299,6 +299,14 @@ export interface OpcionesDelVestibulo {
    */
   commitearTurno?: (raiz: string, mensaje: string, sesion: string) => Promise<string | undefined>;
   /**
+   * El mantenimiento de la memoria del agente, al cerrar el turno. Devuelve qué contar, o
+   * nada — que es el caso normal, porque solo actúa pasada la cota.
+   *
+   * Entra por parámetro como `commitearTurno` y por lo mismo: toca disco, y el suite no
+   * puede depender de una base. Ausente = esta ejecución no hace mantenimiento.
+   */
+  mantenerMemoria?: (raiz: string) => string | undefined;
+  /**
    * ¿Queda memoria del agente para ese hilo? El `thread_id` ES el id de la sesión
    * (`agent/sesiones/checkpointer.ts`), así que preguntarlo es lo que convierte `historica` en un
    * hecho comprobado en vez de en «se reabrió»: una sesión con checkpoint CONTINÚA, y una
@@ -1367,6 +1375,26 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
           if (aviso !== undefined) informar(aviso);
         } catch (error) {
           informar(`no se pudo commitear el turno: ${(error as Error).message}`);
+        }
+        /**
+         * Y el mantenimiento de la memoria del agente, lo ÚLTIMO.
+         *
+         * Aquí y no en otro sitio porque es el único momento en que «no hay nada a medias»
+         * está garantizado, que es la condición que hace segura la poda. Va DESPUÉS del
+         * commit porque el commit es del usuario y esto es nuestro: si algo se cae, que se
+         * caiga lo prescindible.
+         *
+         * Envuelto entero por la misma razón que el commit: esto vive en el `finally` del
+         * turno, y una excepción aquí dejaría el compositor apagado para siempre. Y su fallo
+         * NO se cuenta —solo lo que hizo—: un mantenimiento que no pudo correr se reintenta
+         * al cerrar el turno siguiente, y anunciarlo sería el aviso que enseña a ignorar los
+         * avisos.
+         */
+        try {
+          const dicho = opciones.mantenerMemoria?.(raiz);
+          if (dicho !== undefined) informar(dicho);
+        } catch {
+          // Mantenimiento: la vuelta siguiente llega sola.
         }
       }
     };

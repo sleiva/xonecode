@@ -118,8 +118,9 @@ import {
   borrarProveedorPersonalizado, guardarProveedorPersonalizado, proveedoresPersonalizados,
 } from "../../agent/config/configEnDisco.js";
 import {
-  crearCheckpointerDeProyecto, hayCheckpoint, olvidarHilo,
+  crearCheckpointerDeProyecto, hayCheckpoint, mantenimientoDelCheckpointer, olvidarHilo,
 } from "../../agent/sesiones/checkpointer.js";
+import { resumenDePoda } from "../../core/podaDeCheckpoint.js";
 import {
   cargarSettings,
   guardarConcurrenciaDeTareas,
@@ -4739,6 +4740,31 @@ export function commitDeTurnoCableado(opciones: {
 }
 
 /**
+ * El mantenimiento de la memoria del agente, cableado — y EXTRAÍDO por el motivo de siempre:
+ * compuesto dentro del cierre de `arrancarConsolaWeb`, que todos sus tests doblan, esta regla
+ * estaría escrita y no probada. Es la novena vez que este repo tropieza con lo mismo.
+ *
+ * Lo que aquí se puede caer sin que TypeScript diga nada son las DOS mitades: pedir el
+ * checkpointer del proyecto que TOCA —`crearCheckpointerDeProyecto` devuelve la conexión
+ * compartida, y una segunda competiría con nosotros mismos por el lock exclusivo del
+ * `VACUUM`— y devolver el resumen en vez de tragárselo, que es lo único que hace visible que
+ * esto corrió.
+ *
+ * `podar` entra por parámetro para poder mirarlo desde fuera sin una base delante.
+ */
+export function mantenimientoDeMemoriaCableado(opciones?: {
+  podar?: typeof mantenimientoDelCheckpointer;
+  checkpointer?: typeof crearCheckpointerDeProyecto;
+}): (raiz: string) => string | undefined {
+  const podar = opciones?.podar ?? mantenimientoDelCheckpointer;
+  const abrir = opciones?.checkpointer ?? crearCheckpointerDeProyecto;
+  return (raiz) => {
+    const hecho = podar(abrir(raiz), raiz);
+    return hecho === undefined ? undefined : resumenDePoda(hecho);
+  };
+}
+
+/**
  * La mudanza de una vez de las copias que siguen en el reparto viejo, cableada — y extraída
  * por el motivo de siempre: compuesta dentro del cierre de `arrancarConsolaWeb`, que todos
  * sus tests doblan, la regla estaría escrita y no probada.
@@ -5513,6 +5539,9 @@ function vestibuloReal(
     commitearTurno: commitDeTurnoCableado({
       base: () => cargarSettings().settings.workspace ?? baseDeWorkspacePorOmision(),
     }),
+    // Y el mantenimiento de esa memoria: pasada la cota, se poda lo que ya no reanuda. La
+    // composición está EXTRAÍDA y probada (`mantenimientoDeMemoriaCableado`).
+    mantenerMemoria: mantenimientoDeMemoriaCableado(),
     olvidarMarcaDeSesion: olvidarSesion,
     // La memoria del agente por hilo. `historica` deja de ser «se reabrió» para ser «no hay
     // checkpoint que cargar», y borrar una sesión se lleva también su checkpoint.
