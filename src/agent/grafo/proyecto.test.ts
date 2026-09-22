@@ -501,8 +501,30 @@ describe("la costura con deepagents: el rechazo llega como RESULTADO, no como ex
   it("y lo que sí vale se escribe de verdad: la guarda no está de más en el camino bueno", async () => {
     const { raiz, ficheros } = proyecto();
     const write = tools(raiz, ficheros).find((x) => x.name === "write_file")!;
-    await write.invoke({ file_path: "/Clientes.xne", content: "<coll nuevo/>" });
-    expect(readFileSync(join(raiz, "Clientes.xne"), "utf8")).toBe("<coll nuevo/>");
+    await write.invoke({ file_path: "/Clientes.xne", content: '<coll name="Clientes"/>' });
+    expect(readFileSync(join(raiz, "Clientes.xne"), "utf8")).toBe('<coll name="Clientes"/>');
+  });
+
+  /**
+   * **El motivo que llega al modelo tiene que ser el de la RUTA, no el del contenido.**
+   *
+   * Un Proxy que envuelve a otro intercepta ANTES que él, así que el envoltorio de más afuera
+   * corre primero. Con la guarda de contenido por fuera —como se montó al principio— un
+   * `write` sobre una vista aplanada contestaba «XML mal formado en la línea 1» en vez de
+   * «es una vista aplanada, edita el .xne», y ése es el único motivo que le deja corregir.
+   * Va con contenido deliberadamente inválido para que las dos guardas puedan hablar: la que
+   * conteste es la que está montada primero.
+   */
+  it("una ruta denegada se rechaza por su RUTA, aunque el contenido también esté mal", async () => {
+    const { raiz, ficheros } = proyecto();
+    const write = tools(raiz, ficheros).find((x) => x.name === "write_file")!;
+
+    const salida = String(
+      await write.invoke({ file_path: "/Clientes.xml", content: "<coll roto" })
+    );
+
+    expect(salida).toMatch(/aplanada/i);
+    expect(salida).not.toMatch(/XML_MALFORMED|mal formado/i);
   });
 });
 

@@ -421,8 +421,8 @@ describe("una tarea aplica, y aun así estas rutas NO se escriben", () => {
     // El otro lado de la medida. Sin esto, un backend que rechazara TODO pasaría los cinco
     // casos de arriba y este test sería el único que lo notaría.
     const { raiz, write } = proyecto();
-    await write.invoke({ file_path: "/Clientes.xne", content: "<coll nuevo/>" });
-    expect(readFileSync(join(raiz, "Clientes.xne"), "utf8")).toBe("<coll nuevo/>");
+    await write.invoke({ file_path: "/Clientes.xne", content: '<coll name="Clientes"/>' });
+    expect(readFileSync(join(raiz, "Clientes.xne"), "utf8")).toBe('<coll name="Clientes"/>');
   });
 });
 

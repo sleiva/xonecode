@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, statSync, type Dirent } from "node:
 import { join } from "node:path";
 import { CompositeBackend, FilesystemBackend, LocalShellBackend } from "deepagents";
 import { RUTA_MEMORIA_INTERNA, RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
+import { sinContenidoInvalido, validarConXoneLinter, type ValidarContenido } from "./validacionXone.js";
 import { RAIZ_SKILLS, skillsConRuta, skillsMontables, type Montaje } from "./skills.js";
 import {
   artefactoFueraDeSitio,
@@ -432,14 +433,39 @@ export function backendDeAgente(opciones: {
    * proyecto (medido: sin ella lo era).
    */
   adjuntos?: string;
+  /**
+   * Con qué se juzga el contenido antes de escribirlo. Entra por parámetro para poder mirar
+   * la guarda desde fuera sin un parser delante; en producción es `validarConXoneLinter()`.
+   */
+  validar?: ValidarContenido;
 }): FilesystemBackend {
   const base =
     opciones.ejecucion === undefined
       ? backendDelProyecto(opciones.raiz)
       : backendDelProyectoConShell(opciones.raiz, opciones.ejecucion.entorno);
+  /**
+   * **La CUARTA guarda va la MÁS INTERNA, y el orden importa en los dos sentidos.**
+   *
+   * Un Proxy que envuelve a otro intercepta ANTES que él, así que el envoltorio de más afuera
+   * es el que corre primero. Las tres de rutas contestan «¿puede tocarse esto?» con una
+   * comparación de texto; ésta contesta «¿vale este contenido?» leyendo el fichero de antes y
+   * llamando a un parser. Dejándola dentro, una escritura sobre una vista aplanada o sobre
+   * `/artefactos/` se rechaza por su RUTA sin haber parseado nada.
+   *
+   * Y no es solo coste: al revés, el motivo que recibía el modelo era el equivocado. Medido —
+   * un `write` sobre `/Clientes.xml` (vista aplanada) contestaba «XML mal formado en la línea
+   * 1» en vez de «es una vista aplanada, edita el .xne», que es lo único que le deja corregir.
+   * Lo destapó un test que ya existía.
+   */
   const delProyecto = sinDescargasEnElProyecto(
     sinArtefactosEnElProyecto(
-      sinVistasAplanadas(exponerMemoriaDeProyecto(base), opciones.ficheros)
+      sinVistasAplanadas(
+        sinContenidoInvalido(
+          exponerMemoriaDeProyecto(base),
+          opciones.validar ?? validarConXoneLinter()
+        ),
+        opciones.ficheros
+      )
     )
   );
   /**

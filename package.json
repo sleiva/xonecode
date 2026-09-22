@@ -52,7 +52,7 @@
     "marked": "^16.4.2",
     "react": "^18.3.1",
     "ws": "^8.21.3",
-    "xone-linter": "^1.4.0",
+    "xone-linter": "^1.5.0",
     "zod": "4.5.4"
   },
   "devDependencies": {
