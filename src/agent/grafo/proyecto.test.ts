@@ -762,6 +762,107 @@ describe("la shell de un subagente con EJECUCIÓN", () => {
     expect(apuntados[0]!.ruta).toBe("/artefactos/captura.png");
   });
 
+  /**
+   * REPRODUCIDO: un `unzip` en la carpeta de artefactos deja un ÁRBOL, no un fichero.
+   *
+   * La foto era `readdirSync` a secas más `isFile()`, o sea que una CARPETA se saltaba
+   * entera y con ella todo lo que llevara dentro. Medido sobre una sesión real
+   * (`stitch-restaurantes/stitch_screen_complex/{screen.png,code.html,DESIGN.md}`): cero
+   * anuncios, cero actos `artefacto` y, como la pestaña Artefactos solo existe si hay
+   * alguno, **ninguna pestaña** — los tres ficheros estaban en el disco y no existían para
+   * nadie. Es el mismo fallo que la carpeta sin crear, un escalón más adentro.
+   *
+   * El anuncio compone igual que el Proxy de `write`/`edit`: la ruta lleva el camino
+   * RELATIVO —es lo que después se le pide al lector— y el `nombre` es el último segmento,
+   * que es lo que se le enseña a una persona.
+   */
+  it("y lo que deja en una SUBCARPETA también, que es lo que hace un `unzip`", async () => {
+    const raiz = raizDePrueba();
+    const carpeta = join(mkdtempSync(join(tmpdir(), "xc-sesion-")), "artefactos");
+    const apuntados: Artefacto[] = [];
+    const backend = backendDeAgente({
+      raiz,
+      ficheros: new Set(["/app.xml"]),
+      ejecucion: { entorno: { DESTINO: carpeta } },
+      artefactos: { carpeta, alEscribir: (a) => apuntados.push(a) },
+    }) as unknown as { execute(c: string): Promise<{ output: string }> };
+
+    await backend.execute(
+      'mkdir -p "$DESTINO/stitch/pantalla" && printf xx > "$DESTINO/stitch/pantalla/screen.png"'
+    );
+
+    expect(apuntados).toEqual([
+      {
+        ruta: "/artefactos/stitch/pantalla/screen.png",
+        nombre: "screen.png",
+        mime: "image/png",
+        bytes: 2,
+      },
+    ]);
+  });
+
+  it("no baja por un ENLACE a otra carpeta: lo de dentro no es de esta sesión", async () => {
+    const raiz = raizDePrueba();
+    const carpeta = join(mkdtempSync(join(tmpdir(), "xc-sesion-")), "artefactos");
+    const fuera = mkdtempSync(join(tmpdir(), "xc-fuera-"));
+    writeFileSync(join(fuera, "secreto.png"), "x");
+    const apuntados: Artefacto[] = [];
+    const backend = backendDeAgente({
+      raiz,
+      ficheros: new Set(["/app.xml"]),
+      ejecucion: { entorno: { DESTINO: carpeta, FUERA: fuera } },
+      artefactos: { carpeta, alEscribir: (a) => apuntados.push(a) },
+    }) as unknown as { execute(c: string): Promise<{ output: string }> };
+
+    await backend.execute('ln -s "$FUERA" "$DESTINO/atajo"');
+
+    expect(apuntados).toEqual([]);
+  });
+
+  it("y la basura de un zip de Finder no llega a la lista", async () => {
+    const raiz = raizDePrueba();
+    const carpeta = join(mkdtempSync(join(tmpdir(), "xc-sesion-")), "artefactos");
+    const apuntados: Artefacto[] = [];
+    const backend = backendDeAgente({
+      raiz,
+      ficheros: new Set(["/app.xml"]),
+      ejecucion: { entorno: { DESTINO: carpeta } },
+      artefactos: { carpeta, alEscribir: (a) => apuntados.push(a) },
+    }) as unknown as { execute(c: string): Promise<{ output: string }> };
+
+    await backend.execute(
+      'mkdir -p "$DESTINO/__MACOSX/d" "$DESTINO/d" && ' +
+        'printf x > "$DESTINO/__MACOSX/d/._a.png" && ' +
+        'printf x > "$DESTINO/d/._a.png" && ' +
+        'printf x > "$DESTINO/d/.DS_Store" && ' +
+        'printf xx > "$DESTINO/d/a.png"'
+    );
+
+    expect(apuntados.map((a) => a.ruta)).toEqual(["/artefactos/d/a.png"]);
+  });
+
+  /**
+   * Una shell puede escribir el nombre que le dé la gana, y el lector lo rechazará: su
+   * barrera es una lista BLANCA de forma por segmento (`esRutaDeArtefacto`). Anunciarlo
+   * pintaría una tarjeta cuyo único final posible es un 403 — la misma regla que el `when`
+   * de `seDetieneEn`, que no saca un modal cuya respuesta ya se sabe.
+   */
+  it("y lo que el LECTOR rechazaría no se anuncia", async () => {
+    const raiz = raizDePrueba();
+    const carpeta = join(mkdtempSync(join(tmpdir(), "xc-sesion-")), "artefactos");
+    const apuntados: Artefacto[] = [];
+    const backend = backendDeAgente({
+      raiz,
+      ficheros: new Set(["/app.xml"]),
+      ejecucion: { entorno: { DESTINO: carpeta } },
+      artefactos: { carpeta, alEscribir: (a) => apuntados.push(a) },
+    }) as unknown as { execute(c: string): Promise<{ output: string }> };
+
+    await backend.execute('printf x > "$DESTINO/Diseño final.png"');
+
+    expect(apuntados).toEqual([]);
+  });
+
   it("el `cwd` de la shell es la raíz del proyecto", async () => {
     const raiz = raizDePrueba();
     const be = backendDelProyectoConShell(raiz, {}) as unknown as {

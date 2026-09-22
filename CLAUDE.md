@@ -366,7 +366,13 @@ no viaja porque ahí la ejecución no se concede—. Reglas duras:
 - **Lo que un COMANDO deja en la carpeta de artefactos también se anuncia**
   (`proyecto.ts#anunciarArtefactosDeLaShell`): el evento `artefacto` lo emite el Proxy de
   `write`/`edit`, y una shell no pasa por ahí — sin esto, una captura existe en el disco y no
-  existe para nadie. Se compara una FOTO de la carpeta antes y después, no lo que el comando diga.
+  existe para nadie. Se compara una FOTO de la carpeta antes y después, no lo que el comando
+  diga, y esa foto es **RECURSIVA**: un `unzip` deja un ÁRBOL, así que con la plana una maqueta
+  descomprimida en una subcarpeta daba cero anuncios y por tanto ninguna pestaña Artefactos.
+  No se baja por un enlace. Y no se anuncia lo que acabaría en una tarjeta muerta: lo que
+  `esRutaDeArtefacto` —la barrera del LECTOR— rechazaría, ni la basura que un zip arrastra
+  (`core/artefactos.ts#esBasuraDeArtefacto`, que **no** es `BASURA_DEL_SO`: aquella contesta
+  qué no se commitea y esta qué no se le enseña a una persona).
 - **Un Proxy sobre un backend lee contra el OBJETIVO, no contra el proxy.** `LocalShellBackend.id`
   es un getter sobre un campo PRIVADO, y `Reflect.get(o, p, receptor)` lanza al leerlo — lo lee el
   constructor de `CompositeBackend`, así que el fallo es al MONTAR y no al usar.

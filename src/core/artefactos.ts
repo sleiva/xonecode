@@ -77,6 +77,37 @@ export function esRutaDeArtefacto(ruta: string | undefined): boolean {
 }
 
 /**
+ * Lo que aparece en la carpeta de artefactos y NO es un artefacto que enseñar.
+ *
+ * Existe porque la foto que toma la shell (`agent/grafo/proyecto.ts#anunciarArtefactosDeLaShell`)
+ * mira la carpeta ENTERA, subcarpetas incluidas: un `unzip` deja un árbol, no un fichero. Y
+ * un `.zip` hecho desde el Finder no trae solo lo que se empaquetó — trae `__MACOSX/` con
+ * una sombra `._<fichero>` por cada uno, del mismo nombre y la misma extensión que el bueno.
+ * Sin esto, descomprimir una maqueta de tres ficheros pintaba seis tarjetas, tres de ellas
+ * con `mime: image/png` y doscientos bytes dentro: una imagen rota con nombre de imagen.
+ *
+ * **No es `BASURA_DEL_SO` (`agent/sesiones/gitSync.ts`) y no puede serlo**, y no solo porque
+ * `core/` no importe de `agent/`: aquella contesta «qué no se commitea NUNCA» y vive del
+ * lado de git, con su lista cerrada apuntando a `info/exclude`. Esta contesta «qué no se le
+ * ENSEÑA a una persona como salida del agente», que es otra pregunta y otro conjunto — el
+ * `__MACOSX/` de un zip no tiene nada que hacer en el `info/exclude` de la app del cliente.
+ * Comparten tres nombres por coincidencia, no por ser la misma regla.
+ *
+ * Se mira SEGMENTO a segmento: un `__MACOSX` a media ruta se lleva lo que cuelgue de él, y
+ * un `notas-sobre-__MACOSX.md` no es basura por contener el nombre. La sombra se reconoce
+ * por el prefijo `._` y no por «empieza por punto», que dejaría fuera un `.perfil.json` que
+ * el agente sí escribió a propósito.
+ */
+const BASURA = new Set(["__MACOSX", ".DS_Store", "Thumbs.db", "desktop.ini"]);
+
+export function esBasuraDeArtefacto(relativa: string): boolean {
+  return relativa
+    .split("/")
+    .filter((s) => s.length > 0)
+    .some((s) => BASURA.has(s) || s.startsWith("._"));
+}
+
+/**
  * ¿Es esta ruta un artefacto escrito en el SITIO EQUIVOCADO? Y si lo es, dónde iba.
  *
  * **Esto existe porque el prompt se agotó.** La carpeta buena la nombran los cuatro sitios

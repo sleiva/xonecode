@@ -102,3 +102,58 @@ describe("los artefactos de una sesión, leídos de disco", () => {
     });
   });
 });
+
+/**
+ * Un `unzip` en la carpeta deja un ÁRBOL, así que el `nombre` que llega aquí puede ser una
+ * ruta relativa con barras — la misma que el acto anunció y que el cliente manda de vuelta
+ * (`Artefactos.tsx#parametroDe`). Se prueba de verdad y no se supone: la mitad de escritura
+ * ya está atada, y una tarjeta que aparece y al pulsarla da un 403 es peor que no tenerla.
+ */
+describe("un artefacto dentro de una SUBCARPETA", () => {
+  let raiz: string;
+  let carpeta: string;
+
+  beforeEach(() => {
+    raiz = mkdtempSync(join(tmpdir(), "xonecode-artefactos-hondos-"));
+    carpeta = join(raiz, ".xonecode", "sesiones", SESION, "artefactos");
+    mkdirSync(join(carpeta, "stitch", "pantalla"), { recursive: true });
+    writeFileSync(join(carpeta, "stitch", "pantalla", "DESIGN.md"), "# el diseño");
+    writeFileSync(
+      join(carpeta, "stitch", "pantalla", "screen.png"),
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0])
+    );
+  });
+
+  afterEach(() => rmSync(raiz, { recursive: true, force: true }));
+
+  it("se lee por el cable con su ruta virtual entera", async () => {
+    const leido = await leerArtefactoDeSesion(raiz, SESION, "stitch/pantalla/DESIGN.md");
+    expect(leido.error).toBeUndefined();
+    expect(leido.texto).toContain("el diseño");
+    expect(leido.ruta).toBe("/artefactos/stitch/pantalla/DESIGN.md");
+    expect(JSON.stringify(leido)).not.toContain(raiz);
+  });
+
+  it("y una imagen honda toma el camino de imagen, no el del texto", async () => {
+    const leido = await leerArtefactoDeSesion(raiz, SESION, "stitch/pantalla/screen.png");
+    expect(leido.error).toBeUndefined();
+    expect(leido.mime).toBe("image/png");
+    expect(leido.base64).toBeDefined();
+    expect(leido.texto).toBeUndefined();
+  });
+
+  it("y por la ruta HTTP vuelve con su mime y con el NOMBRE, sin la subcarpeta", async () => {
+    const leido = await leerArtefactoCrudo(raiz, SESION, "stitch/pantalla/screen.png");
+    expect(leido.ok).toBe(true);
+    if (!leido.ok) return;
+    expect(leido.mime).toBe("image/png");
+    // Lo que se enseña y lo que acaba en la cabecera de descarga es el último segmento: un
+    // `filename="stitch/pantalla/screen.png"` no es un nombre de fichero.
+    expect(leido.nombre).toBe("screen.png");
+  });
+
+  it("y la fuga por la subcarpeta sigue cerrada", async () => {
+    const leido = await leerArtefactoCrudo(raiz, SESION, "stitch/../../auth.json");
+    expect(leido).toEqual({ ok: false, motivo: "rechazado" });
+  });
+});

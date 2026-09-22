@@ -1,10 +1,12 @@
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync, type Dirent } from "node:fs";
 import { join } from "node:path";
 import { CompositeBackend, FilesystemBackend, LocalShellBackend } from "deepagents";
 import { RUTA_MEMORIA_INTERNA, RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
 import { RAIZ_SKILLS, skillsConRuta, skillsMontables, type Montaje } from "./skills.js";
 import {
   artefactoFueraDeSitio,
+  esBasuraDeArtefacto,
+  esRutaDeArtefacto,
   mimeDeArtefacto,
   nombreDeArtefacto,
   RUTA_ARTEFACTOS,
@@ -451,9 +453,24 @@ export function backendDeAgente(opciones: {
  * que decir «he dejado una captura» sin que nada lo respalde — que es la clase de afirmación
  * que este harness no quiere.
  *
- * **Se compara una FOTO de antes con una de después** (nombre → tamaño + mtime) en vez de
- * fiarse de lo que el comando diga que hizo. Un comando puede escribir tres ficheros, o
- * ninguno, o pisar el de antes; lo único que lo sabe es la carpeta.
+ * **Se compara una FOTO de antes con una de después** (ruta relativa → tamaño + mtime) en
+ * vez de fiarse de lo que el comando diga que hizo. Un comando puede escribir tres ficheros,
+ * o ninguno, o pisar el de antes; lo único que lo sabe es la carpeta.
+ *
+ * **Y la foto es RECURSIVA, porque un `unzip` deja un ÁRBOL y no un fichero.** Era
+ * `readdirSync` a secas más un `isFile()`, o sea que una carpeta se saltaba entera y con
+ * ella todo lo que llevara dentro. Medido sobre una sesión real: el zip de una maqueta se
+ * descomprimió en `/artefactos/stitch-restaurantes/stitch_screen_complex/` y salieron CERO
+ * anuncios — los tres ficheros estaban en el disco y no existían para nadie, sin pestaña
+ * Artefactos (solo existe si hay alguno) y sin tarjeta en el hilo. Es el mismo fallo que la
+ * carpeta sin crear, un escalón más adentro. No se baja por un ENLACE: `Dirent.isDirectory()`
+ * es falso para uno, y lo que cuelgue de él no es lo que esta sesión produjo.
+ *
+ * Lo que la recursión hace aparecer también se filtra, y las dos cribas son la misma idea:
+ * **no anunciar lo que acaba en una tarjeta muerta**. `esRutaDeArtefacto` es la barrera que
+ * el LECTOR aplica, así que un nombre que él rechazaría (`Diseño final.png`) pintaría una
+ * fila cuyo único final es un 403; y `esBasuraDeArtefacto` retira el `__MACOSX/._x.png` que
+ * un zip de Finder arrastra, que tiene la extensión del bueno y doscientos bytes dentro.
  *
  * **Y la carpeta se CREA aquí, antes de correr el comando.** Es la excepción a «no se crea
  * al montar», y la pagó una captura: `$XONECODE_ARTEFACTOS` la crea `FilesystemBackend.write`
@@ -473,20 +490,35 @@ export function anunciarArtefactosDeLaShell<T extends object>(
 ): T {
   const foto = (): Map<string, string> => {
     const m = new Map<string, string>();
-    let nombres: string[];
-    try {
-      nombres = readdirSync(carpeta);
-    } catch {
-      return m;
-    }
-    for (const nombre of nombres) {
+    const recorrer = (dir: string, prefijo: string): void => {
+      let entradas: Dirent[];
       try {
-        const e = statSync(join(carpeta, nombre));
-        if (e.isFile()) m.set(nombre, `${e.size}:${e.mtimeMs}`);
+        entradas = readdirSync(dir, { withFileTypes: true });
       } catch {
-        // Un fichero que desaparece entre el listado y la medida no es un artefacto nuevo.
+        return;
       }
-    }
+      for (const entrada of entradas) {
+        // La clave se compone con `/` y nunca con `sep`: es la ruta VIRTUAL que se va a
+        // anunciar, y una barra invertida de Windows no pasaría `esRutaDeArtefacto`.
+        const relativa = prefijo + entrada.name;
+        // `isDirectory()` sobre un `Dirent` es FALSO para un enlace —el dirent dice
+        // `isSymbolicLink()`—, así que no se baja por él. Es la misma disciplina que el
+        // árbol de Ficheros, y aquí importa igual: lo que cuelga de un enlace no es lo que
+        // esta sesión produjo, y se anunciaría con ruta de artefacto.
+        if (entrada.isDirectory()) {
+          recorrer(join(dir, entrada.name), relativa + "/");
+          continue;
+        }
+        if (!entrada.isFile()) continue;
+        try {
+          const e = statSync(join(dir, entrada.name));
+          m.set(relativa, `${e.size}:${e.mtimeMs}`);
+        } catch {
+          // Un fichero que desaparece entre el listado y la medida no es un artefacto nuevo.
+        }
+      }
+    };
+    recorrer(carpeta, "");
     return m;
   };
 
@@ -513,9 +545,18 @@ export function anunciarArtefactosDeLaShell<T extends object>(
           // En el `finally`: un comando que acaba en error puede haber dejado el fichero, y
           // un fallo al listar la carpeta no puede llevarse por delante el resultado.
           try {
-            for (const [nombre, marca] of foto()) {
-              if (antes.get(nombre) === marca) continue;
-              const ruta = RUTA_ARTEFACTOS + nombre;
+            for (const [relativa, marca] of foto()) {
+              if (antes.get(relativa) === marca) continue;
+              const ruta = RUTA_ARTEFACTOS + relativa;
+              // Lo que el LECTOR rechazaría no se anuncia: su barrera es la lista blanca de
+              // forma de `esRutaDeArtefacto`, y una shell escribe el nombre que quiera. Una
+              // tarjeta cuyo único final posible es un 403 es la misma mentira que un modal
+              // que solo puede acabar en rechazo.
+              if (!esRutaDeArtefacto(ruta) || esBasuraDeArtefacto(relativa)) continue;
+              // Se compone igual que el Proxy de `write`/`edit`: la RUTA lleva el camino
+              // relativo —es lo que después se le pide al lector— y el `nombre` es el
+              // último segmento, que es lo que se le enseña a una persona.
+              const nombre = nombreDeArtefacto(ruta);
               const mime = mimeDeArtefacto(nombre);
               const bytes = Number(marca.split(":")[0] ?? 0);
               alEscribir({ ruta, nombre, bytes, ...(mime === undefined ? {} : { mime }) });

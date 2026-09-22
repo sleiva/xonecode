@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   artefactoFueraDeSitio,
+  esBasuraDeArtefacto,
   esRutaDeArtefacto,
   mimeDeArtefacto,
   nombreDeArtefacto,
@@ -95,5 +96,32 @@ describe("artefactoFueraDeSitio", () => {
     expect(artefactoFueraDeSitio("/artifactsviejos/x.html")).toBeUndefined();
     expect(artefactoFueraDeSitio("/artifacts")).toBeUndefined();
     expect(artefactoFueraDeSitio("")).toBeUndefined();
+  });
+});
+
+describe("lo que un zip arrastra y no es un artefacto", () => {
+  it("la basura del SO no se anuncia, esté en la raíz o dentro", () => {
+    expect(esBasuraDeArtefacto(".DS_Store")).toBe(true);
+    expect(esBasuraDeArtefacto("stitch/.DS_Store")).toBe(true);
+    expect(esBasuraDeArtefacto("Thumbs.db")).toBe(true);
+    expect(esBasuraDeArtefacto("desktop.ini")).toBe(true);
+  });
+
+  it("el envoltorio de un zip de Finder tampoco, ni sus sombras `._`", () => {
+    // Un `.zip` hecho desde el Finder trae `__MACOSX/<carpeta>/._<fichero>`: ficheros de
+    // doscientos bytes con la MISMA extensión que el bueno, así que sin esto salían tres
+    // tarjetas con `mime: image/png` y una imagen rota dentro.
+    expect(esBasuraDeArtefacto("__MACOSX/stitch/._screen.png")).toBe(true);
+    expect(esBasuraDeArtefacto("__MACOSX")).toBe(true);
+    expect(esBasuraDeArtefacto("stitch/._code.html")).toBe(true);
+  });
+
+  it("y un artefacto de verdad pasa, aunque se llame parecido", () => {
+    expect(esBasuraDeArtefacto("screen.png")).toBe(false);
+    expect(esBasuraDeArtefacto("stitch/stitch_screen_complex/DESIGN.md")).toBe(false);
+    // Empieza por punto, pero no es una sombra `._`.
+    expect(esBasuraDeArtefacto(".perfil.json")).toBe(false);
+    // Contiene el nombre, no lo es.
+    expect(esBasuraDeArtefacto("notas-sobre-__MACOSX.md")).toBe(false);
   });
 });

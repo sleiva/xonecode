@@ -28,6 +28,7 @@ import {
   carpetaDeArtefactosDeSesion,
   esRutaDeArtefacto,
   mimeDeArtefacto,
+  nombreDeArtefacto,
 } from "../../core/artefactos.js";
 import { leerContenidoDeFichero, type FicheroLeido } from "./arbolDeProyecto.js";
 
@@ -138,7 +139,7 @@ export async function leerArtefactoDeSesion(
  * y por eso lo pide ella a `mimeDeArtefacto`.
  */
 function mimeDeImagenDeArtefacto(nombre: string): string | undefined {
-  const mime = mimeDeArtefacto(nombre);
+  const mime = mimeDeArtefacto(nombreDeArtefacto(nombre));
   return mime !== undefined && mime.startsWith("image/") ? mime : undefined;
 }
 
@@ -158,6 +159,17 @@ export async function leerArtefactoCrudo(
   // comprobarlo después de `readFile` no protegería de nada.
   if (info.size > TOPE_DE_ARTEFACTO) return { ok: false, motivo: "demasiado-grande" };
 
-  const mime = mimeDeArtefacto(nombre);
-  return { ok: true, nombre, datos: await readFile(real), ...(mime === undefined ? {} : { mime }) };
+  // Del último segmento las DOS cosas, porque el `nombre` que llega puede ser una ruta
+  // relativa: un `unzip` deja un árbol en la carpeta, y esa ruta es la que el acto anunció.
+  // El `filename=` de la cabecera de descarga sale de aquí, y `stitch/pantalla/screen.png`
+  // no es un nombre de fichero; y `mimeDeArtefacto` busca el ÚLTIMO punto de lo que se le
+  // pase, así que un `v1.2/mockup` sin extensión le daría por extensión `2/mockup`.
+  const base = nombreDeArtefacto(nombre);
+  const mime = mimeDeArtefacto(base);
+  return {
+    ok: true,
+    nombre: base,
+    datos: await readFile(real),
+    ...(mime === undefined ? {} : { mime }),
+  };
 }
