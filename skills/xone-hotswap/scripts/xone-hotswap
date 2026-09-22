@@ -350,6 +350,29 @@ ws.onmessage = (ev) => {
     siguiente();
     return;
   }
+  /**
+   * **Las tramas PUSH no son la respuesta de nadie, y tragárselas DESINCRONIZA el canal.**
+   *
+   * El protocolo **no correla peticiones con respuestas**: no hay identificador de comando,
+   * así que se emparejan por ORDEN —se manda de uno en uno y se toma la siguiente trama que
+   * no sea un push—. Eso lo documenta el cliente del equipo del framework
+   * (`pack_ia/scripts/hotswap-cli.mjs`), y aquí solo se filtraba el saludo.
+   *
+   * La consecuencia de que falten las otras dos no es perder una línea: es que **el push se
+   * cuenta como la respuesta del comando pendiente y TODO lo que viene después va
+   * desfasado** — cada comando recibe la contestación del anterior. Y no falla siempre, solo
+   * cuando llega un push en medio, que es lo que lo hace difícil de ver.
+   *
+   * Las dos que faltaban:
+   *  - `logger: true` — una línea de log que el aparato empuja. Las produce cualquier cosa
+   *    que encienda el registro, o sea justo lo que se hace para diagnosticar.
+   *  - `state` — el progreso de una descarga.
+   */
+  if (mensaje.logger === true || mensaje.state !== undefined || mensaje.command === "server_hello") {
+    // No se imprime: quien pidió un comando no pidió esto, y meterlo en la salida es meterlo
+    // en el contexto del agente. Lo que se conserva es el ORDEN.
+    return;
+  }
   console.log(JSON.stringify({ comando: pendiente?.command, ...sinBinarios(mensaje) }));
   pendiente = undefined;
   siguiente();

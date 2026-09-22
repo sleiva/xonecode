@@ -400,18 +400,37 @@ function exigirAparato() {
        * hay que volver a preguntar. Tres órdenes encadenadas por el modelo son tres viajes;
        * ésta es una.
        */
-      if (args.includes("--captura")) {
+      /**
+       * **El log ANTES que la captura, y por un fallo visto en vivo.**
+       *
+       * El orden era al revés y producía una foto que engaña: la app contesta el árbol, se
+       * cae mientras se pide la captura, y lo que sale fotografiado es la **pantalla del
+       * propio servidor hotswap** —«Applications / MyAllXOne / Explore / Delete», con
+       * «Awaiting connection…» abajo—. Eso no es la app, y quien lo mire después no tiene
+       * forma de saberlo: parece una app en blanco. Ocurrió con un `--captura` real y el
+       * usuario lo cazó mirando el artefacto.
+       *
+       * Cuando XOne ha reventado al cargar, la respuesta entera está en el LOG y la captura
+       * solo añade ruido —y 3.375 tokens si alguien se la enseña al revisor visual—. Así que
+       * primero se mira el log; si reventó, se cuenta y NO se captura.
+       */
+      const roto = excepcionDeXOne();
+      if (args.includes("--captura") && roto === undefined) {
         try {
           console.log(mandar({ command: "getScreenshot" }));
         } catch {
           console.error("la app arrancó pero la captura falló; el árbol de arriba sí es bueno.");
         }
+      } else if (args.includes("--captura")) {
+        console.error(
+          "NO capturo: XOne reventó al cargar y lo que saldría en la foto es la pantalla del " +
+            "host, no tu app. Lo que pasó está en el log de aquí abajo.",
+        );
       }
       // **Estar VIVA no es estar BIEN.** Una app que revienta al cargar la configuración se
       // queda con su diálogo de error delante, y el canal contesta igual: el árbol llega, la
       // captura sale, y todo parece haber ido bien. Quien lo cuenta es el log, y no pedirlo
       // aquí obliga a que alguien se acuerde de hacerlo — que es justo lo que no pasa.
-      const roto = excepcionDeXOne();
       if (roto !== undefined) {
         console.error("");
         console.error("La app ARRANCÓ pero XOne lanzó una excepción al cargar:");
