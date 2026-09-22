@@ -2,25 +2,24 @@ import clsx from "clsx";
 import conversacion from "../../estilos/ConversationRoot.module.css";
 import estilos from "./Pestanas.module.css";
 
-export type Pestana = "chat" | "ficheros" | "revision" | "artefactos" | "tareas" | "ejecutar" | "trazas";
+export type Pestana = "ficheros" | "revision" | "artefactos" | "tareas" | "ejecutar" | "trazas";
 
 /**
- * La tira de pestañas: Chat, Tareas, Ficheros, Revisión y Trazas — más Artefactos, si la
- * sesión dejó alguno.
+ * La tira de pestañas del PANEL: Tareas, Ejecutar, Ficheros, Revisión y Trazas — más
+ * Artefactos, si la sesión dejó alguno —, con el botón de cerrarlo al final.
  *
- * Vive en el PANEL CENTRAL, no en la barra superior. Es la tercera casa que tiene —estuvo
- * en `Transcript`, luego en `Cabecera`— y esta vez la mudanza la decide una regla y no una
- * hoja de estilos: desde que la barra azul cruza las dos columnas (`Maqueta.tsx`), esa barra
- * es de la APLICACIÓN, y unas pestañas que solo existen con sesión abierta y que solo
- * cambian lo que se ve en el centro no son de la aplicación — son del centro. Puestas
- * arriba, además, quedaban centradas sobre la barra lateral, señalando a una columna que no
- * cambian.
+ * **«Chat» ya no es una pestaña, y eso es el cambio.** Era la primera de la tira y significaba
+ * «devuélveme la conversación», o sea que las otras seis se leían como sus alternativas: para
+ * mirar un fichero había que dejar de ver lo que el agente estaba escribiendo. Desde que el
+ * panel puede vivir a la DERECHA del chat (`repartoDeColumnas.ts`), la conversación no es una
+ * vista más — es la columna que se queda —, así que lo que estas pestañas eligen no es «qué
+ * veo» sino «qué abro al lado». Volver al chat a secas es CERRAR el panel, y por eso el sitio
+ * que ocupaba «Chat» lo ocupa ahora una «×».
  *
- * Lo que se llevó consigo la mudanza: sobre el azul profundo las pestañas necesitaban
- * colores propios (`Cabecera.module.css` tenía tres reglas para eso). Aquí caen sobre la
- * superficie clara para la que la hoja copiada las diseñó, así que lo único NUESTRO que
- * queda es el acento de la elegida — cian, como en el rediseño y como el resto de acentos
- * de la aplicación.
+ * Es la cuarta casa que tiene la tira —estuvo en `Transcript`, luego en `Cabecera`, luego en
+ * el panel central— y esta vez la mudanza no la decide una hoja de estilos: la tira es del
+ * PANEL, se mueva el panel a donde se mueva. En una ventana ancha eso es la columna derecha y
+ * en una estrecha el centro, y este componente no se entera de la diferencia.
  *
  * No recuerda nada: cuál está elegida lo sabe `App`, que es quien también decide qué pintar
  * debajo. Este componente solo dice qué se ha pulsado.
@@ -37,20 +36,13 @@ export type Pestana = "chat" | "ficheros" | "revision" | "artefactos" | "tareas"
  * REGISTRO existe si hay registro; una pestaña de ACCIÓN existe siempre, y su estado vacío
  * dice cómo se empieza** (ver `TareasDelProyecto.tsx`, que es quien pinta ese estado vacío).
  *
- * **Y por eso Tareas se sienta junto a Chat, no al final.** Chat y Tareas son las dos
- * primeras pestañas de ACCIÓN —una habla con el agente ahora mismo, la otra le manda un
- * encargo para que trabaje solo—; Ficheros, Revisión y Artefactos son de REGISTRO —enseñan
- * lo que YA pasó, y por eso siguen agrupadas donde estaban—, y Trazas es de otro destinatario
- * (quien depura el harness, no quien desarrolla la app), así que sigue cerrando la tira.
- *
- * **«Ejecutar» es la TERCERA de ACCIÓN, y va justo detrás de Tareas (Task 10).** Cierra el
- * viaje entero del harness en un aparato —el agente escribe, el verificador mira, y esto
- * ARRANCA la app—, que hasta ahora era el terminal, la skill y `adb` a mano. Existe siempre
- * por el mismo criterio que Tareas: es donde se ACTÚA, y su estado vacío dice cómo se
- * empieza, así que condicionarla a que haya una medida sería volver al defecto que aquel
- * criterio vino a arreglar. **Y su recorrido —fase, tiempo y la cola del log— vive DENTRO**,
- * no en una pestaña de historial aparte: un lanzamiento se lee donde se lanzó, que es donde
- * está el botón que lo provoca y el aparato al que fue.
+ * **Tareas y Ejecutar abren la tira porque son las de ACCIÓN**: una le manda al agente un
+ * encargo para que trabaje solo, la otra ARRANCA la app en un aparato. Ficheros, Revisión y
+ * Artefactos son de REGISTRO —enseñan lo que YA pasó— y van detrás; Trazas es de otro
+ * destinatario (quien depura el harness, no quien desarrolla la app), así que sigue cerrando
+ * la tira. **Y su recorrido —fase, tiempo y la cola del log— vive DENTRO de Ejecutar**, no en
+ * una pestaña de historial aparte: un lanzamiento se lee donde se lanzó, que es donde está el
+ * botón que lo provoca y el aparato al que fue.
  *
  * **La sincronización con CloudStudio NO es una pestaña: vive dentro de Revisión**, como una
  * banda arriba. Tenía la suya —era la tercera de ACCIÓN y existía siempre, con el mismo
@@ -66,10 +58,17 @@ export type Pestana = "chat" | "ficheros" | "revision" | "artefactos" | "tareas"
 export function Pestanas({
   pestana,
   alElegirPestana,
+  alCerrar,
   hayArtefactos,
 }: {
   pestana: Pestana;
   alElegirPestana: (pestana: Pestana) => void;
+  /**
+   * Cerrar el panel. **No es opcional**, a diferencia de casi todo lo demás de esta consola:
+   * es la única salida del panel cuando ocupa el centro —ahí no hay chat a la vista al que
+   * volver con el ratón—, así que una tira sin esto sería una vista de la que no se sale.
+   */
+  alCerrar: () => void;
   /**
    * ¿Ha dejado esta sesión algún artefacto? Su pestaña solo existe entonces.
    *
@@ -80,14 +79,13 @@ export function Pestanas({
   hayArtefactos?: boolean;
 }) {
   const pestanas: { id: Pestana; etiqueta: string }[] = [
-    { id: "chat", etiqueta: "Chat" },
-    // Junto al Chat, y no al final: las dos son de ACCIÓN (ver el comentario del componente,
-    // más arriba). La cola de tareas en background es del proyecto ABIERTO, no de la máquina
-    // entera — el kanban global ya vive en el escritorio. SIEMPRE presente, a propósito.
+    // Las dos de ACCIÓN abren la tira. La cola de tareas en background es del proyecto
+    // ABIERTO, no de la máquina entera — el kanban global ya vive en el escritorio. SIEMPRE
+    // presente, a propósito.
     { id: "tareas", etiqueta: "Tareas" },
-    // La tercera de ACCIÓN, y por eso va aquí y no con las de registro: es el verbo que
-    // cierra el viaje —lanzar la app en un aparato—, no la foto de lo que ya pasó. SIEMPRE
-    // presente, por el mismo criterio que Tareas: su estado vacío dice cómo se empieza.
+    // La segunda de ACCIÓN: es el verbo que cierra el viaje —lanzar la app en un aparato—,
+    // no la foto de lo que ya pasó. SIEMPRE presente, por el mismo criterio que Tareas: su
+    // estado vacío dice cómo se empieza.
     { id: "ejecutar", etiqueta: "Ejecutar" },
     // El árbol del proyecto en el que se trabaja, con visor de solo lectura.
     { id: "ficheros", etiqueta: "Ficheros" },
@@ -102,19 +100,38 @@ export function Pestanas({
     { id: "trazas", etiqueta: "Trazas" },
   ];
   return (
-    <div className={clsx(conversacion.tabs, estilos.tira)} role="tablist">
-      {pestanas.map((p) => (
-        <button
-          key={p.id}
-          type="button"
-          role="tab"
-          aria-selected={pestana === p.id}
-          className={clsx(conversacion.tab, pestana === p.id && conversacion.tabActive)}
-          onClick={() => alElegirPestana(p.id)}
-        >
-          {p.etiqueta}
-        </button>
-      ))}
+    <div className={estilos.cabecera}>
+      {/*
+        La «×» va FUERA del `tablist` y antes que él en el DOM, no dentro: un `tablist` solo
+        admite `tab`s, y colar ahí un botón que no es una pestaña rompe el recorrido que
+        anuncia a quien navega con el teclado («pestaña 7 de 7» para algo que no lleva a
+        ninguna vista). Delante porque cerrar es lo contrario de elegir: es la salida, y
+        ponerla al final de una tira que además puede desplazarse la escondería justo en el
+        panel estrecho, que es donde más falta hace.
+      */}
+      <button
+        type="button"
+        className={estilos.cerrar}
+        onClick={alCerrar}
+        aria-label="Cerrar el panel"
+        title="Cerrar el panel"
+      >
+        <span aria-hidden="true">×</span>
+      </button>
+      <div className={clsx(conversacion.tabs, estilos.tira)} role="tablist">
+        {pestanas.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            role="tab"
+            aria-selected={pestana === p.id}
+            className={clsx(conversacion.tab, estilos.pestana, pestana === p.id && conversacion.tabActive)}
+            onClick={() => alElegirPestana(p.id)}
+          >
+            {p.etiqueta}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

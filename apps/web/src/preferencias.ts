@@ -60,3 +60,34 @@ export function guardarAnchoBarra(px: number): void {
     // Se redimensiona igual; dura lo que dure la pestaña.
   }
 }
+
+/**
+ * El ancho del PANEL de vistas, en píxeles. Mismo contrato que el de la barra —ausente no
+ * es cero, y lo que no es un número se descarta— y por los mismos dos motivos.
+ *
+ * Lo que NO se guarda, y es una decisión: **si el panel estaba abierto y con qué pestaña**.
+ * Eso muere con la página, igual que moría la pestaña elegida antes de que el panel
+ * existiera. Guardarlo haría que cada arranque abriera una vista que nadie ha pedido, y esas
+ * vistas MIDEN al montarse —Ficheros pide el árbol, Revisión la lista, Ejecutar pregunta por
+ * el aparato—: sería mandar peticiones al servidor por una preferencia de hace tres días.
+ */
+const CLAVE_ANCHO_PANEL = "xonecode.anchoPanel";
+
+export function leerAnchoPanel(): number | undefined {
+  try {
+    const guardado = window.localStorage.getItem(CLAVE_ANCHO_PANEL);
+    if (guardado === null) return undefined;
+    const px = Number.parseInt(guardado, 10);
+    return Number.isFinite(px) ? px : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function guardarAnchoPanel(px: number): void {
+  try {
+    window.localStorage.setItem(CLAVE_ANCHO_PANEL, String(Math.round(px)));
+  } catch {
+    // Se redimensiona igual; dura lo que dure la pestaña.
+  }
+}

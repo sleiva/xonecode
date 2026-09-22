@@ -1,18 +1,55 @@
 /* Lo único nuestro de la tira: el resto es `.tabs`/`.tab`/`.tabActive` de
    `estilos/ConversationRoot.module.css`, copiado de deepseek.
 
-   Alias comprobados contra `estilos/design-platform.css`: border-l2 y bg-layer-1.
-   `--xonecode-cian` es de `estilos/marca.css` (la paleta propia). */
+   Alias comprobados contra `estilos/design-platform.css`: border-l2, bg-layer-1 y
+   label-tertiary/primary. `--xonecode-cian` y `--xonecode-fila-hover` son de
+   `estilos/marca.css` (la paleta propia), y ese segundo ya viene AJUSTADO POR TEMA — por
+   eso se reusa en vez de inventar aquí un cian translúcido con un porcentaje fijo. */
 
-/* La tira se pega arriba del panel y lo separa de lo que scrollea debajo. El borde va aquí
-   y no en el contenedor de abajo porque la tira es lo que está SIEMPRE: el chat, las
-   trazas y los ficheros se turnan debajo de ella, y un borde por vista serían tres
-   sitios que mantener sincronizados. */
-.tira {
+/* La cabecera del panel: la salida a la izquierda y la tira a continuación. Se pega arriba
+   del panel y lo separa de lo que scrollea debajo. El borde y el fondo viven AQUÍ y no en
+   la tira porque desde que hay un botón al lado la cabecera es la banda: con el borde en la
+   tira, la línea arrancaba después de la «×».
+
+   `flex-end` y no `center`: la hoja copiada alinea sus pestañas abajo (tira de 35 px con el
+   subrayado pegado al borde inferior), así que un botón centrado a su lado dejaría el
+   subrayado de la elegida más bajo que la «×» y la banda se leería torcida. */
+.cabecera {
+  display: flex;
   flex: none;
-  padding: 0 16px;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 0 8px;
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-1);
+}
+
+/* La tira es lo elástico de la banda, y **se desplaza en horizontal cuando no cabe**: el
+   panel se puede arrastrar hasta 360 px y ahí seis pestañas con el hueco de la hoja copiada
+   (36 px) no entran ni de lejos. Se resuelve con desbordamiento y no con una consulta de
+   contenedor a propósito: una consulta necesita un ancestro que declare `container-type` —y
+   si falta, la regla se queda escrita y muerta sin avisar—, mientras que esto se adapta a
+   cualquier ancho sin preguntarle a nadie.
+
+   La barra de desplazamiento se esconde porque el borde de la banda ya está ahí y un
+   renglón de 8 px debajo de las pestañas partiría la línea; el gesto (rueda, trackpad,
+   teclado) sigue funcionando. */
+.tira {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-left: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tira::-webkit-scrollbar {
+  display: none;
+}
+
+/* Que no se aplasten: sin esto, flex encoge las pestañas antes de desplazar la tira y las
+   etiquetas se parten en dos líneas. */
+.pestana {
+  flex: none;
 }
 
 /* El acento de la elegida, en cian: el mismo papel que tiene en el filo de la fila activa
@@ -24,4 +61,31 @@
 
 .tira [role="tab"][aria-selected="true"]::after {
   background: var(--xonecode-cian);
+}
+
+/* La salida. Lleva fondo al pasar por encima y no solo un cambio de color porque es la
+   única pieza de la banda que no es texto: sin superficie, una «×» suelta no se lee como
+   un control. Va alineada con la línea de las pestañas (`margin-bottom` contra los 11 px
+   de relleno inferior que la hoja copiada le da a cada `.tab`). */
+.cerrar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-bottom: 6px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cerrar:hover {
+  background: var(--xonecode-fila-hover);
+  color: var(--dsw-alias-label-primary);
 }

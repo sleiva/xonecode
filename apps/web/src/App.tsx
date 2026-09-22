@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { crearStoreDelCliente } from "./store.js";
 import type { ActoDeSincronizacion } from "./tipos.js";
 import type { Conexion } from "./conexion.js";
-import { Maqueta } from "./componentes/Maqueta.js";
+import { ANCHO_BARRA_POR_OMISION, Maqueta } from "./componentes/Maqueta.js";
 import { Barra } from "./componentes/Barra.js";
 import { Cabecera } from "./componentes/Cabecera.js";
-import { Pestanas, type Pestana } from "./componentes/Pestanas.js";
+import { Panel } from "./componentes/Panel.js";
+import type { Pestana } from "./componentes/Pestanas.js";
 import { Compositor } from "./componentes/Compositor.js";
 import { Transcript } from "./componentes/Transcript.js";
 import { BarraDeEstado } from "./componentes/BarraDeEstado.js";
@@ -31,7 +32,16 @@ import { Artefactos, type ArtefactoEnLista } from "./componentes/Artefactos.js";
 import { TareasDelProyecto } from "./componentes/TareasDelProyecto.js";
 import { Ejecutar } from "./componentes/Ejecutar.js";
 import { aplicarApariencia, guardarApariencia, leerApariencia, type Apariencia } from "./apariencia.js";
-import { guardarAnchoBarra, guardarBarraContraida, leerAnchoBarra, leerBarraContraida } from "./preferencias.js";
+import {
+  guardarAnchoBarra,
+  guardarAnchoPanel,
+  guardarBarraContraida,
+  leerAnchoBarra,
+  leerAnchoPanel,
+  leerBarraContraida,
+} from "./preferencias.js";
+import { usarAnchoDeVentana } from "./anchoDeVentana.js";
+import { ANCHO_PANEL_POR_OMISION, acotarAnchoDePanel, repartoDeColumnas } from "./repartoDeColumnas.js";
 
 type Store = ReturnType<typeof crearStoreDelCliente>;
 
@@ -86,7 +96,30 @@ export function App({
    * la página, como antes, porque recargar el navegador ya es una sesión nueva
    * (`store.ts#marcarDesconectado` borra lo pendiente en ese momento).
    */
-  const [pestana, setPestana] = useState<Pestana>("chat");
+  /**
+   * La vista abierta en el PANEL, o `undefined` si el panel está cerrado. Antes era una
+   * `pestana` que empezaba en `"chat"`: el chat era una vista más y elegir cualquier otra lo
+   * escondía. Hoy el chat es la columna del centro y esto es lo que se abre al lado
+   * (`repartoDeColumnas.ts`), así que «volver al chat» es cerrar el panel — y eso es
+   * exactamente lo que significa el `undefined`.
+   */
+  const [vistaDelPanel, setVistaDelPanel] = useState<Pestana | undefined>(undefined);
+  /**
+   * Con cuál se reabre el panel desde el botón de la cabecera. **Ficheros la primera vez**,
+   * y no Trazas, que son de otro destinatario —quien depura el harness, no quien desarrolla
+   * la app—: un panel que abriera ahí enseñaría el interior del harness a quien solo quería
+   * mirar su proyecto.
+   *
+   * Es un `ref` y no un estado porque nadie repinta por esto: solo se lee en el instante en
+   * que alguien pulsa el botón.
+   */
+  const ultimaVistaDelPanel = useRef<Pestana>("ficheros");
+
+  /** Abrir el panel por una vista concreta, recordándola para la próxima vez. */
+  const abrirPanel = useCallback((vista: Pestana) => {
+    ultimaVistaDelPanel.current = vista;
+    setVistaDelPanel(vista);
+  }, []);
    /**
    * Las rutas con el diff desplegado en Revisión. **Arranca sin ninguna**: la pestaña se
    * abre enseñando la LISTA de lo que tocó el agente, y cada diff se despliega al pulsarlo
@@ -137,6 +170,32 @@ export function App({
    * resto de la geometría, y no repetida aquí.
    */
   const [anchoBarra, setAnchoBarra] = useState(() => leerAnchoBarra());
+  /** Y el del PANEL, con el mismo trato. Lo que NO se recuerda es si estaba abierto: ver
+   *  `preferencias.ts`, que dice por qué. */
+  const [anchoPanel, setAnchoPanel] = useState(() => leerAnchoPanel());
+  /**
+   * El ancho de la ventana. Lo necesita `repartoDeColumnas`, que es quien decide si el panel
+   * cabe al lado del chat o tiene que ocupar su sitio — y esa decisión DESMONTA una columna,
+   * así que no la puede tomar una hoja de estilos.
+   */
+  const anchoDeVentana = usarAnchoDeVentana();
+  /**
+   * Quién cabe y quién no. Es la ÚNICA pieza que decide el encuadre, y vive fuera de este
+   * fichero a propósito: pura y con su test, porque una regla que solo existe dentro de un
+   * componente es de las que este repo llama «escritas y no probadas».
+   *
+   * De aquí salen las tres cosas que cambian la pantalla: si la barra se pinta plegada
+   * —que **no** es lo mismo que la preferencia del usuario, y por eso `guardarBarraContraida`
+   * no se llama nunca con esto—, si el panel va en su columna o en el centro, y si el
+   * compositor se esconde (solo se esconde cuando el panel ocupa el sitio del chat).
+   */
+  const reparto = repartoDeColumnas({
+    anchoVentana: anchoDeVentana,
+    anchoBarra: anchoBarra ?? ANCHO_BARRA_POR_OMISION,
+    anchoPanel: acotarAnchoDePanel(anchoPanel ?? ANCHO_PANEL_POR_OMISION),
+    barraPlegadaPorElUsuario: barraContraida,
+    panelAbierto: vistaDelPanel !== undefined,
+  });
 
   /**
    * Pedir la lista de ficheros de la sesión. Va en `useCallback` porque `Revision` la
@@ -221,10 +280,10 @@ export function App({
       // comportamiento de siempre para la barra y el escritorio. Quien abre desde una
       // tarjeta de tarea «esperando feedback» sí la nombra —«revision»—, porque ahí la
       // verdad sobre lo que cambió está en esa pestaña y no en el chat.
-      if (pestanaAlAbrir !== undefined) setPestana(pestanaAlAbrir);
+      if (pestanaAlAbrir !== undefined) abrirPanel(pestanaAlAbrir);
       void enviar(sesion === undefined ? { clase: "sesion", proyecto } : { clase: "sesion", proyecto, sesion });
     },
-    [enviar, estado.alta]
+    [enviar, estado.alta, abrirPanel]
   );
 
   useEffect(() => {
@@ -350,11 +409,12 @@ export function App({
   /**
    * La pestaña de artefactos desaparece si la sesión nueva no tiene ninguno, así que la
    * elección tiene que caerse con ella: si no, `Pestanas` la quitaba de la tira —y hace
-   * bien— pero `pestana` seguía valiendo «artefactos» y el centro enseñaba ese panel sin
-   * ninguna pestaña marcada. Se vuelve al Chat, que es donde estaría quien no ha elegido.
+   * bien— pero la vista seguía valiendo «artefactos» y el panel la enseñaba sin ninguna
+   * pestaña marcada. **Se CIERRA el panel**, que es donde estaría quien no ha elegido nada:
+   * dejarlo abierto por otra vista sería elegir en su nombre.
    */
   useEffect(() => {
-    if (artefactos.length === 0) setPestana((actual) => (actual === "artefactos" ? "chat" : actual));
+    if (artefactos.length === 0) setVistaDelPanel((actual) => (actual === "artefactos" ? undefined : actual));
   }, [artefactos.length]);
 
   /**
@@ -398,16 +458,23 @@ export function App({
   );
 
   /**
-   * Abrir un artefacto desde su tarjeta del chat: cambia de pestaña Y lo elige.
+   * Abrir un artefacto desde su tarjeta del chat: abre el PANEL por Artefactos y lo elige.
    *
    * Es el mismo gesto que pulsar su fila en la lista, así que va por una función: la tarjeta
    * es lo primero que se ve cuando el agente acaba de dibujar, y sin esto había que buscar
    * la pestaña y volver a elegirlo.
+   *
+   * Y desde que el panel puede vivir al lado, este gesto vale el doble de lo que valía: en
+   * una ventana ancha la captura se abre SIN perder de vista la conversación que la
+   * produjo, que es justo lo que se pedía.
    */
-  const abrirArtefacto = useCallback((ruta: string) => {
-    setArtefactoElegido(ruta);
-    setPestana("artefactos");
-  }, []);
+  const abrirArtefacto = useCallback(
+    (ruta: string) => {
+      setArtefactoElegido(ruta);
+      abrirPanel("artefactos");
+    },
+    [abrirPanel]
+  );
 
   /** Pedir el árbol del proyecto (pestaña Ficheros). Mismo motivo que `pedirRevision`. */
   const pedirArbol = useCallback(() => {
@@ -508,7 +575,7 @@ export function App({
     // Solo el FLANCO de fin. Sin esto, abrir la pestaña dispararía este efecto además del
     // que `Revision` lleva dentro para pedir al montar, y saldrían dos peticiones iguales.
     if (!acabaDeTerminar) return;
-    if (pestana === "revision") {
+    if (vistaDelPanel === "revision") {
       pedirRevision();
       // Los desplegados se vuelven a pedir: si no, seguirían enseñando el diff viejo del
       // fichero que el turno acaba de cambiar.
@@ -520,7 +587,7 @@ export function App({
       // flanco de fin, y no se adelanta a ojo.
       pedirSync();
     }
-    if (pestana === "ficheros") {
+    if (vistaDelPanel === "ficheros") {
       // El agente puede haber creado o cambiado ficheros: el árbol y el abierto se releen.
       pedirArbol();
       if (ficheroElegido !== undefined) void enviar({ clase: "fichero", ruta: ficheroElegido });
@@ -528,7 +595,7 @@ export function App({
     // `desplegados` y `ficheroElegido` NO van en las dependencias a propósito: desplegar y
     // elegir ya piden lo suyo por su cuenta, y tenerlos aquí lo pediría dos veces.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [turnoEnVuelo, pestana, pedirRevision, pedirParche, pedirArbol, pedirSync, enviar]);
+  }, [turnoEnVuelo, vistaDelPanel, pedirRevision, pedirParche, pedirArbol, pedirSync, enviar]);
   const [apariencia, setApariencia] = useState<Apariencia>(() => leerApariencia());
 
   useEffect(() => {
@@ -854,12 +921,30 @@ export function App({
     void enviar({ clase: "alta", paso: "proyecto", proyecto });
   };
 
-  /** Plegar y desplegar, recordándolo en este navegador. */
+  /**
+   * Plegar y desplegar, recordándolo en este navegador.
+   *
+   * **Con una excepción: si la barra está plegada porque el PANEL le quitó el sitio, este
+   * botón cierra el panel en vez de tocar la preferencia.** Sin eso sería un botón muerto —
+   * el usuario no la ha plegado, así que su preferencia ya dice «abierta» y ponerla otra vez
+   * a «abierta» no cambia nada: se pulsa «Mostrar la barra lateral» y no pasa nada, sin
+   * ninguna pista de por qué. Gana quien pulsa: pide la barra, se le da la barra.
+   */
   const alternarBarra = (): void => {
+    if (!barraContraida && reparto.barra === "plegada") {
+      setVistaDelPanel(undefined);
+      return;
+    }
     setBarraContraida((plegada) => {
       guardarBarraContraida(!plegada);
       return !plegada;
     });
+  };
+
+  /** Abrir el panel por donde se dejó, o cerrarlo. La otra mitad del par es la «×» de su
+   *  propia tira; este vive fuera porque cerrado el panel no está. */
+  const alternarPanel = (): void => {
+    setVistaDelPanel((actual) => (actual === undefined ? ultimaVistaDelPanel.current : undefined));
   };
 
   /**
@@ -870,6 +955,12 @@ export function App({
   const alRedimensionarBarra = (ancho: number, terminado: boolean): void => {
     setAnchoBarra(ancho);
     if (terminado) guardarAnchoBarra(ancho);
+  };
+
+  /** Lo mismo para el panel. */
+  const alRedimensionarPanel = (ancho: number, terminado: boolean): void => {
+    setAnchoPanel(ancho);
+    if (terminado) guardarAnchoPanel(ancho);
   };
 
   /** El entorno activo con su nombre y su URL, para la portada del escritorio. `undefined`
@@ -1212,6 +1303,155 @@ export function App({
     />
   ) : null;
 
+  /**
+   * El PANEL de vistas, montado UNA vez y colocado en un sitio o en otro.
+   *
+   * `reparto` decide su casa: la columna de la derecha cuando la ventana da para las tres,
+   * y el sitio del chat cuando no — que es exactamente cómo se comportaba esta consola
+   * antes de que existiera la tercera columna. **Se monta una sola vez**, y eso importa:
+   * cada una de sus vistas MIDE al montarse (Ficheros pide el árbol, Revisión la lista,
+   * Ejecutar pregunta por el aparato, CloudStudio mide lo que queda por subir), así que
+   * dos copias —una por sitio— duplicarían todas esas peticiones.
+   *
+   * Cerrado es `undefined`, no un elemento escondido: lo que se pliega se DESMONTA, porque
+   * un elemento invisible sigue siendo tabulable.
+   */
+  const elPanel =
+    vistaDelPanel === undefined ? undefined : (
+      <Panel
+        pestana={vistaDelPanel}
+        alElegirPestana={abrirPanel}
+        alCerrar={() => setVistaDelPanel(undefined)}
+        hayArtefactos={artefactos.length > 0}
+        actos={estado.actos}
+      revision={
+        <Revision
+          historica={estado.alta?.historica === true}
+          {...(estado.revision === undefined ? {} : { via: estado.revision.via })}
+          {...(estado.revision?.mezclados === undefined ? {} : { mezclados: estado.revision.mezclados })}
+          ficheros={estado.revision?.lista ?? []}
+          parches={estado.parches ?? {}}
+          desplegados={desplegados ?? new Set()}
+          alDesplegar={desplegar}
+          alPlegar={plegar}
+          alRecargar={pedirRevision}
+          conectado={estado.conectado}
+          // La banda de la sincronización, que ya no es pestaña propia: «cuánto queda
+          // por subir» es la misma pregunta que contesta Revisión medida contra otra
+          // referencia. Se monta CON la pestaña, y montarse es lo que la hace medir
+          // (`CloudStudio` pide al entrar): abrir Revisión ES entrar a mirarlo.
+          cloudstudio={
+            <CloudStudio
+              {...(estado.sync === undefined ? {} : { sync: estado.sync })}
+              // El registro va con el mismo trato que `sync`: AUSENTE cuando esta
+              // sesión no ha sincronizado nada todavía. Un array vacío diría «hay un
+              // registro y está vacío», y la banda no tiene nada que enseñar en
+              // ninguno de los dos casos — pero la distinción se conserva en la capa
+              // que la sabe, que es donde el repo la exige.
+              {...(registroDeSync.length === 0 ? {} : { registro: registroDeSync })}
+              alPedir={sincronizar}
+              alRecargar={pedirSync}
+              conectado={estado.conectado}
+            />
+          }
+        />
+      }
+      ficheros={
+        <Ficheros
+          {...(estado.arbol === undefined ? {} : { arbol: estado.arbol })}
+          contenidos={estado.contenidos ?? {}}
+          {...(ficheroElegido === undefined ? {} : { elegido: ficheroElegido })}
+          alElegir={elegirFichero}
+          alRecargar={pedirArbol}
+          conectado={estado.conectado}
+        />
+      }
+      artefactos={
+        <Artefactos
+          lista={artefactos}
+          contenidos={estado.artefactos ?? {}}
+          {...(artefactoElegido === undefined ? {} : { elegido: artefactoElegido })}
+          alElegir={setArtefactoElegido}
+          alPedir={pedirArtefacto}
+          conectado={estado.conectado}
+        />
+      }
+      tareas={
+        <TareasDelProyecto
+          tareas={tareasDelProyecto}
+          alReintentar={alReintentarTarea}
+          alDescartar={alDescartarTarea}
+          alTerminar={alTerminarTarea}
+          // Antes esta lista no tenía forma de mandar feedback — eso era solo del
+          // kanban del escritorio, así que una tarea aparcada solo se podía atender
+          // desde ahí (Task 13). `AccionesDeTarea` ya la ofrece en las dos vistas.
+          alEnviarFeedback={alEnviarFeedbackTarea}
+          conectado={estado.conectado}
+          // Si las ejecuta OTRO proceso, esta pestaña lo dice — y aquí importa más
+          // que en el kanban, porque aquí vive «Nueva tarea»: la que se cree se
+          // queda quieta hasta que ese proceso mire la cola por su cuenta (F4 de la
+          // revisión final). Ausente mientras la cola no ha llegado: no se afirma.
+          {...(estado.tareas === undefined ? {} : { corriendoAqui: estado.tareas.corriendoAqui })}
+          // Y si las ejecuta OTRO, que no es lo mismo que que no las ejecute nadie:
+          // el primero manda a esperar y el segundo dice que no va a pasar nada.
+          // Ausente se propaga como ausente, que es «no se sabe».
+          {...(estado.tareas?.ejecutaOtroProceso === undefined
+            ? {}
+            : { ejecutaOtroProceso: estado.tareas.ejecutaOtroProceso })}
+          // Task 15: crear una tarea PARA este proyecto sin salir de la pestaña ni
+          // volver al escritorio, con el proyecto ya resuelto — es el mismo id que
+          // abre esta ventana desde una tarjeta del escritorio, solo que aquí no hay
+          // nada que elegir.
+          {...(proyectoActivoId === undefined
+            ? {}
+            : { alNuevaTarea: () => abrirVentanaDeTarea(proyectoActivoId) })}
+          // Ver lo que hace, en vivo (Task 17): la MISMA pieza (`MirarTarea.tsx`,
+          // vía `Kanban.tsx`/`TareasDelProyecto.tsx`) que monta el escritorio — antes
+          // esta pestaña no la ofrecía en absoluto.
+          {...(mirar === undefined ? {} : { alMirar: alMirarTarea, alDejarDeMirar: alDejarDeMirarTarea })}
+          {...(mirandoTarea === undefined ? {} : { mirando: mirandoTarea })}
+          {...(estado.mirada === undefined ? {} : { mirada: estado.mirada })}
+        />
+      }
+      /*
+        Ejecutar la app de este proyecto en un aparato (Task 10): el último tramo del
+        viaje —el agente escribe, el verificador mira, y aquí se ARRANCA—, que hasta
+        ahora era el terminal, la skill y `adb` a mano.
+
+        Va como ranura, igual que las de al lado, y por el mismo motivo: el elemento
+        solo se monta al elegir su pestaña, y MONTARSE es lo que la hace medir — la
+        medida vive en el servidor y habla con `adb`, así que no se hereda de ninguna
+        foto, se PIDE. Abrir la pestaña ES entrar a mirarlo.
+      */
+      ejecutar={
+        <Ejecutar
+          // El veredicto y el recorrido salen del STORE, no del cable: `estado.lanzable`
+          // no lleva el discriminante del sobre (`clase: "lanzable"`, que es del mensaje
+          // y no un dato), así que van directos y sin adaptador — el tipo de la pestaña
+          // se declara sobre el estado justo para esto.
+          veredicto={estado.lanzable}
+          lanzamiento={estado.lanzamiento}
+          // El inventario TAL CUAL lo manda el servidor, apagados incluidos: distinguir
+          // «no hay ninguno enchufado» de «hay tres y ninguno arrancado» necesita la
+          // lista entera, y la pestaña decide qué hacer con ella.
+          dispositivos={estado.dispositivos?.dispositivos}
+          // Y que vuelva a medir al entrar: la foto puede ser de hace rato, y esta
+          // pestaña decide con ella en qué aparato se lanza la app.
+          alActualizarDispositivos={actualizarDispositivos}
+          // El dispositivo de la sesión: la MISMA fuente que la pastilla del compositor,
+          // que es donde se elige y donde este botón va a caer.
+          elegido={estado.alta?.dispositivoActivo}
+          conectado={estado.conectado}
+          alRevisar={revisarLanzamiento}
+          alLanzar={lanzarApp}
+          alCancelar={cancelarLanzamiento}
+          alElegirDispositivo={elegirDispositivoDeEjecutar}
+        />
+      }
+      // La tarjeta del chat abre el artefacto: cambia de pestaña y lo elige.
+      />
+    );
+
   /*
     La MISMA barra superior con sesión abierta y sin ella, y a propósito: es la barra de
     herramientas de la APLICACIÓN, no de la sesión — ahí viven la marca, el estado del cable
@@ -1234,8 +1474,14 @@ export function App({
       // vez de afirmar un modo que nadie ha leído.
       {...(estado.alta?.modo === undefined ? {} : { modo: estado.alta.modo })}
       conectado={estado.conectado}
-      barraContraida={barraContraida}
+      // El estado EFECTIVO, no la preferencia: si el reparto la ha plegado para hacerle
+      // sitio al panel, el botón tiene que decir «Mostrar» — que es lo que se ve.
+      barraContraida={reparto.barra === "plegada"}
       alAlternarBarra={alternarBarra}
+      // El botón del panel solo con sesión: sin ella no hay ni ficheros ni revisión que
+      // enseñar, y abriría una columna vacía.
+      panelAbierto={vistaDelPanel !== undefined}
+      alAlternarPanel={alternarPanel}
       alAbrirAjustes={() => abrirAjustes()}
       // La marca lleva al escritorio, y solo desde la sesión: en el escritorio ya estás.
       alIrAlEscritorio={() => setEnEscritorio(true)}
@@ -1244,7 +1490,7 @@ export function App({
     <Cabecera
       titulo="Escritorio"
       conectado={estado.conectado}
-      barraContraida={barraContraida}
+      barraContraida={reparto.barra === "plegada"}
       alAlternarBarra={alternarBarra}
       alAbrirAjustes={() => abrirAjustes()}
     />
@@ -1253,9 +1499,16 @@ export function App({
   return (
     <>
     <Maqueta
-      barraContraida={barraContraida}
+      // El EFECTIVO, no la preferencia: `repartoDeColumnas` la puede plegar para hacerle
+      // sitio al panel, y eso no se guarda en ningún sitio.
+      barraContraida={reparto.barra === "plegada"}
       {...(anchoBarra === undefined ? {} : { anchoBarra })}
       alRedimensionarBarra={alRedimensionarBarra}
+      // La tercera columna. Solo cuando cabe: si no cabe, el mismo elemento se monta en el
+      // centro (ver `elPanel`), nunca en los dos sitios a la vez.
+      {...(reparto.panel === "columna" && elPanel !== undefined ? { panel: elPanel } : {})}
+      {...(anchoPanel === undefined ? {} : { anchoPanel })}
+      alRedimensionarPanel={alRedimensionarPanel}
       cabecera={cabecera}
       centro={
         // La rama ya NO se elige aquí: la pregunta de «qué proyecto abro y desde qué rama»
@@ -1263,18 +1516,16 @@ export function App({
         // suelto en mitad del centro no decía ni de qué proyecto era.
         enSesion ? (
           <>
-            {/*
-              La tira de pestañas, en el PANEL CENTRAL y no en la barra superior: desde que
-              esa cruza las dos columnas es la barra de la aplicación, y unas pestañas que
-              solo existen con sesión abierta y que solo cambian lo que se ve aquí debajo
-              son de aquí. Arriba quedaban además centradas sobre la barra lateral,
-              señalando a una columna que no cambian.
-            */}
-            <Pestanas pestana={pestana} alElegirPestana={setPestana} hayArtefactos={artefactos.length > 0} />
             <AvisoDeConexion conectado={estado.conectado} />
+            {/*
+              La conversación, o el panel en su sitio si la ventana no da para los dos. La
+              tira de pestañas ya no está aquí: se fue DENTRO del panel, que es de quien es
+              (`Pestanas.tsx` cuenta las cuatro casas que ha tenido). Puesta aquí seguiría
+              cambiando una columna que en la ventana ancha ya no es esta.
+            */}
+            {reparto.panel === "centro" && elPanel !== undefined ? elPanel : (
             <Transcript
               actos={estado.actos}
-              pestana={pestana}
               turnoEnVuelo={estado.turnoEnVuelo === true}
               // Lo dice el servidor (`alta.historica`): una sesión reabierta que el agente
               // no recuerda. El chat lo enseña arriba y Revisión cambia su explicación.
@@ -1296,133 +1547,9 @@ export function App({
               // el id de sesión no existe hasta que se vuelca el primer acto, y entonces la
               // tarjeta enseña la ruta virtual en vez de componer una falsa.
               {...(estado.alta?.sesionActiva === undefined ? {} : { sesion: estado.alta.sesionActiva })}
-              revision={
-                <Revision
-                  historica={estado.alta?.historica === true}
-                  {...(estado.revision === undefined ? {} : { via: estado.revision.via })}
-                  {...(estado.revision?.mezclados === undefined ? {} : { mezclados: estado.revision.mezclados })}
-                  ficheros={estado.revision?.lista ?? []}
-                  parches={estado.parches ?? {}}
-                  desplegados={desplegados ?? new Set()}
-                  alDesplegar={desplegar}
-                  alPlegar={plegar}
-                  alRecargar={pedirRevision}
-                  conectado={estado.conectado}
-                  // La banda de la sincronización, que ya no es pestaña propia: «cuánto queda
-                  // por subir» es la misma pregunta que contesta Revisión medida contra otra
-                  // referencia. Se monta CON la pestaña, y montarse es lo que la hace medir
-                  // (`CloudStudio` pide al entrar): abrir Revisión ES entrar a mirarlo.
-                  cloudstudio={
-                    <CloudStudio
-                      {...(estado.sync === undefined ? {} : { sync: estado.sync })}
-                      // El registro va con el mismo trato que `sync`: AUSENTE cuando esta
-                      // sesión no ha sincronizado nada todavía. Un array vacío diría «hay un
-                      // registro y está vacío», y la banda no tiene nada que enseñar en
-                      // ninguno de los dos casos — pero la distinción se conserva en la capa
-                      // que la sabe, que es donde el repo la exige.
-                      {...(registroDeSync.length === 0 ? {} : { registro: registroDeSync })}
-                      alPedir={sincronizar}
-                      alRecargar={pedirSync}
-                      conectado={estado.conectado}
-                    />
-                  }
-                />
-              }
-              ficheros={
-                <Ficheros
-                  {...(estado.arbol === undefined ? {} : { arbol: estado.arbol })}
-                  contenidos={estado.contenidos ?? {}}
-                  {...(ficheroElegido === undefined ? {} : { elegido: ficheroElegido })}
-                  alElegir={elegirFichero}
-                  alRecargar={pedirArbol}
-                  conectado={estado.conectado}
-                />
-              }
-              artefactos={
-                <Artefactos
-                  lista={artefactos}
-                  contenidos={estado.artefactos ?? {}}
-                  {...(artefactoElegido === undefined ? {} : { elegido: artefactoElegido })}
-                  alElegir={setArtefactoElegido}
-                  alPedir={pedirArtefacto}
-                  conectado={estado.conectado}
-                />
-              }
-              tareas={
-                <TareasDelProyecto
-                  tareas={tareasDelProyecto}
-                  alReintentar={alReintentarTarea}
-                  alDescartar={alDescartarTarea}
-                  alTerminar={alTerminarTarea}
-                  // Antes esta lista no tenía forma de mandar feedback — eso era solo del
-                  // kanban del escritorio, así que una tarea aparcada solo se podía atender
-                  // desde ahí (Task 13). `AccionesDeTarea` ya la ofrece en las dos vistas.
-                  alEnviarFeedback={alEnviarFeedbackTarea}
-                  conectado={estado.conectado}
-                  // Si las ejecuta OTRO proceso, esta pestaña lo dice — y aquí importa más
-                  // que en el kanban, porque aquí vive «Nueva tarea»: la que se cree se
-                  // queda quieta hasta que ese proceso mire la cola por su cuenta (F4 de la
-                  // revisión final). Ausente mientras la cola no ha llegado: no se afirma.
-                  {...(estado.tareas === undefined ? {} : { corriendoAqui: estado.tareas.corriendoAqui })}
-                  // Y si las ejecuta OTRO, que no es lo mismo que que no las ejecute nadie:
-                  // el primero manda a esperar y el segundo dice que no va a pasar nada.
-                  // Ausente se propaga como ausente, que es «no se sabe».
-                  {...(estado.tareas?.ejecutaOtroProceso === undefined
-                    ? {}
-                    : { ejecutaOtroProceso: estado.tareas.ejecutaOtroProceso })}
-                  // Task 15: crear una tarea PARA este proyecto sin salir de la pestaña ni
-                  // volver al escritorio, con el proyecto ya resuelto — es el mismo id que
-                  // abre esta ventana desde una tarjeta del escritorio, solo que aquí no hay
-                  // nada que elegir.
-                  {...(proyectoActivoId === undefined
-                    ? {}
-                    : { alNuevaTarea: () => abrirVentanaDeTarea(proyectoActivoId) })}
-                  // Ver lo que hace, en vivo (Task 17): la MISMA pieza (`MirarTarea.tsx`,
-                  // vía `Kanban.tsx`/`TareasDelProyecto.tsx`) que monta el escritorio — antes
-                  // esta pestaña no la ofrecía en absoluto.
-                  {...(mirar === undefined ? {} : { alMirar: alMirarTarea, alDejarDeMirar: alDejarDeMirarTarea })}
-                  {...(mirandoTarea === undefined ? {} : { mirando: mirandoTarea })}
-                  {...(estado.mirada === undefined ? {} : { mirada: estado.mirada })}
-                />
-              }
-              /*
-                Ejecutar la app de este proyecto en un aparato (Task 10): el último tramo del
-                viaje —el agente escribe, el verificador mira, y aquí se ARRANCA—, que hasta
-                ahora era el terminal, la skill y `adb` a mano.
-
-                Va como ranura, igual que las de al lado, y por el mismo motivo: el elemento
-                solo se monta al elegir su pestaña, y MONTARSE es lo que la hace medir — la
-                medida vive en el servidor y habla con `adb`, así que no se hereda de ninguna
-                foto, se PIDE. Abrir la pestaña ES entrar a mirarlo.
-              */
-              ejecutar={
-                <Ejecutar
-                  // El veredicto y el recorrido salen del STORE, no del cable: `estado.lanzable`
-                  // no lleva el discriminante del sobre (`clase: "lanzable"`, que es del mensaje
-                  // y no un dato), así que van directos y sin adaptador — el tipo de la pestaña
-                  // se declara sobre el estado justo para esto.
-                  veredicto={estado.lanzable}
-                  lanzamiento={estado.lanzamiento}
-                  // El inventario TAL CUAL lo manda el servidor, apagados incluidos: distinguir
-                  // «no hay ninguno enchufado» de «hay tres y ninguno arrancado» necesita la
-                  // lista entera, y la pestaña decide qué hacer con ella.
-                  dispositivos={estado.dispositivos?.dispositivos}
-                  // Y que vuelva a medir al entrar: la foto puede ser de hace rato, y esta
-                  // pestaña decide con ella en qué aparato se lanza la app.
-                  alActualizarDispositivos={actualizarDispositivos}
-                  // El dispositivo de la sesión: la MISMA fuente que la pastilla del compositor,
-                  // que es donde se elige y donde este botón va a caer.
-                  elegido={estado.alta?.dispositivoActivo}
-                  conectado={estado.conectado}
-                  alRevisar={revisarLanzamiento}
-                  alLanzar={lanzarApp}
-                  alCancelar={cancelarLanzamiento}
-                  alElegirDispositivo={elegirDispositivoDeEjecutar}
-                />
-              }
-              // La tarjeta del chat abre el artefacto: cambia de pestaña y lo elige.
               alAbrirArtefacto={abrirArtefacto}
             />
+            )}
             {/*
               Las tres esperas de humano van DELANTE del compositor y cada una con su propio
               cauce: el compositor manda `prosa`, que entra por la cola de líneas del lazo y no
@@ -1524,10 +1651,14 @@ export function App({
               // Lo dice el servidor, no se deduce de los actos: un turno que revienta no
               // siempre deja `fin`, y el compositor se quedaría apagado para siempre.
               turnoEnVuelo={estado.turnoEnVuelo === true}
-              // Solo en el chat: en Trazas y en Ficheros no hay a quién escribirle. Se
-              // oculta y no se desmonta, para no perder el borrador al ir a mirar un
+              // Solo se esconde cuando el panel ocupa el SITIO del chat: ahí no hay a quién
+              // escribirle. Con el panel en su columna la conversación sigue delante, así que
+              // el compositor se queda — que es la mitad de lo que se ganó partiendo la
+              // pantalla: mirar un fichero y seguir escribiendo.
+              //
+              // Se oculta y no se desmonta, para no perder el borrador al ir a mirar un
               // fichero y volver.
-              oculto={pestana !== "chat"}
+              oculto={reparto.panel === "centro"}
               alParar={() => void enviar({ clase: "cancelar" })}
               // Una línea que empieza por «/» no tiene camino propio: viaja como prosa
               // igual que cualquier otra, y es `correrConsola` quien la despacha contra
