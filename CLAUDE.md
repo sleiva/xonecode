@@ -829,6 +829,18 @@ feedback del desarrollador** y no es terminal.
   línea. **Y la tarjeta no repite la REGLA** —«no es del proyecto, no entra en git»—: eso es
   lo mismo para todas y vive una vez al pie de la pestaña Artefactos, no dieciséis veces en
   el hilo.
+- **El HUECO entre actos dice si sigue el mismo turno o empieza otro, y se declara con la
+  VARIABLE de la hoja copiada** (`Chat.module.css`, `.flujo` / `.inicioDeTurno`).
+  `ChatView.module.css` separa a los hijos de `.column` con
+  `margin-top: var(--dsh-chat-flow-gap, 16px)` y ese margen lo lleva el HIJO, así que la
+  variable se resuelve EN CADA ACTO —medido en vivo— y la jerarquía se declara sin pelear una
+  especificidad de (0,7,0) ni tocar una hoja de la librería. **Dos valores y no tres**: dentro
+  de un turno, y al empezar otro (lo lleva el acto del USUARIO, que es lo que abre uno). Y
+  **ningún margen accidental**: el globo del usuario es un `<p>` y traía 14 px propios, o sea
+  que ese hueco no lo decidía nadie. **El aire gordo no estaba ahí**: medido sobre una
+  conversación real, el hueco entre actos era la parte PEQUEÑA y el resto vivía DENTRO de los
+  mensajes — el margen del primer y último párrafo contra el relleno del globo es aire por
+  duplicado, y se anula.
 - **Los actos de `sistema` se ven en el chat** (respuestas a comandos y avisos de honestidad), y
   van FUERA del tramo plegable. `razonamiento` es su propio evento y su propio acto —`textoDe` lo
   EXCLUYE del texto—. El texto del asistente se enseña mientras llega, a `MS_ENTRE_PARCIALES`

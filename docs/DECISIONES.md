@@ -6041,3 +6041,51 @@ párrafos del mismo mensaje separados igual que dos turnos) y la cola de actos `
 dos avisos de modo de escritura que se contradicen. El segundo no es un arreglo de pintado:
 son dos eventos ciertos cada uno en su momento, y fundirlos en el cliente escondería
 historia — el sitio es la cola de `/aprobacion`, cuando dos se drenan al final del turno.
+
+
+## El aire del hilo: dónde estaba de verdad
+
+Tercera pasada de la limpieza, sobre la misma conversación. La hipótesis de partida era «el
+espaciado es plano, 16–18 px entre todo». Cierto, pero medir el desglose la corrigió.
+
+**De 16.844 px:** texto y bloques de los mensajes 11.419 (68 %), **hueco entre actos 1.312
+(8 %)**, margen del primer y último párrafo 878 (5 %), la fila del botón de copiar 837 (5 %),
+relleno de los globos 620 (4 %). O sea que apretar el hueco —que era la reforma «obvia»—
+movía el 8 % y dejaba el mensaje igual de suelto. Un mensaje de UNA LÍNEA medía 92 px de los
+que 21 son el texto.
+
+**El mecanismo del hueco es una variable que ya existe.** `ChatView.module.css` —copiada de la
+librería, no se toca— separa a los hijos de `.column` con
+`margin-top: var(--dsh-chat-flow-gap, 16px)`, y **ese margen lo lleva el HIJO**: la variable
+se resuelve en cada acto. Comprobado en el navegador antes de escribir nada, poniéndosela a
+un acto suelto. Así la jerarquía se declara por acto, sin pelear la especificidad de esa hoja
+—que es (0,7,0) y gana a cualquier cosa razonable— y sin inventar un token nuevo. Es la misma
+forma que reusar `--xonecode-fila-hover` en vez de fabricar un cian translúcido.
+
+**Dos valores y no tres**: 10 px dentro de un turno y 30 al empezar otro. Tres sería una
+gradación que nadie lee de un vistazo. El grande lo lleva el acto del USUARIO, que es lo único
+que abre un turno (`usuario` solo lo emite el compositor).
+
+**Y ningún margen accidental, que es la mitad del valor de esto.** El globo del usuario es un
+`<p>` y traía 14 px de margen inferior de la hoja base —el de arriba sí lo ganaba la regla de
+la columna, el de abajo no lo tocaba nadie—, así que el hueco entre la pregunta y la respuesta
+salía 24 px cuando la hoja declaraba 10: un número que no decidía nadie. Anulado, todos los
+huecos medidos coinciden con los declarados (10–12 y 30–32), que es lo que hace que estos
+valores se puedan leer en la hoja y sean ciertos.
+
+**El aire de dentro del mensaje.** Un `<p>` lleva `margin: 14px 0`, que está bien ENTRE
+párrafos y sobra contra el relleno del globo: 878 px en 31 mensajes, y 28 de los 92 px de uno
+de una línea. Se anula solo en el primer y el último bloque, y por hijo DIRECTO para no
+alcanzar el primer párrafo de una cita o de un `li`, que sí lo quieren.
+
+**Medido en el navegador**, misma conversación, `scrollHeight` contra `scrollHeight`:
+18.566 → 16.938 (tramo y tarjeta) → 16.844 (miniaturas) → **15.644**. Un mensaje de una línea,
+92 → 68 px.
+
+**Lo que NO se hizo, y es una decisión pendiente, no un olvido: la fila del botón de copiar
+(837 px).** Ocupa un renglón propio bajo cada mensaje, siempre. Recuperarlos tiene dos
+caminos y los dos cuestan: llevarlo a la esquina del globo estrecha el texto ~32 px en TODOS
+los mensajes o lo solapa; enseñarlo solo al pasar por encima no lo alcanzan ni el teclado ni
+el táctil, que es la lección ya escrita en `SelectorDeModo.tsx`. Y hay un argumento que no es
+de píxeles: hoy el botón está DESPUÉS del mensaje, que es donde estás cuando has terminado de
+leer y quieres copiarlo. Se deja como está hasta que alguien decida.

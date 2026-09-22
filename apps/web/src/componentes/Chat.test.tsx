@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { Chat } from "./Chat.js";
@@ -600,5 +603,53 @@ describe("Chat: lo que costó cada turno", () => {
     expect(linea).toContain("1 paso");
     expect(linea).not.toContain("0.1s");
     expect(linea).not.toContain("↑");
+  });
+});
+
+/**
+ * **El AIRE del hilo, y por qué esto se comprueba leyendo la HOJA.**
+ *
+ * jsdom no hace layout ni cascada, así que un test de píxeles aquí sería una promesa: las
+ * cifras salieron del navegador y ahí se vuelven a mirar. Lo que este bloque sí puede fijar
+ * es que las dos reglas **existen y están puestas donde tienen que estar** — que es
+ * exactamente la forma de fallo de esta arquitectura en versión de CSS: una regla escrita en
+ * una hoja que nadie enlaza se queda escrita y muerta, con todo en verde.
+ *
+ * Es el mismo molde que `Barra.test.tsx` usa para las consultas de contenedor.
+ */
+describe("el aire del hilo", () => {
+  // La misma forma que `Barra.test.tsx`: `import.meta.url` no es `file:` bajo vitest.
+  const hoja = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "Chat.module.css"), "utf8");
+
+  it("la jerarquía del hueco se declara con la VARIABLE de la hoja copiada, no con un margen nuestro", () => {
+    // `ChatView.module.css` pone `margin-top: var(--dsh-chat-flow-gap, 16px)` al HIJO, así
+    // que la variable se resuelve en cada acto. Un margen propio tendría que ganarle a una
+    // especificidad de (0,7,0), y ese es el camino por el que esto se rompe en silencio.
+    expect(hoja).toMatch(/\.flujo\s*\{[^}]*--dsh-chat-flow-gap/u);
+    expect(hoja).toMatch(/\.inicioDeTurno\s*\{[^}]*--dsh-chat-flow-gap/u);
+    // Y el de un turno nuevo es MAYOR que el de dentro del turno, que es toda la jerarquía.
+    const valor = (clase: string) =>
+      Number(
+        new RegExp(`\\.${clase}\\s*\\{[^}]*--dsh-chat-flow-gap:\\s*(\\d+)px`, "u").exec(hoja)?.[1] ?? "0"
+      );
+    expect(valor("inicioDeTurno")).toBeGreaterThan(valor("flujo"));
+  });
+
+  it("y el acto del USUARIO es quien la lleva, porque es lo que ABRE un turno", () => {
+    const { container } = render(
+      <Chat actos={[{ tipo: "usuario", texto: "hola" }, asistente("qué tal")]} />
+    );
+    const usuario = container.querySelector('[class*="usuario"]');
+    expect(usuario?.className).toMatch(/inicioDeTurno/u);
+    // Y el del asistente NO: dentro de un turno el hueco es el corto.
+    expect(container.querySelector('[class*="asistente"]')?.className).not.toMatch(/inicioDeTurno/u);
+  });
+
+  it("el primer y el último bloque de un mensaje no llevan margen: contra el relleno es aire doble", () => {
+    // Medido: 878 px en una conversación de 31 mensajes, y 28 de los 92 px de uno de una
+    // línea. Por hijo DIRECTO, para no alcanzar el primer párrafo de una cita o de un `li`,
+    // que sí lo quieren.
+    expect(hoja).toMatch(/\.asistente\s*>\s*:first-child\s*>\s*:first-child\s*\{\s*margin-top:\s*0/u);
+    expect(hoja).toMatch(/\.asistente\s*>\s*:first-child\s*>\s*:last-child\s*\{\s*margin-bottom:\s*0/u);
   });
 });

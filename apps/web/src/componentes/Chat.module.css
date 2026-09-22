@@ -1,3 +1,32 @@
+/* ─────────────────────────── El AIRE del hilo ───────────────────────────
+   Medido en el navegador sobre una conversación real de cuatro turnos (16.844 px): el hueco
+   ENTRE actos era solo el 8 %. El resto del aire estaba DENTRO de los mensajes — 878 px de
+   margen del primer y último párrafo contra el relleno del globo, 837 px de la fila del botón
+   de copiar y 620 px de relleno—, así que apretar el hueco sin tocar eso habría movido el 8 %
+   y dejado el mensaje igual de suelto.
+
+   **El mecanismo del hueco es una VARIABLE que ya existe, no un margen nuestro.**
+   `ChatView.module.css` (copiada de la librería, no se toca) separa a los hijos de `.column`
+   con `margin-top: var(--dsh-chat-flow-gap, 16px)`, y ese margen lo lleva el HIJO — o sea que
+   la variable se resuelve EN CADA ACTO. Medido en vivo: poniéndosela a un acto, su hueco
+   cambia solo el suyo. Así que la jerarquía se declara por acto y no hay que pelear la
+   especificidad de esa hoja, que es (0,7,0) y gana a cualquier cosa razonable.
+
+   Dos valores y no tres: dentro de un turno, y entre turnos. Tres sería una gradación que
+   nadie puede leer de un vistazo. ───────────────────────────────────────────────────── */
+
+/* La base: lo que separa dos actos DEL MISMO turno —un mensaje de su tramo de trabajo, el
+   tramo de lo que produjo—. La heredan todos los actos porque una custom property hereda. */
+.flujo {
+  --dsh-chat-flow-gap: 10px;
+}
+
+/* Y el único hueco que significa algo: aquí empieza otro turno. Lo lleva el acto del USUARIO,
+   que es lo que abre un turno (`usuario` solo lo emite el compositor). */
+.inicioDeTurno {
+  --dsh-chat-flow-gap: 30px;
+}
+
 /* Alias comprobados contra design-platform.css (grep del brief): bg-layer-1/2,
    border-l2, label-primary, state-error-secondary, state-business-tertiary,
    markdown-code-block y markdown-inline-code existen. */
@@ -41,6 +70,12 @@
    propio (no 70ch, que era el de las dos): una pastilla de una frase corta no necesita
    ancho de párrafo. */
 .usuario {
+  /* El globo del usuario es un `<p>`, así que traía 14 px de margen inferior de la hoja base
+     — el de ARRIBA sí lo gana la regla de la columna, el de abajo no lo tocaba nadie—. Medido:
+     el hueco entre la pregunta y la respuesta salía 24 px cuando la hoja declara 10, o sea que
+     ese valor no lo decidía nadie. Se anula para que el ÚNICO mecanismo del hueco sea la
+     variable, que es lo que hace que estos números se puedan leer aquí y sean ciertos. */
+  margin-bottom: 0;
   align-self: flex-end;
   max-width: 70ch;
   border-radius: 18px;
@@ -282,6 +317,19 @@
   gap: 6px;
   align-items: flex-start;
   width: 100%;
+}
+
+/* El primer y el último bloque de un mensaje NO llevan su margen: contra el relleno del
+   globo es aire por duplicado. Un `<p>` lleva `margin: 14px 0`, que está bien ENTRE párrafos
+   y sobra en los extremos — medido, 878 px en una conversación de 31 mensajes, y en un
+   mensaje de UNA LÍNEA eran 28 de sus 92 px. El selector va por hijo directo para no alcanzar
+   el primer párrafo de una cita o de un elemento de lista, que sí lo quieren. */
+.asistente > :first-child > :first-child {
+  margin-top: 0;
+}
+
+.asistente > :first-child > :last-child {
+  margin-bottom: 0;
 }
 
 /* La FILA de capturas. Envuelve si no caben: seis miniaturas de un turno de aparato no

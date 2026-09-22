@@ -397,7 +397,7 @@ export function Chat({
             `estilos/ConversationRoot.module.css` (que `Maqueta.tsx` monta sobre la
             columna central). Es lo que pone la conversación en el CENTRO y no pegada a la
             barra, y lo que la alinea con el compositor, que lee la MISMA variable. */}
-        <div className={vista.column}>
+        <div className={`${vista.column} ${estilos.flujo}`}>
           {actos.length === 0 && !historica ? (
             // Una sesión nueva era un vacío de setecientos píxeles: ni saludo, ni qué se
             // puede pedir, ni en qué proyecto estás — y la barra no la enseña hasta el
@@ -616,7 +616,13 @@ export function Chat({
             const { acto, indice } = pieza;
             if (acto.tipo === "usuario") {
               return (
-                <p key={indice} className={`${vista.flowItem} ${estilos.globo} ${estilos.usuario}`}>
+                // `inicioDeTurno` es lo único que da JERARQUÍA al hueco: un turno empieza
+                // cuando habla la persona (`usuario` solo lo emite el compositor), así que
+                // este es el único sitio donde el hueco significa «aquí empieza otra cosa».
+                <p
+                  key={indice}
+                  className={`${vista.flowItem} ${estilos.globo} ${estilos.usuario} ${estilos.inicioDeTurno}`}
+                >
                   {acto.texto}
                 </p>
               );
