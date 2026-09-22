@@ -5909,3 +5909,69 @@ pegado al fondo. Queda declarado y sin hacer.
 sangría. **No es una herramienta de este repo** —no hay config ni dependencia— y reformateó
 el fichero entero a 80 columnas. Se recuperó leyendo el blob del almacén de objetos de git
 con python y zlib, porque `git` estaba bloqueado a la vez por la licencia de Xcode.
+
+## `/hotswap/`: lo que una shell saca del contexto no es un artefacto
+
+**Lo que se vio.** Una conversación de `device-controller` sobre MyAllXOne llegó a 18.566 px
+de transcript para cuatro turnos, y la queja fue que se leía sucia. Medido en el DOM, el 11 %
+del alto eran **16 tarjetas de artefacto de 113 px**, y solo 23 de esos 113 px son el dato: el
+resto son la ruta del disco con el uuid de la sesión partido en dos líneas y una nota de una
+línea —«No es un fichero del proyecto: vive con esta sesión…»— **idéntica en las dieciséis**.
+La secuencia real de la zona era `A P1 A P2 A P1 A P1`: cada artefacto parte el colapsador y
+deja detrás un tramo de «Trabajo del agente · 1 paso». En una pantalla de 1.353 px cabían seis
+tarjetas, ocho tramos y **un solo párrafo** del asistente.
+
+**Quién escribía eso.** No el agente: el script `xone-hotswap` de la skill de serie. Su regla
+es `LARGO_PARA_GUARDAR = 2_000` — cualquier campo de texto de la respuesta del aparato que
+pase de dos mil caracteres se saca de la salida del comando y se escribe a fichero. El motivo
+está bien y lo dice su propio comentario: el árbol de `getAllElements` de una pantalla llena
+son varios miles de caracteres, y volcarlo en la salida es meterlo en el contexto para
+siempre. Lo que estaba mal era el destino: `$XONECODE_ARTEFACTOS`, que es la carpeta que **se
+anuncia**.
+
+**Quién los lee después, medido sobre el `.jsonl` de esa sesión.** De los 10
+`respuesta-status-*.json` anunciados, **6 no se vuelven a abrir jamás**. De los 13 usos de los
+otros cuatro, 9 son por shell y 4 por `read_file`, y cuando se abren se recortan
+(`print(json.dumps(d)[:1500])` sobre un fichero de 8 KB: el 18 %). No hay ningún otro lector
+—ni el juez del turno, ni el verificador, ni la persona—. El contraste estaba al lado y decide
+el reparto: **las capturas sí tienen un segundo lector**, `capturasDelTurno` se lleva la última
+al crítico de pantalla, que es lo que produce el aviso «la captura de esta sesión enseña N
+defectos». Por eso las imágenes se quedan en artefactos y el texto se muda.
+
+**El segundo defecto, que es el que explica el 9-contra-4.** El script devolvía un nombre
+pelado (`<guardado como respuesta-status-….json, 8123 bytes>`) y lo único que el entorno le
+daba al agente era `XONECODE_ARTEFACTOS`, que es la carpeta del DISCO. Nadie le decía que la
+ruta para leerlo era `/artefactos/<nombre>`. En la traza se le ve intentando el mismo fichero
+por tres rutas —la absoluta de la máquina y `/.xonecode/sesiones/…`, denegada— antes de
+rendirse y abrirlo con `python3`. De paso, esa ruta absoluta viajó por el cable dentro de la
+línea de la tool, que es justo lo que `sinRutas` existe para impedir, y no por la excepción
+declarada de la shell.
+
+**Lo que se hizo.** La misma pieza que ya existía para `/large_tool_results/`: otra raíz del
+`CompositeBackend` (`/hotswap/`), colgada de `.xonecode/sesiones/<id>/hotswap/`, **sin
+anuncio**. El script reparte por tipo —imagen a artefactos, texto a hotswap— y **nombra la
+ruta virtual en su salida**, que es la otra mitad del arreglo. Cuatro detalles que no son de
+forma:
+
+- **La carpeta es HERMANA de `artefactos/`, no una subcarpeta suya.** Desde que la foto de
+  `anunciarArtefactosDeLaShell` es recursiva, cualquier cosa que cuelgue de `artefactos/` se
+  anuncia: un `artefactos/hotswap/` habría devuelto el problema entero. Hay test que lo fija.
+- **Se deriva de la carpeta de artefactos**, igual que `carpetaDeDescargas`, porque ahí vive
+  ya la única decisión que hace falta —¿hay sesión con identidad?—. Un segundo parámetro sería
+  un segundo sitio donde contestarla, y es justo el que se cae en un cableado largo.
+- **No necesita fila en `permisosDe`**: los `deny` de ahí son de `write`, así que leer ya está
+  permitido, y escribir cae bajo el `deny` general — que es lo correcto, porque quien escribe
+  ahí es una shell y una shell no pasa por los permisos.
+- **Sin `XONECODE_HOTSWAP` se cae a la de artefactos**, que es lo que había: un harness viejo
+  o el terminal siguen guardando, con el ruido de antes pero sin perder el volcado.
+
+**El precio, declarado: el nombre ata el harness a UNA skill.** Lo honesto sería un nombre que
+dijera la función y no el protocolo (`/volcados/`), porque mañana otra skill querrá lo mismo.
+Se deja `hotswap` porque hoy hay exactamente un escritor, y un nombre genérico con un solo
+usuario es una abstracción que nadie ha medido. El día que haya un segundo, el sitio de la
+decisión es `core/hotswap.ts`.
+
+**Y lo que esto NO arregla**, porque eran defectos distintos de la misma pantalla: la forma de
+la tarjeta de artefacto (la ruta y la nota repetida), el colapsador que se parte en cada
+artefacto, el espaciado plano de 16–18 px entre todo, y la cola de actos `sistema` con dos
+avisos de modo de escritura que se contradicen porque son de dos momentos del mismo turno.

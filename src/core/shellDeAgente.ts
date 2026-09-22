@@ -61,6 +61,17 @@ const PREFIJO_DE_CLAVE = "XONECODE_CLAVE_";
 export const VARIABLE_DE_ARTEFACTOS = "XONECODE_ARTEFACTOS";
 
 /**
+ * Y la que nombra la carpeta donde dejar lo que **no** se le enseña a nadie: lo que un script
+ * saca del contexto para no metérselo al agente en el hilo (`core/hotswap.ts`).
+ *
+ * Son dos variables y no una porque son dos preguntas: la de arriba dice «dónde dejo lo que
+ * quiero que vea», ésta «dónde dejo lo que quiero poder releer». Con una sola, el script
+ * escribía sus volcados donde se anuncian — medido: diez tarjetas en el hilo, seis de ellas
+ * de ficheros que nadie volvió a abrir.
+ */
+export const VARIABLE_DE_HOTSWAP = "XONECODE_HOTSWAP";
+
+/**
  * Cómo se llama la variable que lleva la ruta real de una skill.
  *
  * La MISMA derivación que `variableDeProveedor` para un personalizado (mayúsculas y los
@@ -127,6 +138,8 @@ export function entornoDeShell(opciones: {
   skills?: readonly SkillEnDisco[];
   /** La carpeta de artefactos de la sesión, si la sesión tiene una. */
   artefactos?: string;
+  /** Y su hermana, la de los volcados que no se anuncian. Misma condición: si la hay. */
+  hotswap?: string;
   /**
    * Las carpetas de scripts que hay que poner al alcance, ya comprobadas por quien toca el
    * disco: esto es puro y no mira si existen. Una que no exista no rompe nada, pero ensucia
@@ -162,6 +175,7 @@ export function entornoDeShell(opciones: {
     limpio["PATH"] = actual === undefined || actual === "" ? binarios.join(":") : [actual, ...binarios].join(":");
   }
   if (opciones.artefactos !== undefined) limpio[VARIABLE_DE_ARTEFACTOS] = opciones.artefactos;
+  if (opciones.hotswap !== undefined) limpio[VARIABLE_DE_HOTSWAP] = opciones.hotswap;
   // Después de la copia del entorno heredado, así que lo que resuelve el localizador gana
   // sobre un valor que viniera de fuera: el localizador SÍ ha comprobado que el fichero está.
   Object.assign(limpio, opciones.android ?? {});

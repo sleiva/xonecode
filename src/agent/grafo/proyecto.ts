@@ -13,6 +13,7 @@ import {
   type Artefacto,
 } from "../../core/artefactos.js";
 import { RUTA_ADJUNTOS } from "../../core/adjuntos.js";
+import { carpetaDeHotswap, RUTA_HOTSWAP } from "../../core/hotswap.js";
 import { CARPETA_DE_PLANES, RUTA_PLANES } from "../../core/planes.js";
 import { entornoDeShell, variablesDeAndroid } from "../../core/shellDeAgente.js";
 import { localizadorDeAndroid } from "../dispositivos/dispositivosEnMaquina.js";
@@ -117,7 +118,10 @@ export function entornoDeLaShellDelProyecto(
     // Sin esto, `xone-arrancar-android` tendría que adivinar dónde está el SDK: en un Mac con
     // Homebrew `emulator` no está en el PATH y `ANDROID_HOME` suele estar vacía.
     android: variablesDeAndroid(enSdk),
-    ...(artefactos === undefined ? {} : { artefactos }),
+    // Las DOS carpetas, y la segunda se DERIVA de la primera: es la misma decisión —¿hay una
+    // sesión con identidad?— y un segundo parámetro sería un segundo sitio donde contestarla,
+    // que es justo el que se cae en un cableado largo.
+    ...(artefactos === undefined ? {} : { artefactos, hotswap: carpetaDeHotswap(artefactos) }),
   });
 }
 
@@ -316,6 +320,37 @@ export function backendConDescargas<T extends object>(backend: T, carpetaDeArtef
 }
 
 /**
+ * Cuelga `/hotswap/` al lado de los artefactos de la sesión — o sea, FUERA del proyecto.
+ *
+ * Es donde el script `xone-hotswap` deja lo que saca del contexto: el árbol de controles de
+ * una pantalla, el log del aparato. El porqué entero —y la medida de los 10 volcados de los
+ * que 6 no volvió a abrir nadie— está en `core/hotswap.ts`.
+ *
+ * La misma pieza que `/skills/`, `/artefactos/`, `/adjuntos/` y las dos de descarga: otra
+ * raíz del `CompositeBackend`, con la barra final obligatoria y sin crear la carpeta al
+ * montar. Y **no se anuncia**, igual que las descargas y al contrario que los artefactos:
+ * ésa es exactamente la diferencia que esta carpeta existe para marcar.
+ *
+ * Que esté MONTADA es la otra mitad del arreglo, y no es opcional. El agente tenía la
+ * carpeta del disco en `$XONECODE_ARTEFACTOS` y ninguna ruta virtual con la que volver a
+ * abrir lo que el script le había guardado; en la traza se le ve probando tres rutas —la
+ * absoluta de la máquina incluida— antes de rendirse y leerlo por la shell. Con esto,
+ * `read_file("/hotswap/<nombre>")` funciona y el script puede NOMBRAR esa ruta en su salida.
+ *
+ * No necesita fila en `permisosDe`: los `deny` de ahí son de `write`, así que leer ya está
+ * permitido, y escribir cae bajo el `deny` general — que es lo correcto, porque quien escribe
+ * aquí es una shell, y una shell no pasa por los permisos.
+ */
+export function backendConHotswap<T extends object>(backend: T, carpetaDeArtefactos: string): T {
+  return new CompositeBackend(backend as never, {
+    [RUTA_HOTSWAP]: new FilesystemBackend({
+      rootDir: carpetaDeHotswap(carpetaDeArtefactos),
+      virtualMode: true,
+    }),
+  } as never) as T;
+}
+
+/**
  * Envuelve el backend del PROYECTO para que una descarga del agente no pueda aterrizar
  * dentro.
  *
@@ -427,8 +462,14 @@ export function backendDeAgente(opciones: {
     opciones.artefactos === undefined
       ? conArtefactos
       : backendConDescargas(conArtefactos, opciones.artefactos.carpeta);
+  // Y `/hotswap/`, de la MISMA carpeta de sesión y por el mismo motivo que las descargas: lo
+  // que una shell saca del contexto se tiene que poder releer, y no se anuncia.
+  const conHotswap =
+    opciones.artefactos === undefined
+      ? conDescargas
+      : backendConHotswap(conDescargas, opciones.artefactos.carpeta);
   const conAdjuntos =
-    opciones.adjuntos === undefined ? conDescargas : backendConAdjuntos(conDescargas, opciones.adjuntos);
+    opciones.adjuntos === undefined ? conHotswap : backendConAdjuntos(conHotswap, opciones.adjuntos);
   /**
    * Los PLANES van SIEMPRE, sin depender de la sesión: cuelgan del repo local
    * (`.xonecode/planes/`) y no de la carpeta de una sesión, porque un plan se escribe un día y

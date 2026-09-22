@@ -50,12 +50,36 @@ process.on("warning", (aviso) => {
   if (!String(aviso.message).includes("NODE_TLS_REJECT_UNAUTHORIZED")) console.warn(aviso);
 });
 
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const URL_POR_OMISION = "wss://127.0.0.1:8443/hotswap";
 const TOPE_MS = Number(process.env.HOTSWAP_TOPE_MS ?? 40_000);
 const ARTEFACTOS = process.env.XONECODE_ARTEFACTOS;
+/**
+ * Dónde va lo que se saca del contexto y NO es para enseñar: el árbol de controles, el log.
+ *
+ * Es otra carpeta que la de artefactos, y esa separación es la decisión. Todo lo que cae en
+ * `XONECODE_ARTEFACTOS` se ANUNCIA —sale como tarjeta en el hilo y en su pestaña—, y medido
+ * sobre una sesión real eso eran diez tarjetas de `respuesta-status-*.json` de las que seis
+ * no volvía a abrir nadie, ni el agente ni el juez ni la persona. Una captura sí: la última
+ * del turno se la lleva el crítico de pantalla. Por eso las imágenes se quedan en artefactos
+ * y el texto se muda aquí. El porqué entero está en `core/hotswap.ts` del harness.
+ *
+ * Sin la variable se cae a la de artefactos, que es lo que había antes: un harness viejo o
+ * el terminal siguen guardando, con el ruido de antes pero sin perder el volcado.
+ */
+const HOTSWAP = process.env.XONECODE_HOTSWAP ?? ARTEFACTOS;
+/**
+ * La ruta VIRTUAL de esa carpeta, que es la que el agente puede abrir con `read_file`.
+ *
+ * Se NOMBRA en la salida porque callarla costaba viajes: el script devolvía un nombre pelado
+ * y lo único que el agente tenía era la carpeta del DISCO, así que intentaba leerlo por la
+ * ruta absoluta de la máquina y por `/.xonecode/sesiones/…` —las dos denegadas— antes de
+ * rendirse y abrirlo con `python3` desde la shell. Es la misma regla que `porQueNo`: decir la
+ * ruta buena, no que la adivine.
+ */
+const RUTA_VIRTUAL = process.env.XONECODE_HOTSWAP === undefined ? "/artefactos/" : "/hotswap/";
 /**
  * A partir de aquí una respuesta de TEXTO se guarda en vez de imprimirse.
  *
@@ -76,7 +100,9 @@ if (pedidos.length === 0 || pedidos.includes("--help") || pedidos.includes("-h")
   xone-hotswap '{"command":"click","name":"MAP_BT"}'   varios comandos, en orden, si pasas varios
 
 Antes, en Android, hace falta el túnel: adb forward tcp:8443 tcp:8443
-Variables: HOTSWAP_URL (${URL_POR_OMISION}), XONECODE_ARTEFACTOS, HOTSWAP_TOPE_MS.
+Una respuesta larga no se imprime: una IMAGEN va a $XONECODE_ARTEFACTOS (y sale en el chat),
+el TEXTO va a $XONECODE_HOTSWAP y se relee con read_file en /hotswap/<nombre>.
+Variables: HOTSWAP_URL (${URL_POR_OMISION}), XONECODE_ARTEFACTOS, XONECODE_HOTSWAP, HOTSWAP_TOPE_MS.
 El catálogo entero de comandos está en el SKILL.md de xone-hotswap.`);
   process.exit(pedidos.length === 0 ? 1 : 0);
 }
@@ -128,11 +154,16 @@ function sinBinarios(respuesta) {
   for (const [clave, valor] of Object.entries(copia)) {
     if (typeof valor !== "string" || valor.length < LARGO_PARA_GUARDAR) continue;
     const imagen = imagenDe(valor);
-    if (ARTEFACTOS === undefined) {
+    // Una imagen es para MIRARLA y va a artefactos; lo demás es andamio y va a hotswap.
+    const destino = imagen === undefined ? HOTSWAP : ARTEFACTOS;
+    if (destino === undefined) {
+      // Se nombra la variable que FALTA, no siempre la misma: mandar a poner
+      // `XONECODE_ARTEFACTOS` cuando lo que falta es la otra es el error que cuesta un viaje.
+      const cual = imagen === undefined ? "XONECODE_HOTSWAP ni XONECODE_ARTEFACTOS" : "XONECODE_ARTEFACTOS";
       copia[clave] =
         imagen === undefined
-          ? `<${valor.length} caracteres; sin XONECODE_ARTEFACTOS no hay dónde guardarlos>`
-          : `<imagen ${imagen} de ${valor.length} car.; sin XONECODE_ARTEFACTOS no hay dónde guardarla>`;
+          ? `<${valor.length} caracteres; sin ${cual} no hay dónde guardarlos>`
+          : `<imagen ${imagen} de ${valor.length} car.; sin ${cual} no hay dónde guardarla>`;
       continue;
     }
     /**
@@ -145,8 +176,12 @@ function sinBinarios(respuesta) {
         ? `respuesta-${clave}-${Date.now()}.${valor.trimStart().startsWith("[") || valor.trimStart().startsWith("{") ? "json" : "txt"}`
         : `captura-${Date.now()}.${imagen}`;
     const bytes = imagen === undefined ? Buffer.from(valor, "utf8") : Buffer.from(valor, "base64");
-    writeFileSync(join(ARTEFACTOS, nombre), bytes);
-    copia[clave] = `<guardado como ${nombre}, ${bytes.length} bytes>`;
+    mkdirSync(destino, { recursive: true });
+    writeFileSync(join(destino, nombre), bytes);
+    // Con la ruta VIRTUAL delante, que es la que se puede volver a abrir. Una captura sigue
+    // diciendo `/artefactos/`, que es donde está y donde la tarjeta del hilo la enseña.
+    const virtual = imagen === undefined ? RUTA_VIRTUAL : "/artefactos/";
+    copia[clave] = `<guardado como ${virtual}${nombre}, ${bytes.length} bytes>`;
   }
   return copia;
 }

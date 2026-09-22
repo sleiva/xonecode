@@ -90,10 +90,14 @@ la misma idea.
 
 Tres cosas de `xone-hotswap` que conviene saber antes de leer su salida:
 
-- **Una captura no se imprime**: se guarda en `$XONECODE_ARTEFACTOS` y lo que sale es su nombre y
-  su tamaño. Un `getScreenshot` son ~57.000 caracteres de base64, y volcarlos en la salida de un
-  comando es meterlos en el contexto sin que nadie pueda mirarlos. Para ENSEÑARLA, di su nombre:
-  la interfaz la enseña desde ahí. **No intentes abrirla ni leerla**: es binaria.
+- **Una respuesta larga no se imprime, y su destino depende de para quién sea.** Una IMAGEN va a
+  `$XONECODE_ARTEFACTOS` y sale como tarjeta en el chat: para ENSEÑARLA basta con decir su
+  nombre, y **no intentes abrirla ni leerla**, que es binaria. El TEXTO —el árbol de
+  `getAllElements`, un log— va a `$XONECODE_HOTSWAP`, que **no** sale en el chat porque no es
+  algo que una persona vaya a mirar; **se relee con `read_file` en `/hotswap/<nombre>`**, y esa
+  ruta te la dice el propio script en su salida. Un `getScreenshot` son ~57.000 caracteres de
+  base64 y un árbol de controles varios miles: volcarlos en la salida de un comando es meterlos
+  en el contexto para siempre.
 - **La respuesta viene en `status`** —no en un campo `image`— y una captura de Android es
   **JPEG**, no PNG.
 - Si muere con «no se pudo hablar con el aparato», casi siempre falta el túnel

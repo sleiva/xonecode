@@ -67,6 +67,16 @@ describe("entornoDeShell", () => {
     expect(entornoDeShell({ entorno: {} })).not.toHaveProperty("XONECODE_ARTEFACTOS");
   });
 
+  it("y la carpeta donde dejar lo que NO es una salida para una persona", () => {
+    // La hermana de la anterior, y la diferencia es el anuncio: lo que cae en artefactos
+    // sale en el hilo y en su pestaña; lo que cae aquí, no. Ver `core/hotswap.ts`.
+    expect(entornoDeShell({ entorno: {}, hotswap: "/ses/hotswap" })).toHaveProperty(
+      "XONECODE_HOTSWAP",
+      "/ses/hotswap",
+    );
+    expect(entornoDeShell({ entorno: {} })).not.toHaveProperty("XONECODE_HOTSWAP");
+  });
+
   it("una skill NO puede pisar una credencial con su nombre", () => {
     // `XONECODE_CLAVE_X` se descarta del entorno heredado; una skill llamada así tampoco
     // puede reintroducirla por la puerta de atrás, porque su variable lleva otro prefijo.

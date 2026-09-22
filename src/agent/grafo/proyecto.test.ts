@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { createFilesystemMiddleware, createSkillsMiddleware, isSandboxBackend } from "deepagents";
 import { permisosDe } from "./perfiles.js";
 import type { Artefacto } from "../../core/artefactos.js";
+import { carpetaDeHotswap } from "../../core/hotswap.js";
 import { RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
 
 const TODAS = new Set(["/p/Clientes.xne", "/p/Clientes.xml", "/p/app.xml", "/p/config.xml"]);
@@ -861,6 +862,57 @@ describe("la shell de un subagente con EJECUCIÓN", () => {
     await backend.execute('printf x > "$DESTINO/Diseño final.png"');
 
     expect(apuntados).toEqual([]);
+  });
+
+  /**
+   * El hermano del anterior, y el que decide que esto NO es un artefacto: lo que la shell
+   * saca del CONTEXTO va a `/hotswap/`, se puede volver a LEER por esa ruta, y no se anuncia.
+   *
+   * Medido sobre una sesión real antes de esto: de 10 volcados anunciados, 6 no se abrieron
+   * jamás, y el agente que quiso abrir los otros probó tres rutas —la absoluta de la máquina
+   * incluida— porque nadie le había dicho la buena. Ver `core/hotswap.ts`.
+   */
+  it("lo que la shell saca del CONTEXTO va a `/hotswap/`, se lee por ahí y NO se anuncia", async () => {
+    const raiz = raizDePrueba();
+    const carpeta = join(mkdtempSync(join(tmpdir(), "xc-sesion-")), "artefactos");
+    const apuntados: Artefacto[] = [];
+    const backend = backendDeAgente({
+      raiz,
+      ficheros: new Set(["/app.xml"]),
+      ejecucion: { entorno: { HOTSWAP: carpetaDeHotswap(carpeta) } },
+      artefactos: { carpeta, alEscribir: (a) => apuntados.push(a) },
+    }) as unknown as {
+      execute(c: string): Promise<{ output: string }>;
+      read(ruta: string): Promise<unknown>;
+    };
+
+    await backend.execute('mkdir -p "$HOTSWAP" && printf \'{"a":1}\' > "$HOTSWAP/respuesta-status-1.json"');
+
+    // No se anuncia: es el andamio del agente, no una salida para una persona.
+    expect(apuntados).toEqual([]);
+    // Y se puede volver a abrir por la ruta virtual, que es la mitad del arreglo.
+    const leido = (await backend.read("/hotswap/respuesta-status-1.json")) as { content: string };
+    expect(leido.content).toBe('{"a":1}');
+  });
+
+  it("la carpeta de hotswap es HERMANA de la de artefactos, así que la foto no la ve", async () => {
+    // Si colgara de `artefactos/`, la foto recursiva la anunciaría entera y volveríamos al
+    // problema que esto viene a quitar. El test lo fija desde fuera, sobre el montaje real.
+    const raiz = raizDePrueba();
+    const carpeta = join(mkdtempSync(join(tmpdir(), "xc-sesion-")), "artefactos");
+    const apuntados: Artefacto[] = [];
+    const backend = backendDeAgente({
+      raiz,
+      ficheros: new Set(["/app.xml"]),
+      ejecucion: { entorno: { DESTINO: carpeta, HOTSWAP: carpetaDeHotswap(carpeta) } },
+      artefactos: { carpeta, alEscribir: (a) => apuntados.push(a) },
+    }) as unknown as { execute(c: string): Promise<{ output: string }> };
+
+    await backend.execute(
+      'mkdir -p "$HOTSWAP" && printf x > "$HOTSWAP/volcado.json" && printf xx > "$DESTINO/captura.png"'
+    );
+
+    expect(apuntados.map((a) => a.ruta)).toEqual(["/artefactos/captura.png"]);
   });
 
   it("el `cwd` de la shell es la raíz del proyecto", async () => {

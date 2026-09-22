@@ -181,6 +181,18 @@ Y las guardas del proyecto:
   —sin HITL ni `permissions`—, así que se montan al lado de los artefactos
   (`backendConDescargas`), y la guarda del backend del proyecto existe para fallar CERRADO el día
   que el montaje falte.
+- **Y lo que una SHELL saca del contexto tiene su propia carpeta, `/hotswap/`**
+  (`core/hotswap.ts`, `backendConHotswap`, variable `XONECODE_HOTSWAP`). Misma pieza y misma
+  razón que las descargas —«un artefacto es una salida para una persona y por eso se anuncia;
+  esto es el andamio del agente»—, y cambia solo quién descarga: ahí la librería, aquí el
+  script `xone-hotswap`, que no imprime una respuesta larga del aparato sino que la guarda.
+  Escribía en la carpeta que SÍ se anuncia, y el reparto lo decide un LECTOR medido: una
+  captura tiene uno —`capturasDelTurno` se lleva la última al crítico de pantalla— y un árbol
+  de controles no tiene ninguno, así que la imagen se queda en `/artefactos/` y el texto se
+  muda. **La carpeta es HERMANA de la de artefactos y no una subcarpeta suya**, porque la foto
+  de `anunciarArtefactosDeLaShell` es recursiva y lo de dentro volvería a anunciarse. **Y el
+  script NOMBRA la ruta virtual en su salida**: con un nombre pelado el agente no sabía por
+  dónde releerlo y probaba la ruta absoluta de la máquina, que además viajaba por el cable.
 - **`/skills/` con barra final obligatoria** (`CompositeBackend` la retira antes de delegar) y
   `permisosDe` deniega `write` ahí: son instrucciones, no ficheros editables.
 - **Y bajo esa MISMA ruta cuelgan las skills del USUARIO, una a una**
