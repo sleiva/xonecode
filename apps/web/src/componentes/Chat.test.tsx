@@ -740,3 +740,61 @@ describe("Chat: lo que dice el harness", () => {
     expect(screen.getByText("esfuerzo: high")).toBeTruthy();
   });
 });
+
+/**
+ * **El tramo de trabajo: cuál está en curso, y cómo se abre.**
+ *
+ * Los tres defectos salieron de una pantalla con un turno EN VUELO delante.
+ */
+describe("Chat: el tramo de trabajo", () => {
+  const paso = (t: string): Acto => ({ tipo: "herramientas", lineas: [t] });
+
+  it("solo el ÚLTIMO tramo del turno está trabajando: los de antes ya cerraron", () => {
+    // MEDIDO en pantalla: tres tramos seguidos decían LO MISMO —«Trabajando… · 1397 s ·
+    // busca function calc · 17 s»—, porque el paso y el cronómetro se calculan una vez para
+    // la lista ENTERA y los pintaba cualquier tramo sin terminar. Pero un tramo que un
+    // mensaje del asistente ya cerró no está trabajando: lo que quedan por delante son sus
+    // pasos, no el paso de ahora.
+    const { container } = render(
+      <Chat
+        actos={[
+          { tipo: "usuario", texto: "haz algo" },
+          paso("→ lee a"),
+          asistente("voy por aquí"),
+          paso("→ lee b"),
+        ]}
+        turnoEnVuelo
+        segundosEnVuelo={1397}
+      />
+    );
+    const resumenes = [...container.querySelectorAll("summary")].map((s) => s.textContent ?? "");
+    expect(resumenes).toHaveLength(2);
+    expect(resumenes[0]).toMatch(/Trabajo del agente · 1 paso/u);
+    expect(resumenes[0]).not.toMatch(/Trabajando/u);
+    // Y el de ahora sí, con el cronómetro del turno.
+    expect(resumenes[1]).toMatch(/Trabajando… · 1397 s/u);
+  });
+
+  it("y nace PLEGADO también con el turno en vuelo: la línea ya dice en qué paso está", () => {
+    // Antes se abría mientras el turno corría, «porque es lo único que se ve mientras
+    // trabaja». Dejó de ser cierto cuando el resumen empezó a llevar el paso actual y su
+    // cronómetro: eso es lo que se ve con el pulso PLEGADO, y un tramo abierto de cuarenta
+    // pasos empuja la respuesta fuera de la pantalla.
+    const { container } = render(<Chat actos={[paso("→ lee a")]} turnoEnVuelo />);
+    expect(container.querySelector("details")!.hasAttribute("open")).toBe(false);
+  });
+
+  it("al desplegarlo, el andamio va en una ventana con scroll y no crece sin fin", () => {
+    // jsdom no hace layout, así que lo que se fija aquí es que el contenedor ES un scroller
+    // —tiene su clase— y que la hoja le pone tope y desbordamiento. La altura se midió en el
+    // navegador; ver el comentario de la hoja.
+    const { container } = render(
+      <Chat actos={Array.from({ length: 40 }, (_, i) => paso(`→ lee f${i}`))} />
+    );
+    const detalle = container.querySelector("details > div");
+    expect(detalle?.className).toMatch(/detalleDePulso/u);
+    const hoja = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "Chat.module.css"), "utf8");
+    expect(hoja).toMatch(/\.detalleDePulso\s*\{[^}]*max-height/u);
+    expect(hoja).toMatch(/\.detalleDePulso\s*\{[^}]*overflow-y:\s*auto/u);
+  });
+});

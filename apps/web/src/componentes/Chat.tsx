@@ -57,6 +57,119 @@ import estilos from "./Chat.module.css";
  * registro completo; esto es el pulso.
  */
 /** Los actos que son PULSO del turno y no conversación: se pliegan al terminar. */
+/**
+ * Un tramo de trabajo: el `<details>` con «Trabajo del agente» y el andamio dentro.
+ *
+ * Es un componente y no un trozo del `map` porque necesita un `ref` y un efecto — ver el
+ * scroll de abajo.
+ *
+ * **Nace PLEGADO siempre, también con el turno en vuelo.** Se abría mientras corría, «porque
+ * es lo único que se ve mientras trabaja»; dejó de ser cierto cuando el resumen empezó a
+ * llevar el paso actual y su cronómetro, que es justo lo que se lee con el pulso plegado.
+ * Medido en pantalla: un tramo abierto de cuarenta pasos empuja la respuesta fuera de la
+ * vista, y con un turno largo son varios a la vez.
+ *
+ * **Y al abrirlo es una VENTANA con scroll, pegada al final.** El andamio de un turno de
+ * aparato son decenas de líneas; volcarlas enteras convierte un clic de curiosidad en perder
+ * el sitio. Se reusa `usarPegadoAbajo`, el mismo que mantiene el transcript abajo mientras
+ * el agente escribe: baja solo si ya estabas abajo, así que subir a leer una línea de hace
+ * diez tools no te devuelve al fondo en la siguiente.
+ */
+function TramoDeTrabajo({
+  tramo: t,
+  pasos,
+  segundosEnVuelo,
+  pasoActual,
+  segundosDelPaso,
+}: {
+  tramo: TramoDePulso;
+  pasos: number;
+  segundosEnVuelo?: number;
+  pasoActual?: string;
+  segundosDelPaso?: number;
+}) {
+  // La dependencia es cuánto ha llegado: el efecto corre después del pintado, que es cuando
+  // `scrollHeight` ya vale lo nuevo.
+  const { nodo, alDesplazar } = usarPegadoAbajo(t.actos.length);
+  return (
+    <details
+      className={`${vista.flowItem} ${estilos.pensando}`}
+      // Al abrirlo, al FINAL: lo último es lo que está pasando, y es lo que se viene a ver.
+      onToggle={(e) => {
+        if (!e.currentTarget.open || nodo.current === null) return;
+        nodo.current.scrollTop = nodo.current.scrollHeight;
+      }}
+    >
+      <summary className={estilos.resumen}>
+        {t.terminado ? (
+          <>
+            {`Trabajo del agente · ${pasos} ${pasos === 1 ? "paso" : "pasos"}`}
+            {/*
+              La duración y el coste del turno, en la línea que ya lo cierra. Es el nivel
+              «mensaje» que faltaba: el contador del compositor dice lo que lleva la
+              conversación, y de un acumulado no se saca lo que costó lo último. Se compone en
+              `CierreDelTurno` y no aquí, porque el mismo par lo pinta el cierre de un turno
+              sin trabajo: dos copias serían dos sitios donde la duración y el coste pueden
+              dejar de ir juntos.
+            */}
+            {t.ms === undefined && t.consumo === undefined ? null : (
+              <>
+                {" · "}
+                <CierreDelTurno ms={t.ms} consumo={t.consumo} />
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            {segundosEnVuelo === undefined ? "Trabajando…" : `Trabajando… · ${segundosEnVuelo} s`}
+            {/*
+              Y en qué paso está. Va aquí, en la línea que se ve con el pulso PLEGADO, porque
+              desplegarlo para saber qué está haciendo es exactamente lo que sobra cuando un
+              turno se alarga — y desde que nace plegado, esta línea es lo único que lo dice.
+            */}
+            {pasoActual === undefined ? null : (
+              <span className={estilos.pasoActual}>
+                {` · ${pasoActual}`}
+                {segundosDelPaso === undefined ? "" : ` · ${segundosDelPaso} s`}
+              </span>
+            )}
+          </>
+        )}
+      </summary>
+      <div className={estilos.detalleDePulso} ref={nodo} onScroll={alDesplazar}>
+        {t.actos.map((a, i) => {
+          if (a.tipo === "razonamiento") {
+            return (
+              <p key={i} className={`${estilos.textoTenue} ${estilos.pensado}`}>
+                {a.texto}
+              </p>
+            );
+          }
+          if (a.tipo === "herramientas") {
+            return (
+              <ul key={i} className={estilos.trabajo}>
+                {a.lineas.map((linea, j) => (
+                  <li key={j} className={estilos.textoTenue}>
+                    {linea}
+                  </li>
+                ))}
+              </ul>
+            );
+          }
+          if (a.tipo === "fase") {
+            return (
+              <p key={i} className={`${estilos.textoTenue} ${estilos.fase}`}>
+                {a.texto} · {Math.round(a.ms / 100) / 10}s
+              </p>
+            );
+          }
+          return null;
+        })}
+      </div>
+    </details>
+  );
+}
+
 /** ¿Hay algo que PREVISUALIZAR de este artefacto? Solo una imagen, y por su `mime`, que sale
  *  de una tabla cerrada por extensión (`core/artefactos.ts`) — nunca de olfatear los bytes. */
 const esImagen = (acto: Extract<Acto, { tipo: "artefacto" }>): boolean =>
@@ -405,6 +518,22 @@ export function Chat({
     deHarness = undefined;
     if (ES_PULSO.has(acto.tipo)) {
       if (tramo === undefined) {
+        /**
+         * **Abrir uno nuevo da por TERMINADO al anterior, aunque el turno siga.**
+         *
+         * `terminado` decide si el resumen dice «Trabajo del agente · N pasos» o
+         * «Trabajando… · el paso de ahora», y ese paso y su cronómetro se calculan UNA vez
+         * para la lista entera. Sin esto los pintaban todos los tramos sin terminar: medido
+         * en pantalla con un turno en vuelo, tres tramos seguidos decían literalmente lo
+         * mismo —«Trabajando… · 1397 s · busca function calc · 17 s»— y solo uno era cierto.
+         *
+         * Un tramo que un mensaje del asistente ya cerró no está trabajando: lo que tiene
+         * por delante son sus pasos, no el paso de ahora. Las CIFRAS del turno no se ven
+         * afectadas: las reparte el `fin` al ÚLTIMO de `delTurno`, y ese sigue siendo el
+         * último.
+         */
+        const anterior = delTurno[delTurno.length - 1];
+        if (anterior !== undefined) anterior.terminado = true;
         tramo = { desde: indice, actos: [], terminado: false };
         piezas.push({ tipo: "pulso", tramo });
         delTurno.push(tramo);
@@ -585,77 +714,14 @@ export function Chat({
               const capturas = producido.filter(esImagen);
               const otros = producido.filter((a) => !esImagen(a));
               const desplegable = (
-                // Abierto mientras el turno corre —es lo único que se ve mientras trabaja—
-                // y plegado en cuanto termina: la conversación se lee sin el andamio, y el
-                // andamio sigue estando a un clic. No se BORRA: lo que pasó, pasó.
-                <details key={`pulso-${t.desde}`} className={`${vista.flowItem} ${estilos.pensando}`} open={!t.terminado}>
-                  <summary className={estilos.resumen}>
-                    {t.terminado ? (
-                      <>
-                        {`Trabajo del agente · ${pasos} ${pasos === 1 ? "paso" : "pasos"}`}
-                        {/*
-                          La duración y el coste del turno, en la línea que ya lo cierra. Es el
-                          nivel «mensaje» que faltaba: el contador del compositor dice lo que
-                          lleva la conversación, y de un acumulado no se saca lo que costó lo
-                          último. Se compone en `CierreDelTurno` y no aquí, porque el mismo par
-                          lo pinta el cierre de un turno sin trabajo: dos copias serían dos
-                          sitios donde la duración y el coste pueden dejar de ir juntos.
-                        */}
-                        {t.ms === undefined && t.consumo === undefined ? null : (
-                          <>
-                            {" · "}
-                            <CierreDelTurno ms={t.ms} consumo={t.consumo} />
-                          </>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        {segundosEnVuelo === undefined ? "Trabajando…" : `Trabajando… · ${segundosEnVuelo} s`}
-                        {/*
-                          Y en qué paso está. Va aquí, en la línea que se ve con el pulso
-                          PLEGADO, porque desplegarlo para saber qué está haciendo es
-                          exactamente lo que sobra cuando un turno se alarga.
-                        */}
-                        {pasoActual === undefined ? null : (
-                          <span className={estilos.pasoActual}>
-                            {` · ${pasoActual}`}
-                            {segundosDelPaso === undefined ? "" : ` · ${segundosDelPaso} s`}
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </summary>
-                  <div className={estilos.detalleDePulso}>
-                    {t.actos.map((a, i) => {
-                      if (a.tipo === "razonamiento") {
-                        return (
-                          <p key={i} className={`${estilos.textoTenue} ${estilos.pensado}`}>
-                            {a.texto}
-                          </p>
-                        );
-                      }
-                      if (a.tipo === "herramientas") {
-                        return (
-                          <ul key={i} className={estilos.trabajo}>
-                            {a.lineas.map((linea, j) => (
-                              <li key={j} className={estilos.textoTenue}>
-                                {linea}
-                              </li>
-                            ))}
-                          </ul>
-                        );
-                      }
-                      if (a.tipo === "fase") {
-                        return (
-                          <p key={i} className={`${estilos.textoTenue} ${estilos.fase}`}>
-                            {a.texto} · {Math.round(a.ms / 100) / 10}s
-                          </p>
-                        );
-                      }
-                      return null;
-                    })}
-                  </div>
-                </details>
+                <TramoDeTrabajo
+                  key={`pulso-${t.desde}`}
+                  tramo={t}
+                  pasos={pasos}
+                  {...(segundosEnVuelo === undefined ? {} : { segundosEnVuelo })}
+                  {...(pasoActual === undefined ? {} : { pasoActual })}
+                  {...(segundosDelPaso === undefined ? {} : { segundosDelPaso })}
+                />
               );
               // Y las tarjetas FUERA del desplegable: pertenecen al tramo —por eso no lo
               // parten— pero no se pliegan con él, que sería esconder la captura que el

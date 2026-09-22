@@ -6225,3 +6225,40 @@ quedan en la cola y `LineaDeConsola.sustituye` deja una sola: la clave que se es
 **No se toca `PastillaDeModelo` ni `PastillaDeEsfuerzo`**: comprobado, no tienen esta guarda
 —mandan siempre—, así que no pierden pulsaciones. Lo que les evita la línea repetida es la
 clave de coalescing, que ya la llevan.
+
+## El tramo de trabajo: cuál está en curso, y que abrirlo no se coma la pantalla
+
+Tres defectos vistos sobre una pantalla con un turno EN VUELO, que es donde este componente
+se comporta distinto.
+
+**1. Tres tramos seguidos decían literalmente lo mismo.** «Trabajando… · 1397 s · busca
+function calc · 17 s», repetido. La causa: `pasoActual` y el cronómetro se calculan UNA vez
+para la lista entera de actos, y los pintaba cualquier tramo con `terminado: false` — y
+mientras el turno corre, todos los del turno lo están. Pero un tramo que un mensaje del
+asistente ya cerró **no está trabajando**: lo que tiene por delante son sus pasos, no el paso
+de ahora. **Solo el ÚLTIMO tramo del turno está en curso**, así que abrir uno nuevo da por
+terminado al anterior. Las cifras del turno no se ven afectadas: las reparte el `fin` al
+último de `delTurno`, que sigue siendo el último.
+
+**2. Nace PLEGADO también con el turno en vuelo.** Se abría, y la razón escrita era «es lo
+único que se ve mientras trabaja». Dejó de ser cierta cuando el resumen empezó a llevar el
+paso actual y su cronómetro — la propia regla dice «en la línea que se ve con el pulso
+PLEGADO»—, así que esto no revierte aquella decisión: la completa. Lo que se midió en contra
+de abrirlo: un tramo de cuarenta pasos empuja la respuesta fuera de la pantalla, y con un
+turno largo hay varios a la vez.
+
+**3. Abierto es una VENTANA de seis renglones con scroll, pegada al final.** El andamio de un
+turno de aparato son decenas de líneas; volcarlas enteras convierte un clic de curiosidad en
+perder el sitio de la conversación. La altura sale de la aritmética de la propia hoja —una
+línea es `12px × 1.6` más el `gap` de 2 px; seis renglones y el relleno dan 132— y está
+escrita con esa cuenta al lado, no adivinada. **Se reusa `usarPegadoAbajo`**, el mismo hook
+que mantiene el transcript abajo mientras el agente escribe: baja solo si ya estabas abajo,
+así que subir a leer una línea de hace diez tools no te devuelve al fondo en la siguiente. Al
+ABRIRLO se va al final sin condición (`onToggle`), porque lo último es lo que está pasando y
+es a lo que se abre.
+
+**Consecuencia declarada**: el tope alcanza también a «Verificaciones» y «Permisos», que
+reusan `.detalleDePulso`. Vale por lo mismo — quince permisos tampoco se leen de un vistazo.
+
+**Y una nota de forma**: esto obligó a extraer `TramoDeTrabajo` a su propio componente,
+porque un trozo de `map` no puede tener un `ref` ni un efecto.

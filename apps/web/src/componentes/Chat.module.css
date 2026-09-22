@@ -182,11 +182,21 @@
 }
 
 /* El cuerpo del tramo de pulso, cuando está abierto. */
+/* El andamio desplegado es una VENTANA, no un volcado.
+   El trabajo de un turno de aparato son decenas de líneas, y volcarlas enteras convierte un
+   clic de curiosidad en perder el sitio de la conversación — medido en pantalla con un tramo
+   de cuarenta pasos, que empuja la respuesta fuera de la vista.
+   Seis renglones: una línea son `12px × 1.6` = 19,2 px (`.textoTenue`), más los 2 px de `gap`
+   de este contenedor; 6 × 21,2 ≈ 127, y los 4 px de `padding-top` dan 131. Se redondea a 132.
+   El tope alcanza también a «Verificaciones» y «Permisos», que reusan esta clase, y ahí vale
+   por lo mismo: quince permisos tampoco son algo que se lea de un vistazo. */
 .detalleDePulso {
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding-top: 4px;
+  max-height: 132px;
+  overflow-y: auto;
 }
 
 /* El razonamiento conserva sus saltos de línea: es prosa del modelo, no una lista. */

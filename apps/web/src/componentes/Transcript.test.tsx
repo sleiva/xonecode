@@ -40,10 +40,13 @@ describe("Transcript", () => {
     // que se ve con el pulso plegado—, así que `getByText` a secas encuentra dos.
     expect(document.querySelector("ul li")?.textContent).toMatch(/read_file/);
     expect(screen.getByText(/planificando/)).toBeTruthy();
-    // Turno EN CURSO (no ha llegado `fin`): el pulso se ve abierto, que es lo único que hay
-    // que mirar mientras el agente trabaja.
+    // Turno EN CURSO (no ha llegado `fin`): el resumen lo DICE, y el pulso nace PLEGADO
+    // también entonces. Se abría, «porque es lo único que se ve mientras trabaja»; dejó de
+    // ser cierto cuando ese resumen empezó a llevar el paso actual y su cronómetro —lo que se
+    // lee con el pulso plegado—, y un tramo abierto de cuarenta pasos empuja la respuesta
+    // fuera de la pantalla.
     expect(screen.getByText(/trabajando/i)).toBeTruthy();
-    expect(document.querySelector("details")?.hasAttribute("open")).toBe(true);
+    expect(document.querySelector("details")?.hasAttribute("open")).toBe(false);
   });
 
   /**
