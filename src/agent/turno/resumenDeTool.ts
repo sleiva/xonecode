@@ -42,6 +42,17 @@ export const CAMPOS_SEGUROS: Record<string, readonly string[]> = {
    */
   task: ["subagent_type"],
   /**
+   * **De la `description` no sale el TEXTO, sale su HUELLA**, y hace falta por una medida.
+   *
+   * DeepSeek paraleliza: en un turno real, 37 de 69 tools salieron en ráfagas simultáneas, y
+   * una de ellas llevaba TRES `task` a la vez —dos al mismo especialista—. Con solo el nombre
+   * en la traza no hay forma de saber si eran tres encargos distintos o el mismo repetido, que
+   * es justo la diferencia entre paralelismo útil y trabajo tirado.
+   *
+   * Un hash corto y la longitud lo contestan sin guardar una línea del encargo, así que la
+   * regla de arriba no se toca: lo que no puede salir sigue sin salir.
+   */
+  /**
    * De `xone_navegacion` sale la OPERACIÓN y **no el `nombre`**, que es una colección del
    * proyecto — o sea contenido, y aquí no entra contenido.
    *
@@ -91,6 +102,13 @@ function objetoDeArgs(args: unknown): Record<string, unknown> | undefined {
 }
 
 /** Argumentos acotados y seguros para la traza opt-in de diagnóstico. */
+/** Huella corta y estable de un texto. No reversible: solo sirve para comparar dos. */
+export function huellaDeTexto(texto: string): string {
+  let h = 5381;
+  for (let i = 0; i < texto.length; i++) h = ((h * 33) ^ texto.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
 export function parametrosDe(nombre: string, args: unknown): ParametrosSeguros | undefined {
   const campos = CAMPOS_SEGUROS[nombre];
   const objeto = objetoDeArgs(args);
@@ -102,6 +120,16 @@ export function parametrosDe(nombre: string, args: unknown): ParametrosSeguros |
     if (typeof valor === "string" || typeof valor === "number" || typeof valor === "boolean") {
       salida[campo] = valor;
     }
+  }
+  /**
+   * La HUELLA del encargo de un `task`, nunca su texto. Ver la nota de `CAMPOS_SEGUROS.task`:
+   * es lo que distingue tres delegaciones simultáneas distintas de la misma repetida tres
+   * veces, y sin ella el paralelismo de DeepSeek no se puede diagnosticar.
+   */
+  if (nombre === "task" && typeof objeto["description"] === "string") {
+    const encargo = objeto["description"] as string;
+    salida["encargoChars"] = encargo.length;
+    salida["encargoHuella"] = huellaDeTexto(encargo);
   }
   return Object.keys(salida).length > 0 ? salida : undefined;
 }

@@ -75,8 +75,14 @@ describe("`task`: sale QUIÉN, nunca el encargo", () => {
     // nombre sí puede: es el de un fichero que escribió el usuario, y ya viaja como `origen`
     // en cada petición de aprobación.
     const p = parametrosDe("task", args);
-    expect(p).toEqual({ subagent_type: "Documentador" });
-    expect(JSON.stringify(p)).not.toContain("fieldsize");
+    // Lo que sale es el nombre y la HUELLA del encargo —cuánto mide y un hash—, nunca una
+    // línea de su texto: eso es lo que distingue tres delegaciones simultáneas distintas de
+    // la misma repetida, sin guardar el encargo.
+    expect(Object.keys(p ?? {}).sort()).toEqual(["encargoChars", "encargoHuella", "subagent_type"]);
+    const serializado = JSON.stringify(p);
+    for (const secreto of ["fieldsize", "Clientes", "/bd", "documenta", ".xne"]) {
+      expect(serializado, secreto).not.toContain(secreto);
+    }
   });
 });
 
@@ -138,5 +144,45 @@ describe("el detalle de la línea", () => {
       const primero = campos[0]!;
       expect(detalleDe(tool, { [primero]: "valor" }), tool).toBe("valor");
     }
+  });
+});
+
+
+/**
+ * **La huella del encargo de un `task`, que es lo que deja diagnosticar el paralelismo.**
+ *
+ * Medido en un turno real: DeepSeek lanzó 37 de 69 tools en ráfagas simultáneas, y una
+ * llevaba TRES `task` a la vez, dos al mismo especialista. Con solo el nombre en la traza no
+ * se puede saber si eran tres encargos distintos o el mismo repetido — que es justo la
+ * diferencia entre paralelismo útil y trabajo tirado.
+ */
+describe("la huella del encargo de un task", () => {
+  const dePrueba = (description: string) =>
+    parametrosDe("task", { subagent_type: "device-controller", description });
+
+  it("dos encargos IGUALES dan la misma huella", () => {
+    expect(dePrueba("despliega y mira el log")).toEqual(dePrueba("despliega y mira el log"));
+  });
+
+  it("dos encargos DISTINTOS dan huellas distintas", () => {
+    expect(dePrueba("despliega y mira el log")?.["encargoHuella"]).not.toBe(
+      dePrueba("otra cosa")?.["encargoHuella"],
+    );
+  });
+
+  /** La regla de arriba no se toca: lo que no puede salir a disco, sigue sin salir. */
+  it("el TEXTO del encargo no sale", () => {
+    const p = dePrueba("abre /Clientes.xne y arregla el onload");
+    const serializado = JSON.stringify(p);
+    expect(serializado).not.toContain("Clientes");
+    expect(serializado).not.toContain("onload");
+    expect(p?.["encargoChars"]).toBe("abre /Clientes.xne y arregla el onload".length);
+  });
+
+  /** Un `task` sin descripción sigue trayendo a quién delega, como antes. */
+  it("sin descripción no estorba", () => {
+    expect(parametrosDe("task", { subagent_type: "developer-xone" })).toEqual({
+      subagent_type: "developer-xone",
+    });
   });
 });

@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ponerSumideroDeErrores } from "../../core/trazaDeErrores.js";
 import {
   contenidoTrasEditar,
   sinContenidoInvalido,
@@ -156,5 +157,55 @@ describe("validarConXoneLinter", () => {
   /** Lo que no es suyo no es un error: es que no es suyo. */
   it("un fichero que no sabe mirar no da hallazgos", async () => {
     expect(await validarConXoneLinter()("/foto.png", "binario")).toEqual([]);
+  });
+});
+
+
+/**
+ * **El testigo de las escrituras solapadas.**
+ *
+ * Reproducido: cuatro `edit` concurrentes sobre un fichero devuelven las cuatro «bien» y solo
+ * UNA llega al disco —cada una lee, sustituye sobre lo que leyó y escribe entero—. Y ocurre de
+ * verdad: DeepSeek agrupa varias `edit_file` en un mismo mensaje y LangGraph las ejecuta a la
+ * vez; medido en una sesión, siete de ocho ediciones de un fichero salieron en ráfaga, hasta
+ * tres en el mismo milisegundo.
+ */
+describe("escrituras solapadas sobre el mismo fichero", () => {
+  afterEach(() => ponerSumideroDeErrores(undefined));
+
+  it("se ANOTAN, con la ruta y cuántas había en vuelo", async () => {
+    const visto: Array<{ donde: string; mensaje: string }> = [];
+    ponerSumideroDeErrores((a) => visto.push(a as never));
+
+    const b = backendFalso({});
+    const g = sinContenidoInvalido(b, sinHallazgos);
+    await Promise.all([g.write("/a.css", "1"), g.write("/a.css", "2"), g.write("/a.css", "3")]);
+
+    const solapes = visto.filter((v) => v.donde === "escrituraSolapada");
+    expect(solapes).toHaveLength(2);
+    expect(solapes[0]!.mensaje).toContain("/a.css");
+  });
+
+  /** Ficheros DISTINTOS a la vez no son un solape: eso es paralelismo legítimo. */
+  it("dos ficheros distintos a la vez no avisan", async () => {
+    const visto: Array<{ donde: string }> = [];
+    ponerSumideroDeErrores((a) => visto.push(a as never));
+
+    const g = sinContenidoInvalido(backendFalso({}), sinHallazgos);
+    await Promise.all([g.write("/a.css", "1"), g.write("/b.css", "2")]);
+
+    expect(visto.filter((v) => v.donde === "escrituraSolapada")).toHaveLength(0);
+  });
+
+  /** Y en serie tampoco: lo que se vigila es el SOLAPE, no el número de escrituras. */
+  it("dos escrituras seguidas al mismo fichero no avisan", async () => {
+    const visto: Array<{ donde: string }> = [];
+    ponerSumideroDeErrores((a) => visto.push(a as never));
+
+    const g = sinContenidoInvalido(backendFalso({}), sinHallazgos);
+    await g.write("/a.css", "1");
+    await g.write("/a.css", "2");
+
+    expect(visto.filter((v) => v.donde === "escrituraSolapada")).toHaveLength(0);
   });
 });

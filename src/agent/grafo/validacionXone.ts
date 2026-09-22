@@ -126,6 +126,8 @@ export function contenidoTrasEditar(
  * excepción se lleva el turno por delante y el agente no reintenta.
  */
 export function sinContenidoInvalido<T extends object>(backend: T, validar: ValidarContenido): T {
+  /** Escrituras en vuelo por ruta. Ver el testigo de abajo. */
+  const enVuelo = new Map<string, number>();
   return new Proxy(backend, {
     get(destino, prop) {
       const valor = Reflect.get(destino, prop, destino);
@@ -134,11 +136,40 @@ export function sinContenidoInvalido<T extends object>(backend: T, validar: Vali
         return (valor as (...a: unknown[]) => unknown).bind(destino);
       }
       return async (...args: unknown[]) => {
-        const fin = anotarPaso(`sinContenidoInvalido#${String(prop)}`, typeof args[0] === "string" ? args[0] : undefined);
+        const ruta = typeof args[0] === "string" ? args[0] : undefined;
+        /**
+         * **Dos escrituras SOLAPADAS sobre el mismo fichero pierden cambios, y no avisa nadie.**
+         *
+         * Reproducido: cuatro `edit` concurrentes sobre un fichero devuelven las cuatro
+         * «bien» y solo UNA llega al disco — cada una lee, sustituye sobre lo que leyó y
+         * escribe entero, así que la última borra a las demás. Y pasa de verdad: DeepSeek
+         * agrupa varias `edit_file` en un mismo mensaje y LangGraph las ejecuta a la vez;
+         * medido en una sesión, siete de ocho ediciones de `funciones.js` salieron en ráfaga,
+         * hasta tres en el mismo milisegundo.
+         *
+         * Esto solo lo ANOTA —no serializa nada—: es el testigo que dice si está ocurriendo y
+         * sobre qué fichero, para poder decidir el arreglo con la medida delante.
+         */
+        if (ruta !== undefined) {
+          const yaEnVuelo = enVuelo.get(ruta) ?? 0;
+          if (yaEnVuelo > 0) {
+            anotarError(
+              "escrituraSolapada",
+              new Error(`${String(prop)} sobre «${ruta}» con ${yaEnVuelo} escritura(s) en vuelo sobre el MISMO fichero`),
+            );
+          }
+          enVuelo.set(ruta, yaEnVuelo + 1);
+        }
+        const fin = anotarPaso(`sinContenidoInvalido#${String(prop)}`, ruta);
         try {
           return await guardado(...args);
         } finally {
           fin();
+          if (ruta !== undefined) {
+            const quedan = (enVuelo.get(ruta) ?? 1) - 1;
+            if (quedan <= 0) enVuelo.delete(ruta);
+            else enVuelo.set(ruta, quedan);
+          }
         }
       };
 
