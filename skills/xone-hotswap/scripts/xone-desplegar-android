@@ -377,8 +377,27 @@ function exigirAparato() {
 
   console.log("5/5 esperando al canal, lanzando y comprobando que está VIVA");
   const cliente = join(import.meta.dirname, "xone-hotswap");
-  const mandar = (comando) =>
-    execFileSync("node", [cliente, JSON.stringify(comando)], { encoding: "utf8" }).trim();
+  /**
+   * **En `clave=valor`, que es lo único que el cliente entiende.**
+   *
+   * Esto mandaba `JSON.stringify(comando)` y se rompió ENTERO el día que el cliente dejó de
+   * aceptar JSON: el objeto se metía como NOMBRE del comando, el aparato contestaba
+   * `Unknown command: {…}` y el despliegue no lanzaba nada. Lanzar la app, pedir el árbol y
+   * capturar —las tres cosas que hace este paso— pasaban por aquí, así que se cayeron las
+   * tres a la vez, y en silencio: el script reintenta diez veces y acaba diciendo que el
+   * canal no levantó, que manda a mirar el puerto y el paquete en vez de al cliente.
+   *
+   * La conversión es la misma que hace el cliente al revés: cada campo que no es `command`
+   * sale como `clave=valor`, y un objeto o un array se serializan porque el tipado del
+   * cliente los reconoce por la forma.
+   */
+  const mandar = (comando) => {
+    const { command, ...resto } = comando;
+    const pares = Object.entries(resto).map(([k, v]) =>
+      `${k}=${typeof v === "object" && v !== null ? JSON.stringify(v) : String(v)}`,
+    );
+    return execFileSync("node", [cliente, command, ...pares], { encoding: "utf8" }).trim();
+  };
   const esperar = (segundos) => execFileSync("sleep", [String(segundos)]);
 
   /**
