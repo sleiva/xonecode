@@ -415,3 +415,49 @@ describe("el dedupe entre RONDAS", () => {
     expect(await correr()).toEqual(["edit_file"]);
   });
 });
+
+/**
+ * **A qué tool pertenece el peso de un resultado, también entre rondas.**
+ *
+ * La llamada se reemite en cada ronda y el dedupe la salta, así que apuntar el nombre DESPUÉS
+ * de ese `continue` dejaba el mapa vacío a partir de la segunda: medido sobre una sesión real,
+ * 35 resultados salían como «(sin nombre)» — la cuarta parte de todo lo que entró en el
+ * contexto, sin poder decir de dónde venía.
+ */
+describe("el peso de un resultado sabe de qué tool es", () => {
+  const llamada = () => [
+    [],
+    "updates",
+    { agent: { messages: [{ id: "m1", tool_calls: [{ id: "c1", name: "read_file", args: { file_path: "/skills/x/SKILL.md" } }] }] } },
+  ];
+  const resultado = () => [
+    [],
+    "updates",
+    { agent: { messages: [{ tool_call_id: "c1", type: "tool", content: "0123456789" }] } },
+  ];
+  const correr = async (chunks: unknown[], vistas: Set<string>) => {
+    const pesos: Array<{ nombre?: string; detalle?: string; chars: number }> = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for await (const e of aEventos((async function* () { for (const c of chunks) yield c; })() as any, undefined, undefined, vistas, (r) => pesos.push(r))) void e;
+    return pesos;
+  };
+
+  it("en la MISMA ronda, el resultado lleva nombre y blanco", async () => {
+    expect(await correr([llamada(), resultado()], new Set())).toEqual([
+      { id: "c1", chars: 10, nombre: "read_file", detalle: "/skills/x/SKILL.md" },
+    ]);
+  });
+
+  it("y en la SEGUNDA ronda también, aunque la llamada ya estuviera contada", async () => {
+    const vistas = new Set<string>();
+    await correr([llamada()], vistas); // ronda 1: la llamada se cuenta
+    // Ronda 2: el stream reentrega la llamada (ya vista) y trae su resultado.
+    const pesos = await correr([llamada(), resultado()], vistas);
+    expect(pesos).toEqual([{ id: "c1", chars: 10, nombre: "read_file", detalle: "/skills/x/SKILL.md" }]);
+  });
+
+  /** Un resultado del que no consta llamada se cuenta igual: el peso entró en el contexto. */
+  it("sin llamada conocida, el peso se cuenta sin nombre", async () => {
+    expect(await correr([resultado()], new Set())).toEqual([{ id: "c1", chars: 10 }]);
+  });
+});

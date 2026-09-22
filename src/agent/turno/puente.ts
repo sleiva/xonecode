@@ -297,9 +297,14 @@ export async function* aEventos(
           // `toolsDe`). Sin `id` no se puede afirmar que sea repetida, así que se emite —
           // la dirección segura es contar de más, no callar una llamada que ocurrió.
           if (id !== undefined) {
+            // El nombre se apunta ANTES del dedupe, y esa precedencia no es de estilo: la
+            // llamada se reemite en cada ronda y el `continue` de abajo la salta, así que
+            // apuntándolo después el mapa se quedaba vacío a partir de la segunda ronda y el
+            // peso de esos resultados salía «(sin nombre)». Medido: 35 resultados sin
+            // atribuir, la cuarta parte de todo lo que entró en el contexto.
+            deQuien.set(id, { nombre, ...(detalle === undefined ? {} : { detalle }) });
             if (vistas.has(id)) continue;
             vistas.add(id);
-            deQuien.set(id, { nombre, ...(detalle === undefined ? {} : { detalle }) });
           }
           try {
             alLlamarTool?.({
