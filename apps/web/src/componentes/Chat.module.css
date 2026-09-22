@@ -272,6 +272,59 @@
    marco propio y no se pliega con el trabajo del agente — plegarla la escondería, y lo que
    no se aprueba tiene que verse. Se pinta con la superficie secundaria y el borde de la
    paleta copiada; nada de color literal, como el resto de esta hoja. */
+/* Las tarjetas de un mismo tramo, juntas: son una LISTA de lo que ese trabajo produjo, no
+   bloques independientes de la conversación. El hueco de dentro es corto a propósito — el de
+   16px de la columna es el que separa dos MENSAJES— y quien recibe el de la columna es este
+   contenedor, así que el grupo sigue despegado del tramo que lo precede. */
+.artefactosDelTramo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  width: 100%;
+}
+
+/* La FILA de capturas. Envuelve si no caben: seis miniaturas de un turno de aparato no
+   entran en una columna de 70ch, y una tira con scroll horizontal esconde justo la última,
+   que es la que dice cómo acabó. */
+.capturas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+/* Altura fija y ancho automático: una captura de móvil es muy vertical y un diagrama muy
+   horizontal, así que cada una toma el ancho que le toque en vez de recortarse al centro —
+   ahí se perdería la barra superior, que es lo que dice en qué pantalla está. El tope de
+   ancho es para que un panorama no se coma la fila él solo. */
+.captura {
+  display: block;
+  height: 112px;
+  width: auto;
+  max-width: 200px;
+  object-fit: contain;
+  border: 1px solid var(--dsw-alias-border-primary);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-secondary);
+}
+
+/* El botón es la imagen: sin relleno ni fondo propios, porque el recinto ya lo pone ella. */
+.capturaAbrir {
+  display: block;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  line-height: 0;
+  border-radius: 8px;
+}
+
+.capturaAbrir:hover .captura,
+.capturaAbrir:focus-visible .captura {
+  border-color: var(--dsw-alias-label-secondary);
+}
+
 .artefacto {
   align-self: flex-start;
   max-width: 70ch;
@@ -310,22 +363,6 @@
   flex: none;
   font-family: var(--ds-font-family-code);
   font-size: 12px;
-  color: var(--dsw-alias-label-tertiary);
-}
-
-.artefactoRuta {
-  margin: 6px 0 0;
-  font-family: var(--ds-font-family-code);
-  font-size: 12px;
-  color: var(--dsw-alias-label-secondary);
-  /* Una ruta larga se parte por donde sea antes que ensanchar la columna. */
-  overflow-wrap: anywhere;
-}
-
-.artefactoNota {
-  margin: 6px 0 0;
-  font-size: 12px;
-  line-height: 1.5;
   color: var(--dsw-alias-label-tertiary);
 }
 

@@ -816,6 +816,19 @@ feedback del desarrollador** y no es terminal.
   el `MarkdownText` monta matemáticas con dólar simple y `$http` es un objeto real de XOne. Fuera
   de código solo; el botón de copiar y las Trazas llevan el original. `streaming` apaga shiki, así
   que solo va puesto mientras el servidor dice que hay turno en vuelo.
+- **Un ARTEFACTO pertenece al tramo de trabajo, pero no se pliega con él** (`Chat.tsx`,
+  `ES_PULSO`). Fuera del conjunto caía en la rama de conversación, que CIERRA el tramo
+  abierto: medido en pantalla, la secuencia `P5 A P5 A P8 A P1 A P2` — cinco tarjetas
+  alternando con cinco bloques «Trabajo del agente», cuatro de ellos de uno o dos pasos. Es
+  el mismo fallo que el `continue` de `sincronizacion` evita por el otro lado. Dentro del
+  tramo el colapsador no se parte; las tarjetas salen FUERA del `<details>` y agrupadas,
+  porque una captura escondida bajo un desplegable es una captura que nadie mira, y **no
+  cuentan como pasos** — un artefacto es lo que un paso produjo—. Una IMAGEN se enseña como
+  MINIATURA en fila y sin texto (un `<img>` a la ruta HTTP, nunca marcado inyectado), que es
+  lo único del hilo que se entiende sin abrir nada; lo demás conserva su tarjeta de una
+  línea. **Y la tarjeta no repite la REGLA** —«no es del proyecto, no entra en git»—: eso es
+  lo mismo para todas y vive una vez al pie de la pestaña Artefactos, no dieciséis veces en
+  el hilo.
 - **Los actos de `sistema` se ven en el chat** (respuestas a comandos y avisos de honestidad), y
   van FUERA del tramo plegable. `razonamiento` es su propio evento y su propio acto —`textoDe` lo
   EXCLUYE del texto—. El texto del asistente se enseña mientras llega, a `MS_ENTRE_PARCIALES`

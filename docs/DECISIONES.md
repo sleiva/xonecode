@@ -5975,3 +5975,67 @@ decisión es `core/hotswap.ts`.
 la tarjeta de artefacto (la ruta y la nota repetida), el colapsador que se parte en cada
 artefacto, el espaciado plano de 16–18 px entre todo, y la cola de actos `sistema` con dos
 avisos de modo de escritura que se contradicen porque son de dos momentos del mismo turno.
+
+
+## El hilo se leía sucio: el artefacto partía el tramo, y la tarjeta repetía una regla
+
+Continuación de la limpieza que empezó con `/hotswap/`, sobre la misma conversación medida.
+
+**Lo que se midió, antes.** 104 elementos y 16.121 px de columna para cuatro turnos. Las 16
+tarjetas de artefacto pesaban 1.808 px (11 %) a **113 px cada una**, de los que 23 son el
+dato: 36 px eran la ruta con el uuid de la sesión partido en dos líneas y 18 px una frase
+—«No es un fichero del proyecto: vive con esta sesión, no entra en git y no sube a
+CloudStudio»— **idéntica en las dieciséis**. Y había **43 tramos «Trabajo del agente» para 31
+mensajes**, con esta secuencia en la zona de capturas: `P5 A P5 A P8 A P1 A P2`.
+
+**La causa del acordeón.** `ES_PULSO` no incluía `artefacto`, así que caía en la rama de
+conversación, y esa rama CIERRA el tramo abierto. Pero un artefacto no es conversación: es lo
+que PRODUJO el trabajo que está dentro del tramo. Es el mismo fallo que el `continue` de
+`sincronizacion` ya evitaba por el otro lado —su comentario lo dice con estas palabras:
+«partiría en dos el trabajo del agente por una operación de git que no tiene nada que ver con
+él»—, con la diferencia de que un artefacto sí se pinta.
+
+**Lo que NO se hizo, y por qué.** La versión de una línea era pintar la tarjeta sin cerrar el
+tramo. No vale: el tramo se empuja a `piezas` cuando se ABRE, así que las tarjetas habrían
+salido detrás de un tramo que sigue creciendo con pasos posteriores — o sea «en un montón
+después del trabajo», que es exactamente la decisión que `turnoReal.ts` tomó al sacarlas del
+montón del final. Habría sido revertirla desde el cliente y en silencio.
+
+**Lo que se hizo.** `artefacto` entra en `ES_PULSO` y el tramo emite dos cosas: el `<details>`
+con los pasos, y las tarjetas DESPUÉS y fuera de él. Pertenecen al tramo —por eso no lo
+parten— pero no se pliegan con él, porque una captura escondida bajo un desplegable es una
+captura que nadie mira. **Y no cuentan como pasos**: la cabecera decía 21 y con ellas dentro
+habría dicho 26, y esa cifra es lo único que la línea plegada afirma.
+
+**Una IMAGEN se enseña, no se nombra.** Salían como un renglón con su nombre
+—`captura-1790061246909.jpg`—, un timestamp que no dice nada de lo que hay dentro, y en un
+turno de aparato son seis o siete iguales. Ahora van en una fila de miniaturas sin texto, con
+el mismo clic que lleva a la pestaña Artefactos. Tres detalles: se pinta con un `<img src>` a
+la ruta HTTP y nunca marcado inyectado —un `.svg` puede traer un `<script>`, y en un `<img>`
+no se ejecuta—; lleva `alt`, porque quitar el renglón no es quitar la identidad y el control
+necesita nombre; y la altura es fija con ancho automático, porque recortando al centro se
+pierde la barra superior, que es lo que dice en qué pantalla está. Lo que no es imagen
+conserva su tarjeta: de un `.json` no hay nada que previsualizar.
+
+**La regla deja de repetirse.** La frase de la tarjeta no era un hecho de ese fichero: es la
+misma para todos, y repetida dieciséis veces enseña a no leerla — el patrón del aviso que
+salta cuando no ha pasado nada. Ya vivía, una sola vez, al pie de la pestaña Artefactos. Se
+conserva además en el `title` de la tarjeta. La RUTA no se pierde: sigue siendo lo que copia
+el botón, que es para lo que se usaba — leerla no le hace falta a nadie, pegarla en un
+terminal sí.
+
+**Un efecto que el propio arreglo destapó.** Con las tarjetas ya de una línea y seguidas, se
+veían como bloques sueltos: 47 px de tarjeta y **63 de salto**, porque
+`ChatView.module.css` separa a los hijos de `.column` con los 16 px que van entre dos
+MENSAJES. Se agrupan en un contenedor con `gap: 6px` en vez de pelear la especificidad de esa
+hoja, que es de la librería y no se toca; el contenedor es quien recibe el hueco de la
+columna, así que el grupo sigue despegado del tramo.
+
+**Medido después, misma conversación**: 104 → 89 elementos, 16.121 → 15.404 px, la tarjeta de
+113 → 47 px, y 43 → 29 tramos. La secuencia pasó de `P5 A P5 A P8 A P1 A P2` a `P29 A A A A A`.
+
+**Lo que sigue sin tocar**: el espaciado plano del transcript (16–18 px entre todo, con dos
+párrafos del mismo mensaje separados igual que dos turnos) y la cola de actos `sistema` con
+dos avisos de modo de escritura que se contradicen. El segundo no es un arreglo de pintado:
+son dos eventos ciertos cada uno en su momento, y fundirlos en el cliente escondería
+historia — el sitio es la cola de `/aprobacion`, cuando dos se drenan al final del turno.

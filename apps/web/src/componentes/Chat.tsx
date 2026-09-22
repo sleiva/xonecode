@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import type { Acto, ConsumoDeTurno } from "../tipos.js";
 import { usarPegadoAbajo } from "../pegadoAbajo.js";
 import { useCronometro } from "../cronometro.js";
@@ -5,6 +6,7 @@ import { protegerDolares } from "../protegerDolares.js";
 import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
 import { BotonDeCopiar } from "./BotonDeCopiar.js";
 import { CierreDelTurno } from "./CierreDelTurno.js";
+import { urlDeArtefacto } from "./Artefactos.js";
 import { hayCosteQueEnsenar } from "./CosteDelTurno.js";
 import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
 import vista from "../../estilos/ChatView.module.css";
@@ -55,7 +57,145 @@ import estilos from "./Chat.module.css";
  * registro completo; esto es el pulso.
  */
 /** Los actos que son PULSO del turno y no conversación: se pliegan al terminar. */
-const ES_PULSO = new Set(["razonamiento", "herramientas", "fase"]);
+/** ¿Hay algo que PREVISUALIZAR de este artefacto? Solo una imagen, y por su `mime`, que sale
+ *  de una tabla cerrada por extensión (`core/artefactos.ts`) — nunca de olfatear los bytes. */
+const esImagen = (acto: Extract<Acto, { tipo: "artefacto" }>): boolean =>
+  acto.mime !== undefined && acto.mime.startsWith("image/");
+
+/**
+ * Las capturas de un tramo, en una FILA de miniaturas.
+ *
+ * Una captura es lo único del hilo que se entiende de un vistazo sin abrir nada, y salía como
+ * un renglón con su nombre: `captura-1790061246909.jpg`, un timestamp que no dice nada de lo
+ * que hay dentro. En un turno de aparato son seis o siete, o sea seis o siete renglones
+ * iguales. Enseñar la imagen contesta la pregunta que el nombre no contesta.
+ *
+ * Tres cosas que no son de forma:
+ *
+ * - **Se pinta con un `<img src>` a la ruta HTTP del artefacto**, nunca marcado inyectado en
+ *   el DOM: es la misma regla que el visor de Ficheros, y el motivo es que un `.svg` puede
+ *   traer un `<script>` dentro. En un `<img>` no se ejecuta.
+ * - **Sin texto, pero con NOMBRE ACCESIBLE.** Lo que se quita es el renglón, no la
+ *   identidad: sin `alt` esto sería un adorno para quien no ve la imagen, y el control que
+ *   lleva a la pestaña dejaría de tener nombre.
+ * - **Altura fija y ancho automático.** Una captura de móvil es muy vertical y un diagrama
+ *   muy horizontal; recortando al centro con `object-fit: cover` se pierde justo la barra
+ *   superior, que es lo que dice en qué pantalla está. Cada una toma el ancho que le toque.
+ */
+function CapturasDelTramo({
+  actos,
+  alAbrir,
+}: {
+  actos: Extract<Acto, { tipo: "artefacto" }>[];
+  alAbrir?: (ruta: string) => void;
+}) {
+  return (
+    <div className={estilos.capturas}>
+      {actos.map((a, i) =>
+        alAbrir === undefined ? (
+          // Sin manejador no hay a dónde ir, así que no es un botón: el botón muerto de
+          // siempre. La imagen se sigue viendo, que es la mitad que sí funciona.
+          <img key={i} className={estilos.captura} src={urlDeArtefacto(a.ruta)} alt={a.nombre} />
+        ) : (
+          <button
+            key={i}
+            type="button"
+            className={estilos.capturaAbrir}
+            onClick={() => alAbrir(a.ruta)}
+            title={`${a.nombre} · ${Math.max(1, Math.round(a.bytes / 1024))} KB`}
+          >
+            <img className={estilos.captura} src={urlDeArtefacto(a.ruta)} alt={a.nombre} />
+          </button>
+        )
+      )}
+    </div>
+  );
+}
+
+/**
+ * La tarjeta de un ARTEFACTO en el hilo.
+ *
+ * Existe porque este acto es el único del turno que se escribió SIN aprobación —no es un
+ * fichero del proyecto—, y una escritura que nadie aprueba no puede ser además muda. Dice
+ * qué es, cuánto pesa y por dónde abrirlo.
+ *
+ * **Lo que ya NO dice, y por qué.** Llevaba debajo dos renglones más: la ruta entera y una
+ * frase —«No es un fichero del proyecto: vive con esta sesión, no entra en git y no sube a
+ * CloudStudio»—. Medido en el navegador sobre una sesión real: la tarjeta medía 113 px de
+ * los que **23 son el dato**; 36 px eran la ruta, con el uuid de la sesión partido en dos
+ * líneas, y 18 px esa frase, **idéntica en las dieciséis tarjetas** de esa conversación.
+ *
+ * Y la frase no era un hecho de ese fichero: es una REGLA, la misma para todos, así que
+ * repetirla por tarjeta enseña a no leerla — el patrón del aviso que salta cuando no ha
+ * pasado nada, escrito en la bitácora de este repo. Se conserva donde sí se lee: en el
+ * `title` de la tarjeta, y en la pestaña Artefactos, que es donde se decide sobre ellos.
+ *
+ * La RUTA no se pierde: sigue siendo lo que copia el botón, que es para lo que se usaba —
+ * para leerla nadie necesita el uuid, y para pegarla en un terminal sí—.
+ */
+function TarjetaDeArtefacto({
+  acto,
+  sesion,
+  alAbrir,
+}: {
+  acto: Extract<Acto, { tipo: "artefacto" }>;
+  sesion?: string;
+  alAbrir?: (ruta: string) => void;
+}) {
+  // La ruta desde la RAÍZ DEL PROYECTO, que se puede componer aquí porque el id de la sesión
+  // ya viaja en el alta. Nunca la ruta de la máquina —el cable puede ir por un túnel—, y sin
+  // id de sesión se copia la virtual, que es la verdad que se tiene.
+  const donde =
+    sesion === undefined
+      ? acto.ruta
+      : `.xonecode/sesiones/${sesion}/artefactos/${acto.ruta.slice("/artefactos/".length)}`;
+  return (
+    <div
+      className={estilos.artefacto}
+      title="No es un fichero del proyecto: vive con esta sesión, no entra en git y no sube a CloudStudio."
+    >
+      <div className={estilos.artefactoFila}>
+        <span aria-hidden className={estilos.artefactoIcono}>
+          🖼
+        </span>
+        {/* El NOMBRE es el enlace: lleva a la pestaña Artefactos con este elegido. La
+            tarjeta es lo primero que se ve cuando el agente acaba de dibujar, y sin esto
+            había que ir a buscar la pestaña y elegirlo otra vez. Sin manejador se queda
+            como rótulo: un botón que no lleva a ninguna parte es el botón muerto de
+            siempre. */}
+        {alAbrir === undefined ? (
+          <span className={estilos.artefactoNombre}>{acto.nombre}</span>
+        ) : (
+          <button
+            type="button"
+            className={`${estilos.artefactoNombre} ${estilos.artefactoAbrir}`}
+            onClick={() => alAbrir(acto.ruta)}
+          >
+            {acto.nombre}
+          </button>
+        )}
+        <span className={estilos.artefactoPeso}>{Math.max(1, Math.round(acto.bytes / 1024))} KB</span>
+        <BotonDeCopiar texto={donde} etiqueta="Copiar la ruta del artefacto" />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Qué actos forman el TRAMO de trabajo, o sea qué se agrupa bajo «Trabajo del agente».
+ *
+ * **`artefacto` está aquí, y no es obvio**: no es un paso que el agente diera, es lo que un
+ * paso PRODUJO. Fuera del conjunto caía en la rama de conversación, que cierra el tramo
+ * abierto, y el efecto medido en pantalla sobre una sesión de `device-controller` era la
+ * secuencia `P5 A P5 A P8 A P1 A P2`: cinco tarjetas alternando con cinco bloques, cuatro de
+ * ellos de uno o dos pasos. Es exactamente el fallo que el `continue` de `sincronizacion`
+ * evita por el otro lado, con la diferencia de que un artefacto SÍ se pinta.
+ *
+ * Estar en el tramo no significa plegarse con él: las tarjetas salen FUERA del `<details>`
+ * (ver el render), porque una captura escondida bajo un desplegable es una captura que nadie
+ * mira. Lo que se gana es que el tramo no se parta y que el orden se conserve.
+ */
+const ES_PULSO = new Set(["razonamiento", "herramientas", "fase", "artefacto"]);
 
 /**
  * Un tramo de pulso: los actos de trabajo consecutivos, con si su turno YA terminó.
@@ -350,11 +490,22 @@ export function Chat({
             }
             if (pieza.tipo === "pulso") {
               const { tramo: t } = pieza;
+              // Los pasos NO cuentan los artefactos: un artefacto es lo que un paso produjo,
+              // no un paso más. Contarlos inflaba la cabecera —«21 pasos» habría dicho 26 en
+              // la sesión que se midió— y esa cifra es lo único que la línea plegada afirma.
               const pasos = t.actos.reduce(
-                (n, a) => n + (a.tipo === "herramientas" ? a.lineas.length : 1),
+                (n, a) => n + (a.tipo === "artefacto" ? 0 : a.tipo === "herramientas" ? a.lineas.length : 1),
                 0
               );
-              return (
+              // Y lo que ese trabajo PRODUJO, que se pinta después del desplegable y en su
+              // orden. Se parte en dos porque son dos formas: de una imagen se enseña la
+              // imagen, y de lo demás su nombre — de un `.json` no hay nada que previsualizar.
+              const producido = t.actos.filter(
+                (a): a is Extract<Acto, { tipo: "artefacto" }> => a.tipo === "artefacto"
+              );
+              const capturas = producido.filter(esImagen);
+              const otros = producido.filter((a) => !esImagen(a));
+              const desplegable = (
                 // Abierto mientras el turno corre —es lo único que se ve mientras trabaja—
                 // y plegado en cuanto termina: la conversación se lee sin el andamio, y el
                 // andamio sigue estando a un clic. No se BORRA: lo que pasó, pasó.
@@ -427,6 +578,38 @@ export function Chat({
                   </div>
                 </details>
               );
+              // Y las tarjetas FUERA del desplegable: pertenecen al tramo —por eso no lo
+              // parten— pero no se pliegan con él, que sería esconder la captura que el
+              // agente acaba de sacar. Sin tarjetas no hay fragmento que envolver.
+              return producido.length === 0 ? (
+                desplegable
+              ) : (
+                <Fragment key={`pulso-${t.desde}`}>
+                  {desplegable}
+                  {/*
+                    Las tarjetas van en UN grupo y no sueltas en la columna, y eso es de
+                    espaciado: `ChatView.module.css` separa a los hijos de `.column` con 16 px
+                    —el hueco entre dos mensajes—, y trece tarjetas seguidas con ese hueco se
+                    leen como trece bloques sueltos en vez de como la lista que son. Medido
+                    después de quitarles la ruta y la nota: 47 px de tarjeta y 63 de salto.
+                    Se agrupan aquí en vez de pelear la especificidad de esa hoja, que es de
+                    la librería y no se toca.
+                  */}
+                  <div className={`${vista.flowItem} ${estilos.artefactosDelTramo}`}>
+                    {capturas.length === 0 ? null : (
+                      <CapturasDelTramo actos={capturas} alAbrir={alAbrirArtefacto} />
+                    )}
+                    {otros.map((a, i) => (
+                      <TarjetaDeArtefacto
+                        key={`${t.desde}-${i}`}
+                        acto={a}
+                        sesion={sesion}
+                        alAbrir={alAbrirArtefacto}
+                      />
+                    ))}
+                  </div>
+                </Fragment>
+              );
             }
             const { acto, indice } = pieza;
             if (acto.tipo === "usuario") {
@@ -463,53 +646,6 @@ export function Chat({
                   <div className={estilos.acciones}>
                     <BotonDeCopiar texto={acto.texto} etiqueta="Copiar la respuesta" />
                   </div>
-                </div>
-              );
-            }
-            if (acto.tipo === "artefacto") {
-              // La tarjeta existe porque este acto es el único del turno que se escribió
-              // SIN aprobación —no es un fichero del proyecto—, y una escritura que nadie
-              // aprueba no puede ser además muda. Dice qué es, cuánto pesa y dónde está.
-              //
-              // Dónde: la ruta desde la RAÍZ DEL PROYECTO, que se puede componer aquí
-              // porque el id de la sesión ya viaja en el alta. Nunca la ruta de la máquina
-              // —el cable puede ir por un túnel—, y sin id de sesión se enseña la virtual,
-              // que es la verdad que se tiene.
-              const donde =
-                sesion === undefined
-                  ? acto.ruta
-                  : `.xonecode/sesiones/${sesion}/artefactos/${acto.ruta.slice("/artefactos/".length)}`;
-              return (
-                <div key={indice} className={`${vista.flowItem} ${estilos.artefacto}`}>
-                  <div className={estilos.artefactoFila}>
-                    <span aria-hidden className={estilos.artefactoIcono}>
-                      🖼
-                    </span>
-                    {/* El NOMBRE es el enlace: lleva a la pestaña Artefactos con este
-                        elegido. La tarjeta es lo primero que se ve cuando el agente acaba de
-                        dibujar, y sin esto había que ir a buscar la pestaña y elegirlo otra
-                        vez. Sin manejador se queda como rótulo. */}
-                    {alAbrirArtefacto === undefined ? (
-                      <span className={estilos.artefactoNombre}>{acto.nombre}</span>
-                    ) : (
-                      <button
-                        type="button"
-                        className={`${estilos.artefactoNombre} ${estilos.artefactoAbrir}`}
-                        onClick={() => alAbrirArtefacto(acto.ruta)}
-                      >
-                        {acto.nombre}
-                      </button>
-                    )}
-                    <span className={estilos.artefactoPeso}>
-                      {Math.max(1, Math.round(acto.bytes / 1024))} KB
-                    </span>
-                    <BotonDeCopiar texto={donde} etiqueta="Copiar la ruta del artefacto" />
-                  </div>
-                  <p className={estilos.artefactoRuta}>{donde}</p>
-                  <p className={estilos.artefactoNota}>
-                    No es un fichero del proyecto: vive con esta sesión, no entra en git y no
-                    sube a CloudStudio.
-                  </p>
                 </div>
               );
             }

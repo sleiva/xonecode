@@ -219,22 +219,40 @@ describe("Chat: el artefacto", () => {
   it("se ve, con su nombre y su peso, y dice que no es del proyecto", () => {
     // No es decoración: es la ÚNICA escritura del turno que no pasó por la aprobación
     // humana, así que si no se viera sería una escritura muda.
-    render(<Chat actos={[artefacto]} />);
+    const { container } = render(<Chat actos={[artefacto]} />);
     expect(screen.getByText("flujo.html")).toBeTruthy();
     expect(screen.getByText("42 KB")).toBeTruthy();
-    expect(screen.getByText(/No es un fichero del proyecto/i)).toBeTruthy();
+    // La REGLA —que no es del proyecto— se dice una vez por tarjeta y no se PINTA: medido,
+    // eran 18 px idénticos en las dieciséis tarjetas de una conversación real, y una frase
+    // repetida enseña a no leerla. Sigue estando donde se consulta.
+    expect(container.textContent).not.toContain("No es un fichero del proyecto");
+    expect(container.querySelector("[title*='no entra en git']")).toBeTruthy();
   });
 
-  it("con sesión dice la ruta DEL PROYECTO; sin ella, la virtual y no una inventada", () => {
+  it("con sesión COPIA la ruta DEL PROYECTO; sin ella, la virtual y no una inventada", () => {
     // La ruta de la máquina no viaja nunca —el cable puede ir por un túnel—, así que la del
     // proyecto se compone aquí con el id de la sesión. Y el id puede faltar: no existe hasta
     // que se vuelca el primer acto.
+    //
+    // Ya no se PINTA —eran 36 px con el uuid partido en dos líneas, de una tarjeta cuyo dato
+    // son 23— pero sigue siendo lo que el botón copia, que es para lo que se usaba: leerla no
+    // le hace falta a nadie, pegarla en un terminal sí. La garantía se mudó de sitio, no se
+    // quitó: sin este test, el botón podría acabar copiando la virtual sin que nada avisara.
+    const copiado: string[] = [];
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: (t: string) => { copiado.push(t); return Promise.resolve(); } },
+    });
+
     const { unmount } = render(<Chat actos={[artefacto]} sesion="s-1" />);
-    expect(screen.getByText(".xonecode/sesiones/s-1/artefactos/flujo.html")).toBeTruthy();
+    expect(screen.queryByText(".xonecode/sesiones/s-1/artefactos/flujo.html")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Copiar la ruta del artefacto" }));
+    expect(copiado).toEqual([".xonecode/sesiones/s-1/artefactos/flujo.html"]);
     unmount();
 
     render(<Chat actos={[artefacto]} />);
-    expect(screen.getByText("/artefactos/flujo.html")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Copiar la ruta del artefacto" }));
+    expect(copiado[1]).toBe("/artefactos/flujo.html");
   });
 
   it("el nombre ABRE el artefacto, y sin manejador se queda como rótulo", () => {
@@ -257,6 +275,122 @@ describe("Chat: el artefacto", () => {
     // tramo, así que sigue a la vista cuando el turno termina.
     render(<Chat actos={[{ tipo: "herramientas", lineas: ["→ lee x"] }, artefacto, { tipo: "fin", ms: 10 }]} />);
     expect(screen.getByText("flujo.html")).toBeTruthy();
+  });
+
+  /**
+   * **Una IMAGEN se enseña, no se nombra.**
+   *
+   * Una captura es lo único del hilo que se entiende de un vistazo sin abrir nada, y estaba
+   * saliendo como un renglón con su nombre —`captura-1790061246909.jpg`— que no dice nada de
+   * lo que hay dentro. En una sesión de aparato son seis o siete por turno: seis renglones
+   * con un timestamp cada uno.
+   *
+   * Van en una FILA de miniaturas y sin texto, y el clic sigue llevando a la pestaña
+   * Artefactos, que es donde se miran de verdad. Lo que NO es imagen se queda con su tarjeta
+   * de una línea: de un `.json` no hay nada que previsualizar.
+   */
+  it("una captura sale como MINIATURA en fila, sin texto, y sigue abriendo la pestaña", () => {
+    const abrir = vi.fn();
+    const captura: Acto = {
+      tipo: "artefacto",
+      ruta: "/artefactos/captura-9.jpg",
+      nombre: "captura-9.jpg",
+      bytes: 52_000,
+      mime: "image/jpeg",
+    };
+    const volcado: Acto = {
+      tipo: "artefacto",
+      ruta: "/artefactos/respuesta-status-9.json",
+      nombre: "respuesta-status-9.json",
+      bytes: 8_000,
+      mime: "application/json",
+    };
+    const { container } = render(
+      <Chat actos={[captura, volcado, { tipo: "fin", ms: 10 }]} alAbrirArtefacto={abrir} />
+    );
+
+    // La imagen se PINTA, y por la ruta HTTP del artefacto — nunca marcado inyectado.
+    const img = container.querySelector("img");
+    expect(img).toBeTruthy();
+    expect(img!.getAttribute("src")).toBe("/artefacto?n=captura-9.jpg");
+    // Sin texto: su nombre no se pinta, pero SÍ es su nombre accesible, que es lo que la
+    // convierte en un control y no en un adorno.
+    expect(container.textContent).not.toContain("captura-9.jpg");
+    const boton = screen.getByRole("button", { name: /captura-9\.jpg/u });
+    fireEvent.click(boton);
+    expect(abrir).toHaveBeenCalledWith("/artefactos/captura-9.jpg");
+
+    // Y lo que no es imagen conserva su tarjeta con el nombre: de un `.json` no hay
+    // previsualización que enseñar.
+    expect(screen.getByText("respuesta-status-9.json")).toBeTruthy();
+    expect(container.querySelectorAll("img")).toHaveLength(1);
+  });
+
+  /**
+   * **Y NO parte el tramo de trabajo, que es lo que lo volvía ilegible.**
+   *
+   * Medido en el navegador sobre una sesión real de `device-controller`: la secuencia de
+   * actos era `P5 A P5 A P8 A P1 A P2`, o sea cinco tarjetas alternando con cinco bloques
+   * «Trabajo del agente», cuatro de ellos de uno o dos pasos. En una pantalla de 1.353 px
+   * cabían seis tarjetas, ocho tramos y UN párrafo del asistente.
+   *
+   * La causa es la misma que el test de la sincronización fija por el otro lado: un acto que
+   * no es de pulso CIERRA el tramo abierto. Pero un artefacto no es conversación — es lo que
+   * PRODUJO el trabajo que está dentro del tramo, así que pertenece a él.
+   *
+   * Lo que este test fija son las tres cosas a la vez, porque cualquiera de ellas sola sería
+   * un arreglo peor: UN solo desplegable, las tarjetas VISIBLES (plegarlas dentro sería
+   * esconder la captura que el agente acaba de sacar) y EN ORDEN antes de la respuesta, que
+   * es lo que `turnoReal.ts` decidió cuando las sacó del montón del final.
+   */
+  it("cinco artefactos entre pasos dan UN tramo, no cinco: las tarjetas no lo parten", () => {
+    const paso = (n: number): Acto => ({
+      tipo: "herramientas",
+      lineas: Array.from({ length: n }, (_, i) => `→ lee f${i}`),
+    });
+    const art = (n: number): Acto => ({
+      tipo: "artefacto",
+      ruta: `/artefactos/captura-${n}.jpg`,
+      nombre: `captura-${n}.jpg`,
+      bytes: 1024,
+      mime: "image/jpeg",
+    });
+    const { container } = render(
+      <Chat
+        actos={[
+          { tipo: "usuario", texto: "mira la pantalla" },
+          paso(5), art(1), paso(5), art(2), paso(8), art(3), paso(1), art(4), paso(2), art(5),
+          asistente("Ya está."),
+          { tipo: "fin", ms: 1000 },
+        ]}
+      />
+    );
+
+    // UN desplegable, no cinco.
+    expect(container.querySelectorAll("details")).toHaveLength(1);
+    // Y cuenta los PASOS, no las tarjetas: un artefacto no es un paso que el agente diera,
+    // es lo que un paso produjo. Contarlo inflaría la cabecera en +5.
+    expect(screen.getByText(/Trabajo del agente · 21 pasos/u)).toBeTruthy();
+    // Las cinco siguen a la VISTA y en ORDEN. Son imágenes, así que se leen por su `alt`:
+    // el nombre ya no se pinta como texto (ver el test de la miniatura), pero el orden en
+    // que se produjeron es lo que esto fija.
+    expect([...container.querySelectorAll("img")].map((i) => i.getAttribute("alt"))).toEqual([
+      "captura-1.jpg",
+      "captura-2.jpg",
+      "captura-3.jpg",
+      "captura-4.jpg",
+      "captura-5.jpg",
+    ]);
+    // Y antes de la respuesta, que es lo que decidió `turnoReal.ts` al sacarlas del montón
+    // del final: una captura suelta no dice nada, una captura antes del párrafo que la
+    // explica sí.
+    const cuerpo = [...container.querySelectorAll("img, p")];
+    const ultima = cuerpo.findIndex((e) => e.getAttribute("alt") === "captura-5.jpg");
+    const respuesta = cuerpo.findIndex((e) => (e.textContent ?? "").includes("Ya está."));
+    expect(ultima).toBeGreaterThanOrEqual(0);
+    expect(ultima).toBeLessThan(respuesta);
+    // Y ninguna está DENTRO del desplegable, que es donde nadie las vería.
+    expect(container.querySelector("details")!.querySelector("img")).toBeNull();
   });
 });
 
