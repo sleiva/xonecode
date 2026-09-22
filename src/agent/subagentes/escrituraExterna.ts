@@ -165,18 +165,11 @@ export type VeredictoDeRuta = { admitida: true; ruta: string } | { admitida: fal
  * instrucciones del harness y como los documentos que anexó una persona. Que aquí apunten
  * a otro sitio no cambia lo que alguien leería al verlos cambiados.
  *
- * `/disco` entra por lo mismo, y con un matiz que conviene tener delante: para el motor
- * `modelo` esa raíz es la MÁQUINA montada de solo lectura (`core/discoDeLaMaquina.ts`), pero
- * un hijo externo no la tiene — lee el disco de verdad, acotado a la carpeta del proyecto. Lo
- * que se deniega aquí es una carpeta REAL llamada `disco` dentro del proyecto, y se deniega
- * por la misma razón que las otras dos: alguien que la vea cambiada no puede saber si lo que
- * miraba era eso o la raíz virtual del mismo nombre.
- *
  * `escrituraExterna.test.ts` ATA esta lista con las filas de `write` de `DENEGADO_SIEMPRE`
  * en vez de confiarla: son dos formatos de la misma regla (globs para deepagents, prefijos
  * para aquí) y dos copias de una regla son dos copias que divergen.
  */
-const CARPETAS_DENEGADAS = ["/skills", "/adjuntos", "/disco"];
+const CARPETAS_DENEGADAS = ["/skills", "/adjuntos"];
 
 /**
  * La ruta virtual de una ruta absoluta del hijo, o `undefined` si no se puede afirmar que

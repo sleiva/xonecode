@@ -69,20 +69,6 @@ export const DENEGADO_SIEMPRE = [
   // Las skills son instrucciones del harness, nunca ficheros que el agente pueda alterar.
   { operations: ["write"] as const, paths: ["/skills", "/skills/**"], mode: "deny" as const },
   /**
-   * **`/disco/` es la máquina entera y va de SOLO LECTURA**, por lo mismo que los adjuntos:
-   * es material de ENTRADA. Que el agente pueda ABRIR un fichero que la persona nombró —el
-   * zip de un diseño en `Downloads`— es el caso que esa raíz resuelve; que pueda ESCRIBIR en
-   * cualquier sitio de la máquina no lo pide nadie y no tiene arreglo si se equivoca. Para
-   * escribir ya está el proyecto, con su aprobación.
-   *
-   * **E incondicional, como la de `/adjuntos/` y por la misma medida**: sin esta fila, un
-   * `write_file` a `/disco/x` en una consola donde esa raíz no estuviera montada escribiría
-   * `<raiz>/disco/x`, o sea un fichero del proyecto con el nombre de algo que se presenta
-   * como «la máquina». Lo que NO se lee ni por ahí —`auth.json` y cualquier `.xonecode/`—
-   * vive en `core/discoDeLaMaquina.ts`, porque son rutas REALES y aquí solo hay virtuales.
-   */
-  { operations: ["write"] as const, paths: ["/disco", "/disco/**"], mode: "deny" as const },
-  /**
    * Los ADJUNTOS de una tarea (`core/adjuntos.ts`), de solo lectura por lo mismo que las
    * skills: son material de ENTRADA —los documentos que anexó la persona que creó la
    * tarea—, no ficheros que reescribir. Leerlos es justamente su razón de ser, así que la

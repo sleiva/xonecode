@@ -14,13 +14,7 @@ import {
   type Artefacto,
 } from "../../core/artefactos.js";
 import { RUTA_ADJUNTOS } from "../../core/adjuntos.js";
-import {
-  bajoDisco,
-  esRutaDeMaquina,
-  motivoDeDiscoDenegado,
-  porQueNoSuelta,
-  RUTA_DISCO,
-} from "../../core/discoDeLaMaquina.js";
+import { esRutaDeMaquina, porQueNoSuelta } from "../../core/traerDeLaMaquina.js";
 import { carpetaDeHotswap, RUTA_HOTSWAP } from "../../core/hotswap.js";
 import { CARPETA_DE_PLANES, RUTA_PLANES } from "../../core/planes.js";
 import { entornoDeShell, variablesDeAndroid } from "../../core/shellDeAgente.js";
@@ -185,48 +179,26 @@ export const TOPE_DE_COMANDO_S = 600;
  *   existe» sobre un fichero que sí existe —y de paso filtra la raíz absoluta del proyecto—.
  *   Se intercepta antes y se devuelve la ruta buena ya escrita.
  */
-/** Lo único que se le deja hacer a `/disco/`. Lista BLANCA: ver el Proxy de abajo. */
-const OPERACIONES_DE_LECTURA = new Set(["read", "ls", "glob", "grep"]);
-
-export function backendConDisco<T extends object>(backend: T): T {
-  const conMontaje = new CompositeBackend(backend as never, {
-    [RUTA_DISCO]: new FilesystemBackend({ rootDir: "/", virtualMode: true }),
-  }) as T;
-
-  return new Proxy(conMontaje as object, {
+/**
+ * Contesta bien a una ruta de la MÁQUINA escrita como si fuera del proyecto.
+ *
+ * Sin esto se resuelve DENTRO del proyecto y vuelve un ENOENT que dice «no such file or
+ * directory» sobre un fichero que sí existe —y de paso filtra la raíz absoluta del proyecto—.
+ * Medido: el orquestador concluía que estaba enjaulado y se iba a delegar en el agente con
+ * shell. Aquí se le devuelve el paso siguiente ESCRITO, que es el patrón de `porQueNo`.
+ *
+ * No monta nada y no abre nada: solo sustituye un mensaje que engaña por uno que sirve.
+ */
+export function conAvisoDeRutaDeMaquina<T extends object>(backend: T): T {
+  return new Proxy(backend as object, {
     get(destino, prop) {
       const valor = Reflect.get(destino, prop, destino);
       if (typeof valor !== "function") return valor;
       return (...args: unknown[]) => {
         const ruta = args[0];
-        if (typeof ruta === "string") {
-          /**
-           * **El «solo lectura» se aplica AQUÍ, no solo en `permisosDe`, y eso se midió.**
-           *
-           * `permisosDe` lo impone el middleware de TOOLS, y hay un agente que no lo recibe:
-           * el que tiene `ejecucion`, porque deepagents LANZA si se combinan `permissions` con
-           * un backend ejecutable. O sea que justo el único especialista con shell habría
-           * tenido la máquina entera abierta a escritura por las tools de fichero. Comprobado
-           * antes de arreglarlo: un `write` a `/disco/tmp/colado.txt` creaba el fichero en la
-           * máquina de verdad.
-           *
-           * Es lista BLANCA de operación y no lista negra: lo que no sea leer, se deniega. Un
-           * método nuevo que la librería añada mañana nace cerrado en vez de nacer abierto.
-           */
-          if (ruta.startsWith(RUTA_DISCO) && !OPERACIONES_DE_LECTURA.has(String(prop))) {
-            return {
-              error:
-                `«${ruta}» está bajo ${RUTA_DISCO}, que es tu máquina y va de SOLO LECTURA. ` +
-                "Ahí se lee, no se escribe ni se borra. Lo que haya que escribir va al proyecto, " +
-                "que es donde una escritura pasa por su aprobación.",
-            };
-          }
-          // Lo del harness no se lee ni por aquí: ver `motivoDeDiscoDenegado`.
-          const denegado = motivoDeDiscoDenegado(ruta);
-          if (denegado !== undefined) return { error: denegado };
-          // Y una ruta de máquina a pelo se contesta con la buena ya escrita, en vez de con
-          // un ENOENT que miente. Se DEVUELVE `{error}`, como las otras guardas.
-          if (esRutaDeMaquina(ruta)) return { error: porQueNoSuelta(ruta) };
+        // Se DEVUELVE `{error}`, como las otras guardas: una excepción se lleva el turno.
+        if (typeof ruta === "string" && esRutaDeMaquina(ruta)) {
+          return { error: porQueNoSuelta(ruta) };
         }
         return (valor as (...a: unknown[]) => unknown).apply(destino, args);
       };
@@ -573,13 +545,16 @@ export function backendDeAgente(opciones: {
    */
   const conPlanes = backendConPlanes(conAdjuntos, opciones.raiz);
   /**
-   * Y la máquina entera bajo `/disco/`, de solo lectura.
+   * Y el aviso de las rutas de MÁQUINA, que no monta nada.
    *
-   * Va la ÚLTIMA de las raíces a propósito: su Proxy reescribe las rutas de máquina escritas a
-   * pelo, y tiene que ver la ruta ANTES de que ninguna otra raíz la resuelva —o un
-   * `/Users/…/x.zip` volvería a caer en el proyecto y a contestar que no existe—.
+   * Hubo aquí un montaje de `/` bajo `/disco/` y **rompió un turno de producción**: con la
+   * máquina entera dentro del `CompositeBackend`, toda operación recursiva sin ruta la
+   * recorría — un `grep` sobre el PROYECTO tardaba 30 s y moría con
+   * `EPERM … scandir '/Volumes/com.apple.TimeMachine.localsnapshots'`. Lo que hacía falta no
+   * era navegar el disco sino TRAERSE un fichero, y eso lo hace la tool
+   * `traer_de_la_maquina`. Aquí solo queda contestar bien a quien escriba la ruta a pelo.
    */
-  const conDisco = backendConDisco(conPlanes);
+  const conDisco = conAvisoDeRutaDeMaquina(conPlanes);
   // Lo que deje un COMANDO en la carpeta de artefactos también se anuncia. Sin esto, la
   // captura que escribe un script existe en el disco y no existe para nadie: el evento
   // `artefacto` lo emite el Proxy de `write`/`edit`, y una shell no pasa por ahí.
