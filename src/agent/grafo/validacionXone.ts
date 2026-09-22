@@ -194,6 +194,22 @@ export function sinContenidoInvalido<T extends object>(backend: T, validar: Vali
 
         const { introducidos } = veredictoDeEscritura(antes, despues);
         if (introducidos.length === 0) return seguir();
+        /**
+         * **Un rechazo se ANOTA, y no es higiene.**
+         *
+         * Devolver `{error}` es correcto —el modelo reintenta— pero deja el rechazo INVISIBLE:
+         * el `anotarPaso` de arriba cierra igual, así que en la traza una escritura aceptada y
+         * una rechazada se leen exactamente igual. Y un rechazo cuesta un viaje entero con todo
+         * el contexto detrás, o sea que es justo lo que hay que poder contar cuando un turno se
+         * dispara de precio. Se preguntó y el instrumento no sabía contestar.
+         *
+         * Va el CÓDIGO del hallazgo y la ruta, nunca el contenido ni el mensaje —que lleva el
+         * fragmento de código dentro—, la misma regla que `resumenDeTool.ts`.
+         */
+        anotarError(
+          "sinContenidoInvalido#rechazo",
+          new Error(`${String(prop)} sobre «${ruta}» rechazada: ${introducidos.length} hallazgo(s) [${[...new Set(introducidos.map((h) => h.codigo))].join(", ")}]`)
+        );
         return { error: motivoDelRechazo(ruta, introducidos) };
       }
     },

@@ -49,6 +49,46 @@ describe("sinContenidoInvalido", () => {
   });
 
   /**
+   * **Un rechazo deja rastro, porque si no es indistinguible de una escritura que pasó.**
+   *
+   * El `anotarPaso` que envuelve esto cierra igual en los dos casos, así que sin esta anotación
+   * la traza no puede contestar «¿cuántas escrituras se rechazaron?» — y un rechazo cuesta un
+   * viaje entero con el contexto detrás, que es justo lo que se va a buscar cuando un turno se
+   * dispara de precio. Se preguntó sobre una sesión real y el instrumento no supo contestar.
+   */
+  it("un rechazo se ANOTA, con el código del hallazgo y sin el contenido", async () => {
+    const anotados: string[] = [];
+    ponerSumideroDeErrores((e) => anotados.push(`${e.donde}|${(e as { mensaje?: string }).mensaje ?? ""}`));
+    try {
+      const g = sinContenidoInvalido(
+        backendFalso({}),
+        async () => [{ codigo: "CSS_WEB_PROPERTY", mensaje: 'el SECRETO del fichero', linea: 2 }],
+      );
+      await g.write("/a.css", ".x {\n font-size: SECRETO;\n}");
+    } finally {
+      ponerSumideroDeErrores(undefined);
+    }
+    const rechazo = anotados.find((x) => x.startsWith("sinContenidoInvalido#rechazo"));
+    expect(rechazo, anotados.join(" · ")).toBeDefined();
+    expect(rechazo).toContain("CSS_WEB_PROPERTY");
+    expect(rechazo).toContain("/a.css");
+    // Ni el contenido ni el mensaje del hallazgo: la misma regla que `resumenDeTool.ts`.
+    expect(rechazo).not.toContain("SECRETO");
+  });
+
+  /** Y lo que pasa no anota nada: un rastro que sale siempre no distingue nada. */
+  it("una escritura ACEPTADA no anota rechazo", async () => {
+    const anotados: string[] = [];
+    ponerSumideroDeErrores((e) => anotados.push(e.donde));
+    try {
+      await sinContenidoInvalido(backendFalso({}), sinHallazgos).write("/a.css", ".x { fontsize: 4; }");
+    } finally {
+      ponerSumideroDeErrores(undefined);
+    }
+    expect(anotados.filter((d) => d.includes("rechazo"))).toEqual([]);
+  });
+
+  /**
    * **La prueba que decide si esto es usable.** Medido sobre siete proyectos reales: quedan
    * hallazgos en ficheros que están en producción. Sin esto, el día que la guarda entrara no
    * se podría editar ninguno de ellos para arreglar OTRA cosa.

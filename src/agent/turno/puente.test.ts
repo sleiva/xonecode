@@ -103,6 +103,47 @@ describe("toolsDe", () => {
     expect(toolsDe(dato)).toEqual([{ nombre: "write_file", detalle: "/MEMORIA.md", parametros: { file_path: "/MEMORIA.md" } }]);
     expect(JSON.stringify(toolsDe(dato))).not.toContain("token-secreto");
   });
+
+  /**
+   * **De que RESPUESTA salio cada tool, que es lo unico que decide si van en paralelo.**
+   *
+   * Sin este campo la traza no podia contestarlo y habia que adivinarlo con dos heuristicas
+   * que se contradicen. Medido sobre un turno real de 69 tools: por el reloj exacto salian 18
+   * en rafaga —el milisegundo PARTE una rafaga— y por los contadores del tracker salian 38,
+   * con dos grupos de 1.000 ms de span, o sea rezagados FUNDIDOS en una respuesta ajena. La
+   * conclusion que se saco de ahi (siete ediciones simultaneas sobre el mismo fichero) resulto
+   * ser cierta, pero no por el metodo: hubo que cruzar los dos criterios para defenderla.
+   */
+  it("las tools de UNA respuesta comparten el id del mensaje, y las de otra no", () => {
+    const dato = {
+      agent: {
+        messages: [
+          {
+            id: "msg-1",
+            tool_calls: [
+              { name: "edit_file", args: { file_path: "/f.js", old_string: "a", new_string: "b" } },
+              { name: "edit_file", args: { file_path: "/f.js", old_string: "c", new_string: "d" } },
+            ],
+          },
+          { id: "msg-2", tool_calls: [{ name: "read_file", args: { file_path: "/f.js" } }] },
+        ],
+      },
+    };
+    const [a, b, c] = toolsDe(dato);
+    expect(a?.respuesta).toBe("msg-1");
+    expect(b?.respuesta).toBe("msg-1");
+    expect(a?.respuesta).toBe(b?.respuesta); // dos ediciones PEDIDAS A LA VEZ
+    expect(c?.respuesta).toBe("msg-2");
+    expect(c?.respuesta).not.toBe(a?.respuesta);
+  });
+
+  /** Un mensaje sin id no inventa uno: ausente es "no consta", como en todo lo demas. */
+  it("sin id del mensaje, el campo no sale", () => {
+    const sinId = toolsDe({ agent: { messages: [{ tool_calls: [{ name: "read_file", args: { file_path: "/f.js" } }] }] } });
+    expect(sinId[0]).not.toHaveProperty("respuesta");
+    const vacio = toolsDe({ agent: { messages: [{ id: "", tool_calls: [{ name: "read_file", args: { file_path: "/f.js" } }] }] } });
+    expect(vacio[0]).not.toHaveProperty("respuesta");
+  });
 });
 
 describe("esDelPadre", () => {

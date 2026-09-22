@@ -69,14 +69,16 @@ export function razonamientoDe(msg: unknown): string {
  * con los mismos argumentos son dos llamadas, y colapsarlas por su contenido escondería trabajo
  * de verdad. Por eso se deduplica por ahí y no por el par nombre+argumentos.
  */
-export function toolsDe(dato: unknown): Array<{ nombre: string; detalle?: string; parametros?: ParametrosSeguros; id?: string }> {
+export function toolsDe(dato: unknown): Array<{ nombre: string; detalle?: string; parametros?: ParametrosSeguros; id?: string; respuesta?: string }> {
   if (!dato || typeof dato !== "object") return [];
-  const salida: Array<{ nombre: string; detalle?: string; id?: string }> = [];
+  const salida: Array<{ nombre: string; detalle?: string; id?: string; respuesta?: string }> = [];
   for (const nodo of Object.values(dato as Record<string, unknown>)) {
     const msgs = (nodo as Record<string, unknown> | null)?.messages;
     if (!Array.isArray(msgs)) continue;
     for (const m of msgs) {
       const llamadas = (m as Record<string, unknown>)?.tool_calls;
+      // El id del MENSAJE que trae estas llamadas: es lo que dice cuales se pidieron JUNTAS.
+      const respuesta = (m as Record<string, unknown>)?.id;
       if (Array.isArray(llamadas)) {
         for (const l of llamadas) {
           const n = (l as Record<string, unknown>)?.name;
@@ -90,6 +92,7 @@ export function toolsDe(dato: unknown): Array<{ nombre: string; detalle?: string
               ...(detalle === undefined ? {} : { detalle }),
               ...(parametros === undefined ? {} : { parametros }),
               ...(typeof id === "string" && id !== "" ? { id } : {}),
+              ...(typeof respuesta === "string" && respuesta !== "" ? { respuesta } : {}),
             });
           }
         }
@@ -167,6 +170,19 @@ export type AlLlamarTool = (tool: {
   detalle?: string;
   parametros?: ParametrosSeguros;
   origen: OrigenDeTool;
+  /**
+   * Id del MENSAJE del modelo que pidio esta tool. Dos tools con el mismo valor se
+   * pidieron en la MISMA respuesta, que es lo unico que decide si van en paralelo.
+   *
+   * Existe porque sin el la traza no podia contestarlo y habia que adivinarlo. Medido
+   * sobre un turno real de 69 tools: agrupar por el reloj exacto daba 18 en rafaga (el
+   * milisegundo PARTE una rafaga) y agrupar por los contadores del tracker daba 38, con
+   * dos grupos de 1.000 ms de span, o sea rezagados FUNDIDOS en una respuesta ajena. Dos
+   * metodos, dos respuestas, y ninguno comprobable. Ademas `origen` solo tiene dos
+   * valores, asi que dos especialistas a la vez son indistinguibles: el id del mensaje
+   * tambien los separa.
+   */
+  respuesta?: string;
 }) => void;
 
 /**
@@ -196,7 +212,7 @@ export async function* aEventos(
       if (!chunk) continue;
 
       if (chunk.modo === "updates") {
-        for (const { nombre, detalle, parametros, id } of toolsDe(chunk.dato)) {
+        for (const { nombre, detalle, parametros, id, respuesta } of toolsDe(chunk.dato)) {
           // Ya contada: este mismo chunk trae la historia acumulada del subgrafo (ver
           // `toolsDe`). Sin `id` no se puede afirmar que sea repetida, así que se emite —
           // la dirección segura es contar de más, no callar una llamada que ocurrió.
@@ -210,6 +226,7 @@ export async function* aEventos(
               ...(detalle === undefined ? {} : { detalle }),
               ...(parametros === undefined ? {} : { parametros }),
               origen: origenDeTool(chunk.ns),
+              ...(respuesta === undefined ? {} : { respuesta }),
             });
           } catch {
             // La observabilidad no puede tumbar ni silenciar el stream.

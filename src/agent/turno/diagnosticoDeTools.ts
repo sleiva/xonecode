@@ -35,7 +35,7 @@ export interface DiagnosticoDeTools {
    * stream, ver `puente.ts#esDelPadre`). No dice CUÁL especialista: sus segmentos son ids
    * opacos. Dos cubos ciertos en vez de cinco dudosos.
    */
-  herramienta(nombre: string, detalle: string | undefined, parametros: ParametrosSeguros | undefined, tracker: TokenTracker, origen?: OrigenDeTool): void;
+  herramienta(nombre: string, detalle: string | undefined, parametros: ParametrosSeguros | undefined, tracker: TokenTracker, origen?: OrigenDeTool, respuesta?: string): void;
 }
 
 /** Ruta pública solo para comunicar al usuario dónde quedó su diagnóstico. */
@@ -77,11 +77,12 @@ export function crearDiagnosticoDeTools(
     corte(origen, limite) {
       escribir({ tipo: "corte", origen, limite });
     },
-    herramienta(nombre, detalle, parametros, tracker, origen) {
+    herramienta(nombre, detalle, parametros, tracker, origen, respuesta) {
       escribir({
         tipo: "tool",
         nombre,
         ...(origen === undefined ? {} : { origen }),
+        ...(respuesta === undefined ? {} : { respuesta }),
         ...(detalle === undefined ? {} : { detalle }),
         ...(parametros === undefined ? {} : { parametros }),
         inputAcumulado: tracker.input,

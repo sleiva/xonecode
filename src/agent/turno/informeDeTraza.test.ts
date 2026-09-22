@@ -254,3 +254,76 @@ describe("el reparto de tools entre orquestador y especialistas", () => {
     expect(sesion.toolsDelOrquestador).toBe(0);
   });
 });
+
+/**
+ * **El paralelismo, que es lo que la traza no sabia contestar.**
+ *
+ * La pregunta —¿cuantas tools pidio el modelo A LA VEZ?— se contesto dos veces con dos
+ * metodos y dieron dos numeros: por el reloj exacto, 18 de 69; por los contadores del
+ * tracker, 38 de 69 con grupos de 1.000 ms de span. Faltaba el dato, y el dato es de que
+ * MENSAJE salio cada tool.
+ */
+describe("paralelismo", () => {
+  const linea = (o: Record<string, unknown>) => JSON.stringify({ v: 1, sesion: "s1", at: "2026-09-22T00:00:00.000Z", ...o });
+  const tool = (nombre: string, respuesta: string | undefined, detalle?: string) =>
+    linea({ tipo: "tool", nombre, ...(respuesta === undefined ? {} : { respuesta }), ...(detalle === undefined ? {} : { detalle }), ...(detalle === undefined ? {} : { parametros: { file_path: detalle } }) });
+
+  it("dos tools del MISMO mensaje van en paralelo; las de otro, no", () => {
+    const [s] = resumirTraza([
+      linea({ tipo: "sesion" }),
+      tool("read_file", "m1", "/a.js"),
+      tool("grep", "m1"),
+      tool("read_file", "m2", "/b.js"),
+    ]);
+    expect(s?.paralelismo.respuestas).toBe(1);
+    expect(s?.paralelismo.tools).toBe(2);
+    expect(s?.paralelismo.maximo).toBe(2);
+  });
+
+  /** El hallazgo que esto vino a buscar: ahi es donde se pierden cambios. */
+  it("dos escrituras del mismo mensaje sobre el MISMO fichero se avisan", () => {
+    const [s] = resumirTraza([
+      linea({ tipo: "sesion" }),
+      tool("edit_file", "m1", "/funciones.js"),
+      tool("edit_file", "m1", "/funciones.js"),
+      tool("edit_file", "m1", "/otro.js"),
+    ]);
+    expect(s?.paralelismo.escriturasALaVez).toEqual([{ detalle: "/funciones.js", veces: 2 }]);
+    expect(pintarSesion(s!).join("\n")).toContain("2 escrituras A LA VEZ sobre /funciones.js");
+  });
+
+  /** Dos ficheros distintos en la misma respuesta no chocan: cada uno tiene su contenido. */
+  it("dos escrituras a la vez sobre ficheros DISTINTOS no son un choque", () => {
+    const [s] = resumirTraza([linea({ tipo: "sesion" }), tool("edit_file", "m1", "/a.js"), tool("edit_file", "m1", "/b.js")]);
+    expect(s?.paralelismo.escriturasALaVez).toEqual([]);
+    expect(s?.paralelismo.respuestas).toBe(1);
+  });
+
+  /**
+   * Se queda el MAXIMO de una respuesta, no la suma: lo que se cuenta es cuantas a la vez, y
+   * sumar dos respuestas de dos daria cuatro —un numero que nunca ocurrio—.
+   */
+  it("dos respuestas de dos escrituras no se suman a cuatro", () => {
+    const [s] = resumirTraza([
+      linea({ tipo: "sesion" }),
+      tool("edit_file", "m1", "/f.js"), tool("edit_file", "m1", "/f.js"),
+      tool("edit_file", "m2", "/f.js"), tool("edit_file", "m2", "/f.js"),
+    ]);
+    expect(s?.paralelismo.escriturasALaVez).toEqual([{ detalle: "/f.js", veces: 2 }]);
+  });
+
+  /** Ausente no es `sola`: una traza vieja diria cero paralelismo, que no es lo medido. */
+  it("una traza SIN el campo no dice cero: dice cuantas no constan", () => {
+    const [s] = resumirTraza([linea({ tipo: "sesion" }), tool("read_file", undefined, "/a.js"), tool("edit_file", undefined, "/a.js")]);
+    expect(s?.paralelismo.respuestas).toBe(0);
+    expect(s?.paralelismo.sinRespuesta).toBe(2);
+    const pintado = pintarSesion(s!).join("\n");
+    expect(pintado).toContain("2 tool(s) sin respuesta anotada");
+    expect(pintado).not.toContain("en paralelo");
+  });
+
+  it("sin paralelismo no se pinta la seccion", () => {
+    const [s] = resumirTraza([linea({ tipo: "sesion" }), tool("read_file", "m1", "/a.js")]);
+    expect(pintarSesion(s!).join("\n")).not.toContain("en paralelo");
+  });
+});

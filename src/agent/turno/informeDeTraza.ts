@@ -63,6 +63,37 @@ export interface UsoDeTool {
   distintos: number;
 }
 
+/**
+ * **Que pidio el modelo EN LA MISMA respuesta**, que es lo unico que decide si dos tools
+ * corren a la vez: langgraph ejecuta las tool_calls de un mensaje concurrentemente.
+ *
+ * Esto existe porque la pregunta se contesto dos veces con dos metodos y dieron dos numeros.
+ * Sobre un turno real de 69 tools, agrupar por el RELOJ exacto daba 18 en rafaga —el
+ * milisegundo parte una rafaga por la mitad— y agrupar por los CONTADORES del tracker daba
+ * 38, con dos grupos de 1.000 ms de span, o sea rezagados fundidos en una respuesta ajena.
+ * Hubo que cruzar los dos criterios para defender un numero, y eso es la señal de que
+ * faltaba el dato: ahora cada tool dice de que mensaje salio.
+ */
+export interface Paralelismo {
+  /** Respuestas que pidieron MAS DE UNA tool. */
+  respuestas: number;
+  /** Tools pedidas dentro de una respuesta multiple. */
+  tools: number;
+  /** El maximo pedido de una vez. */
+  maximo: number;
+  /**
+   * Tools sin `respuesta`: de una traza anterior a este campo. No se cuentan a ningun lado.
+   * Ausente no es `sola`, la misma regla que `toolsDelOrquestador`.
+   */
+  sinRespuesta: number;
+  /**
+   * **El hallazgo que esto vino a buscar**: un fichero escrito mas de una vez en la MISMA
+   * respuesta. Son escrituras concurrentes sobre el mismo contenido, y ahi se pierden
+   * cambios — medido con el backend de verdad, cuatro ediciones simultaneas dejaron UNA.
+   */
+  escriturasALaVez: Array<{ detalle: string; veces: number }>;
+}
+
 export interface SesionDeTraza {
   id: string;
   llamadas: number;
@@ -83,6 +114,7 @@ export interface SesionDeTraza {
    * estos dos.
    */
   toolsDelOrquestador: number;
+  paralelismo: Paralelismo;
   /** Líneas que no se pudieron leer. Se dicen: una traza a medias no se disimula. */
   ilegibles: number;
 }
@@ -99,6 +131,8 @@ export function costeEfectivo(uso: { input: number; output: number; cache: numbe
 }
 
 interface EnConstruccion {
+  /** Las tools de cada respuesta del modelo, por su id de mensaje. */
+  porRespuesta: Map<string, Array<{ nombre: string; detalle?: string }>>;
   sesion: SesionDeTraza;
   porOrigen: Map<string, GastoDeOrigen>;
   porTool: Map<string, { uso: UsoDeTool; blancos: Map<string, BlancoDeTool> }>;
@@ -146,9 +180,14 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
     const ya = sesiones.get(id);
     if (ya !== undefined) return ya;
     const nueva: EnConstruccion = {
-      sesion: { id, llamadas: 0, input: 0, output: 0, cache: 0, contexto: 0, origenes: [], tools: [], toolsDelOrquestador: 0, ilegibles: 0 },
+      sesion: {
+        id, llamadas: 0, input: 0, output: 0, cache: 0, contexto: 0, origenes: [], tools: [], toolsDelOrquestador: 0,
+        paralelismo: { respuestas: 0, tools: 0, maximo: 0, sinRespuesta: 0, escriturasALaVez: [] },
+        ilegibles: 0,
+      },
       porOrigen: new Map(),
       porTool: new Map(),
+      porRespuesta: new Map(),
     };
     sesiones.set(id, nueva);
     nueva.sesion.ilegibles += ilegiblesSinDueño;
@@ -224,6 +263,14 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
         else ya.veces += 1;
       }
       actual.porTool.set(nombre, entrada);
+
+      const respuesta = texto(evento.respuesta);
+      if (respuesta === undefined) actual.sesion.paralelismo.sinRespuesta += 1;
+      else {
+        const juntas = actual.porRespuesta.get(respuesta) ?? [];
+        juntas.push({ nombre, ...(detalle === undefined ? {} : { detalle }) });
+        actual.porRespuesta.set(respuesta, juntas);
+      }
     }
   }
 
@@ -231,8 +278,9 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
   // con ninguna de verdad, y devolver una lista vacía se leería como «no hay traza».
   if (ilegiblesSinDueño > 0 && sesiones.size === 0) abrir("?");
 
-  return [...sesiones.values()].map(({ sesion, porOrigen, porTool }) => ({
+  return [...sesiones.values()].map(({ sesion, porOrigen, porTool, porRespuesta }) => ({
     ...sesion,
+    paralelismo: resumirParalelismo(porRespuesta, sesion.paralelismo.sinRespuesta),
     origenes: [...porOrigen.values()].sort((a, b) => costeEfectivo(b) - costeEfectivo(a)),
     tools: [...porTool.values()].map(({ uso, blancos }) => ({
       ...uso,
@@ -242,6 +290,38 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
       distintos: blancos.size,
     })),
   }));
+}
+
+/** Las escrituras, que son las unicas tools donde coincidir en el mismo fichero pierde datos. */
+const ESCRIBE = new Set(["write_file", "edit_file"]);
+
+function resumirParalelismo(
+  porRespuesta: Map<string, Array<{ nombre: string; detalle?: string }>>,
+  sinRespuesta: number
+): Paralelismo {
+  const multiples = [...porRespuesta.values()].filter((g) => g.length > 1);
+  const choques = new Map<string, number>();
+  for (const grupo of porRespuesta.values()) {
+    const porFichero = new Map<string, number>();
+    for (const t of grupo) {
+      if (!ESCRIBE.has(t.nombre) || t.detalle === undefined) continue;
+      porFichero.set(t.detalle, (porFichero.get(t.detalle) ?? 0) + 1);
+    }
+    // Se queda el MAXIMO de una respuesta, no la suma de todas: lo que se cuenta es
+    // `cuantas a la vez`, y sumar dos respuestas de dos daria cuatro, que nunca ocurrio.
+    for (const [fichero, veces] of porFichero) {
+      if (veces > 1) choques.set(fichero, Math.max(choques.get(fichero) ?? 0, veces));
+    }
+  }
+  return {
+    respuestas: multiples.length,
+    tools: multiples.reduce((a, g) => a + g.length, 0),
+    maximo: multiples.reduce((a, g) => Math.max(a, g.length), 0),
+    sinRespuesta,
+    escriturasALaVez: [...choques.entries()]
+      .map(([detalle, veces]) => ({ detalle, veces }))
+      .sort((a, b) => b.veces - a.veces || a.detalle.localeCompare(b.detalle)),
+  };
 }
 
 function cifra(n: number): string {
@@ -302,6 +382,23 @@ export function pintarSesion(sesion: SesionDeTraza): string[] {
       const fuera = t.blancos.length - TOPE_DE_BLANCOS;
       if (fuera > 0) lineas.push(`        … y ${fuera} más`);
     }
+  }
+
+  const par = sesion.paralelismo;
+  // Solo si CONSTA: una traza anterior a este campo daría cero respuestas múltiples, y eso
+  // se leería como «no hubo paralelismo» cuando es «no se registró». La misma regla que el
+  // reparto de tools por origen, dos bloques más arriba.
+  if (par.respuestas > 0 || par.escriturasALaVez.length > 0) {
+    lineas.push(`  en paralelo: ${par.tools} tool(s) en ${par.respuestas} respuesta(s) · máximo ${par.maximo} a la vez`);
+    for (const e of par.escriturasALaVez) {
+      // Al final de la sección y con el aviso delante: esto no es una estadística, es el
+      // sitio donde se pierden cambios. Dos escrituras del mismo mensaje sobre el mismo
+      // fichero se resuelven contra el MISMO contenido de partida, y gana la última.
+      lineas.push(`    ⚠ ${e.veces} escrituras A LA VEZ sobre ${e.detalle}`);
+    }
+  }
+  if (par.sinRespuesta > 0) {
+    lineas.push(`  ${par.sinRespuesta} tool(s) sin respuesta anotada: traza anterior a ese campo, no contadas`);
   }
 
   if (sesion.ilegibles > 0) lineas.push(`  ${sesion.ilegibles} línea(s) ilegibles, no contadas`);
