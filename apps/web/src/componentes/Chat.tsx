@@ -200,6 +200,33 @@ function TarjetaDeArtefacto({
 const ES_PULSO = new Set(["razonamiento", "herramientas", "fase", "artefacto"]);
 
 /**
+ * Cómo se llama cada clase de lo que el HARNESS dice sobre el turno, y cómo se cuenta.
+ *
+ * Los actos de sistema eran un cajón con cuatro orígenes —la respuesta a un comando, el
+ * enunciado de una pregunta, los avisos de honestidad y las escrituras autorizadas sin
+ * preguntar—, y al final de un turno salían cuatro renglones grises seguidos. Dos de ellos
+ * se contradecían entre sí y tres eran el mismo «quiere escribir un fichero del proyecto».
+ *
+ * **Se pliega lo que el harness dice SOBRE el turno; lo que te CONTESTA, no.** Un «hecho:
+ * cada escritura vuelve a pedir aprobación» es el acuse de un botón que acabas de pulsar, y
+ * plegarlo sería no contestarte — por eso no tiene clase y sigue suelto.
+ *
+ * **El resumen dice QUÉ hay dentro, no solo cuántos.** Que existan avisos no puede quedar
+ * escondido: es lo único que la bitácora de honestidad existe para hacer visible. Lo que se
+ * pliega es el párrafo, nunca el hecho de que lo hay.
+ */
+const CLASES_DE_SISTEMA = {
+  aviso: { titulo: "Verificaciones", uno: "aviso", varios: "avisos" },
+  permiso: { titulo: "Permisos", uno: "escritura", varios: "escrituras" },
+} as const;
+
+type ClaseDeSistema = keyof typeof CLASES_DE_SISTEMA;
+
+/** Un tramo de lo que dice el harness: actos SEGUIDOS de la misma clase. Dos clases
+ *  distintas no se funden — «qué se autorizó» y «qué falló» son dos preguntas. */
+type TramoDeSistema = { desde: number; clase: ClaseDeSistema; actos: Extract<Acto, { tipo: "sistema" }>[] };
+
+/**
  * Un tramo de pulso: los actos de trabajo consecutivos, con si su turno YA terminó.
  *
  * Agrupar es lo que permite plegarlo entero en una línea cuando acaba. Mientras el turno
@@ -315,9 +342,13 @@ export function Chat({
   const piezas: Array<
     | { tipo: "acto"; acto: Acto; indice: number }
     | { tipo: "pulso"; tramo: TramoDePulso }
+    | { tipo: "harness"; tramo: TramoDeSistema }
     | { tipo: "cierre"; desde: number; ms: number; consumo: ConsumoDeTurno }
   > = [];
   let tramo: TramoDePulso | undefined;
+  /** El tramo de harness abierto. Aparte de `tramo` porque son dos agrupadores distintos:
+   *  un aviso no cierra el trabajo del agente ni al revés. */
+  let deHarness: TramoDeSistema | undefined;
   /**
    * Los tramos del turno EN CURSO, y solo esos.
    *
@@ -348,6 +379,30 @@ export function Chat({
      * línea, y la otra dirección sí tiene un fallo que medir.
      */
     if (acto.tipo === "sincronizacion") continue;
+    /**
+     * Lo que el HARNESS dice sobre el turno se agrupa por CLASE, y la clase viaja con el
+     * acto (`core/actos.ts`) en vez de deducirse del texto — la misma regla que la forma de
+     * una pregunta. Un `sistema` SIN clase no entra: es la respuesta a un comando, y plegar
+     * el acuse de un botón que acabas de pulsar sería no contestar.
+     *
+     * No cierra el tramo de pulso ni lo abre: es otra cosa, con su propio agrupador. Y dos
+     * clases seguidas NO se funden, porque «qué se autorizó» y «qué falló» son dos preguntas.
+     */
+    // La clase se comprueba contra la TABLA y no solo contra `undefined`: el acto llega por
+    // el cable, de otro proceso que puede tener otra versión, y el store solo valida el
+    // `tipo`. Una clase que este cliente no conozca dejaba `CLASES_DE_SISTEMA[clase]` en
+    // `undefined` y el destructuring del render LANZABA — o sea que se llevaba el transcript
+    // entero. Se cae al camino suelto, que es el lado conservador: se ve, sin agrupar.
+    if (acto.tipo === "sistema" && acto.clase !== undefined && acto.clase in CLASES_DE_SISTEMA) {
+      const clase = acto.clase;
+      if (deHarness === undefined || deHarness.clase !== clase) {
+        deHarness = { desde: indice, clase, actos: [] };
+        piezas.push({ tipo: "harness", tramo: deHarness });
+      }
+      deHarness.actos.push(acto);
+      continue;
+    }
+    deHarness = undefined;
     if (ES_PULSO.has(acto.tipo)) {
       if (tramo === undefined) {
         tramo = { desde: indice, actos: [], terminado: false };
@@ -488,6 +543,28 @@ export function Chat({
                 <p key={`cierre-${pieza.desde}`} className={`${vista.flowItem} ${estilos.pensando} ${estilos.cierre}`}>
                   <CierreDelTurno ms={pieza.ms} consumo={pieza.consumo} />
                 </p>
+              );
+            }
+            if (pieza.tipo === "harness") {
+              const { tramo: t } = pieza;
+              const { titulo, uno, varios } = CLASES_DE_SISTEMA[t.clase];
+              const n = t.actos.length;
+              return (
+                // Plegado siempre: al contrario que el pulso, esto no se sigue en vivo — sale
+                // entero al cerrar el turno. Lo que NO se pliega es el resumen, que dice qué
+                // hay dentro: el párrafo se esconde, el hecho de que lo hay nunca.
+                <details key={`harness-${t.desde}`} className={`${vista.flowItem} ${estilos.pensando}`}>
+                  <summary className={estilos.resumen}>
+                    {`${titulo} · ${n} ${n === 1 ? uno : varios}`}
+                  </summary>
+                  <div className={estilos.detalleDePulso}>
+                    {t.actos.map((a, i) => (
+                      <p key={i} role="note" className={estilos.sistema}>
+                        {a.texto}
+                      </p>
+                    ))}
+                  </div>
+                </details>
               );
             }
             if (pieza.tipo === "pulso") {
@@ -664,8 +741,13 @@ export function Chat({
               // su respuesta a una pestaña de depuración—; la otra son los avisos de
               // honestidad (`core/bitacora.ts`), y un aviso que solo vive en la pestaña de
               // depurar el harness es exactamente el aviso que nadie lee, que es lo que esa
-              // bitácora existe para evitar. Van fuera del tramo plegable a propósito: el
-              // pulso se dobla al terminar el turno y esto no puede desaparecer con él.
+              // bitácora existe para evitar.
+              //
+              // Por aquí pasa ahora solo lo que NO tiene clase: la respuesta a un comando y
+              // el enunciado de una pregunta. Eso sigue suelto y a la vista a propósito —es
+              // el acuse de algo que la persona acaba de pulsar, y plegarlo sería no
+              // contestarle—. Lo que el harness dice SOBRE el turno (`aviso`, `permiso`) se
+              // agrupa arriba, en su propio plegable.
               return (
                 <p key={indice} role="note" className={`${vista.flowItem} ${estilos.sistema}`}>
                   {acto.texto}

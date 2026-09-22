@@ -6089,3 +6089,54 @@ los mensajes o lo solapa; enseñarlo solo al pasar por encima no lo alcanzan ni 
 el táctil, que es la lección ya escrita en `SelectorDeModo.tsx`. Y hay un argumento que no es
 de píxeles: hoy el botón está DESPUÉS del mensaje, que es donde estás cuando has terminado de
 leer y quieres copiarlo. Se deja como está hasta que alguien decida.
+
+## «Verificaciones» y «Permisos»: la clase de un aviso viaja con él
+
+**Lo que se veía.** Al cerrar un turno salían cuatro renglones grises seguidos —dos de ellos
+contradiciéndose: «hecho: las escrituras se aplicarán SIN preguntar» y «hecho: cada escritura
+vuelve a pedir aprobación»— y, en otro sitio, tres «developer-xone: quiere escribir un fichero
+del proyecto» idénticos. Sin estructura y con el mismo peso visual que una respuesta del
+agente.
+
+**El acto `sistema` era un cajón con cuatro orígenes**: `Consola.escribir` (la respuesta a un
+comando, un error del vestíbulo), `Consola.preguntar` (el enunciado de una pregunta de texto
+libre), `Piel.notificacion` (los avisos de honestidad de `core/bitacora.ts`, el juez del turno,
+el crítico de pantalla) y `Piel.pausa` (lo que se autorizó sin preguntar). Plegarlos todos
+bajo un mismo título habría mentido sobre la mitad.
+
+**La clase viaja CON el acto, no se deduce del texto.** Es la regla de `DecisionDeConsola`
+—«la FORMA de una pregunta viaja con ella»— por el mismo motivo: mirar el enunciado para
+decidir cómo se pinta es leer la sintaxis que la propia piel acaba de escribir, y se rompe en
+las dos direcciones. `clase?: "aviso" | "permiso"`, opcional, y **ausente es lo de siempre**:
+un «hecho: …» es el acuse de un botón que la persona acaba de pulsar, y plegarlo sería no
+contestarle. De regalo, las sesiones guardadas antes del campo se pintan exactamente igual
+—verificado en el navegador sobre una de ellas: nueve actos sueltos, cero tramos.
+
+**Dos tramos y no uno**, porque «qué se autorizó» y «qué falló» son dos preguntas: los avisos
+bajo «Verificaciones», los permisos bajo «Permisos», y dos clases seguidas no se funden.
+
+**Lo que se pliega es el PÁRRAFO, nunca el hecho de que lo hay.** Es lo que salva la regla que
+esto matiza: un ⚠ del juez diciendo «esto no cumple lo que pediste» es exactamente la línea
+que la bitácora de honestidad existe para hacer visible. El `<summary>` dice de qué son y
+cuántos —«Verificaciones · 2 avisos»—, no solo un número, que no diría nada.
+
+**`pausa` pasa a emitir un acto POR pendiente.** Emitía uno con las líneas pegadas por `\n`, y
+con el resumen contando actos eso habría dicho «1 escritura» donde hubo tres. Es la misma
+forma que `Consola.escribir`, que ya parte por líneas.
+
+**Un fallo que este cambio introdujo y que el test cazó**: el acto llega por el CABLE, de otro
+proceso que puede tener otra versión, y el store solo valida el `tipo`. Una clase que el
+cliente no conozca dejaba `CLASES_DE_SISTEMA[clase]` en `undefined` y el destructuring del
+render LANZABA — o sea que un host más nuevo se llevaba por delante el transcript entero de un
+cliente viejo. Se comprueba contra la tabla, no contra `undefined`, y lo desconocido cae al
+camino suelto: se ve, sin agrupar.
+
+**Lo que esto NO arregla, y sigue siendo el defecto 4**: los dos «hecho:» contradictorios
+siguen ahí, sueltos, porque son dos eventos ciertos cada uno cuando se emitió. Fundirlos en el
+cliente escondería historia. El sitio es la cola de `/aprobacion`, cuando dos se drenan al
+final del mismo turno.
+
+**Límite declarado de la verificación**: la compatibilidad con sesiones anteriores está vista
+en el navegador; el aspecto de los dos plegables NUEVOS está en test, no en pantalla, porque
+la conversación medida es anterior al campo y no tiene ninguno. Reusan las clases del tramo
+«Trabajo del agente», que sí está verificado ahí.

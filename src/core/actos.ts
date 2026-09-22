@@ -54,7 +54,26 @@ export type Acto =
    * poder distinguirlo — por eso no se rellena con un array de vacíos al leer del disco.
    */
   | { tipo: "herramientas"; lineas: string[]; detalles?: DetalleDeLinea[] }
-  | { tipo: "sistema"; texto: string }
+  /**
+   * Una línea del harness, no de la conversación: la respuesta a un comando, un aviso de
+   * honestidad, lo que se autorizó sin preguntar.
+   *
+   * **`clase` dice DE QUÉ es, y viaja con el acto en vez de deducirse del texto.** Es la
+   * misma regla que la FORMA de una pregunta (`DecisionDeConsola`): mirar el enunciado para
+   * decidir cómo se pinta es leer la sintaxis que la propia piel acaba de escribir, y aquí
+   * se rompería en las dos direcciones — un «hecho: …» que empieza igual que un aviso, y un
+   * aviso que mañana cambie de redacción.
+   *
+   * Solo dos clases, y las dos son lo que el HARNESS dice SOBRE el turno: `aviso` (la
+   * bitácora de honestidad, el juez, el crítico de pantalla) y `permiso` (una escritura que
+   * se aplicó sin preguntar porque la sesión está en autónomo). Esas se agrupan y se pliegan.
+   *
+   * **Ausente es lo de siempre, y eso es la decisión**: una respuesta a un comando —«hecho:
+   * cada escritura vuelve a pedir aprobación»— es el acuse de un botón que la persona acaba
+   * de pulsar, y plegarlo sería no contestarle. Sigue suelta y a la vista, como las sesiones
+   * guardadas antes de que este campo existiera.
+   */
+  | { tipo: "sistema"; texto: string; clase?: "aviso" | "permiso" }
   /**
    * Un artefacto que el agente dejó escrito: un diagrama, un panel, una captura
    * (`core/artefactos.ts`). Es un acto propio y no una línea de `herramientas` porque es lo

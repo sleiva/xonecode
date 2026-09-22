@@ -653,3 +653,90 @@ describe("el aire del hilo", () => {
     expect(hoja).toMatch(/\.asistente\s*>\s*:first-child\s*>\s*:last-child\s*\{\s*margin-bottom:\s*0/u);
   });
 });
+
+/**
+ * **Lo que el HARNESS dice sobre el turno se pliega; lo que te CONTESTA, no.**
+ *
+ * Los actos de sistema eran un cajón con cuatro orígenes: la respuesta a un comando, el
+ * enunciado de una pregunta, los avisos de honestidad y la lista de escrituras autorizadas
+ * sin preguntar. Al final de un turno salían cuatro renglones grises seguidos, dos de ellos
+ * contradictorios entre sí, y tres «developer-xone: quiere escribir un fichero del proyecto»
+ * repetidos — medido en pantalla.
+ *
+ * La línea no se traza por el texto sino por la CLASE, que viaja con el acto: la misma regla
+ * que la forma de una pregunta. Y lo que queda FUERA del plegable es lo que contesta a algo
+ * que la persona acaba de pulsar: plegar un «hecho: …» sería no contestarle.
+ */
+describe("Chat: lo que dice el harness", () => {
+  const aviso = (texto: string): Acto => ({ tipo: "sistema", texto, clase: "aviso" });
+  const permiso = (texto: string): Acto => ({ tipo: "sistema", texto, clase: "permiso" });
+
+  it("los avisos consecutivos se pliegan bajo «Verificaciones», y el resumen DICE cuántos", () => {
+    const { container } = render(
+      <Chat actos={[asistente("ya está"), aviso("no cumple lo que pediste"), aviso("5 defectos de pantalla")]} />
+    );
+    const d = container.querySelector("details");
+    expect(d).toBeTruthy();
+    // El resumen dice QUÉ hay dentro, no solo cuántos: que existan avisos no puede quedar
+    // escondido — es lo único que el aparato de honestidad existe para hacer visible.
+    expect(d!.querySelector("summary")!.textContent).toMatch(/Verificaciones · 2 avisos/u);
+    expect(d!.textContent).toContain("no cumple lo que pediste");
+    expect(d!.textContent).toContain("5 defectos de pantalla");
+  });
+
+  it("y los permisos bajo «Permisos», con su propio tramo: son dos preguntas distintas", () => {
+    const { container } = render(
+      <Chat
+        actos={[
+          permiso("developer-xone: quiere escribir un fichero del proyecto"),
+          permiso("developer-xone: quiere modificar un fichero del proyecto"),
+          aviso("no cumple lo que pediste"),
+        ]}
+      />
+    );
+    const resumenes = [...container.querySelectorAll("summary")].map((s) => s.textContent);
+    expect(resumenes).toEqual([
+      expect.stringMatching(/Permisos · 2 escrituras/u),
+      expect.stringMatching(/Verificaciones · 1 aviso\b/u),
+    ]);
+  });
+
+  it("uno solo se dice en SINGULAR: un plural mentido es una cifra que nadie midió", () => {
+    const { container } = render(<Chat actos={[permiso("developer-xone: quiere escribir")]} />);
+    expect(container.querySelector("summary")!.textContent).toMatch(/Permisos · 1 escritura\b/u);
+  });
+
+  it("una respuesta a un COMANDO no se pliega: es el acuse de algo que acabas de pulsar", () => {
+    const { container } = render(
+      <Chat
+        actos={[
+          { tipo: "sistema", texto: "hecho: cada escritura vuelve a pedir aprobación." },
+          aviso("no cumple lo que pediste"),
+        ]}
+      />
+    );
+    // El «hecho:» está a la vista y FUERA de cualquier desplegable.
+    expect(screen.getByText(/hecho: cada escritura/u)).toBeTruthy();
+    expect(container.querySelector("details")!.textContent).not.toContain("hecho:");
+  });
+
+  it("una clase DESCONOCIDA no tumba el render: se trata como suelta", () => {
+    // El acto llega por el CABLE, de otro proceso que puede tener otra versión —«nada de lo
+    // que llega por el cable puede darse por bien formado»—, y el store solo valida el
+    // `tipo`. Sin esta guarda, un host más nuevo con una clase que este cliente no conoce
+    // dejaba `CLASES_DE_SISTEMA[clase]` en `undefined` y el destructuring LANZABA, o sea que
+    // se llevaba el transcript entero por delante. El lado conservador es enseñarlo suelto.
+    const raro = { tipo: "sistema", texto: "de una versión más nueva", clase: "fantasma" } as unknown as Acto;
+    const { container } = render(<Chat actos={[raro]} />);
+    expect(screen.getByText("de una versión más nueva")).toBeTruthy();
+    expect(container.querySelector("details")).toBeNull();
+  });
+
+  it("y un acto de una sesión ANTERIOR, sin clase, se pinta como siempre", () => {
+    // `clase` es opcional a propósito: el `.jsonl` de una conversación guardada antes de que
+    // el campo existiera no lo trae, y ausente significa «suelto», no «sin clasificar».
+    const { container } = render(<Chat actos={[{ tipo: "sistema", texto: "esfuerzo: high" }]} />);
+    expect(container.querySelector("details")).toBeNull();
+    expect(screen.getByText("esfuerzo: high")).toBeTruthy();
+  });
+});

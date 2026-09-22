@@ -841,8 +841,18 @@ feedback del desarrollador** y no es terminal.
   conversación real, el hueco entre actos era la parte PEQUEÑA y el resto vivía DENTRO de los
   mensajes — el margen del primer y último párrafo contra el relleno del globo es aire por
   duplicado, y se anula.
-- **Los actos de `sistema` se ven en el chat** (respuestas a comandos y avisos de honestidad), y
-  van FUERA del tramo plegable. `razonamiento` es su propio evento y su propio acto —`textoDe` lo
+- **Los actos de `sistema` se ven en el chat** (respuestas a comandos y avisos de honestidad),
+  y **se reparten por CLASE, que viaja con el acto y no se deduce del texto** —la misma regla
+  que la forma de una pregunta—. Se pliega lo que el harness dice SOBRE el turno: `aviso` (la
+  bitácora, el juez, el crítico de pantalla) bajo «Verificaciones» y `permiso` (una escritura
+  aplicada sin preguntar) bajo «Permisos», cada clase en SU tramo porque «qué se autorizó» y
+  «qué falló» son dos preguntas. **Ausente sigue suelto y a la vista, y eso es la decisión**:
+  una respuesta a un comando es el acuse de un botón que la persona acaba de pulsar, y
+  plegarla sería no contestarle — vale también para las sesiones guardadas antes del campo.
+  **Lo que se pliega es el párrafo, nunca el hecho de que lo hay**: el resumen dice de qué
+  son y cuántos, porque un aviso escondido es justo lo que la bitácora existe para evitar.
+  `pausa` emite un acto POR pendiente y no uno con líneas pegadas, o el resumen contaría tres
+  escrituras como una. `razonamiento` es su propio evento y su propio acto —`textoDe` lo
   EXCLUYE del texto—. El texto del asistente se enseña mientras llega, a `MS_ENTRE_PARCIALES`
   (80 ms) con el reloj por parámetro, porque cada emisión manda el acto entero.
 - **Abrir una sesión NO espera al aviso de git** (`MS_DE_TRABAJO_AL_ABRIR`, 2 s). El `finally`

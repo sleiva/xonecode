@@ -289,10 +289,16 @@ export function crearPielWeb(
 
     pausa(pendientes: PendienteDeAprobacion[]) {
       cerrarFase();
-      // Una línea por pendiente, origen y descripción y NADA más: ni el fichero, ni el
+      // Un ACTO por pendiente, con origen y descripción y NADA más: ni el fichero, ni el
       // diff — eso viaja solo en el mensaje de aprobación (`transporte.ts`).
-      const texto = pendientes.map((p) => `${p.origen}: ${p.descripcion}`).join("\n");
-      empujar({ tipo: "sistema", texto });
+      //
+      // Uno por pendiente y no uno con tres líneas pegadas por `\n`, que es lo que había:
+      // el cliente los agrupa y su resumen dice CUÁNTOS, así que tres escrituras en un solo
+      // acto se habrían contado como una. Es la misma forma que `Consola.escribir`, que ya
+      // parte por líneas.
+      for (const p of pendientes) {
+        empujar({ tipo: "sistema", texto: `${p.origen}: ${p.descripcion}`, clase: "permiso" });
+      }
     },
 
     fin(ms) {
@@ -309,7 +315,10 @@ export function crearPielWeb(
 
     notificacion(texto) {
       cerrarFase();
-      empujar({ tipo: "sistema", texto });
+      // Los avisos de honestidad (`core/bitacora.ts`), el juez del turno y el crítico de
+      // pantalla entran por aquí: es lo que el HARNESS dice sobre el turno, no una respuesta
+      // a lo que la persona pidió.
+      empujar({ tipo: "sistema", texto, clase: "aviso" });
     },
   };
 
