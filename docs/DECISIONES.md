@@ -5846,3 +5846,66 @@ identifica por su nombre, que es lo más largo de la fila.
 
 Y el `↑` del botón de enviar pasa a ser el glifo de la maqueta: el carácter dependía de la
 fuente del sistema y se pintaba con un peso distinto en cada una.
+
+### Los retoques de después, mirando la pantalla (22-09-2026)
+
+Cuatro peticiones suyas seguidas, cada una con lo que costó:
+
+**El logo del PROVEEDOR en la pastilla del modelo.** No el rayo de la maqueta, por lo dicho
+arriba. El proveedor sale del id (`proveedor/modelo`), ya lo pintan las filas de ese mismo
+menú con `IconoDeProveedor`, y es lo que se reconoce de un vistazo cuando el nombre del
+modelo es largo. Sin modelo en vigor no hay logo: «Elige modelo» no tiene proveedor detrás, y
+el genérico diría que lo hay y que no lo conocemos. **Límite**: `deepseek` no está en el juego
+copiado, así que ahí sale el genérico de enlace — el mismo comportamiento que ya tenía el menú.
+
+**El filo con el azul de la marca, y una sombra corta.** Primero se declaró como token en
+`marca.css`: `--xonecode-borde-caja: color-mix(… var(--dsw-alias-border-l2))`. **En ese
+`:root` el alias del tema no está definido, la mezcla queda inválida en tiempo de cómputo y
+el atajo `border` ENTERO se descarta** — medido en el navegador: `borderWidth: 0px`, con el
+suite en verde y la regla escrita. Un `color-mix` que arrastre un alias del tema tiene que ir
+en la hoja del componente, sobre el elemento donde ese alias resuelve, que es lo que ya hacía
+`.pastilla`. La sombra sí se queda como token, porque lleva `transparent`.
+
+Y en NOCHE el filo se aclara con `--xonecode-sobre-azul` en una rama
+`:global([data-ds-dark-theme])`: los tokens de marca no se redefinen por tema y
+`--xonecode-azul` es un navy — sobre el fondo oscuro, un filo de ese tono es un filo que no
+está. Se aclara con el blanco de la marca y no se salta al cian, que es otro color y aquí
+diría otra cosa.
+
+**El dispositivo al otro extremo de la banda**, con envoltorio propio y no con
+`.motor > :last-child`: sin manejador de dispositivo esa pastilla no se pinta y el último
+hijo sería el conjunto modelo+esfuerzo, al que el `margin-left: auto` mandaría a la derecha —
+justo lo contrario.
+
+**Y la caja PLEGADA en reposo, que es lo que lo justifica todo.** Con el campo a 88 px y las
+tres bandas, la tarjeta medía 216 y el transcript es lo único elástico de la columna: esos
+216 px son conversación que no se ve. En reposo quedan 110 — campo bajo y sin banda de motor—
+y al enfocar vuelve a 199.
+
+Tres reglas de ese plegado:
+
+- **Se pliega DESMONTANDO** (`display: none`), no con `visibility`: un elemento invisible
+  sigue siendo tabulable, y en reposo lo que se quiere es que no esté en el recorrido.
+- **Lo decide `:focus-within` en CSS y no un `onBlur` en React**, y no es una preferencia:
+  con estado de React, al tabular desde el campo el navegador desmontaría la pastilla ANTES
+  de que el foco llegase a ella y se quedaría en el `<body>`. Comprobado con teclado en el
+  navegador: Shift+Tab desde el campo aterriza en la pastilla del dispositivo.
+- **La banda de ABAJO no se pliega.** El modo dice si lo próximo que mandes se va a aplicar
+  solo, y ese estado tiene que leerse sin hacer nada — es la razón entera de que sea un
+  conmutador y no un menú. Plegarlo sería volver al menú, pero peor: sin menú que abrir.
+
+Un borrador a medias mantiene la caja abierta (`data-con-texto`): volver de mirar un fichero
+y encontrarse el modelo escondido con el texto a medio escribir sería esconder con qué se va
+a mandar.
+
+**Lo que se dejó para después: minimizar mientras se scrollea la conversación.** Con el
+plegado puesto ya está casi cubierto —leer con la caja sin foco la deja minimizada—, y el
+único caso que queda es «campo enfocado y subo a leer». Ahí el arreglo tiene precio: colapsar
+con el foco dentro puede tirarlo al `<body>` si estaba en una pastilla, y atar la altura al
+scroll es la receta del salto que se pelea con el propio scroll, más aún con el transcript
+pegado al fondo. Queda declarado y sin hacer.
+
+**Y una nota de proceso**: se lanzó `prettier` sobre `Compositor.tsx` para arreglar una
+sangría. **No es una herramienta de este repo** —no hay config ni dependencia— y reformateó
+el fichero entero a 80 columnas. Se recuperó leyendo el blob del almacén de objetos de git
+con python y zlib, porque `git` estaba bloqueado a la vez por la licencia de Xcode.

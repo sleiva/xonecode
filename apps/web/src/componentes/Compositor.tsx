@@ -161,7 +161,21 @@ export function Compositor({
         cambia solo— y el CSS lo lee como tal. De ahí cuelga el borde animado, que es la
         única señal de «está pasando algo» mientras el agente no habla.
       */}
-      <div className={estilos.compositor} data-trabajando={turnoEnVuelo ? "" : undefined}>
+      {/*
+        `data-con-texto` abre la caja aunque no tenga el foco: un borrador a medias es
+        trabajo empezado, y plegarle los controles a quien vuelve de mirar un fichero sería
+        esconderle con qué modelo iba a mandarlo. Lo demás lo decide `:focus-within` en CSS
+        y no un `onBlur` en React, y esa elección no es de estilo: con estado de React, al
+        tabular desde el campo el navegador desmontaría la pastilla ANTES de que el foco
+        llegara a ella y se quedaría en el `<body>`. Con `:focus-within` el campo todavía
+        tiene el foco cuando se calcula el estilo, así que la banda está a la vista y el Tab
+        la alcanza.
+      */}
+      <div
+        className={estilos.compositor}
+        data-trabajando={turnoEnVuelo ? "" : undefined}
+        data-con-texto={valor === "" ? undefined : ""}
+      >
         {/*
           **La banda de ARRIBA: con qué va a correr esto.** Modelo, esfuerzo y dispositivo
           viven encima del campo y separados por un filete, que es la forma de la maqueta de
@@ -226,12 +240,17 @@ export function Compositor({
             mirando la pantalla: un chip solo arriba no era una fila, era un renglón.
           */}
           {alElegirDispositivo === undefined ? null : (
-            <PastillaDeDispositivo
-              {...(dispositivo === undefined ? {} : { elegido: dispositivo })}
-              {...(dispositivos === undefined ? {} : { informe: dispositivos })}
-              conectado={conectado}
-              alElegir={alElegirDispositivo}
-            />
+            /* En su propia caja porque de ahí cuelga el `margin-left: auto` que lo manda al
+               otro extremo de la banda: sin envoltorio habría que nombrar la clase de la
+               pastilla, que vive en otro módulo y va hasheada. */
+            <div className={estilos.dispositivo}>
+              <PastillaDeDispositivo
+                {...(dispositivo === undefined ? {} : { elegido: dispositivo })}
+                {...(dispositivos === undefined ? {} : { informe: dispositivos })}
+                conectado={conectado}
+                alElegir={alElegirDispositivo}
+              />
+            </div>
           )}
         </div>
         <textarea
@@ -248,12 +267,20 @@ export function Compositor({
               ? "sin conexión con xonecode"
               : turnoEnVuelo
                 ? "el agente está trabajando…"
-                : // Corto a propósito: con la ventana estrecha el largo partía en DOS líneas
-                  // y dejaba la caja apretada contra las pastillas (medido en pantalla). Lo
-                  // que sigue nombrando es lo que el harness sabe hacer —no un «escribe
-                  // algo»—, y los ejemplos largos se van al `title`, que es donde caben sin
-                  // empujar nada.
-                  "Pregunta sobre XOne, o /comando…"
+                : // DOS líneas: lo que el harness sabe hacer, y debajo las teclas.
+                  //
+                  // Las teclas estaban en un `<p>` bajo la tarjeta y se han metido aquí para
+                  // devolverle ese renglón al transcript, que es lo único elástico de la
+                  // columna. Caben porque la caja en reposo mide 48 px, que son dos líneas:
+                  // el aviso de «con la ventana estrecha el largo partía en dos» dejó de
+                  // aplicar cuando las pastillas se pliegan y ya no hay contra qué apretar.
+                  //
+                  // **Y el precio declarado**: un placeholder se va en cuanto escribes, o
+                  // sea que la ayuda desaparece justo mientras redactas un párrafo largo,
+                  // que es cuando saber que Enter envía más importa. Lo que lo hace
+                  // aceptable es que las dos teclas se aprenden una vez; si resulta que no,
+                  // el sitio sin coste es el hueco libre de la banda de abajo.
+                  "Pregunta sobre XOne, o /comando…\nEnter envía · Shift+Enter salta de línea"
           }
           /* Los ejemplos, donde caben: el placeholder se lee en cada turno y tiene que
              caber en una línea; esto se consulta una vez. */
@@ -331,20 +358,6 @@ export function Compositor({
           </div>
         </div>
       </div>
-      {/*
-        Las DOS teclas que hay que saber, y las dos son ciertas hoy: `Enter` envía
-        (`alPulsarTecla`) y `Shift+Enter` salta de línea. Escribirlas aquí no promete nada
-        nuevo — es la diferencia entre esto y un icono de micrófono. La tercera que hubo
-        —«/ para comandos»— se fue con los comandos: en el navegador no hay ninguno, y una
-        ayuda que nombra una tecla muerta es peor que no tenerla.
-
-        Va FUERA de la caja y dentro de la envoltura: fuera porque no compite con lo que se
-        escribe, y dentro porque así se oculta con ella en Trazas y en Ficheros, donde no hay
-        a quién escribirle.
-      */}
-      <p className={estilos.ayudaDeTeclas}>
-        Enter para enviar · Shift + Enter para salto de línea
-      </p>
     </div>
   );
 }

@@ -80,6 +80,31 @@
    */
   --xonecode-fila-hover: color-mix(in srgb, var(--xonecode-cian) 7%, transparent);
 
+
+  /**
+   * La sombra de la CAJA DEL CHAT: pequeña, para que se despegue del transcript sin flotar.
+   *
+   * Su FILO, en cambio, NO vive aquí, y el motivo es una trampa que costó una vuelta: se
+   * declaró como `--xonecode-borde-caja: color-mix(… var(--dsw-alias-border-l2))` en este
+   * `:root`, donde ese alias del tema todavía no está definido. La mezcla queda inválida en
+   * tiempo de cómputo, el valor se descarta y **el atajo `border` entero se cae**: medido
+   * en el navegador, `borderWidth: 0px` con todo en verde. Un `color-mix` que arrastre un
+   * alias del tema tiene que escribirse en la hoja del componente, sobre el elemento donde
+   * ese alias sí resuelve — que es justo lo que ya hace `.pastilla`.
+   *
+   * Dos capas, que es lo que distingue una sombra de una mancha: una de 1 px que dibuja el
+   * canto y otra ancha y muy floja que da la distancia. El tono es el azul hondo de la
+   * marca y no un negro neutro, por lo mismo que el velo de los modales: el negro sobre una
+   * interfaz clara la vuelve gris sucio.
+   *
+   * Vive aquí y no en `Compositor.module.css` por la regla de este fichero —la paleta en UN
+   * sitio, y un componente solo consume alias—, y porque `transparent` y los porcentajes de
+   * color solo se escriben aquí.
+   */
+  --xonecode-sombra-caja:
+    0 1px 2px color-mix(in srgb, var(--xonecode-azul-hondo) 8%, transparent),
+    0 8px 24px -8px color-mix(in srgb, var(--xonecode-azul-hondo) 14%, transparent);
+
   /**
    * El icono de copiar, como máscara, para el botón que `MarkdownText` pinta con la PALABRA
    * «Copiar» y sin icono (su `CodeBlock` mete la etiqueta como hijo del botón, y desde fuera

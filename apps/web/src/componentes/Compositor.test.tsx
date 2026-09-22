@@ -152,7 +152,11 @@ describe("la ayuda de teclas", () => {
     // que no tenerla.
     const alEnviar = vi.fn();
     render(<Compositor conectado alEnviar={alEnviar} />);
-    expect(screen.getByText(/Enter para enviar · Shift \+ Enter para salto de línea$/)).toBeTruthy();
+    // Están DENTRO de la caja, en la segunda línea del placeholder: el renglón que
+    // ocupaban debajo de la tarjeta es transcript, que es lo único elástico de la columna.
+    expect(
+      (screen.getByRole("textbox") as HTMLTextAreaElement).placeholder
+    ).toMatch(/Enter envía · Shift\+Enter salta de línea$/);
 
     const campo = screen.getByRole("textbox");
     // `Enter` envía…
@@ -165,11 +169,15 @@ describe("la ayuda de teclas", () => {
     expect(alEnviar).toHaveBeenCalledTimes(1);
   });
 
-  it("se oculta CON la caja, no por su cuenta", () => {
-    // En Trazas y en Ficheros no hay a quién escribirle, así que la caja se esconde; una
-    // ayuda de teclado suelta debajo de un diff sería una nota al pie sin nota.
+  it("se oculta CON la caja, y ahora no puede ser de otra forma", () => {
+    // En Trazas y en Ficheros no hay a quién escribirle, así que la caja se esconde. Antes
+    // la ayuda era un `<p>` suelto bajo la tarjeta y había que acordarse de meterlo dentro
+    // de la envoltura; desde que vive en el placeholder, esconder la caja la esconde por
+    // construcción. El test se queda porque lo que fija es la CONSECUENCIA, no el marcado.
     const { container } = render(<Compositor conectado alEnviar={() => undefined} oculto />);
-    expect(container.querySelector("[hidden]")?.textContent).toContain("Enter para enviar");
+    const oculta = container.querySelector("[hidden]");
+    expect(oculta).not.toBeNull();
+    expect(oculta!.querySelector("textarea")?.placeholder).toContain("Enter envía");
   });
 
   it("el placeholder nombra lo que este harness sabe hacer", () => {

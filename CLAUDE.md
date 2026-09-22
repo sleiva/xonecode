@@ -842,6 +842,23 @@ feedback del desarrollador** y no es terminal.
   a la derecha—. El filete separa dos preguntas distintas, no decora: por eso el relleno
   vive en cada banda y no en la tarjeta, o no llegaría a los bordes. **Esto se comprueba en
   el NAVEGADOR** —`capturas/` está en el `.gitignore` para eso— y no con tests.
+  **Y en REPOSO la banda de arriba NO ESTÁ y el campo es bajo**: la caja llegó a 216 px con
+  la ayuda de teclas, y eso son 216 px de conversación que no se ven. Plegada mide 110. Se
+  pliega **desmontando** —un elemento invisible sigue siendo tabulable— y **lo decide
+  `:focus-within` en CSS, no un `onBlur` en React**: con estado de React, al tabular desde el
+  campo el navegador desmontaría la pastilla ANTES de que el foco llegara y lo dejaría en el
+  `<body>`; con `:focus-within` el campo todavía tiene el foco cuando se calcula el estilo.
+  Un borrador a medias la mantiene abierta (`data-con-texto`). **Lo que NO se pliega es la
+  banda de abajo**: el modo dice si lo próximo se aplicará solo, y ese estado tiene que
+  leerse sin hacer nada.
+  **El dispositivo va al otro extremo de la banda**, con envoltorio propio y no con
+  `:last-child`: sin manejador de dispositivo el último hijo sería el conjunto, y el `auto`
+  lo mandaría a él. **Y el filo de la caja lleva EL AZUL de la marca** con una sombra corta,
+  con rama de noche que lo aclara —los tokens de marca no se redefinen por tema y el navy
+  sobre el fondo oscuro es un filo que no está—. **Trampa**: un `color-mix` que arrastre un
+  alias del TEMA no puede vivir en el `:root` de `marca.css`, donde ese alias no existe
+  todavía: la mezcla queda inválida y **se lleva el atajo `border` entero** (medido,
+  `borderWidth: 0px`, con todo en verde).
   **Es una decisión REVISITADA**: el dispositivo ya estuvo arriba siguiendo una maqueta y
   bajó mirando la pantalla, «un chip solo no era una fila, era un renglón». Lo que cambió es
   el reparto — arriba van tres controles y abajo quedan otros tres, así que ninguna banda es
@@ -875,12 +892,16 @@ feedback del desarrollador** y no es terminal.
   en la maqueta está a la vez en el modelo y en «Autónomo», que no tienen nada que ver, y
   reusarlo enseñaría a no mirarlo.
 - **El compositor DICE sus teclas, y solo las que son ciertas** (`Enter` envía, `Shift+Enter`
-  salta de línea), y se comprueban en el mismo test que las escribe: una ayuda que
-  se queda vieja es peor que no tenerla. Eran TRES hasta que los comandos se fueron del
-  navegador, y una ayuda que nombra una tecla muerta es peor que no tenerla. Va fuera de la caja —no compite con lo que se
-  escribe— y dentro de la envoltura, para ocultarse CON ella en Trazas y Ficheros. El
-  placeholder nombra lo que el harness sabe hacer, y solo eso: prometer ahí lo que no está
-  cableado es el botón muerto de siempre con la petición de una persona detrás.
+  salta de línea), comprobadas en el mismo test que las escribe: una ayuda que se queda
+  vieja es peor que no tenerla. Eran TRES hasta que los comandos se fueron del navegador.
+  **Van en la SEGUNDA LÍNEA del placeholder**, no en un párrafo bajo la tarjeta: ese renglón
+  es transcript, que es lo único elástico de la columna. Caben porque la caja en reposo mide
+  dos líneas, y desde ahí se ocultan con la caja por construcción en vez de por acordarse.
+  **Precio declarado**: un placeholder se va en cuanto escribes, o sea que la ayuda no está
+  mientras redactas un párrafo largo — que es cuando saber que Enter envía más importa. El
+  sitio sin coste, si se nota, es el hueco libre de la banda de abajo. La primera línea
+  nombra lo que el harness sabe hacer, y solo eso: prometer ahí lo que no está cableado es
+  el botón muerto de siempre con la petición de una persona detrás.
 - **Nada se trae de un CDN** (tipografías empaquetadas, iconos copiados): esta consola escucha en
   loopback y declara un modo offline de primera clase.
 - **Una consulta de contenedor declara su contenedor en la MISMA hoja** (`Barra.test.tsx` lo exige

@@ -45,9 +45,38 @@
   flex-direction: column;
   align-items: stretch;
   padding: 0;
-  border: 0.5px solid var(--dsw-alias-border-l2);
+  /*
+   * **El filo lleva EL AZUL de la marca, no un gris con un toque.** La caja es donde se
+   * escribe; con el borde del tema se leía como un contenedor más de la columna. Es el
+   * azul PROFUNDO y no el cian: el cian es el acento de las pastillas de dentro, y el filo
+   * tiene que enmarcarlas sin competir con ellas.
+   *
+   * La MEZCLA va aquí y no en `marca.css` aunque la paleta viva allí: arrastra
+   * `--dsw-alias-border-l2`, que en el `:root` de la marca todavía no está definido — ahí
+   * el `color-mix` queda inválido y se lleva por delante el atajo `border` entero (medido:
+   * `borderWidth: 0px`, con todo en verde). Es lo mismo que hace `.pastilla`, y por lo
+   * mismo. La sombra sí es un token, porque lleva `transparent` y eso solo se escribe en
+   * `marca.css`.
+   */
+  border: 1px solid color-mix(in srgb, var(--xonecode-azul) 85%, var(--dsw-alias-border-l2));
   border-radius: 20px;
   background: var(--dsw-alias-bg-layer-1);
+  box-shadow: var(--xonecode-sombra-caja);
+}
+
+/*
+ * Y en NOCHE el mismo azul, ACLARADO. Los tokens de marca no se redefinen por tema y
+ * `--xonecode-azul` es un navy: sobre el fondo oscuro, un filo de ese tono es un filo que
+ * no está. Se aclara con `--xonecode-sobre-azul` —el blanco de la marca, el que ya se usa
+ * para la letra encima del azul— en vez de saltar al cian, que es otro color y aquí diría
+ * otra cosa.
+ *
+ * `data-ds-dark-theme` en el `body` es lo que pone `apariencia.ts`; se nombra con `:global`
+ * porque es un atributo de fuera de este módulo. La SOMBRA no se toca: sobre un fondo
+ * oscuro no se ve, y eso es lo correcto — una sombra es distancia, no un contorno.
+ */
+:global([data-ds-dark-theme]) .compositor {
+  border-color: color-mix(in srgb, var(--xonecode-azul) 55%, var(--xonecode-sobre-azul));
 }
 
 /*
@@ -64,12 +93,50 @@
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
+/*
+ * El dispositivo, al OTRO extremo de la banda. Es la única de las tres elecciones de arriba
+ * que no habla del modelo —las otras dos son una sola cosa, y por eso van en un conjunto—,
+ * así que separarlas dice lo mismo que el filete del conjunto: qué va junto con qué.
+ *
+ * Con una caja propia y no con `.motor > :last-child`: sin manejador de dispositivo no se
+ * pinta esa pastilla, y entonces el último hijo sería el conjunto — el `auto` lo mandaría a
+ * la derecha a él, que es justo lo contrario. Un envoltorio de ESTE módulo, que es la única
+ * forma de nombrar desde aquí algo que vive en otro (su clase va hasheada).
+ */
+.dispositivo {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+}
+
 /* Y sin nada dentro, la banda entera se va: sin sesión no hay ni modelo ni modo que pintar,
-   y un filete sobre una fila vacía es una caja partida en dos por nada. `:empty` no vale
-   —React deja los comentarios fuera del DOM pero los `null` dejan la caja sin hijos, y eso
-   sí lo caza—. */
+   y un filete sobre una fila vacía es una caja partida en dos por nada. */
 .motor:empty {
   display: none;
+}
+
+/*
+ * **En REPOSO la banda de arriba no está, y el campo es bajo.** La caja llegó a 196 px
+ * —47 de motor, 98 de campo, 50 de acciones— y eso son 196 px de conversación que no se
+ * ven: el transcript es lo único elástico de la columna, así que todo lo que engorde la
+ * caja se lo quita a él.
+ *
+ * Se pliega **desmontando** (`display: none`) y no con `visibility`: un elemento invisible
+ * sigue siendo tabulable, y aquí lo que se quiere es justo que en reposo no esté en el
+ * recorrido del teclado. Cuando el campo tiene el foco la banda vuelve, y el Tab la alcanza
+ * porque el estilo se calcula con el campo todavía enfocado.
+ *
+ * **Lo que NO se pliega es la banda de abajo**: el modo de escritura dice si lo próximo que
+ * mandes se va a aplicar solo, y ese estado tiene que leerse sin hacer nada — es la razón
+ * entera de que sea un conmutador y no un menú. El botón de enviar, por lo mismo.
+ */
+.motor {
+  display: none;
+}
+
+.compositor:focus-within .motor,
+.compositor[data-con-texto] .motor {
+  display: flex;
 }
 
 .entrada {
@@ -80,6 +147,12 @@
    * lee como un campo de búsqueda, y lo que se escribe aquí suele ser un párrafo. El
    * máximo no se toca —a partir de ahí crece con scroll— y sigue siendo `min-height` y no
    * `rows`, para que el crecimiento automático siga mandando.
+   */
+  /*
+   * 48 en reposo y 88 en cuanto se usa. Los 88 se pidieron mirando la pantalla —lo que se
+   * escribe aquí suele ser un párrafo—, pero mantenerlos con la caja parada le quitaba al
+   * transcript 40 px que no hacían nada. Sigue siendo `min-height` y no `rows`, y el máximo
+   * no se toca: a partir de ahí crece con scroll.
    */
   min-height: 48px;
   max-height: 220px;
@@ -101,6 +174,11 @@
   color: var(--dsw-alias-label-primary);
   border: none;
   font: inherit;
+}
+
+.compositor:focus-within .entrada,
+.compositor[data-con-texto] .entrada {
+  min-height: 88px;
 }
 
 .entrada:focus {
@@ -412,18 +490,4 @@
     animation: none;
     opacity: 0.18;
   }
-}
-
-/*
- * Las tres teclas, debajo de la caja. Tenue y centrada: es una ayuda que se lee una vez y
- * después se ignora, así que no puede competir ni con lo que se escribe ni con la pastilla
- * del modelo. Color por ALIAS, nunca literal —`Barra.test.tsx` recorre todos los
- * `.module.css` de esta carpeta—, y el cian de la marca no entra aquí: es el ACENTO del
- * producto y esto no es un control, es una nota al pie.
- */
-.ayudaDeTeclas {
-  margin: 6px 0 0;
-  text-align: center;
-  font-size: 11px;
-  color: var(--dsw-alias-text-tertiary);
 }

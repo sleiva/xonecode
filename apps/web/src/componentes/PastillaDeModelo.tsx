@@ -137,6 +137,21 @@ export function PastillaDeModelo({
         aria-haspopup="menu"
         onClick={() => setAbierta((v) => !v)}
       >
+        {/*
+          **El logo del PROVEEDOR, no el rayo de la maqueta.** Ahí el mismo rayo estaba en
+          la pastilla del modelo y en la mitad «Autónomo» del modo, que no tienen nada que
+          ver; y un glifo genérico delante del nombre no añade nada que el nombre no diga.
+          El proveedor sí: es un DATO, sale del id (`proveedor/modelo`), ya lo pintan las
+          filas de este mismo menú con este mismo componente, y es lo que se reconoce de un
+          vistazo cuando el nombre del modelo es largo.
+
+          **Sin modelo en vigor no hay logo**: «Elige modelo» no tiene proveedor detrás, y
+          el genérico de `IconoDeProveedor` diría que lo hay y que no lo conocemos, que es
+          otra cosa. La regla de siempre: solo hay icono donde hay dato.
+        */}
+        {actual === undefined ? null : (
+          <IconoDeProveedor proveedor={actual.split("/")[0] ?? ""} size={14} className={estilos.logo} />
+        )}
         {actual ?? "Elige modelo"}
         <IconoDeChevron />
       </button>
