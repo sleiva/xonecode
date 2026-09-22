@@ -1,4 +1,5 @@
 import { readdirSync, lstatSync, statSync, existsSync, readFileSync, realpathSync } from "node:fs";
+import { anotarError, anotarPaso } from "../../core/trazaDeErrores.js";
 import { join, sep, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { HumanMessage, ToolMessage, type AIMessage, type BaseMessage } from "@langchain/core/messages";
@@ -156,6 +157,7 @@ import { asegurarMemoriaDeProyecto } from "../grafo/memoriaDeProyecto.js";
 import { aEventos } from "./puente.js";
 import { createTokenTracker, type TokenTracker } from "../../vendor/tokenTracking.js";
 import { crearDiagnosticoDeTools } from "./diagnosticoDeTools.js";
+import { encenderTrazaDeErrores } from "../trazaDeErroresEnDisco.js";
 import { indiceEnDisco, type CargarIndice } from "../navegacion/indiceEnDisco.js";
 import { hechosDelProyectoDe } from "../navegacion/hechosEnDisco.js";
 import { conHechosDelProyecto } from "../../core/hechosDelProyecto.js";
@@ -549,6 +551,13 @@ export async function abrirSesionReal(opciones: {
   const checkpointer = opciones.checkpointer ?? new MemorySaver();
   const tracker = createTokenTracker();
   const diagnostico = crearDiagnosticoDeTools(raiz);
+  /**
+   * Y la traza de EXCEPCIONES e HITOS, con la misma variable de entorno que la de tools y el
+   * mismo trato: apagada no cuesta nada. Se enciende aquí, al construir la sesión, porque es
+   * el primer sitio donde se conoce la raíz — y el sumidero es global (ver
+   * `core/trazaDeErrores.ts`), así que basta una vez.
+   */
+  encenderTrazaDeErrores(raiz);
   let modelos = opciones.modelos;
   let hilo = opciones.hilo ?? `xonecode-${randomUUID()}`;
   let cancelarEnCurso: (() => void) | undefined;
@@ -1271,6 +1280,9 @@ export async function abrirSesionReal(opciones: {
       }
 
       const { lista, ficheros, diffs } = await leerPendientes();
+      // Cada vuelta del bucle deja su hito: es lo que distingue «el turno avanza despacio» de
+      // «el turno no avanza», que desde fuera se ven igual.
+      anotarPaso("turnoReal#ronda", `ronda ${ronda}, ${lista.length} pendiente(s)`)();
       if (lista.length === 0) break;
 
       /**

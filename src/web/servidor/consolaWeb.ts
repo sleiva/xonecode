@@ -27,6 +27,7 @@
  * el prellenado del mapa, no en quién compara la cadena.
  */
 import { crearPielWeb } from "./pielWeb.js";
+import { anotarPaso } from "../../core/trazaDeErrores.js";
 import { crearTransporte, type MensajeAlCliente, type MensajeDelCliente, type Sumidero } from "./transporte.js";
 import type { Acto, ConsumoDeTurno, NarracionDeSincronizacion } from "../../core/actos.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
@@ -350,6 +351,10 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
       );
       if (!transporte.conectado()) return Promise.resolve(decisiones);
 
+      // El hito dice CUÁNTAS escrituras se pusieron delante de alguien y cuánto tardó en
+      // contestar. Un `inicio` sin `fin` aquí es «la aprobación se quedó sin contestar», que
+      // es lo primero que hay que descartar cuando un turno no avanza.
+      const finDelPaso = anotarPaso("consolaWeb#aprobacionesTui", `${pendientes.length} pendiente(s)`);
       return new Promise<Map<string, Decision>>((resuelto) => {
         const temporizador = setTimeout(() => enVuelo.terminar(), msDeEspera);
         const enVuelo: AprobacionEnVuelo = {
@@ -365,6 +370,7 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
           },
           terminar: () => {
             clearTimeout(temporizador);
+            finDelPaso();
             // Soltarlo ANTES de resolver es lo que hace que una decisión tardía no tenga
             // nada que ascender, y que el contenido no sobreviva a la decisión.
             aprobacionEnVuelo = undefined;

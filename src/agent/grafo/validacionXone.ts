@@ -11,6 +11,7 @@
  * **Y el import es PROFUNDO**, también por lo mismo: el barril de la librería arrastra su runtime
  * con un *top-level await* que revienta bajo `tsx`, o sea bajo el lanzador de desarrollo.
  */
+import { anotarError, anotarPaso } from "../../core/trazaDeErrores.js";
 import type { HallazgoDeEscritura } from "../../core/validacionDeEscritura.js";
 import {
   motivoDelRechazo,
@@ -34,6 +35,9 @@ export type ValidarContenido = (
  */
 export function validarConXoneLinter(): ValidarContenido {
   return async (ruta, contenido) => {
+    // El hito envuelve la llamada ENTERA al parser: si se cuelga aquí, queda un `inicio` sin
+    // su `fin` con el nombre del fichero al lado.
+    const fin = anotarPaso("validacionXone#validar", ruta);
     try {
       const { validateContent, canValidate } = await import(
         // Import PROFUNDO: el barril trae un top-level await que revienta bajo `tsx`.
@@ -49,9 +53,13 @@ export function validarConXoneLinter(): ValidarContenido {
           ...(typeof e.location?.line === "number" ? { linea: e.location.line } : {}),
         }),
       );
-    } catch {
-      // No está la librería, o su parser reventó. Se DEJA ESCRIBIR: ver la cabecera.
+    } catch (e) {
+      // No está la librería, o su parser reventó. Se DEJA ESCRIBIR: ver la cabecera. Pero
+      // ahora QUEDA ANOTADO, que es la diferencia entre un fail-open y un fallo invisible.
+      anotarError("validacionXone#validar", e);
       return undefined;
+    } finally {
+      fin();
     }
   };
 }
@@ -76,7 +84,8 @@ async function contenidoActual(backend: BackendLegible, ruta: string): Promise<s
     const obj = leido as { content?: unknown; error?: unknown } | null;
     if (obj && typeof obj === "object" && typeof obj.content === "string") return obj.content;
     return undefined;
-  } catch {
+  } catch (e) {
+    anotarError("validacionXone#contenidoActual", e);
     return undefined;
   }
 }
@@ -125,6 +134,15 @@ export function sinContenidoInvalido<T extends object>(backend: T, validar: Vali
         return (valor as (...a: unknown[]) => unknown).bind(destino);
       }
       return async (...args: unknown[]) => {
+        const fin = anotarPaso(`sinContenidoInvalido#${String(prop)}`, typeof args[0] === "string" ? args[0] : undefined);
+        try {
+          return await guardado(...args);
+        } finally {
+          fin();
+        }
+      };
+
+      async function guardado(...args: unknown[]) {
         const seguir = () => (valor as (...a: unknown[]) => unknown).apply(destino, args);
         const ruta = args[0];
         if (typeof ruta !== "string") return seguir();
@@ -146,7 +164,7 @@ export function sinContenidoInvalido<T extends object>(backend: T, validar: Vali
         const { introducidos } = veredictoDeEscritura(antes, despues);
         if (introducidos.length === 0) return seguir();
         return { error: motivoDelRechazo(ruta, introducidos) };
-      };
+      }
     },
   }) as T;
 }
