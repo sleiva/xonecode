@@ -60,9 +60,10 @@ xone-desplegar-android --captura                  # …y deja la captura, en la 
 xone-desplegar-android --app MiApp --serie emulator-5554
 
 # Cualquier comando del catálogo de más abajo (varios en orden, si le pasas varios):
-xone-hotswap '{"command":"getAllElements","format":"xone"}'
-xone-hotswap '{"command":"getScreenshot"}'
-xone-hotswap '{"command":"click","name":"MAP_BT_ACEPTAR"}'
+xone-hotswap elements                    # atajo de getAllElements format=xone
+xone-hotswap shot                        # atajo de getScreenshot, a $XONECODE_ARTEFACTOS
+xone-hotswap click name=MAP_BT_ACEPTAR
+xone-hotswap waitForElement name=BTN_OK timeout=5000 -- click name=BTN_OK   # UNA conexión
 
 # Por qué algo no se pinta o la app se muere: las excepciones del aparato.
 xone-log-android

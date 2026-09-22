@@ -95,9 +95,18 @@ if (pedidos.length === 0 || pedidos.includes("--help") || pedidos.includes("-h")
   // un viaje y deja al modelo adivinando argumentos.
   console.error(`xone-hotswap — manda comandos al servidor hotswap de la app (WebSocket).
 
-  xone-hotswap '{"command":"getAllElements","format":"xone"}'
-  xone-hotswap '{"command":"getScreenshot"}'           la captura va a $XONECODE_ARTEFACTOS
-  xone-hotswap '{"command":"click","name":"MAP_BT"}'   varios comandos, en orden, si pasas varios
+  xone-hotswap click name=MAP_BT
+  xone-hotswap waitForElement name=BTN_OK timeout=5000 -- click name=BTN_OK
+  xone-hotswap screen                        en qué pantalla estás (barato)
+  xone-hotswap elements                      el árbol de controles (va a $XONECODE_HOTSWAP)
+  xone-hotswap shot                          la captura va a $XONECODE_ARTEFACTOS
+  xone-hotswap shot name=MAP_ACEPTAR scale=0.5 quality=40     recortada a un control
+  xone-hotswap sql MiApp "SELECT * FROM CLIENTES LIMIT 20"
+
+Cada comando es "<nombre> clave=valor ..."; con -- se encadenan varios por la MISMA
+conexion, que es lo que hay que hacer (el servidor admite una sola y cierra la anterior).
+Los valores se tipan solos: número, true/false y {...}/[...] como JSON.
+Con --dry-run se imprime lo que se enviaría, sin conectar.
 
 Antes, en Android, hace falta el túnel: adb forward tcp:8443 tcp:8443
 Una respuesta larga no se imprime: una IMAGEN va a $XONECODE_ARTEFACTOS (y sale en el chat),
@@ -107,13 +116,89 @@ El catálogo entero de comandos está en el SKILL.md de xone-hotswap.`);
   process.exit(pedidos.length === 0 ? 1 : 0);
 }
 
-const comandos = [];
-for (const arg of pedidos) {
-  try {
-    comandos.push(JSON.parse(arg));
-  } catch {
-    salir(`no es JSON válido: ${arg.slice(0, 80)}`);
+/**
+ * De `clave=valor` a los objetos del protocolo, con `--` separando comandos.
+ *
+ * **POR QUÉ SE FUE EL JSON.** Antes cada comando era un objeto JSON entre comillas
+ * (`'{"command":"click","name":"BTN_OK"}'`). Medido sobre cinco comandos típicos, esta
+ * sintaxis los escribe en un **38 % menos de caracteres** —un `click` pasa de 37 a 17— y
+ * quita el escapado, que es donde un modelo se equivoca y gasta un viaje en volver a
+ * intentarlo. No se aceptan las dos: una capa de compatibilidad es deuda desde el primer día,
+ * y el JSON solo se escribía dentro de esta misma skill.
+ *
+ * Los valores se TIPAN solos —número, `true`/`false`, y `{…}`/`[…]` como JSON— porque el
+ * protocolo distingue `timeout=5000` de `"5000"` y `where={"ID":"7"}` es un objeto. Lo que no
+ * encaje en ninguno se queda como cadena, que es lo que casi todo es.
+ */
+function valorTipado(bruto) {
+  if (bruto === "true") return true;
+  if (bruto === "false") return false;
+  if (bruto !== "" && !Number.isNaN(Number(bruto))) return Number(bruto);
+  if (/^[{[]/.test(bruto)) {
+    try {
+      return JSON.parse(bruto);
+    } catch {
+      salir(`«${bruto.slice(0, 60)}» empieza como JSON pero no lo es`);
+    }
   }
+  return bruto;
+}
+
+/**
+ * Los ATAJOS, que existen para lo que si no cuesta dos viajes o un base64 a mano.
+ *
+ * Cada uno es exactamente un comando del protocolo con sus campos ya puestos: no añaden
+ * capacidades, quitan la parte que se escribe mal. `shot` es el que más se nota — decodifica
+ * el JPEG y lo deja donde el harness lo anuncia.
+ */
+const ATAJOS = {
+  elements: (resto) => ({ command: "getAllElements", format: resto[0] ?? "xone" }),
+  screen: () => ({ command: "getCurrentScreen" }),
+  shot: (resto) => aplicarPares({ command: "getScreenshot" }, resto),
+  tables: (resto) => ({ command: "getDatabaseTableNames", appName: resto[0] }),
+  sql: (resto) => ({ command: "runSql", appName: resto[0], sql: resto.slice(1).join(" ") }),
+};
+
+function aplicarPares(json, pares) {
+  for (const par of pares) {
+    const corte = par.indexOf("=");
+    if (corte <= 0) salir(`«${par}» no es clave=valor`);
+    json[par.slice(0, corte)] = valorTipado(par.slice(corte + 1));
+  }
+  return json;
+}
+
+/**
+ * `--dry-run`: imprime lo que se enviaría y no conecta.
+ *
+ * No es comodidad: es lo que hace comprobable el tipado de los valores sin un aparato
+ * delante —`timeout=5000` tiene que salir como número y `where={...}` como objeto, y si salen
+ * como cadena el servidor los rechaza sin decir por qué—. También deja probar un comando
+ * escrito a mano antes de gastarle un viaje al canal.
+ */
+const seco = pedidos.includes("--dry-run");
+const utiles = pedidos.filter((a) => a !== "--dry-run");
+
+const comandos = [];
+for (const trozo of partirPorSeparador(utiles)) {
+  const [cabeza, ...resto] = trozo;
+  const atajo = ATAJOS[cabeza];
+  comandos.push(atajo ? atajo(resto) : aplicarPares({ command: cabeza }, resto));
+}
+
+if (seco) {
+  for (const c of comandos) console.log(JSON.stringify(c));
+  process.exit(0);
+}
+
+/** Parte `a x=1 -- b y=2` en `[["a","x=1"],["b","y=2"]]`. Un `--` suelto no abre comando. */
+function partirPorSeparador(args) {
+  const trozos = [[]];
+  for (const a of args) {
+    if (a === "--") trozos.push([]);
+    else trozos[trozos.length - 1].push(a);
+  }
+  return trozos.filter((t) => t.length > 0);
 }
 
 
