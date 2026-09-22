@@ -1,0 +1,90 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-1/2, border-l2,
+   label-secondary y label-tertiary. Los tokens de marca (`--xonecode-*`) los declara
+   `estilos/marca.css`, que es el único sitio con colores literales. */
+
+/*
+ * La PISTA del conmutador: un carril hundido con las dos mitades dentro, y la puesta
+ * levantada sobre él. Es la forma de la maqueta de Stitch; el color es el nuestro.
+ *
+ * El fondo es `bg-layer-2` —el escalón hundido del tema, que ya viene ajustado en claro y
+ * en noche— y no un gris literal: aquí lo que hace legible el conmutador es el CONTRASTE
+ * entre el carril y la mitad puesta, y dos grises fijos se lo comen en uno de los dos temas.
+ */
+.pista {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  /*
+   * El baño de cian de las filas de la barra, que ya viene AJUSTADO por tema. Era
+   * `bg-layer-2` y en tema claro es casi blanco: sobre la tarjeta, el carril desaparecía y
+   * el conmutador se leía como dos botones sueltos —visto en el navegador—. Lo que hace
+   * legible un segmentado es el contraste entre el carril y la mitad puesta.
+   */
+  background: var(--xonecode-fila-hover);
+}
+
+.mitad {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  /*
+   * El filo va PUESTO también en la mitad apagada, del color del carril: así la caja mide
+   * lo mismo en los dos estados y la mitad puesta no da un salto de un píxel al cambiar.
+   * Del color del carril y no `transparent` porque aquí no se escribe ningún color
+   * literal, `transparent` incluido — lo vigila `Barra.test.tsx`. (En la hoja de las
+   * pastillas sí aparece, pero ahí va como valor de `border-color` sobre un borde que ya
+   * existe, no como un color inventado.)
+   */
+  border: 1px solid var(--xonecode-fila-hover);
+  border-radius: 8px;
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.mitad:hover:not(:disabled):not([data-puesto]) {
+  color: var(--dsw-alias-label-secondary);
+  background: var(--xonecode-fila-hover);
+}
+
+/*
+ * La mitad PUESTA se levanta del carril: fondo de capa 1 (el de la tarjeta) y filo de cian,
+ * el mismo par que ya distingue una pastilla del compositor. No lleva el azul de la marca
+ * de fondo aunque la maqueta lo pinte así: ese azul es del botón de enviar, que es la
+ * acción primaria de esta caja, y un conmutador con el mismo peso competiría con él.
+ *
+ * El cian es ACENTO y va en el FILO, nunca sosteniendo la letra: la letra sale de los alias,
+ * que sí se redefinen por tema.
+ */
+.mitad[data-puesto] {
+  background: var(--dsw-alias-bg-layer-1);
+  border-color: var(--xonecode-cian);
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.mitad:disabled {
+  color: var(--dsw-alias-label-dimmed);
+  cursor: default;
+}
+
+/*
+ * **No hay consulta de contenedor que retire los rótulos en estrecho, y es deliberado.**
+ * Los rótulos son media razón de ser de un conmutador —con dos iconos sin texto habría que
+ * abrir el `title` para saber cuál es cuál—, y la fila ya tiene su red: `.controles` lleva
+ * `flex-wrap`, así que cuando no cabe el conmutador baja a su renglón en vez de empujar al
+ * botón de enviar fuera de la tarjeta. Una consulta aquí además tendría que declarar su
+ * propio contenedor en esta misma hoja (`Barra.test.tsx` lo exige, y con razón: sin
+ * ancestro no dispara jamás y no avisa), y el ancho que importa es el del renglón, que es
+ * de otro módulo.
+ */

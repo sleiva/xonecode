@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { useCerrarAlPulsarFuera } from "../cerrarAlPulsarFuera.js";
 import type { ProveedorDeModelos } from "../tipos.js";
 import { IconoDeProveedor } from "./IconoDeProveedor.js";
+import { IconoDeChevron } from "./IconosDelCompositor.js";
 import estilos from "./PastillaDeModelo.module.css";
 
 /**
@@ -137,6 +138,7 @@ export function PastillaDeModelo({
         onClick={() => setAbierta((v) => !v)}
       >
         {actual ?? "Elige modelo"}
+        <IconoDeChevron />
       </button>
       {abierta ? (
         <div

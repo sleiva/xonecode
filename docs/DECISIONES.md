@@ -5744,3 +5744,105 @@ Y **las tareas de fondo no usan nada de esto**, a propósito: allí la autorizac
 CREAR LA TAREA —el encargo se aumenta y se enseña editable antes de encolar, y ese paso ocupa
 el sitio del diff—, mientras que el modo de una sesión significa «el humano que está aquí ha
 decidido no pulsar» y de hecho exige que lo haya.
+
+
+## La caja del chat en tres bandas (22-09-2026)
+
+Maqueta de Stitch (`stitch_chat_layout_controls_redesign`), de la que se toma la FORMA y
+nunca el color — la regla de siempre, y la que vigila `Barra.test.tsx` recorriendo los
+`.module.css`. Su captura solo había pintado la cabecera; la caja entera estaba en el
+`code.html` de al lado, y de ahí salen también los iconos.
+
+### El reparto, y por qué esta vez arriba sí
+
+Tres bandas dentro de la misma tarjeta: **con qué va a correr** (modelo, esfuerzo,
+dispositivo), **qué se escribe** (el campo) y **qué pasa con ello y mandarlo** (modo, gasto,
+botón). El filete de arriba separa dos preguntas distintas en vez de decorar, y por eso el
+relleno bajó de la tarjeta a cada banda: un filete que no llega a los dos bordes se lee como
+un subrayado del contenido.
+
+**Es una decisión revisitada, y el argumento de la vuelta atrás anterior sigue siendo
+bueno.** El dispositivo estuvo arriba siguiendo una maqueta y volvió abajo mirando la
+pantalla: «un chip solo no era una fila, era un renglón». Lo que cambió no es el criterio,
+es el reparto — ahora suben TRES controles y abajo quedan otros tres, así que ninguna de las
+dos bandas es un renglón huérfano. Comprobado en el navegador a 1728 y a 900: las tres
+bandas en una línea cada una, el botón dentro de la tarjeta y sin scroll horizontal.
+
+### El conjunto modelo + esfuerzo
+
+La mejor idea de la maqueta, porque le da forma a una frase que el código ya decía y la
+pantalla no sostenía: «el esfuerzo no es una elección independiente, es un ajuste DE ese
+modelo — qué niveles hay depende de cuál esté puesto». Estaban pegados y se leían como dos
+elecciones hermanas.
+
+Ahora la CAJA es el conjunto —su filo, su baño— y las pastillas de dentro pierden los suyos,
+con un filete entre las dos. Primero se hizo al revés (cada pastilla con su borde y una raya
+en medio) y en el navegador se veían dos controles vecinos con una línea perdida. El
+separador es un borde del SEGUNDO hijo y no un elemento: cuando el modelo no admite esfuerzo
+y su pastilla no se pinta, no queda un filete colgando junto a nada.
+
+Y el rótulo `pensar:` delante del nivel, también de la maqueta: la decisión de no traducir
+los niveles («son el vocabulario del proveedor») dejaba la pastilla con una palabra suelta
+—`high`— que junto al nombre del modelo no dice de qué habla.
+
+**Una trampa que costó una vuelta**: la clase del conjunto se llamó `grupo` y en esa misma
+hoja ya había un `.grupo` —el de las filas de un menú, en columna—. **Dos clases con el
+mismo nombre en un módulo CSS no chocan: la segunda PISA a la primera, en silencio.** El
+conjunto salía en columna y nada lo decía; se vio midiendo en el navegador.
+
+### El modo, de menú a conmutador
+
+Se construyó como pastilla con menú hace unas horas y pasa a control segmentado. La
+diferencia no es de gusto: **con dos valores y ninguno oculto, el estado se lee sin abrir
+nada**, y aquí el estado es «¿lo próximo que escriba se va a aplicar solo?» — la pregunta
+que más caro sale contestar mal.
+
+Lo que el menú tenía y un conmutador no: sitio donde explicar. La maqueta lo resuelve con un
+tooltip de hover, que **no alcanzan ni el teclado ni el táctil**, y esto es la palanca que
+decide si los ficheros se escriben sin diff. Se pone en el `title` de cada mitad, que lee el
+hover Y el lector de pantalla, y lo que el modo NO concede lo sigue contando la nota
+permanente del chat en cuanto está encendido.
+
+Tres reglas más: **`aria-pressed` va en las DOS mitades** —«false» en la apagada es lo que
+las convierte en un conmutador; sin él son dos botones idénticos de los que no se sabe cuál
+rige, y el color no le llega a quien escucha la página—; **pulsar la que ya está puesta no
+manda nada**, que sería un mensaje por el cable y una línea en el transcript para dejarlo
+todo igual; y **los rótulos no se retiran en estrecho**, porque son media razón de ser del
+control y la fila ya tiene su red con el `flex-wrap` de `.controles`. Una consulta de
+contenedor aquí además tendría que declarar su propio contenedor en la misma hoja, y el
+ancho que importa es el del renglón, que es de otro módulo.
+
+Hoja propia y no la de `PastillaDeModelo`, que comparten las otras tres: aquélla es la de
+una pastilla con menú y esto ya no lo es. Compartirla habría atado las dos formas.
+
+### Los colores, y los dos que hubo que cambiar mirando la pantalla
+
+De la maqueta no entra ni uno: su `#0b233a`, su `#e8f1fd` y sus `blue-600` se quedan fuera y
+van los tokens de marca y los alias por tema. Dos elecciones se corrigieron en el navegador:
+
+- **El carril del conmutador** empezó en `bg-layer-2` y en tema claro es casi blanco, así que
+  sobre la tarjeta desaparecía y el conmutador se leía como dos botones sueltos. Va
+  `--xonecode-fila-hover`, el baño de cian de las filas de la barra, que ya viene ajustado
+  por tema (7 % en claro, 13 % en oscuro) — reusarlo evita inventar un cian translúcido que
+  en noche quedaría invisible o gritón.
+- **La mitad puesta NO lleva el azul de la marca de fondo** aunque la maqueta lo pinte así:
+  ese azul es el del botón de enviar, la acción primaria de la caja, y un conmutador con el
+  mismo peso competiría con él. Lleva el fondo de la tarjeta y filo de cian, que es el par
+  que ya distingue una pastilla.
+
+Y `transparent` cuenta como color literal: donde hacía falta un borde invisible se pinta del
+color del fondo que tiene detrás, que además mantiene el tamaño de la caja.
+
+### Los iconos
+
+Copiados del `code.html` a `IconosDelCompositor.tsx`, porque aquí no se trae nada de un CDN.
+Pintan con `currentColor` —el color lo pone el botón que los lleva— y van `aria-hidden`: al
+lado siempre hay texto que dice lo mismo, y un icono que lo repite en voz alta es ruido.
+
+**El rayo del selector de modelo no se copió.** En la maqueta el mismo glifo está en la
+pastilla del modelo y en la mitad «Autónomo», que son dos cosas que no tienen nada que ver;
+reusarlo enseñaría a no mirarlo. Se queda donde significa algo —«va solo»— y el modelo se
+identifica por su nombre, que es lo más largo de la fila.
+
+Y el `↑` del botón de enviar pasa a ser el glifo de la maqueta: el carácter dependía de la
+fuente del sistema y se pintaba con un peso distinto en cada una.

@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { useCerrarAlPulsarFuera } from "../cerrarAlPulsarFuera.js";
 import type { DispositivoElegido, InformeDeDispositivos } from "../tipos.js";
 import { etiquetaDeEstado, inventario } from "../inventarioDeDispositivos.js";
+import { IconoDeChevron, IconoDeDispositivo } from "./IconosDelCompositor.js";
 import estilos from "./PastillaDeModelo.module.css";
 
 /**
@@ -114,8 +115,12 @@ export function PastillaDeDispositivo({
         title={elegido === undefined ? "Elige el dispositivo de esta sesión" : presente ? elegido.nombre : `${elegido.nombre} — no está en la última medida`}
         onClick={() => setAbierta((v) => !v)}
       >
-        {elegido === undefined ? "Sin dispositivo" : elegido.nombre}
-        {elegido !== undefined && !presente ? " ·" : null}
+        <IconoDeDispositivo />
+        <span>
+          {elegido === undefined ? "Sin dispositivo" : elegido.nombre}
+          {elegido !== undefined && !presente ? " ·" : null}
+        </span>
+        <IconoDeChevron />
       </button>
       {abierta ? (
         <div className={estilos.menu} role="menu" aria-label="dispositivo de la sesión">

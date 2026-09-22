@@ -835,21 +835,45 @@ feedback del desarrollador** y no es terminal.
   PARAR se queda ROJO —es un estado, no la marca— y hay que repetir su hover porque el mismo
   botón lleva las dos clases; y apagado no lleva color de marca, que un botón inerte pintado
   de azul invita a pulsarlo.
-- **La caja del compositor va en COLUMNA**: el texto arriba a todo el ancho, y debajo el
-  modelo y el dispositivo JUNTOS a la izquierda con el contador y el botón a la derecha. **Esto
-  se comprueba en el NAVEGADOR** —`capturas/` está en el `.gitignore` para eso— y no con tests.
-  El hueco de los controles se lo come UN `margin-left: auto`, el del bloque que agrupa el
-  gasto y el botón, así que las pastillas quedan juntas y el gasto cae junto al botón. Uno y
-  no uno por pieza porque **los márgenes automáticos se REPARTEN el hueco libre**, no lo come
-  el primero: con dos, el contador se quedaba flotando a mitad de fila. Y ese bloque envuelve
-  y el gasto se retira cuando la fila no da para los dos, que el botón no puede quedarse
-  fuera de la tarjeta: la acción es lo único que no se calla. El gasto es una pastilla del par
-  `state-business-*` —el MISMO de la pastilla de «compartido»—, con las cifras en negrita:
-  `bg-layer-2` no sirve de fondo aquí, que en el tema claro es blanco sobre blanco. El dispositivo
-  estuvo ARRIBA en una fila de chips, siguiendo la maqueta, y volvió abajo mirando la pantalla:
-  un chip solo no era una fila, era un renglón. Y no hay chip de «Contexto» aunque la maqueta
-  lo pinte — ese concepto no existe aquí, y lo más parecido (el proyecto) ya se lee en la miga:
-  pintarlo dos veces es la duplicación que ya se quitó de las marcas de «trabajando».
+- **La caja del compositor va en TRES BANDAS** (maqueta de Stitch, `code.html`, con nuestra
+  paleta): arriba **con qué va a correr** —modelo y esfuerzo en UNA caja con filete entre
+  los dos, y el dispositivo al lado—, en medio el campo a todo el ancho, y abajo **qué pasa
+  con lo que escribas y mandarlo** —el modo de escritura a la izquierda, el gasto y el botón
+  a la derecha—. El filete separa dos preguntas distintas, no decora: por eso el relleno
+  vive en cada banda y no en la tarjeta, o no llegaría a los bordes. **Esto se comprueba en
+  el NAVEGADOR** —`capturas/` está en el `.gitignore` para eso— y no con tests.
+  **Es una decisión REVISITADA**: el dispositivo ya estuvo arriba siguiendo una maqueta y
+  bajó mirando la pantalla, «un chip solo no era una fila, era un renglón». Lo que cambió es
+  el reparto — arriba van tres controles y abajo quedan otros tres, así que ninguna banda es
+  un renglón huérfano. **Y el conjunto modelo+esfuerzo le da forma a una frase que ya estaba
+  en el código**: «el esfuerzo no es una elección independiente, es un ajuste DE ese modelo».
+  Su clase vive en la hoja de las pastillas y no en la del compositor, porque el nombre de un
+  módulo CSS va HASHEADO — y ojo, **dos clases con el mismo nombre en una hoja no chocan: la
+  segunda pisa a la primera en silencio** (medido: el conjunto salía en columna por un
+  `.grupo` que ya existía más abajo).
+  El hueco de la banda de abajo se lo come UN `margin-left: auto`, el del bloque que agrupa
+  el gasto y el botón. Uno y no uno por pieza porque **los márgenes automáticos se REPARTEN
+  el hueco libre**: con dos, el contador se quedaba flotando a mitad de fila. Ese bloque
+  envuelve y el gasto se retira cuando la fila no da para los dos, que el botón no puede
+  quedarse fuera de la tarjeta: la acción es lo único que no se calla. El gasto es una
+  pastilla del par `state-business-*` —el MISMO de la pastilla de «compartido»—, con las
+  cifras en negrita: `bg-layer-2` no sirve de fondo aquí, que en el tema claro es blanco
+  sobre blanco. Y no hay chip de «Contexto» aunque la maqueta lo pinte — ese concepto no
+  existe aquí, y lo más parecido (el proyecto) ya se lee en la miga.
+- **El MODO se elige con un CONMUTADOR de dos mitades, no con un menú**
+  (`SelectorDeModo.tsx`, hoja propia porque ya no es una pastilla con menú). Con dos valores
+  y ninguno oculto el estado se lee sin abrir nada, y aquí el estado es «¿lo próximo que
+  escriba se aplicará solo?». Tres cosas que no son de forma: **cada mitad DICE lo que hace
+  en su `title`** —la maqueta lo ponía en un tooltip de hover, que no alcanzan ni el teclado
+  ni el táctil—, **`aria-pressed` va en las DOS** (es lo que las convierte en un conmutador;
+  el color no le llega a quien escucha la página), y **pulsar la que ya está puesta no manda
+  nada**. Los rótulos NO se retiran en estrecho: son media razón de ser del control, y la
+  fila ya tiene su red con `flex-wrap`.
+- **Los iconos salen del `code.html` de la maqueta, copiados** (`IconosDelCompositor.tsx`):
+  aquí no se trae nada de un CDN. Pintan con `currentColor` y van `aria-hidden`, porque al
+  lado siempre hay texto que dice lo mismo. **El rayo del selector de modelo NO se copió**:
+  en la maqueta está a la vez en el modelo y en «Autónomo», que no tienen nada que ver, y
+  reusarlo enseñaría a no mirarlo.
 - **El compositor DICE sus teclas, y solo las que son ciertas** (`Enter` envía, `Shift+Enter`
   salta de línea), y se comprueban en el mismo test que las escribe: una ayuda que
   se queda vieja es peor que no tenerla. Eran TRES hasta que los comandos se fueron del

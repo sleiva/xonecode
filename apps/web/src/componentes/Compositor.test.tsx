@@ -180,23 +180,35 @@ describe("la ayuda de teclas", () => {
   });
 });
 
-describe("el dispositivo y el modelo, en la MISMA fila", () => {
-  it("los dos van DESPUÉS del campo: son elecciones de la sesión, no chips que lo acoten", () => {
-    // Estuvieron arriba en su propia fila siguiendo la maqueta, y el usuario los devolvió
-    // aquí mirando la pantalla: un chip solo arriba no era una fila, era un renglón.
+describe("las tres bandas de la caja", () => {
+  /**
+   * **El MOTOR va encima del campo y lo que decide el turno va debajo.**
+   *
+   * Es una decisión revisitada, y por eso este test dice la historia: el dispositivo
+   * estuvo arriba siguiendo una maqueta y volvió abajo mirando la pantalla, con un
+   * argumento que sigue siendo bueno —«un chip solo no era una fila, era un renglón»—.
+   * Lo que cambió es el reparto: arriba van TRES controles (modelo, esfuerzo, dispositivo)
+   * y abajo quedan el modo, el gasto y el botón, así que ninguna banda es un renglón
+   * huérfano. Se comprueba por POSICIÓN en el documento porque jsdom no hace layout.
+   */
+  it("modelo y dispositivo van ANTES del campo; el modo, DESPUÉS", () => {
     render(
       <Compositor
         conectado
         alEnviar={() => undefined}
         alElegirDispositivo={() => undefined}
+        alElegirModoDeEscritura={() => undefined}
+        modoDeEscritura="supervisado"
         modelos={{ actual: "gemini/gemini-flash-latest", proveedores: [] }}
       />
     );
     const campo = screen.getByRole("textbox");
     for (const texto of [/dispositivo/i, "gemini/gemini-flash-latest"]) {
       const control = screen.getByText(texto);
-      expect(control.compareDocumentPosition(campo) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+      expect(control.compareDocumentPosition(campo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
+    const modo = screen.getByRole("group", { name: "modo de escritura" });
+    expect(modo.compareDocumentPosition(campo) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
   });
 
   it("sin manejador no hay pastilla de dispositivo", () => {

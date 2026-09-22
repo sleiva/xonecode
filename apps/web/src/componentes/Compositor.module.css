@@ -31,16 +31,45 @@
  * compartía FILA con las pastillas y el contador, y con la ventana estrecha se quedaba en un
  * canal de dos líneas — visto en el navegador. La columna es lo que le devuelve el ancho.
  */
+/*
+ * Y en TRES BANDAS: con qué va a correr (arriba), qué se escribe (en medio), y qué pasa con
+ * ello más el botón (abajo). Es la forma de la maqueta de Stitch, y lo que la sostiene es
+ * que el filete de arriba separa dos preguntas distintas en vez de decorar.
+ *
+ * El relleno se va de la tarjeta y baja a cada banda: un filete que no llega a los dos
+ * bordes se lee como un subrayado del contenido, no como una división de la caja.
+ */
 .compositor {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
-  padding: 10px 10px 10px 16px;
+  padding: 0;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 20px;
   background: var(--dsw-alias-bg-layer-1);
+}
+
+/*
+ * La banda de arriba: el motor. Envuelve porque son tres controles y el nombre de un modelo
+ * es largo —`deepseek/deepseek-flash` ya ocupa 166 px—, así que en estrecho el dispositivo
+ * baja a su renglón en vez de salirse.
+ */
+.motor {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 14px 8px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+/* Y sin nada dentro, la banda entera se va: sin sesión no hay ni modelo ni modo que pintar,
+   y un filete sobre una fila vacía es una caja partida en dos por nada. `:empty` no vale
+   —React deja los comentarios fuera del DOM pero los `null` dejan la caja sin hijos, y eso
+   sí lo caza—. */
+.motor:empty {
+  display: none;
 }
 
 .entrada {
@@ -61,7 +90,13 @@
    * aquél se sumaba al `min-height` dejando 16px de aire muerto debajo del texto — visto en
    * el navegador, no deducido.
    */
-  padding: 0;
+  /*
+   * El relleno lo pone AHORA el campo, y no la tarjeta: con las bandas, la tarjeta no
+   * puede tenerlo o el filete de arriba no llegaría a los bordes. Sigue sin ser vertical
+   * por el motivo de antes —se sumaba al `min-height` y dejaba aire muerto debajo—: el
+   * hueco de arriba y de abajo lo dan las bandas vecinas.
+   */
+  padding: 10px 14px 0;
   background: none;
   color: var(--dsw-alias-label-primary);
   border: none;
@@ -105,7 +140,8 @@
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
-  padding-bottom: 2px;
+  /* Su propio relleno, por lo mismo que el campo: la tarjeta ya no lo tiene. */
+  padding: 8px 10px 10px 14px;
   /*
    * Y cuando no cabe, la fila se PARTE en dos: las pastillas arriba y el gasto con el botón
    * abajo, que el `auto` de `.acciones` sigue pegando al borde derecho. Antes no envolvía y

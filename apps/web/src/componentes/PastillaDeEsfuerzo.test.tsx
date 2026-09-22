@@ -33,7 +33,7 @@ describe("PastillaDeEsfuerzo", () => {
 
   it("con nivel fijado lo enseña tal cual lo nombra la API", () => {
     render(<PastillaDeEsfuerzo niveles={["low", "medium", "high", "xhigh", "max"]} actual="xhigh" alElegir={() => {}} />);
-    expect(screen.getByRole("button", { name: "xhigh" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "pensar: xhigh" })).toBeTruthy();
   });
 
   /**
@@ -61,14 +61,14 @@ describe("PastillaDeEsfuerzo", () => {
   it("«Sin fijar» manda undefined, que es dejar de mandar el parámetro", () => {
     const alElegir = vi.fn();
     render(<PastillaDeEsfuerzo niveles={["low", "medium", "high"]} actual="high" alElegir={alElegir} />);
-    fireEvent.click(screen.getByRole("button", { name: "high" }));
+    fireEvent.click(screen.getByRole("button", { name: "pensar: high" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Sin fijar" }));
     expect(alElegir).toHaveBeenCalledWith(undefined);
   });
 
   it("el nivel en vigor va marcado, y con «Sin fijar» la marca es de «Sin fijar»", () => {
     render(<PastillaDeEsfuerzo niveles={["low", "medium", "high"]} actual="low" alElegir={() => {}} />);
-    fireEvent.click(screen.getByRole("button", { name: "low" }));
+    fireEvent.click(screen.getByRole("button", { name: "pensar: low" }));
     expect(screen.getByRole("menuitem", { name: "low" }).getAttribute("aria-current")).toBe("true");
 
     // Montaje NUEVO y no `rerender`: `cleanup()` desmonta la raíz, y reusarla después

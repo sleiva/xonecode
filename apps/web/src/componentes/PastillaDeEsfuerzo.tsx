@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useCerrarAlPulsarFuera } from "../cerrarAlPulsarFuera.js";
 import type { Esfuerzo } from "../tipos.js";
+import { IconoDeChevron } from "./IconosDelCompositor.js";
 import estilos from "./PastillaDeModelo.module.css";
 
 /**
@@ -85,7 +86,22 @@ export function PastillaDeEsfuerzo({
         title="Cuánto razona el modelo antes de contestar"
         onClick={() => setAbierta((v) => !v)}
       >
-        {actual ?? "esfuerzo"}
+        {/*
+          El rótulo `pensar:` delante del nivel, de la maqueta de Stitch. No es adorno: sin
+          él, un `low` pegado al nombre del modelo se lee como parte del modelo, y la propia
+          decisión de no traducir los niveles («son el vocabulario del proveedor») deja la
+          pastilla con una palabra suelta que no dice de qué habla. Con `undefined` no se
+          pone: «pensar: esfuerzo» sería una frase que no significa nada.
+        */}
+        {actual === undefined ? (
+          "esfuerzo"
+        ) : (
+          <>
+            <span className={estilos.rotulo}>pensar:</span>
+            {actual}
+          </>
+        )}
+        <IconoDeChevron />
       </button>
       {abierta ? (
         <div className={estilos.menu} role="menu" aria-label="esfuerzo de razonamiento">

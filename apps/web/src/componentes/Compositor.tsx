@@ -6,7 +6,9 @@ import type {
 import { PastillaDeModelo } from "./PastillaDeModelo.js";
 import { PastillaDeEsfuerzo } from "./PastillaDeEsfuerzo.js";
 import { PastillaDeDispositivo } from "./PastillaDeDispositivo.js";
-import { PastillaDeModoDeEscritura } from "./PastillaDeModoDeEscritura.js";
+import { SelectorDeModo } from "./SelectorDeModo.js";
+import { IconoDeEnviar } from "./IconosDelCompositor.js";
+import pastillas from "./PastillaDeModelo.module.css";
 import { ContadorDeTokens, type ConsumoPintable } from "./ContadorDeTokens.js";
 import estilos from "./Compositor.module.css";
 
@@ -160,6 +162,78 @@ export function Compositor({
         única señal de «está pasando algo» mientras el agente no habla.
       */}
       <div className={estilos.compositor} data-trabajando={turnoEnVuelo ? "" : undefined}>
+        {/*
+          **La banda de ARRIBA: con qué va a correr esto.** Modelo, esfuerzo y dispositivo
+          viven encima del campo y separados por un filete, que es la forma de la maqueta de
+          Stitch — y la que parte la caja por lo que significa cada mitad: arriba se
+          configura el motor, abajo se decide qué pasa con lo que escriba y se manda.
+
+          Ya estuvieron arriba una vez y volvieron abajo mirando la pantalla, con un
+          argumento que hay que respetar: «un chip solo no era una fila, era un renglón».
+          Entonces subía el dispositivo SOLO; aquí suben tres controles y abajo se quedan el
+          modo, el gasto y el botón, así que ninguna de las dos bandas es un renglón huérfano.
+        */}
+        <div className={estilos.motor}>
+          {/*
+            Modelo y esfuerzo en UNA caja con separador interno. Es lo que el código ya
+            decía y la forma no sostenía: «el esfuerzo no es una elección independiente, es
+            un ajuste DE ese modelo — qué niveles hay depende de cuál esté puesto». Estaban
+            pegados y se leían como dos elecciones hermanas.
+
+            La clase sale de `PastillaDeModelo.module.css`, la hoja que ya comparten las
+            pastillas: el nombre de un módulo CSS va hasheado, así que agrupar desde aquí dos
+            componentes de esa familia solo se puede nombrando su hoja. Y ahí es donde tiene
+            que vivir la regla, que es de la familia y no de este renglón.
+          */}
+          <div className={pastillas.conjunto}>
+            {modelos !== undefined ? (
+              <PastillaDeModelo
+                {...(modelos.actual === undefined ? {} : { actual: modelos.actual })}
+                proveedores={modelos.proveedores}
+                alPedirCatalogo={(proveedor) => alPedirCatalogo?.(proveedor)}
+                // Una ACCIÓN, no un comando: por el cable viaja `{clase:"modelo", id}` y es
+                // el servidor quien decide que aplicarla es reusar el manejador de `/modelo`.
+                // Mandar aquí la prosa «/modelo …» apuntaba en el transcript un acto de
+                // usuario que nadie tecleó —y de ahí sale el título de la sesión— y dejaba la
+                // interfaz hablando en la sintaxis del terminal.
+                alElegir={(id) => alElegirModelo?.(id)}
+                // La pastilla solo lista lo COMPROBADO; los demás se cuentan con el camino
+                // para configurarlos, que es esta ventana.
+                {...(alAbrirAjustes === undefined ? {} : { alAbrirAjustes })}
+              />
+            ) : null}
+            {/*
+              El esfuerzo, PEGADO al modelo: no es una elección independiente, es un ajuste DE
+              ese modelo — qué niveles hay depende de cuál esté puesto, y la mitad de los
+              modelos de este harness no admiten ninguno. Por eso se pinta solo cuando el
+              servidor manda niveles, y por eso no lleva rótulo: en una fila estrecha, «low»
+              junto al nombre del modelo se lee como lo que es.
+            */}
+            {alElegirEsfuerzo === undefined ? null : (
+              <PastillaDeEsfuerzo
+                {...(modelos?.esfuerzo === undefined ? {} : { niveles: modelos.esfuerzo.niveles })}
+                {...(modelos?.esfuerzo?.actual === undefined ? {} : { actual: modelos.esfuerzo.actual })}
+                {...(modelos?.esfuerzo?.nota === undefined ? {} : { nota: modelos.esfuerzo.nota })}
+                conectado={conectado}
+                alElegir={alElegirEsfuerzo}
+              />
+            )}
+          </div>
+          {/*
+            El dispositivo, AL LADO del modelo: son la misma clase de elección —de la sesión,
+            la decide el servidor y el cliente la pinta— y se miran juntas. Estuvo arriba en
+            su propia fila un rato, siguiendo la maqueta, y el usuario lo devolvió aquí
+            mirando la pantalla: un chip solo arriba no era una fila, era un renglón.
+          */}
+          {alElegirDispositivo === undefined ? null : (
+            <PastillaDeDispositivo
+              {...(dispositivo === undefined ? {} : { elegido: dispositivo })}
+              {...(dispositivos === undefined ? {} : { informe: dispositivos })}
+              conectado={conectado}
+              alElegir={alElegirDispositivo}
+            />
+          )}
+        </div>
         <textarea
           ref={campo}
           className={estilos.entrada}
@@ -188,69 +262,21 @@ export function Compositor({
           onKeyDown={alPulsarTecla}
         />
         {/*
-          Fila de controles DENTRO de la tarjeta, como en la referencia. La pastilla de
-          MODELO ya está aquí: dejó de ser un botón sin nada detrás en cuanto el cable
-          empezó a mandar `clase: "modelos"` — el modelo en vigor y los proveedores. El
-          «+» y la de permisos siguen fuera por el mismo motivo que estaban antes las
-          tres: no hay dato ni acción detrás, y un control así es la misma mentira que
-          una lista vacía rellenada con un placeholder.
+          **La banda de ABAJO: qué pasa con lo que escriba, y mandarlo.** El modo de
+          escritura a la izquierda; el gasto y la acción a la derecha. El «+» y la pastilla
+          de permisos de la referencia siguen sin estar por el motivo de siempre: no hay
+          dato ni acción detrás, y un control así es la misma mentira que una lista vacía
+          rellenada con un placeholder.
         */}
         <div className={estilos.controles}>
-          {modelos !== undefined ? (
-            <PastillaDeModelo
-              {...(modelos.actual === undefined ? {} : { actual: modelos.actual })}
-              proveedores={modelos.proveedores}
-              alPedirCatalogo={(proveedor) => alPedirCatalogo?.(proveedor)}
-              // Una ACCIÓN, no un comando: por el cable viaja `{clase:"modelo", id}` y es
-              // el servidor quien decide que aplicarla es reusar el manejador de `/modelo`.
-              // Mandar aquí la prosa «/modelo …» apuntaba en el transcript un acto de
-              // usuario que nadie tecleó —y de ahí sale el título de la sesión— y dejaba la
-              // interfaz hablando en la sintaxis del terminal.
-              alElegir={(id) => alElegirModelo?.(id)}
-              // La pastilla solo lista lo COMPROBADO; los demás se cuentan con el camino
-              // para configurarlos, que es esta ventana.
-              {...(alAbrirAjustes === undefined ? {} : { alAbrirAjustes })}
-            />
-          ) : null}
           {/*
-            El esfuerzo, PEGADO al modelo: no es una elección independiente, es un ajuste DE
-            ese modelo — qué niveles hay depende de cuál esté puesto, y la mitad de los
-            modelos de este harness no admiten ninguno. Por eso se pinta solo cuando el
-            servidor manda niveles, y por eso no lleva rótulo: en una fila estrecha, «low»
-            junto al nombre del modelo se lee como lo que es.
-          */}
-          {alElegirEsfuerzo === undefined ? null : (
-            <PastillaDeEsfuerzo
-              {...(modelos?.esfuerzo === undefined ? {} : { niveles: modelos.esfuerzo.niveles })}
-              {...(modelos?.esfuerzo?.actual === undefined ? {} : { actual: modelos.esfuerzo.actual })}
-              {...(modelos?.esfuerzo?.nota === undefined ? {} : { nota: modelos.esfuerzo.nota })}
-              conectado={conectado}
-              alElegir={alElegirEsfuerzo}
-            />
-          )}
-          {/*
-            El dispositivo, AL LADO del modelo: son la misma clase de elección —de la sesión,
-            la decide el servidor y el cliente la pinta— y se miran juntas. Estuvo arriba en
-            su propia fila un rato, siguiendo la maqueta, y el usuario lo devolvió aquí
-            mirando la pantalla: un chip solo arriba no era una fila, era un renglón.
-          */}
-          {alElegirDispositivo === undefined ? null : (
-            <PastillaDeDispositivo
-              {...(dispositivo === undefined ? {} : { elegido: dispositivo })}
-              {...(dispositivos === undefined ? {} : { informe: dispositivos })}
-              conectado={conectado}
-              alElegir={alElegirDispositivo}
-            />
-          )}
-          {/*
-            Y el MODO DE ESCRITURA, en la misma fila y por la misma razón que las otras
-            tres: es una elección DE LA SESIÓN que decide el servidor y el cliente pinta, y
-            se mira justo antes de escribir la petición — que es cuando importa saber si lo
-            que venga se va a aplicar solo. Sin sesión no hay modo y no se pinta: un control
-            sin dato detrás no se pinta.
+            El MODO DE ESCRITURA abre esta banda, y no está arriba con las otras tres a
+            propósito: aquéllas dicen CON QUÉ va a correr, y ésta qué va a pasar con lo que
+            escriba — que es la misma pregunta que contestan el gasto y el botón de al lado.
+            Sin sesión no hay modo y no se pinta: un control sin dato detrás no se pinta.
           */}
           {alElegirModoDeEscritura === undefined ? null : (
-            <PastillaDeModoDeEscritura
+            <SelectorDeModo
               {...(modoDeEscritura === undefined ? {} : { actual: modoDeEscritura })}
               conectado={conectado}
               alElegir={alElegirModoDeEscritura}
@@ -297,7 +323,9 @@ export function Compositor({
                 aria-label="Enviar"
                 onClick={enviar}
               >
-                ↑
+                {/* El glifo de la maqueta en vez del carácter `↑`, que dependía de la
+                    fuente del sistema y se pintaba de un peso distinto en cada una. */}
+                <IconoDeEnviar />
               </button>
             )}
           </div>

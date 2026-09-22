@@ -19,7 +19,65 @@
  * en modo noche sería ilegible, y los tokens de marca no se redefinen por tema — los de
  * `--dsw-alias-*` sí. La misma razón por la que el cian nunca sostiene letra.
  */
+/*
+ * El CONJUNTO: modelo y esfuerzo dentro de una misma caja, con un filete entre los dos.
+ * Se llama así y no `grupo` porque en esta misma hoja ya hay un `.grupo` —el de las filas
+ * de un menú—, y dos clases con el mismo nombre en un módulo CSS no chocan: la segunda
+ * PISA a la primera en silencio. Medido en el navegador: el conjunto salía en columna. Es la
+ * forma que le faltaba a una frase que el código ya decía —«el esfuerzo no es una elección
+ * independiente, es un ajuste DE ese modelo»—: pegados se leían como dos elecciones
+ * hermanas.
+ *
+ * El separador es un borde del SEGUNDO hijo y no un elemento: así, cuando el modelo no
+ * admite esfuerzo y su pastilla no se pinta, no queda un filete colgando junto a nada.
+ */
+.conjunto {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  /* La CAJA es el conjunto: mismo filo y mismo baño que una pastilla suelta, porque para
+     quien mira esto ES una pastilla — una con dos mitades. */
+  border: 1px solid color-mix(in srgb, var(--xonecode-cian) 70%, var(--dsw-alias-border-l2));
+  border-radius: 8px;
+  background: var(--xonecode-fila-hover);
+}
+
+/* Y las pastillas de dentro pierden la suya: con su borde y su fondo puestos se leían como
+   dos controles vecinos con una raya perdida en medio —visto en el navegador—, que es justo
+   lo contrario de lo que el conjunto viene a decir.
+
+   El borde se pinta del color del FONDO del conjunto en vez de quitarse o ponerse
+   `transparent`: quitarlo cambiaría el tamaño de la caja y `transparent` es un color
+   literal, que aquí no se escribe (`Barra.test.tsx`). */
+.conjunto .pastilla,
+.conjunto .pastilla:hover {
+  border-color: var(--xonecode-fila-hover);
+  background: none;
+}
+
+.conjunto .pastilla:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+/* El separador, en el SEGUNDO hijo y no como elemento: cuando el modelo no admite esfuerzo
+   y su pastilla no se pinta, no queda un filete colgando junto a nada. */
+.conjunto > * + * {
+  border-left: 1px solid color-mix(in srgb, var(--xonecode-cian) 70%, var(--dsw-alias-border-l2));
+}
+
+/* El rótulo de lo que el número significa, en la pastilla del esfuerzo: `pensar: high`. Va
+   apagado para que el valor sea lo que se lee, igual que en la maqueta. */
+.rotulo {
+  color: var(--dsw-alias-label-tertiary);
+  font-weight: 400;
+}
+
 .pastilla {
+  /* En línea con sus glifos: el icono, el texto y el chevron, con el mismo aire entre los
+     tres. Antes era un botón de texto suelto y le bastaba el relleno. */
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   padding: 4px 8px;
   border: 1px solid color-mix(in srgb, var(--xonecode-cian) 70%, var(--dsw-alias-border-l2));
   border-radius: 8px;
