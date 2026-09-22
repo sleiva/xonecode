@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import type { ModoDeEscritura } from "../tipos.js";
 import { IconoDeEscudo, IconoDeRayo } from "./IconosDelCompositor.js";
 import estilos from "./SelectorDeModo.module.css";
@@ -26,6 +27,19 @@ import estilos from "./SelectorDeModo.module.css";
  *   los ficheros se escriben sin enseñar el diff. El `title` lo lee el hover Y el lector de
  *   pantalla; lo que el modo NO concede (subir sigue preguntando) lo cuenta la nota
  *   permanente del chat en cuanto está encendido.
+ * - **La guarda de «no mandar lo que ya está puesto» mira lo último PEDIDO, no lo último
+ *   confirmado.** REPRODUCIDO en el navegador: `actual` llega del servidor por el `alta`, así
+ *   que entre el clic y la vuelta la pastilla sigue diciendo lo de antes — y pulsar lo de
+ *   antes se leía como «pulsar la que ya está puesta», o sea que **una segunda pulsación
+ *   rápida se perdía en silencio**: pulsabas «Autónomo», cambiabas de idea, pulsabas
+ *   «Supervisado» y te quedabas en autónomo. Con un turno en vuelo la vuelta tarda lo que
+ *   tarde el turno, que es justo cuando más se cambia de opinión. Una intención perdida es
+ *   peor que la línea de más que la guarda evita.
+ * - **Pero lo que se PINTA sigue siendo lo confirmado.** Pintar lo pedido afirmaría que el
+ *   modo ya rige, y no rige: el `/aprobacion` está en la cola del lazo y con un turno en
+ *   vuelo no se ejecuta hasta que termine. Ese modo decide si los ficheros se escriben sin
+ *   enseñar el diff, así que adelantarlo en pantalla es la clase de mentira que este harness
+ *   no se permite. El precio, dicho: durante un turno la pastilla no refleja lo que pediste.
  * - **`aria-pressed` y no `aria-current`**: son dos botones de un conmutador, no dos
  *   destinos de una navegación. Sin él, quien escucha la página oiría dos botones idénticos
  *   sin saber cuál está puesto — el color no le llega.
@@ -43,7 +57,37 @@ export function SelectorDeModo({
   conectado?: boolean;
   alElegir: (modo: ModoDeEscritura) => void;
 }) {
+  /**
+   * Lo último que se pidió, y DESDE qué estado confirmado se pidió.
+   *
+   * Guardar el `desde` es lo que hace que el pedido CADUQUE solo, sin un efecto: vale
+   * mientras `actual` no se mueva, y en cuanto el servidor dice algo —lo pedido o cualquier
+   * otra cosa— manda lo confirmado. Un pedido pegado para siempre dejaría el control muerto
+   * para ese valor el día que una petición se perdiera.
+   *
+   * **`useRef` y no `useState`, y eso lo decidió una medida.** Con estado, dos pulsaciones
+   * dentro del MISMO tick comparten el closure del render anterior: el segundo manejador
+   * leía el pedido viejo y volvía a descartar la pulsación — reproducido en el navegador
+   * exactamente igual que el defecto que esto viene a arreglar, y verde en los tests, porque
+   * `fireEvent` fuerza el repintado entre dos clics y un navegador no. Aquí no hace falta
+   * render: esto no se PINTA, solo decide si se manda.
+   */
+  const pedido = useRef<{ modo: ModoDeEscritura; desde: ModoDeEscritura }>(undefined);
+
   if (actual === undefined) return null;
+  const confirmado = actual;
+
+  /**
+   * Contra qué se decide si MANDAR. Lo que se pinta sigue siendo `actual`.
+   *
+   * Se calcula DENTRO del manejador y no en el render, y eso es la otra mitad de usar una
+   * ref: calculado arriba quedaría capturado en el closure de este render, y dos pulsaciones
+   * del mismo tick volverían a compartir el valor viejo — que es exactamente el defecto.
+   */
+  const vigente = (): ModoDeEscritura =>
+    pedido.current !== undefined && pedido.current.desde === confirmado
+      ? pedido.current.modo
+      : confirmado;
 
   const MITADES: readonly {
     modo: ModoDeEscritura;
@@ -80,10 +124,13 @@ export function SelectorDeModo({
           disabled={!conectado}
           title={que}
           onClick={() => {
-            // Volver a pulsar la que ya está puesta no manda nada: sería un mensaje por el
+            // Volver a pulsar lo que ya se pidió no manda nada: sería un mensaje por el
             // cable, un `/aprobacion` encolado y una línea en el transcript para dejar todo
-            // como estaba.
-            if (modo !== actual) alElegir(modo);
+            // como estaba. Contra `vigente` y no contra `actual`, que es lo que arregla la
+            // pulsación perdida — ver el comentario del componente.
+            if (modo === vigente()) return;
+            pedido.current = { modo, desde: confirmado };
+            alElegir(modo);
           }}
         >
           <Icono />

@@ -6186,3 +6186,42 @@ contiguos del mismo control. Dejarlos —son ciertos—, que el segundo sustituy
 cuando no hay nada entre medias —esconde el titubeo y deja el estado final honesto—, o tratar
 el modo como un estado que el transcript enseña una vez en lugar de un registro. Las tres
 esconden o enseñan cosas distintas y ninguna es obviamente mejor.
+
+## La guarda del selector de modo: contra lo último PEDIDO, y con una `ref`
+
+**El defecto.** `SelectorDeModo` no manda si pulsas la mitad que ya está puesta, y ese «ya
+está puesta» salía de `actual`, que llega del servidor por el `alta`. Entre el clic y la
+vuelta la pastilla sigue diciendo lo de antes, así que pulsar lo de antes se leía como
+«pulsar la que ya está puesta»: **una segunda pulsación rápida se perdía en silencio**.
+Reproducido en el navegador: pulsar «Autónomo» y acto seguido «Supervisado» dejaba la sesión
+en autónomo, sin que nada lo dijera. Con un turno en vuelo la vuelta tarda lo que tarde el
+turno, que es justo cuando más se cambia de opinión.
+
+**El arreglo: la decisión de MANDAR mira lo último pedido; lo que se PINTA sigue siendo lo
+confirmado.** Pintar lo pedido afirmaría que el modo ya rige, y no rige — el `/aprobacion`
+está en la cola del lazo—; y ese modo decide si los ficheros se escriben sin enseñar el diff.
+El precio, dicho: durante un turno la pastilla no refleja lo que pediste.
+
+**El pedido caduca solo, sin efecto**, porque guarda DESDE qué confirmado se hizo: vale
+mientras `actual` no se mueva, y en cuanto el servidor dice algo —lo pedido o cualquier otra
+cosa— manda lo confirmado. Un pedido pegado para siempre dejaría el control muerto para ese
+valor el día que una petición se perdiera.
+
+**Y la parte que costó dos intentos, con su medida.** La primera versión usaba `useState`, y
+en el navegador **seguía fallando**: dos pulsaciones del mismo tick comparten el closure del
+render anterior, así que el segundo manejador leía el pedido viejo y volvía a descartar la
+pulsación. En los tests salía VERDE, porque `fireEvent` fuerza el repintado entre dos clics y
+un navegador no. Hacen falta las dos cosas: el pedido en una **`ref`** —esto no se pinta, solo
+decide si se manda— y `vigente` calculado **dentro del manejador**, porque arriba quedaría
+capturado en el closure igual que el estado. Hay un test que dispara los dos `click` sin pasar
+por `fireEvent` entre medias, que es el único que caza esto.
+
+**Consecuencia que hay que tener presente**: ahora el segundo clic SÍ manda, así que sin turno
+en vuelo cambiar de idea rápido deja dos acuses en el hilo. Son dos cambios reales y eso es
+historia correcta. Con un turno en vuelo —el caso que motivó todo esto— las dos líneas se
+quedan en la cola y `LineaDeConsola.sustituye` deja una sola: la clave que se escribió
+«defendiendo un caso inalcanzable» es justo lo que este arreglo vuelve alcanzable.
+
+**No se toca `PastillaDeModelo` ni `PastillaDeEsfuerzo`**: comprobado, no tienen esta guarda
+—mandan siempre—, así que no pierden pulsaciones. Lo que les evita la línea repetida es la
+clave de coalescing, que ya la llevan.
