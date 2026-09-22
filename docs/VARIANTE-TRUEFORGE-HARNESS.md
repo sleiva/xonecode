@@ -1,0 +1,473 @@
+# Variante TrueForge: runtime propio para XOneCode
+
+> Estado: propuesta arquitectónica para evaluación. No describe todavía una migración
+> aprobada ni un contrato estable.
+
+## Resumen ejecutivo
+
+La variante recomendada consiste en construir el siguiente harness de XOneCode a partir de
+las piezas útiles del runtime de TrueForge, adaptándolas al dominio XOne. No se pretende
+ejecutar XOneCode como un agente remoto ni entregar CloudStudio a los modelos. El objetivo es
+reutilizar el diseño de ejecución de TrueForge —hilos de agente, subagentes dinámicos, eventos,
+estado y reanudación— y conservar como componentes propios las reglas de XOneCode.
+
+El sistema resultante tendría estas propiedades:
+
+- Un agente raíz puede crear subagentes con contexto independiente.
+- Los subagentes comparten la copia local del proyecto.
+- El trabajo local puede ejecutarse en modo supervisado o autónomo.
+- Los perfiles `docs`, `planner`, `dev` y `mockup` pasan a ser especializaciones de prompt,
+  skills y modelo, no fronteras de seguridad.
+- Las tareas de lectura pueden ejecutarse en paralelo; las escrituras se coordinan para evitar
+  conflictos.
+- El MCP de CloudStudio no se expone a ningún agente.
+- Descargar, comparar y subir a CloudStudio sigue siendo un proceso determinista de XOneCode.
+- La publicación tiene una política independiente de la escritura local.
+
+La separación principal es:
+
+```text
+┌────────────────────────────────────────────────────────────┐
+│ Runtime de agentes                                         │
+│ raíz + subagentes + skills + tools locales + estado         │
+└───────────────────────────┬────────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────────┐
+│ Copia local del proyecto XOne                              │
+│ Git + instantánea por turno + verificador                   │
+└───────────────────────────┬────────────────────────────────┘
+                            │ plan de cambios
+                            ▼
+┌────────────────────────────────────────────────────────────┐
+│ Adaptador determinista de CloudStudio                       │
+│ autenticación + descarga + ramas + subida + actualización   │
+│ de la referencia remota                                    │
+└────────────────────────────────────────────────────────────┘
+```
+
+## Por qué esta variante
+
+XOneCode ya tiene reglas de dominio que no deben diluirse dentro de un framework generalista:
+
+- Los `.xne` son la fuente; las vistas `.xml` generadas no se editan.
+- Las escrituras locales pueden necesitar aprobación.
+- La fotografía anterior al turno debe permitir revisar y recuperar cambios.
+- La verificación debe distinguir errores del proyecto y fallos del entorno.
+- Los archivos internos y las credenciales no forman parte del proyecto editable.
+- CloudStudio tiene reglas específicas para ramas, binarios, archivos no descargados y
+  reintentos.
+
+TrueForge, por otra parte, resuelve de forma sólida problemas generales del runtime:
+
+- Un hilo independiente por agente.
+- Una máquina de estados explícita por hilo.
+- Subagentes representados como llamadas de herramienta.
+- Ejecución paralela de los hijos activos.
+- Correlación mediante `thread_id` y `tool_call_id`.
+- Eventos de ciclo de vida y métricas.
+- Pausa y reanudación ante acciones requeridas.
+- Entrega del resultado del hijo como respuesta de herramienta al padre.
+
+La propuesta no es reemplazar las reglas de XOneCode por las de TrueForge. Es usar el modelo
+de ejecución de TrueForge debajo de un harness específico de XOne.
+
+## Alcance de la extracción
+
+No conviene copiar archivos aislados de TrueForge. `AgentThread`, el orquestador, los handles
+de turno y sesión, los eventos y el estado forman un conjunto acoplado. La extracción debe
+tratarse como un port controlado de un subsistema y comenzar con una revisión de licencia y de
+la clausura real de dependencias.
+
+Las piezas conceptuales que se desean conservar son:
+
+1. `AgentThread` como unidad de ejecución aislada.
+2. `AgentThreadOrchestrator` como planificador del árbol de hilos.
+3. La factoría `CreateDynamicSubAgentThread` como punto de extensión.
+4. La máquina de estados del turno.
+5. Los eventos de creación, progreso, acción requerida y finalización.
+6. La devolución del resultado del hijo al `tool_call_id` del padre.
+7. Los handles de sesión y turno, si resultan necesarios para cancelación y reanudación.
+8. Las interfaces de almacenamiento, adaptadas a la persistencia elegida por XOneCode.
+
+No se deben portar sin revisión:
+
+- Integraciones de proveedor que XOneCode no utilice.
+- Tools genéricas de shell o filesystem incompatibles con las reglas XOne.
+- Autenticación, servidor o interfaz propios del producto TrueForge.
+- Acceso remoto desde el modelo.
+- Suposiciones de seguridad que contradigan la frontera local/CloudStudio.
+
+## Modelo de subagentes
+
+### Delegación como herramienta
+
+El agente raíz delega mediante una herramienta ordinaria:
+
+```ts
+type DelegarInput = {
+  nombre: string;
+  encargo: string;
+  perfil?: "general" | "docs" | "planner" | "dev" | "mockup";
+  modelo?: string;
+  modo?: "lectura" | "escritura";
+};
+```
+
+Una llamada puede verse así:
+
+```ts
+delegar({
+  nombre: "revisar-persistencia",
+  perfil: "planner",
+  modo: "lectura",
+  encargo: "Analiza el estado actual y devuelve una propuesta con referencias concretas."
+});
+```
+
+La llamada de tool del padre permanece abierta mientras trabaja el hijo. Al terminar, la
+respuesta final del hijo se convierte en la respuesta de esa misma tool. De esta forma el
+protocolo del modelo padre no necesita conocer un mecanismo especial de mensajería.
+
+### Ciclo de vida
+
+```text
+Agente raíz llama a delegar
+          │
+          ▼
+El orquestador crea un AgentThread hijo
+          │
+          ▼
+El hijo ejecuta su encargo con contexto limpio
+          │
+          ├── puede emitir eventos y solicitar aprobación local
+          └── puede terminar con resultado o error publicable
+          │
+          ▼
+El resultado se inserta como tool response del padre
+          │
+          ▼
+Se retira el hilo hijo y el padre continúa
+```
+
+Cada hijo conserva:
+
+- `threadId` propio.
+- Referencia al hilo padre.
+- `toolCallId` que originó la delegación.
+- Contexto LLM independiente.
+- Estado de ejecución independiente.
+- Métricas y eventos propios.
+- Señal de cancelación.
+
+El encargo debe ser autosuficiente: el hijo no necesita recibir todo el historial del padre.
+Esto reduce contexto y evita que una investigación secundaria contamine la conversación
+principal.
+
+### Perfiles como especialización
+
+Los perfiles no son identidades de seguridad. Son presets que resuelven:
+
+```ts
+interface PerfilDeAgente {
+  instrucciones: string;
+  skills: string[];
+  papelDeModelo: "rapido" | "trabajo" | "afilado";
+  formatoDeResultado?: string;
+}
+```
+
+La primera implementación puede conservar los perfiles existentes:
+
+| Perfil | Finalidad principal |
+|---|---|
+| `docs` | Consultar documentación y justificar reglas XOne |
+| `planner` | Analizar y diseñar cambios |
+| `dev` | Implementar y verificar cambios locales |
+| `mockup` | Preparar recursos y propuestas visuales |
+| `general` | Resolver encargos que no necesitan especialización |
+
+Todos pueden compartir las herramientas locales. Las restricciones sobre `.git`, credenciales,
+archivos internos y vistas generadas siguen siendo invariantes del backend, no permisos de un
+perfil concreto.
+
+### Paralelismo y consistencia
+
+El paralelismo es útil principalmente para investigación. Una política inicial segura y simple
+sería:
+
+- Máximo de cinco subagentes activos, configurable.
+- Varios trabajos declarados como `lectura` pueden ejecutarse en paralelo.
+- Solo un trabajo declarado como `escritura` puede ejecutarse al mismo tiempo.
+- El padre espera a los hijos antes de sintetizar el resultado.
+- No hay subagentes anidados en la primera versión.
+- No se acepta un nuevo mensaje del usuario mientras el árbol tenga una operación indivisible
+  en curso; alternativamente, se cancela explícitamente el turno anterior.
+
+La exclusión de escritores evita que dos hijos modifiquen simultáneamente `app.xml` o la misma
+colección. No es una frontera de seguridad, sino una regla de consistencia. Los bloqueos por
+ruta pueden estudiarse después si existe una necesidad medida.
+
+## Escritura sobre el repositorio local
+
+La política local es configurable y se aplica en el runtime de tools, no en los prompts:
+
+```ts
+type PoliticaDeEscrituraLocal =
+  | { modo: "supervisado" }
+  | { modo: "autonomo" }
+  | {
+      modo: "mixto";
+      aprobar: Array<"crear" | "modificar" | "borrar">;
+    };
+```
+
+### Modo supervisado
+
+1. El agente solicita una escritura.
+2. XOneCode calcula y muestra el cambio.
+3. El usuario aprueba o rechaza.
+4. Solo una aprobación explícita aplica la operación.
+
+### Modo autónomo
+
+1. XOneCode toma la instantánea anterior al turno.
+2. Los agentes escriben en la copia local sin aprobación individual.
+3. El verificador analiza el resultado.
+4. Git permite presentar el diff y recuperar el estado anterior.
+
+### Modo mixto
+
+Permite, por ejemplo, crear y modificar automáticamente pero exigir aprobación para borrar:
+
+```json
+{
+  "escrituraLocal": {
+    "modo": "mixto",
+    "aprobar": ["borrar"]
+  }
+}
+```
+
+La política se resuelve al ejecutar la tool. Agentes, perfiles y skills no tienen que cambiar
+cuando el usuario cambia de modo.
+
+## Estado y persistencia
+
+El diseño debe distinguir cuatro clases de estado:
+
+| Estado | Vida útil | Ejemplos |
+|---|---|---|
+| Estado de hilo | Durante/reanudable | fase, mensajes, tools pendientes, padre |
+| Estado de turno | Un turno | instantánea anterior, aprobaciones, métricas |
+| Estado de sesión | Conversación | árbol de hilos, resumen, modelo activo |
+| Estado de proyecto | Entre conversaciones | memoria, decisiones, configuración, referencia remota |
+
+El checkpointer guarda el estado reanudable de la ejecución. El store guarda conocimiento que
+debe sobrevivir a una conversación. No deben utilizarse como sinónimos.
+
+Una interfaz de persistencia podría separar ambas responsabilidades:
+
+```ts
+interface CheckpointPort {
+  guardarHilo(checkpoint: CheckpointDeHilo): Promise<void>;
+  cargarHilo(threadId: string): Promise<CheckpointDeHilo | undefined>;
+  eliminarHilo(threadId: string): Promise<void>;
+}
+
+interface StoreDeProyectoPort {
+  obtener<T>(espacio: string, clave: string): Promise<T | undefined>;
+  guardar<T>(espacio: string, clave: string, valor: T): Promise<void>;
+  buscar(espacio: string, consulta: string): Promise<EntradaDeStore[]>;
+}
+```
+
+El estado persistido debe usar versiones de esquema. Un checkpoint no puede contener clientes,
+handles abiertos, señales, tool instances ni secretos; solo identificadores y datos
+serializables con los que el runtime reconstruye esas dependencias.
+
+## Eventos
+
+TrueForge puede producir eventos internos detallados, pero `core/` debe seguir recibiendo
+eventos de dominio propios. Un adaptador realiza la traducción:
+
+```text
+Evento del runtime TrueForge
+           │
+           ▼
+Adaptador de eventos de XOneCode
+           │
+           ▼
+Evento de dominio en core/events.ts
+           │
+           ├── stdio
+           └── TUI
+```
+
+Como mínimo interesa representar:
+
+- Creación y finalización de un subagente.
+- Inicio y final de llamada al modelo.
+- Inicio y final de tool.
+- Acción o aprobación requerida.
+- Pausa, reanudación y cancelación.
+- Resultado o error publicable del hilo.
+
+Los eventos no deben filtrar argumentos sensibles ni contenido completo de archivos. La lista
+blanca actual para detalles de tools sigue siendo aplicable.
+
+## CloudStudio queda fuera del agente
+
+Ningún agente o subagente recibe las tools MCP de CloudStudio. El MCP se usa como una API de
+infraestructura desde código determinista de XOneCode.
+
+```text
+Agentes trabajan en local
+          │
+          ▼
+Verificador XOne
+          │
+          ▼
+Git calcula el plan de subida
+          │
+          ▼
+Política de publicación
+          │
+          ▼
+XOneCode ejecuta el plan mediante MCP
+```
+
+Esto conserva las reglas actuales:
+
+- El agente no cambia la rama del servidor.
+- El agente no decide cómo se reintenta una subida parcial.
+- `.xonecode` nunca se publica.
+- Lo que no se descargó no puede borrarse remotamente.
+- La referencia remota solo se mueve cuando el plan termina entero.
+- La rama activa de Studio se restaura al finalizar.
+
+La publicación puede ser interactiva o autorizada por una política automática, pero su
+ejecución siempre es determinista:
+
+```ts
+interface PoliticasDeEjecucion {
+  escrituraLocal: PoliticaDeEscrituraLocal;
+  publicacion: "interactiva" | "autorizada-por-politica";
+}
+```
+
+Una política automática de publicación debe comprobar mediante código, como mínimo:
+
+- Verificador en verde.
+- Ningún subagente activo.
+- Ninguna aprobación pendiente.
+- Plan de subida válido.
+- Estado Git compatible con la operación.
+- Autorización explícita de la política configurada.
+
+Un mensaje del modelo indicando que terminó no sustituye estas comprobaciones.
+
+## Encaje con la arquitectura actual
+
+La frontera actual de cuatro capas puede mantenerse:
+
+| Capa | Responsabilidad después del cambio |
+|---|---|
+| `src/core/` | Eventos de dominio, políticas, puertos, estado serializable y motor independiente |
+| `src/agent/` | Port del runtime, factoría de hilos, adaptadores LLM/tools/skills y reglas XOne |
+| `src/cli/` | Sesión, presentación, aprobación, configuración y comandos CloudStudio |
+| `src/vendor/` | Código portado que se decida mantener próximo al origen, con procedencia documentada |
+
+`core/` no debe importar TrueForge, LangChain, LangGraph, Deep Agents, Ink ni MCP. El runtime
+portado se conecta mediante puertos y traduce sus eventos en `agent/`, preservando la frontera
+que ya está cubierta por tests.
+
+## Estrategia de implementación
+
+### Fase 0: prueba de compatibilidad
+
+- Revisar licencia y obligaciones de atribución de TrueForge.
+- Fijar el commit de origen estudiado.
+- Enumerar la clausura de imports del runtime que se desea portar.
+- Construir un prototipo mínimo: raíz, un hijo, resultado como tool response y cancelación.
+- Verificar que funciona sin servidor TrueForge y sin CloudStudio.
+
+### Fase 1: runtime aislado
+
+- Portar interfaces de hilo, estado y eventos.
+- Implementar el orquestador de hojas activas.
+- Añadir correlación padre/hijo/tool.
+- Añadir pruebas deterministas sin modelo real.
+- Implementar límites de concurrencia y prohibición de anidamiento.
+
+### Fase 2: adaptadores XOne
+
+- Conectar resolución de modelos por papel.
+- Conectar backend local y reglas de rutas XOne.
+- Conectar skills.
+- Traducir eventos al dominio existente.
+- Integrar el verificador y la instantánea por turno.
+
+### Fase 3: políticas de escritura
+
+- Mantener el modo supervisado como comportamiento compatible.
+- Añadir el modo autónomo local.
+- Añadir, si se necesita, el modo mixto.
+- Probar rechazo, EOF, cancelación y límite de rondas.
+
+### Fase 4: persistencia
+
+- Implementar checkpoints versionados de hilo/sesión.
+- Reconstruir dependencias no serializables al reanudar.
+- Conectar el store persistente de proyecto.
+- Definir poda y migración de versiones.
+
+### Fase 5: retirada controlada del harness anterior
+
+- Ejecutar ambos motores detrás de un selector temporal.
+- Comparar eventos, cambios locales, verificaciones y consumo.
+- Migrar el comportamiento por capacidades, no mediante un cambio único.
+- Retirar Deep Agents/LangGraph solo cuando exista paridad medida.
+
+## Pruebas de aceptación
+
+La variante no se considerará viable hasta demostrar, sin red ni claves:
+
+1. Un hijo recibe un encargo autosuficiente y devuelve el resultado al padre.
+2. Varios hijos lectores se ejecutan en paralelo y el padre espera a todos.
+3. Dos escritores no se ejecutan simultáneamente.
+4. Una aprobación requerida identifica el hilo correcto y se reanuda correctamente.
+5. Cancelar el turno cancela raíz e hijos sin dejar tools abiertas.
+6. Un error del hijo vuelve al padre de manera utilizable.
+7. Los eventos no exponen contenido o secretos.
+8. Un checkpoint permite reanudar sin serializar dependencias vivas.
+9. Los modos supervisado y autónomo producen el mismo cambio final para una tarea equivalente.
+10. Ningún catálogo de tools entregado al modelo contiene operaciones de CloudStudio.
+11. El plan de subida conserva todos los candados actuales.
+12. `npm test` continúa funcionando sin red, credenciales ni simulador.
+
+## Riesgos y decisiones pendientes
+
+- **Deriva respecto a TrueForge:** un port propio exige revisar periódicamente cambios del
+  origen o aceptar una bifurcación consciente.
+- **Clausura grande de dependencias:** antes de portar hay que separar el núcleo necesario de
+  componentes de servidor o producto.
+- **Escrituras concurrentes:** deben serializarse antes de habilitar subagentes escritores.
+- **Compatibilidad de checkpoints:** requiere versión y migración desde el primer formato.
+- **Skills por hijo:** hay que decidir si se cargan todas y el prompt selecciona, o si la
+  factoría construye un catálogo por perfil.
+- **Modelo por hijo:** la selección debe pasar por la resolución de modelos de XOneCode y no
+  aceptar proveedores o credenciales arbitrarias.
+- **Autonomía local:** debe conservar instantánea, diff, verificador y recuperación aunque no
+  exista aprobación previa.
+
+## Decisión propuesta
+
+La dirección recomendada es construir un runtime XOne específico utilizando como referencia y,
+si la licencia lo permite, como base portada, el núcleo de ejecución de TrueForge. El primer
+hito no debe intentar reemplazar todo el harness: debe demostrar el ciclo completo de un
+subagente sobre la copia local, con estado, eventos, cancelación y resultado correlacionado.
+
+Si esa prueba confirma que el runtime puede aislarse sin arrastrar el producto completo,
+XOneCode puede avanzar hacia subagentes dinámicos y persistencia propia. CloudStudio permanece
+fuera de ese runtime y continúa siendo una integración determinista controlada por el CLI.
