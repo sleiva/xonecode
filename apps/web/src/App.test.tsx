@@ -1564,7 +1564,9 @@ describe("el contador de tokens, montado por App", () => {
     act(() => store.aplicar(DEL_SERVIDOR));
     // El compositor enseña los DOS totales de la conversación, y nada más.
     expect(screen.getByText("2,2k")).toBeTruthy();
-    expect(screen.getByText("entrada")).toBeTruthy();
+    expect(screen.getByText("nueva")).toBeTruthy();
+    // Y la caché es su propia cifra, no una nota escondida en el `title`.
+    expect(screen.getByText("caché")).toBeTruthy();
   });
 
   it("y la ventana del MISMO mensaje la pinta la barra de estado, no el compositor", () => {

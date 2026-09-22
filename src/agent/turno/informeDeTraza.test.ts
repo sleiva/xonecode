@@ -380,3 +380,46 @@ describe("el peso en contexto", () => {
     expect(pintarSesion(s!).join("\n")).toContain("(sin nombre)");
   });
 });
+
+/**
+ * **La entrada FRESCA, al lado del total.**
+ *
+ * `entrada` es lo MANDADO, caché incluida. En un turno con varias rondas la mayor parte es el
+ * historial reenviado, así que medio millón de entrada puede ser cuarenta mil de texto nuevo.
+ * Sin la cifra al lado se lee mal en las DOS direcciones —y pasó: el total solo parece un
+ * gasto enorme que no lo es, y el efectivo solo esconde el volumen que de verdad viajó—.
+ */
+describe("la entrada fresca", () => {
+  const modelo = (o: Record<string, unknown>) =>
+    JSON.stringify({ v: 1, sesion: "s1", at: "2026-09-22T00:00:00.000Z", tipo: "modelo", origen: "orquestador", ...o });
+
+  it("sale al lado del total, en la sesión y en cada origen", () => {
+    const [s] = resumirTraza([
+      JSON.stringify({ v: 1, sesion: "s1", at: "2026-09-22T00:00:00.000Z", tipo: "sesion" }),
+      modelo({ input: 100000, cache: 92000, output: 5000, contexto: 20000 }),
+    ]);
+    const pintado = pintarSesion(s!).join("\n");
+    expect(pintado).toContain("entrada 100.000 (fresca 8000)");
+    expect(pintado).toContain("orquestador");
+    // También en la fila del origen, que es donde se decide a quién apretar.
+    expect(pintado.split("\n").filter((l) => l.includes("(fresca 8000)"))).toHaveLength(2);
+  });
+
+  /** Sin caché, fresca y total coinciden — y eso es correcto, no un adorno que sobre. */
+  it("sin caché, la fresca es el total", () => {
+    const [s] = resumirTraza([
+      JSON.stringify({ v: 1, sesion: "s1", at: "2026-09-22T00:00:00.000Z", tipo: "sesion" }),
+      modelo({ input: 900, cache: 0, output: 10 }),
+    ]);
+    expect(pintarSesion(s!).join("\n")).toContain("entrada 900 (fresca 900)");
+  });
+
+  /** Una caché mayor que la entrada es un dato imposible: no se pinta un negativo. */
+  it("no pinta un negativo si la caché viniera inflada", () => {
+    const [s] = resumirTraza([
+      JSON.stringify({ v: 1, sesion: "s1", at: "2026-09-22T00:00:00.000Z", tipo: "sesion" }),
+      modelo({ input: 100, cache: 500, output: 1 }),
+    ]);
+    expect(pintarSesion(s!).join("\n")).toContain("(fresca 0)");
+  });
+});

@@ -389,6 +389,23 @@ function cifra(n: number): string {
 /** Cuántos blancos se enseñan por tool antes de contar el resto. */
 const TOPE_DE_BLANCOS = 10;
 
+/**
+ * La entrada que NO venía de caché: texto nuevo que el modelo no había visto.
+ *
+ * **Se pinta al lado del total porque el total solo se lee bien con ella.** `entrada` es lo
+ * MANDADO, caché incluida, y en un turno con varias rondas la mayor parte es el historial
+ * reenviado — así que medio millón de entrada puede ser cuarenta mil de texto nuevo. Sin este
+ * número al lado hay que hacer la resta con el porcentaje, y se lee mal en las DOS
+ * direcciones: el total solo parece un gasto enorme que no lo es, y el efectivo solo esconde
+ * el volumen que de verdad viajó. Las dos cifras son ciertas y contestan preguntas distintas.
+ *
+ * Y es la única sobre la que se puede ACTUAR: lo fresco de un turno es casi todo lo que
+ * devuelven las tools, y eso se acota. El reenvío es consecuencia de cuántas llamadas haya.
+ */
+function frescos(uso: { input: number; cache: number }): number {
+  return Math.max(0, uso.input - uso.cache);
+}
+
 function porcentajeDeCache(uso: { input: number; cache: number }): number {
   return uso.input === 0 ? 0 : Math.round((100 * uso.cache) / uso.input);
 }
@@ -404,8 +421,9 @@ export function pintarSesion(sesion: SesionDeTraza): string[] {
   const lineas: string[] = [];
   lineas.push(`--- traza ${sesion.id} ---`);
   lineas.push(
-    `  ${sesion.llamadas} llamada(s) · entrada ${cifra(sesion.input)} · salida ${cifra(sesion.output)} · ` +
-      `caché ${porcentajeDeCache(sesion)}% · efectivo ≈${cifra(costeEfectivo(sesion))} · ventana máx ${cifra(sesion.contexto)}`
+    `  ${sesion.llamadas} llamada(s) · entrada ${cifra(sesion.input)} (fresca ${cifra(frescos(sesion))}) · ` +
+      `salida ${cifra(sesion.output)} · caché ${porcentajeDeCache(sesion)}% · ` +
+      `efectivo ≈${cifra(costeEfectivo(sesion))} · ventana máx ${cifra(sesion.contexto)}`
   );
 
   if (sesion.origenes.length > 0) {
@@ -413,8 +431,8 @@ export function pintarSesion(sesion: SesionDeTraza): string[] {
     for (const o of sesion.origenes) {
       const parte = sesion.input + sesion.output === 0 ? 0 : Math.round((100 * costeEfectivo(o)) / costeEfectivo(sesion));
       lineas.push(
-        `    ${o.origen.padEnd(18)} ${String(o.llamadas).padStart(3)} llam · entrada ${cifra(o.input)} · salida ${cifra(o.output)} · ` +
-          `caché ${porcentajeDeCache(o)}% · efectivo ≈${cifra(costeEfectivo(o))} (${parte}%)` +
+        `    ${o.origen.padEnd(18)} ${String(o.llamadas).padStart(3)} llam · entrada ${cifra(o.input)} (fresca ${cifra(frescos(o))}) · ` +
+          `salida ${cifra(o.output)} · caché ${porcentajeDeCache(o)}% · efectivo ≈${cifra(costeEfectivo(o))} (${parte}%)` +
           // Al FINAL de su línea y no en una aparte: lo que hay que poder leer de un vistazo es
           // «estas llamadas no son las de un agente que terminó». Separado en otra línea se lee
           // como una nota al pie de algo que ya se dio por bueno.
