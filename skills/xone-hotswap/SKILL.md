@@ -283,3 +283,23 @@ Ninguno es del hotswap; los dos te van a costar una sesión si no los sabes.
 |---|---|
 | Los comandos, uno a uno: entrada, salida, errores y qué plataforma lo tiene | [references/comandos.md](references/comandos.md) |
 | Llegar al dispositivo, desplegar una app, relanzarla, y los endpoints de fichero | [references/conexion-y-despliegue.md](references/conexion-y-despliegue.md) |
+
+## El permiso que hace que un arranque arranque
+
+`xone-desplegar-android` concede `SYSTEM_ALERT_WINDOW` por `appops` antes de lanzar, y no es
+higiene: Android 10 y superiores BLOQUEAN que una app en segundo plano arranque una actividad, y
+ese permiso es la exención que reconocen. El framework se va a segundo plano **con solo apagarse
+la pantalla**, o en cuanto se cierra la app.
+
+Sin él, `launchApplication` contesta `Cannot launch app while the framework is in the background`
+y el despliegue parece que fue bien sin que arrancara nada. Si lo lanzas a mano:
+
+```sh
+adb shell appops set com.xone.android.framework SYSTEM_ALERT_WINDOW allow
+```
+
+Y **dos cosas de la versión**: el framework va por **5.0.5.5dev** con **protocolo 3**. El saludo
+no cambió de forma —solo de número— y nuestro cliente no exige ninguna, así que sigue valiendo.
+Los comandos que llegaron con él (`getFields`, `openRecord`, `setGroup`, `setTrace`) están en
+[`references/comandos.md`](references/comandos.md).
+

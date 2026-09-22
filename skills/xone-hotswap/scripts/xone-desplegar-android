@@ -236,6 +236,26 @@ function concederPermisos() {
     console.log("    no se pudo leer qué permisos pide; sigo");
     return;
   }
+  /**
+   * **El de dibujar sobre otras apps NO se concede con `pm grant`, y sin él el arranque es una
+   * carrera contra el foco.**
+   *
+   * `SYSTEM_ALERT_WINDOW` es un appop, no un permiso de ejecución, así que el bucle de abajo lo
+   * intenta y falla en silencio con los demás. Y lo que concede no es cosmético: Android 10 y
+   * superiores BLOQUEAN que una app en segundo plano arranque una actividad, y ese permiso es la
+   * exención que reconocen. El framework se va a segundo plano con solo apagarse la pantalla, o
+   * en cuanto se cierra la app — así que sin esto `launchApplication` contesta
+   * «Cannot launch app while the framework is in the background» y el despliegue parece que
+   * funcionó sin que arrancara nada. Es buena parte del síntoma que teníamos apuntado como
+   * «`result:true` significa aceptado, no arrancó».
+   *
+   * Idempotente, y su fallo no para nada: en un aparato donde no aplique, se sigue.
+   */
+  try {
+    adbCallado("shell", "appops", "set", PAQUETE, "SYSTEM_ALERT_WINDOW", "allow");
+  } catch {
+    // Aparato que no lo admite. El despliegue sigue; lo que se pierde es la garantía de foco.
+  }
   let dados = 0;
   for (const permiso of declaradas) {
     try {
