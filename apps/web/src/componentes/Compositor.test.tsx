@@ -190,16 +190,17 @@ describe("la ayuda de teclas", () => {
 
 describe("las tres bandas de la caja", () => {
   /**
-   * **El MOTOR va encima del campo y lo que decide el turno va debajo.**
+   * **Arriba lo que se MIRA; abajo lo que decide el turno y lo manda.**
    *
-   * Es una decisión revisitada, y por eso este test dice la historia: el dispositivo
-   * estuvo arriba siguiendo una maqueta y volvió abajo mirando la pantalla, con un
-   * argumento que sigue siendo bueno —«un chip solo no era una fila, era un renglón»—.
-   * Lo que cambió es el reparto: arriba van TRES controles (modelo, esfuerzo, dispositivo)
-   * y abajo quedan el modo, el gasto y el botón, así que ninguna banda es un renglón
-   * huérfano. Se comprueba por POSICIÓN en el documento porque jsdom no hace layout.
+   * El reparto ha cambiado dos veces y por eso este test lleva la historia. Primero los
+   * selectores subieron todos encima del campo; después el gasto subió a la esquina de
+   * arriba a la izquierda y el motor —modelo y esfuerzo— bajó junto al botón de enviar, que
+   * es donde se lee justo antes de pulsar. Y eso cierra de paso un límite del plegado: la
+   * banda de arriba se va en reposo, así que ahí el modelo en vigor dejaba de verse.
+   *
+   * Se comprueba por POSICIÓN en el documento porque jsdom no hace layout.
    */
-  it("modelo y dispositivo van ANTES del campo; el modo, DESPUÉS", () => {
+  it("el dispositivo va ANTES del campo; el modo y el modelo, DESPUÉS", () => {
     render(
       <Compositor
         conectado
@@ -211,12 +212,14 @@ describe("las tres bandas de la caja", () => {
       />
     );
     const campo = screen.getByRole("textbox");
-    for (const texto of [/dispositivo/i, "gemini/gemini-flash-latest"]) {
-      const control = screen.getByText(texto);
-      expect(control.compareDocumentPosition(campo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const dispositivo = screen.getByText(/dispositivo/i);
+    expect(dispositivo.compareDocumentPosition(campo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    for (const nodo of [
+      screen.getByText("gemini/gemini-flash-latest"),
+      screen.getByRole("group", { name: "modo de escritura" }),
+    ]) {
+      expect(nodo.compareDocumentPosition(campo) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     }
-    const modo = screen.getByRole("group", { name: "modo de escritura" });
-    expect(modo.compareDocumentPosition(campo) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
   });
 
   it("sin manejador no hay pastilla de dispositivo", () => {

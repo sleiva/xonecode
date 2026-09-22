@@ -189,55 +189,22 @@ export function Compositor({
         */}
         <div className={estilos.motor}>
           {/*
-            Modelo y esfuerzo en UNA caja con separador interno. Es lo que el código ya
-            decía y la forma no sostenía: «el esfuerzo no es una elección independiente, es
-            un ajuste DE ese modelo — qué niveles hay depende de cuál esté puesto». Estaban
-            pegados y se leían como dos elecciones hermanas.
+            **Lo consumido por la sesión, arriba a la izquierda.** Es un dato que se MIRA y
+            no se toca, así que vive en la banda del estado y no junto a la acción: abajo
+            compartía sitio con el botón de enviar, que es lo único de la caja que no es
+            información.
 
-            La clase sale de `PastillaDeModelo.module.css`, la hoja que ya comparten las
-            pastillas: el nombre de un módulo CSS va hasheado, así que agrupar desde aquí dos
-            componentes de esa familia solo se puede nombrando su hoja. Y ahí es donde tiene
-            que vivir la regla, que es de la familia y no de este renglón.
+            Conserva su caja propia porque de ella cuelga la regla que lo retira cuando el
+            renglón no da de sí — el nombre de su clase lo hashea su módulo y desde aquí no
+            se alcanza. Sin dato no se pinta: ausente es «no consta», no cero.
           */}
-          <div className={pastillas.conjunto}>
-            {modelos !== undefined ? (
-              <PastillaDeModelo
-                {...(modelos.actual === undefined ? {} : { actual: modelos.actual })}
-                proveedores={modelos.proveedores}
-                alPedirCatalogo={(proveedor) => alPedirCatalogo?.(proveedor)}
-                // Una ACCIÓN, no un comando: por el cable viaja `{clase:"modelo", id}` y es
-                // el servidor quien decide que aplicarla es reusar el manejador de `/modelo`.
-                // Mandar aquí la prosa «/modelo …» apuntaba en el transcript un acto de
-                // usuario que nadie tecleó —y de ahí sale el título de la sesión— y dejaba la
-                // interfaz hablando en la sintaxis del terminal.
-                alElegir={(id) => alElegirModelo?.(id)}
-                // La pastilla solo lista lo COMPROBADO; los demás se cuentan con el camino
-                // para configurarlos, que es esta ventana.
-                {...(alAbrirAjustes === undefined ? {} : { alAbrirAjustes })}
-              />
-            ) : null}
-            {/*
-              El esfuerzo, PEGADO al modelo: no es una elección independiente, es un ajuste DE
-              ese modelo — qué niveles hay depende de cuál esté puesto, y la mitad de los
-              modelos de este harness no admiten ninguno. Por eso se pinta solo cuando el
-              servidor manda niveles, y por eso no lleva rótulo: en una fila estrecha, «low»
-              junto al nombre del modelo se lee como lo que es.
-            */}
-            {alElegirEsfuerzo === undefined ? null : (
-              <PastillaDeEsfuerzo
-                {...(modelos?.esfuerzo === undefined ? {} : { niveles: modelos.esfuerzo.niveles })}
-                {...(modelos?.esfuerzo?.actual === undefined ? {} : { actual: modelos.esfuerzo.actual })}
-                {...(modelos?.esfuerzo?.nota === undefined ? {} : { nota: modelos.esfuerzo.nota })}
-                conectado={conectado}
-                alElegir={alElegirEsfuerzo}
-              />
-            )}
+          <div className={estilos.gasto}>
+            <ContadorDeTokens {...(consumo === undefined ? {} : { consumo })} />
           </div>
           {/*
-            El dispositivo, AL LADO del modelo: son la misma clase de elección —de la sesión,
-            la decide el servidor y el cliente la pinta— y se miran juntas. Estuvo arriba en
-            su propia fila un rato, siguiendo la maqueta, y el usuario lo devolvió aquí
-            mirando la pantalla: un chip solo arriba no era una fila, era un renglón.
+            El dispositivo, arriba a la derecha, con el gasto al otro extremo: los dos son
+            de la SESIÓN y se miran, no se pelean por el turno que vas a mandar. Ya no está
+            al lado del modelo porque el modelo se ha ido abajo, con lo que decide el turno.
           */}
           {alElegirDispositivo === undefined ? null : (
             /* En su propia caja porque de ahí cuelga el `margin-left: auto` que lo manda al
@@ -310,21 +277,62 @@ export function Compositor({
             />
           )}
           {/*
-            Lo consumido por la sesión, pegado al botón y no «al lado del modelo». Comparte
-            fila con él, pero en el otro extremo: a la izquierda van las pastillas —lo que va
-            a CORRER, que se elige antes de escribir— y a la derecha el gasto y la acción.
-            Estuvo suelto a mitad de fila porque el contador y el botón llevaban cada uno su
-            `margin-left: auto`, y dos márgenes automáticos se REPARTEN el hueco en vez de
-            comerlo el primero: medido en pantalla, 194 px de vacío a cada lado. Ahora el
-            `auto` es uno solo, el de esta caja. Sin dato no se pinta: ausente es «no consta»,
-            no cero.
+            **El motor, abajo a la derecha, pegado al botón.** Modelo y esfuerzo son lo que
+            va a CORRER con lo próximo que mandes, así que se leen justo antes de pulsar —
+            que es donde está el botón. Y de paso arreglan un límite del plegado: la banda
+            de arriba se va en reposo, así que ahí el modelo en vigor dejaba de verse; aquí
+            está siempre.
+
+            Va DENTRO de `.acciones` y no al lado con su propio `margin-left: auto`, que es
+            la lección ya pagada: los márgenes automáticos se REPARTEN el hueco libre, y con
+            dos el conjunto se quedaría flotando a mitad de fila en vez de junto al botón.
           */}
           <div className={estilos.acciones}>
-            {/* Con una caja propia, y no por gusto: la regla que la retira cuando no cabe
-                es una consulta de contenedor sobre el renglón, y para nombrarla desde este
-                fichero hace falta una clase de ESTE módulo. */}
-            <div className={estilos.gasto}>
-              <ContadorDeTokens {...(consumo === undefined ? {} : { consumo })} />
+            {/*
+              Modelo y esfuerzo en UNA caja con separador interno. Es lo que el código ya
+              decía y la forma no sostenía: «el esfuerzo no es una elección independiente, es
+              un ajuste DE ese modelo — qué niveles hay depende de cuál esté puesto». Estaban
+              pegados y se leían como dos elecciones hermanas.
+
+              La clase sale de `PastillaDeModelo.module.css`, la hoja que ya comparten las
+              pastillas: el nombre de un módulo CSS va hasheado, así que agrupar desde aquí dos
+              componentes de esa familia solo se puede nombrando su hoja. Y ahí es donde tiene
+              que vivir la regla, que es de la familia y no de este renglón.
+            */}
+            <div className={pastillas.conjunto}>
+              {modelos !== undefined ? (
+                <PastillaDeModelo
+                  {...(modelos.actual === undefined ? {} : { actual: modelos.actual })}
+                  proveedores={modelos.proveedores}
+                  alPedirCatalogo={(proveedor) => alPedirCatalogo?.(proveedor)}
+                  // Una ACCIÓN, no un comando: por el cable viaja `{clase:"modelo", id}` y es
+                  // el servidor quien decide que aplicarla es reusar el manejador de `/modelo`.
+                  // Mandar aquí la prosa «/modelo …» apuntaba en el transcript un acto de
+                  // usuario que nadie tecleó —y de ahí sale el título de la sesión— y dejaba la
+                  // interfaz hablando en la sintaxis del terminal.
+                  alElegir={(id) => alElegirModelo?.(id)}
+                  // La pastilla solo lista lo COMPROBADO; los demás se cuentan con el camino
+                  // para configurarlos, que es esta ventana.
+                  {...(alAbrirAjustes === undefined ? {} : { alAbrirAjustes })}
+                />
+              ) : null}
+              {/*
+                El esfuerzo, DENTRO de la misma caja que el modelo: no es una elección
+                independiente, es un ajuste DE ese modelo — qué niveles hay depende de cuál
+                esté puesto, y la mitad de los modelos de este harness no admiten ninguno.
+                Por eso se pinta solo cuando el servidor manda niveles, y por eso lleva el
+                rótulo `pensar:` delante: un «low» a secas junto al nombre del modelo se lee
+                como parte del modelo.
+              */}
+              {alElegirEsfuerzo === undefined ? null : (
+                <PastillaDeEsfuerzo
+                  {...(modelos?.esfuerzo === undefined ? {} : { niveles: modelos.esfuerzo.niveles })}
+                  {...(modelos?.esfuerzo?.actual === undefined ? {} : { actual: modelos.esfuerzo.actual })}
+                  {...(modelos?.esfuerzo?.nota === undefined ? {} : { nota: modelos.esfuerzo.nota })}
+                  conectado={conectado}
+                  alElegir={alElegirEsfuerzo}
+                />
+              )}
             </div>
             {/*
               La MISMA ranura, dos acciones: con turno en vuelo es parar, y si no, enviar.

@@ -229,13 +229,6 @@
    * forma de mandar nada. Envolver cuesta una línea de alto solo cuando hace falta.
    */
   flex-wrap: wrap;
-  /* Este renglón es el CONTENEDOR del que cuelga la regla que retira el contador cuando no
-     cabe (su regla vive en `ContadorDeTokens.module.css`, que es quien puede nombrar su
-     propia clase — el nombre de un módulo CSS va hasheado y desde aquí no se alcanza). Se
-     declara aquí porque aquí se sabe el ancho. Y es seguro porque el tamaño de esta fila lo
-     fija su padre —es un hijo de una columna con `align-items: stretch`— y no lo que lleve
-     dentro. */
-  container-type: inline-size;
 }
 
 /* El gasto y la acción, en un solo bloque pegado al borde derecho. El `margin-left: auto`
@@ -257,37 +250,24 @@
   flex: none;
 }
 
-/* La caja del contador: existe para tener un NOMBRE con el que retirarlo —el nombre de su
-   propia clase lo hashea el otro módulo CSS y desde aquí no se alcanza—, y no pinta nada.
-   El `display: inline-flex` es el que haría la pastilla por su cuenta; aquí vive para que
-   el día que esta regla la esconda desaparezca la caja entera y el `gap` no deje un hueco. */
+/* La caja del contador, ahora en la banda de ARRIBA y a la izquierda del todo. Existe para
+   tener un NOMBRE con el que agarrarlo desde este módulo —el de su propia clase lo hashea el
+   otro y desde aquí no se alcanza— y no pinta nada. */
 .gasto {
   display: inline-flex;
   align-items: center;
 }
 
 /*
- * Y cuando la fila es tan estrecha que el gasto y el botón de enviar no caben JUNTOS en su
- * renglón, el que cede es el dato: el gasto se consulta, mandar el mensaje es lo único que
- * no puede faltar. MEDIDO: a 420 de ventana la fila mide 108, la pastilla 113, y el botón
- * se salía de la tarjeta.
- *
- * El umbral sale de lo que ocupan los dos: 113 + 8 de hueco + 32 de botón = 153, y 170 deja
- * 17 px de aire para una cifra algo más larga que la de hoy. No es la red de seguridad —esa
- * es el `flex-wrap` de `.acciones`, que impide que el botón se salga pase lo que pase—, sino
- * lo que decide cuándo la pastilla no vale el renglón que se lleva. MEDIDO a 560 de ventana
- * la fila mide 180: ahí sí cabe y se pinta; a 480 mide 132 y se va.
- *
- * Es CONSULTA DE CONTENEDOR y no `@media` por el mismo motivo que la cifra de la barra
- * (`Barra.module.css`, su regla del final): el ancho de este renglón lo decide el de la
- * barra lateral, que pone JS, así que una ventana ancha con la barra arrastrada a tope deja
- * el compositor mucho más estrecho de lo que la ventana sugiere.
+ * **Aquí hubo una consulta de contenedor y se fue con el gasto.** Retiraba el contador
+ * cuando el renglón no daba para él y el botón de enviar juntos: medido a 420 de ventana,
+ * la pastilla ocupaba 113, el botón 32, y el botón se salía de la tarjeta. Desde que el
+ * gasto vive en la banda de ARRIBA ese choque no existe —allí no hay ninguna acción que
+ * proteger—, y lo que sobra se resuelve envolviendo. Con la consulta se fue también el
+ * `container-type` de `.controles`, que no lo consultaba ya nadie: un contenedor declarado
+ * sin consulta es la mitad de una regla que alguien leerá como si hiciera algo.
  */
-@container (max-width: 170px) {
-  .gasto {
-    display: none;
-  }
-}
+
 
 /* Redondo, como en la referencia — `button-primary-fill` es el único azul de acento que
  * ya usábamos en otro sitio (`Wizard`), así que no es un color nuevo por esto. */
