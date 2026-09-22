@@ -147,6 +147,8 @@ export function Artefactos({
   }
 
   return (
+    // La caja de fuera declara el CONTENEDOR de la consulta; ver `Ficheros.tsx`.
+    <div className={estilos.caja}>
     <div className={estilos.artefactos}>
       <div className={estilos.visor}>
         {actual === undefined ? (
@@ -267,6 +269,7 @@ export function Artefactos({
           borras.
         </p>
       </aside>
+    </div>
     </div>
   );
 }

@@ -127,6 +127,9 @@ export function Ficheros({
   const soloDibujo = hayDibujo && !svgConDibujo;
 
   return (
+    // La caja de fuera es la que declara el CONTENEDOR de la consulta; `.ficheros` es su
+    // hija porque una `@container` no puede estilar al elemento que la declara.
+    <div className={estilos.caja}>
     <div className={estilos.ficheros}>
       <div className={estilos.visor}>
         {elegido === undefined ? (
@@ -228,6 +231,7 @@ export function Ficheros({
           abiertas="ninguna"
         />
       </aside>
+    </div>
     </div>
   );
 }

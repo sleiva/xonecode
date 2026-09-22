@@ -85,6 +85,38 @@ function tieneColorLiteral(css: string): boolean {
   );
 }
 
+/** Las clases de una hoja que declaran `container-type`, o sea las que SON contenedor. */
+function clasesQueSonContenedor(css: string): string[] {
+  const clases: string[] = [];
+  for (const bloque of css.matchAll(/\.([A-Za-z0-9_-]+)\s*\{([^}]*)\}/g)) {
+    if (/container-type\s*:/.test(bloque[2] ?? "")) clases.push(bloque[1]!);
+  }
+  return clases;
+}
+
+/** El cuerpo de cada bloque `@container`. Se cuentan las llaves porque dentro hay reglas
+ *  anidadas y un `[^}]*` se pararía en la primera. */
+function bloquesDeConsulta(css: string): string[] {
+  const bloques: string[] = [];
+  for (const abre of css.matchAll(/@container[^{]*\{/g)) {
+    let i = abre.index! + abre[0].length;
+    let nivel = 1;
+    const desde = i;
+    while (i < css.length && nivel > 0) {
+      if (css[i] === "{") nivel += 1;
+      else if (css[i] === "}") nivel -= 1;
+      i += 1;
+    }
+    bloques.push(css.slice(desde, i - 1));
+  }
+  return bloques;
+}
+
+/** Los selectores de clase que ese bloque estila. */
+function selectoresDe(bloque: string): string[] {
+  return [...bloque.matchAll(/(^|[\s,>+~])(\.[A-Za-z0-9_-]+)/g)].map((m) => m[2]!);
+}
+
 describe("disciplina de estilos (heredada de deepseek)", () => {
   it("hay módulos que revisar", () => {
     expect(modulos.length).toBeGreaterThan(0);
@@ -162,6 +194,42 @@ describe("disciplina de estilos (heredada de deepseek)", () => {
       if (!/@container/.test(css)) continue;
       expect(css, `${m} consulta un contenedor que no declara`).toMatch(/container-type\s*:/);
     }
+  });
+
+  /**
+   * **Y una consulta de contenedor no puede estilar a su PROPIO contenedor.** Una
+   * `@container` solo alcanza a los DESCENDIENTES del elemento que declara `container-type`,
+   * así que una regla dentro de la consulta con el mismo selector que el contenedor no se
+   * aplica nunca — y no lo hace en silencio, que es lo peor: el resto de las reglas del
+   * bloque SÍ se aplican, así que lo que queda es medio encuadre.
+   *
+   * No es teórico ni es viejo: `Ficheros` y `Artefactos` tenían las dos el `container-type`
+   * en la misma caja que la consulta ponía en columna, y el resultado era el árbol saltando a
+   * la izquierda por su `order: -1` y recortado al 40% de alto, en FILA con el visor. No se
+   * vio en dos meses porque esas cajas vivían siempre en la columna central, más ancha que
+   * los 720 px de la consulta; apareció el día que hubo una caja estrecha de verdad —el panel
+   * a la derecha del chat—.
+   */
+  it("una consulta de contenedor no estila a su propio contenedor: ahí no se aplica NUNCA", () => {
+    for (const m of modulos) {
+      const css = readFileSync(join(AQUI, m), "utf8");
+      for (const clase of clasesQueSonContenedor(css)) {
+        for (const bloque of bloquesDeConsulta(css)) {
+          expect(
+            selectoresDe(bloque),
+            `${m}: «.${clase}» declara el contenedor y la consulta intenta estilarla`
+          ).not.toContain(`.${clase}`);
+        }
+      }
+    }
+  });
+
+  it("ese detector también dispara: una hoja con el defecto se caza, y una sin él no", () => {
+    const mala = ".a { container-type: inline-size; }\n@container (max-width: 9px) { .a { color: red; } }";
+    const buena = ".a { container-type: inline-size; }\n@container (max-width: 9px) { .b { color: red; } }";
+    expect(clasesQueSonContenedor(mala)).toEqual(["a"]);
+    expect(selectoresDe(bloquesDeConsulta(mala)[0]!)).toContain(".a");
+    expect(selectoresDe(bloquesDeConsulta(buena)[0]!)).not.toContain(".a");
   });
 
   it("el detector de la consulta de contenedor SÍ dispara: si no cazara, el test de arriba no probaría nada", () => {
