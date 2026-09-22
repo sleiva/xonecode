@@ -219,12 +219,38 @@ export type AlLlamarTool = (tool: {
 }) => void;
 
 /**
- * Lo que una tool devolvio: CUÁNTO pesa, nunca qué era.
+ * Lo que `aEventos` tiene que recordar ENTRE RONDAS, en un solo sitio.
+ *
+ * **Las tres cosas de aquí dentro vivían sueltas dentro de `aEventos`, y las tres estaban mal
+ * por la misma razón**: `turnoReal.ts` la llama DENTRO del bucle de rondas y el stream
+ * reentrega la historia acumulada al reanudar, así que con estado local cada ronda empezaba en
+ * blanco. Medido dos veces: primero las tools se recontaban, y al arreglar solo aquello se
+ * quedaron mal los resultados —62 medidos para 57 llamadas, con 98.439 caracteres sin
+ * atribuir, el 43 % del total—.
+ *
+ * Van en un objeto y no en tres parámetros porque la razón es UNA —el alcance es el turno— y
+ * porque tres opcionales sueltos son tres sitios donde olvidarse de uno, y ese olvido es mudo.
+ */
+export interface MemoriaDelTurno {
+  /** Los `tool_call` ya contados, por id. */
+  vistas: Set<string>;
+  /** Los resultados ya medidos, por el id de su llamada. */
+  resultados: Set<string>;
+  /** De qué tool era cada llamada, para poder repartir el peso de su resultado. */
+  deQuien: Map<string, { nombre: string; detalle?: string }>;
+}
+
+export function crearMemoriaDelTurno(): MemoriaDelTurno {
+  return { vistas: new Set(), resultados: new Set(), deQuien: new Map() };
+}
+
+/**
+ * Lo que una tool devolvió: CUÁNTO pesa, nunca qué era.
  *
  * Lleva `nombre` y `detalle` porque un peso suelto no se puede repartir: el id de una llamada
- * no significa nada en un informe. Salen del `tool_call` que se vio antes —el resultado llega
- * en un chunk POSTERIOR al de su llamada—, y el `detalle` es el mismo de la lista blanca de
- * `resumenDeTool.ts`, así que por aquí no pasa nada que no pasara ya.
+ * no significa nada en un informe. Salen del `tool_call`, que se procesa ANTES que los
+ * resultados del mismo chunk — **la historia acumulada reentrega los dos JUNTOS**, así que
+ * mirar los resultados primero dejaba sin nombre a todo lo de las rondas siguientes.
  */
 export type AlResponderTool = (r: { id: string; chars: number; nombre?: string; detalle?: string }) => void;
 
@@ -245,7 +271,7 @@ export async function* aEventos(
   stream: AsyncIterable<unknown>,
   pendientes?: () => Promise<PendienteDeAprobacion[]>,
   alLlamarTool?: AlLlamarTool,
-  vistasDelTurno?: Set<string>,
+  memoriaDelTurno?: MemoriaDelTurno,
   alResponderTool?: AlResponderTool
 ): AsyncIterable<DomainEvent> {
   const mensajes = new Mensajes();
@@ -268,30 +294,13 @@ export async function* aEventos(
    * llamador ni ningún doble de los tests cambia: la misma asimetría que los métodos
    * opcionales de `Piel`.
    */
-  const vistas = vistasDelTurno ?? new Set<string>();
-  /** Los resultados ya medidos, por el id de su llamada: llegan reenviados igual que ellas. */
-  const resultados = new Set<string>();
-  /** De qué tool era cada llamada, para poder repartir el peso de su resultado. */
-  const deQuien = new Map<string, { nombre: string; detalle?: string }>();
+  const { vistas, resultados, deQuien } = memoriaDelTurno ?? crearMemoriaDelTurno();
   try {
     for await (const bruto of stream) {
       const chunk = normalizar(bruto);
       if (!chunk) continue;
 
       if (chunk.modo === "updates") {
-        // Los resultados van ANTES que las llamadas del mismo chunk: el resultado de una tool
-        // llega en el chunk SIGUIENTE al de su llamada, así que aquí no hay carrera — y
-        // mirarlos primero deja la linea de la llamada lista para acompañarse de su peso.
-        for (const r of resultadosDe(chunk.dato)) {
-          if (resultados.has(r.id)) continue;
-          resultados.add(r.id);
-          const quien = deQuien.get(r.id);
-          try {
-            alResponderTool?.({ ...r, ...(quien ?? {}) });
-          } catch {
-            // La observabilidad no puede tumbar ni silenciar el stream.
-          }
-        }
         for (const { nombre, detalle, parametros, id, respuesta } of toolsDe(chunk.dato)) {
           // Ya contada: este mismo chunk trae la historia acumulada del subgrafo (ver
           // `toolsDe`). Sin `id` no se puede afirmar que sea repetida, así que se emite —
@@ -318,6 +327,24 @@ export async function* aEventos(
             // La observabilidad no puede tumbar ni silenciar el stream.
           }
           yield { tipo: "tool", nombre, ...(detalle !== undefined ? { detalle } : {}) };
+        }
+
+        /**
+         * **Los resultados van DESPUÉS de las llamadas del mismo chunk, y ese orden es el
+         * arreglo.** Se puso al revés con el argumento de que un resultado llega en el chunk
+         * SIGUIENTE al de su llamada; es cierto la primera vez y FALSO al reanudar, porque la
+         * historia acumulada reentrega los dos JUNTOS. Consecuencia medida: 98.439 caracteres
+         * —el 43 % de todo lo que entró en el contexto— repartidos como «(sin nombre)».
+         */
+        for (const r of resultadosDe(chunk.dato)) {
+          if (resultados.has(r.id)) continue;
+          resultados.add(r.id);
+          const quien = deQuien.get(r.id);
+          try {
+            alResponderTool?.({ ...r, ...(quien ?? {}) });
+          } catch {
+            // La observabilidad no puede tumbar ni silenciar el stream.
+          }
         }
         continue;
       }

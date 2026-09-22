@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aEventos, razonamientoDe, textoDe, toolsDe, esDelPadre } from "./puente.js";
+import { aEventos, crearMemoriaDelTurno, razonamientoDe, textoDe, toolsDe, esDelPadre } from "./puente.js";
 import type { DomainEvent, PendienteDeAprobacion } from "../../core/events.js";
 
 async function recoger(chunks: unknown[]): Promise<DomainEvent[]> {
@@ -396,7 +396,7 @@ describe("el dedupe entre RONDAS", () => {
     "updates",
     { agent: { messages: [{ id: "msg-1", tool_calls: [{ id: "call-1", name: "edit_file", args: { file_path: "/f.js" } }] }] } },
   ];
-  const correr = async (vistas?: Set<string>) => {
+  const correr = async (vistas?: ReturnType<typeof crearMemoriaDelTurno>) => {
     const salida: string[] = [];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for await (const e of aEventos((async function* () { yield chunk(); })() as any, undefined, (t) => salida.push(t.nombre), vistas)) void e;
@@ -404,7 +404,7 @@ describe("el dedupe entre RONDAS", () => {
   };
 
   it("con el conjunto del TURNO, la segunda ronda no la vuelve a contar", async () => {
-    const vistas = new Set<string>();
+    const vistas = crearMemoriaDelTurno();
     expect(await correr(vistas)).toEqual(["edit_file"]);
     expect(await correr(vistas)).toEqual([]); // la MISMA tool, reentregada: no se cuenta
     expect(await correr(vistas)).toEqual([]);
@@ -435,7 +435,7 @@ describe("el peso de un resultado sabe de qué tool es", () => {
     "updates",
     { agent: { messages: [{ tool_call_id: "c1", type: "tool", content: "0123456789" }] } },
   ];
-  const correr = async (chunks: unknown[], vistas: Set<string>) => {
+  const correr = async (chunks: unknown[], vistas: ReturnType<typeof crearMemoriaDelTurno>) => {
     const pesos: Array<{ nombre?: string; detalle?: string; chars: number }> = [];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for await (const e of aEventos((async function* () { for (const c of chunks) yield c; })() as any, undefined, undefined, vistas, (r) => pesos.push(r))) void e;
@@ -443,13 +443,13 @@ describe("el peso de un resultado sabe de qué tool es", () => {
   };
 
   it("en la MISMA ronda, el resultado lleva nombre y blanco", async () => {
-    expect(await correr([llamada(), resultado()], new Set())).toEqual([
+    expect(await correr([llamada(), resultado()], crearMemoriaDelTurno())).toEqual([
       { id: "c1", chars: 10, nombre: "read_file", detalle: "/skills/x/SKILL.md" },
     ]);
   });
 
   it("y en la SEGUNDA ronda también, aunque la llamada ya estuviera contada", async () => {
-    const vistas = new Set<string>();
+    const vistas = crearMemoriaDelTurno();
     await correr([llamada()], vistas); // ronda 1: la llamada se cuenta
     // Ronda 2: el stream reentrega la llamada (ya vista) y trae su resultado.
     const pesos = await correr([llamada(), resultado()], vistas);
@@ -458,6 +458,53 @@ describe("el peso de un resultado sabe de qué tool es", () => {
 
   /** Un resultado del que no consta llamada se cuenta igual: el peso entró en el contexto. */
   it("sin llamada conocida, el peso se cuenta sin nombre", async () => {
-    expect(await correr([resultado()], new Set())).toEqual([{ id: "c1", chars: 10 }]);
+    expect(await correr([resultado()], crearMemoriaDelTurno())).toEqual([{ id: "c1", chars: 10 }]);
+  });
+});
+
+/**
+ * **Los resultados, entre rondas: ni se recuentan ni pierden su nombre.**
+ *
+ * Dos fallos de la misma familia, encontrados al estrenar la medida de peso sobre una sesión
+ * real: salían **62 resultados para 57 llamadas** —imposible— y **98.439 caracteres como
+ * «(sin nombre)», el 43 % de todo lo que entró en el contexto**.
+ *
+ *  1. El conjunto de resultados ya medidos vivía por RONDA, así que cada reanudación volvía a
+ *     contar los de las anteriores. Lo mismo que le pasó a las tools en `8b69c08`.
+ *  2. Los resultados se miraban ANTES que las llamadas del mismo chunk, con el argumento de
+ *     que un resultado llega en el chunk SIGUIENTE al de su llamada. Es cierto la primera vez
+ *     y FALSO al reanudar: la historia acumulada reentrega los dos JUNTOS.
+ */
+describe("los resultados entre rondas", () => {
+  const historia = () => [
+    [],
+    "updates",
+    {
+      agent: {
+        messages: [
+          { id: "m1", tool_calls: [{ id: "c1", name: "read_file", args: { file_path: "/skills/x/SKILL.md" } }] },
+          { tool_call_id: "c1", type: "tool", content: "0123456789" },
+        ],
+      },
+    },
+  ];
+  const correr = async (memoria: ReturnType<typeof crearMemoriaDelTurno>) => {
+    const pesos: Array<{ nombre?: string; chars: number }> = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for await (const e of aEventos((async function* () { yield historia(); })() as any, undefined, undefined, memoria, (r) => pesos.push(r))) void e;
+    return pesos;
+  };
+
+  it("llamada y resultado en el MISMO chunk: el peso sale con su nombre", async () => {
+    const pesos = await correr(crearMemoriaDelTurno());
+    expect(pesos).toEqual([{ id: "c1", chars: 10, nombre: "read_file", detalle: "/skills/x/SKILL.md" }]);
+  });
+
+  it("y la ronda siguiente NO lo vuelve a contar", async () => {
+    const memoria = crearMemoriaDelTurno();
+    expect(await correr(memoria)).toHaveLength(1);
+    // La misma historia, reentregada al reanudar: ya está medida.
+    expect(await correr(memoria)).toEqual([]);
+    expect(await correr(memoria)).toEqual([]);
   });
 });

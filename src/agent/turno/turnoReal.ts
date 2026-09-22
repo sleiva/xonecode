@@ -154,7 +154,7 @@ import type { Entorno } from "../config/entorno.js";
 import { tomarInstantanea, type Instantanea, type Cambio } from "./instantanea.js";
 import { construirAgente } from "../grafo/xoneAgent.js";
 import { asegurarMemoriaDeProyecto } from "../grafo/memoriaDeProyecto.js";
-import { aEventos } from "./puente.js";
+import { aEventos, crearMemoriaDelTurno } from "./puente.js";
 import { createTokenTracker, type TokenTracker } from "../../vendor/tokenTracking.js";
 import { crearDiagnosticoDeTools } from "./diagnosticoDeTools.js";
 import { encenderTrazaDeErrores } from "../trazaDeErroresEnDisco.js";
@@ -789,10 +789,11 @@ export async function abrirSesionReal(opciones: {
     let bitacora = null as Awaited<ReturnType<typeof correrTurno>> | null;
     let ronda = 0;
     /**
-     * Las tool_calls ya contadas EN ESTE TURNO. Vive fuera del bucle a proposito: ver
-     * `aEventos`. Dentro, cada ronda recontaba las tools de las anteriores.
+     * Lo que el puente recuerda ENTRE RONDAS: qué tools ya se contaron, qué resultados ya se
+     * midieron y de quién era cada llamada. Vive fuera del bucle a propósito: ver
+     * `MemoriaDelTurno`. Dentro, cada ronda recontaba lo de las anteriores.
      */
-    const vistasDelTurno = new Set<string>();
+    const memoriaDelTurno = crearMemoriaDelTurno();
 
     // El bucle de aprobación, tal como está en `correrReal` (`cli/run.ts`): una pausa
     // TERMINA la ronda, el interrupt queda en el estado, y se reanuda con un `Command`
@@ -1246,7 +1247,7 @@ export async function abrirSesionReal(opciones: {
                 async () => (await leerPendientes()).lista,
                 ({ nombre, detalle, parametros, origen, respuesta }) =>
                   diagnostico?.herramienta(nombre, detalle, parametros, tracker, origen, respuesta),
-                vistasDelTurno,
+                memoriaDelTurno,
                 ({ nombre, detalle, chars }) => diagnostico?.resultado?.(nombre, detalle, chars)
               ),
               eventosExternos
