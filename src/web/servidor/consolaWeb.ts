@@ -80,7 +80,14 @@ export interface ConsolaWeb {
   /** Dice si hay turno en vuelo. Lo llama el envoltorio del ejecutor (`vestibulo.ts`), que
    *  es el único que sabe cuándo empieza y cuándo acaba. */
   turno(activo: boolean): void;
-  encolar(linea: string): void;
+  /**
+   * Encola una línea COMO COMANDO, que es como el servidor aplica `/modelo`, `/aprobacion` o
+   * `/sync` sin que nadie teclee la sintaxis.
+   *
+   * `sustituye` es la CLAVE de un control que refleja un ESTADO: si ya hay otra pendiente con
+   * la misma clave, aquélla se retira. Opcional a propósito — ver `LineaDeConsola`.
+   */
+  encolar(linea: string, sustituye?: string): void;
   consola: Consola;
   /** Un mensaje del navegador, tal cual llega por `POST /accion`. */
   recibir(mensaje: MensajeDelCliente): void;
@@ -458,15 +465,53 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
     consola,
     recibir,
     turno: (activo) => transporte.emitir({ clase: "turno", activo }),
-    encolar: (linea) => {
+    encolar: (linea, sustituye) => {
       if (cerrada) return;
       // `comoComando: true`: esto lo pide un CONTROL, no una persona, y es la vía por la
       // que el servidor sigue aplicando `/modelo …` — o `/sync …` — sin que nadie teclee
       // la sintaxis. Es justo la mitad que «/» perdió en el compositor.
-      const encolada: LineaDeConsola = { texto: linea, comoComando: true };
+      const encolada: LineaDeConsola = {
+        texto: linea,
+        comoComando: true,
+        ...(sustituye === undefined ? {} : { sustituye }),
+      };
       const despertar = esperandoLinea.shift();
-      if (despertar !== undefined) despertar({ value: encolada, done: false });
-      else cola.push(encolada);
+      if (despertar !== undefined) {
+        // Alguien ya estaba esperando: la línea sale en el acto y no hay nada pendiente que
+        // sustituir. Y lo que YA salió no se toca — sustituir algo ejecutado sería reescribir
+        // historia, no evitar una línea caduca.
+        despertar({ value: encolada, done: false });
+        return;
+      }
+      /**
+       * **Un control que refleja un ESTADO se encola una vez, no una por pulsación.**
+       *
+       * Si la pastilla del modo se pulsa dos veces mientras un turno corre, las dos líneas
+       * se quedan aquí y el lazo las ejecuta SEGUIDAS al terminar: dos acuses contiguos, con
+       * el primero ya caduco al imprimirse. Con clave, la pendiente se retira y solo vale la
+       * última — que es lo que el control significa.
+       *
+       * **Hoy ese caso NO puede darse, y hay que decirlo**: la pastilla no manda si pulsas
+       * la que ya está puesta, y ese «ya está puesta» sale del estado CONFIRMADO por el
+       * servidor, que durante un turno no cambia — así que el segundo clic se descarta en el
+       * cliente antes de llegar aquí (reproducido en el navegador). Esto queda como el lado
+       * fail-closed de esa guarda: el día que se arregle —porque hoy pierde una pulsación
+       * rápida en silencio— es esto lo que impide que el arreglo traiga dos líneas.
+       *
+       * La clave viaja como DATO y no se deduce del texto: mirar si dos cadenas «son el
+       * mismo comando» sería parsear la sintaxis que el propio servidor acaba de componer,
+       * que es la regla de `DecisionDeConsola` y la de `Acto.clase`.
+       *
+       * Sin clave no se sustituye nada, y eso es la mitad de la decisión: dos `/sync subir`
+       * son dos operaciones, y una línea que teclea una persona no se coalesce jamás.
+       */
+      if (sustituye !== undefined) {
+        for (let i = cola.length - 1; i >= 0; i -= 1) {
+          const pendiente = cola[i]!;
+          if (typeof pendiente !== "string" && pendiente.sustituye === sustituye) cola.splice(i, 1);
+        }
+      }
+      cola.push(encolada);
     },
     conectar: (enviar) => transporte.conectar(enviar),
     mirar: (enviar) => transporte.mirar(enviar),

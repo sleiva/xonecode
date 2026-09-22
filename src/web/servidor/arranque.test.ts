@@ -876,6 +876,10 @@ describe("montarRutas — el cable, por fin conectado", () => {
         const escritos: { papel: string; id: string }[] = [];
         const dichos: string[] = [];
         const encoladas: string[] = [];
+        /** Con su CLAVE de sustitución, que es lo que este doble tenía que empezar a mirar:
+         *  la lambda de abajo tomaba UN parámetro y se comía el segundo sin que `tsc` dijera
+         *  nada — el patrón de fallo que este repo ya tiene contado por argumento. */
+        const conClave: { linea: string; sustituye?: string }[] = [];
         const servidor = servidorDeMentira();
         const vestibulo = vestibuloDePrueba({
           // El `encolar` de la consola no se puede mirar desde fuera —la cola la lee el
@@ -886,9 +890,10 @@ describe("montarRutas — el cable, por fin conectado", () => {
             const real = crearConsolaWeb(o);
             return {
               ...real,
-              encolar: (linea: string) => {
+              encolar: (linea: string, sustituye?: string) => {
                 encoladas.push(linea);
-                real.encolar(linea);
+                conClave.push({ linea, ...(sustituye === undefined ? {} : { sustituye }) });
+                real.encolar(linea, sustituye);
               },
             };
           },
@@ -901,7 +906,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
           },
           ...extra,
         });
-        return { servidor, vestibulo, escritos, dichos, encoladas };
+        return { servidor, vestibulo, escritos, dichos, encoladas, conClave };
       }
 
       /** Conecta el cable y devuelve la ruta de acción, que es por donde entra la elección. */
@@ -991,6 +996,34 @@ describe("montarRutas — el cable, por fin conectado", () => {
         await asentar();
 
         expect(encoladas).toEqual(["/aprobacion autonomo"]);
+      });
+
+      /**
+       * **Y va con CLAVE de sustitución, o dos pulsaciones dejan dos líneas en la cola.**
+       *
+       * Dos pulsaciones con un turno en vuelo dejarían las dos líneas pendientes, y el lazo
+       * las ejecutaría seguidas al terminar. El coalescing vive en `consolaWeb.ts` y tiene su
+       * propio test —con la nota de que hoy la guarda del cliente hace ese caso inalcanzable—;
+       * lo que ESTO fija es que aquí se PASA la clave, que es justo la mitad que se cae sola:
+       * una función de un parámetro se asigna sin que `tsc` diga nada.
+       *
+       * Los tres controles de estado llevan la suya y son DISTINTAS entre sí: sustituir un
+       * `/modelo` pendiente con un `/aprobacion` sería peor que el defecto que esto arregla.
+       */
+      it("y con su CLAVE, que es lo que impide dos «hecho:» seguidos y contradictorios", async () => {
+        const { servidor, vestibulo, conClave } = conEscritor();
+        const { accion } = await conectar(servidor);
+        await vestibulo.abrirProyecto({ raiz: "/w/a" });
+        await asentar();
+
+        await enviarMensaje(accion, { clase: "modoDeEscritura", modo: "autonomo" });
+        await enviarMensaje(accion, { clase: "esfuerzo", nivel: "high" });
+        await asentar();
+
+        const claves = conClave.map((c) => c.sustituye);
+        expect(claves.every((c) => c !== undefined)).toBe(true);
+        // Distintas entre sí: son tres controles, no uno.
+        expect(new Set(claves).size).toBe(claves.length);
       });
 
       /**

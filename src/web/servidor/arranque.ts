@@ -2495,6 +2495,30 @@ export function montarRutas(
    * parece puesto y no lo está es peor que uno que falta.
    */
   /**
+   * Las CLAVES con las que un control que refleja un ESTADO sustituye su propia línea
+   * pendiente (`LineaDeConsola.sustituye`).
+   *
+   * Los tres son pastillas del compositor: se pulsan una vez por cambio de opinión, y si el
+   * turno está en vuelo las líneas se quedan en la cola y el lazo las ejecuta seguidas al
+   * terminar — dos acuses contiguos, con el primero ya caduco. Los tres tienen el mismo
+   * acuse y el mismo defecto, así que llevan clave los tres: una lista que hay que acordarse
+   * de ampliar es el patrón de fallo de este repo.
+   *
+   * **Hoy ninguna de las tres llega a encolarse dos veces**, y hay que decirlo: la pastilla
+   * no manda si pulsas la que ya está puesta, y ese estado es el CONFIRMADO por el servidor,
+   * que durante un turno no cambia. Reproducido en el navegador. Esto es el lado fail-closed
+   * de esa guarda, que además pierde una pulsación rápida en silencio y está sin arreglar.
+   *
+   * **`/sync` NO está aquí, y esa ausencia es la decisión**: dos subidas son dos operaciones,
+   * no una opinión que cambia. Y nada de lo que teclea una persona se coalesce jamás.
+   */
+  const CLAVE_DE_CONTROL = {
+    modo: "control:modo-de-escritura",
+    modelo: "control:modelo",
+    esfuerzo: "control:esfuerzo",
+  } as const;
+
+  /**
    * El esfuerzo de la sesión abierta. `nivel` ausente = quitarlo.
    *
    * Se encola `/esfuerzo`, que es el MISMO manejador que usa el terminal: la función se
@@ -2523,8 +2547,9 @@ export function montarRutas(
       informar(`«${nivel}» no es un nivel de esfuerzo`);
       return;
     }
-    abierto.consola.encolar(`/esfuerzo ${nivel}`);
+    abierto.consola.encolar(`/esfuerzo ${nivel}`, CLAVE_DE_CONTROL.esfuerzo);
   };
+
 
   /**
    * El MODO DE ESCRITURA de la sesión abierta.
@@ -2551,7 +2576,7 @@ export function montarRutas(
       informar(`«${String(modo)}» no es un modo de escritura`);
       return;
     }
-    abierto.consola.encolar(`/aprobacion ${modo satisfies ModoDeEscritura}`);
+    abierto.consola.encolar(`/aprobacion ${modo satisfies ModoDeEscritura}`, CLAVE_DE_CONTROL.modo);
   };
 
   /**
@@ -2599,7 +2624,7 @@ export function montarRutas(
         informar("esta ejecución no puede guardar el modelo por defecto");
         return;
       }
-      abierto.consola.encolar(`/modelo ${id}`);
+      abierto.consola.encolar(`/modelo ${id}`, CLAVE_DE_CONTROL.modelo);
       informar(`modelo de esta sesión: ${id} · esta ejecución no lo guarda como defecto`);
       return;
     }
@@ -2612,7 +2637,7 @@ export function montarRutas(
     if (abierto === undefined) {
       informar(`modelo por defecto: ${id} · lo usarán las sesiones nuevas`);
     } else {
-      abierto.consola.encolar(`/modelo ${id}`);
+      abierto.consola.encolar(`/modelo ${id}`, CLAVE_DE_CONTROL.modelo);
       informar(`${id} guardado como modelo por defecto, además de aplicarlo a esta sesión`);
     }
     // El defecto acaba de cambiar, así que lo que el cliente pinta como «por defecto» se

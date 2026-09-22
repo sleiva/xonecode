@@ -54,6 +54,68 @@ describe("consolaWeb: la entrada", () => {
     expect((await it.next()).value).toEqual({ texto: "/modelo ollama/uno", comoComando: true });
   });
 
+  /**
+   * **Un control que refleja un ESTADO se encola una vez, no una por pulsación.**
+   *
+   * Si la pastilla del modo se pulsa dos veces mientras un turno corre, las dos líneas se
+   * quedan en la cola y el lazo las ejecuta SEGUIDAS al terminar: dos acuses contiguos, con
+   * el primero ya caduco al imprimirse.
+   *
+   * **Hoy ese caso no puede darse, y por eso esto se prueba aquí y no en pantalla**: la
+   * pastilla no manda si pulsas la que ya está puesta, y ese estado sale del CONFIRMADO por
+   * el servidor, que durante un turno no cambia — reproducido en el navegador: pulsar
+   * «Autónomo» y luego «Supervisado» deja el segundo clic sin mandar. Esto es el lado
+   * fail-closed de esa guarda, para el día que se arregle.
+   *
+   * La clave viaja como DATO en la línea y no se deduce de su texto —tercera vez que aplica
+   * la regla de `DecisionDeConsola` en esta pantalla—: mirar si dos cadenas «son el mismo
+   * comando» sería parsear la sintaxis que el propio servidor acaba de componer.
+   *
+   * Y solo sustituye lo que AÚN NO se ha ejecutado. Dos cambios de modo separados por un
+   * turno son dos sucesos, y sus dos líneas son historia correcta.
+   */
+  describe("encolar con clave de sustitución", () => {
+    const drenar = async (c: ReturnType<typeof crearConsolaWeb>): Promise<string[]> => {
+      c.cerrar();
+      const salidas: string[] = [];
+      for await (const l of c.consola.lineas) salidas.push(typeof l === "string" ? l : l.texto);
+      return salidas;
+    };
+
+    it("dos pendientes con la MISMA clave dejan solo la última", async () => {
+      const c = crearConsolaWeb();
+      c.encolar("/aprobacion autonomo", "modo-de-escritura");
+      c.encolar("/aprobacion supervisado", "modo-de-escritura");
+      expect(await drenar(c)).toEqual(["/aprobacion supervisado"]);
+    });
+
+    it("con claves DISTINTAS salen las dos: son dos controles", async () => {
+      const c = crearConsolaWeb();
+      c.encolar("/aprobacion autonomo", "modo-de-escritura");
+      c.encolar("/esfuerzo high", "esfuerzo");
+      expect(await drenar(c)).toEqual(["/aprobacion autonomo", "/esfuerzo high"]);
+    });
+
+    it("y SIN clave no se sustituye nada: dos `/sync subir` son dos operaciones", async () => {
+      const c = crearConsolaWeb();
+      c.encolar("/sync subir");
+      c.encolar("/sync subir");
+      expect(await drenar(c)).toEqual(["/sync subir", "/sync subir"]);
+    });
+
+    it("una clave NO alcanza a lo que ya salió de la cola", async () => {
+      // Quien ya estaba esperando se lleva la línea en el acto, así que no hay nada
+      // pendiente que sustituir — y sustituir algo ya ejecutado sería reescribir historia.
+      const c = crearConsolaWeb();
+      const it = c.consola.lineas[Symbol.asyncIterator]();
+      const primera = it.next();
+      c.encolar("/aprobacion autonomo", "modo-de-escritura");
+      expect((await primera).value).toMatchObject({ texto: "/aprobacion autonomo" });
+      c.encolar("/aprobacion supervisado", "modo-de-escritura");
+      expect((await it.next()).value).toMatchObject({ texto: "/aprobacion supervisado" });
+    });
+  });
+
   it("cerrar agota las líneas: es EOF, y el lazo de correrConsola retorna", async () => {
     const c = crearConsolaWeb();
     c.cerrar();

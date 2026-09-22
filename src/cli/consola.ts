@@ -72,7 +72,26 @@ import { ESFUERZOS, esEsfuerzo, type Esfuerzo } from "../core/esfuerzo.js";
  * siguen haciendo stdio, la TUI, la consola de una tarea y los dobles de los tests: el
  * contrato viejo no se mueve y ninguna de esas pieles cambia de comportamiento.
  */
-export type LineaDeConsola = string | { texto: string; comoComando: boolean };
+export type LineaDeConsola =
+  | string
+  | {
+      texto: string;
+      comoComando: boolean;
+      /**
+       * La CLAVE de sustitución: si al encolar esta línea ya hay otra PENDIENTE con la misma
+       * clave, aquélla se retira. Es para los controles que reflejan un ESTADO —el modo de
+       * escritura, el modelo, el esfuerzo—, que se pulsan una vez por cambio de opinión y
+       * solo el último vale.
+       *
+       * Viaja como DATO, nunca se deduce del `texto`: comparar dos cadenas para ver si «son
+       * el mismo comando» sería parsear la sintaxis que el servidor acaba de componer, la
+       * misma trampa que `DecisionDeConsola` y `Acto.clase` ya evitan.
+       *
+       * **Ausente es lo de siempre**, y eso es la mitad de la decisión: dos `/sync subir` son
+       * dos operaciones, y lo que teclea una persona no se coalesce nunca.
+       */
+      sustituye?: string;
+    };
 
 export interface Consola {
   /** De dónde vienen las líneas del usuario. Agotarlo termina la sesión: es EOF, no cuelgue. */

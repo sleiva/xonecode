@@ -6140,3 +6140,49 @@ final del mismo turno.
 en el navegador; el aspecto de los dos plegables NUEVOS está en test, no en pantalla, porque
 la conversación medida es anterior al campo y no tiene ninguno. Reusan las clases del tramo
 «Trabajo del agente», que sí está verificado ahí.
+
+## Los dos «hecho:» contradictorios: el diagnóstico obvio era el equivocado
+
+**La hipótesis.** Al cerrar un turno salían dos líneas seguidas que se contradicen —«hecho:
+las escrituras se aplicarán SIN preguntar» y «hecho: cada escritura vuelve a pedir aprobación
+con su diff delante»—. La lectura natural: la pastilla se pulsó dos veces MIENTRAS el turno
+corría, las dos `/aprobacion` se quedaron en la cola del lazo y se ejecutaron seguidas al
+terminar, con la primera ya caduca al imprimirse.
+
+**Lo que dijo el navegador.** Ese caso **no puede darse hoy**. `SelectorDeModo.tsx` no manda
+si pulsas la que ya está puesta, y ese «ya está puesta» sale del estado CONFIRMADO por el
+servidor. Reproducido: pulsar «Autónomo» y acto seguido «Supervisado» deja UNA sola línea —la
+del primero— y la pastilla en «Autónomo». El segundo clic no llega a encolarse.
+
+Lo que sí reproduce las dos líneas es lo contrario de lo que se suponía: pulsar «Autónomo»,
+**esperar a que se aplique**, y luego pulsar «Supervisado». O sea **dos cambios de opinión
+reales y separados**, contiguos en el hilo solo porque entre ellos no hubo conversación. Los
+dos acuses son ciertos y ninguno sobra: cualquier cosa que los funda está escondiendo un
+estado en el que la sesión estuvo de verdad.
+
+**Lo que se hizo igualmente, y por qué se deja.** `LineaDeConsola.sustituye`: una clave que
+retira la línea PENDIENTE del mismo control antes de encolar la nueva, con las tres pastillas
+de estado usándola (modo, modelo y esfuerzo — los tres tienen el mismo acuse y el mismo
+defecto, y una lista que hay que acordarse de ampliar es el patrón de fallo de este repo).
+`/sync` no la lleva: dos subidas son dos operaciones, y nada de lo que teclea una persona se
+coalesce. La clave viaja como DATO y no se deduce del texto, que es la regla de
+`DecisionDeConsola` y de `Acto.clase` por tercera vez en esta pantalla.
+
+**Está declarado en el código que hoy defiende un caso inalcanzable.** No es adorno: es el
+lado fail-closed de esa guarda del cliente, y se vuelve necesario en cuanto la guarda se
+arregle — porque entonces dos pulsaciones SÍ encolarán dos líneas.
+
+**Y el defecto que apareció al verificar, que es peor que el que se buscaba.** La guarda
+compara contra el estado confirmado, que va por detrás del clic: **una segunda pulsación
+rápida se pierde en silencio**. Pulsas «Autónomo», cambias de idea y pulsas «Supervisado»
+antes de que vuelva el `alta`, y te quedas en «Autónomo» sin que nada lo diga. La forma
+limpia del arreglo es que la decisión de MANDAR mire lo último que se PIDIÓ —si hay algo sin
+confirmar— mientras lo que se PINTA sigue siendo lo confirmado. Sin hacer: cambia el
+comportamiento del control en cada pulsación, y eso se decide, no se cuela. El mismo patrón
+existe con toda probabilidad en las pastillas de modelo y de esfuerzo.
+
+**Y lo que queda abierto, que es de forma y no de mecanismo**: qué hacer con dos acuses
+contiguos del mismo control. Dejarlos —son ciertos—, que el segundo sustituya al primero
+cuando no hay nada entre medias —esconde el titubeo y deja el estado final honesto—, o tratar
+el modo como un estado que el transcript enseña una vez en lugar de un registro. Las tres
+esconden o enseñan cosas distintas y ninguna es obviamente mejor.
