@@ -1,39 +1,45 @@
 # El linter de escritura: lo que queda anotado
 
 Hallazgos que salieron al montar la validación previa a `write_file` (paso 1, en
-`xone-linter`: `f0b3f1a` y `ae03157`) y que **no se han arreglado**. Cada uno dice por qué.
+`xone-linter`) y que **no se han arreglado**. Cada uno dice por qué.
 
-## 1. `type="C"` no es un tipo nuevo: es un anti-patrón, y DOS SKILLS SE CONTRADICEN
+## 1. `type="C"` NO existe — y el problema es una skill DESACTUALIZADA en disco
 
-Apareció 3 veces en el corpus (solo en AppDemo) y no estaba en la tabla de tipos, así que
-parecía un tipo sin documentar. Es al revés — `xone-development` dice en **tres sitios** que
-no existe:
+Historia corta: `INVALID_PROP_TYPE` marcaba `type="C"` en 3 ficheros de AppDemo. Se investigó,
+se «arregló» metiendo once tipos en la lista del linter, y **estaba mal**: se había leído una
+tabla vieja. Revertido (`399ab6b`).
 
-- `references/xml-ui/prop-tipos-combos-y-controles.md:11` — «**No existe un `type="C"` propio
-  en XOne.** Los combos/selectores se implementan con `type="T"` (o `type="N"`) más `mapcol`
-  y `mapfld`».
-- `references/tipos-de-prop.md:28` — «No existen `type="C"`, `"M"`, `"A"`, `"F"`, `"S"`,
-  `"P"`, `"E"`, `"R"`, `"H"`, `"W"`, `"CAM"`, `"ARRAY"`, `"STRING"`, `"N1"` ni `"BT"`».
-- `references/anti-patrones.md:11` — lo lista como anti-patrón, con el arreglo al lado.
+**La respuesta buena**, de la tabla que se declara a sí misma «Lista autoritativa» en
+`xone-help-docs/topics/02b-xml-prop-tipos.md`:
 
-Y el uso real es EXACTAMENTE el anti-patrón, ya con las dos mitades del arreglo puestas:
-`<prop name="EMPRESA" type="C" mapcol="Empresas" mapfld="ID" …/>`. Solo sobra el tipo.
+> **Combos/selectores**: NO tienen un type propio. Se implementan con `type="T"` (o `type="N"`)
+> más `mapcol` y `mapfld`.
+> **Mapas**: `type="Z" viewmode="mapview"`. No existe un `type="M"`.
+> **Sliders, progress bars, stepper, OTP, navbar, kanban…**: son **viewmodes** sobre `T`, `N`
+> o `Z`. No son types propios.
 
-**Y la otra skill lo da por bueno.**
-`xone-project-generator/references/fases-10-12-readmes-y-validacion.md:75` tiene una tabla
-titulada «Mapeo de Tipos XOne a SQLite» —para el generador de la base de datos— y bajo la
-columna **«Tipo XOne»** lista `C`, `F`, `M`, `P`, `R` y `S`, más `N1` cuando la serie va de
-`N2` a `N6`. Son seis tipos que `xone-development` declara inexistentes.
+Y su `SKILL.md:439` lista `<prop type="C">` como anti-patrón con el arreglo al lado. La lista
+del linter coincide con esa tabla **exactamente: 30 tipos, cero diferencia**. Así que los 3
+hallazgos de AppDemo son correctos.
 
-**Con precisión, porque la diferencia importa**: esa tabla NO manda escribir `type="C"` —dice
-qué columna SQLite crear si lo encuentra— y el skill no usa ninguno de esos tipos en ningún
-ejemplo suyo (comprobado: cero apariciones de `type="C|F|M|P|R|S|N1"` en todo el skill). El
-daño es indirecto: es una lista rotulada «Tipo XOne» que contiene seis que no lo son, y quien
-la lea para saber qué tipos hay se llevará la respuesta equivocada. Además la tabla se
-contradice sola — `L` sale en dos filas, en `TEXT` y en `NO SE CREA`.
+**Lo que hay que arreglar no es el linter, es el disco.** Hay tres copias de `xone-help-docs`
+en la máquina y no dicen lo mismo:
 
-El linter acierta al marcarlo (`INVALID_PROP_TYPE`). Lo que hay que decidir es cuál de las dos
-tablas manda y corregir la otra.
+| copia | estado |
+|---|---|
+| `~/.claude/skills/xone-help-docs` | **VIEJA** — tiene `\| C \| Combo \|` en 3 ficheros y le falta `02b-xml-prop-tipos.md` |
+| `~/.agents/skills/xone-help-docs` | al día |
+| `~/Downloads/xone-help-docs` | vieja |
+
+La primera es la que lee Claude Code, y es la que hizo creer que `C` era un tipo válido. Hasta
+que se actualice, cualquier agente que consulte los tipos se llevará la respuesta de antes.
+
+**Y la tabla del generador sigue mal, también en la versión nueva.**
+`xone-project-generator/references/xone-project-generation-workflow.md:5727` conserva el
+«Mapeo de Tipos XOne a SQLite» con `C`, `F`, `M`, `P`, `R` y `S` bajo la columna «Tipo XOne»,
+más `N1` cuando la serie empieza en `N2`. No manda escribir esos tipos —dice qué columna crear
+si los ve— pero es una lista rotulada «Tipo XOne» con seis que no lo son, y encima se
+contradice sola: `L` sale en dos filas, en `TEXT` y en `NO SE CREA`.
 
 ## 2. Las colls de ACAProd se cargan DOS VECES
 
