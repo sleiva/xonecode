@@ -5717,6 +5717,16 @@ número provisional con un fallo honesto se afina luego.
   dato habría sido un segundo vocabulario para lo mismo.
 - **El aviso del chat manda a la pastilla, no al comando.** En el navegador «/» es prosa, así
   que decirle a alguien que teclee `/aprobacion` es mandarlo a un camino que allí no existe.
+- **Y el ECO de `/aprobacion` se recorta donde la pantalla ya lo cuenta**
+  (`Consola.modoALaVista`). Al encender el modo, el comando explicaba tres cosas —que se
+  avisará con los nombres, que es de esta conversación, que subir sigue preguntando—: en el
+  navegador eso eran cuatro renglones en el transcript diciendo lo que la nota permanente se
+  lee dos centímetros más arriba, y la pastilla enseña al lado. Se recorta a una línea ahí y
+  se deja entero en el terminal, donde no hay ni pastilla ni nota y esos tres detalles son lo
+  único que los cuenta. **Lo decide el DESTINO y no la línea**, el molde de
+  `Piel.anotarSincronizacion?`: la misma orden tecleada en el terminal DEBE explicarse
+  entera, y eso no lo puede decidir quien compone el texto. Lo que no se recorta es el HECHO
+  («se aplicarán SIN preguntar»): una acción sin acuse se lee como que no pasó nada.
 - **El cable lleva la INTENCIÓN** (`{clase:"modoDeEscritura", modo}`) y el servidor la aplica
   encolando `/aprobacion`, el mismo manejador del terminal. Un segundo camino para lo mismo es
   donde el hueco de política podría reabrirse. Se llama `modoDeEscritura` y no `modo` porque en

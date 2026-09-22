@@ -131,6 +131,22 @@ export interface Consola {
    */
   topeDeAprobaciones?: number;
   /**
+   * Esta piel tiene el modo de escritura SIEMPRE a la vista. Ausente = no.
+   *
+   * Lo declara quien monta la consola, igual que `topeDeAprobaciones`, y cambia cuánto
+   * EXPLICA `/aprobacion` al ponerlo. En la web hay una pastilla en el compositor y una
+   * nota permanente arriba del chat que ya cuentan los tres detalles —que se avisará con
+   * los nombres, que es de esta conversación y que subir sigue preguntando—, así que
+   * repetirlos en el transcript era la duplicación de siempre: cuatro renglones que dicen
+   * lo que se está leyendo dos centímetros más arriba. En el terminal no hay ni pastilla ni
+   * nota, y esos tres detalles son lo único que los cuenta.
+   *
+   * Va como propiedad del DESTINO y no como una bandera de la línea, por lo mismo que
+   * `Piel.anotarSincronizacion?`: la misma `/aprobacion` tecleada en el terminal DEBE
+   * imprimir la explicación entera, y eso no lo puede decidir quien compone el texto.
+   */
+  modoALaVista?: boolean;
+  /**
    * El estado de sesión ACABA de cambiar (un comando devolvió uno nuevo).
    *
    * Existe porque el modelo en vigor vive dentro del lazo: `/modelo` y `/modelos` cambian
@@ -1326,11 +1342,14 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
       }
 
       if (pedido === "autonomo") {
+        // Los tres detalles solo donde no están ya en pantalla. Ver `Consola.modoALaVista`.
         consola.escribir(
           "hecho: en esta sesión las escrituras se aplicarán SIN preguntar.\n" +
-            "  Cada turno que escriba lo dirá, con los nombres de los ficheros.\n" +
-            "  Es de ESTA conversación: una sesión nueva vuelve a preguntar.\n" +
-            "  Subir a CloudStudio NO entra aquí: /sync subir sigue enseñando su plan.\n"
+            (consola.modoALaVista === true
+              ? ""
+              : "  Cada turno que escriba lo dirá, con los nombres de los ficheros.\n" +
+                "  Es de ESTA conversación: una sesión nueva vuelve a preguntar.\n" +
+                "  Subir a CloudStudio NO entra aquí: /sync subir sigue enseñando su plan.\n")
         );
       } else {
         consola.escribir("hecho: cada escritura vuelve a pedir aprobación con su diff delante.\n");

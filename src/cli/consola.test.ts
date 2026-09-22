@@ -1590,12 +1590,34 @@ describe("/aprobacion", () => {
     expect(r.estado?.modo).toBe("autonomo");
     expect(existsSync(join(casa, NOMBRE_CARPETA, "settings.json"))).toBe(false);
     // Las tres cosas que hay que saber al encenderlo: que se avisará con los nombres, que
-    // es de ESTA conversación, y que subir a CloudStudio sigue preguntando.
+    // es de ESTA conversación, y que subir a CloudStudio sigue preguntando. Salen porque
+    // esta consola NO declara `modoALaVista`: en el terminal no hay pastilla ni nota que
+    // las cuente, y son lo único que las cuenta.
     expect(salida()).toContain("nombres de los ficheros");
     expect(salida()).toContain("sesión nueva");
     expect(salida()).toContain("/sync subir");
     vi.unstubAllEnvs();
     rmSync(casa, { recursive: true, force: true });
+  });
+
+  it("con el modo A LA VISTA se recorta a una línea: la pantalla ya lo cuenta", async () => {
+    // En la web hay una pastilla y una nota permanente con esos mismos tres detalles, así
+    // que repetirlos en el transcript eran cuatro renglones diciendo lo que se lee dos
+    // centímetros más arriba. Lo decide el DESTINO y no la línea, por lo mismo que
+    // `Piel.anotarSincronizacion?`: la misma orden tecleada en el terminal debe explicarse
+    // entera.
+    const { consola, salida } = consolaDeConSecreto({ lineas: [], interactivo: true });
+    const r = await COMANDOS["aprobacion"]!.manejador(
+      ["autonomo"],
+      estadoDe(),
+      { ...consola, modoALaVista: true }
+    );
+
+    // El hecho SÍ se dice: una acción sin acuse se lee como que no pasó nada.
+    expect(salida()).toContain("SIN preguntar");
+    expect(salida()).not.toContain("nombres de los ficheros");
+    expect(salida()).not.toContain("/sync subir");
+    expect(r.estado?.modo).toBe("autonomo");
   });
 
   it("un proyecto conectado a CloudStudio YA NO lo rechaza", async () => {

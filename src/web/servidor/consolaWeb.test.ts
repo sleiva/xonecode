@@ -15,6 +15,15 @@ const OTRO_PENDIENTE = { id: "2", origen: "dev", descripcion: "escribir src/otro
 const aprobado = (d: Decision | undefined) => d?.type === "approve";
 const rechazado = (d: Decision | undefined) => d?.type === "reject";
 
+describe("consolaWeb: lo que declara de sí misma", () => {
+  it("dice que el modo de escritura está A LA VISTA, y sin eso `/aprobacion` se repetiría", () => {
+    // Un campo opcional que se cae no da error que leer: el síntoma serían cuatro renglones
+    // en el transcript diciendo lo que la nota permanente del chat ya cuenta dos
+    // centímetros más arriba — la duplicación que esto vino a quitar, y con todo en verde.
+    expect(crearConsolaWeb().consola.modoALaVista).toBe(true);
+  });
+});
+
 describe("consolaWeb: la entrada", () => {
   it("la prosa que llega por accion sale por el iterador de líneas, marcada como PROSA", async () => {
     const c = crearConsolaWeb();

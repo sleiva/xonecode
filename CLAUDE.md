@@ -639,6 +639,11 @@ no viaja porque ahí la ejecución no se concede—. Reglas duras:
   `MAX_APPROVAL_ROUNDS` se dimensionaron para un modelo que insiste, y lo que cortan es un
   trabajo legítimo a la mitad. Sin nadie delante se queda el cinco, que ahí sí frena un bucle
   que nadie puede parar.
+  **Y lo que `/aprobacion` EXPLICA lo decide el destino, no la línea** (`Consola.modoALaVista`,
+  el molde de `anotarSincronizacion?`): donde el modo está siempre a la vista —la web, con su
+  pastilla y su nota— sale una línea, y donde no lo está —el terminal— salen los tres
+  detalles, que ahí son lo único que los cuenta. Una bandera en la línea decidiría por texto
+  lo que es una propiedad de la pantalla.
 - El origen del interrupt se dice UNA vez: `aPendiente` (`agent/turno/interrupts.ts`) quita el prefijo
   `[perfil]` de la descripción porque el dato ya viaja en `origen`.
 

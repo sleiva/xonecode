@@ -226,6 +226,13 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
 
   const consola: Consola = {
     interactivo: true,
+    /**
+     * Aquí el modo de escritura está SIEMPRE a la vista: la pastilla del compositor y la
+     * nota permanente del chat. Por eso `/aprobacion` no repite sus tres detalles en el
+     * transcript — se estarían leyendo dos centímetros más arriba. Ver
+     * `Consola.modoALaVista`; en el terminal no se declara y la explicación sale entera.
+     */
+    modoALaVista: true,
 
     lineas: {
       [Symbol.asyncIterator]() {
