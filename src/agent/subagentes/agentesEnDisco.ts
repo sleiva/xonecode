@@ -990,8 +990,9 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
       "mira qué pasa. Es el único que ve lo que ninguna comprobación estática puede ver. " +
       "Dile SIEMPRE a qué pantalla o colección llegar y qué comprobar ahí: «pruébalo» a " +
       "secas le hace improvisar y sale caro. Levanta el emulador si no hay ninguno. Devuelve " +
-      "lo que MIDIÓ —salida literal, captura y excepciones del log—, y dice lo que no pudo " +
-      "comprobar en vez de deducirlo. No lo uses para cambiar el proyecto: eso es de " +
+      "lo que MIDIÓ —salida literal y excepciones del log—, y dice lo que no pudo " +
+      "comprobar en vez de deducirlo. PÍDELE una captura solo si lo que hay que comprobar es " +
+      "VISUAL: cuesta tokens, y un fallo que el log explica no se ve mejor en una foto. No lo uses para cambiar el proyecto: eso es de " +
       "developer-xone. Y NO lo uses para algo que se ve LEYENDO —un texto cortado, un " +
       "atributo, un error de sintaxis—: arrancar un aparato para eso se come un cuarto del " +
       "turno y no contesta nada que no conteste abrir el fichero.",
