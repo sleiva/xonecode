@@ -6019,8 +6019,10 @@ conserva su tarjeta: de un `.json` no hay nada que previsualizar.
 
 **La regla deja de repetirse.** La frase de la tarjeta no era un hecho de ese fichero: es la
 misma para todos, y repetida dieciséis veces enseña a no leerla — el patrón del aviso que
-salta cuando no ha pasado nada. Ya vivía, una sola vez, al pie de la pestaña Artefactos. Se
-conserva además en el `title` de la tarjeta. La RUTA no se pierde: sigue siendo lo que copia
+salta cuando no ha pasado nada. **Donde se conserva es al pie de la pestaña Artefactos**, una
+sola vez, que es donde ya vivía y donde se decide sobre ellos. El `title` de la tarjeta la
+repite, pero eso no cuenta como conservarla: un `title` es solo hover, y no lo alcanzan ni el
+teclado ni el táctil — la misma lección que `SelectorDeModo.tsx`. La RUTA no se pierde: sigue siendo lo que copia
 el botón, que es para lo que se usaba — leerla no le hace falta a nadie, pegarla en un
 terminal sí.
 

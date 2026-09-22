@@ -127,8 +127,10 @@ function CapturasDelTramo({
  *
  * Y la frase no era un hecho de ese fichero: es una REGLA, la misma para todos, así que
  * repetirla por tarjeta enseña a no leerla — el patrón del aviso que salta cuando no ha
- * pasado nada, escrito en la bitácora de este repo. Se conserva donde sí se lee: en el
- * `title` de la tarjeta, y en la pestaña Artefactos, que es donde se decide sobre ellos.
+ * pasado nada, escrito en la bitácora de este repo. **Donde se conserva es al pie de la
+ * pestaña Artefactos**, una sola vez y donde ya vivía, que es donde se decide sobre ellos.
+ * El `title` de aquí la repite y no cuenta como conservarla: un `title` es solo hover y no
+ * lo alcanzan ni el teclado ni el táctil, la misma lección que `SelectorDeModo.tsx`.
  *
  * La RUTA no se pierde: sigue siendo lo que copia el botón, que es para lo que se usaba —
  * para leerla nadie necesita el uuid, y para pegarla en un terminal sí—.
