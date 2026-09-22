@@ -327,3 +327,56 @@ describe("paralelismo", () => {
     expect(pintarSesion(s!).join("\n")).not.toContain("en paralelo");
   });
 });
+
+/**
+ * **Cuánto METIÓ cada tool en el contexto, que es lo que se paga.**
+ *
+ * El reparto por tool cuenta LLAMADAS: dos `read_file` son dos líneas iguales y pueden ser
+ * doscientos caracteres o veinte mil. Se echó de menos buscando por qué un turno costaba
+ * mucho más que el mismo turno de por la mañana — se podía contar cuántas veces se leía el
+ * `SKILL.md` de una skill, pero no lo que pesaba, y por eliminación no se llega.
+ */
+describe("el peso en contexto", () => {
+  const linea = (o: Record<string, unknown>) => JSON.stringify({ v: 1, sesion: "s1", at: "2026-09-22T00:00:00.000Z", ...o });
+  const res = (nombre: string, detalle: string, chars: number) => linea({ tipo: "resultado", nombre, detalle, chars });
+
+  it("suma por tool y BLANCO, y lo más gordo sale primero", () => {
+    const [s] = resumirTraza([
+      linea({ tipo: "sesion" }),
+      res("read_file", "/skills/x/SKILL.md", 12000),
+      res("read_file", "/skills/x/SKILL.md", 12000),
+      res("execute", "xone-log-android", 30000),
+      res("read_file", "/a.js", 500),
+    ]);
+    expect(s?.charsDeTools).toBe(54500);
+    expect(s?.pesos[0]).toEqual({ nombre: "execute", detalle: "xone-log-android", chars: 30000, veces: 1 });
+    expect(s?.pesos[1]).toEqual({ nombre: "read_file", detalle: "/skills/x/SKILL.md", chars: 24000, veces: 2 });
+    expect(s?.pesos[2]?.detalle).toBe("/a.js");
+  });
+
+  it("se pinta con la MEDIA solo cuando hubo más de una", () => {
+    const [s] = resumirTraza([linea({ tipo: "sesion" }), res("read_file", "/f", 100), res("read_file", "/f", 300), res("execute", "ls", 50)]);
+    const pintado = pintarSesion(s!).join("\n");
+    expect(pintado).toContain("lo que METIÓ en el contexto");
+    expect(pintado).toMatch(/400\s+read_file\s+\/f\s+×2\s+\(media 200\)/);
+    // Con una sola, la media no aporta nada y sería ruido.
+    expect(pintado).toMatch(/50\s+execute\s+ls$/m);
+  });
+
+  /** Ausente no es cero: una traza anterior al campo no dice «no metió nada». */
+  it("sin resultados no se pinta la sección", () => {
+    const [s] = resumirTraza([
+      JSON.stringify({ v: 1, sesion: "s1", at: "2026-09-22T00:00:00.000Z", tipo: "sesion" }),
+      JSON.stringify({ v: 1, sesion: "s1", at: "2026-09-22T00:00:00.000Z", tipo: "tool", nombre: "read_file", detalle: "/f" }),
+    ]);
+    expect(s?.pesos).toEqual([]);
+    expect(s?.charsDeTools).toBe(0);
+    expect(pintarSesion(s!).join("\n")).not.toContain("METIÓ en el contexto");
+  });
+
+  it("un resultado sin nombre se cuenta igual, y lo dice", () => {
+    const [s] = resumirTraza([linea({ tipo: "sesion" }), linea({ tipo: "resultado", chars: 900 })]);
+    expect(s?.charsDeTools).toBe(900);
+    expect(pintarSesion(s!).join("\n")).toContain("(sin nombre)");
+  });
+});

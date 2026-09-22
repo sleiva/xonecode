@@ -1,7 +1,7 @@
 import { normalizar } from "./normalizar.js";
 import { Mensajes } from "./mensajes.js";
 import { detalleDe, parametrosDe, type ParametrosSeguros } from "./resumenDeTool.js";
-import { esMensajeDeTool } from "./textoDeTool.js";
+import { aTexto, esMensajeDeTool } from "./textoDeTool.js";
 import type { DomainEvent, PendienteDeAprobacion } from "../../core/events.js";
 
 /** El texto de un mensaje, venga como venga. */
@@ -77,7 +77,7 @@ export function toolsDe(dato: unknown): Array<{ nombre: string; detalle?: string
     if (!Array.isArray(msgs)) continue;
     for (const m of msgs) {
       const llamadas = (m as Record<string, unknown>)?.tool_calls;
-      // El id del MENSAJE que trae estas llamadas: es lo que dice cuales se pidieron JUNTAS.
+      // El id del MENSAJE que trae estas llamadas: es lo que dice cuáles se pidieron JUNTAS.
       const respuesta = (m as Record<string, unknown>)?.id;
       if (Array.isArray(llamadas)) {
         for (const l of llamadas) {
@@ -97,6 +97,37 @@ export function toolsDe(dato: unknown): Array<{ nombre: string; detalle?: string
           }
         }
       }
+    }
+  }
+  return salida;
+}
+
+/**
+ * Lo que cada tool DEVOLVIÓ, medido en caracteres, por el id de su llamada.
+ *
+ * **Contar llamadas no dice a dónde van los tokens.** Un `read_file` y otro `read_file` son
+ * una linea igual en la traza y pueden ser doscientos caracteres o veinte mil: lo que se paga
+ * es lo que ENTRA en el contexto, no cuántas veces se pidió. Sin esto, la pregunta «¿que me
+ * esta costando este turno?» solo se podía contestar por eliminación.
+ *
+ * **Van los CARACTERES, nunca el contenido** —la misma regla que `core/events.ts`: el
+ * resultado de un `read_file` es el fichero entero y el de una tool MCP lleva el bearer—. Un
+ * tamaño no es contenido, y es lo único que hace falta para repartir el gasto.
+ *
+ * No se convierte a tokens: la razón caracteres/token cambia con el modelo y con lo que haya
+ * dentro, así que dar una cifra de tokens aquí sería inventarse una precisión que no se tiene.
+ */
+export function resultadosDe(dato: unknown): Array<{ id: string; chars: number }> {
+  if (!dato || typeof dato !== "object") return [];
+  const salida: Array<{ id: string; chars: number }> = [];
+  for (const nodo of Object.values(dato as Record<string, unknown>)) {
+    const msgs = (nodo as Record<string, unknown> | null)?.messages;
+    if (!Array.isArray(msgs)) continue;
+    for (const m of msgs) {
+      if (!esMensajeDeTool(m)) continue;
+      const id = (m as Record<string, unknown>)?.tool_call_id;
+      if (typeof id !== "string" || id === "") continue;
+      salida.push({ id, chars: aTexto((m as Record<string, unknown>).content).length });
     }
   }
   return salida;
@@ -170,20 +201,32 @@ export type AlLlamarTool = (tool: {
   detalle?: string;
   parametros?: ParametrosSeguros;
   origen: OrigenDeTool;
+  /** Cuántos caracteres devolvió, si ya se sabe. Ver `alResponderTool`. */
+  chars?: number;
   /**
-   * Id del MENSAJE del modelo que pidio esta tool. Dos tools con el mismo valor se
-   * pidieron en la MISMA respuesta, que es lo unico que decide si van en paralelo.
+   * Id del MENSAJE del modelo que pidió esta tool. Dos tools con el mismo valor se
+   * pidieron en la MISMA respuesta, que es lo único que decide si van en paralelo.
    *
-   * Existe porque sin el la traza no podia contestarlo y habia que adivinarlo. Medido
+   * Existe porque sin él la traza no podía contestarlo y había que adivinarlo. Medido
    * sobre un turno real de 69 tools: agrupar por el reloj exacto daba 18 en rafaga (el
    * milisegundo PARTE una rafaga) y agrupar por los contadores del tracker daba 38, con
    * dos grupos de 1.000 ms de span, o sea rezagados FUNDIDOS en una respuesta ajena. Dos
-   * metodos, dos respuestas, y ninguno comprobable. Ademas `origen` solo tiene dos
-   * valores, asi que dos especialistas a la vez son indistinguibles: el id del mensaje
+   * metodos, dos respuestas, y ninguno comprobable. Además `origen` solo tiene dos
+   * valores, así que dos especialistas a la vez son indistinguibles: el id del mensaje
    * tambien los separa.
    */
   respuesta?: string;
 }) => void;
+
+/**
+ * Lo que una tool devolvio: CUÁNTO pesa, nunca qué era.
+ *
+ * Lleva `nombre` y `detalle` porque un peso suelto no se puede repartir: el id de una llamada
+ * no significa nada en un informe. Salen del `tool_call` que se vio antes —el resultado llega
+ * en un chunk POSTERIOR al de su llamada—, y el `detalle` es el mismo de la lista blanca de
+ * `resumenDeTool.ts`, así que por aquí no pasa nada que no pasara ya.
+ */
+export type AlResponderTool = (r: { id: string; chars: number; nombre?: string; detalle?: string }) => void;
 
 /**
  * Convierte el stream del grafo en `DomainEvent`.
@@ -202,7 +245,8 @@ export async function* aEventos(
   stream: AsyncIterable<unknown>,
   pendientes?: () => Promise<PendienteDeAprobacion[]>,
   alLlamarTool?: AlLlamarTool,
-  vistasDelTurno?: Set<string>
+  vistasDelTurno?: Set<string>,
+  alResponderTool?: AlResponderTool
 ): AsyncIterable<DomainEvent> {
   const mensajes = new Mensajes();
   /**
@@ -220,17 +264,34 @@ export async function* aEventos(
    * MISMO id de mensaje — o sea que no eran del modelo, eran del stream. Eso mandó a
    * diagnosticar un problema de escrituras concurrentes que la traza se habia inventado.
    *
-   * Sin el parametro se comporta como antes (un turno de una ronda), asi que ningun otro
-   * llamador ni ningun doble de los tests cambia: la misma asimetria que los metodos
+   * Sin el parámetro se comporta como antes (un turno de una ronda), así que ningún otro
+   * llamador ni ningún doble de los tests cambia: la misma asimetría que los métodos
    * opcionales de `Piel`.
    */
   const vistas = vistasDelTurno ?? new Set<string>();
+  /** Los resultados ya medidos, por el id de su llamada: llegan reenviados igual que ellas. */
+  const resultados = new Set<string>();
+  /** De qué tool era cada llamada, para poder repartir el peso de su resultado. */
+  const deQuien = new Map<string, { nombre: string; detalle?: string }>();
   try {
     for await (const bruto of stream) {
       const chunk = normalizar(bruto);
       if (!chunk) continue;
 
       if (chunk.modo === "updates") {
+        // Los resultados van ANTES que las llamadas del mismo chunk: el resultado de una tool
+        // llega en el chunk SIGUIENTE al de su llamada, así que aquí no hay carrera — y
+        // mirarlos primero deja la linea de la llamada lista para acompañarse de su peso.
+        for (const r of resultadosDe(chunk.dato)) {
+          if (resultados.has(r.id)) continue;
+          resultados.add(r.id);
+          const quien = deQuien.get(r.id);
+          try {
+            alResponderTool?.({ ...r, ...(quien ?? {}) });
+          } catch {
+            // La observabilidad no puede tumbar ni silenciar el stream.
+          }
+        }
         for (const { nombre, detalle, parametros, id, respuesta } of toolsDe(chunk.dato)) {
           // Ya contada: este mismo chunk trae la historia acumulada del subgrafo (ver
           // `toolsDe`). Sin `id` no se puede afirmar que sea repetida, así que se emite —
@@ -238,6 +299,7 @@ export async function* aEventos(
           if (id !== undefined) {
             if (vistas.has(id)) continue;
             vistas.add(id);
+            deQuien.set(id, { nombre, ...(detalle === undefined ? {} : { detalle }) });
           }
           try {
             alLlamarTool?.({

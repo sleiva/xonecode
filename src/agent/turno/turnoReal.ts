@@ -1246,7 +1246,8 @@ export async function abrirSesionReal(opciones: {
                 async () => (await leerPendientes()).lista,
                 ({ nombre, detalle, parametros, origen, respuesta }) =>
                   diagnostico?.herramienta(nombre, detalle, parametros, tracker, origen, respuesta),
-                vistasDelTurno
+                vistasDelTurno,
+                ({ nombre, detalle, chars }) => diagnostico?.resultado?.(nombre, detalle, chars)
               ),
               eventosExternos
             )

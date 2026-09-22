@@ -36,6 +36,15 @@ export interface DiagnosticoDeTools {
    * opacos. Dos cubos ciertos en vez de cinco dudosos.
    */
   herramienta(nombre: string, detalle: string | undefined, parametros: ParametrosSeguros | undefined, tracker: TokenTracker, origen?: OrigenDeTool, respuesta?: string): void;
+  /**
+   * **Cuánto METIÓ en el contexto lo que devolvió una tool.** Opcional, como `corte`.
+   *
+   * Contar llamadas no dice a donde van los tokens: dos `read_file` son dos líneas iguales y
+   * pueden ser doscientos caracteres o veinte mil. Van los CARACTERES y nunca el contenido, y
+   * no se convierten a tokens — la razón cambia con el modelo y con lo que haya dentro, así
+   * que una cifra de tokens aquí sería una precisión inventada.
+   */
+  resultado?(nombre: string | undefined, detalle: string | undefined, chars: number): void;
 }
 
 /** Ruta pública solo para comunicar al usuario dónde quedó su diagnóstico. */
@@ -76,6 +85,14 @@ export function crearDiagnosticoDeTools(
     },
     corte(origen, limite) {
       escribir({ tipo: "corte", origen, limite });
+    },
+    resultado(nombre, detalle, chars) {
+      escribir({
+        tipo: "resultado",
+        ...(nombre === undefined ? {} : { nombre }),
+        ...(detalle === undefined ? {} : { detalle }),
+        chars,
+      });
     },
     herramienta(nombre, detalle, parametros, tracker, origen, respuesta) {
       escribir({

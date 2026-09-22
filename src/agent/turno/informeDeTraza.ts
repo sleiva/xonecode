@@ -72,7 +72,7 @@ export interface UsoDeTool {
  * milisegundo parte una rafaga por la mitad— y agrupar por los CONTADORES del tracker daba
  * 38, con dos grupos de 1.000 ms de span, o sea rezagados fundidos en una respuesta ajena.
  * Hubo que cruzar los dos criterios para defender un numero, y eso es la señal de que
- * faltaba el dato: ahora cada tool dice de que mensaje salio.
+ * faltaba el dato: ahora cada tool dice de qué mensaje salió.
  */
 export interface Paralelismo {
   /** Respuestas que pidieron MAS DE UNA tool. */
@@ -92,6 +92,29 @@ export interface Paralelismo {
    * cambios — medido con el backend de verdad, cuatro ediciones simultaneas dejaron UNA.
    */
   escriturasALaVez: Array<{ detalle: string; veces: number }>;
+}
+
+/**
+ * **Cuánto METIÓ en el contexto lo que devolvió una tool, que no es cuántas veces se llamó.**
+ *
+ * Dos `read_file` son dos líneas iguales en el reparto de arriba y pueden ser doscientos
+ * caracteres o veinte mil. Lo que se paga es esto. Salió de buscar por qué un turno costaba
+ * mucho más que el mismo turno de por la mañana: se podía contar cuántas veces se leía el
+ * `SKILL.md` de una skill, pero no lo que pesaba — y por eliminación no se llega.
+ *
+ * **Son CARACTERES y no se convierten a tokens**: la razón cambia con el modelo y con lo que
+ * haya dentro, así que dar tokens aquí sería inventarse una precisión que no se tiene. Para
+ * comparar dos turnos sirve igual.
+ */
+export interface PesoEnContexto {
+  /** La tool, si consta de que llamada era su resultado. */
+  nombre?: string;
+  /** El BLANCO de la lista blanca: la ruta, el patrón, el comando. */
+  detalle?: string;
+  /** Caracteres devueltos, sumados. */
+  chars: number;
+  /** Cuantas veces. `chars` entre `veces` dice si es una gorda o muchas pequeñas. */
+  veces: number;
 }
 
 export interface SesionDeTraza {
@@ -115,6 +138,10 @@ export interface SesionDeTraza {
    */
   toolsDelOrquestador: number;
   paralelismo: Paralelismo;
+  /** De dónde sale el contexto, lo más gordo primero. Ver `PesoEnContexto`. */
+  pesos: PesoEnContexto[];
+  /** Todo lo que devolvieron las tools, sumado. */
+  charsDeTools: number;
   /** Líneas que no se pudieron leer. Se dicen: una traza a medias no se disimula. */
   ilegibles: number;
 }
@@ -131,6 +158,8 @@ export function costeEfectivo(uso: { input: number; output: number; cache: numbe
 }
 
 interface EnConstruccion {
+  /** Lo devuelto por cada (tool, blanco). */
+  porPeso: Map<string, PesoEnContexto>;
   /** Las tools de cada respuesta del modelo, por su id de mensaje. */
   porRespuesta: Map<string, Array<{ nombre: string; detalle?: string }>>;
   sesion: SesionDeTraza;
@@ -183,11 +212,14 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
       sesion: {
         id, llamadas: 0, input: 0, output: 0, cache: 0, contexto: 0, origenes: [], tools: [], toolsDelOrquestador: 0,
         paralelismo: { respuestas: 0, tools: 0, maximo: 0, sinRespuesta: 0, escriturasALaVez: [] },
+        pesos: [],
+        charsDeTools: 0,
         ilegibles: 0,
       },
       porOrigen: new Map(),
       porTool: new Map(),
       porRespuesta: new Map(),
+      porPeso: new Map(),
     };
     sesiones.set(id, nueva);
     nueva.sesion.ilegibles += ilegiblesSinDueño;
@@ -244,6 +276,27 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
       continue;
     }
 
+    if (evento.tipo === "resultado") {
+      const chars = numero(evento.chars);
+      const nombre = texto(evento.nombre);
+      const detalle = texto(evento.detalle);
+      actual.sesion.charsDeTools += chars;
+      const clave = `${nombre ?? ""}\u0000${detalle ?? ""}`;
+      const ya = actual.porPeso.get(clave);
+      if (ya === undefined) {
+        actual.porPeso.set(clave, {
+          ...(nombre === undefined ? {} : { nombre }),
+          ...(detalle === undefined ? {} : { detalle }),
+          chars,
+          veces: 1,
+        });
+      } else {
+        ya.chars += chars;
+        ya.veces += 1;
+      }
+      continue;
+    }
+
     if (evento.tipo === "tool") {
       const nombre = texto(evento.nombre) ?? "(sin nombre)";
       // Ausente NO se cuenta como del orquestador: una traza vieja, de antes de que esto se
@@ -278,9 +331,14 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
   // con ninguna de verdad, y devolver una lista vacía se leería como «no hay traza».
   if (ilegiblesSinDueño > 0 && sesiones.size === 0) abrir("?");
 
-  return [...sesiones.values()].map(({ sesion, porOrigen, porTool, porRespuesta }) => ({
+  return [...sesiones.values()].map(({ sesion, porOrigen, porTool, porRespuesta, porPeso }) => ({
     ...sesion,
     paralelismo: resumirParalelismo(porRespuesta, sesion.paralelismo.sinRespuesta),
+    // Lo más gordo primero, que es lo que se viene a buscar. Desempate por nombre para que
+    // dos pesos iguales no salgan en orden distinto en dos lecturas del mismo fichero.
+    pesos: [...porPeso.values()].sort(
+      (a, b) => b.chars - a.chars || (a.detalle ?? "").localeCompare(b.detalle ?? ""),
+    ),
     origenes: [...porOrigen.values()].sort((a, b) => costeEfectivo(b) - costeEfectivo(a)),
     tools: [...porTool.values()].map(({ uso, blancos }) => ({
       ...uso,
@@ -336,6 +394,12 @@ function porcentajeDeCache(uso: { input: number; cache: number }): number {
 }
 
 /** Una línea por origen y una por tool. Sin colores: esto es un informe, no una piel. */
+/**
+ * Cuantas filas de peso se pintan. Lo que no cabe se CUENTA, igual que los blancos: una lista
+ * recortada en silencio se lee como la lista entera.
+ */
+const TOPE_DE_PESOS = 12;
+
 export function pintarSesion(sesion: SesionDeTraza): string[] {
   const lineas: string[] = [];
   lineas.push(`--- traza ${sesion.id} ---`);
@@ -382,6 +446,21 @@ export function pintarSesion(sesion: SesionDeTraza): string[] {
       const fuera = t.blancos.length - TOPE_DE_BLANCOS;
       if (fuera > 0) lineas.push(`        … y ${fuera} más`);
     }
+  }
+
+  if (sesion.pesos.length > 0) {
+    // Solo si CONSTA: una traza anterior a este campo daria cero, y un cero se leeria como
+    // «no metio nada en el contexto». La misma regla que el reparto por origen.
+    lineas.push(`  lo que METIÓ en el contexto: ${cifra(sesion.charsDeTools)} caracteres devueltos por las tools`);
+    for (const w of sesion.pesos.slice(0, TOPE_DE_PESOS)) {
+      const cuantas = w.veces > 1 ? `  ×${w.veces}` : "";
+      // La MEDIA solo con mas de una: dice si es una respuesta gorda o muchas pequeñas, que
+      // se arreglan de forma distinta —acotar la que devuelve mucho, o dejar de pedirla—.
+      const media = w.veces > 1 ? `  (media ${cifra(Math.round(w.chars / w.veces))})` : "";
+      lineas.push(`    ${cifra(w.chars).padStart(9)}  ${(w.nombre ?? "(sin nombre)").padEnd(18)} ${w.detalle ?? ""}${cuantas}${media}`);
+    }
+    const fuera = sesion.pesos.length - TOPE_DE_PESOS;
+    if (fuera > 0) lineas.push(`    … y ${fuera} más`);
   }
 
   const par = sesion.paralelismo;
