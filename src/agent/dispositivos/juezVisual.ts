@@ -80,7 +80,15 @@ export interface CapturaDePantalla {
 export type InvocarVisual = (
   papel: Papel,
   prompt: string,
-  imagen: CapturaDePantalla
+  imagen: CapturaDePantalla,
+  /**
+   * La MAQUETA contra la que comparar, cuando la hay.
+   *
+   * Va como cuarto parámetro OPCIONAL a propósito, el molde de `fase?` y `razonamiento?` en
+   * `Piel`: una implementación con menos parámetros sigue asignándose a este tipo, así que
+   * `cli/main.ts`, `cli/run.ts` y los dobles de los tests no cambian de una línea.
+   */
+  referencia?: CapturaDePantalla
 ) => Promise<string>;
 
 export interface VeredictoVisual {
@@ -128,6 +136,65 @@ export const PROMPT_VISUAL = [
   'Contesta SOLO este JSON: {"veredicto":"verde"|"rojo","hallazgos":["lo que se ve", …],"necesito":["Coleccion", …]}',
 ].join("\n");
 
+/**
+ * Lo que se le pide CUANDO hay maqueta delante, y existe por una medida.
+ *
+ * **El modelo ve las imágenes de sobra; lo que decide qué ve es qué se le pide describir.**
+ * Sobre la calculadora de MyAllXOne el crítico acertó que una captura era el login y no la
+ * pantalla pedida, y leyó los rótulos `AP_EXPRESION`/`AP_RESULTADO` cortados contra el borde.
+ * Luego dio VERDE sobre una pantalla cuyas teclas eran rectángulos donde la maqueta tenía
+ * píldoras y cuyo resultado era 1,4 veces la expresión donde la maqueta pedía 2,7. No falló:
+ * `PROMPT_VISUAL` le dice literalmente que NO opine de la paleta ni de los gustos, y la
+ * fidelidad cae entera en ese conjunto excluido. La prueba de que era la pregunta y no la
+ * vista: el orquestador llegó a escribirle «las teclas llevan esquinas redondeadas (radio
+ * alto)» y el crítico no protestó, porque no se le pidió comparar.
+ *
+ * Tres cosas que no son de forma:
+ *
+ *  - **Se nombra QUÉ comparar** —proporciones, jerarquía de tamaños, forma y alineación— en
+ *    vez de pedir «¿se parecen?». Una pregunta abierta devuelve impresiones; ésta devuelve
+ *    sitios.
+ *  - **El COLOR se compara, el GUSTO no.** «El botón es coral donde la maqueta lo pone gris»
+ *    es un hecho comprobable contra una imagen que está delante; «la paleta es fría» sigue
+ *    siendo una opinión y sigue fuera. Sin referencia no se puede distinguir, y por eso allí
+ *    se excluyen los dos.
+ *  - **Se conserva «no diagnostiques la causa»**, que está medido seis veces: describe un
+ *    texto CORTADO como «girado 180°». Acierta DÓNDE y falla en el PORQUÉ, y eso no cambia
+ *    porque haya una maqueta al lado.
+ *
+ * Y se conserva que una diferencia deliberada no es un defecto: una plataforma no da todo lo
+ * que da un navegador, así que lo que se pide es lo que SE VE distinto, no un veredicto de
+ * si estuvo bien decidido.
+ */
+export const PROMPT_VISUAL_CON_REFERENCIA = [
+  "Eres un revisor VISUAL de la pantalla de una app móvil. Te doy DOS imágenes:",
+  "1) la MAQUETA: cómo tendría que verse.",
+  "2) la CAPTURA del aparato: cómo se ve de verdad.",
+  "",
+  "Di en qué se DIFERENCIAN, sin diagnosticar: describe lo que se ve, no la causa ni cómo",
+  "arreglarlo. Quien lo lea tiene el código delante y tú no.",
+  "",
+  "Compara, y nombra el control concreto en cada diferencia:",
+  "- FORMA: esquinas (redondeadas, en píldora, en círculo o rectas), bordes, sombras.",
+  "- TAMAÑOS Y JERARQUÍA: qué es más grande que qué, y cuánto. Si en la maqueta un texto es",
+  "  el doble que otro y en la captura son casi iguales, eso es una diferencia.",
+  "- COLOR: solo comparado con la maqueta —«es gris donde la maqueta lo pone coral»—. NO",
+  "  opines de si la paleta te gusta.",
+  "- COLOCACIÓN: alineación, márgenes, huecos, orden de los elementos, qué falta y qué sobra.",
+  "- Y lo de siempre: texto cortado, ilegible, solapado o fuera de la pantalla.",
+  "",
+  "No toda diferencia es un error: una app nativa no puede dar todo lo que da un navegador.",
+  "Di lo que VES distinto y deja que lo valore quien lee.",
+  "",
+  "Si no ves ninguna diferencia que merezca contarse, dilo con la lista vacía.",
+  "",
+  "Si para dictaminar necesitas ver OTRA pantalla, pídela en `necesito` por el NOMBRE de su",
+  "colección y nada más (por ejemplo «Productos»), no con una frase. Alguien irá a por ella.",
+  "Si con lo que tienes te basta, déjalo vacío.",
+  "",
+  'Contesta SOLO este JSON: {"veredicto":"verde"|"rojo","hallazgos":["lo que se ve", …],"necesito":["Coleccion", …]}',
+].join("\n");
+
 export interface ContextoVisual {
   /** Qué pantalla se supone que es. Va en el prompt para que no adivine dónde está. */
   pantalla: string;
@@ -142,12 +209,19 @@ export interface ContextoVisual {
 export async function juzgarPantalla(
   imagen: CapturaDePantalla,
   contexto: ContextoVisual,
-  invocar: InvocarVisual
+  invocar: InvocarVisual,
+  /**
+   * La maqueta, si la hay. **Cuarto parámetro y opcional**, así los dos llamadores de
+   * `cli/` no cambian: lo que hace un `xonecode` de diagnóstico es mirar una pantalla, no
+   * compararla contra nada.
+   */
+  referencia?: CapturaDePantalla
 ): Promise<VeredictoVisual> {
-  const prompt = `${PROMPT_VISUAL}\n\nLa captura es de la pantalla «${contexto.pantalla}».`;
+  const base = referencia === undefined ? PROMPT_VISUAL : PROMPT_VISUAL_CON_REFERENCIA;
+  const prompt = `${base}\n\nLa captura es de la pantalla «${contexto.pantalla}».`;
   let texto: string;
   try {
-    texto = await invocar(PAPEL_DEL_JUEZ_VISUAL, prompt, imagen);
+    texto = await invocar(PAPEL_DEL_JUEZ_VISUAL, prompt, imagen, referencia);
   } catch (error) {
     throw new ErrorDelJuezVisual(error instanceof Error ? error.message : String(error));
   }
@@ -200,7 +274,7 @@ export async function juzgarPantalla(
 export function invocarVisualConModelos(modelos: {
   paraPapel(papel: Papel): unknown;
 }): InvocarVisual {
-  return async (papel, prompt, imagen) => {
+  return async (papel, prompt, imagen, referencia) => {
     let modelo: unknown;
     try {
       modelo = modelos.paraPapel(papel);
@@ -231,10 +305,29 @@ export function invocarVisualConModelos(modelos: {
        * clase de fuga que un argumento de tool en un evento. Lo que la persona tiene que
        * leer es lo que el harness decide contar con ese veredicto, no el JSON.
        */
+      /**
+       * **Cada imagen va DETRÁS de la línea que dice cuál es.** Con dos adjuntas y el prompt
+       * describiéndolas arriba, cuál es la maqueta y cuál el aparato dependería del orden en
+       * que el proveedor las numere — y eso no es un contrato, es una suposición. Una
+       * etiqueta pegada a cada una lo vuelve un dato. Si se invirtieran, el crítico contaría
+       * las diferencias al revés y se leerían igual de bien: es el fallo mudo de siempre.
+       *
+       * El orden es el del prompt: primero la MAQUETA, después la CAPTURA.
+       */
       const respuesta = await (modelo as { invoke: (p: unknown, o?: unknown) => Promise<unknown> }).invoke([
         new HumanMessage({
           content: [
             { type: "text", text: prompt },
+            ...(referencia === undefined
+              ? []
+              : [
+                  { type: "text", text: "MAQUETA (cómo tendría que verse):" },
+                  {
+                    type: "image_url",
+                    image_url: { url: `data:${referencia.mime};base64,${referencia.base64}` },
+                  },
+                  { type: "text", text: "CAPTURA del aparato (cómo se ve de verdad):" },
+                ]),
             { type: "image_url", image_url: { url: `data:${imagen.mime};base64,${imagen.base64}` } },
           ],
         }),

@@ -154,6 +154,25 @@ export function nombreDeArtefacto(ruta: string): string {
 }
 
 /**
+ * Lo que hay que poner detrás de la carpeta para ABRIR el fichero: la ruta sin `/artefactos/`.
+ *
+ * **No es `nombreDeArtefacto` y confundirlas era un botón muerto.** Aquélla contesta «cómo se
+ * llama esto para una persona» y se queda con el último segmento, que es lo correcto para una
+ * tarjeta. Para abrirlo hace falta el camino ENTERO: un `unzip` deja un ÁRBOL bajo la carpeta
+ * de la sesión —una maqueta descomprimida vive en `/artefactos/diseno/screen.png`— y con el
+ * basename el `join` apuntaba a `<carpeta>/screen.png`, que no existe. El síntoma era un
+ * «no pude abrir» sobre un fichero que estaba ahí y que la propia foto había anunciado.
+ *
+ * **No lleva guarda de travesía y no la necesita**: quien la llama ha pasado antes por
+ * `esRutaDeArtefacto`, que ya exige que cada segmento sea llano y que ninguno sea `.` ni `..`.
+ * Ponerla aquí sería un segundo sitio donde decidir sobre una ruta, que es la única forma en
+ * la que estas guardas se han roto nunca.
+ */
+export function rutaRelativaDeArtefacto(ruta: string): string {
+  return ruta.startsWith(RUTA_ARTEFACTOS) ? ruta.slice(RUTA_ARTEFACTOS.length) : nombreDeArtefacto(ruta);
+}
+
+/**
  * De qué es este artefacto, por su EXTENSIÓN.
  *
  * Tabla cerrada y por extensión, igual que el visor de Ficheros: olfatear los bytes no vale

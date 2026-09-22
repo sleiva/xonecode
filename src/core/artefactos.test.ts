@@ -6,6 +6,7 @@ import {
   mimeDeArtefacto,
   nombreDeArtefacto,
   RUTA_ARTEFACTOS,
+  rutaRelativaDeArtefacto,
 } from "./artefactos.js";
 
 describe("la barrera de `/artefactos/`", () => {
@@ -123,5 +124,40 @@ describe("lo que un zip arrastra y no es un artefacto", () => {
     expect(esBasuraDeArtefacto(".perfil.json")).toBe(false);
     // Contiene el nombre, no lo es.
     expect(esBasuraDeArtefacto("notas-sobre-__MACOSX.md")).toBe(false);
+  });
+});
+
+
+/**
+ * **Nombrar y ABRIR son dos preguntas, y confundirlas era un botón muerto.** Un `unzip` deja
+ * un ÁRBOL bajo la carpeta de la sesión, así que una maqueta descomprimida vive en
+ * `/artefactos/diseno/screen.png`. Con el basename, quien la abre hacía
+ * `join(carpeta, "screen.png")` y contestaba «no pude abrir» sobre un fichero que estaba ahí
+ * y que la propia foto de la shell había anunciado.
+ */
+describe("rutaRelativaDeArtefacto", () => {
+  it("conserva las subcarpetas, donde el nombre se queda con el último segmento", () => {
+    const ruta = "/artefactos/diseno_calculadora/screen.png";
+    expect(rutaRelativaDeArtefacto(ruta)).toBe("diseno_calculadora/screen.png");
+    expect(nombreDeArtefacto(ruta)).toBe("screen.png");
+  });
+
+  it("en la raíz las dos contestan lo mismo", () => {
+    expect(rutaRelativaDeArtefacto("/artefactos/captura-1.jpg")).toBe("captura-1.jpg");
+    expect(nombreDeArtefacto("/artefactos/captura-1.jpg")).toBe("captura-1.jpg");
+  });
+
+  it("aguanta varios niveles", () => {
+    expect(rutaRelativaDeArtefacto("/artefactos/a/b/c.png")).toBe("a/b/c.png");
+  });
+
+  /**
+   * Lo que NO empieza por la ruta virtual no se puede relativizar, así que se cae al nombre:
+   * nunca se devuelve algo que, pegado detrás de la carpeta, salga de ella. La guarda de
+   * verdad es `esRutaDeArtefacto`, que corre antes — esto es el suelo, no la barrera.
+   */
+  it("lo que no cuelga de /artefactos/ se queda en el nombre", () => {
+    expect(rutaRelativaDeArtefacto("/otra/cosa.png")).toBe("cosa.png");
+    expect(rutaRelativaDeArtefacto("cosa.png")).toBe("cosa.png");
   });
 });

@@ -140,3 +140,158 @@ describe("xone_critica_visual", () => {
     expect(salida).not.toContain("/Users/");
   });
 });
+
+
+/**
+ * **El parámetro `referencia`, y por qué existe.** Medido sobre la calculadora de MyAllXOne:
+ * el crítico dio VERDE sobre una pantalla cuyas teclas eran rectángulos donde la maqueta
+ * tenía píldoras y cuyo resultado era 1,4 veces la expresión donde la maqueta pedía 2,7. No
+ * falló: `PROMPT_VISUAL` le prohíbe opinar de la paleta y de los gustos, y la fidelidad cae
+ * entera en ese conjunto. El verde significaba «nada roto» y se leyó como «se parece».
+ */
+describe("xone_critica_visual con una maqueta delante", () => {
+  /**
+   * **El caso que lo motivó, y el que habría dejado el parámetro muerto.** Una maqueta llega
+   * en un `.zip` y se descomprime, así que vive en `/artefactos/diseno_calculadora/screen.png`
+   * — un ÁRBOL, no un fichero suelto. `nombreDeArtefacto` se queda con el último segmento (su
+   * trabajo: nombrar para una persona), así que abrir por ahí pedía `<carpeta>/screen.png` y
+   * contestaba «no pude abrir» sobre un fichero que estaba ahí y que la foto había anunciado.
+   */
+  it("abre una imagen en SUBCARPETA por su ruta relativa, no por el basename", async () => {
+    const pedidas: string[] = [];
+    const espia = crearCriticaVisual({
+      leerArtefacto: async (n) => {
+        pedidas.push(n);
+        return Buffer.from([0xff, 0xd8, 0xff]);
+      },
+      invocar: invocando('{"veredicto":"verde","hallazgos":[]}'),
+    });
+
+    const salida = await espia.invoke({
+      captura: "/artefactos/captura-1.jpg",
+      pantalla: "EspecialCalculadora",
+      referencia: "/artefactos/diseno_calculadora/screen.png",
+    });
+
+    expect(pedidas).toContain("diseno_calculadora/screen.png");
+    expect(salida).not.toMatch(/No pude abrir/);
+  });
+
+  /** La cabecera dice CUÁL de las dos preguntas se ha contestado. */
+  it("dice que el veredicto es COMPARADO, y no lo dice cuando no lo es", async () => {
+    const con = await tool('{"veredicto":"verde","hallazgos":[]}').invoke({
+      captura: "/artefactos/c.jpg",
+      pantalla: "X",
+      referencia: "/artefactos/maqueta.png",
+    });
+    expect(con).toMatch(/comparado con la referencia/);
+
+    const sin = await tool('{"veredicto":"verde","hallazgos":[]}').invoke({
+      captura: "/artefactos/c.jpg",
+      pantalla: "X",
+    });
+    expect(sin).not.toMatch(/comparado con la referencia/);
+  });
+
+  /** El eco ya lo paga `pantalla`; la ruta de la referencia la acaba de escribir quien llama. */
+  it("no devuelve la ruta de la referencia", async () => {
+    const salida = await tool('{"veredicto":"verde","hallazgos":[]}').invoke({
+      captura: "/artefactos/c.jpg",
+      pantalla: "X",
+      referencia: "/artefactos/diseno_calculadora/screen.png",
+    });
+    expect(salida).not.toContain("diseno_calculadora");
+  });
+
+  /**
+   * **Fail-closed, y con el mutante bien elegido**: lo tentador es juzgar sin la maqueta y
+   * avisar. Eso devuelve «verde» sobre algo que nadie ha comparado, que es EXACTAMENTE el
+   * fallo que este parámetro cierra. Y el paso siguiente no puede ofrecer el modo ciego.
+   */
+  it("una referencia que no se puede abrir es un NO: no se juzga nada", async () => {
+    let juzgado = false;
+    const espia = crearCriticaVisual({
+      leerArtefacto: async (n) => {
+        if (n.includes("maqueta")) throw new Error("ENOENT: open '/Users/alguien/maqueta.png'");
+        return Buffer.from([0xff, 0xd8, 0xff]);
+      },
+      invocar: async () => {
+        juzgado = true;
+        return '{"veredicto":"verde","hallazgos":[]}';
+      },
+    });
+
+    const salida = await espia.invoke({
+      captura: "/artefactos/c.jpg",
+      pantalla: "X",
+      referencia: "/artefactos/maqueta.png",
+    });
+
+    expect(juzgado).toBe(false);
+    expect(salida).toMatch(/NO he juzgado/);
+    // No sale NINGÚN veredicto: la cabecera de siempre no está.
+    expect(salida).not.toMatch(/Veredicto visual/);
+    // Y no se ofrece el modo ciego como alternativa.
+    expect(salida).not.toMatch(/llámame sin|sin la referencia|sin maqueta/i);
+    // La ruta de la máquina nunca sale.
+    expect(salida).not.toContain("/Users/");
+  });
+
+  /** La referencia pasa por la MISMA guarda que la captura, y antes de abrir nada. */
+  it("una referencia fuera de /artefactos/ no se abre", async () => {
+    let abierto = false;
+    const espia = crearCriticaVisual({
+      leerArtefacto: async () => {
+        abierto = true;
+        return Buffer.from([]);
+      },
+      invocar: invocando('{"veredicto":"verde","hallazgos":[]}'),
+    });
+
+    for (const ruta of ["/.env", "/artefactos/../secreto.png", "/app.xml"]) {
+      const salida = await espia.invoke({
+        captura: "/artefactos/c.jpg",
+        pantalla: "X",
+        referencia: ruta,
+      });
+      expect(salida, ruta).toMatch(/no es la referencia de esta sesión/);
+    }
+    /**
+     * **Y no se abre NADA, ni siquiera la captura, que es válida.** Las dos rutas se
+     * comprueban antes de leer ninguna: si no, una referencia mal escrita se descubriría
+     * después de haber metido ya un fichero en memoria.
+     */
+    expect(abierto).toBe(false);
+  });
+
+  /**
+   * Una diferencia contra una maqueta es VISUAL por definición, y eso es lo que el `.md` de
+   * `designer-xone` reclama. Sin referencia el hallazgo puede ser cualquier cosa, así que esa
+   * rama se queda como estaba.
+   */
+  it("un ROJO comparado manda a designer-xone; sin comparar, a developer-xone", async () => {
+    const con = await tool('{"veredicto":"rojo","hallazgos":["las teclas son rectas"]}').invoke({
+      captura: "/artefactos/c.jpg",
+      pantalla: "X",
+      referencia: "/artefactos/m.png",
+    });
+    expect(con).toContain("designer-xone");
+    expect(con).not.toContain("developer-xone");
+
+    const sin = await tool('{"veredicto":"rojo","hallazgos":["texto cortado"]}').invoke({
+      captura: "/artefactos/c.jpg",
+      pantalla: "X",
+    });
+    expect(sin).toContain("developer-xone");
+  });
+
+  /** Y al volver hay que traer la MISMA maqueta, o la siguiente vuelta mide otra cosa. */
+  it("el paso siguiente pide volver CON la referencia", async () => {
+    const salida = await tool('{"veredicto":"rojo","hallazgos":["algo"]}').invoke({
+      captura: "/artefactos/c.jpg",
+      pantalla: "X",
+      referencia: "/artefactos/m.png",
+    });
+    expect(salida).toMatch(/MISMA `referencia`/);
+  });
+});

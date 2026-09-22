@@ -1,9 +1,15 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { esRutaDeArtefacto, mimeDeArtefacto, nombreDeArtefacto } from "../../core/artefactos.js";
+import {
+  esRutaDeArtefacto,
+  mimeDeArtefacto,
+  nombreDeArtefacto,
+  rutaRelativaDeArtefacto,
+} from "../../core/artefactos.js";
 import {
   juzgarPantalla,
   TOPE_DE_PETICIONES,
+  type CapturaDePantalla,
   type InvocarVisual,
 } from "../dispositivos/juezVisual.js";
 
@@ -40,6 +46,23 @@ const Entrada = z.object({
   pantalla: z
     .string()
     .describe("De qué pantalla o colección es la captura, para que el crítico sepa qué mira"),
+  /**
+   * La MAQUETA, y su ausencia significa algo — por eso lo dice el `describe`.
+   *
+   * Sin ella el crítico solo busca ROTURAS y no dice nada de si la pantalla se parece a lo
+   * que se pidió. Medido: dio verde sobre una calculadora cuyas teclas eran rectángulos donde
+   * la maqueta tenía píldoras, y el verde se leyó como «está bien». Un parámetro que no dice
+   * qué pasa cuando falta deja ese malentendido intacto.
+   */
+  referencia: z
+    .string()
+    .optional()
+    .describe(
+      "OPCIONAL. La ruta virtual bajo /artefactos/ de la MAQUETA o diseño de referencia. " +
+        "Pásala SIEMPRE que el encargo traiga un diseño: con ella comparo la captura contra " +
+        "la maqueta (forma, tamaños, colocación). SIN ella solo busco roturas y NO digo nada " +
+        "sobre si se parece al diseño."
+    ),
 });
 type Entrada = z.infer<typeof Entrada>;
 
@@ -49,36 +72,114 @@ export interface DependenciasDeCritica {
   invocar: InvocarVisual;
 }
 
+/**
+ * Qué es esta ruta, o el motivo en palabras. **Comprueba y NO lee.**
+ *
+ * Separada de la lectura a propósito: con dos imágenes en juego, el orden importa. Si se
+ * comprobara y abriera cada una por turno, una referencia con la ruta mal escrita se
+ * descubriría DESPUÉS de haber leído la captura — y lo que la guarda promete es que no se
+ * abre nada hasta que todo lo que se va a abrir está comprobado. Es lo mismo que exige el
+ * test de siempre («no se lee NADA antes de comprobarlo»), solo que ahora hay dos.
+ *
+ * `que` cambia únicamente cómo se nombra en el mensaje: la comprobación es la MISMA para las
+ * dos, porque las dos acaban dentro de un modelo.
+ */
+function veredictoDeImagen(ruta: string, que: string): { mime: string } | string {
+  // Lista BLANCA de forma, sobre el TEXTO que escribe el modelo. `esRutaDeArtefacto` no es
+  // un `startsWith`: comprueba la forma entera, segmento a segmento.
+  if (!esRutaDeArtefacto(ruta)) {
+    return `«${ruta}» no es ${que} de esta sesión. Solo puedo mirar lo que hay bajo /artefactos/.`;
+  }
+  const nombre = nombreDeArtefacto(ruta);
+  const mime = mimeDeArtefacto(nombre);
+  if (mime === undefined || !mime.startsWith("image/")) {
+    return `«${nombre}» no es una imagen, así que no hay nada que mirar.`;
+  }
+  return { mime };
+}
+
+/**
+ * Los bytes, ya con la ruta comprobada. Nunca lanza: que falte una imagen no puede llevarse
+ * el turno por delante.
+ *
+ * **Se abre por la ruta RELATIVA y se NOMBRA por el último segmento**, que son dos preguntas
+ * distintas y confundirlas era un botón muerto: un `unzip` deja un ÁRBOL, y una maqueta
+ * descomprimida vive en `/artefactos/diseno/screen.png`. Con el basename, el `join` de quien
+ * lee apuntaba a `<carpeta>/screen.png` y contestaba «no pude abrir» sobre un fichero que
+ * estaba ahí y que la propia foto había anunciado.
+ */
+async function leer(
+  ruta: string,
+  mime: string,
+  deps: DependenciasDeCritica
+): Promise<CapturaDePantalla | string> {
+  try {
+    const bytes = await deps.leerArtefacto(rutaRelativaDeArtefacto(ruta));
+    return { base64: bytes.toString("base64"), mime };
+  } catch (error) {
+    // El mensaje de un error de Node lleva la ruta absoluta y esto va al modelo: solo el
+    // NOMBRE del error.
+    return `No pude abrir «${nombreDeArtefacto(ruta)}» (${error instanceof Error ? error.name : "error"}).`;
+  }
+}
+
+/**
+ * **Fail-closed: una referencia que se pidió y no se pudo usar es un NO.**
+ *
+ * Lo tentador es juzgar sin ella y avisar. Es justo el fallo que este parámetro existe para
+ * cerrar: un veredicto sin maqueta vuelve como «verde» y se lee como «se parece al diseño».
+ * Así que no se juzga nada, y el paso siguiente que se escribe es ARREGLAR LA RUTA — nunca
+ * «o llámame sin ella», que sería dejar el modo ciego escrito dentro de la propia tool como
+ * alternativa legítima.
+ */
+function sinJuzgar(motivo: string): string {
+  return [
+    motivo,
+    "NO he juzgado la captura: comparar contra media maqueta no es comparar, y mi veredicto",
+    "se leería como que la pantalla se parece al diseño. Comprueba la ruta de la maqueta",
+    "—tiene que ser la que anunció su evento `artefacto`, con sus subcarpetas— y vuelve a",
+    "llamarme.",
+  ].join("\n");
+}
+
 export function crearCriticaVisual(deps: DependenciasDeCritica) {
   return tool(
     async (entrada: Entrada) => {
-      // Lista BLANCA de forma, sobre el TEXTO que escribe el modelo. `esRutaDeArtefacto` no es
-      // un `startsWith`: comprueba la forma entera.
-      if (!esRutaDeArtefacto(entrada.captura)) {
-        return `«${entrada.captura}» no es una captura de esta sesión. Solo puedo mirar lo que hay bajo /artefactos/.`;
-      }
-      const nombre = nombreDeArtefacto(entrada.captura);
-      const mime = mimeDeArtefacto(nombre);
-      if (mime === undefined || !mime.startsWith("image/")) {
-        return `«${nombre}» no es una imagen, así que no hay nada que mirar.`;
-      }
+      // Se comprueban las DOS antes de abrir ninguna: ver `veredictoDeImagen`.
+      const deLaCaptura = veredictoDeImagen(entrada.captura, "una captura");
+      if (typeof deLaCaptura === "string") return deLaCaptura;
+      const deLaReferencia =
+        entrada.referencia === undefined
+          ? undefined
+          : veredictoDeImagen(entrada.referencia, "la referencia");
+      if (typeof deLaReferencia === "string") return sinJuzgar(deLaReferencia);
 
-      let bytes: Buffer;
-      try {
-        bytes = await deps.leerArtefacto(nombre);
-      } catch (error) {
-        // El mensaje de un error de Node lleva la ruta absoluta y esto va al modelo: solo el
-        // nombre del error. Y se DEVUELVE, no se lanza: que falte una captura no puede
-        // llevarse el turno por delante.
-        return `No pude abrir «${nombre}» (${error instanceof Error ? error.name : "error"}).`;
+      const abierta = await leer(entrada.captura, deLaCaptura.mime, deps);
+      if (typeof abierta === "string") return abierta;
+
+      let referencia: CapturaDePantalla | undefined;
+      if (entrada.referencia !== undefined && deLaReferencia !== undefined) {
+        const abiertaRef = await leer(entrada.referencia, deLaReferencia.mime, deps);
+        /**
+         * **Fail-closed: una referencia que se pidió y no se pudo abrir es un NO.**
+         *
+         * Lo tentador es juzgar sin ella y avisar. Es justo el fallo que este parámetro
+         * existe para cerrar: un veredicto sin maqueta vuelve como «verde» y se lee como
+         * «se parece al diseño». Así que no se juzga nada, y el paso siguiente que se
+         * escribe es ARREGLAR LA RUTA — nunca «o llámame sin referencia», que sería dejar
+         * el modo ciego escrito dentro de la propia tool como alternativa legítima.
+         */
+        if (typeof abiertaRef === "string") return sinJuzgar(abiertaRef);
+        referencia = abiertaRef;
       }
 
       let veredicto;
       try {
         veredicto = await juzgarPantalla(
-          { base64: bytes.toString("base64"), mime },
+          abierta,
           { pantalla: entrada.pantalla },
-          deps.invocar
+          deps.invocar,
+          referencia
         );
       } catch (error) {
         // Fallo del ENTORNO —sin modelo, sin clave, sin red—: se dice, y no se convierte en un
@@ -86,7 +187,16 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
         return `No se pudo consultar al crítico visual: ${error instanceof Error ? error.message : "error"}`;
       }
 
-      const lineas = [`Veredicto visual de «${entrada.pantalla}»: ${veredicto.veredicto}.`];
+      /**
+       * **La cabecera dice si se COMPARÓ, y no repite la ruta de la referencia.** Lo primero
+       * porque «verde» contesta dos preguntas distintas según el modo y quien lo lea tiene
+       * que saber cuál le han contestado. Lo segundo porque el argumento lo acaba de escribir
+       * quien llama: devolvérselo entero es el eco que ya paga el campo `pantalla`.
+       */
+      const comparado = referencia === undefined ? "" : " (comparado con la referencia)";
+      const lineas = [
+        `Veredicto visual de «${entrada.pantalla}»${comparado}: ${veredicto.veredicto}.`,
+      ];
       if (veredicto.observaciones.length > 0) {
         /**
          * **El aviso no es cortesía: está medido.** Seis vueltas sobre la misma captura
@@ -132,13 +242,24 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
        * puede, porque llegar a una pantalla necesita abrir cajones y mirar el árbol.
        */
       if (veredicto.veredicto === "rojo") {
+        /**
+         * **Con referencia, el arreglo es de `designer-xone`.** No es un cambio de criterio:
+         * una diferencia contra una maqueta es visual por definición —forma, tamaño,
+         * colocación, color— y eso es literalmente lo que su `.md` reclama («del color o del
+         * tamaño equivocado… también cuando se arregle en un `.xne`»). Sin referencia el
+         * hallazgo puede ser cualquier cosa, así que esa rama se queda como estaba.
+         */
+        const aQuien = referencia === undefined ? "developer-xone" : "designer-xone";
         lineas.push(
           "Esto es un defecto del proyecto SIN ARREGLAR, y qué hacer con él depende de TU",
           "encargo — que lo sabes tú y no yo:",
-          "- Si el encargo incluye ARREGLAR o dejar la app bien: encárgaselo a `developer-xone`",
+          `- Si el encargo incluye ARREGLAR o dejar la app bien: encárgaselo a \`${aQuien}\``,
           "  pasándole estas observaciones tal cual, y cuando lo haya corregido manda otra vez",
-          "  al conductor a esta misma pantalla y vuelve a llamarme con la captura nueva. No",
-          "  des la pantalla por buena hasta que yo la vea en verde.",
+          "  al conductor a esta misma pantalla y vuelve a llamarme con la captura nueva.",
+          referencia === undefined
+            ? "  No des la pantalla por buena hasta que yo la vea en verde."
+            : "  Y vuelve CON LA MISMA `referencia`: sin ella mi verde solo diría que nada" +
+              "\n  está roto, no que la pantalla se parezca al diseño.",
           "- Si el encargo es OTRO —documentar, medir, inventariar—: NO toques el proyecto por",
           "  esto. Anótalo donde estés contando lo que ves y sigue con lo tuyo.",
           "Lo que NO vale en ninguno de los dos casos es callártelo."
@@ -157,7 +278,10 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
       description:
         "Enseña una captura de pantalla del aparato a un revisor visual y devuelve qué se ve " +
         "mal: texto cortado, controles solapados o fuera de la pantalla, cosas ilegibles. " +
-        "Ve lo que ninguna comprobación estática puede ver. Puede pedir otras pantallas.",
+        "Ve lo que ninguna comprobación estática puede ver. Puede pedir otras pantallas. " +
+        "Si el encargo trae un DISEÑO o una MAQUETA, pásala en `referencia` y además comparo " +
+        "la pantalla contra ella (forma, tamaños, colocación, color). SIN `referencia` mi " +
+        "verde significa «nada roto», NO «se parece al diseño».",
       schema: Entrada,
     }
   );

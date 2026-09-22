@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   ErrorDelJuezVisual,
   juzgarPantalla,
+  invocarVisualConModelos,
   PROMPT_VISUAL,
+  PROMPT_VISUAL_CON_REFERENCIA,
   TOPE_DE_OBSERVACIONES,
   TOPE_DE_PETICIONES,
   type InvocarVisual,
@@ -166,5 +168,110 @@ describe("juzgarPantalla", () => {
 
     expect(vistos).toMatchObject({ imagen: PANTALLA });
     expect((vistos as { prompt: string }).prompt).toContain("Calculadora");
+  });
+});
+
+
+/**
+ * **La maqueta, y por qué el prompt cambia con ella.** El modelo VE las imágenes de sobra —
+ * medido: acertó que una captura era el login y no la pantalla pedida. Lo que decide qué ve
+ * es qué se le pide describir, y `PROMPT_VISUAL` le prohíbe expresamente opinar de la paleta
+ * y de los gustos, donde cae entera la fidelidad a un diseño.
+ */
+describe("el crítico con una maqueta delante", () => {
+  const MAQUETA = { base64: "iVBORw0KGgo", mime: "image/png" };
+
+  it("con referencia cambia el prompt, y sin ella no se toca nada", async () => {
+    const vistos: string[] = [];
+    const espia: InvocarVisual = async (_p, prompt) => {
+      vistos.push(prompt);
+      return '{"veredicto":"verde","hallazgos":[]}';
+    };
+
+    await juzgarPantalla(PANTALLA, { pantalla: "X" }, espia);
+    expect(vistos[0]).toContain(PROMPT_VISUAL);
+
+    await juzgarPantalla(PANTALLA, { pantalla: "X" }, espia, MAQUETA);
+    expect(vistos[1]).toContain(PROMPT_VISUAL_CON_REFERENCIA);
+    expect(vistos[1]).not.toContain(PROMPT_VISUAL);
+  });
+
+  /** La maqueta llega a quien juzga; sin ella, `undefined` y no un hueco raro. */
+  it("pasa la referencia al invocador, y solo cuando la hay", async () => {
+    const vistas: (typeof MAQUETA | undefined)[] = [];
+    const espia: InvocarVisual = async (_p, _t, _i, referencia) => {
+      vistas.push(referencia);
+      return '{"veredicto":"verde","hallazgos":[]}';
+    };
+
+    await juzgarPantalla(PANTALLA, { pantalla: "X" }, espia);
+    await juzgarPantalla(PANTALLA, { pantalla: "X" }, espia, MAQUETA);
+
+    expect(vistas[0]).toBeUndefined();
+    expect(vistas[1]).toEqual(MAQUETA);
+  });
+
+  /**
+   * **El prompt NOMBRA qué comparar.** Una pregunta abierta («¿se parecen?») devuelve
+   * impresiones; ésta tiene que devolver sitios. Y el color entra SOLO comparado contra la
+   * maqueta, mientras que el gusto sigue fuera — sin referencia no se pueden distinguir, y
+   * por eso allí se excluyen los dos.
+   */
+  it("el prompt con referencia pide forma, tamaños y colocación, y conserva lo medido", () => {
+    for (const q of ["FORMA", "TAMAÑOS Y JERARQUÍA", "COLOR", "COLOCACIÓN"]) {
+      expect(PROMPT_VISUAL_CON_REFERENCIA).toContain(q);
+    }
+    // Lo medido seis veces: acierta DÓNDE y falla en el PORQUÉ. Sigue vigente con maqueta.
+    expect(PROMPT_VISUAL_CON_REFERENCIA).toMatch(/no la causa/);
+    // El gusto sigue fuera.
+    expect(PROMPT_VISUAL_CON_REFERENCIA).toMatch(/NO\s+opines de si la paleta/);
+    // Y el mismo contrato de salida que sin ella: `objetoDe` lee lo mismo.
+    expect(PROMPT_VISUAL_CON_REFERENCIA).toContain('"hallazgos"');
+    expect(PROMPT_VISUAL_CON_REFERENCIA).toContain('"necesito"');
+  });
+
+  /**
+   * **COSTURA contra el cliente real**: cada imagen va detrás de la línea que dice cuál es.
+   * Con dos adjuntas, cuál es la maqueta y cuál el aparato dependería del orden en que el
+   * proveedor las numere, y eso es una suposición, no un contrato. Si se invirtieran, el
+   * crítico contaría las diferencias al revés y se leerían igual de bien.
+   */
+  it("manda DOS imágenes, en orden y cada una rotulada", async () => {
+    let contenido: { type: string; text?: string; image_url?: { url: string } }[] = [];
+    const modelos = {
+      paraPapel: () => ({
+        invoke: async (mensajes: { content: typeof contenido }[]) => {
+          contenido = mensajes[0]!.content;
+          return '{"veredicto":"verde","hallazgos":[]}';
+        },
+      }),
+    };
+
+    await invocarVisualConModelos(modelos)("afilado", "el prompt", PANTALLA, MAQUETA);
+
+    const tipos = contenido.map((b) => b.type);
+    expect(tipos).toEqual(["text", "text", "image_url", "text", "image_url"]);
+    // La maqueta va PRIMERO y rotulada; la captura, DESPUÉS.
+    expect(contenido[1]!.text).toMatch(/MAQUETA/);
+    expect(contenido[2]!.image_url!.url).toContain(MAQUETA.base64);
+    expect(contenido[3]!.text).toMatch(/CAPTURA/);
+    expect(contenido[4]!.image_url!.url).toContain(PANTALLA.base64);
+  });
+
+  /** Sin maqueta, el mensaje es EXACTAMENTE el de antes: una sola imagen y sin rótulos. */
+  it("sin referencia el mensaje no cambia", async () => {
+    let contenido: { type: string }[] = [];
+    const modelos = {
+      paraPapel: () => ({
+        invoke: async (mensajes: { content: typeof contenido }[]) => {
+          contenido = mensajes[0]!.content;
+          return '{"veredicto":"verde","hallazgos":[]}';
+        },
+      }),
+    };
+
+    await invocarVisualConModelos(modelos)("afilado", "el prompt", PANTALLA);
+
+    expect(contenido.map((b) => b.type)).toEqual(["text", "image_url"]);
   });
 });
