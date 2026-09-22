@@ -434,15 +434,19 @@ export async function abrirSesionReal(opciones: {
    */
   adjuntos?: string;
   /**
-   * ¿Las escrituras de ESTE proyecto se aplican sin pedir aprobación?
+   * ¿Las escrituras de ESTA sesión se aplican sin pedir aprobación?
    *
-   * Es una FUNCIÓN y no un booleano porque se pregunta en cada ronda: el ajuste se cambia
-   * con `/aprobacion` sin cerrar la sesión, y un booleano capturado al abrir dejaría el
-   * cambio sin efecto hasta reabrir — justo en la dirección peligrosa la mitad de las veces.
+   * Es una FUNCIÓN y no un booleano porque se pregunta en cada ronda: el modo se cambia con
+   * `/aprobacion` sin cerrar la sesión, y un booleano capturado al abrir dejaría el cambio
+   * sin efecto hasta reabrir — justo en la dirección peligrosa la mitad de las veces.
    *
-   * Quien decide es `core/settings.ts#seAplicaSinAprobacion`, y no este fichero: la regla
-   * tiene tres condiciones (lo dijo el dueño de la máquina para esta raíz, el proyecto no
-   * está conectado a CloudStudio, y hay alguien delante) y ninguna se puede comprobar aquí.
+   * Quien decide es `core/modoDeEscritura.ts#seEscribeSinPreguntar`, y no este fichero: sus
+   * dos condiciones —el modo de la sesión y que haya alguien delante— dependen de quién
+   * montó la consola, y ninguna se puede comprobar aquí.
+   *
+   * **El MISMO predicado gobierna a los motores externos**, por el campo `modo` que este
+   * fichero le pasa a `opcionesDeSubagenteExterno`: sin eso valdría para la mitad de los
+   * agentes, y un modo que solo gobierna una mitad miente sobre lo que hace.
    */
   sinAprobacion?: () => boolean;
   /**
@@ -502,6 +506,21 @@ export async function abrirSesionReal(opciones: {
    * de cerrarlo (`entrelazar`).
    */
   const eventosExternos = new ColaDeEventos();
+
+  /**
+   * A dónde van las rutas que un motor EXTERNO aplica sin preguntar, para el aviso de
+   * honestidad del turno.
+   *
+   * Es un puntero de la SESIÓN a una lista del TURNO, y esa asimetría es el dato: la
+   * política externa se compone una vez con el agente, y el aviso es de cada turno. Sin
+   * esta costura, el aviso contaría las escrituras del grafo y callaría las del hijo — o
+   * sea que enseñaría un número menor que la verdad justo en las que nadie vio pasar, que
+   * es la clase de aviso que enseña a ignorar los avisos.
+   *
+   * Ausente entre turnos: lo que un hijo escribiera fuera de un turno no tiene dónde
+   * contarse, y perderlo en silencio es mejor que atribuirlo al turno siguiente.
+   */
+  let apuntarAplicadasSinPreguntar: ((rutas: readonly string[]) => void) | undefined;
 
   /**
    * Lo que lleva consumido ESTA sesión, en dos cuentas que no se mezclan.
@@ -605,6 +624,18 @@ export async function abrirSesionReal(opciones: {
           alConsumir: (c) => {
             consumoExterno = sumarConsumo(consumoExterno, c);
             avisarDeConsumo();
+          },
+          /**
+           * **El modo de la sesión alcanza también al hijo.**
+           *
+           * Sin esto el modo gobernaba la mitad: el grafo escribía solo y `claude-code`
+           * seguía parando en cada fichero. Es el MISMO predicado que usa el HITL del
+           * grafo —`opciones.sinAprobacion`—, no una segunda lectura, porque dos sitios
+           * donde se decide lo mismo es como estas reglas se rompen.
+           */
+          modo: {
+            sinPreguntar: () => opciones.sinAprobacion?.() === true,
+            alAplicarSinPreguntar: (rutas) => apuntarAplicadasSinPreguntar?.(rutas),
           },
         })
       ),
@@ -761,6 +792,9 @@ export async function abrirSesionReal(opciones: {
      *  proyecto con «sin aprobación»; los artefactos no cuentan aquí, porque un artefacto
      *  no es del proyecto y su constancia es su propio acto. */
     const aplicadasSinPreguntar: string[] = [];
+    // Y aquí es donde lo que aplique un motor EXTERNO sin preguntar entra en la MISMA
+    // lista: una sola cuenta, porque para quien lee el aviso son las mismas escrituras.
+    apuntarAplicadasSinPreguntar = (rutas) => aplicadasSinPreguntar.push(...rutas);
 
     /**
      * El estado del lazo, compartido entre el generador y el bucle de rondas.
@@ -1214,15 +1248,16 @@ export async function abrirSesionReal(opciones: {
                 : [
                     `⚠ el verificador no ha corrido en este turno${motivoSinVerificar === undefined ? "" : ` (${motivoSinVerificar})`}`,
                   ]),
-              // Lo que se aplicó sin que nadie lo mirara, CON LOS NOMBRES. La decisión se
-              // tomó una vez, quizá hace meses, en `settings.json`; el turno que la ejerce
-              // es el único momento en que se puede recordar. Solo si hubo alguna: un aviso
-              // que salta cuando no ha pasado nada enseña a ignorarlo.
+              // Lo que se aplicó sin que nadie lo mirara, CON LOS NOMBRES —las del grafo y
+              // las de un motor externo, en la misma cuenta—. La decisión se tomó una vez,
+              // al principio de la conversación; el turno que la ejerce es el único momento
+              // en que se puede recordar. Solo si hubo alguna: un aviso que salta cuando no
+              // ha pasado nada enseña a ignorarlo.
               ...(aplicadasSinPreguntar.length === 0
                 ? []
                 : [
                     `⚠ ${aplicadasSinPreguntar.length} escritura(s) aplicadas SIN aprobación: ${aplicadasSinPreguntar.join(", ")}` +
-                      " — este proyecto está en «sin aprobación» (/aprobacion humana lo deshace)",
+                      " — esta sesión va en modo autónomo (/aprobacion supervisado lo deshace)",
                   ]),
             ],
             // Solo la ÚLTIMA pasada cierra el turno. Lo decide el generador al agotar el

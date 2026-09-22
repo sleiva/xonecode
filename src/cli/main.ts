@@ -34,7 +34,8 @@ import {
 import { crearCheckpointerDeProyecto } from "../agent/sesiones/checkpointer.js";
 import { crearTareasEnDisco } from "../agent/tareas/tareasEnDisco.js";
 import { carpetaDeArtefactosDeSesion } from "../core/artefactos.js";
-import { seAplicaSinAprobacion } from "../core/settings.js";
+import { seEscribeSinPreguntar, TOPE_DE_RONDAS_DE_CONSOLA } from "../core/modoDeEscritura.js";
+import { MAX_APPROVAL_ROUNDS } from "../vendor/hitl.js";
 import { conectarCloudStudio, sesionCloudStudio, PUERTO_CALLBACK } from "../agent/cloudstudio/cloudstudioMcp.js";
 import { clienteCloudStudio } from "../agent/cloudstudio/cloudstudioClient.js";
 import { cargarSettings } from "../agent/config/settingsEnDisco.js";
@@ -505,8 +506,22 @@ export function crearEjecutorReal(
    */
   let esfuerzoVisto: Esfuerzo | undefined;
   let hiloVisto: string | undefined;
+  /**
+   * El `estado` del turno que está corriendo AHORA.
+   *
+   * Existe porque `abrirSesionReal` se llama una vez, en el primer turno, y sus cierres se
+   * quedan con el `estado` de ESE turno — que es un objeto nuevo en cada llamada. Mientras
+   * lo único que se leía de él era la raíz daba igual; con el MODO dentro, no: `/aprobacion`
+   * lo cambia en el turno N y el cierre seguiría leyendo el del turno 1, o sea que el
+   * comando sería cosmético. Es el mismo fallo mudo que `esfuerzoVisto` existe para evitar,
+   * en su otra dirección.
+   */
+  let estadoVivo: EstadoDeSesion | undefined;
 
   return async (peticion, estado, consolaReal) => {
+    // Antes de nada, para que los cierres de la sesión —que se construyó en el primer
+    // turno— lean el estado de ESTE.
+    estadoVivo = estado;
     if (sesion === undefined) {
       // Mismo diagnóstico y mismas frases que `run --real`: no se construye NADA sobre un
       // sitio que no es un proyecto XOne, y la consola sigue viva para otros comandos.
@@ -566,24 +581,28 @@ export function crearEjecutorReal(
         // Los adjuntos de la tarea, si esta consola es de una tarea con alguno. Ausente es
         // «no hay», y el campo NO se pone: una cadena vacía montaría el cwd del proceso.
         ...(carpetaDeAdjuntos === undefined ? {} : { adjuntos: carpetaDeAdjuntos }),
-        // Si las escrituras de ESTE proyecto se aplican sin preguntar. Se pregunta en cada
-        // ronda —de ahí la función— porque `/aprobacion` lo cambia sin cerrar la sesión, y
-        // porque `interactivo` es de la consola que esté delante. Los settings se releen
-        // cada vez por lo mismo: la alternativa es que el cambio no surta efecto hasta
-        // reabrir, y la mitad de las veces eso sería en la dirección peligrosa.
-        // Cuántas rondas de aprobación admite un turno de ESTA consola. La pone quien la
-        // monta porque es quien sabe quién está detrás (ver `Consola.topeDeAprobaciones`);
-        // ausente y `abrirSesionReal` usa el `MAX_APPROVAL_ROUNDS` de siempre.
-        ...(consolaReal.topeDeAprobaciones === undefined
-          ? {}
-          : { topeDeRondas: consolaReal.topeDeAprobaciones }),
+        /**
+         * Cuántas rondas de aprobación admite un turno de ESTA consola.
+         *
+         * Tres valores y tres situaciones distintas. Si la consola declara el suyo, manda
+         * (es el caso de una tarea de fondo: `TOPE_DE_RONDAS_DE_TAREA`, finito porque allí
+         * no hay nadie mirando y el corte es lo único que frena el bucle). Con alguien
+         * delante va `TOPE_DE_RONDAS_DE_CONSOLA`, tan alto que no puede cortar antes que la
+         * persona — que es el freno de verdad en los dos modos: un rechazo en supervisado,
+         * el botón de parar en autónomo. Y **sin nadie delante se queda el
+         * `MAX_APPROVAL_ROUNDS` de siempre**: en `xonecode run` y en una tubería nadie
+         * aprueba nada, así que cada ronda es una llamada al modelo que va a acabar en el
+         * mismo rechazo, y ahí el tope bajo sí es lo que corta un bucle que nadie puede
+         * parar.
+         */
+        topeDeRondas:
+          consolaReal.topeDeAprobaciones
+          ?? (consolaReal.interactivo ? TOPE_DE_RONDAS_DE_CONSOLA : MAX_APPROVAL_ROUNDS),
         sinAprobacion: () =>
-          seAplicaSinAprobacion({
-            raiz: estado.raiz,
-            sinAprobacion: cargarSettings().settings.sinAprobacion,
-            // Del DISCO y por la raíz, no de `estado.fuentes.proyecto`: en la web ese
-            // campo no se rellena nunca, y la guarda habría dado «offline» para todos.
-            cloudstudio: cloudstudioDelProyecto(estado.raiz),
+          seEscribeSinPreguntar({
+            // Del estado VIVO, no del `estado` capturado al abrir: `/aprobacion` cambia el
+            // modo con la sesión en marcha.
+            modo: estadoVivo?.modo,
             // `interactivo` SOLO no basta, y esto no es celo: `consolaWeb.ts` lo declara
             // `true` a fuego, así que una pestaña que se cierra a mitad de turno seguiría
             // auto-aprobando. «Hay alguien delante» ya está definido en este repo —

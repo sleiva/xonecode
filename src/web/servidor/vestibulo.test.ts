@@ -22,6 +22,7 @@ import type { Entorno } from "../../core/settings.js";
 import { validar } from "../../core/config.js";
 import type { Consola, EjecutorDeTurno } from "../../cli/consola.js";
 import type { Esfuerzo } from "../../core/esfuerzo.js";
+import type { ModoDeEscritura } from "../../core/modoDeEscritura.js";
 
 function dobles() {
   const escrituras: string[] = [];
@@ -66,6 +67,7 @@ function sesionesEnMemoria() {
   /** El dispositivo preferido, por clave `raiz|id` — como lo guarda el índice de verdad. */
   const dispositivos = new Map<string, DispositivoElegido | undefined>();
   const esfuerzos = new Map<string, Esfuerzo | undefined>();
+  const modos = new Map<string, ModoDeEscritura>();
   /** Con qué tarea se dio de alta cada sesión, como lo guarda el índice de verdad. */
   const tareas = new Map<string, string | undefined>();
   /** El acumulado de cada sesión, como lo guarda el índice de verdad. */
@@ -74,6 +76,7 @@ function sesionesEnMemoria() {
     jsonl,
     dispositivos,
     esfuerzos,
+    modos,
     tareas,
     consumos,
     puerto: {
@@ -103,12 +106,14 @@ function sesionesEnMemoria() {
       reabrir: (raiz: string, id: string) => {
         const dispositivo = dispositivos.get(`${raiz}|${id}`);
         const esfuerzo = esfuerzos.get(`${raiz}|${id}`);
+        const modo = modos.get(`${raiz}|${id}`);
         return {
           id,
           actos: [...(jsonl.get(`${raiz}|${id}`) ?? [])],
           historica: true,
           ...(dispositivo === undefined ? {} : { dispositivo }),
           ...(esfuerzo === undefined ? {} : { esfuerzo }),
+          ...(modo === undefined ? {} : { modo }),
         };
       },
       borrar: (raiz: string, id: string) => jsonl.delete(`${raiz}|${id}`),
@@ -122,6 +127,15 @@ function sesionesEnMemoria() {
       elegirEsfuerzo: (raiz: string, id: string, esfuerzo: Esfuerzo | undefined) => {
         if (!jsonl.has(`${raiz}|${id}`)) return false;
         esfuerzos.set(`${raiz}|${id}`, esfuerzo);
+        return true;
+      },
+      elegirModo: (raiz: string, id: string, modo: ModoDeEscritura) => {
+        if (!jsonl.has(`${raiz}|${id}`)) return false;
+        // Como el índice real: `supervisado` es la omisión y BORRA la clave en vez de
+        // escribirla, así que el doble tiene que hacer lo mismo o el test iría por otro
+        // camino que el de producción.
+        if (modo === "supervisado") modos.delete(`${raiz}|${id}`);
+        else modos.set(`${raiz}|${id}`, modo);
         return true;
       },
     },
@@ -485,6 +499,59 @@ describe("vestíbulo", () => {
       abierta.consola.encolar("/esfuerzo high");
       await new Promise((r) => setTimeout(r, 0));
       expect(s.esfuerzos.get(`/w/a|${id}`)).toBe("high");
+      await v.cerrar();
+    });
+
+    /**
+     * El MODO DE ESCRITURA, que es el tercero de la misma familia y el que más caro sale
+     * si se queda sin montar: el viaje índice → `EstadoDeSesion` vive en el cierre que
+     * construye la consola, o sea el sitio donde este repo lleva nueve reglas caídas con
+     * todo en verde. El síntoma sería mudo y al revés de lo que parece: una pastilla
+     * diciendo «supervisado» sobre una sesión que alguien dejó en autónomo — o peor, la
+     * confianza de que se perdió cuando no.
+     */
+    it("el modo guardado vuelve al ESTADO DE SESIÓN al reabrirla", async () => {
+      const s = sesionesEnMemoria();
+      const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
+      const id = s.puerto.crear("/w/a");
+      s.puerto.elegirModo("/w/a", id, "autonomo");
+
+      const abierta = await v.abrirProyecto({ raiz: "/w/a", sesion: id });
+      expect(abierta.estadoDeSesion.modo).toBe("autonomo");
+      await v.cerrar();
+    });
+
+    it("elegirlo con /aprobacion lo ANOTA en el índice", async () => {
+      const s = sesionesEnMemoria();
+      const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
+      const id = s.puerto.crear("/w/a");
+      const abierta = await v.abrirProyecto({ raiz: "/w/a", sesion: id });
+      abierta.consola.encolar("/aprobacion autonomo");
+      await new Promise((r) => setTimeout(r, 0));
+      expect(s.modos.get(`/w/a|${id}`)).toBe("autonomo");
+      await v.cerrar();
+    });
+
+    it("volver a supervisado BORRA la anotación: la omisión no se escribe", async () => {
+      const s = sesionesEnMemoria();
+      const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
+      const id = s.puerto.crear("/w/a");
+      s.puerto.elegirModo("/w/a", id, "autonomo");
+      const abierta = await v.abrirProyecto({ raiz: "/w/a", sesion: id });
+      abierta.consola.encolar("/aprobacion supervisado");
+      await new Promise((r) => setTimeout(r, 0));
+      expect(s.modos.has(`/w/a|${id}`)).toBe(false);
+      await v.cerrar();
+    });
+
+    it("una sesión sin modo guardado abre SUPERVISADA, que es la dirección segura", async () => {
+      // Ausente aquí NO es «no consta»: de esto hay que decidir en cada escritura, y el
+      // hueco se resuelve por el lado que enseña el diff.
+      const s = sesionesEnMemoria();
+      const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
+      const id = s.puerto.crear("/w/a");
+      const abierta = await v.abrirProyecto({ raiz: "/w/a", sesion: id });
+      expect(abierta.estadoDeSesion.modo).toBeUndefined();
       await v.cerrar();
     });
 

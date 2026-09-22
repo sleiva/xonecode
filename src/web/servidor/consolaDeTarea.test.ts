@@ -49,7 +49,7 @@ describe("crearConsolaDeTarea", () => {
      * verificador del turno (`turnoReal.ts#conVerificacion`, que corre igual por este
      * camino) y el juez de QA, no un modal que nadie va a ver.
      *
-     * Y esto NO es `seAplicaSinAprobacion`: ese ajuste dice «el humano que está aquí ha
+     * Y esto NO es el modo de escritura de una sesión: ese dice «el humano que está aquí ha
      * decidido no pulsar», y aquí no hay nadie aquí. La autorización es el acto de CREAR
      * la tarea — elegir un proyecto y escribir un encargo es decir «trabaja en esto sin
      * preguntarme».
@@ -67,7 +67,7 @@ describe("crearConsolaDeTarea", () => {
 
   it("lo autorizado se APUNTA, con ruta relativa y por el canal de la tarea", async () => {
     // «Lo que la tarea escribe se DICE», y con los NOMBRES: es el mismo criterio del aviso
-    // de honestidad de `seAplicaSinAprobacion`, que saca los ficheros y no un contador,
+    // de honestidad del modo autónomo, que saca los ficheros y no un contador,
     // porque un contador a secas es el aviso que enseña a ignorar los avisos. Se llama
     // «autorizado» y no «aplicado» porque esto se apunta ANTES de que el backend escriba:
     // el nombre no puede prometer un hecho sobre el disco (la verdad la da Revisión).
@@ -76,7 +76,7 @@ describe("crearConsolaDeTarea", () => {
     expect(autorizado).toEqual([["src/app.xne"]]);
   });
 
-  it("aplicar no se consulta con `seAplicaSinAprobacion`: es otra decisión, de otro humano", async () => {
+  it("aplicar no se consulta con el modo de la sesión: es otra decisión, de otro humano", async () => {
     /**
      * Reutilizar ese ajuste habría hecho dos cosas mal: un proyecto CONECTADO no aplicaría
      * nada (el ajuste lo rechaza a propósito), y la marca del `settings.json` de un
@@ -86,7 +86,7 @@ describe("crearConsolaDeTarea", () => {
      * Se comprueba sobre el FUENTE porque es donde se puede afirmar: esta consola no
      * recibe ningún ajuste ni ninguna raíz, así que no hay parámetro que espiar — lo que
      * hay que vigilar es que nadie le añada uno. (El ejecutor sí evalúa
-     * `seAplicaSinAprobacion` en cada ronda, `cli/main.ts`, y con esta consola devuelve
+     * `seEscribeSinPreguntar` en cada ronda, `cli/main.ts`, y con esta consola devuelve
      * `false` siempre: `interactivo && !eof()` es falso. O sea que no aporta nada, ni
      * puede: la política es esta.)
      */
@@ -94,7 +94,7 @@ describe("crearConsolaDeTarea", () => {
     // Ni se importa el módulo de los ajustes…
     expect(fuente).not.toMatch(/from\s+"[^"]*settings/);
     // …ni se llama a la función (el docblock la NOMBRA, y a propósito: explica por qué no).
-    expect(fuente).not.toMatch(/seAplicaSinAprobacion\s*\(/);
+    expect(fuente).not.toMatch(/seEscribeSinPreguntar\s*\(/);
     // Y la política aplica sin que nadie le haya dado un ajuste ni una raíz.
     const { consola } = montar();
     const decisiones = await consola.aprobacionesTui!([PENDIENTE], new Map(), new Map());
@@ -279,7 +279,7 @@ describe("crearConsolaDeTarea", () => {
   it("autorizar TAMPOCO es mudo, y es lo que más falta hace decir", async () => {
     /**
      * Una escritura que nadie aprueba no puede ser además muda — es la regla del evento
-     * `artefacto` y la del aviso de honestidad de `seAplicaSinAprobacion`, y aquí es el
+     * `artefacto` y la del aviso de honestidad del modo autónomo, y aquí es el
      * único aviso que hay: el de `turnoReal.ts` solo sale por la rama `todoAutomatico`, que
      * este camino no toma. Con los NOMBRES, no con un contador.
      */

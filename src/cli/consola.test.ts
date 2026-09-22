@@ -1575,64 +1575,75 @@ describe("crearCompleter", () => {
 });
 
 describe("/aprobacion", () => {
-  /** Un proyecto de verdad en un temporal: el comando lee su `config.json` del DISCO. */
-  function proyecto(config: Record<string, unknown>): string {
-    const raiz = mkdtempSync(join(tmpdir(), "xc-aprob-"));
-    mkdirSync(join(raiz, NOMBRE_CARPETA), { recursive: true });
-    writeFileSync(join(raiz, NOMBRE_CARPETA, "config.json"), JSON.stringify(config));
-    return raiz;
-  }
-
   /**
-   * La rama que importa: en un proyecto conectado se RECHAZA en vez de guardarse sin
-   * aplicarse. Un ajuste escrito que no hace nada es peor que no poder ponerlo, porque
-   * quien lo puso se cree protegido al revés.
+   * **Ya no toca el disco, y eso es la mitad del cambio.** El modo vive en la SESIÓN, así
+   * que el manejador devuelve `estado` y no escribe ningún `settings.json`: lo que se
+   * comprueba aquí es que el estado sale cambiado y que el fichero no aparece.
    */
-  it("un proyecto conectado a CloudStudio lo rechaza, y no escribe nada", async () => {
-    const raiz = proyecto({ modo: "cloud", cloudstudio: { url: "https://mcp.example/mcp" } });
+  it("pone la sesión en autónomo devolviendo el estado, sin escribir nada en disco", async () => {
     const { consola, salida } = consolaDeConSecreto({ lineas: [], interactivo: true });
     const casa = mkdtempSync(join(tmpdir(), "xc-casa-"));
     vi.stubEnv("HOME", casa);
 
-    await COMANDOS["aprobacion"]!.manejador(["automatica"], { ...estadoDe(), raiz }, consola);
+    const r = await COMANDOS["aprobacion"]!.manejador(["autonomo"], estadoDe(), consola);
 
-    expect(salida()).toContain("CloudStudio");
+    expect(r.estado?.modo).toBe("autonomo");
     expect(existsSync(join(casa, NOMBRE_CARPETA, "settings.json"))).toBe(false);
+    // Las tres cosas que hay que saber al encenderlo: que se avisará con los nombres, que
+    // es de ESTA conversación, y que subir a CloudStudio sigue preguntando.
+    expect(salida()).toContain("nombres de los ficheros");
+    expect(salida()).toContain("sesión nueva");
+    expect(salida()).toContain("/sync subir");
     vi.unstubAllEnvs();
-    rmSync(raiz, { recursive: true, force: true });
     rmSync(casa, { recursive: true, force: true });
   });
 
-  it("en un proyecto offline lo guarda, y lo dice con lo que cuesta", async () => {
-    const raiz = proyecto({ modo: "offline" });
+  it("un proyecto conectado a CloudStudio YA NO lo rechaza", async () => {
+    // Era la condición que lo prohibía ahí, y se levantó con su argumento medido: escribir
+    // no sube —`/sync subir` conserva su plan y su aprobación—, el commit por turno es git,
+    // y sobre ese MISMO proyecto una tarea de fondo ya escribía sin preguntar mientras la
+    // consola no podía. El comando ni siquiera mira el `config.json` del proyecto.
+    const { consola } = consolaDeConSecreto({ lineas: [], interactivo: true });
+    const r = await COMANDOS["aprobacion"]!.manejador(["autonomo"], estadoDe(), consola);
+    expect(r.estado?.modo).toBe("autonomo");
+  });
+
+  it("vuelve a supervisado, y ese es el estado que devuelve", async () => {
     const { consola, salida } = consolaDeConSecreto({ lineas: [], interactivo: true });
-    const casa = mkdtempSync(join(tmpdir(), "xc-casa-"));
-    vi.stubEnv("HOME", casa);
+    const r = await COMANDOS["aprobacion"]!.manejador(
+      ["supervisado"],
+      { ...estadoDe(), modo: "autonomo" as const },
+      consola
+    );
+    expect(r.estado?.modo).toBe("supervisado");
+    expect(salida()).toContain("diff");
+  });
 
-    await COMANDOS["aprobacion"]!.manejador(["automatica"], { ...estadoDe(), raiz }, consola);
+  it("sigue entendiendo el vocabulario viejo: un comando que deja de entender lo suyo es una regresión", async () => {
+    const { consola } = consolaDeConSecreto({ lineas: [], interactivo: true });
+    expect((await COMANDOS["aprobacion"]!.manejador(["automatica"], estadoDe(), consola)).estado?.modo).toBe("autonomo");
+    expect((await COMANDOS["aprobacion"]!.manejador(["humana"], estadoDe(), consola)).estado?.modo).toBe("supervisado");
+  });
 
-    const guardado = JSON.parse(readFileSync(join(casa, NOMBRE_CARPETA, "settings.json"), "utf8"));
-    expect(guardado.sinAprobacion).toEqual({ [raiz]: true });
-    // Las dos cosas que hay que saber para usarlo: dónde vive y que se pierde al renombrar.
-    expect(salida()).toContain("no en el proyecto");
-    expect(salida()).toContain("renombrar");
-    vi.unstubAllEnvs();
-    rmSync(raiz, { recursive: true, force: true });
-    rmSync(casa, { recursive: true, force: true });
+  it("sin argumento DICE en qué modo está y no cambia nada", async () => {
+    const { consola, salida } = consolaDeConSecreto({ lineas: [], interactivo: true });
+    const r = await COMANDOS["aprobacion"]!.manejador([], estadoDe(), consola);
+    expect(r.estado).toBeUndefined();
+    expect(salida()).toContain("supervisado");
+  });
+
+  it("puesto pero sin nadie delante, lo dice: el modo no basta, hace falta alguien que decida", async () => {
+    // La única condición que sobrevivió al rediseño. Un «no» sin motivo manda a adivinar.
+    const { consola, salida } = consolaDeConSecreto({ lineas: [], interactivo: false });
+    await COMANDOS["aprobacion"]!.manejador([], { ...estadoDe(), modo: "autonomo" as const }, consola);
+    expect(salida()).toContain("supervisado");
+    expect(salida()).toContain("nadie delante");
   });
 
   it("un argumento que no es ninguno de los dos enseña el uso y no toca nada", async () => {
-    const raiz = proyecto({ modo: "offline" });
     const { consola, salida } = consolaDeConSecreto({ lineas: [], interactivo: true });
-    const casa = mkdtempSync(join(tmpdir(), "xc-casa-"));
-    vi.stubEnv("HOME", casa);
-
-    await COMANDOS["aprobacion"]!.manejador(["si"], { ...estadoDe(), raiz }, consola);
-
+    const r = await COMANDOS["aprobacion"]!.manejador(["si"], estadoDe(), consola);
     expect(salida()).toContain("uso: /aprobacion");
-    expect(existsSync(join(casa, NOMBRE_CARPETA, "settings.json"))).toBe(false);
-    vi.unstubAllEnvs();
-    rmSync(raiz, { recursive: true, force: true });
-    rmSync(casa, { recursive: true, force: true });
+    expect(r.estado).toBeUndefined();
   });
 });

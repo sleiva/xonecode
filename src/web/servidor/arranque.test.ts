@@ -974,6 +974,82 @@ describe("montarRutas — el cable, por fin conectado", () => {
         expect(encoladas).toEqual(["/modelo ollama/qwen3"]);
         expect(dichos.at(-1)).toMatch(/no lo guarda como defecto/);
       });
+
+    describe("el modo de escritura en el cable", () => {
+      /**
+       * El cliente manda la INTENCIÓN y el servidor decide cómo se aplica: encolando el
+       * MISMO `/aprobacion` que usa el terminal. Un segundo camino para lo mismo es donde
+       * el hueco de política podría reabrirse, que es la razón entera de este test.
+       */
+      it("con sesión abierta encola `/aprobacion`, el manejador de siempre", async () => {
+        const { servidor, vestibulo, encoladas } = conEscritor();
+        const { accion } = await conectar(servidor);
+        await vestibulo.abrirProyecto({ raiz: "/w/a" });
+        await asentar();
+
+        await enviarMensaje(accion, { clase: "modoDeEscritura", modo: "autonomo" });
+        await asentar();
+
+        expect(encoladas).toEqual(["/aprobacion autonomo"]);
+      });
+
+      /**
+       * **Y la pastilla se entera SIN esperar a un turno**, que es donde este cableado se
+       * cae solo: el modo viaja en el ALTA y el único reemisor que había en
+       * `alCambiarEstadoDeSesion` era `emitirModelos()`. Sin esta línea, pulsar «autónomo»
+       * dejaba la pastilla diciendo «supervisado» hasta el siguiente flanco de turno — un
+       * control que miente durante un turno entero, y justo el que decide si los ficheros
+       * se escriben sin enseñarte el diff.
+       */
+      it("cambiar el modo REEMITE el alta, sin esperar a ningún turno", async () => {
+        const { servidor, vestibulo } = conEscritor();
+        const { cliente, accion } = await conectar(servidor);
+        await vestibulo.abrirProyecto({ raiz: "/w/a" });
+        await asentar();
+        void accion;
+
+        const abierto = vestibulo.proyectoAbierto()!;
+        // Se empuja por la MISMA costura que usa el lazo al aplicar `/aprobacion`
+        // (`Consola.alEstado`), en vez de encolar la línea: en este test el lazo no corre.
+        abierto.consola.consola.alEstado?.({ ...abierto.estadoDeSesion, modo: "autonomo" });
+        await asentar();
+
+        const ultimaAlta = [...cliente.recibidos].reverse().find((m) => m.clase === "alta");
+        expect(ultimaAlta).toMatchObject({ modoDeEscritura: "autonomo" });
+      });
+
+      it("sin sesión NO se guarda ningún defecto: se dice y ya", async () => {
+        // A diferencia del modelo, el modo es de la sesión y solo de la sesión. Un defecto
+        // persistido es justo el ajuste por RUTA que se acaba de retirar, y no se vuelve a
+        // meter por inercia.
+        const { servidor, escritos, dichos, encoladas } = conEscritor();
+        const { accion } = await conectar(servidor);
+
+        await enviarMensaje(accion, { clase: "modoDeEscritura", modo: "autonomo" });
+        await asentar();
+
+        expect(encoladas).toEqual([]);
+        expect(escritos).toEqual([]);
+        expect(dichos.at(-1)).toMatch(/no hay ninguna sesión abierta/i);
+      });
+
+      it("un modo que no existe no se encola: se criba ANTES, no en el manejador", async () => {
+        // El manejador ya lo rechazaría, pero su rechazo se imprimiría como una línea de
+        // consola en el transcript en vez de como un aviso. Aquí se dice mejor.
+        const { servidor, vestibulo, encoladas, dichos } = conEscritor();
+        const { accion } = await conectar(servidor);
+        await vestibulo.abrirProyecto({ raiz: "/w/a" });
+        await asentar();
+
+        // El `as never` es el dato: el TIPO ya lo prohíbe, y lo que se prueba aquí es lo
+        // que pasa cuando llega igual — por el cable entra JSON, no un tipo.
+        await enviarMensaje(accion, { clase: "modoDeEscritura", modo: "automatica" as never });
+        await asentar();
+
+        expect(encoladas).toEqual([]);
+        expect(dichos.at(-1)).toMatch(/no es un modo de escritura/i);
+      });
+    });
     });
 
     describe("el modelo por defecto en el cable", () => {

@@ -389,6 +389,72 @@ describe("el CABLEADO de la política (el sitio donde este repo lleva siete regl
   });
 });
 
+describe("el MODO AUTÓNOMO alcanza a los motores externos", () => {
+  it("en autónomo concede SIN preguntar, y apunta las rutas para el aviso de honestidad", async () => {
+    // Sin esto, el modo valía para la mitad de los agentes: el grafo escribía solo y el
+    // hijo de Claude Code seguía parando en cada fichero. Un modo que solo gobierna una
+    // mitad miente sobre lo que hace.
+    let preguntas = 0;
+    const apuntadas: string[] = [];
+    const politica = politicaExternaDeSesion(
+      async (pendientes) => {
+        preguntas += 1;
+        return new Map(pendientes.map((p) => [p.id, { type: "approve" } as Decision]));
+      },
+      { sinPreguntar: () => true, alAplicarSinPreguntar: (rutas) => apuntadas.push(...rutas) }
+    );
+    await expect(
+      politica!([
+        { agente: "dev", ruta: "/app/x.js", lineas: [] },
+        { agente: "dev", ruta: "/app/y.js", lineas: [] },
+      ])
+    ).resolves.toBe(true);
+    expect(preguntas).toBe(0);
+    expect(apuntadas).toEqual(["/app/x.js", "/app/y.js"]);
+  });
+
+  it("en supervisado pregunta como siempre y no apunta nada", async () => {
+    let preguntas = 0;
+    const apuntadas: string[] = [];
+    const politica = politicaExternaDeSesion(
+      async (pendientes) => {
+        preguntas += 1;
+        return new Map(pendientes.map((p) => [p.id, { type: "approve" } as Decision]));
+      },
+      { sinPreguntar: () => false, alAplicarSinPreguntar: (rutas) => apuntadas.push(...rutas) }
+    );
+    await expect(politica!([{ agente: "dev", ruta: "/app/x.js", lineas: [] }])).resolves.toBe(true);
+    expect(preguntas).toBe(1);
+    expect(apuntadas).toEqual([]);
+  });
+
+  it("una tanda VACÍA sigue siendo un NO, también en autónomo", () => {
+    // La trampa del `every`: sin la guarda, «todas vinieron aprobadas» se cumple por
+    // vacuidad. El modo quita la pregunta, nunca convierte la nada en un sí.
+    const politica = politicaExternaDeSesion(async () => new Map(), { sinPreguntar: () => true });
+    return expect(politica!([])).resolves.toBe(false);
+  });
+
+  it("el predicado se pregunta en CADA tanda, no se captura al montar la sesión", async () => {
+    // `/aprobacion` cambia el modo con la sesión en marcha, y un booleano capturado dejaría
+    // el cambio sin efecto hasta reabrir — la mitad de las veces en la dirección peligrosa.
+    let modo = false;
+    let preguntas = 0;
+    const politica = politicaExternaDeSesion(
+      async (pendientes) => {
+        preguntas += 1;
+        return new Map(pendientes.map((p) => [p.id, { type: "approve" } as Decision]));
+      },
+      { sinPreguntar: () => modo }
+    );
+    await politica!([{ agente: "dev", ruta: "/app/x.js", lineas: [] }]);
+    expect(preguntas).toBe(1);
+    modo = true;
+    await politica!([{ agente: "dev", ruta: "/app/y.js", lineas: [] }]);
+    expect(preguntas).toBe(1);
+  });
+});
+
 describe("el hook `PreToolUse`, que es la denegación que NO se puede ensombrecer", () => {
   const hook = (nombre: string, entrada: Record<string, unknown> = {}) =>
     decisionDePreToolUse({ nombre, entrada, cwd: "/proyecto", ficheros: new Set<string>(), real: (r) => r });

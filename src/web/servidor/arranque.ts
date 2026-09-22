@@ -131,9 +131,13 @@ import {
   dentroDelWorkspace,
   expandirConCasa,
   motivoDeWorkspaceInaceptable,
-  seAplicaSinAprobacion,
   type Settings,
 } from "../../core/settings.js";
+import {
+  esModoDeEscritura,
+  MODO_POR_OMISION,
+  type ModoDeEscritura,
+} from "../../core/modoDeEscritura.js";
 import { mudarWorkspaceLegado, type ResultadoDeMudanza } from "../../agent/config/mudanzaEnDisco.js";
 import { elegirCarpetaEnMaquina, haySelectorDeCarpeta } from "../../agent/config/selectorEnMaquina.js";
 import { cloudstudioDelProyecto } from "../../agent/config/configEnDisco.js";
@@ -883,24 +887,23 @@ export function montarRutas(
       ...(abierto?.sesion === undefined ? {} : { sesionActiva: abierto.sesion }),
       ...(abierto?.dispositivo === undefined ? {} : { dispositivoActivo: abierto.dispositivo }),
       ...(abierto?.historica === true ? { historica: true } : {}),
-      // Este proyecto escribe sin preguntar. Viaja en el ALTA y no solo en el aviso del
-      // turno porque la decisión se tomó una vez, quizá hace meses, y quien se sienta hoy
-      // tiene que saberlo ANTES de pedir nada — no después, con los ficheros ya cambiados.
-      // Se calcula aquí y no se guarda: las tres condiciones incluyen si hay alguien
-      // delante, y eso cambia con la conexión.
-      ...(abierto !== undefined &&
-      seAplicaSinAprobacion({
-        raiz: abierto.estadoDeSesion.raiz,
-        sinAprobacion: cargarSettings().settings.sinAprobacion,
-        cloudstudio: cloudstudioDelProyecto(abierto.estadoDeSesion.raiz),
-        // `true` sin más, y hay que decir por qué no es una simplificación: el alta se
-        // EMITE, o sea que solo llega a un cliente conectado, y la consola web declara
-        // `interactivo: true` por la misma razón (`consolaWeb.ts`). Quien decide de verdad
-        // en cada ronda es el ejecutor, que vuelve a preguntar las tres condiciones.
-        interactivo: true,
-      })
-        ? { sinAprobacion: true }
-        : {}),
+      /**
+       * **El modo de escritura de la sesión abierta**: supervisado o autónomo.
+       *
+       * Viaja en el ALTA y no solo en el aviso del turno porque quien se sienta hoy tiene
+       * que saber en qué modo está ANTES de pedir nada — no después, con los ficheros ya
+       * cambiados. Y viaja el MODO, no un booleano «sin aprobación»: es el dato que la
+       * pastilla del compositor tiene que pintar, y derivar el booleano de él es trivial
+       * mientras que lo contrario no.
+       *
+       * **Ausente = no hay sesión abierta**, que es por qué la pastilla no se pinta: un
+       * control sin dato detrás no se pinta. Lo dice el SERVIDOR leyendo el estado de la
+       * consola abierta, igual que el modelo en vigor — releer un fichero contaría lo de
+       * antes para siempre, y aquí ya no hay fichero que releer.
+       */
+      ...(abierto === undefined
+        ? {}
+        : { modoDeEscritura: abierto.estadoDeSesion.modo ?? MODO_POR_OMISION }),
       // Solo si SE MIRÓ y había algo. Las otras tres respuestas —limpio, sin git, no se
       // pudo— se callan: un mensaje en cada apertura limpia es ruido en casi todas, y el
       // aviso dejaría de leerse justo el día que importa.
@@ -2497,6 +2500,34 @@ export function montarRutas(
   };
 
   /**
+   * El MODO DE ESCRITURA de la sesión abierta.
+   *
+   * Se encola `/aprobacion`, que es el MISMO manejador que usa el terminal: la función se
+   * comparte y la sintaxis no se exporta, igual que con `/modelo` y `/esfuerzo`. Y **no se
+   * guarda ningún defecto**: el modo es de la sesión y solo de la sesión — un defecto
+   * persistido es justo lo que se acaba de retirar, y no se vuelve a meter por inercia.
+   *
+   * Sin proyecto abierto no hay sesión a la que aplicárselo, y se DICE en vez de callarlo:
+   * la pastilla solo se pinta con sesión, así que llegar aquí sin ella es un cliente
+   * desincronizado y merece una frase, no un silencio.
+   */
+  const atenderModoDeEscritura = (modo: unknown): void => {
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined) {
+      informar("no hay ninguna sesión abierta a la que cambiarle el modo de escritura");
+      return;
+    }
+    // Se criba contra el vocabulario ANTES de encolar: lo que llega del cable acaba siendo
+    // un parámetro, y el manejador ya lo rechazaría, pero su rechazo se imprimiría como una
+    // línea de consola en vez de un aviso. Aquí se dice mejor.
+    if (!esModoDeEscritura(modo)) {
+      informar(`«${String(modo)}» no es un modo de escritura`);
+      return;
+    }
+    abierto.consola.encolar(`/aprobacion ${modo satisfies ModoDeEscritura}`);
+  };
+
+  /**
    * Pregunta a Ollama si el modelo en vigor piensa, y vuelve a emitir cuando conteste.
    *
    * Una vez por modelo y por proceso: la respuesta se guarda en `capacidadesVivas`, y sin
@@ -3427,7 +3458,22 @@ export function montarRutas(
   // tocan disco), así que la única forma de enterarse es que el vestíbulo lo diga. Sin
   // esto, el disparador del compositor seguiría enseñando el modelo con el que se abrió la
   // sesión después de haberlo cambiado — una cifra con forma de verdad.
-  vestibulo.alCambiarEstadoDeSesion(() => emitirModelos());
+  vestibulo.alCambiarEstadoDeSesion(() => {
+    emitirModelos();
+    /**
+     * **Y el ALTA, porque el modo de escritura viaja ahí y no en `modelos`.**
+     *
+     * `/aprobacion` cambia el modo dentro del lazo igual que `/modelo` cambia el modelo, y
+     * sin esta línea la pastilla se quedaba en el valor de antes hasta el siguiente flanco
+     * de turno: un control que MIENTE durante un turno entero, y justo el que decide si los
+     * ficheros se escriben sin enseñarte el diff. No se mete el campo dentro de `modelos`
+     * para ahorrarse esto, porque no es una propiedad del modelo.
+     *
+     * Se traga el fallo como los demás llamadores: un alta que no se pudo componer no puede
+     * llevarse por delante un cambio de modelo que sí surtió efecto.
+     */
+    void anunciarAlta().catch(contar);
+  });
   // El turno se emite solo (`consolaWeb.turno`), pero además hay que RECORDARLO: una pestaña
   // que conecta a mitad no vio ese mensaje, y necesita saberlo para apagar su compositor.
   /**
@@ -4106,6 +4152,12 @@ export function montarRutas(
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "esfuerzo") {
       atenderEsfuerzo(mensaje.nivel);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "modoDeEscritura") {
+      atenderModoDeEscritura(mensaje.modo);
       respuesta.writeHead(204);
       respuesta.end();
       return;

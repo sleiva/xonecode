@@ -12,6 +12,7 @@ import { tituloDesde,
   renombrarSesion,
   elegirDispositivo,
   elegirEsfuerzo,
+  elegirModo,
   IndiceDeSesionesRoto,
   marcarTareaDeSesion,
   sembrarConsumosPendientes,
@@ -577,5 +578,44 @@ describe("el esfuerzo de una sesión", () => {
     const raiz = mkdtempSync(join(tmpdir(), "xonecode-esf-"));
     const id = crearSesion(raiz);
     expect(reabrirSesion(raiz, id).esfuerzo).toBeUndefined();
+  });
+});
+
+/**
+ * El MODO DE ESCRITURA, el tercero de la familia. Lo que defiende es lo mismo que el
+ * esfuerzo —que sobreviva a cerrar la pestaña— con una diferencia en el hueco: ausente aquí
+ * significa SUPERVISADO y no «no consta», porque de esto hay que decidir algo en cada
+ * escritura.
+ */
+describe("el modo de escritura de una sesión", () => {
+  it("se guarda con la sesión y vuelve al reabrirla", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-modo-"));
+    const id = crearSesion(raiz);
+    expect(elegirModo(raiz, id, "autonomo")).toBe(true);
+    expect(listarSesiones(raiz)[0]!.modo).toBe("autonomo");
+    expect(reabrirSesion(raiz, id).modo).toBe("autonomo");
+  });
+
+  it("volver a supervisado BORRA la clave en vez de escribir la omisión", () => {
+    // Dos formas de decir lo mismo es una de más, y la que sobra es la que hay que
+    // acordarse de mantener. La misma regla que el `false` del ajuste de disco que esto
+    // sustituyó.
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-modo-"));
+    const id = crearSesion(raiz);
+    elegirModo(raiz, id, "autonomo");
+    expect(elegirModo(raiz, id, "supervisado")).toBe(true);
+    expect("modo" in listarSesiones(raiz)[0]!).toBe(false);
+    expect(reabrirSesion(raiz, id).modo).toBeUndefined();
+  });
+
+  it("una sesión que aún no está en el índice contesta que NO hay dónde anotarlo", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-modo-"));
+    expect(elegirModo(raiz, "sesion-que-no-existe", "autonomo")).toBe(false);
+  });
+
+  it("y una sesión anterior a esto reabre SIN modo, o sea supervisada", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-modo-"));
+    const id = crearSesion(raiz);
+    expect(reabrirSesion(raiz, id).modo).toBeUndefined();
   });
 });

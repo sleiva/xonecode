@@ -306,18 +306,28 @@ describe("Chat: la sincronización", () => {
   });
 });
 
-describe("Chat: el proyecto que escribe sin preguntar", () => {
-  it("lo DICE arriba, y dice cómo deshacerlo", () => {
-    // La decisión se tomó una vez en `settings.json`, quizá hace meses. Quien se sienta hoy
-    // tiene que saberlo ANTES de pedir nada, no después con los ficheros ya cambiados.
-    render(<Chat actos={[]} sinAprobacion />);
-    expect(screen.getByText(/sin pedirte aprobación/i)).toBeTruthy();
-    expect(screen.getByText("/aprobacion humana")).toBeTruthy();
+describe("Chat: la sesión que escribe sin preguntar", () => {
+  it("lo DICE arriba, y manda a la PASTILLA y no a un comando", () => {
+    // Quien se sienta hoy tiene que saberlo ANTES de pedir nada, no después con los
+    // ficheros ya cambiados. Y en el navegador «/» es prosa: mandarle a teclear
+    // `/aprobacion` sería mandarle a un camino que aquí no existe.
+    const { container } = render(<Chat actos={[]} sinAprobacion />);
+    expect(screen.getByText(/modo autónomo/i)).toBeTruthy();
+    expect(screen.getByText(/supervisado/i)).toBeTruthy();
+    expect(container.textContent).toContain("pastilla");
+    expect(container.textContent).not.toContain("/aprobacion");
+  });
+
+  it("dice también lo que el modo NO concede: la subida sigue preguntando", () => {
+    // El modo gobierna las escrituras LOCALES. Callarlo dejaría creer que también se sube
+    // solo, que es la confusión que más caro sale en un proyecto conectado.
+    const { container } = render(<Chat actos={[]} sinAprobacion />);
+    expect(container.textContent).toContain("CloudStudio");
   });
 
   it("y no lo dice cuando no es cierto", () => {
     render(<Chat actos={[]} />);
-    expect(screen.queryByText(/sin pedirte aprobación/i)).toBeNull();
+    expect(screen.queryByText(/modo autónomo/i)).toBeNull();
   });
 });
 

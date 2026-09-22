@@ -621,12 +621,24 @@ no viaja porque ahí la ejecución no se concede—. Reglas duras:
   (`MS_DE_ESPERA_POR_OMISION`, 10 min) con cadena vacía, que ya es un rechazo. El test que lo
   fija mira el PORTAL y no el CSS —el diálogo está en `document.body` y fuera del contenedor del
   test—, porque en jsdom no hay layout que medir.
-- **La única grieta es `seAplicaSinAprobacion`** (`core/settings.ts`, comando `/aprobacion`), con
-  seis condiciones: vive en `settings.json` y **no** en el `config.json` del proyecto (que puede
-  venir de fuera); offline se comprueba mirando el bloque `cloudstudio` **del disco por la raíz**
-  (en la web `FuentesDeEleccion.proyecto` no se rellena nunca); hace falta interactivo; solo el
-  booleano `true`; se pregunta en cada RONDA y no al abrir; y se DICE dos veces (aviso por turno
-  con los nombres, y `alta.sinAprobacion`). En un proyecto conectado el comando RECHAZA.
+- **La única grieta es el MODO DE ESCRITURA, y vive en la SESIÓN**
+  (`core/modoDeEscritura.ts`, comando `/aprobacion`, pastilla del compositor): `supervisado`
+  —cada escritura con su diff— o `autonomo` —se aplican solas—. Antes era un ajuste por RUTA
+  en `settings.json` que se ponía una vez y quedaba puesto para siempre; se retiró entero, y
+  con él la condición que lo PROHIBÍA en un proyecto conectado a CloudStudio. Lo que queda:
+  ausente es supervisado (de esto hay que decidir en cada escritura, así que el hueco se
+  resuelve por el lado que enseña el diff); **hace falta alguien delante**, calculado como
+  `interactivo && !eof()` igual que `pedirDecisiones`, así que una pestaña que se cierra a
+  mitad de turno devuelve la escritura al camino de aprobación; se pregunta en cada RONDA y
+  no al abrir; se DICE dos veces (aviso por turno con los NOMBRES, y `alta.modoDeEscritura`);
+  y **el mismo predicado alcanza a los motores externos** —si no, el modo gobernaría la mitad
+  y el hijo seguiría parando en cada fichero—. **Gobierna las escrituras LOCALES y nada
+  más**: `/sync subir` conserva su plan y su aprobación fail-closed en los dos modos, y las
+  guardas de RUTA no se tocan. El tope de rondas de la consola es el MISMO 20 que el de una
+  tarea (`TOPE_DE_RONDAS_DE_CONSOLA`) y por la misma medida: los cinco de
+  `MAX_APPROVAL_ROUNDS` se dimensionaron para un modelo que insiste, y lo que cortan es un
+  trabajo legítimo a la mitad. Sin nadie delante se queda el cinco, que ahí sí frena un bucle
+  que nadie puede parar.
 - El origen del interrupt se dice UNA vez: `aPendiente` (`agent/turno/interrupts.ts`) quita el prefijo
   `[perfil]` de la descripción porque el dato ya viaja en `origen`.
 
@@ -661,8 +673,9 @@ commits, sin tocar el índice del usuario— y se toma **por turno**, no por ses
 solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` significa **esperando
 feedback del desarrollador** y no es terminal.
 
-- **La autorización es el ACTO DE CREAR LA TAREA**, no un interruptor, y **no se reutiliza
-  `seAplicaSinAprobacion`** (que significa «el humano que está aquí ha decidido no pulsar»).
+- **La autorización es el ACTO DE CREAR LA TAREA**, no un interruptor, y **no se reutiliza el
+  modo de escritura de una sesión** (que significa «el humano que está aquí ha decidido no
+  pulsar», y de hecho exige que lo haya).
 - **Las guardas de RUTA siguen enteras**: `/artifacts/`, vistas aplanadas, `/.env`, `/.git`,
   `/.xonecode`. Las tres últimas las corta `permissions` con un `ToolMessage`, no el backend.
 - **El sitio del diff lo ocupan el verificador y el JUEZ, y el juez no basta solo**: las
@@ -954,16 +967,16 @@ feedback del desarrollador** y no es terminal.
   función, y también el `base` de `commitDeTurnoCableado`): se cambia desde Ajustes con la
   consola en marcha, así que un valor capturado dejaría el proceso bajando al sitio de antes
   mientras la pantalla enseña el nuevo — y, peor, `dentroDelWorkspace` compararía contra la
-  carpeta de antes y los commits por turno se pararían EN SILENCIO. Es la misma regla que
-  `sinAprobacion` y el tope de concurrencia.
+  carpeta de antes y los commits por turno se pararían EN SILENCIO. Es la misma regla que el
+  modo de escritura y el tope de concurrencia.
 - **El reparto viejo se MUDA de una vez al arrancar la web**
   (`arranque.ts#mudarWorkspaceLegadoCableado`, antes del vestíbulo y del corredor de tareas:
   los dos abrirían carpetas que están a punto de moverse). Proyecto a proyecto y no la carpeta
   entera, porque con el workspace ya configurado el destino es el PADRE del origen. **Un
   destino que existe NUNCA se pisa** y se cuenta aparte; **solo lo que se movió de verdad
-  reescribe una ruta guardada**, que son dos: `proyecto.raiz` del índice de tareas y las
-  claves de `sinAprobacion` — sin eso, una tarea pendiente abriría una carpeta que ya no está
-  y una autorización se perdería sin decirlo. El husco vacío se retira con `rmdir`, que nunca
+  reescribe una ruta guardada**: `proyecto.raiz` del índice de tareas — sin eso, una tarea
+  pendiente abriría una carpeta que ya no está. Fueron DOS hasta que el modo de escritura se
+  mudó a la sesión y su ajuste por ruta se retiró. El husco vacío se retira con `rmdir`, que nunca
   vacía nada, y antes se borra solo la BASURA DEL SO de la lista CERRADA que ya mantiene
   `gitSync.ts`.
 - **Cambiar el workspace NO mueve lo que ya está bajado**, y la pantalla lo dice: las copias

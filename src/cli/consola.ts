@@ -37,10 +37,14 @@ import { esTema, seleccionarTema, TEMAS, type IdTema } from "./tema.js";
 import { acuseDeModelo } from "./acuseDeModelo.js";
 import type { LineaDelPlan, Preguntar } from "./aprobar.js";
 import { guardarCredencial, AuthRotoEnDisco } from "../agent/config/authEnDisco.js";
-import { cargarSettings, guardarSinAprobacion } from "../agent/config/settingsEnDisco.js";
-import { seAplicaSinAprobacion } from "../core/settings.js";
+import {
+  MODO_POR_OMISION,
+  modoDeTexto,
+  seEscribeSinPreguntar,
+  type ModoDeEscritura,
+} from "../core/modoDeEscritura.js";
 import { URL_CLOUDSTUDIO_POR_OMISION } from "../agent/cloudstudio/cloudstudioMcp.js";
-import { cargar, cloudstudioDelProyecto, NOMBRE_CARPETA } from "../agent/config/configEnDisco.js";
+import { cargar, NOMBRE_CARPETA } from "../agent/config/configEnDisco.js";
 import { rutaMemoriaDeProyecto } from "../agent/grafo/memoriaDeProyecto.js";
 import type { CatalogoModelosPort, ModeloDisponible } from "../core/ports.js";
 import { ESFUERZOS, esEsfuerzo, type Esfuerzo } from "../core/esfuerzo.js";
@@ -476,6 +480,21 @@ export interface EstadoDeSesion {
    * modelo que sí lo acepte, que es justo lo que se quiere al ir probando.
    */
   esfuerzo?: Esfuerzo;
+  /**
+   * Quién aprueba las escrituras en esta sesión: supervisado (cada una con su diff) o
+   * autónomo (se aplican solas). Ausente = supervisado, y eso NO es «no consta»: de esto
+   * hay que decidir algo en cada escritura, así que el hueco se resuelve, y la única
+   * dirección segura para resolverlo es la que enseña el diff.
+   *
+   * Vive AQUÍ y no en `settings.json` —donde vivía, indexado por ruta— porque es de la
+   * SESIÓN: el mando está dentro de la caja del chat y se lee como «esta conversación».
+   * `core/modoDeEscritura.ts` tiene el argumento entero, incluido por qué se retiró la
+   * condición que lo prohibía en un proyecto conectado a CloudStudio.
+   *
+   * Va fuera de `fuentes` por lo mismo que el esfuerzo: `FuentesDeEleccion` contesta «qué
+   * modelo le toca a cada papel» y esto no compite con nada ni viene de un fichero.
+   */
+  modo?: ModoDeEscritura;
 }
 
 /** Lo que hace un comando de barra: escribe y puede cambiar el estado de la sesión. */
@@ -1269,72 +1288,54 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
     },
   },
   aprobacion: {
-    descripcion: "quién aprueba las escrituras aquí: /aprobacion [humana|automatica]",
+    descripcion: "cómo se aprueban las escrituras aquí: /aprobacion [supervisado|autonomo]",
     manejador: async (args, estado, consola) => {
-      const raiz = estado.raiz;
-      // Del DISCO y por la raíz: en la consola web `fuentes.proyecto` no se rellena, así
-      // que preguntárselo daría «offline» para cualquier proyecto, conectado o no.
-      const cloudstudio = cloudstudioDelProyecto(raiz);
-      const vigente = (): boolean =>
-        seAplicaSinAprobacion({
-          raiz,
-          sinAprobacion: cargarSettings().settings.sinAprobacion,
-          cloudstudio,
-          // La misma cuenta que `pedirDecisiones`: `interactivo` a secas es `true` a fuego
-          // en la consola web, así que sin el `eof` este comando diría «automatica» con la
-          // pestaña ya cerrada.
-          interactivo: consola.interactivo && !(consola.eof?.() ?? false),
-        });
+      /**
+       * **El modo es de la SESIÓN, así que este manejador no toca el disco.** Antes escribía
+       * `settings.sinAprobacion[raiz]` y eso quedaba puesto para siempre, en todas las
+       * sesiones y todos los procesos; el argumento de por qué se retiró vive entero en
+       * `core/modoDeEscritura.ts`. Lo que devuelve es `estado`, igual que `/modelo` y
+       * `/esfuerzo`: el cambio se aplica en el turno siguiente sin reabrir nada.
+       */
+      // La misma cuenta que `pedirDecisiones`: `interactivo` a secas es `true` a fuego en la
+      // consola web, así que sin el `eof` esto diría «autónomo» con la pestaña ya cerrada.
+      const hayAlguienDelante = consola.interactivo && !(consola.eof?.() ?? false);
+      const modo = estado.modo ?? MODO_POR_OMISION;
+      const vigente = seEscribeSinPreguntar({ modo, interactivo: hayAlguienDelante });
 
       const que = args[0];
       if (que === undefined) {
         consola.escribir(
-          vigente()
-            ? "automatica: las escrituras de este proyecto se aplican SIN preguntar\n"
-            : "humana: cada escritura pide aprobación con su diff delante\n"
+          vigente
+            ? "autonomo: las escrituras de esta sesión se aplican SIN preguntar\n"
+            : "supervisado: cada escritura pide aprobación con su diff delante\n"
         );
-        // Las tres condiciones se dicen cuando la respuesta es «humana», porque entonces la
-        // pregunta que sigue siempre es «¿y por qué?». Un «no» sin motivo manda a adivinar.
-        if (!vigente() && cargarSettings().settings.sinAprobacion?.[raiz] === true) {
-          consola.escribir(
-            cloudstudio !== undefined
-              ? "  (está puesta, pero no se aplica: este proyecto sube a CloudStudio)\n"
-              : "  (está puesta, pero no se aplica: no hay nadie delante que pueda decidir)\n"
-          );
+        // El motivo se dice cuando el modo está puesto y aun así no se aplica, porque
+        // entonces la pregunta que sigue siempre es «¿y por qué?». Un «no» sin motivo manda
+        // a adivinar.
+        if (!vigente && modo === "autonomo") {
+          consola.escribir("  (está puesto, pero no se aplica: no hay nadie delante que pueda decidir)\n");
         }
         return { seguir: true };
       }
 
-      if (que !== "humana" && que !== "automatica") {
-        consola.escribir("uso: /aprobacion [humana|automatica]\n");
+      const pedido = modoDeTexto(que);
+      if (pedido === undefined) {
+        consola.escribir("uso: /aprobacion [supervisado|autonomo]\n");
         return { seguir: true };
       }
 
-      // Se RECHAZA en vez de guardarse y no aplicarse: un ajuste escrito que no hace nada
-      // es peor que no poder ponerlo, porque quien lo puso se cree protegido al revés.
-      if (que === "automatica" && cloudstudio !== undefined) {
+      if (pedido === "autonomo") {
         consola.escribir(
-          "no: este proyecto está conectado a CloudStudio, y lo que se escriba aquí sube al\n" +
-            "trabajo de otras personas. La aprobación no es una preferencia ahí.\n"
-        );
-        return { seguir: true };
-      }
-
-      const { ruta } = guardarSinAprobacion(undefined, raiz, que === "automatica");
-      if (que === "automatica") {
-        // La ruta del SETTINGS sí se dice —es donde se edita a mano, y `/config` y `/tema`
-        // ya imprimen la suya—, pero la del proyecto no: quien teclea esto sabe dónde está,
-        // y por esta salida pasa un acto del transcript que viaja por el cable.
-        consola.escribir(
-          "hecho: las escrituras de este proyecto se aplicarán SIN preguntar.\n" +
-            `  Cada turno que escriba lo dirá, con los nombres de los ficheros.\n` +
-            `  Se guarda en ${ruta} —en tu máquina, no en el proyecto— y renombrar la\n` +
-            "  carpeta lo pierde: entonces se vuelve a preguntar.\n"
+          "hecho: en esta sesión las escrituras se aplicarán SIN preguntar.\n" +
+            "  Cada turno que escriba lo dirá, con los nombres de los ficheros.\n" +
+            "  Es de ESTA conversación: una sesión nueva vuelve a preguntar.\n" +
+            "  Subir a CloudStudio NO entra aquí: /sync subir sigue enseñando su plan.\n"
         );
       } else {
-        consola.escribir(`hecho: cada escritura vuelve a pedir aprobación. Guardado en ${ruta}.\n`);
+        consola.escribir("hecho: cada escritura vuelve a pedir aprobación con su diff delante.\n");
       }
-      return { seguir: true };
+      return { seguir: true, estado: { ...estado, modo: pedido } };
     },
   },
   hilo: {

@@ -62,6 +62,7 @@ import { carpetaDeArtefactosDeSesion } from "../../core/artefactos.js";
 import { segmentoSeguro } from "../../core/settings.js";
 import { tituloDesde } from "../../core/textos.js";
 import type { Esfuerzo } from "../../core/esfuerzo.js";
+import type { ModoDeEscritura } from "../../core/modoDeEscritura.js";
 
 /** Cuántos caracteres de la primera prosa del usuario se guardan como título. */
 const LARGO_TITULO = 80;
@@ -116,6 +117,19 @@ export interface EntradaIndice {
    */
   esfuerzo?: Esfuerzo;
   /**
+   * El modo de escritura de esta sesión: supervisado o autónomo. Ausente = supervisado.
+   *
+   * Vive AQUÍ por lo mismo que el esfuerzo y el dispositivo: es un dato DE la sesión, no
+   * uno de sus actos, y sin esto la elección se perdía al cerrar la pestaña — que es justo
+   * lo que hace inútil una palanca, porque hay que volver a ponerla cada vez.
+   *
+   * **Ausente es supervisado y no «no consta»**, a diferencia del esfuerzo: de esto hay que
+   * decidir algo en cada escritura, así que el hueco se resuelve, y la única dirección
+   * segura para resolverlo es la que enseña el diff. Por eso perder la anotación no es un
+   * agujero: es volver a preguntar.
+   */
+  modo?: ModoDeEscritura;
+  /**
    * El id de la TAREA de fondo que abrió esta sesión, si la abrió una.
    *
    * Ausente es **«no consta»** y no «es una conversación»: no la lleva ninguna sesión
@@ -155,6 +169,8 @@ export interface SesionReabierta {
   dispositivo?: DispositivoElegido;
   /** El esfuerzo que tenía fijado. Ausente = ninguno, o la sesión es anterior a esto. */
   esfuerzo?: Esfuerzo;
+  /** El modo de escritura que tenía. Ausente = supervisado, o la sesión es anterior a esto. */
+  modo?: ModoDeEscritura;
 }
 
 function carpetaSesiones(raiz: string): string {
@@ -524,6 +540,30 @@ export function elegirEsfuerzo(raiz: string, id: string, esfuerzo: Esfuerzo | un
   return true;
 }
 
+/**
+ * Fija el modo de escritura de una sesión.
+ *
+ * Gemela de `elegirEsfuerzo` hasta en el `false`: una sesión cuyo id todavía no está en el
+ * índice (nace al volcar el primer acto) no se puede anotar, y crear ahí una entrada a
+ * medias la pintaría en la barra como una sesión vacía. Quien llama lo tiene en memoria de
+ * todos modos —vive en `EstadoDeSesion`—, así que perder la anotación no pierde la
+ * elección: solo no sobrevive a cerrar.
+ *
+ * **`supervisado` BORRA la clave en vez de escribirla.** Es la omisión, así que dejarla
+ * escrita daría dos formas de decir lo mismo, y la que sobra es la que hay que recordar
+ * mantener. La misma regla que el `false` que no se guardaba en el ajuste de disco que esto
+ * sustituyó.
+ */
+export function elegirModo(raiz: string, id: string, modo: ModoDeEscritura): boolean {
+  const entradas = leerIndiceOAbortar(raiz);
+  const entrada = entradas.find((e) => e.id === id);
+  if (entrada === undefined) return false;
+  if (modo === "supervisado") delete entrada.modo;
+  else entrada.modo = modo;
+  escribirIndice(raiz, entradas);
+  return true;
+}
+
 /** El índice completo, tal cual lo enseña la lista de sesiones del proyecto. */
 export function listarSesiones(raiz: string): EntradaIndice[] {
   return leerIndice(raiz);
@@ -557,5 +597,6 @@ export function reabrirSesion(raiz: string, id: string): SesionReabierta {
     historica: true,
     ...(entrada?.dispositivo === undefined ? {} : { dispositivo: entrada.dispositivo }),
     ...(entrada?.esfuerzo === undefined ? {} : { esfuerzo: entrada.esfuerzo }),
+    ...(entrada?.modo === undefined ? {} : { modo: entrada.modo }),
   };
 }

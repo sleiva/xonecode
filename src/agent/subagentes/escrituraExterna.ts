@@ -509,6 +509,20 @@ export const MOTIVO_DE_ESCRITURA_RECHAZADA =
   "la escritura no se ha autorizado. No la intentes por otro camino: explica qué querías cambiar y por qué.";
 
 /**
+ * El MODO de escritura de la sesión, tal y como lo ve la política de un motor externo.
+ *
+ * Es una función y no un booleano porque se pregunta en cada tanda (`/aprobacion` cambia el
+ * modo con la sesión en marcha), y el apunte es opcional porque quien monta la política en
+ * un test no tiene aviso de honestidad que alimentar.
+ */
+export interface ModoDeLaSesion {
+  /** ¿Se aplica sin enseñar el diff, AHORA? Ver `core/modoDeEscritura.ts#seEscribeSinPreguntar`. */
+  sinPreguntar: () => boolean;
+  /** Las rutas que se acaban de aplicar sin preguntar, para el aviso del turno. */
+  alAplicarSinPreguntar?: (rutas: readonly string[]) => void;
+}
+
+/**
  * El `pedirAprobacion` de la sesión, convertido en la política de escritura del hijo.
  *
  * **Y aquí está la mitad buena del diseño: la política ya existía.** `pedirAprobacion` es el
@@ -541,7 +555,8 @@ export function politicaDeAprobacionExterna(
     pendientes: PendienteDeAprobacion[],
     ficheros: Map<string, string>,
     diffs: Map<string, LineaDeDiff[]>
-  ) => Promise<Map<string, Decision>>
+  ) => Promise<Map<string, Decision>>,
+  modo?: ModoDeLaSesion
 ): PoliticaDeEscrituraExterna {
   let contador = 0;
   return async (escrituras: readonly EscrituraExternaPedida[]): Promise<boolean> => {
@@ -549,8 +564,34 @@ export function politicaDeAprobacionExterna(
      * **Una lista vacía es un NO, y no un «sí» por vacuidad.** Es la trampa de `every`: sin
      * esta línea, un item sin cambios —o uno cuyo `changes` no se pudo leer— se concedería
      * porque «todas las escrituras vinieron aprobadas», sin haber enseñado nada a nadie.
+     *
+     * Va DELANTE del modo autónomo a propósito: el modo quita la PREGUNTA, y convertir la
+     * nada en un sí no es quitar una pregunta.
      */
     if (escrituras.length === 0) return false;
+
+    /**
+     * **La sesión va en autónomo: se concede sin enseñar el diff.**
+     *
+     * Aquí y no en cada adaptador porque este es el único sitio por el que pasan los tres
+     * motores; escribirlo por motor sería un segundo y un tercer sitio donde el fail-closed
+     * puede dejar de estarlo, que es la única forma en la que estas guardas se han roto.
+     *
+     * **Y es seguro porque las guardas de RUTA ya corrieron**: `decisionDeEscrituraExterna`
+     * llama a `veredictoDeEscriturasExternas` ANTES que a la política, así que lo que llega
+     * hasta aquí ya pasó por `permisosDe`, el confinamiento a la raíz, las vistas aplanadas
+     * y las guardas de artefactos y descargas. El modo quita la pregunta, nunca la barrera.
+     *
+     * Se pregunta en CADA tanda y no se captura al montar la sesión, por lo mismo que el
+     * `sinAprobacion` del grafo: `/aprobacion` cambia el modo con la sesión en marcha.
+     *
+     * Y lo aplicado se APUNTA con sus rutas: sin eso, el aviso de honestidad del turno
+     * contaría de menos justo las escrituras que nadie vio pasar.
+     */
+    if (modo?.sinPreguntar() === true) {
+      modo.alAplicarSinPreguntar?.(escrituras.map((e) => e.ruta));
+      return true;
+    }
     const pendientes: PendienteDeAprobacion[] = [];
     const ficheros = new Map<string, string>();
     const diffs = new Map<string, LineaDeDiff[]>();
@@ -747,9 +788,12 @@ export function politicaExternaDeSesion(
         ficheros: Map<string, string>,
         diffs: Map<string, LineaDeDiff[]>
       ) => Promise<Map<string, Decision>>)
-    | undefined
+    | undefined,
+  modo?: ModoDeLaSesion
 ): PoliticaDeEscrituraExterna | undefined {
-  return pedirAprobacion === undefined ? undefined : politicaDeAprobacionExterna(pedirAprobacion);
+  return pedirAprobacion === undefined
+    ? undefined
+    : politicaDeAprobacionExterna(pedirAprobacion, modo);
 }
 
 /**
@@ -849,6 +893,11 @@ export function opcionesDeSubagenteExterno(opciones: {
   eventos: ColaDeEventos;
   /** Lo que el hijo consumió, para la cuenta de la sesión. Ausente = no se lleva la cuenta. */
   alConsumir?: (consumo: ConsumoExterno) => void;
+  /**
+   * El modo de escritura de la sesión. Ausente = supervisado, o sea que cada escritura del
+   * hijo se pregunta, que es lo que hacía antes de que el modo existiera.
+   */
+  modo?: ModoDeLaSesion;
 }): {
   aprobarEscritura?: PoliticaDeEscrituraExterna;
   ficherosDelProyecto: () => ReadonlySet<string>;
@@ -856,7 +905,7 @@ export function opcionesDeSubagenteExterno(opciones: {
   alRazonar: (texto: string) => void;
   alConsumir?: (consumo: ConsumoExterno) => void;
 } {
-  const politica = politicaExternaDeSesion(opciones.pedirAprobacion);
+  const politica = politicaExternaDeSesion(opciones.pedirAprobacion, opciones.modo);
   return {
     ...(politica === undefined ? {} : { aprobarEscritura: politica }),
     ficherosDelProyecto: opciones.ficherosDelProyecto,

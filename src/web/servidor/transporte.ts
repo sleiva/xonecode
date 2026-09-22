@@ -682,12 +682,18 @@ export type MensajeAlCliente =
        */
       historica?: boolean;
       /**
-       * Las escrituras de este proyecto se aplican SIN pedir aprobación
-       * (`core/settings.ts#seAplicaSinAprobacion`). Ausente = se pide, que es lo normal.
+       * El modo de escritura de la SESIÓN abierta: `supervisado` (cada escritura con su
+       * diff) o `autonomo` (se aplican solas). Ver `core/modoDeEscritura.ts`.
+       *
+       * **Ausente = no hay sesión abierta**, y por eso la pastilla no se pinta: un control
+       * sin dato detrás no se pinta. Nunca significa «supervisado» — una sesión abierta
+       * siempre trae el suyo, porque el servidor resuelve la omisión antes de emitir.
+       *
        * Viaja en el alta y no solo en el aviso del turno porque quien se sienta hoy tiene
-       * que saberlo ANTES de pedir nada, no después con los ficheros ya cambiados.
+       * que saber en qué modo está ANTES de pedir nada, no después con los ficheros ya
+       * cambiados. Y viaja el MODO y no un booleano porque es lo que la pastilla pinta.
        */
-      sinAprobacion?: boolean;
+      modoDeEscritura?: "supervisado" | "autonomo";
       /**
        * Lo que YA estaba sin commitear en el proyecto cuando se abrió esta consola
        * (`agent/sesiones/gitSync.ts#trabajoSinCommitear`, medido en el instante de abrir).
@@ -1078,6 +1084,17 @@ export type MensajeDelCliente =
    * admite lo recupera solo, en vez de obligar a volver a elegirlo.
    */
   | { clase: "esfuerzo"; nivel?: Esfuerzo }
+  /**
+   * El MODO DE ESCRITURA de la sesión abierta: supervisado o autónomo.
+   *
+   * La INTENCIÓN y no la sintaxis, como el modelo y el esfuerzo: el servidor la aplica
+   * encolando el manejador de `/aprobacion` que ya comparten el terminal y la TUI. Un
+   * segundo camino para lo mismo es donde el hueco de política podría reabrirse.
+   *
+   * Lo que el modo gobierna son las escrituras LOCALES: la subida a CloudStudio conserva
+   * su plan y su aprobación en los dos modos, y las guardas de RUTA no se tocan.
+   */
+  | { clase: "modoDeEscritura"; modo: "supervisado" | "autonomo" }
   /**
    * Abrir una sesión de un proyecto: la que se nombra, o una NUEVA si no se nombra ninguna.
    *

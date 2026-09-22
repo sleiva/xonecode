@@ -162,45 +162,14 @@ export function guardarDispositivos(casa: string | undefined, ajustes: AjustesDe
 }
 
 /**
- * Pone o quita la marca de «sin aprobación» de UN proyecto, por su ruta absoluta.
- *
- * Se fusiona campo a campo, al revés que `guardarDispositivos`: ahí son cuatro
- * interruptores que la ventana manda juntos, y aquí cada entrada es un proyecto distinto
- * que se decidió en otro momento — escribir el objeto entero borraría la decisión de los
- * demás. Quitar la marca BORRA la entrada en vez de dejar un `false`: `false` y «no está»
- * significan lo mismo (pedir aprobación) y dos formas de decirlo es una de más.
- */
-export function guardarSinAprobacion(
-  casa: string | undefined,
-  raiz: string,
-  sinAprobacion: boolean,
-): { ruta: string } {
-  const ruta = rutaSettings(casa ?? homedir());
-  const crudo = leerCrudoOAbortar(ruta);
-  const previo = typeof crudo.sinAprobacion === "object" && crudo.sinAprobacion !== null
-    ? (crudo.sinAprobacion as Record<string, unknown>)
-    : {};
-  const siguiente = sinAprobacion
-    ? { ...previo, [raiz]: true }
-    : Object.fromEntries(Object.entries(previo).filter(([k]) => k !== raiz));
-  const fusionado =
-    Object.keys(siguiente).length === 0
-      ? Object.fromEntries(Object.entries(crudo).filter(([k]) => k !== "sinAprobacion"))
-      : { ...crudo, sinAprobacion: siguiente };
-  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
-  return { ruta };
-}
-
-/**
  * Guarda el tope de concurrencia de la cola de tareas, sin tocar nada más del fichero.
  *
  * Se acota a `0..TOPE_DE_CONCURRENCIA_DE_TAREAS` aquí y no solo en el cliente: el selector
  * de Ajustes ya lo acota antes de mandarlo, pero `settings.json` no se fía de quien
  * escribe — es el mismo criterio que `validarConcurrenciaDeTareas` aplica al LEER, aplicado
  * ahora al escribir. Trunca en vez de rechazar: un decimal o un valor fuera de rango es un
- * fallo de quien llama y no una razón para dejar el fichero como estaba, al contrario que
- * `guardarSinAprobacion` (ahí una clave mal formada se descarta entera porque hay más de
- * una y una escribe sola no puede aplastar a las demás; aquí solo hay un valor).
+ * fallo de quien llama y no una razón para dejar el fichero como estaba: aquí solo hay un
+ * valor, así que truncarlo no puede aplastar la decisión de nadie más.
  */
 export function guardarConcurrenciaDeTareas(casa: string | undefined, concurrencia: number): { ruta: string } {
   const ruta = rutaSettings(casa ?? homedir());
@@ -209,44 +178,6 @@ export function guardarConcurrenciaDeTareas(casa: string | undefined, concurrenc
   const fusionado = { ...crudo, concurrenciaDeTareas: acotado };
   escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
   return { ruta };
-}
-
-/**
- * Reescribe las claves de `sinAprobacion` cuando una copia local se ha mudado de sitio.
- *
- * Son rutas ABSOLUTAS de raíz de proyecto, así que una mudanza las deja apuntando a una
- * carpeta que ya no está: la autorización de escribir sin preguntar dejaría de aplicarse en
- * silencio. Es la dirección segura —se vuelve a preguntar— pero es un ajuste que el dueño de
- * la máquina dio por puesto, y perderlo sin decir nada es el fallo mudo de siempre.
- *
- * Misma disciplina que el resto del fichero: la base es el objeto CRUDO, un JSON roto PARA
- * sin escribir, y cero cambios no escribe nada. Devuelve cuántas claves se tradujeron.
- */
-export function remapearSinAprobacion(
-  casa: string | undefined,
-  traducir: (raiz: string) => string | undefined
-): number {
-  const ruta = rutaSettings(casa ?? homedir());
-  if (!existsSync(ruta)) return 0;
-  const crudo = leerCrudoOAbortar(ruta);
-  const previo = crudo.sinAprobacion;
-  if (!esObjeto(previo)) return 0;
-
-  let cambiadas = 0;
-  const salida: Record<string, unknown> = {};
-  for (const [clave, valor] of Object.entries(previo)) {
-    const nueva = traducir(clave);
-    if (nueva === undefined) {
-      salida[clave] = valor;
-      continue;
-    }
-    cambiadas += 1;
-    salida[nueva] = valor;
-  }
-
-  if (cambiadas === 0) return 0;
-  escribirAtomico(ruta, JSON.stringify({ ...crudo, sinAprobacion: salida }, null, 2) + "\n");
-  return cambiadas;
 }
 
 /** Guarda solo la base del workspace, sin tocar la lista de entornos. */

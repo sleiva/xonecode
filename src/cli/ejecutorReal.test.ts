@@ -27,6 +27,8 @@ vi.mock("../agent/turno/turnoReal.js", () => ({
 vi.mock("../agent/config/entorno.js", () => ({ inspeccionar: dobles.inspeccionar }));
 
 const { crearEjecutorReal } = await import("./main.js");
+const { TOPE_DE_RONDAS_DE_CONSOLA } = await import("../core/modoDeEscritura.js");
+const { MAX_APPROVAL_ROUNDS } = await import("../vendor/hitl.js");
 const { crearConsolaDeTarea } = await import("../web/servidor/consolaDeTarea.js");
 const { CatalogoModelosEnMemoria } = await import("../core/ports.js");
 
@@ -157,16 +159,35 @@ describe("el tope de rondas de la consola llega hasta la sesión", () => {
     expect(dobles.abrirSesionReal.mock.calls[0]![0]).toMatchObject({ topeDeRondas: 20 });
   });
 
-  it("sin él, no se pasa nada: `abrirSesionReal` se queda con el tope de siempre", async () => {
+  it("sin él y CON alguien delante, va el tope alto: el freno es la persona, no el contador", async () => {
+    // `MAX_APPROVAL_ROUNDS` son cinco y se dimensionaron para un modelo que insiste tras
+    // cada rechazo. Medido, lo que corta son trabajos legítimos a la mitad: una ronda no es
+    // una insistencia, es una TANDA. Con alguien delante el freno es un rechazo o el botón
+    // de parar, así que el tope solo tiene que estar donde no llegue.
     dobles.abrirSesionReal.mockImplementation(async () => ({
       turno: async () => ({ bitacora: { todo: [] }, cambios: [], cortadoPorTope: false, verificador: "verde" as const, pendientes: 0 }),
     }));
     const ejecutor = crearEjecutorReal(() => {});
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await ejecutor("haz algo", ESTADO, consolaDeMentira() as any);
-    // Ausente y no `undefined` explícito, que es la regla de todo el repo: un
-    // `"topeDeRondas" in opciones` tiene que decir que NO.
-    expect("topeDeRondas" in (dobles.abrirSesionReal.mock.calls[0]![0] as object)).toBe(false);
+    await ejecutor("haz algo", ESTADO, consolaDeMentira({ interactivo: true }) as any);
+    expect(dobles.abrirSesionReal.mock.calls[0]![0]).toMatchObject({
+      topeDeRondas: TOPE_DE_RONDAS_DE_CONSOLA,
+    });
+  });
+
+  it("sin nadie delante se queda el tope BAJO de siempre", async () => {
+    // `xonecode run` y una tubería: nadie aprueba nada, así que cada ronda es una llamada
+    // al modelo que va a acabar en el mismo rechazo. Ahí el tope bajo sí es lo que corta un
+    // bucle que nadie puede parar.
+    dobles.abrirSesionReal.mockImplementation(async () => ({
+      turno: async () => ({ bitacora: { todo: [] }, cambios: [], cortadoPorTope: false, verificador: "verde" as const, pendientes: 0 }),
+    }));
+    const ejecutor = crearEjecutorReal(() => {});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await ejecutor("haz algo", ESTADO, consolaDeMentira({ interactivo: false }) as any);
+    expect(dobles.abrirSesionReal.mock.calls[0]![0]).toMatchObject({
+      topeDeRondas: MAX_APPROVAL_ROUNDS,
+    });
   });
 
   /**

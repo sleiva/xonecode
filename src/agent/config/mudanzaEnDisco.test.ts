@@ -98,7 +98,7 @@ describe("mudarWorkspaceLegado", () => {
     expect(dichos.join("\n")).toMatch(/AppDemo/);
   });
 
-  it("reescribe la raíz de las tareas y la autorización sin aprobación", () => {
+  it("reescribe la raíz de las tareas", () => {
     const vieja = copiaVieja("webstudio", "AppDemo");
     mkdirSync(join(legado, "tareas"), { recursive: true });
     writeFileSync(
@@ -108,11 +108,6 @@ describe("mudarWorkspaceLegado", () => {
         { id: "t2", proyecto: { id: "p2", raiz: "/proyectos/otro", nombre: "Otro" }, titulo: "y", estado: "pendiente" },
       ])
     );
-    writeFileSync(
-      join(legado, "settings.json"),
-      JSON.stringify({ entornos: [], sinAprobacion: { [vieja]: true, "/proyectos/otro": true } })
-    );
-
     mudarWorkspaceLegado({ casa, legado, workspace, entornos: ["webstudio"], escribir });
 
     const indice = JSON.parse(readFileSync(join(legado, "tareas", "indice.json"), "utf8"));
@@ -120,12 +115,6 @@ describe("mudarWorkspaceLegado", () => {
     // Lo que no se mudó se queda EXACTAMENTE como estaba, y el resto de la entrada también.
     expect(indice[1].proyecto.raiz).toBe("/proyectos/otro");
     expect(indice[0].titulo).toBe("x");
-
-    const settings = JSON.parse(readFileSync(join(legado, "settings.json"), "utf8"));
-    expect(settings.sinAprobacion).toEqual({
-      [join(workspace, "webstudio", "AppDemo")]: true,
-      "/proyectos/otro": true,
-    });
   });
 
   it("sin nada que mudar no dice NADA: un arranque normal no lleva ruido", () => {

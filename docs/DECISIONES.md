@@ -1830,7 +1830,12 @@ leer ahora, con palabras y arriba. Lo que la sostiene:
   quien la monte tenga que decidir por tipo qué hacer con «no se puede».
 
 **Un proyecto puede escribir SIN aprobación, y es la única grieta del fail-closed**
-(`core/settings.ts#seAplicaSinAprobacion`, comando `/aprobacion`). El caso es real —en un
+(`core/settings.ts#seAplicaSinAprobacion`, comando `/aprobacion`).
+> **SUPERADO el 21-09-2026.** Esto describe el ajuste por RUTA en `settings.json`, que se
+> retiró entero: el modo de escritura pasó a vivir en la SESIÓN y con él se levantó la
+> condición de CloudStudio. Se deja porque cinco de sus seis condiciones siguen explicando
+> por qué la grieta es estrecha, y porque la que se cayó hay que poder leerla para entender
+> lo que la sustituyó. Ver «El modo de escritura vive en la sesión», al final del fichero. El caso es real —en un
 proyecto offline que el agente crea no hay nadie más— pero la aprobación no está ahí por la
 propiedad del repo: está porque XOne ignora en silencio lo desconocido, así que un atributo
 inventado no da error sino un bug mudo, y el diff es el único momento en que alguien lo ve
@@ -5593,3 +5598,139 @@ a `ecmaVersion: 2015` más la deny-list de arriba, con dos códigos (`JS_SYNTAX`
 real, 119 scripts en eventos contra **162 en nodos**, y los cuatro errores de sintaxis que tiene
 el proyecto están **los cuatro en nodos**. Empujado a `sleiva/xone-linter` hasta `d5f42b4`; no
 alcanza a xonecode hasta que se publique, porque el verificador usa el binario GLOBAL del PATH.
+
+
+## El modo de escritura vive en la sesión (21-09-2026)
+
+### La petición, y el ajuste que ya existía
+
+«Modo autónomo y modo supervisado; las tareas en background ya ejecutan en autónomo, pero
+debemos tener un selector en la caja de chat.» Aclarado después: «no quiero que me esté
+pidiendo permiso cada vez que escriba un fichero».
+
+El interruptor **ya existía** —`seAplicaSinAprobacion`, comando `/aprobacion
+[humana|automatica]`, entrada de arriba— y no servía para esto por una condición: un
+proyecto conectado a CloudStudio no podía ponerse en automático. MyAllXOne, que es donde se
+trabaja, lo está. O sea que el switch habría salido apagado y sin poder encenderse justo
+donde se iba a buscar.
+
+### Lo que tumbó esa condición: una incoherencia medida, no una preferencia
+
+El argumento de la condición era «lo que se escriba aquí sube al trabajo de otras personas».
+Se miró, y no se sostiene:
+
+- **Escribir no sube.** `/sync subir` es un acto aparte, con su plan delante y su aprobación
+  fail-closed por TIPO (`core/cloudstudio.ts#PoliticaDeAprobacion`). Eso no cambia en ningún
+  modo, y el modo nuevo lo dice con palabras en tres sitios: el comando, la pastilla y el
+  aviso del chat.
+- **Lo automático es el commit por turno**, que es git y se recupera.
+- **Y sobre ese MISMO proyecto conectado, una tarea de fondo ya escribía sin preguntar**
+  mientras la consola no podía. La barrera no era «un proyecto conectado no se toca sin
+  mirar» —eso ya no pasaba—: estaba solo en el camino interactivo, que es el que tiene un
+  humano delante con el botón de parar.
+
+### La decisión: en la SESIÓN, no en el disco
+
+Se eligió entre dos sitios y se descartó el de disco, que era el de antes:
+
+- **En la sesión** (lo elegido): un mando dentro de la caja del chat se lee como «esta
+  conversación», el estado se anota en el índice y vuelve al reabrirla —el camino exacto del
+  esfuerzo de razonamiento—, y una sesión nueva nace supervisada. **No hay defecto global**, y
+  esa ausencia es la decisión, igual que con el esfuerzo: un tercer valor «para todas las
+  nuevas» decide en nombre de conversaciones que todavía no existen.
+- **En el disco** (retirado): se ponía una vez y quedaba puesto para siempre, en todas las
+  sesiones y todos los procesos. Una bandera encendida sobre la app de un cliente que nadie
+  recuerda haber dejado encendida es el peor final posible.
+
+Con el ajuste de disco se fueron `settings.sinAprobacion`, `AprobacionPorProyecto`,
+`guardarSinAprobacion`, `validarSinAprobacion`, `seAplicaSinAprobacion` y `remapearSinAprobacion`
+—con su mitad de la mudanza de workspace—. **Dos sitios donde se decide lo mismo es como
+estas reglas se rompen**, así que no coexisten: no hay «defecto de disco» que siembre la
+sesión.
+
+### Lo único que sobrevivió de las seis condiciones
+
+**Hay alguien delante**, calculado como `interactivo && !eof()`, la misma cuenta que
+`pedirDecisiones`. No es celo: `consolaWeb` declara `interactivo: true` a fuego, así que sin
+el `eof` una pestaña cerrada a mitad de turno seguiría auto-aprobando. Con ella, la escritura
+vuelve al camino de aprobación, donde el eof la rechaza — y `xonecode run` en CI y las
+tuberías siguen sin aplicar nada, que es lo que el código de salida 2 del contrato significa.
+
+Y se pregunta en cada RONDA, nunca se captura al abrir: eso obligó a que `crearEjecutorReal`
+guarde el `estado` VIVO (`estadoVivo`), porque `abrirSesionReal` se llama en el primer turno y
+sus cierres se quedaban con el `estado` de ESE turno. Mientras de ahí solo se leía la raíz daba
+igual; con el modo dentro, el comando habría sido cosmético.
+
+### El agujero que se encontró de paso: el modo tiene que alcanzar a los motores externos
+
+`politicaExternaDeSesion` se construía solo desde `pedirAprobacion` y **nunca consultaba el
+ajuste**. O sea que con «automática» puesta, el grafo escribía solo y `claude-code`, `codex` y
+`opencode` seguían parando en cada fichero. Eso ya estaba roto antes de este cambio.
+
+Ahora el MISMO predicado gobierna las dos mitades, y el cortocircuito vive en
+`politicaDeAprobacionExterna` —el único sitio por el que pasan los tres motores—, **después**
+de la guarda de la lista vacía (el modo quita la pregunta, no convierte la nada en un sí) y
+**después** de las guardas de RUTA, que `decisionDeEscrituraExterna` ya corre antes de
+consultar la política. El modo quita la pregunta, nunca la barrera.
+
+Las rutas que se conceden así entran en la MISMA lista que alimenta el aviso de honestidad del
+turno: si no, el aviso contaría de menos justo las escrituras que nadie vio pasar. Eso obligó a
+un puntero de la SESIÓN a una lista del TURNO (`apuntarAplicadasSinPreguntar`), porque la
+política se compone con el agente y el aviso es de cada turno.
+
+**Y está probado desde fuera**, con un espía sobre `opcionesDeSubagenteExterno`: el cableado
+vive en el cierre de `abrirSesionReal`, que es exactamente el patrón de fallo que este repo
+lleva nueve veces —una regla de producción compuesta dentro de algo que todos los tests
+doblan—. El test muere con el mutante: quitar el campo `modo` lo pone en rojo.
+
+### El tope de rondas, que era el otro corte
+
+`MAX_APPROVAL_ROUNDS` son cinco y se dimensionaron para un modelo que insiste tras cada
+rechazo. En autónomo una ronda no es una insistencia, es una TANDA de escrituras, y eso ya
+estaba medido: las tareas de fondo tienen su propio `TOPE_DE_RONDAS_DE_TAREA = 20` porque un
+turno acabó con cuatro ficheros escritos, una escritura abandonada y el verificador sin correr.
+
+La consola interactiva pasa a `TOPE_DE_RONDAS_DE_CONSOLA`, **el mismo 20 y por la misma
+medida** —no hay una segunda observación detrás—. Vive en su propia constante aunque hoy
+valgan lo mismo: son dos situaciones y no una, y fundirlas ataría dos números que se van a
+afinar por separado. **Sin nadie delante se queda el cinco**: ahí nadie aprueba nada, cada
+ronda es una llamada al modelo que acabará en el mismo rechazo, y el tope bajo sí frena un
+bucle que nadie puede parar.
+
+Se consideró ponerlo tan alto que no pudiera cortar (10 000), con el argumento de que el freno
+real es la persona —un rechazo, o el botón de parar—. Se descartó: 20 corta con un motivo
+VERDADERO (`cortadoPorTope`, quedan escrituras sin aplicar, `core/entrega.ts` no entrega), y un
+número provisional con un fallo honesto se afina luego.
+
+### La forma en la pantalla
+
+- **Una pastilla en la fila del compositor**, junto al modelo, el esfuerzo y el dispositivo:
+  las cuatro son la misma clase de cosa —una elección DE LA SESIÓN que decide el servidor y el
+  cliente pinta—, comparten hoja de estilos y se miran juntas justo antes de escribir.
+- **Es un MENÚ y no un interruptor**, aunque sean dos valores: encenderlo cambia lo que va a
+  pasar con los ficheros, y un interruptor no tiene dónde decir qué se concede y qué NO. La
+  frase del menú es la mitad del control.
+- **Ausente no es «supervisado», es «no hay sesión»**, y entonces no se pinta: un control sin
+  dato detrás no se pinta. El servidor resuelve la omisión antes de emitir, así que una sesión
+  abierta siempre trae el suyo.
+- **La etiqueta lleva tilde («autónomo») y el valor no (`autonomo`)**: meter la tilde en el
+  dato habría sido un segundo vocabulario para lo mismo.
+- **El aviso del chat manda a la pastilla, no al comando.** En el navegador «/» es prosa, así
+  que decirle a alguien que teclee `/aprobacion` es mandarlo a un camino que allí no existe.
+- **El cable lleva la INTENCIÓN** (`{clase:"modoDeEscritura", modo}`) y el servidor la aplica
+  encolando `/aprobacion`, el mismo manejador del terminal. Un segundo camino para lo mismo es
+  donde el hueco de política podría reabrirse. Se llama `modoDeEscritura` y no `modo` porque en
+  el alta `modo` ya significa offline/cloud.
+- **`/aprobacion` sigue entendiendo `humana` y `automatica`** además de las palabras nuevas: un
+  comando que deja de entender lo suyo es una regresión aunque el concepto sea el mismo.
+
+### Lo que NO cambia, y se dice tres veces porque es lo que más caro sale confundir
+
+El modo gobierna las **escrituras locales**. No toca la subida —`/sync subir` conserva su plan
+y su aprobación en los dos modos— ni las guardas de RUTA: `/.env`, `/.git`, `/.xonecode`, las
+vistas aplanadas y un artefacto fuera de sitio se siguen denegando igual en autónomo.
+
+Y **las tareas de fondo no usan nada de esto**, a propósito: allí la autorización es el ACTO DE
+CREAR LA TAREA —el encargo se aumenta y se enseña editable antes de encolar, y ese paso ocupa
+el sitio del diff—, mientras que el modo de una sesión significa «el humano que está aquí ha
+decidido no pulsar» y de hecho exige que lo haya.

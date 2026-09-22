@@ -76,7 +76,7 @@ export interface Tarea {
    * `raiz` es ABSOLUTA y solo se usa aquí dentro para abrirlo.
    *
    * Mover o renombrar la carpeta deja la tarea huérfana, y entonces NO se ejecuta — falla
-   * cerrado, igual que `seAplicaSinAprobacion`, que también se indexa por ruta absoluta.
+   * cerrado, igual que el índice de tareas, que también se indexa por ruta absoluta.
    */
   proyecto: { id: string; raiz: string; nombre: string };
   /** La primera frase de la petición. Para leer en el kanban. */
@@ -112,7 +112,7 @@ export interface Tarea {
    * **Se guarda porque nadie lo aprobó.** La autorización de una tarea es el acto de
    * crearla, así que el diff dejó de ser el momento en que alguien ve lo que se va a
    * escribir; lo único que queda es el registro. Con los NOMBRES y no un contador, que es
-   * el mismo criterio del aviso de honestidad de `seAplicaSinAprobacion` — un contador a
+   * el mismo criterio del aviso de honestidad del modo autónomo — un contador a
    * secas es el aviso que enseña a ignorar los avisos.
    *
    * **Ausente y vacío no son lo mismo**, y aquí la diferencia es la de siempre: ausente es

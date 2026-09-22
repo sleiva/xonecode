@@ -555,12 +555,18 @@ export type MensajeAlCliente =
       /** La sesión abierta es una relectura y el agente no la recuerda. Ausente = no. */
       historica?: boolean;
       /**
-       * Las escrituras de este proyecto se aplican SIN pedir aprobación
-       * (`core/settings.ts#seAplicaSinAprobacion`). Ausente = se pide, que es lo normal.
+       * El modo de escritura de la SESIÓN abierta (`core/modoDeEscritura.ts`).
+       *
+       * **Ausente = no hay sesión abierta**, y por eso la pastilla no se pinta. Nunca
+       * significa «supervisado»: una sesión abierta siempre trae el suyo, porque el
+       * servidor resuelve la omisión antes de emitir. Es la distinción de siempre entre
+       * ausente y vacío, ahora sobre un control.
+       *
        * Viaja en el alta y no solo en el aviso del turno porque quien se sienta hoy tiene
-       * que saberlo ANTES de pedir nada, no después con los ficheros ya cambiados.
+       * que saber en qué modo está ANTES de pedir nada, no después con los ficheros ya
+       * cambiados.
        */
-      sinAprobacion?: boolean;
+      modoDeEscritura?: ModoDeEscritura;
       /** Lo que YA estaba sin commitear cuando se abrió esta consola. Ausente = nada que
        *  decir: limpio, sin git con qué mirar, o no se pudo medir. `ficheros` viene
        *  acotada y `total` es la cifra entera. */
@@ -750,6 +756,14 @@ export const TRANSICIONES: Readonly<Record<TareaDelCable["estado"], readonly Tar
  */
 export type Esfuerzo = "low" | "medium" | "high" | "xhigh" | "max";
 
+/**
+ * Quién aprueba las escrituras de una sesión: supervisado (cada una con su diff) o autónomo
+ * (se aplican solas). Copia DECLARADA de `core/modoDeEscritura.ts`, como la de `Esfuerzo` y
+ * la regla del slug de un subagente: la frontera prohíbe compartir módulo con `src/`, y
+ * `tipos.test.ts` compara los literales contra el host para que divergir dé rojo.
+ */
+export type ModoDeEscritura = "supervisado" | "autonomo";
+
 /** El vocabulario como VALOR, que es lo que el store necesita para cribar lo que llega. */
 export const ESFUERZOS: readonly Esfuerzo[] = ["low", "medium", "high", "xhigh", "max"] as const;
 
@@ -812,6 +826,14 @@ export type MensajeDelCliente =
    * admite lo recupera solo, en vez de obligar a volver a elegirlo.
    */
   | { clase: "esfuerzo"; nivel?: Esfuerzo }
+  /**
+   * El MODO DE ESCRITURA de la sesión abierta.
+   *
+   * La INTENCIÓN y no la sintaxis, como el modelo y el esfuerzo: el servidor la aplica
+   * encolando el manejador de `/aprobacion` que ya comparten el terminal y la TUI. Un
+   * segundo camino para lo mismo es donde el hueco de política podría reabrirse.
+   */
+  | { clase: "modoDeEscritura"; modo: ModoDeEscritura }
   /** Abrir una sesión de un proyecto: la nombrada, o una NUEVA si no se nombra ninguna. */
   | { clase: "sesion"; proyecto: string; sesion?: string }
   /** Borrar una sesión guardada, o ponerle nombre, desde el menú de su fila en la barra.

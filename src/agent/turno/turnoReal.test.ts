@@ -9,6 +9,21 @@ import { Command } from "@langchain/langgraph";
 const mocks = vi.hoisted(() => ({ construirAgente: vi.fn() }));
 vi.mock("../grafo/xoneAgent.js", () => ({ construirAgente: mocks.construirAgente }));
 
+/**
+ * Y un espía sobre `opcionesDeSubagenteExterno`, que es lo ÚNICO que se puede mirar del
+ * cableado del modo hacia un motor EXTERNO: la composición vive en el cierre de
+ * `abrirSesionReal`, que es exactamente el patrón de fallo que este repo lleva nueve veces
+ * —una regla de producción compuesta dentro de algo que todos los tests doblan—. Sin este
+ * espía, el `modo` podía dejar de pasarse CON TODO EN VERDE y el hijo seguiría preguntando
+ * por cada fichero mientras la pastilla dice «autónomo».
+ */
+const mocksExterno = vi.hoisted(() => ({ opcionesDeSubagenteExterno: vi.fn() }));
+vi.mock("../subagentes/escrituraExterna.js", async (importOriginal) => {
+  const orig = await importOriginal<typeof import("../subagentes/escrituraExterna.js")>();
+  mocksExterno.opcionesDeSubagenteExterno.mockImplementation(orig.opcionesDeSubagenteExterno);
+  return { ...orig, opcionesDeSubagenteExterno: mocksExterno.opcionesDeSubagenteExterno };
+});
+
 const mocksInstantanea = vi.hoisted(() => ({ tomarInstantanea: vi.fn() }));
 vi.mock("./instantanea.js", async (importOriginal) => {
   const orig = await importOriginal<typeof import("./instantanea.js")>();
@@ -1144,11 +1159,11 @@ describe("los artefactos no pasan por la aprobación", () => {
   });
 });
 
-describe("un proyecto en «sin aprobación»", () => {
+describe("una sesión en modo AUTÓNOMO", () => {
   it("aplica la escritura sin preguntar, y lo DICE con el nombre del fichero", async () => {
-    // La decisión se tomó una vez en `settings.json`, quizá hace meses. El turno que la
-    // ejerce es el único momento en que se puede recordar — y con los nombres, porque un
-    // contador a secas es el aviso que enseña a ignorar los avisos.
+    // La decisión se tomó una vez, al principio de la conversación. El turno que la ejerce
+    // es el único momento en que se puede recordar — y con los nombres, porque un contador
+    // a secas es el aviso que enseña a ignorar los avisos.
     const pedir = vi.fn(aprobarTodo());
     const sesion = await abrir({
       escribe: true,
@@ -1164,7 +1179,29 @@ describe("un proyecto en «sin aprobación»", () => {
     const aviso = lineasDe(piel).find((l) => l.includes("SIN aprobación"));
     expect(aviso).toBeDefined();
     expect(aviso).toContain("/Clientes.xne");
-    expect(aviso).toContain("/aprobacion humana");
+    expect(aviso).toContain("/aprobacion supervisado");
+  });
+
+  it("el modo ALCANZA al motor externo, y es el MISMO predicado que el del grafo", async () => {
+    // Sin esto el modo gobernaba la mitad: el grafo escribía solo y el hijo de Claude Code
+    // seguía parando en cada fichero. Se mira lo que recibe `opcionesDeSubagenteExterno`
+    // porque el cableado vive en el cierre de `abrirSesionReal`, que todos estos tests
+    // doblan — el sitio donde este repo ha visto caerse nueve reglas con todo en verde.
+    mocksExterno.opcionesDeSubagenteExterno.mockClear();
+    let autonomo = false;
+    await abrir({ escribe: true, sinAprobacion: () => autonomo });
+
+    const recibidas = mocksExterno.opcionesDeSubagenteExterno.mock.calls[0]![0] as {
+      modo?: { sinPreguntar: () => boolean; alAplicarSinPreguntar?: (r: readonly string[]) => void };
+    };
+    expect(recibidas.modo).toBeDefined();
+    // Y se PREGUNTA, no se captura: `/aprobacion` cambia el modo con la sesión en marcha.
+    expect(recibidas.modo!.sinPreguntar()).toBe(false);
+    autonomo = true;
+    expect(recibidas.modo!.sinPreguntar()).toBe(true);
+    // El apunte existe, o el aviso de honestidad contaría de menos justo las escrituras
+    // que nadie vio pasar.
+    expect(typeof recibidas.modo!.alAplicarSinPreguntar).toBe("function");
   });
 
   it("sin la marca, la MISMA escritura sigue pidiendo permiso y no avisa de nada", async () => {

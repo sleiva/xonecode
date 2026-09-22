@@ -433,8 +433,8 @@ export function crearSubagenteExterno(opciones: {
            * `canUseTool` **no se invoque** — y por omisión el SDK carga las tres fuentes,
            * incluida `.claude/settings.json` de dentro del `cwd`. Ese fichero viene de
            * CloudStudio con el proyecto, o sea de fuera: es exactamente el argumento por el
-           * que `seAplicaSinAprobacion` vive en `settings.json` y no en el `config.json` del
-           * proyecto. Con las tres fuentes cargadas, quien te pasa un proyecto decidía si
+           * que las decisiones del dueño de la máquina viven en `settings.json` y no en el
+           * `config.json` del proyecto. Con las tres fuentes cargadas, quien te pasa un proyecto decidía si
            * tus barreras se aplican.
            *
            * Se queda `"user"`: son los ajustes del dueño de la máquina —su autenticación,

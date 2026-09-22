@@ -14,7 +14,8 @@
  * (`turnoReal.ts#conVerificacion`, que corre por este camino igual que por el de una
  * persona — MEDIDO) y el juez de la entrega.
  *
- * **Y NO es `seAplicaSinAprobacion`.** Ese ajuste dice «el humano que está aquí ha decidido
+ * **Y NO es el MODO DE ESCRITURA de una sesión** (`core/modoDeEscritura.ts`). Ese dice «el
+ * humano que está aquí ha decidido
  * no pulsar» —lo calcula como `interactivo && !eof()`— y aquí no hay nadie aquí: con esta
  * consola devuelve `false` siempre, así que reutilizarlo habría dejado a las tareas sin
  * aplicar nada. Y al revés: la marca del `settings.json` de un proyecto offline no decide
@@ -23,7 +24,7 @@
  * **Lo autorizado se DICE**, por dos canales y con los NOMBRES: al transcript (que es lo que
  * lee quien abre la sesión) y por `autorizado`, que el corredor guarda en la tarea. Una
  * escritura que nadie aprueba no puede ser además muda — es la regla del evento `artefacto`
- * y la del aviso de honestidad de `seAplicaSinAprobacion`, y aquí es el ÚNICO aviso que
+ * y la del aviso de honestidad del modo autónomo, y aquí es el ÚNICO aviso que
  * hay: el de `turnoReal.ts` sale solo por su rama `todoAutomatico`, que este camino no
  * toma. Con los nombres y no un contador, porque un contador a secas es el aviso que enseña
  * a ignorar los avisos.
@@ -201,7 +202,7 @@ export function crearConsolaDeTarea(opciones: {
     // `interactivo: false` y `eof: true` dicen la verdad: no hay nadie delante. Lo que NO
     // se hace es dejar que de ahí se deduzca una decisión — quien contesta una PREGUNTA es
     // la persona que atienda la tarea, y las escrituras se aplican por la política de este
-    // fichero y no por lo que estos dos campos digan. De rebote, `seAplicaSinAprobacion`
+    // fichero y no por lo que estos dos campos digan. De rebote, el modo de escritura
     // calcula «hay alguien delante» con exactamente esta cuenta (`interactivo && !eof()`),
     // así que con esta consola devuelve `false` siempre y no aporta nada por aquí: ese
     // ajuste es «el humano que está aquí ha decidido no pulsar».

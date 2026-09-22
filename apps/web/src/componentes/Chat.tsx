@@ -99,7 +99,7 @@ export function Chat({
    */
   historica?: boolean;
   /**
-   * Este proyecto aplica las escrituras SIN pedir aprobación (`alta.sinAprobacion`). Se
+   * Esta sesión aplica las escrituras SIN pedir aprobación (el modo es `autonomo`). Se
    * dice arriba, con la conversación, y no solo en el aviso del turno: la decisión se tomó
    * una vez —quizá hace meses, en `settings.json`— y quien se sienta hoy tiene que saberlo
    * ANTES de pedir nada, no después con los ficheros ya cambiados.
@@ -285,13 +285,17 @@ export function Chat({
             </section>
           ) : null}
           {sinAprobacion ? (
-            // `role="note"` y no `alert`: es una condición permanente de este proyecto, no
-            // algo que acabe de pasar. Va arriba del todo, por delante incluso del aviso de
-            // relectura: cambia lo que va a ocurrir con lo próximo que escribas.
+            // `role="note"` y no `alert`: es un estado de la sesión, no algo que acabe de
+            // pasar. Va arriba del todo, por delante incluso del aviso de relectura: cambia
+            // lo que va a ocurrir con lo próximo que escribas.
+            //
+            // Y manda a la PASTILLA, no al comando: en el navegador «/» es prosa y cada
+            // acción tiene su botón, así que decirle a alguien que teclee `/aprobacion` es
+            // mandarlo a un camino que aquí no existe.
             <p role="note" className={`${vista.flowItem} ${estilos.sinAprobacion}`}>
-              Este proyecto escribe <strong>sin pedirte aprobación</strong>: los cambios se
-              aplican solos y cada turno te dirá qué ficheros tocó. Escribe{" "}
-              <code>/aprobacion humana</code> para volver a decidir tú.
+              Esta sesión va en <strong>modo autónomo</strong>: los cambios se aplican solos
+              y cada turno te dirá qué ficheros tocó. Subir a CloudStudio sigue pidiéndote
+              permiso. Vuelve a <strong>supervisado</strong> en la pastilla de la caja.
             </p>
           ) : null}
           {trabajoAlAbrir === undefined ? null : (

@@ -1266,9 +1266,11 @@ export function App({
               // Lo dice el servidor (`alta.historica`): una sesión reabierta que el agente
               // no recuerda. El chat lo enseña arriba y Revisión cambia su explicación.
               historica={estado.alta?.historica === true}
-              // Lo dice el servidor tras comprobar las tres condiciones
-              // (`core/settings.ts#seAplicaSinAprobacion`); el cliente no lo deduce.
-              sinAprobacion={estado.alta?.sinAprobacion === true}
+              // Lo dice el servidor con el modo de la sesión abierta
+              // (`core/modoDeEscritura.ts`); el cliente no lo deduce. El aviso del chat es
+              // un booleano porque solo habla de un caso —el autónomo—, y la pastilla que
+              // lo cambia lleva el modo entero.
+              sinAprobacion={estado.alta?.modoDeEscritura === "autonomo"}
               {...(estado.alta?.trabajoAlAbrir === undefined
                 ? {}
                 : { trabajoAlAbrir: estado.alta.trabajoAlAbrir })}
@@ -1499,6 +1501,13 @@ export function App({
               {...(estado.alta?.dispositivoActivo === undefined ? {} : { dispositivo: estado.alta.dispositivoActivo })}
               {...(estado.dispositivos === undefined ? {} : { dispositivos: estado.dispositivos })}
               alElegirDispositivo={(id) => void enviar(id === undefined ? { clase: "dispositivo" } : { clase: "dispositivo", id })}
+              // El modo de escritura de la sesión. Ausente = no hay sesión abierta, y
+              // entonces la pastilla no se pinta: un control sin dato detrás no se pinta.
+              // Se manda la INTENCIÓN y el servidor la aplica encolando `/aprobacion`.
+              {...(estado.alta?.modoDeEscritura === undefined
+                ? {}
+                : { modoDeEscritura: estado.alta.modoDeEscritura })}
+              alElegirModoDeEscritura={(modo) => void enviar({ clase: "modoDeEscritura", modo })}
               // Lo dice el servidor, no se deduce de los actos: un turno que revienta no
               // siempre deja `fin`, y el compositor se quedaría apagado para siempre.
               turnoEnVuelo={estado.turnoEnVuelo === true}

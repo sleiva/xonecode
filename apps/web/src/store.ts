@@ -41,6 +41,7 @@ import type {
   EstadoDelLanzamiento,
   Esfuerzo,
   EsfuerzoDelCable,
+  ModoDeEscritura,
 } from "./tipos.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, FASES_DEL_LANZAMIENTO, ESTADOS_DEL_LANZAMIENTO, ESFUERZOS } from "./tipos.js";
 
@@ -376,8 +377,9 @@ export interface EstadoDelCliente {
     dispositivoActivo?: DispositivoElegido;
     /** La sesión abierta es una relectura que el agente no recuerda. Ausente = no. */
     historica?: boolean;
-    /** Este proyecto aplica las escrituras sin pedir aprobación. Ausente = las pide. */
-    sinAprobacion?: boolean;
+    /** El modo de escritura de la sesión abierta. Ausente = no hay sesión, y entonces la
+     *  pastilla no se pinta: nunca significa «supervisado». */
+    modoDeEscritura?: ModoDeEscritura;
     /** Lo que ya estaba sin commitear al abrir esta consola. Ausente = nada que decir
      *  (limpio, sin git, o no se pudo medir): el chat no pinta ningún aviso. */
     trabajoAlAbrir?: { ficheros: string[]; total: number };
@@ -1603,7 +1605,7 @@ export function crearStoreDelCliente(): {
             sesionActiva?: unknown;
             dispositivoActivo?: unknown;
             historica?: unknown;
-            sinAprobacion?: unknown;
+            modoDeEscritura?: unknown;
             trabajoAlAbrir?: unknown;
             proyectos?: unknown;
             ramas?: unknown;
@@ -1725,11 +1727,13 @@ export function crearStoreDelCliente(): {
               // Solo si es exactamente `true`: es una afirmación sobre lo que el agente NO
               // recuerda, y cualquier otra cosa se lee como «no».
               ...(m.historica === true ? { historica: true } : {}),
-              // Y aquí el `=== true` no es rutina: es la diferencia entre avisar de que
-              // este proyecto escribe sin preguntar y callarlo. Cualquier otra cosa —una
-              // cadena «true» incluida— se lee como «sí pide aprobación», que es el lado
-              // en el que un fallo no cuesta nada.
-              ...(m.sinAprobacion === true ? { sinAprobacion: true } : {}),
+              // Los DOS literales y nada más: un modo nuevo del servidor, o basura, se
+              // descarta y entonces no se pinta pastilla — lo mismo que cuando el campo no
+              // viene. Aceptar lo desconocido pintaría un control cuyo valor no se sabe
+              // leer, y encima sobre la palanca que decide si se escribe sin preguntar.
+              ...(m.modoDeEscritura === "supervisado" || m.modoDeEscritura === "autonomo"
+                ? { modoDeEscritura: m.modoDeEscritura }
+                : {}),
               // Campo a campo, como la foto del dispositivo: media forma no vale. Y una
               // lista VACÍA se descarta aunque venga bien formada — sería un aviso que
               // dice «ya había cambios» sin nombrar ninguno, o sea peor que callarse. El

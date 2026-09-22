@@ -70,6 +70,7 @@ import {
   crearSesion,
   elegirDispositivo,
   elegirEsfuerzo,
+  elegirModo,
   listarSesiones,
   reabrirSesion,
   renombrarSesion,
@@ -77,6 +78,7 @@ import {
 } from "./sesiones.js";
 import type { MensajeAlCliente, MensajeDelCliente, Sumidero } from "./transporte.js";
 import type { Esfuerzo } from "../../core/esfuerzo.js";
+import { MODO_POR_OMISION, type ModoDeEscritura } from "../../core/modoDeEscritura.js";
 
 /**
  * Un paso del alta — o, para «proyecto», una ACCIÓN que ya no es un paso del alta:
@@ -173,7 +175,14 @@ export interface PuertoDeSesiones {
   reabrir(
     raiz: string,
     id: string,
-  ): { id: string; actos: Acto[]; historica: boolean; dispositivo?: DispositivoElegido; esfuerzo?: Esfuerzo };
+  ): {
+    id: string;
+    actos: Acto[];
+    historica: boolean;
+    dispositivo?: DispositivoElegido;
+    esfuerzo?: Esfuerzo;
+    modo?: ModoDeEscritura;
+  };
   /** Borra una sesión. Devuelve si había algo que borrar; un id desconocido no es un error
    *  (dos pestañas, un doble clic). Opcional: un puerto de prueba puede no saber borrar. */
   borrar?(raiz: string, id: string): boolean;
@@ -184,6 +193,8 @@ export interface PuertoDeSesiones {
   elegirDispositivo?(raiz: string, id: string, dispositivo: DispositivoElegido | undefined): boolean;
   /** Anota el esfuerzo de una sesión. Gemelo del anterior: otra elección DE la sesión. */
   elegirEsfuerzo?(raiz: string, id: string, esfuerzo: Esfuerzo | undefined): boolean;
+  /** Anota el modo de escritura de una sesión. El tercero de la misma familia. */
+  elegirModo?(raiz: string, id: string, modo: ModoDeEscritura): boolean;
 }
 
 const SESIONES_EN_DISCO: PuertoDeSesiones = {
@@ -195,6 +206,7 @@ const SESIONES_EN_DISCO: PuertoDeSesiones = {
   renombrar: renombrarSesion,
   elegirDispositivo,
   elegirEsfuerzo,
+  elegirModo,
 };
 
 /**
@@ -1266,6 +1278,11 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       if (estadoDeSesion.esfuerzo !== undefined) {
         sesiones.elegirEsfuerzo?.(raiz, idSesion, estadoDeSesion.esfuerzo);
       }
+      // Y el modo de escritura, por lo mismo. Solo si NO es el de omisión: anotar
+      // `supervisado` escribiría la omisión en el índice, que es la clave que sobra.
+      if (estadoDeSesion.modo !== undefined && estadoDeSesion.modo !== MODO_POR_OMISION) {
+        sesiones.elegirModo?.(raiz, idSesion, estadoDeSesion.modo);
+      }
     };
 
     /**
@@ -1375,6 +1392,13 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
        * es lo que vuelve inútil una palanca de coste — hay que volver a ponerla cada vez.
        */
       ...(reabierta?.esfuerzo === undefined ? {} : { esfuerzo: reabierta.esfuerzo }),
+      /**
+       * Y el modo de escritura, por el mismo camino y con una diferencia: ausente aquí es
+       * SUPERVISADO y no «no consta». Una sesión guardada antes de que esto existiera, o
+       * una cuyo índice no se pudo leer, se reabre preguntando — que es la dirección en la
+       * que perder el dato no cuesta nada.
+       */
+      ...(reabierta?.modo === undefined ? {} : { modo: reabierta.modo }),
     };
     // `/modelo` y `/modelos` cambian el modelo EN CALIENTE y no tocan disco, así que esta
     // es la única forma de enterarse. Ver `Consola.alEstado`.
@@ -1392,6 +1416,13 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
        */
       if (nuevo.esfuerzo !== estadoDeSesion.esfuerzo && anotada) {
         sesiones.elegirEsfuerzo?.(raiz, idSesion, nuevo.esfuerzo);
+      }
+      // El modo de escritura, exactamente igual: `/aprobacion` es un comando como
+      // `/esfuerzo` —devuelve estado y no toca disco—, así que ésta es la única costura que
+      // ve el de antes y el de ahora. Sin esto, poner autónomo y cerrar la pestaña lo
+      // perdía, y la entrada de DECISIONES prometía lo contrario.
+      if (nuevo.modo !== estadoDeSesion.modo && anotada) {
+        sesiones.elegirModo?.(raiz, idSesion, nuevo.modo ?? MODO_POR_OMISION);
       }
       estadoDeSesion = nuevo;
       // Al cable solo por la puerta de las personas: la escucha reemite el estado de

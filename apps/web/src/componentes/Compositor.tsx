@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type {
-  DispositivoElegido, Esfuerzo, EsfuerzoDelCable, InformeDeDispositivos, ProveedorDeModelos,
+  DispositivoElegido, Esfuerzo, EsfuerzoDelCable, InformeDeDispositivos, ModoDeEscritura,
+  ProveedorDeModelos,
 } from "../tipos.js";
 import { PastillaDeModelo } from "./PastillaDeModelo.js";
 import { PastillaDeEsfuerzo } from "./PastillaDeEsfuerzo.js";
 import { PastillaDeDispositivo } from "./PastillaDeDispositivo.js";
+import { PastillaDeModoDeEscritura } from "./PastillaDeModoDeEscritura.js";
 import { ContadorDeTokens, type ConsumoPintable } from "./ContadorDeTokens.js";
 import estilos from "./Compositor.module.css";
 
@@ -35,6 +37,8 @@ export function Compositor({
   alAbrirAjustes,
   dispositivo,
   dispositivos,
+  modoDeEscritura,
+  alElegirModoDeEscritura,
   alElegirDispositivo,
   alEnviar,
 }: {
@@ -95,6 +99,13 @@ export function Compositor({
   dispositivo?: DispositivoElegido;
   /** La última medida de la máquina, para la lista. Ausente = todavía no llegó. */
   dispositivos?: InformeDeDispositivos;
+  /**
+   * El modo de escritura de la sesión abierta. Ausente = no hay sesión, y entonces no se
+   * pinta pastilla — nunca significa «supervisado».
+   */
+  modoDeEscritura?: ModoDeEscritura;
+  /** Cambiar el modo. Ausente = no se pinta pastilla, como las otras tres. */
+  alElegirModoDeEscritura?: (modo: ModoDeEscritura) => void;
   /** Elegir dispositivo: el id, o `undefined` para quitarlo. Ausente = no se pinta pastilla. */
   alElegirDispositivo?: (id: string | undefined) => void;
   alEnviar: (texto: string) => void;
@@ -229,6 +240,20 @@ export function Compositor({
               {...(dispositivos === undefined ? {} : { informe: dispositivos })}
               conectado={conectado}
               alElegir={alElegirDispositivo}
+            />
+          )}
+          {/*
+            Y el MODO DE ESCRITURA, en la misma fila y por la misma razón que las otras
+            tres: es una elección DE LA SESIÓN que decide el servidor y el cliente pinta, y
+            se mira justo antes de escribir la petición — que es cuando importa saber si lo
+            que venga se va a aplicar solo. Sin sesión no hay modo y no se pinta: un control
+            sin dato detrás no se pinta.
+          */}
+          {alElegirModoDeEscritura === undefined ? null : (
+            <PastillaDeModoDeEscritura
+              {...(modoDeEscritura === undefined ? {} : { actual: modoDeEscritura })}
+              conectado={conectado}
+              alElegir={alElegirModoDeEscritura}
             />
           )}
           {/*

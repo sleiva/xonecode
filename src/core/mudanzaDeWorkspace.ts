@@ -101,11 +101,14 @@ export function mudanzasPendientes(
  * Una ruta absoluta ya grabada en disco, traducida al reparto de ahora — o AUSENTE si esta
  * mudanza no la toca.
  *
- * Existe porque hay dos almacenes con raíces absolutas escritas: `proyecto.raiz` del índice
- * de tareas (`~/.xonecode/tareas/indice.json`) y las claves de `settings.sinAprobacion`. Sin
- * reescribirlas, una tarea pendiente abriría una carpeta que ya no está y una autorización
- * de escritura sin preguntar dejaría de aplicarse en silencio — que es la dirección segura,
- * pero es un ajuste que el usuario dio por puesto.
+ * Existe por el almacén que tiene raíces absolutas escritas: `proyecto.raiz` del índice de
+ * tareas (`~/.xonecode/tareas/indice.json`). Sin reescribirlas, una tarea pendiente abriría
+ * una carpeta que ya no está.
+ *
+ * Fueron DOS: las claves de `settings.sinAprobacion` también eran rutas, y perderlas dejaba
+ * sin aplicar una autorización que el usuario dio por puesta. Ese ajuste se retiró cuando el
+ * modo de escritura pasó a vivir en la SESIÓN (`core/modoDeEscritura.ts`) y con él se fue su
+ * mudanza; esta función sigue siendo general porque el problema no era suyo.
  *
  * Se compara por SEGMENTOS y no por prefijo de texto, la misma trampa que `dentroDelWorkspace`:
  * `…/AppDemoViejo` empieza por `…/AppDemo` y no tiene nada que ver. Y ausente significa «esto

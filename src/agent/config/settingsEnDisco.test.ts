@@ -7,7 +7,6 @@ import {
   guardarConcurrenciaDeTareas,
   guardarDispositivos,
   guardarEntorno,
-  guardarSinAprobacion,
   guardarWorkspace,
   rutaSettings,
   SettingsRotosEnDisco,
@@ -165,32 +164,3 @@ describe("settingsEnDisco", () => {
   });
 });
 
-describe("guardarSinAprobacion", () => {
-  /**
-   * Se fusiona proyecto a proyecto, al revés que `guardarDispositivos`: allí son cuatro
-   * interruptores que la ventana manda juntos, y aquí cada entrada es una decisión distinta
-   * tomada en otro momento. Escribir el objeto entero borraría las de los demás.
-   */
-  it("cada proyecto es su propia decisión, y no se pisan", () => {
-    const c = casa();
-    guardarEntorno(c, { id: "a", nombre: "A", url: "https://a/mcp" });
-    guardarSinAprobacion(c, "/proy/uno", true);
-    guardarSinAprobacion(c, "/proy/dos", true);
-    expect(cargarSettings(c).settings.sinAprobacion).toEqual({ "/proy/uno": true, "/proy/dos": true });
-
-    guardarSinAprobacion(c, "/proy/uno", false);
-    expect(cargarSettings(c).settings.sinAprobacion).toEqual({ "/proy/dos": true });
-    // Y no se lleva por delante lo que había alrededor.
-    expect(cargarSettings(c).settings.entornos.map((e) => e.id)).toEqual(["a"]);
-  });
-
-  it("quitar la última BORRA la clave en vez de dejar un `false`", () => {
-    // `false` y «no está» significan lo mismo —pedir aprobación— y dos formas de decirlo
-    // es una de más, además de basura en el fichero.
-    const c = casa();
-    guardarSinAprobacion(c, "/proy/uno", true);
-    guardarSinAprobacion(c, "/proy/uno", false);
-    expect(cargarSettings(c).settings.sinAprobacion).toBeUndefined();
-    expect(readFileSync(rutaSettings(c), "utf8")).not.toContain("sinAprobacion");
-  });
-});

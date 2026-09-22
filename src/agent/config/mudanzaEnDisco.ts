@@ -18,7 +18,6 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { mudanzasPendientes, rutaMudada, type Mudanza } from "../../core/mudanzaDeWorkspace.js";
-import { remapearSinAprobacion } from "./settingsEnDisco.js";
 import { remapearRaicesDeTareas } from "../tareas/tareasEnDisco.js";
 import { BASURA_DEL_SO } from "../sesiones/gitSync.js";
 
@@ -103,15 +102,18 @@ export function mudarWorkspaceLegado(opciones: {
 
   if (hechas.length > 0) {
     const traducir = (raiz: string): string | undefined => rutaMudada(raiz, hechas);
-    // Un fallo de cualquiera de los dos no puede tumbar el arranque de la consola: las
-    // copias ya están mudadas, y lo que queda es un ajuste que se vuelve a poner a mano.
+    // Un fallo no puede tumbar el arranque de la consola: las copias ya están mudadas, y
+    // lo que queda es un ajuste que se vuelve a poner a mano.
+    //
+    // **Queda UNO**, y antes eran dos: el otro reescribía las claves de
+    // `settings.sinAprobacion`, que era el ajuste por RUTA de «escribe sin preguntar». Ese
+    // ajuste se retiró entero cuando el modo de escritura pasó a vivir en la SESIÓN
+    // (`core/modoDeEscritura.ts`), así que ya no hay ninguna ruta absoluta suya que
+    // traducir. El bucle se queda porque el siguiente almacén con rutas dentro entra aquí.
     for (const [que, remapear] of [
-      // Las dos toman su raíz por parámetros que NO significan lo mismo: `casa` es el HOME
-      // (`rutaSettings` le añade `.xonecode`) y la base de las tareas es ya la carpeta
-      // `.xonecode`. Se traduce aquí, a la vista, en vez de fiarse de que los dos nombres
-      // que se parecen quieran decir lo mismo.
+      // Su raíz NO es la `casa`: `casa` es el HOME (`rutaSettings` le añade `.xonecode`) y
+      // la base de las tareas es ya la carpeta `.xonecode`. Se traduce aquí, a la vista.
       ["la cola de tareas", () => remapearRaicesDeTareas(join(opciones.casa ?? homedir(), ".xonecode"), traducir)],
-      ["las autorizaciones sin aprobación", () => remapearSinAprobacion(opciones.casa, traducir)],
     ] as const) {
       try {
         remapear();

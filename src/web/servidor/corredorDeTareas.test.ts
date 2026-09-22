@@ -311,7 +311,7 @@ describe("lo que una tarea AUTORIZÓ se guarda con su estado", () => {
    * Desde §0 del diseño una tarea aplica sus escrituras sin aprobación, y su autorización
    * es el acto de crearla. Lo que queda entonces es el REGISTRO: nadie vio el diff antes,
    * así que la única pista de qué tocó es lo que se apunte aquí. Con los NOMBRES y no un
-   * contador, igual que el aviso de honestidad de `seAplicaSinAprobacion`.
+   * contador, igual que el aviso de honestidad del modo autónomo.
    */
   it("una tarea que autoriza y termina deja los ficheros en el índice, RELATIVOS", async () => {
     const { disco, estado } = discoDeMentira([TAREA()]);
