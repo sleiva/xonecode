@@ -17,6 +17,33 @@ El servidor vive **dentro del proceso de la app**: si la app no está viva, el p
 responde. Habla dos protocolos por el mismo puerto: **WebSocket** para los comandos
 (`{"command": "..."}` → `{"result": ..., "status": ...}`) y **HTTP(S)** para lo demás.
 
+
+## Qué usar para qué (y una captura casi nunca es la respuesta)
+
+No cuestan lo mismo, ni de lejos. Por orden de lo que vas a necesitar:
+
+| quieres saber… | úsalo | por qué |
+|---|---|---|
+| **dónde estoy** | `screen` | una línea: colección activa, diálogos abiertos, ventana con el foco |
+| **qué está fallando** | `xone-log-android` | un error de JavaScript o una excepción salen ahí con su mensaje y su línea |
+| **el valor de un campo** | `getText name=X` | un viaje, una respuesta corta |
+| **varios campos** | `getFields names=A,B,C` | UN viaje; un campo que falle no tumba a los demás |
+| **el contenido de una lista** | `getRows content=X fields=…` | alcanza todas las filas, no solo las pintadas |
+| **qué hay en la pantalla** | `elements` | SOLO para explorar: decenas de miles de caracteres |
+| **si algo se VE mal** | `shot name=MAP_X` | y solo aquí |
+
+**Una captura NO es una herramienta de diagnóstico.** Para saber por qué algo falla están el
+LOG y `elements`. La captura es para lo **visual** —texto cortado, un control tapado, algo
+ilegible— o para cuando lo anterior no concluye.
+
+**Y tiene un precio medido.** Una captura de pantalla completa (1080×2400) cuesta **3.375
+tokens** en el revisor visual. El peso del fichero **da igual**: medido contra el proveedor,
+52 KB y 766 KB con las mismas dimensiones cuestan exactamente lo mismo —se paga por PÍXELES—,
+así que bajar `quality` ahorra disco y cero tokens. Lo que ahorra es `scale`, y sobre todo
+acotar: `shot name=MAP_ACEPTAR` cuesta una fracción y además **dice qué se estaba probando**
+en vez de ser una foto de la pantalla.
+
+
 ## Lo que hay que saber antes de tocar nada
 
 - **HTTPS con certificado autofirmado** en las dos plataformas. Todas las URLs son `https://`;

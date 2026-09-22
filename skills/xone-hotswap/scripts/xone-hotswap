@@ -182,6 +182,41 @@ const utiles = pedidos.filter((a) => a !== "--dry-run");
 const comandos = [];
 for (const trozo of partirPorSeparador(utiles)) {
   const [cabeza, ...resto] = trozo;
+  /**
+   * **El JSON viejo se RECHAZA con la forma buena escrita, nunca se acepta a medias.**
+   *
+   * Al quitar el JSON, una llamada con la sintaxis de antes no fallaba: metía el objeto
+   * ENTERO como nombre del comando y mandaba
+   * `{"command":"{\"command\":\"getAllElements\",…}"}`. El aparato contestaba
+   * `Unknown command: {"command":"getAllElements","format":"xone"}` —visto en pantalla— y
+   * quien lo leyera no tenía forma de saber que el problema era la sintaxis del cliente y no
+   * el comando: parecía que el framework no conocía `getAllElements`. Un fallo que miente
+   * sobre dónde está invita a reintentar, y reintentar es lo que cuesta.
+   *
+   * No se ACEPTA —eso era la capa de compatibilidad que se decidió no tener— pero tampoco se
+   * traga: se dice qué escribir, que es el patrón de `porQueNo` y el de `xone_navegacion`
+   * cuando no sabe contestar.
+   */
+  if (cabeza.startsWith("{")) {
+    let comoJson;
+    try {
+      comoJson = JSON.parse(cabeza);
+    } catch {
+      comoJson = undefined;
+    }
+    const nombre = typeof comoJson?.command === "string" ? comoJson.command : undefined;
+    const pares = nombre
+      ? Object.entries(comoJson)
+          .filter(([k]) => k !== "command")
+          .map(([k, v]) => `${k}=${typeof v === "object" ? JSON.stringify(v) : String(v)}`)
+          .join(" ")
+      : "";
+    salir(
+      `este cliente ya NO recibe JSON. Escríbelo como "<comando> clave=valor".` +
+        (nombre ? `\n  Lo que querías es:  xone-hotswap ${nombre}${pares ? ` ${pares}` : ""}` : "") +
+        `\n  Y con -- se encadenan varios por la misma conexión. Mira --help.`,
+    );
+  }
   const atajo = ATAJOS[cabeza];
   comandos.push(atajo ? atajo(resto) : aplicarPares({ command: cabeza }, resto));
 }
