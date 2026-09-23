@@ -295,6 +295,41 @@ describe("una sesión con el motor TrueForge", () => {
     expect(toolsPorLlamada[4]).not.toContain("execute");
     // Su prompt es el de su `.md` —con las reglas de XOne delante— y le llegan SUS skills.
     expect(vistos[1]!.join("\n")).toContain("/skills/xone-development/SKILL.md");
-    expect(vistos[4]!.join("\n")).toMatch(/cada escritura la aprueba una persona/);
+    // Las tools PROPIAS, con el reparto de deepagents: los especialistas llevan las dos, y su
+    // nota las NOMBRA — sale de lo que se monta, no de una frase escrita a mano.
+    expect(toolsPorLlamada[1]).toEqual(expect.arrayContaining(["xone_navegacion", "regex_search"]));
+    expect(vistos[1]!.join("\n")).toContain("`xone_navegacion`");
+    expect(vistos[4]!.join("\n")).toMatch(/cada escritura la aprueba una persona/i);
+  }, 30_000);
+
+  it("el ORQUESTADOR lleva `xone_navegacion` y la usa de verdad; `regex_search` no, es de los especialistas", async () => {
+    const raiz = proyecto();
+    const { m, vistos, toolsPorLlamada } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "n1", name: "xone_navegacion", args: JSON.stringify({ operacion: "inventario" }) }] })],
+      [new AIMessageChunk({ content: "Hay una: Clientes." })],
+    ]);
+    const s = await abrirSesionTrueforge({
+      raiz,
+      modelos: m,
+      entorno: ENTORNO,
+      skills: CATALOGO,
+      // Doblado: se mide que la tool está MONTADA y su respuesta vuelve al modelo.
+      navegacion: async () =>
+        ({
+          inventario: () => [{ clase: "coleccion", nombre: "Clientes", fichero: "/clientes.xne" }],
+          definicion: () => [],
+          referencias: () => [],
+          campos: () => [],
+          app: () => ({ entrada: [], login: [], estilos: [], conexiones: [] }),
+          detalle: () => undefined,
+          problemas: () => ({ rotas: [], huerfanas: [] }),
+        }) as never,
+    });
+    const pi = piel();
+    await s.turno("¿qué colecciones hay?", pi.p);
+    expect(toolsPorLlamada[0]).toContain("xone_navegacion");
+    expect(toolsPorLlamada[0]).not.toContain("regex_search");
+    expect(vistos[1]!.join("\n")).toContain("Clientes  /clientes.xne");
+    expect(pi.tokens.join("")).toBe("Hay una: Clientes.");
   }, 30_000);
 });

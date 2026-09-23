@@ -620,7 +620,11 @@ continúa el otro. Cumple el mismo `SesionReal`, así que ninguna piel sabe cuá
 **el modelo es NUESTRO** (un `ILLM` sobre el de LangChain, nunca su `VercelAILLM`, que perdería el
 `user_id`, el eco y el esfuerzo); **las tools delegan en `backendDeAgente`** y reevalúan las reglas de
 `permisosDe`, que en deepagents son middleware y aquí nadie aplicaría; y **`core/` no importa
-`@truefoundry/` ni `winston`** (`imports.test.ts`). Fase 0: sin subagentes, verificador ni navegación.
+`@truefoundry/` ni `winston`** (`imports.test.ts`). **El reparto es el de deepagents**: el raíz es el
+orquestador de solo lectura y sin skills, cada especialista sale de su `.md`, y **la aprobación de un
+hijo se devuelve a SU `thread_id`** (a `main` la librería la rechaza). **Las tools propias no se
+reescriben: se ADAPTAN** (`toolsPropias.ts`, esquema de la tool y su `invoke`), con el mismo reparto —
+`xone_navegacion` a todos, el orquestador incluido—. Falta el verificador y la memoria en disco.
 
 ### La aprobación
 

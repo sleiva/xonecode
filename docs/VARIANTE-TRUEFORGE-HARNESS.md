@@ -514,7 +514,7 @@ hechos del proyecto precargados, y envuelve el prompt con su identidad, que no s
 
 **Lo que NO hay todavía**, y en este orden sería lo siguiente:
 
-1. `xone_navegacion`, `regex_search` y los hechos del proyecto: es lo que cierra la diferencia medida.
+1. ~~`xone_navegacion`, `regex_search`~~: hechas (abajo). Faltan los hechos del proyecto precargados.
 2. El verificador con su reparación, el juez del turno y el crítico de pantalla. Hoy un turno que
    escribe lo avisa, como deepagents cuando su verificador no corre.
 3. ~~El resto de subagentes~~: hecho, todos salen de su `.md` (abajo).
@@ -572,3 +572,20 @@ especialista y el orquestador no recibe ninguna**. Ahora el árbol es el mismo e
   y la cola por ruta vive en `backendDeAgente`.
 - Qué se pregunta lo decide **la misma función** que el HITL de deepagents (`seDetieneEn`): lo que no
   es el proyecto no se pregunta, y por un fichero del proyecto siempre.
+
+### Las tools propias, adaptadas y no reescritas (23-09-2026)
+
+`xone_navegacion`, `regex_search`, `copiar_artefacto`, la crítica visual y traer de la máquina son
+tools de LangChain. No se reescriben para este motor —un segundo `xone_navegacion` sería un segundo
+sitio donde las respuestas pueden divergir—: `toolsPropias.ts#fuenteDeLangchain` las ofrece a
+TrueForge con el esquema de la propia tool (`toJsonSchema`) y las llama con su `invoke`, así que sus
+guardas son el mismo código. El reparto es el de `xoneAgent.ts`: `xone_navegacion` a todos, el
+orquestador incluido; `regex_search` a los especialistas; `copiar_artefacto` a quien declara
+`escribeEn`; crítica visual y traer de la máquina solo al orquestador, y todas las que dependen de la
+carpeta de artefactos solo con ella. La nota de «qué tools tienes» de cada hijo sale ahora de los
+nombres montados: escrita a mano se había quedado corta.
+
+Medido con `deepseek-flash`, la misma pregunta de la Fase 0 sobre AppDemo: el orquestador abre con
+`xone_navegacion app` y contesta bien, en 4 llamadas y 19-27k de entrada con 65-89 % de caché según la
+pasada. **Límite declarado**: este motor aún no escribe `traza-tools.jsonl`, así que `xonecode traza`
+no lo ve; lo que usó se lee en la salida del turno.

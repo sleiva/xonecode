@@ -42,12 +42,21 @@ import { modeloParaTrueforge } from "./modeloLangchain.js";
 import {
   fuenteDeEjecucion,
   fuenteDeFicheros,
+  TOOLS_DE_FICHERO,
   TOOLS_DE_LECTURA,
   TOOLS_QUE_ESCRIBEN,
   type BackendDeFicheros,
 } from "./toolsDeFichero.js";
 import { traducirEvento } from "./eventosTrueforge.js";
 import { anuncioDeSkills } from "./skillsTrueforge.js";
+import { fuenteDeLangchain, type ToolDeLangchain } from "./toolsPropias.js";
+import { crearNavegacionXone } from "../../grafo/navegacionXone.js";
+import { crearBusquedaRegex } from "../../grafo/busquedaRegex.js";
+import { crearCopiarArtefacto } from "../../grafo/copiarArtefacto.js";
+import { crearCriticaVisual } from "../../grafo/criticaVisual.js";
+import { crearTraerDeLaMaquina } from "../../grafo/traerDeLaMaquina.js";
+import { invocarVisualConModelos } from "../../dispositivos/juezVisual.js";
+import { estilosDeDisco, indiceEnDisco, type CargarIndice } from "../../navegacion/indiceEnDisco.js";
 
 /** Las tools que NO piden aprobación: las de lectura y la shell del conductor. */
 const SIN_APROBACION = { enableTools: ["@all"], disableTools: [], preloadTools: [], requireApprovalForTools: [] };
@@ -90,18 +99,25 @@ export function clasesDeTools(agente: Pick<Agente, "soloLectura" | "ejecucion">)
   return agente.soloLectura ? "lee" : "escribe";
 }
 
-const TOOLS_QUE_TIENE: Record<ReturnType<typeof clasesDeTools>, string> = {
-  ejecuta: "Tienes `ls`, `read_file`, `glob`, `grep` y `execute`; no puedes escribir ficheros del proyecto.",
-  lee:
-    "Tienes `ls`, `read_file`, `glob`, `grep`, `write_file` y `edit_file`, pero solo puedes escribir en " +
-    "`/artefactos/` y `/planes/`: el proyecto no lo puedes tocar, y no puedes ejecutar comandos.",
-  escribe:
-    "Tienes `ls`, `read_file`, `glob`, `grep`, `write_file` y `edit_file`; cada escritura la aprueba una persona " +
-    "viendo su diff, y no puedes ejecutar comandos.",
+/** Lo que cada clase NO puede hacer, que la lista de tools no dice sola. */
+const LIMITES_DE: Record<ReturnType<typeof clasesDeTools>, string> = {
+  ejecuta: "No puedes escribir ficheros del proyecto.",
+  lee: "Solo puedes escribir en `/artefactos/` y `/planes/`: el proyecto no lo puedes tocar, y no puedes ejecutar comandos.",
+  escribe: "Cada escritura la aprueba una persona viendo su diff, y no puedes ejecutar comandos.",
 };
 
+/**
+ * La frase de las tools que TIENE, sacada de los nombres que de verdad se le montan: escrita a
+ * mano se quedaba vieja en cuanto se añadía una —la nota decía cuatro y el modelo veía seis—.
+ */
+export function notaDeTools(nombres: readonly string[], limite: string): string {
+  return `NOTA DEL HARNESS: aunque tu identidad diga lo contrario, NO tienes las mismas tools que quien te delega. Tienes ${nombres
+    .map((n) => `\`${n}\``)
+    .join(", ")}. ${limite}`;
+}
+
 /** Un nombre que no es de ningún especialista: lectura a secas, sin escribir en ningún sitio. */
-const TOOLS_DEL_GENERICO = "Tienes `ls`, `read_file`, `glob` y `grep`; no puedes escribir ficheros ni ejecutar comandos.";
+const LIMITE_DEL_GENERICO = "No puedes escribir ficheros ni ejecutar comandos.";
 
 export interface OpcionesDeSesionTrueforge {
   raiz: string;
@@ -123,6 +139,12 @@ export interface OpcionesDeSesionTrueforge {
   /** La carpeta de artefactos de la sesión (lo que el agente ve como `/artefactos/`). */
   artefactos?: string;
   hilo?: string;
+  /**
+   * El índice de `xone_navegacion`. Solo para doblarlo en un test: ausente es el REAL, sobre la
+   * raíz (`indiceEnDisco`), y la omisión vive aquí y no en quien llama por el patrón de fallo de
+   * siempre — compuesta en un cierre que los tests doblan, la tool quedaría escrita y sin montar.
+   */
+  navegacion?: CargarIndice;
   /** Tope de rondas de aprobación con alguien delante (el de la consola). */
   topeDeRondas?: number;
 }
@@ -178,6 +200,44 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
    * delegar desde aquí, y ofrecerlo sería un botón muerto que pulsa el modelo.
    */
   const especialistas = (): Agente[] => cargarAgentes(raiz).agentes.filter((a) => a.motor === "modelo");
+  /**
+   * **Las tools PROPIAS, con el MISMO reparto que deepagents** (`xoneAgent.ts`): son las mismas
+   * funciones, adaptadas (`toolsPropias.ts`), no una copia.
+   * - `xone_navegacion` va a TODOS, el orquestador incluido: medido en deepagents, el
+   *   orquestador no delegaba la pregunta de estructura y sin ella se orientaba con once
+   *   llamadas de `ls`/`grep`/`read_file`.
+   * - `regex_search` a los especialistas.
+   * - `copiar_artefacto` solo a quien declara `escribeEn` y con carpeta de artefactos.
+   * - La crítica visual y traer de la máquina, solo al ORQUESTADOR y solo con carpeta: es
+   *   quien reparte y quien lee la ruta que nombra la persona.
+   */
+  const ficheros = ficherosDelProyecto(raiz);
+  const cargarIndice = opciones.navegacion ?? indiceEnDisco(raiz);
+  const cargarEstilos = estilosDeDisco(raiz);
+  const navegacion = (): ToolDeLangchain => crearNavegacionXone(cargarIndice, ficheros, cargarEstilos) as unknown as ToolDeLangchain;
+  const carpeta = opciones.artefactos;
+  const propiasDelRaiz: ToolDeLangchain[] = [
+    navegacion(),
+    ...(carpeta === undefined
+      ? []
+      : ([
+          crearCriticaVisual({
+            leerArtefacto: async (nombre) => readFileSync(join(carpeta, nombre)),
+            invocar: invocarVisualConModelos({ paraPapel: (p) => modelos.paraPapel(p) }),
+          }),
+          crearTraerDeLaMaquina({ carpeta, alEscribir: (a: Artefacto) => void artefactosPorAnunciar.push(a) }),
+        ] as unknown as ToolDeLangchain[])),
+  ];
+  const propiasDe = (agente: Agente): ToolDeLangchain[] => [
+    crearBusquedaRegex(backend as never) as unknown as ToolDeLangchain,
+    navegacion(),
+    ...(carpeta !== undefined && (agente.escribeEn ?? []).length > 0
+      ? [crearCopiarArtefacto({ raiz, carpetaDeArtefactos: carpeta, perfil: agente }) as unknown as ToolDeLangchain]
+      : []),
+  ];
+  const conjuntoDePropias = (tools: ToolDeLangchain[]) =>
+    new ToolSet({ source: fuenteDeLangchain(tools) as never, selectors: SIN_APROBACION, preload: true });
+
   const toolsDelRaiz = new ToolSet({
     source: fuenteDeFicheros({ backend, reglas: permisosDe(PERFIL_DEL_ORQUESTADOR), tools: TOOLS_DE_LECTURA }) as never,
     selectors: SIN_APROBACION,
@@ -203,6 +263,12 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
     const clase = agente === undefined ? "lee" : clasesDeTools(agente);
     const reglas = permisosDe(agente ?? { nombre: params.request.name, soloLectura: true });
     const tools: unknown[] = [];
+    const propias = agente === undefined ? [] : propiasDe(agente);
+    const nombres = [
+      ...(clase === "escribe" || (clase === "lee" && agente !== undefined) ? TOOLS_DE_FICHERO : TOOLS_DE_LECTURA),
+      ...propias.map((t) => t.name),
+      ...(clase === "ejecuta" ? ["execute"] : []),
+    ];
     if (clase === "escribe") {
       tools.push(new ToolSet({ source: fuenteDeFicheros({ backend, reglas }) as never, selectors: CON_APROBACION, preload: true }));
     } else if (clase === "lee" && agente !== undefined) {
@@ -212,15 +278,14 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
         new ToolSet({ source: fuenteDeFicheros({ backend, reglas, tools: TOOLS_DE_LECTURA }) as never, selectors: SIN_APROBACION, preload: true })
       );
     }
+    if (propias.length > 0) tools.push(conjuntoDePropias(propias));
     if (clase === "ejecuta") {
       const conShell = montarBackend({ entorno: entornoDeLaShellDelProyecto(raiz, opciones.artefactos) }) as unknown as {
         execute(c: string): unknown;
       };
       tools.push(new ToolSet({ source: fuenteDeEjecucion(conShell) as never, selectors: SIN_APROBACION, preload: true }));
     }
-    const nota = `NOTA DEL HARNESS: aunque tu identidad diga lo contrario, NO tienes las mismas tools que quien te delega. ${
-      agente === undefined ? TOOLS_DEL_GENERICO : TOOLS_QUE_TIENE[clase]
-    }`;
+    const nota = notaDeTools(nombres, agente === undefined ? LIMITE_DEL_GENERICO : LIMITES_DE[clase]);
     const instrucciones =
       agente === undefined
         ? `${nota} Contesta con lo que encuentres y dónde.`
@@ -258,7 +323,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       threadId: HILO_RAIZ,
       title: HILO_RAIZ,
       capabilities: [
-        { systemToolSets: [toolsDelRaiz] },
+        { systemToolSets: [toolsDelRaiz, conjuntoDePropias(propiasDelRaiz)] },
         // `create_sub_agent`: la delegación de TrueForge, un nivel y cinco a la vez como mucho.
         dynamicSubAgents({ sandboxAvailable: false, tracing: NOOP_AGENT_TRACING }),
       ] as never,
