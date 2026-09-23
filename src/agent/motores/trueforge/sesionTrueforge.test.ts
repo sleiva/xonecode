@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { AIMessageChunk } from "@langchain/core/messages";
 import type { Piel } from "../../../core/turno.js";
 import type { ModelosPort } from "../../../core/ports.js";
-import { abrirSesionTrueforge } from "./sesionTrueforge.js";
+import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ } from "./sesionTrueforge.js";
+import { TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
+import { traducirEvento } from "./eventosTrueforge.js";
 import { abrirSesionReal } from "../../turno/turnoReal.js";
 import { resumirTraza } from "../../turno/informeDeTraza.js";
 
@@ -583,4 +585,68 @@ describe("la pregunta del orquestador, como texto", () => {
     // Sin opciones: la pregunta sola, sin la línea de «contesta con el número».
     expect(textoDePregunta({ question: "¿Seguro?", options: [] })).not.toMatch(/número/);
   });
+});
+
+describe("el tope de llamadas es POR TURNO, no de toda la conversación", () => {
+  it("más turnos que el tope del raíz sobre la MISMA sesión: todos contestan", async () => {
+    const raiz = proyecto();
+    const turnos = LIMITE_DE_LLAMADAS_DEL_RAIZ + 5;
+    const { m } = modelosConGuion(Array.from({ length: turnos }, (_, i) => [new AIMessageChunk({ content: `r${i}` })]));
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    let ultimo: string[] = [];
+    for (let i = 0; i < turnos; i += 1) {
+      const pi = piel();
+      await s.turno(`hola ${i}`, pi.p);
+      ultimo = pi.tokens;
+    }
+    // Con el contador acumulado, el turno 101 moría con «iteration limit»; rehecho cada turno, contesta.
+    expect(ultimo.join("")).toBe(`r${turnos - 1}`);
+  }, 60_000);
+
+  it("un especialista con más de 25 pasos útiles —el 25 del core de TrueForge— TERMINA", async () => {
+    const raiz = proyecto();
+    const pasos = 27;
+    expect(pasos).toBeLessThan(TOPE_DE_LLAMADAS_DEL_ESPECIALISTA);
+    const { m } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "consultant-xone", input: "mira mucho" }) }] })],
+      ...Array.from({ length: pasos }, (_, i) => [
+        new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: `l${i}`, name: "ls", args: JSON.stringify({ path: "/" }) }] }),
+      ]),
+      [new AIMessageChunk({ content: "Mirado todo." })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    const pi = piel();
+    await s.turno("mira mucho", pi.p);
+    expect(pi.tokens.join("")).toBe("Hecho.");
+    expect(pi.lineas.join("\n")).not.toMatch(/tope|falló/);
+  }, 60_000);
+
+  it("el corte por tope se DICE como corte, en castellano y con el número", () => {
+    const { eventos } = traducirEvento({ type: "internal.agent.done", status: "error", error: "You have reached iteration limit of 100, please request again" });
+    expect(eventos).toEqual([expect.objectContaining({ tipo: "aviso", texto: expect.stringMatching(/agotó su tope de 100 llamadas/) })]);
+  });
+});
+
+describe("la pregunta sobrevive a CERRAR y REABRIR", () => {
+  it("el agente pregunta, se cierra la consola, y al reabrir la respuesta vuelve como la de ESA pregunta", async () => {
+    const raiz = proyecto();
+    const abrir = (m: ModelosPort) =>
+      abrirSesionReal({ raiz, modelos: m, skills: { catalogo: () => [], cargar: async () => [] } as never, entorno: ENTORNO, motor: "trueforge", hilo: "s-pregunta" });
+    const primera = await abrir(
+      modelosConGuion([
+        [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "q1", name: "ask_user_question", args: JSON.stringify({ question: "¿Cuál?", options: ["Login", "Menú"] }) }] })],
+      ]).m
+    );
+    await primera.turno("arregla la pantalla", piel().p);
+    primera.cerrar();
+
+    const { m, vistos } = modelosConGuion([[new AIMessageChunk({ content: "Vale, el menú." })]]);
+    const segunda = await abrir(m);
+    const pi = piel();
+    await segunda.turno("2", pi.p);
+    expect(vistos[0]!).toContain("Menú");
+    expect(vistos[0]!.join("\n")).not.toMatch(/No se completó/);
+    expect(pi.tokens.join("")).toBe("Vale, el menú.");
+  }, 30_000);
 });

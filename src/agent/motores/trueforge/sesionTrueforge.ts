@@ -24,7 +24,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import winston from "winston";
 import { AgentThread, AgentThreadOrchestrator, EventType, askUserQuestion, contextCompaction, dynamicSubAgents } from "@truefoundry/trueforge-core/core";
-import { UMBRAL_RESUMEN_TOKENS } from "../../turno/resumenDeContexto.js";
+import { TOPE_DE_LLAMADAS_DEL_CONDUCTOR, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA, UMBRAL_RESUMEN_TOKENS } from "../../turno/resumenDeContexto.js";
 import { NOOP_AGENT_TRACING } from "@truefoundry/trueforge-core/core/tracing/NoopAgentTracing";
 import type { DomainEvent, HallazgoDelTurno, PendienteDeAprobacion } from "../../../core/events.js";
 import type { ConsumoDeSesionPorCuenta, ModelosPort, SkillInfo, VerifierPort } from "../../../core/ports.js";
@@ -130,6 +130,20 @@ export function respuestaAPregunta(args: Record<string, unknown>, escrito: strin
   const n = /^\s*(\d+)\s*[.)]?\s*$/.exec(escrito);
   const elegida = n === null ? undefined : opciones[Number(n[1]) - 1];
   return elegida ?? escrito;
+}
+
+/**
+ * El tope de llamadas del ORQUESTADOR en un turno. deepagents no le pone ninguno —no puede quedarse
+ * a medias— y TrueForge exige un número (su omisión, 25, es la del core); 100 es la omisión de su
+ * propio `AgentSpec`. Es POR TURNO porque el raíz se rehace desde su foto al acabar cada uno.
+ */
+export const LIMITE_DE_LLAMADAS_DEL_RAIZ = 100;
+
+/** La pregunta guardada en la foto, en la forma con que la espera el turno. */
+function preguntaDeLaFoto(foto: FotoDeHilo | undefined): Pendiente | undefined {
+  const p = foto?.pregunta_pendiente;
+  if (p === undefined) return undefined;
+  return { clave: claveDe(p.hilo, p.id), hilo: p.hilo, id: p.id, nombre: "ask_user_question", args: p.args };
 }
 
 export interface OpcionesDeSesionTrueforge {
@@ -306,6 +320,8 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
         senal: () => aborto?.signal,
       }),
       messages: [{ role: "user", content: params.request.input }],
+      // Los topes MEDIDOS de deepagents: el conductor más, porque cada paso suyo es un comando.
+      iterationLimit: agente?.ejecucion === true ? TOPE_DE_LLAMADAS_DEL_CONDUCTOR : TOPE_DE_LLAMADAS_DEL_ESPECIALISTA,
     };
     return new AgentThread({
       definition: definicionDelHijo as never,
@@ -347,6 +363,8 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
     const definicion = {
       modelClient: llm,
       instruction: [promptOrquestador(especialistas()), notaDeDelegacion(especialistas())].filter((l) => l !== "").join("\n\n"),
+      // Por TURNO, porque el raíz se rehace desde su foto al final de cada uno (ver `turno`).
+      iterationLimit: LIMITE_DE_LLAMADAS_DEL_RAIZ,
     };
     const raizDelArbol = new AgentThread({
       definition: definicion,
@@ -399,7 +417,10 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
    * de terminal no lo pasa, la misma regla que el checkpoint de deepagents.
    */
   const persistir = opciones.hilo !== undefined;
-  let orquestador = nuevoOrquestador(persistir ? leerMemoria(raiz, hilo) : undefined);
+  const fotoInicial = persistir ? leerMemoria(raiz, hilo) : undefined;
+  let orquestador = nuevoOrquestador(fotoInicial);
+  // La pregunta que se quedó sin contestar al cerrar: la respuesta de la persona es para ELLA.
+  preguntaEnEspera = preguntaDeLaFoto(fotoInicial);
 
   const avisar = (): void => {
     for (const o of oyentes) o();
@@ -511,7 +532,6 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       let preexistentesDelTurno: number | undefined;
       let motivoSinVerificar: string | undefined;
       let escribioProyecto = false;
-      let turnoLimpio = false;
 
       /**
        * Las RONDAS de una petición: una pausa termina la ronda y se reanuda con las decisiones.
@@ -624,7 +644,6 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
           if (intento > 0) yield { tipo: "reparacion", intento, tope: TOPE_REPARACIONES };
           const salida = { limpia: false };
           yield* rondasDe(lote, salida);
-          turnoLimpio = salida.limpia;
           const cambios = cambiosQueSeVerifican(await instantanea.cambios());
           escribioProyecto = cambios.length > 0;
           if (!salida.limpia) {
@@ -711,7 +730,12 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
          * se rehace el árbol desde ella. Guardar no puede tumbar un turno ya terminado.
          */
         if (raizActual !== undefined) {
-          const foto = fotoSaneada(raizActual.toSnapshot() as unknown as FotoDeHilo);
+          const foto = fotoSaneada({
+            ...(raizActual.toSnapshot() as unknown as FotoDeHilo),
+            ...(preguntaEnEspera === undefined
+              ? {}
+              : { pregunta_pendiente: { hilo: preguntaEnEspera.hilo, id: preguntaEnEspera.id, args: preguntaEnEspera.args } }),
+          });
           if (persistir) {
             try {
               guardarMemoria(raiz, hilo, foto);
@@ -719,7 +743,15 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
               // Sin memoria en disco la sesión sigue viva; al reabrirla, `hayMemoria` dirá la verdad.
             }
           }
-          if (!turnoLimpio) orquestador = nuevoOrquestador(foto);
+          /**
+           * **El raíz se rehace desde su foto al final de CADA turno**, y no solo tras uno cortado.
+           * El contador de llamadas de TrueForge (`metrics.iterations`) vive con el HILO y no se
+           * reinicia entre ejecuciones: con el raíz vivo toda la conversación, su tope se agotaba
+           * sumando TODOS los turnos y una sesión larga dejaba de contestar aunque cada turno fuera
+           * corto. Rehacerlo reinicia el contador y conserva el contexto: el tope pasa a ser por
+           * turno, que es lo que promete.
+           */
+          orquestador = nuevoOrquestador(foto);
         }
       }
       const cambios: Cambio[] = await instantanea.cambios();
@@ -741,10 +773,11 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
     },
     nuevoHilo(id?: string) {
       hilo = id ?? `tf-${Date.now()}`;
-      // Una pregunta de la conversación de antes no la contesta el primer mensaje de la nueva.
-      preguntaEnEspera = undefined;
-      // Un hilo NUEVO: lo que hubiera guardado con ese id no se pisa ni se carga a medias.
-      orquestador = nuevoOrquestador(persistir ? leerMemoria(raiz, hilo) : undefined);
+      // Un hilo NUEVO: lo que hubiera guardado con ese id no se pisa ni se carga a medias. Y una
+      // pregunta de la conversación de antes no la contesta el primer mensaje de la nueva.
+      const foto = persistir ? leerMemoria(raiz, hilo) : undefined;
+      orquestador = nuevoOrquestador(foto);
+      preguntaEnEspera = preguntaDeLaFoto(foto);
     },
     cancelar() {
       cancelado = true;

@@ -109,6 +109,20 @@ export function traducirEvento(evento: unknown): { eventos: DomainEvent[]; uso?:
       // El RAÍZ que falla se dice aquí: un turno que se rompe no puede cerrar en silencio.
       if (!delRaiz || e.status !== "error") return { eventos: [] };
       const detalle = typeof e.error === "string" ? e.error : "error del motor";
+      // El TOPE de llamadas no es un fallo del motor: es un corte, y se dice como tal — con cuántas
+      // y con lo que se puede hacer. Sin esto se leía «el motor falló» con el texto en inglés.
+      const tope = /iteration limit of (\d+)/.exec(detalle);
+      if (tope !== null) {
+        return {
+          eventos: [
+            {
+              tipo: "aviso",
+              texto: `⚠ el orquestador agotó su tope de ${tope[1]} llamadas en este turno: lo hecho hasta aquí se queda como está; pide que siga si hace falta`,
+              severidad: "grave",
+            },
+          ],
+        };
+      }
       return { eventos: [{ tipo: "aviso", texto: `⚠ el motor TrueForge falló: ${detalle}`, severidad: "grave" }] };
     }
     default:

@@ -670,3 +670,22 @@ escriba después vuelve como `user.tool_response` a su hilo —un número de opc
 texto—. Así llega igual a la web, a la TUI y al terminal sin tocar ninguna piel; una tarjeta con
 botones sería el siguiente paso y no cambiaría esto. Medido con `deepseek-flash`: ante «pregúntame
 antes de tocar nada», el orquestador investigó el proyecto y preguntó con dos paletas concretas.
+
+### El tope de llamadas era de TODA la conversación, y la pregunta no sobrevivía (23-09-2026)
+
+Dos fallos del ciclo de vida, los dos medidos en la librería instalada:
+
+- **El contador de llamadas vive con el HILO** (`metrics.iterations`, creado en el constructor) y no
+  se reinicia entre ejecuciones; su tope por omisión es 25. Con el raíz vivo toda la conversación,
+  una sesión larga dejaba de contestar tras 25 llamadas SUMADAS, aunque cada turno fuera corto. El
+  raíz se rehace ahora desde su foto al final de CADA turno —conserva el contexto y reinicia el
+  contador—, así que el tope es por turno. Los topes son los medidos de deepagents: 30 por
+  especialista y 60 para el que ejecuta (`TOPE_DE_LLAMADAS_DEL_ESPECIALISTA`, `…_DEL_CONDUCTOR`), y
+  100 para el orquestador, la omisión del `AgentSpec` de TrueForge, porque deepagents no le pone
+  ninguno y aquí hace falta un número. El corte se dice como corte, con el número y en castellano.
+- **La pregunta en espera solo vivía en memoria**, y al guardar la foto se saldaba como incompleta:
+  cerrar la consola y contestar después la convertía en un mensaje suelto. Ahora viaja en la foto
+  (`pregunta_pendiente`) y su tool call no se salda mientras espera.
+
+**Límite declarado**: no hay un presupuesto GLOBAL por turno (la suma de todos los hilos). Lo acotan
+los topes por hilo y el máximo de cinco hijos a la vez de la librería; deepagents tampoco lo tiene.

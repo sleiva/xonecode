@@ -29,6 +29,19 @@ export interface FotoDeHilo {
   context: unknown[];
   current_context_usage?: unknown;
   capability_state?: Record<string, unknown> | null;
+  /**
+   * La pregunta del orquestador (`ask_user_question`) que espera respuesta. Va CON la foto porque
+   * sin ella, al reabrir, la respuesta de la persona entraría como un mensaje nuevo y la pregunta
+   * se quedaría saldada como incompleta. Mientras esté, su tool call NO se salda.
+   */
+  pregunta_pendiente?: PreguntaPendiente;
+}
+
+/** La pregunta en espera: en qué hilo, qué tool call contesta y con qué opciones. */
+export interface PreguntaPendiente {
+  hilo: string;
+  id: string;
+  args: Record<string, unknown>;
 }
 
 /** Un id de sesión que se puede usar como nombre de carpeta: segmento llano y nada más. */
@@ -52,7 +65,7 @@ type MensajeDelContexto = { role?: string; tool_calls?: { id?: string }[]; tool_
  * saldadas. Solo el último: una anterior sin respuesta ya habría roto la conversación antes.
  * Puro: no toca el contexto que recibe.
  */
-export function saldarColgadas(context: readonly unknown[]): unknown[] {
+export function saldarColgadas(context: readonly unknown[], excepto?: string): unknown[] {
   const mensajes = context as readonly MensajeDelContexto[];
   let ultimo = -1;
   for (let i = mensajes.length - 1; i >= 0; i -= 1) {
@@ -65,12 +78,15 @@ export function saldarColgadas(context: readonly unknown[]): unknown[] {
   if (ultimo === -1) return [...context];
   const pedidas = new Set((mensajes[ultimo]!.tool_calls ?? []).map((t) => t.id).filter((id): id is string => typeof id === "string"));
   for (const m of mensajes.slice(ultimo + 1)) if (m?.role === "tool" && m.tool_call_id !== undefined) pedidas.delete(m.tool_call_id);
+  // La que espera la respuesta de la persona no está colgada: está esperando, y saldarla la mataría.
+  if (excepto !== undefined) pedidas.delete(excepto);
   return [...context, ...[...pedidas].map((id) => ({ role: "tool", tool_call_id: id, content: RESPUESTA_A_UNA_COLGADA }))];
 }
 
 /** La foto lista para guardar o para rehacer el hilo: con las colgadas saldadas. */
 export function fotoSaneada(foto: FotoDeHilo): FotoDeHilo {
-  return { ...foto, context: saldarColgadas(foto.context) };
+  const pregunta = foto.pregunta_pendiente;
+  return { ...foto, context: saldarColgadas(foto.context, pregunta?.id) };
 }
 
 /**
