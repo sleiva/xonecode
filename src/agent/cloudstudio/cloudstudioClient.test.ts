@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { clienteCloudStudio, type LlamadaMcp } from "./cloudstudioClient.js";
+import { clienteCloudStudio, PAUSAS_DE_REAPERTURA_MS, type LlamadaMcp } from "./cloudstudioClient.js";
+
+/** Sin esperas de verdad, y apuntando cuáles se pidieron. */
+function reloj() {
+  const pausas: number[] = [];
+  return { pausas, esperar: async (ms: number) => { pausas.push(ms); } };
+}
 
 /** Cliente MCP falso: registra las llamadas y responde con lo que se le programe. */
 function clienteFalso(respuestas: Array<unknown | Error>) {
@@ -44,15 +50,49 @@ describe("clienteCloudStudio", () => {
     ]);
   });
 
-  it("si tras reabrir vuelve a fallar, propaga en vez de reintentar sin fin", async () => {
+  it("si tras reabrir sigue sin proyecto, lo intenta unas pocas veces y PARA", async () => {
+    const perdida = new Error("No project is open");
+    const intentos = PAUSAS_DE_REAPERTURA_MS.length;
+    const falso = clienteFalso([perdida, ...Array.from({ length: intentos }, () => [{ status: "project_open" }, perdida]).flat()]);
+    const r = reloj();
+    await expect(clienteCloudStudio(falso.invocar, "AppForTest", r.esperar).leerTexto("app.ini"))
+      .rejects.toThrow(new RegExp(`no hay proyecto abierto.*AppForTest.*${intentos} veces.*project_open`, "s"));
+    // La llamada, y luego abrir+reintentar por cada intento: ni uno más.
+    expect(falso.llamadas).toHaveLength(1 + 2 * intentos);
+    expect(r.pausas).toEqual(PAUSAS_DE_REAPERTURA_MS.filter((ms) => ms > 0));
+  });
+
+  /**
+   * MEDIDO en una descarga de un proyecto recién creado («weweewe»): la apertura contestaba
+   * bien y la llamada de justo después seguía sin proyecto, A VECES. Una sola vuelta inmediata
+   * no bastaba; con una pausa, sí.
+   */
+  it("una reapertura que no asienta a la primera, asienta a la segunda tras la pausa", async () => {
+    const perdida = { content: [{ type: "text", text: "Error: No project is open." }] };
+    const falso = clienteFalso([
+      perdida,
+      { status: "project_open" }, perdida,
+      { status: "project_open" }, { content: [{ type: "text", text: '[{"Key":"master"}]' }] },
+    ]);
+    const r = reloj();
+    expect(await clienteCloudStudio(falso.invocar, "weweewe", r.esperar).ramas()).toEqual(["master"]);
+    expect(r.pausas).toEqual([PAUSAS_DE_REAPERTURA_MS[1]]);
+  });
+
+  it("una apertura RECHAZADA con texto de error falla con SU motivo, no con «no hay proyecto»", async () => {
     const falso = clienteFalso([
       new Error("No project is open"),
-      { status: "project_open" },
-      new Error("No project is open"),
+      { content: [{ type: "text", text: "Error: Project 'weweewe' not found" }] },
     ]);
-    await expect(clienteCloudStudio(falso.invocar, "AppForTest").leerTexto("app.ini"))
-      .rejects.toThrow(/No project is open/);
-    expect(falso.llamadas).toHaveLength(3);
+    await expect(clienteCloudStudio(falso.invocar, "weweewe", reloj().esperar).leerTexto("app.ini"))
+      .rejects.toThrow(/studio_open_project «weweewe»: Error: Project 'weweewe' not found/);
+    // Y no se insiste: el servidor ya dijo por qué.
+    expect(falso.llamadas).toHaveLength(2);
+  });
+
+  it("abrir() también comprueba la respuesta: el rechazo sale AQUÍ y no una llamada después", async () => {
+    const falso = clienteFalso([{ content: [{ type: "text", text: "Error: Project 'x' not found" }] }]);
+    await expect(clienteCloudStudio(falso.invocar, "x").abrir("x")).rejects.toThrow(/studio_open_project «x»: .*not found/);
   });
 
   /**
@@ -98,8 +138,8 @@ describe("clienteCloudStudio", () => {
 
   it("si tras reabrir el TEXTO sigue diciendo lo mismo, se lanza nombrando la tool", async () => {
     const perdida = { content: [{ type: "text", text: "Error: No project is open." }] };
-    const falso = clienteFalso([perdida, { status: "project_open" }, perdida]);
-    await expect(clienteCloudStudio(falso.invocar, "AppForTest").ramas())
+    const falso = clienteFalso([perdida, ...PAUSAS_DE_REAPERTURA_MS.flatMap(() => [{ status: "project_open" }, perdida])]);
+    await expect(clienteCloudStudio(falso.invocar, "AppForTest", reloj().esperar).ramas())
       .rejects.toThrow(/studio_manage_branches.*no hay proyecto abierto.*AppForTest/s);
   });
 

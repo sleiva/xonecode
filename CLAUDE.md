@@ -1240,8 +1240,11 @@ feedback del desarrollador** y no es terminal.
   `{id, nombre}`).
 - **La sesión caída llega de DOS formas** y hay que mirar las dos: un error de tool (`isError`) y
   una respuesta CORRECTA cuyo texto empieza por «Error: No project is open…». `conSesion`
-  (`agent/cloudstudio/cloudstudioClient.ts`) mira el RESULTADO además de la excepción, reabre y reintenta una
-  vez. Ningún `JSON.parse` a pelo: `comoJson` dice QUÉ tool contestó.
+  (`agent/cloudstudio/cloudstudioClient.ts`) mira el RESULTADO además de la excepción, reabre y reintenta
+  **unas pocas veces con pausa creciente** (`PAUSAS_DE_REAPERTURA_MS`) —una vuelta inmediata no
+  bastaba: la apertura contestaba bien y la llamada siguiente seguía sin proyecto, a veces— y
+  **comprueba lo que contesta la apertura**: un «Error: …» en su texto falla con ESE motivo y
+  no una llamada después como «no hay proyecto abierto». Ningún `JSON.parse` a pelo: `comoJson` dice QUÉ tool contestó.
   **`ProviderCloudStudio.invalidateCredentials` tiene que existir**: es el gancho del que depende
   la recuperación del SDK; sin él un token caducado era un fallo duro.
 - **El nombre de la tool de proyectos no se codifica a pelo** (`herramientaDeProyectos`: nombres
