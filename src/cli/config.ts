@@ -109,6 +109,9 @@ export function cmdConfig(
   // identidad legible, que es lo único que no se puede comprobar de otra forma — el IDS
   // puede no devolver `id_token`, y entonces el campo no viaja sin que nada falle.
   const identidadDeDeepSeek = userIdDeDeepSeekEnDisco({ proyecto: cargado.config.proyecto }) !== undefined;
+  // Y el verbo depende de si DeepSeek está en juego: «se manda» con otro proveedor en los
+  // tres papeles afirmaría algo que no pasa, que es un aviso que enseña a ignorarlo.
+  const usaDeepSeek = PAPELES.some((papel) => eleccion[papel].proveedor === "deepseek");
 
   // Graves primero, con orden estable dentro de cada grupo: son lo que hay que mirar
   // antes de seguir, y el resto puede esperar debajo.
@@ -170,9 +173,11 @@ export function cmdConfig(
 
   escribir("--- identidad para DeepSeek ---\n");
   escribir(
-    identidadDeDeepSeek
-      ? "  ✓ se manda user_id  (del login de CloudStudio, como hash)\n"
-      : "  · sin user_id  (no hay login de CloudStudio con identidad legible)\n"
+    !identidadDeDeepSeek
+      ? "  · sin user_id  (no hay login de CloudStudio con identidad legible)\n"
+      : usaDeepSeek
+        ? "  ✓ se manda user_id  (del login de CloudStudio, como hash)\n"
+        : "  ✓ hay identidad  (se mandaría como user_id si un papel usara DeepSeek)\n"
   );
 
   if (ordenados.length > 0) {

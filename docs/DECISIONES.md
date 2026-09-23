@@ -6388,5 +6388,8 @@ ventaja por una avería). El hash no entra en eventos, trazas ni `.jsonl`.
 
 **Medido**: `xonecode config` dice «se manda user_id» con el login real de la máquina (o sea, el IDS
 devuelve un token con `sub`, que era lo único que no se podía saber leyendo el código), y una
-llamada real a `deepseek-flash` con el campo puesto contestó sin error. Lo que eso NO demuestra es
-que DeepSeek lo esté USANDO: una API que ignora un campo desconocido contestaría igual.
+llamada real a `deepseek-flash` contestó sin error con el campo **medido en el cuerpo del `fetch`**,
+no solo en `invocationParams()`: para DeepSeek el `fetch` es el del eco del razonamiento, el único
+sitio que reescribe el cuerpo, y lo recompone con `{ ...cuerpo, messages }`, así que conserva la
+clave. Lo que eso NO demuestra es que DeepSeek la esté USANDO: una API que ignora un campo
+desconocido contestaría igual.

@@ -26,11 +26,8 @@
 import type { FuentesDeEleccion } from "../../core/modelos.js";
 import { entornoDeUrl } from "../../core/settings.js";
 import { subDeTokens, userIdDeDeepSeek } from "../../core/identidadDeProveedor.js";
-import { leerEstado, rutaAuthPorDefecto } from "../cloudstudio/cloudstudioMcp.js";
+import { CLAVE_LEGADO, leerEstado, rutaAuthPorDefecto } from "../cloudstudio/cloudstudioMcp.js";
 import { cargarSettings } from "./settingsEnDisco.js";
-
-/** La misma clave que usa `ProviderCloudStudio` cuando nadie le dice el entorno. */
-const CLAVE_LEGADO = "legado";
 
 export function userIdDeDeepSeekEnDisco(fuentes: FuentesDeEleccion): string | undefined {
   try {
