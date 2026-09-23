@@ -587,8 +587,9 @@ nombres montados: escrita a mano se había quedado corta.
 
 Medido con `deepseek-flash`, la misma pregunta de la Fase 0 sobre AppDemo: el orquestador abre con
 `xone_navegacion app` y contesta bien, en 4 llamadas y 19-27k de entrada con 65-89 % de caché según la
-pasada. **Límite declarado**: este motor aún no escribe `traza-tools.jsonl`, así que `xonecode traza`
-no lo ve; lo que usó se lee en la salida del turno.
+pasada. La traza de tools (`XONECODE_TRACE_TOOLS=1`) la escribe ya este motor con la MISMA pieza que
+deepagents (`crearDiagnosticoDeTools`): mismo fichero, mismo formato, origen por nombre de
+especialista, así que `xonecode traza` compara los dos.
 
 ### La memoria en disco, y por qué no es `agent-session` (23-09-2026)
 

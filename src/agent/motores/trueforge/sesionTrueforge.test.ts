@@ -7,6 +7,7 @@ import type { Piel } from "../../../core/turno.js";
 import type { ModelosPort } from "../../../core/ports.js";
 import { abrirSesionTrueforge } from "./sesionTrueforge.js";
 import { abrirSesionReal } from "../../turno/turnoReal.js";
+import { resumirTraza } from "../../turno/informeDeTraza.js";
 
 /**
  * Un modelo de pega con el guion de una ESCRITURA delegada: el orquestador delega en
@@ -502,5 +503,29 @@ describe("una sesión con el motor TrueForge", () => {
     const visto = vistos[2]!.join("\n");
     expect(visto).toMatch(/se guardó en \/large_tool_results\//);
     expect((visto.match(/b{1000}/g) ?? []).length * 1000).toBeLessThan(45_000);
+  }, 30_000);
+
+  it("con `XONECODE_TRACE_TOOLS=1` deja la MISMA traza que deepagents, y `xonecode traza` la lee por origen", async () => {
+    const raiz = proyecto();
+    const antes = process.env.XONECODE_TRACE_TOOLS;
+    process.env.XONECODE_TRACE_TOOLS = "1";
+    try {
+      const { m } = modelosConGuion([
+        [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "consultant-xone", input: "mira app.xml" }) }], usage_metadata: { input_tokens: 100, output_tokens: 5, total_tokens: 105 } })],
+        [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "r1", name: "read_file", args: JSON.stringify({ file_path: "/app.xml" }) }], usage_metadata: { input_tokens: 40, output_tokens: 3, total_tokens: 43 } })],
+        [new AIMessageChunk({ content: "Es <app/>.", usage_metadata: { input_tokens: 50, output_tokens: 4, total_tokens: 54 } })],
+        [new AIMessageChunk({ content: "Hecho.", usage_metadata: { input_tokens: 120, output_tokens: 2, total_tokens: 122 } })],
+      ]);
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+      await s.turno("mira app.xml", piel().p);
+    } finally {
+      if (antes === undefined) delete process.env.XONECODE_TRACE_TOOLS;
+      else process.env.XONECODE_TRACE_TOOLS = antes;
+    }
+    const [sesion] = resumirTraza(readFileSync(join(raiz, ".xonecode", "traza-tools.jsonl"), "utf8").split("\n"));
+    expect(sesion!.llamadas).toBe(4);
+    expect(sesion!.origenes.map((o) => o.origen).sort()).toEqual(["consultant-xone", "orquestador"]);
+    expect(sesion!.tools.map((t) => t.nombre).sort()).toEqual(["create_sub_agent", "read_file"]);
+    expect(sesion!.pesos.some((p) => p.nombre === "read_file" && p.chars > 0)).toBe(true);
   }, 30_000);
 });

@@ -55,6 +55,8 @@ import {
 import { traducirEvento } from "./eventosTrueforge.js";
 import { anuncioDeSkills } from "./skillsTrueforge.js";
 import { presupuestoDelPaso } from "./recortes.js";
+import { crearDiagnosticoDeTools, type DiagnosticoDeTools } from "../../turno/diagnosticoDeTools.js";
+import { detalleDe, parametrosDe } from "../../turno/resumenDeTool.js";
 import { fotoSaneada, guardarMemoria, leerMemoria, type FotoDeHilo } from "./memoriaTrueforge.js";
 import { fuenteDeLangchain, type ToolDeLangchain } from "./toolsPropias.js";
 import { crearNavegacionXone } from "../../grafo/navegacionXone.js";
@@ -157,6 +159,8 @@ export interface OpcionesDeSesionTrueforge {
    * producción lo pasa `abrirSesionReal`, que es quien lo recibe de todas las pieles.
    */
   verifier?: VerifierPort;
+  /** Solo para doblar la traza en un test; ausente es la real (`crearDiagnosticoDeTools`). */
+  diagnostico?: DiagnosticoDeTools;
   /** Tope de rondas de aprobación con alguien delante (el de la consola). */
   topeDeRondas?: number;
 }
@@ -176,6 +180,12 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
   const { raiz } = opciones;
   let modelos = opciones.modelos;
   const logger = winston.createLogger({ silent: true, transports: [] });
+  /**
+   * La traza de tools (`XONECODE_TRACE_TOOLS=1`), la MISMA de deepagents: mismo fichero y mismo
+   * formato, así que `xonecode traza` compara los dos motores. La omisión es la real —entrar por
+   * parámetro solo sirve para doblarla—, que es lo que evita dejarla escrita y sin montar.
+   */
+  const diagnostico = opciones.diagnostico ?? crearDiagnosticoDeTools(raiz);
   const tracker: TokenTracker = createTokenTracker();
   const oyentes = new Set<() => void>();
   let aborto: AbortController | undefined;
@@ -419,7 +429,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
     const it = orquestador.execute({ signal: senal });
     let r = await it.next();
     while (!r.done) {
-      const evento = r.value as { type?: string; thread_id?: string; output?: unknown };
+      const evento = r.value as { type?: string; thread_id?: string; output?: unknown; tool_call_id?: string; content?: unknown };
       const deHilo = evento.thread_id ?? HILO_RAIZ;
       if (evento.type === "internal.agent.context.append" && Array.isArray(evento.output)) {
         for (const m of evento.output) {
@@ -431,8 +441,23 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
               args = {};
             }
             llamadas.set(claveDe(deHilo, t.id), { nombre: t.function.name, args });
+            // La traza: la MISMA lista blanca que el evento (`detalleDe`, `parametrosDe`), nunca
+            // los argumentos crudos.
+            diagnostico?.herramienta(
+              t.function.name,
+              detalleDe(t.function.name, args),
+              parametrosDe(t.function.name, args),
+              tracker,
+              deHilo === HILO_RAIZ ? "orquestador" : "especialista"
+            );
           }
         }
+      }
+      if (evento.type === "tool.response" && evento.tool_call_id !== undefined) {
+        // Cuánto METIÓ en el contexto lo que devolvió: los caracteres, nunca el contenido.
+        const llamada = llamadas.get(claveDe(deHilo, evento.tool_call_id));
+        const chars = typeof evento.content === "string" ? evento.content.length : 0;
+        diagnostico?.resultado?.(llamada?.nombre, llamada === undefined ? undefined : detalleDe(llamada.nombre, llamada.args), chars);
       }
       const { eventos, uso } = traducirEvento(evento);
       if (uso !== undefined) {
@@ -445,6 +470,14 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
         tracker.calls += 1;
         // Y solo de una llamada NORMAL: la de la compactación mide lo de ANTES de resumir.
         if (deHilo === HILO_RAIZ && evento.type === "internal.agent.context.append") tracker.contexto = uso.input;
+        // Por ORIGEN, como deepagents: el orquestador y cada especialista por su nombre.
+        diagnostico?.modelo(quienEs.get(deHilo) ?? deHilo, {
+          input: uso.input,
+          output: uso.output,
+          cache: uso.cache,
+          llamadas: tracker.calls,
+          contexto: uso.input,
+        });
         avisar();
       }
       yield* eventos;
