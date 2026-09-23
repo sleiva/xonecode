@@ -202,6 +202,10 @@ function Linea({ acto }: { acto: Acto }) {
       // El cierre del registro con su duración: un dato de la Trayectoria, no una línea de
       // conversación. Mismo criterio que el chat.
       return null;
+    case "consulta":
+      // Una tarea de fondo no tiene a quien preguntar, y su texto ya va en el mensaje del
+      // asistente. Se pintan las opciones, sin botones: mirar no es contestar.
+      return <p className={estilos.sistema}>{`Opciones: ${acto.opciones.join(" · ")}`}</p>;
     default: {
       // La red que a esta vista le faltaba, y que es la de siempre en este repo: sin ella un
       // acto nuevo se cae por aquí y devuelve `undefined` —no un error—, así que el síntoma

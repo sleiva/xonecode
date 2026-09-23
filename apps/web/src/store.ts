@@ -458,6 +458,7 @@ const TIPOS_DE_ACTO = {
   herramientas: true,
   sistema: true,
   artefacto: true,
+  consulta: true,
   fase: true,
   fin: true,
   sincronizacion: true,

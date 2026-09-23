@@ -13,6 +13,8 @@ import { BarraDeEstado } from "./componentes/BarraDeEstado.js";
 import { AvisoDeConexion } from "./componentes/AvisoDeConexion.js";
 import { useCronometro } from "./cronometro.js";
 import { Pregunta } from "./componentes/Pregunta.js";
+import { ConsultaDelAgente } from "./componentes/ConsultaDelAgente.js";
+import { consultaPendiente } from "./consultaPendiente.js";
 import { Aprobacion } from "./componentes/Aprobacion.js";
 import { Selector } from "./componentes/Selector.js";
 import { Wizard } from "./componentes/Wizard.js";
@@ -548,6 +550,15 @@ export function App({
    * si no, seguirían enseñando el diff viejo del fichero que el turno acaba de cambiar.
    */
   const turnoEnVuelo = estado.turnoEnVuelo === true;
+  /**
+   * La pregunta del agente sin contestar (`consultaPendiente.ts`), y la que la persona APARTÓ
+   * para contestar escribiendo. Apartar es de esta pantalla y no del hilo: la pregunta sigue
+   * pendiente, y al reabrir la sesión la ventana vuelve. La clave lleva el enunciado además de
+   * la posición porque dos sesiones pueden tener una consulta en el mismo sitio.
+   */
+  const consulta = consultaPendiente(estado.actos, turnoEnVuelo);
+  const claveDeConsulta = consulta === undefined ? undefined : `${consulta.indice}:${consulta.pregunta}`;
+  const [consultaApartada, setConsultaApartada] = useState<string | undefined>(undefined);
   // Desde cuándo: lo pintan el pie y el pulso mientras dura, en vez del tiempo del turno
   // anterior, que es lo que se veía.
   const segundosEnVuelo = useCronometro(turnoEnVuelo);
@@ -1642,6 +1653,19 @@ export function App({
                   await enviar({ clase: "eleccion", id });
                   store.contestarSelector();
                 }}
+              />
+            ) : null}
+            {consulta !== undefined && claveDeConsulta !== consultaApartada ? (
+              <ConsultaDelAgente
+                pregunta={consulta.pregunta}
+                opciones={consulta.opciones}
+                // La opción viaja como PROSA, lo mismo que si la persona la hubiera tecleado:
+                // es el mensaje siguiente, y el motor ya sabe leerlo como la respuesta.
+                alElegir={async (opcion) => {
+                  await enviar({ clase: "prosa", texto: opcion });
+                  setConsultaApartada(claveDeConsulta);
+                }}
+                alCerrar={() => setConsultaApartada(claveDeConsulta)}
               />
             ) : null}
             {/*

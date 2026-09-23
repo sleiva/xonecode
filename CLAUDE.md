@@ -636,7 +636,7 @@ librería, que trae un segundo registro de sesiones y cuya factoría pisa el pro
 al final de cada turno SANEADA —el `OpenToolCallCloser` de TrueForge se salta las `create_sub_agent`
 colgadas—, y quien pregunta si una sesión tiene memoria mira las dos (`agent/sesiones/memoriaDeHilo.ts`).
 **El prompt de un hijo va en su prompt de SISTEMA por `instructionBuilders`**: la librería ignora el
-`instruction` de un hijo. **El raíz puede PREGUNTAR** (`ask_user_question`, solo él): la pregunta cierra el turno en el chat y el mensaje siguiente vuelve como `user.tool_response` a su hilo. **Y solo se compacta el raíz**: en un hijo, medido con la traza, resumir un encargo corto y ya cacheado costaba más que reenviarlo.
+`instruction` de un hijo. **El raíz puede PREGUNTAR** (`ask_user_question`, solo él): la pregunta cierra el turno en el chat y el mensaje siguiente vuelve como `user.tool_response` a su hilo. Con opciones sale ADEMÁS como tarjeta con un botón por opción (evento y acto `consulta`, `Piel.consulta?` opcional), y lo pendiente lo decide el hilo —la última consulta sin usuario detrás—, así que vuelve al reabrir. **Y solo se compacta el raíz**: en un hijo, medido con la traza, resumir un encargo corto y ya cacheado costaba más que reenviarlo.
 
 ### La aprobación
 

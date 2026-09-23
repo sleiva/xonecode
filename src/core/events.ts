@@ -71,6 +71,15 @@ export type DomainEvent =
    * pasa lo que acaba en el transcript y en el cable.
    */
   | { tipo: "artefacto"; artefacto: Artefacto }
+  /**
+   * El agente le PREGUNTA a la persona y el turno se para ahí (`ask_user_question` del motor
+   * TrueForge). La pregunta ya viaja como texto —con sus opciones numeradas— por `token`, que
+   * es lo que ven stdio y la TUI; esto lleva lo MISMO como DATO, para la piel que sabe pintar
+   * un botón por opción. Datos y no texto por la regla de `DecisionDeConsola`: deducir las
+   * opciones de «1. …» sería leer la sintaxis que la propia piel acaba de escribir. Solo se
+   * emite con opciones: sin ellas no hay botón que pintar y el texto basta.
+   */
+  | { tipo: "consulta"; pregunta: string; opciones: string[] }
   | { tipo: "bloqueado"; motivo: MotivoBloqueo; explicacion: string }
   | { tipo: "pausa"; pendientes: PendienteDeAprobacion[] }
   | { tipo: "aviso"; texto: string; severidad: "info" | "aviso" | "grave" }

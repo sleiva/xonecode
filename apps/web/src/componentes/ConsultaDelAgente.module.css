@@ -1,0 +1,15 @@
+/* La coraza —capa, velo, tarjeta, título, botones— es la de `Pregunta.module.css`, importada
+   tal cual: es la misma ventana, no una que se le parece. Aquí solo lo que cambia: las
+   opciones van en COLUMNA, una por fila y a todo el ancho, porque son frases del modelo y su
+   largo no se sabe — en fila, tres opciones largas se partían la tarjeta a trozos. */
+.opciones {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.opcion {
+  width: 100%;
+  text-align: left;
+  white-space: normal;
+}

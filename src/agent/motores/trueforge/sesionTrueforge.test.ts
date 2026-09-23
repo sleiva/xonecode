@@ -787,7 +787,12 @@ describe("el juez del turno y el crítico de pantalla, enganchados en TrueForge"
     expect(casos).toHaveLength(0);
     await s.turno("2", piel().p);
     expect(casos).toHaveLength(1);
-    expect(casos[0]!).toMatchObject({ objetivo: "arregla la pantalla", respuesta: "Hecho en el menú." });
+    expect(casos[0]!.respuesta).toBe("Hecho en el menú.");
+    // El encargo, y que hubo pregunta y respuesta: sin eso el juez lee solo este turno y
+    // concluye que no se preguntó (medido en el navegador).
+    expect(casos[0]!.objetivo.startsWith("arregla la pantalla")).toBe(true);
+    expect(casos[0]!.objetivo).toContain("«¿Cuál?»");
+    expect(casos[0]!.objetivo).toContain("«Menú»");
   }, 30_000);
 
   it("`abrirSesionReal` le PASA el juez y el crítico a TrueForge", async () => {
@@ -843,5 +848,27 @@ describe("el juez del turno y el crítico de pantalla, enganchados en TrueForge"
     expect(vistos[4]!.join("\n")).toContain("OBS-7Q");
     // Una vez por turno: sus observaciones no son una huella con la que medir si avanza.
     expect(criticas).toBe(1);
+  }, 30_000);
+});
+
+describe("la pregunta del orquestador, también como DATO", () => {
+  it("con opciones, la piel recibe la pregunta y sus opciones además del texto; sin opciones, solo el texto", async () => {
+    const preguntar = (args: Record<string, unknown>) => [
+      new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "q1", name: "ask_user_question", args: JSON.stringify(args) }] }),
+    ];
+    const consultas: { pregunta: string; opciones: string[] }[] = [];
+    const { m } = modelosConGuion([preguntar({ question: "¿Qué pantalla toco?", options: ["Login", "Menú"] })]);
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    const pi = piel();
+    await s.turno("arregla la pantalla", { ...pi.p, consulta: (c) => void consultas.push(c) });
+    expect(consultas).toEqual([{ pregunta: "¿Qué pantalla toco?", opciones: ["Login", "Menú"] }]);
+    // El texto sigue saliendo: es lo que ven el terminal y la TUI.
+    expect(pi.tokens.join("")).toMatch(/1\. Login/);
+
+    const sin: unknown[] = [];
+    const otro = modelosConGuion([preguntar({ question: "¿Algo más?" })]);
+    const s2 = await abrirSesionTrueforge({ raiz: proyecto(), modelos: otro.m, entorno: ENTORNO, skills: CATALOGO });
+    await s2.turno("hola", { ...piel().p, consulta: (c) => void sin.push(c) });
+    expect(sin).toEqual([]);
   }, 30_000);
 });

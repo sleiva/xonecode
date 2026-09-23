@@ -529,11 +529,8 @@ hechos del proyecto precargados, y envuelve el prompt con su identidad, que no s
 3. ~~El resto de subagentes~~: hecho, todos salen de su `.md` (abajo).
 4. ~~La memoria del hilo en disco~~: hecha, como foto del raíz (abajo).
 5. Deshacer la dependencia circular entre `turnoReal.ts` y `sesionTrueforge.ts`.
-6. **MUY IMPORTANTE — la pregunta del orquestador como TARJETA con botones.** Hoy `ask_user_question`
-   sale como texto en el chat con las opciones numeradas (abajo). Falta la tarjeta con un botón por
-   opción, como la de subir a CloudStudio (`Pregunta.tsx`), ENCIMA del texto y sin sustituirlo:
-   stdio y la TUI siguen con el texto. Las opciones viajan como DATO en un evento propio, no se
-   deducen del texto, y es una interrupción distinta de la aprobación de escrituras.
+6. ~~**MUY IMPORTANTE — la pregunta del orquestador como TARJETA con botones.**~~: hecha (abajo,
+   «La pregunta, también como tarjeta»). stdio y la TUI siguen con el texto.
 
 **Las rigideces de la librería** que podrían llevar a portarla: envuelve siempre el prompt con su
 identidad; prefija cada tool con `mcp server:`; el prompt de un subagente no se puede personalizar y no
@@ -679,6 +676,25 @@ escriba después vuelve como `user.tool_response` a su hilo —un número de opc
 texto—. Así llega igual a la web, a la TUI y al terminal sin tocar ninguna piel; una tarjeta con
 botones sería el siguiente paso y no cambiaría esto. Medido con `deepseek-flash`: ante «pregúntame
 antes de tocar nada», el orquestador investigó el proyecto y preguntó con dos paletas concretas.
+
+### La pregunta, también como tarjeta (23-09-2026)
+
+ENCIMA del texto, no en su lugar. Las opciones viajan como DATO en un evento propio
+(`events.ts#consulta`), emitido detrás del texto y solo con opciones; `Piel.consulta?` es opcional,
+así que stdio y la TUI no cambian de un byte. La piel web lo guarda como acto `consulta` en el
+`.jsonl`, y **lo pendiente lo decide el HILO** (`apps/web/src/consultaPendiente.ts`): la última
+consulta sin un acto de usuario detrás, y nada con el turno en vuelo. Por eso la tarjeta vuelve al
+reabrir sin guardarla aparte. Es un diálogo con la coraza de `Pregunta.tsx`, pero no fail-closed:
+pulsar una opción la manda como PROSA —lo mismo que teclearla—, y cerrar no contesta nada.
+
+Dos cosas que salieron de mirarlo en el navegador y no de los tests:
+
+- **La pregunta quedaba DOS veces en el `.jsonl`**: el acto llegaba con el mensaje del asistente aún
+  abierto, y el `cerrarLinea` del final lo volvía a empujar. `core/turno.ts` cierra el mensaje antes
+  del acto, igual que `escribirLinea`; el test va por `correrTurno` con la piel web de verdad.
+- **El juez del turno de la respuesta juzgaba mal**: con el encargo a secas veía solo la respuesta de
+  ESE turno y concluía que la pregunta pedida no se hizo. El objetivo lleva ahora la pregunta y lo
+  contestado.
 
 ### El tope de llamadas era de TODA la conversación, y la pregunta no sobrevivía (23-09-2026)
 

@@ -188,6 +188,9 @@ export type Acto =
    *  proyecto (vive en la carpeta de la sesión) y por eso se escribió SIN aprobación — que
    *  se vea es la contrapartida. Metadatos y nunca el contenido. */
   | { tipo: "artefacto"; ruta: string; nombre: string; bytes: number; mime?: string }
+  /** El agente pregunta, con las opciones como DATO (`core/actos.ts#consulta`). Pendiente
+   *  mientras no haya un acto de usuario detrás: así vuelve la tarjeta al reabrir. */
+  | { tipo: "consulta"; pregunta: string; opciones: string[] }
   /** `fase` es la CATEGORÍA (el enum de `core/events.ts`), aparte de su texto en español:
    *  filtrar por la prosa se rompería el día que alguien la reescriba. Opcional por lo
    *  mismo que `detalles` — las sesiones viejas no lo traen. */

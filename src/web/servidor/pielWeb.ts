@@ -321,6 +321,13 @@ export function crearPielWeb(
       });
     },
 
+    consulta(c) {
+      // Acto propio, con las opciones como DATO: el cliente pinta un botón por opción, y la
+      // pregunta sigue pendiente mientras no llegue un acto de usuario detrás.
+      cerrarFase();
+      empujar({ tipo: "consulta", pregunta: c.pregunta, opciones: [...c.opciones] });
+    },
+
     pausa(pendientes: PendienteDeAprobacion[]) {
       cerrarFase();
       // Un ACTO por pendiente, con origen y descripción y NADA más: ni el fichero, ni el

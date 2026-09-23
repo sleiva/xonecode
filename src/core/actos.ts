@@ -85,6 +85,14 @@ export type Acto =
    */
   | { tipo: "artefacto"; ruta: string; nombre: string; bytes: number; mime?: string }
   /**
+   * Una PREGUNTA del agente con opciones (`events.ts#consulta`). Se guarda en el `.jsonl`
+   * como cualquier acto, y eso es lo que hace que la tarjeta VUELVA al reabrir una sesión
+   * que se quedó esperando respuesta: sigue pendiente mientras no haya un acto de usuario
+   * detrás. El texto de la pregunta no se repite aquí como mensaje: ya está en el del
+   * asistente.
+   */
+  | { tipo: "consulta"; pregunta: string; opciones: string[] }
+  /**
    * `fase` es el valor del enum (`core/events.ts#Fase`), que el acto tiraba al quedarse
    * solo con su texto en español. Opcional por lo mismo que `detalles`: las sesiones
    * viejas no lo traen. Sirve para filtrar y agrupar sin re-parsear la prosa, que es lo

@@ -544,6 +544,13 @@ export function Chat({
      */
     if (acto.tipo === "sincronizacion") continue;
     /**
+     * La pregunta del agente no se pinta en el hilo: su texto YA está en el mensaje del
+     * asistente, y la tarjeta con un botón por opción es un diálogo que monta `App`
+     * (`ConsultaDelAgente`). Con `continue` y no con el `return null` de abajo, por lo mismo
+     * que la sincronización: no es un acto de conversación que cierre el tramo.
+     */
+    if (acto.tipo === "consulta") continue;
+    /**
      * Lo que el HARNESS dice sobre el turno se agrupa por CLASE, y la clase viaja con el
      * acto (`core/actos.ts`) en vez de deducirse del texto — la misma regla que la forma de
      * una pregunta. Un `sistema` SIN clase no entra: es la respuesta a un comando, y plegar

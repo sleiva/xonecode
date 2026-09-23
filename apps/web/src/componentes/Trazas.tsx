@@ -170,6 +170,9 @@ function filasDe(acto: Acto): FilaCruda[] {
       ];
     case "error":
       return [cruda("error", "ERROR", acto.texto)];
+    case "consulta":
+      // Color de sistema y etiqueta propia: es lo que dijo el HARNESS por el agente, no una tool.
+      return [cruda("sistema", "CONSULTA", `${acto.pregunta} · ${acto.opciones.join(" · ")}`)];
     default: {
       const _exhaustivo: never = acto;
       return _exhaustivo;

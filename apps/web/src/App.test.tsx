@@ -1775,3 +1775,34 @@ describe("App: el panel a la derecha del chat", () => {
     expect(screen.getAllByRole("tablist")).toHaveLength(1);
   });
 });
+
+describe("App: la pregunta del AGENTE, con un botón por opción", () => {
+  const acto = (a: unknown) => ({ clase: "acto", acto: a });
+  const consulta = { tipo: "consulta", pregunta: "¿Qué pantalla toco?", opciones: ["Login", "Menú"] };
+
+  it("una consulta sin contestar abre el diálogo, y pulsar una opción la manda como PROSA", async () => {
+    const { store, enviar } = montar();
+    act(() => store.aplicar(acto({ tipo: "asistente", texto: "¿Qué pantalla toco?" })));
+    act(() => store.aplicar(acto(consulta)));
+    const dialogo = screen.getByRole("dialog", { name: "¿Qué pantalla toco?" });
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Menú" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "prosa", texto: "Menú" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "¿Qué pantalla toco?" })).toBeNull());
+  });
+
+  it("«Responder escribiendo» la aparta SIN mandar nada: la pregunta sigue en el chat", () => {
+    const { store, enviar } = montar();
+    act(() => store.aplicar(acto(consulta)));
+    fireEvent.click(screen.getByRole("button", { name: "Responder escribiendo" }));
+    expect(screen.queryByRole("dialog", { name: "¿Qué pantalla toco?" })).toBeNull();
+    expect(enviar).not.toHaveBeenCalled();
+  });
+
+  it("al REABRIR una sesión que se quedó esperando, la ventana vuelve; contestada, no", () => {
+    const { store } = montar();
+    act(() => store.aplicar({ clase: "reemision", actos: [{ tipo: "usuario", texto: "arregla" }, consulta] }));
+    expect(screen.getByRole("dialog", { name: "¿Qué pantalla toco?" })).toBeTruthy();
+    act(() => store.aplicar({ clase: "reemision", actos: [{ tipo: "usuario", texto: "arregla" }, consulta, { tipo: "usuario", texto: "Menú" }] }));
+    expect(screen.queryByRole("dialog", { name: "¿Qué pantalla toco?" })).toBeNull();
+  });
+});

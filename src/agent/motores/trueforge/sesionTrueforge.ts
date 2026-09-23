@@ -118,17 +118,27 @@ const LIMITE_DEL_GENERICO = "No puedes escribir ficheros ni ejecutar comandos.";
  * sin tocar ninguna piel, y la persona contesta como contesta siempre, escribiendo.
  */
 export function textoDePregunta(args: Record<string, unknown>): string {
-  const pregunta = typeof args.question === "string" ? args.question.trim() : "";
-  const opciones = Array.isArray(args.options) ? args.options.filter((o): o is string => typeof o === "string") : [];
+  const { pregunta, opciones } = consultaDe(args);
   return [
     "\n\n" + pregunta,
     ...(opciones.length === 0 ? [] : ["", ...opciones.map((o, i) => `${i + 1}. ${o}`), "", "Contesta con el número o con tus palabras."]),
   ].join("\n");
 }
 
+/**
+ * La pregunta y sus opciones como DATO (`events.ts#consulta`), de los argumentos que mandó el
+ * modelo: una sola lectura para el texto, la tarjeta y la respuesta, o las tres divergirían.
+ */
+export function consultaDe(args: Record<string, unknown>): { pregunta: string; opciones: string[] } {
+  return {
+    pregunta: typeof args.question === "string" ? args.question.trim() : "",
+    opciones: Array.isArray(args.options) ? args.options.filter((o): o is string => typeof o === "string") : [],
+  };
+}
+
 /** Lo que escribió la persona, como respuesta: un número de opción se traduce a su texto. */
 export function respuestaAPregunta(args: Record<string, unknown>, escrito: string): string {
-  const opciones = Array.isArray(args.options) ? args.options.filter((o): o is string => typeof o === "string") : [];
+  const { opciones } = consultaDe(args);
   const n = /^\s*(\d+)\s*[.)]?\s*$/.exec(escrito);
   const elegida = n === null ? undefined : opciones[Number(n[1]) - 1];
   return elegida ?? escrito;
@@ -582,6 +592,9 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
               preguntaEnEspera = pregunta;
               encargoEnEspera = objetivoDelTurno;
               yield { tipo: "token", texto: textoDePregunta(pregunta.args) };
+              // Y la misma pregunta como DATO, para la piel que pinta un botón por opción.
+              const consulta = consultaDe(pregunta.args);
+              if (consulta.opciones.length > 0) yield { tipo: "consulta", ...consulta };
             }
             salida.limpia = true;
             return;
@@ -662,7 +675,16 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
         preguntaEnEspera = undefined;
         // El ENCARGO del turno: lo que se repara y lo que se juzga. En un turno que contesta una
         // pregunta no es lo tecleado —un «2» no es un objetivo—, sino el encargo que la provocó.
-        objetivoDelTurno = enEspera === undefined ? peticion : encargoEnEspera;
+        //
+        // Y con lo que se preguntó y se contestó al lado. Medido en el navegador: con el encargo
+        // a secas, el juez leía solo la respuesta de ESTE turno y concluía que la pregunta que
+        // se pidió no se había hecho — se hizo, en el turno anterior, y él no lo veía.
+        objetivoDelTurno =
+          enEspera === undefined
+            ? peticion
+            : encargoEnEspera === undefined
+              ? undefined
+              : `${encargoEnEspera}\n\n[En un turno anterior el agente preguntó «${consultaDe(enEspera.args).pregunta}» y la persona contestó «${respuestaAPregunta(enEspera.args, peticion)}».]`;
         encargoEnEspera = undefined;
         // Los hechos baratos del proyecto van DELANTE (`core/hechosDelProyecto.ts`), la misma
         // foto y el MISMO cargador que `xone_navegacion`, rehecha en cada turno —la regla de

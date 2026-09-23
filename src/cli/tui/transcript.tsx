@@ -309,6 +309,11 @@ function ActoVista({
           ))}
         </>
       );
+    case "consulta":
+      // Tampoco llega HOY: `Piel.consulta` es opcional y la TUI no la implementa, así que aquí
+      // la pregunta es el texto del asistente con sus opciones numeradas, y se contesta
+      // escribiendo. No se pinta nada: repetir la pregunta la enseñaría dos veces.
+      return null;
     default:
       // sistema: mudo e indentado — un aviso, no la conversación.
       return <Text color={temaInk.mudo}>{`  ${acto.texto}`}</Text>;

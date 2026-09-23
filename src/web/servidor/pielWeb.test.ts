@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import type { ConsumoDeTurno } from "../../core/actos.js";
 import { crearPielWeb } from "./pielWeb.js";
+import { correrTurno } from "../../core/turno.js";
+import type { DomainEvent } from "../../core/events.js";
 
 describe("pielWeb", () => {
   /**
@@ -315,5 +317,30 @@ describe("pielWeb: el coste del turno en el `fin`", () => {
     l.pon(acumulado(4, 1));
     piel.fin(5);
     expect(actos()[1]).toEqual({ tipo: "fin", ms: 5 });
+  });
+
+  it("la pregunta del agente es un acto PROPIO con las opciones como dato, detrás de su texto", () => {
+    const t = 0;
+    const { piel, actos } = crearPielWeb(() => t);
+    piel.token("¿Qué pantalla?\n1. Login\n2. Menú");
+    piel.consulta?.({ pregunta: "¿Qué pantalla?", opciones: ["Login", "Menú"] });
+    expect(actos()).toEqual([
+      { tipo: "asistente", texto: "¿Qué pantalla?\n1. Login\n2. Menú" },
+      { tipo: "consulta", pregunta: "¿Qué pantalla?", opciones: ["Login", "Menú"] },
+    ]);
+  });
+
+  it("por el turno ENTERO, la pregunta del agente queda UNA vez: el acto no reabre el mensaje", async () => {
+    // Medido en el navegador: el texto de la pregunta se guardaba DOS veces en el `.jsonl`
+    // —antes y después de la consulta—, porque el acto llegaba con el mensaje del asistente
+    // aún abierto y el `cerrarLinea` del final lo volvía a empujar.
+    const { piel, actos } = crearPielWeb(() => 0);
+    async function* eventos(): AsyncIterable<DomainEvent> {
+      yield { tipo: "token", texto: "¿Qué pantalla?" };
+      yield { tipo: "consulta", pregunta: "¿Qué pantalla?", opciones: ["Login", "Menú"] };
+    }
+    await correrTurno(eventos(), piel);
+    expect(actos().filter((a) => a.tipo === "asistente")).toEqual([{ tipo: "asistente", texto: "¿Qué pantalla?" }]);
+    expect(actos().map((a) => a.tipo)).toEqual(["asistente", "consulta", "fin"]);
   });
 });

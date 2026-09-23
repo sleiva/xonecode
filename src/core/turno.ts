@@ -58,6 +58,12 @@ export interface Piel {
    * así que la constancia de que se escribió no puede depender de qué piel esté delante.
    */
   artefacto?(artefacto: Artefacto): void;
+  /**
+   * El agente pregunta y el turno se para (`events.ts#consulta`). OPCIONAL, como `fase?`: la
+   * pregunta YA salió por `token`, así que quien no lo implemente —stdio, la TUI— la enseña
+   * igual, byte-idéntica. Hoy solo la web lo implementa, con un botón por opción.
+   */
+  consulta?(consulta: { pregunta: string; opciones: string[] }): void;
 }
 
 /** Cómo se le cuenta cada fase al usuario. En un solo sitio, no repartido por el motor. */
@@ -245,6 +251,17 @@ export async function correrTurno(
           piel.artefacto?.(ev.artefacto);
           break;
         }
+
+        case "consulta":
+          // Sin línea: el texto ya salió por `token`. Esto es solo la FORMA, para quien la pinte.
+          // Pero el mensaje que la trae se CIERRA antes, como hace `escribirLinea`: con él
+          // abierto, la piel web lo volvía a empujar al final y la pregunta quedaba dos veces.
+          if (abierta) {
+            piel.cerrarLinea();
+            abierta = false;
+          }
+          piel.consulta?.({ pregunta: ev.pregunta, opciones: ev.opciones });
+          break;
 
         case "bloqueado":
           bitacora.anota("bloqueado", ev.motivo);
