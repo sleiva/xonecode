@@ -52,7 +52,7 @@
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { jdkDeLaMaquina, localizadorDeAndroid } from "./dispositivosEnMaquina.js";
+import { jdkDeLaMaquina, localizadorDeAndroid, pathConCarpetas, unirRuta } from "./dispositivosEnMaquina.js";
 import {
   crearEjecutor,
   lanzarReal,
@@ -424,12 +424,20 @@ export function correrPasoDeReceta(
       const paso = plataforma === "win32" ? (faltaElSdk ? "el paso 3" : "el paso 2") : "el paso 1";
       return fallar(`falta ${que}: hazlo con ${paso} y vuelve a mirar`);
     }
+    // Con el separador y el NOMBRE de variable de la plataforma: con `:` a mano, en Windows
+    // las dos carpetas se pegaban a la última del `Path` y `avdmanager` no encontraba a
+    // `sdkmanager` aunque el SDK estuviera entero.
+    const path = pathConCarpetas(
+      entorno,
+      [unirRuta(plataforma, sdk, "emulator"), unirRuta(plataforma, sdk, "platform-tools")],
+      plataforma
+    );
     env = {
       ...env,
       ANDROID_HOME: sdk,
       ANDROID_SDK_ROOT: sdk,
       JAVA_HOME: jdk,
-      PATH: `${entorno.PATH ?? ""}:${join(sdk, "emulator")}:${join(sdk, "platform-tools")}`,
+      [path.nombre]: path.valor,
     };
   } else {
     binario = enPath(paso.binario);

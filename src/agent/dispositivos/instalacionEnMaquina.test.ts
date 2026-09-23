@@ -532,6 +532,22 @@ describe("los pasos de Windows", () => {
       expect(l.hijos[0]!.escrito).toContain("no\n");
     });
 
+    it("el PATH del hijo lleva `;` y se escribe como `Path`, el nombre con el que llegó", () => {
+      // Con `:` a mano, las dos carpetas se pegaban a la última del `Path` y `avdmanager` no
+      // encontraba a `sdkmanager`; y un `PATH` además del `Path` dejaría al hijo con uno de
+      // los dos sin decir cuál, porque en Windows el entorno no distingue mayúsculas.
+      const l = lanzador();
+      correrPasoDeReceta("android-emulador", 5, {
+        ...WINDOWS,
+        entorno: { ...WINDOWS.entorno, Path: "C:\\Windows\\system32" },
+        lanzar: l.lanzar,
+      });
+      const env = l.llamadas[0]!.env;
+      const sdk = win32.join(LOCALAPPDATA, "Android", "Sdk");
+      expect(env["Path"]).toBe(`C:\\Windows\\system32;${win32.join(sdk, "emulator")};${win32.join(sdk, "platform-tools")}`);
+      expect(Object.keys(env).filter((k) => k.toUpperCase() === "PATH")).toEqual(["Path"]);
+    });
+
     it("sin sdkmanager.bat en la máquina no se lanza nada: se dice qué falta", async () => {
       const l = lanzador();
       const trabajo = correrPasoDeReceta("android-emulador", 4, { ...WINDOWS, existe: () => false, lanzar: l.lanzar });

@@ -44,6 +44,32 @@ import { join, posix, win32 } from "node:path";
 function rutasDe(plataforma: string): typeof posix {
   return plataforma === "win32" ? win32 : posix;
 }
+
+/**
+ * El PATH de un proceso hijo con carpetas AÑADIDAS al final, con las reglas de la plataforma.
+ *
+ * Dos cosas que en Windows no son como en macOS, y las dos se rompían en silencio: el
+ * separador es `;` y no `:` (que además vive DENTRO de `C:\…`), y la variable suele llamarse
+ * `Path`. Se devuelve con el MISMO nombre con que llegó: en Windows el entorno no distingue
+ * mayúsculas, y un hijo con `PATH` y `Path` a la vez recibiría uno de los dos sin que nadie
+ * diga cuál. Sin ninguno puesto, `PATH`.
+ */
+export function pathConCarpetas(
+  entorno: Record<string, string | undefined>,
+  carpetas: readonly string[],
+  plataforma: string
+): { nombre: string; valor: string } {
+  const { delimiter } = rutasDe(plataforma);
+  const nombre =
+    plataforma === "win32" ? (Object.keys(entorno).find((clave) => clave.toUpperCase() === "PATH") ?? "PATH") : "PATH";
+  const actual = entorno[nombre] ?? "";
+  return { nombre, valor: [...(actual === "" ? [] : [actual]), ...carpetas].join(delimiter) };
+}
+
+/** Componer una ruta con las reglas de la plataforma medida (ver `rutasDe`). */
+export function unirRuta(plataforma: string, ...partes: string[]): string {
+  return rutasDe(plataforma).join(...partes);
+}
 import { promisify } from "node:util";
 import { seMira, type AjustesDeDispositivos } from "../../core/settings.js";
 import {

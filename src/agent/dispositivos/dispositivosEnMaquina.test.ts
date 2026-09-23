@@ -12,6 +12,7 @@ import {
   TOPES_MS,
   type DependenciasDeDeteccion,
   type Ejecucion,
+  pathConCarpetas,
 } from "./dispositivosEnMaquina.js";
 
 /** Un ejecutor de pega: responde según el binario y apunta qué se le pidió. */
@@ -940,5 +941,26 @@ describe("localizadorDeAndroid — la extensión en Windows es POR BINARIO", () 
     });
     expect(enPath("sdkmanager")).toBe(sdkmanager);
     expect(enPath("adb")).toBe(adb);
+  });
+});
+
+
+describe("pathConCarpetas — el PATH de un hijo con las reglas de la plataforma", () => {
+  it("en macOS, `:` y la variable `PATH` de siempre", () => {
+    expect(pathConCarpetas({ PATH: "/usr/bin" }, ["/sdk/emulator"], "darwin")).toEqual({
+      nombre: "PATH",
+      valor: "/usr/bin:/sdk/emulator",
+    });
+  });
+
+  it("en Windows, `;` y el nombre con el que llegó", () => {
+    expect(pathConCarpetas({ Path: "C:\\Windows" }, ["C:\\Sdk\\emulator"], "win32")).toEqual({
+      nombre: "Path",
+      valor: "C:\\Windows;C:\\Sdk\\emulator",
+    });
+  });
+
+  it("sin variable puesta no deja un separador colgando delante", () => {
+    expect(pathConCarpetas({}, ["C:\\a", "C:\\b"], "win32")).toEqual({ nombre: "PATH", valor: "C:\\a;C:\\b" });
   });
 });
