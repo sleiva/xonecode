@@ -22,6 +22,10 @@ const PROHIBIDOS = [
   "ink",
   "react",
   "@modelcontextprotocol",
+  // El SEGUNDO motor (docs/VARIANTE-TRUEFORGE-HARNESS.md): como deepagents, vive en `agent/` y
+  // se traduce a los eventos de dominio. `core/` no sabe qué motor corre el turno.
+  "@truefoundry/",
+  "winston",
 ];
 
 function ficherosTs(dir: string): string[] {
