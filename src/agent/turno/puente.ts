@@ -2,6 +2,7 @@ import { normalizar } from "./normalizar.js";
 import { Mensajes } from "./mensajes.js";
 import { detalleDe, parametrosDe, type ParametrosSeguros } from "./resumenDeTool.js";
 import { aTexto, esMensajeDeTool } from "./textoDeTool.js";
+import { ETIQUETA_DEL_RESUMEN } from "./resumenDeContexto.js";
 import type { DomainEvent, PendienteDeAprobacion } from "../../core/events.js";
 
 /** El texto de un mensaje, venga como venga. */
@@ -370,6 +371,17 @@ export async function* aEventos(
         const texto = textoDe(msg);
         const id = (msg as Record<string, unknown> | null)?.id;
         const idTexto = typeof id === "string" ? id : undefined;
+        /**
+         * **El RESUMEN de contexto tampoco es la respuesta**, y llega por aquí con el mismo
+         * namespace y el mismo nodo: lo único que lo distingue es la ETIQUETA que le pone
+         * `resumenConEncargo` a esa llamada. Sin esto se pintaba en el chat y se guardaba como
+         * un mensaje del asistente. Va ANTES de `mensajes.trozo`, que cuenta solo la respuesta.
+         */
+        const meta = (chunk.dato as unknown[])[1] as { tags?: unknown } | undefined;
+        if (Array.isArray(meta?.tags) && meta.tags.includes(ETIQUETA_DEL_RESUMEN)) {
+          if (texto !== "") yield { tipo: "resumen", texto, ...(idTexto === undefined ? {} : { msgId: idTexto }) };
+          continue;
+        }
         // El razonamiento sale por su propio evento y NO pasa por `Mensajes`: ese contador
         // decide qué trozos de la RESPUESTA se pintan (dedupe de reintentos), y contar el
         // pensamiento ahí desalinearía esa cuenta.

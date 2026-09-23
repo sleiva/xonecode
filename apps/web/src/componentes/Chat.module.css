@@ -447,8 +447,25 @@
    cada tool, que con veinte lecturas seguidas es la pantalla saltando. La ruta entera está a
    un clic, desplegando. */
 .pasoActual {
+  min-width: 0;
   color: var(--dsw-alias-label-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Lo que contiene al paso actual. El recorte de arriba NO se aplica en un elemento en línea,
+   y así estuvo: una línea larga (el aviso de un turno que falló) se salía de la columna y le
+   ponía barra de scroll horizontal al chat entero. `inline-flex` acotado al ancho del
+   `summary`, menos el hueco del triángulo, es lo que le da al paso un ancho del que ceder. */
+.lineaEnVuelo {
+  display: inline-flex;
+  max-width: calc(100% - 1.5em);
+  min-width: 0;
+  vertical-align: top;
+}
+
+.enVuelo {
+  flex: none;
+  white-space: pre;
 }

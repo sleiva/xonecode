@@ -120,8 +120,13 @@ function TramoDeTrabajo({
             )}
           </>
         ) : (
-          <>
-            {segundosEnVuelo === undefined ? "Trabajando…" : `Trabajando… · ${segundosEnVuelo} s`}
+          // Una caja FLEXIBLE acotada al ancho del `summary`: sin ella el recorte del paso
+          // actual no se aplica (un `span` en línea no recorta) y una línea larga —medido: el
+          // aviso de un turno que falló— salía de la columna con su barra de scroll horizontal.
+          <span className={estilos.lineaEnVuelo}>
+            <span className={estilos.enVuelo}>
+              {segundosEnVuelo === undefined ? "Trabajando…" : `Trabajando… · ${segundosEnVuelo} s`}
+            </span>
             {/*
               Y en qué paso está. Va aquí, en la línea que se ve con el pulso PLEGADO, porque
               desplegarlo para saber qué está haciendo es exactamente lo que sobra cuando un
@@ -133,7 +138,7 @@ function TramoDeTrabajo({
                 {segundosDelPaso === undefined ? "" : ` · ${segundosDelPaso} s`}
               </span>
             )}
-          </>
+          </span>
         )}
       </summary>
       <div className={estilos.detalleDePulso} ref={nodo} onScroll={alDesplazar}>
@@ -329,8 +334,16 @@ const ES_PULSO = new Set(["razonamiento", "herramientas", "fase", "artefacto"]);
  * pliega es el párrafo, nunca el hecho de que lo hay.
  */
 const CLASES_DE_SISTEMA = {
-  aviso: { titulo: "Verificaciones", uno: "aviso", varios: "avisos" },
-  permiso: { titulo: "Permisos", uno: "escritura", varios: "escrituras" },
+  aviso: { titulo: "Verificaciones", uno: "aviso", varios: "avisos", markdown: false },
+  permiso: { titulo: "Permisos", uno: "escritura", varios: "escrituras", markdown: false },
+  /**
+   * El resumen con el que se compactó la conversación al pasar el umbral de contexto. Es lo
+   * que el harness hizo CON el turno, así que se pliega como los otros dos; y es el ÚNICO que
+   * se pinta como markdown, porque es un texto del modelo con títulos y listas. La bandera va
+   * en la TABLA y no en el render: un aviso que nombre `Menu.xne` o `MAP_COLOR5` no puede
+   * pasar por markdown, que se comería los guiones bajos.
+   */
+  resumen: { titulo: "Resumen del contexto", uno: "resumen", varios: "resúmenes", markdown: true },
 } as const;
 
 type ClaseDeSistema = keyof typeof CLASES_DE_SISTEMA;
@@ -676,7 +689,7 @@ export function Chat({
             }
             if (pieza.tipo === "harness") {
               const { tramo: t } = pieza;
-              const { titulo, uno, varios } = CLASES_DE_SISTEMA[t.clase];
+              const { titulo, uno, varios, markdown } = CLASES_DE_SISTEMA[t.clase];
               const n = t.actos.length;
               return (
                 // Plegado siempre: al contrario que el pulso, esto no se sigue en vivo — sale
@@ -687,11 +700,19 @@ export function Chat({
                     {`${titulo} · ${n} ${n === 1 ? uno : varios}`}
                   </summary>
                   <div className={estilos.detalleDePulso}>
-                    {t.actos.map((a, i) => (
-                      <p key={i} role="note" className={estilos.sistema}>
-                        {a.texto}
-                      </p>
-                    ))}
+                    {t.actos.map((a, i) =>
+                      markdown ? (
+                        // `md-cuerpo` y los dólares escapados, como la respuesta del asistente:
+                        // es el mismo tipo de texto y se tiene que leer igual.
+                        <div key={i} role="note" className="md-cuerpo">
+                          <MarkdownText text={protegerDolares(a.texto)} codeLabels={ETIQUETAS_DE_CODIGO} />
+                        </div>
+                      ) : (
+                        <p key={i} role="note" className={estilos.sistema}>
+                          {a.texto}
+                        </p>
+                      )
+                    )}
                   </div>
                 </details>
               );

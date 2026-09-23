@@ -183,7 +183,7 @@ export type Acto =
    * de pulsar, y plegarlo sería no contestarle. Sigue suelta y a la vista, como las sesiones
    * guardadas antes de que este campo existiera.
    */
-  | { tipo: "sistema"; texto: string; clase?: "aviso" | "permiso" }
+  | { tipo: "sistema"; texto: string; clase?: "aviso" | "permiso" | "resumen" }
   /** Un artefacto que dejó el agente: diagrama, panel, captura. No es un fichero del
    *  proyecto (vive en la carpeta de la sesión) y por eso se escribió SIN aprobación — que
    *  se vea es la contrapartida. Metadatos y nunca el contenido. */

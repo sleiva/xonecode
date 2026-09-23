@@ -95,6 +95,13 @@ export function crearPielWeb(
   let pensamiento = "";
   let parcialPensado = false;
   let ultimoPensado = 0;
+  /** Y para el resumen de contexto, que es un acto `sistema` de clase `resumen`. Su
+   *  colchón se VUELCA entero antes del acto siguiente (`empujar`): con la ventana de 80 ms
+   *  el último trozo se podía quedar fuera, y aquí eso es el final del resumen. */
+  let resumido = "";
+  let parcialResumido = false;
+  let volcadoResumido = "";
+  let ultimoResumido = 0;
   const escuchas: ((acto: Acto) => void)[] = [];
   /**
    * El acumulado en el ÚLTIMO `fin` estampado, para restarle el de ahora y quedarnos con el
@@ -108,6 +115,12 @@ export function crearPielWeb(
   };
 
   const empujar = (acto: Acto): void => {
+    if (parcialResumido && resumido !== volcadoResumido) {
+      sustituir({ tipo: "sistema", texto: resumido, clase: "resumen" });
+    }
+    parcialResumido = false;
+    resumido = "";
+    volcadoResumido = "";
     // Cualquier acto NUEVO cierra los parciales: lo que venga detrás ya no los sustituye.
     parcial = false;
     parcialPensado = false;
@@ -227,6 +240,27 @@ export function crearPielWeb(
       if (t - ultimoPensado < MS_ENTRE_PARCIALES) return;
       ultimoPensado = t;
       sustituir({ tipo: "razonamiento", texto: pensamiento });
+    },
+
+    resumen(texto) {
+      // Mismo trato que el razonamiento —parcial que se sustituye, con su ventana—, pero el
+      // acto es de SISTEMA con su clase: es lo que el harness hizo con el contexto, y así cae
+      // en el mismo plegable que «Verificaciones» y «Permisos».
+      if (!parcialResumido) {
+        cerrarFase();
+        empujar({ tipo: "sistema", texto, clase: "resumen" });
+        resumido = texto;
+        volcadoResumido = texto;
+        parcialResumido = true;
+        ultimoResumido = ahora();
+        return;
+      }
+      resumido += texto;
+      const t = ahora();
+      if (t - ultimoResumido < MS_ENTRE_PARCIALES) return;
+      ultimoResumido = t;
+      volcadoResumido = resumido;
+      sustituir({ tipo: "sistema", texto: resumido, clase: "resumen" });
     },
 
     cerrarLinea() {

@@ -870,6 +870,16 @@ feedback del desarrollador** y no es terminal.
   escrituras como una. `razonamiento` es su propio evento y su propio acto —`textoDe` lo
   EXCLUYE del texto—. El texto del asistente se enseña mientras llega, a `MS_ENTRE_PARCIALES`
   (80 ms) con el reloj por parámetro, porque cada emisión manda el acto entero.
+- **El RESUMEN de contexto es un acto de sistema de clase `resumen`, no una respuesta**
+  (`resumenDeContexto.ts#ETIQUETA_DEL_RESUMEN`, `puente.ts`, `pielWeb.ts#resumen`). deepagents
+  resume llamando al MISMO modelo en el MISMO nodo, así que sus chunks eran indistinguibles de
+  la respuesta y se guardaban como mensaje del asistente. Lo que los separa es una ETIQUETA en
+  esa llamada, puesta por dos envoltorios que ABRAZAN al middleware de resumen dentro de
+  `resumenConEncargo` —que sigue siendo la única composición—, y el cliente lo pliega como
+  «Resumen del contexto», el ÚNICO de los tres plegables que se pinta como markdown (la bandera
+  va en `CLASES_DE_SISTEMA`: un aviso con guiones bajos no puede pasar por ahí). El prompt es
+  nuestro y en castellano. **Límite declarado**: solo se etiqueta `invoke`; si la librería
+  resume un día con `stream`, el resumen vuelve al chat, y el aviso es el test contra ella.
 - **Abrir una sesión NO espera al aviso de git** (`MS_DE_TRABAJO_AL_ABRIR`, 2 s). El `finally`
   que apaga el indicador «abriendo…» espera a `anunciarAlta()`, y ésta esperaba SIN PLAZO a
   `trabajoAlAbrir`, detrás del cual hay un `git status --untracked-files=all`. Un aviso cuya

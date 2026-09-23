@@ -59,6 +59,23 @@ describe("pielWeb", () => {
    * El razonamiento va en su PROPIO acto: no es la respuesta, y mezclarlo con ella es lo
    * que hacía el `String(content)` que el puente dejó de usar.
    */
+  it("el resumen de contexto es un acto de SISTEMA con su clase, y su último trozo no se pierde", () => {
+    let t = 0;
+    const { piel, actos } = crearPielWeb(() => t);
+    piel.resumen!("## Resumen\n");
+    expect(actos()).toEqual([{ tipo: "sistema", texto: "## Resumen\n", clase: "resumen" }]);
+    // Dentro de la ventana no se reemite…
+    piel.resumen!("- hecho A");
+    // …y aun así el acto siguiente lo vuelca ENTERO antes de entrar: si no, el final del
+    // resumen se quedaba fuera cuando la respuesta empezaba en menos de 80 ms.
+    piel.token("Sigo");
+    piel.cerrarLinea();
+    expect(actos()).toEqual([
+      { tipo: "sistema", texto: "## Resumen\n- hecho A", clase: "resumen" },
+      { tipo: "asistente", texto: "Sigo" },
+    ]);
+  });
+
   it("el razonamiento es su propio acto, con el mismo goteo que la respuesta", () => {
     let t = 0;
     const { piel, actos } = crearPielWeb(() => t);

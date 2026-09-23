@@ -162,7 +162,7 @@ import { indiceEnDisco, type CargarIndice } from "../navegacion/indiceEnDisco.js
 import { hechosDelProyectoDe } from "../navegacion/hechosEnDisco.js";
 import { conHechosDelProyecto } from "../../core/hechosDelProyecto.js";
 import { accionDelJuez, type HechosDelTurno, type VeredictoDelTurno } from "../../core/juezDelTurno.js";
-import { crearRegistroDeFallos } from "./registroDeFallos.js";
+import { crearRegistroDeFallos, RUTA_VISIBLE_DE_FALLOS } from "./registroDeFallos.js";
 
 /**
  * Una sesión de turno real: varios turnos sobre el MISMO agente y el MISMO hilo.
@@ -1446,7 +1446,7 @@ export async function abrirSesionReal(opciones: {
           pasos: pasosDelTurno,
         });
         if (anotado !== undefined) {
-          piel.linea(`\n⚠ el turno falló. Queda apuntado en ${anotado.ruta}\n${anotado.legible}\n`);
+          piel.linea(`\n⚠ el turno falló. Queda apuntado en ${RUTA_VISIBLE_DE_FALLOS}\n${anotado.legible}\n`);
         }
         throw error;
       }

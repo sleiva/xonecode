@@ -6414,3 +6414,40 @@ quería por debajo del orquestador se reescribieron: los dos codificaban la deci
 **Descartado, para no rediscutirlo**: excluir las escrituras del conteo con un middleware propio
 (el de langchain no sabe excluir). Arreglaba el bloqueo sin tocar el número; se prefirió el tope
 alto, que es su criterio de siempre.
+
+## El resumen de contexto salía como la respuesta del asistente (23-09-2026)
+
+**Medido en MyAllXOne**: a mitad de un turno largo apareció en el chat un `## Summary` /
+`**Task:**` / `Key facts established:` en inglés, y el `.jsonl` de la sesión lo guardó como un acto
+`asistente`. Era el middleware de resumen de deepagents al cruzar el umbral: resume llamando a
+`request.model` —el MISMO modelo del agente, que además gana sobre el `model` de sus opciones— dentro
+del MISMO nodo `model_request`. Medido contra la librería real: sus chunks llegaban con el mismo
+namespace, el mismo nodo y `tags: []`. Para el puente eran la respuesta.
+
+**Cómo se separan: una ETIQUETA, no el texto.** Dos envoltorios abrazan al middleware de resumen:
+`EtiquetaDelResumenMiddleware` delante le cambia el modelo por un Proxy que añade
+`xonecode:resumen` a cada `invoke`, y `SinEtiquetaDelResumenMiddleware` detrás devuelve el original.
+Medido con un modelo de pega que emite los dos textos: los chunks del resumen llegan con la etiqueta
+y los de la respuesta sin ella. El puente manda los etiquetados a un evento `resumen` antes de
+contarlos como respuesta, la piel web los junta en un acto `sistema` de clase `resumen` y el cliente
+los pliega como «Resumen del contexto», en markdown — por petición suya, «legible, pero dentro de un
+panel», como «Permisos» y «Verificaciones».
+
+**`dentro` es la segunda llave, y su mutante NO muere**: la llamada real pasa por `bindTools`, que el
+Proxy delega al original, así que la respuesta ya sale sin marca aunque faltara. Se queda porque el
+fallo que evita es el caro —la respuesta entera al plegable y el chat mudo— y basta un agente que
+invoque sin `bindTools` para que sea la única. El mutante de `fuera` sí tumba los dos tests.
+
+Se descartó leer el resumen del `_summarizationEvent` que trae el `update` del nodo: está entero y de
+una vez, pero envuelto en el texto inglés de la librería («You are in the middle of a conversation…
+<summary>»), y sacarlo de ahí sería depender de su redacción. El prompt pasa a ser nuestro y en
+castellano (`PROMPT_DEL_RESUMEN`), pidiendo markdown. El terminal deja de imprimir el resumen: allí
+salía como si fuera la respuesta, y `Piel.resumen` es opcional como `razonamiento`. El `## Summary`
+que ya está en el `.jsonl` de aquella sesión es histórico y sigue saliendo como asistente.
+
+**De rebote, dos cosas de la misma captura**: el aviso «el turno falló. Queda apuntado en …» nombraba
+el registro por su ruta ABSOLUTA —con la cuenta del sistema dentro, por el cable— y ahora dice
+`.xonecode/fallos.jsonl`; y esa misma línea, en el `summary` del tramo en vuelo, sacaba barra de scroll
+horizontal porque el recorte de `.pasoActual` no se aplica en un `span` en línea (lo acota ahora un
+`inline-flex`). **Queda abierto**: las causas de `falloLegible` pueden llevar el mensaje de un error de
+Node con su ruta absoluta, y una cancelación del usuario se anota como fallo.

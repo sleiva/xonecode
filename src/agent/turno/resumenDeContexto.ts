@@ -15,9 +15,33 @@ import { RUTA_HISTORIAL_RESUMIDO } from "../grafo/memoriaDeProyecto.js";
 export const UMBRAL_RESUMEN_TOKENS = 32_000;
 export const CONTEXTO_RECIENTE_TOKENS = 8_000;
 
+/**
+ * El prompt del resumen, en CASTELLANO y pidiendo markdown.
+ *
+ * El de deepagents está en inglés, y el resumen no es un texto interno: se le enseña a la
+ * persona en su propio plegable («Resumen del contexto», ver `ETIQUETA_DEL_RESUMEN`). Medido en
+ * MyAllXOne: salía un `## Summary` / `**Task:**` / `Key facts established:` en mitad de una
+ * conversación en castellano. `{conversation}` es el hueco que la librería rellena.
+ *
+ * Lo que NO se le pide aquí es que conserve el encargo: eso lo hace el CÓDIGO
+ * (`conservarElEncargo`), porque un resumen que a veces lo pierde ya costó millones de tokens.
+ */
+export const PROMPT_DEL_RESUMEN = `Eres el encargado de resumir una conversación de trabajo sobre una aplicación XOne para que el agente pueda seguir sin releerla. Escribe EN CASTELLANO y en markdown legible (títulos cortos y listas), y recoge:
+1. Qué se está haciendo y para qué.
+2. Los hechos ya comprobados, con fichero y línea cuando los haya.
+3. Las decisiones tomadas y lo que queda pendiente.
+
+Sé concreto y breve. No inventes nada que no esté en la conversación.
+
+Conversación a resumir:
+{conversation}
+
+Resumen:`;
+
 export function resumenDeContexto(backend: FilesystemBackend) {
   return createSummarizationMiddleware({
     backend,
+    summaryPrompt: PROMPT_DEL_RESUMEN,
     trigger: { type: "tokens", value: UMBRAL_RESUMEN_TOKENS },
     keep: { type: "tokens", value: CONTEXTO_RECIENTE_TOKENS },
     // Las tools de fichero pueden llevar contenido grande. Los argumentos antiguos ya
@@ -115,7 +139,76 @@ function textoPlano(msg: unknown): string {
  * en un cierre que los tests doblan, y que puede dejar de estar montada con todo en verde.
  */
 export function resumenConEncargo(backend: FilesystemBackend): ReturnType<typeof createMiddleware>[] {
-  return [resumenDeContexto(backend), conservarElEncargo()] as ReturnType<typeof createMiddleware>[];
+  const { fuera, dentro } = etiquetarElResumen();
+  return [fuera, resumenDeContexto(backend), dentro, conservarElEncargo()] as ReturnType<typeof createMiddleware>[];
+}
+
+/**
+ * La marca que distingue, en el stream, la llamada del RESUMEN de la respuesta del agente.
+ *
+ * deepagents resume llamando al MISMO modelo del agente (`request.model`, que gana sobre el
+ * `model` de sus opciones) dentro del MISMO nodo, así que sus chunks llegaban al puente con el
+ * mismo namespace, el mismo nodo y ninguna etiqueta: indistinguibles de la respuesta. El puente
+ * los pintaba en el chat y el `.jsonl` los guardaba como un mensaje del asistente — medido en
+ * MyAllXOne, un `## Summary` en inglés a mitad de la conversación.
+ *
+ * Con la etiqueta, el puente los saca de la respuesta y los manda a su propio acto (`resumen`),
+ * que el cliente pliega como «Verificaciones» o «Permisos». Una ETIQUETA y no una heurística
+ * sobre el texto por la regla de siempre: la clase viaja como dato.
+ */
+export const ETIQUETA_DEL_RESUMEN = "xonecode:resumen";
+
+/**
+ * Los dos envoltorios que ponen la etiqueta SOLO en la llamada del resumen.
+ *
+ * `fuera` va delante del middleware de resumen y le cambia el modelo por uno que etiqueta cada
+ * `invoke`; `dentro` va detrás y devuelve el ORIGINAL antes de la llamada de verdad. Así solo
+ * lo que el resumen invoque entre medias lleva la marca. Contra la librería real se prueban
+ * los dos sentidos: sin `fuera`, el resumen vuelve al chat (el mutante tumba el test).
+ *
+ * **`dentro` es la SEGUNDA llave, y hay que saberlo**: hoy la llamada real pasa por
+ * `bindTools`, que el Proxy delega al ORIGINAL, así que la respuesta sale sin marca aunque
+ * `dentro` faltara — medido, su mutante no muere. Se queda porque el fallo que evita es el
+ * caro (la RESPUESTA entera al plegable y el chat mudo) y basta con que un agente invoque el
+ * modelo sin `bindTools` para que fuera la única.
+ *
+ * El Proxy lee contra el OBJETIVO (`Reflect.get(o, p, o)`), por la trampa del getter sobre
+ * campo privado. **Límite declarado**: solo se etiqueta `invoke`, que es lo que la librería
+ * usa hoy para resumir; si un día resume con `stream`, el resumen vuelve al chat — el test
+ * contra la librería real es el aviso.
+ */
+function etiquetarElResumen(): { fuera: ReturnType<typeof createMiddleware>; dentro: ReturnType<typeof createMiddleware> } {
+  const originales = new WeakMap<object, unknown>();
+  const fuera = createMiddleware({
+    name: "EtiquetaDelResumenMiddleware",
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    wrapModelCall: (request: any, handler: any) => {
+      const modelo = request?.model;
+      if (modelo === null || typeof modelo !== "object") return handler(request);
+      const etiquetado = new Proxy(modelo, {
+        get(objetivo, propiedad) {
+          if (propiedad === "invoke") {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return (entrada: unknown, config?: any) =>
+              objetivo.invoke(entrada, { ...(config ?? {}), tags: [...(config?.tags ?? []), ETIQUETA_DEL_RESUMEN] });
+          }
+          const valor = Reflect.get(objetivo, propiedad, objetivo);
+          return typeof valor === "function" ? valor.bind(objetivo) : valor;
+        },
+      });
+      originales.set(etiquetado, modelo);
+      return handler({ ...request, model: etiquetado });
+    },
+  });
+  const dentro = createMiddleware({
+    name: "SinEtiquetaDelResumenMiddleware",
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    wrapModelCall: (request: any, handler: any) => {
+      const original = request?.model === null || typeof request?.model !== "object" ? undefined : originales.get(request.model);
+      return handler(original === undefined ? request : { ...request, model: original });
+    },
+  });
+  return { fuera, dentro } as { fuera: ReturnType<typeof createMiddleware>; dentro: ReturnType<typeof createMiddleware> };
 }
 
 /**

@@ -508,3 +508,22 @@ describe("los resultados entre rondas", () => {
     expect(await correr(memoria)).toEqual([]);
   });
 });
+
+
+describe("el resumen de contexto no es la respuesta", () => {
+  it("un chunk con la ETIQUETA del resumen sale como `resumen`, no como token", async () => {
+    const e = await recoger([
+      [["model_request:abc"], "messages", [{ text: "## Resumen", id: "s1" }, { tags: ["xonecode:resumen"] }]],
+      [["model_request:abc"], "messages", [{ text: "hola", id: "r1" }, { tags: [] }]],
+    ]);
+    expect(e).toEqual([
+      { tipo: "resumen", texto: "## Resumen", msgId: "s1" },
+      { tipo: "token", texto: "hola", msgId: "r1" },
+    ]);
+  });
+
+  it("la etiqueta se compara con la CONSTANTE de quien la pone", async () => {
+    const { ETIQUETA_DEL_RESUMEN } = await import("./resumenDeContexto.js");
+    expect(ETIQUETA_DEL_RESUMEN).toBe("xonecode:resumen");
+  });
+});

@@ -701,6 +701,25 @@ describe("Chat: lo que dice el harness", () => {
     ]);
   });
 
+  it("el resumen de contexto se pliega en su propio tramo y se lee como MARKDOWN", () => {
+    const { container } = render(
+      <Chat
+        actos={[
+          { tipo: "sistema", texto: "## Qué se hace\n\n- crear `Calculadora.xne`", clase: "resumen" },
+          aviso("MAP_COLOR5 sin_markdown"),
+        ]}
+      />
+    );
+    const detalles = [...container.querySelectorAll("details")];
+    expect(detalles[0]!.querySelector("summary")!.textContent).toMatch(/Resumen del contexto · 1 resumen\b/u);
+    // Markdown de verdad: un título y código en línea, no el texto con sus almohadillas.
+    expect(detalles[0]!.querySelector("h2")?.textContent).toBe("Qué se hace");
+    expect(detalles[0]!.querySelector("code")?.textContent).toBe("Calculadora.xne");
+    // Y un aviso NO pasa por markdown: los guiones bajos se quedan como están.
+    expect(detalles[1]!.textContent).toContain("MAP_COLOR5 sin_markdown");
+    expect(detalles[1]!.querySelector("em")).toBeNull();
+  });
+
   it("uno solo se dice en SINGULAR: un plural mentido es una cifra que nadie midió", () => {
     const { container } = render(<Chat actos={[permiso("developer-xone: quiere escribir")]} />);
     expect(container.querySelector("summary")!.textContent).toMatch(/Permisos · 1 escritura\b/u);
