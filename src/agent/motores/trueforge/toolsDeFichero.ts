@@ -22,6 +22,7 @@
 import { posix } from "node:path";
 import micromatch from "micromatch";
 import { toolResultResponse } from "@truefoundry/trueforge-core/core";
+import { desalojarSiGrande, MAXIMO_DE_COINCIDENCIAS, truncarSiLargo } from "./recortes.js";
 
 /** El backend de deepagents en su versión nueva, en lo que se usa. */
 export interface BackendDeFicheros {
@@ -129,7 +130,7 @@ async function ejecutar(backend: BackendDeFicheros, nombre: ToolDeFichero, args:
     case "ls": {
       const r = (await backend.ls(s(args.path) || "/")) as Resultado & { files?: { path: string; is_dir?: boolean }[] };
       if (r.error !== undefined) return { texto: r.error, error: true };
-      return { texto: (r.files ?? []).map((f) => (f.is_dir === true ? `${f.path}/` : f.path)).join("\n") || "(vacío)", error: false };
+      return { texto: truncarSiLargo((r.files ?? []).map((f) => (f.is_dir === true ? `${f.path}/` : f.path)).join("\n")) || "(vacío)", error: false };
     }
     case "read_file": {
       const offset = typeof args.offset === "number" && args.offset > 0 ? Math.floor(args.offset) : 0;
@@ -154,14 +155,19 @@ async function ejecutar(backend: BackendDeFicheros, nombre: ToolDeFichero, args:
     case "glob": {
       const r = (await backend.glob(s(args.pattern), s(args.path) || "/")) as Resultado & { files?: { path: string }[] };
       if (r.error !== undefined) return { texto: r.error, error: true };
-      return { texto: (r.files ?? []).map((f) => f.path).join("\n") || "(ninguno)", error: false };
+      return { texto: truncarSiLargo((r.files ?? []).map((f) => f.path).join("\n")) || "(ninguno)", error: false };
     }
     case "grep": {
       const r = (await backend.grep(s(args.pattern), s(args.path) || "/", s(args.glob) || null)) as Resultado & {
         matches?: { path: string; line: number; text: string }[];
       };
       if (r.error !== undefined) return { texto: r.error, error: true };
-      return { texto: (r.matches ?? []).map((m) => `${m.path}:${m.line}: ${m.text}`).join("\n") || "(sin coincidencias)", error: false };
+      // El tope de coincidencias y el truncado de deepagents (`recortes.ts`): sin ellos un `grep`
+      // sobre la raíz metía cientos de líneas que se reenviaban en cada llamada siguiente.
+      const todas = r.matches ?? [];
+      const lineas = todas.slice(0, MAXIMO_DE_COINCIDENCIAS).map((m) => `${m.path}:${m.line}: ${m.text}`);
+      const resto = todas.length > MAXIMO_DE_COINCIDENCIAS ? `\n... [${todas.length - MAXIMO_DE_COINCIDENCIAS} coincidencias más: afina el patrón o la ruta]` : "";
+      return { texto: truncarSiLargo(lineas.join("\n") + resto) || "(sin coincidencias)", error: false };
     }
   }
 }
@@ -232,6 +238,8 @@ export const TOOLS_DE_LECTURA: readonly ToolDeFichero[] = ["ls", "read_file", "g
 /** Lo que devuelve la shell de deepagents (`ExecuteResponse`), en lo que se usa. */
 interface BackendQueEjecuta {
   execute(comando: string): unknown;
+  /** Para desalojar una salida grande a `/large_tool_results/`, como deepagents. */
+  write(ruta: string, contenido: string): unknown;
 }
 
 /**
@@ -272,7 +280,8 @@ export function fuenteDeEjecucion(backend: BackendQueEjecuta) {
         const r = (await backend.execute(comando)) as { output?: string; exitCode?: number | null; truncated?: boolean };
         const salida = `${r.output ?? ""}${r.truncated === true ? "\n[salida truncada]" : ""}`;
         const codigo = r.exitCode ?? 0;
-        return toolResultResponse({ text: `${salida}\n[exit code ${codigo}]`, isError: codigo !== 0 });
+        const texto = await desalojarSiGrande(`${salida}\n[exit code ${codigo}]`, backend);
+        return toolResultResponse({ text: texto, isError: codigo !== 0 });
       } catch (e) {
         return toolResultResponse({ text: e instanceof Error ? e.message : String(e), isError: true });
       }

@@ -11,6 +11,7 @@
  */
 import { toolResultResponse } from "@truefoundry/trueforge-core/core";
 import { toJsonSchema } from "@langchain/core/utils/json_schema";
+import { desalojarSiGrande, type EscritorDeDesalojo } from "./recortes.js";
 
 /** Lo que se usa de una tool de LangChain: su nombre, su descripción, su esquema y llamarla. */
 export interface ToolDeLangchain {
@@ -29,7 +30,7 @@ function textoDeResultado(r: unknown): string {
 }
 
 /** Un `ToolSource` de TrueForge con estas tools, llamadas tal cual. */
-export function fuenteDeLangchain(tools: readonly ToolDeLangchain[]) {
+export function fuenteDeLangchain(tools: readonly ToolDeLangchain[], backend: EscritorDeDesalojo) {
   const porNombre = new Map(tools.map((t) => [t.name, t]));
   return {
     name: "xone-propias",
@@ -49,7 +50,10 @@ export function fuenteDeLangchain(tools: readonly ToolDeLangchain[]) {
       const t = porNombre.get(params.name);
       if (t === undefined) return toolResultResponse({ text: `tool desconocida: ${params.name}`, isError: true });
       try {
-        return toolResultResponse({ text: textoDeResultado(await t.invoke(params.arguments ?? {})), isError: false });
+        // Las propias SÍ se desalojan cuando son grandes: no son de fichero, y en deepagents el
+        // `FilesystemMiddleware` solo exime a esas (`recortes.ts`).
+        const texto = await desalojarSiGrande(textoDeResultado(await t.invoke(params.arguments ?? {})), backend);
+        return toolResultResponse({ text: texto, isError: false });
       } catch (e) {
         // Una tool que LANZA —un argumento que no pasa su esquema, por ejemplo— no tumba el turno:
         // se le devuelve al modelo, que puede corregirse, como las guardas.

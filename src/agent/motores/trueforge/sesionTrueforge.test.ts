@@ -332,4 +332,43 @@ describe("una sesión con el motor TrueForge", () => {
     expect(vistos[1]!.join("\n")).toContain("Clientes  /clientes.xne");
     expect(pi.tokens.join("")).toBe("Hay una: Clientes.");
   }, 30_000);
+
+  it("una salida GRANDE de `execute` se desaloja a `/large_tool_results/`: al hijo le llega la ruta, no el volcado", async () => {
+    const raiz = proyecto();
+    const artefactos = join(raiz, ".xonecode", "sesiones", "s1", "artefactos");
+    const { m, vistos } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "device-controller", input: "saca el log" }) }] })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "x1", name: "execute", args: JSON.stringify({ command: "head -c 60000 /dev/zero | tr '\\0' a" }) }] })],
+      [new AIMessageChunk({ content: "Log revisado." })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, artefactos });
+    await s.turno("saca el log", piel().p);
+    const visto = vistos[2]!.join("\n");
+    expect(visto).toMatch(/se guardó en \/large_tool_results\//);
+    expect(visto).not.toContain("a".repeat(30_000));
+  }, 30_000);
+
+  it("el raíz se COMPACTA al umbral de deepagents, y el resumen también cuenta en el gasto", async () => {
+    const raiz = proyecto();
+    const { m, vistos } = modelosConGuion([
+      [
+        new AIMessageChunk({
+          content: "",
+          tool_call_chunks: [{ index: 0, id: "n1", name: "ls", args: JSON.stringify({ path: "/" }) }],
+          usage_metadata: { input_tokens: 40_000, output_tokens: 10, total_tokens: 40_010 },
+        }),
+      ],
+      // La compactación: una llamada entera, antes de la siguiente del raíz.
+      [new AIMessageChunk({ content: "RESUMEN-DE-LA-CONVERSACION", usage_metadata: { input_tokens: 900, output_tokens: 50, total_tokens: 950 } })],
+      [new AIMessageChunk({ content: "Listo.", usage_metadata: { input_tokens: 1_000, output_tokens: 2, total_tokens: 1_002 } })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("mira la raíz", piel().p);
+    expect(vistos[1]!.join("\n")).toMatch(/summary of the conversation/);
+    expect(vistos[2]!.join("\n")).toContain("RESUMEN-DE-LA-CONVERSACION");
+    // Las tres llamadas pagan, la del resumen incluida; la ventana es la de la ÚLTIMA normal.
+    expect(s.consumo().modelo).toMatchObject({ entrada: 41_900, salida: 62 });
+    expect(s.consumo().contexto).toBe(1_000);
+  }, 30_000);
 });

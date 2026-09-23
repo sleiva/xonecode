@@ -20,7 +20,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import winston from "winston";
-import { AgentThread, AgentThreadOrchestrator, EventType, ToolSet, dynamicSubAgents } from "@truefoundry/trueforge-core/core";
+import { AgentThread, AgentThreadOrchestrator, EventType, ToolSet, contextCompaction, dynamicSubAgents } from "@truefoundry/trueforge-core/core";
+import { UMBRAL_RESUMEN_TOKENS } from "../../turno/resumenDeContexto.js";
 import { NOOP_AGENT_TRACING } from "@truefoundry/trueforge-core/core/tracing/NoopAgentTracing";
 import type { DomainEvent, PendienteDeAprobacion } from "../../../core/events.js";
 import type { ConsumoDeSesionPorCuenta, ModelosPort, SkillInfo } from "../../../core/ports.js";
@@ -236,7 +237,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       : []),
   ];
   const conjuntoDePropias = (tools: ToolDeLangchain[]) =>
-    new ToolSet({ source: fuenteDeLangchain(tools) as never, selectors: SIN_APROBACION, preload: true });
+    new ToolSet({ source: fuenteDeLangchain(tools, backend as never) as never, selectors: SIN_APROBACION, preload: true });
 
   const toolsDelRaiz = new ToolSet({
     source: fuenteDeFicheros({ backend, reglas: permisosDe(PERFIL_DEL_ORQUESTADOR), tools: TOOLS_DE_LECTURA }) as never,
@@ -282,6 +283,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
     if (clase === "ejecuta") {
       const conShell = montarBackend({ entorno: entornoDeLaShellDelProyecto(raiz, opciones.artefactos) }) as unknown as {
         execute(c: string): unknown;
+        write(ruta: string, contenido: string): unknown;
       };
       tools.push(new ToolSet({ source: fuenteDeEjecucion(conShell) as never, selectors: SIN_APROBACION, preload: true }));
     }
@@ -315,15 +317,25 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
 
   /** El árbol de hilos de UNA conversación. Se rehace con `nuevoHilo`. */
   const nuevoOrquestador = (): AgentThreadOrchestrator => {
+    const definicion = {
+      modelClient: llm,
+      instruction: [promptOrquestador(especialistas()), notaDeDelegacion(especialistas())].filter((l) => l !== "").join("\n\n"),
+    };
     const raizDelArbol = new AgentThread({
-      definition: {
-        modelClient: llm,
-        instruction: [promptOrquestador(especialistas()), notaDeDelegacion(especialistas())].filter((l) => l !== "").join("\n\n"),
-      },
+      definition: definicion,
       threadId: HILO_RAIZ,
       title: HILO_RAIZ,
       capabilities: [
         { systemToolSets: [toolsDelRaiz, conjuntoDePropias(propiasDelRaiz)] },
+        /**
+         * **La conversación se RESUME al mismo umbral que deepagents** (`UMBRAL_RESUMEN_TOKENS`):
+         * sin esto no se compactaba nunca y cada turno reenviaba la sesión entera. Solo en el
+         * RAÍZ, y es a propósito: la compactación de TrueForge sustituye el contexto ENTERO por
+         * el resumen, y el prompt de un hijo viaja en su primer mensaje —la librería no deja
+         * ponérselo aparte—, así que en un hijo se llevaría sus propias instrucciones. El del
+         * raíz va en `instruction`, que no se compacta.
+         */
+        contextCompaction({ definition: definicion as never, compactionThresholdTokens: UMBRAL_RESUMEN_TOKENS }),
         // `create_sub_agent`: la delegación de TrueForge, un nivel y cinco a la vez como mucho.
         dynamicSubAgents({ sandboxAvailable: false, tracing: NOOP_AGENT_TRACING }),
       ] as never,
@@ -382,7 +394,8 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
         tracker.output += uso.output;
         tracker.cache += uso.cache;
         tracker.calls += 1;
-        if (deHilo === HILO_RAIZ) tracker.contexto = uso.input;
+        // Y solo de una llamada NORMAL: la de la compactación mide lo de ANTES de resumir.
+        if (deHilo === HILO_RAIZ && evento.type === "internal.agent.context.append") tracker.contexto = uso.input;
         avisar();
       }
       yield* eventos;
