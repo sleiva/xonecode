@@ -608,6 +608,18 @@ no viaja porque ahí la ejecución no se concede—. Reglas duras:
   `workspace-write`: así las guardas de ruta siguen enteras, que es justo lo que `core/tareas.ts`
   exige.
 
+### El segundo motor: TrueForge (rama `xonecode-trueforge`)
+
+`core/motor.ts`, `agent/motores/trueforge/`, `docs/VARIANTE-TRUEFORGE-HARNESS.md`. **Se elige por
+configuración y no se ve** (`"motor"` en `config.json`, `XONECODE_MOTOR`; omisión `deepagents`), y
+**la elección vive en UN punto, `abrirSesionReal`**, por el que pasan la web, el terminal, `run`, el
+banco y los evals. Una sesión guarda en el índice el motor con el que nació: la memoria de uno no la
+continúa el otro. Cumple el mismo `SesionReal`, así que ninguna piel sabe cuál corre. Tres reglas:
+**el modelo es NUESTRO** (un `ILLM` sobre el de LangChain, nunca su `VercelAILLM`, que perdería el
+`user_id`, el eco y el esfuerzo); **las tools delegan en `backendDeAgente`** y reevalúan las reglas de
+`permisosDe`, que en deepagents son middleware y aquí nadie aplicaría; y **`core/` no importa
+`@truefoundry/` ni `winston`** (`imports.test.ts`). Fase 0: sin subagentes, verificador ni navegación.
+
 ### La aprobación
 
 - **Fail-closed: lo que no se entiende es RECHAZO** (`cli/aprobar.ts`, `vendor/hitl.ts`). El Enter

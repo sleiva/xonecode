@@ -471,3 +471,57 @@ subagente sobre la copia local, con estado, eventos, cancelación y resultado co
 Si esa prueba confirma que el runtime puede aislarse sin arrastrar el producto completo,
 XOneCode puede avanzar hacia subagentes dinámicos y persistencia propia. CloudStudio permanece
 fuera de ese runtime y continúa siendo una integración determinista controlada por el CLI.
+
+## Estado: Fase 0 hecha (23-09-2026)
+
+**Cómo se integró.** Como librería y no como port: `@truefoundry/trueforge-core` **0.2.1, versión
+exacta** (MIT; su API es 0.x sin garantía de compatibilidad). Corre en proceso **sin ninguna
+infraestructura** —ni NATS, ni Redis, ni Postgres, ni Daytona— con `AgentThread` y
+`AgentThreadOrchestrator`. Portar el núcleo sigue siendo una opción si alguna de sus rigideces
+estorba (abajo).
+
+**El motor se elige por configuración y no se ve.** `"motor": "trueforge"` en el `config.json` del
+proyecto o en el global, o `XONECODE_MOTOR=trueforge`; por omisión, `deepagents`. Cada sesión guarda
+en el índice el motor con el que nació y lo conserva al reabrirla, porque la memoria de un motor no
+la continúa el otro. La elección vive en un solo punto, `abrirSesionReal`, por el que pasan la web,
+el terminal, `run`, el banco y los evals (`core/motor.ts`, `agent/motores/trueforge/`).
+
+**Lo que ya funciona con TrueForge**, con el mismo contrato `SesionReal` que deepagents —la interfaz
+no nota la diferencia—:
+
+| Pieza | Cómo |
+|---|---|
+| Modelo | Un `ILLM` propio sobre NUESTRO modelo de LangChain, no su `VercelAILLM`: así se conservan el `user_id` de DeepSeek, el eco de razonamiento, el tope de salida y el esfuerzo por modelo |
+| Tools | `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`, con los nombres y argumentos de deepagents, delegando en `backendDeAgente` —sus guardas van gratis— y evaluando las reglas de `permisosDe` con la semántica de deepagents |
+| Aprobación | Cada escritura para el turno (`requireApprovalForTools`), se decide con el mismo `pedirAprobacion` y el mismo diff (`cambioDe`), y se reanuda con `user.tool_approval` |
+| Modo autónomo, artefactos | Igual que en deepagents: autónomo aprueba y lo avisa con los nombres; un artefacto no pregunta y se anuncia |
+| Eventos | Traducidos a los de dominio con las reglas del puente: sin argumentos de tool, solo habla el hilo raíz |
+| Cancelación, tokens, cambios | También si se cancela mientras se decide una aprobación |
+
+**Medido de punta a punta** con `deepseek-flash` sobre una copia de AppDemo, la misma pregunta de
+solo lectura («¿colección de entrada y dónde se declara?»):
+
+| | deepagents | TrueForge |
+|---|---|---|
+| Respuesta | correcta | correcta |
+| Llamadas | 2 | 4 |
+| Entrada | 12.426 | 15.138 |
+| Caché | 94 % | 48 % |
+| Cómo se orientó | `xone_navegacion` | `glob` + `read_file` + `grep` |
+
+La diferencia es lo que falta, no el motor: TrueForge todavía no tiene `xone_navegacion` ni los
+hechos del proyecto precargados, y envuelve el prompt con su identidad, que no se puede quitar.
+
+**Lo que NO hay todavía**, y en este orden sería lo siguiente:
+
+1. `xone_navegacion`, `regex_search` y los hechos del proyecto: es lo que cierra la diferencia medida.
+2. El verificador con su reparación, el juez del turno y el crítico de pantalla. Hoy un turno que
+   escribe lo avisa, como deepagents cuando su verificador no corre.
+3. Subagentes, emulando los cinco especialistas en `createDynamicSubAgentThread`.
+4. La memoria del hilo en disco: hoy vive en memoria y reabrir una sesión de TrueForge empieza de cero.
+5. Deshacer la dependencia circular entre `turnoReal.ts` y `sesionTrueforge.ts`.
+
+**Las rigideces de la librería** que podrían llevar a portarla: envuelve siempre el prompt con su
+identidad; prefija cada tool con `mcp server:`; el prompt de un subagente no se puede personalizar y no
+hay subagentes con nombre; las tools no reciben señal de cancelación; como mucho 5 subagentes en paralelo
+y un solo nivel.
