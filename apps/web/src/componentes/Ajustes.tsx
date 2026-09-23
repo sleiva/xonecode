@@ -339,7 +339,7 @@ export function Ajustes({
   proveedores?: readonly ProveedorDeModelos[];
   /** Los entornos REGISTRADOS (`settings.json`), no los ofrecidos por el alta. `proyectos`
    *  es la elección de cuáles se enseñan; ausente = no se ha dicho. */
-  entornos?: readonly { id: string; nombre: string; url: string; proyectos?: readonly string[] }[];
+  entornos?: readonly { id: string; nombre: string; url: string; proyectos?: readonly string[]; copias?: number }[];
   /**
    * Los proyectos del entorno ACTIVO, tal cual los devolvió CloudStudio y tal como vienen
    * en el `alta`. Los de los DEMÁS entornos llegan por `proyectosPorEntorno`, que se pide
@@ -380,7 +380,7 @@ export function Ajustes({
    * abierto, una tarea sin terminar) y `undefined` si lo quitó. La regla vive en el servidor;
    * aquí solo se enseña. Ausente = no se ofrece el botón.
    */
-  alQuitarEntorno?: (entorno: string) => Promise<string | undefined>;
+  alQuitarEntorno?: (entorno: string, modo: { borrarCopias: boolean }) => Promise<string | undefined>;
   /**
    * El motivo del último paso del alta que falló (`alta.aviso`). Aquí se usa para el REGISTRO
    * de un entorno: un entorno nuevo que no conecta ya no se guarda, así que sin esto el
@@ -1891,15 +1891,19 @@ export function Ajustes({
               */}
               {!registrando && entornoEnPestana !== undefined ? (
                 <div role="tabpanel" className={estilos.panelDePestana}>
-                  <p className={estilos.url}>{entornos.find((e) => e.id === entornoEnPestana)?.url}</p>
-                  {alQuitarEntorno === undefined ? null : (
-                    <QuitarEntorno
-                      key={entornoEnPestana}
-                      entorno={entornos.find((e) => e.id === entornoEnPestana)!}
-                      conectado={conectado}
-                      alQuitar={alQuitarEntorno}
-                    />
-                  )}
+                  {/* La URL y lo que se hace CON ella, en una fila: el botón de quitar suelto en
+                      su propio renglón, lejos de lo que quita, se leía como de otra cosa. */}
+                  <div className={estilos.filaDeUrl}>
+                    <p className={estilos.url}>{entornos.find((e) => e.id === entornoEnPestana)?.url}</p>
+                    {alQuitarEntorno === undefined ? null : (
+                      <QuitarEntorno
+                        key={entornoEnPestana}
+                        entorno={entornos.find((e) => e.id === entornoEnPestana)!}
+                        conectado={conectado}
+                        alQuitar={alQuitarEntorno}
+                      />
+                    )}
+                  </div>
                   <div className={estilos.cabeceraDeProyectos}>
                     <h3 className={estilos.subencabezado}>Proyectos en la barra</h3>
                     {alPedirProyectosDeEntorno === undefined ? null : (
@@ -2174,48 +2178,81 @@ function QuitarEntorno({
   conectado,
   alQuitar,
 }: {
-  entorno: { id: string; nombre: string };
+  entorno: { id: string; nombre: string; copias?: number };
   conectado: boolean;
-  alQuitar: (entorno: string) => Promise<string | undefined>;
+  alQuitar: (entorno: string, modo: { borrarCopias: boolean }) => Promise<string | undefined>;
 }) {
   const [confirmando, setConfirmando] = useState(false);
   const [quitando, setQuitando] = useState(false);
   const [motivo, setMotivo] = useState<string | undefined>(undefined);
+  // DESMARCADA siempre al abrir: borrar las copias es lo que no tiene vuelta atrás, y tiene
+  // que ser una decisión, no lo que ya estaba puesto.
+  const [borrarCopias, setBorrarCopias] = useState(false);
+  // El NOMBRE escrito: dos clics rápidos en el mismo sitio no pueden quitar un entorno.
+  const [escrito, setEscrito] = useState("");
+  const confirmado = escrito.trim() === entorno.nombre;
+  const copias = entorno.copias ?? 0;
   if (!confirmando) {
     return (
-      <div className={estilos.quitarEntorno}>
+      <>
         <button
           type="button"
-          className={estilos.recargar}
+          className={estilos.quitar}
           disabled={!conectado}
           onClick={() => {
             setMotivo(undefined);
+            setBorrarCopias(false);
+            setEscrito("");
             setConfirmando(true);
           }}
         >
           Quitar entorno
         </button>
         {motivo === undefined ? null : (
-          <p role="alert" className={estilos.aviso}>
+          <p role="alert" className={`${estilos.aviso} ${estilos.anchoEntero}`}>
             No se ha quitado: {motivo}
           </p>
         )}
-      </div>
+      </>
     );
   }
   return (
-    <div className={estilos.quitarEntorno} role="group" aria-label={`Quitar ${entorno.nombre}`}>
-      <p className={estilos.nota}>
-        ¿Quitar <strong>{entorno.nombre}</strong>? Deja de estar en la lista y se olvida su sesión
-        de CloudStudio. Las copias ya bajadas se quedan en el disco.
+    // `alertdialog`: es una pregunta de SEGURIDAD —quita credenciales— y no una nota más.
+    <div className={estilos.confirmarQuitar} role="alertdialog" aria-label={`Quitar ${entorno.nombre}`}>
+      <p className={estilos.tituloDeAviso}>
+        <span aria-hidden="true">⚠</span> Atención: vas a quitar <strong>{entorno.nombre}</strong>
       </p>
+      <p className={estilos.textoDeAviso}>
+        Se borra de la lista y se <strong>cierra su sesión de CloudStudio</strong>: para volver a
+        usarlo tendrás que registrarlo y entrar otra vez.{" "}
+        {borrarCopias
+          ? "Y se BORRAN sus copias locales: el trabajo que no hayas subido se pierde para siempre."
+          : "Las copias ya bajadas se quedan en el disco."}
+      </p>
+      {copias === 0 ? null : (
+        <label className={estilos.casillaDeAviso}>
+          <input type="checkbox" checked={borrarCopias} onChange={(e) => setBorrarCopias(e.target.checked)} />
+          Borrar también las copias locales de este entorno ({copias} {copias === 1 ? "proyecto" : "proyectos"})
+        </label>
+      )}
+      <label className={estilos.escribirNombre}>
+        Escribe <strong>{entorno.nombre}</strong> para confirmar
+        <input
+          type="text"
+          value={escrito}
+          autoFocus
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(e) => setEscrito(e.target.value)}
+        />
+      </label>
       <button
         type="button"
-        className={estilos.recargar}
-        disabled={quitando}
+        className={estilos.quitarLleno}
+        disabled={quitando || !confirmado}
         onClick={async () => {
           setQuitando(true);
-          const negativa = await alQuitar(entorno.id);
+          const negativa = await alQuitar(entorno.id, { borrarCopias });
           setQuitando(false);
           setConfirmando(false);
           setMotivo(negativa);

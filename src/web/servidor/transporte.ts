@@ -823,6 +823,9 @@ export type MensajeAlCliente =
  */
 export interface EntornoRegistrado extends OpcionDeEntorno {
   proyectos?: string[];
+  /** Cuántas carpetas de proyecto tiene en el workspace. Ausente = no se pudo mirar, que no
+   *  es cero: con cero la casilla de borrarlas no se ofrece. */
+  copias?: number;
 }
 
 /**
@@ -1129,7 +1132,14 @@ export type MensajeDelCliente =
    * ahora (un proyecto suyo abierto, una tarea sin terminar): la negativa vive allí, y así el
    * cliente la enseña sin llevar una copia de la regla. Sus copias locales se quedan.
    */
-  | { clase: "entorno"; accion: "olvidar"; entorno: string }
+  | {
+      clase: "entorno";
+      accion: "olvidar";
+      entorno: string;
+      /** Borrar además `<workspace>/<entorno>/` entera. Solo con la casilla marcada y el
+       *  nombre escrito; ausente = las copias se quedan. */
+      borrarCopias?: boolean;
+    }
   /** Cambiar de entorno ACTIVO: el de cuyos proyectos se habla. Trae su listado consigo. */
   | { clase: "entorno"; accion: "activo"; entorno: string }
   /**

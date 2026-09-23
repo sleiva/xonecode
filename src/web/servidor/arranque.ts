@@ -129,6 +129,8 @@ import {
   guardarDispositivos,
   guardarEntorno as guardarEntornoEnDisco,
   olvidarEntornoDeSettings,
+  copiasDeEntorno,
+  borrarCopiasDeEntorno,
 } from "../../agent/config/settingsEnDisco.js";
 import {
   dentroDelWorkspace,
@@ -871,6 +873,11 @@ export function montarRutas(
         // Solo si el entorno lo dice: ausente es «no lo he elegido», y el cliente aplica su
         // omisión. Mandar `[]` en su lugar sería decir «ninguno», que es otra cosa.
         ...(e.proyectos === undefined ? {} : { proyectos: [...e.proyectos] }),
+        // Cuántas copias tiene bajadas: lo que la casilla de «borrarlas también» cuenta.
+        ...(() => {
+          const copias = copiasDeEntorno(opciones.workspace?.() ?? baseDeWorkspacePorOmision(), e.id);
+          return copias === undefined ? {} : { copias };
+        })(),
       })),
       // Cada proyecto con las sesiones de su copia local. Se recalcula en cada anuncio: una
       // sesión nueva aparece en cuanto se abre, sin que nadie recargue.
@@ -4073,9 +4080,17 @@ export function montarRutas(
         return;
       }
       const olvidado = mensaje.entorno;
+      const borrarCopias = mensaje.borrarCopias === true;
       void vestibulo
         .olvidarEntorno(olvidado)
         .then(() => {
+          // Las copias, DESPUÉS de quitar el entorno y solo con la casilla marcada: si quitar
+          // falla, no se ha borrado nada del disco. La guarda de «nada abierto, ninguna tarea
+          // viva» ya se comprobó arriba, antes del 204.
+          if (borrarCopias) {
+            const cuantas = borrarCopiasDeEntorno(opciones.workspace?.() ?? baseDeWorkspacePorOmision(), olvidado);
+            informar(`borradas las copias locales de «${olvidado}» (${cuantas} ${cuantas === 1 ? "proyecto" : "proyectos"})`);
+          }
           // El entorno de la barra, si era ése, deja de estar: el alta siguiente ya no lo
           // trae, y un `entornoActivo` que nombra a uno que no existe es un dato inventado.
           if (entornoElegido === olvidado) {

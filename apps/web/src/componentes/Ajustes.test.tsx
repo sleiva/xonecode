@@ -1413,7 +1413,8 @@ describe("Ajustes: quitar un entorno", () => {
     const alQuitarEntorno = vi.fn(async () => undefined);
     render(<Ajustes entornos={entornos} entornoActivo="webstudio" seccionInicial="entornos" conectado alQuitarEntorno={alQuitarEntorno} alCerrar={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: "Quitar entorno" }));
-    expect(screen.getByText(/copias ya bajadas se quedan/)).toBeTruthy();
+    // Es un aviso de SEGURIDAD: dice que se cierra la sesión de CloudStudio, no solo que se quita.
+    expect(screen.getByRole("alertdialog").textContent).toMatch(/Atención.*cierra su sesión de CloudStudio.*copias ya bajadas se quedan/s);
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
     expect(alQuitarEntorno).not.toHaveBeenCalled();
   });
@@ -1437,5 +1438,49 @@ describe("Ajustes: registrar un entorno que no conecta", () => {
     rerender(<Ajustes {...props} avisoDelAlta="no se ha registrado el entorno «mcp.casa.example»: no es un servidor MCP" />);
     expect(screen.getByRole("alert").textContent).toMatch(/no se ha registrado el entorno/);
     expect(screen.getByLabelText("URL del MCP")).toBeTruthy();
+  });
+});
+
+
+describe("Ajustes: quitar un entorno, contra un clic por error", () => {
+  afterEach(cleanup);
+  const conCopias = [{ id: "manager", nombre: "XOne Manager", url: "https://mcp.xonemanager.com/mcp", copias: 3 }];
+  const abrir = (alQuitarEntorno = vi.fn(async () => undefined), entornos = conCopias) => {
+    render(<Ajustes entornos={entornos} entornoActivo="manager" seccionInicial="entornos" conectado alQuitarEntorno={alQuitarEntorno} alCerrar={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Quitar entorno" }));
+    return alQuitarEntorno;
+  };
+
+  it("el botón rojo no se activa hasta escribir el NOMBRE del entorno", () => {
+    abrir();
+    const quitar = screen.getByRole("button", { name: "Quitar" }) as HTMLButtonElement;
+    expect(quitar.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText(/para confirmar/), { target: { value: "XOne Manag" } });
+    expect(quitar.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText(/para confirmar/), { target: { value: "XOne Manager" } });
+    expect(quitar.disabled).toBe(false);
+  });
+
+  it("la casilla de borrar las copias sale DESMARCADA, y sin marcarla no se borran", async () => {
+    const alQuitar = abrir();
+    const casilla = screen.getByRole("checkbox", { name: /Borrar también las copias locales.*3 proyectos/ }) as HTMLInputElement;
+    expect(casilla.checked).toBe(false);
+    fireEvent.change(screen.getByLabelText(/para confirmar/), { target: { value: "XOne Manager" } });
+    fireEvent.click(screen.getByRole("button", { name: "Quitar" }));
+    await waitFor(() => expect(alQuitar).toHaveBeenCalledWith("manager", { borrarCopias: false }));
+  });
+
+  it("marcada, lo DICE en el aviso y lo pide", async () => {
+    const alQuitar = abrir();
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(screen.getByRole("alertdialog").textContent).toMatch(/se BORRAN sus copias locales/);
+    fireEvent.change(screen.getByLabelText(/para confirmar/), { target: { value: "XOne Manager" } });
+    fireEvent.click(screen.getByRole("button", { name: "Quitar" }));
+    await waitFor(() => expect(alQuitar).toHaveBeenCalledWith("manager", { borrarCopias: true }));
+  });
+
+  it("sin copias que borrar, la casilla no se ofrece", () => {
+    abrir(undefined, [{ ...conCopias[0]!, copias: 0 }]);
+    expect(screen.queryByRole("checkbox")).toBeNull();
   });
 });

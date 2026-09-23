@@ -8445,6 +8445,28 @@ describe("el cable: quitar un entorno", () => {
     expect(olvidados).toEqual(["webstudio"]);
   });
 
+  it("las copias del entorno se borran SOLO con `borrarCopias`: sin la marca se quedan", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xc-quitar-copias-"));
+    mkdirSync(join(base, "webstudio", "Tienda"), { recursive: true });
+    const quitar = async (borrarCopias: boolean) => {
+      const servidor = servidorDeMentira();
+      montarRutas(servidor, vestibuloDePrueba(), { workspace: () => base });
+      const r = await postearConCuerpo(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, {
+        clase: "entorno",
+        accion: "olvidar",
+        entorno: "webstudio",
+        ...(borrarCopias ? { borrarCopias: true } : {}),
+      });
+      await asentar();
+      return r.estado;
+    };
+    expect(await quitar(false)).toBe(204);
+    expect(existsSync(join(base, "webstudio", "Tienda"))).toBe(true);
+    expect(await quitar(true)).toBe(204);
+    expect(existsSync(join(base, "webstudio"))).toBe(false);
+    rmSync(base, { recursive: true, force: true });
+  });
+
   it("con una tarea de fondo sin terminar en ese entorno, 409 con el MOTIVO y no se toca nada", async () => {
     const olvidados: string[] = [];
     const servidor = servidorDeMentira();

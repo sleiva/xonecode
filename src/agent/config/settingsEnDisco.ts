@@ -15,8 +15,11 @@ import {
   existsSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
+  rmSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -29,6 +32,8 @@ import {
   Entorno,
   Settings,
   TOPE_DE_CONCURRENCIA_DE_TAREAS,
+  dentroDelWorkspace,
+  segmentoSeguro,
   validarSettings,
 } from "../../core/settings.js";
 
@@ -216,4 +221,39 @@ export function olvidarEntornoDeSettings(casa: string | undefined, id: string): 
   const quedan = listaBruta.filter((e) => !(esObjeto(e) && e.id === id));
   escribirAtomico(ruta, JSON.stringify({ ...base, entornos: quedan }, null, 2) + "\n");
   return { ruta };
+}
+
+/** Las carpetas de proyecto bajo `<workspace>/<entorno>/`, o `undefined` si no se pueden mirar
+ *  (ausente es «no consta», que no es cero). Sin la basura del sistema. */
+export function copiasDeEntorno(base: string, entorno: string): number | undefined {
+  try {
+    const carpeta = join(base, segmentoSeguro(entorno, "id de entorno"));
+    if (!existsSync(carpeta)) return 0;
+    return readdirSync(carpeta, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.name.startsWith(".")).length;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Borra `<workspace>/<entorno>/` ENTERA: las copias de todos sus proyectos, con su trabajo sin
+ * subir, sus sesiones y su git. Solo lo pide quitar un entorno con la casilla marcada y el
+ * nombre escrito, y quien llama ya ha comprobado que no hay nada abierto ni tareas vivas.
+ *
+ * La barrera es la de siempre y va AQUÍ, no solo en quien llama: el id pasa por
+ * `segmentoSeguro` (un id de un solo segmento, sin `..`), y la carpeta tiene que estar dentro
+ * del workspace por el TEXTO y por el camino REAL — un enlace que apuntara fuera pasaría la
+ * primera. Devuelve cuántas carpetas de proyecto había.
+ */
+export function borrarCopiasDeEntorno(base: string, entorno: string): number {
+  const carpeta = join(base, segmentoSeguro(entorno, "id de entorno"));
+  if (!existsSync(carpeta)) return 0;
+  const real = realpathSync(carpeta);
+  const baseReal = realpathSync(base);
+  if (!dentroDelWorkspace(carpeta, base) || !dentroDelWorkspace(real, baseReal)) {
+    throw new Error("no se borra una carpeta fuera del workspace de XOneCode");
+  }
+  const cuantas = copiasDeEntorno(base, entorno) ?? 0;
+  rmSync(carpeta, { recursive: true, force: true });
+  return cuantas;
 }

@@ -1288,10 +1288,15 @@ export function App({
         void enviar({ clase: "entorno", accion: "proyectos", entorno })
       }
       {...(estado.alta?.aviso === undefined ? {} : { avisoDelAlta: estado.alta.aviso })}
-      alQuitarEntorno={async (entorno) => {
+      alQuitarEntorno={async (entorno, { borrarCopias }) => {
         // El servidor contesta 409 con `{ motivo }` si se niega: la regla es suya, y así la
         // negativa llega hasta aquí en vez de quedarse en el terminal.
-        const r = (await enviar({ clase: "entorno", accion: "olvidar", entorno })) as Response | undefined;
+        const r = (await enviar({
+          clase: "entorno",
+          accion: "olvidar",
+          entorno,
+          ...(borrarCopias ? { borrarCopias: true } : {}),
+        })) as Response | undefined;
         if (r?.status !== 409) return undefined;
         try {
           const cuerpo = (await r.json()) as { motivo?: unknown };

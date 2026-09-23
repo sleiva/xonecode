@@ -558,7 +558,7 @@ export type MensajeAlCliente =
        * nadie lo ha dicho —y manda la omisión de la barra—, mientras que una lista vacía es
        * una elección: ninguno.
        */
-      registrados: { id: string; nombre: string; url: string; proyectos?: string[] }[];
+      registrados: { id: string; nombre: string; url: string; proyectos?: string[]; copias?: number }[];
       /** De qué entorno son los `proyectos` de este mensaje. Ausente = de ninguno todavía. */
       entornoActivo?: string;
       /**
@@ -871,7 +871,14 @@ export type MensajeDelCliente =
    * ahora (un proyecto suyo abierto, una tarea sin terminar): la negativa vive allí, y así el
    * cliente la enseña sin llevar una copia de la regla. Sus copias locales se quedan.
    */
-  | { clase: "entorno"; accion: "olvidar"; entorno: string }
+  | {
+      clase: "entorno";
+      accion: "olvidar";
+      entorno: string;
+      /** Borrar además `<workspace>/<entorno>/` entera. Solo con la casilla marcada y el
+       *  nombre escrito; ausente = las copias se quedan. */
+      borrarCopias?: boolean;
+    }
   /** Cambiar de entorno activo: el de cuyos proyectos se habla. */
   | { clase: "entorno"; accion: "activo"; entorno: string }
   /** «Dime los proyectos de este entorno», sin hacerlo activo: las casillas de su pestaña

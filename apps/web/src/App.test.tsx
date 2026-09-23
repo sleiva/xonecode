@@ -272,6 +272,7 @@ describe("App: el secreto y el selector, que también colgaban", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Ajustes" })[0]!);
     fireEvent.click(screen.getByRole("button", { name: "Entornos" }));
     fireEvent.click(screen.getByRole("button", { name: "Quitar entorno" }));
+    fireEvent.change(screen.getByLabelText(/para confirmar/), { target: { value: "XOne WebStudio" } });
     fireEvent.click(screen.getByRole("button", { name: "Quitar" }));
     await waitFor(() =>
       expect(enviar).toHaveBeenCalledWith({ clase: "entorno", accion: "olvidar", entorno: "webstudio" })

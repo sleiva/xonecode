@@ -894,17 +894,125 @@
   font-size: 12px;
 }
 
-/* Quitar un entorno: el botón y, cuando se pulsa, la confirmación en línea con lo que NO se
-   borra. En fila y envolviendo, bajo la URL del entorno. */
-.quitarEntorno {
+/* La URL del entorno y el botón que lo quita, en UNA fila: la URL cede con `margin-right: auto`
+   (ver `.url`) y el botón queda al borde derecho, alineado con «Refrescar». Envuelve, y lo que
+   va a todo el ancho —la confirmación, el motivo de un «no»— baja a su propio renglón. */
+.filaDeUrl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+
+.filaDeUrl > .url {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.anchoEntero {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+/* Quitar es DESTRUCTIVO, y se ve: rojo siempre —texto y filo— y relleno rojo al pasar. Los
+   mismos alias que el botón de borrar una sesión (`AccionDeSesion.module.css`). */
+.quitar {
+  padding: 4px 10px;
+  border: 0.5px solid var(--dsw-alias-state-error-primary);
+  border-radius: 8px;
+  background: none;
+  color: var(--dsw-alias-state-error-primary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.quitar:hover:enabled {
+  background: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-label-primary-inverted);
+}
+
+.quitar:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* El «sí» de la confirmación: relleno rojo, que es el peso de una acción sin papelera. */
+.quitarLleno {
+  padding: 4px 10px;
+  border: 0.5px solid var(--dsw-alias-state-error-primary);
+  border-radius: 8px;
+  background: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-label-primary-inverted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.quitarLleno:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* La confirmación es un AVISO DE SEGURIDAD —quita credenciales—, y se pinta como tal: los
+   alias de advertencia del tema, los mismos que el aviso de trabajo sin commitear. */
+.confirmarQuitar {
+  flex-basis: 100%;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin: 4px 0 12px;
+  padding: 10px 12px;
+  border: 0.5px solid var(--dsw-alias-state-warn-label);
+  border-radius: 8px;
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-state-warn-label);
 }
 
-.quitarEntorno > p {
+.confirmarQuitar > p {
   flex-basis: 100%;
   margin: 0;
+}
+
+.tituloDeAviso {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.textoDeAviso {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* «Cancelar» es el botón secundario de siempre, sin el empuje a la derecha de `.recargar`. */
+.confirmarQuitar > .recargar {
+  margin-left: 0;
+}
+
+/* Dentro del aviso de seguridad: la casilla de borrar las copias y el campo del nombre, a todo
+   el ancho y con el color del aviso. */
+.casillaDeAviso,
+.escribirNombre {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.escribirNombre {
+  flex-wrap: wrap;
+}
+
+.escribirNombre > input {
+  flex: 1;
+  min-width: 160px;
+  padding: 4px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
 }

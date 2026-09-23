@@ -828,7 +828,12 @@ feedback del desarrollador** y no es terminal.
   que pueden ser el juego legado adoptado—; uno que ya estaba no se quita porque hoy no conteste.
   Quitar lo decide el SERVIDOR (proyecto suyo abierto o tarea sin terminar = no) y contesta **409
   con el motivo** en la propia respuesta, porque `informar` no llega al navegador desde el
-  vestíbulo. Las copias bajadas se QUEDAN. La opción del vestíbulo es obligatoria.
+  vestíbulo. Las copias bajadas se QUEDAN salvo con la casilla **«borrar también las copias»,
+  DESMARCADA siempre al abrir** (`borrarCopias`, `settingsEnDisco.ts#borrarCopiasDeEntorno`, con la
+  barrera de ruta por texto y `realpath`), y el botón rojo no se activa hasta **escribir el nombre
+  del entorno**: dos clics rápidos en el mismo sitio no pueden quitar nada. El recuento de copias
+  viaja en `registrados[].copias` —nombrado en la lista blanca del store—. La opción del vestíbulo
+  es obligatoria.
 - **Una copia «bajada» es `config.json` Y `sync.json`** (`vestibulo.ts#esProyectoEnDisco`): el alta
   escribe el `config.json` ANTES de bajar, y con solo él una descarga que fallaba dejaba una
   carpeta vacía que la barra daba por bajada (medido: Bequikly y Conecta2). Y **un fallo de

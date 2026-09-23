@@ -6512,3 +6512,14 @@ OBLIGATORIA, y el cableado de `App` a `Ajustes` tiene su test, porque el prop es
 barra daba por bajada una carpeta vacía y la abría como proyecto. Medido en este Mac: las siete
 copias buenas tienen `sync.json`, y las dos sin él —Bequikly y Conecta2— son justo dos descargas
 que fallaron. Ahora hacen falta los dos.
+
+### Quitar un entorno: aviso de seguridad, casilla de las copias y el nombre escrito
+
+Pedido mirando la pantalla: el botón era «feo», tenía que ser rojo y sacar un aviso de seguridad,
+y «sin querer puede clickear un missclick». Decidido con él: la URL y el botón en una fila; el botón
+rojo siempre; la confirmación, un aviso con los colores de advertencia que dice que se cierra la
+sesión de CloudStudio; una casilla **desmarcada** para borrar también `<workspace>/<entorno>/` —con
+cuántas copias hay—, y el botón rojo solo se activa al **escribir el nombre** del entorno, como
+GitHub al borrar un repo. Borrar las copias va DESPUÉS de quitar el entorno, así que si quitar
+falla no se ha tocado el disco; y la barrera de ruta vive en la función que borra, no solo en
+quien llama.
