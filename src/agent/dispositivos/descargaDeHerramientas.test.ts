@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { zipSync } from "fflate";
 import {
@@ -43,6 +45,15 @@ function respuestaEnTrozos(trozos: Uint8Array[], contentLength?: number): Respon
   } as unknown as Response;
 }
 
+
+/**
+ * El destino de las descargas de estos tests, en un TEMPORAL. Era `"C:\\Sdk"`, que en Windows
+ * es absoluto pero en macOS y Linux es una carpeta RELATIVA con una barra invertida en el nombre:
+ * el test que descomprime de verdad la creaba en el cwd —la raíz del repo— y acabó entrando en un
+ * commit (`C:\Sdk/a.txt`). Con un temporal no se escribe fuera, en ninguna plataforma.
+ */
+const DESTINO = mkdtempSync(join(tmpdir(), "xonecode-descarga-"));
+
 describe("descargarYDescomprimir", () => {
   it("descarga, descomprime y escribe cada fichero bajo el destino — caso feliz", async () => {
     const zip = zipSync({ "platform-tools/adb.exe": new Uint8Array([1, 2, 3]), "platform-tools/fastboot.exe": new Uint8Array([4]) });
@@ -51,7 +62,7 @@ describe("descargarYDescomprimir", () => {
     const lineas: string[] = [];
     const { terminado } = descargarYDescomprimir(
       "https://dl.google.com/x.zip",
-      "C:\\Sdk",
+      DESTINO,
       {},
       {
         fetch: (async () => respuestaDeUnGolpe(zip)) as unknown as typeof fetch,
@@ -63,7 +74,7 @@ describe("descargarYDescomprimir", () => {
     const r = await terminado;
     expect(r.estado).toBe("ok");
     expect(escritos.map((e) => e.ruta).sort()).toEqual(
-      [join("C:\\Sdk", "platform-tools", "adb.exe"), join("C:\\Sdk", "platform-tools", "fastboot.exe")].sort()
+      [join(DESTINO, "platform-tools", "adb.exe"), join(DESTINO, "platform-tools", "fastboot.exe")].sort()
     );
     expect(escritos.find((e) => e.ruta.endsWith("adb.exe"))!.datos).toEqual(new Uint8Array([1, 2, 3]));
     expect(lineas.some((l) => l.startsWith("listo:"))).toBe(true);
@@ -88,19 +99,19 @@ describe("descargarYDescomprimir", () => {
     const escritos: string[] = [];
     const { terminado } = descargarYDescomprimir(
       "https://dl.google.com/x.zip",
-      "C:\\Sdk",
+      DESTINO,
       {},
       { fetch: (async () => respuestaDeUnGolpe(zip)) as unknown as typeof fetch, crearCarpeta: () => {}, escribir: (r) => escritos.push(r) }
     );
     await terminado;
-    expect(escritos).toEqual([join("C:\\Sdk", "platform-tools", "adb.exe")]);
+    expect(escritos).toEqual([join(DESTINO, "platform-tools", "adb.exe")]);
   });
 
   it("un HTTP que no es 200 es fallo, con el código en el motivo — y no intenta descomprimir nada", async () => {
     const escritos: string[] = [];
     const { terminado } = descargarYDescomprimir(
       "https://dl.google.com/x.zip",
-      "C:\\Sdk",
+      DESTINO,
       {},
       { fetch: (async () => respuestaDeUnGolpe(new Uint8Array(), { ok: false, status: 404 })) as unknown as typeof fetch, escribir: (r) => escritos.push(r) }
     );
@@ -113,7 +124,7 @@ describe("descargarYDescomprimir", () => {
   it("un zip corrupto no revienta: fallo con motivo de una línea", async () => {
     const { terminado } = descargarYDescomprimir(
       "https://dl.google.com/x.zip",
-      "C:\\Sdk",
+      DESTINO,
       {},
       { fetch: (async () => respuestaDeUnGolpe(new Uint8Array([1, 2, 3, 4, 5]))) as unknown as typeof fetch }
     );
@@ -129,7 +140,7 @@ describe("descargarYDescomprimir", () => {
     const escritos: string[] = [];
     const { terminado } = descargarYDescomprimir(
       "https://dl.google.com/x.zip",
-      "C:\\Sdk",
+      DESTINO,
       {},
       { fetch: (async () => respuestaDeUnGolpe(zip)) as unknown as typeof fetch, escribir: (r) => escritos.push(r) }
     );
@@ -145,7 +156,7 @@ describe("descargarYDescomprimir", () => {
     const grande = new Uint8Array(TOPE_DE_LA_DESCARGA + 1);
     const { terminado } = descargarYDescomprimir(
       "https://dl.google.com/x.zip",
-      "C:\\Sdk",
+      DESTINO,
       {},
       { fetch: (async () => respuestaDeUnGolpe(grande)) as unknown as typeof fetch }
     );
@@ -160,7 +171,7 @@ describe("descargarYDescomprimir", () => {
     const zip = zipSync({ "x.bin": new Uint8Array(TOPE_DESCOMPRIMIDO + 1) });
     const { terminado } = descargarYDescomprimir(
       "https://dl.google.com/x.zip",
-      "C:\\Sdk",
+      DESTINO,
       {},
       { fetch: (async () => respuestaDeUnGolpe(zip)) as unknown as typeof fetch }
     );
@@ -177,7 +188,7 @@ describe("descargarYDescomprimir", () => {
     const lineas: string[] = [];
     const { terminado } = descargarYDescomprimir(
       "https://dl.google.com/x.zip",
-      "C:\\Sdk",
+      DESTINO,
       {},
       { fetch: (async () => respuestaEnTrozos(trozos, zip.length)) as unknown as typeof fetch, alSalirLinea: (l) => lineas.push(l) }
     );
@@ -191,7 +202,7 @@ describe("descargarYDescomprimir", () => {
       new Promise((_resolver, rechazar) => {
         opciones.signal.addEventListener("abort", () => rechazar(Object.assign(new Error("aborted"), { name: "AbortError" })));
       })) as unknown as typeof fetch;
-    const { cancelar, terminado } = descargarYDescomprimir("https://dl.google.com/x.zip", "C:\\Sdk", {}, { fetch: fetchQueEsperaAlAborto });
+    const { cancelar, terminado } = descargarYDescomprimir("https://dl.google.com/x.zip", DESTINO, {}, { fetch: fetchQueEsperaAlAborto });
     cancelar();
     expect(await terminado).toMatchObject({ estado: "cancelada" });
   });
@@ -204,7 +215,7 @@ describe("descargarYDescomprimir", () => {
         rechazarPorAborto = () => rechazar(Object.assign(new Error("aborted"), { name: "AbortError" }));
         opciones.signal.addEventListener("abort", () => rechazarPorAborto!());
       })) as unknown as typeof fetch;
-    const { terminado } = descargarYDescomprimir("https://dl.google.com/x.zip", "C:\\Sdk", {}, { fetch: fetchColgado });
+    const { terminado } = descargarYDescomprimir("https://dl.google.com/x.zip", DESTINO, {}, { fetch: fetchColgado });
     await vi.advanceTimersByTimeAsync(TOPE_SIN_SALIDA_MS + 1000);
     expect(await terminado).toMatchObject({ estado: "colgada" });
     vi.useRealTimers();
