@@ -7,6 +7,7 @@
  * lista de líneas y un acumulador. Sin esa costura la consola no se puede probar.
  */
 
+import type { MotorDeAgente } from "../core/motor.js";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
@@ -521,6 +522,8 @@ export interface EstadoDeSesion {
    * modelo que sí lo acepte, que es justo lo que se quiere al ir probando.
    */
   esfuerzo?: Esfuerzo;
+  /** El motor de agente de esta sesión (`core/motor.ts`). Ausente = el de la configuración. */
+  motor?: MotorDeAgente;
   /**
    * Quién aprueba las escrituras en esta sesión: supervisado (cada una con su diff) o
    * autónomo (se aplican solas). Ausente = supervisado, y eso NO es «no consta»: de esto

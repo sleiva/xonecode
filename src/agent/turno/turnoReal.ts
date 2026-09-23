@@ -133,6 +133,10 @@ export function textoDeReparacion(
 }
 import { aPendiente, ficheroDe, cambioDe, buildResume } from "./interrupts.js";
 import { cargarAgentes } from "../subagentes/agentesEnDisco.js";
+import { promptDeAgente, REGLAS_XONE } from "../../core/agentes.js";
+import { resolverMotor, type MotorDeAgente } from "../../core/motor.js";
+import { cargar } from "../config/configEnDisco.js";
+import { abrirSesionTrueforge } from "../motores/trueforge/sesionTrueforge.js";
 import { crearSubagenteExterno } from "../subagentes/subagenteExterno.js";
 import { opcionesDeSubagenteExterno } from "../subagentes/escrituraExterna.js";
 import { ColaDeEventos, entrelazar } from "../../core/entrelazar.js";
@@ -479,7 +483,40 @@ export async function abrirSesionReal(opciones: {
    * propósito: dos cargadores serían dos fuentes para la misma pregunta.
    */
   navegacion?: CargarIndice;
+  /**
+   * El motor de agente (`core/motor.ts`). Ausente = el de la configuración: `XONECODE_MOTOR`, el
+   * `config.json` del proyecto o el global, y si no, deepagents. La web lo pasa con el motor con
+   * el que NACIÓ la sesión; el terminal, `run`, el banco y los evals lo dejan a la configuración.
+   */
+  motor?: MotorDeAgente;
 }): Promise<SesionReal> {
+  /**
+   * **Aquí se elige el motor, y en ningún otro sitio.** Por este punto pasan los cinco que abren
+   * una sesión —la web, el terminal, `run`, el banco, los evals—, así que ninguno puede quedarse
+   * con el de siempre por olvido. Con TrueForge, la sesión la construye su adaptador
+   * (`motores/trueforge/sesionTrueforge.ts`) con las MISMAS aprobación, modo y artefactos.
+   */
+  const configDelMotor = cargar(opciones.raiz).config;
+  const motor =
+    opciones.motor ??
+    resolverMotor({
+      entorno: process.env["XONECODE_MOTOR"],
+      proyecto: configDelMotor.proyecto?.motor,
+      global: configDelMotor.global?.motor,
+    });
+  if (motor === "trueforge") {
+    return abrirSesionTrueforge({
+      raiz: opciones.raiz,
+      modelos: opciones.modelos,
+      entorno: opciones.entorno,
+      instrucciones: instruccionesDelRaizTrueforge(opciones.raiz),
+      ...(opciones.pedirAprobacion === undefined ? {} : { pedirAprobacion: opciones.pedirAprobacion }),
+      ...(opciones.sinAprobacion === undefined ? {} : { sinAprobacion: opciones.sinAprobacion }),
+      ...(opciones.artefactos === undefined ? {} : { artefactos: opciones.artefactos }),
+      ...(opciones.hilo === undefined ? {} : { hilo: opciones.hilo }),
+      ...(opciones.topeDeRondas === undefined ? {} : { topeDeRondas: opciones.topeDeRondas }),
+    });
+  }
   const { raiz, entorno } = opciones;
 
   // Persiste fuera del checkpointer (que es solo de la sesión), pero no sobrescribe nunca
@@ -1512,4 +1549,15 @@ export async function abrirSesionReal(opciones: {
       return hilo;
     },
   };
+}
+
+
+/**
+ * El prompt del agente raíz de TrueForge en esta fase, que es un solo agente que lee Y escribe:
+ * el del `developer-xone` —con sus reglas de XOne delante, que `promptDeAgente` antepone siempre—,
+ * y si no está, las reglas a secas. Sin subagentes todavía, el que escribe es él.
+ */
+function instruccionesDelRaizTrueforge(raiz: string): string {
+  const desarrollador = cargarAgentes(raiz).agentes.find((a) => a.nombre === "developer-xone");
+  return desarrollador === undefined ? REGLAS_XONE : promptDeAgente(desarrollador, { suyas: [], faltan: [] });
 }

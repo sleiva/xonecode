@@ -62,6 +62,7 @@ import { carpetaDeArtefactosDeSesion } from "../../core/artefactos.js";
 import { segmentoSeguro } from "../../core/settings.js";
 import { tituloDesde } from "../../core/textos.js";
 import type { Esfuerzo } from "../../core/esfuerzo.js";
+import type { MotorDeAgente } from "../../core/motor.js";
 import type { ModoDeEscritura } from "../../core/modoDeEscritura.js";
 
 /** Cuántos caracteres de la primera prosa del usuario se guardan como título. */
@@ -117,6 +118,13 @@ export interface EntradaIndice {
    */
   esfuerzo?: Esfuerzo;
   /**
+   * Con qué motor de agente NACIÓ esta sesión (`core/motor.ts`). Ausente = deepagents, que era el
+   * único cuando se escribió cualquier sesión sin el campo. Se guarda porque la memoria de un
+   * motor no la continúa el otro: cambiar la configuración no puede cambiarle el motor a una
+   * conversación que ya existe. No se enseña en ninguna parte, como pidió él.
+   */
+  motor?: MotorDeAgente;
+  /**
    * El modo de escritura de esta sesión: supervisado o autónomo. Ausente = supervisado.
    *
    * Vive AQUÍ por lo mismo que el esfuerzo y el dispositivo: es un dato DE la sesión, no
@@ -169,6 +177,8 @@ export interface SesionReabierta {
   dispositivo?: DispositivoElegido;
   /** El esfuerzo que tenía fijado. Ausente = ninguno, o la sesión es anterior a esto. */
   esfuerzo?: Esfuerzo;
+  /** El motor con el que nació. Ausente = deepagents (ver `EntradaIndice.motor`). */
+  motor?: MotorDeAgente;
   /** El modo de escritura que tenía. Ausente = supervisado, o la sesión es anterior a esto. */
   modo?: ModoDeEscritura;
 }
@@ -530,6 +540,16 @@ export function elegirDispositivo(raiz: string, id: string, dispositivo: Disposi
  * todos modos —vive en `EstadoDeSesion`—, así que perder la anotación no pierde la
  * elección: solo no sobrevive a cerrar, que es lo mismo que pasaba antes de esto.
  */
+/** Anota el motor con el que nace una sesión. Gemela de `elegirEsfuerzo`, `false` incluido. */
+export function anotarMotor(raiz: string, id: string, motor: MotorDeAgente): boolean {
+  const entradas = leerIndiceOAbortar(raiz);
+  const entrada = entradas.find((e) => e.id === id);
+  if (entrada === undefined) return false;
+  entrada.motor = motor;
+  escribirIndice(raiz, entradas);
+  return true;
+}
+
 export function elegirEsfuerzo(raiz: string, id: string, esfuerzo: Esfuerzo | undefined): boolean {
   const entradas = leerIndiceOAbortar(raiz);
   const entrada = entradas.find((e) => e.id === id);
@@ -597,6 +617,7 @@ export function reabrirSesion(raiz: string, id: string): SesionReabierta {
     historica: true,
     ...(entrada?.dispositivo === undefined ? {} : { dispositivo: entrada.dispositivo }),
     ...(entrada?.esfuerzo === undefined ? {} : { esfuerzo: entrada.esfuerzo }),
+    ...(entrada?.motor === undefined ? {} : { motor: entrada.motor }),
     ...(entrada?.modo === undefined ? {} : { modo: entrada.modo }),
   };
 }

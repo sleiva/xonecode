@@ -2363,3 +2363,25 @@ describe("el dispositivo de la sesión llega al agente", () => {
     await v.cerrar();
   });
 });
+
+
+describe("el motor de la sesión, por configuración y sin enseñarlo", () => {
+  it("una sesión NUEVA toma el del config.json; una REABIERTA sin campo es deepagents", async () => {
+    const s = sesionesEnMemoria();
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      fuentes: () => ({ proyecto: { motor: "trueforge" } }),
+    });
+    const nueva = await v.abrirProyecto({ raiz: "/w/a" });
+    expect(nueva.estadoDeSesion.motor).toBe("trueforge");
+    // Una sesión que ya existía —de antes de haber dos motores— sigue con deepagents, aunque
+    // la configuración diga otra cosa: su memoria es de deepagents y el otro no la continúa.
+    const id = s.puerto.crear("/w/b");
+    s.puerto.anotar("/w/b", id, { tipo: "usuario", texto: "hola" });
+    const vieja = await v.abrirProyecto({ raiz: "/w/b", sesion: id });
+    expect(vieja.estadoDeSesion.motor).toBe("deepagents");
+    await v.cerrar();
+  });
+});

@@ -547,6 +547,9 @@ export function crearEjecutorReal(
       sesion = await abrirSesionReal({
         raiz: estado.raiz,
         modelos: await modelosDeSesion(estado),
+        // El motor con el que NACIÓ la sesión (la web lo guarda en el índice); sin él, el de la
+        // configuración. Ver `core/motor.ts`.
+        ...(estado.motor === undefined ? {} : { motor: estado.motor }),
         /**
          * El juez del turno: ¿esto cumple lo que se pidió? Va con el papel `afilado`, que
          * es el reservado a juzgar, y aquí se enchufa para el terminal Y para la web —las

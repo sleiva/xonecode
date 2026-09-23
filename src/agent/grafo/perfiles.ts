@@ -300,7 +300,7 @@ export function toolsDe(perfil: QuienDecidePermisos): string[] {
 }
 
 /** Texto de la petición de aprobación, por tool. */
-const TEXTO_HITL: Record<string, string> = {
+export const TEXTO_HITL: Record<string, string> = {
   write_file: "escribir un fichero del proyecto",
   edit_file: "modificar un fichero del proyecto",
 };

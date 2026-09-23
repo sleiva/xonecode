@@ -18,6 +18,7 @@
  * campo, no QUÉ contenía. Por eso estos mensajes no interpolan nunca el valor de entrada.
  */
 
+import { esMotor, MOTORES, type MotorDeAgente } from "./motor.js";
 import {
   PROVEEDORES, PAPELES,
   esProveedorPersonalizado, motivoDeEndpointInaceptable, motivoDeSlugInaceptable,
@@ -30,6 +31,8 @@ export interface ConfigDeFichero {
   /** Cómo se abrió este proyecto. Las credenciales nunca se guardan aquí. */
   modo?: "offline" | "cloud";
   modelo?: string;
+  /** El motor de agente de las sesiones NUEVAS (`core/motor.ts`). Ausente = deepagents. */
+  motor?: MotorDeAgente;
   modelos?: Partial<Record<Papel, string>>;
   /** Tema visual de la consola, persistido solo cuando pertenece al proyecto. */
   tema?: string;
@@ -193,6 +196,18 @@ export function validar(
       } else {
         avisos.push({
           texto: `«${ruta}»: «modelo» debe ser la cadena «proveedor/modelo»; se descarta.`,
+          severidad: "aviso",
+        });
+      }
+      continue;
+    }
+
+    if (clave === "motor") {
+      if (esMotor(valor)) {
+        config.motor = valor;
+      } else {
+        avisos.push({
+          texto: `«${ruta}»: «motor» debe ser ${MOTORES.map((m) => `«${m}»`).join(" o ")}; se descarta.`,
           severidad: "aviso",
         });
       }

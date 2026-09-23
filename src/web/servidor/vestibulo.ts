@@ -73,6 +73,7 @@ import {
   crearSesion,
   elegirDispositivo,
   elegirEsfuerzo,
+  anotarMotor,
   elegirModo,
   listarSesiones,
   reabrirSesion,
@@ -81,6 +82,7 @@ import {
 } from "./sesiones.js";
 import type { MensajeAlCliente, MensajeDelCliente, Sumidero } from "./transporte.js";
 import type { Esfuerzo } from "../../core/esfuerzo.js";
+import { resolverMotor, type MotorDeAgente } from "../../core/motor.js";
 import { MODO_POR_OMISION, type ModoDeEscritura } from "../../core/modoDeEscritura.js";
 
 /**
@@ -182,6 +184,7 @@ export interface PuertoDeSesiones {
     historica: boolean;
     dispositivo?: DispositivoElegido;
     esfuerzo?: Esfuerzo;
+    motor?: MotorDeAgente;
     modo?: ModoDeEscritura;
   };
   /** Borra una sesión. Devuelve si había algo que borrar; un id desconocido no es un error
@@ -194,6 +197,8 @@ export interface PuertoDeSesiones {
   elegirDispositivo?(raiz: string, id: string, dispositivo: DispositivoElegido | undefined): boolean;
   /** Anota el esfuerzo de una sesión. Gemelo del anterior: otra elección DE la sesión. */
   elegirEsfuerzo?(raiz: string, id: string, esfuerzo: Esfuerzo | undefined): boolean;
+  /** Anota con qué motor nace una sesión (`core/motor.ts`). */
+  anotarMotor?(raiz: string, id: string, motor: MotorDeAgente): boolean;
   /** Anota el modo de escritura de una sesión. El tercero de la misma familia. */
   elegirModo?(raiz: string, id: string, modo: ModoDeEscritura): boolean;
 }
@@ -207,6 +212,7 @@ const SESIONES_EN_DISCO: PuertoDeSesiones = {
   renombrar: renombrarSesion,
   elegirDispositivo,
   elegirEsfuerzo,
+  anotarMotor,
   elegirModo,
 };
 
@@ -1322,6 +1328,10 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       if (estadoDeSesion.modo !== undefined && estadoDeSesion.modo !== MODO_POR_OMISION) {
         sesiones.elegirModo?.(raiz, idSesion, estadoDeSesion.modo);
       }
+      // Y el motor, solo si NO es el de omisión: ausente en el índice ya significa deepagents.
+      if (estadoDeSesion.motor !== undefined && estadoDeSesion.motor !== "deepagents") {
+        sesiones.anotarMotor?.(raiz, idSesion, estadoDeSesion.motor);
+      }
     };
 
     /**
@@ -1436,6 +1446,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     // `estadoDeSesion` devuelve mientras nadie haya cambiado nada, y sin él quien pinte el
     // modelo en vigor no tendría qué enseñar hasta el primer `/modelo` — que es justo lo
     // que se quiere evitar (enseñar «no se sabe» cuando sí se sabe).
+    const fuentesDeLaSesion = opciones.fuentes?.() ?? {};
     let estadoDeSesion: EstadoDeSesion = {
       // El hilo ES el id de la sesión: es lo que permite que reabrirla continúe la
       // conversación en vez de releerla. `/nuevo` sigue pudiendo cambiarlo — abre otro hilo
@@ -1444,7 +1455,22 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       raiz,
       // Se LEE aquí, una vez por consola y no una por proceso: es lo que hace que una
       // sesión nueva vea el `config.json` de ahora. Ver `OpcionesDelVestibulo.fuentes`.
-      fuentes: opciones.fuentes?.() ?? {},
+      fuentes: fuentesDeLaSesion,
+      /**
+       * Con qué MOTOR corre esta sesión (`core/motor.ts`), sin enseñarlo en ninguna parte.
+       *
+       * Una sesión REABIERTA sigue con el suyo —el índice lo guarda; ausente es deepagents, el
+       * único que existía—, porque la memoria de un motor no la continúa el otro. Una NUEVA toma
+       * el de la configuración: `XONECODE_MOTOR`, el `config.json` del proyecto o el global.
+       */
+      motor:
+        reabierta !== undefined
+          ? resolverMotor({ sesion: reabierta.motor ?? "deepagents" })
+          : resolverMotor({
+              entorno: process.env["XONECODE_MOTOR"],
+              proyecto: fuentesDeLaSesion.proyecto?.motor,
+              global: fuentesDeLaSesion.global?.motor,
+            }),
       /**
        * El esfuerzo que la sesión tenía fijado, restaurado al reabrirla.
        *
