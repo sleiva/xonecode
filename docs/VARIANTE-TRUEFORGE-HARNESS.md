@@ -627,6 +627,58 @@ Dos hallazgos de leer la librería:
 La web mira las dos memorias al decidir si una sesión reabierta continúa, y borrar una sesión se
 lleva las dos (`agent/sesiones/memoriaDeHilo.ts`).
 
+### La foto lleva versión, y se lee estricta (23-09-2026)
+
+La foto sobrevive a las subidas de XOneCode y de la librería —0.x, sin promesa entre versiones—, y
+hasta ahora era `toSnapshot()` tal cual, sin decir qué formato era. Ahora (`memoriaTrueforge.ts`):
+
+- **Formato v1**, entero, y lo escribe `guardarMemoria` con una lista CERRADA de campos:
+
+  ```json
+  { "version": 1, "trueforge": "0.2.1", "context": [...],
+    "current_context_usage": {...}, "capability_state": {...} | null,
+    "pregunta_pendiente": { "hilo": "...", "id": "...", "args": {...} } }
+  ```
+
+  `version` es la del FORMATO (`VERSION_DE_MEMORIA`) y la sella quien escribe, no quien llama.
+  `trueforge` es la de la librería (`VERSION_DE_TRUEFORGE`, constante en `trueforge.ts` —la única
+  puerta a la librería— y comprobada contra la fijada en `package.json` y la instalada). Se APUNTA
+  y no se EXIGE: rechazar por ella tiraría todas las conversaciones en cada subida de la librería;
+  está para que una migración futura sepa de qué `toSnapshot()` parte. Los cuatro campos del
+  snapshot que el raíz no recibe de vuelta (`thread_id`, `parent`, `agent_info`, `completion`) ya
+  no llegan a disco.
+- **Migraciones por versión** (`MIGRACIONES`, puras y encadenadas). La única hoy es v0 → v1: la
+  foto SIN versión que ya hay en disco añade `version` y retira esos cuatro campos, pero solo con el
+  valor de un RAÍZ —un `parent` o una `completion` puestos serían la foto de un hijo, y retirarlos
+  sería cargarla a medias—. No se inventa `trueforge`: falta en la migrada y la sella el guardado
+  siguiente. Así las sesiones actuales siguen abriéndose.
+- **Lectura estricta** (`interpretarFoto`): JSON ilegible, una versión que no es entero o es MÁS
+  NUEVA que la que se sabe leer, un campo desconocido en una v1 o un campo conocido mal formado
+  —y entonces se va la foto ENTERA, no ese campo— son `incompatible` con un motivo. El motivo no
+  repite contenido (el mensaje de `JSON.parse` cita el fichero) ni rutas.
+- **Una incompatible no tumba la sesión**: se abre SIN memoria, `hayMemoria` dice que no —la web no
+  la presenta como continuada— y el PRIMER turno lo dice con un aviso de la bitácora, con el motivo.
+  **La foto no se borra: se APARTA** a `memoria-trueforge.incompatible-<ms>.json` en la misma
+  carpeta, sin pisar nunca una apartada anterior, porque el guardado de ese mismo turno la
+  sustituiría. Apartar lo hace la sesión al abrir (y `nuevoHilo`), nunca quien solo pregunta. Si
+  apartar falla, el aviso lo dice: el siguiente guardado la sustituirá. Borrar la sesión se lleva
+  también las apartadas.
+
+**Límite declarado**: de cada mensaje del contexto se mira que sea un objeto con `role` o `type` de
+texto, y no más. Su esquema entero es de la librería (zod, dentro de ella), y repetirlo aquí sería un
+segundo sitio donde decidir qué es un mensaje; un mensaje con la forma buena y el contenido malo lo
+rechazará la librería al usarlo, no esta lectura. Las decisiones de aprobación van en el contexto con
+`type` y sin `role` (`AgentApprovalDecisionMessage`), y por eso vale cualquiera de los dos. Y el aviso
+va por la bitácora del turno, el mismo camino que «SIN aprobación» (en la web, bajo «Verificaciones»):
+si antes del primer turno se abre otro hilo con `/nuevo`, ese aviso ya no sale —la foto está apartada
+igual, no se pierde nada—.
+
+**Queda fuera, a propósito: la poda de sesiones antiguas.** Las fotos (y ahora las apartadas) crecen
+con las sesiones y nadie las retira salvo el borrado de una sesión. Es la misma deuda que ya declara
+el checkpoint de deepagents («Esto CRECE y no hay poda», `CLAUDE.md`), y se decide para las dos
+memorias a la vez o para ninguna: una poda que solo alcanzara a un motor dejaría a la web diciendo
+que una sesión de deepagents continúa y que una de TrueForge del mismo día empieza de cero.
+
 ### El presupuesto del paso y la fecha (23-09-2026)
 
 Dos reglas del `largeToolResponse` de TrueForge, **portadas y no montadas**: con los dos recortadores

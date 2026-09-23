@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AIMessageChunk } from "@langchain/core/messages";
@@ -8,6 +8,7 @@ import type { ModelosPort } from "../../../core/ports.js";
 import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ } from "./sesionTrueforge.js";
 import { TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
 import { traducirEvento } from "./eventosTrueforge.js";
+import { cargarMemoria } from "./memoriaTrueforge.js";
 import { abrirSesionReal } from "../../turno/turnoReal.js";
 import { resumirTraza } from "../../turno/informeDeTraza.js";
 
@@ -470,6 +471,66 @@ describe("una sesión con el motor TrueForge", () => {
     expect(visto).toContain("¿cómo te llamas?");
     expect(visto).toContain("Me llamo XOneCode.");
     expect(visto).toContain("¿qué me dijiste?");
+  }, 30_000);
+
+  it("una conversación CON aprobación y delegación se guarda, pasa la lectura estricta y se reabre", async () => {
+    // Lo que la librería mete de verdad en el contexto del raíz —la delegación, su respuesta, las
+    // decisiones— tiene que pasar `interpretarFoto`: si no, las sesiones que más importan se
+    // abrirían sin memoria.
+    const raiz = proyecto();
+    const abrir = (m: ModelosPort) =>
+      abrirSesionReal({
+        raiz,
+        modelos: m,
+        skills: { catalogo: () => [], cargar: async () => [] } as never,
+        entorno: ENTORNO,
+        motor: "trueforge",
+        hilo: "sesion-escrita",
+        pedirAprobacion: async (pendientes) => new Map(pendientes.map((p) => [p.id, { type: "approve" as const }])),
+      });
+    const primera = await abrir(modelosConGuion(guionDeEscritura()).m);
+    await primera.turno("escribe una nota", piel().p);
+    primera.cerrar();
+    expect(readFileSync(join(raiz, "nota.txt"), "utf8")).toBe("hola\n");
+    expect(cargarMemoria(raiz, "sesion-escrita").estado).toBe("ok");
+
+    const { m, vistos } = modelosConGuion([[new AIMessageChunk({ content: "La escribí antes." })]]);
+    const segunda = await abrir(m);
+    const pi = piel();
+    await segunda.turno("¿qué hiciste?", pi.p);
+    expect(vistos[0]!.join("\n")).toContain("escribe una nota");
+    expect(pi.lineas.join("\n")).not.toMatch(/no se pudo cargar/);
+  }, 30_000);
+
+  it("una foto que NO se entiende no tumba la sesión: se abre sin memoria, se APARTA y el PRIMER turno lo dice", async () => {
+    const raiz = proyecto();
+    const carpeta = join(raiz, ".xonecode", "sesiones", "sesion-rota");
+    mkdirSync(carpeta, { recursive: true });
+    const ilegible = JSON.stringify({ version: 99, context: [{ role: "user", content: "de un XOneCode futuro" }] });
+    writeFileSync(join(carpeta, "memoria-trueforge.json"), ilegible);
+    const { m, vistos } = modelosConGuion([[new AIMessageChunk({ content: "Empiezo de cero." })], [new AIMessageChunk({ content: "Sigo." })]]);
+    const s = await abrirSesionReal({
+      raiz,
+      modelos: m,
+      skills: { catalogo: () => [], cargar: async () => [] } as never,
+      entorno: ENTORNO,
+      motor: "trueforge",
+      hilo: "sesion-rota",
+    });
+    const primero = piel();
+    await s.turno("hola", primero.p);
+    expect(vistos[0]!.join("\n")).not.toContain("de un XOneCode futuro");
+    const aviso = primero.lineas.join("\n");
+    expect(aviso).toMatch(/memoria guardada de esta sesión no se pudo cargar \(la escribió un XOneCode más nuevo \(versión 99/);
+    expect(aviso).not.toContain(raiz);
+    // No se ha destruido: está apartada, byte a byte, y el guardado del turno no la pisó.
+    const apartadas = readdirSync(carpeta).filter((n) => n.startsWith("memoria-trueforge.incompatible-"));
+    expect(apartadas).toHaveLength(1);
+    expect(readFileSync(join(carpeta, apartadas[0]!), "utf8")).toBe(ilegible);
+    // Y se dice UNA vez: el segundo turno ya continúa la conversación nueva.
+    const segundo = piel();
+    await s.turno("¿sigues?", segundo.p);
+    expect(segundo.lineas.join("\n")).not.toMatch(/no se pudo cargar/);
   }, 30_000);
 
   it("un turno CORTADO con un hijo esperando no deja la sesión atascada: la colgada se salda y el siguiente turno corre", async () => {

@@ -59,7 +59,7 @@ import {
 } from "./capacidades.js";
 import { crearDiagnosticoDeTools, type DiagnosticoDeTools } from "../../turno/diagnosticoDeTools.js";
 import { detalleDe, parametrosDe } from "../../turno/resumenDeTool.js";
-import { fotoSaneada, guardarMemoria, leerMemoria, type FotoDeHilo } from "./memoriaTrueforge.js";
+import { apartarMemoria, cargarMemoria, fotoSaneada, guardarMemoria, textoDeMemoriaDescartada, type FotoDeHilo } from "./memoriaTrueforge.js";
 import type { ToolDeLangchain } from "./toolsPropias.js";
 import { crearNavegacionXone } from "../../grafo/navegacionXone.js";
 import { hechosDelProyectoDe } from "../../navegacion/hechosEnDisco.js";
@@ -418,7 +418,20 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
    * de terminal no lo pasa, la misma regla que el checkpoint de deepagents.
    */
   const persistir = opciones.hilo !== undefined;
-  const fotoInicial = persistir ? leerMemoria(raiz, hilo) : undefined;
+  /** El aviso de una memoria que existía y no se entendió: sale en el PRIMER turno y se gasta. */
+  let avisoDeMemoria: string | undefined;
+  /**
+   * La foto de la sesión `id`, si hay y se entiende. Una que no se entiende se APARTA —el guardado
+   * de este mismo turno la pisaría— y se DICE en el turno siguiente (`memoriaTrueforge.ts`).
+   */
+  const fotoDeLaSesion = (id: string): FotoDeHilo | undefined => {
+    avisoDeMemoria = undefined;
+    if (!persistir) return undefined;
+    const lectura = cargarMemoria(raiz, id);
+    if (lectura.estado === "incompatible") avisoDeMemoria = textoDeMemoriaDescartada(lectura.motivo, apartarMemoria(raiz, id));
+    return lectura.estado === "ok" ? lectura.foto : undefined;
+  };
+  const fotoInicial = fotoDeLaSesion(hilo);
   let orquestador = nuevoOrquestador(fotoInicial);
   // La pregunta que se quedó sin contestar al cerrar: la respuesta de la persona es para ELLA.
   preguntaEnEspera = preguntaDeLaFoto(fotoInicial);
@@ -525,6 +538,9 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       const instantanea = await tomarInstantanea(raiz, opciones.entorno.git);
       const tope = opciones.topeDeRondas ?? MAX_APPROVAL_ROUNDS;
       const aplicadasSinPreguntar: string[] = [];
+      // Se dice UNA vez: el turno que lo lleva es el primero que corre sin la conversación de antes.
+      const memoriaDescartada = avisoDeMemoria;
+      avisoDeMemoria = undefined;
       let cortadoPorTope = false;
       let sinResolver = 0;
       // El veredicto del turno, con las MISMAS reglas que deepagents (`verificacion.ts`).
@@ -723,6 +739,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
           // Solo si el turno ESCRIBIÓ y aun así no se verificó, y con el motivo: la regla de
           // deepagents — un aviso que salta cuando no ha pasado nada enseña a ignorarlo.
           avisos: (b) => [
+            ...(memoriaDescartada === undefined ? [] : [memoriaDescartada]),
             ...(b.corrio("verify") || !escribioProyecto
               ? []
               : [`⚠ el verificador no ha corrido en este turno${motivoSinVerificar === undefined ? "" : ` (${motivoSinVerificar})`}`]),
@@ -786,7 +803,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       hilo = id ?? `tf-${Date.now()}`;
       // Un hilo NUEVO: lo que hubiera guardado con ese id no se pisa ni se carga a medias. Y una
       // pregunta de la conversación de antes no la contesta el primer mensaje de la nueva.
-      const foto = persistir ? leerMemoria(raiz, hilo) : undefined;
+      const foto = fotoDeLaSesion(hilo);
       orquestador = nuevoOrquestador(foto);
       preguntaEnEspera = preguntaDeLaFoto(foto);
     },

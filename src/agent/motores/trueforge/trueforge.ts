@@ -15,6 +15,15 @@
  * de la librería: si su interfaz cambia, el compilador lo dice aquí. Era una ruta profunda más, y la
  * única que no era un tipo.
  */
+/**
+ * La versión de la librería con la que corre este motor, la MISMA que fija `package.json`
+ * (`frontera.test.ts` compara las dos, y contra la instalada). Viaja en la foto de memoria
+ * (`memoriaTrueforge.ts`) para que una migración futura sepa con qué `toSnapshot()` se escribió.
+ * Es una constante y no una lectura de su `package.json`: leerlo desde otro fichero sería una
+ * segunda puerta a la librería, y aquí subirla se revisa de todas formas.
+ */
+export const VERSION_DE_TRUEFORGE = "0.2.1";
+
 export {
   AgentThread,
   AgentThreadOrchestrator,
