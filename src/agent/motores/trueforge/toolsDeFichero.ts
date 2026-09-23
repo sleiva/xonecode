@@ -21,7 +21,7 @@
  */
 import { posix } from "node:path";
 import micromatch from "micromatch";
-import { toolResultResponse } from "@truefoundry/trueforge-core/core";
+import { toolResultResponse } from "./trueforge.js";
 import { desalojarSiGrande, MAXIMO_DE_COINCIDENCIAS, truncarSiLargo } from "./recortes.js";
 
 /** El backend de deepagents en su versión nueva, en lo que se usa. */

@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import winston from "winston";
 import { AIMessageChunk, type BaseMessage } from "@langchain/core/messages";
-import { AgentThread, AgentThreadOrchestrator, ToolSet, EventType, toolResultResponse } from "@truefoundry/trueforge-core/core";
-import { NOOP_AGENT_TRACING } from "@truefoundry/trueforge-core/core/tracing/NoopAgentTracing";
+import { AgentThread, AgentThreadOrchestrator, EventType, NOOP_AGENT_TRACING, ToolSet, toolResultResponse } from "./trueforge.js";
 import { aMensajesDeLangchain, modeloParaTrueforge } from "./modeloLangchain.js";
 
 /** Un modelo de LangChain de pega: por cada llamada, un guion de trozos. Apunta lo que recibe. */

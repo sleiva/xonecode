@@ -16,8 +16,7 @@
  * curso se pide a `senal()` en cada `create`, y quien corre el turno la pone.
  */
 import { AIMessage, AIMessageChunk, HumanMessage, SystemMessage, ToolMessage, type BaseMessage } from "@langchain/core/messages";
-import type { ILLM, LLMCreateParams, LLMCreateParamsStreaming } from "@truefoundry/trueforge-core/core/llm/ILLM";
-import type { ExtendedChatCompletionChunk, RawAssistantMessageWithUsage } from "@truefoundry/trueforge-core/core/llm/LLMTypes";
+import type { ExtendedChatCompletionChunk, ILLM, LLMCreateParams, LLMCreateParamsStreaming, RawAssistantMessageWithUsage } from "./trueforge.js";
 import { razonamientoDe, textoDe } from "../../turno/puente.js";
 
 /** Lo mínimo que se usa de un modelo de LangChain: atarle las tools y pedirle un stream. */

@@ -23,9 +23,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import winston from "winston";
-import { AgentThread, AgentThreadOrchestrator, EventType, askUserQuestion, contextCompaction, dynamicSubAgents } from "@truefoundry/trueforge-core/core";
+import { AgentThread, AgentThreadOrchestrator, EventType, NOOP_AGENT_TRACING, askUserQuestion, contextCompaction, dynamicSubAgents } from "./trueforge.js";
 import { TOPE_DE_LLAMADAS_DEL_CONDUCTOR, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA, UMBRAL_RESUMEN_TOKENS } from "../../turno/resumenDeContexto.js";
-import { NOOP_AGENT_TRACING } from "@truefoundry/trueforge-core/core/tracing/NoopAgentTracing";
 import type { DomainEvent, HallazgoDelTurno, PendienteDeAprobacion } from "../../../core/events.js";
 import type { ConsumoDeSesionPorCuenta, ModelosPort, SkillInfo, VerifierPort } from "../../../core/ports.js";
 import { cambiosQueSeVerifican, huellaDeErrores, repartirHallazgos } from "../../turno/verificacion.js";

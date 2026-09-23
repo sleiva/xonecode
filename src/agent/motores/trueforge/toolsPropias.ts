@@ -9,7 +9,7 @@
  * `puedeLeerRuta` a mano porque tampoco en deepagents pasan por el middleware de permisos— es el
  * mismo código en los dos motores.
  */
-import { toolResultResponse } from "@truefoundry/trueforge-core/core";
+import { toolResultResponse } from "./trueforge.js";
 import { toJsonSchema } from "@langchain/core/utils/json_schema";
 import { desalojarSiGrande, type EscritorDeDesalojo } from "./recortes.js";
 

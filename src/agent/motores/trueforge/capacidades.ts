@@ -11,8 +11,7 @@
  * sobre lo que declara su `.md`, con la misma partición que deepagents. Es lo que deja probar el
  * reparto sin levantar un hilo.
  */
-import { ToolSet, currentDateTime } from "@truefoundry/trueforge-core/core";
-import { NOOP_AGENT_TRACING } from "@truefoundry/trueforge-core/core/tracing/NoopAgentTracing";
+import { NOOP_AGENT_TRACING, ToolSet, currentDateTime } from "./trueforge.js";
 import type { Agente } from "../../../core/agentes.js";
 import { permisosDe } from "../../grafo/perfiles.js";
 import {

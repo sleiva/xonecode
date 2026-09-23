@@ -689,3 +689,14 @@ Dos fallos del ciclo de vida, los dos medidos en la librería instalada:
 
 **Límite declarado**: no hay un presupuesto GLOBAL por turno (la suma de todos los hilos). Lo acotan
 los topes por hilo y el máximo de cinco hijos a la vez de la librería; deepagents tampoco lo tiene.
+
+### Una sola frontera con la librería (23-09-2026)
+
+Todo lo que se usa de `@truefoundry/trueforge-core` entra por `agent/motores/trueforge/trueforge.ts`,
+y un test lo exige (`frontera.test.ts`). Dentro se separa lo de la API pública (`/core`) de lo que
+solo está en rutas profundas —`ExtendedChatCompletionChunk`, `RawAssistantMessageWithUsage` y
+`NOOP_AGENT_TRACING`—: el paquete deja importarlas (`"./*"` en sus `exports`), pero no son su API y
+son lo primero que puede moverse. `NOOP_AGENT_TRACING` no se reimplementa: `AgentTracing` es una
+interfaz de spans anidados, y una copia nuestra sería otro sitio que mantener sin que el compilador
+avisara. **Ojo al comparar con el código fuente**: el checkout local de TrueForge es 0.2.0 y aquí
+corre 0.2.1; la referencia del comportamiento es `node_modules`.
