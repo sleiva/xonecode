@@ -633,7 +633,7 @@ librería, que trae un segundo registro de sesiones y cuya factoría pisa el pro
 al final de cada turno SANEADA —el `OpenToolCallCloser` de TrueForge se salta las `create_sub_agent`
 colgadas—, y quien pregunta si una sesión tiene memoria mira las dos (`agent/sesiones/memoriaDeHilo.ts`).
 **El prompt de un hijo va en su prompt de SISTEMA por `instructionBuilders`**: la librería ignora el
-`instruction` de un hijo, y en su primer mensaje la compactación se lo llevaba.
+`instruction` de un hijo. **Y solo se compacta el raíz**: en un hijo, medido con la traza, resumir un encargo corto y ya cacheado costaba más que reenviarlo.
 
 ### La aprobación
 

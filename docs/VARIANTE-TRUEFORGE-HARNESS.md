@@ -607,8 +607,11 @@ Dos hallazgos de leer la librería:
 
 - **`buildInstruction` ignora el `instruction` de un hijo** (`!this.parent`); a su prompt de sistema
   solo llegan los `instructionBuilders` de sus capabilities. El prompt del especialista pasa a ir ahí
-  en vez de en su primer mensaje, y como la compactación sustituye el contexto entero, ahí sobrevive:
-  los hijos ya se compactan al mismo umbral que el raíz.
+  en vez de en su primer mensaje, donde una compactación —que sustituye el contexto entero— se lo
+  llevaría. **Los hijos no se compactan, y lo decidió la traza**: activada al umbral del raíz, el
+  `device-controller` se compactó a un par de llamadas de terminar, y el resumen costó 26.010 de
+  entrada sin caché y 5.916 de salida, más recalentar la caché después. Un encargo de hijo es corto y
+  va cacheado al 85-95 %: reenviarlo sale más barato que resumirlo.
 - **El `OpenToolCallCloser` se salta las `create_sub_agent`** (`is_thread_creation`), que es la tool
   call que queda colgada cuando un turno se corta con un hijo esperando aprobación. Se salda al
   guardar la foto (`saldarColgadas`), y tras un turno cortado el árbol se rehace desde ella: con el
@@ -626,3 +629,19 @@ si entre todas pasan de 10.000 tokens —su umbral— se desalojan las mayores p
 haya que recortar se trunca a 500 caracteres en vez de guardarse aparte, porque no hay nada que
 releer. Y `currentDateTime` de la librería, en el raíz y en los hijos: devuelve la fecha en **UTC**
 y epoch, no la zona horaria local.
+
+### La tarea del emulador, con traza en los dos motores (23-09-2026)
+
+«Puedes lanzar la app en el emulador» sobre una copia de MyAllXOne, `deepseek-flash`, n=1:
+
+| | TrueForge | deepagents |
+|---|---|---|
+| Llamadas | 19 | 14 |
+| Efectivo | ≈107k | ≈42k |
+| `device-controller` | 16 llam · 74 % caché · 66k fresca | 11 llam · 92 % caché · 13k fresca |
+| Caracteres devueltos por tools | 88.578 | 39.300 |
+
+Dos causas, y la traza separa las dos. La **compactación del hijo** (arriba), que era cosa nuestra y
+se retiró. Y **conducta**: el hijo de TrueForge sacó el log entero dos veces (12k cada una) donde el
+de deepagents lo filtró con `grep`/`tail`, y leyó el `SKILL.md` en dos trozos. Eso último no es del
+motor —las tools y los umbrales son los mismos— y con una pasada no se distingue de la varianza.

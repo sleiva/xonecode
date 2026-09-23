@@ -337,13 +337,19 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
        * **El prompt del especialista va en el prompt de SISTEMA, por una capability**, y no en
        * su primer mensaje como al principio. Medido en la librería: `buildInstruction` IGNORA el
        * `instruction` de un hijo (`!this.parent`), y lo único que llega a su sistema son los
-       * `instructionBuilders`. En el primer mensaje, además, la compactación —que sustituye el
-       * contexto entero— se lo llevaba por delante; aquí sobrevive, y por eso el hijo ya puede
-       * compactarse al mismo umbral que el raíz.
+       * `instructionBuilders`. En el primer mensaje, además, una compactación —que sustituye el
+       * contexto entero— se lo llevaría por delante.
+       *
+       * **Y el hijo NO se compacta, por una medida.** Se activó al mismo umbral que el raíz y la
+       * traza lo tumbó («lanza la app en el emulador», MyAllXOne): el `device-controller` llegó a
+       * 32.694 a un par de llamadas de terminar, y el resumen de TrueForge —un prompt largo que
+       * pide fragmentos de código enteros— costó 26.010 de entrada SIN caché y 5.916 de salida, y
+       * las dos llamadas siguientes volvieron a calentar la caché. Un encargo de hijo es corto y va
+       * cacheado al 85-95 %: reenviar su contexto sale más barato que resumirlo. El de deepagents
+       * acabó a 22.508 sin llegar al umbral.
        */
       capabilities: [
         { systemToolSets: tools, toolResponseProcessors: [presupuestoDelPaso(backend as never)] as never, instructionBuilders: [(b: { addSection(tag: string, texto: string, escapar?: boolean): unknown }) => void b.addSection("especialista", instrucciones, true)] },
-        contextCompaction({ definition: definicionDelHijo as never, compactionThresholdTokens: UMBRAL_RESUMEN_TOKENS }),
         currentDateTime({ tracing: NOOP_AGENT_TRACING }),
       ] as never,
       tracing: NOOP_AGENT_TRACING,
