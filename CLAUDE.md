@@ -635,6 +635,9 @@ divergir sin que se note. **La memoria en disco es la FOTO del raíz** (`memoria
 librería, que trae un segundo registro de sesiones y cuya factoría pisa el prompt del hijo. Se guarda
 al final de cada turno SANEADA —el `OpenToolCallCloser` de TrueForge se salta las `create_sub_agent`
 colgadas—, y quien pregunta si una sesión tiene memoria mira las dos (`agent/sesiones/memoriaDeHilo.ts`).
+**La foto lleva VERSIÓN y se lee ESTRICTA** (`MIGRACIONES`, `interpretarFoto`): la de antes se migra, y
+una que no se entiende no se carga a medias — se abre sin memoria, se APARTA con otro nombre (el guardado
+del turno la pisaría) y el primer turno lo dice.
 **El prompt de un hijo va en su prompt de SISTEMA por `instructionBuilders`**: la librería ignora el
 `instruction` de un hijo. **El raíz puede PREGUNTAR** (`ask_user_question`, solo él): la pregunta cierra el turno en el chat y el mensaje siguiente vuelve como `user.tool_response` a su hilo. Con opciones sale ADEMÁS como tarjeta con un botón por opción (evento y acto `consulta`, `Piel.consulta?` opcional), y lo pendiente lo decide el hilo —la última consulta sin usuario detrás—, así que vuelve al reabrir. **Y solo se compacta el raíz**: en un hijo, medido con la traza, resumir un encargo corto y ya cacheado costaba más que reenviarlo.
 

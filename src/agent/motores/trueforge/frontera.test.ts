@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { VERSION_DE_TRUEFORGE } from "./trueforge.js";
 
 /** Todos los `.ts` de `src/`, recorridos a mano: el test no puede depender de un glob externo. */
 function ficheros(dir: string): string[] {
@@ -34,6 +35,13 @@ describe("la frontera con TrueForge", () => {
     for (const mencion of ['const PROHIBIDOS = ["@truefoundry/", "winston"];', "// ver @truefoundry/trueforge-core"]) {
       expect(CARGA_TRUEFORGE.test(mencion), mencion).toBe(false);
     }
+  });
+
+  it("la versión que se DECLARA es la fijada en `package.json` y la instalada: la foto de memoria la lleva", () => {
+    const leer = (ruta: string) => JSON.parse(readFileSync(join(process.cwd(), ruta), "utf8")) as Record<string, unknown>;
+    const fijada = (leer("package.json").dependencies as Record<string, string>)["@truefoundry/trueforge-core"];
+    expect(fijada).toBe(VERSION_DE_TRUEFORGE);
+    expect(leer(join("node_modules", "@truefoundry", "trueforge-core", "package.json")).version).toBe(VERSION_DE_TRUEFORGE);
   });
 
   it("SOLO `trueforge.ts` carga `@truefoundry/`: subir la librería se revisa en un fichero", () => {
