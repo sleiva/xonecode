@@ -1443,6 +1443,13 @@ feedback del desarrollador** y no es terminal.
   sesión, no uno de sus actos, igual que el dispositivo— y vuelve al reabrirla. **No hay
   defecto global, y esa ausencia es la decisión**: un tercer valor «para todas las nuevas»
   decidiría en nombre de conversaciones que todavía no existen.
+- **A DeepSeek se le dice QUIÉN pide** (`core/identidadDeProveedor.ts`,
+  `agent/config/identidadEnDisco.ts`): un `user_id` en la raíz del cuerpo, porque sus límites y su
+  filtro de contenido son de CUENTA y varias claves de una suscripción son el mismo cliente. Sale
+  del `sub` del login de CloudStudio, del entorno del proyecto resuelto como la sincronización, y
+  **siempre como hash**, nunca el identificador del IDS. **El lector real es la OMISIÓN del
+  constructor de `Modelos`**, no un parámetro opcional —el `Calificador` enseñó lo que pasa con
+  uno—, y la costura lo mira sin pasar nada. Sin login no viaja; `xonecode config` lo DICE.
 - **Los topes de contexto solo si se saben** (`core/contextos.ts`, por familias; **ollama no tiene
   tope a propósito**). El porcentaje solo se calcula con tope: uno sobre un número inventado es
   una mentira con forma de cifra. La barra y `/config` usan la misma `topeResuelto`.

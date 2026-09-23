@@ -6341,3 +6341,52 @@ la misma hoja: ninguna regla dentro de un `@container` puede llevar el selector 
 declare `container-type`. Es el patrón de fallo de esta arquitectura —una regla escrita y no
 montada, con todo en verde— en su versión de CSS, y jsdom no lo puede ver porque no hace layout
 ni cascada.
+
+## A DeepSeek se le dice QUIÉN pide: el `user_id` del login de CloudStudio (23-09-2026)
+
+`core/identidadDeProveedor.ts` (la regla, pura), `agent/config/identidadEnDisco.ts` (de qué
+entorno se lee), `agent/config/modelos.ts#construirCompatibleOpenAi` (el cableado).
+
+**Por qué, con claves distintas.** La primera respuesta fue «no hace falta»: con una clave por
+desarrollador, la cuenta ya separa a las personas. Era falso por un dato que faltaba — las claves
+son de la MISMA suscripción, y los límites de DeepSeek son de CUENTA
+(`api-docs.deepseek.com/quick_start/rate_limit`). Para DeepSeek somos todos el mismo cliente. El
+`user_id` da tres cosas: el filtro de contenido marca a una persona y no a la cuenta (la que más
+pesa: sin él, lo que dispare uno frena a todo el equipo), aísla la caché KV por persona, y con
+cuota ampliada da cupo de concurrencia por persona. La segunda no se puede medir desde aquí: su
+documentación no dice si hoy la caché se comparte entre claves de una misma cuenta.
+
+**La identidad es el `sub` del token del IDS, y se normaliza SIEMPRE.** DeepSeek exige
+`[a-zA-Z0-9\-_]+` de hasta 512 caracteres y pide no poner datos personales, así que sale
+`xonecode-` + los primeros 32 hexadecimales de un sha256 — nunca el `sub`, y el correo menos (ya se
+filtra a propósito en `proyectosDeResultado`). Antes del hash el `sub` se recorta y se pasa a
+minúsculas (es un GUID: escrito de dos formas no son dos personas), y el ENTORNO entra en el hash,
+porque dos servidores con su propio IDS pueden repetir un `sub`. El `id_token` primero y el
+`access_token` después, que IdentityServer también emite como JWT. No se verifica la firma: esto no
+autentica a nadie, le pone nombre a una petición.
+
+**Qué entorno**: el del proyecto, resuelto EXACTAMENTE como la sincronización (`entorno` del
+`config.json` → `entornoDeUrl` → `legado`); por eso `entornoDeUrl` se mudó de `cli/main.ts` a
+`core/settings.ts`, que `agent/` sí puede importar. Un proyecto de un servidor sin sesión NO toma
+prestada la identidad de otro. Sin CloudStudio en el proyecto, el primer entorno registrado con
+identidad legible, y luego `legado` — determinista y declarado.
+
+**El cableado es el lector REAL por omisión, no un parámetro opcional.** Salió del mismo día que
+el `Calificador`: un campo opcional que nadie pasa, con todo en verde. Aquí hay diez
+`new Modelos(` en producción, así que el quinto parámetro del constructor es una función que por
+omisión lee el disco, y lo que se pasa a mano es la excepción (un test). La prueba de costura lo
+mira desde fuera: con `HOME` en un temporal y un login de pega, un `new Modelos` sin argumentos
+tiene que llevar `user_id` en `invocationParams()` — y con el mutante (omisión `undefined`) caen
+los tres tests de cableado. Se lee en cada construcción, porque el login puede llegar con la
+consola abierta.
+
+**Va en la RAÍZ del cuerpo por `modelKwargs`**, como pide su documentación para la API compatible
+con OpenAI, y no por el `user` nativo del SDK, que es otro campo. Solo `deepseek`. **Límites
+declarados**: un proveedor PERSONALIZADO apuntado a DeepSeek no lo lleva, y sin login el campo no
+viaja (DeepSeek funciona igual, y un turno caído por no poder ponerle nombre sería cambiar una
+ventaja por una avería). El hash no entra en eventos, trazas ni `.jsonl`.
+
+**Medido**: `xonecode config` dice «se manda user_id» con el login real de la máquina (o sea, el IDS
+devuelve un token con `sub`, que era lo único que no se podía saber leyendo el código), y una
+llamada real a `deepseek-flash` con el campo puesto contestó sin error. Lo que eso NO demuestra es
+que DeepSeek lo esté USANDO: una API que ignora un campo desconocido contestaría igual.

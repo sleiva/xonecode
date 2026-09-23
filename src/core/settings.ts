@@ -315,3 +315,36 @@ export function motivoDeWorkspaceInaceptable(ruta: string): string | undefined {
 export function rutaDeWorkspace(base: string, entorno: string, proyecto: string): string {
   return posix.join(base, segmentoSeguro(entorno, "id de entorno"), segmentoSeguro(proyecto, "nombre de proyecto"));
 }
+
+/**
+ * Qué entorno de `settings.json` sirve esta URL.
+ *
+ * Existe porque el `entorno` del `config.json` puede FALTAR o quedarse viejo, y las dos
+ * cosas mandaban el token al hueco equivocado:
+ *
+ *  - Falta en todo proyecto dado de alta desde la terminal, que no elige entorno. Esos
+ *    proyectos viven en `legado` hasta que alguien registra el oficial en el vestíbulo, y
+ *    entonces `adoptarLegadoSiProcede` MUEVE ese juego a `webstudio` y los deja sin tokens:
+ *    reautenticaban en silencio. Casando la URL leen el hueco adoptado y no se enteran.
+ *  - Se queda viejo cuando `/connect-studio` reescribe la `url` del proyecto: sin volver a
+ *    resolver, el `entorno` anterior seguiría nombrando el juego de OTRO servidor.
+ *
+ * La comparación normaliza con `URL` y cae a la comparación literal si alguna cadena no
+ * parsea. Qué absorbe esa normalización, MEDIDO y no supuesto: el case del host y el puerto
+ * por omisión explícito (`:443`) sí casan; una barra final de más, un `?` vacío, otro puerto,
+ * `http` frente a `https` y otro case en la RUTA no casan. Que no casen es benigno y no
+ * accidental: el fallo devuelve `undefined` —y cae en `legado`, donde ese proyecto ya
+ * estaba— en vez de resolver al id de otro entorno. Ninguna variante cruza a un id ajeno, y
+ * ESA es la propiedad de la que depende no mandarle a un servidor el token de otro.
+ */
+export function entornoDeUrl(url: string, entornos: readonly Entorno[]): string | undefined {
+  const canonica = (valor: string): string => {
+    try {
+      return new URL(valor).toString();
+    } catch {
+      return valor;
+    }
+  };
+  const buscada = canonica(url);
+  return entornos.find((entorno) => canonica(entorno.url) === buscada)?.id;
+}

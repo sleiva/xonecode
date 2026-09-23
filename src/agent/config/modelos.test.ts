@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Modelos } from "./modelos.js";
 
 /**
@@ -154,5 +157,92 @@ describe("el esfuerzo, contra el invocationParams de cada cliente", () => {
       process.env.OPENAI_API_KEY = "openai-de-pega";
       expect(params("openai/gpt-5", "high")["reasoning_effort"]).toBeUndefined();
     });
+  });
+});
+
+/**
+ * El `user_id` de DeepSeek, contra el `invocationParams()` del cliente REAL.
+ *
+ * Dos mitades, y la segunda es la que importa: con la identidad pasada a mano se prueba que
+ * el campo llega a la raíz del cuerpo; SIN pasarla —que es como la construyen los diez
+ * `new Modelos(` de producción— se prueba que el lector de disco está CABLEADO. Solo la
+ * primera sería probar la función y no el montaje, que es el patrón del `Calificador`.
+ */
+describe("el user_id de DeepSeek, contra el invocationParams del cliente", () => {
+  const guardadas = { ...process.env };
+  let casa: string;
+  beforeEach(() => {
+    process.env.DEEPSEEK_API_KEY = "deepseek-de-pega";
+    process.env.NVIDIA_API_KEY = "nvidia-de-pega";
+    casa = mkdtempSync(join(tmpdir(), "xonecode-identidad-"));
+    process.env.HOME = casa;
+    process.env.USERPROFILE = casa;
+  });
+  afterEach(() => {
+    for (const v of ["DEEPSEEK_API_KEY", "NVIDIA_API_KEY", "HOME", "USERPROFILE"]) {
+      if (guardadas[v] === undefined) delete process.env[v];
+      else process.env[v] = guardadas[v];
+    }
+    rmSync(casa, { recursive: true, force: true });
+  });
+
+  const jwt = (sub: string): string =>
+    `e30.${Buffer.from(JSON.stringify({ sub })).toString("base64url")}.firma`;
+
+  const params = (modelos: Modelos) =>
+    (modelos.paraPapel("trabajo") as { invocationParams: () => Record<string, unknown> }).invocationParams();
+
+  /** Deja en la casa temporal un login de CloudStudio con ese `sub`, en ese entorno. */
+  const conLogin = (entorno: string, url: string, sub: string): void => {
+    mkdirSync(join(casa, ".xonecode"), { recursive: true });
+    writeFileSync(join(casa, ".xonecode", "settings.json"), JSON.stringify({ entornos: [{ id: entorno, nombre: entorno, url }] }));
+    writeFileSync(join(casa, ".xonecode", "cloudstudio-oauth.json"), JSON.stringify({
+      version: 2,
+      porEntorno: { [entorno]: { tokens: { access_token: "opaco", token_type: "Bearer", id_token: jwt(sub) } } },
+    }));
+  };
+
+  it("con identidad, viaja como user_id en la RAÍZ del cuerpo, y no como el `user` del SDK", () => {
+    const p = params(new Modelos({ bandera: "deepseek/deepseek-flash" }, undefined, undefined, undefined, () => "xonecode-abc"));
+    expect(p["user_id"]).toBe("xonecode-abc");
+    expect(p["user"]).toBeUndefined();
+  });
+
+  it("solo a DeepSeek: otro compatible con OpenAI no lo lleva aunque haya identidad", () => {
+    const p = params(new Modelos({ bandera: "nvidia/nemotron-x" }, undefined, undefined, undefined, () => "xonecode-abc"));
+    expect(p["user_id"]).toBeUndefined();
+  });
+
+  it("sin login en la máquina no se manda nada", () => {
+    expect(params(new Modelos({ bandera: "deepseek/deepseek-flash" }))["user_id"]).toBeUndefined();
+  });
+
+  it("CABLEADO: sin pasar nada, lee el login de la casa y manda su hash", () => {
+    conLogin("webstudio", "https://mcp.xonewebstudio.com/mcp", "8f1c-guid");
+    const p = params(new Modelos({ bandera: "deepseek/deepseek-flash" }));
+    expect(p["user_id"]).toMatch(/^xonecode-[0-9a-f]{32}$/);
+    expect(String(p["user_id"])).not.toContain("8f1c");
+  });
+
+  it("el entorno del PROYECTO manda: se resuelve por su url, como la sincronización", () => {
+    conLogin("webstudio", "https://mcp.xonewebstudio.com/mcp", "8f1c-guid");
+    const delProyecto = params(new Modelos({
+      bandera: "deepseek/deepseek-flash",
+      proyecto: { cloudstudio: { url: "https://mcp.xonewebstudio.com/mcp" } },
+    }));
+    const deOtroServidor = params(new Modelos({
+      bandera: "deepseek/deepseek-flash",
+      proyecto: { cloudstudio: { url: "https://cloudstudio.cliente.example/mcp" } },
+    }));
+    expect(delProyecto["user_id"]).toMatch(/^xonecode-/);
+    // Un proyecto de OTRO servidor, sin sesión ahí, no toma prestada la identidad de éste.
+    expect(deOtroServidor["user_id"]).toBeUndefined();
+  });
+
+  it("y se lee en cada construcción: un login hecho con la consola abierta ya cuenta", () => {
+    const modelos = new Modelos({ bandera: "deepseek/deepseek-flash" });
+    expect(params(modelos)["user_id"]).toBeUndefined();
+    conLogin("webstudio", "https://mcp.xonewebstudio.com/mcp", "8f1c-guid");
+    expect(params(modelos)["user_id"]).toMatch(/^xonecode-/);
   });
 });
