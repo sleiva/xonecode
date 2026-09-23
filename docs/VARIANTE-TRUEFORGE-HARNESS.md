@@ -523,8 +523,10 @@ hechos del proyecto precargados, y envuelve el prompt con su identidad, que no s
    última captura del turno una vez; en verde solo avisa y en rojo sus observaciones van en la
    reparación. El juez corre una vez tras todas las pasadas y contra el ENCARGO, no contra lo
    tecleado: la respuesta a una pregunta se juzga contra el encargo que la provocó. No se juzga un
-   turno cancelado ni uno que acaba preguntando, y tras reabrir una sesión con pregunta pendiente
-   el encargo no consta —vive en el proceso, no en la foto— y el juez calla. A diferencia de
+   turno cancelado ni uno que acaba preguntando. El encargo CRUDO viaja con la pregunta en espera
+   —también en la foto (`pregunta_pendiente.encargo`, opcional)—, así que tras reabrir se sigue
+   juzgando y reparando contra él; el objetivo lleva al lado solo la ÚLTIMA pregunta y su
+   respuesta, para que las preguntas encadenadas no acumulen notas. A diferencia de
    deepagents, este camino SÍ tiene test de turno: aquí el arnés escribe una captura de verdad.
 3. ~~El resto de subagentes~~: hecho, todos salen de su `.md` (abajo).
 4. ~~La memoria del hilo en disco~~: hecha, como foto del raíz (abajo).

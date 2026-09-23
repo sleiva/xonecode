@@ -51,6 +51,9 @@ export interface PreguntaPendiente {
   hilo: string;
   id: string;
   args: Record<string, unknown>;
+  /** El encargo que provocó la pregunta: sin él, tras reabrir, el juez y la reparación del
+   *  turno de la respuesta no tendrían contra qué medir. Opcional: una v1 anterior no lo trae. */
+  encargo?: string;
 }
 
 /** Un id de sesión que se puede usar como nombre de carpeta: segmento llano y nada más. */
@@ -110,7 +113,7 @@ export function fotoSaneada(foto: FotoDeHilo): FotoDeHilo {
  * ```json
  * { "version": 1, "trueforge": "0.2.1", "context": [...],
  *   "current_context_usage": {...}, "capability_state": {...} | null,
- *   "pregunta_pendiente": { "hilo": "...", "id": "...", "args": {...} } }
+ *   "pregunta_pendiente": { "hilo": "...", "id": "...", "args": {...}, "encargo"?: "..." } }
  * ```
  *
  * Solo `version` y `context` son obligatorios. `trueforge` es la versión de la librería que
@@ -193,11 +196,12 @@ function validarV1(foto: FotoCruda): FotoDeHilo | string {
       typeof p.hilo !== "string" ||
       typeof p.id !== "string" ||
       !esObjeto(p.args) ||
-      Object.keys(p).some((k) => k !== "hilo" && k !== "id" && k !== "args")
+      (p.encargo !== undefined && typeof p.encargo !== "string") ||
+      Object.keys(p).some((k) => k !== "hilo" && k !== "id" && k !== "args" && k !== "encargo")
     ) {
       return "la pregunta pendiente está mal formada";
     }
-    pregunta = { hilo: p.hilo, id: p.id, args: p.args };
+    pregunta = { hilo: p.hilo, id: p.id, args: p.args, ...(typeof p.encargo === "string" ? { encargo: p.encargo } : {}) };
   }
   return {
     context,
@@ -256,7 +260,16 @@ export function guardarMemoria(raiz: string, hilo: string, foto: FotoDeHilo): vo
     context: saneada.context,
     ...(saneada.current_context_usage === undefined ? {} : { current_context_usage: saneada.current_context_usage }),
     ...(saneada.capability_state === undefined ? {} : { capability_state: saneada.capability_state }),
-    ...(pregunta === undefined ? {} : { pregunta_pendiente: { hilo: pregunta.hilo, id: pregunta.id, args: pregunta.args } }),
+    ...(pregunta === undefined
+      ? {}
+      : {
+          pregunta_pendiente: {
+            hilo: pregunta.hilo,
+            id: pregunta.id,
+            args: pregunta.args,
+            ...(pregunta.encargo === undefined ? {} : { encargo: pregunta.encargo }),
+          },
+        }),
   };
   mkdirSync(dirname(ruta), { recursive: true });
   const temporal = `${ruta}.${process.pid}.tmp`;

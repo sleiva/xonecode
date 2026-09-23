@@ -155,7 +155,14 @@ export const LIMITE_DE_LLAMADAS_DEL_RAIZ = 100;
 function preguntaDeLaFoto(foto: FotoDeHilo | undefined): Pendiente | undefined {
   const p = foto?.pregunta_pendiente;
   if (p === undefined) return undefined;
-  return { clave: claveDe(p.hilo, p.id), hilo: p.hilo, id: p.id, nombre: "ask_user_question", args: p.args };
+  return {
+    clave: claveDe(p.hilo, p.id),
+    hilo: p.hilo,
+    id: p.id,
+    nombre: "ask_user_question",
+    args: p.args,
+    ...(p.encargo === undefined ? {} : { encargo: p.encargo }),
+  };
 }
 
 export interface OpcionesDeSesionTrueforge {
@@ -212,6 +219,9 @@ interface Pendiente {
   id: string;
   nombre: string;
   args: Record<string, unknown>;
+  /** Solo en una PREGUNTA: el encargo CRUDO que la provocó, para juzgar y reparar contra él y no
+   *  contra la respuesta. Viaja en la foto, así que sobrevive a reabrir la sesión. */
+  encargo?: string;
 }
 
 const claveDe = (hilo: string, id: string): string => `${hilo}:${id}`;
@@ -386,9 +396,6 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
    * lo rechazaba la librería («Cannot process user messages while sub agents are running»).
    */
   let raizActual: AgentThread | undefined;
-  /** El encargo que provocó la pregunta en espera, para juzgar y reparar contra él y no contra
-   *  la respuesta. Solo en el proceso: tras reabrir no consta, y entonces el juez calla. */
-  let encargoEnEspera: string | undefined;
   /** La pregunta del orquestador que espera respuesta: el siguiente mensaje la contesta. */
   let preguntaEnEspera: Pendiente | undefined;
   const nuevoOrquestador = (foto?: FotoDeHilo): AgentThreadOrchestrator => {
@@ -570,7 +577,9 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       const tope = opciones.topeDeRondas ?? MAX_APPROVAL_ROUNDS;
       const aplicadasSinPreguntar: string[] = [];
       capturasDelTurno = [];
-      /** El encargo de ESTE turno (ver `flujo`); ausente = no consta. */
+      /** El encargo de ESTE turno tal cual se pidió, y el mismo con la última pregunta y su
+       *  respuesta al lado, que es lo que se juzga y se repara (ver `flujo`). Ausente = no consta. */
+      let encargoDelTurno: string | undefined;
       let objetivoDelTurno: string | undefined;
       // Se dice UNA vez: el turno que lo lleva es el primero que corre sin la conversación de antes.
       const memoriaDescartada = avisoDeMemoria;
@@ -605,8 +614,9 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
             // persona escriba después vuelve como la respuesta de esa tool (`turno`, arriba).
             const pregunta = preguntas[0];
             if (pregunta !== undefined) {
-              preguntaEnEspera = pregunta;
-              encargoEnEspera = objetivoDelTurno;
+              // El encargo CRUDO, no el objetivo con su nota: si no, cada pregunta encadenada
+              // arrastraría las notas de las anteriores y el objetivo crecería turno a turno.
+              preguntaEnEspera = { ...pregunta, ...(encargoDelTurno === undefined ? {} : { encargo: encargoDelTurno }) };
               yield { tipo: "token", texto: textoDePregunta(pregunta.args) };
               // Y la misma pregunta como DATO, para la piel que pinta un botón por opción.
               const consulta = consultaDe(pregunta.args);
@@ -695,13 +705,13 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
         // Y con lo que se preguntó y se contestó al lado. Medido en el navegador: con el encargo
         // a secas, el juez leía solo la respuesta de ESTE turno y concluía que la pregunta que
         // se pidió no se había hecho — se hizo, en el turno anterior, y él no lo veía.
+        // Solo la ÚLTIMA pregunta va en la nota: las de antes están en la conversación, y el
+        // encargo de una pregunta encadenada es el CRUDO (`rondasDe`), así que no se acumulan.
+        encargoDelTurno = enEspera === undefined ? peticion : enEspera.encargo;
         objetivoDelTurno =
-          enEspera === undefined
-            ? peticion
-            : encargoEnEspera === undefined
-              ? undefined
-              : `${encargoEnEspera}\n\n[En un turno anterior el agente preguntó «${consultaDe(enEspera.args).pregunta}» y la persona contestó «${respuestaAPregunta(enEspera.args, peticion)}».]`;
-        encargoEnEspera = undefined;
+          enEspera === undefined || encargoDelTurno === undefined
+            ? encargoDelTurno
+            : `${encargoDelTurno}\n\n[En un turno anterior el agente preguntó «${consultaDe(enEspera.args).pregunta}» y la persona contestó «${respuestaAPregunta(enEspera.args, peticion)}».]`;
         // Los hechos baratos del proyecto van DELANTE (`core/hechosDelProyecto.ts`), la misma
         // foto y el MISMO cargador que `xone_navegacion`, rehecha en cada turno —la regla de
         // deepagents: en el prompt de sistema envejecería dentro de la sesión—. Solo en la
@@ -895,7 +905,14 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
             ...(raizActual.toSnapshot() as unknown as FotoDeHilo),
             ...(preguntaEnEspera === undefined
               ? {}
-              : { pregunta_pendiente: { hilo: preguntaEnEspera.hilo, id: preguntaEnEspera.id, args: preguntaEnEspera.args } }),
+              : {
+                  pregunta_pendiente: {
+                    hilo: preguntaEnEspera.hilo,
+                    id: preguntaEnEspera.id,
+                    args: preguntaEnEspera.args,
+                    ...(preguntaEnEspera.encargo === undefined ? {} : { encargo: preguntaEnEspera.encargo }),
+                  },
+                }),
           });
           if (persistir) {
             try {
@@ -939,7 +956,6 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       const foto = fotoDeLaSesion(hilo);
       orquestador = nuevoOrquestador(foto);
       preguntaEnEspera = preguntaDeLaFoto(foto);
-      encargoEnEspera = undefined;
     },
     cancelar() {
       cancelado = true;

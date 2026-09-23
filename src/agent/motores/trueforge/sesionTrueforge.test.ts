@@ -933,3 +933,46 @@ describe("la pregunta del orquestador, también como DATO", () => {
     expect(sin).toEqual([]);
   }, 30_000);
 });
+
+describe("el encargo de una pregunta, contra el que se juzga y se repara", () => {
+  const preguntar = (id: string, question: string) => [
+    new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "ask_user_question", args: JSON.stringify({ question, options: ["A", "B"] }) }] }),
+  ];
+  type Caso = { objetivo: string; respuesta: string; hechos: HechosDelTurno };
+
+  it("dos preguntas ENCADENADAS: el objetivo lleva el encargo una vez y solo la ÚLTIMA pregunta", async () => {
+    const casos: Caso[] = [];
+    const { m } = modelosConGuion([preguntar("q1", "¿Primera?"), preguntar("q2", "¿Segunda?"), [new AIMessageChunk({ content: "Hecho." })]]);
+    const s = await abrirSesionTrueforge({
+      raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO,
+      juezDelTurno: async (c) => (casos.push(c), { cumplimiento: "cumplido", motivo: "ok" }),
+    });
+    await s.turno("arregla la pantalla", piel().p);
+    await s.turno("1", piel().p);
+    await s.turno("2", piel().p);
+    expect(casos).toHaveLength(1);
+    const objetivo = casos[0]!.objetivo;
+    expect(objetivo.startsWith("arregla la pantalla\n\n[")).toBe(true);
+    expect(objetivo.match(/En un turno anterior/g)).toHaveLength(1);
+    expect(objetivo).toContain("«¿Segunda?»");
+    expect(objetivo).toContain("«B»");
+    expect(objetivo).not.toContain("¿Primera?");
+  }, 30_000);
+
+  it("tras CERRAR y REABRIR, la respuesta se sigue juzgando contra el encargo: viaja en la foto", async () => {
+    const raiz = proyecto();
+    const casos: Caso[] = [];
+    const abrir = (m: ModelosPort) =>
+      abrirSesionReal({
+        raiz, modelos: m, skills: { catalogo: () => [], cargar: async () => [] } as never, entorno: ENTORNO, motor: "trueforge", hilo: "s-encargo",
+        juezDelTurno: async (c) => (casos.push(c), { cumplimiento: "cumplido", motivo: "ok" }),
+      });
+    const primera = await abrir(modelosConGuion([preguntar("q1", "¿Cuál?")]).m);
+    await primera.turno("arregla la pantalla", piel().p);
+    primera.cerrar();
+    const segunda = await abrir(modelosConGuion([[new AIMessageChunk({ content: "Vale." })]]).m);
+    await segunda.turno("2", piel().p);
+    expect(casos).toHaveLength(1);
+    expect(casos[0]!.objetivo.startsWith("arregla la pantalla")).toBe(true);
+  }, 30_000);
+});

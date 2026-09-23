@@ -144,6 +144,15 @@ describe("la foto lleva VERSIÓN y se lee de forma estricta", () => {
     expect(interpretarFoto(JSON.stringify({ version: null, context: [] }))).toMatchObject({ estado: "incompatible" });
   });
 
+  it("el ENCARGO de la pregunta pendiente se guarda y se vuelve a leer; una v1 sin él sigue valiendo", () => {
+    const r = raiz();
+    const pregunta = { hilo: "main", id: "q1", args: { question: "¿A o B?" }, encargo: "arregla la pantalla" };
+    guardarMemoria(r, "s1", { context: [{ role: "user", content: "hola" }], pregunta_pendiente: pregunta });
+    expect(cargarMemoria(r, "s1")).toMatchObject({ estado: "ok", foto: { pregunta_pendiente: pregunta } });
+    const sinEncargo = { version: 1, context: [], pregunta_pendiente: { hilo: "main", id: "q1", args: {} } };
+    expect(interpretarFoto(JSON.stringify(sinEncargo)).estado).toBe("ok");
+  });
+
   it("un campo desconocido en una v1 es un NO, no un campo que se ignora", () => {
     expect(interpretarFoto(JSON.stringify({ version: 1, context: [], otra_cosa: 1 }))).toEqual({
       estado: "incompatible",
@@ -156,6 +165,7 @@ describe("la foto lleva VERSIÓN y se lee de forma estricta", () => {
     for (const mala of [
       { ...base, pregunta_pendiente: { hilo: "main", id: 7, args: {} } },
       { ...base, pregunta_pendiente: { hilo: "main", id: "q", args: {}, extra: true } },
+      { ...base, pregunta_pendiente: { hilo: "main", id: "q", args: {}, encargo: 3 } },
       { ...base, capability_state: [1] },
       { ...base, current_context_usage: 3 },
       { ...base, context: [{ content: "sin role ni type" }] },
