@@ -306,3 +306,20 @@ button.fuera:hover {
   color: var(--dsw-alias-label-primary);
   background: var(--dsw-alias-interactive-bg-hover);
 }
+
+/* «Volver a medir», en el pie del menú de dispositivos: un enlace y no un botón con recinto, que
+   al lado ya va la hora de la medida y el menú no necesita otro control con peso. */
+.volverAMedir {
+  border: none;
+  padding: 0;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.volverAMedir:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

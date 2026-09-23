@@ -103,3 +103,43 @@ describe("etiquetaDeEstado", () => {
     expect(etiquetaDeEstado({ estado: "offline", clase: "emulador" })).toBe("offline");
   });
 });
+
+describe("inventario: los emuladores de Android no se entierran bajo los simuladores de iOS", () => {
+  it("con el AVD apagado y 46 simuladores de iOS apagados, el AVD va PRIMERO entre los apagados", () => {
+    // Medido en su pantalla: «me salen simuladores de iOS apagados pero no me sale el Android».
+    // El AVD se añadía al FINAL, detrás de los 46.
+    const simuladores: Dispositivo[] = Array.from({ length: 46 }, (_, i) => ({
+      id: `SIM-${i}`,
+      nombre: `iPhone ${i}`,
+      plataforma: "ios",
+      clase: "simulador",
+      estado: "apagado",
+    }));
+    const informe = {
+      sistema: "mac",
+      medido: "2026-09-23T10:30:00.000Z",
+      herramientas: [],
+      dispositivos: simuladores,
+      avds: ["pixel8"],
+      recetas: [],
+    } as unknown as InformeDeDispositivos;
+    const { virtuales } = inventario(informe);
+    expect(virtuales[0]!.nombre).toBe("pixel8");
+    expect(virtuales).toHaveLength(47);
+  });
+
+  it("lo que está a MANO sigue primero, sea de la plataforma que sea", () => {
+    const informe = {
+      sistema: "mac",
+      medido: "2026-09-23T10:30:00.000Z",
+      herramientas: [],
+      dispositivos: [
+        { id: "SIM-A", nombre: "iPhone arrancado", plataforma: "ios", clase: "simulador", estado: "arrancado" },
+        { id: "SIM-B", nombre: "iPhone apagado", plataforma: "ios", clase: "simulador", estado: "apagado" },
+      ],
+      avds: ["pixel8"],
+      recetas: [],
+    } as unknown as InformeDeDispositivos;
+    expect(inventario(informe).virtuales.map((d) => d.nombre)).toEqual(["iPhone arrancado", "pixel8", "iPhone apagado"]);
+  });
+});

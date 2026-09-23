@@ -27,17 +27,17 @@ import estilos from "./PastillaDeModelo.module.css";
  * - **Elegir manda el ID y nada más.** El servidor resuelve el resto contra su medida: el
  *   navegador no es fuente sobre la máquina.
  *
- * Y lo que NO promete: **la elección la consume la pestaña Ejecutar**, que es la que lanza la
- * app en ese aparato. Lo que sigue sin ser verdad —y el pie no lo insinúa— es que el AGENTE
- * esté hablando con ese teléfono: sus tools de dispositivo no existen. El pie decía antes
- * «ninguna tool la consume todavía», y esa mitad dejó de ser cierta en cuanto la pestaña
- * existió; la otra no se ha movido, así que se arregla una y no las dos.
+ * **La elección la consumen la pestaña Ejecutar**, que lanza la app en ese aparato, **y el
+ * `device-controller`**: los scripts de `xone-hotswap` la leen de un fichero de la sesión en cada
+ * ejecución (`core/dispositivoDeSesion.ts`). El pie lo dice ahora; hasta que existió eso, decía
+ * solo lo de la pestaña, porque era lo único cierto.
  */
 export function PastillaDeDispositivo({
   elegido,
   informe,
   conectado = true,
   alElegir,
+  alMedir,
 }: {
   /** El de la sesión, tal como lo cuenta el servidor. Ausente = ninguno elegido. */
   elegido?: DispositivoElegido;
@@ -46,6 +46,13 @@ export function PastillaDeDispositivo({
   conectado?: boolean;
   /** El id, o `undefined` para quitar la elección. */
   alElegir: (id: string | undefined) => void;
+  /**
+   * Volver a medir la máquina desde el propio menú. La lista es una FOTO —se mide al conectar y
+   * al pedirlo, sin sondeo—, y un emulador que arrancó un script después no sale hasta que se
+   * vuelve a medir: tener que ir a «Tu equipo» para eso es no saber que hace falta. Ausente = no
+   * se ofrece.
+   */
+  alMedir?: () => void;
 }) {
   const [abierta, setAbierta] = useState(false);
   const envoltura = useRef<HTMLDivElement>(null);
@@ -152,11 +159,28 @@ export function PastillaDeDispositivo({
               <p className={estilos.espera}>No se ha encontrado ningún dispositivo. Los requisitos se instalan en Ajustes.</p>
             ) : null}
           </div>
+          {alMedir === undefined ? null : (
+            // La HORA de la foto al lado del botón: es lo que dice si hace falta pulsarlo.
+            <div className={estilos.espera}>
+              {informe === undefined ? null : `Medido a las ${horaDeMedida(informe.medido)}. `}
+              <button type="button" className={estilos.volverAMedir} disabled={!conectado} onClick={() => alMedir()}>
+                Volver a medir
+              </button>
+            </div>
+          )}
           <p className={estilos.espera}>
-            Se guarda con la sesión. La usa la pestaña Ejecutar para lanzar la app.
+            Se guarda con la sesión. La usan la pestaña Ejecutar para lanzar la app y el agente
+            cuando prueba en un aparato; sin elegir ninguno, prefiere un emulador.
           </p>
         </div>
       ) : null}
     </div>
   );
+}
+
+
+/** «12:30» de una medida en ISO, en la hora de ESTE navegador. Una fecha rota no se pinta. */
+function horaDeMedida(iso: string): string {
+  const fecha = new Date(iso);
+  return Number.isNaN(fecha.getTime()) ? "—" : fecha.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
 }

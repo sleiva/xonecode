@@ -1675,6 +1675,8 @@ export function App({
               {...(estado.alta?.dispositivoActivo === undefined ? {} : { dispositivo: estado.alta.dispositivoActivo })}
               {...(estado.dispositivos === undefined ? {} : { dispositivos: estado.dispositivos })}
               alElegirDispositivo={(id) => void enviar(id === undefined ? { clase: "dispositivo" } : { clase: "dispositivo", id })}
+              // El MISMO mensaje que el «Refrescar» de «Tu equipo»: medir es una sola acción.
+              alMedirDispositivos={actualizarDispositivos}
               // El modo de escritura de la sesión. Ausente = no hay sesión abierta, y
               // entonces la pastilla no se pinta: un control sin dato detrás no se pinta.
               // Se manda la INTENCIÓN y el servidor la aplica encolando `/aprobacion`.

@@ -90,10 +90,23 @@ describe("PastillaDeDispositivo", () => {
    * sigue sin tools de dispositivo, así que un «cuando las tenga» es una capacidad que nadie ha
    * decidido construir, dicha como si estuviera en camino.
    */
-  it("dice que la elección la usa la pestaña Ejecutar, y no promete que la use el agente", () => {
+  it("dice quién usa la elección —Ejecutar Y el agente, desde que le llega— sin prometer tools", () => {
+    // El agente la usa desde que los scripts de xone-hotswap leen el fichero de la sesión
+    // (`core/dispositivoDeSesion.ts`): decirlo ahora es verdad, y callarlo haría creer que da igual.
     render(<PastillaDeDispositivo informe={INFORME} alElegir={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: /sin dispositivo/i }));
-    expect(screen.getByText(/la usa la pestaña Ejecutar/i)).toBeTruthy();
+    expect(screen.getByText(/pestaña Ejecutar.*el agente.*prefiere un emulador/is)).toBeTruthy();
     expect(screen.queryByText(/tools de dispositivo/i)).toBeNull();
+  });
+
+  it("«Volver a medir» con la HORA de la foto, y solo si hay quien mida", () => {
+    const alMedir = vi.fn();
+    const { rerender } = render(<PastillaDeDispositivo informe={INFORME} alElegir={() => {}} alMedir={alMedir} />);
+    fireEvent.click(screen.getByRole("button", { name: /sin dispositivo/i }));
+    expect(screen.getByText(/Medido a las/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Volver a medir" }));
+    expect(alMedir).toHaveBeenCalledTimes(1);
+    rerender(<PastillaDeDispositivo informe={INFORME} alElegir={() => {}} />);
+    expect(screen.queryByRole("button", { name: "Volver a medir" })).toBeNull();
   });
 });

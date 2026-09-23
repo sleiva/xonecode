@@ -42,6 +42,7 @@ export function Compositor({
   modoDeEscritura,
   alElegirModoDeEscritura,
   alElegirDispositivo,
+  alMedirDispositivos,
   alEnviar,
 }: {
   conectado: boolean;
@@ -110,6 +111,8 @@ export function Compositor({
   alElegirModoDeEscritura?: (modo: ModoDeEscritura) => void;
   /** Elegir dispositivo: el id, o `undefined` para quitarlo. Ausente = no se pinta pastilla. */
   alElegirDispositivo?: (id: string | undefined) => void;
+  /** Volver a medir la máquina desde el menú de la pastilla. Ausente = no se ofrece. */
+  alMedirDispositivos?: () => void;
   alEnviar: (texto: string) => void;
 }) {
   const [valor, setValor] = useState("");
@@ -216,6 +219,7 @@ export function Compositor({
                 {...(dispositivos === undefined ? {} : { informe: dispositivos })}
                 conectado={conectado}
                 alElegir={alElegirDispositivo}
+                {...(alMedirDispositivos === undefined ? {} : { alMedir: alMedirDispositivos })}
               />
             </div>
           )}
