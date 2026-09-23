@@ -517,7 +517,8 @@ hechos del proyecto precargados, y envuelve el prompt con su identidad, que no s
 1. `xone_navegacion`, `regex_search` y los hechos del proyecto: es lo que cierra la diferencia medida.
 2. El verificador con su reparación, el juez del turno y el crítico de pantalla. Hoy un turno que
    escribe lo avisa, como deepagents cuando su verificador no corre.
-3. Subagentes, emulando los cinco especialistas en `createDynamicSubAgentThread`.
+3. El resto de subagentes. **El primero ya está**: el `device-controller`, el único con shell,
+   como en deepagents (abajo).
 4. La memoria del hilo en disco: hoy vive en memoria y reabrir una sesión de TrueForge empieza de cero.
 5. Deshacer la dependencia circular entre `turnoReal.ts` y `sesionTrueforge.ts`.
 
@@ -525,3 +526,18 @@ hechos del proyecto precargados, y envuelve el prompt con su identidad, que no s
 identidad; prefija cada tool con `mcp server:`; el prompt de un subagente no se puede personalizar y no
 hay subagentes con nombre; las tools no reciben señal de cancelación; como mucho 5 subagentes en paralelo
 y un solo nivel.
+
+
+### El `device-controller`, primer subagente (23-09-2026)
+
+«No puede ejecutar el hotswap»: sin subagentes nadie tenía shell, y dársela al agente raíz habría
+roto la regla de deepagents —la shell la tiene UNO, porque no pasa por `permisosDe` ni por la
+aprobación—. Así que el raíz delega con `create_sub_agent` y la factoría de hijos crea el `.md` con
+`ejecucion: true`, con su prompt, sus tools de lectura y `execute` sobre el mismo backend que le
+monta deepagents. Un test comprueba en las tools que recibe el modelo que al raíz nunca se le ofrece
+`execute`.
+
+Medido con `deepseek-flash`: «¿qué dispositivos hay conectados?» → `create_sub_agent device-controller`
+→ `adb devices -l` → «el emulador `emulator-5554`, en estado `device`», correcto, en 4 llamadas y
+13,4k de entrada. Las dos rigideces que hubo que rodear: el prompt del hijo va en su primer mensaje,
+y ese mensaje corrige la frase fija de TrueForge de que el hijo tiene «las mismas tools que el padre».
