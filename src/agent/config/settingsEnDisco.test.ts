@@ -8,6 +8,7 @@ import {
   guardarDispositivos,
   guardarEntorno,
   guardarWorkspace,
+  olvidarEntornoDeSettings,
   rutaSettings,
   SettingsRotosEnDisco,
 } from "./settingsEnDisco.js";
@@ -164,3 +165,17 @@ describe("settingsEnDisco", () => {
   });
 });
 
+
+
+describe("olvidarEntornoDeSettings", () => {
+  it("quita ESE entorno y deja los demás y el resto del fichero", () => {
+    const c = casa();
+    guardarEntorno(c, { id: "a", nombre: "A", url: "https://a/mcp" });
+    guardarEntorno(c, { id: "b", nombre: "B", url: "https://b/mcp" });
+    guardarWorkspace(c, "/mi/ws");
+    olvidarEntornoDeSettings(c, "a");
+    const { settings } = cargarSettings(c);
+    expect(settings.entornos.map((e) => e.id)).toEqual(["b"]);
+    expect(settings.workspace).toBe("/mi/ws");
+  });
+});

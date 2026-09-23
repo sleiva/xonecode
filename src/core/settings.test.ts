@@ -8,6 +8,7 @@ import {
   seMira,
   PLATAFORMAS_DE_DISPOSITIVO,
   TOPE_DE_CONCURRENCIA_DE_TAREAS,
+  motivoParaNoOlvidarEntorno,
 } from "./settings.js";
 
 describe("validarSettings", () => {
@@ -217,5 +218,25 @@ describe("motivoDeWorkspaceInaceptable", () => {
   it("relativa, tampoco: dependería del directorio desde el que se arrancó la consola", () => {
     expect(motivoDeWorkspaceInaceptable("proyectos")).toBeDefined();
     expect(motivoDeWorkspaceInaceptable("./proyectos")).toBeDefined();
+  });
+});
+
+
+describe("motivoParaNoOlvidarEntorno", () => {
+  const base = { entorno: "webstudio", baseDeWorkspace: "/ws" };
+  it("sin nada vivo en ese entorno, se puede", () => {
+    expect(
+      motivoParaNoOlvidarEntorno({ ...base, abiertas: ["/ws/manager/X"], tareas: [{ estado: "en-proceso", raiz: "/ws/manager/X" }] })
+    ).toBeUndefined();
+  });
+  it("con un proyecto SUYO abierto, no, y dice cuál", () => {
+    expect(motivoParaNoOlvidarEntorno({ ...base, abiertas: ["/ws/webstudio/Tienda"], tareas: [] })).toMatch(/Tienda/);
+  });
+  it("con una tarea suya sin terminar, no; una TERMINADA no cuenta", () => {
+    expect(motivoParaNoOlvidarEntorno({ ...base, abiertas: [], tareas: [{ estado: "requiere-atencion", raiz: "/ws/webstudio/T" }] })).toMatch(/1 tarea/);
+    expect(motivoParaNoOlvidarEntorno({ ...base, abiertas: [], tareas: [{ estado: "terminada", raiz: "/ws/webstudio/T" }] })).toBeUndefined();
+  });
+  it("un entorno cuyo id es PREFIJO de otro no se confunde con él", () => {
+    expect(motivoParaNoOlvidarEntorno({ ...base, abiertas: ["/ws/webstudio2/X"], tareas: [] })).toBeUndefined();
   });
 });

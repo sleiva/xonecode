@@ -1404,3 +1404,22 @@ describe("los dos botones de refrescar el equipo son el mismo", () => {
     );
   });
 });
+
+describe("Ajustes: quitar un entorno", () => {
+  afterEach(cleanup);
+  const entornos = [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" }];
+
+  it("pide confirmación, dice que las copias se quedan, y CANCELAR no manda nada", () => {
+    const alQuitarEntorno = vi.fn(async () => undefined);
+    render(<Ajustes entornos={entornos} entornoActivo="webstudio" seccionInicial="entornos" conectado alQuitarEntorno={alQuitarEntorno} alCerrar={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Quitar entorno" }));
+    expect(screen.getByText(/copias ya bajadas se quedan/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(alQuitarEntorno).not.toHaveBeenCalled();
+  });
+
+  it("sin el manejador no se ofrece el botón", () => {
+    render(<Ajustes entornos={entornos} entornoActivo="webstudio" seccionInicial="entornos" conectado alCerrar={() => {}} />);
+    expect(screen.queryByRole("button", { name: "Quitar entorno" })).toBeNull();
+  });
+});

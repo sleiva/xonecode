@@ -243,6 +243,42 @@ describe("App: el secreto y el selector, que también colgaban", () => {
     expect(enviar).toHaveBeenCalledWith({ clase: "arrancarEmulador", avd: "pixel8" });
   });
 
+  it("«Quitar entorno» manda `olvidar` por el cable y enseña el MOTIVO del 409", async () => {
+    // El cableado, por lo mismo que el test de abajo: el prop es OPCIONAL, y sin él el botón
+    // ni aparecería. Y la negativa viaja en la RESPUESTA, que es lo que `App` tiene que leer.
+    const enviar = vi.fn((mensaje: unknown) =>
+      Promise.resolve(
+        (mensaje as { accion?: string }).accion === "olvidar"
+          ? (new Response(JSON.stringify({ motivo: "hay 1 tarea de fondo sin terminar en este entorno" }), {
+              status: 409,
+            }) as unknown)
+          : (undefined as unknown)
+      )
+    );
+    const { store } = montar(enviar);
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        registrados: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" }],
+        entornoActivo: "webstudio",
+        proyectos: [],
+        ramas: [],
+        proyectoAbierto: true,
+      })
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Ajustes" })[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "Entornos" }));
+    fireEvent.click(screen.getByRole("button", { name: "Quitar entorno" }));
+    fireEvent.click(screen.getByRole("button", { name: "Quitar" }));
+    await waitFor(() =>
+      expect(enviar).toHaveBeenCalledWith({ clase: "entorno", accion: "olvidar", entorno: "webstudio" })
+    );
+    expect(await screen.findByText(/No se ha quitado: hay 1 tarea de fondo/)).toBeTruthy();
+  });
+
   it("abrir la pestaña de otro entorno pide SUS proyectos por el cable", async () => {
     /*
       El CABLEADO, que es lo que ningún test de componente ve: `Ajustes.tsx` ya está probado

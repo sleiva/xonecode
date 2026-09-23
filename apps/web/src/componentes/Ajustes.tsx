@@ -285,6 +285,7 @@ export function Ajustes({
   proyectos = [],
   proyectosPorEntorno = {},
   alPedirProyectosDeEntorno,
+  alQuitarEntorno,
   entornoActivo,
   seccionInicial,
   secreto,
@@ -373,6 +374,12 @@ export function Ajustes({
    * dato, no al montar—, y NUNCA muda el entorno activo.
    */
   alPedirProyectosDeEntorno?: (entorno: string) => void;
+  /**
+   * Quitar un entorno registrado. Devuelve el MOTIVO si el servidor se negó (un proyecto suyo
+   * abierto, una tarea sin terminar) y `undefined` si lo quitó. La regla vive en el servidor;
+   * aquí solo se enseña. Ausente = no se ofrece el botón.
+   */
+  alQuitarEntorno?: (entorno: string) => Promise<string | undefined>;
   entornoActivo?: string;
   /**
    * En qué sección abrir, para quien llega desde un enlace concreto (el aviso de proyectos
@@ -1857,6 +1864,14 @@ export function Ajustes({
               {!registrando && entornoEnPestana !== undefined ? (
                 <div role="tabpanel" className={estilos.panelDePestana}>
                   <p className={estilos.url}>{entornos.find((e) => e.id === entornoEnPestana)?.url}</p>
+                  {alQuitarEntorno === undefined ? null : (
+                    <QuitarEntorno
+                      key={entornoEnPestana}
+                      entorno={entornos.find((e) => e.id === entornoEnPestana)!}
+                      conectado={conectado}
+                      alQuitar={alQuitarEntorno}
+                    />
+                  )}
                   <div className={estilos.cabeceraDeProyectos}>
                     <h3 className={estilos.subencabezado}>Proyectos en la barra</h3>
                     {alPedirProyectosDeEntorno === undefined ? null : (
@@ -2116,5 +2131,73 @@ function ConfirmarCambiosSinGuardar({ onCancelar, onConfirmar }: { onCancelar: (
         </div>
       </div>
     </Modal>
+  );
+}
+
+
+/**
+ * Quitar un entorno, en DOS pasos y en línea: el botón pide confirmación y dice lo que NO se
+ * borra (las copias bajadas se quedan en el disco, igual que cambiar el workspace no mueve
+ * nada). Si el servidor se niega, el MOTIVO sale aquí mismo, al lado del botón que lo pidió.
+ * Con `key` por entorno, el estado de la confirmación no sobrevive a cambiar de pestaña.
+ */
+function QuitarEntorno({
+  entorno,
+  conectado,
+  alQuitar,
+}: {
+  entorno: { id: string; nombre: string };
+  conectado: boolean;
+  alQuitar: (entorno: string) => Promise<string | undefined>;
+}) {
+  const [confirmando, setConfirmando] = useState(false);
+  const [quitando, setQuitando] = useState(false);
+  const [motivo, setMotivo] = useState<string | undefined>(undefined);
+  if (!confirmando) {
+    return (
+      <div className={estilos.quitarEntorno}>
+        <button
+          type="button"
+          className={estilos.recargar}
+          disabled={!conectado}
+          onClick={() => {
+            setMotivo(undefined);
+            setConfirmando(true);
+          }}
+        >
+          Quitar entorno
+        </button>
+        {motivo === undefined ? null : (
+          <p role="alert" className={estilos.aviso}>
+            No se ha quitado: {motivo}
+          </p>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className={estilos.quitarEntorno} role="group" aria-label={`Quitar ${entorno.nombre}`}>
+      <p className={estilos.nota}>
+        ¿Quitar <strong>{entorno.nombre}</strong>? Deja de estar en la lista y se olvida su sesión
+        de CloudStudio. Las copias ya bajadas se quedan en el disco.
+      </p>
+      <button
+        type="button"
+        className={estilos.recargar}
+        disabled={quitando}
+        onClick={async () => {
+          setQuitando(true);
+          const negativa = await alQuitar(entorno.id);
+          setQuitando(false);
+          setConfirmando(false);
+          setMotivo(negativa);
+        }}
+      >
+        {quitando ? "Quitando…" : "Quitar"}
+      </button>
+      <button type="button" className={estilos.recargar} disabled={quitando} onClick={() => setConfirmando(false)}>
+        Cancelar
+      </button>
+    </div>
   );
 }

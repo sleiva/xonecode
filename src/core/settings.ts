@@ -363,3 +363,30 @@ export function entornoDeUrl(url: string, entornos: readonly Entorno[]): string 
   const buscada = canonica(url);
   return entornos.find((entorno) => canonica(entorno.url) === buscada)?.id;
 }
+
+/**
+ * Por qué NO se puede quitar un entorno ahora mismo, o `undefined` si se puede.
+ *
+ * Se niega mientras algo VIVO depende de él: una consola abierta sobre una copia suya (su lazo
+ * sigue hablando con ese servidor) o una tarea de fondo que no ha terminado (la cola la
+ * abriría con un entorno que ya no está). Las copias de `<workspace>/<id>/` las reconoce por
+ * la RUTA, que es donde vive el id del entorno (`rutaDeWorkspace`). Lo que ya terminó no
+ * cuenta: quitar el entorno no borra nada del disco.
+ */
+export function motivoParaNoOlvidarEntorno(datos: {
+  entorno: string;
+  baseDeWorkspace: string;
+  abiertas: readonly string[];
+  tareas: readonly { estado: string; raiz: string }[];
+}): string | undefined {
+  const suya = (raiz: string): boolean => dentroDelWorkspace(raiz, posix.join(datos.baseDeWorkspace, datos.entorno));
+  const abierta = datos.abiertas.find(suya);
+  if (abierta !== undefined) {
+    return `hay un proyecto de este entorno abierto (${posix.basename(abierta)}): ciérralo antes de quitarlo`;
+  }
+  const viva = datos.tareas.filter((t) => t.estado !== "terminada" && suya(t.raiz));
+  if (viva.length > 0) {
+    return `hay ${viva.length} ${viva.length === 1 ? "tarea de fondo" : "tareas de fondo"} sin terminar en este entorno`;
+  }
+  return undefined;
+}

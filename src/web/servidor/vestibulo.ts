@@ -258,6 +258,12 @@ export interface OpcionesDelVestibulo {
   aplicarCredencial?: (proveedor: Proveedor, clave: string) => void;
   /** Registra el entorno en `~/.xonecode/settings.json`. */
   guardarEntorno: (entorno: Entorno) => { ruta: string };
+  /**
+   * Quita el entorno de `settings.json` y OLVIDA sus credenciales OAuth. OBLIGATORIA, y es a
+   * propósito: una opción opcional que nadie pasa es el patrón de fallo de este repo, y aquí
+   * el síntoma sería un «Eliminar» que no borra nada con todo en verde.
+   */
+  olvidarEntorno: (id: string) => { ruta: string };
   /** Baja la copia local. Recibe la raíz ya calculada: la sincronización no se toca, solo
    *  cambia QUIÉN calcula el `raiz` que siempre recibió por parámetro. */
   descargar: (datos: DatosDeProyecto & { raiz: string }) => Promise<void>;
@@ -600,6 +606,12 @@ export interface Vestibulo {
   /** Devuelve el entorno tal y como quedó REGISTRADO: el id puede no ser el que llegó
    *  (ver `identidadDeEntorno`), y quien registra necesita el bueno para seguir. */
   registrarEntorno(entorno: Entorno): Promise<{ ruta: string; entorno: Entorno }>;
+  /**
+   * Quita un entorno registrado: de `settings.json`, de sus credenciales y de la lista viva.
+   * Las copias bajadas se QUEDAN. Si puede o no quitarse ahora lo decide quien llama
+   * (`core/settings.ts#motivoParaNoOlvidarEntorno`), que sabe qué hay abierto y qué tareas viven.
+   */
+  olvidarEntorno(id: string): Promise<{ ruta: string }>;
   /**
    * Qué proyectos de un entorno se enseñan en la barra. Se guarda CON el entorno
    * (`settings.json`) porque es una preferencia sobre él, y una lista vacía es una
@@ -1851,6 +1863,15 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       // qué id quedó, y `arranque.ts` necesita ese id exacto para pedirle los proyectos —
       // con el «otro» de la lista, `entornoPorId` no encontraría nada.
       return { ...guardado, entorno: identificado };
+    },
+
+    async olvidarEntorno(id) {
+      const registrado = entornoPorId(id);
+      const quitado = opciones.olvidarEntorno(registrado.id);
+      const donde = registrados.findIndex((e) => e.id === registrado.id);
+      if (donde >= 0) registrados.splice(donde, 1);
+      informar(`entorno «${registrado.id}» quitado de ${quitado.ruta}; sus copias locales se quedan`);
+      return quitado;
     },
 
     async guardarProyectosVisibles(entorno, proyectos) {

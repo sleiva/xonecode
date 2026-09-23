@@ -204,3 +204,16 @@ export function baseDeWorkspacePorOmision(): string {
 export function baseDeWorkspace(): string {
   return cargarSettings().settings.workspace ?? baseDeWorkspacePorOmision();
 }
+
+/**
+ * Quita un entorno por `id`, sin tocar los demás ni el resto del fichero: el mismo molde que
+ * `guardarEntorno` (leer crudo, filtrar, escritura atómica). Las copias bajadas NO se tocan.
+ */
+export function olvidarEntornoDeSettings(casa: string | undefined, id: string): { ruta: string } {
+  const ruta = rutaSettings(casa ?? homedir());
+  const base = leerCrudoOAbortar(ruta);
+  const listaBruta = Array.isArray(base.entornos) ? base.entornos : [];
+  const quedan = listaBruta.filter((e) => !(esObjeto(e) && e.id === id));
+  escribirAtomico(ruta, JSON.stringify({ ...base, entornos: quedan }, null, 2) + "\n");
+  return { ruta };
+}

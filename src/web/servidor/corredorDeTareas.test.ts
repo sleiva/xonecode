@@ -1767,6 +1767,7 @@ describe("el volcado de la sesión de una tarea", () => {
       catalogoModelos: new CatalogoModelosEnMemoria(),
       guardarCredencial: () => ({ ruta: "/casa/.xonecode/auth.json" }),
       guardarEntorno: () => ({ ruta: "/casa/.xonecode/settings.json" }),
+      olvidarEntorno: () => ({ ruta: "/casa/.xonecode/settings.json" }),
       descargar: async () => {},
       guardarConfigDeProyecto: () => ({ ruta: "/x/config.json" }),
       guardarModeloGlobal: (_papel, id) => ({ ruta: "/casa/.xonecode/config.json", id }),

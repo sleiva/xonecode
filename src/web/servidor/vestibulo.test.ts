@@ -41,6 +41,10 @@ function dobles() {
       escrituras.push(`entorno:${e.id}`);
       return { ruta: "/casa/.xonecode/settings.json" };
     },
+    olvidarEntorno: (id: string) => {
+      escrituras.push(`olvidar:${id}`);
+      return { ruta: "/casa/.xonecode/settings.json" };
+    },
     guardarConfigDeProyecto: (raiz: string) => {
       escrituras.push(`config:${raiz}`);
       return { ruta: `${raiz}/.xonecode/config.json` };
@@ -2235,5 +2239,25 @@ describe("el acumulado de cada sesión sale del índice hacia la barra", () => {
     // `{consumo: undefined}` en el objeto es la forma en la que un `JSON.stringify` deja de
     // distinguir los dos casos… o peor, en la que alguien lo lee como un cero.
     expect("consumo" in (porId.get("s2") ?? {})).toBe(false);
+  });
+});
+
+
+describe("olvidar un entorno", () => {
+  it("lo quita del disco y de la lista viva, y dice que las copias se quedan", async () => {
+    const d = dobles();
+    const avisos: string[] = [];
+    const v = crearVestibulo({ ...d, origenDeTrabajo: "global", informar: (t) => avisos.push(t) });
+    await v.olvidarEntorno("webstudio");
+    expect(d.escrituras).toContain("olvidar:webstudio");
+    expect(v.entornosRegistrados().map((e) => e.id)).not.toContain("webstudio");
+    expect(avisos.join("\n")).toMatch(/copias locales se quedan/);
+  });
+
+  it("uno que no está registrado es un error, no un no-op", async () => {
+    const d = dobles();
+    const v = crearVestibulo({ ...d, origenDeTrabajo: "global" });
+    await expect(v.olvidarEntorno("no-existe")).rejects.toThrow();
+    expect(d.escrituras.filter((e) => e.startsWith("olvidar:"))).toEqual([]);
   });
 });

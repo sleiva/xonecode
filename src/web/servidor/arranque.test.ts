@@ -143,6 +143,7 @@ function vestibuloDePrueba(extra: Partial<Parameters<typeof crearVestibulo>[0]> 
     catalogoModelos: new CatalogoModelosEnMemoria(),
     guardarCredencial: () => ({ ruta: "/casa/.xonecode/auth.json" }),
     guardarEntorno: () => ({ ruta: "/casa/.xonecode/settings.json" }),
+    olvidarEntorno: () => ({ ruta: "/casa/.xonecode/settings.json" }),
     guardarConfigDeProyecto: (raiz: string) => ({ ruta: `${raiz}/.xonecode/config.json` }),
     guardarModeloGlobal: (_papel, id) => ({ ruta: "/casa/.xonecode/config.json", id }),
     descargar: async () => {},
@@ -8340,5 +8341,66 @@ describe("montarRutas — instalar una skill desde un .zip", () => {
     } as never);
     expect(codigo).toBe(409);
     expect(cuerpo).toMatch(/proyecto/);
+  });
+});
+
+
+/**
+ * Quitar un entorno por el cable. La negativa se decide en el SERVIDOR y viaja en la propia
+ * respuesta (409 con su motivo), porque `informar` no llega al navegador desde el vestíbulo.
+ */
+describe("el cable: quitar un entorno", () => {
+  async function postearConCuerpo(manejador: ManejadorRuta, mensaje: MensajeDelCliente) {
+    const peticion = Readable.from([Buffer.from(JSON.stringify(mensaje))]) as unknown as IncomingMessage;
+    let estado = 0;
+    let cuerpo = "";
+    const respuesta = {
+      writeHead: (codigo: number) => {
+        estado = codigo;
+        return respuesta;
+      },
+      end: (texto?: string) => {
+        cuerpo = texto ?? "";
+        return respuesta;
+      },
+    } as unknown as ServerResponse;
+    await manejador(peticion, respuesta);
+    return { estado, cuerpo };
+  }
+
+  it("sin nada vivo lo QUITA: 204 y el vestíbulo lo olvida", async () => {
+    const olvidados: string[] = [];
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba({ olvidarEntorno: (id) => (olvidados.push(id), { ruta: "/s.json" }) }));
+    const r = await postearConCuerpo(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, {
+      clase: "entorno",
+      accion: "olvidar",
+      entorno: "webstudio",
+    });
+    await asentar();
+    expect(r.estado).toBe(204);
+    expect(olvidados).toEqual(["webstudio"]);
+  });
+
+  it("con una tarea de fondo sin terminar en ese entorno, 409 con el MOTIVO y no se toca nada", async () => {
+    const olvidados: string[] = [];
+    const servidor = servidorDeMentira();
+    const tarea = {
+      estado: "en-proceso",
+      proyecto: { id: "p", nombre: "P", raiz: "/ws/webstudio/P" },
+    } as unknown as Tarea;
+    montarRutas(servidor, vestibuloDePrueba({ olvidarEntorno: (id) => (olvidados.push(id), { ruta: "/s.json" }) }), {
+      workspace: () => "/ws",
+      colaDeTareas: colaDeMentira([tarea]),
+    });
+    const r = await postearConCuerpo(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, {
+      clase: "entorno",
+      accion: "olvidar",
+      entorno: "webstudio",
+    });
+    await asentar();
+    expect(r.estado).toBe(409);
+    expect(JSON.parse(r.cuerpo).motivo).toMatch(/tarea de fondo sin terminar/);
+    expect(olvidados).toEqual([]);
   });
 });

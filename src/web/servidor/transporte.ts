@@ -1124,6 +1124,12 @@ export type MensajeDelCliente =
   /** Qué proyectos de un entorno se enseñan en la barra. Lista vacía = ninguno, que es una
    *  elección; para volver a la omisión no hay mensaje, porque no hay «deshacer» que pedir. */
   | { clase: "entorno"; accion: "visibles"; entorno: string; proyectos: string[] }
+  /**
+   * Quitar un entorno registrado. El servidor contesta **409 con `{ motivo }`** si no se puede
+   * ahora (un proyecto suyo abierto, una tarea sin terminar): la negativa vive allí, y así el
+   * cliente la enseña sin llevar una copia de la regla. Sus copias locales se quedan.
+   */
+  | { clase: "entorno"; accion: "olvidar"; entorno: string }
   /** Cambiar de entorno ACTIVO: el de cuyos proyectos se habla. Trae su listado consigo. */
   | { clase: "entorno"; accion: "activo"; entorno: string }
   /**

@@ -128,10 +128,12 @@ import {
   guardarWorkspace as guardarWorkspaceEnDisco,
   guardarDispositivos,
   guardarEntorno as guardarEntornoEnDisco,
+  olvidarEntornoDeSettings,
 } from "../../agent/config/settingsEnDisco.js";
 import {
   dentroDelWorkspace,
   expandirConCasa,
+  motivoParaNoOlvidarEntorno,
   motivoDeWorkspaceInaceptable,
   type Settings,
 } from "../../core/settings.js";
@@ -143,7 +145,7 @@ import {
 import { mudarWorkspaceLegado, type ResultadoDeMudanza } from "../../agent/config/mudanzaEnDisco.js";
 import { elegirCarpetaEnMaquina, haySelectorDeCarpeta } from "../../agent/config/selectorEnMaquina.js";
 import { cloudstudioDelProyecto } from "../../agent/config/configEnDisco.js";
-import { abrirEnSistema } from "../../agent/cloudstudio/cloudstudioMcp.js";
+import { abrirEnSistema, olvidarEntorno as olvidarCredencialesDeEntorno, rutaAuthPorDefecto } from "../../agent/cloudstudio/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/config/persona.js";
 import { cambiosDeSesion, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesiones/sesionGit.js";
 import { commitDeTurno, cambiosPendientes, trabajoSinCommitear } from "../../agent/sesiones/gitSync.js";
@@ -4026,6 +4028,43 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "entorno" &&
+      mensaje.accion === "olvidar"
+    ) {
+      // La negativa se decide AQUÍ y en el acto, antes del 204: es lo que deja devolver el
+      // motivo en la respuesta, porque `informar` no llega al navegador desde el vestíbulo.
+      const motivo = motivoParaNoOlvidarEntorno({
+        entorno: mensaje.entorno,
+        baseDeWorkspace: opciones.workspace?.() ?? baseDeWorkspacePorOmision(),
+        abiertas: vestibulo.proyectosAbiertos().map((c) => c.raiz),
+        tareas: (opciones.colaDeTareas?.listar() ?? []).map((t) => ({ estado: t.estado, raiz: t.proyecto.raiz })),
+      });
+      if (motivo !== undefined) {
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ motivo }));
+        return;
+      }
+      const olvidado = mensaje.entorno;
+      void vestibulo
+        .olvidarEntorno(olvidado)
+        .then(() => {
+          // El entorno de la barra, si era ése, deja de estar: el alta siguiente ya no lo
+          // trae, y un `entornoActivo` que nombra a uno que no existe es un dato inventado.
+          if (entornoElegido === olvidado) {
+            entornoElegido = undefined;
+            proyectos = [];
+            ramas = [];
+          }
+        })
+        .catch(contar)
+        .finally(() => void anunciarAlta().catch(contar));
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "revision") {
       void atenderRevision(mensaje.ruta).catch(contar);
       respuesta.writeHead(204);
@@ -5566,6 +5605,13 @@ function vestibuloReal(
     // pediría de nuevo una credencial que está escrita.
     hayCredencial: (proveedor) => hayCredencial(proveedor, opciones.cwd),
     guardarEntorno: (entorno: Entorno) => guardarEntornoEnDisco(undefined, entorno),
+    // Primero el `settings.json` y DESPUÉS las credenciales: si lo primero falla, el entorno
+    // sigue registrado y sus tokens con él, en vez de un entorno que ya no sabe entrar.
+    olvidarEntorno: (id: string) => {
+      const quitado = olvidarEntornoDeSettings(undefined, id);
+      olvidarCredencialesDeEntorno(rutaAuthPorDefecto(), id);
+      return quitado;
+    },
     guardarModeloGlobal,
     guardarConfigDeProyecto: escribirProyectoEnDisco,
     // El «antes» de cada sesión: se fotografía al abrir el proyecto y se nombra cuando la

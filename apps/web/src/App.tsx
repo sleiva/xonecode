@@ -1287,6 +1287,18 @@ export function App({
       alPedirProyectosDeEntorno={(entorno) =>
         void enviar({ clase: "entorno", accion: "proyectos", entorno })
       }
+      alQuitarEntorno={async (entorno) => {
+        // El servidor contesta 409 con `{ motivo }` si se niega: la regla es suya, y así la
+        // negativa llega hasta aquí en vez de quedarse en el terminal.
+        const r = (await enviar({ clase: "entorno", accion: "olvidar", entorno })) as Response | undefined;
+        if (r?.status !== 409) return undefined;
+        try {
+          const cuerpo = (await r.json()) as { motivo?: unknown };
+          return typeof cuerpo.motivo === "string" ? cuerpo.motivo : "el servidor se negó";
+        } catch {
+          return "el servidor se negó";
+        }
+      }}
       alResponderSecreto={async (valor) => {
         await enviar({ clase: "secreto", valor });
         store.contestarSecreto();

@@ -893,3 +893,18 @@
   font: inherit;
   font-size: 12px;
 }
+
+/* Quitar un entorno: el botón y, cuando se pulsa, la confirmación en línea con lo que NO se
+   borra. En fila y envolviendo, bajo la URL del entorno. */
+.quitarEntorno {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.quitarEntorno > p {
+  flex-basis: 100%;
+  margin: 0;
+}
