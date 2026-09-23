@@ -23,7 +23,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import winston from "winston";
-import { AgentThread, AgentThreadOrchestrator, EventType, contextCompaction, dynamicSubAgents } from "@truefoundry/trueforge-core/core";
+import { AgentThread, AgentThreadOrchestrator, EventType, askUserQuestion, contextCompaction, dynamicSubAgents } from "@truefoundry/trueforge-core/core";
 import { UMBRAL_RESUMEN_TOKENS } from "../../turno/resumenDeContexto.js";
 import { NOOP_AGENT_TRACING } from "@truefoundry/trueforge-core/core/tracing/NoopAgentTracing";
 import type { DomainEvent, HallazgoDelTurno, PendienteDeAprobacion } from "../../../core/events.js";
@@ -109,6 +109,28 @@ export function notaDeTools(nombres: readonly string[], limite: string): string 
 
 /** Un nombre que no es de ningún especialista: lectura a secas, sin escribir en ningún sitio. */
 const LIMITE_DEL_GENERICO = "No puedes escribir ficheros ni ejecutar comandos.";
+
+/**
+ * La pregunta del orquestador, como TEXTO del chat: la pregunta y sus opciones numeradas. Se pinta
+ * en la respuesta y no en un diálogo, a propósito: así llega igual a la web, a la TUI y al terminal
+ * sin tocar ninguna piel, y la persona contesta como contesta siempre, escribiendo.
+ */
+export function textoDePregunta(args: Record<string, unknown>): string {
+  const pregunta = typeof args.question === "string" ? args.question.trim() : "";
+  const opciones = Array.isArray(args.options) ? args.options.filter((o): o is string => typeof o === "string") : [];
+  return [
+    "\n\n" + pregunta,
+    ...(opciones.length === 0 ? [] : ["", ...opciones.map((o, i) => `${i + 1}. ${o}`), "", "Contesta con el número o con tus palabras."]),
+  ].join("\n");
+}
+
+/** Lo que escribió la persona, como respuesta: un número de opción se traduce a su texto. */
+export function respuestaAPregunta(args: Record<string, unknown>, escrito: string): string {
+  const opciones = Array.isArray(args.options) ? args.options.filter((o): o is string => typeof o === "string") : [];
+  const n = /^\s*(\d+)\s*[.)]?\s*$/.exec(escrito);
+  const elegida = n === null ? undefined : opciones[Number(n[1]) - 1];
+  return elegida ?? escrito;
+}
 
 export interface OpcionesDeSesionTrueforge {
   raiz: string;
@@ -319,6 +341,8 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
    * lo rechazaba la librería («Cannot process user messages while sub agents are running»).
    */
   let raizActual: AgentThread | undefined;
+  /** La pregunta del orquestador que espera respuesta: el siguiente mensaje la contesta. */
+  let preguntaEnEspera: Pendiente | undefined;
   const nuevoOrquestador = (foto?: FotoDeHilo): AgentThreadOrchestrator => {
     const definicion = {
       modelClient: llm,
@@ -345,6 +369,9 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
          * capability—, que no se compacta.
          */
         contextCompaction({ definition: definicion as never, compactionThresholdTokens: UMBRAL_RESUMEN_TOKENS }),
+        // `ask_user_question`, SOLO en el raíz —la librería tampoco se la da a un hijo—: es el
+        // único que tiene a una persona delante.
+        askUserQuestion(),
         // `create_sub_agent`: la delegación de TrueForge, un nivel y cinco a la vez como mucho.
         dynamicSubAgents({ sandboxAvailable: false, tracing: NOOP_AGENT_TRACING }),
       ] as never,
@@ -386,7 +413,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
    * `thread_id`: mandarla al raíz no la contestaría —o la rechazaría por hilo desconocido—.
    * Por eso las tool calls se apuntan por hilo Y por id: dos hijos pueden repetir id.
    */
-  async function* paso(lote: unknown[], senal: AbortSignal, pendientes: Pendiente[]): AsyncGenerator<DomainEvent> {
+  async function* paso(lote: unknown[], senal: AbortSignal, pendientes: Pendiente[], preguntas: Pendiente[] = []): AsyncGenerator<DomainEvent> {
     for await (const _ of orquestador.send(lote as never)) void _;
     const llamadas = new Map<string, { nombre: string; args: Record<string, unknown> }>();
     const it = orquestador.execute({ signal: senal });
@@ -449,12 +476,15 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
     }
     const resultado = r.value as { required_actions?: { type?: string; thread_id?: string; tool_calls?: { id: string }[] }[] };
     for (const accion of resultado.required_actions ?? []) {
-      if (accion.type !== "tool.approval_required") continue;
+      // Dos interrupciones distintas, y no se mezclan: una APROBACIÓN decide sobre una escritura
+      // con su diff; una RESPUESTA es lo que pide `ask_user_question`, que no escribe nada.
+      const destino = accion.type === "tool.approval_required" ? pendientes : accion.type === "tool.response_required" ? preguntas : undefined;
+      if (destino === undefined) continue;
       const deHilo = accion.thread_id ?? HILO_RAIZ;
       for (const { id } of accion.tool_calls ?? []) {
         const clave = claveDe(deHilo, id);
         const llamada = llamadas.get(clave);
-        if (llamada !== undefined) pendientes.push({ clave, hilo: deHilo, id, ...llamada });
+        if (llamada !== undefined) destino.push({ clave, hilo: deHilo, id, ...llamada });
       }
     }
   }
@@ -497,8 +527,16 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
           aborto = new AbortController();
           const senal = aborto.signal;
           const pendientes: Pendiente[] = [];
-          yield* paso(lote, senal, pendientes);
+          const preguntas: Pendiente[] = [];
+          yield* paso(lote, senal, pendientes, preguntas);
           if (pendientes.length === 0) {
+            // El orquestador PREGUNTA: el turno acaba aquí con la pregunta a la vista, y lo que la
+            // persona escriba después vuelve como la respuesta de esa tool (`turno`, arriba).
+            const pregunta = preguntas[0];
+            if (pregunta !== undefined) {
+              preguntaEnEspera = pregunta;
+              yield { tipo: "token", texto: textoDePregunta(pregunta.args) };
+            }
             salida.limpia = true;
             return;
           }
@@ -572,7 +610,14 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
        * corta antes si un intento deja la MISMA huella de errores.
        */
       async function* flujo(): AsyncGenerator<DomainEvent> {
-        let lote: unknown[] = [{ type: EventType.USER_MESSAGE, content: peticion }];
+        // Si el orquestador dejó una pregunta, ESTE mensaje es su respuesta: vuelve a su hilo como
+        // `user.tool_response`, y no como un mensaje nuevo que la dejaría sin contestar.
+        const enEspera = preguntaEnEspera;
+        preguntaEnEspera = undefined;
+        let lote: unknown[] =
+          enEspera === undefined
+            ? [{ type: EventType.USER_MESSAGE, content: peticion }]
+            : [{ type: "user.tool_response", thread_id: enEspera.hilo, tool_call_id: enEspera.id, content: respuestaAPregunta(enEspera.args, peticion) }];
         let intento = 0;
         let huellaPrevia: string | undefined;
         while (true) {
@@ -696,6 +741,8 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
     },
     nuevoHilo(id?: string) {
       hilo = id ?? `tf-${Date.now()}`;
+      // Una pregunta de la conversación de antes no la contesta el primer mensaje de la nueva.
+      preguntaEnEspera = undefined;
       // Un hilo NUEVO: lo que hubiera guardado con ese id no se pisa ni se carga a medias.
       orquestador = nuevoOrquestador(persistir ? leerMemoria(raiz, hilo) : undefined);
     },

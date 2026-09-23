@@ -654,3 +654,14 @@ añade**, y la nota «tienes estas tools» de cada hijo sale de esa lista (`tool
 mantenía aparte y a mano, y ya se había quedado corta una vez. Qué piezas lleva cada especialista lo
 decide `capacidadesDelEspecialista` sobre su `.md`, con la partición de deepagents, y se prueba sin
 levantar un hilo. No cambia el comportamiento: los tests de la sesión pasan sin tocarse.
+
+### El orquestador pregunta (`ask_user_question`, 23-09-2026)
+
+La capability de la librería, **solo en el raíz** —ella tampoco se la da a un hijo: es el único con
+una persona delante—. Es una tool de CLIENTE: la librería para el turno con `tool.response_required`,
+que no es una aprobación y no se mezcla con ellas. **Se contesta por el chat, no con un diálogo**:
+la pregunta cierra el turno y sale en la respuesta con sus opciones numeradas, y lo que la persona
+escriba después vuelve como `user.tool_response` a su hilo —un número de opción se traduce a su
+texto—. Así llega igual a la web, a la TUI y al terminal sin tocar ninguna piel; una tarjeta con
+botones sería el siguiente paso y no cambiaría esto. Medido con `deepseek-flash`: ante «pregúntame
+antes de tocar nada», el orquestador investigó el proyecto y preguntó con dos paletas concretas.

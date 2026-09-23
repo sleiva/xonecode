@@ -528,4 +528,59 @@ describe("una sesión con el motor TrueForge", () => {
     expect(sesion!.tools.map((t) => t.nombre).sort()).toEqual(["create_sub_agent", "read_file"]);
     expect(sesion!.pesos.some((p) => p.nombre === "read_file" && p.chars > 0)).toBe(true);
   }, 30_000);
+
+  it("el orquestador PREGUNTA: el turno acaba con la pregunta en el chat y el siguiente mensaje la CONTESTA en su hilo", async () => {
+    const raiz = proyecto();
+    const { m, vistos, toolsPorLlamada } = modelosConGuion([
+      [
+        new AIMessageChunk({
+          content: "",
+          tool_call_chunks: [
+            { index: 0, id: "q1", name: "ask_user_question", args: JSON.stringify({ question: "¿Qué pantalla toco?", options: ["Login", "Menú"] }) },
+          ],
+        }),
+      ],
+      [new AIMessageChunk({ content: "Vale, el menú." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    const uno = piel();
+    await s.turno("arregla la pantalla", uno.p);
+    expect(toolsPorLlamada[0]).toContain("ask_user_question");
+    expect(uno.tokens.join("")).toMatch(/¿Qué pantalla toco\?[\s\S]*1\. Login[\s\S]*2\. Menú/);
+    // Solo UNA llamada al modelo: la pregunta cierra el turno, no sigue sola.
+    expect(vistos).toHaveLength(1);
+
+    const dos = piel();
+    await s.turno("2", dos.p);
+    // El «2» vuelve como la respuesta de la tool, traducido a la opción, y no como otro mensaje suelto.
+    expect(vistos[1]!).toContain("Menú");
+    expect(vistos[1]!.filter((c) => c === "2")).toHaveLength(0);
+    expect(dos.tokens.join("")).toBe("Vale, el menú.");
+  }, 30_000);
+
+  it("solo el ORQUESTADOR puede preguntar: un hijo no tiene a nadie delante", async () => {
+    const raiz = proyecto();
+    const { m, toolsPorLlamada } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "consultant-xone", input: "mira" }) }] })],
+      [new AIMessageChunk({ content: "Mirado." })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("mira", piel().p);
+    expect(toolsPorLlamada[0]).toContain("ask_user_question");
+    expect(toolsPorLlamada[1]).not.toContain("ask_user_question");
+  }, 30_000);
+});
+
+describe("la pregunta del orquestador, como texto", () => {
+  it("un número dentro de las opciones se traduce; fuera de rango o texto libre pasan tal cual", async () => {
+    const { respuestaAPregunta, textoDePregunta } = await import("./sesionTrueforge.js");
+    const args = { question: "¿Cuál?", options: ["A", "B"] };
+    expect(respuestaAPregunta(args, "1")).toBe("A");
+    expect(respuestaAPregunta(args, " 2. ")).toBe("B");
+    expect(respuestaAPregunta(args, "3")).toBe("3");
+    expect(respuestaAPregunta(args, "ninguna, la C")).toBe("ninguna, la C");
+    // Sin opciones: la pregunta sola, sin la línea de «contesta con el número».
+    expect(textoDePregunta({ question: "¿Seguro?", options: [] })).not.toMatch(/número/);
+  });
 });
