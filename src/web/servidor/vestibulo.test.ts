@@ -15,6 +15,8 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { crearVestibulo, ENTORNOS_OFICIALES, escribirProyectoEnDisco, esProyectoEnDisco } from "./vestibulo.js";
+import { ficheroDeDispositivoDeSesion } from "../../core/dispositivoDeSesion.js";
+import { existsSync } from "node:fs";
 import { CatalogoModelosEnMemoria } from "../../core/ports.js";
 import type { Acto, ConsumoDeTurno } from "../../core/actos.js";
 import type { DispositivoElegido } from "./sesiones.js";
@@ -2310,5 +2312,54 @@ describe("esProyectoEnDisco: una copia BAJADA, no un alta a medias", () => {
     writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
     expect(esProyectoEnDisco(raiz)).toBe(true);
     rmSync(raiz, { recursive: true, force: true });
+  });
+});
+
+
+/**
+ * El dispositivo de la sesión, hasta el AGENTE: el fichero que leen los scripts y la línea del
+ * turno. Se mira el cableado desde fuera, con una raíz de verdad, porque es una composición que
+ * vive en el vestíbulo y que ningún test de los scripts alcanza.
+ */
+describe("el dispositivo de la sesión llega al agente", () => {
+  const PIXEL = { id: "emulator-5554", nombre: "Pixel 8", plataforma: "android" as const, clase: "emulador" as const };
+
+  it("elegirlo ESCRIBE el fichero en el acto, y quitar la elección lo BORRA", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-disp-sesion-"));
+    const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: sesionesEnMemoria().puerto });
+    const abierta = await v.abrirProyecto({ raiz });
+    // El id de la sesión existe desde que se abre aunque `sesion` no se publique hasta el primer
+    // mensaje: el fichero se busca donde lo deja, en su carpeta de `.xonecode/sesiones/`.
+    const sesiones = join(raiz, ".xonecode", "sesiones");
+    const ficheros = () =>
+      existsSync(sesiones) ? readdirSync(sesiones).map((id) => ficheroDeDispositivoDeSesion(raiz, id)).filter(existsSync) : [];
+    expect(ficheros()).toEqual([]);
+    abierta.elegirDispositivo(PIXEL);
+    expect(ficheros()).toHaveLength(1);
+    const fichero = ficheros()[0]!;
+    expect(JSON.parse(readFileSync(fichero, "utf8"))).toEqual(PIXEL);
+    abierta.elegirDispositivo(undefined);
+    expect(existsSync(fichero)).toBe(false);
+    await v.cerrar();
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("cada turno lleva DELANTE la línea del dispositivo, y sigue la elección del momento", async () => {
+    const recibidas: string[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: sesionesEnMemoria().puerto,
+      crearEjecutor: () => async (peticion) => {
+        recibidas.push(peticion);
+      },
+    });
+    const a = await v.abrirProyecto({ raiz: "/w/a" });
+    await a.ejecutarTurno("pruébalo", a.estadoDeSesion, a.consola.consola);
+    a.elegirDispositivo(PIXEL);
+    await a.ejecutarTurno("otra vez", a.estadoDeSesion, a.consola.consola);
+    expect(recibidas[0]).toMatch(/^\[Dispositivo de esta sesión: ninguno elegido[\s\S]*\n\npruébalo$/);
+    expect(recibidas[1]).toMatch(/^\[Dispositivo de esta sesión: Pixel 8[\s\S]*\n\notra vez$/);
+    await v.cerrar();
   });
 });

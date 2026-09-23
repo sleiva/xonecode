@@ -1,3 +1,4 @@
+import { ficheroDeDispositivo } from "../../core/dispositivoDeSesion.js";
 import { existsSync, mkdirSync, readdirSync, statSync, type Dirent } from "node:fs";
 import { join } from "node:path";
 import { CompositeBackend, FilesystemBackend, LocalShellBackend } from "deepagents";
@@ -124,7 +125,10 @@ export function entornoDeLaShellDelProyecto(
     // Las DOS carpetas, y la segunda se DERIVA de la primera: es la misma decisión —¿hay una
     // sesión con identidad?— y un segundo parámetro sería un segundo sitio donde contestarla,
     // que es justo el que se cae en un cableado largo.
-    ...(artefactos === undefined ? {} : { artefactos, hotswap: carpetaDeHotswap(artefactos) }),
+    // Y el fichero del dispositivo de la sesión, derivado igual: es la misma pregunta.
+    ...(artefactos === undefined
+      ? {}
+      : { artefactos, hotswap: carpetaDeHotswap(artefactos), dispositivo: ficheroDeDispositivo(artefactos) }),
   });
 }
 

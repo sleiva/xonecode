@@ -25,6 +25,7 @@
  * deja de responder justo después de abrir un menú, es eso y es un defecto AJENO al hotswap.
  */
 import { execFileSync } from "node:child_process";
+import { udidIos } from "../lib/dispositivo.mjs";
 
 const HOST = "es.xone.studioapp.swift";
 
@@ -48,7 +49,8 @@ const opcion = (nombre) => {
 
 /** El simulador arrancado, o el que se diga. Sin ninguno, se dice: no se arranca uno a ciegas. */
 function udid() {
-  const dicho = opcion("udid");
+  // `--udid`, o el SIMULADOR elegido en la sesión (`../lib/dispositivo.mjs`).
+  const dicho = udidIos(opcion("udid"));
   if (dicho !== undefined) return dicho;
   const salida = execFileSync("xcrun", ["simctl", "list", "devices", "booted", "-j"], { encoding: "utf8" });
   const porRuntime = JSON.parse(salida).devices ?? {};

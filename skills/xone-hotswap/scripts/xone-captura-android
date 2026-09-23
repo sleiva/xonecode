@@ -25,6 +25,7 @@
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join, basename } from "node:path";
+import { serieAndroid } from "../lib/dispositivo.mjs";
 
 const args = process.argv.slice(2);
 if (args.includes("--help") || args.includes("-h")) {
@@ -53,7 +54,10 @@ const opcion = (nombre) => {
   const i = args.indexOf(`--${nombre}`);
   return i >= 0 ? args[i + 1] : undefined;
 };
-const serie = opcion("serie");
+// `--serie`, el dispositivo elegido en la sesión o un emulador (`../lib/dispositivo.mjs`). Se
+// dice por stderr con cuál y por qué: con varios aparatos, callarlo haría adivinar dónde pasó.
+const { serie, porque } = serieAndroid(opcion("serie"));
+if (serie !== undefined) process.stderr.write(`dispositivo: ${serie} (${porque})\n`);
 
 // `basename` y no la cadena tal cual: el nombre lo elige el modelo, y un `../` aquí escribiría
 // fuera de la carpeta de la sesión. Misma regla que `esRutaDeArtefacto` en el host.

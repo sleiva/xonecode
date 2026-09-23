@@ -1799,7 +1799,9 @@ describe("el volcado de la sesión de una tarea", () => {
       // crearPielStdio(consola.escribir)`.
       crearEjecutor: () => async (peticion, estado, consola) => {
         if (ejecutor !== undefined) return ejecutor(peticion, estado, consola);
-        escritos.push(peticion);
+        // Sin la línea del dispositivo que el envoltorio antepone a cada turno: aquí se mide qué
+        // ENCARGO llegó, no el prefijo.
+        escritos.push(peticion.replace(/^\[Dispositivo de esta sesión:[^\]]*\]\n\n/, ""));
         const piel = consola.piel?.();
         if (piel === undefined) {
           // Sin piel rica, el turno solo sabe escribir texto: es el camino degradado que
@@ -2208,7 +2210,9 @@ describe("el volcado de la sesión de una tarea", () => {
     let vuelta = 0;
     const v = vestibuloReal(base, escritos, marcada, async (peticion, _estado, consola) => {
       vuelta += 1;
-      escritos.push(peticion);
+      // Sin la línea del dispositivo que el envoltorio antepone a cada turno: aquí se mide qué
+        // ENCARGO llegó, no el prefijo.
+        escritos.push(peticion.replace(/^\[Dispositivo de esta sesión:[^\]]*\]\n\n/, ""));
       const piel = consola.piel?.();
       piel?.token(`respuesta ${vuelta}`);
       piel?.cerrarLinea();

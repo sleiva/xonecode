@@ -6523,3 +6523,27 @@ cuántas copias hay—, y el botón rojo solo se activa al **escribir el nombre*
 GitHub al borrar un repo. Borrar las copias va DESPUÉS de quitar el entorno, así que si quitar
 falla no se ha tocado el disco; y la barrera de ruta vive en la función que borra, no solo en
 quien llama.
+
+## El dispositivo del chat llega al `device-controller`, y sin él se prefiere un emulador (23-09-2026)
+
+Pedido suyo: «cuando en el chat no esté seleccionado el dispositivo, priorizar los emuladores, y
+pasarlo en algún estado para que cuando se mande al device controller use el dispositivo cuando se
+seleccione». **Medido antes**: la elección de la pastilla solo la leía la pestaña Ejecutar; al agente
+no le llegaba por ningún sitio —ni el estado de sesión, ni el ejecutor, ni el entorno de su shell—,
+y con varios aparatos los scripts usaban el de adb por omisión o el `--serie` que el modelo se
+acordara de pasar.
+
+**Por un fichero, no por una variable con el valor**: `LocalShellBackend` copia su `env` al
+construirse, así que una variable se quedaría con el aparato de cuando se abrió la sesión.
+`XONECODE_DISPOSITIVO` lleva la RUTA, fija por sesión, de `dispositivo.json` —al lado de la carpeta de
+artefactos y no dentro, que lo de dentro se anuncia—; el vestíbulo lo escribe al abrir y cada vez
+que se elige (y lo borra sin elección), y los scripts lo leen en cada ejecución. La regla es UNA,
+en `skills/xone-hotswap/lib/dispositivo.mjs` (fuera de `scripts/`, que va al PATH): `--serie`/`--udid`,
+luego el de la sesión, y sin elección un emulador antes que un físico; con varios físicos no se
+adivina. En iOS solo cuenta un SIMULADOR elegido, que es con lo que hablan esos scripts. Cada script
+dice por stderr con cuál trabajó.
+
+La línea `[Dispositivo de esta sesión: …]` que se antepone a cada turno es para el modelo —que el
+orquestador lo nombre al delegar y el conductor no pase otro `--serie`—; la garantía la pone el
+script. **Sin verificar con un aparato**: la regla y el cableado están probados, el despliegue real en
+un emulador con dos aparatos conectados no se ha hecho.

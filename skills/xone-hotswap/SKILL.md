@@ -185,7 +185,11 @@ resuelve con el mismo localizador que la pestaña Ejecutar.
 ## Cómo llegar, según la plataforma
 
 **Android** — por `adb forward`, y entonces la IP es `127.0.0.1` (el localhost del PC, que adb
-tuneliza al dispositivo). Con varios dispositivos, `adb -s <serial>`:
+tuneliza al dispositivo). **Qué aparato usan los scripts `xone-*`**: el que se les pase con
+`--serie`; si no, el ELEGIDO en la sesión de XOneCode (lo leen de `$XONECODE_DISPOSITIVO` en cada
+ejecución); si no hay elección, un EMULADOR antes que un dispositivo físico. Lo dicen por stderr
+(`dispositivo: emulator-5554 (el de la sesión: Pixel 8)`). Con `adb` a mano y varios
+dispositivos, `adb -s <serial>`:
 
 ```bash
 adb devices -l

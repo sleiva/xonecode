@@ -23,12 +23,13 @@
  * mentir en esa pregunta abre un proyecto que no existe.
  */
 
+import { ficheroDeDispositivoDeSesion, lineaDelDispositivo } from "../../core/dispositivoDeSesion.js";
 import { crearRegistroDeFallos } from "../../agent/turno/registroDeFallos.js";
 import { baseDeWorkspacePorOmision } from "../../agent/config/settingsEnDisco.js";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Acto, ConsumoDeTurno } from "../../core/actos.js";
 import { consumoDeLosActos, sumarConsumo } from "../../core/actos.js";
 import type { Eleccion, FuentesDeEleccion, Proveedor } from "../../core/modelos.js";
@@ -1228,6 +1229,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     let historica = reabierta?.historica ?? false;
     if (historica && (await opciones.hayMemoriaDeHilo?.(raiz, sesion!)) === true) historica = false;
     let dispositivo: DispositivoElegido | undefined = reabierta?.dispositivo;
+    // El fichero que leen los scripts del `device-controller` (`core/dispositivoDeSesion.ts`)
+    // queda como la pastilla DESDE QUE SE ABRE: también sin elección, que borra uno viejo.
+    escribirDispositivoDeSesion(raiz, idSesion, dispositivo);
     let cerrada = false;
     /** Ver `ConsolaDeProyecto.turnoEnVuelo`: lo pone y lo quita el envoltorio de abajo, que
      *  es el único sitio que ve los dos flancos. */
@@ -1373,7 +1377,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         // `crearEjecutorReal` acaba de abrir moría en este envoltorio: el corredor de
         // tareas no tendría con qué medir si lo hecho es entregable, y ninguna piel se
         // enteraría — que es exactamente cómo el `terminada` falso pasó desapercibido.
-        return await ejecutorEfectivo(peticion, estado, consola);
+        // Con la línea del dispositivo DELANTE: el agente sabe con cuál trabaja esta sesión —o
+        // que no hay ninguno y se prefiere un emulador— sin tener que descubrirlo.
+        return await ejecutorEfectivo(`${lineaDelDispositivo(dispositivo)}\n\n${peticion}`, estado, consola);
       } finally {
         // En el `finally`: un turno que revienta o que se cancela también TERMINA, y dejar
         // el compositor apagado para siempre sería peor que no haberlo apagado nunca.
@@ -1544,6 +1550,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       },
       elegirDispositivo: (elegido) => {
         dispositivo = elegido;
+        // El fichero, SIEMPRE y en el acto: lo leen los scripts en cada ejecución, así que
+        // cambiar de aparato con la sesión abierta alcanza al siguiente comando.
+        escribirDispositivoDeSesion(raiz, idSesion, elegido);
         // Si todavía no está en el índice, se queda en memoria: `volcar()` lo anotará en
         // cuanto cree la entrada. Escribir aquí una entrada nueva la enseñaría en la barra
         // como una sesión vacía que nadie ha empezado.
@@ -2081,4 +2090,25 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       consolaDelVestibulo.cerrar();
     }),
   };
+}
+
+
+/**
+ * Deja el fichero del dispositivo de la sesión como la pastilla: el elegido, o NINGÚN fichero si
+ * no hay elección (y entonces los scripts prefieren un emulador). Nunca lanza: un disco que no
+ * deja escribir aquí no puede tumbar abrir una sesión, y lo peor que pasa es que el script use su
+ * regla de omisión.
+ */
+function escribirDispositivoDeSesion(raiz: string, id: string, d: DispositivoElegido | undefined): void {
+  try {
+    const fichero = ficheroDeDispositivoDeSesion(raiz, id);
+    if (d === undefined) {
+      rmSync(fichero, { force: true });
+      return;
+    }
+    mkdirSync(dirname(fichero), { recursive: true });
+    writeFileSync(fichero, `${JSON.stringify({ id: d.id, nombre: d.nombre, plataforma: d.plataforma, clase: d.clase })}\n`);
+  } catch {
+    // Ver arriba: se cae a la regla de omisión del script.
+  }
 }

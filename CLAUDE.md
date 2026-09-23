@@ -1537,7 +1537,14 @@ feedback del desarrollador** y no es terminal.
   para toda la máquina; un segundo «ejecutar» reenvía el estado.
 - **El dispositivo de la sesión guarda la FOTO, no solo el id** (los ids no son estables), y solo
   si NO está a mano ahora. El cliente manda el ID y nada más. La consume la pestaña Ejecutar
-  —el agente sigue sin tools de dispositivo—, y la pastilla lo dice.
+  y, desde que se pidió, **también el `device-controller`**, por un FICHERO y no por una variable
+  (`core/dispositivoDeSesion.ts`): la shell fija sus variables al construirse, así que
+  `XONECODE_DISPOSITIVO` lleva la RUTA de `.xonecode/sesiones/<id>/dispositivo.json`, que el
+  vestíbulo reescribe al elegir, y los scripts de `xone-hotswap` lo leen en CADA ejecución
+  (`skills/xone-hotswap/lib/dispositivo.mjs`, una regla para todos): `--serie`/`--udid` manda, luego
+  el de la sesión, y sin elección **un emulador antes que un físico**. Cada turno lleva además la
+  línea `[Dispositivo de esta sesión: …]` delante, para que el orquestador lo nombre al delegar;
+  la garantía la ponen los scripts, no esa línea.
 
 ### La TUI y el panel (terminal)
 

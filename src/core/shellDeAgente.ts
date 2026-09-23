@@ -47,6 +47,7 @@
  * prompt dice `$XONECODE_SKILL_XONE_HOTSWAP/scripts/android.mjs` y ni el contexto ni el
  * cable ven una ruta.
  */
+import { VARIABLE_DE_DISPOSITIVO } from "./dispositivoDeSesion.js";
 import { VARIABLES_POR_PROVEEDOR } from "./modelos.js";
 
 /** El prefijo de las claves de un proveedor personalizado (`core/modelos.ts#variableDeProveedor`). */
@@ -140,6 +141,9 @@ export function entornoDeShell(opciones: {
   artefactos?: string;
   /** Y su hermana, la de los volcados que no se anuncian. Misma condición: si la hay. */
   hotswap?: string;
+  /** El FICHERO con el dispositivo de la sesión (`core/dispositivoDeSesion.ts`). Misma
+   *  condición: solo con sesión. Se da la ruta aunque el fichero no exista todavía. */
+  dispositivo?: string;
   /**
    * Las carpetas de scripts que hay que poner al alcance, ya comprobadas por quien toca el
    * disco: esto es puro y no mira si existen. Una que no exista no rompe nada, pero ensucia
@@ -176,6 +180,7 @@ export function entornoDeShell(opciones: {
   }
   if (opciones.artefactos !== undefined) limpio[VARIABLE_DE_ARTEFACTOS] = opciones.artefactos;
   if (opciones.hotswap !== undefined) limpio[VARIABLE_DE_HOTSWAP] = opciones.hotswap;
+  if (opciones.dispositivo !== undefined) limpio[VARIABLE_DE_DISPOSITIVO] = opciones.dispositivo;
   // Después de la copia del entorno heredado, así que lo que resuelve el localizador gana
   // sobre un valor que viniera de fuera: el localizador SÍ ha comprobado que el fichero está.
   Object.assign(limpio, opciones.android ?? {});

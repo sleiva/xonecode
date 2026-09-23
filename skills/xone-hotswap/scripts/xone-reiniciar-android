@@ -21,6 +21,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
+import { serieAndroid } from "../lib/dispositivo.mjs";
 
 const PAQUETE = "com.xone.android.framework";
 const ACTIVIDAD = `${PAQUETE}/com.xone.android.hotswap.activities.SetupActivity`;
@@ -43,7 +44,10 @@ const opcion = (nombre) => {
   const i = args.indexOf(`--${nombre}`);
   return i >= 0 ? args[i + 1] : undefined;
 };
-const serie = opcion("serie");
+// `--serie`, el dispositivo elegido en la sesión o un emulador (`../lib/dispositivo.mjs`). Se
+// dice por stderr con cuál y por qué: con varios aparatos, callarlo haría adivinar dónde pasó.
+const { serie, porque } = serieAndroid(opcion("serie"));
+if (serie !== undefined) process.stderr.write(`dispositivo: ${serie} (${porque})\n`);
 const adb = (...partes) =>
   execFileSync("adb", [...(serie ? ["-s", serie] : []), ...partes], { encoding: "utf8" });
 
