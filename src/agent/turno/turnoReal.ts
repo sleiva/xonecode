@@ -133,7 +133,6 @@ export function textoDeReparacion(
 }
 import { aPendiente, ficheroDe, cambioDe, buildResume } from "./interrupts.js";
 import { cargarAgentes } from "../subagentes/agentesEnDisco.js";
-import { promptDeAgente, REGLAS_XONE } from "../../core/agentes.js";
 import { resolverMotor, type MotorDeAgente } from "../../core/motor.js";
 import { cargar } from "../config/configEnDisco.js";
 import { abrirSesionTrueforge } from "../motores/trueforge/sesionTrueforge.js";
@@ -509,7 +508,7 @@ export async function abrirSesionReal(opciones: {
       raiz: opciones.raiz,
       modelos: opciones.modelos,
       entorno: opciones.entorno,
-      instrucciones: instruccionesDelRaizTrueforge(opciones.raiz),
+      skills: opciones.skills.catalogo(),
       ...(opciones.pedirAprobacion === undefined ? {} : { pedirAprobacion: opciones.pedirAprobacion }),
       ...(opciones.sinAprobacion === undefined ? {} : { sinAprobacion: opciones.sinAprobacion }),
       ...(opciones.artefactos === undefined ? {} : { artefactos: opciones.artefactos }),
@@ -1552,12 +1551,3 @@ export async function abrirSesionReal(opciones: {
 }
 
 
-/**
- * El prompt del agente raíz de TrueForge en esta fase, que es un solo agente que lee Y escribe:
- * el del `developer-xone` —con sus reglas de XOne delante, que `promptDeAgente` antepone siempre—,
- * y si no está, las reglas a secas. Sin subagentes todavía, el que escribe es él.
- */
-function instruccionesDelRaizTrueforge(raiz: string): string {
-  const desarrollador = cargarAgentes(raiz).agentes.find((a) => a.nombre === "developer-xone");
-  return desarrollador === undefined ? REGLAS_XONE : promptDeAgente(desarrollador, { suyas: [], faltan: [] });
-}

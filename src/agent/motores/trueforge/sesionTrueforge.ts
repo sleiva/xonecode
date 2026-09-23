@@ -7,10 +7,12 @@
  * misma `Piel`, aprueban por el mismo `pedirAprobacion` y devuelven los mismos `cambios`.
  *
  * **Lo que hay en esta fase, y lo que NO, dicho entero**:
- * - SÍ: el agente raíz con las seis tools de fichero sobre nuestro backend (`toolsDeFichero.ts`),
- *   nuestro modelo (`modeloLangchain.ts`), la aprobación de cada escritura con su diff, el modo
- *   autónomo, los artefactos sin preguntar, la cancelación, los tokens y los cambios del turno.
- * - NO todavía: subagentes, el verificador con su reparación, el juez y el crítico de pantalla,
+ * - SÍ: el raíz como ORQUESTADOR de solo lectura y sin skills, y cada especialista como hijo
+ *   sacado de su `.md` (prompt, skills, permisos, modelo; la shell solo quien la declara), sobre
+ *   nuestro backend (`toolsDeFichero.ts`) y nuestro modelo (`modeloLangchain.ts`); la aprobación
+ *   de cada escritura con su diff, devuelta al hilo que la pidió; el modo autónomo, los artefactos
+ *   sin preguntar, la cancelación, los tokens y los cambios del turno.
+ * - NO todavía: el verificador con su reparación, el juez y el crítico de pantalla,
  *   `xone_navegacion`/`regex_search` y la memoria del hilo en disco (vive en memoria: reabrir una
  *   sesión de este motor empieza la conversación de cero). Un turno que escribió lo DICE con un
  *   aviso, como hace el de deepagents cuando su verificador no corre.
@@ -21,16 +23,17 @@ import winston from "winston";
 import { AgentThread, AgentThreadOrchestrator, EventType, ToolSet, dynamicSubAgents } from "@truefoundry/trueforge-core/core";
 import { NOOP_AGENT_TRACING } from "@truefoundry/trueforge-core/core/tracing/NoopAgentTracing";
 import type { DomainEvent, PendienteDeAprobacion } from "../../../core/events.js";
-import type { ConsumoDeSesionPorCuenta, ModelosPort } from "../../../core/ports.js";
+import type { ConsumoDeSesionPorCuenta, ModelosPort, SkillInfo } from "../../../core/ports.js";
 import { correrTurno, type Piel } from "../../../core/turno.js";
-import { esRutaDeArtefacto, type Artefacto } from "../../../core/artefactos.js";
+import type { Artefacto } from "../../../core/artefactos.js";
 import type { LineaDeDiff } from "../../../core/diff.js";
 import { createTokenTracker, type TokenTracker } from "../../../vendor/tokenTracking.js";
 import { MAX_APPROVAL_ROUNDS, type Decision } from "../../../vendor/hitl.js";
 import { backendDeAgente, entornoDeLaShellDelProyecto } from "../../grafo/proyecto.js";
 import { cargarAgentes } from "../../subagentes/agentesEnDisco.js";
-import { promptDeAgente, type Agente } from "../../../core/agentes.js";
-import { permisosDe, TEXTO_HITL } from "../../grafo/perfiles.js";
+import { fichaDeAgente, promptDeAgente, repartirSkills, type Agente } from "../../../core/agentes.js";
+import { PERFIL_DEL_ORQUESTADOR, promptOrquestador } from "../../grafo/xoneAgent.js";
+import { permisosDe, seDetieneEn, TEXTO_HITL } from "../../grafo/perfiles.js";
 import { cambioDe } from "../../turno/interrupts.js";
 import { tomarInstantanea, type Cambio } from "../../turno/instantanea.js";
 import { ficherosDelProyecto, type SesionReal } from "../../turno/turnoReal.js";
@@ -44,33 +47,72 @@ import {
   type BackendDeFicheros,
 } from "./toolsDeFichero.js";
 import { traducirEvento } from "./eventosTrueforge.js";
-
-/** Quién pide las escrituras en este motor, para la tarjeta de aprobación. */
-const ORIGEN = "trueforge";
+import { anuncioDeSkills } from "./skillsTrueforge.js";
 
 /** Las tools que NO piden aprobación: las de lectura y la shell del conductor. */
 const SIN_APROBACION = { enableTools: ["@all"], disableTools: [], preloadTools: [], requireApprovalForTools: [] };
+/** Las que escriben PARAN el turno hasta que alguien decida, como el HITL de deepagents. */
+const CON_APROBACION = { enableTools: ["@all"], disableTools: [], preloadTools: [], requireApprovalForTools: [...TOOLS_QUE_ESCRIBEN] };
+
+/** El hilo raíz de TrueForge. Se llama así en la librería y no se elige. */
+const HILO_RAIZ = "main";
 
 /**
- * Lo que el agente raíz tiene que saber para DELEGAR: que no tiene shell y a quién se le pide lo
- * que se hace en un aparato. Sin esto, «lanza el hotswap» se contestaba con «no puedo ejecutar».
+ * Lo que el orquestador tiene que saber para DELEGAR en ESTE motor. Su prompt es el de siempre
+ * (`promptOrquestador`), que habla de `task` y de la ficha que va en su descripción: aquí la
+ * delegación es `create_sub_agent` y no tiene descripción por especialista, así que se traduce
+ * el nombre de la tool y las fichas van escritas aquí, con la MISMA función que deepagents.
  */
-function instruccionDeDelegar(conductor: Agente | undefined): string {
-  if (conductor === undefined) return "No tienes shell ni un subagente que ejecute comandos: si te piden algo en un dispositivo, dilo.";
-  return (
-    `No tienes shell. Todo lo que haya que hacer en un dispositivo o emulador —desplegar, hotswap, lanzar la app, ` +
-    `capturas, logs— lo DELEGAS con \`create_sub_agent\` usando exactamente \`name: "${conductor.nombre}"\` y un encargo ` +
-    `autosuficiente: qué pantalla o colección tiene que alcanzar y qué comprobar. Es el único que ejecuta comandos.`
-  );
+export function notaDeDelegacion(agentes: readonly Agente[]): string {
+  if (agentes.length === 0) return "";
+  return [
+    "NOTA DEL HARNESS: en este entorno NO existe la tool `task`. Se delega con `create_sub_agent`:",
+    "`name` es EXACTAMENTE el nombre del especialista y `input` el encargo, autosuficiente —el",
+    "especialista no ve esta conversación—. Donde estas instrucciones dicen `task` o `subagent_type`,",
+    "entiende `create_sub_agent` y `name`. Las fichas de los especialistas:",
+    ...agentes.map((a) => `- ${a.nombre}: ${fichaDeAgente(a)}`),
+  ].join("\n");
 }
+
+/**
+ * Qué tools lleva un especialista, por lo que declara su `.md` — la MISMA partición que
+ * deepagents (`perfiles.ts#toolsDe` y `montajeDeFicheros`):
+ * - quien EJECUTA: lectura + `execute`, y nada de escribir (la shell no pasa por los permisos,
+ *   así que el camino normal de tocar el proyecto sigue siendo el de la aprobación);
+ * - quien solo lee: las seis SIN aprobación, porque `permisosDe` lo confina a lo que no es el
+ *   proyecto —`/artefactos/` y `/planes/`, que es donde el analista deja su plan—: en deepagents
+ *   `hitlDe` le devuelve `{}` por lo mismo;
+ * - el resto: las seis, con `write_file`/`edit_file` pidiendo aprobación y `permisosDe` acotando
+ *   (`escribeEn` incluido).
+ */
+export function clasesDeTools(agente: Pick<Agente, "soloLectura" | "ejecucion">): "ejecuta" | "lee" | "escribe" {
+  if (agente.ejecucion === true) return "ejecuta";
+  return agente.soloLectura ? "lee" : "escribe";
+}
+
+const TOOLS_QUE_TIENE: Record<ReturnType<typeof clasesDeTools>, string> = {
+  ejecuta: "Tienes `ls`, `read_file`, `glob`, `grep` y `execute`; no puedes escribir ficheros del proyecto.",
+  lee:
+    "Tienes `ls`, `read_file`, `glob`, `grep`, `write_file` y `edit_file`, pero solo puedes escribir en " +
+    "`/artefactos/` y `/planes/`: el proyecto no lo puedes tocar, y no puedes ejecutar comandos.",
+  escribe:
+    "Tienes `ls`, `read_file`, `glob`, `grep`, `write_file` y `edit_file`; cada escritura la aprueba una persona " +
+    "viendo su diff, y no puedes ejecutar comandos.",
+};
+
+/** Un nombre que no es de ningún especialista: lectura a secas, sin escribir en ningún sitio. */
+const TOOLS_DEL_GENERICO = "Tienes `ls`, `read_file`, `glob` y `grep`; no puedes escribir ficheros ni ejecutar comandos.";
 
 export interface OpcionesDeSesionTrueforge {
   raiz: string;
   modelos: ModelosPort;
   entorno: Entorno;
-  /** El prompt del agente raíz: las reglas de XOne y su papel. TrueForge lo envuelve con su
-   *  propia identidad, que no se puede quitar. */
-  instrucciones: string;
+  /**
+   * El catálogo de skills de la sesión. OBLIGATORIO: sin él cada especialista se quedaría sin
+   * el anuncio de las suyas y trabajaría como si no las tuviera, sin un error que leer — el
+   * patrón de fallo del campo opcional.
+   */
+  skills: readonly SkillInfo[];
   pedirAprobacion?: (
     pendientes: PendienteDeAprobacion[],
     ficheros: Map<string, string>,
@@ -85,6 +127,17 @@ export interface OpcionesDeSesionTrueforge {
   topeDeRondas?: number;
 }
 
+/** Una tool call que espera decisión: en QUÉ hilo, con qué id, y qué pide. */
+interface Pendiente {
+  clave: string;
+  hilo: string;
+  id: string;
+  nombre: string;
+  args: Record<string, unknown>;
+}
+
+const claveDe = (hilo: string, id: string): string => `${hilo}:${id}`;
+
 export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge): Promise<SesionReal> {
   const { raiz } = opciones;
   let modelos = opciones.modelos;
@@ -98,80 +151,89 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
   let cancelado = false;
   let cerrada = false;
   let hilo = opciones.hilo ?? `tf-${Date.now()}`;
+  const catalogo = opciones.skills;
+  const disponibles = new Set(catalogo.map((s) => s.nombre));
+  /** De quién es cada hilo, para que la tarjeta de aprobación diga QUIÉN quiere escribir. */
+  const quienEs = new Map<string, string>([[HILO_RAIZ, PERFIL_DEL_ORQUESTADOR.nombre]]);
 
   /** Lo que el agente dejó en `/artefactos/` y aún no se ha anunciado: un artefacto se escribe
    *  SIN aprobación, así que tiene que ANUNCIARSE, como en deepagents. */
   const artefactosPorAnunciar: Artefacto[] = [];
-  const backend = backendDeAgente({
-    raiz,
-    ficheros: ficherosDelProyecto(raiz),
-    ...(opciones.artefactos === undefined
-      ? {}
-      : { artefactos: { carpeta: opciones.artefactos, alEscribir: (a: Artefacto) => void artefactosPorAnunciar.push(a) } }),
-  }) as unknown as BackendDeFicheros;
-  const toolSet = new ToolSet({
-    source: fuenteDeFicheros({ backend, reglas: permisosDe({ nombre: ORIGEN, soloLectura: false }) }) as never,
-    // Las que escriben PARAN el turno hasta que alguien decida, como el HITL de deepagents.
-    selectors: { enableTools: ["@all"], disableTools: [], preloadTools: [], requireApprovalForTools: [...TOOLS_QUE_ESCRIBEN] },
+  const montarBackend = (ejecucion?: { entorno: Record<string, string> }) =>
+    backendDeAgente({
+      raiz,
+      ficheros: ficherosDelProyecto(raiz),
+      ...(opciones.artefactos === undefined
+        ? {}
+        : { artefactos: { carpeta: opciones.artefactos, alEscribir: (a: Artefacto) => void artefactosPorAnunciar.push(a) } }),
+      ...(ejecucion === undefined ? {} : { ejecucion }),
+    });
+  const backend = montarBackend() as unknown as BackendDeFicheros;
+
+  /**
+   * **El raíz es el ORQUESTADOR, de solo lectura y SIN skills** — la regla de deepagents
+   * (`xoneAgent.ts`): los subagentes no heredan las skills del orquestador, cada uno recibe
+   * las de su `.md`. Lee para orientarse y contestar lo que se contesta mirando; todo lo que
+   * escribe o ejecuta lo delega. Solo los de motor `modelo`: a uno externo no se le puede
+   * delegar desde aquí, y ofrecerlo sería un botón muerto que pulsa el modelo.
+   */
+  const especialistas = (): Agente[] => cargarAgentes(raiz).agentes.filter((a) => a.motor === "modelo");
+  const toolsDelRaiz = new ToolSet({
+    source: fuenteDeFicheros({ backend, reglas: permisosDe(PERFIL_DEL_ORQUESTADOR), tools: TOOLS_DE_LECTURA }) as never,
+    selectors: SIN_APROBACION,
     preload: true,
   });
   const llm = modeloParaTrueforge({ modelo: () => modelos.paraPapel("trabajo"), senal: () => aborto?.signal });
 
   /**
-   * **El que EJECUTA es un subagente, y es el único con shell** —la regla de deepagents, que aquí
-   * se conserva—: una shell no pasa por `permisosDe` ni por la aprobación, así que no se le da al
-   * agente raíz, que escribe el proyecto. Es el `.md` con `ejecucion: true` (hoy el
-   * `device-controller`), con su prompt, sus tools de LECTURA y `execute` sobre el mismo backend
-   * que le monta deepagents.
-   */
-  const conductor = (): Agente | undefined => cargarAgentes(raiz).agentes.find((a) => a.ejecucion === true);
-
-  /**
-   * El hilo de un subagente. TrueForge no tiene subagentes con nombre ni deja poner prompt propio a
-   * un hijo —su identidad fija dice además que tiene «las mismas tools que el padre», que aquí no es
-   * verdad—, así que las instrucciones van en su primer mensaje, CORRIGIENDO esa frase, y el encargo
-   * detrás. Un nombre que no es el del conductor da un hijo genérico de SOLO LECTURA y sin shell:
-   * un nombre inventado no tumba el turno ni se lleva la shell.
+   * El hilo de un subagente, sacado de SU `.md`: su prompt, SUS skills, sus permisos y su
+   * modelo. TrueForge no tiene subagentes con nombre ni deja poner prompt propio a un hijo —su
+   * identidad fija dice además que tiene «las mismas tools que el padre», que aquí no es
+   * verdad—, así que las instrucciones van en su primer mensaje, CORRIGIENDO esa frase, y el
+   * encargo detrás. Un nombre que no es de ningún especialista da un hijo genérico de SOLO
+   * LECTURA y sin shell: un nombre inventado no tumba el turno ni se lleva la escritura.
    */
   const crearHijo = async (params: {
     request: { name: string; input: string };
     threadId: string;
     parent: unknown;
   }): Promise<AgentThread> => {
-    const elConductor = conductor();
-    const esElConductor = elConductor !== undefined && params.request.name === elConductor.nombre;
-    const lectura = fuenteDeFicheros({ backend, reglas: permisosDe({ nombre: params.request.name, soloLectura: true }), tools: TOOLS_DE_LECTURA });
-    const tools: unknown[] = [new ToolSet({ source: lectura as never, selectors: SIN_APROBACION, preload: true })];
-    let instrucciones: string;
-    if (esElConductor) {
-      const carpeta = opciones.artefactos;
-      const conShell = backendDeAgente({
-        raiz,
-        ficheros: ficherosDelProyecto(raiz),
-        ...(carpeta === undefined
-          ? {}
-          : { artefactos: { carpeta, alEscribir: (a: Artefacto) => void artefactosPorAnunciar.push(a) } }),
-        ejecucion: { entorno: entornoDeLaShellDelProyecto(raiz, carpeta) },
-      }) as unknown as { execute(c: string): unknown };
-      tools.push(new ToolSet({ source: fuenteDeEjecucion(conShell) as never, selectors: SIN_APROBACION, preload: true }));
-      const skills = elConductor.skills.map((s) => `/skills/${s}/SKILL.md`).join(", ");
-      instrucciones = [
-        promptDeAgente(elConductor, { suyas: [], faltan: [] }),
-        "",
-        "NOTA DEL HARNESS: aunque tu identidad diga lo contrario, NO tienes las mismas tools que quien te " +
-          "delega. Tienes `ls`, `read_file`, `glob`, `grep` y `execute`; no puedes escribir ficheros del proyecto.",
-        ...(skills === "" ? [] : [`Tus skills están en ${skills}: léelas con read_file antes de usar sus scripts.`]),
-      ].join("\n");
+    const agente = especialistas().find((a) => a.nombre === params.request.name);
+    quienEs.set(params.threadId, agente?.nombre ?? params.request.name);
+    const clase = agente === undefined ? "lee" : clasesDeTools(agente);
+    const reglas = permisosDe(agente ?? { nombre: params.request.name, soloLectura: true });
+    const tools: unknown[] = [];
+    if (clase === "escribe") {
+      tools.push(new ToolSet({ source: fuenteDeFicheros({ backend, reglas }) as never, selectors: CON_APROBACION, preload: true }));
+    } else if (clase === "lee" && agente !== undefined) {
+      tools.push(new ToolSet({ source: fuenteDeFicheros({ backend, reglas }) as never, selectors: SIN_APROBACION, preload: true }));
     } else {
-      instrucciones =
-        "NOTA DEL HARNESS: eres un subagente de SOLO LECTURA. Tienes `ls`, `read_file`, `glob` y `grep`; " +
-        "no puedes escribir ficheros ni ejecutar comandos. Contesta con lo que encuentres y dónde.";
+      tools.push(
+        new ToolSet({ source: fuenteDeFicheros({ backend, reglas, tools: TOOLS_DE_LECTURA }) as never, selectors: SIN_APROBACION, preload: true })
+      );
     }
-    const modelo = esElConductor && elConductor.modelo !== undefined ? elConductor.modelo : undefined;
+    if (clase === "ejecuta") {
+      const conShell = montarBackend({ entorno: entornoDeLaShellDelProyecto(raiz, opciones.artefactos) }) as unknown as {
+        execute(c: string): unknown;
+      };
+      tools.push(new ToolSet({ source: fuenteDeEjecucion(conShell) as never, selectors: SIN_APROBACION, preload: true }));
+    }
+    const nota = `NOTA DEL HARNESS: aunque tu identidad diga lo contrario, NO tienes las mismas tools que quien te delega. ${
+      agente === undefined ? TOOLS_DEL_GENERICO : TOOLS_QUE_TIENE[clase]
+    }`;
+    const instrucciones =
+      agente === undefined
+        ? `${nota} Contesta con lo que encuentres y dónde.`
+        : [promptDeAgente(agente, repartirSkills(agente, disponibles)), "", nota, anuncioDeSkills(agente, catalogo)]
+            .filter((l) => l !== undefined)
+            .join("\n")
+            .trimEnd();
+    const papel = agente?.soloLectura === true ? "rapido" : "trabajo";
     return new AgentThread({
       definition: {
         modelClient: modeloParaTrueforge({
-          modelo: () => (modelo === undefined ? modelos.paraPapel("trabajo") : modelos.paraModelo(modelo)),
+          modelo: () =>
+            agente?.modelo === undefined ? modelos.paraPapel(papel, agente?.esfuerzo) : modelos.paraModelo(agente.modelo, agente.esfuerzo),
           senal: () => aborto?.signal,
         }),
         messages: [{ role: "user", content: `${instrucciones}\n\nENCARGO:\n${params.request.input}` }] as never,
@@ -189,11 +251,14 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
   /** El árbol de hilos de UNA conversación. Se rehace con `nuevoHilo`. */
   const nuevoOrquestador = (): AgentThreadOrchestrator => {
     const raizDelArbol = new AgentThread({
-      definition: { modelClient: llm, instruction: `${opciones.instrucciones}\n\n${instruccionDeDelegar(conductor())}` },
-      threadId: "main",
-      title: "main",
+      definition: {
+        modelClient: llm,
+        instruction: [promptOrquestador(especialistas()), notaDeDelegacion(especialistas())].filter((l) => l !== "").join("\n\n"),
+      },
+      threadId: HILO_RAIZ,
+      title: HILO_RAIZ,
       capabilities: [
-        { systemToolSets: [toolSet] },
+        { systemToolSets: [toolsDelRaiz] },
         // `create_sub_agent`: la delegación de TrueForge, un nivel y cinco a la vez como mucho.
         dynamicSubAgents({ sandboxAvailable: false, tracing: NOOP_AGENT_TRACING }),
       ] as never,
@@ -201,7 +266,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       logger,
     });
     return new AgentThreadOrchestrator({
-      agentThreads: new Map([["main", raizDelArbol]]),
+      agentThreads: new Map([[HILO_RAIZ, raizDelArbol]]),
       createDynamicSubAgentThread: async (params) =>
         crearHijo(params as unknown as { request: { name: string; input: string }; threadId: string; parent: unknown }),
       tracing: NOOP_AGENT_TRACING,
@@ -214,15 +279,22 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
     for (const o of oyentes) o();
   };
 
-  /** Lo que el orquestador dice al ejecutar, traducido; y lo que pidió aprobar al terminar. */
-  async function* paso(lote: unknown[], senal: AbortSignal, acciones: { pendientes: { id: string; nombre: string; args: Record<string, unknown> }[] }): AsyncGenerator<DomainEvent> {
+  /**
+   * Lo que el orquestador dice al ejecutar, traducido; y lo que pidió aprobar al terminar.
+   *
+   * **Una aprobación se devuelve al hilo que la PIDIÓ.** Con subagentes que escriben, la
+   * `write_file` la pide el hijo, y el orquestador de TrueForge reparte las decisiones por
+   * `thread_id`: mandarla al raíz no la contestaría —o la rechazaría por hilo desconocido—.
+   * Por eso las tool calls se apuntan por hilo Y por id: dos hijos pueden repetir id.
+   */
+  async function* paso(lote: unknown[], senal: AbortSignal, pendientes: Pendiente[]): AsyncGenerator<DomainEvent> {
     for await (const _ of orquestador.send(lote as never)) void _;
     const llamadas = new Map<string, { nombre: string; args: Record<string, unknown> }>();
     const it = orquestador.execute({ signal: senal });
     let r = await it.next();
     while (!r.done) {
-      const evento = r.value as { type?: string; output?: unknown };
-      // Las tool calls de este paso, por id: es lo que dice QUÉ se pide aprobar.
+      const evento = r.value as { type?: string; thread_id?: string; output?: unknown };
+      const deHilo = evento.thread_id ?? HILO_RAIZ;
       if (evento.type === "internal.agent.context.append" && Array.isArray(evento.output)) {
         for (const m of evento.output) {
           for (const t of (m as { tool_calls?: { id: string; function: { name: string; arguments: string } }[] }).tool_calls ?? []) {
@@ -232,29 +304,34 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
             } catch {
               args = {};
             }
-            llamadas.set(t.id, { nombre: t.function.name, args });
+            llamadas.set(claveDe(deHilo, t.id), { nombre: t.function.name, args });
           }
         }
       }
       const { eventos, uso } = traducirEvento(evento);
       if (uso !== undefined) {
+        // Los tokens de TODOS los hilos se gastaron, así que todos cuentan. La VENTANA es otra
+        // pregunta —cuánto ocupa la conversación—, y esa es la del raíz: la de un hijo es la de
+        // un encargo que muere con él.
         tracker.input += uso.input;
         tracker.output += uso.output;
         tracker.cache += uso.cache;
         tracker.calls += 1;
-        tracker.contexto = uso.input;
+        if (deHilo === HILO_RAIZ) tracker.contexto = uso.input;
         avisar();
       }
       yield* eventos;
       while (artefactosPorAnunciar.length > 0) yield { tipo: "artefacto", artefacto: artefactosPorAnunciar.shift()! };
       r = await it.next();
     }
-    const resultado = r.value as { required_actions?: { type?: string; tool_calls?: { id: string }[] }[] };
+    const resultado = r.value as { required_actions?: { type?: string; thread_id?: string; tool_calls?: { id: string }[] }[] };
     for (const accion of resultado.required_actions ?? []) {
       if (accion.type !== "tool.approval_required") continue;
+      const deHilo = accion.thread_id ?? HILO_RAIZ;
       for (const { id } of accion.tool_calls ?? []) {
-        const llamada = llamadas.get(id);
-        if (llamada !== undefined) acciones.pendientes.push({ id, ...llamada });
+        const clave = claveDe(deHilo, id);
+        const llamada = llamadas.get(clave);
+        if (llamada !== undefined) pendientes.push({ clave, hilo: deHilo, id, ...llamada });
       }
     }
   }
@@ -284,9 +361,9 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
           if (cancelado || cerrada) return;
           aborto = new AbortController();
           const senal = aborto.signal;
-          const acciones = { pendientes: [] as { id: string; nombre: string; args: Record<string, unknown> }[] };
-          yield* paso(lote, senal, acciones);
-          if (acciones.pendientes.length === 0) return;
+          const pendientes: Pendiente[] = [];
+          yield* paso(lote, senal, pendientes);
+          if (pendientes.length === 0) return;
 
           const leer = (ruta: string): string => {
             try {
@@ -295,29 +372,31 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
               return "";
             }
           };
+          // Todo va por la CLAVE (hilo + id): es lo que viaja a la tarjeta y lo que vuelve.
           const decisiones = new Map<string, Decision>();
           const humanos: PendienteDeAprobacion[] = [];
           const ficheros = new Map<string, string>();
           const diffs = new Map<string, LineaDeDiff[]>();
           const autonomo = opciones.sinAprobacion?.() === true;
-          for (const p of acciones.pendientes) {
+          for (const p of pendientes) {
             const ruta = typeof p.args.file_path === "string" ? p.args.file_path : "";
-            if (esRutaDeArtefacto(ruta)) {
-              decisiones.set(p.id, { type: "approve" });
+            // Lo que NO es el proyecto —artefactos y planes— y lo que el backend va a rechazar de
+            // todas formas no se pregunta: la MISMA función que el HITL de deepagents.
+            if (!seDetieneEn({ toolCall: { args: p.args } })) {
+              decisiones.set(p.clave, { type: "approve" });
             } else if (autonomo) {
-              decisiones.set(p.id, { type: "approve" });
+              decisiones.set(p.clave, { type: "approve" });
               aplicadasSinPreguntar.push(ruta);
             } else {
-              const pendiente: PendienteDeAprobacion = {
-                id: p.id,
-                origen: ORIGEN,
+              humanos.push({
+                id: p.clave,
+                origen: quienEs.get(p.hilo) ?? p.hilo,
                 descripcion: `quiere ${TEXTO_HITL[p.nombre] ?? p.nombre}`,
                 decisionesPermitidas: ["approve", "reject"],
-              };
-              humanos.push(pendiente);
-              ficheros.set(p.id, ruta);
-              const vista = cambioDe({ id: p.id, tool: p.nombre, args: p.args, description: "", allowedDecisions: [] }, leer);
-              if (vista !== undefined) diffs.set(p.id, vista.lineas);
+              });
+              ficheros.set(p.clave, ruta);
+              const vista = cambioDe({ id: p.clave, tool: p.nombre, args: p.args, description: "", allowedDecisions: [] }, leer);
+              if (vista !== undefined) diffs.set(p.clave, vista.lineas);
             }
           }
 
@@ -339,10 +418,10 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
             for (const h of humanos) decisiones.set(h.id, respuesta.get(h.id) ?? { type: "reject" });
           }
           if ([...decisiones.values()].some((d) => d.type === "approve")) escribio = true;
-          lote = [...decisiones.entries()].map(([id, d]) => ({
+          lote = pendientes.map((p) => ({ p, d: decisiones.get(p.clave) ?? ({ type: "reject" } as Decision) })).map(({ p, d }) => ({
             type: "user.tool_approval",
-            thread_id: "main",
-            tool_call_id: id,
+            thread_id: p.hilo,
+            tool_call_id: p.id,
             approval: d.type === "approve" ? { status: "allow" } : { status: "deny", reason: d.message ?? "rechazado por el usuario" },
           }));
         }

@@ -517,8 +517,7 @@ hechos del proyecto precargados, y envuelve el prompt con su identidad, que no s
 1. `xone_navegacion`, `regex_search` y los hechos del proyecto: es lo que cierra la diferencia medida.
 2. El verificador con su reparación, el juez del turno y el crítico de pantalla. Hoy un turno que
    escribe lo avisa, como deepagents cuando su verificador no corre.
-3. El resto de subagentes. **El primero ya está**: el `device-controller`, el único con shell,
-   como en deepagents (abajo).
+3. ~~El resto de subagentes~~: hecho, todos salen de su `.md` (abajo).
 4. La memoria del hilo en disco: hoy vive en memoria y reabrir una sesión de TrueForge empieza de cero.
 5. Deshacer la dependencia circular entre `turnoReal.ts` y `sesionTrueforge.ts`.
 
@@ -541,3 +540,35 @@ Medido con `deepseek-flash`: «¿qué dispositivos hay conectados?» → `create
 → `adb devices -l` → «el emulador `emulator-5554`, en estado `device`», correcto, en 4 llamadas y
 13,4k de entrada. Las dos rigideces que hubo que rodear: el prompt del hijo va en su primer mensaje,
 y ese mensaje corrige la frase fija de TrueForge de que el hijo tiene «las mismas tools que el padre».
+
+### Todos los subagentes, con el reparto de deepagents (23-09-2026)
+
+La primera versión tenía un raíz que leía, escribía y recibía las reglas del `developer-xone`, y un
+solo hijo con nombre. Eso rompía el reparto que deepagents ya hace: **las skills son de cada
+especialista y el orquestador no recibe ninguna**. Ahora el árbol es el mismo en los dos motores:
+
+- **El raíz es el ORQUESTADOR**, con el prompt de siempre (`promptOrquestador`, generado de la lista),
+  **de solo lectura** (`permisosDe(PERFIL_DEL_ORQUESTADOR)` y solo las cuatro tools de lectura) y **sin
+  skills**. Ese prompt habla de `task` y de la ficha en su descripción; aquí se delega con
+  `create_sub_agent`, así que una nota traduce el nombre de la tool y lleva las fichas escritas con la
+  MISMA `fichaDeAgente` (`notaDeDelegacion`). Solo se ofrecen los especialistas de motor `modelo`: a uno
+  externo no se le puede delegar desde este motor.
+- **Cada hijo sale de SU `.md`**: su prompt (`promptDeAgente`, con las reglas de XOne delante), **sus**
+  skills anunciadas —nombre, descripción y ruta del `SKILL.md`, que se lee bajo demanda desde
+  `/skills/`, montada por `backendDeAgente`— (`skillsTrueforge.ts#anuncioDeSkills`), su modelo
+  (`modelo` del `.md`, o `rapido`/`trabajo` según `soloLectura`, con su `esfuerzo`) y sus tools por la
+  misma partición que deepagents (`clasesDeTools`): quien ejecuta, lectura + `execute`; quien solo lee,
+  las seis **sin aprobación**, porque `permisosDe` lo confina a `/artefactos/` y `/planes/` —el plan del
+  analista—, igual que el `hitlDe` vacío de deepagents; el resto, las seis con `write_file`/`edit_file` pidiendo aprobación y `permisosDe(agente)`
+  acotando (`escribeEn` incluido). Un nombre que no es de ningún especialista da un hijo genérico de
+  solo lectura.
+- **La aprobación vuelve al hilo que la PIDIÓ.** Con escritores, la `write_file` la pide el hijo, y el
+  orquestador de TrueForge reparte las decisiones por `thread_id`: devolverla al raíz la rechaza con
+  «no pending approval» (el test muere así con ese mutante). Las tool calls se apuntan por hilo **y**
+  por id, y la tarjeta dice el nombre del especialista que quiere escribir, no «trueforge».
+- **Tokens de todos los hilos, ventana solo del raíz**: todos se gastaron; la ventana de un hijo es la
+  de un encargo que muere con él.
+- Las escrituras de dos hijos a la vez sobre el mismo fichero **se serializan**: comparten el backend,
+  y la cola por ruta vive en `backendDeAgente`.
+- Qué se pregunta lo decide **la misma función** que el HITL de deepagents (`seDetieneEn`): lo que no
+  es el proyecto no se pregunta, y por un fichero del proyecto siempre.

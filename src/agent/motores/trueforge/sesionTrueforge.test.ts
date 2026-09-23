@@ -8,29 +8,61 @@ import type { ModelosPort } from "../../../core/ports.js";
 import { abrirSesionTrueforge } from "./sesionTrueforge.js";
 import { abrirSesionReal } from "../../turno/turnoReal.js";
 
-/** Un modelo de pega que, en su primera llamada, pide escribir `/nota.txt` y luego contesta. */
-function modelos(): ModelosPort {
-  const guiones = [
-    [
-      new AIMessageChunk({
-        content: "Escribo la nota.",
-        tool_call_chunks: [{ index: 0, id: "w1", name: "write_file", args: JSON.stringify({ file_path: "/nota.txt", content: "hola\n" }) }],
-        usage_metadata: { input_tokens: 50, output_tokens: 9, total_tokens: 59 },
-      }),
-    ],
-    [new AIMessageChunk({ content: "Listo.", usage_metadata: { input_tokens: 70, output_tokens: 2, total_tokens: 72 } })],
-  ];
+/**
+ * Un modelo de pega con el guion de una ESCRITURA delegada: el orquestador delega en
+ * `developer-xone`, éste pide escribir `/nota.txt`, informa, y el orquestador contesta. El
+ * raíz no puede escribir —es de solo lectura—, así que escribir es siempre cosa de un hijo, y
+ * la aprobación tiene que volver al hilo de ESE hijo.
+ *
+ * Apunta lo que ve cada llamada: los mensajes y las tools que se le ataron.
+ */
+function modelosConGuion(guiones: AIMessageChunk[][]) {
+  const vistos: string[][] = [];
+  const toolsPorLlamada: string[][] = [];
+  let atadas: string[] = [];
   const modelo = {
-    bindTools: () => modelo,
-    stream: async () => {
+    bindTools: (tools: { function?: { name?: string } }[]) => {
+      atadas = tools.map((t) => t.function?.name ?? "");
+      return modelo;
+    },
+    stream: async (mensajes: { content: unknown }[]) => {
+      vistos.push(mensajes.map((m) => String(m.content)));
+      toolsPorLlamada.push(atadas);
       const g = guiones.shift() ?? [new AIMessageChunk({ content: "" })];
       return (async function* () {
         for (const t of g) yield t;
       })();
     },
   };
-  return { paraPapel: () => modelo, paraModelo: () => modelo, descripcion: () => ({}) } as unknown as ModelosPort;
+  const m = { paraPapel: () => modelo, paraModelo: () => modelo, descripcion: () => ({}) } as unknown as ModelosPort;
+  return { m, vistos, toolsPorLlamada };
 }
+
+const guionDeEscritura = (): AIMessageChunk[][] => [
+  [
+    new AIMessageChunk({
+      content: "",
+      tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "escribe la nota" }) }],
+      usage_metadata: { input_tokens: 50, output_tokens: 9, total_tokens: 59 },
+    }),
+  ],
+  [
+    new AIMessageChunk({
+      content: "Escribo la nota.",
+      tool_call_chunks: [{ index: 0, id: "w1", name: "write_file", args: JSON.stringify({ file_path: "/nota.txt", content: "hola\n" }) }],
+      usage_metadata: { input_tokens: 30, output_tokens: 5, total_tokens: 35 },
+    }),
+  ],
+  [new AIMessageChunk({ content: "Nota escrita." })],
+  [new AIMessageChunk({ content: "Listo.", usage_metadata: { input_tokens: 70, output_tokens: 2, total_tokens: 72 } })],
+];
+
+const modelos = (): ModelosPort => modelosConGuion(guionDeEscritura()).m;
+
+const CATALOGO = [
+  { nombre: "xone-development", descripcion: "reglas de XOne", tokens: 1 },
+  { nombre: "xone-hotswap", descripcion: "manda al aparato", tokens: 1 },
+];
 
 /** Una piel que apunta lo que le llega. */
 function piel() {
@@ -55,16 +87,18 @@ const proyecto = () => {
 const ENTORNO = { git: { usable: false, prefijo: "" } } as never;
 
 describe("una sesión con el motor TrueForge", () => {
-  it("con aprobación: pausa, se aprueba, se ESCRIBE y el turno lo cuenta", async () => {
+  it("con aprobación: el HIJO que escribe pausa, se aprueba en SU hilo, se ESCRIBE y el turno lo cuenta", async () => {
     const raiz = proyecto();
     const preguntadas: string[] = [];
+    const origenes: string[] = [];
     const s = await abrirSesionTrueforge({
       raiz,
       modelos: modelos(),
       entorno: ENTORNO,
-      instrucciones: "reglas",
+      skills: CATALOGO,
       pedirAprobacion: async (pendientes, ficheros) => {
         for (const p of pendientes) preguntadas.push(ficheros.get(p.id) ?? "?");
+        for (const p of pendientes) origenes.push(p.origen);
         return new Map(pendientes.map((p) => [p.id, { type: "approve" as const }]));
       },
     });
@@ -75,8 +109,10 @@ describe("una sesión con el motor TrueForge", () => {
     expect(r.cambios.map((c) => c.ruta)).toContain("nota.txt");
     expect(pi.tokens.join("")).toContain("Listo.");
     expect(pi.pausas()).toBe(1);
-    // Los tokens de las DOS llamadas, sumados, y la ventana es la última.
-    expect(s.consumo().modelo).toMatchObject({ entrada: 120, salida: 11 });
+    // La tarjeta dice QUIÉN quiere escribir: el especialista, no el motor.
+    expect(origenes).toEqual(["developer-xone"]);
+    // Los tokens de TODOS los hilos, sumados; la ventana es la del raíz, no la del hijo.
+    expect(s.consumo().modelo).toMatchObject({ entrada: 150, salida: 16 });
     expect(s.consumo().contexto).toBe(70);
   }, 20_000);
 
@@ -86,7 +122,7 @@ describe("una sesión con el motor TrueForge", () => {
       raiz,
       modelos: modelos(),
       entorno: ENTORNO,
-      instrucciones: "reglas",
+      skills: CATALOGO,
       pedirAprobacion: async (pendientes) => new Map(pendientes.map((p) => [p.id, { type: "reject" as const }])),
     });
     await s.turno("escribe una nota", piel().p);
@@ -100,7 +136,7 @@ describe("una sesión con el motor TrueForge", () => {
       raiz,
       modelos: modelos(),
       entorno: ENTORNO,
-      instrucciones: "reglas",
+      skills: CATALOGO,
       sinAprobacion: () => true,
       pedirAprobacion: async () => {
         preguntas += 1;
@@ -116,7 +152,7 @@ describe("una sesión con el motor TrueForge", () => {
 
   it("sin nadie que apruebe, la escritura NO se aplica y queda como pendiente", async () => {
     const raiz = proyecto();
-    const s = await abrirSesionTrueforge({ raiz, modelos: modelos(), entorno: ENTORNO, instrucciones: "reglas" });
+    const s = await abrirSesionTrueforge({ raiz, modelos: modelos(), entorno: ENTORNO, skills: CATALOGO });
     const r = await s.turno("escribe una nota", piel().p);
     expect(existsSync(join(raiz, "nota.txt"))).toBe(false);
     expect(r.pendientes).toBe(1);
@@ -129,7 +165,7 @@ describe("una sesión con el motor TrueForge", () => {
       raiz,
       modelos: modelos(),
       entorno: ENTORNO,
-      instrucciones: "reglas",
+      skills: CATALOGO,
       pedirAprobacion: async (pendientes) => {
         // La persona pulsa «parar» con la tarjeta delante, y luego aprueba por inercia.
         sesion!.cancelar();
@@ -190,7 +226,7 @@ describe("una sesión con el motor TrueForge", () => {
       },
     };
     const m = { paraPapel: () => modelo, paraModelo: () => modelo, descripcion: () => ({}) } as unknown as ModelosPort;
-    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, instrucciones: "reglas" });
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
     const lineas: string[] = [];
     const tokens: string[] = [];
     await s.turno("lanza el hotswap", {
@@ -215,5 +251,50 @@ describe("una sesión con el motor TrueForge", () => {
     expect(toolsPorLlamada[3]).not.toContain("execute");
     expect(toolsPorLlamada[1]).toContain("execute");
     expect(toolsPorLlamada[1]).not.toContain("write_file");
+    // Y el raíz es el ORQUESTADOR: lee pero no escribe, sabe delegar por `create_sub_agent`, y no
+    // recibe NINGUNA skill — son de cada especialista.
+    expect(toolsPorLlamada[0]).toContain("read_file");
+    expect(toolsPorLlamada[0]).not.toContain("write_file");
+    expect(toolsPorLlamada[0]).toContain("create_sub_agent");
+    expect(vistos[0]!.join("\n")).toMatch(/create_sub_agent/);
+    expect(vistos[0]!.join("\n")).not.toMatch(/\/skills\//);
+    // El conductor recibe las SUYAS del catálogo, y no las de otro.
+    expect(vistos[1]!.join("\n")).toContain("/skills/xone-hotswap/SKILL.md");
+    expect(vistos[1]!.join("\n")).not.toContain("/skills/xone-development/SKILL.md");
+  }, 30_000);
+
+  it("cada especialista sale de SU `.md`: el que solo lee escribe SOLO fuera del proyecto y sin preguntar, el que escribe pide aprobación", async () => {
+    const raiz = proyecto();
+    const { m, vistos, toolsPorLlamada } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "c1", name: "create_sub_agent", args: JSON.stringify({ name: "consultant-xone", input: "¿qué es un mapcol?" }) }] })],
+      // El consultor —soloLectura— intenta tocar el proyecto y deja un plan.
+      [
+        new AIMessageChunk({
+          content: "",
+          tool_call_chunks: [
+            { index: 0, id: "e1", name: "write_file", args: JSON.stringify({ file_path: "/app.xml", content: "<roto/>" }) },
+            { index: 1, id: "e2", name: "write_file", args: JSON.stringify({ file_path: "/planes/demo/plan.md", content: "# plan\n" }) },
+          ],
+        }),
+      ],
+      [new AIMessageChunk({ content: "Una referencia a otra colección." })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "c2", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "mira app.xml" }) }] })],
+      [new AIMessageChunk({ content: "Mirado." })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    const pi = piel();
+    await s.turno("pregunta y mira", pi.p);
+    // Lo mismo que deepagents: `permisosDe` lo confina y no hay nada que aprobar.
+    expect(toolsPorLlamada[1]).toContain("write_file");
+    expect(pi.pausas()).toBe(0);
+    expect(readFileSync(join(raiz, "app.xml"), "utf8")).toBe("<app/>\n");
+    expect(readFileSync(join(raiz, ".xonecode", "planes", "demo", "plan.md"), "utf8")).toBe("# plan\n");
+    // El desarrollador escribe (con aprobación) y no ejecuta.
+    expect(toolsPorLlamada[4]).toContain("write_file");
+    expect(toolsPorLlamada[4]).not.toContain("execute");
+    // Su prompt es el de su `.md` —con las reglas de XOne delante— y le llegan SUS skills.
+    expect(vistos[1]!.join("\n")).toContain("/skills/xone-development/SKILL.md");
+    expect(vistos[4]!.join("\n")).toMatch(/cada escritura la aprueba una persona/);
   }, 30_000);
 });
