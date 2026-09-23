@@ -1064,6 +1064,15 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       const foto = fotoDeLaSesion(hilo);
       orquestador = nuevoOrquestador(foto);
       preguntaEnEspera = preguntaDeLaFoto(foto);
+      // Y las DOS cuentas vuelven a cero, como en deepagents: lo que gastó la conversación de antes
+      // no es de ésta, y sin esto `/nuevo` arrastraba la cifra entera a una sesión vacía.
+      tracker.input = 0;
+      tracker.output = 0;
+      tracker.cache = 0;
+      tracker.calls = 0;
+      tracker.contexto = 0;
+      consumoExterno = SIN_CONSUMO;
+      avisar();
     },
     cancelar() {
       cancelado = true;

@@ -258,6 +258,25 @@ describe("y que el puerto le pase de verdad lo que le da la sesión", () => {
     expect(apuntado().find((x) => x.que === "respuesta")?.result?.decision).toBe("accept");
   });
 
+  it("dos hijos que ESCRIBEN, lanzados a la vez por el MISMO puerto, no se solapan", async () => {
+    // El envoltorio (`escritoresEnSerie`) está probado puro; esto prueba que el puerto lo MONTA.
+    guion({ cambios: UN_CAMBIO(raiz) });
+    let dentro = 0;
+    let maximo = 0;
+    const puerto = crearSubagenteExterno({
+      aprobarEscritura: async () => {
+        dentro += 1;
+        maximo = Math.max(maximo, dentro);
+        await new Promise((r) => setTimeout(r, 150));
+        dentro -= 1;
+        return true;
+      },
+      ficherosDelProyecto: () => new Set(),
+    });
+    await Promise.all([puerto.correr(peticionDe(true)), puerto.correr(peticionDe(true))]);
+    expect(maximo).toBe(1);
+  });
+
   it("`ficherosDelProyecto` LLEGA, y este sí es peligroso: sin él se escribe una vista APLANADA", async () => {
     // Una lista vacía no reconoce `Cosa.xml` como la vista de `Cosa.xne`, así que la guarda
     // la dejaría pasar y el agente editaría el fichero que Studio regenera — perdiendo el

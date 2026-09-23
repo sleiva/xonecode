@@ -1149,12 +1149,27 @@ describe("Claude Code, Codex y OpenCode como hijos de TrueForge", () => {
         })
       );
     });
-    const { m } = modelosConGuion([delegar(), [new AIMessageChunk({ content: "no debería llegar" })]]);
+    const { m } = modelosConGuion([delegar(), [new AIMessageChunk({ content: "Sigo aquí." })]]);
     s = await abrirSesionTrueforge({ raiz: conExterno(), modelos: m, entorno: ENTORNO, skills: CATALOGO, subagenteExterno: f.subagenteExterno });
     const pi = piel();
     await s.turno("refactoriza", pi.p);
     expect(abortada).toBe(true);
-    expect(pi.tokens.join("")).not.toContain("no debería llegar");
+    expect(pi.tokens.join("")).not.toContain("Sigo aquí.");
+    // Y la sesión no queda atascada con el `create_sub_agent` sin respuesta: el siguiente turno corre.
+    const otro = piel();
+    await s.turno("otra cosa", otro.p);
+    expect(otro.tokens.join("")).toBe("Sigo aquí.");
+  }, 30_000);
+
+  it("`/nuevo` reinicia las DOS cuentas: lo de la conversación de antes no es de ésta", async () => {
+    const f = fabrica(["codex"], async (_p, c) => (c.alConsumir?.({ motor: "codex", entrada: 900, salida: 40, cache: 300 }), "hecho"));
+    const { m } = modelosConGuion([delegar(), [new AIMessageChunk({ content: "Listo.", usage_metadata: { input_tokens: 70, output_tokens: 2, total_tokens: 72 } })]]);
+    const s = await abrirSesionTrueforge({ raiz: conExterno(), modelos: m, entorno: ENTORNO, skills: CATALOGO, subagenteExterno: f.subagenteExterno });
+    await s.turno("refactoriza", piel().p);
+    expect(s.consumo().externo.entrada).toBe(900);
+    expect(s.consumo().modelo.entrada).toBeGreaterThan(0);
+    s.nuevoHilo();
+    expect(s.consumo()).toEqual({ modelo: { entrada: 0, salida: 0, cache: 0 }, externo: { entrada: 0, salida: 0, cache: 0 }, contexto: 0 });
   }, 30_000);
 
   it("REABRIR continúa con la respuesta del hijo en la conversación, sin ningún proceso que resucitar", async () => {
