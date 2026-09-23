@@ -281,6 +281,9 @@
    par `state-error-*`, como `.error`, y por el mismo motivo `label-primary` para el texto:
    medido, da mejor contraste sobre ese rojo medio que el «primary» de su propio par. */
 .sinAprobacion {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   margin: 12px 0 0;
   padding: 8px 12px;
   border-radius: 8px;
@@ -288,6 +291,26 @@
   color: var(--dsw-alias-label-primary);
   font-size: 12px;
   line-height: 1.5;
+  /* Todo el aviso se cierra al pulsarlo, no solo la «×»: es lo que se pidió. */
+  cursor: pointer;
+}
+
+.textoDelAviso {
+  margin: 0;
+  flex: 1;
+}
+
+/* La «×»: sin recinto propio —el aviso ya lo es— y con el color del texto. */
+.cerrarAviso {
+  flex: none;
+  border: none;
+  padding: 0 2px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
 }
 
 /* El estado vacío de una sesión nueva: qué es esto y qué se puede pedir. En el color

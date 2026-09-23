@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { Chat } from "./Chat.js";
+import { Chat, MS_DEL_AVISO_AUTONOMO } from "./Chat.js";
 import type { Acto } from "../tipos.js";
 
 // Mismo motivo que `Compositor.test.tsx`: sin `globals` en `vitest.config.ts`, un
@@ -465,6 +465,44 @@ describe("Chat: la sesión que escribe sin preguntar", () => {
   it("y no lo dice cuando no es cierto", () => {
     render(<Chat actos={[]} />);
     expect(screen.queryByText(/modo autónomo/i)).toBeNull();
+  });
+
+  /**
+   * Pedido por él: el aviso se quedaba fijo arriba durante toda la sesión. Se retira al
+   * pulsarlo, con su «×» o solo a los veinte segundos — y el modo se sigue leyendo en el
+   * conmutador de la caja, que es donde ese dato vive siempre.
+   */
+  it("se retira al pulsarlo", () => {
+    render(<Chat actos={[]} sinAprobacion />);
+    fireEvent.click(screen.getByText(/modo autónomo/i));
+    expect(screen.queryByText(/modo autónomo/i)).toBeNull();
+  });
+
+  it("y con su «×»", () => {
+    render(<Chat actos={[]} sinAprobacion />);
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar el aviso" }));
+    expect(screen.queryByText(/modo autónomo/i)).toBeNull();
+  });
+
+  it("y solo, pasado el plazo", () => {
+    vi.useFakeTimers();
+    try {
+      render(<Chat actos={[]} sinAprobacion />);
+      act(() => vi.advanceTimersByTime(MS_DEL_AVISO_AUTONOMO - 1));
+      expect(screen.getByText(/modo autónomo/i)).toBeTruthy();
+      act(() => vi.advanceTimersByTime(1));
+      expect(screen.queryByText(/modo autónomo/i)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("volver a autónomo después de supervisado lo ENSEÑA otra vez", () => {
+    const { rerender } = render(<Chat actos={[]} sinAprobacion />);
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar el aviso" }));
+    rerender(<Chat actos={[]} />);
+    rerender(<Chat actos={[]} sinAprobacion />);
+    expect(screen.getByText(/modo autónomo/i)).toBeTruthy();
   });
 });
 

@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { Acto, ConsumoDeTurno } from "../tipos.js";
 import { usarPegadoAbajo } from "../pegadoAbajo.js";
 import { useCronometro } from "../cronometro.js";
@@ -373,6 +373,44 @@ interface TramoDePulso {
   consumo?: ConsumoDeTurno;
 }
 
+/** Cuánto se queda a la vista el aviso del modo autónomo antes de retirarse solo. */
+export const MS_DEL_AVISO_AUTONOMO = 20_000;
+
+/**
+ * El aviso de que la sesión va en autónomo. **Se retira**: al pulsarlo, con su «×» o solo a
+ * los veinte segundos. Pedido por él: se quedaba fijo arriba del hilo durante toda la sesión.
+ *
+ * Retirarlo no esconde el estado, y por eso se puede: el CONMUTADOR de la caja
+ * (`SelectorDeModo.tsx`) sigue diciendo «Autónomo» sin hacer nada, que es donde ese dato tiene
+ * que leerse siempre. Esto es la explicación de lo que significa, y una explicación se lee una
+ * vez. Vive en su propio componente para que su estado nazca con él: se monta al pasar a
+ * autónomo y se desmonta al volver, así que otra vuelta a autónomo lo enseña de nuevo sin una
+ * bandera que recordar.
+ */
+function AvisoDeModoAutonomo() {
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const plazo = setTimeout(() => setVisible(false), MS_DEL_AVISO_AUTONOMO);
+    return () => clearTimeout(plazo);
+  }, []);
+  if (!visible) return null;
+  return (
+    // `role="note"` y no `alert`: es un estado de la sesión, no algo que acabe de pasar. Va
+    // arriba del todo: cambia lo que va a ocurrir con lo próximo que escribas. Y manda a la
+    // PASTILLA, no al comando: en el navegador «/» es prosa y cada acción tiene su botón.
+    <div role="note" className={`${vista.flowItem} ${estilos.sinAprobacion}`} onClick={() => setVisible(false)}>
+      <p className={estilos.textoDelAviso}>
+        Esta sesión va en <strong>modo autónomo</strong>: los cambios se aplican solos
+        y cada turno te dirá qué ficheros tocó. Subir a CloudStudio sigue pidiéndote
+        permiso. Vuelve a <strong>supervisado</strong> en la pastilla de la caja.
+      </p>
+      <button type="button" className={estilos.cerrarAviso} aria-label="Cerrar el aviso" title="Cerrar el aviso">
+        ×
+      </button>
+    </div>
+  );
+}
+
 export function Chat({
   actos,
   turnoEnVuelo = false,
@@ -631,11 +669,7 @@ export function Chat({
             // Y manda a la PASTILLA, no al comando: en el navegador «/» es prosa y cada
             // acción tiene su botón, así que decirle a alguien que teclee `/aprobacion` es
             // mandarlo a un camino que aquí no existe.
-            <p role="note" className={`${vista.flowItem} ${estilos.sinAprobacion}`}>
-              Esta sesión va en <strong>modo autónomo</strong>: los cambios se aplican solos
-              y cada turno te dirá qué ficheros tocó. Subir a CloudStudio sigue pidiéndote
-              permiso. Vuelve a <strong>supervisado</strong> en la pastilla de la caja.
-            </p>
+            <AvisoDeModoAutonomo />
           ) : null}
           {trabajoAlAbrir === undefined ? null : (
             // Va detrás de `sinAprobacion` y delante de la relectura: los dos primeros son
