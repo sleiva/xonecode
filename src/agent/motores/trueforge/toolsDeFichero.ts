@@ -19,6 +19,7 @@
  * Un rechazo se DEVUELVE como resultado de error y nunca se lanza: el modelo lo lee y reintenta,
  * que es la regla de las guardas del backend.
  */
+import { posix } from "node:path";
 import micromatch from "micromatch";
 import { toolResultResponse } from "@truefoundry/trueforge-core/core";
 
@@ -73,6 +74,27 @@ const ESQUEMAS: Record<ToolDeFichero, { descripcion: string; propiedades: Record
   glob: { descripcion: "Finds files matching a glob pattern.", propiedades: { pattern: cadena, path: cadena }, obligatorias: ["pattern"] },
   grep: { descripcion: "Searches file contents for a literal pattern.", propiedades: { pattern: cadena, path: cadena, glob: cadena }, obligatorias: ["pattern"] },
 };
+
+/**
+ * La ruta VIRTUAL que el backend entiende, desde lo que escriba el modelo. Medido en la primera
+ * sesión real: el modelo pidió `ls .` y `read_file MEMORIA_PROYECTO.md`, sin la barra, y el
+ * backend —que solo sabe de rutas absolutas del espacio virtual— contestó «no existe» sobre un
+ * fichero que sí está; el agente acabó barriendo los `.xne` a mano. Vacía o `.` es la raíz, y
+ * lo relativo cuelga de ella.
+ *
+ * **Se normaliza ANTES de evaluar los permisos**, y es lo que importa: las reglas de `permisosDe`
+ * están escritas sobre rutas absolutas (`/.env`), así que una relativa (`.env`) no casaría con
+ * ninguna y pasaría. Y una que se sale de la raíz con `..` no es una ruta del proyecto: `undefined`,
+ * que quien llama rechaza — lo mismo que hace deepagents.
+ */
+export function normalizarRuta(bruta: string): string | undefined {
+  const limpia = bruta.trim();
+  if (limpia === "" || limpia === ".") return "/";
+  const absoluta = limpia.startsWith("/") ? limpia : `/${limpia.replace(/^\.\//, "")}`;
+  if (absoluta.split("/").includes("..")) return undefined;
+  const normal = posix.normalize(absoluta);
+  return normal.length > 1 && normal.endsWith("/") ? normal.slice(0, -1) : normal;
+}
 
 /** La ruta de la que habla cada tool, y si es para leer o para escribir. */
 function objetivoDe(nombre: ToolDeFichero, args: Record<string, unknown>): { ruta: string; operacion: "read" | "write" } {
@@ -166,9 +188,17 @@ export function fuenteDeFicheros(opciones: { backend: BackendDeFicheros; reglas:
     }),
     callTool: async (params: { name: string; arguments?: Record<string, unknown> }) => {
       if (!esDeFichero(params.name)) return toolResultResponse({ text: `tool desconocida: ${params.name}`, isError: true });
-      const args = params.arguments ?? {};
-      const { ruta, operacion } = objetivoDe(params.name, args);
-      if (ruta === "") return toolResultResponse({ text: "falta la ruta del fichero", isError: true });
+      const crudos = params.arguments ?? {};
+      const { ruta: bruta, operacion } = objetivoDe(params.name, crudos);
+      if (bruta === "") return toolResultResponse({ text: "falta la ruta del fichero", isError: true });
+      const ruta = normalizarRuta(bruta);
+      if (ruta === undefined) {
+        return toolResultResponse({ text: `ruta fuera del proyecto: ${bruta}`, isError: true });
+      }
+      // Los argumentos que llegan al backend llevan la ruta YA normalizada: la misma que se
+      // acaba de autorizar, y no otra.
+      const campo = params.name === "ls" || params.name === "glob" || params.name === "grep" ? "path" : "file_path";
+      const args = { ...crudos, [campo]: ruta };
       if (decidirAccesoDeRuta(opciones.reglas, operacion, ruta) === "deny") {
         return toolResultResponse({ text: `permission denied: ${operacion} ${ruta}`, isError: true });
       }

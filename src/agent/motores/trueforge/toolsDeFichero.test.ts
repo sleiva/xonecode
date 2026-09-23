@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { backendDeAgente } from "../../grafo/proyecto.js";
 import { permisosDe } from "../../grafo/perfiles.js";
-import { decidirAccesoDeRuta, fuenteDeFicheros, type BackendDeFicheros } from "./toolsDeFichero.js";
+import { decidirAccesoDeRuta, fuenteDeFicheros, normalizarRuta, type BackendDeFicheros } from "./toolsDeFichero.js";
 
 /**
  * Contra el backend REAL, con toda su pila de guardas: lo que se prueba es que las tools de
@@ -81,5 +81,30 @@ describe("decidirAccesoDeRuta: la semántica de deepagents", () => {
     const reglas = permisosDe({ nombre: "consultor", soloLectura: true });
     expect(decidirAccesoDeRuta(reglas, "write", "/app.xml")).toBe("deny");
     expect(decidirAccesoDeRuta(reglas, "read", "/app.xml")).toBe("allow");
+  });
+});
+
+
+describe("las rutas que escribe el modelo, normalizadas", () => {
+  it("vacía o `.` es la raíz; lo relativo cuelga de ella; `..` no es del proyecto", () => {
+    expect(normalizarRuta(".")).toBe("/");
+    expect(normalizarRuta("")).toBe("/");
+    expect(normalizarRuta("MEMORIA_PROYECTO.md")).toBe("/MEMORIA_PROYECTO.md");
+    expect(normalizarRuta("./doc/")).toBe("/doc");
+    expect(normalizarRuta("/app.xml")).toBe("/app.xml");
+    expect(normalizarRuta("../fuera")).toBeUndefined();
+  });
+
+  it("MEDIDO en la primera sesión real: `ls .` y una ruta sin barra ya funcionan", async () => {
+    const { llamar } = proyecto();
+    expect((await llamar("ls", { path: "." })).texto).toContain("app.xml");
+    expect(await llamar("read_file", { file_path: "app.xml" })).toMatchObject({ error: false });
+  });
+
+  it("y una ruta sin barra NO se cuela por las reglas: `.env` casa con `/.env` tras normalizar", async () => {
+    const { llamar } = proyecto();
+    const r = await llamar("read_file", { file_path: ".env" });
+    expect(r.error).toBe(true);
+    expect(r.texto).not.toContain("secreta");
   });
 });
