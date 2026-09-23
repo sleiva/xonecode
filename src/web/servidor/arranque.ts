@@ -28,6 +28,7 @@
  * en la omisión (Ollama local) con una clave de Anthropic recién escrita al lado.
  */
 
+import { hayMemoriaDeHilo, olvidarMemoriaDeHilo } from "../../agent/sesiones/memoriaDeHilo.js";
 import { existsSync, readFileSync } from "node:fs";
 import { lineaDeVersion, type VersionEnMarcha } from "../../core/version.js";
 import { basename, dirname, join } from "node:path";
@@ -119,7 +120,7 @@ import {
   borrarProveedorPersonalizado, guardarProveedorPersonalizado, proveedoresPersonalizados,
 } from "../../agent/config/configEnDisco.js";
 import {
-  crearCheckpointerDeProyecto, hayCheckpoint, mantenimientoDelCheckpointer, olvidarHilo,
+  crearCheckpointerDeProyecto, mantenimientoDelCheckpointer,
 } from "../../agent/sesiones/checkpointer.js";
 import { resumenDePoda } from "../../core/podaDeCheckpoint.js";
 import {
@@ -5301,7 +5302,7 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     vestibulo: conVestibulo,
     tareasFabrica: opciones.tareas,
     informar,
-    olvidarHiloDeSesion: async (raiz, hilo) => olvidarHilo(crearCheckpointerDeProyecto(raiz), hilo),
+    olvidarHiloDeSesion: olvidarMemoriaDeHilo,
     /**
      * El juez de QA de las tareas, con el papel `afilado` — el que `core/modelos.ts` le
      * reserva.
@@ -5678,8 +5679,10 @@ function vestibuloReal(
     olvidarMarcaDeSesion: olvidarSesion,
     // La memoria del agente por hilo. `historica` deja de ser «se reabrió» para ser «no hay
     // checkpoint que cargar», y borrar una sesión se lleva también su checkpoint.
-    hayMemoriaDeHilo: async (raiz, hilo) => hayCheckpoint(crearCheckpointerDeProyecto(raiz), hilo),
-    olvidarMemoriaDeHilo: async (raiz, hilo) => olvidarHilo(crearCheckpointerDeProyecto(raiz), hilo),
+    // Las dos memorias —la del checkpointer de deepagents y la foto de TrueForge—, en una función
+    // exportada y probada (`memoriaDeHilo.ts`), no en dos lambdas de este cierre.
+    hayMemoriaDeHilo,
+    olvidarMemoriaDeHilo,
     entornos: settings.entornos,
     /**
      * Dónde se bajan las copias, RELEÍDO en cada uso y no resuelto aquí.

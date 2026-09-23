@@ -518,7 +518,7 @@ hechos del proyecto precargados, y envuelve el prompt con su identidad, que no s
 2. ~~El verificador con su reparación~~: hecho, con las reglas de deepagents compartidas
    (`agent/turno/verificacion.ts`). Faltan el juez del turno y el crítico de pantalla enganchados.
 3. ~~El resto de subagentes~~: hecho, todos salen de su `.md` (abajo).
-4. La memoria del hilo en disco: hoy vive en memoria y reabrir una sesión de TrueForge empieza de cero.
+4. ~~La memoria del hilo en disco~~: hecha, como foto del raíz (abajo).
 5. Deshacer la dependencia circular entre `turnoReal.ts` y `sesionTrueforge.ts`.
 
 **Las rigideces de la librería** que podrían llevar a portarla: envuelve siempre el prompt con su
@@ -589,3 +589,29 @@ Medido con `deepseek-flash`, la misma pregunta de la Fase 0 sobre AppDemo: el or
 `xone_navegacion app` y contesta bien, en 4 llamadas y 19-27k de entrada con 65-89 % de caché según la
 pasada. **Límite declarado**: este motor aún no escribe `traza-tools.jsonl`, así que `xonecode traza`
 no lo ve; lo que usó se lee en la salida del turno.
+
+### La memoria en disco, y por qué no es `agent-session` (23-09-2026)
+
+`@truefoundry/trueforge-core/agent-session` promete sesiones persistentes, y se miró antes de
+descartarlo. Dos cosas lo dejan fuera: trae su propio registro de sesiones, turnos y eventos —un
+segundo índice al lado del de XOneCode, con su propio «de quién es esto»—, y su factoría de
+subagentes **sustituye el primer mensaje del hijo por el encargo pelado** (`instruction: undefined`,
+`messages: [encargo]`), que es justo donde iba el prompt del `.md`.
+
+Lo que hace falta para que reabrir continúe es menos: `AgentThread.toSnapshot()` del raíz al acabar
+cada turno, en `.xonecode/sesiones/<id>/memoria-trueforge.json` con modo 0600, y el constructor del
+hilo con ese contexto al reabrir (`memoriaTrueforge.ts`). Los hijos mueren con su turno por diseño.
+
+Dos hallazgos de leer la librería:
+
+- **`buildInstruction` ignora el `instruction` de un hijo** (`!this.parent`); a su prompt de sistema
+  solo llegan los `instructionBuilders` de sus capabilities. El prompt del especialista pasa a ir ahí
+  en vez de en su primer mensaje, y como la compactación sustituye el contexto entero, ahí sobrevive:
+  los hijos ya se compactan al mismo umbral que el raíz.
+- **El `OpenToolCallCloser` se salta las `create_sub_agent`** (`is_thread_creation`), que es la tool
+  call que queda colgada cuando un turno se corta con un hijo esperando aprobación. Se salda al
+  guardar la foto (`saldarColgadas`), y tras un turno cortado el árbol se rehace desde ella: con el
+  hijo vivo, el siguiente mensaje del usuario lo rechazaba la librería.
+
+La web mira las dos memorias al decidir si una sesión reabierta continúa, y borrar una sesión se
+lleva las dos (`agent/sesiones/memoriaDeHilo.ts`).

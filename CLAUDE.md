@@ -627,7 +627,13 @@ reescriben: se ADAPTAN** (`toolsPropias.ts`, esquema de la tool y su `invoke`), 
 `xone_navegacion` a todos, el orquestador incluido—. **El verificador y su reparación también**, con
 las reglas SACADAS del cierre de deepagents a `agent/turno/verificacion.ts` (reparto de hallazgos,
 huella de errores, qué cuenta como fichero del proyecto): las dos copias eran justo lo que no puede
-divergir sin que se note. Falta la memoria en disco.
+divergir sin que se note. **La memoria en disco es la FOTO del raíz** (`memoriaTrueforge.ts`,
+`AgentThread.toSnapshot()`, 0600, en la carpeta de la sesión) y **no** la capa `agent-session` de la
+librería, que trae un segundo registro de sesiones y cuya factoría pisa el prompt del hijo. Se guarda
+al final de cada turno SANEADA —el `OpenToolCallCloser` de TrueForge se salta las `create_sub_agent`
+colgadas—, y quien pregunta si una sesión tiene memoria mira las dos (`agent/sesiones/memoriaDeHilo.ts`).
+**El prompt de un hijo va en su prompt de SISTEMA por `instructionBuilders`**: la librería ignora el
+`instruction` de un hijo, y en su primer mensaje la compactación se lo llevaba.
 
 ### La aprobación
 

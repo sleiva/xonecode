@@ -240,6 +240,9 @@ describe("una sesión con el motor TrueForge", () => {
     expect(vistos[2]!.join("\n")).toContain("hola-desde-la-shell");
     // El conductor recibió sus instrucciones corregidas, no la frase de «mismas tools».
     expect(vistos[1]!.join("\n")).toMatch(/NO tienes las mismas tools/);
+    // Y va en su prompt de SISTEMA —que la compactación no toca—; el primer mensaje es solo el encargo.
+    expect(vistos[1]![0]).toMatch(/NO tienes las mismas tools/);
+    expect(vistos[1]![1]).toBe("di hola por la shell");
     // El chat vio la delegación Y el comando, con el comando entero.
     expect(lineas.join("\n")).toMatch(/device-controller/);
     expect(lineas.join("\n")).toMatch(/echo hola-desde-la-shell/);
@@ -438,5 +441,47 @@ describe("una sesión con el motor TrueForge", () => {
     const r = await s.turno("escribe una nota", piel().p);
     expect(verificaciones).toBe(1);
     expect(r.verificador).toBe("verde");
+  }, 30_000);
+
+  it("REABRIR una sesión continúa la conversación: la foto del raíz sobrevive al proceso", async () => {
+    const raiz = proyecto();
+    const abrir = (m: ModelosPort) =>
+      abrirSesionReal({
+        raiz,
+        modelos: m,
+        skills: { catalogo: () => [], cargar: async () => [] } as never,
+        entorno: ENTORNO,
+        motor: "trueforge",
+        hilo: "sesion-1",
+      });
+    const primera = await abrir(modelosConGuion([[new AIMessageChunk({ content: "Me llamo XOneCode." })]]).m);
+    await primera.turno("¿cómo te llamas?", piel().p);
+    primera.cerrar();
+
+    const { m, vistos } = modelosConGuion([[new AIMessageChunk({ content: "Te lo dije antes." })]]);
+    const segunda = await abrir(m);
+    await segunda.turno("¿qué me dijiste?", piel().p);
+    const visto = vistos[0]!.join("\n");
+    expect(visto).toContain("¿cómo te llamas?");
+    expect(visto).toContain("Me llamo XOneCode.");
+    expect(visto).toContain("¿qué me dijiste?");
+  }, 30_000);
+
+  it("un turno CORTADO con un hijo esperando no deja la sesión atascada: la colgada se salda y el siguiente turno corre", async () => {
+    const raiz = proyecto();
+    const { m, vistos } = modelosConGuion([
+      ...guionDeEscritura().slice(0, 2),
+      // El turno siguiente: el raíz contesta.
+      [new AIMessageChunk({ content: "Sigo aquí." })],
+    ]);
+    // Sin `pedirAprobacion`: la escritura del hijo se queda sin resolver y el turno se corta.
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    const r1 = await s.turno("escribe una nota", piel().p);
+    expect(r1.pendientes).toBe(1);
+    const pi = piel();
+    await s.turno("¿sigues?", pi.p);
+    expect(pi.tokens.join("")).toBe("Sigo aquí.");
+    // La delegación que quedó a medias llega al modelo con una respuesta que dice la verdad.
+    expect(vistos[2]!.join("\n")).toMatch(/No se completó: el turno se cortó antes/);
   }, 30_000);
 });

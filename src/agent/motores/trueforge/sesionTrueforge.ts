@@ -15,9 +15,10 @@
  *   escritura con su diff, devuelta al hilo que la pidió; el verificador con su reparación, con
  *   las reglas compartidas de `turno/verificacion.ts`; el modo autónomo, los artefactos sin
  *   preguntar, la cancelación, los tokens y los cambios del turno.
+ *   Y la memoria en disco: la foto del raíz se guarda al final de cada turno y reabrir la sesión
+ *   continúa la conversación (`memoriaTrueforge.ts`).
  * - NO todavía: el juez del turno y el crítico de pantalla ENGANCHADOS al final (la tool de la
- *   crítica sí está), y la memoria del hilo en disco: vive en memoria, así que reabrir una sesión
- *   de este motor empieza la conversación de cero.
+ *   crítica sí está).
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -53,6 +54,7 @@ import {
 } from "./toolsDeFichero.js";
 import { traducirEvento } from "./eventosTrueforge.js";
 import { anuncioDeSkills } from "./skillsTrueforge.js";
+import { fotoSaneada, guardarMemoria, leerMemoria, type FotoDeHilo } from "./memoriaTrueforge.js";
 import { fuenteDeLangchain, type ToolDeLangchain } from "./toolsPropias.js";
 import { crearNavegacionXone } from "../../grafo/navegacionXone.js";
 import { crearBusquedaRegex } from "../../grafo/busquedaRegex.js";
@@ -304,27 +306,45 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
             .join("\n")
             .trimEnd();
     const papel = agente?.soloLectura === true ? "rapido" : "trabajo";
+    const definicionDelHijo = {
+      modelClient: modeloParaTrueforge({
+        modelo: () =>
+          agente?.modelo === undefined ? modelos.paraPapel(papel, agente?.esfuerzo) : modelos.paraModelo(agente.modelo, agente.esfuerzo),
+        senal: () => aborto?.signal,
+      }),
+      messages: [{ role: "user", content: params.request.input }],
+    };
     return new AgentThread({
-      definition: {
-        modelClient: modeloParaTrueforge({
-          modelo: () =>
-            agente?.modelo === undefined ? modelos.paraPapel(papel, agente?.esfuerzo) : modelos.paraModelo(agente.modelo, agente.esfuerzo),
-          senal: () => aborto?.signal,
-        }),
-        messages: [{ role: "user", content: `${instrucciones}\n\nENCARGO:\n${params.request.input}` }] as never,
-      },
+      definition: definicionDelHijo as never,
       threadId: params.threadId,
       title: params.request.name,
       parent: params.parent as never,
       agentInfo: { type: "dynamic", ...params.request } as never,
-      capabilities: [{ systemToolSets: tools }] as never,
+      /**
+       * **El prompt del especialista va en el prompt de SISTEMA, por una capability**, y no en
+       * su primer mensaje como al principio. Medido en la librería: `buildInstruction` IGNORA el
+       * `instruction` de un hijo (`!this.parent`), y lo único que llega a su sistema son los
+       * `instructionBuilders`. En el primer mensaje, además, la compactación —que sustituye el
+       * contexto entero— se lo llevaba por delante; aquí sobrevive, y por eso el hijo ya puede
+       * compactarse al mismo umbral que el raíz.
+       */
+      capabilities: [
+        { systemToolSets: tools, instructionBuilders: [(b: { addSection(tag: string, texto: string, escapar?: boolean): unknown }) => void b.addSection("especialista", instrucciones, true)] },
+        contextCompaction({ definition: definicionDelHijo as never, compactionThresholdTokens: UMBRAL_RESUMEN_TOKENS }),
+      ] as never,
       tracing: NOOP_AGENT_TRACING,
       logger,
     });
   };
 
-  /** El árbol de hilos de UNA conversación. Se rehace con `nuevoHilo`. */
-  const nuevoOrquestador = (): AgentThreadOrchestrator => {
+  /**
+   * El árbol de hilos de UNA conversación. Se rehace con `nuevoHilo`, al reabrir una sesión
+   * —desde la foto guardada— y tras un turno cortado, desde la foto SANEADA del raíz: los hijos
+   * que se quedaron esperando no pueden seguir, y con ellos vivos el siguiente mensaje del usuario
+   * lo rechazaba la librería («Cannot process user messages while sub agents are running»).
+   */
+  let raizActual: AgentThread | undefined;
+  const nuevoOrquestador = (foto?: FotoDeHilo): AgentThreadOrchestrator => {
     const definicion = {
       modelClient: llm,
       instruction: [promptOrquestador(especialistas()), notaDeDelegacion(especialistas())].filter((l) => l !== "").join("\n\n"),
@@ -337,11 +357,10 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
         { systemToolSets: [toolsDelRaiz, conjuntoDePropias(propiasDelRaiz)] },
         /**
          * **La conversación se RESUME al mismo umbral que deepagents** (`UMBRAL_RESUMEN_TOKENS`):
-         * sin esto no se compactaba nunca y cada turno reenviaba la sesión entera. Solo en el
-         * RAÍZ, y es a propósito: la compactación de TrueForge sustituye el contexto ENTERO por
-         * el resumen, y el prompt de un hijo viaja en su primer mensaje —la librería no deja
-         * ponérselo aparte—, así que en un hijo se llevaría sus propias instrucciones. El del
-         * raíz va en `instruction`, que no se compacta.
+         * sin esto no se compactaba nunca y cada turno reenviaba la sesión entera. La
+         * compactación de TrueForge sustituye el contexto ENTERO por el resumen, y por eso las
+         * instrucciones van en el prompt de sistema —aquí `instruction`, en un hijo su
+         * capability—, que no se compacta.
          */
         contextCompaction({ definition: definicion as never, compactionThresholdTokens: UMBRAL_RESUMEN_TOKENS }),
         // `create_sub_agent`: la delegación de TrueForge, un nivel y cinco a la vez como mucho.
@@ -349,7 +368,15 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       ] as never,
       tracing: NOOP_AGENT_TRACING,
       logger,
+      ...(foto === undefined
+        ? {}
+        : {
+            context: foto.context as never,
+            ...(foto.current_context_usage === undefined ? {} : { currentContextUsage: foto.current_context_usage as never }),
+            ...(foto.capability_state == null ? {} : { capabilityState: foto.capability_state as never }),
+          }),
     });
+    raizActual = raizDelArbol;
     return new AgentThreadOrchestrator({
       agentThreads: new Map([[HILO_RAIZ, raizDelArbol]]),
       createDynamicSubAgentThread: async (params) =>
@@ -358,7 +385,12 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       logger,
     });
   };
-  let orquestador = nuevoOrquestador();
+  /**
+   * Solo se persiste con un id de sesión DADO: es lo que tiene índice donde reanudar. La consola
+   * de terminal no lo pasa, la misma regla que el checkpoint de deepagents.
+   */
+  const persistir = opciones.hilo !== undefined;
+  let orquestador = nuevoOrquestador(persistir ? leerMemoria(raiz, hilo) : undefined);
 
   const avisar = (): void => {
     for (const o of oyentes) o();
@@ -444,6 +476,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       let preexistentesDelTurno: number | undefined;
       let motivoSinVerificar: string | undefined;
       let escribioProyecto = false;
+      let turnoLimpio = false;
 
       /**
        * Las RONDAS de una petición: una pausa termina la ronda y se reanuda con las decisiones.
@@ -541,6 +574,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
           if (intento > 0) yield { tipo: "reparacion", intento, tope: TOPE_REPARACIONES };
           const salida = { limpia: false };
           yield* rondasDe(lote, salida);
+          turnoLimpio = salida.limpia;
           const cambios = cambiosQueSeVerifican(await instantanea.cambios());
           escribioProyecto = cambios.length > 0;
           if (!salida.limpia) {
@@ -620,6 +654,23 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
         });
       } finally {
         aborto = undefined;
+        /**
+         * La foto del raíz, al acabar CADA turno —en el `finally`, como el commit del turno—:
+         * saneada, para que las tool calls que el corte dejó sin respuesta no rompan la
+         * siguiente llamada. Se guarda si hay sesión que reanudar, y si el turno no acabó limpio
+         * se rehace el árbol desde ella. Guardar no puede tumbar un turno ya terminado.
+         */
+        if (raizActual !== undefined) {
+          const foto = fotoSaneada(raizActual.toSnapshot() as unknown as FotoDeHilo);
+          if (persistir) {
+            try {
+              guardarMemoria(raiz, hilo, foto);
+            } catch {
+              // Sin memoria en disco la sesión sigue viva; al reabrirla, `hayMemoria` dirá la verdad.
+            }
+          }
+          if (!turnoLimpio) orquestador = nuevoOrquestador(foto);
+        }
       }
       const cambios: Cambio[] = await instantanea.cambios();
       return {
@@ -640,7 +691,8 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
     },
     nuevoHilo(id?: string) {
       hilo = id ?? `tf-${Date.now()}`;
-      orquestador = nuevoOrquestador();
+      // Un hilo NUEVO: lo que hubiera guardado con ese id no se pisa ni se carga a medias.
+      orquestador = nuevoOrquestador(persistir ? leerMemoria(raiz, hilo) : undefined);
     },
     cancelar() {
       cancelado = true;
