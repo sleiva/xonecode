@@ -6482,3 +6482,33 @@ menos `.xonecode/`, dentro del workspace y comprobado por el texto de la ruta y 
 **Lo que se pierde, y está declarado**: las refs de sesión de esa copia, así que la Revisión de las
 sesiones anteriores pasa a `sin-marca`, y los commits por turno. Una tarea de fondo sobre esa copia
 también pierde su ref.
+
+## Entornos: registrar solo si conecta, poder quitarlos, y las descargas que fallan (23-09-2026)
+
+Pedido suyo, las tres a la vez: «reportar errores de descargas del proyecto», «los entornos
+cuando se registren y fallen no guardarlos» y «que haya un eliminar entorno».
+
+**Registrar.** `registrarEntorno` escribía en `settings.json` antes de hablar con el servidor —del
+alta solo sale la URL—, y la primera conversación era `proyectosDe`. Ahora, si esa conversación
+falla y el entorno era NUEVO, se deshace (`olvidarEntorno(id, { credenciales: false })`) y el aviso
+dice «no se ha registrado el entorno …» con el motivo. Las credenciales NO se borran al deshacer:
+registrar la URL oficial puede haber adoptado el juego legado, y borrarlo obligaría a volver a
+entrar; unos tokens sin entorno no molestan y se reaprovechan si se reintenta. Uno que ya estaba
+registrado no se quita porque hoy no conteste. En Ajustes el formulario enseña el motivo —antes no
+decía nada, ni bien ni mal— y se cierra solo cuando el entorno aparece.
+
+**Quitar.** `settings.json` + credenciales + la lista viva; las copias de `<workspace>/<id>/` se
+QUEDAN, como cambiar el workspace no mueve nada. El servidor se niega con un proyecto de ese entorno
+abierto o una tarea de fondo sin terminar (`core/settings.ts#motivoParaNoOlvidarEntorno`, puro, que
+reconoce las copias por la RUTA y no confunde un id que es prefijo de otro). La negativa viaja como
+**409 con `{ motivo }`** en la respuesta del `POST /accion`: `informar` no llega al navegador desde
+el vestíbulo, y así el cliente no lleva una copia de la regla. La opción del vestíbulo es
+OBLIGATORIA, y el cableado de `App` a `Ajustes` tiene su test, porque el prop es opcional.
+
+**Descargas.** Dos cosas. Se APUNTAN en el `fallos.jsonl` del proyecto —el alta
+(`completarProyecto`) y `/sync`, con qué se bajaba—, por omisión con el registro real: el error de
+`weweewe` no había dejado rastro. Y una descarga fallida ya no parece una copia: el alta escribe el
+`config.json` ANTES de bajar, a propósito, y `esProyectoEnDisco` solo miraba ese fichero, así que la
+barra daba por bajada una carpeta vacía y la abría como proyecto. Medido en este Mac: las siete
+copias buenas tienen `sync.json`, y las dos sin él —Bequikly y Conecta2— son justo dos descargas
+que fallaron. Ahora hacen falta los dos.

@@ -440,6 +440,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
     const raiz = mkdtempSync(join(tmpdir(), "xonecode-modo-"));
     mkdirSync(join(raiz, ".xonecode"));
     writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "cloud" }));
+    // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
 
     const servidor = servidorDeMentira();
     const vestibulo = vestibuloDePrueba();
@@ -1469,6 +1472,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
       writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raizDeVerdad, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raizDeVerdad, ".xonecode", "cloudstudio", "sync.json"), "{}");
       montarRutas(servidor, vestibulo, {
         cambiosDeSesion: async () => ({ via: "git", ficheros: [{ ruta: "no.xne", clase: "nuevo" }] }),
       });
@@ -1538,6 +1544,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raiz, ".xonecode"), { recursive: true });
       writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
       montarRutas(servidor, vestibulo);
       const cliente = clienteDeMentira();
       await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
@@ -1594,6 +1603,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raiz, ".xonecode"), { recursive: true });
       writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
       montarRutas(servidor, vestibulo);
       const cliente = clienteDeMentira();
       await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
@@ -1697,6 +1709,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
         const raiz = vestibulo.raizDeProyecto("webstudio", nombre);
         mkdirSync(join(raiz, ".xonecode"), { recursive: true });
         writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+        // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+        mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+        writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
       }
       montarRutas(servidor, vestibulo);
       const cliente = clienteDeMentira();
@@ -1776,6 +1791,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raiz, ".xonecode"), { recursive: true });
       writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
       montarRutas(servidor, vestibulo);
       const cliente = clienteDeMentira();
       await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
@@ -1825,6 +1843,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
       writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raizDeVerdad, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raizDeVerdad, ".xonecode", "cloudstudio", "sync.json"), "{}");
 
       const pedidos: string[] = [];
       montarRutas(servidor, vestibulo, {
@@ -1883,6 +1904,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
       writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raizDeVerdad, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raizDeVerdad, ".xonecode", "cloudstudio", "sync.json"), "{}");
       montarRutas(servidor, vestibulo, { cambiosDeSesion: async () => ({ via: "git", ficheros: [] }) });
       const cliente = clienteDeMentira();
       await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
@@ -1913,6 +1937,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
       writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raizDeVerdad, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raizDeVerdad, ".xonecode", "cloudstudio", "sync.json"), "{}");
       return { base, servidor, vestibulo, raizDeVerdad };
     };
 
@@ -2073,6 +2100,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
           cloudstudio: { url: "https://x/mcp", proyecto: { id: "p1", nombre: "Tienda" }, rama: "main" },
         })
       );
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
       writeFileSync(join(raiz, "app.xml"), "<app/>");
       execFileSync("git", ["init", "-q", "-b", "main"], { cwd: raiz });
       execFileSync("git", ["config", "user.email", "t@t"], { cwd: raiz });
@@ -2193,6 +2223,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raiz, ".xonecode"), { recursive: true });
       writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
       montarRutas(servidor, vestibulo);
       const cliente = clienteDeMentira();
       await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
@@ -2232,6 +2265,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const raiz = mkdtempSync(join(tmpdir(), "xonecode-proy-"));
       mkdirSync(join(raiz, ".xonecode"));
       writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
       const servidor = servidorDeMentira();
       const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => dirname(raiz) });
       // `raizDeProyecto` compone `<workspace>/<entorno>/<nombre>`, así que el nombre
@@ -2239,6 +2275,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
       writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raizDeVerdad, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raizDeVerdad, ".xonecode", "cloudstudio", "sync.json"), "{}");
 
       montarRutas(servidor, vestibulo);
       const cliente = clienteDeMentira();
@@ -2276,6 +2315,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
       writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raizDeVerdad, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raizDeVerdad, ".xonecode", "cloudstudio", "sync.json"), "{}");
 
       montarRutas(servidor, vestibulo);
       const cliente = clienteDeMentira();
@@ -3851,6 +3893,9 @@ describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
     const cwd = mkdtempSync(join(tmpdir(), "xonecode-cwd-"));
     mkdirSync(join(cwd, ".xonecode"));
     writeFileSync(join(cwd, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+    mkdirSync(join(cwd, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(cwd, ".xonecode", "cloudstudio", "sync.json"), "{}");
     const salida: string[] = [];
     const codigo = await arrancarConsolaWeb({
       puerto: 0,
@@ -3923,6 +3968,9 @@ describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
     const cwd = mkdtempSync(join(tmpdir(), "xonecode-cwd-"));
     mkdirSync(join(cwd, ".xonecode"));
     writeFileSync(join(cwd, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+    mkdirSync(join(cwd, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(cwd, ".xonecode", "cloudstudio", "sync.json"), "{}");
     const vestibulo = vestibuloDePrueba();
     const salida: string[] = [];
     // Lo que hay que mirar vive ENTRE que el proyecto se abre y `vestibulo.cerrar()` lo
@@ -4566,6 +4614,9 @@ describe("los artefactos de la sesión", () => {
     const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
     mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
     writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+    mkdirSync(join(raizDeVerdad, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raizDeVerdad, ".xonecode", "cloudstudio", "sync.json"), "{}");
     montarRutas(servidor, vestibulo, opciones);
     const cliente = clienteDeMentira();
     await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
@@ -6157,6 +6208,9 @@ describe("contextoDelProyecto", () => {
     const raiz = mkdtempSync(join(tmpdir(), "xonecode-ctx2-"));
     mkdirSync(join(raiz, ".xonecode"), { recursive: true });
     writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
     expect(contextoDelProyecto(raiz)).toEqual({});
     rmSync(raiz, { recursive: true, force: true });
   });
@@ -6255,6 +6309,9 @@ describe("lecturaDeSync — lo que la banda de CloudStudio enseña", () => {
     const raiz = mkdtempSync(join(tmpdir(), "xonecode-sync-off-"));
     mkdirSync(join(raiz, ".xonecode"), { recursive: true });
     writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
     const leido = await lecturaDeSync(raiz);
     expect(leido).toEqual({ clase: "sync" });
     expect(leido.pendientes).toBeUndefined();
@@ -7212,6 +7269,9 @@ describe("abrir la sesión de una tarea en curso, por el cable", () => {
     const base = mkdtempSync(join(tmpdir(), "xonecode-abrir-tarea-"));
     mkdirSync(join(base, ".xonecode"), { recursive: true });
     writeFileSync(join(base, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+    mkdirSync(join(base, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(base, ".xonecode", "cloudstudio", "sync.json"), "{}");
     montarRutas(
       servidor,
       {
@@ -7458,6 +7518,9 @@ describe("el recorrido por el cable — el veredicto, la intención y las fases"
     const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
     mkdirSync(join(raiz, ".xonecode"), { recursive: true });
     writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
     if (montaje.xml !== undefined) writeFileSync(join(raiz, "app.xml"), montaje.xml);
     writeFileSync(join(raiz, "app.ini"), montaje.ini ?? APP_INI);
     if (montaje.conBase === true) {

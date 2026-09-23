@@ -23,6 +23,7 @@
  * mentir en esa pregunta abre un proyecto que no existe.
  */
 
+import { crearRegistroDeFallos } from "../../agent/turno/registroDeFallos.js";
 import { baseDeWorkspacePorOmision } from "../../agent/config/settingsEnDisco.js";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -211,8 +212,15 @@ const SESIONES_EN_DISCO: PuertoDeSesiones = {
 /**
  * ¿Hay una copia local de proyecto en esa raíz? Es el MISMO criterio con el que el alta
  * decide `proyectos[].local` (`arranque.ts#hayCopiaLocal`, que tira de aquí): existe su
- * `.xonecode/config.json`. Dos copias del predicado es cómo divergen el día que una se
- * afine — el mismo motivo por el que la regla de URL de MCP vive en un solo sitio.
+ * `.xonecode/config.json` **y el `sync.json` de una bajada que TERMINÓ**. Dos copias del
+ * predicado es cómo divergen el día que una se afine — el mismo motivo por el que la regla de
+ * URL de MCP vive en un solo sitio.
+ *
+ * El `sync.json` es la mitad nueva, y cierra un fallo medido: el alta escribe el `config.json`
+ * ANTES de bajar —a propósito, para que «reintenta con /sync bajar» sea verdad—, así que con
+ * solo él una descarga que fallaba dejaba una carpeta vacía que la barra daba por bajada y que
+ * se abría como proyecto. `descargarProyecto` escribe el `sync.json` al acabar, también por la
+ * vía fichero a fichero; si no está, lo que hay que hacer es bajarlo, y eso es el alta.
  *
  * Se lo traga todo y devuelve `false`: una raíz que no se puede ni mirar (permisos, un
  * enlace roto) no es un proyecto sobre el que abrir nada, y esta puerta falla CERRADO.
@@ -220,7 +228,7 @@ const SESIONES_EN_DISCO: PuertoDeSesiones = {
 export function esProyectoEnDisco(raiz: string): boolean {
   // Sin `try`: `existsSync` no lanza nunca —traga cualquier error del sistema y devuelve
   // false—, así que envolverlo sugeriría un peligro que no existe.
-  return existsSync(join(raiz, ".xonecode", "config.json"));
+  return existsSync(join(raiz, ".xonecode", "config.json")) && existsSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"));
 }
 
 /** Lo mínimo que el vestíbulo necesita de una `SesionReal` para cambiar de proyecto. */
@@ -271,6 +279,12 @@ export interface OpcionesDelVestibulo {
   guardarConfigDeProyecto: (raiz: string, datos: DatosDeProyecto) => { ruta: string };
   /** A dónde van los avisos del vestíbulo. Por omisión, su propia consola. */
   informar?: (texto: string) => void;
+  /**
+   * Apuntar un fallo de DESCARGA en el registro de fallos del proyecto. Por omisión el REAL
+   * (`registroDeFallos.ts`) y no un hueco: un opcional que nadie pasa es el patrón de fallo de
+   * este repo, y aquí el síntoma sería justo el de antes, un error sin rastro.
+   */
+  anotarFallo?: (raiz: string, fallo: { error: unknown; peticion: string }) => void;
   /**
    * Toma el «antes» de la sesión al ABRIR el proyecto y devuelve con qué nombrarlo cuando el
    * id exista (`agent/sesiones/sesionGit.ts#fotoDeApertura`). Entra por opción como todo lo que toca
@@ -849,6 +863,8 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
   const crearConsola = opciones.crearConsola ?? crearConsolaWeb;
   const correr = opciones.correr ?? correrConsola;
   const base = opciones.baseDeWorkspace ?? baseDeWorkspacePorOmision;
+  const anotarFallo =
+    opciones.anotarFallo ?? ((raiz: string, fallo: { error: unknown; peticion: string }) => void crearRegistroDeFallos(raiz).anotar(fallo));
   const adoptarLegado =
     opciones.adoptarLegado ??
     // `rutaAuthPorDefecto` y no un `join` propio: el mismo literal en dos ficheros es lo
@@ -2007,6 +2023,13 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         await opciones.descargar({ ...datos, raiz });
       } catch (error) {
         const detalle = error instanceof Error ? error.message : String(error);
+        // Se APUNTA en el registro de fallos del proyecto, con qué se bajaba y la cadena de
+        // causas: hasta ahora solo salía en pantalla, y el «sigue diciendo que no hay proyecto
+        // abierto» de una descarga no dejó ningún rastro con el que mirar después.
+        anotarFallo(raiz, {
+          error,
+          peticion: `descarga de «${identidad.nombre}» (entorno ${registrado.id}, rama ${rama})`,
+        });
         informar(`no se pudo descargar el proyecto: ${detalle}`);
         informar(`el alta quedó completa en ${ruta}; reintenta la descarga con «/sync bajar»`);
         // Se propaga: quien llama decide si vuelve al paso de proyecto o abre igualmente

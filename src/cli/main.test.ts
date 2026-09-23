@@ -751,6 +751,7 @@ function piezasFalsas(overrides: Partial<PiezasDeSincronizacion> = {}): PiezasDe
     // Por omisión la raíz del test NO está en el workspace: los tests de siempre siguen
     // ejercitando la regla de antes, y el vaciado se pide a mano.
     baseDeWorkspace: overrides.baseDeWorkspace ?? (() => "/no/es/el/workspace"),
+    anotarFallo: overrides.anotarFallo ?? (() => {}),
   };
 }
 
@@ -1225,5 +1226,24 @@ describe("crearSincronizador: bajar dentro del workspace vacía la copia", () =>
     )("bajar", raiz, undefined, undefined, async () => true);
     expect(r).toEqual({ tipo: "arbol-sucio", accion: "bajar", pendientes: ["Menu.xne"] });
     expect(vaciarAntes).toBe("sin llamar");
+  });
+});
+
+
+describe("crearSincronizador: un fallo se APUNTA en el registro del proyecto", () => {
+  it("una bajada que revienta deja rastro, con qué se bajaba, y el error sigue subiendo", async () => {
+    const raiz = raizConProyectoCloudYEntorno();
+    const anotados: { raiz: string; peticion: string }[] = [];
+    await expect(
+      crearSincronizador(
+        piezasFalsas({
+          anotarFallo: (r, f) => anotados.push({ raiz: r, peticion: f.peticion }),
+          descargar: async () => {
+            throw new Error("studio_manage_branches: CloudStudio sigue diciendo que no hay proyecto abierto");
+          },
+        })
+      )("bajar", raiz)
+    ).rejects.toThrow(/sigue diciendo/);
+    expect(anotados).toEqual([{ raiz, peticion: "/sync bajar de «Proyecto» (rama master)" }]);
   });
 });

@@ -1710,6 +1710,9 @@ describe("el volcado de la sesión de una tarea", () => {
     const raiz = join(base, "webstudio", "A");
     mkdirSync(join(raiz, ".xonecode"), { recursive: true });
     writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
     writeFileSync(join(raiz, "app.xml"), "<app/>\n");
     execFileSync("git", ["init", "-q", "."], { cwd: raiz });
     execFileSync("git", ["config", "user.email", "x@y.z"], { cwd: raiz });

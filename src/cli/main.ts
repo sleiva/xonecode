@@ -4,6 +4,7 @@
  * Sin librería de argumentos a propósito: hoy hay un comando y una bandera, y una
  * dependencia más es una dependencia más que fijar y vigilar. Cuando haya cinco, se mete.
  */
+import { crearRegistroDeFallos } from "../agent/turno/registroDeFallos.js";
 import * as readline from "node:readline";
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
@@ -854,6 +855,8 @@ export interface PiezasDeSincronizacion {
   repoPropio: typeof esRepoPropio;
   /** La base del workspace EN VIGOR, leída en cada uso. */
   baseDeWorkspace: () => string;
+  /** Apuntar en el registro de fallos del proyecto una sincronización que REVENTÓ. */
+  anotarFallo: (raiz: string, fallo: { error: unknown; peticion: string }) => void;
 }
 
 const PIEZAS_DE_SINCRONIZACION_REALES: PiezasDeSincronizacion = {
@@ -870,6 +873,7 @@ const PIEZAS_DE_SINCRONIZACION_REALES: PiezasDeSincronizacion = {
   vaciar: vaciarCopia,
   repoPropio: esRepoPropio,
   baseDeWorkspace,
+  anotarFallo: (raiz, fallo) => void crearRegistroDeFallos(raiz).anotar(fallo),
 };
 
 /** Vive en `core/settings.ts` desde que `agent/` también la necesita (la identidad para
@@ -990,7 +994,16 @@ export function crearSincronizador(
       return { tipo: "arbol-sucio", accion, pendientes: await piezas.sinCommitear(raiz) };
     }
 
-    const sesion = await piezas.sesion(config.url, { scopes: config.scopes, entornoId: config.entorno });
+    // Un fallo de la operación se APUNTA en el registro de fallos del proyecto antes de
+    // subir: hasta ahora solo salía en pantalla, y un «sigue diciendo que no hay proyecto
+    // abierto» al bajar no dejaba ningún rastro con el que mirarlo después.
+    let sesion: Awaited<ReturnType<typeof piezas.sesion>>;
+    try {
+      sesion = await piezas.sesion(config.url, { scopes: config.scopes, entornoId: config.entorno });
+    } catch (error) {
+      piezas.anotarFallo(raiz, { error, peticion: `/sync ${accion} de «${config.proyecto.nombre}» (rama ${config.rama})` });
+      throw error;
+    }
     try {
       const puerto = piezas.cliente(sesion.invocar, config.proyecto.nombre);
 
@@ -1031,6 +1044,9 @@ export function crearSincronizador(
       }
       const pendientes = await piezas.pendientes(raiz, config.rama);
       return { tipo: "texto", texto: `rama ${config.rama}: ${pendientes.length} ficheros por subir\n` };
+    } catch (error) {
+      piezas.anotarFallo(raiz, { error, peticion: `/sync ${accion} de «${config.proyecto.nombre}» (rama ${config.rama})` });
+      throw error;
     } finally {
       await sesion.cerrar();
     }

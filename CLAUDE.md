@@ -822,6 +822,17 @@ feedback del desarrollador** y no es terminal.
   efecto depende de los DOS CAMPOS de esa pestaña y **no del record** (que con su omisión `{}`
   es un objeto nuevo por render), y el cableado de los dos sentidos tiene test propio porque
   el prop es opcional y `tsc` no lo caza.
+- **Un entorno se registra SOLO si conecta, y se puede QUITAR** (`arranque.ts#atenderAlta`,
+  `motivoParaNoOlvidarEntorno`). Registrar escribe antes de hablar con el servidor, así que uno
+  NUEVO cuyo `proyectosDe` falla se deshace y el aviso lo dice —sin borrarle las credenciales,
+  que pueden ser el juego legado adoptado—; uno que ya estaba no se quita porque hoy no conteste.
+  Quitar lo decide el SERVIDOR (proyecto suyo abierto o tarea sin terminar = no) y contesta **409
+  con el motivo** en la propia respuesta, porque `informar` no llega al navegador desde el
+  vestíbulo. Las copias bajadas se QUEDAN. La opción del vestíbulo es obligatoria.
+- **Una copia «bajada» es `config.json` Y `sync.json`** (`vestibulo.ts#esProyectoEnDisco`): el alta
+  escribe el `config.json` ANTES de bajar, y con solo él una descarga que fallaba dejaba una
+  carpeta vacía que la barra daba por bajada (medido: Bequikly y Conecta2). Y **un fallo de
+  descarga se APUNTA** en el `fallos.jsonl` del proyecto —el alta y `/sync`—, con qué se bajaba.
 - **La clave de API viaja por el ÚNICO mensaje del cable que la lleva** (`leerSecreto`), y se
   PRUEBA antes de escribirse: `motivoDeClaveInaceptable` (`core/config.ts`) criba de balde, y
   luego el catálogo con `aplicarCredencialAlProceso` — **solo si el proveedor contesta** se
