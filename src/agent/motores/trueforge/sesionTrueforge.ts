@@ -23,7 +23,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import winston from "winston";
-import { AgentThread, AgentThreadOrchestrator, EventType, ToolSet, contextCompaction, dynamicSubAgents } from "@truefoundry/trueforge-core/core";
+import { AgentThread, AgentThreadOrchestrator, EventType, ToolSet, contextCompaction, currentDateTime, dynamicSubAgents } from "@truefoundry/trueforge-core/core";
 import { UMBRAL_RESUMEN_TOKENS } from "../../turno/resumenDeContexto.js";
 import { NOOP_AGENT_TRACING } from "@truefoundry/trueforge-core/core/tracing/NoopAgentTracing";
 import type { DomainEvent, HallazgoDelTurno, PendienteDeAprobacion } from "../../../core/events.js";
@@ -54,6 +54,7 @@ import {
 } from "./toolsDeFichero.js";
 import { traducirEvento } from "./eventosTrueforge.js";
 import { anuncioDeSkills } from "./skillsTrueforge.js";
+import { presupuestoDelPaso } from "./recortes.js";
 import { fotoSaneada, guardarMemoria, leerMemoria, type FotoDeHilo } from "./memoriaTrueforge.js";
 import { fuenteDeLangchain, type ToolDeLangchain } from "./toolsPropias.js";
 import { crearNavegacionXone } from "../../grafo/navegacionXone.js";
@@ -279,6 +280,8 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       ...(clase === "escribe" || (clase === "lee" && agente !== undefined) ? TOOLS_DE_FICHERO : TOOLS_DE_LECTURA),
       ...propias.map((t) => t.name),
       ...(clase === "ejecuta" ? ["execute"] : []),
+      // La de la capability de la fecha, que también se le monta (abajo).
+      "get_current_datetime",
     ];
     if (clase === "escribe") {
       tools.push(new ToolSet({ source: fuenteDeFicheros({ backend, reglas }) as never, selectors: CON_APROBACION, preload: true }));
@@ -329,8 +332,9 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
        * compactarse al mismo umbral que el raíz.
        */
       capabilities: [
-        { systemToolSets: tools, instructionBuilders: [(b: { addSection(tag: string, texto: string, escapar?: boolean): unknown }) => void b.addSection("especialista", instrucciones, true)] },
+        { systemToolSets: tools, toolResponseProcessors: [presupuestoDelPaso(backend as never)] as never, instructionBuilders: [(b: { addSection(tag: string, texto: string, escapar?: boolean): unknown }) => void b.addSection("especialista", instrucciones, true)] },
         contextCompaction({ definition: definicionDelHijo as never, compactionThresholdTokens: UMBRAL_RESUMEN_TOKENS }),
+        currentDateTime({ tracing: NOOP_AGENT_TRACING }),
       ] as never,
       tracing: NOOP_AGENT_TRACING,
       logger,
@@ -354,7 +358,9 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       threadId: HILO_RAIZ,
       title: HILO_RAIZ,
       capabilities: [
-        { systemToolSets: [toolsDelRaiz, conjuntoDePropias(propiasDelRaiz)] },
+        // El presupuesto de un PASO entero (`recortes.ts#recortarPaso`), que el recorte por
+        // resultado no ve: varias respuestas en paralelo que caben solas pero no juntas.
+        { systemToolSets: [toolsDelRaiz, conjuntoDePropias(propiasDelRaiz)], toolResponseProcessors: [presupuestoDelPaso(backend as never)] as never },
         /**
          * **La conversación se RESUME al mismo umbral que deepagents** (`UMBRAL_RESUMEN_TOKENS`):
          * sin esto no se compactaba nunca y cada turno reenviaba la sesión entera. La
@@ -363,6 +369,9 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
          * capability—, que no se compacta.
          */
         contextCompaction({ definition: definicion as never, compactionThresholdTokens: UMBRAL_RESUMEN_TOKENS }),
+        // `get_current_datetime` de la librería: la fecha en UTC, para que «hoy» o «hace tres días»
+        // no se lo invente el modelo. No da la zona horaria local, y no se le atribuye.
+        currentDateTime({ tracing: NOOP_AGENT_TRACING }),
         // `create_sub_agent`: la delegación de TrueForge, un nivel y cinco a la vez como mucho.
         dynamicSubAgents({ sandboxAvailable: false, tracing: NOOP_AGENT_TRACING }),
       ] as never,

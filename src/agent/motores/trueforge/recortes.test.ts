@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { OPCIONES_BUSQUEDA_FICHEROS } from "../../grafo/xoneAgent.js";
 // Desde xoneAgent A PROPÓSITO: es la constante que usa deepagents, reexportada.
-import { CARACTERES_ANTES_DE_DESALOJAR, CARACTERES_ANTES_DE_TRUNCAR, desalojarSiGrande, MAXIMO_DE_COINCIDENCIAS, truncarSiLargo, vistaPrevia } from "./recortes.js";
+import { CARACTERES_DE_UN_ERROR, CARACTERES_DEL_PASO, recortarPaso, type ResultadoDelPaso, CARACTERES_ANTES_DE_DESALOJAR, CARACTERES_ANTES_DE_TRUNCAR, desalojarSiGrande, MAXIMO_DE_COINCIDENCIAS, truncarSiLargo, vistaPrevia } from "./recortes.js";
 
 describe("los recortes de deepagents, en TrueForge", () => {
   it("los umbrales son los NUESTROS de deepagents, no una copia", () => {
@@ -47,5 +47,32 @@ describe("los recortes de deepagents, en TrueForge", () => {
     let escrituras = 0;
     expect(await desalojarSiGrande("hola", { write: () => void (escrituras += 1) })).toBe("hola");
     expect(escrituras).toBe(0);
+  });
+
+  it("el PASO tiene presupuesto: varias respuestas que caben solas pero no juntas se desalojan las mayores", async () => {
+    const escritos: string[] = [];
+    const trozo = (n: number): ResultadoDelPaso => ({ message: { content: "q".repeat(n) } });
+    const resultados = [trozo(20_000), trozo(18_000), trozo(5_000)];
+    await recortarPaso(resultados, { write: (r: string) => void escritos.push(r) });
+    const total = resultados.reduce((s, r) => s + String(r.message.content).length, 0);
+    expect(total).toBeLessThanOrEqual(CARACTERES_DEL_PASO);
+    // La MAYOR primero, y la pequeña intacta.
+    expect(String(resultados[0]!.message.content)).toMatch(/se guardó en \/large_tool_results\//);
+    expect(resultados[2]!.message.content).toBe("q".repeat(5_000));
+    expect(escritos.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("un error ENORME se trunca a su tope, no se desaloja: ahí no hay nada que releer", async () => {
+    let escrituras = 0;
+    const resultados: ResultadoDelPaso[] = [{ message: { content: "E".repeat(CARACTERES_ANTES_DE_DESALOJAR + 1) }, failure: true }];
+    await recortarPaso(resultados, { write: () => void (escrituras += 1) });
+    expect(String(resultados[0]!.message.content).length).toBeLessThan(CARACTERES_DE_UN_ERROR + 100);
+    expect(escrituras).toBe(0);
+  });
+
+  it("lo que cabe no se toca", async () => {
+    const resultados: ResultadoDelPaso[] = [{ message: { content: "corto" } }, { message: { content: "fallo" }, failure: true }];
+    await recortarPaso(resultados, { write: () => undefined });
+    expect(resultados.map((r) => r.message.content)).toEqual(["corto", "fallo"]);
   });
 });

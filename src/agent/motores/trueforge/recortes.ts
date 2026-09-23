@@ -60,8 +60,8 @@ let secuencia = 0;
  * guarda del proyecto lo rechaza, como debe— se dice y va el extracto igual: meter el resultado
  * entero es justo lo que esto evita.
  */
-export async function desalojarSiGrande(texto: string, backend: EscritorDeDesalojo): Promise<string> {
-  if (texto.length <= CARACTERES_ANTES_DE_DESALOJAR) return texto;
+export async function desalojarSiGrande(texto: string, backend: EscritorDeDesalojo, forzar = false): Promise<string> {
+  if (!forzar && texto.length <= CARACTERES_ANTES_DE_DESALOJAR) return texto;
   const ruta = `/large_tool_results/tf-${Date.now()}-${++secuencia}.txt`;
   let error: string | undefined;
   try {
@@ -78,4 +78,64 @@ export async function desalojarSiGrande(texto: string, backend: EscritorDeDesalo
     `Resultado demasiado grande (${texto.length} caracteres): se guardó en ${ruta}. Léelo con read_file por ` +
     `partes (offset y limit), no entero. Extracto de cabeza y cola:\n\n${extracto}`
   );
+}
+
+/**
+ * **El presupuesto de un PASO**, que el recorte de arriba no ve: cada resultado se mira solo, así
+ * que cinco `execute` en paralelo de 20.000 caracteres pasan uno a uno y juntos meten 100.000 en
+ * el contexto. Es la regla del `largeToolResponse` de TrueForge, con su umbral (10.000 tokens),
+ * portada y no montada: con los dos puestos la misma salida se procesaría dos veces.
+ */
+export const CARACTERES_DEL_PASO = 10_000 * 4;
+/** Un error que haya que recortar se TRUNCA a esto en vez de desalojarse: ahí no hay nada que releer. */
+export const CARACTERES_DE_UN_ERROR = 500;
+
+/** Lo que se usa de un resultado de tool de TrueForge dentro de un `toolResponseProcessor`. */
+export interface ResultadoDelPaso {
+  message: { content: unknown };
+  failure?: unknown;
+  isStructuredContent?: boolean;
+}
+
+const textoDelResultado = (r: ResultadoDelPaso): string =>
+  typeof r.message.content === "string" ? r.message.content : JSON.stringify(r.message.content ?? "");
+
+function recortarError(r: ResultadoDelPaso, texto: string): void {
+  if (texto.length <= CARACTERES_DE_UN_ERROR) return;
+  r.message.content = `${texto.slice(0, CARACTERES_DE_UN_ERROR)}\n... [error truncado: ${texto.length} caracteres]`;
+  r.isStructuredContent = false;
+}
+
+/**
+ * Los resultados de UN paso, dentro del presupuesto: un error ENORME se trunca, y mientras el
+ * total se pase se desalojan los mayores primero. Modifica los resultados, que es el contrato del
+ * procesador de la librería; no quita ninguno (la librería lanza si falta uno).
+ */
+export async function recortarPaso(resultados: ResultadoDelPaso[], backend: EscritorDeDesalojo): Promise<void> {
+  for (const r of resultados) {
+    const texto = textoDelResultado(r);
+    if (r.failure && texto.length > CARACTERES_ANTES_DE_DESALOJAR) recortarError(r, texto);
+  }
+  let total = resultados.reduce((suma, r) => suma + textoDelResultado(r).length, 0);
+  const porTamano = [...resultados].sort((a, b) => textoDelResultado(b).length - textoDelResultado(a).length);
+  for (const r of porTamano) {
+    if (total <= CARACTERES_DEL_PASO) break;
+    const antes = textoDelResultado(r);
+    if (r.failure) recortarError(r, antes);
+    else {
+      r.message.content = await desalojarSiGrande(antes, backend, true);
+      r.isStructuredContent = false;
+    }
+    total -= antes.length - textoDelResultado(r).length;
+  }
+}
+
+/** El procesador que TrueForge llama con todos los resultados de un paso. */
+export function presupuestoDelPaso(backend: EscritorDeDesalojo) {
+  return {
+    process: async (resultados: ResultadoDelPaso[]) => {
+      await recortarPaso(resultados, backend);
+      return {};
+    },
+  };
 }

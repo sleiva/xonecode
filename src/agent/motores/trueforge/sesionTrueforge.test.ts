@@ -332,6 +332,8 @@ describe("una sesión con el motor TrueForge", () => {
     await s.turno("¿qué colecciones hay?", pi.p);
     expect(toolsPorLlamada[0]).toContain("xone_navegacion");
     expect(toolsPorLlamada[0]).not.toContain("regex_search");
+    // La fecha de la librería, sin tocar el disco.
+    expect(toolsPorLlamada[0]).toContain("get_current_datetime");
     expect(vistos[1]!.join("\n")).toContain("Clientes  /clientes.xne");
     expect(pi.tokens.join("")).toBe("Hay una: Clientes.");
   }, 30_000);
@@ -483,5 +485,22 @@ describe("una sesión con el motor TrueForge", () => {
     expect(pi.tokens.join("")).toBe("Sigo aquí.");
     // La delegación que quedó a medias llega al modelo con una respuesta que dice la verdad.
     expect(vistos[2]!.join("\n")).toMatch(/No se completó: el turno se cortó antes/);
+  }, 30_000);
+
+  it("el PRESUPUESTO del paso está montado: tres salidas en paralelo que caben solas no entran juntas", async () => {
+    const raiz = proyecto();
+    const artefactos = join(raiz, ".xonecode", "sesiones", "s1", "artefactos");
+    const comando = (id: string, i: number) => ({ index: i, id, name: "execute", args: JSON.stringify({ command: "head -c 20000 /dev/zero | tr '\\0' b" }) });
+    const { m, vistos } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "device-controller", input: "tres logs" }) }] })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [comando("x1", 0), comando("x2", 1), comando("x3", 2)] })],
+      [new AIMessageChunk({ content: "Revisados." })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, artefactos });
+    await s.turno("tres logs", piel().p);
+    const visto = vistos[2]!.join("\n");
+    expect(visto).toMatch(/se guardó en \/large_tool_results\//);
+    expect((visto.match(/b{1000}/g) ?? []).length * 1000).toBeLessThan(45_000);
   }, 30_000);
 });

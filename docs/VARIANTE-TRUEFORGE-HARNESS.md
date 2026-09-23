@@ -615,3 +615,13 @@ Dos hallazgos de leer la librería:
 
 La web mira las dos memorias al decidir si una sesión reabierta continúa, y borrar una sesión se
 lleva las dos (`agent/sesiones/memoriaDeHilo.ts`).
+
+### El presupuesto del paso y la fecha (23-09-2026)
+
+Dos reglas del `largeToolResponse` de TrueForge, **portadas y no montadas**: con los dos recortadores
+puestos la misma salida se procesaría dos veces. `recortes.ts#recortarPaso` va como
+`toolResponseProcessor`, la pieza con la que la librería ve todas las respuestas de un paso juntas:
+si entre todas pasan de 10.000 tokens —su umbral— se desalojan las mayores primero, y un error que
+haya que recortar se trunca a 500 caracteres en vez de guardarse aparte, porque no hay nada que
+releer. Y `currentDateTime` de la librería, en el raíz y en los hijos: devuelve la fecha en **UTC**
+y epoch, no la zona horaria local.
