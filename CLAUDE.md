@@ -622,7 +622,8 @@ continúa el otro. Cumple el mismo `SesionReal`, así que ninguna piel sabe cuá
 `permisosDe`, que en deepagents son middleware y aquí nadie aplicaría; y **`core/` no importa
 `@truefoundry/` ni `winston`** (`imports.test.ts`). **Y fuera de `core/` solo lo importa UN fichero**,
 `agent/motores/trueforge/trueforge.ts` (`frontera.test.ts`): la librería es 0.x fijada exacta, y subirla se revisa
-ahí; lo que solo está en rutas profundas —tipos de los fragmentos, el trazado mudo— vive separado dentro. **El reparto es el de deepagents**: el raíz es el
+ahí; lo que solo está en rutas profundas —dos tipos de los fragmentos— vive separado dentro, y el trazado
+mudo es nuestro con `satisfies` contra los tipos públicos. **El reparto es el de deepagents**: el raíz es el
 orquestador de solo lectura y sin skills, cada especialista sale de su `.md`, y **la aprobación de un
 hijo se devuelve a SU `thread_id`** (a `main` la librería la rechaza). **Las tools propias no se
 reescriben: se ADAPTAN** (`toolsPropias.ts`, esquema de la tool y su `invoke`), con el mismo reparto —

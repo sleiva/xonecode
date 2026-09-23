@@ -10,13 +10,39 @@ function ficheros(dir: string): string[] {
   });
 }
 
+/**
+ * ¿Este código CARGA `@truefoundry/`? Las cuatro formas de hacerlo: `… from "x"` (import y
+ * re-export), `import "x"` a secas, `import("x")` dinámico y `require("x")`. Solo buscar el `from`
+ * dejaba pasar las otras tres. Y es un PATRÓN de carga, no «el nombre aparece»: `core/imports.test.ts`
+ * nombra el paquete en una cadena para PROHIBIRLO, y eso no es importarlo.
+ */
+export const CARGA_TRUEFORGE = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)["'`]@truefoundry\//;
+
 describe("la frontera con TrueForge", () => {
-  it("SOLO `trueforge.ts` importa `@truefoundry/`: subir la librería se revisa en un fichero", () => {
+  it("el detector caza las CUATRO formas de cargar el paquete, y no una mención", () => {
+    for (const carga of [
+      'import { X } from "@truefoundry/trueforge-core/core";',
+      'export { X } from "@truefoundry/trueforge-core/core";',
+      'import type { X } from "@truefoundry/trueforge-core";',
+      'import "@truefoundry/trueforge-core/core";',
+      'const m = await import("@truefoundry/trueforge-core/core");',
+      "const m = await import('@truefoundry/trueforge-core');",
+      'const m = require("@truefoundry/trueforge-core");',
+    ]) {
+      expect(CARGA_TRUEFORGE.test(carga), carga).toBe(true);
+    }
+    for (const mencion of ['const PROHIBIDOS = ["@truefoundry/", "winston"];', "// ver @truefoundry/trueforge-core"]) {
+      expect(CARGA_TRUEFORGE.test(mencion), mencion).toBe(false);
+    }
+  });
+
+  it("SOLO `trueforge.ts` carga `@truefoundry/`: subir la librería se revisa en un fichero", () => {
     const src = join(process.cwd(), "src");
     const culpables = ficheros(src)
       .filter((f) => !f.endsWith(join("motores", "trueforge", "trueforge.ts")))
-      // `core/imports.test.ts` NOMBRA el paquete para prohibirlo; no lo importa.
-      .filter((f) => /from\s+["']@truefoundry\//.test(readFileSync(f, "utf8")))
+      // Este mismo fichero lleva las formas prohibidas como EJEMPLOS del detector.
+      .filter((f) => !f.endsWith(join("motores", "trueforge", "frontera.test.ts")))
+      .filter((f) => CARGA_TRUEFORGE.test(readFileSync(f, "utf8")))
       .map((f) => relative(src, f));
     expect(culpables).toEqual([]);
   });

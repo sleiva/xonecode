@@ -694,9 +694,10 @@ los topes por hilo y el máximo de cinco hijos a la vez de la librería; deepage
 
 Todo lo que se usa de `@truefoundry/trueforge-core` entra por `agent/motores/trueforge/trueforge.ts`,
 y un test lo exige (`frontera.test.ts`). Dentro se separa lo de la API pública (`/core`) de lo que
-solo está en rutas profundas —`ExtendedChatCompletionChunk`, `RawAssistantMessageWithUsage` y
-`NOOP_AGENT_TRACING`—: el paquete deja importarlas (`"./*"` en sus `exports`), pero no son su API y
-son lo primero que puede moverse. `NOOP_AGENT_TRACING` no se reimplementa: `AgentTracing` es una
-interfaz de spans anidados, y una copia nuestra sería otro sitio que mantener sin que el compilador
-avisara. **Ojo al comparar con el código fuente**: el checkout local de TrueForge es 0.2.0 y aquí
+solo está en rutas profundas —hoy, solo dos TIPOS: `ExtendedChatCompletionChunk` y
+`RawAssistantMessageWithUsage`—: el paquete deja importarlas (`"./*"` en sus `exports`), pero no son
+su API y son lo primero que puede moverse. El trazado mudo es nuestro, con `satisfies` contra los
+tipos públicos de `AgentTracing`, así que un cambio de su interfaz lo dice el compilador. El test
+de la frontera reconoce las cuatro formas de cargar el paquete —`from`, `import` a secas,
+`import()` y `require()`—, y prueba el propio detector con cada una. **Ojo al comparar con el código fuente**: el checkout local de TrueForge es 0.2.0 y aquí
 corre 0.2.1; la referencia del comportamiento es `node_modules`.
