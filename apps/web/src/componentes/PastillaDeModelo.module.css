@@ -323,3 +323,20 @@ button.fuera:hover {
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+/* El punto de cada fila del menú de dispositivos: VERDE solo cuando se llega al aparato (el
+   mismo alias que «Tu equipo»), gris en lo demás. El texto de al lado dice el estado con
+   palabras: el color no es la única señal. */
+.puntoDeDispositivo {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-tertiary);
+  vertical-align: middle;
+}
+
+.puntoDeDispositivo[data-vivo] {
+  background: var(--dsw-alias-state-success-primary);
+}

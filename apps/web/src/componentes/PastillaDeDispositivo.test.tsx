@@ -28,8 +28,17 @@ describe("PastillaDeDispositivo", () => {
     const alElegir = vi.fn();
     render(<PastillaDeDispositivo informe={INFORME} alElegir={alElegir} />);
     fireEvent.click(screen.getByRole("button", { name: /sin dispositivo/i }));
-    expect(screen.getByText("Teléfonos y tablets")).toBeTruthy();
+    // Lo que está a MANO va arriba, en su propio grupo, con Android primero y punto verde; y
+    // un grupo que se queda vacío no se pinta (aquí los dos teléfonos del fixture están vivos).
+    expect(screen.getByText("Disponibles ahora")).toBeTruthy();
+    expect(screen.queryByText("Teléfonos y tablets")).toBeNull();
     expect(screen.getByText("Simuladores y emuladores")).toBeTruthy();
+    const filas = screen.getAllByRole("menuitem").map((b) => b.textContent);
+    expect(filas.findIndex((t) => t?.includes("Galaxy S21"))).toBeLessThan(filas.findIndex((t) => t?.includes("iPhone 16")));
+    const galaxy = screen.getByRole("menuitem", { name: /Galaxy S21/ });
+    expect(galaxy.querySelector("[data-vivo]")).not.toBeNull();
+    // Sin la plataforma repetida: los nombres de iOS ya la traen del host.
+    expect(filas.some((t) => /iOS · iOS/.test(t ?? ""))).toBe(false);
     /**
      * El AVD definido y sin arrancar SE LISTA —es lo que se puede arrancar— pero NO se puede
      * elegir: esa fila la inventa el cliente y el servidor resuelve el elegido contra su
