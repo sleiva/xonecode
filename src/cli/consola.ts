@@ -1287,13 +1287,30 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
               }
             };
       const cuando = new Date().toISOString();
+      /**
+       * **Una subida que la persona CANCELÓ no es una operación del registro.** No tocó el
+       * remoto ni movió la ref, y quien la canceló acaba de ver el plan en la tarjeta: medido,
+       * cada «Cancelar» dejaba en la banda un «Subir · 10:30», «Subir · 10:31»… que no
+       * contaban nada que hubiera pasado. Es la regla que ya estaba escrita abajo —el registro
+       * es de las operaciones que CORRIERON— y que el rechazo se saltaba. En el terminal se
+       * sigue diciendo («→ rechazado»): ahí es la respuesta a lo que tecleaste.
+       */
+      let rechazada = false;
 
       try {
         // El hueco de política solo se rellena para «subir»: es la única acción que
         // escribe. `agent/cloudstudio/subida.ts#subir` la invoca con el plan YA CONSTRUIDO, así que
         // esto puede pasarse siempre — si el árbol está sucio o no hay nada que subir, ni
         // siquiera llega a invocarse.
-        const politicaDeAprobacion = accion === "subir" ? politicaInteractiva(consola, decir) : undefined;
+        const base = accion === "subir" ? politicaInteractiva(consola, decir) : undefined;
+        const politicaDeAprobacion: PoliticaDeAprobacion | undefined =
+          base === undefined
+            ? undefined
+            : async (plan) => {
+                const autorizada = await base(plan);
+                if (!autorizada) rechazada = true;
+                return autorizada;
+              };
         const resultado = await consola.sincronizar(accion, estado.raiz, politicaDeAprobacion, decir);
         if (resultado.tipo === "arbol-sucio") {
           // Al subir se sube el estado de un COMMIT, no un borrador: así «lo que está
@@ -1317,7 +1334,7 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
         // La excepción se deja PROPAGAR: un fallo inesperado lo dice el harness en el hilo,
         // que es donde tiene que verse. Esconderlo en el registro sería lo contrario de lo
         // que esto busca — el registro es de las operaciones que corrieron, no de las que no.
-        anotar?.({ accion, cuando, lineas });
+        if (!rechazada) anotar?.({ accion, cuando, lineas });
       }
       return { seguir: true };
     },

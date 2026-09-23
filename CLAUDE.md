@@ -1092,7 +1092,10 @@ feedback del desarrollador** y no es terminal.
   el enunciado de la pregunta («¿Subir a CloudStudio?»), que no es una línea de la operación sino
   el argumento de `preguntar` —la cabecera ya dice qué operación fue y el `→ APROBADO` dice cómo
   acabó—, y los dos errores de USO de `/sync`, que no son una operación y son el mismo tipo de
-  mensaje que el de cualquier otro comando mal escrito.
+  mensaje que el de cualquier otro comando mal escrito. **Tampoco una subida que la persona CANCELÓ**: no tocó
+  el remoto ni movió la ref, y quien la canceló acaba de ver el plan en la tarjeta — cada
+  «Cancelar» dejaba un «Subir · hora» en la banda que no contaba nada que hubiera pasado. En el
+  terminal el «→ rechazado» se sigue imprimiendo, porque ahí es la respuesta a lo tecleado.
 
 ### El workspace: dónde viven las copias locales
 
