@@ -8404,3 +8404,53 @@ describe("el cable: quitar un entorno", () => {
     expect(olvidados).toEqual([]);
   });
 });
+
+/**
+ * Un entorno NUEVO cuyo registro no llega a conectar no se queda guardado: registrar escribe
+ * antes de hablar con el servidor, y la primera conversación es `proyectosDe`.
+ */
+describe("el alta: un entorno que no conecta no se guarda", () => {
+  async function registrar(vestibulo: Vestibulo, url: string) {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibulo);
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, {
+      clase: "alta",
+      paso: "entorno",
+      entorno: { id: "", nombre: "", url },
+    });
+    await asentar();
+    return ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
+  }
+
+  it("si el servidor NUEVO no contesta, se deshace el registro —sin tocar sus credenciales— y se DICE", async () => {
+    const olvidados: { id: string; modo?: { credenciales?: boolean } }[] = [];
+    const vestibulo = vestibuloDePrueba({
+      olvidarEntorno: (id, modo) => (olvidados.push({ id, ...(modo === undefined ? {} : { modo }) }), { ruta: "/s.json" }),
+      proyectosDeEntorno: async () => {
+        throw new Error("no es un servidor MCP");
+      },
+    });
+    const alta = await registrar(vestibulo, "https://mcp.casa.example/mcp");
+    expect(olvidados).toHaveLength(1);
+    expect(olvidados[0]!.modo).toEqual({ credenciales: false });
+    expect(vestibulo.entornosRegistrados().map((e) => e.url)).not.toContain("https://mcp.casa.example/mcp");
+    expect(alta.aviso).toMatch(/no se ha registrado el entorno.*no es un servidor MCP/);
+  });
+
+  it("uno que YA estaba registrado no se quita porque hoy no conteste", async () => {
+    const olvidados: string[] = [];
+    const vestibulo = vestibuloDePrueba({
+      olvidarEntorno: (id) => (olvidados.push(id), { ruta: "/s.json" }),
+      proyectosDeEntorno: async () => {
+        throw new Error("servidor caído");
+      },
+    });
+    const alta = await registrar(vestibulo, "https://mcp.xonewebstudio.com/mcp");
+    expect(olvidados).toEqual([]);
+    expect(vestibulo.entornosRegistrados().map((e) => e.id)).toContain("webstudio");
+    expect(alta.aviso).toMatch(/servidor caído/);
+  });
+});

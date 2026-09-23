@@ -263,7 +263,7 @@ export interface OpcionesDelVestibulo {
    * propósito: una opción opcional que nadie pasa es el patrón de fallo de este repo, y aquí
    * el síntoma sería un «Eliminar» que no borra nada con todo en verde.
    */
-  olvidarEntorno: (id: string) => { ruta: string };
+  olvidarEntorno: (id: string, modo?: { credenciales?: boolean }) => { ruta: string };
   /** Baja la copia local. Recibe la raíz ya calculada: la sincronización no se toca, solo
    *  cambia QUIÉN calcula el `raiz` que siempre recibió por parámetro. */
   descargar: (datos: DatosDeProyecto & { raiz: string }) => Promise<void>;
@@ -611,7 +611,7 @@ export interface Vestibulo {
    * Las copias bajadas se QUEDAN. Si puede o no quitarse ahora lo decide quien llama
    * (`core/settings.ts#motivoParaNoOlvidarEntorno`), que sabe qué hay abierto y qué tareas viven.
    */
-  olvidarEntorno(id: string): Promise<{ ruta: string }>;
+  olvidarEntorno(id: string, modo?: { credenciales?: boolean }): Promise<{ ruta: string }>;
   /**
    * Qué proyectos de un entorno se enseñan en la barra. Se guarda CON el entorno
    * (`settings.json`) porque es una preferencia sobre él, y una lista vacía es una
@@ -1865,9 +1865,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       return { ...guardado, entorno: identificado };
     },
 
-    async olvidarEntorno(id) {
+    async olvidarEntorno(id, modo = {}) {
       const registrado = entornoPorId(id);
-      const quitado = opciones.olvidarEntorno(registrado.id);
+      const quitado = opciones.olvidarEntorno(registrado.id, modo);
       const donde = registrados.findIndex((e) => e.id === registrado.id);
       if (donde >= 0) registrados.splice(donde, 1);
       informar(`entorno «${registrado.id}» quitado de ${quitado.ruta}; sus copias locales se quedan`);

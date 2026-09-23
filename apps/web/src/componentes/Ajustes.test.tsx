@@ -1423,3 +1423,19 @@ describe("Ajustes: quitar un entorno", () => {
     expect(screen.queryByRole("button", { name: "Quitar entorno" })).toBeNull();
   });
 });
+
+describe("Ajustes: registrar un entorno que no conecta", () => {
+  afterEach(cleanup);
+  it("el MOTIVO sale dentro del formulario, que se queda abierto", () => {
+    const alRegistrarEntorno = vi.fn();
+    const props = { entornos: [], seccionInicial: "entornos" as const, conectado: true, alRegistrarEntorno, alCerrar: () => {} };
+    const { rerender } = render(<Ajustes {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Registrar un entorno" }));
+    fireEvent.change(screen.getByLabelText("URL del MCP"), { target: { value: "https://mcp.casa.example/mcp" } });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar" }));
+    expect(alRegistrarEntorno).toHaveBeenCalledWith("https://mcp.casa.example/mcp");
+    rerender(<Ajustes {...props} avisoDelAlta="no se ha registrado el entorno «mcp.casa.example»: no es un servidor MCP" />);
+    expect(screen.getByRole("alert").textContent).toMatch(/no se ha registrado el entorno/);
+    expect(screen.getByLabelText("URL del MCP")).toBeTruthy();
+  });
+});

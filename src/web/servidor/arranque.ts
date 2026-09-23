@@ -3471,15 +3471,40 @@ export function montarRutas(
         // URL, y de un «otro» el vestíbulo deduce id y nombre del host
         // (`identidadDeEntorno`). Con el id de la lista, el `proyectosDe` de la línea
         // siguiente moriría con «el entorno «otro» no está registrado».
+        // Si ya estaba ANTES de este registro: un entorno que ya funcionaba no se quita porque
+        // hoy su servidor no conteste.
+        const yaEstaban = new Set(vestibulo.entornosRegistrados().map((e) => e.id));
         const { entorno: registrado } = await vestibulo.registrarEntorno({
           id: elegido.id,
           nombre: elegido.nombre,
           url: elegido.url,
         });
+        /**
+         * **Un entorno NUEVO que no conecta no se queda guardado.** Registrar escribe en
+         * `settings.json` antes de hablar con el servidor —del alta solo sale la URL—, y la
+         * primera conversación de verdad es esta: si falla (URL que no es un MCP, login
+         * cancelado, servidor caído), el entorno se quedaba en la lista y en la barra sin
+         * servir para nada. Se deshace el registro y se DICE, con el motivo.
+         */
+        let lista: readonly ProyectoRemoto[];
+        try {
+          lista = await vestibulo.proyectosDe(registrado.id);
+        } catch (error) {
+          if (!yaEstaban.has(registrado.id)) {
+            await vestibulo.olvidarEntorno(registrado.id, { credenciales: false }).catch(contar);
+            const detalle = error instanceof Error ? error.message : String(error);
+            throw new Error(`no se ha registrado el entorno «${registrado.nombre}»: ${detalle}`);
+          }
+          // Uno que YA estaba se queda elegido, como antes: el fallo es de hoy, no del entorno.
+          entornoElegido = registrado.id;
+          proyectoElegido = undefined;
+          ramas = [];
+          throw error;
+        }
         entornoElegido = registrado.id;
         proyectoElegido = undefined;
         ramas = [];
-        proyectos = await vestibulo.proyectosDe(registrado.id);
+        proyectos = lista;
         return;
       }
 
@@ -5607,9 +5632,12 @@ function vestibuloReal(
     guardarEntorno: (entorno: Entorno) => guardarEntornoEnDisco(undefined, entorno),
     // Primero el `settings.json` y DESPUÉS las credenciales: si lo primero falla, el entorno
     // sigue registrado y sus tokens con él, en vez de un entorno que ya no sabe entrar.
-    olvidarEntorno: (id: string) => {
+    olvidarEntorno: (id: string, modo: { credenciales?: boolean } = {}) => {
       const quitado = olvidarEntornoDeSettings(undefined, id);
-      olvidarCredencialesDeEntorno(rutaAuthPorDefecto(), id);
+      // `credenciales: false` es DESHACER un registro que no conectó: ahí los tokens se
+      // quedan, porque registrar la URL oficial puede haber adoptado el juego legado, y
+      // borrarlo obligaría a volver a entrar. Unos tokens sin entorno no molestan.
+      if (modo.credenciales !== false) olvidarCredencialesDeEntorno(rutaAuthPorDefecto(), id);
       return quitado;
     },
     guardarModeloGlobal,

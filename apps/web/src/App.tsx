@@ -1287,6 +1287,7 @@ export function App({
       alPedirProyectosDeEntorno={(entorno) =>
         void enviar({ clase: "entorno", accion: "proyectos", entorno })
       }
+      {...(estado.alta?.aviso === undefined ? {} : { avisoDelAlta: estado.alta.aviso })}
       alQuitarEntorno={async (entorno) => {
         // El servidor contesta 409 con `{ motivo }` si se niega: la regla es suya, y así la
         // negativa llega hasta aquí en vez de quedarse en el terminal.

@@ -286,6 +286,7 @@ export function Ajustes({
   proyectosPorEntorno = {},
   alPedirProyectosDeEntorno,
   alQuitarEntorno,
+  avisoDelAlta,
   entornoActivo,
   seccionInicial,
   secreto,
@@ -380,6 +381,12 @@ export function Ajustes({
    * aquí solo se enseña. Ausente = no se ofrece el botón.
    */
   alQuitarEntorno?: (entorno: string) => Promise<string | undefined>;
+  /**
+   * El motivo del último paso del alta que falló (`alta.aviso`). Aquí se usa para el REGISTRO
+   * de un entorno: un entorno nuevo que no conecta ya no se guarda, así que sin esto el
+   * formulario no diría nada y el entorno simplemente no aparecería.
+   */
+  avisoDelAlta?: string;
   entornoActivo?: string;
   /**
    * En qué sección abrir, para quien llega desde un enlace concreto (el aviso de proyectos
@@ -759,6 +766,13 @@ export function Ajustes({
 
   const [avisoDeUrl, setAvisoDeUrl] = useState<string | undefined>(undefined);
 
+  /**
+   * Lo que había al ENVIAR un registro: cuántos entornos y qué aviso. Con eso se sabe cuándo
+   * contestó el servidor sin que Ajustes vea el alta entera — un entorno más es que se
+   * registró (y el formulario se cierra), un aviso distinto es que no (y se enseña dentro).
+   * Límite declarado: el MISMO motivo dos veces seguidas no se vuelve a enseñar.
+   */
+  const [enviado, setEnviado] = useState<{ entornos: number; aviso?: string } | undefined>(undefined);
   const registrar = (evento: FormEvent): void => {
     evento.preventDefault();
     if (!urlDeEntornoAceptable(url)) {
@@ -766,9 +780,17 @@ export function Ajustes({
       return;
     }
     setAvisoDeUrl(undefined);
+    setEnviado({ entornos: entornos.length, ...(avisoDelAlta === undefined ? {} : { aviso: avisoDelAlta }) });
     alRegistrarEntorno(url);
     setUrl("");
   };
+  useEffect(() => {
+    if (enviado === undefined || entornos.length <= enviado.entornos) return;
+    setEnviado(undefined);
+    setRegistrando(false);
+  }, [enviado, entornos.length]);
+  const avisoDeRegistro =
+    enviado !== undefined && avisoDelAlta !== undefined && avisoDelAlta !== enviado.aviso ? avisoDelAlta : undefined;
 
   /**
    * El motivo del último intento, para pintarlo DENTRO del formulario. Solo mientras el
@@ -1799,12 +1821,18 @@ export function Ajustes({
                     {avisoDeUrl}
                   </p>
                 ) : null}
+                {avisoDeRegistro === undefined ? null : (
+                  <p className={estilos.aviso} role="alert">
+                    {avisoDeRegistro}
+                  </p>
+                )}
                 <div className={estilos.botones}>
                   <Button
                     variant="outline"
                     className={estilos.accion}
                     onClick={() => {
                       setRegistrando(false);
+                      setEnviado(undefined);
                       setUrl("");
                     }}
                   >
