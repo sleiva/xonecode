@@ -515,8 +515,8 @@ hechos del proyecto precargados, y envuelve el prompt con su identidad, que no s
 **Lo que NO hay todavía**, y en este orden sería lo siguiente:
 
 1. ~~`xone_navegacion`, `regex_search`~~: hechas (abajo). Faltan los hechos del proyecto precargados.
-2. El verificador con su reparación, el juez del turno y el crítico de pantalla. Hoy un turno que
-   escribe lo avisa, como deepagents cuando su verificador no corre.
+2. ~~El verificador con su reparación~~: hecho, con las reglas de deepagents compartidas
+   (`agent/turno/verificacion.ts`). Faltan el juez del turno y el crítico de pantalla enganchados.
 3. ~~El resto de subagentes~~: hecho, todos salen de su `.md` (abajo).
 4. La memoria del hilo en disco: hoy vive en memoria y reabrir una sesión de TrueForge empieza de cero.
 5. Deshacer la dependencia circular entre `turnoReal.ts` y `sesionTrueforge.ts`.

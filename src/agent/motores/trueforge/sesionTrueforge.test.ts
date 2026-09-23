@@ -371,4 +371,72 @@ describe("una sesión con el motor TrueForge", () => {
     expect(s.consumo().modelo).toMatchObject({ entrada: 41_900, salida: 62 });
     expect(s.consumo().contexto).toBe(1_000);
   }, 30_000);
+
+  it("un ROJO del simulador se REPARA en el mismo hilo, con el objetivo delante, y el turno cierra en VERDE", async () => {
+    const raiz = proyecto();
+    const escritura = (id: string, contenido: string) =>
+      new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "write_file", args: JSON.stringify({ file_path: "/nota.txt", content: contenido }) }] });
+    const delegar = (id: string) =>
+      new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "escribe la nota" }) }] });
+    const { m, vistos } = modelosConGuion([
+      [delegar("d1")],
+      [escritura("w1", "mal\n")],
+      [new AIMessageChunk({ content: "Escrita." })],
+      [new AIMessageChunk({ content: "Listo." })],
+      // La reparación: el orquestador vuelve a delegar y el hijo corrige.
+      [delegar("d2")],
+      [escritura("w2", "bien\n")],
+      [new AIMessageChunk({ content: "Corregida." })],
+      [new AIMessageChunk({ content: "Arreglado." })],
+    ]);
+    const veredictos = [
+      { hallazgos: [{ code: "XNE001", severidad: "error" as const, mensaje: "mal", fichero: join(raiz, "nota.txt"), linea: 1 }] },
+      { hallazgos: [] },
+    ];
+    let verificaciones = 0;
+    const s = await abrirSesionTrueforge({
+      raiz,
+      modelos: m,
+      entorno: ENTORNO,
+      skills: CATALOGO,
+      sinAprobacion: () => true,
+      verifier: { verificar: async () => ({ ...veredictos[verificaciones++]!, ok: true }) as never },
+    });
+    const eventos: string[] = [];
+    const r = await s.turno("escribe una nota", { ...piel().p, linea: (t) => void eventos.push(t) });
+    expect(verificaciones).toBe(2);
+    expect(readFileSync(join(raiz, "nota.txt"), "utf8")).toBe("bien\n");
+    // La petición de reparación llegó al orquestador, con los hallazgos Y el objetivo.
+    const reparacion = vistos[4]!.join("\n");
+    expect(reparacion).toMatch(/XNE001 en nota\.txt:1/);
+    expect(reparacion).toContain("escribe una nota");
+    expect(r.verificador).toBe("verde");
+    expect(eventos.join("\n")).not.toMatch(/no ha corrido/);
+  }, 30_000);
+
+  it("sin verificador, un turno que ESCRIBIÓ lo DICE con el motivo; uno que no escribió, no", async () => {
+    const raiz = proyecto();
+    const s = await abrirSesionTrueforge({ raiz, modelos: modelos(), entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true });
+    const lineas: string[] = [];
+    const r = await s.turno("escribe una nota", { ...piel().p, linea: (t) => void lineas.push(t) });
+    expect(r.verificador).toBe("no-corrio");
+    expect(lineas.join("\n")).toMatch(/el verificador no ha corrido en este turno \(esta ejecución no tiene verificador\)/);
+  }, 30_000);
+
+  it("`abrirSesionReal` le PASA el verificador a TrueForge: es la puerta de todas las pieles", async () => {
+    const raiz = proyecto();
+    let verificaciones = 0;
+    const s = await abrirSesionReal({
+      raiz,
+      modelos: modelos(),
+      skills: { catalogo: () => [], cargar: async () => [] } as never,
+      entorno: ENTORNO,
+      motor: "trueforge",
+      sinAprobacion: () => true,
+      verifier: { verificar: async () => (verificaciones++, { hallazgos: [], ok: true }) as never },
+    });
+    const r = await s.turno("escribe una nota", piel().p);
+    expect(verificaciones).toBe(1);
+    expect(r.verificador).toBe("verde");
+  }, 30_000);
 });

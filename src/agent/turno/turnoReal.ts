@@ -153,6 +153,7 @@ import type { ModelosPort, SkillsPort, VerifierPort } from "../../core/ports.js"
 import type { EstadoDeVerificador, ResultadoDeTurno } from "../../core/entrega.js";
 import type { DomainEvent, HallazgoDelTurno } from "../../core/events.js";
 import { relative, resolve as resolverRuta } from "node:path";
+import { cambiosQueSeVerifican, huellaDeErrores, repartirHallazgos } from "./verificacion.js";
 import type { Entorno } from "../config/entorno.js";
 import { tomarInstantanea, type Instantanea, type Cambio } from "./instantanea.js";
 import { construirAgente } from "../grafo/xoneAgent.js";
@@ -509,6 +510,7 @@ export async function abrirSesionReal(opciones: {
       modelos: opciones.modelos,
       entorno: opciones.entorno,
       skills: opciones.skills.catalogo(),
+      ...(opciones.verifier === undefined ? {} : { verifier: opciones.verifier }),
       ...(opciones.pedirAprobacion === undefined ? {} : { pedirAprobacion: opciones.pedirAprobacion }),
       ...(opciones.sinAprobacion === undefined ? {} : { sinAprobacion: opciones.sinAprobacion }),
       ...(opciones.artefactos === undefined ? {} : { artefactos: opciones.artefactos }),
@@ -981,9 +983,7 @@ export async function abrirSesionReal(opciones: {
         }
         cerrarRonda = true;
 
-        const cambios = (await instantanea.cambios()).filter(
-          (c) => c.clase !== "borrado" && !c.ruta.startsWith(".xonecode/") && c.ruta !== ".xonecode"
-        );
+        const cambios = cambiosQueSeVerifican(await instantanea.cambios());
         rondaEscribio = cambios.length > 0;
         if (!rondaEscribio) {
           // No hay nada que verificar, y eso NO es un verde. Se DICE, porque este motivo
@@ -1010,24 +1010,9 @@ export async function abrirSesionReal(opciones: {
           return;
         }
 
-        // Los hallazgos se reparten entre los ficheros que ESTE turno tocó y los demás. El
-        // simulador mira el proyecto entero —es su API—, y un error que ya estaba en un
-        // fichero que el agente no abrió no es del agente. Un hallazgo sin fichero no se
-        // puede atribuir: se enseña con los del turno, que es el lado conservador.
-        const tocados = new Set(cambios.map((c) => resolverRuta(raiz, c.ruta)));
-        const delTurno = informe.hallazgos.filter(
-          (h) => h.fichero === undefined || tocados.has(resolverRuta(h.fichero))
-        );
-        const preexistentes = informe.hallazgos.length - delTurno.length;
-        const errores = delTurno.filter((h) => h.severidad === "error").length;
-
-        const hallazgos: HallazgoDelTurno[] = delTurno.map((h) => ({
-          code: h.code,
-          severidad: h.severidad,
-          mensaje: h.mensaje,
-          ...(h.fichero === undefined ? {} : { fichero: relative(raiz, h.fichero) }),
-          ...(h.linea === undefined ? {} : { linea: h.linea }),
-        }));
+        // El reparto y la huella viven en `verificacion.ts`: los comparten los dos motores.
+        const { hallazgos, preexistentes, errores } = repartirHallazgos(raiz, informe, cambios.map((c) => c.ruta));
+        const delTurno = hallazgos;
 
         // Lo mismo que va al evento, apuntado para el retorno: NO se recalcula ni se
         // re-parsea de la bitácora, que es cómo dos copias de una cuenta acaban discrepando.
@@ -1142,11 +1127,7 @@ export async function abrirSesionReal(opciones: {
         // y no con «¿bajó el número?»: dos errores distintos en vez de dos iguales también es
         // avance, y un modelo que arregla uno y rompe otro no debe quedarse bloqueado como si
         // no hubiera hecho nada.
-        const huella = hallazgos
-          .filter((h) => h.severidad === "error")
-          .map((h) => `${h.code}|${h.fichero ?? ""}|${h.linea ?? ""}`)
-          .sort()
-          .join("\n");
+        const huella = huellaDeErrores(hallazgos);
 
         if (huella === huellaPrevia) {
           // Corregir no cambió nada: el mismo error, en el mismo sitio. Seguir sería gastar

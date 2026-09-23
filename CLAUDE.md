@@ -624,7 +624,10 @@ continúa el otro. Cumple el mismo `SesionReal`, así que ninguna piel sabe cuá
 orquestador de solo lectura y sin skills, cada especialista sale de su `.md`, y **la aprobación de un
 hijo se devuelve a SU `thread_id`** (a `main` la librería la rechaza). **Las tools propias no se
 reescriben: se ADAPTAN** (`toolsPropias.ts`, esquema de la tool y su `invoke`), con el mismo reparto —
-`xone_navegacion` a todos, el orquestador incluido—. Falta el verificador y la memoria en disco.
+`xone_navegacion` a todos, el orquestador incluido—. **El verificador y su reparación también**, con
+las reglas SACADAS del cierre de deepagents a `agent/turno/verificacion.ts` (reparto de hallazgos,
+huella de errores, qué cuenta como fichero del proyecto): las dos copias eran justo lo que no puede
+divergir sin que se note. Falta la memoria en disco.
 
 ### La aprobación
 

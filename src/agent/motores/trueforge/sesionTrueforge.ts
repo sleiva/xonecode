@@ -6,16 +6,18 @@
  * consola —web, terminal, tareas— no sabe con cuál habla: los dos pintan eventos de dominio en la
  * misma `Piel`, aprueban por el mismo `pedirAprobacion` y devuelven los mismos `cambios`.
  *
- * **Lo que hay en esta fase, y lo que NO, dicho entero**:
+ * **Lo que hay, y lo que NO, dicho entero**:
  * - SÍ: el raíz como ORQUESTADOR de solo lectura y sin skills, y cada especialista como hijo
  *   sacado de su `.md` (prompt, skills, permisos, modelo; la shell solo quien la declara), sobre
- *   nuestro backend (`toolsDeFichero.ts`) y nuestro modelo (`modeloLangchain.ts`); la aprobación
- *   de cada escritura con su diff, devuelta al hilo que la pidió; el modo autónomo, los artefactos
- *   sin preguntar, la cancelación, los tokens y los cambios del turno.
- * - NO todavía: el verificador con su reparación, el juez y el crítico de pantalla,
- *   `xone_navegacion`/`regex_search` y la memoria del hilo en disco (vive en memoria: reabrir una
- *   sesión de este motor empieza la conversación de cero). Un turno que escribió lo DICE con un
- *   aviso, como hace el de deepagents cuando su verificador no corre.
+ *   nuestro backend (`toolsDeFichero.ts`) y nuestro modelo (`modeloLangchain.ts`); las tools
+ *   propias adaptadas (`toolsPropias.ts`: `xone_navegacion`, `regex_search`, la crítica visual…);
+ *   los recortes de deepagents y la compactación del raíz (`recortes.ts`); la aprobación de cada
+ *   escritura con su diff, devuelta al hilo que la pidió; el verificador con su reparación, con
+ *   las reglas compartidas de `turno/verificacion.ts`; el modo autónomo, los artefactos sin
+ *   preguntar, la cancelación, los tokens y los cambios del turno.
+ * - NO todavía: el juez del turno y el crítico de pantalla ENGANCHADOS al final (la tool de la
+ *   crítica sí está), y la memoria del hilo en disco: vive en memoria, así que reabrir una sesión
+ *   de este motor empieza la conversación de cero.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -23,8 +25,9 @@ import winston from "winston";
 import { AgentThread, AgentThreadOrchestrator, EventType, ToolSet, contextCompaction, dynamicSubAgents } from "@truefoundry/trueforge-core/core";
 import { UMBRAL_RESUMEN_TOKENS } from "../../turno/resumenDeContexto.js";
 import { NOOP_AGENT_TRACING } from "@truefoundry/trueforge-core/core/tracing/NoopAgentTracing";
-import type { DomainEvent, PendienteDeAprobacion } from "../../../core/events.js";
-import type { ConsumoDeSesionPorCuenta, ModelosPort, SkillInfo } from "../../../core/ports.js";
+import type { DomainEvent, HallazgoDelTurno, PendienteDeAprobacion } from "../../../core/events.js";
+import type { ConsumoDeSesionPorCuenta, ModelosPort, SkillInfo, VerifierPort } from "../../../core/ports.js";
+import { cambiosQueSeVerifican, huellaDeErrores, repartirHallazgos } from "../../turno/verificacion.js";
 import { correrTurno, type Piel } from "../../../core/turno.js";
 import type { Artefacto } from "../../../core/artefactos.js";
 import type { LineaDeDiff } from "../../../core/diff.js";
@@ -37,7 +40,7 @@ import { PERFIL_DEL_ORQUESTADOR, promptOrquestador } from "../../grafo/xoneAgent
 import { permisosDe, seDetieneEn, TEXTO_HITL } from "../../grafo/perfiles.js";
 import { cambioDe } from "../../turno/interrupts.js";
 import { tomarInstantanea, type Cambio } from "../../turno/instantanea.js";
-import { ficherosDelProyecto, type SesionReal } from "../../turno/turnoReal.js";
+import { ficherosDelProyecto, textoDeReparacion, TOPE_REPARACIONES, type SesionReal } from "../../turno/turnoReal.js";
 import type { Entorno } from "../../config/entorno.js";
 import { modeloParaTrueforge } from "./modeloLangchain.js";
 import {
@@ -146,6 +149,11 @@ export interface OpcionesDeSesionTrueforge {
    * siempre — compuesta en un cierre que los tests doblan, la tool quedaría escrita y sin montar.
    */
   navegacion?: CargarIndice;
+  /**
+   * El simulador. Entra por parámetro, como en deepagents, para que `npm test` siga sin él; en
+   * producción lo pasa `abrirSesionReal`, que es quien lo recibe de todas las pieles.
+   */
+  verifier?: VerifierPort;
   /** Tope de rondas de aprobación con alguien delante (el de la consola). */
   topeDeRondas?: number;
 }
@@ -428,12 +436,23 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       const instantanea = await tomarInstantanea(raiz, opciones.entorno.git);
       const tope = opciones.topeDeRondas ?? MAX_APPROVAL_ROUNDS;
       const aplicadasSinPreguntar: string[] = [];
-      let escribio = false;
       let cortadoPorTope = false;
       let sinResolver = 0;
+      // El veredicto del turno, con las MISMAS reglas que deepagents (`verificacion.ts`).
+      let veredicto: "verde" | "rojo" | "no-corrio" = "no-corrio";
+      let hallazgosDelTurno: HallazgoDelTurno[] = [];
+      let preexistentesDelTurno: number | undefined;
+      let motivoSinVerificar: string | undefined;
+      let escribioProyecto = false;
 
-      async function* flujo(): AsyncGenerator<DomainEvent> {
-        let lote: unknown[] = [{ type: EventType.USER_MESSAGE, content: peticion }];
+      /**
+       * Las RONDAS de una petición: una pausa termina la ronda y se reanuda con las decisiones.
+       * Devuelve si acabó LIMPIA —sin escrituras en la mesa—, que es lo único que se verifica:
+       * con algo sin resolver el turno no ha terminado su trabajo, y mirar a medias daría un
+       * veredicto sobre algo que no es lo que quedó.
+       */
+      async function* rondasDe(loteInicial: unknown[], salida: { limpia: boolean }): AsyncGenerator<DomainEvent> {
+        let lote = loteInicial;
         let rondas = 0;
         while (true) {
           if (cancelado || cerrada) return;
@@ -441,7 +460,10 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
           const senal = aborto.signal;
           const pendientes: Pendiente[] = [];
           yield* paso(lote, senal, pendientes);
-          if (pendientes.length === 0) return;
+          if (pendientes.length === 0) {
+            salida.limpia = true;
+            return;
+          }
 
           const leer = (ruta: string): string => {
             try {
@@ -495,7 +517,6 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
             }
             for (const h of humanos) decisiones.set(h.id, respuesta.get(h.id) ?? { type: "reject" });
           }
-          if ([...decisiones.values()].some((d) => d.type === "approve")) escribio = true;
           lote = pendientes.map((p) => ({ p, d: decisiones.get(p.clave) ?? ({ type: "reject" } as Decision) })).map(({ p, d }) => ({
             type: "user.tool_approval",
             thread_id: p.hilo,
@@ -505,12 +526,92 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
         }
       }
 
+      /**
+       * **El verificador, cosido al FINAL del flujo y no después del turno** —la regla de
+       * deepagents—: `correrTurno` cierra en cuanto el flujo se agota, así que verificar después
+       * pintaría el veredicto fuera del turno. Un rojo se REPARA en el mismo hilo, como mensaje
+       * de USUARIO con el objetivo delante (`textoDeReparacion`), hasta `TOPE_REPARACIONES`, y
+       * corta antes si un intento deja la MISMA huella de errores.
+       */
+      async function* flujo(): AsyncGenerator<DomainEvent> {
+        let lote: unknown[] = [{ type: EventType.USER_MESSAGE, content: peticion }];
+        let intento = 0;
+        let huellaPrevia: string | undefined;
+        while (true) {
+          if (intento > 0) yield { tipo: "reparacion", intento, tope: TOPE_REPARACIONES };
+          const salida = { limpia: false };
+          yield* rondasDe(lote, salida);
+          const cambios = cambiosQueSeVerifican(await instantanea.cambios());
+          escribioProyecto = cambios.length > 0;
+          if (!salida.limpia) {
+            if (sinResolver > 0) motivoSinVerificar = "quedaron escrituras sin resolver";
+            return;
+          }
+          veredicto = "no-corrio";
+          if (!escribioProyecto) {
+            motivoSinVerificar = "el turno no escribió ningún fichero del proyecto";
+            return;
+          }
+          if (opciones.verifier === undefined) {
+            motivoSinVerificar = "esta ejecución no tiene verificador";
+            return;
+          }
+          yield { tipo: "fase", fase: "verificando" };
+          let informe;
+          try {
+            informe = await opciones.verifier.verificar(raiz);
+          } catch (e) {
+            // Que no esté el binario NO es un fallo del proyecto, y se dice como tal.
+            motivoSinVerificar = e instanceof Error ? e.message : String(e);
+            yield { tipo: "aviso", texto: `⚠ no se pudo verificar: ${motivoSinVerificar}`, severidad: "aviso" };
+            return;
+          }
+          motivoSinVerificar = undefined;
+          const { hallazgos, preexistentes, errores } = repartirHallazgos(raiz, informe, cambios.map((c) => c.ruta));
+          veredicto = errores === 0 ? "verde" : "rojo";
+          hallazgosDelTurno = hallazgos;
+          preexistentesDelTurno = preexistentes;
+          yield {
+            tipo: "verificacion",
+            verde: errores === 0,
+            errores,
+            avisos: hallazgos.length - errores,
+            hallazgos,
+            ...(preexistentes > 0 ? { preexistentes } : {}),
+          };
+          if (errores === 0) return;
+          const huella = huellaDeErrores(hallazgos);
+          if (huella === huellaPrevia) {
+            yield {
+              tipo: "bloqueado",
+              motivo: "no-progreso",
+              explicacion: `el intento ${intento} dejó los mismos ${errores} error(es) en los mismos sitios`,
+            };
+            return;
+          }
+          if (intento >= TOPE_REPARACIONES) {
+            yield {
+              tipo: "bloqueado",
+              motivo: "tope-reparaciones",
+              explicacion: `tras ${intento} intento(s) siguen ${errores} error(es); se deja como está para que lo mires`,
+            };
+            return;
+          }
+          huellaPrevia = huella;
+          intento += 1;
+          lote = [{ type: EventType.USER_MESSAGE, content: textoDeReparacion(hallazgos, [], peticion) }];
+        }
+      }
+
       let bitacora;
       try {
         bitacora = await correrTurno(flujo(), piel, {
-          avisos: () => [
-            // El verificador no corre todavía en este motor: si el turno ESCRIBIÓ, se dice.
-            ...(escribio ? ["⚠ el verificador no ha corrido en este turno (el motor TrueForge aún no lo integra)"] : []),
+          // Solo si el turno ESCRIBIÓ y aun así no se verificó, y con el motivo: la regla de
+          // deepagents — un aviso que salta cuando no ha pasado nada enseña a ignorarlo.
+          avisos: (b) => [
+            ...(b.corrio("verify") || !escribioProyecto
+              ? []
+              : [`⚠ el verificador no ha corrido en este turno${motivoSinVerificar === undefined ? "" : ` (${motivoSinVerificar})`}`]),
             ...(aplicadasSinPreguntar.length === 0
               ? []
               : [`⚠ ${aplicadasSinPreguntar.length} escritura(s) aplicadas SIN aprobación: ${aplicadasSinPreguntar.join(", ")} — esta sesión va en modo autónomo`]),
@@ -521,7 +622,16 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
         aborto = undefined;
       }
       const cambios: Cambio[] = await instantanea.cambios();
-      return { bitacora, cambios, cortadoPorTope, verificador: "no-corrio" as const, pendientes: sinResolver };
+      return {
+        bitacora,
+        cambios,
+        cortadoPorTope,
+        verificador: veredicto,
+        pendientes: sinResolver,
+        ...(hallazgosDelTurno.length === 0 ? {} : { hallazgos: hallazgosDelTurno }),
+        ...(preexistentesDelTurno === undefined ? {} : { preexistentes: preexistentesDelTurno }),
+        ...(motivoSinVerificar === undefined ? {} : { motivoSinVerificar }),
+      };
     },
     async cambiarModelos(nuevos: ModelosPort) {
       // El ILLM pide el modelo en cada llamada, así que basta con cambiar a quién se lo pide:
