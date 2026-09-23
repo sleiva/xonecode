@@ -81,12 +81,13 @@ import {
   type Veredicto,
 } from "../../core/puedeLanzarse.js";
 
-import type { Dispositivo, InformeDeDispositivos } from "../../core/dispositivos.js";
+import type { Dispositivo, Herramienta, InformeDeDispositivos } from "../../core/dispositivos.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, type AjustesDeDispositivos } from "../../core/settings.js";
 import type { NombreDeHerramienta } from "../../core/dispositivos.js";
 import { instalarHerramientaDeDispositivos, verificarDispositivo } from "../../agent/dispositivos/dispositivosEnMaquina.js";
 import { arrancarEmulador } from "../../agent/dispositivos/arranqueDeEmulador.js";
 import { correrPasoDeReceta } from "../../agent/dispositivos/instalacionEnMaquina.js";
+import { abrirCarpetaDelSistema } from "../../agent/config/selectorEnMaquina.js";
 import { modelosDeMotor } from "../../agent/config/modelosDeMotor.js";
 import {
   parsear,
@@ -451,6 +452,13 @@ export interface OpcionesDeMontaje {
    * máquina del usuario. Ausente = esta ejecución no instala nada.
    */
   instalarHerramienta?: (herramienta: NombreDeHerramienta) => Promise<void>;
+  /**
+   * Abre, en el sistema donde corre la consola, la carpeta que contiene el binario de una
+   * herramienta. Recibe la ruta ENTERA (host-only hasta aquí); nunca lanza y no tiene
+   * respuesta que esperar — un fallo aquí es accesorio, como abrir el navegador al arrancar.
+   * Ausente = esta ejecución no lo ofrece y el botón no se pinta.
+   */
+  abrirCarpetaDeHerramienta?: (ruta: string) => void;
   /**
    * VERIFICA la conexión con un dispositivo (`agent/dispositivos/dispositivosEnMaquina.ts`).
    *
@@ -1570,10 +1578,16 @@ export function montarRutas(
    * primera. Y la respuesta va a TODOS —la máquina es la misma para todos—.
    */
   let informeDeDispositivos: InformeDeDispositivosDelCable | undefined;
-  /** La ruta de cada herramienta es una ruta del home del usuario: no sale por el cable. */
+  /**
+   * La ruta de cada herramienta es una ruta del home del usuario: no sale por el cable —
+   * salvo `adb`/`emulator`, la excepción DECLARADA (igual que el workspace, ver
+   * `AjustesDeDispositivos`): esas dos SÍ la llevan, porque es lo que permite ver dónde se
+   * encontraron y abrir su carpeta. `xcrun`/`devicectl` se quedan sin ella como siempre.
+   */
+  const sinRuta = ({ ruta: _ruta, ...resto }: Herramienta): Herramienta => resto;
   const sinRutas = (informe: InformeDeDispositivos): InformeDeDispositivosDelCable => ({
     ...informe,
-    herramientas: informe.herramientas.map(({ ruta: _ruta, ...resto }) => resto),
+    herramientas: informe.herramientas.map((h) => (h.nombre === "adb" || h.nombre === "emulator" ? h : sinRuta(h))),
   });
   /** Los cuatro nombres conocidos y nada más: lo que llega por el cable no elige binario. */
   const esNombreDeHerramienta = (v: string): v is NombreDeHerramienta =>
@@ -1989,20 +2003,31 @@ export function montarRutas(
   /**
    * Verificar la conexión con UN dispositivo, y volver a emitir la foto con lo que contestó.
    *
-   * Cuatro reglas:
+   * Cinco reglas:
    * - **El id se resuelve contra la última MEDIDA**, igual que al elegir dispositivo de la
    *   sesión: lo que se le pasa al verificador es el `Dispositivo` que el host midió, no la
    *   cadena que llegó. Un id que no está se ignora en silencio — es una foto vieja del
    *   cliente (desenchufaron el teléfono entre medias), no un error que contar.
-   * - **NO se vuelve a medir.** La verificación vive dentro del informe, así que una medida
-   *   nueva se la llevaría — justo la que se acaba de hacer.
+   * - **Si hay una medida EN VUELO, se espera a que termine antes de mirar.** Entrar en la
+   *   sección dispara una remedida (`useMedirAlVolver`) que primero VACÍA `informeDeDispositivos`
+   *   y luego mide; un dispositivo que ya estaba arrancado al abrir la ventana se pinta y se
+   *   puede pulsar Verificar de inmediato, así que el click cae justo en ese hueco. Medido:
+   *   sin esperar, el id nunca se encuentra (el informe está vacío), la petición se pierde EN
+   *   SILENCIO y el botón se queda en «Verificando…» para siempre —el propio `disabled` del
+   *   botón le quita al usuario hasta la posibilidad de reintentar—. Esperar la medida en
+   *   vuelo (o disparar una si no hay ninguna) es gratis: es la MISMA promesa que ya existe,
+   *   no una medida de más.
+   * - **NO se vuelve a medir si ya hay foto.** La verificación vive dentro del informe, así
+   *   que una medida nueva se la llevaría — justo la que se acaba de hacer.
    * - **Solo se toca ESE dispositivo**: las verificaciones de los demás siguen donde
    *   estaban. Se emite el informe entero porque es el mensaje que hay.
    * - **Y viaja a todos los clientes**, como la foto: la máquina es la misma para todos.
    */
   const atenderConexion = async (id: string): Promise<void> => {
     const verificar = opciones.verificarDispositivo;
-    if (verificar === undefined || informeDeDispositivos === undefined) return;
+    if (verificar === undefined) return;
+    if (informeDeDispositivos === undefined) await atenderDispositivos().catch(contar);
+    if (informeDeDispositivos === undefined) return;
     const dispositivo = informeDeDispositivos.dispositivos.find((d) => d.id === id);
     if (dispositivo === undefined) return;
     let resultado: { ok: boolean; detalle: string };
@@ -4317,11 +4342,29 @@ export function montarRutas(
           const valor = (pedidos as Record<string, unknown>)[plataforma];
           if (typeof valor === "boolean") limpios[plataforma] = valor;
         }
+        // Las dos rutas personalizadas, recortadas: una vacía tras el `trim` no se guarda —
+        // es «lo borré», y `AjustesDeDispositivos` ya trata eso como ausente.
+        for (const campo of ["rutaAdb", "rutaEmulator"] as const) {
+          const valor = (pedidos as Record<string, unknown>)[campo];
+          if (typeof valor === "string" && valor.trim() !== "") limpios[campo] = valor.trim();
+        }
         try {
           opciones.guardarAjustesDeDispositivos(limpios);
         } catch (error) {
           informar(`no se pudieron guardar los destinos de prueba (${codigoDe(error)})`);
         }
+      }
+      // Abrir carpeta no cambia ningún estado: no remide, y responde en el acto. Va ANTES
+      // del `instalar` porque las dos ramas devuelven pronto y esta no tiene nada que
+      // esperar — ni siquiera al instalador, que si acaso viene en el MISMO mensaje que esto
+      // nunca se manda (son dos botones distintos en la ventana).
+      const aAbrir = (mensaje as { abrirRuta?: unknown }).abrirRuta;
+      if (typeof aAbrir === "string" && esNombreDeHerramienta(aAbrir)) {
+        const ruta = informeDeDispositivos?.herramientas.find((h) => h.nombre === aAbrir)?.ruta;
+        if (ruta !== undefined) opciones.abrirCarpetaDeHerramienta?.(ruta);
+        respuesta.writeHead(204);
+        respuesta.end();
+        return;
       }
       // Instalar va ANTES de medir y por el nombre, nunca por un comando del cliente. Se
       // espera a que termine para que la foto de después cuente la verdad: medir mientras
@@ -5310,6 +5353,7 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     ajustesDeDispositivos: () => cargarSettings().settings.dispositivos ?? {},
     guardarAjustesDeDispositivos: (ajustes) => void guardarDispositivos(undefined, ajustes),
     instalarHerramienta: instalarHerramientaDeDispositivos,
+    abrirCarpetaDeHerramienta: abrirCarpetaDelSistema,
     verificarDispositivo,
     // Con la función REAL, y no declarada y sin pasar: es la trampa que este repo ha pagado
     // nueve veces, y la que el comentario de justo abajo describe para las cuatro del

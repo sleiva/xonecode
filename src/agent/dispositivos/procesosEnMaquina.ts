@@ -276,6 +276,20 @@ export function motivoDelCodigo(codigo: number | null, ultima: string): string {
 }
 
 /**
+ * `sdkmanager`/`avdmanager` son `.bat` en Windows (`localizadorDeAndroid` ya lo sabe, ver
+ * `extensionDeBinario`), y desde que Node cerró el CVE-2024-27980 —la inyección de comandos
+ * por `.bat`/`.cmd`— un `spawn` a secas sobre uno de estos revienta con `spawn EINVAL` en
+ * vez de arrancar: medido en la máquina del usuario, «No salió bien: spawn EINVAL» al pulsar
+ * el paso 4 de la receta de Windows. La forma sancionada por Node de arreglarlo es `shell:
+ * true`, y aquí es seguro dárselo —a diferencia del caso general que el CVE cerraba—: los
+ * `args` de estos dos binarios NUNCA llevan nada que no sea un literal de nuestra propia
+ * tabla (`PASOS_EJECUTABLES`), nunca una cadena que haya escrito un usuario.
+ */
+export function necesitaShell(binario: string, plataforma: string = process.platform): boolean {
+  return plataforma === "win32" && /\.(bat|cmd)$/i.test(binario);
+}
+
+/**
  * El hijo de verdad. Dos decisiones, las dos medidas:
  *
  * - **`detached: true`**, para que sea líder de su grupo y `kill(-pid)` se lleve también a
@@ -284,6 +298,9 @@ export function motivoDelCodigo(codigo: number | null, ultima: string): string {
  *   Lo que hace que un `sudo` de dentro no cuelgue no es cerrar `stdin`: es no tener
  *   terminal de CONTROL, que es de donde `sudo` lee la contraseña — y con `detached` no lo
  *   tiene ni por herencia.
+ * - **`shell: true` SOLO para `.bat`/`.cmd`** (`necesitaShell`, arriba): para `adb`/`emulator`
+ *   y para `brew` —los binarios que lanza el resto de este módulo, incluido el lanzamiento en
+ *   el dispositivo— nada cambia, exactamente el mismo `spawn` de siempre.
  *
  * Es el valor POR OMISIÓN de `crearEjecutor`, y el único `spawn` de los dos módulos: la receta
  * de instalación y el `adb` del lanzamiento necesitan exactamente estas dos cosas por los
@@ -291,4 +308,9 @@ export function motivoDelCodigo(codigo: number | null, ultima: string): string {
  * de estar —y ese día el `kill(-pid)` de un sitio mataría a un grupo que no existe—.
  */
 export const lanzarReal: Lanzar = (binario, args, opciones) =>
-  spawn(binario, args, { env: opciones.env, stdio: ["pipe", "pipe", "pipe"], detached: true }) as unknown as ProcesoHijo;
+  spawn(binario, args, {
+    env: opciones.env,
+    stdio: ["pipe", "pipe", "pipe"],
+    detached: true,
+    ...(necesitaShell(binario) ? { shell: true } : {}),
+  }) as unknown as ProcesoHijo;

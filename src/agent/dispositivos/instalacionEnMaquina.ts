@@ -62,6 +62,7 @@ import {
   type Lanzar,
   type ProcesoHijo,
 } from "./procesosEnMaquina.js";
+import { descargarYDescomprimir } from "./descargaDeHerramientas.js";
 
 /**
  * Y esto se REEXPORTA: lo que este módulo exportaba antes de que existiera el ejecutor
@@ -72,8 +73,10 @@ import {
  */
 export { lanzarReal, TOPE_DE_TRABAJO_MS, TOPE_SIN_SALIDA_MS, type Lanzar, type ProcesoHijo };
 
-/** El paquete de la imagen del sistema, el mismo que nombra la receta. */
-const IMAGEN = "system-images;android-35;google_apis;arm64-v8a";
+/** El paquete de la imagen del sistema en macOS, el mismo que nombra la receta. */
+const IMAGEN_DARWIN = "system-images;android-35;google_apis;arm64-v8a";
+/** Y en Windows: el caso común es x86_64, no Apple Silicon. Mismo motivo que en `core/dispositivos.ts`. */
+const IMAGEN_WIN32 = "system-images;android-35;google_apis;x86_64";
 
 /** Una llamada a un proceso dentro de un paso. Un paso puede ser varias, en orden. */
 interface Invocacion {
@@ -91,8 +94,18 @@ interface Invocacion {
   anuncio?: string;
 }
 
-/** Lo que hace falta para lanzar un paso: qué binario, con qué llamadas y qué se le teclea. */
-interface PasoEjecutable {
+/**
+ * Lo que hace falta para lanzar un paso: o un PROCESO (lo que ya había: un binario, con qué
+ * llamadas y qué se le teclea) o una DESCARGA (nueva, para Windows: adb/JDK/cmdline-tools no
+ * tienen un Homebrew equivalente que los instale de un tirón, así que se bajan de una URL
+ * fijada y se descomprimen). Las dos comparten el mismo resultado final
+ * (`"ok"|"fallo"|"cancelada"|"colgada"`), así que `correrPasoDeReceta` las trata como la
+ * MISMA cosa de cara a quien pregunta por el cable.
+ */
+type PasoEjecutable = PasoDeProceso | PasoDeDescarga;
+
+interface PasoDeProceso {
+  tipo: "proceso";
   /** El binario, por nombre. Tabla cerrada: del cliente llega un NÚMERO, nunca un comando. */
   binario: "sdkmanager" | "avdmanager" | "brew";
   /**
@@ -112,9 +125,25 @@ interface PasoEjecutable {
   titulo: string;
 }
 
+interface PasoDeDescarga {
+  tipo: "descarga";
+  url: string;
+  /** Dónde cae, relativo a `%LOCALAPPDATA%` — la única raíz que Windows garantiza y que
+   *  `RAICES_DE_SDK_POR_OMISION.win32` ya usa para el SDK. */
+  destinoBajoLocalAppData: string[];
+  /** Ver `descargaDeHerramientas.ts#OpcionesDeDescarga`. */
+  renombrarCarpetaUnicaA?: string;
+  titulo: string;
+}
+
 /**
- * Los pasos que xonecode lanza él. Tabla CERRADA y por `receta:paso`: lo que llega del
- * cliente es un número, y un número que no esté aquí no lanza nada.
+ * Los pasos que xonecode lanza él. Tabla CERRADA y por `receta:plataforma:paso`: lo que
+ * llega del cliente es un número, y un número que no esté aquí no lanza nada.
+ *
+ * **La PLATAFORMA es parte de la clave**, y no un detalle: los pasos 1-3 de Windows
+ * (descargas) y los 1-3 de macOS (Homebrew) son acciones completamente distintas bajo el
+ * MISMO número — sin la plataforma en la clave, la entrada de una pisaría a la otra en este
+ * mapa, o habría que inventar números que no significan nada en la receta que se enseña.
  *
  * Tiene que coincidir con lo que `core/dispositivos.ts` marca `ejecutable` — un paso con
  * botón que no esté aquí es un botón muerto, y uno lanzable sin botón es una capacidad que
@@ -122,8 +151,9 @@ interface PasoEjecutable {
  */
 export const PASOS_EJECUTABLES = new Map<string, PasoEjecutable>([
   [
-    "android-emulador:1",
+    "android-emulador:darwin:1",
     {
+      tipo: "proceso",
       binario: "brew",
       // Es el paso que INSTALA el SDK: exigirlo aquí era el círculo que lo dejaba sin botón.
       conSdk: false,
@@ -141,8 +171,9 @@ export const PASOS_EJECUTABLES = new Map<string, PasoEjecutable>([
     // El 2 desde que los `export` de la shell dejaron de ser un paso: la tabla va por NÚMERO,
     // así que renumerar la receta es renumerar esto — y el test que compara las dos listas
     // en las dos direcciones es lo que hace que no se pueda quedar descolgada en silencio.
-    "android-emulador:2",
+    "android-emulador:darwin:2",
     {
+      tipo: "proceso",
       binario: "sdkmanager",
       conSdk: true,
       subcarpeta: join("cmdline-tools", "latest", "bin"),
@@ -164,7 +195,7 @@ export const PASOS_EJECUTABLES = new Map<string, PasoEjecutable>([
           // esta es la copia que se LANZA, y por eso hay un test que compara las dos: la lista
           // de paquetes está escrita dos veces y sin él podrían divergir en silencio, con el
           // botón instalando una cosa y la ventana enseñando otra.
-          args: ["--install", "platform-tools", "emulator", "platforms;android-35", IMAGEN],
+          args: ["--install", "platform-tools", "emulator", "platforms;android-35", IMAGEN_DARWIN],
           teclear: [],
         },
       ],
@@ -172,14 +203,90 @@ export const PASOS_EJECUTABLES = new Map<string, PasoEjecutable>([
     },
   ],
   [
-    "android-emulador:3",
+    "android-emulador:darwin:3",
     {
+      tipo: "proceso",
       binario: "avdmanager",
       conSdk: true,
       subcarpeta: join("cmdline-tools", "latest", "bin"),
       invocaciones: [
         // «Do you wish to create a custom hardware profile? [no]»: sin respuesta, cuelga.
-        { args: ["create", "avd", "-n", "pixel8", "-k", IMAGEN, "-d", "pixel_8"], teclear: ["no\n"] },
+        { args: ["create", "avd", "-n", "pixel8", "-k", IMAGEN_DARWIN, "-d", "pixel_8"], teclear: ["no\n"] },
+      ],
+      titulo: "Creando el dispositivo virtual",
+    },
+  ],
+  [
+    "android-emulador:win32:1",
+    {
+      tipo: "descarga",
+      url: "https://dl.google.com/android/repository/platform-tools-latest-windows.zip",
+      // El zip ya trae `platform-tools/` como carpeta de primer nivel: cae DIRECTO bajo el
+      // SDK, sin renombrar nada — a diferencia de los dos pasos siguientes.
+      destinoBajoLocalAppData: ["Android", "Sdk"],
+      titulo: "Descargando adb (platform-tools)",
+    },
+  ],
+  [
+    "android-emulador:win32:2",
+    {
+      tipo: "descarga",
+      url: "https://api.adoptium.net/v3/binary/latest/17/ga/windows/x64/jdk/hotspot/normal/eclipse",
+      destinoBajoLocalAppData: ["Android"],
+      // El zip de Adoptium trae UNA carpeta con la versión en el nombre (`jdk-17.0.20.1+1`),
+      // que cambia en cada build: se renombra a una ruta FIJA para que la detección
+      // (`dispositivosEnMaquina.ts#jdkDeLaMaquina`) compruebe un sitio conocido.
+      renombrarCarpetaUnicaA: "jdk17",
+      titulo: "Descargando el JDK",
+    },
+  ],
+  [
+    "android-emulador:win32:3",
+    {
+      tipo: "descarga",
+      url: "https://dl.google.com/android/repository/commandlinetools-win-15859902_latest.zip",
+      destinoBajoLocalAppData: ["Android", "Sdk", "cmdline-tools"],
+      // El zip trae una carpeta `cmdline-tools/` de primer nivel; Google exige que su
+      // contenido viva bajo `…/cmdline-tools/latest/`, o `sdkmanager` no se reconoce a sí
+      // mismo. Mismo mecanismo que el JDK: se renombra AL escribir, sin un paso aparte.
+      renombrarCarpetaUnicaA: "latest",
+      titulo: "Descargando las herramientas del SDK",
+    },
+  ],
+  [
+    "android-emulador:win32:4",
+    {
+      tipo: "proceso",
+      binario: "sdkmanager",
+      conSdk: true,
+      subcarpeta: join("cmdline-tools", "latest", "bin"),
+      invocaciones: [
+        {
+          args: ["--licenses"],
+          teclear: ["y\n"],
+          repetir: 100,
+          opcional: true,
+          anuncio: "Aceptando las licencias del SDK de Android (lo pediste al pulsar).",
+        },
+        {
+          // Misma lista de paquetes que en macOS, con la imagen de Windows: ver el
+          // comentario del paso equivalente de macOS, arriba.
+          args: ["--install", "platform-tools", "emulator", "platforms;android-35", IMAGEN_WIN32],
+          teclear: [],
+        },
+      ],
+      titulo: "Descargando el emulador y la imagen del sistema",
+    },
+  ],
+  [
+    "android-emulador:win32:5",
+    {
+      tipo: "proceso",
+      binario: "avdmanager",
+      conSdk: true,
+      subcarpeta: join("cmdline-tools", "latest", "bin"),
+      invocaciones: [
+        { args: ["create", "avd", "-n", "pixel8", "-k", IMAGEN_WIN32, "-d", "pixel_8"], teclear: ["no\n"] },
       ],
       titulo: "Creando el dispositivo virtual",
     },
@@ -221,6 +328,11 @@ export interface DependenciasDeInstalacion {
    * y un test que lo llamara de verdad mataría el grupo de quien corre `npm test`.
    */
   matarGrupo?: (pid: number, senal: string) => void;
+  /** Solo para los pasos `tipo: "descarga"` — ver `descargaDeHerramientas.ts`. `npm test`
+   *  nunca toca la red real: sin esto un test de un paso de Windows la tocaría. */
+  fetch?: typeof fetch;
+  crearCarpeta?: (ruta: string) => void;
+  escribir?: (ruta: string, datos: Uint8Array) => void;
 }
 
 /**
@@ -244,13 +356,46 @@ export function correrPasoDeReceta(
   const t0 = ahora();
   const decir = (linea: string): void => deps.alSalirLinea?.(linea);
 
-  const paso = PASOS_EJECUTABLES.get(`${receta}:${numero}`);
+  const paso = PASOS_EJECUTABLES.get(`${receta}:${plataforma}:${numero}`);
   if (paso === undefined) {
     return {
       titulo: "",
       cancelar: () => {},
       terminado: Promise.resolve({ estado: "fallo", motivo: "ese paso no se lanza desde aquí", ms: 0 }),
     };
+  }
+
+  // La DESCARGA es un camino aparte y mucho más corto: no hay binario que resolver ni SDK que
+  // exigir, solo dónde cae. `descargaDeHerramientas.ts` ya devuelve el MISMO vocabulario
+  // (`"ok"|"fallo"|"cancelada"|"colgada"`), así que de aquí para afuera esto es indistinguible
+  // de un paso de proceso — ni el cable ni `Receta.tsx` se enteran de que detrás hay un
+  // `fetch` y no un `spawn`.
+  if (paso.tipo === "descarga") {
+    if (entorno.LOCALAPPDATA === undefined) {
+      return {
+        titulo: paso.titulo,
+        cancelar: () => {},
+        terminado: Promise.resolve({
+          estado: "fallo",
+          motivo: "falta %LOCALAPPDATA%: no se sabe dónde descargar",
+          ms: ahora() - t0,
+        }),
+      };
+    }
+    const destino = join(entorno.LOCALAPPDATA, ...paso.destinoBajoLocalAppData);
+    const descarga = descargarYDescomprimir(
+      paso.url,
+      destino,
+      paso.renombrarCarpetaUnicaA === undefined ? {} : { renombrarCarpetaUnicaA: paso.renombrarCarpetaUnicaA },
+      {
+        alSalirLinea: decir,
+        ahora,
+        ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
+        ...(deps.crearCarpeta === undefined ? {} : { crearCarpeta: deps.crearCarpeta }),
+        ...(deps.escribir === undefined ? {} : { escribir: deps.escribir }),
+      }
+    );
+    return { titulo: paso.titulo, cancelar: descarga.cancelar, terminado: descarga.terminado };
   }
 
   const { enPath, enSdk, raicesDeSdk } = localizadorDeAndroid({ plataforma, entorno, home, existe });
@@ -268,11 +413,16 @@ export function correrPasoDeReceta(
   if (paso.conSdk) {
     binario = enSdk(paso.binario, paso.subcarpeta ?? "");
     const sdk = raicesDeSdk.find((raiz) => existe(raiz));
-    const jdk = jdkDeLaMaquina(entorno, existe);
+    const jdk = jdkDeLaMaquina(entorno, existe, plataforma);
     if (binario === undefined || sdk === undefined || jdk === undefined) {
-      // Se dice QUÉ falta y dónde se arregla, no «no se pudo»: el paso 1 es el que lo instala.
-      const que = binario === undefined || sdk === undefined ? "el SDK de línea de comandos" : "el JDK";
-      return fallar(`falta ${que}: hazlo con el paso 1 y vuelve a mirar`);
+      // Se dice QUÉ falta y dónde se arregla, no «no se pudo». En macOS el paso 1 instala
+      // las DOS cosas de un tirón (Homebrew); en Windows son pasos distintos —el 2 el JDK,
+      // el 3 las cmdline-tools—, así que el número que se dice depende de QUÉ falta y de la
+      // plataforma, no de una frase fija.
+      const faltaElSdk = binario === undefined || sdk === undefined;
+      const que = faltaElSdk ? "el SDK de línea de comandos" : "el JDK";
+      const paso = plataforma === "win32" ? (faltaElSdk ? "el paso 3" : "el paso 2") : "el paso 1";
+      return fallar(`falta ${que}: hazlo con ${paso} y vuelve a mirar`);
     }
     env = {
       ...env,

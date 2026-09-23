@@ -865,8 +865,10 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Tienda" }));
     expect(enviar).toHaveBeenCalledWith({ clase: "alta", paso: "proyecto", proyecto: "p1" });
     // Nada de Selector todavía: `estado.alta.ramas` sigue vacía hasta que el servidor
-    // conteste — no se inventa un catálogo mientras se espera.
-    expect(screen.queryByRole("group")).toBeNull();
+    // conteste — no se inventa un catálogo mientras se espera. El conmutador de
+    // apariencia de la barra superior también es un `role="group"` y siempre está: se
+    // excluye por nombre en vez de dejar que contamine esta comprobación.
+    expect(screen.queryByRole("group", { name: (n) => n !== "apariencia" })).toBeNull();
   });
 
   /**

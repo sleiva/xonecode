@@ -5,8 +5,6 @@ import { TITULO_DE_REFRESCAR_EQUIPO } from "./Equipo.js";
 import { selloDeFecha } from "../selloDeFecha.js";
 
 const MANEJADORES = {
-  apariencia: "sistema" as const,
-  alCambiarApariencia: () => {},
   alPedirClave: () => {},
   alBorrarClave: () => {},
   alRegistrarEntorno: () => {},
@@ -354,7 +352,6 @@ describe("Ajustes", () => {
     expect(within(navegacion).getAllByRole("button").map((b) => b.textContent)).toEqual([
       "General",
       "Modelos",
-      "Apariencia",
       "Entornos",
       "Subagentes",
       // Skills va JUNTO a Subagentes y debajo: es la otra mitad de la misma pregunta —quién
@@ -362,8 +359,6 @@ describe("Ajustes", () => {
       "Skills",
       "Dispositivos",
     ]);
-    fireEvent.click(screen.getByRole("button", { name: "Apariencia" }));
-    expect(screen.getByRole("heading", { name: /apariencia/i })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Entornos" }));
     expect(screen.getByRole("heading", { name: /entornos/i })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "General" }));
@@ -824,20 +819,6 @@ describe("Ajustes", () => {
     expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
   });
 
-  it("la apariencia marca la que está en uso y avisa de que es solo de esta ventana", () => {
-    const alCambiarApariencia = vi.fn();
-    render(<Ajustes {...MANEJADORES} apariencia="oscuro" alCambiarApariencia={alCambiarApariencia} />);
-    fireEvent.click(screen.getByRole("button", { name: "Apariencia" }));
-    expect(screen.getByText(/solo afecta a esta ventana/i)).toBeTruthy();
-    // Los temas de la consola de terminal NO se ofrecen aquí: son paletas ANSI y en un
-    // navegador no pintan nada.
-    expect(screen.queryByText(/midnight/i)).toBeNull();
-    const oscuro = screen.getByText("Oscuro").closest("li")!;
-    expect(oscuro.textContent).toMatch(/en uso/i);
-    const claro = screen.getByText("Claro").closest("li")!;
-    fireEvent.click(within(claro).getByRole("button", { name: /^usar$/i }));
-    expect(alCambiarApariencia).toHaveBeenCalledWith("claro");
-  });
 });
 
 const INFORME = {
@@ -878,6 +859,12 @@ describe("Ajustes: la sección de Dispositivos", () => {
   const abrirPestana = (panel: HTMLElement, nombre: "Android" | "iOS") =>
     fireEvent.click(within(panel).getByRole("tab", { name: new RegExp(`^${nombre}`) }));
 
+  // La lista de Requisitos, aparte: desde que hay un campo de «Ruta personalizada» con
+  // etiquetas «adb»/«emulator», el nombre de una herramienta ya no es único en todo el
+  // panel — hay que acotar a la lista que cuelga de su propio encabezado.
+  const requisitos = (panel: HTMLElement): HTMLElement =>
+    within(panel).getByRole("heading", { name: "Requisitos" }).nextElementSibling as HTMLElement;
+
   it("una pestaña por plataforma, y cada una con SUS requisitos", () => {
     // Antes era una sola columna con las herramientas de las dos plataformas, y con iOS
     // dentro la lista se hacía larga y sin costuras. Lo que agrupa es `plataforma`, que
@@ -887,14 +874,14 @@ describe("Ajustes: la sección de Dispositivos", () => {
       "true",
       "false",
     ]);
-    expect(within(panel).getByText("adb")).toBeTruthy();
-    expect(within(panel).getByText("emulator")).toBeTruthy();
-    expect(within(panel).queryByText("devicectl")).toBeNull();
+    expect(within(requisitos(panel)).getByText("adb")).toBeTruthy();
+    expect(within(requisitos(panel)).getByText("emulator")).toBeTruthy();
+    expect(within(requisitos(panel)).queryByText("devicectl")).toBeNull();
 
     abrirPestana(panel, "iOS");
-    expect(within(panel).getByText("Xcode command line tools")).toBeTruthy();
-    expect(within(panel).getByText("devicectl")).toBeTruthy();
-    expect(within(panel).queryByText("adb")).toBeNull();
+    expect(within(requisitos(panel)).getByText("Xcode command line tools")).toBeTruthy();
+    expect(within(requisitos(panel)).getByText("devicectl")).toBeTruthy();
+    expect(within(requisitos(panel)).queryByText("adb")).toBeNull();
   });
 
   it("cada pestaña cuenta lo que le falta, y solo si le falta algo", () => {
@@ -998,25 +985,31 @@ describe("Ajustes: la sección de Dispositivos", () => {
         herramientas: INFORME.herramientas.filter((h) => h.nombre !== "emulator"),
       },
     });
-    expect(within(panel).queryByText("emulator")).toBeNull();
+    expect(within(requisitos(panel)).queryByText("emulator")).toBeNull();
     expect(within(panel).getByText(/La medida no nombra emulator/)).toBeTruthy();
   });
 
-  it("la pestaña de iOS está SIEMPRE, aunque allí no aplique", () => {
-    // Esconderla dejaría su receta sin puerta y haría creer que iOS se puede probar en ese
-    // sistema y no se está enseñando. Dentro se dice lo que contestó la medida.
-    const panel = abrir({
-      dispositivos: {
-        ...INFORME,
-        sistema: "linux" as const,
-        herramientas: INFORME.herramientas.map((h) =>
-          h.plataforma === "ios" ? { ...h, estado: "no-aplica" as const } : h
-        ),
-      },
-    });
-    abrirPestana(panel, "iOS");
-    expect(within(panel).getAllByText(/no aplica en este sistema/).length).toBeGreaterThan(0);
-    expect(within(panel).getByRole("tab", { name: "iOS" })).toBeTruthy();
+  it("la pestaña de iOS está SIEMPRE —nunca se esconde— pero se DESHABILITA fuera de macOS, con el motivo en el título", () => {
+    // Antes se abría para leer «no aplica en este sistema» dentro del panel; con la pestaña
+    // deshabilitada ese panel deja de ser alcanzable exactamente en el mismo caso, así que el
+    // motivo se dice de una vez en el título de la propia pestaña.
+    const panel = abrir({ dispositivos: { ...INFORME, sistema: "linux" as const } });
+    const pestanaIos = within(panel).getByRole("tab", { name: /^iOS/ }) as HTMLButtonElement;
+    expect(pestanaIos).toBeTruthy();
+    expect(pestanaIos.disabled).toBe(true);
+    expect(pestanaIos.title).toMatch(/solo se detectan en macOS/);
+    // Un clic no hace nada: se sigue viendo Android.
+    fireEvent.click(pestanaIos);
+    expect(within(panel).queryByRole("tabpanel", { name: "iOS" })).toBeNull();
+    expect(within(panel).getByRole("tabpanel", { name: "Android" })).toBeTruthy();
+  });
+
+  it("con `sistema: mac` la pestaña de iOS NO se deshabilita", () => {
+    const panel = abrir(); // INFORME por omisión: sistema "mac".
+    const pestanaIos = within(panel).getByRole("tab", { name: /^iOS/ }) as HTMLButtonElement;
+    expect(pestanaIos.disabled).toBe(false);
+    fireEvent.click(pestanaIos);
+    expect(within(panel).getByRole("tabpanel", { name: "iOS" })).toBeTruthy();
   });
 
   it("verde SOLO lo disponible: lo que falta va hueco", () => {
@@ -1059,22 +1052,34 @@ describe("Ajustes: la sección de Dispositivos", () => {
     expect(alInstalarHerramienta).toHaveBeenCalledWith("xcrun");
   });
 
-  it("el filtro de medida son CASILLAS, y marcar una manda el objeto entero", () => {
+  it("el filtro de medida son CASILLAS, quedan en un BORRADOR, y «Guardar» —dentro de la card de adb/emulator— manda el objeto entero", () => {
     // Eran cuatro botones «Se mira» al lado de un punto verde, y se leían como si
     // concedieran la capacidad: el verde ya dice que se puede usar. Y son las de ESTA
     // plataforma: apagar «iOS Sim» desde la pestaña de Android no se decide ahí.
+    //
+    // Y desde que «Guardar» vive DENTRO de la card de ajustes de adb/emulator, tocar una
+    // casilla YA NO manda nada por sí sola: escribe en un borrador, y el botón —una vez
+    // desplegada la card— es el único acto que guarda, para las casillas de LAS DOS
+    // pestañas a la vez.
     const alCambiarDispositivos = vi.fn();
     const panel = abrir({ ajustesDeDispositivos: { ios: false }, alCambiarDispositivos });
     const casillas = within(panel).getAllByRole("checkbox") as HTMLInputElement[];
     expect(casillas).toHaveLength(2);
     expect(casillas.map((c) => c.checked)).toEqual([true, true]);
     fireEvent.click(casillas[0]!);
-    expect(alCambiarDispositivos).toHaveBeenCalledWith({ ios: false, android: false });
-
+    expect(alCambiarDispositivos).not.toHaveBeenCalled();
+    // El borrador SOBREVIVE al cambio de pestaña: sigue siendo la MISMA sección.
     abrirPestana(panel, "iOS");
     const deIos = within(panel).getAllByRole("checkbox") as HTMLInputElement[];
     // Ausente = se busca; solo iOS está desmarcado, y la de su simulador no.
     expect(deIos.map((c) => c.checked)).toEqual([false, true]);
+
+    // «Guardar» solo vive en Android —es donde están adb/emulator—, así que hay que volver.
+    abrirPestana(panel, "Android");
+    fireEvent.click(within(requisitos(panel)).getByRole("button", { name: "Ajustes de ruta de adb" }));
+    fireEvent.click(within(panel).getByRole("button", { name: "Guardar" }));
+    expect(alCambiarDispositivos).toHaveBeenCalledTimes(1);
+    expect(alCambiarDispositivos).toHaveBeenCalledWith({ ios: false, android: false });
   });
 
   it("sin foto no se afirma nada de la máquina", () => {
@@ -1098,6 +1103,137 @@ describe("Ajustes: la sección de Dispositivos", () => {
     fireEvent.click(screen.getByRole("button", { name: "Dispositivos" }));
     for (const c of screen.getAllByRole("checkbox")) expect(c).toHaveProperty("disabled", true);
     expect(screen.getByRole("button", { name: /refrescar/i })).toHaveProperty("disabled", true);
+  });
+
+  it("«Abrir carpeta» solo se pinta con `ruta`, y manda el NOMBRE de la herramienta", () => {
+    const alAbrirCarpetaDeHerramienta = vi.fn();
+    const panel = abrir({
+      dispositivos: {
+        ...INFORME,
+        herramientas: [
+          { nombre: "adb" as const, plataforma: "android" as const, estado: "ok" as const, ruta: "/opt/sdk/platform-tools/adb" },
+          { nombre: "emulator" as const, plataforma: "android" as const, estado: "no-encontrada" as const },
+          { nombre: "xcrun" as const, plataforma: "ios" as const, estado: "ok" as const },
+          { nombre: "devicectl" as const, plataforma: "ios" as const, estado: "desactivada" as const },
+        ],
+      },
+      alAbrirCarpetaDeHerramienta,
+    });
+    // Despliega las DOS filas —adb y emulator llevan engranaje aunque a esta le falte—.
+    for (const boton of within(requisitos(panel)).getAllByRole("button", { name: /^Ajustes de ruta de/ })) {
+      fireEvent.click(boton);
+    }
+    // Solo adb tiene `ruta`: un solo botón, no dos.
+    const botones = within(requisitos(panel)).getAllByRole("button", { name: "Abrir carpeta" });
+    expect(botones).toHaveLength(1);
+    fireEvent.click(botones[0]!);
+    expect(alAbrirCarpetaDeHerramienta).toHaveBeenCalledWith("adb");
+  });
+
+  it("sin `alAbrirCarpetaDeHerramienta` no se ofrece el botón, aunque haya `ruta`", () => {
+    const panel = abrir({
+      dispositivos: {
+        ...INFORME,
+        herramientas: [{ nombre: "adb" as const, plataforma: "android" as const, estado: "ok" as const, ruta: "/opt/adb" }],
+      },
+    });
+    fireEvent.click(within(requisitos(panel)).getByRole("button", { name: /^Ajustes de ruta de/ }));
+    expect(within(requisitos(panel)).queryByRole("button", { name: "Abrir carpeta" })).toBeNull();
+    // Pero la ruta se sigue viendo, de solo lectura.
+    expect((within(requisitos(panel)).getByLabelText("Ruta actual de adb") as HTMLInputElement).value).toBe("/opt/adb");
+  });
+
+  it("el engranaje despliega «ruta actual» y «ruta personalizada», y se pliega al pulsar otra vez", () => {
+    const panel = abrir({
+      dispositivos: {
+        ...INFORME,
+        herramientas: [{ nombre: "adb" as const, plataforma: "android" as const, estado: "ok" as const, ruta: "/opt/sdk/adb" }],
+      },
+    });
+    const requisitosPanel = requisitos(panel);
+    expect(within(requisitosPanel).queryByLabelText("Ruta personalizada de adb")).toBeNull();
+    const engranaje = within(requisitosPanel).getByRole("button", { name: "Ajustes de ruta de adb" });
+    fireEvent.click(engranaje);
+    expect(within(requisitosPanel).getByLabelText("Ruta personalizada de adb")).toBeTruthy();
+    fireEvent.click(engranaje);
+    expect(within(requisitosPanel).queryByLabelText("Ruta personalizada de adb")).toBeNull();
+  });
+
+  /**
+   * **El aviso de cambios sin guardar.** Con un borrador sucio, cambiar de sección o cerrar
+   * Ajustes ya no es un acto directo: primero pregunta. «Cancelar» cierra SOLO el aviso —
+   * Ajustes se queda abierto, en Dispositivos, con el borrador intacto. La acción destructiva
+   * descarta el borrador y completa lo que estaba pendiente.
+   */
+  describe("cambios sin guardar", () => {
+    const conCambioSucio = (extra: Record<string, unknown> = {}) => {
+      const alCambiarDispositivos = vi.fn();
+      const panel = abrir({ ajustesDeDispositivos: {}, alCambiarDispositivos, ...extra });
+      fireEvent.click(within(panel).getAllByRole("checkbox")[0]!);
+      return { panel, alCambiarDispositivos };
+    };
+
+    // El `title` de `Modal` también deja algo con este texto para lectores de pantalla, así
+    // que la comprobación es por el ENCABEZADO del aviso (único), no por el texto suelto.
+    const avisoAbierto = () => screen.queryByRole("heading", { name: "Cambios sin guardar" }) !== null;
+
+    it("cambiar de sección con un borrador sucio abre el aviso, en vez de cambiar", () => {
+      conCambioSucio();
+      fireEvent.click(screen.getByRole("button", { name: "General" }));
+      expect(avisoAbierto()).toBe(true);
+      // Y no cambió de sección: el encabezado de Dispositivos sigue ahí.
+      expect(screen.getByRole("heading", { name: "Dispositivos", level: 2 })).toBeTruthy();
+    });
+
+    it("«Cancelar» cierra SOLO el aviso: Ajustes sigue abierto en Dispositivos, con el borrador", () => {
+      const { panel } = conCambioSucio();
+      const casillaTocada = within(panel).getAllByRole("checkbox")[0] as HTMLInputElement;
+      const estabaMarcada = casillaTocada.checked;
+      fireEvent.click(screen.getByRole("button", { name: "General" }));
+      fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+      expect(avisoAbierto()).toBe(false);
+      expect(screen.getByRole("heading", { name: "Dispositivos", level: 2 })).toBeTruthy();
+      // El borrador sigue como se dejó: no se perdió el clic de antes.
+      expect((within(panel).getAllByRole("checkbox")[0] as HTMLInputElement).checked).toBe(estabaMarcada);
+    });
+
+    it("la acción destructiva descarta el borrador y COMPLETA el cambio de sección pendiente", () => {
+      const { alCambiarDispositivos } = conCambioSucio();
+      fireEvent.click(screen.getByRole("button", { name: "General" }));
+      fireEvent.click(screen.getByRole("button", { name: "Descartar y continuar" }));
+      expect(avisoAbierto()).toBe(false);
+      // Cambió de sección de verdad: ya no se ve el encabezado de Dispositivos.
+      expect(screen.queryByRole("heading", { name: "Dispositivos", level: 2 })).toBeNull();
+      // Y el borrador se descartó: nunca se guardó nada.
+      expect(alCambiarDispositivos).not.toHaveBeenCalled();
+    });
+
+    it("cerrar Ajustes con un borrador sucio también avisa, y «Cancelar» no cierra", () => {
+      const alCerrar = vi.fn();
+      conCambioSucio({ alCerrar });
+      fireEvent.click(screen.getByRole("button", { name: "Cerrar ajustes" }));
+      expect(avisoAbierto()).toBe(true);
+      expect(alCerrar).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+      expect(alCerrar).not.toHaveBeenCalled();
+      expect(screen.getByRole("heading", { name: "Dispositivos", level: 2 })).toBeTruthy();
+    });
+
+    it("descartar y cerrar SÍ llama a `alCerrar`", () => {
+      const alCerrar = vi.fn();
+      conCambioSucio({ alCerrar });
+      fireEvent.click(screen.getByRole("button", { name: "Cerrar ajustes" }));
+      fireEvent.click(screen.getByRole("button", { name: "Descartar y continuar" }));
+      expect(alCerrar).toHaveBeenCalledTimes(1);
+    });
+
+    it("sin cambios, cambiar de sección o cerrar es directo: no hay nada que avisar", () => {
+      const alCerrar = vi.fn();
+      abrir({ ajustesDeDispositivos: {}, alCambiarDispositivos: () => {}, alCerrar });
+      fireEvent.click(screen.getByRole("button", { name: "General" }));
+      expect(avisoAbierto()).toBe(false);
+      expect(screen.queryByRole("heading", { name: "Dispositivos", level: 2 })).toBeNull();
+    });
   });
 });
 

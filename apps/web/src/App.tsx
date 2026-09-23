@@ -592,6 +592,10 @@ export function App({
     medio.addEventListener("change", alCambiar);
     return () => medio.removeEventListener("change", alCambiar);
   }, [apariencia]);
+  const alCambiarApariencia = (nueva: Apariencia): void => {
+    setApariencia(nueva);
+    guardarApariencia(nueva);
+  };
 
   /**
    * El proyecto para el que se está abriendo la ventana de sesión nueva.
@@ -1127,7 +1131,6 @@ export function App({
       // El listado del entorno ACTIVO, que es del único del que el cable trae proyectos.
       proyectos={estado.alta?.proyectos ?? []}
       {...(entornoActivo === "" ? {} : { entornoActivo })}
-      apariencia={apariencia}
       {...(estado.agentes === undefined ? {} : { agentes: estado.agentes })}
       {...(estado.skills === undefined ? {} : { skills: estado.skills })}
       {...(estado.cuerposDeSkill === undefined ? {} : { cuerposDeSkill: estado.cuerposDeSkill })}
@@ -1198,10 +1201,6 @@ export function App({
       // La pregunta oculta en vuelo se pinta DENTRO de la fila que se está editando; por
       // eso el centro deja de pintarla mientras la ventana está abierta (más abajo).
       {...(estado.secreto === undefined ? {} : { secreto: estado.secreto.pregunta })}
-      alCambiarApariencia={(nueva) => {
-        setApariencia(nueva);
-        guardarApariencia(nueva);
-      }}
       // La misma foto y los mismos ajustes que el escritorio: es la máquina, una sola para
       // todos los clientes. Ausentes mientras no lleguen — no se afirma un equipo vacío.
       {...(estado.dispositivos === undefined ? {} : { dispositivos: estado.dispositivos })}
@@ -1215,6 +1214,9 @@ export function App({
       // servidor con su tabla cerrada. Y detrás vuelve a medir, así que la foto nueva es
       // la que dice si la herramienta apareció.
       alInstalarHerramienta={(herramienta) => void enviar({ clase: "dispositivos", instalar: herramienta })}
+      // Abre una carpeta en el sistema donde corre la consola. No remide ni cambia ningún
+      // estado, así que no hay nada que esperar por el cable.
+      alAbrirCarpetaDeHerramienta={(herramienta) => void enviar({ clase: "dispositivos", abrirRuta: herramienta })}
       // Verificar es su propio mensaje y NO vuelve a medir: la verificación vive dentro de
       // la foto, así que una medida nueva se llevaría la que se acaba de hacer.
       alVerificarDispositivo={(id) => void enviar({ clase: "conexion", id })}
@@ -1493,6 +1495,8 @@ export function App({
       panelAbierto={vistaDelPanel !== undefined}
       alAlternarPanel={alternarPanel}
       alAbrirAjustes={() => abrirAjustes()}
+      apariencia={apariencia}
+      alCambiarApariencia={alCambiarApariencia}
       // La marca lleva al escritorio, y solo desde la sesión: en el escritorio ya estás.
       alIrAlEscritorio={() => setEnEscritorio(true)}
     />
@@ -1503,6 +1507,8 @@ export function App({
       barraContraida={reparto.barra === "plegada"}
       alAlternarBarra={alternarBarra}
       alAbrirAjustes={() => abrirAjustes()}
+      apariencia={apariencia}
+      alCambiarApariencia={alCambiarApariencia}
     />
   );
 

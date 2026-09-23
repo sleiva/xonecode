@@ -228,6 +228,40 @@ describe("Receta", () => {
     expect(cancelar).toHaveBeenCalled();
   });
 
+  it("mientras corre y AÚN no hay ninguna línea, no se pinta la caja del log", () => {
+    // Medido en pantalla: a los 0 s, con `lineas: []`, la caja vacía —con su borde y su
+    // fondo, pero sin una letra dentro— se leía como una barra de progreso que no avanza
+    // nada. El giro de arriba ya dice que sigue en marcha; la caja solo tiene sentido con
+    // algo que enseñar.
+    // Sin `aparte`, para que el único `<pre>` de partida sea el de los comandos del paso —el
+    // recuento no depende de una pieza de la receta que no tiene nada que ver con el log.
+    const { aparte: _, ...sinAparte } = RECETA;
+    const { container } = render(
+      <Receta
+        receta={{ ...sinAparte, pasos: [PASO_EJECUTABLE] }}
+        alEjecutar={vi.fn()}
+        instalacion={{ receta: "android-emulador", paso: 1, titulo: "Descargando", estado: "corriendo", lineas: [], ms: 0 }}
+      />
+    );
+    expect(screen.getByText(/Descargando/)).toBeTruthy();
+    // Un solo `<pre>`: el de los comandos, que SIEMPRE se pinta. El del log no, porque no
+    // hay ninguna línea que enseñar todavía.
+    expect(container.querySelectorAll("pre")).toHaveLength(1);
+  });
+
+  it("y en cuanto llega la primera línea, la caja del log aparece", () => {
+    const { aparte: _, ...sinAparte } = RECETA;
+    const { container } = render(
+      <Receta
+        receta={{ ...sinAparte, pasos: [PASO_EJECUTABLE] }}
+        alEjecutar={vi.fn()}
+        instalacion={{ receta: "android-emulador", paso: 1, titulo: "Descargando", estado: "corriendo", lineas: ["58%"], ms: 3_000 }}
+      />
+    );
+    expect(container.querySelectorAll("pre")).toHaveLength(2);
+    expect(screen.getByText("58%")).toBeTruthy();
+  });
+
   it("el log de OTRO paso no se pinta en este", () => {
     // El estado es uno para toda la máquina: sin comprobar el número, el log del paso 3
     // aparecería también bajo el 4.

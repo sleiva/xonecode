@@ -16,6 +16,9 @@ import {
   recetaDeSimuladorIos,
   parsearRuntimesDeIos,
   motivoDeSimctl,
+  URL_PLATFORM_TOOLS_WINDOWS,
+  URL_JDK_WINDOWS,
+  URL_CMDLINE_TOOLS_WINDOWS,
 } from "./dispositivos.js";
 
 describe("sistemaDe", () => {
@@ -253,12 +256,11 @@ describe("alcanzables", () => {
 });
 
 describe("recetaDeEmuladorAndroid", () => {
-  const nada = { brew: false, sdkmanager: false, emulator: false, jdk: false, avds: [] as string[] };
+  const nada = { brew: false, adb: false, sdkmanager: false, emulator: false, jdk: false, avds: [] as string[] };
 
-  it("en un sistema que no es macOS todavía no hay receta, y no se finge una", () => {
-    // Windows y Linux son otra receta —otros gestores, otras rutas— y escribir la de macOS
-    // con otro título sería el botón muerto de siempre. Se dirá que falta.
-    expect(recetaDeEmuladorAndroid("win32", nada)).toBeUndefined();
+  it("en Linux todavía no hay receta, y no se finge una", () => {
+    // Linux es otra receta —otros gestores, otras rutas— y escribir la de macOS con otro
+    // título sería el botón muerto de siempre. Se dirá que falta.
     expect(recetaDeEmuladorAndroid("linux", nada)).toBeUndefined();
   });
 
@@ -286,7 +288,7 @@ describe("recetaDeEmuladorAndroid", () => {
     expect(conSdk.pasos[1]!.hecho).toBe(false); // pero el emulador todavía no
 
     const conTodo = recetaDeEmuladorAndroid("darwin", {
-      brew: true, sdkmanager: true, emulator: true, jdk: true, avds: ["pixel8"],
+      brew: true, adb: true, sdkmanager: true, emulator: true, jdk: true, avds: ["pixel8"],
     })!;
     expect(conTodo.pasos.map((p) => p.hecho)).toEqual([true, true, true]);
     expect(conTodo.completa).toBe(true);
@@ -384,7 +386,7 @@ describe("recetaDeEmuladorAndroid", () => {
     // La excepción es el paso de la imagen: volver a pedirla no es instalar lo mismo, es
     // subir de versión, y sin ella no quedaría ninguna vía de actualizar.
     const todo = recetaDeEmuladorAndroid("darwin", {
-      brew: true, sdkmanager: true, emulator: true, jdk: true, avds: ["pixel8"],
+      brew: true, adb: true, sdkmanager: true, emulator: true, jdk: true, avds: ["pixel8"],
     })!;
     expect(todo.pasos[0]!.hecho).toBe(true);
     expect(todo.pasos[0]!.repetir).toBeUndefined();
@@ -394,6 +396,80 @@ describe("recetaDeEmuladorAndroid", () => {
     // Y el motivo acompaña al nombre: un botón sobre un paso hecho, sin él, se lee como el
     // error de antes al revés.
     expect(todo.pasos[2]!.repetir).toBeUndefined();
+  });
+});
+
+describe("recetaDeEmuladorAndroid — Windows", () => {
+  const nada = { brew: false, adb: false, sdkmanager: false, emulator: false, jdk: false, avds: [] as string[] };
+
+  it("de cero, los cinco pasos y ninguno hecho, y los tres primeros SIEMPRE ejecutables", () => {
+    // A diferencia de macOS, donde el paso 1 necesita Homebrew: aquí los tres primeros son
+    // descargas y solo dependen de la red, así que no hace falta nada instalado antes.
+    const receta = recetaDeEmuladorAndroid("win32", nada)!;
+    expect(receta.id).toBe("android-emulador");
+    expect(receta.plataforma).toBe("android");
+    expect(receta.pasos).toHaveLength(5);
+    expect(receta.pasos.map((p) => p.hecho)).toEqual([false, false, false, false, false]);
+    expect(receta.pasos.slice(0, 3).map((p) => p.ejecutable)).toEqual([true, true, true]);
+    expect(receta.completa).toBe(false);
+  });
+
+  it("los pasos 4 y 5 dependen de que el 3 (y el 2, el JDK) estén hechos, igual que en macOS", () => {
+    const sinNada = recetaDeEmuladorAndroid("win32", nada)!;
+    expect(sinNada.pasos[3]!.ejecutable).toBe(false);
+    expect(sinNada.pasos[3]!.porQueNo).toMatch(/paso 3/);
+    expect(sinNada.pasos[4]!.ejecutable).toBe(false);
+
+    const conHerramientas = recetaDeEmuladorAndroid("win32", { ...nada, sdkmanager: true, jdk: true })!;
+    expect(conHerramientas.pasos[3]!.ejecutable).toBe(true);
+    expect(conHerramientas.pasos[4]!.ejecutable).toBe(false);
+    expect(conHerramientas.pasos[4]!.porQueNo).toMatch(/paso 4/);
+
+    const conImagen = recetaDeEmuladorAndroid("win32", { ...nada, sdkmanager: true, jdk: true, emulator: true })!;
+    expect(conImagen.pasos[4]!.ejecutable).toBe(true);
+  });
+
+  it("`adb` es su PROPIO paso, hecho por su propio campo — no comparte marca con sdkmanager", () => {
+    const conAdb = recetaDeEmuladorAndroid("win32", { ...nada, adb: true })!;
+    expect(conAdb.pasos[0]!.hecho).toBe(true);
+    expect(conAdb.pasos[1]!.hecho).toBe(false);
+    expect(conAdb.pasos[2]!.hecho).toBe(false);
+  });
+
+  it("todo hecho: completa, y sin comandos que ejecuten adb.exe directamente (son PowerShell de descarga)", () => {
+    const todo = recetaDeEmuladorAndroid("win32", {
+      brew: false, adb: true, sdkmanager: true, emulator: true, jdk: true, avds: ["pixel8"],
+    })!;
+    expect(todo.pasos.map((p) => p.hecho)).toEqual([true, true, true, true, true]);
+    expect(todo.completa).toBe(true);
+  });
+
+  it("ningún comando lleva una ruta EXPANDIDA de la máquina: solo variables de entorno como token", () => {
+    // La misma regla que en macOS con `$(brew --prefix)`: `$env:LOCALAPPDATA` es una
+    // referencia que resuelve el propio PowerShell al pegarlo, nunca una ruta ya expandida
+    // con el nombre de la cuenta.
+    const receta = recetaDeEmuladorAndroid("win32", nada)!;
+    const todo = [...receta.pasos.flatMap((p) => p.comandos), ...(receta.aparte?.comandos ?? [])].join("\n");
+    expect(todo).not.toMatch(/C:\\Users\\[^$]/);
+    expect(todo).toContain("$env:LOCALAPPDATA");
+  });
+
+  it("el `.bat` de sdkmanager/avdmanager, y las URLs fijadas de las tres descargas", () => {
+    const receta = recetaDeEmuladorAndroid("win32", nada)!;
+    expect(receta.pasos[3]!.comandos.join(" ")).toContain("sdkmanager.bat");
+    expect(receta.pasos[4]!.comandos.join(" ")).toContain("avdmanager.bat");
+    expect(receta.pasos[0]!.comandos.join(" ")).toContain(URL_PLATFORM_TOOLS_WINDOWS);
+    expect(receta.pasos[1]!.comandos.join(" ")).toContain(URL_JDK_WINDOWS);
+    expect(receta.pasos[2]!.comandos.join(" ")).toContain(URL_CMDLINE_TOOLS_WINDOWS);
+  });
+
+  it("el paso 4 acepta licencias y ofrece «Actualizar», igual que su equivalente de macOS", () => {
+    const receta = recetaDeEmuladorAndroid("win32", nada)!;
+    expect(receta.pasos[3]!.acepta).toMatch(/licencias del SDK de Android/i);
+    const todo = recetaDeEmuladorAndroid("win32", {
+      brew: false, adb: true, sdkmanager: true, emulator: true, jdk: true, avds: ["pixel8"],
+    })!;
+    expect(todo.pasos[3]!.repetir!.etiqueta).toBe("Actualizar");
   });
 });
 

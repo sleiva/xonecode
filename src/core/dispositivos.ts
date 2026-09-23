@@ -38,7 +38,12 @@ export interface Herramienta {
    * — y es la única de las tres que se arregla con un clic.
    */
   estado: "ok" | "no-encontrada" | "fallo" | "no-aplica" | "desactivada";
-  /** Dónde se encontró, cuando se encontró. */
+  /**
+   * Dónde se encontró, cuando se encontró. **Cruza el cable ENTERA solo para `adb` y
+   * `emulator`** — la segunda excepción declarada a `sinRutas`, igual que
+   * `Settings.workspace` (sin abreviar con `~`: se probó para el workspace y se descartó).
+   * Para `xcrun`/`devicectl` se queda en el host, como hasta ahora.
+   */
   ruta?: string;
   /**
    * Cómo se instala, cuando falta y se sabe cómo. **El comando no puede llevar ninguna ruta
@@ -257,8 +262,15 @@ export interface Receta {
 
 /** Lo medido que decide qué pasos están hechos. Entra ya resuelto: esto es `core/`. */
 export interface EstadoDeAndroid {
-  /** ¿Hay `brew`? Sin él la receta se puede leer igual, pero el primer paso no valdrá. */
+  /** ¿Hay `brew`? Sin él la receta se puede leer igual, pero el primer paso no valdrá.
+   *  Solo lo usa la receta de macOS. */
   brew: boolean;
+  /**
+   * ¿Hay `adb`? En macOS lo trae el mismo cask que `sdkmanager`, así que no hacía falta
+   * aparte; en Windows es su PROPIO paso (una descarga independiente de las demás), y sin
+   * este campo ese paso no tendría de qué `hecho` colgarse.
+   */
+  adb: boolean;
   sdkmanager: boolean;
   emulator: boolean;
   /** Un JDK con el que correr `sdkmanager`, que es un programa Java. */
@@ -267,17 +279,43 @@ export interface EstadoDeAndroid {
 }
 
 /**
- * La receta del emulador de Android en macOS.
+ * Las URLs de descarga de la receta de Windows, fijadas a mano y verificadas en vivo
+ * (2026-09-22): `platform-tools-latest-windows.zip` y la API de Adoptium son alias
+ * ESTABLES que Google/Adoptium mantienen sin cambiar nunca — los usan incontables scripts
+ * de CI. Las «command line tools» del SDK NO tienen alias estable (el número de build
+ * cambia de vez en cuando): se fija a mano, igual que ya está fijada a mano la imagen de
+ * sistema `system-images;android-35;…` de abajo. Si Google la retira, el paso de descarga
+ * falla con un mensaje claro (no en silencio) y esto se bump a mano cuando toque.
+ */
+export const URL_PLATFORM_TOOLS_WINDOWS = "https://dl.google.com/android/repository/platform-tools-latest-windows.zip";
+export const URL_JDK_WINDOWS = "https://api.adoptium.net/v3/binary/latest/17/ga/windows/x64/jdk/hotspot/normal/eclipse";
+export const URL_CMDLINE_TOOLS_WINDOWS = "https://dl.google.com/android/repository/commandlinetools-win-15859902_latest.zip";
+
+/** La imagen de sistema del AVD de Windows: el caso común es un procesador x86_64 — límite
+ *  declarado, como el `arm64-v8a` de macOS lo es para Apple Silicon. */
+const IMAGEN_DE_SISTEMA_WINDOWS = "system-images;android-35;google_apis;x86_64";
+
+/**
+ * La receta del emulador de Android, en macOS o en Windows.
  *
- * **Solo macOS, y a propósito.** En Windows y en Linux los gestores y las rutas son otros,
- * así que serán otra receta; devolver esta con otro título sería el botón muerto de siempre,
- * y el panel prefiere decir que aún no la hay.
+ * **Solo estos dos, y a propósito.** En Linux los gestores y las rutas son otros, así que
+ * sería otra receta; devolver esta con otro título sería el botón muerto de siempre, y el
+ * panel prefiere decir que aún no la hay.
  *
  * Sale de los pasos que el usuario verificó a mano en su máquina, no de la documentación.
+ * Los de macOS, en su propia sección (`recetaMacOs`); los de Windows en `recetaWindows`, con
+ * la MISMA forma pero un mecanismo de instalación distinto: macOS tiene Homebrew para
+ * instalar TODO de un tirón; Windows no tiene un gestor equivalente para esto, así que cada
+ * pieza (adb, el JDK, las herramientas del SDK) se descarga por su cuenta — de ahí que
+ * Windows tenga cinco pasos donde macOS tiene tres.
  */
 export function recetaDeEmuladorAndroid(plataforma: string, estado: EstadoDeAndroid): Receta | undefined {
-  if (plataforma !== "darwin") return undefined;
+  if (plataforma === "darwin") return recetaMacOs(estado);
+  if (plataforma === "win32") return recetaWindows(estado);
+  return undefined;
+}
 
+function recetaMacOs(estado: EstadoDeAndroid): Receta {
   // Lo que xonecode puede lanzar él necesita las herramientas del paso 1: el binario y el
   // JDK con el que corre. Sin ellos el botón no se ofrece y se dice por qué — un botón que
   // no puede cumplir es el botón muerto de siempre.
@@ -371,6 +409,108 @@ export function recetaDeEmuladorAndroid(plataforma: string, estado: EstadoDeAndr
     },
     // Arrancar un emulador es un proceso de vida larga y otra capacidad; hoy no está
     // cableado, así que se da el comando en vez de prometer un botón.
+    despues:
+      "Con el AVD creado aparece abajo, en «Simuladores y emuladores», con su botón de " +
+      "«Arrancar»: se lanza desde aquí y la fila se pone en verde cuando el aparato responde. " +
+      "A mano sería `emulator -avd pixel8`, que es lo mismo que hace ese botón.",
+  };
+}
+
+/**
+ * La receta del emulador de Android en Windows.
+ *
+ * **Cinco pasos y no tres**: Homebrew instala el JDK, las herramientas del SDK y `adb` de un
+ * tirón; en Windows no hay un gestor equivalente para esto, así que cada pieza se descarga
+ * por su cuenta —de ahí los tres primeros pasos, uno por descarga—. Los dos últimos son el
+ * mismo `sdkmanager`/`avdmanager` que en macOS, solo que en `.bat` y con la imagen de
+ * sistema `x86_64` en vez de `arm64-v8a` (el caso común en un PC, no en Apple Silicon).
+ *
+ * Los tres primeros son SIEMPRE ejecutables (solo dependen de la red); los dos últimos
+ * necesitan que `sdkmanager`/`avdmanager` existan, que es lo que trae el paso 3 —igual que
+ * en macOS, donde los pasos 2 y 3 dependen del 1.
+ */
+function recetaWindows(estado: EstadoDeAndroid): Receta {
+  const puedeLanzar = estado.sdkmanager && estado.jdk;
+
+  const pasos: PasoDeReceta[] = [
+    {
+      titulo: "Descargar adb (platform-tools)",
+      comandos: [
+        `Invoke-WebRequest "${URL_PLATFORM_TOOLS_WINDOWS}" -OutFile "$env:TEMP\\platform-tools.zip"`,
+        'Expand-Archive "$env:TEMP\\platform-tools.zip" "$env:LOCALAPPDATA\\Android\\Sdk" -Force',
+      ],
+      nota: "Son 8 MB. Puedes pegarlo en PowerShell o dejar que lo haga XOneCode.",
+      hecho: estado.adb,
+      ejecutable: true,
+    },
+    {
+      titulo: "Descargar el JDK",
+      comandos: [
+        `Invoke-WebRequest "${URL_JDK_WINDOWS}" -OutFile "$env:TEMP\\jdk.zip"`,
+        'Expand-Archive "$env:TEMP\\jdk.zip" "$env:LOCALAPPDATA\\Android" -Force',
+        '# Renombra la carpeta que trae el zip (con la versión en el nombre) a "jdk17"',
+      ],
+      nota: "Son unos 190 MB. Puedes pegarlo en PowerShell o dejar que lo haga XOneCode.",
+      hecho: estado.jdk,
+      ejecutable: true,
+    },
+    {
+      titulo: "Descargar las herramientas del SDK",
+      comandos: [
+        `Invoke-WebRequest "${URL_CMDLINE_TOOLS_WINDOWS}" -OutFile "$env:TEMP\\cmdline-tools.zip"`,
+        'Expand-Archive "$env:TEMP\\cmdline-tools.zip" "$env:LOCALAPPDATA\\Android\\Sdk\\cmdline-tools" -Force',
+        '# Renombra la carpeta "cmdline-tools" que trae el zip a "latest": sdkmanager exige esa ruta.',
+      ],
+      nota: "Son 156 MB. Puedes pegarlo en PowerShell o dejar que lo haga XOneCode.",
+      hecho: estado.sdkmanager,
+      ejecutable: true,
+    },
+    {
+      titulo: "Descargar el emulador y la imagen del sistema",
+      comandos: [`sdkmanager.bat --install "platform-tools" "emulator" "platforms;android-35" "${IMAGEN_DE_SISTEMA_WINDOWS}"`],
+      nota: "Son 2-3 GB. Puedes pegarlo en PowerShell o dejar que lo haga XOneCode.",
+      hecho: estado.emulator,
+      ejecutable: puedeLanzar,
+      ...(puedeLanzar ? {} : { porQueNo: "hace falta el paso 3 (y el 2, para el JDK con el que corre sdkmanager)" }),
+      repetir: {
+        etiqueta: "Actualizar",
+        porQue:
+          "volver a pedirlo sube de versión lo que ya está: `sdkmanager --install` sobre un paquete instalado lo actualiza",
+      },
+      acepta: "las licencias del SDK de Android de Google",
+    },
+    {
+      titulo: "Crear el dispositivo virtual",
+      comandos: [`avdmanager.bat create avd -n pixel8 -k "${IMAGEN_DE_SISTEMA_WINDOWS}" -d pixel_8`],
+      nota: "Si lo pegas en PowerShell y pregunta por un perfil de hardware, responde `no`.",
+      hecho: estado.avds.length > 0,
+      ejecutable: puedeLanzar && estado.emulator,
+      ...(puedeLanzar && estado.emulator ? {} : { porQueNo: puedeLanzar ? "hazlo después del paso 4" : "hace falta el paso 3" }),
+    },
+  ];
+
+  return {
+    id: "android-emulador",
+    plataforma: "android",
+    titulo: "Instalar el emulador de Android",
+    descripcion:
+      "Cinco pasos, una vez por máquina. Los comandos se pegan en PowerShell; cada paso se " +
+      "marca solo cuando la medida lo encuentra, no cuando lo pulsas.",
+    pasos,
+    completa: pasos.every((p) => p.hecho),
+    aparte: {
+      titulo: "Declarar las variables en tu perfil de PowerShell",
+      comandos: [
+        'setx ANDROID_HOME "$env:LOCALAPPDATA\\Android\\Sdk"',
+        'setx JAVA_HOME "$env:LOCALAPPDATA\\Android\\jdk17"',
+        'setx PATH "$env:PATH;$env:LOCALAPPDATA\\Android\\Sdk\\platform-tools;$env:LOCALAPPDATA\\Android\\Sdk\\emulator"',
+      ],
+      nota:
+        "Y luego abre una terminal nueva. XOneCode NO lo necesita —ya mira estas rutas fijas " +
+        "para encontrar el SDK y el JDK—: esto es para que `emulator` y `adb` te funcionen en " +
+        "tu terminal. No es un paso: no se mide, no se lanza desde aquí y la receta no espera " +
+        "a que lo hagas.",
+    },
     despues:
       "Con el AVD creado aparece abajo, en «Simuladores y emuladores», con su botón de " +
       "«Arrancar»: se lanza desde aquí y la fila se pone en verde cuando el aparato responde. " +

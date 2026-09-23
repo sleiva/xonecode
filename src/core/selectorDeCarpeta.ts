@@ -23,6 +23,7 @@
  * Esta parte es pura: compone el comando y lee su salida. Lanzarlo es de
  * `agent/config/selectorEnMaquina.ts`.
  */
+import { posix, win32 } from "node:path";
 
 /** Lo que tarda un diálogo en contestar lo pone una persona, así que el tope es largo: solo
  *  existe para que un diálogo que nadie cierra no deje un proceso vivo para siempre. */
@@ -91,4 +92,29 @@ export function comandoDelSelector(plataforma: string, desde?: string): ComandoD
 export function carpetaDeLaSalida(salida: string): string | undefined {
   const limpia = salida.trim().replace(/\/+$/, "");
   return limpia.startsWith("/") ? limpia : undefined;
+}
+
+/**
+ * El comando que abre, en el explorador de ficheros del sistema, la carpeta que CONTIENE
+ * `ruta` — pensado para «enséñame dónde está este binario», no para elegir una carpeta.
+ *
+ * Los tres sistemas, sin lista cerrada que devuelva ausente: a diferencia del selector de
+ * arriba, `explorer.exe`/`open`/`xdg-open` existen en cualquier Windows, macOS o Linux de
+ * escritorio, así que no hace falta un tercer estado «este sistema no tiene».
+ *
+ * `dirname` y no `ruta` tal cual: `ruta` apunta al BINARIO (`…\platform-tools\adb.exe`), y
+ * lo que el botón promete es enseñar dónde vive, no intentar «ejecutar» la carpeta.
+ *
+ * **El `dirname` es el de `plataforma`, no el de este proceso.** `node:path` por omisión
+ * resuelve al del sistema donde CORRE el test, y una ruta de Windows partida con el
+ * `dirname` POSIX de un runner Linux/Mac no encuentra ninguna barra que cortar —
+ * `npm test` tiene que poder probar los tres sistemas desde uno solo.
+ *
+ * Pura: compone el comando. Lanzarlo es de `agent/config/selectorEnMaquina.ts`.
+ */
+export function comandoParaAbrirCarpeta(plataforma: string, ruta: string): ComandoDeSelector {
+  const carpeta = (plataforma === "win32" ? win32 : posix).dirname(ruta);
+  if (plataforma === "win32") return { programa: "explorer.exe", argumentos: [carpeta] };
+  if (plataforma === "darwin") return { programa: "open", argumentos: [carpeta] };
+  return { programa: "xdg-open", argumentos: [carpeta] };
 }

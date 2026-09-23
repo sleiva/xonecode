@@ -786,6 +786,38 @@ describe("la foto de la máquina («dispositivos»)", () => {
     expect(foto.recetas[0]!.pasos[0]!.repetir).toEqual({ etiqueta: "Actualizar", porQue: "lo sube de versión" });
   });
 
+  it("la `ruta` de adb/emulator llega al store: sin nombrarla en la lista blanca, «ok» salía con «no encontrada» al lado", () => {
+    // Quinta vez por lo mismo: la `ruta` se declaró en `tipos.ts` como la excepción a
+    // `sinRutas` para adb/emulator, la ventana la usa para «ruta actual» y «Abrir carpeta»,
+    // pero esta lista blanca no la nombraba — así que la herramienta salía en verde («ok»)
+    // con la ruta a «no encontrada», la contradicción que ese campo existe para evitar.
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "dispositivos",
+      informe: {
+        sistema: "mac",
+        medido: "2026-09-07T10:00:00.000Z",
+        herramientas: [
+          { nombre: "adb", plataforma: "android", estado: "ok", ruta: "/Users/ana/Library/Android/sdk/platform-tools/adb" },
+          // xcrun se queda en el host: sin `ruta` aquí, y eso también hay que comprobarlo.
+          { nombre: "xcrun", plataforma: "ios", estado: "ok" },
+        ],
+        dispositivos: [],
+        avds: [],
+        recetas: [],
+      },
+      ajustes: {},
+    });
+    const foto = s.leer().dispositivos!;
+    expect(foto.herramientas[0]).toEqual({
+      nombre: "adb",
+      plataforma: "android",
+      estado: "ok",
+      ruta: "/Users/ana/Library/Android/sdk/platform-tools/adb",
+    });
+    expect(foto.herramientas[1]!.ruta).toBeUndefined();
+  });
+
   it("una receta SIN `aparte` no lo inventa: la de iOS no tiene ninguno", () => {
     // Ausente ≠ vacío: un `aparte` de mentira le pintaría a iOS una sección en blanco.
     const s = crearStoreDelCliente();

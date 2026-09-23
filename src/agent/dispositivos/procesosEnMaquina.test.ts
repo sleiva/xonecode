@@ -12,6 +12,7 @@ import { EventEmitter } from "node:events";
 import {
   crearEjecutor,
   motivoDelCodigo,
+  necesitaShell,
   TOPE_DE_TRABAJO_MS,
   TOPE_SIN_SALIDA_MS,
   unaLinea,
@@ -259,5 +260,25 @@ describe("las dos frases que sí se comparten", () => {
     // señal— esta frase sale tal cual, «terminó con código null», y es lo que decían los dos
     // módulos antes de compartir el ejecutor. Se deja como estaba: cambiarla es otra decisión.
     expect(motivoDelCodigo(1, "")).toBe("terminó con código 1");
+  });
+});
+
+describe("necesitaShell", () => {
+  /**
+   * Medido en la máquina del usuario: `spawn("…\\sdkmanager.bat", args)` sin `shell: true`
+   * revienta con «spawn EINVAL» en vez de arrancar. Node cerró la inyección de comandos por
+   * `.bat`/`.cmd` (CVE-2024-27980) exigiendo `shell: true` para lanzarlos directamente en
+   * Windows — así que esto es la comprobación de LA MISMA condición que decide si `lanzarReal`
+   * se lo da, sin lanzar un proceso de verdad.
+   */
+  it("solo en Windows, y solo para `.bat`/`.cmd`: ni para `.exe` ni para un binario sin extensión", () => {
+    expect(necesitaShell("C:\\Sdk\\cmdline-tools\\latest\\bin\\sdkmanager.bat", "win32")).toBe(true);
+    expect(necesitaShell("C:\\Sdk\\cmdline-tools\\latest\\bin\\avdmanager.bat", "win32")).toBe(true);
+    expect(necesitaShell("algo.CMD", "win32")).toBe(true); // sin distinguir mayúsculas
+    expect(necesitaShell("C:\\Sdk\\platform-tools\\adb.exe", "win32")).toBe(false);
+    expect(necesitaShell("/opt/homebrew/bin/brew", "darwin")).toBe(false);
+    // Y ni siquiera un `.bat` fuera de Windows: ahí Node no impone esta restricción y `shell:
+    // true` solo añadiría una capa de interpretación que no hace falta.
+    expect(necesitaShell("./script.bat", "linux")).toBe(false);
   });
 });

@@ -1,12 +1,14 @@
 import { describe, it, expect } from "vitest";
 import type { Dispositivo } from "../../core/dispositivos.js";
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 import {
   describirFallo,
   detectarDispositivos,
   frameworkEnDispositivo,
   instalarHerramientaDeDispositivos,
   verificarDispositivo,
+  jdkDeLaMaquina,
+  localizadorDeAndroid,
   TOPES_MS,
   type DependenciasDeDeteccion,
   type Ejecucion,
@@ -48,6 +50,55 @@ describe("detectarDispositivos", () => {
     ]);
     expect(informe.dispositivos).toEqual([]);
     // Ni un proceso lanzado: sin binario no hay a quién preguntar, y en Windows xcrun no se intenta.
+    expect(llamadas).toEqual([]);
+  });
+
+  it("con `rutaAdb`/`rutaEmulator` puestas y existentes, se usan DIRECTO —ni PATH ni SDK—", async () => {
+    const { ejecutar, llamadas } = ejecutorDe({
+      "/opt/a-mano/adb devices": salida("List of devices attached\n"),
+      "/opt/a-mano/emulator": salida(""),
+    });
+    const informe = await detectarDispositivos(
+      {
+        plataforma: "darwin",
+        entorno: { PATH: "/bin" }, // adb/emulator NO están aquí: si se buscara por PATH, fallaría.
+        home: "/Users/yo",
+        existe: (r) => r === "/opt/a-mano/adb" || r === "/opt/a-mano/emulator",
+        ejecutar,
+      },
+      { ios: false, iosSimulador: false, rutaAdb: " /opt/a-mano/adb ", rutaEmulator: "/opt/a-mano/emulator" }
+    );
+    expect(informe.herramientas.map((h) => [h.nombre, h.estado, h.ruta])).toEqual([
+      ["adb", "ok", "/opt/a-mano/adb"],
+      ["emulator", "ok", "/opt/a-mano/emulator"],
+      ["xcrun", "desactivada", undefined],
+      ["devicectl", "desactivada", undefined],
+    ]);
+    expect(llamadas.map((l) => l.binario)).toEqual(["/opt/a-mano/adb", "/opt/a-mano/emulator"]);
+  });
+
+  it("con `rutaAdb`/`rutaEmulator` puestas pero que NO existen, «no-encontrada» con la ruta en el detalle y sin oferta de instalar", async () => {
+    const { ejecutar, llamadas } = ejecutorDe({});
+    const informe = await detectarDispositivos(
+      {
+        plataforma: "darwin",
+        entorno: { PATH: "/bin" },
+        home: "/Users/yo",
+        existe: () => false,
+        ejecutar,
+      },
+      { ios: false, iosSimulador: false, rutaAdb: "/no/existe/adb", rutaEmulator: "/no/existe/emulator" }
+    );
+    const adb = informe.herramientas.find((h) => h.nombre === "adb")!;
+    const emulator = informe.herramientas.find((h) => h.nombre === "emulator")!;
+    expect(adb.estado).toBe("no-encontrada");
+    expect(adb.detalle).toBe("la ruta configurada no existe: /no/existe/adb");
+    expect(adb.instalar).toBeUndefined();
+    expect(emulator.estado).toBe("no-encontrada");
+    expect(emulator.detalle).toBe("la ruta configurada no existe: /no/existe/emulator");
+    expect(emulator.instalar).toBeUndefined();
+    // Ni una búsqueda por PATH/SDK: la ruta a mano manda, y no existe, así que no hay nada
+    // que ejecutar.
     expect(llamadas).toEqual([]);
   });
 
@@ -233,8 +284,8 @@ describe("detectarDispositivos", () => {
   });
 
   it("en Windows busca `adb.exe` en el PATH y luego en `%LOCALAPPDATA%\\Android\\Sdk`", async () => {
-    const sdk = join("C:\\Users\\yo\\AppData\\Local", "Android", "Sdk");
-    const adb = join(sdk, "platform-tools", "adb.exe");
+    const sdk = win32.join("C:\\Users\\yo\\AppData\\Local", "Android", "Sdk");
+    const adb = win32.join(sdk, "platform-tools", "adb.exe");
     const { ejecutar, llamadas } = ejecutorDe({ "adb.exe": salida("List of devices attached\nABC device model:Pixel_8\n") });
     const informe = await detectarDispositivos({
       plataforma: "win32",
@@ -398,11 +449,11 @@ describe("detectarDispositivos", () => {
     expect(informe.herramientas.find((h) => h.nombre === "adb")!.estado).toBe("ok");
   });
 
-  it("la receta del emulador viaja con el informe, y en Windows no se inventa ninguna", async () => {
+  it("la receta del emulador viaja con el informe, en macOS con SUS dos y en Windows con la del emulador", async () => {
     const { ejecutar } = ejecutorDe({ "xcode-select": new Error("no") });
     const deps = (plataforma: string): DependenciasDeDeteccion => ({
       plataforma,
-      entorno: { PATH: "/usr/bin", Path: "C:\\W" },
+      entorno: { PATH: "/usr/bin", Path: "C:\\W", LOCALAPPDATA: "C:\\Users\\yo\\AppData\\Local" },
       home: "/Users/yo",
       existe: () => false,
       ejecutar,
@@ -415,8 +466,12 @@ describe("detectarDispositivos", () => {
     expect(mac.recetas.every((r) => !r.completa)).toBe(true);
     expect(JSON.stringify(mac.recetas)).not.toContain("/Users/yo");
 
+    // En Windows hay receta del emulador —ya no se dice que falta sin más—, pero SIGUE sin
+    // haber la de iOS: los simuladores de iOS los da Xcode, que no existe fuera de macOS.
     const win = await detectarDispositivos(deps("win32"));
-    expect(win.recetas).toEqual([]);
+    expect(win.recetas.map((r) => r.id)).toEqual(["android-emulador"]);
+    expect(win.recetas[0]!.pasos).toHaveLength(5);
+    expect(JSON.stringify(win.recetas)).not.toContain("C:\\Users\\yo");
   });
 
 describe("describirFallo", () => {
@@ -809,5 +864,81 @@ describe("frameworkEnDispositivo", () => {
       detalle: "iOS todavía no",
     });
     expect(llamadas).toEqual([]);
+  });
+});
+
+describe("jdkDeLaMaquina", () => {
+  it("`JAVA_HOME` manda si está puesta y existe, en cualquier sistema", () => {
+    expect(jdkDeLaMaquina({ JAVA_HOME: "/mi/jdk" }, (r) => r === "/mi/jdk", "darwin")).toBe("/mi/jdk");
+    expect(jdkDeLaMaquina({ JAVA_HOME: "C:\\mi\\jdk" }, (r) => r === "C:\\mi\\jdk", "win32")).toBe("C:\\mi\\jdk");
+  });
+
+  it("en Windows sin JAVA_HOME, mira la ruta FIJA donde cae el paso 2 de la receta", () => {
+    const localAppData = "C:\\Users\\yo\\AppData\\Local";
+    const jdk17 = win32.join(localAppData, "Android", "jdk17");
+    expect(jdkDeLaMaquina({ LOCALAPPDATA: localAppData }, (r) => r === jdk17, "win32")).toBe(jdk17);
+    // Y si esa carpeta no está, ausente: no se inventa un sitio.
+    expect(jdkDeLaMaquina({ LOCALAPPDATA: localAppData }, () => false, "win32")).toBeUndefined();
+  });
+
+  it("sin `%LOCALAPPDATA%` en Windows, ausente — no hay dónde mirar", () => {
+    expect(jdkDeLaMaquina({}, () => true, "win32")).toBeUndefined();
+  });
+
+  it("en macOS sin JAVA_HOME, los dos prefijos de Homebrew — Windows no los mira", () => {
+    // `join()` para construir el esperado y no un literal con `/`: en `path.win32` (lo que
+    // corre este `npm test` en una máquina Windows) una barra `/` suelta en un literal no es
+    // el mismo separador que compone `join`, y comparar contra el literal daría un falso rojo
+    // que no tiene nada que ver con lo que se está probando aquí.
+    const candidato = join("/opt/homebrew", "opt", "openjdk@17");
+    expect(jdkDeLaMaquina({}, (r) => r === candidato, "darwin")).toBe(candidato);
+    expect(jdkDeLaMaquina({ LOCALAPPDATA: "C:\\x" }, (r) => r === candidato, "win32")).toBeUndefined();
+  });
+});
+
+describe("localizadorDeAndroid — la extensión en Windows es POR BINARIO", () => {
+  // El bug que esto arregla: `sdkmanager`/`avdmanager` son `.bat` en Windows, nunca `.exe` —
+  // y antes de esto se les añadía `.exe` como a cualquier otro, así que nunca se localizaban
+  // aunque las cmdline-tools ya estuvieran instaladas a mano.
+  it("adb y emulator llevan `.exe`; sdkmanager y avdmanager llevan `.bat`", () => {
+    const { enPath } = localizadorDeAndroid({
+      plataforma: "win32",
+      entorno: { Path: "C:\\Sdk\\platform-tools;C:\\Sdk\\cmdline-tools\\latest\\bin" },
+      home: "C:\\Users\\yo",
+      existe: (r) =>
+        r === "C:\\Sdk\\platform-tools\\adb.exe" ||
+        r === "C:\\Sdk\\platform-tools\\emulator.exe" ||
+        r === "C:\\Sdk\\cmdline-tools\\latest\\bin\\sdkmanager.bat" ||
+        r === "C:\\Sdk\\cmdline-tools\\latest\\bin\\avdmanager.bat",
+    });
+    expect(enPath("adb")).toBe("C:\\Sdk\\platform-tools\\adb.exe");
+    expect(enPath("sdkmanager")).toBe("C:\\Sdk\\cmdline-tools\\latest\\bin\\sdkmanager.bat");
+    expect(enPath("avdmanager")).toBe("C:\\Sdk\\cmdline-tools\\latest\\bin\\avdmanager.bat");
+  });
+
+  it("con solo el `.exe` puesto (el bug de antes), sdkmanager NO se encuentra", () => {
+    // Confirma el ANTES: si alguien dejara sdkmanager.exe por error, esto sigue sin
+    // encontrarlo — `.bat` es lo único que las cmdline-tools de Windows traen de verdad.
+    const { enPath } = localizadorDeAndroid({
+      plataforma: "win32",
+      entorno: { Path: "C:\\Sdk\\cmdline-tools\\latest\\bin" },
+      home: "C:\\Users\\yo",
+      existe: (r) => r === "C:\\Sdk\\cmdline-tools\\latest\\bin\\sdkmanager.exe",
+    });
+    expect(enPath("sdkmanager")).toBeUndefined();
+  });
+
+  it("fuera de Windows, sin extensión para nadie", () => {
+    // Mismo motivo que arriba: el esperado sale de `join()`, no de un literal con `/`.
+    const sdkmanager = join("/usr/local/bin", "sdkmanager");
+    const adb = join("/usr/local/bin", "adb");
+    const { enPath } = localizadorDeAndroid({
+      plataforma: "darwin",
+      entorno: { PATH: "/usr/local/bin" },
+      home: "/Users/yo",
+      existe: (r) => r === sdkmanager || r === adb,
+    });
+    expect(enPath("sdkmanager")).toBe(sdkmanager);
+    expect(enPath("adb")).toBe(adb);
   });
 });
