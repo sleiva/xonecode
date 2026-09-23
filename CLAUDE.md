@@ -627,7 +627,7 @@ mudo es nuestro con `satisfies` contra los tipos públicos. **El reparto es el d
 orquestador de solo lectura y sin skills, cada especialista sale de su `.md`, y **la aprobación de un
 hijo se devuelve a SU `thread_id`** (a `main` la librería la rechaza). **Las tools propias no se
 reescriben: se ADAPTAN** (`toolsPropias.ts`, esquema de la tool y su `invoke`), con el mismo reparto —
-`xone_navegacion` a todos, el orquestador incluido—. **El verificador y su reparación también**, con
+`xone_navegacion` a todos, el orquestador incluido—. **El verificador y su reparación también**, y el juez del turno y el crítico de pantalla con los mismos puertos (el juez contra el ENCARGO, que en la respuesta a una pregunta es el que la provocó), con
 las reglas SACADAS del cierre de deepagents a `agent/turno/verificacion.ts` (reparto de hallazgos,
 huella de errores, qué cuenta como fichero del proyecto): las dos copias eran justo lo que no puede
 divergir sin que se note. **La memoria en disco es la FOTO del raíz** (`memoriaTrueforge.ts`,

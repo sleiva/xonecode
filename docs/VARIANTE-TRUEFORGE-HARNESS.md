@@ -518,7 +518,14 @@ hechos del proyecto precargados, y envuelve el prompt con su identidad, que no s
    hechos, en la petición de cada turno y con el MISMO cargador que la tool (`sesionTrueforge.ts#flujo`);
    no van en la respuesta a una pregunta, que no es un encargo nuevo, ni en la de una reparación.
 2. ~~El verificador con su reparación~~: hecho, con las reglas de deepagents compartidas
-   (`agent/turno/verificacion.ts`). Faltan el juez del turno y el crítico de pantalla enganchados.
+   (`agent/turno/verificacion.ts`). ~~El juez del turno y el crítico de pantalla~~: enganchados,
+   con los MISMOS puertos que deepagents y reenviados por `abrirSesionReal`. El crítico mira la
+   última captura del turno una vez; en verde solo avisa y en rojo sus observaciones van en la
+   reparación. El juez corre una vez tras todas las pasadas y contra el ENCARGO, no contra lo
+   tecleado: la respuesta a una pregunta se juzga contra el encargo que la provocó. No se juzga un
+   turno cancelado ni uno que acaba preguntando, y tras reabrir una sesión con pregunta pendiente
+   el encargo no consta —vive en el proceso, no en la foto— y el juez calla. A diferencia de
+   deepagents, este camino SÍ tiene test de turno: aquí el arnés escribe una captura de verdad.
 3. ~~El resto de subagentes~~: hecho, todos salen de su `.md` (abajo).
 4. ~~La memoria del hilo en disco~~: hecha, como foto del raíz (abajo).
 5. Deshacer la dependencia circular entre `turnoReal.ts` y `sesionTrueforge.ts`.

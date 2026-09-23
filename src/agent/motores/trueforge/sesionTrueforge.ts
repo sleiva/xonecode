@@ -40,7 +40,8 @@ import { PERFIL_DEL_ORQUESTADOR, promptOrquestador } from "../../grafo/xoneAgent
 import { permisosDe, seDetieneEn, TEXTO_HITL } from "../../grafo/perfiles.js";
 import { cambioDe } from "../../turno/interrupts.js";
 import { tomarInstantanea, type Cambio } from "../../turno/instantanea.js";
-import { ficherosDelProyecto, textoDeReparacion, TOPE_REPARACIONES, type SesionReal } from "../../turno/turnoReal.js";
+import { ficherosDelProyecto, textoDeReparacion, tocaCriticarPantalla, TOPE_REPARACIONES, type SesionReal } from "../../turno/turnoReal.js";
+import { accionDelJuez, type HechosDelTurno, type VeredictoDelTurno } from "../../../core/juezDelTurno.js";
 import type { Entorno } from "../../config/entorno.js";
 import { modeloParaTrueforge } from "./modeloLangchain.js";
 import { TOOLS_DE_LECTURA, type BackendDeFicheros } from "./toolsDeFichero.js";
@@ -182,6 +183,16 @@ export interface OpcionesDeSesionTrueforge {
   diagnostico?: DiagnosticoDeTools;
   /** Tope de rondas de aprobación con alguien delante (el de la consola). */
   topeDeRondas?: number;
+  /**
+   * El crítico VISUAL y el JUEZ del turno, los MISMOS puertos que deepagents
+   * (`turnoReal.ts#abrirSesionReal`): llaman a un modelo, así que entran por parámetro y
+   * `npm test` no pregunta a nadie. Ausente es «esta ejecución no tiene», nunca «está bien».
+   */
+  criticaVisual?: (
+    captura: { base64: string; mime: string },
+    pantalla: string
+  ) => Promise<{ veredicto: string; observaciones: string[] }>;
+  juezDelTurno?: (caso: { objetivo: string; respuesta: string; hechos: HechosDelTurno }) => Promise<VeredictoDelTurno>;
 }
 
 /** Una tool call que espera decisión: en QUÉ hilo, con qué id, y qué pide. */
@@ -222,13 +233,20 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
   /** Lo que el agente dejó en `/artefactos/` y aún no se ha anunciado: un artefacto se escribe
    *  SIN aprobación, así que tiene que ANUNCIARSE, como en deepagents. */
   const artefactosPorAnunciar: Artefacto[] = [];
+  /** Las IMÁGENES que dejó el turno en curso, para el crítico de pantalla. Se vacía al empezar
+   *  cada turno: una captura de antes enseña la pantalla de antes. */
+  let capturasDelTurno: Artefacto[] = [];
+  const anotarArtefacto = (a: Artefacto): void => {
+    artefactosPorAnunciar.push(a);
+    if (a.mime !== undefined && a.mime.startsWith("image/")) capturasDelTurno.push(a);
+  };
   const montarBackend = (ejecucion?: { entorno: Record<string, string> }) =>
     backendDeAgente({
       raiz,
       ficheros: ficherosDelProyecto(raiz),
       ...(opciones.artefactos === undefined
         ? {}
-        : { artefactos: { carpeta: opciones.artefactos, alEscribir: (a: Artefacto) => void artefactosPorAnunciar.push(a) } }),
+        : { artefactos: { carpeta: opciones.artefactos, alEscribir: anotarArtefacto } }),
       ...(ejecucion === undefined ? {} : { ejecucion }),
     });
   const backend = montarBackend() as unknown as BackendDeFicheros;
@@ -266,7 +284,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
             leerArtefacto: async (nombre) => readFileSync(join(carpeta, nombre)),
             invocar: invocarVisualConModelos({ paraPapel: (p) => modelos.paraPapel(p) }),
           }),
-          crearTraerDeLaMaquina({ carpeta, alEscribir: (a: Artefacto) => void artefactosPorAnunciar.push(a) }),
+          crearTraerDeLaMaquina({ carpeta, alEscribir: anotarArtefacto }),
         ] as unknown as ToolDeLangchain[])),
   ];
   const propiasDe = (agente: Agente): ToolDeLangchain[] => [
@@ -358,6 +376,9 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
    * lo rechazaba la librería («Cannot process user messages while sub agents are running»).
    */
   let raizActual: AgentThread | undefined;
+  /** El encargo que provocó la pregunta en espera, para juzgar y reparar contra él y no contra
+   *  la respuesta. Solo en el proceso: tras reabrir no consta, y entonces el juez calla. */
+  let encargoEnEspera: string | undefined;
   /** La pregunta del orquestador que espera respuesta: el siguiente mensaje la contesta. */
   let preguntaEnEspera: Pendiente | undefined;
   const nuevoOrquestador = (foto?: FotoDeHilo): AgentThreadOrchestrator => {
@@ -525,6 +546,9 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       const instantanea = await tomarInstantanea(raiz, opciones.entorno.git);
       const tope = opciones.topeDeRondas ?? MAX_APPROVAL_ROUNDS;
       const aplicadasSinPreguntar: string[] = [];
+      capturasDelTurno = [];
+      /** El encargo de ESTE turno (ver `flujo`); ausente = no consta. */
+      let objetivoDelTurno: string | undefined;
       let cortadoPorTope = false;
       let sinResolver = 0;
       // El veredicto del turno, con las MISMAS reglas que deepagents (`verificacion.ts`).
@@ -556,6 +580,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
             const pregunta = preguntas[0];
             if (pregunta !== undefined) {
               preguntaEnEspera = pregunta;
+              encargoEnEspera = objetivoDelTurno;
               yield { tipo: "token", texto: textoDePregunta(pregunta.args) };
             }
             salida.limpia = true;
@@ -635,12 +660,16 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
         // `user.tool_response`, y no como un mensaje nuevo que la dejaría sin contestar.
         const enEspera = preguntaEnEspera;
         preguntaEnEspera = undefined;
+        // El ENCARGO del turno: lo que se repara y lo que se juzga. En un turno que contesta una
+        // pregunta no es lo tecleado —un «2» no es un objetivo—, sino el encargo que la provocó.
+        objetivoDelTurno = enEspera === undefined ? peticion : encargoEnEspera;
+        encargoEnEspera = undefined;
         // Los hechos baratos del proyecto van DELANTE (`core/hechosDelProyecto.ts`), la misma
         // foto y el MISMO cargador que `xone_navegacion`, rehecha en cada turno —la regla de
         // deepagents: en el prompt de sistema envejecería dentro de la sesión—. Solo en la
         // petición ORIGINAL: la respuesta a una pregunta no es un encargo nuevo, y el mensaje de
         // una reparación ya lleva sus hallazgos. Un índice que no carga deja la petición sola.
-        let lote: unknown[] =
+        const loteInicial: unknown[] =
           enEspera === undefined
             ? [
                 {
@@ -649,12 +678,31 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
                 },
               ]
             : [{ type: "user.tool_response", thread_id: enEspera.hilo, tool_call_id: enEspera.id, content: respuestaAPregunta(enEspera.args, peticion) }];
+        yield* pasadas(loteInicial);
+        yield* juzgar();
+      }
+
+      /** Lo que el turno CONTESTÓ en su última pasada: es lo que lee el juez. */
+      let respuestaDeLaPasada = "";
+
+      /**
+       * Las PASADAS del turno: la de la petición y las de reparación. Cada `return` de aquí es un
+       * final del turno —verde, sin escribir, sin verificador, bloqueado…— y el juez va DETRÁS de
+       * todos (`flujo`); la única salida que no cierra es la que sigue a otra pasada.
+       */
+      async function* pasadas(loteInicial: unknown[]): AsyncGenerator<DomainEvent> {
+        let lote = loteInicial;
         let intento = 0;
         let huellaPrevia: string | undefined;
+        let visualYaDisparo = false;
         while (true) {
           if (intento > 0) yield { tipo: "reparacion", intento, tope: TOPE_REPARACIONES };
           const salida = { limpia: false };
-          yield* rondasDe(lote, salida);
+          respuestaDeLaPasada = "";
+          for await (const evento of rondasDe(lote, salida)) {
+            if (evento.tipo === "token") respuestaDeLaPasada += evento.texto;
+            yield evento;
+          }
           const cambios = cambiosQueSeVerifican(await instantanea.cambios());
           escribioProyecto = cambios.length > 0;
           if (!salida.limpia) {
@@ -693,6 +741,38 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
             hallazgos,
             ...(preexistentes > 0 ? { preexistentes } : {}),
           };
+
+          /**
+           * **El crítico de pantalla**, con las reglas de deepagents (`turnoReal.ts`, junto a
+           * `tocaCriticarPantalla`): mira la ÚLTIMA captura que dejó este turno, una vez por
+           * turno. Con el simulador en VERDE solo REPORTA —medido allí: una ronda disparada por
+           * defectos de otra pantalla se iba a rediseñar lo que nadie pidió—; en ROJO sus
+           * observaciones se suman a la reparación que iba a salir igualmente. Que no se pueda
+           * preguntar es un aviso, no un rojo.
+           */
+          let observacionesVisuales: string[] = [];
+          if (
+            carpeta !== undefined &&
+            tocaCriticarPantalla({ hayCritico: opciones.criticaVisual !== undefined, capturas: capturasDelTurno.length, yaDisparo: visualYaDisparo, intento })
+          ) {
+            visualYaDisparo = true;
+            const captura = capturasDelTurno[capturasDelTurno.length - 1]!;
+            try {
+              const bytes = readFileSync(join(carpeta, captura.nombre));
+              const visual = await opciones.criticaVisual!({ base64: bytes.toString("base64"), mime: captura.mime ?? "image/png" }, captura.nombre);
+              if (visual.veredicto === "rojo" && visual.observaciones.length > 0) {
+                observacionesVisuales = visual.observaciones;
+                yield {
+                  tipo: "aviso",
+                  texto: `⚠ la captura de esta sesión enseña ${visual.observaciones.length} defecto(s) de pantalla`,
+                  severidad: "aviso",
+                };
+              }
+            } catch (error) {
+              yield { tipo: "aviso", texto: `⚠ no se pudo criticar la pantalla: ${error instanceof Error ? error.name : "error"}`, severidad: "aviso" };
+            }
+          }
+
           if (errores === 0) return;
           const huella = huellaDeErrores(hallazgos);
           if (huella === huellaPrevia) {
@@ -713,7 +793,38 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
           }
           huellaPrevia = huella;
           intento += 1;
-          lote = [{ type: EventType.USER_MESSAGE, content: textoDeReparacion(hallazgos, [], peticion) }];
+          lote = [{ type: EventType.USER_MESSAGE, content: textoDeReparacion(hallazgos, observacionesVisuales, objetivoDelTurno ?? peticion) }];
+        }
+      }
+
+      /**
+       * **¿Hizo lo que se le pidió?** El juez del turno, con el reparto de deepagents: los HECHOS
+       * los mide el código y al modelo solo se le pregunta el juicio (`core/juezDelTurno.ts`). Va
+       * DETRÁS de todas las pasadas, así que alcanza cada final del turno —«no escribió nada» es
+       * el candidato número uno a no haber cumplido—. Tres casos en que NO se pregunta, y los tres
+       * serían ruido: un turno CANCELADO (alguien pulsó Parar; juzgarlo es gastar una llamada
+       * contra su decisión), uno que acaba PREGUNTANDO (su «respuesta» es la pregunta, y saldría
+       * dudoso siempre), y la respuesta a una pregunta cuyo encargo no consta —una sesión
+       * reabierta: el encargo vive en memoria del proceso, no en la foto—. Un juez que falla es
+       * un aviso: es una opinión sobre trabajo ya hecho.
+       */
+      async function* juzgar(): AsyncGenerator<DomainEvent> {
+        if (opciones.juezDelTurno === undefined || cancelado || cerrada) return;
+        if (preguntaEnEspera !== undefined || objetivoDelTurno === undefined) return;
+        try {
+          const v = await opciones.juezDelTurno({
+            objetivo: objetivoDelTurno,
+            respuesta: respuestaDeLaPasada,
+            hechos: {
+              // Ausente es «no corrió», que no es lo mismo que «salió mal»: el prompt lo dice.
+              ...(veredicto === "verde" || veredicto === "rojo" ? { verificador: veredicto } : {}),
+              ...(cortadoPorTope ? { escriturasSinResolver: true } : {}),
+            },
+          });
+          const accion = accionDelJuez(v, { hayHumano: false });
+          if (accion.tipo !== "nada") yield { tipo: "aviso", texto: `⚠ ${accion.texto}`, severidad: "aviso" };
+        } catch (error) {
+          yield { tipo: "aviso", texto: `⚠ no se pudo consultar al juez del turno: ${error instanceof Error ? error.name : "error"}`, severidad: "aviso" };
         }
       }
 
@@ -789,6 +900,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       const foto = persistir ? leerMemoria(raiz, hilo) : undefined;
       orquestador = nuevoOrquestador(foto);
       preguntaEnEspera = preguntaDeLaFoto(foto);
+      encargoEnEspera = undefined;
     },
     cancelar() {
       cancelado = true;

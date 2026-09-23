@@ -516,6 +516,8 @@ export async function abrirSesionReal(opciones: {
       ...(opciones.artefactos === undefined ? {} : { artefactos: opciones.artefactos }),
       ...(opciones.hilo === undefined ? {} : { hilo: opciones.hilo }),
       ...(opciones.topeDeRondas === undefined ? {} : { topeDeRondas: opciones.topeDeRondas }),
+      ...(opciones.criticaVisual === undefined ? {} : { criticaVisual: opciones.criticaVisual }),
+      ...(opciones.juezDelTurno === undefined ? {} : { juezDelTurno: opciones.juezDelTurno }),
     });
   }
   const { raiz, entorno } = opciones;

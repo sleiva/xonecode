@@ -10,6 +10,7 @@ import { TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto
 import { traducirEvento } from "./eventosTrueforge.js";
 import { abrirSesionReal } from "../../turno/turnoReal.js";
 import { resumirTraza } from "../../turno/informeDeTraza.js";
+import type { HechosDelTurno } from "../../../core/juezDelTurno.js";
 
 /**
  * Un modelo de pega con el guion de una ESCRITURA delegada: el orquestador delega en
@@ -706,5 +707,141 @@ describe("los hechos del proyecto van DELANTE del turno, también en TrueForge",
     await s.turno("2", piel().p);
     // La foto va UNA vez, con el encargo; la respuesta no la repite.
     expect(vistos[1]!.filter((c) => c.includes("Calculadora"))).toHaveLength(1);
+  }, 30_000);
+});
+
+describe("el juez del turno y el crítico de pantalla, enganchados en TrueForge", () => {
+  const delegar = (id: string) =>
+    new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "escribe la nota" }) }] });
+  const escribir = (id: string, contenido: string, captura = false) =>
+    new AIMessageChunk({
+      content: "",
+      tool_call_chunks: [
+        { index: 0, id, name: "write_file", args: JSON.stringify({ file_path: "/nota.txt", content: contenido }) },
+        ...(captura ? [{ index: 1, id: `${id}c`, name: "write_file", args: JSON.stringify({ file_path: "/artefactos/pantalla.png", content: "PNG" }) }] : []),
+      ],
+    });
+  const verde = { verificar: async () => ({ hallazgos: [], ok: true }) as never };
+  type Caso = { objetivo: string; respuesta: string; hechos: HechosDelTurno };
+  const juezQueApunta = (veredicto: { cumplimiento: "cumplido" | "no-cumplido" | "dudoso"; motivo: string }) => {
+    const casos: Caso[] = [];
+    return { casos, juez: async (c: Caso) => (casos.push(c), veredicto) };
+  };
+  const lineasDe = () => {
+    const lineas: string[] = [];
+    return { lineas, p: { ...piel().p, linea: (t: string) => void lineas.push(t) } };
+  };
+
+  it("el juez recibe el ENCARGO tal cual —sin los hechos precargados— y los hechos MEDIDOS", async () => {
+    const { casos, juez } = juezQueApunta({ cumplimiento: "no-cumplido", motivo: "falta el botón" });
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: modelos(), entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true, verifier: verde, juezDelTurno: juez });
+    const l = lineasDe();
+    await s.turno("escribe una nota", l.p);
+    expect(casos).toHaveLength(1);
+    expect(casos[0]!.objetivo).toBe("escribe una nota");
+    expect(casos[0]!.respuesta).toBe("Listo.");
+    expect(casos[0]!.hechos).toEqual({ verificador: "verde" });
+    expect(l.lineas.join("\n")).toMatch(/no parece que esto cumpla lo que pediste: falta el botón/);
+  }, 30_000);
+
+  it("con una reparación por medio se juzga UNA vez, al final, y contra el encargo", async () => {
+    const { m } = modelosConGuion([
+      [delegar("d1")], [escribir("w1", "mal\n")], [new AIMessageChunk({ content: "Escrita." })], [new AIMessageChunk({ content: "Listo." })],
+      [delegar("d2")], [escribir("w2", "bien\n")], [new AIMessageChunk({ content: "Corregida." })], [new AIMessageChunk({ content: "Arreglado." })],
+    ]);
+    const raiz = proyecto();
+    const veredictos = [{ hallazgos: [{ code: "XNE001", severidad: "error" as const, mensaje: "mal", fichero: join(raiz, "nota.txt"), linea: 1 }] }, { hallazgos: [] }];
+    let n = 0;
+    const { casos, juez } = juezQueApunta({ cumplimiento: "cumplido", motivo: "ok" });
+    const s = await abrirSesionTrueforge({
+      raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true,
+      verifier: { verificar: async () => ({ ...veredictos[n++]!, ok: true }) as never },
+      juezDelTurno: juez,
+    });
+    await s.turno("escribe una nota", piel().p);
+    expect(casos).toHaveLength(1);
+    expect(casos[0]!).toMatchObject({ objetivo: "escribe una nota", respuesta: "Arreglado.", hechos: { verificador: "verde" } });
+  }, 30_000);
+
+  it("un juez que REVIENTA es un aviso, no un turno caído", async () => {
+    const s = await abrirSesionTrueforge({
+      raiz: proyecto(), modelos: modelos(), entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true, verifier: verde,
+      juezDelTurno: async () => {
+        throw new TypeError("sin red");
+      },
+    });
+    const l = lineasDe();
+    const r = await s.turno("escribe una nota", l.p);
+    expect(r.verificador).toBe("verde");
+    expect(l.lineas.join("\n")).toMatch(/no se pudo consultar al juez del turno: TypeError/);
+  }, 30_000);
+
+  it("un turno que acaba PREGUNTANDO no se juzga; su respuesta se juzga contra el encargo que la provocó", async () => {
+    const { m } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "q1", name: "ask_user_question", args: JSON.stringify({ question: "¿Cuál?", options: ["Login", "Menú"] }) }] })],
+      [new AIMessageChunk({ content: "Hecho en el menú." })],
+    ]);
+    const { casos, juez } = juezQueApunta({ cumplimiento: "cumplido", motivo: "ok" });
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, juezDelTurno: juez });
+    await s.turno("arregla la pantalla", piel().p);
+    expect(casos).toHaveLength(0);
+    await s.turno("2", piel().p);
+    expect(casos).toHaveLength(1);
+    expect(casos[0]!).toMatchObject({ objetivo: "arregla la pantalla", respuesta: "Hecho en el menú." });
+  }, 30_000);
+
+  it("`abrirSesionReal` le PASA el juez y el crítico a TrueForge", async () => {
+    const carpeta = mkdtempSync(join(tmpdir(), "xc-tf-art-"));
+    const { m } = modelosConGuion([[delegar("d1")], [escribir("w1", "hola\n", true)], [new AIMessageChunk({ content: "Escrita." })], [new AIMessageChunk({ content: "Listo." })]]);
+    const { casos, juez } = juezQueApunta({ cumplimiento: "cumplido", motivo: "ok" });
+    let criticas = 0;
+    const s = await abrirSesionReal({
+      raiz: proyecto(), modelos: m, skills: { catalogo: () => [], cargar: async () => [] } as never, entorno: ENTORNO, motor: "trueforge",
+      sinAprobacion: () => true, artefactos: carpeta, verifier: verde, juezDelTurno: juez,
+      criticaVisual: async () => (criticas++, { veredicto: "verde", observaciones: [] }),
+    });
+    await s.turno("escribe una nota", piel().p);
+    expect(casos).toHaveLength(1);
+    expect(criticas).toBe(1);
+  }, 30_000);
+
+  it("el crítico mira la CAPTURA del turno: con el simulador en VERDE solo AVISA y no repara", async () => {
+    const carpeta = mkdtempSync(join(tmpdir(), "xc-tf-art-"));
+    const { m } = modelosConGuion([[delegar("d1")], [escribir("w1", "hola\n", true)], [new AIMessageChunk({ content: "Escrita." })], [new AIMessageChunk({ content: "Listo." })]]);
+    const vistas: { base64: string; pantalla: string }[] = [];
+    let verificaciones = 0;
+    const s = await abrirSesionTrueforge({
+      raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true, artefactos: carpeta,
+      verifier: { verificar: async () => (verificaciones++, { hallazgos: [], ok: true }) as never },
+      criticaVisual: async (c, pantalla) => (vistas.push({ base64: c.base64, pantalla }), { veredicto: "rojo", observaciones: ["texto cortado", "botón fuera"] }),
+    });
+    const l = lineasDe();
+    await s.turno("escribe una nota", l.p);
+    // Los BYTES que hay en el disco, no lo que el modelo tecleó: la imagen es la que quedó.
+    expect(vistas).toEqual([{ base64: readFileSync(join(carpeta, "pantalla.png")).toString("base64"), pantalla: "pantalla.png" }]);
+    expect(l.lineas.join("\n")).toMatch(/la captura de esta sesión enseña 2 defecto\(s\) de pantalla/);
+    expect(verificaciones).toBe(1);
+  }, 30_000);
+
+  it("con el simulador en ROJO, las observaciones del crítico van DENTRO de la reparación", async () => {
+    const carpeta = mkdtempSync(join(tmpdir(), "xc-tf-art-"));
+    const raiz = proyecto();
+    const { m, vistos } = modelosConGuion([
+      [delegar("d1")], [escribir("w1", "mal\n", true)], [new AIMessageChunk({ content: "Escrita." })], [new AIMessageChunk({ content: "Listo." })],
+      [new AIMessageChunk({ content: "Arreglado." })],
+    ]);
+    const veredictos = [{ hallazgos: [{ code: "XNE001", severidad: "error" as const, mensaje: "mal", fichero: join(raiz, "nota.txt"), linea: 1 }] }, { hallazgos: [] }];
+    let n = 0;
+    let criticas = 0;
+    const s = await abrirSesionTrueforge({
+      raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true, artefactos: carpeta,
+      verifier: { verificar: async () => ({ ...veredictos[Math.min(n++, 1)]!, ok: true }) as never },
+      criticaVisual: async () => (criticas++, { veredicto: "rojo", observaciones: ["el rótulo OBS-7Q se sale de su celda"] }),
+    });
+    await s.turno("escribe una nota", piel().p);
+    // Una marca que no puede venir de otro sitio: el prompt de sistema ya dice «cortado».
+    expect(vistos[4]!.join("\n")).toContain("OBS-7Q");
+    // Una vez por turno: sus observaciones no son una huella con la que medir si avanza.
+    expect(criticas).toBe(1);
   }, 30_000);
 });
