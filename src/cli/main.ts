@@ -39,9 +39,10 @@ import { MAX_APPROVAL_ROUNDS } from "../vendor/hitl.js";
 import { conectarCloudStudio, sesionCloudStudio, PUERTO_CALLBACK } from "../agent/cloudstudio/cloudstudioMcp.js";
 import { clienteCloudStudio } from "../agent/cloudstudio/cloudstudioClient.js";
 import { cargarSettings } from "../agent/config/settingsEnDisco.js";
-import { entornoDeUrl, type Entorno } from "../core/settings.js";
+import { dentroDelWorkspace, entornoDeUrl, type Entorno } from "../core/settings.js";
 import { descargarProyecto } from "../agent/cloudstudio/descarga.js";
-import { arbolLimpio, cambiosPendientes, prepararRepo, sinCommitear } from "../agent/sesiones/gitSync.js";
+import { arbolLimpio, cambiosPendientes, esRepoPropio, prepararRepo, sinCommitear, vaciarCopia } from "../agent/sesiones/gitSync.js";
+import { baseDeWorkspace } from "../agent/config/settingsEnDisco.js";
 import { subir } from "../agent/cloudstudio/subida.js";
 import { guardarCredencial } from "../agent/config/authEnDisco.js";
 import { asistenteDeModelo } from "./wizardInicial.js";
@@ -847,6 +848,12 @@ export interface PiezasDeSincronizacion {
   limpio: typeof arbolLimpio;
   sinCommitear: typeof sinCommitear;
   subirProyecto: typeof subir;
+  /** Dejar la copia vacía para bajarla entera (`gitSync.ts#vaciarCopia`). */
+  vaciar: typeof vaciarCopia;
+  /** Si la carpeta es la raíz de su propio repo: decide si hay historia que perder. */
+  repoPropio: typeof esRepoPropio;
+  /** La base del workspace EN VIGOR, leída en cada uso. */
+  baseDeWorkspace: () => string;
 }
 
 const PIEZAS_DE_SINCRONIZACION_REALES: PiezasDeSincronizacion = {
@@ -860,6 +867,9 @@ const PIEZAS_DE_SINCRONIZACION_REALES: PiezasDeSincronizacion = {
   limpio: arbolLimpio,
   sinCommitear,
   subirProyecto: subir,
+  vaciar: vaciarCopia,
+  repoPropio: esRepoPropio,
+  baseDeWorkspace,
 };
 
 /** Vive en `core/settings.ts` desde que `agent/` también la necesita (la identidad para
@@ -934,7 +944,7 @@ function cloudStudioDeProyecto(
 export function crearSincronizador(
   piezas: PiezasDeSincronizacion = PIEZAS_DE_SINCRONIZACION_REALES
 ): NonNullable<Consola["sincronizar"]> {
-  return async (accion, raiz, politicaDeAprobacion, informar = () => {}) => {
+  return async (accion, raiz, politicaDeAprobacion, informar = () => {}, confirmarBajada) => {
     const config = cloudStudioDeProyecto(piezas.leerConfig, piezas.leerSettings, raiz);
     if (config === undefined) {
       return { tipo: "texto", texto: "este proyecto no es cloud (o le falta el proyecto/rama del alta)\n" };
@@ -946,7 +956,34 @@ export function crearSincronizador(
     // recupera de ninguna forma. Es alcanzable sin escribir `/sync`: el alta llama a
     // `sincronizar("bajar", …)`, así que quien arranca xonecode en una carpeta con
     // trabajo y elige modo cloud lo perdería. La guarda va ANTES de abrir sesión MCP.
-    if (accion !== "estado" && !(await piezas.limpio(raiz))) {
+    /**
+     * **«Actualizar repo local» dentro del workspace VACÍA la copia y rehace el git.** La
+     * decisión es suya y está medida: bajar escribiendo el zip ENCIMA dejaba lo borrado en
+     * Studio vivo aquí, y una copia cuyo repo no era el suyo enseñaba el proyecto entero como
+     * «añadido por esta sesión» en Revisión. Lo que se quiere es una copia idéntica a la rama
+     * con un `git init` hecho DESPUÉS de bajar, para que el primer commit sea la bajada y no
+     * aparezcan cambios que nadie hizo.
+     *
+     * Solo dentro del workspace: ahí la copia la creó XOneCode. En la carpeta que abrió una
+     * persona se queda la regla de antes —se niega con cambios sin commitear—, porque vaciarla
+     * sería borrarle su trabajo. Y siempre con CONFIRMACIÓN delante, salvo si no hay nada que
+     * perder (una carpeta vacía, que es el alta): sin quien confirme no se vacía nada.
+     */
+    const vaciable = accion === "bajar" && dentroDelWorkspace(raiz, piezas.baseDeWorkspace());
+    let vaciar = false;
+    if (vaciable) {
+      const pendientes = await piezas.sinCommitear(raiz);
+      const hayQuePerder = pendientes.length > 0 || (await piezas.repoPropio(raiz));
+      if (hayQuePerder) {
+        if (confirmarBajada === undefined) {
+          return { tipo: "arbol-sucio", accion, pendientes };
+        }
+        if (!(await confirmarBajada({ sinCommitear: pendientes }))) {
+          return { tipo: "texto", texto: "no se ha actualizado la copia\n" };
+        }
+      }
+      vaciar = true;
+    } else if (accion !== "estado" && !(await piezas.limpio(raiz))) {
       // `sinCommitear` y no `pendientes`: la pregunta aquí es «qué falta por COMMITEAR»,
       // y además `pendientes` compara contra la ref de seguimiento, que en el alta de una
       // carpeta que todavía no es repo no existe siquiera.
@@ -962,8 +999,18 @@ export function crearSincronizador(
         // deja posicionada y la restaura al terminar): sin esto se traería lo que
         // estuviera ACTIVO en la sesión de Studio, y una subida posterior firmaría ese
         // contenido como si fuera de `config.rama`, en silencio.
-        const bajada = await piezas.descargar({ puerto, raiz, proyecto: config.proyecto, ramaOrigen: config.rama, informar });
-        await piezas.preparar(raiz, bajada.rama, informar);
+        const base = piezas.baseDeWorkspace();
+        const bajada = await piezas.descargar({
+          puerto,
+          raiz,
+          proyecto: config.proyecto,
+          ramaOrigen: config.rama,
+          informar,
+          ...(vaciar ? { vaciarAntes: () => void piezas.vaciar(raiz, base) } : {}),
+        });
+        // `prepararRepo` va DESPUÉS de bajar, y es quien hace el `git init`: con la copia
+        // vaciada no hay `.git`, así que el primer commit es la bajada entera.
+        await piezas.preparar(raiz, bajada.rama, informar, vaciar ? { propio: true } : {});
         return { tipo: "texto", texto: `bajados ${bajada.descargados.length} ficheros (${bajada.via})\n` };
       }
       if (accion === "subir") {

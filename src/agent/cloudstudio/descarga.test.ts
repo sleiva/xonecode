@@ -349,3 +349,44 @@ describe("descargarProyecto", () => {
     expect(avisos.join("")).toMatch(/master/);
   });
 });
+
+/**
+ * La limpieza de «Actualizar repo local» la hace la descarga, y SOLO con el zip en la mano:
+ * vaciar primero y que después falle la bajada dejaría la copia sin nada.
+ */
+describe("descargarProyecto con vaciado", () => {
+  it("vacía DESPUÉS de tener el zip y ANTES de escribirlo: lo nuevo queda, lo viejo no", async () => {
+    const raiz = raizNueva();
+    writeFileSync(join(raiz, "viejo.xne"), "<coll/>");
+    const puerto = new CloudStudioEnMemoria({ zipBase64: zip({ "app.xml": "<app/>" }), textos: { "app.xml": "<app/>" } });
+    let vaciadas = 0;
+    await descargarProyecto({
+      puerto, raiz, proyecto, ramaOrigen: "master",
+      vaciarAntes: () => {
+        vaciadas += 1;
+        // En el momento de vaciar, el zip todavía no se ha escrito.
+        expect(existsSync(join(raiz, "app.xml"))).toBe(false);
+        rmSync(join(raiz, "viejo.xne"));
+      },
+    });
+    expect(vaciadas).toBe(1);
+    expect(existsSync(join(raiz, "viejo.xne"))).toBe(false);
+    expect(readFileSync(join(raiz, "app.xml"), "utf8")).toBe("<app/>");
+  });
+
+  it("si el zip FALLA no se vacía nada, y se dice", async () => {
+    const raiz = raizNueva();
+    writeFileSync(join(raiz, "viejo.xne"), "<coll/>");
+    const puerto = new CloudStudioEnMemoria({ zipFalla: "roto", textos: { "app.xml": "<app/>" } });
+    const avisos: string[] = [];
+    let vaciadas = 0;
+    await descargarProyecto({
+      puerto, raiz, proyecto, ramaOrigen: "master",
+      informar: (t) => avisos.push(t),
+      vaciarAntes: () => { vaciadas += 1; },
+    });
+    expect(vaciadas).toBe(0);
+    expect(existsSync(join(raiz, "viejo.xne"))).toBe(true);
+    expect(avisos.join("")).toMatch(/no se ha vaciado la copia/);
+  });
+});

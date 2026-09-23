@@ -23,6 +23,7 @@
  * mentir en esa pregunta abre un proyecto que no existe.
  */
 
+import { baseDeWorkspacePorOmision } from "../../agent/config/settingsEnDisco.js";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
@@ -129,9 +130,7 @@ export const ENTORNO_OTRO: OpcionDeEntorno = { id: "otro", nombre: "Otro (on-pre
  * `dentroDelWorkspace` —que es lo que decide si se commitea solo al cerrar cada turno—
  * deja de dar por suya cualquier carpeta que cuelgue de `~/.xonecode`.
  */
-export function baseDeWorkspacePorOmision(): string {
-  return join(homedir(), ".xonecode", "workspace");
-}
+export { baseDeWorkspacePorOmision };
 
 /**
  * Dónde caían las copias con el reparto VIEJO, cuando nadie había configurado nada:

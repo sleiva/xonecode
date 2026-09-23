@@ -188,3 +188,19 @@ export function guardarWorkspace(casa: string | undefined, base: string): { ruta
   escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
   return { ruta };
 }
+
+/**
+ * Dónde caen las copias cuando nadie ha configurado `settings.workspace`. Vive aquí y no en el
+ * vestíbulo desde que también la necesita `cli/` (la bajada que vacía la copia solo lo hace
+ * dentro del workspace), y `cli/` no importa de `web/`. El vestíbulo la reexporta, con el
+ * porqué de la carpeta propia.
+ */
+export function baseDeWorkspacePorOmision(): string {
+  return join(homedir(), NOMBRE_CARPETA, "workspace");
+}
+
+/** La base del workspace EN VIGOR: la de Ajustes si la hay, y si no la de omisión. Se lee en
+ *  cada uso, nunca se captura: se cambia desde Ajustes con la consola en marcha. */
+export function baseDeWorkspace(): string {
+  return cargarSettings().settings.workspace ?? baseDeWorkspacePorOmision();
+}

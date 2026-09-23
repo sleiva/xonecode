@@ -30,7 +30,7 @@ import type { PendienteDeAprobacion } from "../core/events.js";
 import type { ResultadoDeTurno } from "../core/entrega.js";
 import type { LineaDeDiff } from "../core/diff.js";
 import { interpretAnswer, type Decision } from "../vendor/hitl.js";
-import type { AccionDeSincronizacion, PoliticaDeAprobacion } from "../core/cloudstudio.js";
+import type { AccionDeSincronizacion, ConfirmacionDeBajada, PoliticaDeAprobacion } from "../core/cloudstudio.js";
 import type { NarracionDeSincronizacion } from "../core/actos.js";
 import { crearPielStdio, type Escribir } from "./stdio.js";
 import { esTema, seleccionarTema, TEMAS, type IdTema } from "./tema.js";
@@ -220,7 +220,13 @@ export interface Consola {
      * conservó. En este repo los avisos son código y no prompt; sin este cable estaban
      * escritos y no llegaban a ninguna parte (el `informar` por omisión es `() => {}`).
      */
-    informar?: (texto: string) => void
+    informar?: (texto: string) => void,
+    /**
+     * Para «bajar»: quien autoriza VACIAR la copia (`core/cloudstudio.ts#ConfirmacionDeBajada`).
+     * Ausente = no se vacía y se aplica la regla de antes. La rellena el comando `/sync`, que
+     * es quien tiene `preguntar`.
+     */
+    confirmarBajada?: ConfirmacionDeBajada
   ) => Promise<
     | { tipo: "texto"; texto: string }
     // `accion` viaja con el rechazo porque el porqué NO es el mismo en las dos
@@ -1075,6 +1081,35 @@ export function politicaInteractiva(
   };
 }
 
+/**
+ * La confirmación de «Actualizar repo local», con lo que se pierde DELANTE — la misma forma
+ * que `politicaInteractiva`: las líneas que van al registro viajan también en la pregunta,
+ * y la tarjeta las pinta con dos botones. Fail-closed: lo que no sea un sí, no vacía nada.
+ */
+export function confirmacionInteractiva(
+  consola: Consola,
+  decir: (texto: string) => void = (texto) => consola.escribir(texto)
+): ConfirmacionDeBajada {
+  return async ({ sinCommitear }) => {
+    const lineas: LineaDelPlan[] = [
+      { texto: "ACTUALIZAR REPO LOCAL — se vacía esta copia y se baja entera de la rama" },
+      { texto: "  el historial de git de esta copia se borra: se rehace con la bajada como primer commit" },
+      ...(sinCommitear.length === 0
+        ? [{ texto: "  no hay cambios sin commitear que perder" }]
+        : [
+            { texto: `  se PIERDEN ${sinCommitear.length} ${sinCommitear.length === 1 ? "cambio" : "cambios"} sin commitear:` },
+            ...sinCommitear.map((ruta): LineaDelPlan => ({ texto: `  - ${ruta}`, cambio: "borrado" })),
+          ]),
+    ];
+    decir(`\n${"─".repeat(60)}\n`);
+    for (const linea of lineas) decir(`${linea.texto}\n`);
+    const respuesta = await consola.preguntar("¿Vaciar la copia y actualizarla desde CloudStudio?", { lineas });
+    const decision = interpretAnswer(respuesta);
+    decir(decision.type === "approve" ? "  → APROBADO\n" : "  → cancelado, no se ha tocado nada\n");
+    return decision.type === "approve";
+  };
+}
+
 export const COMANDOS: Record<string, { descripcion: string; manejador: ManejadorDeBarra }> = {
   ayuda: {
     descripcion: "lista los comandos de barra",
@@ -1303,6 +1338,15 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
         // esto puede pasarse siempre — si el árbol está sucio o no hay nada que subir, ni
         // siquiera llega a invocarse.
         const base = accion === "subir" ? politicaInteractiva(consola, decir) : undefined;
+        const confirmacion = accion === "bajar" ? confirmacionInteractiva(consola, decir) : undefined;
+        const confirmarBajada: ConfirmacionDeBajada | undefined =
+          confirmacion === undefined
+            ? undefined
+            : async (loQueSePierde) => {
+                const autorizada = await confirmacion(loQueSePierde);
+                if (!autorizada) rechazada = true;
+                return autorizada;
+              };
         const politicaDeAprobacion: PoliticaDeAprobacion | undefined =
           base === undefined
             ? undefined
@@ -1311,7 +1355,7 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
                 if (!autorizada) rechazada = true;
                 return autorizada;
               };
-        const resultado = await consola.sincronizar(accion, estado.raiz, politicaDeAprobacion, decir);
+        const resultado = await consola.sincronizar(accion, estado.raiz, politicaDeAprobacion, decir, confirmarBajada);
         if (resultado.tipo === "arbol-sucio") {
           // Al subir se sube el estado de un COMMIT, no un borrador: así «lo que está
           // arriba» es siempre un commit concreto y mover la ref significa algo. Al bajar

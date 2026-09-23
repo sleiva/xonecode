@@ -107,7 +107,7 @@ function cuentaDe(sync: EstadoDeSync): string {
  * va pegado al control y no solo en la prosa de abajo, que se lee cuando ya se ha decidido.
  */
 const AVISO_DE_ACTUALIZAR =
-  "SOBRESCRIBE esta copia con lo que hay en la rama: lo que no esté commiteado se pierde.";
+  "VACÍA esta copia y la baja entera de la rama, con un git nuevo: lo que no esté commiteado y la historia de git de la copia se pierden. Antes pide confirmación.";
 
 /**
  * Cómo se llama cada acción del protocolo en el registro.
@@ -307,8 +307,8 @@ export function CloudStudio({
           el chat: el recorrido de la operación se cuenta en el registro de abajo. */}
       <p className={estilos.nota}>
         {nadaQueSubir
-          ? `«Actualizar repo local» ${AVISO_DE_ACTUALIZAR} Se niega con cambios sin commitear, y lo que pasa queda aquí abajo, en el registro de esta sesión.`
-          : `Subir pide el plan y lo apruebas en la pregunta de siempre. «Actualizar repo local» ${AVISO_DE_ACTUALIZAR} Las dos se niegan con cambios sin commitear, y lo que pasa —lo que sube, lo que no y por qué— queda aquí abajo, en el registro de esta sesión.`}
+          ? `«Actualizar repo local» ${AVISO_DE_ACTUALIZAR} Lo que pasa queda aquí abajo, en el registro de esta sesión.`
+          : `Subir pide el plan y lo apruebas en la pregunta de siempre, y se niega con cambios sin commitear. «Actualizar repo local» ${AVISO_DE_ACTUALIZAR} Lo que pasa —lo que sube, lo que no y por qué— queda aquí abajo, en el registro de esta sesión.`}
       </p>
 
       <Registro operaciones={registro} />

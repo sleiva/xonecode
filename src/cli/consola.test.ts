@@ -666,6 +666,33 @@ describe("/sync", () => {
       expect(operaciones).toEqual([]);
     });
 
+    it("«Actualizar repo local» PREGUNTA con lo que se pierde delante, y cancelar no se registra", async () => {
+      const { consola } = consolaDeConSecreto({ lineas: ["/sync bajar", "/salir"], respuestas: ["n"] });
+      const operaciones: NarracionDeSincronizacion[] = [];
+      const preguntas: { enunciado: string; lineas?: readonly { texto: string; cambio?: string }[] }[] = [];
+      const conSync: Consola = {
+        ...consola,
+        preguntar: async (enunciado, decision) => {
+          preguntas.push({ enunciado, ...(decision === undefined ? {} : { lineas: decision.lineas }) });
+          return consola.preguntar(enunciado, decision);
+        },
+        anotarSincronizacion: (operacion) => operaciones.push(operacion),
+        sincronizar: async (accion, _raiz, _politica, _informar, confirmarBajada) => {
+          expect(accion).toBe("bajar");
+          const si = await confirmarBajada!({ sinCommitear: ["Menu.xne"] });
+          return { tipo: "texto", texto: si ? "bajados 3 ficheros (zip)\n" : "no se ha actualizado la copia\n" };
+        },
+      };
+
+      await correrConsola(conSync, estadoDe());
+
+      expect(preguntas).toHaveLength(1);
+      const lineas = preguntas[0]!.lineas!.map((l) => l.texto).join("\n");
+      expect(lineas).toMatch(/historial de git de esta copia se borra/);
+      expect(preguntas[0]!.lineas!.find((l) => l.texto.includes("Menu.xne"))?.cambio).toBe("borrado");
+      expect(operaciones).toEqual([]);
+    });
+
     it("y sin sumidero (el terminal) el rechazo se sigue imprimiendo", async () => {
       const { consola, salida } = consolaDeConSecreto({ lineas: ["/sync subir", "/salir"], respuestas: ["n"] });
       const conSync: Consola = {

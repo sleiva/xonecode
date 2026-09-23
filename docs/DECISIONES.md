@@ -6451,3 +6451,34 @@ el registro por su ruta ABSOLUTA —con la cuenta del sistema dentro, por el cab
 horizontal porque el recorte de `.pasoActual` no se aplica en un `span` en línea (lo acota ahora un
 `inline-flex`). **Queda abierto**: las causas de `falloLegible` pueden llevar el mensaje de un error de
 Node con su ruta absoluta, y una cancelación del usuario se anota como fallo.
+
+## «Actualizar repo local» vacía la copia y rehace el git (23-09-2026)
+
+**Lo que se vio**: en la pestaña Revisión de una copia de CloudStudio (SLC_ElMombuey, en otra
+máquina), la sesión enseñaba el proyecto ENTERO como añadido —«+10082 −0 y 115 binarios», todo con
+«A»— y «1 commit de otra sesión entremedias». Y lo que él pidió: que actualizar deje la copia
+limpia, con un `git init` hecho DESPUÉS de bajar, «porque si no aparecerán cambios que no hemos
+hecho».
+
+**Decisión suya: opción B**, borrar el `.git` y rehacerlo, frente a la A —conservar la historia y
+hacer un commit de baseline encima—, que era mi recomendación porque conservaba la atribución de
+Revisión de las sesiones viejas. Se prefirió la copia limpia.
+
+**Por qué salía «todo A», sin poder medirlo en esa máquina**: el código tiene un camino que lo
+produce exacto. `esRepo` pregunta `--is-inside-work-tree`, que dice «sí» si CUALQUIER ancestro es un
+repo; si la copia cuelga del repo de otra carpeta, `prepararRepo` no hace su `git init`, y el
+baseline y los commits por turno van a la historia de arriba, donde todo el proyecto es nuevo. El
+otro camino, más estrecho: índice no vacío en la primera bajada, y entonces el baseline no pasa a
+ser el primer commit y el de un turno ocupa su sitio como raíz. En este Mac ninguna copia cuelga de
+otro repo. Por eso la bajada que vacía hace `prepararRepo(…, { propio: true })`: exige que el repo
+sea de ESTA carpeta y, si no, lo crea aquí. Sin `propio` todo sigue igual, a propósito: un proyecto
+que una persona abre dentro de su monorepo usa ese repo, y así está probado.
+
+**El orden, que es lo que no puede fallar**: preguntar → pedir el zip → solo con el zip en la mano,
+vaciar → extraer → `git init` + baseline. Si el zip falla no se vacía nada (y se dice), y la vía
+fichero a fichero no vacía nunca: traería solo los de texto sobre una carpeta vacía. Se vacía todo
+menos `.xonecode/`, dentro del workspace y comprobado por el texto de la ruta y por el camino real.
+
+**Lo que se pierde, y está declarado**: las refs de sesión de esa copia, así que la Revisión de las
+sesiones anteriores pasa a `sin-marca`, y los commits por turno. Una tarea de fondo sobre esa copia
+también pierde su ref.

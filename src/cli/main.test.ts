@@ -746,6 +746,11 @@ function piezasFalsas(overrides: Partial<PiezasDeSincronizacion> = {}): PiezasDe
     limpio: overrides.limpio ?? (async () => true),
     sinCommitear: overrides.sinCommitear ?? (async () => []),
     subirProyecto: overrides.subirProyecto ?? (async () => ({ ok: [], fallos: [], omitidas: [] })),
+    vaciar: overrides.vaciar ?? (() => []),
+    repoPropio: overrides.repoPropio ?? (async () => false),
+    // Por omisión la raíz del test NO está en el workspace: los tests de siempre siguen
+    // ejercitando la regla de antes, y el vaciado se pide a mano.
+    baseDeWorkspace: overrides.baseDeWorkspace ?? (() => "/no/es/el/workspace"),
   };
 }
 
@@ -1119,5 +1124,106 @@ describe("/connect-studio: el endpoint y el entorno se escriben JUNTOS", () => {
     // Y la URL nueva sí quedó: lo que se borra es la referencia caducada, no el endpoint.
     const cloudstudio = JSON.parse(readFileSync(join(raiz, ".xonecode", "config.json"), "utf8")).cloudstudio;
     expect(cloudstudio.url).toBe("https://cloudstudio.cliente.example/mcp");
+  });
+});
+
+
+/**
+ * «Actualizar repo local» dentro del workspace VACÍA la copia y rehace el git — decidido por
+ * él: lo borrado en Studio seguía vivo aquí, y una copia sin su propio repo enseñaba el
+ * proyecto entero como «añadido por esta sesión». Se mira la COMPOSICIÓN desde fuera, por el
+ * patrón de siempre: que la pregunta vaya antes, que sin «sí» no se toque nada y que la
+ * limpieza se entregue a la descarga (que la hace con el zip ya en la mano), no antes.
+ */
+describe("crearSincronizador: bajar dentro del workspace vacía la copia", () => {
+  const enWorkspace = (raiz: string) => ({ baseDeWorkspace: () => dirname(raiz) });
+
+  it("sin quien confirme, con algo que perder, se NIEGA como antes y no abre sesión", async () => {
+    const raiz = raizConProyectoCloudYEntorno();
+    const sesion = vi.fn(piezasFalsas().sesion);
+    const r = await crearSincronizador(
+      piezasFalsas({ ...enWorkspace(raiz), sesion, sinCommitear: async () => ["Menu.xne"] })
+    )("bajar", raiz);
+    expect(r).toEqual({ tipo: "arbol-sucio", accion: "bajar", pendientes: ["Menu.xne"] });
+    expect(sesion).not.toHaveBeenCalled();
+  });
+
+  it("si se CANCELA no se abre sesión ni se toca nada, y la pregunta lleva lo que se pierde", async () => {
+    const raiz = raizConProyectoCloudYEntorno();
+    const sesion = vi.fn(piezasFalsas().sesion);
+    const vaciar = vi.fn(() => []);
+    const preguntado: unknown[] = [];
+    const r = await crearSincronizador(
+      piezasFalsas({ ...enWorkspace(raiz), sesion, vaciar, repoPropio: async () => true, sinCommitear: async () => ["Menu.xne"] })
+    )("bajar", raiz, undefined, undefined, async (loQueSePierde) => {
+      preguntado.push(loQueSePierde);
+      return false;
+    });
+    expect(r).toEqual({ tipo: "texto", texto: "no se ha actualizado la copia\n" });
+    expect(preguntado).toEqual([{ sinCommitear: ["Menu.xne"] }]);
+    expect(sesion).not.toHaveBeenCalled();
+    expect(vaciar).not.toHaveBeenCalled();
+  });
+
+  it("con un sí, la LIMPIEZA se entrega a la descarga y el git se rehace DESPUÉS", async () => {
+    const raiz = raizConProyectoCloudYEntorno();
+    const orden: string[] = [];
+    const vaciar = vi.fn(() => {
+      orden.push("vaciar");
+      return [];
+    });
+    await crearSincronizador(
+      piezasFalsas({
+        ...enWorkspace(raiz),
+        vaciar,
+        repoPropio: async () => true,
+        descargar: async ({ proyecto, vaciarAntes }) => {
+          orden.push("zip");
+          vaciarAntes?.();
+          orden.push("extraer");
+          return { proyecto, rama: "master", fecha: "2026-01-01T00:00:00.000Z", via: "zip" as const, manifiesto: [], descargados: [] };
+        },
+        preparar: async (_raiz, _rama, _informar, modo) => {
+          // El `git init` va en la PROPIA carpeta: sin `propio`, una copia que cuelga del
+          // repo de otra escribiría en esa historia.
+          orden.push(modo?.propio === true ? "git init" : "git init SIN propio");
+          return "sha";
+        },
+      })
+    )("bajar", raiz, undefined, undefined, async () => true);
+    expect(orden).toEqual(["zip", "vaciar", "extraer", "git init"]);
+    expect(vaciar).toHaveBeenCalledWith(raiz, dirname(raiz));
+  });
+
+  it("una carpeta sin nada que perder (el alta) no pregunta, y se baja vaciada igual", async () => {
+    const raiz = raizConProyectoCloudYEntorno();
+    let vaciarAntes: unknown;
+    await crearSincronizador(
+      piezasFalsas({
+        ...enWorkspace(raiz),
+        descargar: async (opciones) => {
+          vaciarAntes = opciones.vaciarAntes;
+          return { proyecto: opciones.proyecto, rama: "master", fecha: "x", via: "zip" as const, manifiesto: [], descargados: [] };
+        },
+      })
+    )("bajar", raiz);
+    expect(vaciarAntes).toBeTypeOf("function");
+  });
+
+  it("FUERA del workspace no se vacía nada: la regla de antes", async () => {
+    const raiz = raizConProyectoCloudYEntorno();
+    let vaciarAntes: unknown = "sin llamar";
+    const r = await crearSincronizador(
+      piezasFalsas({
+        limpio: async () => false,
+        sinCommitear: async () => ["Menu.xne"],
+        descargar: async (opciones) => {
+          vaciarAntes = opciones.vaciarAntes;
+          return { proyecto: opciones.proyecto, rama: "master", fecha: "x", via: "zip" as const, manifiesto: [], descargados: [] };
+        },
+      })
+    )("bajar", raiz, undefined, undefined, async () => true);
+    expect(r).toEqual({ tipo: "arbol-sucio", accion: "bajar", pendientes: ["Menu.xne"] });
+    expect(vaciarAntes).toBe("sin llamar");
   });
 });

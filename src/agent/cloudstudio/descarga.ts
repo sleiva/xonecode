@@ -30,6 +30,14 @@ export interface OpcionesDeDescarga {
    */
   ramaOrigen: string;
   informar?: (texto: string) => void;
+  /**
+   * Dejar la copia vacía ANTES de escribir la bajada (`gitSync.ts#vaciarCopia`). Se llama
+   * **solo con el zip ya en la mano**: si la descarga falla, la copia tiene que seguir como
+   * estaba, y vaciar primero la dejaría sin nada. Y **la vía fichero a fichero NO vacía**:
+   * trae solo los de texto, así que media bajada sobre una carpeta vacía sería perder los
+   * binarios — ahí se escribe encima, como siempre, y se dice.
+   */
+  vaciarAntes?: () => void;
 }
 
 /** Pool acotado. No hay `worker_threads`: esto es espera de red, no CPU. */
@@ -130,8 +138,24 @@ export async function descargarProyecto(opciones: OpcionesDeDescarga): Promise<E
     let motivo: string | undefined;
     let descargados: string[] = [];
 
+    // El zip se PIDE aparte y antes de tocar el disco: es lo que deja vaciar la copia solo
+    // cuando ya se tiene lo que va a ocupar su sitio.
+    let zip: string | undefined;
+    let fallo: Error | undefined;
     try {
-      descargados = retirarVistasAplanadas(raiz, extraerZipBase64(await puerto.descargarZip(), raiz));
+      zip = await puerto.descargarZip();
+    } catch (error) {
+      fallo = error as Error;
+    }
+    if (zip !== undefined && opciones.vaciarAntes !== undefined) {
+      opciones.vaciarAntes();
+    } else if (opciones.vaciarAntes !== undefined) {
+      informar("no se ha vaciado la copia: sin el ZIP se escribe encima de lo que hay\n");
+    }
+
+    try {
+      if (fallo !== undefined) throw fallo;
+      descargados = retirarVistasAplanadas(raiz, extraerZipBase64(zip!, raiz));
     } catch (error) {
       // Un solo intento: si el ZIP falla por un fichero roto en Studio, volverá a fallar.
       via = "parcial";

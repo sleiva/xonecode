@@ -1286,8 +1286,17 @@ feedback del desarrollador** y no es terminal.
   servidor se restaura tras cada operación.
 - **Orden al descargar: extraer → borrar vistas aplanadas → commit de baseline.** Al revés, git
   vería esos `.xml` como borrados y la primera subida los borraría **en Studio**.
-- **Guarda de árbol limpio en las DOS direcciones** (`arbolLimpio`): al subir porque se sube un
-  commit, al bajar porque `bajar` SOBRESCRIBE y el baseline se construye después. No hay ningún
+- **Guarda de árbol limpio al SUBIR** (`arbolLimpio`), porque se sube un commit. **Bajar dentro
+  del workspace ya no se niega: VACÍA la copia y rehace el git** (`gitSync.ts#vaciarCopia`,
+  `ConfirmacionDeBajada`), decisión suya: escribir el zip encima dejaba vivo lo borrado en Studio,
+  y una copia sin su propio repo enseñaba el proyecto entero como «añadido por esta sesión». Tres
+  cosas que no son de forma: **se pregunta antes** con lo que se pierde delante (fail-closed por
+  TIPO, y sin nada que perder —el alta— no pregunta); **se vacía SOLO con el zip en la mano**
+  (`vaciarAntes` de `descargarProyecto`: si la bajada falla la copia sigue igual, y la vía fichero
+  a fichero NUNCA vacía, que traería solo los de texto); y **el `git init` es DESPUÉS de bajar y en
+  la propia carpeta** (`prepararRepo(…, { propio: true })`), para que el primer commit sea la
+  bajada. Fuera del workspace —la carpeta que abrió una persona— sigue la guarda de antes, y un
+  proyecto DENTRO de su repo sigue usando ese repo: `propio` solo lo pide el vaciado. No hay ningún
   `git merge`: fusionar es del usuario, en Studio. Una carpeta que aún no es repo solo está limpia
   si está vacía salvo por la basura del SO (lista CERRADA: un `.env` o un `.gitignore` sí bloquean).
 - **La autorización de la subida es un hueco de política, fail-closed por TIPO**
