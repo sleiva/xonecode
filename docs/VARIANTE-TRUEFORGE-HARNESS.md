@@ -520,6 +520,11 @@ hechos del proyecto precargados, y envuelve el prompt con su identidad, que no s
 3. ~~El resto de subagentes~~: hecho, todos salen de su `.md` (abajo).
 4. ~~La memoria del hilo en disco~~: hecha, como foto del raíz (abajo).
 5. Deshacer la dependencia circular entre `turnoReal.ts` y `sesionTrueforge.ts`.
+6. **MUY IMPORTANTE — la pregunta del orquestador como TARJETA con botones.** Hoy `ask_user_question`
+   sale como texto en el chat con las opciones numeradas (abajo). Falta la tarjeta con un botón por
+   opción, como la de subir a CloudStudio (`Pregunta.tsx`), ENCIMA del texto y sin sustituirlo:
+   stdio y la TUI siguen con el texto. Las opciones viajan como DATO en un evento propio, no se
+   deducen del texto, y es una interrupción distinta de la aprobación de escrituras.
 
 **Las rigideces de la librería** que podrían llevar a portarla: envuelve siempre el prompt con su
 identidad; prefija cada tool con `mcp server:`; el prompt de un subagente no se puede personalizar y no
