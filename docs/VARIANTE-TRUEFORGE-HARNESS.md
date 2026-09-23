@@ -645,3 +645,12 @@ Dos causas, y la traza separa las dos. La **compactación del hijo** (arriba), q
 se retiró. Y **conducta**: el hijo de TrueForge sacó el log entero dos veces (12k cada una) donde el
 de deepagents lo filtró con `grep`/`tail`, y leyó el `SKILL.md` en dos trozos. Eso último no es del
 motor —las tools y los umbrales son los mismos— y con una pasada no se distingue de la varianza.
+
+### Las capacidades, una pieza por responsabilidad (23-09-2026)
+
+`capacidades.ts` es el sistema de plugins de este motor sobre `AgentCapability`: ficheros, tools
+propias, ejecución, recortes del paso, fecha e instrucciones. **Cada pieza declara las tools que
+añade**, y la nota «tienes estas tools» de cada hijo sale de esa lista (`toolsDe`): antes se
+mantenía aparte y a mano, y ya se había quedado corta una vez. Qué piezas lleva cada especialista lo
+decide `capacidadesDelEspecialista` sobre su `.md`, con la partición de deepagents, y se prueba sin
+levantar un hilo. No cambia el comportamiento: los tests de la sesión pasan sin tocarse.

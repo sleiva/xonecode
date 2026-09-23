@@ -23,7 +23,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import winston from "winston";
-import { AgentThread, AgentThreadOrchestrator, EventType, ToolSet, contextCompaction, currentDateTime, dynamicSubAgents } from "@truefoundry/trueforge-core/core";
+import { AgentThread, AgentThreadOrchestrator, EventType, contextCompaction, dynamicSubAgents } from "@truefoundry/trueforge-core/core";
 import { UMBRAL_RESUMEN_TOKENS } from "../../turno/resumenDeContexto.js";
 import { NOOP_AGENT_TRACING } from "@truefoundry/trueforge-core/core/tracing/NoopAgentTracing";
 import type { DomainEvent, HallazgoDelTurno, PendienteDeAprobacion } from "../../../core/events.js";
@@ -44,21 +44,24 @@ import { tomarInstantanea, type Cambio } from "../../turno/instantanea.js";
 import { ficherosDelProyecto, textoDeReparacion, TOPE_REPARACIONES, type SesionReal } from "../../turno/turnoReal.js";
 import type { Entorno } from "../../config/entorno.js";
 import { modeloParaTrueforge } from "./modeloLangchain.js";
-import {
-  fuenteDeEjecucion,
-  fuenteDeFicheros,
-  TOOLS_DE_FICHERO,
-  TOOLS_DE_LECTURA,
-  TOOLS_QUE_ESCRIBEN,
-  type BackendDeFicheros,
-} from "./toolsDeFichero.js";
+import { TOOLS_DE_LECTURA, type BackendDeFicheros } from "./toolsDeFichero.js";
 import { traducirEvento } from "./eventosTrueforge.js";
 import { anuncioDeSkills } from "./skillsTrueforge.js";
-import { presupuestoDelPaso } from "./recortes.js";
+import {
+  capabilitiesDe,
+  capacidadDeFecha,
+  capacidadDeFicheros,
+  capacidadDeInstrucciones,
+  capacidadDePropias,
+  capacidadDeRecortes,
+  capacidadesDelEspecialista,
+  clasesDeTools,
+  toolsDe,
+} from "./capacidades.js";
 import { crearDiagnosticoDeTools, type DiagnosticoDeTools } from "../../turno/diagnosticoDeTools.js";
 import { detalleDe, parametrosDe } from "../../turno/resumenDeTool.js";
 import { fotoSaneada, guardarMemoria, leerMemoria, type FotoDeHilo } from "./memoriaTrueforge.js";
-import { fuenteDeLangchain, type ToolDeLangchain } from "./toolsPropias.js";
+import type { ToolDeLangchain } from "./toolsPropias.js";
 import { crearNavegacionXone } from "../../grafo/navegacionXone.js";
 import { crearBusquedaRegex } from "../../grafo/busquedaRegex.js";
 import { crearCopiarArtefacto } from "../../grafo/copiarArtefacto.js";
@@ -66,11 +69,6 @@ import { crearCriticaVisual } from "../../grafo/criticaVisual.js";
 import { crearTraerDeLaMaquina } from "../../grafo/traerDeLaMaquina.js";
 import { invocarVisualConModelos } from "../../dispositivos/juezVisual.js";
 import { estilosDeDisco, indiceEnDisco, type CargarIndice } from "../../navegacion/indiceEnDisco.js";
-
-/** Las tools que NO piden aprobación: las de lectura y la shell del conductor. */
-const SIN_APROBACION = { enableTools: ["@all"], disableTools: [], preloadTools: [], requireApprovalForTools: [] };
-/** Las que escriben PARAN el turno hasta que alguien decida, como el HITL de deepagents. */
-const CON_APROBACION = { enableTools: ["@all"], disableTools: [], preloadTools: [], requireApprovalForTools: [...TOOLS_QUE_ESCRIBEN] };
 
 /** El hilo raíz de TrueForge. Se llama así en la librería y no se elige. */
 const HILO_RAIZ = "main";
@@ -90,22 +88,6 @@ export function notaDeDelegacion(agentes: readonly Agente[]): string {
     "entiende `create_sub_agent` y `name`. Las fichas de los especialistas:",
     ...agentes.map((a) => `- ${a.nombre}: ${fichaDeAgente(a)}`),
   ].join("\n");
-}
-
-/**
- * Qué tools lleva un especialista, por lo que declara su `.md` — la MISMA partición que
- * deepagents (`perfiles.ts#toolsDe` y `montajeDeFicheros`):
- * - quien EJECUTA: lectura + `execute`, y nada de escribir (la shell no pasa por los permisos,
- *   así que el camino normal de tocar el proyecto sigue siendo el de la aprobación);
- * - quien solo lee: las seis SIN aprobación, porque `permisosDe` lo confina a lo que no es el
- *   proyecto —`/artefactos/` y `/planes/`, que es donde el analista deja su plan—: en deepagents
- *   `hitlDe` le devuelve `{}` por lo mismo;
- * - el resto: las seis, con `write_file`/`edit_file` pidiendo aprobación y `permisosDe` acotando
- *   (`escribeEn` incluido).
- */
-export function clasesDeTools(agente: Pick<Agente, "soloLectura" | "ejecucion">): "ejecuta" | "lee" | "escribe" {
-  if (agente.ejecucion === true) return "ejecuta";
-  return agente.soloLectura ? "lee" : "escribe";
 }
 
 /** Lo que cada clase NO puede hacer, que la lista de tools no dice sola. */
@@ -257,14 +239,6 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       ? [crearCopiarArtefacto({ raiz, carpetaDeArtefactos: carpeta, perfil: agente }) as unknown as ToolDeLangchain]
       : []),
   ];
-  const conjuntoDePropias = (tools: ToolDeLangchain[]) =>
-    new ToolSet({ source: fuenteDeLangchain(tools, backend as never) as never, selectors: SIN_APROBACION, preload: true });
-
-  const toolsDelRaiz = new ToolSet({
-    source: fuenteDeFicheros({ backend, reglas: permisosDe(PERFIL_DEL_ORQUESTADOR), tools: TOOLS_DE_LECTURA }) as never,
-    selectors: SIN_APROBACION,
-    preload: true,
-  });
   const llm = modeloParaTrueforge({ modelo: () => modelos.paraPapel("trabajo"), senal: () => aborto?.signal });
 
   /**
@@ -283,33 +257,17 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
     const agente = especialistas().find((a) => a.nombre === params.request.name);
     quienEs.set(params.threadId, agente?.nombre ?? params.request.name);
     const clase = agente === undefined ? "lee" : clasesDeTools(agente);
-    const reglas = permisosDe(agente ?? { nombre: params.request.name, soloLectura: true });
-    const tools: unknown[] = [];
-    const propias = agente === undefined ? [] : propiasDe(agente);
-    const nombres = [
-      ...(clase === "escribe" || (clase === "lee" && agente !== undefined) ? TOOLS_DE_FICHERO : TOOLS_DE_LECTURA),
-      ...propias.map((t) => t.name),
-      ...(clase === "ejecuta" ? ["execute"] : []),
-      // La de la capability de la fecha, que también se le monta (abajo).
-      "get_current_datetime",
-    ];
-    if (clase === "escribe") {
-      tools.push(new ToolSet({ source: fuenteDeFicheros({ backend, reglas }) as never, selectors: CON_APROBACION, preload: true }));
-    } else if (clase === "lee" && agente !== undefined) {
-      tools.push(new ToolSet({ source: fuenteDeFicheros({ backend, reglas }) as never, selectors: SIN_APROBACION, preload: true }));
-    } else {
-      tools.push(
-        new ToolSet({ source: fuenteDeFicheros({ backend, reglas, tools: TOOLS_DE_LECTURA }) as never, selectors: SIN_APROBACION, preload: true })
-      );
-    }
-    if (propias.length > 0) tools.push(conjuntoDePropias(propias));
-    if (clase === "ejecuta") {
-      const conShell = montarBackend({ entorno: entornoDeLaShellDelProyecto(raiz, opciones.artefactos) }) as unknown as {
-        execute(c: string): unknown;
-        write(ruta: string, contenido: string): unknown;
-      };
-      tools.push(new ToolSet({ source: fuenteDeEjecucion(conShell) as never, selectors: SIN_APROBACION, preload: true }));
-    }
+    // Las piezas por lo que declara su `.md` (`capacidades.ts`); la nota sale de SUS tools.
+    const piezas = capacidadesDelEspecialista(agente, params.request.name, {
+      backend: backend as never,
+      propias: propiasDe,
+      conShell: () =>
+        montarBackend({ entorno: entornoDeLaShellDelProyecto(raiz, opciones.artefactos) }) as unknown as {
+          execute(c: string): unknown;
+          write(ruta: string, contenido: string): unknown;
+        },
+    });
+    const nombres = toolsDe(piezas);
     const nota = notaDeTools(nombres, agente === undefined ? LIMITE_DEL_GENERICO : LIMITES_DE[clase]);
     const instrucciones =
       agente === undefined
@@ -348,10 +306,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
        * cacheado al 85-95 %: reenviar su contexto sale más barato que resumirlo. El de deepagents
        * acabó a 22.508 sin llegar al umbral.
        */
-      capabilities: [
-        { systemToolSets: tools, toolResponseProcessors: [presupuestoDelPaso(backend as never)] as never, instructionBuilders: [(b: { addSection(tag: string, texto: string, escapar?: boolean): unknown }) => void b.addSection("especialista", instrucciones, true)] },
-        currentDateTime({ tracing: NOOP_AGENT_TRACING }),
-      ] as never,
+      capabilities: capabilitiesDe([...piezas, capacidadDeInstrucciones(instrucciones)]) as never,
       tracing: NOOP_AGENT_TRACING,
       logger,
     });
@@ -374,9 +329,14 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       threadId: HILO_RAIZ,
       title: HILO_RAIZ,
       capabilities: [
-        // El presupuesto de un PASO entero (`recortes.ts#recortarPaso`), que el recorte por
-        // resultado no ve: varias respuestas en paralelo que caben solas pero no juntas.
-        { systemToolSets: [toolsDelRaiz, conjuntoDePropias(propiasDelRaiz)], toolResponseProcessors: [presupuestoDelPaso(backend as never)] as never },
+        // Las piezas del orquestador (`capacidades.ts`): leer, sus tools propias, el presupuesto
+        // del paso y la fecha. Lo que necesita su definición —compactar— y delegar van aquí.
+        ...capabilitiesDe([
+          capacidadDeFicheros({ backend, reglas: permisosDe(PERFIL_DEL_ORQUESTADOR), tools: TOOLS_DE_LECTURA, conAprobacion: false }),
+          capacidadDePropias(propiasDelRaiz, backend as never),
+          capacidadDeRecortes(backend as never),
+          capacidadDeFecha(),
+        ]),
         /**
          * **La conversación se RESUME al mismo umbral que deepagents** (`UMBRAL_RESUMEN_TOKENS`):
          * sin esto no se compactaba nunca y cada turno reenviaba la sesión entera. La
@@ -385,9 +345,6 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
          * capability—, que no se compacta.
          */
         contextCompaction({ definition: definicion as never, compactionThresholdTokens: UMBRAL_RESUMEN_TOKENS }),
-        // `get_current_datetime` de la librería: la fecha en UTC, para que «hoy» o «hace tres días»
-        // no se lo invente el modelo. No da la zona horaria local, y no se le atribuye.
-        currentDateTime({ tracing: NOOP_AGENT_TRACING }),
         // `create_sub_agent`: la delegación de TrueForge, un nivel y cinco a la vez como mucho.
         dynamicSubAgents({ sandboxAvailable: false, tracing: NOOP_AGENT_TRACING }),
       ] as never,
