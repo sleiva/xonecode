@@ -73,7 +73,7 @@ export type Acto =
    * de pulsar, y plegarlo sería no contestarle. Sigue suelta y a la vista, como las sesiones
    * guardadas antes de que este campo existiera.
    */
-  | { tipo: "sistema"; texto: string; clase?: "aviso" | "permiso" }
+  | { tipo: "sistema"; texto: string; clase?: "aviso" | "permiso" | "resumen" }
   /**
    * Un artefacto que el agente dejó escrito: un diagrama, un panel, una captura
    * (`core/artefactos.ts`). Es un acto propio y no una línea de `herramientas` porque es lo

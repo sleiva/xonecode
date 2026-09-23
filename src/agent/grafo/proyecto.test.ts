@@ -949,3 +949,17 @@ describe("la shell de un subagente con EJECUCIÓN", () => {
     expect(output.trim().endsWith(raiz.replace(/^\/private/, ""))).toBe(true);
   });
 });
+
+
+describe("la shell del agente sabe dónde está el dispositivo de la sesión", () => {
+  it("con sesión, XONECODE_DISPOSITIVO nombra el fichero de al lado de sus artefactos; sin ella, no", () => {
+    // Composición de producción: `entornoDeShell` es puro y ya se prueba solo, lo que falta
+    // mirar es que ESTO le pase la ruta. Sin ella los scripts no ven la pastilla del chat.
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-shell-disp-"));
+    const artefactos = join(raiz, ".xonecode", "sesiones", "s1", "artefactos");
+    expect(entornoDeLaShellDelProyecto(raiz, artefactos, () => undefined)["XONECODE_DISPOSITIVO"]).toBe(
+      join(raiz, ".xonecode", "sesiones", "s1", "dispositivo.json")
+    );
+    expect(entornoDeLaShellDelProyecto(raiz, undefined, () => undefined)).not.toHaveProperty("XONECODE_DISPOSITIVO");
+  });
+});

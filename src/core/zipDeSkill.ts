@@ -73,8 +73,15 @@ export function rutaDeZipAceptable(ruta: string): boolean {
   return segmentos.every((s) => s !== "" && s !== "." && s !== ".." && !/^\s|\s$/.test(s));
 }
 
-/** El único segmento de primer nivel que comparten TODAS las entradas, si lo hay. */
-function carpetaComun(rutas: readonly string[]): string | undefined {
+/**
+ * El único segmento de primer nivel que comparten TODAS las entradas, si lo hay.
+ *
+ * Exportada porque `agent/dispositivos/descargaDeHerramientas.ts` necesita la MISMA
+ * pregunta —¿este zip trae una sola carpeta envolvente?— para el JDK y las cmdline-tools de
+ * Android, que hay que renombrar a una ruta fija tras descomprimir: una segunda copia de esto
+ * es donde divergiría en silencio.
+ */
+export function carpetaComun(rutas: readonly string[]): string | undefined {
   const primeros = new Set(rutas.map((r) => r.split("/")[0] ?? ""));
   if (primeros.size !== 1) return undefined;
   const unico = [...primeros][0]!;

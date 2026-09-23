@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { Acto, ConsumoDeTurno } from "../tipos.js";
 import { usarPegadoAbajo } from "../pegadoAbajo.js";
 import { useCronometro } from "../cronometro.js";
@@ -120,8 +120,13 @@ function TramoDeTrabajo({
             )}
           </>
         ) : (
-          <>
-            {segundosEnVuelo === undefined ? "Trabajando…" : `Trabajando… · ${segundosEnVuelo} s`}
+          // Una caja FLEXIBLE acotada al ancho del `summary`: sin ella el recorte del paso
+          // actual no se aplica (un `span` en línea no recorta) y una línea larga —medido: el
+          // aviso de un turno que falló— salía de la columna con su barra de scroll horizontal.
+          <span className={estilos.lineaEnVuelo}>
+            <span className={estilos.enVuelo}>
+              {segundosEnVuelo === undefined ? "Trabajando…" : `Trabajando… · ${segundosEnVuelo} s`}
+            </span>
             {/*
               Y en qué paso está. Va aquí, en la línea que se ve con el pulso PLEGADO, porque
               desplegarlo para saber qué está haciendo es exactamente lo que sobra cuando un
@@ -133,7 +138,7 @@ function TramoDeTrabajo({
                 {segundosDelPaso === undefined ? "" : ` · ${segundosDelPaso} s`}
               </span>
             )}
-          </>
+          </span>
         )}
       </summary>
       <div className={estilos.detalleDePulso} ref={nodo} onScroll={alDesplazar}>
@@ -329,8 +334,16 @@ const ES_PULSO = new Set(["razonamiento", "herramientas", "fase", "artefacto"]);
  * pliega es el párrafo, nunca el hecho de que lo hay.
  */
 const CLASES_DE_SISTEMA = {
-  aviso: { titulo: "Verificaciones", uno: "aviso", varios: "avisos" },
-  permiso: { titulo: "Permisos", uno: "escritura", varios: "escrituras" },
+  aviso: { titulo: "Verificaciones", uno: "aviso", varios: "avisos", markdown: false },
+  permiso: { titulo: "Permisos", uno: "escritura", varios: "escrituras", markdown: false },
+  /**
+   * El resumen con el que se compactó la conversación al pasar el umbral de contexto. Es lo
+   * que el harness hizo CON el turno, así que se pliega como los otros dos; y es el ÚNICO que
+   * se pinta como markdown, porque es un texto del modelo con títulos y listas. La bandera va
+   * en la TABLA y no en el render: un aviso que nombre `Menu.xne` o `MAP_COLOR5` no puede
+   * pasar por markdown, que se comería los guiones bajos.
+   */
+  resumen: { titulo: "Resumen del contexto", uno: "resumen", varios: "resúmenes", markdown: true },
 } as const;
 
 type ClaseDeSistema = keyof typeof CLASES_DE_SISTEMA;
@@ -358,6 +371,44 @@ interface TramoDePulso {
    * `↑0 ↓0` afirmaría una medida que nadie hizo.
    */
   consumo?: ConsumoDeTurno;
+}
+
+/** Cuánto se queda a la vista el aviso del modo autónomo antes de retirarse solo. */
+export const MS_DEL_AVISO_AUTONOMO = 20_000;
+
+/**
+ * El aviso de que la sesión va en autónomo. **Se retira**: al pulsarlo, con su «×» o solo a
+ * los veinte segundos. Pedido por él: se quedaba fijo arriba del hilo durante toda la sesión.
+ *
+ * Retirarlo no esconde el estado, y por eso se puede: el CONMUTADOR de la caja
+ * (`SelectorDeModo.tsx`) sigue diciendo «Autónomo» sin hacer nada, que es donde ese dato tiene
+ * que leerse siempre. Esto es la explicación de lo que significa, y una explicación se lee una
+ * vez. Vive en su propio componente para que su estado nazca con él: se monta al pasar a
+ * autónomo y se desmonta al volver, así que otra vuelta a autónomo lo enseña de nuevo sin una
+ * bandera que recordar.
+ */
+function AvisoDeModoAutonomo() {
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const plazo = setTimeout(() => setVisible(false), MS_DEL_AVISO_AUTONOMO);
+    return () => clearTimeout(plazo);
+  }, []);
+  if (!visible) return null;
+  return (
+    // `role="note"` y no `alert`: es un estado de la sesión, no algo que acabe de pasar. Va
+    // arriba del todo: cambia lo que va a ocurrir con lo próximo que escribas. Y manda a la
+    // PASTILLA, no al comando: en el navegador «/» es prosa y cada acción tiene su botón.
+    <div role="note" className={`${vista.flowItem} ${estilos.sinAprobacion}`} onClick={() => setVisible(false)}>
+      <p className={estilos.textoDelAviso}>
+        Esta sesión va en <strong>modo autónomo</strong>: los cambios se aplican solos
+        y cada turno te dirá qué ficheros tocó. Subir a CloudStudio sigue pidiéndote
+        permiso. Vuelve a <strong>supervisado</strong> en la pastilla de la caja.
+      </p>
+      <button type="button" className={estilos.cerrarAviso} aria-label="Cerrar el aviso" title="Cerrar el aviso">
+        ×
+      </button>
+    </div>
+  );
 }
 
 export function Chat({
@@ -618,11 +669,7 @@ export function Chat({
             // Y manda a la PASTILLA, no al comando: en el navegador «/» es prosa y cada
             // acción tiene su botón, así que decirle a alguien que teclee `/aprobacion` es
             // mandarlo a un camino que aquí no existe.
-            <p role="note" className={`${vista.flowItem} ${estilos.sinAprobacion}`}>
-              Esta sesión va en <strong>modo autónomo</strong>: los cambios se aplican solos
-              y cada turno te dirá qué ficheros tocó. Subir a CloudStudio sigue pidiéndote
-              permiso. Vuelve a <strong>supervisado</strong> en la pastilla de la caja.
-            </p>
+            <AvisoDeModoAutonomo />
           ) : null}
           {trabajoAlAbrir === undefined ? null : (
             // Va detrás de `sinAprobacion` y delante de la relectura: los dos primeros son
@@ -676,7 +723,7 @@ export function Chat({
             }
             if (pieza.tipo === "harness") {
               const { tramo: t } = pieza;
-              const { titulo, uno, varios } = CLASES_DE_SISTEMA[t.clase];
+              const { titulo, uno, varios, markdown } = CLASES_DE_SISTEMA[t.clase];
               const n = t.actos.length;
               return (
                 // Plegado siempre: al contrario que el pulso, esto no se sigue en vivo — sale
@@ -687,11 +734,19 @@ export function Chat({
                     {`${titulo} · ${n} ${n === 1 ? uno : varios}`}
                   </summary>
                   <div className={estilos.detalleDePulso}>
-                    {t.actos.map((a, i) => (
-                      <p key={i} role="note" className={estilos.sistema}>
-                        {a.texto}
-                      </p>
-                    ))}
+                    {t.actos.map((a, i) =>
+                      markdown ? (
+                        // `md-cuerpo` y los dólares escapados, como la respuesta del asistente:
+                        // es el mismo tipo de texto y se tiene que leer igual.
+                        <div key={i} role="note" className="md-cuerpo">
+                          <MarkdownText text={protegerDolares(a.texto)} codeLabels={ETIQUETAS_DE_CODIGO} />
+                        </div>
+                      ) : (
+                        <p key={i} role="note" className={estilos.sistema}>
+                          {a.texto}
+                        </p>
+                      )
+                    )}
                   </div>
                 </details>
               );

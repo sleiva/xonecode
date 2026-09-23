@@ -182,7 +182,7 @@ describe("CloudStudio: los botones", () => {
       <CloudStudio sync={{ proyecto: "Tienda", rama: "main", pendientes: 1 }} alPedir={NADA} alRecargar={NADA} />
     );
     const actualizar = screen.getByRole("button", { name: "Actualizar repo local" });
-    expect(actualizar.getAttribute("title")).toMatch(/sobrescribe esta copia/i);
+    expect(actualizar.getAttribute("title")).toMatch(/vacía esta copia/i);
   });
 
   /**
@@ -194,7 +194,7 @@ describe("CloudStudio: los botones", () => {
     render(
       <CloudStudio sync={{ proyecto: "Tienda", rama: "main", pendientes: 1 }} alPedir={NADA} alRecargar={NADA} />
     );
-    const nota = screen.getByText(/sobrescribe esta copia/i);
+    const nota = screen.getByText(/vacía esta copia/i);
     expect(nota.textContent).toMatch(/Subir pide el plan/i);
   });
 
@@ -272,9 +272,11 @@ describe("CloudStudio: cuándo no se ofrece subir", () => {
    */
   it("sin «Subir», la nota no lo nombra, y sigue avisando de que la actualización pisa", () => {
     render(<CloudStudio sync={{ ...CON_PROYECTO, pendientes: 0 }} alPedir={NADA} alRecargar={NADA} />);
-    const nota = screen.getByText(/sobrescribe esta copia/i);
+    const nota = screen.getByText(/vacía esta copia/i);
     expect(nota.textContent).not.toMatch(/Subir/);
-    expect(nota.textContent).toMatch(/se niega con cambios sin commitear/i);
+    // Ya no se NIEGA: vacía la copia y lo pregunta antes, y la nota lo tiene que decir.
+    expect(nota.textContent).toMatch(/pide confirmación/i);
+    expect(nota.textContent).not.toMatch(/se niega/i);
   });
 });
 
@@ -432,14 +434,14 @@ describe("CloudStudio: el registro de lo que pasó", () => {
    */
   it("la nota manda al registro, y ya no promete el chat", () => {
     render(<CloudStudio sync={CON_PROYECTO} alPedir={NADA} alRecargar={NADA} />);
-    const nota = screen.getByText(/sobrescribe esta copia/i).textContent!;
+    const nota = screen.getByText(/vacía esta copia/i).textContent!;
     expect(nota).toMatch(/queda aquí abajo, en el registro de esta sesión/i);
     expect(nota).not.toMatch(/en el chat/i);
     // La otra variante —sin «Subir»— lleva la misma promesa: era la que decía «se niega con
     // cambios sin commitear, y lo que pasa sale en el chat».
     cleanup();
     render(<CloudStudio sync={{ ...CON_PROYECTO, pendientes: 0 }} alPedir={NADA} alRecargar={NADA} />);
-    const sinSubir = screen.getByText(/sobrescribe esta copia/i).textContent!;
+    const sinSubir = screen.getByText(/vacía esta copia/i).textContent!;
     expect(sinSubir).toMatch(/queda aquí abajo, en el registro de esta sesión/i);
     expect(sinSubir).not.toMatch(/en el chat/i);
   });

@@ -112,8 +112,13 @@ export function inventario(informe: InformeDeDispositivos): {
       // No hay aparato al que hablar: quien ofrezca esta fila tiene que decirlo.
       soloDefinicion: true,
     }));
-  // Lo que está a mano primero: es lo que se va a elegir el 90% de las veces.
-  const orden = (d: FilaDeInventario): number => (seLlegaAlDispositivo(d) ? 0 : 1);
+  // Lo que está a mano primero: es lo que se va a elegir el 90% de las veces. Y DENTRO de cada
+  // grupo, Android antes que iOS: los AVD se añadían al FINAL, detrás de todos los simuladores de
+  // iOS, y con 46 apagados el `pixel8` quedaba en la última fila — medido en su pantalla, «me
+  // salen simuladores de iOS apagados pero no me sale el Android». Es además la preferencia que
+  // pidió para el agente: emuladores primero. `sort` es estable, así que el orden de la medida
+  // se conserva dentro de cada escalón.
+  const orden = (d: FilaDeInventario): number => (seLlegaAlDispositivo(d) ? 0 : 2) + (d.plataforma === "android" ? 0 : 1);
   const virtuales = [...medidos, ...deAvds].sort((a, b) => orden(a) - orden(b));
   return { fisicos, virtuales };
 }

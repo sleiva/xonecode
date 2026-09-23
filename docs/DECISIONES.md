@@ -6262,3 +6262,288 @@ reusan `.detalleDePulso`. Vale por lo mismo — quince permisos tampoco se leen 
 
 **Y una nota de forma**: esto obligó a extraer `TramoDeTrabajo` a su propio componente,
 porque un trozo de `map` no puede tener un `ref` ni un efecto.
+
+## El panel de vistas se abre AL LADO del chat, no encima (23-09-2026)
+
+Lo pidió él con dos capturas y el chat de ChatGPT delante: «que las tres secciones cambien, así
+podría ver los artefactos y el chat a la vez». La tira de pestañas llevaba a «Chat» como primera
+opción, o sea que las otras seis se leían como sus alternativas: **para mirar un fichero había
+que dejar de ver lo que el agente estaba escribiendo**, que es justo el momento en que más falta
+hace mirarlo.
+
+La decisión que ordena todo lo demás es que **la conversación deja de ser una vista**. No es una
+más entre siete: es la columna que se queda. Lo que las pestañas eligen pasa a ser «qué abro al
+lado», y volver al chat a secas es CERRAR el panel — por eso el sitio que ocupaba «Chat» lo ocupa
+una «×», y por eso la tira se muda DENTRO del panel, que es la cuarta casa que tiene.
+
+**La tercera columna ya estaba, y llevaba sin usar desde el principio.** `.detailsCol`, su
+tirador con pastilla (`data-side="details"`) y el `.frame[data-details-collapsed]` que le quita el
+borde a cero vienen en `estilos/AppFrame.module.css`, copiado de deepseek; `Maqueta.tsx` incluso
+lo decía por escrito («aquí no hay columna de detalles»). Lo que faltaba era la pista del grid y
+quién la habita, así que el asa, el plegado a cero y la animación salieron gratis.
+
+**Quién cabe lo decide código, no una hoja de estilos** (`apps/web/src/repartoDeColumnas.ts`,
+puro y con test), por dos motivos que se refuerzan: lo que no cabe se **DESMONTA** —un elemento
+invisible sigue siendo tabulable, la regla de siempre de esta consola—, y los anchos de la barra
+y del panel **los pone JS**, así que un `@media` no puede consultarlos: con la misma ventana y la
+barra estrecha caben tres columnas, y con la barra ancha no. El orden de las preguntas ES la
+política, de más generoso a menos: ¿caben las tres? ¿caben el chat y el panel sin la barra?
+¿ninguna de las dos?
+
+De ahí salen las dos decisiones que no son de forma:
+
+- **La única concesión automática es plegar la barra**, y es TRANSITORIA. Cuando no caben las tres
+  pero sí el chat y el panel, la barra se pliega sola para hacerle sitio — y `guardarBarraContraida`
+  **no se llama nunca** con eso. Si se guardara, estrechar la ventana una vez dejaría la barra
+  plegada para siempre, también en la pantalla grande de mañana.
+- **Pedir la barra de vuelta CIERRA el panel**, en vez de no hacer nada. Es la consecuencia
+  incómoda de lo anterior: el usuario no la plegó, así que su preferencia ya dice «abierta» y
+  volver a ponerla ahí no cambiaría nada — se pulsa «Mostrar la barra lateral» y no pasa nada, sin
+  ninguna pista de por qué. Gana quien pulsa: pide la barra, se le da la barra. **Y con el panel
+  CERRADO no hay concesión ninguna**, por lo mismo: si el ancho a secas plegara la barra, ese botón
+  quedaría muerto sin nada que hacer al respecto. Una ventana estrecha sin panel se comporta
+  exactamente como antes de que existiera la tercera columna.
+
+Sin sitio para los dos, **el panel ocupa el centro y el compositor se esconde —sin desmontarse,
+para no perder el borrador—**, que es el comportamiento que ya tenía esta consola; el mismo
+elemento se monta UNA vez en un sitio o en el otro, porque cada una de sus vistas MIDE al
+montarse y dos copias duplicarían todas esas peticiones. **Y el panel es de la SESIÓN**: en el
+escritorio no se pinta aunque la vista siga elegida, porque allí no se ofrece el botón que lo
+cierra y quedaría una columna de la que no se sale. La elección sí se conserva, así que al volver
+a la sesión el panel vuelve por donde estaba.
+
+Dos cosas menores que se decidieron aquí y no hay que volver a decidir: **la vista por omisión al
+abrir es Ficheros**, no Trazas, que son de otro destinatario —quien depura el harness, no quien
+desarrolla la app—; y **el ancho del panel se recuerda pero NO si estaba abierto ni con qué
+vista**, porque esas vistas miden al montarse y sería mandar peticiones al servidor por una
+preferencia de hace tres días.
+
+El gesto de los dos tiradores pasó a ser **una sola pieza** (`Tirador`, dentro de `Maqueta.tsx`):
+son noventa líneas con cuatro trampas medidas dentro —el `button > 0` de jsdom, la captura de
+puntero envuelta, el `pointercancel` y el `lostpointercapture`—, y una segunda copia para el panel
+sería el segundo sitio donde cada una de las cuatro puede volver. Lo único que los distingue es
+`medir`: la barra cuenta desde el borde izquierdo del marco y el panel desde el derecho, y las
+flechas del teclado van en el mismo espejo porque mueven el BORDE y no el ancho.
+
+### Y destapó un defecto de dos meses que ningún test veía
+
+`Ficheros` y `Artefactos` declaraban `container-type` en la MISMA caja que su `@container` ponía
+en columna. **Una consulta de contenedor solo alcanza a los DESCENDIENTES del elemento que la
+declara**, así que esa regla no se aplicaba nunca — y el resto del bloque sí: el árbol saltaba a
+la izquierda por su `order: -1` y salía recortado a una fracción del alto, en FILA con el visor.
+No es «no pasa nada», es medio encuadre, que es peor.
+
+No se vio en dos meses porque esas cajas vivían siempre en la columna central, más ancha que el
+umbral de la consulta; apareció a los cinco minutos de que hubiera una caja estrecha de verdad.
+El arreglo es un envoltorio que declara el contenedor, con la caja de antes como hija. Y va con
+su test en `Barra.test.tsx`, al lado del que ya exigía que una consulta declarara su contenedor en
+la misma hoja: ninguna regla dentro de un `@container` puede llevar el selector de una clase que
+declare `container-type`. Es el patrón de fallo de esta arquitectura —una regla escrita y no
+montada, con todo en verde— en su versión de CSS, y jsdom no lo puede ver porque no hace layout
+ni cascada.
+
+## A DeepSeek se le dice QUIÉN pide: el `user_id` del login de CloudStudio (23-09-2026)
+
+`core/identidadDeProveedor.ts` (la regla, pura), `agent/config/identidadEnDisco.ts` (de qué
+entorno se lee), `agent/config/modelos.ts#construirCompatibleOpenAi` (el cableado).
+
+**Por qué, con claves distintas.** La primera respuesta fue «no hace falta»: con una clave por
+desarrollador, la cuenta ya separa a las personas. Era falso por un dato que faltaba — las claves
+son de la MISMA suscripción, y los límites de DeepSeek son de CUENTA
+(`api-docs.deepseek.com/quick_start/rate_limit`). Para DeepSeek somos todos el mismo cliente. El
+`user_id` da tres cosas: el filtro de contenido marca a una persona y no a la cuenta (la que más
+pesa: sin él, lo que dispare uno frena a todo el equipo), aísla la caché KV por persona, y con
+cuota ampliada da cupo de concurrencia por persona. La segunda no se puede medir desde aquí: su
+documentación no dice si hoy la caché se comparte entre claves de una misma cuenta.
+
+**La identidad es el `sub` del token del IDS, y se normaliza SIEMPRE.** DeepSeek exige
+`[a-zA-Z0-9\-_]+` de hasta 512 caracteres y pide no poner datos personales, así que sale
+`xonecode-` + los primeros 32 hexadecimales de un sha256 — nunca el `sub`, y el correo menos (ya se
+filtra a propósito en `proyectosDeResultado`). Antes del hash el `sub` se recorta y se pasa a
+minúsculas (es un GUID: escrito de dos formas no son dos personas), y el ENTORNO entra en el hash,
+porque dos servidores con su propio IDS pueden repetir un `sub`. El `id_token` primero y el
+`access_token` después, que IdentityServer también emite como JWT. No se verifica la firma: esto no
+autentica a nadie, le pone nombre a una petición.
+
+**Qué entorno**: el del proyecto, resuelto EXACTAMENTE como la sincronización (`entorno` del
+`config.json` → `entornoDeUrl` → `legado`); por eso `entornoDeUrl` se mudó de `cli/main.ts` a
+`core/settings.ts`, que `agent/` sí puede importar. Un proyecto de un servidor sin sesión NO toma
+prestada la identidad de otro. Sin CloudStudio en el proyecto, el primer entorno registrado con
+identidad legible, y luego `legado` — determinista y declarado.
+
+**El cableado es el lector REAL por omisión, no un parámetro opcional.** Salió del mismo día que
+el `Calificador`: un campo opcional que nadie pasa, con todo en verde. Aquí hay diez
+`new Modelos(` en producción, así que el quinto parámetro del constructor es una función que por
+omisión lee el disco, y lo que se pasa a mano es la excepción (un test). La prueba de costura lo
+mira desde fuera: con `HOME` en un temporal y un login de pega, un `new Modelos` sin argumentos
+tiene que llevar `user_id` en `invocationParams()` — y con el mutante (omisión `undefined`) caen
+los tres tests de cableado. Se lee en cada construcción, porque el login puede llegar con la
+consola abierta.
+
+**Va en la RAÍZ del cuerpo por `modelKwargs`**, como pide su documentación para la API compatible
+con OpenAI, y no por el `user` nativo del SDK, que es otro campo. Solo `deepseek`. **Límites
+declarados**: un proveedor PERSONALIZADO apuntado a DeepSeek no lo lleva, y sin login el campo no
+viaja (DeepSeek funciona igual, y un turno caído por no poder ponerle nombre sería cambiar una
+ventaja por una avería). El hash no entra en eventos, trazas ni `.jsonl`.
+
+**Medido**: `xonecode config` dice «se manda user_id» con el login real de la máquina (o sea, el IDS
+devuelve un token con `sub`, que era lo único que no se podía saber leyendo el código), y una
+llamada real a `deepseek-flash` contestó sin error con el campo **medido en el cuerpo del `fetch`**,
+no solo en `invocationParams()`: para DeepSeek el `fetch` es el del eco del razonamiento, el único
+sitio que reescribe el cuerpo, y lo recompone con `{ ...cuerpo, messages }`, así que conserva la
+clave. Lo que eso NO demuestra es que DeepSeek la esté USANDO: una API que ignora un campo
+desconocido contestaría igual.
+
+## El tope de tools del especialista bloqueaba la ENTREGA: de 35 a 150 (23-09-2026)
+
+`agent/turno/resumenDeContexto.ts#TOPE_DE_TOOLS_DEL_ESPECIALISTA`.
+
+**Medido en MyAllXOne** («una calculadora a partir de una maqueta de Stitch y su enlace en el
+drawer»): `developer-xone` gastó 39, 39 y 49 tools en tres encargos seguidos y ninguno creó el
+`.xne`. El tope sale con `continue`, y al agotarse bloquea TODA tool que venga después — también
+`write_file` y `edit_file`—, así que el especialista exploraba hasta el techo y la escritura era la
+que se rechazaba. Solo el developer se llevó 1,17M de entrada para devolver 60, 14 y 14 caracteres,
+y el orquestador lo contaba como «los agentes escritores se están quedando sin turnos explorando» y
+re-delegaba: el mismo reconocimiento otra vez, desde cero.
+
+**Decisión suya: 150, es decir, de economía a GUARDA**, como el del orquestador — por encima de lo
+observado, para que solo pare un encargo desbocado. Lo que sigue acotando de verdad es el tope de
+LLAMADAS (con tools en paralelo llega antes). El test que lo quería por debajo de 43 y el que lo
+quería por debajo del orquestador se reescribieron: los dos codificaban la decisión de antes.
+
+**Descartado, para no rediscutirlo**: excluir las escrituras del conteo con un middleware propio
+(el de langchain no sabe excluir). Arreglaba el bloqueo sin tocar el número; se prefirió el tope
+alto, que es su criterio de siempre.
+
+## El resumen de contexto salía como la respuesta del asistente (23-09-2026)
+
+**Medido en MyAllXOne**: a mitad de un turno largo apareció en el chat un `## Summary` /
+`**Task:**` / `Key facts established:` en inglés, y el `.jsonl` de la sesión lo guardó como un acto
+`asistente`. Era el middleware de resumen de deepagents al cruzar el umbral: resume llamando a
+`request.model` —el MISMO modelo del agente, que además gana sobre el `model` de sus opciones— dentro
+del MISMO nodo `model_request`. Medido contra la librería real: sus chunks llegaban con el mismo
+namespace, el mismo nodo y `tags: []`. Para el puente eran la respuesta.
+
+**Cómo se separan: una ETIQUETA, no el texto.** Dos envoltorios abrazan al middleware de resumen:
+`EtiquetaDelResumenMiddleware` delante le cambia el modelo por un Proxy que añade
+`xonecode:resumen` a cada `invoke`, y `SinEtiquetaDelResumenMiddleware` detrás devuelve el original.
+Medido con un modelo de pega que emite los dos textos: los chunks del resumen llegan con la etiqueta
+y los de la respuesta sin ella. El puente manda los etiquetados a un evento `resumen` antes de
+contarlos como respuesta, la piel web los junta en un acto `sistema` de clase `resumen` y el cliente
+los pliega como «Resumen del contexto», en markdown — por petición suya, «legible, pero dentro de un
+panel», como «Permisos» y «Verificaciones».
+
+**`dentro` es la segunda llave, y su mutante NO muere**: la llamada real pasa por `bindTools`, que el
+Proxy delega al original, así que la respuesta ya sale sin marca aunque faltara. Se queda porque el
+fallo que evita es el caro —la respuesta entera al plegable y el chat mudo— y basta un agente que
+invoque sin `bindTools` para que sea la única. El mutante de `fuera` sí tumba los dos tests.
+
+Se descartó leer el resumen del `_summarizationEvent` que trae el `update` del nodo: está entero y de
+una vez, pero envuelto en el texto inglés de la librería («You are in the middle of a conversation…
+<summary>»), y sacarlo de ahí sería depender de su redacción. El prompt pasa a ser nuestro y en
+castellano (`PROMPT_DEL_RESUMEN`), pidiendo markdown. El terminal deja de imprimir el resumen: allí
+salía como si fuera la respuesta, y `Piel.resumen` es opcional como `razonamiento`. El `## Summary`
+que ya está en el `.jsonl` de aquella sesión es histórico y sigue saliendo como asistente.
+
+**De rebote, dos cosas de la misma captura**: el aviso «el turno falló. Queda apuntado en …» nombraba
+el registro por su ruta ABSOLUTA —con la cuenta del sistema dentro, por el cable— y ahora dice
+`.xonecode/fallos.jsonl`; y esa misma línea, en el `summary` del tramo en vuelo, sacaba barra de scroll
+horizontal porque el recorte de `.pasoActual` no se aplica en un `span` en línea (lo acota ahora un
+`inline-flex`). **Queda abierto**: las causas de `falloLegible` pueden llevar el mensaje de un error de
+Node con su ruta absoluta, y una cancelación del usuario se anota como fallo.
+
+## «Actualizar repo local» vacía la copia y rehace el git (23-09-2026)
+
+**Lo que se vio**: en la pestaña Revisión de una copia de CloudStudio (SLC_ElMombuey, en otra
+máquina), la sesión enseñaba el proyecto ENTERO como añadido —«+10082 −0 y 115 binarios», todo con
+«A»— y «1 commit de otra sesión entremedias». Y lo que él pidió: que actualizar deje la copia
+limpia, con un `git init` hecho DESPUÉS de bajar, «porque si no aparecerán cambios que no hemos
+hecho».
+
+**Decisión suya: opción B**, borrar el `.git` y rehacerlo, frente a la A —conservar la historia y
+hacer un commit de baseline encima—, que era mi recomendación porque conservaba la atribución de
+Revisión de las sesiones viejas. Se prefirió la copia limpia.
+
+**Por qué salía «todo A», sin poder medirlo en esa máquina**: el código tiene un camino que lo
+produce exacto. `esRepo` pregunta `--is-inside-work-tree`, que dice «sí» si CUALQUIER ancestro es un
+repo; si la copia cuelga del repo de otra carpeta, `prepararRepo` no hace su `git init`, y el
+baseline y los commits por turno van a la historia de arriba, donde todo el proyecto es nuevo. El
+otro camino, más estrecho: índice no vacío en la primera bajada, y entonces el baseline no pasa a
+ser el primer commit y el de un turno ocupa su sitio como raíz. En este Mac ninguna copia cuelga de
+otro repo. Por eso la bajada que vacía hace `prepararRepo(…, { propio: true })`: exige que el repo
+sea de ESTA carpeta y, si no, lo crea aquí. Sin `propio` todo sigue igual, a propósito: un proyecto
+que una persona abre dentro de su monorepo usa ese repo, y así está probado.
+
+**El orden, que es lo que no puede fallar**: preguntar → pedir el zip → solo con el zip en la mano,
+vaciar → extraer → `git init` + baseline. Si el zip falla no se vacía nada (y se dice), y la vía
+fichero a fichero no vacía nunca: traería solo los de texto sobre una carpeta vacía. Se vacía todo
+menos `.xonecode/`, dentro del workspace y comprobado por el texto de la ruta y por el camino real.
+
+**Lo que se pierde, y está declarado**: las refs de sesión de esa copia, así que la Revisión de las
+sesiones anteriores pasa a `sin-marca`, y los commits por turno. Una tarea de fondo sobre esa copia
+también pierde su ref.
+
+## Entornos: registrar solo si conecta, poder quitarlos, y las descargas que fallan (23-09-2026)
+
+Pedido suyo, las tres a la vez: «reportar errores de descargas del proyecto», «los entornos
+cuando se registren y fallen no guardarlos» y «que haya un eliminar entorno».
+
+**Registrar.** `registrarEntorno` escribía en `settings.json` antes de hablar con el servidor —del
+alta solo sale la URL—, y la primera conversación era `proyectosDe`. Ahora, si esa conversación
+falla y el entorno era NUEVO, se deshace (`olvidarEntorno(id, { credenciales: false })`) y el aviso
+dice «no se ha registrado el entorno …» con el motivo. Las credenciales NO se borran al deshacer:
+registrar la URL oficial puede haber adoptado el juego legado, y borrarlo obligaría a volver a
+entrar; unos tokens sin entorno no molestan y se reaprovechan si se reintenta. Uno que ya estaba
+registrado no se quita porque hoy no conteste. En Ajustes el formulario enseña el motivo —antes no
+decía nada, ni bien ni mal— y se cierra solo cuando el entorno aparece.
+
+**Quitar.** `settings.json` + credenciales + la lista viva; las copias de `<workspace>/<id>/` se
+QUEDAN, como cambiar el workspace no mueve nada. El servidor se niega con un proyecto de ese entorno
+abierto o una tarea de fondo sin terminar (`core/settings.ts#motivoParaNoOlvidarEntorno`, puro, que
+reconoce las copias por la RUTA y no confunde un id que es prefijo de otro). La negativa viaja como
+**409 con `{ motivo }`** en la respuesta del `POST /accion`: `informar` no llega al navegador desde
+el vestíbulo, y así el cliente no lleva una copia de la regla. La opción del vestíbulo es
+OBLIGATORIA, y el cableado de `App` a `Ajustes` tiene su test, porque el prop es opcional.
+
+**Descargas.** Dos cosas. Se APUNTAN en el `fallos.jsonl` del proyecto —el alta
+(`completarProyecto`) y `/sync`, con qué se bajaba—, por omisión con el registro real: el error de
+`weweewe` no había dejado rastro. Y una descarga fallida ya no parece una copia: el alta escribe el
+`config.json` ANTES de bajar, a propósito, y `esProyectoEnDisco` solo miraba ese fichero, así que la
+barra daba por bajada una carpeta vacía y la abría como proyecto. Medido en este Mac: las siete
+copias buenas tienen `sync.json`, y las dos sin él —Bequikly y Conecta2— son justo dos descargas
+que fallaron. Ahora hacen falta los dos.
+
+### Quitar un entorno: aviso de seguridad, casilla de las copias y el nombre escrito
+
+Pedido mirando la pantalla: el botón era «feo», tenía que ser rojo y sacar un aviso de seguridad,
+y «sin querer puede clickear un missclick». Decidido con él: la URL y el botón en una fila; el botón
+rojo siempre; la confirmación, un aviso con los colores de advertencia que dice que se cierra la
+sesión de CloudStudio; una casilla **desmarcada** para borrar también `<workspace>/<entorno>/` —con
+cuántas copias hay—, y el botón rojo solo se activa al **escribir el nombre** del entorno, como
+GitHub al borrar un repo. Borrar las copias va DESPUÉS de quitar el entorno, así que si quitar
+falla no se ha tocado el disco; y la barrera de ruta vive en la función que borra, no solo en
+quien llama.
+
+## El dispositivo del chat llega al `device-controller`, y sin él se prefiere un emulador (23-09-2026)
+
+Pedido suyo: «cuando en el chat no esté seleccionado el dispositivo, priorizar los emuladores, y
+pasarlo en algún estado para que cuando se mande al device controller use el dispositivo cuando se
+seleccione». **Medido antes**: la elección de la pastilla solo la leía la pestaña Ejecutar; al agente
+no le llegaba por ningún sitio —ni el estado de sesión, ni el ejecutor, ni el entorno de su shell—,
+y con varios aparatos los scripts usaban el de adb por omisión o el `--serie` que el modelo se
+acordara de pasar.
+
+**Por un fichero, no por una variable con el valor**: `LocalShellBackend` copia su `env` al
+construirse, así que una variable se quedaría con el aparato de cuando se abrió la sesión.
+`XONECODE_DISPOSITIVO` lleva la RUTA, fija por sesión, de `dispositivo.json` —al lado de la carpeta de
+artefactos y no dentro, que lo de dentro se anuncia—; el vestíbulo lo escribe al abrir y cada vez
+que se elige (y lo borra sin elección), y los scripts lo leen en cada ejecución. La regla es UNA,
+en `skills/xone-hotswap/lib/dispositivo.mjs` (fuera de `scripts/`, que va al PATH): `--serie`/`--udid`,
+luego el de la sesión, y sin elección un emulador antes que un físico; con varios físicos no se
+adivina. En iOS solo cuenta un SIMULADOR elegido, que es con lo que hablan esos scripts. Cada script
+dice por stderr con cuál trabajó.
+
+La línea `[Dispositivo de esta sesión: …]` que se antepone a cada turno es para el modelo —que el
+orquestador lo nombre al delegar y el conductor no pase otro `--serie`—; la garantía la pone el
+script. **Sin verificar con un aparato**: la regla y el cableado están probados, el despliegue real en
+un emulador con dos aparatos conectados no se ha hecho.

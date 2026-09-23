@@ -114,6 +114,16 @@ export interface OperacionOmitida {
 export type PoliticaDeAprobacion = (plan: readonly OperacionDeSubida[]) => Promise<boolean>;
 
 /**
+ * Quién autoriza que «Actualizar repo local» VACÍE la copia y la baje entera.
+ *
+ * Es el mismo hueco fail-closed por TIPO que `PoliticaDeAprobacion`: sin confirmación no se
+ * vacía nada, y la bajada vuelve a la regla de antes —se niega con cambios sin commitear—. Lo
+ * que se decide va DELANTE: `sinCommitear` es lo que se va a perder, y se pierde además la
+ * historia de git de la copia, que se rehace desde cero con la bajada como primer commit.
+ */
+export type ConfirmacionDeBajada = (loQueSePierde: { sinCommitear: readonly string[] }) => Promise<boolean>;
+
+/**
  * Las TRES acciones de `/sync`, con nombre propio.
  *
  * Existían escritas tres veces —en el puerto `Consola.sincronizar`, en el manejador del comando

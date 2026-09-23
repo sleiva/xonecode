@@ -11,7 +11,7 @@
  * actos ni la traza de emisión los tocan, y por eso `emitir` no registra ese mensaje: lo
  * guarda quien lo tiene en vuelo, que lo suelta en cuanto hay decisión.
  */
-import type { Herramienta, InformeDeDispositivos, NombreDeHerramienta } from "../../core/dispositivos.js";
+import type { InformeDeDispositivos, NombreDeHerramienta } from "../../core/dispositivos.js";
 import type { AjustesDeDispositivos } from "../../core/settings.js";
 import type { Acto, ConsumoDeTurno } from "../../core/actos.js";
 import type { Tarea } from "../../core/tareas.js";
@@ -35,13 +35,13 @@ import type { DispositivoElegido } from "./sesiones.js";
 import type { Esfuerzo } from "../../core/esfuerzo.js";
 
 /**
- * El informe de `core/dispositivos.ts` SIN la ruta de cada herramienta: es una ruta del
- * home del usuario, el panel no la pinta, y este cable puede ir por un túnel
- * (`--anfitrion`). Campo a campo, nada de más.
+ * El informe de `core/dispositivos.ts`. **La `ruta` de cada herramienta solo cruza para
+ * `adb`/`emulator`** —la excepción declarada, igual que el workspace— y se quita en el
+ * código (`arranque.ts#sinRutas`) para `xcrun`/`devicectl`, que se quedan en el host: este
+ * cable puede ir por un túnel (`--anfitrion`) y esas dos nunca tuvieron un motivo para
+ * cruzarlo.
  */
-export type InformeDeDispositivosDelCable = Omit<InformeDeDispositivos, "herramientas"> & {
-  herramientas: Omit<Herramienta, "ruta">[];
-};
+export type InformeDeDispositivosDelCable = InformeDeDispositivos;
 
 /**
  * Una sesión tal como viaja dentro del alta de un proyecto. **Sin la raíz**: la fila de la
@@ -823,6 +823,9 @@ export type MensajeAlCliente =
  */
 export interface EntornoRegistrado extends OpcionDeEntorno {
   proyectos?: string[];
+  /** Cuántas carpetas de proyecto tiene en el workspace. Ausente = no se pudo mirar, que no
+   *  es cero: con cero la casilla de borrarlas no se ofrece. */
+  copias?: number;
 }
 
 /**
@@ -918,7 +921,8 @@ export interface EstadoDeSync {
 
 /**
  * Una tarea tal como viaja. **Sin la raíz del proyecto**: viajan su id y su nombre, que es
- * lo que la interfaz necesita — la ruta se queda en el host, igual que `Herramienta.ruta`.
+ * lo que la interfaz necesita — la ruta se queda en el host, igual que `Herramienta.ruta` de
+ * `xcrun`/`devicectl` (`adb`/`emulator` sí cruzan, ver `InformeDeDispositivosDelCable`).
  * Redeclarada en `apps/web/src/tipos.ts`.
  */
 export interface TareaDelCable {
@@ -1123,6 +1127,19 @@ export type MensajeDelCliente =
   /** Qué proyectos de un entorno se enseñan en la barra. Lista vacía = ninguno, que es una
    *  elección; para volver a la omisión no hay mensaje, porque no hay «deshacer» que pedir. */
   | { clase: "entorno"; accion: "visibles"; entorno: string; proyectos: string[] }
+  /**
+   * Quitar un entorno registrado. El servidor contesta **409 con `{ motivo }`** si no se puede
+   * ahora (un proyecto suyo abierto, una tarea sin terminar): la negativa vive allí, y así el
+   * cliente la enseña sin llevar una copia de la regla. Sus copias locales se quedan.
+   */
+  | {
+      clase: "entorno";
+      accion: "olvidar";
+      entorno: string;
+      /** Borrar además `<workspace>/<entorno>/` entera. Solo con la casilla marcada y el
+       *  nombre escrito; ausente = las copias se quedan. */
+      borrarCopias?: boolean;
+    }
   /** Cambiar de entorno ACTIVO: el de cuyos proyectos se habla. Trae su listado consigo. */
   | { clase: "entorno"; accion: "activo"; entorno: string }
   /**
@@ -1206,6 +1223,13 @@ export type MensajeDelCliente =
        * abierta en la máquina del usuario.
        */
       instalar?: NombreDeHerramienta;
+      /**
+       * Abre la carpeta que contiene el binario de esta herramienta en el explorador del
+       * SISTEMA donde corre la consola — el mismo límite que el selector de carpeta del
+       * workspace: con la consola por un túnel, el botón no sirve. Solo `adb`/`emulator`
+       * tienen una ruta que abrir; no vuelve a medir ni cambia ningún estado.
+       */
+      abrirRuta?: NombreDeHerramienta;
     }
   /**
    * Con qué dispositivo trabaja la sesión abierta. Viaja el ID y nada más: el servidor lo

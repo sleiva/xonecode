@@ -95,8 +95,12 @@ export function Receta({
                           </p>
                           {/* El log: la cola, que es lo que dice que avanza. El tiempo de al
                               lado es lo que dice que sigue vivo cuando la última línea lleva
-                              un rato quieta —descomprimir 3 GB no imprime nada—. */}
-                          <pre className={estilos.log}>{enCurso.lineas.join("\n")}</pre>
+                              un rato quieta —descomprimir 3 GB no imprime nada—. SIN líneas
+                              todavía —los primeros segundos, o un `sdkmanager` que no tiene
+                              nada que instalar y calla del todo— no se pinta la caja: vacía,
+                              con su borde y su fondo, se leía como una barra de progreso que
+                              no progresa nada. El giro de arriba ya dice que sigue en marcha. */}
+                          {enCurso.lineas.length === 0 ? null : <pre className={estilos.log}>{enCurso.lineas.join("\n")}</pre>}
                         </div>
                       );
                     }

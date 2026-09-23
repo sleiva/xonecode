@@ -1710,6 +1710,9 @@ describe("el volcado de la sesión de una tarea", () => {
     const raiz = join(base, "webstudio", "A");
     mkdirSync(join(raiz, ".xonecode"), { recursive: true });
     writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
     writeFileSync(join(raiz, "app.xml"), "<app/>\n");
     execFileSync("git", ["init", "-q", "."], { cwd: raiz });
     execFileSync("git", ["config", "user.email", "x@y.z"], { cwd: raiz });
@@ -1767,6 +1770,7 @@ describe("el volcado de la sesión de una tarea", () => {
       catalogoModelos: new CatalogoModelosEnMemoria(),
       guardarCredencial: () => ({ ruta: "/casa/.xonecode/auth.json" }),
       guardarEntorno: () => ({ ruta: "/casa/.xonecode/settings.json" }),
+      olvidarEntorno: () => ({ ruta: "/casa/.xonecode/settings.json" }),
       descargar: async () => {},
       guardarConfigDeProyecto: () => ({ ruta: "/x/config.json" }),
       guardarModeloGlobal: (_papel, id) => ({ ruta: "/casa/.xonecode/config.json", id }),
@@ -1795,7 +1799,9 @@ describe("el volcado de la sesión de una tarea", () => {
       // crearPielStdio(consola.escribir)`.
       crearEjecutor: () => async (peticion, estado, consola) => {
         if (ejecutor !== undefined) return ejecutor(peticion, estado, consola);
-        escritos.push(peticion);
+        // Sin la línea del dispositivo que el envoltorio antepone a cada turno: aquí se mide qué
+        // ENCARGO llegó, no el prefijo.
+        escritos.push(peticion.replace(/^\[Dispositivo de esta sesión:[^\]]*\]\n\n/, ""));
         const piel = consola.piel?.();
         if (piel === undefined) {
           // Sin piel rica, el turno solo sabe escribir texto: es el camino degradado que
@@ -2204,7 +2210,9 @@ describe("el volcado de la sesión de una tarea", () => {
     let vuelta = 0;
     const v = vestibuloReal(base, escritos, marcada, async (peticion, _estado, consola) => {
       vuelta += 1;
-      escritos.push(peticion);
+      // Sin la línea del dispositivo que el envoltorio antepone a cada turno: aquí se mide qué
+        // ENCARGO llegó, no el prefijo.
+        escritos.push(peticion.replace(/^\[Dispositivo de esta sesión:[^\]]*\]\n\n/, ""));
       const piel = consola.piel?.();
       piel?.token(`respuesta ${vuelta}`);
       piel?.cerrarLinea();

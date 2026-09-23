@@ -1,8 +1,10 @@
+import { ficheroDeDispositivo } from "../../core/dispositivoDeSesion.js";
 import { existsSync, mkdirSync, readdirSync, statSync, type Dirent } from "node:fs";
 import { join } from "node:path";
 import { CompositeBackend, FilesystemBackend, LocalShellBackend } from "deepagents";
 import { RUTA_MEMORIA_INTERNA, RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
 import { sinContenidoInvalido, validarConXoneLinter, type ValidarContenido } from "./validacionXone.js";
+import { escriturasEnSerie } from "./escriturasEnSerie.js";
 import { RAIZ_SKILLS, skillsConRuta, skillsMontables, type Montaje } from "./skills.js";
 import {
   artefactoFueraDeSitio,
@@ -14,6 +16,7 @@ import {
   type Artefacto,
 } from "../../core/artefactos.js";
 import { RUTA_ADJUNTOS } from "../../core/adjuntos.js";
+import { esRutaDeMaquina, porQueNoSuelta } from "../../core/traerDeLaMaquina.js";
 import { carpetaDeHotswap, RUTA_HOTSWAP } from "../../core/hotswap.js";
 import { CARPETA_DE_PLANES, RUTA_PLANES } from "../../core/planes.js";
 import { entornoDeShell, variablesDeAndroid } from "../../core/shellDeAgente.js";
@@ -122,7 +125,10 @@ export function entornoDeLaShellDelProyecto(
     // Las DOS carpetas, y la segunda se DERIVA de la primera: es la misma decisión —¿hay una
     // sesión con identidad?— y un segundo parámetro sería un segundo sitio donde contestarla,
     // que es justo el que se cae en un cableado largo.
-    ...(artefactos === undefined ? {} : { artefactos, hotswap: carpetaDeHotswap(artefactos) }),
+    // Y el fichero del dispositivo de la sesión, derivado igual: es la misma pregunta.
+    ...(artefactos === undefined
+      ? {}
+      : { artefactos, hotswap: carpetaDeHotswap(artefactos), dispositivo: ficheroDeDispositivo(artefactos) }),
   });
 }
 
@@ -164,6 +170,47 @@ export const TOPE_DE_COMANDO_S = 600;
  * resueltas, y es así como el modelo las descubre— pero un agente que liste esa carpeta a
  * mano no las verá.
  */
+/**
+ * Monta la máquina entera bajo `/disco/`, de solo lectura, y contesta bien a quien pegue una
+ * ruta absoluta a pelo.
+ *
+ * El porqué entero está en `core/discoDeLaMaquina.ts`. Aquí, las dos mitades del cableado:
+ *
+ * - **El montaje**: la misma pieza que `/skills/`, `/adjuntos/` y `/planes/` — otra raíz del
+ *   `CompositeBackend`, con su barra final obligatoria. El «solo lectura» no lo pone esto: lo
+ *   pone `permisosDe`, que es donde vive esa decisión para todas las raíces.
+ * - **La REESCRITURA**, que es lo que evita el viaje en balde. Una ruta de máquina escrita a
+ *   pelo (`/Users/…/x.zip`) se resuelve DENTRO del proyecto y vuelve un ENOENT que dice «no
+ *   existe» sobre un fichero que sí existe —y de paso filtra la raíz absoluta del proyecto—.
+ *   Se intercepta antes y se devuelve la ruta buena ya escrita.
+ */
+/**
+ * Contesta bien a una ruta de la MÁQUINA escrita como si fuera del proyecto.
+ *
+ * Sin esto se resuelve DENTRO del proyecto y vuelve un ENOENT que dice «no such file or
+ * directory» sobre un fichero que sí existe —y de paso filtra la raíz absoluta del proyecto—.
+ * Medido: el orquestador concluía que estaba enjaulado y se iba a delegar en el agente con
+ * shell. Aquí se le devuelve el paso siguiente ESCRITO, que es el patrón de `porQueNo`.
+ *
+ * No monta nada y no abre nada: solo sustituye un mensaje que engaña por uno que sirve.
+ */
+export function conAvisoDeRutaDeMaquina<T extends object>(backend: T): T {
+  return new Proxy(backend as object, {
+    get(destino, prop) {
+      const valor = Reflect.get(destino, prop, destino);
+      if (typeof valor !== "function") return valor;
+      return (...args: unknown[]) => {
+        const ruta = args[0];
+        // Se DEVUELVE `{error}`, como las otras guardas: una excepción se lleva el turno.
+        if (typeof ruta === "string" && esRutaDeMaquina(ruta)) {
+          return { error: porQueNoSuelta(ruta) };
+        }
+        return (valor as (...a: unknown[]) => unknown).apply(destino, args);
+      };
+    },
+  }) as T;
+}
+
 export function backendConSkills<T extends object>(backend: T, propias: readonly Montaje[] = []): T {
   return new CompositeBackend(backend as never, {
     // La barra final importa: CompositeBackend la retira antes de delegar. Sin ella
@@ -457,12 +504,26 @@ export function backendDeAgente(opciones: {
    * 1» en vez de «es una vista aplanada, edita el .xne», que es lo único que le deja corregir.
    * Lo destapó un test que ya existía.
    */
+/**
+   * **Y la QUINTA va entre medias, porque no contesta una pregunta: espera un turno.**
+   *
+   * `escriturasEnSerie` va por DENTRO de las guardas de ruta —que siguen contestando primero,
+   * con su comparación de texto y sin parsear nada— y por FUERA de `sinContenidoInvalido`,
+   * para que leer el fichero de antes, validarlo y escribirlo sean un solo turno. Al revés,
+   * dos validaciones podrían intercalarse entre su lectura y su escritura, que es justo la
+   * carrera que esto quita.
+   *
+   * Y por eso tampoco tiene sentido más afuera: una escritura que las guardas de ruta van a
+   * rechazar no necesita hacer cola detrás de nadie.
+   */
   const delProyecto = sinDescargasEnElProyecto(
     sinArtefactosEnElProyecto(
       sinVistasAplanadas(
-        sinContenidoInvalido(
-          exponerMemoriaDeProyecto(base),
-          opciones.validar ?? validarConXoneLinter()
+        escriturasEnSerie(
+          sinContenidoInvalido(
+            exponerMemoriaDeProyecto(base),
+            opciones.validar ?? validarConXoneLinter()
+          )
         ),
         opciones.ficheros
       )
@@ -502,12 +563,23 @@ export function backendDeAgente(opciones: {
    * se implementa otro. Es la diferencia con los artefactos, que mueren con su sesión.
    */
   const conPlanes = backendConPlanes(conAdjuntos, opciones.raiz);
+  /**
+   * Y el aviso de las rutas de MÁQUINA, que no monta nada.
+   *
+   * Hubo aquí un montaje de `/` bajo `/disco/` y **rompió un turno de producción**: con la
+   * máquina entera dentro del `CompositeBackend`, toda operación recursiva sin ruta la
+   * recorría — un `grep` sobre el PROYECTO tardaba 30 s y moría con
+   * `EPERM … scandir '/Volumes/com.apple.TimeMachine.localsnapshots'`. Lo que hacía falta no
+   * era navegar el disco sino TRAERSE un fichero, y eso lo hace la tool
+   * `traer_de_la_maquina`. Aquí solo queda contestar bien a quien escriba la ruta a pelo.
+   */
+  const conDisco = conAvisoDeRutaDeMaquina(conPlanes);
   // Lo que deje un COMANDO en la carpeta de artefactos también se anuncia. Sin esto, la
   // captura que escribe un script existe en el disco y no existe para nadie: el evento
   // `artefacto` lo emite el Proxy de `write`/`edit`, y una shell no pasa por ahí.
   return opciones.ejecucion === undefined || opciones.artefactos === undefined
-    ? conPlanes
-    : anunciarArtefactosDeLaShell(conPlanes, opciones.artefactos.carpeta, opciones.artefactos.alEscribir);
+    ? conDisco
+    : anunciarArtefactosDeLaShell(conDisco, opciones.artefactos.carpeta, opciones.artefactos.alEscribir);
 }
 
 /**

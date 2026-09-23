@@ -3,11 +3,12 @@
  * su respuesta es pura y vive en `core/selectorDeCarpeta.ts`; aquí solo está lanzarlo.
  */
 
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 
 import {
   carpetaDeLaSalida,
   comandoDelSelector,
+  comandoParaAbrirCarpeta,
   TOPE_DEL_SELECTOR_MS,
   type ComandoDeSelector,
 } from "../../core/selectorDeCarpeta.js";
@@ -43,6 +44,20 @@ export async function elegirCarpetaEnMaquina(opciones?: {
     // Cancelar sale por aquí (código 1), igual que un fallo de verdad. Ver arriba.
     return undefined;
   }
+}
+
+/**
+ * Abre, en el explorador de ficheros de ESTA máquina, la carpeta que contiene `ruta`.
+ *
+ * Accesorio, como `abrirEnSistema` al arrancar la web: nunca lanza, no espera respuesta ni
+ * mira el código de salida —`explorer.exe` sale con uno no-cero también cuando funciona—, y
+ * `detached`+`unref` para no dejar el proceso padre esperando a una ventana del sistema.
+ */
+export function abrirCarpetaDelSistema(ruta: string, plataforma: string = process.platform): void {
+  const comando = comandoParaAbrirCarpeta(plataforma, ruta);
+  const proceso = spawn(comando.programa, [...comando.argumentos], { detached: true, stdio: "ignore" });
+  proceso.on("error", () => {});
+  proceso.unref();
 }
 
 function lanzarDeVerdad(comando: ComandoDeSelector): Promise<string> {

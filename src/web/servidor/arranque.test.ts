@@ -143,6 +143,7 @@ function vestibuloDePrueba(extra: Partial<Parameters<typeof crearVestibulo>[0]> 
     catalogoModelos: new CatalogoModelosEnMemoria(),
     guardarCredencial: () => ({ ruta: "/casa/.xonecode/auth.json" }),
     guardarEntorno: () => ({ ruta: "/casa/.xonecode/settings.json" }),
+    olvidarEntorno: () => ({ ruta: "/casa/.xonecode/settings.json" }),
     guardarConfigDeProyecto: (raiz: string) => ({ ruta: `${raiz}/.xonecode/config.json` }),
     guardarModeloGlobal: (_papel, id) => ({ ruta: "/casa/.xonecode/config.json", id }),
     descargar: async () => {},
@@ -439,6 +440,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
     const raiz = mkdtempSync(join(tmpdir(), "xonecode-modo-"));
     mkdirSync(join(raiz, ".xonecode"));
     writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "cloud" }));
+    // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
 
     const servidor = servidorDeMentira();
     const vestibulo = vestibuloDePrueba();
@@ -1468,6 +1472,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
       writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raizDeVerdad, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raizDeVerdad, ".xonecode", "cloudstudio", "sync.json"), "{}");
       montarRutas(servidor, vestibulo, {
         cambiosDeSesion: async () => ({ via: "git", ficheros: [{ ruta: "no.xne", clase: "nuevo" }] }),
       });
@@ -1537,6 +1544,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raiz, ".xonecode"), { recursive: true });
       writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
       montarRutas(servidor, vestibulo);
       const cliente = clienteDeMentira();
       await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
@@ -1593,6 +1603,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raiz, ".xonecode"), { recursive: true });
       writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
       montarRutas(servidor, vestibulo);
       const cliente = clienteDeMentira();
       await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
@@ -1696,6 +1709,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
         const raiz = vestibulo.raizDeProyecto("webstudio", nombre);
         mkdirSync(join(raiz, ".xonecode"), { recursive: true });
         writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+        // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+        mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+        writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
       }
       montarRutas(servidor, vestibulo);
       const cliente = clienteDeMentira();
@@ -1775,6 +1791,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raiz, ".xonecode"), { recursive: true });
       writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
       montarRutas(servidor, vestibulo);
       const cliente = clienteDeMentira();
       await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
@@ -1824,6 +1843,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
       writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raizDeVerdad, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raizDeVerdad, ".xonecode", "cloudstudio", "sync.json"), "{}");
 
       const pedidos: string[] = [];
       montarRutas(servidor, vestibulo, {
@@ -1882,6 +1904,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
       writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raizDeVerdad, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raizDeVerdad, ".xonecode", "cloudstudio", "sync.json"), "{}");
       montarRutas(servidor, vestibulo, { cambiosDeSesion: async () => ({ via: "git", ficheros: [] }) });
       const cliente = clienteDeMentira();
       await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
@@ -1912,6 +1937,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
       writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raizDeVerdad, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raizDeVerdad, ".xonecode", "cloudstudio", "sync.json"), "{}");
       return { base, servidor, vestibulo, raizDeVerdad };
     };
 
@@ -2072,6 +2100,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
           cloudstudio: { url: "https://x/mcp", proyecto: { id: "p1", nombre: "Tienda" }, rama: "main" },
         })
       );
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
       writeFileSync(join(raiz, "app.xml"), "<app/>");
       execFileSync("git", ["init", "-q", "-b", "main"], { cwd: raiz });
       execFileSync("git", ["config", "user.email", "t@t"], { cwd: raiz });
@@ -2192,6 +2223,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raiz, ".xonecode"), { recursive: true });
       writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
       montarRutas(servidor, vestibulo);
       const cliente = clienteDeMentira();
       await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
@@ -2231,6 +2265,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const raiz = mkdtempSync(join(tmpdir(), "xonecode-proy-"));
       mkdirSync(join(raiz, ".xonecode"));
       writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
       const servidor = servidorDeMentira();
       const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => dirname(raiz) });
       // `raizDeProyecto` compone `<workspace>/<entorno>/<nombre>`, así que el nombre
@@ -2238,6 +2275,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
       writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raizDeVerdad, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raizDeVerdad, ".xonecode", "cloudstudio", "sync.json"), "{}");
 
       montarRutas(servidor, vestibulo);
       const cliente = clienteDeMentira();
@@ -2275,6 +2315,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
       writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+      mkdirSync(join(raizDeVerdad, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raizDeVerdad, ".xonecode", "cloudstudio", "sync.json"), "{}");
 
       montarRutas(servidor, vestibulo);
       const cliente = clienteDeMentira();
@@ -3850,6 +3893,9 @@ describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
     const cwd = mkdtempSync(join(tmpdir(), "xonecode-cwd-"));
     mkdirSync(join(cwd, ".xonecode"));
     writeFileSync(join(cwd, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+    mkdirSync(join(cwd, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(cwd, ".xonecode", "cloudstudio", "sync.json"), "{}");
     const salida: string[] = [];
     const codigo = await arrancarConsolaWeb({
       puerto: 0,
@@ -3922,6 +3968,9 @@ describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
     const cwd = mkdtempSync(join(tmpdir(), "xonecode-cwd-"));
     mkdirSync(join(cwd, ".xonecode"));
     writeFileSync(join(cwd, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+    mkdirSync(join(cwd, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(cwd, ".xonecode", "cloudstudio", "sync.json"), "{}");
     const vestibulo = vestibuloDePrueba();
     const salida: string[] = [];
     // Lo que hay que mirar vive ENTRE que el proyecto se abre y `vestibulo.cerrar()` lo
@@ -4267,20 +4316,31 @@ describe("qué hay en la máquina: el mensaje «dispositivos»", () => {
     expect(medidas).toBe(2);
   });
 
-  it("la RUTA de cada herramienta no sale por el cable: es una ruta del home del usuario", async () => {
+  it("la RUTA de adb/emulator SÍ sale por el cable —la excepción declarada, como el workspace—, y la de xcrun/devicectl no", async () => {
     const servidor = servidorDeMentira();
     montarRutas(servidor, vestibuloDePrueba(), {
       detectarDispositivos: async () => ({
         ...informe,
-        herramientas: [{ nombre: "adb", plataforma: "android", estado: "ok", ruta: "/Users/alguien/Library/Android/sdk/platform-tools/adb" }],
+        herramientas: [
+          { nombre: "adb", plataforma: "android", estado: "ok", ruta: "/Users/alguien/Library/Android/sdk/platform-tools/adb" },
+          { nombre: "emulator", plataforma: "android", estado: "ok", ruta: "/Users/alguien/Library/Android/sdk/emulator/emulator" },
+          { nombre: "xcrun", plataforma: "ios", estado: "ok", ruta: "/usr/bin/xcrun" },
+        ],
       }),
     });
     const cliente = clienteDeMentira();
     await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
     await asentar();
     const foto = cliente.recibidos.find((m) => m.clase === "dispositivos") as Extract<MensajeAlCliente, { clase: "dispositivos" }>;
-    expect(foto.informe.herramientas).toEqual([{ nombre: "adb", plataforma: "android", estado: "ok" }]);
-    expect(JSON.stringify(foto)).not.toContain("/Users/alguien");
+    expect(foto.informe.herramientas).toEqual([
+      { nombre: "adb", plataforma: "android", estado: "ok", ruta: "/Users/alguien/Library/Android/sdk/platform-tools/adb" },
+      { nombre: "emulator", plataforma: "android", estado: "ok", ruta: "/Users/alguien/Library/Android/sdk/emulator/emulator" },
+      { nombre: "xcrun", plataforma: "ios", estado: "ok" },
+    ]);
+    // La de xcrun no viaja, pero la de adb/emulator sí: solo se comprueba que NO se cuela una
+    // ruta que nunca se declaró en el informe de arriba (evita un falso verde si `xcrun`
+    // llevara la misma cuenta de usuario en otra parte del mensaje).
+    expect(JSON.stringify(foto)).not.toContain("/usr/bin/xcrun");
   });
 
   /**
@@ -4365,6 +4425,47 @@ describe("qué hay en la máquina: el mensaje «dispositivos»", () => {
       expect(fotos(cliente).at(-1)!.informe.dispositivos[0]!.verificado).toBeUndefined();
     });
 
+    /**
+     * Medido en pantalla: se abre XoneCode con el emulador YA arrancado, se entra en Ajustes →
+     * Dispositivos —lo que dispara una remedida (`useMedirAlVolver`) que VACÍA el informe
+     * antes de volver a medir— y se pulsa Verificar de inmediato, porque el dispositivo ya
+     * está a la vista. Antes de esto el click caía en el hueco: `informeDeDispositivos` era
+     * `undefined`, la petición se perdía EN SILENCIO y el botón se quedaba en
+     * «Verificando…» para siempre —ni siquiera se podía reintentar, porque el propio botón
+     * se desactiva mientras «verifica»—. Ahora espera a que la medida en vuelo termine.
+     */
+    it("si la conexión llega con una medida en vuelo, espera a que termine en vez de perderla", async () => {
+      let llamadas = 0;
+      let resolverSegunda: (() => void) | undefined;
+      const servidor = servidorDeMentira();
+      montarRutas(servidor, vestibuloDePrueba(), {
+        detectarDispositivos: () => {
+          llamadas++;
+          if (llamadas === 1) return Promise.resolve(conDispositivos);
+          return new Promise<typeof conDispositivos>((resolve) => {
+            resolverSegunda = () => resolve(conDispositivos);
+          });
+        },
+        verificarDispositivo: async () => ({ ok: true, detalle: "responde: Pixel 8" }),
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+      // Entrar en la sección: vacía el informe y deja la segunda medida EN VUELO, sin
+      // resolver todavía.
+      await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "dispositivos" });
+      await asentar();
+      // El click de Verificar cae justo en el hueco: no hay informe con el que resolver "ABC".
+      await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "conexion", id: "ABC" });
+      await asentar();
+      expect(resolverSegunda).toBeDefined();
+      resolverSegunda!();
+      await asentar();
+      await asentar();
+      const ultima = fotos(cliente).at(-1)!;
+      expect(ultima.informe.dispositivos[0]!.verificado).toMatchObject({ ok: true, detalle: "responde: Pixel 8" });
+    });
+
     it("un verificador que revienta contesta como respuesta, sin la ruta de nada", async () => {
       const { servidor } = montar(async () => {
         throw Object.assign(new Error("ENOENT: no such file or directory, open '/Users/alguien/x'"), { code: "ENOENT" });
@@ -4400,6 +4501,76 @@ describe("qué hay en la máquina: el mensaje «dispositivos»", () => {
     expect(cliente.recibidos.some((m) => m.clase === "dispositivos")).toBe(false);
     // Y pedirlo tampoco revienta: 204 y silencio.
     expect(await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "dispositivos" })).toBe(204);
+  });
+
+  it("guardar `ajustes` con las dos rutas personalizadas las persiste, recortadas", async () => {
+    const guardados: unknown[] = [];
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      detectarDispositivos: async () => informe,
+      guardarAjustesDeDispositivos: (a) => {
+        guardados.push(a);
+      },
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, {
+      clase: "dispositivos",
+      ajustes: { android: false, rutaAdb: "  /opt/adb  ", rutaEmulator: "" },
+    });
+    await asentar();
+    expect(guardados).toEqual([{ android: false, rutaAdb: "/opt/adb" }]);
+  });
+
+  it("«abrirRuta» abre la carpeta de la herramienta y NO vuelve a medir", async () => {
+    let medidas = 0;
+    const abiertas: string[] = [];
+    const conRuta = {
+      ...informe,
+      herramientas: [{ nombre: "adb" as const, plataforma: "android" as const, estado: "ok" as const, ruta: "/opt/sdk/platform-tools/adb" }],
+    };
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      detectarDispositivos: async () => {
+        medidas++;
+        return conRuta;
+      },
+      abrirCarpetaDeHerramienta: (ruta) => {
+        abiertas.push(ruta);
+      },
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    expect(medidas).toBe(1);
+
+    expect(
+      await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "dispositivos", abrirRuta: "adb" })
+    ).toBe(204);
+    await asentar();
+    expect(abiertas).toEqual(["/opt/sdk/platform-tools/adb"]);
+    // No remide: la foto sigue siendo la de la única medida de arriba.
+    expect(medidas).toBe(1);
+  });
+
+  it("«abrirRuta» de una herramienta sin ruta en la última medida no llama a nada, y responde 204 igual", async () => {
+    const abiertas: string[] = [];
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      detectarDispositivos: async () => informe, // adb en "no-encontrada": sin `ruta`.
+      abrirCarpetaDeHerramienta: (ruta) => {
+        abiertas.push(ruta);
+      },
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    expect(
+      await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "dispositivos", abrirRuta: "adb" })
+    ).toBe(204);
+    await asentar();
+    expect(abiertas).toEqual([]);
   });
 });
 
@@ -4443,6 +4614,9 @@ describe("los artefactos de la sesión", () => {
     const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
     mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
     writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+    mkdirSync(join(raizDeVerdad, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raizDeVerdad, ".xonecode", "cloudstudio", "sync.json"), "{}");
     montarRutas(servidor, vestibulo, opciones);
     const cliente = clienteDeMentira();
     await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
@@ -6034,6 +6208,9 @@ describe("contextoDelProyecto", () => {
     const raiz = mkdtempSync(join(tmpdir(), "xonecode-ctx2-"));
     mkdirSync(join(raiz, ".xonecode"), { recursive: true });
     writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
     expect(contextoDelProyecto(raiz)).toEqual({});
     rmSync(raiz, { recursive: true, force: true });
   });
@@ -6132,6 +6309,9 @@ describe("lecturaDeSync — lo que la banda de CloudStudio enseña", () => {
     const raiz = mkdtempSync(join(tmpdir(), "xonecode-sync-off-"));
     mkdirSync(join(raiz, ".xonecode"), { recursive: true });
     writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
     const leido = await lecturaDeSync(raiz);
     expect(leido).toEqual({ clase: "sync" });
     expect(leido.pendientes).toBeUndefined();
@@ -7089,6 +7269,9 @@ describe("abrir la sesión de una tarea en curso, por el cable", () => {
     const base = mkdtempSync(join(tmpdir(), "xonecode-abrir-tarea-"));
     mkdirSync(join(base, ".xonecode"), { recursive: true });
     writeFileSync(join(base, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+    mkdirSync(join(base, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(base, ".xonecode", "cloudstudio", "sync.json"), "{}");
     montarRutas(
       servidor,
       {
@@ -7335,6 +7518,9 @@ describe("el recorrido por el cable — el veredicto, la intención y las fases"
     const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
     mkdirSync(join(raiz, ".xonecode"), { recursive: true });
     writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
     if (montaje.xml !== undefined) writeFileSync(join(raiz, "app.xml"), montaje.xml);
     writeFileSync(join(raiz, "app.ini"), montaje.ini ?? APP_INI);
     if (montaje.conBase === true) {
@@ -8218,5 +8404,138 @@ describe("montarRutas — instalar una skill desde un .zip", () => {
     } as never);
     expect(codigo).toBe(409);
     expect(cuerpo).toMatch(/proyecto/);
+  });
+});
+
+
+/**
+ * Quitar un entorno por el cable. La negativa se decide en el SERVIDOR y viaja en la propia
+ * respuesta (409 con su motivo), porque `informar` no llega al navegador desde el vestíbulo.
+ */
+describe("el cable: quitar un entorno", () => {
+  async function postearConCuerpo(manejador: ManejadorRuta, mensaje: MensajeDelCliente) {
+    const peticion = Readable.from([Buffer.from(JSON.stringify(mensaje))]) as unknown as IncomingMessage;
+    let estado = 0;
+    let cuerpo = "";
+    const respuesta = {
+      writeHead: (codigo: number) => {
+        estado = codigo;
+        return respuesta;
+      },
+      end: (texto?: string) => {
+        cuerpo = texto ?? "";
+        return respuesta;
+      },
+    } as unknown as ServerResponse;
+    await manejador(peticion, respuesta);
+    return { estado, cuerpo };
+  }
+
+  it("sin nada vivo lo QUITA: 204 y el vestíbulo lo olvida", async () => {
+    const olvidados: string[] = [];
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba({ olvidarEntorno: (id) => (olvidados.push(id), { ruta: "/s.json" }) }));
+    const r = await postearConCuerpo(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, {
+      clase: "entorno",
+      accion: "olvidar",
+      entorno: "webstudio",
+    });
+    await asentar();
+    expect(r.estado).toBe(204);
+    expect(olvidados).toEqual(["webstudio"]);
+  });
+
+  it("las copias del entorno se borran SOLO con `borrarCopias`: sin la marca se quedan", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xc-quitar-copias-"));
+    mkdirSync(join(base, "webstudio", "Tienda"), { recursive: true });
+    const quitar = async (borrarCopias: boolean) => {
+      const servidor = servidorDeMentira();
+      montarRutas(servidor, vestibuloDePrueba(), { workspace: () => base });
+      const r = await postearConCuerpo(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, {
+        clase: "entorno",
+        accion: "olvidar",
+        entorno: "webstudio",
+        ...(borrarCopias ? { borrarCopias: true } : {}),
+      });
+      await asentar();
+      return r.estado;
+    };
+    expect(await quitar(false)).toBe(204);
+    expect(existsSync(join(base, "webstudio", "Tienda"))).toBe(true);
+    expect(await quitar(true)).toBe(204);
+    expect(existsSync(join(base, "webstudio"))).toBe(false);
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("con una tarea de fondo sin terminar en ese entorno, 409 con el MOTIVO y no se toca nada", async () => {
+    const olvidados: string[] = [];
+    const servidor = servidorDeMentira();
+    const tarea = {
+      estado: "en-proceso",
+      proyecto: { id: "p", nombre: "P", raiz: "/ws/webstudio/P" },
+    } as unknown as Tarea;
+    montarRutas(servidor, vestibuloDePrueba({ olvidarEntorno: (id) => (olvidados.push(id), { ruta: "/s.json" }) }), {
+      workspace: () => "/ws",
+      colaDeTareas: colaDeMentira([tarea]),
+    });
+    const r = await postearConCuerpo(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, {
+      clase: "entorno",
+      accion: "olvidar",
+      entorno: "webstudio",
+    });
+    await asentar();
+    expect(r.estado).toBe(409);
+    expect(JSON.parse(r.cuerpo).motivo).toMatch(/tarea de fondo sin terminar/);
+    expect(olvidados).toEqual([]);
+  });
+});
+
+/**
+ * Un entorno NUEVO cuyo registro no llega a conectar no se queda guardado: registrar escribe
+ * antes de hablar con el servidor, y la primera conversación es `proyectosDe`.
+ */
+describe("el alta: un entorno que no conecta no se guarda", () => {
+  async function registrar(vestibulo: Vestibulo, url: string) {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibulo);
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, {
+      clase: "alta",
+      paso: "entorno",
+      entorno: { id: "", nombre: "", url },
+    });
+    await asentar();
+    return ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
+  }
+
+  it("si el servidor NUEVO no contesta, se deshace el registro —sin tocar sus credenciales— y se DICE", async () => {
+    const olvidados: { id: string; modo?: { credenciales?: boolean } }[] = [];
+    const vestibulo = vestibuloDePrueba({
+      olvidarEntorno: (id, modo) => (olvidados.push({ id, ...(modo === undefined ? {} : { modo }) }), { ruta: "/s.json" }),
+      proyectosDeEntorno: async () => {
+        throw new Error("no es un servidor MCP");
+      },
+    });
+    const alta = await registrar(vestibulo, "https://mcp.casa.example/mcp");
+    expect(olvidados).toHaveLength(1);
+    expect(olvidados[0]!.modo).toEqual({ credenciales: false });
+    expect(vestibulo.entornosRegistrados().map((e) => e.url)).not.toContain("https://mcp.casa.example/mcp");
+    expect(alta.aviso).toMatch(/no se ha registrado el entorno.*no es un servidor MCP/);
+  });
+
+  it("uno que YA estaba registrado no se quita porque hoy no conteste", async () => {
+    const olvidados: string[] = [];
+    const vestibulo = vestibuloDePrueba({
+      olvidarEntorno: (id) => (olvidados.push(id), { ruta: "/s.json" }),
+      proyectosDeEntorno: async () => {
+        throw new Error("servidor caído");
+      },
+    });
+    const alta = await registrar(vestibulo, "https://mcp.xonewebstudio.com/mcp");
+    expect(olvidados).toEqual([]);
+    expect(vestibulo.entornosRegistrados().map((e) => e.id)).toContain("webstudio");
+    expect(alta.aviso).toMatch(/servidor caído/);
   });
 });

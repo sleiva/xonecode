@@ -28,6 +28,16 @@ export type DomainEvent =
    * byte-idéntica.
    */
   | { tipo: "razonamiento"; texto: string; msgId?: string }
+  /**
+   * El RESUMEN con el que la librería compacta la conversación al pasar el umbral de contexto
+   * (`agent/turno/resumenDeContexto.ts`), en trozos. Tampoco es la respuesta: salía por el
+   * mismo stream que ella y se pintaba —y se guardaba— como un mensaje del asistente. Lo
+   * distingue una ETIQUETA de la llamada, no el texto.
+   *
+   * Opcional como `razonamiento`: las pieles de terminal no lo implementan, así que ahí deja
+   * de imprimirse (antes salía en inglés como si fuera la respuesta) y la tubería sigue igual.
+   */
+  | { tipo: "resumen"; texto: string; msgId?: string }
   | { tipo: "fase"; fase: Fase; detalle?: string }
   | { tipo: "tool"; nombre: string; detalle?: string; error?: string }
   | { tipo: "plan"; tareas: TareaDelPlan[] }

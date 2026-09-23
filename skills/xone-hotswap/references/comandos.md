@@ -15,6 +15,39 @@ promesa de paridad que no se cumple, diagnosticarás mal. Las que más caro sale
 
 Cómo llegar al dispositivo y cómo desplegar: [conexion-y-despliegue.md](conexion-y-despliegue.md).
 
+## Lo que llegó con el framework 5.0.5.5dev (protocolo 3)
+
+Tres comandos y un modo de traza que la referencia anterior no tenía. Salen del pack de
+`dispositivo-xone`, que es la documentación del equipo del framework.
+
+| comando | campos | qué hace |
+|---|---|---|
+| `getFields` | `names` (**sí**: array o lista separada por comas) | Varios campos en UN viaje, cada uno leído como lo leería `getText`. Devuelve `fields`, con `value` **o** `error` por campo. No acepta `name`. |
+| `openRecord` | `collection` (sí), `where` | Abre la ficha de un registro **directamente**, sin menú, lista ni scroll. |
+| `setGroup` | `group` (sí) | Lleva la pantalla a ese grupo. No acepta `name` ni fila. |
+| `setTrace` | `enabled` | Enciende la traza de ejecución línea a línea. Apagada por omisión. |
+
+Cuatro cosas de estos que no se deducen:
+
+- **`getFields` es la forma barata de leer varios valores.** Un campo que falle **no tumba a los
+  demás**: viene con su `error` mientras los otros traen su `value`, y eso es lo que distingue un
+  campo vacío de uno que no se pudo leer.
+- **Cada `openRecord` APILA una ficha más, no sustituye a la anterior.** Medido por el equipo del
+  framework: con dos seguidos, el primer `pressKey keyCode=4` devuelve a la ficha anterior y no a
+  la pantalla de partida. Al recorrer varios registros hay que cerrar cada ficha antes de abrir la
+  siguiente.
+- **A un grupo se llega con `setGroup`, NUNCA con `scroll`.** El contenedor de grupos no arrastra
+  cuando el gesto nace encima de un control —tampoco con el dedo de una persona—, y un comando solo
+  sabe apuntar a controles: por ahí no se llega nunca, por bien que se entregue el gesto. El nombre
+  es el del volcado (`type: "group"`), no el rótulo de su pestaña, y el cambio es ANIMADO, así que
+  se confirma con `elements` o `waitForElement` y no por la respuesta.
+- `setGroup` y `pressKey` son los dos únicos que **no aceptan** los campos de selección de control
+  (`name`, `row`, `content`, `where`): no apuntan a ningún control.
+
+Y `getFields` se suma a la lista de los que devuelven su objeto **serializado dentro de `status`**
+—con `getAllElements`, `getCurrentScreen` y `getRows`—, así que hay que volver a parsear esa cadena.
+
+
 ## Tipos de respuesta
 
 | Tipo | JSON resultante | iOS |

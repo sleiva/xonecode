@@ -17,6 +17,45 @@ El servidor vive **dentro del proceso de la app**: si la app no está viva, el p
 responde. Habla dos protocolos por el mismo puerto: **WebSocket** para los comandos
 (`{"command": "..."}` → `{"result": ..., "status": ...}`) y **HTTP(S)** para lo demás.
 
+
+## Qué usar para qué (y una captura casi nunca es la respuesta)
+
+No cuestan lo mismo, ni de lejos. Por orden de lo que vas a necesitar:
+
+| quieres saber… | úsalo | por qué |
+|---|---|---|
+| **dónde estoy** | `screen` | una línea: colección activa, diálogos abiertos, ventana con el foco |
+| **qué está fallando** | `xone-log-android` | un error de JavaScript o una excepción salen ahí con su mensaje y su línea |
+| **el valor de un campo** | `getText name=X` | un viaje, una respuesta corta |
+| **varios campos** | `getFields names=A,B,C` | UN viaje; un campo que falle no tumba a los demás |
+| **el contenido de una lista** | `getRows content=X fields=…` | alcanza todas las filas, no solo las pintadas |
+| **qué hay en la pantalla** | `elements` | SOLO para explorar: decenas de miles de caracteres |
+| **si algo se VE mal** | `shot name=MAP_X` | y solo aquí |
+
+**Y la captura del CANAL no pinta los diálogos.** Lo dice la referencia del equipo del
+framework: `getScreenshot` dibuja la ventana de la ACTIVIDAD, así que un diálogo abierto —el
+«Error loading initial config» de XOne, por ejemplo— **no sale en ella** aunque la persona lo
+esté viendo. Para saber qué hay encima está `screen` (trae `dialogs`) o `elements`. La captura
+NATIVA (`xone-captura-android`, que es `adb screencap`) sí lo pinta, porque fotografía la
+pantalla entera y no la ventana — y ésa es toda la diferencia entre las dos, no el formato.
+
+**Antes de capturar, comprueba que hay algo que ver.** Si el log no da error y `screen`
+contesta con su colección, la app está bien: no hay nada que diagnosticar en una foto. El
+orden que sale barato es log → `screen` → y solo entonces, si lo que compruebas es VISUAL,
+la captura acotada.
+
+**Una captura NO es una herramienta de diagnóstico.** Para saber por qué algo falla están el
+LOG y `elements`. La captura es para lo **visual** —texto cortado, un control tapado, algo
+ilegible— o para cuando lo anterior no concluye.
+
+**Y tiene un precio medido.** Una captura de pantalla completa (1080×2400) cuesta **3.375
+tokens** en el revisor visual. El peso del fichero **da igual**: medido contra el proveedor,
+52 KB y 766 KB con las mismas dimensiones cuestan exactamente lo mismo —se paga por PÍXELES—,
+así que bajar `quality` ahorra disco y cero tokens. Lo que ahorra es `scale`, y sobre todo
+acotar: `shot name=MAP_ACEPTAR` cuesta una fracción y además **dice qué se estaba probando**
+en vez de ser una foto de la pantalla.
+
+
 ## Lo que hay que saber antes de tocar nada
 
 - **HTTPS con certificado autofirmado** en las dos plataformas. Todas las URLs son `https://`;
@@ -56,13 +95,14 @@ xone-reiniciar-android --app MiApp
 # «lanza la app», «despliégala»: la cadena ENTERA (túnel, ZIP, subida, reinicio, lanzamiento)
 # y termina diciendo si la app está VIVA, con su árbol de controles.
 xone-desplegar-android
-xone-desplegar-android --captura                  # …y deja la captura, en la MISMA orden
+xone-desplegar-android --captura                  # …y además captura: solo si quieres VERLO
 xone-desplegar-android --app MiApp --serie emulator-5554
 
 # Cualquier comando del catálogo de más abajo (varios en orden, si le pasas varios):
-xone-hotswap '{"command":"getAllElements","format":"xone"}'
-xone-hotswap '{"command":"getScreenshot"}'
-xone-hotswap '{"command":"click","name":"MAP_BT_ACEPTAR"}'
+xone-hotswap elements                    # atajo de getAllElements format=xone
+xone-hotswap shot                        # atajo de getScreenshot, a $XONECODE_ARTEFACTOS
+xone-hotswap click name=MAP_BT_ACEPTAR
+xone-hotswap waitForElement name=BTN_OK timeout=5000 -- click name=BTN_OK   # UNA conexión
 
 # Por qué algo no se pinta o la app se muere: las excepciones del aparato.
 xone-log-android
@@ -83,10 +123,18 @@ sobre un proyecto real: la app arrancaba, el árbol de controles contestaba, y l
 una fuente. Ni la captura ni `getAllElements` lo cuentan.
 
 **Encadenar órdenes cuesta más que la orden.** Lo que devuelve cada una es pequeño —1,6 KB el
-árbol de controles, 108 bytes la captura—, pero cada ida y vuelta reenvía la conversación
-entera. Por eso «lanza la app y sácame una captura» es `xone-desplegar-android --captura`, un
-viaje, y no tres órdenes encadenadas. Y `xone-hotswap` acepta varios comandos de golpe, que es
-la misma idea.
+árbol de controles— pero cada ida y vuelta reenvía la conversación entera, así que lo que se
+paga son los VIAJES. Por eso `xone-hotswap` acepta varios comandos de golpe y los scripts
+hacen la cadena entera en una orden.
+
+**Pero una CAPTURA no entra en esa cuenta, y el número de antes engañaba.** Aquí decía «108
+bytes la captura», que es lo que devuelve el comando —el fichero se guarda aparte— y no lo
+que cuesta MIRARLA: medido contra el proveedor, una de 1080×2400 son **3.375 fichas** en el
+revisor visual, pesen 52 KB o 766 KB (se paga por píxeles). Así que `--captura` no es «gratis
+porque va en el mismo viaje»: sale cara en cuanto alguien la mira, y para diagnosticar un
+fallo de arranque no hace falta — eso lo dice el log, con fichero y línea, por unas 50.
+
+Úsala cuando quieras VER algo: que un control se ve cortado, tapado o ilegible.
 
 Tres cosas de `xone-hotswap` que conviene saber antes de leer su salida:
 
@@ -137,7 +185,11 @@ resuelve con el mismo localizador que la pestaña Ejecutar.
 ## Cómo llegar, según la plataforma
 
 **Android** — por `adb forward`, y entonces la IP es `127.0.0.1` (el localhost del PC, que adb
-tuneliza al dispositivo). Con varios dispositivos, `adb -s <serial>`:
+tuneliza al dispositivo). **Qué aparato usan los scripts `xone-*`**: el que se les pase con
+`--serie`; si no, el ELEGIDO en la sesión de XOneCode (lo leen de `$XONECODE_DISPOSITIVO` en cada
+ejecución); si no hay elección, un EMULADOR antes que un dispositivo físico. Lo dicen por stderr
+(`dispositivo: emulator-5554 (el de la sesión: Pixel 8)`). Con `adb` a mano y varios
+dispositivos, `adb -s <serial>`:
 
 ```bash
 adb devices -l
@@ -283,3 +335,23 @@ Ninguno es del hotswap; los dos te van a costar una sesión si no los sabes.
 |---|---|
 | Los comandos, uno a uno: entrada, salida, errores y qué plataforma lo tiene | [references/comandos.md](references/comandos.md) |
 | Llegar al dispositivo, desplegar una app, relanzarla, y los endpoints de fichero | [references/conexion-y-despliegue.md](references/conexion-y-despliegue.md) |
+
+## El permiso que hace que un arranque arranque
+
+`xone-desplegar-android` concede `SYSTEM_ALERT_WINDOW` por `appops` antes de lanzar, y no es
+higiene: Android 10 y superiores BLOQUEAN que una app en segundo plano arranque una actividad, y
+ese permiso es la exención que reconocen. El framework se va a segundo plano **con solo apagarse
+la pantalla**, o en cuanto se cierra la app.
+
+Sin él, `launchApplication` contesta `Cannot launch app while the framework is in the background`
+y el despliegue parece que fue bien sin que arrancara nada. Si lo lanzas a mano:
+
+```sh
+adb shell appops set com.xone.android.framework SYSTEM_ALERT_WINDOW allow
+```
+
+Y **dos cosas de la versión**: el framework va por **5.0.5.5dev** con **protocolo 3**. El saludo
+no cambió de forma —solo de número— y nuestro cliente no exige ninguna, así que sigue valiendo.
+Los comandos que llegaron con él (`getFields`, `openRecord`, `setGroup`, `setTrace`) están en
+[`references/comandos.md`](references/comandos.md).
+

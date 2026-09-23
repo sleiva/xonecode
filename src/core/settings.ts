@@ -55,8 +55,18 @@ export type PlataformaDeDispositivo = (typeof PLATAFORMAS_DE_DISPOSITIVO)[number
  * arranca el demonio de adb y se queda vivo, `xcrun` tarda segundos—, así que un destino
  * apagado no se consulta, y su herramienta se declara «desactivada» en vez de fingir que
  * no está.
+ *
+ * `rutaAdb`/`rutaEmulator` son la ruta a mano al binario, cuando `localizadorDeAndroid` no
+ * lo encuentra solo (PATH y SDK por omisión). Ausente = se sigue buscando como siempre.
+ * Son la SEGUNDA excepción declarada a `sinRutas`, igual que `Settings.workspace`: viajan
+ * ENTERAS por el cable (no abreviadas con `~` — eso se probó para el workspace y se
+ * descartó, ver `expandirConCasa`), y solo para `adb`/`emulator`; `xcrun`/`devicectl` se
+ * quedan en el host.
  */
-export type AjustesDeDispositivos = { [K in PlataformaDeDispositivo]?: boolean };
+export type AjustesDeDispositivos = { [K in PlataformaDeDispositivo]?: boolean } & {
+  rutaAdb?: string;
+  rutaEmulator?: string;
+};
 
 /** ¿Se mira este destino? Ausente = sí. */
 export function seMira(ajustes: AjustesDeDispositivos | undefined, plataforma: PlataformaDeDispositivo): boolean {
@@ -193,13 +203,14 @@ export function validarSettings(bruto: unknown): { settings: Settings; avisos: A
 
 
 /**
- * Solo BOOLEANOS, y solo los cuatro nombres conocidos: lo que no lo sea se descarta sin
- * aviso, como cualquier campo desconocido. Un `"false"` de cadena NO se toma por falso —es
- * verdadero en JavaScript, y esa es la trampa que este repo ya pagó con el `soloLectura`
- * de un subagente y con el `compartido` de CloudStudio—; se descarta, y entonces manda la
- * omisión, que es mirar. Un objeto sin ningún campo válido se devuelve como ausente: `{}`
- * y «no lo he dicho» significan lo mismo aquí, mirar todo, y guardar un objeto vacío solo
- * ensuciaría el fichero.
+ * Solo BOOLEANOS para los cuatro destinos y solo TEXTO para las dos rutas: lo que no lo sea
+ * se descarta sin aviso, como cualquier campo desconocido. Un `"false"` de cadena NO se toma
+ * por falso —es verdadero en JavaScript, y esa es la trampa que este repo ya pagó con el
+ * `soloLectura` de un subagente y con el `compartido` de CloudStudio—; se descarta, y
+ * entonces manda la omisión, que es mirar. Las rutas se recortan (`trim`), y una que queda
+ * vacía se trata como ausente: no hay diferencia entre «no lo he dicho» y «lo borré». Un
+ * objeto sin ningún campo válido se devuelve como ausente: `{}` y «no lo he dicho»
+ * significan lo mismo aquí, y guardar un objeto vacío solo ensuciaría el fichero.
  */
 function validarDispositivos(candidato: unknown): AjustesDeDispositivos | undefined {
   if (typeof candidato !== "object" || candidato === null) return undefined;
@@ -207,6 +218,10 @@ function validarDispositivos(candidato: unknown): AjustesDeDispositivos | undefi
   const salida: AjustesDeDispositivos = {};
   for (const plataforma of PLATAFORMAS_DE_DISPOSITIVO) {
     if (typeof c[plataforma] === "boolean") salida[plataforma] = c[plataforma] as boolean;
+  }
+  for (const campo of ["rutaAdb", "rutaEmulator"] as const) {
+    const valor = c[campo];
+    if (typeof valor === "string" && valor.trim() !== "") salida[campo] = valor.trim();
   }
   return Object.keys(salida).length === 0 ? undefined : salida;
 }
@@ -314,4 +329,64 @@ export function motivoDeWorkspaceInaceptable(ruta: string): string | undefined {
 
 export function rutaDeWorkspace(base: string, entorno: string, proyecto: string): string {
   return posix.join(base, segmentoSeguro(entorno, "id de entorno"), segmentoSeguro(proyecto, "nombre de proyecto"));
+}
+
+/**
+ * Qué entorno de `settings.json` sirve esta URL.
+ *
+ * Existe porque el `entorno` del `config.json` puede FALTAR o quedarse viejo, y las dos
+ * cosas mandaban el token al hueco equivocado:
+ *
+ *  - Falta en todo proyecto dado de alta desde la terminal, que no elige entorno. Esos
+ *    proyectos viven en `legado` hasta que alguien registra el oficial en el vestíbulo, y
+ *    entonces `adoptarLegadoSiProcede` MUEVE ese juego a `webstudio` y los deja sin tokens:
+ *    reautenticaban en silencio. Casando la URL leen el hueco adoptado y no se enteran.
+ *  - Se queda viejo cuando `/connect-studio` reescribe la `url` del proyecto: sin volver a
+ *    resolver, el `entorno` anterior seguiría nombrando el juego de OTRO servidor.
+ *
+ * La comparación normaliza con `URL` y cae a la comparación literal si alguna cadena no
+ * parsea. Qué absorbe esa normalización, MEDIDO y no supuesto: el case del host y el puerto
+ * por omisión explícito (`:443`) sí casan; una barra final de más, un `?` vacío, otro puerto,
+ * `http` frente a `https` y otro case en la RUTA no casan. Que no casen es benigno y no
+ * accidental: el fallo devuelve `undefined` —y cae en `legado`, donde ese proyecto ya
+ * estaba— en vez de resolver al id de otro entorno. Ninguna variante cruza a un id ajeno, y
+ * ESA es la propiedad de la que depende no mandarle a un servidor el token de otro.
+ */
+export function entornoDeUrl(url: string, entornos: readonly Entorno[]): string | undefined {
+  const canonica = (valor: string): string => {
+    try {
+      return new URL(valor).toString();
+    } catch {
+      return valor;
+    }
+  };
+  const buscada = canonica(url);
+  return entornos.find((entorno) => canonica(entorno.url) === buscada)?.id;
+}
+
+/**
+ * Por qué NO se puede quitar un entorno ahora mismo, o `undefined` si se puede.
+ *
+ * Se niega mientras algo VIVO depende de él: una consola abierta sobre una copia suya (su lazo
+ * sigue hablando con ese servidor) o una tarea de fondo que no ha terminado (la cola la
+ * abriría con un entorno que ya no está). Las copias de `<workspace>/<id>/` las reconoce por
+ * la RUTA, que es donde vive el id del entorno (`rutaDeWorkspace`). Lo que ya terminó no
+ * cuenta: quitar el entorno no borra nada del disco.
+ */
+export function motivoParaNoOlvidarEntorno(datos: {
+  entorno: string;
+  baseDeWorkspace: string;
+  abiertas: readonly string[];
+  tareas: readonly { estado: string; raiz: string }[];
+}): string | undefined {
+  const suya = (raiz: string): boolean => dentroDelWorkspace(raiz, posix.join(datos.baseDeWorkspace, datos.entorno));
+  const abierta = datos.abiertas.find(suya);
+  if (abierta !== undefined) {
+    return `hay un proyecto de este entorno abierto (${posix.basename(abierta)}): ciérralo antes de quitarlo`;
+  }
+  const viva = datos.tareas.filter((t) => t.estado !== "terminada" && suya(t.raiz));
+  if (viva.length > 0) {
+    return `hay ${viva.length} ${viva.length === 1 ? "tarea de fondo" : "tareas de fondo"} sin terminar en este entorno`;
+  }
+  return undefined;
 }

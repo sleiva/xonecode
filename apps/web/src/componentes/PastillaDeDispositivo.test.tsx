@@ -28,8 +28,17 @@ describe("PastillaDeDispositivo", () => {
     const alElegir = vi.fn();
     render(<PastillaDeDispositivo informe={INFORME} alElegir={alElegir} />);
     fireEvent.click(screen.getByRole("button", { name: /sin dispositivo/i }));
-    expect(screen.getByText("Teléfonos y tablets")).toBeTruthy();
+    // Lo que está a MANO va arriba, en su propio grupo, con Android primero y punto verde; y
+    // un grupo que se queda vacío no se pinta (aquí los dos teléfonos del fixture están vivos).
+    expect(screen.getByText("Disponibles ahora")).toBeTruthy();
+    expect(screen.queryByText("Teléfonos y tablets")).toBeNull();
     expect(screen.getByText("Simuladores y emuladores")).toBeTruthy();
+    const filas = screen.getAllByRole("menuitem").map((b) => b.textContent);
+    expect(filas.findIndex((t) => t?.includes("Galaxy S21"))).toBeLessThan(filas.findIndex((t) => t?.includes("iPhone 16")));
+    const galaxy = screen.getByRole("menuitem", { name: /Galaxy S21/ });
+    expect(galaxy.querySelector("[data-vivo]")).not.toBeNull();
+    // Sin la plataforma repetida: los nombres de iOS ya la traen del host.
+    expect(filas.some((t) => /iOS · iOS/.test(t ?? ""))).toBe(false);
     /**
      * El AVD definido y sin arrancar SE LISTA —es lo que se puede arrancar— pero NO se puede
      * elegir: esa fila la inventa el cliente y el servidor resuelve el elegido contra su
@@ -90,10 +99,23 @@ describe("PastillaDeDispositivo", () => {
    * sigue sin tools de dispositivo, así que un «cuando las tenga» es una capacidad que nadie ha
    * decidido construir, dicha como si estuviera en camino.
    */
-  it("dice que la elección la usa la pestaña Ejecutar, y no promete que la use el agente", () => {
+  it("dice quién usa la elección —Ejecutar Y el agente, desde que le llega— sin prometer tools", () => {
+    // El agente la usa desde que los scripts de xone-hotswap leen el fichero de la sesión
+    // (`core/dispositivoDeSesion.ts`): decirlo ahora es verdad, y callarlo haría creer que da igual.
     render(<PastillaDeDispositivo informe={INFORME} alElegir={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: /sin dispositivo/i }));
-    expect(screen.getByText(/la usa la pestaña Ejecutar/i)).toBeTruthy();
+    expect(screen.getByText(/pestaña Ejecutar.*el agente.*prefiere un emulador/is)).toBeTruthy();
     expect(screen.queryByText(/tools de dispositivo/i)).toBeNull();
+  });
+
+  it("«Volver a medir» con la HORA de la foto, y solo si hay quien mida", () => {
+    const alMedir = vi.fn();
+    const { rerender } = render(<PastillaDeDispositivo informe={INFORME} alElegir={() => {}} alMedir={alMedir} />);
+    fireEvent.click(screen.getByRole("button", { name: /sin dispositivo/i }));
+    expect(screen.getByText(/Medido a las/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Volver a medir" }));
+    expect(alMedir).toHaveBeenCalledTimes(1);
+    rerender(<PastillaDeDispositivo informe={INFORME} alElegir={() => {}} />);
+    expect(screen.queryByRole("button", { name: "Volver a medir" })).toBeNull();
   });
 });

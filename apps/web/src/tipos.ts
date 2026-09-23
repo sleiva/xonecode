@@ -183,7 +183,7 @@ export type Acto =
    * de pulsar, y plegarlo sería no contestarle. Sigue suelta y a la vista, como las sesiones
    * guardadas antes de que este campo existiera.
    */
-  | { tipo: "sistema"; texto: string; clase?: "aviso" | "permiso" }
+  | { tipo: "sistema"; texto: string; clase?: "aviso" | "permiso" | "resumen" }
   /** Un artefacto que dejó el agente: diagrama, panel, captura. No es un fichero del
    *  proyecto (vive en la carpeta de la sesión) y por eso se escribió SIN aprobación — que
    *  se vea es la contrapartida. Metadatos y nunca el contenido. */
@@ -558,7 +558,7 @@ export type MensajeAlCliente =
        * nadie lo ha dicho —y manda la omisión de la barra—, mientras que una lista vacía es
        * una elección: ninguno.
        */
-      registrados: { id: string; nombre: string; url: string; proyectos?: string[] }[];
+      registrados: { id: string; nombre: string; url: string; proyectos?: string[]; copias?: number }[];
       /** De qué entorno son los `proyectos` de este mensaje. Ausente = de ninguno todavía. */
       entornoActivo?: string;
       /**
@@ -866,6 +866,19 @@ export type MensajeDelCliente =
   | { clase: "sesionAccion"; accion: "renombrar"; proyecto: string; sesion: string; titulo: string }
   /** Qué proyectos de un entorno se enseñan en la barra. Vacío = ninguno, que es elección. */
   | { clase: "entorno"; accion: "visibles"; entorno: string; proyectos: string[] }
+  /**
+   * Quitar un entorno registrado. El servidor contesta **409 con `{ motivo }`** si no se puede
+   * ahora (un proyecto suyo abierto, una tarea sin terminar): la negativa vive allí, y así el
+   * cliente la enseña sin llevar una copia de la regla. Sus copias locales se quedan.
+   */
+  | {
+      clase: "entorno";
+      accion: "olvidar";
+      entorno: string;
+      /** Borrar además `<workspace>/<entorno>/` entera. Solo con la casilla marcada y el
+       *  nombre escrito; ausente = las copias se quedan. */
+      borrarCopias?: boolean;
+    }
   /** Cambiar de entorno activo: el de cuyos proyectos se habla. */
   | { clase: "entorno"; accion: "activo"; entorno: string }
   /** «Dime los proyectos de este entorno», sin hacerlo activo: las casillas de su pestaña
@@ -901,7 +914,14 @@ export type MensajeDelCliente =
    * Vuelve a mirar qué dispositivos hay; la respuesta llega por el SSE como `dispositivos`.
    * Con `ajustes`, además los guarda antes de medir.
    */
-  | { clase: "dispositivos"; ajustes?: AjustesDeDispositivos; instalar?: NombreDeHerramienta }
+  | {
+      clase: "dispositivos";
+      ajustes?: AjustesDeDispositivos;
+      instalar?: NombreDeHerramienta;
+      /** Abre, en el explorador del sistema donde corre la consola, la carpeta que contiene
+       *  el binario de esta herramienta. No remide ni cambia ningún estado. */
+      abrirRuta?: NombreDeHerramienta;
+    }
   /** Con qué dispositivo trabaja la sesión. Viaja el ID; sin él, se quita la elección. */
   | { clase: "dispositivo"; id?: string }
   /** «Arranca este AVD.» El nombre y nada más: el servidor comprueba que esté en SU última
@@ -1037,7 +1057,15 @@ export const PLATAFORMAS_DE_DISPOSITIVO = ["android", "androidEmulador", "ios", 
 
 export type PlataformaDeDispositivo = (typeof PLATAFORMAS_DE_DISPOSITIVO)[number];
 
-export type AjustesDeDispositivos = { [K in PlataformaDeDispositivo]?: boolean };
+/**
+ * Redeclarado de `core/settings.ts`. `rutaAdb`/`rutaEmulator` son la ruta personalizada a
+ * cada binario cuando la búsqueda automática (PATH y SDK) no lo encuentra sola: la segunda
+ * excepción declarada a `sinRutas`, igual que `workspace` — viaja ENTERA, sin abreviar.
+ */
+export type AjustesDeDispositivos = { [K in PlataformaDeDispositivo]?: boolean } & {
+  rutaAdb?: string;
+  rutaEmulator?: string;
+};
 
 /** ¿Se mira este destino? Ausente = sí. La misma función que el host (`core/settings.ts`). */
 export function seMira(ajustes: AjustesDeDispositivos | undefined, plataforma: PlataformaDeDispositivo): boolean {
@@ -1066,7 +1094,12 @@ export interface Herramienta {
   estado: "ok" | "no-encontrada" | "fallo" | "no-aplica" | "desactivada";
   /** Cómo se instala si falta. `automatico` = xonecode puede lanzarlo él. */
   instalar?: { comando: string; automatico: boolean };
-  /** Sin `ruta`: se queda en el host, es una ruta del home del usuario. */
+  /**
+   * Dónde se encontró. **Presente solo para `adb`/`emulator`** — la excepción declarada a
+   * `sinRutas`, igual que `workspace` (viaja ENTERA, sin abreviar con `~`). Para
+   * `xcrun`/`devicectl` se queda en el host, como el resto de rutas de la máquina.
+   */
+  ruta?: string;
   detalle?: string;
 }
 

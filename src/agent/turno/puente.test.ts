@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aEventos, razonamientoDe, textoDe, toolsDe, esDelPadre } from "./puente.js";
+import { aEventos, crearMemoriaDelTurno, razonamientoDe, textoDe, toolsDe, esDelPadre } from "./puente.js";
 import type { DomainEvent, PendienteDeAprobacion } from "../../core/events.js";
 
 async function recoger(chunks: unknown[]): Promise<DomainEvent[]> {
@@ -102,6 +102,47 @@ describe("toolsDe", () => {
     };
     expect(toolsDe(dato)).toEqual([{ nombre: "write_file", detalle: "/MEMORIA.md", parametros: { file_path: "/MEMORIA.md" } }]);
     expect(JSON.stringify(toolsDe(dato))).not.toContain("token-secreto");
+  });
+
+  /**
+   * **De que RESPUESTA salio cada tool, que es lo unico que decide si van en paralelo.**
+   *
+   * Sin este campo la traza no podia contestarlo y habia que adivinarlo con dos heuristicas
+   * que se contradicen. Medido sobre un turno real de 69 tools: por el reloj exacto salian 18
+   * en rafaga —el milisegundo PARTE una rafaga— y por los contadores del tracker salian 38,
+   * con dos grupos de 1.000 ms de span, o sea rezagados FUNDIDOS en una respuesta ajena. La
+   * conclusion que se saco de ahi (siete ediciones simultaneas sobre el mismo fichero) resulto
+   * ser cierta, pero no por el metodo: hubo que cruzar los dos criterios para defenderla.
+   */
+  it("las tools de UNA respuesta comparten el id del mensaje, y las de otra no", () => {
+    const dato = {
+      agent: {
+        messages: [
+          {
+            id: "msg-1",
+            tool_calls: [
+              { name: "edit_file", args: { file_path: "/f.js", old_string: "a", new_string: "b" } },
+              { name: "edit_file", args: { file_path: "/f.js", old_string: "c", new_string: "d" } },
+            ],
+          },
+          { id: "msg-2", tool_calls: [{ name: "read_file", args: { file_path: "/f.js" } }] },
+        ],
+      },
+    };
+    const [a, b, c] = toolsDe(dato);
+    expect(a?.respuesta).toBe("msg-1");
+    expect(b?.respuesta).toBe("msg-1");
+    expect(a?.respuesta).toBe(b?.respuesta); // dos ediciones PEDIDAS A LA VEZ
+    expect(c?.respuesta).toBe("msg-2");
+    expect(c?.respuesta).not.toBe(a?.respuesta);
+  });
+
+  /** Un mensaje sin id no inventa uno: ausente es "no consta", como en todo lo demas. */
+  it("sin id del mensaje, el campo no sale", () => {
+    const sinId = toolsDe({ agent: { messages: [{ tool_calls: [{ name: "read_file", args: { file_path: "/f.js" } }] }] } });
+    expect(sinId[0]).not.toHaveProperty("respuesta");
+    const vacio = toolsDe({ agent: { messages: [{ id: "", tool_calls: [{ name: "read_file", args: { file_path: "/f.js" } }] }] } });
+    expect(vacio[0]).not.toHaveProperty("respuesta");
   });
 });
 
@@ -333,5 +374,156 @@ describe("la historia acumulada de un subgrafo no se cuenta dos veces", () => {
     for await (const e of aEventos(stream)) if (e.tipo === "tool") eventos.push(e);
 
     expect(eventos).toHaveLength(2);
+  });
+});
+
+/**
+ * **Que una tool no se cuente dos veces porque hubo dos rondas.**
+ *
+ * `turnoReal.ts` llama a `aEventos` DENTRO del bucle de rondas: una aprobación termina la
+ * ronda, se reanuda con un `Command` y el stream vuelve a entregar la historia acumulada. Con
+ * el dedupe local, cada ronda empezaba en blanco y recontaba las tools de las anteriores.
+ *
+ * Medido sobre una sesión real: la traza decía OCHO `edit_file` sobre el mismo fichero, seis
+ * de ellas «en la misma respuesta», y en la pantalla se había pedido UN permiso y escrito UNA
+ * vez. Las reemisiones caían 15 ms después de cada ronda y con el MISMO id de mensaje. Eso
+ * mandó a diagnosticar escrituras concurrentes que la traza se había inventado.
+ */
+describe("el dedupe entre RONDAS", () => {
+  // La forma del stream con `subgraphs: true`: [namespace, modo, dato].
+  const chunk = () => [
+    [],
+    "updates",
+    { agent: { messages: [{ id: "msg-1", tool_calls: [{ id: "call-1", name: "edit_file", args: { file_path: "/f.js" } }] }] } },
+  ];
+  const correr = async (vistas?: ReturnType<typeof crearMemoriaDelTurno>) => {
+    const salida: string[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for await (const e of aEventos((async function* () { yield chunk(); })() as any, undefined, (t) => salida.push(t.nombre), vistas)) void e;
+    return salida;
+  };
+
+  it("con el conjunto del TURNO, la segunda ronda no la vuelve a contar", async () => {
+    const vistas = crearMemoriaDelTurno();
+    expect(await correr(vistas)).toEqual(["edit_file"]);
+    expect(await correr(vistas)).toEqual([]); // la MISMA tool, reentregada: no se cuenta
+    expect(await correr(vistas)).toEqual([]);
+  });
+
+  it("sin el conjunto se cuenta otra vez — que es el fallo que esto cierra", async () => {
+    expect(await correr()).toEqual(["edit_file"]);
+    expect(await correr()).toEqual(["edit_file"]);
+  });
+});
+
+/**
+ * **A qué tool pertenece el peso de un resultado, también entre rondas.**
+ *
+ * La llamada se reemite en cada ronda y el dedupe la salta, así que apuntar el nombre DESPUÉS
+ * de ese `continue` dejaba el mapa vacío a partir de la segunda: medido sobre una sesión real,
+ * 35 resultados salían como «(sin nombre)» — la cuarta parte de todo lo que entró en el
+ * contexto, sin poder decir de dónde venía.
+ */
+describe("el peso de un resultado sabe de qué tool es", () => {
+  const llamada = () => [
+    [],
+    "updates",
+    { agent: { messages: [{ id: "m1", tool_calls: [{ id: "c1", name: "read_file", args: { file_path: "/skills/x/SKILL.md" } }] }] } },
+  ];
+  const resultado = () => [
+    [],
+    "updates",
+    { agent: { messages: [{ tool_call_id: "c1", type: "tool", content: "0123456789" }] } },
+  ];
+  const correr = async (chunks: unknown[], vistas: ReturnType<typeof crearMemoriaDelTurno>) => {
+    const pesos: Array<{ nombre?: string; detalle?: string; chars: number }> = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for await (const e of aEventos((async function* () { for (const c of chunks) yield c; })() as any, undefined, undefined, vistas, (r) => pesos.push(r))) void e;
+    return pesos;
+  };
+
+  it("en la MISMA ronda, el resultado lleva nombre y blanco", async () => {
+    expect(await correr([llamada(), resultado()], crearMemoriaDelTurno())).toEqual([
+      { id: "c1", chars: 10, nombre: "read_file", detalle: "/skills/x/SKILL.md" },
+    ]);
+  });
+
+  it("y en la SEGUNDA ronda también, aunque la llamada ya estuviera contada", async () => {
+    const vistas = crearMemoriaDelTurno();
+    await correr([llamada()], vistas); // ronda 1: la llamada se cuenta
+    // Ronda 2: el stream reentrega la llamada (ya vista) y trae su resultado.
+    const pesos = await correr([llamada(), resultado()], vistas);
+    expect(pesos).toEqual([{ id: "c1", chars: 10, nombre: "read_file", detalle: "/skills/x/SKILL.md" }]);
+  });
+
+  /** Un resultado del que no consta llamada se cuenta igual: el peso entró en el contexto. */
+  it("sin llamada conocida, el peso se cuenta sin nombre", async () => {
+    expect(await correr([resultado()], crearMemoriaDelTurno())).toEqual([{ id: "c1", chars: 10 }]);
+  });
+});
+
+/**
+ * **Los resultados, entre rondas: ni se recuentan ni pierden su nombre.**
+ *
+ * Dos fallos de la misma familia, encontrados al estrenar la medida de peso sobre una sesión
+ * real: salían **62 resultados para 57 llamadas** —imposible— y **98.439 caracteres como
+ * «(sin nombre)», el 43 % de todo lo que entró en el contexto**.
+ *
+ *  1. El conjunto de resultados ya medidos vivía por RONDA, así que cada reanudación volvía a
+ *     contar los de las anteriores. Lo mismo que le pasó a las tools en `8b69c08`.
+ *  2. Los resultados se miraban ANTES que las llamadas del mismo chunk, con el argumento de
+ *     que un resultado llega en el chunk SIGUIENTE al de su llamada. Es cierto la primera vez
+ *     y FALSO al reanudar: la historia acumulada reentrega los dos JUNTOS.
+ */
+describe("los resultados entre rondas", () => {
+  const historia = () => [
+    [],
+    "updates",
+    {
+      agent: {
+        messages: [
+          { id: "m1", tool_calls: [{ id: "c1", name: "read_file", args: { file_path: "/skills/x/SKILL.md" } }] },
+          { tool_call_id: "c1", type: "tool", content: "0123456789" },
+        ],
+      },
+    },
+  ];
+  const correr = async (memoria: ReturnType<typeof crearMemoriaDelTurno>) => {
+    const pesos: Array<{ nombre?: string; chars: number }> = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for await (const e of aEventos((async function* () { yield historia(); })() as any, undefined, undefined, memoria, (r) => pesos.push(r))) void e;
+    return pesos;
+  };
+
+  it("llamada y resultado en el MISMO chunk: el peso sale con su nombre", async () => {
+    const pesos = await correr(crearMemoriaDelTurno());
+    expect(pesos).toEqual([{ id: "c1", chars: 10, nombre: "read_file", detalle: "/skills/x/SKILL.md" }]);
+  });
+
+  it("y la ronda siguiente NO lo vuelve a contar", async () => {
+    const memoria = crearMemoriaDelTurno();
+    expect(await correr(memoria)).toHaveLength(1);
+    // La misma historia, reentregada al reanudar: ya está medida.
+    expect(await correr(memoria)).toEqual([]);
+    expect(await correr(memoria)).toEqual([]);
+  });
+});
+
+
+describe("el resumen de contexto no es la respuesta", () => {
+  it("un chunk con la ETIQUETA del resumen sale como `resumen`, no como token", async () => {
+    const e = await recoger([
+      [["model_request:abc"], "messages", [{ text: "## Resumen", id: "s1" }, { tags: ["xonecode:resumen"] }]],
+      [["model_request:abc"], "messages", [{ text: "hola", id: "r1" }, { tags: [] }]],
+    ]);
+    expect(e).toEqual([
+      { tipo: "resumen", texto: "## Resumen", msgId: "s1" },
+      { tipo: "token", texto: "hola", msgId: "r1" },
+    ]);
+  });
+
+  it("la etiqueta se compara con la CONSTANTE de quien la pone", async () => {
+    const { ETIQUETA_DEL_RESUMEN } = await import("./resumenDeContexto.js");
+    expect(ETIQUETA_DEL_RESUMEN).toBe("xonecode:resumen");
   });
 });

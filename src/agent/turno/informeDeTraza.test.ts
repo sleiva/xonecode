@@ -254,3 +254,172 @@ describe("el reparto de tools entre orquestador y especialistas", () => {
     expect(sesion.toolsDelOrquestador).toBe(0);
   });
 });
+
+/**
+ * **El paralelismo, que es lo que la traza no sabia contestar.**
+ *
+ * La pregunta —¿cuantas tools pidio el modelo A LA VEZ?— se contesto dos veces con dos
+ * metodos y dieron dos numeros: por el reloj exacto, 18 de 69; por los contadores del
+ * tracker, 38 de 69 con grupos de 1.000 ms de span. Faltaba el dato, y el dato es de que
+ * MENSAJE salio cada tool.
+ */
+describe("paralelismo", () => {
+  const linea = (o: Record<string, unknown>) => JSON.stringify({ v: 1, sesion: "s1", at: "2026-09-22T00:00:00.000Z", ...o });
+  const tool = (nombre: string, respuesta: string | undefined, detalle?: string) =>
+    linea({ tipo: "tool", nombre, ...(respuesta === undefined ? {} : { respuesta }), ...(detalle === undefined ? {} : { detalle }), ...(detalle === undefined ? {} : { parametros: { file_path: detalle } }) });
+
+  it("dos tools del MISMO mensaje van en paralelo; las de otro, no", () => {
+    const [s] = resumirTraza([
+      linea({ tipo: "sesion" }),
+      tool("read_file", "m1", "/a.js"),
+      tool("grep", "m1"),
+      tool("read_file", "m2", "/b.js"),
+    ]);
+    expect(s?.paralelismo.respuestas).toBe(1);
+    expect(s?.paralelismo.tools).toBe(2);
+    expect(s?.paralelismo.maximo).toBe(2);
+  });
+
+  /** El hallazgo que esto vino a buscar: ahi es donde se pierden cambios. */
+  it("dos escrituras del mismo mensaje sobre el MISMO fichero se avisan", () => {
+    const [s] = resumirTraza([
+      linea({ tipo: "sesion" }),
+      tool("edit_file", "m1", "/funciones.js"),
+      tool("edit_file", "m1", "/funciones.js"),
+      tool("edit_file", "m1", "/otro.js"),
+    ]);
+    expect(s?.paralelismo.escriturasALaVez).toEqual([{ detalle: "/funciones.js", veces: 2 }]);
+    expect(pintarSesion(s!).join("\n")).toContain("2 escrituras sobre /funciones.js en UNA respuesta");
+  });
+
+  /** Dos ficheros distintos en la misma respuesta no chocan: cada uno tiene su contenido. */
+  it("dos escrituras a la vez sobre ficheros DISTINTOS no son un choque", () => {
+    const [s] = resumirTraza([linea({ tipo: "sesion" }), tool("edit_file", "m1", "/a.js"), tool("edit_file", "m1", "/b.js")]);
+    expect(s?.paralelismo.escriturasALaVez).toEqual([]);
+    expect(s?.paralelismo.respuestas).toBe(1);
+  });
+
+  /**
+   * Se queda el MAXIMO de una respuesta, no la suma: lo que se cuenta es cuantas a la vez, y
+   * sumar dos respuestas de dos daria cuatro —un numero que nunca ocurrio—.
+   */
+  it("dos respuestas de dos escrituras no se suman a cuatro", () => {
+    const [s] = resumirTraza([
+      linea({ tipo: "sesion" }),
+      tool("edit_file", "m1", "/f.js"), tool("edit_file", "m1", "/f.js"),
+      tool("edit_file", "m2", "/f.js"), tool("edit_file", "m2", "/f.js"),
+    ]);
+    expect(s?.paralelismo.escriturasALaVez).toEqual([{ detalle: "/f.js", veces: 2 }]);
+  });
+
+  /** Ausente no es `sola`: una traza vieja diria cero paralelismo, que no es lo medido. */
+  it("una traza SIN el campo no dice cero: dice cuantas no constan", () => {
+    const [s] = resumirTraza([linea({ tipo: "sesion" }), tool("read_file", undefined, "/a.js"), tool("edit_file", undefined, "/a.js")]);
+    expect(s?.paralelismo.respuestas).toBe(0);
+    expect(s?.paralelismo.sinRespuesta).toBe(2);
+    const pintado = pintarSesion(s!).join("\n");
+    expect(pintado).toContain("2 tool(s) sin respuesta anotada");
+    expect(pintado).not.toContain("en paralelo");
+  });
+
+  it("sin paralelismo no se pinta la seccion", () => {
+    const [s] = resumirTraza([linea({ tipo: "sesion" }), tool("read_file", "m1", "/a.js")]);
+    expect(pintarSesion(s!).join("\n")).not.toContain("en paralelo");
+  });
+});
+
+/**
+ * **Cuánto METIÓ cada tool en el contexto, que es lo que se paga.**
+ *
+ * El reparto por tool cuenta LLAMADAS: dos `read_file` son dos líneas iguales y pueden ser
+ * doscientos caracteres o veinte mil. Se echó de menos buscando por qué un turno costaba
+ * mucho más que el mismo turno de por la mañana — se podía contar cuántas veces se leía el
+ * `SKILL.md` de una skill, pero no lo que pesaba, y por eliminación no se llega.
+ */
+describe("el peso en contexto", () => {
+  const linea = (o: Record<string, unknown>) => JSON.stringify({ v: 1, sesion: "s1", at: "2026-09-22T00:00:00.000Z", ...o });
+  const res = (nombre: string, detalle: string, chars: number) => linea({ tipo: "resultado", nombre, detalle, chars });
+
+  it("suma por tool y BLANCO, y lo más gordo sale primero", () => {
+    const [s] = resumirTraza([
+      linea({ tipo: "sesion" }),
+      res("read_file", "/skills/x/SKILL.md", 12000),
+      res("read_file", "/skills/x/SKILL.md", 12000),
+      res("execute", "xone-log-android", 30000),
+      res("read_file", "/a.js", 500),
+    ]);
+    expect(s?.charsDeTools).toBe(54500);
+    expect(s?.pesos[0]).toEqual({ nombre: "execute", detalle: "xone-log-android", chars: 30000, veces: 1 });
+    expect(s?.pesos[1]).toEqual({ nombre: "read_file", detalle: "/skills/x/SKILL.md", chars: 24000, veces: 2 });
+    expect(s?.pesos[2]?.detalle).toBe("/a.js");
+  });
+
+  it("se pinta con la MEDIA solo cuando hubo más de una", () => {
+    const [s] = resumirTraza([linea({ tipo: "sesion" }), res("read_file", "/f", 100), res("read_file", "/f", 300), res("execute", "ls", 50)]);
+    const pintado = pintarSesion(s!).join("\n");
+    expect(pintado).toContain("lo que METIÓ en el contexto");
+    expect(pintado).toMatch(/400\s+read_file\s+\/f\s+×2\s+\(media 200\)/);
+    // Con una sola, la media no aporta nada y sería ruido.
+    expect(pintado).toMatch(/50\s+execute\s+ls$/m);
+  });
+
+  /** Ausente no es cero: una traza anterior al campo no dice «no metió nada». */
+  it("sin resultados no se pinta la sección", () => {
+    const [s] = resumirTraza([
+      JSON.stringify({ v: 1, sesion: "s1", at: "2026-09-22T00:00:00.000Z", tipo: "sesion" }),
+      JSON.stringify({ v: 1, sesion: "s1", at: "2026-09-22T00:00:00.000Z", tipo: "tool", nombre: "read_file", detalle: "/f" }),
+    ]);
+    expect(s?.pesos).toEqual([]);
+    expect(s?.charsDeTools).toBe(0);
+    expect(pintarSesion(s!).join("\n")).not.toContain("METIÓ en el contexto");
+  });
+
+  it("un resultado sin nombre se cuenta igual, y lo dice", () => {
+    const [s] = resumirTraza([linea({ tipo: "sesion" }), linea({ tipo: "resultado", chars: 900 })]);
+    expect(s?.charsDeTools).toBe(900);
+    expect(pintarSesion(s!).join("\n")).toContain("(sin nombre)");
+  });
+});
+
+/**
+ * **La entrada FRESCA, al lado del total.**
+ *
+ * `entrada` es lo MANDADO, caché incluida. En un turno con varias rondas la mayor parte es el
+ * historial reenviado, así que medio millón de entrada puede ser cuarenta mil de texto nuevo.
+ * Sin la cifra al lado se lee mal en las DOS direcciones —y pasó: el total solo parece un
+ * gasto enorme que no lo es, y el efectivo solo esconde el volumen que de verdad viajó—.
+ */
+describe("la entrada fresca", () => {
+  const modelo = (o: Record<string, unknown>) =>
+    JSON.stringify({ v: 1, sesion: "s1", at: "2026-09-22T00:00:00.000Z", tipo: "modelo", origen: "orquestador", ...o });
+
+  it("sale al lado del total, en la sesión y en cada origen", () => {
+    const [s] = resumirTraza([
+      JSON.stringify({ v: 1, sesion: "s1", at: "2026-09-22T00:00:00.000Z", tipo: "sesion" }),
+      modelo({ input: 100000, cache: 92000, output: 5000, contexto: 20000 }),
+    ]);
+    const pintado = pintarSesion(s!).join("\n");
+    expect(pintado).toContain("entrada 100.000 (fresca 8000)");
+    expect(pintado).toContain("orquestador");
+    // También en la fila del origen, que es donde se decide a quién apretar.
+    expect(pintado.split("\n").filter((l) => l.includes("(fresca 8000)"))).toHaveLength(2);
+  });
+
+  /** Sin caché, fresca y total coinciden — y eso es correcto, no un adorno que sobre. */
+  it("sin caché, la fresca es el total", () => {
+    const [s] = resumirTraza([
+      JSON.stringify({ v: 1, sesion: "s1", at: "2026-09-22T00:00:00.000Z", tipo: "sesion" }),
+      modelo({ input: 900, cache: 0, output: 10 }),
+    ]);
+    expect(pintarSesion(s!).join("\n")).toContain("entrada 900 (fresca 900)");
+  });
+
+  /** Una caché mayor que la entrada es un dato imposible: no se pinta un negativo. */
+  it("no pinta un negativo si la caché viniera inflada", () => {
+    const [s] = resumirTraza([
+      JSON.stringify({ v: 1, sesion: "s1", at: "2026-09-22T00:00:00.000Z", tipo: "sesion" }),
+      modelo({ input: 100, cache: 500, output: 1 }),
+    ]);
+    expect(pintarSesion(s!).join("\n")).toContain("(fresca 0)");
+  });
+});

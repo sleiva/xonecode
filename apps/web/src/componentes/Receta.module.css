@@ -88,7 +88,10 @@
 
 /* La marca de hecho: HUECA cuando falta, no roja. Que te falte el SDK de Android no es un
    error —es que no lo has instalado—, y un punto rojo se lee como que algo va mal. Es el
-   mismo criterio que los puntos de los requisitos. */
+   MISMO criterio Y el mismo alias que los puntos de los requisitos
+   (`Ajustes.module.css#.punto[data-herramienta="ok"]`): verde de éxito, no cian — el cian es
+   ACENTO de la marca y no sostiene un estado, y un paso hecho aquí es la misma «ok» que un
+   punto verde de ahí arriba. Eran dos colores para el mismo hecho. */
 .marca {
   flex: 0 0 auto;
   width: 8px;
@@ -98,8 +101,8 @@
 }
 
 .marca[data-hecho] {
-  border-color: var(--xonecode-cian);
-  background: var(--xonecode-cian);
+  border-color: var(--dsw-alias-state-success-primary);
+  background: var(--dsw-alias-state-success-primary);
 }
 
 .paso[data-hecho] .pasoTitulo {

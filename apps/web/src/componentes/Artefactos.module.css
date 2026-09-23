@@ -3,11 +3,22 @@
    Revisión —lo que cede en el centro, la columna a la derecha sin ceder, y el corte por
    CONTENEDOR y no por ventana—, con la lista en vez del árbol: aquí son un puñado de
    ficheros planos y un árbol no tendría ramas. */
-.artefactos {
+/* **El contenedor de la consulta es esta caja, y `.artefactos` es su HIJA a propósito.**
+   Una `@container` solo puede estilar DESCENDIENTES del elemento que declara
+   `container-type`, nunca al elemento mismo — mismo defecto y mismo arreglo que en
+   `Ficheros.module.css`, que lo cuenta entero. */
+.caja {
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
   container-type: inline-size;
+}
+
+.artefactos {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
 }
 
 .visor {

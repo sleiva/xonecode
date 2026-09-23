@@ -37,6 +37,7 @@ npm run build                          # rm -rf dist && tsc -p tsconfig.build.js
 XONECODE_TRACE_TOOLS=1 ./bin/xonecode run --real "…"   # un turno medido, sin web ni TUI
 ./bin/xonecode traza [--todas]         # a dónde se fueron los tokens de ese turno
 npm run web -- --puerto 4200           # la consola WEB: construye el cliente y la levanta
+npm run web:trazas                     # la misma, dejando .xonecode/traza-{errores,tools}.jsonl
 ```
 
 Los tests son **colocados** (`src/**/*.test.ts`, junto al módulo que prueban).
@@ -155,6 +156,20 @@ Y las guardas del proyecto:
   error al modelo, que puede reintentar; una excepción se lleva el turno por delante y el agente
   no reintenta. Vale para `sinVistasAplanadas`, `sinArtefactosEnElProyecto` y
   `sinDescargasEnElProyecto`. `proyecto.test.ts` lo ata contra la librería real.
+- **Dos escrituras sobre el MISMO fichero no se solapan** (`core/serieDeEscrituras.ts` puro,
+  `agent/grafo/escriturasEnSerie.ts`). `write` y `edit` son leer-modificar-escribir sobre el
+  fichero entero, así que dos a la vez se pisan y **las dos contestan que bien**: una de ellas
+  no llega al disco y no avisa nadie. Un modelo las pide a la vez en cuanto agrupa varias
+  `tool_calls` en un mensaje. **Serializar BASTA, y por dónde va**: la segunda calculó su
+  `old_string` contra un contenido que la primera ya cambió, así que el envoltorio va por
+  FUERA de quien edita — cuando le llega el turno se vuelve a leer el fichero y se vuelve a
+  buscar el ancla contra lo que hay. Si sigue, la edición es correcta; si no, el backend
+  contesta que no lo encuentra y el modelo reintenta, que es el camino que ya existe. La
+  alternativa era perder el cambio en silencio. En la pila va por DENTRO de las guardas de
+  ruta —que siguen contestando primero— y por FUERA de `sinContenidoInvalido`, para que leer,
+  validar y escribir sean un solo turno. Solo `write` y `edit`: serializar lecturas no arregla
+  nada y volvería secuencial lo que sí puede ir en paralelo. **Y se prueba por `backendDeAgente`
+  y contra el backend REAL**, porque lo que hay que comprobar es que esté CABLEADA.
 - **`/artefactos/` → `.xonecode/sesiones/<id>/artefactos/`**: escribible y **sin aprobación**, por
   eso se ANUNCIA con el evento `artefacto` (nombre, tamaño, ruta virtual — nunca contenido).
   `esRutaDeArtefacto` es una lista BLANCA de forma, no un `startsWith`. La carpeta no se crea al
@@ -807,6 +822,22 @@ feedback del desarrollador** y no es terminal.
   efecto depende de los DOS CAMPOS de esa pestaña y **no del record** (que con su omisión `{}`
   es un objeto nuevo por render), y el cableado de los dos sentidos tiene test propio porque
   el prop es opcional y `tsc` no lo caza.
+- **Un entorno se registra SOLO si conecta, y se puede QUITAR** (`arranque.ts#atenderAlta`,
+  `motivoParaNoOlvidarEntorno`). Registrar escribe antes de hablar con el servidor, así que uno
+  NUEVO cuyo `proyectosDe` falla se deshace y el aviso lo dice —sin borrarle las credenciales,
+  que pueden ser el juego legado adoptado—; uno que ya estaba no se quita porque hoy no conteste.
+  Quitar lo decide el SERVIDOR (proyecto suyo abierto o tarea sin terminar = no) y contesta **409
+  con el motivo** en la propia respuesta, porque `informar` no llega al navegador desde el
+  vestíbulo. Las copias bajadas se QUEDAN salvo con la casilla **«borrar también las copias»,
+  DESMARCADA siempre al abrir** (`borrarCopias`, `settingsEnDisco.ts#borrarCopiasDeEntorno`, con la
+  barrera de ruta por texto y `realpath`), y el botón rojo no se activa hasta **escribir el nombre
+  del entorno**: dos clics rápidos en el mismo sitio no pueden quitar nada. El recuento de copias
+  viaja en `registrados[].copias` —nombrado en la lista blanca del store—. La opción del vestíbulo
+  es obligatoria.
+- **Una copia «bajada» es `config.json` Y `sync.json`** (`vestibulo.ts#esProyectoEnDisco`): el alta
+  escribe el `config.json` ANTES de bajar, y con solo él una descarga que fallaba dejaba una
+  carpeta vacía que la barra daba por bajada (medido: Bequikly y Conecta2). Y **un fallo de
+  descarga se APUNTA** en el `fallos.jsonl` del proyecto —el alta y `/sync`—, con qué se bajaba.
 - **La clave de API viaja por el ÚNICO mensaje del cable que la lleva** (`leerSecreto`), y se
   PRUEBA antes de escribirse: `motivoDeClaveInaceptable` (`core/config.ts`) criba de balde, y
   luego el catálogo con `aplicarCredencialAlProceso` — **solo si el proveedor contesta** se
@@ -855,6 +886,16 @@ feedback del desarrollador** y no es terminal.
   escrituras como una. `razonamiento` es su propio evento y su propio acto —`textoDe` lo
   EXCLUYE del texto—. El texto del asistente se enseña mientras llega, a `MS_ENTRE_PARCIALES`
   (80 ms) con el reloj por parámetro, porque cada emisión manda el acto entero.
+- **El RESUMEN de contexto es un acto de sistema de clase `resumen`, no una respuesta**
+  (`resumenDeContexto.ts#ETIQUETA_DEL_RESUMEN`, `puente.ts`, `pielWeb.ts#resumen`). deepagents
+  resume llamando al MISMO modelo en el MISMO nodo, así que sus chunks eran indistinguibles de
+  la respuesta y se guardaban como mensaje del asistente. Lo que los separa es una ETIQUETA en
+  esa llamada, puesta por dos envoltorios que ABRAZAN al middleware de resumen dentro de
+  `resumenConEncargo` —que sigue siendo la única composición—, y el cliente lo pliega como
+  «Resumen del contexto», el ÚNICO de los tres plegables que se pinta como markdown (la bandera
+  va en `CLASES_DE_SISTEMA`: un aviso con guiones bajos no puede pasar por ahí). El prompt es
+  nuestro y en castellano. **Límite declarado**: solo se etiqueta `invoke`; si la librería
+  resume un día con `stream`, el resumen vuelve al chat, y el aviso es el test contra ella.
 - **Abrir una sesión NO espera al aviso de git** (`MS_DE_TRABAJO_AL_ABRIR`, 2 s). El `finally`
   que apaga el indicador «abriendo…» espera a `anunciarAlta()`, y ésta esperaba SIN PLAZO a
   `trabajoAlAbrir`, detrás del cual hay un `git status --untracked-files=all`. Un aviso cuya
@@ -964,7 +1005,22 @@ feedback del desarrollador** y no es terminal.
   CSS va HASHEADO, no se puede retirar desde un fichero el elemento de otro: al que vive en otro
   componente se le pone un envoltorio con clase propia del módulo que consulta. El ancho que se
   consulta suele ser el de un panel que pone JS —la barra lateral, el renglón del compositor—, y
-  por eso esto es contenedor y no `@media`.
+  por eso esto es contenedor y no `@media`. **Y no puede estilar a su PROPIO contenedor**, que es
+  el mismo test y la otra mitad de la regla: una consulta solo alcanza a los DESCENDIENTES del
+  elemento que declara `container-type`, así que una regla suya con el selector del contenedor no
+  se aplica nunca — y el resto del bloque SÍ, con lo que queda medio encuadre en vez de ninguno.
+  El arreglo es un envoltorio que declare el contenedor, con la caja de antes como hija.
+- **El encuadre de las TRES columnas lo decide `core`… del cliente, no una hoja**
+  (`apps/web/src/repartoDeColumnas.ts`, puro y con test): la barra, la conversación y el panel de
+  vistas compiten por el mismo ancho, y quien se queda fuera se DESMONTA — eso no lo sabe hacer un
+  `@media`, y además los anchos de la barra y del panel los pone JS. Tres salidas y **una sola
+  concesión automática**: si no caben las tres pero sí el chat y el panel, la barra se pliega SOLA
+  para hacerle sitio, transitoriamente y **sin tocar la preferencia del navegador** — si se
+  guardara, estrechar la ventana una vez la dejaría plegada para siempre. Y **pedir la barra de
+  vuelta cierra el panel**, en vez de no hacer nada: el usuario no la plegó, así que su preferencia
+  ya dice «abierta» y volver a ponerla ahí sería un botón muerto. **Con el panel cerrado no hay
+  concesión ninguna**, justamente por eso. La tercera columna no se inventó: `.detailsCol` y su
+  tirador llevaban sin usar en la hoja copiada desde el principio.
 - **Un control sin dato detrás no se pinta.** Ausente ≠ vacío en las cuatro capas (disco, cable,
   store, componente): `Entorno.proyectos`, `AjustesDeDispositivos`, `compartido`, `detalles`.
   Lo que falta se ROTULA; lo que queda fuera se CUENTA con el camino para arreglarlo.
@@ -1052,7 +1108,10 @@ feedback del desarrollador** y no es terminal.
   el enunciado de la pregunta («¿Subir a CloudStudio?»), que no es una línea de la operación sino
   el argumento de `preguntar` —la cabecera ya dice qué operación fue y el `→ APROBADO` dice cómo
   acabó—, y los dos errores de USO de `/sync`, que no son una operación y son el mismo tipo de
-  mensaje que el de cualquier otro comando mal escrito.
+  mensaje que el de cualquier otro comando mal escrito. **Tampoco una subida que la persona CANCELÓ**: no tocó
+  el remoto ni movió la ref, y quien la canceló acaba de ver el plan en la tarjeta — cada
+  «Cancelar» dejaba un «Subir · hora» en la banda que no contaba nada que hubiera pasado. En el
+  terminal el «→ rechazado» se sigue imprimiendo, porque ahí es la respuesta a lo tecleado.
 
 ### El workspace: dónde viven las copias locales
 
@@ -1197,8 +1256,11 @@ feedback del desarrollador** y no es terminal.
   `{id, nombre}`).
 - **La sesión caída llega de DOS formas** y hay que mirar las dos: un error de tool (`isError`) y
   una respuesta CORRECTA cuyo texto empieza por «Error: No project is open…». `conSesion`
-  (`agent/cloudstudio/cloudstudioClient.ts`) mira el RESULTADO además de la excepción, reabre y reintenta una
-  vez. Ningún `JSON.parse` a pelo: `comoJson` dice QUÉ tool contestó.
+  (`agent/cloudstudio/cloudstudioClient.ts`) mira el RESULTADO además de la excepción, reabre y reintenta
+  **unas pocas veces con pausa creciente** (`PAUSAS_DE_REAPERTURA_MS`) —una vuelta inmediata no
+  bastaba: la apertura contestaba bien y la llamada siguiente seguía sin proyecto, a veces— y
+  **comprueba lo que contesta la apertura**: un «Error: …» en su texto falla con ESE motivo y
+  no una llamada después como «no hay proyecto abierto». Ningún `JSON.parse` a pelo: `comoJson` dice QUÉ tool contestó.
   **`ProviderCloudStudio.invalidateCredentials` tiene que existir**: es el gancho del que depende
   la recuperación del SDK; sin él un token caducado era un fallo duro.
 - **El nombre de la tool de proyectos no se codifica a pelo** (`herramientaDeProyectos`: nombres
@@ -1240,8 +1302,17 @@ feedback del desarrollador** y no es terminal.
   servidor se restaura tras cada operación.
 - **Orden al descargar: extraer → borrar vistas aplanadas → commit de baseline.** Al revés, git
   vería esos `.xml` como borrados y la primera subida los borraría **en Studio**.
-- **Guarda de árbol limpio en las DOS direcciones** (`arbolLimpio`): al subir porque se sube un
-  commit, al bajar porque `bajar` SOBRESCRIBE y el baseline se construye después. No hay ningún
+- **Guarda de árbol limpio al SUBIR** (`arbolLimpio`), porque se sube un commit. **Bajar dentro
+  del workspace ya no se niega: VACÍA la copia y rehace el git** (`gitSync.ts#vaciarCopia`,
+  `ConfirmacionDeBajada`), decisión suya: escribir el zip encima dejaba vivo lo borrado en Studio,
+  y una copia sin su propio repo enseñaba el proyecto entero como «añadido por esta sesión». Tres
+  cosas que no son de forma: **se pregunta antes** con lo que se pierde delante (fail-closed por
+  TIPO, y sin nada que perder —el alta— no pregunta); **se vacía SOLO con el zip en la mano**
+  (`vaciarAntes` de `descargarProyecto`: si la bajada falla la copia sigue igual, y la vía fichero
+  a fichero NUNCA vacía, que traería solo los de texto); y **el `git init` es DESPUÉS de bajar y en
+  la propia carpeta** (`prepararRepo(…, { propio: true })`), para que el primer commit sea la
+  bajada. Fuera del workspace —la carpeta que abrió una persona— sigue la guarda de antes, y un
+  proyecto DENTRO de su repo sigue usando ese repo: `propio` solo lo pide el vaciado. No hay ningún
   `git merge`: fusionar es del usuario, en Studio. Una carpeta que aún no es repo solo está limpia
   si está vacía salvo por la basura del SO (lista CERRADA: un `.env` o un `.gitignore` sí bloquean).
 - **La autorización de la subida es un hueco de política, fail-closed por TIPO**
@@ -1413,6 +1484,13 @@ feedback del desarrollador** y no es terminal.
   sesión, no uno de sus actos, igual que el dispositivo— y vuelve al reabrirla. **No hay
   defecto global, y esa ausencia es la decisión**: un tercer valor «para todas las nuevas»
   decidiría en nombre de conversaciones que todavía no existen.
+- **A DeepSeek se le dice QUIÉN pide** (`core/identidadDeProveedor.ts`,
+  `agent/config/identidadEnDisco.ts`): un `user_id` en la raíz del cuerpo, porque sus límites y su
+  filtro de contenido son de CUENTA y varias claves de una suscripción son el mismo cliente. Sale
+  del `sub` del login de CloudStudio, del entorno del proyecto resuelto como la sincronización, y
+  **siempre como hash**, nunca el identificador del IDS. **El lector real es la OMISIÓN del
+  constructor de `Modelos`**, no un parámetro opcional —el `Calificador` enseñó lo que pasa con
+  uno—, y la costura lo mira sin pasar nada. Sin login no viaja; `xonecode config` lo DICE.
 - **Los topes de contexto solo si se saben** (`core/contextos.ts`, por familias; **ollama no tiene
   tope a propósito**). El porcentaje solo se calcula con tope: uno sobre un número inventado es
   una mentira con forma de cifra. La barra y `/config` usan la misma `topeResuelto`.
@@ -1459,7 +1537,14 @@ feedback del desarrollador** y no es terminal.
   para toda la máquina; un segundo «ejecutar» reenvía el estado.
 - **El dispositivo de la sesión guarda la FOTO, no solo el id** (los ids no son estables), y solo
   si NO está a mano ahora. El cliente manda el ID y nada más. La consume la pestaña Ejecutar
-  —el agente sigue sin tools de dispositivo—, y la pastilla lo dice.
+  y, desde que se pidió, **también el `device-controller`**, por un FICHERO y no por una variable
+  (`core/dispositivoDeSesion.ts`): la shell fija sus variables al construirse, así que
+  `XONECODE_DISPOSITIVO` lleva la RUTA de `.xonecode/sesiones/<id>/dispositivo.json`, que el
+  vestíbulo reescribe al elegir, y los scripts de `xone-hotswap` lo leen en CADA ejecución
+  (`skills/xone-hotswap/lib/dispositivo.mjs`, una regla para todos): `--serie`/`--udid` manda, luego
+  el de la sesión, y sin elección **un emulador antes que un físico**. Cada turno lleva además la
+  línea `[Dispositivo de esta sesión: …]` delante, para que el orquestador lo nombre al delegar;
+  la garantía la ponen los scripts, no esa línea.
 
 ### La TUI y el panel (terminal)
 

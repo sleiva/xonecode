@@ -105,6 +105,49 @@
   color: var(--xonecode-sobre-azul);
 }
 
+/* El conmutador de apariencia: sistema / claro / oscuro, la pista hundida de
+   `SelectorDeModo.module.css` pero en los tonos de la barra azul, que es donde vive —esa
+   hoja está pensada para la tarjeta clara del compositor y sus alias no se leen aquí. El
+   PUESTO se levanta con una caja propia (filo + fondo), igual que la maqueta: los otros
+   dos quedan como icono suelto, sin caja, que es lo que los distingue de un botón que ya
+   está pulsado. */
+.temaGrupo {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  margin-right: 10px;
+  border: 1px solid var(--xonecode-borde-azul);
+  border-radius: 8px;
+}
+
+/* El filo va PUESTO también en el botón apagado, del color del propio carril —la misma
+   trampa que documenta `SelectorDeModo.module.css`: escribirlo `transparent` es un color
+   literal como cualquier otro, y `Barra.test.tsx` lo vigila—. Así la caja mide lo mismo en
+   los dos estados y el puesto no da un salto de un píxel al levantarse. */
+.temaBoton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  border: 1px solid var(--xonecode-azul);
+  border-radius: 6px;
+  background: none;
+  color: var(--xonecode-sobre-azul-suave);
+  cursor: pointer;
+}
+
+.temaBoton:hover:not([data-puesto]) {
+  color: var(--xonecode-sobre-azul);
+}
+
+.temaBoton[data-puesto] {
+  border-color: var(--xonecode-sobre-azul-suave);
+  background: var(--xonecode-borde-azul);
+  color: var(--xonecode-sobre-azul);
+}
+
 /* Ajustes, con el mismo trazo que el botón de plegar: ambos son de la aplicación. */
 .ajustes {
   display: inline-flex;

@@ -16,6 +16,7 @@ import type { CargarEstilos } from "../navegacion/estilosEnDisco.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { crearCriticaVisual } from "./criticaVisual.js";
+import { crearTraerDeLaMaquina } from "./traerDeLaMaquina.js";
 import { invocarVisualConModelos } from "../dispositivos/juezVisual.js";
 import { inventarioDelProyecto } from "../subagentes/escrituraExterna.js";
 import type { DiagnosticoDeTools } from "../turno/diagnosticoDeTools.js";
@@ -192,6 +193,25 @@ export function promptOrquestador(agentes: readonly Agente[]): string {
       ? "Si el encargo va a CAMBIAR el proyecto y no es un retoque de una línea, son DOS pasos y en este orden: `analyst-xone` averigua primero —dile QUÉ hay que averiguar y PARA QUÉ— y su `HANDOFF DE ANÁLISIS` va DENTRO del encargo a `developer-xone`, que así no redescubre nada. Si el desarrollo son varios pasos o no cabe en un turno, pídele además el PLAN: lo deja en `/planes/<nombre>/` y te dice el nombre, y ese nombre es lo que le pasas al que desarrolla. Y si el plan vuelve con decisiones PENDIENTES, pregúntaselas al usuario antes de mandar a escribir: el analista no tiene a quién preguntar y tú sí."
       : "",
     /**
+     * **Lo que se puede MEDIR no se pregunta**, y esto salió de una sesión en vivo.
+     *
+     * El encargo era «arregla el error que me pasa al arrancar la app». El orquestador miró
+     * los ficheros, no lo encontró, y **paró a preguntarle a la persona cuándo pasaba** — con
+     * un emulador delante, la app desplegada y un conductor capaz de lanzarla y leer el log,
+     * que es donde XOne escribe la excepción con su fichero, su línea y su columna. La
+     * persona contestó «al entrar», que es exactamente lo que el aparato habría dicho solo.
+     *
+     * El modo autónomo NO cubre esto: gobierna las ESCRITURAS —si se aplican sin aprobación—
+     * y una pregunta no es una escritura. Así que un turno «autónomo» se queda parado
+     * igualmente, y quien lo dejó corriendo se lo encuentra esperando.
+     *
+     * La frontera es qué clase de cosa es lo que falta: un HECHO del proyecto o del aparato se
+     * va a buscar; una DECISIÓN o una preferencia, que solo vive en la cabeza de quien
+     * encarga, se pregunta. Por eso esta regla no contradice la del plan con decisiones
+     * pendientes de arriba: aquélla habla de lo segundo.
+     */
+    "Lo que puedas AVERIGUAR, no lo preguntes. Si lo que te falta se puede medir —qué error da al arrancar, en qué pantalla pasa, qué valor tiene un campo— vas y lo mides: `device-controller` lanza la app y trae el log, que es donde XOne escribe la excepción con su fichero y su línea. Preguntar a la persona es para lo que SOLO ella sabe: qué quiere, una decisión de negocio, una credencial. Y ojo, que el modo autónomo no te salva de esto: gobierna si una escritura se aplica sola, no si paras a preguntar — un turno que nadie está mirando se queda ahí.",
+    /**
      * **Escribir y PROBARLO EN UN APARATO son dos encargos, y el segundo necesita un
      * destino.** Sin esta regla, «crea una pantalla y pruébala» se leía como una sola `task`
      * al desarrollador — que no tiene `execute`, así que «probar» se quedaba en que dijera
@@ -222,7 +242,7 @@ export function promptOrquestador(agentes: readonly Agente[]): string {
      * los fallos visuales. Por eso se decide contra el encargo y no contra el fichero.
      */
     hay("developer-xone") && hay("device-controller")
-      ? "Si el encargo incluye PROBARLO en un móvil o emulador, son DOS pasos y en este orden: `developer-xone` escribe, y luego `device-controller` lo despliega y lo comprueba. Dile SIEMPRE a qué pantalla o colección tiene que llegar, no solo «pruébalo». Si tienes `xone_critica_visual`, pásale la captura que deje: ve fallos de pintado que ninguna comprobación estática detecta, y si te pide otra pantalla, encárgasela al conductor y vuelve. Y si el encargo traía un DISEÑO o una MAQUETA, pásasela SIEMPRE en `referencia`: sin ella su verde solo dice que nada está roto, no que la pantalla se parezca a lo que te pidieron. De lo que saque, MANDA A CORREGIR solo lo que sirva al encargo que te hicieron: un defecto que ya estaba ahí y que tu cambio no ha causado NO se arregla, se CUENTA en tu respuesta para que lo decida quien te encargó el trabajo. Y no des por buena una pantalla que nadie ha mirado."
+      ? "Si el encargo incluye PROBARLO en un móvil o emulador, son DOS pasos y en este orden: `developer-xone` escribe, y luego `device-controller` lo despliega y lo comprueba. Dile SIEMPRE a qué pantalla o colección tiene que llegar, no solo «pruébalo». Si la persona nombra un fichero SUYO por su ruta absoluta (`/Users/...`, `/tmp/...`), NO está en el proyecto y no hace falta delegar en nadie para leerlo: tráetelo con `traer_de_la_maquina`, que lo copia a `/artefactos/` y te dice con qué nombre queda; a partir de ahí se abre como cualquier artefacto, y si es un `.zip` quien tenga shell lo descomprime ahí mismo. Si tienes `xone_critica_visual`, pásale la captura que deje: ve fallos de pintado que ninguna comprobación estática detecta, y si te pide otra pantalla, encárgasela al conductor y vuelve. Y si el encargo traía un DISEÑO o una MAQUETA, pásasela SIEMPRE en `referencia`: sin ella su verde solo dice que nada está roto, no que la pantalla se parezca a lo que te pidieron. De lo que saque, MANDA A CORREGIR solo lo que sirva al encargo que te hicieron: un defecto que ya estaba ahí y que tu cambio no ha causado NO se arregla, se CUENTA en tu respuesta para que lo decida quien te encargó el trabajo. Y no des por buena una pantalla que nadie ha mirado."
       : "",
     "Los especialistas no comparten el transcript: al encadenarlos, incluye en la descripción",
     "de la siguiente `task` un bloque `HANDOFF DE ANÁLISIS` compacto con los hechos verificados,",
@@ -614,6 +634,18 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
               leerArtefacto: async (nombre) =>
                 readFileSync(join(opciones.artefactos!.carpeta, nombre)),
               invocar: invocarVisualConModelos(opciones.modelos),
+            }),
+            /**
+             * Traer al área de trabajo un fichero que la PERSONA nombró por su ruta.
+             *
+             * Va con el orquestador porque es QUIEN LEE ese mensaje: la ruta llega en el
+             * encargo, y sin esto la resolvía dentro del proyecto, recibía un ENOENT que
+             * decía «no existe» sobre un fichero que sí existe, y se iba a delegar en el
+             * único especialista con shell para que lo copiara.
+             */
+            crearTraerDeLaMaquina({
+              carpeta: opciones.artefactos.carpeta,
+              alEscribir: opciones.artefactos.alEscribir,
             }),
           ]),
     ],

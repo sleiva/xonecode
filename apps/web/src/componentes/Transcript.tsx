@@ -1,23 +1,24 @@
-import type { ReactNode } from "react";
 import type { Acto } from "../tipos.js";
-import type { Pestana } from "./Pestanas.js";
 import { Chat } from "./Chat.js";
-import { Trazas } from "./Trazas.js";
 import conversacion from "../../estilos/ConversationRoot.module.css";
 
 /**
- * La vista elegida, dentro de las cajas que la hoja copiada da a la banda de debajo de
- * la cabecera (`estilos/ConversationRoot.module.css`): `.body` es la banda y `.viewArea`
- * la vista.
+ * La conversación, dentro de las cajas que la hoja copiada da a la banda de debajo de la
+ * cabecera (`estilos/ConversationRoot.module.css`): `.body` es la banda y `.viewArea` la
+ * vista.
  *
- * Ya no lleva las pestañas ni el `useState` que decidía cuál. Se fueron a `Cabecera.tsx`
- * —que es donde viven en el original, dentro del mismo `<header>` que pinta la línea de
- * separación— y el estado subió a `App.tsx`, con la misma vida útil de antes: muere con
- * la página, no se persiste en ningún sitio.
+ * **Ya no despacha entre vistas, y esa es la mudanza.** Llevaba dentro las pestañas, luego
+ * solo el despacho —chat, trazas, ficheros, revisión…—, y el chat era una de las opciones:
+ * abrir un fichero era dejar de ver lo que el agente estaba escribiendo. Desde que el panel
+ * de vistas vive al lado (`Panel.tsx`, `repartoDeColumnas.ts`), la conversación no compite
+ * con nada — es la columna que se queda —, así que aquí no queda nada que elegir.
+ *
+ * Lo que se lleva consigo: **este componente ya no monta Trazas**, que era la única vista que
+ * no llegaba por ranura, y con ella se va el único motivo que tenía para conocer más actos
+ * que los de la conversación.
  */
 export function Transcript({
   actos,
-  pestana,
   turnoEnVuelo,
   historica,
   sinAprobacion,
@@ -26,15 +27,9 @@ export function Transcript({
   proyecto,
   modelo,
   sesion,
-  ficheros,
-  revision,
-  artefactos,
-  tareas,
-  ejecutar,
   alAbrirArtefacto,
 }: {
   actos: readonly Acto[];
-  pestana: Pestana;
   /** Van al Chat tal cual: la relectura, el cronómetro del turno en vuelo, y el proyecto y
    *  el modelo para el estado vacío de una sesión nueva. */
   historica?: boolean;
@@ -47,71 +42,28 @@ export function Transcript({
   modelo?: string;
   /** El id de la sesión abierta. Solo para componer la ruta de un artefacto en el Chat. */
   sesion?: string;
-  /**
-   * Las vistas de Ficheros y de Revisión, ya montadas por `App`. Van como ranuras y no como
-   * props sueltas porque lo que aporta este componente es ELEGIR la vista; y como el
-   * elemento solo se monta cuando se pinta, la petición al servidor que cada una lleva
-   * dentro no sale hasta que alguien abre su pestaña.
-   *
-   * Revisión lleva DENTRO la sincronización con CloudStudio, que ya no tiene pestaña propia
-   * (`Pestanas.tsx` dice por qué): aquí no se nota —es una ranura como las demás— y su
-   * montaje sigue coincidiendo con el momento en que alguien entra a mirar.
-   */
-  ficheros?: ReactNode;
-  revision?: ReactNode;
-  /** Lo que el agente DIBUJÓ en esta sesión. Su pestaña solo existe si hay alguno, y de eso
-   *  se encarga `Pestanas`: aquí es una ranura más. */
-  artefactos?: ReactNode;
-  /** Las tareas en background del proyecto ABIERTO. Desde Task 15 su pestaña existe SIEMPRE
-   *  —es de acción, no de registro como `artefactos` (`Pestanas.tsx`)—; aquí sigue siendo
-   *  solo una ranura más. */
-  tareas?: ReactNode;
-  /**
-   * Ejecutar la app de este proyecto en un aparato. Como `tareas`, su pestaña existe
-   * SIEMPRE —es de ACCIÓN, no de registro— y aquí es una ranura más.
-   *
-   * **Su rama del despacho es EXPLÍCITA y tiene que seguir siéndolo**: la última de abajo es
-   * un `else` INCONDICIONAL que pinta Ficheros, así que una pestaña sin rama propia no deja
-   * un hueco vacío ni da un error — pinta la vista de al lado EN SILENCIO. Toda pestaña nueva
-   * se añade aquí ANTES de ese `else`.
-   */
-  ejecutar?: ReactNode;
-  /** Abrir un artefacto desde su tarjeta del Chat. Lo resuelve `App`, que es quien recuerda
-   *  la pestaña y el elegido. */
+  /** Abrir un artefacto desde su tarjeta del Chat. Lo resuelve `App`, que es quien decide
+   *  si eso abre el panel de al lado o lo pone en el centro. */
   alAbrirArtefacto?: (ruta: string) => void;
-  /** Hay turno corriendo. Solo lo usa el Chat, para saber si el último mensaje sigue
-   *  llegando — y con él, si toca resaltar el código o esperar al cierre. */
+  /** Hay turno corriendo. Lo usa el Chat, para saber si el último mensaje sigue llegando —y
+   *  con él, si toca resaltar el código o esperar al cierre. */
   turnoEnVuelo?: boolean;
 }) {
   return (
     <div className={conversacion.body}>
       <div className={conversacion.viewArea}>
-        {pestana === "chat" ? (
-          <Chat
-            actos={actos}
-            turnoEnVuelo={turnoEnVuelo === true}
-            historica={historica === true}
-            sinAprobacion={sinAprobacion === true}
-            {...(trabajoAlAbrir === undefined ? {} : { trabajoAlAbrir })}
-            {...(segundosEnVuelo === undefined ? {} : { segundosEnVuelo })}
-            {...(proyecto === undefined ? {} : { proyecto })}
-            {...(modelo === undefined ? {} : { modelo })}
-            {...(sesion === undefined ? {} : { sesion })}
-            {...(alAbrirArtefacto === undefined ? {} : { alAbrirArtefacto })}
-          />
-        ) : pestana === "trazas" ? (
-          <Trazas actos={actos} />
-        ) : pestana === "revision" ? (
-          revision
-        ) : pestana === "artefactos" ? (
-          artefactos
-        ) : pestana === "tareas" ? (
-          tareas
-        ) : pestana === "ejecutar" ? (
-          ejecutar
-        ) : (
-          ficheros
-        )}
+        <Chat
+          actos={actos}
+          turnoEnVuelo={turnoEnVuelo === true}
+          historica={historica === true}
+          sinAprobacion={sinAprobacion === true}
+          {...(trabajoAlAbrir === undefined ? {} : { trabajoAlAbrir })}
+          {...(segundosEnVuelo === undefined ? {} : { segundosEnVuelo })}
+          {...(proyecto === undefined ? {} : { proyecto })}
+          {...(modelo === undefined ? {} : { modelo })}
+          {...(sesion === undefined ? {} : { sesion })}
+          {...(alAbrirArtefacto === undefined ? {} : { alAbrirArtefacto })}
+        />
       </div>
     </div>
   );

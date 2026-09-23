@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ponerSumideroDeErrores } from "../../core/trazaDeErrores.js";
 import {
   contenidoTrasEditar,
   sinContenidoInvalido,
@@ -45,6 +46,46 @@ describe("sinContenidoInvalido", () => {
     expect(r.error).toMatch(/No he escrito/);
     expect(r.error).toContain("CSS_WEB_PROPERTY");
     expect(b.escrito["/a.css"]).toBeUndefined();
+  });
+
+  /**
+   * **Un rechazo deja rastro, porque si no es indistinguible de una escritura que pasó.**
+   *
+   * El `anotarPaso` que envuelve esto cierra igual en los dos casos, así que sin esta anotación
+   * la traza no puede contestar «¿cuántas escrituras se rechazaron?» — y un rechazo cuesta un
+   * viaje entero con el contexto detrás, que es justo lo que se va a buscar cuando un turno se
+   * dispara de precio. Se preguntó sobre una sesión real y el instrumento no supo contestar.
+   */
+  it("un rechazo se ANOTA, con el código del hallazgo y sin el contenido", async () => {
+    const anotados: string[] = [];
+    ponerSumideroDeErrores((e) => anotados.push(`${e.donde}|${(e as { mensaje?: string }).mensaje ?? ""}`));
+    try {
+      const g = sinContenidoInvalido(
+        backendFalso({}),
+        async () => [{ codigo: "CSS_WEB_PROPERTY", mensaje: 'el SECRETO del fichero', linea: 2 }],
+      );
+      await g.write("/a.css", ".x {\n font-size: SECRETO;\n}");
+    } finally {
+      ponerSumideroDeErrores(undefined);
+    }
+    const rechazo = anotados.find((x) => x.startsWith("sinContenidoInvalido#rechazo"));
+    expect(rechazo, anotados.join(" · ")).toBeDefined();
+    expect(rechazo).toContain("CSS_WEB_PROPERTY");
+    expect(rechazo).toContain("/a.css");
+    // Ni el contenido ni el mensaje del hallazgo: la misma regla que `resumenDeTool.ts`.
+    expect(rechazo).not.toContain("SECRETO");
+  });
+
+  /** Y lo que pasa no anota nada: un rastro que sale siempre no distingue nada. */
+  it("una escritura ACEPTADA no anota rechazo", async () => {
+    const anotados: string[] = [];
+    ponerSumideroDeErrores((e) => anotados.push(e.donde));
+    try {
+      await sinContenidoInvalido(backendFalso({}), sinHallazgos).write("/a.css", ".x { fontsize: 4; }");
+    } finally {
+      ponerSumideroDeErrores(undefined);
+    }
+    expect(anotados.filter((d) => d.includes("rechazo"))).toEqual([]);
   });
 
   /**
@@ -156,5 +197,55 @@ describe("validarConXoneLinter", () => {
   /** Lo que no es suyo no es un error: es que no es suyo. */
   it("un fichero que no sabe mirar no da hallazgos", async () => {
     expect(await validarConXoneLinter()("/foto.png", "binario")).toEqual([]);
+  });
+});
+
+
+/**
+ * **El testigo de las escrituras solapadas.**
+ *
+ * Reproducido: cuatro `edit` concurrentes sobre un fichero devuelven las cuatro «bien» y solo
+ * UNA llega al disco —cada una lee, sustituye sobre lo que leyó y escribe entero—. Y ocurre de
+ * verdad: DeepSeek agrupa varias `edit_file` en un mismo mensaje y LangGraph las ejecuta a la
+ * vez; medido en una sesión, siete de ocho ediciones de un fichero salieron en ráfaga, hasta
+ * tres en el mismo milisegundo.
+ */
+describe("escrituras solapadas sobre el mismo fichero", () => {
+  afterEach(() => ponerSumideroDeErrores(undefined));
+
+  it("se ANOTAN, con la ruta y cuántas había en vuelo", async () => {
+    const visto: Array<{ donde: string; mensaje: string }> = [];
+    ponerSumideroDeErrores((a) => visto.push(a as never));
+
+    const b = backendFalso({});
+    const g = sinContenidoInvalido(b, sinHallazgos);
+    await Promise.all([g.write("/a.css", "1"), g.write("/a.css", "2"), g.write("/a.css", "3")]);
+
+    const solapes = visto.filter((v) => v.donde === "escrituraSolapada");
+    expect(solapes).toHaveLength(2);
+    expect(solapes[0]!.mensaje).toContain("/a.css");
+  });
+
+  /** Ficheros DISTINTOS a la vez no son un solape: eso es paralelismo legítimo. */
+  it("dos ficheros distintos a la vez no avisan", async () => {
+    const visto: Array<{ donde: string }> = [];
+    ponerSumideroDeErrores((a) => visto.push(a as never));
+
+    const g = sinContenidoInvalido(backendFalso({}), sinHallazgos);
+    await Promise.all([g.write("/a.css", "1"), g.write("/b.css", "2")]);
+
+    expect(visto.filter((v) => v.donde === "escrituraSolapada")).toHaveLength(0);
+  });
+
+  /** Y en serie tampoco: lo que se vigila es el SOLAPE, no el número de escrituras. */
+  it("dos escrituras seguidas al mismo fichero no avisan", async () => {
+    const visto: Array<{ donde: string }> = [];
+    ponerSumideroDeErrores((a) => visto.push(a as never));
+
+    const g = sinContenidoInvalido(backendFalso({}), sinHallazgos);
+    await g.write("/a.css", "1");
+    await g.write("/a.css", "2");
+
+    expect(visto.filter((v) => v.donde === "escrituraSolapada")).toHaveLength(0);
   });
 });

@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { FilesystemBackend } from "deepagents";
 import { createAgent, FakeToolCallingModel } from "langchain";
-import { conservarElEncargo, resumenConEncargo, resumenDeContexto, SALIDA_DEL_TOPE_DE_TOOLS, topeDeLlamadas, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA, topeDeTools, TOPE_DE_TOOLS_DEL_ESPECIALISTA, TOPE_DE_TOOLS_DEL_ORQUESTADOR, UMBRAL_RESUMEN_TOKENS } from "./resumenDeContexto.js";
+import { conservarElEncargo, ETIQUETA_DEL_RESUMEN, resumenConEncargo, resumenDeContexto, SALIDA_DEL_TOPE_DE_TOOLS, topeDeLlamadas, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA, topeDeTools, TOPE_DE_TOOLS_DEL_ESPECIALISTA, TOPE_DE_TOOLS_DEL_ORQUESTADOR, UMBRAL_RESUMEN_TOKENS } from "./resumenDeContexto.js";
 
 
 /**
@@ -147,7 +147,11 @@ describe("el par", () => {
     const raiz = mkdtempSync(join(tmpdir(), "xc-par-"));
     try {
       const par = resumenConEncargo(new FilesystemBackend({ rootDir: raiz, virtualMode: true }) as never);
-      expect(par.map((m) => (m as { name: string }).name)).toEqual(["SummarizationMiddleware", "ConservarElEncargoMiddleware"]);
+      // La etiqueta ABRAZA al resumen: `fuera` delante para marcar sus llamadas y `dentro`
+      // detrás para que la respuesta de verdad salga sin marca.
+      expect(par.map((m) => (m as { name: string }).name)).toEqual([
+        "EtiquetaDelResumenMiddleware", "SummarizationMiddleware", "SinEtiquetaDelResumenMiddleware", "ConservarElEncargoMiddleware",
+      ]);
     } finally {
       rmSync(raiz, { recursive: true, force: true });
     }
@@ -226,10 +230,14 @@ describe("el tope de TOOLS", () => {
     expect(prompt).toContain("en el MISMO mensaje");
   });
 
-  it("veinte es generoso contra su propia regla de tres referencias", () => {
-    expect(TOPE_DE_TOOLS_DEL_ESPECIALISTA).toBeGreaterThan(10);
-    // Y por debajo de los 43 que acumuló el turno que lo motivó.
-    expect(TOPE_DE_TOOLS_DEL_ESPECIALISTA).toBeLessThan(43);
+  it("es un GUARDA y no una economía: por encima de lo que gasta un encargo que escribe", () => {
+    // Medido el 23-09-2026 en MyAllXOne (una calculadora a partir de una maqueta): con 35, el
+    // developer gastó 39, 39 y 49 tools en tres encargos y NINGUNO llegó a escribir, porque
+    // con `continue` el tope bloquea también `write_file` y `edit_file`. Se pagaba la
+    // exploración entera y la entrega no salía. Ahora el número se sitúa por encima de lo
+    // observado, como el del orquestador: solo para un encargo desbocado.
+    const MEDIDO_EN_UN_ENCARGO_QUE_NO_LLEGO_A_ESCRIBIR = 49;
+    expect(TOPE_DE_TOOLS_DEL_ESPECIALISTA).toBeGreaterThan(MEDIDO_EN_UN_ENCARGO_QUE_NO_LLEGO_A_ESCRIBIR);
   });
 });
 
@@ -309,12 +317,6 @@ describe("el tope de tools del ORQUESTADOR", () => {
     expect(TOPE_DE_TOOLS_DEL_ORQUESTADOR).toBeGreaterThan(41);
   });
 
-  it("es MAYOR que el del especialista, y eso no es arbitrario", () => {
-    // Un especialista hace un encargo acotado; el orquestador lleva el turno entero y delega.
-    // Darles el mismo presupuesto sería tratar dos trabajos distintos como si fueran el mismo.
-    expect(TOPE_DE_TOOLS_DEL_ORQUESTADOR).toBeGreaterThan(TOPE_DE_TOOLS_DEL_ESPECIALISTA);
-  });
-
   it("no le corta la respuesta: sale por `continue`, no por `end`", async () => {
     // El argumento contra caparle las LLAMADAS sigue en pie —«el que contesta al usuario no
     // puede quedarse a medias»— y este tope lo respeta: le quita la pala, no la palabra.
@@ -327,4 +329,54 @@ describe("el tope de tools del ORQUESTADOR", () => {
     const r = await agente.invoke({ messages: [new HumanMessage("hola")] });
     expect(r.messages.length).toBeGreaterThan(0);
   });
+});
+
+
+/**
+ * La ETIQUETA del resumen, contra la librería DE VERDAD y su stream `messages`.
+ *
+ * Los dos sentidos, porque los dos fallan en silencio: sin la etiqueta el resumen se pinta en
+ * el chat como si fuera la respuesta (medido en MyAllXOne, un `## Summary` en inglés en el
+ * `.jsonl`); y si la etiqueta se colara en la llamada real, la RESPUESTA entera se iría al
+ * plegable y el chat se quedaría mudo.
+ */
+describe("la etiqueta del resumen, en el stream de la librería", () => {
+  it("marca los chunks del RESUMEN y deja sin marca los de la RESPUESTA, y el prompt va en castellano", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-etiqueta-"));
+    try {
+      const { FakeListChatModel } = await import("@langchain/core/utils/testing");
+      const prompts: string[] = [];
+      class ConTools extends FakeListChatModel {
+        bindTools() { return this; }
+        override async invoke(entrada: unknown, config?: unknown) {
+          prompts.push(JSON.stringify(entrada));
+          return super.invoke(entrada as never, config as never);
+        }
+      }
+      const modelo = new ConTools({ responses: ["## Resumen\n- hecho", "RESPUESTA-FINAL"] });
+      const agente = createAgent({
+        model: modelo as never,
+        tools: [],
+        middleware: resumenConEncargo(new FilesystemBackend({ rootDir: raiz, virtualMode: true }) as never) as never,
+      });
+      const largo = "x ".repeat(UMBRAL_RESUMEN_TOKENS * 3);
+      const stream = await agente.stream(
+        { messages: [new HumanMessage("encargo"), new AIMessage(largo), new HumanMessage("sigue")] } as never,
+        { streamMode: ["messages"], subgraphs: true } as never
+      );
+      let delResumen = "";
+      let deLaRespuesta = "";
+      for await (const trozo of stream as AsyncIterable<unknown[]>) {
+        const [, , dato] = trozo as [string[], string, [{ content: unknown }, { tags?: string[] }]];
+        const [msg, meta] = dato;
+        if ((meta.tags ?? []).includes(ETIQUETA_DEL_RESUMEN)) delResumen += String(msg.content);
+        else deLaRespuesta += String(msg.content);
+      }
+      expect(delResumen).toBe("## Resumen\n- hecho");
+      expect(deLaRespuesta).toBe("RESPUESTA-FINAL");
+      expect(prompts.join("")).toContain("EN CASTELLANO");
+    } finally {
+      rmSync(raiz, { recursive: true, force: true });
+    }
+  }, 30_000);
 });

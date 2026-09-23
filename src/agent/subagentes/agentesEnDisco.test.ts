@@ -981,3 +981,41 @@ describe("el plan del analista, prometido y posible", () => {
     expect(analista.instrucciones).toMatch(/No la\s+inventes|no la inventes/);
   });
 });
+
+/**
+ * **Lo que la FICHA promete es lo que el orquestador acaba pidiendo.**
+ *
+ * La ficha de un subagente es lo que el orquestador lee para decidir qué encargarle, así que
+ * lo que ahí figure como «devuelve X» se convierte en una petición de X. Medido sobre una
+ * sesión real: la ficha de `device-controller` listaba la captura entre lo que devuelve
+ * —«devuelve lo que MIDIÓ: salida literal, captura y excepciones del log»— y el conductor
+ * capturaba tres veces en una delegación, después de haber leído ya `screen` Y el log.
+ *
+ * No era que no supiera la jerarquía: su propio prompt dice que la captura va la ÚLTIMA y
+ * cuánto cuesta. Es que se la habían encargado, y gana quien escribe el encargo. Y encima
+ * tiene una segunda factura, porque una captura del turno se lleva al crítico visual.
+ */
+describe("la ficha de device-controller no encarga capturas de oficio", () => {
+  const conductor = AGENTES_DE_SERIE.find((a) => a.nombre === "device-controller");
+
+  it("existe y dice lo que devuelve", () => {
+    expect(conductor?.descripcion).toMatch(/Devuelve lo que MIDIÓ/);
+  });
+
+  it("la lista de lo que DEVUELVE no incluye la captura", () => {
+    // Solo el tramo entre guiones largos: lo que se promete de oficio.
+    const promete = /Devuelve lo que MIDIÓ —([^—]*)—/.exec(conductor?.descripcion ?? "")?.[1] ?? "";
+    expect(promete, "el tramo de lo prometido no se encontró").not.toBe("");
+    expect(promete).not.toMatch(/captura/i);
+    // Y lo que sí promete sigue estando: sin esto el test pasaría con la frase borrada.
+    expect(promete).toMatch(/salida literal/);
+    expect(promete).toMatch(/log/);
+  });
+
+  it("y si la nombra, es CONDICIONADA a lo visual", () => {
+    // No se prohíbe la palabra: pedirla cuando el fallo es visual es justo su caso de uso.
+    // Lo que no puede es aparecer sin condición, que es como se convierte en rutina.
+    const d = conductor?.descripcion ?? "";
+    if (/captura/i.test(d)) expect(d).toMatch(/captura[\s\S]*?(solo si|VISUAL)/i);
+  });
+});

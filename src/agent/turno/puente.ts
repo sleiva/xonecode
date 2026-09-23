@@ -1,7 +1,8 @@
 import { normalizar } from "./normalizar.js";
 import { Mensajes } from "./mensajes.js";
 import { detalleDe, parametrosDe, type ParametrosSeguros } from "./resumenDeTool.js";
-import { esMensajeDeTool } from "./textoDeTool.js";
+import { aTexto, esMensajeDeTool } from "./textoDeTool.js";
+import { ETIQUETA_DEL_RESUMEN } from "./resumenDeContexto.js";
 import type { DomainEvent, PendienteDeAprobacion } from "../../core/events.js";
 
 /** El texto de un mensaje, venga como venga. */
@@ -69,14 +70,16 @@ export function razonamientoDe(msg: unknown): string {
  * con los mismos argumentos son dos llamadas, y colapsarlas por su contenido escondería trabajo
  * de verdad. Por eso se deduplica por ahí y no por el par nombre+argumentos.
  */
-export function toolsDe(dato: unknown): Array<{ nombre: string; detalle?: string; parametros?: ParametrosSeguros; id?: string }> {
+export function toolsDe(dato: unknown): Array<{ nombre: string; detalle?: string; parametros?: ParametrosSeguros; id?: string; respuesta?: string }> {
   if (!dato || typeof dato !== "object") return [];
-  const salida: Array<{ nombre: string; detalle?: string; id?: string }> = [];
+  const salida: Array<{ nombre: string; detalle?: string; id?: string; respuesta?: string }> = [];
   for (const nodo of Object.values(dato as Record<string, unknown>)) {
     const msgs = (nodo as Record<string, unknown> | null)?.messages;
     if (!Array.isArray(msgs)) continue;
     for (const m of msgs) {
       const llamadas = (m as Record<string, unknown>)?.tool_calls;
+      // El id del MENSAJE que trae estas llamadas: es lo que dice cuáles se pidieron JUNTAS.
+      const respuesta = (m as Record<string, unknown>)?.id;
       if (Array.isArray(llamadas)) {
         for (const l of llamadas) {
           const n = (l as Record<string, unknown>)?.name;
@@ -90,10 +93,42 @@ export function toolsDe(dato: unknown): Array<{ nombre: string; detalle?: string
               ...(detalle === undefined ? {} : { detalle }),
               ...(parametros === undefined ? {} : { parametros }),
               ...(typeof id === "string" && id !== "" ? { id } : {}),
+              ...(typeof respuesta === "string" && respuesta !== "" ? { respuesta } : {}),
             });
           }
         }
       }
+    }
+  }
+  return salida;
+}
+
+/**
+ * Lo que cada tool DEVOLVIÓ, medido en caracteres, por el id de su llamada.
+ *
+ * **Contar llamadas no dice a dónde van los tokens.** Un `read_file` y otro `read_file` son
+ * una linea igual en la traza y pueden ser doscientos caracteres o veinte mil: lo que se paga
+ * es lo que ENTRA en el contexto, no cuántas veces se pidió. Sin esto, la pregunta «¿que me
+ * esta costando este turno?» solo se podía contestar por eliminación.
+ *
+ * **Van los CARACTERES, nunca el contenido** —la misma regla que `core/events.ts`: el
+ * resultado de un `read_file` es el fichero entero y el de una tool MCP lleva el bearer—. Un
+ * tamaño no es contenido, y es lo único que hace falta para repartir el gasto.
+ *
+ * No se convierte a tokens: la razón caracteres/token cambia con el modelo y con lo que haya
+ * dentro, así que dar una cifra de tokens aquí sería inventarse una precisión que no se tiene.
+ */
+export function resultadosDe(dato: unknown): Array<{ id: string; chars: number }> {
+  if (!dato || typeof dato !== "object") return [];
+  const salida: Array<{ id: string; chars: number }> = [];
+  for (const nodo of Object.values(dato as Record<string, unknown>)) {
+    const msgs = (nodo as Record<string, unknown> | null)?.messages;
+    if (!Array.isArray(msgs)) continue;
+    for (const m of msgs) {
+      if (!esMensajeDeTool(m)) continue;
+      const id = (m as Record<string, unknown>)?.tool_call_id;
+      if (typeof id !== "string" || id === "") continue;
+      salida.push({ id, chars: aTexto((m as Record<string, unknown>).content).length });
     }
   }
   return salida;
@@ -167,7 +202,58 @@ export type AlLlamarTool = (tool: {
   detalle?: string;
   parametros?: ParametrosSeguros;
   origen: OrigenDeTool;
+  /** Cuántos caracteres devolvió, si ya se sabe. Ver `alResponderTool`. */
+  chars?: number;
+  /**
+   * Id del MENSAJE del modelo que pidió esta tool. Dos tools con el mismo valor se
+   * pidieron en la MISMA respuesta, que es lo único que decide si van en paralelo.
+   *
+   * Existe porque sin él la traza no podía contestarlo y había que adivinarlo. Medido
+   * sobre un turno real de 69 tools: agrupar por el reloj exacto daba 18 en rafaga (el
+   * milisegundo PARTE una rafaga) y agrupar por los contadores del tracker daba 38, con
+   * dos grupos de 1.000 ms de span, o sea rezagados FUNDIDOS en una respuesta ajena. Dos
+   * metodos, dos respuestas, y ninguno comprobable. Además `origen` solo tiene dos
+   * valores, así que dos especialistas a la vez son indistinguibles: el id del mensaje
+   * tambien los separa.
+   */
+  respuesta?: string;
 }) => void;
+
+/**
+ * Lo que `aEventos` tiene que recordar ENTRE RONDAS, en un solo sitio.
+ *
+ * **Las tres cosas de aquí dentro vivían sueltas dentro de `aEventos`, y las tres estaban mal
+ * por la misma razón**: `turnoReal.ts` la llama DENTRO del bucle de rondas y el stream
+ * reentrega la historia acumulada al reanudar, así que con estado local cada ronda empezaba en
+ * blanco. Medido dos veces: primero las tools se recontaban, y al arreglar solo aquello se
+ * quedaron mal los resultados —62 medidos para 57 llamadas, con 98.439 caracteres sin
+ * atribuir, el 43 % del total—.
+ *
+ * Van en un objeto y no en tres parámetros porque la razón es UNA —el alcance es el turno— y
+ * porque tres opcionales sueltos son tres sitios donde olvidarse de uno, y ese olvido es mudo.
+ */
+export interface MemoriaDelTurno {
+  /** Los `tool_call` ya contados, por id. */
+  vistas: Set<string>;
+  /** Los resultados ya medidos, por el id de su llamada. */
+  resultados: Set<string>;
+  /** De qué tool era cada llamada, para poder repartir el peso de su resultado. */
+  deQuien: Map<string, { nombre: string; detalle?: string }>;
+}
+
+export function crearMemoriaDelTurno(): MemoriaDelTurno {
+  return { vistas: new Set(), resultados: new Set(), deQuien: new Map() };
+}
+
+/**
+ * Lo que una tool devolvió: CUÁNTO pesa, nunca qué era.
+ *
+ * Lleva `nombre` y `detalle` porque un peso suelto no se puede repartir: el id de una llamada
+ * no significa nada en un informe. Salen del `tool_call`, que se procesa ANTES que los
+ * resultados del mismo chunk — **la historia acumulada reentrega los dos JUNTOS**, así que
+ * mirar los resultados primero dejaba sin nombre a todo lo de las rondas siguientes.
+ */
+export type AlResponderTool = (r: { id: string; chars: number; nombre?: string; detalle?: string }) => void;
 
 /**
  * Convierte el stream del grafo en `DomainEvent`.
@@ -185,22 +271,48 @@ export type AlLlamarTool = (tool: {
 export async function* aEventos(
   stream: AsyncIterable<unknown>,
   pendientes?: () => Promise<PendienteDeAprobacion[]>,
-  alLlamarTool?: AlLlamarTool
+  alLlamarTool?: AlLlamarTool,
+  memoriaDelTurno?: MemoriaDelTurno,
+  alResponderTool?: AlResponderTool
 ): AsyncIterable<DomainEvent> {
   const mensajes = new Mensajes();
-  /** Los `tool_call` ya contados, por id: el stream reenvía los mensajes acumulados. */
-  const vistas = new Set<string>();
+  /**
+   * Los `tool_call` ya contados, por id: el stream reenvía los mensajes acumulados.
+   *
+   * **Y el conjunto tiene que vivir por TURNO, no por RONDA** — por eso entra por parámetro.
+   * `turnoReal.ts` llama a `aEventos` DENTRO del bucle de rondas: una aprobación termina la
+   * ronda, se reanuda con un `Command` y el stream vuelve a entregar la historia acumulada.
+   * Con el conjunto local, cada ronda empezaba en blanco y volvía a contar todas las tools
+   * de las rondas anteriores.
+   *
+   * Medido sobre una sesión real de MyAllXOne: la traza decía OCHO `edit_file` sobre
+   * `/funciones.js` con seis "en la misma respuesta", y en la pantalla se había pedido UN
+   * permiso y escrito UNA vez. Las reemisiones caían 15 ms despues de cada ronda y con el
+   * MISMO id de mensaje — o sea que no eran del modelo, eran del stream. Eso mandó a
+   * diagnosticar un problema de escrituras concurrentes que la traza se habia inventado.
+   *
+   * Sin el parámetro se comporta como antes (un turno de una ronda), así que ningún otro
+   * llamador ni ningún doble de los tests cambia: la misma asimetría que los métodos
+   * opcionales de `Piel`.
+   */
+  const { vistas, resultados, deQuien } = memoriaDelTurno ?? crearMemoriaDelTurno();
   try {
     for await (const bruto of stream) {
       const chunk = normalizar(bruto);
       if (!chunk) continue;
 
       if (chunk.modo === "updates") {
-        for (const { nombre, detalle, parametros, id } of toolsDe(chunk.dato)) {
+        for (const { nombre, detalle, parametros, id, respuesta } of toolsDe(chunk.dato)) {
           // Ya contada: este mismo chunk trae la historia acumulada del subgrafo (ver
           // `toolsDe`). Sin `id` no se puede afirmar que sea repetida, así que se emite —
           // la dirección segura es contar de más, no callar una llamada que ocurrió.
           if (id !== undefined) {
+            // El nombre se apunta ANTES del dedupe, y esa precedencia no es de estilo: la
+            // llamada se reemite en cada ronda y el `continue` de abajo la salta, así que
+            // apuntándolo después el mapa se quedaba vacío a partir de la segunda ronda y el
+            // peso de esos resultados salía «(sin nombre)». Medido: 35 resultados sin
+            // atribuir, la cuarta parte de todo lo que entró en el contexto.
+            deQuien.set(id, { nombre, ...(detalle === undefined ? {} : { detalle }) });
             if (vistas.has(id)) continue;
             vistas.add(id);
           }
@@ -210,11 +322,30 @@ export async function* aEventos(
               ...(detalle === undefined ? {} : { detalle }),
               ...(parametros === undefined ? {} : { parametros }),
               origen: origenDeTool(chunk.ns),
+              ...(respuesta === undefined ? {} : { respuesta }),
             });
           } catch {
             // La observabilidad no puede tumbar ni silenciar el stream.
           }
           yield { tipo: "tool", nombre, ...(detalle !== undefined ? { detalle } : {}) };
+        }
+
+        /**
+         * **Los resultados van DESPUÉS de las llamadas del mismo chunk, y ese orden es el
+         * arreglo.** Se puso al revés con el argumento de que un resultado llega en el chunk
+         * SIGUIENTE al de su llamada; es cierto la primera vez y FALSO al reanudar, porque la
+         * historia acumulada reentrega los dos JUNTOS. Consecuencia medida: 98.439 caracteres
+         * —el 43 % de todo lo que entró en el contexto— repartidos como «(sin nombre)».
+         */
+        for (const r of resultadosDe(chunk.dato)) {
+          if (resultados.has(r.id)) continue;
+          resultados.add(r.id);
+          const quien = deQuien.get(r.id);
+          try {
+            alResponderTool?.({ ...r, ...(quien ?? {}) });
+          } catch {
+            // La observabilidad no puede tumbar ni silenciar el stream.
+          }
         }
         continue;
       }
@@ -240,6 +371,17 @@ export async function* aEventos(
         const texto = textoDe(msg);
         const id = (msg as Record<string, unknown> | null)?.id;
         const idTexto = typeof id === "string" ? id : undefined;
+        /**
+         * **El RESUMEN de contexto tampoco es la respuesta**, y llega por aquí con el mismo
+         * namespace y el mismo nodo: lo único que lo distingue es la ETIQUETA que le pone
+         * `resumenConEncargo` a esa llamada. Sin esto se pintaba en el chat y se guardaba como
+         * un mensaje del asistente. Va ANTES de `mensajes.trozo`, que cuenta solo la respuesta.
+         */
+        const meta = (chunk.dato as unknown[])[1] as { tags?: unknown } | undefined;
+        if (Array.isArray(meta?.tags) && meta.tags.includes(ETIQUETA_DEL_RESUMEN)) {
+          if (texto !== "") yield { tipo: "resumen", texto, ...(idTexto === undefined ? {} : { msgId: idTexto }) };
+          continue;
+        }
         // El razonamiento sale por su propio evento y NO pasa por `Mensajes`: ese contador
         // decide qué trozos de la RESPUESTA se pintan (dedupe de reintentos), y contar el
         // pensamiento ahí desalinearía esa cuenta.

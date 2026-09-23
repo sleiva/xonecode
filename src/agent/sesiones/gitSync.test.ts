@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync, unlinkSync, symlinkSync, statSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { prepararRepo, cambiosPendientes, marcarSubido, arbolLimpio, sinCommitear, trabajoSinCommitear, commitDeTurno, asegurarExclusiones, REMOTO } from "./gitSync.js";
+import { prepararRepo, cambiosPendientes, marcarSubido, arbolLimpio, sinCommitear, trabajoSinCommitear, commitDeTurno, asegurarExclusiones, REMOTO, vaciarCopia, esRepoPropio } from "./gitSync.js";
 
 const git = (raiz: string, ...args: string[]) =>
   execFileSync("git", args, { cwd: raiz, encoding: "utf8" }).trim();
@@ -558,5 +558,66 @@ describe("cambiosPendientes y marcarSubido", () => {
     symlinkSync("otro-sitio", join(raiz, "app.xml"));
 
     expect(await cambiosPendientes(raiz, "master")).toEqual([{ clase: "modificado", ruta: "app.xml" }]);
+  });
+});
+
+
+/**
+ * «Actualizar repo local» dentro del workspace: vaciar la copia y rehacer el git DESPUÉS de
+ * bajar. Contra git de verdad, porque lo que se comprueba es lo que queda en el disco.
+ */
+describe("vaciarCopia y el git recién hecho", () => {
+  /** Un workspace con una copia dentro que ya tiene su historia y trabajo sin commitear. */
+  function copiaConHistoria(): { base: string; raiz: string } {
+    const base = mkdtempSync(join(tmpdir(), "xc-ws-"));
+    const raiz = join(base, "manager", "Proyecto");
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "memoria.md"), "# memoria");
+    writeFileSync(join(raiz, "viejo.xne"), "<coll/>");
+    mkdirSync(join(raiz, "img"));
+    writeFileSync(join(raiz, "img", "logo.png"), "png");
+    git(raiz, "init", "-q", "-b", "master");
+    return { base, raiz };
+  }
+
+  it("borra TODO menos `.xonecode/`, el `.git` incluido", () => {
+    const { base, raiz } = copiaConHistoria();
+    expect(vaciarCopia(raiz, base)).toEqual([".git", "img", "viejo.xne"]);
+    expect(existsSync(join(raiz, ".git"))).toBe(false);
+    expect(readFileSync(join(raiz, ".xonecode", "memoria.md"), "utf8")).toBe("# memoria");
+  });
+
+  it("se NIEGA fuera del workspace, también por un enlace que apunte fuera", () => {
+    const { base, raiz } = copiaConHistoria();
+    const otra = mkdtempSync(join(tmpdir(), "xc-fuera-"));
+    expect(() => vaciarCopia(otra, base)).toThrow(/fuera del workspace/);
+    const enlace = join(base, "manager", "Enlace");
+    symlinkSync(otra, enlace);
+    expect(() => vaciarCopia(enlace, base)).toThrow(/fuera del workspace/);
+    expect(existsSync(join(raiz, "viejo.xne"))).toBe(true);
+  });
+
+  it("tras vaciar y bajar, el git es NUEVO y su primer commit es la bajada: nada «añadido» de más", async () => {
+    const { base, raiz } = copiaConHistoria();
+    vaciarCopia(raiz, base);
+    writeFileSync(join(raiz, "app.xml"), "<app/>");
+    await prepararRepo(raiz, "master", () => {}, { propio: true });
+    expect(git(raiz, "rev-list", "--count", "HEAD")).toBe("1");
+    expect(await arbolLimpio(raiz)).toBe(true);
+    expect(git(raiz, "ls-files")).toBe("app.xml");
+  });
+
+  it("con `propio`, una copia que cuelga del repo de OTRA carpeta tiene su propio `git init`", async () => {
+    // El «todo A» de Revisión: sin su `git init`, el baseline y los commits por turno iban a
+    // la historia de arriba, donde el proyecto entero es nuevo.
+    const base = mkdtempSync(join(tmpdir(), "xc-ws-dentro-de-repo-"));
+    git(base, "init", "-q", "-b", "master");
+    const raiz = join(base, "manager", "Proyecto");
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(join(raiz, "app.xml"), "<app/>");
+    expect(await esRepoPropio(raiz)).toBe(false);
+    await prepararRepo(raiz, "master", () => {}, { propio: true });
+    expect(await esRepoPropio(raiz)).toBe(true);
+    expect(git(raiz, "rev-list", "--count", "HEAD")).toBe("1");
   });
 });

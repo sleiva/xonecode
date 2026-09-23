@@ -4,6 +4,14 @@ import { falloLegible, registroDeFallo, type RegistroDeFallo } from "../../core/
 
 export const NOMBRE_REGISTRO_DE_FALLOS = "fallos.jsonl";
 
+/**
+ * Cómo se NOMBRA el registro ante quien acaba de ver el error: relativo a la raíz del
+ * proyecto. La ruta absoluta lleva el nombre de la cuenta del sistema y viajaba por el cable
+ * dentro del aviso («Queda apuntado en /Users/…»), y ninguna ruta de la máquina viaja por
+ * ahí; además era la línea que, sin partir, sacaba la barra de scroll horizontal del chat.
+ */
+export const RUTA_VISIBLE_DE_FALLOS = `.xonecode/${NOMBRE_REGISTRO_DE_FALLOS}`;
+
 /** Dónde queda, para poder decírselo a quien acaba de ver el error. */
 export function rutaDeFallos(raiz: string): string {
   return join(raiz, ".xonecode", NOMBRE_REGISTRO_DE_FALLOS);

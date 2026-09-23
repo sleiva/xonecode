@@ -68,3 +68,28 @@
   grid-row: 2;
   grid-column: 1;
 }
+
+
+/* El tirador del PANEL. A diferencia del de la barra, la hoja copiada SÍ le da señal
+   visible —la pastilla de 12×32 del `data-side="details"`, que aparece al pasar por encima
+   de la columna o del asa—, así que aquí no hay que dibujar nada: lo único que le falta es
+   el TECLADO. `:focus-visible` enciende esa misma pastilla en vez de inventar una segunda
+   señal, y el anillo del navegador se quita por el mismo motivo que en la barra: la tira
+   mide 8 px y el anillo se pinta fuera, o sea encima de las dos columnas que separa. */
+.tiradorDelPanel:focus-visible::after {
+  opacity: 1;
+}
+
+.tiradorDelPanel:focus-visible {
+  outline: none;
+}
+
+/* Con cabecera, en la fila de las columnas — mismo motivo que `.tiradorEnFila`. La
+   diferencia es la celda: este se posiciona con `left: calc(100% - Xpx)`, o sea contado
+   desde la DERECHA, así que su bloque contenedor tiene que ser la fila ENTERA (`1 / -1`) y
+   no una columna. Declarándole solo la del panel, ese `100%` sería el ancho del panel y el
+   asa se iría fuera de la pantalla. */
+.tiradorDelPanelEnFila {
+  grid-row: 2;
+  grid-column: 1 / -1;
+}

@@ -349,7 +349,7 @@ export interface EstadoDelCliente {
     entornos: { id: string; nombre: string; url: string }[];
     /** Los REGISTRADOS (`settings.json`), no los ofrecidos: es lo que lista la ventana de
      *  ajustes y lo que la barra debe enseñar. Vacío mientras no haya ninguno. */
-    registrados: { id: string; nombre: string; url: string; proyectos?: string[] }[];
+    registrados: { id: string; nombre: string; url: string; proyectos?: string[]; copias?: number }[];
     proyectos: {
       id: string;
       nombre: string;
@@ -1073,6 +1073,11 @@ export function crearStoreDelCliente(): {
                   nombre: h.nombre,
                   plataforma: h.plataforma,
                   estado: h.estado,
+                  // Solo `adb`/`emulator` la llevan —la excepción declarada a `sinRutas`,
+                  // como el workspace—; sin nombrarla aquí la lista blanca se la comía y la
+                  // ventana enseñaba «no encontrada» con la herramienta en verde al lado,
+                  // que es justo la contradicción que este campo existe para evitar.
+                  ...(typeof h.ruta === "string" ? { ruta: h.ruta } : {}),
                   ...(h.detalle === undefined ? {} : { detalle: h.detalle }),
                   // `instalar` se copia campo a campo, y solo si viene: es lo que decide
                   // entre un botón «Instalar» y el comando para copiar. No estaba en esta
@@ -1683,7 +1688,7 @@ export function crearStoreDelCliente(): {
             Array.isArray(m.registrados) &&
             m.registrados.every((e) => typeof (e as { url?: unknown })?.url === "string") &&
             sonIdentidades(m.registrados)
-              ? (m.registrados as { id: string; nombre: string; url: string; proyectos?: unknown }[]).map((e) => ({
+              ? (m.registrados as { id: string; nombre: string; url: string; proyectos?: unknown; copias?: unknown }[]).map((e) => ({
                   id: e.id,
                   nombre: e.nombre,
                   url: e.url,
@@ -1692,6 +1697,10 @@ export function crearStoreDelCliente(): {
                   // que elegir ninguno se leyera como no haber elegido.
                   ...(Array.isArray(e.proyectos) && e.proyectos.every((p) => typeof p === "string")
                     ? { proyectos: e.proyectos as string[] }
+                    : {}),
+                  // Nombrado aquí o no llega: el `case` es lista BLANCA.
+                  ...(typeof e.copias === "number" && Number.isInteger(e.copias) && e.copias >= 0
+                    ? { copias: e.copias }
                     : {}),
                 }))
               : [];

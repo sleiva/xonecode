@@ -12,6 +12,7 @@ import { esfuerzoAplicable, type CapacidadesVivas, type Esfuerzo } from "../../c
 import { baseUrlDeOllama, baseUrlDeOllamaCloud } from "./catalogoModelos.js";
 import { crearMemoriaDeEco, fetchConEcoDeRazonamiento } from "./ecoDeRazonamiento.js";
 import { ChatGoogleGenerativeAICompatible } from "./gemini.js";
+import { userIdDeDeepSeekEnDisco } from "./identidadEnDisco.js";
 
 /**
  * Construye el modelo de cada papel. NO lleva la marca de doble: es real.
@@ -68,13 +69,28 @@ export class Modelos implements ModelosPort {
    */
   private readonly esfuerzoDeLaSesion: Esfuerzo | undefined;
 
+  /**
+   * El `user_id` que DeepSeek usa para separar a las personas de una misma cuenta
+   * (`core/identidadDeProveedor.ts` explica por qué hace falta con claves distintas).
+   *
+   * **Por omisión es el lector REAL** (`userIdDeDeepSeekEnDisco`), y no `undefined`: un
+   * parámetro opcional que nadie pasa es el patrón de fallo de este repo en su forma más
+   * limpia —el `Calificador`—, y aquí hay diez `new Modelos(` en producción. Así los diez
+   * quedan cableados sin tocar ninguno, y lo que se pasa a mano es la EXCEPCIÓN (un test).
+   * Es una función y se llama en cada construcción: el login puede llegar con la consola
+   * abierta.
+   */
+  private readonly identidad: () => string | undefined;
+
   constructor(
     fuentes: FuentesDeEleccion = {},
     personalizados?: () => readonly ProveedorDeclarado[],
     capacidades?: (proveedor: Proveedor, modelo: string) => CapacidadesVivas | undefined,
     esfuerzo?: Esfuerzo,
+    identidad?: () => string | undefined,
   ) {
     this.eleccion = resolver(fuentes);
+    this.identidad = identidad ?? (() => userIdDeDeepSeekEnDisco(fuentes));
     this.personalizados = personalizados ?? (() => fuentes.global?.proveedores ?? []);
     this.capacidades = capacidades ?? (() => undefined);
     this.esfuerzoDeLaSesion = esfuerzo;
@@ -82,7 +98,7 @@ export class Modelos implements ModelosPort {
 
   paraPapel(papel: Papel, esfuerzo?: Esfuerzo): unknown {
     return construirModelo(
-      this.eleccion[papel], this.personalizados(), esfuerzo ?? this.esfuerzoDeLaSesion, this.capacidades,
+      this.eleccion[papel], this.personalizados(), esfuerzo ?? this.esfuerzoDeLaSesion, this.capacidades, this.identidad,
     );
   }
 
@@ -93,7 +109,7 @@ export class Modelos implements ModelosPort {
    */
   paraModelo(id: string, esfuerzo?: Esfuerzo): unknown {
     return construirModelo(
-      parsear(id), this.personalizados(), esfuerzo ?? this.esfuerzoDeLaSesion, this.capacidades,
+      parsear(id), this.personalizados(), esfuerzo ?? this.esfuerzoDeLaSesion, this.capacidades, this.identidad,
     );
   }
 
@@ -132,6 +148,7 @@ function construirCompatibleOpenAi(
   modelo: string,
   { baseUrl, variable }: { baseUrl: string; variable: string },
   esfuerzo?: Esfuerzo,
+  identidad: () => string | undefined = () => undefined,
 ): unknown {
   const apiKey = process.env[variable];
   if (apiKey === undefined || apiKey.trim() === "") {
@@ -161,7 +178,19 @@ function construirCompatibleOpenAi(
    * CURE aquel fallo concreto está por confirmar. Si vuelve, el registro de fallos
    * (`registroDeFallos.ts`) ya lo captura entero.
    */
-  const kwargs = esfuerzo === undefined ? {} : { reasoning_effort: esfuerzo };
+  /**
+   * **Y a DeepSeek se le dice QUIÉN pide**, con el `user_id` del login de CloudStudio. Va en
+   * la RAÍZ del cuerpo —es lo que su documentación pide para la API compatible con OpenAI— y
+   * por `modelKwargs`, la misma puerta que el esfuerzo; no por el `user` nativo del SDK, que
+   * es otro campo. Solo DeepSeek: a los otros compatibles sería mandarles un campo que no
+   * conocen. Sin login no se manda, y **un personalizado apuntado a DeepSeek no lo lleva**:
+   * la regla es por proveedor de serie, y ahí no sabemos a quién estamos hablando.
+   */
+  const userId = proveedor === "deepseek" ? identidad() : undefined;
+  const kwargs = {
+    ...(esfuerzo === undefined ? {} : { reasoning_effort: esfuerzo }),
+    ...(userId === undefined ? {} : { user_id: userId }),
+  };
   return new ChatOpenAI({
     model: modelo, apiKey,
     configuration: {
@@ -180,6 +209,7 @@ function construirModelo(
   personalizados: readonly ProveedorDeclarado[] = [],
   esfuerzoPedido?: Esfuerzo,
   capacidades: (proveedor: Proveedor, modelo: string) => CapacidadesVivas | undefined = () => undefined,
+  identidad: () => string | undefined = () => undefined,
 ): unknown {
     /**
      * **El nivel se criba AQUÍ y contra ESTE modelo, no donde se eligió.**
@@ -216,7 +246,7 @@ function construirModelo(
         // Enumerados uno a uno, y no un `default`, para que el switch siga siendo
         // exhaustivo: el día que se añada un proveedor, esto tiene que dar un error de
         // compilación y no construir un cliente equivocado en silencio.
-        return construirCompatibleOpenAi(proveedor, modelo, COMPATIBLES_OPENAI[proveedor], esfuerzo);
+        return construirCompatibleOpenAi(proveedor, modelo, COMPATIBLES_OPENAI[proveedor], esfuerzo, identidad);
       case "openai":
         return new ChatOpenAI({
           model: modelo,

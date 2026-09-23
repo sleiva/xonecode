@@ -81,12 +81,13 @@ import {
   type Veredicto,
 } from "../../core/puedeLanzarse.js";
 
-import type { Dispositivo, InformeDeDispositivos } from "../../core/dispositivos.js";
+import type { Dispositivo, Herramienta, InformeDeDispositivos } from "../../core/dispositivos.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, type AjustesDeDispositivos } from "../../core/settings.js";
 import type { NombreDeHerramienta } from "../../core/dispositivos.js";
 import { instalarHerramientaDeDispositivos, verificarDispositivo } from "../../agent/dispositivos/dispositivosEnMaquina.js";
 import { arrancarEmulador } from "../../agent/dispositivos/arranqueDeEmulador.js";
 import { correrPasoDeReceta } from "../../agent/dispositivos/instalacionEnMaquina.js";
+import { abrirCarpetaDelSistema } from "../../agent/config/selectorEnMaquina.js";
 import { modelosDeMotor } from "../../agent/config/modelosDeMotor.js";
 import {
   parsear,
@@ -127,10 +128,14 @@ import {
   guardarWorkspace as guardarWorkspaceEnDisco,
   guardarDispositivos,
   guardarEntorno as guardarEntornoEnDisco,
+  olvidarEntornoDeSettings,
+  copiasDeEntorno,
+  borrarCopiasDeEntorno,
 } from "../../agent/config/settingsEnDisco.js";
 import {
   dentroDelWorkspace,
   expandirConCasa,
+  motivoParaNoOlvidarEntorno,
   motivoDeWorkspaceInaceptable,
   type Settings,
 } from "../../core/settings.js";
@@ -142,7 +147,7 @@ import {
 import { mudarWorkspaceLegado, type ResultadoDeMudanza } from "../../agent/config/mudanzaEnDisco.js";
 import { elegirCarpetaEnMaquina, haySelectorDeCarpeta } from "../../agent/config/selectorEnMaquina.js";
 import { cloudstudioDelProyecto } from "../../agent/config/configEnDisco.js";
-import { abrirEnSistema } from "../../agent/cloudstudio/cloudstudioMcp.js";
+import { abrirEnSistema, olvidarEntorno as olvidarCredencialesDeEntorno, rutaAuthPorDefecto } from "../../agent/cloudstudio/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/config/persona.js";
 import { cambiosDeSesion, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesiones/sesionGit.js";
 import { commitDeTurno, cambiosPendientes, trabajoSinCommitear } from "../../agent/sesiones/gitSync.js";
@@ -451,6 +456,13 @@ export interface OpcionesDeMontaje {
    * máquina del usuario. Ausente = esta ejecución no instala nada.
    */
   instalarHerramienta?: (herramienta: NombreDeHerramienta) => Promise<void>;
+  /**
+   * Abre, en el sistema donde corre la consola, la carpeta que contiene el binario de una
+   * herramienta. Recibe la ruta ENTERA (host-only hasta aquí); nunca lanza y no tiene
+   * respuesta que esperar — un fallo aquí es accesorio, como abrir el navegador al arrancar.
+   * Ausente = esta ejecución no lo ofrece y el botón no se pinta.
+   */
+  abrirCarpetaDeHerramienta?: (ruta: string) => void;
   /**
    * VERIFICA la conexión con un dispositivo (`agent/dispositivos/dispositivosEnMaquina.ts`).
    *
@@ -861,6 +873,11 @@ export function montarRutas(
         // Solo si el entorno lo dice: ausente es «no lo he elegido», y el cliente aplica su
         // omisión. Mandar `[]` en su lugar sería decir «ninguno», que es otra cosa.
         ...(e.proyectos === undefined ? {} : { proyectos: [...e.proyectos] }),
+        // Cuántas copias tiene bajadas: lo que la casilla de «borrarlas también» cuenta.
+        ...(() => {
+          const copias = copiasDeEntorno(opciones.workspace?.() ?? baseDeWorkspacePorOmision(), e.id);
+          return copias === undefined ? {} : { copias };
+        })(),
       })),
       // Cada proyecto con las sesiones de su copia local. Se recalcula en cada anuncio: una
       // sesión nueva aparece en cuanto se abre, sin que nadie recargue.
@@ -1570,10 +1587,16 @@ export function montarRutas(
    * primera. Y la respuesta va a TODOS —la máquina es la misma para todos—.
    */
   let informeDeDispositivos: InformeDeDispositivosDelCable | undefined;
-  /** La ruta de cada herramienta es una ruta del home del usuario: no sale por el cable. */
+  /**
+   * La ruta de cada herramienta es una ruta del home del usuario: no sale por el cable —
+   * salvo `adb`/`emulator`, la excepción DECLARADA (igual que el workspace, ver
+   * `AjustesDeDispositivos`): esas dos SÍ la llevan, porque es lo que permite ver dónde se
+   * encontraron y abrir su carpeta. `xcrun`/`devicectl` se quedan sin ella como siempre.
+   */
+  const sinRuta = ({ ruta: _ruta, ...resto }: Herramienta): Herramienta => resto;
   const sinRutas = (informe: InformeDeDispositivos): InformeDeDispositivosDelCable => ({
     ...informe,
-    herramientas: informe.herramientas.map(({ ruta: _ruta, ...resto }) => resto),
+    herramientas: informe.herramientas.map((h) => (h.nombre === "adb" || h.nombre === "emulator" ? h : sinRuta(h))),
   });
   /** Los cuatro nombres conocidos y nada más: lo que llega por el cable no elige binario. */
   const esNombreDeHerramienta = (v: string): v is NombreDeHerramienta =>
@@ -1989,20 +2012,31 @@ export function montarRutas(
   /**
    * Verificar la conexión con UN dispositivo, y volver a emitir la foto con lo que contestó.
    *
-   * Cuatro reglas:
+   * Cinco reglas:
    * - **El id se resuelve contra la última MEDIDA**, igual que al elegir dispositivo de la
    *   sesión: lo que se le pasa al verificador es el `Dispositivo` que el host midió, no la
    *   cadena que llegó. Un id que no está se ignora en silencio — es una foto vieja del
    *   cliente (desenchufaron el teléfono entre medias), no un error que contar.
-   * - **NO se vuelve a medir.** La verificación vive dentro del informe, así que una medida
-   *   nueva se la llevaría — justo la que se acaba de hacer.
+   * - **Si hay una medida EN VUELO, se espera a que termine antes de mirar.** Entrar en la
+   *   sección dispara una remedida (`useMedirAlVolver`) que primero VACÍA `informeDeDispositivos`
+   *   y luego mide; un dispositivo que ya estaba arrancado al abrir la ventana se pinta y se
+   *   puede pulsar Verificar de inmediato, así que el click cae justo en ese hueco. Medido:
+   *   sin esperar, el id nunca se encuentra (el informe está vacío), la petición se pierde EN
+   *   SILENCIO y el botón se queda en «Verificando…» para siempre —el propio `disabled` del
+   *   botón le quita al usuario hasta la posibilidad de reintentar—. Esperar la medida en
+   *   vuelo (o disparar una si no hay ninguna) es gratis: es la MISMA promesa que ya existe,
+   *   no una medida de más.
+   * - **NO se vuelve a medir si ya hay foto.** La verificación vive dentro del informe, así
+   *   que una medida nueva se la llevaría — justo la que se acaba de hacer.
    * - **Solo se toca ESE dispositivo**: las verificaciones de los demás siguen donde
    *   estaban. Se emite el informe entero porque es el mensaje que hay.
    * - **Y viaja a todos los clientes**, como la foto: la máquina es la misma para todos.
    */
   const atenderConexion = async (id: string): Promise<void> => {
     const verificar = opciones.verificarDispositivo;
-    if (verificar === undefined || informeDeDispositivos === undefined) return;
+    if (verificar === undefined) return;
+    if (informeDeDispositivos === undefined) await atenderDispositivos().catch(contar);
+    if (informeDeDispositivos === undefined) return;
     const dispositivo = informeDeDispositivos.dispositivos.find((d) => d.id === id);
     if (dispositivo === undefined) return;
     let resultado: { ok: boolean; detalle: string };
@@ -3444,15 +3478,40 @@ export function montarRutas(
         // URL, y de un «otro» el vestíbulo deduce id y nombre del host
         // (`identidadDeEntorno`). Con el id de la lista, el `proyectosDe` de la línea
         // siguiente moriría con «el entorno «otro» no está registrado».
+        // Si ya estaba ANTES de este registro: un entorno que ya funcionaba no se quita porque
+        // hoy su servidor no conteste.
+        const yaEstaban = new Set(vestibulo.entornosRegistrados().map((e) => e.id));
         const { entorno: registrado } = await vestibulo.registrarEntorno({
           id: elegido.id,
           nombre: elegido.nombre,
           url: elegido.url,
         });
+        /**
+         * **Un entorno NUEVO que no conecta no se queda guardado.** Registrar escribe en
+         * `settings.json` antes de hablar con el servidor —del alta solo sale la URL—, y la
+         * primera conversación de verdad es esta: si falla (URL que no es un MCP, login
+         * cancelado, servidor caído), el entorno se quedaba en la lista y en la barra sin
+         * servir para nada. Se deshace el registro y se DICE, con el motivo.
+         */
+        let lista: readonly ProyectoRemoto[];
+        try {
+          lista = await vestibulo.proyectosDe(registrado.id);
+        } catch (error) {
+          if (!yaEstaban.has(registrado.id)) {
+            await vestibulo.olvidarEntorno(registrado.id, { credenciales: false }).catch(contar);
+            const detalle = error instanceof Error ? error.message : String(error);
+            throw new Error(`no se ha registrado el entorno «${registrado.nombre}»: ${detalle}`);
+          }
+          // Uno que YA estaba se queda elegido, como antes: el fallo es de hoy, no del entorno.
+          entornoElegido = registrado.id;
+          proyectoElegido = undefined;
+          ramas = [];
+          throw error;
+        }
         entornoElegido = registrado.id;
         proyectoElegido = undefined;
         ramas = [];
-        proyectos = await vestibulo.proyectosDe(registrado.id);
+        proyectos = lista;
         return;
       }
 
@@ -4001,6 +4060,51 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "entorno" &&
+      mensaje.accion === "olvidar"
+    ) {
+      // La negativa se decide AQUÍ y en el acto, antes del 204: es lo que deja devolver el
+      // motivo en la respuesta, porque `informar` no llega al navegador desde el vestíbulo.
+      const motivo = motivoParaNoOlvidarEntorno({
+        entorno: mensaje.entorno,
+        baseDeWorkspace: opciones.workspace?.() ?? baseDeWorkspacePorOmision(),
+        abiertas: vestibulo.proyectosAbiertos().map((c) => c.raiz),
+        tareas: (opciones.colaDeTareas?.listar() ?? []).map((t) => ({ estado: t.estado, raiz: t.proyecto.raiz })),
+      });
+      if (motivo !== undefined) {
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ motivo }));
+        return;
+      }
+      const olvidado = mensaje.entorno;
+      const borrarCopias = mensaje.borrarCopias === true;
+      void vestibulo
+        .olvidarEntorno(olvidado)
+        .then(() => {
+          // Las copias, DESPUÉS de quitar el entorno y solo con la casilla marcada: si quitar
+          // falla, no se ha borrado nada del disco. La guarda de «nada abierto, ninguna tarea
+          // viva» ya se comprobó arriba, antes del 204.
+          if (borrarCopias) {
+            const cuantas = borrarCopiasDeEntorno(opciones.workspace?.() ?? baseDeWorkspacePorOmision(), olvidado);
+            informar(`borradas las copias locales de «${olvidado}» (${cuantas} ${cuantas === 1 ? "proyecto" : "proyectos"})`);
+          }
+          // El entorno de la barra, si era ése, deja de estar: el alta siguiente ya no lo
+          // trae, y un `entornoActivo` que nombra a uno que no existe es un dato inventado.
+          if (entornoElegido === olvidado) {
+            entornoElegido = undefined;
+            proyectos = [];
+            ramas = [];
+          }
+        })
+        .catch(contar)
+        .finally(() => void anunciarAlta().catch(contar));
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "revision") {
       void atenderRevision(mensaje.ruta).catch(contar);
       respuesta.writeHead(204);
@@ -4317,11 +4421,29 @@ export function montarRutas(
           const valor = (pedidos as Record<string, unknown>)[plataforma];
           if (typeof valor === "boolean") limpios[plataforma] = valor;
         }
+        // Las dos rutas personalizadas, recortadas: una vacía tras el `trim` no se guarda —
+        // es «lo borré», y `AjustesDeDispositivos` ya trata eso como ausente.
+        for (const campo of ["rutaAdb", "rutaEmulator"] as const) {
+          const valor = (pedidos as Record<string, unknown>)[campo];
+          if (typeof valor === "string" && valor.trim() !== "") limpios[campo] = valor.trim();
+        }
         try {
           opciones.guardarAjustesDeDispositivos(limpios);
         } catch (error) {
           informar(`no se pudieron guardar los destinos de prueba (${codigoDe(error)})`);
         }
+      }
+      // Abrir carpeta no cambia ningún estado: no remide, y responde en el acto. Va ANTES
+      // del `instalar` porque las dos ramas devuelven pronto y esta no tiene nada que
+      // esperar — ni siquiera al instalador, que si acaso viene en el MISMO mensaje que esto
+      // nunca se manda (son dos botones distintos en la ventana).
+      const aAbrir = (mensaje as { abrirRuta?: unknown }).abrirRuta;
+      if (typeof aAbrir === "string" && esNombreDeHerramienta(aAbrir)) {
+        const ruta = informeDeDispositivos?.herramientas.find((h) => h.nombre === aAbrir)?.ruta;
+        if (ruta !== undefined) opciones.abrirCarpetaDeHerramienta?.(ruta);
+        respuesta.writeHead(204);
+        respuesta.end();
+        return;
       }
       // Instalar va ANTES de medir y por el nombre, nunca por un comando del cliente. Se
       // espera a que termine para que la foto de después cuente la verdad: medir mientras
@@ -5310,6 +5432,7 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     ajustesDeDispositivos: () => cargarSettings().settings.dispositivos ?? {},
     guardarAjustesDeDispositivos: (ajustes) => void guardarDispositivos(undefined, ajustes),
     instalarHerramienta: instalarHerramientaDeDispositivos,
+    abrirCarpetaDeHerramienta: abrirCarpetaDelSistema,
     verificarDispositivo,
     // Con la función REAL, y no declarada y sin pasar: es la trampa que este repo ha pagado
     // nueve veces, y la que el comentario de justo abajo describe para las cuatro del
@@ -5522,6 +5645,16 @@ function vestibuloReal(
     // pediría de nuevo una credencial que está escrita.
     hayCredencial: (proveedor) => hayCredencial(proveedor, opciones.cwd),
     guardarEntorno: (entorno: Entorno) => guardarEntornoEnDisco(undefined, entorno),
+    // Primero el `settings.json` y DESPUÉS las credenciales: si lo primero falla, el entorno
+    // sigue registrado y sus tokens con él, en vez de un entorno que ya no sabe entrar.
+    olvidarEntorno: (id: string, modo: { credenciales?: boolean } = {}) => {
+      const quitado = olvidarEntornoDeSettings(undefined, id);
+      // `credenciales: false` es DESHACER un registro que no conectó: ahí los tokens se
+      // quedan, porque registrar la URL oficial puede haber adoptado el juego legado, y
+      // borrarlo obligaría a volver a entrar. Unos tokens sin entorno no molestan.
+      if (modo.credenciales !== false) olvidarCredencialesDeEntorno(rutaAuthPorDefecto(), id);
+      return quitado;
+    },
     guardarModeloGlobal,
     guardarConfigDeProyecto: escribirProyectoEnDisco,
     // El «antes» de cada sesión: se fotografía al abrir el proyecto y se nombra cuando la

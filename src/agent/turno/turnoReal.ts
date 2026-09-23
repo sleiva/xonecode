@@ -1,4 +1,5 @@
 import { readdirSync, lstatSync, statSync, existsSync, readFileSync, realpathSync } from "node:fs";
+import { anotarError, anotarPaso } from "../../core/trazaDeErrores.js";
 import { join, sep, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { HumanMessage, ToolMessage, type AIMessage, type BaseMessage } from "@langchain/core/messages";
@@ -153,14 +154,15 @@ import type { Entorno } from "../config/entorno.js";
 import { tomarInstantanea, type Instantanea, type Cambio } from "./instantanea.js";
 import { construirAgente } from "../grafo/xoneAgent.js";
 import { asegurarMemoriaDeProyecto } from "../grafo/memoriaDeProyecto.js";
-import { aEventos } from "./puente.js";
+import { aEventos, crearMemoriaDelTurno } from "./puente.js";
 import { createTokenTracker, type TokenTracker } from "../../vendor/tokenTracking.js";
 import { crearDiagnosticoDeTools } from "./diagnosticoDeTools.js";
+import { encenderTrazaDeErrores } from "../trazaDeErroresEnDisco.js";
 import { indiceEnDisco, type CargarIndice } from "../navegacion/indiceEnDisco.js";
 import { hechosDelProyectoDe } from "../navegacion/hechosEnDisco.js";
 import { conHechosDelProyecto } from "../../core/hechosDelProyecto.js";
 import { accionDelJuez, type HechosDelTurno, type VeredictoDelTurno } from "../../core/juezDelTurno.js";
-import { crearRegistroDeFallos } from "./registroDeFallos.js";
+import { crearRegistroDeFallos, RUTA_VISIBLE_DE_FALLOS } from "./registroDeFallos.js";
 
 /**
  * Una sesión de turno real: varios turnos sobre el MISMO agente y el MISMO hilo.
@@ -549,6 +551,13 @@ export async function abrirSesionReal(opciones: {
   const checkpointer = opciones.checkpointer ?? new MemorySaver();
   const tracker = createTokenTracker();
   const diagnostico = crearDiagnosticoDeTools(raiz);
+  /**
+   * Y la traza de EXCEPCIONES e HITOS, con la misma variable de entorno que la de tools y el
+   * mismo trato: apagada no cuesta nada. Se enciende aquí, al construir la sesión, porque es
+   * el primer sitio donde se conoce la raíz — y el sumidero es global (ver
+   * `core/trazaDeErrores.ts`), así que basta una vez.
+   */
+  encenderTrazaDeErrores(raiz);
   let modelos = opciones.modelos;
   let hilo = opciones.hilo ?? `xonecode-${randomUUID()}`;
   let cancelarEnCurso: (() => void) | undefined;
@@ -779,6 +788,12 @@ export async function abrirSesionReal(opciones: {
     let payload: unknown = { messages: [new HumanMessage(payloadInicial)] };
     let bitacora = null as Awaited<ReturnType<typeof correrTurno>> | null;
     let ronda = 0;
+    /**
+     * Lo que el puente recuerda ENTRE RONDAS: qué tools ya se contaron, qué resultados ya se
+     * midieron y de quién era cada llamada. Vive fuera del bucle a propósito: ver
+     * `MemoriaDelTurno`. Dentro, cada ronda recontaba lo de las anteriores.
+     */
+    const memoriaDelTurno = crearMemoriaDelTurno();
 
     // El bucle de aprobación, tal como está en `correrReal` (`cli/run.ts`): una pausa
     // TERMINA la ronda, el interrupt queda en el estado, y se reanuda con un `Command`
@@ -1230,8 +1245,10 @@ export async function abrirSesionReal(opciones: {
               aEventos(
                 stream,
                 async () => (await leerPendientes()).lista,
-                ({ nombre, detalle, parametros, origen }) =>
-                  diagnostico?.herramienta(nombre, detalle, parametros, tracker, origen)
+                ({ nombre, detalle, parametros, origen, respuesta }) =>
+                  diagnostico?.herramienta(nombre, detalle, parametros, tracker, origen, respuesta),
+                memoriaDelTurno,
+                ({ nombre, detalle, chars }) => diagnostico?.resultado?.(nombre, detalle, chars)
               ),
               eventosExternos
             )
@@ -1271,6 +1288,9 @@ export async function abrirSesionReal(opciones: {
       }
 
       const { lista, ficheros, diffs } = await leerPendientes();
+      // Cada vuelta del bucle deja su hito: es lo que distingue «el turno avanza despacio» de
+      // «el turno no avanza», que desde fuera se ven igual.
+      anotarPaso("turnoReal#ronda", `ronda ${ronda}, ${lista.length} pendiente(s)`)();
       if (lista.length === 0) break;
 
       /**
@@ -1426,7 +1446,7 @@ export async function abrirSesionReal(opciones: {
           pasos: pasosDelTurno,
         });
         if (anotado !== undefined) {
-          piel.linea(`\n⚠ el turno falló. Queda apuntado en ${anotado.ruta}\n${anotado.legible}\n`);
+          piel.linea(`\n⚠ el turno falló. Queda apuntado en ${RUTA_VISIBLE_DE_FALLOS}\n${anotado.legible}\n`);
         }
         throw error;
       }

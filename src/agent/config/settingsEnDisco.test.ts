@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
@@ -8,6 +8,9 @@ import {
   guardarDispositivos,
   guardarEntorno,
   guardarWorkspace,
+  olvidarEntornoDeSettings,
+  borrarCopiasDeEntorno,
+  copiasDeEntorno,
   rutaSettings,
   SettingsRotosEnDisco,
 } from "./settingsEnDisco.js";
@@ -164,3 +167,41 @@ describe("settingsEnDisco", () => {
   });
 });
 
+
+
+describe("olvidarEntornoDeSettings", () => {
+  it("quita ESE entorno y deja los demás y el resto del fichero", () => {
+    const c = casa();
+    guardarEntorno(c, { id: "a", nombre: "A", url: "https://a/mcp" });
+    guardarEntorno(c, { id: "b", nombre: "B", url: "https://b/mcp" });
+    guardarWorkspace(c, "/mi/ws");
+    olvidarEntornoDeSettings(c, "a");
+    const { settings } = cargarSettings(c);
+    expect(settings.entornos.map((e) => e.id)).toEqual(["b"]);
+    expect(settings.workspace).toBe("/mi/ws");
+  });
+});
+
+
+describe("borrarCopiasDeEntorno", () => {
+  it("borra `<workspace>/<entorno>/` entera y dice cuántas copias había; los demás entornos quedan", () => {
+    const base = casa();
+    mkdirSync(join(base, "manager", "A", ".xonecode"), { recursive: true });
+    mkdirSync(join(base, "manager", "B"), { recursive: true });
+    mkdirSync(join(base, "webstudio", "C"), { recursive: true });
+    expect(copiasDeEntorno(base, "manager")).toBe(2);
+    expect(borrarCopiasDeEntorno(base, "manager")).toBe(2);
+    expect(existsSync(join(base, "manager"))).toBe(false);
+    expect(existsSync(join(base, "webstudio", "C"))).toBe(true);
+  });
+
+  it("un id que no es un segmento llano, o un enlace que sale del workspace, se NIEGA", () => {
+    const base = casa();
+    expect(() => borrarCopiasDeEntorno(base, "..")).toThrow();
+    const fuera = casa();
+    mkdirSync(join(fuera, "importante"));
+    symlinkSync(fuera, join(base, "enlace"));
+    expect(() => borrarCopiasDeEntorno(base, "enlace")).toThrow(/fuera del workspace/);
+    expect(existsSync(join(fuera, "importante"))).toBe(true);
+  });
+});

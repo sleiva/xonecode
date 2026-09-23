@@ -8,8 +8,9 @@
  */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
-import { basename, dirname, resolve } from "node:path";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
+import { dentroDelWorkspace } from "../../core/settings.js";
 import type { CambioLocal } from "../../core/planDeSubida.js";
 import { indicePrivado, claseDeCambio } from "./git.js";
 import { NOMBRE_CARPETA } from "../config/configEnDisco.js";
@@ -31,6 +32,52 @@ async function esRepo(raiz: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * Si la carpeta es la RAÍZ de su propio repo, y no una subcarpeta del repo de otra.
+ *
+ * `esRepo` contesta «sí» si CUALQUIER ancestro es un repo, y para `prepararRepo` eso es la
+ * diferencia entre una copia con su historia y una que escribe en la de otro: sin su propio
+ * `git init`, el baseline y los commits de cada turno acababan en el repo de arriba, donde
+ * todo el proyecto es nuevo — y Revisión lo enseñaba entero como «añadido por esta sesión».
+ * Se compara con el camino REAL (`realpath`), porque `--show-toplevel` lo devuelve resuelto.
+ */
+export async function esRepoPropio(raiz: string): Promise<boolean> {
+  try {
+    const { stdout } = await git(raiz, ["rev-parse", "--show-toplevel"]);
+    return realpathSync(stdout.trim()) === realpathSync(raiz);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Deja la copia VACÍA para bajarla entera: borra todo lo que cuelga de la raíz salvo
+ * `.xonecode/` —sesiones, checkpoint, memoria—, y el `.git` también.
+ *
+ * Es lo que hace «Actualizar repo local» desde que se decidió que la copia tiene que quedar
+ * IDÉNTICA a la rama y con un git recién hecho, no con el zip escrito encima: así lo borrado
+ * en Studio desaparece también aquí, y el primer commit es el de la bajada.
+ *
+ * **Solo dentro del workspace, comprobado aquí y no solo por quien llama**: en la carpeta que
+ * abrió una persona esto le borraría su trabajo y su historia. Por el TEXTO de la ruta y por
+ * el camino REAL, como el resto de guardas, porque un enlace dentro del workspace que apunte
+ * fuera pasaría la primera. No se baja por un enlace: `rmSync` sobre un enlace quita el enlace.
+ */
+export function vaciarCopia(raiz: string, baseDeWorkspace: string): string[] {
+  const real = realpathSync(raiz);
+  const baseReal = existsSync(baseDeWorkspace) ? realpathSync(baseDeWorkspace) : baseDeWorkspace;
+  if (!dentroDelWorkspace(raiz, baseDeWorkspace) || !dentroDelWorkspace(real, baseReal)) {
+    throw new Error("no se vacía una carpeta fuera del workspace de XOneCode");
+  }
+  const borradas: string[] = [];
+  for (const entrada of readdirSync(raiz)) {
+    if (entrada === NOMBRE_CARPETA) continue;
+    rmSync(join(raiz, entrada), { recursive: true, force: true });
+    borradas.push(entrada);
+  }
+  return borradas.sort();
 }
 
 /**
@@ -141,9 +188,18 @@ export async function asegurarExclusiones(raiz: string): Promise<void> {
 export async function prepararRepo(
   raiz: string,
   ramaOrigen: string,
-  informar: (texto: string) => void = () => {}
+  informar: (texto: string) => void = () => {},
+  /**
+   * `propio`: exigir que el repo sea DE ESTA carpeta y, si no, hacer su `git init` aquí.
+   * Solo lo pide la bajada que VACÍA una copia del workspace: ahí la copia es de XOneCode y
+   * tiene que tener su historia, y sin esto una copia que cuelga del repo de otra carpeta
+   * escribiría el baseline y los commits por turno en la historia de arriba — donde todo el
+   * proyecto es nuevo y Revisión lo enseña entero como «añadido». Ausente es lo de siempre,
+   * y es a propósito: un proyecto que una persona abre DENTRO de su repo usa ese repo.
+   */
+  modo: { propio?: boolean } = {}
 ): Promise<string> {
-  const yaEraRepo = await esRepo(raiz);
+  const yaEraRepo = modo.propio === true ? await esRepoPropio(raiz) : await esRepo(raiz);
   if (!yaEraRepo) {
     // La rama local se llama como la remota: dos vocabularios para lo mismo confunden.
     await git(raiz, ["init", "-q", "-b", ramaOrigen]);

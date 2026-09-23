@@ -59,6 +59,17 @@ function registro(valor: unknown): Record<string, unknown> {
 /** Cuánto del cuerpo remoto se deja ver en un error de formato: lo justo para reconocerlo. */
 const TOPE_DE_MUESTRA = 120;
 
+/** Un texto del servidor, acotado: para un mensaje de error, no para volcarlo entero. */
+function muestra(bruto: string): string {
+  return bruto.length > TOPE_DE_MUESTRA ? `${bruto.slice(0, TOPE_DE_MUESTRA)}…` : bruto;
+}
+
+/**
+ * Las pausas antes de cada reapertura cuando CloudStudio dice que no hay proyecto abierto:
+ * la primera inmediata y las siguientes, crecientes. Tres intentos en total, y ni uno más.
+ */
+export const PAUSAS_DE_REAPERTURA_MS = [0, 1_000, 3_000] as const;
+
 /**
  * JSON, o un error que dice quién contestó y con qué.
  *
@@ -70,8 +81,7 @@ function comoJson(bruto: string, tool: string): unknown {
   try {
     return JSON.parse(bruto) as unknown;
   } catch {
-    const muestra = bruto.length > TOPE_DE_MUESTRA ? `${bruto.slice(0, TOPE_DE_MUESTRA)}…` : bruto;
-    throw new Error(`${tool} no devolvió JSON: «${muestra}»`);
+    throw new Error(`${tool} no devolvió JSON: «${muestra(bruto)}»`);
   }
 }
 
@@ -82,8 +92,27 @@ function comoJson(bruto: string, tool: string): unknown {
  * algo que el servidor no encuentra, la tool volvía a decir «no project is open», y el
  * error hablaba de la tool y no del argumento equivocado.
  */
-export function clienteCloudStudio(invocar: Invocar, nombreDeProyecto: string): CloudStudioPort {
+export function clienteCloudStudio(
+  invocar: Invocar,
+  nombreDeProyecto: string,
+  /** La pausa entre reaperturas. Por parámetro para que los tests no esperen de verdad. */
+  esperar: (ms: number) => Promise<void> = (ms) => new Promise((listo) => setTimeout(listo, ms)),
+): CloudStudioPort {
   const proyecto = nombreDeProyecto;
+
+  /**
+   * Abrir el proyecto MIRANDO lo que contesta. Antes se ignoraba la respuesta, y una apertura
+   * que el servidor rechazaba con un TEXTO de error (una respuesta «correcta» que empieza por
+   * «Error:», la misma forma que ya obligó a mirar el resultado en `conSesion`) no dejaba
+   * rastro: el fallo aparecía una llamada después como «no hay proyecto abierto», sin el
+   * motivo. Devuelve una muestra de la respuesta para poder decirla si luego no basta.
+   */
+  const abrirComprobando = async (nombre: string): Promise<string> => {
+    const respuesta = await invocar("studio_open_project", { project: nombre });
+    const dicho = texto(respuesta) || (typeof respuesta === "string" ? respuesta : JSON.stringify(respuesta ?? ""));
+    if (/^\s*error\b/i.test(dicho)) throw new Error(`studio_open_project «${nombre}»: ${muestra(dicho)}`);
+    return muestra(dicho);
+  };
   /**
    * Una llamada que sobrevive a la caducidad: reabre y reintenta UNA vez. Una segunda
    * vuelta convertiría un servidor caído en un bucle silencioso.
@@ -108,15 +137,28 @@ export function clienteCloudStudio(invocar: Invocar, nombreDeProyecto: string): 
 
     // Reabrir es transparente a propósito: quien llamó pidió `studio_get_file`, no
     // gestionar una sesión. Lo único que no se puede hacer transparente es que falle otra
-    // vez, y eso se dice.
-    await invocar("studio_open_project", { project: proyecto });
-    const reintento = await invocar(nombre, argumentos);
-    if (SESION_PERDIDA.test(texto(reintento))) {
-      throw new Error(
-        `${nombre}: CloudStudio sigue diciendo que no hay proyecto abierto después de reabrir «${proyecto}»`
-      );
+    // vez, y eso se dice — con lo que contestó la apertura, que es la pista que faltaba.
+    //
+    // **Varias veces y con pausa, no una**: medido en la descarga de un proyecto recién
+    // creado, «weweewe», la apertura contestaba bien y la llamada de justo después seguía
+    // sin proyecto, A VECES. Una sola vuelta inmediata no le daba al servidor ocasión de
+    // asentarlo. El número está acotado (`PAUSAS_DE_REAPERTURA_MS`): un servidor que de
+    // verdad no abre el proyecto sigue acabando en un error, no en un bucle.
+    let apertura = "";
+    for (const pausa of PAUSAS_DE_REAPERTURA_MS) {
+      if (pausa > 0) await esperar(pausa);
+      apertura = await abrirComprobando(proyecto);
+      try {
+        const reintento = await invocar(nombre, argumentos);
+        if (!SESION_PERDIDA.test(texto(reintento))) return reintento;
+      } catch (error) {
+        if (!SESION_PERDIDA.test((error as Error).message)) throw error;
+      }
     }
-    return reintento;
+    throw new Error(
+      `${nombre}: CloudStudio sigue diciendo que no hay proyecto abierto después de reabrir «${proyecto}» ` +
+        `${PAUSAS_DE_REAPERTURA_MS.length} veces (la apertura contestó: «${apertura}»)`
+    );
   };
 
   const entradasDeArbol = (arbol: Record<string, unknown>): ManifiestoRemoto => {
@@ -135,8 +177,10 @@ export function clienteCloudStudio(invocar: Invocar, nombreDeProyecto: string): 
 
   return {
     async abrir(nombre) {
-      // Por NOMBRE: medido, el servidor rechaza el identificador («not found for user»).
-      await invocar("studio_open_project", { project: nombre });
+      // Por NOMBRE: medido, el servidor rechaza el identificador («not found for user»). Y
+      // comprobando la respuesta: una apertura rechazada tiene que fallar AQUÍ, con su
+      // motivo, y no una llamada después como «no hay proyecto abierto».
+      await abrirComprobando(nombre);
     },
     async contexto(): Promise<ContextoRemoto> {
       const r = registro(await conSesion("studio_get_context", {}));
@@ -208,7 +252,7 @@ export function clienteCloudStudio(invocar: Invocar, nombreDeProyecto: string): 
       // Se reabre aquí, y NO se amplía `SESION_PERDIDA` con ese otro texto: un mensaje
       // vacío puede venir de cualquier fallo del servidor, y tratarlo como sesión caída
       // pondría una reapertura —y un reintento— delante de problemas que no arregla.
-      await invocar("studio_open_project", { project: proyecto });
+      await abrirComprobando(proyecto);
     },
   };
 }

@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, cleanup, act, waitFor, within } from "@testing-library/react";
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App.js";
 import { crearStoreDelCliente } from "./store.js";
 
@@ -56,6 +56,20 @@ function montar(enviar = vi.fn(() => Promise.resolve(undefined as unknown))) {
     })
   );
   return { store, enviar, vista };
+}
+
+/**
+ * Abrir el panel de vistas y elegir una pestaña.
+ *
+ * Desde que la conversación es la columna que se queda, **la tira de pestañas vive DENTRO
+ * del panel y el panel arranca cerrado**: sin este primer clic no hay ninguna pestaña que
+ * pulsar. Son los dos gestos que hace una persona —el botón del panel, y luego su pestaña—,
+ * y el primero se salta si el panel ya estaba abierto.
+ */
+function abrirPestana(nombre: string): void {
+  const boton = screen.queryByRole("button", { name: "Mostrar el panel" });
+  if (boton !== null) fireEvent.click(boton);
+  fireEvent.click(screen.getByRole("tab", { name: nombre }));
 }
 
 /** La subida de adjuntos, concedida y sin red: `App` la recibe inyectada igual que `enviar`. */
@@ -227,6 +241,43 @@ describe("App: el secreto y el selector, que también colgaban", () => {
     fireEvent.click(screen.getByRole("button", { name: "Dispositivos" }));
     fireEvent.click(screen.getByRole("button", { name: "Arrancar" }));
     expect(enviar).toHaveBeenCalledWith({ clase: "arrancarEmulador", avd: "pixel8" });
+  });
+
+  it("«Quitar entorno» manda `olvidar` por el cable y enseña el MOTIVO del 409", async () => {
+    // El cableado, por lo mismo que el test de abajo: el prop es OPCIONAL, y sin él el botón
+    // ni aparecería. Y la negativa viaja en la RESPUESTA, que es lo que `App` tiene que leer.
+    const enviar = vi.fn((mensaje: unknown) =>
+      Promise.resolve(
+        (mensaje as { accion?: string }).accion === "olvidar"
+          ? (new Response(JSON.stringify({ motivo: "hay 1 tarea de fondo sin terminar en este entorno" }), {
+              status: 409,
+            }) as unknown)
+          : (undefined as unknown)
+      )
+    );
+    const { store } = montar(enviar);
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        registrados: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" }],
+        entornoActivo: "webstudio",
+        proyectos: [],
+        ramas: [],
+        proyectoAbierto: true,
+      })
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Ajustes" })[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "Entornos" }));
+    fireEvent.click(screen.getByRole("button", { name: "Quitar entorno" }));
+    fireEvent.change(screen.getByLabelText(/para confirmar/), { target: { value: "XOne WebStudio" } });
+    fireEvent.click(screen.getByRole("button", { name: "Quitar" }));
+    await waitFor(() =>
+      expect(enviar).toHaveBeenCalledWith({ clase: "entorno", accion: "olvidar", entorno: "webstudio" })
+    );
+    expect(await screen.findByText(/No se ha quitado: hay 1 tarea de fondo/)).toBeTruthy();
   });
 
   it("abrir la pestaña de otro entorno pide SUS proyectos por el cable", async () => {
@@ -760,7 +811,9 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
       })
     );
     expect(screen.getByPlaceholderText(/pregunta sobre xone/i)).toBeTruthy();
-    expect(screen.getByRole("tablist")).toBeTruthy();
+    // El panel arranca CERRADO, así que lo que prueba que la sesión está montada es su
+    // botón —la tira de pestañas vive dentro y todavía no hay ninguna—.
+    expect(screen.getByRole("button", { name: "Mostrar el panel" })).toBeTruthy();
     // La barra lateral, con su pie: sin entorno/proyecto en ESTE mensaje, sus niveles
     // siguen vacíos — es la prueba de que la barra está montada, no de un `<select>` que
     // con esas props no existe.
@@ -849,8 +902,10 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Tienda" }));
     expect(enviar).toHaveBeenCalledWith({ clase: "alta", paso: "proyecto", proyecto: "p1" });
     // Nada de Selector todavía: `estado.alta.ramas` sigue vacía hasta que el servidor
-    // conteste — no se inventa un catálogo mientras se espera.
-    expect(screen.queryByRole("group")).toBeNull();
+    // conteste — no se inventa un catálogo mientras se espera. El conmutador de
+    // apariencia de la barra superior también es un `role="group"` y siempre está: se
+    // excluye por nombre en vez de dejar que contamine esta comprobación.
+    expect(screen.queryByRole("group", { name: (n) => n !== "apariencia" })).toBeNull();
   });
 
   /**
@@ -934,12 +989,13 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
    */
   it("la marca lleva al escritorio con la sesión abierta, y no cierra nada", () => {
     const { enviar } = montar();
-    // Con sesión: hay pestañas y la marca es pulsable.
-    expect(screen.queryByRole("tablist")).not.toBeNull();
+    // Con sesión: se puede abrir el panel y la marca es pulsable.
+    expect(screen.queryByRole("button", { name: "Mostrar el panel" })).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "XOneCode" }));
-    // Se ve el escritorio: su saludo, y las pestañas de la sesión se van con ella.
+    // Se ve el escritorio: su saludo, y el panel de la sesión se va con ella.
     expect(screen.getByRole("heading", { level: 1 })).toBeTruthy();
     expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Mostrar el panel" })).toBeNull();
     // Y NO se ha soltado el proyecto: es estado de vista, no una orden al servidor.
     expect(enviar).not.toHaveBeenCalled();
     // Ya en el escritorio la marca deja de ser un botón: no lleva a ninguna parte.
@@ -1138,7 +1194,7 @@ describe("App: Revisión arranca PLEGADA", () => {
    */
   it("al llegar la lista no se despliega ningún bloque ni se pide ningún parche", () => {
     const { store, enviar } = montar();
-    fireEvent.click(screen.getByRole("tab", { name: "Revisión" }));
+    abrirPestana("Revisión");
     act(() => store.aplicar({ clase: "revision", via: "sin-empezar", ficheros: [] }));
     act(() => store.aplicar({ clase: "revision", via: "git", ficheros: diez() }));
 
@@ -1160,7 +1216,7 @@ describe("App: Revisión arranca PLEGADA", () => {
 
   it("pulsar una cabecera despliega ESE bloque y pide SU parche", () => {
     const { store, enviar } = montar();
-    fireEvent.click(screen.getByRole("tab", { name: "Revisión" }));
+    abrirPestana("Revisión");
     act(() => store.aplicar({ clase: "revision", via: "git", ficheros: diez() }));
 
     const indice = screen.getByRole("complementary", { name: "Ficheros cambiados" });
@@ -1191,6 +1247,7 @@ describe("App: la pestaña Artefactos", () => {
 
   it("la lista sale de los ACTOS, y con ella aparece la pestaña", () => {
     const { store } = montar();
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar el panel" }));
     expect(screen.queryByRole("tab", { name: "Artefactos" })).toBeNull();
     act(() => store.aplicar({ clase: "reemision", actos: [ARTEFACTO] }));
     expect(screen.getByRole("tab", { name: "Artefactos" })).toBeTruthy();
@@ -1204,15 +1261,16 @@ describe("App: la pestaña Artefactos", () => {
     expect(screen.getByTitle("d.html").tagName).toBe("IFRAME");
   });
 
-  it("si la sesión nueva no tiene artefactos, se vuelve al Chat en vez de dejar una pestaña que ya no está", () => {
+  it("si la sesión nueva no tiene artefactos, el panel se CIERRA en vez de dejar una pestaña que ya no está", () => {
     // Es el estado que se escapa: estando en Artefactos, abrir otra sesión quita la pestaña
-    // de la tira —y hace bien— pero la elección seguía puesta, así que el centro enseñaba el
-    // panel de artefactos sin ninguna pestaña marcada.
+    // de la tira —y hace bien— pero la elección seguía puesta, así que el panel enseñaba los
+    // artefactos sin ninguna pestaña marcada. Se cierra, que es donde está quien no ha
+    // elegido nada: dejarlo abierto por otra vista sería elegir en su nombre.
     const { store } = conArtefacto();
-    fireEvent.click(screen.getByRole("tab", { name: "Artefactos" }));
+    abrirPestana("Artefactos");
     act(() => store.aplicar({ clase: "reemision", actos: [] }));
     expect(screen.queryByRole("tab", { name: "Artefactos" })).toBeNull();
-    expect(screen.getByRole("tab", { name: "Chat" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.queryByRole("tablist")).toBeNull();
   });
 });
 
@@ -1221,7 +1279,7 @@ describe("App: la pestaña Ficheros", () => {
 
   it("pide el árbol al abrir la pestaña, y lo vuelve a pedir junto al fichero abierto al terminar un turno", () => {
     const { store, enviar } = montar();
-    fireEvent.click(screen.getByRole("tab", { name: "Ficheros" }));
+    abrirPestana("Ficheros");
     expect(arboles(enviar)).toHaveLength(1);
 
     act(() => store.aplicar({ clase: "arbol", rutas: ["app.xml"], recortado: false }));
@@ -1289,8 +1347,7 @@ describe("App: la pestaña Tareas", () => {
    */
   it("la pestaña está desde el principio, y lo que filtra por proyecto ACTIVO es lo que hay DENTRO", () => {
     const { store } = montarConProyectoActivo();
-    expect(screen.getByRole("tab", { name: "Tareas" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("tab", { name: "Tareas" }));
+    abrirPestana("Tareas");
     // Antes de que llegue ningún mensaje `tareas`, no se afirma que no haya ninguna.
     expect(screen.getByText(/consultando/i)).toBeTruthy();
 
@@ -1327,7 +1384,7 @@ describe("App: la pestaña Tareas", () => {
         lista: [TAREA({ estado: "requiere-atencion", motivo: "el juez marcó el trabajo en rojo" })],
       })
     );
-    fireEvent.click(screen.getByRole("tab", { name: "Tareas" }));
+    abrirPestana("Tareas");
     expect(screen.getByText(/el juez marcó el trabajo en rojo/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /reintentar/i }));
@@ -1342,14 +1399,14 @@ describe("App: la pestaña Tareas", () => {
   });
 
   it("al quedarse el proyecto activo sin tareas, la pestaña se QUEDA — a diferencia de Artefactos, a propósito", () => {
-    // Es justo lo que Task 15 cambia: Artefactos SÍ vuelve al Chat al vaciarse (es registro),
-    // pero Tareas es acción y su estado vacío es la respuesta, no un hueco que hay que evitar
-    // enseñando otra pestaña.
+    // Es justo lo que Task 15 cambia: Artefactos SÍ cierra el panel al vaciarse (es
+    // registro), pero Tareas es acción y su estado vacío es la respuesta, no un hueco que
+    // hay que evitar enseñando otra pestaña.
     const { store } = montarConProyectoActivo();
     act(() =>
       store.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [TAREA()] })
     );
-    fireEvent.click(screen.getByRole("tab", { name: "Tareas" }));
+    abrirPestana("Tareas");
     expect(screen.getByRole("tab", { name: "Tareas" }).getAttribute("aria-selected")).toBe("true");
     act(() => store.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [] }));
     expect(screen.getByRole("tab", { name: "Tareas" })).toBeTruthy();
@@ -1364,7 +1421,7 @@ describe("App: la pestaña Tareas", () => {
   it("crear una tarea desde AQUÍ, sin volver al escritorio, y con el proyecto ya resuelto", async () => {
     const { store, enviar } = montarConProyectoActivo();
     act(() => store.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [] }));
-    fireEvent.click(screen.getByRole("tab", { name: "Tareas" }));
+    abrirPestana("Tareas");
     fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
     // Si el punto de entrada abriera la ventana SIN proyecto resuelto —la mutación que el
     // brief pide vigilar—, `App` no encontraría con qué pintarla (`proyectoDeLaTarea` no
@@ -1564,7 +1621,9 @@ describe("el contador de tokens, montado por App", () => {
     act(() => store.aplicar(DEL_SERVIDOR));
     // El compositor enseña los DOS totales de la conversación, y nada más.
     expect(screen.getByText("2,2k")).toBeTruthy();
-    expect(screen.getByText("entrada")).toBeTruthy();
+    expect(screen.getByText("nueva")).toBeTruthy();
+    // Y la caché es su propia cifra, no una nota escondida en el `title`.
+    expect(screen.getByText("caché")).toBeTruthy();
   });
 
   it("y la ventana del MISMO mensaje la pinta la barra de estado, no el compositor", () => {
@@ -1581,5 +1640,138 @@ describe("el contador de tokens, montado por App", () => {
     // Ausente es «no consta»: sin sesión que haya consumido, el hueco se queda vacío.
     montar();
     expect(screen.queryByTitle(/Tokens de esta conversación/)).toBeNull();
+  });
+});
+
+/**
+ * El reparto de columnas, cableado. La REGLA vive en `repartoDeColumnas.ts` y se prueba
+ * entera allí; lo que se prueba aquí es lo que ninguna función pura puede probar: que esté
+ * CONECTADA — que el ancho de la ventana llegue, que lo que decide mueva de verdad la
+ * pantalla, y que el plegado automático no se escriba en la preferencia del navegador.
+ *
+ * Es el patrón de fallo que este repo documenta diez veces: una regla compuesta dentro de
+ * algo que los tests doblan no está probada, está escrita.
+ */
+describe("App: el panel a la derecha del chat", () => {
+  const conVentana = (px: number): void => {
+    Object.defineProperty(window, "innerWidth", { value: px, configurable: true, writable: true });
+  };
+  const compositorOculto = (): boolean =>
+    screen.getByPlaceholderText(/pregunta sobre xone/i).closest("[hidden]") !== null;
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    conVentana(1024);
+  });
+  afterEach(() => conVentana(1024));
+
+  it("el panel arranca CERRADO, y su botón lo abre por Ficheros", () => {
+    // Ficheros y no Trazas: aquéllas son de otro destinatario —quien depura el harness, no
+    // quien desarrolla la app—, así que un panel que abriera ahí enseñaría el interior del
+    // harness a quien solo quería mirar su proyecto.
+    montar();
+    expect(screen.queryByRole("tablist")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar el panel" }));
+    expect(screen.getByRole("tab", { name: "Ficheros" }).getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("y lo reabre por donde se dejó", () => {
+    montar();
+    abrirPestana("Revisión");
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar el panel" }));
+    expect(screen.queryByRole("tablist")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar el panel" }));
+    expect(screen.getByRole("tab", { name: "Revisión" }).getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("con sitio de sobra, el chat SE QUEDA: es la mitad de lo que se gana partiendo la pantalla", () => {
+    conVentana(1600);
+    const { store } = montar();
+    act(() => store.aplicar({ clase: "acto", acto: { tipo: "usuario", texto: "hola" } }));
+    abrirPestana("Ficheros");
+    // La conversación sigue delante. Con `selector` porque el título de la sesión sale del
+    // primer mensaje, así que «hola» está además en la miga de la cabecera — y ahí es un
+    // `<button>`, mientras que el globo del chat es un `<p>`.
+    expect(screen.getByText("hola", { selector: "p" })).toBeTruthy();
+    // ...y con ella el compositor, que es lo que permite seguir escribiendo mientras se
+    // mira un fichero.
+    expect(compositorOculto()).toBe(false);
+  });
+
+  it("y sin sitio el panel ocupa el centro, con el compositor escondido: como se comportaba antes", () => {
+    conVentana(900);
+    const { store } = montar();
+    act(() => store.aplicar({ clase: "acto", acto: { tipo: "usuario", texto: "hola" } }));
+    abrirPestana("Ficheros");
+    expect(screen.queryByText("hola", { selector: "p" })).toBeNull();
+    // Escondido, NO desmontado: si no, ir a mirar un fichero y volver perdería el borrador.
+    expect(compositorOculto()).toBe(true);
+  });
+
+  it("la barra se pliega SOLA para hacerle sitio al panel, y eso NO se guarda", () => {
+    // 1200 da para el chat (560) y el panel (480) pero no para los tres con la barra (320).
+    conVentana(1200);
+    montar();
+    expect(screen.getByRole("button", { name: /ocultar la barra lateral/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar el panel" }));
+    // Ahora se ve plegada, y el botón lo dice.
+    expect(screen.getByRole("button", { name: /mostrar la barra lateral/i })).toBeTruthy();
+    // **Y la preferencia sigue intacta.** Sin esto, estrechar la ventana una vez dejaría la
+    // barra plegada para siempre, también en la pantalla grande de mañana.
+    expect(window.localStorage.getItem("xonecode.barraContraida")).not.toBe("1");
+  });
+
+  it("y pedirla de vuelta CIERRA el panel, en vez de no hacer nada", () => {
+    // Es la otra mitad de lo anterior: el usuario no la ha plegado, así que su preferencia
+    // ya dice «abierta» y volver a ponerla a «abierta» no cambiaría nada — un botón muerto
+    // sin ninguna pista de por qué. Gana quien pulsa.
+    conVentana(1200);
+    montar();
+    abrirPestana("Ficheros");
+    expect(screen.getByRole("tablist")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /mostrar la barra lateral/i }));
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.getByRole("button", { name: /ocultar la barra lateral/i })).toBeTruthy();
+  });
+
+  it("estrechar la ventana SIN panel no pliega nada: manda el usuario y punto", () => {
+    // Deliberado: si el ancho la plegara por su cuenta, pulsar «Mostrar la barra lateral» no
+    // haría nada y no habría forma de arreglarlo. Con el panel abierto sí la hay —cerrarlo—.
+    conVentana(400);
+    montar();
+    expect(screen.getByRole("button", { name: /ocultar la barra lateral/i })).toBeTruthy();
+  });
+
+  it("el panel NO se va al escritorio con la sesión: ahí no hay botón que lo cierre", () => {
+    // La fuga sale SOLO en ventana ancha: con el panel en el centro vive dentro de la rama
+    // de la sesión y se va con ella, pero en su columna lo monta la maqueta, que no sabe
+    // nada de sesiones. El escritorio no ofrece el botón del panel —ahí no hay ficheros de
+    // nadie—, así que quedaba una columna con el Ficheros de la sesión anterior de la que no
+    // se salía. Y a 1200 la barra se quedaba además plegada en el escritorio.
+    conVentana(1600);
+    montar();
+    abrirPestana("Ficheros");
+    expect(screen.getByRole("region", { name: "Panel" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "XOneCode" }));
+    expect(screen.queryByRole("region", { name: "Panel" })).toBeNull();
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.getByRole("button", { name: /ocultar la barra lateral/i })).toBeTruthy();
+    // Lo que NO se tira es la ELECCIÓN: `vistaDelPanel` sigue puesta, así que al volver a la
+    // sesión el panel vuelve por donde estaba. No se prueba aquí porque este montaje no trae
+    // proyectos en el alta y desde el escritorio no hay ninguno que abrir.
+  });
+
+  it("el panel se monta UNA vez: al mudarse de la columna al centro no quedan dos", () => {
+    // Cada vista suya MIDE al montarse, así que dos copias duplicarían todas sus peticiones
+    // — y un `getAllByRole` de dos `tablist` es el síntoma que lo delata.
+    conVentana(1600);
+    montar();
+    abrirPestana("Ficheros");
+    expect(screen.getAllByRole("tablist")).toHaveLength(1);
+    act(() => {
+      conVentana(900);
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect(screen.getAllByRole("tablist")).toHaveLength(1);
   });
 });

@@ -647,6 +647,67 @@ describe("/sync", () => {
       for (const linea of operacion.lineas) expect(salida()).not.toContain(linea);
     });
 
+    it("una subida CANCELADA no deja entrada en el registro, y en el terminal se sigue diciendo", async () => {
+      // Medido en el navegador: cada «Cancelar» en la tarjeta dejaba un «Subir · 10:30» en la
+      // banda que no contaba nada que hubiera pasado. El registro es de lo que CORRIÓ.
+      const { consola } = consolaDeConSecreto({ lineas: ["/sync subir", "/salir"], respuestas: ["n"] });
+      const operaciones: NarracionDeSincronizacion[] = [];
+      const conSync: Consola = {
+        ...consola,
+        anotarSincronizacion: (operacion) => operaciones.push(operacion),
+        sincronizar: async (_accion, _raiz, politica) => {
+          const autorizado = await politica!([{ tipo: "texto", ruta: "app.xml", clase: "nuevo" }]);
+          return { tipo: "texto", texto: autorizado ? "subidos 1, fallaron 0\n" : "" };
+        },
+      };
+
+      await correrConsola(conSync, estadoDe());
+
+      expect(operaciones).toEqual([]);
+    });
+
+    it("«Actualizar repo local» PREGUNTA con lo que se pierde delante, y cancelar no se registra", async () => {
+      const { consola } = consolaDeConSecreto({ lineas: ["/sync bajar", "/salir"], respuestas: ["n"] });
+      const operaciones: NarracionDeSincronizacion[] = [];
+      const preguntas: { enunciado: string; lineas?: readonly { texto: string; cambio?: string }[] }[] = [];
+      const conSync: Consola = {
+        ...consola,
+        preguntar: async (enunciado, decision) => {
+          preguntas.push({ enunciado, ...(decision === undefined ? {} : { lineas: decision.lineas }) });
+          return consola.preguntar(enunciado, decision);
+        },
+        anotarSincronizacion: (operacion) => operaciones.push(operacion),
+        sincronizar: async (accion, _raiz, _politica, _informar, confirmarBajada) => {
+          expect(accion).toBe("bajar");
+          const si = await confirmarBajada!({ sinCommitear: ["Menu.xne"] });
+          return { tipo: "texto", texto: si ? "bajados 3 ficheros (zip)\n" : "no se ha actualizado la copia\n" };
+        },
+      };
+
+      await correrConsola(conSync, estadoDe());
+
+      expect(preguntas).toHaveLength(1);
+      const lineas = preguntas[0]!.lineas!.map((l) => l.texto).join("\n");
+      expect(lineas).toMatch(/historial de git de esta copia se borra/);
+      expect(preguntas[0]!.lineas!.find((l) => l.texto.includes("Menu.xne"))?.cambio).toBe("borrado");
+      expect(operaciones).toEqual([]);
+    });
+
+    it("y sin sumidero (el terminal) el rechazo se sigue imprimiendo", async () => {
+      const { consola, salida } = consolaDeConSecreto({ lineas: ["/sync subir", "/salir"], respuestas: ["n"] });
+      const conSync: Consola = {
+        ...consola,
+        sincronizar: async (_accion, _raiz, politica) => {
+          await politica!([{ tipo: "texto", ruta: "app.xml", clase: "nuevo" }]);
+          return { tipo: "texto", texto: "" };
+        },
+      };
+
+      await correrConsola(conSync, estadoDe());
+
+      expect(salida()).toContain("→ rechazado, no se ha aplicado nada");
+    });
+
     /**
      * La hora es la de EMPEZAR, y se captura antes del `await` a propósito: una subida larga
      * fechada al final diría un instante en el que ya no estaba pasando nada, y el registro se

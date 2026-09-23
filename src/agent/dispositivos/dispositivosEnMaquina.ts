@@ -31,7 +31,45 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { join, posix, win32 } from "node:path";
+
+/**
+ * Las reglas de RUTA de la plataforma que se está MIDIENDO, no las de la máquina que corre
+ * esto. Las funciones de abajo reciben `plataforma` por parámetro —es lo que deja probar la
+ * rama de Windows desde un Mac—, y con `join`/`delimiter` a secas de `node:path` usaban las del
+ * host: en un Mac, un `Path` de Windows se partía por `:` y no se encontraba nada. Salió al
+ * mezclar la rama que añadió los `.bat`, cuyo test pasaba en Windows y fallaba en cualquier
+ * otra máquina.
+ */
+function rutasDe(plataforma: string): typeof posix {
+  return plataforma === "win32" ? win32 : posix;
+}
+
+/**
+ * El PATH de un proceso hijo con carpetas AÑADIDAS al final, con las reglas de la plataforma.
+ *
+ * Dos cosas que en Windows no son como en macOS, y las dos se rompían en silencio: el
+ * separador es `;` y no `:` (que además vive DENTRO de `C:\…`), y la variable suele llamarse
+ * `Path`. Se devuelve con el MISMO nombre con que llegó: en Windows el entorno no distingue
+ * mayúsculas, y un hijo con `PATH` y `Path` a la vez recibiría uno de los dos sin que nadie
+ * diga cuál. Sin ninguno puesto, `PATH`.
+ */
+export function pathConCarpetas(
+  entorno: Record<string, string | undefined>,
+  carpetas: readonly string[],
+  plataforma: string
+): { nombre: string; valor: string } {
+  const { delimiter } = rutasDe(plataforma);
+  const nombre =
+    plataforma === "win32" ? (Object.keys(entorno).find((clave) => clave.toUpperCase() === "PATH") ?? "PATH") : "PATH";
+  const actual = entorno[nombre] ?? "";
+  return { nombre, valor: [...(actual === "" ? [] : [actual]), ...carpetas].join(delimiter) };
+}
+
+/** Componer una ruta con las reglas de la plataforma medida (ver `rutasDe`). */
+export function unirRuta(plataforma: string, ...partes: string[]): string {
+  return rutasDe(plataforma).join(...partes);
+}
 import { promisify } from "node:util";
 import { seMira, type AjustesDeDispositivos } from "../../core/settings.js";
 import {
@@ -102,12 +140,12 @@ export const TOPES_MS = {
  */
 const RAICES_DE_SDK_POR_OMISION: Record<string, (home: string, entorno: Record<string, string | undefined>) => string[]> = {
   darwin: (home) => [
-    join(home, "Library", "Android", "sdk"),
+    posix.join(home, "Library", "Android", "sdk"),
     "/opt/homebrew/share/android-commandlinetools",
     "/usr/local/share/android-commandlinetools",
   ],
-  win32: (_home, entorno) => (entorno.LOCALAPPDATA === undefined ? [] : [join(entorno.LOCALAPPDATA, "Android", "Sdk")]),
-  linux: (home) => [join(home, "Android", "Sdk")],
+  win32: (_home, entorno) => (entorno.LOCALAPPDATA === undefined ? [] : [win32.join(entorno.LOCALAPPDATA, "Android", "Sdk")]),
+  linux: (home) => [posix.join(home, "Android", "Sdk")],
 };
 
 /**
@@ -122,6 +160,18 @@ const RAICES_DE_SDK_POR_OMISION: Record<string, (home: string, entorno: Record<s
  * En Windows los binarios llevan `.exe`. `existe` entra por parámetro porque `npm test` no
  * puede depender del disco de quien lo corre.
  */
+/**
+ * La extensión de un binario en Windows: `.exe` para `adb`/`emulator`, pero `sdkmanager` y
+ * `avdmanager` son SCRIPTS `.bat` en Windows —nunca `.exe`, en ningún SDK—. Antes esto era un
+ * único `.exe` para lo que fuera, y con él `sdkmanager`/`avdmanager` no se localizaban NUNCA
+ * en Windows, aunque las cmdline-tools ya estuvieran instaladas a mano: los pasos que
+ * dependen de `estado.sdkmanager`/`estado.jdk` no podían marcarse nunca como disponibles.
+ */
+function extensionDeBinario(nombre: string, plataforma: string): string {
+  if (plataforma !== "win32") return "";
+  return nombre === "sdkmanager" || nombre === "avdmanager" ? ".bat" : ".exe";
+}
+
 export function localizadorDeAndroid(deps: {
   plataforma: string;
   entorno: Record<string, string | undefined>;
@@ -133,13 +183,14 @@ export function localizadorDeAndroid(deps: {
   /** En el PATH y, si no, dentro del SDK bajo `subcarpeta`. */
   enSdk: (nombre: string, subcarpeta: string) => string | undefined;
 } {
-  const ext = deps.plataforma === "win32" ? ".exe" : "";
   const raicesDeSdk = [
     deps.entorno.ANDROID_HOME,
     deps.entorno.ANDROID_SDK_ROOT,
     ...(RAICES_DE_SDK_POR_OMISION[deps.plataforma]?.(deps.home, deps.entorno) ?? []),
   ].filter((r): r is string => r !== undefined && r !== "");
+  const { delimiter, join } = rutasDe(deps.plataforma);
   const enPath = (nombre: string): string | undefined => {
+    const ext = extensionDeBinario(nombre, deps.plataforma);
     for (const carpeta of (deps.entorno.PATH ?? deps.entorno.Path ?? "").split(delimiter)) {
       if (carpeta === "") continue;
       const candidato = join(carpeta, nombre + ext);
@@ -150,6 +201,7 @@ export function localizadorDeAndroid(deps: {
   const enSdk = (nombre: string, subcarpeta: string): string | undefined => {
     const delPath = enPath(nombre);
     if (delPath !== undefined) return delPath;
+    const ext = extensionDeBinario(nombre, deps.plataforma);
     for (const raiz of raicesDeSdk) {
       const candidato = join(raiz, subcarpeta, nombre + ext);
       if (deps.existe(candidato)) return candidato;
@@ -162,20 +214,28 @@ export function localizadorDeAndroid(deps: {
 /**
  * El JDK con el que corre `sdkmanager`, que es un programa Java.
  *
- * `JAVA_HOME` si el usuario la puso; si no, el `openjdk@17` de Homebrew en los dos prefijos
- * —igual que las raíces del SDK, y por lo mismo: preguntárselo a `brew --prefix` costaría un
- * proceso en cada medida—. Lo usan el detector, para decir si el paso 3 se puede lanzar, y
- * el ejecutor, para ponérselo al hijo: una segunda copia habría divergido con el síntoma
- * peor, que el botón se ofreciera y luego no encontrara el JDK.
+ * `JAVA_HOME` si el usuario la puso; si no, por sistema: en macOS el `openjdk@17` de
+ * Homebrew en los dos prefijos —preguntárselo a `brew --prefix` costaría un proceso en cada
+ * medida—; en Windows la ruta FIJA donde cae el paso 2 de la receta,
+ * `%LOCALAPPDATA%\Android\jdk17` (`descargaDeHerramientas.ts` renombra ahí la carpeta
+ * versionada que trae el zip de Adoptium). Lo usan el detector, para decir si los últimos
+ * pasos se pueden lanzar, y el ejecutor, para ponérselo al hijo: una segunda copia habría
+ * divergido con el síntoma peor, que el botón se ofreciera y luego no encontrara el JDK.
  */
 export function jdkDeLaMaquina(
   entorno: Record<string, string | undefined>,
-  existe: (ruta: string) => boolean
+  existe: (ruta: string) => boolean,
+  plataforma: string
 ): string | undefined {
   const puesta = entorno.JAVA_HOME ?? "";
   if (puesta !== "" && existe(puesta)) return puesta;
+  if (plataforma === "win32") {
+    if (entorno.LOCALAPPDATA === undefined) return undefined;
+    const candidato = win32.join(entorno.LOCALAPPDATA, "Android", "jdk17");
+    return existe(candidato) ? candidato : undefined;
+  }
   for (const prefijo of ["/opt/homebrew", "/usr/local"]) {
-    const candidato = join(prefijo, "opt", "openjdk@17");
+    const candidato = posix.join(prefijo, "opt", "openjdk@17");
     if (existe(candidato)) return candidato;
   }
   return undefined;
@@ -274,15 +334,34 @@ export async function detectarDispositivos(
     return undefined;
   };
 
-  const adb = miraAndroid || miraAndroidEmulador ? localizar("adb", "platform-tools") : undefined;
+  /**
+   * La ruta personalizada, cuando la hay, gana sobre PATH/SDK — es lo que la persona pidió
+   * a mano porque la búsqueda automática no la encontró. Si no existe en disco se dice CUÁL
+   * se probó: ya es una ruta que cruza el cable (`Herramienta.ruta` para estas dos
+   * herramientas), así que repetirla en `detalle` no abre ninguna excepción nueva.
+   */
+  const rutaAdbPersonalizada = ajustes.rutaAdb?.trim();
+  const adb =
+    rutaAdbPersonalizada !== undefined && rutaAdbPersonalizada !== ""
+      ? existe(rutaAdbPersonalizada)
+        ? rutaAdbPersonalizada
+        : undefined
+      : miraAndroid || miraAndroidEmulador
+        ? localizar("adb", "platform-tools")
+        : undefined;
   if (!miraAndroid && !miraAndroidEmulador) {
     herramientas.push({ nombre: "adb", estado: "desactivada", detalle: APAGADO });
   } else if (adb === undefined) {
-    const instalar = comoInstalar("adb");
+    const rutaNoEncontrada = rutaAdbPersonalizada !== undefined && rutaAdbPersonalizada !== "";
+    // Con una ruta a mano que no existe no se ofrece un comando de instalación: ya se dijo
+    // dónde buscar, y proponer `sdkmanager`/`brew` encima sería ignorar lo que se pidió.
+    const instalar = rutaNoEncontrada ? undefined : comoInstalar("adb");
     herramientas.push({
       nombre: "adb",
       estado: "no-encontrada",
-      detalle: "ni en el PATH ni en platform-tools del SDK de Android",
+      detalle: rutaNoEncontrada
+        ? `la ruta configurada no existe: ${rutaAdbPersonalizada}`
+        : "ni en el PATH ni en platform-tools del SDK de Android",
       ...(instalar === undefined ? {} : { instalar }),
     });
   } else {
@@ -352,15 +431,26 @@ export async function detectarDispositivos(
     }
   }
 
-  const emulator = miraAndroidEmulador ? localizar("emulator", "emulator") : undefined;
+  const rutaEmulatorPersonalizada = ajustes.rutaEmulator?.trim();
+  const emulator =
+    rutaEmulatorPersonalizada !== undefined && rutaEmulatorPersonalizada !== ""
+      ? existe(rutaEmulatorPersonalizada)
+        ? rutaEmulatorPersonalizada
+        : undefined
+      : miraAndroidEmulador
+        ? localizar("emulator", "emulator")
+        : undefined;
   if (!miraAndroidEmulador) {
     herramientas.push({ nombre: "emulator", estado: "desactivada", detalle: APAGADO });
   } else if (emulator === undefined) {
-    const instalar = comoInstalar("emulator");
+    const rutaNoEncontrada = rutaEmulatorPersonalizada !== undefined && rutaEmulatorPersonalizada !== "";
+    const instalar = rutaNoEncontrada ? undefined : comoInstalar("emulator");
     herramientas.push({
       nombre: "emulator",
       estado: "no-encontrada",
-      detalle: "ni en el PATH ni en la carpeta emulator del SDK de Android; viene con Android Studio",
+      detalle: rutaNoEncontrada
+        ? `la ruta configurada no existe: ${rutaEmulatorPersonalizada}`
+        : "ni en el PATH ni en la carpeta emulator del SDK de Android; viene con Android Studio",
       ...(instalar === undefined ? {} : { instalar }),
     });
   } else {
@@ -478,12 +568,15 @@ export async function detectarDispositivos(
    */
   const recetaAndroid = recetaDeEmuladorAndroid(plataforma, {
     brew: enPath("brew") !== undefined,
+    // Ya localizado arriba: sin este campo, el primer paso de la receta de Windows —que es
+    // justo descargar `adb`— no tendría de qué `hecho` colgarse.
+    adb: adb !== undefined,
     sdkmanager:
       enPath("sdkmanager") !== undefined ||
       localizar("sdkmanager", join("cmdline-tools", "latest", "bin")) !== undefined,
     emulator: emulator !== undefined,
     // El JDK con el que corre `sdkmanager`: sin él, el botón de ejecutar no se ofrece.
-    jdk: jdkDeLaMaquina(entorno, existe) !== undefined,
+    jdk: jdkDeLaMaquina(entorno, existe, plataforma) !== undefined,
     avds,
   });
 

@@ -1,13 +1,10 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useState, type FormEvent } from "react";
 import {
   Modal,
   Button,
   Input,
   IconSettingsOutline16,
   IconSparkle16,
-  IconDarkOutline16,
-  IconLightOutline16,
-  IconFollowsystemOutline16,
   IconDataOutline16,
   IconUserOutline16,
   IconSkillOutline16,
@@ -25,8 +22,9 @@ import type {
   NombreDeHerramienta,
   PlataformaDeDispositivo,
   ProveedorDeModelos,
+  SistemaOperativo,
 } from "../tipos.js";
-import { seMira } from "../tipos.js";
+import { PLATAFORMAS_DE_DISPOSITIVO, seMira } from "../tipos.js";
 import { etiquetaDeEstado, inventario, seLlegaAlDispositivo, type FilaDeInventario } from "../inventarioDeDispositivos.js";
 import { ArrancarEmulador } from "./ArrancarEmulador.js";
 import { useMedirAlVolver } from "../medirAlVolver.js";
@@ -68,9 +66,13 @@ import { IconoDeEntorno } from "./IconoDeEntorno.js";
 import { IconoDeProveedor } from "./IconoDeProveedor.js";
 import { PastillaDeModelo } from "./PastillaDeModelo.js";
 import estilos from "./Ajustes.module.css";
+// La coraza del aviso de «cambios sin guardar»: mismo velo que `ConfirmarDescarte`
+// (`AccionesDeTarea.tsx`) y `AccionDeSesion.tsx` — dos copias del mismo velo es cómo se
+// acaba con dos velos distintos.
+import modalDeAviso from "./NuevaSesion.module.css";
 
 /**
- * La ventana de ajustes: apariencia, modelos y entornos, con la navegación a la izquierda
+ * La ventana de ajustes: modelos y entornos, con la navegación a la izquierda
  * y una sola sección a la vista — la disposición del panel de ajustes del harness de
  * DeepSeek, que es de donde salió el encargo.
  *
@@ -79,9 +81,11 @@ import estilos from "./Ajustes.module.css";
  * nada detrás es la misma mentira que una lista vacía rellenada con un placeholder. De ahí
  * tres ausencias deliberadas:
  *
- * - **Los temas de terminal no están.** `TEMAS` (`cli/tema.ts`) son paletas ANSI para la
- *   consola de terminal; en un navegador no pintan nada. Lo que sí es real aquí es el
- *   claro/oscuro del propio cliente, que es lo que esta sección ofrece.
+ * - **Los temas de terminal no están, y tampoco el claro/oscuro del cliente.** `TEMAS`
+ *   (`cli/tema.ts`) son paletas ANSI para la consola de terminal; en un navegador no pintan
+ *   nada. El claro/oscuro de esta ventana del navegador SÍ es real, pero vive en la barra
+ *   superior (`Cabecera.tsx`, junto al botón de Ajustes) y no aquí: es un ajuste de un solo
+ *   gesto, no una sección propia.
  * - **No hay «proveedor personalizado».** El harness lo tiene porque su adaptador `pi-ai`
  *   sabe hablar con cualquier endpoint compatible con OpenAI. Aquí eso ya no es la razón:
  *   desde que NVIDIA, Groq y xAI entran por `COMPATIBLES_OPENAI` (`core/modelos.ts`), el
@@ -100,7 +104,6 @@ import estilos from "./Ajustes.module.css";
  * ventana.
  */
 export type SeccionDeAjustes =
-  | "apariencia"
   | "modelos"
   | "entornos"
   | "agentes"
@@ -137,7 +140,6 @@ const SECCIONES: readonly {
   // confesaba —«el modelo en uso se elige en la pastilla del compositor»— porque no había
   // dónde fijar el defecto; ahora sí, y es lo primero que se ve al abrirla.
   { id: "modelos", etiqueta: "Modelos", Icono: IconSparkle16 },
-  { id: "apariencia", etiqueta: "Apariencia", Icono: IconDarkOutline16 },
   { id: "entornos", etiqueta: "Entornos", Icono: IconDataOutline16 },
   { id: "agentes", etiqueta: "Subagentes", Icono: IconUserOutline16 },
   // Skills va JUNTO a Subagentes y debajo, porque contesta la otra mitad de la misma
@@ -199,6 +201,25 @@ const REQUISITOS: readonly { nombre: Herramienta["nombre"]; etiqueta: string; pa
 ];
 
 /**
+ * El ejemplo que se enseña en el campo de ruta personalizada, cuando está vacío. Por
+ * `sistema` medido, porque una ruta de Windows en un placeholder de Mac no ayuda a nadie.
+ * `"otro"` y AUSENTE (sin medida todavía) caen en la forma de Windows, la más frecuente
+ * entre quien no tiene todavía ninguna foto del equipo.
+ */
+const PLACEHOLDER_RUTA_WINDOWS = {
+  adb: "C:\\Users\\tú\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe",
+  emulator: "C:\\Users\\tú\\AppData\\Local\\Android\\Sdk\\emulator\\emulator.exe",
+};
+const PLACEHOLDER_RUTA: Record<SistemaOperativo, { adb: string; emulator: string }> = {
+  mac: { adb: "~/Library/Android/sdk/platform-tools/adb", emulator: "~/Library/Android/sdk/emulator/emulator" },
+  windows: PLACEHOLDER_RUTA_WINDOWS,
+  linux: { adb: "~/Android/Sdk/platform-tools/adb", emulator: "~/Android/Sdk/emulator/emulator" },
+  otro: PLACEHOLDER_RUTA_WINDOWS,
+};
+const placeholderDeRuta = (sistema: SistemaOperativo | undefined): { adb: string; emulator: string } =>
+  PLACEHOLDER_RUTA[sistema ?? "windows"];
+
+/**
  * Las dos pestañas de la sección, en el orden en que se leen: Android primero porque es lo
  * único que funciona fuera de un Mac, y eso hace que en Windows y Linux la primera pestaña
  * sea útil y la segunda se lea sabiendo lo que es.
@@ -207,6 +228,13 @@ const REQUISITOS: readonly { nombre: Herramienta["nombre"]; etiqueta: string; pa
  * su receta sin puerta y, peor, haría creer que iOS se puede probar allí y no se está
  * enseñando: dentro se dice que sus herramientas «no aplican en este sistema», que es lo que
  * contestó la medida. Una pestaña de ACCIÓN existe siempre (ver `Pestanas.tsx`).
+ *
+ * **La de iOS se DESHABILITA fuera de macOS**, cuando ya se sabe (`sistema` medido y
+ * distinto de `"mac"`): un clic no puede llevar a ningún sitio útil, así que en vez de
+ * dejar entrar para leer «no aplica en este sistema» en cada fila, la razón se dice de una
+ * vez en el `title` de la propia pestaña (`TITULO_IOS_REQUIERE_MAC`). `sistema` AUSENTE
+ * —todavía no ha llegado ninguna medida— no deshabilita nada: ausente no es «no», es «no lo
+ * sé todavía», la misma regla que en todo lo demás de esta ventana.
  */
 const PLATAFORMAS: readonly Dispositivo["plataforma"][] = ["android", "ios"];
 
@@ -215,6 +243,25 @@ const ETIQUETA_DE_PLATAFORMA: Record<Dispositivo["plataforma"], string> = {
   android: "Android",
   ios: "iOS",
 };
+
+/** La MISMA frase que pone el servidor en `detalle` cuando `sistema !== "mac"`
+ *  (`dispositivosEnMaquina.ts`): dos copias del motivo es donde divergirían. */
+const TITULO_IOS_REQUIERE_MAC = "los simuladores y dispositivos iOS solo se detectan en macOS";
+
+/**
+ * ¿Son el mismo `AjustesDeDispositivos`? Compara los cuatro interruptores por `seMira` —así
+ * `undefined` y `true` cuentan igual, que es lo que ya significan— y las dos rutas
+ * recortadas y con la cadena vacía tratada como ausente, la misma regla que aplica el
+ * servidor al guardar. Es lo que decide si hay «cambios sin guardar» que avisar.
+ */
+function igualesAjustesDeDispositivos(a: AjustesDeDispositivos, b: AjustesDeDispositivos): boolean {
+  const mismaRuta = (x?: string, y?: string): boolean => (x?.trim() ?? "") === (y?.trim() ?? "");
+  return (
+    PLATAFORMAS_DE_DISPOSITIVO.every((p) => seMira(a, p) === seMira(b, p)) &&
+    mismaRuta(a.rutaAdb, b.rutaAdb) &&
+    mismaRuta(a.rutaEmulator, b.rutaEmulator)
+  );
+}
 
 /** La hora de la foto. Si el ISO no parsea se enseña tal cual: inventar una hora es peor. */
 function horaDe(iso: string): string {
@@ -232,41 +279,22 @@ const ETIQUETA_DE_HERRAMIENTA: Record<Herramienta["estado"], string> = {
   desactivada: "no se ha mirado",
 };
 
-export type Apariencia = "sistema" | "claro" | "oscuro";
-
-/* Los tres iconos existen en la librería y dicen exactamente esto —seguir al sistema, claro
-   y oscuro—, así que no hay que aproximar ninguno con un dibujo parecido. */
-const APARIENCIAS: readonly {
-  id: Apariencia;
-  etiqueta: string;
-  detalle: string;
-  Icono: typeof IconSparkle16;
-}[] = [
-  {
-    id: "sistema",
-    etiqueta: "Como el sistema",
-    detalle: "sigue la preferencia del navegador",
-    Icono: IconFollowsystemOutline16,
-  },
-  { id: "claro", etiqueta: "Claro", detalle: "fondo claro, siempre", Icono: IconLightOutline16 },
-  { id: "oscuro", etiqueta: "Oscuro", detalle: "fondo oscuro, siempre", Icono: IconDarkOutline16 },
-];
-
 export function Ajustes({
   proveedores = [],
   entornos = [],
   proyectos = [],
   proyectosPorEntorno = {},
   alPedirProyectosDeEntorno,
+  alQuitarEntorno,
+  avisoDelAlta,
   entornoActivo,
   seccionInicial,
-  apariencia,
   secreto,
-  alCambiarApariencia,
   dispositivos,
   ajustesDeDispositivos,
   alCambiarDispositivos,
   alActualizarDispositivos,
+  alAbrirCarpetaDeHerramienta,
   alInstalarHerramienta,
   alVerificarDispositivo,
   alArrancarEmulador,
@@ -311,7 +339,7 @@ export function Ajustes({
   proveedores?: readonly ProveedorDeModelos[];
   /** Los entornos REGISTRADOS (`settings.json`), no los ofrecidos por el alta. `proyectos`
    *  es la elección de cuáles se enseñan; ausente = no se ha dicho. */
-  entornos?: readonly { id: string; nombre: string; url: string; proyectos?: readonly string[] }[];
+  entornos?: readonly { id: string; nombre: string; url: string; proyectos?: readonly string[]; copias?: number }[];
   /**
    * Los proyectos del entorno ACTIVO, tal cual los devolvió CloudStudio y tal como vienen
    * en el `alta`. Los de los DEMÁS entornos llegan por `proyectosPorEntorno`, que se pide
@@ -347,6 +375,18 @@ export function Ajustes({
    * dato, no al montar—, y NUNCA muda el entorno activo.
    */
   alPedirProyectosDeEntorno?: (entorno: string) => void;
+  /**
+   * Quitar un entorno registrado. Devuelve el MOTIVO si el servidor se negó (un proyecto suyo
+   * abierto, una tarea sin terminar) y `undefined` si lo quitó. La regla vive en el servidor;
+   * aquí solo se enseña. Ausente = no se ofrece el botón.
+   */
+  alQuitarEntorno?: (entorno: string, modo: { borrarCopias: boolean }) => Promise<string | undefined>;
+  /**
+   * El motivo del último paso del alta que falló (`alta.aviso`). Aquí se usa para el REGISTRO
+   * de un entorno: un entorno nuevo que no conecta ya no se guarda, así que sin esto el
+   * formulario no diría nada y el entorno simplemente no aparecería.
+   */
+  avisoDelAlta?: string;
   entornoActivo?: string;
   /**
    * En qué sección abrir, para quien llega desde un enlace concreto (el aviso de proyectos
@@ -355,7 +395,6 @@ export function Ajustes({
    * quien tenga un motivo.
    */
   seccionInicial?: SeccionDeAjustes;
-  apariencia: Apariencia;
   /** Los subagentes y los `.md` ilegibles. Ausente = todavía no llegó el mensaje, que NO es
    *  lo mismo que «no hay ninguno»: la sección lo distingue y lo dice. */
   agentes?: { lista: readonly AgenteDelCable[]; problemas: readonly string[] };
@@ -380,7 +419,6 @@ export function Ajustes({
   ) => Promise<{ ok: boolean; motivo?: string }>;
   /** La pregunta oculta en vuelo, si la hay: se pinta DENTRO de la fila que se edita. */
   secreto?: string;
-  alCambiarApariencia: (apariencia: Apariencia) => void;
   /**
    * La foto de la máquina, la misma que pinta el escritorio. Ausente = todavía no ha
    * llegado, y se dice: una lista vacía afirmaría un equipo sin nada.
@@ -392,13 +430,19 @@ export function Ajustes({
    */
   ajustesDeDispositivos?: AjustesDeDispositivos;
   /**
-   * Cambia los cuatro interruptores. Se manda el objeto ENTERO y no el que cambió: el
-   * servidor los guarda juntos, y así no hay dos ideas de cuál es el estado actual.
-   * Ausente = esta ejecución no puede cambiarlos y no se pintan interruptores.
+   * Guarda los cuatro interruptores y las dos rutas personalizadas. Se manda el objeto
+   * ENTERO y no lo que cambió: el servidor lo guarda junto, y así no hay dos ideas de cuál
+   * es el estado actual. Ausente = esta ejecución no puede guardar y no se pinta «Guardar».
    */
   alCambiarDispositivos?: (ajustes: AjustesDeDispositivos) => void;
   /** Volver a medir. Ausente = no se ofrece. */
   alActualizarDispositivos?: () => void;
+  /**
+   * Abre, en el explorador del sistema donde corre la consola, la carpeta que contiene el
+   * binario de `adb`/`emulator`. Viaja el NOMBRE, nunca la ruta: el servidor la resuelve
+   * contra su última medida. Ausente = no se pinta el botón.
+   */
+  alAbrirCarpetaDeHerramienta?: (herramienta: NombreDeHerramienta) => void;
   /**
    * Instalar una herramienta que falta. Viaja el NOMBRE, nunca el comando: qué se lanza lo
    * decide el servidor. Ausente = no se ofrece el botón.
@@ -497,6 +541,36 @@ export function Ajustes({
    * lo particular contradecía el propio orden que la lista declara.
    */
   const [seccion, setSeccion] = useState<SeccionDeAjustes>(() => seccionInicial ?? "general");
+
+  /**
+   * El borrador de TODA la sección Dispositivos: los cuatro interruptores y las dos rutas
+   * personalizadas, mismo patrón que `workspaceTecleado` de más abajo. Un solo borrador y no
+   * uno por campo porque el guardado es UNO —«Guardar» manda el objeto entero— y por eso el
+   * aviso de cambios sin guardar también es uno solo para la sección.
+   *
+   * Ausente = «no lo he tocado», y entonces se pinta lo que dice el servidor. Se suelta al
+   * guardar Y al descartar (el botón «Descartar y continuar» del aviso), que son los dos
+   * momentos en que el valor del servidor vuelve a ser la verdad.
+   */
+  const [dispositivosTecleados, setDispositivosTecleados] = useState<AjustesDeDispositivos | undefined>(undefined);
+  const dispositivosEnElCampo = dispositivosTecleados ?? ajustesDeDispositivos ?? {};
+  const dispositivosCambiados =
+    dispositivosTecleados !== undefined && !igualesAjustesDeDispositivos(dispositivosTecleados, ajustesDeDispositivos ?? {});
+
+  /**
+   * Lo que queda pendiente si se confirma descartar el borrador de Dispositivos: cambiar de
+   * sección o cerrar Ajustes. Puesto = el aviso está en pantalla.
+   */
+  const [pendienteDeConfirmar, setPendienteDeConfirmar] = useState<(() => void) | undefined>(undefined);
+  const hayCambiosSinGuardar = seccion === "dispositivos" && dispositivosCambiados;
+  const alIntentarCambiarSeccion = (nueva: SeccionDeAjustes): void => {
+    if (hayCambiosSinGuardar && nueva !== seccion) setPendienteDeConfirmar(() => () => setSeccion(nueva));
+    else setSeccion(nueva);
+  };
+  const alIntentarCerrar = (): void => {
+    if (hayCambiosSinGuardar) setPendienteDeConfirmar(() => alCerrar);
+    else alCerrar();
+  };
 
   /**
    * Lo que hay TECLEADO en el campo del workspace, que no es lo que hay guardado.
@@ -641,7 +715,7 @@ export function Ajustes({
    * no gasta una conexión (su lista viene en el `alta`) y el que ya se consultó tampoco.
    *
    * Depende de `seccion` porque la pestaña solo está a la vista en Entornos: preguntarle a
-   * CloudStudio por un entorno mientras alguien mira Apariencia sería gastar una conexión
+   * CloudStudio por un entorno mientras alguien mira Modelos sería gastar una conexión
    * que nadie pidió.
    */
   const { proyectos: suyosEnPestana, error: errorEnPestana } = listaDe(entornoEnPestana);
@@ -692,6 +766,13 @@ export function Ajustes({
 
   const [avisoDeUrl, setAvisoDeUrl] = useState<string | undefined>(undefined);
 
+  /**
+   * Lo que había al ENVIAR un registro: cuántos entornos y qué aviso. Con eso se sabe cuándo
+   * contestó el servidor sin que Ajustes vea el alta entera — un entorno más es que se
+   * registró (y el formulario se cierra), un aviso distinto es que no (y se enseña dentro).
+   * Límite declarado: el MISMO motivo dos veces seguidas no se vuelve a enseñar.
+   */
+  const [enviado, setEnviado] = useState<{ entornos: number; aviso?: string } | undefined>(undefined);
   const registrar = (evento: FormEvent): void => {
     evento.preventDefault();
     if (!urlDeEntornoAceptable(url)) {
@@ -699,9 +780,17 @@ export function Ajustes({
       return;
     }
     setAvisoDeUrl(undefined);
+    setEnviado({ entornos: entornos.length, ...(avisoDelAlta === undefined ? {} : { aviso: avisoDelAlta }) });
     alRegistrarEntorno(url);
     setUrl("");
   };
+  useEffect(() => {
+    if (enviado === undefined || entornos.length <= enviado.entornos) return;
+    setEnviado(undefined);
+    setRegistrando(false);
+  }, [enviado, entornos.length]);
+  const avisoDeRegistro =
+    enviado !== undefined && avisoDelAlta !== undefined && avisoDelAlta !== enviado.aviso ? avisoDelAlta : undefined;
 
   /**
    * El motivo del último intento, para pintarlo DENTRO del formulario. Solo mientras el
@@ -888,6 +977,24 @@ export function Ajustes({
   const [plataformaAbierta, setPlataformaAbierta] = useState<Dispositivo["plataforma"]>("android");
 
   /**
+   * Qué filas de Requisitos tienen el panel de «ruta actual / ruta personalizada»
+   * desplegado. Solo `adb`/`emulator` lo ofrecen —son las dos únicas con `ruta` y con campo
+   * de override—, y cada una se abre por su cuenta: un Set y no un booleano, porque las dos
+   * pueden estar abiertas a la vez.
+   */
+  const [expandidas, setExpandidas] = useState<ReadonlySet<NombreDeHerramienta>>(new Set());
+  const alternarExpandida = (nombre: NombreDeHerramienta): void =>
+    setExpandidas((actual) => {
+      const siguiente = new Set(actual);
+      if (siguiente.has(nombre)) siguiente.delete(nombre);
+      else siguiente.add(nombre);
+      return siguiente;
+    });
+  /** El campo del borrador que le corresponde a cada herramienta con ruta personalizable. */
+  const campoDeRutaDe = (nombre: "adb" | "emulator"): "rutaAdb" | "rutaEmulator" =>
+    nombre === "adb" ? "rutaAdb" : "rutaEmulator";
+
+  /**
    * Las herramientas de una plataforma, **según la medida y no según una tabla de aquí**.
    * Vienen todas en el informe —el host las mide siempre, apagadas o no—, y cada una dice de
    * qué plataforma es. Un informe que no nombre alguna de las que esta ventana conoce se
@@ -915,23 +1022,27 @@ export function Ajustes({
       : REQUISITOS.filter((r) => !dispositivos.herramientas.some((h) => h.nombre === r.nombre));
 
   return (
-    // `headless` como el modal de aprobación: la cabecera y el pie que trae `Modal` no se
-    // usan —la ventana tiene su propia navegación y su propio cierre—, pero `title` sigue
-    // siendo obligatorio y es lo que anuncia el diálogo a un lector de pantalla.
-    //
-    // La CAPA y el VELO son nuestros, y no un adorno: los CSS Modules del primitivo son
-    // stubs vacíos, así que su `dialog` y su máscara no traen ni posición ni tamaño. Sin
-    // esto la ventana se pintaba al final del `body`, debajo de la aplicación entera —
-    // montada y fuera de la vista, que desde fuera se lee como «el botón no hace nada».
-    <Modal open onClose={alCerrar} title="Ajustes" headless className={estilos.capa}>
+    // El Fragment es lo que permite que el aviso de «cambios sin guardar» —otro `Modal`,
+    // propio portal— sea HERMANO de la ventana de Ajustes y no un hijo suyo: dos portales
+    // anidados no es lo mismo que dos portales al lado.
+    <>
+    {/* `headless` como el modal de aprobación: la cabecera y el pie que trae `Modal` no se
+        usan —la ventana tiene su propia navegación y su propio cierre—, pero `title` sigue
+        siendo obligatorio y es lo que anuncia el diálogo a un lector de pantalla.
+
+        La CAPA y el VELO son nuestros, y no un adorno: los CSS Modules del primitivo son
+        stubs vacíos, así que su `dialog` y su máscara no traen ni posición ni tamaño. Sin
+        esto la ventana se pintaba al final del `body`, debajo de la aplicación entera —
+        montada y fuera de la vista, que desde fuera se lee como «el botón no hace nada». */}
+    <Modal open onClose={alIntentarCerrar} title="Ajustes" headless className={estilos.capa}>
       <div
         className={estilos.velo}
         // Pinchar FUERA cierra; la comprobación de `target` es lo que distingue «fuera» de
         // «dentro», porque un clic en cualquier botón de la ventana burbujea hasta aquí.
-        // Cerrar aquí no decide nada —a diferencia del modal de aprobación—, así que no
-        // hace falta más ceremonia.
+        // Pasa por `alIntentarCerrar` y no por `alCerrar` a pelo: con un borrador sucio en
+        // Dispositivos, cerrar SÍ decide algo — si se pierde lo tecleado.
         onClick={(evento) => {
-          if (evento.target === evento.currentTarget) alCerrar();
+          if (evento.target === evento.currentTarget) alIntentarCerrar();
         }}
       >
       <div className={estilos.ventana}>
@@ -955,7 +1066,7 @@ export function Ajustes({
               className={estilos.seccion}
               data-actual={s.id === seccion ? "" : undefined}
               aria-current={s.id === seccion ? "page" : undefined}
-              onClick={() => setSeccion(s.id)}
+              onClick={() => alIntentarCambiarSeccion(s.id)}
             >
               <s.Icono size={16} className={estilos.iconoDeSeccion} />
               {s.etiqueta}
@@ -963,32 +1074,6 @@ export function Ajustes({
           ))}
         </nav>
         <div className={estilos.panel}>
-          {seccion === "apariencia" ? (
-            <>
-              <h2 className={estilos.encabezado}>Apariencia</h2>
-              <p className={estilos.nota}>
-                Solo afecta a esta ventana del navegador; se recuerda en este equipo.
-              </p>
-              <ul className={estilos.filas}>
-                {APARIENCIAS.map((a) => (
-                  <li key={a.id} className={estilos.fila}>
-                    <span className={estilos.placa} aria-hidden="true">
-                      <a.Icono size={16} />
-                    </span>
-                    <span className={estilos.nombre}>{a.etiqueta}</span>
-                    <span className={estilos.detalle}>{a.detalle}</span>
-                    <Button
-                      variant={a.id === apariencia ? "primary" : "outline"}
-                      className={estilos.accion}
-                      onClick={() => alCambiarApariencia(a.id)}
-                    >
-                      {a.id === apariencia ? "En uso" : "Usar"}
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : null}
 
           {seccion === "dispositivos" ? (
             <>
@@ -1013,6 +1098,7 @@ export function Ajustes({
               <div className={estilos.pestanas} role="tablist" aria-label="Plataformas">
                 {PLATAFORMAS.map((p) => {
                   const faltan = faltanDe(p);
+                  const deshabilitada = p === "ios" && dispositivos?.sistema !== undefined && dispositivos.sistema !== "mac";
                   return (
                     <button
                       key={p}
@@ -1020,11 +1106,22 @@ export function Ajustes({
                       role="tab"
                       className={estilos.pestana}
                       aria-selected={p === plataformaAbierta}
+                      aria-disabled={deshabilitada ? true : undefined}
+                      disabled={deshabilitada}
+                      title={deshabilitada ? TITULO_IOS_REQUIERE_MAC : undefined}
                       // Lo que le falta, en la etiqueta que lee un lector de pantalla: el
-                      // número de al lado, solo, no se anuncia como nada.
-                      aria-label={faltan === 0 ? ETIQUETA_DE_PLATAFORMA[p] : `${ETIQUETA_DE_PLATAFORMA[p]}, ${faltan} por instalar`}
+                      // número de al lado, solo, no se anuncia como nada. Deshabilitada, el
+                      // motivo en vez del recuento — con la pestaña inerte ya no hay panel
+                      // donde leerlo.
+                      aria-label={
+                        deshabilitada
+                          ? `${ETIQUETA_DE_PLATAFORMA[p]}, ${TITULO_IOS_REQUIERE_MAC}`
+                          : faltan === 0
+                            ? ETIQUETA_DE_PLATAFORMA[p]
+                            : `${ETIQUETA_DE_PLATAFORMA[p]}, ${faltan} por instalar`
+                      }
                       data-actual={p === plataformaAbierta ? "" : undefined}
-                      onClick={() => setPlataformaAbierta(p)}
+                      onClick={deshabilitada ? undefined : () => setPlataformaAbierta(p)}
                     >
                       {ETIQUETA_DE_PLATAFORMA[p]}
                       {/* Y solo cuando falta algo: un cero es el control sin dato detrás que
@@ -1061,43 +1158,132 @@ export function Ajustes({
                     // La ficha es solo el rótulo; de qué plataforma es lo dice la medida. Una
                     // herramienta que esta ventana no conozca se enseña con su nombre.
                     const r = REQUISITOS.find((x) => x.nombre === h.nombre);
+                    // Solo estas dos tienen `ruta` y ruta PERSONALIZABLE — la excepción
+                    // declarada a `sinRutas`, ver `core/dispositivos.ts#Herramienta.ruta`.
+                    const conRuta = h.nombre === "adb" || h.nombre === "emulator" ? h.nombre : undefined;
+                    const desplegada = conRuta !== undefined && expandidas.has(conRuta);
                     return (
-                      <li key={h.nombre} className={estilos.fila}>
-                        {/* Verde SOLO con «ok»: es lo único que significa disponible y
-                            configurado. «Desactivada» no se pinta en verde ni en rojo —no se
-                            ha mirado, y afirmar cualquiera de las dos sería inventarlo. */}
-                        <span
-                          className={estilos.punto}
-                          data-herramienta={h.estado}
-                          aria-label={ETIQUETA_DE_HERRAMIENTA[h.estado]}
-                        />
-                        <span className={estilos.nombre}>{r?.etiqueta ?? h.nombre}</span>
-                        <span className={estilos.detalle}>
-                          {ETIQUETA_DE_HERRAMIENTA[h.estado]}
-                          {r === undefined ? "" : ` · ${r.para}`}
-                          {h.detalle === undefined || h.estado === "ok" ? null : ` · ${h.detalle}`}
-                        </span>
-                        {/*
-                          Instalar solo se ofrece cuando FALTA y se sabe cómo. Y el comando se
-                          enseña siempre: quien pulsa un botón que instala software tiene
-                          derecho a saber qué se va a lanzar en su máquina.
-                        */}
-                        {h.instalar === undefined ? null : h.instalar.automatico ? (
-                          <Button
-                            variant="outline"
-                            className={estilos.accion}
-                            disabled={!conectado || alInstalarHerramienta === undefined}
-                            title={h.instalar.comando}
-                            onClick={() => alInstalarHerramienta?.(h.nombre)}
-                          >
-                            Instalar
-                          </Button>
-                        ) : (
-                          <code className={estilos.comando} title="cópialo en un terminal">
-                            {h.instalar.comando}
-                          </code>
+                      <Fragment key={h.nombre}>
+                        <li className={estilos.fila}>
+                          {/* Verde SOLO con «ok»: es lo único que significa disponible y
+                              configurado. «Desactivada» no se pinta en verde ni en rojo —no
+                              se ha mirado, y afirmar cualquiera de las dos sería inventarlo. */}
+                          <span
+                            className={estilos.punto}
+                            data-herramienta={h.estado}
+                            aria-label={ETIQUETA_DE_HERRAMIENTA[h.estado]}
+                          />
+                          <span className={estilos.nombre}>{r?.etiqueta ?? h.nombre}</span>
+                          <span className={estilos.detalle}>
+                            {ETIQUETA_DE_HERRAMIENTA[h.estado]}
+                            {r === undefined ? "" : ` · ${r.para}`}
+                            {h.detalle === undefined || h.estado === "ok" ? null : ` · ${h.detalle}`}
+                          </span>
+                          {/*
+                            Instalar solo se ofrece cuando FALTA y se sabe cómo. Y el comando
+                            se enseña siempre: quien pulsa un botón que instala software tiene
+                            derecho a saber qué se va a lanzar en su máquina. Va JUNTO al
+                            engranaje y no en su lugar: una herramienta que falta también se
+                            puede apuntar a mano, así que las dos acciones conviven.
+                          */}
+                          {h.instalar === undefined ? null : h.instalar.automatico ? (
+                            <Button
+                              variant="outline"
+                              className={estilos.accion}
+                              disabled={!conectado || alInstalarHerramienta === undefined}
+                              title={h.instalar.comando}
+                              onClick={() => alInstalarHerramienta?.(h.nombre)}
+                            >
+                              Instalar
+                            </Button>
+                          ) : (
+                            <code className={estilos.comando} title="cópialo en un terminal">
+                              {h.instalar.comando}
+                            </code>
+                          )}
+                          {/* El engranaje: abre el panel con la ruta actual y la
+                              personalizada. Solo adb/emulator lo llevan. */}
+                          {conRuta === undefined ? null : (
+                            <button
+                              type="button"
+                              className={estilos.iconoDeAjuste}
+                              aria-label={`Ajustes de ruta de ${r?.etiqueta ?? h.nombre}`}
+                              aria-expanded={desplegada}
+                              onClick={() => alternarExpandida(conRuta)}
+                            >
+                              <IconSettingsOutline16 size={16} />
+                            </button>
+                          )}
+                        </li>
+                        {conRuta === undefined || !desplegada ? null : (
+                          <li key={`${h.nombre}-ajustes`} className={estilos.fila} data-columna>
+                            <label className={estilos.filaDeWorkspace}>
+                              <span className={estilos.etiquetaDeWorkspace}>Ruta actual</span>
+                              <div className={estilos.campoConBoton}>
+                                <input
+                                  type="text"
+                                  value={h.ruta ?? ""}
+                                  disabled
+                                  placeholder="no encontrada"
+                                  aria-label={`Ruta actual de ${r?.etiqueta ?? h.nombre}`}
+                                />
+                                {h.ruta === undefined || alAbrirCarpetaDeHerramienta === undefined ? null : (
+                                  <button
+                                    type="button"
+                                    className={estilos.accion}
+                                    title="Abre esa carpeta en el explorador del sistema donde corre la consola"
+                                    disabled={!conectado}
+                                    onClick={() => alAbrirCarpetaDeHerramienta(conRuta)}
+                                  >
+                                    Abrir carpeta
+                                  </button>
+                                )}
+                              </div>
+                            </label>
+                            {alCambiarDispositivos === undefined ? null : (
+                              <>
+                                <label className={estilos.filaDeWorkspace}>
+                                  <span className={estilos.etiquetaDeWorkspace}>Ruta personalizada</span>
+                                  <input
+                                    type="text"
+                                    value={dispositivosEnElCampo[campoDeRutaDe(conRuta)] ?? ""}
+                                    spellCheck={false}
+                                    autoCapitalize="off"
+                                    autoCorrect="off"
+                                    aria-label={`Ruta personalizada de ${r?.etiqueta ?? h.nombre}`}
+                                    placeholder={placeholderDeRuta(dispositivos?.sistema)[conRuta]}
+                                    disabled={!conectado}
+                                    onChange={(e) =>
+                                      setDispositivosTecleados({ ...dispositivosEnElCampo, [campoDeRutaDe(conRuta)]: e.target.value })
+                                    }
+                                  />
+                                </label>
+                                <p className={estilos.nota}>Vacío = se busca en el PATH y en el SDK, como hasta ahora.</p>
+                                {/*
+                                  «Guardar» vive EN la card, no al pie de la sección: es
+                                  aquí donde se edita (esta ruta, y las casillas de
+                                  «Buscar en» de arriba, que viajan en el MISMO borrador).
+                                  Mismo patrón que el del workspace: `<button>` con
+                                  `.accion`, no el primitivo `Button`, a la derecha.
+                                */}
+                                <div className={estilos.accionesDeWorkspace}>
+                                  <button
+                                    type="button"
+                                    className={estilos.accion}
+                                    disabled={!conectado || !dispositivosCambiados}
+                                    onClick={() => {
+                                      alCambiarDispositivos(dispositivosEnElCampo);
+                                      setDispositivosTecleados(undefined);
+                                    }}
+                                  >
+                                    Guardar
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </li>
                         )}
-                      </li>
+                      </Fragment>
                     );
                   })}
                 </ul>
@@ -1127,6 +1313,42 @@ export function Ajustes({
                   />
                 ))}
 
+              {/*
+                El filtro de MEDIDA, DENTRO de la sección de Requisitos —es una pregunta
+                sobre las mismas herramientas de arriba, no del inventario de abajo—.
+                «Guardar» ya NO vive aquí: se guarda desde CADA card de adb/emulator (su
+                engranaje desplegado), porque es donde se edita la ruta personalizada; las
+                casillas viajan en el MISMO objeto cuando se pulsa cualquiera de los dos.
+              */}
+              {alCambiarDispositivos === undefined ? null : (
+                <div className={estilos.filaBuscarEn}>
+                  <span>Buscar en:</span>
+                  {DESTINOS.filter((d) => d.plataforma === plataformaAbierta).map((d) => (
+                    <label key={d.id} className={estilos.casillaEnLinea}>
+                      <input
+                        type="checkbox"
+                        checked={seMira(dispositivosEnElCampo, d.id)}
+                        disabled={!conectado}
+                        // Escribe en el BORRADOR: nada se guarda hasta pulsar «Guardar»,
+                        // que ahora vive en cada card de adb/emulator.
+                        onChange={() =>
+                          setDispositivosTecleados({
+                            ...dispositivosEnElCampo,
+                            [d.id]: !seMira(dispositivosEnElCampo, d.id),
+                          })
+                        }
+                      />
+                      {d.etiqueta}
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              {/* La línea que separa los REQUISITOS (lo que se configura) del INVENTARIO
+                  (lo que se lista). Pegada al título de abajo a propósito: la separación
+                  vale entre las dos SECCIONES, no dentro de la de abajo. */}
+              <hr className={estilos.separador} />
+              <h3 className={`${estilos.subencabezado} ${estilos.subencabezadoPegado}`}>Dispositivos y emuladores</h3>
               {/*
                 El INVENTARIO, no cuatro interruptores. El botón de antes decía «Se mira» al
                 lado de un punto verde y se leía como si concediera la capacidad: el verde ya
@@ -1233,39 +1455,6 @@ export function Ajustes({
                   );
                 })()
               )}
-
-              {/*
-                El filtro de MEDIDA, degradado a lo que es: dos casillas por pestaña, no
-                cuatro. Sigue existiendo porque apagar uno ahorra procesos de verdad en este
-                equipo —adb arranca un demonio que se queda vivo—, pero ya no compite con el
-                estado de nada. Y son las de ESTA plataforma: las cuatro juntas eran otra vez
-                la lista mezclada, y apagar «iOS Sim» desde la pestaña de Android es una
-                decisión que no se toma ahí.
-              */}
-              {alCambiarDispositivos === undefined ? null : (
-                <p className={estilos.nota}>
-                  Buscar en:{" "}
-                  {DESTINOS.filter((d) => d.plataforma === plataformaAbierta).map((d, i) => (
-                    <span key={d.id}>
-                      {i === 0 ? null : " · "}
-                      <label className={estilos.casillaEnLinea}>
-                        <input
-                          type="checkbox"
-                          checked={seMira(ajustesDeDispositivos, d.id)}
-                          disabled={!conectado}
-                          // Se manda el objeto ENTERO con el cambio dentro: el servidor los
-                          // guarda juntos, y mandar solo el que cambió obligaría a fusionar
-                          // al otro lado con dos ideas de cuál es el estado.
-                          onChange={() =>
-                            alCambiarDispositivos({ ...ajustesDeDispositivos, [d.id]: !seMira(ajustesDeDispositivos, d.id) })
-                          }
-                        />
-                        {d.etiqueta}
-                      </label>
-                    </span>
-                  ))}
-                </p>
-              )}
               </div>
 
               {/*
@@ -1273,7 +1462,7 @@ export function Ajustes({
                 midió, y la puerta para volver a mirar. Dentro de una pestaña, «Medido a las
                 12:04» se leería como la hora de esa plataforma, y es la de las dos.
               */}
-              <p className={estilos.nota}>
+              <p className={`${estilos.nota} ${estilos.medidoAlPie}`}>
                 {dispositivos === undefined
                   ? "Todavía no ha llegado ninguna medida de este equipo."
                   : `Medido a las ${horaDe(dispositivos.medido)}. Lo que no se busca no se mide: adb arranca un demonio que se queda vivo, y xcrun tarda segundos.`}{" "}
@@ -1632,12 +1821,18 @@ export function Ajustes({
                     {avisoDeUrl}
                   </p>
                 ) : null}
+                {avisoDeRegistro === undefined ? null : (
+                  <p className={estilos.aviso} role="alert">
+                    {avisoDeRegistro}
+                  </p>
+                )}
                 <div className={estilos.botones}>
                   <Button
                     variant="outline"
                     className={estilos.accion}
                     onClick={() => {
                       setRegistrando(false);
+                      setEnviado(undefined);
                       setUrl("");
                     }}
                   >
@@ -1696,7 +1891,19 @@ export function Ajustes({
               */}
               {!registrando && entornoEnPestana !== undefined ? (
                 <div role="tabpanel" className={estilos.panelDePestana}>
-                  <p className={estilos.url}>{entornos.find((e) => e.id === entornoEnPestana)?.url}</p>
+                  {/* La URL y lo que se hace CON ella, en una fila: el botón de quitar suelto en
+                      su propio renglón, lejos de lo que quita, se leía como de otra cosa. */}
+                  <div className={estilos.filaDeUrl}>
+                    <p className={estilos.url}>{entornos.find((e) => e.id === entornoEnPestana)?.url}</p>
+                    {alQuitarEntorno === undefined ? null : (
+                      <QuitarEntorno
+                        key={entornoEnPestana}
+                        entorno={entornos.find((e) => e.id === entornoEnPestana)!}
+                        conectado={conectado}
+                        alQuitar={alQuitarEntorno}
+                      />
+                    )}
+                  </div>
                   <div className={estilos.cabeceraDeProyectos}>
                     <h3 className={estilos.subencabezado}>Proyectos en la barra</h3>
                     {alPedirProyectosDeEntorno === undefined ? null : (
@@ -1896,11 +2103,166 @@ export function Ajustes({
             </>
           ) : null}
         </div>
-        <button type="button" className={estilos.cerrar} aria-label="Cerrar ajustes" onClick={alCerrar}>
+        <button type="button" className={estilos.cerrar} aria-label="Cerrar ajustes" onClick={alIntentarCerrar}>
           ✕
         </button>
       </div>
       </div>
     </Modal>
+    {pendienteDeConfirmar === undefined ? null : (
+      <ConfirmarCambiosSinGuardar
+        onCancelar={() => setPendienteDeConfirmar(undefined)}
+        onConfirmar={() => {
+          setDispositivosTecleados(undefined);
+          pendienteDeConfirmar();
+          setPendienteDeConfirmar(undefined);
+        }}
+      />
+    )}
+    </>
+  );
+}
+
+/**
+ * El aviso de cambios sin guardar en Dispositivos, al cambiar de sección o al cerrar
+ * Ajustes con el borrador sucio. Mismo esqueleto que `ConfirmarDescarte`
+ * (`AccionesDeTarea.tsx`) — `Modal` + las clases de `NuevaSesion.module.css`
+ * (`capa`/`velo`/`ventana`/`titulo`/`nota`/`acciones`/`accion`) que ya reutiliza
+ * `AccionDeSesion.tsx` para lo mismo: dos copias del mismo velo es cómo se acaba con dos
+ * velos distintos.
+ *
+ * **«Cancelar» no toca nada**: cierra SOLO este aviso, Ajustes se queda abierto en
+ * Dispositivos y el borrador sigue ahí. **La acción destructiva** descarta el borrador y
+ * ejecuta lo que estaba pendiente (cambiar de sección o cerrar) — en ese orden, para que
+ * `dispositivosCambiados` ya sea falso cuando el efecto pendiente se dispara.
+ */
+function ConfirmarCambiosSinGuardar({ onCancelar, onConfirmar }: { onCancelar: () => void; onConfirmar: () => void }) {
+  return (
+    <Modal open onClose={onCancelar} title="Cambios sin guardar" headless className={modalDeAviso.capa}>
+      <div
+        className={modalDeAviso.velo}
+        onClick={(evento) => {
+          if (evento.target === evento.currentTarget) onCancelar();
+        }}
+      >
+        <div className={modalDeAviso.ventana}>
+          <h2 className={modalDeAviso.titulo}>Cambios sin guardar</h2>
+          <p className={modalDeAviso.nota}>Hay cambios sin guardar en Dispositivos. Si continúas, se pierden.</p>
+          <div className={modalDeAviso.acciones}>
+            <Button variant="outline" className={modalDeAviso.accion} onClick={onCancelar}>
+              Cancelar
+            </Button>
+            <Button
+              variant="primary"
+              className={`${modalDeAviso.accion} ${modalDeAviso.principal} ${estilos.destructiva}`}
+              onClick={onConfirmar}
+            >
+              Descartar y continuar
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+
+/**
+ * Quitar un entorno, en DOS pasos y en línea: el botón pide confirmación y dice lo que NO se
+ * borra (las copias bajadas se quedan en el disco, igual que cambiar el workspace no mueve
+ * nada). Si el servidor se niega, el MOTIVO sale aquí mismo, al lado del botón que lo pidió.
+ * Con `key` por entorno, el estado de la confirmación no sobrevive a cambiar de pestaña.
+ */
+function QuitarEntorno({
+  entorno,
+  conectado,
+  alQuitar,
+}: {
+  entorno: { id: string; nombre: string; copias?: number };
+  conectado: boolean;
+  alQuitar: (entorno: string, modo: { borrarCopias: boolean }) => Promise<string | undefined>;
+}) {
+  const [confirmando, setConfirmando] = useState(false);
+  const [quitando, setQuitando] = useState(false);
+  const [motivo, setMotivo] = useState<string | undefined>(undefined);
+  // DESMARCADA siempre al abrir: borrar las copias es lo que no tiene vuelta atrás, y tiene
+  // que ser una decisión, no lo que ya estaba puesto.
+  const [borrarCopias, setBorrarCopias] = useState(false);
+  // El NOMBRE escrito: dos clics rápidos en el mismo sitio no pueden quitar un entorno.
+  const [escrito, setEscrito] = useState("");
+  const confirmado = escrito.trim() === entorno.nombre;
+  const copias = entorno.copias ?? 0;
+  if (!confirmando) {
+    return (
+      <>
+        <button
+          type="button"
+          className={estilos.quitar}
+          disabled={!conectado}
+          onClick={() => {
+            setMotivo(undefined);
+            setBorrarCopias(false);
+            setEscrito("");
+            setConfirmando(true);
+          }}
+        >
+          Quitar entorno
+        </button>
+        {motivo === undefined ? null : (
+          <p role="alert" className={`${estilos.aviso} ${estilos.anchoEntero}`}>
+            No se ha quitado: {motivo}
+          </p>
+        )}
+      </>
+    );
+  }
+  return (
+    // `alertdialog`: es una pregunta de SEGURIDAD —quita credenciales— y no una nota más.
+    <div className={estilos.confirmarQuitar} role="alertdialog" aria-label={`Quitar ${entorno.nombre}`}>
+      <p className={estilos.tituloDeAviso}>
+        <span aria-hidden="true">⚠</span> Atención: vas a quitar <strong>{entorno.nombre}</strong>
+      </p>
+      <p className={estilos.textoDeAviso}>
+        Se borra de la lista y se <strong>cierra su sesión de CloudStudio</strong>: para volver a
+        usarlo tendrás que registrarlo y entrar otra vez.{" "}
+        {borrarCopias
+          ? "Y se BORRAN sus copias locales: el trabajo que no hayas subido se pierde para siempre."
+          : "Las copias ya bajadas se quedan en el disco."}
+      </p>
+      {copias === 0 ? null : (
+        <label className={estilos.casillaDeAviso}>
+          <input type="checkbox" checked={borrarCopias} onChange={(e) => setBorrarCopias(e.target.checked)} />
+          Borrar también las copias locales de este entorno ({copias} {copias === 1 ? "proyecto" : "proyectos"})
+        </label>
+      )}
+      <label className={estilos.escribirNombre}>
+        Escribe <strong>{entorno.nombre}</strong> para confirmar
+        <input
+          type="text"
+          value={escrito}
+          autoFocus
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(e) => setEscrito(e.target.value)}
+        />
+      </label>
+      <button
+        type="button"
+        className={estilos.quitarLleno}
+        disabled={quitando || !confirmado}
+        onClick={async () => {
+          setQuitando(true);
+          const negativa = await alQuitar(entorno.id, { borrarCopias });
+          setQuitando(false);
+          setConfirmando(false);
+          setMotivo(negativa);
+        }}
+      >
+        {quitando ? "Quitando…" : "Quitar"}
+      </button>
+      <button type="button" className={estilos.recargar} disabled={quitando} onClick={() => setConfirmando(false)}>
+        Cancelar
+      </button>
+    </div>
   );
 }

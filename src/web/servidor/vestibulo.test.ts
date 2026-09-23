@@ -14,7 +14,9 @@ import { describe, it, expect } from "vitest";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { crearVestibulo, ENTORNOS_OFICIALES, escribirProyectoEnDisco } from "./vestibulo.js";
+import { crearVestibulo, ENTORNOS_OFICIALES, escribirProyectoEnDisco, esProyectoEnDisco } from "./vestibulo.js";
+import { ficheroDeDispositivoDeSesion } from "../../core/dispositivoDeSesion.js";
+import { existsSync } from "node:fs";
 import { CatalogoModelosEnMemoria } from "../../core/ports.js";
 import type { Acto, ConsumoDeTurno } from "../../core/actos.js";
 import type { DispositivoElegido } from "./sesiones.js";
@@ -39,6 +41,10 @@ function dobles() {
     },
     guardarEntorno: (e: { id: string }) => {
       escrituras.push(`entorno:${e.id}`);
+      return { ruta: "/casa/.xonecode/settings.json" };
+    },
+    olvidarEntorno: (id: string) => {
+      escrituras.push(`olvidar:${id}`);
       return { ruta: "/casa/.xonecode/settings.json" };
     },
     guardarConfigDeProyecto: (raiz: string) => {
@@ -1193,6 +1199,39 @@ describe("vestíbulo", () => {
     expect(dichos.join("\n")).toMatch(/\/sync bajar/);
   });
 
+  it("un fallo de descarga se APUNTA en el registro de fallos del proyecto, con qué se bajaba", async () => {
+    const d = dobles();
+    const anotados: { raiz: string; peticion: string }[] = [];
+    const v = crearVestibulo({
+      ...d,
+      origenDeTrabajo: "global",
+      anotarFallo: (raiz, f) => anotados.push({ raiz, peticion: f.peticion }),
+      descargar: async () => {
+        throw new Error("studio_manage_branches: CloudStudio sigue diciendo que no hay proyecto abierto");
+      },
+    });
+    await expect(v.completarProyecto({ entorno: "webstudio", proyecto: "weweewe", rama: "master" })).rejects.toThrow();
+    expect(anotados).toEqual([{ raiz: "/w/webstudio/weweewe", peticion: "descarga de «weweewe» (entorno webstudio, rama master)" }]);
+  });
+
+  it("y por OMISIÓN lo apunta el registro REAL: queda en `.xonecode/fallos.jsonl`", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xc-fallo-descarga-"));
+    const d = dobles();
+    const v = crearVestibulo({
+      ...d,
+      origenDeTrabajo: "global",
+      baseDeWorkspace: () => base,
+      descargar: async () => {
+        throw new Error("el ZIP vino vacío");
+      },
+    });
+    await expect(v.completarProyecto({ entorno: "webstudio", proyecto: "P", rama: "master" })).rejects.toThrow();
+    const registro = readFileSync(join(base, "webstudio", "P", ".xonecode", "fallos.jsonl"), "utf8");
+    expect(registro).toContain("el ZIP vino vacío");
+    expect(registro).toContain("descarga de «P»");
+    rmSync(base, { recursive: true, force: true });
+  });
+
   it("no se puede completar un proyecto de un entorno que no está registrado", async () => {
     const d = dobles();
     const v = crearVestibulo({ ...d, origenDeTrabajo: "global" });
@@ -1241,6 +1280,9 @@ describe("abrirParaTarea — la segunda puerta", () => {
     const raiz = join(base, "webstudio", nombre);
     mkdirSync(join(raiz, ".xonecode"), { recursive: true });
     writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    // Una copia BAJADA lleva el `sync.json` de su descarga (`esProyectoEnDisco`).
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
     return raiz;
   }
 
@@ -2235,5 +2277,89 @@ describe("el acumulado de cada sesión sale del índice hacia la barra", () => {
     // `{consumo: undefined}` en el objeto es la forma en la que un `JSON.stringify` deja de
     // distinguir los dos casos… o peor, en la que alguien lo lee como un cero.
     expect("consumo" in (porId.get("s2") ?? {})).toBe(false);
+  });
+});
+
+
+describe("olvidar un entorno", () => {
+  it("lo quita del disco y de la lista viva, y dice que las copias se quedan", async () => {
+    const d = dobles();
+    const avisos: string[] = [];
+    const v = crearVestibulo({ ...d, origenDeTrabajo: "global", informar: (t) => avisos.push(t) });
+    await v.olvidarEntorno("webstudio");
+    expect(d.escrituras).toContain("olvidar:webstudio");
+    expect(v.entornosRegistrados().map((e) => e.id)).not.toContain("webstudio");
+    expect(avisos.join("\n")).toMatch(/copias locales se quedan/);
+  });
+
+  it("uno que no está registrado es un error, no un no-op", async () => {
+    const d = dobles();
+    const v = crearVestibulo({ ...d, origenDeTrabajo: "global" });
+    await expect(v.olvidarEntorno("no-existe")).rejects.toThrow();
+    expect(d.escrituras.filter((e) => e.startsWith("olvidar:"))).toEqual([]);
+  });
+});
+
+
+describe("esProyectoEnDisco: una copia BAJADA, no un alta a medias", () => {
+  it("con solo el `config.json` (la descarga falló) NO es una copia", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-copia-"));
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), "{}");
+    // Medido: Bequikly y Conecta2 estaban así, y la barra los daba por bajados.
+    expect(esProyectoEnDisco(raiz)).toBe(false);
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
+    expect(esProyectoEnDisco(raiz)).toBe(true);
+    rmSync(raiz, { recursive: true, force: true });
+  });
+});
+
+
+/**
+ * El dispositivo de la sesión, hasta el AGENTE: el fichero que leen los scripts y la línea del
+ * turno. Se mira el cableado desde fuera, con una raíz de verdad, porque es una composición que
+ * vive en el vestíbulo y que ningún test de los scripts alcanza.
+ */
+describe("el dispositivo de la sesión llega al agente", () => {
+  const PIXEL = { id: "emulator-5554", nombre: "Pixel 8", plataforma: "android" as const, clase: "emulador" as const };
+
+  it("elegirlo ESCRIBE el fichero en el acto, y quitar la elección lo BORRA", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-disp-sesion-"));
+    const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: sesionesEnMemoria().puerto });
+    const abierta = await v.abrirProyecto({ raiz });
+    // El id de la sesión existe desde que se abre aunque `sesion` no se publique hasta el primer
+    // mensaje: el fichero se busca donde lo deja, en su carpeta de `.xonecode/sesiones/`.
+    const sesiones = join(raiz, ".xonecode", "sesiones");
+    const ficheros = () =>
+      existsSync(sesiones) ? readdirSync(sesiones).map((id) => ficheroDeDispositivoDeSesion(raiz, id)).filter(existsSync) : [];
+    expect(ficheros()).toEqual([]);
+    abierta.elegirDispositivo(PIXEL);
+    expect(ficheros()).toHaveLength(1);
+    const fichero = ficheros()[0]!;
+    expect(JSON.parse(readFileSync(fichero, "utf8"))).toEqual(PIXEL);
+    abierta.elegirDispositivo(undefined);
+    expect(existsSync(fichero)).toBe(false);
+    await v.cerrar();
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("cada turno lleva DELANTE la línea del dispositivo, y sigue la elección del momento", async () => {
+    const recibidas: string[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: sesionesEnMemoria().puerto,
+      crearEjecutor: () => async (peticion) => {
+        recibidas.push(peticion);
+      },
+    });
+    const a = await v.abrirProyecto({ raiz: "/w/a" });
+    await a.ejecutarTurno("pruébalo", a.estadoDeSesion, a.consola.consola);
+    a.elegirDispositivo(PIXEL);
+    await a.ejecutarTurno("otra vez", a.estadoDeSesion, a.consola.consola);
+    expect(recibidas[0]).toMatch(/^\[Dispositivo de esta sesión: ninguno elegido[\s\S]*\n\npruébalo$/);
+    expect(recibidas[1]).toMatch(/^\[Dispositivo de esta sesión: Pixel 8[\s\S]*\n\notra vez$/);
+    await v.cerrar();
   });
 });

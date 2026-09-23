@@ -23,10 +23,13 @@
  * mentir en esa pregunta abre un proyecto que no existe.
  */
 
+import { ficheroDeDispositivoDeSesion, lineaDelDispositivo } from "../../core/dispositivoDeSesion.js";
+import { crearRegistroDeFallos } from "../../agent/turno/registroDeFallos.js";
+import { baseDeWorkspacePorOmision } from "../../agent/config/settingsEnDisco.js";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Acto, ConsumoDeTurno } from "../../core/actos.js";
 import { consumoDeLosActos, sumarConsumo } from "../../core/actos.js";
 import type { Eleccion, FuentesDeEleccion, Proveedor } from "../../core/modelos.js";
@@ -129,9 +132,7 @@ export const ENTORNO_OTRO: OpcionDeEntorno = { id: "otro", nombre: "Otro (on-pre
  * `dentroDelWorkspace` —que es lo que decide si se commitea solo al cerrar cada turno—
  * deja de dar por suya cualquier carpeta que cuelgue de `~/.xonecode`.
  */
-export function baseDeWorkspacePorOmision(): string {
-  return join(homedir(), ".xonecode", "workspace");
-}
+export { baseDeWorkspacePorOmision };
 
 /**
  * Dónde caían las copias con el reparto VIEJO, cuando nadie había configurado nada:
@@ -212,8 +213,15 @@ const SESIONES_EN_DISCO: PuertoDeSesiones = {
 /**
  * ¿Hay una copia local de proyecto en esa raíz? Es el MISMO criterio con el que el alta
  * decide `proyectos[].local` (`arranque.ts#hayCopiaLocal`, que tira de aquí): existe su
- * `.xonecode/config.json`. Dos copias del predicado es cómo divergen el día que una se
- * afine — el mismo motivo por el que la regla de URL de MCP vive en un solo sitio.
+ * `.xonecode/config.json` **y el `sync.json` de una bajada que TERMINÓ**. Dos copias del
+ * predicado es cómo divergen el día que una se afine — el mismo motivo por el que la regla de
+ * URL de MCP vive en un solo sitio.
+ *
+ * El `sync.json` es la mitad nueva, y cierra un fallo medido: el alta escribe el `config.json`
+ * ANTES de bajar —a propósito, para que «reintenta con /sync bajar» sea verdad—, así que con
+ * solo él una descarga que fallaba dejaba una carpeta vacía que la barra daba por bajada y que
+ * se abría como proyecto. `descargarProyecto` escribe el `sync.json` al acabar, también por la
+ * vía fichero a fichero; si no está, lo que hay que hacer es bajarlo, y eso es el alta.
  *
  * Se lo traga todo y devuelve `false`: una raíz que no se puede ni mirar (permisos, un
  * enlace roto) no es un proyecto sobre el que abrir nada, y esta puerta falla CERRADO.
@@ -221,7 +229,7 @@ const SESIONES_EN_DISCO: PuertoDeSesiones = {
 export function esProyectoEnDisco(raiz: string): boolean {
   // Sin `try`: `existsSync` no lanza nunca —traga cualquier error del sistema y devuelve
   // false—, así que envolverlo sugeriría un peligro que no existe.
-  return existsSync(join(raiz, ".xonecode", "config.json"));
+  return existsSync(join(raiz, ".xonecode", "config.json")) && existsSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"));
 }
 
 /** Lo mínimo que el vestíbulo necesita de una `SesionReal` para cambiar de proyecto. */
@@ -259,6 +267,12 @@ export interface OpcionesDelVestibulo {
   aplicarCredencial?: (proveedor: Proveedor, clave: string) => void;
   /** Registra el entorno en `~/.xonecode/settings.json`. */
   guardarEntorno: (entorno: Entorno) => { ruta: string };
+  /**
+   * Quita el entorno de `settings.json` y OLVIDA sus credenciales OAuth. OBLIGATORIA, y es a
+   * propósito: una opción opcional que nadie pasa es el patrón de fallo de este repo, y aquí
+   * el síntoma sería un «Eliminar» que no borra nada con todo en verde.
+   */
+  olvidarEntorno: (id: string, modo?: { credenciales?: boolean }) => { ruta: string };
   /** Baja la copia local. Recibe la raíz ya calculada: la sincronización no se toca, solo
    *  cambia QUIÉN calcula el `raiz` que siempre recibió por parámetro. */
   descargar: (datos: DatosDeProyecto & { raiz: string }) => Promise<void>;
@@ -266,6 +280,12 @@ export interface OpcionesDelVestibulo {
   guardarConfigDeProyecto: (raiz: string, datos: DatosDeProyecto) => { ruta: string };
   /** A dónde van los avisos del vestíbulo. Por omisión, su propia consola. */
   informar?: (texto: string) => void;
+  /**
+   * Apuntar un fallo de DESCARGA en el registro de fallos del proyecto. Por omisión el REAL
+   * (`registroDeFallos.ts`) y no un hueco: un opcional que nadie pasa es el patrón de fallo de
+   * este repo, y aquí el síntoma sería justo el de antes, un error sin rastro.
+   */
+  anotarFallo?: (raiz: string, fallo: { error: unknown; peticion: string }) => void;
   /**
    * Toma el «antes» de la sesión al ABRIR el proyecto y devuelve con qué nombrarlo cuando el
    * id exista (`agent/sesiones/sesionGit.ts#fotoDeApertura`). Entra por opción como todo lo que toca
@@ -602,6 +622,12 @@ export interface Vestibulo {
    *  (ver `identidadDeEntorno`), y quien registra necesita el bueno para seguir. */
   registrarEntorno(entorno: Entorno): Promise<{ ruta: string; entorno: Entorno }>;
   /**
+   * Quita un entorno registrado: de `settings.json`, de sus credenciales y de la lista viva.
+   * Las copias bajadas se QUEDAN. Si puede o no quitarse ahora lo decide quien llama
+   * (`core/settings.ts#motivoParaNoOlvidarEntorno`), que sabe qué hay abierto y qué tareas viven.
+   */
+  olvidarEntorno(id: string, modo?: { credenciales?: boolean }): Promise<{ ruta: string }>;
+  /**
    * Qué proyectos de un entorno se enseñan en la barra. Se guarda CON el entorno
    * (`settings.json`) porque es una preferencia sobre él, y una lista vacía es una
    * elección —«ninguno»— y no un «no lo he dicho».
@@ -838,6 +864,8 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
   const crearConsola = opciones.crearConsola ?? crearConsolaWeb;
   const correr = opciones.correr ?? correrConsola;
   const base = opciones.baseDeWorkspace ?? baseDeWorkspacePorOmision;
+  const anotarFallo =
+    opciones.anotarFallo ?? ((raiz: string, fallo: { error: unknown; peticion: string }) => void crearRegistroDeFallos(raiz).anotar(fallo));
   const adoptarLegado =
     opciones.adoptarLegado ??
     // `rutaAuthPorDefecto` y no un `join` propio: el mismo literal en dos ficheros es lo
@@ -1201,6 +1229,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     let historica = reabierta?.historica ?? false;
     if (historica && (await opciones.hayMemoriaDeHilo?.(raiz, sesion!)) === true) historica = false;
     let dispositivo: DispositivoElegido | undefined = reabierta?.dispositivo;
+    // El fichero que leen los scripts del `device-controller` (`core/dispositivoDeSesion.ts`)
+    // queda como la pastilla DESDE QUE SE ABRE: también sin elección, que borra uno viejo.
+    escribirDispositivoDeSesion(raiz, idSesion, dispositivo);
     let cerrada = false;
     /** Ver `ConsolaDeProyecto.turnoEnVuelo`: lo pone y lo quita el envoltorio de abajo, que
      *  es el único sitio que ve los dos flancos. */
@@ -1346,7 +1377,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         // `crearEjecutorReal` acaba de abrir moría en este envoltorio: el corredor de
         // tareas no tendría con qué medir si lo hecho es entregable, y ninguna piel se
         // enteraría — que es exactamente cómo el `terminada` falso pasó desapercibido.
-        return await ejecutorEfectivo(peticion, estado, consola);
+        // Con la línea del dispositivo DELANTE: el agente sabe con cuál trabaja esta sesión —o
+        // que no hay ninguno y se prefiere un emulador— sin tener que descubrirlo.
+        return await ejecutorEfectivo(`${lineaDelDispositivo(dispositivo)}\n\n${peticion}`, estado, consola);
       } finally {
         // En el `finally`: un turno que revienta o que se cancela también TERMINA, y dejar
         // el compositor apagado para siempre sería peor que no haberlo apagado nunca.
@@ -1517,6 +1550,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       },
       elegirDispositivo: (elegido) => {
         dispositivo = elegido;
+        // El fichero, SIEMPRE y en el acto: lo leen los scripts en cada ejecución, así que
+        // cambiar de aparato con la sesión abierta alcanza al siguiente comando.
+        escribirDispositivoDeSesion(raiz, idSesion, elegido);
         // Si todavía no está en el índice, se queda en memoria: `volcar()` lo anotará en
         // cuanto cree la entrada. Escribir aquí una entrada nueva la enseñaría en la barra
         // como una sesión vacía que nadie ha empezado.
@@ -1854,6 +1890,15 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       return { ...guardado, entorno: identificado };
     },
 
+    async olvidarEntorno(id, modo = {}) {
+      const registrado = entornoPorId(id);
+      const quitado = opciones.olvidarEntorno(registrado.id, modo);
+      const donde = registrados.findIndex((e) => e.id === registrado.id);
+      if (donde >= 0) registrados.splice(donde, 1);
+      informar(`entorno «${registrado.id}» quitado de ${quitado.ruta}; sus copias locales se quedan`);
+      return quitado;
+    },
+
     async guardarProyectosVisibles(entorno, proyectos) {
       const registrado = entornoPorId(entorno);
       const conProyectos: Entorno = { ...registrado, proyectos: [...proyectos] };
@@ -1987,6 +2032,13 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         await opciones.descargar({ ...datos, raiz });
       } catch (error) {
         const detalle = error instanceof Error ? error.message : String(error);
+        // Se APUNTA en el registro de fallos del proyecto, con qué se bajaba y la cadena de
+        // causas: hasta ahora solo salía en pantalla, y el «sigue diciendo que no hay proyecto
+        // abierto» de una descarga no dejó ningún rastro con el que mirar después.
+        anotarFallo(raiz, {
+          error,
+          peticion: `descarga de «${identidad.nombre}» (entorno ${registrado.id}, rama ${rama})`,
+        });
         informar(`no se pudo descargar el proyecto: ${detalle}`);
         informar(`el alta quedó completa en ${ruta}; reintenta la descarga con «/sync bajar»`);
         // Se propaga: quien llama decide si vuelve al paso de proyecto o abre igualmente
@@ -2038,4 +2090,25 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       consolaDelVestibulo.cerrar();
     }),
   };
+}
+
+
+/**
+ * Deja el fichero del dispositivo de la sesión como la pastilla: el elegido, o NINGÚN fichero si
+ * no hay elección (y entonces los scripts prefieren un emulador). Nunca lanza: un disco que no
+ * deja escribir aquí no puede tumbar abrir una sesión, y lo peor que pasa es que el script use su
+ * regla de omisión.
+ */
+function escribirDispositivoDeSesion(raiz: string, id: string, d: DispositivoElegido | undefined): void {
+  try {
+    const fichero = ficheroDeDispositivoDeSesion(raiz, id);
+    if (d === undefined) {
+      rmSync(fichero, { force: true });
+      return;
+    }
+    mkdirSync(dirname(fichero), { recursive: true });
+    writeFileSync(fichero, `${JSON.stringify({ id: d.id, nombre: d.nombre, plataforma: d.plataforma, clase: d.clase })}\n`);
+  } catch {
+    // Ver arriba: se cae a la regla de omisión del script.
+  }
 }

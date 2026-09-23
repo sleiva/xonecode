@@ -22,7 +22,7 @@ Con varios dispositivos: `adb -s <serial> forward tcp:8443 tcp:8443`. Para desha
 **El canal de los comandos es un WebSocket, y vive en `/hotswap`.** Medido el 16-sep-2026 contra
 `com.xone.android.framework` **5.0.2.2dev** (flavor standalone, Android): `wss://127.0.0.1:8443/hotswap`
 contesta `101`, mientras que `/`, `/ws` y `/api` contestan `400`. Y **el servidor habla primero**: al
-abrir manda `{"command":"server_hello","protocol_version":2}`, así que el cliente ESPERA el saludo en
+abrir manda `{"command":"server_hello","protocol_version":3}`, así que el cliente ESPERA el saludo en
 vez de provocarlo. En esta versión `POST /command` por HTTP da **404** — los comandos van por el
 WebSocket—, y por eso el `curl` de más abajo es solo para iOS.
 
@@ -224,3 +224,63 @@ En iOS, `POST /command` responde con el JSON del comando (incluido el de error),
 que supere su tope responde también JSON en vez de cortar la conexión. **Un cuerpo enviado sin
 `Content-Length` (`Transfer-Encoding: chunked`) funciona**: es el modo por defecto de varios
 clientes HTTP, entre ellos el `http` de Node.
+
+## El permiso de overlay, y por qué `launchApplication` fallaba
+
+**Esto es preflight, no un extra.** Sin el permiso de dibujar sobre otras apps,
+`launchApplication` **no puede arrancar nada mientras el framework esté en segundo plano**:
+Android 10 y superiores bloquean el arranque de actividades desde ahí, y ese permiso es la
+exención que reconocen.
+
+```sh
+adb shell appops set com.xone.android.framework SYSTEM_ALERT_WINDOW allow
+```
+
+Y el framework se queda en segundo plano **con solo apagarse la pantalla**, o en cuanto
+`exitApplication` cierra la app — así que sin conceder el permiso cualquier reinicio es una
+carrera contra el foco. Con él, el bucle de trabajo deja de depender de que la pantalla esté
+encendida. Es idempotente: se puede volver a lanzar sin mirar.
+
+Esto explica el síntoma que teníamos apuntado como «`result:true` significa *aceptado*, no
+*arrancó*»: buena parte de esos arranques que no arrancaban eran este permiso, y el mensaje
+del servidor lo dice — `Cannot launch app while the framework is in the background`.
+
+```sh
+adb shell appops get com.xone.android.framework SYSTEM_ALERT_WINDOW   # 'allow' = concedido
+adb shell appops set com.xone.android.framework SYSTEM_ALERT_WINDOW default   # revertir
+```
+
+**Y el paquete cambia de flavor**: en el de Play Store es `com.xone.android.developer.framework`.
+
+## Cuando el `curl` de comprobación no contesta
+
+Tres causas, en este orden:
+
+1. **El proceso de la app no está vivo.** El servidor solo existe en builds *debuggable* y
+   arranca con el proceso. La pantalla del servidor lo levanta y además enseña IP y puerto
+   reales:
+   `adb shell am start -n com.xone.android.framework/com.xone.android.hotswap.activities.SetupActivity`
+2. **El puerto no es 8443.** Si estaba ocupado —lo normal con DOS APK de framework
+   instaladas— el servidor tomó el siguiente libre. El override guardado se lee con
+   `adb shell run-as com.xone.android.framework cat shared_prefs/hotswap_preferences.xml`
+   (claves `port_number` y `use_secure_connection`); si no dice nada, se sondea 8443–8446
+   rehaciendo el forward a cada puerto remoto.
+3. **El SSL está desactivado** (`use_secure_connection` a `false`): entonces el servidor habla
+   `http://` y el cliente tiene que ir en claro.
+
+Por LAN en vez de USB no hay forward: se apunta a la IP del dispositivo, la que enseña la barra
+superior de esa pantalla.
+
+## Dos cosas del despliegue que no dan ningún error cuando se hacen mal
+
+- **El ZIP debe llamarse EXACTAMENTE `debug_app_update.zip`**: el nombre es lo que dispara la
+  descompresión en el dispositivo. Y su contenido es lo que irá dentro de `app_<appname>`, **sin
+  carpeta raíz que lo envuelva**.
+- **El ZIP no limpia el destino**: añade y sobrescribe, no borra. Un fichero que quitaste del
+  proyecto sigue en el dispositivo. Para un despliegue desde cero hay que vaciar `app_<appname>`
+  antes — y eso se PIDE, no se hace.
+- **`appName` se baja a minúsculas** para formar el directorio: `MiApp` → `app_miapp`.
+- Y los `-wal`, `-shm` y `-journal` de una base de datos **ya no hay que borrarlos a mano**: al
+  reemplazar una base, suelta o dentro del ZIP, se cierra lo que hubiera abierto y se van sus
+  ficheros auxiliares. Antes, olvidarlo dejaba la base corrupta **sin dar ningún error**.
+

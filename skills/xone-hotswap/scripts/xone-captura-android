@@ -2,7 +2,7 @@
 /**
  * Una captura de la pantalla del aparato, POR LA VÍA NATIVA, a la carpeta de artefactos.
  *
- * POR QUÉ EXISTE, si el canal ya sabe capturar. `xone-hotswap '{"command":"getScreenshot"}'`
+ * POR QUÉ EXISTE, si el canal ya sabe capturar. `xone-hotswap shot`
  * es la vía buena —la pide la app host, así que sale lo que la app pinta— pero necesita el
  * túnel y la app viva. Cuando eso no está, lo único que queda es `adb exec-out screencap`, y
  * medido: el modelo la compone él y redirige la salida a un fichero, que en el `cwd` de la
@@ -25,6 +25,7 @@
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join, basename } from "node:path";
+import { serieAndroid } from "../lib/dispositivo.mjs";
 
 const args = process.argv.slice(2);
 if (args.includes("--help") || args.includes("-h")) {
@@ -35,7 +36,7 @@ if (args.includes("--help") || args.includes("-h")) {
   xone-captura-android --serie <id>           con varios aparatos conectados
 
 Es la vía de RESPALDO: si el túnel y la app host están vivos, la buena es
-\`xone-hotswap '{"command":"getScreenshot"}'\`, que captura lo que la app pinta.
+\`xone-hotswap shot\`, que captura lo que la app pinta.
 Nunca redirijas \`adb exec-out screencap\` a un fichero: el \`cwd\` es la raíz del
 proyecto del usuario y ahí no se escribe.`);
   process.exit(0);
@@ -53,12 +54,29 @@ const opcion = (nombre) => {
   const i = args.indexOf(`--${nombre}`);
   return i >= 0 ? args[i + 1] : undefined;
 };
-const serie = opcion("serie");
+// `--serie`, el dispositivo elegido en la sesión o un emulador (`../lib/dispositivo.mjs`). Se
+// dice por stderr con cuál y por qué: con varios aparatos, callarlo haría adivinar dónde pasó.
+const { serie, porque } = serieAndroid(opcion("serie"));
+if (serie !== undefined) process.stderr.write(`dispositivo: ${serie} (${porque})\n`);
 
 // `basename` y no la cadena tal cual: el nombre lo elige el modelo, y un `../` aquí escribiría
 // fuera de la carpeta de la sesión. Misma regla que `esRutaDeArtefacto` en el host.
 const pedido = opcion("nombre");
-const nombre = pedido === undefined ? `captura-${Date.now()}.png` : basename(pedido);
+/**
+ * **La EXTENSIÓN se pone si falta, y no es cosmética.**
+ *
+ * Medido en una sesión: el agente pidió `--nombre arranque_error` y el fichero quedó sin
+ * extensión. Lo que hizo después es el coste: **tres comandos más** —`file` para averiguar
+ * qué había bajado, `sips` para sus dimensiones y un `python3 -c "from PIL import Image…"`
+ * para intentar abrirlo—. Un artefacto sin extensión tampoco se sabe pintar: `mimeDeArtefacto`
+ * decide por la extensión y sin ella no afirma nada, así que la tarjeta del chat no lo enseña
+ * y el revisor visual no lo acepta.
+ *
+ * Se AÑADE en vez de rechazar: lo que el modelo quería está claro y un «no» aquí cuesta otro
+ * viaje para lo mismo.
+ */
+const conExtension = (n) => (/\.[A-Za-z0-9]{2,4}$/.test(n) ? n : `${n}.png`);
+const nombre = pedido === undefined ? `captura-${Date.now()}.png` : conExtension(basename(pedido));
 if (nombre === "" || nombre === "." || nombre === "..") {
   console.error("ese nombre no vale para un fichero.");
   process.exit(1);
@@ -80,6 +98,80 @@ try {
 if (bytes.length === 0) {
   console.error("adb devolvió una captura VACÍA: ¿está el aparato despierto y desbloqueado?");
   process.exit(1);
+}
+
+/**
+ * **Si XOne ha reventado, el LOG basta y la captura sobra.**
+ *
+ * Visto tres veces en sesiones reales: la app no arranca, y quien diagnostica fotografía el
+ * diálogo de error. La foto es legítima —el diálogo ES el error— pero **lo mismo está en el
+ * log en texto**, con fichero, línea, columna y la línea culpable, y cuesta unas 50 fichas
+ * contra las **3.375** que cuesta una captura de 1080×2400 en el revisor visual. Setenta veces
+ * más por saber lo mismo.
+ *
+ * Así que no se captura: se enseña la excepción y se dice por qué. Con `--igualmente` se
+ * captura de todos modos, que para una comprobación VISUAL —algo cortado, algo tapado— sigue
+ * siendo la herramienta buena aunque haya una excepción por ahí.
+ *
+ * Se mira acotado al PROCESO (`--pid`) y no a las últimas N líneas del aparato: 600 líneas de
+ * todo son un par de minutos aquí, y la excepción se sale de esa ventana — el mismo fallo que
+ * tenía `xone-desplegar-android`.
+ */
+if (!args.includes("--igualmente")) {
+  let roto;
+  try {
+    const enElAparato = (...partes) =>
+      execFileSync("adb", [...(serie ? ["-s", serie] : []), ...partes], {
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+      });
+    const pid = enElAparato("shell", "pidof", "com.xone.android.framework").trim().split(/\s+/)[0];
+    if (pid) {
+      const log = enElAparato("logcat", "-d", "--pid", pid, "-t", "600");
+      const filas = log.split("\n");
+      const i = filas.findIndex((l) => l.includes("XOneJavascriptException"));
+      if (i >= 0) {
+        roto = filas
+          .slice(i, i + 12)
+          .map((l) => l.replace(/^.*?\bSystem\.err:\s?/, "").trim())
+          .filter((l) => l !== "" && !l.startsWith("at "))
+          .slice(0, 6)
+          .join("\n");
+      }
+    }
+  } catch {
+    // Sin log no hay nada que objetar: se captura.
+  }
+  /**
+   * **Y si NO hay error, se dice también.** Es la otra mitad de la misma regla: si el log no
+   * da excepción y la app contesta en qué colección está, no hay nada que diagnosticar en una
+   * foto — y capturar «por si acaso» es el caso que más se repite. No se BLOQUEA, porque
+   * comprobar algo VISUAL sobre una app sana es legítimo y es para lo que la captura sirve;
+   * lo que se hace es decirle a quien la pidió lo que ya se sabe, para que no la pida por
+   * costumbre.
+   */
+  if (roto === undefined) {
+    try {
+      const cliente = join(import.meta.dirname, "xone-hotswap");
+      const donde = execFileSync("node", [cliente, "screen"], { encoding: "utf8" }).trim();
+      const m = /\\"collection\\":\\"([^\\"]+)/.exec(donde);
+      if (m) {
+        console.log(`(el log no da error y la app responde en «${m[1]}»: si buscabas un fallo,`);
+        console.log(" no lo hay. Capturo igual, que para lo VISUAL es la herramienta buena.)");
+      }
+    } catch {
+      // Sin canal no se puede decir nada del estado: se captura y ya.
+    }
+  }
+  if (roto !== undefined) {
+    console.log("NO capturo: XOne reventó al cargar y eso ya está en el log, en texto:");
+    console.log("");
+    console.log(roto);
+    console.log("");
+    console.log("Ahí tienes fichero, línea y columna. Una captura del diálogo diría lo mismo");
+    console.log("y cuesta ~3.375 fichas. Si de verdad quieres la imagen: --igualmente.");
+    process.exit(0);
+  }
 }
 
 const destino = join(ARTEFACTOS, nombre);

@@ -72,7 +72,7 @@
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
-/* La placa del icono: mismo gesto en la cabecera y en las filas de apariencia. El fondo es
+/* La placa del icono: mismo gesto en la cabecera y en las filas de una sección. El fondo es
    el azul pastel que ya usan la burbuja del chat y la etiqueta de «compartido» — un alias
    que existe, no un tinte inventado para esto. */
 .placa {
@@ -253,7 +253,7 @@
 }
 
 /* La URL del entorno, en mono. `.detalle` no vale para esto aunque sea el hueco de al lado:
-   ese mismo hueco lo ocupan la descripción de una opción de apariencia y el estado de una
+   ese mismo hueco lo ocupan la descripción de una herramienta y el estado de una
    credencial, que son PROSA. La regla tipográfica del rediseño separa dato de máquina de
    frase, y meterlos todos en mono la volvería decorativa. Misma clase y mismo motivo que
    `.entornoUrl` en `Escritorio.module.css` — que es, además, la misma URL. */
@@ -264,9 +264,8 @@
   font-size: 11px;
 }
 
-/* La frase que acompaña a una fila: el estado de una credencial, la descripción de una
-   opción de apariencia, lo que dice una herramienta. Prosa, y por eso en Inter y no en
-   mono (ver `.url` justo arriba).
+/* La frase que acompaña a una fila: el estado de una credencial, lo que dice una
+   herramienta. Prosa, y por eso en Inter y no en mono (ver `.url` justo arriba).
 
    El `margin-right: auto` es lo que empuja los botones al borde derecho en las filas de
    herramientas y dispositivos, donde el detalle ES el elemento elástico. En la fila de un
@@ -323,6 +322,18 @@
 
 .accion:hover {
   background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* El botón destructivo del aviso de «cambios sin guardar» (descartar el borrador de
+   Dispositivos). MISMA regla que `AccionDeSesion.module.css#destructiva` y
+   `AccionesDeTarea.module.css#destructiva`: relleno rojo lleno y no un tinte suave, porque
+   es una acción irreversible y sin papelera. El selector va DOBLADO para ganarle a
+   `.principal.principal` de `NuevaSesion.module.css`, que también pisa el botón «primario»
+   con dos clases. */
+.destructiva.destructiva {
+  border-color: var(--dsw-alias-state-error-primary);
+  background: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-label-primary-inverted);
 }
 
 .confirmacion {
@@ -497,6 +508,54 @@
   font-weight: 500;
 }
 
+/* El engranaje que despliega «ruta actual / ruta personalizada» en la fila de adb/emulator.
+   Icono solo, así que el `aria-label` es lo único que dice qué es — mismo tamaño que un
+   `.punto` no, este es un CONTROL y necesita área de clic. */
+.iconoDeAjuste {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.iconoDeAjuste:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* Desplegado, el MISMO par que la pestaña elegida (`.pestana[data-actual]`): es la misma
+   idea —«esto es lo que está abierto ahora mismo»— aplicada a un icono en vez de a una
+   pestaña. */
+.iconoDeAjuste[aria-expanded="true"] {
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--xonecode-cian);
+}
+
+/* La «ruta actual», de solo lectura, con «Abrir carpeta» PEGADO a su borde — es lo que hace
+   que el botón se lea como parte del campo, y no como una acción suelta al lado. */
+.campoConBoton {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.campoConBoton input {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+
+.campoConBoton .accion {
+  flex: none;
+}
+
 /* La lista de simuladores, acotada en alto y con scroll propio: esta máquina tiene 35, y sin
    tope empujarían la sección de requisitos fuera de la pantalla — que es donde está lo único
    accionable de la ventana. */
@@ -517,6 +576,45 @@
 
 .casillaEnLinea input {
   cursor: pointer;
+}
+
+/* La fila «Buscar en: …», como FLEX y no como texto corrido dentro de un `<p>`. Con el
+   texto y las casillas fluyendo como texto, `inline-flex` de `.casillaEnLinea` no se
+   alineaba con la línea base de «Buscar en:» y las casillas quedaban descolgadas — es
+   `align-items: center` en el CONTENEDOR, no en cada etiqueta suelta, lo que las pone a
+   todas en la misma línea. */
+.filaBuscarEn {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0 0 14px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+/* La línea que separa los Requisitos (lo que se configura) del inventario de abajo (lo que
+   se lista). Un alias de borde y no un color a mano: la disciplina de esta ventana es que
+   el color se nombra por alias o no se nombra. Solo arriba: abajo pega con el título que
+   sigue —`.subencabezadoPegado` le quita el suyo—, porque la separación vale ENTRE las dos
+   secciones y no dentro de la de abajo. Menos que los 14px de `.filaBuscarEn`: la línea va
+   PEGADA a «Buscar en:», que es la fila de la que se despide. */
+.separador {
+  margin: 8px 0 0;
+  border: none;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+/* El `<h3>` que viene JUSTO detrás de `.separador`: sin su propio margen de arriba, que si
+   no se suma al de la línea y deja un hueco doble entre la raya y el título. */
+.subencabezadoPegado {
+  margin-top: 8px;
+}
+
+/* La nota de «Medido a las…» que cierra el inventario: pegada a la última tarjeta de la
+   lista de arriba (`.fila`, con su propio borde) sin margen de sobra entre las dos. */
+.medidoAlPie {
+  margin-top: 10px;
 }
 
 /* El tope de concurrencia de tareas: una etiqueta y su número, en línea. Es el ÚNICO
@@ -575,6 +673,7 @@
 }
 
 .filaDeWorkspace input {
+  box-sizing: border-box;
   width: 100%;
   min-width: 0;
   padding: 4px 8px;
@@ -645,6 +744,20 @@
 
 .pestana:hover {
   color: var(--dsw-alias-label-primary);
+}
+
+/* La de iOS deshabilitada fuera de macOS: sin esto se veía activa —el color cambiaba al
+   pasar el cursor por encima, igual que las que sí llevan a algún sitio—, que es lo
+   contrario de lo que «deshabilitada» tiene que leerse como. `cursor: not-allowed` y el
+   hover CANCELADO explícitamente, porque `:hover` sigue disparando sobre un botón
+   `disabled` en la mayoría de navegadores. */
+.pestana:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pestana:disabled:hover {
+  color: var(--dsw-alias-label-secondary);
 }
 
 .pestana[data-actual] {
@@ -778,5 +891,128 @@
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: inherit;
+  font-size: 12px;
+}
+
+/* La URL del entorno y el botón que lo quita, en UNA fila: la URL cede con `margin-right: auto`
+   (ver `.url`) y el botón queda al borde derecho, alineado con «Refrescar». Envuelve, y lo que
+   va a todo el ancho —la confirmación, el motivo de un «no»— baja a su propio renglón. */
+.filaDeUrl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+
+.filaDeUrl > .url {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.anchoEntero {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+/* Quitar es DESTRUCTIVO, y se ve: rojo siempre —texto y filo— y relleno rojo al pasar. Los
+   mismos alias que el botón de borrar una sesión (`AccionDeSesion.module.css`). */
+.quitar {
+  padding: 4px 10px;
+  border: 0.5px solid var(--dsw-alias-state-error-primary);
+  border-radius: 8px;
+  background: none;
+  color: var(--dsw-alias-state-error-primary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.quitar:hover:enabled {
+  background: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-label-primary-inverted);
+}
+
+.quitar:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* El «sí» de la confirmación: relleno rojo, que es el peso de una acción sin papelera. */
+.quitarLleno {
+  padding: 4px 10px;
+  border: 0.5px solid var(--dsw-alias-state-error-primary);
+  border-radius: 8px;
+  background: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-label-primary-inverted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.quitarLleno:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* La confirmación es un AVISO DE SEGURIDAD —quita credenciales—, y se pinta como tal: los
+   alias de advertencia del tema, los mismos que el aviso de trabajo sin commitear. */
+.confirmarQuitar {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 0.5px solid var(--dsw-alias-state-warn-label);
+  border-radius: 8px;
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.confirmarQuitar > p {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.tituloDeAviso {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.textoDeAviso {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* «Cancelar» es el botón secundario de siempre, sin el empuje a la derecha de `.recargar`. */
+.confirmarQuitar > .recargar {
+  margin-left: 0;
+}
+
+/* Dentro del aviso de seguridad: la casilla de borrar las copias y el campo del nombre, a todo
+   el ancho y con el color del aviso. */
+.casillaDeAviso,
+.escribirNombre {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.escribirNombre {
+  flex-wrap: wrap;
+}
+
+.escribirNombre > input {
+  flex: 1;
+  min-width: 160px;
+  padding: 4px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--ds-font-family-code);
   font-size: 12px;
 }

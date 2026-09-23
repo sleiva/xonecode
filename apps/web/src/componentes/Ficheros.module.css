@@ -2,11 +2,26 @@
    label-primary/secondary/tertiary. Misma maqueta que `Revision.module.css`: lo que cede
    en el centro, el árbol a la derecha sin ceder, y el corte por CONTENEDOR y no por
    ventana —la barra lateral son 280 px que la ventana cuenta y esta caja no—. */
-.ficheros {
+/* **El contenedor de la consulta es esta caja, y `.ficheros` es su HIJA a propósito.**
+   Una `@container` solo puede estilar DESCENDIENTES del elemento que declara
+   `container-type`, nunca al elemento mismo — así que con el `container-type` puesto en
+   `.ficheros`, la regla de abajo que la pone en columna no se aplicaba NUNCA mientras la de
+   `.arbol` sí. El resultado no era «no pasa nada»: era medio apaño, con el árbol saltando a
+   la izquierda por su `order: -1` y recortado al 40% de alto, en fila con el visor. No se vio
+   hasta que hubo una caja estrecha de verdad (el panel a la derecha del chat); antes esto solo
+   vivía en la columna central, siempre más ancha que 720. */
+.caja {
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
   container-type: inline-size;
+}
+
+.ficheros {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
 }
 
 .visor {

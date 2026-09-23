@@ -4,6 +4,7 @@
  * Sin librería de argumentos a propósito: hoy hay un comando y una bandera, y una
  * dependencia más es una dependencia más que fijar y vigilar. Cuando haya cinco, se mete.
  */
+import { crearRegistroDeFallos } from "../agent/turno/registroDeFallos.js";
 import * as readline from "node:readline";
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
@@ -39,9 +40,10 @@ import { MAX_APPROVAL_ROUNDS } from "../vendor/hitl.js";
 import { conectarCloudStudio, sesionCloudStudio, PUERTO_CALLBACK } from "../agent/cloudstudio/cloudstudioMcp.js";
 import { clienteCloudStudio } from "../agent/cloudstudio/cloudstudioClient.js";
 import { cargarSettings } from "../agent/config/settingsEnDisco.js";
-import type { Entorno } from "../core/settings.js";
+import { dentroDelWorkspace, entornoDeUrl, type Entorno } from "../core/settings.js";
 import { descargarProyecto } from "../agent/cloudstudio/descarga.js";
-import { arbolLimpio, cambiosPendientes, prepararRepo, sinCommitear } from "../agent/sesiones/gitSync.js";
+import { arbolLimpio, cambiosPendientes, esRepoPropio, prepararRepo, sinCommitear, vaciarCopia } from "../agent/sesiones/gitSync.js";
+import { baseDeWorkspace } from "../agent/config/settingsEnDisco.js";
 import { subir } from "../agent/cloudstudio/subida.js";
 import { guardarCredencial } from "../agent/config/authEnDisco.js";
 import { asistenteDeModelo } from "./wizardInicial.js";
@@ -847,6 +849,14 @@ export interface PiezasDeSincronizacion {
   limpio: typeof arbolLimpio;
   sinCommitear: typeof sinCommitear;
   subirProyecto: typeof subir;
+  /** Dejar la copia vacía para bajarla entera (`gitSync.ts#vaciarCopia`). */
+  vaciar: typeof vaciarCopia;
+  /** Si la carpeta es la raíz de su propio repo: decide si hay historia que perder. */
+  repoPropio: typeof esRepoPropio;
+  /** La base del workspace EN VIGOR, leída en cada uso. */
+  baseDeWorkspace: () => string;
+  /** Apuntar en el registro de fallos del proyecto una sincronización que REVENTÓ. */
+  anotarFallo: (raiz: string, fallo: { error: unknown; peticion: string }) => void;
 }
 
 const PIEZAS_DE_SINCRONIZACION_REALES: PiezasDeSincronizacion = {
@@ -860,40 +870,15 @@ const PIEZAS_DE_SINCRONIZACION_REALES: PiezasDeSincronizacion = {
   limpio: arbolLimpio,
   sinCommitear,
   subirProyecto: subir,
+  vaciar: vaciarCopia,
+  repoPropio: esRepoPropio,
+  baseDeWorkspace,
+  anotarFallo: (raiz, fallo) => void crearRegistroDeFallos(raiz).anotar(fallo),
 };
 
-/**
- * Qué entorno de `settings.json` sirve esta URL.
- *
- * Existe porque el `entorno` del `config.json` puede FALTAR o quedarse viejo, y las dos
- * cosas mandaban el token al hueco equivocado:
- *
- *  - Falta en todo proyecto dado de alta desde la terminal, que no elige entorno. Esos
- *    proyectos viven en `legado` hasta que alguien registra el oficial en el vestíbulo, y
- *    entonces `adoptarLegadoSiProcede` MUEVE ese juego a `webstudio` y los deja sin tokens:
- *    reautenticaban en silencio. Casando la URL leen el hueco adoptado y no se enteran.
- *  - Se queda viejo cuando `/connect-studio` reescribe la `url` del proyecto: sin volver a
- *    resolver, el `entorno` anterior seguiría nombrando el juego de OTRO servidor.
- *
- * La comparación normaliza con `URL` y cae a la comparación literal si alguna cadena no
- * parsea. Qué absorbe esa normalización, MEDIDO y no supuesto: el case del host y el puerto
- * por omisión explícito (`:443`) sí casan; una barra final de más, un `?` vacío, otro puerto,
- * `http` frente a `https` y otro case en la RUTA no casan. Que no casen es benigno y no
- * accidental: el fallo devuelve `undefined` —y cae en `legado`, donde ese proyecto ya
- * estaba— en vez de resolver al id de otro entorno. Ninguna variante cruza a un id ajeno, y
- * ESA es la propiedad de la que depende no mandarle a un servidor el token de otro.
- */
-export function entornoDeUrl(url: string, entornos: readonly Entorno[]): string | undefined {
-  const canonica = (valor: string): string => {
-    try {
-      return new URL(valor).toString();
-    } catch {
-      return valor;
-    }
-  };
-  const buscada = canonica(url);
-  return entornos.find((entorno) => canonica(entorno.url) === buscada)?.id;
-}
+/** Vive en `core/settings.ts` desde que `agent/` también la necesita (la identidad para
+ *  DeepSeek); se reexporta aquí para que ningún llamador cambie. */
+export { entornoDeUrl } from "../core/settings.js";
 
 /**
  * El adaptador de `/connect-studio`: guarda el endpoint Y vuelve a resolver el `entorno`.
@@ -963,7 +948,7 @@ function cloudStudioDeProyecto(
 export function crearSincronizador(
   piezas: PiezasDeSincronizacion = PIEZAS_DE_SINCRONIZACION_REALES
 ): NonNullable<Consola["sincronizar"]> {
-  return async (accion, raiz, politicaDeAprobacion, informar = () => {}) => {
+  return async (accion, raiz, politicaDeAprobacion, informar = () => {}, confirmarBajada) => {
     const config = cloudStudioDeProyecto(piezas.leerConfig, piezas.leerSettings, raiz);
     if (config === undefined) {
       return { tipo: "texto", texto: "este proyecto no es cloud (o le falta el proyecto/rama del alta)\n" };
@@ -975,14 +960,50 @@ export function crearSincronizador(
     // recupera de ninguna forma. Es alcanzable sin escribir `/sync`: el alta llama a
     // `sincronizar("bajar", …)`, así que quien arranca xonecode en una carpeta con
     // trabajo y elige modo cloud lo perdería. La guarda va ANTES de abrir sesión MCP.
-    if (accion !== "estado" && !(await piezas.limpio(raiz))) {
+    /**
+     * **«Actualizar repo local» dentro del workspace VACÍA la copia y rehace el git.** La
+     * decisión es suya y está medida: bajar escribiendo el zip ENCIMA dejaba lo borrado en
+     * Studio vivo aquí, y una copia cuyo repo no era el suyo enseñaba el proyecto entero como
+     * «añadido por esta sesión» en Revisión. Lo que se quiere es una copia idéntica a la rama
+     * con un `git init` hecho DESPUÉS de bajar, para que el primer commit sea la bajada y no
+     * aparezcan cambios que nadie hizo.
+     *
+     * Solo dentro del workspace: ahí la copia la creó XOneCode. En la carpeta que abrió una
+     * persona se queda la regla de antes —se niega con cambios sin commitear—, porque vaciarla
+     * sería borrarle su trabajo. Y siempre con CONFIRMACIÓN delante, salvo si no hay nada que
+     * perder (una carpeta vacía, que es el alta): sin quien confirme no se vacía nada.
+     */
+    const vaciable = accion === "bajar" && dentroDelWorkspace(raiz, piezas.baseDeWorkspace());
+    let vaciar = false;
+    if (vaciable) {
+      const pendientes = await piezas.sinCommitear(raiz);
+      const hayQuePerder = pendientes.length > 0 || (await piezas.repoPropio(raiz));
+      if (hayQuePerder) {
+        if (confirmarBajada === undefined) {
+          return { tipo: "arbol-sucio", accion, pendientes };
+        }
+        if (!(await confirmarBajada({ sinCommitear: pendientes }))) {
+          return { tipo: "texto", texto: "no se ha actualizado la copia\n" };
+        }
+      }
+      vaciar = true;
+    } else if (accion !== "estado" && !(await piezas.limpio(raiz))) {
       // `sinCommitear` y no `pendientes`: la pregunta aquí es «qué falta por COMMITEAR»,
       // y además `pendientes` compara contra la ref de seguimiento, que en el alta de una
       // carpeta que todavía no es repo no existe siquiera.
       return { tipo: "arbol-sucio", accion, pendientes: await piezas.sinCommitear(raiz) };
     }
 
-    const sesion = await piezas.sesion(config.url, { scopes: config.scopes, entornoId: config.entorno });
+    // Un fallo de la operación se APUNTA en el registro de fallos del proyecto antes de
+    // subir: hasta ahora solo salía en pantalla, y un «sigue diciendo que no hay proyecto
+    // abierto» al bajar no dejaba ningún rastro con el que mirarlo después.
+    let sesion: Awaited<ReturnType<typeof piezas.sesion>>;
+    try {
+      sesion = await piezas.sesion(config.url, { scopes: config.scopes, entornoId: config.entorno });
+    } catch (error) {
+      piezas.anotarFallo(raiz, { error, peticion: `/sync ${accion} de «${config.proyecto.nombre}» (rama ${config.rama})` });
+      throw error;
+    }
     try {
       const puerto = piezas.cliente(sesion.invocar, config.proyecto.nombre);
 
@@ -991,8 +1012,18 @@ export function crearSincronizador(
         // deja posicionada y la restaura al terminar): sin esto se traería lo que
         // estuviera ACTIVO en la sesión de Studio, y una subida posterior firmaría ese
         // contenido como si fuera de `config.rama`, en silencio.
-        const bajada = await piezas.descargar({ puerto, raiz, proyecto: config.proyecto, ramaOrigen: config.rama, informar });
-        await piezas.preparar(raiz, bajada.rama, informar);
+        const base = piezas.baseDeWorkspace();
+        const bajada = await piezas.descargar({
+          puerto,
+          raiz,
+          proyecto: config.proyecto,
+          ramaOrigen: config.rama,
+          informar,
+          ...(vaciar ? { vaciarAntes: () => void piezas.vaciar(raiz, base) } : {}),
+        });
+        // `prepararRepo` va DESPUÉS de bajar, y es quien hace el `git init`: con la copia
+        // vaciada no hay `.git`, así que el primer commit es la bajada entera.
+        await piezas.preparar(raiz, bajada.rama, informar, vaciar ? { propio: true } : {});
         return { tipo: "texto", texto: `bajados ${bajada.descargados.length} ficheros (${bajada.via})\n` };
       }
       if (accion === "subir") {
@@ -1013,6 +1044,9 @@ export function crearSincronizador(
       }
       const pendientes = await piezas.pendientes(raiz, config.rama);
       return { tipo: "texto", texto: `rama ${config.rama}: ${pendientes.length} ficheros por subir\n` };
+    } catch (error) {
+      piezas.anotarFallo(raiz, { error, peticion: `/sync ${accion} de «${config.proyecto.nombre}» (rama ${config.rama})` });
+      throw error;
     } finally {
       await sesion.cerrar();
     }

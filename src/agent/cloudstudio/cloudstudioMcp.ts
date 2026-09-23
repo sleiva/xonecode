@@ -60,7 +60,7 @@ export type EstadoDeEntorno = {
 };
 
 /** El id reservado para el fichero plano de antes de los entornos: ver `leerEstado`. */
-const CLAVE_LEGADO = "legado";
+export const CLAVE_LEGADO = "legado";
 
 /**
  * El fichero entero: un juego POR ENTORNO.

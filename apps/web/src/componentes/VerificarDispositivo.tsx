@@ -30,7 +30,17 @@ export function VerificarDispositivo({
   medidoDeLaFoto,
   alVerificar,
 }: {
-  dispositivo: Dispositivo;
+  /**
+   * `soloDefinicion` es de `inventarioDeDispositivos.ts#FilaDeInventario`: un AVD que existe
+   * y no está arrancado, con un `id` que esta ventana se INVENTA (`avd:<nombre>`) porque
+   * `emulator -list-avds` no da ningún id de verdad. Ese id no está en `informe.dispositivos`
+   * del servidor —ahí solo viven los dispositivos REALES—, así que verificarlo encontraba
+   * nada, no hacía nada y no lo decía: el botón se quedaba en «Verificando…» PARA SIEMPRE,
+   * el mismo «control sin dato detrás» que ya obligó a que `ArrancarEmulador` solo se
+   * ofrezca en estas filas — aquí es la regla contraria: Verificar solo tiene con quién
+   * hablar cuando NO es `soloDefinicion`.
+   */
+  dispositivo: Dispositivo & { soloDefinicion?: true };
   conectado: boolean;
   /**
    * Cuándo se midió la FOTO en que vive esta fila. Sirve para lo de abajo: cuando la
@@ -73,7 +83,7 @@ export function VerificarDispositivo({
           {!discrepa ? null : <span className={estilos.desfase}>la lista es de las {horaDe(medidoDeLaFoto!)}</span>}
         </span>
       )}
-      {alVerificar === undefined ? null : (
+      {alVerificar === undefined || dispositivo.soloDefinicion === true ? null : (
         <button
           type="button"
           className={estilos.boton}

@@ -20,6 +20,8 @@ export interface Piel {
    * por una tubería, que es lo que sostiene el e2e—. Hoy solo la web lo pinta.
    */
   razonamiento?(texto: string): void;
+  /** El resumen de contexto, en trozos. OPCIONAL, por lo mismo que `razonamiento`. */
+  resumen?(texto: string): void;
   /**
    * Cualquier cosa que no sea un token. El segundo parámetro es OPCIONAL y solo lo manda el
    * motor cuando la línea viene de una tool: dice cuál y si falló. Una piel que implemente
@@ -155,6 +157,17 @@ export async function correrTurno(
               abierta = false;
             }
             piel.razonamiento(ev.texto);
+          }
+          break;
+
+        case "resumen":
+          // Igual que el razonamiento: quien no lo implementa no se entera de que existe.
+          if (piel.resumen !== undefined) {
+            if (abierta) {
+              piel.cerrarLinea();
+              abierta = false;
+            }
+            piel.resumen(ev.texto);
           }
           break;
 

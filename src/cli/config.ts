@@ -12,6 +12,7 @@
  */
 
 import { cargar } from "../agent/config/configEnDisco.js";
+import { userIdDeDeepSeekEnDisco } from "../agent/config/identidadEnDisco.js";
 import type { Aviso } from "../core/config.js";
 import {
   ModeloMalEscrito,
@@ -103,6 +104,15 @@ export function cmdConfig(
     };
   });
 
+  // Si a DeepSeek le va a llegar un `user_id`. Se DICE y no se enseña: el valor es un hash y
+  // no una credencial, pero aquí basta con saber si el login de CloudStudio trae una
+  // identidad legible, que es lo único que no se puede comprobar de otra forma — el IDS
+  // puede no devolver `id_token`, y entonces el campo no viaja sin que nada falle.
+  const identidadDeDeepSeek = userIdDeDeepSeekEnDisco({ proyecto: cargado.config.proyecto }) !== undefined;
+  // Y el verbo depende de si DeepSeek está en juego: «se manda» con otro proveedor en los
+  // tres papeles afirmaría algo que no pasa, que es un aviso que enseña a ignorarlo.
+  const usaDeepSeek = PAPELES.some((papel) => eleccion[papel].proveedor === "deepseek");
+
   // Graves primero, con orden estable dentro de cada grupo: son lo que hay que mirar
   // antes de seguir, y el resto puede esperar debajo.
   const avisos = [...avisosDeResolucion, ...cargado.avisos];
@@ -123,6 +133,7 @@ export function cmdConfig(
       credenciales: credenciales.map((c) =>
         c.puesta ? c : { proveedor: c.proveedor, puesta: false }
       ),
+      identidadDeDeepSeek,
       avisos: ordenados.map((a) => ({ severidad: a.severidad, texto: a.texto })),
     };
     escribir(`${JSON.stringify(salida, null, 2)}\n`);
@@ -159,6 +170,15 @@ export function cmdConfig(
         : `  · sin credencial  ${c.proveedor}\n`
     );
   }
+
+  escribir("--- identidad para DeepSeek ---\n");
+  escribir(
+    !identidadDeDeepSeek
+      ? "  · sin user_id  (no hay login de CloudStudio con identidad legible)\n"
+      : usaDeepSeek
+        ? "  ✓ se manda user_id  (del login de CloudStudio, como hash)\n"
+        : "  ✓ hay identidad  (se mandaría como user_id si un papel usara DeepSeek)\n"
+  );
 
   if (ordenados.length > 0) {
     escribir("--- avisos ---\n");

@@ -59,7 +59,11 @@ describe("Maqueta", () => {
     const raiz = container.firstElementChild as HTMLElement;
     // El techo va en la PISTA y no en el número: `min(320px, 60vw)` lo aplica el CSS en
     // vivo, así que encoger la ventana estrecha la barra sin tocar el ancho recordado.
-    expect(raiz.style.gridTemplateColumns).toBe("min(320px, 60vw) minmax(0, 1fr)");
+    //
+    // Y son TRES pistas aunque no haya panel, con la suya a cero: `.frame` anima
+    // `grid-template-columns`, y una transición entre dos listas de distinta longitud no
+    // interpola — el panel aparecería de golpe mientras la barra se desliza.
+    expect(raiz.style.gridTemplateColumns).toBe("min(320px, 60vw) minmax(0, 1fr) 0px");
   });
 
   it("NO pone `data-phase`: con él, ni el chat ni las trazas pueden scrollear", () => {
@@ -205,7 +209,7 @@ describe("el tirador de la barra", () => {
       <Maqueta centro={<div />} barra={<div />} anchoBarra={5000} alRedimensionarBarra={vi.fn()} />
     );
     expect((container.firstElementChild as HTMLElement).style.gridTemplateColumns).toBe(
-      "min(560px, 60vw) minmax(0, 1fr)"
+      "min(560px, 60vw) minmax(0, 1fr) 0px"
     );
     expect(tirador().getAttribute("aria-valuenow")).toBe("560");
   });
@@ -253,5 +257,109 @@ describe("acotarAnchoDeBarra", () => {
 
   it("lo que no es un número cae en la omisión, nunca en un `NaN` dentro del grid", () => {
     expect(acotarAnchoDeBarra(Number.NaN)).toBe(ANCHO_BARRA_POR_OMISION);
+  });
+});
+
+describe("la columna del panel", () => {
+  const panel = (): HTMLElement | null => document.querySelector("[class*='detailsCol']");
+  const asa = (): HTMLElement => screen.getByRole("separator", { name: "Ancho del panel" });
+
+  /**
+   * Una ventana ancha para los gestos. **jsdom dice 1024**, y con eso `acotarAnchoDePanel`
+   * capa el panel en 464 px —lo que le sobra al suelo del chat— así que cualquier gesto
+   * devolvía esa misma cifra y el test no medía el gesto sino el tope. No es un apaño: es
+   * el tope haciendo su trabajo, y tiene su propia prueba en `repartoDeColumnas.test.ts`.
+   */
+  const conVentanaAncha = (px: number, cuerpo: () => void): void => {
+    const antes = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { value: px, configurable: true, writable: true });
+    try {
+      cuerpo();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { value: antes, configurable: true, writable: true });
+    }
+  };
+
+  it("sin panel la columna está a cero Y VACÍA: lo que se pliega se desmonta", () => {
+    // Un elemento invisible sigue siendo tabulable, así que esconderlo con un ancho de cero
+    // dejaría llegar con el teclado a botones que no se ven.
+    const { container } = render(<Maqueta centro={<div />} barra={<div />} />);
+    expect((container.firstElementChild as HTMLElement).style.gridTemplateColumns).toMatch(/ 0px$/);
+    expect(panel()?.textContent).toBe("");
+    // Y la hoja copiada le quita el borde con este atributo: a cero, sin él, quedaría una
+    // costura de 1 px pegada al borde sin nada detrás.
+    expect((container.firstElementChild as HTMLElement).getAttribute("data-details-collapsed")).toBe("true");
+  });
+
+  it("con panel, la tercera pista mide y el contenido está dentro", () => {
+    const { container } = render(<Maqueta centro={<div />} barra={<div />} panel={<p>lo del panel</p>} />);
+    expect((container.firstElementChild as HTMLElement).style.gridTemplateColumns).toBe(
+      "min(320px, 60vw) minmax(0, 1fr) 480px"
+    );
+    expect((container.firstElementChild as HTMLElement).hasAttribute("data-details-collapsed")).toBe(false);
+    expect(panel()?.textContent).toBe("lo del panel");
+  });
+
+  it("va DESPUÉS del centro en el DOM, y su asa después de él", () => {
+    // La hoja copiada enseña la pastilla del asa con `.detailsCol:hover ~ .handle[…]`, que
+    // es un hermano POSTERIOR: con el orden al revés esa regla no dispararía nunca.
+    const { container } = render(
+      <Maqueta centro={<div />} barra={<div />} panel={<div />} alRedimensionarPanel={vi.fn()} />
+    );
+    const hijos = [...(container.firstElementChild as HTMLElement).children];
+    const centro = hijos.findIndex((h) => h.className.includes("centerCol"));
+    const columna = hijos.findIndex((h) => h.className.includes("detailsCol"));
+    const tira = hijos.findIndex((h) => h.getAttribute("data-side") === "details");
+    expect(centro).toBeLessThan(columna);
+    expect(columna).toBeLessThan(tira);
+  });
+
+  it("su asa no se pinta sin panel, ni sin manejador", () => {
+    render(<Maqueta centro={<div />} barra={<div />} alRedimensionarPanel={vi.fn()} />);
+    expect(screen.queryByRole("separator", { name: "Ancho del panel" })).toBeNull();
+    cleanup();
+    render(<Maqueta centro={<div />} barra={<div />} panel={<div />} />);
+    expect(screen.queryByRole("separator", { name: "Ancho del panel" })).toBeNull();
+  });
+
+  it("se cuenta desde la DERECHA: arrastrar hacia la izquierda lo ENSANCHA", () => {
+    // Es el espejo de la barra, y el único parámetro que distingue a los dos tiradores. Con
+    // la medida de la barra, arrastrar el asa del panel haría lo contrario de lo que se ve.
+    const alRedimensionarPanel = vi.fn();
+    render(
+      <Maqueta centro={<div />} barra={<div />} panel={<div />} alRedimensionarPanel={alRedimensionarPanel} />
+    );
+    const marco = document.querySelector("[class*='frame']") as HTMLElement;
+    // jsdom no hace layout: sin esto el marco mide 0×0 y no hay borde derecho que medir.
+    marco.getBoundingClientRect = () => ({ left: 0, right: 1400, width: 1400 }) as DOMRect;
+    conVentanaAncha(1600, () => {
+      fireEvent.pointerDown(asa(), { button: 0 });
+      fireEvent(asa(), new MouseEvent("pointermove", { bubbles: true, clientX: 900 }));
+    });
+    expect(alRedimensionarPanel).toHaveBeenCalledWith(500, false);
+  });
+
+  it("y sus flechas van en el mismo espejo: «izquierda» lo ensancha", () => {
+    // La tecla mueve el BORDE, no el ancho. Con el signo de la barra, la flecha haría lo
+    // contrario de lo que el asa hace bajo el ratón.
+    const alRedimensionarPanel = vi.fn();
+    render(
+      <Maqueta centro={<div />} barra={<div />} panel={<div />} alRedimensionarPanel={alRedimensionarPanel} />
+    );
+    conVentanaAncha(1600, () => {
+      fireEvent.keyDown(asa(), { key: "ArrowLeft" });
+      expect(alRedimensionarPanel).toHaveBeenCalledWith(496, true);
+      fireEvent.keyDown(asa(), { key: "ArrowRight" });
+      expect(alRedimensionarPanel).toHaveBeenCalledWith(464, true);
+    });
+  });
+
+  it("la celda de su asa vive en la HOJA, y abarca la fila ENTERA", () => {
+    // Se posiciona con `left: calc(100% - Xpx)`, o sea contado desde la derecha: si su
+    // bloque contenedor fuera la columna del panel, ese `100%` sería el ancho del panel y el
+    // asa se iría fuera de la pantalla. jsdom no ve la cascada, así que se mira la hoja.
+    const nuestra = readFileSync(join(AQUI, "Maqueta.module.css"), "utf8");
+    expect(nuestra).toMatch(/\.tiradorDelPanelEnFila\s*\{[^}]*grid-column:\s*1 \/ -1/);
+    expect(nuestra).toMatch(/\.tiradorDelPanel:focus-visible::after\s*\{[^}]*opacity:\s*1/);
   });
 });

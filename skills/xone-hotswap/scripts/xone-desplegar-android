@@ -48,6 +48,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, join, relative, sep } from "node:path";
 import { deflateRawSync } from "node:zlib";
+import { serieAndroid } from "../lib/dispositivo.mjs";
 
 const PAQUETE = "com.xone.android.framework";
 const ACTIVIDAD = `${PAQUETE}/com.xone.android.hotswap.activities.SetupActivity`;
@@ -169,7 +170,10 @@ Studio o \`xone-db-tools\`, no esto, y sin ella la app muere aunque el verificad
   process.exit(0);
 }
 
-const serie = opcion("serie");
+// `--serie`, el dispositivo elegido en la sesión o un emulador (`../lib/dispositivo.mjs`). Se
+// dice por stderr con cuál y por qué: con varios aparatos, callarlo haría adivinar dónde pasó.
+const { serie, porque } = serieAndroid(opcion("serie"));
+if (serie !== undefined) process.stderr.write(`dispositivo: ${serie} (${porque})\n`);
 const adb = (...partes) =>
   execFileSync("adb", [...(serie ? ["-s", serie] : []), ...partes], { encoding: "utf8" });
 
@@ -236,6 +240,26 @@ function concederPermisos() {
     console.log("    no se pudo leer qué permisos pide; sigo");
     return;
   }
+  /**
+   * **El de dibujar sobre otras apps NO se concede con `pm grant`, y sin él el arranque es una
+   * carrera contra el foco.**
+   *
+   * `SYSTEM_ALERT_WINDOW` es un appop, no un permiso de ejecución, así que el bucle de abajo lo
+   * intenta y falla en silencio con los demás. Y lo que concede no es cosmético: Android 10 y
+   * superiores BLOQUEAN que una app en segundo plano arranque una actividad, y ese permiso es la
+   * exención que reconocen. El framework se va a segundo plano con solo apagarse la pantalla, o
+   * en cuanto se cierra la app — así que sin esto `launchApplication` contesta
+   * «Cannot launch app while the framework is in the background» y el despliegue parece que
+   * funcionó sin que arrancara nada. Es buena parte del síntoma que teníamos apuntado como
+   * «`result:true` significa aceptado, no arrancó».
+   *
+   * Idempotente, y su fallo no para nada: en un aparato donde no aplique, se sigue.
+   */
+  try {
+    adbCallado("shell", "appops", "set", PAQUETE, "SYSTEM_ALERT_WINDOW", "allow");
+  } catch {
+    // Aparato que no lo admite. El despliegue sigue; lo que se pierde es la garantía de foco.
+  }
   let dados = 0;
   for (const permiso of declaradas) {
     try {
@@ -260,7 +284,24 @@ function concederPermisos() {
 function excepcionDeXOne() {
   let log;
   try {
-    log = adbCallado("logcat", "-d", "-t", "600");
+    /**
+     * **Acotado al PROCESO, no a las últimas N líneas del aparato.** Era `-t 600` a secas, y
+     * eso no es «lo último de la app»: son 600 líneas de TODO —Chromium, el sistema, lo que
+     * haya—, que en este emulador son un par de minutos. La excepción de XOne se salía de esa
+     * ventana enseguida, el despliegue no la veía y no contaba nada.
+     *
+     * Y lo que pasa después es el motivo de arreglarlo: sin el texto, a quien diagnostica solo
+     * le queda **fotografiar el diálogo de error** —visto en una sesión real—, que cuesta 3.375
+     * tokens y dice exactamente lo mismo que estas seis líneas.
+     *
+     * Con `--pid`, 600 líneas son 600 líneas DE LA APP. Es como ya leía `xone-log-android`;
+     * que dos sitios miraran el mismo log de forma distinta era la razón de que uno lo
+     * encontrara y el otro no.
+     */
+    const pid = adbCallado("shell", "pidof", PAQUETE).trim().split(/\s+/)[0];
+    log = pid
+      ? adbCallado("logcat", "-d", "--pid", pid, "-t", "600")
+      : adbCallado("logcat", "-d", "-t", "600");
   } catch {
     return undefined;
   }
@@ -340,8 +381,27 @@ function exigirAparato() {
 
   console.log("5/5 esperando al canal, lanzando y comprobando que está VIVA");
   const cliente = join(import.meta.dirname, "xone-hotswap");
-  const mandar = (comando) =>
-    execFileSync("node", [cliente, JSON.stringify(comando)], { encoding: "utf8" }).trim();
+  /**
+   * **En `clave=valor`, que es lo único que el cliente entiende.**
+   *
+   * Esto mandaba `JSON.stringify(comando)` y se rompió ENTERO el día que el cliente dejó de
+   * aceptar JSON: el objeto se metía como NOMBRE del comando, el aparato contestaba
+   * `Unknown command: {…}` y el despliegue no lanzaba nada. Lanzar la app, pedir el árbol y
+   * capturar —las tres cosas que hace este paso— pasaban por aquí, así que se cayeron las
+   * tres a la vez, y en silencio: el script reintenta diez veces y acaba diciendo que el
+   * canal no levantó, que manda a mirar el puerto y el paquete en vez de al cliente.
+   *
+   * La conversión es la misma que hace el cliente al revés: cada campo que no es `command`
+   * sale como `clave=valor`, y un objeto o un array se serializan porque el tipado del
+   * cliente los reconoce por la forma.
+   */
+  const mandar = (comando) => {
+    const { command, ...resto } = comando;
+    const pares = Object.entries(resto).map(([k, v]) =>
+      `${k}=${typeof v === "object" && v !== null ? JSON.stringify(v) : String(v)}`,
+    );
+    return execFileSync("node", [cliente, command, ...pares], { encoding: "utf8" }).trim();
+  };
   const esperar = (segundos) => execFileSync("sleep", [String(segundos)]);
 
   /**
@@ -380,18 +440,37 @@ function exigirAparato() {
        * hay que volver a preguntar. Tres órdenes encadenadas por el modelo son tres viajes;
        * ésta es una.
        */
-      if (args.includes("--captura")) {
+      /**
+       * **El log ANTES que la captura, y por un fallo visto en vivo.**
+       *
+       * El orden era al revés y producía una foto que engaña: la app contesta el árbol, se
+       * cae mientras se pide la captura, y lo que sale fotografiado es la **pantalla del
+       * propio servidor hotswap** —«Applications / MyAllXOne / Explore / Delete», con
+       * «Awaiting connection…» abajo—. Eso no es la app, y quien lo mire después no tiene
+       * forma de saberlo: parece una app en blanco. Ocurrió con un `--captura` real y el
+       * usuario lo cazó mirando el artefacto.
+       *
+       * Cuando XOne ha reventado al cargar, la respuesta entera está en el LOG y la captura
+       * solo añade ruido —y 3.375 tokens si alguien se la enseña al revisor visual—. Así que
+       * primero se mira el log; si reventó, se cuenta y NO se captura.
+       */
+      const roto = excepcionDeXOne();
+      if (args.includes("--captura") && roto === undefined) {
         try {
           console.log(mandar({ command: "getScreenshot" }));
         } catch {
           console.error("la app arrancó pero la captura falló; el árbol de arriba sí es bueno.");
         }
+      } else if (args.includes("--captura")) {
+        console.error(
+          "NO capturo: XOne reventó al cargar y lo que saldría en la foto es la pantalla del " +
+            "host, no tu app. Lo que pasó está en el log de aquí abajo.",
+        );
       }
       // **Estar VIVA no es estar BIEN.** Una app que revienta al cargar la configuración se
       // queda con su diálogo de error delante, y el canal contesta igual: el árbol llega, la
       // captura sale, y todo parece haber ido bien. Quien lo cuenta es el log, y no pedirlo
       // aquí obliga a que alguien se acuerde de hacerlo — que es justo lo que no pasa.
-      const roto = excepcionDeXOne();
       if (roto !== undefined) {
         console.error("");
         console.error("La app ARRANCÓ pero XOne lanzó una excepción al cargar:");
