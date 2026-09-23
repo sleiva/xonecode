@@ -294,8 +294,29 @@ function ultimoTextoSustancial(mensajes: unknown): string | undefined {
  * bucle: cada llamada reenvía todo lo anterior, así que esto sigue siendo cuadrático y sigue
  * habiendo techo. El número nuevo cubre un reconocimiento completo más la escritura del
  * entregable y se queda por debajo del orquestador; el 43 de aquel incidente sigue fuera.
+ *
+ * ## Por qué ya no es 35: el tope bloqueaba la ENTREGA (23-09-2026)
+ *
+ * Medido en MyAllXOne, «una calculadora a partir de una maqueta de Stitch»: el developer gastó
+ * 39, 39 y 49 tools en tres encargos y **ninguno escribió**. Con `continue`, al agotarse, el
+ * tope bloquea TODA tool que venga después, y eso incluye `write_file` y `edit_file`: el
+ * especialista explora hasta el techo y cuando va a crear el `.xne` se lo rechazan. Se pagaba
+ * el reconocimiento entero (1,17M de entrada solo el developer) y no salía nada; el
+ * orquestador lo leía como «se quedan sin turnos explorando» y re-delegaba, que es el mismo
+ * reconocimiento otra vez desde cero.
+ *
+ * **Así que deja de ser una economía y pasa a ser un GUARDA**, como el del orquestador: por
+ * encima de lo observado, para que no muerda en un encargo normal y solo pare uno desbocado.
+ * Lo que sigue acotando de verdad es el tope de LLAMADAS, que con tools en paralelo llega
+ * antes. **Y por eso ya no está por debajo del del orquestador**: esa relación tenía sentido
+ * mientras este número era un presupuesto de trabajo.
+ *
+ * La alternativa que se descartó, para no rediscutirla: excluir las escrituras del conteo
+ * (un middleware propio, porque el de langchain no sabe excluir). Arreglaba el bloqueo de la
+ * entrega sin tocar el número; se prefirió el tope alto, que es su criterio de siempre —los
+ * topes se ponen altos para que no muerdan—.
  */
-export const TOPE_DE_TOOLS_DEL_ESPECIALISTA = 35;
+export const TOPE_DE_TOOLS_DEL_ESPECIALISTA = 150;
 
 /**
  * **`continue`, y NO `end`: son incompatibles con pedir varias tools a la vez.**

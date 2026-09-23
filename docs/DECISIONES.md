@@ -6393,3 +6393,24 @@ no solo en `invocationParams()`: para DeepSeek el `fetch` es el del eco del razo
 sitio que reescribe el cuerpo, y lo recompone con `{ ...cuerpo, messages }`, así que conserva la
 clave. Lo que eso NO demuestra es que DeepSeek la esté USANDO: una API que ignora un campo
 desconocido contestaría igual.
+
+## El tope de tools del especialista bloqueaba la ENTREGA: de 35 a 150 (23-09-2026)
+
+`agent/turno/resumenDeContexto.ts#TOPE_DE_TOOLS_DEL_ESPECIALISTA`.
+
+**Medido en MyAllXOne** («una calculadora a partir de una maqueta de Stitch y su enlace en el
+drawer»): `developer-xone` gastó 39, 39 y 49 tools en tres encargos seguidos y ninguno creó el
+`.xne`. El tope sale con `continue`, y al agotarse bloquea TODA tool que venga después — también
+`write_file` y `edit_file`—, así que el especialista exploraba hasta el techo y la escritura era la
+que se rechazaba. Solo el developer se llevó 1,17M de entrada para devolver 60, 14 y 14 caracteres,
+y el orquestador lo contaba como «los agentes escritores se están quedando sin turnos explorando» y
+re-delegaba: el mismo reconocimiento otra vez, desde cero.
+
+**Decisión suya: 150, es decir, de economía a GUARDA**, como el del orquestador — por encima de lo
+observado, para que solo pare un encargo desbocado. Lo que sigue acotando de verdad es el tope de
+LLAMADAS (con tools en paralelo llega antes). El test que lo quería por debajo de 43 y el que lo
+quería por debajo del orquestador se reescribieron: los dos codificaban la decisión de antes.
+
+**Descartado, para no rediscutirlo**: excluir las escrituras del conteo con un middleware propio
+(el de langchain no sabe excluir). Arreglaba el bloqueo sin tocar el número; se prefirió el tope
+alto, que es su criterio de siempre.
