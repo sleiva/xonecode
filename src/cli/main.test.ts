@@ -1247,3 +1247,18 @@ describe("crearSincronizador: un fallo se APUNTA en el registro del proyecto", (
     expect(anotados).toEqual([{ raiz, peticion: "/sync bajar de «Proyecto» (rama master)" }]);
   });
 });
+
+
+describe("--motor, el punto de entrada de TrueForge", () => {
+  it("se quita del argv CON su valor y el resto queda intacto", async () => {
+    const { extraerMotor } = await import("./main.js");
+    expect(extraerMotor(["--web", "--motor", "trueforge", "--no-abrir"])).toEqual({ resto: ["--web", "--no-abrir"], motor: "trueforge" });
+    expect(extraerMotor(["--web"])).toEqual({ resto: ["--web"] });
+  });
+
+  it("un valor que no es un motor es un error de USO, no el de siempre en silencio", async () => {
+    const { extraerMotor } = await import("./main.js");
+    expect(extraerMotor(["--motor", "langgraph"]).error).toMatch(/--motor necesita.*no «langgraph»/);
+    expect(extraerMotor(["--motor"]).error).toMatch(/--motor necesita/);
+  });
+});

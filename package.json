@@ -26,12 +26,14 @@
     "prepack": "npm run build",
     "web": "npm run build:web && tsx src/bin.ts --web",
     "web:trazas": "XONECODE_TRACE_ERRORES=1 XONECODE_TRACE_TOOLS=1 npm run web",
+    "web:trueforge": "npm run build:web && tsx src/bin.ts --web --motor trueforge",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit && tsc -p apps/web/tsconfig.json --noEmit",
     "eval": "tsx src/evals/correr.ts",
     "banco": "tsx src/evals/banco.ts",
-    "xonecode": "tsx src/bin.ts"
+    "xonecode": "tsx src/bin.ts",
+    "trueforge": "tsx src/bin.ts --motor trueforge"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.263",

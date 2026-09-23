@@ -4,6 +4,7 @@
  * Sin librería de argumentos a propósito: hoy hay un comando y una bandera, y una
  * dependencia más es una dependencia más que fijar y vigilar. Cuando haya cinco, se mete.
  */
+import { esMotor, MOTORES, type MotorDeAgente } from "../core/motor.js";
 import { crearRegistroDeFallos } from "../agent/turno/registroDeFallos.js";
 import * as readline from "node:readline";
 import { randomUUID } from "node:crypto";
@@ -180,6 +181,7 @@ const AYUDA = `XOneCode — harness de XOne
   xonecode --no-abrir            la web, pero sin abrir el navegador (imprime la URL)
   xonecode --puerto <n>          la web en otro puerto (por omisión 4173)
   xonecode --anfitrion <host>    acepta ese Host además del loopback, para un túnel
+  xonecode --motor <m>           con ese motor de agente: deepagents (omisión) o trueforge
   xonecode --cli                 la consola de terminal (TUI)
   xonecode --cli --no-tui        consola clásica (stdio)
   xonecode run "<peticion>"      un turno, de un disparo (pipeable)
@@ -1345,7 +1347,33 @@ export async function entrarEnConsola(
   return codigo;
 }
 
-export async function main(argv: string[]): Promise<number> {
+/**
+ * `--motor <deepagents|trueforge>`, el punto de entrada para arrancar con un motor concreto sin
+ * tocar la configuración (`npm run web:trueforge`). Se quita del argv con su valor y se deja en
+ * `XONECODE_MOTOR`, que es la fuente que ya lee `resolverMotor`: una bandera no es una tercera
+ * regla, es otra forma de poner la variable —y la única que vale igual en Windows, donde un
+ * `XONECODE_MOTOR=…` delante del comando no funciona—. Un valor que no es un motor es un error de
+ * USO: arrancar con el de siempre callando la errata haría creer que se está probando el otro.
+ */
+export function extraerMotor(argv: readonly string[]): { resto: string[]; motor?: MotorDeAgente; error?: string } {
+  const i = argv.indexOf("--motor");
+  if (i < 0) return { resto: [...argv] };
+  const valor = argv[i + 1];
+  const resto = [...argv.slice(0, i), ...argv.slice(i + 2)];
+  if (!esMotor(valor)) {
+    return { resto, error: `--motor necesita ${MOTORES.map((m) => `«${m}»`).join(" o ")}${valor === undefined ? "" : `, no «${valor}»`}` };
+  }
+  return { resto, motor: valor };
+}
+
+export async function main(argvCrudo: string[]): Promise<number> {
+  const conMotor = extraerMotor(argvCrudo);
+  if (conMotor.error !== undefined) {
+    process.stderr.write(`${conMotor.error}\n`);
+    return 64;
+  }
+  if (conMotor.motor !== undefined) process.env["XONECODE_MOTOR"] = conMotor.motor;
+  const argv = conMotor.resto;
   const [comando, ...resto] = argv;
 
   try {

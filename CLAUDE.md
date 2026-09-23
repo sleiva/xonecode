@@ -38,6 +38,8 @@ XONECODE_TRACE_TOOLS=1 ./bin/xonecode run --real "…"   # un turno medido, sin 
 ./bin/xonecode traza [--todas]         # a dónde se fueron los tokens de ese turno
 npm run web -- --puerto 4200           # la consola WEB: construye el cliente y la levanta
 npm run web:trazas                     # la misma, dejando .xonecode/traza-{errores,tools}.jsonl
+npm run web:trueforge                  # la consola web con el motor TrueForge (`--motor trueforge`)
+./bin/xonecode --motor trueforge …     # cualquier subcomando con ese motor; `xonecode config` dice cuál
 ```
 
 Los tests son **colocados** (`src/**/*.test.ts`, junto al módulo que prueban).

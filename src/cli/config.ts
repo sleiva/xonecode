@@ -11,6 +11,7 @@
  * justo el que uno corre cuando la configuración está mal. Por eso siempre devuelve 0.
  */
 
+import { esMotor, resolverMotor } from "../core/motor.js";
 import { cargar } from "../agent/config/configEnDisco.js";
 import { userIdDeDeepSeekEnDisco } from "../agent/config/identidadEnDisco.js";
 import type { Aviso } from "../core/config.js";
@@ -109,6 +110,21 @@ export function cmdConfig(
   // identidad legible, que es lo único que no se puede comprobar de otra forma — el IDS
   // puede no devolver `id_token`, y entonces el campo no viaja sin que nada falle.
   const identidadDeDeepSeek = userIdDeDeepSeekEnDisco({ proyecto: cargado.config.proyecto }) !== undefined;
+  // El motor de las sesiones NUEVAS y de dónde sale. No se enseña en la interfaz —decisión suya—,
+  // pero un diagnóstico que no lo dijera dejaría sin forma de comprobar qué se está probando.
+  const variableDeMotor = process.env["XONECODE_MOTOR"];
+  const motor = resolverMotor({
+    entorno: variableDeMotor,
+    proyecto: cargado.config.proyecto?.motor,
+    global: cargado.config.global?.motor,
+  });
+  const origenDelMotor = esMotor(variableDeMotor)
+    ? "XONECODE_MOTOR"
+    : cargado.config.proyecto?.motor !== undefined
+      ? "config del proyecto"
+      : cargado.config.global?.motor !== undefined
+        ? "config global"
+        : "omisión";
   // Y el verbo depende de si DeepSeek está en juego: «se manda» con otro proveedor en los
   // tres papeles afirmaría algo que no pasa, que es un aviso que enseña a ignorarlo.
   const usaDeepSeek = PAPELES.some((papel) => eleccion[papel].proveedor === "deepseek");
@@ -134,6 +150,7 @@ export function cmdConfig(
         c.puesta ? c : { proveedor: c.proveedor, puesta: false }
       ),
       identidadDeDeepSeek,
+      motor: { motor, origen: origenDelMotor },
       avisos: ordenados.map((a) => ({ severidad: a.severidad, texto: a.texto })),
     };
     escribir(`${JSON.stringify(salida, null, 2)}\n`);
@@ -170,6 +187,9 @@ export function cmdConfig(
         : `  · sin credencial  ${c.proveedor}\n`
     );
   }
+
+  escribir("--- motor de agente ---\n");
+  escribir(`  ${motor}  (${origenDelMotor})\n`);
 
   escribir("--- identidad para DeepSeek ---\n");
   escribir(
