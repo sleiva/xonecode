@@ -26,7 +26,20 @@ import winston from "winston";
 import { AgentThread, AgentThreadOrchestrator, EventType, NOOP_AGENT_TRACING, askUserQuestion, contextCompaction, dynamicSubAgents } from "./trueforge.js";
 import { TOPE_DE_LLAMADAS_DEL_CONDUCTOR, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA, UMBRAL_RESUMEN_TOKENS } from "../../turno/resumenDeContexto.js";
 import type { DomainEvent, HallazgoDelTurno, PendienteDeAprobacion } from "../../../core/events.js";
-import type { ConsumoDeSesionPorCuenta, ModelosPort, SkillInfo, VerifierPort } from "../../../core/ports.js";
+import type {
+  ConsumoDeSesion,
+  ConsumoDeSesionPorCuenta,
+  ModelosPort,
+  MotorExterno,
+  SkillInfo,
+  SubagenteExternoPort,
+  VerifierPort,
+} from "../../../core/ports.js";
+import { crearSubagenteExterno } from "../../subagentes/subagenteExterno.js";
+import { inventarioDelProyecto, opcionesDeSubagenteExterno } from "../../subagentes/escrituraExterna.js";
+import { sumarConsumo, SIN_CONSUMO } from "../../subagentes/consumoExterno.js";
+import { ColaDeEventos, entrelazar } from "../../../core/entrelazar.js";
+import { modeloExternoParaTrueforge } from "./modeloExterno.js";
 import { cambiosQueSeVerifican, huellaDeErrores, repartirHallazgos } from "../../turno/verificacion.js";
 import { correrTurno, type Piel } from "../../../core/turno.js";
 import type { Artefacto } from "../../../core/artefactos.js";
@@ -210,6 +223,13 @@ export interface OpcionesDeSesionTrueforge {
     pantalla: string
   ) => Promise<{ veredicto: string; observaciones: string[] }>;
   juezDelTurno?: (caso: { objetivo: string; respuesta: string; hechos: HechosDelTurno }) => Promise<VeredictoDelTurno>;
+  /**
+   * La FÁBRICA del puerto de los motores externos (Claude Code, Codex, OpenCode), no el puerto:
+   * así un test recibe las opciones que la sesión COMPONE —política, modo, cola, consumo— y las
+   * comprueba una a una. Ausente es la real (`crearSubagenteExterno`), y la omisión vive aquí por
+   * el patrón de fallo de siempre: compuesta en un cierre que los tests doblan, quedaría escrita.
+   */
+  subagenteExterno?: (opciones: ReturnType<typeof opcionesDeSubagenteExterno>) => SubagenteExternoPort;
 }
 
 /** Una tool call que espera decisión: en QUÉ hilo, con qué id, y qué pide. */
@@ -272,13 +292,53 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
   const backend = montarBackend() as unknown as BackendDeFicheros;
 
   /**
+   * **Los motores EXTERNOS**, por el MISMO puerto que deepagents (`subagenteExterno.ts`), con sus
+   * guardas de ruta, su política —la de la sesión, traducida (`politicaExternaDeSesion`)— y su
+   * consumo. Lo que el hijo hace MIENTRAS trabaja entra por `eventosExternos` y se entrelaza con el
+   * flujo del turno; las rutas que aplica sin preguntar van al aviso del turno por
+   * `apuntarAplicadasSinPreguntar`, un puntero de la sesión a una lista del turno: la política se
+   * compone una vez y el aviso es de cada turno.
+   */
+  const eventosExternos = new ColaDeEventos();
+  let consumoExterno: ConsumoDeSesion = SIN_CONSUMO;
+  let apuntarAplicadasSinPreguntar: ((rutas: readonly string[]) => void) | undefined;
+  const externo = (opciones.subagenteExterno ?? crearSubagenteExterno)(
+    opcionesDeSubagenteExterno({
+      ...(opciones.pedirAprobacion === undefined ? {} : { pedirAprobacion: opciones.pedirAprobacion }),
+      ficherosDelProyecto: () => ficherosDelProyecto(raiz),
+      eventos: eventosExternos,
+      alConsumir: (c) => {
+        consumoExterno = sumarConsumo(consumoExterno, c);
+        avisar();
+      },
+      modo: {
+        sinPreguntar: () => opciones.sinAprobacion?.() === true,
+        alAplicarSinPreguntar: (rutas) => apuntarAplicadasSinPreguntar?.(rutas),
+      },
+    })
+  );
+  /**
+   * Qué motores externos se pueden usar DE VERDAD, preguntado UNA vez al abrir —como deepagents al
+   * construir el grafo—: un especialista que el orquestador elige y que revienta en cuanto lo
+   * elige es un botón muerto que pulsa el modelo, y se lo cree.
+   */
+  const motoresDisponibles = new Set<MotorExterno>();
+  for (const motor of new Set(cargarAgentes(raiz).agentes.map((a) => a.motor).filter((m) => m !== "modelo"))) {
+    if (await externo.disponible(motor as MotorExterno)) motoresDisponibles.add(motor as MotorExterno);
+  }
+  /** Los hilos de un hijo EXTERNO: su «llamada al modelo» no es una llamada, no se cuenta. */
+  const hilosExternos = new Set<string>();
+
+  /**
    * **El raíz es el ORQUESTADOR, de solo lectura y SIN skills** — la regla de deepagents
    * (`xoneAgent.ts`): los subagentes no heredan las skills del orquestador, cada uno recibe
    * las de su `.md`. Lee para orientarse y contestar lo que se contesta mirando; todo lo que
-   * escribe o ejecuta lo delega. Solo los de motor `modelo`: a uno externo no se le puede
-   * delegar desde aquí, y ofrecerlo sería un botón muerto que pulsa el modelo.
+   * escribe o ejecuta lo delega. Los de motor externo, solo si su motor está disponible: el
+   * prompt del orquestador y la factoría de hijos salen de ESTA lista, así que no puede ofrecer
+   * uno que luego no se monte.
    */
-  const especialistas = (): Agente[] => cargarAgentes(raiz).agentes.filter((a) => a.motor === "modelo");
+  const especialistas = (): Agente[] =>
+    cargarAgentes(raiz).agentes.filter((a) => a.motor === "modelo" || motoresDisponibles.has(a.motor as MotorExterno));
   /**
    * **Las tools PROPIAS, con el MISMO reparto que deepagents** (`xoneAgent.ts`): son las mismas
    * funciones, adaptadas (`toolsPropias.ts`), no una copia.
@@ -317,6 +377,46 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
   const llm = modeloParaTrueforge({ modelo: () => modelos.paraPapel("trabajo"), senal: () => aborto?.signal });
 
   /**
+   * El hilo de un hijo EXTERNO: un `AgentThread` normal con UNA llamada, cuyo «modelo» es el
+   * producto (`modeloExterno.ts`). Sin tools, sin capabilities y sin compactación: el bucle vive
+   * dentro de Claude Code, Codex u OpenCode. La petición es la de deepagents (`xoneAgent.ts`), y
+   * se compone al DELEGAR —el inventario, fresco—; su vida es la del encargo, y no se persiste
+   * nada del producto: la foto del raíz guarda el encargo y la respuesta, nunca un proceso.
+   */
+  const hijoExterno = (
+    agente: Agente,
+    params: { request: { name: string; input: string }; threadId: string; parent: unknown }
+  ): AgentThread => {
+    hilosExternos.add(params.threadId);
+    const motor = agente.motor as MotorExterno;
+    return new AgentThread({
+      definition: {
+        modelClient: modeloExternoParaTrueforge({
+          puerto: externo,
+          peticion: () => ({
+            motor,
+            cwd: raiz,
+            instrucciones: `${promptDeAgente(agente, repartirSkills(agente, disponibles))}\n\n${inventarioDelProyecto(ficherosDelProyecto(raiz))}`,
+            tarea: params.request.input,
+            ...(agente.modelo === undefined ? {} : { modelo: agente.modelo }),
+            permitirEscritura: !agente.soloLectura,
+            agente: agente.nombre,
+          }),
+          senal: () => aborto?.signal,
+        }),
+        messages: [{ role: "user", content: params.request.input }],
+        iterationLimit: 1,
+      } as never,
+      threadId: params.threadId,
+      title: params.request.name,
+      parent: params.parent as never,
+      agentInfo: { type: "dynamic", ...params.request } as never,
+      tracing: NOOP_AGENT_TRACING,
+      logger,
+    });
+  };
+
+  /**
    * El hilo de un subagente, sacado de SU `.md`: su prompt, SUS skills, sus permisos y su
    * modelo. TrueForge no tiene subagentes con nombre ni deja poner prompt propio a un hijo —su
    * identidad fija dice además que tiene «las mismas tools que el padre», que aquí no es
@@ -331,6 +431,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
   }): Promise<AgentThread> => {
     const agente = especialistas().find((a) => a.nombre === params.request.name);
     quienEs.set(params.threadId, agente?.nombre ?? params.request.name);
+    if (agente !== undefined && agente.motor !== "modelo") return hijoExterno(agente, params);
     const clase = agente === undefined ? "lee" : clasesDeTools(agente);
     // Las piezas por lo que declara su `.md` (`capacidades.ts`); la nota sale de SUS tools.
     const piezas = capacidadesDelEspecialista(agente, params.request.name, {
@@ -523,7 +624,9 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
         diagnostico?.resultado?.(llamada?.nombre, llamada === undefined ? undefined : detalleDe(llamada.nombre, llamada.args), chars);
       }
       const { eventos, uso } = traducirEvento(evento);
-      if (uso !== undefined) {
+      // La «llamada» de un hijo externo es el producto entero: su consumo llega por su propio
+      // callback (`externo`), y contarla aquí sumaría una llamada de modelo a ceros por delegación.
+      if (uso !== undefined && !hilosExternos.has(deHilo)) {
         // Los tokens de TODOS los hilos se gastaron, así que todos cuentan. La VENTANA es otra
         // pregunta —cuánto ocupa la conversación—, y esa es la del raíz: la de un hijo es la de
         // un encargo que muere con él.
@@ -576,6 +679,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       const instantanea = await tomarInstantanea(raiz, opciones.entorno.git);
       const tope = opciones.topeDeRondas ?? MAX_APPROVAL_ROUNDS;
       const aplicadasSinPreguntar: string[] = [];
+      apuntarAplicadasSinPreguntar = (rutas) => void aplicadasSinPreguntar.push(...rutas);
       capturasDelTurno = [];
       /** El encargo de ESTE turno tal cual se pidió, y el mismo con la última pregunta y su
        *  respuesta al lado, que es lo que se juzga y se repara (ver `flujo`). Ausente = no consta. */
@@ -878,7 +982,9 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
 
       let bitacora;
       try {
-        bitacora = await correrTurno(flujo(), piel, {
+        // El flujo del turno MÁS lo que un hijo externo va haciendo en su proceso: sin esto, sus
+        // minutos de trabajo no cruzan hasta que contesta (`core/entrelazar.ts`).
+        bitacora = await correrTurno(entrelazar(flujo(), eventosExternos), piel, {
           // Solo si el turno ESCRIBIÓ y aun así no se verificó, y con el motivo: la regla de
           // deepagents — un aviso que salta cuando no ha pasado nada enseña a ignorarlo.
           avisos: (b) => [
@@ -894,6 +1000,8 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
         });
       } finally {
         aborto = undefined;
+        // Lo que un hijo escribiera fuera de un turno no tiene dónde contarse (ver arriba).
+        apuntarAplicadasSinPreguntar = undefined;
         /**
          * La foto del raíz, al acabar CADA turno —en el `finally`, como el commit del turno—:
          * saneada, para que las tool calls que el corte dejó sin respuesta no rompan la
@@ -964,7 +1072,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
     consumo(): ConsumoDeSesionPorCuenta {
       return {
         modelo: { entrada: tracker.input, salida: tracker.output, cache: tracker.cache },
-        externo: { entrada: 0, salida: 0, cache: 0 },
+        externo: consumoExterno,
         contexto: tracker.contexto,
       };
     },

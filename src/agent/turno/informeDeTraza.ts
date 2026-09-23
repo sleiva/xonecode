@@ -524,7 +524,10 @@ export function pintarGasto(consumo: ConsumoDeSesionPorCuenta, llamadas: number)
 
   const lineas = ["--- gasto del turno ---", fila("modelo", consumo.modelo, llamadas)];
   const e = consumo.externo;
-  if (e.entrada > 0 || e.salida > 0) lineas.push(fila("externo", e));
+  // Las dos cuentas cuentan la caché al revés: el grafo la lleva DENTRO de `entrada` y un agente
+  // externo, FUERA (Claude Code, OpenCode). Medido en una pasada real: sin normalizar, la fila
+  // externa decía «caché 1110 %» y un efectivo NEGATIVO. Se pinta en la convención del grafo.
+  if (e.entrada > 0 || e.salida > 0) lineas.push(fila("externo", { ...e, entrada: e.entrada + e.cache }));
   if (consumo.contexto > 0) lineas.push(`  ventana  ${cifra(consumo.contexto)} de entrada en la última llamada`);
   return lineas;
 }

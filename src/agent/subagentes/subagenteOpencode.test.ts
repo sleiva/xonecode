@@ -393,3 +393,21 @@ describe("el error del motor, con el siguiente paso detrás", () => {
     expect(conRemedio("no such model")).toBe("no such model");
   });
 });
+
+describe("Parar el turno cancela la sesión ACP y MATA al hijo", () => {
+  it("con la señal abortada mientras espera una aprobación: `session/cancel` y `correr` rechaza", async () => {
+    guion({ toolCall: edicion(join(raiz, "x.js"), "", "hola\n") });
+    const control = new AbortController();
+    const corriendo = correrOpencode(
+      { ...peticionDe(true), senal: control.signal },
+      // La aprobación no llega nunca: antes solo lo paraba el tope de diez minutos.
+      { casa, ficheros: () => new Set(), aprobar: () => new Promise<boolean>(() => {}) }
+    );
+    for (let i = 0; i < 100 && !apuntado().some((x) => x.que === "prompt"); i++) await new Promise((r) => setTimeout(r, 20));
+    await new Promise((r) => setTimeout(r, 50));
+    control.abort();
+    await expect(corriendo).rejects.toThrow(/se canceló/);
+    for (let i = 0; i < 50 && !apuntado().some((x) => x.que === "cancel"); i++) await new Promise((r) => setTimeout(r, 20));
+    expect(apuntado().some((x) => x.que === "cancel")).toBe(true);
+  });
+});

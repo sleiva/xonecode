@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AIMessageChunk } from "@langchain/core/messages";
 import type { Piel } from "../../../core/turno.js";
-import type { ModelosPort } from "../../../core/ports.js";
+import type { ModelosPort, PeticionExterna } from "../../../core/ports.js";
 import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ } from "./sesionTrueforge.js";
 import { TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
 import { traducirEvento } from "./eventosTrueforge.js";
@@ -974,5 +974,202 @@ describe("el encargo de una pregunta, contra el que se juzga y se repara", () =>
     await segunda.turno("2", piel().p);
     expect(casos).toHaveLength(1);
     expect(casos[0]!.objetivo.startsWith("arregla la pantalla")).toBe(true);
+  }, 30_000);
+});
+
+describe("Claude Code, Codex y OpenCode como hijos de TrueForge", () => {
+  type Compuestas = ReturnType<typeof import("../../subagentes/escrituraExterna.js").opcionesDeSubagenteExterno>;
+  /** Un proyecto con un especialista EXTERNO en su `.md`, como los escribe una persona. */
+  const conExterno = (motor = "codex", soloLectura = false) => {
+    const raiz = proyecto();
+    mkdirSync(join(raiz, ".xonecode", "agentes"), { recursive: true });
+    writeFileSync(
+      join(raiz, ".xonecode", "agentes", "refactor-ext.md"),
+      `---\ndescripcion: Refactoriza con otro producto\nmotor: ${motor}\nmodelo: gpt-5.6-sol\nsoloLectura: ${soloLectura}\nskills: [xone-development]\n---\nTrabaja solo dentro del proyecto y explica los cambios.\n`
+    );
+    return raiz;
+  };
+  /** La fábrica de mentira: captura lo que la sesión COMPONE y deja guionizar `correr`. */
+  const fabrica = (disponibles: string[], correr: (p: PeticionExterna, c: Compuestas) => Promise<string>) => {
+    const peticiones: PeticionExterna[] = [];
+    let compuestas: Compuestas | undefined;
+    return {
+      peticiones,
+      compuestas: () => compuestas!,
+      subagenteExterno: (o: Compuestas) => {
+        compuestas = o;
+        return {
+          disponible: async (m: string) => disponibles.includes(m),
+          correr: async (p: PeticionExterna) => (peticiones.push(p), correr(p, o)),
+        };
+      },
+    };
+  };
+  const delegar = () => [
+    new AIMessageChunk({
+      content: "",
+      tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "refactor-ext", input: "refactoriza el menú" }) }],
+    }),
+  ];
+
+  it("aparece en el prompt del orquestador SOLO si su motor está disponible", async () => {
+    const con = modelosConGuion([[new AIMessageChunk({ content: "ok" })]]);
+    await (await abrirSesionTrueforge({ raiz: conExterno(), modelos: con.m, entorno: ENTORNO, skills: CATALOGO, subagenteExterno: fabrica(["codex"], async () => "").subagenteExterno })).turno("hola", piel().p);
+    expect(con.vistos[0]!.join("\n")).toContain("refactor-ext");
+    const sin = modelosConGuion([[new AIMessageChunk({ content: "ok" })]]);
+    await (await abrirSesionTrueforge({ raiz: conExterno(), modelos: sin.m, entorno: ENTORNO, skills: CATALOGO, subagenteExterno: fabrica([], async () => "").subagenteExterno })).turno("hola", piel().p);
+    expect(sin.vistos[0]!.join("\n")).not.toContain("refactor-ext");
+  }, 30_000);
+
+  it("se delega por el nombre del `.md`: la petición es la de deepagents y la respuesta vuelve al orquestador", async () => {
+    const raiz = conExterno();
+    const f = fabrica(["codex"], async () => "hecho por codex");
+    const { m, vistos } = modelosConGuion([delegar(), [new AIMessageChunk({ content: "Listo." })]]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, subagenteExterno: f.subagenteExterno });
+    const pi = piel();
+    await s.turno("refactoriza", pi.p);
+    expect(f.peticiones).toHaveLength(1);
+    const p = f.peticiones[0]!;
+    expect(p).toMatchObject({ motor: "codex", cwd: raiz, tarea: "refactoriza el menú", modelo: "gpt-5.6-sol", permitirEscritura: true, agente: "refactor-ext" });
+    expect(p.instrucciones).toContain("Trabaja solo dentro del proyecto");
+    // El inventario del proyecto, que un hijo externo no puede sacar solo.
+    expect(p.instrucciones).toContain("/app.xml");
+    // Y la cancelación del turno, para que Parar lo mate.
+    expect(p.senal).toBeInstanceOf(AbortSignal);
+    expect(vistos[1]!.join("\n")).toContain("hecho por codex");
+    expect(pi.tokens.join("")).toBe("Listo.");
+    // Su «llamada» no es una llamada de NUESTRO modelo: solo cuentan las dos del orquestador.
+    expect(s.tracker.calls).toBe(2);
+  }, 30_000);
+
+  it("solo lectura en el `.md` es `permitirEscritura: false`", async () => {
+    const f = fabrica(["claude-code"], async () => "leído");
+    const { m } = modelosConGuion([delegar(), [new AIMessageChunk({ content: "Listo." })]]);
+    const s = await abrirSesionTrueforge({ raiz: conExterno("claude-code", true), modelos: m, entorno: ENTORNO, skills: CATALOGO, subagenteExterno: f.subagenteExterno });
+    await s.turno("mira", piel().p);
+    expect(f.peticiones[0]).toMatchObject({ motor: "claude-code", permitirEscritura: false });
+  }, 30_000);
+
+  it("lo que hace MIENTRAS trabaja se ve, y sus tokens van a `externo`, nunca a `modelo`", async () => {
+    const f = fabrica(["codex"], async (_p, c) => {
+      c.alUsarTool({ nombre: "read_file", detalle: "/menu.xne" });
+      c.alRazonar("mirando el menú");
+      c.alConsumir?.({ motor: "codex", entrada: 900, salida: 40, cache: 300 });
+      await new Promise((r) => setTimeout(r, 20));
+      return "hecho";
+    });
+    const { m } = modelosConGuion([delegar(), [new AIMessageChunk({ content: "Listo." })]]);
+    const s = await abrirSesionTrueforge({ raiz: conExterno(), modelos: m, entorno: ENTORNO, skills: CATALOGO, subagenteExterno: f.subagenteExterno });
+    const lineas: string[] = [];
+    await s.turno("refactoriza", { ...piel().p, linea: (t) => void lineas.push(t) });
+    expect(lineas.join("\n")).toContain("/menu.xne");
+    expect(s.consumo().externo).toEqual({ entrada: 900, salida: 40, cache: 300 });
+    expect(s.consumo().modelo.entrada).toBeLessThan(900);
+  }, 30_000);
+
+  it("la política es la de la sesión: sin `pedirAprobacion` no escribe; en autónomo aplica y el aviso nombra las rutas", async () => {
+    const sinPolitica = fabrica(["codex"], async () => "");
+    await abrirSesionTrueforge({ raiz: conExterno(), modelos: modelos(), entorno: ENTORNO, skills: CATALOGO, subagenteExterno: sinPolitica.subagenteExterno });
+    expect(sinPolitica.compuestas().aprobarEscritura).toBeUndefined();
+
+    let concedida: boolean | undefined;
+    const f = fabrica(["codex"], async (_p, c) => {
+      concedida = await c.aprobarEscritura!([{ agente: "refactor-ext", ruta: "menu.xne", lineas: [] }]);
+      return "escrito";
+    });
+    const { m } = modelosConGuion([delegar(), [new AIMessageChunk({ content: "Listo." })]]);
+    const s = await abrirSesionTrueforge({
+      raiz: conExterno(), modelos: m, entorno: ENTORNO, skills: CATALOGO, subagenteExterno: f.subagenteExterno,
+      pedirAprobacion: async () => {
+        throw new Error("en autónomo no se pregunta");
+      },
+      sinAprobacion: () => true,
+    });
+    const lineas: string[] = [];
+    await s.turno("refactoriza", { ...piel().p, linea: (t) => void lineas.push(t) });
+    expect(concedida).toBe(true);
+    expect(lineas.join("\n")).toMatch(/escritura\(s\) aplicadas SIN aprobación: menu\.xne/);
+  }, 30_000);
+
+  it("en SUPERVISADO la escritura del hijo pasa por la aprobación con su diff, y un NO es un no", async () => {
+    let vistaLaEscritura = false;
+    let concedida: boolean | undefined;
+    const f = fabrica(["codex"], async (_p, c) => {
+      concedida = await c.aprobarEscritura!([{ agente: "refactor-ext", ruta: "menu.xne", lineas: [{ tipo: "anadido", texto: "<boton/>" }] as never }]);
+      return "intentado";
+    });
+    const { m } = modelosConGuion([delegar(), [new AIMessageChunk({ content: "Listo." })]]);
+    const s = await abrirSesionTrueforge({
+      raiz: conExterno(), modelos: m, entorno: ENTORNO, skills: CATALOGO, subagenteExterno: f.subagenteExterno,
+      pedirAprobacion: async (pendientes, _ficheros, diffs) => {
+        vistaLaEscritura = pendientes.length === 1 && [...diffs.values()].flat().length > 0;
+        return new Map(pendientes.map((p) => [p.id, { type: "reject" as const }]));
+      },
+    });
+    await s.turno("refactoriza", piel().p);
+    expect(vistaLaEscritura).toBe(true);
+    expect(concedida).toBe(false);
+  }, 30_000);
+
+  it("un motor que FALLA no tumba el turno: el orquestador lee que falló", async () => {
+    const f = fabrica(["codex"], async () => {
+      throw new Error("codex no terminó en 10 minutos");
+    });
+    const { m, vistos } = modelosConGuion([delegar(), [new AIMessageChunk({ content: "Lo intento de otra forma." })]]);
+    const s = await abrirSesionTrueforge({ raiz: conExterno(), modelos: m, entorno: ENTORNO, skills: CATALOGO, subagenteExterno: f.subagenteExterno });
+    const pi = piel();
+    await s.turno("refactoriza", pi.p);
+    expect(vistos[1]!.join("\n")).toMatch(/no terminó su encargo: codex no terminó en 10 minutos/);
+    expect(pi.tokens.join("")).toBe("Lo intento de otra forma.");
+  }, 30_000);
+
+  it("el verificador VE lo que el hijo escribió en el disco", async () => {
+    const raiz = conExterno();
+    const f = fabrica(["codex"], async () => (writeFileSync(join(raiz, "menu.xne"), "<coll/>\n"), "escrito"));
+    const { m } = modelosConGuion([delegar(), [new AIMessageChunk({ content: "Listo." })]]);
+    let verificaciones = 0;
+    const s = await abrirSesionTrueforge({
+      raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, subagenteExterno: f.subagenteExterno,
+      verifier: { verificar: async () => (verificaciones++, { hallazgos: [], ok: true }) as never },
+    });
+    const r = await s.turno("refactoriza", piel().p);
+    expect(verificaciones).toBe(1);
+    expect(r.verificador).toBe("verde");
+  }, 30_000);
+
+  it("CANCELAR aborta la señal que recibió el hijo, y el turno se cierra", async () => {
+    let s: Awaited<ReturnType<typeof abrirSesionTrueforge>> | undefined;
+    let abortada = false;
+    const f = fabrica(["codex"], (p) => {
+      setTimeout(() => s!.cancelar(), 10);
+      return new Promise<string>((_ok, mal) =>
+        p.senal!.addEventListener("abort", () => {
+          abortada = true;
+          mal(new Error("matado"));
+        })
+      );
+    });
+    const { m } = modelosConGuion([delegar(), [new AIMessageChunk({ content: "no debería llegar" })]]);
+    s = await abrirSesionTrueforge({ raiz: conExterno(), modelos: m, entorno: ENTORNO, skills: CATALOGO, subagenteExterno: f.subagenteExterno });
+    const pi = piel();
+    await s.turno("refactoriza", pi.p);
+    expect(abortada).toBe(true);
+    expect(pi.tokens.join("")).not.toContain("no debería llegar");
+  }, 30_000);
+
+  it("REABRIR continúa con la respuesta del hijo en la conversación, sin ningún proceso que resucitar", async () => {
+    const raiz = conExterno();
+    const abrir = (m: ModelosPort, f: ReturnType<typeof fabrica>) =>
+      abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, subagenteExterno: f.subagenteExterno, hilo: "s-externo" });
+    const f1 = fabrica(["codex"], async () => "hecho por codex");
+    const primera = await abrir(modelosConGuion([delegar(), [new AIMessageChunk({ content: "Listo." })]]).m, f1);
+    await primera.turno("refactoriza", piel().p);
+    primera.cerrar();
+    const f2 = fabrica(["codex"], async () => "no se llama");
+    const { m, vistos } = modelosConGuion([[new AIMessageChunk({ content: "Sigo." })]]);
+    const segunda = await abrir(m, f2);
+    await segunda.turno("¿qué hizo?", piel().p);
+    expect(vistos[0]!.join("\n")).toContain("hecho por codex");
+    expect(f2.peticiones).toHaveLength(0);
   }, 30_000);
 });

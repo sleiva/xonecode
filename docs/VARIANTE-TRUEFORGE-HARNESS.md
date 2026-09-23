@@ -731,6 +731,53 @@ texto—. Así llega igual a la web, a la TUI y al terminal sin tocar ninguna pi
 botones sería el siguiente paso y no cambiaría esto. Medido con `deepseek-flash`: ante «pregúntame
 antes de tocar nada», el orquestador investigó el proyecto y preguntó con dos paletas concretas.
 
+### Claude Code, Codex y OpenCode, hijos de TrueForge (24-09-2026)
+
+Era la diferencia grande con deepagents: TrueForge descartaba los `.md` de motor externo. Ahora el
+orquestador los delega con el MISMO `create_sub_agent` y por el nombre de su `.md`, sin saber qué
+corre detrás. **No se reintegra ningún producto**: el hijo es un `AgentThread` normal de UNA llamada
+(`iterationLimit: 1`, sin tools, sin capabilities, sin compactación) cuyo «modelo» es un objeto con
+`stream()` que llama una vez a `SubagenteExternoPort.correr()` —el mismo puerto de deepagents, con sus
+guardas de ruta y su política— y que `modeloParaTrueforge` ya sabe traducir (`modeloExterno.ts`). El
+bucle agéntico vive dentro del producto.
+
+- **La petición es la de deepagents** (`xoneAgent.ts`): motor, `cwd`, el prompt del `.md` con sus
+  skills MÁS el inventario del proyecto —compuesto al DELEGAR, fresco—, el encargo, su modelo,
+  `permitirEscritura: !soloLectura` y el nombre del agente.
+- **Solo si su motor está disponible**, preguntado UNA vez al abrir; el prompt del orquestador y la
+  factoría salen de la misma lista, así que no puede ofrecer uno que no se monte.
+- **Lo que compone la sesión, entero**: la política de `pedirAprobacion` traducida
+  (`politicaExternaDeSesion`: supervisado enseña el diff, autónomo aplica y el aviso del turno NOMBRA
+  las rutas, sin política no escribe), la cola de actividad —`entrelazar(flujo(), eventosExternos)`,
+  así que sus tools y su razonamiento se ven MIENTRAS trabaja— y la cuenta `externo` del consumo. Entra
+  por una FÁBRICA inyectable, para que el test compruebe lo compuesto opción a opción.
+- **Su «llamada» no es de nuestro modelo**: no suma en el tracker ni en la traza (medido: sin el filtro,
+  cada delegación contaba una llamada a ceros).
+- **Un motor que falla se DEVUELVE** como la respuesta del hijo (`textoDeFalloExterno`), no se lanza:
+  el orquestador lee que falló y decide.
+- **Parar MATA al hijo**, y esto es nuevo en los dos motores: `PeticionExterna.senal`. Codex y OpenCode
+  matan su proceso (OpenCode manda antes `session/cancel`, y ahora le da 300 ms para leerlo: medido con
+  el doble, con el `kill` en el mismo instante no llegaba nunca —también en el tope de 10 min—); Claude
+  Code aborta el SDK con un `abortController` propio.
+- **Dos hijos que ESCRIBEN no corren a la vez** (`subagenteExterno.ts#escritoresEnSerie`); los de solo
+  lectura, sí. Sus escrituras van al disco directo y no pasan por la cola por fichero del backend.
+- **El verificador y el juez ven lo que escribió**: miran el disco (`instantanea.cambios()`).
+- **Nada del producto se persiste**: la foto del raíz guarda el encargo y la respuesta; reabrir continúa
+  la conversación y no resucita ningún proceso.
+
+Medido con el producto real (`run --real --motor trueforge`, copia de AppDemo, el `advisor` de Claude
+Code de solo lectura): delegó, sus más de cuarenta lecturas se vieron mientras trabajaba, contestó bien (42
+colecciones, entrada `EntradaApp`), 2 llamadas de nuestro modelo y 95.498 de entrada en `externo`, en
+185 s. **Y destapó un fallo de la fila `externo` del gasto**, que valía también para deepagents: la caché
+del externo va FUERA de su entrada y se pintaba como si fuera dentro («caché 1110 %», efectivo negativo).
+`pintarGasto` la normaliza a la convención del grafo.
+
+**Límites declarados**: la cancelación de Claude Code no tiene test (pide el SDK de verdad); en
+deepagents la señal se pasa si la librería la propaga hasta el `runnable`, y eso no está medido;
+serializar es por HIJO y no por fichero, que es más grueso pero la única costura que hay; y la
+disponibilidad se pregunta al abrir, como deepagents al construir, así que un `.md` externo nuevo no
+llega a una sesión abierta.
+
 ### La pregunta, también como tarjeta (23-09-2026)
 
 ENCIMA del texto, no en su lugar. Las opciones viajan como DATO en un evento propio

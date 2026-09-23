@@ -49,6 +49,7 @@ import { spawn } from "node:child_process";
 import type { PeticionExterna, PoliticaDeEscrituraExterna } from "../../core/ports.js";
 import { consumoDeCodex } from "./consumoExterno.js";
 import { decisionDeEscrituraDeCodex } from "./escrituraDeCodex.js";
+import { MOTIVO_DE_CANCELACION_EXTERNA } from "./escrituraExterna.js";
 
 /** El binario. `CODEX_BIN` gana, para poder apuntar a una versión concreta o a un envoltorio. */
 export function binarioDeCodex(): string {
@@ -180,6 +181,10 @@ export async function correrCodex(
     };
 
     armarReloj();
+    // Parar el turno MATA al hijo (`PeticionExterna.senal`): Codex no tiene cancelación propia.
+    const alCancelar = (): void => acabar(new Error(MOTIVO_DE_CANCELACION_EXTERNA));
+    if (peticion.senal?.aborted === true) alCancelar();
+    else peticion.senal?.addEventListener("abort", alCancelar, { once: true });
 
     const mandar = (objeto: unknown): void => {
       if (!terminado) hijo.stdin.write(`${JSON.stringify(objeto)}\n`);

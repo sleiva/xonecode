@@ -22,6 +22,7 @@ const guion = JSON.parse(process.env.STUB_GUION);
 const salida = process.env.STUB_SALIDA;
 const apuntar = (o) => require("node:fs").appendFileSync(salida, JSON.stringify(o) + "\\n");
 const mandar = (o) => process.stdout.write(JSON.stringify(o) + "\\n");
+if (process.env.STUB_PID) require("node:fs").writeFileSync(process.env.STUB_PID, String(process.pid));
 let buffer = "";
 process.stdin.on("data", (t) => {
   buffer += t.toString();
@@ -268,5 +269,45 @@ describe("y que el puerto le pase de verdad lo que le da la sesión", () => {
     });
     await puerto.correr(peticionDe(true));
     expect(apuntado().find((x) => x.que === "respuesta")?.result?.decision).toBe("decline");
+  });
+});
+
+describe("Parar el turno MATA al hijo", () => {
+  it("con la señal abortada mientras espera una aprobación, `correr` rechaza y el proceso ya no existe", async () => {
+    guion({ cambios: UN_CAMBIO(raiz) });
+    const pid = join(raiz, "pid");
+    process.env["STUB_PID"] = pid;
+    try {
+      const control = new AbortController();
+      const corriendo = correrCodex(
+        { ...peticionDe(true), senal: control.signal },
+        // La aprobación no llega nunca: es el caso en que antes solo lo paraba el tope de 10 min.
+        { aprobar: () => new Promise<boolean>(() => {}) }
+      );
+      for (let i = 0; i < 100 && !existsSync(pid); i++) await new Promise((r) => setTimeout(r, 20));
+      await new Promise((r) => setTimeout(r, 100));
+      control.abort();
+      await expect(corriendo).rejects.toThrow(/se canceló/);
+      const n = Number(readFileSync(pid, "utf8"));
+      let vivo = true;
+      for (let i = 0; i < 50 && vivo; i++) {
+        try {
+          process.kill(n, 0);
+          await new Promise((r) => setTimeout(r, 20));
+        } catch {
+          vivo = false;
+        }
+      }
+      expect(vivo).toBe(false);
+    } finally {
+      delete process.env["STUB_PID"];
+    }
+  });
+
+  it("con la señal YA abortada no llega a trabajar", async () => {
+    guion({});
+    const control = new AbortController();
+    control.abort();
+    await expect(correrCodex({ ...peticionDe(false), senal: control.signal })).rejects.toThrow(/se canceló/);
   });
 });

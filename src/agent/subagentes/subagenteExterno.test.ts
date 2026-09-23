@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { crearSubagenteExterno, decisionDeTool, MOTORES_CABLEADOS } from "./subagenteExterno.js";
+import { crearSubagenteExterno, decisionDeTool, escritoresEnSerie, MOTORES_CABLEADOS } from "./subagenteExterno.js";
 import { binarioDeCodex } from "./subagenteCodex.js";
 
 const PETICION = {
@@ -304,5 +304,40 @@ describe("los tres motores externos", () => {
       if (previo === undefined) delete process.env["CODEX_BIN"];
       else process.env["CODEX_BIN"] = previo;
     }
+  });
+});
+
+describe("los hijos que ESCRIBEN pasan de uno en uno; los que leen, no esperan", () => {
+  const peticion = (agente: string, permitirEscritura: boolean) =>
+    ({ motor: "codex", cwd: "/p", instrucciones: "", tarea: "t", permitirEscritura, agente }) as const;
+
+  it("dos escritores no se solapan, un lector corre a la vez, y un fallo no bloquea la cola", async () => {
+    const traza: string[] = [];
+    const abiertas = new Map<string, () => void>();
+    const correr = escritoresEnSerie(
+      (p) =>
+        new Promise<string>((ok, mal) => {
+          traza.push(`inicio ${p.agente}`);
+          abiertas.set(p.agente, () => {
+            traza.push(`fin ${p.agente}`);
+            if (p.agente === "a") mal(new Error("revienta"));
+            else ok(p.agente);
+          });
+        })
+    );
+    const a = correr(peticion("a", true)).catch(() => "falló");
+    const b = correr(peticion("b", true));
+    const lector = correr(peticion("l", false));
+    await new Promise((r) => setTimeout(r, 0));
+    // El lector ya arrancó; el segundo escritor espera al primero.
+    expect([...traza].sort()).toEqual(["inicio a", "inicio l"]);
+    abiertas.get("l")!();
+    abiertas.get("a")!();
+    await a;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(traza.slice(2)).toEqual(["fin l", "fin a", "inicio b"]);
+    abiertas.get("b")!();
+    expect(await b).toBe("b");
+    expect(await lector).toBe("l");
   });
 });

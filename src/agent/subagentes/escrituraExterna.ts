@@ -500,6 +500,9 @@ export function motivoDeToolDenegada(nombre: string, clase: ClaseDeToolExterna):
   );
 }
 
+/** Por qué `correr` rechaza cuando se paró el turno: el hijo se mató, no terminó su encargo. */
+export const MOTIVO_DE_CANCELACION_EXTERNA = "el turno se canceló y el agente externo se ha detenido";
+
 /** Y el motivo cuando el propio SDK abortó mientras se esperaba la decisión. */
 export const MOTIVO_DE_ESCRITURA_ABORTADA =
   "la petición se canceló antes de que nadie autorizara esa escritura, así que no se ha escrito nada.";

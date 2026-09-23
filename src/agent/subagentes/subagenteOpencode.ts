@@ -54,6 +54,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { PeticionExterna, PoliticaDeEscrituraExterna } from "../../core/ports.js";
 import { carpetasDeSkillsParaElMotor } from "../grafo/skills.js";
+import { MOTIVO_DE_CANCELACION_EXTERNA } from "./escrituraExterna.js";
 import { consumoDeOpencode } from "./consumoExterno.js";
 import { decisionDeEscrituraDeOpencode } from "./escrituraDeOpencode.js";
 
@@ -70,6 +71,8 @@ export function carpetaDeConfigDeOpencode(base?: string): string {
 
 /** Diez minutos, igual que Codex, y por lo mismo: un hijo colgado colgaría el turno. */
 const TOPE_MS = 10 * 60 * 1000;
+/** Lo que se espera entre mandarle `session/cancel` y matarlo, para que llegue a leerlo. */
+const MS_PARA_LEER_LA_CANCELACION = 300;
 
 /**
  * La configuración con la que corre el hijo. **Es pura y por eso se puede probar entera.**
@@ -287,12 +290,23 @@ export async function correrOpencode(
       if (sesion !== undefined) mandar({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId: sesion } });
       terminado = true;
       pararReloj();
-      hijo.kill();
+      // Y se le deja un momento para LEERLO antes de matarlo: con el `kill` en el mismo instante,
+      // medido con el doble, el `session/cancel` no llegaba nunca. Cerrar su entrada y matarlo al
+      // poco garantiza igual que no queda vivo.
+      if (sesion === undefined) hijo.kill();
+      else {
+        hijo.stdin.end();
+        setTimeout(() => hijo.kill(), MS_PARA_LEER_LA_CANCELACION).unref();
+      }
       if (error !== undefined) fallar(error);
       else cumplir(salida ?? "");
     };
 
     armarReloj();
+    // Parar el turno cancela la sesión ACP y MATA al hijo (`PeticionExterna.senal`).
+    const alCancelar = (): void => acabar(new Error(MOTIVO_DE_CANCELACION_EXTERNA));
+    if (peticion.senal?.aborted === true) alCancelar();
+    else peticion.senal?.addEventListener("abort", alCancelar, { once: true });
 
     hijo.on("error", (e) => acabar(new Error(`no se pudo lanzar opencode: ${e.message}`)));
     hijo.on("close", () => {

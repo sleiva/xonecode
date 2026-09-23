@@ -625,7 +625,13 @@ continúa el otro. Cumple el mismo `SesionReal`, así que ninguna piel sabe cuá
 ahí; lo que solo está en rutas profundas —dos tipos de los fragmentos— vive separado dentro, y el trazado
 mudo es nuestro con `satisfies` contra los tipos públicos. **El reparto es el de deepagents**: el raíz es el
 orquestador de solo lectura y sin skills, cada especialista sale de su `.md`, y **la aprobación de un
-hijo se devuelve a SU `thread_id`** (a `main` la librería la rechaza). **Las tools propias no se
+hijo se devuelve a SU `thread_id`** (a `main` la librería la rechaza). **Los de motor EXTERNO también son
+hijos, por el MISMO `SubagenteExternoPort`** (`modeloExterno.ts`): un `AgentThread` de UNA llamada cuyo
+«modelo» es `correr()`, sin tools ni capabilities, solo si su motor está disponible al abrir, con la política,
+el modo, la cola de actividad (`entrelazar`) y la cuenta `externo` que compone la sesión; su «llamada» no se
+cuenta como de nuestro modelo, y un motor que falla se DEVUELVE como texto. **Parar mata al hijo**
+(`PeticionExterna.senal`) y **dos hijos que escriben no corren a la vez** (`escritoresEnSerie`), las dos en el
+puerto, así que valen a los dos motores. **Las tools propias no se
 reescriben: se ADAPTAN** (`toolsPropias.ts`, esquema de la tool y su `invoke`), con el mismo reparto —
 `xone_navegacion` a todos, el orquestador incluido—. **El verificador y su reparación también**, y el juez del turno y el crítico de pantalla con los mismos puertos (el juez contra el ENCARGO, que en la respuesta a una pregunta es el que la provocó), con
 las reglas SACADAS del cierre de deepagents a `agent/turno/verificacion.ts` (reparto de hallazgos,

@@ -242,6 +242,12 @@ export interface PeticionExterna {
    * todos los especialistas, así que sin esto el diff diría «alguien quiere escribir».
    */
   agente: string;
+  /**
+   * La cancelación del turno. Abortada, el motor MATA a su hijo y `correr` rechaza: pulsar Parar
+   * no puede dejar un Claude Code o un Codex vivo escribiendo el proyecto con el turno ya
+   * cerrado. Opcional: sin ella el hijo acaba por su cuenta o por su tope, que es lo de antes.
+   */
+  senal?: AbortSignal;
 }
 
 /**

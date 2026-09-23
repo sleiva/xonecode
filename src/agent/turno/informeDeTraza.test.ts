@@ -154,6 +154,18 @@ describe("informe de traza", () => {
     expect(texto).toContain("3 llam");
   });
 
+  it("la caché del EXTERNO va fuera de su entrada y se pinta en la convención del grafo", () => {
+    // Las cifras de una pasada real con Claude Code: sin normalizar salía «caché 1110 %» y un
+    // efectivo negativo.
+    const fila = pintarGasto(
+      { modelo: { entrada: 10, salida: 1, cache: 0 }, externo: { entrada: 95_498, salida: 13_119, cache: 1_060_000 }, contexto: 0 },
+      1
+    ).find((l) => l.includes("externo"))!;
+    const porcentaje = Number(/caché (\d+)%/.exec(fila)![1]);
+    expect(porcentaje).toBeLessThanOrEqual(100);
+    expect(fila).not.toMatch(/efectivo ≈-/);
+  });
+
   it("sin agente externo no se pinta una fila de ceros", () => {
     const texto = pintarGasto(
       { modelo: { entrada: 1000, salida: 100, cache: 0 }, externo: { entrada: 0, salida: 0, cache: 0 }, contexto: 900 },
