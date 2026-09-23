@@ -3,6 +3,7 @@ import {
   ANCHO_MINIMO_DEL_CHAT,
   ANCHO_MINIMO_DEL_PANEL,
   ANCHO_PANEL_POR_OMISION,
+  ANCHO_PANEL_MAXIMO,
   acotarAnchoDePanel,
   repartoDeColumnas,
 } from "./repartoDeColumnas.js";
@@ -89,7 +90,7 @@ describe("repartoDeColumnas", () => {
 describe("acotarAnchoDePanel", () => {
   it("acota al suelo y al techo", () => {
     expect(acotarAnchoDePanel(10)).toBe(ANCHO_MINIMO_DEL_PANEL);
-    expect(acotarAnchoDePanel(5000)).toBe(720);
+    expect(acotarAnchoDePanel(5000)).toBe(ANCHO_PANEL_MAXIMO);
     expect(acotarAnchoDePanel(500)).toBe(500);
   });
 
@@ -106,5 +107,16 @@ describe("acotarAnchoDePanel", () => {
 
   it("lo que no es un número cae en la omisión: un NaN acabaría en un `grid-template-columns`", () => {
     expect(acotarAnchoDePanel(Number.NaN)).toBe(ANCHO_PANEL_POR_OMISION);
+  });
+});
+
+
+describe("el tope del panel, ensanchado", () => {
+  it("deja arrastrarlo muy por encima de los 720 de antes, y sigue sin llevarse el chat", () => {
+    // Pedido por él: «el resize tiene un tope, dejarlo más».
+    expect(ANCHO_PANEL_MAXIMO).toBeGreaterThanOrEqual(1200);
+    expect(acotarAnchoDePanel(1100, 2400)).toBe(1100);
+    // En una ventana de 1400 el chat conserva su suelo: el panel no pasa de 1400 − 560.
+    expect(acotarAnchoDePanel(1300, 1400)).toBe(1400 - ANCHO_MINIMO_DEL_CHAT);
   });
 });

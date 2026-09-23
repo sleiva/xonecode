@@ -38,8 +38,16 @@ export const ANCHO_MINIMO_DEL_PANEL = 360;
 /** Lo que mide el panel la primera vez, mientras nadie lo haya arrastrado. */
 export const ANCHO_PANEL_POR_OMISION = 480;
 
-/** El tope duro, el mismo papel que `ANCHO_BARRA_MAXIMO` tiene en la barra. */
-export const ANCHO_PANEL_MAXIMO = 720;
+/**
+ * El tope duro, el mismo papel que `ANCHO_BARRA_MAXIMO` tiene en la barra.
+ *
+ * Era 720 y se quedaba corto: pedido por él, mirando la pantalla, «el resize tiene un tope,
+ * dejarlo más». Un diff de Revisión o un `.xne` largo en Ficheros se leen mejor anchos, y el
+ * que de verdad protege algo es el OTRO techo —el que deja al chat su `ANCHO_MINIMO_DEL_CHAT`,
+ * en `acotarAnchoDePanel`—, que es el que impide que el panel se lleve la conversación. Con un
+ * panel ancho la barra se pliega sola para hacerle sitio (`repartoDeColumnas`, paso 2).
+ */
+export const ANCHO_PANEL_MAXIMO = 1400;
 
 export type RepartoDeColumnas = {
   /**
