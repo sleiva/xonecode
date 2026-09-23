@@ -170,14 +170,20 @@ async function ejecutar(backend: BackendDeFicheros, nombre: ToolDeFichero, args:
  * El `ToolSource` de TrueForge con las seis tools. La aprobación NO se decide aquí: la pone el
  * `ToolSet` que lo envuelve (`requireApprovalForTools`), y la tool solo corre tras el «sí».
  */
-export function fuenteDeFicheros(opciones: { backend: BackendDeFicheros; reglas: readonly ReglaDeRuta[] }) {
-  const esDeFichero = (n: string): n is ToolDeFichero => (TOOLS_DE_FICHERO as readonly string[]).includes(n);
+export function fuenteDeFicheros(opciones: {
+  backend: BackendDeFicheros;
+  reglas: readonly ReglaDeRuta[];
+  /** Cuáles se ofrecen. Ausente = las seis. El `device-controller` no escribe ficheros: ejecuta. */
+  tools?: readonly ToolDeFichero[];
+}) {
+  const ofrecidas = opciones.tools ?? TOOLS_DE_FICHERO;
+  const esDeFichero = (n: string): n is ToolDeFichero => (ofrecidas as readonly string[]).includes(n);
   return {
     name: "xone",
     id: "xone",
     listTools: async () => ({
       result: {
-        tools: TOOLS_DE_FICHERO.map((n) => ({
+        tools: ofrecidas.map((n) => ({
           name: n,
           description: ESQUEMAS[n].descripcion,
           inputSchema: { type: "object" as const, properties: ESQUEMAS[n].propiedades, required: ESQUEMAS[n].obligatorias },
@@ -214,6 +220,67 @@ export function fuenteDeFicheros(opciones: { backend: BackendDeFicheros; reglas:
       type: "mcp" as const,
       mcp_server_id: "xone",
       mcp_server_name: "xone",
+      original_tool_name: params.name,
+    }),
+  };
+}
+
+
+/** Las que solo LEEN: las que lleva un subagente que no escribe el proyecto. */
+export const TOOLS_DE_LECTURA: readonly ToolDeFichero[] = ["ls", "read_file", "glob", "grep"];
+
+/** Lo que devuelve la shell de deepagents (`ExecuteResponse`), en lo que se usa. */
+interface BackendQueEjecuta {
+  execute(comando: string): unknown;
+}
+
+/**
+ * `execute`: la shell del `device-controller`, sobre el MISMO backend que le monta deepagents
+ * (`backendDeAgente` con `ejecucion`), así que su entorno —los scripts de las skills en el PATH, sin
+ * las claves de API, con el fichero del dispositivo de la sesión— y el anuncio de los artefactos que
+ * deje un comando son los de siempre.
+ *
+ * **Solo la lleva UN agente**, como en deepagents: una shell no pasa por `permisosDe` ni por la
+ * aprobación, así que no se le da al que escribe el proyecto. Y no pregunta antes de cada comando:
+ * lo que lo compensa es que el comando entero se VE en el chat (`resumenDeTool.ts` lo tiene en su
+ * lista blanca).
+ */
+export function fuenteDeEjecucion(backend: BackendQueEjecuta) {
+  return {
+    name: "shell",
+    id: "shell",
+    listTools: async () => ({
+      result: {
+        tools: [
+          {
+            name: "execute",
+            description:
+              "Runs a shell command in the project root and returns its output and exit code. Use the xone-* scripts of your skills.",
+            inputSchema: { type: "object" as const, properties: { command: { type: "string" } }, required: ["command"] },
+            preload: true,
+          },
+        ],
+      },
+      wasInitialized: undefined,
+    }),
+    callTool: async (params: { name: string; arguments?: Record<string, unknown> }) => {
+      const comando = params.arguments?.command;
+      if (params.name !== "execute" || typeof comando !== "string" || comando.trim() === "") {
+        return toolResultResponse({ text: "execute necesita un `command`", isError: true });
+      }
+      try {
+        const r = (await backend.execute(comando)) as { output?: string; exitCode?: number | null; truncated?: boolean };
+        const salida = `${r.output ?? ""}${r.truncated === true ? "\n[salida truncada]" : ""}`;
+        const codigo = r.exitCode ?? 0;
+        return toolResultResponse({ text: `${salida}\n[exit code ${codigo}]`, isError: codigo !== 0 });
+      } catch (e) {
+        return toolResultResponse({ text: e instanceof Error ? e.message : String(e), isError: true });
+      }
+    },
+    toolCallInfo: async (params: { name: string }) => ({
+      type: "mcp" as const,
+      mcp_server_id: "shell",
+      mcp_server_name: "shell",
       original_tool_name: params.name,
     }),
   };

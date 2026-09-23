@@ -159,4 +159,61 @@ describe("una sesión con el motor TrueForge", () => {
     expect(readFileSync(join(raiz, "nota.txt"), "utf8")).toBe("hola\n");
     expect(pi.tokens.join("")).toContain("Listo.");
   }, 20_000);
+
+  it("el raíz DELEGA en el device-controller, que EJECUTA de verdad: la shell la tiene solo él", async () => {
+    const raiz = proyecto();
+    const vistos: string[][] = [];
+    const toolsPorLlamada: string[][] = [];
+    const guiones = [
+      // 1. El raíz delega.
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "device-controller", input: "di hola por la shell" }) }] })],
+      // 2. El conductor ejecuta un comando real.
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "x1", name: "execute", args: JSON.stringify({ command: "echo hola-desde-la-shell" }) }] })],
+      // 3. El conductor informa.
+      [new AIMessageChunk({ content: "La shell dijo hola." })],
+      // 4. El raíz contesta.
+      [new AIMessageChunk({ content: "Hecho en el dispositivo." })],
+    ];
+    let atadas: string[] = [];
+    const modelo = {
+      bindTools: (tools: { function?: { name?: string } }[]) => {
+        atadas = tools.map((t) => t.function?.name ?? "");
+        return modelo;
+      },
+      stream: async (mensajes: { content: unknown }[]) => {
+        vistos.push(mensajes.map((m) => String(m.content)));
+        toolsPorLlamada.push(atadas);
+        const g = guiones.shift() ?? [new AIMessageChunk({ content: "" })];
+        return (async function* () {
+          for (const t of g) yield t;
+        })();
+      },
+    };
+    const m = { paraPapel: () => modelo, paraModelo: () => modelo, descripcion: () => ({}) } as unknown as ModelosPort;
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, instrucciones: "reglas" });
+    const lineas: string[] = [];
+    const tokens: string[] = [];
+    await s.turno("lanza el hotswap", {
+      token: (t) => void tokens.push(t),
+      cerrarLinea: () => {},
+      linea: (t) => void lineas.push(t),
+      pausa: () => {},
+      fin: () => {},
+    });
+    // El comando CORRIÓ y su salida volvió al conductor en su segunda llamada.
+    expect(vistos[2]!.join("\n")).toContain("hola-desde-la-shell");
+    // El conductor recibió sus instrucciones corregidas, no la frase de «mismas tools».
+    expect(vistos[1]!.join("\n")).toMatch(/NO tienes las mismas tools/);
+    // El chat vio la delegación Y el comando, con el comando entero.
+    expect(lineas.join("\n")).toMatch(/device-controller/);
+    expect(lineas.join("\n")).toMatch(/echo hola-desde-la-shell/);
+    // Y solo habla el raíz.
+    expect(tokens.join("")).toBe("Hecho en el dispositivo.");
+    // LA REGLA: la shell la tiene UNO. Al raíz —llamadas 1 y 4— nunca se le ofrece `execute`;
+    // al conductor —2 y 3— sí, y no puede escribir ficheros.
+    expect(toolsPorLlamada[0]).not.toContain("execute");
+    expect(toolsPorLlamada[3]).not.toContain("execute");
+    expect(toolsPorLlamada[1]).toContain("execute");
+    expect(toolsPorLlamada[1]).not.toContain("write_file");
+  }, 30_000);
 });

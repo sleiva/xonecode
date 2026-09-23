@@ -18,7 +18,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import winston from "winston";
-import { AgentThread, AgentThreadOrchestrator, EventType, ToolSet } from "@truefoundry/trueforge-core/core";
+import { AgentThread, AgentThreadOrchestrator, EventType, ToolSet, dynamicSubAgents } from "@truefoundry/trueforge-core/core";
 import { NOOP_AGENT_TRACING } from "@truefoundry/trueforge-core/core/tracing/NoopAgentTracing";
 import type { DomainEvent, PendienteDeAprobacion } from "../../../core/events.js";
 import type { ConsumoDeSesionPorCuenta, ModelosPort } from "../../../core/ports.js";
@@ -27,18 +27,42 @@ import { esRutaDeArtefacto, type Artefacto } from "../../../core/artefactos.js";
 import type { LineaDeDiff } from "../../../core/diff.js";
 import { createTokenTracker, type TokenTracker } from "../../../vendor/tokenTracking.js";
 import { MAX_APPROVAL_ROUNDS, type Decision } from "../../../vendor/hitl.js";
-import { backendDeAgente } from "../../grafo/proyecto.js";
+import { backendDeAgente, entornoDeLaShellDelProyecto } from "../../grafo/proyecto.js";
+import { cargarAgentes } from "../../subagentes/agentesEnDisco.js";
+import { promptDeAgente, type Agente } from "../../../core/agentes.js";
 import { permisosDe, TEXTO_HITL } from "../../grafo/perfiles.js";
 import { cambioDe } from "../../turno/interrupts.js";
 import { tomarInstantanea, type Cambio } from "../../turno/instantanea.js";
 import { ficherosDelProyecto, type SesionReal } from "../../turno/turnoReal.js";
 import type { Entorno } from "../../config/entorno.js";
 import { modeloParaTrueforge } from "./modeloLangchain.js";
-import { fuenteDeFicheros, TOOLS_QUE_ESCRIBEN, type BackendDeFicheros } from "./toolsDeFichero.js";
+import {
+  fuenteDeEjecucion,
+  fuenteDeFicheros,
+  TOOLS_DE_LECTURA,
+  TOOLS_QUE_ESCRIBEN,
+  type BackendDeFicheros,
+} from "./toolsDeFichero.js";
 import { traducirEvento } from "./eventosTrueforge.js";
 
 /** Quién pide las escrituras en este motor, para la tarjeta de aprobación. */
 const ORIGEN = "trueforge";
+
+/** Las tools que NO piden aprobación: las de lectura y la shell del conductor. */
+const SIN_APROBACION = { enableTools: ["@all"], disableTools: [], preloadTools: [], requireApprovalForTools: [] };
+
+/**
+ * Lo que el agente raíz tiene que saber para DELEGAR: que no tiene shell y a quién se le pide lo
+ * que se hace en un aparato. Sin esto, «lanza el hotswap» se contestaba con «no puedo ejecutar».
+ */
+function instruccionDeDelegar(conductor: Agente | undefined): string {
+  if (conductor === undefined) return "No tienes shell ni un subagente que ejecute comandos: si te piden algo en un dispositivo, dilo.";
+  return (
+    `No tienes shell. Todo lo que haya que hacer en un dispositivo o emulador —desplegar, hotswap, lanzar la app, ` +
+    `capturas, logs— lo DELEGAS con \`create_sub_agent\` usando exactamente \`name: "${conductor.nombre}"\` y un encargo ` +
+    `autosuficiente: qué pantalla o colección tiene que alcanzar y qué comprobar. Es el único que ejecuta comandos.`
+  );
+}
 
 export interface OpcionesDeSesionTrueforge {
   raiz: string;
@@ -93,22 +117,93 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
   });
   const llm = modeloParaTrueforge({ modelo: () => modelos.paraPapel("trabajo"), senal: () => aborto?.signal });
 
+  /**
+   * **El que EJECUTA es un subagente, y es el único con shell** —la regla de deepagents, que aquí
+   * se conserva—: una shell no pasa por `permisosDe` ni por la aprobación, así que no se le da al
+   * agente raíz, que escribe el proyecto. Es el `.md` con `ejecucion: true` (hoy el
+   * `device-controller`), con su prompt, sus tools de LECTURA y `execute` sobre el mismo backend
+   * que le monta deepagents.
+   */
+  const conductor = (): Agente | undefined => cargarAgentes(raiz).agentes.find((a) => a.ejecucion === true);
+
+  /**
+   * El hilo de un subagente. TrueForge no tiene subagentes con nombre ni deja poner prompt propio a
+   * un hijo —su identidad fija dice además que tiene «las mismas tools que el padre», que aquí no es
+   * verdad—, así que las instrucciones van en su primer mensaje, CORRIGIENDO esa frase, y el encargo
+   * detrás. Un nombre que no es el del conductor da un hijo genérico de SOLO LECTURA y sin shell:
+   * un nombre inventado no tumba el turno ni se lleva la shell.
+   */
+  const crearHijo = async (params: {
+    request: { name: string; input: string };
+    threadId: string;
+    parent: unknown;
+  }): Promise<AgentThread> => {
+    const elConductor = conductor();
+    const esElConductor = elConductor !== undefined && params.request.name === elConductor.nombre;
+    const lectura = fuenteDeFicheros({ backend, reglas: permisosDe({ nombre: params.request.name, soloLectura: true }), tools: TOOLS_DE_LECTURA });
+    const tools: unknown[] = [new ToolSet({ source: lectura as never, selectors: SIN_APROBACION, preload: true })];
+    let instrucciones: string;
+    if (esElConductor) {
+      const carpeta = opciones.artefactos;
+      const conShell = backendDeAgente({
+        raiz,
+        ficheros: ficherosDelProyecto(raiz),
+        ...(carpeta === undefined
+          ? {}
+          : { artefactos: { carpeta, alEscribir: (a: Artefacto) => void artefactosPorAnunciar.push(a) } }),
+        ejecucion: { entorno: entornoDeLaShellDelProyecto(raiz, carpeta) },
+      }) as unknown as { execute(c: string): unknown };
+      tools.push(new ToolSet({ source: fuenteDeEjecucion(conShell) as never, selectors: SIN_APROBACION, preload: true }));
+      const skills = elConductor.skills.map((s) => `/skills/${s}/SKILL.md`).join(", ");
+      instrucciones = [
+        promptDeAgente(elConductor, { suyas: [], faltan: [] }),
+        "",
+        "NOTA DEL HARNESS: aunque tu identidad diga lo contrario, NO tienes las mismas tools que quien te " +
+          "delega. Tienes `ls`, `read_file`, `glob`, `grep` y `execute`; no puedes escribir ficheros del proyecto.",
+        ...(skills === "" ? [] : [`Tus skills están en ${skills}: léelas con read_file antes de usar sus scripts.`]),
+      ].join("\n");
+    } else {
+      instrucciones =
+        "NOTA DEL HARNESS: eres un subagente de SOLO LECTURA. Tienes `ls`, `read_file`, `glob` y `grep`; " +
+        "no puedes escribir ficheros ni ejecutar comandos. Contesta con lo que encuentres y dónde.";
+    }
+    const modelo = esElConductor && elConductor.modelo !== undefined ? elConductor.modelo : undefined;
+    return new AgentThread({
+      definition: {
+        modelClient: modeloParaTrueforge({
+          modelo: () => (modelo === undefined ? modelos.paraPapel("trabajo") : modelos.paraModelo(modelo)),
+          senal: () => aborto?.signal,
+        }),
+        messages: [{ role: "user", content: `${instrucciones}\n\nENCARGO:\n${params.request.input}` }] as never,
+      },
+      threadId: params.threadId,
+      title: params.request.name,
+      parent: params.parent as never,
+      agentInfo: { type: "dynamic", ...params.request } as never,
+      capabilities: [{ systemToolSets: tools }] as never,
+      tracing: NOOP_AGENT_TRACING,
+      logger,
+    });
+  };
+
   /** El árbol de hilos de UNA conversación. Se rehace con `nuevoHilo`. */
   const nuevoOrquestador = (): AgentThreadOrchestrator => {
     const raizDelArbol = new AgentThread({
-      definition: { modelClient: llm, instruction: opciones.instrucciones },
+      definition: { modelClient: llm, instruction: `${opciones.instrucciones}\n\n${instruccionDeDelegar(conductor())}` },
       threadId: "main",
       title: "main",
-      capabilities: [{ systemToolSets: [toolSet] }] as never,
+      capabilities: [
+        { systemToolSets: [toolSet] },
+        // `create_sub_agent`: la delegación de TrueForge, un nivel y cinco a la vez como mucho.
+        dynamicSubAgents({ sandboxAvailable: false, tracing: NOOP_AGENT_TRACING }),
+      ] as never,
       tracing: NOOP_AGENT_TRACING,
       logger,
     });
     return new AgentThreadOrchestrator({
       agentThreads: new Map([["main", raizDelArbol]]),
-      // Sin subagentes en esta fase: pedir uno es un error que el motor devuelve al modelo.
-      createDynamicSubAgentThread: async () => {
-        throw new Error("este motor todavía no tiene subagentes");
-      },
+      createDynamicSubAgentThread: async (params) =>
+        crearHijo(params as unknown as { request: { name: string; input: string }; threadId: string; parent: unknown }),
       tracing: NOOP_AGENT_TRACING,
       logger,
     });

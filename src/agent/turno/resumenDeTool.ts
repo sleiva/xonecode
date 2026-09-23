@@ -41,6 +41,9 @@ export const CAMPOS_SEGUROS: Record<string, readonly string[]> = {
    * minutos en otro proceso, sin una sola tool que cruce.
    */
   task: ["subagent_type"],
+  // La delegación del motor TrueForge: el NOMBRE del subagente y nada más, por lo mismo que
+  // `task` — su `input` es el encargo entero y puede llevar contenido del proyecto dentro.
+  create_sub_agent: ["name"],
   /**
    * **De la `description` no sale el TEXTO, sale su HUELLA**, y hace falta por una medida.
    *
