@@ -514,7 +514,9 @@ hechos del proyecto precargados, y envuelve el prompt con su identidad, que no s
 
 **Lo que NO hay todavía**, y en este orden sería lo siguiente:
 
-1. ~~`xone_navegacion`, `regex_search`~~: hechas (abajo). Faltan los hechos del proyecto precargados.
+1. ~~`xone_navegacion`, `regex_search`~~: hechas (abajo). ~~Los hechos del proyecto precargados~~:
+   hechos, en la petición de cada turno y con el MISMO cargador que la tool (`sesionTrueforge.ts#flujo`);
+   no van en la respuesta a una pregunta, que no es un encargo nuevo, ni en la de una reparación.
 2. ~~El verificador con su reparación~~: hecho, con las reglas de deepagents compartidas
    (`agent/turno/verificacion.ts`). Faltan el juez del turno y el crítico de pantalla enganchados.
 3. ~~El resto de subagentes~~: hecho, todos salen de su `.md` (abajo).
@@ -699,5 +701,7 @@ solo está en rutas profundas —hoy, solo dos TIPOS: `ExtendedChatCompletionChu
 su API y son lo primero que puede moverse. El trazado mudo es nuestro, con `satisfies` contra los
 tipos públicos de `AgentTracing`, así que un cambio de su interfaz lo dice el compilador. El test
 de la frontera reconoce las cuatro formas de cargar el paquete —`from`, `import` a secas,
-`import()` y `require()`—, y prueba el propio detector con cada una. **Ojo al comparar con el código fuente**: el checkout local de TrueForge es 0.2.0 y aquí
-corre 0.2.1; la referencia del comportamiento es `node_modules`.
+`import()` y `require()`—, y prueba el propio detector con cada una. **Ojo al comparar con el código fuente**: el checkout local de TrueForge está ya en 0.3.0-rc.0 y aquí
+corre 0.2.1; la referencia del comportamiento es `node_modules`. No se sube a 0.3 sin antes una prueba
+de compatibilidad con DeepSeek: 0.3 saca `reasoning_content` del contexto del hilo, y DeepSeek exige
+recibirlo de vuelta cuando hay tool calls.

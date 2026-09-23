@@ -650,3 +650,61 @@ describe("la pregunta sobrevive a CERRAR y REABRIR", () => {
     expect(pi.tokens.join("")).toBe("Vale, el menú.");
   }, 30_000);
 });
+
+describe("los hechos del proyecto van DELANTE del turno, también en TrueForge", () => {
+  // La composición vive dentro de `turno()`, el cierre que todos los tests doblan: sin estos
+  // tres, la foto podía dejar de montarse en este motor con todo en verde.
+  const indice = async () =>
+    ({
+      inventario: () => [
+        { nombre: "EntradaApp", clase: "coleccion", fichero: "/EntradaApp.xne" },
+        { nombre: "Calculadora", clase: "coleccion", fichero: "/Calculadora.xne" },
+      ],
+      app: () => ({ entrada: ["EntradaApp"], login: [], estilos: ["default.css"], conexiones: [] }),
+    }) as never;
+  const mensajeDelUsuario = (vistos: string[][], i: number): string => vistos[i]!.find((c) => c.includes("arregla el visor"))!;
+
+  it("la petición llega con el inventario detrás, y la petición va PRIMERO", async () => {
+    const { m, vistos } = modelosConGuion([[new AIMessageChunk({ content: "Hecho." })]]);
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, navegacion: indice });
+    await s.turno("arregla el visor", piel().p);
+    const texto = mensajeDelUsuario(vistos, 0);
+    expect(texto.startsWith("arregla el visor")).toBe(true);
+    expect(texto).toContain("Calculadora");
+    expect(texto).toContain("Entrada: EntradaApp");
+  }, 30_000);
+
+  it("un índice que revienta NO tumba el turno: va la petición sola", async () => {
+    const { m, vistos } = modelosConGuion([[new AIMessageChunk({ content: "Hecho." })]]);
+    const s = await abrirSesionTrueforge({
+      raiz: proyecto(),
+      modelos: m,
+      entorno: ENTORNO,
+      skills: CATALOGO,
+      navegacion: async () => {
+        throw new Error("no es un proyecto XOne");
+      },
+    });
+    const pi = piel();
+    await s.turno("arregla el visor", pi.p);
+    expect(vistos[0]!).toContain("arregla el visor");
+    expect(pi.tokens.join("")).toBe("Hecho.");
+  }, 30_000);
+
+  it("la RESPUESTA a una pregunta no es un encargo nuevo: vuelve sin la foto", async () => {
+    const { m, vistos } = modelosConGuion([
+      [
+        new AIMessageChunk({
+          content: "",
+          tool_call_chunks: [{ index: 0, id: "q1", name: "ask_user_question", args: JSON.stringify({ question: "¿Cuál?", options: ["Login", "Menú"] }) }],
+        }),
+      ],
+      [new AIMessageChunk({ content: "Vale." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, navegacion: indice });
+    await s.turno("arregla el visor", piel().p);
+    await s.turno("2", piel().p);
+    // La foto va UNA vez, con el encargo; la respuesta no la repite.
+    expect(vistos[1]!.filter((c) => c.includes("Calculadora"))).toHaveLength(1);
+  }, 30_000);
+});

@@ -62,6 +62,8 @@ import { detalleDe, parametrosDe } from "../../turno/resumenDeTool.js";
 import { fotoSaneada, guardarMemoria, leerMemoria, type FotoDeHilo } from "./memoriaTrueforge.js";
 import type { ToolDeLangchain } from "./toolsPropias.js";
 import { crearNavegacionXone } from "../../grafo/navegacionXone.js";
+import { hechosDelProyectoDe } from "../../navegacion/hechosEnDisco.js";
+import { conHechosDelProyecto } from "../../../core/hechosDelProyecto.js";
 import { crearBusquedaRegex } from "../../grafo/busquedaRegex.js";
 import { crearCopiarArtefacto } from "../../grafo/copiarArtefacto.js";
 import { crearCriticaVisual } from "../../grafo/criticaVisual.js";
@@ -633,9 +635,19 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
         // `user.tool_response`, y no como un mensaje nuevo que la dejaría sin contestar.
         const enEspera = preguntaEnEspera;
         preguntaEnEspera = undefined;
+        // Los hechos baratos del proyecto van DELANTE (`core/hechosDelProyecto.ts`), la misma
+        // foto y el MISMO cargador que `xone_navegacion`, rehecha en cada turno —la regla de
+        // deepagents: en el prompt de sistema envejecería dentro de la sesión—. Solo en la
+        // petición ORIGINAL: la respuesta a una pregunta no es un encargo nuevo, y el mensaje de
+        // una reparación ya lleva sus hallazgos. Un índice que no carga deja la petición sola.
         let lote: unknown[] =
           enEspera === undefined
-            ? [{ type: EventType.USER_MESSAGE, content: peticion }]
+            ? [
+                {
+                  type: EventType.USER_MESSAGE,
+                  content: conHechosDelProyecto(peticion, await hechosDelProyectoDe(cargarIndice, ficherosDelProyecto(raiz))),
+                },
+              ]
             : [{ type: "user.tool_response", thread_id: enEspera.hilo, tool_call_id: enEspera.id, content: respuestaAPregunta(enEspera.args, peticion) }];
         let intento = 0;
         let huellaPrevia: string | undefined;
