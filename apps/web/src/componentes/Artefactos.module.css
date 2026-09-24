@@ -91,7 +91,10 @@
 }
 
 .cara {
-  padding: 3px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
   border: none;
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
@@ -115,7 +118,10 @@
    ofrece sus propias formas de guardarlo. Con BORDE, como los de copiar: un control que no
    se ve como control no invita a pulsarlo. */
 .descargar {
-  padding: 3px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-1);
@@ -137,6 +143,12 @@
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
+}
+
+/* A pantalla completa el marco es la pantalla: con el fondo de la capa, que sin él el navegador
+   pone negro detrás de un artefacto de fondo transparente. */
+.marco:fullscreen {
+  background: var(--dsw-alias-bg-layer-1);
 }
 
 .iframe {

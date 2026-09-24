@@ -152,3 +152,29 @@ describe("Artefactos: un programa de OpenUI", () => {
     expect(alPedir).toHaveBeenCalled();
   });
 });
+
+describe("Artefactos: pantalla completa", () => {
+  afterEach(cleanup);
+  const PANEL: ArtefactoEnLista = { ruta: "/artefactos/flujo.html", nombre: "flujo.html", bytes: 900, mime: "text/html" };
+
+  it("con el navegador que lo permite, amplía el MARCO del iframe —el mismo iframe aislado—", () => {
+    Object.defineProperty(document, "fullscreenEnabled", { value: true, configurable: true });
+    const pedir = vi.fn().mockResolvedValue(undefined);
+    HTMLElement.prototype.requestFullscreen = pedir;
+    try {
+      render(<Artefactos lista={[PANEL]} contenidos={{}} elegido={PANEL.ruta} alElegir={() => {}} alPedir={() => {}} conectado />);
+      fireEvent.click(screen.getByRole("button", { name: "Pantalla completa" }));
+      expect(pedir).toHaveBeenCalledTimes(1);
+      const ampliado = pedir.mock.contexts[0] as HTMLElement;
+      expect(ampliado.querySelector("iframe")?.getAttribute("sandbox")).toBe("allow-scripts");
+    } finally {
+      Object.defineProperty(document, "fullscreenEnabled", { value: undefined, configurable: true });
+    }
+  });
+
+  it("sin permiso del navegador no hay botón, y en la fuente tampoco", () => {
+    render(<Artefactos lista={[PANEL]} contenidos={{}} elegido={PANEL.ruta} alElegir={() => {}} alPedir={() => {}} conectado />);
+    expect(screen.queryByRole("button", { name: "Pantalla completa" })).toBeNull();
+  });
+});
+

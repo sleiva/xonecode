@@ -27,6 +27,15 @@ export default defineConfig({
       name: "XonecodeVisorOpenui",
       fileName: () => "visor.js",
     },
-    rollupOptions: { output: { assetFileNames: "visor.[ext]" } },
+    rollupOptions: {
+      output: { assetFileNames: "visor.[ext]" },
+      // zod (que arrastra OpenUI) trae comentarios `@__PURE__` en sitios que Rollup no sabe
+      // leer y descarta: no cambia lo que se ejecuta. Se calla SOLO ese aviso y solo de zod;
+      // cualquier otro sigue saliendo.
+      onwarn(aviso, avisar) {
+        if (aviso.code === "INVALID_ANNOTATION" && aviso.id?.includes("/node_modules/zod/")) return;
+        avisar(aviso);
+      },
+    },
   },
 });

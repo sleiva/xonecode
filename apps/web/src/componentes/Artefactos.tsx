@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { IconoDeDescarga, IconoDeFuente, IconoDePantallaCompleta, IconoDeVista } from "./IconosDelVisor";
 import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { FicheroDelProyecto } from "../tipos.js";
 import { protegerDolares } from "../protegerDolares.js";
@@ -106,6 +107,9 @@ export function Artefactos({
     if (!lista.some((a) => a.ruta === elegido)) alElegir(undefined);
   }, [lista, elegido, alElegir]);
 
+  /** El marco del iframe, que es lo que se pone a pantalla completa. */
+  const marco = useRef<HTMLDivElement>(null);
+  const puedePantallaCompleta = typeof document !== "undefined" && document.fullscreenEnabled === true;
   const mime = actual?.mime;
   const esHtml = mime === "text/html";
   /**
@@ -175,23 +179,47 @@ export function Artefactos({
                         aria-pressed={cara === cual}
                         data-activa={cara === cual ? "" : undefined}
                         onClick={() => setCara(cual)}
+                        aria-label={cual === "vista" ? "Vista" : "Fuente"}
+                        title={cual === "vista" ? "Ver el artefacto como se pinta" : "Ver el texto del artefacto"}
                       >
-                        {cual === "vista" ? "Vista" : "Fuente"}
+                        {cual === "vista" ? <IconoDeVista /> : <IconoDeFuente />}
                       </button>
                     ))}
                   </div>
                 ) : null}
+                {/* Pantalla completa, para lo que se VE en el iframe: un diagrama o un panel no
+                    caben en la columna del panel. Se amplía el MARCO, no se abre el artefacto
+                    aparte: el iframe sigue siendo el mismo, con su `sandbox`, y `Esc` devuelve
+                    a donde estabas. Solo si el navegador lo permite, para no dejar un botón que
+                    no hace nada. */}
+                {esDocumento && cara === "vista" && puedePantallaCompleta ? (
+                  <button
+                    type="button"
+                    className={estilos.descargar}
+                    aria-label="Pantalla completa"
+                    title="Ver el artefacto a pantalla completa (Esc para salir)"
+                    onClick={() => void marco.current?.requestFullscreen?.().catch(() => {})}
+                  >
+                    <IconoDePantallaCompleta />
+                  </button>
+                ) : null}
                 {/* Descargar está SIEMPRE, y es lo único que funciona para todos los tipos.
                     Va por la misma ruta HTTP con `descargar=1`, que contesta con
                     `Content-Disposition: attachment` y sin adivinar el tipo. */}
-                <a className={estilos.descargar} href={urlDeArtefacto(actual.ruta, true)} download={actual.nombre}>
-                  Descargar
+                <a
+                  className={estilos.descargar}
+                  href={urlDeArtefacto(actual.ruta, true)}
+                  download={actual.nombre}
+                  aria-label="Descargar"
+                  title={`Descargar ${actual.nombre}`}
+                >
+                  <IconoDeDescarga />
                 </a>
               </div>
             </div>
 
             {esDocumento && cara === "vista" ? (
-              <div className={estilos.marco}>
+              <div className={estilos.marco} ref={marco}>
                 {/* Ver la cabecera del componente: `allow-scripts` sin `allow-same-origin`. */}
                 <iframe
                   className={estilos.iframe}
