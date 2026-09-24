@@ -301,6 +301,7 @@ export function backendConArtefactos<T extends object>(
   carpeta: string,
   alEscribir: (artefacto: Artefacto) => void,
 ): T {
+  // Sus escrituras hacen cola en `backendDeAgente#enSerie`, por fuera de todo lo montado.
   const destino = new FilesystemBackend({ rootDir: carpeta, virtualMode: true });
 
   const anotado = new Proxy(destino, {
@@ -505,27 +506,14 @@ export function backendDeAgente(opciones: {
    * 1» en vez de «es una vista aplanada, edita el .xne», que es lo único que le deja corregir.
    * Lo destapó un test que ya existía.
    */
-/**
-   * **Y la QUINTA va entre medias, porque no contesta una pregunta: espera un turno.**
-   *
-   * `escriturasEnSerie` va por DENTRO de las guardas de ruta —que siguen contestando primero,
-   * con su comparación de texto y sin parsear nada— y por FUERA de `sinContenidoInvalido`,
-   * para que leer el fichero de antes, validarlo y escribirlo sean un solo turno. Al revés,
-   * dos validaciones podrían intercalarse entre su lectura y su escritura, que es justo la
-   * carrera que esto quita.
-   *
-   * Y por eso tampoco tiene sentido más afuera: una escritura que las guardas de ruta van a
-   * rechazar no necesita hacer cola detrás de nadie.
+  /*
+   * La cola de escrituras (`escriturasEnSerie`) YA NO va aquí: va una vez, por FUERA de todo lo
+   * montado —más abajo, `enSerie`—, para que alcance a CUALQUIER fichero.
    */
   const delProyecto = sinDescargasEnElProyecto(
     sinArtefactosEnElProyecto(
       sinVistasAplanadas(
-        escriturasEnSerie(
-          sinContenidoInvalido(
-            exponerMemoriaDeProyecto(base),
-            opciones.validar ?? validarConXoneLinter()
-          )
-        ),
+        sinContenidoInvalido(exponerMemoriaDeProyecto(base), opciones.validar ?? validarConXoneLinter()),
         opciones.ficheros
       )
     )
@@ -574,7 +562,25 @@ export function backendDeAgente(opciones: {
    * era navegar el disco sino TRAERSE un fichero, y eso lo hace la tool
    * `traer_de_la_maquina`. Aquí solo queda contestar bien a quien escriba la ruta a pelo.
    */
-  const conDisco = conAvisoDeRutaDeMaquina(conPlanes);
+  /**
+   * **Las escrituras van en serie POR RUTA, y va UNA vez, aquí: por fuera de TODO lo montado.**
+   *
+   * `write` y `edit` son leer-modificar-escribir sobre el fichero entero, así que dos a la vez
+   * se pisan y las DOS contestan que bien. La cola vivía dentro de la pila del PROYECTO, y
+   * `/artefactos/` y `/planes/` se montan fuera de ella: no la heredaban. Medido (24-09-2026,
+   * MyAllXOne): el diseñador pidió en cinco respuestas seguidas 2, 2, 2, 2 y 5 ediciones del
+   * MISMO HTML a la vez, y el artefacto acabó con tres copias de su `</footer></body></html>`
+   * detrás del cierre —dos escrituras que truncan el mismo fichero dejan la cola de la larga
+   * tras el final de la corta—. Aquí la alcanza cualquier ruta, incluida la carpeta que alguien
+   * monte mañana, que es lo que una cola por montaje no podía prometer.
+   *
+   * Sigue por FUERA de `sinContenidoInvalido` —leer, validar y escribir son un solo turno— y
+   * ahora también de las guardas de ruta: una escritura que van a rechazar espera su turno antes
+   * de oír el no, que es un coste de milisegundos a cambio de un solo sitio. Solo `write` y
+   * `edit`: serializar lecturas no arreglaría nada.
+   */
+  const enSerie = escriturasEnSerie(conPlanes);
+  const conDisco = conAvisoDeRutaDeMaquina(enSerie);
   // Lo que deje un COMANDO en la carpeta de artefactos también se anuncia. Sin esto, la
   // captura que escribe un script existe en el disco y no existe para nadie: el evento
   // `artefacto` lo emite el Proxy de `write`/`edit`, y una shell no pasa por ahí.

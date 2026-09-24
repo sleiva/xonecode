@@ -83,6 +83,44 @@ describe("las escrituras del proyecto van en serie (contra el backend real)", ()
   });
 });
 
+/**
+ * **Y las de `/artefactos/` y `/planes/` también**, que se montan FUERA de la pila del proyecto y
+ * por eso no heredaban la cola. Medido en un artefacto real: cinco rondas de ediciones simultáneas
+ * sobre el mismo HTML lo dejaron con tres colas de su propio final pegadas detrás de `</html>`.
+ */
+describe("las escrituras de /artefactos/ y /planes/ también van en serie (contra el backend real)", () => {
+  const html = Array.from({ length: 10 }, (_, i) => `<p id="s${i}">seccion${i}</p>`).join("\n") + "\n</body></html>\n";
+
+  for (const [ruta, montar] of [
+    [
+      "/artefactos/flujo.html",
+      (raiz: string, carpeta: string) => backendDeAgente({ raiz, ficheros: new Set(), artefactos: { carpeta, alEscribir: () => {} } }),
+    ],
+    ["/planes/visitas/TASKS.md", (raiz: string) => backendDeAgente({ raiz, ficheros: new Set() })],
+  ] as const) {
+    it(`cinco ediciones CONCURRENTES de ${ruta} se aplican las cinco, y el fichero no se corrompe`, async () => {
+      const raiz = mkdtempSync(join(tmpdir(), "serie-fuera-"));
+      const carpeta = mkdtempSync(join(tmpdir(), "serie-artefactos-"));
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const backend = montar(raiz, carpeta) as any;
+        expect((await backend.write(ruta, html))?.error).toBeUndefined();
+        const cambios = [1, 3, 5, 7, 9].map((i) => [`seccion${i}<`, `SECCION${i}-editada<`] as const);
+        const r = (await Promise.all(cambios.map(([v, n]) => backend.edit(ruta, v, n)))) as Array<{ error?: string }>;
+        expect(r.filter((x) => x?.error)).toEqual([]);
+        const leido = (await backend.read(ruta)) as { content?: string } | string;
+        const final = typeof leido === "string" ? leido : String(leido.content ?? "");
+        for (const [, nuevo] of cambios) expect(final, nuevo).toContain(nuevo);
+        // Un solo cierre: la carrera dejaba la cola de la versión larga detrás del final.
+        expect(final.match(/<\/html>/g)).toHaveLength(1);
+      } finally {
+        rmSync(raiz, { recursive: true, force: true });
+        rmSync(carpeta, { recursive: true, force: true });
+      }
+    });
+  }
+});
+
 /** El envoltorio suelto, para poder ver el fallo que arregla sin un disco delante. */
 describe("escriturasEnSerie, el envoltorio", () => {
   it("SIN él, dos lecturas-escrituras concurrentes se pisan", async () => {

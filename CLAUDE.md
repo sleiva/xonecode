@@ -170,9 +170,11 @@ Y las guardas del proyecto:
   FUERA de quien edita — cuando le llega el turno se vuelve a leer el fichero y se vuelve a
   buscar el ancla contra lo que hay. Si sigue, la edición es correcta; si no, el backend
   contesta que no lo encuentra y el modelo reintenta, que es el camino que ya existe. La
-  alternativa era perder el cambio en silencio. En la pila va por DENTRO de las guardas de
-  ruta —que siguen contestando primero— y por FUERA de `sinContenidoInvalido`, para que leer,
-  validar y escribir sean un solo turno. Solo `write` y `edit`: serializar lecturas no arregla
+  alternativa era perder el cambio en silencio. **Va UNA vez, por fuera de TODO lo montado**
+  (`backendDeAgente#enSerie`), para que alcance a cualquier fichero: vivía dentro de la pila del
+  proyecto, y `/artefactos/` y `/planes/` —que se montan fuera— no la heredaban (medido: un HTML
+  editado a la vez varias veces acabó con colas de su propio final pegadas detrás del cierre). Y
+  por FUERA de `sinContenidoInvalido`, para que leer, validar y escribir sean un solo turno. Solo `write` y `edit`: serializar lecturas no arregla
   nada y volvería secuencial lo que sí puede ir en paralelo. **Y se prueba por `backendDeAgente`
   y contra el backend REAL**, porque lo que hay que comprobar es que esté CABLEADA.
 - **`/artefactos/` → `.xonecode/sesiones/<id>/artefactos/`**: escribible y **sin aprobación**, por
