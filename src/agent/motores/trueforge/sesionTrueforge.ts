@@ -40,6 +40,7 @@ import { inventarioDelProyecto, opcionesDeSubagenteExterno } from "../../subagen
 import { sumarConsumo, SIN_CONSUMO } from "../../subagentes/consumoExterno.js";
 import { ColaDeEventos, entrelazar } from "../../../core/entrelazar.js";
 import { modeloExternoParaTrueforge } from "./modeloExterno.js";
+import { diferenciasDelContraste, metricasDeTrueforge } from "./metricasTrueforge.js";
 import { cambiosQueSeVerifican, huellaDeErrores, repartirHallazgos, textoDeReparacion, tocaCriticarPantalla, TOPE_REPARACIONES } from "../../turno/verificacion.js";
 import { correrTurno, type Piel } from "../../../core/turno.js";
 import type { Artefacto } from "../../../core/artefactos.js";
@@ -329,6 +330,8 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
   }
   /** Los hilos de un hijo EXTERNO: su «llamada al modelo» no es una llamada, no se cuenta. */
   const hilosExternos = new Set<string>();
+  /** Cuántos hijos externos lanzó el turno en curso, para el contraste con las métricas del motor. */
+  let externosDelTurno = 0;
 
   /**
    * **El raíz es el ORQUESTADOR, de solo lectura y SIN skills** — la regla de deepagents
@@ -389,6 +392,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
     params: { request: { name: string; input: string }; threadId: string; parent: unknown }
   ): AgentThread => {
     hilosExternos.add(params.threadId);
+    externosDelTurno += 1;
     const motor = agente.motor as MotorExterno;
     return new AgentThread({
       definition: {
@@ -681,6 +685,9 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       const tope = opciones.topeDeRondas ?? MAX_APPROVAL_ROUNDS;
       const aplicadasSinPreguntar: string[] = [];
       apuntarAplicadasSinPreguntar = (rutas) => void aplicadasSinPreguntar.push(...rutas);
+      // Lo que llevaba el tracker al empezar: el contraste con el motor es del TURNO.
+      const trackerAlEmpezar = { input: tracker.input, output: tracker.output, cache: tracker.cache, calls: tracker.calls };
+      externosDelTurno = 0;
       capturasDelTurno = [];
       /** El encargo de ESTE turno tal cual se pidió, y el mismo con la última pregunta y su
        *  respuesta al lado, que es lo que se juzga y se repara (ver `flujo`). Ausente = no consta. */
@@ -1001,6 +1008,30 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
         });
       } finally {
         aborto = undefined;
+        /**
+         * **El contraste con las métricas del motor**, ANTES de rehacer el raíz: el árbol que se
+         * mide es el de este turno, y rehecho ya no lo sería (`metricasTrueforge.ts`). Solo con la
+         * traza puesta, y sin poder tumbar nada: es diagnóstico.
+         */
+        if (diagnostico?.contraste !== undefined) {
+          try {
+            const motor = metricasDeTrueforge(orquestador.getMetrics() as unknown as Record<string, unknown>);
+            const nuestras = {
+              entrada: tracker.input - trackerAlEmpezar.input,
+              salida: tracker.output - trackerAlEmpezar.output,
+              cache: tracker.cache - trackerAlEmpezar.cache,
+              llamadas: tracker.calls - trackerAlEmpezar.calls,
+            };
+            diagnostico.contraste({
+              nuestras,
+              motor: { ...motor },
+              externos: externosDelTurno,
+              diferencias: diferenciasDelContraste(nuestras, motor, externosDelTurno),
+            });
+          } catch {
+            // Una métrica que no se pudo leer no es un turno que falló.
+          }
+        }
         // Lo que un hijo escribiera fuera de un turno no tiene dónde contarse (ver arriba).
         apuntarAplicadasSinPreguntar = undefined;
         /**

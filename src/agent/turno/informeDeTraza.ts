@@ -144,6 +144,12 @@ export interface SesionDeTraza {
   charsDeTools: number;
   /** Líneas que no se pudieron leer. Se dicen: una traza a medias no se disimula. */
   ilegibles: number;
+  /**
+   * El contraste de NUESTRAS cifras con las del motor, turno a turno (solo TrueForge lleva cuentas
+   * propias: `motores/trueforge/metricasTrueforge.ts`). Ausente = esta sesión no se contrastó, que
+   * no es lo mismo que «coinciden».
+   */
+  contraste?: { turnos: number; conDiferencias: number; diferencias: string[] };
 }
 
 /**
@@ -263,6 +269,17 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
       gasto.cache += cache;
       gasto.contexto = Math.max(gasto.contexto, contexto);
       actual.porOrigen.set(origen, gasto);
+      continue;
+    }
+
+    if (evento.tipo === "contraste") {
+      const c = (actual.sesion.contraste ??= { turnos: 0, conDiferencias: 0, diferencias: [] });
+      c.turnos += 1;
+      const diferencias = Array.isArray(evento.diferencias) ? evento.diferencias.filter((d): d is string => typeof d === "string") : [];
+      if (diferencias.length > 0) {
+        c.conDiferencias += 1;
+        c.diferencias.push(...diferencias);
+      }
       continue;
     }
 
@@ -498,6 +515,17 @@ export function pintarSesion(sesion: SesionDeTraza): string[] {
     lineas.push(`  ${par.sinRespuesta} tool(s) sin respuesta anotada: traza anterior a ese campo, no contadas`);
   }
 
+  if (sesion.contraste !== undefined) {
+    const c = sesion.contraste;
+    // Coincidir se dice en una línea; diferir, con cada cifra: es lo único de esta sección que
+    // alguien viene a buscar, y un «hay diferencias» sin ellas manda a abrir el fichero a mano.
+    if (c.conDiferencias === 0) lineas.push(`  contraste con el motor: ${c.turnos} turno(s), las dos cuentas coinciden`);
+    else {
+      lineas.push(`  ⚠ contraste con el motor: ${c.conDiferencias} de ${c.turnos} turno(s) con diferencias`);
+      for (const d of c.diferencias.slice(0, TOPE_DE_BLANCOS)) lineas.push(`    ${d}`);
+      if (c.diferencias.length > TOPE_DE_BLANCOS) lineas.push(`    y ${c.diferencias.length - TOPE_DE_BLANCOS} más`);
+    }
+  }
   if (sesion.ilegibles > 0) lineas.push(`  ${sesion.ilegibles} línea(s) ilegibles, no contadas`);
   return lineas;
 }

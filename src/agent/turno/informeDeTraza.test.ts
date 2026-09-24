@@ -435,3 +435,22 @@ describe("la entrada fresca", () => {
     expect(pintarSesion(s!).join("\n")).toContain("(fresca 0)");
   });
 });
+
+describe("el contraste con las métricas del motor", () => {
+  const linea = (diferencias: string[]) => JSON.stringify({ v: 1, sesion: "s1", tipo: "contraste", nuestras: {}, motor: {}, externos: 0, diferencias });
+
+  it("coincidir se dice en una línea; diferir, con cada cifra", () => {
+    const [bien] = resumirTraza([linea([]), linea([])]);
+    expect(pintarSesion(bien!).join("\n")).toContain("contraste con el motor: 2 turno(s), las dos cuentas coinciden");
+    const [mal] = resumirTraza([linea([]), linea(["entrada: nuestra 150, TrueForge 190"])]);
+    const texto = pintarSesion(mal!).join("\n");
+    expect(texto).toContain("⚠ contraste con el motor: 1 de 2 turno(s) con diferencias");
+    expect(texto).toContain("entrada: nuestra 150, TrueForge 190");
+  });
+
+  it("una sesión sin contrastar no dice que coincide", () => {
+    const [s] = resumirTraza([JSON.stringify({ v: 1, sesion: "s1", tipo: "sesion" })]);
+    expect(s!.contraste).toBeUndefined();
+    expect(pintarSesion(s!).join("\n")).not.toContain("contraste");
+  });
+});

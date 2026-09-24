@@ -735,6 +735,24 @@ texto—. Así llega igual a la web, a la TUI y al terminal sin tocar ninguna pi
 botones sería el siguiente paso y no cambiaría esto. Medido con `deepseek-flash`: ante «pregúntame
 antes de tocar nada», el orquestador investigó el proyecto y preguntó con dos paletas concretas.
 
+### Las métricas del motor, como CONTRASTE (24-09-2026)
+
+`AgentThreadOrchestrator.getMetrics()` se lee al final de cada turno, ANTES de rehacer el raíz
+(así el árbol medido es el de ese turno), y se pone al lado de nuestras cifras del mismo turno
+(`metricasTrueforge.ts`, puro). Va a la traza (`XONECODE_TRACE_TOOLS=1`, línea `contraste`) y
+`xonecode traza` lo dice: «las dos cuentas coinciden», o cada diferencia con sus dos cifras. **No
+sustituye a nuestras cuentas**, que son las mismas que las de deepagents y las que se enseñan.
+
+Los tokens se comparan tal cual. Las llamadas no, y las dos diferencias se MIDIERON contra la librería
+antes de escribir la regla: un hijo EXTERNO es una iteración suya y ninguna nuestra (su gasto es del
+producto), y una COMPACTACIÓN es una llamada nuestra —se paga— que ella no cuenta como iteración, sino
+en `resumenes`. Medido: delegación con escritura, hijo externo y compactación coinciden en el arnés, y
+un turno real con DeepSeek (delegando en `consultant-xone`, 4 llamadas, 34.853 de entrada) también.
+
+**Pendiente visto al medirlo, no de este cambio**: con TrueForge la traza dice «tool(s) sin respuesta
+anotada: traza anterior a ese campo», y no es verdad —la traza es nueva—: este motor no anota a qué
+respuesta del modelo pertenece cada tool, así que el paralelismo por respuesta no se puede leer.
+
 ### Claude Code, Codex y OpenCode, hijos de TrueForge (24-09-2026)
 
 Era la diferencia grande con deepagents: TrueForge descartaba los `.md` de motor externo. Ahora el

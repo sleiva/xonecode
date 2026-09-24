@@ -10,7 +10,7 @@ import { TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto
 import { traducirEvento } from "./eventosTrueforge.js";
 import { cargarMemoria } from "./memoriaTrueforge.js";
 import { abrirSesionReal } from "../../turno/turnoReal.js";
-import { resumirTraza } from "../../turno/informeDeTraza.js";
+import { pintarSesion, resumirTraza } from "../../turno/informeDeTraza.js";
 import type { HechosDelTurno } from "../../../core/juezDelTurno.js";
 
 /**
@@ -591,6 +591,9 @@ describe("una sesión con el motor TrueForge", () => {
     expect(sesion!.origenes.map((o) => o.origen).sort()).toEqual(["consultant-xone", "orquestador"]);
     expect(sesion!.tools.map((t) => t.nombre).sort()).toEqual(["create_sub_agent", "read_file"]);
     expect(sesion!.pesos.some((p) => p.nombre === "read_file" && p.chars > 0)).toBe(true);
+    // Y el contraste con las métricas del motor llega a la traza REAL y al informe.
+    expect(sesion!.contraste).toEqual({ turnos: 1, conDiferencias: 0, diferencias: [] });
+    expect(pintarSesion(sesion!).join("\n")).toContain("contraste con el motor: 1 turno(s), las dos cuentas coinciden");
   }, 30_000);
 
   it("el orquestador PREGUNTA: el turno acaba con la pregunta en el chat y el siguiente mensaje la CONTESTA en su hilo", async () => {
@@ -1186,5 +1189,63 @@ describe("Claude Code, Codex y OpenCode como hijos de TrueForge", () => {
     await segunda.turno("¿qué hizo?", piel().p);
     expect(vistos[0]!.join("\n")).toContain("hecho por codex");
     expect(f2.peticiones).toHaveLength(0);
+  }, 30_000);
+});
+
+describe("el contraste con las métricas PROPIAS de TrueForge, en la traza", () => {
+  type Contraste = Parameters<NonNullable<import("../../turno/diagnosticoDeTools.js").DiagnosticoDeTools["contraste"]>>[0];
+  const conTraza = () => {
+    const vistos: Contraste[] = [];
+    return { vistos, diagnostico: { modelo: () => {}, herramienta: () => {}, contraste: (c: Contraste) => void vistos.push(c) } };
+  };
+
+  it("una delegación con escritura: las dos cuentas COINCIDEN, y es del turno y no de la sesión", async () => {
+    const t = conTraza();
+    const guion = () => guionDeEscritura();
+    const { m } = modelosConGuion([...guion(), ...guion()]);
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true, diagnostico: t.diagnostico });
+    await s.turno("escribe una nota", piel().p);
+    await s.turno("otra vez", piel().p);
+    expect(t.vistos).toHaveLength(2);
+    for (const c of t.vistos) {
+      expect(c.diferencias).toEqual([]);
+      expect(c.nuestras).toEqual({ entrada: 150, salida: 16, cache: 0, llamadas: 4 });
+      expect(c.motor).toMatchObject({ entrada: 150, salida: 16, iteraciones: 4, subagentes: 1 });
+    }
+  }, 30_000);
+
+  it("con la compactación del raíz por medio", async () => {
+    const t = conTraza();
+    const { m } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "n1", name: "ls", args: JSON.stringify({ path: "/" }) }], usage_metadata: { input_tokens: 40_000, output_tokens: 10, total_tokens: 40_010 } })],
+      [new AIMessageChunk({ content: "RESUMEN", usage_metadata: { input_tokens: 900, output_tokens: 50, total_tokens: 950 } })],
+      [new AIMessageChunk({ content: "Listo.", usage_metadata: { input_tokens: 1_000, output_tokens: 2, total_tokens: 1_002 } })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, diagnostico: t.diagnostico });
+    await s.turno("mira la raíz", piel().p);
+    expect(t.vistos[0]!.motor).toMatchObject({ entrada: 41_900, salida: 62, iteraciones: 2, resumenes: 1 });
+    expect(t.vistos[0]!.nuestras.llamadas).toBe(3);
+    expect(t.vistos[0]!.diferencias).toEqual([]);
+  }, 30_000);
+
+  it("con un hijo EXTERNO: su iteración se descuenta y no hay diferencia", async () => {
+    const t = conTraza();
+    const raiz = proyecto();
+    mkdirSync(join(raiz, ".xonecode", "agentes"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "agentes", "ext.md"), "---\ndescripcion: externo\nmotor: codex\nsoloLectura: true\n---\nhola\n");
+    const { m } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "ext", input: "mira" }) }], usage_metadata: { input_tokens: 50, output_tokens: 9, total_tokens: 59 } })],
+      [new AIMessageChunk({ content: "Listo.", usage_metadata: { input_tokens: 70, output_tokens: 2, total_tokens: 72 } })],
+      [new AIMessageChunk({ content: "Sin delegar.", usage_metadata: { input_tokens: 90, output_tokens: 3, total_tokens: 93 } })],
+    ]);
+    const s = await abrirSesionTrueforge({
+      raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, diagnostico: t.diagnostico,
+      subagenteExterno: () => ({ disponible: async () => true, correr: async () => "visto" }),
+    });
+    await s.turno("mira", piel().p);
+    expect(t.vistos[0]).toMatchObject({ externos: 1, nuestras: { llamadas: 2 }, motor: { iteraciones: 3 }, diferencias: [] });
+    // El recuento es del TURNO: el siguiente, sin delegar, no arrastra el hijo del anterior.
+    await s.turno("y ahora sin delegar", piel().p);
+    expect(t.vistos[1]).toMatchObject({ externos: 0, nuestras: { llamadas: 1 }, motor: { iteraciones: 1 }, diferencias: [] });
   }, 30_000);
 });

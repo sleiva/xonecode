@@ -45,6 +45,18 @@ export interface DiagnosticoDeTools {
    * que una cifra de tokens aquí sería una precisión inventada.
    */
   resultado?(nombre: string | undefined, detalle: string | undefined, chars: number): void;
+  /**
+   * **Las cifras de un turno según NOSOTROS y según el motor**, y en qué difieren. Opcional, como
+   * `corte`: solo TrueForge lleva cuentas propias con las que contrastar
+   * (`motores/trueforge/metricasTrueforge.ts`). Es diagnóstico: una diferencia es una cuenta que
+   * se pierde en un lado, y sin esto no había forma de verla.
+   */
+  contraste?(contraste: {
+    nuestras: { entrada: number; salida: number; cache: number; llamadas: number };
+    motor: Record<string, number>;
+    externos: number;
+    diferencias: string[];
+  }): void;
 }
 
 /** Ruta pública solo para comunicar al usuario dónde quedó su diagnóstico. */
@@ -85,6 +97,9 @@ export function crearDiagnosticoDeTools(
     },
     corte(origen, limite) {
       escribir({ tipo: "corte", origen, limite });
+    },
+    contraste(c) {
+      escribir({ tipo: "contraste", ...c });
     },
     resultado(nombre, detalle, chars) {
       escribir({
