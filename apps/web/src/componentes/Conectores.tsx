@@ -122,10 +122,14 @@ export function Conectores({ catalogo, conectores, desconocidos, ilegible, error
                       // Con OAuth, «Añadir» hace las DOS cosas: añadir Y autorizar. Medido en
                       // el navegador con él delante: separarlas en dos clics dejaba un paso
                       // intermedio, «Falta autorizar», que se leía como un error y no como
-                      // «pulsa Conectar». `anadir` va primero por orden natural de lectura —no
-                      // hay dependencia real entre las dos: `autorizar` resuelve el id contra
-                      // el CATÁLOGO, no contra lo añadido—. Sin OAuth no hay nada que
-                      // autorizar, así que DeepWiki se queda con el único `anadir` de siempre.
+                      // «pulsa Conectar». `anadir` va primero por orden natural de lectura, pero
+                      // son dos `POST /accion` sin garantía de orden entre ellos — la que de
+                      // verdad sostiene esto es el SERVIDOR: `autorizar` rechaza sin tocar la
+                      // red si el id no está en lo añadido (`servicioDeConectores.ts`), así que
+                      // un `anadir` que falla —fichero ilegible, disco lleno— no deja un OAuth
+                      // real completándose para un conector que la lista nunca mostró como
+                      // añadido. Sin OAuth no hay nada que autorizar, así que DeepWiki se queda
+                      // con el único `anadir` de siempre.
                       alAccion("anadir", c.id);
                       if (c.autenticacion === "oauth") alAccion("autorizar", c.id);
                     }}
