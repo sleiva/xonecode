@@ -17,6 +17,7 @@ import type { CargarEstilos } from "../navegacion/estilosEnDisco.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { crearCriticaVisual } from "./criticaVisual.js";
+import { textoDeFalloExterno } from "../subagentes/subagenteExterno.js";
 import { crearTraerDeLaMaquina } from "./traerDeLaMaquina.js";
 import { invocarVisualConModelos } from "../dispositivos/juezVisual.js";
 import { inventarioDelProyecto } from "../subagentes/escrituraExterna.js";
@@ -423,36 +424,48 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
         // del orquestador ya impone entre especialistas.
         const ultimo = entrada.messages?.at(-1);
         const tarea = typeof ultimo?.content === "string" ? ultimo.content : String(ultimo?.content ?? "");
-        const texto = await opciones.subagenteExterno.correr({
-          motor,
-          cwd: opciones.raiz,
-          /**
-           * Sus instrucciones MÁS el inventario del proyecto. Ese añadido no es un lujo: un
-           * hijo de Claude Code no tiene ninguna herramienta para listar carpetas —medido—,
-           * así que sin él lee a ciegas nombres inventados y concluye que el proyecto está
-           * vacío. Se le dice lo que el harness ya sabe, que es el patrón de `/adjuntos/`.
-           */
-          instrucciones: `${promptDeAgente(agente, repartirSkills(agente, catalogoDeSkills))}\n\n${inventarioDelProyecto(opciones.ficheros)}`,
-          tarea,
-          // El modelo del producto que pida su `.md`, si pide alguno. Ausente = el que el
-          // agente externo use por su cuenta, que es lo de siempre.
-          ...(agente.modelo === undefined ? {} : { modelo: agente.modelo }),
-          /**
-           * Lo que diga su `.md`, y nada más. Es la PRIMERA de dos puertas: con esto en
-           * cierto, cada escritura pasa además por la política de la sesión y por las
-           * guardas de ruta (`agent/subagentes/escrituraExterna.ts`). Un agente de solo lectura no
-           * llega a preguntar.
-           */
-          permitirEscritura: !agente.soloLectura,
-          // Para poder decir QUIÉN pide la escritura en la petición de aprobación: la tool
-          // es la misma para todos los especialistas, así que sin esto el diff diría
-          // «alguien quiere escribir». Es el papel del `[dev]` que `hitlDe` mete en la
-          // descripción de un interrupt del grafo.
-          agente: agente.nombre,
-          // La cancelación del turno, si la librería la propaga hasta aquí: con ella, Parar MATA
-          // al hijo en vez de dejarlo escribiendo con el turno cerrado. Sin ella, lo de antes.
-          ...(config?.signal === undefined ? {} : { senal: config.signal }),
-        });
+        /**
+         * Un motor que FALLA se DEVUELVE como la respuesta del hijo, y saneado
+         * (`textoDeFalloExterno`): lanzado, el `ToolNode` de LangChain lo convertía en un
+         * `ToolMessage` con el `error.message` CRUDO —la ruta de la máquina incluida— que lee el
+         * modelo, sale en el chat y se guarda. La cancelación sí se relanza: no hay respuesta que dar.
+         */
+        let texto: string;
+        try {
+          texto = await opciones.subagenteExterno.correr({
+            motor,
+            cwd: opciones.raiz,
+            /**
+             * Sus instrucciones MÁS el inventario del proyecto. Ese añadido no es un lujo: un
+             * hijo de Claude Code no tiene ninguna herramienta para listar carpetas —medido—,
+             * así que sin él lee a ciegas nombres inventados y concluye que el proyecto está
+             * vacío. Se le dice lo que el harness ya sabe, que es el patrón de `/adjuntos/`.
+             */
+            instrucciones: `${promptDeAgente(agente, repartirSkills(agente, catalogoDeSkills))}\n\n${inventarioDelProyecto(opciones.ficheros)}`,
+            tarea,
+            // El modelo del producto que pida su `.md`, si pide alguno. Ausente = el que el
+            // agente externo use por su cuenta, que es lo de siempre.
+            ...(agente.modelo === undefined ? {} : { modelo: agente.modelo }),
+            /**
+             * Lo que diga su `.md`, y nada más. Es la PRIMERA de dos puertas: con esto en
+             * cierto, cada escritura pasa además por la política de la sesión y por las
+             * guardas de ruta (`agent/subagentes/escrituraExterna.ts`). Un agente de solo lectura no
+             * llega a preguntar.
+             */
+            permitirEscritura: !agente.soloLectura,
+            // Para poder decir QUIÉN pide la escritura en la petición de aprobación: la tool
+            // es la misma para todos los especialistas, así que sin esto el diff diría
+            // «alguien quiere escribir». Es el papel del `[dev]` que `hitlDe` mete en la
+            // descripción de un interrupt del grafo.
+            agente: agente.nombre,
+            // La cancelación del turno, si la librería la propaga hasta aquí: con ella, Parar MATA
+            // al hijo en vez de dejarlo escribiendo con el turno cerrado. Sin ella, lo de antes.
+            ...(config?.signal === undefined ? {} : { senal: config.signal }),
+          });
+        } catch (error) {
+          if (config?.signal?.aborted === true) throw error;
+          texto = textoDeFalloExterno(motor, error);
+        }
         return { messages: [new AIMessage(texto)] };
       }),
     });

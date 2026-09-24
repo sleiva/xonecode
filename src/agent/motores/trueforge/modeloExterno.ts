@@ -20,18 +20,7 @@ import { AIMessageChunk } from "@langchain/core/messages";
 import type { MotorExterno, PeticionExterna, SubagenteExternoPort } from "../../../core/ports.js";
 import type { ILLM } from "./trueforge.js";
 import { modeloParaTrueforge } from "./modeloLangchain.js";
-
-/**
- * Lo que el especialista externo contesta cuando su motor FALLA —no arranca, se agota su tope—.
- *
- * Se devuelve como su respuesta y no se lanza: una excepción en el modelo de un hijo se llevaría
- * el turno entero (es la regla de las guardas: un rechazo se DEVUELVE), y el orquestador, que es
- * quien decide qué hacer después, se quedaría sin saber qué pasó. Con esto lee que falló y por qué.
- */
-export function textoDeFalloExterno(motor: MotorExterno, error: unknown): string {
-  const motivo = error instanceof Error ? error.message : String(error);
-  return `⚠ El agente externo (${motor}) no terminó su encargo: ${motivo}. No hay resultado suyo que usar.`;
-}
+import { textoDeFalloExterno } from "../../subagentes/subagenteExterno.js";
 
 export function modeloExternoParaTrueforge(opciones: {
   puerto: SubagenteExternoPort;

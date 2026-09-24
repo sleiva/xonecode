@@ -1410,7 +1410,8 @@ feedback del desarrollador** y no es terminal.
 - **Los tokens de una SESIÓN se cuentan y se enseñan, en DOS cuentas que no se suman**
   (`core/ports.ts#ConsumoDeSesionPorCuenta`, `agent/subagentes/consumoExterno.ts`, mensaje `consumo`,
   `componentes/ContadorDeTokens.tsx`). El del agente EXTERNO lo dan `result.modelUsage` (Claude
-  Code) y `thread/tokenUsage/updated` (Codex). Reglas:
+  Code), `thread/tokenUsage/updated` (Codex) y el `usage` del resultado de `session/prompt`
+  (OpenCode). Reglas:
   - **Los dos son ACUMULADOS: se lee el último, no se suman.** Entre ejecuciones sí se suma:
     cada `correr` es otra sesión del producto.
   - **Se suman TOKENS, nunca COSTE.** Los del grafo van contra la clave de API del usuario y

@@ -17,8 +17,11 @@
  *   preguntar, la cancelación, los tokens y los cambios del turno.
  *   Y la memoria en disco: la foto del raíz se guarda al final de cada turno y reabrir la sesión
  *   continúa la conversación (`memoriaTrueforge.ts`).
- * - NO todavía: el juez del turno y el crítico de pantalla ENGANCHADOS al final (la tool de la
- *   crítica sí está).
+ *   Y además: los hechos del proyecto delante de cada turno, el juez del turno y el crítico de
+ *   pantalla enganchados al final, la pregunta del orquestador también como dato para la tarjeta,
+ *   y Claude Code, Codex y OpenCode como hijos por el mismo puerto que deepagents
+ *   (`modeloExterno.ts`).
+ * - NO: un presupuesto GLOBAL por turno (la suma de todos los hilos), que deepagents tampoco tiene.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

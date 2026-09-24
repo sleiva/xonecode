@@ -35,6 +35,7 @@ import type {
 import { codexDisponible, correrCodex } from "./subagenteCodex.js";
 import { correrOpencode, opencodeDisponible } from "./subagenteOpencode.js";
 import { consumoDeClaude } from "./consumoExterno.js";
+import { mensajeSeguro } from "../../core/trazaDeErrores.js";
 import { montarPluginDeSkills } from "./pluginDeSkills.js";
 import {
   claseDeToolExterna,
@@ -277,7 +278,7 @@ export function crearSubagenteExterno(opciones: {
   // sus protocolos y su narración va por otros mensajes; cablearla ahí es otra medida, y
   // prometerlo aquí con un reenvío que no llega a ningún sitio sería peor que no tenerlo.
   /**
-   * Lo que el hijo consumió, al terminar. Los dos motores lo reportan y hasta ahora se
+   * Lo que el hijo consumió, al terminar. Los TRES productos lo reportan y hasta ahora se
    * tiraba entero (`agent/subagentes/consumoExterno.ts` explica de dónde sale cada uno).
    *
    * Va por su propio callback y no dentro de la respuesta porque son dos cosas distintas:
@@ -306,7 +307,8 @@ export function crearSubagenteExterno(opciones: {
      * (`escriturasEnSerie.ts`), así que dos a la vez sobre el mismo fichero se pisan y los dos
      * contestan que bien — el fallo que esa cola existe para impedir. Serializar el hijo entero
      * es más grueso que serializar por fichero, pero aquí no hay otra costura: la escritura ocurre
-     * dentro de su proceso. Vive aquí, y no en quien delega, para que valga a los DOS motores.
+     * dentro de su proceso. Vive aquí, y no en quien delega, para que valga igual con deepagents
+     * que con TrueForge: los dos delegan en este mismo puerto.
      */
     correr: escritoresEnSerie(correrUno),
   };
@@ -469,9 +471,9 @@ export function crearSubagenteExterno(opciones: {
          * instrucciones y las reglas de XOne van por `systemPrompt.append`, que es de
          * donde salen de verdad.
          *
-         * Y queda DECLARADO lo que esto no cierra: un `allow` en los ajustes GLOBALES del
-         * usuario sigue pudiendo ensombrecer el callback. El cierre robusto que el propio
-         * SDK nombra es un hook `PreToolUse`, que no se ensombrece; no está puesto todavía.
+         * Y lo que esto solo no cerraría —un `allow` en los ajustes GLOBALES del usuario
+         * ensombreciendo el callback— lo cierra el hook `PreToolUse` de más arriba, que es el
+         * cierre robusto que el propio SDK nombra: un hook no se ensombrece.
          */
         settingSources: ["user"],
         /**
@@ -582,6 +584,22 @@ export function crearSubagenteExterno(opciones: {
     if (controlador.signal.aborted) throw new Error(MOTIVO_DE_CANCELACION_EXTERNA);
     throw new Error(`${peticion.motor} no devolvió ningún resultado`);
   }
+}
+
+/**
+ * Lo que el especialista externo contesta cuando su motor FALLA —no arranca, se agota su tope—.
+ *
+ * Se devuelve como su respuesta y no se lanza, en los DOS motores que delegan en este puerto: en
+ * TrueForge una excepción en el modelo de un hijo se llevaría el turno entero (es la regla de las guardas: un rechazo se DEVUELVE), y el orquestador, que es
+ * quien decide qué hacer después, se quedaría sin saber qué pasó. Con esto lee que falló y por qué.
+ *
+ * **El motivo va SANEADO** (`mensajeSeguro`): el error de un producto que no arranca lleva la ruta
+ * de la máquina —«spawn /Users/…/codex ENOENT»—, y este texto lo lee el modelo, sale en el chat y se
+ * guarda en el `.jsonl`. Ninguna ruta de la máquina viaja por el cable.
+ */
+export function textoDeFalloExterno(motor: MotorExterno, error: unknown): string {
+  const motivo = mensajeSeguro(error instanceof Error ? error.message : String(error));
+  return `⚠ El agente externo (${motor}) no terminó su encargo: ${motivo}. No hay resultado suyo que usar.`;
 }
 
 /**
