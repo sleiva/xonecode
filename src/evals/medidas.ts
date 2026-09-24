@@ -19,6 +19,8 @@
  * miente invalida en silencio todo lo que se decida mirándola.
  */
 
+import { costeEfectivo } from "../agent/turno/informeDeTraza.js";
+
 export interface Pasada {
   entrada: number;
   salida: number;
@@ -62,6 +64,13 @@ export interface ResumenDeCelda {
   salida?: Reparto;
   llamadas?: Reparto;
   ms?: Reparto;
+  /**
+   * El coste EFECTIVO de cada pasada (`costeEfectivo`: la caché a un décimo). La entrada a secas
+   * basta para comparar un prompt consigo mismo, pero no dos MOTORES: cachean distinto, y la misma
+   * entrada puede costar el doble en uno que en otro. Opcional: los bancos guardados antes no lo
+   * traen.
+   */
+  efectivo?: Reparto;
 }
 
 function reparto(valores: number[]): Reparto | undefined {
@@ -86,6 +95,9 @@ export function resumirCelda(modelo: string, pregunta: string, pasadas: readonly
     ...(reparto(validas.map((p) => p.salida)) === undefined ? {} : { salida: reparto(validas.map((p) => p.salida))! }),
     ...(reparto(validas.map((p) => p.llamadas)) === undefined ? {} : { llamadas: reparto(validas.map((p) => p.llamadas))! }),
     ...(reparto(validas.map((p) => p.ms)) === undefined ? {} : { ms: reparto(validas.map((p) => p.ms))! }),
+    ...(validas.length === 0
+      ? {}
+      : { efectivo: reparto(validas.map((p) => costeEfectivo({ input: p.entrada, output: p.salida, cache: p.cache })))! }),
   };
 }
 
@@ -118,6 +130,7 @@ export function pintarCelda(r: ResumenDeCelda): string[] {
       `\n      entrada  ${cifra(r.entrada.media)}  (${cifra(r.entrada.min)}–${cifra(r.entrada.max)}, ±${Math.round(100 * r.entrada.dispersion)}%)` +
       `\n      llamadas ${r.llamadas === undefined ? "?" : cifra(r.llamadas.media)}` +
       `   salida ${r.salida === undefined ? "?" : cifra(r.salida.media)}` +
+      `   efectivo ${r.efectivo === undefined ? "?" : `≈${cifra(r.efectivo.media)}`}` +
       `   ${r.ms === undefined ? "" : `${(r.ms.media / 1000).toFixed(1)}s`}`
   );
 
@@ -139,13 +152,63 @@ export function pintarCelda(r: ResumenDeCelda): string[] {
  * que un cambio haya mejorado nada, por mucho que las medias difieran. Es exactamente el error
  * que se cometió el día que se escribió esto.
  */
-export function comparar(antes: ResumenDeCelda, ahora: ResumenDeCelda): { diferencia?: number; concluyente: boolean; motivo: string } {
-  if (antes.entrada === undefined || ahora.entrada === undefined) {
+export function comparar(
+  antes: ResumenDeCelda,
+  ahora: ResumenDeCelda,
+  /** Qué se compara. `entrada` es lo de siempre; `efectivo`, lo que hace falta entre motores. */
+  campo: "entrada" | "efectivo" = "entrada"
+): { diferencia?: number; concluyente: boolean; motivo: string } {
+  const a = antes[campo];
+  const b = ahora[campo];
+  if (a === undefined || b === undefined) {
     return { concluyente: false, motivo: "falta alguna medida" };
   }
-  const diferencia = (ahora.entrada.media - antes.entrada.media) / antes.entrada.media;
+  const diferencia = (b.media - a.media) / a.media;
   if (ahora.correctas < ahora.validas) return { diferencia, concluyente: false, motivo: "hay respuestas incorrectas" };
-  const solapan = ahora.entrada.min <= antes.entrada.max && antes.entrada.min <= ahora.entrada.max;
+  // Con UNA pasada el «rango» es un punto, y dos puntos solo se tocan si son idénticos: todo
+  // salía concluyente, un 0 % incluido (medido en la primera tirada entre motores).
+  if (antes.validas < 2 || ahora.validas < 2) return { diferencia, concluyente: false, motivo: "con una sola pasada no hay rango" };
+  const solapan = b.min <= a.max && a.min <= b.max;
   if (solapan) return { diferencia, concluyente: false, motivo: "los rangos se solapan: puede ser ruido" };
   return { diferencia, concluyente: true, motivo: diferencia < 0 ? "baja, y los rangos no se tocan" : "sube, y los rangos no se tocan" };
+}
+
+/** Una celda del banco con el motor que la corrió. */
+export interface CeldaConMotor {
+  motor: string;
+  resumen: ResumenDeCelda;
+}
+
+/**
+ * **Los motores, comparados celda a celda** (misma pregunta, mismo modelo), contra el primero de la
+ * lista, que hace de base. Con las MISMAS reglas que comparar dos bancos —`comparar()`, que se niega a
+ * concluir con los rangos solapados o con respuestas incorrectas—, y por DOS campos: la entrada, que
+ * es lo que se envía, y el efectivo, que es lo que cuesta. Dicen cosas distintas entre motores
+ * porque cachean distinto, así que se enseñan los dos y no se elige uno.
+ *
+ * Y se marca lo que invalida la comparación aunque las cifras salgan: que un motor delegue y el
+ * otro no es otro camino, no el mismo más barato — la regla de `pintarCelda`.
+ */
+export function compararMotores(celdas: readonly CeldaConMotor[], base: string): string[] {
+  const lineas: string[] = [];
+  const pct = (d: number | undefined): string => (d === undefined ? "?" : `${d > 0 ? "+" : ""}${Math.round(100 * d)}%`);
+  for (const b of celdas.filter((c) => c.motor === base)) {
+    for (const otra of celdas.filter((c) => c.motor !== base && c.resumen.pregunta === b.resumen.pregunta && c.resumen.modelo === b.resumen.modelo)) {
+      const e = comparar(b.resumen, otra.resumen, "entrada");
+      const f = comparar(b.resumen, otra.resumen, "efectivo");
+      const llam = (r: ResumenDeCelda): string => (r.llamadas === undefined ? "?" : cifra(r.llamadas.media));
+      lineas.push(`  ${b.resumen.pregunta} · ${b.resumen.modelo}: ${otra.motor} frente a ${base}`);
+      lineas.push(`      entrada  ${pct(e.diferencia)} — ${e.concluyente ? "CONCLUYENTE" : "no concluyente"}, ${e.motivo}`);
+      lineas.push(`      efectivo ${pct(f.diferencia)} — ${f.concluyente ? "CONCLUYENTE" : "no concluyente"}, ${f.motivo}`);
+      lineas.push(
+        `      llamadas ${llam(b.resumen)} → ${llam(otra.resumen)} · correctas ${b.resumen.correctas}/${b.resumen.validas} → ${otra.resumen.correctas}/${otra.resumen.validas}`
+      );
+      const delegaBase = b.resumen.delegadas > 0;
+      const delegaOtra = otra.resumen.delegadas > 0;
+      if (delegaBase !== delegaOtra) {
+        lineas.push(`      ⚠ ${delegaBase ? base : otra.motor} delegó y ${delegaBase ? otra.motor : base} no: otro camino, no el mismo más barato`);
+      }
+    }
+  }
+  return lineas;
 }

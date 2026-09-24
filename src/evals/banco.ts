@@ -1,6 +1,11 @@
 /**
- * El banco: `npm run banco [-- --pasadas 3] [--modelos a/b,c/d] [--solo entrypoint] [--json f]`
- * `[--contra base.json]`.
+ * El banco: `npm run banco [-- --pasadas 3] [--modelos a/b,c/d] [--motores deepagents,trueforge]`
+ * `[--solo entrypoint] [--json f] [--contra base.json]`.
+ *
+ * **Con `--motores`, compara MOTORES**: cada celda se corre con cada uno, con el mismo modelo, y al
+ * final `compararMotores` pone cada uno frente al primero de la lista, por entrada y por coste
+ * efectivo —cachean distinto, así que la entrada sola no dice lo que cuesta—. Es lo que decide qué
+ * motor va por omisión, y con las mismas reglas que comparar dos bancos.
  *
  * Corre las mismas preguntas VARIAS veces contra uno o varios modelos y dice lo que cuestan,
  * con su dispersión y con el veredicto de un juez. Existe por una lección cara del 17-09-2026
@@ -39,7 +44,8 @@ import { hidratarFuentesDeDisco } from "../cli/fuentesDeDisco.js";
 import { rutaTrazaDeTools, VARIABLE_TRAZA_TOOLS } from "../agent/turno/diagnosticoDeTools.js";
 import { resumirTraza } from "../agent/turno/informeDeTraza.js";
 import { PREGUNTAS, type Pregunta } from "./preguntas.js";
-import { comparar, pintarCelda, resumirCelda, type Pasada, type ResumenDeCelda } from "./medidas.js";
+import { comparar, compararMotores, pintarCelda, resumirCelda, type CeldaConMotor, type Pasada, type ResumenDeCelda } from "./medidas.js";
+import { esMotor, type MotorDeAgente } from "../core/motor.js";
 import type { Piel } from "../core/turno.js";
 import type { Decision } from "../vendor/hitl.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
@@ -83,7 +89,7 @@ function pielQueRecuerda(): { piel: Piel; texto: () => string } {
 const rechazarTodo = async (pendientes: PendienteDeAprobacion[]): Promise<Map<string, Decision>> =>
   new Map(pendientes.map((p) => [p.id, { type: "reject", message: "el banco no aprueba escrituras: esto es una pregunta" } as Decision]));
 
-async function unaPasada(pregunta: Pregunta, modelos: Modelos, skills: SkillsEnDisco): Promise<Pasada> {
+async function unaPasada(pregunta: Pregunta, modelos: Modelos, skills: SkillsEnDisco, motor: MotorDeAgente | undefined): Promise<Pasada> {
   const raiz = mkdtempSync(join(tmpdir(), `xonecode-banco-${pregunta.nombre}-`));
   const base: Pasada = { entrada: 0, salida: 0, cache: 0, llamadas: 0, ms: 0, correcta: false, delego: false };
   const t0 = Date.now();
@@ -104,7 +110,8 @@ async function unaPasada(pregunta: Pregunta, modelos: Modelos, skills: SkillsEnD
   try {
     crearProyecto(raiz, PROYECTO);
     const entorno = await inspeccionar(raiz);
-    sesion = await abrirSesionReal({ raiz, modelos, skills, entorno, pedirAprobacion: rechazarTodo });
+    // El motor, si se pidió: por el MISMO punto de elección que todas las pieles.
+    sesion = await abrirSesionReal({ raiz, modelos, skills, entorno, pedirAprobacion: rechazarTodo, ...(motor === undefined ? {} : { motor }) });
     const { piel, texto } = pielQueRecuerda();
     // **Quién canceló se APUNTA**, porque el mensaje de la librería dice «cancelado por el
     // usuario» y aquí no hay ningún usuario: lo cancela este reloj. Medido en la primera base,
@@ -189,10 +196,23 @@ async function main(): Promise<number> {
   const modelosAProbar = lista.length === 0 ? [undefined] : lista;
   const skills = new SkillsEnDisco();
 
-  console.log(`banco: ${preguntas.length} pregunta(s) × ${modelosAProbar.length} modelo(s) × ${pasadas} pasada(s)`);
+  // Un motor por celda también; sin `--motores`, el que resuelva la configuración, como siempre.
+  const listaDeMotores = (argumento("--motores") ?? "").split(",").map((m) => m.trim()).filter((m) => m !== "");
+  const malos = listaDeMotores.filter((m) => !esMotor(m));
+  if (malos.length > 0) {
+    console.error(`motor desconocido: ${malos.join(", ")}. Los que hay: deepagents, trueforge`);
+    return 64;
+  }
+  const motoresAProbar: (MotorDeAgente | undefined)[] = listaDeMotores.length === 0 ? [undefined] : (listaDeMotores as MotorDeAgente[]);
+
+  console.log(
+    `banco: ${preguntas.length} pregunta(s) × ${modelosAProbar.length} modelo(s) × ${motoresAProbar.length} motor(es) × ${pasadas} pasada(s)`
+  );
   if (pasadas < 2) console.log("⚠  con UNA pasada no hay dispersión que medir: esto no decide nada, solo mira.");
 
-  const resumenes = [];
+  const resumenes: Array<ResumenDeCelda & { mide: string; pasadas: Pasada[]; motor?: MotorDeAgente }> = [];
+  for (const motor of motoresAProbar) {
+  if (motor !== undefined) console.log(`\n— motor ${motor} —`);
   for (const bandera of modelosAProbar) {
     // Las fuentes se hidratan por modelo y con el MISMO cuerpo que la consola y `run --real`:
     // config del disco más credenciales aplicadas al proceso.
@@ -205,14 +225,22 @@ async function main(): Promise<number> {
       for (let i = 0; i < pasadas; i++) {
         // El progreso va por STDERR: así la tabla se puede pipear o volcar sin que el
         // carrusel de «pasada 2/3…» se cuele en lo que alguien va a leer o a guardar.
-        process.stderr.write(`  ${pregunta.nombre} · ${nombre} · pasada ${i + 1}/${pasadas}…\r`);
-        medidas.push(await unaPasada(pregunta, modelos, skills));
+        process.stderr.write(`  ${pregunta.nombre} · ${nombre}${motor === undefined ? "" : ` · ${motor}`} · pasada ${i + 1}/${pasadas}…\r`);
+        medidas.push(await unaPasada(pregunta, modelos, skills, motor));
       }
       const resumen = resumirCelda(nombre, pregunta.nombre, medidas);
-      resumenes.push({ ...resumen, mide: pregunta.mide, pasadas: medidas });
+      resumenes.push({ ...resumen, mide: pregunta.mide, pasadas: medidas, ...(motor === undefined ? {} : { motor }) });
       process.stderr.write(`${" ".repeat(72)}\r`);
       for (const linea of pintarCelda(resumen)) console.log(linea);
     }
+  }
+  }
+
+  // Los motores, frente al PRIMERO de la lista: es la pregunta de `--motores`.
+  if (listaDeMotores.length > 1) {
+    console.log(`\nentre motores (base: ${listaDeMotores[0]}):`);
+    const celdas: CeldaConMotor[] = resumenes.flatMap((r) => (r.motor === undefined ? [] : [{ motor: r.motor, resumen: r }]));
+    for (const linea of compararMotores(celdas, listaDeMotores[0]!)) console.log(linea);
   }
 
   // **La comparación es el punto de todo esto**, y la hace `comparar()`, que se NIEGA a
@@ -222,7 +250,12 @@ async function main(): Promise<number> {
     console.log(`\ncontra ${contra}:`);
     const base = JSON.parse(readFileSync(contra, "utf8")) as { celdas: ResumenDeCelda[] };
     for (const ahora of resumenes) {
-      const antes = base.celdas.find((c) => c.modelo === ahora.modelo && c.pregunta === ahora.pregunta);
+      // El motor también empareja: una base de antes de que hubiera dos no trae el campo, y
+      // entonces era deepagents, el único que había.
+      const motorDe = (c: { motor?: string }): string => c.motor ?? "deepagents";
+      const antes = (base.celdas as Array<ResumenDeCelda & { motor?: string }>).find(
+        (c) => c.modelo === ahora.modelo && c.pregunta === ahora.pregunta && motorDe(c) === motorDe(ahora)
+      );
       if (antes === undefined) {
         console.log(`  ${ahora.pregunta} · ${ahora.modelo}: no estaba en la base`);
         continue;

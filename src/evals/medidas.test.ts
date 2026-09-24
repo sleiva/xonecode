@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { comparar, pintarCelda, resumirCelda, type Pasada } from "./medidas.js";
+import { comparar, compararMotores, pintarCelda, resumirCelda, type Pasada } from "./medidas.js";
 
 const pasada = (entrada: number, extra: Partial<Pasada> = {}): Pasada => ({
   entrada,
@@ -83,5 +83,50 @@ describe("comparar dos bancos", () => {
     const r = comparar(celda([30_000, 32_000]), celda([1_000, 1_200], { correcta: false }));
     expect(r.concluyente).toBe(false);
     expect(r.motivo).toContain("incorrectas");
+  });
+});
+
+describe("los motores, comparados", () => {
+  it("el efectivo cuenta la caché a un décimo: misma entrada, más caché, menos coste", () => {
+    const sin = resumirCelda("m", "p", [pasada(10_000, { cache: 0 }), pasada(10_000, { cache: 0 })]);
+    const con = resumirCelda("m", "p", [pasada(10_000, { cache: 9_000 }), pasada(10_000, { cache: 9_000 })]);
+    expect(con.efectivo!.media).toBeLessThan(sin.efectivo!.media);
+    // Por entrada no se distinguen; por efectivo sí, y concluyente.
+    expect(comparar(sin, con).diferencia).toBe(0);
+    expect(comparar(sin, con, "efectivo")).toMatchObject({ concluyente: true });
+  });
+
+  it("empareja por pregunta y modelo contra la BASE, con los dos campos y las llamadas", () => {
+    const da = resumirCelda("ds", "entrypoint", [pasada(10_000), pasada(10_500)]);
+    const tf = resumirCelda("ds", "entrypoint", [pasada(20_000), pasada(21_000)]);
+    const otra = resumirCelda("ds", "login", [pasada(5_000)]);
+    const texto = compararMotores(
+      [
+        { motor: "deepagents", resumen: da },
+        { motor: "trueforge", resumen: tf },
+        { motor: "trueforge", resumen: otra },
+      ],
+      "deepagents"
+    ).join("\n");
+    expect(texto).toContain("entrypoint · ds: trueforge frente a deepagents");
+    expect(texto).toMatch(/entrada {2}\+\d+% — CONCLUYENTE/);
+    expect(texto).toMatch(/efectivo \+\d+% — CONCLUYENTE/);
+    // Una celda sin pareja en la base no se compara contra nada.
+    expect(texto).not.toContain("login");
+  });
+
+  it("que uno delegue y el otro no se DICE: es otro camino", () => {
+    const da = resumirCelda("ds", "capacidad", [pasada(10_000), pasada(10_000)]);
+    const tf = resumirCelda("ds", "capacidad", [pasada(9_000, { delego: false }), pasada(9_000, { delego: false })]);
+    const texto = compararMotores([{ motor: "deepagents", resumen: da }, { motor: "trueforge", resumen: tf }], "deepagents").join("\n");
+    expect(texto).toContain("⚠ deepagents delegó y trueforge no");
+  });
+});
+
+describe("con UNA pasada no se concluye nada", () => {
+  it("dos puntos distintos no son dos rangos que no se tocan", () => {
+    // La primera tirada entre motores dijo «0% — CONCLUYENTE» con una pasada por lado.
+    const r = comparar(resumirCelda("m", "p", [pasada(1027)]), resumirCelda("m", "p", [pasada(1026)]));
+    expect(r).toMatchObject({ concluyente: false, motivo: "con una sola pasada no hay rango" });
   });
 });
