@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Agente } from "../../../core/agentes.js";
-import { capacidadesDelEspecialista, toolsDe, type DependenciasDelEspecialista } from "./capacidades.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { capacidadesDelEspecialista, SKILL_DE_OPENUI, toolsDe, type DependenciasDelEspecialista } from "./capacidades.js";
+import { RAIZ_SKILLS } from "../../grafo/skills.js";
+import { AGENTES_DE_SERIE } from "../../subagentes/agentesEnDisco.js";
 
 const agente = (campos: Partial<Agente>): Agente =>
   ({ nombre: "x", descripcion: "d", motor: "modelo", soloLectura: false, skills: [], ...campos }) as Agente;
@@ -49,27 +53,44 @@ describe("qué piezas lleva cada especialista, por lo que declara su `.md`", () 
   });
 });
 
-describe("OpenUI, para quien hace artefactos", () => {
-  it("lo lleva quien tiene `artifacts-builder`, y quien no, no", () => {
-    const con = toolsDe(capacidadesDelEspecialista(agente({ skills: ["artifacts-builder"] }), "x", deps()));
-    const sin = toolsDe(capacidadesDelEspecialista(agente({ skills: ["xone-development"] }), "x", deps()));
+describe("OpenUI lo trae su skill, `openui-builder`", () => {
+  it("lo lleva quien declara la skill; `artifacts-builder` a secas ya no basta", () => {
+    const con = toolsDe(capacidadesDelEspecialista(agente({ skills: ["openui-builder"] }), "x", deps()));
+    const soloHtml = toolsDe(capacidadesDelEspecialista(agente({ skills: ["artifacts-builder"] }), "x", deps()));
     expect(con).toContain("get_openui_instructions");
-    expect(sin).not.toContain("get_openui_instructions");
+    expect(soloHtml).not.toContain("get_openui_instructions");
   });
 
-  it("sus instrucciones se cargan BAJO DEMANDA y nuestras reglas van al lado", () => {
-    const pieza = capacidadesDelEspecialista(agente({ skills: ["artifacts-builder"] }), "x", deps()).find((c) => c.nombre === "openui")!;
+  it("sus instrucciones se cargan BAJO DEMANDA y las reglas del harness van al lado", () => {
+    const pieza = capacidadesDelEspecialista(agente({ skills: ["openui-builder"] }), "x", deps()).find((c) => c.nombre === "openui")!;
     const secciones: [string, string][] = [];
     for (const b of pieza.capability.instructionBuilders as ((b: unknown) => void)[]) {
       b({ addSection: (tag: string, contenido: string) => void secciones.push([tag, contenido]) });
     }
-    // La de la librería (la que dice que llame a la tool) y la nuestra.
     expect(secciones.map(([t]) => t)).toEqual(["openui", "openui-en-xonecode"]);
     const nuestra = secciones[1]![1];
     expect(nuestra).toContain("/artefactos/<nombre>.openui");
-    expect(nuestra).toContain("ÚLTIMA pestaña");
-    // Y el prompt grande de la librería NO viaja en el sistema: lo trae la tool.
+    expect(nuestra).toContain("openui-builder");
+    // El prompt grande de la librería NO viaja en el sistema: lo trae la tool.
     expect(secciones[0]![1]).toContain("get_openui_instructions");
     expect(secciones[0]![1].length).toBeLessThan(1000);
+  });
+});
+
+describe("la skill que las reglas NOMBRAN existe, y dice lo que hace falta", () => {
+  it("`openui-builder` está en el catálogo real, pide la tool y manda a `/artefactos/`", () => {
+    // Un nombre muerto en un prompt manda al modelo a buscar algo que no está.
+    const skill = readFileSync(join(RAIZ_SKILLS, SKILL_DE_OPENUI, "SKILL.md"), "utf8");
+    expect(skill).toMatch(/^---\nname: openui-builder\n/);
+    expect(skill).toContain("get_openui_instructions");
+    expect(skill).toContain("/artefactos/<nombre>.openui");
+    // Y dice qué hacer SIN la tool, que es el caso de un motor externo: no inventarse la sintaxis.
+    expect(skill).toContain("Si no la tienes, no escribas OpenUI");
+  });
+
+  it("de serie la lleva quien lleva `artifacts-builder`: los que hacen artefactos", () => {
+    const html = AGENTES_DE_SERIE.filter((a) => a.skills.includes("artifacts-builder")).map((a) => a.nombre);
+    const openui = AGENTES_DE_SERIE.filter((a) => a.skills.includes(SKILL_DE_OPENUI)).map((a) => a.nombre);
+    expect(openui.sort()).toEqual(html.sort());
   });
 });

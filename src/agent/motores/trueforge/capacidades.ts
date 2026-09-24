@@ -97,28 +97,29 @@ export function capacidadDeFecha(): Capacidad {
 }
 
 /**
- * Lo que OpenUI tiene que saber de ESTE harness, y que su prompt no dice.
- *
- * El prompt de la librería (`openUI()`) enseña el lenguaje y su catálogo; no sabe que aquí la
- * respuesta de un especialista la lee el orquestador, que el visor no tiene red, ni lo que salió
- * de MEDIR (24-09-2026, `deepseek-flash`, tres encargos × tres pasadas contra el HTML de
- * `artifacts-builder`): el mismo artefacto con 3-14 veces menos salida, pero una pestaña que se
- * abría en la última escondiendo los errores, un gráfico que apilaba la caché con la entrada y un
- * `Card(...)` con los argumentos corridos. Cada regla de aquí es uno de esos fallos.
+ * Lo que OpenUI tiene que saber de ESTE harness, y que su prompt no dice. Va en CÓDIGO —en el
+ * prompt de quien tiene la skill `openui-builder`— porque vale para cualquier usuario y el modelo
+ * no siempre abre un `SKILL.md` (la lección medida de `artifacts-builder`, ver `agentesEnDisco.ts`):
+ * el prompt de la librería le pide que emita el bloque en su RESPUESTA, y la de un especialista
+ * la lee el orquestador. Y «elige UNO» porque se midió lo contrario: un turno real escribió el
+ * mismo panel en `.html` y en `.openui`, pagando el caro además del barato. Lo demás —cuándo usarlo
+ * y cómo no fallar— vive en la skill, que el usuario puede copiar y editar como cualquier otra.
  */
 export const REGLAS_DE_OPENUI = [
-  "OpenUI en xonecode: úsalo para TABLAS, INFORMES y PANELES DE DATOS. Para diagramas, o para una pieza con análisis o estilo propios, sigue con `artifacts-builder` (HTML).",
-  "- Antes de escribir OpenUI, llama a `get_openui_instructions`. El programa NO va en tu respuesta —la lee el orquestador, no una persona—: escríbelo con `write_file` en `/artefactos/<nombre>.openui` (con su valla ```openui o sin ella). Así se anuncia y se ve en la pestaña Artefactos.",
-  "- Hornea los datos LITERALES en el programa: aquí no hay `Query()` ni `Mutation()`, y las acciones (`@ToAssistant`, `@OpenUrl`, botones) no hacen nada.",
-  "- Sin imágenes de fuera: el visor no tiene red y no se verían.",
-  "- `Tabs` solo para vistas ALTERNATIVAS de lo mismo, nunca para lo principal: el visor abre en la ÚLTIMA pestaña, y lo que pongas en las otras no se ve al abrir.",
-  "- Los argumentos son POSICIONALES: repasa el orden de cada llamada. Uno corrido desplaza a todos y el programa se pinta a medias.",
-  "- No inventes categorías que los datos no traen (una colección «huérfana» o «aislada» porque no tiene referencias: el índice no ve todas las formas de usarla). Y no sumes ni apiles magnitudes que se contienen: la caché de tokens va DENTRO de la entrada.",
+  "OpenUI en xonecode: el programa NO va en tu respuesta —la lee el orquestador, no una persona—. Escríbelo con `write_file` en `/artefactos/<nombre>.openui` (con su valla ```openui o sin ella); así se anuncia y se ve en la pestaña Artefactos.",
+  "- Se ve en un iframe SIN RED: hornea los datos literales (no hay `Query()` ni `Mutation()`), sin imágenes de fuera, y las acciones no hacen nada.",
+  "- Elige UNO: o este `.openui` o un HTML de `artifacts-builder`, nunca el mismo artefacto en los dos formatos.",
+  "- Cuándo usarlo y los fallos que evitar: la skill `openui-builder`.",
 ].join("\n");
 
+/** El nombre de la skill que TRAE OpenUI: quien la tiene recibe la tool que la skill necesita. */
+export const SKILL_DE_OPENUI = "openui-builder";
+
 /**
- * OpenUI para quien hace ARTEFACTOS: la tool de la librería que carga sus instrucciones BAJO
- * DEMANDA (unos 5.000 tokens que no viajan en cada llamada) y, al lado, nuestras reglas.
+ * OpenUI para quien tiene la skill `openui-builder`: la tool de la librería que carga sus
+ * instrucciones BAJO DEMANDA (unos 5.000 tokens que no viajan en cada llamada) y, al lado, las
+ * reglas del harness. **La skill explica y esto monta lo que la skill necesita**, igual que un
+ * builder del usuario: lo decide la skill que declara su `.md`, no el nombre de otra skill.
  */
 export function capacidadDeOpenui(): Capacidad {
   const base = openUI({ preload: false, tracing: NOOP_AGENT_TRACING }) as {
@@ -219,8 +220,8 @@ export function capacidadesDelEspecialista(
     ...(clase === "ejecuta" ? [capacidadDeEjecucion(deps.conShell())] : []),
     capacidadDeRecortes(deps.backend),
     capacidadDeFecha(),
-    // OpenUI va con `artifacts-builder`: lo lleva quien hace artefactos, y solo en nuestro motor
-    // —un hijo externo no pasa por estas capabilities—.
-    ...(agente.skills.includes("artifacts-builder") ? [capacidadDeOpenui()] : []),
+    // OpenUI lo trae su skill: quien la declara recibe la tool. Solo en nuestro motor —un hijo
+    // externo no pasa por estas capabilities, y la skill le dice que sin la tool no lo use—.
+    ...(agente.skills.includes(SKILL_DE_OPENUI) ? [capacidadDeOpenui()] : []),
   ];
 }

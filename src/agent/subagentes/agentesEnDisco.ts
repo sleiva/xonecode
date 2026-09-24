@@ -1043,7 +1043,7 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
       "devuelve como decisión PENDIENTE.",
     motor: "modelo",
     soloLectura: true,
-    skills: ["xone-spec-builder", "xone-plan-builder", "archify", "artifacts-builder"],
+    skills: ["xone-spec-builder", "xone-plan-builder", "archify", "artifacts-builder", "openui-builder"],
     /**
      * **El plan va DELANTE del reconocimiento, y el orden es la mitad del arreglo.**
      *
@@ -1074,7 +1074,7 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     soloLectura: false,
     // `artifacts-builder` se queda: escribe documentos e informes. `archify` no, que los
     // diagramas son de `designer-xone` y su descripción son ~700 caracteres por llamada.
-    skills: ["xone-development", "xone-debugging", "artifacts-builder"],
+    skills: ["xone-development", "xone-debugging", "artifacts-builder", "openui-builder"],
     instrucciones: `${TRABAJAR_CON_PLAN}\n\n${MEMORIA_LEER}\n\n${MEMORIA_ESCRIBIR}`,
     origen: "semilla",
   },
@@ -1138,7 +1138,7 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
       "describe.**",
     motor: "modelo",
     soloLectura: false,
-    skills: ["xone-development", "archify", "artifacts-builder"],
+    skills: ["xone-development", "archify", "artifacts-builder", "openui-builder"],
     instrucciones: `${TRABAJAR_CON_PLAN}\n\n${HANDOFF_MOCKUP}\n\n${MEMORIA_LEER_CON_HANDOFF}\n\n${MEMORIA_ESCRIBIR}`,
     origen: "semilla",
   },
@@ -1170,7 +1170,7 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
      */
     soloLectura: false,
     escribeEn: ["/doc/"],
-    skills: ["artifacts-builder", "archify"],
+    skills: ["artifacts-builder", "openui-builder", "archify"],
     instrucciones: `${DOCUMENTAR}\n\n${FLUJO_Y_MAQUETAS_DE_DOCUMENTO}\n\n${MEMORIA_LEER}`,
     origen: "semilla",
   },

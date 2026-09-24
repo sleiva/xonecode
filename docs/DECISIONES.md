@@ -6593,3 +6593,14 @@ La telemetría de runtime es opcional y no está en el bundle del navegador (com
 con cada apertura de un `.openui` porque no se pueden cachear fuera del documento. En loopback no
 se nota; por un túnel, sí.
 
+**24-09-2026, el mismo día — OpenUI pasa a ser una SKILL, `openui-builder`.** La primera versión
+montaba la capability en quien tuviera `artifacts-builder`: ataba código al nombre de una skill que
+el usuario puede quitar, renombrar o sustituir, y no dejaba darle OpenUI a un subagente propio.
+Ahora lo trae su propia skill, como cualquier builder: la skill explica cuándo usarlo y cómo no
+fallar (editable, copiable), y quien la declara recibe la tool. En código se queda solo lo que vale
+para cualquier usuario —la lección de `artifacts-builder`: el modelo no siempre abre un `SKILL.md`,
+y lo que tiene que cumplirse va donde mira siempre—. Y se añadió «elige UNO» porque el turno real
+de la medida escribió el mismo panel en `.html` y en `.openui`. **Cómo elige entre los dos sigue
+siendo criterio del modelo**: las descripciones de las dos skills, el cuerpo de `openui-builder` y,
+sobre todo, el encargo del orquestador.
+

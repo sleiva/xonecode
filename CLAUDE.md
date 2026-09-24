@@ -1090,9 +1090,13 @@ feedback del desarrollador** y no es terminal.
   `apps/web`**: el `postinstall` de `@openuidev/lang-core` manda telemetría de instalación salvo
   con `OPENUI_TELEMETRY_DISABLED=1`, que es como se instala aquí, y quien instala xonecode solo
   recibe `apps/web/dist`. El precio es que el programa no se valida al escribirlo: los errores de
-  análisis los dice el visor. En el agente va con `artifacts-builder`, solo en TrueForge
-  (`capacidadDeOpenui`): las instrucciones de la librería se cargan BAJO DEMANDA y al lado van
-  `REGLAS_DE_OPENUI`, una por cada fallo medido. El porqué medido, en `docs/DECISIONES.md`.
+  análisis los dice el visor. **En el agente lo trae su SKILL, `openui-builder`**, solo en
+  TrueForge (`capacidadDeOpenui`): quien la declara recibe la tool que carga las instrucciones de
+  la librería BAJO DEMANDA —la skill explica y el código monta lo que la skill necesita, así que
+  no se ata al nombre de otra skill—. En código van solo `REGLAS_DE_OPENUI`, lo que vale para
+  cualquier usuario (a dónde se escribe, sin red, elegir UNO de los dos formatos); cuándo usarlo y
+  cómo no fallar viven en la skill, que se copia y se edita. A un motor externo no le llega la
+  tool, y la skill le dice que sin ella no lo use. El porqué medido, en `docs/DECISIONES.md`.
 - **Ficheros y Revisión**: el lector filtra con las MISMAS reglas que ve el agente
   (`puedeLeerRuta`, `esVistaAplanada`) y **la barrera se aplica DOS veces** — sobre el texto que
   teclea el cliente y sobre el camino REAL que devuelve `realpath`. Con una sola no era verdad:
