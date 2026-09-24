@@ -50,6 +50,7 @@ import type { PeticionExterna, PoliticaDeEscrituraExterna } from "../../core/por
 import { consumoDeCodex } from "./consumoExterno.js";
 import { decisionDeEscrituraDeCodex } from "./escrituraDeCodex.js";
 import { MOTIVO_DE_CANCELACION_EXTERNA } from "./escrituraExterna.js";
+import { actividadDeItemDeCodex } from "./actividadDeCodex.js";
 
 /** El binario. `CODEX_BIN` gana, para poder apuntar a una versión concreta o a un envoltorio. */
 export function binarioDeCodex(): string {
@@ -118,6 +119,10 @@ export async function correrCodex(
     ficheros?: () => ReadonlySet<string>;
     /** El `realpath`, inyectado para poder probar la guarda sin tocar disco. */
     real?: (ruta: string) => string;
+    /** Lo que hace MIENTRAS trabaja, como línea de actividad (`actividadDeCodex.ts`). */
+    alUsarTool?: (tool: { nombre: string; detalle?: string }) => void;
+    /** Lo que va CONTANDO: sus mensajes de fase `commentary`. */
+    alRazonar?: (texto: string) => void;
   } = {}
 ): Promise<string> {
   const { alConsumir } = opciones;
@@ -379,6 +384,15 @@ export async function correrCodex(
 
       if (m.method === "item/completed") {
         const item = (m.params as { item?: { type?: string; phase?: string; text?: string } } | undefined)?.item;
+        // Lo que HIZO y lo que CONTÓ, mientras trabaja: sin esto la pantalla se quedaba quieta
+        // hasta su respuesta. Contar no puede tumbar el turno.
+        try {
+          const actividad = actividadDeItemDeCodex(item, peticion.cwd);
+          for (const t of actividad.tools) opciones.alUsarTool?.(t);
+          if (actividad.razonamiento !== undefined) opciones.alRazonar?.(actividad.razonamiento);
+        } catch {
+          // Una línea de actividad que no se pudo componer no es un turno que falló.
+        }
         // La respuesta es el `agentMessage` de fase `final_answer`. Los otros items del turno
         // —el mensaje del usuario, el razonamiento, las lecturas— no son la contestación, y
         // quedarse con el último de todos devolvería cualquier cosa.

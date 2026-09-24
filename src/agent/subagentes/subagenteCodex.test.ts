@@ -39,6 +39,8 @@ process.stdin.on("data", (t) => {
       continue;
     }
     if (m.method === "turn/start") {
+      // Lo que hace mientras trabaja, si el guion lo trae: items ya terminados, como en la medida.
+      for (const item of guion.items ?? []) mandar({ method: "item/completed", params: { item } });
       // El item con los cambios va PRIMERO, como en la medida.
       mandar({ method: "item/started", params: { item: { type: "fileChange", id: "exec-1", status: "inProgress", changes: guion.cambios } } });
       // Y la petición después, con id 0 — el que de verdad manda el binario.
@@ -78,8 +80,9 @@ afterEach(() => {
   rmSync(raiz, { recursive: true, force: true });
 });
 
-function guion(g: { cambios?: unknown[]; peticion?: string; params?: unknown }): void {
+function guion(g: { cambios?: unknown[]; peticion?: string; params?: unknown; items?: unknown[] }): void {
   process.env["STUB_GUION"] = JSON.stringify({
+    ...(g.items === undefined ? {} : { items: g.items }),
     cambios: g.cambios ?? [],
     peticion: g.peticion ?? "item/fileChange/requestApproval",
     params: g.params ?? { itemId: "exec-1" },
@@ -328,5 +331,36 @@ describe("Parar el turno MATA al hijo", () => {
     const control = new AbortController();
     control.abort();
     await expect(correrCodex({ ...peticionDe(false), senal: control.signal })).rejects.toThrow(/se canceló/);
+  });
+});
+
+describe("lo que hace MIENTRAS trabaja llega por el puerto", () => {
+  it("sus lecturas como `read_file` con la ruta virtual, y su comentario como razonamiento", async () => {
+    guion({
+      cambios: UN_CAMBIO(raiz),
+      items: [
+        { type: "agentMessage", phase: "commentary", text: "Miro app.xml." },
+        {
+          type: "commandExecution",
+          id: "exec-1",
+          command: "/bin/zsh -lc \"nl -ba app.xml\"",
+          cwd: raiz,
+          status: "completed",
+          exitCode: 0,
+          commandActions: [{ type: "read", command: "nl -ba app.xml", name: "app.xml", path: "app.xml" }],
+        },
+      ],
+    });
+    const tools: { nombre: string; detalle?: string }[] = [];
+    const razonado: string[] = [];
+    const puerto = crearSubagenteExterno({
+      aprobarEscritura: async () => true,
+      ficherosDelProyecto: () => new Set(),
+      alUsarTool: (t) => void tools.push(t),
+      alRazonar: (t) => void razonado.push(t),
+    });
+    await puerto.correr(peticionDe(true));
+    expect(tools).toEqual([{ nombre: "read_file", detalle: "/app.xml" }]);
+    expect(razonado).toEqual(["Miro app.xml."]);
   });
 });

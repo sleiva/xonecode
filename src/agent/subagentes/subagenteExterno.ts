@@ -274,9 +274,9 @@ export function crearSubagenteExterno(opciones: {
    * narración del hijo es continua y es la única señal de vida que hay.
    */
   alRazonar?: (texto: string) => void;
-  // **Límite declarado**: hoy solo lo alimenta `claude-code`. Codex y OpenCode hablan por
-  // sus protocolos y su narración va por otros mensajes; cablearla ahí es otra medida, y
-  // prometerlo aquí con un reenvío que no llega a ningún sitio sería peor que no tenerlo.
+  // Lo alimentan `claude-code` (sus bloques de texto) y `codex` (sus `agentMessage` de fase
+  // `commentary`, `actividadDeCodex.ts`). **Límite declarado**: OpenCode todavía no — su
+  // narración va por otros mensajes de ACP, y cablearla ahí es otra medida.
   /**
    * Lo que el hijo consumió, al terminar. Los TRES productos lo reportan y hasta ahora se
    * tiraba entero (`agent/subagentes/consumoExterno.ts` explica de dónde sale cada uno).
@@ -333,6 +333,9 @@ export function crearSubagenteExterno(opciones: {
         // `realpathSync`, que es el de producción. Quien lo dobla es el test de
         // `decisionDeEscrituraDeCodex`, que es donde vive la guarda.
         ficheros: () => opciones.ficherosDelProyecto?.() ?? new Set<string>(),
+        // Lo que hace y lo que cuenta mientras trabaja: sin ellos, minutos de pantalla quieta.
+        ...(opciones.alUsarTool === undefined ? {} : { alUsarTool: opciones.alUsarTool }),
+        ...(opciones.alRazonar === undefined ? {} : { alRazonar: opciones.alRazonar }),
       });
     }
     if (peticion.motor === "opencode") {

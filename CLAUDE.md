@@ -479,7 +479,9 @@ no viaja porque ahí la ejecución no se concede—. Reglas duras:
   siguiente no llegaba NADA y no había forma de distinguir un agente que trabaja de uno
   colgado. Solo bloques de TEXTO, nunca los de `tool_use`: esos ya viajan por `alUsarTool` con
   su lista blanca, y duplicarlos aquí los sacaría con los argumentos crudos dentro. **Límite
-  declarado**: hoy solo lo alimenta `claude-code`.
+  declarado**: lo alimentan `claude-code` y `codex`; OpenCode todavía no. **Y lo que HACE Codex también
+  cruza** (`actividadDeCodex.ts`), y sale de su propia clasificación de cada comando (`commandActions`,
+  medida contra el app-server real) y NUNCA del comando de shell, que lleva la ruta de la máquina.
 - **El pulso DICE en qué paso está y cuánto lleva en él** (`Chat.tsx`, `cronometro.ts` con
   `clave`), en la línea que se ve con el pulso PLEGADO. El total no contesta esa pregunta: un
   «Trabajando…» con su cuenta atrás no distingue avanzar de colgarse, y lo que lo distingue es
