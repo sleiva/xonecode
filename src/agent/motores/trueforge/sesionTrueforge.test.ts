@@ -1249,3 +1249,27 @@ describe("el contraste con las métricas PROPIAS de TrueForge, en la traza", () 
     expect(t.vistos[1]).toMatchObject({ externos: 0, nuestras: { llamadas: 1 }, motor: { iteraciones: 1 }, diferencias: [] });
   }, 30_000);
 });
+
+describe("los clientes de modelo duran la sesión, y `/modelo` los renueva", () => {
+  it("un cliente por papel en toda la sesión; tras `cambiarModelos`, el del modelo nuevo", async () => {
+    const contar = (guion: AIMessageChunk[][]) => {
+      const g = modelosConGuion(guion);
+      let construidos = 0;
+      const base = g.m as unknown as { paraPapel: (...a: unknown[]) => unknown };
+      const m = { ...base, paraPapel: (...a: unknown[]) => (construidos++, base.paraPapel(...a)) } as unknown as ModelosPort;
+      return { m, vistos: g.vistos, construidos: () => construidos };
+    };
+    const a = contar([[new AIMessageChunk({ content: "uno" })], [new AIMessageChunk({ content: "dos" })]]);
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: a.m, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("hola", piel().p);
+    await s.turno("otra", piel().p);
+    // Dos llamadas del orquestador, UN cliente: su memoria de eco es la de toda la conversación.
+    expect(a.construidos()).toBe(1);
+    const b = contar([[new AIMessageChunk({ content: "del nuevo" })]]);
+    await s.cambiarModelos(b.m);
+    const pi = piel();
+    await s.turno("y ahora", pi.p);
+    expect(b.construidos()).toBe(1);
+    expect(pi.tokens.join("")).toBe("del nuevo");
+  }, 30_000);
+});

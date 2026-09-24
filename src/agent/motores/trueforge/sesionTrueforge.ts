@@ -378,7 +378,29 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       ? [crearCopiarArtefacto({ raiz, carpetaDeArtefactos: carpeta, perfil: agente }) as unknown as ToolDeLangchain]
       : []),
   ];
-  const llm = modeloParaTrueforge({ modelo: () => modelos.paraPapel("trabajo"), senal: () => aborto?.signal });
+  /**
+   * **Un cliente de modelo por papel, modelo y esfuerzo, que dura la SESIÓN** —hasta `/modelo`—, y
+   * no uno por llamada como era.
+   *
+   * No es por ahorro, es por el ECO de DeepSeek (`config/ecoDeRazonamiento.ts`): repone el
+   * `reasoning_content` que `@langchain/openai` tira, emparejándolo por el id de la tool call, y su
+   * memoria vive DENTRO del cliente. Con un cliente nuevo en cada llamada la memoria nacía vacía y el
+   * eco no emparejaba nunca. Medido en el cable con DeepSeek real: deepagents devolvía el
+   * razonamiento en 7 de 7 mensajes con tool calls, y TrueForge en 0 de 5. Hoy la API lo acepta
+   * igual, pero su documentación exige devolverlo, y con esto TrueForge lo hace a nivel HTTP haga lo
+   * que haga su contexto —que es justo lo que cambia en 0.3—
+   * (`deepseekEnTrueforge.test.ts`).
+   */
+  const clientes = new Map<string, unknown>();
+  const clienteDe = (clave: string, crear: () => unknown): unknown => {
+    let cliente = clientes.get(clave);
+    if (cliente === undefined) {
+      cliente = crear();
+      clientes.set(clave, cliente);
+    }
+    return cliente;
+  };
+  const llm = modeloParaTrueforge({ modelo: () => clienteDe("papel:trabajo:", () => modelos.paraPapel("trabajo")), senal: () => aborto?.signal });
 
   /**
    * El hilo de un hijo EXTERNO: un `AgentThread` normal con UNA llamada, cuyo «modelo» es el
@@ -461,7 +483,9 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
     const definicionDelHijo = {
       modelClient: modeloParaTrueforge({
         modelo: () =>
-          agente?.modelo === undefined ? modelos.paraPapel(papel, agente?.esfuerzo) : modelos.paraModelo(agente.modelo, agente.esfuerzo),
+          agente?.modelo === undefined
+            ? clienteDe(`papel:${papel}:${agente?.esfuerzo ?? ""}`, () => modelos.paraPapel(papel, agente?.esfuerzo))
+            : clienteDe(`modelo:${agente.modelo}:${agente.esfuerzo ?? ""}`, () => modelos.paraModelo(agente.modelo!, agente.esfuerzo)),
         senal: () => aborto?.signal,
       }),
       messages: [{ role: "user", content: params.request.input }],
@@ -1088,6 +1112,8 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       // El ILLM pide el modelo en cada llamada, así que basta con cambiar a quién se lo pide:
       // el hilo sigue entero.
       modelos = nuevos;
+      // Los clientes eran del modelo de antes: el siguiente se construye con el nuevo.
+      clientes.clear();
     },
     nuevoHilo(id?: string) {
       hilo = id ?? `tf-${Date.now()}`;
