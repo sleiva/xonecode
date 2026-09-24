@@ -1,0 +1,57 @@
+/* La captura ampliada. La capa y el velo son los de `Pregunta.module.css`: es la misma ventana
+   que las otras, no una que se le parece. Aquí solo el marco de la imagen y su pie. */
+.visor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-sizing: border-box;
+  max-width: 100%;
+  max-height: 100%;
+  margin: 0;
+  padding: 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+/* Hasta donde quepa y sin recortar: el alto lo acota la ventana menos el pie y el relleno del
+   velo, para que los botones no se salgan de la pantalla con una captura muy vertical. */
+.imagen {
+  display: block;
+  min-height: 0;
+  max-width: min(90vw, 1200px);
+  max-height: calc(100vh - 140px);
+  margin: 0 auto;
+  object-fit: contain;
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* El nombre es DATO DE MÁQUINA (un timestamp la mitad de las veces): mono, y cede él. */
+.nombre {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.acciones {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+
+.enlace {
+  text-decoration: none;
+}

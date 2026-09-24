@@ -480,6 +480,12 @@
 }
 
 /* El botón es la imagen: sin relleno ni fondo propios, porque el recinto ya lo pone ella. */
+/* Una captura SOLA, más grande: sin vecinas, a 112 px una pantalla de móvil no se lee. */
+.capturaSola {
+  height: 240px;
+  max-width: 360px;
+}
+
 .capturaAbrir {
   display: block;
   padding: 0;

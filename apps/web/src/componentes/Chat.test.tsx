@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, act, within } from "@testing-library/react";
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { Chat, MS_DEL_AVISO_AUTONOMO, peticionDeCorreccion } from "./Chat.js";
 import { Transcript } from "./Transcript.js";
@@ -399,7 +399,7 @@ describe("Chat: el artefacto", () => {
    * Artefactos, que es donde se miran de verdad. Lo que NO es imagen se queda con su tarjeta
    * de una línea: de un `.json` no hay nada que previsualizar.
    */
-  it("una captura sale como MINIATURA en fila, sin texto, y sigue abriendo la pestaña", () => {
+  it("una captura sale como MINIATURA, sin texto, y se AMPLÍA ahí mismo; de ahí se va a la pestaña", () => {
     const abrir = vi.fn();
     const captura: Acto = {
       tipo: "artefacto",
@@ -426,9 +426,16 @@ describe("Chat: el artefacto", () => {
     // Sin texto: su nombre no se pinta, pero SÍ es su nombre accesible, que es lo que la
     // convierte en un control y no en un adorno.
     expect(container.textContent).not.toContain("captura-9.jpg");
-    const boton = screen.getByRole("button", { name: /captura-9\.jpg/u });
+    const boton = screen.getByRole("button", { name: "Ampliar captura-9.jpg" });
     fireEvent.click(boton);
+    // Pulsar AMPLÍA —el `Image.Zoom` de assistant-ui— en vez de mandarte a otra pestaña.
+    expect(abrir).not.toHaveBeenCalled();
+    const visor = screen.getByRole("dialog", { name: "captura-9.jpg" });
+    expect(visor.querySelector("img")!.getAttribute("src")).toBe("/artefacto?n=captura-9.jpg");
+    // Ir a Artefactos queda como botón del visor, y lo cierra.
+    fireEvent.click(within(visor).getByRole("button", { name: "Abrir en Artefactos" }));
     expect(abrir).toHaveBeenCalledWith("/artefactos/captura-9.jpg");
+    expect(screen.queryByRole("dialog")).toBeNull();
 
     // Y lo que no es imagen conserva su tarjeta con el nombre: de un `.json` no hay
     // previsualización que enseñar.
@@ -1135,6 +1142,42 @@ describe("Chat: la pregunta del agente en el hilo", () => {
     const { container } = render(<Chat actos={[...actos, { tipo: "usuario", texto: "Negro" }]} alResponderConsulta={vi.fn()} />);
     expect(screen.queryByRole("button", { name: "Responder" })).toBeNull();
     expect(container.querySelector("li[data-elegida]")?.textContent).toBe("Negro");
+  });
+});
+
+describe("Chat: la captura ampliada", () => {
+  const captura: Acto = { tipo: "artefacto", ruta: "/artefactos/c.png", nombre: "c.png", bytes: 2048, mime: "image/png" };
+
+  it("se cierra con «Cerrar», con Escape y con el clic fuera; y sin manejador no hay «Abrir en Artefactos»", () => {
+    render(<Chat actos={[captura, { tipo: "fin", ms: 1 }]} />);
+    const abrirVisor = () => fireEvent.click(screen.getByRole("button", { name: "Ampliar c.png" }));
+
+    abrirVisor();
+    expect(within(screen.getByRole("dialog")).queryByRole("button", { name: "Abrir en Artefactos" })).toBeNull();
+    // Descargar va por la misma ruta con `descargar=1`.
+    expect(within(screen.getByRole("dialog")).getByRole("link", { name: "Descargar" }).getAttribute("href")).toBe(
+      "/artefacto?n=c.png&descargar=1"
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    abrirVisor();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    abrirVisor();
+    const velo = screen.getByRole("dialog").querySelector("figure")!.parentElement!;
+    fireEvent.click(velo);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("una SOLA sale más grande que cuando van varias", () => {
+    const { container, unmount } = render(<Chat actos={[captura, { tipo: "fin", ms: 1 }]} />);
+    const sola = container.querySelector("img")!.className;
+    unmount();
+    const otra: Acto = { ...captura, ruta: "/artefactos/d.png", nombre: "d.png" };
+    const { container: dos } = render(<Chat actos={[captura, otra, { tipo: "fin", ms: 1 }]} />);
+    expect(dos.querySelector("img")!.className).not.toBe(sola);
   });
 });
 

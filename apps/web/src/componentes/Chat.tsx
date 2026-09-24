@@ -14,6 +14,7 @@ import { tipoDeArtefacto } from "../tipoDeArtefacto.js";
 import { consultaPendiente } from "../consultaPendiente.js";
 import { sinTextoDeConsulta } from "../textoDeConsulta.js";
 import { ConsultaDelAgente } from "./ConsultaDelAgente.js";
+import { VisorDeImagen } from "./VisorDeImagen.js";
 import { hayCosteQueEnsenar } from "./CosteDelTurno.js";
 import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
 import vista from "../../estilos/ChatView.module.css";
@@ -367,7 +368,7 @@ const esImagen = (acto: Extract<Acto, { tipo: "artefacto" }>): boolean =>
  *   traer un `<script>` dentro. En un `<img>` no se ejecuta.
  * - **Sin texto, pero con NOMBRE ACCESIBLE.** Lo que se quita es el renglón, no la
  *   identidad: sin `alt` esto sería un adorno para quien no ve la imagen, y el control que
- *   lleva a la pestaña dejaría de tener nombre.
+ *   la amplía dejaría de tener nombre.
  * - **Altura fija y ancho automático.** Una captura de móvil es muy vertical y un diagrama
  *   muy horizontal; recortando al centro con `object-fit: cover` se pierde justo la barra
  *   superior, que es lo que dice en qué pantalla está. Cada una toma el ancho que le toque.
@@ -379,24 +380,41 @@ function CapturasDelTramo({
   actos: Extract<Acto, { tipo: "artefacto" }>[];
   alAbrir?: (ruta: string) => void;
 }) {
+  // La que está AMPLIADA, si alguna. Pulsar la miniatura la enseña entera ahí mismo (el
+  // `Image.Zoom` de assistant-ui) en vez de mandarte a otra pestaña; ir a Artefactos queda
+  // como un botón del visor. Por eso ahora es un botón siempre: ampliar funciona sin manejador.
+  const [ampliada, setAmpliada] = useState<Extract<Acto, { tipo: "artefacto" }> | undefined>(undefined);
+  // Una captura SOLA sale más grande: sin vecinas con las que compartir la fila, a 112 px de
+  // alto una pantalla de móvil no se lee.
+  const sola = actos.length === 1;
   return (
     <div className={estilos.capturas}>
-      {actos.map((a, i) =>
-        alAbrir === undefined ? (
-          // Sin manejador no hay a dónde ir, así que no es un botón: el botón muerto de
-          // siempre. La imagen se sigue viendo, que es la mitad que sí funciona.
-          <img key={i} className={estilos.captura} src={urlDeArtefacto(a.ruta)} alt={a.nombre} />
-        ) : (
-          <button
-            key={i}
-            type="button"
-            className={estilos.capturaAbrir}
-            onClick={() => alAbrir(a.ruta)}
-            title={`${a.nombre} · ${Math.max(1, Math.round(a.bytes / 1024))} KB`}
-          >
-            <img className={estilos.captura} src={urlDeArtefacto(a.ruta)} alt={a.nombre} />
-          </button>
-        )
+      {actos.map((a, i) => (
+        <button
+          key={i}
+          type="button"
+          className={estilos.capturaAbrir}
+          onClick={() => setAmpliada(a)}
+          aria-label={`Ampliar ${a.nombre}`}
+          title={`${a.nombre} · ${Math.max(1, Math.round(a.bytes / 1024))} KB`}
+        >
+          <img className={`${estilos.captura} ${sola ? estilos.capturaSola : ""}`} src={urlDeArtefacto(a.ruta)} alt={a.nombre} />
+        </button>
+      ))}
+      {ampliada === undefined ? null : (
+        <VisorDeImagen
+          ruta={ampliada.ruta}
+          nombre={ampliada.nombre}
+          alCerrar={() => setAmpliada(undefined)}
+          {...(alAbrir === undefined
+            ? {}
+            : {
+                alAbrirEnArtefactos: () => {
+                  setAmpliada(undefined);
+                  alAbrir(ampliada.ruta);
+                },
+              })}
+        />
       )}
     </div>
   );
