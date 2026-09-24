@@ -163,6 +163,31 @@ describe("Chat: lo que la revisión de interfaz vio en vivo", () => {
     ]);
   });
 
+  it("la memoria pedida en el turno se dice en su PRIMER tramo, con quién, y no en los demás", () => {
+    const { container } = render(
+      <Chat
+        actos={[
+          { tipo: "usuario", texto: "sigue" },
+          { tipo: "herramientas", lineas: ["→ lee /MEMORIA_PROYECTO.md"] },
+          asistente("Miro el proyecto."),
+          { tipo: "herramientas", lineas: ["→ lee /app.xml"] },
+          { tipo: "fin", ms: 10, memoria: { por: [{ rol: "orquestador" }, { rol: "especialista", nombre: "developer-xone" }] } },
+        ]}
+      />
+    );
+    const tramos = [...container.querySelectorAll("details")];
+    expect(tramos).toHaveLength(2);
+    expect(tramos[0]!.textContent).toContain("Memoria del proyecto · pedida por orquestador, developer-xone");
+    expect(tramos[1]!.textContent).not.toContain("Memoria del proyecto");
+  });
+
+  it("sin el campo no hay línea de memoria: un turno que no la pidió no dice nada de ella", () => {
+    const { container } = render(
+      <Chat actos={[{ tipo: "usuario", texto: "x" }, { tipo: "herramientas", lineas: ["→ lee /a"] }, { tipo: "fin", ms: 1 }]} />
+    );
+    expect(container.textContent).not.toContain("Memoria del proyecto");
+  });
+
   it("sin origen que conste —una sesión anterior— no se inventa ningún rótulo", () => {
     const { container } = render(
       <Chat actos={[{ tipo: "usuario", texto: "x" }, { tipo: "herramientas", lineas: ["→ lee /a"] }, { tipo: "fin", ms: 1 }]} />

@@ -268,3 +268,27 @@ describe("correrTurno", () => {
     expect(actos).toEqual(["token:propongo esto", "cerrar", "pausa:1", "fin"]);
   });
 });
+describe("la memoria del proyecto, pedida", () => {
+  it("una lectura de la memoria se le dice a la piel con su origen; otra tool o un error, no", async () => {
+    const pedidas: unknown[] = [];
+    const piel: Piel = { ...pielDePrueba().piel, memoriaPedida: (o) => void pedidas.push(o) };
+    const dev = { rol: "especialista", nombre: "developer-xone" } as const;
+    await correrTurno(
+      flujo(
+        { tipo: "tool", nombre: "read_file", detalle: "/MEMORIA_PROYECTO.md", origen: dev },
+        { tipo: "tool", nombre: "read_file", detalle: "/app.xml", origen: dev },
+        { tipo: "tool", nombre: "read_file", detalle: "MEMORIA_PROYECTO.md" },
+        { tipo: "tool", nombre: "read_file", detalle: "/MEMORIA_PROYECTO.md", error: "ENOENT" },
+        { tipo: "fin", ms: 1 }
+      ),
+      piel
+    );
+    expect(pedidas).toEqual([dev, undefined]);
+  });
+
+  it("una piel sin el método no se entera: la tubería sigue igual", async () => {
+    const { piel, actos } = pielDePrueba();
+    await correrTurno(flujo({ tipo: "tool", nombre: "read_file", detalle: "/MEMORIA_PROYECTO.md" }), piel);
+    expect(actos).toEqual(["linea:→ lee /MEMORIA_PROYECTO.md", "fin"]);
+  });
+});

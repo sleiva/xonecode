@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
-import type { Acto, ConsumoDeTurno } from "../tipos.js";
+import type { Acto, ConsumoDeTurno, MemoriaDelTurno } from "../tipos.js";
 import { usarPegadoAbajo } from "../pegadoAbajo.js";
-import { partirPorOrigen, type TrozoPorOrigen } from "../porOrigen.js";
+import { partirPorOrigen, rotuloDeOrigen, type TrozoPorOrigen } from "../porOrigen.js";
 import { useCronometro } from "../cronometro.js";
 import { protegerDolares } from "../protegerDolares.js";
 import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
@@ -143,6 +143,15 @@ function TramoDeTrabajo({
         )}
       </summary>
       <div className={estilos.detalleDePulso} ref={nodo} onScroll={alDesplazar}>
+        {t.memoria === undefined ? null : (
+          // «Pedida», no «leída» ni «aplicada»: lo que consta es la petición de la tool
+          // (`Piel.memoriaPedida?`), no que se leyera bien ni que decidiera nada.
+          <p className={estilos.memoriaDelTurno}>
+            {t.memoria.por.length === 0
+              ? "Memoria del proyecto · pedida"
+              : `Memoria del proyecto · pedida por ${t.memoria.por.map((o) => rotuloDeOrigen(o)).join(", ")}`}
+          </p>
+        )}
         {conQuienTrabaja(t.actos).map(({ acto: a, trozos }, i) => {
           if (a.tipo === "razonamiento") {
             return (
@@ -394,6 +403,8 @@ interface TramoDePulso {
    * `↑0 ↓0` afirmaría una medida que nadie hizo.
    */
   consumo?: ConsumoDeTurno;
+  /** Que en su turno se pidió leer la memoria del proyecto, y quién. Ausente = no se pidió. */
+  memoria?: MemoriaDelTurno;
 }
 
 /** Cuánto se queda a la vista el aviso del modo autónomo antes de retirarse solo. */
@@ -635,6 +646,10 @@ export function Chat({
       // y repartirla entre todos sería inventarse cuánto duró cada trozo. Y el COSTE del turno
       // por el mismo camino y por el mismo motivo: es de quien terminó, no de cada trozo.
       const ultimo = delTurno[delTurno.length - 1];
+      // La memoria, en cambio, va al PRIMERO: se lee al empezar —los prompts lo piden así— y
+      // es el tramo donde está su línea. Es un hecho del turno, no de un trozo, así que va en
+      // uno solo y no en todos.
+      if (acto.memoria !== undefined && delTurno[0] !== undefined) delTurno[0].memoria = acto.memoria;
       for (const suyo of delTurno) suyo.terminado = true;
       delTurno = [];
       if (ultimo !== undefined) {

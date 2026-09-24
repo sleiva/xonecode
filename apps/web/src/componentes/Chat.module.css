@@ -152,6 +152,17 @@
   flex-direction: column;
 }
 
+/* Un HECHO del turno, no una línea del andamio: letra de la interfaz y tono secundario, como el
+   rótulo de quién trabaja, y un filete debajo que lo separa de las tools. */
+.memoriaDelTurno {
+  margin: 0 0 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .quienTrabaja {
   margin: 4px 0 0;
   color: var(--dsw-alias-label-secondary);

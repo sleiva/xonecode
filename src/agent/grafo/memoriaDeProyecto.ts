@@ -10,8 +10,9 @@ import { join } from "node:path";
 import { NOMBRE_CARPETA } from "../config/configEnDisco.js";
 
 export const NOMBRE_ARCHIVO_MEMORIA = "memoria.md";
-/** Ruta que ve el agente dentro de su backend virtual. */
-export const RUTA_MEMORIA_VIRTUAL = "/MEMORIA_PROYECTO.md";
+/** Ruta que ve el agente dentro de su backend virtual. Vive en `core/memoria.ts`, que la
+ *  reconoce también en el flujo de tools. */
+export { RUTA_MEMORIA_VIRTUAL } from "../../core/memoria.js";
 /** Ruta real dentro del backend virtual; nunca se enseña al agente. */
 export const RUTA_MEMORIA_INTERNA = `/${NOMBRE_CARPETA}/${NOMBRE_ARCHIVO_MEMORIA}`;
 /** Almacén interno de los historiales que DeepAgents ya ha resumido. */

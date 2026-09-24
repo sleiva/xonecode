@@ -1,7 +1,8 @@
 import { Bitacora } from "./bitacora.js";
 import { Colapsador } from "./notify.js";
 import type { LineaDeTool } from "./notify.js";
-import type { Artefacto, DomainEvent, Fase, PendienteDeAprobacion } from "./events.js";
+import type { Artefacto, DomainEvent, Fase, OrigenDeLaTool, PendienteDeAprobacion } from "./events.js";
+import { pideLeerLaMemoria } from "./memoria.js";
 import type { DetalleDeLinea } from "./actos.js";
 
 /**
@@ -49,6 +50,19 @@ export interface Piel {
   linea(texto: string, detalle?: DetalleDeLinea): void;
   pausa(pendientes: PendienteDeAprobacion[]): void;
   fin(ms: number): void;
+  /**
+   * Alguien pidió LEER la memoria del proyecto (`core/memoria.ts`), con su origen si consta.
+   * OPCIONAL, como `fase?` y `razonamiento?`: stdio y la TUI no lo implementan —ahí ya se ve
+   * la línea de la tool— y la tubería sigue byte-idéntica.
+   *
+   * Es un método de la PIEL y no una cuenta de este motor porque el hecho es del TURNO y este
+   * motor se llama una vez por RONDA (aprobaciones, reparaciones): la piel es lo único que dura
+   * el turno entero, y quien lo estampa en su cierre.
+   *
+   * Dice que se PIDIÓ, no que se leyó: el evento `tool` sale cuando la tool se pide, y en
+   * TrueForge nunca trae su error. Una memoria que no existe da una lectura pedida igual.
+   */
+  memoriaPedida?(origen: OrigenDeLaTool | undefined): void;
   /**
    * Si la piel sabe animar fases (el spinner del terminal), el motor le delega la fase
    * y le dicta SOLO el texto — la decoración es cosa de la piel. Sin este método, la
@@ -211,6 +225,7 @@ export async function correrTurno(
 
         case "tool":
           bitacora.anota("tool", ev.nombre);
+          if (!ev.error && pideLeerLaMemoria(ev.nombre, ev.detalle)) piel.memoriaPedida?.(ev.origen);
           for (const l of colapsador.lineas({
             nombre: ev.nombre,
             detalle: ev.detalle,

@@ -158,6 +158,11 @@ export interface DetalleDeLinea {
   origen?: OrigenDeLaTool;
 }
 
+/** Que alguien pidió leer la memoria del proyecto en el turno (`core/actos.ts#MemoriaDelTurno`). */
+export interface MemoriaDelTurno {
+  por: OrigenDeLaTool[];
+}
+
 export type Acto =
   | { tipo: "usuario"; texto: string }
   | { tipo: "asistente"; texto: string }
@@ -210,7 +215,7 @@ export type Acto =
    *  filtrar por la prosa se rompería el día que alguien la reescriba. Opcional por lo
    *  mismo que `detalles` — las sesiones viejas no lo traen. */
   | { tipo: "fase"; texto: string; ms: number; fase?: string }
-  | { tipo: "fin"; ms: number; modelo?: string; consumo?: ConsumoDeTurno }
+  | { tipo: "fin"; ms: number; modelo?: string; consumo?: ConsumoDeTurno; memoria?: MemoriaDelTurno }
   /**
    * Una operación de sincronización con CloudStudio, contada entera: las líneas que el
    * terminal habría impreso, su hora de EMPEZAR y cuál de las tres acciones fue.

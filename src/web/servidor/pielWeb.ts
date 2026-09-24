@@ -21,7 +21,7 @@ import type { Piel } from "../../core/turno.js";
 import type { Acto } from "../../core/actos.js";
 import { conLlamadaDeTool } from "../../core/actos.js";
 import type { ConsumoDeTurno, ConsumoDeUnaCuenta, DetalleDeLinea } from "../../core/actos.js";
-import type { Fase, PendienteDeAprobacion } from "../../core/events.js";
+import type { Fase, OrigenDeLaTool, PendienteDeAprobacion } from "../../core/events.js";
 
 export interface PielWeb {
   piel: Piel;
@@ -195,7 +195,21 @@ export function crearPielWeb(
     return gastado ? { consumo: delta } : {};
   };
 
+  /**
+   * Quién pidió leer la memoria en el turno en curso (`Piel.memoriaPedida?`). Se vacía al
+   * estamparlo en el `fin`, que es una vez por TURNO aunque el motor pase por varias rondas.
+   * `undefined` = no se ha pedido; una lista vacía = se pidió sin origen que conste.
+   */
+  let memoria: OrigenDeLaTool[] | undefined;
+  const claveDeOrigen = (o: OrigenDeLaTool): string => (o.rol === "orquestador" ? "o" : `e:${o.nombre ?? ""}`);
+
   const piel: Piel = {
+    memoriaPedida(origen) {
+      const lista = memoria ?? [];
+      if (origen !== undefined && !lista.some((o) => claveDeOrigen(o) === claveDeOrigen(origen))) lista.push(origen);
+      memoria = lista;
+    },
+
     token(texto) {
       // A DIFERENCIA del store de la TUI (`cli/tui/store.ts:74-87`), aquí NO se parte por
       // `\n`: la TUI pinta líneas en un terminal y necesita una por fila, pero la web
@@ -344,7 +358,9 @@ export function crearPielWeb(
 
     fin(ms) {
       cerrarFase();
-      empujar({ tipo: "fin", ms, ...deltaDelTurno() });
+      const pedida = memoria;
+      memoria = undefined;
+      empujar({ tipo: "fin", ms, ...deltaDelTurno(), ...(pedida === undefined ? {} : { memoria: { por: pedida } }) });
     },
 
     fase(texto, fase) {

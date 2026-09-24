@@ -221,6 +221,30 @@ describe("pielWeb", () => {
     ]);
   });
 
+  it("la memoria pedida se estampa UNA vez en el `fin` del turno, sin repetir quién, y se vacía", () => {
+    const { piel, actos } = crearPielWeb();
+    const dev = { rol: "especialista", nombre: "developer-xone" } as const;
+    // Dos rondas del motor antes de un solo `fin`: el hecho es del TURNO.
+    piel.memoriaPedida!({ rol: "orquestador" });
+    piel.memoriaPedida!(dev);
+    piel.memoriaPedida!(dev);
+    piel.memoriaPedida!(undefined);
+    piel.fin(5);
+    piel.fin(7);
+    const fines = actos().filter((a) => a.tipo === "fin");
+    expect(fines).toEqual([
+      { tipo: "fin", ms: 5, memoria: { por: [{ rol: "orquestador" }, dev] } },
+      { tipo: "fin", ms: 7 },
+    ]);
+  });
+
+  it("pedida sin ningún origen que conste es una lista VACÍA, no ausente", () => {
+    const { piel, actos } = crearPielWeb();
+    piel.memoriaPedida!(undefined);
+    piel.fin(1);
+    expect(actos().at(-1)).toEqual({ tipo: "fin", ms: 1, memoria: { por: [] } });
+  });
+
   it("el token NO se parte por saltos: la web renderiza markdown y el párrafo va entero", () => {
     const { piel, actos } = crearPielWeb();
     piel.token("- uno\n- dos\n");

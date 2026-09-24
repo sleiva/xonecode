@@ -40,6 +40,15 @@ export interface DetalleDeLinea {
    */
   origen?: OrigenDeLaTool;
 }
+/**
+ * La memoria del proyecto en un turno: que alguien PIDIÓ leerla, y quién si consta
+ * (`Piel.memoriaPedida?`). Presente = se pidió al menos una vez; `por` son los orígenes que
+ * constan, en orden y sin repetir, y puede ir VACÍO si ninguna petición traía origen. Ausente
+ * es «no se pidió» o «la sesión es anterior». Nunca lleva contenido de la memoria.
+ */
+export interface MemoriaDelTurno {
+  por: OrigenDeLaTool[];
+}
 export type Acto =
   | { tipo: "usuario"; texto: string }
   | { tipo: "asistente"; texto: string }
@@ -129,7 +138,7 @@ export type Acto =
    * existiera no lo traen, y ausente significa «anterior» o «esta piel no lo sabe» —nunca
    * cero—. Quien lo lea tiene que poder distinguirlo, que es lo que hace `consumoDeLosActos`.
    */
-  | { tipo: "fin"; ms: number; modelo?: string; consumo?: ConsumoDeTurno }
+  | { tipo: "fin"; ms: number; modelo?: string; consumo?: ConsumoDeTurno; memoria?: MemoriaDelTurno }
   | { tipo: "error"; texto: string }
   /**
    * UNA operación de sincronización con CloudStudio —subir o bajar—, contada entera y de una
