@@ -57,6 +57,10 @@ export function crearServicioDeConectores(o: {
   let error: string | undefined;
   const cambio = (): void => { try { o.alCambiar?.(); } catch { /* reemitir no puede tumbar la operación */ } };
   const hayPendienteVivo = (id: string): boolean => [...pendientes.values()].some((p) => p.id === id && p.expira >= ahora());
+  /** Retira los pendientes de ESTE conector, vivos o no: el callback viejo contestará «ya se
+   *  usó». Sin esto, `quitar`/`desconectar` dejan un canje en vuelo que escribe tokens de un
+   *  conector ya retirado (o deja «Esperando al navegador…» encendido diez minutos). */
+  const retirarPendientes = (id: string): void => { for (const [s, p] of pendientes) if (p.id === id) pendientes.delete(s); };
 
   /** La frase de un fallo AL GUARDAR EN DISCO, nunca `error.message`: un `ErrorDeFicheroDeConectores`
    *  lleva la ruta ABSOLUTA del fichero (`conectoresEnDisco.ts#paraEscribir`), y un `EACCES`/`ENOSPC`
@@ -115,8 +119,8 @@ export function crearServicioDeConectores(o: {
       if (conectorDelCatalogo(id) === undefined) { error = `«${id}» no está en el catálogo de conectores`; cambio(); return; }
       operar(() => { anadirConector(o.casa, id); });
     },
-    quitar(id) { operar(() => { quitarConector(o.casa, id); olvidarOAuth(o.casa, id); pruebas.delete(id); }); },
-    desconectar(id) { operar(() => { olvidarOAuth(o.casa, id); pruebas.delete(id); }); },
+    quitar(id) { operar(() => { quitarConector(o.casa, id); olvidarOAuth(o.casa, id); pruebas.delete(id); }); retirarPendientes(id); },
+    desconectar(id) { operar(() => { olvidarOAuth(o.casa, id); pruebas.delete(id); }); retirarPendientes(id); },
     async probar(id) {
       const c = conectorDelCatalogo(id);
       if (c === undefined) { error = `«${id}» no está en el catálogo de conectores`; cambio(); return; }
@@ -156,7 +160,7 @@ export function crearServicioDeConectores(o: {
       // UNA autorización viva por conector: el verificador PKCE se guarda por conector, así
       // que una nueva invalida la anterior. Pulsar «Conectar» otra vez es también cómo se
       // recupera quien cerró la pestaña a medias.
-      for (const [s, p] of pendientes) if (p.id === id) pendientes.delete(s);
+      retirarPendientes(id);
       const state = randomBytes(32).toString("base64url");
       pendientes.set(state, { id, expira: ahora() + TTL_DE_AUTORIZACION_MS, redirectUrl });
       error = undefined;

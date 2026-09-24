@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { UnauthorizedError, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import { TOPE_DE_CONEXION_MS } from "../../core/conectores.js";
-import { guardarOAuth, leerOAuth, rutaDeAnadidos } from "./conectoresEnDisco.js";
+import { guardarOAuth, leerOAuth, rutaDeAnadidos, rutaDeOAuth } from "./conectoresEnDisco.js";
 import { ProveedorDeConector } from "./proveedorDeConector.js";
 import { crearServicioDeConectores, servicioDeConectoresCableado, type RedDeConectores, type ServicioDeConectores } from "./servicioDeConectores.js";
 
@@ -139,12 +139,49 @@ describe("probar", () => {
   });
 
   it("con un pendiente vivo del mismo conector, probar NO toca la red (no pisa el verificador PKCE)", async () => {
+    // Con tokens guardados, para que la única razón de NO llamar a la red sea el pendiente
+    // vivo y no la guarda de «sin tokens» — si se retira la guarda del pendiente, este test
+    // seguiría en verde por la otra guarda, y no probaría nada.
+    guardarOAuth(casa, "notion", { tokens: { access_token: "a", token_type: "Bearer" }, redirectUri: "http://127.0.0.1:4200/mcp/oauth/callback" });
     const red = redDoble();
     const s = crear(red);
     s.anadir("notion");
     void s.autorizar("notion", "http://127.0.0.1:4200/mcp/oauth/callback");
     await s.probar("notion");
     expect(red.listarTools).not.toHaveBeenCalled();
+    // Deja la foto como está: ni la borra ni inventa una.
+    expect(s.lista().conectores[0]?.prueba).toBeUndefined();
+  });
+
+  it("quitar retira el pendiente: el callback ya no encuentra nada que canjear", async () => {
+    const red = redDoble();
+    const s = crear(red);
+    s.anadir("notion");
+    await s.autorizar("notion", "http://127.0.0.1:4200/mcp/oauth/callback");
+    const proveedor = (red.iniciarAutorizacion as ReturnType<typeof vi.fn>).mock.calls[0]?.[1] as ProveedorDeConector;
+    const state = proveedor.state();
+
+    s.quitar("notion");
+    const resultado = await s.completar(new URLSearchParams(`code=c&state=${state}`));
+
+    expect(resultado.ok).toBe(false);
+    expect(red.canjearCodigo).not.toHaveBeenCalled();
+    expect(leerOAuth(casa, "notion")).toEqual({});
+  });
+
+  it("desconectar retira el pendiente: no se queda 'autorizando' ni bloquea probar", async () => {
+    const red = redDoble();
+    const s = crear(red);
+    s.anadir("notion");
+    await s.autorizar("notion", "http://127.0.0.1:4200/mcp/oauth/callback");
+    expect(s.lista().conectores[0]).toMatchObject({ autorizando: true });
+
+    s.desconectar("notion");
+    expect(s.lista().conectores[0]).not.toHaveProperty("autorizando");
+
+    guardarOAuth(casa, "notion", { tokens: { access_token: "b", token_type: "Bearer" }, redirectUri: "http://127.0.0.1:4200/mcp/oauth/callback" });
+    await s.probar("notion");
+    expect(red.listarTools).toHaveBeenCalled();
   });
 });
 
@@ -233,13 +270,23 @@ describe("autorizar y completar", () => {
 });
 
 describe("el fallo de una operación de disco no lanza hacia fuera", () => {
-  it("anadir/quitar/desconectar contra un fichero de anadidos ilegible dejan su frase en error", () => {
+  it("anadir/quitar contra un fichero de anadidos ilegible dejan su frase en error", () => {
     mkdirSync(join(casa, ".xonecode"), { recursive: true });
     writeFileSync(rutaDeAnadidos(casa), "{roto");
     const s = crear(redDoble());
     expect(() => s.anadir("jira")).not.toThrow();
     expect(s.lista().error).toBeDefined();
     expect(() => s.quitar("jira")).not.toThrow();
+  });
+
+  it("desconectar contra un fichero de OAuth ilegible deja su frase en error, sin la ruta de la máquina", () => {
+    mkdirSync(join(casa, ".xonecode"), { recursive: true });
+    writeFileSync(rutaDeOAuth(casa), "{roto");
+    const s = crear(redDoble());
+    expect(() => s.desconectar("notion")).not.toThrow();
+    const l = s.lista();
+    expect(l.error).toBeDefined();
+    expect(l.error).not.toContain(casa);
   });
 });
 
