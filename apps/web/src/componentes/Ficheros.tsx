@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
+import { vistaParaElVisor } from "../imagenesDelDocumento.js";
 import type { FicheroDelProyecto } from "../tipos.js";
 import { protegerDolares } from "../protegerDolares.js";
 import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
@@ -195,9 +196,16 @@ export function Ficheros({
                   // El mismo renderizador que el chat, con los dólares escapados por lo
                   // mismo (`protegerDolares.ts`): en un `.md` de un proyecto XOne aparece
                   // `$http`, y sin escapar se lo come el lector de TeX. `md-cuerpo` es la
-                  // clase global que pinta el cuerpo (`estilos/markdown.css`).
+                  // clase global que pinta el cuerpo (`estilos/markdown.css`). Con imágenes del
+                  // proyecto se pinta su VISTA, con cada imagen pedida a la ruta que la sirve
+                  // (`imagenesDelDocumento.ts`): enlazadas en relativo salían rotas.
                   <div className={`${estilos.markdown} md-cuerpo`}>
-                    <MarkdownText text={protegerDolares(contenido.texto ?? "")} codeLabels={ETIQUETAS_DE_CODIGO} />
+                    <MarkdownText
+                      text={protegerDolares(
+                        contenido.vista === undefined ? (contenido.texto ?? "") : vistaParaElVisor(contenido.vista, window.location.origin)
+                      )}
+                      codeLabels={ETIQUETAS_DE_CODIGO}
+                    />
                   </div>
                 ) : (
                   <Visor texto={contenido.texto ?? ""} {...(lenguaje === undefined ? {} : { lenguaje })} />

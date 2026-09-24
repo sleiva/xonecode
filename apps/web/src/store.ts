@@ -1411,6 +1411,9 @@ export function crearStoreDelCliente(): {
                 // navegador porque `mime` y `base64` se quedaban en este case.
                 ...(typeof m.mime === "string" ? { mime: m.mime } : {}),
                 ...(typeof m.base64 === "string" ? { base64: m.base64 } : {}),
+                // La vista de un markdown con imágenes, por la misma trampa: sin nombrarla aquí,
+                // el visor se quedaba con el texto crudo y sus imágenes rotas.
+                ...(typeof m.vista === "string" ? { vista: m.vista } : {}),
                 ...(typeof m.error === "string" ? { error: m.error } : {}),
               },
             },

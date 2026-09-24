@@ -4,6 +4,7 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { ficherosDelProyecto } from "../turno/ficherosDelProyecto.js";
 import { puedeLeerRuta } from "./perfiles.js";
 import { esVistaAplanada } from "./proyecto.js";
+import { conImagenesIncrustadas, enlacesDeImagen, imagenEnProyecto, RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
 
 /**
  * El proyecto tal como lo enseña la pestaña Ficheros de la consola web: el árbol y el
@@ -91,6 +92,12 @@ export interface FicheroLeido {
   mime?: string;
   /** El contenido de la imagen, si cupo en `TOPE_DE_IMAGEN`. Sin recortar nunca. */
   base64?: string;
+  /**
+   * Solo en un MARKDOWN que enlaza imágenes del proyecto: el mismo texto con cada uno de esos
+   * enlaces apuntando a `RUTA_IMAGEN_DEL_PROYECTO`, que las sirve (`vistaDeMarkdown`). `texto`
+   * sigue siendo la fuente tal cual: «Fuente» enseña lo que hay en el fichero, no lo que se pinta.
+   */
+  vista?: string;
   /** El motivo del paso que falló. Sin él, la lectura fue bien. */
   error?: string;
 }
@@ -192,7 +199,76 @@ export async function leerFicheroDeProyecto(raiz: string, ruta: string): Promise
   if (!puedeLeerRuta(`/${relReal}`)) return rechazo("esa ruta no se enseña");
   if (relReal.endsWith(".xml") && existsSync(`${real.slice(0, -4)}.xne`)) return rechazo(MOTIVO_APLANADA);
 
-  return leerContenidoDeFichero(real, ruta, mimeDeImagen(normal));
+  const leido = await leerContenidoDeFichero(real, ruta, mimeDeImagen(normal));
+  // Un markdown con imágenes del proyecto lleva además su VISTA: enlazadas en relativo, en la página
+  // de la consola salían rotas (`core/imagenesDeDocumento.ts`).
+  if (/\.(md|markdown)$/i.test(normal) && leido.texto !== undefined && !leido.recortado) {
+    const vista = vistaDeMarkdown(normal, leido.texto);
+    if (vista !== undefined) return { ...leido, vista };
+  }
+  return leido;
+}
+
+/**
+ * El markdown con cada enlace a una IMAGEN del proyecto apuntando a `RUTA_IMAGEN_DEL_PROYECTO`, o
+ * `undefined` si no enlaza ninguna.
+ *
+ * **No se incrusta, y es a propósito**: el visor (`MarkdownText`) solo pinta imágenes con URL
+ * absoluta `http(s)` —una `data:` se queda en su texto alternativo—, así que tienen que llegar por
+ * HTTP. Y así abrir un documento no lee ni un byte de sus imágenes: la barrera la pone la ruta que
+ * las sirve, al pedirlas. Aquí solo se reescribe lo que ya pasa la criba de balde sobre el TEXTO
+ * (`motivoDeRutaInaceptable`) y es una imagen por su extensión: un enlace a `.env`, o que se sale
+ * del proyecto, se queda como estaba.
+ */
+export function vistaDeMarkdown(documento: string, texto: string): string | undefined {
+  const reescritos = new Map<string, string>();
+  for (const enlace of enlacesDeImagen(texto)) {
+    const ruta = imagenEnProyecto(documento, enlace);
+    if (ruta === undefined || mimeDeImagen(ruta) === undefined || motivoDeRutaInaceptable(ruta) !== undefined) continue;
+    reescritos.set(enlace, `${RUTA_IMAGEN_DEL_PROYECTO}?ruta=${encodeURIComponent(ruta)}`);
+  }
+  return reescritos.size === 0 ? undefined : conImagenesIncrustadas(texto, reescritos);
+}
+
+/** Cuántas imágenes y cuántos bytes se incrustan como mucho en un documento. */
+export const TOPE_DE_IMAGENES_INCRUSTADAS = 40;
+export const TOPE_DE_BYTES_INCRUSTADOS = 10_000_000;
+
+/**
+ * El documento `documento` (ruta relativa al proyecto) con sus imágenes del proyecto INCRUSTADAS.
+ *
+ * Cada imagen se lee con `leerFicheroDeProyecto` —las MISMAS barreras de la pestaña Ficheros, sobre
+ * el texto y sobre el camino real, y su tope por imagen—, así que un enlace a `.env` o a algo de
+ * fuera del proyecto no se incrusta: no pasa la barrera y se queda como estaba. No hay una segunda
+ * copia de esas reglas aquí. Lo que no se puede leer, o pasa de los topes, se deja tal cual y se
+ * CUENTA en `sinResolver`: una imagen rota se ve, una inventada no.
+ */
+export async function conImagenesDelProyecto(
+  raiz: string,
+  documento: string,
+  texto: string,
+  leer: (raiz: string, ruta: string) => Promise<FicheroLeido> = leerFicheroDeProyecto
+): Promise<{ texto: string; incrustadas: number; sinResolver: number }> {
+  const incrustadas = new Map<string, string>();
+  let bytes = 0;
+  let sinResolver = 0;
+  for (const enlace of enlacesDeImagen(texto)) {
+    const ruta = imagenEnProyecto(documento, enlace);
+    // Una URL o un `data:` no son del proyecto, y ya se ven donde se lean: no se cuentan.
+    if (ruta === undefined) continue;
+    if (incrustadas.size >= TOPE_DE_IMAGENES_INCRUSTADAS) {
+      sinResolver += 1;
+      continue;
+    }
+    const imagen = await leer(raiz, ruta);
+    if (imagen.base64 === undefined || imagen.mime === undefined || bytes + imagen.base64.length > TOPE_DE_BYTES_INCRUSTADOS) {
+      sinResolver += 1;
+      continue;
+    }
+    bytes += imagen.base64.length;
+    incrustadas.set(enlace, `data:${imagen.mime};base64,${imagen.base64}`);
+  }
+  return { texto: conImagenesIncrustadas(texto, incrustadas), incrustadas: incrustadas.size, sinResolver };
 }
 
 /**

@@ -174,3 +174,32 @@ describe("exportarAPdf", () => {
     expect(r).toEqual({ error: expect.stringContaining("se fue") });
   });
 });
+
+describe("las imágenes del documento en el PDF", () => {
+  /** Un PNG de un píxel: bytes de verdad. */
+  const PNG = Buffer.from(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c6360000002000100ffff03000006000557bfabd40000000049454e44ae426082",
+    "hex"
+  );
+
+  it("una imagen del proyecto enlazada en relativo va INCRUSTADA: el HTML se imprime desde un temporal", async () => {
+    // Medido: con el enlace relativo, el `img/login.png` se buscaba en el temporal y salía rota.
+    mkdirSync(join(raiz, "doc", "img"), { recursive: true });
+    writeFileSync(join(raiz, "doc", "img", "login.png"), PNG);
+    writeFileSync(join(raiz, "doc", "manual.md"), "# Manual\n\n![Login](img/login.png)\n");
+    const vistos: string[] = [];
+    const n = navegadorQueImprime();
+    const r = await exportarAPdf({
+      raiz,
+      ruta: "doc/manual.md",
+      navegador: "/fake",
+      imprimir: async (nav, args) => {
+        vistos.push(readFileSync(args.at(-1)!.replace("file://", ""), "utf8"));
+        await n.imprimir(nav, args);
+      },
+    });
+    expect(r).toEqual({ ruta: "doc/manual.pdf" });
+    expect(vistos[0]).toContain(`src="data:image/png;base64,${PNG.toString("base64")}"`);
+    expect(vistos[0]).not.toContain('src="img/login.png"');
+  });
+});

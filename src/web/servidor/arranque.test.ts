@@ -7,7 +7,7 @@
  */
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
@@ -37,6 +37,7 @@ import { MS_DE_PREPARACION,
 } from "./arranque.js";
 import { ErrorDelAumentador } from "../../agent/tareas/aumentador.js";
 import { leerFicheroDeProyecto, motivoDeRutaInaceptable } from "../../agent/grafo/arbolDeProyecto.js";
+import { RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
 import { CLAVE_DE_SELLO, cambiosDeSesion, fotoDeApertura } from "../../agent/sesiones/sesionGit.js";
 import type { PeticionDeTarea } from "../../core/ports.js";
 import { crearVestibulo, type Vestibulo } from "./vestibulo.js";
@@ -178,7 +179,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       `POST ${RUTA_ADJUNTO}`,
       // Y la quinta, los de un `.zip` con una skill dentro: la misma razón y el mismo molde.
       `POST ${RUTA_SKILL}`,
-    ]);
+      // Y la sexta, las imágenes que enlaza un `.md` del proyecto: su visor solo pinta `http(s)`.
+      `GET ${RUTA_IMAGEN_DEL_PROYECTO}`,
+    ].sort());
   });
 
   it("al conectar manda el transcript, el estado de modelos, el saludo y el alta", async () => {
@@ -8537,5 +8540,94 @@ describe("el alta: un entorno que no conecta no se guarda", () => {
     expect(olvidados).toEqual([]);
     expect(vestibulo.entornosRegistrados().map((e) => e.id)).toContain("webstudio");
     expect(alta.aviso).toMatch(/servidor caído/);
+  });
+});
+
+/**
+ * Las IMÁGENES de un documento del proyecto, por HTTP: el visor de markdown solo pinta `http(s)`
+ * absolutas, así que la vista de un `.md` las enlaza aquí (`arbolDeProyecto.ts#vistaDeMarkdown`).
+ */
+describe("GET /imagen-del-proyecto", () => {
+  async function pedir(manejador: ManejadorRuta, url: string) {
+    const peticion = { method: "GET", url, headers: {} } as unknown as IncomingMessage;
+    let estado = 0;
+    const cabeceras: Record<string, string | number> = {};
+    let cuerpo: Buffer | string | undefined;
+    const respuesta = {
+      writeHead: (codigo: number, extra?: Record<string, string | number>) => ((estado = codigo), Object.assign(cabeceras, extra ?? {}), respuesta),
+      setHeader: (clave: string, valor: string | number) => ((cabeceras[clave] = valor), respuesta),
+      end: (trozo?: Buffer | string) => ((cuerpo = trozo), respuesta),
+    } as unknown as ServerResponse;
+    await manejador(peticion, respuesta);
+    return { estado, cabeceras, cuerpo };
+  }
+  const PNG = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
+
+  const abrir = async (leerFichero?: Parameters<typeof montarRutas>[2] extends infer O ? (O extends { leerFichero?: infer L } ? L : never) : never) => {
+    const base = mkdtempSync(join(tmpdir(), "xonecode-imagen-"));
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
+    const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
+    montarRutas(servidor, vestibulo, leerFichero === undefined ? {} : { leerFichero });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "sesion", proyecto: "p1" });
+    await asentar();
+    return {
+      raiz,
+      ruta: servidor.rutas.get(`GET ${RUTA_IMAGEN_DEL_PROYECTO}`)!,
+      limpiar: async () => {
+        await vestibulo.cerrar();
+        rmSync(base, { recursive: true, force: true });
+      },
+    };
+  };
+
+  it("sirve los BYTES de una imagen del proyecto, con su tipo y las cabeceras de seguridad", async () => {
+    const pedidas: string[] = [];
+    const { ruta, limpiar } = await abrir(async (_raiz, r) => {
+      pedidas.push(r);
+      return { ruta: r, recortado: false, binario: true, bytes: PNG.length, mime: "image/png", base64: PNG.toString("base64") };
+    });
+    const r = await pedir(ruta, `${RUTA_IMAGEN_DEL_PROYECTO}?ruta=doc%2Fimg%2Flogin.png`);
+    expect(r.estado).toBe(200);
+    expect(pedidas).toEqual(["doc/img/login.png"]);
+    expect(Buffer.from(r.cuerpo as Buffer)).toEqual(PNG);
+    expect(r.cabeceras).toMatchObject({
+      "Content-Type": "image/png",
+      "Content-Security-Policy": "sandbox",
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "no-store",
+    });
+    await limpiar();
+  });
+
+  it("SOLO imágenes: otra ruta no llega ni a leerse", async () => {
+    let leidas = 0;
+    const { ruta, limpiar } = await abrir(async (_raiz, r) => (leidas++, { ruta: r, texto: "CLAVE=x", recortado: false, binario: false, bytes: 7 }));
+    expect((await pedir(ruta, `${RUTA_IMAGEN_DEL_PROYECTO}?ruta=.env`)).estado).toBe(403);
+    expect((await pedir(ruta, `${RUTA_IMAGEN_DEL_PROYECTO}?ruta=app.xml`)).estado).toBe(403);
+    expect((await pedir(ruta, RUTA_IMAGEN_DEL_PROYECTO)).estado).toBe(400);
+    expect(leidas).toBe(0);
+    await limpiar();
+  });
+
+  it("con el lector de VERDAD: lo que su barrera rechaza no se sirve, aunque se llame .png", async () => {
+    const { raiz, ruta, limpiar } = await abrir(leerFicheroDeProyecto);
+    mkdirSync(join(raiz, "doc", "img"), { recursive: true });
+    writeFileSync(join(raiz, "doc", "img", "login.png"), PNG);
+    writeFileSync(join(raiz, ".env"), "CLAVE=secreta");
+    symlinkSync(join(raiz, ".env"), join(raiz, "doc", "img", "trampa.png"));
+    expect((await pedir(ruta, `${RUTA_IMAGEN_DEL_PROYECTO}?ruta=doc%2Fimg%2Flogin.png`)).estado).toBe(200);
+    const trampa = await pedir(ruta, `${RUTA_IMAGEN_DEL_PROYECTO}?ruta=doc%2Fimg%2Ftrampa.png`);
+    expect(trampa.estado).toBe(403);
+    expect(String(trampa.cuerpo)).not.toContain("secreta");
+    expect((await pedir(ruta, `${RUTA_IMAGEN_DEL_PROYECTO}?ruta=doc%2Fimg%2Fno.png`)).estado).toBe(404);
+    expect((await pedir(ruta, `${RUTA_IMAGEN_DEL_PROYECTO}?ruta=..%2F..%2Ffuera.png`)).estado).toBe(403);
+    await limpiar();
   });
 });

@@ -672,6 +672,9 @@ export interface FicheroDelProyecto {
   mime?: string;
   /** La imagen entera, si cupo en el tope. Nunca recortada: media imagen no se abre. */
   base64?: string;
+  /** Un markdown con imágenes del proyecto: el texto para la VISTA, con sus enlaces a la ruta
+   *  que las sirve (`imagenesDelDocumento.ts`). `texto` sigue siendo la fuente. */
+  vista?: string;
   error?: string;
 }
 

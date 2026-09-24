@@ -104,3 +104,13 @@ describe("la política que impide que imprimir EJECUTE nada", () => {
     expect(con).toContain(POLITICA_SIN_SCRIPTS);
   });
 });
+
+describe("una imagen en la hoja de impresión", () => {
+  it("se limita en ALTO además de en ancho: una captura de móvil no puede pasar de una página", () => {
+    // Medido con una de 1080×2400: con solo `max-width` el PDF salía en tres hojas, con el título
+    // solo en la primera y la captura partida en las otras dos.
+    const hoja = documentoImprimible("<p>x</p>", "t");
+    expect(hoja).toMatch(/img \{[^}]*max-width: 100%/);
+    expect(hoja).toMatch(/img \{[^}]*max-height: \d+mm/);
+  });
+});

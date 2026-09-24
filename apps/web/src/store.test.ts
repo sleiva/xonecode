@@ -320,6 +320,13 @@ describe("store del cliente", () => {
     s.aplicar({ clase: "fichero", ruta: "logo.png", recortado: false, binario: true, bytes: 7, mime: "image/png", base64: "QUJD" });
     expect(s.leer().contenidos?.["logo.png"]).toMatchObject({ mime: "image/png", base64: "QUJD", binario: true });
   });
+
+  it("y la `vista` de un markdown con imágenes también llega: la misma trampa de la lista blanca", () => {
+    const s = crearStoreDelCliente();
+    const vista = "![L](/imagen-del-proyecto?ruta=doc%2Fimg%2Fl.png)";
+    s.aplicar({ clase: "fichero", ruta: "doc/m.md", texto: "![L](img/l.png)", recortado: false, binario: false, bytes: 15, vista });
+    expect(s.leer().contenidos?.["doc/m.md"]).toMatchObject({ texto: "![L](img/l.png)", vista });
+  });
 });
 
 describe("el dispositivo de la sesión, en el alta", () => {

@@ -173,6 +173,34 @@ describe("Ficheros", () => {
     expect(screen.queryByRole("heading", { name: "Título" })).toBeNull();
   });
 
+  it("un markdown con imágenes del proyecto las PINTA: su vista, con la URL absoluta de la ruta que las sirve", () => {
+    // El visor solo pinta imágenes `http(s)` absolutas: con el enlace relativo del `.md`, lo que
+    // salía era el texto alternativo.
+    render(
+      <Ficheros
+        arbol={{ rutas: ["doc/m.md"], recortado: false }}
+        contenidos={{
+          "doc/m.md": {
+            ruta: "doc/m.md",
+            texto: "![Pantalla de login](img/login.png)",
+            vista: "![Pantalla de login](/imagen-del-proyecto?ruta=doc%2Fimg%2Flogin.png)",
+            recortado: false,
+            binario: false,
+            bytes: 35,
+          },
+        }}
+        elegido="doc/m.md"
+        alElegir={NADA}
+        alRecargar={NADA}
+      />
+    );
+    const img = screen.getByRole("img", { name: "Pantalla de login" }) as HTMLImageElement;
+    expect(img.getAttribute("src")).toBe(`${window.location.origin}/imagen-del-proyecto?ruta=doc%2Fimg%2Flogin.png`);
+    // Y la fuente sigue siendo el fichero tal cual.
+    fireEvent.click(screen.getByRole("button", { name: "Fuente" }));
+    expect(screen.getByText(/img\/login\.png/)).toBeTruthy();
+  });
+
   it("un SVG enseña el dibujo Y el código a la vez, sin interruptor", () => {
     render(
       <Ficheros

@@ -64,6 +64,11 @@ export function rutaDePdf(ruta: string): string {
  * tablas y bloques de código —sin eso una tabla se parte por la mitad entre dos hojas— y
  * `break-after: avoid` en los encabezados, para que un título no se quede solo al pie.
  *
+ * **Y una imagen se limita también en ALTO**, no solo en ancho. Medido con una captura de móvil
+ * (1080×2400): con solo `max-width: 100%` medía unos 40 cm a todo el ancho de un A4, más que la
+ * página, y el PDF salía con el título solo en la primera hoja y la captura partida en las dos
+ * siguientes. Con `max-height` se reduce entera, sin deformarse, y cabe en una página.
+ *
  * El título va ESCAPADO: sale de un nombre de fichero del proyecto, y un `<` ahí dentro
  * rompería la cabecera del documento.
  */
@@ -90,7 +95,7 @@ pre { background: #f7f8fa; border: 1px solid #e2e6ec; border-radius: 5px; paddin
       overflow-x: auto; break-inside: avoid; }
 pre code { background: none; padding: 0; }
 blockquote { border-left: 3px solid #0b5fff; margin: 1em 0; padding: .2em 1em; background: #f5f8ff; }
-img { max-width: 100%; }
+img { max-width: 100%; max-height: 190mm; width: auto; height: auto; display: block; margin: .6em auto; break-inside: avoid; }
 hr { border: 0; border-top: 1px solid #d7dbe0; margin: 1.6em 0; }
 a { color: #0b5fff; text-decoration: none; }
 </style>

@@ -1,8 +1,8 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
+import { conImagenesDelProyecto,
   arbolDeProyecto,
   leerFicheroDeProyecto,
   motivoDeRutaInaceptable,
@@ -265,5 +265,45 @@ describe("motivoDeRutaInaceptable", () => {
     expect(motivoDeRutaInaceptable("a/../b")).toBeTypeOf("string");
     expect(motivoDeRutaInaceptable("C:\\x")).toBeTypeOf("string");
     expect(motivoDeRutaInaceptable(".env.local")).toBeTypeOf("string");
+  });
+});
+
+describe("las imágenes de un markdown, incrustadas para la VISTA", () => {
+  const PNG = Buffer.from("89504e470d0a1a0a0000000d4948445200000001000000010806000000", "hex");
+  const proyectoConDoc = (md: string) => {
+    const raiz = mkdtempSync(join(tmpdir(), "vista-md-"));
+    mkdirSync(join(raiz, "doc", "img"), { recursive: true });
+    writeFileSync(join(raiz, "doc", "img", "login.png"), PNG);
+    writeFileSync(join(raiz, ".env"), "CLAVE=secreta");
+    writeFileSync(join(raiz, "doc", "manual.md"), md);
+    return raiz;
+  };
+
+  it("el markdown lleva su `vista` con cada imagen apuntando a la ruta que la sirve, y el `texto` sigue siendo la fuente", async () => {
+    const md = "# Manual\n\n![Login](img/login.png)\n![Fuera](../../x.png)\n![Env](../.env)\n";
+    const leido = await leerFicheroDeProyecto(proyectoConDoc(md), "doc/manual.md");
+    expect(leido.texto).toBe(md);
+    // Solo la imagen del proyecto se reescribe; lo de fuera y lo que no es una imagen se quedan igual.
+    expect(leido.vista).toBe(
+      "# Manual\n\n![Login](/imagen-del-proyecto?ruta=doc%2Fimg%2Flogin.png)\n![Fuera](../../x.png)\n![Env](../.env)\n"
+    );
+  });
+
+  it("para el PDF se INCRUSTA, y lo que no pasa la barrera de la pestaña Ficheros no: ni `.env` ni lo de fuera", async () => {
+    const raizBuena = proyectoConDoc("![ok](img/login.png)\n");
+    const buena = await conImagenesDelProyecto(raizBuena, "doc/manual.md", "![ok](img/login.png)\n");
+    expect(buena.texto).toBe(`![ok](data:image/png;base64,${PNG.toString("base64")})\n`);
+    const raiz = proyectoConDoc("![a](../.env)\n![b](../../fuera.png)\n![c](img/no-existe.png)\n");
+    const r = await conImagenesDelProyecto(raiz, "doc/manual.md", readFileSync(join(raiz, "doc", "manual.md"), "utf8"));
+    expect(r.incrustadas).toBe(0);
+    expect(r.texto).not.toContain("secreta");
+    expect(r.texto).not.toContain("data:");
+    // Las dos que se intentaron y no se pudieron se CUENTAN; lo de fuera de la raíz ni se intenta.
+    expect(r.sinResolver).toBe(2);
+  });
+
+  it("sin imágenes que incrustar no hay `vista`: el visor usa el texto de siempre", async () => {
+    const leido = await leerFicheroDeProyecto(proyectoConDoc("# Solo texto\n"), "doc/manual.md");
+    expect(leido.vista).toBeUndefined();
   });
 });

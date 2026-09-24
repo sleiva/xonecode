@@ -157,8 +157,10 @@ import { RUTA_ARTEFACTOS, esRutaDeArtefacto } from "../../core/artefactos.js";
 import {
   arbolDeProyecto,
   leerFicheroDeProyecto,
+  mimeDeImagen,
   motivoDeRutaInaceptable,
 } from "../../agent/grafo/arbolDeProyecto.js";
+import { RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
 import {
   leerArtefactoCrudo,
   leerArtefactoDeSesion,
@@ -3885,6 +3887,67 @@ export function montarRutas(
       ...(inline ? {} : { "Content-Disposition": `attachment; filename="${leido.nombre}"` }),
     });
     respuesta.end(leido.datos);
+  });
+
+  /**
+   * `GET /imagen-del-proyecto?ruta=<relativa>` — una IMAGEN del proyecto abierto, para que un `.md`
+   * de la pestaña Ficheros enseñe las suyas.
+   *
+   * Existe porque el visor de markdown solo pinta imágenes `http(s)` absolutas: un enlace relativo o
+   * una `data:` se quedaban en su texto alternativo. La vista del documento reescribe cada enlace a
+   * esta ruta (`arbolDeProyecto.ts#vistaDeMarkdown`), y aquí se sirve con la barrera de siempre:
+   *  - **Solo imágenes, por su extensión**, antes de leer nada: esto no es un lector de ficheros por
+   *    HTTP, y sin esa criba cualquier ruta que se enseñe se podría pedir por aquí.
+   *  - **Leída con `leerFichero`** —las dos barreras de la pestaña Ficheros, sobre el texto y sobre
+   *    el camino REAL, y su tope—, no con una copia de ellas.
+   *  - `Content-Security-Policy: sandbox`, `nosniff` y `no-store`: un `.svg` abierto a pelo en una
+   *    pestaña no ejecuta nada, el navegador no adivina el tipo, y una captura reescrita se ve nueva.
+   */
+  servidor.registrarRuta("GET", RUTA_IMAGEN_DEL_PROYECTO, async (peticion, respuesta) => {
+    const responder = (codigo: number, texto: string): void => {
+      respuesta.writeHead(codigo, { "Content-Type": "text/plain; charset=utf-8" });
+      respuesta.end(texto);
+    };
+    const ruta = new URLSearchParams((peticion.url ?? "").split("?")[1] ?? "").get("ruta");
+    if (ruta === null || ruta === "") {
+      responder(400, "falta la ruta");
+      return;
+    }
+    if (mimeDeImagen(ruta) === undefined) {
+      responder(403, "eso no es una imagen");
+      return;
+    }
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined || opciones.leerFichero === undefined) {
+      responder(404, "no hay imagen");
+      return;
+    }
+    let leido: FicheroDelProyecto;
+    try {
+      leido = await opciones.leerFichero(abierto.raiz, ruta);
+    } catch (error) {
+      // Como en el resto: al cliente y a `informar` solo el código, nunca el mensaje de Node.
+      informar(`no se pudo servir la imagen «${ruta}» (${codigoDe(error)})`);
+      responder(500, "no se pudo leer");
+      return;
+    }
+    if (leido.error !== undefined) {
+      responder(leido.error === "no existe" ? 404 : 403, leido.error);
+      return;
+    }
+    if (leido.base64 === undefined || leido.mime === undefined) {
+      responder(413, "la imagen es demasiado grande");
+      return;
+    }
+    const datos = Buffer.from(leido.base64, "base64");
+    respuesta.writeHead(200, {
+      "Content-Type": leido.mime,
+      "Content-Length": datos.length,
+      "Content-Security-Policy": "sandbox",
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "no-store",
+    });
+    respuesta.end(datos);
   });
 
   /**

@@ -27,7 +27,7 @@ import {
   motivoDeExportacionInaceptable,
   rutaDePdf,
 } from "../core/exportacion.js";
-import { motivoDeRutaInaceptable } from "./grafo/arbolDeProyecto.js";
+import { conImagenesDelProyecto, motivoDeRutaInaceptable } from "./grafo/arbolDeProyecto.js";
 
 /**
  * Dónde puede estar un navegador que sepa imprimir. Lista CERRADA y en este orden.
@@ -107,6 +107,11 @@ export async function exportarAPdf(opciones: {
     // El mensaje de Node lleva la ruta absoluta y esto viaja por el cable (`sinRutas`).
     return { error: `no se pudo leer «${opciones.ruta}»` };
   }
+
+  // Las imágenes del proyecto, INCRUSTADAS: el HTML se imprime desde un temporal, y ahí un enlace
+  // relativo (`img/login.png`) ya no apunta a nada —salían rotas en el PDF—. Con las MISMAS
+  // barreras de la pestaña Ficheros (`conImagenesDelProyecto`).
+  fuente = (await conImagenesDelProyecto(opciones.raiz, opciones.ruta.split(/[\\/]/).join("/"), fuente)).texto;
 
   let cuerpo: string;
   try {
