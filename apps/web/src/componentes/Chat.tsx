@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import type { Acto, ConsumoDeTurno } from "../tipos.js";
 import { usarPegadoAbajo } from "../pegadoAbajo.js";
+import { partirPorOrigen, type TrozoPorOrigen } from "../porOrigen.js";
 import { useCronometro } from "../cronometro.js";
 import { protegerDolares } from "../protegerDolares.js";
 import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
@@ -142,7 +143,7 @@ function TramoDeTrabajo({
         )}
       </summary>
       <div className={estilos.detalleDePulso} ref={nodo} onScroll={alDesplazar}>
-        {t.actos.map((a, i) => {
+        {conQuienTrabaja(t.actos).map(({ acto: a, trozos }, i) => {
           if (a.tipo === "razonamiento") {
             return (
               <p key={i} className={`${estilos.textoTenue} ${estilos.pensado}`}>
@@ -151,15 +152,20 @@ function TramoDeTrabajo({
             );
           }
           if (a.tipo === "herramientas") {
-            return (
-              <ul key={i} className={estilos.trabajo}>
-                {a.lineas.map((linea, j) => (
-                  <li key={j} className={estilos.textoTenue}>
-                    {linea}
-                  </li>
-                ))}
-              </ul>
-            );
+            // Un trozo por racha de quién pide, en orden, con su rótulo solo cuando CAMBIA
+            // (`porOrigen.ts`). Sin origen que conste no hay rótulo: se pinta como antes.
+            return (trozos ?? []).map((trozo, k) => (
+              <div key={`${i}-${k}`} className={estilos.trozoDeTrabajo}>
+                {trozo.rotulo === undefined ? null : <p className={estilos.quienTrabaja}>{trozo.rotulo}</p>}
+                <ul className={estilos.trabajo}>
+                  {trozo.lineas.map((linea, j) => (
+                    <li key={j} className={estilos.textoTenue}>
+                      {linea}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ));
           }
           if (a.tipo === "fase") {
             return (
@@ -173,6 +179,23 @@ function TramoDeTrabajo({
       </div>
     </details>
   );
+}
+
+/**
+ * Los actos de un tramo con sus líneas de tool ya partidas por QUIÉN las pidió. El rótulo del
+ * último trozo se arrastra de un acto al siguiente, porque un razonamiento en medio parte el
+ * acto de herramientas pero no cambia quién trabaja.
+ */
+function conQuienTrabaja(
+  actos: readonly Acto[]
+): { acto: Acto; trozos?: TrozoPorOrigen[] }[] {
+  let previo: string | undefined;
+  return actos.map((acto) => {
+    if (acto.tipo !== "herramientas") return { acto };
+    const { trozos, ultimo } = partirPorOrigen(acto.lineas, acto.detalles, previo);
+    previo = ultimo;
+    return { acto, trozos };
+  });
 }
 
 /** ¿Hay algo que PREVISUALIZAR de este artefacto? Solo una imagen, y por su `mime`, que sale

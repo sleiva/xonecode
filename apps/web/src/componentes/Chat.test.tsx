@@ -128,6 +128,49 @@ describe("Chat: lo que la revisión de interfaz vio en vivo", () => {
     expect(screen.queryByRole("note")).toBeNull();
   });
 
+  it("«Trabajo del agente» dice QUIÉN pidió cada tanda, en orden y solo cuando cambia", () => {
+    const dev = { rol: "especialista", nombre: "developer-xone" } as const;
+    const { container } = render(
+      <Chat
+        actos={[
+          { tipo: "usuario", texto: "añade un campo" },
+          {
+            tipo: "herramientas",
+            lineas: ["⊙ delega en developer-xone", "→ lee /app.xml", "← edita /clientes.xne"],
+            detalles: [
+              { nombre: "task", origen: { rol: "orquestador" } },
+              { nombre: "read_file", origen: dev },
+              { nombre: "edit_file", origen: dev },
+            ],
+          },
+          { tipo: "razonamiento", texto: "sigo" },
+          // El mismo especialista tras un razonamiento: no se repite el rótulo.
+          { tipo: "herramientas", lineas: ["→ lee /menu.xne"], detalles: [{ nombre: "read_file", origen: dev }] },
+          { tipo: "fin", ms: 10 },
+        ]}
+      />
+    );
+    const rotulos = [...container.querySelectorAll("details p")]
+      .map((p) => p.textContent)
+      .filter((t) => t === "orquestador" || t === "developer-xone");
+    expect(rotulos).toEqual(["orquestador", "developer-xone"]);
+    // Y las líneas siguen todas, en su orden.
+    expect([...container.querySelectorAll("details li")].map((li) => li.textContent)).toEqual([
+      "⊙ delega en developer-xone",
+      "→ lee /app.xml",
+      "← edita /clientes.xne",
+      "→ lee /menu.xne",
+    ]);
+  });
+
+  it("sin origen que conste —una sesión anterior— no se inventa ningún rótulo", () => {
+    const { container } = render(
+      <Chat actos={[{ tipo: "usuario", texto: "x" }, { tipo: "herramientas", lineas: ["→ lee /a"] }, { tipo: "fin", ms: 1 }]} />
+    );
+    expect(container.querySelectorAll("details p")).toHaveLength(0);
+    expect(container.querySelector("details li")?.textContent).toBe("→ lee /a");
+  });
+
   it("mientras el turno corre, el pulso dice cuántos segundos lleva", () => {
     const actos: Acto[] = [
       { tipo: "usuario", texto: "haz algo" },
