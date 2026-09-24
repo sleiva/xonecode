@@ -47,7 +47,8 @@ const ESQUEMA = z.object({
     .describe(
       "inventario: todas las colecciones. definicion: dónde se declara. referencias: quién la usa. " +
         "campos: los campos de una colección. detalle: todo de una (campos, eventos, nodos, conexiones). " +
-        "app: por dónde arranca la aplicación, login y estilos. problemas: referencias rotas y colecciones que no usa nadie. " +
+        "app: por dónde arranca la aplicación, login y estilos. problemas: referencias a colecciones que NO EXISTEN — solo eso: " +
+        "no mide qué colecciones no usa nadie (el índice no ve todas las formas de llegar a una), así que no afirmes nada de eso. " +
         "estilos: qué estilo acaba aplicándosele a un control y de qué clase y fichero sale — resuelve la cascada, " +
         "que es lo que no se puede averiguar leyendo una hoja de arriba abajo"
     ),
@@ -131,14 +132,18 @@ export function crearNavegacionXone(
 
       if (entrada.operacion === "problemas") {
         const { rotas } = indice.problemas();
+        // Lo que NO mide se dice en la respuesta, además de en la descripción: la descripción
+        // prometió durante un tiempo «y colecciones que no usa nadie» cuando eso ya no se
+        // calculaba, y un informe real escribió «0 huérfanas» como si fuera una medida.
+        const noMide = "Esto no mide qué colecciones no usa nadie: el índice no ve todas las formas de llegar a una.";
         if (rotas.length === 0) {
-          return "Ninguna referencia apunta a una colección que no exista.";
+          return `Ninguna referencia apunta a una colección que no exista. ${noMide}`;
         }
         return `${rotas.length} referencia(s) a una colección que no existe:\n${recortar(
           rotas,
           LIMITES_NAVEGACION.problemas,
           pintarReferencia
-        )}`;
+        )}\n${noMide}`;
       }
 
       const nombre = entrada.nombre?.trim();

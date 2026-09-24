@@ -341,3 +341,27 @@ describe("cuando no sabe contestar, manda a `regex_search` con la llamada HECHA"
     expect(r).not.toContain(NOMBRE_BUSQUEDA_REGEX);
   });
 });
+
+describe("`problemas` no promete lo que no mide", () => {
+  /**
+   * Las «colecciones huérfanas» se quitaron —la mitad eran falsos positivos (`core/navegacion.ts`)—,
+   * pero la descripción de la operación siguió diciendo «y colecciones que no usa nadie», y un
+   * informe real escribió «0 huérfanas» como si se hubiera medido. La descripción y la respuesta
+   * dicen ahora lo que NO miden, y esto lo ata.
+   */
+  it("la descripción no promete colecciones sin usar, y dice que no lo mide", () => {
+    const tool = crearNavegacionXone(cargarDe(MODELO), SIN_FICHEROS) as unknown as {
+      schema: { shape: { operacion: { description?: string } } };
+    };
+    const descripcion = tool.schema.shape.operacion.description ?? "";
+    expect(descripcion).not.toMatch(/problemas: [^.]*colecciones que no usa nadie/);
+    expect(descripcion).toContain("no mide qué colecciones no usa nadie");
+  });
+
+  it("la respuesta lo dice también, con referencias rotas y sin ellas", async () => {
+    const sano = { ...MODELO, referenciasDeScript: [] };
+    expect(await llamar({ operacion: "problemas" }, sano)).toContain("no mide qué colecciones no usa nadie");
+    expect(await llamar({ operacion: "problemas" }, RICO)).toContain("no mide qué colecciones no usa nadie");
+  });
+});
+

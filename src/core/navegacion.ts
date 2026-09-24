@@ -153,7 +153,8 @@ export interface IndiceDeNavegacion {
   app(): AppDeNavegacion;
   /** Todo lo de UNA colección. `undefined` si no existe — que no es lo mismo que vacía. */
   detalle(coleccion: string): DetalleDeColeccion | undefined;
-  /** Lo que no cuadra: referencias a lo que no existe, y colecciones que nadie usa. */
+  /** Lo que no cuadra: referencias a lo que no existe. Y SOLO eso: qué colecciones no usa nadie
+   *  no se mide (ver «Por qué NO hay colecciones huérfanas», más arriba). */
   problemas(): ProblemasDelProyecto;
 }
 
