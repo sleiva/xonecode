@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, within } from "@testing-library/react";
 import { afterEach, describe, it, expect, vi } from "vitest";
 import type { ConectorDelCable } from "../tipos.js";
 import { Conectores } from "./Conectores.js";
@@ -214,8 +214,10 @@ describe("Conectores", () => {
     it("«Añadir» sobre un catálogo OAuth manda `anadir` Y `autorizar`, en ese orden: un solo clic hace las dos", () => {
       const alAccion = vi.fn();
       render(<Conectores {...props({ alAccion })} />);
-      // El catálogo va DeepWiki (sin auth), Jira, Notion — el segundo botón «Añadir» es Jira.
-      fireEvent.click(screen.getAllByRole("button", { name: "Añadir" })[1]!);
+      // Por NOMBRE, no por posición en el catálogo: la fila es la que trae «Jira» en su
+      // cabecera, y de ahí sale su botón «Añadir» — no depende del orden del array.
+      const filaDeJira = screen.getByText("Jira").closest("li")!;
+      fireEvent.click(within(filaDeJira).getByRole("button", { name: "Añadir" }));
       expect(alAccion).toHaveBeenCalledTimes(2);
       expect(alAccion).toHaveBeenNthCalledWith(1, "anadir", "jira");
       expect(alAccion).toHaveBeenNthCalledWith(2, "autorizar", "jira");

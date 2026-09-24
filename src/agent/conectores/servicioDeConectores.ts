@@ -170,7 +170,13 @@ export function crearServicioDeConectores(o: {
       retirarPendientes(id);
       const state = randomBytes(32).toString("base64url");
       pendientes.set(state, { id, expira: ahora() + TTL_DE_AUTORIZACION_MS, redirectUrl });
-      error = undefined;
+      // NO se limpia `error` aquí: en este instante no se sabe todavía si `autorizar` va a ir
+      // bien —solo se ha apuntado un pendiente—, y limpiarlo a ciegas borraría el error de UN
+      // CLIC ANTERIOR (por ejemplo, un `anadir` que falló al escribir) antes de que nadie lo
+      // viera, ahora que «Añadir» en un OAuth manda `anadir` y `autorizar` seguidos. Se limpia
+      // donde `autorizar` de verdad tiene éxito: la rama `AUTHORIZED` llama a `probar`, que ya
+      // limpia el suyo al ir bien; la rama `REDIRECT` no ha decidido nada todavía —quien lo
+      // decide es `completar`, que ya limpia el suyo al canjear el código—.
       cambio();
       try {
         const resultado = await o.red.iniciarAutorizacion(c.url, proveedor(id, redirectUrl, state, (url) => o.red.abrir(url)));

@@ -294,6 +294,25 @@ describe("autorizar y completar", () => {
     expect(l.conectores[0]?.prueba).toMatchObject({ ok: false });
   });
 
+  it("un anadir que falla seguido de autorizar para el MISMO id no borra el error del anadir: «Añadir» en OAuth manda las dos seguidas, y autorizar no ha tenido éxito todavía", async () => {
+    // El escenario real: «Añadir» sobre un OAuth manda `anadir` y `autorizar` en el MISMO
+    // clic. Si `anadir` falla al escribir en disco, su frase tiene que seguir ahí después de
+    // que `autorizar` arranque —`autorizar` resuelve el id contra el CATÁLOGO, no contra lo
+    // añadido, así que arranca igual aunque `anadir` no haya escrito nada—.
+    mkdirSync(join(casa, ".xonecode"), { recursive: true });
+    writeFileSync(rutaDeAnadidos(casa), "{roto");
+    const red = redDoble();
+    const s = crear(red);
+
+    s.anadir("jira");
+    const errorDelAnadir = s.lista().error;
+    expect(errorDelAnadir).toBeDefined();
+
+    await s.autorizar("jira", "http://127.0.0.1:4200/mcp/oauth/callback");
+
+    expect(s.lista().error).toBe(errorDelAnadir);
+  });
+
   it("dos autorizaciones seguidas: solo el state del segundo vale para completar", async () => {
     const red = redDoble();
     (red.iniciarAutorizacion as ReturnType<typeof vi.fn>).mockResolvedValue("REDIRECT");
@@ -341,8 +360,9 @@ describe("un `error` de antes se limpia con CUALQUIER operación que va bien, no
     await s.autorizar("notion", "http://127.0.0.1:4200/mcp/oauth/callback");
     const proveedor = (red.iniciarAutorizacion as ReturnType<typeof vi.fn>).mock.calls[0]?.[1] as ProveedorDeConector;
 
-    // El error se deja DESPUÉS de `autorizar` (que también limpia el suyo al arrancar): si no
-    // fuera así, este test pasaría aunque `completar` nunca tocara `error`.
+    // El error se deja DESPUÉS de `autorizar` (que ya devolvió y no toca `error` sin saber si
+    // tuvo éxito): si `autorizar` lo limpiara al arrancar, este test pasaría aunque `completar`
+    // nunca tocara `error`.
     s.anadir("linear");
     expect(s.lista().error).toContain("linear");
 
