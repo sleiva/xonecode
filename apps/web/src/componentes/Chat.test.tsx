@@ -996,3 +996,32 @@ describe("el rojo con el que TERMINA un turno", () => {
     expect(peticionDeCorreccion({ code: "E9", severidad: "error", mensaje: "sin sitio" })).toBe("Corrige E9: sin sitio");
   });
 });
+
+describe("un artefacto editado varias veces", () => {
+  const art = (bytes: number): Acto => ({ tipo: "artefacto", ruta: "/artefactos/flujo.html", nombre: "flujo.html", bytes, mime: "text/html" });
+  const edita: Acto = { tipo: "herramientas", lineas: ["← edita /artefactos/flujo.html"] };
+
+  it("tiene UNA tarjeta, en su último anuncio, aunque cada edición se anuncie", () => {
+    // Medido en pantalla: ocho ediciones del mismo HTML dejaban ocho tarjetas iguales.
+    const { container } = render(
+      <Chat
+        actos={[{ tipo: "usuario", texto: "haz el diagrama" }, art(10), edita, art(20), edita, art(46_000), { tipo: "fin", ms: 1 }]}
+        alAbrirArtefacto={() => {}}
+      />
+    );
+    const tarjetas = [...container.querySelectorAll("button")].filter((b) => b.textContent === "flujo.html");
+    expect(tarjetas).toHaveLength(1);
+    // La que queda es la del último anuncio: la que dice el tamaño de ahora.
+    expect(container.textContent).toContain("45 KB");
+  });
+
+  it("dos artefactos distintos siguen siendo dos tarjetas", () => {
+    const otro: Acto = { tipo: "artefacto", ruta: "/artefactos/otro.html", nombre: "otro.html", bytes: 10, mime: "text/html" };
+    const { container } = render(
+      <Chat actos={[{ tipo: "usuario", texto: "x" }, art(10), otro, { tipo: "fin", ms: 1 }]} alAbrirArtefacto={() => {}} />
+    );
+    const nombres = [...container.querySelectorAll("button")].map((b) => b.textContent).filter((t) => t?.endsWith(".html"));
+    expect(nombres).toEqual(["flujo.html", "otro.html"]);
+  });
+});
+

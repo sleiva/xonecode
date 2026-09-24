@@ -674,6 +674,9 @@ export function Chat({
    * dejarlo sin ella.
    */
   let delTurno: TramoDePulso[] = [];
+  // Dónde se anunció por ÚLTIMA vez cada artefacto: ahí, y solo ahí, va su tarjeta.
+  const ultimoAnuncio = new Map<string, number>();
+  for (const [indice, acto] of actos.entries()) if (acto.tipo === "artefacto") ultimoAnuncio.set(acto.ruta, indice);
   for (const [indice, acto] of actos.entries()) {
     /**
      * Una operación de sincronización pasa de largo, y sin tocar el tramo abierto.
@@ -696,6 +699,16 @@ export function Chat({
      * que la sincronización: no es un acto de conversación que cierre el tramo.
      */
     if (acto.tipo === "consulta") continue;
+    /**
+     * **Un artefacto tiene UNA tarjeta, en su último anuncio.** Cada `write` y cada `edit` sobre
+     * `/artefactos/` se anuncia —una escritura sin aprobación tiene que decirse, y esa línea sigue
+     * en el tramo—, pero es el MISMO fichero: medido en pantalla, un diseñador que editó su HTML
+     * ocho veces dejaba ocho tarjetas iguales, y seguían saliendo mientras editaba. La regla es la
+     * de la pestaña Artefactos (`App.tsx`, por ruta y el último gana): la tarjeta baja al sitio del
+     * último anuncio, que es el que enseña el fichero como está. Con `continue`, como la
+     * sincronización: saltarse un anuncio repetido no cierra ni abre ningún tramo.
+     */
+    if (acto.tipo === "artefacto" && ultimoAnuncio.get(acto.ruta) !== indice) continue;
     /**
      * Lo que el HARNESS dice sobre el turno se agrupa por CLASE, y la clase viaja con el
      * acto (`core/actos.ts`) en vez de deducirse del texto — la misma regla que la forma de
