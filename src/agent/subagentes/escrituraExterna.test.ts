@@ -596,11 +596,11 @@ describe("las opciones del subagente externo, extraídas del cierre y probadas",
     // `abrirSesionReal`, los dos `tsc` siguen limpios y el agente externo vuelve a ser mudo.
     const eventos = new ColaDeEventos();
     const o = opcionesDeSubagenteExterno({ ficherosDelProyecto: ficheros, eventos });
-    o.alUsarTool({ nombre: "read_file", detalle: "/app/x.js" });
-    o.alUsarTool({ nombre: "grep" });
+    o.alUsarTool({ nombre: "read_file", detalle: "/app/x.js", agente: "refactor-ext" });
+    o.alUsarTool({ nombre: "grep", agente: "refactor-ext" });
     expect(eventos.vaciar()).toEqual([
-      { tipo: "tool", nombre: "read_file", detalle: "/app/x.js" },
-      { tipo: "tool", nombre: "grep" },
+      { tipo: "tool", nombre: "read_file", detalle: "/app/x.js", origen: { rol: "especialista", nombre: "refactor-ext" } },
+      { tipo: "tool", nombre: "grep", origen: { rol: "especialista", nombre: "refactor-ext" } },
     ]);
   });
 

@@ -46,7 +46,7 @@
  */
 
 import { spawn } from "node:child_process";
-import type { PeticionExterna, PoliticaDeEscrituraExterna } from "../../core/ports.js";
+import type { PeticionExterna, PoliticaDeEscrituraExterna, ToolDeUnHijo } from "../../core/ports.js";
 import { consumoDeCodex } from "./consumoExterno.js";
 import { decisionDeEscrituraDeCodex } from "./escrituraDeCodex.js";
 import { MOTIVO_DE_CANCELACION_EXTERNA } from "./escrituraExterna.js";
@@ -120,7 +120,7 @@ export async function correrCodex(
     /** El `realpath`, inyectado para poder probar la guarda sin tocar disco. */
     real?: (ruta: string) => string;
     /** Lo que hace MIENTRAS trabaja, como línea de actividad (`actividadDeCodex.ts`). */
-    alUsarTool?: (tool: { nombre: string; detalle?: string }) => void;
+    alUsarTool?: (tool: ToolDeUnHijo) => void;
     /** Lo que va CONTANDO: sus mensajes de fase `commentary`. */
     alRazonar?: (texto: string) => void;
   } = {}
@@ -388,7 +388,7 @@ export async function correrCodex(
         // hasta su respuesta. Contar no puede tumbar el turno.
         try {
           const actividad = actividadDeItemDeCodex(item, peticion.cwd);
-          for (const t of actividad.tools) opciones.alUsarTool?.(t);
+          for (const t of actividad.tools) opciones.alUsarTool?.({ ...t, agente: peticion.agente });
           if (actividad.razonamiento !== undefined) opciones.alRazonar?.(actividad.razonamiento);
         } catch {
           // Una línea de actividad que no se pudo componer no es un turno que falló.

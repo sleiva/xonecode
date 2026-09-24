@@ -211,6 +211,16 @@ describe("pielWeb", () => {
     expect(avisos[1]).toEqual({ tipo: "herramientas", lineas: ["→ lee ×3 — /a"], detalles: [{}] });
   });
 
+  it("el cierre de una racha SUSTITUYE el detalle de su apertura y conserva el origen", () => {
+    const { piel, actos } = crearPielWeb();
+    const origen = { rol: "especialista", nombre: "developer-xone" } as const;
+    piel.linea("→ lee /a", { nombre: "read_file", origen });
+    piel.linea("→ lee ×3 — /a", { nombre: "read_file", origen });
+    expect(actos()).toEqual([
+      { tipo: "herramientas", lineas: ["→ lee ×3 — /a"], detalles: [{ nombre: "read_file", origen }] },
+    ]);
+  });
+
   it("el token NO se parte por saltos: la web renderiza markdown y el párrafo va entero", () => {
     const { piel, actos } = crearPielWeb();
     piel.token("- uno\n- dos\n");

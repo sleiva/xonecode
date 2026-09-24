@@ -1,7 +1,21 @@
 import { Bitacora } from "./bitacora.js";
 import { Colapsador } from "./notify.js";
+import type { LineaDeTool } from "./notify.js";
 import type { Artefacto, DomainEvent, Fase, PendienteDeAprobacion } from "./events.js";
 import type { DetalleDeLinea } from "./actos.js";
+
+/**
+ * Lo que la piel recibe de una línea del colapsador: su tool, su error y su origen. UNA función
+ * para los dos sitios que escriben líneas de tool —el evento y el cierre del turno—: el cierre
+ * se componía a mano con solo el nombre, y así se habría quedado sin el origen.
+ */
+function detalleDeLineaDeTool(l: LineaDeTool): DetalleDeLinea {
+  return {
+    nombre: l.nombre,
+    ...(l.error === undefined ? {} : { error: l.error }),
+    ...(l.origen === undefined ? {} : { origen: l.origen }),
+  };
+}
 
 /**
  * Lo que hace falta para pintar un turno. La implementan el renderizador de stdio y la TUI.
@@ -197,8 +211,13 @@ export async function correrTurno(
 
         case "tool":
           bitacora.anota("tool", ev.nombre);
-          for (const l of colapsador.lineas({ nombre: ev.nombre, detalle: ev.detalle, error: ev.error })) {
-            escribirLinea(l.texto, { nombre: l.nombre, ...(l.error === undefined ? {} : { error: l.error }) });
+          for (const l of colapsador.lineas({
+            nombre: ev.nombre,
+            detalle: ev.detalle,
+            error: ev.error,
+            ...(ev.origen === undefined ? {} : { origen: ev.origen }),
+          })) {
+            escribirLinea(l.texto, detalleDeLineaDeTool(l));
           }
           break;
 
@@ -301,7 +320,7 @@ export async function correrTurno(
     // La cuenta de la última racha de tools, aunque el turno reviente: si se cayó a
     // mitad, el «×17» es justo el dato que explica dónde se quedó.
     const cierre = colapsador.cierre();
-    if (cierre) escribirLinea(cierre.texto, { nombre: cierre.nombre });
+    if (cierre) escribirLinea(cierre.texto, detalleDeLineaDeTool(cierre));
 
     // Una pasada intermedia —hay otra ronda o un intento de reparación detrás— NO cierra:
     // ni avisos ni `fin`. La línea abierta sí se cierra siempre, porque lo que venga

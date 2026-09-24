@@ -26,7 +26,7 @@ import { dirname, basename, resolve, relative, sep } from "node:path";
 import type { LineaDeDiff } from "../../core/diff.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
 import type { ColaDeEventos } from "../../core/entrelazar.js";
-import type { ConsumoExterno, EscrituraExternaPedida, PoliticaDeEscrituraExterna } from "../../core/ports.js";
+import type { ConsumoExterno, EscrituraExternaPedida, PoliticaDeEscrituraExterna, ToolDeUnHijo } from "../../core/ports.js";
 import { artefactoFueraDeSitio } from "../../core/artefactos.js";
 import { descargaFueraDeSitio } from "../../core/descargas.js";
 import type { Decision } from "../../vendor/hitl.js";
@@ -904,7 +904,7 @@ export function opcionesDeSubagenteExterno(opciones: {
 }): {
   aprobarEscritura?: PoliticaDeEscrituraExterna;
   ficherosDelProyecto: () => ReadonlySet<string>;
-  alUsarTool: (tool: { nombre: string; detalle?: string }) => void;
+  alUsarTool: (tool: ToolDeUnHijo) => void;
   alRazonar: (texto: string) => void;
   alConsumir?: (consumo: ConsumoExterno) => void;
 } {
@@ -913,9 +913,15 @@ export function opcionesDeSubagenteExterno(opciones: {
     ...(politica === undefined ? {} : { aprobarEscritura: politica }),
     ficherosDelProyecto: opciones.ficherosDelProyecto,
     // Un evento `tool` normal y corriente: el colapsador lo agrupa con los demás, la
-    // bitácora lo cuenta y ninguna piel se entera de que hay dos orígenes.
-    alUsarTool: ({ nombre, detalle }) =>
-      opciones.eventos.empujar({ tipo: "tool", nombre, ...(detalle === undefined ? {} : { detalle }) }),
+    // bitácora lo cuenta y ninguna piel se entera de que hay dos orígenes. Un hijo externo es
+    // SIEMPRE un especialista —solo se llega a él delegando— y su nombre es el de su `.md`.
+    alUsarTool: ({ nombre, detalle, agente }) =>
+      opciones.eventos.empujar({
+        tipo: "tool",
+        nombre,
+        ...(detalle === undefined ? {} : { detalle }),
+        origen: { rol: "especialista", nombre: agente },
+      }),
     /**
      * **Lo que el hijo VA CONTANDO, como `razonamiento`.**
      *

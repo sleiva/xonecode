@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AIMessageChunk } from "@langchain/core/messages";
 import type { Piel } from "../../../core/turno.js";
+import type { DetalleDeLinea } from "../../../core/actos.js";
 import type { ModelosPort, PeticionExterna } from "../../../core/ports.js";
 import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ } from "./sesionTrueforge.js";
 import { TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
@@ -119,6 +120,36 @@ describe("una sesión con el motor TrueForge", () => {
     // Los tokens de TODOS los hilos, sumados; la ventana es la del raíz, no la del hijo.
     expect(s.consumo().modelo).toMatchObject({ entrada: 150, salida: 16 });
     expect(s.consumo().contexto).toBe(70);
+  }, 20_000);
+
+  it("cada tool dice QUIÉN la pidió: el orquestador delega, el especialista escribe con su nombre", async () => {
+    const s = await abrirSesionTrueforge({
+      raiz: proyecto(),
+      modelos: modelos(),
+      entorno: ENTORNO,
+      skills: CATALOGO,
+      pedirAprobacion: async (ps) => new Map(ps.map((p) => [p.id, { type: "approve" as const }])),
+    });
+    const vistas: { texto: string; detalle: DetalleDeLinea }[] = [];
+    await s.turno("escribe una nota", { ...piel().p, linea: (texto, detalle) => void vistas.push({ texto, detalle: detalle ?? {} }) });
+    const de = (tool: string) => vistas.filter((v) => v.detalle.nombre === tool).map((v) => v.detalle.origen);
+    expect(de("create_sub_agent")).toEqual([{ rol: "orquestador" }]);
+    // El nombre sale del hilo que abrió la delegación —la COMPOSICIÓN de la sesión, no la
+    // función pura—: el hijo tiene que estar apuntado antes de que se traduzca su primera tool.
+    expect(de("write_file")).toEqual([{ rol: "especialista", nombre: "developer-xone" }]);
+  }, 20_000);
+
+  it("un hijo con un nombre que no es de ningún especialista sale SIN nombre, no con el que inventó el modelo", async () => {
+    const { m } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "ayudante-inventado", input: "mira" }) }] })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "r1", name: "read_file", args: JSON.stringify({ file_path: "/app.xml" }) }] })],
+      [new AIMessageChunk({ content: "Visto." })],
+      [new AIMessageChunk({ content: "Listo." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    const detalles: DetalleDeLinea[] = [];
+    await s.turno("mira", { ...piel().p, linea: (_t, d) => void detalles.push(d ?? {}) });
+    expect(detalles.filter((d) => d.nombre === "read_file").map((d) => d.origen)).toEqual([{ rol: "especialista" }]);
   }, 20_000);
 
   it("RECHAZADA: el disco no se toca", async () => {
@@ -706,6 +737,22 @@ describe("el tope de llamadas es POR TURNO, no de toda la conversación", () => 
     expect(cortes).toEqual([{ origen: "consultant-xone", limite: TOPE_DE_LLAMADAS_DEL_ESPECIALISTA }]);
   }, 120_000);
 
+  it("`traducirEvento`: el raíz es el orquestador, y un hijo que la sesión no conoce sale sin nombre, nunca con el id del hilo", () => {
+    const append = (thread_id?: string) => ({
+      type: "internal.agent.context.append",
+      ...(thread_id === undefined ? {} : { thread_id }),
+      output: [{ tool_calls: [{ function: { name: "grep", arguments: "{}" } }] }],
+    });
+    const origen = (e: unknown, quien?: (h: string) => string | undefined) =>
+      traducirEvento(e, quien).eventos.map((ev) => (ev.tipo === "tool" ? ev.origen : undefined));
+    expect(origen(append())).toEqual([{ rol: "orquestador" }]);
+    expect(origen(append("hilo-7"))).toEqual([{ rol: "especialista" }]);
+    expect(origen(append("hilo-7"), () => undefined)).toEqual([{ rol: "especialista" }]);
+    expect(origen(append("hilo-7"), (h) => (h === "hilo-7" ? "analyst-xone" : undefined))).toEqual([
+      { rol: "especialista", nombre: "analyst-xone" },
+    ]);
+  });
+
   it("`topeAgotadoDe` reconoce el corte y nada más", () => {
     expect(topeAgotadoDe({ type: "internal.agent.done", status: "error", error: "You have reached iteration limit of 100, please request again" })).toBe(100);
     expect(topeAgotadoDe({ type: "internal.agent.done", status: "error", error: "otra cosa" })).toBeUndefined();
@@ -1079,8 +1126,8 @@ describe("Claude Code, Codex y OpenCode como hijos de TrueForge", () => {
   }, 30_000);
 
   it("lo que hace MIENTRAS trabaja se ve, y sus tokens van a `externo`, nunca a `modelo`", async () => {
-    const f = fabrica(["codex"], async (_p, c) => {
-      c.alUsarTool({ nombre: "read_file", detalle: "/menu.xne" });
+    const f = fabrica(["codex"], async (p, c) => {
+      c.alUsarTool({ nombre: "read_file", detalle: "/menu.xne", agente: p.agente });
       c.alRazonar("mirando el menú");
       c.alConsumir?.({ motor: "codex", entrada: 900, salida: 40, cache: 300 });
       await new Promise((r) => setTimeout(r, 20));
@@ -1089,8 +1136,14 @@ describe("Claude Code, Codex y OpenCode como hijos de TrueForge", () => {
     const { m } = modelosConGuion([delegar(), [new AIMessageChunk({ content: "Listo." })]]);
     const s = await abrirSesionTrueforge({ raiz: conExterno(), modelos: m, entorno: ENTORNO, skills: CATALOGO, subagenteExterno: f.subagenteExterno });
     const lineas: string[] = [];
-    await s.turno("refactoriza", { ...piel().p, linea: (t) => void lineas.push(t) });
+    const detalles: DetalleDeLinea[] = [];
+    await s.turno("refactoriza", { ...piel().p, linea: (t, d) => void (lineas.push(t), detalles.push(d ?? {})) });
     expect(lineas.join("\n")).toContain("/menu.xne");
+    // Y dice de QUIÉN es: el nombre del `.md` del hijo, no el de su motor.
+    expect(detalles[lineas.findIndex((l) => l.includes("/menu.xne"))]).toEqual({
+      nombre: "read_file",
+      origen: { rol: "especialista", nombre: "refactor-ext" },
+    });
     expect(s.consumo().externo).toEqual({ entrada: 900, salida: 40, cache: 300 });
     expect(s.consumo().modelo.entrada).toBeLessThan(900);
   }, 30_000);

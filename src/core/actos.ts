@@ -12,6 +12,7 @@
  */
 
 import type { AccionDeSincronizacion } from "./cloudstudio.js";
+import type { OrigenDeLaTool } from "./events.js";
 
 /**
  * Lo que se sabe de la línea i-ésima de un acto de herramientas.
@@ -32,6 +33,12 @@ export interface DetalleDeLinea {
   nombre?: string;
   /** El motivo, si la llamada falló. Un error nunca se colapsa con la racha. */
   error?: string;
+  /**
+   * Quién la pidió: el orquestador o un especialista, y cuál si se sabe
+   * (`core/events.ts#OrigenDeLaTool`). Ausente = no consta, que es el caso de una sesión
+   * guardada antes de que existiera y de una línea que no es de ninguna tool.
+   */
+  origen?: OrigenDeLaTool;
 }
 export type Acto =
   | { tipo: "usuario"; texto: string }

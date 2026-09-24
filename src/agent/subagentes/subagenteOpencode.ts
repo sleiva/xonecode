@@ -52,7 +52,7 @@ import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { PeticionExterna, PoliticaDeEscrituraExterna } from "../../core/ports.js";
+import type { PeticionExterna, PoliticaDeEscrituraExterna, ToolDeUnHijo } from "../../core/ports.js";
 import { carpetasDeSkillsParaElMotor } from "../grafo/skills.js";
 import { MOTIVO_DE_CANCELACION_EXTERNA } from "./escrituraExterna.js";
 import { consumoDeOpencode } from "./consumoExterno.js";
@@ -220,7 +220,7 @@ export async function correrOpencode(
     /** Las vistas aplanadas del proyecto, con su ruta VIRTUAL, para denegarles la lectura. */
     vistasAplanadas?: () => readonly string[];
     real?: (ruta: string) => string;
-    alUsarTool?: (tool: { nombre: string; detalle?: string }) => void;
+    alUsarTool?: (tool: ToolDeUnHijo) => void;
     /** La casa de xonecode. Entra por parámetro porque esto escribe en disco. */
     casa?: string;
   } = {}
@@ -422,7 +422,7 @@ export async function correrOpencode(
       const apuntada = enCurso.get(id);
       if (apuntada === undefined) return;
       enCurso.delete(id);
-      if (u["status"] === "completed") opciones.alUsarTool?.(apuntada);
+      if (u["status"] === "completed") opciones.alUsarTool?.({ ...apuntada, agente: peticion.agente });
     };
 
     const atender = (m: Mensaje): void => {

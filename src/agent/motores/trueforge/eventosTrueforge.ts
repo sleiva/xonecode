@@ -14,7 +14,7 @@
  * Puro sobre los eventos: guarda lo justo entre uno y otro (el uso de la última llamada) y no
  * toca nada más.
  */
-import type { DomainEvent } from "../../../core/events.js";
+import type { DomainEvent, OrigenDeLaTool } from "../../../core/events.js";
 import { detalleDe } from "../../turno/resumenDeTool.js";
 
 /** Lo que interesa de un evento de TrueForge, sin atarse a sus tipos internos. */
@@ -73,12 +73,33 @@ export function topeAgotadoDe(evento: unknown): number | undefined {
 }
 
 /**
+ * El especialista de un hilo hijo, si se sabe: lo contesta la sesión (`quienEs`), que es quien
+ * sabe qué hilo abrió cada delegación.
+ */
+export type EspecialistaDeHilo = (hilo: string) => string | undefined;
+
+/**
+ * De quién es lo que llega por un hilo. El raíz es el orquestador; cualquier otro, un
+ * especialista, con su nombre solo si la sesión lo conoce — sin resolutor, o con un hilo que no
+ * sabe, el nombre se CALLA en vez de rellenarse con el id del hilo.
+ */
+function origenDelHilo(hilo: string, especialistaDe: EspecialistaDeHilo | undefined): OrigenDeLaTool {
+  if (hilo === HILO_RAIZ) return { rol: "orquestador" };
+  const nombre = especialistaDe?.(hilo);
+  return nombre === undefined ? { rol: "especialista" } : { rol: "especialista", nombre };
+}
+
+/**
  * Un evento de TrueForge → cero o más eventos de dominio, y el uso si trae una llamada al modelo
  * terminada (para que quien corre el turno lo sume al contador).
  */
-export function traducirEvento(evento: unknown): { eventos: DomainEvent[]; uso?: UsoDeLlamada } {
+export function traducirEvento(
+  evento: unknown,
+  especialistaDe?: EspecialistaDeHilo
+): { eventos: DomainEvent[]; uso?: UsoDeLlamada } {
   const e = (evento ?? {}) as EventoTrueforge;
-  const delRaiz = (e.thread_id ?? HILO_RAIZ) === HILO_RAIZ;
+  const hilo = e.thread_id ?? HILO_RAIZ;
+  const delRaiz = hilo === HILO_RAIZ;
   switch (e.type) {
     case "model.message.delta": {
       if (!delRaiz) return { eventos: [] };
@@ -97,10 +118,11 @@ export function traducirEvento(evento: unknown): { eventos: DomainEvent[]; uso?:
       const salidas = Array.isArray(e.output) ? e.output : [];
       const eventos: DomainEvent[] = [];
       let uso: UsoDeLlamada | undefined;
+      const origen = origenDelHilo(hilo, especialistaDe);
       for (const m of salidas) {
         for (const { nombre, args } of llamadasDe(m)) {
           const detalle = detalleDe(nombre, args);
-          eventos.push({ tipo: "tool", nombre, ...(detalle === undefined ? {} : { detalle }) });
+          eventos.push({ tipo: "tool", nombre, ...(detalle === undefined ? {} : { detalle }), origen });
         }
         const u = (m as { usage?: { input_tokens?: number; output_tokens?: number; cache_read_tokens?: number } } | null)?.usage;
         if (u !== undefined) {

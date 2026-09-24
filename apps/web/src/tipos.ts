@@ -143,6 +143,21 @@ export interface SesionDelCable {
   consumo?: ConsumoDeTurno;
 }
 
+/**
+ * QUIÉN pidió una tool (`core/events.ts#OrigenDeLaTool`, redeclarado: la frontera no deja
+ * compartir módulo). El `rol` es exacto; el `nombre` solo viaja cuando es el de un especialista
+ * cargado, y ausente es «no consta» — el de un hijo del motor deepagents, que no lo da.
+ */
+export type OrigenDeLaTool = { rol: "orquestador" } | { rol: "especialista"; nombre?: string };
+
+/** Lo que se sabe de la línea i-ésima de un acto de herramientas (`core/actos.ts`). */
+export interface DetalleDeLinea {
+  nombre?: string;
+  error?: string;
+  /** Ausente = no consta: una sesión anterior, o una línea que no es de ninguna tool. */
+  origen?: OrigenDeLaTool;
+}
+
 export type Acto =
   | { tipo: "usuario"; texto: string }
   | { tipo: "asistente"; texto: string }
@@ -163,7 +178,7 @@ export type Acto =
    * Un elemento VACÍO sí quiere decir «esta línea no es de una tool»: por el mismo canal
    * pasan las líneas de plan, de tarea y de verificación.
    */
-  | { tipo: "herramientas"; lineas: string[]; detalles?: { nombre?: string; error?: string }[] }
+  | { tipo: "herramientas"; lineas: string[]; detalles?: DetalleDeLinea[] }
   /**
    * Una línea del harness, no de la conversación: la respuesta a un comando, un aviso de
    * honestidad, lo que se autorizó sin preguntar.

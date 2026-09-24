@@ -301,7 +301,7 @@ describe("lo que el turno devuelve y cuenta", () => {
       aprobar: async () => true,
       alUsarTool: (t) => tools.push(t),
     });
-    expect(tools).toContainEqual({ nombre: "read_file", detalle: "/app/y.js" });
+    expect(tools).toContainEqual({ nombre: "read_file", detalle: "/app/y.js", agente: "dev" });
   });
 });
 

@@ -39,7 +39,7 @@ export type DomainEvent =
    */
   | { tipo: "resumen"; texto: string; msgId?: string }
   | { tipo: "fase"; fase: Fase; detalle?: string }
-  | { tipo: "tool"; nombre: string; detalle?: string; error?: string }
+  | { tipo: "tool"; nombre: string; detalle?: string; error?: string; origen?: OrigenDeLaTool }
   | { tipo: "plan"; tareas: TareaDelPlan[] }
   | { tipo: "tarea"; id: string; indice: number; total: number; estado: EstadoTarea }
   /**
@@ -84,6 +84,24 @@ export type DomainEvent =
   | { tipo: "pausa"; pendientes: PendienteDeAprobacion[] }
   | { tipo: "aviso"; texto: string; severidad: "info" | "aviso" | "grave" }
   | { tipo: "fin"; ms: number };
+
+/**
+ * QUIÉN pidió una tool: el orquestador o un especialista, y cuál si se sabe.
+ *
+ * El `rol` es EXACTO en los dos motores —un especialista siempre llega por la delegación, y eso
+ * se ve en el namespace de deepagents y en el hilo de TrueForge—; lo que puede faltar es el
+ * NOMBRE. deepagents no lo da (sus segmentos son ids opacos, ver `puente.ts#origenDeTool`) y
+ * TrueForge sí (`quienEs`, hilo → especialista). **Ausente es «no consta»**, y por eso no hay un
+ * booleano de exactitud al lado: permitiría la combinación imposible de un nombre «inexacto».
+ *
+ * El nombre es el de un especialista CARGADO, nunca el texto que el modelo puso al delegar ni un
+ * id de hilo: un nombre inventado por el modelo o un id opaco en el cable serían un dato con
+ * forma de dato que no lo es. Y el orquestador no lleva nombre porque solo hay uno.
+ *
+ * Ausente entero —el evento sin `origen`— es lo de antes: el doble guionizado y las sesiones
+ * guardadas antes de que existiera.
+ */
+export type OrigenDeLaTool = { rol: "orquestador" } | { rol: "especialista"; nombre?: string };
 
 /** Las fases del lazo. Es lo que llena los 100-300 s en que el agente no habla. */
 /** Un hallazgo del simulador, ya relativo al proyecto. Sin contenido de ningún fichero. */

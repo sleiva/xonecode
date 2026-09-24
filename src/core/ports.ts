@@ -209,6 +209,18 @@ export function consumoDeLaSesion(c: ConsumoDeTurno): ConsumoDeSesionPorCuenta {
   };
 }
 
+/**
+ * Una tool que un agente EXTERNO ha usado, para contarla mientras trabaja
+ * (`core/entrelazar.ts`). `agente` es el nombre de su `.md` —el de `PeticionExterna.agente`— y es
+ * OBLIGATORIO a propósito: son tres motores los que lo rellenan, y con el campo opcional uno que
+ * se lo dejara saldría con todo en verde y sus tools sin dueño.
+ */
+export interface ToolDeUnHijo {
+  nombre: string;
+  detalle?: string;
+  agente: string;
+}
+
 export interface PeticionExterna {
   motor: MotorExterno;
   /** La carpeta del proyecto: el hijo trabaja ahí y en ningún otro sitio. */

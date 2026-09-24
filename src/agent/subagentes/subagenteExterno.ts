@@ -31,6 +31,7 @@ import type {
   PeticionExterna,
   PoliticaDeEscrituraExterna,
   SubagenteExternoPort,
+  ToolDeUnHijo,
 } from "../../core/ports.js";
 import { codexDisponible, correrCodex } from "./subagenteCodex.js";
 import { correrOpencode, opencodeDisponible } from "./subagenteOpencode.js";
@@ -265,7 +266,7 @@ export function crearSubagenteExterno(opciones: {
    * `canUseTool` no llegan las lecturas, porque un `allow` del hook es una pre-aprobación y
    * el callback ya no se consulta (medido).
    */
-  alUsarTool?: (tool: { nombre: string; detalle?: string }) => void;
+  alUsarTool?: (tool: ToolDeUnHijo) => void;
   /**
    * Lo que el hijo va CONTANDO mientras trabaja, para que se vea que trabaja.
    *
@@ -444,7 +445,7 @@ export function crearSubagenteExterno(opciones: {
                    * flujo del grafo ya hace con un `write_file` antes de su aprobación.
                    */
                   if (decision.permissionDecision !== "deny") {
-                    opciones.alUsarTool?.(eventoDeToolExterna(nombre, args, peticion.cwd));
+                    opciones.alUsarTool?.({ ...eventoDeToolExterna(nombre, args, peticion.cwd), agente: peticion.agente });
                   }
                   return { hookSpecificOutput: decision };
                 },

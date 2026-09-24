@@ -16,6 +16,8 @@
  * un glob"— hay DOS cosas que decir, y quien pinta escribe tantas líneas como haya.
  */
 
+import type { OrigenDeLaTool } from "./events.js";
+
 export interface EventoTool {
   nombre: string;
   /**
@@ -26,6 +28,8 @@ export interface EventoTool {
   detalle?: string;
   /** Vacío si fue bien. Un error nunca se colapsa. */
   error?: string;
+  /** Quién la pidió (`core/events.ts#OrigenDeLaTool`). Ausente = no consta. */
+  origen?: OrigenDeLaTool;
 }
 
 /** Qué icono abre la línea, por familia. Sin entrada: `⚙`, genérico. */
@@ -75,6 +79,8 @@ export interface LineaDeTool {
   nombre: string;
   /** Presente solo en la línea de un error, que nunca se colapsa. */
   error?: string;
+  /** El origen de la RACHA, que es uno solo: dos orígenes son dos rachas. */
+  origen?: OrigenDeLaTool;
 }
 
 /** `→ lee app.xne` para una conocida; `⚙ studio_edit_file` para el resto. */
@@ -104,8 +110,24 @@ function listaDe(detalles: string[]): string {
   return `${unicos.slice(0, 3).join(", ")} y ${resto} ${resto === 1 ? "fichero" : "ficheros"} más`;
 }
 
+/**
+ * La clave de una racha: el origen forma parte de ella. Con solo el nombre, tres lecturas de
+ * dos especialistas distintos se contaban como UNA racha y la línea atribuía las tres al primero
+ * — un origen que miente es peor que no llevarlo. El precio, declarado: en el terminal, donde el
+ * origen no se pinta, una racha se parte cuando cambia quién la pide.
+ */
+function claveDeOrigen(origen: OrigenDeLaTool | undefined): string {
+  if (origen === undefined) return "";
+  return origen.rol === "orquestador" ? "o" : `e:${origen.nombre ?? ""}`;
+}
+
+function conOrigen(origen: OrigenDeLaTool | undefined): { origen?: OrigenDeLaTool } {
+  return origen === undefined ? {} : { origen };
+}
+
 export class Colapsador {
   private nombre = "";
+  private origen: OrigenDeLaTool | undefined = undefined;
   private cuenta = 0;
   private detalles: string[] = [];
 
@@ -121,11 +143,12 @@ export class Colapsador {
         texto: `✗ ${frase(evento.nombre, evento.detalle).slice(2)}: ${evento.error}`,
         nombre: evento.nombre,
         error: evento.error,
+        ...conOrigen(evento.origen),
       });
       return salida;
     }
 
-    if (evento.nombre === this.nombre) {
+    if (evento.nombre === this.nombre && claveDeOrigen(evento.origen) === claveDeOrigen(this.origen)) {
       this.cuenta++;
       if (evento.detalle !== undefined) this.detalles.push(evento.detalle);
       return salida; // misma racha: calla
@@ -134,9 +157,10 @@ export class Colapsador {
     const pendiente = this.cerrarRacha();
     if (pendiente) salida.push(pendiente);
     this.nombre = evento.nombre;
+    this.origen = evento.origen;
     this.cuenta = 1;
     this.detalles = evento.detalle === undefined ? [] : [evento.detalle];
-    salida.push({ texto: frase(evento.nombre, evento.detalle), nombre: evento.nombre });
+    salida.push({ texto: frase(evento.nombre, evento.detalle), nombre: evento.nombre, ...conOrigen(evento.origen) });
     return salida;
   }
 
@@ -154,15 +178,16 @@ export class Colapsador {
     const base = frase(this.nombre);
     const texto =
       this.detalles.length > 0 ? `${base} ×${this.cuenta} — ${listaDe(this.detalles)}` : `${base} ×${this.cuenta}`;
-    // El nombre se lee ANTES de reiniciar: es el de la racha que se cierra, no el de la
-    // que viene.
-    const cierre: LineaDeTool = { texto, nombre: this.nombre };
+    // El nombre y el origen se leen ANTES de reiniciar: son los de la racha que se cierra, no
+    // los de la que viene.
+    const cierre: LineaDeTool = { texto, nombre: this.nombre, ...conOrigen(this.origen) };
     this.reiniciar();
     return cierre;
   }
 
   private reiniciar(): void {
     this.nombre = "";
+    this.origen = undefined;
     this.cuenta = 0;
     this.detalles = [];
   }

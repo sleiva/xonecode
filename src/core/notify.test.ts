@@ -132,3 +132,40 @@ describe("la línea de una delegación dice a QUIÉN", () => {
     expect(lineas.filter((l) => l !== null).map((l) => l!.texto).join(" | ")).toContain("studio_edit_file app/Clientes.xne");
   });
 });
+
+describe("el ORIGEN de una tool viaja con su racha", () => {
+  const dev = { rol: "especialista", nombre: "developer-xone" } as const;
+  const disenio = { rol: "especialista", nombre: "designer-xone" } as const;
+
+  it("la misma tool de dos especialistas son DOS rachas, cada una con el suyo", () => {
+    // Con la clave de antes —solo el nombre— las tres lecturas eran una racha y el «×3» se
+    // atribuía entero al primero: un origen que miente sobre dos de tres llamadas.
+    const c = new Colapsador();
+    expect(c.lineas({ nombre: "read_file", detalle: "a.xne", origen: dev })).toEqual([
+      { texto: "→ lee a.xne", nombre: "read_file", origen: dev },
+    ]);
+    c.lineas({ nombre: "read_file", detalle: "b.xne", origen: dev });
+    const cambio = c.lineas({ nombre: "read_file", detalle: "c.css", origen: disenio });
+    expect(cambio.map((l) => [l.texto, l.origen])).toEqual([
+      ["→ lee ×2 — a.xne, b.xne", dev],
+      ["→ lee c.css", disenio],
+    ]);
+  });
+
+  it("el cierre del TURNO y la línea de un error llevan también el suyo", () => {
+    const c = new Colapsador();
+    c.lineas({ nombre: "grep", origen: dev });
+    c.lineas({ nombre: "grep", origen: dev });
+    expect(c.cierre()).toEqual({ texto: "✱ busca ×2", nombre: "grep", origen: dev });
+    expect(c.lineas({ nombre: "read_file", error: "ENOENT", origen: { rol: "orquestador" } })[0]!.origen).toEqual({
+      rol: "orquestador",
+    });
+  });
+
+  it("sin origen es lo de antes, byte a byte: la tubería no cambia", () => {
+    const c = new Colapsador();
+    c.lineas(ok("read_file", "a"));
+    expect(c.lineas(ok("read_file", "b"))).toEqual([]);
+    expect(c.cierre()).toEqual({ texto: "→ lee ×2 — a, b", nombre: "read_file" });
+  });
+});

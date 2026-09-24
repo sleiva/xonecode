@@ -360,7 +360,7 @@ describe("lo que hace MIENTRAS trabaja llega por el puerto", () => {
       alRazonar: (t) => void razonado.push(t),
     });
     await puerto.correr(peticionDe(true));
-    expect(tools).toEqual([{ nombre: "read_file", detalle: "/app.xml" }]);
+    expect(tools).toEqual([{ nombre: "read_file", detalle: "/app.xml", agente: "dev" }]);
     expect(razonado).toEqual(["Miro app.xml."]);
   });
 });

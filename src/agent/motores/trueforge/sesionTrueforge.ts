@@ -275,6 +275,12 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
   const disponibles = new Set(catalogo.map((s) => s.nombre));
   /** De quién es cada hilo, para que la tarjeta de aprobación diga QUIÉN quiere escribir. */
   const quienEs = new Map<string, string>([[HILO_RAIZ, PERFIL_DEL_ORQUESTADOR.nombre]]);
+  /**
+   * El especialista CARGADO de cada hilo hijo, para el `origen` de sus tools. No es `quienEs`:
+   * ése guarda también el nombre que el modelo puso al delegar aunque no sea de nadie, y lo que
+   * viaja por el cable como nombre de un especialista tiene que serlo de verdad.
+   */
+  const especialistaDeHilo = new Map<string, string>();
 
   /** Lo que el agente dejó en `/artefactos/` y aún no se ha anunciado: un artefacto se escribe
    *  SIN aprobación, así que tiene que ANUNCIARSE, como en deepagents. */
@@ -464,6 +470,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
   }): Promise<AgentThread> => {
     const agente = especialistas().find((a) => a.nombre === params.request.name);
     quienEs.set(params.threadId, agente?.nombre ?? params.request.name);
+    if (agente !== undefined) especialistaDeHilo.set(params.threadId, agente.nombre);
     if (agente !== undefined && agente.motor !== "modelo") return hijoExterno(agente, params);
     const clase = agente === undefined ? "lee" : clasesDeTools(agente);
     // Las piezas por lo que declara su `.md` (`capacidades.ts`); la nota sale de SUS tools.
@@ -661,7 +668,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       // Un hilo que agotó su tope se ANOTA en la traza, con quién era: el raíz y cualquier hijo.
       const tope = topeAgotadoDe(evento);
       if (tope !== undefined) diagnostico?.corte?.(quienEs.get(deHilo) ?? deHilo, tope);
-      const { eventos, uso } = traducirEvento(evento);
+      const { eventos, uso } = traducirEvento(evento, (h) => especialistaDeHilo.get(h));
       // La «llamada» de un hijo externo es el producto entero: su consumo llega por su propio
       // callback (`externo`), y contarla aquí sumaría una llamada de modelo a ceros por delegación.
       if (uso !== undefined && !hilosExternos.has(deHilo)) {
