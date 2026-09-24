@@ -2,7 +2,7 @@
  * Una `SesionReal` con el motor de TrueForge debajo — la Fase 0 de
  * `docs/VARIANTE-TRUEFORGE-HARNESS.md`.
  *
- * Cumple el MISMO contrato que la de deepagents (`turno/turnoReal.ts#SesionReal`), así que la
+ * Cumple el MISMO contrato que la de deepagents (`turno/sesionReal.ts`), así que la
  * consola —web, terminal, tareas— no sabe con cuál habla: los dos pintan eventos de dominio en la
  * misma `Piel`, aprueban por el mismo `pedirAprobacion` y devuelven los mismos `cambios`.
  *
@@ -40,7 +40,7 @@ import { inventarioDelProyecto, opcionesDeSubagenteExterno } from "../../subagen
 import { sumarConsumo, SIN_CONSUMO } from "../../subagentes/consumoExterno.js";
 import { ColaDeEventos, entrelazar } from "../../../core/entrelazar.js";
 import { modeloExternoParaTrueforge } from "./modeloExterno.js";
-import { cambiosQueSeVerifican, huellaDeErrores, repartirHallazgos } from "../../turno/verificacion.js";
+import { cambiosQueSeVerifican, huellaDeErrores, repartirHallazgos, textoDeReparacion, tocaCriticarPantalla, TOPE_REPARACIONES } from "../../turno/verificacion.js";
 import { correrTurno, type Piel } from "../../../core/turno.js";
 import type { Artefacto } from "../../../core/artefactos.js";
 import type { LineaDeDiff } from "../../../core/diff.js";
@@ -53,7 +53,8 @@ import { PERFIL_DEL_ORQUESTADOR, promptOrquestador } from "../../grafo/xoneAgent
 import { permisosDe, seDetieneEn, TEXTO_HITL } from "../../grafo/perfiles.js";
 import { cambioDe } from "../../turno/interrupts.js";
 import { tomarInstantanea, type Cambio } from "../../turno/instantanea.js";
-import { ficherosDelProyecto, textoDeReparacion, tocaCriticarPantalla, TOPE_REPARACIONES, type SesionReal } from "../../turno/turnoReal.js";
+import { ficherosDelProyecto } from "../../turno/ficherosDelProyecto.js";
+import type { SesionReal } from "../../turno/sesionReal.js";
 import { accionDelJuez, type HechosDelTurno, type VeredictoDelTurno } from "../../../core/juezDelTurno.js";
 import type { Entorno } from "../../config/entorno.js";
 import { modeloParaTrueforge } from "./modeloLangchain.js";

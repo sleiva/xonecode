@@ -17,7 +17,8 @@ import { PAPELES, parsear, resolver, type FuentesDeEleccion } from "../../core/m
 import { PISTA_DE_DECISION } from "../aprobar.js";
 import type { CatalogoModelosPort, Papel } from "../../core/ports.js";
 import type { Piel } from "../../core/turno.js";
-import { ficherosDelProyecto, type SesionReal } from "../../agent/turno/turnoReal.js";
+import { ficherosDelProyecto } from "../../agent/turno/ficherosDelProyecto.js";
+import type { SesionReal } from "../../agent/turno/sesionReal.js";
 import { inspeccionar } from "../../agent/config/entorno.js";
 import {
   correrConsola,

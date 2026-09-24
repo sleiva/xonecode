@@ -20,6 +20,8 @@ const dobles = vi.hoisted(() => ({
 
 vi.mock("../agent/turno/turnoReal.js", () => ({
   abrirSesionReal: dobles.abrirSesionReal,
+}));
+vi.mock("../agent/turno/ficherosDelProyecto.js", () => ({
   // `main.ts` la importa para el completado de «@ficheros» del Tab.
   ficherosDelProyecto: () => new Set<string>(),
   PROFUNDIDAD_DEL_TAB: 4,

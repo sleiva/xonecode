@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { tocaCriticarPantalla, textoDeReparacion, TOPE_REPARACIONES } from "./turnoReal.js";
+import { tocaCriticarPantalla, textoDeReparacion, TOPE_REPARACIONES } from "./verificacion.js";
 import type { HallazgoDelTurno } from "../../core/events.js";
 
 const HALLAZGO: HallazgoDelTurno = {

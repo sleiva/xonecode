@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { open, readFile, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { ficherosDelProyecto } from "../turno/turnoReal.js";
+import { ficherosDelProyecto } from "../turno/ficherosDelProyecto.js";
 import { puedeLeerRuta } from "./perfiles.js";
 import { esVistaAplanada } from "./proyecto.js";
 

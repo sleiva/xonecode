@@ -30,7 +30,9 @@ vi.mock("./instantanea.js", async (importOriginal) => {
   return { ...orig, tomarInstantanea: mocksInstantanea.tomarInstantanea };
 });
 
-import { abrirSesionReal, ficherosDelProyecto, saldarAprobacionesHuerfanas, TOPE_REPARACIONES } from "./turnoReal.js";
+import { abrirSesionReal, saldarAprobacionesHuerfanas } from "./turnoReal.js";
+import { ficherosDelProyecto } from "./ficherosDelProyecto.js";
+import { TOPE_REPARACIONES } from "./verificacion.js";
 import { ModeloGuionizado, SkillsEnMemoria, type VerifierPort } from "../../core/ports.js";
 import type { Piel } from "../../core/turno.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";

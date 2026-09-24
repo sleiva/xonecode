@@ -75,7 +75,9 @@ import {
   CatalogoModelos, baseUrlDeOllama, baseUrlDeOllamaCloud, capacidadesDeOllama,
 } from "../agent/config/catalogoModelos.js";
 import type { Esfuerzo } from "../core/esfuerzo.js";
-import { abrirSesionReal, ficherosDelProyecto, type SesionReal } from "../agent/turno/turnoReal.js";
+import { abrirSesionReal } from "../agent/turno/turnoReal.js";
+import type { SesionReal } from "../agent/turno/sesionReal.js";
+import { ficherosDelProyecto } from "../agent/turno/ficherosDelProyecto.js";
 import { SimuladorVerifier } from "../agent/turno/verificador.js";
 import { crearProyecto } from "../agent/config/crearProyecto.js";
 import { type DatosDelProyecto } from "../core/esqueleto.js";

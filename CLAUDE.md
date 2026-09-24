@@ -103,6 +103,10 @@ Seis capas, y la frontera importa más que el contenido:
 - **react-dom, vite y `apps/web/` no se importan desde `src/`** (`src/web/frontera.test.ts`), y
   los tipos del cable se **redeclaran** en `apps/web/src/tipos.ts`. `tipos.test.ts` compara los
   literales `tipo:` y `clase:` contra el host: divergir da rojo, no un bug mudo.
+- **`src/` no tiene ciclos de importación de VALOR** (`src/ciclos.test.ts`, que recorre el árbol
+  entero; un `import type` no cuenta). Hubo uno —TrueForge importaba de `turnoReal.ts`, que lo
+  elige—, y por eso el contrato `SesionReal`, `ficherosDelProyecto` y las reglas de reparación viven
+  en módulos neutrales de `agent/turno/`.
 - `agent/` no importa de `cli/` — convención sin test, solo un comentario en `agent/turno/turnoReal.ts`.
   En el otro sentido sí se puede.
 

@@ -530,7 +530,11 @@ hechos del proyecto precargados, y envuelve el prompt con su identidad, que no s
    deepagents, este camino SÍ tiene test de turno: aquí el arnés escribe una captura de verdad.
 3. ~~El resto de subagentes~~: hecho, todos salen de su `.md` (abajo).
 4. ~~La memoria del hilo en disco~~: hecha, como foto del raíz (abajo).
-5. Deshacer la dependencia circular entre `turnoReal.ts` y `sesionTrueforge.ts`.
+5. ~~Deshacer la dependencia circular entre `turnoReal.ts` y `sesionTrueforge.ts`~~: hecho. Lo que
+   TrueForge tomaba de `turnoReal.ts` vive en módulos neutrales —el contrato en `turno/sesionReal.ts`,
+   los ficheros en `turno/ficherosDelProyecto.ts` y las reglas de reparación con las demás del
+   verificador en `turno/verificacion.ts`—. Medido al hacerlo, era el ÚNICO ciclo de `src/`, así que
+   `src/ciclos.test.ts` vigila que no haya NINGUNO.
 6. ~~**MUY IMPORTANTE — la pregunta del orquestador como TARJETA con botones.**~~: hecha (abajo,
    «La pregunta, también como tarjeta»). stdio y la TUI siguen con el texto.
 
