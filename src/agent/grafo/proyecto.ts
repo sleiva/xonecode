@@ -8,6 +8,7 @@ import { escriturasEnSerie } from "./escriturasEnSerie.js";
 import { RAIZ_SKILLS, skillsConRuta, skillsMontables, type Montaje } from "./skills.js";
 import {
   artefactoFueraDeSitio,
+  artefactoSinMontar,
   esBasuraDeArtefacto,
   esRutaDeArtefacto,
   mimeDeArtefacto,
@@ -772,6 +773,11 @@ export const porQueNoAhi = (ruta: string, destino: string): string =>
 export function sinArtefactosEnElProyecto<T extends object>(backend: T): T {
   const motivo = (ruta: unknown): string | undefined => {
     if (typeof ruta !== "string") return undefined;
+    // `/artefactos/` en el backend del PROYECTO = el montaje falta (`core/artefactos.ts`): se
+    // rechaza en vez de escribirlo en la app del cliente, que es lo que pasaba y sin aprobación.
+    if (artefactoSinMontar(ruta)) {
+      return `\`${RUTA_ARTEFACTOS}\` no está disponible en esta sesión, y no se escribe en el proyecto en su lugar: ahí sería un fichero de la app del cliente. Entrega el resultado en tu respuesta.`;
+    }
     const destino = artefactoFueraDeSitio(ruta);
     return destino === undefined ? undefined : porQueNoAhi(ruta, destino);
   };

@@ -448,6 +448,39 @@ describe("backendDeAgente — las reglas están MONTADAS, no solo escritas", () 
     });
     expect(existsSync(join(raiz, "large_tool_results"))).toBe(false);
   });
+
+  /**
+   * El mismo fallo cerrado para `/artefactos/`, y este SÍ se vivió: el motor TrueForge no recibía
+   * carpeta de artefactos en la consola de terminal ni en `run --real`, y `write_file` de
+   * `/artefactos/panel.html` acabó en `artefactos/panel.html` de la app —sin aprobación, porque por
+   * una ruta de artefacto no se pregunta—. Sin montaje, la ruta se RECHAZA.
+   */
+  it("sin carpeta de artefactos, `/artefactos/` se RECHAZA y no aterriza en el proyecto", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-sin-artefactos-"));
+    writeFileSync(join(raiz, "app.xml"), "<app/>");
+    const backend = backendDeAgente({ raiz, ficheros: new Set(["/app.xml"]) }) as unknown as {
+      write(ruta: string, contenido: string): Promise<unknown>;
+      edit(ruta: string, viejo: string, nuevo: string): Promise<unknown>;
+    };
+    for (const ruta of ["/artefactos/panel.html", "/Artefactos/panel.openui", "artefactos/x.md"]) {
+      expect(await backend.write(ruta, "contenido")).toEqual({ error: expect.stringContaining("no se escribe en el proyecto") });
+    }
+    expect(await backend.edit("/artefactos/panel.html", "a", "b")).toEqual({ error: expect.any(String) });
+    expect(existsSync(join(raiz, "artefactos"))).toBe(false);
+    expect(existsSync(join(raiz, "Artefactos"))).toBe(false);
+  });
+
+  it("CON carpeta de artefactos, la misma ruta escribe en la carpeta de la sesión, no en el proyecto", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-con-artefactos-"));
+    writeFileSync(join(raiz, "app.xml"), "<app/>");
+    const carpeta = mkdtempSync(join(tmpdir(), "xonecode-carpeta-artefactos-"));
+    const backend = backendDeAgente({ raiz, ficheros: new Set(["/app.xml"]), artefactos: { carpeta, alEscribir: () => {} } }) as unknown as {
+      write(ruta: string, contenido: string): Promise<unknown>;
+    };
+    expect(await backend.write("/artefactos/panel.openui", "root = A")).not.toHaveProperty("error");
+    expect(readFileSync(join(carpeta, "panel.openui"), "utf8")).toBe("root = A");
+    expect(existsSync(join(raiz, "artefactos"))).toBe(false);
+  });
 });
 
 /**

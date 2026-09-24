@@ -232,6 +232,30 @@ describe("una sesión con el motor TrueForge", () => {
     expect(pi.tokens.join("")).toContain("Listo.");
   }, 20_000);
 
+  it("por `abrirSesionReal` SIN carpeta de artefactos —terminal, `run --real`—, `/artefactos/` cae en `.xonecode/artefactos` y no en la app", async () => {
+    // El agujero medido: TrueForge no recibía carpeta y la escritura acababa en `artefactos/`
+    // de la raíz del proyecto, sin aprobación. Aquí sin `artefactos` en las opciones, como abren
+    // el terminal y `run --real`.
+    const raiz = proyecto();
+    const { m } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "haz el panel" }) }] })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "w1", name: "write_file", args: JSON.stringify({ file_path: "/artefactos/panel.openui", content: "root = A" }) }] })],
+      [new AIMessageChunk({ content: "Hecho." })],
+      [new AIMessageChunk({ content: "Listo." })],
+    ]);
+    const s = await abrirSesionReal({
+      raiz,
+      modelos: m,
+      skills: { catalogo: () => [], cargar: async () => [] } as never,
+      entorno: ENTORNO,
+      motor: "trueforge",
+      sinAprobacion: () => true,
+    });
+    await s.turno("haz un panel", piel().p);
+    expect(existsSync(join(raiz, "artefactos"))).toBe(false);
+    expect(readFileSync(join(raiz, ".xonecode", "artefactos", "panel.openui"), "utf8")).toBe("root = A");
+  }, 20_000);
+
   it("el raíz DELEGA en el device-controller, que EJECUTA de verdad: la shell la tiene solo él", async () => {
     const raiz = proyecto();
     const vistos: string[][] = [];

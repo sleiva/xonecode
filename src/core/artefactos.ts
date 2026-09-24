@@ -148,6 +148,26 @@ export function artefactoFueraDeSitio(ruta: string): string | undefined {
   return `${RUTA_ARTEFACTOS}${segmentos[segmentos.length - 1]!}`;
 }
 
+/**
+ * ¿Es una ruta de `/artefactos/` que ha llegado al backend del PROYECTO?
+ *
+ * Solo puede pasar si el montaje FALTA: con él, el `CompositeBackend` desvía `/artefactos/` a la
+ * carpeta de la sesión antes de que el proyecto la vea. Y que falte no es teórico: el motor
+ * TrueForge no recibía carpeta en la consola de terminal ni en `run --real`, y un `write_file` de
+ * `/artefactos/panel.html` acabó en `artefactos/panel.html` de la app del cliente —y SIN
+ * aprobación, porque por una ruta de artefacto no se pregunta (`perfiles.ts#seDetieneEn`)—.
+ * Medido el 24-09-2026. Así que la guarda del proyecto la rechaza: si el montaje vuelve a faltar,
+ * el fallo es un error que el modelo lee, no un fichero en la app.
+ *
+ * El primer segmento y sin distinguir mayúsculas, como `artefactoFueraDeSitio`. El precio es el
+ * mismo que allí y ya se pagaba: una carpeta `artefactos/` en la raíz del proyecto no se puede
+ * escribir con el agente —con el montaje puesto, tampoco se podía—.
+ */
+export function artefactoSinMontar(ruta: string): boolean {
+  const primero = ruta.split(/[\\/]+/).find((s) => s.length > 0);
+  return primero !== undefined && primero.toLowerCase() === RUTA_ARTEFACTOS.replace(/\//g, "").toLowerCase();
+}
+
 /** El nombre que se le enseña a una persona: el último segmento y nada más. */
 export function nombreDeArtefacto(ruta: string): string {
   return ruta.slice(ruta.lastIndexOf("/") + 1);

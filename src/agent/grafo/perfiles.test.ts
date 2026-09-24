@@ -266,10 +266,11 @@ describe("seDetieneEn — a qué escrituras se para el turno a preguntar", () =>
         ).toBe(true);
       }
     }
-    // Y de propina: lo que sí se escribió es exactamente lo que el backend dejó pasar.
-    expect(escrituras).toEqual([
-      "/app.xml", "/src/artifacts.js", "/artifactsviejos/x.html", "/artefactos/x.html", "/Clientes.xne",
-    ]);
+    // Y de propina: lo que sí se escribió es exactamente lo que el backend dejó pasar. Aquí
+    // estaba `/artefactos/x.html`, y era el agujero escrito en un test: esta guarda es la del
+    // backend del PROYECTO, y una ruta de artefactos que llega hasta él es que falta su montaje
+    // —medido con TrueForge en el terminal: acababa en la app sin aprobación—. Ahora se rechaza.
+    expect(escrituras).toEqual(["/app.xml", "/src/artifacts.js", "/artifactsviejos/x.html", "/Clientes.xne"]);
   });
 });
 

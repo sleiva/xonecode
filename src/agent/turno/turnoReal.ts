@@ -273,7 +273,10 @@ export async function abrirSesionReal(opciones: {
       ...(opciones.verifier === undefined ? {} : { verifier: opciones.verifier }),
       ...(opciones.pedirAprobacion === undefined ? {} : { pedirAprobacion: opciones.pedirAprobacion }),
       ...(opciones.sinAprobacion === undefined ? {} : { sinAprobacion: opciones.sinAprobacion }),
-      ...(opciones.artefactos === undefined ? {} : { artefactos: opciones.artefactos }),
+      // SIEMPRE con carpeta, con la MISMA caída que deepagents. Sin ella `/artefactos/` no se
+      // montaba en la consola de terminal ni en `run --real`, y la escritura caía en la raíz del
+      // proyecto sin aprobación (medido: `artefactos/panel.html` en la app del cliente).
+      artefactos: carpetaDeArtefactosDeLaSesion(opciones.raiz, opciones.artefactos),
       ...(opciones.hilo === undefined ? {} : { hilo: opciones.hilo }),
       ...(opciones.topeDeRondas === undefined ? {} : { topeDeRondas: opciones.topeDeRondas }),
       ...(opciones.criticaVisual === undefined ? {} : { criticaVisual: opciones.criticaVisual }),
@@ -380,7 +383,7 @@ export async function abrirSesionReal(opciones: {
    * capturado no.
    */
   const capturasDelTurno: Artefacto[] = [];
-  const carpetaDeArtefactos = opciones.artefactos ?? join(raiz, ".xonecode", "artefactos");
+  const carpetaDeArtefactos = carpetaDeArtefactosDeLaSesion(raiz, opciones.artefactos);
   /**
    * El índice de navegación de esta sesión, y **es UNO solo**.
    *
@@ -1293,4 +1296,14 @@ export async function abrirSesionReal(opciones: {
   };
 }
 
-
+/**
+ * Dónde caen los artefactos de una sesión: la carpeta que traiga quien la abre (la web, por sesión)
+ * o, sin ella —la consola de terminal, `run --real`—, `.xonecode/artefactos` del proyecto.
+ *
+ * **Una función para los DOS motores**, y es el arreglo: la caída vivía escrita dentro del camino
+ * de deepagents, y el de TrueForge pasaba la opción tal cual, o sea NADA cuando no venía. Sin
+ * carpeta no había montaje, y sin montaje `/artefactos/` era una ruta más del proyecto.
+ */
+export function carpetaDeArtefactosDeLaSesion(raiz: string, pedida: string | undefined): string {
+  return pedida ?? join(raiz, ".xonecode", "artefactos");
+}
