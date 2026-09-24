@@ -1976,6 +1976,43 @@ describe("montarRutas — el cable, por fin conectado", () => {
       rmSync(base, { recursive: true, force: true });
     });
 
+    it("«modeloDelCambio» contesta SIEMPRE: sin sesión, con ruta mala o con los cambios del puerto", async () => {
+      const { base, servidor, vestibulo } = await abrirProyecto();
+      const pedidos: string[] = [];
+      montarRutas(servidor, vestibulo, {
+        informar: () => {},
+        modeloDelCambio: async (_raiz, sesion, ruta) => {
+          pedidos.push(`${sesion}:${ruta}`);
+          return [];
+        },
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+      await asentar();
+      const ultimo = () => cliente.recibidos.filter((x) => x.clase === "modeloDelCambio").at(-1);
+      // Sin sesión empezada todavía no hay «antes»: se dice, no se calla.
+      expect(await enviarMensaje(accion, { clase: "modeloDelCambio", ruta: "Clientes.xne" })).toBe(204);
+      await asentar();
+      expect(ultimo()).toEqual({ clase: "modeloDelCambio", ruta: "Clientes.xne", error: "la sesión todavía no ha empezado" });
+      expect(pedidos).toEqual([]);
+
+      // Con sesión: una ruta que la barrera de lectura rechaza no llega al puerto (ni a git).
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1", sesion: "s1" });
+      await asentar();
+      await enviarMensaje(accion, { clase: "modeloDelCambio", ruta: ".env" });
+      await asentar();
+      expect(ultimo()).toEqual({ clase: "modeloDelCambio", ruta: ".env", error: "esa ruta no se enseña" });
+      await enviarMensaje(accion, { clase: "modeloDelCambio", ruta: "Clientes.xne" });
+      await asentar();
+      expect(pedidos).toEqual(["s1:Clientes.xne"]);
+      expect(ultimo()).toEqual({ clase: "modeloDelCambio", ruta: "Clientes.xne", cambios: [] });
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
     it("«colecciones» contesta la foto del puerto, y si el puerto lanza, un error sin la ruta", async () => {
       const { base, servidor, vestibulo, raizDeVerdad } = await abrirProyecto();
       const foto = { colecciones: [], total: 0, entrada: ["Menu"], login: [], rotas: [] };

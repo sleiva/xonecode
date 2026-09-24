@@ -163,6 +163,8 @@ import {
 import { modeloEnDisco } from "../../agent/navegacion/indiceEnDisco.js";
 import { ficherosDelProyecto } from "../../agent/turno/ficherosDelProyecto.js";
 import { fotoDeColecciones, type FotoDeColecciones } from "../../core/fotoDeColecciones.js";
+import type { CambiosDeUnaColeccion } from "../../core/diffDeColecciones.js";
+import { modeloDelCambio } from "../../agent/sesiones/modeloDelCambio.js";
 import { RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
 import {
   leerArtefactoCrudo,
@@ -431,6 +433,11 @@ export interface OpcionesDeMontaje {
    * cargador que `xone_navegacion`. Por opción porque lee el proyecto con `xone-linter`.
    */
   coleccionesDelProyecto?: (raiz: string) => Promise<FotoDeColecciones>;
+  /**
+   * El diff SEMÁNTICO de un `.xne` de la sesión (`agent/sesiones/modeloDelCambio.ts`): toca git y
+   * el disco, así que entra por opción. `undefined` = no hay «antes» con el que comparar.
+   */
+  modeloDelCambio?: (raiz: string, sesion: string, ruta: string) => Promise<CambiosDeUnaColeccion[] | undefined>;
   leerFichero?: (raiz: string, ruta: string) => Promise<FicheroDelProyecto>;
   /**
    * Los dos lectores de ARTEFACTOS (`agent/grafo/artefactosEnDisco.ts`), y son dos porque son dos
@@ -3278,6 +3285,28 @@ export function montarRutas(
   };
 
   /**
+   * El diff semántico de un `.xne` de Revisión. Siempre CONTESTA —la fila abierta espera, y un
+   * silencio la dejaría cargando para siempre—, y la ruta pasa por la MISMA barrera que la del
+   * lector de Ficheros antes de llegar a git.
+   */
+  const atenderModeloDelCambio = async (ruta: string): Promise<void> => {
+    const abierto = vestibulo.proyectoAbierto();
+    const sesion = abierto?.sesion;
+    const sinNada = (error: string): void => emitir({ clase: "modeloDelCambio", ruta, error });
+    if (abierto === undefined || opciones.modeloDelCambio === undefined) return sinNada("esta ejecución no sabe comparar el modelo");
+    if (sesion === undefined) return sinNada("la sesión todavía no ha empezado");
+    if (motivoDeRutaInaceptable(ruta) !== undefined) return sinNada("esa ruta no se enseña");
+    try {
+      const cambios = await opciones.modeloDelCambio(abierto.raiz, sesion, ruta);
+      if (cambios === undefined) return sinNada("no hay con qué comparar");
+      emitir({ clase: "modeloDelCambio", ruta, cambios });
+    } catch (error) {
+      informar(`no se pudo comparar el modelo (${codigoDe(error)})`);
+      sinNada("no se pudo comparar el modelo");
+    }
+  };
+
+  /**
    * La foto del modelo XOne del proyecto abierto. Mismas reglas que el árbol: sin proyecto no
    * se contesta, sin puerto se contesta con error —un «consultando…» eterno es un fallo mudo—,
    * y el fallo viaja sin la ruta de la máquina.
@@ -4205,6 +4234,17 @@ export function montarRutas(
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "arbol") {
       void atenderArbol().catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "modeloDelCambio" &&
+      typeof (mensaje as { ruta?: unknown }).ruta === "string"
+    ) {
+      void atenderModeloDelCambio((mensaje as { ruta: string }).ruta).catch(contar);
       respuesta.writeHead(204);
       respuesta.end();
       return;
@@ -5521,6 +5561,7 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     // El modelo XOne con el MISMO cargador y el mismo conjunto de ficheros que la tool, para
     // que la pestaña y el agente no contesten distinto sobre el mismo proyecto.
     coleccionesDelProyecto: async (raiz) => fotoDeColecciones(await modeloEnDisco(raiz)(ficherosDelProyecto(raiz))),
+    modeloDelCambio,
     leerFichero: leerFicheroDeProyecto,
     leerArtefacto: leerArtefactoDeSesion,
     leerArtefactoCrudo,

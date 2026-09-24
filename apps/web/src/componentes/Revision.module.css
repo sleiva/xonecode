@@ -276,3 +276,75 @@
   font-size: 11px;
   font-family: var(--ds-font-family-code);
 }
+
+/* «Cambios en el modelo» de un `.xne`, encima de su diff de texto. Un RESUMEN de lo que el índice
+   entiende, no el diff: letra de la interfaz y un filete que lo separa del parche. El color de
+   cada línea va en su FILO —el mismo par verde/rojo de las cuentas `+`/`−`—, y la cifra de lo que
+   cambia de tipo en el neutro de «modificado». La clase del cambio viaja como dato
+   (`data-cambio`), no se deduce del `+` del texto. */
+.modelo {
+  margin: 10px 20px 4px;
+  padding-bottom: 8px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.modeloTitulo {
+  margin: 0 0 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-weight: 600;
+}
+
+.modeloColeccion + .modeloColeccion {
+  margin-top: 6px;
+}
+
+.modeloNombre {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  font-weight: 600;
+}
+
+.modeloEstado {
+  padding: 0 6px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.modeloLineas {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.modeloLineas li {
+  padding-left: 8px;
+  border-left: 2px solid var(--dsw-alias-border-l2);
+  overflow-wrap: anywhere;
+}
+
+.modeloLineas li[data-cambio="nuevo"] {
+  border-left-color: var(--dsw-alias-state-success-primary);
+}
+
+.modeloLineas li[data-cambio="borrado"] {
+  border-left-color: var(--dsw-alias-state-error-primary);
+}
+
+.modeloLineas code {
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+}
+
+.modeloNota {
+  margin: 6px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}

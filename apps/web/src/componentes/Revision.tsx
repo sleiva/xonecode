@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
-import type { FicheroTocado } from "../tipos.js";
+import type { CambiosDeUnaColeccion, FicheroTocado } from "../tipos.js";
 import { numerarParche } from "../numerarParche.js";
 import { arbolDeRutas } from "../arbolDeRutas.js";
 import { Arbol } from "./Arbol.js";
@@ -43,6 +43,7 @@ export function Revision({
   mezclados,
   ficheros,
   parches,
+  modelosDelCambio,
   desplegados,
   alDesplegar,
   alPlegar,
@@ -68,6 +69,11 @@ export function Revision({
   ficheros: readonly FicheroTocado[];
   /** Los parches ya traídos, por ruta. El que falta está pedido y en camino. */
   parches: Record<string, { texto: string; recortado: boolean }>;
+  /**
+   * Lo que cambió en el MODELO de cada `.xne` desplegado, por ruta. Ausente la ruta = pedido y
+   * en camino. Opcional: sin él no se pinta el bloque, que es lo que había.
+   */
+  modelosDelCambio?: Record<string, { cambios?: CambiosDeUnaColeccion[]; error?: string }>;
   /** Las rutas con el diff a la vista. Quien las recuerda es `App`. */
   desplegados: ReadonlySet<string>;
   alDesplegar: (ruta: string) => void;
@@ -250,6 +256,9 @@ export function Revision({
                   )}
                 </button>
 
+                {abierto && modelosDelCambio !== undefined && f.ruta.toLowerCase().endsWith(".xne") ? (
+                  <CambiosDelModelo ruta={f.ruta} estado={modelosDelCambio[f.ruta]} />
+                ) : null}
                 {abierto ? (
                   parche === undefined ? (
                     <p className={estilos.aviso}>Trayendo el diff de {f.ruta}…</p>
@@ -291,6 +300,73 @@ export function Revision({
           abajo, y va arriba y aparte. */}
       {cloudstudio === undefined ? null : <div className={estilos.banda}>{cloudstudio}</div>}
       {cuerpo}
+    </div>
+  );
+}
+
+/**
+ * «Cambios en el modelo» de un `.xne`: lo que el índice entiende de la diferencia, ENCIMA del
+ * diff de texto, que sigue siendo la medida entera. Solo el tipo de un campo —no su tamaño ni sus
+ * demás atributos— y eso se dice, para que un cambio que solo está en el texto no se lea como
+ * «no ha cambiado nada».
+ */
+function CambiosDelModelo({ ruta, estado }: { ruta: string; estado?: { cambios?: CambiosDeUnaColeccion[]; error?: string } }) {
+  if (estado === undefined) return <p className={estilos.aviso}>Comparando el modelo de {ruta}…</p>;
+  if (estado.cambios === undefined) {
+    return <p className={estilos.aviso}>No se pudo comparar el modelo: {estado.error ?? "sin motivo"}.</p>;
+  }
+  if (estado.cambios.length === 0) {
+    return (
+      <p className={estilos.aviso}>
+        Sin cambios en el modelo (campos, tipos, referencias, eventos): lo que cambió está en el diff de abajo.
+      </p>
+    );
+  }
+  return (
+    <div className={estilos.modelo} aria-label={`Cambios en el modelo de ${ruta}`}>
+      <p className={estilos.modeloTitulo}>Cambios en el modelo</p>
+      {estado.cambios.map((c) => (
+        <div key={c.nombre} className={estilos.modeloColeccion}>
+          <p className={estilos.modeloNombre}>
+            {c.nombre}
+            {c.estado === "modificada" ? null : <span className={estilos.modeloEstado}>{c.estado}</span>}
+          </p>
+          <ul className={estilos.modeloLineas}>
+            {c.campos.map((f) => (
+              <li key={`c:${f.nombre}`} data-cambio={f.cambio === "tipo" ? "modificado" : f.cambio}>
+                {f.cambio === "nuevo" ? "+ " : f.cambio === "borrado" ? "− " : "~ "}
+                campo <code>{f.nombre}</code>
+                {f.cambio === "tipo"
+                  ? ` · ${f.antes ?? "sin tipo"} → ${f.ahora ?? "sin tipo"}`
+                  : (f.cambio === "nuevo" ? f.ahora : f.antes) === undefined
+                    ? ""
+                    : ` · ${f.cambio === "nuevo" ? f.ahora : f.antes}`}
+              </li>
+            ))}
+            {c.referencias.map((r, i) => (
+              <li key={`r:${i}`} data-cambio={r.cambio}>
+                {r.cambio === "nuevo" ? "+ " : "− "}
+                referencia <code>{r.desde}</code> {r.por} → <code>{r.hacia}</code>
+              </li>
+            ))}
+            {(
+              [
+                ["evento", c.eventos],
+                ["nodo", c.nodos],
+                ["conexión", c.conexiones],
+              ] as const
+            ).flatMap(([que, lista]) =>
+              lista.map((n) => (
+                <li key={`${que}:${n.nombre}`} data-cambio={n.cambio}>
+                  {n.cambio === "nuevo" ? "+ " : "− "}
+                  {que} <code>{n.nombre}</code>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      ))}
+      <p className={estilos.modeloNota}>Del campo solo consta el tipo: tamaño y demás atributos, en el diff de abajo.</p>
     </div>
   );
 }

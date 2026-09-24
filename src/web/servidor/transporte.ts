@@ -11,6 +11,7 @@
  * actos ni la traza de emisión los tocan, y por eso `emitir` no registra ese mensaje: lo
  * guarda quien lo tiene en vuelo, que lo suelta en cuanto hay decisión.
  */
+import type { CambiosDeUnaColeccion } from "../../core/diffDeColecciones.js";
 import type { FotoDeColecciones } from "../../core/fotoDeColecciones.js";
 import type { InformeDeDispositivos, NombreDeHerramienta } from "../../core/dispositivos.js";
 import type { AjustesDeDispositivos } from "../../core/settings.js";
@@ -488,6 +489,12 @@ export type MensajeAlCliente =
       mezclados?: number;
     }
   | { clase: "parche"; ruta: string; texto: string; recortado: boolean }
+  /**
+   * Lo que cambió en el MODELO de un `.xne` de Revisión (`core/diffDeColecciones.ts`), entre el
+   * mismo «antes» que su parche y ahora. Sin `cambios` y con `error` si no se pudo
+   * reconstruir; `cambios` vacío es «ningún cambio que el modelo vea».
+   */
+  | { clase: "modeloDelCambio"; ruta: string; cambios?: CambiosDeUnaColeccion[]; error?: string }
   /**
    * El árbol del proyecto abierto (pestaña Ficheros): rutas relativas, ordenadas y ya
    * filtradas por la misma regla que ve el agente (`agent/grafo/arbolDeProyecto.ts`). `error`
@@ -1355,6 +1362,8 @@ export type MensajeDelCliente =
   | { clase: "cancelar" }
   /** Pide lo que la sesión abierta ha tocado, o el parche de un fichero concreto. */
   | { clase: "revision"; ruta?: string }
+  /** Pide el diff SEMÁNTICO de un `.xne` de Revisión. */
+  | { clase: "modeloDelCambio"; ruta: string }
   /** Pide el árbol del proyecto abierto, o el contenido de una ruta relativa a su raíz. */
   | { clase: "arbol" }
   /** Pide la foto del modelo XOne del proyecto abierto (pestaña Colecciones). */

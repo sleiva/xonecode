@@ -195,6 +195,10 @@ export function App({
   const pedirParche = useCallback(
     (ruta: string) => {
       void enviar({ clase: "revision", ruta });
+      // Y de un `.xne`, lo que cambió en su MODELO, que sale del mismo «antes» que el parche.
+      // Va con él y no aparte porque se piden en los mismos dos momentos: al desplegar y en el
+      // flanco de fin de turno, cuando el fichero puede haber vuelto a cambiar.
+      if (ruta.toLowerCase().endsWith(".xne")) void enviar({ clase: "modeloDelCambio", ruta });
     },
     [enviar]
   );
@@ -1399,6 +1403,7 @@ export function App({
           {...(estado.revision?.mezclados === undefined ? {} : { mezclados: estado.revision.mezclados })}
           ficheros={estado.revision?.lista ?? []}
           parches={estado.parches ?? {}}
+          modelosDelCambio={estado.modelosDelCambio ?? {}}
           desplegados={desplegados ?? new Set()}
           alDesplegar={desplegar}
           alPlegar={plegar}

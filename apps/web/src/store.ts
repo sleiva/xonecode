@@ -15,10 +15,12 @@
  * líneas —«→ lee src/app.xne» y luego «→ lee ×3 — …»— para una sola racha, que es
  * exactamente lo que la TUI ya evita en `cli/tui/store.ts` con la misma sustitución.
  */
+import { leerCambiosDelModelo } from "./cambiosDelModelo.js";
 import { leerFotoDeColecciones } from "./fotoDeColecciones.js";
 import type {
   Receta,
   FotoDeColecciones,
+  CambiosDeUnaColeccion,
   PasoDeReceta,
   Acto,
   MensajeAlCliente,
@@ -229,6 +231,11 @@ export interface EstadoDelCliente {
     mezclados?: number;
   };
   parches?: Record<string, { texto: string; recortado: boolean }>;
+  /**
+   * El diff SEMÁNTICO de cada `.xne` desplegado en Revisión, por ruta y ya validado
+   * (`cambiosDelModelo.ts`). Se tira con los parches: son la misma foto contada de otra forma.
+   */
+  modelosDelCambio?: Record<string, { cambios?: CambiosDeUnaColeccion[]; error?: string }>;
   /**
    * El árbol del proyecto abierto y los contenidos ya traídos, por ruta (pestaña Ficheros).
    * Son una FOTO del disco: se tiran con la sesión y sin cable, como los parches.
@@ -1360,6 +1367,22 @@ export function crearStoreDelCliente(): {
           });
           return;
         }
+        case "modeloDelCambio": {
+          const m = mensaje as { ruta?: unknown; cambios?: unknown; error?: unknown };
+          if (typeof m.ruta !== "string") return;
+          const cambios = leerCambiosDelModelo(m.cambios);
+          if (cambios === undefined && typeof m.error !== "string") return;
+          mutar({
+            modelosDelCambio: {
+              ...estado.modelosDelCambio,
+              [m.ruta]: {
+                ...(cambios === undefined ? {} : { cambios }),
+                ...(typeof m.error === "string" ? { error: m.error } : {}),
+              },
+            },
+          });
+          return;
+        }
         case "colecciones": {
           const m = mensaje as { foto?: unknown; error?: unknown };
           const foto = leerFotoDeColecciones(m.foto);
@@ -1744,7 +1767,7 @@ export function crearStoreDelCliente(): {
           const sesionDeAhora = typeof m.sesionActiva === "string" ? m.sesionActiva : undefined;
           const cambioDeSesion = sesionDeAhora !== estado.alta?.sesionActiva;
           mutar({
-            ...(cambioDeSesion ? { revision: undefined, parches: undefined, arbol: undefined, contenidos: undefined, colecciones: undefined, artefactos: undefined, sync: undefined } : {}),
+            ...(cambioDeSesion ? { revision: undefined, parches: undefined, modelosDelCambio: undefined, arbol: undefined, contenidos: undefined, colecciones: undefined, artefactos: undefined, sync: undefined } : {}),
             alta: {
               pasos: m.pasos as PasoDelWizard[],
               proveedores: m.proveedores,
@@ -1861,6 +1884,7 @@ export function crearStoreDelCliente(): {
         // vez al volver.
         revision: undefined,
         parches: undefined,
+        modelosDelCambio: undefined,
         arbol: undefined,
         contenidos: undefined,
         colecciones: undefined,

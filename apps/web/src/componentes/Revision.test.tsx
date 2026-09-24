@@ -360,3 +360,76 @@ describe("Revision: qué se AFIRMA según cómo se haya medido", () => {
     expect(screen.getByText("sin commitear")).toBeTruthy();
   });
 });
+
+describe("Revision: los cambios en el MODELO de un `.xne`", () => {
+  afterEach(cleanup);
+  const ficheros: FicheroTocado[] = [
+    { ruta: "Clientes.xne", clase: "modificado", mas: 2, menos: 1 },
+    { ruta: "estilos.css", clase: "modificado", mas: 1, menos: 0 },
+  ];
+  const abiertos: ReadonlySet<string> = new Set(["Clientes.xne", "estilos.css"]);
+  const parches = { "Clientes.xne": { texto: "@@ -1 +1 @@\n-a\n+b\n", recortado: false }, "estilos.css": { texto: "", recortado: false } };
+  const pinta = (modelos: Parameters<typeof Revision>[0]["modelosDelCambio"]) =>
+    render(
+      <Revision
+        via="git"
+        ficheros={ficheros}
+        parches={parches}
+        {...(modelos === undefined ? {} : { modelosDelCambio: modelos })}
+        desplegados={abiertos}
+        alDesplegar={NADA}
+        alPlegar={NADA}
+        alRecargar={NADA}
+      />
+    );
+
+  it("va ENCIMA del diff del `.xne`, con cada campo, referencia y evento, y solo en el `.xne`", () => {
+    pinta({
+      "Clientes.xne": {
+        cambios: [
+          {
+            nombre: "Clientes",
+            estado: "modificada",
+            campos: [
+              { cambio: "nuevo", nombre: "ALTA", ahora: "D" },
+              { cambio: "tipo", nombre: "ESTADO", antes: "T", ahora: "N" },
+              { cambio: "borrado", nombre: "VIEJO" },
+            ],
+            referencias: [{ cambio: "nuevo", desde: "Clientes.PROV", por: "mapcol", hacia: "Provincias" }],
+            eventos: [{ cambio: "borrado", nombre: "onload" }],
+            nodos: [],
+            conexiones: [],
+          },
+        ],
+      },
+    });
+    const bloque = screen.getByLabelText("Cambios en el modelo de Clientes.xne");
+    const lineas = [...bloque.querySelectorAll("li")].map((li) => [li.textContent, li.getAttribute("data-cambio")]);
+    expect(lineas).toEqual([
+      ["+ campo ALTA · D", "nuevo"],
+      ["~ campo ESTADO · T → N", "modificado"],
+      ["− campo VIEJO", "borrado"],
+      ["+ referencia Clientes.PROV mapcol → Provincias", "nuevo"],
+      ["− evento onload", "borrado"],
+    ]);
+    // Y lo que el modelo NO sabe se dice, para que el diff de texto siga siendo la medida.
+    expect(bloque.textContent).toContain("Del campo solo consta el tipo");
+    expect(screen.queryByLabelText("Cambios en el modelo de estilos.css")).toBeNull();
+  });
+
+  it("en camino, sin cambios o sin poder comparar: tres frases distintas", () => {
+    const { unmount } = pinta({});
+    expect(screen.getByText("Comparando el modelo de Clientes.xne…")).toBeTruthy();
+    unmount();
+    const segundo = pinta({ "Clientes.xne": { cambios: [] } });
+    expect(screen.getByText(/Sin cambios en el modelo/)).toBeTruthy();
+    segundo.unmount();
+    pinta({ "Clientes.xne": { error: "no hay con qué comparar" } });
+    expect(screen.getByText("No se pudo comparar el modelo: no hay con qué comparar.")).toBeTruthy();
+  });
+
+  it("sin la prop no se pinta nada nuevo: lo que había", () => {
+    pinta(undefined);
+    expect(screen.queryByText(/modelo/)).toBeNull();
+  });
+});

@@ -262,6 +262,20 @@ describe("store del cliente", () => {
     expect(s.leer().contenidos).toBeUndefined();
   });
 
+  it("«modeloDelCambio» se guarda por ruta y validado, y se tira al caerse el cable", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "modeloDelCambio", ruta: "Clientes.xne", cambios: [] });
+    s.aplicar({ clase: "modeloDelCambio", ruta: "Pedidos.xne", error: "no hay con qué comparar" });
+    // Ni lista ni error: no se guarda nada, que sería un «sin cambios» inventado.
+    s.aplicar({ clase: "modeloDelCambio", ruta: "Otro.xne", cambios: "x" } as never);
+    expect(s.leer().modelosDelCambio).toEqual({
+      "Clientes.xne": { cambios: [] },
+      "Pedidos.xne": { error: "no hay con qué comparar" },
+    });
+    s.marcarDesconectado();
+    expect(s.leer().modelosDelCambio).toBeUndefined();
+  });
+
   it("«colecciones» guarda la foto VALIDADA, y se tira al caerse el cable", () => {
     const s = crearStoreDelCliente();
     const foto = { colecciones: [], total: 0, entrada: [], login: [], rotas: [] };

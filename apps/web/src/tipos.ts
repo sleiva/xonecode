@@ -207,6 +207,17 @@ export interface ColeccionDeLaFoto {
   leApuntan: ReferenciaXone[];
 }
 
+/** Lo que cambió en el modelo de UNA colección (`core/diffDeColecciones.ts`). */
+export interface CambiosDeUnaColeccion {
+  nombre: string;
+  estado: "nueva" | "borrada" | "modificada";
+  campos: { cambio: "nuevo" | "borrado" | "tipo"; nombre: string; antes?: string; ahora?: string }[];
+  referencias: { cambio: "nuevo" | "borrado"; desde: string; por: string; hacia: string }[];
+  eventos: { cambio: "nuevo" | "borrado"; nombre: string }[];
+  nodos: { cambio: "nuevo" | "borrado"; nombre: string }[];
+  conexiones: { cambio: "nuevo" | "borrado"; nombre: string }[];
+}
+
 /** La foto del modelo XOne (`core/fotoDeColecciones.ts#FotoDeColecciones`). */
 export interface FotoDeColecciones {
   colecciones: ColeccionDeLaFoto[];
@@ -551,6 +562,8 @@ export type MensajeAlCliente =
       mezclados?: number;
     }
   | { clase: "parche"; ruta: string; texto: string; recortado: boolean }
+  /** El diff SEMÁNTICO de un `.xne` (`core/diffDeColecciones.ts`). Validado en el store. */
+  | { clase: "modeloDelCambio"; ruta: string; cambios?: CambiosDeUnaColeccion[]; error?: string }
   /** El árbol del proyecto abierto y el contenido de uno de sus ficheros (pestaña Ficheros). */
   | { clase: "arbol"; rutas: string[]; recortado: boolean; error?: string }
   /** El modelo XOne del proyecto abierto (pestaña Colecciones). Sin `foto` y con `error` si
@@ -1076,6 +1089,7 @@ export type MensajeDelCliente =
   | { clase: "cancelar" }
   /** Pide lo que la sesión abierta ha tocado, o el parche de un fichero concreto. */
   | { clase: "revision"; ruta?: string }
+  | { clase: "modeloDelCambio"; ruta: string }
   | { clase: "arbol" }
   | { clase: "colecciones" }
   | { clase: "fichero"; ruta: string }

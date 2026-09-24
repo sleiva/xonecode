@@ -493,6 +493,24 @@ export async function parcheDeSesion(
 }
 
 /**
+ * El «antes» de UN fichero en Revisión —el mismo extremo que su parche—, para quien quiera
+ * reconstruir ese estado (el diff semántico de colecciones, `modeloDelCambio.ts`). `undefined`
+ * = no hay «antes» que usar. Devuelve también si es el árbol VACÍO, que no hace falta sacar.
+ */
+export async function antesDelFichero(
+  raiz: string,
+  id: string,
+  ruta: string
+): Promise<{ ref: string; vacio: boolean } | undefined> {
+  try {
+    const extremos = await extremosDelParche(raiz, id, ruta);
+    return extremos === undefined ? undefined : { ref: extremos.antes, vacio: extremos.antes === ARBOL_VACIO };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Entre qué dos extremos se pide el parche de un fichero, y son los MISMOS que dan sus
  * cuentas en la lista — si no, una fila diría «+40» y su diff enseñaría otra cosa.
  *
