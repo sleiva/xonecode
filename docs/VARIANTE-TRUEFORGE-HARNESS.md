@@ -769,6 +769,30 @@ tests de comportamiento, no el coste.
 **De paso, un fallo de la estadística**: con una pasada por lado, `comparar()` declaraba «CONCLUYENTE»
 un 0 %, porque dos puntos distintos nunca se solapan. Ahora se niega con menos de dos pasadas.
 
+**Y con SEIS pasadas por celda** (`docs/bancos/2026-09-24-motores-6.json`, misma configuración):
+
+| pregunta | entrada DA → TF | efectivo DA → TF | llamadas | correctas |
+|---|---|---|---|---|
+| entrypoint | 9.904 → 6.791 (−31 %) | 1.450 → 1.071 (−26 %) | 2 → 1 | 6/6 → 6/6 |
+| estilo | 21.899 → 16.803 (−23 %) | 4.480 → 3.024 (−33 %) | 3 → 3 | 6/6 → 6/6 |
+| capacidad | 285.057 → 357.720 (+25 %) | 84.568 → 94.699 (+12 %) | 14 → 15 | 6/6 → 6/6 |
+| cambio | 38.803 → 29.788 (**−23 %, concluyente**) | 8.929 → 7.553 (−15 %) | 5 → 4 | 6/6 → 6/6 |
+| estilo-efectivo | 41.143 → 63.403 (+54 %) | 10.023 → 18.136 (+81 %) | 5 → 7 | 5/6 → 6/6 |
+| login | 91.733 → 36.140 (−61 %) | 21.015 → 8.364 (−60 %) | 9 → 5 | 6/6 → 6/6 |
+
+- **Una sola celda concluyente**, y a favor de TrueForge: `cambio` por entrada (−23 %, los rangos no se
+  tocan); por efectivo, la misma celda no concluye.
+- **El ruido manda sobre la dirección**: `capacidad` pasó de −35 % con tres pasadas a +25 % con seis, y
+  `estilo-efectivo` de −18 % a +54 %. Las diferencias que cambian de signo al repetir no son del motor.
+- **Calidad**: 35 de 36 en deepagents (una incorrecta en `estilo-efectivo`) y 36 de 36 en TrueForge.
+- **El camino, casi igual**: los dos delegan siempre en `capacidad`; en `login` deepagents delegó en 2
+  de 6 pasadas y TrueForge nunca, y esas dos son las que disparan su media (hasta 196.861 de entrada).
+
+**Conclusión del banco**: en solo lectura, los dos motores son EQUIVALENTES en coste —dentro del ruido,
+con una celda a favor de TrueForge— y TrueForge no es peor en calidad. El coste no decide el motor por
+omisión; lo decidirán otras cosas (la madurez de la librería, que es 0.x y sigue en rc, y lo que no
+mide el banco: los encargos que escriben).
+
 ### DeepSeek y la subida a 0.3 (24-09-2026)
 
 La duda: 0.3 saca `reasoning_content` del contexto del hilo, y DeepSeek documenta que con `tools` hay

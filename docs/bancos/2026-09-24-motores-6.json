@@ -1,0 +1,1158 @@
+{
+  "cuando": "2026-09-24T06:05:27.486Z",
+  "celdas": [
+    {
+      "modelo": "deepseek/deepseek-flash  (global)",
+      "pregunta": "entrypoint",
+      "validas": 6,
+      "errores": 0,
+      "correctas": 6,
+      "delegadas": 0,
+      "entrada": {
+        "media": 9904,
+        "min": 5878,
+        "max": 11953,
+        "dispersion": 0.6133885298869144
+      },
+      "salida": {
+        "media": 128.83333333333334,
+        "min": 49,
+        "max": 195,
+        "dispersion": 1.1332470892626132
+      },
+      "llamadas": {
+        "media": 1.6666666666666667,
+        "min": 1,
+        "max": 2,
+        "dispersion": 0.6
+      },
+      "ms": {
+        "media": 2169.1666666666665,
+        "min": 1220,
+        "max": 3060,
+        "dispersion": 0.8482520169035729
+      },
+      "efectivo": {
+        "media": 1450.3333333333333,
+        "min": 858,
+        "max": 1780,
+        "dispersion": 0.6357159273730177
+      },
+      "mide": "leer una declaración de app.xml",
+      "pasadas": [
+        {
+          "entrada": 11953,
+          "salida": 195,
+          "cache": 11520,
+          "llamadas": 2,
+          "ms": 3060,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 11906,
+          "salida": 142,
+          "cache": 11520,
+          "llamadas": 2,
+          "ms": 2337,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 5878,
+          "salida": 114,
+          "cache": 5632,
+          "llamadas": 1,
+          "ms": 1546,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 11914,
+          "salida": 143,
+          "cache": 11520,
+          "llamadas": 2,
+          "ms": 2270,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 5878,
+          "salida": 49,
+          "cache": 5632,
+          "llamadas": 1,
+          "ms": 1220,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 11895,
+          "salida": 130,
+          "cache": 11392,
+          "llamadas": 2,
+          "ms": 2582,
+          "correcta": true,
+          "delego": false
+        }
+      ],
+      "motor": "deepagents"
+    },
+    {
+      "modelo": "deepseek/deepseek-flash  (global)",
+      "pregunta": "estilo",
+      "validas": 6,
+      "errores": 0,
+      "correctas": 6,
+      "delegadas": 0,
+      "entrada": {
+        "media": 21898.5,
+        "min": 12026,
+        "max": 32760,
+        "dispersion": 0.9468228417471516
+      },
+      "salida": {
+        "media": 398.5,
+        "min": 225,
+        "max": 722,
+        "dispersion": 1.247176913425345
+      },
+      "llamadas": {
+        "media": 3.1666666666666665,
+        "min": 2,
+        "max": 4,
+        "dispersion": 0.6315789473684211
+      },
+      "ms": {
+        "media": 4282.333333333333,
+        "min": 1890,
+        "max": 6617,
+        "dispersion": 1.1038374717832957
+      },
+      "efectivo": {
+        "media": 4479.5,
+        "min": 1883,
+        "max": 8171,
+        "dispersion": 1.4037280946534212
+      },
+      "mide": "seguir una referencia entre ficheros",
+      "pasadas": [
+        {
+          "entrada": 31027,
+          "salida": 722,
+          "cache": 27008,
+          "llamadas": 4,
+          "ms": 6617,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 32760,
+          "salida": 525,
+          "cache": 27904,
+          "llamadas": 4,
+          "ms": 5291,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 19277,
+          "salida": 362,
+          "cache": 17408,
+          "llamadas": 3,
+          "ms": 4011,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 18240,
+          "salida": 303,
+          "cache": 17536,
+          "llamadas": 3,
+          "ms": 3821,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 18061,
+          "salida": 254,
+          "cache": 17408,
+          "llamadas": 3,
+          "ms": 4064,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 12026,
+          "salida": 225,
+          "cache": 11520,
+          "llamadas": 2,
+          "ms": 1890,
+          "correcta": true,
+          "delego": false
+        }
+      ],
+      "motor": "deepagents"
+    },
+    {
+      "modelo": "deepseek/deepseek-flash  (global)",
+      "pregunta": "capacidad",
+      "validas": 6,
+      "errores": 0,
+      "correctas": 6,
+      "delegadas": 6,
+      "entrada": {
+        "media": 285057,
+        "min": 154085,
+        "max": 398310,
+        "dispersion": 0.8567584728668302
+      },
+      "salida": {
+        "media": 19773.333333333332,
+        "min": 15134,
+        "max": 26111,
+        "dispersion": 0.5551416048550236
+      },
+      "llamadas": {
+        "media": 13.666666666666666,
+        "min": 10,
+        "max": 18,
+        "dispersion": 0.5853658536585367
+      },
+      "ms": {
+        "media": 111002,
+        "min": 76947,
+        "max": 175784,
+        "dispersion": 0.8904073800472063
+      },
+      "efectivo": {
+        "media": 84568,
+        "min": 52291,
+        "max": 115433,
+        "dispersion": 0.7466417557468547
+      },
+      "mide": "criterio sobre la plataforma, no lectura del proyecto",
+      "pasadas": [
+        {
+          "entrada": 308023,
+          "salida": 21652,
+          "cache": 269824,
+          "llamadas": 14,
+          "ms": 107166,
+          "correcta": true,
+          "delego": true
+        },
+        {
+          "entrada": 266620,
+          "salida": 20322,
+          "cache": 229376,
+          "llamadas": 12,
+          "ms": 100825,
+          "correcta": true,
+          "delego": true
+        },
+        {
+          "entrada": 214046,
+          "salida": 17447,
+          "cache": 186240,
+          "llamadas": 12,
+          "ms": 90127,
+          "correcta": true,
+          "delego": true
+        },
+        {
+          "entrada": 154085,
+          "salida": 15134,
+          "cache": 129920,
+          "llamadas": 10,
+          "ms": 76947,
+          "correcta": true,
+          "delego": true
+        },
+        {
+          "entrada": 398310,
+          "salida": 17974,
+          "cache": 342016,
+          "llamadas": 18,
+          "ms": 115163,
+          "correcta": true,
+          "delego": true
+        },
+        {
+          "entrada": 369258,
+          "salida": 26111,
+          "cache": 311040,
+          "llamadas": 16,
+          "ms": 175784,
+          "correcta": true,
+          "delego": true
+        }
+      ],
+      "motor": "deepagents"
+    },
+    {
+      "modelo": "deepseek/deepseek-flash  (global)",
+      "pregunta": "cambio",
+      "validas": 6,
+      "errores": 0,
+      "correctas": 6,
+      "delegadas": 0,
+      "entrada": {
+        "media": 38803.166666666664,
+        "min": 32452,
+        "max": 43648,
+        "dispersion": 0.2885331523629944
+      },
+      "salida": {
+        "media": 1460.5,
+        "min": 1235,
+        "max": 1758,
+        "dispersion": 0.35809654228004106
+      },
+      "llamadas": {
+        "media": 4.666666666666667,
+        "min": 4,
+        "max": 5,
+        "dispersion": 0.21428571428571427
+      },
+      "ms": {
+        "media": 9809.833333333334,
+        "min": 8265,
+        "max": 11883,
+        "dispersion": 0.3688136053959462
+      },
+      "efectivo": {
+        "media": 8929.333333333334,
+        "min": 7367,
+        "max": 10273,
+        "dispersion": 0.32544422875914586
+      },
+      "mide": "preparar un CAMBIO: dos ficheros y el ayudante que YA existe",
+      "pasadas": [
+        {
+          "entrada": 32452,
+          "salida": 1411,
+          "cache": 29440,
+          "llamadas": 4,
+          "ms": 8916,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 42081,
+          "salida": 1758,
+          "cache": 37888,
+          "llamadas": 5,
+          "ms": 11883,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 35173,
+          "salida": 1317,
+          "cache": 29312,
+          "llamadas": 4,
+          "ms": 8265,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 38145,
+          "salida": 1396,
+          "cache": 35328,
+          "llamadas": 5,
+          "ms": 9839,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 43648,
+          "salida": 1646,
+          "cache": 38912,
+          "llamadas": 5,
+          "ms": 10438,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 41320,
+          "salida": 1235,
+          "cache": 38016,
+          "llamadas": 5,
+          "ms": 9518,
+          "correcta": true,
+          "delego": false
+        }
+      ],
+      "motor": "deepagents"
+    },
+    {
+      "modelo": "deepseek/deepseek-flash  (global)",
+      "pregunta": "estilo-efectivo",
+      "validas": 6,
+      "errores": 0,
+      "correctas": 5,
+      "delegadas": 0,
+      "entrada": {
+        "media": 41142.666666666664,
+        "min": 26506,
+        "max": 56669,
+        "dispersion": 0.7331318663512332
+      },
+      "salida": {
+        "media": 3478.6666666666665,
+        "min": 1065,
+        "max": 5983,
+        "dispersion": 1.4137600613261787
+      },
+      "llamadas": {
+        "media": 5.333333333333333,
+        "min": 4,
+        "max": 7,
+        "dispersion": 0.5625
+      },
+      "ms": {
+        "media": 19863.166666666668,
+        "min": 7906,
+        "max": 32784,
+        "dispersion": 1.2524689752389262
+      },
+      "efectivo": {
+        "media": 10023,
+        "min": 5222,
+        "max": 14383,
+        "dispersion": 0.9139978050483887
+      },
+      "mide": "resolver la CASCADA de estilos: qué le toca de verdad a un control",
+      "pasadas": [
+        {
+          "entrada": 45812,
+          "salida": 3196,
+          "cache": 42368,
+          "llamadas": 6,
+          "ms": 18470,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 26506,
+          "salida": 1065,
+          "cache": 24832,
+          "llamadas": 4,
+          "ms": 7906,
+          "correcta": false,
+          "delego": false,
+          "respuesta": "Voy a mirar el control y resolver la cascada de estilos.\n⚙ xone_navegacion detalle\n⚙ xone_navegacion ×2 — detalle, estilos\n→ lista /\n→ lee /MenuPrincipal.xne\n→ lee ×2 — /MenuPrincipal.xne, /default.css"
+        },
+        {
+          "entrada": 38755,
+          "salida": 3479,
+          "cache": 35840,
+          "llamadas": 5,
+          "ms": 19912,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 51633,
+          "salida": 4124,
+          "cache": 48128,
+          "llamadas": 6,
+          "ms": 24601,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 56669,
+          "salida": 5983,
+          "cache": 53632,
+          "llamadas": 7,
+          "ms": 32784,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 27481,
+          "salida": 3025,
+          "cache": 25856,
+          "llamadas": 4,
+          "ms": 15506,
+          "correcta": true,
+          "delego": false
+        }
+      ],
+      "motor": "deepagents"
+    },
+    {
+      "modelo": "deepseek/deepseek-flash  (global)",
+      "pregunta": "login",
+      "validas": 6,
+      "errores": 0,
+      "correctas": 6,
+      "delegadas": 2,
+      "entrada": {
+        "media": 91732.66666666667,
+        "min": 31863,
+        "max": 196861,
+        "dispersion": 1.798683129964607
+      },
+      "salida": {
+        "media": 4200.5,
+        "min": 950,
+        "max": 10800,
+        "dispersion": 2.3449589334603025
+      },
+      "llamadas": {
+        "media": 8.833333333333334,
+        "min": 5,
+        "max": 16,
+        "dispersion": 1.2452830188679245
+      },
+      "ms": {
+        "media": 25162.666666666668,
+        "min": 8996,
+        "max": 56887,
+        "dispersion": 1.9032561466723188
+      },
+      "efectivo": {
+        "media": 21014.666666666668,
+        "min": 5165,
+        "max": 50953,
+        "dispersion": 2.178859209441025
+      },
+      "mide": "distinguir dos conceptos parecidos",
+      "pasadas": [
+        {
+          "entrada": 34000,
+          "salida": 1539,
+          "cache": 32000,
+          "llamadas": 5,
+          "ms": 10681,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 195558,
+          "salida": 10800,
+          "cache": 172672,
+          "llamadas": 14,
+          "ms": 56887,
+          "correcta": true,
+          "delego": true
+        },
+        {
+          "entrada": 47908,
+          "salida": 1296,
+          "cache": 45824,
+          "llamadas": 7,
+          "ms": 11264,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 196861,
+          "salida": 8670,
+          "cache": 177792,
+          "llamadas": 16,
+          "ms": 50053,
+          "correcta": true,
+          "delego": true
+        },
+        {
+          "entrada": 31863,
+          "salida": 950,
+          "cache": 30720,
+          "llamadas": 5,
+          "ms": 8996,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 44206,
+          "salida": 1948,
+          "cache": 40448,
+          "llamadas": 6,
+          "ms": 13095,
+          "correcta": true,
+          "delego": false
+        }
+      ],
+      "motor": "deepagents"
+    },
+    {
+      "modelo": "deepseek/deepseek-flash  (global)",
+      "pregunta": "entrypoint",
+      "validas": 6,
+      "errores": 0,
+      "correctas": 6,
+      "delegadas": 0,
+      "entrada": {
+        "media": 6790.666666666667,
+        "min": 5044,
+        "max": 10288,
+        "dispersion": 0.7722364029059493
+      },
+      "salida": {
+        "media": 156,
+        "min": 47,
+        "max": 222,
+        "dispersion": 1.1217948717948718
+      },
+      "llamadas": {
+        "media": 1.3333333333333333,
+        "min": 1,
+        "max": 2,
+        "dispersion": 0.75
+      },
+      "ms": {
+        "media": 1806.1666666666667,
+        "min": 968,
+        "max": 2831,
+        "dispersion": 1.0314662729537694
+      },
+      "efectivo": {
+        "media": 1071.3333333333333,
+        "min": 713,
+        "max": 1611,
+        "dispersion": 0.8382078406969509
+      },
+      "mide": "leer una declaración de app.xml",
+      "pasadas": [
+        {
+          "entrada": 5044,
+          "salida": 142,
+          "cache": 4864,
+          "llamadas": 1,
+          "ms": 1413,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 5044,
+          "salida": 133,
+          "cache": 4864,
+          "llamadas": 1,
+          "ms": 1474,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 10288,
+          "salida": 193,
+          "cache": 9856,
+          "llamadas": 2,
+          "ms": 2332,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 10280,
+          "salida": 199,
+          "cache": 9856,
+          "llamadas": 2,
+          "ms": 2831,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 5044,
+          "salida": 222,
+          "cache": 4864,
+          "llamadas": 1,
+          "ms": 1819,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 5044,
+          "salida": 47,
+          "cache": 4864,
+          "llamadas": 1,
+          "ms": 968,
+          "correcta": true,
+          "delego": false
+        }
+      ],
+      "motor": "trueforge"
+    },
+    {
+      "modelo": "deepseek/deepseek-flash  (global)",
+      "pregunta": "estilo",
+      "validas": 6,
+      "errores": 0,
+      "correctas": 6,
+      "delegadas": 0,
+      "entrada": {
+        "media": 16802.5,
+        "min": 10333,
+        "max": 21692,
+        "dispersion": 0.6760303526260973
+      },
+      "salida": {
+        "media": 314.1666666666667,
+        "min": 210,
+        "max": 575,
+        "dispersion": 1.1618037135278514
+      },
+      "llamadas": {
+        "media": 3,
+        "min": 2,
+        "max": 4,
+        "dispersion": 0.6666666666666666
+      },
+      "ms": {
+        "media": 3901,
+        "min": 2685,
+        "max": 4876,
+        "dispersion": 0.5616508587541656
+      },
+      "efectivo": {
+        "media": 3023.5,
+        "min": 1557,
+        "max": 5793,
+        "dispersion": 1.4010253018025467
+      },
+      "mide": "seguir una referencia entre ficheros",
+      "pasadas": [
+        {
+          "entrada": 15900,
+          "salida": 283,
+          "cache": 15104,
+          "llamadas": 3,
+          "ms": 3499,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 15994,
+          "salida": 303,
+          "cache": 15232,
+          "llamadas": 3,
+          "ms": 3799,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 10333,
+          "salida": 210,
+          "cache": 9984,
+          "llamadas": 2,
+          "ms": 2685,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 21692,
+          "salida": 575,
+          "cache": 18304,
+          "llamadas": 3,
+          "ms": 4738,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 15852,
+          "salida": 234,
+          "cache": 15104,
+          "llamadas": 3,
+          "ms": 3809,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 21044,
+          "salida": 280,
+          "cache": 20224,
+          "llamadas": 4,
+          "ms": 4876,
+          "correcta": true,
+          "delego": false
+        }
+      ],
+      "motor": "trueforge"
+    },
+    {
+      "modelo": "deepseek/deepseek-flash  (global)",
+      "pregunta": "capacidad",
+      "validas": 6,
+      "errores": 0,
+      "correctas": 6,
+      "delegadas": 6,
+      "entrada": {
+        "media": 357720.3333333333,
+        "min": 183648,
+        "max": 436174,
+        "dispersion": 0.7059313560593425
+      },
+      "salida": {
+        "media": 18622.833333333332,
+        "min": 16221,
+        "max": 20887,
+        "dispersion": 0.25055263699580266
+      },
+      "llamadas": {
+        "media": 14.833333333333334,
+        "min": 10,
+        "max": 19,
+        "dispersion": 0.6067415730337078
+      },
+      "ms": {
+        "media": 92797.66666666667,
+        "min": 80444,
+        "max": 104218,
+        "dispersion": 0.2561917864314117
+      },
+      "efectivo": {
+        "media": 94698.5,
+        "min": 66583,
+        "max": 106995,
+        "dispersion": 0.4267438238198071
+      },
+      "mide": "criterio sobre la plataforma, no lectura del proyecto",
+      "pasadas": [
+        {
+          "entrada": 323712,
+          "salida": 18362,
+          "cache": 274816,
+          "llamadas": 15,
+          "ms": 89477,
+          "correcta": true,
+          "delego": true
+        },
+        {
+          "entrada": 352105,
+          "salida": 20887,
+          "cache": 295552,
+          "llamadas": 14,
+          "ms": 100425,
+          "correcta": true,
+          "delego": true
+        },
+        {
+          "entrada": 434807,
+          "salida": 20398,
+          "cache": 394752,
+          "llamadas": 19,
+          "ms": 104218,
+          "correcta": true,
+          "delego": true
+        },
+        {
+          "entrada": 415876,
+          "salida": 17846,
+          "cache": 373376,
+          "llamadas": 15,
+          "ms": 87601,
+          "correcta": true,
+          "delego": true
+        },
+        {
+          "entrada": 436174,
+          "salida": 18023,
+          "cache": 391040,
+          "llamadas": 16,
+          "ms": 94621,
+          "correcta": true,
+          "delego": true
+        },
+        {
+          "entrada": 183648,
+          "salida": 16221,
+          "cache": 148096,
+          "llamadas": 10,
+          "ms": 80444,
+          "correcta": true,
+          "delego": true
+        }
+      ],
+      "motor": "trueforge"
+    },
+    {
+      "modelo": "deepseek/deepseek-flash  (global)",
+      "pregunta": "cambio",
+      "validas": 6,
+      "errores": 0,
+      "correctas": 6,
+      "delegadas": 0,
+      "entrada": {
+        "media": 29787.833333333332,
+        "min": 27637,
+        "max": 32185,
+        "dispersion": 0.1526797853709848
+      },
+      "salida": {
+        "media": 1016.6666666666666,
+        "min": 851,
+        "max": 1299,
+        "dispersion": 0.44065573770491806
+      },
+      "llamadas": {
+        "media": 4.166666666666667,
+        "min": 4,
+        "max": 5,
+        "dispersion": 0.24
+      },
+      "ms": {
+        "media": 7875,
+        "min": 6394,
+        "max": 10146,
+        "dispersion": 0.47644444444444445
+      },
+      "efectivo": {
+        "media": 7553.333333333333,
+        "min": 7449,
+        "max": 7683,
+        "dispersion": 0.030979699911738746
+      },
+      "mide": "preparar un CAMBIO: dos ficheros y el ayudante que YA existe",
+      "pasadas": [
+        {
+          "entrada": 32185,
+          "salida": 1299,
+          "cache": 28928,
+          "llamadas": 5,
+          "ms": 10146,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 27637,
+          "salida": 966,
+          "cache": 23424,
+          "llamadas": 4,
+          "ms": 7443,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 30367,
+          "salida": 921,
+          "cache": 26368,
+          "llamadas": 4,
+          "ms": 7548,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 27941,
+          "salida": 1124,
+          "cache": 23808,
+          "llamadas": 4,
+          "ms": 8040,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 30007,
+          "salida": 851,
+          "cache": 25984,
+          "llamadas": 4,
+          "ms": 6394,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 30590,
+          "salida": 939,
+          "cache": 26496,
+          "llamadas": 4,
+          "ms": 7679,
+          "correcta": true,
+          "delego": false
+        }
+      ],
+      "motor": "trueforge"
+    },
+    {
+      "modelo": "deepseek/deepseek-flash  (global)",
+      "pregunta": "estilo-efectivo",
+      "validas": 6,
+      "errores": 0,
+      "correctas": 6,
+      "delegadas": 0,
+      "entrada": {
+        "media": 63402.5,
+        "min": 53483,
+        "max": 102211,
+        "dispersion": 0.7685501360356453
+      },
+      "salida": {
+        "media": 4442.666666666667,
+        "min": 3013,
+        "max": 5333,
+        "dispersion": 0.5222088835534213
+      },
+      "llamadas": {
+        "media": 6.666666666666667,
+        "min": 5,
+        "max": 9,
+        "dispersion": 0.6
+      },
+      "ms": {
+        "media": 25148.5,
+        "min": 18860,
+        "max": 31103,
+        "dispersion": 0.4868282402528978
+      },
+      "efectivo": {
+        "media": 18136.333333333332,
+        "min": 11690,
+        "max": 26558,
+        "dispersion": 0.819790843426639
+      },
+      "mide": "resolver la CASCADA de estilos: qué le toca de verdad a un control",
+      "pasadas": [
+        {
+          "entrada": 53835,
+          "salida": 3013,
+          "cache": 50176,
+          "llamadas": 7,
+          "ms": 18860,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 53483,
+          "salida": 4279,
+          "cache": 49792,
+          "llamadas": 7,
+          "ms": 23684,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 102211,
+          "salida": 5333,
+          "cache": 89984,
+          "llamadas": 9,
+          "ms": 31103,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 53497,
+          "salida": 4601,
+          "cache": 42368,
+          "llamadas": 5,
+          "ms": 25007,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 59597,
+          "salida": 4692,
+          "cache": 54272,
+          "llamadas": 7,
+          "ms": 26575,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 57792,
+          "salida": 4738,
+          "cache": 44800,
+          "llamadas": 5,
+          "ms": 25662,
+          "correcta": true,
+          "delego": false
+        }
+      ],
+      "motor": "trueforge"
+    },
+    {
+      "modelo": "deepseek/deepseek-flash  (global)",
+      "pregunta": "login",
+      "validas": 6,
+      "errores": 0,
+      "correctas": 6,
+      "delegadas": 0,
+      "entrada": {
+        "media": 36140.166666666664,
+        "min": 22172,
+        "max": 66063,
+        "dispersion": 1.2144658989766697
+      },
+      "salida": {
+        "media": 1042.6666666666667,
+        "min": 659,
+        "max": 1758,
+        "dispersion": 1.0540281329923273
+      },
+      "llamadas": {
+        "media": 5,
+        "min": 4,
+        "max": 6,
+        "dispersion": 0.4
+      },
+      "ms": {
+        "media": 9346.333333333334,
+        "min": 6274,
+        "max": 13834,
+        "dispersion": 0.8088733549698633
+      },
+      "efectivo": {
+        "media": 8363.666666666666,
+        "min": 3823,
+        "max": 18887,
+        "dispersion": 1.8011239089713444
+      },
+      "mide": "distinguir dos conceptos parecidos",
+      "pasadas": [
+        {
+          "entrada": 22180,
+          "salida": 681,
+          "cache": 21120,
+          "llamadas": 4,
+          "ms": 6274,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 28026,
+          "salida": 787,
+          "cache": 26880,
+          "llamadas": 5,
+          "ms": 7866,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 33597,
+          "salida": 933,
+          "cache": 30848,
+          "llamadas": 5,
+          "ms": 9008,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 44803,
+          "salida": 1758,
+          "cache": 38144,
+          "llamadas": 6,
+          "ms": 13834,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 66063,
+          "salida": 1438,
+          "cache": 54016,
+          "llamadas": 6,
+          "ms": 12592,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 22172,
+          "salida": 659,
+          "cache": 21120,
+          "llamadas": 4,
+          "ms": 6504,
+          "correcta": true,
+          "delego": false
+        }
+      ],
+      "motor": "trueforge"
+    }
+  ]
+}
