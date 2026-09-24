@@ -31,7 +31,7 @@ export interface ConfigDeFichero {
   /** Cómo se abrió este proyecto. Las credenciales nunca se guardan aquí. */
   modo?: "offline" | "cloud";
   modelo?: string;
-  /** El motor de agente de las sesiones NUEVAS (`core/motor.ts`). Ausente = deepagents. */
+  /** El motor de agente de las sesiones NUEVAS (`core/motor.ts`). Ausente = `MOTOR_POR_OMISION`. */
   motor?: MotorDeAgente;
   modelos?: Partial<Record<Papel, string>>;
   /** Tema visual de la consola, persistido solo cuando pertenece al proyecto. */

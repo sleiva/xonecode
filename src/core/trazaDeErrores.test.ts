@@ -41,6 +41,26 @@ describe("mensajeSeguro", () => {
     expect(mensajeSeguro("falló en /home/ana/z")).not.toContain("/home/");
   });
 
+  /** XOneCode corre también en Windows, y ahí la ruta de la máquina tiene otra forma. */
+  it("también las rutas de WINDOWS: con unidad, con barras de los dos tipos, entre comillas y UNC", () => {
+    const casos = [
+      "spawn C:\\Users\\sergio\\.local\\bin\\codex.exe ENOENT",
+      "no se pudo abrir 'D:\\Proyectos\\app\\secreto.txt'",
+      "falló en C:/Users/sergio/AppData/Roaming/x.json",
+      "red: \\\\servidor\\compartido\\sergio\\clave.txt",
+    ];
+    for (const c of casos) {
+      const m = mensajeSeguro(c);
+      expect(m, c).not.toContain("sergio");
+      expect(m, c).not.toContain("Proyectos");
+      expect(m, c).toContain("<ruta>");
+    }
+    // Lo que queda sigue diciendo qué pasó.
+    expect(mensajeSeguro(casos[0]!)).toBe("spawn <ruta> ENOENT");
+    // Y lo que NO es una ruta, se queda: una URL lleva «s://» y no es una unidad.
+    expect(mensajeSeguro("fetch https://api.deepseek.com/v1 falló")).toBe("fetch https://api.deepseek.com/v1 falló");
+  });
+
   /** Una ruta VIRTUAL no es de la máquina y no estorba: es lo que identifica el sitio. */
   it("no toca las rutas virtuales del agente", () => {
     expect(mensajeSeguro("no pude abrir /EspecialCalculadora.xne")).toContain("/EspecialCalculadora.xne");

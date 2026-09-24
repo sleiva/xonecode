@@ -245,7 +245,7 @@ export async function abrirSesionReal(opciones: {
   navegacion?: CargarIndice;
   /**
    * El motor de agente (`core/motor.ts`). Ausente = el de la configuración: `XONECODE_MOTOR`, el
-   * `config.json` del proyecto o el global, y si no, deepagents. La web lo pasa con el motor con
+   * `config.json` del proyecto o el global, y si no, `MOTOR_POR_OMISION`. La web lo pasa con el motor con
    * el que NACIÓ la sesión; el terminal, `run`, el banco y los evals lo dejan a la configuración.
    */
   motor?: MotorDeAgente;

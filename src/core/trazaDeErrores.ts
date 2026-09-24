@@ -61,9 +61,17 @@ export interface ErrorAnotado {
  * such file or directory, open '<ruta>'»— sigue diciendo qué pasó.
  */
 export function mensajeSeguro(mensaje: string): string {
-  return mensaje
-    .replace(/(['"`])\/(?:[^'"`\s]|\\ )*\1/g, "$1<ruta>$1")
-    .replace(/(?<![\w'"`/])\/(?:Users|home|private|Volumes|tmp|var|opt)\/[^\s'"`,;)]*/g, "<ruta>");
+  return (
+    mensaje
+      // Unix: entre comillas cualquier ruta absoluta; suelta, las de las raíces de usuario y temporales.
+      .replace(/(['"`])\/(?:[^'"`\s]|\\ )*\1/g, "$1<ruta>$1")
+      .replace(/(?<![\w'"`/])\/(?:Users|home|private|Volumes|tmp|var|opt)\/[^\s'"`,;)]*/g, "<ruta>")
+      // Windows —XOneCode corre también ahí—: con unidad (`C:\…` o `C:/…`) o de red (`\\servidor\…`),
+      // entre comillas o sueltas. La unidad exige no ir pegada a una letra: `https://` no es una ruta.
+      .replace(/(['"`])(?:[A-Za-z]:[\\/]|\\\\)[^'"`]*\1/g, "$1<ruta>$1")
+      .replace(/(?<![\w])[A-Za-z]:[\\/][^\s'"`,;)]*/g, "<ruta>")
+      .replace(/(?<![\w\\])\\\\[^\s\\'"`]+\\[^\s'"`,;)]*/g, "<ruta>")
+  );
 }
 
 /** De un error, lo que se puede contar. */

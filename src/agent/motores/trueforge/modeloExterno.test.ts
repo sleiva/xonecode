@@ -9,6 +9,12 @@ describe("el fallo de un motor externo, tal como lo lee el orquestador", () => {
     expect(texto).toContain("no se pudo lanzar codex: spawn <ruta> ENOENT");
   });
 
+  it("tampoco la de WINDOWS", () => {
+    const texto = textoDeFalloExterno("codex", new Error("no se pudo lanzar codex: spawn C:\\Users\\sergio\\.local\\bin\\codex.exe ENOENT"));
+    expect(texto).not.toContain("sergio");
+    expect(texto).toContain("spawn <ruta> ENOENT");
+  });
+
   it("también cuando no es un `Error`", () => {
     expect(textoDeFalloExterno("opencode", "falló en '/private/tmp/x/opencode.json'")).not.toContain("/private/tmp");
   });

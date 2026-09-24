@@ -4,7 +4,7 @@
  * Sin librería de argumentos a propósito: hoy hay un comando y una bandera, y una
  * dependencia más es una dependencia más que fijar y vigilar. Cuando haya cinco, se mete.
  */
-import { esMotor, MOTORES, type MotorDeAgente } from "../core/motor.js";
+import { esMotor, MOTOR_POR_OMISION, MOTORES, type MotorDeAgente } from "../core/motor.js";
 import { crearRegistroDeFallos } from "../agent/turno/registroDeFallos.js";
 import * as readline from "node:readline";
 import { randomUUID } from "node:crypto";
@@ -183,7 +183,7 @@ const AYUDA = `XOneCode — harness de XOne
   xonecode --no-abrir            la web, pero sin abrir el navegador (imprime la URL)
   xonecode --puerto <n>          la web en otro puerto (por omisión 4173)
   xonecode --anfitrion <host>    acepta ese Host además del loopback, para un túnel
-  xonecode --motor <m>           con ese motor de agente: deepagents (omisión) o trueforge
+  xonecode --motor <m>           con ese motor de agente: ${MOTORES.map((m) => (m === MOTOR_POR_OMISION ? `${m} (omisión)` : m)).join(" o ")}
   xonecode --cli                 la consola de terminal (TUI)
   xonecode --cli --no-tui        consola clásica (stdio)
   xonecode run "<peticion>"      un turno, de un disparo (pipeable)

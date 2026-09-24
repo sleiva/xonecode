@@ -1,3 +1,4 @@
+import { MOTOR_POR_OMISION } from "../core/motor.js";
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -175,6 +176,10 @@ describe("main — la consola no se come los subcomandos", () => {
       expect(codigo).toBe(0);
       expect(texto).toContain("xonecode run");
       expect(texto).not.toContain("XOneCode · ");
+      // La omisión que ANUNCIA es la que corre: se genera de `MOTOR_POR_OMISION`, no se escribe a
+      // mano. Escrita a mano, siguió diciendo «deepagents (omisión)» cuando ya era TrueForge.
+      expect(texto).toContain(`${MOTOR_POR_OMISION} (omisión)`);
+      expect(texto).toContain("trueforge (omisión)");
     } finally {
       espia.mockRestore();
     }
