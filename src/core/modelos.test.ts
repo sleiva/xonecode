@@ -141,6 +141,14 @@ describe("los proveedores compatibles con OpenAI", () => {
     expect(parsear("xai/grok-4").proveedor).toBe("xai");
   });
 
+  it("OpenCode Go y Zen se parsean como dos proveedores distintos", () => {
+    expect(parsear("opencode-go/deepseek-v4.1-flash")).toEqual({
+      proveedor: "opencode-go",
+      modelo: "deepseek-v4.1-flash",
+    });
+    expect(parsear("opencode-zen/glm-5.1")).toEqual({ proveedor: "opencode-zen", modelo: "glm-5.1" });
+  });
+
   it("cada uno tiene URL base y variable, y `compatibleConOpenAi` no reconoce a los demás", () => {
     for (const [proveedor, fila] of Object.entries(COMPATIBLES_OPENAI)) {
       expect(PROVEEDORES).toContain(proveedor);

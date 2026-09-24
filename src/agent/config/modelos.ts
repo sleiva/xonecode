@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { ChatOpenAI } from "@langchain/openai";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatOllama } from "@langchain/ollama";
@@ -143,6 +144,13 @@ export class Modelos implements ModelosPort {
  * `modelKwargs` es la puerta que sí llega: el cliente lo vuelca tal cual en el cuerpo.
  * Comprobado en la prueba de costura, que es lo único que puede sostener esta afirmación.
  */
+/**
+ * El `User-Agent` que llevan las peticiones a OpenCode (Go y Zen). Su documentación exige uno
+ * propio — sin él, el servidor contesta 400. No es una tabla porque hoy solo lo pide un
+ * proveedor: el día que otro lo exija, esto se convierte en una fila más.
+ */
+const AGENTE_DE_USUARIO_OPENCODE = "xonecode/1.0";
+
 function construirCompatibleOpenAi(
   proveedor: Proveedor,
   modelo: string,
@@ -191,12 +199,30 @@ function construirCompatibleOpenAi(
     ...(esfuerzo === undefined ? {} : { reasoning_effort: esfuerzo }),
     ...(userId === undefined ? {} : { user_id: userId }),
   };
+  /**
+   * **OpenCode (Go y Zen) exige un `User-Agent` propio y un `x-opencode-session` estable**,
+   * o el servidor contesta 400. El id se genera UNA vez, al construir el cliente — no en
+   * cada llamada —, así que vale como «id estable durante la conversación»: este cliente se
+   * reconstruye al abrir la sesión y en `/modelo` (`turnoReal.ts#construir`), que es
+   * exactamente el ciclo de vida al que la documentación de OpenCode ata la sesión. Solo
+   * estos dos proveedores: mandarle esta cabecera a otro compatible sería un campo que no
+   * pidió y que no hace nada.
+   */
+  const esOpenCode = proveedor === "opencode-go" || proveedor === "opencode-zen";
   return new ChatOpenAI({
     model: modelo, apiKey,
     configuration: {
       baseURL: baseUrl,
       ...(proveedor === "deepseek"
         ? { fetch: fetchConEcoDeRazonamiento(crearMemoriaDeEco()) }
+        : {}),
+      ...(esOpenCode
+        ? {
+            defaultHeaders: {
+              "User-Agent": AGENTE_DE_USUARIO_OPENCODE,
+              "x-opencode-session": randomUUID(),
+            },
+          }
         : {}),
     },
     ...(Object.keys(kwargs).length === 0 ? {} : { modelKwargs: kwargs }),
@@ -243,6 +269,8 @@ function construirModelo(
       case "groq":
       case "xai":
       case "deepseek":
+      case "opencode-go":
+      case "opencode-zen":
         // Enumerados uno a uno, y no un `default`, para que el switch siga siendo
         // exhaustivo: el día que se añada un proveedor, esto tiene que dar un error de
         // compilación y no construir un cliente equivocado en silencio.

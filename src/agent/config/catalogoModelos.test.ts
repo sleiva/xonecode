@@ -349,6 +349,42 @@ describe("los compatibles con OpenAI (NVIDIA, Groq, xAI)", () => {
   });
 });
 
+describe("OpenCode Go y Zen", () => {
+  // Su catálogo real (comprobado en vivo) no manda `context_window` ni ningún campo que
+  // distinga el endpoint: solo `id`, `object`, `created`, `owned_by`. Por eso `contexto` no
+  // sale en ninguna fila, y la lista no se filtra por familia — la misma decisión que ya
+  // documenta `listarCompatible`.
+  it("Go se pide a su URL, sin contexto y sin filtrar por familia", async () => {
+    vi.stubEnv("OPENCODE_GO_API_KEY", "oc-go-prueba");
+    const doble = responderJson({ object: "list", data: [
+      { id: "deepseek-v4.1-flash", object: "model", created: 1790262855, owned_by: "opencode" },
+      { id: "minimax-m3", object: "model", created: 1790262855, owned_by: "opencode" },
+    ] });
+
+    await expect(new CatalogoModelos(doble.fetch).listar("opencode-go")).resolves.toEqual([
+      { proveedor: "opencode-go", id: "deepseek-v4.1-flash" },
+      { proveedor: "opencode-go", id: "minimax-m3" },
+    ]);
+    expect(doble.llamadas).toEqual([{
+      url: "https://opencode.ai/zen/go/v1/models",
+      init: { headers: { authorization: "Bearer oc-go-prueba" }, signal: expect.any(AbortSignal) },
+    }]);
+  });
+
+  it("Zen usa SU URL y SU clave, independiente de la de Go", async () => {
+    vi.stubEnv("OPENCODE_ZEN_API_KEY", "oc-zen-prueba");
+    const doble = responderJson({ object: "list", data: [
+      { id: "glm-5.1", object: "model", created: 1790262855, owned_by: "opencode" },
+    ] });
+
+    await expect(new CatalogoModelos(doble.fetch).listar("opencode-zen")).resolves.toEqual([
+      { proveedor: "opencode-zen", id: "glm-5.1" },
+    ]);
+    expect(doble.llamadas[0]!.url).toBe("https://opencode.ai/zen/v1/models");
+    expect(doble.llamadas[0]!.init!.headers).toEqual({ authorization: "Bearer oc-zen-prueba" });
+  });
+});
+
 describe("Modelos: los compatibles se construyen con la URL base cambiada", () => {
   it("NVIDIA usa el cliente de OpenAI apuntado a su endpoint, con SU clave", () => {
     vi.stubEnv("NVIDIA_API_KEY", "nvapi-prueba");
@@ -385,6 +421,45 @@ describe("Modelos: los compatibles se construyen con la URL base cambiada", () =
     vi.stubEnv("OPENAI_API_KEY", "sk-la-clave-de-openai");
     expect(() => new Modelos({ bandera: "nvidia/meta/llama-3.3-70b-instruct" }).paraPapel("trabajo"))
       .toThrow(/falta la credencial para nvidia \(NVIDIA_API_KEY\)/);
+  });
+
+  it("NVIDIA no lleva las cabeceras propias de OpenCode", () => {
+    vi.stubEnv("NVIDIA_API_KEY", "nvapi-prueba");
+    const cliente = new Modelos({ bandera: "nvidia/meta/llama-3.3-70b-instruct" }).paraPapel("trabajo") as {
+      clientConfig: { defaultHeaders?: Record<string, string> };
+    };
+    expect(cliente.clientConfig.defaultHeaders).toBeUndefined();
+  });
+
+  it("OpenCode Go y Zen van cada uno a su host, con SU clave y las cabeceras que exige su API", () => {
+    vi.stubEnv("OPENCODE_GO_API_KEY", "oc-go-prueba");
+    vi.stubEnv("OPENCODE_ZEN_API_KEY", "oc-zen-prueba");
+    const go = new Modelos({ bandera: "opencode-go/deepseek-v4.1-flash" }).paraPapel("rapido") as {
+      model: string;
+      clientConfig: { apiKey: string; baseURL: string; defaultHeaders: Record<string, string> };
+    };
+    const zen = new Modelos({ bandera: "opencode-zen/glm-5.1" }).paraPapel("rapido") as {
+      clientConfig: { apiKey: string; baseURL: string; defaultHeaders: Record<string, string> };
+    };
+    expect(go.model).toBe("deepseek-v4.1-flash");
+    expect(go.clientConfig.apiKey).toBe("oc-go-prueba");
+    expect(go.clientConfig.baseURL).toBe("https://opencode.ai/zen/go/v1");
+    expect(go.clientConfig.defaultHeaders["User-Agent"]).toBe("xonecode/1.0");
+    expect(typeof go.clientConfig.defaultHeaders["x-opencode-session"]).toBe("string");
+    expect(go.clientConfig.defaultHeaders["x-opencode-session"]!.length).toBeGreaterThan(0);
+
+    expect(zen.clientConfig.apiKey).toBe("oc-zen-prueba");
+    expect(zen.clientConfig.baseURL).toBe("https://opencode.ai/zen/v1");
+    // Cada cliente construido lleva SU PROPIO id de sesión: no se comparte entre Go y Zen,
+    // ni entre dos construcciones sucesivas.
+    expect(zen.clientConfig.defaultHeaders["x-opencode-session"])
+      .not.toBe(go.clientConfig.defaultHeaders["x-opencode-session"]);
+  });
+
+  it("sin la clave de OpenCode Go no se llama a nadie, y el mensaje nombra su variable", () => {
+    vi.stubEnv("OPENCODE_GO_API_KEY", "");
+    expect(() => new Modelos({ bandera: "opencode-go/deepseek-v4.1-flash" }).paraPapel("trabajo"))
+      .toThrow(/falta la credencial para opencode-go \(OPENCODE_GO_API_KEY\)/);
   });
 });
 
