@@ -1231,6 +1231,50 @@ feedback del desarrollador** y no es terminal.
   túnel el botón no sirve — por eso el campo de texto es el camino principal y esto un atajo, y
   en un sistema sin selector el botón no se pinta.
 
+### Los conectores MCP
+
+`core/conectores.ts` (puro: catálogo, formas del cable, reglas), `agent/conectores/` (disco y
+red), sección Conectores de Ajustes. Un conector es un servidor MCP REMOTO de catálogo con el
+que esta consola se conecta — hoy solo eso.
+
+- **Todavía no llegan a ningún agente.** Esta pieza es la conexión y la configuración; qué
+  agente recibe sus tools, y con qué política de aprobación, es la pieza siguiente. El propio
+  catálogo lo dice al pie de la ventana de Ajustes, no solo aquí.
+- **El catálogo es una TABLA** (`CATALOGO_DE_CONECTORES`), no ramas: id, nombre, URL,
+  descripción y si pide `oauth` o `ninguna`. Un servidor nuevo es una fila, y el icono de su
+  fila es un monograma que sale de esa misma fila — nunca un logo copiado a mano, que sí
+  necesitan los proveedores de modelo por su catálogo fijo y su licencia.
+- **Dos ficheros, y SOLO en la casa del usuario** (`agent/conectores/conectoresEnDisco.ts`):
+  `conectores.json` (qué está añadido) y `conectores-oauth.json` (cliente registrado, tokens,
+  verificador PKCE), este último 0600. Nunca en el proyecto: una definición ahí podría llevar
+  un token a donde el proyecto dijera, la misma razón que los proveedores personalizados de
+  modelo. El contrato de escritura es el de `authEnDisco.ts`: una escritura nunca destruye lo
+  que había, y un fichero que no se entiende se deja tal cual y la escritura LANZA.
+- **La ruta del callback es PÚBLICA, y su autenticación es el `state`, no la cookie de
+  sesión.** La cookie es `SameSite=Strict`, así que la redirección que manda el proveedor OAuth
+  llega SIN ella; `Host` y `Origin` se comprueban igual. Lo que autentica esa vuelta es un
+  `state` aleatorio, de un solo uso y con plazo (`TTL_DE_AUTORIZACION_MS`, 10 min), que se
+  CONSUME en cuanto se reconoce, vaya bien o mal, para que no se pueda repetir. Es una ruta
+  fija y no el puerto dedicado que usa CloudStudio (7634): ese puerto existe porque el IDS de
+  CloudStudio registra su `redirect_uri` una vez y para siempre, y aquí cada conector se
+  registra por su cuenta contra su propio servidor.
+- **Ni tokens ni URL de autorización cruzan el cable.** Lo que llega al cliente es la forma de
+  `ConectorDelCable`: id, estado y la foto de la última prueba — nunca lo que hay en
+  `conectores-oauth.json`.
+- **El cliente OAuth es PÚBLICO y va atado a su `redirect_uri`.** Sin secreto que guardar
+  (`token_endpoint_auth_method: "none"`), porque no hay dónde meter uno que valga más que el
+  propio token. El cliente registrado se guarda junto al `redirect_uri` con el que se registró
+  (`ProveedorDeConector`): el puerto de la consola puede cambiar entre arranques, y con otro
+  puerto el servidor rechazaría el callback — la recuperación es registrar de nuevo, no un
+  caso especial.
+- **La prueba es una FOTO, como la de dispositivos, no un estado en vivo.** Se mide al pulsar y
+  al terminar de autorizar; no hay sondeo, y un proceso nuevo empieza sin foto — ausente es «no
+  se ha probado», no «falla». Su tope es su propia constante (`TOPE_DE_CONEXION_MS`, 30 s).
+- **Límites declarados**: no llegan a ningún agente todavía; sin túnel — el `redirect_uri` es
+  `127.0.0.1` y un proveedor remoto no vuelve a una URL que no sea esa; y esta consola no tiene
+  URL propia que ofrecer a un servidor que solo aceptara un cliente ya registrado por el
+  operador del catálogo.
+
 ### Exportar a PDF
 
 `core/exportacion.ts` (puro), `agent/exportarPdf.ts`, comando `/pdf <ruta>`.
