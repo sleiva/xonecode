@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Planes } from "./componentes/Planes.js";
 import { Colecciones } from "./componentes/Colecciones.js";
 import type { crearStoreDelCliente } from "./store.js";
 import type { ActoDeSincronizacion } from "./tipos.js";
@@ -471,6 +472,11 @@ export function App({
     void enviar({ clase: "arbol" });
   }, [enviar]);
 
+  /** Pedir los planes del proyecto (pestaña Planes). */
+  const pedirPlanes = useCallback(() => {
+    void enviar({ clase: "planes" });
+  }, [enviar]);
+
   /** Pedir la foto del modelo XOne (pestaña Colecciones). Mismo motivo que `pedirArbol`. */
   const pedirColecciones = useCallback(() => {
     void enviar({ clase: "colecciones" });
@@ -623,10 +629,25 @@ export function App({
     }
     // El agente pudo escribir un `.xne`, y un modelo viejo contesta con autoridad y equivocado.
     if (vistaDelPanel === "colecciones") pedirColecciones();
+    // Y un plan se pide SIEMPRE, esté delante o no: su pestaña solo existe si hay alguno, así
+    // que el turno en el que el analista escribe el primero es el que la hace aparecer.
+    pedirPlanes();
     // `desplegados` y `ficheroElegido` NO van en las dependencias a propósito: desplegar y
     // elegir ya piden lo suyo por su cuenta, y tenerlos aquí lo pediría dos veces.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [turnoEnVuelo, vistaDelPanel, pedirRevision, pedirParche, pedirArbol, pedirColecciones, pedirSync, enviar]);
+  }, [turnoEnVuelo, vistaDelPanel, pedirRevision, pedirParche, pedirArbol, pedirColecciones, pedirPlanes, pedirSync, enviar]);
+
+  /**
+   * Los planes se piden en cuanto hay proyecto abierto y cable, sin esperar a la pestaña: la
+   * pestaña solo EXISTE si hay alguno, así que esperarla sería no enterarse nunca. El store los
+   * tira al cambiar de sesión y al caerse el cable, y eso vuelve a disparar esto.
+   */
+  const hayProyectoAbierto = estado.alta?.proyectoAbierto === true;
+  const tienePlanes = estado.planes !== undefined;
+  useEffect(() => {
+    if (!estado.conectado || !hayProyectoAbierto || tienePlanes) return;
+    pedirPlanes();
+  }, [estado.conectado, hayProyectoAbierto, tienePlanes, pedirPlanes]);
   const [apariencia, setApariencia] = useState<Apariencia>(() => leerApariencia());
 
   useEffect(() => {
@@ -1401,6 +1422,8 @@ export function App({
         alElegirPestana={abrirPanel}
         alCerrar={() => setVistaDelPanel(undefined)}
         hayArtefactos={artefactos.length > 0}
+        // La pestaña Planes solo existe con algún plan: una lista MEDIDA y no vacía.
+        hayPlanes={(estado.planes?.lista?.length ?? 0) > 0}
         actos={estado.actos}
       revision={
         <Revision
@@ -1433,6 +1456,12 @@ export function App({
               conectado={estado.conectado}
             />
           }
+        />
+      }
+      planes={
+        <Planes
+          {...(estado.planes?.lista === undefined ? {} : { planes: estado.planes.lista })}
+          {...(estado.planes?.error === undefined ? {} : { error: estado.planes.error })}
         />
       }
       colecciones={

@@ -15,11 +15,13 @@
  * líneas —«→ lee src/app.xne» y luego «→ lee ×3 — …»— para una sola racha, que es
  * exactamente lo que la TUI ya evita en `cli/tui/store.ts` con la misma sustitución.
  */
+import { leerPlanesDelCable } from "./planesDelCable.js";
 import { leerCambiosDelModelo } from "./cambiosDelModelo.js";
 import { leerFotoDeColecciones } from "./fotoDeColecciones.js";
 import type {
   Receta,
   FotoDeColecciones,
+  PlanDelCable,
   CambiosDeUnaColeccion,
   PasoDeReceta,
   Acto,
@@ -248,6 +250,11 @@ export interface EstadoDelCliente {
    * cable. Ausente = no se ha pedido; con `error` y sin `foto`, no se pudo leer.
    */
   colecciones?: { foto?: FotoDeColecciones; error?: string };
+  /**
+   * Los planes del proyecto abierto (pestaña Planes), ya validados (`planesDelCable.ts`). Se tiran
+   * con la sesión y sin cable. `lista` vacía es «no hay planes», y entonces no hay pestaña.
+   */
+  planes?: { lista?: PlanDelCable[]; error?: string };
   /**
    * El estado de sincronización del proyecto abierto (pestaña CloudStudio). Ausente = no se
    * ha pedido todavía, y eso se dice: la pestaña arranca en «consultando».
@@ -1383,6 +1390,18 @@ export function crearStoreDelCliente(): {
           });
           return;
         }
+        case "planes": {
+          const m = mensaje as { planes?: unknown; error?: unknown };
+          const lista = leerPlanesDelCable(m.planes);
+          if (lista === undefined && typeof m.error !== "string") return;
+          mutar({
+            planes: {
+              ...(lista === undefined ? {} : { lista }),
+              ...(typeof m.error === "string" ? { error: m.error } : {}),
+            },
+          });
+          return;
+        }
         case "colecciones": {
           const m = mensaje as { foto?: unknown; error?: unknown };
           const foto = leerFotoDeColecciones(m.foto);
@@ -1767,7 +1786,7 @@ export function crearStoreDelCliente(): {
           const sesionDeAhora = typeof m.sesionActiva === "string" ? m.sesionActiva : undefined;
           const cambioDeSesion = sesionDeAhora !== estado.alta?.sesionActiva;
           mutar({
-            ...(cambioDeSesion ? { revision: undefined, parches: undefined, modelosDelCambio: undefined, arbol: undefined, contenidos: undefined, colecciones: undefined, artefactos: undefined, sync: undefined } : {}),
+            ...(cambioDeSesion ? { revision: undefined, parches: undefined, modelosDelCambio: undefined, arbol: undefined, contenidos: undefined, colecciones: undefined, planes: undefined, artefactos: undefined, sync: undefined } : {}),
             alta: {
               pasos: m.pasos as PasoDelWizard[],
               proveedores: m.proveedores,
@@ -1888,6 +1907,7 @@ export function crearStoreDelCliente(): {
         arbol: undefined,
         contenidos: undefined,
         colecciones: undefined,
+        planes: undefined,
         artefactos: undefined,
         // Y la medida de lo que falta por subir: la rama la pudo mover el agente, y arriba
         // —en CloudStudio— pudo cambiar algo desde fuera. Es una foto como las tres de

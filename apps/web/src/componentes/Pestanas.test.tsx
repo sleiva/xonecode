@@ -84,6 +84,15 @@ describe("Pestanas", () => {
     ]);
   });
 
+  it("«Planes» solo está si el proyecto tiene alguno, detrás de Colecciones", () => {
+    render(<Pestanas pestana="ficheros" alElegirPestana={vi.fn()} alCerrar={vi.fn()} hayPlanes />);
+    const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
+    expect(tabs.indexOf("Planes")).toBe(tabs.indexOf("Colecciones") + 1);
+    cleanup();
+    render(<Pestanas pestana="ficheros" alElegirPestana={vi.fn()} alCerrar={vi.fn()} />);
+    expect(screen.queryByRole("tab", { name: "Planes" })).toBeNull();
+  });
+
   it("pulsar Artefactos reporta «artefactos»", () => {
     const alElegirPestana = vi.fn();
     render(<Pestanas pestana="ficheros" alElegirPestana={alElegirPestana} alCerrar={vi.fn()} hayArtefactos />);

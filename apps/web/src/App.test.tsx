@@ -997,7 +997,8 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
     expect(screen.queryByRole("tablist")).toBeNull();
     expect(screen.queryByRole("button", { name: "Mostrar el panel" })).toBeNull();
     // Y NO se ha soltado el proyecto: es estado de vista, no una orden al servidor.
-    expect(enviar).not.toHaveBeenCalled();
+    // La única que puede salir es la LECTURA de los planes, que se pide sola con proyecto abierto.
+    expect(enviar.mock.calls.filter(([m]) => (m as { clase?: string }).clase !== "planes")).toEqual([]);
     // Ya en el escritorio la marca deja de ser un botón: no lleva a ninguna parte.
     expect(screen.queryByRole("button", { name: "XOneCode" })).toBeNull();
   });
@@ -1795,7 +1796,8 @@ describe("App: la pregunta del AGENTE, con un botón por opción", () => {
     act(() => store.aplicar(acto(consulta)));
     fireEvent.click(screen.getByRole("button", { name: "Responder escribiendo" }));
     expect(screen.queryByRole("dialog", { name: "¿Qué pantalla toco?" })).toBeNull();
-    expect(enviar).not.toHaveBeenCalled();
+    // Nada que CONTESTE: la lectura de los planes sale sola con proyecto abierto y no es una respuesta.
+    expect(enviar.mock.calls.filter(([m]) => (m as { clase?: string }).clase !== "planes")).toEqual([]);
   });
 
   it("al REABRIR una sesión que se quedó esperando, la ventana vuelve; contestada, no", () => {

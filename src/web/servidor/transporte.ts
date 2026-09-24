@@ -11,6 +11,7 @@
  * actos ni la traza de emisión los tocan, y por eso `emitir` no registra ese mensaje: lo
  * guarda quien lo tiene en vuelo, que lo suelta en cuanto hay decisión.
  */
+import type { PlanEnDisco } from "../../agent/planesEnDisco.js";
 import type { CambiosDeUnaColeccion } from "../../core/diffDeColecciones.js";
 import type { FotoDeColecciones } from "../../core/fotoDeColecciones.js";
 import type { InformeDeDispositivos, NombreDeHerramienta } from "../../core/dispositivos.js";
@@ -508,6 +509,12 @@ export type MensajeAlCliente =
    * `error` si no se pudo leer.
    */
   | { clase: "colecciones"; foto?: FotoDeColecciones; error?: string }
+  /**
+   * Los planes del proyecto abierto (`.xonecode/planes/`, pestaña Planes): sus ficheros, las
+   * tareas leídas de su `TASKS.md` y el texto de su `PLAN.md`. Es lo que el plan DICE —estado y
+   * casillas las marca el modelo—. Sin `planes` y con `error` si no se pudo leer.
+   */
+  | { clase: "planes"; planes?: PlanEnDisco[]; error?: string }
   | ({ clase: "fichero" } & FicheroDelProyecto)
   /**
    * El estado de sincronización del proyecto abierto (pestaña CloudStudio). Los campos van en
@@ -1368,6 +1375,8 @@ export type MensajeDelCliente =
   | { clase: "arbol" }
   /** Pide la foto del modelo XOne del proyecto abierto (pestaña Colecciones). */
   | { clase: "colecciones" }
+  /** Pide los planes del proyecto abierto (pestaña Planes). */
+  | { clase: "planes" }
   | { clase: "fichero"; ruta: string }
   /**
    * La sincronización con CloudStudio del proyecto abierto (pestaña CloudStudio).

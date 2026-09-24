@@ -1,0 +1,169 @@
+/* La pestaña Planes. Solo alias del tema y los tokens de marca de siempre: ningún color literal
+   (`Barra.test.tsx` lo vigila). El ESTADO de una tarea va en una pastilla NEUTRA a propósito: es
+   la palabra del plan, y un verde para «hecha» afirmaría una medida que nadie hizo. */
+.planes {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: auto;
+  padding: 0 16px 24px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.aviso {
+  margin: 0;
+  padding: 16px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.elegir {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 10px;
+}
+
+.pastilla,
+.boton {
+  padding: 2px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pastilla:hover,
+.boton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.pastilla[aria-pressed="true"] {
+  background: var(--xonecode-fila-elegida);
+  color: var(--dsw-alias-label-primary);
+}
+
+.cabecera {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 10px 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.titulo {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ruta {
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+}
+
+.boton {
+  margin-left: auto;
+}
+
+.nota {
+  margin: 10px 0 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.tareas {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tarea {
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  width: 100%;
+  padding: 8px 0 2px;
+  border: none;
+  background: none;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.numero {
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+}
+
+.tituloDeTarea {
+  flex: 1 1 20ch;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.estado {
+  padding: 0 6px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+}
+
+.criterios {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.bloqueo {
+  margin: 0 0 6px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.prosa {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.ficha {
+  padding: 4px 0 12px;
+}
+
+.markdown {
+  max-width: 78ch;
+  padding-top: 8px;
+}
+
+/* Un código en línea largo del plan —`ExecuteNode(cambiarMenu('UTILIDADES',…))`— no puede
+   sacar la columna del panel de su ancho: medido en pantalla, daba una barra horizontal al pie.
+   Parte donde haga falta; las vallas de código mantienen su propio desplazamiento. */
+.markdown :global(:not(pre) > code),
+.ficha :global(:not(pre) > code) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.markdown,
+.ficha {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

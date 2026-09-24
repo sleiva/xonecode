@@ -276,6 +276,16 @@ describe("store del cliente", () => {
     expect(s.leer().modelosDelCambio).toBeUndefined();
   });
 
+  it("«planes» se guarda validado, y se tira al caerse el cable", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "planes", planes: [{ nombre: "visitas", ficheros: ["PLAN.md"], modificado: 1 }] });
+    expect(s.leer().planes).toEqual({ lista: [{ nombre: "visitas", ficheros: ["PLAN.md"], modificado: 1 }] });
+    s.aplicar({ clase: "planes", planes: "x" } as never);
+    expect(s.leer().planes?.lista).toHaveLength(1);
+    s.marcarDesconectado();
+    expect(s.leer().planes).toBeUndefined();
+  });
+
   it("«colecciones» guarda la foto VALIDADA, y se tira al caerse el cable", () => {
     const s = crearStoreDelCliente();
     const foto = { colecciones: [], total: 0, entrada: [], login: [], rotas: [] };

@@ -2013,6 +2013,35 @@ describe("montarRutas — el cable, por fin conectado", () => {
       rmSync(base, { recursive: true, force: true });
     });
 
+    it("«planes» contesta los planes del puerto, y si lanza, un error sin la ruta", async () => {
+      const { base, servidor, vestibulo, raizDeVerdad } = await abrirProyecto();
+      let falla = false;
+      const planes = [{ nombre: "visitas", ficheros: ["PLAN.md"], modificado: 1 }];
+      montarRutas(servidor, vestibulo, {
+        informar: () => {},
+        planesDelProyecto: () => {
+          if (falla) throw Object.assign(new Error(`EACCES '${raizDeVerdad}'`), { code: "EACCES" });
+          return planes;
+        },
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+      await asentar();
+      expect(await enviarMensaje(accion, { clase: "planes" })).toBe(204);
+      await asentar();
+      expect(cliente.recibidos.filter((x) => x.clase === "planes").at(-1)).toEqual({ clase: "planes", planes });
+      falla = true;
+      await enviarMensaje(accion, { clase: "planes" });
+      await asentar();
+      expect(cliente.recibidos.filter((x) => x.clase === "planes").at(-1)).toEqual({ clase: "planes", error: "no se pudieron leer los planes" });
+      expect(JSON.stringify(cliente.recibidos)).not.toContain(raizDeVerdad);
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
     it("«colecciones» contesta la foto del puerto, y si el puerto lanza, un error sin la ruta", async () => {
       const { base, servidor, vestibulo, raizDeVerdad } = await abrirProyecto();
       const foto = { colecciones: [], total: 0, entrada: ["Menu"], login: [], rotas: [] };

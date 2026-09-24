@@ -207,6 +207,27 @@ export interface ColeccionDeLaFoto {
   leApuntan: ReferenciaXone[];
 }
 
+/** Una tarea de un `TASKS.md`, tal como la DICE el plan (`core/tareasDelPlan.ts`). */
+export interface TareaDelPlanDelCable {
+  numero: string;
+  titulo: string;
+  /** Tal cual lo escribió el plan; ausente si la tarea no lo lleva. */
+  estado?: string;
+  bloqueadaPor: string[];
+  bloqueadaPorTexto?: string;
+  criterios: { hechos: number; total: number };
+  cuerpo: string;
+}
+
+/** Un plan de `.xonecode/planes/` (`agent/planesEnDisco.ts#PlanEnDisco`). */
+export interface PlanDelCable {
+  nombre: string;
+  ficheros: string[];
+  tareas?: { titulo?: string; tareas: TareaDelPlanDelCable[] };
+  plan?: { texto: string; recortado: boolean };
+  modificado: number;
+}
+
 /** Lo que cambió en el modelo de UNA colección (`core/diffDeColecciones.ts`). */
 export interface CambiosDeUnaColeccion {
   nombre: string;
@@ -569,6 +590,8 @@ export type MensajeAlCliente =
   /** El modelo XOne del proyecto abierto (pestaña Colecciones). Sin `foto` y con `error` si
    *  no se pudo leer. El store lo valida campo a campo (`fotoDeColecciones.ts`). */
   | { clase: "colecciones"; foto?: FotoDeColecciones; error?: string }
+  /** Los planes del proyecto (pestaña Planes). Validados en el store (`planesDelCable.ts`). */
+  | { clase: "planes"; planes?: PlanDelCable[]; error?: string }
   | ({ clase: "fichero" } & FicheroDelProyecto)
   /** El estado de sincronización del proyecto abierto (pestaña CloudStudio). `proyecto` y
    *  `rama` ausentes = no está dado de alta en CloudStudio, que NO es «cero pendientes». */
@@ -1092,6 +1115,7 @@ export type MensajeDelCliente =
   | { clase: "modeloDelCambio"; ruta: string }
   | { clase: "arbol" }
   | { clase: "colecciones" }
+  | { clase: "planes" }
   | { clase: "fichero"; ruta: string }
   /** La sincronización con CloudStudio: `estado` pide la medida, `subir`/`bajar` son las
    *  dos acciones de `/sync`. Viaja la INTENCIÓN: el servidor las aplica encolando la línea

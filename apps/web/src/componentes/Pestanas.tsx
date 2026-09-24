@@ -2,7 +2,7 @@ import clsx from "clsx";
 import conversacion from "../../estilos/ConversationRoot.module.css";
 import estilos from "./Pestanas.module.css";
 
-export type Pestana = "ficheros" | "revision" | "colecciones" | "artefactos" | "tareas" | "ejecutar" | "trazas";
+export type Pestana = "ficheros" | "revision" | "colecciones" | "planes" | "artefactos" | "tareas" | "ejecutar" | "trazas";
 
 /**
  * La tira de pestañas del PANEL: Tareas, Ejecutar, Ficheros, Revisión y Trazas — más
@@ -60,6 +60,7 @@ export function Pestanas({
   alElegirPestana,
   alCerrar,
   hayArtefactos,
+  hayPlanes,
 }: {
   pestana: Pestana;
   alElegirPestana: (pestana: Pestana) => void;
@@ -77,6 +78,12 @@ export function Pestanas({
    * permite en ninguna otra parte. Lo sabe `App` mirando los actos, que ya traen la lista.
    */
   hayArtefactos?: boolean;
+  /**
+   * ¿Tiene el proyecto algún plan en `.xonecode/planes/`? Su pestaña solo existe entonces: es de
+   * REGISTRO como Artefactos —enseña lo que el analista dejó escrito—, y casi ningún proyecto
+   * tiene uno. Lo sabe `App` por el mensaje `planes`.
+   */
+  hayPlanes?: boolean;
 }) {
   const pestanas: { id: Pestana; etiqueta: string }[] = [
     // Las dos de ACCIÓN abren la tira. La cola de tareas en background es del proyecto
@@ -98,6 +105,8 @@ export function Pestanas({
     // REGISTRO como Ficheros, y como ella SIEMPRE presente: todo proyecto XOne tiene modelo, y
     // uno sin colecciones lo dice en su estado vacío.
     { id: "colecciones", etiqueta: "Colecciones" },
+    // Lo que el analista dejó PLANIFICADO, con sus tareas según el plan. Solo si hay alguno.
+    ...(hayPlanes === true ? [{ id: "planes" as const, etiqueta: "Planes" }] : []),
     // Lo que el agente DIBUJÓ, que no es del proyecto y por eso no está en las dos de
     // arriba. Solo si hay alguno.
     ...(hayArtefactos === true ? [{ id: "artefactos" as const, etiqueta: "Artefactos" }] : []),

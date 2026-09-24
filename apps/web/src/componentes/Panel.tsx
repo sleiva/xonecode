@@ -30,10 +30,12 @@ export function Panel({
   alElegirPestana,
   alCerrar,
   hayArtefactos,
+  hayPlanes,
   actos,
   ficheros,
   revision,
   colecciones,
+  planes,
   artefactos,
   tareas,
   ejecutar,
@@ -43,6 +45,7 @@ export function Panel({
   /** Cerrar el panel entero. Ver `Pestanas`, que es quien pinta la salida. */
   alCerrar: () => void;
   hayArtefactos?: boolean;
+  hayPlanes?: boolean;
   /** Solo para las Trazas, que se calculan de los actos y no llegan por ranura: es la única
    *  vista que no habla con el servidor, así que no tiene nada que medir al montarse. */
   actos: readonly Acto[];
@@ -52,6 +55,8 @@ export function Panel({
   revision?: ReactNode;
   /** El modelo XOne del proyecto (`Colecciones.tsx`). Una ranura más, con su rama EXPLÍCITA. */
   colecciones?: ReactNode;
+  /** Los planes del proyecto (`Planes.tsx`). Su pestaña solo existe si hay alguno. */
+  planes?: ReactNode;
   /** Lo que el agente DIBUJÓ en esta sesión. Su pestaña solo existe si hay alguno, y de eso
    *  se encarga `Pestanas`: aquí es una ranura más. */
   artefactos?: ReactNode;
@@ -79,6 +84,7 @@ export function Panel({
         alElegirPestana={alElegirPestana}
         alCerrar={alCerrar}
         {...(hayArtefactos === undefined ? {} : { hayArtefactos })}
+        {...(hayPlanes === undefined ? {} : { hayPlanes })}
       />
       <div className={conversacion.viewArea}>
         {pestana === "trazas" ? (
@@ -87,6 +93,8 @@ export function Panel({
           revision
         ) : pestana === "colecciones" ? (
           colecciones
+        ) : pestana === "planes" ? (
+          planes
         ) : pestana === "artefactos" ? (
           artefactos
         ) : pestana === "tareas" ? (

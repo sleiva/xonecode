@@ -165,6 +165,7 @@ import { ficherosDelProyecto } from "../../agent/turno/ficherosDelProyecto.js";
 import { fotoDeColecciones, type FotoDeColecciones } from "../../core/fotoDeColecciones.js";
 import type { CambiosDeUnaColeccion } from "../../core/diffDeColecciones.js";
 import { modeloDelCambio } from "../../agent/sesiones/modeloDelCambio.js";
+import { planesDelProyecto, type PlanEnDisco } from "../../agent/planesEnDisco.js";
 import { RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
 import {
   leerArtefactoCrudo,
@@ -433,6 +434,8 @@ export interface OpcionesDeMontaje {
    * cargador que `xone_navegacion`. Por opción porque lee el proyecto con `xone-linter`.
    */
   coleccionesDelProyecto?: (raiz: string) => Promise<FotoDeColecciones>;
+  /** Los planes del proyecto (`agent/planesEnDisco.ts`). Por opción porque lee su disco. */
+  planesDelProyecto?: (raiz: string) => PlanEnDisco[];
   /**
    * El diff SEMÁNTICO de un `.xne` de la sesión (`agent/sesiones/modeloDelCambio.ts`): toca git y
    * el disco, así que entra por opción. `undefined` = no hay «antes» con el que comparar.
@@ -3307,6 +3310,25 @@ export function montarRutas(
   };
 
   /**
+   * Los planes del proyecto abierto. Mismas reglas que el árbol: sin proyecto no se contesta,
+   * sin puerto se contesta con error, y el fallo viaja sin la ruta de la máquina.
+   */
+  const atenderPlanes = async (): Promise<void> => {
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined) return;
+    if (opciones.planesDelProyecto === undefined) {
+      emitir({ clase: "planes", error: "esta ejecución no puede leer los planes" });
+      return;
+    }
+    try {
+      emitir({ clase: "planes", planes: opciones.planesDelProyecto(abierto.raiz) });
+    } catch (error) {
+      informar(`no se pudieron leer los planes (${codigoDe(error)})`);
+      emitir({ clase: "planes", error: "no se pudieron leer los planes" });
+    }
+  };
+
+  /**
    * La foto del modelo XOne del proyecto abierto. Mismas reglas que el árbol: sin proyecto no
    * se contesta, sin puerto se contesta con error —un «consultando…» eterno es un fallo mudo—,
    * y el fallo viaja sin la ruta de la máquina.
@@ -4245,6 +4267,12 @@ export function montarRutas(
       typeof (mensaje as { ruta?: unknown }).ruta === "string"
     ) {
       void atenderModeloDelCambio((mensaje as { ruta: string }).ruta).catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "planes") {
+      void atenderPlanes().catch(contar);
       respuesta.writeHead(204);
       respuesta.end();
       return;
@@ -5562,6 +5590,7 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     // que la pestaña y el agente no contesten distinto sobre el mismo proyecto.
     coleccionesDelProyecto: async (raiz) => fotoDeColecciones(await modeloEnDisco(raiz)(ficherosDelProyecto(raiz))),
     modeloDelCambio,
+    planesDelProyecto,
     leerFichero: leerFicheroDeProyecto,
     leerArtefacto: leerArtefactoDeSesion,
     leerArtefactoCrudo,
