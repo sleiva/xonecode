@@ -30,6 +30,7 @@ export function Transcript({
   alAbrirArtefacto,
   alAbrirFichero,
   alPedirCorreccion,
+  alResponderConsulta,
 }: {
   actos: readonly Acto[];
   /** Van al Chat tal cual: la relectura, el cronómetro del turno en vuelo, y el proyecto y
@@ -51,6 +52,8 @@ export function Transcript({
    *  la petición de corrección escrita en el compositor. */
   alAbrirFichero?: (ruta: string, linea?: number) => void;
   alPedirCorreccion?: (texto: string) => void;
+  /** Contestar la pregunta pendiente del agente desde su tarjeta del hilo. Ver `Chat`. */
+  alResponderConsulta?: (texto: string) => void | Promise<unknown>;
   /** Hay turno corriendo. Lo usa el Chat, para saber si el último mensaje sigue llegando —y
    *  con él, si toca resaltar el código o esperar al cierre. */
   turnoEnVuelo?: boolean;
@@ -71,6 +74,7 @@ export function Transcript({
           {...(alAbrirArtefacto === undefined ? {} : { alAbrirArtefacto })}
           {...(alAbrirFichero === undefined ? {} : { alAbrirFichero })}
           {...(alPedirCorreccion === undefined ? {} : { alPedirCorreccion })}
+          {...(alResponderConsulta === undefined ? {} : { alResponderConsulta })}
         />
       </div>
     </div>

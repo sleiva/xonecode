@@ -1,6 +1,48 @@
-/* La coraza —capa, velo, tarjeta, botones— es la de `Pregunta.module.css`, importada tal
-   cual: es la misma ventana, no una que se le parece. Aquí solo lo que cambia, con la forma
-   del modo de pregunta del `ToolFallback` de assistant-ui y nuestros alias. */
+/* Una tarjeta DEL HILO, no una ventana: con el ancho de lectura de los mensajes y el recinto
+   de las tarjetas de artefacto. Los botones y el aviso de fallo son los de `Pregunta.module.css`,
+   importados tal cual: es el mismo «Responder», no uno que se le parece. La forma, la del modo
+   de pregunta del `ToolFallback` de assistant-ui, con nuestros alias. */
+.tarjeta {
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 70ch;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-primary);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-secondary);
+}
+
+/* El registro de una pregunta contestada: las opciones como lista, sin controles, y la elegida
+   marcada con el filo cian de la fila elegida. */
+.registro {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.registro li {
+  padding: 4px 10px;
+  border-left: 2px solid var(--dsw-alias-border-l2);
+}
+
+.registro li[data-elegida] {
+  border-left-color: var(--xonecode-cian);
+  background: var(--xonecode-fila-elegida);
+  color: var(--dsw-alias-label-primary);
+}
+
+.respuestaPropia {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+}
 
 .cabecera {
   display: flex;
@@ -89,8 +131,8 @@
   resize: vertical;
 }
 
-/* Cancelar y Responder, a la DERECHA: aquí la tarjeta es un formulario —se elige y se
-   manda—, no el aviso centrado de una decisión. */
+/* Responder, a la DERECHA: aquí la tarjeta es un formulario —se elige y se manda—, no el
+   aviso centrado de una decisión. */
 .decisiones {
   display: flex;
   justify-content: flex-end;

@@ -11,6 +11,9 @@ import { CierreDelTurno } from "./CierreDelTurno.js";
 import { urlDeArtefacto } from "./Artefactos.js";
 import { IconoDeAbrir, IconoDeArtefacto } from "./IconosDelVisor.js";
 import { tipoDeArtefacto } from "../tipoDeArtefacto.js";
+import { consultaPendiente } from "../consultaPendiente.js";
+import { sinTextoDeConsulta } from "../textoDeConsulta.js";
+import { ConsultaDelAgente } from "./ConsultaDelAgente.js";
 import { hayCosteQueEnsenar } from "./CosteDelTurno.js";
 import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
 import vista from "../../estilos/ChatView.module.css";
@@ -79,6 +82,17 @@ import estilos from "./Chat.module.css";
  * el agente escribe: baja solo si ya estabas abajo, así que subir a leer una línea de hace
  * diez tools no te devuelve al fondo en la siguiente.
  */
+/** ¿Se puede pintar la tarjeta de esta consulta? Con pregunta y alguna opción de texto: el acto
+ *  llega por el cable de otro proceso y el store solo valida su `tipo`. */
+function consultaPintable(a: Extract<Acto, { tipo: "consulta" }>): boolean {
+  return (
+    typeof a.pregunta === "string" &&
+    Array.isArray(a.opciones) &&
+    a.opciones.length > 0 &&
+    a.opciones.every((o) => typeof o === "string" && o.trim() !== "")
+  );
+}
+
 /** El paso actual cuando lo último que llegó del turno es razonamiento del modelo. */
 const PENSANDO = "Pensando…";
 
@@ -614,6 +628,7 @@ export function Chat({
   alAbrirArtefacto,
   alAbrirFichero,
   alPedirCorreccion,
+  alResponderConsulta,
 }: {
   actos: readonly Acto[];
   turnoEnVuelo?: boolean;
@@ -667,7 +682,38 @@ export function Chat({
    * botón que lanzara el turno sería un comando tecleado por otra puerta (`comoComando`).
    */
   alPedirCorreccion?: (texto: string) => void;
+  /** Contestar la pregunta PENDIENTE del agente desde su tarjeta del hilo: manda el texto como
+   *  el mensaje siguiente. Se espera, para decir si el envío falló. Sin él, la tarjeta es solo
+   *  el registro de la pregunta. */
+  alResponderConsulta?: (texto: string) => void | Promise<unknown>;
 }) {
+  /**
+   * Las preguntas del agente, que se pintan como TARJETA en su sitio del hilo: cuál está
+   * pendiente (la única que se puede contestar), qué se contestó a cada una (el mensaje de la
+   * persona que vino detrás), y qué mensaje del asistente lleva su texto repetido al final
+   * (`textoDeConsulta.ts`), que se quita al pintar porque la tarjeta ya lo dice.
+   */
+  const pendiente = consultaPendiente(actos, turnoEnVuelo);
+  const repetidaEn = new Map<number, { pregunta: string; opciones: string[] }>();
+  const respuestaA = new Map<number, string>();
+  for (const [k, a] of actos.entries()) {
+    if (a.tipo !== "consulta" || !consultaPintable(a)) continue;
+    for (let j = k - 1; j >= 0; j--) {
+      const previo = actos[j]!;
+      if (previo.tipo === "usuario") break;
+      if (previo.tipo === "asistente") {
+        repetidaEn.set(j, { pregunta: a.pregunta, opciones: a.opciones });
+        break;
+      }
+    }
+    for (let j = k + 1; j < actos.length; j++) {
+      const despues = actos[j]!;
+      if (despues.tipo === "usuario") {
+        respuestaA.set(k, despues.texto);
+        break;
+      }
+    }
+  }
   // Cuál es el último acto de asistente: es el único que puede estar llegando todavía.
   const ultimoAsistente = actos.map((a) => a.tipo).lastIndexOf("asistente");
 
@@ -757,12 +803,12 @@ export function Chat({
      */
     if (acto.tipo === "sincronizacion") continue;
     /**
-     * La pregunta del agente no se pinta en el hilo: su texto YA está en el mensaje del
-     * asistente, y la tarjeta con un botón por opción es un diálogo que monta `App`
-     * (`ConsultaDelAgente`). Con `continue` y no con el `return null` de abajo, por lo mismo
-     * que la sincronización: no es un acto de conversación que cierre el tramo.
+     * La pregunta del agente es su TARJETA, en su sitio: pendiente se contesta ahí, contestada
+     * queda como registro. Una que no se puede pintar —sin opciones válidas, llegada de otra
+     * versión— pasa de largo sin tocar el tramo, como antes: su texto sigue en el mensaje, que
+     * solo pierde la pregunta repetida cuando la tarjeta la dice.
      */
-    if (acto.tipo === "consulta") continue;
+    if (acto.tipo === "consulta" && !consultaPintable(acto)) continue;
     /**
      * **Un artefacto tiene UNA tarjeta, en su último anuncio.** Cada `write` y cada `edit` sobre
      * `/artefactos/` se anuncia —una escritura sin aprobación tiene que decirse, y esa línea sigue
@@ -1084,7 +1130,25 @@ export function Chat({
                 </p>
               );
             }
+            if (acto.tipo === "consulta") {
+              const esLaPendiente = pendiente?.indice === indice && alResponderConsulta !== undefined;
+              const respondida = respuestaA.get(indice);
+              return (
+                <div key={indice} className={vista.flowItem}>
+                  <ConsultaDelAgente
+                    pregunta={acto.pregunta}
+                    opciones={acto.opciones}
+                    {...(esLaPendiente ? { alElegir: alResponderConsulta } : {})}
+                    {...(respondida === undefined ? {} : { respondida })}
+                  />
+                </div>
+              );
+            }
             if (acto.tipo === "asistente") {
+              const repetida = repetidaEn.get(indice);
+              const texto = repetida === undefined ? acto.texto : sinTextoDeConsulta(acto.texto, repetida.pregunta, repetida.opciones);
+              // Un mensaje que SOLO era la pregunta se queda en la tarjeta: un globo vacío no dice nada.
+              if (texto === "") return null;
               return (
                 // `md-cuerpo` es una clase GLOBAL, no de módulo: el cuerpo de un documento
                 // markdown se pinta igual aquí y en el `.md` que enseña la pestaña
@@ -1094,7 +1158,7 @@ export function Chat({
                     // Con los dólares escapados: el renderizador los lee como TeX y no
                     // se puede apagar (`protegerDolares.ts`). El botón de copiar de abajo
                     // se queda con el texto original.
-                    text={protegerDolares(acto.texto)}
+                    text={protegerDolares(texto)}
                     // Solo mientras el turno CORRE. `MarkdownText` desactiva el resaltado
                     // en modo streaming (`lang: context.streaming ? undefined : lang`,
                     // medido en su `renderCode`), que es justo lo que quieres a medio

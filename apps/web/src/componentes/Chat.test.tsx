@@ -1113,3 +1113,28 @@ describe("Chat: quién pensó", () => {
   });
 });
 
+describe("Chat: la pregunta del agente en el hilo", () => {
+  const texto = "No se aplicó.\n\n¿Qué color pongo?\n\n1. Negro\n2. Dejarlo\n\nContesta con el número o con tus palabras.";
+  const actos: Acto[] = [
+    { tipo: "usuario", texto: "cambia el color" },
+    { tipo: "asistente", texto },
+    { tipo: "consulta", pregunta: "¿Qué color pongo?", opciones: ["Negro", "Dejarlo"] },
+  ];
+
+  it("la tarjeta sustituye a la pregunta repetida del mensaje, que conserva lo de antes", () => {
+    const responder = vi.fn();
+    const { container } = render(<Chat actos={actos} alResponderConsulta={responder} />);
+    expect(container.textContent).toContain("No se aplicó.");
+    expect(container.textContent).not.toContain("Contesta con el número");
+    fireEvent.click(screen.getByRole("radio", { name: "Negro" }));
+    fireEvent.click(screen.getByRole("button", { name: "Responder" }));
+    expect(responder).toHaveBeenCalledWith("Negro");
+  });
+
+  it("contestada NO se puede volver a contestar: queda como registro con la elegida", () => {
+    const { container } = render(<Chat actos={[...actos, { tipo: "usuario", texto: "Negro" }]} alResponderConsulta={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Responder" })).toBeNull();
+    expect(container.querySelector("li[data-elegida]")?.textContent).toBe("Negro");
+  });
+});
+

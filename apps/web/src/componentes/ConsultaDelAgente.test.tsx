@@ -4,9 +4,9 @@ import { ConsultaDelAgente } from "./ConsultaDelAgente.js";
 
 afterEach(cleanup);
 
-const montar = (alElegir = vi.fn(), alCerrar = vi.fn()) => {
-  render(<ConsultaDelAgente pregunta="¿Dónde lo guardo?" opciones={["En el proyecto", "Global"]} alElegir={alElegir} alCerrar={alCerrar} />);
-  return { alElegir, alCerrar, responder: () => screen.getByRole("button", { name: "Responder" }) };
+const montar = (alElegir = vi.fn()) => {
+  render(<ConsultaDelAgente pregunta="¿Dónde lo guardo?" opciones={["En el proyecto", "Global"]} alElegir={alElegir} />);
+  return { alElegir, responder: () => screen.getByRole("button", { name: "Responder" }) };
 };
 
 describe("ConsultaDelAgente", () => {
@@ -48,10 +48,16 @@ describe("ConsultaDelAgente", () => {
     expect(alElegir).toHaveBeenCalledTimes(2);
   });
 
-  it("«Cancelar» cierra sin contestar nada", () => {
-    const { alElegir, alCerrar } = montar();
-    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
-    expect(alCerrar).toHaveBeenCalledTimes(1);
-    expect(alElegir).not.toHaveBeenCalled();
+  it("sin `alElegir` es el REGISTRO: sin controles, con lo contestado marcado", () => {
+    const { container, unmount } = render(
+      <ConsultaDelAgente pregunta="¿Dónde lo guardo?" opciones={["En el proyecto", "Global"]} respondida="Global" />
+    );
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(container.querySelector("li[data-elegida]")?.textContent).toBe("Global");
+    unmount();
+    // Contestada con otras palabras: se dice qué, en vez de marcar una opción que no se eligió.
+    render(<ConsultaDelAgente pregunta="¿Dónde lo guardo?" opciones={["En el proyecto", "Global"]} respondida="en los dos" />);
+    expect(screen.getByText("Contestaste: en los dos")).toBeTruthy();
   });
 });

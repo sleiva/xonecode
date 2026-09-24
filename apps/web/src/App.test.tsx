@@ -1777,35 +1777,29 @@ describe("App: el panel a la derecha del chat", () => {
   });
 });
 
-describe("App: la pregunta del AGENTE, con un botón por opción", () => {
+describe("App: la pregunta del AGENTE, en su tarjeta DENTRO del hilo", () => {
   const acto = (a: unknown) => ({ clase: "acto", acto: a });
   const consulta = { tipo: "consulta", pregunta: "¿Qué pantalla toco?", opciones: ["Login", "Menú"] };
 
-  it("una consulta sin contestar abre el diálogo, y pulsar una opción la manda como PROSA", async () => {
+  it("no es un diálogo: la tarjeta está en el chat, y Responder manda lo elegido como PROSA", () => {
     const { store, enviar } = montar();
-    act(() => store.aplicar(acto({ tipo: "asistente", texto: "¿Qué pantalla toco?" })));
+    act(() => store.aplicar(acto({ tipo: "asistente", texto: "No sé cuál." })));
     act(() => store.aplicar(acto(consulta)));
-    const dialogo = screen.getByRole("dialog", { name: "¿Qué pantalla toco?" });
-    fireEvent.click(within(dialogo).getByRole("radio", { name: "Menú" }));
-    fireEvent.click(within(dialogo).getByRole("button", { name: "Responder" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    const tarjeta = screen.getByRole("region", { name: "¿Qué pantalla toco?" });
+    fireEvent.click(within(tarjeta).getByRole("radio", { name: "Menú" }));
+    fireEvent.click(within(tarjeta).getByRole("button", { name: "Responder" }));
     expect(enviar).toHaveBeenCalledWith({ clase: "prosa", texto: "Menú" });
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "¿Qué pantalla toco?" })).toBeNull());
   });
 
-  it("«Cancelar» la aparta SIN mandar nada: la pregunta sigue en el chat", () => {
-    const { store, enviar } = montar();
-    act(() => store.aplicar(acto(consulta)));
-    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
-    expect(screen.queryByRole("dialog", { name: "¿Qué pantalla toco?" })).toBeNull();
-    // Nada que CONTESTE: la lectura de los planes sale sola con proyecto abierto y no es una respuesta.
-    expect(enviar.mock.calls.filter(([m]) => (m as { clase?: string }).clase !== "planes")).toEqual([]);
-  });
-
-  it("al REABRIR una sesión que se quedó esperando, la ventana vuelve; contestada, no", () => {
+  it("al REABRIR una sesión que se quedó esperando se puede contestar; contestada, queda como registro", () => {
     const { store } = montar();
     act(() => store.aplicar({ clase: "reemision", actos: [{ tipo: "usuario", texto: "arregla" }, consulta] }));
-    expect(screen.getByRole("dialog", { name: "¿Qué pantalla toco?" })).toBeTruthy();
-    act(() => store.aplicar({ clase: "reemision", actos: [{ tipo: "usuario", texto: "arregla" }, consulta, { tipo: "usuario", texto: "Menú" }] }));
-    expect(screen.queryByRole("dialog", { name: "¿Qué pantalla toco?" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Responder" })).toBeTruthy();
+    act(() =>
+      store.aplicar({ clase: "reemision", actos: [{ tipo: "usuario", texto: "arregla" }, consulta, { tipo: "usuario", texto: "Menú" }] })
+    );
+    expect(screen.queryByRole("button", { name: "Responder" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Pregunta del agente: ¿Qué pantalla toco?" })).toBeTruthy();
   });
 });
