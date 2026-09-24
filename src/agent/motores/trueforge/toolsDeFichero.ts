@@ -22,6 +22,7 @@
 import { posix } from "node:path";
 import micromatch from "micromatch";
 import { toolResultResponse } from "./trueforge.js";
+import { REGLA_DE_ESCRITURAS_EN_PARALELO } from "../../../core/serieDeEscrituras.js";
 import { desalojarSiGrande, MAXIMO_DE_COINCIDENCIAS, truncarSiLargo } from "./recortes.js";
 
 /** El backend de deepagents en su versión nueva, en lo que se usa. */
@@ -66,9 +67,9 @@ const ESQUEMAS: Record<ToolDeFichero, { descripcion: string; propiedades: Record
     propiedades: { file_path: cadena, offset: { type: "number" }, limit: { type: "number" } },
     obligatorias: ["file_path"],
   },
-  write_file: { descripcion: "Writes a NEW file with the given content.", propiedades: { file_path: cadena, content: cadena }, obligatorias: ["file_path", "content"] },
+  write_file: { descripcion: `Writes a NEW file with the given content. ${REGLA_DE_ESCRITURAS_EN_PARALELO}`, propiedades: { file_path: cadena, content: cadena }, obligatorias: ["file_path", "content"] },
   edit_file: {
-    descripcion: "Replaces old_string with new_string in a file. old_string must match exactly.",
+    descripcion: `Replaces old_string with new_string in a file. old_string must match exactly. ${REGLA_DE_ESCRITURAS_EN_PARALELO}`,
     propiedades: { file_path: cadena, old_string: cadena, new_string: cadena, replace_all: { type: "boolean" } },
     obligatorias: ["file_path", "old_string", "new_string"],
   },

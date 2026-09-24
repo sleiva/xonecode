@@ -1,5 +1,6 @@
 import { createDeepAgent, createFilesystemMiddleware } from "deepagents";
 import { MAPA_DEL_PROYECTO, fichaDeAgente, promptDeAgente, repartirSkills, type Agente } from "../../core/agentes.js";
+import { REGLA_DE_ESCRITURAS_EN_PARALELO } from "../../core/serieDeEscrituras.js";
 import type { MotorExterno, SubagenteExternoPort } from "../../core/ports.js";
 import { RunnableLambda } from "@langchain/core/runnables";
 import { AIMessage, type BaseMessage } from "@langchain/core/messages";
@@ -292,11 +293,13 @@ export const DESCRIPCIONES_FICHEROS = {
     "escrito fuera de ella acaba dentro de la app XOne del usuario. La ruta",
     "`/MEMORIA_PROYECTO.md` es exclusivamente",
     "para hechos confirmados, decisiones y pendientes útiles; no guardes transcripciones ni secretos.",
+    REGLA_DE_ESCRITURAS_EN_PARALELO,
   ].join(" "),
   edit_file: [
     "Modifica un fichero existente del proyecto en una ruta absoluta.",
     "No modifiques `/skills`: son instrucciones de solo lectura. Para actualizar la memoria",
     "usa solo `/MEMORIA_PROYECTO.md` y conserva su contenido útil.",
+    REGLA_DE_ESCRITURAS_EN_PARALELO,
   ].join(" "),
   grep: [
     "Busca texto LITERAL (no regex) de forma progresiva para ahorrar contexto.",

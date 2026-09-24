@@ -108,3 +108,22 @@ describe("las rutas que escribe el modelo, normalizadas", () => {
     expect(r.texto).not.toContain("secreta");
   });
 });
+
+describe("lo que TrueForge le dice al modelo sobre escribir en paralelo", () => {
+  /**
+   * La cola por ruta hace que dos escrituras al mismo fichero no se pisen; esto es la otra mitad:
+   * que el modelo no las pida a la vez. Medido: DeepSeek pidió cinco ediciones del mismo HTML en
+   * una respuesta. Se mira en `listTools`, que es lo que TrueForge le entrega al modelo.
+   */
+  it("`write_file` y `edit_file` lo dicen; las de lectura, no", async () => {
+    const fuente = fuenteDeFicheros({ backend: {} as never, reglas: permisosDe({ nombre: "raiz", soloLectura: false }) });
+    const { result } = (await fuente.listTools()) as unknown as { result: { tools: { name: string; description: string }[] } };
+    const de = (n: string) => result.tools.find((t) => t.name === n)!.description;
+    for (const n of ["write_file", "edit_file"]) {
+      expect(de(n), n).toContain("MISMO fichero NO las pidas a la vez");
+      expect(de(n), n).toContain("ficheros DISTINTOS");
+    }
+    expect(de("read_file")).not.toContain("MISMO fichero");
+  });
+});
+

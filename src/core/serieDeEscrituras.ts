@@ -70,3 +70,19 @@ export function crearSerieDeEscrituras(): EnSerie {
     return mia;
   };
 }
+
+/**
+ * Lo que se le DICE al modelo sobre escribir en paralelo, en la descripción de `write_file` y
+ * `edit_file` de los dos motores —una sola frase para los dos, para que no diverjan—.
+ *
+ * La cola de arriba hace que dos escrituras al mismo fichero no se pisen: es la CORRECCIÓN, y no
+ * depende de que el modelo obedezca. Esto es la otra mitad, la EFICIENCIA: sin decírselo, un
+ * modelo que agrupa `tool_calls` —DeepSeek lo hace, medido— pide cinco ediciones del mismo HTML
+ * en una respuesta; en fila, las que ya no encajan fallan y hay que reintentarlas. Lo que sí
+ * puede ir a la vez se dice también: prohibir el paralelismo entero tiraría lo que sí vale.
+ */
+export const REGLA_DE_ESCRITURAS_EN_PARALELO =
+  "Lo independiente puede ir en paralelo —leer varios ficheros, editar ficheros DISTINTOS—. " +
+  "Pero varias escrituras del MISMO fichero NO las pidas a la vez: se aplican en fila y la que ya " +
+  "no encaje falla. Júntalas en una sola edición, o hazlas una detrás de otra.";
+
