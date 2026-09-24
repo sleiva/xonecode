@@ -25,7 +25,6 @@
     "build:web": "npm run build --workspace apps/web",
     "prepack": "npm run build",
     "web": "npm run build:web && tsx src/bin.ts --web",
-    "web:trazas": "XONECODE_TRACE_ERRORES=1 XONECODE_TRACE_TOOLS=1 npm run web",
     "web:trueforge": "npm run build:web && tsx src/bin.ts --web --motor trueforge",
     "test": "vitest run",
     "test:watch": "vitest",
