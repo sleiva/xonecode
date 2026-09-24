@@ -187,6 +187,19 @@ describe("dentroDelWorkspace: dónde puede xonecode commitear solo", () => {
     expect(dentroDelWorkspace("/casa/.xonecode/workspace/webstudio/A/", "/casa/.xonecode/workspace")).toBe(true);
     expect(dentroDelWorkspace("/casa/.xonecode/workspace/../../fuera", "/casa/.xonecode/workspace")).toBe(false);
   });
+
+  it("en Windows: barras invertidas y sin distinguir mayúsculas", () => {
+    // Medido en una máquina Windows: con `posix` a secas la ruta era UN segmento y el alta
+    // fallaba con «no se vacía una carpeta fuera del workspace».
+    const base = "C:\\Users\\ysoli\\.xonecode\\workspace";
+    expect(dentroDelWorkspace(`${base}\\mcp.xone.dev\\Plademer_Movil`, base)).toBe(true);
+    expect(dentroDelWorkspace("c:\\users\\YSOLI\\.xonecode\\workspace\\e\\P", base)).toBe(true);
+    expect(dentroDelWorkspace("C:/Users/ysoli/.xonecode/workspace/e/P", base)).toBe(true);
+    expect(dentroDelWorkspace("C:\\Users\\ysoli\\proyectos\\mi-app", base)).toBe(false);
+    expect(dentroDelWorkspace("D:\\Users\\ysoli\\.xonecode\\workspace\\e\\P", base)).toBe(false);
+    expect(dentroDelWorkspace(`${base}\\..\\..\\fuera`, base)).toBe(false);
+    expect(dentroDelWorkspace(base, base)).toBe(false);
+  });
 });
 
 describe("expandirConCasa: el «~» es una comodidad de ENTRADA", () => {

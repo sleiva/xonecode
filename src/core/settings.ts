@@ -283,10 +283,27 @@ export function segmentoSeguro(valor: string, que: string): string {
  * secas devuelve `false`: ahí no hay ningún proyecto, solo la carpeta que los contiene.
  */
 export function dentroDelWorkspace(raiz: string, base: string): boolean {
-  const normal = (r: string): string[] => posix.normalize(r).replace(/\/+$/, "").split("/");
+  const windows = esRutaDeWindows(raiz) || esRutaDeWindows(base);
+  const normal = (r: string): string[] => {
+    const barras = windows ? r.replace(/\\/g, "/") : r;
+    const limpia = posix.normalize(barras).replace(/\/+$/, "");
+    return (windows ? limpia.toLowerCase() : limpia).split("/");
+  };
   const dentro = normal(raiz);
   const fuera = normal(base);
   return dentro.length > fuera.length && fuera.every((seg, i) => dentro[i] === seg);
+}
+
+/**
+ * Una ruta de Windows —`C:\…`, `C:/…` o `\\servidor\…`— se compara con `\` como separador y
+ * SIN distinguir mayúsculas, que es lo que hace su sistema de ficheros. Con `posix` a secas la
+ * ruta entera era UN segmento, así que en Windows nada estaba nunca «dentro del workspace»:
+ * el alta no podía vaciar la copia y los commits por turno no corrían. Se decide por la FORMA
+ * del texto y no por `process.platform`, para que el módulo siga puro y se pueda probar en cualquier
+ * máquina.
+ */
+function esRutaDeWindows(ruta: string): boolean {
+  return /^[a-zA-Z]:[\\/]/.test(ruta) || ruta.startsWith("\\\\");
 }
 
 /**
