@@ -1351,7 +1351,7 @@ export async function entrarEnConsola(
 
 /**
  * `--motor <deepagents|trueforge>`, el punto de entrada para arrancar con un motor concreto sin
- * tocar la configuración (`npm run web:trueforge`). Se quita del argv con su valor y se deja en
+ * tocar la configuración (`npm run web -- --motor deepagents`). Se quita del argv con su valor y se deja en
  * `XONECODE_MOTOR`, que es la fuente que ya lee `resolverMotor`: una bandera no es una tercera
  * regla, es otra forma de poner la variable —y la única que vale igual en Windows, donde un
  * `XONECODE_MOTOR=…` delante del comando no funciona—. Un valor que no es un motor es un error de
