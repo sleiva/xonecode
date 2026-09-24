@@ -9,6 +9,8 @@ import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
 import { BotonDeCopiar } from "./BotonDeCopiar.js";
 import { CierreDelTurno } from "./CierreDelTurno.js";
 import { urlDeArtefacto } from "./Artefactos.js";
+import { IconoDeAbrir, IconoDeArtefacto } from "./IconosDelVisor.js";
+import { tipoDeArtefacto } from "../tipoDeArtefacto.js";
 import { hayCosteQueEnsenar } from "./CosteDelTurno.js";
 import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
 import vista from "../../estilos/ChatView.module.css";
@@ -388,34 +390,51 @@ function TarjetaDeArtefacto({
     sesion === undefined
       ? acto.ruta
       : `.xonecode/sesiones/${sesion}/artefactos/${acto.ruta.slice("/artefactos/".length)}`;
+  const tipo = tipoDeArtefacto(acto.nombre);
+  const peso = `${Math.max(1, Math.round(acto.bytes / 1024))} KB`;
+  // El CUERPO de la tarjeta: el tipo por dibujo, y a su lado el nombre encima y el tipo y el
+  // peso debajo. Es lo mismo abra o no abra; lo que cambia es quién lo envuelve.
+  const cuerpo = (
+    <>
+      <span className={estilos.artefactoIcono}>
+        <IconoDeArtefacto forma={tipo.forma} />
+      </span>
+      <span className={estilos.artefactoTexto}>
+        <span className={estilos.artefactoNombre}>{acto.nombre}</span>
+        <span className={estilos.artefactoMeta}>
+          {tipo.etiqueta} · <span className={estilos.artefactoPeso}>{peso}</span>
+        </span>
+      </span>
+    </>
+  );
   return (
     <div
       className={estilos.artefacto}
       title="No es un fichero del proyecto: vive con esta sesión, no entra en git y no sube a CloudStudio."
     >
-      <div className={estilos.artefactoFila}>
-        <span aria-hidden className={estilos.artefactoIcono}>
-          🖼
-        </span>
-        {/* El NOMBRE es el enlace: lleva a la pestaña Artefactos con este elegido. La
-            tarjeta es lo primero que se ve cuando el agente acaba de dibujar, y sin esto
-            había que ir a buscar la pestaña y elegirlo otra vez. Sin manejador se queda
-            como rótulo: un botón que no lleva a ninguna parte es el botón muerto de
-            siempre. */}
-        {alAbrir === undefined ? (
-          <span className={estilos.artefactoNombre}>{acto.nombre}</span>
-        ) : (
-          <button
-            type="button"
-            className={`${estilos.artefactoNombre} ${estilos.artefactoAbrir}`}
-            onClick={() => alAbrir(acto.ruta)}
-          >
-            {acto.nombre}
-          </button>
-        )}
-        <span className={estilos.artefactoPeso}>{Math.max(1, Math.round(acto.bytes / 1024))} KB</span>
-        <BotonDeCopiar texto={donde} etiqueta="Copiar la ruta del artefacto" />
-      </div>
+      {/* Con manejador, la tarjeta ENTERA abre: es un blanco del tamaño de lo que se ve, y
+          lleva a la pestaña Artefactos con este elegido. La flecha «Abrir» dice que lleva a
+          algún sitio, y lo dice sin hover —que no alcanzan el teclado ni el táctil—. Sin
+          manejador se queda como rótulo: un botón que no lleva a ninguna parte es el botón
+          muerto de siempre. */}
+      {alAbrir === undefined ? (
+        <div className={estilos.artefactoCuerpo}>{cuerpo}</div>
+      ) : (
+        <button
+          type="button"
+          className={`${estilos.artefactoCuerpo} ${estilos.artefactoAbrir}`}
+          aria-label={`Abrir ${acto.nombre}`}
+          onClick={() => alAbrir(acto.ruta)}
+        >
+          {cuerpo}
+          <span aria-hidden="true" className={estilos.artefactoIr}>
+            Abrir <IconoDeAbrir />
+          </span>
+        </button>
+      )}
+      {/* Copiar va FUERA del botón —un botón no puede llevar otro dentro— y SIEMPRE a la
+          vista: una acción que solo sale al pasar el ratón no la alcanza quien no lo tiene. */}
+      <BotonDeCopiar texto={donde} etiqueta="Copiar la ruta del artefacto" />
     </div>
   );
 }

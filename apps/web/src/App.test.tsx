@@ -1256,7 +1256,7 @@ describe("App: la pestaña Artefactos", () => {
 
   it("el nombre de la tarjeta del chat abre la pestaña con ese artefacto elegido", () => {
     conArtefacto();
-    fireEvent.click(screen.getByRole("button", { name: "d.html" }));
+    fireEvent.click(screen.getByRole("button", { name: "Abrir d.html" }));
     expect(screen.getByRole("tab", { name: "Artefactos" }).getAttribute("aria-selected")).toBe("true");
     // Y lo que se pinta es su iframe, no el «elige uno de la lista».
     expect(screen.getByTitle("d.html").tagName).toBe("IFRAME");

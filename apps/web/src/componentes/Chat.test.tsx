@@ -327,10 +327,12 @@ describe("Chat: el artefacto", () => {
     expect(copiado[1]).toBe("/artefactos/flujo.html");
   });
 
-  it("el nombre ABRE el artefacto, y sin manejador se queda como rótulo", () => {
+  it("la tarjeta ENTERA abre el artefacto, y sin manejador se queda como rótulo", () => {
     const abrir = vi.fn();
     const { unmount } = render(<Chat actos={[artefacto]} alAbrirArtefacto={abrir} />);
-    fireEvent.click(screen.getByRole("button", { name: "flujo.html" }));
+    // Dice qué es por su extensión, y lo dice escrito: el dibujo es aria-hidden.
+    expect(screen.getByText(/^HTML ·/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir flujo.html" }));
     expect(abrir).toHaveBeenCalledWith("/artefactos/flujo.html");
     // Y la frase que decía que no se podía abrir se fue con esto.
     expect(screen.queryByText(/todavía no se abre/i)).toBeNull();
@@ -338,7 +340,7 @@ describe("Chat: el artefacto", () => {
 
     // Un botón que no lleva a ninguna parte es el botón muerto de siempre.
     render(<Chat actos={[artefacto]} />);
-    expect(screen.queryByRole("button", { name: "flujo.html" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Abrir flujo.html" })).toBeNull();
     expect(screen.getByText("flujo.html")).toBeTruthy();
   });
 
@@ -1009,7 +1011,7 @@ describe("un artefacto editado varias veces", () => {
         alAbrirArtefacto={() => {}}
       />
     );
-    const tarjetas = [...container.querySelectorAll("button")].filter((b) => b.textContent === "flujo.html");
+    const tarjetas = [...container.querySelectorAll("button")].filter((b) => b.getAttribute("aria-label") === "Abrir flujo.html");
     expect(tarjetas).toHaveLength(1);
     // La que queda es la del último anuncio: la que dice el tamaño de ahora.
     expect(container.textContent).toContain("45 KB");
@@ -1020,7 +1022,9 @@ describe("un artefacto editado varias veces", () => {
     const { container } = render(
       <Chat actos={[{ tipo: "usuario", texto: "x" }, art(10), otro, { tipo: "fin", ms: 1 }]} alAbrirArtefacto={() => {}} />
     );
-    const nombres = [...container.querySelectorAll("button")].map((b) => b.textContent).filter((t) => t?.endsWith(".html"));
+    const nombres = [...container.querySelectorAll("button")]
+      .map((b) => b.getAttribute("aria-label")?.replace(/^Abrir /, ""))
+      .filter((t) => t?.endsWith(".html"));
     expect(nombres).toEqual(["flujo.html", "otro.html"]);
   });
 });

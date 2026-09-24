@@ -189,10 +189,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-## Lucide (iconos del visor de artefactos)
+## Lucide (iconos de los artefactos)
 
-`apps/web/src/componentes/IconosDelVisor.tsx` copia los trazados de cuatro iconos de
-Lucide 0.575.0 (`eye`, `code`, `maximize`, `download`).
+`apps/web/src/componentes/IconosDelVisor.tsx` copia los trazados de diez iconos de
+Lucide 0.575.0 (`eye`, `code`, `maximize`, `download`, `file`, `file-code`, `file-text`,
+`image`, `layout-dashboard`, `arrow-right`).
 
 Licencia (ISC):
 

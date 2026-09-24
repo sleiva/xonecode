@@ -439,21 +439,39 @@
   max-width: 70ch;
   box-sizing: border-box;
   width: 100%;
-  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px 4px 4px;
   border: 1px solid var(--dsw-alias-border-primary);
   border-radius: 10px;
   background: var(--dsw-alias-bg-secondary);
 }
 
-.artefactoFila {
+/* El cuerpo es lo que ocupa la tarjeta: icono, dos renglones y, si abre, la flecha. Cede él
+   el ancho (`min-width: 0`), para que un nombre largo se recorte en vez de empujar al botón
+   de copiar fuera de la tarjeta. */
+.artefactoCuerpo {
   display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
 }
 
 .artefactoIcono {
-  font-size: 15px;
-  line-height: 1;
+  display: inline-flex;
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.artefactoTexto {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
 }
 
 .artefactoNombre {
@@ -465,23 +483,22 @@
   white-space: nowrap;
 }
 
-/* El peso y la ruta son DATO DE MÁQUINA, así que van en mono (`estilos/tipografia.css`):
-   la misma regla por la que la URL de un entorno tiene clase propia en Ajustes. */
-.artefactoPeso {
-  margin-left: auto;
-  flex: none;
-  font-family: var(--ds-font-family-code);
+.artefactoMeta {
   font-size: 12px;
   color: var(--dsw-alias-label-tertiary);
 }
 
-/* El nombre del artefacto cuando ADEMÁS abre: un botón que se lee como el rótulo que era
-   —mismo tamaño, mismo peso— y se subraya al pasar por encima, que es lo que dice que lleva
-   a algún sitio. Sin `background` ni borde: dentro de la tarjeta ya hay un recinto, y un
-   segundo marco alrededor del nombre lo convertiría en un formulario. */
+/* El peso es DATO DE MÁQUINA, así que va en mono (`estilos/tipografia.css`): la misma regla
+   por la que la URL de un entorno tiene clase propia en Ajustes. */
+.artefactoPeso {
+  font-family: var(--ds-font-family-code);
+}
+
+/* La tarjeta cuando ADEMÁS abre: un botón que se lee como la tarjeta que era, sin marco
+   propio —ya hay uno alrededor—, y que se baña al pasar por encima, que es lo que dice que
+   todo él se pulsa. */
 .artefactoAbrir {
   border: none;
-  padding: 0;
   background: none;
   color: inherit;
   font: inherit;
@@ -489,8 +506,19 @@
   cursor: pointer;
 }
 
-.artefactoAbrir:hover {
-  text-decoration: underline;
+.artefactoAbrir:hover,
+.artefactoAbrir:focus-visible {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.artefactoIr {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
 }
 
 /* El paso ACTUAL, en la misma línea del pulso plegado. Se recorta con puntos suspensivos en
