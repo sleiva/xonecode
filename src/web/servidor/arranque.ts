@@ -4149,10 +4149,13 @@ export function montarRutas(
       const query = new URLSearchParams((peticion.url ?? "").split("?")[1] ?? "");
       // `completar` no debería lanzar —sus propios fallos vuelven como `{ok:false}`—, pero
       // esto es una ruta PÚBLICA sin cookie por delante: un reventón aquí no puede dejar al
-      // navegador con una petición colgada ni con un 500 sin nada que decir.
-      const { mensaje } = await servicioConectores
-        .completar(query)
-        .catch(() => ({ ok: false as const, mensaje: "no se pudo completar la autorización: vuelve a pulsar Conectar" }));
+      // navegador con una petición colgada ni con un 500 sin nada que decir. Y tampoco puede
+      // desaparecer en silencio: `contar` es el mismo hueco por el que se avisa de cualquier
+      // otro fallo suelto de este cable (`probar`/`autorizar`, más abajo).
+      const { mensaje } = await servicioConectores.completar(query).catch((error: unknown) => {
+        contar(error);
+        return { ok: false as const, mensaje: "no se pudo completar la autorización: vuelve a pulsar Conectar" };
+      });
       const cuerpo =
         `<!doctype html><html lang="es"><head><meta charset="utf-8">` +
         `<title>xonecode</title></head><body><p>${escaparHtml(mensaje)}</p>` +
@@ -4574,13 +4577,22 @@ export function montarRutas(
       return;
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "conector") {
-      const id = (mensaje as { id?: unknown }).id;
-      const accion = (mensaje as { accion?: unknown }).accion;
-      if (servicioConectores === undefined || typeof id !== "string" || typeof accion !== "string" || !esAccionDeConector(accion)) {
+      // Sin `as`: `mensaje.clase === "conector"` ya narrows a la forma de `MensajeDelCliente`
+      // —la misma unión discriminada que `workspace` usa un renglón más arriba—, así que
+      // `mensaje.id`/`mensaje.accion` se leen directos. El `typeof` que sigue no es para el
+      // tipo (ese ya lo sabe TypeScript): es la guarda de verdad contra un JSON malformado,
+      // que puede mentir sobre lo que el tipo promete.
+      if (
+        servicioConectores === undefined ||
+        typeof mensaje.id !== "string" ||
+        typeof mensaje.accion !== "string" ||
+        !esAccionDeConector(mensaje.accion)
+      ) {
         respuesta.writeHead(400);
         respuesta.end();
         return;
       }
+      const { id, accion } = mensaje;
       /**
        * Las cinco contestan 204 EN EL ACTO. `anadir`/`quitar`/`desconectar` son síncronas —su
        * `cambio()` ya reemite `conectores` antes de que esta función devuelva—; `probar` y

@@ -5970,12 +5970,19 @@ describe("las tareas en background, por el cable", () => {
 function servicioDeConectoresDeMentira(inicial: {
   conectores?: ConectorDelCable[];
   desconocidos?: string[];
+  ilegible?: true;
+  error?: string;
   completar?: (query: URLSearchParams) => { ok: boolean; mensaje: string };
 } = {}) {
   const llamadas: { metodo: string; args: unknown[] }[] = [];
   let alCambiar: (() => void) | undefined;
   const servicio: ServicioDeConectores = {
-    lista: () => ({ conectores: inicial.conectores ?? [], desconocidos: inicial.desconocidos ?? [] }),
+    lista: () => ({
+      conectores: inicial.conectores ?? [],
+      desconocidos: inicial.desconocidos ?? [],
+      ...(inicial.ilegible ? { ilegible: inicial.ilegible } : {}),
+      ...(inicial.error === undefined ? {} : { error: inicial.error }),
+    }),
     anadir: (id) => {
       llamadas.push({ metodo: "anadir", args: [id] });
       alCambiar?.();
@@ -6035,6 +6042,43 @@ describe("los conectores MCP, por el cable", () => {
     expect(JSON.stringify(mensaje)).not.toContain("mcp.deepwiki.com");
     // Y nada de lo emitido en este test lleva forma de token.
     expect(JSON.stringify(cliente.recibidos)).not.toContain("access_token");
+  });
+
+  it("`ilegible` y `error` viajan tal cual los da `lista()`, y NUNCA por `informar`", async () => {
+    // `informar` no llega al navegador desde el vestíbulo, y Ajustes se abre sin proyecto:
+    // el propio `ServicioDeConectores` lo dice en su doc. Lo que se comprueba aquí es que
+    // el cable no reintroduce ese camino por su cuenta.
+    const dichos: string[] = [];
+    const doble = servicioDeConectoresDeMentira({ ilegible: true, error: "el fichero de conectores no se entiende" });
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { conectores: doble.fabrica, informar: (t) => dichos.push(t) });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const mensaje = cliente.recibidos.find((m) => m.clase === "conectores") as Extract<
+      MensajeAlCliente,
+      { clase: "conectores" }
+    >;
+    expect(mensaje).toBeDefined();
+    expect(mensaje.ilegible).toBe(true);
+    expect(mensaje.error).toBe("el fichero de conectores no se entiende");
+    expect(dichos).toEqual([]);
+  });
+
+  it("sin `ilegible` ni `error`, el mensaje no los lleva — ausente no es `false`/cadena vacía", async () => {
+    const doble = servicioDeConectoresDeMentira();
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { conectores: doble.fabrica });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const mensaje = cliente.recibidos.find((m) => m.clase === "conectores") as Extract<
+      MensajeAlCliente,
+      { clase: "conectores" }
+    >;
+    expect(mensaje).toBeDefined();
+    expect("ilegible" in mensaje).toBe(false);
+    expect("error" in mensaje).toBe(false);
   });
 
   it("sin la opción `conectores`, la ráfaga no lo lleva: un control sin dato detrás no se pinta", async () => {
