@@ -9,7 +9,7 @@ import type { ModelosPort, PeticionExterna } from "../../../core/ports.js";
 import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ } from "./sesionTrueforge.js";
 import { TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
 import { topeAgotadoDe, traducirEvento } from "./eventosTrueforge.js";
-import { cargarMemoria } from "./memoriaTrueforge.js";
+import { cargarMemoria, rutaDeMemoria } from "./memoriaTrueforge.js";
 import { abrirSesionReal } from "../../turno/turnoReal.js";
 import { pintarSesion, resumirTraza } from "../../turno/informeDeTraza.js";
 import type { HechosDelTurno } from "../../../core/juezDelTurno.js";
@@ -793,6 +793,65 @@ describe("el tope de llamadas es POR TURNO, no de toda la conversación", () => 
       { rol: "especialista", nombre: "analyst-xone" },
     ]);
   });
+
+  it("`traducirEvento`: el razonamiento de un HIJO sale ENTERO al completarse su mensaje, delante de sus tools, y sin mezclarse con el de otro", () => {
+    const pensamientos = new Map<string, string>();
+    const quien = (h: string) => ({ "h-1": "developer-xone", "h-2": "designer-xone" })[h];
+    const delta = (thread_id: string, reasoning_content: string) =>
+      traducirEvento({ type: "model.message.delta", thread_id, reasoning_content }, quien, pensamientos).eventos;
+    // Los trozos de dos especialistas en paralelo, intercalados: no sale NADA mientras llegan.
+    expect([...delta("h-1", "Leo "), ...delta("h-2", "Miro "), ...delta("h-1", "el app."), ...delta("h-2", "el CSS.")]).toEqual([]);
+    const cierre = traducirEvento(
+      { type: "internal.agent.context.append", thread_id: "h-1", output: [{ tool_calls: [{ function: { name: "grep", arguments: "{}" } }] }] },
+      quien,
+      pensamientos
+    ).eventos;
+    expect(cierre.map((e) => e.tipo)).toEqual(["razonamiento", "tool"]);
+    expect(cierre[0]).toEqual({ tipo: "razonamiento", texto: "Leo el app.", origen: { rol: "especialista", nombre: "developer-xone" } });
+    // El del otro sigue esperando a SU mensaje, entero.
+    const otro = traducirEvento({ type: "internal.agent.context.append", thread_id: "h-2", output: [] }, quien, pensamientos).eventos;
+    expect(otro).toEqual([{ tipo: "razonamiento", texto: "Miro el CSS.", origen: { rol: "especialista", nombre: "designer-xone" } }]);
+    // El del raíz va a trozos, en vivo, y dice que es del orquestador.
+    expect(traducirEvento({ type: "model.message.delta", reasoning_content: "Delego." }, quien, pensamientos).eventos).toEqual([
+      { tipo: "razonamiento", texto: "Delego.", origen: { rol: "orquestador" } },
+    ]);
+  });
+
+  it("el razonamiento de DeepSeek (additional_kwargs) llega al CHAT con quién pensó, y NO entra en la memoria del hilo", async () => {
+    const raiz = proyecto();
+    const pensado = (texto: string, extra: Partial<ConstructorParameters<typeof AIMessageChunk>[0] & object> = {}) =>
+      new AIMessageChunk({ content: "", additional_kwargs: { reasoning_content: texto }, ...(extra as object) });
+    const { m } = modelosConGuion([
+      [
+        pensado("PIENSA-EL-ORQUESTADOR "),
+        new AIMessageChunk({
+          content: "",
+          tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "analyst-xone", input: "mira el app" }) }],
+        }),
+      ],
+      [pensado("PIENSA-EL-"), pensado("ANALISTA"), new AIMessageChunk({ content: "Tiene una colección." })],
+      [new AIMessageChunk({ content: "Una colección." })],
+    ]);
+    const s = await abrirSesionReal({
+      raiz,
+      modelos: m,
+      skills: { catalogo: () => [], cargar: async () => [] } as never,
+      entorno: ENTORNO,
+      motor: "trueforge",
+      hilo: "sesion-pensada",
+    });
+    const razonado: { texto: string; origen?: unknown }[] = [];
+    const pi = piel();
+    await s.turno("¿qué tiene?", { ...pi.p, razonamiento: (texto, origen) => void razonado.push({ texto, ...(origen === undefined ? {} : { origen }) }) });
+    s.cerrar();
+    expect(razonado).toEqual([
+      { texto: "PIENSA-EL-ORQUESTADOR ", origen: { rol: "orquestador" } },
+      { texto: "PIENSA-EL-ANALISTA", origen: { rol: "especialista", nombre: "analyst-xone" } },
+    ]);
+    const foto = readFileSync(rutaDeMemoria(raiz, "sesion-pensada")!, "utf8");
+    expect(foto).toContain("Una colección.");
+    expect(foto).not.toContain("PIENSA-EL");
+  }, 30_000);
 
   it("`topeAgotadoDe` reconoce el corte y nada más", () => {
     expect(topeAgotadoDe({ type: "internal.agent.done", status: "error", error: "You have reached iteration limit of 100, please request again" })).toBe(100);

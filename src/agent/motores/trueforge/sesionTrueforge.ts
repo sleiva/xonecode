@@ -63,7 +63,7 @@ import { accionDelJuez, type HechosDelTurno, type VeredictoDelTurno } from "../.
 import type { Entorno } from "../../config/entorno.js";
 import { modeloParaTrueforge } from "./modeloLangchain.js";
 import { TOOLS_DE_LECTURA, type BackendDeFicheros } from "./toolsDeFichero.js";
-import { topeAgotadoDe, traducirEvento } from "./eventosTrueforge.js";
+import { topeAgotadoDe, traducirEvento, type PensamientoPorHilo } from "./eventosTrueforge.js";
 import { anuncioDeSkills } from "./skillsTrueforge.js";
 import {
   capabilitiesDe,
@@ -632,6 +632,8 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
   async function* paso(lote: unknown[], senal: AbortSignal, pendientes: Pendiente[], preguntas: Pendiente[] = []): AsyncGenerator<DomainEvent> {
     for await (const _ of orquestador.send(lote as never)) void _;
     const llamadas = new Map<string, { nombre: string; args: Record<string, unknown> }>();
+    // El razonamiento de los especialistas, juntado por hilo hasta que su mensaje se completa.
+    const pensamientos: PensamientoPorHilo = new Map();
     const it = orquestador.execute({ signal: senal });
     let r = await it.next();
     while (!r.done) {
@@ -668,7 +670,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       // Un hilo que agotó su tope se ANOTA en la traza, con quién era: el raíz y cualquier hijo.
       const tope = topeAgotadoDe(evento);
       if (tope !== undefined) diagnostico?.corte?.(quienEs.get(deHilo) ?? deHilo, tope);
-      const { eventos, uso } = traducirEvento(evento, (h) => especialistaDeHilo.get(h));
+      const { eventos, uso } = traducirEvento(evento, (h) => especialistaDeHilo.get(h), pensamientos);
       // La «llamada» de un hijo externo es el producto entero: su consumo llega por su propio
       // callback (`externo`), y contarla aquí sumaría una llamada de modelo a ceros por delegación.
       if (uso !== undefined && !hilosExternos.has(deHilo)) {

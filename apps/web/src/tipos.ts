@@ -254,7 +254,8 @@ export type Acto =
   | { tipo: "asistente"; texto: string }
   /** Lo que el modelo PENSÓ, cuando lo publica. Aparte de `asistente` porque no es la
    *  respuesta: se pinta apagado y plegado. */
-  | { tipo: "razonamiento"; texto: string }
+  /** `origen`: quién pensó (`core/actos.ts`). Ausente = no consta, sin rótulo. */
+  | { tipo: "razonamiento"; texto: string; origen?: OrigenDeLaTool }
   /**
    * `detalles` corre EN PARALELO a `lineas`: misma longitud, mismo orden. Dice de qué tool
    * es cada línea y si falló — el evento ya lo traía y el acto lo tiraba al componer el

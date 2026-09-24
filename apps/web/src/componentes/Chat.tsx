@@ -173,10 +173,13 @@ function TramoDeTrabajo({
         )}
         {conQuienTrabaja(t.actos).map(({ acto: a, trozos }, i) => {
           if (a.tipo === "razonamiento") {
+            // Con el rótulo de QUIÉN pensó cuando cambia, el mismo que llevan sus tools.
+            const rotulo = trozos?.[0]?.rotulo;
             return (
-              <p key={i} className={`${estilos.textoTenue} ${estilos.pensado}`}>
-                {a.texto}
-              </p>
+              <Fragment key={i}>
+                {rotulo === undefined ? null : <p className={estilos.quienTrabaja}>{rotulo}</p>}
+                <p className={`${estilos.textoTenue} ${estilos.pensado}`}>{a.texto}</p>
+              </Fragment>
             );
           }
           if (a.tipo === "herramientas") {
@@ -232,12 +235,22 @@ function TramoDeTrabajo({
  * Los actos de un tramo con sus líneas de tool ya partidas por QUIÉN las pidió. El rótulo del
  * último trozo se arrastra de un acto al siguiente, porque un razonamiento en medio parte el
  * acto de herramientas pero no cambia quién trabaja.
+ *
+ * Un razonamiento CON origen cuenta igual que una línea: lleva rótulo si quien piensa no es
+ * quien trabajaba, y lo pasa al siguiente. Sin origen (deepagents, sesiones de antes) no
+ * rotula ni cambia nada, como antes.
  */
 function conQuienTrabaja(
   actos: readonly Acto[]
 ): { acto: Acto; trozos?: TrozoPorOrigen[] }[] {
   let previo: string | undefined;
   return actos.map((acto) => {
+    if (acto.tipo === "razonamiento" && acto.origen !== undefined) {
+      const rotulo = rotuloDeOrigen(acto.origen);
+      const trozos = rotulo === previo ? [] : [{ ...(rotulo === undefined ? {} : { rotulo }), lineas: [] }];
+      previo = rotulo;
+      return { acto, trozos };
+    }
     if (acto.tipo !== "herramientas") return { acto };
     const { trozos, ultimo } = partirPorOrigen(acto.lineas, acto.detalles, previo);
     previo = ultimo;

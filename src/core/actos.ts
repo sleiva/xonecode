@@ -71,7 +71,7 @@ export type Acto =
    * es la respuesta: se pinta distinto (apagado, plegable) y quien lea el transcript tiene
    * que poder distinguir lo que el modelo pensó de lo que dijo.
    */
-  | { tipo: "razonamiento"; texto: string }
+  | { tipo: "razonamiento"; texto: string; origen?: OrigenDeLaTool }
   /**
    * Las líneas de tool CONSECUTIVAS de un turno, en un solo acto: son paisaje, y el
    * transcript enseña solo las últimas. Una línea del asistente (o de sistema) cierra el

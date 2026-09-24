@@ -17,7 +17,7 @@
  */
 import { AIMessage, AIMessageChunk, HumanMessage, SystemMessage, ToolMessage, type BaseMessage } from "@langchain/core/messages";
 import type { ExtendedChatCompletionChunk, ILLM, LLMCreateParams, LLMCreateParamsStreaming, RawAssistantMessageWithUsage } from "./trueforge.js";
-import { razonamientoDe, textoDe } from "../../turno/puente.js";
+import { razonamientoDe, razonamientoVisibleDe, textoDe } from "../../turno/puente.js";
 
 /** Lo mínimo que se usa de un modelo de LangChain: atarle las tools y pedirle un stream. */
 interface ModeloDeLangchain {
@@ -105,7 +105,10 @@ export function modeloParaTrueforge(opciones: {
     for await (const trozo of await modelo.stream(mensajes, senal === undefined ? {} : { signal: senal })) {
       acumulado = acumulado === undefined ? trozo : acumulado.concat(trozo);
       const texto = textoDe(trozo);
-      const pensado = razonamientoDe(trozo);
+      // En los TROZOS va el razonamiento que se ENSEÑA, DeepSeek incluido: los trozos solo
+      // alimentan los eventos del chat. El mensaje que se guarda en el hilo es el `output` de
+      // abajo, que sigue con `razonamientoDe` — lo de DeepSeek no entra en la memoria.
+      const pensado = razonamientoVisibleDe(trozo);
       const llamadas = (trozo.tool_call_chunks ?? []).map((t, i) => ({
         index: t.index ?? i,
         ...(t.id === undefined ? {} : { id: t.id, type: "function" as const }),

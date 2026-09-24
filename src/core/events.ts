@@ -27,7 +27,13 @@ export type DomainEvent =
    * las pieles de terminal no lo implementan — así la salida de una tubería sigue siendo
    * byte-idéntica.
    */
-  | { tipo: "razonamiento"; texto: string; msgId?: string }
+  | {
+      tipo: "razonamiento";
+      texto: string;
+      msgId?: string;
+      /** Quién pensó: el orquestador o un especialista. Ausente = no consta (deepagents). */
+      origen?: OrigenDeLaTool;
+    }
   /**
    * El RESUMEN con el que la librería compacta la conversación al pasar el umbral de contexto
    * (`agent/turno/resumenDeContexto.ts`), en trozos. Tampoco es la respuesta: salía por el

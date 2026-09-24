@@ -9,7 +9,8 @@
  *   lista blanca (`resumenDeTool.ts#detalleDe`), y el resultado de una tool no se pinta —
  *   `write_file` llevaría el fichero entero—.
  * - **Solo el hilo RAÍZ habla**: lo que dice un subagente no es la respuesta, igual que el
- *   `esDelPadre` del puente. Sus tools sí se ven, que es lo que dice que está trabajando.
+ *   `esDelPadre` del puente. Sus tools sí se ven, que es lo que dice que está trabajando, y
+ *   su RAZONAMIENTO también, pero entero y no a trozos (`PensamientoPorHilo`).
  *
  * Puro sobre los eventos: guarda lo justo entre uno y otro (el uso de la última llamada) y no
  * toca nada más.
@@ -90,22 +91,44 @@ function origenDelHilo(hilo: string, especialistaDe: EspecialistaDeHilo | undefi
 }
 
 /**
+ * El razonamiento de los HIJOS mientras llega, por hilo. El del raíz se pinta a trozos, en vivo;
+ * el de un especialista se guarda aquí y sale ENTERO cuando su mensaje se completa
+ * (`internal.agent.context.append`), delante de las tools que decidió. A trozos no se puede:
+ * dos especialistas en paralelo intercalan sus trozos, y la piel —que junta los trozos seguidos
+ * en un acto— los mezclaría en un párrafo que no pensó nadie.
+ *
+ * Uno por TURNO: lo que se quede a medias en un turno cortado no es del siguiente.
+ */
+export type PensamientoPorHilo = Map<string, string>;
+
+/**
  * Un evento de TrueForge → cero o más eventos de dominio, y el uso si trae una llamada al modelo
  * terminada (para que quien corre el turno lo sume al contador).
  */
 export function traducirEvento(
   evento: unknown,
-  especialistaDe?: EspecialistaDeHilo
+  especialistaDe?: EspecialistaDeHilo,
+  pensamientos?: PensamientoPorHilo
 ): { eventos: DomainEvent[]; uso?: UsoDeLlamada } {
   const e = (evento ?? {}) as EventoTrueforge;
   const hilo = e.thread_id ?? HILO_RAIZ;
   const delRaiz = hilo === HILO_RAIZ;
   switch (e.type) {
     case "model.message.delta": {
-      if (!delRaiz) return { eventos: [] };
+      const pensado = typeof e.reasoning_content === "string" ? e.reasoning_content : "";
+      if (!delRaiz) {
+        // Sin colchón no hay dónde juntarlo, y a trozos se mezclaría: se calla, como antes.
+        if (pensado !== "" && pensamientos !== undefined) pensamientos.set(hilo, (pensamientos.get(hilo) ?? "") + pensado);
+        return { eventos: [] };
+      }
       const salida: DomainEvent[] = [];
-      if (typeof e.reasoning_content === "string" && e.reasoning_content !== "") {
-        salida.push({ tipo: "razonamiento", texto: e.reasoning_content, ...(e.id === undefined ? {} : { msgId: e.id }) });
+      if (pensado !== "") {
+        salida.push({
+          tipo: "razonamiento",
+          texto: pensado,
+          ...(e.id === undefined ? {} : { msgId: e.id }),
+          origen: { rol: "orquestador" },
+        });
       }
       if (typeof e.content === "string" && e.content !== "") {
         salida.push({ tipo: "token", texto: e.content, ...(e.id === undefined ? {} : { msgId: e.id }) });
@@ -119,6 +142,12 @@ export function traducirEvento(
       const eventos: DomainEvent[] = [];
       let uso: UsoDeLlamada | undefined;
       const origen = origenDelHilo(hilo, especialistaDe);
+      // Lo que el hijo pensó para ESTE mensaje, entero y antes de las tools que decidió.
+      const pensado = pensamientos?.get(hilo);
+      if (pensado !== undefined) {
+        pensamientos!.delete(hilo);
+        if (pensado.trim() !== "") eventos.push({ tipo: "razonamiento", texto: pensado, origen });
+      }
       for (const m of salidas) {
         for (const { nombre, args } of llamadasDe(m)) {
           const detalle = detalleDe(nombre, args);

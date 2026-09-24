@@ -95,6 +95,16 @@ export function crearPielWeb(
   let pensamiento = "";
   let parcialPensado = false;
   let ultimoPensado = 0;
+  /** Lo último que se VOLCÓ del razonamiento, para no perder la cola que cayó dentro de la
+   *  ventana de 80 ms: se vuelca en `empujar`, como el resumen. */
+  let volcadoPensado = "";
+  /** De quién es el razonamiento a medias. Otro origen empieza OTRO acto: el de dos
+   *  especialistas seguidos no es un párrafo. */
+  let origenPensado: OrigenDeLaTool | undefined;
+  const mismoOrigen = (a: OrigenDeLaTool | undefined, b: OrigenDeLaTool | undefined): boolean =>
+    JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  const actoDePensado = (texto: string): Acto =>
+    origenPensado === undefined ? { tipo: "razonamiento", texto } : { tipo: "razonamiento", texto, origen: origenPensado };
   /** Y para el resumen de contexto, que es un acto `sistema` de clase `resumen`. Su
    *  colchón se VUELCA entero antes del acto siguiente (`empujar`): con la ventana de 80 ms
    *  el último trozo se podía quedar fuera, y aquí eso es el final del resumen. */
@@ -115,6 +125,8 @@ export function crearPielWeb(
   };
 
   const empujar = (acto: Acto): void => {
+    if (parcialPensado && pensamiento !== volcadoPensado) sustituir(actoDePensado(pensamiento));
+    volcadoPensado = "";
     if (parcialResumido && resumido !== volcadoResumido) {
       sustituir({ tipo: "sistema", texto: resumido, clase: "resumen" });
     }
@@ -234,17 +246,24 @@ export function crearPielWeb(
       sustituir({ tipo: "asistente", texto: colchon });
     },
 
-    razonamiento(texto) {
+    razonamiento(texto, origen) {
       // Mismo trato que los tokens de la respuesta —parcial que se sustituye, con su
       // ventana de 80 ms— pero en su propio acto: lo que el modelo PIENSA no es lo que
       // dice, y el transcript tiene que poder distinguirlo.
+      if (parcialPensado && !mismoOrigen(origen, origenPensado)) {
+        // Otro que piensa: lo de antes se cierra ENTERO y lo suyo empieza acto propio.
+        if (pensamiento !== volcadoPensado) sustituir(actoDePensado(pensamiento));
+        parcialPensado = false;
+      }
       if (!parcialPensado) {
         cerrarFase();
         // El orden importa: `empujar` limpia los colchones (cualquier acto nuevo cierra lo
         // que hubiera a medias), así que el bloque nuevo se asigna DESPUÉS. Al revés se
         // perdía el primer trozo y el pensamiento empezaba a contar desde el segundo.
-        empujar({ tipo: "razonamiento", texto });
+        origenPensado = origen;
+        empujar(actoDePensado(texto));
         pensamiento = texto;
+        volcadoPensado = texto;
         parcialPensado = true;
         ultimoPensado = ahora();
         return;
@@ -253,7 +272,8 @@ export function crearPielWeb(
       const t = ahora();
       if (t - ultimoPensado < MS_ENTRE_PARCIALES) return;
       ultimoPensado = t;
-      sustituir({ tipo: "razonamiento", texto: pensamiento });
+      volcadoPensado = pensamiento;
+      sustituir(actoDePensado(pensamiento));
     },
 
     resumen(texto) {

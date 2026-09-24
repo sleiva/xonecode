@@ -98,6 +98,29 @@ describe("pielWeb", () => {
     ]);
   });
 
+  it("el razonamiento de OTRO que piensa es otro acto, con su origen; el mismo sigue en el suyo", () => {
+    let t = 0;
+    const { piel, actos } = crearPielWeb(() => t);
+    const orq = { rol: "orquestador" } as const;
+    const dev = { rol: "especialista", nombre: "developer-xone" } as const;
+    piel.razonamiento!("Delego ", orq);
+    piel.razonamiento!("en el developer.", orq);
+    piel.razonamiento!("Leo el app.xml.", dev);
+    expect(actos()).toEqual([
+      // La cola del primero cayó dentro de la ventana de 80 ms y NO se pierde al cambiar.
+      { tipo: "razonamiento", texto: "Delego en el developer.", origen: orq },
+      { tipo: "razonamiento", texto: "Leo el app.xml.", origen: dev },
+    ]);
+  });
+
+  it("la cola del razonamiento que cae en la ventana no se pierde con el acto siguiente", () => {
+    const { piel, actos } = crearPielWeb(() => 0);
+    piel.razonamiento!("Primero ");
+    piel.razonamiento!("miro.");
+    piel.linea("→ lee /app.xml");
+    expect(actos()[0]).toEqual({ tipo: "razonamiento", texto: "Primero miro." });
+  });
+
   it("un acto por medio corta el razonamiento: el bloque siguiente empieza de cero", () => {
     let t = 0;
     const { piel, actos } = crearPielWeb(() => t);

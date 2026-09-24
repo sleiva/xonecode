@@ -35,7 +35,7 @@ export interface Piel {
    * implemente no lo verá, y la salida de stdio sigue siendo la de siempre —byte-idéntica
    * por una tubería, que es lo que sostiene el e2e—. Hoy solo la web lo pinta.
    */
-  razonamiento?(texto: string): void;
+  razonamiento?(texto: string, origen?: OrigenDeLaTool): void;
   /** El resumen de contexto, en trozos. OPCIONAL, por lo mismo que `razonamiento`. */
   resumen?(texto: string): void;
   /**
@@ -198,7 +198,7 @@ export async function correrTurno(
               piel.cerrarLinea();
               abierta = false;
             }
-            piel.razonamiento(ev.texto);
+            piel.razonamiento(ev.texto, ev.origen);
           }
           break;
 

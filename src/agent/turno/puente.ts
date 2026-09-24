@@ -42,6 +42,23 @@ export function textoDe(msg: unknown): string {
  * Se aceptan las dos formas que hay sueltas por el ecosistema: el bloque `thinking` con su
  * campo homónimo y el `{ text, thought: true }` que usan otros adaptadores.
  */
+/**
+ * El razonamiento que se ENSEÑA: el de `razonamientoDe` más el que un cliente compatible con
+ * OpenAI deja en `additional_kwargs.reasoning_content` —DeepSeek, por `@langchain/openai`—, que
+ * no viaja en bloques y por eso no se veía nunca.
+ *
+ * **Es solo para pintar**, y por eso es otra función y no un caso más de la de arriba: la de
+ * arriba también decide qué razonamiento se GUARDA en la memoria de un hilo de TrueForge
+ * (`modeloLangchain.ts`), y el de DeepSeek no entra ahí — su eco lo repone el `fetch`
+ * (`ecoDeRazonamiento.ts`), y meterlo en la foto de la sesión la engordaría para nada.
+ */
+export function razonamientoVisibleDe(msg: unknown): string {
+  const deBloques = razonamientoDe(msg);
+  const extra = (msg as { additional_kwargs?: { reasoning_content?: unknown } } | null)?.additional_kwargs
+    ?.reasoning_content;
+  return typeof extra === "string" && extra !== "" ? deBloques + extra : deBloques;
+}
+
 export function razonamientoDe(msg: unknown): string {
   if (!msg || typeof msg !== "object") return "";
   const c = (msg as Record<string, unknown>).content;
@@ -385,7 +402,7 @@ export async function* aEventos(
         // El razonamiento sale por su propio evento y NO pasa por `Mensajes`: ese contador
         // decide qué trozos de la RESPUESTA se pintan (dedupe de reintentos), y contar el
         // pensamiento ahí desalinearía esa cuenta.
-        const pensado = razonamientoDe(msg);
+        const pensado = razonamientoVisibleDe(msg);
         if (pensado !== "") {
           yield { tipo: "razonamiento", texto: pensado, ...(idTexto === undefined ? {} : { msgId: idTexto }) };
         }

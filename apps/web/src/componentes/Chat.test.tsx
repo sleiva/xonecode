@@ -1090,3 +1090,26 @@ describe("Chat: lo que falló en el trabajo del agente", () => {
   });
 });
 
+describe("Chat: quién pensó", () => {
+  it("el razonamiento de un especialista lleva su rótulo, y la tool suya de detrás no lo repite", () => {
+    const { container } = render(
+      <Chat
+        actos={[
+          { tipo: "razonamiento", texto: "Delego.", origen: { rol: "orquestador" } },
+          { tipo: "razonamiento", texto: "Leo el app.", origen: { rol: "especialista", nombre: "developer-xone" } },
+          {
+            tipo: "herramientas",
+            lineas: ["→ lee /app.xml"],
+            detalles: [{ nombre: "read_file", origen: { rol: "especialista", nombre: "developer-xone" } }],
+          },
+          { tipo: "fin", ms: 10 },
+        ]}
+      />
+    );
+    const rotulos = [...container.querySelectorAll("details p")]
+      .map((p) => p.textContent)
+      .filter((t) => t === "orquestador" || t === "developer-xone");
+    expect(rotulos).toEqual(["orquestador", "developer-xone"]);
+  });
+});
+

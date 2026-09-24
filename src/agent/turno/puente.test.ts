@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aEventos, crearMemoriaDelTurno, razonamientoDe, textoDe, toolsDe, esDelPadre } from "./puente.js";
+import { aEventos, crearMemoriaDelTurno, razonamientoDe, razonamientoVisibleDe, textoDe, toolsDe, esDelPadre } from "./puente.js";
 import type { DomainEvent, PendienteDeAprobacion } from "../../core/events.js";
 
 async function recoger(chunks: unknown[]): Promise<DomainEvent[]> {
@@ -527,3 +527,15 @@ describe("el resumen de contexto no es la respuesta", () => {
     expect(ETIQUETA_DEL_RESUMEN).toBe("xonecode:resumen");
   });
 });
+
+describe("razonamientoVisibleDe", () => {
+  it("añade el de DeepSeek (additional_kwargs.reasoning_content), que razonamientoDe NO lee", () => {
+    const deepseek = { content: "", additional_kwargs: { reasoning_content: "pienso en el login" } };
+    expect(razonamientoVisibleDe(deepseek)).toBe("pienso en el login");
+    // La otra sigue sin verlo: es la que decide lo que se GUARDA en la memoria de TrueForge.
+    expect(razonamientoDe(deepseek)).toBe("");
+    const claude = { content: [{ type: "thinking", thinking: "miro" }] };
+    expect(razonamientoVisibleDe(claude)).toBe("miro");
+  });
+});
+
