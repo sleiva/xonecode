@@ -1,15 +1,98 @@
-/* La coraza —capa, velo, tarjeta, título, botones— es la de `Pregunta.module.css`, importada
-   tal cual: es la misma ventana, no una que se le parece. Aquí solo lo que cambia: las
-   opciones van en COLUMNA, una por fila y a todo el ancho, porque son frases del modelo y su
-   largo no se sabe — en fila, tres opciones largas se partían la tarjeta a trozos. */
+/* La coraza —capa, velo, tarjeta, botones— es la de `Pregunta.module.css`, importada tal
+   cual: es la misma ventana, no una que se le parece. Aquí solo lo que cambia, con la forma
+   del modo de pregunta del `ToolFallback` de assistant-ui y nuestros alias. */
+
+.cabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* El «?» en su círculo, con el cian de ACENTO: aquí no sostiene texto, lo acompaña. */
+.marca {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--xonecode-cian);
+  border-radius: 50%;
+  color: var(--dsw-alias-label-primary);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.enunciado {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+  white-space: pre-wrap;
+}
+
+/* Las opciones van en COLUMNA, una por fila y a todo el ancho, porque son frases del modelo
+   y su largo no se sabe — en fila, tres opciones largas se partían la tarjeta a trozos. */
 .opciones {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
+/* Una opción es su FILA entera: el `label` hace que pulsar en cualquier sitio la elija. */
 .opcion {
-  width: 100%;
-  text-align: left;
-  white-space: normal;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+.opcion:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* La elegida se ve sin mirar el círculo: filo cian y el baño de la fila elegida, los mismos
+   tokens por tema que la barra lateral. */
+.opcion[data-elegida] {
+  border-color: var(--xonecode-cian);
+  background: var(--xonecode-fila-elegida);
+}
+
+.radio {
+  flex: none;
+  margin: 3px 0 0;
+  accent-color: var(--xonecode-azul);
+}
+
+.otra {
+  align-items: stretch;
+}
+
+/* Sin `box-sizing` global en este cliente (`Pregunta.module.css#envoltorio input`): sin él,
+   el ancho más el relleno se saldría de la fila. */
+.campo {
+  flex: 1 1 auto;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  resize: vertical;
+}
+
+/* Cancelar y Responder, a la DERECHA: aquí la tarjeta es un formulario —se elige y se
+   manda—, no el aviso centrado de una decisión. */
+.decisiones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }

@@ -1786,15 +1786,16 @@ describe("App: la pregunta del AGENTE, con un botón por opción", () => {
     act(() => store.aplicar(acto({ tipo: "asistente", texto: "¿Qué pantalla toco?" })));
     act(() => store.aplicar(acto(consulta)));
     const dialogo = screen.getByRole("dialog", { name: "¿Qué pantalla toco?" });
-    fireEvent.click(within(dialogo).getByRole("button", { name: "Menú" }));
+    fireEvent.click(within(dialogo).getByRole("radio", { name: "Menú" }));
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Responder" }));
     expect(enviar).toHaveBeenCalledWith({ clase: "prosa", texto: "Menú" });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "¿Qué pantalla toco?" })).toBeNull());
   });
 
-  it("«Responder escribiendo» la aparta SIN mandar nada: la pregunta sigue en el chat", () => {
+  it("«Cancelar» la aparta SIN mandar nada: la pregunta sigue en el chat", () => {
     const { store, enviar } = montar();
     act(() => store.aplicar(acto(consulta)));
-    fireEvent.click(screen.getByRole("button", { name: "Responder escribiendo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
     expect(screen.queryByRole("dialog", { name: "¿Qué pantalla toco?" })).toBeNull();
     // Nada que CONTESTE: la lectura de los planes sale sola con proyecto abierto y no es una respuesta.
     expect(enviar.mock.calls.filter(([m]) => (m as { clase?: string }).clase !== "planes")).toEqual([]);
