@@ -3,9 +3,9 @@ import { MOTOR_POR_OMISION, resolverMotor } from "./motor.js";
 import { validar } from "./config.js";
 
 describe("el motor de una sesión", () => {
-  it("sin nada puesto, deepagents: el de siempre", () => {
-    expect(resolverMotor({})).toBe("deepagents");
-    expect(MOTOR_POR_OMISION).toBe("deepagents");
+  it("sin nada puesto, TrueForge: la omisión desde el banco entre motores", () => {
+    expect(resolverMotor({})).toBe("trueforge");
+    expect(MOTOR_POR_OMISION).toBe("trueforge");
   });
 
   it("la SESIÓN manda sobre todo lo demás: una conversación no cambia de motor por debajo", () => {

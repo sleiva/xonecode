@@ -481,7 +481,8 @@ infraestructura** —ni NATS, ni Redis, ni Postgres, ni Daytona— con `AgentThr
 estorba (abajo).
 
 **El motor se elige por configuración y no se ve.** `"motor": "trueforge"` en el `config.json` del
-proyecto o en el global, o `XONECODE_MOTOR=trueforge`; por omisión, `deepagents`. Cada sesión guarda
+proyecto o en el global, o `XONECODE_MOTOR`; **por omisión, `trueforge`** desde el 24-09-2026 (decisión
+suya tras el banco entre motores, abajo) — `deepagents` se pide con `"motor": "deepagents"`. Cada sesión guarda
 en el índice el motor con el que nació y lo conserva al reabrirla, porque la memoria de un motor no
 la continúa el otro. La elección vive en un solo punto, `abrirSesionReal`, por el que pasan la web,
 el terminal, `run`, el banco y los evals (`core/motor.ts`, `agent/motores/trueforge/`).

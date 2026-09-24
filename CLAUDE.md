@@ -617,7 +617,9 @@ no viaja porque ahí la ejecución no se concede—. Reglas duras:
 ### El segundo motor: TrueForge (rama `xonecode-trueforge`)
 
 `core/motor.ts`, `agent/motores/trueforge/`, `docs/VARIANTE-TRUEFORGE-HARNESS.md`. **Se elige por
-configuración y no se ve** (`"motor"` en `config.json`, `XONECODE_MOTOR`; omisión `deepagents`), y
+configuración y no se ve** (`"motor"` en `config.json`, `XONECODE_MOTOR`; **omisión `trueforge`**, decidida tras el banco entre
+motores —equivalentes en coste dentro del ruido—; una sesión sin motor guardado se reabre con
+`deepagents`, y los tests de ese motor lo fijan por la variable), y
 **la elección vive en UN punto, `abrirSesionReal`**, por el que pasan la web, el terminal, `run`, el
 banco y los evals. Una sesión guarda en el índice el motor con el que nació: la memoria de uno no la
 continúa el otro. Cumple el mismo `SesionReal`, así que ninguna piel sabe cuál corre. Tres reglas:

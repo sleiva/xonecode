@@ -16,8 +16,15 @@
 export const MOTORES = ["deepagents", "trueforge"] as const;
 export type MotorDeAgente = (typeof MOTORES)[number];
 
-/** El de omisión: el que existía antes de que hubiera dos, y el que corre sin configurar nada. */
-export const MOTOR_POR_OMISION: MotorDeAgente = "deepagents";
+/**
+ * El de omisión, el que corre sin configurar nada: **TrueForge**, decisión suya (24-09-2026) tras el
+ * banco entre motores, que los dio equivalentes en coste dentro del ruido y a TrueForge sin peor
+ * calidad (`docs/VARIANTE-TRUEFORGE-HARNESS.md`, «El banco entre motores»). deepagents sigue a un
+ * `"motor": "deepagents"` de distancia, y una sesión que nació con él sigue con él: el vestíbulo la
+ * reabre con el suyo, y a una sin motor guardado —de antes de que hubiera dos— le pone deepagents a
+ * mano, sin pasar por aquí.
+ */
+export const MOTOR_POR_OMISION: MotorDeAgente = "trueforge";
 
 export function esMotor(valor: unknown): valor is MotorDeAgente {
   return typeof valor === "string" && (MOTORES as readonly string[]).includes(valor);

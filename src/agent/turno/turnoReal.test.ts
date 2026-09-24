@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -42,6 +42,20 @@ import type { Entorno } from "../config/entorno.js";
 import type { Cambio } from "./instantanea.js";
 import type { CargarIndice } from "../navegacion/indiceEnDisco.js";
 import type { IndiceDeNavegacion } from "../../core/navegacion.js";
+
+/**
+ * **Este fichero prueba el motor DEEPAGENTS.** Desde que la omisión es TrueForge
+ * (`core/motor.ts#MOTOR_POR_OMISION`), `abrirSesionReal` sin motor abre TrueForge, y estos tests
+ * doblan el grafo de deepagents (`construirAgente`). Se fija por la variable —la fuente de más
+ * precedencia después de la sesión— para TODO el fichero, en vez de en cada llamada: una llamada que
+ * se olvidara de pasarlo probaría el otro motor sin decirlo.
+ */
+beforeEach(() => {
+  vi.stubEnv("XONECODE_MOTOR", "deepagents");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 /**
  * El agente falso, con el MÍNIMO que `turnoReal.ts` consume:
