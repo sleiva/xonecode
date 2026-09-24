@@ -458,6 +458,10 @@
   flex-wrap: wrap;
   gap: 8px;
   align-items: flex-end;
+  /* El mismo sangrado que el tramo de trabajo (`.pensando`): sin él las miniaturas salían
+     12 px a la izquierda del triángulo de «Trabajo del agente» y del texto del mensaje,
+     descolgadas de la columna. Medido en pantalla. */
+  padding-left: 12px;
 }
 
 /* Altura fija y ancho automático: una captura de móvil es muy vertical y un diagrama muy
