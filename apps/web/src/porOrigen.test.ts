@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { partirPorOrigen, rotuloDeOrigen } from "./porOrigen.js";
+import { partirPorOrigen, toolsFallidas, rotuloDeOrigen } from "./porOrigen.js";
 
 const dev = { nombre: "read_file", origen: { rol: "especialista", nombre: "developer-xone" } } as const;
 const dis = { nombre: "read_file", origen: { rol: "especialista", nombre: "designer-xone" } } as const;
@@ -48,3 +48,37 @@ describe("partirPorOrigen", () => {
     ]);
   });
 });
+
+describe("las tools que fallaron", () => {
+  it("se marcan por su detalle.error, con el índice DENTRO de su trozo", () => {
+    const { trozos } = partirPorOrigen(
+      ["a", "✗ b: no existe", "c"],
+      [
+        { origen: { rol: "orquestador" } },
+        { origen: { rol: "especialista", nombre: "developer-xone" }, error: "no existe" },
+        { origen: { rol: "especialista", nombre: "developer-xone" } },
+      ],
+      undefined
+    );
+    expect(trozos).toEqual([
+      { rotulo: "orquestador", lineas: ["a"] },
+      { rotulo: "developer-xone", lineas: ["✗ b: no existe", "c"], fallidas: [0] },
+    ]);
+  });
+
+  it("el `✗` del TEXTO no decide nada: sin error en el dato, no hay fallo", () => {
+    expect(partirPorOrigen(["✗ parece un fallo"], [{}], undefined).trozos).toEqual([{ lineas: ["✗ parece un fallo"] }]);
+  });
+
+  it("se cuentan en todo el tramo, y solo en actos de herramientas", () => {
+    expect(
+      toolsFallidas([
+        { tipo: "herramientas", detalles: [{ error: "x" }, {}] },
+        { tipo: "razonamiento" },
+        { tipo: "herramientas", detalles: [{ error: "y" }] },
+        { tipo: "herramientas" },
+      ])
+    ).toBe(2);
+  });
+});
+

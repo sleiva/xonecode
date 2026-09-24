@@ -18,6 +18,11 @@ export function rotuloDeOrigen(origen: OrigenDeLaTool | undefined): string | und
 export interface TrozoPorOrigen {
   rotulo?: string;
   lineas: string[];
+  /**
+   * Qué líneas del trozo (su índice DENTRO del trozo) son de una tool que FALLÓ, según su
+   * `detalle.error` — el dato, no el `✗` del texto. Ausente = ninguna que conste.
+   */
+  fallidas?: number[];
 }
 
 /**
@@ -45,7 +50,18 @@ export function partirPorOrigen(
       trozos.push(abierto);
       actual = rotulo;
     }
+    if (detalles?.[i]?.error !== undefined) (abierto.fallidas ??= []).push(abierto.lineas.length);
     abierto.lineas.push(linea);
   });
   return { trozos, ultimo: actual };
+}
+
+/** Cuántas líneas de tool de estos actos FALLARON, según su `detalle.error`. */
+export function toolsFallidas(actos: readonly { tipo: string; detalles?: readonly DetalleDeLinea[] }[]): number {
+  let n = 0;
+  for (const a of actos) {
+    if (a.tipo !== "herramientas") continue;
+    for (const d of a.detalles ?? []) if (d?.error !== undefined) n++;
+  }
+  return n;
 }

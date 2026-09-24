@@ -132,11 +132,68 @@
 
 .trabajo {
   margin: 2px 0;
-  padding: 0 0 0 10px;
+  padding: 0 0 0 12px;
   list-style: none;
   border-left: 2px solid var(--dsw-alias-border-l2);
   font-family: var(--ds-font-family-code);
   overflow-x: auto;
+}
+
+/* Cada paso, un NODO sobre el carril: la línea de tiempo del ToolGroup de assistant-ui. El
+   punto va sobre el borde del `ul` (−12 px de relleno, −2 de borde, centrado en él). */
+.paso {
+  position: relative;
+}
+
+.paso::before {
+  content: "";
+  position: absolute;
+  left: -16px;
+  top: 0.8em;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: var(--dsw-alias-border-l2);
+}
+
+/* Una tool que FALLÓ: nodo y texto en el rojo del estado. */
+.paso[data-fallo] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.paso[data-fallo]::before {
+  background: var(--dsw-alias-state-error-primary);
+}
+
+.resumenFallos {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* El giro del turno en vuelo, el mismo trazo de siempre: un aro con un hueco que da vueltas.
+   Quieto para quien pidió menos movimiento: el texto de al lado sigue diciendo que trabaja. */
+.giro {
+  flex: none;
+  align-self: center;
+  width: 9px;
+  height: 9px;
+  margin-right: 6px;
+  border: 1.5px solid var(--dsw-alias-border-l2);
+  border-top-color: var(--dsw-alias-label-secondary);
+  border-radius: 50%;
+  animation: xonecode-giro-del-turno 0.9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .giro {
+    animation: none;
+  }
+}
+
+@keyframes xonecode-giro-del-turno {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .trabajo li {

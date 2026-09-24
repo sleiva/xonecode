@@ -1029,3 +1029,28 @@ describe("un artefacto editado varias veces", () => {
   });
 });
 
+describe("Chat: lo que falló en el trabajo del agente", () => {
+  it("se cuenta en la línea plegada y se marca en su paso, por el DATO y no por el ✗ del texto", () => {
+    const { container } = render(
+      <Chat
+        actos={[
+          {
+            tipo: "herramientas",
+            lineas: ["→ lee /a.xne", "✗ lee /b.xne: no existe", "✗ esto solo parece un fallo"],
+            detalles: [{ nombre: "read_file" }, { nombre: "read_file", error: "no existe" }, {}],
+          },
+          { tipo: "fin", ms: 10 },
+        ]}
+      />
+    );
+    expect(screen.getByText(/Trabajo del agente · 3 pasos/u).textContent).toContain("· 1 falló");
+    const marcados = [...container.querySelectorAll("li[data-fallo]")].map((li) => li.textContent);
+    expect(marcados).toEqual(["✗ lee /b.xne: no existe"]);
+  });
+
+  it("sin fallos no dice nada de fallos", () => {
+    render(<Chat actos={[{ tipo: "herramientas", lineas: ["→ lee /a.xne"], detalles: [{}] }, { tipo: "fin", ms: 10 }]} />);
+    expect(screen.getByText(/Trabajo del agente · 1 paso/u).textContent).not.toMatch(/fall/u);
+  });
+});
+

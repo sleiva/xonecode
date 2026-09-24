@@ -2,7 +2,7 @@ import { Fragment, useEffect, useState } from "react";
 import type { Acto, ConsumoDeTurno, HallazgoDelTurno, MemoriaDelTurno } from "../tipos.js";
 import { dondeDe, lineasDeVerificacion, marcaDe } from "../lineasDeVerificacion.js";
 import { usarPegadoAbajo } from "../pegadoAbajo.js";
-import { partirPorOrigen, rotuloDeOrigen, type TrozoPorOrigen } from "../porOrigen.js";
+import { partirPorOrigen, rotuloDeOrigen, toolsFallidas, type TrozoPorOrigen } from "../porOrigen.js";
 import { useCronometro } from "../cronometro.js";
 import { protegerDolares } from "../protegerDolares.js";
 import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
@@ -95,6 +95,9 @@ function TramoDeTrabajo({
   // La dependencia es cuánto ha llegado: el efecto corre después del pintado, que es cuando
   // `scrollHeight` ya vale lo nuevo.
   const { nodo, alDesplazar } = usarPegadoAbajo(t.actos.length);
+  // Lo que FALLÓ se cuenta en la línea plegada: es lo único del andamio que puede pedir que
+  // alguien lo abra. Sale del `detalle.error` de cada línea, no de buscar `✗` en el texto.
+  const fallidas = toolsFallidas(t.actos);
   return (
     <details
       className={`${vista.flowItem} ${estilos.pensando}`}
@@ -108,6 +111,9 @@ function TramoDeTrabajo({
         {t.terminado ? (
           <>
             {`Trabajo del agente · ${pasos} ${pasos === 1 ? "paso" : "pasos"}`}
+            {fallidas === 0 ? null : (
+              <span className={estilos.resumenFallos}>{` · ${fallidas} ${fallidas === 1 ? "falló" : "fallaron"}`}</span>
+            )}
             {/*
               La duración y el coste del turno, en la línea que ya lo cierra. Es el nivel
               «mensaje» que faltaba: el contador del compositor dice lo que lleva la
@@ -128,6 +134,9 @@ function TramoDeTrabajo({
           // actual no se aplica (un `span` en línea no recorta) y una línea larga —medido: el
           // aviso de un turno que falló— salía de la columna con su barra de scroll horizontal.
           <span className={estilos.lineaEnVuelo}>
+            {/* El giro dice que está VIVO sin leer la cifra; lo decide `terminado`, que viene
+                del servidor, no una suposición. Decorativo: el texto de al lado ya lo dice. */}
+            <span aria-hidden="true" className={estilos.giro} />
             <span className={estilos.enVuelo}>
               {segundosEnVuelo === undefined ? "Trabajando…" : `Trabajando… · ${segundosEnVuelo} s`}
             </span>
@@ -169,9 +178,17 @@ function TramoDeTrabajo({
             return (trozos ?? []).map((trozo, k) => (
               <div key={`${i}-${k}`} className={estilos.trozoDeTrabajo}>
                 {trozo.rotulo === undefined ? null : <p className={estilos.quienTrabaja}>{trozo.rotulo}</p>}
+                {/* Una LÍNEA DE TIEMPO: cada paso es un nodo sobre el carril, y el de una tool
+                    que falló va en rojo (`fallidas`, del dato). El resto no lleva ✓: que una
+                    línea exista no dice que terminara bien, y un icono de «hecho» sin dato
+                    detrás es una cifra inventada con forma de dibujo. */}
                 <ul className={estilos.trabajo}>
                   {trozo.lineas.map((linea, j) => (
-                    <li key={j} className={estilos.textoTenue}>
+                    <li
+                      key={j}
+                      className={`${estilos.textoTenue} ${estilos.paso}`}
+                      data-fallo={trozo.fallidas?.includes(j) ? "" : undefined}
+                    >
                       {linea}
                     </li>
                   ))}
