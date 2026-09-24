@@ -203,11 +203,22 @@ describe("Conectores", () => {
       expect(screen.queryByRole("button", { name: "Desconectar" })).toBeNull();
     });
 
-    it("«Añadir» en Disponibles manda `anadir` con el id del catálogo", () => {
+    it("«Añadir» sobre un catálogo SIN autenticación manda solo `anadir`: sin OAuth no hay nada que autorizar", () => {
       const alAccion = vi.fn();
       render(<Conectores {...props({ alAccion })} />);
       fireEvent.click(screen.getAllByRole("button", { name: "Añadir" })[0]!);
+      expect(alAccion).toHaveBeenCalledTimes(1);
       expect(alAccion).toHaveBeenCalledWith("anadir", "deepwiki");
+    });
+
+    it("«Añadir» sobre un catálogo OAuth manda `anadir` Y `autorizar`, en ese orden: un solo clic hace las dos", () => {
+      const alAccion = vi.fn();
+      render(<Conectores {...props({ alAccion })} />);
+      // El catálogo va DeepWiki (sin auth), Jira, Notion — el segundo botón «Añadir» es Jira.
+      fireEvent.click(screen.getAllByRole("button", { name: "Añadir" })[1]!);
+      expect(alAccion).toHaveBeenCalledTimes(2);
+      expect(alAccion).toHaveBeenNthCalledWith(1, "anadir", "jira");
+      expect(alAccion).toHaveBeenNthCalledWith(2, "autorizar", "jira");
     });
   });
 

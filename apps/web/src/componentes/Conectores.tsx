@@ -118,7 +118,16 @@ export function Conectores({ catalogo, conectores, desconocidos, ilegible, error
                   <button
                     type="button"
                     className={estilos.accionDeFila}
-                    onClick={() => alAccion("anadir", c.id)}
+                    onClick={() => {
+                      // Con OAuth, «Añadir» hace las DOS cosas: añadir Y autorizar, en ese
+                      // orden —`autorizar` necesita el conector ya en `conectores.json`—.
+                      // Medido en el navegador con él delante: separarlas en dos clics dejaba
+                      // un paso intermedio, «Falta autorizar», que se leía como un error y no
+                      // como «pulsa Conectar». Sin OAuth no hay nada que autorizar, así que
+                      // DeepWiki se queda con el único `anadir` de siempre.
+                      alAccion("anadir", c.id);
+                      if (c.autenticacion === "oauth") alAccion("autorizar", c.id);
+                    }}
                   >
                     Añadir
                   </button>
