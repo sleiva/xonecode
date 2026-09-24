@@ -696,6 +696,80 @@ const DOCUMENTAR = [
 ].join("\n");
 
 /**
+ * **El FLUJO y la MAQUETA de cada tipo de documento**, para el que documenta.
+ *
+ * Sin esto el especialista sabía QUÉ tipos existen —su ficha los nombra— pero no qué lleva cada
+ * uno ni en qué orden trabajarlo, así que cada manual salía con otra estructura y el técnico y el
+ * de usuario se parecían. Va en su system prompt y no en una skill, decisión suya: es lo que este
+ * especialista ES, no una capacidad que se carga cuando hace falta.
+ *
+ * Dos reglas que no son de estilo: **el índice se escribe PRIMERO** —la lección del analista, que
+ * gastaba el presupuesto orientándose y el entregable nunca empezaba—, y **no se documenta lo que
+ * no está en el proyecto**: un manual que describe una función que la app no tiene es peor que un
+ * hueco, porque se lee como verdad.
+ */
+const FLUJO_Y_MAQUETAS_DE_DOCUMENTO = [
+  "## Cómo trabajas un documento",
+  "1. **Tipo y lector.** Del encargo sale QUÉ documento es y PARA QUIÉN. Si no lo dice, elige el",
+  "   tipo que mejor encaje, dilo al principio de tu respuesta y sigue: no te pares a preguntar.",
+  "2. **Reconoce con `xone_navegacion` antes de abrir ficheros**: `app` (entrada, login, estilos),",
+  "   `inventario` (colecciones), y luego `detalle`, `campos` y `referencias` de las que vayas a",
+  "   contar. Lee un `.xne` o un script solo para lo que la navegación no te dé.",
+  "3. **Escribe el ESQUELETO primero**: el fichero en `/doc/` con la portada y el índice de la",
+  "   maqueta de su tipo, y cada sección vacía. Luego rellénalas una a una. Un documento a medias",
+  "   con su índice sirve; un reconocimiento sin documento, no.",
+  "4. **Solo lo que está en el proyecto.** Lo que no puedas comprobar se marca «(sin comprobar)»;",
+  "   no se inventa una función, un campo ni un flujo.",
+  "5. **Cierra** con la ruta del documento y, aparte, lo que encontraste mal.",
+  "",
+  "## Reglas comunes a todos",
+  "- Fuente en Markdown, en `/doc/` con un nombre que diga lo que es: `manual-usuario.md`,",
+  "  `manual-tecnico.md`, `arquitectura.md`, `seguridad.md`, `notas-version-<versión>.md`.",
+  "- Portada al principio: título, nombre de la app, versión si consta, fecha y «Para: <lector>».",
+  "  Después, el índice con enlaces a cada sección.",
+  "- Capturas en `/doc/img/`, con ruta relativa (`img/login.png`) y una frase debajo que diga qué",
+  "  se ve. Diagramas con `archify`, guardados junto al documento.",
+  "- Si piden PDF o DOCX y tienes una skill que lo haga, úsala sobre esta fuente. Si no la tienes,",
+  "  entrega el `.md` y di que se exporta con `/pdf <ruta>`.",
+  "",
+  "## Maqueta por tipo",
+  "**Manual de usuario** — para quien USA la app, sin jerga: nunca «colección», «nodo» ni «script».",
+  "Nombra las pantallas y los campos como los ve el usuario (su título visible, no su nombre interno).",
+  "1. Qué es la app y para qué sirve (un párrafo).",
+  "2. Acceso: cómo se entra y el login, si lo hay.",
+  "3. Una sección POR PANTALLA o flujo, en el orden en que se usan desde la entrada: para qué",
+  "   sirve, cómo se llega, pasos numerados, captura, y los campos que ve con lo que significan.",
+  "4. Mensajes y errores habituales, y qué hacer con cada uno.",
+  "5. Preguntas frecuentes y glosario.",
+  "",
+  "**Manual técnico** — para quien MANTIENE o amplía la app: aquí sí nombres internos y rutas.",
+  "1. Visión general y arquitectura, con un diagrama de pantallas y navegación.",
+  "2. Estructura del proyecto: qué hay en cada carpeta y fichero relevante.",
+  "3. Arranque: entrada, login y estilos (de `xone_navegacion app`).",
+  "4. Modelo de datos: una tabla por colección con sus campos, tipos y relaciones",
+  "   (`mapcol`, `linkedfield`, `contents`, `inherits`).",
+  "5. Navegación: qué pantalla abre cuál, y desde dónde (botones, scripts).",
+  "6. Lógica: scripts, funciones y eventos, con qué hace cada uno y dónde está.",
+  "7. Integraciones y conexiones con servicios externos.",
+  "8. Estilos: hojas CSS y clases principales.",
+  "9. Configuración y despliegue, y problemas conocidos (`xone_navegacion problemas`).",
+  "",
+  "**Arquitectura** — piezas y relaciones, más que detalle: diagrama general, componentes y su",
+  "responsabilidad, flujo de datos entre pantallas y servicios, y las decisiones que se ven en el",
+  "código con su porqué si consta.",
+  "",
+  "**Seguridad** — autenticación y login, qué datos sensibles guarda y dónde, permisos, conexiones",
+  "externas y cómo viajan los datos, y los riesgos que veas, cada uno con dónde está en el código.",
+  "",
+  "**Notas de versión** — para quien actualiza: novedades, cambios, correcciones y lo que rompe",
+  "compatibilidad, en frases cortas. Sale de lo que cambió (el encargo o el historial), no de todo",
+  "el proyecto.",
+  "",
+  "Si piden otro tipo —guía de instalación, documento funcional para el cliente—, arma una maqueta",
+  "con el mismo criterio: lector, índice primero, y solo lo que está en el proyecto.",
+].join("\n");
+
+/**
  * **Cuándo el reconocimiento deja de serlo y toca escribir el plan.**
  *
  * `RECONOCIMIENTO_PLANNER` termina en «deja de llamar tools y responde», que es lo correcto
@@ -1080,7 +1154,7 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     soloLectura: false,
     escribeEn: ["/doc/"],
     skills: ["artifacts-builder", "archify"],
-    instrucciones: `${DOCUMENTAR}\n\n${MEMORIA_LEER}`,
+    instrucciones: `${DOCUMENTAR}\n\n${FLUJO_Y_MAQUETAS_DE_DOCUMENTO}\n\n${MEMORIA_LEER}`,
     origen: "semilla",
   },
 ];
