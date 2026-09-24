@@ -32,6 +32,10 @@ import type {
   EstadoDeSync,
   AgenteDelCable,
   SkillDelCable,
+  AutenticacionDeConector,
+  ConectorDelCable,
+  ToolDeConector,
+  PruebaDeConector,
   TareaDelCable,
   ProveedorDeModelos,
   SelectorDeConsola,
@@ -116,6 +120,20 @@ export interface EstadoDelCliente {
    * «todavía no se ha pedido».
    */
   cuerposDeSkill?: Record<string, string | undefined>;
+  /**
+   * Los conectores MCP: el catálogo y los que esta consola tiene AÑADIDOS, para la sección
+   * de Ajustes. Ausente = todavía no ha llegado el mensaje —que en este caso puede ser
+   * también «esta consola no tiene la opción puesta»—, así que la sección de Ajustes no se
+   * pinta en absoluto, ni siquiera con un «Consultando…»: un control sin dato detrás no se
+   * pinta. `ilegible`/`error` son del fichero en disco, no del cable.
+   */
+  conectores?: {
+    catalogo: { id: string; nombre: string; descripcion: string; autenticacion: AutenticacionDeConector }[];
+    conectores: ConectorDelCable[];
+    desconocidos: string[];
+    ilegible?: true;
+    error?: string;
+  };
   /**
    * La cola de tareas en background. Ausente = todavía no ha llegado el mensaje: el kanban
    * dice que no ha llegado en vez de afirmar que no hay tareas. NO se tira al caerse el
@@ -594,6 +612,63 @@ function esSkillDelCable(valor: unknown): valor is SkillDelCable {
     typeof s.tokens === "number" &&
     Array.isArray(s.ficheros)
   );
+}
+
+/** Una entrada del catálogo de conectores, comprobada campo a campo. */
+function esEntradaDeCatalogoDeConector(
+  valor: unknown
+): valor is { id: string; nombre: string; descripcion: string; autenticacion: AutenticacionDeConector } {
+  const c = valor as Partial<{ id: unknown; nombre: unknown; descripcion: unknown; autenticacion: unknown }> | null;
+  return (
+    typeof c === "object" &&
+    c !== null &&
+    typeof c.id === "string" &&
+    typeof c.nombre === "string" &&
+    typeof c.descripcion === "string" &&
+    (c.autenticacion === "ninguna" || c.autenticacion === "oauth")
+  );
+}
+
+/** Igual que `esSkillDelCable`: `estado` se comprueba por VALOR, no solo por tipo — un
+ *  literal que no sea uno de los tres no puede decidir qué pastilla ni qué botones. */
+function esConectorDelCable(valor: unknown): valor is ConectorDelCable {
+  const c = valor as Partial<ConectorDelCable> | null;
+  return (
+    typeof c === "object" &&
+    c !== null &&
+    typeof c.id === "string" &&
+    (c.estado === "sin-autorizacion" || c.estado === "falta-autorizar" || c.estado === "autorizado")
+  );
+}
+
+function esToolDeConector(valor: unknown): valor is ToolDeConector {
+  const t = valor as Partial<ToolDeConector> | null;
+  return typeof t === "object" && t !== null && typeof t.nombre === "string";
+}
+
+/**
+ * La prueba de un conector, campo a campo y hasta el fondo de `tools`: un campo de más en
+ * la propia prueba, o en una tool suya, no se propaga — la misma disciplina que el resto de
+ * esta lista blanca, un nivel más adentro.
+ */
+function pruebaDeConectorDelCable(valor: unknown): PruebaDeConector | undefined {
+  const p = valor as Partial<{ cuando: unknown; ok: unknown; tools: unknown; motivo: unknown }> | null;
+  if (typeof p !== "object" || p === null || typeof p.cuando !== "number") return undefined;
+  if (p.ok === true && Array.isArray(p.tools)) {
+    return {
+      cuando: p.cuando,
+      ok: true,
+      tools: p.tools.filter(esToolDeConector).map((t) => ({
+        nombre: t.nombre,
+        ...(typeof t.descripcion === "string" ? { descripcion: t.descripcion } : {}),
+        ...(t.soloLectura === true ? { soloLectura: true as const } : {}),
+      })),
+    };
+  }
+  if (p.ok === false && typeof p.motivo === "string") {
+    return { cuando: p.cuando, ok: false, motivo: p.motivo };
+  }
+  return undefined;
 }
 
 function esProveedorDeModelos(valor: unknown): valor is ProveedorDeModelos {
@@ -1216,6 +1291,44 @@ export function crearStoreDelCliente(): {
               problemas: Array.isArray(m.problemas)
                 ? m.problemas.filter((x): x is string => typeof x === "string")
                 : [],
+            },
+          });
+          return;
+        }
+        case "conectores": {
+          const m = mensaje as {
+            catalogo?: unknown;
+            conectores?: unknown;
+            desconocidos?: unknown;
+            ilegible?: unknown;
+            error?: unknown;
+          };
+          if (!Array.isArray(m.catalogo) || !Array.isArray(m.conectores)) return;
+          // Campo a campo, y hasta el fondo: un conector puede traer `prueba`, y `prueba`
+          // puede traer `tools` — la lista blanca de `agentes` y `skills` ya se ha comido un
+          // campo nuevo en silencio, y aquí hay TRES niveles donde puede volver a pasar.
+          mutar({
+            conectores: {
+              catalogo: m.catalogo.filter(esEntradaDeCatalogoDeConector).map((c) => ({
+                id: c.id,
+                nombre: c.nombre,
+                descripcion: c.descripcion,
+                autenticacion: c.autenticacion,
+              })),
+              conectores: m.conectores.filter(esConectorDelCable).map((c) => {
+                const prueba = pruebaDeConectorDelCable((c as { prueba?: unknown }).prueba);
+                return {
+                  id: c.id,
+                  estado: c.estado,
+                  ...(prueba === undefined ? {} : { prueba }),
+                  ...(c.autorizando === true ? { autorizando: true as const } : {}),
+                };
+              }),
+              desconocidos: Array.isArray(m.desconocidos)
+                ? m.desconocidos.filter((x): x is string => typeof x === "string")
+                : [],
+              ...(m.ilegible === true ? { ilegible: true as const } : {}),
+              ...(typeof m.error === "string" ? { error: m.error } : {}),
             },
           });
           return;
@@ -1923,6 +2036,10 @@ export function crearStoreDelCliente(): {
         // guardado de una skill que ya no está es peor que pedirlo otra vez.
         skills: undefined,
         cuerposDeSkill: undefined,
+        // Y los conectores por lo mismo: token y catálogo viven en disco, así que mientras
+        // no hay cable pueden haberse tocado a mano. La reconexión los trae enteros en la
+        // misma ráfaga.
+        conectores: undefined,
         // La mirada a una tarea la sostiene el SERVIDOR: su enganche se va con el SSE
         // (`arranque.ts`, el `close`), así que guardarla dejaría un transcript congelado
         // presentado como si siguiera llegando. La reconexión la vuelve a pedir.

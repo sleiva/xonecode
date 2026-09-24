@@ -24,6 +24,7 @@ const MANEJADORES = {
   alPedirCuerpoDeSkill: () => {},
   alGuardarSkill: () => {},
   alBorrarSkill: () => {},
+  alAccionDeConector: () => {},
 };
 
 const PROVEEDORES = [
@@ -374,6 +375,31 @@ describe("Ajustes", () => {
     render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} seccionInicial="entornos" />);
     expect(screen.getByRole("heading", { name: /entornos/i })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "General" })).toBeNull();
+  });
+
+  /**
+   * «Conectores» no es como las demás: sin `conectores` no se sabe si esta consola tiene la
+   * opción puesta, así que ni siquiera se ofrece un «Consultando…» — se retira ENTERA de la
+   * navegación. Es distinto de Skills o Subagentes, que siempre están y solo cambian de
+   * contenido según llegue o no el dato.
+   */
+  describe("la sección Conectores", () => {
+    it("sin `conectores` en el estado, no aparece en la navegación", () => {
+      render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} />);
+      expect(screen.queryByRole("button", { name: "Conectores" })).toBeNull();
+    });
+
+    it("con `conectores`, sí aparece y se puede abrir", () => {
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectores={{ catalogo: [], conectores: [], desconocidos: [] }}
+        />
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Conectores" }));
+      expect(screen.getByRole("heading", { name: "Conectores" })).toBeTruthy();
+    });
   });
 
   /**

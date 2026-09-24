@@ -1256,6 +1256,13 @@ export function App({
       // Los BYTES del `.zip` van por HTTP y no por el cable, que lleva JSON: el mismo molde
       // que la subida de un adjunto de tarea.
       alInstalarSkill={(nombre, ambito, zip) => instalarSkill(nombre, ambito, zip)}
+      // Ausente = la sección de Conectores no se pinta en absoluto, ni la navegación ni el
+      // panel — «un control sin dato detrás no se pinta».
+      {...(estado.conectores === undefined ? {} : { conectores: estado.conectores })}
+      // El resultado NO viaja en la respuesta: `probar` y `autorizar` corren en segundo
+      // plano (red, o esperar al navegador) y lo que cambien llega por el `conectores` que
+      // sigue, vía el mismo mensaje de bienvenida reemitido.
+      alAccionDeConector={(accion, id) => void enviar({ clase: "conector", accion, id })}
       // La pregunta oculta en vuelo se pinta DENTRO de la fila que se está editando; por
       // eso el centro deja de pintarla mientras la ventana está abierta (más abajo).
       {...(estado.secreto === undefined ? {} : { secreto: estado.secreto.pregunta })}

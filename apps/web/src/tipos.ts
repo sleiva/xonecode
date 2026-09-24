@@ -96,6 +96,36 @@ export interface SkillDelCable {
 }
 
 /**
+ * Los conectores MCP, redeclarados de `core/conectores.ts` (ver la cabecera de este
+ * fichero: la frontera prohíbe compartir módulo con `src/`).
+ */
+export type AutenticacionDeConector = "ninguna" | "oauth";
+
+/** Una tool tal como la enseña Ajustes. `soloLectura` ausente = el servidor no lo anota. */
+export interface ToolDeConector {
+  nombre: string;
+  descripcion?: string;
+  soloLectura?: boolean;
+}
+
+/** La última vez que se probó un conector: una FOTO con hora. Ausente = no se ha probado. */
+export type PruebaDeConector =
+  | { cuando: number; ok: true; tools: ToolDeConector[] }
+  | { cuando: number; ok: false; motivo: string };
+
+/**
+ * Un conector AÑADIDO, en la forma del cable. Nunca lleva tokens ni URL de autorización:
+ * eso se queda en el host.
+ */
+export interface ConectorDelCable {
+  id: string;
+  estado: "sin-autorizacion" | "falta-autorizar" | "autorizado";
+  prueba?: PruebaDeConector;
+  /** Hay una autorización abierta en el navegador esperando su callback. */
+  autorizando?: boolean;
+}
+
+/**
  * Lo que costó UN turno, tal como viaja y se persiste en su `fin`.
  *
  * Las dos cuentas por SEPARADO y no sumadas: sumarlas aquí perdería el desglose para
@@ -509,6 +539,27 @@ export type MensajeAlCliente =
   | { clase: "skills"; skills: SkillDelCable[]; problemas: string[] }
   /** El cuerpo de UNA, pedido a mano. `cuerpo` ausente con `error` = no se pudo leer. */
   | { clase: "cuerpoDeSkill"; nombre: string; cuerpo?: string; error?: string }
+  /**
+   * El catálogo de conectores MCP y los que esta consola tiene AÑADIDOS, para la sección de
+   * Ajustes. Va en la ráfaga de bienvenida por lo mismo que el workspace: Ajustes se puede
+   * abrir en cuanto conecta, y solo si la opción `conectores` está puesta — «un control sin
+   * dato detrás no se pinta».
+   *
+   * `catalogo` viaja SIN la `url` de cada servidor: no hace falta en pantalla, y así no hay
+   * una ruta remota que discutir por este cable.
+   *
+   * `ilegible`/`error` son los mismos campos que da `ServicioDeConectores.lista()`. Un fallo
+   * NO va por `informar`, que no llega al navegador desde el vestíbulo, y Ajustes se abre sin
+   * proyecto.
+   */
+  | {
+      clase: "conectores";
+      catalogo: { id: string; nombre: string; descripcion: string; autenticacion: AutenticacionDeConector }[];
+      conectores: ConectorDelCable[];
+      desconocidos: string[];
+      ilegible?: true;
+      error?: string;
+    }
   /**
    * La cola de tareas entera. Va a TODOS los clientes, como la foto de la máquina y por lo
    * mismo: la cola es de la máquina. `corriendoAqui` es falso en el segundo proceso, y es
@@ -1171,6 +1222,13 @@ export type MensajeDelCliente =
   | { clase: "revisarLanzamiento" }
   | { clase: "lanzarApp" }
   | { clase: "cancelarLanzamiento" }
+  /**
+   * Una acción sobre UN conector: añadirlo, quitarlo, probarlo, autorizarlo o desconectarlo.
+   *
+   * El resultado NO viaja en la respuesta: `probar` y `autorizar` corren en segundo plano
+   * (red, o esperar al navegador) y lo que cambien llega por el `conectores` que sigue.
+   */
+  | { clase: "conector"; accion: "anadir" | "quitar" | "probar" | "autorizar" | "desconectar"; id: string }
   | { clase: "decision"; decisiones: Record<string, string> };
 
 /**

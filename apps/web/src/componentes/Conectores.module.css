@@ -1,0 +1,239 @@
+/* La sección de conectores MCP de la ventana de ajustes, debajo de Skills.
+
+   Copiada de `Skills.module.css` y no importada: el nombre de una clase de módulo va
+   HASHEADO, así que compartir la hoja no es una opción — y son la misma clase de lista en
+   la misma ventana, tenían que leerse igual. Lo propio de aquí (la pastilla de estado, el
+   monograma, la lista de tools) va al final.
+
+   Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-1/2,
+   bg-module-platform, border-l2, label-primary/secondary/tertiary, interactive-bg-hover,
+   state-error-secondary/primary, state-success-primary/tertiary, state-warn-tertiary/label
+   y state-business-primary/tertiary. */
+
+.nota,
+.vacio {
+  margin: 0 0 14px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Los conectores que esta versión no reconoce, en rojo con `role="alert"`: es trabajo
+   pendiente de quien está mirando esta ventana, la misma clase que `.problemas` en
+   `Skills.module.css` y por el mismo motivo. */
+.problemas {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--dsw-alias-state-error-secondary);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* El `error` de la última operación y el aviso de `ilegible`, con `role="status"`: no es un
+   fallo del que haya que huir de la ventana, es información de la última cosa que se pidió. */
+.estado {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.grupo {
+  margin: 0 0 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Cuántos hay en el grupo. Misma píldora del par `state-business-*` que la cuenta de una
+   pestaña de Skills y el gasto del compositor: un dato de máquina, no una valoración. */
+.cuenta {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-state-business-primary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.filas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 18px;
+  padding: 0;
+  list-style: none;
+}
+
+.fila {
+  padding: 10px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.cabeceraDeFila {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* El monograma: hereda el color de la fila, como `IconoDeProveedor`. */
+.monograma {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.nombre {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.autenticacion {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.relleno {
+  flex: 1;
+}
+
+/*
+ * La pastilla de estado: cinco valores y cinco combinaciones de fondo/letra, nunca un
+ * literal de color — los alias ya vienen ajustados por tema.
+ *
+ * `sinProbar` reusa el par neutro de `.autenticacion` (`bg-module-platform` /
+ * `label-tertiary`): no es ni un acierto ni un fallo, es que nadie ha preguntado todavía.
+ */
+.pastilla {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sinProbar {
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.conectado {
+  background: var(--dsw-alias-state-success-tertiary);
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.esperando,
+.faltaAutorizar {
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.noResponde {
+  background: var(--dsw-alias-state-error-secondary);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* El motivo de un «No responde», bajo la fila y no solo en el `title` de la pastilla: un
+   `title` no lo lee nadie que no pase el ratón por encima, y esto es lo que hay que arreglar
+   para que el conector vuelva a servir. */
+.motivo {
+  margin: 6px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.descripcion {
+  margin: 6px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* El botón dentro de una fila, con los mismos alias que `Skills.module.css#.accionDeFila`
+   por el mismo motivo: el `variant="outline"` del paquete llega blanco en tema oscuro. */
+.accionDeFila.accionDeFila {
+  flex: none;
+  padding: 4px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.accionDeFila.accionDeFila:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* El desplegable de tools. Misma forma que `Skills.module.css#.cuerpo`. */
+.cuerpo {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.tools {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tool {
+  padding: 6px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.nombreDeTool {
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Verde para «solo lectura»: la misma lectura que `Agentes.module.css#.lectura` — el estado
+   que NO exige vigilancia. */
+.soloLectura {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--dsw-alias-state-success-tertiary);
+  color: var(--dsw-alias-state-success-primary);
+  font-family: var(--ds-font-family-code);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.descripcionDeTool {
+  margin: 4px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}

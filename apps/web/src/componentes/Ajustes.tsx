@@ -9,12 +9,15 @@ import {
   IconUserOutline16,
   IconSkillOutline16,
   IconLinkOutline16,
+  IconShareOutline16,
   IconSearchOutline16,
 } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { EstadoDelCliente } from "../store.js";
 import type {
   AgenteDelCable,
   SkillDelCable,
+  AutenticacionDeConector,
+  ConectorDelCable,
   AjustesDeDispositivos,
   Dispositivo,
   Herramienta,
@@ -30,6 +33,7 @@ import { ArrancarEmulador } from "./ArrancarEmulador.js";
 import { useMedirAlVolver } from "../medirAlVolver.js";
 import { Agentes } from "./Agentes.js";
 import { Skills } from "./Skills.js";
+import { Conectores } from "./Conectores.js";
 import { TITULO_DE_REFRESCAR_EQUIPO } from "./Equipo.js";
 import { Receta } from "./Receta.js";
 import { VerificarDispositivo } from "./VerificarDispositivo.js";
@@ -108,6 +112,7 @@ export type SeccionDeAjustes =
   | "entornos"
   | "agentes"
   | "skills"
+  | "conectores"
   | "dispositivos"
   | "general";
 
@@ -150,6 +155,15 @@ const SECCIONES: readonly {
   // `IconAgentPresetOutline16`, el que no existía y hacía reventar a React con «Element type
   // is invalid»—, así que el icono es el que SIGNIFICA lo que hay detrás y no uno parecido.
   { id: "skills", etiqueta: "Skills", Icono: IconSkillOutline16 },
+  // «Conectores» va justo debajo de Skills, y NO en la lista de siempre: `estaSeccionSePinta`
+  // la retira cuando `conectores` no ha llegado —«un control sin dato detrás no se pinta»,
+  // a diferencia de Modelos/Entornos/Agentes/Skills/Dispositivos, que siempre existen y solo
+  // cambian de «consultando» a su contenido—. `IconShareOutline16` SÍ lo exporta el paquete
+  // instalado —comprobado sobre `lib/index.js`, la misma comprobación que ya se hizo para
+  // `IconSkillOutline16` y por la misma lección de `IconAgentPresetOutline16`—, y no
+  // `IconLinkOutline16`: ese ya es el de Dispositivos, y dos secciones con el mismo dibujo se
+  // confunden en la navegación.
+  { id: "conectores", etiqueta: "Conectores", Icono: IconShareOutline16 },
   // `IconLinkOutline16` y no un icono de móvil: en el paquete instalado no hay ninguno
   // —comprobado sobre sus exports, que es la lección de `IconAgentPresetOutline16`, el que
   // no existía y hacía reventar a React—. Y el enlace dice lo que esta sección es: con qué
@@ -319,6 +333,8 @@ export function Ajustes({
   alGuardarSkill,
   alBorrarSkill,
   alInstalarSkill,
+  conectores,
+  alAccionDeConector,
   alPedirClave,
   alBorrarClave,
   alRegistrarEntorno,
@@ -417,6 +433,20 @@ export function Ajustes({
     ambito: "global" | "proyecto",
     zip: File
   ) => Promise<{ ok: boolean; motivo?: string }>;
+  /**
+   * El catálogo de conectores MCP y los que esta consola tiene añadidos. **Ausente = la
+   * sección NO se pinta**, ni siquiera con un «Consultando…»: a diferencia de Skills o
+   * Subagentes, que siempre existen, un conector es una opción que puede no estar puesta —
+   * «un control sin dato detrás no se pinta».
+   */
+  conectores?: {
+    catalogo: { id: string; nombre: string; descripcion: string; autenticacion: AutenticacionDeConector }[];
+    conectores: ConectorDelCable[];
+    desconocidos: string[];
+    ilegible?: true;
+    error?: string;
+  };
+  alAccionDeConector: (accion: "anadir" | "quitar" | "probar" | "autorizar" | "desconectar", id: string) => void;
   /** La pregunta oculta en vuelo, si la hay: se pinta DENTRO de la fila que se edita. */
   secreto?: string;
   /**
@@ -1059,7 +1089,11 @@ export function Ajustes({
               <span className={estilos.alcance}>Configuración global</span>
             </span>
           </div>
-          {SECCIONES.map((s) => (
+          {/* «Conectores» se retira de la lista mientras `conectores` no ha llegado: no es
+              lo mismo que las demás secciones, que siempre existen y solo cambian de
+              «consultando» a su contenido — aquí ausente puede significar que esta consola
+              no tiene la opción puesta. Un control sin dato detrás no se pinta. */}
+          {SECCIONES.filter((s) => s.id !== "conectores" || conectores !== undefined).map((s) => (
             <button
               key={s.id}
               type="button"
@@ -2099,6 +2133,24 @@ export function Ajustes({
                 alGuardar={alGuardarSkill}
                 alBorrar={alBorrarSkill}
                 {...(alInstalarSkill === undefined ? {} : { alInstalar: alInstalarSkill })}
+              />
+            </>
+          ) : null}
+
+          {/* Sin dato no hay NADA que pintar aquí, ni la sección: el filtro de arriba ya
+              quitó el botón de la navegación, así que `seccion` no puede valer «conectores»
+              sin que `conectores` también esté puesto — salvo el instante entre perder el
+              cable y que el siguiente estado la cambie de sitio, que este `null` cubre. */}
+          {seccion === "conectores" && conectores !== undefined ? (
+            <>
+              <h2 className={estilos.encabezado}>Conectores</h2>
+              <Conectores
+                catalogo={conectores.catalogo}
+                conectores={conectores.conectores}
+                desconocidos={conectores.desconocidos}
+                {...(conectores.ilegible === undefined ? {} : { ilegible: conectores.ilegible })}
+                {...(conectores.error === undefined ? {} : { error: conectores.error })}
+                alAccion={alAccionDeConector}
               />
             </>
           ) : null}
