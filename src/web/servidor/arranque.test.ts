@@ -1976,6 +1976,38 @@ describe("montarRutas — el cable, por fin conectado", () => {
       rmSync(base, { recursive: true, force: true });
     });
 
+    it("«colecciones» contesta la foto del puerto, y si el puerto lanza, un error sin la ruta", async () => {
+      const { base, servidor, vestibulo, raizDeVerdad } = await abrirProyecto();
+      const foto = { colecciones: [], total: 0, entrada: ["Menu"], login: [], rotas: [] };
+      let falla = false;
+      montarRutas(servidor, vestibulo, {
+        informar: () => {},
+        coleccionesDelProyecto: async () => {
+          if (falla) throw Object.assign(new Error(`ENOENT: '${raizDeVerdad}/app.xml'`), { code: "ENOENT" });
+          return foto;
+        },
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+      await asentar();
+      expect(await enviarMensaje(accion, { clase: "colecciones" })).toBe(204);
+      await asentar();
+      expect(cliente.recibidos.filter((x) => x.clase === "colecciones").at(-1)).toEqual({ clase: "colecciones", foto });
+      falla = true;
+      await enviarMensaje(accion, { clase: "colecciones" });
+      await asentar();
+      expect(cliente.recibidos.filter((x) => x.clase === "colecciones").at(-1)).toEqual({
+        clase: "colecciones",
+        error: "no se pudo leer el modelo del proyecto",
+      });
+      expect(JSON.stringify(cliente.recibidos)).not.toContain(raizDeVerdad);
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
     it("si el puerto del árbol lanza, se contesta con error y lista vacía, no con silencio", async () => {
       const { base, servidor, vestibulo, raizDeVerdad } = await abrirProyecto();
       const dichos: string[] = [];

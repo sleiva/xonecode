@@ -182,6 +182,41 @@ export interface VeredictoDelTurno {
   preexistentes?: number;
 }
 
+/**
+ * Quién apunta a quién (`core/navegacion.ts#Referencia`). `por` es el atributo —`mapcol`,
+ * `mapfld`, `linkedfield`, `contents`, `inherits`— o una de las dos señales de script:
+ * `script` (una `getCollection('X')` resuelta) y `mencion` (un literal que coincide con una
+ * colección, la señal FLOJA). Rutas VIRTUALES.
+ */
+export interface ReferenciaXone {
+  desde: string;
+  por: string;
+  hacia: string;
+  fichero: string;
+}
+
+/** Una colección de la foto (`core/fotoDeColecciones.ts#ColeccionDeLaFoto`). */
+export interface ColeccionDeLaFoto {
+  nombre: string;
+  fichero: string;
+  campos: { nombre: string; tipo?: string }[];
+  eventos: string[];
+  nodos: string[];
+  conexiones: string[];
+  apuntaA: ReferenciaXone[];
+  leApuntan: ReferenciaXone[];
+}
+
+/** La foto del modelo XOne (`core/fotoDeColecciones.ts#FotoDeColecciones`). */
+export interface FotoDeColecciones {
+  colecciones: ColeccionDeLaFoto[];
+  /** Más que `colecciones.length` = se recortó. */
+  total: number;
+  entrada: string[];
+  login: string[];
+  rotas: ReferenciaXone[];
+}
+
 export type Acto =
   | { tipo: "usuario"; texto: string }
   | { tipo: "asistente"; texto: string }
@@ -518,6 +553,9 @@ export type MensajeAlCliente =
   | { clase: "parche"; ruta: string; texto: string; recortado: boolean }
   /** El árbol del proyecto abierto y el contenido de uno de sus ficheros (pestaña Ficheros). */
   | { clase: "arbol"; rutas: string[]; recortado: boolean; error?: string }
+  /** El modelo XOne del proyecto abierto (pestaña Colecciones). Sin `foto` y con `error` si
+   *  no se pudo leer. El store lo valida campo a campo (`fotoDeColecciones.ts`). */
+  | { clase: "colecciones"; foto?: FotoDeColecciones; error?: string }
   | ({ clase: "fichero" } & FicheroDelProyecto)
   /** El estado de sincronización del proyecto abierto (pestaña CloudStudio). `proyecto` y
    *  `rama` ausentes = no está dado de alta en CloudStudio, que NO es «cero pendientes». */
@@ -1039,6 +1077,7 @@ export type MensajeDelCliente =
   /** Pide lo que la sesión abierta ha tocado, o el parche de un fichero concreto. */
   | { clase: "revision"; ruta?: string }
   | { clase: "arbol" }
+  | { clase: "colecciones" }
   | { clase: "fichero"; ruta: string }
   /** La sincronización con CloudStudio: `estado` pide la medida, `subir`/`bajar` son las
    *  dos acciones de `/sync`. Viaja la INTENCIÓN: el servidor las aplica encolando la línea

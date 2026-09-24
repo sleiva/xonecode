@@ -160,6 +160,9 @@ import {
   mimeDeImagen,
   motivoDeRutaInaceptable,
 } from "../../agent/grafo/arbolDeProyecto.js";
+import { modeloEnDisco } from "../../agent/navegacion/indiceEnDisco.js";
+import { ficherosDelProyecto } from "../../agent/turno/ficherosDelProyecto.js";
+import { fotoDeColecciones, type FotoDeColecciones } from "../../core/fotoDeColecciones.js";
 import { RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
 import {
   leerArtefactoCrudo,
@@ -423,6 +426,11 @@ export interface OpcionesDeMontaje {
    * por opción porque tocan el disco del proyecto: un test del cable usa dobles.
    */
   arbolDelProyecto?: (raiz: string) => Promise<{ rutas: string[]; recortado: boolean }>;
+  /**
+   * La foto del modelo XOne (pestaña Colecciones, `core/fotoDeColecciones.ts`), sobre el mismo
+   * cargador que `xone_navegacion`. Por opción porque lee el proyecto con `xone-linter`.
+   */
+  coleccionesDelProyecto?: (raiz: string) => Promise<FotoDeColecciones>;
   leerFichero?: (raiz: string, ruta: string) => Promise<FicheroDelProyecto>;
   /**
    * Los dos lectores de ARTEFACTOS (`agent/grafo/artefactosEnDisco.ts`), y son dos porque son dos
@@ -3270,6 +3278,26 @@ export function montarRutas(
   };
 
   /**
+   * La foto del modelo XOne del proyecto abierto. Mismas reglas que el árbol: sin proyecto no
+   * se contesta, sin puerto se contesta con error —un «consultando…» eterno es un fallo mudo—,
+   * y el fallo viaja sin la ruta de la máquina.
+   */
+  const atenderColecciones = async (): Promise<void> => {
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined) return;
+    if (opciones.coleccionesDelProyecto === undefined) {
+      emitir({ clase: "colecciones", error: "esta ejecución no puede leer el modelo del proyecto" });
+      return;
+    }
+    try {
+      emitir({ clase: "colecciones", foto: await opciones.coleccionesDelProyecto(abierto.raiz) });
+    } catch (error) {
+      informar(`no se pudo leer el modelo del proyecto (${codigoDe(error)})`);
+      emitir({ clase: "colecciones", error: "no se pudo leer el modelo del proyecto" });
+    }
+  };
+
+  /**
    * El contenido de una ruta del proyecto abierto. El lector decide si se puede enseñar.
    *
    * El `try` es por lo mismo que el del árbol: `leerFicheroDeProyecto` devuelve los rechazos
@@ -4177,6 +4205,12 @@ export function montarRutas(
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "arbol") {
       void atenderArbol().catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "colecciones") {
+      void atenderColecciones().catch(contar);
       respuesta.writeHead(204);
       respuesta.end();
       return;
@@ -5484,6 +5518,9 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     // El proyecto tal como lo ve el agente, para la pestaña Ficheros: mismo filtro, misma
     // barrera de rutas (`agent/grafo/arbolDeProyecto.ts`).
     arbolDelProyecto: async (raiz) => arbolDeProyecto(raiz),
+    // El modelo XOne con el MISMO cargador y el mismo conjunto de ficheros que la tool, para
+    // que la pestaña y el agente no contesten distinto sobre el mismo proyecto.
+    coleccionesDelProyecto: async (raiz) => fotoDeColecciones(await modeloEnDisco(raiz)(ficherosDelProyecto(raiz))),
     leerFichero: leerFicheroDeProyecto,
     leerArtefacto: leerArtefactoDeSesion,
     leerArtefactoCrudo,

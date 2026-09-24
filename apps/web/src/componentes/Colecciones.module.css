@@ -1,0 +1,256 @@
+/* La pestaña Colecciones. El encuadre de Ficheros: el detalle cede en el centro y la lista va a
+   la derecha sin ceder; en estrecho la lista sube, acotada en alto. Solo alias del tema y los
+   dos tokens de marca de siempre: ningún color literal (`Barra.test.tsx` lo vigila). */
+
+/* La caja declara el CONTENEDOR y `.colecciones` es su HIJA: una `@container` no estila al
+   elemento que la declara (la misma trampa que se midió en Ficheros). */
+.caja {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  container-type: inline-size;
+}
+
+.colecciones {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.detalle {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: auto;
+}
+
+.lista {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 0 0 240px;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 8px;
+  border-left: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+@container (max-width: 720px) {
+  .colecciones {
+    flex-direction: column;
+  }
+
+  .lista {
+    order: -1;
+    flex: 0 0 auto;
+    max-height: 40%;
+    border-left: none;
+    border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  }
+}
+
+.aviso {
+  margin: 0;
+  padding: 16px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.vacio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 16px;
+}
+
+.filtro {
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+}
+
+.fila {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fila:hover {
+  background: var(--xonecode-fila-hover);
+}
+
+/* La elegida, con el mismo baño que la fila elegida de la barra: ya viene ajustado por tema. */
+.fila[aria-current="true"] {
+  background: var(--xonecode-fila-elegida);
+}
+
+.nombre {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.marca {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 10px;
+}
+
+.cuerpo {
+  padding: 0 16px 24px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.cabecera {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 10px 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.titulo {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ruta,
+.codigo {
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+}
+
+.ruta {
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* El secundario de Revisión y Ficheros: son acciones de la misma familia. */
+.recargar {
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.recargar:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.seccion {
+  margin-top: 14px;
+}
+
+.seccionTitulo {
+  margin: 0 0 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.lineas,
+.campos {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lineas li {
+  overflow-wrap: anywhere;
+}
+
+.campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16ch, 1fr));
+  gap: 2px 16px;
+}
+
+.campos li {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tipo {
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+}
+
+.grupo {
+  margin-top: 6px;
+}
+
+/* La mención es la señal FLOJA y se tiene que leer como tal: el grupo va en el tono terciario,
+   además de la nota que lo dice con palabras. */
+.grupo[data-confianza="mencion"] .lineas {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.subtitulo {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.nota {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.por {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.desdeDonde {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+/* Un nombre que navega: parece texto con subrayado, no un botón, porque va dentro de una
+   línea de prosa. */
+.enlace {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}

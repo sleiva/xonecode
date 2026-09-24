@@ -11,6 +11,7 @@
  * actos ni la traza de emisión los tocan, y por eso `emitir` no registra ese mensaje: lo
  * guarda quien lo tiene en vuelo, que lo suelta en cuanto hay decisión.
  */
+import type { FotoDeColecciones } from "../../core/fotoDeColecciones.js";
 import type { InformeDeDispositivos, NombreDeHerramienta } from "../../core/dispositivos.js";
 import type { AjustesDeDispositivos } from "../../core/settings.js";
 import type { Acto, ConsumoDeTurno } from "../../core/actos.js";
@@ -494,6 +495,12 @@ export type MensajeAlCliente =
    * de solo lectura: sin `texto` si es binario o si la ruta se rechazó, con el motivo.
    */
   | { clase: "arbol"; rutas: string[]; recortado: boolean; error?: string }
+  /**
+   * El modelo XOne del proyecto abierto (pestaña Colecciones), del MISMO índice que
+   * `xone_navegacion`: rutas virtuales y nombres, nunca rutas de la máquina. Sin `foto` y con
+   * `error` si no se pudo leer.
+   */
+  | { clase: "colecciones"; foto?: FotoDeColecciones; error?: string }
   | ({ clase: "fichero" } & FicheroDelProyecto)
   /**
    * El estado de sincronización del proyecto abierto (pestaña CloudStudio). Los campos van en
@@ -1350,6 +1357,8 @@ export type MensajeDelCliente =
   | { clase: "revision"; ruta?: string }
   /** Pide el árbol del proyecto abierto, o el contenido de una ruta relativa a su raíz. */
   | { clase: "arbol" }
+  /** Pide la foto del modelo XOne del proyecto abierto (pestaña Colecciones). */
+  | { clase: "colecciones" }
   | { clase: "fichero"; ruta: string }
   /**
    * La sincronización con CloudStudio del proyecto abierto (pestaña CloudStudio).

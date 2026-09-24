@@ -262,6 +262,20 @@ describe("store del cliente", () => {
     expect(s.leer().contenidos).toBeUndefined();
   });
 
+  it("«colecciones» guarda la foto VALIDADA, y se tira al caerse el cable", () => {
+    const s = crearStoreDelCliente();
+    const foto = { colecciones: [], total: 0, entrada: [], login: [], rotas: [] };
+    s.aplicar({ clase: "colecciones", foto });
+    expect(s.leer().colecciones).toEqual({ foto });
+    // Ni foto que se entienda ni error: no se pinta nada en vez de «no hay colecciones».
+    s.aplicar({ clase: "colecciones", foto: { colecciones: "x" } } as never);
+    expect(s.leer().colecciones).toEqual({ foto });
+    s.aplicar({ clase: "colecciones", error: "no se pudo leer el modelo del proyecto" });
+    expect(s.leer().colecciones).toEqual({ error: "no se pudo leer el modelo del proyecto" });
+    s.marcarDesconectado();
+    expect(s.leer().colecciones).toBeUndefined();
+  });
+
   /**
    * La pestaña CloudStudio se nutre de este campo y de nada más, así que la lista blanca se
    * lleva sus dos trampas juntas: un `pendientes` que llegara como CADENA pintaría «NaN

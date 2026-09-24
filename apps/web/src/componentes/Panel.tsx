@@ -33,6 +33,7 @@ export function Panel({
   actos,
   ficheros,
   revision,
+  colecciones,
   artefactos,
   tareas,
   ejecutar,
@@ -49,6 +50,8 @@ export function Panel({
   /** Lleva DENTRO la banda de CloudStudio, que ya no tiene pestaña propia (`Pestanas.tsx`
    *  dice por qué): aquí no se nota, es una ranura como las demás. */
   revision?: ReactNode;
+  /** El modelo XOne del proyecto (`Colecciones.tsx`). Una ranura más, con su rama EXPLÍCITA. */
+  colecciones?: ReactNode;
   /** Lo que el agente DIBUJÓ en esta sesión. Su pestaña solo existe si hay alguno, y de eso
    *  se encarga `Pestanas`: aquí es una ranura más. */
   artefactos?: ReactNode;
@@ -82,6 +85,8 @@ export function Panel({
           <Trazas actos={actos} />
         ) : pestana === "revision" ? (
           revision
+        ) : pestana === "colecciones" ? (
+          colecciones
         ) : pestana === "artefactos" ? (
           artefactos
         ) : pestana === "tareas" ? (

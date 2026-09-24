@@ -2,7 +2,7 @@ import clsx from "clsx";
 import conversacion from "../../estilos/ConversationRoot.module.css";
 import estilos from "./Pestanas.module.css";
 
-export type Pestana = "ficheros" | "revision" | "artefactos" | "tareas" | "ejecutar" | "trazas";
+export type Pestana = "ficheros" | "revision" | "colecciones" | "artefactos" | "tareas" | "ejecutar" | "trazas";
 
 /**
  * La tira de pestañas del PANEL: Tareas, Ejecutar, Ficheros, Revisión y Trazas — más
@@ -93,6 +93,11 @@ export function Pestanas({
     // cambiado el agente?» sin salir a un terminal. Y lleva dentro la banda de CloudStudio
     // —cuánto queda por subir—, que es la misma pregunta contra otra referencia.
     { id: "revision", etiqueta: "Revisión" },
+    // El MODELO XOne del proyecto —colecciones, campos y quién apunta a quién—, del mismo
+    // índice que `xone_navegacion`: lo que ve el agente, para que lo vea una persona. De
+    // REGISTRO como Ficheros, y como ella SIEMPRE presente: todo proyecto XOne tiene modelo, y
+    // uno sin colecciones lo dice en su estado vacío.
+    { id: "colecciones", etiqueta: "Colecciones" },
     // Lo que el agente DIBUJÓ, que no es del proyecto y por eso no está en las dos de
     // arriba. Solo si hay alguno.
     ...(hayArtefactos === true ? [{ id: "artefactos" as const, etiqueta: "Artefactos" }] : []),

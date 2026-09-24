@@ -5,7 +5,7 @@
 // format». Por la ruta del modelo no hay ningún `await` de módulo, así que entra limpio — y
 // de paso no se arrastra medio runtime para leer un XML.
 import { XoneProject } from "xone-linter/dist/project/XoneProject.js";
-import { construirIndice, type IndiceDeNavegacion } from "../../core/navegacion.js";
+import { construirIndice, type IndiceDeNavegacion, type ModeloDeNavegacion } from "../../core/navegacion.js";
 import { modeloDeNavegacion, type ModeloDelLinter } from "./modeloDeProyecto.js";
 import { estilosEnDisco, type CargarEstilos } from "./estilosEnDisco.js";
 
@@ -40,9 +40,19 @@ export type CargarIndice = (ficheros: ReadonlySet<string>) => Promise<IndiceDeNa
  * tendríamos una tool que lee cualquier carpeta de la máquina.
  */
 export function indiceEnDisco(raiz: string): CargarIndice {
+  const modelo = modeloEnDisco(raiz);
+  return async (ficheros) => construirIndice(await modelo(ficheros));
+}
+
+/**
+ * El MODELO de navegación de una raíz, ya traducido y filtrado: lo que el índice consulta y lo
+ * que la pestaña Colecciones fotografía (`core/fotoDeColecciones.ts`). Un solo cargador para
+ * los dos, así que lo que ve la persona y lo que ve el agente salen de la misma lectura.
+ */
+export function modeloEnDisco(raiz: string): (ficheros: ReadonlySet<string>) => Promise<ModeloDeNavegacion> {
   return async (ficheros) => {
     const proyecto = await XoneProject.load(raiz);
-    return construirIndice(modeloDeNavegacion(proyecto.model as ModeloDelLinter, raiz, ficheros));
+    return modeloDeNavegacion(proyecto.model as ModeloDelLinter, raiz, ficheros);
   };
 }
 

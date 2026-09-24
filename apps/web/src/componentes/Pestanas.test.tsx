@@ -34,7 +34,7 @@ describe("Pestanas", () => {
     expect(screen.queryByRole("tab", { name: "Chat" })).toBeNull();
   });
 
-  it("son cinco por omisión, en este orden: Tareas · Ejecutar · Ficheros · Revisión · Trazas", () => {
+  it("son seis por omisión, en este orden: Tareas · Ejecutar · Ficheros · Revisión · Colecciones · Trazas", () => {
     // Tareas y Ejecutar son las dos pestañas de ACCIÓN —una le manda al agente algo para que
     // trabaje solo, la otra lanza la app en un aparato— y van juntas al principio. Ficheros,
     // Revisión (y Artefactos, si lo hay) son de REGISTRO: enseñan lo que ya pasó, y Trazas
@@ -50,6 +50,8 @@ describe("Pestanas", () => {
       "Ejecutar",
       "Ficheros",
       "Revisión",
+      // El modelo XOne: de REGISTRO, y siempre presente porque todo proyecto XOne lo tiene.
+      "Colecciones",
       "Trazas",
     ]);
     expect(screen.getByRole("tab", { name: "Revisión" }).getAttribute("aria-selected")).toBe("true");
@@ -76,6 +78,7 @@ describe("Pestanas", () => {
       "Ejecutar",
       "Ficheros",
       "Revisión",
+      "Colecciones",
       "Artefactos",
       "Trazas",
     ]);

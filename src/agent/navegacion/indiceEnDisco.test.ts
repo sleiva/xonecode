@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { indiceEnDisco } from "./indiceEnDisco.js";
+import { indiceEnDisco, modeloEnDisco } from "./indiceEnDisco.js";
+import { fotoDeColecciones } from "../../core/fotoDeColecciones.js";
 
 /**
  * Contra DISCO de verdad, con `xone-linter` de verdad y un proyecto de mentira.
@@ -101,5 +102,18 @@ describe("indiceEnDisco", () => {
     const vacia = mkdtempSync(join(tmpdir(), "nav-vacia-"));
     mkdirSync(join(vacia, "sub"), { recursive: true });
     await expect(indiceEnDisco(vacia)(new Set())).rejects.toThrow(/app\.xml/);
+  });
+});
+
+describe("la foto de la pestaña Colecciones, contra disco de verdad", () => {
+  it("sale del MISMO modelo que el índice, y sin ninguna ruta de la máquina", async () => {
+    const raiz = proyectoDePrueba();
+    const foto = fotoDeColecciones(await modeloEnDisco(raiz)(ficherosDe(raiz)));
+    expect(foto.colecciones.map((c) => c.nombre).sort()).toEqual(["Clientes", "Pedidos"]);
+    const clientes = foto.colecciones.find((c) => c.nombre === "Clientes")!;
+    const indice = await indiceEnDisco(raiz)(ficherosDe(raiz));
+    // Lo que la pestaña dice que le apunta es lo que la tool contestaría.
+    expect(clientes.leApuntan).toEqual(indice.referencias("Clientes"));
+    expect(JSON.stringify(foto)).not.toContain(raiz);
   });
 });

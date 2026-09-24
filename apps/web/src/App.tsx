@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Colecciones } from "./componentes/Colecciones.js";
 import type { crearStoreDelCliente } from "./store.js";
 import type { ActoDeSincronizacion } from "./tipos.js";
 import type { Conexion } from "./conexion.js";
@@ -466,6 +467,11 @@ export function App({
     void enviar({ clase: "arbol" });
   }, [enviar]);
 
+  /** Pedir la foto del modelo XOne (pestaña Colecciones). Mismo motivo que `pedirArbol`. */
+  const pedirColecciones = useCallback(() => {
+    void enviar({ clase: "colecciones" });
+  }, [enviar]);
+
   /**
    * Pedir la medida de lo que queda por subir (la banda de CloudStudio, dentro de Revisión),
    * y las dos acciones.
@@ -605,10 +611,12 @@ export function App({
       pedirArbol();
       if (ficheroElegido !== undefined) void enviar({ clase: "fichero", ruta: ficheroElegido });
     }
+    // El agente pudo escribir un `.xne`, y un modelo viejo contesta con autoridad y equivocado.
+    if (vistaDelPanel === "colecciones") pedirColecciones();
     // `desplegados` y `ficheroElegido` NO van en las dependencias a propósito: desplegar y
     // elegir ya piden lo suyo por su cuenta, y tenerlos aquí lo pediría dos veces.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [turnoEnVuelo, vistaDelPanel, pedirRevision, pedirParche, pedirArbol, pedirSync, enviar]);
+  }, [turnoEnVuelo, vistaDelPanel, pedirRevision, pedirParche, pedirArbol, pedirColecciones, pedirSync, enviar]);
   const [apariencia, setApariencia] = useState<Apariencia>(() => leerApariencia());
 
   useEffect(() => {
@@ -1414,6 +1422,17 @@ export function App({
               conectado={estado.conectado}
             />
           }
+        />
+      }
+      colecciones={
+        <Colecciones
+          {...(estado.colecciones?.foto === undefined ? {} : { foto: estado.colecciones.foto })}
+          {...(estado.colecciones?.error === undefined ? {} : { error: estado.colecciones.error })}
+          conectado={estado.conectado}
+          alPedir={pedirColecciones}
+          // «Abrir» un `.xne` es el MISMO camino que el de un hallazgo: elegirlo en Ficheros y
+          // abrir esa pestaña, que aquí es irse de esta.
+          alAbrirFichero={abrirFicheroDeHallazgo}
         />
       }
       ficheros={
