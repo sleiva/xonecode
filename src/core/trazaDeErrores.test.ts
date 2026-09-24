@@ -74,6 +74,20 @@ describe("mensajeSeguro", () => {
     expect(mensajeSeguro("open /Users/ana/x.json failed because the disk is full")).toBe("open <ruta> failed because the disk is full");
   });
 
+  /**
+   * **Fail-closed**: en una ruta sin comillas no hay un final seguro —«de la Cruz», «My File.txt»—,
+   * así que desde que empieza se tapa el resto de la línea, salvo un final RECONOCIDO (un código
+   * de error de Node, «failed», «falló»…). Tapar de más es el lado seguro; de menos, no.
+   */
+  it("varios espacios, o el último trozo con espacio: se tapa hasta el final reconocido o hasta el final", () => {
+    expect(mensajeSeguro("spawn C:\\Users\\Sergio de la Cruz\\.local\\codex.exe ENOENT")).toBe("spawn <ruta> ENOENT");
+    expect(mensajeSeguro("/Users/ana/proyectos/My File.txt")).toBe("<ruta>");
+    expect(mensajeSeguro("C:\\Users\\ana\\My Project Files\\app.xml")).toBe("<ruta>");
+    expect(mensajeSeguro("no se pudo abrir C:\\Program Files (x86)\\Sergio\\app.exe EACCES")).toBe("no se pudo abrir <ruta> EACCES");
+    // Sin final reconocido se tapa hasta el final de la LÍNEA, no del mensaje.
+    expect(mensajeSeguro("leyendo /Users/ana/My File.txt\nsegunda línea")).toBe("leyendo <ruta>\nsegunda línea");
+  });
+
   it("entre comillas CON ESPACIOS, que es el formato de un error de Node: se tapa entera", () => {
     // Salía entera: la regla de las comillas no admitía espacios, y la de las sueltas no mira
     // detrás de una comilla. Es el caso más común con un nombre de usuario de dos palabras.

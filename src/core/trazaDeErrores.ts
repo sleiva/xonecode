@@ -60,35 +60,48 @@ export interface ErrorAnotado {
  * Las rutas se SUSTITUYEN en vez de tirar el mensaje entero, porque lo que queda —«ENOENT: no
  * such file or directory, open '<ruta>'»— sigue diciendo qué pasó.
  */
-/** Lo que puede ir dentro de un trozo de ruta suelta: hasta un espacio, una comilla o un signo que la cierra. */
-const TROZO = String.raw`[^\s'"\u0060,;)]`;
 /**
- * **Un espacio sigue dentro de la ruta solo si lo que viene detrás vuelve a tener un separador**
- * antes del siguiente espacio. Así «Sergio Leiva\.local\codex.exe» sigue siendo ruta —un nombre de
- * usuario de dos palabras es lo normal— y « ENOENT» o « failed», que no tienen separador, se quedan
- * fuera: se tapa la ruta sin comerse el resto del mensaje.
+ * Dónde EMPIEZA una ruta de la máquina sin comillas: las raíces de usuario y temporales de Unix,
+ * una unidad de Windows (`C:\…`, `C:/…`) o una ruta de red (`\\servidor\…`, `//servidor/…`). Cada una
+ * exige no ir pegada a lo de antes: `https://` no es una unidad ni una ruta de red, y una ruta
+ * VIRTUAL del agente (`/artefactos/…`) no empieza por ninguna de estas raíces.
  */
-const CON_ESPACIOS = String.raw`(?: [^\s'"\u0060,;)\\/]*[\\/]${TROZO}*)*`;
+const INICIO_SUELTA =
+  /(?<![\w'"`/])\/(?:Users|home|private|Volumes|tmp|var|opt)\/|(?<![\w])[A-Za-z]:[\\/]|(?<![\w\\])\\\\(?=[^\s\\])|(?<![\w:/])\/\/(?=[^\s/])/g;
 
-const UNIX_SUELTA = new RegExp(String.raw`(?<![\w'"\u0060/])\/(?:Users|home|private|Volumes|tmp|var|opt)\/${TROZO}*${CON_ESPACIOS}`, "g");
-const UNIDAD_SUELTA = new RegExp(String.raw`(?<![\w])[A-Za-z]:[\\/]${TROZO}*${CON_ESPACIOS}`, "g");
-const UNC_SUELTA = new RegExp(String.raw`(?<![\w\\])\\\\[^\s\\'"\u0060]+\\${TROZO}*${CON_ESPACIOS}`, "g");
-/** `//servidor/…`: detrás no puede ir `:` —el de `https://`— ni una letra. */
-const UNC_CON_BARRAS = new RegExp(String.raw`(?<![\w:/])\/\/[^\s/'"\u0060]+\/${TROZO}*${CON_ESPACIOS}`, "g");
+/**
+ * **Los finales RECONOCIDOS de una ruta sin comillas**, y solo estos. Una ruta sin comillas no tiene
+ * un final seguro —«Sergio de la Cruz», «My Project Files», «Program Files (x86)»—, y adivinarlo
+ * falló en las dos direcciones, así que esto es FAIL-CLOSED: desde que empieza una ruta se tapa el
+ * resto de la LÍNEA, salvo que aparezca uno de estos finales, que se conserva con lo que le siga.
+ * Tapar de más es el lado seguro; de menos, no. Lista cerrada a propósito: un código de error de
+ * Node (`ENOENT`, `EACCES`…) y las pocas frases con que los productos cierran el mensaje.
+ */
+const FINAL_RECONOCIDO = /\s+(?=(?:E[A-Z0-9]{2,}|failed|falló|not found|no existe|no responde|is not recognized)\b)/;
+
+/** Tapa las rutas sin comillas de UNA línea, con el corte de arriba. */
+function taparSueltas(linea: string): string {
+  let salida = "";
+  let resto = linea;
+  for (;;) {
+    INICIO_SUELTA.lastIndex = 0;
+    const inicio = INICIO_SUELTA.exec(resto);
+    if (inicio === null) return salida + resto;
+    salida += `${resto.slice(0, inicio.index)}<ruta>`;
+    const tras = resto.slice(inicio.index);
+    const fin = FINAL_RECONOCIDO.exec(tras);
+    if (fin === null) return salida;
+    resto = tras.slice(fin.index);
+  }
+}
 
 export function mensajeSeguro(mensaje: string): string {
-  return (
-    mensaje
-      // Entre comillas: cualquier ruta absoluta, Unix o Windows (con unidad o de red), espacios incluidos.
-      .replace(/(['"`])\/[^'"`\n]*\1/g, "$1<ruta>$1")
-      .replace(/(['"`])(?:[A-Za-z]:[\\/]|\\\\)[^'"`]*\1/g, "$1<ruta>$1")
-      // Sueltas —XOneCode corre también en Windows—: las raíces de usuario y temporales de Unix, las
-      // de unidad (`C:\…`, `C:/…`) y las de red (`\\servidor\…`, `//servidor/…`). Una URL no es una ruta.
-      .replace(UNIX_SUELTA, "<ruta>")
-      .replace(UNIDAD_SUELTA, "<ruta>")
-      .replace(UNC_SUELTA, "<ruta>")
-      .replace(UNC_CON_BARRAS, "<ruta>")
-  );
+  const conComillas = mensaje
+    // Entre comillas el final SÍ es seguro —la comilla—, espacios incluidos: Unix o Windows.
+    .replace(/(['"`])\/[^'"`\n]*\1/g, "$1<ruta>$1")
+    .replace(/(['"`])(?:[A-Za-z]:[\\/]|\\\\)[^'"`\n]*\1/g, "$1<ruta>$1");
+  // Sin comillas, línea a línea: una ruta no cruza un salto de línea, y la línea siguiente se queda.
+  return conComillas.split("\n").map(taparSueltas).join("\n");
 }
 
 /** De un error, lo que se puede contar. */
