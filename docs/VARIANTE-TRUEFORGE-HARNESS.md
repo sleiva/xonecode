@@ -735,6 +735,29 @@ texto—. Así llega igual a la web, a la TUI y al terminal sin tocar ninguna pi
 botones sería el siguiente paso y no cambiaría esto. Medido con `deepseek-flash`: ante «pregúntame
 antes de tocar nada», el orquestador investigó el proyecto y preguntó con dos paletas concretas.
 
+### DeepSeek y la subida a 0.3 (24-09-2026)
+
+La duda: 0.3 saca `reasoning_content` del contexto del hilo, y DeepSeek documenta que con `tools` hay
+que devolvérselo o contesta 400. Lo que salió al MEDIRLO, con un espía de `fetch` en el cable:
+
+- **TrueForge 0.2.1 ya no se lo devolvía**: 0 de 5 mensajes con tool calls, frente a 7 de 7 en
+  deepagents. Quien lo repone es el eco (`config/ecoDeRazonamiento.ts`), por id de tool call y con la
+  memoria DENTRO del cliente, y TrueForge construía un cliente por llamada. Arreglado: un cliente por
+  papel, modelo y esfuerzo que dura la sesión (`/modelo` lo renueva). Tras el arreglo, 5 de 5.
+- **Y aun así funcionaba**: contra la API cruda, hoy DeepSeek acepta el historial SIN
+  `reasoning_content`, dentro del bucle de tools y en un turno nuevo, con el modelo pensando (tres
+  pasadas con `reasoning_effort`). El 400 que se midió el 21-09 no se reproduce. Se devuelve igual,
+  porque su documentación lo exige y porque el día que lo vuelva a exigir el fallo sería un 400 duro.
+- **Con 0.3.0-rc.0** (publicada en npm con la etiqueta `rc`, instalada en un worktree aparte): los
+  tipos compilan, el host entero pasa salvo el guardián de la versión —que es lo que debe fallar—, y
+  una pasada real con DeepSeek da 4 peticiones en 200, el razonamiento en 3 de 3 mensajes con tool
+  calls y la respuesta correcta. Como el eco va por HTTP, lo que 0.3 haga con su contexto no le afecta.
+
+La prueba que lo fija es `deepseekEnTrueforge.test.ts`: el cliente REAL de DeepSeek con un `fetch` de
+pega, y se comprueba que la segunda petición lleva el razonamiento de la tool call. **Subir a 0.3 es
+cambiar la versión fijada en `package.json` y `VERSION_DE_TRUEFORGE`**; queda sin hacer porque es una
+rc.
+
 ### Las métricas del motor, como CONTRASTE (24-09-2026)
 
 `AgentThreadOrchestrator.getMetrics()` se lee al final de cada turno, ANTES de rehacer el raíz
@@ -848,6 +871,5 @@ su API y son lo primero que puede moverse. El trazado mudo es nuestro, con `sati
 tipos públicos de `AgentTracing`, así que un cambio de su interfaz lo dice el compilador. El test
 de la frontera reconoce las cuatro formas de cargar el paquete —`from`, `import` a secas,
 `import()` y `require()`—, y prueba el propio detector con cada una. **Ojo al comparar con el código fuente**: el checkout local de TrueForge está ya en 0.3.0-rc.0 y aquí
-corre 0.2.1; la referencia del comportamiento es `node_modules`. No se sube a 0.3 sin antes una prueba
-de compatibilidad con DeepSeek: 0.3 saca `reasoning_content` del contexto del hilo, y DeepSeek exige
-recibirlo de vuelta cuando hay tool calls.
+corre 0.2.1; la referencia del comportamiento es `node_modules`. La prueba de compatibilidad con
+DeepSeek que pedía subir a 0.3 ya está hecha (abajo, «DeepSeek y la subida a 0.3»): pasa.
