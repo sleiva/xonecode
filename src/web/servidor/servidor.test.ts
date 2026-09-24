@@ -168,6 +168,55 @@ describe("servidor web", () => {
     expect(await r.text()).toBe("");
   });
 
+  /**
+   * `registrarRutaPublica`: el callback OAuth de los conectores llega desde OTRO sitio
+   * (el proveedor), y la cookie es `SameSite=Strict` — sin esto se quedaría en un 401 antes
+   * de que el propio callback pudiera decidir nada.
+   */
+  it("una ruta pública responde 200 sin cookie ni ?t=, y nunca emite Set-Cookie", async () => {
+    const { base, token } = await levantar();
+    servidor!.registrarRutaPublica("GET", "/publica", (_peticion, respuesta) => {
+      respuesta.writeHead(200, { "Content-Type": "text/plain" });
+      respuesta.end("ok");
+    });
+
+    const sinNada = await fetch(`${base}/publica`);
+    expect(sinNada.status).toBe(200);
+    expect(await sinNada.text()).toBe("ok");
+    expect(sinNada.headers.get("set-cookie")).toBeNull();
+
+    // Ni siquiera con un token de query VÁLIDO: lo público no canjea cookie, nunca.
+    const conToken = await fetch(`${base}/publica?t=${token}`);
+    expect(conToken.status).toBe(200);
+    expect(conToken.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("una ruta pública sigue DETRÁS de Host y Origin: el rebinding se para igual", async () => {
+    await levantar();
+    servidor!.registrarRutaPublica("GET", "/publica", (_peticion, respuesta) => {
+      respuesta.writeHead(200);
+      respuesta.end("ok");
+    });
+
+    const hostAjeno = await peticionCruda({ ruta: "/publica", host: "malo.example.com" });
+    expect(hostAjeno.estado).toBe(403);
+
+    const origenAjeno = await fetch(`http://127.0.0.1:${servidor!.puerto}/publica`, {
+      headers: { Origin: "https://malo.example.com" },
+    });
+    expect(origenAjeno.status).toBe(403);
+  });
+
+  it("una ruta normal registrada con registrarRuta sigue pidiendo cookie o token: 401", async () => {
+    const { base } = await levantar();
+    servidor!.registrarRuta("GET", "/normal", (_peticion, respuesta) => {
+      respuesta.writeHead(200);
+      respuesta.end("no debería llegar sin autenticar");
+    });
+    const r = await fetch(`${base}/normal`);
+    expect(r.status).toBe(401);
+  });
+
   it("EADDRINUSE se cuenta con el puerto y la bandera, no con una traza", async () => {
     const { raizEstaticos } = await levantar();
     const ocupado = servidor!.puerto;

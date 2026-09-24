@@ -4194,6 +4194,7 @@ describe("arrancarConsolaWeb monta el aumentador", () => {
         registrarRuta: (metodo: string, ruta: string, manejador: ManejadorRuta) => {
           rutas.set(`${metodo} ${ruta}`, manejador);
         },
+        registrarRutaPublica: () => {},
         cerrar: async () => {},
       }),
       vestibulo: vestibuloDePrueba(),
@@ -4220,6 +4221,7 @@ describe("arrancarConsolaWeb monta el aumentador", () => {
 
 function servidorLevantado() {
   const rutas = new Map<string, ManejadorRuta>();
+  const rutasPublicas = new Map<string, ManejadorRuta>();
   return {
     puerto: 4173,
     direccion: "127.0.0.1",
@@ -4227,6 +4229,9 @@ function servidorLevantado() {
     url: "http://127.0.0.1:4173/?t=t0k3n",
     registrarRuta: (metodo: string, ruta: string, manejador: ManejadorRuta) => {
       rutas.set(`${metodo} ${ruta}`, manejador);
+    },
+    registrarRutaPublica: (metodo: string, ruta: string, manejador: ManejadorRuta) => {
+      rutasPublicas.set(`${metodo} ${ruta}`, manejador);
     },
     cerrar: async () => {},
   };
