@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { lineasDeVerificacion } from "../lineasDeVerificacion.js";
 import clsx from "clsx";
 import type { Acto } from "../tipos.js";
 import { formatearMs } from "../tiempo.js";
@@ -173,6 +174,10 @@ function filasDe(acto: Acto): FilaCruda[] {
     case "consulta":
       // Color de sistema y etiqueta propia: es lo que dijo el HARNESS por el agente, no una tool.
       return [cruda("sistema", "CONSULTA", `${acto.pregunta} · ${acto.opciones.join(" · ")}`)];
+    case "verificacion":
+      // Las mismas líneas que antes llegaban como pasos del motor, y con la misma etiqueta:
+      // el veredicto viaja ahora como dato, pero el registro lo cuenta igual.
+      return lineasDeVerificacion(acto).map((linea) => cruda("paso", "PASO", linea));
     default: {
       const _exhaustivo: never = acto;
       return _exhaustivo;

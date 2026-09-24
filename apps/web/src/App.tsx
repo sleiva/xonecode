@@ -530,6 +530,25 @@ export function App({
     [enviar]
   );
 
+  /**
+   * «Abrir» en un hallazgo del verificador: el MISMO camino que pinchar el fichero en el árbol
+   * —elegirlo y pedir su contenido— más abrir la pestaña. La barrera de qué se puede leer sigue
+   * en el servidor, así que un hallazgo sobre algo que el lector no enseña contesta lo que
+   * contestaría el árbol.
+   */
+  const abrirFicheroDeHallazgo = useCallback(
+    (ruta: string) => {
+      elegirFichero(ruta);
+      abrirPanel("ficheros");
+    },
+    [elegirFichero, abrirPanel]
+  );
+
+  /** Lo que «Pedir corrección» deja en el compositor; el `id` hace que dos iguales cuenten dos. */
+  const [borradorDelCompositor, setBorradorDelCompositor] = useState<{ texto: string; id: number } | undefined>(
+    undefined
+  );
+
   // Revisión arranca PLEGADA: al llegar la lista no se despliega ningún bloque ni se pide
   // ningún parche. Lo único que hace este efecto es OLVIDAR lo desplegado cuando el store
   // tira la foto (otra sesión, cable caído), para que las filas abiertas de la sesión
@@ -1593,6 +1612,8 @@ export function App({
               // tarjeta enseña la ruta virtual en vez de componer una falsa.
               {...(estado.alta?.sesionActiva === undefined ? {} : { sesion: estado.alta.sesionActiva })}
               alAbrirArtefacto={abrirArtefacto}
+              alAbrirFichero={abrirFicheroDeHallazgo}
+              alPedirCorreccion={(texto) => setBorradorDelCompositor((b) => ({ texto, id: (b?.id ?? 0) + 1 }))}
             />
             )}
             {/*
@@ -1677,6 +1698,7 @@ export function App({
             */}
             <Compositor
               conectado={estado.conectado}
+              {...(borradorDelCompositor === undefined ? {} : { borrador: borradorDelCompositor })}
               // El estado de modelos, tal cual lo manda el servidor: la pastilla lo pinta
               // y no lo deduce. Ausente mientras no ha llegado el mensaje.
               {...(estado.modelos === undefined ? {} : { modelos: estado.modelos })}

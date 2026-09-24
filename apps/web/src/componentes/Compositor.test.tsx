@@ -229,3 +229,23 @@ describe("las tres bandas de la caja", () => {
   });
 });
 
+
+describe("un borrador que llega de FUERA («Pedir corrección»)", () => {
+  it("se escribe en la caja, se AÑADE a lo que hubiera y NO se envía", () => {
+    const alEnviar = vi.fn();
+    const { rerender } = render(<Compositor conectado alEnviar={alEnviar} />);
+    const caja = screen.getByRole("textbox") as HTMLTextAreaElement;
+    fireEvent.change(caja, { target: { value: "lo que estaba escribiendo" } });
+    rerender(<Compositor conectado alEnviar={alEnviar} borrador={{ texto: "Corrige E1 en a.xne:3: mal", id: 1 }} />);
+    expect(caja.value).toBe("lo que estaba escribiendo\nCorrige E1 en a.xne:3: mal");
+    expect(alEnviar).not.toHaveBeenCalled();
+    // Y el foco dentro, que es lo que despliega la caja para leerlo.
+    expect(document.activeElement).toBe(caja);
+  });
+
+  it("dos peticiones iguales seguidas cuentan dos: lo decide el `id`, no el texto", () => {
+    const { rerender } = render(<Compositor {...manejadores} borrador={{ texto: "A", id: 1 }} />);
+    rerender(<Compositor {...manejadores} borrador={{ texto: "A", id: 2 }} />);
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("A\nA");
+  });
+});

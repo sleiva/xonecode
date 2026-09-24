@@ -28,6 +28,8 @@ export function Transcript({
   modelo,
   sesion,
   alAbrirArtefacto,
+  alAbrirFichero,
+  alPedirCorreccion,
 }: {
   actos: readonly Acto[];
   /** Van al Chat tal cual: la relectura, el cronómetro del turno en vuelo, y el proyecto y
@@ -45,6 +47,10 @@ export function Transcript({
   /** Abrir un artefacto desde su tarjeta del Chat. Lo resuelve `App`, que es quien decide
    *  si eso abre el panel de al lado o lo pone en el centro. */
   alAbrirArtefacto?: (ruta: string) => void;
+  /** Los dos botones de un hallazgo en rojo (`Chat#VeredictoEnRojo`): abrir su fichero y dejar
+   *  la petición de corrección escrita en el compositor. */
+  alAbrirFichero?: (ruta: string) => void;
+  alPedirCorreccion?: (texto: string) => void;
   /** Hay turno corriendo. Lo usa el Chat, para saber si el último mensaje sigue llegando —y
    *  con él, si toca resaltar el código o esperar al cierre. */
   turnoEnVuelo?: boolean;
@@ -63,6 +69,8 @@ export function Transcript({
           {...(modelo === undefined ? {} : { modelo })}
           {...(sesion === undefined ? {} : { sesion })}
           {...(alAbrirArtefacto === undefined ? {} : { alAbrirArtefacto })}
+          {...(alAbrirFichero === undefined ? {} : { alAbrirFichero })}
+          {...(alPedirCorreccion === undefined ? {} : { alPedirCorreccion })}
         />
       </div>
     </div>

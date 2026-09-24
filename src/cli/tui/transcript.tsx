@@ -314,6 +314,10 @@ function ActoVista({
       // la pregunta es el texto del asistente con sus opciones numeradas, y se contesta
       // escribiendo. No se pinta nada: repetir la pregunta la enseñaría dos veces.
       return null;
+    case "verificacion":
+      // Tampoco llega: `Piel.verificacion` es opcional y la TUI no la implementa, así que aquí
+      // el veredicto llega como las líneas de siempre.
+      return null;
     default:
       // sistema: mudo e indentado — un aviso, no la conversación.
       return <Text color={temaInk.mudo}>{`  ${acto.texto}`}</Text>;

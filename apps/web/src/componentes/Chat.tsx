@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
-import type { Acto, ConsumoDeTurno, MemoriaDelTurno } from "../tipos.js";
+import type { Acto, ConsumoDeTurno, HallazgoDelTurno, MemoriaDelTurno } from "../tipos.js";
+import { dondeDe, lineasDeVerificacion, marcaDe } from "../lineasDeVerificacion.js";
 import { usarPegadoAbajo } from "../pegadoAbajo.js";
 import { partirPorOrigen, rotuloDeOrigen, type TrozoPorOrigen } from "../porOrigen.js";
 import { useCronometro } from "../cronometro.js";
@@ -176,6 +177,17 @@ function TramoDeTrabajo({
               </div>
             ));
           }
+          if (a.tipo === "verificacion") {
+            return (
+              <ul key={i} className={estilos.trabajo}>
+                {lineasDeVerificacion(a).map((linea, j) => (
+                  <li key={j} className={estilos.textoTenue}>
+                    {linea}
+                  </li>
+                ))}
+              </ul>
+            );
+          }
           if (a.tipo === "fase") {
             return (
               <p key={i} className={`${estilos.textoTenue} ${estilos.fase}`}>
@@ -205,6 +217,81 @@ function conQuienTrabaja(
     previo = ultimo;
     return { acto, trozos };
   });
+}
+
+/** La frase que «Pedir corrección» deja en el compositor: qué, dónde y lo que dijo el simulador. */
+export function peticionDeCorreccion(h: HallazgoDelTurno): string {
+  const donde = dondeDe(h);
+  return `Corrige ${h.code}${donde === undefined ? "" : ` en ${donde}`}: ${h.mensaje}`;
+}
+
+/**
+ * El rojo con el que TERMINÓ un turno, fuera del plegado y con un botón por hallazgo.
+ *
+ * Fuera porque es lo único del tramo que pide algo a la persona: el turno acabó y el proyecto
+ * sigue mal, ya sea porque se agotaron las reparaciones o porque no había que repararlo. Los
+ * botones solo en hallazgos con FICHERO —sin él no hay nada que abrir ni sitio que nombrar— y
+ * solo si quien monta el chat los cablea. «Abrir» elige el fichero en Ficheros y no salta a la
+ * línea, que el visor no sabe hacer todavía; por eso la línea va escrita al lado.
+ */
+function VeredictoEnRojo({
+  veredicto: v,
+  alAbrirFichero,
+  alPedirCorreccion,
+}: {
+  veredicto: Extract<Acto, { tipo: "verificacion" }>;
+  alAbrirFichero?: (ruta: string) => void;
+  alPedirCorreccion?: (texto: string) => void;
+}) {
+  return (
+    <section className={`${vista.flowItem} ${estilos.veredictoEnRojo}`} aria-label="Verificación en rojo">
+      <p className={estilos.veredictoCabecera}>
+        {`✗ La verificación sigue en rojo · ${v.errores} ${v.errores === 1 ? "error" : "errores"}, ${v.avisos} ${
+          v.avisos === 1 ? "aviso" : "avisos"
+        }`}
+      </p>
+      {(v.hallazgos ?? []).length === 0 ? null : (
+        <ul className={estilos.hallazgos}>
+          {(v.hallazgos ?? []).map((h, i) => {
+            const donde = dondeDe(h);
+            return (
+              <li key={i} className={estilos.hallazgo}>
+                <span className={estilos.hallazgoTexto}>
+                  {`${marcaDe(h)} `}
+                  {donde === undefined ? null : <code className={estilos.hallazgoDonde}>{donde}</code>}
+                  {` ${h.code} — ${h.mensaje}`}
+                </span>
+                {h.fichero === undefined ? null : (
+                  <span className={estilos.hallazgoAcciones}>
+                    {alAbrirFichero === undefined ? null : (
+                      <button type="button" className={estilos.hallazgoBoton} onClick={() => alAbrirFichero(h.fichero!)}>
+                        Abrir
+                      </button>
+                    )}
+                    {alPedirCorreccion === undefined ? null : (
+                      <button
+                        type="button"
+                        className={estilos.hallazgoBoton}
+                        title="Deja la petición escrita en el compositor; no se envía sola"
+                        onClick={() => alPedirCorreccion(peticionDeCorreccion(h))}
+                      >
+                        Pedir corrección
+                      </button>
+                    )}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {v.preexistentes === undefined || v.preexistentes === 0 ? null : (
+        <p className={estilos.veredictoNota}>
+          {`Y ${v.preexistentes} ${v.preexistentes === 1 ? "hallazgo" : "hallazgos"} más en ficheros que este turno no tocó.`}
+        </p>
+      )}
+    </section>
+  );
 }
 
 /** ¿Hay algo que PREVISUALIZAR de este artefacto? Solo una imagen, y por su `mime`, que sale
@@ -346,8 +433,14 @@ function TarjetaDeArtefacto({
  * Estar en el tramo no significa plegarse con él: las tarjetas salen FUERA del `<details>`
  * (ver el render), porque una captura escondida bajo un desplegable es una captura que nadie
  * mira. Lo que se gana es que el tramo no se parta y que el orden se conserve.
+ *
+ * **`verificacion` también**, porque es lo que llegaba antes como líneas del tramo: el
+ * veredicto viaja ahora como dato (`Piel.verificacion?`) y dentro del tramo se sigue contando
+ * igual. Lo nuevo es el ROJO con el que el turno TERMINA, que además sale fuera del plegado
+ * con un botón por hallazgo (`VeredictoEnRojo`): los rojos de antes de una reparación son
+ * historia, y el último es lo que queda por arreglar.
  */
-const ES_PULSO = new Set(["razonamiento", "herramientas", "fase", "artefacto"]);
+const ES_PULSO = new Set(["razonamiento", "herramientas", "fase", "artefacto", "verificacion"]);
 
 /**
  * Cómo se llama cada clase de lo que el HARNESS dice sobre el turno, y cómo se cuenta.
@@ -405,6 +498,13 @@ interface TramoDePulso {
   consumo?: ConsumoDeTurno;
   /** Que en su turno se pidió leer la memoria del proyecto, y quién. Ausente = no se pidió. */
   memoria?: MemoriaDelTurno;
+  /**
+   * El veredicto en ROJO con el que TERMINÓ su turno, si está en este tramo. Lo decide el `fin`
+   * y no la llegada del veredicto: con el turno en vuelo un rojo puede ir seguido de una
+   * reparación, y ofrecer «pedir corrección» sobre algo que el harness ya está reparando sería
+   * mandar a hacer dos veces lo mismo.
+   */
+  rojoFinal?: Extract<Acto, { tipo: "verificacion" }>;
 }
 
 /** Cuánto se queda a la vista el aviso del modo autónomo antes de retirarse solo. */
@@ -456,6 +556,8 @@ export function Chat({
   modelo,
   sesion,
   alAbrirArtefacto,
+  alAbrirFichero,
+  alPedirCorreccion,
 }: {
   actos: readonly Acto[];
   turnoEnVuelo?: boolean;
@@ -499,6 +601,16 @@ export function Chat({
    * monta también en tests que no cablean la pestaña.
    */
   alAbrirArtefacto?: (ruta: string) => void;
+  /**
+   * Abrir en Ficheros el fichero de un hallazgo (ruta RELATIVA, la misma forma que el árbol).
+   * Opcional por lo mismo que `alAbrirArtefacto`: sin él no se pinta el botón.
+   */
+  alAbrirFichero?: (ruta: string) => void;
+  /**
+   * Dejar en el compositor una petición de corrección, SIN enviarla: la envía la persona. Un
+   * botón que lanzara el turno sería un comando tecleado por otra puerta (`comoComando`).
+   */
+  alPedirCorreccion?: (texto: string) => void;
 }) {
   // Cuál es el último acto de asistente: es el único que puede estar llegando todavía.
   const ultimoAsistente = actos.map((a) => a.tipo).lastIndexOf("asistente");
@@ -650,6 +762,15 @@ export function Chat({
       // es el tramo donde está su línea. Es un hecho del turno, no de un trozo, así que va en
       // uno solo y no en todos.
       if (acto.memoria !== undefined && delTurno[0] !== undefined) delTurno[0].memoria = acto.memoria;
+      // El ÚLTIMO veredicto del turno, y solo si es rojo: uno verde tras una reparación dice
+      // que no queda nada, y un rojo de antes de ella ya no es lo que queda.
+      for (let k = delTurno.length - 1; k >= 0; k--) {
+        const suyo = delTurno[k]!;
+        const ultimoVeredicto = [...suyo.actos].reverse().find((a) => a.tipo === "verificacion");
+        if (ultimoVeredicto === undefined) continue;
+        if (ultimoVeredicto.tipo === "verificacion" && !ultimoVeredicto.verde) suyo.rojoFinal = ultimoVeredicto;
+        break;
+      }
       for (const suyo of delTurno) suyo.terminado = true;
       delTurno = [];
       if (ultimo !== undefined) {
@@ -826,11 +947,27 @@ export function Chat({
               // Y las tarjetas FUERA del desplegable: pertenecen al tramo —por eso no lo
               // parten— pero no se pliegan con él, que sería esconder la captura que el
               // agente acaba de sacar. Sin tarjetas no hay fragmento que envolver.
+              const rojo =
+                t.rojoFinal === undefined ? null : (
+                  <VeredictoEnRojo
+                    veredicto={t.rojoFinal}
+                    {...(alAbrirFichero === undefined ? {} : { alAbrirFichero })}
+                    {...(alPedirCorreccion === undefined ? {} : { alPedirCorreccion })}
+                  />
+                );
               return producido.length === 0 ? (
-                desplegable
+                rojo === null ? (
+                  desplegable
+                ) : (
+                  <Fragment key={`pulso-${t.desde}`}>
+                    {desplegable}
+                    {rojo}
+                  </Fragment>
+                )
               ) : (
                 <Fragment key={`pulso-${t.desde}`}>
                   {desplegable}
+                  {rojo}
                   {/*
                     Las tarjetas van en UN grupo y no sueltas en la columna, y eso es de
                     espaciado: `ChatView.module.css` separa a los hijos de `.column` con 16 px

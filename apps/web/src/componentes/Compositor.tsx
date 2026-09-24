@@ -44,6 +44,7 @@ export function Compositor({
   alElegirDispositivo,
   alMedirDispositivos,
   alEnviar,
+  borrador,
 }: {
   conectado: boolean;
   /**
@@ -114,9 +115,26 @@ export function Compositor({
   /** Volver a medir la máquina desde el menú de la pastilla. Ausente = no se ofrece. */
   alMedirDispositivos?: () => void;
   alEnviar: (texto: string) => void;
+  /**
+   * Un texto que alguien de FUERA deja escrito en la caja —hoy, «Pedir corrección» de un
+   * hallazgo—, con un `id` que cambia en cada petición para que dos iguales seguidas cuenten
+   * como dos. Se AÑADE a lo que haya, en su propia línea: pisar un borrador a medias sería
+   * perder lo que la persona estaba escribiendo. Nunca se envía solo; la envía quien lo lee.
+   */
+  borrador?: { texto: string; id: number };
 }) {
   const [valor, setValor] = useState("");
   const campo = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (borrador === undefined) return;
+    setValor((antes) => (antes.trim() === "" ? borrador.texto : `${antes.replace(/\s+$/, "")}\n${borrador.texto}`));
+    // Con el foco dentro la caja se DESPLIEGA (`:focus-within`), que es donde se lee lo que
+    // acaba de aparecer, y quien lo pidió puede retocarlo y mandarlo sin ir a pinchar nada.
+    campo.current?.focus();
+    // Solo el `id`: el texto de una petición no cambia sin que cambie su id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [borrador?.id]);
 
   /**
    * Al terminar el turno, el foco vuelve a la caja.

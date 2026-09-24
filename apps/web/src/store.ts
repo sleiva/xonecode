@@ -463,6 +463,7 @@ const TIPOS_DE_ACTO = {
   fin: true,
   sincronizacion: true,
   error: true,
+  verificacion: true,
 } satisfies Record<Acto["tipo"], true>;
 
 /**

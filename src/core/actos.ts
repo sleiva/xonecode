@@ -12,7 +12,7 @@
  */
 
 import type { AccionDeSincronizacion } from "./cloudstudio.js";
-import type { OrigenDeLaTool } from "./events.js";
+import type { HallazgoDelTurno, OrigenDeLaTool } from "./events.js";
 
 /**
  * Lo que se sabe de la línea i-ésima de un acto de herramientas.
@@ -49,6 +49,20 @@ export interface DetalleDeLinea {
 export interface MemoriaDelTurno {
   por: OrigenDeLaTool[];
 }
+/**
+ * El veredicto del verificador sobre lo que el turno escribió, como DATO (`Piel.verificacion?`).
+ * Es el evento `verificacion` sin su `tipo`: fichero RELATIVO, línea, código y mensaje del
+ * simulador — nunca contenido de un fichero. Los `preexistentes` son solo una cifra porque el
+ * evento no los lista: atribuirlos al turno sería falso, y listarlos no se puede.
+ */
+export interface VeredictoDelTurno {
+  verde: boolean;
+  errores: number;
+  avisos: number;
+  hallazgos?: HallazgoDelTurno[];
+  preexistentes?: number;
+}
+
 export type Acto =
   | { tipo: "usuario"; texto: string }
   | { tipo: "asistente"; texto: string }
@@ -139,6 +153,11 @@ export type Acto =
    * cero—. Quien lo lea tiene que poder distinguirlo, que es lo que hace `consumoDeLosActos`.
    */
   | { tipo: "fin"; ms: number; modelo?: string; consumo?: ConsumoDeTurno; memoria?: MemoriaDelTurno }
+  /**
+   * Un veredicto del verificador. Es PULSO del turno —vive en el tramo de trabajo—, y el ROJO
+   * con el que un turno TERMINA sale además fuera del plegado, con un botón por hallazgo.
+   */
+  | ({ tipo: "verificacion" } & VeredictoDelTurno)
   | { tipo: "error"; texto: string }
   /**
    * UNA operación de sincronización con CloudStudio —subir o bajar—, contada entera y de una

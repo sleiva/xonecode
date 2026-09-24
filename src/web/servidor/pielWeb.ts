@@ -335,6 +335,31 @@ export function crearPielWeb(
       });
     },
 
+    verificacion(v) {
+      // Acto PROPIO y campo a campo —lista blanca, como el artefacto—: lo que no se nombra
+      // aquí no llega al cable ni al `.jsonl`. El hallazgo es del simulador (código, fichero
+      // relativo, línea y mensaje), nunca contenido de un fichero.
+      cerrarFase();
+      empujar({
+        tipo: "verificacion",
+        verde: v.verde,
+        errores: v.errores,
+        avisos: v.avisos,
+        ...(v.hallazgos === undefined
+          ? {}
+          : {
+              hallazgos: v.hallazgos.map((h) => ({
+                code: h.code,
+                severidad: h.severidad,
+                mensaje: h.mensaje,
+                ...(h.fichero === undefined ? {} : { fichero: h.fichero }),
+                ...(h.linea === undefined ? {} : { linea: h.linea }),
+              })),
+            }),
+        ...(v.preexistentes === undefined ? {} : { preexistentes: v.preexistentes }),
+      });
+    },
+
     consulta(c) {
       // Acto propio, con las opciones como DATO: el cliente pinta un botón por opción, y la
       // pregunta sigue pendiente mientras no llegue un acto de usuario detrás.

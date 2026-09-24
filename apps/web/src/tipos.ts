@@ -163,6 +163,25 @@ export interface MemoriaDelTurno {
   por: OrigenDeLaTool[];
 }
 
+/** Un hallazgo del simulador, ya relativo al proyecto (`core/events.ts#HallazgoDelTurno`). */
+export interface HallazgoDelTurno {
+  code: string;
+  severidad: "error" | "warning" | "info";
+  mensaje: string;
+  fichero?: string;
+  linea?: number;
+}
+
+/** El veredicto del verificador como dato (`core/actos.ts#VeredictoDelTurno`). */
+export interface VeredictoDelTurno {
+  verde: boolean;
+  errores: number;
+  avisos: number;
+  hallazgos?: HallazgoDelTurno[];
+  /** Solo la cifra: el evento no los lista. */
+  preexistentes?: number;
+}
+
 export type Acto =
   | { tipo: "usuario"; texto: string }
   | { tipo: "asistente"; texto: string }
@@ -216,6 +235,8 @@ export type Acto =
    *  mismo que `detalles` — las sesiones viejas no lo traen. */
   | { tipo: "fase"; texto: string; ms: number; fase?: string }
   | { tipo: "fin"; ms: number; modelo?: string; consumo?: ConsumoDeTurno; memoria?: MemoriaDelTurno }
+  /** Un veredicto del verificador: pulso del turno, y el rojo final además fuera del plegado. */
+  | ({ tipo: "verificacion" } & VeredictoDelTurno)
   /**
    * Una operación de sincronización con CloudStudio, contada entera: las líneas que el
    * terminal habría impreso, su hora de EMPEZAR y cuál de las tres acciones fue.

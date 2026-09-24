@@ -520,3 +520,85 @@
   flex: none;
   white-space: pre;
 }
+
+/* EL ROJO CON EL QUE TERMINÓ UN TURNO, fuera del plegado (`VeredictoEnRojo`).
+
+   La forma es la de la tarjeta de un artefacto —filo y fondo secundario— y el rojo va en una
+   FRANJA a la izquierda y no en la letra: `state-error-primary` como texto no se lee sobre el
+   fondo claro (medido en `.error`, ~1.4:1), y como filo solo tiene que verse, no sostener nada.
+   Los botones son el secundario de Revisión y Ficheros: son acciones de la misma familia. */
+.veredictoEnRojo {
+  align-self: flex-start;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 70ch;
+  padding: 10px 14px;
+  border: 1px solid var(--dsw-alias-border-primary);
+  border-left: 3px solid var(--dsw-alias-state-error-primary);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-secondary);
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.veredictoCabecera {
+  margin: 0;
+  font-weight: 600;
+}
+
+.hallazgos {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Texto y botones en la misma fila mientras quepan; en estrecho, los botones bajan. */
+.hallazgo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.hallazgoTexto {
+  flex: 1 1 24ch;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* El sitio es DATO DE MÁQUINA: en mono, como la ruta de un artefacto. */
+.hallazgoDonde {
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+}
+
+.hallazgoAcciones {
+  display: flex;
+  gap: 6px;
+}
+
+.hallazgoBoton {
+  padding: 2px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.hallazgoBoton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.veredictoNota {
+  margin: 6px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}

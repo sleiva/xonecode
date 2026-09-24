@@ -2,6 +2,7 @@ import { Bitacora } from "./bitacora.js";
 import { Colapsador } from "./notify.js";
 import type { LineaDeTool } from "./notify.js";
 import type { Artefacto, DomainEvent, Fase, OrigenDeLaTool, PendienteDeAprobacion } from "./events.js";
+import type { VeredictoDelTurno } from "./actos.js";
 import { pideLeerLaMemoria } from "./memoria.js";
 import type { DetalleDeLinea } from "./actos.js";
 
@@ -63,6 +64,13 @@ export interface Piel {
    * TrueForge nunca trae su error. Una memoria que no existe da una lectura pedida igual.
    */
   memoriaPedida?(origen: OrigenDeLaTool | undefined): void;
+  /**
+   * El veredicto del verificador ENTERO, como dato. OPCIONAL, con la asimetría de `fase?`: la
+   * piel que lo implementa recibe el veredicto EN VEZ de las líneas —la web lo pinta con un
+   * botón por hallazgo, que de una línea de prosa no se puede sacar sin re-parsearla—, y la
+   * que no, sigue recibiendo las líneas de siempre, byte a byte.
+   */
+  verificacion?(veredicto: VeredictoDelTurno): void;
   /**
    * Si la piel sabe animar fases (el spinner del terminal), el motor le delega la fase
    * y le dicta SOLO el texto — la decoración es cosa de la piel. Sin este método, la
@@ -249,6 +257,16 @@ export async function correrTurno(
 
         case "verificacion": {
           bitacora.anota("verify", ev.verde ? "verde" : `${ev.errores} errores`);
+          if (piel.verificacion) {
+            if (abierta) {
+              piel.cerrarLinea();
+              abierta = false;
+            }
+            const { tipo: _tipo, ...veredicto } = ev;
+            void _tipo;
+            piel.verificacion(veredicto);
+            break;
+          }
           escribirLinea(
             ev.verde
               ? "✓  verificación en verde"

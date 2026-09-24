@@ -245,6 +245,28 @@ describe("pielWeb", () => {
     expect(actos().at(-1)).toEqual({ tipo: "fin", ms: 1, memoria: { por: [] } });
   });
 
+  it("el veredicto es un acto PROPIO y copiado campo a campo: lo que no se nombra no sale", () => {
+    const { piel, actos } = crearPielWeb();
+    piel.verificacion!({
+      verde: false,
+      errores: 1,
+      avisos: 0,
+      hallazgos: [{ code: "E1", severidad: "error", mensaje: "mal", fichero: "app/a.xne", linea: 3, colado: "x" } as never],
+      preexistentes: 2,
+      colado: "y",
+    } as never);
+    expect(actos()).toEqual([
+      {
+        tipo: "verificacion",
+        verde: false,
+        errores: 1,
+        avisos: 0,
+        hallazgos: [{ code: "E1", severidad: "error", mensaje: "mal", fichero: "app/a.xne", linea: 3 }],
+        preexistentes: 2,
+      },
+    ]);
+  });
+
   it("el token NO se parte por saltos: la web renderiza markdown y el párrafo va entero", () => {
     const { piel, actos } = crearPielWeb();
     piel.token("- uno\n- dos\n");

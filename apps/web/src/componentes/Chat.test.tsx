@@ -3,7 +3,8 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { Chat, MS_DEL_AVISO_AUTONOMO } from "./Chat.js";
+import { Chat, MS_DEL_AVISO_AUTONOMO, peticionDeCorreccion } from "./Chat.js";
+import { Transcript } from "./Transcript.js";
 import type { Acto } from "../tipos.js";
 
 // Mismo motivo que `Compositor.test.tsx`: sin `globals` en `vitest.config.ts`, un
@@ -921,5 +922,77 @@ describe("Chat: el tramo de trabajo", () => {
     const hoja = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "Chat.module.css"), "utf8");
     expect(hoja).toMatch(/\.detalleDePulso\s*\{[^}]*max-height/u);
     expect(hoja).toMatch(/\.detalleDePulso\s*\{[^}]*overflow-y:\s*auto/u);
+  });
+});
+
+describe("el rojo con el que TERMINA un turno", () => {
+  const rojo = (errores = 1): Acto => ({
+    tipo: "verificacion",
+    verde: false,
+    errores,
+    avisos: 0,
+    hallazgos: [
+      { code: "E1", severidad: "error", mensaje: "falta el campo", fichero: "app/Clientes.xne", linea: 12 },
+      { code: "E9", severidad: "error", mensaje: "sin sitio" },
+    ],
+    preexistentes: 3,
+  });
+  const verde: Acto = { tipo: "verificacion", verde: true, errores: 0, avisos: 0 };
+  const usuario: Acto = { tipo: "usuario", texto: "añade un campo" };
+  const fin: Acto = { tipo: "fin", ms: 10 };
+
+  it("sale FUERA del plegado, con sus hallazgos, y los botones abren y piden", () => {
+    const alAbrirFichero = vi.fn();
+    const alPedirCorreccion = vi.fn();
+    render(
+      <Chat actos={[usuario, rojo(), fin]} alAbrirFichero={alAbrirFichero} alPedirCorreccion={alPedirCorreccion} />
+    );
+    const tarjeta = screen.getByRole("region", { name: "Verificación en rojo" });
+    expect(tarjeta.closest("details")).toBeNull();
+    expect(tarjeta.textContent).toContain("app/Clientes.xne:12");
+    expect(tarjeta.textContent).toContain("3 hallazgos más en ficheros que este turno no tocó");
+    // Botones solo en el hallazgo con fichero: uno de cada.
+    const abrir = screen.getAllByRole("button", { name: "Abrir" });
+    expect(abrir).toHaveLength(1);
+    fireEvent.click(abrir[0]!);
+    expect(alAbrirFichero).toHaveBeenCalledWith("app/Clientes.xne");
+    fireEvent.click(screen.getByRole("button", { name: "Pedir corrección" }));
+    expect(alPedirCorreccion).toHaveBeenCalledWith("Corrige E1 en app/Clientes.xne:12: falta el campo");
+  });
+
+  it("un rojo que una reparación dejó en VERDE no se ofrece: ya no es lo que queda", () => {
+    render(<Chat actos={[usuario, rojo(), { tipo: "herramientas", lineas: ["← edita x"] }, verde, fin]} />);
+    expect(screen.queryByRole("region", { name: "Verificación en rojo" })).toBeNull();
+  });
+
+  it("con el turno EN VUELO tampoco: lo decide el `fin`, que detrás puede venir la reparación", () => {
+    render(<Chat actos={[usuario, rojo()]} turnoEnVuelo />);
+    expect(screen.queryByRole("region", { name: "Verificación en rojo" })).toBeNull();
+  });
+
+  it("dentro del tramo el veredicto se sigue contando en líneas, como antes", () => {
+    const { container } = render(<Chat actos={[usuario, rojo(), fin]} />);
+    const lineas = [...container.querySelectorAll("details li")].map((li) => li.textContent);
+    expect(lineas[0]).toBe("✗  verificación: 1 error(es), 0 aviso(s)");
+  });
+
+  it("sin manejadores no hay botones muertos", () => {
+    render(<Chat actos={[usuario, rojo(), fin]} />);
+    expect(screen.queryByRole("button", { name: "Abrir" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Pedir corrección" })).toBeNull();
+  });
+
+  it("`Transcript` los REENVÍA: son opcionales y un reenvío olvidado no lo caza `tsc`", () => {
+    const alAbrirFichero = vi.fn();
+    const alPedirCorreccion = vi.fn();
+    render(<Transcript actos={[usuario, rojo(), fin]} alAbrirFichero={alAbrirFichero} alPedirCorreccion={alPedirCorreccion} />);
+    fireEvent.click(screen.getByRole("button", { name: "Abrir" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pedir corrección" }));
+    expect(alAbrirFichero).toHaveBeenCalledTimes(1);
+    expect(alPedirCorreccion).toHaveBeenCalledTimes(1);
+  });
+
+  it("la petición dice qué, dónde y lo que dijo el simulador", () => {
+    expect(peticionDeCorreccion({ code: "E9", severidad: "error", mensaje: "sin sitio" })).toBe("Corrige E9: sin sitio");
   });
 });

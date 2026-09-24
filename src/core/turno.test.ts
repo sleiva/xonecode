@@ -292,3 +292,35 @@ describe("la memoria del proyecto, pedida", () => {
     expect(actos).toEqual(["linea:→ lee /MEMORIA_PROYECTO.md", "fin"]);
   });
 });
+
+describe("el veredicto del verificador, como dato", () => {
+  const rojo: Extract<DomainEvent, { tipo: "verificacion" }> = {
+    tipo: "verificacion",
+    verde: false,
+    errores: 1,
+    avisos: 0,
+    hallazgos: [{ code: "E1", severidad: "error", mensaje: "mal", fichero: "app/a.xne", linea: 3 }],
+    preexistentes: 2,
+  };
+
+  it("la piel que lo implementa recibe el veredicto ENTERO y ninguna línea", async () => {
+    const recibidos: unknown[] = [];
+    const base = pielDePrueba();
+    const piel: Piel = { ...base.piel, verificacion: (v) => void recibidos.push(v) };
+    await correrTurno(flujo(rojo), piel);
+    const { tipo: _t, ...sinTipo } = rojo;
+    void _t;
+    expect(recibidos).toEqual([sinTipo]);
+    expect(base.actos.filter((a) => a.startsWith("linea:"))).toEqual([]);
+  });
+
+  it("la que no, recibe las líneas de siempre", async () => {
+    const { piel, actos } = pielDePrueba();
+    await correrTurno(flujo(rojo), piel);
+    expect(actos.filter((a) => a.startsWith("linea:"))).toEqual([
+      "linea:✗  verificación: 1 error(es), 0 aviso(s)",
+      "linea:   ✗ E1 app/a.xne:3 — mal",
+      "linea:   (y 2 hallazgo(s) más en ficheros que este turno no tocó)",
+    ]);
+  });
+});
