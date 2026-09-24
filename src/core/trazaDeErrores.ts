@@ -61,13 +61,15 @@ export interface ErrorAnotado {
  * such file or directory, open '<ruta>'»— sigue diciendo qué pasó.
  */
 /**
- * Dónde EMPIEZA una ruta de la máquina sin comillas: las raíces de usuario y temporales de Unix,
- * una unidad de Windows (`C:\…`, `C:/…`) o una ruta de red (`\\servidor\…`, `//servidor/…`). Cada una
+ * Dónde EMPIEZA una ruta de la máquina sin comillas: una URL `file:` (que es una ruta de la máquina
+ * escrita de otra forma, y que la regla de Unix no veía por ir precedida de barras), las raíces de
+ * usuario y temporales de Unix, una unidad de Windows (`C:\…`, `C:/…`) o una ruta de red
+ * (`\\servidor\…`, `//servidor/…`). Cada una
  * exige no ir pegada a lo de antes: `https://` no es una unidad ni una ruta de red, y una ruta
  * VIRTUAL del agente (`/artefactos/…`) no empieza por ninguna de estas raíces.
  */
 const INICIO_SUELTA =
-  /(?<![\w'"`/])\/(?:Users|home|private|Volumes|tmp|var|opt)\/|(?<![\w])[A-Za-z]:[\\/]|(?<![\w\\])\\\\(?=[^\s\\])|(?<![\w:/])\/\/(?=[^\s/])/g;
+  /(?<![\w])file:\/\/|(?<![\w'"`/])\/(?:Users|home|private|Volumes|tmp|var|opt)\/|(?<![\w])[A-Za-z]:[\\/]|(?<![\w\\])\\\\(?=[^\s\\])|(?<![\w:/])\/\/(?=[^\s/])/g;
 
 /**
  * **Los finales RECONOCIDOS de una ruta sin comillas**, y solo estos. Una ruta sin comillas no tiene
@@ -76,30 +78,32 @@ const INICIO_SUELTA =
  * resto de la LÍNEA, salvo que aparezca uno de estos finales, que se conserva con lo que le siga.
  * Tapar de más es el lado seguro; de menos, no. Lista cerrada a propósito: un código de error de
  * Node (`ENOENT`, `EACCES`…) y las pocas frases con que los productos cierran el mensaje.
+ *
+ * **Y un final solo vale si en lo que queda de línea no hay NINGÚN separador**: si no, el nombre de
+ * una carpeta —`My failed/project`, `folder EACCES\secret.txt`— reabría la salida. Que el mensaje
+ * nombre otra ruta o una URL detrás hace que se tape hasta el final: de más, que es el lado seguro.
  */
-const FINAL_RECONOCIDO = /\s+(?=(?:E[A-Z0-9]{2,}|failed|falló|not found|no existe|no responde|is not recognized)\b)/;
+const FINAL_RECONOCIDO = /\s+(?=(?:E[A-Z0-9]{2,}|failed|falló|not found|no existe|no responde|is not recognized)\b)/g;
 
-/** Tapa las rutas sin comillas de UNA línea, con el corte de arriba. */
+/**
+ * Tapa las rutas sin comillas de UNA línea, con el corte de arriba: desde la PRIMERA ruta, todo,
+ * salvo el final reconocido y lo que le siga. No hace falta buscar más rutas detrás: un final solo
+ * vale si ya no queda ningún separador, o sea que detrás no puede empezar otra.
+ */
 function taparSueltas(linea: string): string {
-  let salida = "";
-  let resto = linea;
-  for (;;) {
-    INICIO_SUELTA.lastIndex = 0;
-    const inicio = INICIO_SUELTA.exec(resto);
-    if (inicio === null) return salida + resto;
-    salida += `${resto.slice(0, inicio.index)}<ruta>`;
-    const tras = resto.slice(inicio.index);
-    const fin = FINAL_RECONOCIDO.exec(tras);
-    if (fin === null) return salida;
-    resto = tras.slice(fin.index);
-  }
+  INICIO_SUELTA.lastIndex = 0;
+  const inicio = INICIO_SUELTA.exec(linea);
+  if (inicio === null) return linea;
+  const tras = linea.slice(inicio.index);
+  const fin = [...tras.matchAll(FINAL_RECONOCIDO)].find((f) => !/[\\/]/.test(tras.slice(f.index)));
+  return `${linea.slice(0, inicio.index)}<ruta>${fin === undefined ? "" : tras.slice(fin.index)}`;
 }
 
 export function mensajeSeguro(mensaje: string): string {
   const conComillas = mensaje
     // Entre comillas el final SÍ es seguro —la comilla—, espacios incluidos: Unix o Windows.
     .replace(/(['"`])\/[^'"`\n]*\1/g, "$1<ruta>$1")
-    .replace(/(['"`])(?:[A-Za-z]:[\\/]|\\\\)[^'"`\n]*\1/g, "$1<ruta>$1");
+    .replace(/(['"`])(?:[A-Za-z]:[\\/]|\\\\|file:\/\/)[^'"`\n]*\1/g, "$1<ruta>$1");
   // Sin comillas, línea a línea: una ruta no cruza un salto de línea, y la línea siguiente se queda.
   return conComillas.split("\n").map(taparSueltas).join("\n");
 }

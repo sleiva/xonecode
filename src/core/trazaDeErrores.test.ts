@@ -88,6 +88,24 @@ describe("mensajeSeguro", () => {
     expect(mensajeSeguro("leyendo /Users/ana/My File.txt\nsegunda línea")).toBe("leyendo <ruta>\nsegunda línea");
   });
 
+  /** Un final reconocido que en realidad es el NOMBRE DE UNA CARPETA no puede reabrir la salida. */
+  it("un «failed», «EACCES» o «not found» DENTRO de la ruta no la corta", () => {
+    expect(mensajeSeguro("/Users/ana/My failed/project/secret.txt")).toBe("<ruta>");
+    expect(mensajeSeguro("C:\\Users\\ana\\folder EACCES\\secret.txt")).toBe("<ruta>");
+    expect(mensajeSeguro("/Users/ana/My not found/private/key.pem")).toBe("<ruta>");
+    // Ni con un espacio por medio antes del siguiente separador.
+    expect(mensajeSeguro("/Users/ana/My failed stuff/key.pem")).toBe("<ruta>");
+    // Y el final de verdad, detrás de la ruta, se sigue conservando.
+    expect(mensajeSeguro("open /Users/ana/My failed/x.json failed: disk full")).toBe("open <ruta> failed: disk full");
+  });
+
+  it("las URL `file:` son rutas de la máquina, sueltas o entre comillas", () => {
+    expect(mensajeSeguro("file:///Users/ana/secreto.txt")).toBe("<ruta>");
+    expect(mensajeSeguro("file:///home/ana/secreto.txt")).toBe("<ruta>");
+    expect(mensajeSeguro("file:///C:/Users/ana/secreto.txt")).toBe("<ruta>");
+    expect(mensajeSeguro("cargando 'file:///Users/Sergio de la Cruz/x.html' falló")).toBe("cargando '<ruta>' falló");
+  });
+
   it("entre comillas CON ESPACIOS, que es el formato de un error de Node: se tapa entera", () => {
     // Salía entera: la regla de las comillas no admitía espacios, y la de las sueltas no mira
     // detrás de una comilla. Es el caso más común con un nombre de usuario de dos palabras.
