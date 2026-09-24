@@ -62,11 +62,14 @@ export function crearServicioDeConectores(o: {
    *  conector ya retirado (o deja «Esperando al navegador…» encendido diez minutos). */
   const retirarPendientes = (id: string): void => { for (const [s, p] of pendientes) if (p.id === id) pendientes.delete(s); };
 
+  /** La misma frase en los dos sitios donde un `conectores.json` ilegible impide saber qué está
+   *  añadido: al fallar `anadir` y al rechazar `autorizar` por la misma causa (ver más abajo). */
+  const FICHERO_ILEGIBLE = "el fichero de conectores no se entiende: revísalo o bórralo a mano";
   /** La frase de un fallo AL GUARDAR EN DISCO, nunca `error.message`: un `ErrorDeFicheroDeConectores`
    *  lleva la ruta ABSOLUTA del fichero (`conectoresEnDisco.ts#paraEscribir`), y un `EACCES`/`ENOSPC`
    *  de Node también la lleva — ninguna ruta de la máquina viaja por el cable. */
   const motivoDeFallo = (e: unknown): string => {
-    if (e instanceof ErrorDeFicheroDeConectores) return "el fichero de conectores no se entiende: revísalo o bórralo a mano";
+    if (e instanceof ErrorDeFicheroDeConectores) return FICHERO_ILEGIBLE;
     const code = (e as { code?: unknown } | null)?.code;
     return typeof code === "string" ? `no se pudo guardar (código ${code})` : "no se pudo guardar";
   };
@@ -150,10 +153,21 @@ export function crearServicioDeConectores(o: {
         // intentara un registro contra un servidor que no lo pide.
         const p = c.autenticacion === "oauth" ? proveedor(id, guardado.redirectUri!, "") : undefined;
         const tools = await Promise.race([o.red.listarTools(c.url, p, control.signal), tope]);
-        pruebas.set(id, { cuando: ahora(), ok: true, tools });
-        // Un `error` de una operación ANTERIOR no puede quedarse junto a un estado que ya es
-        // correcto: «ausente ≠ vacío» también vale para lo que ya no es cierto.
-        error = undefined;
+        // El mundo pudo cambiar MIENTRAS la red respondía: un `quitar`/`desconectar` disparado
+        // después de pulsar «Probar» pero antes de que conteste corre en SÍNCRONO y no espera a
+        // esto. Sin repetir aquí la comprobación, este resultado — de una petición que arrancó
+        // contra un estado que ya no existe — resucitaría un «Conectado» sobre un conector que
+        // se acaba de quitar o desconectar. No se compara el VALOR de los tokens contra
+        // `guardado`: el propio SDK puede refrescarlos dentro de `listarTools` y eso sí sigue
+        // siendo un éxito legítimo — solo importa que siga añadido y, si hace falta, autorizado.
+        const sigueAnadido = leerAnadidos(o.casa).anadidos.includes(id);
+        const sigueAutorizado = c.autenticacion !== "oauth" || leerOAuth(o.casa, id).tokens !== undefined;
+        if (sigueAnadido && sigueAutorizado) {
+          pruebas.set(id, { cuando: ahora(), ok: true, tools });
+          // Un `error` de una operación ANTERIOR no puede quedarse junto a un estado que ya es
+          // correcto: «ausente ≠ vacío» también vale para lo que ya no es cierto.
+          error = undefined;
+        }
       } catch (error) {
         pruebas.set(id, { cuando: ahora(), ok: false, motivo: control.signal.aborted ? "no responde (no contestó a tiempo)" : motivoDe(error) });
       } finally {
@@ -164,6 +178,21 @@ export function crearServicioDeConectores(o: {
     async autorizar(id, redirectUrl) {
       const c = conectorDelCatalogo(id);
       if (c === undefined) { error = `«${id}» no está en el catálogo de conectores`; cambio(); return; }
+      // `autorizar` resolvía el id SOLO contra el catálogo, nunca contra lo AÑADIDO: si el
+      // `anadir` del mismo clic había fallado al escribir —o un `quitar` le ganó la carrera—
+      // esto abría un navegador de verdad, completaba un OAuth de verdad y dejaba tokens
+      // huérfanos en `conectores-oauth.json` sin ningún «Quitar»/«Desconectar» que los
+      // alcanzara (esos botones solo salen para lo que YA está en la lista). Se comprueba lo
+      // añadido, y ANTES de tocar la red, no después de escribir tokens.
+      const { anadidos, ilegible } = leerAnadidos(o.casa);
+      if (!anadidos.includes(id)) {
+        // El fichero ilegible es la MISMA causa que ya dejó `anadir` en `error`: se repite su
+        // frase en vez de inventar una nueva que la pisaría. Genuinamente ausente (un `quitar`
+        // de antes, o nunca se añadió) lleva la suya propia.
+        error = ilegible ? FICHERO_ILEGIBLE : `«${id}» no está añadido`;
+        cambio();
+        return;
+      }
       // UNA autorización viva por conector: el verificador PKCE se guarda por conector, así
       // que una nueva invalida la anterior. Pulsar «Conectar» otra vez es también cómo se
       // recupera quien cerró la pestaña a medias.
@@ -172,11 +201,11 @@ export function crearServicioDeConectores(o: {
       pendientes.set(state, { id, expira: ahora() + TTL_DE_AUTORIZACION_MS, redirectUrl });
       // NO se limpia `error` aquí: en este instante no se sabe todavía si `autorizar` va a ir
       // bien —solo se ha apuntado un pendiente—, y limpiarlo a ciegas borraría el error de UN
-      // CLIC ANTERIOR (por ejemplo, un `anadir` que falló al escribir) antes de que nadie lo
-      // viera, ahora que «Añadir» en un OAuth manda `anadir` y `autorizar` seguidos. Se limpia
-      // donde `autorizar` de verdad tiene éxito: la rama `AUTHORIZED` llama a `probar`, que ya
-      // limpia el suyo al ir bien; la rama `REDIRECT` no ha decidido nada todavía —quien lo
-      // decide es `completar`, que ya limpia el suyo al canjear el código—.
+      // CLIC ANTERIOR (por ejemplo, el fallo de una operación anterior sobre OTRO conector)
+      // antes de que nadie lo viera. Se limpia donde `autorizar` de verdad tiene éxito: la
+      // rama `AUTHORIZED` llama a `probar`, que ya limpia el suyo al ir bien; la rama
+      // `REDIRECT` no ha decidido nada todavía —quien lo decide es `completar`, que ya limpia
+      // el suyo al canjear el código—.
       cambio();
       try {
         const resultado = await o.red.iniciarAutorizacion(c.url, proveedor(id, redirectUrl, state, (url) => o.red.abrir(url)));
@@ -204,6 +233,17 @@ export function crearServicioDeConectores(o: {
         pruebas.set(r.id, { cuando: ahora(), ok: false, motivo: motivoDe(error) });
         cambio();
         return { ok: false, mensaje: "no se pudo completar la autorización: vuelve a pulsar Conectar" };
+      }
+      // Un `quitar()` puede correr MIENTRAS `canjearCodigo` está en vuelo — es el único momento
+      // en que esto importa: antes de este `await` todo es síncrono, así que si `quitar` hubiera
+      // corrido antes, `retirarPendientes` ya habría hecho que `interpretarCallback` fallara
+      // arriba. Si ganó la carrera AQUÍ, el SDK ya escribió tokens frescos (su `saveTokens`,
+      // dentro de `canjearCodigo`) para un conector que ya NO está añadido — se olvidan otra
+      // vez, sin dejarlos huérfanos, y no se corre `probar` sobre algo que ya no está.
+      if (!leerAnadidos(o.casa).anadidos.includes(r.id)) {
+        try { olvidarOAuth(o.casa, r.id); } catch { /* si esto también falla no hay más que deshacer */ }
+        cambio();
+        return { ok: false, mensaje: `«${c.nombre}» ya no está añadido` };
       }
       // El canje fue bien: un `error` de una operación anterior ya no describe el estado
       // actual. No se deja esperando a que `probar` lo limpie — puede fallar por su cuenta

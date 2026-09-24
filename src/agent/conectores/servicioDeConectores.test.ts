@@ -153,6 +153,32 @@ describe("probar", () => {
     expect(s.lista().conectores[0]?.prueba).toBeUndefined();
   });
 
+  it("un desconectar que corre MIENTRAS la red responde no deja que probar resucite «Conectado»", async () => {
+    const redirectUri = "http://127.0.0.1:4200/mcp/oauth/callback";
+    guardarOAuth(casa, "notion", { tokens: { access_token: "a", token_type: "Bearer" }, redirectUri });
+    const red = redDoble();
+    // Un doble cuya resolución controlamos a mano, como el tope: aquí en vez de dejar que el
+    // tiempo avance, es `desconectar` quien decide cuándo dispara — ANTES de resolver la red.
+    let resolver: ((tools: unknown) => void) | undefined;
+    (red.listarTools as ReturnType<typeof vi.fn>).mockImplementation(
+      () => new Promise((resolve) => { resolver = resolve; }),
+    );
+    const s = crear(red);
+    s.anadir("notion");
+
+    const p = s.probar("notion");
+    // `listarTools` ya se invocó en el tramo síncrono de `probar` (antes de su primer
+    // `await`), así que `resolver` ya está asignado aquí.
+    s.desconectar("notion");
+    resolver?.([{ nombre: "search" }]);
+    await p;
+
+    // Sin el arreglo, este `probar` en vuelo escribe `{ok:true}` DESPUÉS de que `desconectar`
+    // borrara los tokens, y la fila vuelve a leerse «Conectado» aunque se acaba de desconectar.
+    expect(s.lista().conectores[0]).toMatchObject({ id: "notion", estado: "falta-autorizar" });
+    expect(s.lista().conectores[0]?.prueba).toBeUndefined();
+  });
+
   it("quitar retira el pendiente: el callback ya no encuentra nada que canjear", async () => {
     const red = redDoble();
     const s = crear(red);
@@ -294,14 +320,20 @@ describe("autorizar y completar", () => {
     expect(l.conectores[0]?.prueba).toMatchObject({ ok: false });
   });
 
-  it("un anadir que falla seguido de autorizar para el MISMO id no borra el error del anadir: «Añadir» en OAuth manda las dos seguidas, y autorizar no ha tenido éxito todavía", async () => {
+  it("un anadir que falla seguido de autorizar para el MISMO id no lo autoriza: «Añadir» en OAuth manda las dos seguidas, y jira nunca llegó a estar añadida", async () => {
     // El escenario real: «Añadir» sobre un OAuth manda `anadir` y `autorizar` en el MISMO
-    // clic. Si `anadir` falla al escribir en disco, su frase tiene que seguir ahí después de
-    // que `autorizar` arranque —`autorizar` resuelve el id contra el CATÁLOGO, no contra lo
-    // añadido, así que arranca igual aunque `anadir` no haya escrito nada—.
+    // clic. Si `anadir` falla al escribir en disco, jira nunca llega a `anadidos` — así que
+    // `autorizar` tiene que RECHAZARLA, sin abrir ningún navegador ni tocar la red, y no solo
+    // dejar el error del `anadir` sin tocar.
     mkdirSync(join(casa, ".xonecode"), { recursive: true });
     writeFileSync(rutaDeAnadidos(casa), "{roto");
     const red = redDoble();
+    // Sin esto `abrir` nunca se llamaría ni con el fallo arreglado: el doble por omisión no
+    // redirige a ningún sitio, así que la aserción de `abrir` sería cierta por casualidad.
+    (red.iniciarAutorizacion as ReturnType<typeof vi.fn>).mockImplementation(async (_url, proveedor: OAuthClientProvider) => {
+      proveedor.redirectToAuthorization(new URL("https://mcp.jira.com/authorize?x"));
+      return "REDIRECT";
+    });
     const s = crear(red);
 
     s.anadir("jira");
@@ -310,7 +342,56 @@ describe("autorizar y completar", () => {
 
     await s.autorizar("jira", "http://127.0.0.1:4200/mcp/oauth/callback");
 
+    // El fichero sigue ilegible: es la MISMA causa que ya dejó `anadir`, así que el motivo no
+    // cambia — pero ahora la razón es que `autorizar` también la vio y se negó por su cuenta.
     expect(s.lista().error).toBe(errorDelAnadir);
+    expect(red.iniciarAutorizacion).not.toHaveBeenCalled();
+    expect(red.abrir).not.toHaveBeenCalled();
+  });
+
+  it("un quitar sobre un conector ya añadido también deja a autorizar sin red: no es solo el camino de un anadir fallido", async () => {
+    const red = redDoble();
+    (red.iniciarAutorizacion as ReturnType<typeof vi.fn>).mockImplementation(async (_url, proveedor: OAuthClientProvider) => {
+      proveedor.redirectToAuthorization(new URL("https://mcp.jira.com/authorize?x"));
+      return "REDIRECT";
+    });
+    const s = crear(red);
+    s.anadir("jira");
+    expect(s.lista().conectores).toHaveLength(1);
+
+    s.quitar("jira");
+    await s.autorizar("jira", "http://127.0.0.1:4200/mcp/oauth/callback");
+
+    expect(s.lista().error).toBe("«jira» no está añadido");
+    expect(red.iniciarAutorizacion).not.toHaveBeenCalled();
+    expect(red.abrir).not.toHaveBeenCalled();
+  });
+
+  it("un quitar que gana la carrera AL CANJE deja a completar sin autorizar, y olvida los tokens que el SDK acababa de escribir", async () => {
+    const redirectUri = "http://127.0.0.1:4200/mcp/oauth/callback";
+    const red = redDoble();
+    (red.iniciarAutorizacion as ReturnType<typeof vi.fn>).mockResolvedValue("REDIRECT");
+    const s = crear(red);
+    s.anadir("notion");
+    await s.autorizar("notion", redirectUri);
+    const proveedorDeAutorizar = (red.iniciarAutorizacion as ReturnType<typeof vi.fn>).mock.calls[0]?.[1] as ProveedorDeConector;
+    const state = proveedorDeAutorizar.state();
+
+    (red.canjearCodigo as ReturnType<typeof vi.fn>).mockImplementation(async (_url, proveedor: OAuthClientProvider, code) => {
+      expect(code).toBe("c");
+      // `quitar` corre MIENTRAS este canje está en vuelo, antes de que `completar` pueda volver
+      // a comprobar si el conector sigue añadido — es la única ventana donde la carrera importa
+      // (antes de este `await` todo es síncrono, y `quitar` ya retira el pendiente).
+      s.quitar("notion");
+      await proveedor.saveTokens({ access_token: "a", token_type: "Bearer" });
+    });
+
+    const resultado = await s.completar(new URLSearchParams(`code=c&state=${state}`));
+
+    expect(resultado.ok).toBe(false);
+    // Sin el arreglo, el SDK deja aquí un token huérfano: `quitar` ya se ejecutó y no hay
+    // ningún «Quitar»/«Desconectar» en pantalla que alcance a un conector fuera de la lista.
+    expect(leerOAuth(casa, "notion")).toEqual({});
   });
 
   it("dos autorizaciones seguidas: solo el state del segundo vale para completar", async () => {
