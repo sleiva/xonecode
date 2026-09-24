@@ -909,8 +909,9 @@ Dos fallos del ciclo de vida, los dos medidos en la librería instalada:
   se reinicia entre ejecuciones; su tope por omisión es 25. Con el raíz vivo toda la conversación,
   una sesión larga dejaba de contestar tras 25 llamadas SUMADAS, aunque cada turno fuera corto. El
   raíz se rehace ahora desde su foto al final de CADA turno —conserva el contexto y reinicia el
-  contador—, así que el tope es por turno. Los topes son los medidos de deepagents: 30 por
-  especialista y 60 para el que ejecuta (`TOPE_DE_LLAMADAS_DEL_ESPECIALISTA`, `…_DEL_CONDUCTOR`), y
+  contador—, así que el tope es por turno. Los topes son los de deepagents —hoy 100 por
+  especialista y 150 para el que ejecuta (`TOPE_DE_LLAMADAS_DEL_ESPECIALISTA`, `…_DEL_CONDUCTOR`),
+  subidos el 24-09-2026 porque un manual entero necesitó 57 y con 30 se cortaba a mitad—, y
   100 para el orquestador, la omisión del `AgentSpec` de TrueForge, porque deepagents no le pone
   ninguno y aquí hace falta un número. El corte se dice como corte, con el número y en castellano.
 - **La pregunta en espera solo vivía en memoria**, y al guardar la foto se saldaba como incompleta:

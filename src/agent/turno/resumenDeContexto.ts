@@ -235,8 +235,8 @@ function etiquetarElResumen(): { fuera: ReturnType<typeof createMiddleware>; den
  * Un tope calibrado sobre «leer y contestar» aplicado a «leer y ENTREGAR» corta el trabajo
  * justo antes de que produzca algo, y encima en silencio: el síntoma es un plan que no
  * existe, no un error. El número cubre una pasada entera de reconocimiento (~15, medido) más
- * las lecturas de sus skills y los tres ficheros que deja, y se queda POR DEBAJO del
- * conductor: es un freno por encima de una entrega y no por debajo.
+ * las lecturas de sus skills y los tres ficheros que deja: es un freno por encima de una
+ * entrega y no por debajo (y hoy está en 100, ver abajo).
  *
  * ## Y SUBIRLO NO BASTA — se probó el mismo día y hay que decirlo aquí
  *
@@ -251,7 +251,16 @@ function etiquetarElResumen(): { fuera: ReturnType<typeof createMiddleware>; den
  * arregla donde vive esa instrucción (`agentesEnDisco.ts#PLAN_DE_DESARROLLO`), no aquí. Esto
  * se queda porque una entrega no cabía en 15 y sigue sin caber; no porque cure el síntoma.
  */
-export const TOPE_DE_LLAMADAS_DEL_ESPECIALISTA = 30;
+/*
+ * ## Y a 100, por una medida de entrega (24-09-2026, decisión suya)
+ *
+ * El documentador escribiendo un manual de usuario entero (MyAllXOne, TrueForge) necesitó 57
+ * llamadas: el primero hizo EXACTAMENTE 30, se cortó a mitad, y el orquestador lanzó otro que, sin
+ * saber qué había, reescribió las cinco primeras secciones. Un tope que corta una entrega a la
+ * mitad no frena el gasto: lo parte en dos arranques con amnesia, que es lo que ya se midió con
+ * el conductor. El freno sigue estando, por encima de una entrega completa.
+ */
+export const TOPE_DE_LLAMADAS_DEL_ESPECIALISTA = 100;
 
 /**
  * El de quien CONDUCE UN APARATO, que es otro trabajo y por eso otro número.
@@ -272,7 +281,11 @@ export const TOPE_DE_LLAMADAS_DEL_ESPECIALISTA = 30;
  * que cambia es dónde está el freno — por encima de UNA navegación completa y no por
  * debajo.
  */
-export const TOPE_DE_LLAMADAS_DEL_CONDUCTOR = 60;
+/*
+ * Y a 150 cuando los especialistas pasaron a 100: el conductor tiene MÁS que ellos porque conducir
+ * necesita más llamadas que leer, y con ellos en 100 su 60 le dejaba menos que a nadie.
+ */
+export const TOPE_DE_LLAMADAS_DEL_CONDUCTOR = 150;
 
 /**
  * El tope, con `exitBehavior: "end"` y no `"error"`.

@@ -176,10 +176,10 @@ describe("el tope de llamadas del especialista", () => {
   });
 
   it("el tope sale de una MEDIDA, no de una intuición", () => {
-    // 3-7 llamadas una pregunta de estructura, 10 la cara terminando bien, 32 y subiendo la
-    // descarrilada. El tope va por encima de lo que funciona y por debajo de lo que no.
-    expect(TOPE_DE_LLAMADAS_DEL_ESPECIALISTA).toBeGreaterThan(10);
-    expect(TOPE_DE_LLAMADAS_DEL_ESPECIALISTA).toBeLessThan(32);
+    // La medida que lo fija hoy (24-09-2026): un manual de usuario entero necesitó 57 llamadas del
+    // documentador, y con el tope en 30 se cortó a mitad y se rehízo. El tope va por ENCIMA de una
+    // entrega completa. Antes estaba por debajo de 32 por una pasada descarrilada de preguntas.
+    expect(TOPE_DE_LLAMADAS_DEL_ESPECIALISTA).toBeGreaterThan(57);
   });
 
   /**
