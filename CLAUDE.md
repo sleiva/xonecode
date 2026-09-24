@@ -1081,6 +1081,18 @@ feedback del desarrollador** y no es terminal.
   `sesion`. Consecuencia: `localStorage`, `sessionStorage` e `indexedDB` **lanzan** dentro del
   iframe, así que `SKILLS_VISUALES` (`agent/subagentes/agentesEnDisco.ts`) lo dice desde el prompt y no solo
   desde una skill que hay que cargar.
+- **Un artefacto `.openui` se sirve DENTRO de su visor, y el visor no tiene red**
+  (`web/servidor/visorOpenui.ts`, `apps/web/src/openui/`). El iframe tiene un origen opaco, así que
+  el documento lleva dentro el renderer, su CSS y el programa —una petición suya al servidor
+  recibiría un 403—, y su CSP cierra la red entera: la librería trae imágenes de relleno y
+  favicons de fuera que nadie pidió. **El visor es una entrada de build APARTE** y la aplicación
+  no importa `@openuidev` (`openui/frontera.test.ts`), porque pesa megas. **Solo es dependencia de
+  `apps/web`**: el `postinstall` de `@openuidev/lang-core` manda telemetría de instalación salvo
+  con `OPENUI_TELEMETRY_DISABLED=1`, que es como se instala aquí, y quien instala xonecode solo
+  recibe `apps/web/dist`. El precio es que el programa no se valida al escribirlo: los errores de
+  análisis los dice el visor. En el agente va con `artifacts-builder`, solo en TrueForge
+  (`capacidadDeOpenui`): las instrucciones de la librería se cargan BAJO DEMANDA y al lado van
+  `REGLAS_DE_OPENUI`, una por cada fallo medido. El porqué medido, en `docs/DECISIONES.md`.
 - **Ficheros y Revisión**: el lector filtra con las MISMAS reglas que ve el agente
   (`puedeLeerRuta`, `esVistaAplanada`) y **la barrera se aplica DOS veces** — sobre el texto que
   teclea el cliente y sobre el camino REAL que devuelve `realpath`. Con una sola no era verdad:

@@ -130,3 +130,25 @@ describe("Artefactos", () => {
     expect(screen.getByText(/no existe/)).toBeTruthy();
   });
 });
+
+describe("Artefactos: un programa de OpenUI", () => {
+  afterEach(cleanup);
+  const PANEL: ArtefactoEnLista = { ruta: "/artefactos/panel.openui", nombre: "panel.openui", bytes: 900, mime: "text/x-openui" };
+
+  it("se VE en el mismo iframe aislado, sin pedir su contenido por el cable, y la nota dice que no usa red", () => {
+    const alPedir = vi.fn();
+    render(<Artefactos lista={[PANEL]} contenidos={{}} elegido={PANEL.ruta} alElegir={() => {}} alPedir={alPedir} conectado />);
+    const marco = document.querySelector("iframe")!;
+    expect(marco.getAttribute("sandbox")).toBe("allow-scripts");
+    expect(marco.getAttribute("src")).toContain("panel.openui");
+    expect(screen.getByText(/sin red/)).toBeTruthy();
+    expect(alPedir).not.toHaveBeenCalled();
+  });
+
+  it("y tiene su FUENTE, que sí se pide", () => {
+    const alPedir = vi.fn();
+    render(<Artefactos lista={[PANEL]} contenidos={{}} elegido={PANEL.ruta} alElegir={() => {}} alPedir={alPedir} conectado />);
+    fireEvent.click(screen.getByRole("button", { name: /Fuente/ }));
+    expect(alPedir).toHaveBeenCalled();
+  });
+});

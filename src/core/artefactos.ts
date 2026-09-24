@@ -213,6 +213,9 @@ const MIMES: Record<string, string> = {
   txt: "text/plain",
   json: "application/json",
   csv: "text/csv",
+  // Un programa de OpenUI Lang. Es TEXTO —su fuente se lee como cualquier otro— y la ruta HTTP lo
+  // sirve dentro del visor (`web/servidor/visorOpenui.ts`), no tal cual.
+  openui: "text/x-openui",
 };
 
 export function mimeDeArtefacto(nombre: string): string | undefined {

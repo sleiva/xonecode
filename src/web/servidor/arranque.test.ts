@@ -4826,6 +4826,37 @@ describe("los artefactos de la sesión", () => {
       await limpiar();
     });
 
+    it("un `.openui` se sirve DENTRO de su visor, autocontenido y con una CSP sin red", async () => {
+      const programa = Buffer.from('root = Stack([t])\nt = TextContent("hola")');
+      const { artefacto, limpiar } = await abrirProyecto({
+        leerArtefactoCrudo: async () => ({ ok: true as const, nombre: "panel.openui", datos: programa, mime: "text/x-openui" }),
+        visorOpenui: () => ({ js: "/*visor*/", css: "/*estilo*/" }),
+      });
+      const { estado, cabeceras, cuerpo } = await pedir(artefacto, "/artefacto?n=panel.openui");
+      expect(estado).toBe(200);
+      expect(cabeceras["Content-Type"]).toBe("text/html; charset=utf-8");
+      expect(cabeceras["Content-Security-Policy"]).toContain("sandbox allow-scripts");
+      expect(cabeceras["Content-Security-Policy"]).toContain("default-src 'none'");
+      const doc = cuerpo!.toString("utf8");
+      expect(doc).toContain("<script>/*visor*/</script>");
+      expect(doc).toContain(JSON.stringify('root = Stack([t])\nt = TextContent("hola")'));
+      // Descargar da el programa TAL CUAL, no el documento del visor.
+      const crudo = await pedir(artefacto, "/artefacto?n=panel.openui&descargar=1");
+      expect(crudo.cuerpo).toEqual(programa);
+      await limpiar();
+    });
+
+    it("sin el visor construido, un `.openui` lo DICE con un 503 y no enseña el programa crudo", async () => {
+      const { artefacto, limpiar } = await abrirProyecto({
+        leerArtefactoCrudo: async () => ({ ok: true as const, nombre: "panel.openui", datos: Buffer.from("root = A"), mime: "text/x-openui" }),
+        visorOpenui: () => undefined,
+      });
+      const { estado, cuerpo } = await pedir(artefacto, "/artefacto?n=panel.openui");
+      expect(estado).toBe(503);
+      expect(cuerpo!.toString("utf8")).toContain("npm run build:web");
+      await limpiar();
+    });
+
     it("un mime que no conocemos NO se sirve inline: se descarga", async () => {
       const { artefacto, limpiar } = await abrirProyecto({
         leerArtefactoCrudo: async () => ({ ok: true as const, nombre: "cosa.xyz", datos: Buffer.from("x") }),

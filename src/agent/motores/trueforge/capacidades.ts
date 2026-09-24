@@ -11,7 +11,7 @@
  * sobre lo que declara su `.md`, con la misma partición que deepagents. Es lo que deja probar el
  * reparto sin levantar un hilo.
  */
-import { NOOP_AGENT_TRACING, ToolSet, currentDateTime } from "./trueforge.js";
+import { NOOP_AGENT_TRACING, ToolSet, currentDateTime, openUI } from "./trueforge.js";
 import type { Agente } from "../../../core/agentes.js";
 import { permisosDe } from "../../grafo/perfiles.js";
 import {
@@ -97,6 +97,48 @@ export function capacidadDeFecha(): Capacidad {
 }
 
 /**
+ * Lo que OpenUI tiene que saber de ESTE harness, y que su prompt no dice.
+ *
+ * El prompt de la librería (`openUI()`) enseña el lenguaje y su catálogo; no sabe que aquí la
+ * respuesta de un especialista la lee el orquestador, que el visor no tiene red, ni lo que salió
+ * de MEDIR (24-09-2026, `deepseek-flash`, tres encargos × tres pasadas contra el HTML de
+ * `artifacts-builder`): el mismo artefacto con 3-14 veces menos salida, pero una pestaña que se
+ * abría en la última escondiendo los errores, un gráfico que apilaba la caché con la entrada y un
+ * `Card(...)` con los argumentos corridos. Cada regla de aquí es uno de esos fallos.
+ */
+export const REGLAS_DE_OPENUI = [
+  "OpenUI en xonecode: úsalo para TABLAS, INFORMES y PANELES DE DATOS. Para diagramas, o para una pieza con análisis o estilo propios, sigue con `artifacts-builder` (HTML).",
+  "- Antes de escribir OpenUI, llama a `get_openui_instructions`. El programa NO va en tu respuesta —la lee el orquestador, no una persona—: escríbelo con `write_file` en `/artefactos/<nombre>.openui` (con su valla ```openui o sin ella). Así se anuncia y se ve en la pestaña Artefactos.",
+  "- Hornea los datos LITERALES en el programa: aquí no hay `Query()` ni `Mutation()`, y las acciones (`@ToAssistant`, `@OpenUrl`, botones) no hacen nada.",
+  "- Sin imágenes de fuera: el visor no tiene red y no se verían.",
+  "- `Tabs` solo para vistas ALTERNATIVAS de lo mismo, nunca para lo principal: el visor abre en la ÚLTIMA pestaña, y lo que pongas en las otras no se ve al abrir.",
+  "- Los argumentos son POSICIONALES: repasa el orden de cada llamada. Uno corrido desplaza a todos y el programa se pinta a medias.",
+  "- No inventes categorías que los datos no traen (una colección «huérfana» o «aislada» porque no tiene referencias: el índice no ve todas las formas de usarla). Y no sumes ni apiles magnitudes que se contienen: la caché de tokens va DENTRO de la entrada.",
+].join("\n");
+
+/**
+ * OpenUI para quien hace ARTEFACTOS: la tool de la librería que carga sus instrucciones BAJO
+ * DEMANDA (unos 5.000 tokens que no viajan en cada llamada) y, al lado, nuestras reglas.
+ */
+export function capacidadDeOpenui(): Capacidad {
+  const base = openUI({ preload: false, tracing: NOOP_AGENT_TRACING }) as {
+    systemToolSets?: unknown[];
+    instructionBuilders?: unknown[];
+  };
+  return {
+    nombre: "openui",
+    tools: ["get_openui_instructions"],
+    capability: {
+      ...base,
+      instructionBuilders: [
+        ...(base.instructionBuilders ?? []),
+        (b: { addSection(tag: string, contenido: string, escapar?: boolean): unknown }) => void b.addSection("openui-en-xonecode", REGLAS_DE_OPENUI, true),
+      ],
+    },
+  };
+}
+
+/**
  * Las instrucciones de un HIJO en su prompt de SISTEMA. La librería IGNORA el `instruction` de un
  * hijo (`buildInstruction`, `!this.parent`): a su sistema solo llegan los `instructionBuilders`.
  * En el primer mensaje, una compactación —que sustituye el contexto entero— se las llevaría.
@@ -177,5 +219,8 @@ export function capacidadesDelEspecialista(
     ...(clase === "ejecuta" ? [capacidadDeEjecucion(deps.conShell())] : []),
     capacidadDeRecortes(deps.backend),
     capacidadDeFecha(),
+    // OpenUI va con `artifacts-builder`: lo lleva quien hace artefactos, y solo en nuestro motor
+    // —un hijo externo no pasa por estas capabilities—.
+    ...(agente.skills.includes("artifacts-builder") ? [capacidadDeOpenui()] : []),
   ];
 }

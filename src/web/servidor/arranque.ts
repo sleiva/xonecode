@@ -166,6 +166,7 @@ import { fotoDeColecciones, type FotoDeColecciones } from "../../core/fotoDeCole
 import type { CambiosDeUnaColeccion } from "../../core/diffDeColecciones.js";
 import { modeloDelCambio } from "../../agent/sesiones/modeloDelCambio.js";
 import { planesDelProyecto, type PlanEnDisco } from "../../agent/planesEnDisco.js";
+import { CSP_DE_OPENUI, documentoDeOpenui, esArtefactoOpenui } from "./visorOpenui.js";
 import { RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
 import {
   leerArtefactoCrudo,
@@ -303,6 +304,21 @@ export function raizDelClientePorOmision(): string {
   return join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "apps", "web", "dist");
 }
 
+/**
+ * El visor de OpenUI del build del cliente, o `undefined` si no está. Se lee en cada petición, como
+ * el resto del cliente: reconstruirlo se ve recargando, sin reiniciar el servidor.
+ */
+export function leerVisorOpenui(raizDelCliente: string): { js: string; css: string } | undefined {
+  try {
+    return {
+      js: readFileSync(join(raizDelCliente, "openui", "visor.js"), "utf8"),
+      css: readFileSync(join(raizDelCliente, "openui", "visor.css"), "utf8"),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 export const FALTA_EL_BUILD = "falta el build del cliente: ejecuta «npm run build:web»";
 
 /** Tope del cuerpo de `POST /accion`. Generoso para una prosa larga, finito porque el
@@ -434,6 +450,11 @@ export interface OpcionesDeMontaje {
    * cargador que `xone_navegacion`. Por opción porque lee el proyecto con `xone-linter`.
    */
   coleccionesDelProyecto?: (raiz: string) => Promise<FotoDeColecciones>;
+  /**
+   * El visor de artefactos OpenUI ya construido (`apps/web/dist/openui/`), leído en CADA petición
+   * como el resto del cliente. `undefined` = no está construido, y entonces se DICE.
+   */
+  visorOpenui?: () => { js: string; css: string } | undefined;
   /** Los planes del proyecto (`agent/planesEnDisco.ts`). Por opción porque lee su disco. */
   planesDelProyecto?: (raiz: string) => PlanEnDisco[];
   /**
@@ -3952,6 +3973,25 @@ export function montarRutas(
     }
 
     const descargar = query.get("descargar") !== null;
+    // Un programa de OpenUI se VE dentro de su visor, en un documento autocontenido y sin red
+    // (`visorOpenui.ts`). Descargarlo sigue dando el fichero tal cual.
+    if (!descargar && esArtefactoOpenui(leido.nombre)) {
+      const visor = opciones.visorOpenui?.();
+      if (visor === undefined) {
+        responder(503, "el visor de OpenUI no está construido: ejecuta «npm run build:web»");
+        return;
+      }
+      const documento = Buffer.from(documentoDeOpenui(leido.datos.toString("utf8"), visor, leido.nombre), "utf8");
+      respuesta.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Content-Length": documento.length,
+        "Content-Security-Policy": CSP_DE_OPENUI,
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "no-store",
+      });
+      respuesta.end(documento);
+      return;
+    }
     // Sin mime conocido se descarga en vez de adivinar. El nombre ya pasó la barrera de
     // segmento llano, así que entre comillas no puede romper la cabecera.
     const inline = !descargar && leido.mime !== undefined;
@@ -5591,6 +5631,7 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     coleccionesDelProyecto: async (raiz) => fotoDeColecciones(await modeloEnDisco(raiz)(ficherosDelProyecto(raiz))),
     modeloDelCambio,
     planesDelProyecto,
+    visorOpenui: () => leerVisorOpenui(raizDelCliente),
     leerFichero: leerFicheroDeProyecto,
     leerArtefacto: leerArtefactoDeSesion,
     leerArtefactoCrudo,

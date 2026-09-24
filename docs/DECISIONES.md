@@ -6547,3 +6547,49 @@ La línea `[Dispositivo de esta sesión: …]` que se antepone a cada turno es p
 orquestador lo nombre al delegar y el conductor no pase otro `--serie`—; la garantía la pone el
 script. **Sin verificar con un aparato**: la regla y el cableado están probados, el despliegue real en
 un emulador con dos aparatos conectados no se ha hecho.
+
+## OpenUI entra como formato de artefacto, en un iframe sin red (24-09-2026)
+
+**Qué se midió antes de adoptarlo.** Tres encargos típicos de artefacto (la tabla de colecciones
+de AppDemo con sus datos reales, un informe del verificador y un panel de consumo) en los dos
+formatos, con `deepseek-flash`, tres pasadas por celda y las instrucciones REALES de cada lado:
+el `SKILL.md` de `artifacts-builder` con su `estilo.md` frente al prompt de la capability
+`openUI()` de TrueForge (unos 5.000 tokens cada uno). Salida media, HTML frente a OpenUI:
+colecciones ~20.000 frente a ~5.900 (3,4×), verificación ~13.700 frente a ~3.100 (4,5×),
+consumo ~36.800 frente a ~2.600 (14×); los rangos no se solapan en ninguna celda. Buena parte del
+coste del HTML es RAZONAMIENTO y no el artefacto: en consumo el HTML ocupa ~22.000 caracteres para
+~37.000 tokens de salida. Validez: HTML 9/9, OpenUI 8/9 —el que falló llevaba corridos los
+argumentos POSICIONALES de un `Card(...)`—. Todos traían los datos completos.
+
+**La calidad se miró en una pasada por encargo (tres de nueve pares), y no es concluyente.** En
+consumo el HTML acertó el dato —la caché dentro de la entrada, la salida en su propia escala— y el
+OpenUI apiló entrada, salida y caché, que es contar la caché dos veces. En verificación los dos
+eran correctos, pero los `Tabs` de OpenUI abrían en la ÚLTIMA pestaña y escondían los errores: no
+es el modelo, es su renderer, que sigue a la pestaña cuyo contenido acaba de crecer (una
+heurística de streaming) y con el programa entero de golpe la última es la que «crece». En
+colecciones eran comparables, y LOS DOS se inventaron una colección «huérfana»: fallo del modelo,
+no del formato. Por eso cada uno de esos fallos es una línea de `REGLAS_DE_OPENUI`.
+
+**Por qué un fichero en `/artefactos/` y no el bloque en la respuesta**, que es lo que pide el
+prompt de la librería: la respuesta de un especialista la lee el orquestador, no una persona.
+Como artefacto se anuncia, se persiste con la sesión y se ve en la pestaña de siempre.
+
+**Por qué el documento va ENTERO en la respuesta HTTP** (renderer, CSS y programa): el iframe de
+un artefacto tiene un origen opaco, y una petición suya al servidor sale con `Origin: null` y
+recibe un 403. Y **por qué su CSP cierra la red**, a diferencia de la de un HTML: no carga nada
+de fuera, y la librería de componentes trae dentro, sin que nadie lo pida, una imagen de relleno
+de `picsum.photos` y los favicons de Google; sin la cabecera saldrían de la máquina al pintar.
+
+**Por qué OpenUI es dependencia de `apps/web` y de nadie más**: el `postinstall` de
+`@openuidev/lang-core` MANDA telemetría de instalación (a PostHog, por un proxy en CloudFront)
+salvo con `OPENUI_TELEMETRY_DISABLED=1` o `DO_NOT_TRACK=1`. Ya se disparó una vez desde la máquina
+del desarrollador al medir, antes de saberlo. Como solo se publica `apps/web/dist`, quien instala
+xonecode no lo ejecuta nunca; quien desarrolla en este repo, sí, y por eso la instalación se hace
+con la variable puesta. El precio de no tenerlo en el host es que el programa no se VALIDA al
+escribirlo —haría falta `lang-core` en el servidor—: los errores de análisis los enseña el visor.
+La telemetría de runtime es opcional y no está en el bundle del navegador (comprobado).
+
+**Lo que pesa**: el visor son ~3,5 MB de JS (~0,9 MB comprimido) y ~0,3 MB de CSS, que viajan
+con cada apertura de un `.openui` porque no se pueden cachear fuera del documento. En loopback no
+se nota; por un túnel, sí.
+

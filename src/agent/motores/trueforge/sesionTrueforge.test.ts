@@ -139,6 +139,23 @@ describe("una sesión con el motor TrueForge", () => {
     expect(de("write_file")).toEqual([{ rol: "especialista", nombre: "developer-xone" }]);
   }, 20_000);
 
+  it("un especialista que hace artefactos recibe OpenUI montado de verdad; el orquestador, no", async () => {
+    const { m, toolsPorLlamada, vistos } = modelosConGuion(guionDeEscritura());
+    const s = await abrirSesionTrueforge({
+      raiz: proyecto(),
+      modelos: m,
+      entorno: ENTORNO,
+      skills: CATALOGO,
+      pedirAprobacion: async (ps) => new Map(ps.map((p) => [p.id, { type: "approve" as const }])),
+    });
+    await s.turno("escribe una nota", piel().p);
+    // La primera llamada es del orquestador; la segunda, del hijo `developer-xone`.
+    expect(toolsPorLlamada[0]).not.toContain("get_openui_instructions");
+    expect(toolsPorLlamada[1]).toContain("get_openui_instructions");
+    // Y su prompt de sistema lleva nuestras reglas, no solo la línea de la librería.
+    expect(vistos[1]!.join("\n")).toContain("/artefactos/<nombre>.openui");
+  }, 20_000);
+
   it("un hijo con un nombre que no es de ningún especialista sale SIN nombre, no con el que inventó el modelo", async () => {
     const { m } = modelosConGuion([
       [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "ayudante-inventado", input: "mira" }) }] })],

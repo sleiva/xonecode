@@ -108,10 +108,17 @@ export function Artefactos({
 
   const mime = actual?.mime;
   const esHtml = mime === "text/html";
+  /**
+   * Un programa de OpenUI se VE como un HTML —el servidor lo sirve dentro de su visor, en un
+   * documento autocontenido (`web/servidor/visorOpenui.ts`)— y su FUENTE es texto. Mismas dos
+   * caras y el mismo iframe; lo que cambia es la nota, porque éste no carga nada de fuera.
+   */
+  const esOpenui = mime === "text/x-openui";
+  const esDocumento = esHtml || esOpenui;
   const esImagen = mime !== undefined && mime.startsWith("image/");
   const esMarkdown = mime === "text/markdown";
   const esTexto = mime === "text/plain" || mime === "application/json" || mime === "text/csv";
-  const sabemosEnsenar = esHtml || esImagen || esMarkdown || esTexto;
+  const sabemosEnsenar = esDocumento || esImagen || esMarkdown || esTexto;
   const contenido = elegido === undefined ? undefined : contenidos[elegido];
 
   /**
@@ -122,7 +129,7 @@ export function Artefactos({
    * FUENTE sí, y solo cuando se pulsa. Lo que no sabemos enseñar tampoco: no hay visor al
    * que darle el texto, y solo queda la descarga.
    */
-  const necesitaContenido = sabemosEnsenar && !(esHtml && cara === "vista");
+  const necesitaContenido = sabemosEnsenar && !(esDocumento && cara === "vista");
 
   useEffect(() => {
     if (conectado === false || elegido === undefined || !necesitaContenido) return;
@@ -135,7 +142,7 @@ export function Artefactos({
   const hayDibujo = contenido?.mime !== undefined && contenido.base64 !== undefined;
   const svgConDibujo = hayDibujo && contenido?.mime === "image/svg+xml" && contenido.texto !== undefined;
   const soloDibujo = hayDibujo && !svgConDibujo;
-  const dosCaras = esHtml || (esMarkdown && contenido?.error === undefined);
+  const dosCaras = esDocumento || (esMarkdown && contenido?.error === undefined);
 
   if (lista.length === 0) {
     return (
@@ -183,7 +190,7 @@ export function Artefactos({
               </div>
             </div>
 
-            {esHtml && cara === "vista" ? (
+            {esDocumento && cara === "vista" ? (
               <div className={estilos.marco}>
                 {/* Ver la cabecera del componente: `allow-scripts` sin `allow-same-origin`. */}
                 <iframe
@@ -192,11 +199,19 @@ export function Artefactos({
                   title={actual.nombre}
                   sandbox="allow-scripts"
                 />
-                <p className={estilos.nota}>
-                  Corre aislado: no puede hablar con la consola ni leer tus datos. Las skills que
-                  lo escriben cargan tipografías y diagramas de un CDN, así que{" "}
-                  <strong>sin conexión no se ve entero</strong>.
-                </p>
+                {esOpenui ? (
+                  <p className={estilos.nota}>
+                    Un programa de OpenUI, pintado con su librería de componentes. Corre aislado y{" "}
+                    <strong>sin red</strong>: no habla con la consola ni carga nada de fuera, así que
+                    se ve igual sin conexión.
+                  </p>
+                ) : (
+                  <p className={estilos.nota}>
+                    Corre aislado: no puede hablar con la consola ni leer tus datos. Las skills que
+                    lo escriben cargan tipografías y diagramas de un CDN, así que{" "}
+                    <strong>sin conexión no se ve entero</strong>.
+                  </p>
+                )}
               </div>
             ) : !sabemosEnsenar ? (
               <p className={estilos.aviso}>
