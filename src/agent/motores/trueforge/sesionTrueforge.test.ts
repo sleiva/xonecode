@@ -7,7 +7,7 @@ import type { Piel } from "../../../core/turno.js";
 import type { ModelosPort, PeticionExterna } from "../../../core/ports.js";
 import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ } from "./sesionTrueforge.js";
 import { TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
-import { traducirEvento } from "./eventosTrueforge.js";
+import { topeAgotadoDe, traducirEvento } from "./eventosTrueforge.js";
 import { cargarMemoria } from "./memoriaTrueforge.js";
 import { abrirSesionReal } from "../../turno/turnoReal.js";
 import { pintarSesion, resumirTraza } from "../../turno/informeDeTraza.js";
@@ -686,6 +686,31 @@ describe("el tope de llamadas es POR TURNO, no de toda la conversación", () => 
     expect(pi.tokens.join("")).toBe("Hecho.");
     expect(pi.lineas.join("\n")).not.toMatch(/tope|falló/);
   }, 60_000);
+
+  it("un especialista que AGOTA su tope queda anotado en la traza como corte, con su nombre", async () => {
+    // Medido: la traza decía «cortes: 0» con un documentador parado en exactamente 30 llamadas.
+    const cortes: { origen: string; limite: number }[] = [];
+    const pasos = TOPE_DE_LLAMADAS_DEL_ESPECIALISTA + 2;
+    const { m } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "consultant-xone", input: "mira sin fin" }) }] })],
+      ...Array.from({ length: pasos }, (_, i) => [
+        new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: `l${i}`, name: "ls", args: JSON.stringify({ path: "/" }) }] }),
+      ]),
+      [new AIMessageChunk({ content: "Se cortó." })],
+    ]);
+    const s = await abrirSesionTrueforge({
+      raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO,
+      diagnostico: { modelo: () => {}, herramienta: () => {}, corte: (origen, limite) => void cortes.push({ origen, limite }) },
+    });
+    await s.turno("mira sin fin", piel().p);
+    expect(cortes).toEqual([{ origen: "consultant-xone", limite: TOPE_DE_LLAMADAS_DEL_ESPECIALISTA }]);
+  }, 120_000);
+
+  it("`topeAgotadoDe` reconoce el corte y nada más", () => {
+    expect(topeAgotadoDe({ type: "internal.agent.done", status: "error", error: "You have reached iteration limit of 100, please request again" })).toBe(100);
+    expect(topeAgotadoDe({ type: "internal.agent.done", status: "error", error: "otra cosa" })).toBeUndefined();
+    expect(topeAgotadoDe({ type: "internal.agent.done", status: "completed" })).toBeUndefined();
+  });
 
   it("el corte por tope se DICE como corte, en castellano y con el número", () => {
     const { eventos } = traducirEvento({ type: "internal.agent.done", status: "error", error: "You have reached iteration limit of 100, please request again" });

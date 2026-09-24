@@ -50,6 +50,17 @@ function dentroDe(real: string, base: string): boolean {
   return real === raiz || real.startsWith(raiz.endsWith(sep) ? raiz : `${raiz}${sep}`);
 }
 
+/** Los números de orden que llevan DOS o más secciones, con cuáles: `06 (06-a.md, 06-b.md)`. */
+export function numerosRepetidos(nombres: readonly string[]): string[] {
+  const porNumero = new Map<string, string[]>();
+  for (const n of nombres) {
+    const numero = /^(\d+)/.exec(n)?.[1];
+    if (numero === undefined) continue;
+    porNumero.set(numero, [...(porNumero.get(numero) ?? []), n]);
+  }
+  return [...porNumero].filter(([, ns]) => ns.length > 1).map(([numero, ns]) => `${numero} (${ns.join(", ")})`);
+}
+
 export function crearUnirSecciones(donde: { raiz: string; perfil: QuienDecidePermisos }) {
   return tool(
     async ({ carpeta }: z.infer<typeof ESQUEMA>) => {
@@ -83,16 +94,31 @@ export function crearUnirSecciones(donde: { raiz: string; perfil: QuienDecidePer
       if (nombres.length === 0) return `«${carpetaVirtual}» no tiene ninguna sección \`.md\` que unir.`;
       if (nombres.length > TOPE_DE_SECCIONES) return `«${carpetaVirtual}» tiene ${nombres.length} secciones; el tope es ${TOPE_DE_SECCIONES}.`;
 
-      const partes = nombres.map((n) => readFileSync(join(carpetaReal, n), "utf8").trim());
-      const documento = `${partes.join("\n\n")}\n`;
+      const leidas = nombres.map((n) => ({ nombre: n, texto: readFileSync(join(carpetaReal, n), "utf8").trim() }));
+      // Una sección VACÍA no entra: es como se retira una, porque aquí no hay tool para borrar.
+      const vacias = leidas.filter((l) => l.texto === "").map((l) => l.nombre);
+      const unidas = leidas.filter((l) => l.texto !== "");
+      if (unidas.length === 0) return `Todas las secciones de «${carpetaVirtual}» están vacías: no hay nada que unir.`;
+      const documento = `${unidas.map((l) => l.texto).join("\n\n")}\n`;
       if (documento.length > TOPE_DE_CARACTERES) return `El documento pasaría de ${TOPE_DE_CARACTERES} caracteres: parte el trabajo en varios documentos.`;
       try {
         writeFileSync(destinoReal, documento, "utf8");
       } catch (error) {
         return `No se pudo escribir «${destinoVirtual}»: ${error instanceof Error ? error.name : "error"}.`;
       }
-      // NO se devuelve el documento: es el ahorro entero. Solo lo que hace falta para seguir.
-      return `Unidas ${nombres.length} secciones en ${destinoVirtual} (${documento.length} caracteres): ${nombres.join(", ")}.`;
+      // NO se devuelve el documento: es el ahorro entero. Solo lo que hace falta para seguir, y lo
+      // que huele a sección vieja: medido en un manual real, dos quedaron con el mismo número
+      // (`06-basico.md` y `06-categoria-basico.md`) tras rehacerse media estructura.
+      const repetidos = numerosRepetidos(unidas.map((l) => l.nombre));
+      return [
+        `Unidas ${unidas.length} secciones en ${destinoVirtual} (${documento.length} caracteres): ${unidas.map((l) => l.nombre).join(", ")}.`,
+        ...(vacias.length === 0 ? [] : [`Saltadas por vacías: ${vacias.join(", ")}.`]),
+        ...(repetidos.length === 0
+          ? []
+          : [
+              `⚠ Números repetidos: ${repetidos.join("; ")}. Si una de ellas sobra, VACÍALA (write_file con contenido vacío) y vuelve a unir: una vacía no entra.`,
+            ]),
+      ].join(" ");
     },
     {
       name: NOMBRE_UNIR_SECCIONES,

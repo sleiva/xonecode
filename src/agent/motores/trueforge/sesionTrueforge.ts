@@ -63,7 +63,7 @@ import { accionDelJuez, type HechosDelTurno, type VeredictoDelTurno } from "../.
 import type { Entorno } from "../../config/entorno.js";
 import { modeloParaTrueforge } from "./modeloLangchain.js";
 import { TOOLS_DE_LECTURA, type BackendDeFicheros } from "./toolsDeFichero.js";
-import { traducirEvento } from "./eventosTrueforge.js";
+import { topeAgotadoDe, traducirEvento } from "./eventosTrueforge.js";
 import { anuncioDeSkills } from "./skillsTrueforge.js";
 import {
   capabilitiesDe,
@@ -658,6 +658,9 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
         const chars = typeof evento.content === "string" ? evento.content.length : 0;
         diagnostico?.resultado?.(llamada?.nombre, llamada === undefined ? undefined : detalleDe(llamada.nombre, llamada.args), chars);
       }
+      // Un hilo que agotó su tope se ANOTA en la traza, con quién era: el raíz y cualquier hijo.
+      const tope = topeAgotadoDe(evento);
+      if (tope !== undefined) diagnostico?.corte?.(quienEs.get(deHilo) ?? deHilo, tope);
       const { eventos, uso } = traducirEvento(evento);
       // La «llamada» de un hijo externo es el producto entero: su consumo llega por su propio
       // callback (`externo`), y contarla aquí sumaría una llamada de modelo a ceros por delegación.

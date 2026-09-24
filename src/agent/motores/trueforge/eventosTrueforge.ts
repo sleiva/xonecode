@@ -56,6 +56,22 @@ function llamadasDe(mensaje: unknown): { nombre: string; args: unknown }[] {
   });
 }
 
+/** Cómo dice TrueForge que un hilo agotó su tope de llamadas, en el `error` de su `agent.done`. */
+const TOPE_AGOTADO = /iteration limit of (\d+)/;
+
+/**
+ * El tope que agotó un hilo, si ESTE evento es ese corte; `undefined` si no. Vale para el raíz y
+ * para cualquier hijo, y existe para la traza: sin él, un especialista cortado por el tope era
+ * indistinguible de uno que terminó —medido: la traza decía «cortes: 0» con un documentador que
+ * se quedó en exactamente 30 llamadas a mitad de un manual—.
+ */
+export function topeAgotadoDe(evento: unknown): number | undefined {
+  const e = evento as { type?: string; status?: string; error?: unknown };
+  if (e?.type !== "internal.agent.done" || e.status !== "error" || typeof e.error !== "string") return undefined;
+  const tope = TOPE_AGOTADO.exec(e.error);
+  return tope === null ? undefined : Number(tope[1]);
+}
+
 /**
  * Un evento de TrueForge → cero o más eventos de dominio, y el uso si trae una llamada al modelo
  * terminada (para que quien corre el turno lo sume al contador).
@@ -111,7 +127,7 @@ export function traducirEvento(evento: unknown): { eventos: DomainEvent[]; uso?:
       const detalle = typeof e.error === "string" ? e.error : "error del motor";
       // El TOPE de llamadas no es un fallo del motor: es un corte, y se dice como tal — con cuántas
       // y con lo que se puede hacer. Sin esto se leía «el motor falló» con el texto en inglés.
-      const tope = /iteration limit of (\d+)/.exec(detalle);
+      const tope = TOPE_AGOTADO.exec(detalle);
       if (tope !== null) {
         return {
           eventos: [

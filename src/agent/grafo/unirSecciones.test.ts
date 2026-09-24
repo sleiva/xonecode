@@ -68,3 +68,34 @@ describe("unir_secciones", () => {
     expect(await unir("/")).toMatch(/no la raíz/);
   });
 });
+
+describe("lo que huele a sección vieja", () => {
+  it("una sección VACÍA no entra y se nombra; así se retira una, sin tool de borrar", async () => {
+    const { raiz, unir, seccion } = escenario();
+    seccion("01-a.md", "A");
+    seccion("02-vieja.md", "");
+    seccion("03-c.md", "C");
+    const dicho = await unir("/doc/manual-usuario/");
+    expect(readFileSync(join(raiz, "doc", "manual-usuario.md"), "utf8")).toBe("A\n\nC\n");
+    expect(dicho).toMatch(/Unidas 2 secciones/);
+    expect(dicho).toMatch(/Saltadas por vacías: 02-vieja\.md\./);
+  });
+
+  it("dos secciones con el MISMO número se avisan, con qué hacer", async () => {
+    // Medido en un manual real, tras rehacerse media estructura.
+    const { unir, seccion } = escenario();
+    seccion("06-basico.md", "viejo");
+    seccion("06-categoria-basico.md", "nuevo");
+    seccion("07-contents.md", "x");
+    const dicho = await unir("/doc/manual-usuario/");
+    expect(dicho).toMatch(/⚠ Números repetidos: 06 \(06-basico\.md, 06-categoria-basico\.md\)\. Si una de ellas sobra, VACÍALA/);
+  });
+
+  it("sin repetidos ni vacías, no dice nada de más", async () => {
+    const { unir, seccion } = escenario();
+    seccion("01-a.md", "A");
+    seccion("02-b.md", "B");
+    const dicho = await unir("/doc/manual-usuario/");
+    expect(dicho).not.toMatch(/vacías|repetidos/);
+  });
+});
