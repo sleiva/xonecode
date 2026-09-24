@@ -1702,3 +1702,118 @@ describe("store: `semilla` pasa la lista blanca de los subagentes", () => {
     expect(s.leer().agentes?.lista[0]).not.toHaveProperty("semilla");
   });
 });
+
+/**
+ * La lista blanca de `case "conectores"`, hasta el fondo: un conector puede traer una
+ * `prueba`, y esa `prueba` puede traer `tools` — tres niveles donde el mismo agujero de
+ * `agentes`/`skills` puede volver a abrirse sin que nada lo diga.
+ */
+describe("store: `case \"conectores\"` no deja pasar un campo que no se nombra", () => {
+  const catalogo = [{ id: "notion", nombre: "Notion", descripcion: "da igual", autenticacion: "oauth" as const }];
+
+  it("un conector AÑADIDO llega con sus campos", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "conectores",
+      catalogo,
+      conectores: [{ id: "notion", estado: "autorizado" }],
+      desconocidos: [],
+    } as never);
+    expect(s.leer().conectores?.conectores).toEqual([{ id: "notion", estado: "autorizado" }]);
+  });
+
+  it("un campo de más en el conector NO sobrevive: es el mismo agujero de `agentes`/`skills`", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "conectores",
+      catalogo,
+      conectores: [{ id: "notion", estado: "autorizado", token: "x" }],
+      desconocidos: [],
+    } as never);
+    expect(s.leer().conectores?.conectores[0]).not.toHaveProperty("token");
+    expect(s.leer().conectores?.conectores[0]).toEqual({ id: "notion", estado: "autorizado" });
+  });
+
+  it("un campo de más DENTRO de `prueba` tampoco: un nivel más adentro es el mismo agujero", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "conectores",
+      catalogo,
+      conectores: [{ id: "notion", estado: "autorizado", prueba: { cuando: 1, ok: true, tools: [], token: "x" } }],
+      desconocidos: [],
+    } as never);
+    expect(s.leer().conectores?.conectores[0]?.prueba).toEqual({ cuando: 1, ok: true, tools: [] });
+  });
+
+  it("y un campo de más en UNA TOOL, otro nivel más adentro", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "conectores",
+      catalogo,
+      conectores: [
+        {
+          id: "notion",
+          estado: "autorizado",
+          prueba: { cuando: 1, ok: true, tools: [{ nombre: "search", soloLectura: true, bearer: "secreto" }] },
+        },
+      ],
+      desconocidos: [],
+    } as never);
+    const prueba = s.leer().conectores?.conectores[0]?.prueba;
+    expect(prueba?.ok).toBe(true);
+    expect((prueba as { tools: unknown[] }).tools).toEqual([{ nombre: "search", soloLectura: true }]);
+  });
+
+  it("`soloLectura: false` sobrevive DISTINTO de ausente: no es lo mismo «escribe» que «no consta»", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "conectores",
+      catalogo,
+      conectores: [
+        {
+          id: "notion",
+          estado: "autorizado",
+          prueba: {
+            cuando: 1,
+            ok: true,
+            tools: [{ nombre: "create_page", soloLectura: false }, { nombre: "sin_anotar" }],
+          },
+        },
+      ],
+      desconocidos: [],
+    } as never);
+    const prueba = s.leer().conectores?.conectores[0]?.prueba as { tools: Record<string, unknown>[] };
+    expect(prueba.tools[0]).toEqual({ nombre: "create_page", soloLectura: false });
+    expect(prueba.tools[1]).not.toHaveProperty("soloLectura");
+  });
+
+  it("un campo de más en una entrada del CATÁLOGO tampoco sobrevive", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "conectores",
+      catalogo: [{ id: "notion", nombre: "Notion", descripcion: "da igual", autenticacion: "oauth", url: "https://x" }],
+      conectores: [],
+      desconocidos: [],
+    } as never);
+    expect(s.leer().conectores?.catalogo[0]).toEqual({
+      id: "notion",
+      nombre: "Notion",
+      descripcion: "da igual",
+      autenticacion: "oauth",
+    });
+  });
+
+  it("`ilegible` y `error` sobreviven, y ausentes se quedan ausentes", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "conectores", catalogo, conectores: [], desconocidos: [], ilegible: true } as never);
+    expect(s.leer().conectores?.ilegible).toBe(true);
+    expect(s.leer().conectores).not.toHaveProperty("error");
+  });
+
+  it("se tira al caerse el cable, como los modelos y las skills", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "conectores", catalogo, conectores: [], desconocidos: [] } as never);
+    s.marcarDesconectado();
+    expect(s.leer().conectores).toBeUndefined();
+  });
+});

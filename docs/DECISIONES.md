@@ -6604,3 +6604,42 @@ de la medida escribió el mismo panel en `.html` y en `.openui`. **Cómo elige e
 siendo criterio del modelo**: las descripciones de las dos skills, el cuerpo de `openui-builder` y,
 sobre todo, el encargo del orquestador.
 
+
+## Los conectores MCP: lo medido contra los tres servidores (24-09-2026)
+
+Antes de escribir una sola línea del catálogo se probó contra los tres servidores reales, sin
+ningún SDK propio por delante: `curl`/`listTools` a pelo, para no confundir un fallo de nuestra
+capa con lo que el servidor realmente contesta.
+
+**DeepWiki no pide credenciales.** `https://mcp.deepwiki.com/mcp` contesta `listTools` sin
+ningún encabezado de autenticación y devuelve tres tools: `ask_wiki_question`,
+`read_wiki_contents`, `read_wiki_structure`. Ninguna de las tres lleva `annotations.readOnlyHint`
+en su esquema — importa para la pieza siguiente, la que decida la política de aprobación cuando
+estos conectores lleguen a un agente: sin esa anotación, «solo lectura» no se puede leer del
+propio servidor y hay que decidirlo de otra forma (por conector entero, o preguntando siempre).
+Aquí solo se deja constancia; la política no es de esta pieza.
+
+**Notion y Atlassian/Jira publican metadatos OAuth completos.** `https://mcp.notion.com/mcp` y
+`https://mcp.atlassian.com/v1/mcp` sirven su documento de metadatos de autorización con
+`registration_endpoint` (Dynamic Client Registration, RFC 7591) y `S256` en los métodos de
+`code_challenge` soportados. Los dos aceptaron un registro de cliente PÚBLICO
+(`token_endpoint_auth_method: "none"`) con un `redirect_uri` en loopback
+(`http://127.0.0.1:<puerto>/mcp/oauth/callback`) y devolvieron 201 con la información del
+cliente. No hace falta un cliente pre-registrado ni un secreto que guardar: de ahí que
+`ProveedorDeConector` pida siempre `"none"` y nunca intente nada con un `client_secret`.
+
+**Por qué una ruta pública y no el puerto fijo de CloudStudio (7634).** El de CloudStudio existe
+porque su IDS registra el `redirect_uri` UNA vez, de forma manual, contra un cliente que
+nosotros mismos damos de alta — el puerto forma parte de ese contrato pactado por adelantado. Un
+conector MCP no tiene ese pacto: cada uno se registra por Dynamic Client Registration, en el
+momento, contra SU propio `registration_endpoint`, y el `redirect_uri` que se les da es el que
+resulte del puerto real de la consola en ese arranque (`http://127.0.0.1:<servidor.puerto>`). Un
+puerto fijo distinto del de la consola habría exigido levantar un segundo listener solo para
+esto, sin ninguna ventaja: el problema real no es el puerto, es que la cookie de sesión no
+llega. La sesión de la consola es `SameSite=Strict`; una redirección que llega DESDE
+`mcp.notion.com` o `mcp.atlassian.com` hacia el callback es cross-site por definición, así que el
+navegador nunca adjunta esa cookie, tenga el puerto que tenga la ruta. Eso es lo que obligó a
+que la autenticación real del callback fuera un dato propio y no la cookie: el `state` de un
+solo uso que `interpretarCallback` consume al reconocerlo, vaya la autorización bien o mal —así
+un reintento del mismo `state` (el usuario pulsando atrás, o un proveedor reintentando la
+redirección) no puede colarse una segunda vez.

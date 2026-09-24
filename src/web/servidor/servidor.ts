@@ -49,6 +49,15 @@ export interface ServidorWeb {
   readonly url: string;
   /** Registra un manejador propio para `MÉTODO ruta` — usado por tareas futuras (SSE, acciones). */
   registrarRuta(metodo: string, ruta: string, manejador: ManejadorRuta): void;
+  /**
+   * Registra un manejador para `MÉTODO ruta` que se atiende SIN cookie ni `?t=`: solo tras
+   * las comprobaciones de `Host` y `Origin`, que siguen delante igual que para cualquier
+   * otra ruta. Es para el callback OAuth de un conector: la cookie es `SameSite=Strict`, así
+   * que una redirección que llega desde el proveedor viene SIN ella y se quedaría en un 401
+   * antes de que el propio callback pudiera decidir nada. La autenticación de una ruta
+   * pública la pone su manejador (un `state` de un solo uso), nunca esta función.
+   */
+  registrarRutaPublica(metodo: string, ruta: string, manejador: ManejadorRuta): void;
   cerrar(): Promise<void>;
 }
 
@@ -73,6 +82,7 @@ interface ContextoPeticion {
   raizReal: string;
   token: string;
   rutas: Map<string, ManejadorRuta>;
+  rutasPublicas: Map<string, ManejadorRuta>;
   puerto: number;
   anfitrion?: string;
 }
@@ -84,6 +94,7 @@ export async function arrancarServidor(opciones: OpcionesServidor): Promise<Serv
   const raizReal = realpathSync(opciones.raizEstaticos);
   const token = randomBytes(32).toString("base64url");
   const rutas = new Map<string, ManejadorRuta>();
+  const rutasPublicas = new Map<string, ManejadorRuta>();
 
   let puertoReal = opciones.puerto;
   let direccionReal = "127.0.0.1";
@@ -91,6 +102,7 @@ export async function arrancarServidor(opciones: OpcionesServidor): Promise<Serv
     raizReal,
     token,
     rutas,
+    rutasPublicas,
     puerto: puertoReal,
     ...(opciones.anfitrion === undefined ? {} : { anfitrion: opciones.anfitrion }),
   });
@@ -143,6 +155,9 @@ export async function arrancarServidor(opciones: OpcionesServidor): Promise<Serv
     registrarRuta(metodo, ruta, manejador) {
       rutas.set(`${metodo.toUpperCase()} ${ruta}`, manejador);
     },
+    registrarRutaPublica(metodo, ruta, manejador) {
+      rutasPublicas.set(`${metodo.toUpperCase()} ${ruta}`, manejador);
+    },
     async cerrar() {
       // El SSE deja respuestas abiertas de por vida; sin `closeAllConnections()` el
       // `close()` normal espera a que esas conexiones se cierren solas, cosa que no
@@ -158,7 +173,7 @@ async function manejarPeticion(
   respuesta: ServerResponse,
   contexto: ContextoPeticion
 ): Promise<void> {
-  const { raizReal, token, rutas, puerto, anfitrion: anfitrionExtra } = contexto;
+  const { raizReal, token, rutas, rutasPublicas, puerto, anfitrion: anfitrionExtra } = contexto;
 
   // DNS rebinding: una web ajena resuelve su dominio a 127.0.0.1 y le habla a este
   // proceso desde el navegador de la víctima, que sí tiene la cookie. El único `Host`
@@ -204,6 +219,17 @@ async function manejarPeticion(
     rutaDecodificada = decodeURIComponent(rutaBruta);
   } catch {
     responderTexto(respuesta, 400, "");
+    return;
+  }
+
+  // Lo PÚBLICO va aquí: después de `Host` y `Origin` —el rebinding se para igual— y antes
+  // de la cookie. Existe por el callback OAuth de los conectores: la cookie es
+  // `SameSite=Strict`, así que una redirección que llega desde otro sitio viene SIN ella y
+  // se quedaría en un 401. La autenticación de una ruta pública la pone su manejador (el
+  // callback: un `state` de un solo uso), y por eso esto no emite cookie nunca.
+  const publica = rutasPublicas.get(`${peticion.method} ${rutaDecodificada}`);
+  if (publica !== undefined) {
+    await publica(peticion, respuesta);
     return;
   }
 

@@ -234,6 +234,8 @@ import type {
 // doblan.
 import { filaDeTarea } from "./transporte.js";
 import { esEsfuerzo, nivelesDeEsfuerzo, type Esfuerzo } from "../../core/esfuerzo.js";
+import { CATALOGO_DE_CONECTORES, RUTA_CALLBACK_MCP } from "../../core/conectores.js";
+import { servicioDeConectoresCableado, type ServicioDeConectores } from "../../agent/conectores/servicioDeConectores.js";
 
 /** Las dos rutas del cable. El cliente las tiene escritas en `apps/web/src/conexion.ts`. */
 /**
@@ -653,6 +655,15 @@ export interface OpcionesDeMontaje {
     /** Nombres y tipos, nunca contenido: salen del DISCO, de la carpeta del borrador. */
     adjuntos: readonly { nombre: string; mime?: string }[];
   }) => Promise<string>;
+  /**
+   * Los conectores MCP de esta consola: una FÁBRICA, y no el servicio ya construido. El
+   * arranque la llama UNA vez al montar, con su propio `emitirConectores` como `alCambiar` —
+   * así el servicio puede avisar de un cambio que ocurre en segundo plano (autorizar, probar)
+   * sin que `montarRutas` tenga que exponer su sumidero. Ausente = esta ejecución no ofrece
+   * conectores: ni el mensaje `conectores` se manda, ni la ruta del callback se registra —
+   * «un control sin dato detrás no se pinta».
+   */
+  conectores?: (alCambiar: () => void) => ServicioDeConectores;
 }
 
 /** El `Content-Type` con el que se sirve un artefacto inline: al texto se le pone el juego
@@ -662,6 +673,15 @@ function tipoServido(mime: string): string {
   return mime.startsWith("text/") || mime === "image/svg+xml" || mime === "application/json"
     ? `${mime}; charset=utf-8`
     : mime;
+}
+
+/**
+ * Las cinco entidades de HTML, para la página del callback OAuth de un conector. El
+ * `mensaje` que escapa es siempre una frase NUESTRA (`ServicioDeConectores.completar`), pero
+ * se escapa igual: defensa en profundidad, no confianza en el origen.
+ */
+function escaparHtml(texto: string): string {
+  return texto.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
 /**
@@ -679,7 +699,7 @@ function tipoServido(mime: string): string {
  * necesita en vez de antes.
  */
 export function montarRutas(
-  servidor: Pick<ServidorWeb, "registrarRuta">,
+  servidor: Pick<ServidorWeb, "registrarRuta" | "registrarRutaPublica" | "puerto">,
   vestibulo: Vestibulo,
   opciones: OpcionesDeMontaje = {}
 ): { emitirTareas: () => void } {
@@ -1484,6 +1504,9 @@ export function montarRutas(
     // El workspace, por lo mismo que los subagentes y las skills: Ajustes se puede abrir en
     // cuanto conecta, y un campo en blanco se lee como «no hay ninguno puesto».
     const workspace = mensajeDeWorkspace();
+    // Y los conectores MCP, tras el workspace y por la misma regla: solo si esta ejecución
+    // los monta, y entonces la ventana de Ajustes no se abre con la sección en blanco.
+    const conectores = mensajeDeConectores();
     /**
      * Lo consumido por la sesión que se va a pintar. Va en la ráfaga por lo mismo que los
      * modelos: una pestaña que conecta a mitad de sesión no vio los cambios anteriores, y
@@ -1501,6 +1524,7 @@ export function montarRutas(
       cliente(skills);
       if (tareas !== undefined) cliente(tareas);
       if (workspace !== undefined) cliente(workspace);
+      if (conectores !== undefined) cliente(conectores);
       if (consumoDeLaSesion !== undefined) {
         cliente({
           clase: "consumo",
@@ -1645,6 +1669,10 @@ export function montarRutas(
   const esNombreDeHerramienta = (v: string): v is NombreDeHerramienta =>
     v === "adb" || v === "emulator" || v === "xcrun" || v === "devicectl";
 
+  /** Las cinco acciones conocidas sobre UN conector, y nada más: lo demás es un 400. */
+  const esAccionDeConector = (v: string): v is "anadir" | "quitar" | "probar" | "autorizar" | "desconectar" =>
+    v === "anadir" || v === "quitar" || v === "probar" || v === "autorizar" || v === "desconectar";
+
   const mensajeDeWorkspace = (): MensajeAlCliente | undefined => {
     const ruta = opciones.workspace?.();
     if (ruta === undefined) return undefined;
@@ -1656,6 +1684,37 @@ export function montarRutas(
   };
   const emitirWorkspace = (): void => {
     const m = mensajeDeWorkspace();
+    if (m !== undefined) emitir(m);
+  };
+
+  /**
+   * El servicio de conectores, construido UNA VEZ al montar — no en cada mensaje, porque es
+   * quien guarda en memoria las pruebas y las autorizaciones pendientes (`servicioDeConectores.ts`).
+   * `alCambiar` es lo que hace que un cambio que ocurre en segundo plano (autorizar, probar)
+   * llegue por el cable sin que nadie lo pida — la misma costura que `emitirCambioDeTareas`.
+   * Ausente la OPCIÓN = esta ejecución no monta conectores.
+   */
+  const servicioConectores = opciones.conectores?.(() => emitirConectores());
+
+  const mensajeDeConectores = (): MensajeAlCliente | undefined => {
+    if (servicioConectores === undefined) return undefined;
+    const { conectores, desconocidos, ilegible, error } = servicioConectores.lista();
+    return {
+      clase: "conectores",
+      catalogo: CATALOGO_DE_CONECTORES.map(({ id, nombre, descripcion, autenticacion }) => ({
+        id,
+        nombre,
+        descripcion,
+        autenticacion,
+      })),
+      conectores,
+      desconocidos,
+      ...(ilegible ? { ilegible } : {}),
+      ...(error === undefined ? {} : { error }),
+    };
+  };
+  const emitirConectores = (): void => {
+    const m = mensajeDeConectores();
     if (m !== undefined) emitir(m);
   };
 
@@ -4071,6 +4130,47 @@ export function montarRutas(
   });
 
   /**
+   * `GET RUTA_CALLBACK_MCP` — a donde vuelve el navegador tras autorizar un conector.
+   *
+   * **Ruta PÚBLICA**, registrada con `registrarRutaPublica`: la cookie de sesión es
+   * `SameSite=Strict`, así que la redirección que manda el proveedor OAuth llega SIN ella —
+   * `Host` y `Origin` siguen delante, y la autenticación real es el `state` de un solo uso
+   * que `completar` consume (`core/conectores.ts#interpretarCallback`).
+   *
+   * Solo se registra si esta ejecución monta conectores (`servicioConectores` viene de la
+   * opción `conectores`): sin servicio no hay callback que atender.
+   *
+   * La página es MÍNIMA y NUESTRA — nunca repite la query cruda, que la escribe quien
+   * redirige — y va con `Content-Security-Policy: default-src 'none'; style-src
+   * 'unsafe-inline'` (sin red, sin script) y `Cache-Control: no-store` (no es un documento
+   * que se pueda volver a servir de caché: el `state` ya se consumió).
+   */
+  if (servicioConectores !== undefined) {
+    servidor.registrarRutaPublica("GET", RUTA_CALLBACK_MCP, async (peticion, respuesta) => {
+      const query = new URLSearchParams((peticion.url ?? "").split("?")[1] ?? "");
+      // `completar` no debería lanzar —sus propios fallos vuelven como `{ok:false}`—, pero
+      // esto es una ruta PÚBLICA sin cookie por delante: un reventón aquí no puede dejar al
+      // navegador con una petición colgada ni con un 500 sin nada que decir. Y tampoco puede
+      // desaparecer en silencio: `contar` es el mismo hueco por el que se avisa de cualquier
+      // otro fallo suelto de este cable (`probar`/`autorizar`, más abajo).
+      const { mensaje } = await servicioConectores.completar(query).catch((error: unknown) => {
+        contar(error);
+        return { ok: false as const, mensaje: "no se pudo completar la autorización: vuelve a pulsar Conectar" };
+      });
+      const cuerpo =
+        `<!doctype html><html lang="es"><head><meta charset="utf-8">` +
+        `<title>xonecode</title></head><body><p>${escaparHtml(mensaje)}</p>` +
+        `<p>Ya puedes cerrar esta pestaña.</p></body></html>`;
+      respuesta.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
+        "Cache-Control": "no-store",
+      });
+      respuesta.end(cuerpo);
+    });
+  }
+
+  /**
    * `POST /adjunto?tarea=<id>&nombre=<fichero>` — los BYTES de un adjunto de tarea.
    *
    * Por HTTP y no por el cable, que lleva JSON. Las comprobaciones de `Host`, `Origin` y
@@ -4501,6 +4601,54 @@ export function montarRutas(
         const elegida = await opciones.elegirCarpeta?.(opciones.workspace?.());
         emitir(elegida === undefined ? { clase: "carpetaElegida" } : { clase: "carpetaElegida", ruta: elegida });
       })().catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "conector") {
+      // Sin `as`: `mensaje.clase === "conector"` ya narrows a la forma de `MensajeDelCliente`
+      // —la misma unión discriminada que `workspace` usa un renglón más arriba—, así que
+      // `mensaje.id`/`mensaje.accion` se leen directos. El `typeof` que sigue no es para el
+      // tipo (ese ya lo sabe TypeScript): es la guarda de verdad contra un JSON malformado,
+      // que puede mentir sobre lo que el tipo promete.
+      if (
+        servicioConectores === undefined ||
+        typeof mensaje.id !== "string" ||
+        typeof mensaje.accion !== "string" ||
+        !esAccionDeConector(mensaje.accion)
+      ) {
+        respuesta.writeHead(400);
+        respuesta.end();
+        return;
+      }
+      const { id, accion } = mensaje;
+      /**
+       * Las cinco contestan 204 EN EL ACTO. `anadir`/`quitar`/`desconectar` son síncronas —su
+       * `cambio()` ya reemite `conectores` antes de que esta función devuelva—; `probar` y
+       * `autorizar` corren en segundo plano (red, o esperar al navegador que abre el sistema)
+       * con `.catch(contar)`, la misma disciplina que `conexion` y `dispositivos`. El
+       * resultado de las cinco llega por `emitir(mensajeDeConectores())` vía `alCambiar`,
+       * nunca en esta respuesta.
+       */
+      switch (accion) {
+        case "anadir":
+          servicioConectores.anadir(id);
+          break;
+        case "quitar":
+          servicioConectores.quitar(id);
+          break;
+        case "desconectar":
+          servicioConectores.desconectar(id);
+          break;
+        case "probar":
+          void servicioConectores.probar(id).catch(contar);
+          break;
+        case "autorizar":
+          // El puerto REAL: con `--puerto 0` el sistema elige uno, y es el mismo que ya usa
+          // `servidor.url` para la ráfaga inicial — nunca uno construido a mano.
+          void servicioConectores.autorizar(id, `http://127.0.0.1:${servidor.puerto}${RUTA_CALLBACK_MCP}`).catch(contar);
+          break;
+      }
       respuesta.writeHead(204);
       respuesta.end();
       return;
@@ -5189,6 +5337,24 @@ export function ajusteDeWorkspaceCableado(opciones: {
   };
 }
 
+/**
+ * La opción `conectores` de `montarRutas`, cableada — extraída por el MISMO motivo que
+ * `ajusteDeWorkspaceCableado`: un literal inline dentro de `arrancarConsolaWeb` no quedaría
+ * probado, y esa composición concreta —que la fábrica de verdad (`servicioDeConectoresCableado`)
+ * llega montada, y con la CASA correcta— es exactamente el patrón de fallo que este repo ya
+ * tiene documentado nueve veces.
+ *
+ * Es una función de una línea, pero la línea es la que puede caerse: sin este sitio propio,
+ * `arrancarConsolaWeb` seguiría compilando y pasando sus tests aunque alguien borrara la
+ * opción del objeto que le pasa a `montarRutas` — el mismo campo OPCIONAL que hace que
+ * `ConsolaDeProyecto.consumo` fuera la novena vez.
+ */
+export function ajusteDeConectoresCableado(opciones: {
+  casa: string;
+}): { conectores: (alCambiar: () => void) => ServicioDeConectores } {
+  return { conectores: (alCambiar) => servicioDeConectoresCableado({ casa: opciones.casa, alCambiar }) };
+}
+
 export function construirCorredorDeTareasCableado(opciones: {
   vestibulo: Pick<Vestibulo, "abrirParaTarea" | "proyectosAbiertos" | "sesionesDe">;
   /** La fábrica de `OpcionesDeArranque.tareas`. Ausente = esta ejecución no ejecuta tareas. */
@@ -5613,6 +5779,9 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     // (`ajusteDeWorkspaceCableado`) por el patrón de fallo de siempre — y aquí el escritor
     // ya venía con la marca puesta: existía con su test y sin un solo llamador.
     ...ajusteDeWorkspaceCableado({ casa: homedir() }),
+    // Los conectores MCP, con la MISMA disciplina: la composición extraída y probada
+    // (`ajusteDeConectoresCableado`), nunca un literal aquí dentro.
+    ...ajusteDeConectoresCableado({ casa: homedir() }),
     // El selector nativo, solo si este sistema tiene uno. En el que no, la opción no se
     // monta y el botón no llega a existir.
     ...(haySelectorDeCarpeta()
