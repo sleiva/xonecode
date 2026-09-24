@@ -115,12 +115,6 @@
   gap: 6px;
   padding: 0;
   overflow: hidden;
-  /* Este botón es el CONTENEDOR del que cuelga la consulta de abajo: él sabe de qué ancho
-     dispone la fila. Se declara aquí y no en el viewport porque el ancho de la barra lo pone
-     JS (`Maqueta.tsx`, el tirador) — ver la regla de la cifra, al final del fichero.
-
-     Y es seguro porque su tamaño no depende de lo que lleve dentro: `flex: 1` ya lo fija. */
-  container-type: inline-size;
 }
 
 /* El `<select>` del entorno: el nivel que su barra no tiene (ella va de workspace a
@@ -393,9 +387,9 @@
   font-family: var(--dsw-font-family-mono, monospace);
 }
 
-/* El gasto de la sesión y su fecha, pegados. La CIFRA va delante del sello a propósito: la
-   lista se ordena por fecha y esa columna es lo que se lee de un vistazo, así que tiene que
-   quedarse quieta cuando la cifra aparece o desaparece. */
+/* La fecha de la sesión, empujada al borde. Iba con el gasto de la sesión delante (una Σ y su
+   cifra) y se quitó por decisión suya: la lista contesta «qué conversación es y de cuándo», y
+   el gasto de cada una lo dice el contador de la sesión abierta. */
 .fichaDeSesion {
   display: inline-flex;
   align-items: center;
@@ -405,41 +399,6 @@
 
 .marcaDeTarea + .fichaDeSesion {
   margin-left: 6px;
-}
-
-/* El gasto, con su propio envoltorio para poder retirarlo ENTERO cuando el hueco es estrecho:
-   es una pieza entera —la Σ y su cifra—, y a medias no se puede leer. */
-.cifraDeLaFicha {
-  display: inline-flex;
-  align-items: center;
-}
-
-/* Y la cifra se retira cuando la fila es estrecha. Es una CONSULTA DE CONTENEDOR y no un
-   `@media`: con la misma ventana y la barra encogida, un `@media` no dispararía y la cifra se
-   comería el título igual. El contenedor lo declara `.cuerpoDeFila`, arriba.
-
-   El criterio: el título no baja de lo que YA tiene a la barra más estrecha. Medido en
-   pantalla —seis filas de sesión, barra a 220 (el mínimo): fila 155 y 55 px de título—, ese
-   suelo son 55. La cifra cuesta 46 px de título (40 de cifra más el hueco de 6), así que el
-   título llega justo a 55 cuando la fila mide 200,5: de ahí el 200.
-
-   Y el cruce se comprobó arrastrando el tirador, no restando: fila 200 → escondida (título
-   100,3), fila 201 → pintada (título 55,5).
-
-   El número no es el mismo que cuando la cifra eran dos: `↑77,7k ↓20,5k` ocupaba 86 px y su
-   umbral era 260, o sea que la cifra NO salía a la omisión (fila 255, barra 320) y había que
-   arrastrar la barra a 326 para verla. Con una sola cifra el mismo criterio baja el umbral a
-   200 y a la omisión sale: el título pierde esos 46 px y conserva 109,5 —los 103 que mide el
-   rótulo más largo que escribe la aplicación, «Tarea de fondo», más seis de aire—.
-
-   Y el sello de la fecha no se mueve cuando la cifra aparece: medido a 220 y a 320, su borde
-   derecho cae en `barra − 45` en todas las filas y en los dos casos. Por eso la cifra va
-   DELANTE del sello y no detrás: la columna que se lee de un vistazo —la lista se ordena por
-   fecha— se queda quieta. */
-@container (max-width: 200px) {
-  .cifraDeLaFicha {
-    display: none;
-  }
 }
 
 /* «abriendo…» / «descargando…» en la fila donde se pulsó.

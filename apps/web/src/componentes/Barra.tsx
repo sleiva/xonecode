@@ -15,7 +15,6 @@ import filas from "../../estilos/Rows.module.css";
 import ajustes from "../../estilos/SettingsRoot.module.css";
 import { MenuDeSesion } from "./MenuDeSesion.js";
 import { IconoDeEntorno } from "./IconoDeEntorno.js";
-import { CosteDelTurno, hayCosteQueEnsenar } from "./CosteDelTurno.js";
 import { selloDeFecha } from "../selloDeFecha.js";
 import estilos from "./Barra.module.css";
 import type { SesionDelCable } from "../tipos.js";
@@ -63,12 +62,10 @@ export type FilaDeSesion = SesionDelCable & { historica?: boolean };
  * distingue el movimiento ni un lector de pantalla, y `aria-busy` habla de lo que espera la
  * interfaz, no de lo que hace el agente.
  *
- * Y cuando no lo está, la FICHA: el gasto de la sesión entera y su sello de fecha, en ese orden.
- * Los dos NO se excluyen —una sesión tiene fecha Y gasto—, y el envoltorio no es cosmético: el
- * empuje al borde tiene que ser de UN elemento, y con las piezas sueltas un `margin-left: auto`
- * repartido deja huecos absurdos. La cifra va DELANTE del sello para que la columna de fechas no
- * se mueva cuando aparece o desaparece: la lista se ordena por fecha, y esa columna es lo que se
- * lee de un vistazo.
+ * Y cuando no lo está, la FICHA: su sello de fecha. Llevaba delante el gasto de la sesión entera
+ * (una Σ y su cifra) y se quitó por decisión suya: la lista contesta qué conversación es y de
+ * cuándo, y lo que cuesta la abierta ya lo dice su contador. El total sigue en el índice
+ * (`EntradaIndice.consumo`); lo que se retira es pintarlo aquí.
  *
  * Está extraído con nombre, y no dentro del `map` de la barra, porque ahí es donde este repo ya
  * ha escondido nueve composiciones que todos los tests doblaban.
@@ -95,21 +92,11 @@ function FichaDeSesion({
     );
   }
   const sello = selloDeSesion(sesion.ultimoTurno);
-  const consumo = sesion.consumo;
-  // La regla de si hay gasto que enseñar es la MISMA del componente (`hayCosteQueEnsenar`), no
-  // una copia: un `{0,0}` no es una cifra, es una medida que nadie hizo.
-  const gasto =
-    consumo !== undefined && hayCosteQueEnsenar(consumo) ? (
-      <CosteDelTurno consumo={consumo} ambito="sesion" />
-    ) : undefined;
-  // Sin nada que enseñar no se pinta NI el envoltorio: vacío seguiría llevándose el
-  // `margin-left: auto`, y el hueco que le sobra al título —que es `flex: 1`— se lo comería
-  // un hueco sin nada dentro.
-  if (gasto === undefined && sello === undefined) return null;
+  // Sin fecha no se pinta NI el envoltorio: vacío seguiría llevándose el `margin-left: auto`.
+  if (sello === undefined) return null;
   return (
     <span className={estilos.fichaDeSesion}>
-      {gasto === undefined ? null : <span className={estilos.cifraDeLaFicha}>{gasto}</span>}
-      {sello === undefined ? null : <span className={estilos.selloDeFecha}>{sello}</span>}
+      <span className={estilos.selloDeFecha}>{sello}</span>
     </span>
   );
 }

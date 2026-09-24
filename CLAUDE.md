@@ -1478,16 +1478,13 @@ feedback del desarrollador** y no es terminal.
     cierra el tramo de SU turno, no el último de la lista. Un `{0,0}` no se pinta
     (`hayCosteQueEnsenar`), y **el mismo `abreviar`** (`cifras.ts`) sirve al contador, a la barra
     y al cierre: dos formatos para el mismo dato enseñan a desconfiar de los dos.
-  - **El total de una sesión vive en el ÍNDICE, y su cifra en la barra es UNA**
+  - **El total de una sesión vive en el ÍNDICE, y la barra ya NO lo pinta**
     (`EntradaIndice.consumo`, `core/actos.ts#acumularTotales`, `sesiones.ts#anotarConsumoDeActo` /
-    `#sembrarConsumosPendientes`, `SesionDelCable`, `componentes/Barra.tsx#FichaDeSesion`). La
-    fila de la barra no tiene el sitio de la línea de un turno —compite con el nombre de la
-    sesión, que es lo único elástico de una barra cuyo ancho elige el usuario—, así que ahí va
-    **un solo número con una Σ delante** y el desglose por cuenta en el `title`: `98,2k` pelado
-    junto a una fecha se lee como otra fecha, y `↑`/`↓` dirían que es UNA de las dos mitades. La
-    caché se calla ahí por lo mismo. Y la cifra se RETIRA cuando la fila es estrecha, con una
-    consulta de CONTENEDOR y nunca un `@media`: el ancho de la barra lo pone JS, así que con la
-    misma ventana y la barra encogida un `@media` no dispararía.
+    `#sembrarConsumosPendientes`, `SesionDelCable`, `componentes/Barra.tsx#FichaDeSesion`). Hubo
+    en la fila una Σ con el total, que se retiraba con una consulta de contenedor cuando la fila
+    era estrecha; se quitó por decisión suya: la lista contesta qué conversación es y de cuándo,
+    y lo que cuesta la abierta ya lo dice su contador. El dato sigue calculándose y viajando,
+    así que volver a enseñarlo es solo de presentación.
     - **La ventana NO entra en un acumulado.** `acumularTotales` la quita: «cuánto ocupa el
       historial ahora» es una pregunta de la sesión ABIERTA, y congelada en una cerrada sería un
       «ahora» de hace días que alguien leería como el de hoy. El `.jsonl` la sigue teniendo.

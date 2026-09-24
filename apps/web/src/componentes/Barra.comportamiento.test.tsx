@@ -702,7 +702,7 @@ describe("Barra: qué sesión está trabajando", () => {
  * faltaba. El dato ya estaba —cada `fin` del `.jsonl` lleva su delta y el índice los acumula—,
  * así que lo que se prueba aquí es que llega a la pantalla.
  */
-describe("Barra: lo que ha gastado cada sesión", () => {
+describe("Barra: la fila de una sesión, sin su gasto", () => {
   const GASTO = { modelo: { entrada: 11_000, salida: 200, cache: 9_000 }, externo: { entrada: 0, salida: 0, cache: 0 } };
 
   const montar = (
@@ -725,89 +725,20 @@ describe("Barra: lo que ha gastado cada sesión", () => {
       />
     );
 
-  it("la cifra de la sesión va en su fila, DELANTE de la fecha", () => {
-    // Delante y no detrás: la lista se ordena por fecha, así que esa columna tiene que quedarse
-    // quieta cuando la cifra aparece o desaparece. El orden es lo que se comprueba aquí, no el
-    // CSS — jsdom no hace layout.
+  it("la fila NO enseña el gasto de la sesión, aunque conste: solo su fecha", () => {
+    // Se quitó por decisión suya: la lista contesta qué conversación es y de cuándo, y lo que
+    // cuesta la abierta lo dice su contador. El dato sigue llegando (`consumo`); no se pinta.
     const { container } = montar([{ id: "s1", titulo: "con gasto", ultimoTurno: "2026-09-07T10:08:23.790Z", consumo: GASTO }]);
-    // La fila de la sesión, no el primer `button` del DOM: antes están los de proyecto.
-    const fila = [...container.querySelectorAll("button")].find((b) => (b.textContent ?? "").includes("con gasto"))!;
-    expect(fila.textContent).toContain("11,2k");
-    expect(fila.textContent).toContain("7 sept 12:08");
-    expect(fila.textContent!.indexOf("11,2k")).toBeLessThan(fila.textContent!.indexOf("7 sept"));
-    // Y la caché NO se pinta en línea: en la fila son ~60 px que se comen el título, que es lo
-    // único elástico que hay aquí. Sigue en el `title`, que es donde se consulta.
-    expect(fila.textContent).not.toContain("caché");
-    expect(screen.getByTitle(/caché leída: 9000/)).toBeTruthy();
-  });
-
-  it("la cifra de la fila habla de la SESIÓN, no de un turno", () => {
-    // El mismo componente que la línea de cierre del turno, con otro rótulo: sin esto, la fila
-    // diría que la sesión gastó lo de su último turno.
-    montar([{ id: "s1", titulo: "con gasto", consumo: GASTO }]);
-    expect(screen.getByTitle(/Gastado en esta sesión/)).toBeTruthy();
-    expect(screen.queryByTitle(/Trabajo de este turno/)).toBeNull();
-  });
-
-  it("sin gasto que conste no se pinta cifra NI hueco: nada de un `Σ0`", () => {
-    // Ausente es «no consta» —una sesión anterior a esto, o un ejecutor que no mide— y unos
-    // ceros AFIRMARÍAN una medida. La fecha sí sigue: son dos datos distintos.
-    const { container } = montar([{ id: "s1", titulo: "sin gasto", ultimoTurno: "2026-09-07T10:08:23.790Z" }]);
-    // La Σ y no una flecha: en la fila la cifra es UNA, el total, así que la marca de que hay
-    // cifra es la Σ. Buscar `↑` aquí pasaría siempre y no comprobaría nada.
     expect(container.textContent).not.toContain("Σ");
+    expect(container.textContent).not.toContain("11,2k");
+    expect(screen.queryByTitle(/Gastado en esta sesión/)).toBeNull();
     expect(screen.getByText("7 sept 12:08")).toBeTruthy();
   });
 
-  it("con un `{0,0}` la fecha sigue, y la cifra no", () => {
-    // El cero medido y el dato ausente se pintan igual —los dos sin cifra—, pero por caminos
-    // distintos: uno llega hasta el componente y lo filtra `hayCosteQueEnsenar`, el otro no
-    // llega. Y en ninguno de los dos se pierde la fecha, que es lo que comprueba esto: si el
-    // envoltorio se pintara vacío, el `margin-left: auto` se llevaría el hueco del título.
-    const { container } = montar([
-      {
-        id: "s1",
-        titulo: "cero medido",
-        ultimoTurno: "2026-09-07T10:08:23.790Z",
-        consumo: { modelo: { entrada: 0, salida: 0, cache: 0 }, externo: { entrada: 0, salida: 0, cache: 0 } },
-      },
-    ]);
-    expect(container.textContent).not.toContain("Σ");
-    expect(screen.getByText("7 sept 12:08")).toBeTruthy();
-  });
-
-  it("una sesión de tarea sin título lleva su gasto igual", () => {
-    // La fila que se ROTULA («Tarea de fondo») es la misma que las demás: el gasto no depende
-    // del título, que es justo lo que una tarea no tiene.
-    montar([{ id: "s9", titulo: "", deTarea: true, ultimoTurno: "2026-09-09T06:23:12.784Z", consumo: GASTO }]);
-    expect(screen.getByText("Tarea de fondo")).toBeTruthy();
-    expect(screen.getByText("11,2k")).toBeTruthy();
-  });
-
-  it("mientras el agente trabaja manda la actividad: la cifra se retira", () => {
-    // Es el mismo argumento ya escrito para la fecha —«es justamente el dato que está a punto
-    // de cambiar»— y una razón de ancho: en ese hueco solo cabe una cosa.
+  it("mientras el agente trabaja manda la actividad: la fecha se retira", () => {
     montar([{ id: "s1", titulo: "la que trabaja", ultimoTurno: "2026-09-07T10:08:23.790Z", trabajando: true, consumo: GASTO }]);
     expect(screen.getByText("trabajando…")).toBeTruthy();
-    expect(screen.queryByText("11,2k")).toBeNull();
     expect(screen.queryByText("7 sept 12:08")).toBeNull();
-  });
-
-  it("y mientras se abre, tampoco", () => {
-    const { container } = montar(
-      [{ id: "s1", titulo: "la que se abre", ultimoTurno: "2026-09-07T10:08:23.790Z", consumo: GASTO }],
-      { proyecto: "p1", sesion: "s1" }
-    );
-    expect(container.querySelector("[aria-busy]")?.textContent).toContain("abriendo…");
-    expect(container.textContent).not.toContain("11,2k");
-  });
-
-  it("con la marca de tarea delante, la cifra sigue en su fila", () => {
-    // La marca de tarea y la ficha comparten el borde derecho: la marca empuja y la ficha va
-    // pegada a ella. Aquí se comprueba que las dos llegan, no cuál empuja — eso es CSS.
-    const { container } = montar([{ id: "s9", titulo: "arregla el alta", deTarea: true, consumo: GASTO }]);
-    expect(screen.getByText("Tarea")).toBeTruthy();
-    expect(container.textContent).toContain("11,2k");
   });
 });
 
