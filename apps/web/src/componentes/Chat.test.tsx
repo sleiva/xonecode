@@ -227,6 +227,42 @@ describe("Chat: lo que la revisión de interfaz vio en vivo", () => {
     expect(resumen.textContent).toMatch(/650 s/);
   });
 
+  it("si lo último es RAZONAMIENTO dice «Pensando…», no la tool de antes", () => {
+    // Sin esto, un modelo que pensaba después de leer salía como «→ lee /app.xml · 40 s», que
+    // se lee como una lectura colgada.
+    render(
+      <Chat
+        actos={[
+          { tipo: "usuario", texto: "haz algo" },
+          { tipo: "herramientas", lineas: ["→ lee /app.xml"] },
+          { tipo: "razonamiento", texto: "La colección de login está en…" },
+        ]}
+        turnoEnVuelo
+        segundosEnVuelo={50}
+      />
+    );
+    const resumen = document.querySelector("summary")!;
+    expect(resumen.textContent).toMatch(/Pensando…/u);
+    expect(resumen.textContent).not.toMatch(/lee \/app\.xml/u);
+  });
+
+  it("y vuelve a la tool en cuanto llega otra: pensar no se queda pegado", () => {
+    render(
+      <Chat
+        actos={[
+          { tipo: "usuario", texto: "haz algo" },
+          { tipo: "razonamiento", texto: "Primero leo el app.xml" },
+          { tipo: "herramientas", lineas: ["→ lee /app.xml"] },
+        ]}
+        turnoEnVuelo
+        segundosEnVuelo={5}
+      />
+    );
+    const resumen = document.querySelector("summary")!;
+    expect(resumen.textContent).toMatch(/lee \/app\.xml/u);
+    expect(resumen.textContent).not.toMatch(/Pensando/u);
+  });
+
   it("y el paso se olvida al llegar el mensaje siguiente: no es de este turno", () => {
     // Sin esto, un turno nuevo abriría enseñando el último paso del anterior.
     render(

@@ -79,6 +79,9 @@ import estilos from "./Chat.module.css";
  * el agente escribe: baja solo si ya estabas abajo, así que subir a leer una línea de hace
  * diez tools no te devuelve al fondo en la siguiente.
  */
+/** El paso actual cuando lo último que llegó del turno es razonamiento del modelo. */
+const PENSANDO = "Pensando…";
+
 function TramoDeTrabajo({
   tramo: t,
   pasos,
@@ -147,7 +150,11 @@ function TramoDeTrabajo({
             */}
             {pasoActual === undefined ? null : (
               <span className={estilos.pasoActual}>
-                {` · ${pasoActual}`}
+                {" · "}
+                {/* Pensando lleva el brillo del `Reasoning` de assistant-ui: dice que está
+                    VIVO aunque no haya línea de tool que cambie. Lo decide el dato —el último
+                    acto es razonamiento—, no una suposición. */}
+                {pasoActual === PENSANDO ? <span className={estilos.pensandoAhora}>{PENSANDO}</span> : pasoActual}
                 {segundosDelPaso === undefined ? "" : ` · ${segundosDelPaso} s`}
               </span>
             )}
@@ -658,10 +665,18 @@ export function Chat({
    * que va a ocurrir»), así que la última es literalmente lo que se está haciendo. Ausente =
    * todavía no ha hecho nada, y entonces no se afirma ningún paso.
    */
+  /**
+   * En qué paso está: lo ÚLTIMO que hizo el turno. Una línea de tool si fue una tool, y
+   * `PENSANDO` si lo último que llegó es razonamiento — sin eso, un modelo que pensaba
+   * cuarenta segundos después de leer un fichero salía como «→ lee /x.xne · 40 s», que se lee
+   * como una lectura colgada. Y si lo último es la RESPUESTA escribiéndose, no hay paso: está
+   * contestando, y cualquier paso de antes sería de otro momento.
+   */
   const pasoActual = (() => {
     for (let i = actos.length - 1; i >= 0; i -= 1) {
       const a = actos[i]!;
-      if (a.tipo === "usuario") return undefined;
+      if (a.tipo === "usuario" || a.tipo === "asistente") return undefined;
+      if (a.tipo === "razonamiento") return PENSANDO;
       if (a.tipo === "herramientas" && a.lineas.length > 0) return a.lineas[a.lineas.length - 1];
     }
     return undefined;

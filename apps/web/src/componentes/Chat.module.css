@@ -590,6 +590,30 @@
   white-space: nowrap;
 }
 
+/* «Pensando…» con el brillo del `Reasoning` de assistant-ui: el color respira entre el tenue
+   y el principal. Con color y no con un degradado recortado al texto, porque ese truco pide
+   un `transparent` y esta hoja no lleva colores literales (`Barra.test.tsx`). Quieto para
+   quien pidió menos movimiento: la palabra sigue diciéndolo. */
+.pensandoAhora {
+  animation: xonecode-brillo-pensando 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pensandoAhora {
+    animation: none;
+  }
+}
+
+@keyframes xonecode-brillo-pensando {
+  0%,
+  100% {
+    color: var(--dsw-alias-label-tertiary);
+  }
+  50% {
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
 /* Lo que contiene al paso actual. El recorte de arriba NO se aplica en un elemento en línea,
    y así estuvo: una línea larga (el aviso de un turno que falló) se salía de la columna y le
    ponía barra de scroll horizontal al chat entero. `inline-flex` acotado al ancho del
