@@ -735,6 +735,40 @@ texto—. Así llega igual a la web, a la TUI y al terminal sin tocar ninguna pi
 botones sería el siguiente paso y no cambiaría esto. Medido con `deepseek-flash`: ante «pregúntame
 antes de tocar nada», el orquestador investigó el proyecto y preguntó con dos paletas concretas.
 
+### El banco entre motores (24-09-2026)
+
+`npm run banco -- --pasadas 3 --motores deepagents,trueforge`: las seis preguntas de solo lectura,
+el mismo modelo (`deepseek/deepseek-flash`) en los dos, tres pasadas cada una. Resultado en
+`docs/bancos/2026-09-24-motores.json`.
+
+| pregunta | entrada DA → TF | efectivo DA → TF | llamadas | correctas |
+|---|---|---|---|---|
+| entrypoint | 7.878 → 8.529 (+8 %) | 1.207 → 1.311 (+9 %) | 1 → 2 | 3/3 → 3/3 |
+| estilo | 22.409 → 22.567 (+1 %) | 4.193 → 5.509 (+31 %) | 3 → 3 | 3/3 → 3/3 |
+| capacidad | 345.623 → 225.736 (−35 %) | 96.822 → 70.239 (−27 %) | 16 → 11 | 2/2 → 3/3 |
+| cambio | 30.006 → 27.558 (−8 %) | 7.740 → 8.176 (+6 %) | 4 → 4 | 3/3 → 3/3 |
+| estilo-efectivo | 56.707 → 46.490 (−18 %) | 12.075 → 10.929 (−9 %) | 7 → 6 | 3/3 → 3/3 |
+| login | 27.051 → 21.976 (−19 %) | 4.401 → 3.873 (−12 %) | 4 → 4 | 3/3 → 3/3 |
+
+**Ninguna celda es concluyente**: en las doce comparaciones los rangos se solapan, y once de las doce
+celdas tienen dispersión alta. Lo que SÍ se puede decir:
+
+- **Calidad igual**: 17 de 17 respuestas correctas en deepagents y 18 de 18 en TrueForge. Una pasada de
+  deepagents en `capacidad` se pasó del tope de 5 min y queda fuera de la media.
+- **El mismo camino**: los dos delegan solo en `capacidad`, las tres pasadas; en ninguna celda uno
+  delega y el otro no.
+- **Sin señal de que TrueForge sea más caro**: por entrada baja en 4 de 6 celdas y por efectivo en 3
+  de 6, sin que ninguna diferencia salga del ruido. La única llamativa, `capacidad` (−35 % de entrada,
+  11 llamadas frente a 16), es también la de más varianza (±80 % en TrueForge).
+
+**Para DECIDIR el motor por omisión con esto, no alcanza**: harían falta más pasadas (con este ruido,
+del orden de 6 o más por celda) o preguntas con menos varianza. Y el banco solo mide PREGUNTAS: lo que
+cuesta un encargo que escribe —aprobación, reparación, escritores— no tiene instrumento y lo cubren los
+tests de comportamiento, no el coste.
+
+**De paso, un fallo de la estadística**: con una pasada por lado, `comparar()` declaraba «CONCLUYENTE»
+un 0 %, porque dos puntos distintos nunca se solapan. Ahora se niega con menos de dos pasadas.
+
 ### DeepSeek y la subida a 0.3 (24-09-2026)
 
 La duda: 0.3 saca `reasoning_content` del contexto del hilo, y DeepSeek documenta que con `tools` hay
