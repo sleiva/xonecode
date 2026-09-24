@@ -183,6 +183,54 @@ describe("probar", () => {
     await s.probar("notion");
     expect(red.listarTools).toHaveBeenCalled();
   });
+
+  it("desconectar retira el pendiente ANTES de avisar: quien lee lista() dentro de alCambiar ya no ve autorizando", async () => {
+    const red = redDoble();
+    let vistoAlAvisar: boolean | undefined;
+    const s = crearServicioDeConectores({
+      casa, red, ahora,
+      // Se lee `lista()` SÍNCRONAMENTE dentro del propio callback, como haría un servidor que
+      // reemite el estado en cuanto se le avisa de un cambio.
+      alCambiar: () => { vistoAlAvisar = s.lista().conectores[0]?.autorizando; },
+    });
+    s.anadir("notion");
+    await s.autorizar("notion", "http://127.0.0.1:4200/mcp/oauth/callback");
+    expect(s.lista().conectores[0]).toMatchObject({ autorizando: true });
+
+    s.desconectar("notion");
+
+    expect(vistoAlAvisar).not.toBe(true);
+  });
+
+  it("quitar retira el pendiente ANTES de avisar: un canje iniciado DENTRO de alCambiar ya no lo encuentra", async () => {
+    // `quitar` saca el conector de `lista()` en cuanto su escritura en disco va bien —eso pasa
+    // ANTES de `cambio()` en los dos órdenes posibles—, así que leer `lista()` dentro del aviso
+    // no distingue el orden. Lo que sí lo distingue es invocar `completar` DENTRO del aviso:
+    // `interpretarCallback` consulta el `Map` de pendientes de forma SÍNCRONA, en el tramo de
+    // la función async que corre antes de su primer `await` — así que atrapa el estado exacto
+    // que había en el instante de `cambio()`.
+    const red = redDoble();
+    let state = "";
+    let dispararEnQuitar = false;
+    let resultadoDesdeElAviso: Promise<{ ok: boolean; mensaje: string }> | undefined;
+    const s = crearServicioDeConectores({
+      casa, red, ahora,
+      alCambiar: () => {
+        if (dispararEnQuitar) resultadoDesdeElAviso = s.completar(new URLSearchParams(`code=c&state=${state}`));
+      },
+    });
+    s.anadir("notion");
+    await s.autorizar("notion", "http://127.0.0.1:4200/mcp/oauth/callback");
+    const proveedor = (red.iniciarAutorizacion as ReturnType<typeof vi.fn>).mock.calls[0]?.[1] as ProveedorDeConector;
+    state = proveedor.state();
+
+    dispararEnQuitar = true;
+    s.quitar("notion");
+
+    expect(resultadoDesdeElAviso).toBeDefined();
+    await expect(resultadoDesdeElAviso).resolves.toMatchObject({ ok: false });
+    expect(red.canjearCodigo).not.toHaveBeenCalled();
+  });
 });
 
 describe("autorizar y completar", () => {
@@ -266,6 +314,42 @@ describe("autorizar y completar", () => {
     (red.canjearCodigo as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     const segundoIntento = await s.completar(new URLSearchParams(`code=c&state=${state2}`));
     expect(segundoIntento.ok).toBe(true);
+  });
+});
+
+describe("un `error` de antes se limpia con CUALQUIER operación que va bien, no solo las de escritura", () => {
+  it("un probar que va bien limpia el error que dejó un anadir a un id desconocido", async () => {
+    const red = redDoble();
+    (red.listarTools as ReturnType<typeof vi.fn>).mockResolvedValue([{ nombre: "ask_wiki_question" }]);
+    const s = crear(red);
+    s.anadir("deepwiki");
+    // El error se deja DESPUÉS de un `anadir` que sí fue bien (que también limpia el suyo): si
+    // no fuera así, este test pasaría aunque `probar` nunca tocara `error`.
+    s.anadir("linear"); // fuera del catálogo: deja su frase en error
+    expect(s.lista().error).toContain("linear");
+
+    await s.probar("deepwiki");
+
+    expect(s.lista().error).toBeUndefined();
+  });
+
+  it("un completar que va bien limpia el error que dejó un anadir a un id desconocido", async () => {
+    const red = redDoble();
+    (red.listarTools as ReturnType<typeof vi.fn>).mockResolvedValue([{ nombre: "search" }]);
+    const s = crear(red);
+    s.anadir("notion");
+    await s.autorizar("notion", "http://127.0.0.1:4200/mcp/oauth/callback");
+    const proveedor = (red.iniciarAutorizacion as ReturnType<typeof vi.fn>).mock.calls[0]?.[1] as ProveedorDeConector;
+
+    // El error se deja DESPUÉS de `autorizar` (que también limpia el suyo al arrancar): si no
+    // fuera así, este test pasaría aunque `completar` nunca tocara `error`.
+    s.anadir("linear");
+    expect(s.lista().error).toContain("linear");
+
+    const resultado = await s.completar(new URLSearchParams(`code=c&state=${proveedor.state()}`));
+
+    expect(resultado.ok).toBe(true);
+    expect(s.lista().error).toBeUndefined();
   });
 });
 

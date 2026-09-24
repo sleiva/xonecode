@@ -119,8 +119,12 @@ export function crearServicioDeConectores(o: {
       if (conectorDelCatalogo(id) === undefined) { error = `«${id}» no está en el catálogo de conectores`; cambio(); return; }
       operar(() => { anadirConector(o.casa, id); });
     },
-    quitar(id) { operar(() => { quitarConector(o.casa, id); olvidarOAuth(o.casa, id); pruebas.delete(id); }); retirarPendientes(id); },
-    desconectar(id) { operar(() => { olvidarOAuth(o.casa, id); pruebas.delete(id); }); retirarPendientes(id); },
+    // `retirarPendientes` va ANTES de `operar`: su `cambio()` es SÍNCRONO, así que quien lo
+    // escuche y lea `lista()` dentro del callback vería `autorizando: true` un instante de
+    // más si el pendiente se retirara después — el mismo síntoma que `autorizar` evita al
+    // borrar su pendiente antes de avisar de un fallo.
+    quitar(id) { retirarPendientes(id); operar(() => { quitarConector(o.casa, id); olvidarOAuth(o.casa, id); pruebas.delete(id); }); },
+    desconectar(id) { retirarPendientes(id); operar(() => { olvidarOAuth(o.casa, id); pruebas.delete(id); }); },
     async probar(id) {
       const c = conectorDelCatalogo(id);
       if (c === undefined) { error = `«${id}» no está en el catálogo de conectores`; cambio(); return; }
@@ -147,6 +151,9 @@ export function crearServicioDeConectores(o: {
         const p = c.autenticacion === "oauth" ? proveedor(id, guardado.redirectUri!, "") : undefined;
         const tools = await Promise.race([o.red.listarTools(c.url, p, control.signal), tope]);
         pruebas.set(id, { cuando: ahora(), ok: true, tools });
+        // Un `error` de una operación ANTERIOR no puede quedarse junto a un estado que ya es
+        // correcto: «ausente ≠ vacío» también vale para lo que ya no es cierto.
+        error = undefined;
       } catch (error) {
         pruebas.set(id, { cuando: ahora(), ok: false, motivo: control.signal.aborted ? "no responde (no contestó a tiempo)" : motivoDe(error) });
       } finally {
@@ -192,6 +199,10 @@ export function crearServicioDeConectores(o: {
         cambio();
         return { ok: false, mensaje: "no se pudo completar la autorización: vuelve a pulsar Conectar" };
       }
+      // El canje fue bien: un `error` de una operación anterior ya no describe el estado
+      // actual. No se deja esperando a que `probar` lo limpie — puede fallar por su cuenta
+      // sin que eso reviva un error que ya no es cierto.
+      error = undefined;
       await servicio.probar(r.id);
       return { ok: true, mensaje: `${c.nombre} conectado` };
     },
