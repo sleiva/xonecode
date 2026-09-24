@@ -661,7 +661,10 @@ function pruebaDeConectorDelCable(valor: unknown): PruebaDeConector | undefined 
       tools: p.tools.filter(esToolDeConector).map((t) => ({
         nombre: t.nombre,
         ...(typeof t.descripcion === "string" ? { descripcion: t.descripcion } : {}),
-        ...(t.soloLectura === true ? { soloLectura: true as const } : {}),
+        // `soloLectura` es `boolean | undefined`: ausente = «el servidor no lo anota», y
+        // eso es distinto de `false` —«lo anotó y dice que escribe»—. `=== true ? … : {}`
+        // fundía las dos, así que un `false` anotado se leía como si no constara nada.
+        ...(typeof t.soloLectura === "boolean" ? { soloLectura: t.soloLectura } : {}),
       })),
     };
   }

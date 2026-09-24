@@ -43,6 +43,9 @@
   line-height: 1.6;
 }
 
+/* «Configurados · N» / «Disponibles · N»: el punto es LITERAL —la misma forma que
+   «Conectado · N tools» en la pastilla— y no una píldora aparte con el número: son solo dos
+   grupos, no una pestaña que necesite destacar su cuenta a distancia. */
 .grupo {
   margin: 0 0 8px;
   color: var(--dsw-alias-label-tertiary);
@@ -50,17 +53,6 @@
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-}
-
-/* Cuántos hay en el grupo. Misma píldora del par `state-business-*` que la cuenta de una
-   pestaña de Skills y el gasto del compositor: un dato de máquina, no una valoración. */
-.cuenta {
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--dsw-alias-state-business-tertiary);
-  color: var(--dsw-alias-state-business-primary);
-  font-size: 11px;
-  font-weight: 600;
 }
 
 .filas {

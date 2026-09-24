@@ -1260,8 +1260,9 @@ export function App({
       // panel — «un control sin dato detrás no se pinta».
       {...(estado.conectores === undefined ? {} : { conectores: estado.conectores })}
       // El resultado NO viaja en la respuesta: `probar` y `autorizar` corren en segundo
-      // plano (red, o esperar al navegador) y lo que cambien llega por el `conectores` que
-      // sigue, vía el mismo mensaje de bienvenida reemitido.
+      // plano (red, o esperar al navegador) y lo que cambien llega por un `conectores`
+      // NUEVO — el host lo reemite por `alCambiar` del servicio, el mismo molde que
+      // `dispositivo`/`conexion`.
       alAccionDeConector={(accion, id) => void enviar({ clase: "conector", accion, id })}
       // La pregunta oculta en vuelo se pinta DENTRO de la fila que se está editando; por
       // eso el centro deja de pintarla mientras la ventana está abierta (más abajo).

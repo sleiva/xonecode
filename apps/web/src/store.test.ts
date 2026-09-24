@@ -1764,6 +1764,29 @@ describe("store: `case \"conectores\"` no deja pasar un campo que no se nombra",
     expect((prueba as { tools: unknown[] }).tools).toEqual([{ nombre: "search", soloLectura: true }]);
   });
 
+  it("`soloLectura: false` sobrevive DISTINTO de ausente: no es lo mismo «escribe» que «no consta»", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "conectores",
+      catalogo,
+      conectores: [
+        {
+          id: "notion",
+          estado: "autorizado",
+          prueba: {
+            cuando: 1,
+            ok: true,
+            tools: [{ nombre: "create_page", soloLectura: false }, { nombre: "sin_anotar" }],
+          },
+        },
+      ],
+      desconocidos: [],
+    } as never);
+    const prueba = s.leer().conectores?.conectores[0]?.prueba as { tools: Record<string, unknown>[] };
+    expect(prueba.tools[0]).toEqual({ nombre: "create_page", soloLectura: false });
+    expect(prueba.tools[1]).not.toHaveProperty("soloLectura");
+  });
+
   it("un campo de más en una entrada del CATÁLOGO tampoco sobrevive", () => {
     const s = crearStoreDelCliente();
     s.aplicar({

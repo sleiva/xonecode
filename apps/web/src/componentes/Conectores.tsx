@@ -59,14 +59,6 @@ export function Conectores({ catalogo, conectores, desconocidos, ilegible, error
 
   return (
     <>
-      <p className={estilos.nota}>
-        Estos conectores todavía no llegan a ningún agente: aquí se conectan y se prueban.
-      </p>
-      <p className={estilos.nota}>
-        La autorización se abre en el navegador de la máquina donde corre la consola; por un
-        túnel no vuelve.
-      </p>
-
       {/* Un catálogo más viejo que el fichero en disco: quien tiene que arreglarlo está
           mirando esta ventana. No se pintan como filas —no hay `nombre` ni `descripcion`
           que enseñar de un id que esta versión no conoce. */}
@@ -90,9 +82,7 @@ export function Conectores({ catalogo, conectores, desconocidos, ilegible, error
         </p>
       ) : (
         <section>
-          <h3 className={estilos.grupo}>
-            Configurados <span className={estilos.cuenta}>{conectores.length}</span>
-          </h3>
+          <h3 className={estilos.grupo}>Configurados · {conectores.length}</h3>
           {conectores.length === 0 ? (
             <p className={estilos.vacio}>Ninguno todavía: añade uno de los disponibles.</p>
           ) : (
@@ -113,9 +103,7 @@ export function Conectores({ catalogo, conectores, desconocidos, ilegible, error
       )}
 
       <section>
-        <h3 className={estilos.grupo}>
-          Disponibles <span className={estilos.cuenta}>{disponibles.length}</span>
-        </h3>
+        <h3 className={estilos.grupo}>Disponibles · {disponibles.length}</h3>
         {disponibles.length === 0 ? (
           <p className={estilos.vacio}>Ya has añadido todo el catálogo.</p>
         ) : (
@@ -141,12 +129,30 @@ export function Conectores({ catalogo, conectores, desconocidos, ilegible, error
           </ul>
         )}
       </section>
+
+      {/* Las dos notas de límite, al PIE: lo primero que hay que ver al abrir la sección es
+          lo que hay y lo que se puede añadir, no el aviso. */}
+      <p className={estilos.nota}>
+        Estos conectores todavía no llegan a ningún agente: aquí se conectan y se prueban.
+      </p>
+      <p className={estilos.nota}>
+        La autorización se abre en el navegador de la máquina donde corre la consola; por un
+        túnel no vuelve.
+      </p>
     </>
   );
 }
 
-/** La pastilla de un conector, y el ORDEN en que se decide: ver la cabecera del fichero. */
-function pastillaDe(conector: ConectorDelCable): { texto: string; clase: string; title?: string } {
+/**
+ * La pastilla de un conector, y el ORDEN en que se decide: ver la cabecera del fichero.
+ *
+ * `motivo` SOLO viaja en la rama `noResponde`: una prueba vieja con `ok:false` no se pisa
+ * cuando `autorizando` o `falta-autorizar` ya cambiaron la historia —un Jira recién pedido
+ * sin tokens todavía arrastraba «falta autorizar» de la ÚLTIMA prueba fallida, y un conector
+ * que se acaba de mandar a autorizar podía enseñar un «no responde (HTTP 503)» de ayer bajo
+ * «Esperando al navegador…»—. La pastilla que gana es la única que puede hablar.
+ */
+function pastillaDe(conector: ConectorDelCable): { texto: string; clase: string; motivo?: string } {
   if (conector.prueba !== undefined && conector.prueba.ok) {
     return { texto: `Conectado · ${conector.prueba.tools.length} tools`, clase: estilos.conectado };
   }
@@ -157,7 +163,7 @@ function pastillaDe(conector: ConectorDelCable): { texto: string; clase: string;
     return { texto: "Falta autorizar", clase: estilos.faltaAutorizar };
   }
   if (conector.prueba !== undefined && !conector.prueba.ok) {
-    return { texto: "No responde", clase: estilos.noResponde, title: conector.prueba.motivo };
+    return { texto: "No responde", clase: estilos.noResponde, motivo: conector.prueba.motivo };
   }
   return { texto: "Sin probar", clase: estilos.sinProbar };
 }
@@ -189,7 +195,7 @@ function FilaDeConector({
         <span className={estilos.nombre}>{nombre}</span>
         <span
           className={clsx(estilos.pastilla, pastilla.clase)}
-          {...(pastilla.title === undefined ? {} : { title: pastilla.title })}
+          {...(pastilla.motivo === undefined ? {} : { title: pastilla.motivo })}
         >
           {pastilla.texto}
         </span>
@@ -220,10 +226,10 @@ function FilaDeConector({
       {entrada !== undefined ? <p className={estilos.descripcion}>{entrada.descripcion}</p> : null}
 
       {/* El motivo del «No responde», bajo la fila y no solo en el `title` de la pastilla:
-          un `title` no lo lee nadie que no pase el ratón por encima. */}
-      {conector.prueba !== undefined && !conector.prueba.ok ? (
-        <p className={estilos.motivo}>{conector.prueba.motivo}</p>
-      ) : null}
+          un `title` no lo lee nadie que no pase el ratón por encima. Sale de la MISMA
+          pastilla —no de `conector.prueba` a pelo— para no repetir una prueba vieja que ya
+          no es la que se está contando (ver el porqué en `pastillaDe`). */}
+      {pastilla.motivo !== undefined ? <p className={estilos.motivo}>{pastilla.motivo}</p> : null}
 
       {abierta ? (
         <div className={estilos.cuerpo}>

@@ -155,12 +155,12 @@ const SECCIONES: readonly {
   // `IconAgentPresetOutline16`, el que no existía y hacía reventar a React con «Element type
   // is invalid»—, así que el icono es el que SIGNIFICA lo que hay detrás y no uno parecido.
   { id: "skills", etiqueta: "Skills", Icono: IconSkillOutline16 },
-  // «Conectores» va justo debajo de Skills, y NO en la lista de siempre: `estaSeccionSePinta`
-  // la retira cuando `conectores` no ha llegado —«un control sin dato detrás no se pinta»,
-  // a diferencia de Modelos/Entornos/Agentes/Skills/Dispositivos, que siempre existen y solo
-  // cambian de «consultando» a su contenido—. `IconShareOutline16` SÍ lo exporta el paquete
-  // instalado —comprobado sobre `lib/index.js`, la misma comprobación que ya se hizo para
-  // `IconSkillOutline16` y por la misma lección de `IconAgentPresetOutline16`—, y no
+  // «Conectores» va justo debajo de Skills, y ESTÁ en esta misma lista —a diferencia de
+  // Modelos/Entornos/Agentes/Skills/Dispositivos, no se queda siempre en la navegación: el
+  // `.filter(…)` de donde se recorre este array la retira cuando el prop `conectores` no ha
+  // llegado, «un control sin dato detrás no se pinta». `IconShareOutline16` SÍ lo exporta el
+  // paquete instalado —comprobado sobre `lib/index.js`, la misma comprobación que ya se hizo
+  // para `IconSkillOutline16` y por la misma lección de `IconAgentPresetOutline16`—, y no
   // `IconLinkOutline16`: ese ya es el de Dispositivos, y dos secciones con el mismo dibujo se
   // confunden en la navegación.
   { id: "conectores", etiqueta: "Conectores", Icono: IconShareOutline16 },
@@ -2137,10 +2137,14 @@ export function Ajustes({
             </>
           ) : null}
 
-          {/* Sin dato no hay NADA que pintar aquí, ni la sección: el filtro de arriba ya
-              quitó el botón de la navegación, así que `seccion` no puede valer «conectores»
-              sin que `conectores` también esté puesto — salvo el instante entre perder el
-              cable y que el siguiente estado la cambie de sitio, que este `null` cubre. */}
+          {/* La comprobación de `conectores !== undefined` se repite aquí, y no solo en el
+              filtro de la navegación: nada resetea `seccion` cuando el cable se cae —
+              `marcarDesconectado` tira `conectores`, no `seccion`—, así que quien tenía
+              esta pestaña abierta y pierde la conexión se queda con `seccion === "conectores"`
+              y sin dato. Sin este `null`, el panel intentaría pintar `<Conectores>` con
+              `catalogo`/`conectores` de un objeto que ya no existe. Con él, el panel queda en
+              blanco (ningún botón de la navegación se marca como actual, porque el filtro ya
+              lo retiró de la lista) hasta que vuelva el cable con la ráfaga entera. */}
           {seccion === "conectores" && conectores !== undefined ? (
             <>
               <h2 className={estilos.encabezado}>Conectores</h2>

@@ -34,9 +34,9 @@ describe("Conectores", () => {
         })}
       />
     );
-    expect(screen.getByText("Configurados").textContent).toContain("2");
+    expect(screen.getByText("Configurados · 2")).not.toBeNull();
     // DeepWiki es el único que no se ha añadido: Disponibles trae 1.
-    expect(screen.getByText("Disponibles").textContent).toContain("1");
+    expect(screen.getByText("Disponibles · 1")).not.toBeNull();
     expect(screen.getByText("DeepWiki")).not.toBeNull();
   });
 
@@ -61,6 +61,37 @@ describe("Conectores", () => {
   it("`falta-autorizar` sin `autorizando` ni prueba: «Falta autorizar»", () => {
     render(<Conectores {...props({ conectores: [base({ estado: "falta-autorizar" })] })} />);
     expect(screen.getByText("Falta autorizar")).not.toBeNull();
+  });
+
+  it("`falta-autorizar` con una prueba VIEJA fallida: gana «Falta autorizar», y su motivo NO se enseña", () => {
+    // `probar` sobre un OAuth sin tokens guarda `{ok:false, motivo:"falta autorizar"}` en la
+    // FOTO — así que sin esta regla, un Jira que se probó antes de autorizar arrastraba su
+    // motivo bajo la fila, repitiendo lo que la propia pastilla ya dice.
+    render(
+      <Conectores
+        {...props({
+          conectores: [base({ estado: "falta-autorizar", prueba: { cuando: 1, ok: false, motivo: "falta autorizar" } })],
+        })}
+      />
+    );
+    expect(screen.getByText("Falta autorizar")).not.toBeNull();
+    // En minúscula: es el motivo de la prueba vieja, y no la pastilla («Falta autorizar»,
+    // con mayúscula) que ya ganó.
+    expect(screen.queryByText("falta autorizar")).toBeNull();
+  });
+
+  it("`autorizando` con una prueba VIEJA fallida: gana «Esperando al navegador…», y su motivo NO se enseña", () => {
+    render(
+      <Conectores
+        {...props({
+          conectores: [
+            base({ estado: "falta-autorizar", autorizando: true, prueba: { cuando: 1, ok: false, motivo: "no responde (HTTP 503)" } }),
+          ],
+        })}
+      />
+    );
+    expect(screen.getByText("Esperando al navegador…")).not.toBeNull();
+    expect(screen.queryByText("no responde (HTTP 503)")).toBeNull();
   });
 
   it("`prueba.ok:true` manda sobre todo: «Conectado · N tools», también mientras autorizando", () => {
@@ -187,10 +218,12 @@ describe("Conectores", () => {
 
   it("`ilegible` sustituye a «Configurados · N»: ausente ≠ vacío", () => {
     render(<Conectores {...props({ ilegible: true })} />);
-    expect(screen.queryByText("Configurados")).toBeNull();
+    expect(screen.queryByText(/^Configurados/)).toBeNull();
     expect(screen.getByText(/no se pudo leer/i).textContent).toContain("conectores.json");
-    // Disponibles sigue existiendo: con el fichero ilegible no hay nada añadido.
-    expect(screen.getByText("Disponibles")).not.toBeNull();
+    // Disponibles se calcula del mismo `conectores` vacío que trae un fichero ilegible, así
+    // que enseña el catálogo ENTERO como si nada estuviera añadido — una aproximación
+    // deliberada y no una medida: ver el concern del informe de esta tarea.
+    expect(screen.getByText("Disponibles · 3")).not.toBeNull();
   });
 
   it("`desconocidos` no vacío se nombra en una línea propia", () => {
