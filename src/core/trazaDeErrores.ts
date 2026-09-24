@@ -60,17 +60,34 @@ export interface ErrorAnotado {
  * Las rutas se SUSTITUYEN en vez de tirar el mensaje entero, porque lo que queda —«ENOENT: no
  * such file or directory, open '<ruta>'»— sigue diciendo qué pasó.
  */
+/** Lo que puede ir dentro de un trozo de ruta suelta: hasta un espacio, una comilla o un signo que la cierra. */
+const TROZO = String.raw`[^\s'"\u0060,;)]`;
+/**
+ * **Un espacio sigue dentro de la ruta solo si lo que viene detrás vuelve a tener un separador**
+ * antes del siguiente espacio. Así «Sergio Leiva\.local\codex.exe» sigue siendo ruta —un nombre de
+ * usuario de dos palabras es lo normal— y « ENOENT» o « failed», que no tienen separador, se quedan
+ * fuera: se tapa la ruta sin comerse el resto del mensaje.
+ */
+const CON_ESPACIOS = String.raw`(?: [^\s'"\u0060,;)\\/]*[\\/]${TROZO}*)*`;
+
+const UNIX_SUELTA = new RegExp(String.raw`(?<![\w'"\u0060/])\/(?:Users|home|private|Volumes|tmp|var|opt)\/${TROZO}*${CON_ESPACIOS}`, "g");
+const UNIDAD_SUELTA = new RegExp(String.raw`(?<![\w])[A-Za-z]:[\\/]${TROZO}*${CON_ESPACIOS}`, "g");
+const UNC_SUELTA = new RegExp(String.raw`(?<![\w\\])\\\\[^\s\\'"\u0060]+\\${TROZO}*${CON_ESPACIOS}`, "g");
+/** `//servidor/…`: detrás no puede ir `:` —el de `https://`— ni una letra. */
+const UNC_CON_BARRAS = new RegExp(String.raw`(?<![\w:/])\/\/[^\s/'"\u0060]+\/${TROZO}*${CON_ESPACIOS}`, "g");
+
 export function mensajeSeguro(mensaje: string): string {
   return (
     mensaje
-      // Unix: entre comillas cualquier ruta absoluta; suelta, las de las raíces de usuario y temporales.
-      .replace(/(['"`])\/(?:[^'"`\s]|\\ )*\1/g, "$1<ruta>$1")
-      .replace(/(?<![\w'"`/])\/(?:Users|home|private|Volumes|tmp|var|opt)\/[^\s'"`,;)]*/g, "<ruta>")
-      // Windows —XOneCode corre también ahí—: con unidad (`C:\…` o `C:/…`) o de red (`\\servidor\…`),
-      // entre comillas o sueltas. La unidad exige no ir pegada a una letra: `https://` no es una ruta.
+      // Entre comillas: cualquier ruta absoluta, Unix o Windows (con unidad o de red), espacios incluidos.
+      .replace(/(['"`])\/[^'"`\n]*\1/g, "$1<ruta>$1")
       .replace(/(['"`])(?:[A-Za-z]:[\\/]|\\\\)[^'"`]*\1/g, "$1<ruta>$1")
-      .replace(/(?<![\w])[A-Za-z]:[\\/][^\s'"`,;)]*/g, "<ruta>")
-      .replace(/(?<![\w\\])\\\\[^\s\\'"`]+\\[^\s'"`,;)]*/g, "<ruta>")
+      // Sueltas —XOneCode corre también en Windows—: las raíces de usuario y temporales de Unix, las
+      // de unidad (`C:\…`, `C:/…`) y las de red (`\\servidor\…`, `//servidor/…`). Una URL no es una ruta.
+      .replace(UNIX_SUELTA, "<ruta>")
+      .replace(UNIDAD_SUELTA, "<ruta>")
+      .replace(UNC_SUELTA, "<ruta>")
+      .replace(UNC_CON_BARRAS, "<ruta>")
   );
 }
 

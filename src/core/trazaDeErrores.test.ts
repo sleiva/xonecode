@@ -61,6 +61,32 @@ describe("mensajeSeguro", () => {
     expect(mensajeSeguro("fetch https://api.deepseek.com/v1 falló")).toBe("fetch https://api.deepseek.com/v1 falló");
   });
 
+  /**
+   * **Una ruta SIN comillas con ESPACIOS**, que es lo normal con un nombre de usuario de dos
+   * palabras: se cortaba en el primer espacio y el resto salía —«<ruta> Leiva\\…\\codex.exe»—.
+   * El espacio sigue dentro de la ruta solo si lo que viene detrás vuelve a tener un separador,
+   * así que el sufijo del error —« ENOENT», « failed»— se queda fuera.
+   */
+  it("una ruta sin comillas CON ESPACIOS se tapa entera, y el resto del mensaje se queda", () => {
+    expect(mensajeSeguro("spawn C:\\Users\\Sergio Leiva\\.local\\bin\\codex.exe ENOENT")).toBe("spawn <ruta> ENOENT");
+    expect(mensajeSeguro("open /Users/Sergio Leiva/proyectos/x.json failed")).toBe("open <ruta> failed");
+    // Y lo que sigue a la ruta, aunque sean varias palabras, no se come.
+    expect(mensajeSeguro("open /Users/ana/x.json failed because the disk is full")).toBe("open <ruta> failed because the disk is full");
+  });
+
+  it("entre comillas CON ESPACIOS, que es el formato de un error de Node: se tapa entera", () => {
+    // Salía entera: la regla de las comillas no admitía espacios, y la de las sueltas no mira
+    // detrás de una comilla. Es el caso más común con un nombre de usuario de dos palabras.
+    expect(mensajeSeguro("ENOENT: no such file or directory, open '/Users/Sergio Leiva/x.json'")).toBe(
+      "ENOENT: no such file or directory, open '<ruta>'"
+    );
+  });
+
+  it("UNC con barras NORMALES también es de la máquina; una URL no", () => {
+    expect(mensajeSeguro("red: //servidor/compartido/Sergio/clave.txt no responde")).toBe("red: <ruta> no responde");
+    expect(mensajeSeguro("fetch https://api.deepseek.com/v1/chat falló")).toBe("fetch https://api.deepseek.com/v1/chat falló");
+  });
+
   /** Una ruta VIRTUAL no es de la máquina y no estorba: es lo que identifica el sitio. */
   it("no toca las rutas virtuales del agente", () => {
     expect(mensajeSeguro("no pude abrir /EspecialCalculadora.xne")).toContain("/EspecialCalculadora.xne");
