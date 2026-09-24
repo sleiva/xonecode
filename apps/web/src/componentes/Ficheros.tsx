@@ -51,6 +51,7 @@ export function Ficheros({
   alElegir,
   alRecargar,
   conectado,
+  linea,
 }: {
   /** Ausente = todavía no ha llegado; con `error`, no se pudo listar. */
   arbol?: { rutas: string[]; recortado: boolean; error?: string };
@@ -60,6 +61,12 @@ export function Ficheros({
   alRecargar: () => void;
   /** ¿Hay cable? Sin él no se pide nada: la petición se perdería sin decirlo. */
   conectado?: boolean;
+  /**
+   * La línea a la que se llega desde un hallazgo del verificador (1-based). Es del fichero
+   * ELEGIDO: quien la pone y la quita es `App`, junto con él. Solo la usa el visor de código;
+   * en la vista renderizada de un `.md` no hay líneas que numerar.
+   */
+  linea?: number;
 }) {
   /**
    * Se pide el árbol siempre que NO se tenga, no solo al montar.
@@ -208,7 +215,11 @@ export function Ficheros({
                     />
                   </div>
                 ) : (
-                  <Visor texto={contenido.texto ?? ""} {...(lenguaje === undefined ? {} : { lenguaje })} />
+                  <Visor
+                    texto={contenido.texto ?? ""}
+                    {...(lenguaje === undefined ? {} : { lenguaje })}
+                    {...(linea === undefined ? {} : { linea })}
+                  />
                 )}
               </>
             )}

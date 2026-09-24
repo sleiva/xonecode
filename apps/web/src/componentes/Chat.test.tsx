@@ -955,7 +955,7 @@ describe("el rojo con el que TERMINA un turno", () => {
     const abrir = screen.getAllByRole("button", { name: "Abrir" });
     expect(abrir).toHaveLength(1);
     fireEvent.click(abrir[0]!);
-    expect(alAbrirFichero).toHaveBeenCalledWith("app/Clientes.xne");
+    expect(alAbrirFichero).toHaveBeenCalledWith("app/Clientes.xne", 12);
     fireEvent.click(screen.getByRole("button", { name: "Pedir corrección" }));
     expect(alPedirCorreccion).toHaveBeenCalledWith("Corrige E1 en app/Clientes.xne:12: falta el campo");
   });

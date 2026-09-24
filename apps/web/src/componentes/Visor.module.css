@@ -36,3 +36,45 @@
   color: var(--dsw-alias-label-tertiary);
   user-select: none;
 }
+
+/* La línea a la que se llega desde un hallazgo: el mismo baño que la fila elegida de la barra,
+   que ya viene ajustado por tema. En el código solo si shiki la partió (ver `Visor.tsx`). */
+.bloque :global(.line[data-marcada]) {
+  background: var(--xonecode-fila-elegida);
+}
+
+/* El extracto de encima: la línea pedida con las de alrededor, SIEMPRE, se resalte el fichero o
+   no. En mono como el código, y con la numeración que no se selecciona. */
+.extracto {
+  margin: 12px 0 8px;
+  padding: 6px 0;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+.lineaDelExtracto {
+  white-space: pre;
+}
+
+.lineaDelExtracto[data-marcada] {
+  background: var(--xonecode-fila-elegida);
+}
+
+.numero {
+  display: inline-block;
+  width: 4ch;
+  margin-right: 16px;
+  text-align: right;
+  color: var(--dsw-alias-label-tertiary);
+  user-select: none;
+}
+
+.aviso {
+  margin: 12px 0 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}

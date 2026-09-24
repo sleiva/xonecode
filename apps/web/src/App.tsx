@@ -532,9 +532,13 @@ export function App({
     [enviar]
   );
 
+  /** La línea del fichero elegido a la que se llegó desde un hallazgo. Va y viene CON él. */
+  const [lineaElegida, setLineaElegida] = useState<number | undefined>(undefined);
   const elegirFichero = useCallback(
     (ruta: string | undefined) => {
       setFicheroElegido(ruta);
+      // Elegirlo en el árbol es mirarlo entero: la línea de un hallazgo de antes ya no aplica.
+      setLineaElegida(undefined);
       if (ruta !== undefined) void enviar({ clase: "fichero", ruta });
     },
     [enviar]
@@ -547,8 +551,10 @@ export function App({
    * contestaría el árbol.
    */
   const abrirFicheroDeHallazgo = useCallback(
-    (ruta: string) => {
+    (ruta: string, linea?: number) => {
       elegirFichero(ruta);
+      // DESPUÉS de elegir, que la borra: la línea es lo que distingue llegar desde un hallazgo.
+      setLineaElegida(linea);
       abrirPanel("ficheros");
     },
     [elegirFichero, abrirPanel]
@@ -1445,6 +1451,7 @@ export function App({
           {...(estado.arbol === undefined ? {} : { arbol: estado.arbol })}
           contenidos={estado.contenidos ?? {}}
           {...(ficheroElegido === undefined ? {} : { elegido: ficheroElegido })}
+          {...(lineaElegida === undefined ? {} : { linea: lineaElegida })}
           alElegir={elegirFichero}
           alRecargar={pedirArbol}
           conectado={estado.conectado}

@@ -240,7 +240,7 @@ function VeredictoEnRojo({
   alPedirCorreccion,
 }: {
   veredicto: Extract<Acto, { tipo: "verificacion" }>;
-  alAbrirFichero?: (ruta: string) => void;
+  alAbrirFichero?: (ruta: string, linea?: number) => void;
   alPedirCorreccion?: (texto: string) => void;
 }) {
   return (
@@ -264,7 +264,7 @@ function VeredictoEnRojo({
                 {h.fichero === undefined ? null : (
                   <span className={estilos.hallazgoAcciones}>
                     {alAbrirFichero === undefined ? null : (
-                      <button type="button" className={estilos.hallazgoBoton} onClick={() => alAbrirFichero(h.fichero!)}>
+                      <button type="button" className={estilos.hallazgoBoton} onClick={() => alAbrirFichero(h.fichero!, h.linea)}>
                         Abrir
                       </button>
                     )}
@@ -605,7 +605,7 @@ export function Chat({
    * Abrir en Ficheros el fichero de un hallazgo (ruta RELATIVA, la misma forma que el árbol).
    * Opcional por lo mismo que `alAbrirArtefacto`: sin él no se pinta el botón.
    */
-  alAbrirFichero?: (ruta: string) => void;
+  alAbrirFichero?: (ruta: string, linea?: number) => void;
   /**
    * Dejar en el compositor una petición de corrección, SIN enviarla: la envía la persona. Un
    * botón que lanzara el turno sería un comando tecleado por otra puerta (`comoComando`).

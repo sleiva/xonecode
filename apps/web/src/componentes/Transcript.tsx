@@ -49,7 +49,7 @@ export function Transcript({
   alAbrirArtefacto?: (ruta: string) => void;
   /** Los dos botones de un hallazgo en rojo (`Chat#VeredictoEnRojo`): abrir su fichero y dejar
    *  la petición de corrección escrita en el compositor. */
-  alAbrirFichero?: (ruta: string) => void;
+  alAbrirFichero?: (ruta: string, linea?: number) => void;
   alPedirCorreccion?: (texto: string) => void;
   /** Hay turno corriendo. Lo usa el Chat, para saber si el último mensaje sigue llegando —y
    *  con él, si toca resaltar el código o esperar al cierre. */
