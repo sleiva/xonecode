@@ -8,7 +8,7 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir, homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -19,6 +19,7 @@ import { MS_DE_PREPARACION,
   commitDeTurnoCableado,
   mudarWorkspaceLegadoCableado,
   ajusteDeWorkspaceCableado,
+  ajusteDeConectoresCableado,
   construirCorredorDeTareasCableado,
   FALTA_EL_BUILD,
   RUTA_ACCION,
@@ -62,14 +63,22 @@ import {
 } from "../../agent/dispositivos/lanzamientoEnMaquina.js";
 import type { AgenteDelCable, MensajeAlCliente, MensajeDelCliente, Sumidero } from "./transporte.js";
 import type { Acto } from "../../core/actos.js";
+import { RUTA_CALLBACK_MCP, type ConectorDelCable } from "../../core/conectores.js";
+import type { ServicioDeConectores } from "../../agent/conectores/servicioDeConectores.js";
 
 /** El servidor visto por `montarRutas`: solo apunta lo que se le registra. */
 function servidorDeMentira() {
   const rutas = new Map<string, ManejadorRuta>();
+  const rutasPublicas = new Map<string, ManejadorRuta>();
   return {
     rutas,
+    rutasPublicas,
+    puerto: 4173,
     registrarRuta: (metodo: string, ruta: string, manejador: ManejadorRuta) => {
       rutas.set(`${metodo} ${ruta}`, manejador);
+    },
+    registrarRutaPublica: (metodo: string, ruta: string, manejador: ManejadorRuta) => {
+      rutasPublicas.set(`${metodo} ${ruta}`, manejador);
     },
   };
 }
@@ -5957,6 +5966,210 @@ describe("las tareas en background, por el cable", () => {
   });
 });
 
+/** El servicio de conectores tal como lo ve el cable: apunta las llamadas y contesta a mano. */
+function servicioDeConectoresDeMentira(inicial: {
+  conectores?: ConectorDelCable[];
+  desconocidos?: string[];
+  completar?: (query: URLSearchParams) => { ok: boolean; mensaje: string };
+} = {}) {
+  const llamadas: { metodo: string; args: unknown[] }[] = [];
+  let alCambiar: (() => void) | undefined;
+  const servicio: ServicioDeConectores = {
+    lista: () => ({ conectores: inicial.conectores ?? [], desconocidos: inicial.desconocidos ?? [] }),
+    anadir: (id) => {
+      llamadas.push({ metodo: "anadir", args: [id] });
+      alCambiar?.();
+    },
+    quitar: (id) => {
+      llamadas.push({ metodo: "quitar", args: [id] });
+      alCambiar?.();
+    },
+    desconectar: (id) => {
+      llamadas.push({ metodo: "desconectar", args: [id] });
+      alCambiar?.();
+    },
+    probar: async (id) => {
+      llamadas.push({ metodo: "probar", args: [id] });
+    },
+    autorizar: async (id, redirectUrl) => {
+      llamadas.push({ metodo: "autorizar", args: [id, redirectUrl] });
+    },
+    completar: async (query) => {
+      llamadas.push({ metodo: "completar", args: [query] });
+      return inicial.completar?.(query) ?? { ok: true, mensaje: "DeepWiki conectado" };
+    },
+  };
+  return {
+    llamadas,
+    fabrica: (cb: () => void): ServicioDeConectores => {
+      alCambiar = cb;
+      return servicio;
+    },
+  };
+}
+
+describe("los conectores MCP, por el cable", () => {
+  it("van en la ráfaga con un servicio doble, y el catálogo va SIN la url", async () => {
+    const doble = servicioDeConectoresDeMentira({
+      conectores: [{ id: "deepwiki", estado: "sin-autorizacion" }],
+    });
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { conectores: doble.fabrica });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const mensaje = cliente.recibidos.find((m) => m.clase === "conectores") as Extract<
+      MensajeAlCliente,
+      { clase: "conectores" }
+    >;
+    expect(mensaje).toBeDefined();
+    expect(mensaje.conectores).toEqual([{ id: "deepwiki", estado: "sin-autorizacion" }]);
+    expect(mensaje.desconocidos).toEqual([]);
+    expect(mensaje.catalogo.find((c) => c.id === "deepwiki")).toEqual({
+      id: "deepwiki",
+      nombre: "DeepWiki",
+      descripcion: "Lee la documentación y pregunta sobre cualquier repositorio público de GitHub.",
+      autenticacion: "ninguna",
+    });
+    // Nunca la url: no hace falta en pantalla y así no hay ruta que discutir por el cable.
+    expect(JSON.stringify(mensaje)).not.toContain("mcp.deepwiki.com");
+    // Y nada de lo emitido en este test lleva forma de token.
+    expect(JSON.stringify(cliente.recibidos)).not.toContain("access_token");
+  });
+
+  it("sin la opción `conectores`, la ráfaga no lo lleva: un control sin dato detrás no se pinta", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {});
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    expect(cliente.recibidos.some((m) => m.clase === "conectores")).toBe(false);
+    // Y sin servicio, la ruta del callback tampoco se registra.
+    expect(servidor.rutasPublicas.has(`GET ${RUTA_CALLBACK_MCP}`)).toBe(false);
+  });
+
+  it('«añadir» contesta 204 EN EL ACTO, y el resultado llega por `conectores` vía `alCambiar`', async () => {
+    const doble = servicioDeConectoresDeMentira();
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { conectores: doble.fabrica });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    expect(await enviarMensaje(accion, { clase: "conector", accion: "anadir", id: "deepwiki" })).toBe(204);
+    expect(doble.llamadas).toEqual([{ metodo: "anadir", args: ["deepwiki"] }]);
+    // Y se reemite: es lo que hace que el cambio (síncrono aquí) llegue sin que nadie lo pida.
+    expect(cliente.recibidos.filter((m) => m.clase === "conectores")).toHaveLength(2);
+    expect(JSON.stringify(cliente.recibidos)).not.toContain("access_token");
+  });
+
+  it("una acción que no es una de las cinco conocidas → 400 y no hace nada", async () => {
+    const doble = servicioDeConectoresDeMentira();
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { conectores: doble.fabrica });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    expect(
+      await postear(accion, JSON.stringify({ clase: "conector", accion: "borrar-todo", id: "deepwiki" }))
+    ).toBe(400);
+    expect(doble.llamadas).toEqual([]);
+  });
+
+  it("«probar» y «autorizar» corren en segundo plano, y `autorizar` manda el puerto REAL", async () => {
+    const doble = servicioDeConectoresDeMentira();
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { conectores: doble.fabrica });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    expect(await enviarMensaje(accion, { clase: "conector", accion: "probar", id: "deepwiki" })).toBe(204);
+    expect(await enviarMensaje(accion, { clase: "conector", accion: "autorizar", id: "jira" })).toBe(204);
+    await asentar();
+    expect(doble.llamadas).toEqual([
+      { metodo: "probar", args: ["deepwiki"] },
+      { metodo: "autorizar", args: ["jira", `http://127.0.0.1:${servidor.puerto}${RUTA_CALLBACK_MCP}`] },
+    ]);
+  });
+
+  it("el callback OAuth es una ruta PÚBLICA: 200, y el cuerpo nunca lleva la query cruda", async () => {
+    const doble = servicioDeConectoresDeMentira({
+      completar: () => ({ ok: false, mensaje: 'no se pudo: "<script>alert(1)</script>" & cosas' }),
+    });
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { conectores: doble.fabrica });
+    const manejador = servidor.rutasPublicas.get(`GET ${RUTA_CALLBACK_MCP}`)!;
+    expect(manejador).toBeDefined();
+
+    let estado = 0;
+    let cabeceras: Record<string, unknown> = {};
+    let cuerpo = "";
+    const peticion = { url: `${RUTA_CALLBACK_MCP}?state=x&code=<script>alert(2)</script>` } as unknown as IncomingMessage;
+    const respuesta = {
+      writeHead: (codigo: number, c: Record<string, unknown>) => {
+        estado = codigo;
+        cabeceras = c;
+        return respuesta;
+      },
+      end: (texto: string) => {
+        cuerpo = texto;
+        return respuesta;
+      },
+    } as unknown as ServerResponse;
+    await manejador(peticion, respuesta);
+
+    expect(estado).toBe(200);
+    expect(cabeceras["Content-Type"]).toBe("text/html; charset=utf-8");
+    expect(cabeceras["Content-Security-Policy"]).toBe("default-src 'none'; style-src 'unsafe-inline'");
+    expect(cabeceras["Cache-Control"]).toBe("no-store");
+    // Ni el fallo de nuestro servicio (escapado) ni la query cruda del cliente llevan `<script>`.
+    expect(cuerpo).not.toContain("<script>");
+    expect(cuerpo).toContain("&lt;script&gt;");
+    expect(cuerpo).not.toContain("access_token");
+  });
+
+  it("un `completar` que revienta no tumba la ruta pública: 200 igual, con una frase propia", async () => {
+    const doble = servicioDeConectoresDeMentira();
+    // Sustituye `completar` por uno que LANZA, para probar que la ruta no se cae con él.
+    doble.llamadas.length = 0;
+    const servicioQueRevienta: ServicioDeConectores = {
+      lista: () => ({ conectores: [], desconocidos: [] }),
+      anadir: () => {},
+      quitar: () => {},
+      desconectar: () => {},
+      probar: async () => {},
+      autorizar: async () => {},
+      completar: async () => {
+        throw new Error("el proveedor no contestó");
+      },
+    };
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { conectores: () => servicioQueRevienta });
+    const manejador = servidor.rutasPublicas.get(`GET ${RUTA_CALLBACK_MCP}`)!;
+
+    let estado = 0;
+    let cuerpo = "";
+    const peticion = { url: `${RUTA_CALLBACK_MCP}?state=x&code=y` } as unknown as IncomingMessage;
+    const respuesta = {
+      writeHead: (codigo: number) => {
+        estado = codigo;
+        return respuesta;
+      },
+      end: (texto: string) => {
+        cuerpo = texto;
+        return respuesta;
+      },
+    } as unknown as ServerResponse;
+    await manejador(peticion, respuesta);
+
+    expect(estado).toBe(200);
+    expect(cuerpo.length).toBeGreaterThan(0);
+    expect(cuerpo).not.toContain("access_token");
+  });
+});
+
 /**
  * `POST /adjunto`: los BYTES de un adjunto, por HTTP y no por el cable (el SSE lleva JSON).
  *
@@ -7510,6 +7723,28 @@ describe("el ajuste del workspace, cableado", () => {
     guardarWorkspace("   ");
     guardarWorkspace("~otra/cosa");
     expect(guardadas).toEqual([]);
+  });
+});
+
+/**
+ * `ajusteDeConectoresCableado` es la composición de producción que llega a `montarRutas`
+ * desde `arrancarConsolaWeb`. Lo que se comprueba aquí es la COSTURA, no la regla —esa ya la
+ * prueba `servicioDeConectores.test.ts`—: que `conectores` está PRESENTE y que la fábrica de
+ * verdad (`servicioDeConectoresCableado`) devuelve un servicio real, con sus siete
+ * operaciones. Sin red: `casaDePruebas.ts` ya mudó `HOME` para todo el suite, así que
+ * `homedir()` aquí es un temporal y `lista()` es de solo lectura.
+ */
+describe("el ajuste de conectores, cableado", () => {
+  it("la fábrica devuelve un servicio REAL, con sus siete operaciones — sin red", () => {
+    const { conectores } = ajusteDeConectoresCableado({ casa: homedir() });
+    expect(typeof conectores).toBe("function");
+    const cambios: number[] = [];
+    const servicio = conectores(() => void cambios.push(1));
+    // Read-only: no toca la red y, sin fichero en disco, la omisión es la lista vacía.
+    expect(servicio.lista()).toEqual({ conectores: [], desconocidos: [] });
+    expect(Object.keys(servicio).sort()).toEqual(
+      ["anadir", "autorizar", "completar", "desconectar", "lista", "probar", "quitar"].sort()
+    );
   });
 });
 

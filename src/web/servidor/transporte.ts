@@ -36,6 +36,7 @@ import type { OpcionDeEntorno, PasoDelVestibulo } from "./vestibulo.js";
 // este módulo, así que no hay ciclo ni siquiera en el grafo de tipos.
 import type { DispositivoElegido } from "./sesiones.js";
 import type { Esfuerzo } from "../../core/esfuerzo.js";
+import type { AutenticacionDeConector, ConectorDelCable } from "../../core/conectores.js";
 
 /**
  * El informe de `core/dispositivos.ts`. **La `ruta` de cada herramienta solo cruza para
@@ -404,6 +405,27 @@ export type MensajeAlCliente =
    * un campo cuyo único trabajo es que la ruta se pueda leer eso sería quitarle el trabajo.
    */
   | { clase: "carpetaElegida"; ruta?: string }
+  /**
+   * El catálogo de conectores MCP y los que esta consola tiene AÑADIDOS, para la sección de
+   * Ajustes. Va en la ráfaga de bienvenida por lo mismo que el workspace: Ajustes se puede
+   * abrir en cuanto conecta, y solo si la opción `conectores` está puesta — «un control sin
+   * dato detrás no se pinta».
+   *
+   * `catalogo` viaja SIN la `url` de cada servidor: no hace falta en pantalla, y así no hay
+   * una ruta remota que discutir por este cable.
+   *
+   * `ilegible`/`error` son los mismos campos que da `ServicioDeConectores.lista()`. Un fallo
+   * NO va por `informar`, que no llega al navegador desde el vestíbulo, y Ajustes se abre sin
+   * proyecto.
+   */
+  | {
+      clase: "conectores";
+      catalogo: { id: string; nombre: string; descripcion: string; autenticacion: AutenticacionDeConector }[];
+      conectores: ConectorDelCable[];
+      desconocidos: string[];
+      ilegible?: true;
+      error?: string;
+    }
   /**
    * Cómo fue la última augmentación pedida (`{clase:"tarea", accion:"augmentar"}`): el
    * encargo que propone el modelo, o por qué no se pudo. Nunca los dos a la vez.
@@ -1486,6 +1508,15 @@ export type MensajeDelCliente =
    * Un lanzamiento a la vez por consola, así que no lleva id: no hay dos entre los que elegir.
    */
   | { clase: "cancelarLanzamiento" }
+  /**
+   * Una acción sobre UN conector: añadirlo, quitarlo, probarlo, autorizarlo o desconectarlo.
+   * Una `accion` que no sea una de esas cinco se rechaza con 400 y no hace nada.
+   *
+   * El resultado NO viaja en la respuesta: `probar` y `autorizar` corren en segundo plano
+   * (red, o esperar al navegador) y lo que cambien llega por el `conectores` que sigue, vía
+   * `alCambiar` del servicio — el mismo molde que `dispositivo`/`conexion`.
+   */
+  | { clase: "conector"; accion: "anadir" | "quitar" | "probar" | "autorizar" | "desconectar"; id: string }
   | { clase: "decision"; decisiones: Record<string, string> };
 
 /**
