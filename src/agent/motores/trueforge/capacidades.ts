@@ -113,7 +113,8 @@ export const REGLAS_DE_OPENUI = [
 ].join("\n");
 
 /** El nombre de la skill que TRAE OpenUI: quien la tiene recibe la tool que la skill necesita. */
-export const SKILL_DE_OPENUI = "openui-builder";
+export { SKILL_DE_OPENUI } from "../../../core/agentes.js";
+import { SKILL_DE_OPENUI } from "../../../core/agentes.js";
 
 /**
  * OpenUI para quien tiene la skill `openui-builder`: la tool de la librería que carga sus

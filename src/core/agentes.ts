@@ -407,6 +407,14 @@ export interface Lectura {
  * Y la frase del usuario va DELANTE y entera: es lo que él quiso decir, y esto solo la
  * completa con lo que el código sabe y él no tiene por qué repetir.
  */
+/**
+ * La skill que TRAE OpenUI (`skills/openui-builder/`). Vive aquí porque la nombran dos lados: la
+ * ficha que el orquestador lee para delegar y la capability que monta la tool
+ * (`agent/motores/trueforge/capacidades.ts`), y dos literales serían dos sitios donde el nombre
+ * puede cambiar sin que el otro se entere.
+ */
+export const SKILL_DE_OPENUI = "openui-builder";
+
 export function fichaDeAgente(agente: Agente): string {
   const capacidades: string[] = [];
   /**
@@ -428,6 +436,18 @@ export function fichaDeAgente(agente: Agente): string {
     capacidades.push("ESCRIBE ficheros del proyecto, y cada escritura pasa por aprobación");
   }
   if (agente.motor !== "modelo") capacidades.push(`corre en ${agente.motor}`);
+  /**
+   * **Quién sabe hacer OpenUI se DICE aquí, porque sin ello el orquestador decidía mal.** Medido
+   * (24-09-2026): con un encargo de «una tabla de las colecciones» el orquestador leyó la skill
+   * por su cuenta, buscó la tool que la skill pide, no la tiene —se monta en el especialista— y
+   * delegó ya diciendo «hazlo en HTML». El formato lo elige quien tiene la skill; al orquestador
+   * le basta saber que puede. Solo en nuestro motor: a uno externo no le llega la tool.
+   */
+  if (agente.motor === "modelo" && agente.skills.includes(SKILL_DE_OPENUI)) {
+    capacidades.push(
+      "hace artefactos también en OpenUI, más baratos para tablas, informes y paneles de datos: el formato lo elige él, no se lo impongas en el encargo"
+    );
+  }
 
   /**
    * Qué DEVUELVE, que es la mitad que falta para encadenar. Derivado de lo mismo: quien solo

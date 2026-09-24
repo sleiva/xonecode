@@ -85,7 +85,10 @@ describe("la skill que las reglas NOMBRAN existe, y dice lo que hace falta", () 
     expect(skill).toContain("get_openui_instructions");
     expect(skill).toContain("/artefactos/<nombre>.openui");
     // Y dice qué hacer SIN la tool, que es el caso de un motor externo: no inventarse la sintaxis.
-    expect(skill).toContain("Si no la tienes, no escribas OpenUI");
+    expect(skill).toContain("no escribas OpenUI");
+    // Y que el orquestador —que no la ve— no concluya que no existe: medido, eso le hacía
+    // imponer HTML en el encargo.
+    expect(skill).toContain("que tú no la veas no significa que no");
   });
 
   it("de serie la lleva quien lleva `artifacts-builder`: los que hacen artefactos", () => {

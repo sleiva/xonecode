@@ -7,9 +7,13 @@ description: "Build a data artifact in OpenUI Lang —a table, a report or a das
 
 ## Antes de nada: qué necesitas y dónde va
 
-- **Necesitas la tool `get_openui_instructions`**, que enseña el lenguaje y su catálogo de
-  componentes. Solo la da el motor de xonecode. **Si no la tienes, no escribas OpenUI**: sin ella
-  te inventarías la sintaxis, y un componente inventado no se pinta. Usa `artifacts-builder`.
+- **Hace falta la tool `get_openui_instructions`**, que enseña el lenguaje y su catálogo de
+  componentes. Se monta en el ESPECIALISTA que tiene esta skill, en el motor de xonecode.
+  - **Si repartes el trabajo** (eres el orquestador): que tú no la veas no significa que no
+    exista. No decidas el formato en el encargo; delega en quien tenga esta skill y déjale elegir.
+  - **Si vas a escribir el artefacto y no la tienes** (corres en otro motor): no escribas OpenUI
+    —sin ella te inventarías la sintaxis, y un componente inventado no se pinta—. Usa
+    `artifacts-builder`.
 - **El programa va en un FICHERO**, `/artefactos/<nombre>.openui`, con `write_file`. No en tu
   respuesta: tu respuesta la lee el orquestador, no una persona. Como artefacto se anuncia y se ve
   en la pestaña Artefactos. Puedes dejarlo con su valla ` ```openui ` o sin ella.

@@ -90,4 +90,12 @@ describe("fichaDeAgente", () => {
   it("no pega la ficha contra la frase del usuario", () => {
     expect(fichaDeAgente(agente({ descripcion: "Sin punto" }))).toContain("Sin punto.");
   });
+
+  it("dice quién hace OpenUI —el orquestador no ve la tool y, sin esto, imponía HTML—, y solo en nuestro motor", () => {
+    const con = fichaDeAgente(agente({ skills: ["openui-builder"] }));
+    expect(con).toContain("OpenUI");
+    expect(con).toContain("no se lo impongas");
+    expect(fichaDeAgente(agente({ skills: ["artifacts-builder"] }))).not.toContain("OpenUI");
+    expect(fichaDeAgente(agente({ skills: ["openui-builder"], motor: "claude-code" }))).not.toContain("OpenUI");
+  });
 });
