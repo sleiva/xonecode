@@ -1273,3 +1273,21 @@ describe("los clientes de modelo duran la sesión, y `/modelo` los renueva", () 
     expect(pi.tokens.join("")).toBe("del nuevo");
   }, 30_000);
 });
+
+describe("unir_secciones en TrueForge, con el reparto de deepagents", () => {
+  it("el especialista con `escribeEn` la recibe; uno sin él, no", async () => {
+    const raiz = proyecto();
+    mkdirSync(join(raiz, ".xonecode", "agentes"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "agentes", "doc-a.md"), "---\ndescripcion: documenta\nmotor: modelo\nsoloLectura: false\nescribeEn: [/doc/]\n---\nhola\n");
+    writeFileSync(join(raiz, ".xonecode", "agentes", "doc-b.md"), "---\ndescripcion: escribe\nmotor: modelo\nsoloLectura: false\n---\nhola\n");
+    const delegar = (nombre: string) => [
+      new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: `d-${nombre}`, name: "create_sub_agent", args: JSON.stringify({ name: nombre, input: "x" }) }] }),
+    ];
+    const { m, toolsPorLlamada } = modelosConGuion([delegar("doc-a"), [new AIMessageChunk({ content: "a" })], [new AIMessageChunk({ content: "ok" })], delegar("doc-b"), [new AIMessageChunk({ content: "b" })], [new AIMessageChunk({ content: "ok" })]]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("uno", piel().p);
+    await s.turno("otro", piel().p);
+    expect(toolsPorLlamada[1]).toContain("unir_secciones");
+    expect(toolsPorLlamada[4]).not.toContain("unir_secciones");
+  }, 30_000);
+});

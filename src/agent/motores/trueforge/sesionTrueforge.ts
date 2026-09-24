@@ -85,6 +85,7 @@ import { hechosDelProyectoDe } from "../../navegacion/hechosEnDisco.js";
 import { conHechosDelProyecto } from "../../../core/hechosDelProyecto.js";
 import { crearBusquedaRegex } from "../../grafo/busquedaRegex.js";
 import { crearCopiarArtefacto } from "../../grafo/copiarArtefacto.js";
+import { crearUnirSecciones } from "../../grafo/unirSecciones.js";
 import { crearCriticaVisual } from "../../grafo/criticaVisual.js";
 import { crearTraerDeLaMaquina } from "../../grafo/traerDeLaMaquina.js";
 import { invocarVisualConModelos } from "../../dispositivos/juezVisual.js";
@@ -380,6 +381,8 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
     ...(carpeta !== undefined && (agente.escribeEn ?? []).length > 0
       ? [crearCopiarArtefacto({ raiz, carpetaDeArtefactos: carpeta, perfil: agente }) as unknown as ToolDeLangchain]
       : []),
+    // El mismo reparto que deepagents (`xoneAgent.ts`): a quien declara `escribeEn`.
+    ...((agente.escribeEn ?? []).length > 0 ? [crearUnirSecciones({ raiz, perfil: agente }) as unknown as ToolDeLangchain] : []),
   ];
   /**
    * **Un cliente de modelo por papel, modelo y esfuerzo, que dura la SESIÓN** —hasta `/modelo`—, y

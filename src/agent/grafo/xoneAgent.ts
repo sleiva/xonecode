@@ -12,6 +12,7 @@ import { crearBusquedaRegex } from "./busquedaRegex.js";
 import { OPCIONES_BUSQUEDA_FICHEROS } from "./opcionesDeFicheros.js";
 import { crearNavegacionXone } from "./navegacionXone.js";
 import { crearCopiarArtefacto } from "./copiarArtefacto.js";
+import { crearUnirSecciones } from "./unirSecciones.js";
 import { estilosDeDisco, indiceEnDisco, type CargarIndice } from "../navegacion/indiceEnDisco.js";
 import type { CargarEstilos } from "../navegacion/estilosEnDisco.js";
 import { readFileSync } from "node:fs";
@@ -523,6 +524,9 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
             perfil,
           })]
         : []),
+      // Y unir un documento escrito por secciones (`unirSecciones.ts`), con la misma condición de
+      // DATO: escribe sin aprobación, así que solo a quien tiene carpetas abiertas con `escribeEn`.
+      ...((perfil.escribeEn ?? []).length > 0 ? [crearUnirSecciones({ raiz: opciones.raiz, perfil })] : []),
     ],
     //
     // Las tools de fichero las monta el `FilesystemMiddleware` a partir del backend, y
