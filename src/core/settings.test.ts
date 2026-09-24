@@ -9,6 +9,8 @@ import {
   PLATAFORMAS_DE_DISPOSITIVO,
   TOPE_DE_CONCURRENCIA_DE_TAREAS,
   motivoParaNoOlvidarEntorno,
+  motivoDeNombreDeEntornoInaceptable,
+  LARGO_NOMBRE_DE_ENTORNO,
 } from "./settings.js";
 
 describe("validarSettings", () => {
@@ -251,5 +253,27 @@ describe("motivoParaNoOlvidarEntorno", () => {
   });
   it("un entorno cuyo id es PREFIJO de otro no se confunde con él", () => {
     expect(motivoParaNoOlvidarEntorno({ ...base, abiertas: ["/ws/webstudio2/X"], tareas: [] })).toBeUndefined();
+  });
+});
+
+describe("motivoDeNombreDeEntornoInaceptable", () => {
+  it("un nombre de persona vale tal cual: espacios, acentos y mayúsculas son de un rótulo, no de un slug", () => {
+    expect(motivoDeNombreDeEntornoInaceptable("CloudStudio de Producción")).toBeUndefined();
+    expect(motivoDeNombreDeEntornoInaceptable("el de mi equipo")).toBeUndefined();
+  });
+
+  it("en blanco o de espacios no vale, y el motivo dice la CONSECUENCIA", () => {
+    expect(motivoDeNombreDeEntornoInaceptable("")).toBeDefined();
+    expect(motivoDeNombreDeEntornoInaceptable("   ")).toBeDefined();
+    // El motivo no es de formulario: `validarEntorno` descarta un entorno sin nombre al cargar,
+    // así que dejarlo en blanco no deja un entorno «sin nombre» — lo hace desaparecer.
+    expect(motivoDeNombreDeEntornoInaceptable("")).toMatch(/desaparece/);
+  });
+
+  it("justo en el tope vale, y uno más no — el motivo trae el tope", () => {
+    expect(motivoDeNombreDeEntornoInaceptable("x".repeat(LARGO_NOMBRE_DE_ENTORNO))).toBeUndefined();
+    const largo = motivoDeNombreDeEntornoInaceptable("x".repeat(LARGO_NOMBRE_DE_ENTORNO + 1));
+    expect(largo).toBeDefined();
+    expect(largo).toContain(String(LARGO_NOMBRE_DE_ENTORNO));
   });
 });

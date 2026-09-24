@@ -474,7 +474,11 @@ describe("Ajustes", () => {
     fireEvent.click(screen.getByRole("button", { name: "Registrar un entorno" }));
     // Y mientras se registra, la lista NO está: es una cosa o la otra.
     expect(screen.queryByText("CloudStudio de casa")).toBeNull();
-    // No hay campo de nombre en ningún sitio: lo dice el propio servidor al conectarse.
+    // Registrar NO pregunta el nombre: lo deduce el servidor de la URL (y así el campo no
+    // aparece tampoco aquí). Escribirlo es una cosa aparte y vive en la PESTAÑA del entorno,
+    // que es lo que `describe("el nombre de un entorno")` comprueba. Se cambió de idea al
+    // implementarlo: un nombre obligatorio en el alta sería un paso más para dar de alta un
+    // servidor, y lo que se pidió es poder arreglarlo DESPUÉS.
     expect(screen.queryByLabelText(/nombre/i)).toBeNull();
     // La misma regla de URL que el alta, compartida y no copiada.
     fireEvent.change(screen.getByLabelText(/url del mcp/i), { target: { value: "http://mcp.ajeno.com/mcp" } });
@@ -484,6 +488,98 @@ describe("Ajustes", () => {
     fireEvent.change(screen.getByLabelText(/url del mcp/i), { target: { value: "https://mcp.otra.com/mcp" } });
     fireEvent.click(screen.getByRole("button", { name: /registrar/i }));
     expect(alRegistrarEntorno).toHaveBeenCalledWith("https://mcp.otra.com/mcp");
+  });
+
+  /**
+   * El nombre de un entorno. Es un RÓTULO y no una clave —el `id` sigue mandando sobre la
+   * carpeta del workspace, las credenciales y la ruta guardada—, y hasta ahora lo deducía el
+   * servidor de la URL. Se edita SOLO aquí, en la pestaña de su entorno: el alta sigue
+   * deduciéndolo, que es lo que hace que registrar sea pedir una URL y nada más.
+   */
+  describe("el nombre de un entorno", () => {
+    const DOS = [
+      { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" },
+      { id: "casa", nombre: "El de casa", url: "https://mcp.casa.local/mcp" },
+    ];
+    const campo = (): HTMLInputElement => screen.getByLabelText("Nombre del entorno") as HTMLInputElement;
+    const guardar = (): HTMLButtonElement =>
+      screen.getByRole("button", { name: "Guardar" }) as HTMLButtonElement;
+
+    const abrir = (alRenombrarEntorno: (entorno: string, nombre: string) => Promise<string | undefined>) => {
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          entornos={DOS}
+          entornoActivo="webstudio"
+          alRenombrarEntorno={alRenombrarEntorno}
+        />
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Entornos" }));
+    };
+
+    it("se edita en la pestaña de SU entorno, y guarda lo que se escriba", async () => {
+      const llamadas: [string, string][] = [];
+      abrir(async (entorno, nombre) => {
+        llamadas.push([entorno, nombre]);
+        return undefined;
+      });
+      expect(campo().value).toBe("XOne WebStudio");
+      // Sin tocar nada el botón está apagado: guardar lo mismo no es una acción.
+      expect(guardar().disabled).toBe(true);
+      fireEvent.change(campo(), { target: { value: "Producción" } });
+      fireEvent.click(guardar());
+      await waitFor(() => expect(llamadas).toEqual([["webstudio", "Producción"]]));
+    });
+
+    it("en blanco no se manda, y el motivo dice QUÉ pasaría", () => {
+      const llamadas: [string, string][] = [];
+      abrir(async (entorno, nombre) => {
+        llamadas.push([entorno, nombre]);
+        return undefined;
+      });
+      fireEvent.change(campo(), { target: { value: "   " } });
+      expect(guardar().disabled).toBe(true);
+      // La consecuencia, no «campo obligatorio»: `validarEntorno` descarta un entorno sin
+      // nombre al leerlo, así que guardarlo sería hacerlo desaparecer de la lista al
+      // siguiente arranque. El mismo motivo que dice el servidor.
+      expect(screen.getByRole("alert").textContent).toMatch(/desaparece/);
+      expect(llamadas).toEqual([]);
+    });
+
+    it("dos entornos con el mismo nombre se permiten, pero se ADVIERTE", async () => {
+      const llamadas: [string, string][] = [];
+      abrir(async (entorno, nombre) => {
+        llamadas.push([entorno, nombre]);
+        return undefined;
+      });
+      fireEvent.change(campo(), { target: { value: "El de casa" } });
+      expect(screen.getByText(/ya hay otro entorno/i)).toBeTruthy();
+      // Y no bloquea: es un aviso, no una regla. Quien los distingue es la URL, y dos
+      // iguales en el desplegable de la barra son una elección suya.
+      expect(guardar().disabled).toBe(false);
+      fireEvent.click(guardar());
+      await waitFor(() => expect(llamadas).toEqual([["webstudio", "El de casa"]]));
+    });
+
+    it("la negativa del servidor se enseña, y lo tecleado no se pierde", async () => {
+      abrir(async () => "no vale ese nombre, y por un motivo que solo sabe el servidor");
+      fireEvent.change(campo(), { target: { value: "Producción" } });
+      fireEvent.click(guardar());
+      // La regla que MANDA es la del servidor: la copia de aquí evita un viaje, y lo que
+      // conteste él no puede quedarse en el terminal —`informar` no llega desde el vestíbulo—.
+      await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/solo sabe el servidor/));
+      // Y lo tecleado sigue ahí, para poder corregirlo: soltarlo devolvería el campo al
+      // nombre de antes mientras se lee un motivo que habla de lo que se acaba de escribir.
+      expect(campo().value).toBe("Producción");
+      expect(guardar().disabled).toBe(false);
+    });
+
+    it("cada pestaña edita el suyo: cambiar de entorno no arrastra lo tecleado", () => {
+      abrir(async () => undefined);
+      fireEvent.change(campo(), { target: { value: "Producción" } });
+      fireEvent.click(screen.getByRole("tab", { name: "El de casa" }));
+      expect(campo().value).toBe("El de casa");
+    });
   });
 
   /**

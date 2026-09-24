@@ -137,6 +137,7 @@ import {
   dentroDelWorkspace,
   expandirConCasa,
   motivoParaNoOlvidarEntorno,
+  motivoDeNombreDeEntornoInaceptable,
   motivoDeWorkspaceInaceptable,
   type Settings,
 } from "../../core/settings.js";
@@ -4282,6 +4283,34 @@ export function montarRutas(
             ramas = [];
           }
         })
+        .catch(contar)
+        .finally(() => void anunciarAlta().catch(contar));
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "entorno" &&
+      mensaje.accion === "renombrar"
+    ) {
+      // Como `olvidar`: la negativa se decide AQUÍ y antes del 204, para que el motivo pueda
+      // ir en la respuesta — `informar` no llega al navegador desde el vestíbulo. Y el tipo
+      // se mira antes de la regla porque la regla es de cadenas: un `nombre` que no sea texto
+      // la haría reventar dentro del manejador, que es la única forma de que esta guarda no
+      // conteste nada.
+      const motivo =
+        typeof mensaje.nombre === "string"
+          ? motivoDeNombreDeEntornoInaceptable(mensaje.nombre)
+          : "el nombre tiene que ser texto";
+      if (motivo !== undefined) {
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ motivo }));
+        return;
+      }
+      void vestibulo
+        .renombrarEntorno(mensaje.entorno, mensaje.nombre)
         .catch(contar)
         .finally(() => void anunciarAlta().catch(contar));
       respuesta.writeHead(204);

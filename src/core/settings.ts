@@ -382,6 +382,52 @@ export function entornoDeUrl(url: string, entornos: readonly Entorno[]): string 
 }
 
 /**
+ * Cuántos caracteres caben en el nombre de un entorno.
+ *
+ * Es un tope de PANTALLA, no de dato: el nombre se pinta en la pestaña de Ajustes y en la
+ * barra lateral, y ninguno de los dos es un párrafo. Se RECHAZA en vez de RECORTAR — un
+ * nombre cortado en silencio es el bug mudo de siempre, y quien lo escribió no se entera.
+ */
+export const LARGO_NOMBRE_DE_ENTORNO = 60;
+
+/**
+ * Por qué NO vale el nombre de un entorno, o `undefined` si vale.
+ *
+ * El nombre es un RÓTULO, no un identificador, y esa es toda la regla: el `id` sigue saliendo
+ * de la URL del servidor y sigue siendo la clave de todo —el segmento de la carpeta del
+ * workspace (`rutaDeWorkspace`), el hueco de sus credenciales de OAuth, el valor del
+ * `entorno` del `config.json` del proyecto y el valor que viaja por el cable—, así que aquí NO
+ * se aplica la regla de un slug. Espacios, acentos y mayúsculas valen: es la misma distinción
+ * que hace el `nombre` de un proveedor personalizado (`core/modelos.ts`), y por eso renombrar
+ * un entorno no mueve ninguna carpeta ni invalida ningún token.
+ *
+ * Un nombre VACÍO se rechaza, y no es una validación de formulario: `validarEntorno` DESCARTA
+ * un entorno sin nombre al cargar, así que dejarlo en blanco no deja un entorno «sin nombre» —
+ * lo hace DESAPARECER en el siguiente arranque, con sus credenciales y su carpeta colgando de
+ * un id que ya no está en ninguna lista. El motivo lo dice, porque la consecuencia no se
+ * adivina.
+ *
+ * Vive en `core/` porque la aplican los DOS lados: el servidor al guardar (y su negativa va en
+ * el 409, como la de `olvidar`) y el cliente para poder avisar sin haber ido al servidor. La
+ * frontera prohíbe compartir módulo, así que el cliente lleva su copia DECLARADA — la misma
+ * regla que `motivoDeWorkspaceInaceptable`.
+ *
+ * **Y NO se comprueba que no se repita**, que es una decisión y no un olvido: el nombre no es
+ * la clave, así que dos entornos que se llaman igual —el mismo servidor visto por dos redes, un
+ * clon de pruebas— se distinguen perfectamente por su `id`, y negarse obligaría a inventarse
+ * sufijos para algo que no está roto. Lo que sí hace falta es que la pantalla lo ADVIERTA, para
+ * que nadie acabe con dos pestañas idénticas creyendo que son cosas distintas.
+ */
+export function motivoDeNombreDeEntornoInaceptable(nombre: string): string | undefined {
+  const limpio = nombre.trim();
+  if (limpio === "") return "escribe un nombre: uno sin nombre desaparece de la lista al volver a arrancar";
+  if (limpio.length > LARGO_NOMBRE_DE_ENTORNO) {
+    return `no puede pasar de ${LARGO_NOMBRE_DE_ENTORNO} caracteres, que es lo que cabe en su pestaña`;
+  }
+  return undefined;
+}
+
+/**
  * Por qué NO se puede quitar un entorno ahora mismo, o `undefined` si se puede.
  *
  * Se niega mientras algo VIVO depende de él: una consola abierta sobre una copia suya (su lazo

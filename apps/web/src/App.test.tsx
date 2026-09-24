@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, cleanup, act, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { App } from "./App.js";
 import { crearStoreDelCliente } from "./store.js";
 
@@ -33,7 +33,13 @@ afterEach(cleanup);
  * `App` se quedaría enseñando la pantalla de arranque o el hueco de «elige un proyecto»,
  * y ninguno de esos componentes montaría.
  */
-function montar(enviar = vi.fn(() => Promise.resolve(undefined as unknown))) {
+function montar(
+  // El TIPO del parámetro, escrito, y con el argumento que de verdad recibe: el de por omisión
+  // se infiere como `Mock<() => …>` —sin parámetros— y entonces `enviar.mock.calls[0][0]` era
+  // «tupla de longitud 0», un error en cada espía que mira el mensaje. Acepta `unknown` y no
+  // `MensajeDelCliente` porque los espías lo leen a ciegas (`(m as { clase: string }).clase`).
+  enviar: Mock<(mensaje: unknown) => Promise<unknown>> = vi.fn(() => Promise.resolve(undefined as unknown))
+) {
   const store = crearStoreDelCliente();
   const vista = render(
     <App
@@ -278,6 +284,51 @@ describe("App: el secreto y el selector, que también colgaban", () => {
       expect(enviar).toHaveBeenCalledWith({ clase: "entorno", accion: "olvidar", entorno: "webstudio" })
     );
     expect(await screen.findByText(/No se ha quitado: hay 1 tarea de fondo/)).toBeTruthy();
+  });
+
+  it("«Nombre del entorno» manda `renombrar` por el cable y enseña el MOTIVO del 409", async () => {
+    // El mismo cableado que el de arriba, y por el mismo motivo: el prop es OPCIONAL en el
+    // tipo, así que si `App` no lo pasara todo compilaría y el campo no aparecería nunca —
+    // con la regla escrita y sin montar. Y la negativa viaja en la RESPUESTA del 409, que es
+    // lo que `App` tiene que leer para poder enseñarla.
+    const enviar = vi.fn((mensaje: unknown) =>
+      Promise.resolve(
+        (mensaje as { accion?: string }).accion === "renombrar"
+          ? (new Response(JSON.stringify({ motivo: "se te ha colado un salto de línea" }), {
+              status: 409,
+            }) as unknown)
+          : (undefined as unknown)
+      )
+    );
+    const { store } = montar(enviar);
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        registrados: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" }],
+        entornoActivo: "webstudio",
+        proyectos: [],
+        ramas: [],
+        proyectoAbierto: true,
+      })
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Ajustes" })[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "Entornos" }));
+    fireEvent.change(screen.getByLabelText("Nombre del entorno"), { target: { value: "Producción" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    // El `id` NO viaja: es la clave —carpeta del workspace, credenciales— y renombrar no la
+    // toca. Lo que viaja es la intención, con el entorno al que se refiere.
+    await waitFor(() =>
+      expect(enviar).toHaveBeenCalledWith({
+        clase: "entorno",
+        accion: "renombrar",
+        entorno: "webstudio",
+        nombre: "Producción",
+      })
+    );
+    expect(await screen.findByText(/No se ha cambiado: se te ha colado un salto/)).toBeTruthy();
   });
 
   it("abrir la pestaña de otro entorno pide SUS proyectos por el cable", async () => {
@@ -1449,7 +1500,13 @@ describe("App: la pestaña Tareas", () => {
  */
 describe("App: crear una tarea en background", () => {
   /** El escritorio, con un proyecto y sin sesión abierta. */
-  function conEscritorio(enviar = vi.fn(() => Promise.resolve(undefined as unknown)), subir = subirAdjuntoDeMentira) {
+  // El mismo tipo escrito que el de `montar`, y por el mismo motivo: sin él el espía se infiere
+  // sin parámetros y sus llamadas son una tupla VACÍA, así que `enviar.mock.calls[0][0]` —que es
+  // como estos tests miran lo que se mandó— no tipea.
+  function conEscritorio(
+    enviar: Mock<(mensaje: unknown) => Promise<unknown>> = vi.fn(() => Promise.resolve(undefined as unknown)),
+    subir = subirAdjuntoDeMentira
+  ) {
     const store = crearStoreDelCliente();
     const vista = render(
       <App store={store} enviar={enviar} subirAdjunto={subir} instalarSkill={instalarSkillDeMentira} />
@@ -1573,7 +1630,11 @@ describe("App: crear una tarea en background", () => {
      * la costura que ningún test de componente ve —que `App` cambia una ventana por la otra
      * para el MISMO proyecto—, y que crear la tarea no se cuela por el camino.
      */
-    const enviar = vi.fn(() => Promise.resolve(undefined as unknown));
+    // El tipo escrito, como en `montar` y en `conEscritorio`: sin él la tupla de llamadas está
+    // vacía y la última comprobación de este test —mirar lo que se mandó— no tipea.
+    const enviar: Mock<(mensaje: unknown) => Promise<unknown>> = vi.fn(() =>
+      Promise.resolve(undefined as unknown)
+    );
     const store = crearStoreDelCliente();
     render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} instalarSkill={instalarSkillDeMentira} />);
     act(() => store.marcarConectado());

@@ -1166,6 +1166,25 @@ export type MensajeDelCliente =
        *  nombre escrito; ausente = las copias se quedan. */
       borrarCopias?: boolean;
     }
+  /**
+   * Ponerle NOMBRE a un entorno registrado: el alias con el que se lee en la barra y en su
+   * pestaña de Ajustes. Se escribe a mano porque hasta ahora el nombre lo deducía el
+   * servidor al conectarse, y el «Otro» de un on-premise se quedaba con su host por nombre
+   * para siempre.
+   *
+   * **El `id` NO viaja**: es lo que identifica al entorno —segmento de su carpeta en el
+   * workspace, hueco de sus credenciales— y renombrar no lo toca, así que el cable no puede
+   * ni sugerir que cambie.
+   *
+   * El servidor contesta **409 con `{ motivo }`** si el nombre no vale, igual que `olvidar`.
+   * La regla es SUYA (`core/settings.ts#motivoDeNombreDeEntornoInaceptable`) y la vuelve a
+   * aplicar aunque el cliente ya la tenga —la frontera prohíbe compartir el módulo, así que
+   * `Ajustes.tsx` lleva su copia DECLARADA, para poder avisar mientras se teclea—: la copia
+   * es comodidad, y la negativa que manda es esta, con su motivo en la mano. Dos entornos con
+   * el mismo nombre SÍ se admiten; que se repitan se advierte en la pantalla, que es donde se
+   * ven los dos.
+   */
+  | { clase: "entorno"; accion: "renombrar"; entorno: string; nombre: string }
   /** Cambiar de entorno ACTIVO: el de cuyos proyectos se habla. Trae su listado consigo. */
   | { clase: "entorno"; accion: "activo"; entorno: string }
   /**

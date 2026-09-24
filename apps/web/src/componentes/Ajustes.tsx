@@ -60,6 +60,32 @@ export function motivoDeWorkspaceInaceptable(ruta: string): string | undefined {
   }
   return undefined;
 }
+
+/**
+ * La copia DECLARADA de `core/settings.ts#motivoDeNombreDeEntornoInaceptable`, con el mismo
+ * papel que la de arriba: la frontera prohíbe que el cliente importe del host, y sin esto el
+ * no sería mudo —`informar` no llega al navegador desde el vestíbulo—. De balde evita un
+ * viaje; la que MANDA es la del servidor, que la vuelve a aplicar.
+ *
+ * El nombre es un RÓTULO, no una clave: el `id` del entorno es lo que ata su carpeta del
+ * workspace, sus credenciales y sus proyectos, así que aquí no hay reglas de slug. Lo que sí
+ * se rechaza es el vacío, y por una razón que no se ve venir: un entorno sin nombre se
+ * DESCARTA al leerlo, o sea que guardarlo sería hacerlo desaparecer de la lista.
+ *
+ * Y los dos iguales NO se rechazan: se advierten en la pantalla, que es una decisión y no un
+ * descuido — dos servidores distintos pueden llamarse igual, y quien los distingue es la URL.
+ */
+export function motivoDeNombreDeEntornoInaceptable(nombre: string): string | undefined {
+  const limpio = nombre.trim();
+  if (limpio === "") return "escribe un nombre: uno sin nombre desaparece de la lista al volver a arrancar";
+  if (limpio.length > LARGO_NOMBRE_DE_ENTORNO) {
+    return `no puede pasar de ${LARGO_NOMBRE_DE_ENTORNO} caracteres, que es lo que cabe en su pestaña`;
+  }
+  return undefined;
+}
+
+/** El tope del nombre, con el número del host: lo que cabe en la pestaña de un entorno. */
+export const LARGO_NOMBRE_DE_ENTORNO = 60;
 import { PROYECTOS_POR_OMISION } from "./Barra.js";
 import { selloDeFecha } from "../selloDeFecha.js";
 import { IconoDeEntorno } from "./IconoDeEntorno.js";
@@ -286,6 +312,7 @@ export function Ajustes({
   proyectosPorEntorno = {},
   alPedirProyectosDeEntorno,
   alQuitarEntorno,
+  alRenombrarEntorno,
   avisoDelAlta,
   entornoActivo,
   seccionInicial,
@@ -381,6 +408,13 @@ export function Ajustes({
    * aquí solo se enseña. Ausente = no se ofrece el botón.
    */
   alQuitarEntorno?: (entorno: string, modo: { borrarCopias: boolean }) => Promise<string | undefined>;
+  /**
+   * Ponerle nombre a un entorno registrado. Devuelve el MOTIVO si el servidor se negó y
+   * `undefined` si lo escribió. La regla vive en el servidor —aquí está su copia declarada,
+   * que evita el viaje— y el `id` NO viaja al revés: es la clave, y renombrar no la toca.
+   * Ausente = no se ofrece el campo.
+   */
+  alRenombrarEntorno?: (entorno: string, nombre: string) => Promise<string | undefined>;
   /**
    * El motivo del último paso del alta que falló (`alta.aviso`). Aquí se usa para el REGISTRO
    * de un entorno: un entorno nuevo que no conecta ya no se guarda, así que sin esto el
@@ -1891,6 +1925,25 @@ export function Ajustes({
               */}
               {!registrando && entornoEnPestana !== undefined ? (
                 <div role="tabpanel" className={estilos.panelDePestana}>
+                  {/*
+                    El nombre, ARRIBA de la URL: es el rótulo de la pestaña en la que estás, y
+                    quien lo lee viene a cambiar eso. Se edita aquí y solo aquí — el alta lo
+                    sigue deduciendo de la URL, así que registrar un servidor no pregunta nada
+                    más que su URL.
+
+                    Los nombres de los DEMÁS se pasan para poder advertir de un repetido: se
+                    permiten (dos servidores pueden llamarse igual), pero un aviso delante es
+                    la diferencia entre una decisión y un descuido.
+                  */}
+                  {alRenombrarEntorno === undefined ? null : (
+                    <NombreDelEntorno
+                      key={entornoEnPestana}
+                      entorno={entornos.find((e) => e.id === entornoEnPestana)!}
+                      nombresDeOtros={entornos.filter((e) => e.id !== entornoEnPestana).map((e) => e.nombre)}
+                      conectado={conectado}
+                      alRenombrar={alRenombrarEntorno}
+                    />
+                  )}
                   {/* La URL y lo que se hace CON ella, en una fila: el botón de quitar suelto en
                       su propio renglón, lejos de lo que quita, se leía como de otra cosa. */}
                   <div className={estilos.filaDeUrl}>
@@ -2166,6 +2219,107 @@ function ConfirmarCambiosSinGuardar({ onCancelar, onConfirmar }: { onCancelar: (
   );
 }
 
+
+/**
+ * El nombre de un entorno, editable. Vive en la PESTAÑA de su entorno y no en el alta: dar de
+ * alta un servidor sigue siendo pedir una URL y nada más, y esto es lo que se arregla después.
+ *
+ * Tres cosas que no son de forma:
+ *
+ * - **El vacío se rechaza con la CONSECUENCIA delante** («desaparece de la lista al volver a
+ *   arrancar»), no con un «obligatorio»: `validarEntorno` descarta un entorno sin nombre al
+ *   leerlo, así que guardarlo no lo dejaría a medias — lo borraría. La frase es la misma que
+ *   la del servidor, que es quien manda.
+ * - **Dos iguales se permiten y se advierten**: quien los distingue es la URL, y puede haber
+ *   dos servidores que se llamen igual. El aviso no bloquea el botón.
+ * - **Lo tecleado NO se suelta al guardar** (a diferencia del workspace): si el servidor se
+ *   niega, el campo tiene que seguir ahí para poder corregirlo. Se suelta al guardar BIEN.
+ */
+function NombreDelEntorno({
+  entorno,
+  nombresDeOtros,
+  conectado,
+  alRenombrar,
+}: {
+  entorno: { id: string; nombre: string };
+  nombresDeOtros: readonly string[];
+  conectado: boolean;
+  alRenombrar: (entorno: string, nombre: string) => Promise<string | undefined>;
+}) {
+  // Ausente = «no lo he tocado», y entonces se pinta lo que dice el servidor. La pestaña
+  // lleva `key`, así que cambiar de entorno desmonta esto y lo tecleado no se arrastra.
+  const [tecleado, setTecleado] = useState<string | undefined>(undefined);
+  const [guardando, setGuardando] = useState(false);
+  const [motivo, setMotivo] = useState<string | undefined>(undefined);
+  const enElCampo = tecleado ?? entorno.nombre;
+  const limpio = enElCampo.trim();
+  const inaceptable = motivoDeNombreDeEntornoInaceptable(enElCampo);
+  const cambiado = tecleado !== undefined && limpio !== entorno.nombre;
+  const repetido = limpio !== "" && limpio !== entorno.nombre && nombresDeOtros.includes(limpio);
+  return (
+    <>
+      <label className={estilos.filaDeNombre}>
+        <span className={estilos.etiquetaDeNombre}>Nombre</span>
+        <input
+          type="text"
+          value={enElCampo}
+          spellCheck={false}
+          autoComplete="off"
+          aria-label="Nombre del entorno"
+          aria-invalid={inaceptable === undefined ? undefined : true}
+          disabled={!conectado || guardando}
+          onChange={(e) => {
+            setTecleado(e.target.value);
+            setMotivo(undefined);
+          }}
+          // Enter guarda, como en cualquier formulario de una línea. Va en el campo y no en
+          // un `<form>` porque esto no es uno: no hay envío por defecto que pueda mandar de
+          // más, y el botón es el que manda.
+          onKeyDown={(e) => {
+            if (e.key !== "Enter" || guardando || !cambiado || inaceptable !== undefined) return;
+            void escribir();
+          }}
+        />
+      </label>
+      <div className={estilos.accionesDeNombre}>
+        <button
+          type="button"
+          className={estilos.accion}
+          disabled={!conectado || guardando || !cambiado || inaceptable !== undefined}
+          onClick={() => void escribir()}
+        >
+          {guardando ? "Guardando…" : "Guardar"}
+        </button>
+      </div>
+      {inaceptable === undefined ? null : (
+        <p className={estilos.nota} role="alert">
+          {inaceptable}
+        </p>
+      )}
+      {repetido ? (
+        <p className={estilos.nota}>
+          Ya hay otro entorno que se llama así: en la barra del proyecto los dos saldrán igual. Se
+          distingue por su URL, así que se permite — pero no habrá forma de saber cuál es cuál.
+        </p>
+      ) : null}
+      {motivo === undefined ? null : (
+        <p className={estilos.nota} role="alert">
+          No se ha cambiado: {motivo}
+        </p>
+      )}
+    </>
+  );
+
+  async function escribir() {
+    setGuardando(true);
+    const negativa = await alRenombrar(entorno.id, limpio);
+    setGuardando(false);
+    setMotivo(negativa);
+    // Solo con el sí: a partir de ahí manda lo que acabó en disco, que es lo que reemite el
+    // servidor. Con un no, lo tecleado se queda para poder corregirlo.
+    if (negativa === undefined) setTecleado(undefined);
+  }
+}
 
 /**
  * Quitar un entorno, en DOS pasos y en línea: el botón pide confirmación y dice lo que NO se

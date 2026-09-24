@@ -28,6 +28,9 @@ import type { ModoDeEscritura } from "../../core/modoDeEscritura.js";
 
 function dobles() {
   const escrituras: string[] = [];
+  /** El NOMBRE que se escribió de verdad, por entorno: `escrituras` solo dice el id, y lo que
+   *  hay que poder afirmar es que el fichero se lleva el nombre nuevo y no el viejo. */
+  const nombresEscritos: string[] = [];
   const entornos: Entorno[] = [
     { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" },
   ];
@@ -39,8 +42,9 @@ function dobles() {
       escrituras.push(`cred:${p}`);
       return { ruta: "/casa/.xonecode/auth.json" };
     },
-    guardarEntorno: (e: { id: string }) => {
+    guardarEntorno: (e: { id: string; nombre?: string }) => {
       escrituras.push(`entorno:${e.id}`);
+      nombresEscritos.push(`${e.id}=${e.nombre}`);
       return { ruta: "/casa/.xonecode/settings.json" };
     },
     olvidarEntorno: (id: string) => {
@@ -64,6 +68,7 @@ function dobles() {
     entornos,
     baseDeWorkspace: () => "/w",
     escrituras,
+    nombresEscritos,
   };
 }
 
@@ -224,9 +229,17 @@ describe("vestíbulo", () => {
 
   /**
    * El formulario del navegador pide SOLO la URL desde este cambio. Lo demás se deduce
-   * aquí: un nombre tecleado a mano es un dato inventado que después hay que creerse en la
-   * barra lateral, y un id «otro» sería la misma carpeta de workspace para todos los
-   * on-premise del mundo.
+   * aquí: un id «otro» sería la misma carpeta de workspace para todos los on-premise del
+   * mundo.
+   *
+   * **Y el NOMBRE también se sigue deduciendo aquí**, que es la mitad de aquel comentario que
+   * se ha revisado: decía que un nombre tecleado a mano es un dato inventado que después hay
+   * que creerse en la barra lateral, y por eso el alta no lo pide. Las dos objeciones se
+   * sostienen por separado, y las dos caen por su lado: el id sale de la URL, así que la
+   * CARPETA no la decide un dato tecleado; y el nombre deja de ser inventado en cuanto lo
+   * escribe la persona que lo lee — que es lo que hace `renombrarEntorno`, ya con el entorno
+   * registrado y en Ajustes. El alta no cambia: deducir un nombre al vuelo sigue siendo mejor
+   * que pedir uno antes de que nadie sepa cómo se llama el servidor.
    */
   describe("identidad del entorno: lo único que se teclea es la URL", () => {
     it("un «otro» saca id y nombre del host, y el id vale como segmento de ruta", async () => {
@@ -368,6 +381,66 @@ describe("vestíbulo", () => {
     await v.guardarProyectosVisibles("webstudio", []);
     expect(v.entornosRegistrados()[0]!.proyectos).toEqual([]);
     expect(dichos.join("\n")).toMatch(/ninguno/);
+  });
+
+  /**
+   * El ALIAS de un entorno: hasta aquí el nombre solo lo ponía el servidor (ver
+   * `renombrarConElServidor`), así que el «Otro» de un on-premise se quedaba con el host por
+   * nombre para siempre. Es un RÓTULO y no un identificador, así que el id no se toca — y por
+   * eso renombrar no mueve ninguna copia local ni invalida ninguna credencial.
+   */
+  it("renombrar un entorno le cambia el nombre y deja el id intacto", async () => {
+    const d = dobles();
+    const dichos: string[] = [];
+    const v = crearVestibulo({ ...d, origenDeTrabajo: "global", informar: (t) => dichos.push(t) });
+    await v.renombrarEntorno("webstudio", "Producción");
+
+    expect(v.entornosRegistrados()[0]!.nombre).toBe("Producción");
+    // Se afirma lo ESCRITO y no solo la lista viva: si el fichero se llevara el nombre viejo,
+    // la pantalla enseñaría el nuevo hasta el próximo arranque sin que nada esté rojo.
+    expect(d.nombresEscritos).toEqual(["webstudio=Producción"]);
+    // El id sigue siendo el que era: es un segmento de ruta (`rutaDeWorkspace`).
+    expect(v.entornosRegistrados()[0]!.id).toBe("webstudio");
+    expect(v.raizDeProyecto("webstudio", "Tienda")).toBe("/w/webstudio/Tienda");
+    expect(dichos.join("\n")).toMatch(/pasa a llamarse «Producción»/);
+  });
+
+  it("los espacios de sobra se recortan: lo que se guarda es el nombre, no el tecleo", async () => {
+    const d = dobles();
+    const v = crearVestibulo({ ...d, origenDeTrabajo: "global" });
+    await v.renombrarEntorno("webstudio", "  El de casa  ");
+    expect(d.nombresEscritos).toEqual(["webstudio=El de casa"]);
+  });
+
+  it("un nombre en blanco LANZA y no escribe nada: guardado, ese entorno desaparecería del fichero", async () => {
+    // No es una validación de formulario: `validarEntorno` descarta al cargar los entornos sin
+    // nombre, así que un blanco escrito no deja un entorno «sin nombre» — lo borra, con sus
+    // credenciales y su carpeta colgando de un id que ya no está en ninguna lista.
+    const d = dobles();
+    const v = crearVestibulo({ ...d, origenDeTrabajo: "global" });
+    await expect(v.renombrarEntorno("webstudio", "   ")).rejects.toThrow(/no vale como nombre/);
+    expect(d.escrituras).toEqual([]);
+    expect(v.entornosRegistrados()[0]!.nombre).toBe("XOne WebStudio");
+  });
+
+  it("un nombre puesto a mano NO lo pisa el servidor al listar proyectos", async () => {
+    // Es la otra mitad de la razón de ser del alias: su `serverInfo` llega en la primera
+    // conexión de verdad (`proyectosDe`), y sin esta prueba el nombre de la persona duraría
+    // hasta justo ahí.
+    const d = dobles();
+    const v = crearVestibulo({
+      ...d,
+      entornos: [],
+      origenDeTrabajo: "global",
+      proyectosDeEntorno: async () => ({ proyectos: [], servidor: { nombre: "Lo Que El Servidor Diga" } }),
+    });
+    const { entorno } = await v.registrarEntorno({ id: "otro", nombre: "", url: "https://mcp.casa.local/mcp" });
+    expect(entorno.nombre).toBe("mcp.casa.local");
+
+    await v.renombrarEntorno(entorno.id, "Producción");
+    await v.proyectosDe(entorno.id);
+
+    expect(v.entornosRegistrados()[0]!.nombre).toBe("Producción");
   });
 
   it("un on-premise en loopback SÍ se registra: es la misma regla que aplica quien conecta", async () => {

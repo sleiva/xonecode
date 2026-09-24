@@ -894,6 +894,52 @@
   font-size: 12px;
 }
 
+/* El NOMBRE del entorno, encima de su URL. Misma forma que el campo del workspace (mismo
+   borde, mismo relleno, mismo `aria-invalid` que se ve además de leerse), en una fila propia
+   para que el botón quede al borde derecho, alineado con «Guardar» del workspace y con
+   «Quitar entorno» de la fila de abajo. */
+.filaDeNombre {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  margin: 0 0 8px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+}
+
+.etiquetaDeNombre {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.filaDeNombre input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.filaDeNombre input[aria-invalid="true"] {
+  border-color: var(--dsw-alias-state-error-primary);
+}
+
+.filaDeNombre input:disabled {
+  opacity: 0.45;
+}
+
+.accionesDeNombre {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+
 /* La URL del entorno y el botón que lo quita, en UNA fila: la URL cede con `margin-right: auto`
    (ver `.url`) y el botón queda al borde derecho, alineado con «Refrescar». Envuelve, y lo que
    va a todo el ancho —la confirmación, el motivo de un «no»— baja a su propio renglón. */

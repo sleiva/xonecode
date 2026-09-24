@@ -113,19 +113,35 @@ function ultimaAlta(cliente: { recibidos: MensajeAlCliente[] }): MensajeAlClient
   return cliente.recibidos.filter((m) => m.clase === "alta").at(-1);
 }
 
-/** Un `POST /accion` con su cuerpo. Devuelve el estado con el que se contestó. */
-async function postear(manejador: ManejadorRuta, cuerpo: string): Promise<number> {
+/**
+ * Un `POST /accion` con su cuerpo. Devuelve el estado con el que se contestó **y lo que
+ * contestó**: las negativas del cable viajan en el cuerpo de la respuesta (409 con su motivo),
+ * así que un helper que solo mirara el código no podría comprobarlas.
+ */
+async function postearConCuerpo(
+  manejador: ManejadorRuta,
+  cuerpo: string,
+): Promise<{ estado: number; cuerpo: string }> {
   const peticion = Readable.from([Buffer.from(cuerpo)]) as unknown as IncomingMessage;
   let estado = 0;
+  let contestado = "";
   const respuesta = {
     writeHead: (codigo: number) => {
       estado = codigo;
       return respuesta;
     },
-    end: () => respuesta,
+    end: (texto?: string) => {
+      contestado = texto ?? "";
+      return respuesta;
+    },
   } as unknown as ServerResponse;
   await manejador(peticion, respuesta);
-  return estado;
+  return { estado, cuerpo: contestado };
+}
+
+/** Lo mismo, cuando al test solo le importa con qué código se contestó. */
+async function postear(manejador: ManejadorRuta, cuerpo: string): Promise<number> {
+  return (await postearConCuerpo(manejador, cuerpo)).estado;
 }
 
 function enviarMensaje(manejador: ManejadorRuta, mensaje: MensajeDelCliente): Promise<number> {
@@ -8545,33 +8561,14 @@ describe("montarRutas — instalar una skill desde un .zip", () => {
  * respuesta (409 con su motivo), porque `informar` no llega al navegador desde el vestíbulo.
  */
 describe("el cable: quitar un entorno", () => {
-  async function postearConCuerpo(manejador: ManejadorRuta, mensaje: MensajeDelCliente) {
-    const peticion = Readable.from([Buffer.from(JSON.stringify(mensaje))]) as unknown as IncomingMessage;
-    let estado = 0;
-    let cuerpo = "";
-    const respuesta = {
-      writeHead: (codigo: number) => {
-        estado = codigo;
-        return respuesta;
-      },
-      end: (texto?: string) => {
-        cuerpo = texto ?? "";
-        return respuesta;
-      },
-    } as unknown as ServerResponse;
-    await manejador(peticion, respuesta);
-    return { estado, cuerpo };
-  }
-
   it("sin nada vivo lo QUITA: 204 y el vestíbulo lo olvida", async () => {
     const olvidados: string[] = [];
     const servidor = servidorDeMentira();
     montarRutas(servidor, vestibuloDePrueba({ olvidarEntorno: (id) => (olvidados.push(id), { ruta: "/s.json" }) }));
-    const r = await postearConCuerpo(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, {
-      clase: "entorno",
-      accion: "olvidar",
-      entorno: "webstudio",
-    });
+    const r = await postearConCuerpo(
+      servidor.rutas.get(`POST ${RUTA_ACCION}`)!,
+      JSON.stringify({ clase: "entorno", accion: "olvidar", entorno: "webstudio" }),
+    );
     await asentar();
     expect(r.estado).toBe(204);
     expect(olvidados).toEqual(["webstudio"]);
@@ -8583,12 +8580,15 @@ describe("el cable: quitar un entorno", () => {
     const quitar = async (borrarCopias: boolean) => {
       const servidor = servidorDeMentira();
       montarRutas(servidor, vestibuloDePrueba(), { workspace: () => base });
-      const r = await postearConCuerpo(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, {
-        clase: "entorno",
-        accion: "olvidar",
-        entorno: "webstudio",
-        ...(borrarCopias ? { borrarCopias: true } : {}),
-      });
+      const r = await postearConCuerpo(
+        servidor.rutas.get(`POST ${RUTA_ACCION}`)!,
+        JSON.stringify({
+          clase: "entorno",
+          accion: "olvidar",
+          entorno: "webstudio",
+          ...(borrarCopias ? { borrarCopias: true } : {}),
+        }),
+      );
       await asentar();
       return r.estado;
     };
@@ -8610,15 +8610,87 @@ describe("el cable: quitar un entorno", () => {
       workspace: () => "/ws",
       colaDeTareas: colaDeMentira([tarea]),
     });
-    const r = await postearConCuerpo(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, {
-      clase: "entorno",
-      accion: "olvidar",
-      entorno: "webstudio",
-    });
+    const r = await postearConCuerpo(
+      servidor.rutas.get(`POST ${RUTA_ACCION}`)!,
+      JSON.stringify({ clase: "entorno", accion: "olvidar", entorno: "webstudio" }),
+    );
     await asentar();
     expect(r.estado).toBe(409);
     expect(JSON.parse(r.cuerpo).motivo).toMatch(/tarea de fondo sin terminar/);
     expect(olvidados).toEqual([]);
+  });
+});
+
+/**
+ * Renombrar un entorno por el cable. El nombre es un RÓTULO y no una clave —el `id` sigue
+ * mandando sobre la carpeta del workspace, las credenciales y la ruta guardada—, así que lo
+ * que se comprueba aquí es que el rechazo viaja en la PROPIA respuesta (409 con su motivo,
+ * como `olvidar`) y que lo que se escribe es el nombre ya recortado.
+ */
+describe("el cable: renombrar un entorno", () => {
+  /** Un vestíbulo cuyo escritor de entornos apunta lo que le llega. */
+  function conEscritor() {
+    const escritos: string[] = [];
+    const servidor = servidorDeMentira();
+    montarRutas(
+      servidor,
+      vestibuloDePrueba({
+        guardarEntorno: (e) => {
+          escritos.push(`${e.id}=${e.nombre}`);
+          return { ruta: "/casa/.xonecode/settings.json" };
+        },
+      }),
+    );
+    return { servidor, escritos };
+  }
+
+  const renombrar = (servidor: { rutas: Map<string, ManejadorRuta> }, mensaje: unknown) =>
+    postearConCuerpo(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, JSON.stringify(mensaje));
+
+  it("lo escribe: 204, con los espacios de fuera recortados y el id intacto", async () => {
+    const { servidor, escritos } = conEscritor();
+    const r = await renombrar(servidor, {
+      clase: "entorno",
+      accion: "renombrar",
+      entorno: "webstudio",
+      nombre: "  Producción  ",
+    });
+    await asentar();
+    expect(r.estado).toBe(204);
+    // El `id` de la izquierda no se toca: es lo que ata el entorno a su carpeta y a sus
+    // credenciales, y por eso el nombre puede cambiarse sin migrar nada.
+    expect(escritos).toEqual(["webstudio=Producción"]);
+  });
+
+  it("en blanco se RECHAZA aquí: 409 con el motivo y sin escribir una línea", async () => {
+    const { servidor, escritos } = conEscritor();
+    const r = await renombrar(servidor, {
+      clase: "entorno",
+      accion: "renombrar",
+      entorno: "webstudio",
+      nombre: "   ",
+    });
+    await asentar();
+    expect(r.estado).toBe(409);
+    // El motivo nombra la CONSECUENCIA, que es lo que no se ve venir: `validarEntorno`
+    // descarta un entorno sin nombre al leerlo, así que guardarlo sería hacerlo desaparecer
+    // de la lista en el arranque siguiente, no dejarlo a medias.
+    expect(JSON.parse(r.cuerpo).motivo).toMatch(/desaparece/);
+    expect(escritos).toEqual([]);
+  });
+
+  it("un nombre que no es texto se rechaza SIN llamar a la regla", async () => {
+    const { servidor, escritos } = conEscritor();
+    const r = await renombrar(servidor, {
+      clase: "entorno",
+      accion: "renombrar",
+      entorno: "webstudio",
+      nombre: 7,
+    });
+    await asentar();
+    expect(r.estado).toBe(409);
+    expect(JSON.parse(r.cuerpo).motivo).toMatch(/texto/);
+    expect(escritos).toEqual([]);
   });
 });
 

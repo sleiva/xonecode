@@ -1363,6 +1363,24 @@ export function App({
           return "el servidor se negó";
         }
       }}
+      alRenombrarEntorno={async (entorno, nombre) => {
+        // La MISMA costura que `alQuitarEntorno`, y por el mismo motivo: la regla de qué nombre
+        // vale es del servidor, y su negativa viaja en el CUERPO de un 409 —`informar` no llega
+        // al navegador desde el vestíbulo—, así que aquí un `undefined` significa «lo escribió».
+        const r = (await enviar({
+          clase: "entorno",
+          accion: "renombrar",
+          entorno,
+          nombre,
+        })) as Response | undefined;
+        if (r?.status !== 409) return undefined;
+        try {
+          const cuerpo = (await r.json()) as { motivo?: unknown };
+          return typeof cuerpo.motivo === "string" ? cuerpo.motivo : "el servidor se negó";
+        } catch {
+          return "el servidor se negó";
+        }
+      }}
       alResponderSecreto={async (valor) => {
         await enviar({ clase: "secreto", valor });
         store.contestarSecreto();

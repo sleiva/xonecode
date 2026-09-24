@@ -36,7 +36,7 @@ import type { Eleccion, FuentesDeEleccion, Proveedor } from "../../core/modelos.
 import type { ConsumoDeSesionPorCuenta, CatalogoModelosPort } from "../../core/ports.js";
 import { consumoDeLaSesion, consumoPersistible, esDoble } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
-import { rutaDeWorkspace } from "../../core/settings.js";
+import { motivoDeNombreDeEntornoInaceptable, rutaDeWorkspace } from "../../core/settings.js";
 import {
   URL_CLOUDSTUDIO_POR_OMISION,
   SCOPES_CLOUDSTUDIO_AGENTE,
@@ -639,6 +639,26 @@ export interface Vestibulo {
    * elección —«ninguno»— y no un «no lo he dicho».
    */
   guardarProyectosVisibles(entorno: string, proyectos: readonly string[]): Promise<{ ruta: string }>;
+  /**
+   * El NOMBRE con el que se enseña un entorno —su alias—, escrito a mano.
+   *
+   * Es un RÓTULO y no un identificador: el `id` —que sale de la URL y es segmento de la
+   * carpeta del workspace— NO se toca, así que renombrar no mueve ninguna copia local ni
+   * invalida ninguna credencial. Hasta ahora el nombre solo lo ponía el servidor (ver
+   * `renombrarConElServidor`), y sin forma de escribirlo el «Otro» de un on-premise se
+   * quedaba con el host por nombre para siempre.
+   *
+   * El nombre llega SUPUESTO VÁLIDO —la regla es
+   * `core/settings.ts#motivoDeNombreDeEntornoInaceptable` y quien llama la aplica para poder
+   * contestar 409— y aun así se vuelve a comprobar AQUÍ, que es la diferencia con
+   * `olvidarEntorno`: la condición de aquél no la puede ver el puerto (depende de qué consolas
+   * y tareas viven), pero ESTE dato lo tiene delante, y es el que mal puesto no deja un entorno
+   * sin nombre sino NINGÚN entorno — `validarEntorno` descarta al cargar los que no lo tienen.
+   *
+   * Dos entornos pueden acabar llamándose igual: el nombre no es la clave, y el duplicado se
+   * ADVIERTE en la pantalla en vez de impedirse aquí.
+   */
+  renombrarEntorno(id: string, nombre: string): Promise<{ ruta: string }>;
   proyectosDe(entorno: string): Promise<readonly ProyectoRemoto[]>;
   /**
    * Las ramas de un proyecto. Acepta la identidad ENTERA (`{id, nombre}`) además del nombre
@@ -962,6 +982,29 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
   };
 
   /**
+   * Escribe el NOMBRE de un entorno y lo deja dicho en la lista viva. El ÚNICO sitio que
+   * toca un nombre.
+   *
+   * Tiene dos llamadores con motivos OPUESTOS —el servidor diciendo cómo se llama, y la
+   * persona escribiendo el que quiera— y el cuerpo es el mismo: componer el entorno con el
+   * nombre nuevo, guardarlo y sustituirlo en `registrados` POR ID. Escribirlo dos veces
+   * sería un segundo sitio donde el `splice` se puede olvidar, y olvidarlo deja la lista
+   * viva y `settings.json` discrepando en silencio hasta el próximo arranque —que es el
+   * síntoma más caro de este fichero, porque la pantalla sigue enseñando el nombre viejo sin
+   * que nada esté roto.
+   *
+   * El `id` no se toca aquí ni en ninguno de los dos: es un segmento de ruta
+   * (`rutaDeWorkspace`) con una copia local colgando de él.
+   */
+  const escribirNombre = (entorno: Entorno, nombre: string): { ruta: string } => {
+    const renombrado: Entorno = { ...entorno, nombre };
+    const guardado = opciones.guardarEntorno(renombrado);
+    const donde = registrados.findIndex((e) => e.id === entorno.id);
+    if (donde >= 0) registrados.splice(donde, 1, renombrado);
+    return guardado;
+  };
+
+  /**
    * El nombre BUENO del entorno, el que dice el propio servidor, cuando por fin se ha
    * hablado con él.
    *
@@ -972,7 +1015,11 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
    * Dos guardas, y las dos importan:
    * - Solo se pisa un nombre DEDUCIDO (el que sigue siendo igual al host). Un nombre que
    *   puso una persona —o el de un entorno oficial, «XOne WebStudio»— no lo cambia un
-   *   servidor remoto por su cuenta.
+   *   servidor remoto por su cuenta. **La marca de deducido es el propio texto**, así que
+   *   renombrar un entorno EXACTAMENTE al host lo deja marcado como deducido otra vez y el
+   *   siguiente `serverInfo` lo pisaría: se declara en vez de añadir un campo
+   *   (`nombreDeducido`) que sería una clave nueva en `settings.json`, o sea una migración
+   *   del fichero entero para proteger un caso que hay que teclear a propósito.
    * - El id NO se toca nunca. Es un segmento de ruta (`rutaDeWorkspace`) y ya hay una copia
    *   local colgando de él: cambiarlo aquí sería mudar la carpeta del proyecto de sitio
    *   porque el servidor decidió llamarse de otra forma.
@@ -981,10 +1028,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     if (nombreDelServidor === undefined || nombreDelServidor === "") return;
     if (entorno.nombre !== hostDeUrl(entorno.url)) return;
     if (nombreDelServidor === entorno.nombre) return;
-    const renombrado: Entorno = { ...entorno, nombre: nombreDelServidor };
-    opciones.guardarEntorno(renombrado);
-    const donde = registrados.findIndex((e) => e.id === entorno.id);
-    if (donde >= 0) registrados.splice(donde, 1, renombrado);
+    escribirNombre(entorno, nombreDelServidor);
     informar(`entorno «${entorno.id}»: el servidor dice llamarse «${nombreDelServidor}»`);
   };
 
@@ -1932,6 +1976,22 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       const donde = registrados.findIndex((e) => e.id === registrado.id);
       if (donde >= 0) registrados.splice(donde, 1, conProyectos);
       informar(`proyectos visibles de «${registrado.id}»: ${proyectos.length === 0 ? "ninguno" : proyectos.join(", ")}`);
+      return guardado;
+    },
+
+    async renombrarEntorno(id, nombre) {
+      const registrado = entornoPorId(id);
+      // El nombre se comprueba también aquí, y no solo en quien llama: es el dato que, mal
+      // puesto, se lleva por delante el entorno ENTERO en el siguiente arranque (ver el doc de
+      // la regla). `olvidarEntorno` se fía de quien llama porque su condición no la puede ver
+      // este puerto; esta sí.
+      const motivo = motivoDeNombreDeEntornoInaceptable(nombre);
+      if (motivo !== undefined) {
+        throw new Error(`«${nombre}» no vale como nombre de «${registrado.id}»: ${motivo}`);
+      }
+      const limpio = nombre.trim();
+      const guardado = escribirNombre(registrado, limpio);
+      informar(`entorno «${registrado.id}»: pasa a llamarse «${limpio}»`);
       return guardado;
     },
 

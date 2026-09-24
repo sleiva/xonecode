@@ -1001,6 +1001,16 @@ export type MensajeDelCliente =
        *  nombre escrito; ausente = las copias se quedan. */
       borrarCopias?: boolean;
     }
+  /**
+   * Ponerle NOMBRE a un entorno registrado: el alias con el que se lee en la barra y en su
+   * pestaña de Ajustes. Es un RÓTULO, y por eso el `id` NO viaja — renombrar no mueve la
+   * carpeta del entorno en el workspace ni invalida sus credenciales.
+   *
+   * El servidor contesta **409 con `{ motivo }`** si el nombre no vale (vacío, o más largo de
+   * lo que cabe en su pestaña), igual que `olvidar`. Dos entornos con el mismo nombre sí se
+   * admiten: el aviso de duplicado es de la pantalla, que es donde se ven los dos.
+   */
+  | { clase: "entorno"; accion: "renombrar"; entorno: string; nombre: string }
   /** Cambiar de entorno activo: el de cuyos proyectos se habla. */
   | { clase: "entorno"; accion: "activo"; entorno: string }
   /** «Dime los proyectos de este entorno», sin hacerlo activo: las casillas de su pestaña
