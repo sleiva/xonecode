@@ -42,9 +42,9 @@
     {
       "id": 5,
       "subject": "Task 6: verificación final del suite completo",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [0, 1, 2, 3, 4],
-      "description": "**Goal:** Confirmar que nada del resto del proyecto se rompió con estos cinco cambios.\n\n**Depende de:** Tasks 1-5.\n\n**Files:** ninguno (solo verificación).\n\n**Acceptance Criteria:**\n- [ ] `npm test -- --maxWorkers=2` — todo el suite en verde, ni un test menos que antes.\n- [ ] `npm run typecheck` — limpio (host y cliente).\n\n**Verify:** `npm test -- --maxWorkers=2 && npm run typecheck` → ambos terminan en 0, sin fallos ni avisos de tipos nuevos. Si algo falla, NO se marca esta tarea como hecha: se vuelve a la tarea (1-5) cuyo fichero aparece en el fallo, se arregla con TDD, y se repite este Task 6.\n\n```json:metadata\n{\"files\": [], \"verifyCommand\": \"npm test -- --maxWorkers=2 && npm run typecheck\", \"acceptanceCriteria\": [\"suite completo en verde\", \"typecheck limpio en host y cliente\"], \"modelTier\": \"mechanical\"}\n```",
+      "description": "**Goal:** Confirmar que nada del resto del proyecto se rompió con estos cinco cambios.\n\nComplete — see ledger. 318 test files, 5449 tests, todo verde; typecheck limpio.",
       "activeForm": "Verificando el suite completo"
     }
   ],
