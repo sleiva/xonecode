@@ -1,0 +1,52 @@
+{
+  "planPath": "docs/superpowers/plans/2026-09-25-cancelacion-de-execute.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 1: matarGrupoReal compartida, con Windows real",
+      "status": "pending",
+      "description": "**Goal:** Una función exportada que mata un árbol de procesos por PID, con una rama Windows real (hoy inexistente: `crearEjecutor` cae en silencio a matar solo el hijo en Windows).\n\n**Files:**\n- Modify: `src/agent/dispositivos/procesosEnMaquina.ts`\n- Test: `src/agent/dispositivos/procesosEnMaquina.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `matarGrupoReal(pid, senal, opciones?)` exportada desde `procesosEnMaquina.ts`.\n- [ ] En POSIX (`plataforma !== \"win32\"`), sigue llamando `process.kill(-pid, senal)` — mismo comportamiento de siempre.\n- [ ] En `win32`, llama `taskkill /PID <pid> /T /F` y NUNCA `process.kill`.\n- [ ] `crearEjecutor` usa `matarGrupoReal` como valor por omisión de `matarGrupo`.\n- [ ] Los tests existentes de `crearEjecutor` (que inyectan su propio `matarGrupo`) siguen en verde sin tocarlos.\n\n**Verify:** `npx vitest run src/agent/dispositivos/procesosEnMaquina.test.ts` → todo verde. Ver el plan (`docs/superpowers/plans/2026-09-25-cancelacion-de-execute.md`, Task 1) para el código completo del test y de la implementación, listo para copiar.\n\n```json:metadata\n{\"files\": [\"src/agent/dispositivos/procesosEnMaquina.ts\", \"src/agent/dispositivos/procesosEnMaquina.test.ts\"], \"verifyCommand\": \"npx vitest run src/agent/dispositivos/procesosEnMaquina.test.ts\", \"acceptanceCriteria\": [\"matarGrupoReal exportada con rama Windows real via taskkill /PID pid /T /F\", \"rama POSIX sin cambios de comportamiento\", \"crearEjecutor usa matarGrupoReal como default de matarGrupo\", \"tests existentes de crearEjecutor siguen en verde\"], \"modelTier\": \"mechanical\"}\n```",
+      "activeForm": "Implementando matarGrupoReal compartida"
+    },
+    {
+      "id": 1,
+      "subject": "Task 2: test de integración con procesos reales",
+      "status": "pending",
+      "blockedBy": [0],
+      "description": "**Goal:** Probar de verdad, con procesos del sistema operativo reales, que `matarGrupoReal` mata un hijo Y su nieto.\n\n**Depende de:** Task 1 (usa `matarGrupoReal`).\n\n**Nota:** este test rompe a propósito el invariante \"no se lanza un proceso de verdad\" que `procesosEnMaquina.test.ts` declara en su cabecera. Por eso vive en un fichero SEPARADO y con el nombre que lo dice. Es mecánico (el código ya está completo en el plan) pero delicado: si el margen de espera es demasiado corto en una máquina de CI lenta, sube el `esperar(300)` antes de tocar `matarGrupoReal`.\n\n**Files:**\n- Create: `src/agent/dispositivos/matarGrupoReal.integracion.test.ts`\n\n**Acceptance Criteria:**\n- [ ] Lanza un proceso real (`sh -c \"sleep 30 & echo $!; wait\"`, `detached: true`) que a su vez lanza un nieto real.\n- [ ] Llama `matarGrupoReal(pid, \"SIGKILL\")` de verdad (sin inyectar nada).\n- [ ] Comprueba que el proceso Y su nieto están muertos en menos de un segundo.\n- [ ] Solo corre en POSIX: se salta en win32 con `it.skipIf`, con el motivo comentado.\n\n**Verify:** `npx vitest run src/agent/dispositivos/matarGrupoReal.integracion.test.ts` → PASS en macOS/Linux (se salta en Windows). Código completo listo para copiar en el plan (Task 2).\n\n```json:metadata\n{\"files\": [\"src/agent/dispositivos/matarGrupoReal.integracion.test.ts\"], \"verifyCommand\": \"npx vitest run src/agent/dispositivos/matarGrupoReal.integracion.test.ts\", \"acceptanceCriteria\": [\"proceso real con nieto real, matados en menos de 1s tras matarGrupoReal\", \"se salta en win32\", \"vive en fichero propio, no dentro de procesosEnMaquina.test.ts\"], \"modelTier\": \"mechanical\"}\n```",
+      "activeForm": "Escribiendo el test de integración con procesos reales"
+    },
+    {
+      "id": 2,
+      "subject": "Task 3: crearExecuteCancelable",
+      "status": "pending",
+      "description": "**Goal:** Un reemplazo completo de `LocalShellBackend.execute` que acepta una `AbortSignal`, mata el ÁRBOL (no solo el hijo) al vencer el timeout o al cancelar, y mantiene el mismo formato de salida que la librería.\n\n**Files:**\n- Create: `src/agent/grafo/ejecucionCancelable.ts`\n- Test: `src/agent/grafo/ejecucionCancelable.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `crearExecuteCancelable(opciones, deps?)` devuelve `(comando, senal?) => Promise<ResultadoDeEjecucion>`.\n- [ ] Al abortar la señal, llama `matarGrupo(pid, \"SIGKILL\")` — nunca `hijo.kill()` a secas (salvo sin pid).\n- [ ] Al vencer `timeoutS`, hace lo mismo.\n- [ ] Exit code 130 al cancelar, 124 al vencer el timeout.\n- [ ] Sin pid (o si `matarGrupo` lanza), cae a `hijo.kill(senal)`.\n- [ ] El formato de una ejecución normal reproduce EXACTAMENTE el de la librería: stdout+stderr con prefijo `[stderr]`, `<no output>` si no hay nada, `Exit code: N` si el código no es 0, truncado a 100 KB.\n- [ ] `lanzarReal` usa `spawn(comando, { shell: true, detached: true, env, cwd })`.\n\n**Verify:** `npx vitest run src/agent/grafo/ejecucionCancelable.test.ts` → todo verde. Código completo del test y de la implementación en el plan (Task 3), listo para copiar.\n\n```json:metadata\n{\"files\": [\"src/agent/grafo/ejecucionCancelable.ts\", \"src/agent/grafo/ejecucionCancelable.test.ts\"], \"verifyCommand\": \"npx vitest run src/agent/grafo/ejecucionCancelable.test.ts\", \"acceptanceCriteria\": [\"abortar mata el grupo con SIGKILL, exitCode 130\", \"timeout mata el grupo con SIGKILL, exitCode 124\", \"sin pid cae a hijo.kill()\", \"formato de salida normal igual al de deepagents\", \"lanzarReal usa detached:true\"], \"modelTier\": \"mechanical\"}\n```",
+      "activeForm": "Implementando crearExecuteCancelable"
+    },
+    {
+      "id": 3,
+      "subject": "Task 4: backendDelProyectoConShell sustituye execute",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** El backend que TrueForge (y deepagents) usa para el especialista con `ejecucion: true` monta el `execute` nuevo en vez del de la librería.\n\n**Depende de:** Task 3.\n\n**Files:**\n- Modify: `src/agent/grafo/proyecto.ts`\n- Test: `src/agent/grafo/proyecto.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `backendDelProyectoConShell(raiz, entorno, senalDelTurno?)` — tercer parámetro opcional.\n- [ ] Sin `senalDelTurno`, el comportamiento observable es EXACTAMENTE el de antes (tests existentes en verde sin tocarlos).\n- [ ] Con una `AbortSignal` que se aborta a mitad de un comando real y largo, `execute()` resuelve con `exitCode: 130`.\n- [ ] `backendDeAgente`'s opción `ejecucion` acepta `senal?: () => AbortSignal | undefined` y lo reenvía.\n- [ ] Se sustituye la propiedad `execute` de la INSTANCIA — no se subclasifica `LocalShellBackend`.\n\n**Verify:** `npx vitest run src/agent/grafo/proyecto.test.ts` → todo verde. Código completo de los dos tests nuevos y de la implementación en el plan (Task 4).\n\n```json:metadata\n{\"files\": [\"src/agent/grafo/proyecto.ts\", \"src/agent/grafo/proyecto.test.ts\"], \"verifyCommand\": \"npx vitest run src/agent/grafo/proyecto.test.ts\", \"acceptanceCriteria\": [\"tercer parametro senalDelTurno opcional sin romper comportamiento previo\", \"con senal abortada a mitad de comando largo, exitCode 130\", \"backendDeAgente.ejecucion.senal reenviado\", \"sustitucion de instancia, no subclase\"], \"modelTier\": \"standard\"}\n```",
+      "activeForm": "Conectando backendDelProyectoConShell con la señal del turno"
+    },
+    {
+      "id": 4,
+      "subject": "Task 5: wiring en sesionTrueforge.ts",
+      "status": "pending",
+      "blockedBy": [3],
+      "description": "**Goal:** Que cancelar una sesión de TrueForge, con un `execute` real en marcha, libere el turno rápido en vez de esperar a que el comando termine solo.\n\n**Depende de:** Task 4.\n\n**Files:**\n- Modify: `src/agent/motores/trueforge/sesionTrueforge.ts`\n- Test: `src/agent/motores/trueforge/sesionTrueforge.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `conShell()` pasa `senal: () => aborto?.signal` a `montarBackend`, el MISMO patrón ya usado ahí mismo para `modeloParaTrueforge`.\n- [ ] `montarBackend`'s parámetro `ejecucion` admite el campo `senal` en su tipo.\n- [ ] Test de integración: un especialista con `ejecucion: true` (`device-controller`) lanza un comando real y largo (`sleep 5`); se cancela el turno a mitad; el turno se libera (rechaza) en bastante menos de los 5 segundos del comando.\n\n**Verify:** `npx vitest run src/agent/motores/trueforge/sesionTrueforge.test.ts` → todo verde. Código completo del test de integración y del wiring en el plan (Task 5).\n\n```json:metadata\n{\"files\": [\"src/agent/motores/trueforge/sesionTrueforge.ts\", \"src/agent/motores/trueforge/sesionTrueforge.test.ts\"], \"verifyCommand\": \"npx vitest run src/agent/motores/trueforge/sesionTrueforge.test.ts\", \"acceptanceCriteria\": [\"conShell pasa senal: () => aborto?.signal\", \"montarBackend acepta senal en su tipo\", \"cancelar a mitad de execute libera el turno en menos de 4s en vez de esperar los 5s del comando\"], \"modelTier\": \"standard\"}\n```",
+      "activeForm": "Conectando la señal del turno hasta la tool execute"
+    },
+    {
+      "id": 5,
+      "subject": "Task 6: verificación final del suite completo",
+      "status": "pending",
+      "blockedBy": [0, 1, 2, 3, 4],
+      "description": "**Goal:** Confirmar que nada del resto del proyecto se rompió con estos cinco cambios.\n\n**Depende de:** Tasks 1-5.\n\n**Files:** ninguno (solo verificación).\n\n**Acceptance Criteria:**\n- [ ] `npm test -- --maxWorkers=2` — todo el suite en verde, ni un test menos que antes.\n- [ ] `npm run typecheck` — limpio (host y cliente).\n\n**Verify:** `npm test -- --maxWorkers=2 && npm run typecheck` → ambos terminan en 0, sin fallos ni avisos de tipos nuevos. Si algo falla, NO se marca esta tarea como hecha: se vuelve a la tarea (1-5) cuyo fichero aparece en el fallo, se arregla con TDD, y se repite este Task 6.\n\n```json:metadata\n{\"files\": [], \"verifyCommand\": \"npm test -- --maxWorkers=2 && npm run typecheck\", \"acceptanceCriteria\": [\"suite completo en verde\", \"typecheck limpio en host y cliente\"], \"modelTier\": \"mechanical\"}\n```",
+      "activeForm": "Verificando el suite completo"
+    }
+  ],
+  "lastUpdated": "2026-09-25T00:00:00.000Z"
+}
