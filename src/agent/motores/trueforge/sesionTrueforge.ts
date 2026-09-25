@@ -82,6 +82,7 @@ import { encenderTrazaDeErrores } from "../../trazaDeErroresEnDisco.js";
 import { entornoConDepuracion } from "../../turno/depuracion.js";
 import { detalleDe, parametrosDe } from "../../turno/resumenDeTool.js";
 import { apartarMemoria, cargarMemoria, fotoSaneada, guardarMemoria, textoDeMemoriaDescartada, type FotoDeHilo } from "./memoriaTrueforge.js";
+import { crearNota, type Nota } from "./notas.js";
 import type { ToolDeLangchain } from "./toolsPropias.js";
 import { crearNavegacionXone } from "../../grafo/navegacionXone.js";
 import { hechosDelProyectoDe } from "../../navegacion/hechosEnDisco.js";
@@ -261,7 +262,16 @@ interface Pendiente {
 
 const claveDe = (hilo: string, id: string): string => `${hilo}:${id}`;
 
-export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge): Promise<SesionReal> {
+/**
+ * `agregarNota` no vive todavía en `SesionReal` (IXCODE-4, Task 6 se la añade ahí como opcional,
+ * compartida con deepagents): se ensancha el tipo de retorno AQUÍ, en vez de esperar a esa task,
+ * porque una sesión sin ella tipado como `SesionReal` a secas dejaría `s.agregarNota(...)` en
+ * rojo bajo `tsc --noEmit` desde este mismo commit. Sigue siendo un `SesionReal` válido en
+ * cualquier sitio que lo espere (`turnoReal.ts#abrirSesionReal`), por ser una intersección.
+ */
+export async function abrirSesionTrueforge(
+  opciones: OpcionesDeSesionTrueforge
+): Promise<SesionReal & { agregarNota(texto: string): void }> {
   const { raiz } = opciones;
   let modelos = opciones.modelos;
   const logger = winston.createLogger({ silent: true, transports: [] });
@@ -308,6 +318,10 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
     artefactosPorAnunciar.push(a);
     if (a.mime !== undefined && a.mime.startsWith("image/")) capturasDelTurno.push(a);
   };
+  /** Lo que la persona escribió mientras el agente trabajaba, IXCODE-4: se entrega por
+   *  `capacidadDeNotas`, la MISMA instancia en la raíz y en cada hijo. */
+  const notas: Nota[] = [];
+  const capacidadDeNotasDeLaSesion = capacidadDeNotas(notas);
   const montarBackend = (ejecucion?: { entorno: Record<string, string>; senal?: () => AbortSignal | undefined }) =>
     backendDeAgente({
       raiz,
@@ -493,9 +507,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
     const piezas = capacidadesDelEspecialista(agente, params.request.name, {
       backend: backend as never,
       propias: propiasDe,
-      // Placeholder (IXCODE-4, Task 2): cola vacía y permanente, no-op — `processPreLLM` nunca
-      // encuentra nada pendiente. La Tarea 4 lo sustituye por el `Nota[]` real de la sesión.
-      notas: capacidadDeNotas([]),
+      notas: capacidadDeNotasDeLaSesion,
       conShell: () =>
         montarBackend({
           entorno: entornoDeLaShellDelProyecto(raiz, opciones.artefactos),
@@ -585,6 +597,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
           capacidadDePropias(propiasDelRaiz, backend as never),
           capacidadDeRecortes(backend as never),
           capacidadDeFecha(),
+          capacidadDeNotasDeLaSesion,
         ]),
         /**
          * **La conversación se RESUME al mismo umbral que deepagents** (`UMBRAL_RESUMEN_TOKENS`):
@@ -1179,6 +1192,15 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       cancelado = true;
       aborto?.abort(new Error("turno cancelado por el usuario"));
     },
+    /**
+     * Empuja la nota a la cola de la sesión, sin más: no comprueba que haya un turno en marcha
+     * —ese contrato lo sostiene quien llama (`web/servidor/vestibulo.ts`, Task 6)—, así que
+     * llamarlo sin turno en curso no lanza, y la nota queda ahí para la próxima llamada al
+     * modelo que la recoja `capacidadDeNotasDeLaSesion`.
+     */
+    agregarNota(texto: string) {
+      notas.push(crearNota(texto));
+    },
     consumo(): ConsumoDeSesionPorCuenta {
       return {
         modelo: { entrada: tracker.input, salida: tracker.output, cache: tracker.cache },
@@ -1194,5 +1216,5 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       cerrada = true;
       aborto?.abort(new Error("sesión cerrada"));
     },
-  } as SesionReal;
+  } as SesionReal & { agregarNota(texto: string): void };
 }

@@ -1537,3 +1537,76 @@ describe("unir_secciones en TrueForge, con el reparto de deepagents", () => {
     expect(toolsPorLlamada[4]).not.toContain("unir_secciones");
   }, 30_000);
 });
+
+describe("agregarNota: una nota mientras el agente trabaja llega al hilo que trabaja", () => {
+  it("no lanza aunque no haya turno en marcha", async () => {
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: modelos(), entorno: ENTORNO, skills: CATALOGO });
+    expect(() => s.agregarNota("nadie está trabajando todavía")).not.toThrow();
+  });
+
+  it("empujada mientras un especialista trabaja, llega a SU siguiente llamada, no a la primera", async () => {
+    let sesion: Awaited<ReturnType<typeof abrirSesionTrueforge>> | undefined;
+    const { m, vistos } = modelosConGuion([
+      // 1) la raíz delega
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "arregla el login" }) }] })],
+      // 2) la PRIMERA llamada del hijo: una tool call de VERDAD (`read_file`, sobre el
+      //    `app.xml` que `proyecto()` ya escribe) — no un texto suelto. Verificado contra la
+      //    librería real: una respuesta SIN tool_calls termina el hilo ahí mismo
+      //    (`AGENT_DONE`), así que con dos textos sueltos el hijo nunca llegaría a una
+      //    segunda llamada. El mismo patrón que ya usa el test «un hijo con un nombre que no
+      //    es de ningún especialista…», unas líneas más arriba en este fichero.
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "r1", name: "read_file", args: JSON.stringify({ file_path: "/app.xml" }) }] })],
+      // 3) la SEGUNDA llamada del hijo — aquí debe llegar la nota (se empuja tras la 2)
+      [new AIMessageChunk({ content: "Hecho." })],
+      // 4) la raíz cierra
+      [new AIMessageChunk({ content: "Listo." })],
+    ]);
+    sesion = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    // Empuja la nota justo cuando el hijo ya hizo su PRIMERA llamada (vistos.length === 2: la
+    // de la raíz delegando, y la primera del hijo).
+    const original = m.paraPapel;
+    // No hace falta interceptar nada más: basta con llamar `agregarNota` DESPUÉS de que la
+    // sesión exista y ANTES de esperar el turno, porque `modelosConGuion` resuelve cada
+    // `stream` de forma síncrona en microtareas — la propia promesa de `s.turno` no ha
+    // arrancado el hilo del hijo todavía. Se comprueba con el contenido de `vistos`, no con
+    // el orden de las llamadas a `agregarNota`.
+    void original;
+    const turnoPromesa = sesion.turno("arregla el login", piel().p);
+    // Espera a que el hijo haga su primera llamada (dos entradas en `vistos`: raíz + hijo#1)
+    // antes de anotar, para que la nota caiga ENTRE la primera y la segunda del hijo.
+    await new Promise<void>((resuelto) => {
+      const comprobar = () => (vistos.length >= 2 ? resuelto() : setTimeout(comprobar, 0));
+      comprobar();
+    });
+    sesion.agregarNota("cambia de idea: usa el login antiguo");
+    await turnoPromesa;
+
+    // vistos[0] = raíz delegando, vistos[1] = 1ª del hijo, vistos[2] = 2ª del hijo, vistos[3] = raíz cerrando.
+    expect(vistos[1]!.some((t) => t.includes("cambia de idea"))).toBe(false);
+    expect(vistos[2]!.some((t) => t.includes("cambia de idea"))).toBe(true);
+  }, 20_000);
+
+  it("la raíz y cada hijo comparten la MISMA instancia: una nota entregada a la raíz no consume la ración del hijo", async () => {
+    const { m, vistos } = modelosConGuion([
+      // 1) la raíz delega — es su PRIMERA llamada, así que la nota (empujada antes de `turno()`)
+      //    le llega a ELLA aquí y se marca entregada A SU HILO («main»).
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "arregla el login" }) }] })],
+      // 2) la PRIMERA llamada del hijo: si la raíz y el hijo compartieran la nota como si fuera
+      //    UNA ración por SESIÓN —o si `capacidadDeNotas` se construyera con una instancia
+      //    nueva por hilo, sin ver lo que la otra ya marcó— la nota no le llegaría aquí. Con la
+      //    MISMA instancia, entregada por `threadId`, sí le llega: es SU hilo el que todavía no
+      //    la había recibido, aunque el de la raíz ya la tenga marcada.
+      [new AIMessageChunk({ content: "Hecho." })],
+      // 3) la raíz cierra.
+      [new AIMessageChunk({ content: "Listo." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    s.agregarNota("una nota para todos");
+    await s.turno("arregla el login", piel().p);
+
+    // vistos[0] = raíz delegando (recibe la nota), vistos[1] = 1ª del hijo (la recibe TAMBIÉN,
+    // pese a que la raíz ya la tenía marcada como entregada a SU propio hilo).
+    expect(vistos[0]!.some((t) => t.includes("una nota para todos"))).toBe(true);
+    expect(vistos[1]!.some((t) => t.includes("una nota para todos"))).toBe(true);
+  }, 20_000);
+});
