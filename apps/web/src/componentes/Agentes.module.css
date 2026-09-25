@@ -162,6 +162,8 @@
  * lo que quita el ruido de dos rótulos repetidos por fila; el marco es lo que hace que se
  * sepa que se pueden pulsar. Son cosas distintas y se pueden tener las dos.
  */
+/* Mismo tratamiento de contraste que `.secundario` (`Boton.module.css`, IXCODE-2), pero sin
+   componerlo: es un icono cuadrado, no un botón de texto. */
 .icono {
   display: inline-flex;
   align-items: center;
@@ -170,9 +172,9 @@
   width: 32px;
   height: 32px;
   padding: 0;
-  border: 0.5px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l4);
   border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
+  background: var(--dsw-alias-button-elevated-fill);
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
 }

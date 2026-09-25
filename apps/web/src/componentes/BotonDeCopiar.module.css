@@ -4,17 +4,17 @@
 /* Un botón de icono, sin caja: vive bajo el mensaje y no debe competir con él. El color
    solo sube al pasar por encima, que es cuando alguien lo está buscando. */
 /* CON borde y fondo, no plano: un icono suelto sobre el fondo del mensaje no se lee como un
-   botón —no se ve dónde empieza ni dónde acaba— y nadie lo pulsa. Es la misma caja que el
-   resto de acciones secundarias de la interfaz: borde de medio píxel, esquina de 6 y el
-   fondo de la capa 1. */
+   botón —no se ve dónde empieza ni dónde acaba— y nadie lo pulsa. Los mismos alias que
+   `.secundario` (`Boton.module.css`, IXCODE-2) —borde `l4`, fondo elevado—, sin componerlo
+   porque la esquina (6, no 8) y el padding son los suyos propios. */
 .boton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 4px 6px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l4);
   border-radius: 6px;
-  background: var(--dsw-alias-bg-layer-1);
+  background: var(--dsw-alias-button-elevated-fill);
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
 }

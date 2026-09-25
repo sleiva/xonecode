@@ -289,21 +289,10 @@
 }
 
 /* Los botones del formulario. El mismo `.accion` que la fila de al lado para que un botón
-   `variant="outline"` del paquete —que en tema oscuro llega blanco— se lea como los demás. */
+   `variant="outline"` del paquete —que en tema oscuro llega blanco— se lea como los demás:
+   ahora es el mismo botón secundario de siempre (`Boton.module.css#secundario`). */
 .accion {
-  white-space: nowrap;
-  padding: 6px 10px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.accion:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  composes: secundario from "./Boton.module.css";
 }
 
 .botones {

@@ -163,21 +163,11 @@
   gap: 8px;
 }
 
-/* Cancelar, con el mismo par de alias que el `.accion` anidado de más abajo y que
-   `Ajustes.module.css#accion`: es el mismo botón de contorno, no uno que se le parece. */
+/* Cancelar, el mismo botón secundario de siempre (`Boton.module.css#secundario`) — con
+   `.grande` porque vive al lado de `.accion`, que también lo lleva. */
 .cancelar {
+  composes: secundario grande from "./Boton.module.css";
   flex: none;
-  padding: 8px 16px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  cursor: pointer;
-}
-
-.cancelar:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 /*
