@@ -307,7 +307,7 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
     artefactosPorAnunciar.push(a);
     if (a.mime !== undefined && a.mime.startsWith("image/")) capturasDelTurno.push(a);
   };
-  const montarBackend = (ejecucion?: { entorno: Record<string, string> }) =>
+  const montarBackend = (ejecucion?: { entorno: Record<string, string>; senal?: () => AbortSignal | undefined }) =>
     backendDeAgente({
       raiz,
       ficheros: ficherosDelProyecto(raiz),
@@ -493,7 +493,13 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
       backend: backend as never,
       propias: propiasDe,
       conShell: () =>
-        montarBackend({ entorno: entornoDeLaShellDelProyecto(raiz, opciones.artefactos) }) as unknown as {
+        montarBackend({
+          entorno: entornoDeLaShellDelProyecto(raiz, opciones.artefactos),
+          // El MISMO patrón que ya usa `modeloParaTrueforge` un poco más arriba en este
+          // fichero: un getter que se reevalúa en cada llamada, así siempre lee el
+          // `AbortController` de la RONDA en curso y no uno capturado al construir.
+          senal: () => aborto?.signal,
+        }) as unknown as {
           execute(c: string): unknown;
           write(ruta: string, contenido: string): unknown;
         },

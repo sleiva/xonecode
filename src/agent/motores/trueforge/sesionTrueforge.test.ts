@@ -344,6 +344,42 @@ describe("una sesión con el motor TrueForge", () => {
     expect(vistos[1]!.join("\n")).not.toContain("/skills/xone-development/SKILL.md");
   }, 30_000);
 
+  it("cancelar el turno mientras `execute` corre un comando largo LIBERA el turno rápido, sin esperar a que termine", async () => {
+    const raiz = proyecto();
+    const guiones = [
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "device-controller", input: "espera" }) }] })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "x1", name: "execute", args: JSON.stringify({ command: "sleep 5" }) }] })],
+    ];
+    const modelo = {
+      bindTools: (tools: unknown[]) => {
+        void tools;
+        return modelo;
+      },
+      stream: async () => {
+        const g = guiones.shift() ?? [new AIMessageChunk({ content: "" })];
+        return (async function* () {
+          for (const t of g) yield t;
+        })();
+      },
+    };
+    const m = { paraPapel: () => modelo, paraModelo: () => modelo, descripcion: () => ({}) } as unknown as ModelosPort;
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+
+    const empieza = Date.now();
+    const turno = s.turno("espera", piel().p);
+    // Deja que `sh -c "sleep 5"` arranque de verdad antes de cancelar.
+    await new Promise((r) => setTimeout(r, 300));
+    s.cancelar();
+    // A diferencia de deepagents (`turnoReal.ts`), cuyo `agent.stream({signal})` de LangGraph
+    // RECHAZA con el motivo del abort, el `AgentThreadOrchestrator.execute()` real de TrueForge
+    // solo apaga `shouldStopExecution` y termina LIMPIO — otros dos tests de este mismo fichero
+    // («cancelar MIENTRAS se decide una aprobación…», «CANCELAR aborta la señal que recibió el
+    // hijo…») ya dependen de que `turno()` RESUELVA tras cancelar. Lo que aquí se prueba es que
+    // se libera RÁPIDO, no que rechace.
+    await turno;
+    expect(Date.now() - empieza).toBeLessThan(4000);
+  }, 10_000);
+
   it("cada especialista sale de SU `.md`: el que solo lee escribe SOLO fuera del proyecto y sin preguntar, el que escribe pide aprobación", async () => {
     const raiz = proyecto();
     const { m, vistos, toolsPorLlamada } = modelosConGuion([
