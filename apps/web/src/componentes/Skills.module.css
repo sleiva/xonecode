@@ -315,7 +315,6 @@
   composes: primario from "./Boton.module.css";
   flex: none;
   padding: 6px 12px;
-  font-size: 12px;
 }
 
 /*

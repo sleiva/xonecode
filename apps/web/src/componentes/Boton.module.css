@@ -9,6 +9,11 @@
  * Un componente COMPONE su clase local desde aquí (`composes: secundario from
  * "./Boton.module.css";`), así que el nombre de clase que usa cada `.tsx`
  * (`estilos.accion`, `estilos.principal`…) no cambia.
+ *
+ * Los TRES roles llevan `font-size: 12px`, aquí y no en cada consumidor: `.peligro` se lo
+ * quedó sin él una primera vez, y sin talla propia hereda la del contexto — «Eliminar» salía
+ * más grande que «Cambiar clave», que sí lo tenía. Un botón que se ve distinto de tamaño se
+ * lee como de otra fila.
  */
 
 /* IXCODE-2: «los botones de Ajustes > Dispositivos necesitan más contraste para que sean
@@ -53,6 +58,7 @@
   background: var(--xonecode-azul);
   color: var(--xonecode-sobre-azul);
   font: inherit;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -79,6 +85,7 @@
   background: var(--xonecode-rojo-fondo);
   color: var(--xonecode-rojo);
   font: inherit;
+  font-size: 12px;
   cursor: pointer;
 }
 

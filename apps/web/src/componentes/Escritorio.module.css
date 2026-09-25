@@ -266,7 +266,6 @@
 .empezar {
   composes: primario from "./Boton.module.css";
   padding: 7px 10px;
-  font-size: 12px;
 }
 
 /*
