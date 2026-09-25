@@ -5,9 +5,15 @@ dist/
 # usuario, nunca en un proyecto — pero si alguien crea un `.xonecode/` aquí, no se sube.
 .xonecode/
 # El config de una CLI de agente en esta máquina —hoy el `[mcp_servers]` de Codex—: es de
-# quien lo escribió y no del repo, igual que `.xonecode/`. (Lo de Claude se ignora en el
-# `core.excludesFile` global, que no lo ve quien clone esto.)
+# quien lo escribió y no del repo, igual que `.xonecode/`.
 .codex/
+# De `.claude/` solo se tapa lo PERSONAL: `settings.json`, las skills, los comandos y los
+# hooks que alguien quiera compartir SÍ son del repo, así que la carpeta entera no se ignora.
+# El `settings.local.json` ya lo tapa un `core.excludesFile` global en esta máquina, pero eso
+# no lo ve quien clone esto; y `.claude/worktrees/` son los worktrees que abre una sesión, que
+# es lo mismo que la línea `.worktrees/` de arriba, en la otra ruta que usan hoy.
+.claude/settings.local.json
+.claude/worktrees/
 .env
 .env.*
 .DS_Store
