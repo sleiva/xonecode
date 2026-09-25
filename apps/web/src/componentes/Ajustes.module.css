@@ -961,20 +961,12 @@
 
 /* Quitar es DESTRUCTIVO, y se ve: rojo siempre —texto y filo— y relleno rojo al pasar. Los
    mismos alias que el botón de borrar una sesión (`AccionDeSesion.module.css`). */
+/* Mismo `.peligro` que «Eliminar» (Modelos): el rojo de marca con su tinte de fondo, no el
+   contorno hueco que tenía antes — dos botones «peligro» que se ven distinto se leen como
+   dos avisos distintos. */
 .quitar {
+  composes: peligro from "./Boton.module.css";
   padding: 4px 10px;
-  border: 0.5px solid var(--dsw-alias-state-error-primary);
-  border-radius: 8px;
-  background: none;
-  color: var(--dsw-alias-state-error-primary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.quitar:hover:enabled {
-  background: var(--dsw-alias-state-error-primary);
-  color: var(--dsw-alias-label-primary-inverted);
 }
 
 .quitar:disabled {
@@ -982,12 +974,14 @@
   cursor: not-allowed;
 }
 
-/* El «sí» de la confirmación: relleno rojo, que es el peso de una acción sin papelera. */
+/* El «sí» de la confirmación: relleno LLENO y no un tinte, que es el peso de una acción sin
+   papelera — mismo criterio que `.destructiva` (`AccionDeSesion.module.css`,
+   `AccionesDeTarea.module.css`). El rojo de marca, no el genérico de la paleta copiada. */
 .quitarLleno {
   padding: 4px 10px;
-  border: 0.5px solid var(--dsw-alias-state-error-primary);
+  border: 0.5px solid var(--xonecode-rojo);
   border-radius: 8px;
-  background: var(--dsw-alias-state-error-primary);
+  background: var(--xonecode-rojo);
   color: var(--dsw-alias-label-primary-inverted);
   font: inherit;
   font-size: 12px;
