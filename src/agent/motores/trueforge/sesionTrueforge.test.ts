@@ -1591,11 +1591,12 @@ describe("agregarNota: una nota mientras el agente trabaja llega al hilo que tra
       // 1) la raíz delega — es su PRIMERA llamada, así que la nota (empujada antes de `turno()`)
       //    le llega a ELLA aquí y se marca entregada A SU HILO («main»).
       [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "arregla el login" }) }] })],
-      // 2) la PRIMERA llamada del hijo: si la raíz y el hijo compartieran la nota como si fuera
-      //    UNA ración por SESIÓN —o si `capacidadDeNotas` se construyera con una instancia
-      //    nueva por hilo, sin ver lo que la otra ya marcó— la nota no le llegaría aquí. Con la
-      //    MISMA instancia, entregada por `threadId`, sí le llega: es SU hilo el que todavía no
-      //    la había recibido, aunque el de la raíz ya la tenga marcada.
+      // 2) la PRIMERA llamada del hijo: si la raíz y el hijo NO compartieran el mismo `Nota[]`
+      //    —cada uno con su propia cola, en vez de la MISMA `capacidadDeNotasDeLaSesion`— la
+      //    nota nunca habría llegado aquí, porque `agregarNota` solo la empuja a la del sitio
+      //    que la construyó. Con la MISMA cola, entregada por `threadId` (`entregadaA` vive en
+      //    el propio `Nota`, no en la instancia de la capacidad), sí le llega: es SU hilo el que
+      //    todavía no la había recibido, aunque el de la raíz ya la tenga marcada.
       [new AIMessageChunk({ content: "Hecho." })],
       // 3) la raíz cierra.
       [new AIMessageChunk({ content: "Listo." })],
