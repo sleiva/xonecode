@@ -18,6 +18,7 @@ const RUTA_TRANSPORTE = join(aqui, "..", "..", "..", "src", "web", "servidor", "
 const RUTA_TAREAS = join(aqui, "..", "..", "..", "src", "core", "tareas.ts");
 const RUTA_APROBAR = join(aqui, "..", "..", "..", "src", "cli", "aprobar.ts");
 const RUTA_STORE = join(aqui, "store.ts");
+const RUTA_CONECTORES = join(aqui, "..", "..", "..", "src", "core", "conectores.ts");
 
 /**
  * `[A-Za-z0-9_-]+` y no `[a-z0-9_-]+`: la primera versión de este detector (la del brief) no
@@ -315,6 +316,71 @@ describe("tipos del cliente", () => {
 
     expect(s.leer().pregunta).toEqual({ texto: "URL MCP de CloudStudio: " });
   });
+
+  /**
+   * **La familia de los conectores es la única que llegó al cable sin guarda de campos**, y
+   * `ConectorDelCable` la abre. Lo que se cae sin síntoma aquí no es una cifra que se enseña
+   * mal: la fila decide con `estado` si lleva «Conectar», «Desconectar» o ninguno, así que un
+   * campo que el host añada y el cliente no lea deja una fila que se pinta igual de bien y
+   * contesta la mitad.
+   *
+   * `nombre`, `descripcion` y `autenticacion` **no están aquí a propósito**: esta fila se
+   * resuelve contra el `catalogo` que viaja en el MISMO mensaje, y lo que sí se auto-describe
+   * es `FilaDeCatalogo` (su par, más abajo). La primera versión de esta pieza las puso en la
+   * fila; se quitó al ver que el catálogo ya lleva los tres datos para todos, también para un
+   * conector propio, así que duplicarlos era un segundo sitio donde podían divergir.
+   */
+  it("los campos de ConectorDelCable del cliente y del host no divergen", () => {
+    expect(camposDeInterfaz(RUTA_TIPOS, "ConectorDelCable")).toEqual(
+      camposDeInterfaz(RUTA_CONECTORES, "ConectorDelCable")
+    );
+  });
+
+  /**
+   * **El tipo de autenticación decide si una fila tiene carril de autorización**, y por eso se
+   * compara la UNIÓN y no solo la guarda: `esAutenticacionDeConector` comprueba los tres
+   * literales a mano —es la copia declarada que la frontera obliga—, y el día que el host
+   * añada un cuarto y aquí no llegue, la fila entera se descarta **en silencio** en el `case`
+   * del store: el síntoma es un servidor que desaparece de la pantalla con todo en verde.
+   *
+   * El `"api-key"` es justo el literal que este test vigila hoy: es el que se añadió en el host
+   * al abrir el alta por definición, y el que hace que un servidor propio tenga «Conectar»
+   * como un OAuth.
+   */
+  it("los literales de AutenticacionDeConector del cliente y del host no divergen", () => {
+    expect(literalesDeUnion(RUTA_TIPOS, "AutenticacionDeConector")).toEqual(
+      literalesDeUnion(RUTA_CONECTORES, "AutenticacionDeConector")
+    );
+    // No vacío: una unión que se reescriba sin comillas dejaría las dos listas en `[]` y este
+    // test aprobaría por vacío, que se lee igual que aprobar midiendo.
+    expect(literalesDeUnion(RUTA_CONECTORES, "AutenticacionDeConector").length).toBeGreaterThan(0);
+  });
+
+  /**
+   * `FilaDeCatalogo` es la fila que **se cuenta a sí misma**: nombre, descripción y tipo de
+   * autenticación son lo que la ventana PINTA, y el `catalogo` del mensaje es
+   * `CATALOGO_DE_CONECTORES ∪ definiciones`, así que un conector escrito a mano llega por el
+   * mismo camino que uno de serie. Perder `autenticacion` en el cliente no da un error: la
+   * fila sale sin «Conectar» y nadie puede autorizarla.
+   */
+  it("los campos de FilaDeCatalogo del cliente y del host no divergen", () => {
+    expect(camposDeInterfaz(RUTA_TIPOS, "FilaDeCatalogo")).toEqual(
+      camposDeInterfaz(RUTA_CONECTORES, "FilaDeCatalogo")
+    );
+  });
+
+  /**
+   * Y `DefinicionDeConector` es la única de la familia que va en el sentido **cliente →
+   * servidor**: es lo que se manda al dar de alta un servidor propio, y el host la valida con
+   * la regla pura. Aquí perder `url` no rompe nada visible —el campo no se pinta— pero el alta
+   * mandaría una definición incompleta que el servidor rechaza con una frase que no habla de
+   * lo que falta en el cliente.
+   */
+  it("los campos de DefinicionDeConector del cliente y del host no divergen", () => {
+    expect(camposDeInterfaz(RUTA_TIPOS, "DefinicionDeConector")).toEqual(
+      camposDeInterfaz(RUTA_CONECTORES, "DefinicionDeConector")
+    );
+  });
 });
 
 /**
@@ -384,6 +450,11 @@ function clavesDeLaListaBlanca(ruta: string): string[] {
  *
  * Es gemelo del de `src/web/servidor/transporte.test.ts`, y la copia es la MISMA que obliga
  * a redeclarar los tipos del cable: desde aquí no se puede importar de `src/`.
+ *
+ * El `readonly` se SALTA desde que hay tipos del host que lo llevan (`FilaDeCatalogo`,
+ * `DefinicionDeConector` en `core/conectores.ts`): el modificador no cambia el campo, y sin
+ * saltarlo el extractor devolvía la lista VACÍA para esas interfaces — una comparación que
+ * aprueba por vacío es la peor forma de este test, porque se lee igual que una que mide.
  */
 function camposDeInterfaz(ruta: string, nombre: string): string[] {
   const fuente = readFileSync(ruta, "utf8");
@@ -397,7 +468,7 @@ function camposDeInterfaz(ruta: string, nombre: string): string[] {
   let profundidad = 0;
   for (const linea of cuerpo.split("\n")) {
     if (profundidad === 0) {
-      const campo = /^\s*([A-Za-z_][A-Za-z0-9_]*)\??\s*:/.exec(linea);
+      const campo = /^\s*(?:readonly\s+)?([A-Za-z_][A-Za-z0-9_]*)\??\s*:/.exec(linea);
       if (campo !== null) campos.push(campo[1]);
     }
     for (const caracter of linea) {
@@ -409,6 +480,22 @@ function camposDeInterfaz(ruta: string, nombre: string): string[] {
     }
   }
   throw new Error(`la interfaz ${nombre} de ${ruta} no cierra`);
+}
+
+/**
+ * Los literales de una UNIÓN de cadenas, por TEXTO (`export type X = "a" | "b";`).
+ *
+ * Existe porque hay un dato del cable que no es un campo ni una `interface`: el tipo de
+ * autenticación de un conector vive en la unión Y en la guarda que la lee
+ * (`esAutenticacionDeConector`), y un literal que llegue al host y no al cliente descarta la
+ * fila entera sin ruido. `camposDeInterfaz` no puede verlo —no hay interfaz que recorrer— y
+ * `literalesDe` tampoco, porque solo mira `{ tipo: "…" }` y `{ clase: "…" }`.
+ */
+function literalesDeUnion(ruta: string, nombre: string): string[] {
+  const fuente = readFileSync(ruta, "utf8");
+  const union = new RegExp(`export type ${nombre}\\s*=([^;]*);`).exec(fuente);
+  if (union === null) throw new Error(`no se encontró «export type ${nombre}» en ${ruta}`);
+  return [...union[1].matchAll(/"([A-Za-z0-9_-]+)"/g)].map((m) => m[1]).sort();
 }
 
 /**

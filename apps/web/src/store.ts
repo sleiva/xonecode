@@ -32,8 +32,8 @@ import type {
   EstadoDeSync,
   AgenteDelCable,
   SkillDelCable,
-  AutenticacionDeConector,
   ConectorDelCable,
+  FilaDeCatalogo,
   ToolDeConector,
   PruebaDeConector,
   TareaDelCable,
@@ -53,7 +53,7 @@ import type {
   EsfuerzoDelCable,
   ModoDeEscritura,
 } from "./tipos.js";
-import { PLATAFORMAS_DE_DISPOSITIVO, FASES_DEL_LANZAMIENTO, ESTADOS_DEL_LANZAMIENTO, ESFUERZOS } from "./tipos.js";
+import { PLATAFORMAS_DE_DISPOSITIVO, FASES_DEL_LANZAMIENTO, ESTADOS_DEL_LANZAMIENTO, ESFUERZOS, esAutenticacionDeConector } from "./tipos.js";
 
 export interface EstadoDelCliente {
   actos: Acto[];
@@ -128,7 +128,7 @@ export interface EstadoDelCliente {
    * pinta. `ilegible`/`error` son del fichero en disco, no del cable.
    */
   conectores?: {
-    catalogo: { id: string; nombre: string; descripcion: string; autenticacion: AutenticacionDeConector }[];
+    catalogo: FilaDeCatalogo[];
     conectores: ConectorDelCable[];
     desconocidos: string[];
     ilegible?: true;
@@ -615,9 +615,7 @@ function esSkillDelCable(valor: unknown): valor is SkillDelCable {
 }
 
 /** Una entrada del catálogo de conectores, comprobada campo a campo. */
-function esEntradaDeCatalogoDeConector(
-  valor: unknown
-): valor is { id: string; nombre: string; descripcion: string; autenticacion: AutenticacionDeConector } {
+function esEntradaDeCatalogoDeConector(valor: unknown): valor is FilaDeCatalogo {
   const c = valor as Partial<{ id: unknown; nombre: unknown; descripcion: unknown; autenticacion: unknown }> | null;
   return (
     typeof c === "object" &&
@@ -625,7 +623,7 @@ function esEntradaDeCatalogoDeConector(
     typeof c.id === "string" &&
     typeof c.nombre === "string" &&
     typeof c.descripcion === "string" &&
-    (c.autenticacion === "ninguna" || c.autenticacion === "oauth")
+    esAutenticacionDeConector(c.autenticacion)
   );
 }
 

@@ -3,7 +3,7 @@
    Copiada de `Skills.module.css` y no importada: el nombre de una clase de módulo va
    HASHEADO, así que compartir la hoja no es una opción — y son la misma clase de lista en
    la misma ventana, tenían que leerse igual. Lo propio de aquí (la pastilla de estado, el
-   monograma, la lista de tools) va al final.
+   icono, la lista de tools) va al final.
 
    Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-1/2,
    bg-module-platform, border-l2, label-primary/secondary/tertiary, interactive-bg-hover,
@@ -78,8 +78,10 @@
   flex-wrap: wrap;
 }
 
-/* El monograma: hereda el color de la fila, como `IconoDeProveedor`. */
-.monograma {
+/* El icono de la fila. El monograma y el trazado de Notion heredan el color de la fila, como
+   `IconoDeProveedor`; el de Jira y el de DeepWiki son un `<img>` y traen su propio color, así
+   que la regla no pinta nada por ellos — solo evita que la fila los encoja. */
+.icono {
   flex: none;
   color: var(--dsw-alias-label-tertiary);
 }
@@ -228,4 +230,82 @@
   color: var(--dsw-alias-label-secondary);
   font-size: 11px;
   line-height: 1.5;
+}
+
+/* ---------------------------------------------------------------------------------------
+   El formulario de «Añadir servidor». Mismo vocabulario —y mismos valores— que
+   `Ajustes.module.css`, que es el otro formulario EN LÍNEA de esta ventana: `.formulario`
+   de columna con su hueco, `.etiqueta` encima del campo, `.aviso` en rojo y `.botones`
+   abajo a la derecha. No se inventa aquí una forma nueva para lo mismo.
+   --------------------------------------------------------------------------------------- */
+.formulario {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.etiqueta {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+/* `Input` del paquete envuelve el `<input>` en un `<span>`, así que este `width` sobre el
+   componente solo estira la ENVOLTURA: el campo de dentro se queda en su tamaño por omisión
+   —medido en el navegador en el formulario de entorno: 167 px contra 551 de hueco—, y ahí no
+   entra ni una URL corta. Se estiran los dos, y el hijo DIRECTO y no un descendiente
+   cualquiera: dentro de un campo no hay más inputs, pero la regla dice lo que quiere decir. */
+.campo {
+  display: block;
+  width: 100%;
+}
+
+.campo > input {
+  width: 100%;
+}
+
+/* El `<select>` no viene del paquete: es nativo, así que se viste a mano con los mismos
+   valores que un campo. Misma regla que `Skills.module.css#.selector`. */
+.selector {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+}
+
+/* Lo que no pasa la comprobación LOCAL de la URL, antes de mandar nada: rojo y sin caja,
+   como el `.aviso` del formulario de proveedor — es la misma clase de frase. */
+.aviso {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+}
+
+/* Los botones del formulario. El mismo `.accion` que la fila de al lado para que un botón
+   `variant="outline"` del paquete —que en tema oscuro llega blanco— se lea como los demás. */
+.accion {
+  white-space: nowrap;
+  padding: 6px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.accion:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.botones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }

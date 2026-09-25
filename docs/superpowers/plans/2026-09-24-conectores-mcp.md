@@ -26,7 +26,7 @@
 - **Estado en disco ≠ medida**: `estado` sale del disco (`sin-autorizacion` | `falta-autorizar` | `autorizado`); `prueba` es una FOTO con hora (`ok` + tools, o `motivo`), ausente = «no se ha probado». La etiqueta «Conectado» solo con `prueba.ok`.
 - **Los tipos del cable se redeclaran** en `apps/web/src/tipos.ts` (la frontera prohíbe compartir módulo); `tipos.test.ts` compara los literales `clase:`. El `case` del store es lista BLANCA campo a campo.
 - **Ningún color literal** fuera de `estilos/marca.css`/`splash.css` (`Barra.test.tsx` lo vigila); **nada de CDN**: los iconos de los conectores se dibujan en SVG propio (monograma), no se traen logos de fuera.
-- **Límites declarados** (se dicen en pantalla y en docs): los conectores aún no llegan a ningún agente; por un túnel el callback no llega; no hay «añadir servidor por URL».
+- **Límites declarados** (se dicen en pantalla y en docs): los conectores aún no llegan a ningún agente; por un túnel el callback no llega; de OAuth solo hay registro dinámico —un `client ID`/`secret` a mano no cabe—; la clave va como `Authorization: Bearer` y el nombre de la cabecera no se pregunta. La pieza siguiente —«Add MCP server»: un conector escrito a mano— cierra el de «no hay añadir servidor por URL».
 - `npm test` sin red, sin clave y sin tocar la casa (`src/casaDePruebas.ts` ya muda el HOME).
 - Comentarios en castellano, con la densidad y el tono del código de alrededor.
 

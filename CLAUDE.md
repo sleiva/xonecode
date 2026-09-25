@@ -1234,22 +1234,77 @@ feedback del desarrollador** y no es terminal.
 ### Los conectores MCP
 
 `core/conectores.ts` (puro: catálogo, formas del cable, reglas), `agent/conectores/` (disco y
-red), sección Conectores de Ajustes. Un conector es un servidor MCP REMOTO de catálogo con el
-que esta consola se conecta — hoy solo eso.
+red), sección Conectores de Ajustes. Un conector es un servidor MCP REMOTO con el que esta
+consola se conecta: los del catálogo son una tabla cerrada que crece por código, y uno escrito a
+mano lo da de alta una persona desde la misma ventana.
 
 - **Todavía no llegan a ningún agente.** Esta pieza es la conexión y la configuración; qué
   agente recibe sus tools, y con qué política de aprobación, es la pieza siguiente. El propio
   catálogo lo dice al pie de la ventana de Ajustes, no solo aquí.
 - **El catálogo es una TABLA** (`CATALOGO_DE_CONECTORES`), no ramas: id, nombre, URL,
-  descripción y si pide `oauth` o `ninguna`. Un servidor nuevo es una fila, y el icono de su
-  fila es un monograma que sale de esa misma fila — nunca un logo copiado a mano, que sí
-  necesitan los proveedores de modelo por su catálogo fijo y su licencia.
+  descripción y con qué se autentica (`ninguna`, `oauth` o `api-key`). Un servidor nuevo es una
+  fila. **Su icono se ata al `id` y no al nombre** —un logo atado a un nombre se rompe al
+  retocarlo, y perder un id se degrada a un monograma, que es un icono correcto—: las filas del
+  catálogo llevan su marca, copiada del catálogo de TrueForge, y **lo que no la tenga cae en un
+  MONOGRAMA**, que es lo que lleva siempre un servidor escrito a mano. Se copian y no se enlazan:
+  esta consola se sirve desde loopback con un modo `offline` de primera clase.
+- **Un servidor escrito a mano es la MISMA familia, con una sola forma de fila.** `resolver(id)`
+  es catálogo ∪ definiciones, y todo lo de más abajo —estado, prueba, autorización, botones—
+  trabaja contra esa fila resuelta (`conectorDeDefinicion`), así que un `custom:` no tiene camino
+  propio en ninguna capa: es lo que hace que un servidor propio se comporte como Jira. El id se
+  DERIVA del nombre (`idDeConectorDesdeNombre`, con el `slugDesdeNombre` de los proveedores
+  personalizados y su mismo `custom:`) y **nunca lo elige el cliente**: es lo que impide que un
+  cuerpo del cable decida el nombre de una clave de fichero. La regla de qué vale es
+  `motivoDeDefinicionInaceptable` (pura, con test) —nombre y descripción no vacíos, la URL con la
+  regla de SIEMPRE (`motivoDeEndpointInaceptable`), y el slug libre—, y **lo que ocupa un nombre
+  son los añadidos MÁS los definidos, nunca el catálogo**: lo que choca es crear dos veces el
+  mismo nombre, porque el segundo pisaría la definición del primero y su URL y su clave se
+  quedarían apuntando a otro servidor; en cambio montar tu propio Jira es una razón real para
+  darlo de alta, y `custom:jira` convive con la fila `jira`.
+- **El cliente no resuelve el nombre: lo lee del `catalogo` que viaja**, y ese mensaje lleva
+  catálogo ∪ definiciones ya recortado a `FilaDeCatalogo`. De ahí que la búsqueda sea TOTAL para
+  las dos familias y que `ConectorDelCable` siga sin repetir esos campos: con solo las filas de
+  código, un conector añadido a mano se quedaba sin nombre y el cliente caía a un `?? id` que
+  enseñaba el slug crudo. **La `url` no vuelve nunca** —ni la del catálogo ni la de una
+  definición—, porque en pantalla no hace falta y una ruta remota de más es una que discutir; la
+  única que cruza lo hace en el sentido cliente→servidor, dentro de `DefinicionDeConector`.
+- **La clave de un `api-key` va al fichero de SECRETOS, no a `auth.json`**
+  (`SecretosDeConector`, junto al cliente OAuth y los tokens, 0600 y por el mismo
+  `escribirAtomico`). En `auth.json` no cabe: `validarAuth` tira cualquier clave que no sea un
+  proveedor, y `variableDeProveedor("notion")` es `undefined`. **El fichero conserva su nombre**
+  aunque ya no sean solo de OAuth —renombrarlo es una migración con usuarios dentro y sin
+  premio—: lo que cambia es el tipo y lo que dice su cabecera. Nace al conectar y muere al
+  desconectar y al quitar, que es el ciclo del OAuth. **El `Authorization: Bearer` lo compone el
+  CÓDIGO** y el nombre de la cabecera no se pregunta; por eso la pregunta lo dice, porque la
+  criba (`motivoDeClaveInaceptable`) rechaza cualquier valor con espacios, o sea justo el
+  `Bearer …` que uno copia del servidor. Se criba ANTES de escribir y su rechazo es una frase
+  NUESTRA en `error` —no un fallo de disco, y nunca repite la clave—.
+- **El formulario no tiene campo para la clave, y eso es el diseño**: «Clave de API» es un TIPO
+  de autenticación y la clave se pide DESPUÉS por `leerSecreto`, el único mensaje del cable que la
+  lleva. Un campo ahí sería un segundo camino para una credencial, y el segundo camino es el que
+  se olvida de la criba. De ahí que un `api-key` sea un carril de autorización como el OAuth —la
+  fila lleva Conectar y Desconectar— y que `estadoDeConector` conteste la misma pregunta para los
+  dos: «¿hay con qué autenticarse?», que es su parámetro `hayCredencial` y no `hayTokens`.
+- **Y el encadenado es del SERVIDOR**: `crear` escribe la definición y añade el id y, si su auth no
+  es `ninguna`, encadena la autorización, contestando en el acto —lo que viene después es un
+  navegador o una clave tecleada, y el `POST` no puede quedarse abierto esperando a la persona—.
+  En el cliente serían dos mensajes **sin orden garantizado**.
+- **`quitar` de un `custom:` se lleva su definición y su clave**, o queda un fantasma en
+  «Disponibles» que nadie puede quitar ni volver a añadir —su nombre lo ocupa una definición que
+  ya no se enseña—: el molde de «dos especialistas, uno sin mantener y en silencio». Y una
+  definición que no se entiende **no se borra**: se conserva al escribir y se filtra al leer, que
+  es el reparto de `authEnDisco.ts`.
 - **Dos ficheros, y SOLO en la casa del usuario** (`agent/conectores/conectoresEnDisco.ts`):
-  `conectores.json` (qué está añadido) y `conectores-oauth.json` (cliente registrado, tokens,
-  verificador PKCE), este último 0600. Nunca en el proyecto: una definición ahí podría llevar
+  `conectores.json` (qué está añadido, y las definiciones de los que se escribieron a mano) y
+  `conectores-oauth.json` (cliente registrado, tokens, verificador PKCE y la clave de un
+  `api-key`), este último 0600. Nunca en el proyecto: una definición ahí podría llevar
   un token a donde el proyecto dijera, la misma razón que los proveedores personalizados de
   modelo. El contrato de escritura es el de `authEnDisco.ts`: una escritura nunca destruye lo
-  que había, y un fichero que no se entiende se deja tal cual y la escritura LANZA.
+  que había, y un fichero que no se entiende se deja tal cual y la escritura LANZA. **Se lee de
+  un tirón** (`leerConectores`) y no en dos viajes, porque quien resuelve un id necesita ids y
+  definiciones a la vez y dos lecturas del mismo fichero pueden discrepar a mitad de camino.
+- **Un id está VIVO si lo conoce el catálogo o si tiene definición.** Es la única pregunta que
+  separa un añadido de un `desconocido`, y de ahí para abajo nada distingue las dos familias.
 - **La ruta del callback es PÚBLICA, y su autenticación es el `state`, no la cookie de
   sesión.** La cookie es `SameSite=Strict`, así que la redirección que manda el proveedor OAuth
   llega SIN ella; `Host` y `Origin` se comprueban igual. Lo que autentica esa vuelta es un
@@ -1271,9 +1326,13 @@ que esta consola se conecta — hoy solo eso.
   al terminar de autorizar; no hay sondeo, y un proceso nuevo empieza sin foto — ausente es «no
   se ha probado», no «falla». Su tope es su propia constante (`TOPE_DE_CONEXION_MS`, 30 s).
 - **Límites declarados**: no llegan a ningún agente todavía; sin túnel — el `redirect_uri` es
-  `127.0.0.1` y un proveedor remoto no vuelve a una URL que no sea esa; y esta consola no tiene
+  `127.0.0.1` y un proveedor remoto no vuelve a una URL que no sea esa; esta consola no tiene
   URL propia que ofrecer a un servidor que solo aceptara un cliente ya registrado por el
-  operador del catálogo.
+  operador del catálogo; **de OAuth solo hay registro dinámico** —un `client ID`/`secret`
+  tecleados a mano no caben, porque `token_endpoint_auth_method` está a fuego en `"none"` y no
+  hay dónde guardar el secreto de cliente, y la nota del formulario lo dice—; y **la clave va
+  como `Authorization: Bearer`**, que no se pregunta: una cabecera con otro nombre no está
+  soportada.
 
 ### Exportar a PDF
 

@@ -63,7 +63,7 @@ import {
 } from "../../agent/dispositivos/lanzamientoEnMaquina.js";
 import type { AgenteDelCable, MensajeAlCliente, MensajeDelCliente, Sumidero } from "./transporte.js";
 import type { Acto } from "../../core/actos.js";
-import { RUTA_CALLBACK_MCP, type ConectorDelCable } from "../../core/conectores.js";
+import { CATALOGO_DE_CONECTORES, filaDeCatalogo, RUTA_CALLBACK_MCP, type AutenticacionDeConector, type ConectorDelCable, type FilaDeCatalogo } from "../../core/conectores.js";
 import type { ServicioDeConectores } from "../../agent/conectores/servicioDeConectores.js";
 
 /** El servidor visto por `montarRutas`: solo apunta lo que se le registra. */
@@ -5985,15 +5985,27 @@ describe("las tareas en background, por el cable", () => {
 /** El servicio de conectores tal como lo ve el cable: apunta las llamadas y contesta a mano. */
 function servicioDeConectoresDeMentira(inicial: {
   conectores?: ConectorDelCable[];
+  /**
+   * Las filas que viajan. Por omisión, las de CÓDIGO —que es lo que hace el servicio real—,
+   * porque un test de aquí mira que el catálogo llegue SIN su `url` y eso solo se puede afirmar
+   * sobre las filas de verdad. Un `custom:` se añade pasando la suya.
+   */
+  catalogo?: FilaDeCatalogo[];
   desconocidos?: string[];
   ilegible?: true;
   error?: string;
+  /** El id que devuelve `crear`. Ausente = rechazo, que es lo que devuelve el real cuando la definición no vale. */
+  idDeCrear?: string;
+  /** Por dónde autorizar un id. Por omisión se resuelve contra `catalogo`, como el real. */
+  autenticacionDe?: (id: string) => AutenticacionDeConector | undefined;
   completar?: (query: URLSearchParams) => { ok: boolean; mensaje: string };
 } = {}) {
   const llamadas: { metodo: string; args: unknown[] }[] = [];
+  const catalogo = inicial.catalogo ?? CATALOGO_DE_CONECTORES.map(filaDeCatalogo);
   let alCambiar: (() => void) | undefined;
   const servicio: ServicioDeConectores = {
     lista: () => ({
+      catalogo,
       conectores: inicial.conectores ?? [],
       desconocidos: inicial.desconocidos ?? [],
       ...(inicial.ilegible ? { ilegible: inicial.ilegible } : {}),
@@ -6009,6 +6021,20 @@ function servicioDeConectoresDeMentira(inicial: {
     },
     desconectar: (id) => {
       llamadas.push({ metodo: "desconectar", args: [id] });
+      alCambiar?.();
+    },
+    // Es una PREGUNTA y no una operación, así que no entra en `llamadas`: el real tampoco deja
+    // rastro suyo en `lista()`. Se contesta contra el `catalogo` del propio doble para que las
+    // dos caras —qué filas hay y por dónde se autorizan— no puedan contradecirse.
+    autenticacionDe: (id) =>
+      inicial.autenticacionDe?.(id) ?? catalogo.find((c) => c.id === id)?.autenticacion,
+    crear: (def) => {
+      llamadas.push({ metodo: "crear", args: [def] });
+      alCambiar?.();
+      return inicial.idDeCrear;
+    },
+    guardarClave: (id, clave) => {
+      llamadas.push({ metodo: "guardarClave", args: [id, clave] });
       alCambiar?.();
     },
     probar: async (id) => {
@@ -6154,6 +6180,189 @@ describe("los conectores MCP, por el cable", () => {
     ]);
   });
 
+  it("un `id` ausente es 400 en las cinco que lo llevan — y NO en `crear`, que no lo lleva a propósito", async () => {
+    const doble = servicioDeConectoresDeMentira({ idDeCrear: "custom:x" });
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { conectores: doble.fabrica });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    // El `typeof` por rama: sin id, `probar` es un mensaje malformado y no toca el servicio.
+    expect(await postear(accion, JSON.stringify({ clase: "conector", accion: "probar" }))).toBe(400);
+    expect(doble.llamadas).toEqual([]);
+    // `crear` tampoco trae id y sin embargo pasa: lo DERIVA el servidor del nombre, que es lo
+    // que impide que el cliente elija el nombre de un fichero.
+    expect(
+      await postear(
+        accion,
+        JSON.stringify({
+          clase: "conector",
+          accion: "crear",
+          definicion: { nombre: "Mi servidor", descripcion: "lo mío", url: "https://x.example/mcp", autenticacion: "ninguna" },
+        })
+      )
+    ).toBe(204);
+    await asentar();
+    expect(doble.llamadas).toEqual([
+      {
+        metodo: "crear",
+        args: [{ nombre: "Mi servidor", descripcion: "lo mío", url: "https://x.example/mcp", autenticacion: "ninguna" }],
+      },
+    ]);
+  });
+
+  it("`crear` con un cuerpo que no tiene la FORMA de una definición → 400, sin llamar al servicio", async () => {
+    const doble = servicioDeConectoresDeMentira({ idDeCrear: "custom:x" });
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { conectores: doble.fabrica });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    // Un JSON puede mentir sobre lo que el tipo promete: aquí falta la `autenticacion` y su
+    // `url` no es una cadena. No es «una definición inaceptable» —esa se rechaza con su
+    // MOTIVO y viaja en `error`—: es un mensaje malformado, y por eso es 400 y no 204.
+    expect(
+      await postear(accion, JSON.stringify({ clase: "conector", accion: "crear", definicion: { nombre: "X", descripcion: "y", url: 7, autenticacion: "lo-que-sea" } }))
+    ).toBe(400);
+    expect(await postear(accion, JSON.stringify({ clase: "conector", accion: "crear" }))).toBe(400);
+    expect(await postear(accion, JSON.stringify({ clase: "conector", accion: "crear", definicion: null }))).toBe(400);
+    expect(doble.llamadas).toEqual([]);
+  });
+
+  it("`crear` ENCADENA la autorización por donde diga la definición — y no encadena `ninguna`", async () => {
+    const doble = servicioDeConectoresDeMentira({
+      idDeCrear: "custom:mi-servidor",
+      autenticacionDe: (id) => (id.startsWith("custom:") ? "oauth" : undefined),
+    });
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { conectores: doble.fabrica });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    const definicion = (autenticacion: AutenticacionDeConector) => ({
+      nombre: "Mi servidor",
+      descripcion: "lo mío",
+      url: "https://x.example/mcp",
+      autenticacion,
+    });
+
+    // `ninguna` no se autoriza: encadenar aquí abriría un navegador para nada.
+    expect(await enviarMensaje(accion, { clase: "conector", accion: "crear", definicion: definicion("ninguna") })).toBe(204);
+    await asentar();
+    expect(doble.llamadas).toEqual([{ metodo: "crear", args: [definicion("ninguna")] }]);
+
+    // Con `oauth` la autorización sale DESPUÉS de la escritura, con el puerto REAL de este
+    // servidor: pedirla por un conector que no llegó a estar añadido no llevaría a ninguna parte.
+    doble.llamadas.length = 0;
+    expect(await enviarMensaje(accion, { clase: "conector", accion: "crear", definicion: definicion("oauth") })).toBe(204);
+    await asentar();
+    expect(doble.llamadas).toEqual([
+      { metodo: "crear", args: [definicion("oauth")] },
+      { metodo: "autorizar", args: ["custom:mi-servidor", `http://127.0.0.1:${servidor.puerto}${RUTA_CALLBACK_MCP}`] },
+    ]);
+  });
+
+  it("un `crear` RECHAZADO no encadena nada: no se pide una clave por un conector que no existe", async () => {
+    // Sin `idDeCrear` el doble devuelve `undefined`, que es lo que devuelve el real cuando la
+    // definición no vale (nombre vacío, URL fuera de la regla, slug ocupado).
+    const doble = servicioDeConectoresDeMentira({ autenticacionDe: () => "oauth" });
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { conectores: doble.fabrica });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    expect(
+      await enviarMensaje(accion, {
+        clase: "conector",
+        accion: "crear",
+        definicion: { nombre: "", descripcion: "", url: "https://x.example/mcp", autenticacion: "oauth" },
+      })
+    ).toBe(204);
+    await asentar();
+    expect(doble.llamadas).toEqual([
+      { metodo: "crear", args: [{ nombre: "", descripcion: "", url: "https://x.example/mcp", autenticacion: "oauth" }] },
+    ]);
+  });
+
+  it("`autorizar` sobre un `api-key` NO abre navegador: pide la clave y la guarda", async () => {
+    const preguntas: string[] = [];
+    const servidor = servidorDeMentira();
+    const doble = servicioDeConectoresDeMentira({ autenticacionDe: () => "api-key" });
+    montarRutas(
+      servidor,
+      vestibuloDePrueba({
+        // La costura que el vestíbulo ya tiene: el `leerSecreto` de verdad espera a un humano
+        // que aquí no hay, y sin esto el carril se quedaría en la cadena vacía —que también
+        // es un caso, y tiene su test debajo—. Se envuelve la `consola` de dentro y no la
+        // `ConsolaWeb`: `leerSecreto` es de la consola, que es lo que `arranque.ts` alcanza.
+        crearConsola: (o: OpcionesDeConsolaWeb): ConsolaWeb => {
+          const real = crearConsolaWeb(o);
+          return {
+            ...real,
+            consola: {
+              ...real.consola,
+              leerSecreto: async (pregunta: string) => {
+                preguntas.push(pregunta);
+                return "  clave-buena  ";
+              },
+            },
+          };
+        },
+      }),
+      { conectores: doble.fabrica }
+    );
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    expect(await enviarMensaje(accion, { clase: "conector", accion: "autorizar", id: "custom:mi-servidor" })).toBe(204);
+    await asentar();
+    // Ni una llamada a `autorizar`: ese carril es el del navegador y este conector no lo tiene.
+    expect(doble.llamadas).toEqual([{ metodo: "guardarClave", args: ["custom:mi-servidor", "clave-buena"] }]);
+    // La pregunta DICE que no hace falta el prefijo: la criba rechaza cualquier valor con
+    // espacios —o sea justo el «Bearer abc» que se copia del servidor— y el `Bearer` lo pone
+    // `credencialDe` al componer la cabecera.
+    expect(preguntas).toHaveLength(1);
+    expect(preguntas[0]).toContain("Bearer");
+    // Y la clave no aparece en NADA de lo que cruzó el cable.
+    expect(JSON.stringify(cliente.recibidos)).not.toContain("clave-buena");
+  });
+
+  it("si nadie contesta a la clave, no se guarda nada y no se dice nada más", async () => {
+    // Sin cliente conectado, `leerSecreto` devuelve la cadena vacía: es la consola cerrada y
+    // también el Enter a secas. Quien canceló no necesita un sermón.
+    const doble = servicioDeConectoresDeMentira({ autenticacionDe: () => "api-key" });
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { conectores: doble.fabrica });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    expect(await enviarMensaje(accion, { clase: "conector", accion: "autorizar", id: "custom:mi-servidor" })).toBe(204);
+    await asentar();
+    expect(doble.llamadas).toEqual([]);
+  });
+
+  it("un `autorizar` sobre un conector que NO se autoriza así no hace nada — y no abre un navegador", async () => {
+    // `ninguna` no se autoriza. El carril lo contesta el SERVIDOR (`autenticacionDe`), nunca el
+    // cliente: sin esta guarda, una pestaña que se equivocara abriría un navegador por un
+    // conector que no lo necesita.
+    const doble = servicioDeConectoresDeMentira({ autenticacionDe: () => "ninguna" });
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { conectores: doble.fabrica });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    expect(await enviarMensaje(accion, { clase: "conector", accion: "autorizar", id: "deepwiki" })).toBe(204);
+    await asentar();
+    expect(doble.llamadas).toEqual([]);
+  });
+
   it("el callback OAuth es una ruta PÚBLICA: 200, y el cuerpo nunca lleva la query cruda", async () => {
     const doble = servicioDeConectoresDeMentira({
       completar: () => ({ ok: false, mensaje: 'no se pudo: "<script>alert(1)</script>" & cosas' }),
@@ -6195,10 +6404,13 @@ describe("los conectores MCP, por el cable", () => {
     // Sustituye `completar` por uno que LANZA, para probar que la ruta no se cae con él.
     doble.llamadas.length = 0;
     const servicioQueRevienta: ServicioDeConectores = {
-      lista: () => ({ conectores: [], desconocidos: [] }),
+      lista: () => ({ catalogo: [], conectores: [], desconocidos: [] }),
       anadir: () => {},
       quitar: () => {},
       desconectar: () => {},
+      autenticacionDe: () => undefined,
+      crear: () => undefined,
+      guardarClave: () => {},
       probar: async () => {},
       autorizar: async () => {},
       completar: async () => {
@@ -7790,20 +8002,26 @@ describe("el ajuste del workspace, cableado", () => {
  * `ajusteDeConectoresCableado` es la composición de producción que llega a `montarRutas`
  * desde `arrancarConsolaWeb`. Lo que se comprueba aquí es la COSTURA, no la regla —esa ya la
  * prueba `servicioDeConectores.test.ts`—: que `conectores` está PRESENTE y que la fábrica de
- * verdad (`servicioDeConectoresCableado`) devuelve un servicio real, con sus siete
+ * verdad (`servicioDeConectoresCableado`) devuelve un servicio real, con sus diez
  * operaciones. Sin red: `casaDePruebas.ts` ya mudó `HOME` para todo el suite, así que
  * `homedir()` aquí es un temporal y `lista()` es de solo lectura.
  */
 describe("el ajuste de conectores, cableado", () => {
-  it("la fábrica devuelve un servicio REAL, con sus siete operaciones — sin red", () => {
+  it("la fábrica devuelve un servicio REAL, con sus diez operaciones — sin red", () => {
     const { conectores } = ajusteDeConectoresCableado({ casa: homedir() });
     expect(typeof conectores).toBe("function");
     const cambios: number[] = [];
     const servicio = conectores(() => void cambios.push(1));
-    // Read-only: no toca la red y, sin fichero en disco, la omisión es la lista vacía.
-    expect(servicio.lista()).toEqual({ conectores: [], desconocidos: [] });
+    // Read-only: no toca la red y, sin fichero en disco, la omisión es la lista vacía. El
+    // `catalogo` sí trae las tres filas de CÓDIGO —el catálogo no vive en disco— y son las
+    // que el cliente usa para poner nombre a cada id; sin ellas la ventana caería al slug.
+    expect(servicio.lista()).toEqual({
+      catalogo: CATALOGO_DE_CONECTORES.map(filaDeCatalogo),
+      conectores: [],
+      desconocidos: [],
+    });
     expect(Object.keys(servicio).sort()).toEqual(
-      ["anadir", "autorizar", "completar", "desconectar", "lista", "probar", "quitar"].sort()
+      ["anadir", "autenticacionDe", "autorizar", "completar", "crear", "desconectar", "guardarClave", "lista", "probar", "quitar"].sort()
     );
   });
 });

@@ -36,7 +36,7 @@ import type { OpcionDeEntorno, PasoDelVestibulo } from "./vestibulo.js";
 // este módulo, así que no hay ciclo ni siquiera en el grafo de tipos.
 import type { DispositivoElegido } from "./sesiones.js";
 import type { Esfuerzo } from "../../core/esfuerzo.js";
-import type { AutenticacionDeConector, ConectorDelCable } from "../../core/conectores.js";
+import type { AutenticacionDeConector, ConectorDelCable, DefinicionDeConector, FilaDeCatalogo } from "../../core/conectores.js";
 
 /**
  * El informe de `core/dispositivos.ts`. **La `ruta` de cada herramienta solo cruza para
@@ -420,7 +420,7 @@ export type MensajeAlCliente =
    */
   | {
       clase: "conectores";
-      catalogo: { id: string; nombre: string; descripcion: string; autenticacion: AutenticacionDeConector }[];
+      catalogo: FilaDeCatalogo[];
       conectores: ConectorDelCable[];
       desconocidos: string[];
       ilegible?: true;
@@ -1528,13 +1528,21 @@ export type MensajeDelCliente =
    */
   | { clase: "cancelarLanzamiento" }
   /**
-   * Una acción sobre UN conector: añadirlo, quitarlo, probarlo, autorizarlo o desconectarlo.
-   * Una `accion` que no sea una de esas cinco se rechaza con 400 y no hace nada.
+   * Una acción sobre UN conector: añadirlo, quitarlo, probarlo, autorizarlo, desconectarlo o
+   * darlo de alta a mano. Una `accion` que no sea una de esas seis se rechaza con 400 y no hace
+   * nada.
+   *
+   * **Son DOS formas y no una con campos opcionales**, porque `crear` no lleva `id`: el id lo
+   * DERIVA el servidor del nombre (y por eso tampoco se puede elegir desde fuera, que sería
+   * dejar que el cliente nombre una clave de fichero). Su `definicion` viaja sin comprobar por
+   * tipo —un cliente puede mentir sobre lo que el tipo promete— y quien la mira de verdad es
+   * `definicionDelCable` en el servidor.
    *
    * El resultado NO viaja en la respuesta: `probar` y `autorizar` corren en segundo plano
    * (red, o esperar al navegador) y lo que cambien llega por el `conectores` que sigue, vía
    * `alCambiar` del servicio — el mismo molde que `dispositivo`/`conexion`.
    */
+  | { clase: "conector"; accion: "crear"; definicion: DefinicionDeConector }
   | { clase: "conector"; accion: "anadir" | "quitar" | "probar" | "autorizar" | "desconectar"; id: string }
   | { clase: "decision"; decisiones: Record<string, string> };
 

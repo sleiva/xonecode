@@ -99,7 +99,32 @@ export interface SkillDelCable {
  * Los conectores MCP, redeclarados de `core/conectores.ts` (ver la cabecera de este
  * fichero: la frontera prohíbe compartir módulo con `src/`).
  */
-export type AutenticacionDeConector = "ninguna" | "oauth";
+export type AutenticacionDeConector = "ninguna" | "oauth" | "api-key";
+
+/**
+ * El literal, comprobado por VALOR. Es la copia DECLARADA de
+ * `core/conectores.ts#esAutenticacionDeConector` —la frontera prohíbe compartir módulo con
+ * `src/`—, y **una sola copia en el cliente a propósito**: los dos sitios que la necesitan son la
+ * guarda del mensaje en el store, que descarta la fila ENTERA en silencio si no reconoce el
+ * literal, y el `select` del formulario de alta, que no puede dejar pasar un valor que no sea uno
+ * de los tres. Dos `===` repetidos serían dos sitios donde añadir un carril y olvidarse en el
+ * otro, con el síntoma de siempre: la fila desaparece de la pantalla con todo en verde.
+ */
+export function esAutenticacionDeConector(valor: unknown): valor is AutenticacionDeConector {
+  return valor === "ninguna" || valor === "oauth" || valor === "api-key";
+}
+
+/**
+ * Una fila del catálogo tal como VIAJA: los cuatro campos menos la `url`. Es la lista con la
+ * que esta pantalla pone nombre y descripción a cada `id` de un `ConectorDelCable`, y por eso
+ * es `catálogo ∪ definiciones` — un conector escrito a mano también tiene su fila aquí.
+ */
+export interface FilaDeCatalogo {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  autenticacion: AutenticacionDeConector;
+}
 
 /** Una tool tal como la enseña Ajustes. `soloLectura` ausente = el servidor no lo anota. */
 export interface ToolDeConector {
@@ -116,6 +141,9 @@ export type PruebaDeConector =
 /**
  * Un conector AÑADIDO, en la forma del cable. Nunca lleva tokens ni URL de autorización:
  * eso se queda en el host.
+ *
+ * **Tampoco lleva `nombre` ni `descripcion`**: los resuelve esta pantalla buscando el `id` en
+ * el `catalogo` que viene en el mismo mensaje, que es `catálogo ∪ definiciones`.
  */
 export interface ConectorDelCable {
   id: string;
@@ -123,6 +151,21 @@ export interface ConectorDelCable {
   prueba?: PruebaDeConector;
   /** Hay una autorización abierta en el navegador esperando su callback. */
   autorizando?: boolean;
+}
+
+/**
+ * Un servidor MCP escrito A MANO, tal como SUBE por el cable: la definición que teclea una
+ * persona en el formulario de «Añadir servidor». Sin `id` — ese lo DERIVA el servidor del
+ * nombre, y por eso no se elige desde aquí.
+ *
+ * Es lo único de esta pieza que cruza en el sentido cliente→servidor con una URL dentro: la
+ * escribió una persona, y el servidor la valida con la regla de URL de siempre.
+ */
+export interface DefinicionDeConector {
+  nombre: string;
+  descripcion: string;
+  url: string;
+  autenticacion: AutenticacionDeConector;
 }
 
 /**
@@ -554,7 +597,7 @@ export type MensajeAlCliente =
    */
   | {
       clase: "conectores";
-      catalogo: { id: string; nombre: string; descripcion: string; autenticacion: AutenticacionDeConector }[];
+      catalogo: FilaDeCatalogo[];
       conectores: ConectorDelCable[];
       desconocidos: string[];
       ilegible?: true;
@@ -1233,11 +1276,18 @@ export type MensajeDelCliente =
   | { clase: "lanzarApp" }
   | { clase: "cancelarLanzamiento" }
   /**
-   * Una acción sobre UN conector: añadirlo, quitarlo, probarlo, autorizarlo o desconectarlo.
+   * Una acción sobre UN conector: añadirlo, quitarlo, probarlo, autorizarlo, desconectarlo o
+   * darlo de alta a mano.
    *
    * El resultado NO viaja en la respuesta: `probar` y `autorizar` corren en segundo plano
    * (red, o esperar al navegador) y lo que cambien llega por el `conectores` que sigue.
+   *
+   * **Son DOS formas y no una con campos opcionales**, porque `crear` no lleva `id`: ese lo
+   * DERIVA el servidor del nombre, y por eso tampoco se puede elegir desde aquí — sería dejar
+   * que el cliente nombre una clave de fichero. Por dónde se autoriza tampoco se manda: eso lo
+   * contesta el servidor, que es quien sabe con qué se autentica cada conector.
    */
+  | { clase: "conector"; accion: "crear"; definicion: DefinicionDeConector }
   | { clase: "conector"; accion: "anadir" | "quitar" | "probar" | "autorizar" | "desconectar"; id: string }
   | { clase: "decision"; decisiones: Record<string, string> };
 

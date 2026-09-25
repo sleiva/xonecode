@@ -1803,6 +1803,35 @@ describe("store: `case \"conectores\"` no deja pasar un campo que no se nombra",
     });
   });
 
+  it("una fila del catálogo con `api-key` SOBREVIVE al `case`: la guarda reconoce los tres literales", () => {
+    // El mutante que esto mata no da ningún error: `esEntradaDeCatalogoDeConector` comprueba el
+    // literal a mano y **descarta la fila ENTERA** cuando no lo reconoce, así que un `"api-key"`
+    // que se añada en el host y no aquí deja la pantalla leyéndose bien —el servidor propio
+    // simplemente desaparece de «Disponibles»— con todo en verde.
+    const s = crearStoreDelCliente();
+    const propio = {
+      id: "custom:mi-servidor",
+      nombre: "Mi servidor",
+      descripcion: "Lo mío, servido por mí.",
+      autenticacion: "api-key",
+    };
+    s.aplicar({ clase: "conectores", catalogo: [...catalogo, propio], conectores: [], desconocidos: [] } as never);
+    expect(s.leer().conectores?.catalogo).toEqual([...catalogo, propio]);
+  });
+
+  it("y un literal que no es de los tres tira la fila: la guarda mide, no deja pasar", () => {
+    // La otra mitad de lo mismo, sin la cual el test de arriba aprobaría igual con una guarda
+    // que no comprobara nada: aquí una fila con un tipo de autenticación inventado no llega.
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "conectores",
+      catalogo: [...catalogo, { id: "custom:x", nombre: "X", descripcion: "d", autenticacion: "bearer" }],
+      conectores: [],
+      desconocidos: [],
+    } as never);
+    expect(s.leer().conectores?.catalogo).toEqual(catalogo);
+  });
+
   it("`ilegible` y `error` sobreviven, y ausentes se quedan ausentes", () => {
     const s = crearStoreDelCliente();
     s.aplicar({ clase: "conectores", catalogo, conectores: [], desconocidos: [], ilegible: true } as never);

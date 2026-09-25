@@ -25,6 +25,7 @@ const MANEJADORES = {
   alGuardarSkill: () => {},
   alBorrarSkill: () => {},
   alAccionDeConector: () => {},
+  alCrearDeConector: () => {},
 };
 
 const PROVEEDORES = [

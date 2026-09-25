@@ -234,7 +234,7 @@ import type {
 // doblan.
 import { filaDeTarea } from "./transporte.js";
 import { esEsfuerzo, nivelesDeEsfuerzo, type Esfuerzo } from "../../core/esfuerzo.js";
-import { CATALOGO_DE_CONECTORES, RUTA_CALLBACK_MCP } from "../../core/conectores.js";
+import { definicionDelCable, RUTA_CALLBACK_MCP, type AccionDeConector } from "../../core/conectores.js";
 import { servicioDeConectoresCableado, type ServicioDeConectores } from "../../agent/conectores/servicioDeConectores.js";
 
 /** Las dos rutas del cable. El cliente las tiene escritas en `apps/web/src/conexion.ts`. */
@@ -1669,9 +1669,9 @@ export function montarRutas(
   const esNombreDeHerramienta = (v: string): v is NombreDeHerramienta =>
     v === "adb" || v === "emulator" || v === "xcrun" || v === "devicectl";
 
-  /** Las cinco acciones conocidas sobre UN conector, y nada más: lo demás es un 400. */
-  const esAccionDeConector = (v: string): v is "anadir" | "quitar" | "probar" | "autorizar" | "desconectar" =>
-    v === "anadir" || v === "quitar" || v === "probar" || v === "autorizar" || v === "desconectar";
+  /** Las seis acciones conocidas sobre UN conector, y nada más: lo demás es un 400. */
+  const esAccionDeConector = (v: string): v is AccionDeConector =>
+    v === "anadir" || v === "quitar" || v === "probar" || v === "autorizar" || v === "desconectar" || v === "crear";
 
   const mensajeDeWorkspace = (): MensajeAlCliente | undefined => {
     const ruta = opciones.workspace?.();
@@ -1698,15 +1698,13 @@ export function montarRutas(
 
   const mensajeDeConectores = (): MensajeAlCliente | undefined => {
     if (servicioConectores === undefined) return undefined;
-    const { conectores, desconocidos, ilegible, error } = servicioConectores.lista();
+    // El catálogo lo compone el SERVICIO y no se arma aquí: es `catálogo ∪ definiciones`, y una
+    // segunda composición en este fichero solo traería las filas de código — dejando sin nombre
+    // en pantalla a todo conector escrito a mano.
+    const { catalogo, conectores, desconocidos, ilegible, error } = servicioConectores.lista();
     return {
       clase: "conectores",
-      catalogo: CATALOGO_DE_CONECTORES.map(({ id, nombre, descripcion, autenticacion }) => ({
-        id,
-        nombre,
-        descripcion,
-        autenticacion,
-      })),
+      catalogo,
       conectores,
       desconocidos,
       ...(ilegible ? { ilegible } : {}),
@@ -1716,6 +1714,45 @@ export function montarRutas(
   const emitirConectores = (): void => {
     const m = mensajeDeConectores();
     if (m !== undefined) emitir(m);
+  };
+
+  /**
+   * Autoriza un conector POR DONDE ÉL PIDA: OAuth abre el navegador del sistema y `api-key` pide
+   * una clave por la consola. `ninguna` no se autoriza —por eso no llega a hacer nada— y un id
+   * que no resuelve tampoco.
+   *
+   * Es UNA función porque la usan DOS sitios —el «Conectar» de la fila y el encadenado de
+   * `crear`—: dos copias serían dos sitios donde el carril puede divergir del que dice la fila, y
+   * el carril lo contesta el SERVIDOR (`autenticacionDe`), nunca el cliente, que manda la
+   * intención («autoriza este id») y no por dónde. Así un conector escrito a mano con `api-key`
+   * no puede acabar abriendo un navegador por una pestaña que se equivocó: `autorizar` lo
+   * rechazaría, y esto ni lo intenta.
+   */
+  const autorizarConector = async (id: string): Promise<void> => {
+    if (servicioConectores === undefined) return;
+    const autenticacion = servicioConectores.autenticacionDe(id);
+    if (autenticacion === "oauth") {
+      // El puerto REAL: con `--puerto 0` el sistema elige uno, y es el mismo que ya usa
+      // `servidor.url` para la ráfaga inicial — nunca uno construido a mano.
+      await servicioConectores.autorizar(id, `http://127.0.0.1:${servidor.puerto}${RUTA_CALLBACK_MCP}`);
+      return;
+    }
+    if (autenticacion !== "api-key") return;
+    // La MISMA resolución de consola que `pedirCredencial`: la del proyecto si hay uno abierto y
+    // la del vestíbulo si no. La clave vuelve por `{clase: "secreto"}`, el único mensaje del
+    // cable que la lleva.
+    const consola = vestibulo.proyectoAbierto()?.consola.consola ?? vestibulo.consola.consola;
+    // La pregunta DICE que no hace falta el prefijo, y no es un adorno: la criba
+    // (`motivoDeClaveInaceptable`) rechaza cualquier valor con espacios —o sea justo el
+    // «Bearer abc» que suele ser lo que uno copia del servidor— y el `Bearer` lo pone
+    // `credencialDe` al componer la cabecera. Sin decirlo, el rechazo llega sin explicación.
+    const clave = (await consola.leerSecreto(`clave de ${id} (sin el «Bearer»): `)).trim();
+    // Cadena vacía es la consola sin nadie al otro lado y también el Enter a secas: en los dos
+    // casos no se guarda nada y no se dice nada más — quien canceló no necesita un sermón.
+    if (clave === "") return;
+    // Una clave que no pasa la criba deja su motivo en `error`, que ya viaja por el cable: aquí
+    // no hay nada que informar por consola, que es donde `pedirCredencial` sí lo hace.
+    servicioConectores.guardarClave(id, clave);
   };
 
   const mensajeDeTareas = (): MensajeAlCliente | undefined => {
@@ -4608,15 +4645,46 @@ export function montarRutas(
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "conector") {
       // Sin `as`: `mensaje.clase === "conector"` ya narrows a la forma de `MensajeDelCliente`
       // —la misma unión discriminada que `workspace` usa un renglón más arriba—, así que
-      // `mensaje.id`/`mensaje.accion` se leen directos. El `typeof` que sigue no es para el
-      // tipo (ese ya lo sabe TypeScript): es la guarda de verdad contra un JSON malformado,
-      // que puede mentir sobre lo que el tipo promete.
+      // `mensaje.accion` se lee directo. El `typeof` que sigue no es para el tipo (ese ya lo
+      // sabe TypeScript): es la guarda de verdad contra un JSON malformado, que puede mentir
+      // sobre lo que el tipo promete.
       if (
         servicioConectores === undefined ||
-        typeof mensaje.id !== "string" ||
         typeof mensaje.accion !== "string" ||
         !esAccionDeConector(mensaje.accion)
       ) {
+        respuesta.writeHead(400);
+        respuesta.end();
+        return;
+      }
+      /**
+       * `crear` va ANTES y se lleva su propia guarda: es la única acción que NO trae `id` —lo
+       * DERIVA el servidor del nombre, que es lo que impide que el cliente elija el nombre de un
+       * fichero— y la única cuyo cuerpo hay que comprobar por FORMA antes de mirarlo de verdad.
+       */
+      if (mensaje.accion === "crear") {
+        const def = definicionDelCable(mensaje.definicion);
+        // Un cuerpo sin la forma no es una definición inaceptable —esa se RECHAZA con su motivo,
+        // y el motivo viaja en `error`—: es un mensaje malformado, y por eso es 400 y no 204.
+        if (def === undefined) {
+          respuesta.writeHead(400);
+          respuesta.end();
+          return;
+        }
+        // El servicio valida lo que tiene que valer (nombre, URL, slug libre) y su motivo sale en
+        // `error`, que ya viaja.
+        const id = servicioConectores.crear(def);
+        // El encadenado es del SERVIDOR y va DESPUÉS de la escritura: pedir una clave —o abrir el
+        // navegador— por un conector que no llegó a estar añadido no llevaría a ninguna parte. Y
+        // sin `await`: esta respuesta sale en el acto y el resultado llega por `alCambiar`, igual
+        // que en `probar` — con `await`, este POST se quedaría colgado hasta que alguien teclee.
+        if (id !== undefined && def.autenticacion !== "ninguna") void autorizarConector(id).catch(contar);
+        respuesta.writeHead(204);
+        respuesta.end();
+        return;
+      }
+      // Las otras CINCO sí traen id, y ahí el `typeof` es la guarda contra el JSON que miente.
+      if (typeof mensaje.id !== "string") {
         respuesta.writeHead(400);
         respuesta.end();
         return;
@@ -4644,9 +4712,9 @@ export function montarRutas(
           void servicioConectores.probar(id).catch(contar);
           break;
         case "autorizar":
-          // El puerto REAL: con `--puerto 0` el sistema elige uno, y es el mismo que ya usa
-          // `servidor.url` para la ráfaga inicial — nunca uno construido a mano.
-          void servicioConectores.autorizar(id, `http://127.0.0.1:${servidor.puerto}${RUTA_CALLBACK_MCP}`).catch(contar);
+          // Por dónde se autoriza lo decide el SERVIDOR —OAuth abre el navegador, `api-key` pide
+          // la clave—, así que este `case` no sabe ni de carriles ni de puertos.
+          void autorizarConector(id).catch(contar);
           break;
       }
       respuesta.writeHead(204);

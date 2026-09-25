@@ -6643,3 +6643,113 @@ que la autenticación real del callback fuera un dato propio y no la cookie: el 
 solo uso que `interpretarCallback` consume al reconocerlo, vaya la autorización bien o mal —así
 un reintento del mismo `state` (el usuario pulsando atrás, o un proveedor reintentando la
 redirección) no puede colarse una segunda vez.
+
+## «Add MCP server»: un servidor escrito a mano (24-09-2026)
+
+El catálogo son tres filas de código, y su límite estaba declarado en tres sitios: «no hay añadir
+servidor por URL». Esta pieza lo cierra con el diálogo del mockup —Name, Description, URL y Auth
+type—, y **el detalle que gobierna el diseño es que el diálogo no tiene campo para la clave**:
+«API Key» es un TIPO de autenticación, no un valor que se teclee ahí. Eso no es un olvido del
+mockup que hubiera que heredar: es justo la costura que este repo ya tiene para una credencial
+(`Consola.leerSecreto` → `{clase:"secreto", valor}`, el único mensaje del cable que la lleva), y
+poner un campo en el formulario habría abierto un SEGUNDO camino para una credencial — uno que no
+pasa por `motivoDeClaveInaceptable`.
+
+### Lo que se le midió a `auth.json`: la clave no cabe ahí
+
+La tentación era obvia: `auth.json` ya es «donde viven las claves», modo 0600, con un escritor que
+fusiona y no destruye. Leído el validador que ya existe, no cabe, y por dos motivos distintos:
+
+- `validarAuth` (`core/config.ts`) descarta CUALQUIER clave que no sea uno de `PROVEEDORES` o un
+  `custom:<slug>`, y lo hace con un aviso, no con un error: `"notion"` entraría al fichero y
+  saldría descartado en la lectura siguiente, con la consola diciendo que falta una credencial que
+  está escrita ahí mismo. Un conector no es un proveedor de modelo, y forzar el tipo para que
+  quepa habría metido una segunda cosa donde el producto dice una sola.
+- Y aunque se colara, no habría quién la leyera: `aplicarAuth` recorre lo que HAY y lo traduce con
+  `variableDeProveedor`, que para `"notion"` es `undefined` — no hay variable de entorno que
+  exportar porque no hay cliente HTTP que las lea del entorno.
+
+Así que la clave vive con el cliente OAuth y los tokens, en `conectores-oauth.json`, que ya era
+«los secretos de los conectores»: mismo modo 0600, mismo `escribirAtomico`, y el mismo ciclo de
+vida —nace al conectar, muere al desconectar y al quitar—. **El fichero conserva su nombre**: quien
+nombra bien su papel ahora es su TIPO (`SecretosDeConector`), y renombrarlo sería una migración con
+usuarios dentro a cambio de nada.
+
+### El encadenado, en el cliente, son dos mensajes sin orden
+
+`crear` deja el conector añadido y, si su auth no es `ninguna`, encadena. La alternativa era la del
+catálogo —`crear` y luego `autorizar`, como hacen las filas de serie—, y ahí el cliente manda DOS
+`POST /accion` sin garantía de orden entre ellos: el «autorizar» puede llegar antes que el «crear»
+y encontrarse un id que todavía no está añadido. Hoy esa carrera la salva el servidor a base de que
+`autorizar` rechaza lo que no está añadido (medido en `arranque.test.ts`), o sea que la alternativa
+no es «más simple»: es la misma pieza con una condición de carrera que alguien tiene que recordar
+en cada cambio. Encadenando en el servidor no hay carrera que salvar, y el `POST` contesta en el
+acto: lo que viene después es un navegador abriéndose o una persona tecleando su clave, y eso no
+puede tener una petición esperando.
+
+### Los iconos: dos carriles, y el `id` como llave
+
+Se copiaron las marcas del catálogo de TrueForge, y al mirarlas apareció el motivo de que haya DOS
+carriles en vez de uno:
+
+- `jira` y `deepwiki` se sirven como FICHERO: su marca ES el color —el azul de Jira, el teal y el
+  azul de DeepWiki— y no hay monocromo de dónde copiarla.
+- `notion` es un TRAZADO con `currentColor`: su marca es monocroma, y el fichero de origen la trae
+  con `fill="black"` a fuego, que dentro de un `<img>` es un cuadrado negro invisible en el tema de
+  noche. Se copia su `d` tal cual —sin redibujar nada— y el color lo pone la fila.
+
+La llave de los dos carriles es el `id` y nunca el nombre: el nombre se escribe con mayúsculas,
+acentos y espacios, y un logo atado a él se rompería al retocarlo. Un id que cambie degrada la
+marca a un MONOGRAMA, que es un icono correcto, y los tres ids están nombrados en su test para que
+perder uno sea un rojo y no un cambio mudo. Copiados y no enlazados, además, porque un `<img>` a
+`assets.production.truefoundry.com` dejaría esta consola sin logos justo en el modo `offline` que
+declara soportar de primera clase.
+
+### Lo que no se ensancha
+
+La regla de URL es la de siempre (`motivoDeEndpointInaceptable`) y no se le hizo una copia: https
+siempre, `http://` solo en la lista cerrada de loopback, y nunca credenciales embebidas. El
+formulario reusa la MISMA copia declarada del cliente que ya usa el asistente de entornos
+(`urlDeEntornoAceptable` + `AVISO_DE_URL`), duplicada porque la frontera prohíbe compartir módulo
+— la misma razón por la que `AutenticacionDeConector` tiene su guarda copiada en el store, donde un
+literal que falte descarta la fila ENTERA en silencio.
+
+Y una definición que no se entiende NO se borra: se conserva al escribir y se filtra al leer, que
+es el reparto de `authEnDisco.ts` — lo que se filtra es la LECTURA, no la fusión. Es la misma regla
+que deja vivir a un conector cuyo id está en `anadidos` y cuya definición no se entiende: sale como
+`desconocido`, la ventana lo dice, y nadie lo pierde por un fichero a medio escribir.
+
+### El 401 de una clave mala, y los dos carriles de conexión
+
+Salió de la comprobación a mano del alta por definición, con una clave mala contra un servidor de
+verdad. La fila decía «No responde» a secas, sin el código, o sea que **una clave equivocada se
+leía exactamente igual que un host que no existe** — y eso no es un adorno que falte: es el
+diagnóstico entero, porque manda a mirar la red cuando el problema está en lo que se pegó.
+
+Medido con `StreamableHTTPClientTransport` contra `https://mcp.notion.com/mcp` y un `Bearer` que no
+vale: la conexión lanza un `Error` CORRIENTE —no la `UnauthorizedError` del SDK, que es la clase
+del FLUJO OAuth y significa otra cosa— que lleva `code: 401` y de mensaje el cuerpo del POST con
+el `invalid_token` del servidor. `motivoDe` ya sabía renderizar un `code` numérico como «no responde
+(HTTP N)», así que el motivo correcto existía: se estaba tirando por el camino.
+
+El tirón venía del reintento por SSE. `listarTools` conecta primero por streamable-http —el
+protocolo de los tres servidores medidos— y, si eso falla, reintenta con un `Client` NUEVO por SSE,
+para un servidor viejo. El `catch` del primer intento solo relanzaba la `UnauthorizedError` o un
+aborto, así que un 401 caía al reintento; el reintento también fallaba —contra un host que no
+habla SSE, y contra uno que no resuelve, el error es un `Error` pelado sin `code` ni `cause`— y era
+ESE el que salía. El código del primario se quedaba en el `catch`.
+
+**El arreglo es relanzar el error del PRIMARIO cuando el respaldo también falla.** Que los dos
+fallen no significa que el diagnóstico del primero fuera el equivocado: significa que el servidor
+no habla ninguno de los dos protocolos, y lo que hay que enseñar es por qué falló el que sí era el
+suyo. El orden de `probar` deja el caso del tope cubierto igual —mira `senal.aborted` antes de
+mirar el error, así que un aborto sigue diciendo «no contestó a tiempo» y no el error de debajo—.
+
+Lo que costó no fue el arreglo, fue **poder probarlo**: la regla vivía dentro del cierre de
+`listarTools`, que es precisamente lo que todos los tests de esa pieza doblan, así que la regla
+estaba escrita y no probada —el patrón de fallo de esta arquitectura, otra vez—. La costura es
+`CosturaDeRedDeConectores` (el cliente y los dos transportes), con las piezas de verdad por
+omisión: así el test entra por `redDeConectoresReal` y por `probar`, no por una copia de la regla,
+y el mutante que quita el relanzamiento deja la fila en «no responde» —medido, es exactamente el
+síntoma que se vio en pantalla— y pone el test en rojo. `npm test` sigue sin red: los transportes
+del doble son una marca, porque lo que hay que distinguir es CUÁL se pidió.

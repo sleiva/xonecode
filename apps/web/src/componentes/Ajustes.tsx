@@ -16,8 +16,9 @@ import type { EstadoDelCliente } from "../store.js";
 import type {
   AgenteDelCable,
   SkillDelCable,
-  AutenticacionDeConector,
   ConectorDelCable,
+  DefinicionDeConector,
+  FilaDeCatalogo,
   AjustesDeDispositivos,
   Dispositivo,
   Herramienta,
@@ -362,6 +363,7 @@ export function Ajustes({
   alInstalarSkill,
   conectores,
   alAccionDeConector,
+  alCrearDeConector,
   alPedirClave,
   alBorrarClave,
   alRegistrarEntorno,
@@ -474,13 +476,19 @@ export function Ajustes({
    * «un control sin dato detrás no se pinta».
    */
   conectores?: {
-    catalogo: { id: string; nombre: string; descripcion: string; autenticacion: AutenticacionDeConector }[];
+    catalogo: FilaDeCatalogo[];
     conectores: ConectorDelCable[];
     desconocidos: string[];
     ilegible?: true;
     error?: string;
   };
   alAccionDeConector: (accion: "anadir" | "quitar" | "probar" | "autorizar" | "desconectar", id: string) => void;
+  /**
+   * El alta de un servidor escrito a mano, con la definición que se teclea. Separado de
+   * `alAccionDeConector` porque es la única acción que no lleva `id` —lo deriva el servidor
+   * del nombre—: ver la cabecera de `PropsDeConectores`.
+   */
+  alCrearDeConector: (definicion: DefinicionDeConector) => void;
   /** La pregunta oculta en vuelo, si la hay: se pinta DENTRO de la fila que se edita. */
   secreto?: string;
   /**
@@ -2207,7 +2215,10 @@ export function Ajustes({
                 desconocidos={conectores.desconocidos}
                 {...(conectores.ilegible === undefined ? {} : { ilegible: conectores.ilegible })}
                 {...(conectores.error === undefined ? {} : { error: conectores.error })}
+                {...(secreto === undefined ? {} : { secreto })}
                 alAccion={alAccionDeConector}
+                alCrear={alCrearDeConector}
+                alResponderSecreto={alResponderSecreto}
               />
             </>
           ) : null}

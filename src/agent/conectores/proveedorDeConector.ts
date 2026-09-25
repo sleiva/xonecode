@@ -11,7 +11,7 @@
  */
 import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
-import { guardarOAuth, leerOAuth, type OAuthDeConector } from "./conectoresEnDisco.js";
+import { guardarOAuth, leerOAuth, type SecretosDeConector } from "./conectoresEnDisco.js";
 
 export interface OpcionesDeProveedor {
   casa: string;
@@ -22,7 +22,12 @@ export interface OpcionesDeProveedor {
 }
 
 export class ProveedorDeConector implements OAuthClientProvider {
-  private datos: OAuthDeConector;
+  /**
+   * Los secretos de ESTE conector. Son los mismos que guarda el carril de la clave —un solo
+   * fichero por conector—, pero aquí no puede haber `clave`: quien construye un proveedor es el
+   * carril de OAuth, y la autenticación de un conector no cambia después de crearlo.
+   */
+  private datos: SecretosDeConector;
   constructor(private readonly o: OpcionesDeProveedor) {
     this.datos = leerOAuth(o.casa, o.id);
   }

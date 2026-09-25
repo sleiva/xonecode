@@ -1264,6 +1264,10 @@ export function App({
       // NUEVO — el host lo reemite por `alCambiar` del servicio, el mismo molde que
       // `dispositivo`/`conexion`.
       alAccionDeConector={(accion, id) => void enviar({ clase: "conector", accion, id })}
+      // El alta viaja por su propia rama de la unión: no lleva `id` —lo deriva el servidor del
+      // nombre—, así que no es un séptimo valor de `accion` con un segundo parámetro de otro
+      // tipo. Ver `PropsDeConectores`.
+      alCrearDeConector={(definicion) => void enviar({ clase: "conector", accion: "crear", definicion })}
       // La pregunta oculta en vuelo se pinta DENTRO de la fila que se está editando; por
       // eso el centro deja de pintarla mientras la ventana está abierta (más abajo).
       {...(estado.secreto === undefined ? {} : { secreto: estado.secreto.pregunta })}
