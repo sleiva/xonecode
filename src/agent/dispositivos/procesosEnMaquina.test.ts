@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
 import {
   crearEjecutor,
+  matarGrupoReal,
   motivoDelCodigo,
   necesitaShell,
   TOPE_DE_TRABAJO_MS,
@@ -280,5 +281,16 @@ describe("necesitaShell", () => {
     // Y ni siquiera un `.bat` fuera de Windows: ahí Node no impone esta restricción y `shell:
     // true` solo añadiría una capa de interpretación que no hace falta.
     expect(necesitaShell("./script.bat", "linux")).toBe(false);
+  });
+});
+
+describe("matarGrupoReal: la rama de Windows, por invocación (no hay Windows en CI)", () => {
+  it("en win32 llama a taskkill /PID <pid> /T /F, y NUNCA a process.kill", () => {
+    const llamadas: string[][] = [];
+    matarGrupoReal(4321, "SIGKILL", {
+      plataforma: "win32",
+      taskkill: (args) => void llamadas.push(args),
+    });
+    expect(llamadas).toEqual([["/PID", "4321", "/T", "/F"]]);
   });
 });

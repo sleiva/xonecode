@@ -5,6 +5,7 @@ import { CompositeBackend, FilesystemBackend, LocalShellBackend } from "deepagen
 import { RUTA_MEMORIA_INTERNA, RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
 import { sinContenidoInvalido, validarConXoneLinter, type ValidarContenido } from "./validacionXone.js";
 import { escriturasEnSerie } from "./escriturasEnSerie.js";
+import { crearExecuteCancelable } from "./ejecucionCancelable.js";
 import { RAIZ_SKILLS, skillsConRuta, skillsMontables, type Montaje } from "./skills.js";
 import {
   artefactoFueraDeSitio,
@@ -64,21 +65,50 @@ export function backendDelProyecto(raiz: string): FilesystemBackend {
  * propósito; un `printenv` las dejaría en el contexto. Lo que se pasa lo decide
  * `core/shellDeAgente.ts#entornoDeShell`, que es puro y tiene test.
  *
- * **Dos límites de la librería, declarados**: el tope es de RELOJ (`timeout`, en segundos) y
- * no de silencio, al revés que `TOPE_SIN_SALIDA_MS` de `agent/dispositivos/`; y al vencer
- * mata al HIJO (`SIGTERM`), no al grupo, así que un nieto sobrevive. Por eso lo que no
- * termina —un emulador— va al fondo desde la propia orden, y eso lo dice la skill.
+ * **El límite declarado, heredado de la librería**: el tope sigue siendo de RELOJ
+ * (`TOPE_DE_COMANDO_S`, pasado como `timeoutS`), no de silencio, al revés que
+ * `TOPE_SIN_SALIDA_MS` de `agent/dispositivos/`. Por eso lo que no termina —un emulador— va al
+ * fondo desde la propia orden, y eso lo dice la skill. Al vencer, `crearExecuteCancelable`
+ * (`agent/grafo/ejecucionCancelable.ts`) manda `SIGKILL` al ÁRBOL vía `matarGrupoReal` —
+ * `process.kill(-pid)` en POSIX, `taskkill /T /F` en Windows—: un nieto no sobrevive.
  */
 export function backendDelProyectoConShell(
   raiz: string,
   entorno: Record<string, string>,
+  /**
+   * La señal del TURNO en curso, ya resuelta desde fuera (`sesionTrueforge.ts`). Ausente —el
+   * caso de deepagents, que no la forwardea nunca— y `execute` se comporta exactamente como
+   * antes: sin cancelación interactiva, pero YA con el kill de árbol al vencer el timeout.
+   */
+  senalDelTurno?: () => AbortSignal | undefined,
 ): FilesystemBackend {
-  return new LocalShellBackend({
+  const backend = new LocalShellBackend({
     rootDir: raiz,
     virtualMode: true,
     env: entorno,
     timeout: TOPE_DE_COMANDO_S,
   });
+  /**
+   * Sustituye la propiedad `execute` de la INSTANCIA, no la subclasifica: `isSandboxBackend`
+   * (deepagents) es un chequeo de FORMA (`typeof backend.execute === "function"`), y `execute`
+   * es un método normal del prototipo — no hace falta acceder a ningún campo privado de la
+   * librería.
+   *
+   * `cwd` de `FilesystemBackend` es `protected` en los TIPOS de deepagents 1.14.0 (no público
+   * como decía la nota original), pero en TIEMPO DE EJECUCIÓN es una propiedad corriente
+   * (`this.cwd = path.resolve(rootDir)` en el constructor, medido en
+   * `node_modules/deepagents/dist/src-*.js`) — no un `#privado` de verdad, al contrario que el
+   * `id` de `LocalShellBackend`. Se lee con el mismo cast que ya hace falta para asignar
+   * `execute`, y es exactamente el valor que el `execute` de la librería habría usado.
+   */
+  const ejecutar = crearExecuteCancelable({
+    env: entorno,
+    cwd: (backend as unknown as { cwd: string }).cwd,
+    timeoutS: TOPE_DE_COMANDO_S,
+  });
+  (backend as unknown as { execute: (comando: string) => ReturnType<typeof ejecutar> }).execute = (comando: string) =>
+    ejecutar(comando, senalDelTurno?.());
+  return backend;
 }
 
 /**
@@ -474,7 +504,7 @@ export function backendDeAgente(opciones: {
    * —que es todo el mundo menos uno— la cadena no es ejecutable y `permisosDe` sigue
    * aplicándose, que es justo lo que la librería prohíbe combinar.
    */
-  ejecucion?: { entorno: Record<string, string> };
+  ejecucion?: { entorno: Record<string, string>; senal?: () => AbortSignal | undefined };
   /**
    * La carpeta de los adjuntos de una TAREA, si la hay. Ausente —toda sesión de persona, y
    * toda tarea sin adjuntos— y `/adjuntos/` no se monta; entonces esa ruta no es nada, y la
@@ -491,7 +521,7 @@ export function backendDeAgente(opciones: {
   const base =
     opciones.ejecucion === undefined
       ? backendDelProyecto(opciones.raiz)
-      : backendDelProyectoConShell(opciones.raiz, opciones.ejecucion.entorno);
+      : backendDelProyectoConShell(opciones.raiz, opciones.ejecucion.entorno, opciones.ejecucion.senal);
   /**
    * **La CUARTA guarda va la MÁS INTERNA, y el orden importa en los dos sentidos.**
    *

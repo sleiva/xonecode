@@ -753,8 +753,12 @@ turno rápido en vez de esperar a que el comando termine solo.
 - [ ] `montarBackend`'s parámetro `ejecucion` admite el campo `senal` en su tipo.
 - [ ] Test de integración: un especialista con `ejecucion: true` (`device-controller`) lanza
       un comando real y largo (`sleep 5`); se cancela el turno a mitad; el turno se libera
-      (rechaza) en bastante menos de los 5 segundos del comando — prueba que la cancelación
-      llega al proceso real, no solo al grafo.
+      en bastante menos de los 5 segundos del comando — prueba que la cancelación llega al
+      proceso real, no solo al grafo. **Corrección tras implementarlo**: en TrueForge
+      `turno()` RESUELVE al cancelar (no rechaza como en deepagents/`turnoReal.ts`) —
+      `AgentThreadOrchestrator.execute()` solo marca una bandera y cierra en paz. Dos tests
+      ya existentes en `sesionTrueforge.test.ts` (~215, ~1389) ya dependían de esto. El
+      criterio real que prueba el arreglo es el tiempo, no si rechaza o resuelve.
 
 **Verify:** `npx vitest run src/agent/motores/trueforge/sesionTrueforge.test.ts` → todo verde.
 
