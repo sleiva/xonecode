@@ -314,9 +314,13 @@
 
 /* «Eliminar» una clave guardada: borra un fichero, pero no es la misma severidad que
    `.destructiva` (el aviso de «cambios sin guardar», sin papelera y sin vuelta atrás) — la
-   clave se puede volver a añadir. El rojo de marca en contorno, no en relleno. */
+   clave se puede volver a añadir. El rojo de marca en contorno, no en relleno. El padding
+   base de `.peligro` (8px 16px) es más alto que el de `.accion`/`.secundario` (6px 10px):
+   sin igualarlo, «Eliminar» salía más ALTO que «Cambiar clave», su vecino en la misma
+   fila. */
 .peligro {
   composes: peligro from "./Boton.module.css";
+  padding: 6px 10px;
 }
 
 /* El botón destructivo del aviso de «cambios sin guardar» (descartar el borrador de
