@@ -1513,11 +1513,15 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
          * arriba, o la excepción que este `finally` deja seguir su curso) y esperar
          * colgaría esa entrega detrás de un turno entero nuevo. El de sobrante es un turno
          * APARTE que entra por el MISMO `ejecutarTurno` —mismo `try/finally`, misma guarda
-         * de raíz, mismo aviso de flanco—, así que un fallo suyo se trata exactamente como
-         * el de cualquier turno que revienta: no tumba nada de aquí.
+         * de raíz, mismo aviso de flanco—, y el `.catch()` de aquí abajo es el MISMO que
+         * `terminada` lleva unas líneas más abajo: un turno que revienta sin que nadie lo
+         * espere es un rechazo sin manejar que tumba el PROCESO entero, no solo esta
+         * consola — no basta con que el `try/finally` de dentro limpie su estado.
          */
         if (resultado?.notasSobrantes !== undefined) {
-          void ejecutarTurno(resultado.notasSobrantes, estado, consola);
+          void ejecutarTurno(resultado.notasSobrantes, estado, consola).catch((error: unknown) => {
+            informar(`el turno del sobrante terminó con un error: ${error instanceof Error ? error.message : String(error)}`);
+          });
         }
       }
     };

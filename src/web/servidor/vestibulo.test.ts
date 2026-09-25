@@ -1166,6 +1166,49 @@ describe("vestíbulo", () => {
     await v.cerrar();
   });
 
+  /**
+   * El turno de sobrante corre por el MISMO `ejecutarTurno` que cualquier otro, así que un
+   * fallo suyo es un rechazo sin manejar de la llamada recursiva `void ejecutarTurno(...)` —
+   * y eso, sin `.catch()`, tumba el PROCESO ENTERO (Node 15+: un `unhandledRejection` no
+   * capturado termina el proceso por omisión), no solo esta consola. El `.catch()` de aquí
+   * es el MISMO patrón que `terminada.catch(...)` unas líneas más abajo en este fichero: se
+   * cuenta con `informar` y se sigue.
+   *
+   * La llamada al turno ORIGINAL se hace DIRECTA (`proyecto.ejecutarTurno(...)`, como el test
+   * de la línea del dispositivo) en vez de por `recibir`: así se puede `await` su propio
+   * resultado y comprobar que resuelve LIMPIO —sin verse arrastrado por el reventón del
+   * turno de sobrante, que pasa DESPUÉS y aparte.
+   */
+  it("un turno de sobrante que revienta no tumba el original, y se avisa como cualquier turno que revienta", async () => {
+    const s = sesionesEnMemoria();
+    const dichos: string[] = [];
+    let primeraVez = true;
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      informar: (t) => dichos.push(t),
+      crearEjecutor: () => async () => {
+        if (primeraVez) {
+          primeraVez = false;
+          return { verificador: "no-corrio" as const, pendientes: 0, notasSobrantes: "cambia de idea" };
+        }
+        throw new Error("el turno del sobrante revienta");
+      },
+    });
+    const proyecto = await v.abrirProyecto({ raiz: "/w/a" });
+    // El turno ORIGINAL resuelve limpio, con su propio resultado — el reventón es cosa del
+    // turno de sobrante, que ni se espera ni se mezcla aquí.
+    const resultado = await proyecto.ejecutarTurno("haz algo", proyecto.estadoDeSesion, proyecto.consola.consola);
+    expect(resultado).toEqual({ verificador: "no-corrio", pendientes: 0, notasSobrantes: "cambia de idea" });
+    // Deja correr el turno de sobrante -disparado por el `finally` de arriba- hasta que su
+    // `.catch()` informe del reventón.
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(dichos.join("\n")).toMatch(/el turno del sobrante terminó con un error: el turno del sobrante revienta/);
+    await v.cerrar();
+  });
+
   it("dos aperturas A LA VEZ siguen dejando una sola consola viva", async () => {
     const s = sesionesEnMemoria();
     const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
