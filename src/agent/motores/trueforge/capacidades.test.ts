@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { Agente } from "../../../core/agentes.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { capacidadDeNotas, capacidadesDelEspecialista, SKILL_DE_OPENUI, toolsDe, type DependenciasDelEspecialista } from "./capacidades.js";
+import winston from "winston";
+import { AIMessageChunk, type BaseMessage } from "@langchain/core/messages";
+import { capacidadDeFecha, capacidadDeNotas, capacidadesDelEspecialista, SKILL_DE_OPENUI, toolsDe, type DependenciasDelEspecialista } from "./capacidades.js";
 import { crearNota, marcarEntregada, type Nota } from "./notas.js";
+import { AgentThread, AgentThreadOrchestrator, EventType, NOOP_AGENT_TRACING } from "./trueforge.js";
+import { modeloParaTrueforge } from "./modeloLangchain.js";
 import { RAIZ_SKILLS } from "../../grafo/skills.js";
 import { AGENTES_DE_SERIE } from "../../subagentes/agentesEnDisco.js";
 
@@ -147,5 +151,93 @@ describe("cada especialista lleva `capacidadDeNotas`, con nombre o genérico", (
   it("el hijo GENÉRICO (nombre inventado) TAMBIÉN la lleva", () => {
     const piezas = capacidadesDelEspecialista(undefined, "inventado", deps());
     expect(piezas.map((p) => p.nombre)).toContain("notas");
+  });
+});
+
+/** El mismo modelo de pega de `modeloLangchain.test.ts`: un guion de trozos por llamada, y
+ *  apunta los mensajes que recibió CADA vez. */
+function modeloGuionizado(guiones: AIMessageChunk[][]) {
+  const recibidos: BaseMessage[][] = [];
+  const modelo = {
+    bindTools() {
+      return modelo;
+    },
+    async stream(mensajes: BaseMessage[]) {
+      recibidos.push(mensajes);
+      const guion = guiones.shift() ?? [new AIMessageChunk({ content: "" })];
+      return (async function* () {
+        for (const t of guion) yield t;
+      })();
+    },
+  };
+  return { modelo, recibidos };
+}
+
+const logger = winston.createLogger({ silent: true, transports: [] });
+
+describe("capacidadDeNotas contra el orquestador real: la entrega ocurre de verdad", () => {
+  it("una nota empujada durante la PRIMERA llamada de la raíz llega en la SEGUNDA", async () => {
+    const { modelo, recibidos } = modeloGuionizado([
+      // La primera respuesta LLEVA una tool call: una respuesta de solo texto cierra el hilo de
+      // inmediato (`AgentThread.js`, `!hasToolCalls` → `AGENT_DONE`) y nunca habría segunda
+      // llamada que probar. `get_current_datetime` (de `capacidadDeFecha`) es una tool real de la
+      // librería, sin aprobación ni backend que montar, así que el turno sigue solo.
+      [new AIMessageChunk({ content: "Miro.", tool_call_chunks: [{ index: 0, id: "f1", name: "get_current_datetime", args: "{}" }] })],
+      [new AIMessageChunk({ content: "Listo." })],
+    ]);
+    const notas: Nota[] = [];
+    const raiz = new AgentThread({
+      definition: { modelClient: modeloParaTrueforge({ modelo: () => modelo }), instruction: "reglas" },
+      threadId: "main",
+      title: "main",
+      capabilities: [capacidadDeNotas(notas).capability, capacidadDeFecha().capability] as never,
+      tracing: NOOP_AGENT_TRACING,
+      logger,
+    });
+    const orq = new AgentThreadOrchestrator({
+      agentThreads: new Map([["main", raiz]]),
+      createDynamicSubAgentThread: async () => {
+        throw new Error("sin subagentes en este test");
+      },
+      tracing: NOOP_AGENT_TRACING,
+      logger,
+    });
+    for await (const _ of orq.send([{ type: EventType.USER_MESSAGE, content: "haz esto" }] as never)) void _;
+    const it1 = orq.execute({ signal: new AbortController().signal });
+    let r = await it1.next();
+    // Espera a que la PRIMERA llamada al modelo haya ocurrido de verdad antes de empujar la nota.
+    while (recibidos.length === 0 && !r.done) r = await it1.next();
+    expect(recibidos).toHaveLength(1);
+    // Empuja la nota DESPUÉS de la primera llamada y ANTES de que el orquestador pida la
+    // segunda: exactamente "mientras el agente trabaja".
+    notas.push(crearNota("cambia de idea"));
+    while (!r.done) r = await it1.next();
+
+    expect(recibidos).toHaveLength(2);
+    expect(recibidos[0]!.some((m) => String(m.content).includes("cambia de idea"))).toBe(false);
+    expect(recibidos[1]!.some((m) => String(m.content).includes("cambia de idea"))).toBe(true);
+    // El mensaje llegó como HUMAN, no rompió el adaptador.
+    expect(recibidos[1]!.find((m) => String(m.content).includes("cambia de idea"))!.getType()).toBe("human");
+    // Y la segunda llamada es de verdad la vuelta de la tool call, no una casualidad de guion.
+    expect(recibidos[1]!.map((m) => m.getType())).toContain("tool");
+  });
+
+  it("un HIJO montado con la MISMA capacidad también la recibe, por separado", async () => {
+    const notas: Nota[] = [crearNota("nota compartida")];
+    const { modelo: modeloHijo, recibidos: recibidosHijo } = modeloGuionizado([[new AIMessageChunk({ content: "Visto." })]]);
+    const hijo = new AgentThread({
+      definition: { modelClient: modeloParaTrueforge({ modelo: () => modeloHijo }), messages: [{ role: "user", content: "encargo" }] },
+      threadId: "hijo-1",
+      title: "hijo-1",
+      capabilities: [capacidadDeNotas(notas).capability] as never,
+      tracing: NOOP_AGENT_TRACING,
+      logger,
+      parent: { tool_call_id: "d1", thread_id: "main" } as never,
+      agentInfo: { type: "dynamic", name: "hijo-1", input: "encargo" } as never,
+    });
+    const it2 = hijo.execute({ signal: new AbortController().signal });
+    let r = await it2.next();
+    while (!r.done) r = await it2.next();
+    expect(recibidosHijo[0]!.some((m) => String(m.content).includes("nota compartida"))).toBe(true);
   });
 });
