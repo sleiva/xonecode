@@ -4,8 +4,9 @@
  * cancelación — ver el porqué medido en
  * `docs/superpowers/specs/2026-09-25-cancelacion-de-execute-design.md`.
  *
- * Sustituye a `LocalShellBackend.execute` ENTERO: mismo formato de salida, más
- * `detached: true` + `matarGrupoReal` (mata el ÁRBOL) y una `AbortSignal` opcional.
+ * Sustituye a `LocalShellBackend.execute` ENTERO: mismo formato de salida, más `detached` (en
+ * POSIX) + `matarGrupoReal` (mata el ÁRBOL, en las dos plataformas) y una `AbortSignal`
+ * opcional.
  *
  * Dos exit codes que la librería no distinguía: **124** si venció el timeout (igual que
  * ella), **130** si lo canceló la señal (128+SIGINT, convención de shell para
@@ -39,9 +40,22 @@ export type LanzarShell = (
  * de proceso de xonecode entero, y `process.kill(-pid)` (dentro de `matarGrupoReal`) mataría
  * ESE grupo — el propio xonecode incluido. `LocalShellBackend.execute` de la librería no lo
  * pone, y por eso su `child.kill()` solo alcanza al hijo inmediato.
+ *
+ * **`detached` es solo de POSIX.** Es lo que hace al hijo líder de su propio grupo para que
+ * `process.kill(-pid)` alcance al árbol; en Windows no hay grupos de proceso POSIX, así que
+ * `matarGrupoReal` usa `taskkill /T` (recorre el árbol por PID, no por grupo) y no lo
+ * necesita — y ahí `detached: true` le abre al hijo su PROPIA ventana de consola visible (lo
+ * dice la documentación de Node). `windowsHide: true` va siempre, en las dos plataformas: en
+ * POSIX no hace nada, en Windows evita esa ventana.
  */
 export const lanzarReal: LanzarShell = (comando, opciones) =>
-  spawn(comando, { shell: true, env: opciones.env, cwd: opciones.cwd, detached: true }) as unknown as ProcesoDeShell;
+  spawn(comando, {
+    shell: true,
+    env: opciones.env,
+    cwd: opciones.cwd,
+    detached: process.platform !== "win32",
+    windowsHide: true,
+  }) as unknown as ProcesoDeShell;
 
 const TOPE_DE_SALIDA_BYTES = 100_000;
 

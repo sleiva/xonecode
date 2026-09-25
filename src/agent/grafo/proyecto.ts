@@ -65,10 +65,12 @@ export function backendDelProyecto(raiz: string): FilesystemBackend {
  * propósito; un `printenv` las dejaría en el contexto. Lo que se pasa lo decide
  * `core/shellDeAgente.ts#entornoDeShell`, que es puro y tiene test.
  *
- * **Dos límites de la librería, declarados**: el tope es de RELOJ (`timeout`, en segundos) y
- * no de silencio, al revés que `TOPE_SIN_SALIDA_MS` de `agent/dispositivos/`; y al vencer
- * mata al HIJO (`SIGTERM`), no al grupo, así que un nieto sobrevive. Por eso lo que no
- * termina —un emulador— va al fondo desde la propia orden, y eso lo dice la skill.
+ * **El límite declarado, heredado de la librería**: el tope sigue siendo de RELOJ
+ * (`TOPE_DE_COMANDO_S`, pasado como `timeoutS`), no de silencio, al revés que
+ * `TOPE_SIN_SALIDA_MS` de `agent/dispositivos/`. Por eso lo que no termina —un emulador— va al
+ * fondo desde la propia orden, y eso lo dice la skill. Al vencer, `crearExecuteCancelable`
+ * (`agent/grafo/ejecucionCancelable.ts`) manda `SIGKILL` al ÁRBOL vía `matarGrupoReal` —
+ * `process.kill(-pid)` en POSIX, `taskkill /T /F` en Windows—: un nieto no sobrevive.
  */
 export function backendDelProyectoConShell(
   raiz: string,

@@ -130,7 +130,9 @@ export function matarGrupoReal(
 ): void {
   const plataforma = opciones.plataforma ?? process.platform;
   if (plataforma === "win32") {
-    const taskkill = opciones.taskkill ?? ((args: string[]) => void execFileSync("taskkill", args, { stdio: "ignore" }));
+    const taskkill =
+      opciones.taskkill ??
+      ((args: string[]) => void execFileSync("taskkill", args, { stdio: "ignore", windowsHide: true }));
     taskkill(["/PID", String(pid), "/T", "/F"]);
     return;
   }
