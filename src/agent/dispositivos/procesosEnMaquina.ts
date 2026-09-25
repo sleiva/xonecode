@@ -19,7 +19,7 @@
  * `matarGrupo` son puertos, y sus valores POR OMISIÓN —los únicos de verdad, y los mismos para
  * los dos módulos— son los que nadie pasa cuando esto corre sobre una máquina.
  */
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 
 /**
  * Cuánto se aguanta SIN una sola línea de salida antes de darlo por colgado.
@@ -111,10 +111,36 @@ export interface DependenciasDeProcesos {
   entorno?: Record<string, string | undefined>;
 }
 
+/**
+ * Mata un árbol de procesos por PID, en las DOS plataformas. Es la ÚNICA función que decide
+ * CUÁNDO y CÓMO se mata un árbol — la comparte `agent/grafo/ejecucionCancelable.ts`.
+ *
+ * En Windows no hay grupos de proceso POSIX ni `SIGTERM`/`SIGKILL` de verdad: `taskkill /T`
+ * recorre el árbol real por PID (no depende de `detached`) y `/F` es el único modo forzoso
+ * que hay — no existe un equivalente "amable".
+ *
+ * `plataforma`/`taskkill` inyectables por lo de siempre: un test en macOS/Linux no puede
+ * ejecutar `taskkill` de verdad, pero sí puede comprobar que se construye la invocación
+ * correcta.
+ */
+export function matarGrupoReal(
+  pid: number,
+  senal: string,
+  opciones: { plataforma?: NodeJS.Platform; taskkill?: (args: string[]) => void } = {}
+): void {
+  const plataforma = opciones.plataforma ?? process.platform;
+  if (plataforma === "win32") {
+    const taskkill = opciones.taskkill ?? ((args: string[]) => void execFileSync("taskkill", args, { stdio: "ignore" }));
+    taskkill(["/PID", String(pid), "/T", "/F"]);
+    return;
+  }
+  process.kill(-pid, senal as NodeJS.Signals);
+}
+
 /** Un ejecutor con los efectos que le pasen. Sin nada, los de verdad. */
 export function crearEjecutor(deps: DependenciasDeProcesos = {}): Ejecutor {
   const lanzar = deps.lanzar ?? lanzarReal;
-  const matarGrupo = deps.matarGrupo ?? ((pid: number, senal: string) => void process.kill(-pid, senal as NodeJS.Signals));
+  const matarGrupo = deps.matarGrupo ?? ((pid: number, senal: string) => matarGrupoReal(pid, senal));
   const entorno = deps.entorno ?? process.env;
 
   let cancelado = false;
