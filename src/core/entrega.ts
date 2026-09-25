@@ -97,6 +97,12 @@ export interface ResultadoDeTurno {
    * intentarlo — casi siempre porque no escribió nada, o porque se cortó antes.
    */
   motivoSinVerificar?: string;
+  /**
+   * El texto de las notas (IXCODE-4) que nadie llegó a recibir antes de que el turno cerrara,
+   * concatenado. Quien orquesta las sesiones (`vestibulo.ts`) decide con esto si dispara el
+   * turno siguiente — este tipo solo REPORTA, no dispara nada.
+   */
+  notasSobrantes?: string;
 }
 
 /** Lo del turno más lo que solo se puede medir desde fuera. */

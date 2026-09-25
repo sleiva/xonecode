@@ -22,8 +22,16 @@ import type { HechosDelTurno } from "../../../core/juezDelTurno.js";
  * la aprobación tiene que volver al hilo de ESE hijo.
  *
  * Apunta lo que ve cada llamada: los mensajes y las tools que se le ataron.
+ *
+ * `alLlamar`, si se pasa, corre justo tras registrar la llamada N-ésima (1-indexado) y ANTES de
+ * devolver la respuesta guionizada. Existe por una medida (Task 5, IXCODE-4): el mock resuelve
+ * `stream` enteramente en microtareas —sin fs real ni red—, así que un `setTimeout(fn, 0)` en el
+ * test nunca alcanza a interponerse entre dos llamadas contiguas cuando no hay una de verdad
+ * (una tool de disco, un `setTimeout` real) en medio. Empujar desde AQUÍ, en cambio, ocurre
+ * justo después de que el `preLLMProcessor` de esa llamada ya haya leído sus notas pendientes,
+ * así que la siguiente sí las recogerá.
  */
-function modelosConGuion(guiones: AIMessageChunk[][]) {
+function modelosConGuion(guiones: AIMessageChunk[][], alLlamar?: (n: number) => void) {
   const vistos: string[][] = [];
   const toolsPorLlamada: string[][] = [];
   let atadas: string[] = [];
@@ -35,6 +43,7 @@ function modelosConGuion(guiones: AIMessageChunk[][]) {
     stream: async (mensajes: { content: unknown }[]) => {
       vistos.push(mensajes.map((m) => String(m.content)));
       toolsPorLlamada.push(atadas);
+      alLlamar?.(vistos.length);
       const g = guiones.shift() ?? [new AIMessageChunk({ content: "" })];
       return (async function* () {
         for (const t of g) yield t;
@@ -1436,6 +1445,28 @@ describe("Claude Code, Codex y OpenCode como hijos de TrueForge", () => {
     expect(vistos[0]!.join("\n")).toContain("hecho por codex");
     expect(f2.peticiones).toHaveLength(0);
   }, 30_000);
+
+  it("agregarNota mientras un hijo EXTERNO trabaja no revienta y no sale como sobrante: la raíz la recoge en su siguiente llamada", async () => {
+    // Contra lo que un borrador anterior de este test asumía, la raíz SÍ vuelve a llamar al
+    // modelo tras recibir la respuesta del hijo externo (lo prueba, en este mismo describe,
+    // «se delega por el nombre del `.md`…», con `vistos[1]` y `s.tracker.calls === 2`), así que
+    // la nota SÍ llega a alguien —la raíz, en su llamada siguiente— y NO sale como
+    // `notasSobrantes`. Lo único verdaderamente propio de un hijo externo es que ÉL no puede
+    // recibirla: no tiene `capabilities`, así que `agregarNota` mientras `correr()` está en
+    // marcha no debe reventar el turno, y el texto no debe colarse en sus instrucciones (esas
+    // ya se compusieron antes de que la nota existiera).
+    let s: Awaited<ReturnType<typeof abrirSesionTrueforge>> | undefined;
+    const f = fabrica(["codex"], async () => {
+      s!.agregarNota("esto no le puede llegar a un hijo externo");
+      return "hecho por codex";
+    });
+    const { m, vistos } = modelosConGuion([delegar(), [new AIMessageChunk({ content: "Listo." })]]);
+    s = await abrirSesionTrueforge({ raiz: conExterno(), modelos: m, entorno: ENTORNO, skills: CATALOGO, subagenteExterno: f.subagenteExterno });
+    const r = await s.turno("refactoriza", piel().p);
+    expect(r.notasSobrantes).toBeUndefined();
+    expect(f.peticiones[0]!.instrucciones).not.toContain("esto no le puede llegar");
+    expect(vistos[1]!.some((t) => t.includes("esto no le puede llegar a un hijo externo"))).toBe(true);
+  }, 30_000);
 });
 
 describe("el contraste con las métricas PROPIAS de TrueForge, en la traza", () => {
@@ -1609,5 +1640,47 @@ describe("agregarNota: una nota mientras el agente trabaja llega al hilo que tra
     // pese a que la raíz ya la tenía marcada como entregada a SU propio hilo).
     expect(vistos[0]!.some((t) => t.includes("una nota para todos"))).toBe(true);
     expect(vistos[1]!.some((t) => t.includes("una nota para todos"))).toBe(true);
+  }, 20_000);
+
+  it("una nota que NADIE recibe antes de que el turno cierre sale como sobrante, y avisa", async () => {
+    // Un solo texto, SIN tool_calls: verificado contra la librería real que eso cierra el hilo
+    // ahí mismo (`AGENT_DONE`) — no hay una segunda llamada que la pudiera recibir. Empujar la
+    // nota DESDE EL MOCK, justo tras registrar la ÚNICA llamada (`alLlamar`, ver su porqué en
+    // `modelosConGuion`): con un solo texto de respuesta no hay ninguna E/S real entre la
+    // llamada y el cierre del turno, así que un `setTimeout` en el test nunca llega a tiempo —
+    // esto la deja sin nadie a quien entregársela de forma determinista.
+    let s: Awaited<ReturnType<typeof abrirSesionTrueforge>> | undefined;
+    const { m } = modelosConGuion([[new AIMessageChunk({ content: "Listo." })]], (n) => {
+      if (n === 1) s!.agregarNota("esto llega tarde");
+    });
+    s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    const pi = piel();
+    const r = await s.turno("escribe una nota", pi.p);
+    expect(r.notasSobrantes).toBe("esto llega tarde");
+    // El aviso por la piel, el mismo patrón que el de «SIN aprobación» (más abajo en este
+    // fichero): una línea que lo dice, no un silencio.
+    expect(pi.lineas.join("\n")).toMatch(/se manda como el turno siguiente/);
+  }, 20_000);
+
+  it("una nota que SÍ se entrega no sale como sobrante", async () => {
+    // La PRIMERA respuesta lleva una tool call de verdad (`get_current_datetime`, que la raíz
+    // ya tiene montada por `capacidadDeFecha()`): verificado contra la librería real que una
+    // respuesta sin tool_calls termina el hilo ahí mismo, así que dos textos sueltos nunca
+    // llegarían a una segunda llamada — que es justo donde tiene que aparecer la nota. Se
+    // empuja desde `alLlamar` tras la PRIMERA llamada, para que la SEGUNDA la recoja.
+    let s: Awaited<ReturnType<typeof abrirSesionTrueforge>> | undefined;
+    const { m, vistos } = modelosConGuion(
+      [
+        [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "f1", name: "get_current_datetime", args: "{}" }] })],
+        [new AIMessageChunk({ content: "Listo." })],
+      ],
+      (n) => {
+        if (n === 1) s!.agregarNota("a tiempo");
+      }
+    );
+    s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    const r = await s.turno("mira algo", piel().p);
+    expect(r.notasSobrantes).toBeUndefined();
+    expect(vistos[1]!.some((t) => t.includes("a tiempo"))).toBe(true);
   }, 20_000);
 });

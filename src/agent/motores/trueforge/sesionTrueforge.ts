@@ -82,7 +82,7 @@ import { encenderTrazaDeErrores } from "../../trazaDeErroresEnDisco.js";
 import { entornoConDepuracion } from "../../turno/depuracion.js";
 import { detalleDe, parametrosDe } from "../../turno/resumenDeTool.js";
 import { apartarMemoria, cargarMemoria, fotoSaneada, guardarMemoria, textoDeMemoriaDescartada, type FotoDeHilo } from "./memoriaTrueforge.js";
-import { crearNota, type Nota } from "./notas.js";
+import { crearNota, sobrantes, type Nota } from "./notas.js";
 import type { ToolDeLangchain } from "./toolsPropias.js";
 import { crearNavegacionXone } from "../../grafo/navegacionXone.js";
 import { hechosDelProyectoDe } from "../../navegacion/hechosEnDisco.js";
@@ -1077,6 +1077,9 @@ export async function abrirSesionTrueforge(
           // deepagents — un aviso que salta cuando no ha pasado nada enseña a ignorarlo.
           avisos: (b) => [
             ...(memoriaDescartada === undefined ? [] : [memoriaDescartada]),
+            ...(sobrantes(notas) === undefined
+              ? []
+              : [`⚠ una nota no se pudo entregar a tiempo: se manda como el turno siguiente`]),
             ...(b.corrio("verify") || !escribioProyecto
               ? []
               : [`⚠ el verificador no ha corrido en este turno${motivoSinVerificar === undefined ? "" : ` (${motivoSinVerificar})`}`]),
@@ -1153,6 +1156,12 @@ export async function abrirSesionTrueforge(
         }
       }
       const cambios: Cambio[] = await instantanea.cambios();
+      // Calculado y VACIADO aquí, DESPUÉS del único `await` que queda entre el `finally` y el
+      // `return`: hacerlo antes (como sugería el borrador) deja una ventana en la que una nota
+      // empujada durante ese `await` cae en una cola ya vacía y sobrevive muda al turno
+      // siguiente — justo lo que este campo existe para impedir.
+      const notasSobrantes = sobrantes(notas);
+      notas.length = 0; // Se sirvieron o se reportan aquí: no siguen vivas para el próximo turno.
       return {
         bitacora,
         cambios,
@@ -1162,6 +1171,7 @@ export async function abrirSesionTrueforge(
         ...(hallazgosDelTurno.length === 0 ? {} : { hallazgos: hallazgosDelTurno }),
         ...(preexistentesDelTurno === undefined ? {} : { preexistentes: preexistentesDelTurno }),
         ...(motivoSinVerificar === undefined ? {} : { motivoSinVerificar }),
+        ...(notasSobrantes === undefined ? {} : { notasSobrantes }),
       };
     },
     async cambiarModelos(nuevos: ModelosPort) {
