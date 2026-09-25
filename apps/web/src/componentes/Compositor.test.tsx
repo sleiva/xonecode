@@ -29,26 +29,23 @@ describe("Compositor", () => {
     expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("a medio escribir");
   });
 
-  it("al terminar el turno, el foco vuelve a la caja", () => {
-    // No es comodidad: la caja se apaga (`disabled`) mientras el agente trabaja, y un
-    // elemento que se deshabilita pierde el foco — el navegador se lo devuelve al `<body>`.
-    // Quien mandaba una petición y esperaba se encontraba con que teclear no escribía en
-    // ningún sitio y había que ir a pinchar con el ratón.
-    const { rerender } = render(<Compositor {...manejadores} turnoEnVuelo />);
+  it("al dejar de haber algo pendiente, el foco vuelve a la caja", () => {
+    const { rerender } = render(<Compositor {...manejadores} hayPendiente />);
     expect(document.activeElement).not.toBe(screen.getByRole("textbox"));
-
     rerender(<Compositor {...manejadores} />);
     expect(document.activeElement).toBe(screen.getByRole("textbox"));
   });
 
   it("pero NO se lo roba si la caja está oculta ni al montar", () => {
-    // Robar el foco mientras el usuario mira un diff en Ficheros es lo contrario de lo que
-    // se quiere: le movería el teclado a una caja que ni siquiera se ve. Y al montar tampoco
-    // —el flanco es de BAJADA de `turnoEnVuelo`, no «está apagado»—, porque si no cada
-    // repintado con la consola recién abierta se llevaría el foco de donde estuviera.
-    const { rerender } = render(<Compositor {...manejadores} turnoEnVuelo oculto />);
+    // Mientras está `oculto` el `<textarea>` sale del árbol de accesibilidad (`hidden`
+    // cascada a los hijos), así que `getByRole` no lo encuentra: la comprobación de ese
+    // tramo se hace contra `document.body`, que es donde se queda el foco cuando no hay
+    // nada enfocable. Al volver a ser visible sí se puede preguntar por rol.
+    const { rerender } = render(<Compositor {...manejadores} hayPendiente oculto />);
     rerender(<Compositor {...manejadores} oculto />);
     expect(document.activeElement).toBe(document.body);
+    rerender(<Compositor {...manejadores} />);
+    expect(document.activeElement).not.toBe(screen.getByRole("textbox"));
   });
 
   it("escribir «/» NO abre ninguna lista: en el navegador no hay comandos que sugerir", () => {
@@ -96,13 +93,20 @@ describe("Compositor", () => {
   });
 
   /**
-   * Con un turno en vuelo, mandar una segunda petición la deja en la cola del lazo sin
-   * decirlo: el usuario ve su texto desaparecer del campo y no pasar nada durante minutos.
+   * Una aprobación, pregunta, selector o secreto en pantalla compite por la MISMA respuesta:
+   * escribir aquí a la vez sería una segunda conversación sobre la misma decisión. Un turno
+   * en vuelo sin nada pendiente no tiene ese problema —desde IXCODE-4 acepta una nota, ver el
+   * test de abajo—, así que solo `hayPendiente` apaga la caja.
    */
-  it("con turno en vuelo la entrada se apaga y dice por qué", () => {
-    render(<Compositor conectado turnoEnVuelo alEnviar={() => {}} />);
-    const entrada = screen.getByPlaceholderText(/está trabajando/i) as HTMLTextAreaElement;
+  it("con algo pendiente la entrada se apaga y dice por qué", () => {
+    render(<Compositor conectado hayPendiente alEnviar={() => {}} />);
+    const entrada = screen.getByPlaceholderText(/responde/i) as HTMLTextAreaElement;
     expect(entrada.disabled).toBe(true);
+  });
+
+  it("con turno en vuelo pero SIN nada pendiente, la entrada sigue escribible", () => {
+    render(<Compositor conectado turnoEnVuelo alEnviar={() => {}} />);
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).disabled).toBe(false);
   });
 
   it("la flecha se convierte en parar, y parar avisa a quien sabe abortar", () => {
@@ -118,13 +122,22 @@ describe("Compositor", () => {
     expect(alParar).toHaveBeenCalled();
   });
 
-  it("el Enter tampoco cuela con el turno en vuelo", () => {
+  it("el Enter SÍ cuela con turno en vuelo, si no hay nada pendiente — es la nota de IXCODE-4", () => {
+    const alEnviar = vi.fn();
+    const { rerender } = render(<Compositor conectado alEnviar={alEnviar} />);
+    const entrada = screen.getByRole("textbox");
+    fireEvent.change(entrada, { target: { value: "cambia de idea" } });
+    rerender(<Compositor conectado turnoEnVuelo alEnviar={alEnviar} />);
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+    expect(alEnviar).toHaveBeenCalledWith("cambia de idea");
+  });
+
+  it("el Enter NO cuela con algo pendiente", () => {
     const alEnviar = vi.fn();
     const { rerender } = render(<Compositor conectado alEnviar={alEnviar} />);
     const entrada = screen.getByRole("textbox");
     fireEvent.change(entrada, { target: { value: "algo" } });
-    // El campo se apaga DESPUÉS de escribir, con el foco puesto: la tecla llega igual.
-    rerender(<Compositor conectado turnoEnVuelo alParar={() => {}} alEnviar={alEnviar} />);
+    rerender(<Compositor conectado hayPendiente alEnviar={alEnviar} />);
     fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
     expect(alEnviar).not.toHaveBeenCalled();
   });

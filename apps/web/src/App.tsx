@@ -1774,6 +1774,16 @@ export function App({
             */}
             <Compositor
               conectado={estado.conectado}
+              // Apaga la caja: una aprobación, pregunta, selector o secreto EN PANTALLA
+              // compite por la misma respuesta. El turno en vuelo a secas ya NO la apaga
+              // desde IXCODE-4 — se puede escribir una nota mientras el agente trabaja en
+              // silencio.
+              hayPendiente={
+                estado.aprobacion !== undefined ||
+                estado.pregunta !== undefined ||
+                estado.selector !== undefined ||
+                estado.secreto !== undefined
+              }
               {...(borradorDelCompositor === undefined ? {} : { borrador: borradorDelCompositor })}
               // El estado de modelos, tal cual lo manda el servidor: la pastilla lo pinta
               // y no lo deduce. Ausente mientras no ha llegado el mensaje.
@@ -1807,7 +1817,8 @@ export function App({
                 : { modoDeEscritura: estado.alta.modoDeEscritura })}
               alElegirModoDeEscritura={(modo) => void enviar({ clase: "modoDeEscritura", modo })}
               // Lo dice el servidor, no se deduce de los actos: un turno que revienta no
-              // siempre deja `fin`, y el compositor se quedaría apagado para siempre.
+              // siempre deja `fin`, y el botón de Parar y el borde de «trabajando» se
+              // quedarían encendidos para siempre.
               turnoEnVuelo={estado.turnoEnVuelo === true}
               // Solo se esconde cuando el panel ocupa el SITIO del chat: ahí no hay a quién
               // escribirle. Con el panel en su columna la conversación sigue delante, así que

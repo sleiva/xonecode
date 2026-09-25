@@ -29,6 +29,7 @@ import estilos from "./Compositor.module.css";
 export function Compositor({
   conectado,
   turnoEnVuelo = false,
+  hayPendiente = false,
   consumo,
   oculto = false,
   alParar,
@@ -48,13 +49,24 @@ export function Compositor({
 }: {
   conectado: boolean;
   /**
-   * Hay un turno EN VUELO. Apaga la entrada y convierte la flecha en un botón de parar.
+   * Hay un turno EN VUELO. Convierte la flecha en un botón de parar y marca la caja como
+   * «trabajando» (`data-trabajando`, el borde animado).
    *
-   * Apagarla no es un capricho: una segunda petición mientras el agente trabaja se queda en
-   * la cola del lazo sin decirlo, y se ejecuta cuando termine el turno de antes — el usuario
-   * ve su texto desaparecer del campo y no pasar nada durante minutos.
+   * Hasta IXCODE-4 esto TAMBIÉN apagaba la entrada: una segunda petición mientras el agente
+   * trabajaba se quedaba en la cola del lazo sin decirlo, y el usuario veía su texto
+   * desaparecer del campo y no pasar nada durante minutos. Ahora la prosa escrita durante un
+   * turno va a `agregarNota` —el servidor decide si se apunta al turno en marcha o abre uno
+   * nuevo—, así que el turno en vuelo A SECAS ya no apaga nada; lo que apaga la entrada es
+   * `hayPendiente`.
    */
   turnoEnVuelo?: boolean;
+  /**
+   * Hay una aprobación, pregunta, selector o secreto EN PANTALLA esperando respuesta. Apaga la
+   * entrada — a diferencia de `turnoEnVuelo` a secas, que desde IXCODE-4 deja escribir una nota
+   * mientras el agente trabaja EN SILENCIO. Con un diálogo delante, escribir aquí competiría
+   * con la respuesta que de verdad se espera.
+   */
+  hayPendiente?: boolean;
   /** Lo consumido por la sesión. Ausente = no consta, y entonces no se pinta el contador. */
   consumo?: ConsumoPintable;
   /**
@@ -137,29 +149,33 @@ export function Compositor({
   }, [borrador?.id]);
 
   /**
-   * Al terminar el turno, el foco vuelve a la caja.
+   * Al dejar de haber algo pendiente, el foco vuelve a la caja.
    *
-   * No es una comodidad: la caja se APAGA mientras el agente trabaja (`disabled`, ver
-   * arriba), y un elemento que se deshabilita pierde el foco — el navegador se lo devuelve
-   * al `<body>`. Así que quien escribía una petición, la mandaba y esperaba, al terminar se
+   * No es una comodidad: la caja se APAGA con una aprobación, pregunta, selector o secreto
+   * en pantalla (`disabled`, ver abajo), y un elemento que se deshabilita pierde el foco — el
+   * navegador se lo devuelve al `<body>`. Así que quien acababa de resolver el diálogo se
    * encontraba con que teclear no escribía en ningún sitio y había que ir a pinchar la caja
    * con el ratón. Lo que se arregla aquí es eso, no un adorno.
    *
-   * Solo en el flanco de bajada de `turnoEnVuelo`, y solo si la caja está a la vista y
+   * Desde IXCODE-4 esto mira `hayPendiente` y NO `turnoEnVuelo`: el turno en vuelo a secas ya
+   * no apaga la caja, así que no hay flanco de bajada del que devolver nada.
+   *
+   * Solo en el flanco de bajada de `hayPendiente`, y solo si la caja está a la vista y
    * habilitada: robar el foco al montar, o mientras el usuario mira un diff en Ficheros,
    * sería lo contrario de lo que se quiere.
    */
-  const veniaDeTurno = useRef(false);
+  const veniaDePendiente = useRef(false);
   useEffect(() => {
-    const acabaDeTerminar = veniaDeTurno.current && !turnoEnVuelo;
-    veniaDeTurno.current = turnoEnVuelo;
+    const acabaDeTerminar = veniaDePendiente.current && !hayPendiente;
+    veniaDePendiente.current = hayPendiente;
     if (acabaDeTerminar && !oculto && conectado) campo.current?.focus();
-  }, [turnoEnVuelo, oculto, conectado]);
+  }, [hayPendiente, oculto, conectado]);
 
   const enviar = (): void => {
-    // Con un turno en vuelo no se manda: el campo está apagado, pero el Enter llega igual
-    // si el navegador tenía el foco puesto antes de apagarse.
-    if (turnoEnVuelo) return;
+    // Con algo pendiente no se manda: una aprobación o pregunta compite por la misma
+    // respuesta. Con turno en vuelo y SIN nada pendiente, sí se manda — es la nota de
+    // IXCODE-4, y el servidor decide si se apunta al turno en marcha o abre uno nuevo.
+    if (hayPendiente) return;
     const texto = valor.trim();
     if (texto === "") return;
     alEnviar(texto);
@@ -246,16 +262,18 @@ export function Compositor({
           ref={campo}
           className={estilos.entrada}
           value={valor}
-          disabled={!conectado || turnoEnVuelo}
+          disabled={!conectado || hayPendiente}
           // Deshabilitado no puede quedarse mudo: dice POR QUÉ, en vez de dejar al usuario
           // adivinando si el campo está roto o si nadie escucha al otro lado. Y son DOS
-          // motivos distintos: sin cable no llega nada; con turno en vuelo, llegaría y se
-          // quedaría en la cola hasta que termine.
+          // motivos distintos: sin cable no llega nada; con algo pendiente, escribir aquí
+          // competiría con la respuesta que de verdad se espera. Un turno en vuelo A SECAS
+          // ya NO apaga la caja desde IXCODE-4: se puede escribir mientras el agente trabaja
+          // en silencio.
           placeholder={
             !conectado
               ? "sin conexión con XOneCode"
-              : turnoEnVuelo
-                ? "el agente está trabajando…"
+              : hayPendiente
+                ? "responde arriba antes de seguir"
                 : // DOS líneas: lo que el harness sabe hacer, y debajo las teclas.
                   //
                   // Las teclas estaban en un `<p>` bajo la tarjeta y se han metido aquí para
