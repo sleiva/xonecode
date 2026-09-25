@@ -152,21 +152,11 @@
 }
 
 /* El secundario de Revisión y Ficheros: son acciones de la misma familia. */
+/* El mismo botón secundario que Ajustes/Agentes/etc. (`Boton.module.css#secundario`), no
+   uno escrito a mano con el mismo aspecto — así un cambio ahí se nota aquí sin acordarse. */
 .recargar {
+  composes: secundario from "./Boton.module.css";
   margin-left: auto;
-  padding: 4px 10px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-secondary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.recargar:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
 }
 
 .seccion {

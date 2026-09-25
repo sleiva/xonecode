@@ -10,10 +10,23 @@
  * "./Boton.module.css";`), así que el nombre de clase que usa cada `.tsx`
  * (`estilos.accion`, `estilos.principal`…) no cambia.
  *
- * Los TRES roles llevan `font-size: 12px`, aquí y no en cada consumidor: `.peligro` se lo
- * quedó sin él una primera vez, y sin talla propia hereda la del contexto — «Eliminar» salía
- * más grande que «Cambiar clave», que sí lo tenía. Un botón que se ve distinto de tamaño se
- * lee como de otra fila.
+ * REGLA DURA, con test en `Boton.test.ts`: un consumidor NUNCA redeclara `padding`,
+ * `font-size`, `font-weight`, `border`, `background` ni `color` en la MISMA regla que
+ * compone un rol de aquí. `composes` no fusiona declaraciones — aplica DOS clases CSS
+ * separadas al elemento, y cuál gana una propiedad que las dos declaran lo decide el ORDEN
+ * en el bundle final, que depende del grafo de imports de Vite y NO está garantizado. Se
+ * midió: `.peligro` llevaba `padding: 6px 10px` en `Ajustes.module.css` desde `bc17749`
+ * creyendo que ganaba —y ganaba, en ESE build— hasta que centralizar otros cinco botones
+ * más cambió el orden del bundle y la regla empezó a perder en silencio, sin que ningún
+ * test lo cazara (jsdom no mide `getComputedStyle` de un build real). Lo único que
+ * garantiza un orden es la posición DENTRO de este mismo fichero: por eso el tamaño es un
+ * MODIFICADOR que se compone (`secundario grande`), nunca una propiedad que se redeclara.
+ *
+ * Los TRES roles comparten el tamaño de FILA por omisión (6px 10px, 12px): es el que usan
+ * dos botones sentados uno al lado del otro. `.grande` (8px 16px) es para el pie de un
+ * diálogo con una sola acción por línea — se compone DESPUÉS del rol
+ * (`composes: primario grande from "./Boton.module.css";`), y como los dos viven en este
+ * mismo fichero, `.grande` sale SIEMPRE después en el CSS generado y gana.
  */
 
 /* IXCODE-2: «los botones de Ajustes > Dispositivos necesitan más contraste para que sean
@@ -52,7 +65,7 @@
    clase porque es redondo y de tamaño fijo —una forma distinta, no un color distinto—, pero
    lee las MISMAS variables. */
 .primario {
-  padding: 8px 16px;
+  padding: 6px 10px;
   border: 0.5px solid var(--xonecode-azul);
   border-radius: 8px;
   background: var(--xonecode-azul);
@@ -79,7 +92,7 @@
    relleno: el manual pinta el botón destructivo con un tinte de fondo al 12% de su rojo, no
    solo contorno — el tinte se deriva en `marca.css` con `color-mix`, no aquí. */
 .peligro {
-  padding: 8px 16px;
+  padding: 6px 10px;
   border: 0.5px solid var(--xonecode-rojo);
   border-radius: 8px;
   background: var(--xonecode-rojo-fondo);
@@ -96,4 +109,11 @@
 .peligro:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* El tamaño de pie de diálogo: una acción sola por línea (Aprobar/Cancelar, Empezar,
+   Guardar el wizard...), no una fila apretada de botones. Va DESPUÉS de los tres roles a
+   propósito — ver la nota de especificidad arriba. */
+.grande {
+  padding: 8px 16px;
 }

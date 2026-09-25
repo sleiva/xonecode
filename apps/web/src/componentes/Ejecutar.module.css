@@ -144,21 +144,11 @@
    de la banda de CloudStudio— y NO el rojo del compositor: aquél es la parada de emergencia
    del turno; parar un lanzamiento es una acción corriente de esta pestaña, y el estado del
    recorrido ya se lee en palabras justo debajo. */
+/* El mismo botón secundario que Ajustes/Agentes/etc. (`Boton.module.css#secundario`), no
+   uno escrito a mano con el mismo aspecto — así un cambio ahí se nota aquí sin acordarse. */
 .cancelar {
+  composes: secundario from "./Boton.module.css";
   margin-left: auto;
-  padding: 2px 9px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-secondary);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.cancelar:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
 }
 
 /* Qué pasó. El color sale del ESTADO del recorrido y nunca de buscar palabras dentro del

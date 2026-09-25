@@ -1,6 +1,7 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-2,
    border-l2, label-primary/secondary/tertiary, state-error-primary,
-   state-success-primary, button-primary-fill/hover y label-primary-inverted.
+   state-success-primary. El botón `.accion` compone `.primario` (`Boton.module.css`),
+   que ya lleva los suyos.
 
    YA NO es tarjeta propia — vivía sola, con su propio borde y fondo, como paso
    suelto debajo de `Bienvenida`. Ahora `Wizard` es el paso ACTUAL dentro de
@@ -61,6 +62,7 @@
 
 /* `Button` también llega sin estilo propio: lo que aporta es el elemento y el paso de los
    atributos nativos (`type="submit"` incluido, que es lo que envía el formulario). */
+/* `.grande`: es el pie de un diálogo (una acción por línea), no una fila apretada. */
 .accion {
-  composes: primario from "./Boton.module.css";
+  composes: primario grande from "./Boton.module.css";
 }

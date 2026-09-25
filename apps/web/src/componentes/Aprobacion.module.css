@@ -205,9 +205,9 @@
 
 /* `Button` llega sin estilo propio (mismo stub vacío), así que la variante la pinta esta
    clase: lo que el paquete aporta es el elemento y el paso de atributos nativos. */
+/* `.grande`: es el pie de un diálogo (una acción por línea), no una fila apretada. */
 .accion {
-  composes: secundario from "./Boton.module.css";
-  padding: 8px 16px;
+  composes: secundario grande from "./Boton.module.css";
 }
 
 /* El primario se distingue por el relleno de marca, no por el orden: «Aprobar» es la

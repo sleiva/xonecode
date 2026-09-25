@@ -69,9 +69,9 @@
   margin-top: 14px;
 }
 
+/* `.grande`: es el pie de un diálogo (una acción por línea), no una fila apretada. */
 .accion {
-  composes: secundario from "./Boton.module.css";
-  padding: 8px 12px;
+  composes: secundario grande from "./Boton.module.css";
 }
 
 /*

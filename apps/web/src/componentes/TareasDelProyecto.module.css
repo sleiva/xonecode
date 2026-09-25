@@ -36,25 +36,11 @@
 
 /* Mismo trazo que `.recargar` de `Revision.module.css`: es el mismo tipo de botón
    secundario, en la cabecera de una pestaña. */
+/* El mismo botón secundario que Ajustes/Agentes/etc. (`Boton.module.css#secundario`), no
+   uno escrito a mano con el mismo aspecto — así un cambio ahí se nota aquí sin acordarse.
+   `:disabled` ya lo cubre `.secundario:disabled`. */
 .nueva {
-  padding: 4px 10px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-secondary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.nueva:hover:not(:disabled) {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
-}
-
-.nueva:disabled {
-  opacity: 0.5;
-  cursor: default;
+  composes: secundario from "./Boton.module.css";
 }
 
 /* El motivo del apagado de «Nueva tarea», visible y no solo en un `title`. Mismo alias y

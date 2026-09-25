@@ -314,13 +314,12 @@
 
 /* «Eliminar» una clave guardada: borra un fichero, pero no es la misma severidad que
    `.destructiva` (el aviso de «cambios sin guardar», sin papelera y sin vuelta atrás) — la
-   clave se puede volver a añadir. El rojo de marca en contorno, no en relleno. El padding
-   base de `.peligro` (8px 16px) es más alto que el de `.accion`/`.secundario` (6px 10px):
-   sin igualarlo, «Eliminar» salía más ALTO que «Cambiar clave», su vecino en la misma
-   fila. */
+   clave se puede volver a añadir. El rojo de marca en contorno, no en relleno. Sin
+   `padding` propio: `.peligro` ya sale del tamaño de FILA por omisión, el mismo que
+   `.accion`/`.secundario` — redeclararlo aquí es la trampa de especificidad que
+   `Boton.module.css` documenta (ver su cabecera). */
 .peligro {
   composes: peligro from "./Boton.module.css";
-  padding: 6px 10px;
 }
 
 /* El botón destructivo del aviso de «cambios sin guardar» (descartar el borrador de
@@ -970,7 +969,6 @@
    dos avisos distintos. */
 .quitar {
   composes: peligro from "./Boton.module.css";
-  padding: 4px 10px;
 }
 
 .quitar:disabled {

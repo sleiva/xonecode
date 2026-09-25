@@ -1,7 +1,8 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-2, border-l2,
-   label-primary, label-secondary, button-primary-fill/hover, label-primary-inverted,
-   interactive-bg-hover y los tres de estado —state-success-primary, state-business-primary,
-   state-error-primary— que visten las líneas del plan. El velo de la decisión usa
+   label-primary, label-secondary, border-l4, interactive-bg-hover y los tres de estado
+   —state-success-primary, state-business-primary, state-error-primary— que visten las
+   líneas del plan. El botón `.accion` compone `.primario`/`.secundario`
+   (`Boton.module.css`), que ya llevan los suyos. El velo de la decisión usa
    `--xonecode-velo`, el mismo de las otras ventanas (`estilos/marca.css`).
    La mono es `--ds-font-family-code` (`estilos/tipografia.css`), que es la que usa el resto
    del cliente: la pila empaquetada de JetBrains Mono, y no un `monospace` pelado.
@@ -228,8 +229,10 @@
   color: var(--dsw-alias-state-error-primary);
 }
 
+/* `.grande`: el diálogo tiene una sola acción por línea, no una fila apretada — salvo
+   anidado (ver debajo), que sí vive en una fila y se resetea a mano al tamaño de fila. */
 .accion {
-  composes: primario from "./Boton.module.css";
+  composes: primario grande from "./Boton.module.css";
   flex: none;
 }
 

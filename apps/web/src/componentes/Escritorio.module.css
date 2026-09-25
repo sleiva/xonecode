@@ -265,27 +265,16 @@
    del tema copiado. */
 .empezar {
   composes: primario from "./Boton.module.css";
-  padding: 7px 10px;
 }
 
 /*
  * «Nueva tarea» es la SEGUNDA acción de la tarjeta, y va secundaria a propósito: la primaria
  * sigue siendo sentarse a trabajar. Y esta autoriza al agente a escribir sin aprobación —lo
- * dice su ventana—, así que no puede además ser el botón que el pulgar pulsa por inercia.
+ * dice su ventana—, así que no puede además ser el botón que el pulgar pulsa por inercia. El
+ * mismo botón secundario que Ajustes/Agentes/etc. (`Boton.module.css#secundario`).
  */
 .empezarTarea {
-  padding: 7px 10px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.empezarTarea:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  composes: secundario from "./Boton.module.css";
 }
 
 .pie {

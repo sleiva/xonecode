@@ -52,7 +52,6 @@
   composes: secundario from "./Boton.module.css";
   flex: none;
   margin-left: auto;
-  padding: 5px 10px;
 }
 
 /* Tabla y panel, uno al lado del otro. El panel es fijo y la tabla es la que cede: al revés,

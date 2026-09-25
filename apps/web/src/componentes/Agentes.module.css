@@ -332,7 +332,6 @@
 .principal {
   composes: primario from "./Boton.module.css";
   flex: none;
-  padding: 6px 12px;
 }
 
 /*

@@ -43,21 +43,11 @@
 
 /* El mismo botón secundario de Revisión y de Ficheros, y a propósito: «volver a mirar» es
    la MISMA acción en las tres pestañas y no hay motivo para que se vea distinta. */
+/* El mismo botón secundario que Ajustes/Agentes/etc. (`Boton.module.css#secundario`), no
+   uno escrito a mano con el mismo aspecto — así un cambio ahí se nota aquí sin acordarse. */
 .recargar {
+  composes: secundario from "./Boton.module.css";
   margin-left: auto;
-  padding: 4px 10px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-secondary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.recargar:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
 }
 
 /* La cifra, en el cuerpo de un dato y no en el de un aviso: «3 ficheros por subir» es la
