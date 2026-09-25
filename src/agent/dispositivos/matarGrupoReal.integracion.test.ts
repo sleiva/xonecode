@@ -23,6 +23,7 @@ async function esperar(ms: number): Promise<void> {
 }
 
 describe("matarGrupoReal: mata al HIJO y al NIETO, de verdad", () => {
+  // No Windows en CI; ejecutar `taskkill /T /F` de verdad es el límite declarado en la spec.
   it.skipIf(process.platform === "win32")(
     "un `sleep` lanzado por un `sh` intermedio muere con su padre al matar el GRUPO",
     async () => {
@@ -35,22 +36,34 @@ describe("matarGrupoReal: mata al HIJO y al NIETO, de verdad", () => {
       const pidDelHijo = hijo.pid;
       expect(pidDelHijo).toBeDefined();
 
-      const pidDelNieto = await new Promise<number>((resolver) => {
-        let salida = "";
-        hijo.stdout!.on("data", (d) => {
-          salida += String(d);
-          const n = Number(salida.trim());
-          if (Number.isInteger(n) && n > 0) resolver(n);
+      try {
+        const pidDelNieto = await new Promise<number>((resolver) => {
+          let salida = "";
+          hijo.stdout!.on("data", (d) => {
+            salida += String(d);
+            const n = Number(salida.trim());
+            if (Number.isInteger(n) && n > 0) resolver(n);
+          });
         });
-      });
 
-      expect(vivo(pidDelNieto)).toBe(true);
+        expect(vivo(pidDelNieto)).toBe(true);
 
-      matarGrupoReal(pidDelHijo!, "SIGKILL");
-      await esperar(300);
+        matarGrupoReal(pidDelHijo!, "SIGKILL");
+        await esperar(300);
 
-      expect(vivo(pidDelHijo!)).toBe(false);
-      expect(vivo(pidDelNieto)).toBe(false);
+        expect(vivo(pidDelHijo!)).toBe(false);
+        expect(vivo(pidDelNieto)).toBe(false);
+      } finally {
+        // Limpieza incondicional: intenta matar el grupo en case de fallo de assertion.
+        // Los errores se tragan — el proceso puede ya estar muerto, que es el caso de éxito.
+        try {
+          if (pidDelHijo) {
+            matarGrupoReal(pidDelHijo, "SIGKILL");
+          }
+        } catch {
+          // Silenciado: el proceso ya está muerto, o el sistema no lo encontró.
+        }
+      }
     },
     10_000
   );
