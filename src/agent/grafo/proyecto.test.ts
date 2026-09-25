@@ -981,6 +981,27 @@ describe("la shell de un subagente con EJECUCIÓN", () => {
     // En macOS `/var` es un enlace a `/private/var`, así que se compara el final.
     expect(output.trim().endsWith(raiz.replace(/^\/private/, ""))).toBe(true);
   });
+
+  it("sin señal del turno, sigue funcionando igual que antes (deepagents no se entera de nada)", async () => {
+    const be = backendDelProyectoConShell(raizDePrueba(), {}) as unknown as {
+      execute(c: string): Promise<{ output: string; exitCode: number | null }>;
+    };
+    const { output, exitCode } = await be.execute("echo sigue-vivo");
+    expect(output.trim()).toBe("sigue-vivo");
+    expect(exitCode).toBe(0);
+  });
+
+  it("con una señal que se aborta a mitad de un comando largo, el exitCode es 130", async () => {
+    const control = new AbortController();
+    const be = backendDelProyectoConShell(raizDePrueba(), {}, () => control.signal) as unknown as {
+      execute(c: string): Promise<{ output: string; exitCode: number | null }>;
+    };
+    const fin = be.execute("sleep 5");
+    setTimeout(() => control.abort(), 50);
+    const { exitCode, output } = await fin;
+    expect(exitCode).toBe(130);
+    expect(output).toBe("Error: Command cancelled.");
+  }, 10_000);
 });
 
 
