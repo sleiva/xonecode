@@ -509,6 +509,8 @@
 /* El engranaje que despliega «ruta actual / ruta personalizada» en la fila de adb/emulator.
    Icono solo, así que el `aria-label` es lo único que dice qué es — mismo tamaño que un
    `.punto` no, este es un CONTROL y necesita área de clic. */
+/* Mismo tratamiento de contraste que `.secundario` (`Boton.module.css`, IXCODE-2), pero sin
+   componerlo: es un icono cuadrado, no un botón de texto, y el padding/tamaño no encajan. */
 .iconoDeAjuste {
   display: inline-flex;
   flex: none;
@@ -517,9 +519,9 @@
   width: 28px;
   height: 28px;
   padding: 0;
-  border: 0.5px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l4);
   border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
+  background: var(--dsw-alias-button-elevated-fill);
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
 }

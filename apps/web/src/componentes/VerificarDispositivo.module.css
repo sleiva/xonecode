@@ -19,25 +19,18 @@
   margin-left: 0;
 }
 
+/* El mismo botón secundario que Ajustes/Agentes/etc. (`Boton.module.css#secundario`) — este
+   es EL botón de IXCODE-2 («Ajustes > Dispositivos, más contraste para que sean más
+   botones»): estaba en `.boton` propio, con `border-l2` al 10% y sin componer nada, así que
+   el arreglo de `Boton.module.css` no lo alcanzaba. `.fila` envuelve (`flex-wrap: wrap`), así
+   que no hay una altura fija que este tamaño rompa. */
 .boton {
+  composes: secundario from "./Boton.module.css";
   flex: 0 0 auto;
-  padding: 2px 9px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.boton:hover:enabled {
-  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .boton:disabled {
   color: var(--dsw-alias-label-tertiary);
-  cursor: default;
 }
 
 /* El resultado. Rojo cuando no contesta —ahí sí es un error: se ha pedido hablar con algo y

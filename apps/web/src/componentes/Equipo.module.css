@@ -34,24 +34,9 @@
   font-size: 11px;
 }
 
+/* El mismo botón secundario que Ajustes/Agentes/etc. (`Boton.module.css#secundario`). */
 .actualizar {
-  padding: 4px 10px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.actualizar:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.actualizar:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+  composes: secundario from "./Boton.module.css";
 }
 
 /* Android e iOS, lado a lado cuando caben y en columna cuando no: sin media queries. */
