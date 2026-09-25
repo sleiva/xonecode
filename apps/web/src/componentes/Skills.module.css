@@ -305,33 +305,17 @@
 }
 
 
-/* La acción que confirma: el primario del tema, que `estilos/marca.css` dejó de secuestrar
-   con el cian — negro en claro, casi blanco en oscuro, con su etiqueta invertida. Se
-   escribe aquí por lo mismo que `.accion`: la variante del paquete no cubre el tema oscuro
-   y hay que decirle los alias. */
+/* La acción que confirma: el azul de marca, el MISMO que el botón de enviar
+   (`Boton.module.css#primario`) — no el negro/blanco genérico del tema copiado. Ese negro
+   se eligió en su día porque «el cian con texto encima nunca llegó a cómodo»; el azul no
+   tiene ese problema (13.4:1 de contraste, medido en el manual de identidad), así que esto
+   no deshace esa decisión, la continúa con el color que sí funciona. Deshabilitado ya lo
+   cubre `.primario:disabled`. */
 .principal {
+  composes: primario from "./Boton.module.css";
   flex: none;
   padding: 6px 12px;
-  border: 0.5px solid var(--dsw-alias-button-primary-fill);
-  border-radius: 8px;
-  background: var(--dsw-alias-button-primary-fill);
-  color: var(--dsw-alias-label-primary-inverted);
-  font: inherit;
   font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.principal:hover {
-  background: var(--dsw-alias-button-primary-hover);
-  border-color: var(--dsw-alias-button-primary-hover);
-}
-
-/* Deshabilitado se ve deshabilitado: sin esto el botón sigue pareciendo pulsable y el
-   usuario cree que la ventana no responde, en vez de que le falta rellenar algo. */
-.principal:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 
 /*

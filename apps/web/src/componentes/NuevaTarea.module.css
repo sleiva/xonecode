@@ -152,20 +152,21 @@
 }
 
 /*
- * La acción que confirma. Mismos alias que `NuevaSesion.module.css#principal`: es el mismo
- * botón, y `.accion` —la misma clase para los dos— pisaría el relleno del primario con el
- * borde y el fondo de capa si no se doblara el selector.
+ * La acción que confirma. El azul de marca, mismos alias que
+ * `NuevaSesion.module.css#principal`: es el mismo botón. `.accion` —la misma clase para los
+ * dos— pisaría el relleno del primario con el borde y el fondo de capa si no se doblara el
+ * selector (y por eso no compone `.primario`: `composes` solo admite una clase).
  */
 .principal.principal {
-  border-color: var(--dsw-alias-button-primary-fill);
-  background: var(--dsw-alias-button-primary-fill);
-  color: var(--dsw-alias-label-primary-inverted);
+  border-color: var(--xonecode-azul);
+  background: var(--xonecode-azul);
+  color: var(--xonecode-sobre-azul);
   font-weight: 600;
 }
 
 .principal.principal:hover {
-  border-color: var(--dsw-alias-button-primary-hover);
-  background: var(--dsw-alias-button-primary-hover);
+  border-color: var(--xonecode-cian);
+  background: var(--xonecode-cian);
 }
 
 .principal.principal:disabled {

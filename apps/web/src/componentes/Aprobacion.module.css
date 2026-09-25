@@ -1,7 +1,8 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-overlay,
-   bg-layer-1/2/3, border-l2/l3, label-primary/secondary/tertiary,
-   state-success-secondary, state-error-primary/secondary, button-primary-fill/hover,
-   label-primary-inverted e interactive-bg-hover. */
+   bg-layer-1/2/3, border-l2/l3, label-primary/secondary/tertiary, state-success-secondary,
+   state-error-primary/secondary e interactive-bg-hover. «Aprobar» compone `.secundario`
+   (`Boton.module.css`) y se pisa con el azul de marca (`estilos/marca.css`) por ser el
+   último de la fila. */
 
 /* La capa es el `dialog` de `Modal`, no su `mask`: los 22 CSS Modules del paquete son
    stubs vacíos en este release candidate y el `mask` no lleva clase ni prop con la que
@@ -210,14 +211,15 @@
 }
 
 /* El primario se distingue por el relleno de marca, no por el orden: «Aprobar» es la
-   acción que ESCRIBE, y tiene que leerse distinta de la que no toca nada. */
+   acción que ESCRIBE, y tiene que leerse distinta de la que no toca nada. El azul de marca,
+   el MISMO que `Boton.module.css#primario` y el botón de enviar. */
 .acciones .accion:last-child {
-  background: var(--dsw-alias-button-primary-fill);
-  color: var(--dsw-alias-label-primary-inverted);
-  border-color: var(--dsw-alias-button-primary-fill);
+  background: var(--xonecode-azul);
+  color: var(--xonecode-sobre-azul);
+  border-color: var(--xonecode-azul);
 }
 
 .acciones .accion:last-child:hover {
-  background: var(--dsw-alias-button-primary-hover);
-  border-color: var(--dsw-alias-button-primary-hover);
+  background: var(--xonecode-cian);
+  border-color: var(--xonecode-cian);
 }
