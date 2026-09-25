@@ -376,6 +376,8 @@ export function Ajustes({
   alCambiarConcurrencia,
   workspace,
   alCambiarWorkspace,
+  depuracionActiva,
+  alCambiarDepuracion,
   alElegirCarpeta,
   carpetaElegida,
   alCerrar,
@@ -592,6 +594,14 @@ export function Ajustes({
   /** Elige la carpeta. Ausente = esta ejecución no puede, y el campo se enseña de solo
    *  lectura — que es la verdad: la carpeta existe, cambiarla desde aquí no. */
   alCambiarWorkspace?: (ruta: string) => void;
+  /**
+   * La casilla «Depurar»: si las dos trazas opt-in van encendidas sin variable de entorno.
+   * **Ausente = esta ejecución no lo dice**, y entonces la casilla no se pinta: un control
+   * sin dato detrás no se pinta.
+   */
+  depuracionActiva?: boolean;
+  /** Cambia la casilla. Ausente = esta ejecución no puede, y se enseña de solo lectura. */
+  alCambiarDepuracion?: (activa: boolean) => void;
   /**
    * Abre el selector de carpeta del sistema. **Ausente = esta máquina no tiene ninguno** —o
    * la consola se mira por un túnel, que es el límite declarado— y entonces el botón no se
@@ -1686,6 +1696,29 @@ export function Ajustes({
                   <p className={estilos.nota}>
                     Cambiarla NO mueve lo que ya está bajado: las copias que tengas se quedan donde están y
                     siguen abriéndose desde ahí. Lo que cambia es dónde caerá lo siguiente que bajes.
+                  </p>
+                </>
+              )}
+
+              {depuracionActiva === undefined ? null : (
+                <>
+                  <h3 className={estilos.subencabezado}>Depurar</h3>
+                  <label className={estilos.casillaEnLinea}>
+                    <input
+                      type="checkbox"
+                      checked={depuracionActiva}
+                      disabled={!conectado || alCambiarDepuracion === undefined}
+                      onChange={() => alCambiarDepuracion?.(!depuracionActiva)}
+                    />
+                    Dejar rastro de cuelgues y coste sin tener que pedirlo a mano
+                  </label>
+                  <p className={estilos.nota}>
+                    Mientras dure esta etapa de pruebas, va encendida por omisión. Deja{" "}
+                    <code>traza-errores.jsonl</code> (excepciones tragadas y cuánto tarda cada paso —la
+                    que sirve para un cuelgue) y <code>traza-tools.jsonl</code> (coste de tokens) en la
+                    carpeta <code>.xonecode/</code> del proyecto: no suben a CloudStudio y el agente no
+                    puede leerlos. Solo afecta a las conversaciones que abras a partir de ahora, no a la
+                    que tengas abierta. Apágala si te sobra el ruido.
                   </p>
                 </>
               )}

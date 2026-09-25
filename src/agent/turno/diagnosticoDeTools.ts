@@ -4,7 +4,13 @@ import type { TokenTracker } from "../../vendor/tokenTracking.js";
 import type { ParametrosSeguros } from "./resumenDeTool.js";
 import type { OrigenDeTool } from "./puente.js";
 
-/** Activa una traza local y opt-in; nunca se habilita para una sesión normal. */
+/**
+ * Activa una traza local. Esta variable, por sí sola, sigue siendo la única palanca de este
+ * módulo — nunca se cablea nada aquí. Que valga "1" por OMISIÓN en una sesión normal (mientras
+ * dure esta etapa de pruebas) es una decisión de `Settings.depurar`, resuelta fuera de este
+ * fichero por `agent/turno/depuracion.ts#entornoConDepuracion` antes de que el `entorno` llegue
+ * a `crearDiagnosticoDeTools`.
+ */
 export const VARIABLE_TRAZA_TOOLS = "XONECODE_TRACE_TOOLS";
 export const NOMBRE_TRAZA_TOOLS = "traza-tools.jsonl";
 

@@ -186,6 +186,37 @@ describe("Ajustes", () => {
     });
   });
 
+  describe("la casilla «Depurar»", () => {
+    const CASILLA = "Dejar rastro de cuelgues y coste sin tener que pedirlo a mano";
+
+    it("sin dato del servidor NO se pinta: un control sin dato detrás no se pinta", () => {
+      render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado />);
+      expect(screen.queryByLabelText(CASILLA)).toBeNull();
+    });
+
+    it("enseña el estado y avisa al cambiarla", () => {
+      const vistos: boolean[] = [];
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          depuracionActiva
+          alCambiarDepuracion={(a) => void vistos.push(a)}
+        />
+      );
+      const casilla = screen.getByLabelText(CASILLA) as HTMLInputElement;
+      expect(casilla.checked).toBe(true);
+      fireEvent.click(casilla);
+      expect(vistos).toEqual([false]);
+    });
+
+    it("sin manejador se enseña apagada: el ajuste existe, cambiarlo desde aquí no", () => {
+      render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado depuracionActiva={false} />);
+      expect((screen.getByLabelText(CASILLA) as HTMLInputElement).disabled).toBe(true);
+    });
+  });
+
   it("mientras se registra un entorno, la sección enseña SOLO el formulario", () => {
     // Medido en pantalla: con la lista de proyectos debajo, el campo de la URL quedaba
     // detrás de dieciocho casillas de 54 px — fuera de la vista justo después de pulsar el

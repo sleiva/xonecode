@@ -6,6 +6,7 @@ import {
   rutaDeWorkspace,
   dentroDelWorkspace,
   seMira,
+  depuracionActiva,
   PLATAFORMAS_DE_DISPOSITIVO,
   TOPE_DE_CONCURRENCIA_DE_TAREAS,
   motivoParaNoOlvidarEntorno,
@@ -163,6 +164,33 @@ describe("el tope de concurrencia de tareas en settings.json", () => {
     ).toBeUndefined();
     expect(validarSettings({ entornos: [], concurrenciaDeTareas: 2.5 }).settings.concurrenciaDeTareas).toBeUndefined();
     expect(validarSettings({ entornos: [], concurrenciaDeTareas: "2" }).settings.concurrenciaDeTareas).toBeUndefined();
+  });
+});
+
+describe("depurar en settings.json", () => {
+  it("un booleano se conserva tal cual, true incluido", () => {
+    expect(validarSettings({ entornos: [], depurar: true }).settings.depurar).toBe(true);
+    expect(validarSettings({ entornos: [], depurar: false }).settings.depurar).toBe(false);
+  });
+
+  it("ausente no es false: es «no lo he dicho», y entonces manda la omisión de encenderTrazaDesdeSettings (mirar)", () => {
+    expect(validarSettings({ entornos: [] }).settings.depurar).toBeUndefined();
+  });
+
+  it("lo que no es booleano se descarta como cualquier campo desconocido, «false» de cadena incluido", () => {
+    expect(validarSettings({ entornos: [], depurar: "false" }).settings.depurar).toBeUndefined();
+    expect(validarSettings({ entornos: [], depurar: 0 }).settings.depurar).toBeUndefined();
+  });
+});
+
+describe("depuracionActiva: ausente enciende, mientras dure esta etapa de pruebas", () => {
+  it("ausente y true dan lo mismo: activa", () => {
+    expect(depuracionActiva(undefined)).toBe(true);
+    expect(depuracionActiva(true)).toBe(true);
+  });
+
+  it("false, y solo false, apaga", () => {
+    expect(depuracionActiva(false)).toBe(false);
   });
 });
 

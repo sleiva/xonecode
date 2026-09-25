@@ -629,6 +629,15 @@ export type MensajeAlCliente =
    */
   | { clase: "carpetaElegida"; ruta?: string }
   /**
+   * La casilla «Depurar» de Ajustes > General: si las dos trazas opt-in
+   * (`XONECODE_TRACE_ERRORES`, `XONECODE_TRACE_TOOLS`) van encendidas sin que nadie ponga una
+   * variable de entorno. Va en la ráfaga de bienvenida por lo mismo que el workspace.
+   *
+   * `activa` es ya el valor RESUELTO (`core/settings.ts#depuracionActiva`): ausente en
+   * `settings.json` llega aquí como `true`, que es la omisión de esta etapa de pruebas.
+   */
+  | { clase: "depuracion"; activa: boolean }
+  /**
    * Cómo fue la última augmentación pedida (`{clase:"tarea", accion:"augmentar"}`): el
    * encargo que propone el modelo, o por qué no se pudo. Nunca los dos a la vez.
    */
@@ -1255,6 +1264,8 @@ export type MensajeDelCliente =
   /** Elige dónde se bajan las copias locales. **No mueve nada de lo ya bajado**: cambia
    *  dónde caerá lo siguiente, y la pantalla lo dice. */
   | { clase: "workspace"; ruta: string }
+  /** Cambia la casilla «Depurar» de Ajustes > General. */
+  | { clase: "depuracion"; activa: boolean }
   /** Abre el selector de carpeta NATIVO **de la máquina donde corre la consola** — ver
    *  `core/selectorDeCarpeta.ts` para por qué no lo puede poner el navegador. */
   | { clase: "elegirCarpeta" }

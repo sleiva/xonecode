@@ -1305,6 +1305,9 @@ export function App({
       // leería como «no hay ninguna carpeta puesta».
       {...(estado.workspace === undefined ? {} : { workspace: estado.workspace })}
       alCambiarWorkspace={(ruta) => void enviar({ clase: "workspace", ruta })}
+      // La casilla «Depurar». Ausente = el servidor no lo dice, y entonces no se pinta.
+      {...(estado.depuracionActiva === undefined ? {} : { depuracionActiva: estado.depuracionActiva })}
+      alCambiarDepuracion={(activa) => void enviar({ clase: "depuracion", activa })}
       // El selector de carpeta, solo si el servidor dice que esta máquina tiene uno.
       {...(estado.puedeElegirCarpeta === true ? { alElegirCarpeta: () => void enviar({ clase: "elegirCarpeta" }) } : {})}
       {...(estado.carpetaElegida === undefined ? {} : { carpetaElegida: estado.carpetaElegida })}

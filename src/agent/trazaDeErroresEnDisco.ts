@@ -1,9 +1,11 @@
 /**
  * El sumidero de `core/trazaDeErrores.ts`, escribiendo en el proyecto.
  *
- * La misma pieza que `agent/turno/diagnosticoDeTools.ts` y con el mismo trato: APAGADO por
- * omisión, se enciende con una variable de entorno, y deja un `.jsonl` dentro de `.xonecode/`
- * —que está denegada al agente, no sube a CloudStudio y no entra en git—.
+ * La misma pieza que `agent/turno/diagnosticoDeTools.ts` y con el mismo trato: la única
+ * palanca de este módulo es la variable de entorno, y deja un `.jsonl` dentro de `.xonecode/`
+ * —que está denegada al agente, no sube a CloudStudio y no entra en git—. Que esa variable
+ * valga "1" por OMISIÓN mientras dure esta etapa de pruebas es una decisión de
+ * `Settings.depurar`, resuelta fuera de aquí por `agent/turno/depuracion.ts`.
  *
  * Append-only y sin buffer: lo que esto tiene que sobrevivir es justamente un proceso que se
  * queda colgado, y un buffer que se vuelca al cerrar no se vuelca nunca si nadie cierra.
@@ -33,7 +35,14 @@ export function encenderTrazaDeErrores(
   entorno: NodeJS.ProcessEnv = process.env,
   escribir: (ruta: string, linea: string) => void = escribirLinea,
 ): (() => void) | undefined {
-  if (entorno[VARIABLE_TRAZA_ERRORES] !== "1") return undefined;
+  if (entorno[VARIABLE_TRAZA_ERRORES] !== "1") {
+    // El sumidero es GLOBAL (core/trazaDeErrores.ts) y esto se llama UNA vez por sesión: sin
+    // apagarlo aquí, una sesión sin depurar seguiría escribiendo sus hitos en el `raiz` de la
+    // ANTERIOR que sí la tenía encendida — y la casilla de Ajustes no apagaría nada de verdad
+    // mientras el proceso siguiera vivo.
+    ponerSumideroDeErrores(undefined);
+    return undefined;
+  }
   const ruta = rutaTrazaDeErrores(raiz);
   const sumidero: SumideroDeErrores = (anotado) => {
     escribir(ruta, `${JSON.stringify({ v: 1, at: new Date().toISOString(), ...anotado })}\n`);

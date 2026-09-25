@@ -41,6 +41,7 @@ import { aEventos, crearMemoriaDelTurno } from "./puente.js";
 import { createTokenTracker, type TokenTracker } from "../../vendor/tokenTracking.js";
 import { crearDiagnosticoDeTools } from "./diagnosticoDeTools.js";
 import { encenderTrazaDeErrores } from "../trazaDeErroresEnDisco.js";
+import { entornoConDepuracion } from "./depuracion.js";
 import { indiceEnDisco, type CargarIndice } from "../navegacion/indiceEnDisco.js";
 import { hechosDelProyectoDe } from "../navegacion/hechosEnDisco.js";
 import { conHechosDelProyecto } from "../../core/hechosDelProyecto.js";
@@ -249,6 +250,17 @@ export async function abrirSesionReal(opciones: {
    * el que NACIÓ la sesión; el terminal, `run`, el banco y los evals lo dejan a la configuración.
    */
   motor?: MotorDeAgente;
+  /**
+   * ¿Las dos trazas opt-in (tools y errores/hitos) van encendidas aunque nadie ponga una
+   * variable de entorno? Resuelto por quien LLAMA a partir de `Settings.depurar`
+   * (`core/settings.ts#depuracionActiva`) — este fichero no lee `settings.json`.
+   *
+   * **Ausente se comporta EXACTAMENTE como hoy** (`entornoConDepuracion(false, …)` devuelve el
+   * entorno intacto): así ningún test que no pase esto ve cambiar nada, y `npm test` sigue sin
+   * necesitar esto. Solo los arranques reales —CLI y consola web— resuelven la omisión de la
+   * fase de pruebas y la pasan aquí ya decidida.
+   */
+  depurar?: boolean;
 }): Promise<SesionReal> {
   /**
    * **Aquí se elige el motor, y en ningún otro sitio.** Por este punto pasan los cinco que abren
@@ -281,6 +293,7 @@ export async function abrirSesionReal(opciones: {
       ...(opciones.topeDeRondas === undefined ? {} : { topeDeRondas: opciones.topeDeRondas }),
       ...(opciones.criticaVisual === undefined ? {} : { criticaVisual: opciones.criticaVisual }),
       ...(opciones.juezDelTurno === undefined ? {} : { juezDelTurno: opciones.juezDelTurno }),
+      ...(opciones.depurar === undefined ? {} : { depurar: opciones.depurar }),
     });
   }
   const { raiz, entorno } = opciones;
@@ -353,14 +366,15 @@ export async function abrirSesionReal(opciones: {
 
   const checkpointer = opciones.checkpointer ?? new MemorySaver();
   const tracker = createTokenTracker();
-  const diagnostico = crearDiagnosticoDeTools(raiz);
+  const entornoDeDiagnostico = entornoConDepuracion(opciones.depurar === true);
+  const diagnostico = crearDiagnosticoDeTools(raiz, entornoDeDiagnostico);
   /**
    * Y la traza de EXCEPCIONES e HITOS, con la misma variable de entorno que la de tools y el
    * mismo trato: apagada no cuesta nada. Se enciende aquí, al construir la sesión, porque es
    * el primer sitio donde se conoce la raíz — y el sumidero es global (ver
    * `core/trazaDeErrores.ts`), así que basta una vez.
    */
-  encenderTrazaDeErrores(raiz);
+  encenderTrazaDeErrores(raiz, entornoDeDiagnostico);
   let modelos = opciones.modelos;
   let hilo = opciones.hilo ?? `xonecode-${randomUUID()}`;
   let cancelarEnCurso: (() => void) | undefined;

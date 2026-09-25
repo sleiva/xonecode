@@ -77,6 +77,8 @@ import {
   toolsDe,
 } from "./capacidades.js";
 import { crearDiagnosticoDeTools, type DiagnosticoDeTools } from "../../turno/diagnosticoDeTools.js";
+import { encenderTrazaDeErrores } from "../../trazaDeErroresEnDisco.js";
+import { entornoConDepuracion } from "../../turno/depuracion.js";
 import { detalleDe, parametrosDe } from "../../turno/resumenDeTool.js";
 import { apartarMemoria, cargarMemoria, fotoSaneada, guardarMemoria, textoDeMemoriaDescartada, type FotoDeHilo } from "./memoriaTrueforge.js";
 import type { ToolDeLangchain } from "./toolsPropias.js";
@@ -236,6 +238,12 @@ export interface OpcionesDeSesionTrueforge {
    * el patrón de fallo de siempre: compuesta en un cierre que los tests doblan, quedaría escrita.
    */
   subagenteExterno?: (opciones: ReturnType<typeof opcionesDeSubagenteExterno>) => SubagenteExternoPort;
+  /**
+   * ¿Las dos trazas opt-in van encendidas sin variable de entorno? Resuelto por quien LLAMA,
+   * igual que en deepagents (`turnoReal.ts#abrirSesionReal`) — ver ahí el porqué de que
+   * ausente se comporte exactamente como hoy.
+   */
+  depurar?: boolean;
 }
 
 /** Una tool call que espera decisión: en QUÉ hilo, con qué id, y qué pide. */
@@ -261,7 +269,14 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
    * formato, así que `xonecode traza` compara los dos motores. La omisión es la real —entrar por
    * parámetro solo sirve para doblarla—, que es lo que evita dejarla escrita y sin montar.
    */
-  const diagnostico = opciones.diagnostico ?? crearDiagnosticoDeTools(raiz);
+  const entornoDeDiagnostico = entornoConDepuracion(opciones.depurar === true);
+  const diagnostico = opciones.diagnostico ?? crearDiagnosticoDeTools(raiz, entornoDeDiagnostico);
+  /**
+   * La traza de EXCEPCIONES e HITOS, la MISMA de deepagents (`turnoReal.ts`) y que aquí
+   * faltaba por completo: TrueForge nunca la encendía, ni siquiera con la variable de entorno
+   * puesta a mano.
+   */
+  encenderTrazaDeErrores(raiz, entornoDeDiagnostico);
   const tracker: TokenTracker = createTokenTracker();
   const oyentes = new Set<() => void>();
   let aborto: AbortController | undefined;

@@ -145,6 +145,34 @@ describe("el ejecutor real DEVUELVE lo que el turno informó", () => {
   });
 });
 
+describe("la depuración global (Ajustes > General) llega a abrirSesionReal", () => {
+  /** Un `cargarSettings` de mentira: los tests no pueden leer el `settings.json` real de
+   *  quien corre la suite (compartido por TODO el worker vía `casaDePruebas.ts`). */
+  function settingsDeMentira(depurar?: boolean) {
+    return () => ({ settings: { entornos: [], ...(depurar === undefined ? {} : { depurar }) }, avisos: [] });
+  }
+
+  it("ausente en settings.json (como recién instalado) llega como depurar:true", async () => {
+    dobles.abrirSesionReal.mockImplementation(async () => ({
+      turno: async () => ({ bitacora: { todo: [] }, cambios: [], cortadoPorTope: false, verificador: "verde" as const, pendientes: 0 }),
+    }));
+    const ejecutor = crearEjecutorReal(() => {}, undefined, undefined, undefined, settingsDeMentira());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await ejecutor("haz algo", ESTADO, consolaDeMentira() as any);
+    expect(dobles.abrirSesionReal.mock.calls[0]![0]).toMatchObject({ depurar: true });
+  });
+
+  it("depurar:false en settings.json llega tal cual, sin invertirlo", async () => {
+    dobles.abrirSesionReal.mockImplementation(async () => ({
+      turno: async () => ({ bitacora: { todo: [] }, cambios: [], cortadoPorTope: false, verificador: "verde" as const, pendientes: 0 }),
+    }));
+    const ejecutor = crearEjecutorReal(() => {}, undefined, undefined, undefined, settingsDeMentira(false));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await ejecutor("haz algo", ESTADO, consolaDeMentira() as any);
+    expect(dobles.abrirSesionReal.mock.calls[0]![0]).toMatchObject({ depurar: false });
+  });
+});
+
 describe("el tope de rondas de la consola llega hasta la sesión", () => {
   /**
    * `Consola.topeDeAprobaciones` es la costura por la que una tarea de fondo pide su propio

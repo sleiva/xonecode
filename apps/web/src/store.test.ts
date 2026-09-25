@@ -1471,6 +1471,22 @@ describe("la cola de tareas", () => {
   });
 });
 
+describe("la casilla «Depurar» de Ajustes > General", () => {
+  it("se guarda tal cual", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "depuracion", activa: true });
+    expect(s.leer().depuracionActiva).toBe(true);
+    s.aplicar({ clase: "depuracion", activa: false });
+    expect(s.leer().depuracionActiva).toBe(false);
+  });
+
+  it("un valor que no es booleano no se toma por verdadero: la trampa del «false» de cadena", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "depuracion", activa: "false" } as never);
+    expect(s.leer().depuracionActiva).toBeUndefined();
+  });
+});
+
 /**
  * **Mirar en vivo lo que hace una tarea** (Task 16).
  *

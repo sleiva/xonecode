@@ -74,6 +74,17 @@ export function seMira(ajustes: AjustesDeDispositivos | undefined, plataforma: P
 }
 
 /**
+ * ¿Está activa la depuración? Ausente = sí, mientras dure esta etapa de pruebas.
+ *
+ * Mismo molde que `seMira`: solo `false` apaga. Vive aquí, separado del campo crudo, para que
+ * quien resuelve el valor en vigor (`agent/turno/depuracion.ts#entornoConDepuracion`, y el
+ * cliente al pintar la casilla) no reimplemente la regla de la omisión cada vez.
+ */
+export function depuracionActiva(depurar: boolean | undefined): boolean {
+  return depurar !== false;
+}
+
+/**
  * Tope máximo del selector de concurrencia de tareas en Ajustes. La omisión (sin nada
  * guardado) es `CONCURRENCIA_POR_OMISION` de `core/tareas.ts` — 2 — y vive ahí y no aquí
  * porque ese fichero es el dueño de la planificación; este solo guarda la ELECCIÓN.
@@ -99,6 +110,19 @@ export interface Settings {
    * legítima (pausar la cola) y no se puede confundir con «no lo he dicho».
    */
   concurrenciaDeTareas?: number;
+  /**
+   * Deja las dos trazas opt-in (`XONECODE_TRACE_ERRORES`, `XONECODE_TRACE_TOOLS`) encendidas
+   * por omisión, para poder enterarse de un cuelgue como el hotswap en Windows sin tener que
+   * pedirle a nadie que teclee una variable de entorno primero. Vive en `core/` porque es la
+   * MISMA regla de las demás: se aplica en `agent/turno/depuracion.ts#entornoConDepuracion`.
+   *
+   * **Ausente no es «no»: es «no lo he dicho», y entonces manda ENCENDIDA** — al revés que
+   * `AjustesDeDispositivos` y que `concurrenciaDeTareas`, y a propósito: esto es diagnóstico de
+   * una etapa de pruebas, no una preferencia de máquina, y la omisión tiene que dejar rastro
+   * hasta que la 1.0 invierta el valor por defecto. Solo se guarda `false`, cuando alguien la
+   * apaga; volver a encenderla borra la clave en vez de escribir `true`.
+   */
+  depurar?: boolean;
 }
 
 
@@ -190,12 +214,14 @@ export function validarSettings(bruto: unknown): { settings: Settings; avisos: A
   const workspace = typeof objeto.workspace === "string" ? objeto.workspace : undefined;
   const dispositivos = validarDispositivos(objeto.dispositivos);
   const concurrenciaDeTareas = validarConcurrenciaDeTareas(objeto.concurrenciaDeTareas);
+  const depurar = typeof objeto.depurar === "boolean" ? objeto.depurar : undefined;
   return {
     settings: {
       entornos,
       ...(workspace === undefined ? {} : { workspace }),
       ...(dispositivos === undefined ? {} : { dispositivos }),
       ...(concurrenciaDeTareas === undefined ? {} : { concurrenciaDeTareas }),
+      ...(depurar === undefined ? {} : { depurar }),
     },
     avisos,
   };

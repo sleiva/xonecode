@@ -126,6 +126,7 @@ import { resumenDePoda } from "../../core/podaDeCheckpoint.js";
 import {
   cargarSettings,
   guardarConcurrenciaDeTareas,
+  guardarDepurar,
   guardarWorkspace as guardarWorkspaceEnDisco,
   guardarDispositivos,
   guardarEntorno as guardarEntornoEnDisco,
@@ -135,6 +136,7 @@ import {
 } from "../../agent/config/settingsEnDisco.js";
 import {
   dentroDelWorkspace,
+  depuracionActiva,
   expandirConCasa,
   motivoParaNoOlvidarEntorno,
   motivoDeNombreDeEntornoInaceptable,
@@ -639,6 +641,14 @@ export interface OpcionesDeMontaje {
    * peor que no tenerlo, y el campo de texto ya resuelve el caso.
    */
   elegirCarpeta?: (desde?: string) => Promise<string | undefined>;
+  /**
+   * La casilla «Depurar» de Ajustes > General, ya RESUELTA (`core/settings.ts#depuracionActiva`:
+   * ausente en disco es `true`, la omisión de esta etapa de pruebas). Ausente la OPCIÓN =
+   * Ajustes no pinta la casilla.
+   */
+  depuracionActiva?: () => boolean;
+  /** Cambia la casilla. Ausente = Ajustes la enseña pero no deja cambiarla. */
+  guardarDepuracion?: (activa: boolean) => void;
   /**
    * Augmenta una petición en un encargo revisado (`agent/tareas/aumentador.ts`, Task 9). Ausente =
    * el botón «Preparar el encargo» no está disponible.
@@ -1504,6 +1514,9 @@ export function montarRutas(
     // El workspace, por lo mismo que los subagentes y las skills: Ajustes se puede abrir en
     // cuanto conecta, y un campo en blanco se lee como «no hay ninguno puesto».
     const workspace = mensajeDeWorkspace();
+    // La casilla «Depurar», por lo mismo que el workspace: Ajustes se puede abrir en cuanto
+    // conecta.
+    const depuracion = mensajeDeDepuracion();
     // Y los conectores MCP, tras el workspace y por la misma regla: solo si esta ejecución
     // los monta, y entonces la ventana de Ajustes no se abre con la sección en blanco.
     const conectores = mensajeDeConectores();
@@ -1524,6 +1537,7 @@ export function montarRutas(
       cliente(skills);
       if (tareas !== undefined) cliente(tareas);
       if (workspace !== undefined) cliente(workspace);
+      if (depuracion !== undefined) cliente(depuracion);
       if (conectores !== undefined) cliente(conectores);
       if (consumoDeLaSesion !== undefined) {
         cliente({
@@ -1684,6 +1698,15 @@ export function montarRutas(
   };
   const emitirWorkspace = (): void => {
     const m = mensajeDeWorkspace();
+    if (m !== undefined) emitir(m);
+  };
+
+  const mensajeDeDepuracion = (): MensajeAlCliente | undefined => {
+    const activa = opciones.depuracionActiva?.();
+    return activa === undefined ? undefined : { clase: "depuracion", activa };
+  };
+  const emitirDepuracion = (): void => {
+    const m = mensajeDeDepuracion();
     if (m !== undefined) emitir(m);
   };
 
@@ -4624,6 +4647,13 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "depuracion" && typeof mensaje.activa === "boolean") {
+      opciones.guardarDepuracion?.(mensaje.activa);
+      emitirDepuracion();
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "elegirCarpeta") {
       /**
        * El diálogo lo abre el SISTEMA donde corre la consola, así que esto tarda lo que
@@ -5406,6 +5436,26 @@ export function ajusteDeWorkspaceCableado(opciones: {
 }
 
 /**
+ * Las dos mitades de la casilla «Depurar», cableadas — extraídas por el MISMO motivo que
+ * `ajusteDeWorkspaceCableado`. `leer`/`guardar` entran por parámetro, y no como en el workspace
+ * porque una prueba no puede leer NI escribir el `settings.json` real de quien corre la suite
+ * (compartido por todo el worker vía `casaDePruebas.ts`): a diferencia del workspace, aquí no
+ * hay ninguna regla que aplicar sobre el valor (un booleano no se puede rechazar), así que la
+ * única razón de existir es esta — la MISMA costura de siempre, sin la mitad de validación.
+ */
+export function ajusteDeDepuracionCableado(opciones: {
+  leer?: () => boolean | undefined;
+  guardar?: (activa: boolean) => void;
+} = {}): { depuracionActiva: () => boolean; guardarDepuracion: (activa: boolean) => void } {
+  const leer = opciones.leer ?? (() => cargarSettings().settings.depurar);
+  const guardar = opciones.guardar ?? ((activa: boolean) => void guardarDepurar(undefined, activa));
+  return {
+    depuracionActiva: () => depuracionActiva(leer()),
+    guardarDepuracion: (activa) => guardar(activa),
+  };
+}
+
+/**
  * La opción `conectores` de `montarRutas`, cableada — extraída por el MISMO motivo que
  * `ajusteDeWorkspaceCableado`: un literal inline dentro de `arrancarConsolaWeb` no quedaría
  * probado, y esa composición concreta —que la fábrica de verdad (`servicioDeConectoresCableado`)
@@ -5847,6 +5897,9 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     // (`ajusteDeWorkspaceCableado`) por el patrón de fallo de siempre — y aquí el escritor
     // ya venía con la marca puesta: existía con su test y sin un solo llamador.
     ...ajusteDeWorkspaceCableado({ casa: homedir() }),
+    // La casilla «Depurar», con la MISMA disciplina: composición extraída y probada
+    // (`ajusteDeDepuracionCableado`).
+    ...ajusteDeDepuracionCableado(),
     // Los conectores MCP, con la MISMA disciplina: la composición extraída y probada
     // (`ajusteDeConectoresCableado`), nunca un literal aquí dentro.
     ...ajusteDeConectoresCableado({ casa: homedir() }),

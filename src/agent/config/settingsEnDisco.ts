@@ -185,6 +185,23 @@ export function guardarConcurrenciaDeTareas(casa: string | undefined, concurrenc
   return { ruta };
 }
 
+/**
+ * Guarda el interruptor de depuración, sin tocar nada más del fichero.
+ *
+ * `true` BORRA la clave en vez de escribirla: ausente y encendida significan lo mismo
+ * mientras dure esta etapa de pruebas (`core/settings.ts#Settings.depurar`), y guardar un
+ * `true` explícito solo ensuciaría el fichero de quien nunca tocó nada.
+ */
+export function guardarDepurar(casa: string | undefined, depurar: boolean): { ruta: string } {
+  const ruta = rutaSettings(casa ?? homedir());
+  const crudo = leerCrudoOAbortar(ruta);
+  const fusionado = depurar
+    ? Object.fromEntries(Object.entries(crudo).filter(([k]) => k !== "depurar"))
+    : { ...crudo, depurar: false };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta };
+}
+
 /** Guarda solo la base del workspace, sin tocar la lista de entornos. */
 export function guardarWorkspace(casa: string | undefined, base: string): { ruta: string } {
   const ruta = rutaSettings(casa ?? homedir());

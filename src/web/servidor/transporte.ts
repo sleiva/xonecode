@@ -406,6 +406,14 @@ export type MensajeAlCliente =
    */
   | { clase: "carpetaElegida"; ruta?: string }
   /**
+   * La casilla «Depurar» de Ajustes > General: si las dos trazas opt-in van encendidas sin
+   * variable de entorno. Va en la ráfaga de bienvenida por lo mismo que el workspace.
+   *
+   * `activa` es el valor YA RESUELTO (`core/settings.ts#depuracionActiva`): ausente en
+   * `settings.json` llega como `true`, la omisión de esta etapa de pruebas.
+   */
+  | { clase: "depuracion"; activa: boolean }
+  /**
    * El catálogo de conectores MCP y los que esta consola tiene AÑADIDOS, para la sección de
    * Ajustes. Va en la ráfaga de bienvenida por lo mismo que el workspace: Ajustes se puede
    * abrir en cuanto conecta, y solo si la opción `conectores` está puesta — «un control sin
@@ -1481,6 +1489,8 @@ export type MensajeDelCliente =
    * lo dice con todas las letras.
    */
   | { clase: "workspace"; ruta: string }
+  /** Cambia la casilla «Depurar» de Ajustes > General. */
+  | { clase: "depuracion"; activa: boolean }
   /** Abre el selector de carpeta NATIVO **de la máquina donde corre la consola** — ver
    *  `core/selectorDeCarpeta.ts` para por qué no lo puede poner el navegador. */
   | { clase: "elegirCarpeta" }

@@ -165,6 +165,12 @@ export interface EstadoDelCliente {
    *  no, y entonces el botón no se pinta: solo queda el campo de texto. */
   puedeElegirCarpeta?: boolean;
   /**
+   * La casilla «Depurar» de Ajustes > General. Ausente = el servidor no lo dice (esta
+   * ejecución no monta el ajuste), y entonces la casilla no se pinta: un control sin dato
+   * detrás no se pinta.
+   */
+  depuracionActiva?: boolean;
+  /**
    * La carpeta que acaba de elegir el diálogo del sistema, para que el campo la recoja.
    *
    * Es un ACUSE con contador y no una cadena, porque la misma carpeta elegida dos veces
@@ -1362,6 +1368,12 @@ export function crearStoreDelCliente(): {
           const m = mensaje as Record<string, unknown>;
           if (typeof m["ruta"] !== "string") return;
           mutar({ workspace: m["ruta"], puedeElegirCarpeta: m["puedeElegir"] === true });
+          return;
+        }
+        case "depuracion": {
+          const m = mensaje as Record<string, unknown>;
+          if (typeof m["activa"] !== "boolean") return;
+          mutar({ depuracionActiva: m["activa"] });
           return;
         }
         case "carpetaElegida": {

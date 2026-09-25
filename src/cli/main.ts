@@ -41,7 +41,7 @@ import { MAX_APPROVAL_ROUNDS } from "../vendor/hitl.js";
 import { conectarCloudStudio, sesionCloudStudio, PUERTO_CALLBACK } from "../agent/cloudstudio/cloudstudioMcp.js";
 import { clienteCloudStudio } from "../agent/cloudstudio/cloudstudioClient.js";
 import { cargarSettings } from "../agent/config/settingsEnDisco.js";
-import { dentroDelWorkspace, entornoDeUrl, type Entorno } from "../core/settings.js";
+import { dentroDelWorkspace, depuracionActiva, entornoDeUrl, type Entorno } from "../core/settings.js";
 import { descargarProyecto } from "../agent/cloudstudio/descarga.js";
 import { arbolLimpio, cambiosPendientes, esRepoPropio, prepararRepo, sinCommitear, vaciarCopia } from "../agent/sesiones/gitSync.js";
 import { baseDeWorkspace } from "../agent/config/settingsEnDisco.js";
@@ -498,6 +498,9 @@ export function crearEjecutorReal(
    * Ausente en toda consola de persona y en toda tarea sin adjuntos.
    */
   carpetaDeAdjuntos?: string,
+  /** Misma costura que `adaptadoresDeProyecto`: los tests no pueden leer el
+   *  `~/.xonecode/settings.json` de quien corre la suite. */
+  leerSettings: typeof cargarSettings = cargarSettings,
 ): EjecutorDeTurno {
   let sesion: SesionReal | undefined;
   let fuentesVistas: FuentesDeEleccion | undefined;
@@ -572,6 +575,10 @@ export function crearEjecutorReal(
         // se llevaría el aviso de «te faltan estas skills» teniéndolas delante.
         skills: new SkillsEnDisco(estado.raiz),
         entorno,
+        // La casilla «Depurar» de Ajustes > General (`Settings.depurar`), la MISMA para el
+        // terminal Y la web —las dos pasan por aquí—. Ausente en settings.json enciende, que
+        // es la omisión de esta etapa de pruebas (`core/settings.ts#depuracionActiva`).
+        depurar: depuracionActiva(leerSettings().settings.depurar),
         // El hilo de la CONSOLA, no uno propio. Había dos ids para lo mismo —el que
         // `/hilo` enseña y el que se generaba dentro— y solo coincidían tras un `/nuevo`.
         // Y en la web ese hilo es el id de la sesión, que es lo que la hace reanudable.

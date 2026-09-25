@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, symlinkSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Command } from "@langchain/langgraph";
@@ -34,6 +34,7 @@ import { abrirSesionReal, saldarAprobacionesHuerfanas } from "./turnoReal.js";
 import { ficherosDelProyecto } from "./ficherosDelProyecto.js";
 import { TOPE_REPARACIONES } from "./verificacion.js";
 import { ModeloGuionizado, SkillsEnMemoria, type VerifierPort } from "../../core/ports.js";
+import { ponerSumideroDeErrores } from "../../core/trazaDeErrores.js";
 import type { Piel } from "../../core/turno.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
 import type { LineaDeDiff } from "../../core/diff.js";
@@ -328,6 +329,35 @@ describe("abrirSesionReal", () => {
     await vi.waitFor(() => expect(senal).toBeDefined());
     sesion.cerrar();
     await expect(enCurso).rejects.toThrow(/turno cancelado por el usuario/);
+  });
+
+  describe("depurar: la opción global enciende las trazas sin que nadie ponga una variable de entorno", () => {
+    // `depurar:true` también enciende el sumidero GLOBAL de `core/trazaDeErrores.ts`: sin
+    // esto, un test más adelante en el mismo worker seguiría escribiendo en ESTE `raiz`.
+    afterEach(() => ponerSumideroDeErrores(undefined));
+
+    it("con depurar:true deja traza-tools.jsonl aunque el proceso no tenga XONECODE_TRACE_TOOLS", async () => {
+      const raiz = mkdtempSync(join(tmpdir(), "xc-turnoreal-depurar-"));
+      await abrirSesionReal({
+        raiz,
+        modelos: new ModeloGuionizado(),
+        skills: new SkillsEnMemoria(),
+        entorno: entornoFalso,
+        depurar: true,
+      });
+      expect(existsSync(join(raiz, ".xonecode", "traza-tools.jsonl"))).toBe(true);
+    });
+
+    it("sin pasar depurar (como cualquier test de siempre) no deja nada: npm test sigue sin necesitarlo", async () => {
+      const raiz = mkdtempSync(join(tmpdir(), "xc-turnoreal-depurar-"));
+      await abrirSesionReal({
+        raiz,
+        modelos: new ModeloGuionizado(),
+        skills: new SkillsEnMemoria(),
+        entorno: entornoFalso,
+      });
+      expect(existsSync(join(raiz, ".xonecode", "traza-tools.jsonl"))).toBe(false);
+    });
   });
 
   it("un turno sobre una sesión ya cerrada FALLA en vez de revivir el hilo", async () => {

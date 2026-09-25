@@ -19,6 +19,7 @@ import { MS_DE_PREPARACION,
   commitDeTurnoCableado,
   mudarWorkspaceLegadoCableado,
   ajusteDeWorkspaceCableado,
+  ajusteDeDepuracionCableado,
   ajusteDeConectoresCableado,
   construirCorredorDeTareasCableado,
   FALTA_EL_BUILD,
@@ -7995,6 +7996,29 @@ describe("el ajuste del workspace, cableado", () => {
     guardarWorkspace("   ");
     guardarWorkspace("~otra/cosa");
     expect(guardadas).toEqual([]);
+  });
+});
+
+describe("el ajuste de depuración, cableado", () => {
+  it("ausente en disco se enseña ACTIVA: es la omisión de esta etapa de pruebas", () => {
+    const { depuracionActiva } = ajusteDeDepuracionCableado({ leer: () => undefined });
+    expect(depuracionActiva()).toBe(true);
+  });
+
+  it("false en disco se enseña tal cual, sin invertirlo", () => {
+    const { depuracionActiva } = ajusteDeDepuracionCableado({ leer: () => false });
+    expect(depuracionActiva()).toBe(false);
+  });
+
+  it("se RELEE en cada emisión: lo que se acaba de guardar es lo que se vuelve a enseñar", () => {
+    let enDisco: boolean | undefined;
+    const { depuracionActiva, guardarDepuracion } = ajusteDeDepuracionCableado({
+      leer: () => enDisco,
+      guardar: (a) => void (enDisco = a),
+    });
+    expect(depuracionActiva()).toBe(true);
+    guardarDepuracion(false);
+    expect(depuracionActiva()).toBe(false);
   });
 });
 

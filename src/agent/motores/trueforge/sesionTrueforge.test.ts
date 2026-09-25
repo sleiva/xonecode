@@ -12,6 +12,7 @@ import { topeAgotadoDe, traducirEvento } from "./eventosTrueforge.js";
 import { cargarMemoria, rutaDeMemoria } from "./memoriaTrueforge.js";
 import { abrirSesionReal } from "../../turno/turnoReal.js";
 import { pintarSesion, resumirTraza } from "../../turno/informeDeTraza.js";
+import { anotarPaso, ponerSumideroDeErrores } from "../../../core/trazaDeErrores.js";
 import type { HechosDelTurno } from "../../../core/juezDelTurno.js";
 
 /**
@@ -667,6 +668,37 @@ describe("una sesión con el motor TrueForge", () => {
     expect(sesion!.contraste).toEqual({ turnos: 1, conDiferencias: 0, diferencias: [] });
     expect(pintarSesion(sesion!).join("\n")).toContain("contraste con el motor: 1 turno(s), las dos cuentas coinciden");
   }, 30_000);
+
+  it("con depurar:true deja traza-tools.jsonl aunque el proceso no tenga XONECODE_TRACE_TOOLS", async () => {
+    const raiz = proyecto();
+    try {
+      await abrirSesionTrueforge({ raiz, modelos: modelos(), entorno: ENTORNO, skills: CATALOGO, depurar: true });
+      expect(existsSync(join(raiz, ".xonecode", "traza-tools.jsonl"))).toBe(true);
+    } finally {
+      // `depurar:true` enciende TAMBIÉN el sumidero GLOBAL de la traza de errores/hitos.
+      ponerSumideroDeErrores(undefined);
+    }
+  });
+
+  it("con depurar:true enciende TAMBIÉN la traza de hitos/errores, que aquí faltaba", async () => {
+    const raiz = proyecto();
+    try {
+      await abrirSesionTrueforge({ raiz, modelos: modelos(), entorno: ENTORNO, skills: CATALOGO, depurar: true });
+      anotarPaso("test#paso")();
+      const lineas = readFileSync(join(raiz, ".xonecode", "traza-errores.jsonl"), "utf8").trim().split("\n");
+      expect(lineas.some((l) => JSON.parse(l).donde === "test#paso")).toBe(true);
+    } finally {
+      // El sumidero es GLOBAL (core/trazaDeErrores.ts): sin esto, un test más adelante en el
+      // mismo worker seguiría escribiendo en ESTE `raiz`, que ya no le pertenece a nadie.
+      ponerSumideroDeErrores(undefined);
+    }
+  });
+
+  it("sin pasar depurar (como cualquier test de siempre) no deja nada: npm test sigue sin necesitarlo", async () => {
+    const raiz = proyecto();
+    await abrirSesionTrueforge({ raiz, modelos: modelos(), entorno: ENTORNO, skills: CATALOGO });
+    expect(existsSync(join(raiz, ".xonecode", "traza-tools.jsonl"))).toBe(false);
+  });
 
   it("el orquestador PREGUNTA: el turno acaba con la pregunta en el chat y el siguiente mensaje la CONTESTA en su hilo", async () => {
     const raiz = proyecto();

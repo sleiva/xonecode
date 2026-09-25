@@ -5,6 +5,7 @@ import { describe, it, expect } from "vitest";
 import {
   cargarSettings,
   guardarConcurrenciaDeTareas,
+  guardarDepurar,
   guardarDispositivos,
   guardarEntorno,
   guardarWorkspace,
@@ -124,6 +125,24 @@ describe("settingsEnDisco", () => {
     expect(cargarSettings(c).settings.concurrenciaDeTareas).toBe(0);
     guardarConcurrenciaDeTareas(c, 99);
     expect(cargarSettings(c).settings.concurrenciaDeTareas).toBe(8);
+  });
+
+  it("guardarDepurar(false) escribe el apagado sin tocar los entornos", () => {
+    const c = casa();
+    guardarEntorno(c, { id: "a", nombre: "A", url: "https://a/mcp" });
+    guardarDepurar(c, false);
+    const { settings } = cargarSettings(c);
+    expect(settings.depurar).toBe(false);
+    expect(settings.entornos.map((e) => e.id)).toEqual(["a"]);
+  });
+
+  it("guardarDepurar(true) BORRA la clave: ausente y encendida significan lo mismo aquí", () => {
+    const c = casa();
+    guardarDepurar(c, false);
+    guardarDepurar(c, true);
+    const crudo = JSON.parse(readFileSync(join(c, ".xonecode", "settings.json"), "utf8")) as Record<string, unknown>;
+    expect("depurar" in crudo).toBe(false);
+    expect(cargarSettings(c).settings.depurar).toBeUndefined();
   });
 
   it("guardarWorkspace fija la base sin tocar los entornos ya guardados", () => {
