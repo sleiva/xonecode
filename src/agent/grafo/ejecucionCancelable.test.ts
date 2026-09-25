@@ -132,4 +132,36 @@ describe("crearExecuteCancelable", () => {
     });
     expect(l.hijos).toEqual([]);
   });
+
+  it("una señal ALREADY abortada no llega a lanzar nada", async () => {
+    const l = lanzador();
+    const ejecutar = crearExecuteCancelable({ env: {}, cwd: "/tmp", timeoutS: 600 }, { lanzar: l.lanzar });
+    const control = new AbortController();
+    control.abort();
+    await expect(ejecutar("sleep 100", control.signal)).resolves.toEqual({
+      output: "Error: Command cancelled.",
+      exitCode: 130,
+      truncated: false,
+    });
+    expect(l.hijos).toEqual([]);
+  });
+
+  it("con pid pero matarGrupo lanza, se cae a matar al hijo", async () => {
+    const l = lanzador(9999);
+    const ejecutar = crearExecuteCancelable(
+      { env: {}, cwd: "/tmp", timeoutS: 600 },
+      {
+        lanzar: l.lanzar,
+        matarGrupo: () => {
+          throw new Error("ESRCH");
+        },
+      }
+    );
+    const control = new AbortController();
+    const fin = ejecutar("sleep 100", control.signal);
+    control.abort();
+    expect(l.hijos[0]!.matado).toBe("SIGKILL");
+    l.hijos[0]!.cerrar(null);
+    await expect(fin).resolves.toEqual({ output: "Error: Command cancelled.", exitCode: 130, truncated: false });
+  });
 });

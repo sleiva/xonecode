@@ -58,6 +58,10 @@ export function crearExecuteCancelable(
       return Promise.resolve({ output: "Error: Command must be a non-empty string.", exitCode: 1, truncated: false });
     }
 
+    if (senal?.aborted) {
+      return Promise.resolve({ output: "Error: Command cancelled.", exitCode: 130, truncated: false });
+    }
+
     return new Promise<ResultadoDeEjecucion>((resolver) => {
       const hijo = lanzar(comando, { env: opciones.env, cwd: opciones.cwd });
       let stdout = "";
