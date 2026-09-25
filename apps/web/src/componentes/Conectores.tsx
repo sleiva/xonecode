@@ -389,7 +389,7 @@ function FilaDeConector({
             {conector.autorizando === true ? "Volver a abrir" : "Conectar"}
           </button>
         ) : null}
-        <button type="button" className={estilos.accionDeFila} onClick={() => alAccion("probar")}>
+        <button type="button" className={clsx(estilos.accionDeFila, estilos.exito)} onClick={() => alAccion("probar")}>
           Probar
         </button>
         {pideAutorizacion && conector.estado === "autorizado" ? (
@@ -585,7 +585,7 @@ function FormularioDeAlta({
         <Button variant="outline" className={estilos.accion} onClick={alCerrar}>
           Cancelar
         </Button>
-        <Button type="submit" variant="primary" className={estilos.accion} disabled={incompleto}>
+        <Button type="submit" variant="primary" className={estilos.principal} disabled={incompleto}>
           Añadir
         </Button>
       </div>

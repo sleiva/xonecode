@@ -312,6 +312,15 @@
   composes: secundario from "./Boton.module.css";
 }
 
+/* «Añadir clave»/«Registrar»: son la acción que CONFIRMA una creación, no la que cancela —
+   antes compartían `.accion` con «Cancelar» y salían igual de grises pese a
+   `variant="primary"`. El azul de marca, no `.grande`: viven en un formulario dentro de un
+   panel de Ajustes, no en un modal de pantalla completa, así que el tamaño de fila es el
+   que corresponde. */
+.principal {
+  composes: primario from "./Boton.module.css";
+}
+
 /* «Eliminar» una clave guardada: borra un fichero, pero no es la misma severidad que
    `.destructiva` (el aviso de «cambios sin guardar», sin papelera y sin vuelta atrás) — la
    clave se puede volver a añadir. El rojo de marca en contorno, no en relleno. Sin

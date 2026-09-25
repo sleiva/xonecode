@@ -51,6 +51,11 @@
   --xonecode-rojo-fondo: color-mix(in srgb, var(--xonecode-rojo) 12%, transparent);
   --xonecode-rojo-fondo-hover: color-mix(in srgb, var(--xonecode-rojo) 20%, transparent);
 
+  /* El mismo tinte, en verde: para un botón de verificar/probar — la acción SALIÓ bien, no
+     que vaya a borrar nada, pero tampoco es un «adelante» de marca (ese es el azul). */
+  --xonecode-verde-fondo: color-mix(in srgb, var(--xonecode-verde) 12%, transparent);
+  --xonecode-verde-fondo-hover: color-mix(in srgb, var(--xonecode-verde) 20%, transparent);
+
   /* Sobre el azul profundo no valen los `label-*` de la paleta clara: son tonos pensados
      para fondo claro y ahí no se leen. Estos dos son los del mockup. */
   --xonecode-sobre-azul: #ffffff;

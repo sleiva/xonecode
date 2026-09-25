@@ -22,7 +22,7 @@
  * garantiza un orden es la posición DENTRO de este mismo fichero: por eso el tamaño es un
  * MODIFICADOR que se compone (`secundario grande`), nunca una propiedad que se redeclara.
  *
- * Los TRES roles comparten el tamaño de FILA por omisión (6px 10px, 12px): es el que usan
+ * Los CUATRO roles comparten el tamaño de FILA por omisión (6px 10px, 12px): es el que usan
  * dos botones sentados uno al lado del otro. `.grande` (8px 16px) es para el pie de un
  * diálogo con una sola acción por línea — se compone DESPUÉS del rol
  * (`composes: primario grande from "./Boton.module.css";`), y como los dos viven en este
@@ -111,8 +111,32 @@
   cursor: not-allowed;
 }
 
+/* El verde de marca (`--xone-emerald-active`, `--xonecode-verde`), declarado desde el
+   manual de identidad pero sin un solo consumidor hasta ahora. Para «Verificar»/«Probar»:
+   una acción que COMPRUEBA algo, no que avanza (ese es `.primario`) ni que lo destruye
+   (`.peligro`) — mismo contorno + tinte que `.peligro`, en verde. */
+.exito {
+  padding: 6px 10px;
+  border: 0.5px solid var(--xonecode-verde);
+  border-radius: 8px;
+  background: var(--xonecode-verde-fondo);
+  color: var(--xonecode-verde);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.exito:hover {
+  background: var(--xonecode-verde-fondo-hover);
+}
+
+.exito:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* El tamaño de pie de diálogo: una acción sola por línea (Aprobar/Cancelar, Empezar,
-   Guardar el wizard...), no una fila apretada de botones. Va DESPUÉS de los tres roles a
+   Guardar el wizard...), no una fila apretada de botones. Va DESPUÉS de los cuatro roles a
    propósito — ver la nota de especificidad arriba. */
 .grande {
   padding: 8px 16px;

@@ -183,6 +183,20 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
+/* «Probar»: comprueba, no avanza (`.principal`) ni destruye (el rojo). El verde de marca,
+   con el mismo padding pequeño de fila que el resto de `.accionDeFila` — mismo motivo por
+   el que ninguno de los dos compone `Boton.module.css#exito`: el selector doblado le gana
+   en especificidad al `variant="outline"` del paquete, que `composes` no admite. */
+.accionDeFila.accionDeFila.exito {
+  border-color: var(--xonecode-verde);
+  background: var(--xonecode-verde-fondo);
+  color: var(--xonecode-verde);
+}
+
+.accionDeFila.accionDeFila.exito:hover {
+  background: var(--xonecode-verde-fondo-hover);
+}
+
 /* El desplegable de tools. Misma forma que `Skills.module.css#.cuerpo`. */
 .cuerpo {
   margin: 10px 0 0;
@@ -293,6 +307,12 @@
    ahora es el mismo botón secundario de siempre (`Boton.module.css#secundario`). */
 .accion {
   composes: secundario from "./Boton.module.css";
+}
+
+/* «Añadir» del formulario: la acción que CONFIRMA, no la que cancela — antes compartía
+   `.accion` con «Cancelar» pese a `variant="primary"`. */
+.principal {
+  composes: primario from "./Boton.module.css";
 }
 
 .botones {

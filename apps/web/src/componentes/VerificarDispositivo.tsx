@@ -1,3 +1,4 @@
+import clsx from "clsx";
 import { useEffect, useState } from "react";
 import type { Dispositivo } from "../tipos.js";
 import estilos from "./VerificarDispositivo.module.css";
@@ -86,7 +87,7 @@ export function VerificarDispositivo({
       {alVerificar === undefined || dispositivo.soloDefinicion === true ? null : (
         <button
           type="button"
-          className={estilos.boton}
+          className={clsx(estilos.boton, estilos.exito)}
           disabled={!conectado || verificando}
           // Lo que el botón hace de verdad, para quien se pare encima: hablar con el
           // aparato, no releer la lista.

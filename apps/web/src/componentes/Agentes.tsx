@@ -132,7 +132,7 @@ const PISTA_DE_MODELO: Record<string, string> = {
  */
 function BotonDeNuevo({ alPulsar }: { alPulsar: () => void }) {
   return (
-    <Button variant="outline" className={clsx(estilos.accion, estilos.nuevo)} onClick={alPulsar}>
+    <Button variant="outline" className={clsx(estilos.principal, estilos.nuevo)} onClick={alPulsar}>
       Nuevo subagente
     </Button>
   );

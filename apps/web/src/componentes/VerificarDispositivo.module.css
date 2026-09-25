@@ -33,6 +33,21 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* «Verificar» comprueba, no avanza ni destruye: el verde de marca. `ArrancarEmulador.tsx`
+   reusa `.boton` para «Arrancar», que se queda neutro —lanzar no es lo mismo que
+   comprobar—, así que el verde va en un modificador aparte y no en `.boton` mismo. Selector
+   compuesto, no `composes`: ya lleva compuesto `.secundario` y una segunda composición
+   pelearía con ella por el mismo orden de bundle que documenta `Boton.module.css`. */
+.boton.exito {
+  border-color: var(--xonecode-verde);
+  background: var(--xonecode-verde-fondo);
+  color: var(--xonecode-verde);
+}
+
+.boton.exito:hover {
+  background: var(--xonecode-verde-fondo-hover);
+}
+
 /* El resultado. Rojo cuando no contesta —ahí sí es un error: se ha pedido hablar con algo y
    no ha contestado—, y en el color del texto normal cuando sí, porque un verde que grita no
    hace falta para decir «va bien». */

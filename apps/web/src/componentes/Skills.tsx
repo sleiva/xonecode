@@ -343,7 +343,7 @@ export function Skills({
         {pestana === "propias" ? (
           <>
             <div className={estilos.acciones}>
-              <Button className={clsx(estilos.accion, estilos.nuevo)} variant="outline" onClick={nueva}>
+              <Button className={clsx(estilos.principal, estilos.nuevo)} variant="outline" onClick={nueva}>
                 Nueva skill
               </Button>
               {/*

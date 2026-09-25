@@ -1815,7 +1815,7 @@ export function Ajustes({
                     >
                       Cancelar
                     </Button>
-                    <Button type="submit" variant="primary" className={estilos.accion}>
+                    <Button type="submit" variant="primary" className={estilos.principal}>
                       Añadir
                     </Button>
                   </div>
@@ -1914,7 +1914,7 @@ export function Ajustes({
                   >
                     Cancelar
                   </Button>
-                  <Button type="submit" variant="primary" className={estilos.accion}>
+                  <Button type="submit" variant="primary" className={estilos.principal}>
                     Registrar
                   </Button>
                 </div>
