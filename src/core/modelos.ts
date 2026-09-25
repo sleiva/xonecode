@@ -7,7 +7,7 @@ export const PAPELES: readonly Papel[] = ["rapido", "trabajo", "afilado"] as con
 
 export type ProveedorDeSerie =
   | "gemini" | "openai" | "anthropic" | "ollama" | "ollama-cloud"
-  | "nvidia" | "groq" | "xai" | "deepseek";
+  | "nvidia" | "groq" | "xai" | "deepseek" | "opencode-go" | "opencode-zen";
 
 /**
  * Un endpoint compatible con OpenAI dado de alta por el USUARIO, con la forma
@@ -129,7 +129,7 @@ export function motivoDeEndpointInaceptable(valor: string): string | undefined {
 
 export const PROVEEDORES: readonly ProveedorDeSerie[] = [
   "gemini", "openai", "anthropic", "ollama", "ollama-cloud",
-  "nvidia", "groq", "xai", "deepseek",
+  "nvidia", "groq", "xai", "deepseek", "opencode-go", "opencode-zen",
 ] as const;
 
 /**
@@ -149,7 +149,8 @@ export const PROVEEDORES: readonly ProveedorDeSerie[] = [
  * `componentes/Ajustes.tsx`): lo que cambia con esto es que añadir uno compatible cuesta
  * una fila de datos en vez de una rama por sitio, no que se pueda declarar desde fuera.
  */
-export type ProveedorCompatibleOpenAi = "nvidia" | "groq" | "xai" | "deepseek";
+export type ProveedorCompatibleOpenAi =
+  "nvidia" | "groq" | "xai" | "deepseek" | "opencode-go" | "opencode-zen";
 
 export const COMPATIBLES_OPENAI: Record<
   ProveedorCompatibleOpenAi,
@@ -170,6 +171,26 @@ export const COMPATIBLES_OPENAI: Record<
    * documentación, que no dice la ruta completa.
    */
   deepseek: { baseUrl: "https://api.deepseek.com/v1", variable: "DEEPSEEK_API_KEY" },
+  /**
+   * OpenCode Go, la suscripción mensual ($10/mes): un catálogo reducido de modelos, con
+   * límites por hora/semana/mes propios de la cuenta. MEDIDO y no leído: `GET
+   * https://opencode.ai/zen/go/v1/models` contesta 200 con un catálogo real
+   * (`{object:"list", data:[{id, object, created, owned_by}, ...]}`) — sin `context_window`
+   * ni ningún campo que diga por qué endpoint (`/chat/completions`, `/messages`,
+   * `/responses`) va cada modelo, así que `contexto` queda sin medir para todos (igual que
+   * NVIDIA/xAI cuando el servidor no lo manda) y el catálogo se ofrece sin filtrar por
+   * familia: una elección incompatible falla al invocarla con el error que dé el servidor,
+   * en vez de una tabla de familias hecha a mano que se desactualizaría con el catálogo.
+   */
+  "opencode-go": { baseUrl: "https://opencode.ai/zen/go/v1", variable: "OPENCODE_GO_API_KEY" },
+  /**
+   * OpenCode Zen, pago por uso: mismo servicio, catálogo más amplio y sin los límites por
+   * franja de Go. Misma URL base compatible con OpenAI, MEDIDA igual que la de Go (`GET
+   * https://opencode.ai/zen/v1/models` responde 200 con el mismo shape). Va con su PROPIA
+   * variable de entorno (`OPENCODE_ZEN_API_KEY`) aunque la cuenta de OpenCode sea una sola:
+   * guardar o borrar la credencial de uno no puede afectar al otro en silencio.
+   */
+  "opencode-zen": { baseUrl: "https://opencode.ai/zen/v1", variable: "OPENCODE_ZEN_API_KEY" },
 };
 
 /**
@@ -218,6 +239,8 @@ const NOMBRES: Record<ProveedorDeSerie, string> = {
   groq: "Groq",
   xai: "xAI",
   deepseek: "DeepSeek",
+  "opencode-go": "OpenCode Go",
+  "opencode-zen": "OpenCode Zen",
 };
 
 /**
