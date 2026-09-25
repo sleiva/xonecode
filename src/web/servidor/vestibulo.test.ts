@@ -1090,6 +1090,26 @@ describe("vestíbulo", () => {
     expect(cerrada).toBe(true);
   });
 
+  it("una prosa mientras el turno está en marcha se manda a `agregarNota`, no se encola", async () => {
+    const s = sesionesEnMemoria();
+    const notas: string[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      crearEjecutor: (alAbrirSesion) => async () => {
+        alAbrirSesion({ cerrar: () => {}, agregarNota: (texto: string) => void notas.push(texto) });
+        // No resuelve nunca por su cuenta: es "un turno largo" en marcha de verdad.
+        await new Promise(() => {});
+      },
+    });
+    const proyecto = await v.abrirProyecto({ raiz: "/w/a" });
+    proyecto.recibir({ clase: "prosa", texto: "arranca algo largo" });
+    await new Promise((r) => setTimeout(r, 0)); // deja que el ejecutor arranque y anuncie la sesión
+    proyecto.recibir({ clase: "prosa", texto: "cambia de idea" });
+    expect(notas).toEqual(["cambia de idea"]);
+  });
+
   it("dos aperturas A LA VEZ siguen dejando una sola consola viva", async () => {
     const s = sesionesEnMemoria();
     const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });

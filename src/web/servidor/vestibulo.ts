@@ -257,6 +257,9 @@ export interface SesionCerrable {
   /** Aborta el `stream` del grafo y deja la sesión viva. Opcional: el ejecutor guionizado
    *  no tiene nada que abortar. */
   cancelar?(): void;
+  /** Añade una nota al turno EN MARCHA (IXCODE-4). Opcional: el ejecutor guionizado y
+   *  `deepagents` no lo tienen. */
+  agregarNota?(texto: string): void;
 }
 
 export interface OpcionesDelVestibulo {
@@ -1220,11 +1223,23 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       const vivo = sesionReal?.consumo?.();
       return vivo === undefined ? undefined : consumoPersistible(vivo);
     };
+    /**
+     * Con turno en marcha y una sesión que sabe apuntar notas (TrueForge; `deepagents` no),
+     * la prosa que llega mientras trabaja se manda ahí en vez de encolarse (IXCODE-4). Igual
+     * que `consumoVivo`, lee `sesionReal`/`turnoEnVuelo` en el momento de la llamada, aunque
+     * las dos se declaren más abajo — cierre perezoso, no hace falta reordenar nada.
+     */
+    const notaMientrasTrabaja = (texto: string): boolean => {
+      if (!turnoEnVuelo || sesionReal?.agregarNota === undefined) return false;
+      sesionReal.agregarNota(texto);
+      return true;
+    };
     const consolaWeb = crearConsola({
       catalogoModelos: opciones.catalogoModelos,
       guardarModeloGlobal,
       ...(opciones.msDeEspera === undefined ? {} : { msDeEspera: opciones.msDeEspera }),
       consumoAcumulado: consumoVivo,
+      notaMientrasTrabaja,
     });
     // `Partial<Consola>` sobre el objeto recién creado: lo que depende de la raíz (`/sync`,
     // los escritores del proyecto) no lo puede saber `consolaWeb`, que no conoce ninguna.

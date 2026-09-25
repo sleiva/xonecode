@@ -66,6 +66,13 @@ export interface OpcionesDeConsolaWeb {
    * `fin` salen sin él, que es «no consta».
    */
   consumoAcumulado?: () => ConsumoDeTurno | undefined;
+  /**
+   * Si hay un turno en marcha, intenta apuntar el texto AHÍ en vez de encolarlo como línea
+   * nueva (IXCODE-4). `true` si lo consumió así — `recibir` no encola nada más—; `false` o
+   * ausente y `recibir` sigue el camino de hoy. Quien inyecta esto (`vestibulo.ts`) es quien
+   * sabe si hay turno en vuelo y tiene la sesión real; este módulo no sabe de ninguna.
+   */
+  notaMientrasTrabaja?: (texto: string) => boolean;
 }
 
 export interface ConsolaWeb {
@@ -401,6 +408,7 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
       // El eco de lo tecleado, como hace la TUI (`store.usuario`): el transcript se lo
       // debe a quien escribió la petición, y de ahí sale el título de la sesión.
       anotar({ tipo: "usuario", texto: mensaje.texto });
+      if (opciones.notaMientrasTrabaja?.(mensaje.texto) === true) return;
       const despertar = esperandoLinea.shift();
       // `comoComando: false` y no una cadena pelada, y esta es TODA la diferencia: aquí
       // escribe una persona, y en el navegador «/» no abre comandos — no hay ninguno al

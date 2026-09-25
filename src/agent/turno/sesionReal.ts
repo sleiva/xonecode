@@ -79,6 +79,11 @@ export interface SesionReal {
    * que un `turno()` tardío falle en vez de revivir un hilo que ya nadie mira.
    */
   cerrar(): void;
+  /**
+   * Añade una nota al turno EN MARCHA (IXCODE-4). Opcional: el ejecutor guionizado y
+   * `deepagents` no lo tienen.
+   */
+  agregarNota?(texto: string): void;
   readonly tracker: TokenTracker;
   /** El `thread_id` ACTUAL: tras `nuevoHilo()` cambia, y hay que leerlo, no cachearlo. */
   readonly hilo: string;

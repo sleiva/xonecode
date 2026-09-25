@@ -136,6 +136,27 @@ describe("consolaWeb: la entrada", () => {
     c.recibir({ clase: "prosa", texto: "añade una colección de clientes" });
     expect(c.actos()).toEqual([{ tipo: "usuario", texto: "añade una colección de clientes" }]);
   });
+
+  it("con `notaMientrasTrabaja` disponible y diciendo que sí, la prosa NO se encola como línea", async () => {
+    const notas: string[] = [];
+    const c = crearConsolaWeb({ notaMientrasTrabaja: (texto) => (notas.push(texto), true) });
+    const it = c.consola.lineas[Symbol.asyncIterator]();
+    c.recibir({ clase: "prosa", texto: "cambia de idea" });
+    expect(notas).toEqual(["cambia de idea"]);
+    // No hay línea encolada: pedir la siguiente no resuelve todavía (usar un plazo corto).
+    const carrera = await Promise.race([
+      it.next().then(() => "resolvió"),
+      new Promise((r) => setTimeout(() => r("sigue-esperando"), 20)),
+    ]);
+    expect(carrera).toBe("sigue-esperando");
+  });
+
+  it("sin `notaMientrasTrabaja`, o si dice que no, la prosa se encola como siempre", async () => {
+    const c = crearConsolaWeb({ notaMientrasTrabaja: () => false });
+    const it = c.consola.lineas[Symbol.asyncIterator]();
+    c.recibir({ clase: "prosa", texto: "haz algo" });
+    expect(await it.next()).toEqual({ value: { texto: "haz algo", comoComando: false }, done: false });
+  });
 });
 
 describe("consolaWeb: la aprobación es fail-closed POR TRANSPORTE", () => {
