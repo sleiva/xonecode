@@ -329,8 +329,8 @@
    `.principal.principal` de `NuevaSesion.module.css`, que también pisa el botón «primario»
    con dos clases. */
 .destructiva.destructiva {
-  border-color: var(--dsw-alias-state-error-primary);
-  background: var(--dsw-alias-state-error-primary);
+  border-color: var(--xonecode-rojo);
+  background: var(--xonecode-rojo);
   color: var(--dsw-alias-label-primary-inverted);
 }
 

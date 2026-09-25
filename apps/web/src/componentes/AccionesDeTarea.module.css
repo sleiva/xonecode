@@ -1,9 +1,10 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css` (los mismos que
    `Kanban.module.css` y `TareasDelProyecto.module.css`, que se quedaron SIN estas reglas
    duplicadas desde que viven aquí: border-l2, label-primary/secondary/tertiary,
-   state-warn-label, bg-layer-2, interactive-bg-hover, state-error-primary,
-   label-primary-inverted (esta última compartida con `AccionDeSesion.module.css`, que ya la
-   comprobó para el mismo botón destructivo). Ningún color literal (`Barra.test.tsx`).
+   state-warn-label, bg-layer-2, interactive-bg-hover, label-primary-inverted (esta última
+   compartida con `AccionDeSesion.module.css`, que ya la comprobó para el mismo botón
+   destructivo, que ahora lleva el rojo de MARCA —`--xonecode-rojo`— y no el genérico).
+   Ningún color literal (`Barra.test.tsx`).
    La coraza del modal de descartar —capa, velo, ventana, título, nota, acciones, el botón
    primario— vive en `NuevaSesion.module.css` y no aquí: es la misma que ya usa
    `AccionDeSesion.tsx`, y copiarla sería la tercera versión del mismo velo. */
@@ -51,8 +52,8 @@
    `NuevaSesion.module.css`, que también pisa el botón "primario" con dos clases. Relleno
    rojo lleno y no un tinte suave: es una acción irreversible y sin papelera. */
 .destructiva.destructiva {
-  border-color: var(--dsw-alias-state-error-primary);
-  background: var(--dsw-alias-state-error-primary);
+  border-color: var(--xonecode-rojo);
+  background: var(--xonecode-rojo);
   color: var(--dsw-alias-label-primary-inverted);
 }
 

@@ -1,5 +1,6 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-1, border-l2,
-   label-primary/secondary, interactive-bg-hover, state-error-primary/secondary. */
+   label-primary/secondary, interactive-bg-hover. El rojo de «eliminar» es el de marca
+   (`--xonecode-rojo`/`--xonecode-rojo-fondo`, `estilos/marca.css`), no el genérico. */
 
 /* El asiento del «…»: ancla de posicionamiento para el menú, y la maqueta que antes ponía
    `.rowActions` de la hoja copiada —de la que se dejó de tirar porque su `display: none`
@@ -54,9 +55,9 @@
 /* La que borra se lee distinta de la que no. No es decoración: es la única del menú que no
    se puede deshacer. */
 .destructiva {
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--xonecode-rojo);
 }
 
 .destructiva:hover {
-  background: var(--dsw-alias-state-error-secondary);
+  background: var(--xonecode-rojo-fondo);
 }

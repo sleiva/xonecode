@@ -1,5 +1,6 @@
-/* Alias comprobados contra `apps/web/estilos/design-platform.css`:
-   state-error-primary y label-primary-inverted. */
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`: label-primary-inverted.
+   El rojo es el de marca (`--xonecode-rojo`, `estilos/marca.css`), no el genérico de la
+   paleta copiada. */
 
 /* El botón que borra no se pinta como el que guarda. Las dos ventanas se abren desde el
    mismo menú y en el mismo sitio de la pantalla, así que si además el botón fuera el mismo,
@@ -10,7 +11,7 @@
    confunde con nada — y para una acción irreversible y sin papelera, es el peso que le
    corresponde. Es además el del mockup (`docs/diseno/eliminar-sesion-rediseno-stitch.png`). */
 .destructiva.destructiva {
-  border-color: var(--dsw-alias-state-error-primary);
-  background: var(--dsw-alias-state-error-primary);
+  border-color: var(--xonecode-rojo);
+  background: var(--xonecode-rojo);
   color: var(--dsw-alias-label-primary-inverted);
 }
