@@ -70,6 +70,7 @@ import {
   capacidadDeFecha,
   capacidadDeFicheros,
   capacidadDeInstrucciones,
+  capacidadDeNotas,
   capacidadDePropias,
   capacidadDeRecortes,
   capacidadesDelEspecialista,
@@ -492,6 +493,9 @@ export async function abrirSesionTrueforge(opciones: OpcionesDeSesionTrueforge):
     const piezas = capacidadesDelEspecialista(agente, params.request.name, {
       backend: backend as never,
       propias: propiasDe,
+      // Placeholder (IXCODE-4, Task 2): cola vacía y permanente, no-op — `processPreLLM` nunca
+      // encuentra nada pendiente. La Tarea 4 lo sustituye por el `Nota[]` real de la sesión.
+      notas: capacidadDeNotas([]),
       conShell: () =>
         montarBackend({
           entorno: entornoDeLaShellDelProyecto(raiz, opciones.artefactos),

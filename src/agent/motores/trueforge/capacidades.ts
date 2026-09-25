@@ -25,6 +25,7 @@ import {
 } from "./toolsDeFichero.js";
 import { fuenteDeLangchain, type ToolDeLangchain } from "./toolsPropias.js";
 import { presupuestoDelPaso, type EscritorDeDesalojo } from "./recortes.js";
+import { pendientesPara, marcarEntregada, textoDeNota, type Nota } from "./notas.js";
 
 /** Una pieza: la `AgentCapability` que se le da a TrueForge y las tools que añade. */
 export interface Capacidad {
@@ -86,6 +87,37 @@ export function capacidadDeEjecucion(conShell: { execute(c: string): unknown; wr
  */
 export function capacidadDeRecortes(backend: EscritorDeDesalojo): Capacidad {
   return { nombre: "recortes", tools: [], capability: { toolResponseProcessors: [presupuestoDelPaso(backend)] } };
+}
+
+/**
+ * Entrega lo que la sesión le deba a ESTE hilo mientras trabaja (IXCODE-4), por
+ * `preLLMProcessors` —corre antes de CADA llamada al modelo, en la raíz y en cada hijo por
+ * igual (`AgentThread.js:733-740`)—. No añade tools. `Nota`/`pendientesPara`/`marcarEntregada`
+ * viven en `notas.ts`, sin importar tipos internos de la librería: ni
+ * `PreLLMAgentContextProcessor` ni `AgentContextProcessorAppendContext` se reexportan desde su
+ * punto de entrada público.
+ */
+export function capacidadDeNotas(notas: Nota[]): Capacidad {
+  return {
+    nombre: "notas",
+    tools: [],
+    capability: {
+      preLLMProcessors: [
+        {
+          async *processPreLLM(execution: { threadId: string }) {
+            const pendientes = pendientesPara(notas, execution.threadId);
+            if (pendientes.length === 0) return;
+            for (const n of pendientes) marcarEntregada(n, execution.threadId);
+            yield {
+              type: "internal.agent.context.append",
+              context: [{ role: "user", content: pendientes.map((n) => textoDeNota(n.texto)).join("\n\n") }],
+              output: [],
+            };
+          },
+        },
+      ],
+    },
+  };
 }
 
 /**
@@ -188,6 +220,8 @@ export interface DependenciasDelEspecialista {
   propias: (agente: Agente) => readonly ToolDeLangchain[];
   /** El backend CON shell, montado solo para quien ejecuta. */
   conShell: () => { execute(c: string): unknown; write(ruta: string, contenido: string): unknown };
+  /** La cola de notas de la SESIÓN, ya envuelta: la misma instancia para todos los hijos. */
+  notas: Capacidad;
 }
 
 /**
@@ -205,6 +239,7 @@ export function capacidadesDelEspecialista(
       capacidadDeFicheros({ backend: deps.backend, reglas: permisosDe({ nombre: nombrePedido, soloLectura: true }), tools: TOOLS_DE_LECTURA, conAprobacion: false }),
       capacidadDeRecortes(deps.backend),
       capacidadDeFecha(),
+      deps.notas,
     ];
   }
   const clase = clasesDeTools(agente);
@@ -221,6 +256,7 @@ export function capacidadesDelEspecialista(
     ...(clase === "ejecuta" ? [capacidadDeEjecucion(deps.conShell())] : []),
     capacidadDeRecortes(deps.backend),
     capacidadDeFecha(),
+    deps.notas,
     // OpenUI lo trae su skill: quien la declara recibe la tool. Solo en nuestro motor —un hijo
     // externo no pasa por estas capabilities, y la skill le dice que sin la tool no lo use—.
     ...(agente.skills.includes(SKILL_DE_OPENUI) ? [capacidadDeOpenui()] : []),
