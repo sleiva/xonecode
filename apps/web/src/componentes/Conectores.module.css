@@ -162,14 +162,16 @@
   line-height: 1.5;
 }
 
-/* El botón dentro de una fila, con los mismos alias que `Skills.module.css#.accionDeFila`
-   por el mismo motivo: el `variant="outline"` del paquete llega blanco en tema oscuro. */
+/* El botón dentro de una fila, con los MISMOS alias que `Boton.module.css#secundario` —
+   pero sin componerla: el `variant="outline"` del paquete llega blanco en tema oscuro y
+   necesita la especificidad DOBLADA (`.accionDeFila.accionDeFila`) para ganarle, y
+   `composes` solo se admite sobre un selector de una única clase local. */
 .accionDeFila.accionDeFila {
   flex: none;
   padding: 4px 10px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l4);
   border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
+  background: var(--dsw-alias-button-elevated-fill);
   color: var(--dsw-alias-label-primary);
   font: inherit;
   font-size: 12px;

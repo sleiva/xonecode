@@ -205,17 +205,8 @@
 /* `Button` llega sin estilo propio (mismo stub vacío), así que la variante la pinta esta
    clase: lo que el paquete aporta es el elemento y el paso de atributos nativos. */
 .accion {
+  composes: secundario from "./Boton.module.css";
   padding: 8px 16px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  cursor: pointer;
-}
-
-.accion:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 /* El primario se distingue por el relleno de marca, no por el orden: «Aprobar» es la

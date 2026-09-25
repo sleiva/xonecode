@@ -49,19 +49,10 @@
 }
 
 .accion {
+  composes: secundario from "./Boton.module.css";
   flex: none;
   margin-left: auto;
   padding: 5px 10px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  cursor: pointer;
-}
-
-.accion:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 /* Tabla y panel, uno al lado del otro. El panel es fijo y la tabla es la que cede: al revés,

@@ -229,33 +229,22 @@
 }
 
 .accion {
+  composes: primario from "./Boton.module.css";
   flex: none;
-  padding: 8px 16px;
-  border: 0.5px solid var(--dsw-alias-button-primary-fill);
-  border-radius: 8px;
-  background: var(--dsw-alias-button-primary-fill);
-  color: var(--dsw-alias-label-primary-inverted);
-  font: inherit;
-  cursor: pointer;
-}
-
-.accion:hover {
-  background: var(--dsw-alias-button-primary-hover);
-  border-color: var(--dsw-alias-button-primary-hover);
 }
 
 /* Anidada, el botón se viste como sus vecinos de la fila («Cambiar clave», «Eliminar»):
-   contorno, no relleno. Los mismos alias que `Ajustes.module.css#accion`, para que sean el
+   contorno, no relleno. Los mismos alias que `Boton.module.css#secundario`, para que sean el
    mismo botón y no dos que se parecen. */
 .pregunta[data-anidado] .accion {
   padding: 6px 12px;
-  border-color: var(--dsw-alias-border-l2);
+  border-color: var(--dsw-alias-border-l4);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font-size: 12px;
 }
 
 .pregunta[data-anidado] .accion:hover {
-  border-color: var(--dsw-alias-border-l2);
+  border-color: var(--dsw-alias-border-l4);
   background: var(--dsw-alias-interactive-bg-hover);
 }

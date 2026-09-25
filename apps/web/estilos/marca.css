@@ -28,9 +28,28 @@
      declara porque es de la marca, no para buscarle un sitio. */
   --xonecode-cian: #00a3e0;
   --xonecode-cian-oscuro: #0284c7;
-  --xonecode-azul: #083b56;
+  /* El navy corporativo del manual de identidad de XOne (`--xone-brand-navy`), no el medido
+     del mockup original — el resto de la paleta (cian, naranja) ya coincidía con el manual,
+     este era el único que difería. */
+  --xonecode-azul: #0c3c60;
   --xonecode-azul-hondo: #05263a;
   --xonecode-naranja: #f58220;
+
+  /* `--xone-red-danger` y `--xone-emerald-active` del manual: antes de esto, destructivo/éxito
+     tiraban del rojo/verde GENÉRICO de la paleta copiada de deepseek (`--dsw-alias-state-*`),
+     que no es un color de marca — no aparece en el manual con ese hex. Valores del CLARO del
+     manual; el oscuro (más claros, para leerse sobre fondo oscuro) va en el bloque de abajo. */
+  --xonecode-rojo: #ef4444;
+  --xonecode-verde: #10b981;
+
+  /* El tinte de fondo de un botón `.peligro` (Boton.module.css): el manual lo pinta con
+     relleno, no solo contorno («Destructive: Background rgba(239, 68, 68, 0.12)…»). Se
+     deriva con `color-mix` en vez de un rgba a mano —dos ficheros con el mismo rojo escrito
+     a mano es como se acaba con dos rojos distintos—, y en UNA sola declaración: no hace
+     falta redeclararlo en el bloque oscuro porque `--xonecode-rojo` ya cambia ahí y
+     `color-mix` resuelve con el valor que esté vigente donde se USA, no donde se declara. */
+  --xonecode-rojo-fondo: color-mix(in srgb, var(--xonecode-rojo) 12%, transparent);
+  --xonecode-rojo-fondo-hover: color-mix(in srgb, var(--xonecode-rojo) 20%, transparent);
 
   /* Sobre el azul profundo no valen los `label-*` de la paleta clara: son tonos pensados
      para fondo claro y ahí no se leen. Estos dos son los del mockup. */
@@ -152,4 +171,8 @@ body[data-ds-dark-theme] {
   --xonecode-fila-elegida: color-mix(in srgb, var(--xonecode-cian) 26%, transparent);
   --xonecode-fila-hover: color-mix(in srgb, var(--xonecode-cian) 13%, transparent);
   --dsw-specific-sidebar-nav-item-active-accent: var(--xonecode-cian);
+  /* El oscuro del manual: más claros que el par del tema claro, para seguir leyéndose como
+     TEXTO (borde+letra de `.peligro`, no un relleno) sobre un fondo oscuro. */
+  --xonecode-rojo: #f87171;
+  --xonecode-verde: #34d399;
 }

@@ -1,0 +1,92 @@
+/*
+ * Los roles de botón de xonecode, en UN sitio. Antes cada `.module.css` repetía las mismas
+ * ~10 líneas (borde, fondo, hover) con pequeñas variaciones sin motivo — arreglar el
+ * contraste bajo de un botón (IXCODE-2, Ajustes > Dispositivos) en un sitio significaba
+ * arreglarlo en siete, y un «primario» que no fuera el mismo azul del botón de enviar
+ * (Pregunta, Wizard: relleno `--dsw-alias-button-primary-fill`, el negro genérico de la
+ * paleta copiada) se leía como otra marca en la misma pantalla.
+ *
+ * Un componente COMPONE su clase local desde aquí (`composes: secundario from
+ * "./Boton.module.css";`), así que el nombre de clase que usa cada `.tsx`
+ * (`estilos.accion`, `estilos.principal`…) no cambia.
+ */
+
+/* IXCODE-2: «los botones de Ajustes > Dispositivos necesitan más contraste para que sean
+   más botones». `--dsw-alias-bg-layer-1` es el mismo fondo que muchos paneles y tarjetas
+   —en oscuro, la fila que lo rodea usaba un gris más claro que el propio botón—, así que un
+   `.accion` se fundía con lo que tenía detrás. `--dsw-alias-button-elevated-fill` es el
+   alias que la paleta copiada reserva para esto (declarado, sin un solo consumidor antes de
+   ahora): en oscuro es un gris bastante más claro que capa-1 Y que la fila; en claro sigue
+   siendo blanco, así que no cambia nada ahí — el borde es quien hace el trabajo en claro. */
+.secundario {
+  padding: 6px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: 8px;
+  background: var(--dsw-alias-button-elevated-fill);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.secundario:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.secundario:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* El mismo azul del botón de enviar (`Compositor.module.css#enviar`): un primario es un
+   primario, da igual si manda el turno o guarda un formulario. El hover es el MISMO cian
+   también — no uno más oscuro: la regla de `enviar` ya lo razonó («el cian se queda para el
+   hover, que es donde puede brillar sin tener que sostener nada») y dos azules de hover
+   distintos para el mismo botón es justo lo que esto centraliza. `enviar` no compone esta
+   clase porque es redondo y de tamaño fijo —una forma distinta, no un color distinto—, pero
+   lee las MISMAS variables. */
+.primario {
+  padding: 8px 16px;
+  border: 0.5px solid var(--xonecode-azul);
+  border-radius: 8px;
+  background: var(--xonecode-azul);
+  color: var(--xonecode-sobre-azul);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primario:hover {
+  background: var(--xonecode-cian);
+  border-color: var(--xonecode-cian);
+}
+
+.primario:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* El rojo del manual de identidad (`--xone-red-danger`, `--xonecode-rojo`), no el rojo
+   genérico de la paleta copiada (`--dsw-alias-state-error-primary`) — mismo motivo que
+   `--xonecode-azul`: este SÍ es un color de marca, con su propio hex en el manual. Y CON
+   relleno: el manual pinta el botón destructivo con un tinte de fondo al 12% de su rojo, no
+   solo contorno — el tinte se deriva en `marca.css` con `color-mix`, no aquí. */
+.peligro {
+  padding: 8px 16px;
+  border: 0.5px solid var(--xonecode-rojo);
+  border-radius: 8px;
+  background: var(--xonecode-rojo-fondo);
+  color: var(--xonecode-rojo);
+  font: inherit;
+  cursor: pointer;
+}
+
+.peligro:hover {
+  background: var(--xonecode-rojo-fondo-hover);
+}
+
+.peligro:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

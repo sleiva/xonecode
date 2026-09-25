@@ -957,7 +957,7 @@ export function Ajustes({
                         {p.enFichero === true ? (
                           <Button
                             variant="outline"
-                            className={estilos.accion}
+                            className={estilos.peligro}
                             onClick={() => {
                               setEditando(undefined);
                               setBorrando(p.id);
@@ -2325,38 +2325,38 @@ function NombreDelEntorno({
   const repetido = limpio !== "" && limpio !== entorno.nombre && nombresDeOtros.includes(limpio);
   return (
     <>
-      <label className={estilos.filaDeNombre}>
+      <div className={estilos.filaDeNombre}>
         <span className={estilos.etiquetaDeNombre}>Nombre</span>
-        <input
-          type="text"
-          value={enElCampo}
-          spellCheck={false}
-          autoComplete="off"
-          aria-label="Nombre del entorno"
-          aria-invalid={inaceptable === undefined ? undefined : true}
-          disabled={!conectado || guardando}
-          onChange={(e) => {
-            setTecleado(e.target.value);
-            setMotivo(undefined);
-          }}
-          // Enter guarda, como en cualquier formulario de una línea. Va en el campo y no en
-          // un `<form>` porque esto no es uno: no hay envío por defecto que pueda mandar de
-          // más, y el botón es el que manda.
-          onKeyDown={(e) => {
-            if (e.key !== "Enter" || guardando || !cambiado || inaceptable !== undefined) return;
-            void escribir();
-          }}
-        />
-      </label>
-      <div className={estilos.accionesDeNombre}>
-        <button
-          type="button"
-          className={estilos.accion}
-          disabled={!conectado || guardando || !cambiado || inaceptable !== undefined}
-          onClick={() => void escribir()}
-        >
-          {guardando ? "Guardando…" : "Guardar"}
-        </button>
+        <div className={estilos.campoDeNombreConBoton}>
+          <input
+            type="text"
+            value={enElCampo}
+            spellCheck={false}
+            autoComplete="off"
+            aria-label="Nombre del entorno"
+            aria-invalid={inaceptable === undefined ? undefined : true}
+            disabled={!conectado || guardando}
+            onChange={(e) => {
+              setTecleado(e.target.value);
+              setMotivo(undefined);
+            }}
+            // Enter guarda, como en cualquier formulario de una línea. Va en el campo y no en
+            // un `<form>` porque esto no es uno: no hay envío por defecto que pueda mandar de
+            // más, y el botón es el que manda.
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" || guardando || !cambiado || inaceptable !== undefined) return;
+              void escribir();
+            }}
+          />
+          <button
+            type="button"
+            className={estilos.accion}
+            disabled={!conectado || guardando || !cambiado || inaceptable !== undefined}
+            onClick={() => void escribir()}
+          >
+            {guardando ? "Guardando…" : "Guardar"}
+          </button>
+        </div>
       </div>
       {inaceptable === undefined ? null : (
         <p className={estilos.nota} role="alert">

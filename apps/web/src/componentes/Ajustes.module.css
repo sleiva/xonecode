@@ -309,19 +309,14 @@
    identidad de al lado, que ya recorta con puntos suspensivos y lleva el texto entero en
    su `title`. */
 .accion {
-  white-space: nowrap;
-  padding: 6px 10px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
+  composes: secundario from "./Boton.module.css";
 }
 
-.accion:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+/* «Eliminar» una clave guardada: borra un fichero, pero no es la misma severidad que
+   `.destructiva` (el aviso de «cambios sin guardar», sin papelera y sin vuelta atrás) — la
+   clave se puede volver a añadir. El rojo de marca en contorno, no en relleno. */
+.peligro {
+  composes: peligro from "./Boton.module.css";
 }
 
 /* El botón destructivo del aviso de «cambios sin guardar» (descartar el borrador de
@@ -894,10 +889,9 @@
   font-size: 12px;
 }
 
-/* El NOMBRE del entorno, encima de su URL. Misma forma que el campo del workspace (mismo
-   borde, mismo relleno, mismo `aria-invalid` que se ve además de leerse), en una fila propia
-   para que el botón quede al borde derecho, alineado con «Guardar» del workspace y con
-   «Quitar entorno» de la fila de abajo. */
+/* El NOMBRE del entorno, encima de su URL: la etiqueta arriba y, debajo, el campo con
+   «Guardar» PEGADO a su borde — mismo patrón que `.campoConBoton` (el de «Abrir carpeta» del
+   workspace), para que el botón se lea como parte del campo y no como una acción suelta. */
 .filaDeNombre {
   display: flex;
   flex-direction: column;
@@ -912,9 +906,16 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-.filaDeNombre input {
+.campoDeNombreConBoton {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.campoDeNombreConBoton input {
   box-sizing: border-box;
-  width: 100%;
+  flex: 1;
+  width: auto;
   min-width: 0;
   padding: 4px 8px;
   border: 0.5px solid var(--dsw-alias-border-l2);
@@ -925,19 +926,16 @@
   font-size: 13px;
 }
 
-.filaDeNombre input[aria-invalid="true"] {
+.campoDeNombreConBoton input[aria-invalid="true"] {
   border-color: var(--dsw-alias-state-error-primary);
 }
 
-.filaDeNombre input:disabled {
+.campoDeNombreConBoton input:disabled {
   opacity: 0.45;
 }
 
-.accionesDeNombre {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin: 0 0 8px;
+.campoDeNombreConBoton .accion {
+  flex: none;
 }
 
 /* La URL del entorno y el botón que lo quita, en UNA fila: la URL cede con `margin-right: auto`

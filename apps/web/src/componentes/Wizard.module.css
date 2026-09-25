@@ -62,16 +62,5 @@
 /* `Button` también llega sin estilo propio: lo que aporta es el elemento y el paso de los
    atributos nativos (`type="submit"` incluido, que es lo que envía el formulario). */
 .accion {
-  padding: 8px 16px;
-  border: 0.5px solid var(--dsw-alias-button-primary-fill);
-  border-radius: 8px;
-  background: var(--dsw-alias-button-primary-fill);
-  color: var(--dsw-alias-label-primary-inverted);
-  font: inherit;
-  cursor: pointer;
-}
-
-.accion:hover {
-  background: var(--dsw-alias-button-primary-hover);
-  border-color: var(--dsw-alias-button-primary-hover);
+  composes: primario from "./Boton.module.css";
 }
