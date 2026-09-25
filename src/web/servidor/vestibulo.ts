@@ -1441,6 +1441,10 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       turnoEnVuelo = true;
       consolaWeb.turno(true);
       alFlancoDeTurno?.(true);
+      // Guardado fuera del `try` para que el `finally` pueda mirar `notasSobrantes` una vez
+      // liberado `turnoEnVuelo` (IXCODE-4): el `return` de abajo ya entrega ESTE resultado a
+      // quien llamó, y esta variable es solo lo que decide si hace falta OTRO turno.
+      let resultado: Awaited<ReturnType<EjecutorDeTurno>> = undefined;
       try {
         // Se DEVUELVE lo que el turno informe. Sin este `return`, el canal que
         // `crearEjecutorReal` acaba de abrir moría en este envoltorio: el corredor de
@@ -1448,7 +1452,8 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         // enteraría — que es exactamente cómo el `terminada` falso pasó desapercibido.
         // Con la línea del dispositivo DELANTE: el agente sabe con cuál trabaja esta sesión —o
         // que no hay ninguno y se prefiere un emulador— sin tener que descubrirlo.
-        return await ejecutorEfectivo(`${lineaDelDispositivo(dispositivo)}\n\n${peticion}`, estado, consola);
+        resultado = await ejecutorEfectivo(`${lineaDelDispositivo(dispositivo)}\n\n${peticion}`, estado, consola);
+        return resultado;
       } finally {
         // En el `finally`: un turno que revienta o que se cancela también TERMINA, y dejar
         // el compositor apagado para siempre sería peor que no haberlo apagado nunca.
@@ -1497,6 +1502,22 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
           if (dicho !== undefined) informar(dicho);
         } catch {
           // Mantenimiento: la vuelta siguiente llega sola.
+        }
+        /**
+         * Y, lo ÚLTIMO de todo, con `turnoEnVuelo` YA en `false`: una nota que llegó
+         * mientras el turno trabajaba y nadie recibió a tiempo (IXCODE-4) se manda SOLA,
+         * como si fuera el siguiente mensaje del usuario — sin que nadie tenga que darse
+         * cuenta ni volver a escribirla.
+         *
+         * NO se espera aquí: el turno ACTUAL ya está devolviendo lo suyo (el `return` de
+         * arriba, o la excepción que este `finally` deja seguir su curso) y esperar
+         * colgaría esa entrega detrás de un turno entero nuevo. El de sobrante es un turno
+         * APARTE que entra por el MISMO `ejecutarTurno` —mismo `try/finally`, misma guarda
+         * de raíz, mismo aviso de flanco—, así que un fallo suyo se trata exactamente como
+         * el de cualquier turno que revienta: no tumba nada de aquí.
+         */
+        if (resultado?.notasSobrantes !== undefined) {
+          void ejecutarTurno(resultado.notasSobrantes, estado, consola);
         }
       }
     };

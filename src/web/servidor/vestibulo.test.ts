@@ -1110,6 +1110,62 @@ describe("vestíbulo", () => {
     expect(notas).toEqual(["cambia de idea"]);
   });
 
+  /**
+   * El cierre de IXCODE-4: `resultado.notasSobrantes` es lo que TrueForge reporta cuando una
+   * nota llegó y nadie la recibió a tiempo (`sesionTrueforge.ts`) — este `ejecutarTurno` es
+   * el único sitio que sabe cuándo el turno actual soltó `turnoEnVuelo`, así que es quien
+   * decide disparar el siguiente, sin que nadie tenga que volver a escribirlo.
+   */
+  it("un turno que devuelve notasSobrantes dispara OTRO turno solo, con ese texto", async () => {
+    const s = sesionesEnMemoria();
+    const peticiones: string[] = [];
+    let primeraVez = true;
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      crearEjecutor: () => async (peticion: string) => {
+        peticiones.push(peticion);
+        if (primeraVez) {
+          primeraVez = false;
+          return { verificador: "no-corrio" as const, pendientes: 0, notasSobrantes: "cambia de idea" };
+        }
+        return { verificador: "no-corrio" as const, pendientes: 0 };
+      },
+    });
+    const proyecto = await v.abrirProyecto({ raiz: "/w/a" });
+    proyecto.recibir({ clase: "prosa", texto: "haz algo" });
+    await new Promise((r) => setTimeout(r, 0)); // el turno original
+    await new Promise((r) => setTimeout(r, 0)); // el del sobrante, disparado en su `finally`
+    // Cada turno lleva DELANTE la línea del dispositivo (ver el test de más abajo), así que
+    // se comprueba con QUÉ acaba cada petición y no la cadena entera.
+    expect(peticiones).toHaveLength(2);
+    expect(peticiones[0]).toMatch(/\n\nhaz algo$/);
+    expect(peticiones[1]).toMatch(/\n\ncambia de idea$/);
+    await v.cerrar();
+  });
+
+  it("sin notasSobrantes, no se dispara ningún turno extra", async () => {
+    const s = sesionesEnMemoria();
+    const peticiones: string[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      crearEjecutor: () => async (peticion: string) => {
+        peticiones.push(peticion);
+        return { verificador: "no-corrio" as const, pendientes: 0 };
+      },
+    });
+    const proyecto = await v.abrirProyecto({ raiz: "/w/a" });
+    proyecto.recibir({ clase: "prosa", texto: "haz algo" });
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(peticiones).toHaveLength(1);
+    expect(peticiones[0]).toMatch(/\n\nhaz algo$/);
+    await v.cerrar();
+  });
+
   it("dos aperturas A LA VEZ siguen dejando una sola consola viva", async () => {
     const s = sesionesEnMemoria();
     const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
