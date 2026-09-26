@@ -4,66 +4,80 @@
     {
       "id": 0,
       "subject": "Task 1: Nota — tipo y lógica de entrega, pura",
-      "status": "pending",
-      "description": "**Goal:** Un tipo `Nota` y las funciones puras que deciden a quién se le debe una nota y cuáles quedan sin entregar al final, sin tocar ningún `AgentThread`.\n\n**Files:**\n- Create: `src/agent/motores/trueforge/notas.ts`\n- Test: `src/agent/motores/trueforge/notas.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `crearNota(texto)` devuelve una `Nota` con `entregadaA` vacío.\n- [ ] `pendientesPara(notas, threadId)` devuelve las notas que ESE hilo aún no recibió.\n- [ ] `marcarEntregada(nota, threadId)` añade el hilo a `entregadaA`.\n- [ ] `textoDeNota(texto)` envuelve el texto con el framing acordado.\n- [ ] `sobrantes(notas)` devuelve el texto concatenado de las notas sin entregar a NADIE, o `undefined`.\n\n**Verify:** `npx vitest run src/agent/motores/trueforge/notas.test.ts` → todos los tests en verde.\n\nVer el plan (Task 1) para el código completo de test e implementación.\n\n```json:metadata\n{\"files\": [\"src/agent/motores/trueforge/notas.ts\", \"src/agent/motores/trueforge/notas.test.ts\"], \"verifyCommand\": \"npx vitest run src/agent/motores/trueforge/notas.test.ts\", \"acceptanceCriteria\": [\"crearNota devuelve Nota con entregadaA vacío\", \"pendientesPara filtra por threadId\", \"marcarEntregada añade el hilo a entregadaA\", \"textoDeNota envuelve con el framing acordado\", \"sobrantes concatena solo lo que nadie recibió, undefined si no queda ninguna\"], \"modelTier\": \"mechanical\"}\n```",
+      "status": "completed",
+      "description": "**Goal:** Un tipo `Nota` y las funciones puras que deciden a quién se le debe una nota y cuáles quedan sin entregar al final, sin tocar ningún `AgentThread`.\n\nComplete — see ledger.",
       "activeForm": "Escribiendo Nota y su lógica de entrega"
     },
     {
       "id": 1,
       "subject": "Task 2: capacidadDeNotas — montada en cada especialista",
-      "status": "pending",
-      "blockedBy": [0],
-      "description": "**Goal:** Una `Capacidad` (`capacidadDeNotas`) que, dada la cola compartida de `Nota[]`, entrega lo pendiente por `preLLMProcessors`; y que `capacidadesDelEspecialista` la incluya para TODO especialista de motor `\"modelo\"` —con nombre o genérico—, vía una nueva dependencia `notas`.\n\n**Files:**\n- Modify: `src/agent/motores/trueforge/capacidades.ts`\n- Modify: `src/agent/motores/trueforge/capacidades.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `capacidadDeNotas(notas)` devuelve `{ nombre: \"notas\", tools: [], capability: { preLLMProcessors: [...] } }`.\n- [ ] Su `processPreLLM` entrega SOLO lo pendiente para `execution.threadId`, marca entregado, y no yield-ea nada si no hay nada pendiente.\n- [ ] `DependenciasDelEspecialista` gana `notas: Capacidad`; `capacidadesDelEspecialista` la incluye en las DOS ramas.\n\n**Verify:** `npx vitest run src/agent/motores/trueforge/capacidades.test.ts` → todos los tests en verde, incluidos los once ya existentes.\n\nVer el plan (Task 2) para el código completo.\n\n```json:metadata\n{\"files\": [\"src/agent/motores/trueforge/capacidades.ts\", \"src/agent/motores/trueforge/capacidades.test.ts\"], \"verifyCommand\": \"npx vitest run src/agent/motores/trueforge/capacidades.test.ts\", \"acceptanceCriteria\": [\"capacidadDeNotas tiene la forma de Capacidad con preLLMProcessors\", \"processPreLLM entrega solo lo pendiente para ese threadId y marca entregado\", \"capacidadesDelEspecialista incluye deps.notas en las dos ramas\"], \"modelTier\": \"mechanical\"}\n```",
+      "status": "completed",
+      "blockedBy": [
+        0
+      ],
+      "description": "**Goal:** Una `Capacidad` (`capacidadDeNotas`) que entrega lo pendiente por `preLLMProcessors`, montada en cada especialista.\n\nComplete — see ledger.",
       "activeForm": "Montando capacidadDeNotas en cada especialista"
     },
     {
       "id": 2,
       "subject": "Task 3: Prueba contra el orquestador REAL",
-      "status": "pending",
-      "blockedBy": [1],
-      "description": "**Goal:** Probar, contra `AgentThread`/`AgentThreadOrchestrator` reales de `trueforge-core` (no doblados) con un modelo de pega, que una nota empujada ENTRE dos llamadas al modelo llega a la SEGUNDA — en la raíz y en un hijo — usando el mismo patrón que `modeloLangchain.test.ts` ya prueba contra la librería real.\n\n**Files:**\n- Modify: `src/agent/motores/trueforge/capacidades.test.ts`\n\n**Acceptance Criteria:**\n- [ ] Una nota empujada durante la PRIMERA llamada de la raíz llega en la SEGUNDA (`recibidos[1]`, no `recibidos[0]`).\n- [ ] Un HIJO (segundo `AgentThread`, misma `capacidadDeNotas`) también la recibe en su primera llamada, por separado de la raíz.\n- [ ] El mensaje `user` insertado sigue siendo válido para el adaptador: no revienta la llamada y el tipo traducido es `\"human\"`.\n\n**Verify:** `npx vitest run src/agent/motores/trueforge/capacidades.test.ts -t \"orquestador real\"` → verde.\n\nVer el plan (Task 3) para el código completo, incluida la comprobación deliberada de que el test FALLA si se comenta la línea de `yield` en `processPreLLM`.\n\n```json:metadata\n{\"files\": [\"src/agent/motores/trueforge/capacidades.test.ts\"], \"verifyCommand\": \"npx vitest run src/agent/motores/trueforge/capacidades.test.ts -t 'orquestador real'\", \"acceptanceCriteria\": [\"nota empujada tras la primera llamada de la raíz aparece en la segunda, no en la primera\", \"un hijo con la misma capacidad la recibe en su primera llamada\", \"el mensaje insertado se traduce a tipo human sin reventar la llamada\"], \"modelTier\": \"standard\"}\n```",
+      "status": "completed",
+      "blockedBy": [
+        1
+      ],
+      "description": "**Goal:** Probar, contra AgentThread/AgentThreadOrchestrator reales, que una nota llega de verdad.\n\nComplete — see ledger.",
       "activeForm": "Probando la entrega contra el orquestador real"
     },
     {
       "id": 3,
       "subject": "Task 4: sesionTrueforge.ts — cola y agregarNota()",
-      "status": "pending",
-      "blockedBy": [1, 2],
-      "description": "**Goal:** Una cola `notas: Nota[]` por sesión, la capacidad montada en la raíz (`nuevoOrquestador`) y en cada hijo de motor `\"modelo\"` (vía `deps.notas` en `crearHijo`), y un método `agregarNota(texto)` en el objeto que devuelve `abrirSesionTrueforge`.\n\n**Files:**\n- Modify: `src/agent/motores/trueforge/sesionTrueforge.ts`\n- Modify: `src/agent/motores/trueforge/sesionTrueforge.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `s.agregarNota(\"texto\")` no lanza aunque no haya turno en marcha.\n- [ ] Una nota añadida mientras un especialista delegado trabaja llega a la SIGUIENTE llamada del hijo, probado con `modelosConGuion`.\n- [ ] La raíz y cada hijo comparten la MISMA instancia de `capacidadDeNotas(notas)`.\n- [ ] Con un especialista de motor EXTERNO trabajando, `agregarNota` no revienta el turno (la comprobación completa con `notasSobrantes` vive en Task 5).\n\n**Verify:** `npx vitest run src/agent/motores/trueforge/sesionTrueforge.test.ts -t \"agregarNota\"` → verde; el fichero completo sigue en verde.\n\nVer el plan (Task 4) para el código completo.\n\n```json:metadata\n{\"files\": [\"src/agent/motores/trueforge/sesionTrueforge.ts\", \"src/agent/motores/trueforge/sesionTrueforge.test.ts\"], \"verifyCommand\": \"npx vitest run src/agent/motores/trueforge/sesionTrueforge.test.ts\", \"acceptanceCriteria\": [\"agregarNota no lanza sin turno en marcha\", \"una nota añadida mientras un hijo delegado trabaja llega a su siguiente llamada\", \"raíz e hijos comparten la misma instancia de capacidadDeNotas\"], \"modelTier\": \"standard\"}\n```",
+      "status": "completed",
+      "blockedBy": [
+        1,
+        2
+      ],
+      "description": "**Goal:** Una cola notas:Nota[] por sesion, agregarNota() y capacidadDeNotas montada en raiz e hijos.\n\nComplete — see ledger.",
       "activeForm": "Cableando la cola de notas y agregarNota() en la sesión"
     },
     {
       "id": 4,
       "subject": "Task 5: notasSobrantes — no se pierde una nota tardía",
-      "status": "pending",
-      "blockedBy": [3],
-      "description": "**Goal:** Si el turno cierra con alguna nota que NADIE llegó a recibir, `turno()` la reporta en `ResultadoDeTurno.notasSobrantes` y avisa por la piel.\n\n**Files:**\n- Modify: `src/core/entrega.ts`\n- Modify: `src/agent/motores/trueforge/sesionTrueforge.ts`\n- Modify: `src/agent/motores/trueforge/sesionTrueforge.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `ResultadoDeTurno` gana `notasSobrantes?: string`.\n- [ ] Un turno que cierra con una nota sin entregar a nadie devuelve `notasSobrantes` con su texto, y la cola queda vacía al terminar.\n- [ ] Un turno donde la nota SÍ llegó a alguien no lleva `notasSobrantes`.\n- [ ] El aviso por la piel incluye una línea que lo dice.\n- [ ] Con un hijo de motor EXTERNO trabajando, `agregarNota` no revienta y la nota sale como `notasSobrantes`.\n\n**Verify:** `npx vitest run src/agent/motores/trueforge/sesionTrueforge.test.ts -t \"sobrante\"` → verde.\n\nVer el plan (Task 5) para el código completo.\n\n```json:metadata\n{\"files\": [\"src/core/entrega.ts\", \"src/agent/motores/trueforge/sesionTrueforge.ts\", \"src/agent/motores/trueforge/sesionTrueforge.test.ts\"], \"verifyCommand\": \"npx vitest run src/agent/motores/trueforge/sesionTrueforge.test.ts -t 'sobrante' && npm run typecheck\", \"acceptanceCriteria\": [\"ResultadoDeTurno.notasSobrantes existe y es opcional\", \"nota sin entregar a nadie sale como notasSobrantes y la cola se vacía\", \"nota entregada no aparece como notasSobrantes\", \"un hijo externo no revienta y la nota sale sobrante\"], \"modelTier\": \"standard\"}\n```",
+      "status": "completed",
+      "blockedBy": [
+        3
+      ],
+      "description": "**Goal:** Si el turno cierra con una nota sin entregar, se reporta en notasSobrantes y no se pierde.\n\nComplete — see ledger.",
       "activeForm": "Reportando las notas sobrantes al cerrar el turno"
     },
     {
       "id": 5,
       "subject": "Task 6: servidor enruta prosa-en-marcha a agregarNota",
-      "status": "pending",
-      "blockedBy": [3],
-      "description": "**Goal:** `SesionReal.agregarNota?` en el contrato compartido, `SesionCerrable.agregarNota?` en el subconjunto que ve `vestibulo.ts`, y la rama `clase === \"prosa\"` de `consolaWeb.ts` llamando a una nueva opción `notaMientrasTrabaja` en vez de encolar siempre una `LineaDeConsola`.\n\n**Files:**\n- Modify: `src/agent/turno/sesionReal.ts`\n- Modify: `src/web/servidor/consolaWeb.ts`\n- Modify: `src/web/servidor/consolaWeb.test.ts`\n- Modify: `src/web/servidor/vestibulo.ts`\n- Modify: `src/web/servidor/vestibulo.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `SesionReal.agregarNota?(texto): void` opcional; deepagents no lo implementa y sigue tipando.\n- [ ] `OpcionesDeConsolaWeb.notaMientrasTrabaja?: (texto) => boolean` — si devuelve `true`, `recibir()` no encola la línea.\n- [ ] `vestibulo.ts` construye `notaMientrasTrabaja` a partir de `turnoEnVuelo` y `sesionReal?.agregarNota`.\n- [ ] Con turno en marcha y la opción disponible: la prosa NO se encola.\n- [ ] Sin turno en marcha (o sin `agregarNota`): el camino de hoy, sin cambios.\n\n**Verify:** `npx vitest run src/web/servidor/consolaWeb.test.ts src/web/servidor/vestibulo.test.ts` → verde.\n\nVer el plan (Task 6) para el código completo, incluidos ambos tests.\n\n```json:metadata\n{\"files\": [\"src/agent/turno/sesionReal.ts\", \"src/web/servidor/consolaWeb.ts\", \"src/web/servidor/consolaWeb.test.ts\", \"src/web/servidor/vestibulo.ts\", \"src/web/servidor/vestibulo.test.ts\"], \"verifyCommand\": \"npx vitest run src/web/servidor/consolaWeb.test.ts src/web/servidor/vestibulo.test.ts && npm run typecheck\", \"acceptanceCriteria\": [\"SesionReal.agregarNota es opcional\", \"notaMientrasTrabaja evita encolar la línea cuando devuelve true\", \"vestibulo.ts construye notaMientrasTrabaja a partir de turnoEnVuelo y sesionReal\", \"sin turno en marcha el camino de hoy no cambia\"], \"modelTier\": \"standard\"}\n```",
+      "status": "completed",
+      "blockedBy": [
+        3
+      ],
+      "description": "**Goal:** El servidor enruta la prosa mientras el turno trabaja a agregarNota, no a la cola.\n\nComplete — see ledger.",
       "activeForm": "Enrutando la prosa mientras el turno trabaja a agregarNota"
     },
     {
       "id": 6,
       "subject": "Task 7: notasSobrantes dispara el turno siguiente sola",
-      "status": "pending",
-      "blockedBy": [4, 5],
-      "description": "**Goal:** Cuando `ejecutarTurno` recibe `resultado.notasSobrantes`, en cuanto el turno actual libera `turnoEnVuelo` se dispara OTRO turno con ese texto — sin que nadie tenga que volver a escribirlo.\n\n**Files:**\n- Modify: `src/web/servidor/vestibulo.ts`\n- Modify: `src/web/servidor/vestibulo.test.ts`\n\n**Acceptance Criteria:**\n- [ ] Un `resultado.notasSobrantes` no vacío dispara OTRA llamada a `ejecutarTurno` con ese texto, DESPUÉS del `finally` que liberó `turnoEnVuelo`.\n- [ ] El turno original devuelve su propio resultado al llamador de siempre; el de sobrante corre aparte.\n- [ ] Un `notasSobrantes` ausente no dispara nada extra.\n- [ ] Un fallo del turno de sobrante no tumba nada (mismo `try/finally` por ser la MISMA función).\n\n**Verify:** `npx vitest run src/web/servidor/vestibulo.test.ts -t \"sobrante\"` → verde.\n\nVer el plan (Task 7) para el código completo.\n\n```json:metadata\n{\"files\": [\"src/web/servidor/vestibulo.ts\", \"src/web/servidor/vestibulo.test.ts\"], \"verifyCommand\": \"npx vitest run src/web/servidor/vestibulo.test.ts -t 'sobrante' && npm run typecheck\", \"acceptanceCriteria\": [\"notasSobrantes dispara otro ejecutarTurno tras liberar turnoEnVuelo\", \"el turno original devuelve su propio resultado sin esperar al de sobrante\", \"sin notasSobrantes no se dispara nada extra\"], \"modelTier\": \"standard\"}\n```",
+      "status": "completed",
+      "blockedBy": [
+        4,
+        5
+      ],
+      "description": "**Goal:** Una nota sobrante dispara el turno siguiente sola, sin tumbar nada si falla.\n\nComplete — see ledger.",
       "activeForm": "Disparando el turno del sobrante solo"
     },
     {
       "id": 7,
       "subject": "Task 8: compositor escribible mientras el agente trabaja",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [],
-      "description": "**Goal:** El campo deja de apagarse por `turnoEnVuelo`; se apaga por `hayPendiente` (aprobación, pregunta, selector o secreto visibles). El botón de Parar y el borde de \"trabajando\" NO cambian.\n\n**Files:**\n- Modify: `apps/web/src/componentes/Compositor.tsx`\n- Modify: `apps/web/src/componentes/Compositor.test.tsx`\n- Modify: `apps/web/src/App.tsx`\n\n**Acceptance Criteria:**\n- [ ] `Compositor` gana `hayPendiente?: boolean` (omisión `false`).\n- [ ] `disabled` pasa de `!conectado || turnoEnVuelo` a `!conectado || hayPendiente`.\n- [ ] `enviar()` corta con `hayPendiente`, no con `turnoEnVuelo`.\n- [ ] El `useEffect` de devolver el foco mira el flanco de bajada de `hayPendiente`.\n- [ ] El placeholder ya no muestra \"el agente está trabajando…\" — muestra el aviso de pendiente solo con `hayPendiente`.\n- [ ] `App.tsx` calcula `hayPendiente` de `estado.aprobacion`/`estado.pregunta`/`estado.selector`/`estado.secreto`.\n- [ ] Los tres tests existentes que asumían que `turnoEnVuelo` deshabilita o bloquea Enter quedan reescritos sobre `hayPendiente`; los dos que solo miran el botón de Parar y el borde de \"trabajando\" no cambian.\n\n**Verify:** `npx vitest run apps/web/src/componentes/Compositor.test.tsx && npm run typecheck` → verde. Verificar también a mano en el navegador (`npm run web`).\n\nVer el plan (Task 8) para el código completo, incluidas las reescrituras exactas de los tests existentes.\n\n```json:metadata\n{\"files\": [\"apps/web/src/componentes/Compositor.tsx\", \"apps/web/src/componentes/Compositor.test.tsx\", \"apps/web/src/App.tsx\"], \"verifyCommand\": \"npx vitest run apps/web/src/componentes/Compositor.test.tsx && npm run typecheck\", \"acceptanceCriteria\": [\"disabled depende de hayPendiente, no de turnoEnVuelo\", \"enviar() corta con hayPendiente\", \"el foco vuelve al bajar hayPendiente\", \"App.tsx calcula hayPendiente de los cuatro estados de diálogo\", \"los tests reescritos pasan y los dos intactos siguen pasando\"], \"modelTier\": \"standard\"}\n```",
+      "description": "**Goal:** El compositor se escribe mientras el agente trabaja, se apaga con algo pendiente.\n\nComplete — see ledger.",
       "activeForm": "Haciendo el compositor escribible mientras el agente trabaja"
     }
   ],
-  "lastUpdated": "2026-09-26T00:00:00.000Z"
+  "lastUpdated": "2026-09-25T23:54:14.986Z"
 }

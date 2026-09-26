@@ -430,6 +430,8 @@ import winston from "winston";
 import { AIMessageChunk, type BaseMessage } from "@langchain/core/messages";
 import { AgentThread, AgentThreadOrchestrator, EventType, NOOP_AGENT_TRACING } from "./trueforge.js";
 import { modeloParaTrueforge } from "./modeloLangchain.js";
+// `capacidadDeFecha` ya está importada en este fichero desde Task 2 si el `describe` de arriba
+// se añade dentro del mismo bloque de imports existente — si no, añádela desde "./capacidades.js".
 
 /** El mismo modelo de pega de `modeloLangchain.test.ts`: un guion de trozos por llamada, y
  *  apunta los mensajes que recibió CADA vez. */
@@ -454,8 +456,19 @@ const logger = winston.createLogger({ silent: true, transports: [] });
 
 describe("capacidadDeNotas contra el orquestador real: la entrega ocurre de verdad", () => {
   it("una nota empujada durante la PRIMERA llamada de la raíz llega en la SEGUNDA", async () => {
+    // OJO — verificado empíricamente contra la librería real: una respuesta SIN tool_calls
+    // hace que `AgentThread.execute()` termine ahí mismo (`AGENT_DONE`), tanto para la raíz
+    // como para un hijo — no hay «segunda llamada» posible con dos textos sueltos. La
+    // PRIMERA respuesta lleva por eso una tool call de verdad (`get_current_datetime`, la
+    // que monta `capacidadDeFecha()`) para que el hilo siga vivo hasta la segunda, que es
+    // donde tiene que aparecer la nota.
     const { modelo, recibidos } = modeloGuionizado([
-      [new AIMessageChunk({ content: "Miro." })],
+      [
+        new AIMessageChunk({
+          content: "",
+          tool_call_chunks: [{ index: 0, id: "f1", name: "get_current_datetime", args: "{}" }],
+        }),
+      ],
       [new AIMessageChunk({ content: "Listo." })],
     ]);
     const notas: Nota[] = [];
@@ -463,7 +476,7 @@ describe("capacidadDeNotas contra el orquestador real: la entrega ocurre de verd
       definition: { modelClient: modeloParaTrueforge({ modelo: () => modelo }), instruction: "reglas" },
       threadId: "main",
       title: "main",
-      capabilities: [capacidadDeNotas(notas).capability] as never,
+      capabilities: [capacidadDeNotas(notas).capability, capacidadDeFecha()] as never,
       tracing: NOOP_AGENT_TRACING,
       logger,
     });
@@ -478,15 +491,21 @@ describe("capacidadDeNotas contra el orquestador real: la entrega ocurre de verd
     for await (const _ of orq.send([{ type: EventType.USER_MESSAGE, content: "haz esto" }] as never)) void _;
     const it1 = orq.execute({ signal: new AbortController().signal });
     let r = await it1.next();
-    // Empuja la nota DESPUÉS de la primera llamada (ya en `recibidos`) y ANTES de que el
-    // orquestador pida la segunda: exactamente "mientras el agente trabaja".
+    // Espera a que la PRIMERA llamada haya ocurrido de verdad (ya en `recibidos`) antes de
+    // empujar la nota — no basta con el primer `next()`, que puede resolver antes de que el
+    // `stream()` de pega se haya invocado.
+    while (recibidos.length === 0) r = await it1.next();
+    // Empuja la nota DESPUÉS de la primera llamada y ANTES de que el orquestador pida la
+    // segunda: exactamente "mientras el agente trabaja".
     notas.push(crearNota("cambia de idea"));
     while (!r.done) r = await it1.next();
 
     expect(recibidos).toHaveLength(2);
     expect(recibidos[0]!.some((m) => String(m.content).includes("cambia de idea"))).toBe(false);
     expect(recibidos[1]!.some((m) => String(m.content).includes("cambia de idea"))).toBe(true);
-    // El mensaje llegó como HUMAN, no rompió el adaptador.
+    // Y la segunda llamada es de verdad la vuelta del tool call (no una coincidencia del guion).
+    expect(recibidos[1]!.map((m) => m.getType())).toContain("tool");
+    // El mensaje de la nota llegó como HUMAN, no rompió el adaptador.
     expect(recibidos[1]!.find((m) => String(m.content).includes("cambia de idea"))!.getType()).toBe("human");
   });
 
@@ -577,9 +596,14 @@ describe("agregarNota: una nota mientras el agente trabaja llega al hilo que tra
     const { m, vistos } = modelosConGuion([
       // 1) la raíz delega
       [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "arregla el login" }) }] })],
-      // 2) el hijo hace una primera llamada (aquí se empuja la nota, ver el `stream` de abajo)
-      [new AIMessageChunk({ content: "Miro el login." })],
-      // 3) la SEGUNDA llamada del hijo — aquí debe llegar la nota
+      // 2) la PRIMERA llamada del hijo: una tool call de VERDAD (`read_file`, sobre el
+      //    `app.xml` que `proyecto()` ya escribe) — no un texto suelto. Verificado contra la
+      //    librería real: una respuesta SIN tool_calls termina el hilo ahí mismo
+      //    (`AGENT_DONE`), así que con dos textos sueltos el hijo nunca llegaría a una
+      //    segunda llamada. El mismo patrón que ya usa el test «un hijo con un nombre que no
+      //    es de ningún especialista…», unas líneas más arriba en este fichero.
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "r1", name: "read_file", args: JSON.stringify({ file_path: "/app.xml" }) }] })],
+      // 3) la SEGUNDA llamada del hijo — aquí debe llegar la nota (se empuja tras la 2)
       [new AIMessageChunk({ content: "Hecho." })],
       // 4) la raíz cierra
       [new AIMessageChunk({ content: "Listo." })],
@@ -636,7 +660,11 @@ Cerca de `artefactosPorAnunciar`/`capturasDelTurno` (mismo bloque de estado de s
 
 En `propiasDe`/`capacidadesDelEspecialista` — el llamador real está en `crearHijo` (dentro de
 `capacidadesDelEspecialista(agente, params.request.name, { backend, propias: propiasDe, conShell:
-() => ... })`), añade el campo:
+() => ... })`), reemplaza el placeholder que dejó Task 2 (`notas: capacidadDeNotas([])` — un
+no-op que Task 2 tuvo que añadir ahí mismo porque `crearHijo` es una TERCERA llamada a
+`capacidadesDelEspecialista` que el pre-flight scan no había visto, y con `notas` ya obligatorio
+en `DependenciasDelEspecialista` el árbol no compilaba entre Task 2 y esta task) por la instancia
+COMPARTIDA de la sesión:
 
 ```ts
     const piezas = capacidadesDelEspecialista(agente, params.request.name, {
@@ -723,21 +751,32 @@ verde.
 ```ts
 // añadir al describe de Task 4 en sesionTrueforge.test.ts
 it("una nota que NADIE recibe antes de que el turno cierre sale como sobrante, y avisa", async () => {
-  const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: modelos(), entorno: ENTORNO, skills: CATALOGO });
+  // Un solo texto, SIN tool_calls: verificado contra la librería real que eso cierra el hilo
+  // ahí mismo (`AGENT_DONE`) — no hay una segunda llamada que la pudiera recibir. Empujar la
+  // nota nada más ocurrir la ÚNICA llamada la deja sin nadie a quien entregársela.
+  const { m, vistos } = modelosConGuion([[new AIMessageChunk({ content: "Listo." })]]);
+  const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
   const pi = piel();
   const turnoPromesa = s.turno("escribe una nota", pi.p);
-  // Se añade DESPUÉS de que el turno haya terminado de verdad su última llamada: para
-  // simularlo sin depender del timing exacto del guion de escritura, se añade ANTES de
-  // esperar la promesa pero el guion de `modelos()` ya no vuelve a preguntarle a nadie
-  // (termina en "Listo." tras escribir), así que nadie llega a consumirla.
+  await new Promise<void>((resuelto) => {
+    const comprobar = () => (vistos.length >= 1 ? resuelto() : setTimeout(comprobar, 0));
+    comprobar();
+  });
   s.agregarNota("esto llega tarde");
   const r = await turnoPromesa;
   expect(r.notasSobrantes).toBe("esto llega tarde");
+  // El aviso por la piel, el mismo patrón que el de «SIN aprobación» (más abajo en este
+  // fichero): una línea que lo dice, no un silencio.
+  expect(pi.lineas.join("\n")).toMatch(/se manda como el turno siguiente/);
 }, 20_000);
 
 it("una nota que SÍ se entrega no sale como sobrante", async () => {
+  // La PRIMERA respuesta lleva una tool call de verdad (`get_current_datetime`, que la raíz
+  // ya tiene montada por `capacidadDeFecha()`): verificado contra la librería real que una
+  // respuesta sin tool_calls termina el hilo ahí mismo, así que dos textos sueltos nunca
+  // llegarían a una segunda llamada — que es justo donde tiene que aparecer la nota.
   const { m, vistos } = modelosConGuion([
-    [new AIMessageChunk({ content: "Miro." })],
+    [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "f1", name: "get_current_datetime", args: "{}" }] })],
     [new AIMessageChunk({ content: "Listo." })],
   ]);
   const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
