@@ -711,6 +711,9 @@ export function crearEjecutorReal(
       ...(resultado.motivoSinVerificar === undefined
         ? {}
         : { motivoSinVerificar: resultado.motivoSinVerificar }),
+      ...(resultado.notasSobrantes === undefined
+        ? {}
+        : { notasSobrantes: resultado.notasSobrantes }),
     };
   };
 }

@@ -12,6 +12,7 @@
  * cuatro ficheros escritos, una escritura abandonada, nada verificado, y «terminada».
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import type { ResultadoDeTurno } from "../core/entrega.js";
 
 const dobles = vi.hoisted(() => ({
   abrirSesionReal: vi.fn(),
@@ -126,6 +127,55 @@ describe("el ejecutor real DEVUELVE lo que el turno informó", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const r = await ejecutor("haz algo", ESTADO, consolaDeMentira() as any);
     expect(Object.keys(r ?? {}).sort()).toEqual(["pendientes", "verificador"]);
+  });
+
+  /**
+   * Regresión de la revisión final de rama de IXCODE-4: `notasSobrantes` llegaba de
+   * `sesionTrueforge.ts` y moría aquí porque el retorno de `crearEjecutorReal` se construye
+   * como una lista BLANCA de campos a mano (líneas 707-714 de `main.ts`), y esa lista nunca
+   * se actualizó al añadir el campo. El efecto en producción: `vestibulo.ts` comprueba
+   * `resultado?.notasSobrantes` para disparar el turno de relevo, y esa comprobación era
+   * SIEMPRE falsa — una nota que el aviso en pantalla promete reenviar se perdía en
+   * silencio. Los tests de cada tarea no lo veían: `sesionTrueforge.test.ts` prueba el
+   * PRODUCTOR (que `turno()` sepa devolver `notasSobrantes`) y `vestibulo.test.ts` prueba el
+   * CONSUMIDOR con un `EjecutorDeTurno` de mentira que ya trae el campo puesto a mano; nadie
+   * probaba la costura real entre los dos, que es exactamente esta fábrica.
+   *
+   * La fijación es `Required<ResultadoDeTurno>`: si mañana se añade un campo a
+   * `ResultadoDeTurno` (`core/entrega.ts`) y no se añade AQUÍ, este fichero deja de
+   * compilar (`npm run typecheck` cubre `src/**\/*.test.ts`, ver `tsconfig.json`) — no hace
+   * falta acordarse de escribir un test nuevo por cada campo, hace falta no poder evitarlo.
+   *
+   * `preexistentes` se excluye a propósito: `crearEjecutorReal` YA no lo reenvía, y es una
+   * deuda PREVIA a esta rama (fuera de alcance aquí, no se toca).
+   */
+  it("reenvía TODO lo que un turno puede informar, salvo lo ya excluido antes de esta rama", async () => {
+    const CAMPOS_FUERA_DE_ALCANCE = ["preexistentes"] as const satisfies readonly (keyof ResultadoDeTurno)[];
+
+    const informeCompleto: Required<ResultadoDeTurno> = {
+      verificador: "rojo",
+      pendientes: 3,
+      hallazgos: [{ code: "COLL_MISSING_PROGID", severidad: "error" as const, mensaje: "falta progid" }],
+      preexistentes: 2,
+      motivoSinVerificar: "no está xone-simulator en el PATH",
+      notasSobrantes: "cambia de idea",
+    };
+
+    dobles.abrirSesionReal.mockImplementation(async () => ({
+      turno: async () => ({
+        bitacora: { todo: [] },
+        cambios: [],
+        cortadoPorTope: true,
+        ...informeCompleto,
+      }),
+    }));
+    const ejecutor = crearEjecutorReal(() => {});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r = await ejecutor("haz algo", ESTADO, consolaDeMentira() as any);
+
+    const esperado: Record<string, unknown> = { ...informeCompleto };
+    for (const campo of CAMPOS_FUERA_DE_ALCANCE) delete esperado[campo];
+    expect(r).toEqual(esperado);
   });
 
   it("un sitio que no es un proyecto XOne no informa de nada: no se sabe, no está verde", async () => {
