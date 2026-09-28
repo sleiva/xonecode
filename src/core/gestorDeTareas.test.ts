@@ -44,4 +44,12 @@ describe("transicionPropuesta", () => {
   it("al empezar sin candidata, nada", () => {
     expect(transicionPropuesta([t("1", "Volver", "PROBLEMA", "por-hacer")], "empezar")).toBeUndefined();
   });
+  it("al empezar, EN CURSO gana aunque PROBAR (también en-curso) venga primero en la lista", () => {
+    const ts2 = [t("2", "PROBAR", "PROBAR", "en-curso"), t("21", "Empezar", "EN CURSO", "en-curso")];
+    expect(transicionPropuesta(ts2, "empezar")?.id).toBe("21");
+  });
+  it("al cerrar, PROBAR gana aunque una terminada venga primero en la lista", () => {
+    const ts2 = [t("31", "Hecho", "TERMINADO", "terminada"), t("2", "PROBAR", "PROBAR", "en-curso")];
+    expect(transicionPropuesta(ts2, "cerrar")?.id).toBe("2");
+  });
 });

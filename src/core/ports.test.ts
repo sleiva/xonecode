@@ -8,11 +8,13 @@ import {
   VerifierGuionizado,
   CatalogoModelosEnMemoria,
   AumentadorGuionizado,
+  GestorDeTareasEnMemoria,
   consumoDeLaSesion,
   consumoPersistible,
   type McpPort,
   type VerifierPort,
 } from "./ports.js";
+import type { FichaDelGestor } from "./gestorDeTareas.js";
 
 describe("la marca de doble", () => {
   it("todos los dobles la llevan", () => {
@@ -22,6 +24,7 @@ describe("la marca de doble", () => {
     expect(esDoble(new StubVerifier())).toBe(true);
     expect(esDoble(new VerifierGuionizado([]))).toBe(true);
     expect(esDoble(new AumentadorGuionizado())).toBe(true);
+    expect(esDoble(new GestorDeTareasEnMemoria())).toBe(true);
   });
 
   it("una implementación real NO la lleva, y no puede fingirla con un campo", () => {
@@ -156,5 +159,56 @@ describe("el consumo va y vuelve entre las dos formas", () => {
     acto.externo.salida = 9;
     expect(porCuenta.modelo.entrada).toBe(700);
     expect(porCuenta.externo.salida).toBe(3);
+  });
+});
+
+describe("GestorDeTareasEnMemoria", () => {
+  const VINCULO = { conector: "jira", sitio: "cloud-1", proyecto: "IXCODE" };
+  const tareas: FichaDelGestor[] = [
+    { clave: "IXCODE-1", titulo: "Panel del proyecto", descripcion: "el gestor de tareas", estado: "En curso", categoria: "en-curso" },
+    { clave: "IXCODE-2", titulo: "Otra cosa", descripcion: "ya cerrada", estado: "Terminado", categoria: "terminada" },
+  ];
+
+  it("`pendientes` deja fuera lo terminado, y el resultado no lleva `descripcion`", async () => {
+    const g = new GestorDeTareasEnMemoria({ tareas });
+    const p = await g.pendientes(VINCULO);
+    expect(p.map((x) => x.clave)).toEqual(["IXCODE-1"]);
+    expect(p[0]).not.toHaveProperty("descripcion");
+  });
+
+  it("el texto filtra sobre título Y descripción, sin distinguir mayúsculas", async () => {
+    const g = new GestorDeTareasEnMemoria({ tareas });
+    expect((await g.pendientes(VINCULO, "GESTOR")).map((x) => x.clave)).toEqual(["IXCODE-1"]);
+    expect((await g.pendientes(VINCULO, "panel")).map((x) => x.clave)).toEqual(["IXCODE-1"]);
+    expect(await g.pendientes(VINCULO, "no está en ninguna")).toEqual([]);
+  });
+
+  it("un texto de solo espacios no filtra nada, igual que `jqlDePendientes`", async () => {
+    const g = new GestorDeTareasEnMemoria({ tareas });
+    expect((await g.pendientes(VINCULO, "   ")).map((x) => x.clave)).toEqual(["IXCODE-1"]);
+  });
+
+  it("`ficha` de una clave que no existe, lanza", async () => {
+    const g = new GestorDeTareasEnMemoria({ tareas });
+    await expect(g.ficha(VINCULO, "IXCODE-99")).rejects.toThrow();
+  });
+
+  it("`ficha` de una clave que existe, la devuelve con `descripcion`", async () => {
+    const g = new GestorDeTareasEnMemoria({ tareas });
+    expect(await g.ficha(VINCULO, "IXCODE-1")).toEqual(tareas[0]);
+  });
+
+  it("`transicionar` y `comentar` apuntan lo ESCRITO, para que el servidor lo compruebe", async () => {
+    const g = new GestorDeTareasEnMemoria({ tareas });
+    await g.transicionar(VINCULO, "IXCODE-1", "21");
+    await g.comentar(VINCULO, "IXCODE-1", "un comentario");
+    expect(g.transicionesAplicadas).toEqual([{ clave: "IXCODE-1", transicion: "21" }]);
+    expect(g.comentariosAplicados).toEqual([{ clave: "IXCODE-1", texto: "un comentario" }]);
+  });
+
+  it("`sitios` y `proyectos` sin datos, listas vacías", async () => {
+    const g = new GestorDeTareasEnMemoria();
+    expect(await g.sitios()).toEqual([]);
+    expect(await g.proyectos("cloud-1")).toEqual([]);
   });
 });

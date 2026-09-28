@@ -800,7 +800,9 @@ export class GestorDeTareasEnMemoria implements GestorDeTareasPort {
   async sitios() { return this.datos.sitios ?? []; }
   async proyectos(sitio: string) { return this.datos.proyectos?.[sitio] ?? []; }
   async pendientes(_v: Vinculo, texto?: string) {
-    const t = (texto ?? "").toLowerCase();
+    // Recortado como `jqlDePendientes`: un texto de solo espacios no filtra nada, ni aquí
+    // ni contra Jira real — que el doble y el adaptador coincidan es la razón de ser del doble.
+    const t = (texto ?? "").trim().toLowerCase();
     return (this.datos.tareas ?? [])
       .filter((x) => x.categoria !== "terminada" && (t === "" || `${x.titulo} ${x.descripcion}`.toLowerCase().includes(t)))
       .map(({ descripcion: _d, ...resto }) => resto);
