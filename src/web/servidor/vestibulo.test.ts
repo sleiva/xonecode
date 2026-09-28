@@ -2608,7 +2608,9 @@ describe("los adjuntos del MENSAJE (IXCODE-7)", () => {
     // El adjunto se guarda con el MISMO id que `idDeHilo` — la carpeta que monta el disco de
     // ESTA conversación — y no con `sesion`, aunque hoy coincidan.
     const guardado = guardarAdjuntoDeSesion(raiz, proyecto.idDeHilo, "ic.png", Buffer.from("ICONO"));
-    expect(guardado).toEqual({ ok: true });
+    // Ronda de arreglo 2/5 (IXCODE-7): el nombre viaja en la respuesta —puede llevar sufijo
+    // si ya había uno igual de otro turno de la MISMA sesión.
+    expect(guardado).toEqual({ ok: true, nombre: "ic.png" });
 
     proyecto.recibir({ clase: "prosa", texto: "pon el icono", adjuntos: ["ic.png"] });
     await new Promise((r) => setTimeout(r, 0));

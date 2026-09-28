@@ -6614,12 +6614,27 @@ describe("POST /adjunto", () => {
       };
     }
 
-    it("con proyecto abierto, guarda en la carpeta de adjuntos de ESA sesión: 204", async () => {
+    it("con proyecto abierto, guarda en la carpeta de adjuntos de ESA sesión: 200 con {nombre}", async () => {
+      // Ronda de arreglo 2/5 (IXCODE-7): 200+JSON y no 204, porque el nombre final lo
+      // decide el servidor (puede llevar sufijo) y el cliente necesita leerlo.
       const { manejador, abierto, cerrar } = await conProyectoAbierto();
       const r = await subir(manejador, "para=sesion&nombre=ic.png", "PNGPNGPNG");
-      expect(r.estado).toBe(204);
+      expect(r.estado).toBe(200);
+      expect(JSON.parse(r.texto)).toEqual({ nombre: "ic.png" });
       const carpeta = carpetaDeAdjuntosDeSesion(abierto.raiz, abierto.idDeHilo);
       expect(readFileSync(join(carpeta, "ic.png"), "utf8")).toBe("PNGPNGPNG");
+      await cerrar();
+    });
+
+    it("un segundo adjunto con el MISMO nombre no pisa el primero: 200 con el nombre sufijado", async () => {
+      const { manejador, abierto, cerrar } = await conProyectoAbierto();
+      await subir(manejador, "para=sesion&nombre=ic.png", "PRIMERO");
+      const r = await subir(manejador, "para=sesion&nombre=ic.png", "SEGUNDO");
+      expect(r.estado).toBe(200);
+      expect(JSON.parse(r.texto)).toEqual({ nombre: "ic-2.png" });
+      const carpeta = carpetaDeAdjuntosDeSesion(abierto.raiz, abierto.idDeHilo);
+      expect(readFileSync(join(carpeta, "ic.png"), "utf8")).toBe("PRIMERO");
+      expect(readFileSync(join(carpeta, "ic-2.png"), "utf8")).toBe("SEGUNDO");
       await cerrar();
     });
 

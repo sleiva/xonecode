@@ -90,6 +90,40 @@ export interface TopesDeAdjuntosDeSesion {
 }
 
 /**
+ * Cuántos sufijos `-2`, `-3`… se prueban antes de rendirse (Ronda de arreglo 1/5, IXCODE-7).
+ * Un valor razonable, no una promesa de «siempre hay hueco»: una sesión con más de cien
+ * adjuntos del MISMO nombre es un caso patológico, no uno que este harness tenga que servir.
+ */
+const TOPE_DE_SUFIJOS_DE_NOMBRE = 100;
+
+/**
+ * El nombre con el que ESTE fichero se escribe de verdad, dentro de `carpeta`.
+ *
+ * **La carpeta de adjuntos es por SESIÓN, no por mensaje**, y las fichas del compositor se
+ * vacían al enviar (`Compositor.tsx#enviar`): sin esto, un `pegado-1.png` de un turno
+ * pisaba en SILENCIO el de un turno anterior de la misma conversación —`writeFileSync` no
+ * avisa—, y la imagen que el agente leía ya no era la que la persona acababa de mandar.
+ *
+ * **El nombre final lo decide el SERVIDOR**, no el cliente: es quien de verdad conoce lo
+ * que ya hay en la carpeta en el instante de escribir (dos subidas casi simultáneas del
+ * mismo nombre solo se sirven UNA detrás de otra, nunca en paralelo — la ruta HTTP no
+ * paraleliza dos peticiones del mismo `fetch` secuencial del compositor, y aun si lo
+ * hiciera, cada `writeFileSync` sería atómico por fichero). `existsSync` y no un `readdir`
+ * cacheado: la comprobación tiene que ser la ÚLTIMA cosa antes de escribir.
+ */
+function nombreLibreEn(carpeta: string, nombre: string): string | undefined {
+  if (!existsSync(join(carpeta, nombre))) return nombre;
+  const punto = nombre.lastIndexOf(".");
+  const base = punto > 0 ? nombre.slice(0, punto) : nombre;
+  const extension = punto > 0 ? nombre.slice(punto) : "";
+  for (let n = 2; n <= TOPE_DE_SUFIJOS_DE_NOMBRE + 1; n += 1) {
+    const candidato = `${base}-${n}${extension}`;
+    if (!existsSync(join(carpeta, candidato))) return candidato;
+  }
+  return undefined;
+}
+
+/**
  * El código de un error, nunca su mensaje: el mensaje de Node lleva la ruta absoluta (`ENOENT:
  * … open '/Users/…/adjuntos/x'`) y el motivo se devuelve al cliente por HTTP. Mismo apaño que
  * `codigoDe` en `arranque.ts`/`corredorDeTareas.ts`, copiado y no importado porque los tres son
@@ -109,6 +143,13 @@ function codigoDe(error: unknown): string {
  * nombre, el tamaño del propio fichero), luego la carpeta —comprobada, no creada— y solo con
  * ella en la mano el tope por sesión (que necesita leer lo que ya hay) y la escritura.
  *
+ * **NUNCA sobrescribe** (Ronda de arreglo 1/5, IXCODE-7): la carpeta es por SESIÓN y sobrevive
+ * a que el compositor vacíe sus fichas al enviar, así que dos turnos que suban el mismo nombre
+ * —un `pegado-1.png` es el caso típico— pisarían en silencio el fichero del turno anterior sin
+ * este paso. `nombreLibreEn` decide el nombre FINAL, que puede llevar sufijo; se devuelve en
+ * `{ok:true, nombre}` para que quien llama (la ruta HTTP, y con ella la ficha del compositor)
+ * sepa con qué nombre quedó de verdad.
+ *
  * **Las cuatro llamadas de disco van en un `try`**: `mkdirSync` (un `EACCES` de permisos),
  * `readdirSync`/`statSync` al sumar lo que ya hay (un `ENOSPC`, o un enlace COLGANTE dentro de
  * `adjuntos/` — `statSync` lo sigue y `ENOENT` si el destino no existe) y `writeFileSync`. Un
@@ -121,7 +162,7 @@ export function guardarAdjuntoDeSesion(
   nombre: string,
   datos: Buffer,
   topes: TopesDeAdjuntosDeSesion = { porFichero: TOPE_DE_ADJUNTO_DE_SESION, porSesion: TOPE_DE_ADJUNTOS_POR_SESION }
-): { ok: true } | { ok: false; motivo: string } {
+): { ok: true; nombre: string } | { ok: false; motivo: string } {
   if (!nombreDeAdjuntoAceptable(nombre)) {
     return { ok: false, motivo: "ese nombre no vale para un adjunto" };
   }
@@ -139,10 +180,14 @@ export function guardarAdjuntoDeSesion(
     if (ya + datos.length > topes.porSesion) {
       return { ok: false, motivo: `esta sesión ya no admite más adjuntos (tope ${Math.round(topes.porSesion / 1_000_000)} MB)` };
     }
+    const nombreFinal = nombreLibreEn(carpeta, nombre);
+    if (nombreFinal === undefined) {
+      return { ok: false, motivo: "ya hay demasiados adjuntos con ese nombre en esta sesión" };
+    }
     // Un adjunto es un documento de la persona, no un dato de sistema: mismo 0600 que los
     // adjuntos de tarea y que el índice de sesiones.
-    writeFileSync(join(carpeta, nombre), datos, { mode: 0o600 });
-    return { ok: true };
+    writeFileSync(join(carpeta, nombreFinal), datos, { mode: 0o600 });
+    return { ok: true, nombre: nombreFinal };
   } catch (error) {
     return { ok: false, motivo: `no se pudo guardar el adjunto (${codigoDe(error)})` };
   }

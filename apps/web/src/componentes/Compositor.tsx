@@ -13,9 +13,21 @@ import pastillas from "./PastillaDeModelo.module.css";
 import { ContadorDeTokens, type ConsumoPintable } from "./ContadorDeTokens.js";
 import estilos from "./Compositor.module.css";
 
-/** Una ficha de adjunto EN VUELO en el compositor: lo que se ve mientras dura la subida y
- *  lo que decide si se puede enviar (ver `Compositor#enviar`). */
+/**
+ * Una ficha de adjunto EN VUELO en el compositor: lo que se ve mientras dura la subida y lo
+ * que decide si se puede enviar (ver `Compositor#enviar`).
+ *
+ * **`id` es la CLAVE, no `nombre`** (Ronda de arreglo 1/5, IXCODE-7): la resolución de una
+ * subida —lo que llega cuando `alSubirAdjunto` por fin contesta— tiene que encontrar SU
+ * ficha, y dos fichas pueden compartir nombre un instante: quitar una que está «subiendo» y
+ * volver a elegir el MISMO fichero crea una ficha nueva con el mismo `nombre` mientras la
+ * vieja sigue en vuelo. Emparejar por nombre hacía que la resolución de la subida VIEJA
+ * marcara la ficha NUEVA —lista aunque su propia subida real fallara—. El `id` es un
+ * contador local del componente y no sobrevive a un remonte, que es justo lo que hace falta:
+ * nunca hay dos fichas vivas a la vez con el mismo.
+ */
 interface FichaDeAdjunto {
+  id: number;
   nombre: string;
   estado: "subiendo" | "listo" | "falló";
   motivo?: string;
@@ -27,6 +39,11 @@ interface FichaDeAdjunto {
  * nombre porque el servidor lo sobrescribiría—, aquí no hace falta: cada ficha se sube con
  * SU nombre único, así que dos capturas seguidas —o dos pegados— simplemente se numeran, en
  * vez de obligar a quitar la primera para poder soltar la segunda.
+ *
+ * **Esto es solo para la ETIQUETA mientras sube**: el nombre de verdad lo decide el
+ * SERVIDOR (Ronda de arreglo 2/5) y puede diferir —otro turno de la MISMA sesión pudo
+ * subir ya algo con este nombre—, así que `añadirFicheros` sustituye el nombre de la ficha
+ * por el que devuelva `alSubirAdjunto` en cuanto contesta.
  */
 function nombreUnicoEntreFichas(nombre: string, tomados: ReadonlySet<string>): string {
   if (!tomados.has(nombre)) return nombre;
@@ -172,11 +189,14 @@ export function Compositor({
   /**
    * Sube los bytes de UN adjunto elegido, soltado o pegado. Ausente = no se pinta el «+» ni
    * se aceptan sueltos o pegados — la misma regla que ya siguen `alElegirDispositivo` y
-   * `alElegirModoDeEscritura`: un control sin dato detrás no se pinta. El `nombre` ya viene
-   * convertido a segmento llano por `nombreDeAdjuntoSeguro` y hecho único entre las fichas;
-   * quien decide si vale de verdad es el servidor, dos veces.
+   * `alElegirModoDeEscritura`: un control sin dato detrás no se pinta. El `nombre` que se
+   * MANDA ya viene convertido a segmento llano por `nombreDeAdjuntoSeguro` y hecho único
+   * entre las fichas de este compositor; el `nombre` que se DEVUELVE es el que el servidor
+   * decidió de verdad (puede llevar sufijo si la sesión ya tenía uno igual de otro turno) y
+   * es el que la ficha usa a partir de ahí. Quien decide si vale de verdad es el servidor,
+   * dos veces.
    */
-  alSubirAdjunto?: (fichero: File, nombre: string) => Promise<{ ok: boolean; motivo?: string }>;
+  alSubirAdjunto?: (fichero: File, nombre: string) => Promise<{ ok: boolean; nombre?: string; motivo?: string }>;
   /**
    * Manda el turno con lo escrito y los NOMBRES de las fichas «listo» —`[]` sin ninguna—.
    * Los nombres y no los `File`: los bytes ya están en el servidor (`alSubirAdjunto` los
@@ -195,9 +215,18 @@ export function Compositor({
   const campo = useRef<HTMLTextAreaElement>(null);
   const entradaDeFicheros = useRef<HTMLInputElement>(null);
   const [fichas, setFichas] = useState<FichaDeAdjunto[]>([]);
+  /** El `id` de la PRÓXIMA ficha: un contador y no `crypto.randomUUID()` —no hace falta que
+   *  sea imprevisible, solo que no se repita DENTRO de este componente montado (ver
+   *  `FichaDeAdjunto`), la misma razón que ya documenta `idNuevoDeCliente` en `conexion.ts`. */
+  const siguienteIdDeFicha = useRef(0);
   /** Solo mientras se arrastra algo POR ENCIMA: es lo que enciende `data-arrastrando`. Un
    *  soltado normal (drop) ya no está «arrastrando», así que se apaga ahí también. */
   const [arrastrando, setArrastrando] = useState(false);
+
+  // Sin conexión no se sube nada: el «+» ya se apaga con `disabled`, pero soltar o pegar no
+  // pasan por un `<button>` — sin esta comprobación aquí, arrastrar un fichero sobre la caja
+  // desconectada disparaba igual la subida (Ronda de arreglo 5/5, IXCODE-7).
+  const puedeAnexar = alSubirAdjunto !== undefined && conectado;
 
   /**
    * Sube cada fichero elegido, soltado o pegado, UNO A UNO —igual que `NuevaTarea#añadir`,
@@ -211,30 +240,39 @@ export function Compositor({
     if (alSubirAdjunto === undefined) return;
     const tomados = new Set(fichas.map((f) => f.nombre));
     for (const fichero of elegidos) {
+      const id = siguienteIdDeFicha.current;
+      siguienteIdDeFicha.current += 1;
       const base = nombreDeAdjuntoSeguro(fichero.name);
       if (base === undefined) {
         // No se inventa uno: se dice, y la ficha se queda ahí hasta que alguien la quite.
-        setFichas((ya) => [...ya, { nombre: fichero.name, estado: "falló", motivo: "no se puede usar ese nombre aquí" }]);
+        setFichas((ya) => [...ya, { id, nombre: fichero.name, estado: "falló", motivo: "no se puede usar ese nombre aquí" }]);
         continue;
       }
       const nombre = nombreUnicoEntreFichas(base, tomados);
       tomados.add(nombre);
-      setFichas((ya) => [...ya, { nombre, estado: "subiendo" }]);
+      setFichas((ya) => [...ya, { id, nombre, estado: "subiendo" }]);
       const r = await alSubirAdjunto(fichero, nombre);
+      // Se empareja por `id`, NUNCA por nombre (Ronda de arreglo 1/5): si esta ficha se
+      // QUITÓ mientras subía —y se volvió a añadir el MISMO nombre—, la ficha nueva tiene
+      // otro `id` y no la encuentra el `.map`, así que esta resolución no toca nada.
       setFichas((ya) =>
         ya.map((f) =>
-          f.nombre === nombre && f.estado === "subiendo"
-            ? { ...f, estado: r.ok ? "listo" : "falló", ...(r.ok || r.motivo === undefined ? {} : { motivo: r.motivo }) }
+          f.id === id
+            ? r.ok
+              ? // El nombre FINAL lo decide el SERVIDOR (Ronda de arreglo 2/5): puede llevar
+                // un sufijo si la sesión ya tenía un adjunto igual de OTRO turno.
+                { ...f, estado: "listo" as const, nombre: r.nombre ?? f.nombre }
+              : { ...f, estado: "falló" as const, ...(r.motivo === undefined ? {} : { motivo: r.motivo }) }
             : f
         )
       );
     }
   };
 
-  const quitarFicha = (nombre: string): void => setFichas((ya) => ya.filter((f) => f.nombre !== nombre));
+  const quitarFicha = (id: number): void => setFichas((ya) => ya.filter((f) => f.id !== id));
 
   const alSoltar = (evento: DragEvent<HTMLDivElement>): void => {
-    if (alSubirAdjunto === undefined) return;
+    if (!puedeAnexar) return;
     evento.preventDefault();
     setArrastrando(false);
     void añadirFicheros(Array.from(evento.dataTransfer.files));
@@ -247,7 +285,7 @@ export function Compositor({
    * de comportamiento.
    */
   const alPegar = (evento: ClipboardEvent<HTMLTextAreaElement>): void => {
-    if (alSubirAdjunto === undefined) return;
+    if (!puedeAnexar) return;
     const pegados = Array.from(evento.clipboardData?.files ?? []);
     if (pegados.length === 0) return;
     evento.preventDefault();
@@ -344,12 +382,12 @@ export function Compositor({
         data-con-texto={valor === "" ? undefined : ""}
         // Soltar es de la CAJA entera y no solo del campo: la maqueta no lo distingue, y
         // un usuario que suelta un poco fuera del `<textarea>` no tiene por qué perder el
-        // fichero. Sin `alSubirAdjunto` los tres manejadores se quedan mudos (ver arriba),
-        // así que soltar algo aquí sin la capacidad no hace nada — ni siquiera enciende
-        // `data-arrastrando`.
+        // fichero. Sin `alSubirAdjunto` O sin conexión (`puedeAnexar`, Ronda de arreglo 5/5)
+        // los tres manejadores se quedan mudos, así que soltar algo aquí no hace nada — ni
+        // siquiera enciende `data-arrastrando`.
         data-arrastrando={arrastrando ? "" : undefined}
         onDragOver={(evento) => {
-          if (alSubirAdjunto === undefined) return;
+          if (!puedeAnexar) return;
           // Sin esto el navegador no permite soltar: es su comportamiento por omisión.
           evento.preventDefault();
           setArrastrando(true);
@@ -448,16 +486,25 @@ export function Compositor({
         {fichas.length === 0 ? null : (
           <ul className={estilos.fichas}>
             {fichas.map((f) => (
-              <li key={f.nombre} className={estilos.ficha} data-estado={f.estado}>
+              <li key={f.id} className={estilos.ficha} data-estado={f.estado}>
                 <span className={estilos.nombreDeFicha}>{f.nombre}</span>
-                <span className={estilos.estadoDeFicha}>
-                  {f.estado === "subiendo" ? "subiendo…" : f.estado === "listo" ? "listo" : (f.motivo ?? "no se pudo subir")}
+                {/*
+                  «falló» VISIBLE, con el MOTIVO en el `title` (Ronda de arreglo 3/5,
+                  decisión vinculante): antes el texto de la fila ERA el motivo —una frase
+                  larga rompía el ancho de la ficha, y una ficha «falló» sin más contexto
+                  no decía que había algo que leer al pasar el ratón por encima—.
+                */}
+                <span
+                  className={estilos.estadoDeFicha}
+                  {...(f.estado === "falló" ? { title: f.motivo ?? "no se pudo subir" } : {})}
+                >
+                  {f.estado === "subiendo" ? "subiendo…" : f.estado === "listo" ? "listo" : "falló"}
                 </span>
                 <button
                   type="button"
                   className={estilos.quitarFicha}
                   aria-label={`Quitar ${f.nombre}`}
-                  onClick={() => quitarFicha(f.nombre)}
+                  onClick={() => quitarFicha(f.id)}
                 >
                   Quitar
                 </button>

@@ -357,6 +357,33 @@ describe("adjuntar ficheros", () => {
     expect(alSubirAdjunto).not.toHaveBeenCalled();
   });
 
+  /**
+   * Ronda de arreglo 5/5: el «+» ya se apaga con `disabled` sin conexión, pero soltar y
+   * pegar no pasan por un `<button>` — sin esta comprobación, arrastrar un fichero sobre la
+   * caja desconectada disparaba igual la subida.
+   */
+  it("sin conexión, `drop` no sube nada ni enciende `data-arrastrando`", () => {
+    const alSubirAdjunto = vi.fn(async () => ({ ok: true }));
+    const { container } = render(<Compositor conectado={false} alEnviar={() => {}} alSubirAdjunto={alSubirAdjunto} />);
+    const caja = container.querySelector('[class*="compositor"]') as HTMLElement;
+    const f = new File(["x"], "captura.png", { type: "image/png" });
+
+    fireEvent.dragOver(caja, { dataTransfer: { files: [f] } });
+    expect(caja.hasAttribute("data-arrastrando")).toBe(false);
+
+    fireEvent.drop(caja, { dataTransfer: { files: [f] } });
+    expect(alSubirAdjunto).not.toHaveBeenCalled();
+  });
+
+  it("sin conexión, `paste` con ficheros no sube nada", () => {
+    const alSubirAdjunto = vi.fn(async () => ({ ok: true }));
+    render(<Compositor conectado={false} alEnviar={() => {}} alSubirAdjunto={alSubirAdjunto} />);
+    const campo = screen.getByRole("textbox");
+    const img = new File(["x"], "imagen.png", { type: "image/png" });
+    fireEvent.paste(campo, { clipboardData: { files: [img], types: ["Files"] } });
+    expect(alSubirAdjunto).not.toHaveBeenCalled();
+  });
+
   it("una ficha «subiendo» o «falló» impide enviar y lo dice en el `title`; «quitar» la retira", async () => {
     let resolver: (r: { ok: boolean; motivo?: string }) => void = () => {};
     const alSubirAdjunto = vi.fn(
@@ -373,14 +400,56 @@ describe("adjuntar ficheros", () => {
 
     // Falla: sigue apagado, con OTRO motivo.
     resolver({ ok: false, motivo: "el adjunto es demasiado grande" });
-    await waitFor(() => expect(screen.getByText("el adjunto es demasiado grande")).toBeTruthy());
+    // El texto VISIBLE de la ficha es «falló» (decisión vinculante, ronda 3/5): el motivo
+    // vive en el `title`, no en el texto — una frase larga rompía el ancho de la ficha.
+    const ficha = await screen.findByText("falló");
+    expect(ficha.title).toBe("el adjunto es demasiado grande");
     expect(botonEnviar.disabled).toBe(true);
     expect(botonEnviar.title).toMatch(/quita/);
 
     // Quitar la retira, y con ella se va el bloqueo.
     fireEvent.click(screen.getByRole("button", { name: "Quitar a.png" }));
-    expect(screen.queryByText("el adjunto es demasiado grande")).toBeNull();
+    expect(screen.queryByText("falló")).toBeNull();
     expect(botonEnviar.disabled).toBe(false);
+  });
+
+  /**
+   * La carrera de la ronda de arreglo 1/5: la resolución de una subida tiene que emparejar
+   * por IDENTIDAD de ficha, no por nombre. Sin eso, quitar una ficha que sigue «subiendo» y
+   * volver a elegir el MISMO fichero hacía que la resolución de la subida VIEJA marcara la
+   * ficha NUEVA como «listo» —aunque su propia subida real fallara después—.
+   */
+  it("quitar una ficha que está SUBIENDO y volver a añadir el MISMO nombre: la subida vieja no toca la nueva", async () => {
+    const resolutores: ((r: { ok: boolean; nombre?: string; motivo?: string }) => void)[] = [];
+    const alSubirAdjunto = vi.fn(
+      () => new Promise<{ ok: boolean; nombre?: string; motivo?: string }>((r) => resolutores.push(r))
+    );
+    render(<Compositor {...manejadores} alSubirAdjunto={alSubirAdjunto} />);
+
+    // Primera elección: «a.png» empieza a subir.
+    fireEvent.change(entradaDeFicheros(), { target: { files: [new File(["1"], "a.png", { type: "image/png" })] } });
+    await waitFor(() => expect(alSubirAdjunto).toHaveBeenCalledTimes(1));
+
+    // Se quita MIENTRAS sigue subiendo: la ficha desaparece, pero su promesa sigue viva.
+    fireEvent.click(screen.getByRole("button", { name: "Quitar a.png" }));
+    expect(screen.queryByText("a.png")).toBeNull();
+
+    // Se vuelve a elegir el MISMO nombre: es una ficha NUEVA, con otro `id`.
+    fireEvent.change(entradaDeFicheros(), { target: { files: [new File(["2"], "a.png", { type: "image/png" })] } });
+    await waitFor(() => expect(alSubirAdjunto).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("a.png")).toBeTruthy();
+
+    // La subida VIEJA resuelve DESPUÉS, con éxito: si emparejara por nombre, marcaría la
+    // ficha NUEVA como «listo» sin que su propia subida (la segunda) haya contestado nada.
+    resolutores[0]!({ ok: true, nombre: "a.png" });
+    // Deja correr la cola de microtareas del `.then` de React sin afirmar nada todavía.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(screen.queryByText("listo")).toBeNull();
+
+    // Y cuando la segunda —la de verdad— falla, la ficha lo dice: la vieja no la salvó.
+    resolutores[1]!({ ok: false, motivo: "el adjunto es demasiado grande" });
+    await waitFor(() => expect(screen.getByText("falló")).toBeTruthy());
   });
 
   it("enviar con fichas «listo» manda los NOMBRES y las vacía; se puede mandar SOLO con adjuntos", async () => {

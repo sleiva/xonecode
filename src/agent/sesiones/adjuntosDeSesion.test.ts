@@ -21,10 +21,46 @@ describe("guardarAdjuntoDeSesion / listarAdjuntosDeSesion", () => {
     const raiz = proyectoTemporal();
     const resultado = guardarAdjuntoDeSesion(raiz, "sesion-1", "captura.png", Buffer.from("no-son-bytes-de-verdad"));
 
-    expect(resultado).toEqual({ ok: true });
+    expect(resultado).toEqual({ ok: true, nombre: "captura.png" });
     expect(listarAdjuntosDeSesion(raiz, "sesion-1")).toEqual([
       { nombre: "captura.png", bytes: 22, mime: "image/png" },
     ]);
+  });
+
+  /**
+   * Ronda de arreglo 1/5 (IXCODE-7): la carpeta es por SESIÓN, no por mensaje, y las fichas
+   * del compositor se vacían al enviar — sin este sufijo, un segundo `a.png` de otro turno
+   * pisaría en SILENCIO el del turno anterior. `writeFileSync` no avisa de una sobrescritura.
+   */
+  it("dos guardados del MISMO nombre no se pisan: el segundo cae en «a-2.png», intacto el primero", () => {
+    const raiz = proyectoTemporal();
+    const primero = guardarAdjuntoDeSesion(raiz, "sesion-1", "a.png", Buffer.from("del primer turno"));
+    const segundo = guardarAdjuntoDeSesion(raiz, "sesion-1", "a.png", Buffer.from("del segundo turno"));
+
+    expect(primero).toEqual({ ok: true, nombre: "a.png" });
+    expect(segundo).toEqual({ ok: true, nombre: "a-2.png" });
+
+    const carpeta = join(raiz, ".xonecode", "sesiones", "sesion-1", "adjuntos");
+    expect(readFileSync(join(carpeta, "a.png"), "utf8")).toBe("del primer turno");
+    expect(readFileSync(join(carpeta, "a-2.png"), "utf8")).toBe("del segundo turno");
+    expect(listarAdjuntosDeSesion(raiz, "sesion-1").map((a) => a.nombre)).toEqual(["a-2.png", "a.png"]);
+  });
+
+  it("un tercer guardado del mismo nombre sigue la numeración: «a-3.png»", () => {
+    const raiz = proyectoTemporal();
+    guardarAdjuntoDeSesion(raiz, "sesion-1", "a.png", Buffer.from("1"));
+    guardarAdjuntoDeSesion(raiz, "sesion-1", "a.png", Buffer.from("2"));
+    const tercero = guardarAdjuntoDeSesion(raiz, "sesion-1", "a.png", Buffer.from("3"));
+
+    expect(tercero).toEqual({ ok: true, nombre: "a-3.png" });
+  });
+
+  it("un nombre sin extensión también se numera: «nota» → «nota-2»", () => {
+    const raiz = proyectoTemporal();
+    guardarAdjuntoDeSesion(raiz, "sesion-1", "nota", Buffer.from("1"));
+    const resultado = guardarAdjuntoDeSesion(raiz, "sesion-1", "nota", Buffer.from("2"));
+
+    expect(resultado).toEqual({ ok: true, nombre: "nota-2" });
   });
 
   it("escribe el fichero en 0600 y la carpeta en 0700", () => {
@@ -73,7 +109,7 @@ describe("guardarAdjuntoDeSesion / listarAdjuntosDeSesion", () => {
   it("rechaza lo que haga pasar la sesión del tope por sesión, aunque el fichero individual quepa", () => {
     const raiz = proyectoTemporal();
     const topes = { porFichero: 1000, porSesion: 1500 };
-    expect(guardarAdjuntoDeSesion(raiz, "sesion-1", "uno.bin", Buffer.alloc(900), topes)).toEqual({ ok: true });
+    expect(guardarAdjuntoDeSesion(raiz, "sesion-1", "uno.bin", Buffer.alloc(900), topes)).toEqual({ ok: true, nombre: "uno.bin" });
 
     const resultado = guardarAdjuntoDeSesion(raiz, "sesion-1", "dos.bin", Buffer.alloc(900), topes);
 

@@ -26,6 +26,10 @@ export type FabricaDeEventos = (url: string) => FuenteDeEventos;
 /** El subconjunto de `fetch` que `enviar` usa. */
 export type FuncionFetch = (url: string, opciones: RequestInit) => Promise<unknown>;
 
+/** El subconjunto de una `Response` que `subirBytes` necesita, de la misma forma laxa que
+ *  el resto de este fichero: `fetchInyectado` en un test no tiene por qué dar una de verdad. */
+type RespuestaDeBytes = { ok?: unknown; status?: unknown; text?: () => Promise<string>; json?: () => Promise<unknown> };
+
 const fabricaPorOmision: FabricaDeEventos = (url) => new EventSource(url) as unknown as FuenteDeEventos;
 
 /** 1 s, 2 s, 4 s… con tope de 30 s. Reconectar cada segundo para siempre es una tormenta. */
@@ -69,7 +73,16 @@ export interface Conexion {
    * porque aquí no hay una tarea a medio crear que nombrar — el servidor ya sabe cuál es la
    * sesión abierta.
    */
-  subirAdjuntoDeSesion(nombre: string, fichero: Blob): Promise<{ ok: boolean; motivo?: string }>;
+  /**
+   * `nombre`: el que el servidor DECIDIÓ de verdad (Ronda de arreglo 2/5, IXCODE-7). La
+   * carpeta de adjuntos es por SESIÓN y sobrevive a que el compositor vacíe sus fichas al
+   * enviar, así que dos turnos que suban el mismo nombre pisarían en silencio el fichero
+   * del turno anterior si el nombre lo eligiera el cliente; el servidor puede devolver un
+   * sufijo (`a-2.png`), y ese es el nombre que hay que usar luego en `alEnviar`. Presente
+   * solo con `ok: true` — la firma no lo obliga porque un doble de test más viejo, o un
+   * servidor que aún no lo manda, siguen siendo `{ok:true}` válido.
+   */
+  subirAdjuntoDeSesion(nombre: string, fichero: Blob): Promise<{ ok: boolean; nombre?: string; motivo?: string }>;
   /**
    * Instala una skill desde un `.zip` (`POST /skill`). Los BYTES van por HTTP y no por el
    * cable, que lleva JSON: el mismo molde, y la misma razón, que `subirAdjunto`.
@@ -106,6 +119,35 @@ export interface Conexion {
  */
 function idNuevoDeCliente(): string {
   return `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * El post-proceso común a las TRES subidas de bytes (`subirAdjunto`, `subirAdjuntoDeSesion`,
+ * `instalarSkill`): un `POST` sin `content-type` propio —el servidor lee bytes, y ponerle uno
+ * solo podría mentir—, un fallo de red que no revienta la ventana, y un MOTIVO que es el que
+ * escribe el SERVIDOR y nunca lleva una ruta de la máquina (su test lo vigila) en vez de un
+ * número de estado desnudo (Ronda de arreglo 4/5, IXCODE-7: las tres repetían este cuerpo
+ * palabra por palabra).
+ *
+ * Devuelve la `respuesta` cruda además de `{ok, motivo?}` porque `subirAdjuntoDeSesion` —y
+ * solo ella, hoy— necesita leer su cuerpo JSON; los otros dos llamadores la ignoran.
+ */
+async function subirBytes(
+  fetchInyectado: FuncionFetch,
+  url: string,
+  cuerpo: Blob
+): Promise<{ ok: boolean; motivo?: string; respuesta?: RespuestaDeBytes }> {
+  let respuesta: unknown;
+  try {
+    respuesta = await fetchInyectado(url, { method: "POST", credentials: "same-origin", body: cuerpo });
+  } catch (error) {
+    // Un fallo de red no puede tumbar la ventana: se dice en la fila del fichero.
+    return { ok: false, motivo: error instanceof Error ? error.message : "no se pudo subir" };
+  }
+  const r = respuesta as RespuestaDeBytes | undefined;
+  if (r?.ok === true) return { ok: true, respuesta: r };
+  const motivo = (await r?.text?.().catch(() => "")) ?? "";
+  return { ok: false, motivo: motivo.trim() === "" ? `el servidor contestó ${String(r?.status ?? "?")}` : motivo.trim() };
 }
 
 /**
@@ -193,58 +235,38 @@ export function crearConexion(store: Store, opciones: OpcionesDeConexion = {}): 
     enviar,
     async subirAdjunto(tarea, nombre, fichero) {
       // El nombre va CODIFICADO en la query y no en el camino de la ruta: `registrarRuta`
-      // casa por coincidencia exacta (la misma razón que documenta `RUTA_ARTEFACTO`). Y sin
-      // `content-type` propio: el servidor lee bytes, y ponerle uno solo podría mentir.
+      // casa por coincidencia exacta (la misma razón que documenta `RUTA_ARTEFACTO`).
       const url = `/adjunto?tarea=${encodeURIComponent(tarea)}&nombre=${encodeURIComponent(nombre)}`;
-      let respuesta: unknown;
-      try {
-        respuesta = await fetchInyectado(url, { method: "POST", credentials: "same-origin", body: fichero });
-      } catch (error) {
-        // Un fallo de red no puede tumbar la ventana: se dice en la fila del fichero.
-        return { ok: false, motivo: error instanceof Error ? error.message : "no se pudo subir" };
-      }
-      const r = respuesta as { ok?: unknown; status?: unknown; text?: () => Promise<string> } | undefined;
-      if (r?.ok === true) return { ok: true };
-      // El MOTIVO lo escribe el servidor y no lleva ninguna ruta de la máquina (su test lo
-      // vigila): es lo que hace que un tope o un nombre rechazado se lean en su fila en vez
-      // de como un número de estado.
-      const motivo = (await r?.text?.().catch(() => "")) ?? "";
-      return { ok: false, motivo: motivo.trim() === "" ? `el servidor contestó ${String(r?.status ?? "?")}` : motivo.trim() };
+      const r = await subirBytes(fetchInyectado, url, fichero);
+      return r.ok ? { ok: true } : { ok: false, motivo: r.motivo };
     },
     async subirAdjuntoDeSesion(nombre, fichero) {
       // `para=sesion` y no `tarea=<id>`: el destino es la sesión ABIERTA del servidor, no
-      // un borrador de tarea. El resto —nombre en la query, sin `content-type` propio— es
-      // idéntico a `subirAdjunto`.
+      // un borrador de tarea.
       const url = `/adjunto?para=sesion&nombre=${encodeURIComponent(nombre)}`;
-      let respuesta: unknown;
+      const r = await subirBytes(fetchInyectado, url, fichero);
+      if (!r.ok) return { ok: false, motivo: r.motivo };
+      // El nombre FINAL viaja en el CUERPO (200+JSON, Ronda de arreglo 2/5): un `.json()`
+      // que no llega, o que no trae un `nombre` de texto, es un servidor que no habla este
+      // contrato — se rechaza en vez de inventar un nombre que puede que ya no exista.
+      let cuerpo: unknown;
       try {
-        respuesta = await fetchInyectado(url, { method: "POST", credentials: "same-origin", body: fichero });
-      } catch (error) {
-        return { ok: false, motivo: error instanceof Error ? error.message : "no se pudo subir" };
+        cuerpo = await r.respuesta?.json?.();
+      } catch {
+        return { ok: false, motivo: "el servidor no contestó con el nombre del adjunto" };
       }
-      const r = respuesta as { ok?: unknown; status?: unknown; text?: () => Promise<string> } | undefined;
-      if (r?.ok === true) return { ok: true };
-      const motivo = (await r?.text?.().catch(() => "")) ?? "";
-      return { ok: false, motivo: motivo.trim() === "" ? `el servidor contestó ${String(r?.status ?? "?")}` : motivo.trim() };
+      const nombreFinal = (cuerpo as { nombre?: unknown } | undefined)?.nombre;
+      if (typeof nombreFinal !== "string" || nombreFinal === "") {
+        return { ok: false, motivo: "el servidor no contestó con el nombre del adjunto" };
+      }
+      return { ok: true, nombre: nombreFinal };
     },
     async instalarSkill(nombre, ambito, zip) {
       // Misma forma que `subirAdjunto`, y por las mismas razones: nombre CODIFICADO en la
-      // query —`registrarRuta` casa por coincidencia exacta— y sin `content-type` propio,
-      // que el servidor lee bytes y ponerle uno solo podría mentir.
+      // query —`registrarRuta` casa por coincidencia exacta.
       const url = `/skill?nombre=${encodeURIComponent(nombre)}&ambito=${encodeURIComponent(ambito)}`;
-      let respuesta: unknown;
-      try {
-        respuesta = await fetchInyectado(url, { method: "POST", credentials: "same-origin", body: zip });
-      } catch (error) {
-        return { ok: false, motivo: error instanceof Error ? error.message : "no se pudo instalar" };
-      }
-      const r = respuesta as { ok?: unknown; status?: unknown; text?: () => Promise<string> } | undefined;
-      if (r?.ok === true) return { ok: true };
-      // El MOTIVO lo escribe el servidor —«no trae SKILL.md», «ya hay una así»— y no lleva
-      // ninguna ruta de la máquina. Es lo que hace que un zip rechazado se lea como una
-      // frase en su sitio y no como un número de estado.
-      const motivo = (await r?.text?.().catch(() => "")) ?? "";
-      return { ok: false, motivo: motivo.trim() === "" ? `el servidor contestó ${String(r?.status ?? "?")}` : motivo.trim() };
+      const r = await subirBytes(fetchInyectado, url, zip);
+      return r.ok ? { ok: true } : { ok: false, motivo: r.motivo };
     },
   };
 }

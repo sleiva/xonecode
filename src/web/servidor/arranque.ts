@@ -4350,8 +4350,13 @@ export function montarRutas(
         responder(413, guardado.motivo ?? "no se pudo guardar el adjunto");
         return;
       }
-      respuesta.writeHead(204);
-      respuesta.end();
+      // 200 con JSON y no 204 (Ronda de arreglo 2/5, IXCODE-7): el nombre final lo decide
+      // `guardarAdjuntoDeSesion` —puede llevar sufijo `-2` si ya había un adjunto igual de
+      // OTRO turno de la misma sesión—, y el cliente necesita saberlo para mandarlo luego
+      // con `{clase:"prosa", adjuntos}`. El camino `?tarea=` sigue en 204: ahí el nombre no
+      // cambia, la carpeta es NUEVA por tarea.
+      respuesta.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      respuesta.end(JSON.stringify({ nombre: guardado.nombre }));
       return;
     }
     const tarea = query.get("tarea");

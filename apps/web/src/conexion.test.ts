@@ -247,6 +247,11 @@ describe("conexión SSE", () => {
    * El adjunto de una SESIÓN abierta (Task 6, el «+» del compositor): mismo molde que
    * `subirAdjunto`, con `para=sesion` en vez de `tarea=<id>` porque aquí no hay un
    * borrador que nombrar.
+   *
+   * **200+JSON y no 204** (Ronda de arreglo 2/5, IXCODE-7): el nombre final lo decide el
+   * SERVIDOR —puede llevar un sufijo si ya había un adjunto igual de OTRO turno de la
+   * misma sesión, porque la carpeta es por sesión y las fichas se vacían al enviar— así
+   * que el cliente lo LEE del cuerpo en vez de asumir el que mandó en la query.
    */
   it("subirAdjuntoDeSesion() hace POST /adjunto?para=sesion con el nombre en la QUERY y los bytes como cuerpo", async () => {
     const store = crearStoreDelCliente();
@@ -255,12 +260,12 @@ describe("conexión SSE", () => {
       fabricaDeEventos: () => new FuenteFalsa(),
       fetch: async (url, opciones) => {
         llamadas.push([url, opciones]);
-        return { ok: true, status: 204, text: async () => "" };
+        return { ok: true, status: 200, json: async () => ({ nombre: "mockup.png" }) };
       },
     });
 
     const fichero = new File(["0123456789"], "mockup.png", { type: "image/png" });
-    expect(await conexion.subirAdjuntoDeSesion("mockup.png", fichero)).toEqual({ ok: true });
+    expect(await conexion.subirAdjuntoDeSesion("mockup.png", fichero)).toEqual({ ok: true, nombre: "mockup.png" });
 
     const [url, opciones] = llamadas[0]!;
     expect(url).toBe("/adjunto?para=sesion&nombre=mockup.png");
@@ -268,6 +273,18 @@ describe("conexión SSE", () => {
     expect(opciones.credentials).toBe("same-origin");
     expect(opciones.body).toBe(fichero);
     expect(opciones.headers).toBeUndefined();
+  });
+
+  it("subirAdjuntoDeSesion() devuelve el nombre SUFIJADO que decidió el servidor, no el que se mandó", async () => {
+    const store = crearStoreDelCliente();
+    const conexion = crearConexion(store, {
+      fabricaDeEventos: () => new FuenteFalsa(),
+      fetch: async () => ({ ok: true, status: 200, json: async () => ({ nombre: "mockup-2.png" }) }),
+    });
+    expect(await conexion.subirAdjuntoDeSesion("mockup.png", new File(["x"], "mockup.png"))).toEqual({
+      ok: true,
+      nombre: "mockup-2.png",
+    });
   });
 
   it("subirAdjuntoDeSesion() devuelve el MOTIVO que contesta el servidor", async () => {
@@ -280,6 +297,17 @@ describe("conexión SSE", () => {
       ok: false,
       motivo: "ese nombre no vale",
     });
+  });
+
+  it("subirAdjuntoDeSesion() rechaza si el 200 no trae un `nombre` de texto: no inventa uno", async () => {
+    const store = crearStoreDelCliente();
+    const conexion = crearConexion(store, {
+      fabricaDeEventos: () => new FuenteFalsa(),
+      fetch: async () => ({ ok: true, status: 200, json: async () => ({}) }),
+    });
+    const r = await conexion.subirAdjuntoDeSesion("a.png", new File(["x"], "a.png"));
+    expect(r.ok).toBe(false);
+    expect(r.motivo).toBeDefined();
   });
 });
 
