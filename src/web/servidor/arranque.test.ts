@@ -9775,6 +9775,13 @@ describe("el gestor de tareas, por el cable", () => {
       },
     });
     const ahora = t.vestibulo.proyectoAbierto()!;
+    // El alta de la sesión nueva llega ANTES que el borrador: el cliente ya está en ella
+    // cuando el texto aterriza en el compositor.
+    const recibidos = t.cliente.recibidos;
+    const iBorrador = recibidos.findIndex((x) => x.clase === "gestor" && "borrador" in x && x.borrador !== undefined);
+    const iAlta = recibidos.findIndex((x, i) => i > recibidos.indexOf(pendientes!) && x.clase === "alta");
+    expect(iAlta).toBeGreaterThan(-1);
+    expect(iAlta).toBeLessThan(iBorrador);
     expect(ahora.raiz).toBe(antes.raiz);
     expect(ahora.idDeHilo).not.toBe(antes.idDeHilo);
     expect(fijados).toEqual([{ hilo: ahora.idDeHilo, ticket: { conector: "jira", sitio: "c1", clave: "IXCODE-12" } }]);

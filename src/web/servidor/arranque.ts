@@ -3622,6 +3622,7 @@ export function montarRutas(
       if (g === undefined) fallo(`«${conector}» no es un gestor de tareas de esta ejecución`);
       return g;
     };
+    let anunciada = false;
     try {
       switch (m.accion) {
         case "estado":
@@ -3686,6 +3687,8 @@ export function montarRutas(
           // La ficha ANTES de abrir nada: si el gestor no contesta, no queda una sesión vacía.
           const ficha = await g.ficha(vinculo, m.clave);
           const hiloDeAntes = abierto.idDeHilo;
+          // Como en `atenderSesion`: un aviso de otra apertura no viaja en el alta de esta.
+          aviso = undefined;
           // Una sesión NUEVA del mismo proyecto: el camino de `atenderSesion` sin `sesion`.
           const nueva = await vestibulo.abrirProyecto({ raiz });
           trasAbrirSesion();
@@ -3693,6 +3696,10 @@ export function montarRutas(
           // ligaría a la tarea una conversación que no se abrió para ella.
           if (nueva.raiz !== raiz || nueva.idDeHilo === hiloDeAntes) return fallo("no se pudo abrir una sesión nueva");
           nueva.fijarTicket({ conector: vinculo.conector, sitio: vinculo.sitio, clave: ficha.clave });
+          // El alta ANTES que el borrador: el cliente tiene que estar ya en la sesión nueva
+          // cuando el texto llega al compositor, o el cambio de sesión se lo llevaría.
+          await anunciarAlta().catch(contar);
+          anunciada = true;
           emitir({ clase: "gestor", borrador: { clave: ficha.clave, texto: borradorDeTarea(ficha) } });
           return;
         }
@@ -3700,9 +3707,10 @@ export function montarRutas(
     } catch (error) {
       fallo(motivoLegible(error));
     } finally {
-      // `empezar` cambió de sesión: el alta dice cuál es la de ahora, igual que al final de
-      // `atenderSesion`. Las demás acciones no mueven el foco, y no se reanuncia nada.
-      if (m.accion === "empezar") await anunciarAlta().catch(contar);
+      // `empezar` pudo cambiar de sesión y fallar después: el alta dice cuál es la de ahora,
+      // igual que al final de `atenderSesion`. Si ya salió antes del borrador, no se repite. Las
+      // demás acciones no mueven el foco, y no se reanuncia nada.
+      if (m.accion === "empezar" && !anunciada) await anunciarAlta().catch(contar);
     }
   };
 
