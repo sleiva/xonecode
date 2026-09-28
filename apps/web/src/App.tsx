@@ -59,6 +59,7 @@ export function App({
   store,
   enviar,
   subirAdjunto,
+  subirAdjuntoDeSesion,
   instalarSkill,
   mirar,
 }: {
@@ -70,6 +71,14 @@ export function App({
    * ninguno y los tests no tienen que parchear el global.
    */
   subirAdjunto: Conexion["subirAdjunto"];
+  /**
+   * Lo mismo, para un adjunto del CHAT de la sesión abierta (Task 6, IXCODE-7): el «+» del
+   * compositor, un soltado o un pegado. **Opcional y no obligatorio como `subirAdjunto`**:
+   * así los montajes de test que no lo pasan siguen viendo un compositor sin «+» —«un
+   * control sin dato detrás no se pinta»— en vez de tener que actualizar cada uno de ellos
+   * para un adjunto que ese test no ejercita.
+   */
+  subirAdjuntoDeSesion?: Conexion["subirAdjuntoDeSesion"];
   instalarSkill: Conexion["instalarSkill"];
   /**
    * Empezar o dejar de mirar en vivo lo que hace una tarea. Tiene canal propio y no va por
@@ -1834,11 +1843,24 @@ export function App({
               {...(estado.turnoDetenible === true
                 ? { alDetener: (texto: string) => void enviar({ clase: "prosa", texto, detener: true }) }
                 : {})}
+              // El «+», soltar y pegar (Task 6, IXCODE-7): solo con sesión abierta —este
+              // `<Compositor>` ya vive entero dentro de `enSesion` (ver más arriba)— y con
+              // la capacidad inyectada. Sin ella no se pinta: un control sin dato detrás no
+              // se pinta, la misma regla que `alElegirDispositivo`.
+              {...(subirAdjuntoDeSesion === undefined
+                ? {}
+                : { alSubirAdjunto: (fichero: File, nombre: string) => subirAdjuntoDeSesion(nombre, fichero) })}
               // Una línea que empieza por «/» no tiene camino propio: viaja como prosa
               // igual que cualquier otra, y es `correrConsola` quien la despacha contra
               // `COMANDOS` (`cli/consola.ts:819`) del lado del servidor — así `/ayuda`,
               // `/modelo`, `/config` y `/sync` funcionan aquí sin ningún código nuevo.
-              alEnviar={(texto) => void enviar({ clase: "prosa", texto })}
+              //
+              // Los `adjuntos` viajan solo si hay alguno: ausente ≠ vacío, la misma regla
+              // que el resto del cable — un mensaje sin ese campo es «ninguno», no «se
+              // mandó una lista vacía a propósito».
+              alEnviar={(texto, adjuntos) =>
+                void enviar({ clase: "prosa", texto, ...(adjuntos.length === 0 ? {} : { adjuntos }) })
+              }
             />
             <BarraDeEstado
               turnos={turnos}

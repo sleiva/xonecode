@@ -60,6 +60,17 @@ export interface Conexion {
    */
   subirAdjunto(tarea: string, nombre: string, fichero: Blob): Promise<{ ok: boolean; motivo?: string }>;
   /**
+   * Sube los bytes de un adjunto de la SESIÓN abierta (`POST /adjunto?para=sesion`), desde
+   * el «+» del compositor, un soltado o un pegado.
+   *
+   * Misma forma que `subirAdjunto` y por las mismas razones —bytes por HTTP y no por el
+   * cable, nombre CODIFICADO en la query, sin `content-type` propio, `{ok, motivo?}` sin
+   * lanzar—; lo único que cambia es el destino: `para=sesion` en vez de `tarea=<borrador>`,
+   * porque aquí no hay una tarea a medio crear que nombrar — el servidor ya sabe cuál es la
+   * sesión abierta.
+   */
+  subirAdjuntoDeSesion(nombre: string, fichero: Blob): Promise<{ ok: boolean; motivo?: string }>;
+  /**
    * Instala una skill desde un `.zip` (`POST /skill`). Los BYTES van por HTTP y no por el
    * cable, que lleva JSON: el mismo molde, y la misma razón, que `subirAdjunto`.
    *
@@ -197,6 +208,22 @@ export function crearConexion(store: Store, opciones: OpcionesDeConexion = {}): 
       // El MOTIVO lo escribe el servidor y no lleva ninguna ruta de la máquina (su test lo
       // vigila): es lo que hace que un tope o un nombre rechazado se lean en su fila en vez
       // de como un número de estado.
+      const motivo = (await r?.text?.().catch(() => "")) ?? "";
+      return { ok: false, motivo: motivo.trim() === "" ? `el servidor contestó ${String(r?.status ?? "?")}` : motivo.trim() };
+    },
+    async subirAdjuntoDeSesion(nombre, fichero) {
+      // `para=sesion` y no `tarea=<id>`: el destino es la sesión ABIERTA del servidor, no
+      // un borrador de tarea. El resto —nombre en la query, sin `content-type` propio— es
+      // idéntico a `subirAdjunto`.
+      const url = `/adjunto?para=sesion&nombre=${encodeURIComponent(nombre)}`;
+      let respuesta: unknown;
+      try {
+        respuesta = await fetchInyectado(url, { method: "POST", credentials: "same-origin", body: fichero });
+      } catch (error) {
+        return { ok: false, motivo: error instanceof Error ? error.message : "no se pudo subir" };
+      }
+      const r = respuesta as { ok?: unknown; status?: unknown; text?: () => Promise<string> } | undefined;
+      if (r?.ok === true) return { ok: true };
       const motivo = (await r?.text?.().catch(() => "")) ?? "";
       return { ok: false, motivo: motivo.trim() === "" ? `el servidor contestó ${String(r?.status ?? "?")}` : motivo.trim() };
     },

@@ -51,6 +51,7 @@ createRoot(document.getElementById("root")!).render(
       store={store}
       enviar={conexion.enviar}
       subirAdjunto={conexion.subirAdjunto}
+      subirAdjuntoDeSesion={conexion.subirAdjuntoDeSesion}
       instalarSkill={conexion.instalarSkill}
       mirar={conexion.mirar}
     />

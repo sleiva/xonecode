@@ -113,6 +113,57 @@ describe("App: la pregunta de texto libre", () => {
   });
 });
 
+/**
+ * Anexar en el chat de una sesión (Task 6, IXCODE-7): `App` solo pinta el «+» del
+ * compositor con `subirAdjuntoDeSesion` inyectado —opcional, a diferencia de `subirAdjunto`
+ * (de tarea)—, y el turno viaja con los NOMBRES ya subidos.
+ */
+describe("App: adjuntos del chat", () => {
+  it("sin `subirAdjuntoDeSesion` no hay «+»: un control sin dato detrás no se pinta", () => {
+    montar();
+    expect(screen.queryByRole("button", { name: "Anexar ficheros" })).toBeNull();
+  });
+
+  it("con él: el «+» sube el fichero por HTTP y ENVIAR manda su nombre en `adjuntos`", async () => {
+    const subirAdjuntoDeSesion = vi.fn(async (): Promise<{ ok: boolean; motivo?: string }> => ({ ok: true }));
+    const enviar: Mock<(mensaje: unknown) => Promise<unknown>> = vi.fn(() => Promise.resolve(undefined as unknown));
+    const store = crearStoreDelCliente();
+    render(
+      <App
+        store={store}
+        enviar={enviar}
+        subirAdjunto={subirAdjuntoDeMentira}
+        subirAdjuntoDeSesion={subirAdjuntoDeSesion}
+        instalarSkill={instalarSkillDeMentira}
+      />
+    );
+    act(() => store.marcarConectado());
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        proyectos: [],
+        ramas: [],
+        proyectoAbierto: true,
+      })
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Anexar ficheros" }));
+    const fichero = new File(["x"], "mockup.png", { type: "image/png" });
+    fireEvent.change(entradaDeFicheros(), { target: { files: [fichero] } });
+
+    // El nombre, no el `File`, es lo que llega a `subirAdjuntoDeSesion`: `App` traduce
+    // `(fichero, nombre)` del compositor a `(nombre, fichero)` de la conexión.
+    await waitFor(() => expect(subirAdjuntoDeSesion).toHaveBeenCalledWith("mockup.png", fichero));
+    await waitFor(() => expect(screen.getByText("listo")).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "prosa", texto: "", adjuntos: ["mockup.png"] });
+  });
+});
+
 describe("App: la aprobación", () => {
   it("una `aprobacion` del cable abre el modal con su diff, y «Aprobar» manda `decision`", async () => {
     const { store, enviar } = montar();
@@ -1753,8 +1804,10 @@ describe("App: el panel a la derecha del chat", () => {
     abrirPestana("Ficheros");
     // La conversación sigue delante. Con `selector` porque el título de la sesión sale del
     // primer mensaje, así que «hola» está además en la miga de la cabecera — y ahí es un
-    // `<button>`, mientras que el globo del chat es un `<p>`.
-    expect(screen.getByText("hola", { selector: "p" })).toBeTruthy();
+    // `<button>`, mientras que el globo del chat es un `<div>` (Task 6, IXCODE-7: con
+    // adjuntos lleva una lista detrás del texto, y un `<ul>` dentro de un `<p>` es HTML
+    // inválido).
+    expect(screen.getByText("hola", { selector: "div" })).toBeTruthy();
     // ...y con ella el compositor, que es lo que permite seguir escribiendo mientras se
     // mira un fichero.
     expect(compositorOculto()).toBe(false);
@@ -1765,7 +1818,7 @@ describe("App: el panel a la derecha del chat", () => {
     const { store } = montar();
     act(() => store.aplicar({ clase: "acto", acto: { tipo: "usuario", texto: "hola" } }));
     abrirPestana("Ficheros");
-    expect(screen.queryByText("hola", { selector: "p" })).toBeNull();
+    expect(screen.queryByText("hola", { selector: "div" })).toBeNull();
     // Escondido, NO desmontado: si no, ir a mirar un fichero y volver perdería el borrador.
     expect(compositorOculto()).toBe(true);
   });

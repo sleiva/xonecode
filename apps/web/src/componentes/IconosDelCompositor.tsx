@@ -89,3 +89,17 @@ export function IconoDeEnviar() {
     </Trazo>
   );
 }
+
+/**
+ * Anexar un fichero (Task 6, IXCODE-7). La maqueta de Stitch NO trae este glifo —no había
+ * botón de adjuntar en `code.html`—, así que se dibuja con el MISMO trazo que sus vecinos
+ * en vez de traer uno de fuera: un «+» a secas, que es lo que ya significa «añadir» en el
+ * resto de la interfaz (NuevaTarea).
+ */
+export function IconoDeAnexar() {
+  return (
+    <Trazo>
+      <path d="M12 5v14M5 12h14" />
+    </Trazo>
+  );
+}

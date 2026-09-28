@@ -1,16 +1,50 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
 import type {
   DispositivoElegido, Esfuerzo, EsfuerzoDelCable, InformeDeDispositivos, ModoDeEscritura,
   ProveedorDeModelos,
 } from "../tipos.js";
+import { nombreDeAdjuntoSeguro } from "../nombreDeAdjunto.js";
 import { PastillaDeModelo } from "./PastillaDeModelo.js";
 import { PastillaDeEsfuerzo } from "./PastillaDeEsfuerzo.js";
 import { PastillaDeDispositivo } from "./PastillaDeDispositivo.js";
 import { SelectorDeModo } from "./SelectorDeModo.js";
-import { IconoDeEnviar } from "./IconosDelCompositor.js";
+import { IconoDeAnexar, IconoDeEnviar } from "./IconosDelCompositor.js";
 import pastillas from "./PastillaDeModelo.module.css";
 import { ContadorDeTokens, type ConsumoPintable } from "./ContadorDeTokens.js";
 import estilos from "./Compositor.module.css";
+
+/** Una ficha de adjunto EN VUELO en el compositor: lo que se ve mientras dura la subida y
+ *  lo que decide si se puede enviar (ver `Compositor#enviar`). */
+interface FichaDeAdjunto {
+  nombre: string;
+  estado: "subiendo" | "listo" | "falló";
+  motivo?: string;
+}
+
+/**
+ * El nombre CON sufijo si ya está tomado entre las fichas de ESTE compositor: `-2`, `-3`…
+ * antes de la extensión. A diferencia de `NuevaTarea` —que RECHAZA el segundo con el mismo
+ * nombre porque el servidor lo sobrescribiría—, aquí no hace falta: cada ficha se sube con
+ * SU nombre único, así que dos capturas seguidas —o dos pegados— simplemente se numeran, en
+ * vez de obligar a quitar la primera para poder soltar la segunda.
+ */
+function nombreUnicoEntreFichas(nombre: string, tomados: ReadonlySet<string>): string {
+  if (!tomados.has(nombre)) return nombre;
+  const punto = nombre.lastIndexOf(".");
+  const base = punto > 0 ? nombre.slice(0, punto) : nombre;
+  const extension = punto > 0 ? nombre.slice(punto) : "";
+  let n = 2;
+  while (tomados.has(`${base}-${n}${extension}`)) n += 1;
+  return `${base}-${n}${extension}`;
+}
+
+/** La extensión que se le pone a un pegado, del tipo MIME (`image/png` → `png`). Sin tipo,
+ *  o con uno raro (`image/svg+xml`), se queda con la parte de antes del `+` o cae en `bin`
+ *  —una extensión rara es mejor que ninguna: es lo único de lo que depende el visor. */
+function extensionDePegado(mime: string): string {
+  const parte = mime.split("/")[1]?.split("+")[0];
+  return parte === undefined || parte === "" ? "bin" : parte;
+}
 
 /**
  * El compositor: manda PROSA.
@@ -45,6 +79,7 @@ export function Compositor({
   alElegirModoDeEscritura,
   alElegirDispositivo,
   alMedirDispositivos,
+  alSubirAdjunto,
   alEnviar,
   borrador,
 }: {
@@ -134,7 +169,20 @@ export function Compositor({
   alElegirDispositivo?: (id: string | undefined) => void;
   /** Volver a medir la máquina desde el menú de la pastilla. Ausente = no se ofrece. */
   alMedirDispositivos?: () => void;
-  alEnviar: (texto: string) => void;
+  /**
+   * Sube los bytes de UN adjunto elegido, soltado o pegado. Ausente = no se pinta el «+» ni
+   * se aceptan sueltos o pegados — la misma regla que ya siguen `alElegirDispositivo` y
+   * `alElegirModoDeEscritura`: un control sin dato detrás no se pinta. El `nombre` ya viene
+   * convertido a segmento llano por `nombreDeAdjuntoSeguro` y hecho único entre las fichas;
+   * quien decide si vale de verdad es el servidor, dos veces.
+   */
+  alSubirAdjunto?: (fichero: File, nombre: string) => Promise<{ ok: boolean; motivo?: string }>;
+  /**
+   * Manda el turno con lo escrito y los NOMBRES de las fichas «listo» —`[]` sin ninguna—.
+   * Los nombres y no los `File`: los bytes ya están en el servidor (`alSubirAdjunto` los
+   * subió al elegirlos), así que el mensaje del cable solo necesita decir cuáles.
+   */
+  alEnviar: (texto: string, adjuntos: string[]) => void;
   /**
    * Un texto que alguien de FUERA deja escrito en la caja —hoy, «Pedir corrección» de un
    * hallazgo—, con un `id` que cambia en cada petición para que dos iguales seguidas cuenten
@@ -145,6 +193,69 @@ export function Compositor({
 }) {
   const [valor, setValor] = useState("");
   const campo = useRef<HTMLTextAreaElement>(null);
+  const entradaDeFicheros = useRef<HTMLInputElement>(null);
+  const [fichas, setFichas] = useState<FichaDeAdjunto[]>([]);
+  /** Solo mientras se arrastra algo POR ENCIMA: es lo que enciende `data-arrastrando`. Un
+   *  soltado normal (drop) ya no está «arrastrando», así que se apaga ahí también. */
+  const [arrastrando, setArrastrando] = useState(false);
+
+  /**
+   * Sube cada fichero elegido, soltado o pegado, UNO A UNO —igual que `NuevaTarea#añadir`,
+   * y por la misma razón medida ahí: el Set de nombres tomados vive en una variable LOCAL y
+   * no en el estado, porque React solo garantiza la vía *eager* del `setState` con la fibra
+   * sin trabajo pendiente. Con dos ficheros del mismo nombre en una sola elección, la
+   * segunda vuelta del bucle llega después de un `await` con una actualización
+   * posiblemente en cola: leer `fichas` ahí vería la lista de ANTES del primero.
+   */
+  const añadirFicheros = async (elegidos: readonly File[]): Promise<void> => {
+    if (alSubirAdjunto === undefined) return;
+    const tomados = new Set(fichas.map((f) => f.nombre));
+    for (const fichero of elegidos) {
+      const base = nombreDeAdjuntoSeguro(fichero.name);
+      if (base === undefined) {
+        // No se inventa uno: se dice, y la ficha se queda ahí hasta que alguien la quite.
+        setFichas((ya) => [...ya, { nombre: fichero.name, estado: "falló", motivo: "no se puede usar ese nombre aquí" }]);
+        continue;
+      }
+      const nombre = nombreUnicoEntreFichas(base, tomados);
+      tomados.add(nombre);
+      setFichas((ya) => [...ya, { nombre, estado: "subiendo" }]);
+      const r = await alSubirAdjunto(fichero, nombre);
+      setFichas((ya) =>
+        ya.map((f) =>
+          f.nombre === nombre && f.estado === "subiendo"
+            ? { ...f, estado: r.ok ? "listo" : "falló", ...(r.ok || r.motivo === undefined ? {} : { motivo: r.motivo }) }
+            : f
+        )
+      );
+    }
+  };
+
+  const quitarFicha = (nombre: string): void => setFichas((ya) => ya.filter((f) => f.nombre !== nombre));
+
+  const alSoltar = (evento: DragEvent<HTMLDivElement>): void => {
+    if (alSubirAdjunto === undefined) return;
+    evento.preventDefault();
+    setArrastrando(false);
+    void añadirFicheros(Array.from(evento.dataTransfer.files));
+  };
+
+  /**
+   * Un pegado CON ficheros —una captura de pantalla, lo más común— se sube como adjunto y
+   * NUNCA pega texto: `preventDefault` es lo que lo impide. Sin ficheros el pegado sigue su
+   * camino normal, que es lo que hace que pegar una frase copiada de otro sitio no cambie
+   * de comportamiento.
+   */
+  const alPegar = (evento: ClipboardEvent<HTMLTextAreaElement>): void => {
+    if (alSubirAdjunto === undefined) return;
+    const pegados = Array.from(evento.clipboardData?.files ?? []);
+    if (pegados.length === 0) return;
+    evento.preventDefault();
+    const renombrados = pegados.map(
+      (fichero, i) => new File([fichero], `pegado-${i + 1}.${extensionDePegado(fichero.type)}`, { type: fichero.type })
+    );
+    void añadirFicheros(renombrados);
+  };
 
   useEffect(() => {
     if (borrador === undefined) return;
@@ -179,15 +290,26 @@ export function Compositor({
     if (acabaDeTerminar && !oculto && conectado) campo.current?.focus();
   }, [hayPendiente, oculto, conectado]);
 
+  // Una ficha «subiendo» o «falló» BLOQUEA el envío: los bytes tienen que estar en disco
+  // ANTES de mandar el turno, y una que falló tiene que quitarse o reintentarse, no colarse
+  // con un nombre que el servidor nunca recibió.
+  const fichaEnVuelo = fichas.some((f) => f.estado === "subiendo");
+  const fichaFallida = fichas.some((f) => f.estado === "falló");
+
   const enviar = (): void => {
     // Con algo pendiente no se manda: una aprobación o pregunta compite por la misma
     // respuesta. Con turno en vuelo y SIN nada pendiente, sí se manda — es la nota de
     // IXCODE-4, y el servidor decide si se apunta al turno en marcha o abre uno nuevo.
     if (hayPendiente) return;
+    if (fichaEnVuelo || fichaFallida) return;
     const texto = valor.trim();
-    if (texto === "") return;
-    alEnviar(texto);
+    const adjuntos = fichas.filter((f) => f.estado === "listo").map((f) => f.nombre);
+    // Vacío se puede mandar SI lleva adjuntos: una captura sin comentario es un turno
+    // válido. Sin ninguno de los dos no hay nada que mandar, como antes.
+    if (texto === "" && adjuntos.length === 0) return;
+    alEnviar(texto, adjuntos);
     setValor("");
+    setFichas([]);
   };
 
   // Enter envía; Shift+Enter salta de línea (el `textarea` lo hace solo si no se
@@ -220,6 +342,20 @@ export function Compositor({
         className={estilos.compositor}
         data-trabajando={turnoEnVuelo ? "" : undefined}
         data-con-texto={valor === "" ? undefined : ""}
+        // Soltar es de la CAJA entera y no solo del campo: la maqueta no lo distingue, y
+        // un usuario que suelta un poco fuera del `<textarea>` no tiene por qué perder el
+        // fichero. Sin `alSubirAdjunto` los tres manejadores se quedan mudos (ver arriba),
+        // así que soltar algo aquí sin la capacidad no hace nada — ni siquiera enciende
+        // `data-arrastrando`.
+        data-arrastrando={arrastrando ? "" : undefined}
+        onDragOver={(evento) => {
+          if (alSubirAdjunto === undefined) return;
+          // Sin esto el navegador no permite soltar: es su comportamiento por omisión.
+          evento.preventDefault();
+          setArrastrando(true);
+        }}
+        onDragLeave={() => setArrastrando(false)}
+        onDrop={alSoltar}
       >
         {/*
           **La banda de ARRIBA: con qué va a correr esto.** Modelo, esfuerzo y dispositivo
@@ -302,17 +438,77 @@ export function Compositor({
           title="Pregunta sobre la plataforma, pide un cambio en una colección o en un script, o escribe /comando"
           onChange={(evento) => setValor(evento.target.value)}
           onKeyDown={alPulsarTecla}
+          onPaste={alPegar}
         />
         {/*
-          **La banda de ABAJO: qué pasa con lo que escriba, y mandarlo.** El modo de
-          escritura a la izquierda; el gasto y la acción a la derecha. El «+» y la pastilla
-          de permisos de la referencia siguen sin estar por el motivo de siempre: no hay
-          dato ni acción detrás, y un control así es la misma mentira que una lista vacía
-          rellenada con un placeholder.
+          Las FICHAS, entre el campo y la banda de abajo: es donde ya vivía la lista de
+          `NuevaTarea` respecto a su propio campo, y el mismo sitio dice lo mismo aquí —lo
+          que se va a mandar con el próximo turno, antes de mandarlo. Vacía no se pinta.
+        */}
+        {fichas.length === 0 ? null : (
+          <ul className={estilos.fichas}>
+            {fichas.map((f) => (
+              <li key={f.nombre} className={estilos.ficha} data-estado={f.estado}>
+                <span className={estilos.nombreDeFicha}>{f.nombre}</span>
+                <span className={estilos.estadoDeFicha}>
+                  {f.estado === "subiendo" ? "subiendo…" : f.estado === "listo" ? "listo" : (f.motivo ?? "no se pudo subir")}
+                </span>
+                <button
+                  type="button"
+                  className={estilos.quitarFicha}
+                  aria-label={`Quitar ${f.nombre}`}
+                  onClick={() => quitarFicha(f.nombre)}
+                >
+                  Quitar
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {/*
+          **La banda de ABAJO: qué pasa con lo que escriba, y mandarlo.** El «+» abre la
+          banda —anexar es lo primero que se decide, antes que el modo o el modelo—, luego
+          el modo de escritura, y el gasto con la acción a la derecha. La pastilla de
+          permisos de la referencia sigue sin estar por el motivo de siempre: no hay dato ni
+          acción detrás, y un control así es la misma mentira que una lista vacía rellenada
+          con un placeholder.
         */}
         <div className={estilos.controles}>
           {/*
-            El MODO DE ESCRITURA abre esta banda, y no está arriba con las otras tres a
+            El «+»: sin `alSubirAdjunto` no se pinta —control sin dato detrás—, y entonces
+            tampoco valen un soltado ni un pegado (los tres manejadores de arriba se quedan
+            mudos solos). El `<input>` va ESCONDIDO y lo abre este botón, por lo mismo que
+            documenta `NuevaTarea`: el selector nativo solo lo puede abrir un input de
+            fichero, y su cromo no seguía el estilo de sus vecinos.
+          */}
+          {alSubirAdjunto === undefined ? null : (
+            <>
+              <button
+                type="button"
+                className={estilos.anexar}
+                disabled={!conectado}
+                aria-label="Anexar ficheros"
+                title="Anexar ficheros (también puedes soltarlos o pegarlos)"
+                onClick={() => entradaDeFicheros.current?.click()}
+              >
+                <IconoDeAnexar />
+              </button>
+              <input
+                ref={entradaDeFicheros}
+                hidden
+                type="file"
+                multiple
+                onChange={(evento) => {
+                  void añadirFicheros(Array.from(evento.target.files ?? []));
+                  // El mismo fichero se puede volver a elegir tras un fallo: sin esto el
+                  // `change` no vuelve a dispararse con el mismo nombre.
+                  evento.target.value = "";
+                }}
+              />
+            </>
+          )}
+          {/*
+            El MODO DE ESCRITURA sigue al «+», y no está arriba con las otras tres a
             propósito: aquéllas dicen CON QUÉ va a correr, y ésta qué va a pasar con lo que
             escriba — que es la misma pregunta que contestan el gasto y el botón de al lado.
             Sin sesión no hay modo y no se pinta: un control sin dato detrás no se pinta.
@@ -416,8 +612,15 @@ export function Compositor({
               <button
                 type="button"
                 className={estilos.enviar}
-                disabled={!conectado}
+                disabled={!conectado || fichaEnVuelo || fichaFallida}
                 aria-label="Enviar"
+                // Deshabilitado por una ficha DICE por qué, la misma regla que ya sigue el
+                // campo: un botón mudo deja adivinando si está roto o si nadie escucha.
+                {...(fichaEnVuelo
+                  ? { title: "espera a que termine de subir el adjunto" }
+                  : fichaFallida
+                    ? { title: "quita el adjunto que falló antes de enviar" }
+                    : {})}
                 onClick={enviar}
               >
                 {/* El glifo de la maqueta en vez del carácter `↑`, que dependía de la

@@ -479,3 +479,77 @@
   composes: secundario from "./Boton.module.css";
   flex: none;
 }
+
+/* Anexar (Task 6, IXCODE-7). Mismo rol SECUNDARIO que `.detener` —es una acción sobre el
+   turno, no la marca ni un estado— y sin redeclarar nada de él (`Boton.test.ts`): el icono
+   se centra con `display`/`align-items`, que no son propiedades prohibidas. */
+.anexar {
+  composes: secundario from "./Boton.module.css";
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+/* La caja ENTERA reacciona al arrastre, no solo el campo: soltar un poco fuera del
+   `<textarea>` no tiene por qué perder el fichero. El azul de marca porque es la misma
+   acción que abre el envío —«esto va a entrar aquí»—, y NO el cian: el cian es el acento de
+   las pastillas de dentro (misma razón que ya documenta el filo de `.compositor`). */
+.compositor[data-arrastrando] {
+  border-color: var(--xonecode-azul);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* Las FICHAS: una lista compacta entre el campo y la banda de abajo, mismo tono que la de
+   `NuevaTarea` —esta ventana y aquélla enseñan lo mismo, «lo que se va a mandar»— pero sin
+   compartir módulo: `NuevaTarea` vive fuera del chat y sus clases no se alcanzan desde
+   aquí. */
+.fichas {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0 14px 6px;
+  list-style: none;
+}
+
+.ficha {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12px;
+}
+
+.nombreDeFicha {
+  flex: 1;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--dsw-alias-font-mono, monospace);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.estadoDeFicha {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* Solo la que FALLÓ se pinta en rojo: el motivo es lo accionable de esa fila, igual que en
+   `NuevaTarea`. */
+.ficha[data-estado="falló"] .estadoDeFicha {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.quitarFicha {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.quitarFicha:hover {
+  color: var(--dsw-alias-label-primary);
+}

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { Compositor } from "./Compositor.js";
 
@@ -70,7 +70,7 @@ describe("Compositor", () => {
     const campo = screen.getByRole("textbox") as HTMLTextAreaElement;
     fireEvent.change(campo, { target: { value: "haz un listado" } });
     fireEvent.keyDown(campo, { key: "Enter" });
-    expect(alEnviar).toHaveBeenCalledWith("haz un listado");
+    expect(alEnviar).toHaveBeenCalledWith("haz un listado", []);
     expect(campo.value).toBe("");
   });
 
@@ -129,7 +129,7 @@ describe("Compositor", () => {
     fireEvent.change(entrada, { target: { value: "cambia de idea" } });
     rerender(<Compositor conectado turnoEnVuelo alEnviar={alEnviar} />);
     fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
-    expect(alEnviar).toHaveBeenCalledWith("cambia de idea");
+    expect(alEnviar).toHaveBeenCalledWith("cambia de idea", []);
   });
 
   it("DETENER solo se pinta con turno en vuelo, sin nada pendiente y si el turno lo admite; manda lo escrito y vacía la caja", () => {
@@ -196,7 +196,7 @@ describe("la ayuda de teclas", () => {
     // `Enter` envía…
     fireEvent.change(campo, { target: { value: "hola" } });
     fireEvent.keyDown(campo, { key: "Enter" });
-    expect(alEnviar).toHaveBeenCalledWith("hola");
+    expect(alEnviar).toHaveBeenCalledWith("hola", []);
     // …`Shift+Enter` no…
     fireEvent.change(campo, { target: { value: "otra" } });
     fireEvent.keyDown(campo, { key: "Enter", shiftKey: true });
@@ -281,5 +281,127 @@ describe("un borrador que llega de FUERA («Pedir corrección»)", () => {
     const { rerender } = render(<Compositor {...manejadores} borrador={{ texto: "A", id: 1 }} />);
     rerender(<Compositor {...manejadores} borrador={{ texto: "A", id: 2 }} />);
     expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("A\nA");
+  });
+});
+
+/**
+ * Anexar desde el chat (Task 6, IXCODE-7): el «+», soltar sobre la caja, pegar una imagen,
+ * y el envío llevando los NOMBRES de lo ya subido.
+ */
+describe("adjuntar ficheros", () => {
+  const entradaDeFicheros = (): HTMLInputElement => {
+    const e = document.querySelector('input[type="file"]');
+    if (e === null) throw new Error("no hay entrada de ficheros");
+    return e as HTMLInputElement;
+  };
+
+  it("sin `alSubirAdjunto` no hay «+» ni se aceptan sueltos: un control sin dato detrás no se pinta", () => {
+    const { container } = render(<Compositor {...manejadores} />);
+    expect(screen.queryByRole("button", { name: "Anexar ficheros" })).toBeNull();
+    const caja = container.querySelector('[class*="compositor"]') as HTMLElement;
+    fireEvent.dragOver(caja, { dataTransfer: { files: [new File(["x"], "a.png")] } });
+    expect(caja.hasAttribute("data-arrastrando")).toBe(false);
+  });
+
+  it("el «+» abre el selector; elegir 2 ficheros sube cada uno con su nombre SANEADO y pinta 2 fichas", async () => {
+    const alSubirAdjunto = vi.fn(async () => ({ ok: true }));
+    render(<Compositor {...manejadores} alSubirAdjunto={alSubirAdjunto} />);
+    fireEvent.click(screen.getByRole("button", { name: "Anexar ficheros" }));
+
+    // El espacio se convierte en `_`: es `nombreDeAdjuntoSeguro`, no una regla nueva de aquí.
+    const f1 = new File(["a"], "Icono Nuevo.png", { type: "image/png" });
+    const f2 = new File(["b"], "b.png", { type: "image/png" });
+    fireEvent.change(entradaDeFicheros(), { target: { files: [f1, f2] } });
+
+    await waitFor(() => expect(alSubirAdjunto).toHaveBeenCalledTimes(2));
+    expect(alSubirAdjunto).toHaveBeenNthCalledWith(1, f1, "Icono_Nuevo.png");
+    expect(alSubirAdjunto).toHaveBeenNthCalledWith(2, f2, "b.png");
+    await waitFor(() => expect(screen.getAllByText("listo")).toHaveLength(2));
+    expect(screen.getByText("Icono_Nuevo.png")).toBeTruthy();
+    expect(screen.getByText("b.png")).toBeTruthy();
+  });
+
+  it("`drop` hace lo mismo que elegir, y `data-arrastrando` solo está encendido MIENTRAS se arrastra", async () => {
+    const alSubirAdjunto = vi.fn(async () => ({ ok: true }));
+    const { container } = render(<Compositor {...manejadores} alSubirAdjunto={alSubirAdjunto} />);
+    const caja = container.querySelector('[class*="compositor"]') as HTMLElement;
+    const f = new File(["x"], "captura.png", { type: "image/png" });
+
+    fireEvent.dragOver(caja, { dataTransfer: { files: [f] } });
+    expect(caja.hasAttribute("data-arrastrando")).toBe(true);
+
+    fireEvent.drop(caja, { dataTransfer: { files: [f] } });
+    expect(caja.hasAttribute("data-arrastrando")).toBe(false);
+    await waitFor(() => expect(alSubirAdjunto).toHaveBeenCalledWith(f, "captura.png"));
+  });
+
+  it("`paste` CON ficheros sube la imagen como «pegado-<n>.<ext>» y NO deja pegar texto", async () => {
+    const alSubirAdjunto = vi.fn(async () => ({ ok: true }));
+    render(<Compositor {...manejadores} alSubirAdjunto={alSubirAdjunto} />);
+    const campo = screen.getByRole("textbox");
+    const img = new File(["x"], "imagen.png", { type: "image/png" });
+
+    // El resultado de `fireEvent` es `false` cuando algún manejador llamó `preventDefault`:
+    // es la prueba de que NO pega texto, no una lectura indirecta.
+    const noCancelado = fireEvent.paste(campo, { clipboardData: { files: [img], types: ["Files"] } });
+    expect(noCancelado).toBe(false);
+    await waitFor(() => expect(alSubirAdjunto).toHaveBeenCalledWith(expect.any(File), "pegado-1.png"));
+  });
+
+  it("`paste` SIN ficheros no interfiere: el pegado de TEXTO sigue su camino normal", () => {
+    const alSubirAdjunto = vi.fn();
+    render(<Compositor {...manejadores} alSubirAdjunto={alSubirAdjunto} />);
+    const campo = screen.getByRole("textbox");
+    const noCancelado = fireEvent.paste(campo, { clipboardData: { files: [], types: ["text/plain"] } });
+    expect(noCancelado).toBe(true);
+    expect(alSubirAdjunto).not.toHaveBeenCalled();
+  });
+
+  it("una ficha «subiendo» o «falló» impide enviar y lo dice en el `title`; «quitar» la retira", async () => {
+    let resolver: (r: { ok: boolean; motivo?: string }) => void = () => {};
+    const alSubirAdjunto = vi.fn(
+      () => new Promise<{ ok: boolean; motivo?: string }>((r) => { resolver = r; })
+    );
+    const alEnviar = vi.fn();
+    render(<Compositor conectado alEnviar={alEnviar} alSubirAdjunto={alSubirAdjunto} />);
+    fireEvent.change(entradaDeFicheros(), { target: { files: [new File(["x"], "a.png", { type: "image/png" })] } });
+
+    // Subiendo: el botón de enviar se apaga y DICE por qué.
+    const botonEnviar = (await screen.findByRole("button", { name: "Enviar" })) as HTMLButtonElement;
+    expect(botonEnviar.disabled).toBe(true);
+    expect(botonEnviar.title).toMatch(/subir/);
+
+    // Falla: sigue apagado, con OTRO motivo.
+    resolver({ ok: false, motivo: "el adjunto es demasiado grande" });
+    await waitFor(() => expect(screen.getByText("el adjunto es demasiado grande")).toBeTruthy());
+    expect(botonEnviar.disabled).toBe(true);
+    expect(botonEnviar.title).toMatch(/quita/);
+
+    // Quitar la retira, y con ella se va el bloqueo.
+    fireEvent.click(screen.getByRole("button", { name: "Quitar a.png" }));
+    expect(screen.queryByText("el adjunto es demasiado grande")).toBeNull();
+    expect(botonEnviar.disabled).toBe(false);
+  });
+
+  it("enviar con fichas «listo» manda los NOMBRES y las vacía; se puede mandar SOLO con adjuntos", async () => {
+    const alSubirAdjunto = vi.fn(async () => ({ ok: true }));
+    const alEnviar = vi.fn();
+    render(<Compositor conectado alEnviar={alEnviar} alSubirAdjunto={alSubirAdjunto} />);
+    fireEvent.change(entradaDeFicheros(), {
+      target: {
+        files: [
+          new File(["a"], "a.png", { type: "image/png" }),
+          new File(["b"], "b.png", { type: "image/png" }),
+        ],
+      },
+    });
+    await waitFor(() => expect(screen.getAllByText("listo")).toHaveLength(2));
+
+    // Texto vacío + adjuntos: SÍ se manda.
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    expect(alEnviar).toHaveBeenCalledWith("", ["a.png", "b.png"]);
+    // Y las fichas se vacían: no quedan en la vista tras enviar.
+    expect(screen.queryByText("a.png")).toBeNull();
+    expect(screen.queryByText("b.png")).toBeNull();
   });
 });

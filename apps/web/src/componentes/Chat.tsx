@@ -1136,16 +1136,35 @@ export function Chat({
             }
             const { acto, indice } = pieza;
             if (acto.tipo === "usuario") {
+              // `<div>` y no `<p>`: con adjuntos el globo lleva una LISTA detrás del texto,
+              // y un `<ul>` dentro de un `<p>` es HTML inválido (el navegador lo cierra
+              // solo, y el DOM que queda no es el que este árbol describe). El
+              // `white-space: pre-wrap` de `.usuario` sigue aplicando igual —es una
+              // propiedad que se HEREDA— así que el texto no cambia de forma.
               return (
                 // `inicioDeTurno` es lo único que da JERARQUÍA al hueco: un turno empieza
                 // cuando habla la persona (`usuario` solo lo emite el compositor), así que
                 // este es el único sitio donde el hueco significa «aquí empieza otra cosa».
-                <p
+                <div
                   key={indice}
                   className={`${vista.flowItem} ${estilos.globo} ${estilos.usuario} ${estilos.inicioDeTurno}`}
                 >
-                  {acto.texto}
-                </p>
+                  {/* Una prosa vacía CON adjuntos se acepta (Task 6, IXCODE-7): sin texto no
+                      hay nada que pintar aquí, y las fichas de abajo bastan. */}
+                  {acto.texto === "" ? null : acto.texto}
+                  {/* Solo el NOMBRE, nunca la ruta: es lo único que el servidor puso en el
+                      acto (`acto.adjuntos`), y lo único que hace falta ver aquí — abrirlo
+                      es cosa de Ficheros, no de este globo. */}
+                  {acto.adjuntos === undefined || acto.adjuntos.length === 0 ? null : (
+                    <ul className={estilos.adjuntosDelMensaje}>
+                      {acto.adjuntos.map((nombre, i) => (
+                        <li key={`${indice}-${i}`} className={estilos.adjuntoDelMensaje}>
+                          {nombre}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               );
             }
             if (acto.tipo === "consulta") {

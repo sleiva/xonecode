@@ -797,6 +797,22 @@ describe("el aire del hilo", () => {
     expect(container.querySelector('[class*="asistente"]')?.className).not.toMatch(/inicioDeTurno/u);
   });
 
+  /**
+   * Lo ANEXADO en el globo del usuario (Task 6, IXCODE-7): solo el NOMBRE, texto y no
+   * marcado inyectado, y una prosa vacía CON adjuntos se pinta igual —el turno es válido
+   * aunque no lleve palabras.
+   */
+  it("el globo del usuario pinta una ficha por adjunto, y una prosa vacía con adjuntos también se ve", () => {
+    render(<Chat actos={[{ tipo: "usuario", texto: "", adjuntos: ["mockup.png", "notas.txt"] }]} />);
+    expect(screen.getByText("mockup.png")).toBeTruthy();
+    expect(screen.getByText("notas.txt")).toBeTruthy();
+  });
+
+  it("sin `adjuntos` no se pinta ninguna lista: ausente ≠ vacío", () => {
+    const { container } = render(<Chat actos={[{ tipo: "usuario", texto: "hola" }]} />);
+    expect(container.querySelector("ul")).toBeNull();
+  });
+
   it("el primer y el último bloque de un mensaje no llevan margen: contra el relleno es aire doble", () => {
     // Medido: 878 px en una conversación de 31 mensajes, y 28 de los 92 px de uno de una
     // línea. Por hijo DIRECTO, para no alcanzar el primer párrafo de una cita o de un `li`,

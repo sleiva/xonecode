@@ -70,17 +70,50 @@
    propio (no 70ch, que era el de las dos): una pastilla de una frase corta no necesita
    ancho de párrafo. */
 .usuario {
-  /* El globo del usuario es un `<p>`, así que traía 14 px de margen inferior de la hoja base
-     — el de ARRIBA sí lo gana la regla de la columna, el de abajo no lo tocaba nadie—. Medido:
-     el hueco entre la pregunta y la respuesta salía 24 px cuando la hoja declara 10, o sea que
-     ese valor no lo decidía nadie. Se anula para que el ÚNICO mecanismo del hueco sea la
-     variable, que es lo que hace que estos números se puedan leer aquí y sean ciertos. */
+  /* El globo del usuario traía 14 px de margen inferior de la hoja base —de cuando era un
+     `<p>`; con adjuntos pasó a `<div>` (Task 6, IXCODE-7) porque un `<ul>` dentro de un `<p>`
+     es HTML inválido, pero la regla se queda: un `<div>` normal no trae ese margen solo, así
+     que anularlo aquí sigue sin sobrar—. El de ARRIBA sí lo gana la regla de la columna, el
+     de abajo no lo tocaba nadie. Medido: el hueco entre la pregunta y la respuesta salía
+     24 px cuando la hoja declara 10, o sea que ese valor no lo decidía nadie. Se anula para
+     que el ÚNICO mecanismo del hueco sea la variable, que es lo que hace que estos números
+     se puedan leer aquí y sean ciertos. */
   margin-bottom: 0;
   align-self: flex-end;
   max-width: 70ch;
   border-radius: 18px;
   background: var(--dsw-alias-state-business-tertiary);
   color: var(--dsw-alias-label-primary);
+}
+
+/* Las fichas de lo ANEXADO (Task 6, IXCODE-7): solo el NOMBRE, en su propia línea bajo el
+   texto —nunca la ruta, que es lo que `Chat.tsx` ya filtra al leer `acto.adjuntos`—. Sin
+   fondo propio: ya están dentro de la burbuja del usuario, y una pastilla sobre una pastilla
+   es ruido. `border-top` las separa del texto cuando hay los dos, con el MISMO alias que ya
+   usa `NuevaTarea` para la misma clase de filete; con SOLO adjuntos (prosa vacía) esta regla
+   no tiene con qué chocar porque el `:first-child` la quita. */
+.adjuntosDelMensaje {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0 0;
+  padding: 6px 0 0;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  list-style: none;
+}
+
+.adjuntosDelMensaje:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.adjuntoDelMensaje {
+  overflow: hidden;
+  font-family: var(--dsw-alias-font-mono, monospace);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* SIN burbuja, a propósito — MEDIDO contra la referencia: el mensaje del usuario es la
