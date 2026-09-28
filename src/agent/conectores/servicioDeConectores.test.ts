@@ -899,6 +899,20 @@ describe("ServicioDeConectores.llamar", () => {
     expect(red.llamarTool).not.toHaveBeenCalled();
   });
 
+  it("con un pendiente vivo del mismo conector, llamar NO toca la red (no pisa el verificador PKCE)", async () => {
+    // Mismo montaje que el test equivalente de `probar`: tokens guardados, para que la única
+    // razón de NO llamar a la red sea el pendiente vivo y no la guarda de «sin credencial» — si
+    // se retira la guarda del pendiente, este test seguiría en verde por la otra guarda, y no
+    // probaría nada.
+    guardarOAuth(casa, "notion", { tokens: { access_token: "a", token_type: "Bearer" }, redirectUri: "http://127.0.0.1:4200/mcp/oauth/callback" });
+    const red = redDoble();
+    const s = crear(red);
+    s.anadir("notion");
+    void s.autorizar("notion", "http://127.0.0.1:4200/mcp/oauth/callback");
+    await expect(s.llamar("notion", "buscar", {})).rejects.toThrow("autorización en curso");
+    expect(red.llamarTool).not.toHaveBeenCalled();
+  });
+
   it("con credencial, pasa la MISMA que probar y devuelve el texto de la red", async () => {
     const red = redDoble();
     (red.llamarTool as ReturnType<typeof vi.fn>).mockResolvedValue("hola");

@@ -397,6 +397,10 @@ export function crearServicioDeConectores(o: {
       const registro = leerConectores(o.casa);
       const c = resolver(id, registro.definiciones);
       if (c === undefined || !registro.anadidos.includes(id)) throw new Error(`«${id}» no está conectado`);
+      // La MISMA razón que en `probar`: con una autorización abierta no se toca la red — un 401
+      // haría que el SDK arrancara OTRA y pisara el verificador PKCE que el callback pendiente
+      // va a necesitar. Sin `cambio()` ni tocar `pruebas`: esto no es una medida de la conexión.
+      if (hayPendienteVivo(id)) throw new Error("autorización en curso");
       // La misma guarda que `probar`: sin credencial no se toca la red, y es el mismo «falta
       // autorizar» tanto si falta un token OAuth como una clave.
       const credencial = credencialDe(c, leerOAuth(o.casa, id));
