@@ -12,7 +12,7 @@
  * guarda quien lo tiene en vuelo, que lo suelta en cuanto hay decisión.
  */
 import type { PlanEnDisco } from "../../agent/planesEnDisco.js";
-import type { TareaDelGestor, Vinculo } from "../../core/gestorDeTareas.js";
+import type { TareaDelGestor, TransicionDelGestor, Vinculo } from "../../core/gestorDeTareas.js";
 import type { CambiosDeUnaColeccion } from "../../core/diffDeColecciones.js";
 import type { FotoDeColecciones } from "../../core/fotoDeColecciones.js";
 import type { InformeDeDispositivos, NombreDeHerramienta } from "../../core/dispositivos.js";
@@ -574,6 +574,24 @@ export type MensajeAlCliente =
       pendientes?: { cuando: number; texto?: string; lista: TareaDelGestor[] };
       /** El texto que el compositor PROPONE: lo envía la persona, no sale solo. */
       borrador?: { clave: string; texto: string };
+      /**
+       * Las transiciones disponibles de una tarea (Task 10, IXCODE-11), para «empezar» —con
+       * `transicion`— y para «cerrar». `propuesta` es el id que `transicionPropuesta` sugiere
+       * (la persona puede elegir otra o ninguna); ausente si ninguna encaja.
+       */
+      transiciones?: { clave: string; para: "empezar" | "cerrar"; lista: TransicionDelGestor[]; propuesta?: string };
+      /**
+       * El comentario de cierre PROPUESTO para la tarea de la sesión ABIERTA: lo compone
+       * `comentarioDeCierre` desde lo que el harness sabe de la sesión (`datosDeCierre`). La
+       * persona lo EDITA antes de mandar `cerrar`; nada se escribe todavía.
+       */
+      cierre?: { clave: string; comentario: string };
+      /**
+       * El resultado de `cerrar`: se llega aquí solo si `comentar` no falló —si falla, sale
+       * `error` en su lugar, así que `comento` es siempre `true`—, y `transicion` viaja SOLO
+       * si además se aplicó una.
+       */
+      cerrado?: { clave: string; comento: boolean; transicion?: string };
       error?: { accion: string; motivo: string };
     }
   | ({ clase: "fichero" } & FicheroDelProyecto)
@@ -1475,7 +1493,17 @@ export type MensajeDelCliente =
   | { clase: "gestor"; accion: "desvincular" }
   | { clase: "gestor"; accion: "usarConector"; conector: string; usar: boolean }
   | { clase: "gestor"; accion: "pendientes"; texto?: string }
-  | { clase: "gestor"; accion: "empezar"; clave: string }
+  /**
+   * Task 10 (IXCODE-11): las ÚNICAS cuatro acciones que ESCRIBEN en Jira, siempre por un
+   * mensaje EXPLÍCITO del cliente —la persona aprobó una tarjeta—, nunca solas. `transiciones`
+   * es de solo LECTURA (pide la lista); `empezar` con `transicion` transiciona ANTES de abrir
+   * la sesión; `borradorDeCierre` también es de solo lectura (compone el texto, no lo manda);
+   * `cerrar` comenta y, si hay `transicion`, transiciona.
+   */
+  | { clase: "gestor"; accion: "transiciones"; clave: string; para: "empezar" | "cerrar" }
+  | { clase: "gestor"; accion: "empezar"; clave: string; transicion?: string }
+  | { clase: "gestor"; accion: "borradorDeCierre" }
+  | { clase: "gestor"; accion: "cerrar"; comentario: string; transicion?: string }
   | { clase: "fichero"; ruta: string }
   /**
    * La sincronización con CloudStudio del proyecto abierto (pestaña CloudStudio).

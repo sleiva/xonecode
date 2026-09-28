@@ -243,8 +243,10 @@ import { definicionDelCable, RUTA_CALLBACK_MCP, type AccionDeConector } from "..
 import { servicioDeConectoresCableado, type ServicioDeConectores } from "../../agent/conectores/servicioDeConectores.js";
 import { crearGestorJira } from "../../agent/conectores/gestorJira.js";
 import {
-  motivoDeClaveDeProyecto, type FichaDelGestor, type GestorDeTareasPort, type Vinculo,
+  motivoDeClaveDeProyecto, transicionPropuesta, comentarioDeCierre,
+  type FichaDelGestor, type GestorDeTareasPort, type TransicionDelGestor, type Vinculo,
 } from "../../core/gestorDeTareas.js";
+import { datosDeCierre } from "./datosDeCierre.js";
 
 /** Las dos rutas del cable. El cliente las tiene escritas en `apps/web/src/conexion.ts`. */
 /**
@@ -737,8 +739,22 @@ function gestorBienFormado(m: object): Extract<MensajeDelCliente, { clase: "gest
     case "pendientes":
       if (x.texto !== undefined && !texto("texto")) return undefined;
       return { clase: "gestor", accion: "pendientes", ...(x.texto === undefined ? {} : { texto: x.texto as string }) };
-    case "empezar":
-      return texto("clave") ? { clase: "gestor", accion: "empezar", clave: x.clave as string } : undefined;
+    case "transiciones":
+      return texto("clave") && (x.para === "empezar" || x.para === "cerrar")
+        ? { clase: "gestor", accion: "transiciones", clave: x.clave as string, para: x.para }
+        : undefined;
+    case "empezar": {
+      if (!texto("clave")) return undefined;
+      if (x.transicion !== undefined && !texto("transicion")) return undefined;
+      return { clase: "gestor", accion: "empezar", clave: x.clave as string, ...(x.transicion === undefined ? {} : { transicion: x.transicion as string }) };
+    }
+    case "borradorDeCierre":
+      return { clase: "gestor", accion: "borradorDeCierre" };
+    case "cerrar": {
+      if (!texto("comentario")) return undefined;
+      if (x.transicion !== undefined && !texto("transicion")) return undefined;
+      return { clase: "gestor", accion: "cerrar", comentario: x.comentario as string, ...(x.transicion === undefined ? {} : { transicion: x.transicion as string }) };
+    }
     default:
       return undefined;
   }
@@ -3580,8 +3596,14 @@ export function montarRutas(
    * sin la ruta de la máquina (`motivoLegible`: nuestra frase, o el código si es de Node).
    *
    * La configuración se lee y se escribe en el `config.json` del PROYECTO, nunca fusionada con
-   * la global: el vínculo y los conectores son de esta carpeta. Y nada escribe en el gestor:
-   * `empezar` abre una sesión y propone un borrador, la transición llega con su aprobación.
+   * la global: el vínculo y los conectores son de esta carpeta.
+   *
+   * **Cuatro acciones ESCRIBEN en Jira (Task 10), y solo esas**: `transicionar` dentro de
+   * `empezar` (con `transicion`) y dentro de `cerrar` (con `transicion`), y `comentar` dentro
+   * de `cerrar`. Las cuatro entran por un mensaje EXPLÍCITO del cliente —la persona aprobó una
+   * tarjeta—, nunca solas: `pendientes`, `transiciones` y `borradorDeCierre` son de solo
+   * LECTURA. `empezar` abre una sesión y propone un borrador; `borradorDeCierre` compone el
+   * texto de cierre de la sesión ABIERTA sin mandarlo.
    */
   const atenderGestor = async (m: Extract<MensajeDelCliente, { clase: "gestor" }>): Promise<void> => {
     const abierto = vestibulo.proyectoAbierto();
@@ -3678,6 +3700,19 @@ export function montarRutas(
           emitir({ clase: "gestor", pendientes: { cuando, ...(m.texto === undefined ? {} : { texto: m.texto }), lista } });
           return;
         }
+        // Task 10 (IXCODE-11): la primera de las CUATRO acciones que escriben en Jira, y
+        // solo LEE —la lista de transiciones y cuál se propone—, para las dos tarjetas que
+        // van a pedir la aprobación (una tarea del cliente).
+        case "transiciones": {
+          const { vinculo } = delProyecto();
+          if (vinculo === undefined) return fallo("este proyecto no tiene gestor de tareas");
+          const g = gestorOFallo(vinculo.conector);
+          if (g === undefined) return;
+          const lista = await g.transiciones(vinculo, m.clave);
+          const propuesta = transicionPropuesta(lista, m.para)?.id;
+          emitir({ clase: "gestor", transiciones: { clave: m.clave, para: m.para, lista, ...(propuesta === undefined ? {} : { propuesta }) } });
+          return;
+        }
         case "empezar": {
           const { vinculo } = delProyecto();
           if (vinculo === undefined) return fallo("este proyecto no tiene gestor de tareas");
@@ -3686,6 +3721,16 @@ export function montarRutas(
           await asegurarSitios(g);
           // La ficha ANTES de abrir nada: si el gestor no contesta, no queda una sesión vacía.
           const ficha = await g.ficha(vinculo, m.clave);
+          // La transición ANTES de abrir la sesión, y su fallo no aborta el resto: la persona
+          // ya aprobó la tarjeta esperando entrar a trabajar, y quedarse sin sesión por un
+          // «no se pudo transicionar» sería peor que decirlo y abrir igual con el borrador.
+          if (m.transicion !== undefined) {
+            try {
+              await g.transicionar(vinculo, ficha.clave, m.transicion);
+            } catch (error) {
+              fallo(motivoLegible(error));
+            }
+          }
           const hiloDeAntes = abierto.idDeHilo;
           // Como en `atenderSesion`: un aviso de otra apertura no viaja en el alta de esta.
           aviso = undefined;
@@ -3701,6 +3746,37 @@ export function montarRutas(
           await anunciarAlta().catch(contar);
           anunciada = true;
           emitir({ clase: "gestor", borrador: { clave: ficha.clave, texto: borradorDeTarea(ficha) } });
+          return;
+        }
+        // Las otras dos acciones que ESCRIBEN (Task 10): de la sesión ABIERTA, no del proyecto
+        // —una sesión puede seguir ligada a un ticket aunque el proyecto se haya desvinculado
+        // o vinculado a otro sitio después—, y solo con el turno ya terminado: escribir sobre
+        // una sesión que sigue trabajando compite con lo que el agente está a punto de dejar.
+        case "borradorDeCierre": {
+          const ticket = abierto.ticket;
+          if (ticket === undefined) return fallo("esta sesión no está ligada a una tarea");
+          if (abierto.turnoEnVuelo) return fallo("espera a que termine el turno");
+          const comentario = comentarioDeCierre(await datosDeCierre(raiz, abierto.idDeHilo));
+          emitir({ clase: "gestor", cierre: { clave: ticket.clave, comentario } });
+          return;
+        }
+        case "cerrar": {
+          const ticket = abierto.ticket;
+          if (ticket === undefined) return fallo("esta sesión no está ligada a una tarea");
+          if (abierto.turnoEnVuelo) return fallo("espera a que termine el turno");
+          if (m.comentario.trim() === "") return fallo("el comentario no puede estar vacío");
+          const g = gestorOFallo(ticket.conector);
+          if (g === undefined) return;
+          // El adaptador de Jira solo mira `sitio` para comentar y transicionar
+          // (`gestorJira.ts#comentar`/`#transicionar`): el `proyecto` del vínculo del TICKET
+          // no hace falta para escribir, así que basta con lo que la sesión guardó al abrirse.
+          // Se completa con el del proyecto cuando coincide, por si algún adaptador futuro sí
+          // lo necesitara; vacío si el proyecto ya no está vinculado a nada.
+          const vinculo: Vinculo = { conector: ticket.conector, sitio: ticket.sitio, proyecto: delProyecto().vinculo?.proyecto ?? "" };
+          // Si `comentar` falla, la excepción sale al `catch` de fuera: NO se transiciona.
+          await g.comentar(vinculo, ticket.clave, m.comentario);
+          if (m.transicion !== undefined) await g.transicionar(vinculo, ticket.clave, m.transicion);
+          emitir({ clase: "gestor", cerrado: { clave: ticket.clave, comento: true, ...(m.transicion === undefined ? {} : { transicion: m.transicion }) } });
           return;
         }
       }

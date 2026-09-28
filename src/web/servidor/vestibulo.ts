@@ -557,6 +557,9 @@ export interface ConsolaDeProyecto {
    * ticket, nadie la pidió.
    */
   fijarTicket(ticket: TicketDeSesion): void;
+  /** El ticket ligado, si lo hay (Task 10, IXCODE-11): lo lee `atenderGestor` para saber a
+   *  qué tarea escribir «borradorDeCierre»/«cerrar». Ausente = esta sesión no tiene ninguna. */
+  readonly ticket: TicketDeSesion | undefined;
   readonly cerrada: boolean;
   /**
    * Si esta consola tiene un turno EN VUELO ahora mismo.
@@ -1737,6 +1740,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         // Misma regla que `elegirDispositivo`: si todavía no está en el índice, se queda en
         // memoria y `volcar()` lo anota en cuanto cree la entrada.
         if (anotada) sesiones.anotarTicket?.(raiz, idSesion, elegido);
+      },
+      get ticket() {
+        return ticket;
       },
       get cerrada() {
         return cerrada;

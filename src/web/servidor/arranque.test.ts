@@ -49,10 +49,10 @@ import { strToU8, zipSync } from "fflate";
 import { rutaGlobalDeSkills } from "../../agent/grafo/skills.js";
 import { crearConsolaWeb, type ConsolaWeb, type OpcionesDeConsolaWeb } from "./consolaWeb.js";
 import { PAPELES } from "../../core/modelos.js";
-import { crearSesion, listarSesiones } from "./sesiones.js";
+import { anotarActo, crearSesion, listarSesiones } from "./sesiones.js";
 import { COMANDOS } from "../../cli/consola.js";
 import { CatalogoModelosEnMemoria, GestorDeTareasEnMemoria } from "../../core/ports.js";
-import type { FichaDelGestor, GestorDeTareasPort } from "../../core/gestorDeTareas.js";
+import type { FichaDelGestor, GestorDeTareasPort, TransicionDelGestor } from "../../core/gestorDeTareas.js";
 import { crearGestorJira } from "../../agent/conectores/gestorJira.js";
 import type { Entorno } from "../../core/settings.js";
 import type { AdjuntoDeTarea, Tarea } from "../../core/tareas.js";
@@ -9541,10 +9541,25 @@ describe("el gestor de tareas, por el cable", () => {
     tareas: [TAREA, { ...TAREA, clave: "IXCODE-1", titulo: "Hecha", estado: "Terminado", categoria: "terminada" as const }],
   });
 
-  const abrir = async (opciones: Parameters<typeof montarRutas>[2], config: Record<string, unknown> = { modo: "offline" }) => {
+  /** Las transiciones de IXCODE-12 (Task 10): «En curso» primero —lo que propone `empezar`—
+   *  y «Probar» después —lo que propone `cerrar`—, con una tercera que no debería proponerse
+   *  nunca (no es ni «en curso» ni «probar»). */
+  const TRANSICIONES: TransicionDelGestor[] = [
+    { id: "t-encurso", nombre: "En curso", destino: "En curso", categoria: "en-curso" },
+    { id: "t-probar", nombre: "Probar", destino: "Probar", categoria: "en-curso" },
+    { id: "t-terminado", nombre: "Terminado", destino: "Terminado", categoria: "terminada" },
+  ];
+
+  const abrir = async (
+    opciones: Parameters<typeof montarRutas>[2],
+    config: Record<string, unknown> = { modo: "offline" },
+    // Costura de la Task 10: controlar el turno para probar «espera a que termine el turno»
+    // (`vestibulo.test.ts` lo hace igual, con `crearEjecutor` y una promesa que no se resuelve).
+    vestibuloExtra: Partial<Parameters<typeof crearVestibulo>[0]> = {}
+  ) => {
     const base = mkdtempSync(join(tmpdir(), "xonecode-gestor-"));
     const servidor = servidorDeMentira();
-    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
+    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base, ...vestibuloExtra });
     const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
     mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
     writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify(config));
@@ -9557,15 +9572,28 @@ describe("el gestor de tareas, por el cable", () => {
     await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
     await asentar();
     const gestor = () => cliente.recibidos.filter((x) => x.clase === "gestor") as Extract<MensajeAlCliente, { clase: "gestor" }>[];
+    // 200 y no los 20 de siempre (`pedir` de otros bloques de este fichero): «borradorDeCierre»
+    // (Task 10) compone `datosDeCierre` con `git` REAL en subprocesos —sin repo, así que «sin-marca»
+    // sale rápido, pero un spawn frío en máquina cargada mide más que 20 vueltas de `setTimeout(0)`
+    // (medido: fallaba solo en aislado, verde dentro del suite completo).
     const pedir = async (m: MensajeDelCliente): Promise<Extract<MensajeAlCliente, { clase: "gestor" }> | undefined> => {
       const antes = gestor().length;
       expect(await enviarMensaje(accion, m)).toBe(204);
-      for (let i = 0; i < 20 && gestor().length === antes; i++) await asentar();
+      for (let i = 0; i < 200 && gestor().length === antes; i++) await asentar();
       return gestor().length === antes ? undefined : gestor().at(-1);
+    };
+    /** Como `pedir`, pero para una acción que puede dejar MÁS de un mensaje `gestor» —
+     *  «empezar» con una transición que falla emite el `error` y LUEGO el `borrador»—, y
+     *  hace falta ver los dos, no solo el último. */
+    const pedirVarios = async (m: MensajeDelCliente, n: number): Promise<Extract<MensajeAlCliente, { clase: "gestor" }>[]> => {
+      const antes = gestor().length;
+      expect(await enviarMensaje(accion, m)).toBe(204);
+      for (let i = 0; i < 200 && gestor().length < antes + n; i++) await asentar();
+      return gestor().slice(antes);
     };
     const leerConfig = () => readFileSync(join(raiz, ".xonecode", "config.json"), "utf8");
     return {
-      raiz, vestibulo, cliente, accion, pedir, leerConfig,
+      raiz, vestibulo, cliente, accion, pedir, pedirVarios, leerConfig,
       limpiar: async () => {
         await vestibulo.cerrar();
         rmSync(base, { recursive: true, force: true });
@@ -9799,6 +9827,224 @@ describe("el gestor de tareas, por el cable", () => {
     expect((await t.pedir({ clase: "gestor", accion: "empezar", clave: "IXCODE-99" }))?.error)
       .toEqual({ accion: "empezar", motivo: "no existe IXCODE-99" });
     expect(t.vestibulo.proyectoAbierto()!.idDeHilo).toBe(antes);
+    await t.limpiar();
+  });
+
+  /**
+   * Task 10 (IXCODE-11): las CUATRO acciones que escriben en Jira —`transicionar` dentro de
+   * «empezar» y de «cerrar», y `comentar` dentro de «cerrar»—, y solo por un mensaje EXPLÍCITO
+   * del cliente. `GestorDeTareasEnMemoria` (`core/ports.ts`) registra lo aplicado en
+   * `transicionesAplicadas`/`comentariosAplicados`: los tests comprueban esas listas, no solo
+   * la respuesta por el cable.
+   */
+  it("«transiciones» devuelve la lista y la propuesta de `transicionPropuesta`", async () => {
+    const t = await abrir(
+      { gestorDeTareas: () => new GestorDeTareasEnMemoria({ ...datos(), transiciones: { "IXCODE-12": TRANSICIONES } }) },
+      { modo: "offline", gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } }
+    );
+    expect(await t.pedir({ clase: "gestor", accion: "transiciones", clave: "IXCODE-12", para: "empezar" })).toEqual({
+      clase: "gestor",
+      transiciones: { clave: "IXCODE-12", para: "empezar", lista: TRANSICIONES, propuesta: "t-encurso" },
+    });
+    expect(await t.pedir({ clase: "gestor", accion: "transiciones", clave: "IXCODE-12", para: "cerrar" })).toEqual({
+      clase: "gestor",
+      transiciones: { clave: "IXCODE-12", para: "cerrar", lista: TRANSICIONES, propuesta: "t-probar" },
+    });
+    // Una clave sin transiciones en el doble: la lista llega vacía y SIN `propuesta` —nunca
+    // inventada—, porque `transicionPropuesta` no encuentra ninguna que casar.
+    expect(await t.pedir({ clase: "gestor", accion: "transiciones", clave: "IXCODE-1", para: "cerrar" })).toEqual({
+      clase: "gestor",
+      transiciones: { clave: "IXCODE-1", para: "cerrar", lista: [] },
+    });
+    await t.limpiar();
+  });
+
+  it("«empezar» con `transicion` transiciona ANTES de abrir la sesión nueva", async () => {
+    let instancia!: GestorDeTareasEnMemoria;
+    const t = await abrir(
+      { gestorDeTareas: () => (instancia = new GestorDeTareasEnMemoria({ ...datos(), transiciones: { "IXCODE-12": TRANSICIONES } })) },
+      { modo: "offline", gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } }
+    );
+    // El ORDEN es lo que se prueba, no solo que `transicionar` se llamara: se envuelve
+    // `abrirProyecto` —el primer paso de abrir la sesión nueva— para capturar cuántas
+    // transiciones había YA aplicadas en ese instante. Si `transicionar` se llamara DESPUÉS
+    // de abrir, aquí seguiría en cero.
+    let aplicadasAlAbrir: number | undefined;
+    const abrirDeVerdad = t.vestibulo.abrirProyecto.bind(t.vestibulo);
+    t.vestibulo.abrirProyecto = async (apertura) => {
+      aplicadasAlAbrir = instancia.transicionesAplicadas.length;
+      return abrirDeVerdad(apertura);
+    };
+    const borrador = await t.pedir({ clase: "gestor", accion: "empezar", clave: "IXCODE-12", transicion: "t-encurso" });
+    expect(borrador?.borrador?.clave).toBe("IXCODE-12");
+    expect(aplicadasAlAbrir).toBe(1);
+    expect(instancia.transicionesAplicadas).toEqual([{ clave: "IXCODE-12", transicion: "t-encurso" }]);
+    await t.limpiar();
+  });
+
+  it("«empezar» con `transicion` que FALLA: se dice el error y la sesión se abre igual, con su borrador", async () => {
+    class GestorQueFallaAlTransicionar extends GestorDeTareasEnMemoria {
+      override async transicionar(): Promise<void> {
+        throw new Error("no se pudo transicionar");
+      }
+    }
+    const instancia = new GestorQueFallaAlTransicionar(datos());
+    const t = await abrir(
+      { gestorDeTareas: () => instancia },
+      { modo: "offline", gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } }
+    );
+    const antes = t.vestibulo.proyectoAbierto()!.idDeHilo;
+    const [primero, segundo] = await t.pedirVarios({ clase: "gestor", accion: "empezar", clave: "IXCODE-12", transicion: "t-encurso" }, 2);
+    expect(primero).toEqual({ clase: "gestor", error: { accion: "empezar", motivo: "no se pudo transicionar" } });
+    expect(segundo?.borrador?.clave).toBe("IXCODE-12");
+    expect(instancia.transicionesAplicadas).toEqual([]);
+    // La sesión se abrió de todos modos: el fallo de la transición no se lleva el «Empezar».
+    expect(t.vestibulo.proyectoAbierto()!.idDeHilo).not.toBe(antes);
+    await t.limpiar();
+  });
+
+  it("«borradorDeCierre» y «cerrar» exigen una sesión ABIERTA ligada a un ticket", async () => {
+    const t = await abrir({ gestorDeTareas: () => new GestorDeTareasEnMemoria(datos()) });
+    expect((await t.pedir({ clase: "gestor", accion: "borradorDeCierre" }))?.error)
+      .toEqual({ accion: "borradorDeCierre", motivo: "esta sesión no está ligada a una tarea" });
+    expect((await t.pedir({ clase: "gestor", accion: "cerrar", comentario: "Listo." }))?.error)
+      .toEqual({ accion: "cerrar", motivo: "esta sesión no está ligada a una tarea" });
+    await t.limpiar();
+  });
+
+  it("«borradorDeCierre» y «cerrar» esperan a que el turno TERMINE", async () => {
+    let soltar: (() => void) | undefined;
+    const t = await abrir(
+      { gestorDeTareas: () => new GestorDeTareasEnMemoria(datos()) },
+      { modo: "offline" },
+      { crearEjecutor: () => async () => { await new Promise<void>((resuelto) => { soltar = resuelto; }); } }
+    );
+    const abierta = t.vestibulo.proyectoAbierto()!;
+    abierta.fijarTicket({ conector: "jira", sitio: "c1", clave: "IXCODE-12" });
+    // Sin esperarlo, como en `vestibulo.test.ts`: es lo que deja el turno EN VUELO.
+    const turno = abierta.ejecutarTurno("algo", abierta.estadoDeSesion, abierta.consola.consola);
+    expect(abierta.turnoEnVuelo).toBe(true);
+    expect((await t.pedir({ clase: "gestor", accion: "borradorDeCierre" }))?.error)
+      .toEqual({ accion: "borradorDeCierre", motivo: "espera a que termine el turno" });
+    expect((await t.pedir({ clase: "gestor", accion: "cerrar", comentario: "Listo." }))?.error)
+      .toEqual({ accion: "cerrar", motivo: "espera a que termine el turno" });
+    soltar!();
+    await turno;
+    await t.limpiar();
+  });
+
+  it("«borradorDeCierre» compone el comentario de cierre DESDE DISCO, de la sesión ABIERTA", async () => {
+    const t = await abrir(
+      { gestorDeTareas: () => new GestorDeTareasEnMemoria(datos()) },
+      { modo: "offline", gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } }
+    );
+    // Un directorio temporal sin `.git`: `datosDeCierre` cae a «sin-marca» —el mismo
+    // respaldo que `datosDeCierre.test.ts` mide contra un repo real— y el comentario lo dice
+    // en vez de fingir una lista de ficheros que nadie pudo comprobar.
+    t.vestibulo.proyectoAbierto()!.fijarTicket({ conector: "jira", sitio: "c1", clave: "IXCODE-12" });
+    expect(await t.pedir({ clase: "gestor", accion: "borradorDeCierre" })).toEqual({
+      clase: "gestor",
+      cierre: {
+        clave: "IXCODE-12",
+        comentario:
+          "## Qué cambió\n\nNo se pudo comprobar qué cambió.\n\n" +
+          "## Verificación\n\nno corrió\n\n" +
+          "— escrito por xonecode",
+      },
+    });
+    await t.limpiar();
+  });
+
+  it("«borradorDeCierre» refleja lo que el `.jsonl` REAL dice, no cualquier id de sesión sirve igual", async () => {
+    const t = await abrir(
+      { gestorDeTareas: () => new GestorDeTareasEnMemoria(datos()) },
+      { modo: "offline", gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } }
+    );
+    const abierta = t.vestibulo.proyectoAbierto()!;
+    abierta.fijarTicket({ conector: "jira", sitio: "c1", clave: "IXCODE-12" });
+    // Un `verificacion` VERDE escrito de verdad con el escritor de `sesiones.ts`, en el id
+    // REAL del hilo (`abierta.idDeHilo`): si `atenderGestor` leyera cualquier otro id —o no
+    // leyera nada— este acto no aparecería en el comentario, y el test del «sin-marca» de
+    // arriba no lo distinguiría (ese caso sale igual para cualquier uuid).
+    anotarActo(t.raiz, abierta.idDeHilo, { tipo: "verificacion", verde: true, errores: 0, avisos: 0 });
+    const respuesta = await t.pedir({ clase: "gestor", accion: "borradorDeCierre" });
+    expect(respuesta?.cierre?.clave).toBe("IXCODE-12");
+    expect(respuesta?.cierre?.comentario).toContain("## Verificación\n\nverde");
+    await t.limpiar();
+  });
+
+  it("«empezar» sin `transicion`, «pendientes», «transiciones» y «borradorDeCierre» no escriben; «cerrar» comenta y, con `transicion`, transiciona DESPUÉS", async () => {
+    let instancia!: GestorDeTareasEnMemoria;
+    const t = await abrir(
+      { gestorDeTareas: () => (instancia = new GestorDeTareasEnMemoria({ ...datos(), transiciones: { "IXCODE-12": TRANSICIONES } })) },
+      { modo: "offline", gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } }
+    );
+    // La sesión se abre y se liga al ticket por el camino REAL —«empezar» SIN transición—,
+    // no a mano con `fijarTicket`: así ese camino entra también en la comprobación de que
+    // nada escribe todavía.
+    await t.pedir({ clase: "gestor", accion: "empezar", clave: "IXCODE-12" });
+    await t.pedir({ clase: "gestor", accion: "pendientes" });
+    await t.pedir({ clase: "gestor", accion: "transiciones", clave: "IXCODE-12", para: "cerrar" });
+    await t.pedir({ clase: "gestor", accion: "borradorDeCierre" });
+    expect(instancia.comentariosAplicados).toEqual([]);
+    expect(instancia.transicionesAplicadas).toEqual([]);
+
+    expect(await t.pedir({ clase: "gestor", accion: "cerrar", comentario: "Listo.", transicion: "t-probar" })).toEqual({
+      clase: "gestor",
+      cerrado: { clave: "IXCODE-12", comento: true, transicion: "t-probar" },
+    });
+    expect(instancia.comentariosAplicados).toEqual([{ clave: "IXCODE-12", texto: "Listo." }]);
+    expect(instancia.transicionesAplicadas).toEqual([{ clave: "IXCODE-12", transicion: "t-probar" }]);
+    await t.limpiar();
+  });
+
+  it("«cerrar» SIN `transicion`: comenta y no transiciona nada", async () => {
+    const instancia = new GestorDeTareasEnMemoria(datos());
+    const t = await abrir(
+      { gestorDeTareas: () => instancia },
+      { modo: "offline", gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } }
+    );
+    t.vestibulo.proyectoAbierto()!.fijarTicket({ conector: "jira", sitio: "c1", clave: "IXCODE-12" });
+    // Igual, no `toMatchObject`: comprueba que NO viaja la clave `transicion`, ni siquiera
+    // como `undefined` — el brief solo la pone «si hay».
+    expect(await t.pedir({ clase: "gestor", accion: "cerrar", comentario: "Listo." })).toEqual({
+      clase: "gestor",
+      cerrado: { clave: "IXCODE-12", comento: true },
+    });
+    expect(instancia.comentariosAplicados).toEqual([{ clave: "IXCODE-12", texto: "Listo." }]);
+    expect(instancia.transicionesAplicadas).toEqual([]);
+    await t.limpiar();
+  });
+
+  it("«cerrar» con un comentario vacío rechaza sin llamar al gestor", async () => {
+    const instancia = new GestorDeTareasEnMemoria(datos());
+    const t = await abrir(
+      { gestorDeTareas: () => instancia },
+      { modo: "offline", gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } }
+    );
+    t.vestibulo.proyectoAbierto()!.fijarTicket({ conector: "jira", sitio: "c1", clave: "IXCODE-12" });
+    expect((await t.pedir({ clase: "gestor", accion: "cerrar", comentario: "   " }))?.error)
+      .toEqual({ accion: "cerrar", motivo: "el comentario no puede estar vacío" });
+    expect(instancia.comentariosAplicados).toEqual([]);
+    await t.limpiar();
+  });
+
+  it("«cerrar»: si `comentar` FALLA, NO se transiciona y se dice el error", async () => {
+    class GestorQueFallaAlComentar extends GestorDeTareasEnMemoria {
+      override async comentar(): Promise<void> {
+        throw new Error("no se pudo comentar");
+      }
+    }
+    const instancia = new GestorQueFallaAlComentar({ ...datos(), transiciones: { "IXCODE-12": TRANSICIONES } });
+    const t = await abrir(
+      { gestorDeTareas: () => instancia },
+      { modo: "offline", gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } }
+    );
+    t.vestibulo.proyectoAbierto()!.fijarTicket({ conector: "jira", sitio: "c1", clave: "IXCODE-12" });
+    expect((await t.pedir({ clase: "gestor", accion: "cerrar", comentario: "Listo.", transicion: "t-probar" }))?.error)
+      .toEqual({ accion: "cerrar", motivo: "no se pudo comentar" });
+    expect(instancia.comentariosAplicados).toEqual([]);
+    expect(instancia.transicionesAplicadas).toEqual([]);
     await t.limpiar();
   });
 });

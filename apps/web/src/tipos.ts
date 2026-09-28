@@ -331,6 +331,14 @@ export interface VinculoDelCable {
   nombreDelSitio?: string;
 }
 
+/** Una transición disponible de una tarea del gestor (`core/gestorDeTareas.ts#TransicionDelGestor`). */
+export interface TransicionDelGestor {
+  id: string;
+  nombre: string;
+  destino: string;
+  categoria: CategoriaDeTarea;
+}
+
 /** Lo que cambió en el modelo de UNA colección (`core/diffDeColecciones.ts`). */
 export interface CambiosDeUnaColeccion {
   nombre: string;
@@ -737,6 +745,12 @@ export type MensajeAlCliente =
       proyectos?: { sitio: string; lista: { clave: string; nombre: string }[] };
       pendientes?: { cuando: number; texto?: string; lista: TareaDelGestor[] };
       borrador?: { clave: string; texto: string };
+      /** Las transiciones de una tarea (Task 10), con la que `transicionPropuesta` sugiere. */
+      transiciones?: { clave: string; para: "empezar" | "cerrar"; lista: TransicionDelGestor[]; propuesta?: string };
+      /** El comentario de cierre PROPUESTO, para editar antes de mandar `cerrar`. */
+      cierre?: { clave: string; comentario: string };
+      /** El resultado de `cerrar`: solo llega si el comentario se escribió. */
+      cerrado?: { clave: string; comento: boolean; transicion?: string };
       error?: { accion: string; motivo: string };
     }
   | ({ clase: "fichero" } & FicheroDelProyecto)
@@ -1286,7 +1300,11 @@ export type MensajeDelCliente =
   | { clase: "gestor"; accion: "desvincular" }
   | { clase: "gestor"; accion: "usarConector"; conector: string; usar: boolean }
   | { clase: "gestor"; accion: "pendientes"; texto?: string }
-  | { clase: "gestor"; accion: "empezar"; clave: string }
+  /** Task 10: las ÚNICAS cuatro acciones que escriben en Jira, por un mensaje EXPLÍCITO. */
+  | { clase: "gestor"; accion: "transiciones"; clave: string; para: "empezar" | "cerrar" }
+  | { clase: "gestor"; accion: "empezar"; clave: string; transicion?: string }
+  | { clase: "gestor"; accion: "borradorDeCierre" }
+  | { clase: "gestor"; accion: "cerrar"; comentario: string; transicion?: string }
   | { clase: "fichero"; ruta: string }
   /** La sincronización con CloudStudio: `estado` pide la medida, `subir`/`bajar` son las
    *  dos acciones de `/sync`. Viaja la INTENCIÓN: el servidor las aplica encolando la línea
