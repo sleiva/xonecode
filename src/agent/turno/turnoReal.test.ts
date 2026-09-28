@@ -3,11 +3,20 @@ import { existsSync, mkdtempSync, mkdirSync, symlinkSync, writeFileSync, rmSync 
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Command } from "@langchain/langgraph";
+import { AIMessageChunk } from "@langchain/core/messages";
 
 // vi.mock se eleva al principio del módulo: las factorías no pueden tocar variables de
 // arriba salvo que pasen por vi.hoisted (mismo patrón que deep-agent-xone/runtime.test.ts).
 const mocks = vi.hoisted(() => ({ construirAgente: vi.fn() }));
-vi.mock("../grafo/xoneAgent.js", () => ({ construirAgente: mocks.construirAgente }));
+// SOLO se dobla `construirAgente` (el grafo de deepagents); el resto del módulo se deja
+// REAL con `importOriginal`, porque TrueForge (`sesionTrueforge.ts`) importa de aquí
+// `PERFIL_DEL_ORQUESTADOR` y `promptOrquestador` — un `vi.mock` que sustituye el módulo
+// entero por `{construirAgente}` a secas tumbaba la rama TrueForge de este mismo fichero
+// con un «no export is defined», así que ningún test con `motor: "trueforge"` podía existir.
+vi.mock("../grafo/xoneAgent.js", async (importOriginal) => {
+  const orig = await importOriginal<typeof import("../grafo/xoneAgent.js")>();
+  return { ...orig, construirAgente: mocks.construirAgente };
+});
 
 /**
  * Y un espía sobre `opcionesDeSubagenteExterno`, que es lo ÚNICO que se puede mirar del
@@ -33,7 +42,7 @@ vi.mock("./instantanea.js", async (importOriginal) => {
 import { abrirSesionReal, saldarAprobacionesHuerfanas } from "./turnoReal.js";
 import { ficherosDelProyecto } from "./ficherosDelProyecto.js";
 import { TOPE_REPARACIONES } from "./verificacion.js";
-import { ModeloGuionizado, SkillsEnMemoria, type VerifierPort } from "../../core/ports.js";
+import { ModeloGuionizado, SkillsEnMemoria, type ModelosPort, type VerifierPort } from "../../core/ports.js";
 import { ponerSumideroDeErrores } from "../../core/trazaDeErrores.js";
 import type { Piel } from "../../core/turno.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
@@ -1472,6 +1481,77 @@ describe("la carpeta de adjuntos llega al agente", () => {
     });
     expect(mocks.construirAgente.mock.calls.at(-1)?.[0]).not.toHaveProperty("adjuntos");
   });
+});
+
+/**
+ * El MISMO HOP, pero para la rama TrueForge: `abrirSesionReal({motor: "trueforge"})` →
+ * `abrirSesionTrueforge` (`turnoReal.ts`, línea del `...(opciones.adjuntos === undefined ? {} :
+ * {adjuntos: opciones.adjuntos})` dentro del `if (motor === "trueforge")`).
+ *
+ * Esa línea no tiene la costura de `construirAgente` —TrueForge no está simulado en este
+ * fichero, es la librería REAL— así que se mide por COMPORTAMIENTO, igual que
+ * `sesionTrueforge.test.ts`: un guion de verdad, un hijo que lee `/adjuntos/a.txt` y la
+ * comprobación de que su siguiente llamada al modelo lleva el contenido. Sin la línea del
+ * reenvío, `abrirSesionTrueforge` recibe `adjuntos: undefined` y `/adjuntos/` no se monta —
+ * el hijo ve un ENOENT en vez del contenido, y este test lo pilla (mutación comprobada a
+ * mano: quitar esa línea tumba el test de abajo).
+ */
+describe("la carpeta de adjuntos llega al agente, TAMBIÉN con motor TrueForge (IXCODE-7)", () => {
+  function proyectoDeVerdad(): string {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-turnoreal-tf-"));
+    writeFileSync(join(raiz, "app.xml"), "<app/>\n");
+    return raiz;
+  }
+
+  /** El mismo doble de modelo TrueForge que `sesionTrueforge.test.ts` (bindTools + stream),
+   *  reescrito aquí porque ese fichero no lo exporta y `ModeloGuionizado` (el doble de
+   *  deepagents de este fichero) no tiene esa forma. */
+  function modeloTrueforgeConGuion(guiones: AIMessageChunk[][]): { modelos: ModelosPort; vistos: string[][] } {
+    const vistos: string[][] = [];
+    let atadas: { function?: { name?: string } }[] = [];
+    const modelo = {
+      bindTools: (tools: { function?: { name?: string } }[]) => {
+        atadas = tools;
+        return modelo;
+      },
+      stream: async (mensajes: { content: unknown }[]) => {
+        vistos.push(mensajes.map((m) => String(m.content)));
+        void atadas;
+        const g = guiones.shift() ?? [new AIMessageChunk({ content: "" })];
+        return (async function* () {
+          for (const t of g) yield t;
+        })();
+      },
+    };
+    const modelos = { paraPapel: () => modelo, paraModelo: () => modelo, descripcion: () => ({}) } as unknown as ModelosPort;
+    return { modelos, vistos };
+  }
+
+  it("con `adjuntos` y `motor: \"trueforge\"`, el hijo que lee /adjuntos/a.txt ve su contenido", async () => {
+    const raiz = proyectoDeVerdad();
+    const carpetaAdjuntos = mkdtempSync(join(tmpdir(), "xc-turnoreal-tf-adj-"));
+    writeFileSync(join(carpetaAdjuntos, "a.txt"), "contenido del adjunto (HOP turnoReal->trueforge)\n");
+    const { modelos, vistos } = modeloTrueforgeConGuion([
+      // 1) el raíz delega.
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "lee el adjunto" }) }] })],
+      // 2) el hijo lee /adjuntos/a.txt.
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "r1", name: "read_file", args: JSON.stringify({ file_path: "/adjuntos/a.txt" }) }] })],
+      // 3) el hijo, con el contenido ya en sus mensajes, contesta.
+      [new AIMessageChunk({ content: "Leído." })],
+      // 4) el raíz cierra.
+      [new AIMessageChunk({ content: "Listo." })],
+    ]);
+    const sesion = await abrirSesionReal({
+      raiz,
+      modelos,
+      skills: new SkillsEnMemoria(),
+      entorno: entornoFalso,
+      motor: "trueforge",
+      adjuntos: carpetaAdjuntos,
+    });
+    await sesion.turno("lee el adjunto", pielFalsa());
+    expect(vistos[2]!.join("\n")).toContain("contenido del adjunto (HOP turnoReal->trueforge)");
+  }, 20_000);
 });
 
 describe("los hechos del proyecto van DELANTE del turno", () => {

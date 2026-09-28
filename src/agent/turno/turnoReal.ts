@@ -190,14 +190,17 @@ export async function abrirSesionReal(opciones: {
     hechos: HechosDelTurno;
   }) => Promise<VeredictoDelTurno>;
   /**
-   * La carpeta de los ADJUNTOS de la tarea — lo que el agente ve como `/adjuntos/`, de solo
-   * lectura (`core/adjuntos.ts`).
+   * La carpeta de los ADJUNTOS — lo que el agente ve como `/adjuntos/`, de solo lectura
+   * (`core/adjuntos.ts`). De una TAREA (`~/.xonecode/tareas/<id>/adjuntos/`) o, desde
+   * IXCODE-7, de una SESIÓN (`.xonecode/sesiones/<id>/adjuntos/`, los que una persona
+   * anexó en el CHAT): este campo no distingue el origen, es solo la ruta ya resuelta.
    *
-   * Entra por parámetro y no se deduce, por lo mismo que `artefactos`: quien sabe si hay
-   * adjuntos es quien abrió la consola, y aquí solo hay una raíz de proyecto. Ausente en
-   * toda sesión de persona y en toda tarea sin adjuntos — y entonces **el campo no se pone**,
-   * porque una cadena vacía montaría el cwd del proceso como si fueran los adjuntos de
-   * alguien.
+   * Entra por parámetro y no se deduce, por lo mismo que `artefactos`: quien sabe qué
+   * carpeta corresponde es quien abrió la consola (`cli/main.ts#carpetaDeAdjuntosDelEjecutor`
+   * decide entre tarea y sesión), y aquí solo hay una raíz de proyecto. **Ausente en el
+   * terminal** (su hilo es un uuid nuevo por arranque, sin sesión que reabrir) **y en toda
+   * tarea sin adjuntos** — y entonces **el campo no se pone**, porque una cadena vacía
+   * montaría el cwd del proceso como si fueran los adjuntos de alguien.
    */
   adjuntos?: string;
   /**

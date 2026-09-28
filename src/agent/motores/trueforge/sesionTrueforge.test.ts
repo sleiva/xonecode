@@ -1984,18 +1984,37 @@ describe("`/adjuntos/` en TrueForge (IXCODE-7): el agujero que deepagents ya ten
     expect(vistos[2]!.join("\n")).toMatch(/permission denied/i);
   }, 20_000);
 
-  it("sin `adjuntos`: /adjuntos/a.txt no existe — no se monta el cwd del proceso", async () => {
+  it("sin `adjuntos`: /adjuntos/a.txt no lee el CWD del proceso — cae al backend normal del proyecto", async () => {
+    // Discriminante entre dos lecturas posibles de «no montado»: (a) lo correcto, que
+    // `/adjuntos/a.txt` sin mount especial es una ruta CUALQUIERA del proyecto (si el
+    // proyecto tiene de verdad una carpeta `adjuntos/`, se lee ESA); (b) el bug que este
+    // test existe para impedir — `adjuntos: ""` haría que `backendConAdjuntos` montara
+    // `/adjuntos/` sobre el CWD del proceso. Un ENOENT suelto no distingue las dos: un
+    // proyecto SIN esa carpeta da ENOENT en los dos casos. Así que se crean AMBOS ficheros,
+    // con contenido distinto, y se comprueba de cuál de los dos viene la lectura.
     const raiz = proyecto();
-    const { m, vistos } = modelosConGuion([
-      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "lee /adjuntos/a.txt" }) }] })],
-      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "r1", name: "read_file", args: JSON.stringify({ file_path: "/adjuntos/a.txt" }) }] })],
-      [new AIMessageChunk({ content: "No existe." })],
-      [new AIMessageChunk({ content: "Listo." })],
-    ]);
-    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
-    await s.turno("lee /adjuntos/a.txt", piel().p);
-    // Sin `adjuntos`, `/adjuntos/` no es una raíz montada: `read_file` cae al backend NORMAL
-    // del proyecto, que no tiene ese fichero — ENOENT, no el contenido del adjunto.
-    expect(vistos[2]!.join("\n")).toMatch(/ENOENT|ruta fuera del proyecto/i);
+    mkdirSync(join(raiz, "adjuntos"));
+    writeFileSync(join(raiz, "adjuntos", "a.txt"), "esto es del PROYECTO, no un adjunto\n");
+    // El CWD se muda a una carpeta temporal EXCLUSIVA de este test —nunca al cwd real del
+    // proceso que corre la suite— para no tocar la casa de quien la corre.
+    const cwdDePega = mkdtempSync(join(tmpdir(), "xc-tf-cwd-"));
+    writeFileSync(join(cwdDePega, "a.txt"), "esto es del CWD, si algo lo monta por error\n");
+    const cwdDeAntes = process.cwd();
+    process.chdir(cwdDePega);
+    try {
+      const { m, vistos } = modelosConGuion([
+        [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "lee /adjuntos/a.txt" }) }] })],
+        [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "r1", name: "read_file", args: JSON.stringify({ file_path: "/adjuntos/a.txt" }) }] })],
+        [new AIMessageChunk({ content: "Leído." })],
+        [new AIMessageChunk({ content: "Listo." })],
+      ]);
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+      await s.turno("lee /adjuntos/a.txt", piel().p);
+      const visto = vistos[2]!.join("\n");
+      expect(visto).toContain("esto es del PROYECTO");
+      expect(visto).not.toContain("esto es del CWD");
+    } finally {
+      process.chdir(cwdDeAntes);
+    }
   }, 20_000);
 });
