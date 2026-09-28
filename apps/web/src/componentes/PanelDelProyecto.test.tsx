@@ -186,6 +186,17 @@ describe("PanelDelProyecto", () => {
     expect((screen.getByRole("button", { name: "Nueva sesión con IXCODE-12" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it("con un turno en vuelo «Nueva sesión con esta tarea» se apaga y dice por qué", () => {
+    montar({
+      gestor: { ...VINCULADO, pendientes: { cuando: 1, lista: [{ clave: "IXCODE-12", titulo: "Menú", estado: "Por hacer", categoria: "por-hacer" }] } },
+      turnoEnVuelo: true,
+    });
+    pestana("Tareas");
+    const b = screen.getByRole("button", { name: "Nueva sesión con IXCODE-12" }) as HTMLButtonElement;
+    expect(b.disabled).toBe(true);
+    expect(b.title).toMatch(/turno en marcha/);
+  });
+
   it("Conectores: el conectado con su casilla, el vinculado atado con su motivo, y el sin conectar con el camino a Ajustes", () => {
     const { alGestor, props } = montar({ gestor: VINCULADO, conectores: CONECTORES });
     pestana("Conectores");

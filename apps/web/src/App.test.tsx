@@ -2038,6 +2038,39 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
     expect(campo()).toBeTruthy();
   });
 
+  it("con un turno en vuelo, una APROBACIÓN que llega con el panel delante saca al chat y se ve", () => {
+    const { store, enviar } = conProyectoAbierto();
+    act(() => store.aplicar({ clase: "turno", activo: true }));
+    fireEvent.click(enBarra("AppDemo"));
+    expect(enPanel()).toBe(true);
+    act(() => store.aplicar({ clase: "aprobacion", pendientes: [PENDIENTE], ficheros: { "1": "src/app.xne" }, diffs: {} }));
+    expect(enPanel()).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: /aprobar/i }));
+    expect(clases(enviar)).toContain("decision");
+  });
+
+  it("una PREGUNTA pendiente también saca al chat", () => {
+    const { store } = conProyectoAbierto();
+    fireEvent.click(enBarra("AppDemo"));
+    act(() => store.aplicar({ clase: "pregunta", texto: "¿Sigo?" }));
+    expect(enPanel()).toBe(false);
+    expect(screen.getByText("¿Sigo?")).toBeTruthy();
+  });
+
+  it("«El agente está trabajando» con «Volver al chat» solo con un turno en vuelo, y las sesiones nuevas apagadas", () => {
+    const { store } = conProyectoAbierto();
+    fireEvent.click(enBarra("AppDemo"));
+    expect(screen.queryByText("El agente está trabajando en esta sesión.")).toBeNull();
+    expect((screen.getByRole("button", { name: "Nueva sesión" }) as HTMLButtonElement).disabled).toBe(false);
+    act(() => store.aplicar({ clase: "turno", activo: true }));
+    expect(screen.getByText("El agente está trabajando en esta sesión.")).toBeTruthy();
+    const nueva = screen.getByRole("button", { name: "Nueva sesión" }) as HTMLButtonElement;
+    expect(nueva.disabled).toBe(true);
+    expect(nueva.title).toMatch(/turno en marcha/);
+    fireEvent.click(screen.getByRole("button", { name: "Volver al chat" }));
+    expect(enPanel()).toBe(false);
+  });
+
   it("«Nueva sesión» del panel y el «+» de la barra llevan al CHAT", () => {
     const { store, enviar } = conProyectoAbierto();
     fireEvent.click(enBarra("AppDemo"));

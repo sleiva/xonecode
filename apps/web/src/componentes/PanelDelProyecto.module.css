@@ -35,6 +35,21 @@
   font-size: 12px;
 }
 
+/* El aviso de turno en marcha: una banda entre la cabecera y las pestañas. */
+.trabajando {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 24px 8px;
+  padding: 8px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--xonecode-fila-hover);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+}
+
 .cuerpo {
   flex: 1 1 auto;
   min-height: 0;

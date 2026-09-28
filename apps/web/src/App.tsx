@@ -616,6 +616,24 @@ export function App({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [borradorDelGestor?.id]);
 
+  /**
+   * Una espera de HUMANO —aprobación, pregunta, secreto, selector— saca del panel al chat.
+   *
+   * Sus diálogos viven en la rama del chat, que es donde se han pintado siempre; con el panel
+   * delante no se veían, y una aprobación sin ver vence sola como RECHAZO al cabo del plazo del
+   * servidor. Se sale en vez de copiar los diálogos al panel: una sola casa para cada uno, y al
+   * contestar ya se está donde el turno sigue. El efecto apaga `enPanel` para que, contestada,
+   * no se vuelva al panel de rebote; `hayEsperaDeHumano` lo cubre ya en el mismo render.
+   */
+  const hayEsperaDeHumano =
+    estado.aprobacion !== undefined ||
+    estado.pregunta !== undefined ||
+    estado.secreto !== undefined ||
+    estado.selector !== undefined;
+  useEffect(() => {
+    if (hayEsperaDeHumano) setEnPanel(false);
+  }, [hayEsperaDeHumano]);
+
   // Revisión arranca PLEGADA: al llegar la lista no se despliega ningún bloque ni se pide
   // ningún parche. Lo único que hace este efecto es OLVIDAR lo desplegado cuando el store
   // tira la foto (otra sesión, cable caído), para que las filas abiertas de la sesión
@@ -942,9 +960,10 @@ export function App({
   // abierto —era el único paso que podía quedar—; ahora hace falta mirarlo aparte.
   const proyectoAbierto = estado.alta?.proyectoAbierto ?? false;
 
-  const enSesion = proyectoAbierto && !enEscritorio && !enPanel;
-  /** El panel del proyecto ocupa el centro: hay proyecto, no se mira el escritorio y se pidió. */
-  const enProyecto = proyectoAbierto && !enEscritorio && enPanel;
+  const enSesion = proyectoAbierto && !enEscritorio && !(enPanel && !hayEsperaDeHumano);
+  /** El panel del proyecto ocupa el centro: hay proyecto, no se mira el escritorio, se pidió, y
+   *  no hay nadie esperando una respuesta en el chat (ver `hayEsperaDeHumano`). */
+  const enProyecto = proyectoAbierto && !enEscritorio && enPanel && !hayEsperaDeHumano;
 
   /**
    * **El panel es de la SESIÓN, así que en el escritorio no hay panel** aunque la vista
@@ -2018,6 +2037,10 @@ export function App({
               {...(estado.gestor === undefined ? {} : { gestor: estado.gestor })}
               {...(estado.conectores === undefined ? {} : { conectores: estado.conectores })}
               conectado={estado.conectado}
+              // Con un turno en marcha el servidor no abre una sesión NUEVA —devuelve la que
+              // trabaja—, y el panel lo dice con la vuelta al chat a mano.
+              turnoEnVuelo={turnoEnVuelo}
+              alVolverAlChat={() => setEnPanel(false)}
               alGestor={(peticion) => void enviar({ clase: "gestor", ...peticion } as MensajeDelCliente)}
               alAbrirAjustesDeConectores={() => abrirAjustes("conectores")}
             />

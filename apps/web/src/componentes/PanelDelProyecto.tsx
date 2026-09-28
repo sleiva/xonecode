@@ -54,6 +54,8 @@ export function PanelDelProyecto({
   gestor,
   conectores,
   conectado,
+  turnoEnVuelo = false,
+  alVolverAlChat,
   alGestor,
   alAbrirAjustesDeConectores,
 }: {
@@ -73,6 +75,13 @@ export function PanelDelProyecto({
   gestor?: EstadoDelCliente["gestor"];
   conectores?: EstadoDelCliente["conectores"];
   conectado: boolean;
+  /**
+   * Hay un turno en marcha en la sesión abierta. Entonces el panel lo DICE, con la vuelta al
+   * chat, y apaga las dos puertas a una sesión nueva: con un turno en vuelo el servidor contesta
+   * con la sesión que trabaja, no con otra (el «+» de la barra se apaga por lo mismo).
+   */
+  turnoEnVuelo?: boolean;
+  alVolverAlChat?: () => void;
   alGestor: (peticion: PeticionAlGestor) => void;
   alAbrirAjustesDeConectores: () => void;
 }) {
@@ -116,6 +125,16 @@ export function PanelDelProyecto({
           </p>
         )}
       </header>
+      {turnoEnVuelo ? (
+        <div className={estilos.trabajando} role="status">
+          <span>El agente está trabajando en esta sesión.</span>
+          {alVolverAlChat === undefined ? null : (
+            <button type="button" className={estilos.accion} onClick={alVolverAlChat}>
+              Volver al chat
+            </button>
+          )}
+        </div>
+      ) : null}
       <div className={pestanas.cabecera}>
         <div className={clsx(conversacion.tabs, pestanas.tira)} role="tablist" aria-label="Vistas del proyecto">
           {PESTANAS.map((p) => (
@@ -141,12 +160,14 @@ export function PanelDelProyecto({
             {...(planes === undefined ? {} : { planes })}
             tareasEnFondo={tareasEnFondo}
             conectado={conectado}
+            turnoEnVuelo={turnoEnVuelo}
           />
         ) : pestana === "tareas" ? (
           <TareasDelGestor
             gestor={gestor}
             conectado={conectado}
             empezando={empezando}
+            turnoEnVuelo={turnoEnVuelo}
             alGestor={alGestor}
             alEmpezar={empezar}
             alIrAConectores={() => setPestana("conectores")}
@@ -172,6 +193,7 @@ function Resumen({
   planes,
   tareasEnFondo,
   conectado,
+  turnoEnVuelo,
 }: {
   sesiones?: SesionDelCable[];
   alAbrirSesion: (sesion: string) => void;
@@ -179,13 +201,20 @@ function Resumen({
   planes?: PlanDelCable[];
   tareasEnFondo?: ReactNode;
   conectado: boolean;
+  turnoEnVuelo: boolean;
 }) {
   return (
     <>
       <section className={estilos.seccion} aria-label="Sesiones">
         <div className={estilos.encabezado}>
           <h2 className={estilos.titulo}>Sesiones</h2>
-          <button type="button" className={estilos.principal} onClick={alNuevaSesion} disabled={!conectado}>
+          <button
+            type="button"
+            className={estilos.principal}
+            onClick={alNuevaSesion}
+            disabled={!conectado || turnoEnVuelo}
+            {...(turnoEnVuelo ? { title: TITULO_CON_TURNO } : {})}
+          >
             Nueva sesión
           </button>
         </div>
@@ -237,6 +266,9 @@ function Resumen({
   );
 }
 
+/** Por qué las dos puertas a una sesión nueva se apagan con un turno en marcha. */
+const TITULO_CON_TURNO = "Hay un turno en marcha: con él en vuelo se volvería a la sesión que trabaja, no a una nueva. Espera a que termine o páralo.";
+
 /** «a las 10:42»: la hora de la foto, que es lo que dice cuánto hace que se preguntó. */
 function horaDe(cuando: number): string {
   return new Date(cuando).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
@@ -254,6 +286,7 @@ function TareasDelGestor({
   gestor,
   conectado,
   empezando,
+  turnoEnVuelo,
   alGestor,
   alEmpezar,
   alIrAConectores,
@@ -261,6 +294,7 @@ function TareasDelGestor({
   gestor?: EstadoDelCliente["gestor"];
   conectado: boolean;
   empezando?: string;
+  turnoEnVuelo: boolean;
   alGestor: (peticion: PeticionAlGestor) => void;
   alEmpezar: (clave: string) => void;
   alIrAConectores: () => void;
@@ -352,6 +386,7 @@ function TareasDelGestor({
               conectado={conectado}
               abriendo={empezando === t.clave}
               ocupado={empezando !== undefined}
+              turnoEnVuelo={turnoEnVuelo}
               alEmpezar={() => alEmpezar(t.clave)}
             />
           ))}
@@ -366,12 +401,14 @@ function FilaDeTarea({
   conectado,
   abriendo,
   ocupado,
+  turnoEnVuelo,
   alEmpezar,
 }: {
   tarea: TareaDelGestor;
   conectado: boolean;
   abriendo: boolean;
   ocupado: boolean;
+  turnoEnVuelo: boolean;
   alEmpezar: () => void;
 }) {
   return (
@@ -392,7 +429,8 @@ function FilaDeTarea({
           type="button"
           className={estilos.principal}
           onClick={alEmpezar}
-          disabled={!conectado || ocupado}
+          disabled={!conectado || ocupado || turnoEnVuelo}
+          {...(turnoEnVuelo ? { title: TITULO_CON_TURNO } : {})}
           aria-label={abriendo ? `Abriendo la sesión de ${t.clave}…` : `Nueva sesión con ${t.clave}`}
         >
           {abriendo ? "Abriendo…" : "Nueva sesión con esta tarea"}
