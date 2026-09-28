@@ -12,6 +12,10 @@
  */
 import { randomBytes } from "node:crypto";
 import { UnauthorizedError, auth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
+// El mismo módulo del que el SDK importa `OAuthError` dentro de `client/auth.js`: así el
+// `instanceof` de `motivoDe` compara contra la MISMA clase que el SDK usa para lanzar, y no
+// contra una reimplementación nuestra que dejaría de encajar en su próxima versión.
+import { OAuthError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
@@ -193,6 +197,15 @@ export function crearServicioDeConectores(o: {
 
   const motivoDe = (error: unknown): string => {
     if (error instanceof UnauthorizedError) return "falta autorizar";
+    // Un `OAuthError` (`InvalidGrantError`, `InvalidClientError`, `UnauthorizedClientError`, …)
+    // es una credencial que YA NO SIRVE, no un servidor que no contesta. El propio `auth()` del
+    // SDK, DENTRO de `iniciarAutorizacion`, ya invalida los tokens (`provider.invalidateCredentials`)
+    // y reintenta UNA vez él solo antes de devolver el control aquí — si esto llega hasta este
+    // `catch` es porque ESE reintento TAMBIÉN acabó topando con una credencial mala. Se distingue
+    // por CLASE, nunca por `code`: un `OAuthError` lleva `errorCode` (una cadena OAuth como
+    // `"invalid_grant"`), no el `code` numérico/string de un fallo de red, así que sin este `if`
+    // caía en el catch-all genérico de más abajo y salía «no responde».
+    if (error instanceof OAuthError) return "falta autorizar";
     const code = (error as { code?: unknown } | null)?.code;
     if (typeof code === "number") return `no responde (HTTP ${code})`;
     if (typeof code === "string") return `no responde (código ${code})`;

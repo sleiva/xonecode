@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { UnauthorizedError, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
+import { InvalidGrantError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import { TOPE_DE_CONEXION_MS } from "../../core/conectores.js";
 import { guardarOAuth, leerConectores, leerOAuth, rutaDeAnadidos, rutaDeOAuth } from "./conectoresEnDisco.js";
 import { ProveedorDeConector } from "./proveedorDeConector.js";
@@ -121,6 +122,30 @@ describe("probar", () => {
     // elegir un carril, y el de un OAuth es su `authProvider`.
     const credencial = (red.listarTools as ReturnType<typeof vi.fn>).mock.calls[0]?.[1] as { proveedor: ProveedorDeConector };
     expect(credencial.proveedor.redirectUrl).toBe(redirectUri);
+  });
+
+  it("un OAuthError REAL del SDK (una credencial que el propio reintento de auth() ya no pudo salvar) también da 'falta autorizar'", async () => {
+    // El SDK, dentro de `auth()`, ya invalida los tokens y reintenta UNA vez él solo cuando ve
+    // uno de estos tres errores — si `InvalidGrantError` llega hasta AQUÍ es porque ese
+    // reintento interno también topó con una credencial mala. Sin el `instanceof OAuthError` de
+    // `motivoDe`, esto se leía «no responde»: la clase no lleva `code` numérico ni string.
+    const redirectUri = "http://127.0.0.1:4200/mcp/oauth/callback";
+    guardarOAuth(casa, "jira", { tokens: { access_token: "a", token_type: "Bearer" }, redirectUri });
+    const red = redDoble();
+    (red.listarTools as ReturnType<typeof vi.fn>).mockRejectedValue(new InvalidGrantError("refresh token revocado"));
+    const s = crear(red);
+    s.anadir("jira");
+    await s.probar("jira");
+    expect(s.lista().conectores[0]?.prueba).toMatchObject({ ok: false, motivo: "falta autorizar" });
+  });
+
+  it("un Error de red sin OAuthError ni 'code' sigue dando 'no responde'", async () => {
+    const red = redDoble();
+    (red.listarTools as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("ECONNREFUSED"));
+    const s = crear(red);
+    s.anadir("deepwiki");
+    await s.probar("deepwiki");
+    expect(s.lista().conectores[0]?.prueba).toMatchObject({ ok: false, motivo: "no responde" });
   });
 
   it("un tope que no contesta a tiempo aborta la señal y da su propio motivo", async () => {
@@ -323,6 +348,15 @@ describe("autorizar y completar", () => {
     const l = s.lista();
     expect(l.conectores[0]).not.toHaveProperty("autorizando");
     expect(l.conectores[0]?.prueba).toMatchObject({ ok: false });
+  });
+
+  it("un InvalidGrantError REAL del SDK que llega hasta autorizar (el reintento interno de auth() también falló) deja 'falta autorizar', no 'no responde'", async () => {
+    const red = redDoble();
+    (red.iniciarAutorizacion as ReturnType<typeof vi.fn>).mockRejectedValue(new InvalidGrantError("x"));
+    const s = crear(red);
+    s.anadir("notion");
+    await expect(s.autorizar("notion", "http://127.0.0.1:4200/mcp/oauth/callback")).resolves.toBeUndefined();
+    expect(s.lista().conectores[0]?.prueba).toMatchObject({ ok: false, motivo: "falta autorizar" });
   });
 
   it("un anadir que falla seguido de autorizar para el MISMO id no lo autoriza: «Añadir» en OAuth manda las dos seguidas, y jira nunca llegó a estar añadida", async () => {
