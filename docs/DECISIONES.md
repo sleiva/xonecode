@@ -6933,5 +6933,6 @@ llamó a `incorporar_adjunto` con `/icons/ic_prueba.png`. La tarjeta dijo «quie
 al proyecto», la ruta, «quién: designer-xone» y «[fichero binario] se copia
 /adjuntos/ic_prueba.png a /icons/ic_prueba.png (si ya existe, se reemplaza)»; antes de aprobar el
 fichero no existía. Aprobado, quedó idéntico byte a byte (`cmp`), el commit del turno lo añadió
-(`icons/ic_prueba.png | Bin 0 -> 94 bytes`) y el simulador dio verde. El turno: 56 s y 51.963
-tokens de entrada. Visto de paso: la copia hereda el modo 0600 del adjunto.
+(`icons/ic_prueba.png | Bin 0 -> 94 bytes`) y el simulador dio verde. El turno: 56 s, 7 llamadas
+al modelo (4 del orquestador y 3 de `designer-xone`), 51.963 tokens de entrada y 1.979 de salida.
+Visto de paso: la copia hereda el modo 0600 del adjunto.

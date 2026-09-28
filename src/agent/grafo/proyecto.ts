@@ -273,11 +273,13 @@ export function backendConSkills<T extends object>(backend: T, propias: readonly
  * DENTRO del proyecto es la tool `incorporar_adjunto`, no esta pieza.
  *
  * **La carpeta no se crea aquí**, misma medida que `/artefactos/`: `FilesystemBackend` no
- * exige que su `rootDir` exista. Quien monta esto lo hace por dos criterios DISTINTOS: para
- * una tarea, solo si TRAE adjuntos (`web/servidor/corredorDeTareas.ts`) — una raíz vacía
- * sería mandar al agente a mirar un sitio donde no hay nada; para una sesión de la web,
- * SIEMPRE, derivada del `hilo` igual que `/artefactos/` (`cli/main.ts
- * #carpetaDeAdjuntosDelEjecutor`), exista o no la carpeta todavía en disco.
+ * exige que su `rootDir` exista. Quién decide qué `carpeta` llega es
+ * `cli/main.ts#carpetaDeAdjuntosDelEjecutor`, con la MISMA regla para las dos fuentes: **en
+ * la web se monta SIEMPRE**, exista o no la carpeta en disco — la de la tarea, si TRAE
+ * adjuntos (`web/servidor/corredorDeTareas.ts`), y si no, la del CHAT de esa misma sesión
+ * (vacía; una tarea también abre por el ejecutor de la web, y cae a su propia sesión igual
+ * que una persona — inocuo, es su propia carpeta). **En el terminal, nunca**: su hilo no
+ * tiene carpeta de sesión que derivar.
  */
 export function backendConAdjuntos<T extends object>(backend: T, carpeta: string): T {
   return new CompositeBackend(backend as never, {
@@ -495,8 +497,8 @@ export function sinDescargasEnElProyecto<T extends object>(backend: T): T {
  * 4b. Y las dos carpetas donde deepagents DESCARGA lo que no cabe en el contexto
  *    (`/large_tool_results/`, `/conversation_history/`), al lado de los artefactos. Sin
  *    ellas caían en el proyecto: medido, commiteadas dentro de la app del usuario.
- * 5. Y `/adjuntos/`, cuando hay alguno —de una tarea o del chat de esta sesión—: la misma
- *    pieza, de solo lectura por `permisosDe`.
+ * 5. Y `/adjuntos/`, según decida quien llama (ver `backendConAdjuntos`): la misma pieza, de
+ *    solo lectura por `permisosDe`.
  */
 export function backendDeAgente(opciones: {
   raiz: string;
