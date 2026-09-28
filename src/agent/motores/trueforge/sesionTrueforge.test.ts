@@ -11,6 +11,7 @@ import { TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto
 import { topeAgotadoDe, traducirEvento } from "./eventosTrueforge.js";
 import { cargarMemoria, rutaDeMemoria } from "./memoriaTrueforge.js";
 import { RESUMEN_DE_RELLENO, textoDeDetencionParaHijo, textoDeDetencionParaRaiz } from "./detencion.js";
+import { textoDeNota, textoDeNotaParaHijo, textoDeNotaYaEntregada } from "./notas.js";
 import { abrirSesionReal } from "../../turno/turnoReal.js";
 import { pintarSesion, resumirTraza } from "../../turno/informeDeTraza.js";
 import { anotarPaso, ponerSumideroDeErrores } from "../../../core/trazaDeErrores.js";
@@ -1618,29 +1619,69 @@ describe("agregarNota: una nota mientras el agente trabaja llega al hilo que tra
     expect(vistos[2]!.some((t) => t.includes("cambia de idea"))).toBe(true);
   }, 20_000);
 
-  it("la raíz y cada hijo comparten la MISMA instancia: una nota entregada a la raíz no consume la ración del hijo", async () => {
+  it("una nota que el raíz se queda NO le llega también al hijo que delega después (dueño único)", async () => {
     const { m, vistos } = modelosConGuion([
-      // 1) la raíz delega — es su PRIMERA llamada, así que la nota (empujada antes de `turno()`)
-      //    le llega a ELLA aquí y se marca entregada A SU HILO («main»).
       [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "arregla el login" }) }] })],
-      // 2) la PRIMERA llamada del hijo: si la raíz y el hijo NO compartieran el mismo `Nota[]`
-      //    —cada uno con su propia cola, en vez de la MISMA `capacidadDeNotasDeLaSesion`— la
-      //    nota nunca habría llegado aquí, porque `agregarNota` solo la empuja a la del sitio
-      //    que la construyó. Con la MISMA cola, entregada por `threadId` (`entregadaA` vive en
-      //    el propio `Nota`, no en la instancia de la capacidad), sí le llega: es SU hilo el que
-      //    todavía no la había recibido, aunque el de la raíz ya la tenga marcada.
       [new AIMessageChunk({ content: "Hecho." })],
-      // 3) la raíz cierra.
       [new AIMessageChunk({ content: "Listo." })],
     ]);
     const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
-    s.agregarNota("una nota para todos");
+    s.agregarNota("una nota para el plan");
     await s.turno("arregla el login", piel().p);
+    expect(vistos[0]!.some((t) => t.includes("una nota para el plan"))).toBe(true);
+    expect(vistos[1]!.some((t) => t.includes("una nota para el plan"))).toBe(false);
+  }, 20_000);
 
-    // vistos[0] = raíz delegando (recibe la nota), vistos[1] = 1ª del hijo (la recibe TAMBIÉN,
-    // pese a que la raíz ya la tenía marcada como entregada a SU propio hilo).
-    expect(vistos[0]!.some((t) => t.includes("una nota para todos"))).toBe(true);
-    expect(vistos[1]!.some((t) => t.includes("una nota para todos"))).toBe(true);
+  it("el DIAGRAMA DOBLE, medido: nota escrita mientras el raíz delega → la hace el hijo, y el raíz la ve como ya encargada", async () => {
+    let s: Awaited<ReturnType<typeof abrirSesionTrueforge>> | undefined;
+    const { m, vistos } = modelosConGuion(
+      [
+        // 1) el raíz decide delegar… y en plena llamada la persona escribe
+        [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "analyst-xone", input: "analiza las colecciones" }) }] })],
+        // 2) el hijo (el ÚNICO que trabaja) se la queda
+        [new AIMessageChunk({ content: "Análisis y diagrama hechos." })],
+        // 3) el raíz vuelve
+        [new AIMessageChunk({ content: "Listo." })],
+      ],
+      (n) => {
+        if (n === 1) s!.agregarNota("y créame un diagrama");
+      }
+    );
+    s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    const r = await s.turno("analiza las colecciones", piel().p);
+    expect(vistos[1]!.join("\n")).toContain(textoDeNotaParaHijo("y créame un diagrama"));
+    const delRaiz = vistos[2]!.join("\n");
+    expect(delRaiz).toContain(textoDeNotaYaEntregada("y créame un diagrama", "analyst-xone"));
+    expect(delRaiz).not.toContain(textoDeNota("y créame un diagrama"));
+    expect(r.notasSobrantes).toBeUndefined();
+  }, 20_000);
+
+  it("con DOS hijos en paralelo ninguno se la queda: la recibe el raíz al volver, como encargo", async () => {
+    let s: Awaited<ReturnType<typeof abrirSesionTrueforge>> | undefined;
+    const { m, vistos } = modelosConGuion(
+      [
+        [
+          new AIMessageChunk({
+            content: "",
+            tool_call_chunks: [
+              { index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "analyst-xone", input: "uno" }) },
+              { index: 1, id: "d2", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "dos" }) },
+            ],
+          }),
+        ],
+        [new AIMessageChunk({ content: "a" })],
+        [new AIMessageChunk({ content: "b" })],
+        [new AIMessageChunk({ content: "Listo." })],
+      ],
+      (n) => {
+        if (n === 1) s!.agregarNota("añade el menú");
+      }
+    );
+    s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("dos cosas", piel().p);
+    expect(vistos[1]!.join("\n")).not.toContain("añade el menú");
+    expect(vistos[2]!.join("\n")).not.toContain("añade el menú");
+    expect(vistos[3]!.join("\n")).toContain(textoDeNota("añade el menú"));
   }, 20_000);
 
   it("una nota que NADIE recibe antes de que el turno cierre sale como sobrante, y avisa", async () => {

@@ -327,7 +327,11 @@ export async function abrirSesionTrueforge(
   const detencion = crearControlDeDetencion(HILO_RAIZ);
   /** Tool calls tiradas por DETENER en la sesión: si se queda en cero, el filtro es solo red. */
   let llamadasTiradasPorDetener = 0;
-  const capacidadDeNotasDeLaSesion = capacidadDeNotas(notas, detencion);
+  const capacidadDeNotasDeLaSesion = capacidadDeNotas(notas, {
+    detencion,
+    nombreDe: (h) => quienEs.get(h) ?? h,
+    hiloRaiz: HILO_RAIZ,
+  });
   /** Lo que la persona escribió en el turno y nadie leyó: notas y la orden de DETENER. */
   const sinLeerDelTurno = (): string | undefined => {
     const sinLeer = [sobrantes(notas), detencion.sobrante()].filter((t): t is string => t !== undefined);

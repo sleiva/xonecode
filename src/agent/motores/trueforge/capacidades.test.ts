@@ -5,7 +5,7 @@ import { join } from "node:path";
 import winston from "winston";
 import { AIMessageChunk, type BaseMessage } from "@langchain/core/messages";
 import { capacidadDeFecha, capacidadDeNotas, capacidadesDelEspecialista, SKILL_DE_OPENUI, toolsDe, type DependenciasDelEspecialista } from "./capacidades.js";
-import { crearNota, marcarEntregada, type Nota } from "./notas.js";
+import { crearNota, textoDeNotaYaEntregada, type Nota } from "./notas.js";
 import { AgentThread, AgentThreadOrchestrator, EventType, NOOP_AGENT_TRACING } from "./trueforge.js";
 import { modeloParaTrueforge } from "./modeloLangchain.js";
 import { RAIZ_SKILLS } from "../../grafo/skills.js";
@@ -119,7 +119,7 @@ describe("capacidadDeNotas: quién debe qué, montada en un hilo", () => {
     expect(segunda).toEqual([]);
   });
 
-  it("dos hilos DISTINTOS reciben la MISMA nota, cada uno por separado", async () => {
+  it("UN dueño: si el raíz se la queda, un hijo que llame después NO la recibe (antes, a todos: el diagrama doble)", async () => {
     const notas: Nota[] = [crearNota("nota compartida")];
     const c = capacidadDeNotas(notas);
     const procesador = (c.capability as { preLLMProcessors: { processPreLLM(e: { threadId: string }): AsyncGenerator<unknown> }[] }).preLLMProcessors[0]!;
@@ -128,12 +128,25 @@ describe("capacidadDeNotas: quién debe qué, montada en un hilo", () => {
     const paraHijo = [];
     for await (const s of procesador.processPreLLM({ threadId: "hijo-1" })) paraHijo.push(s);
     expect(paraMain).toHaveLength(1);
-    expect(paraHijo).toHaveLength(1);
+    expect(paraHijo).toEqual([]);
+  });
+
+  it("si se la quedó un hijo, el raíz la recibe como YA ENCARGADA, con el nombre de quién", async () => {
+    const notas: Nota[] = [crearNota("un diagrama")];
+    const c = capacidadDeNotas(notas, { nombreDe: (h) => (h === "hijo-1" ? "analyst-xone" : h) });
+    const procesador = (c.capability as { preLLMProcessors: { processPreLLM(e: { threadId: string }): AsyncGenerator<unknown> }[] }).preLLMProcessors[0]!;
+    for await (const _ of procesador.processPreLLM({ threadId: "hijo-1" })) void _;
+    const paraMain: unknown[] = [];
+    for await (const s of procesador.processPreLLM({ threadId: "main" })) paraMain.push(s);
+    expect(paraMain).toEqual([
+      { type: "internal.agent.context.append", context: [{ role: "user", content: textoDeNotaYaEntregada("un diagrama", "analyst-xone") }], output: [] },
+    ]);
   });
 
   it("una nota YA entregada a un hilo no vuelve a salir para él", async () => {
     const nota = crearNota("x");
-    marcarEntregada(nota, "main");
+    nota.duenio = "main";
+    nota.vistaPorElRaiz = true;
     const c = capacidadDeNotas([nota]);
     const procesador = (c.capability as { preLLMProcessors: { processPreLLM(e: { threadId: string }): AsyncGenerator<unknown> }[] }).preLLMProcessors[0]!;
     const salida = [];

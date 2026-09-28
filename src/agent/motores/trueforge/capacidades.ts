@@ -25,7 +25,7 @@ import {
 } from "./toolsDeFichero.js";
 import { fuenteDeLangchain, type ToolDeLangchain } from "./toolsPropias.js";
 import { presupuestoDelPaso, type EscritorDeDesalojo } from "./recortes.js";
-import { pendientesPara, marcarEntregada, textoDeNota, type Nota } from "./notas.js";
+import { entregarNotas, type Nota } from "./notas.js";
 import type { ControlDeDetencion } from "./detencion.js";
 
 /** Una pieza: la `AgentCapability` que se le da a TrueForge y las tools que añade. */
@@ -102,7 +102,17 @@ export function capacidadDeRecortes(backend: EscritorDeDesalojo): Capacidad {
  * pieza que corre antes de CADA llamada de cada hilo, y el control necesita contar las del raíz
  * para saber de qué plan nació cada hijo.
  */
-export function capacidadDeNotas(notas: Nota[], detencion?: ControlDeDetencion): Capacidad {
+export function capacidadDeNotas(
+  notas: Nota[],
+  opciones: {
+    detencion?: ControlDeDetencion;
+    /** El nombre con que el raíz conoce a un hijo, para decirle a QUIÉN se le pasó una nota. */
+    nombreDe?: (threadId: string) => string;
+    hiloRaiz?: string;
+  } = {}
+): Capacidad {
+  const { detencion } = opciones;
+  const hiloRaiz = opciones.hiloRaiz ?? "main";
   return {
     nombre: "notas",
     tools: [],
@@ -110,9 +120,12 @@ export function capacidadDeNotas(notas: Nota[], detencion?: ControlDeDetencion):
       preLLMProcessors: [
         {
           async *processPreLLM(execution: { threadId: string }) {
-            const pendientes = pendientesPara(notas, execution.threadId);
-            for (const n of pendientes) marcarEntregada(n, execution.threadId);
-            const textos = pendientes.map((n) => textoDeNota(n.texto));
+            // Sin control no se sabe cuántos hijos hay: se toma como el caso simple, uno.
+            const textos = entregarNotas(notas, execution.threadId, {
+              hiloRaiz,
+              hijosVivos: detencion?.hijosVivos() ?? 1,
+              nombreDe: opciones.nombreDe ?? ((h) => h),
+            });
             const orden = detencion?.antesDeLlamar(execution.threadId);
             if (orden !== undefined) textos.push(orden);
             if (textos.length === 0) return;

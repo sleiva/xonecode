@@ -81,6 +81,16 @@ export function crearControlDeDetencion(hiloRaiz: string) {
       cortes.clear();
       detencion = undefined;
     },
+    /**
+     * Cuántos hijos trabajan a la vez AHORA: los nacidos de la última llamada del raíz. Mientras un
+     * hijo vive, el raíz espera su resultado y no vuelve a llamar al modelo, así que lo nacido de
+     * llamadas anteriores ya terminó. Lo usa el reparto de notas (`notas.ts`).
+     */
+    hijosVivos(): number {
+      let n = 0;
+      for (const nacida of nacimiento.values()) if (nacida === llamadasDelRaiz) n += 1;
+      return n;
+    },
     /** Al crear un hijo: nace de la llamada del raíz en curso. */
     nacio(threadId: string) {
       nacimiento.set(threadId, llamadasDelRaiz);
