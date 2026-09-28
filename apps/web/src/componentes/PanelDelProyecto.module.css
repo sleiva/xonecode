@@ -158,32 +158,83 @@
   font-size: 12px;
 }
 
+/* Una tarea: DOS líneas a la izquierda y la acción a la derecha, en UNA sola fila que no se
+   parte (`nowrap`): con `wrap`, un título largo tiraba los botones abajo. Lo que cede es el
+   título, que se corta con «…» (entero va en su `title`). */
 .tarea {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 12px;
-  padding: 8px 0;
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.filaDeTarea {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.filaDeTarea:hover {
+  background: var(--xonecode-fila-hover);
 }
 
 .datos {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 10px;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
 }
 
+.lineaPrincipal {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.lineaSecundaria {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
 .clave {
+  flex: none;
   color: var(--dsw-alias-label-secondary);
   font-family: var(--ds-font-family-code);
   font-size: 12px;
 }
 
-.tituloDeTarea {
+/* El ↗ al gestor, junto a la clave: pequeño y en el tono de la clave, no un enlace de texto. */
+.abrirFuera {
+  display: inline-flex;
+  flex: none;
+  align-self: center;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.abrirFuera:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+/* El título ES el control de desplegar (teclado): un botón sin cara de botón, cortado a una línea. */
+.desplegar {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
   font-weight: 500;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
 .estado {
@@ -194,18 +245,122 @@
   font-size: 11px;
 }
 
-.acciones {
+/* La acción de la fila EXISTE siempre y se llega tabulando: lo que cambia es la opacidad, con
+   el ratón encima o el foco dentro de la fila — el patrón de las acciones de fila de la barra
+   (`Barra.module.css#accionesDeFila`) y de los mensajes del chat. Nada de `display: none` ni
+   `visibility`: lo enfocable no se esconde así. Sin ratón (pantalla táctil) va siempre a la
+   vista. */
+.accionesDeTarea {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.tarea:hover .accionesDeTarea,
+.tarea:focus-within .accionesDeTarea {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .accionesDeTarea {
+    opacity: 1;
+  }
+}
+
+/* La descripción desplegada: debajo de la fila, sangrada como el vínculo de un conector. */
+.ficha {
+  padding: 4px 6px 12px 12px;
+  border-left: 2px solid var(--dsw-alias-border-l2);
+  margin: 0 0 8px 6px;
+  font-size: 12px;
+}
+
+/* Las pastillas de filtro y «Asignadas a mí»: conmutadores con `aria-pressed`, y la cara de la
+   puesta sale de ESE atributo, no de una clase aparte que se pueda desincronizar. */
+.filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pastilla {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pastilla:hover:not(:disabled) {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.pastilla[aria-pressed="true"] {
+  border-color: var(--dsw-alias-border-l4);
+  background: var(--xonecode-fila-hover);
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.pastilla:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.cuenta {
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.consultado {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Un botón de solo icono («Actualizar»): no compone un rol de `Boton.module.css` porque no es
+   un botón de texto, y así no redeclara nada de uno. */
+.icono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.icono:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.icono:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.avisoConAcciones {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-}
-
-/* El enlace en el color del texto y subrayado: el cian es acento y no sostiene texto. */
-.enlace {
-  color: var(--dsw-alias-label-primary);
-  font-size: 12px;
-  text-decoration: underline;
+  gap: 8px 12px;
 }
 
 .conector {
@@ -231,7 +386,16 @@
   font-size: 12px;
 }
 
-.filaDeConector .casilla {
+.tituloDeConector {
+  font-weight: 500;
+}
+
+/* Lo de la derecha de la fila de un conector: «Conectar» y/o la casilla. */
+.alFinal {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
   margin-left: auto;
 }
 

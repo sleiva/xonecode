@@ -743,7 +743,10 @@ export type MensajeAlCliente =
       estado?: { conectores: string[]; vinculo?: VinculoDelCable };
       sitios?: { conector: string; lista: { id: string; nombre: string }[] };
       proyectos?: { sitio: string; lista: { clave: string; nombre: string }[] };
-      pendientes?: { cuando: number; texto?: string; lista: TareaDelGestor[] };
+      /** `mias` solo con la lista de «asignadas a mí». */
+      pendientes?: { cuando: number; texto?: string; mias?: true; lista: TareaDelGestor[] };
+      /** La descripción de una tarea, para su fila desplegada. */
+      ficha?: { clave: string; descripcion: string };
       borrador?: { clave: string; texto: string };
       /** Las transiciones de una tarea (Task 10), con la que `transicionPropuesta` sugiere. */
       transiciones?: { clave: string; para: "empezar" | "cerrar"; lista: TransicionDelGestor[]; propuesta?: string };
@@ -1300,7 +1303,9 @@ export type MensajeDelCliente =
   | { clase: "gestor"; accion: "vincular"; conector: string; sitio: string; proyecto: string }
   | { clase: "gestor"; accion: "desvincular" }
   | { clase: "gestor"; accion: "usarConector"; conector: string; usar: boolean }
-  | { clase: "gestor"; accion: "pendientes"; texto?: string }
+  | { clase: "gestor"; accion: "pendientes"; texto?: string; mias?: boolean }
+  /** La descripción de una tarea (fila desplegada). De solo LECTURA. */
+  | { clase: "gestor"; accion: "ficha"; clave: string }
   /** Task 10: las ÚNICAS cuatro acciones que escriben en Jira, por un mensaje EXPLÍCITO. */
   | { clase: "gestor"; accion: "transiciones"; clave: string; para: "empezar" | "cerrar" }
   | { clase: "gestor"; accion: "empezar"; clave: string; transicion?: string }

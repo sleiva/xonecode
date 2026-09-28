@@ -18,7 +18,7 @@
  */
 import {
   categoriaDeEstado, jqlDePendientes, motivoDeClaveDeProyecto,
-  type FichaDelGestor, type GestorDeTareasPort, type TareaDelGestor, type TransicionDelGestor, type Vinculo,
+  type FichaDelGestor, type GestorDeTareasPort, type OpcionesDePendientes, type TareaDelGestor, type TransicionDelGestor, type Vinculo,
 } from "../../core/gestorDeTareas.js";
 
 type Llamar = (nombre: string, args: Record<string, unknown>) => Promise<string>;
@@ -80,6 +80,12 @@ function tareaDesdeIssue(tool: string, issue: Record<string, unknown>, urlDelSit
  */
 /** El máximo que admite `getVisibleJiraProjects` por llamada (medido en su esquema). */
 export const PROYECTOS_POR_PAGINA = 50;
+/**
+ * Cuántas pendientes se piden de una vez: el máximo que admite `searchJiraIssuesUsingJql`. El panel
+ * FILTRA por estado y CUENTA en el cliente sobre esta lista, así que cuanto más entera llegue,
+ * menos mienten los números de las pastillas.
+ */
+export const PENDIENTES_POR_CONSULTA = 100;
 /** Cuántas páginas de proyectos se piden como mucho: 1000 proyectos. */
 const TOPE_DE_PAGINAS_DE_PROYECTOS = 20;
 
@@ -123,7 +129,7 @@ export function crearGestorJira(llamar: Llamar): GestorDeTareasPort {
     return salida;
   }
 
-  async function pendientes(v: Vinculo, filtro?: string): Promise<TareaDelGestor[]> {
+  async function pendientes(v: Vinculo, filtro?: string, opciones?: OpcionesDePendientes): Promise<TareaDelGestor[]> {
     const motivo = motivoDeClaveDeProyecto(v.proyecto);
     if (motivo !== undefined) throw new Error(motivo);
     const cuerpo = objeto(
@@ -132,8 +138,8 @@ export function crearGestorJira(llamar: Llamar): GestorDeTareasPort {
         "searchJiraIssuesUsingJql",
         await llamar("searchJiraIssuesUsingJql", {
           cloudId: v.sitio,
-          jql: jqlDePendientes(v, filtro),
-          maxResults: 50,
+          jql: jqlDePendientes(v, filtro, opciones),
+          maxResults: PENDIENTES_POR_CONSULTA,
           fields: ["summary", "status", "assignee"],
         }),
       ),

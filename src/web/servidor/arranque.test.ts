@@ -9677,13 +9677,17 @@ describe("el gestor de tareas, por el cable", () => {
       gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" },
     });
 
-    // Desvincular quita la clave; los conectores se quedan.
-    expect((await t.pedir({ clase: "gestor", accion: "desvincular" }))?.estado).toEqual({ conectores: ["jira"] });
-    expect(JSON.parse(t.leerConfig())).toEqual({ modo: "offline", conectores: ["jira"] });
-    // Y usar/dejar de usar un conector.
+    // Usar otro conector, que no es un gestor: se AÑADE al lado.
     expect((await t.pedir({ clase: "gestor", accion: "usarConector", conector: "deepwiki", usar: true }))?.estado?.conectores).toEqual(["jira", "deepwiki"]);
-    expect((await t.pedir({ clase: "gestor", accion: "usarConector", conector: "jira", usar: false }))?.estado?.conectores).toEqual(["deepwiki"]);
-    expect(JSON.parse(t.leerConfig()).conectores).toEqual(["deepwiki"]);
+    // Desvincular quita la clave Y deja de usar el conector del vínculo (el panel ya no tiene
+    // casilla para un gestor: vincular lo marca, desvincular lo desmarca); los demás se quedan.
+    expect((await t.pedir({ clase: "gestor", accion: "desvincular" }))?.estado).toEqual({ conectores: ["deepwiki"] });
+    expect(JSON.parse(t.leerConfig())).toEqual({ modo: "offline", conectores: ["deepwiki"] });
+    // Desvincular sin vínculo no toca los conectores.
+    expect((await t.pedir({ clase: "gestor", accion: "desvincular" }))?.estado).toEqual({ conectores: ["deepwiki"] });
+    // Y dejar de usar un conector.
+    expect((await t.pedir({ clase: "gestor", accion: "usarConector", conector: "deepwiki", usar: false }))?.estado?.conectores).toEqual([]);
+    expect(JSON.parse(t.leerConfig()).conectores).toEqual([]);
     await t.limpiar();
   });
 
@@ -9717,6 +9721,51 @@ describe("el gestor de tareas, por el cable", () => {
     falla = Object.assign(new Error(`EACCES: open '${t.raiz}/x'`), { code: "EACCES" });
     expect((await t.pedir({ clase: "gestor", accion: "pendientes" }))?.error).toEqual({ accion: "pendientes", motivo: "EACCES" });
     expect(JSON.stringify(t.cliente.recibidos)).not.toContain(t.raiz);
+    await t.limpiar();
+  });
+
+  it("«pendientes» con «asignadas a mí»: llega al gestor y vuelve MARCADA; sin ella, ni el campo", async () => {
+    const recibidas: unknown[] = [];
+    class Gestor extends GestorDeTareasEnMemoria {
+      override async pendientes(...a: Parameters<GestorDeTareasEnMemoria["pendientes"]>) {
+        recibidas.push(a[2]);
+        return super.pendientes(...a);
+      }
+    }
+    const conAna = { ...datos(), yo: "Ana", tareas: [{ ...TAREA, asignado: "Ana" }, { ...TAREA, clave: "IXCODE-13", asignado: "Luis" }] };
+    const t = await abrir(
+      { gestorDeTareas: () => new Gestor(conAna) },
+      { modo: "offline", conectores: ["jira"], gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } },
+    );
+    const mias = await t.pedir({ clase: "gestor", accion: "pendientes", mias: true });
+    expect(mias?.pendientes?.mias).toBe(true);
+    expect(mias?.pendientes?.lista.map((x) => x.clave)).toEqual(["IXCODE-12"]);
+    expect(recibidas.at(-1)).toEqual({ mias: true });
+    const todas = await t.pedir({ clase: "gestor", accion: "pendientes", mias: false });
+    expect(todas?.pendientes && "mias" in todas.pendientes).toBe(false);
+    expect(todas?.pendientes?.lista.map((x) => x.clave)).toEqual(["IXCODE-12", "IXCODE-13"]);
+    expect(recibidas.at(-1)).toBeUndefined();
+    // Un `mias` que no es booleano es una petición mal formada.
+    expect((await t.pedir({ clase: "gestor", accion: "pendientes", mias: "sí" } as never))?.error)
+      .toEqual({ accion: "pendientes", motivo: "petición mal formada" });
+    await t.limpiar();
+  });
+
+  it("«ficha»: la descripción de UNA tarea, solo clave y texto, sin escribir nada en el gestor", async () => {
+    const gestor = new GestorDeTareasEnMemoria({ ...datos(), tareas: [{ ...TAREA, asignado: "Ana" }] });
+    const t = await abrir({ gestorDeTareas: () => gestor });
+    expect((await t.pedir({ clase: "gestor", accion: "ficha", clave: "IXCODE-12" }))?.error)
+      .toEqual({ accion: "ficha", motivo: "este proyecto no tiene gestor de tareas" });
+    await t.pedir({ clase: "gestor", accion: "vincular", conector: "jira", sitio: "c1", proyecto: "IXCODE" });
+    expect(await t.pedir({ clase: "gestor", accion: "ficha", clave: "IXCODE-12" })).toEqual({
+      clase: "gestor",
+      ficha: { clave: "IXCODE-12", descripcion: "Pestañas y **pendientes**." },
+    });
+    // Un fallo del gestor viaja como error de SU acción.
+    expect((await t.pedir({ clase: "gestor", accion: "ficha", clave: "IXCODE-99" }))?.error?.accion).toBe("ficha");
+    expect((await t.pedir({ clase: "gestor", accion: "ficha" } as never))?.error).toEqual({ accion: "ficha", motivo: "petición mal formada" });
+    expect(gestor.transicionesAplicadas).toEqual([]);
+    expect(gestor.comentariosAplicados).toEqual([]);
     await t.limpiar();
   });
 

@@ -120,7 +120,8 @@ describe("pendientes", () => {
       args: {
         cloudId: "cloud-1",
         jql: 'project = "IXCODE" AND statusCategory != Done ORDER BY updated DESC',
-        maxResults: 50,
+        // El máximo de la tool: el panel filtra y cuenta en el cliente sobre esta lista.
+        maxResults: 100,
         fields: ["summary", "status", "assignee"],
       },
     });
@@ -167,6 +168,15 @@ describe("pendientes", () => {
     const g = crearGestorJira(llamar);
     await g.pendientes(V, "panel");
     expect((llamadas[0].args as { jql: string }).jql).toContain('text ~ "panel"');
+  });
+
+  it("«asignadas a mí» llega a la JQL como currentUser(), sin ningún dato de la persona", async () => {
+    const { llamar, llamadas } = llamarDoble({ searchJiraIssuesUsingJql: ISSUES });
+    const g = crearGestorJira(llamar);
+    await g.pendientes(V, "panel", { mias: true });
+    expect((llamadas[0].args as { jql: string }).jql).toBe(
+      'project = "IXCODE" AND statusCategory != Done AND assignee = currentUser() AND text ~ "panel" ORDER BY updated DESC'
+    );
   });
 });
 

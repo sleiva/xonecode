@@ -2335,6 +2335,10 @@ export function App({
               empezarEnVuelo={empezarEnVuelo}
               alVolverAlChat={() => setEnPanel(false)}
               alGestor={alGestor}
+              // El MISMO mensaje que «Conectar» en Ajustes: el servidor elige el carril
+              // (navegador para OAuth, `leerSecreto` para una clave) y el resultado llega
+              // por un `conectores` nuevo.
+              alAutorizarConector={(id) => void enviar({ clase: "conector", accion: "autorizar", id })}
               alAbrirAjustesDeConectores={() => abrirAjustes("conectores")}
             />
           </>

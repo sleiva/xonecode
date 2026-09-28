@@ -748,7 +748,15 @@ function gestorBienFormado(m: object): Extract<MensajeDelCliente, { clase: "gest
         : undefined;
     case "pendientes":
       if (x.texto !== undefined && !texto("texto")) return undefined;
-      return { clase: "gestor", accion: "pendientes", ...(x.texto === undefined ? {} : { texto: x.texto as string }) };
+      if (x.mias !== undefined && typeof x.mias !== "boolean") return undefined;
+      return {
+        clase: "gestor",
+        accion: "pendientes",
+        ...(x.texto === undefined ? {} : { texto: x.texto as string }),
+        ...(x.mias === true ? { mias: true } : {}),
+      };
+    case "ficha":
+      return texto("clave") ? { clase: "gestor", accion: "ficha", clave: x.clave as string } : undefined;
     case "transiciones":
       return texto("clave") && (x.para === "empezar" || x.para === "cerrar")
         ? { clase: "gestor", accion: "transiciones", clave: x.clave as string, para: x.para }
@@ -3701,9 +3709,17 @@ export function montarRutas(
           if (!conectores.includes(m.conector) && !guardar(() => guardarConectoresDeProyecto(raiz, [...conectores, m.conector]))) return;
           return emitirEstado();
         }
-        case "desvincular":
+        case "desvincular": {
+          // Desvincular también DEJA DE USAR el conector del vínculo: el panel ya no ofrece una
+          // casilla aparte para un gestor de tareas —vincular lo marca como usado, y esto es la
+          // vuelta—, así que quedarse en `conectores` lo dejaría usado sin control que lo quite.
+          const { conectores, vinculo } = delProyecto();
           if (!guardar(() => guardarGestorDeProyecto(raiz, undefined))) return;
+          if (vinculo !== undefined && conectores.includes(vinculo.conector)) {
+            if (!guardar(() => guardarConectoresDeProyecto(raiz, conectores.filter((c) => c !== vinculo.conector)))) return;
+          }
           return emitirEstado();
+        }
         case "usarConector": {
           // Solo se AÑADE lo que esta consola conoce (`catálogo ∪ definiciones`): un id cualquiera
           // escrito en el config.json no sería un conector de nadie. QUITAR no se comprueba, para
@@ -3726,8 +3742,23 @@ export function montarRutas(
           if (g === undefined) return;
           await asegurarSitios(g);
           const cuando = Date.now();
-          const lista = await g.pendientes(vinculo, m.texto);
-          emitir({ clase: "gestor", pendientes: { cuando, ...(m.texto === undefined ? {} : { texto: m.texto }), lista } });
+          const mias = m.mias === true;
+          const lista = await g.pendientes(vinculo, m.texto, mias ? { mias } : undefined);
+          emitir({
+            clase: "gestor",
+            pendientes: { cuando, ...(m.texto === undefined ? {} : { texto: m.texto }), ...(mias ? { mias: true as const } : {}), lista },
+          });
+          return;
+        }
+        // De solo LECTURA: la descripción de UNA tarea, para desplegarla en su fila. Viajan la
+        // clave y el texto y nada más —el resto de la ficha ya está en la fila—.
+        case "ficha": {
+          const { vinculo } = delProyecto();
+          if (vinculo === undefined) return fallo("este proyecto no tiene gestor de tareas");
+          const g = gestorOFallo(vinculo.conector);
+          if (g === undefined) return;
+          const f = await g.ficha(vinculo, m.clave);
+          emitir({ clase: "gestor", ficha: { clave: f.clave, descripcion: f.descripcion } });
           return;
         }
         // Task 10 (IXCODE-11): la primera de las CUATRO acciones que escriben en Jira, y

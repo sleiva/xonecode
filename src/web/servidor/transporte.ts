@@ -570,8 +570,13 @@ export type MensajeAlCliente =
       estado?: { conectores: string[]; vinculo?: VinculoDelCable };
       sitios?: { conector: string; lista: { id: string; nombre: string }[] };
       proyectos?: { sitio: string; lista: { clave: string; nombre: string }[] };
-      /** `cuando`: la hora del SERVIDOR a la que se preguntó, para decir «hace N min». */
-      pendientes?: { cuando: number; texto?: string; lista: TareaDelGestor[] };
+      /** `cuando`: la hora del SERVIDOR a la que se preguntó, para decir «hace N min».
+       *  `mias` viaja SOLO cuando la lista es la de «asignadas a mí»: el cliente pinta lo que
+       *  el servidor contestó, no lo que pidió. */
+      pendientes?: { cuando: number; texto?: string; mias?: true; lista: TareaDelGestor[] };
+      /** La descripción de UNA tarea, para desplegarla en su fila antes de empezar. De solo
+       *  LECTURA: solo la clave y el texto, nada más de la ficha. */
+      ficha?: { clave: string; descripcion: string };
       /** El texto que el compositor PROPONE: lo envía la persona, no sale solo. */
       borrador?: { clave: string; texto: string };
       /**
@@ -1494,7 +1499,9 @@ export type MensajeDelCliente =
   | { clase: "gestor"; accion: "vincular"; conector: string; sitio: string; proyecto: string }
   | { clase: "gestor"; accion: "desvincular" }
   | { clase: "gestor"; accion: "usarConector"; conector: string; usar: boolean }
-  | { clase: "gestor"; accion: "pendientes"; texto?: string }
+  | { clase: "gestor"; accion: "pendientes"; texto?: string; mias?: boolean }
+  /** La descripción de una tarea (la fila desplegada del panel). De solo LECTURA. */
+  | { clase: "gestor"; accion: "ficha"; clave: string }
   /**
    * Task 10 (IXCODE-11): las ÚNICAS cuatro acciones que ESCRIBEN en Jira, siempre por un
    * mensaje EXPLÍCITO del cliente —la persona aprobó una tarjeta—, nunca solas. `transiciones`

@@ -1,4 +1,6 @@
 import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 import { PanelDelProyecto } from "./PanelDelProyecto.js";
@@ -17,10 +19,12 @@ const CONECTORES: NonNullable<EstadoDelCliente["conectores"]> = {
   catalogo: [
     { id: "jira", nombre: "Jira", descripcion: "", autenticacion: "oauth" },
     { id: "github", nombre: "GitHub", descripcion: "", autenticacion: "oauth" },
+    { id: "deepwiki", nombre: "DeepWiki", descripcion: "", autenticacion: "ninguna" },
   ],
   conectores: [
     { id: "jira", estado: "autorizado", prueba: { cuando: 1, ok: true, tools: [] } },
     { id: "github", estado: "falta-autorizar" },
+    { id: "deepwiki", estado: "autorizado", prueba: { cuando: 1, ok: true, tools: [] } },
   ],
   desconocidos: [],
 };
@@ -47,6 +51,7 @@ function montar(extra: Partial<Props> = {}) {
     conectado: true,
     empezarEnVuelo: false,
     alGestor,
+    alAutorizarConector: vi.fn(),
     alAbrirAjustesDeConectores: vi.fn(),
     ...extra,
   };
@@ -164,7 +169,9 @@ describe("PanelDelProyecto", () => {
     expect(within(fila).getByText("Menú lateral")).toBeTruthy();
     expect(within(fila).getByText("Por hacer")).toBeTruthy();
     expect(within(fila).getByText("Ana")).toBeTruthy();
-    const enlace = within(fila).getByRole("link", { name: "Abrir en Jira" });
+    // «Abrir en Jira» es un icono junto a la clave, con su nombre en `aria-label` y `title`.
+    const enlace = within(fila).getByRole("link", { name: "Abrir IXCODE-12 en Jira" });
+    expect(enlace.getAttribute("title")).toBe("Abrir IXCODE-12 en Jira");
     expect(enlace.getAttribute("href")).toBe("https://xone.atlassian.net/browse/IXCODE-12");
     expect(enlace.getAttribute("target")).toBe("_blank");
     expect(enlace.getAttribute("rel")).toBe("noreferrer");
@@ -181,15 +188,136 @@ describe("PanelDelProyecto", () => {
     alGestor.mockClear();
     rerender({ gestor: { ...VINCULADO, pendientes: { cuando, texto: "menú", lista: [] } } });
     expect(screen.getByText("No hay tareas pendientes que coincidan con «menú».")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+    // Sin un fallo no hay «Reintentar»: se vuelve a consultar con el icono de «Actualizar»,
+    // que repite la ÚLTIMA consulta mandada.
+    expect(screen.queryByRole("button", { name: "Reintentar" })).toBeNull();
+    const actualizar = screen.getByRole("button", { name: "Actualizar" });
+    expect(actualizar.getAttribute("title")).toBeTruthy();
+    fireEvent.click(actualizar);
     expect(alGestor).toHaveBeenCalledWith({ accion: "pendientes", texto: "menú" });
   });
 
-  it("un error de pendientes se ve en su pestaña", () => {
-    montar({ gestor: { ...VINCULADO, errores: { pendientes: { motivo: "Jira no contesta" } } } });
+  it("un error de pendientes se ve en su pestaña, con «Reintentar» (y sin «Conectar»: no es de credencial)", () => {
+    const { alGestor } = montar({ gestor: { ...VINCULADO, errores: { pendientes: { motivo: "Jira no contesta" } } }, conectores: CONECTORES });
     pestana("Tareas");
     expect(screen.getByRole("alert").textContent).toBe("Jira no contesta");
     expect(screen.queryByText("Consultando las tareas…")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Conectar Jira" })).toBeNull();
+    alGestor.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+    expect(alGestor).toHaveBeenCalledWith({ accion: "pendientes" });
+  });
+
+  const IXCODE = [
+    { clave: "IXCODE-5", titulo: "Probar el login", estado: "PROBAR", categoria: "en-curso" as const, asignado: "Ana" },
+    { clave: "IXCODE-6", titulo: "Un título muy largo que no cabe en una línea del panel del proyecto", estado: "EN CURSO", categoria: "en-curso" as const, asignado: "Ana" },
+    { clave: "IXCODE-7", titulo: "Menú", estado: "PROBLEMA", categoria: "por-hacer" as const, asignado: "Luis" },
+    { clave: "IXCODE-8", titulo: "Login", estado: "PROBLEMA", categoria: "por-hacer" as const },
+  ];
+
+  it("filtros por estado: una pastilla por estado con su número, por categoría, y «esperando prueba» DESMARCADO por omisión", () => {
+    const { alGestor } = montar({ gestor: { ...VINCULADO, pendientes: { cuando: 1, lista: IXCODE } } });
+    pestana("Tareas");
+    const grupo = screen.getByRole("group", { name: "Filtrar por estado" });
+    const pastillas = within(grupo).getAllByRole("button");
+    expect(pastillas.map((b) => [b.textContent, b.getAttribute("aria-pressed")])).toEqual([
+      ["Todas 4", "false"],
+      // Por categoría (por hacer antes que en curso), y dentro de una, por orden de aparición.
+      ["PROBLEMA 2", "true"],
+      ["PROBAR 1", "false"],
+      ["EN CURSO 1", "true"],
+    ]);
+    expect(screen.queryByText("IXCODE-5")).toBeNull();
+    expect(screen.getByText("IXCODE-7")).toBeTruthy();
+    alGestor.mockClear();
+    // Marcar PROBAR la enseña; es filtro de CLIENTE: no sale ninguna petición.
+    fireEvent.click(within(grupo).getByRole("button", { name: "PROBAR 1" }));
+    expect(screen.getByText("IXCODE-5")).toBeTruthy();
+    expect(within(grupo).getByRole("button", { name: "Todas 4" }).getAttribute("aria-pressed")).toBe("true");
+    // Desmarcarlas todas lo DICE, no deja una lista vacía muda.
+    for (const n of ["PROBLEMA 2", "EN CURSO 1", "PROBAR 1"]) fireEvent.click(within(grupo).getByRole("button", { name: n }));
+    expect(screen.getByText("Ninguna pendiente con estos filtros.")).toBeTruthy();
+    expect(screen.queryByRole("list")).toBeNull();
+    fireEvent.click(within(grupo).getByRole("button", { name: "Todas 4" }));
+    expect(screen.getAllByRole("listitem")).toHaveLength(4);
+    expect(alGestor).not.toHaveBeenCalled();
+  });
+
+  it("«Asignadas a mí» vuelve a pedir con `mias`; el asignado deja de pintarse solo cuando la RESPUESTA es la de «mías»", () => {
+    const { alGestor, rerender } = montar({ gestor: { ...VINCULADO, pendientes: { cuando: 1, lista: IXCODE } } });
+    pestana("Tareas");
+    expect(screen.getAllByText("Ana").length).toBeGreaterThan(0);
+    alGestor.mockClear();
+    const mias = screen.getByRole("button", { name: "Asignadas a mí" });
+    expect(mias.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(mias);
+    expect(alGestor).toHaveBeenCalledWith({ accion: "pendientes", mias: true });
+    expect(mias.getAttribute("aria-pressed")).toBe("true");
+    // Mientras no contesta, la lista de antes sigue diciendo de quién es cada una.
+    expect(screen.getAllByText("Ana").length).toBeGreaterThan(0);
+    rerender({ gestor: { ...VINCULADO, pendientes: { cuando: 2, mias: true, lista: IXCODE.slice(0, 2) } } });
+    expect(screen.queryByText("Ana")).toBeNull();
+    // Buscar conserva el conmutador; «Actualizar» repite la última consulta.
+    fireEvent.change(screen.getByRole("searchbox", { name: "Buscar tareas" }), { target: { value: "login" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    expect(alGestor).toHaveBeenLastCalledWith({ accion: "pendientes", texto: "login", mias: true });
+    fireEvent.click(screen.getByRole("button", { name: "Actualizar" }));
+    expect(alGestor).toHaveBeenLastCalledWith({ accion: "pendientes", texto: "login", mias: true });
+  });
+
+  it("dos líneas por fila: clave y título (entero en su `title`) arriba; estado y asignado debajo; la acción aparte y secundaria", () => {
+    montar({ gestor: { ...VINCULADO, pendientes: { cuando: 1, lista: IXCODE } } });
+    pestana("Tareas");
+    const fila = screen.getByText("IXCODE-6").closest("li")!;
+    const titulo = within(fila).getByRole("button", { name: IXCODE[1]!.titulo });
+    expect(titulo.getAttribute("title")).toBe(IXCODE[1]!.titulo);
+    expect(titulo.getAttribute("aria-expanded")).toBe("false");
+    const nueva = within(fila).getByRole("button", { name: "Nueva sesión con IXCODE-6" });
+    // Secundario (no el azul de antes), y SIEMPRE en el DOM: se ve con hover o con el foco.
+    const estilosDelPanel = readFileSync(join(__dirname, "PanelDelProyecto.module.css"), "utf8");
+    expect(nueva.className).not.toMatch(/principal/);
+    expect(estilosDelPanel).toMatch(/\.tarea:focus-within \.accionesDeTarea/);
+    expect(estilosDelPanel).toMatch(/\.tarea:hover \.accionesDeTarea/);
+    const bloque = estilosDelPanel.slice(estilosDelPanel.indexOf(".accionesDeTarea {"), estilosDelPanel.indexOf(".tarea:hover"));
+    expect(bloque).not.toMatch(/display:\s*none|visibility/);
+    // La fila no se parte: el título cede, los botones no bajan.
+    expect(estilosDelPanel.slice(estilosDelPanel.indexOf(".filaDeTarea {"))).toMatch(/^[^}]*flex-wrap: nowrap/);
+    expect(estilosDelPanel.slice(estilosDelPanel.indexOf(".desplegar {"))).toMatch(/^[^}]*text-overflow: ellipsis/);
+  });
+
+  it("pulsar una fila despliega su descripción (ficha, de LECTURA) en markdown; plegarla la desmonta", () => {
+    const { alGestor, rerender } = montar({ gestor: { ...VINCULADO, pendientes: { cuando: 1, lista: IXCODE } } });
+    pestana("Tareas");
+    alGestor.mockClear();
+    const fila = screen.getByText("IXCODE-7").closest("li")!;
+    // Clic en la fila (no en un control): despliega.
+    fireEvent.click(within(fila).getByText("PROBLEMA"));
+    expect(alGestor).toHaveBeenCalledWith({ accion: "ficha", clave: "IXCODE-7" });
+    expect(alGestor).not.toHaveBeenCalledWith(expect.objectContaining({ accion: "transiciones" }));
+    expect(within(fila).getByText("Consultando la descripción…")).toBeTruthy();
+    const titulo = within(fila).getByRole("button", { name: "Menú" });
+    expect(titulo.getAttribute("aria-expanded")).toBe("true");
+    rerender({ gestor: { ...VINCULADO, pendientes: { cuando: 1, lista: IXCODE }, ficha: { clave: "IXCODE-7", descripcion: "Pasos: **uno** y $5" } } });
+    expect(within(screen.getByText("IXCODE-7").closest("li")!).getByText("uno").tagName).toBe("STRONG");
+    // El título (teclado) pliega, y lo plegado se DESMONTA.
+    fireEvent.click(screen.getByRole("button", { name: "Menú" }));
+    expect(screen.queryByText("uno")).toBeNull();
+    // «Nueva sesión» no despliega nada: abre su tarjeta.
+    alGestor.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Nueva sesión con IXCODE-7" }));
+    expect(alGestor).not.toHaveBeenCalledWith(expect.objectContaining({ accion: "ficha" }));
+  });
+
+  it("la ficha: sin descripción lo dice; un error VIEJO de `ficha` no se pinta en la fila recién desplegada", () => {
+    const base = { ...VINCULADO, pendientes: { cuando: 1, lista: IXCODE }, errores: { ficha: { motivo: "viejo" } } };
+    const { rerender } = montar({ gestor: base });
+    pestana("Tareas");
+    fireEvent.click(screen.getByRole("button", { name: "Login" }));
+    expect(screen.queryByText(/viejo/)).toBeNull();
+    rerender({ gestor: { ...base, errores: { ficha: { motivo: "Jira no contesta" } } } });
+    expect(screen.getByRole("alert").textContent).toBe("No se pudo leer la descripción: Jira no contesta");
+    rerender({ gestor: { ...base, errores: {}, ficha: { clave: "IXCODE-8", descripcion: "  " } } });
+    expect(screen.getByText("Esta tarea no tiene descripción.")).toBeTruthy();
   });
 
   it("«Nueva sesión con esta tarea» pide transiciones y abre la tarjeta «Empezar», en vez de `empezar` directo", () => {
@@ -421,31 +549,47 @@ describe("PanelDelProyecto", () => {
     expect(b.title).toMatch(/turno en marcha/);
   });
 
-  it("Conectores: el conectado con su casilla, el vinculado atado con su motivo, y el sin conectar con el camino a Ajustes", () => {
+  it("Conectores: Jira (gestor) SIN casilla, solo su vínculo; el resto con su casilla; el sin conectar con su «Conectar»", () => {
     const { alGestor, props } = montar({ gestor: VINCULADO, conectores: CONECTORES });
     pestana("Conectores");
-    const casilla = screen.getByRole("checkbox", { name: "Usar en este proyecto" }) as HTMLInputElement;
-    expect(casilla.checked).toBe(true);
-    expect(casilla.disabled).toBe(true);
-    expect(screen.getByText("Está vinculado: desvincula antes de dejar de usarlo.")).toBeTruthy();
+    const filaDe = (nombre: string) => screen.getByText(nombre, { selector: "span" }).closest("li")!;
+    // Jira: ni casilla ni la frase de «desvincula antes»; el vínculo y «Desvincular».
+    expect(within(filaDe("Jira")).queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByText(/desvincula antes de dejar de usarlo/)).toBeNull();
     expect(screen.getByText("Vinculado a IXCODE en xone.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Desvincular" }));
     expect(alGestor).toHaveBeenCalledWith({ accion: "desvincular" });
-    // GitHub está añadido pero no conectado: no tiene casilla, se cuenta y se manda a Ajustes.
+    // DeepWiki, conectado y no gestor: su casilla de siempre.
+    const casilla = within(filaDe("DeepWiki")).getByRole("checkbox", { name: "Usar en este proyecto" }) as HTMLInputElement;
+    expect(casilla.checked).toBe(false);
+    fireEvent.click(casilla);
+    expect(alGestor).toHaveBeenCalledWith({ accion: "usarConector", conector: "deepwiki", usar: true });
     expect(screen.getAllByRole("checkbox")).toHaveLength(1);
-    expect(screen.getByText(/Un conector añadido no está conectado: GitHub/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Abrir Ajustes" }));
+    // GitHub, añadido y sin conectar: su fila con «Conectar», el MISMO `autorizar` de Ajustes.
+    fireEvent.click(within(filaDe("GitHub")).getByRole("button", { name: "Conectar GitHub" }));
+    expect(props.alAutorizarConector).toHaveBeenCalledWith("github");
+    expect(screen.queryByText(/no está conectado/)).toBeNull();
+    // Añadir uno nuevo sigue siendo cosa de Ajustes.
+    fireEvent.click(screen.getByRole("button", { name: "Añadir otro conector en Ajustes" }));
     expect(props.alAbrirAjustesDeConectores).toHaveBeenCalled();
+  });
+
+  it("«Conectar» con una autorización abierta dice que espera al navegador y no se repite", () => {
+    montar({
+      gestor: VINCULADO,
+      conectores: { ...CONECTORES, conectores: [{ id: "github", estado: "falta-autorizar", autorizando: true }] },
+    });
+    pestana("Conectores");
+    const b = screen.getByRole("button", { name: "Conectar GitHub" }) as HTMLButtonElement;
+    expect(b.textContent).toBe("Esperando al navegador…");
+    expect(b.disabled).toBe(true);
   });
 
   it("Conectores sin vínculo: pide sitios, con uno solo se elige solo y pide sus proyectos; Vincular manda los tres", () => {
     const { alGestor, rerender } = montar({ gestor: { estado: { conectores: [] } }, conectores: CONECTORES });
     pestana("Conectores");
-    const casilla = screen.getByRole("checkbox", { name: "Usar en este proyecto" }) as HTMLInputElement;
-    expect(casilla.checked).toBe(false);
-    expect(casilla.disabled).toBe(false);
-    fireEvent.click(casilla);
-    expect(alGestor).toHaveBeenCalledWith({ accion: "usarConector", conector: "jira", usar: true });
+    // Sin casilla para Jira: vincular es lo que lo marca como usado.
+    expect(within(screen.getByText("Jira", { selector: "span" }).closest("li")!).queryByRole("checkbox")).toBeNull();
     expect(alGestor).toHaveBeenCalledWith({ accion: "sitios", conector: "jira" });
 
     const gestor1 = { estado: { conectores: [] }, sitios: { conector: "jira", lista: [{ id: "s1", nombre: "xone" }] } };
@@ -461,7 +605,7 @@ describe("PanelDelProyecto", () => {
     expect(alGestor).toHaveBeenCalledWith({ accion: "vincular", conector: "jira", sitio: "s1", proyecto: "IXCODE" });
   });
 
-  it("el vinculado SIN probar (tras un reinicio) sigue enseñando su vínculo y «Desvincular»", () => {
+  it("el vinculado SIN probar (tras un reinicio) sigue enseñando su vínculo y «Desvincular», con su «Conectar»", () => {
     montar({
       gestor: VINCULADO,
       conectores: { ...CONECTORES, conectores: [{ id: "jira", estado: "autorizado" }] },
@@ -469,11 +613,10 @@ describe("PanelDelProyecto", () => {
     pestana("Conectores");
     expect(screen.getByText("Vinculado a IXCODE en xone.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Desvincular" })).toBeTruthy();
-    // Y se sigue contando como sin conectar, con el camino para probarlo.
-    expect(screen.getByText(/Un conector añadido no está conectado: Jira/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Conectar Jira" })).toBeTruthy();
   });
 
-  it("un conector sin conectar y sin usar no se ofrece: ni casilla ni sitios", () => {
+  it("un conector sin conectar y sin usar no se ofrece para usar ni pide sitios: solo «Conectar»", () => {
     const { alGestor } = montar({
       gestor: { estado: { conectores: [] } },
       conectores: { ...CONECTORES, conectores: [{ id: "jira", estado: "autorizado" }] },
@@ -481,6 +624,69 @@ describe("PanelDelProyecto", () => {
     pestana("Conectores");
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(alGestor).not.toHaveBeenCalledWith({ accion: "sitios", conector: "jira" });
+    expect(screen.getByRole("button", { name: "Conectar Jira" })).toBeTruthy();
+  });
+
+  /**
+   * Punto 9: con la credencial caída, el fallo lleva al lado «Conectar Jira» —en Conectores y en
+   * Tareas—, y cuando el mensaje `conectores` lo da por conectado lo que falló se repite SOLO,
+   * UNA vez.
+   */
+  it("«falta autorizar» en sitios: «Conectar Jira» al lado; al conectarse, los sitios se vuelven a pedir UNA vez", () => {
+    const { alGestor, props, rerender } = montar({ gestor: { estado: { conectores: [] } }, conectores: CONECTORES });
+    pestana("Conectores");
+    expect(alGestor).toHaveBeenCalledWith({ accion: "sitios", conector: "jira" });
+    // El token murió: la prueba de Jira sigue VIEJA en verde (`llamar` no toca las pruebas).
+    const conError = { estado: { conectores: [] }, errores: { sitios: { motivo: "falta autorizar" } } };
+    rerender({ gestor: conError });
+    expect(screen.getByRole("alert").textContent).toBe("falta autorizar");
+    fireEvent.click(screen.getByRole("button", { name: "Conectar Jira" }));
+    expect(props.alAutorizarConector).toHaveBeenCalledWith("jira");
+    alGestor.mockClear();
+    // Vuelve del navegador: `autorizar` acaba en `probar`, y llega una prueba NUEVA.
+    const reconectado = {
+      ...CONECTORES,
+      conectores: CONECTORES.conectores.map((c) => (c.id === "jira" ? { ...c, prueba: { cuando: 2, ok: true as const, tools: [] } } : c)),
+    };
+    rerender({ gestor: conError, conectores: reconectado });
+    expect(alGestor.mock.calls.filter(([p]) => p.accion === "sitios")).toEqual([[{ accion: "sitios", conector: "jira" }]]);
+    // Otra foto con la MISMA prueba no lo repite.
+    rerender({ gestor: conError, conectores: { ...reconectado, conectores: [...reconectado.conectores] } });
+    expect(alGestor.mock.calls.filter(([p]) => p.accion === "sitios")).toHaveLength(1);
+  });
+
+  it("y si la fila de Jira se vuelve a montar al conectarse (pide sus sitios ella), no se piden DOS veces", () => {
+    const { alGestor, rerender } = montar({ gestor: { estado: { conectores: [] } }, conectores: CONECTORES });
+    pestana("Conectores");
+    const conError = { estado: { conectores: [] }, errores: { sitios: { motivo: "falta autorizar" } } };
+    const caido = { ...CONECTORES, conectores: CONECTORES.conectores.map((c) => (c.id === "jira" ? { id: "jira", estado: "falta-autorizar" as const } : c)) };
+    rerender({ gestor: conError, conectores: caido });
+    // Con Jira sin conectar, su «Conectar» es el de su fila: uno, no dos.
+    expect(screen.getAllByRole("button", { name: "Conectar Jira" })).toHaveLength(1);
+    alGestor.mockClear();
+    rerender({ gestor: conError, conectores: CONECTORES });
+    expect(alGestor.mock.calls.filter(([p]) => p.accion === "sitios")).toHaveLength(1);
+  });
+
+  it("«falta autorizar» en pendientes: «Conectar Jira» en Tareas; al conectarse, se repite la consulta, UNA vez", () => {
+    const sinProbar = { ...CONECTORES, conectores: [{ id: "jira", estado: "falta-autorizar" as const }] };
+    const conError = { ...VINCULADO, errores: { pendientes: { motivo: "falta autorizar" } } };
+    const { alGestor, props, rerender } = montar({ gestor: conError, conectores: sinProbar });
+    pestana("Tareas");
+    fireEvent.click(screen.getByRole("button", { name: "Asignadas a mí" }));
+    // Esa consulta falla también: el store trae un error NUEVO (un objeto por fallo).
+    const otroError = { ...VINCULADO, errores: { pendientes: { motivo: "falta autorizar" } } };
+    rerender({ gestor: otroError });
+    fireEvent.click(screen.getByRole("button", { name: "Conectar Jira" }));
+    expect(props.alAutorizarConector).toHaveBeenCalledWith("jira");
+    alGestor.mockClear();
+    rerender({ gestor: otroError, conectores: CONECTORES });
+    expect(alGestor).toHaveBeenCalledTimes(1);
+    expect(alGestor).toHaveBeenCalledWith({ accion: "pendientes", mias: true });
+    // Y un conector que ya estaba conectado cuando llegó el fallo no dispara nada.
+    alGestor.mockClear();
+    rerender({ gestor: { ...VINCULADO, errores: { pendientes: { motivo: "falta autorizar" } } }, conectores: CONECTORES });
+    expect(alGestor).not.toHaveBeenCalled();
   });
 
   it("los errores de configuración se ven en Conectores", () => {

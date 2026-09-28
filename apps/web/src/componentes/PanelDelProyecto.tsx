@@ -1,8 +1,12 @@
 import clsx from "clsx";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
+import { protegerDolares } from "../protegerDolares.js";
 import type { EstadoDelCliente } from "../store.js";
-import type { MensajeDelCliente, PlanDelCable, SesionDelCable, TareaDelGestor } from "../tipos.js";
+import type { CategoriaDeTarea, MensajeDelCliente, PlanDelCable, SesionDelCable, TareaDelGestor } from "../tipos.js";
 import { IconoDeConector } from "./IconoDeConector.js";
+import { IconoDeActualizar, IconoDeEnlaceExterno } from "./IconosDelVisor.js";
 import { BarraDeProgreso, resumenDelPlan } from "./Planes.js";
 import { TarjetaDeEmpezar } from "./TarjetaDeJira.js";
 import conversacion from "../../estilos/ConversationRoot.module.css";
@@ -67,6 +71,7 @@ export function PanelDelProyecto({
   empezarEnVuelo,
   alVolverAlChat,
   alGestor,
+  alAutorizarConector,
   alAbrirAjustesDeConectores,
 }: {
   nombre: string;
@@ -102,9 +107,39 @@ export function PanelDelProyecto({
   empezarEnVuelo: boolean;
   alVolverAlChat?: () => void;
   alGestor: (peticion: PeticionAlGestor, contexto?: ContextoDeGestor) => void;
+  /**
+   * «Conectar» un conector AÑADIDO desde el panel: el MISMO mensaje que el botón de Ajustes
+   * (`{clase:"conector", accion:"autorizar", id}`), así que el servidor decide el carril —el
+   * navegador para OAuth, la clave por `leerSecreto` para `api-key`—. Añadir o definir un
+   * conector sigue siendo cosa de Ajustes.
+   */
+  alAutorizarConector: (id: string) => void;
   alAbrirAjustesDeConectores: () => void;
 }) {
   const [pestana, setPestana] = useState<PestanaDelProyecto>("resumen");
+  /**
+   * La ÚLTIMA petición de cada acción que salió de este panel: lo que se vuelve a mandar, UNA
+   * vez, cuando un conector cuya credencial faltaba pasa a conectado (`useReintentoTrasConectar`).
+   * Vive aquí y no en cada pestaña porque la vuelta del navegador puede llegar con la persona
+   * mirando otra.
+   */
+  const ultimas = useRef<Partial<Record<PeticionAlGestor["accion"], PeticionAlGestor>>>({});
+  /** Los errores que ya no se repiten al conectar: ya se volvió a pedir su acción (`useReintentoTrasConectar`). */
+  const repetidos = useRef(new WeakSet<object>());
+  const pedir = (peticion: PeticionAlGestor, contexto?: ContextoDeGestor): void => {
+    ultimas.current[peticion.accion] = peticion;
+    const previo = gestor?.errores?.[peticion.accion];
+    if (previo !== undefined) repetidos.current.add(previo);
+    if (contexto === undefined) alGestor(peticion);
+    else alGestor(peticion, contexto);
+  };
+  /** El conector con el que falló una acción: el del vínculo para las pendientes, el pedido para el resto. */
+  const conectorDelFallo = (accion: AccionConConector): string | undefined => {
+    if (accion === "pendientes") return gestor?.estado?.vinculo?.conector;
+    const p = ultimas.current[accion];
+    return p !== undefined && "conector" in p ? p.conector : undefined;
+  };
+  useReintentoTrasConectar({ gestor, conectores, conectado, ultimas: ultimas.current, repetidos: repetidos.current, conectorDelFallo, pedir });
   /**
    * La CLAVE de la tarea cuya tarjeta «Empezar» está abierta (Task 11, IXCODE-11); `undefined`
    * es «cerrada». Vive AQUÍ y no en la pestaña porque cambiar de pestaña no cancela nada en el
@@ -132,7 +167,7 @@ export function PanelDelProyecto({
   // pedirlo solo al montar lo dejaba en «Consultando…» para siempre tras reconectar. Tareas
   // vuelve a pedir sus pendientes sola, al reaparecer el vínculo (su efecto va por la clave).
   useEffect(() => {
-    if (conectado) alGestor({ accion: "estado" });
+    if (conectado) pedir({ accion: "estado" });
     // Solo `conectado`: `alGestor` puede cambiar de identidad en cada render de `App`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conectado]);
@@ -147,7 +182,7 @@ export function PanelDelProyecto({
   const pedirEmpezar = (clave: string): void => {
     setTarjetaEmpezar(clave);
     erroresAlAbrirRef.current = { empezar: errorDeEmpezar, transiciones: errorTransicionesDelGestor };
-    alGestor({ accion: "transiciones", clave, para: "empezar" });
+    pedir({ accion: "transiciones", clave, para: "empezar" });
   };
   const transicionesDelGestor = gestor?.transiciones;
   const transicionesDeEmpezar =
@@ -162,7 +197,7 @@ export function PanelDelProyecto({
     // El destino se captura AQUÍ, del desplegable que la persona tiene delante: `gestor.transiciones`
     // puede haber cambiado de clave para cuando la respuesta llegue (R8, `ContextoDeGestor`).
     const destino = transicion === undefined ? undefined : transicionesDeEmpezar?.lista.find((t) => t.id === transicion)?.destino;
-    alGestor({ accion: "empezar", clave: tarjetaEmpezar, ...(transicion === undefined ? {} : { transicion }) }, { destino });
+    pedir({ accion: "empezar", clave: tarjetaEmpezar, ...(transicion === undefined ? {} : { transicion }) }, { destino });
   };
 
   return (
@@ -222,7 +257,9 @@ export function PanelDelProyecto({
             // pero la fila no puede volver a lanzarlo hasta que `App` diga que terminó.
             ocupado={tarjetaEmpezar !== undefined || empezarEnVuelo}
             turnoEnVuelo={turnoEnVuelo}
-            alGestor={alGestor}
+            {...(conectores === undefined ? {} : { conectores })}
+            alGestor={pedir}
+            alAutorizar={alAutorizarConector}
             alEmpezar={pedirEmpezar}
             alIrAConectores={() => setPestana("conectores")}
           />
@@ -231,7 +268,9 @@ export function PanelDelProyecto({
             gestor={gestor}
             conectores={conectores}
             conectado={conectado}
-            alGestor={alGestor}
+            alGestor={pedir}
+            alAutorizar={alAutorizarConector}
+            conectorDelFallo={conectorDelFallo}
             alAbrirAjustes={alAbrirAjustesDeConectores}
           />
         )}
@@ -359,31 +398,194 @@ function Aviso({ error }: { error?: { motivo: string } }) {
   );
 }
 
+/** Las acciones cuyo fallo dice con QUÉ conector falló, y que por tanto se arreglan conectándolo. */
+type AccionConConector = "sitios" | "proyectos" | "vincular" | "pendientes";
+/** Las que se REPITEN solas al conectar: leer. `vincular` escribe la configuración y no se repite sola. */
+const REPETIBLES_AL_CONECTAR: readonly AccionConConector[] = ["sitios", "proyectos", "pendientes"];
+
+/**
+ * El motivo de un fallo del gestor que se arregla CONECTANDO el conector: las dos frases que
+ * `ServicioDeConectores.llamar` usa cuando no hay credencial con la que hablar (`falta
+ * autorizar`) o cuando el conector no está añadido (`«jira» no está conectado`). Cualquier otro
+ * motivo —Jira contestó con un error, no responde— no se arregla con otro «Conectar».
+ */
+function seArreglaConectando(motivo: string): boolean {
+  return /falta autorizar|no está conectado/.test(motivo);
+}
+
+const esConectado = (c: { prueba?: { ok: boolean } }): boolean => c.prueba?.ok === true;
+
+/**
+ * Tras «Conectar», lo que falló por falta de credencial se vuelve a pedir SOLO, UNA vez: la
+ * persona pulsó Conectar para seguir, no para tener que pulsar además «Reintentar».
+ *
+ * El disparo es una prueba NUEVA y buena de ese conector (el mensaje `conectores` que el servidor
+ * reemite al volver del navegador: `autorizar` acaba en `probar`), no «está conectado»: un token
+ * que caducó deja la prueba VIEJA en verde —`llamar` falla sin tocar las pruebas—, así que lo que
+ * cuenta es que llegue otra con otra hora. La foto que ya había al montar no es un disparo.
+ *
+ * «Una vez» es por ERROR: el store crea un objeto nuevo en cada fallo (`store.ts`) y `repetidos`
+ * recuerda cuáles ya no hay que repetir — los repetidos aquí y los que ya se volvieron a pedir por
+ * otro lado (`pedir` los apunta: la fila de Jira que se vuelve a montar al conectarse ya pide sus
+ * sitios, y repetirlo aquí serían dos).
+ */
+function useReintentoTrasConectar({
+  gestor,
+  conectores,
+  conectado,
+  ultimas,
+  repetidos,
+  conectorDelFallo,
+  pedir,
+}: {
+  gestor?: EstadoDelCliente["gestor"];
+  conectores?: EstadoDelCliente["conectores"];
+  conectado: boolean;
+  ultimas: Partial<Record<PeticionAlGestor["accion"], PeticionAlGestor>>;
+  repetidos: WeakSet<object>;
+  conectorDelFallo: (accion: AccionConConector) => string | undefined;
+  pedir: (peticion: PeticionAlGestor) => void;
+}): void {
+  /** La hora de la última prueba BUENA de cada conector, en la foto anterior. */
+  const pruebasAntes = useRef<Map<string, number> | undefined>(undefined);
+  const lista = conectores?.conectores;
+  useEffect(() => {
+    if (lista === undefined) return;
+    const ahora = new Map(lista.flatMap((c) => (c.prueba?.ok === true ? [[c.id, c.prueba.cuando] as const] : [])));
+    const antes = pruebasAntes.current;
+    pruebasAntes.current = ahora;
+    if (antes === undefined || !conectado) return;
+    const recienConectados = [...ahora].filter(([id, cuando]) => antes.get(id) !== cuando).map(([id]) => id);
+    if (recienConectados.length === 0) return;
+    for (const accion of REPETIBLES_AL_CONECTAR) {
+      const error = gestor?.errores?.[accion];
+      const peticion = ultimas[accion];
+      if (error === undefined || peticion === undefined || repetidos.has(error) || !seArreglaConectando(error.motivo)) continue;
+      const conector = conectorDelFallo(accion);
+      if (conector === undefined || !recienConectados.includes(conector)) continue;
+      pedir(peticion);
+    }
+    // Solo la lista de conectores: es su CAMBIO lo que dispara, no el de los errores.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lista]);
+}
+
+/**
+ * Un fallo del gestor, y al lado «Conectar <nombre>» si lo que falta es la credencial de un
+ * conector AÑADIDO (sin añadir, `autorizar` no haría nada: eso se hace en Ajustes). Es el MISMO
+ * `autorizar` del botón de Ajustes.
+ */
+function AvisoDelGestor({
+  error,
+  conector,
+  conectores,
+  conectado,
+  alAutorizar,
+  sinDuplicarLaFila = false,
+  children,
+}: {
+  error?: { motivo: string };
+  /** En la pestaña Conectores: el conector sin conectar ya tiene su «Conectar» en su fila. */
+  sinDuplicarLaFila?: boolean;
+  conector?: string;
+  conectores?: EstadoDelCliente["conectores"];
+  conectado: boolean;
+  alAutorizar: (id: string) => void;
+  /** Otras acciones junto al aviso (el «Reintentar» de Tareas). */
+  children?: ReactNode;
+}) {
+  if (error === undefined) return null;
+  const anadido = conector === undefined ? undefined : conectores?.conectores.find((c) => c.id === conector);
+  // En Conectores, la fila de un conector sin conectar ya lleva su «Conectar»: no se repite aquí.
+  const conConectar = anadido !== undefined && seArreglaConectando(error.motivo) && !(sinDuplicarLaFila && !esConectado(anadido));
+  const nombre = conector === undefined ? "" : (conectores?.catalogo.find((f) => f.id === conector)?.nombre ?? conector);
+  return (
+    <div className={estilos.avisoConAcciones}>
+      <Aviso error={error} />
+      {conConectar ? (
+        <button type="button" className={estilos.accion} onClick={() => alAutorizar(anadido.id)} disabled={!conectado || anadido.autorizando === true}>
+          {anadido.autorizando === true ? "Esperando al navegador…" : `Conectar ${nombre}`}
+        </button>
+      ) : null}
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Los estados que por omisión se DESMARCAN en el filtro: en el flujo de IXCODE (PROBLEMA → EN
+ * CURSO → PROBAR → PREPROD → TERMINADO) son «esperando prueba», no trabajo que empezar. Es el
+ * punto de partida, no una regla: la persona marca o desmarca cualquiera.
+ */
+const ESPERANDO_PRUEBA = /PROBAR|PREPROD|REVIS|TEST/i;
+const marcadoPorOmision = (estado: string): boolean => !ESPERANDO_PRUEBA.test(estado);
+/** El orden de las pastillas: lo que está por hacer antes que lo que está en curso. */
+const ORDEN_DE_CATEGORIA: Record<CategoriaDeTarea, number> = { "por-hacer": 0, "en-curso": 1, terminada: 2 };
+
+/** Los estados distintos de la lista, con cuántas hay de cada uno, por categoría y luego por aparición. */
+function estadosDe(lista: readonly TareaDelGestor[]): { estado: string; cuantas: number }[] {
+  const vistos = new Map<string, { estado: string; categoria: CategoriaDeTarea; cuantas: number; orden: number }>();
+  for (const t of lista) {
+    const e = vistos.get(t.estado);
+    if (e === undefined) vistos.set(t.estado, { estado: t.estado, categoria: t.categoria, cuantas: 1, orden: vistos.size });
+    else e.cuantas++;
+  }
+  return [...vistos.values()]
+    .sort((a, b) => ORDEN_DE_CATEGORIA[a.categoria] - ORDEN_DE_CATEGORIA[b.categoria] || a.orden - b.orden)
+    .map(({ estado, cuantas }) => ({ estado, cuantas }));
+}
+
+/** La consulta de pendientes: lo que se busca y si son solo las mías. Lo vacío no viaja. */
+type ConsultaDePendientes = { texto?: string; mias?: boolean };
+const peticionDePendientes = (c: ConsultaDePendientes): PeticionAlGestor => ({
+  accion: "pendientes",
+  ...(c.texto === undefined || c.texto === "" ? {} : { texto: c.texto }),
+  ...(c.mias === true ? { mias: true } : {}),
+});
+
 function TareasDelGestor({
   gestor,
+  conectores,
   conectado,
   ocupado,
   turnoEnVuelo,
   alGestor,
+  alAutorizar,
   alEmpezar,
   alIrAConectores,
 }: {
   gestor?: EstadoDelCliente["gestor"];
+  conectores?: EstadoDelCliente["conectores"];
   conectado: boolean;
   /** Hay una tarjeta «Empezar» abierta (para CUALQUIER tarea): mientras tanto no se abre otra. */
   ocupado: boolean;
   turnoEnVuelo: boolean;
   alGestor: (peticion: PeticionAlGestor) => void;
+  alAutorizar: (id: string) => void;
   alEmpezar: (clave: string) => void;
   alIrAConectores: () => void;
 }) {
   const vinculo = gestor?.estado?.vinculo;
   const [texto, setTexto] = useState("");
+  /** «Asignadas a mí» PEDIDO: el conmutador. Lo que se pinta de la lista lo dice la respuesta (`pendientes.mias`). */
+  const [mias, setMias] = useState(false);
+  /** Lo que la persona marcó o desmarcó a mano, por estado. Lo demás, `marcadoPorOmision`. */
+  const [decididos, setDecididos] = useState<Record<string, boolean>>({});
+  /** La clave de la fila desplegada (una a la vez), o `undefined`. */
+  const [desplegada, setDesplegada] = useState<string | undefined>(undefined);
+  /** El error de `ficha` que ya había al desplegar: uno VIEJO no se pinta en la fila nueva (el R6 de la tarjeta). */
+  const errorDeFichaAlDesplegar = useRef<{ motivo: string } | undefined>(undefined);
+  /** La última consulta MANDADA: «Actualizar» y «Reintentar» repiten esa, no la última que contestó. */
+  const ultimaConsulta = useRef<ConsultaDePendientes>({});
+  const consultar = (c: ConsultaDePendientes): void => {
+    ultimaConsulta.current = c;
+    alGestor(peticionDePendientes(c));
+  };
   const clave = vinculo === undefined ? undefined : `${vinculo.conector}|${vinculo.sitio}|${vinculo.proyecto}`;
-  // Al abrir la pestaña (y si cambia el vínculo), se pregunta: una lista de antes puede no ser
-  // ya la de ahora, y la hora de la foto dice de cuándo es la que se ve mientras llega.
+  // Al abrir la pestaña (y si cambia el vínculo, o vuelve el cable), se pregunta: una lista de
+  // antes puede no ser ya la de ahora, y la hora de la foto dice de cuándo es la que se ve.
   useEffect(() => {
-    if (clave !== undefined) alGestor({ accion: "pendientes" });
+    if (clave !== undefined) alGestor(peticionDePendientes(ultimaConsulta.current));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clave]);
 
@@ -409,20 +611,47 @@ function TareasDelGestor({
   }
 
   const pendientes = gestor.pendientes;
-  const buscar = (): void => {
-    const t = texto.trim();
-    alGestor(t === "" ? { accion: "pendientes" } : { accion: "pendientes", texto: t });
+  const buscar = (): void => consultar({ texto: texto.trim(), mias });
+  const repetir = (): void => consultar(ultimaConsulta.current);
+  const conmutarMias = (): void => {
+    setMias(!mias);
+    consultar({ texto: texto.trim(), mias: !mias });
   };
-  const reintentar = (): void => {
-    const t = pendientes?.texto;
-    alGestor(t === undefined ? { accion: "pendientes" } : { accion: "pendientes", texto: t });
+  const alternar = (claveDeTarea: string): void => {
+    if (desplegada === claveDeTarea) {
+      setDesplegada(undefined);
+      return;
+    }
+    setDesplegada(claveDeTarea);
+    errorDeFichaAlDesplegar.current = errores.ficha;
+    alGestor({ accion: "ficha", clave: claveDeTarea });
   };
+  const estados = pendientes === undefined ? [] : estadosDe(pendientes.lista);
+  const marcado = (estado: string): boolean => decididos[estado] ?? marcadoPorOmision(estado);
+  const todasMarcadas = estados.every((e) => marcado(e.estado));
+  const visibles = pendientes === undefined ? [] : pendientes.lista.filter((t) => marcado(t.estado));
+  const fichaDeLaDesplegada = gestor.ficha !== undefined && gestor.ficha.clave === desplegada ? gestor.ficha : undefined;
+  const errorDeFicha = errores.ficha !== errorDeFichaAlDesplegar.current ? errores.ficha : undefined;
 
   return (
     <div className={estilos.seccion}>
       <div className={estilos.encabezado}>
         <h2 className={estilos.titulo}>{`Pendientes de ${vinculo.proyecto}`}</h2>
-        {pendientes === undefined ? null : <span className={estilos.nota}>{`Consultado a las ${horaDe(pendientes.cuando)}`}</span>}
+        {pendientes === undefined ? null : (
+          <span className={estilos.consultado}>
+            <span className={estilos.nota}>{`Consultado a las ${horaDe(pendientes.cuando)}`}</span>
+            <button
+              type="button"
+              className={estilos.icono}
+              aria-label="Actualizar"
+              title="Volver a consultar las pendientes"
+              onClick={repetir}
+              disabled={!conectado}
+            >
+              <IconoDeActualizar />
+            </button>
+          </span>
+        )}
       </div>
       <form
         className={estilos.busqueda}
@@ -443,11 +672,28 @@ function TareasDelGestor({
         <button type="submit" className={estilos.accion} disabled={!conectado}>
           Buscar
         </button>
-        <button type="button" className={estilos.accion} onClick={reintentar} disabled={!conectado}>
-          Reintentar
+        <button
+          type="button"
+          className={estilos.pastilla}
+          aria-pressed={mias}
+          title="Solo las asignadas a la cuenta con la que está conectado el gestor"
+          onClick={conmutarMias}
+          disabled={!conectado}
+        >
+          Asignadas a mí
         </button>
       </form>
-      <Aviso {...(errores.pendientes === undefined ? {} : { error: errores.pendientes })} />
+      <AvisoDelGestor
+        {...(errores.pendientes === undefined ? {} : { error: errores.pendientes })}
+        conector={vinculo.conector}
+        {...(conectores === undefined ? {} : { conectores })}
+        conectado={conectado}
+        alAutorizar={alAutorizar}
+      >
+        <button type="button" className={estilos.accion} onClick={repetir} disabled={!conectado}>
+          Reintentar
+        </button>
+      </AvisoDelGestor>
       {pendientes === undefined ? (
         errores.pendientes === undefined ? <p className={estilos.aviso}>Consultando las tareas…</p> : null
       ) : pendientes.lista.length === 0 ? (
@@ -455,86 +701,217 @@ function TareasDelGestor({
           {pendientes.texto === undefined ? "No hay tareas pendientes." : `No hay tareas pendientes que coincidan con «${pendientes.texto}».`}
         </p>
       ) : (
-        <ul className={estilos.lista}>
-          {pendientes.lista.map((t) => (
-            <FilaDeTarea
-              key={t.clave}
-              tarea={t}
-              conectado={conectado}
-              ocupado={ocupado}
-              turnoEnVuelo={turnoEnVuelo}
-              alEmpezar={() => alEmpezar(t.clave)}
-            />
-          ))}
-        </ul>
+        <>
+          <div className={estilos.filtros} role="group" aria-label="Filtrar por estado">
+            <button
+              type="button"
+              className={estilos.pastilla}
+              aria-pressed={todasMarcadas}
+              // Con todas puestas no hay nada que poner: pulsarla no cambia nada (lo mismo que
+              // la mitad ya puesta del conmutador de modo).
+              onClick={() => {
+                if (!todasMarcadas) setDecididos(Object.fromEntries(estados.map((e) => [e.estado, true])));
+              }}
+            >
+              Todas <span className={estilos.cuenta}>{pendientes.lista.length}</span>
+            </button>
+            {estados.map((e) => (
+              <button
+                key={e.estado}
+                type="button"
+                className={estilos.pastilla}
+                aria-pressed={marcado(e.estado)}
+                onClick={() => setDecididos({ ...decididos, [e.estado]: !marcado(e.estado) })}
+              >
+                {e.estado} <span className={estilos.cuenta}>{e.cuantas}</span>
+              </button>
+            ))}
+          </div>
+          {visibles.length === 0 ? (
+            <p className={estilos.aviso}>Ninguna pendiente con estos filtros.</p>
+          ) : (
+            <ul className={estilos.lista}>
+              {visibles.map((t) => (
+                <FilaDeTarea
+                  key={t.clave}
+                  tarea={t}
+                  conAsignado={pendientes.mias !== true}
+                  desplegada={desplegada === t.clave}
+                  {...(desplegada === t.clave && fichaDeLaDesplegada !== undefined ? { descripcion: fichaDeLaDesplegada.descripcion } : {})}
+                  {...(desplegada === t.clave && errorDeFicha !== undefined ? { errorDeFicha } : {})}
+                  conectado={conectado}
+                  ocupado={ocupado}
+                  turnoEnVuelo={turnoEnVuelo}
+                  alAlternar={() => alternar(t.clave)}
+                  alEmpezar={() => alEmpezar(t.clave)}
+                />
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </div>
   );
 }
 
+/** Lo que dentro de una fila ya es un control por sí mismo: pulsarlo no despliega la fila. */
+const CONTROLES = "a, button, input, select, textarea, summary";
+
+/**
+ * Una tarea, en DOS líneas: clave (con su ↗ al gestor) y título arriba, estado y asignado
+ * debajo; la acción a la derecha, sin caerse de línea por un título largo (el título se corta
+ * con «…» y entero va en su `title`). La acción EXISTE siempre y se llega con el teclado: lo que
+ * cambia con el ratón encima o el foco dentro es su opacidad, no si está (`.accionesDeTarea`).
+ *
+ * Pulsar la fila despliega su descripción (la ficha del gestor, de solo LECTURA). El control de
+ * teclado es el título, un botón con `aria-expanded`; el clic en el resto de la fila hace lo
+ * mismo por comodidad, salvo sobre otro control —el ↗ abre el gestor, «Nueva sesión» abre la
+ * tarjeta—. Desplegar NUNCA empieza nada. Lo plegado se DESMONTA.
+ */
 function FilaDeTarea({
   tarea: t,
+  conAsignado,
+  desplegada,
+  descripcion,
+  errorDeFicha,
   conectado,
   ocupado,
   turnoEnVuelo,
+  alAlternar,
   alEmpezar,
 }: {
   tarea: TareaDelGestor;
+  /** Con «Asignadas a mí» contestado, el asignado es siempre quien mira: no se repite en cada fila. */
+  conAsignado: boolean;
+  desplegada: boolean;
+  /** La descripción, cuando ya llegó. Ausente con la fila desplegada = consultando. */
+  descripcion?: string;
+  errorDeFicha?: { motivo: string };
   conectado: boolean;
   /** Hay una tarjeta «Empezar» abierta, de CUALQUIER tarea: no se lanza una segunda. */
   ocupado: boolean;
   turnoEnVuelo: boolean;
+  alAlternar: () => void;
   alEmpezar: () => void;
 }) {
+  const idDeFicha = `ficha-${t.clave}`;
+  const alPulsarFila = (e: MouseEvent<HTMLDivElement>): void => {
+    if (e.target instanceof Element && e.target.closest(CONTROLES) !== null) return;
+    alAlternar();
+  };
   return (
     <li className={estilos.tarea} data-categoria={t.categoria}>
-      <div className={estilos.datos}>
-        <span className={estilos.clave}>{t.clave}</span>
-        <span className={estilos.tituloDeTarea}>{t.titulo}</span>
-        <span className={estilos.estado}>{t.estado}</span>
-        {t.asignado === undefined ? null : <span className={estilos.nota}>{t.asignado}</span>}
+      {/* El clic en la fila es un atajo de ratón: el control de teclado es el botón del título. */}
+      <div className={estilos.filaDeTarea} onClick={alPulsarFila}>
+        <div className={estilos.datos}>
+          <div className={estilos.lineaPrincipal}>
+            <span className={estilos.clave}>{t.clave}</span>
+            {t.url === undefined ? null : (
+              <a
+                className={estilos.abrirFuera}
+                href={t.url}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Abrir ${t.clave} en Jira`}
+                title={`Abrir ${t.clave} en Jira`}
+              >
+                <IconoDeEnlaceExterno />
+              </a>
+            )}
+            <button
+              type="button"
+              className={estilos.desplegar}
+              aria-expanded={desplegada}
+              {...(desplegada ? { "aria-controls": idDeFicha } : {})}
+              title={t.titulo}
+              onClick={alAlternar}
+            >
+              {t.titulo}
+            </button>
+          </div>
+          <div className={estilos.lineaSecundaria}>
+            <span className={estilos.estado}>{t.estado}</span>
+            {!conAsignado || t.asignado === undefined ? null : <span className={estilos.nota}>{t.asignado}</span>}
+          </div>
+        </div>
+        <div className={estilos.accionesDeTarea}>
+          <button
+            type="button"
+            className={estilos.accion}
+            onClick={alEmpezar}
+            disabled={!conectado || ocupado || turnoEnVuelo}
+            {...(turnoEnVuelo ? { title: TITULO_CON_TURNO } : {})}
+            aria-label={`Nueva sesión con ${t.clave}`}
+          >
+            Nueva sesión con esta tarea
+          </button>
+        </div>
       </div>
-      <div className={estilos.acciones}>
-        {t.url === undefined ? null : (
-          <a className={estilos.enlace} href={t.url} target="_blank" rel="noreferrer">
-            Abrir en Jira
-          </a>
-        )}
-        <button
-          type="button"
-          className={estilos.principal}
-          onClick={alEmpezar}
-          disabled={!conectado || ocupado || turnoEnVuelo}
-          {...(turnoEnVuelo ? { title: TITULO_CON_TURNO } : {})}
-          aria-label={`Nueva sesión con ${t.clave}`}
-        >
-          Nueva sesión con esta tarea
-        </button>
-      </div>
+      {desplegada ? (
+        <div className={estilos.ficha} id={idDeFicha}>
+          {descripcion !== undefined ? (
+            descripcion.trim() === "" ? (
+              <p className={estilos.aviso}>Esta tarea no tiene descripción.</p>
+            ) : (
+              <MarkdownText text={protegerDolares(descripcion)} codeLabels={ETIQUETAS_DE_CODIGO} />
+            )
+          ) : errorDeFicha !== undefined ? (
+            <p className={estilos.error} role="alert">{`No se pudo leer la descripción: ${errorDeFicha.motivo}`}</p>
+          ) : (
+            <p className={estilos.aviso}>Consultando la descripción…</p>
+          )}
+        </div>
+      ) : null}
     </li>
   );
 }
+
+/**
+ * Los conectores que pueden ser GESTOR de tareas (hoy solo Jira). Para ellos no hay casilla
+ * «usar en este proyecto»: vincular ya lo marca como usado, y desvincular lo desmarca (el
+ * servidor, `atenderGestor`). Una casilla al lado solo podía mentir o quedarse gris.
+ */
+const GESTORES_DE_TAREAS: readonly string[] = ["jira"];
 
 function ConectoresDelProyecto({
   gestor,
   conectores,
   conectado,
   alGestor,
+  alAutorizar,
+  conectorDelFallo,
   alAbrirAjustes,
 }: {
   gestor?: EstadoDelCliente["gestor"];
   conectores?: EstadoDelCliente["conectores"];
   conectado: boolean;
   alGestor: (peticion: PeticionAlGestor) => void;
+  alAutorizar: (id: string) => void;
+  conectorDelFallo: (accion: AccionConConector) => string | undefined;
   alAbrirAjustes: () => void;
 }) {
   const errores = gestor?.errores ?? {};
   const estado = gestor?.estado;
   const avisos = (
     <>
-      {(["estado", "usarConector", "vincular", "desvincular", "sitios", "proyectos"] as const).map((a) => (
+      {(["estado", "usarConector", "desvincular"] as const).map((a) => (
         <Aviso key={a} {...(errores[a] === undefined ? {} : { error: errores[a] })} />
       ))}
+      {/* Los que hablan con UN conector: con la credencial caída, «Conectar» al lado. */}
+      {(["vincular", "sitios", "proyectos"] as const).map((a) => {
+        const conector = conectorDelFallo(a) ?? "jira";
+        return (
+          <AvisoDelGestor
+            key={a}
+            {...(errores[a] === undefined ? {} : { error: errores[a] })}
+            conector={conector}
+            {...(conectores === undefined ? {} : { conectores })}
+            conectado={conectado}
+            alAutorizar={alAutorizar}
+            sinDuplicarLaFila
+          />
+        );
+      })}
     </>
   );
   if (estado === undefined || conectores === undefined) {
@@ -546,62 +923,62 @@ function ConectoresDelProyecto({
     );
   }
   const nombreDe = (id: string): string => conectores.catalogo.find((f) => f.id === id)?.nombre ?? id;
-  // «Conectado» es lo MISMO que dice su pastilla en Ajustes: la última prueba contestó. Un
-  // conector añadido sin eso no se ofrece para EMPEZAR a usarlo —sería apuntar a algo que no
-  // responde—, pero el que el proyecto YA usa o tiene vinculado se pinta igual: la prueba es una
-  // foto EN MEMORIA que un reinicio borra, y sin esto el vínculo y su «Desvincular» desaparecían
-  // de esta pestaña mientras Tareas seguía trabajando contra él.
+  // «Conectado» es lo MISMO que dice su pastilla en Ajustes: la última prueba contestó. Cada
+  // conector AÑADIDO tiene su fila: el que no está conectado, con su «Conectar» (el mismo
+  // `autorizar` de Ajustes); el conectado, con su casilla o, si es un gestor de tareas, con su
+  // vínculo. El vinculado se pinta con su vínculo aunque no esté probado: la prueba es una foto
+  // EN MEMORIA que un reinicio borra, y sin esto el vínculo y su «Desvincular» desaparecían de
+  // esta pestaña mientras Tareas seguía trabajando contra él.
   const vinculo = estado.vinculo;
-  const esConectado = (c: { prueba?: { ok: boolean } }): boolean => c.prueba?.ok === true;
-  const conectados = conectores.conectores.filter(
-    (c) => esConectado(c) || estado.conectores.includes(c.id) || vinculo?.conector === c.id
-  );
-  const sinConectar = conectores.conectores.filter((c) => !esConectado(c));
 
   return (
     <div className={estilos.seccion}>
       {avisos}
-      {conectados.length === 0 ? null : (
+      {conectores.conectores.length === 0 ? null : (
         <ul className={estilos.lista}>
-          {conectados.map((c) => {
+          {conectores.conectores.map((c) => {
             const usado = estado.conectores.includes(c.id);
-            // R5: el vinculado no se deja de usar desde aquí —el servidor no lo desvincularía y
-            // la casilla mentiría—, y el motivo se ve, no se esconde en un `title`.
-            const atado = vinculo?.conector === c.id && usado;
+            const esGestor = GESTORES_DE_TAREAS.includes(c.id);
+            const vinculado = vinculo?.conector === c.id;
+            const conCasilla = !esGestor && (esConectado(c) || usado);
             return (
               <li key={c.id} className={estilos.conector}>
                 <div className={estilos.filaDeConector}>
                   <IconoDeConector id={c.id} nombre={nombreDe(c.id)} />
-                  <span className={estilos.tituloDeTarea}>{nombreDe(c.id)}</span>
-                  <label className={estilos.casilla}>
-                    <input
-                      type="checkbox"
-                      checked={usado}
-                      disabled={!conectado || atado}
-                      onChange={(e) => alGestor({ accion: "usarConector", conector: c.id, usar: e.target.checked })}
-                    />
-                    Usar en este proyecto
-                  </label>
+                  <span className={estilos.tituloDeConector}>{nombreDe(c.id)}</span>
+                  <span className={estilos.alFinal}>
+                    {esConectado(c) ? null : (
+                      <button
+                        type="button"
+                        className={estilos.accion}
+                        onClick={() => alAutorizar(c.id)}
+                        disabled={!conectado || c.autorizando === true}
+                        aria-label={`Conectar ${nombreDe(c.id)}`}
+                      >
+                        {c.autorizando === true ? "Esperando al navegador…" : "Conectar"}
+                      </button>
+                    )}
+                    {conCasilla ? (
+                      <label className={estilos.casilla}>
+                        <input
+                          type="checkbox"
+                          checked={usado}
+                          disabled={!conectado}
+                          onChange={(e) => alGestor({ accion: "usarConector", conector: c.id, usar: e.target.checked })}
+                        />
+                        Usar en este proyecto
+                      </label>
+                    ) : null}
+                  </span>
                 </div>
-                {atado ? <p className={estilos.nota}>Está vinculado: desvincula antes de dejar de usarlo.</p> : null}
                 {/* Sin conexión no se le puede preguntar por sitios: solo se enseña el vínculo que ya hay. */}
-                {c.id === "jira" && (esConectado(c) || vinculo?.conector === "jira") ? (
+                {c.id === "jira" && (esConectado(c) || vinculado) ? (
                   <VinculoDeJira gestor={gestor} conectado={conectado} alGestor={alGestor} />
                 ) : null}
               </li>
             );
           })}
         </ul>
-      )}
-      {sinConectar.length === 0 ? null : (
-        <div className={estilos.encabezado}>
-          <p className={estilos.aviso}>
-            {`${sinConectar.length === 1 ? "Un conector añadido no está conectado" : `${sinConectar.length} conectores añadidos no están conectados`}: ${sinConectar.map((c) => nombreDe(c.id)).join(", ")}. Se conectan en Ajustes.`}
-          </p>
-          <button type="button" className={estilos.accion} onClick={alAbrirAjustes}>
-            Abrir Ajustes
-          </button>
-        </div>
       )}
       {conectores.conectores.length === 0 ? (
         <div className={estilos.encabezado}>
@@ -610,7 +987,13 @@ function ConectoresDelProyecto({
             Abrir Ajustes
           </button>
         </div>
-      ) : null}
+      ) : (
+        <div>
+          <button type="button" className={estilos.accion} onClick={alAbrirAjustes}>
+            Añadir otro conector en Ajustes
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -730,8 +730,19 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   sesión con esta tarea») y Conectores (vincular un gestor). El proyecto que YA está abierto
   enseña el panel SIN mandar `sesion` —soltar la conversación en curso por una vacía es justo lo
   que se quería evitar—; «Nueva sesión» y pulsar una sesión existente sí llevan al chat. Las
-  pendientes son una FOTO con hora y «Reintentar», sin sondeo; sin vínculo la pestaña lo DICE con
-  el camino a Conectores, nunca una lista vacía que parezca «no hay pendientes».
+  pendientes son una FOTO con hora y un icono de «Actualizar», sin sondeo —«Reintentar» solo
+  aparece junto a un fallo—; sin vínculo la pestaña lo DICE con el camino a Conectores, nunca una
+  lista vacía que parezca «no hay pendientes». **El filtro por ESTADO es del CLIENTE** sobre la
+  lista que llegó (una pastilla por estado con su cuenta, `aria-pressed`; por omisión desmarcados
+  los de «esperando prueba», `ESPERANDO_PRUEBA`), y «Asignadas a mí» es del SERVIDOR (`mias` →
+  `assignee = currentUser()`, `jqlDePendientes`): el asignado se deja de pintar según la
+  RESPUESTA (`pendientes.mias`), no según el conmutador. La acción de cada fila EXISTE siempre y
+  se ve con `:hover`/`:focus-within`; pulsar la fila despliega su descripción (acción `ficha`, de
+  LECTURA, markdown con `protegerDolares`), y lo plegado se desmonta. **Un conector añadido sin
+  conectar se CONECTA desde el panel** con el MISMO `{clase:"conector", accion:"autorizar"}` de
+  Ajustes (añadirlo sigue siendo de Ajustes); un fallo de credencial (`falta autorizar`) lleva
+  «Conectar» al lado, y lo que falló se repite SOLO, una vez, al llegar una prueba NUEVA y buena
+  de ese conector (`useReintentoTrasConectar`).
 - **Una espera de humano saca del panel al chat, en el MISMO render** (`App.tsx#hayEsperaDeHumano`):
   una aprobación, pregunta, secreto o selector pendiente hace que el panel se apague y el chat se
   encienda a la vez, así que el diálogo sale en su sitio de siempre sin duplicarlo dentro del
@@ -836,7 +847,9 @@ escrito a mano lo da de alta una persona desde la misma ventana.
 - **Vincular un proyecto de Jira ESCRIBE la configuración solo después de que Jira confirme la
   clave** (`vincular`, `web/servidor/arranque.ts`; `guardarGestorDeProyecto`/
   `guardarConectoresDeProyecto`, `agent/config/configEnDisco.ts`): nunca antes. El vínculo vive en
-  el `config.json` del PROYECTO, no en el global.
+  el `config.json` del PROYECTO, no en el global. **Vincular marca el conector como usado y
+  desvincular lo DESMARCA**: un gestor de tareas no tiene casilla «usar en este proyecto» en el
+  panel (`GESTORES_DE_TAREAS`), así que el vínculo es su único control.
 - **Una instancia MEMOIZADA por conector, y `sitios()` se pide ANTES de `pendientes`/`empezar` si
   esa instancia todavía no contestó** (`web/servidor/arranque.ts`, cableado de `gestorDeTareas`):
   el adaptador de Jira cachea la URL del sitio en su propio cierre al llamar a `sitios()`, para

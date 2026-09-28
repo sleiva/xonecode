@@ -191,9 +191,9 @@ THE SOFTWARE.
 
 ## Lucide (iconos de los artefactos)
 
-`apps/web/src/componentes/IconosDelVisor.tsx` copia los trazados de diez iconos de
+`apps/web/src/componentes/IconosDelVisor.tsx` copia los trazados de doce iconos de
 Lucide 0.575.0 (`eye`, `code`, `maximize`, `download`, `file`, `file-code`, `file-text`,
-`image`, `layout-dashboard`, `arrow-right`).
+`image`, `layout-dashboard`, `arrow-right`, `external-link`, `rotate-cw`).
 
 Licencia (ISC):
 

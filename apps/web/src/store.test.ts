@@ -313,6 +313,20 @@ describe("store del cliente", () => {
     expect(s.leer().gestor).toBeUndefined();
   });
 
+  it("«gestor»: la ficha de una tarea se guarda y retira el error de `ficha`; `mias` de las pendientes se conserva", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "alta", pasos: [], proveedores: [], entornos: [], proyectos: [], ramas: [], proyectoAbierto: true, proyectoActivo: "p1", sesionActiva: "s1" });
+    s.aplicar({ clase: "gestor", error: { accion: "ficha", motivo: "no contesta" } });
+    expect(s.leer().gestor?.errores?.ficha).toEqual({ motivo: "no contesta" });
+    s.aplicar({ clase: "gestor", ficha: { clave: "IXCODE-12", descripcion: "Texto" } });
+    expect(s.leer().gestor?.ficha).toEqual({ clave: "IXCODE-12", descripcion: "Texto" });
+    expect(s.leer().gestor?.errores?.ficha).toBeUndefined();
+    s.aplicar({ clase: "gestor", pendientes: { cuando: 1, mias: true, lista: [] } });
+    expect(s.leer().gestor?.pendientes?.mias).toBe(true);
+    // Y la ficha no se la lleva una lista nueva.
+    expect(s.leer().gestor?.ficha?.clave).toBe("IXCODE-12");
+  });
+
   /**
    * Task 11 (IXCODE-11): las tres respuestas de las tarjetas que escriben en Jira. `cerrado`
    * lleva su propio `id` monotónico, igual que `borrador`, y cada campo retira el error de SU

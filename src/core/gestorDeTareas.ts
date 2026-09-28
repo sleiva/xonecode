@@ -40,10 +40,17 @@ export interface TransicionDelGestor {
   categoria: CategoriaDeTarea;
 }
 
+/** Cómo se acota la consulta de pendientes, además del texto. Todo de LECTURA. */
+export interface OpcionesDePendientes {
+  /** Solo las asignadas a quien tiene la sesión del conector. Ausente o `false`: las de todos. */
+  mias?: boolean;
+}
+
 export interface GestorDeTareasPort {
   sitios(): Promise<{ id: string; nombre: string; url?: string }[]>;
   proyectos(sitio: string): Promise<{ clave: string; nombre: string }[]>;
-  pendientes(v: Vinculo, texto?: string): Promise<TareaDelGestor[]>;
+  /** `opciones.mias`: solo las asignadas a quien tiene la sesión del conector (en Jira, `currentUser()`). */
+  pendientes(v: Vinculo, texto?: string, opciones?: OpcionesDePendientes): Promise<TareaDelGestor[]>;
   ficha(v: Vinculo, clave: string): Promise<FichaDelGestor>;
   transiciones(v: Vinculo, clave: string): Promise<TransicionDelGestor[]>;
   transicionar(v: Vinculo, clave: string, transicion: string): Promise<void>;
@@ -60,10 +67,15 @@ function cadenaJql(texto: string): string {
   return `"${texto.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
-/** Las pendientes: categoría distinta de terminada, lo último tocado arriba. */
-export function jqlDePendientes(v: Pick<Vinculo, "proyecto">, texto?: string): string {
+/**
+ * Las pendientes: categoría distinta de terminada, lo último tocado arriba. Con `mias`, solo las
+ * asignadas a quien tiene la sesión del conector: `currentUser()` es una FUNCIÓN de la JQL, no un
+ * texto que venga del cliente, así que no hay nada que escapar — el cliente solo dice sí o no.
+ */
+export function jqlDePendientes(v: Pick<Vinculo, "proyecto">, texto?: string, opciones: OpcionesDePendientes = {}): string {
+  const mias = opciones.mias === true ? " AND assignee = currentUser()" : "";
   const filtro = texto === undefined || texto.trim() === "" ? "" : ` AND text ~ ${cadenaJql(texto.trim())}`;
-  return `project = ${cadenaJql(v.proyecto)} AND statusCategory != Done${filtro} ORDER BY updated DESC`;
+  return `project = ${cadenaJql(v.proyecto)} AND statusCategory != Done${mias}${filtro} ORDER BY updated DESC`;
 }
 
 /** La categoría de estado del gestor (en Jira, `statusCategory.key`). Lo que no se conoce, por hacer. */

@@ -21,6 +21,15 @@ describe("jqlDePendientes", () => {
   it("un texto vacío o de espacios no añade nada", () => {
     expect(jqlDePendientes({ proyecto: "IXCODE" }, "   ")).toBe(jqlDePendientes({ proyecto: "IXCODE" }));
   });
+  it("«asignadas a mí» añade currentUser(), junto con el texto ESCAPADO", () => {
+    expect(jqlDePendientes({ proyecto: "IXCODE" }, undefined, { mias: true })).toBe(
+      'project = "IXCODE" AND statusCategory != Done AND assignee = currentUser() ORDER BY updated DESC'
+    );
+    expect(jqlDePendientes({ proyecto: "IXCODE" }, 'a"b', { mias: true })).toBe(
+      'project = "IXCODE" AND statusCategory != Done AND assignee = currentUser() AND text ~ "a\\"b" ORDER BY updated DESC'
+    );
+    expect(jqlDePendientes({ proyecto: "IXCODE" }, undefined, { mias: false })).toBe(jqlDePendientes({ proyecto: "IXCODE" }));
+  });
 });
 
 describe("motivoDeClaveDeProyecto", () => {

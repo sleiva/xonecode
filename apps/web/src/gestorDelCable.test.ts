@@ -20,6 +20,16 @@ describe("leerGestorDelCable", () => {
     });
   });
 
+  it("pendientes: `mias` solo con el `true` literal; ficha: clave y descripción, y nada más", () => {
+    expect(leerGestorDelCable({ pendientes: { cuando: 1, mias: true, lista: [] } })).toEqual({ pendientes: { cuando: 1, mias: true, lista: [] } });
+    expect(leerGestorDelCable({ pendientes: { cuando: 1, mias: "sí", lista: [] } })).toEqual({ pendientes: { cuando: 1, lista: [] } });
+    expect(leerGestorDelCable({ pendientes: { cuando: 1, mias: false, lista: [] } })).toEqual({ pendientes: { cuando: 1, lista: [] } });
+    expect(
+      leerGestorDelCable({ ficha: { clave: "IXCODE-12", descripcion: "**hola**", asignado: { emailAddress: "a@b.es" }, colado: 1 } })
+    ).toEqual({ ficha: { clave: "IXCODE-12", descripcion: "**hola**" } });
+    expect(leerGestorDelCable({ ficha: { clave: "IXCODE-12" } })).toEqual({});
+  });
+
   it("un vínculo ilegible NO se lee como «sin vínculo»: el estado entero se descarta", () => {
     expect(leerGestorDelCable({ estado: { conectores: [], vinculo: { conector: "jira" } } })).toEqual({});
     expect(leerGestorDelCable({ estado: { conectores: [] } })).toEqual({ estado: { conectores: [] } });

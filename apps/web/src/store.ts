@@ -1570,6 +1570,7 @@ export function crearStoreDelCliente(): {
             ...(campos.sitios === undefined ? [] : ["sitios"]),
             ...(campos.proyectos === undefined ? [] : ["proyectos"]),
             ...(campos.pendientes === undefined ? [] : ["pendientes"]),
+            ...(campos.ficha === undefined ? [] : ["ficha"]),
             ...(borrador === undefined ? [] : ["empezar"]),
             ...(campos.transiciones === undefined ? [] : ["transiciones"]),
             ...(cierre === undefined ? [] : ["borradorDeCierre"]),

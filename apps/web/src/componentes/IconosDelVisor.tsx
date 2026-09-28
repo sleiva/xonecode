@@ -2,7 +2,9 @@
  * Los glifos de los artefactos: los mandos del visor (Vista, Fuente, Pantalla completa,
  * Descargar) y el TIPO de cada uno en su tarjeta del chat. Copiados de Lucide 0.575.0 (`eye`,
  * `code`, `maximize`, `download`, `file`, `file-code`, `file-text`, `image`,
- * `layout-dashboard`, `arrow-right`; ISC, ver `THIRD_PARTY_NOTICES.md`).
+ * `layout-dashboard`, `arrow-right`; ISC, ver `THIRD_PARTY_NOTICES.md`). También los dos de la
+ * pestaña Tareas del panel del proyecto (`external-link`, `rotate-cw`): los mismos trazos y el
+ * mismo tamaño, así que viven aquí y no en otra hoja con su propio `Trazo`.
  *
  * **Copiados y no importados**, como los del compositor (`IconosDelCompositor.tsx`): nada de
  * un CDN, y `lucide-react` solo está en `node_modules` porque lo arrastra otra dependencia —
@@ -139,6 +141,27 @@ export function IconoDeAbrir() {
     <Trazo>
       <path d="M5 12h14" />
       <path d="m12 5 7 7-7 7" />
+    </Trazo>
+  );
+}
+
+/** Abrir fuera: la tarea en su gestor, en otra pestaña (`external-link`). */
+export function IconoDeEnlaceExterno({ lado = 12 }: { lado?: number }) {
+  return (
+    <Trazo lado={lado}>
+      <path d="M15 3h6v6" />
+      <path d="M10 14 21 3" />
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    </Trazo>
+  );
+}
+
+/** Actualizar: volver a preguntar (`rotate-cw`). */
+export function IconoDeActualizar() {
+  return (
+    <Trazo>
+      <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+      <path d="M21 3v5h-5" />
     </Trazo>
   );
 }

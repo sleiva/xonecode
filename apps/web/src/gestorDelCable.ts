@@ -19,7 +19,8 @@ export interface LecturaDelGestor {
   estado?: { conectores: string[]; vinculo?: VinculoDelCable };
   sitios?: { conector: string; lista: { id: string; nombre: string }[] };
   proyectos?: { sitio: string; lista: { clave: string; nombre: string }[] };
-  pendientes?: { cuando: number; texto?: string; lista: TareaDelGestor[] };
+  pendientes?: { cuando: number; texto?: string; mias?: true; lista: TareaDelGestor[] };
+  ficha?: { clave: string; descripcion: string };
   borrador?: { clave: string; texto: string };
   transiciones?: { clave: string; para: "empezar" | "cerrar"; lista: TransicionDelGestor[]; propuesta?: string };
   cierre?: { clave: string; comentario: string };
@@ -38,6 +39,7 @@ export function leerGestorDelCable(mensaje: unknown): LecturaDelGestor {
   const sitios = leerSitios(mensaje.sitios);
   const proyectos = leerProyectos(mensaje.proyectos);
   const pendientes = leerPendientes(mensaje.pendientes);
+  const ficha = leerFicha(mensaje.ficha);
   const borrador = leerBorrador(mensaje.borrador);
   const transiciones = leerTransiciones(mensaje.transiciones);
   const cierre = leerCierre(mensaje.cierre);
@@ -48,6 +50,7 @@ export function leerGestorDelCable(mensaje: unknown): LecturaDelGestor {
     ...(sitios === undefined ? {} : { sitios }),
     ...(proyectos === undefined ? {} : { proyectos }),
     ...(pendientes === undefined ? {} : { pendientes }),
+    ...(ficha === undefined ? {} : { ficha }),
     ...(borrador === undefined ? {} : { borrador }),
     ...(transiciones === undefined ? {} : { transiciones }),
     ...(cierre === undefined ? {} : { cierre }),
@@ -115,8 +118,17 @@ function leerPendientes(v: unknown): LecturaDelGestor["pendientes"] {
   return {
     cuando: v.cuando,
     ...(typeof v.texto === "string" ? { texto: v.texto } : {}),
+    // Solo el `true` literal: es lo que dice que la lista es la de «asignadas a mí», y sin él
+    // el panel pinta el asignado de cada fila.
+    ...(v.mias === true ? { mias: true as const } : {}),
     lista: v.lista.flatMap(leerTarea),
   };
+}
+
+/** La descripción de una tarea: la clave y el texto, y nada más de la ficha. */
+function leerFicha(v: unknown): LecturaDelGestor["ficha"] {
+  if (!esObjeto(v) || typeof v.clave !== "string" || typeof v.descripcion !== "string") return undefined;
+  return { clave: v.clave, descripcion: v.descripcion };
 }
 
 function leerBorrador(v: unknown): LecturaDelGestor["borrador"] {

@@ -18,7 +18,7 @@ import type { LineaDeDiff } from "./diff.js";
 import type {
   ContextoRemoto, EntradaRemota, EstructuraRemota, ManifiestoRemoto,
 } from "./cloudstudio.js";
-import type { FichaDelGestor, GestorDeTareasPort, TransicionDelGestor, Vinculo } from "./gestorDeTareas.js";
+import type { FichaDelGestor, GestorDeTareasPort, OpcionesDePendientes, TransicionDelGestor, Vinculo } from "./gestorDeTareas.js";
 
 /**
  * La marca de «esto es un doble», y por qué es un Symbol y no un booleano.
@@ -795,15 +795,21 @@ export class GestorDeTareasEnMemoria implements GestorDeTareasPort {
       proyectos?: Record<string, { clave: string; nombre: string }[]>;
       tareas?: FichaDelGestor[];
       transiciones?: Record<string, TransicionDelGestor[]>;
+      /** El nombre visible de quien tiene la sesión del conector: lo que `mias` compara con `asignado`. */
+      yo?: string;
     } = {}
   ) {}
   async sitios() { return this.datos.sitios ?? []; }
   async proyectos(sitio: string) { return this.datos.proyectos?.[sitio] ?? []; }
-  async pendientes(_v: Vinculo, texto?: string) {
+  async pendientes(_v: Vinculo, texto?: string, opciones?: OpcionesDePendientes) {
     // Recortado como `jqlDePendientes`: un texto de solo espacios no filtra nada, ni aquí
     // ni contra Jira real — que el doble y el adaptador coincidan es la razón de ser del doble.
     const t = (texto ?? "").trim().toLowerCase();
+    // `mias` es `assignee = currentUser()`: aquí «yo» es `datos.yo`, y sin él no hay nadie a quien
+    // estén asignadas — la lista sale vacía, igual que en Jira sin sesión de nadie.
+    const mias = opciones?.mias === true;
     return (this.datos.tareas ?? [])
+      .filter((x) => !mias || (this.datos.yo !== undefined && x.asignado === this.datos.yo))
       .filter((x) => x.categoria !== "terminada" && (t === "" || `${x.titulo} ${x.descripcion}`.toLowerCase().includes(t)))
       .map(({ descripcion: _d, ...resto }) => resto);
   }
