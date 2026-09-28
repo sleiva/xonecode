@@ -1,6 +1,6 @@
 /* La pestaña Planes. Solo alias del tema y los tokens de marca de siempre: ningún color literal
-   (`Barra.test.tsx` lo vigila). El ESTADO de una tarea va en una pastilla NEUTRA a propósito: es
-   la palabra del plan, y un verde para «hecha» afirmaría una medida que nadie hizo. */
+   (`Barra.test.tsx` lo vigila). La PALABRA del estado va en una pastilla neutra —es lo que el
+   plan escribió—; el verde va en lo que se CUENTA: el círculo, el recuento y la barra. */
 .planes {
   flex: 1 1 auto;
   min-width: 0;
@@ -164,8 +164,9 @@
 }
 
 /* Por dónde va cada tarea: un círculo vacío (pendiente), con el borde marcado (en curso), a medias
-   (implementada, sin comprobar) o lleno (finalizada). NEUTRO, en el color del texto, por la misma
-   razón que el estado: lo marca el agente, y un verde afirmaría una medida que nadie hizo. */
+   en verde (implementada, sin comprobar) o lleno en verde (finalizada: todos sus criterios
+   marcados). Verde de MARCA, el de «salió bien» (`--xonecode-verde`), a petición suya: sin color
+   no se distinguía de un vistazo lo terminado de lo que falta. */
 .progreso {
   flex: none;
   align-self: center;
@@ -181,11 +182,49 @@
 }
 
 .progreso[data-progreso="implementada"] {
-  border-color: var(--dsw-alias-label-secondary);
-  background: linear-gradient(90deg, var(--dsw-alias-label-secondary) 50%, var(--dsw-alias-bg-layer-1) 50%);
+  border-color: var(--xonecode-verde);
+  background: linear-gradient(90deg, var(--xonecode-verde) 50%, var(--dsw-alias-bg-layer-1) 50%);
 }
 
 .progreso[data-progreso="finalizada"] {
-  border-color: var(--dsw-alias-label-secondary);
-  background: var(--dsw-alias-label-secondary);
+  border-color: var(--xonecode-verde);
+  background: var(--xonecode-verde);
+}
+
+/* Una tarea FINALIZADA se lee de un vistazo: su recuento de criterios en verde. */
+.tarea[data-progreso="finalizada"] .criterios {
+  color: var(--xonecode-verde);
+  font-weight: 600;
+}
+
+/* La barra del porcentaje del plan (criterios comprobados sobre el total), en verde. */
+.barra {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+
+.pista {
+  flex: 1 1 auto;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--xonecode-verde-fondo);
+}
+
+.relleno {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--xonecode-verde);
+  transition: width 300ms ease;
+}
+
+.porcentaje {
+  flex: none;
+  min-width: 4ch;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }

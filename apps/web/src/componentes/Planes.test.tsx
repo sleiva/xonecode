@@ -55,6 +55,11 @@ describe("Planes", () => {
     expect(screen.getByLabelText("Por dónde va el plan").textContent).toBe(
       "Según el plan: 1 de 4 finalizadas · 2 implementadas sin comprobar · 1 pendientes."
     );
+    // La barra: criterios comprobados sobre el total del plan (2 de 8 = 25 %).
+    const barra = screen.getByRole("progressbar");
+    expect(barra.getAttribute("aria-valuenow")).toBe("25");
+    expect(barra.getAttribute("aria-label")).toBe("2 de 8 criterios comprobados");
+    expect(screen.getByText("25 %")).toBeTruthy();
     expect(screen.getAllByRole("img").map((i) => i.getAttribute("aria-label"))).toEqual([
       "finalizada: todos sus criterios comprobados",
       "implementada, sin comprobar",
@@ -66,6 +71,7 @@ describe("Planes", () => {
   it("sin progreso (un servidor viejo) no se pinta indicador y se queda el recuento de antes", () => {
     render(<Planes planes={[VISITAS]} />);
     expect(screen.queryAllByRole("img")).toHaveLength(0);
+    expect(screen.queryByRole("progressbar")).toBeNull();
     expect(screen.queryByLabelText("Por dónde va el plan")).toBeNull();
   });
 

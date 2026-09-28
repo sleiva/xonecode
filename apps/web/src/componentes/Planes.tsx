@@ -85,9 +85,12 @@ export function Planes({
       ) : (
         <>
           {conProgreso ? (
-            <p className={estilos.resumen} aria-label="Por dónde va el plan">
-              {resumenDelPlan(tareas)}
-            </p>
+            <>
+              <p className={estilos.resumen} aria-label="Por dónde va el plan">
+                {resumenDelPlan(tareas)}
+              </p>
+              <BarraDeProgreso tareas={tareas} />
+            </>
           ) : (
             <p className={estilos.nota}>
               {`Según el plan: ${hechas} de ${tareas.length} ${tareas.length === 1 ? "tarea" : "tareas"} con todos sus criterios marcados. El estado y las casillas los marca el agente; nadie los ha medido.`}
@@ -126,6 +129,41 @@ export function resumenDelPlan(tareas: readonly TareaDelPlanDelCable[]): string 
   return `Según el plan: ${partes.join(" · ")}.`;
 }
 
+/**
+ * El porcentaje del plan: criterios COMPROBADOS sobre el total, sumando todas las tareas. Se
+ * cuentan criterios y no tareas porque una tarea con 3 de 4 comprobados no está a cero, y con siete
+ * tareas la barra se movería a saltos de un 14 %. Sin criterios en todo el plan no hay barra: un
+ * 0 % ahí diría que no se ha hecho nada, y lo que pasa es que no hay nada que contar.
+ */
+export function porcentajeDelPlan(tareas: readonly TareaDelPlanDelCable[]): { hechos: number; total: number; porcentaje: number } | undefined {
+  const total = tareas.reduce((n, t) => n + t.criterios.total, 0);
+  if (total === 0) return undefined;
+  const hechos = tareas.reduce((n, t) => n + t.criterios.hechos, 0);
+  return { hechos, total, porcentaje: Math.round((hechos / total) * 100) };
+}
+
+function BarraDeProgreso({ tareas }: { tareas: readonly TareaDelPlanDelCable[] }) {
+  const p = porcentajeDelPlan(tareas);
+  if (p === undefined) return null;
+  const rotulo = `${p.hechos} de ${p.total} criterios comprobados`;
+  return (
+    <div className={estilos.barra}>
+      <div
+        className={estilos.pista}
+        role="progressbar"
+        aria-label={rotulo}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={p.porcentaje}
+        title={rotulo}
+      >
+        <div className={estilos.relleno} style={{ width: `${p.porcentaje}%` }} />
+      </div>
+      <span className={estilos.porcentaje}>{`${p.porcentaje} %`}</span>
+    </div>
+  );
+}
+
 function Tarea({ tarea: t, abierta, alPulsar }: { tarea: TareaDelPlanDelCable; abierta: boolean; alPulsar: () => void }) {
   // La prosa de «Bloqueada por» se enseña cuando dice algo más que números —«requiere ejecución
   // externa»—, que es justo lo que no se puede leer como dependencia.
@@ -136,7 +174,7 @@ function Tarea({ tarea: t, abierta, alPulsar }: { tarea: TareaDelPlanDelCable; a
     /^[\dT\s,–—\-ay]+$/.test(t.bloqueadaPorTexto) ||
     /^(ninguna|nada)\b[\s—–-]*(puede empezar ya)?\.?$/i.test(t.bloqueadaPorTexto);
   return (
-    <li className={estilos.tarea}>
+    <li className={estilos.tarea} data-progreso={t.progreso}>
       <button type="button" className={estilos.fila} aria-expanded={abierta} onClick={alPulsar}>
         {t.progreso === undefined ? null : (
           <span
