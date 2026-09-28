@@ -113,6 +113,11 @@ xone-log-android --limpiar        # aísla lo que pase a partir de ahora
 xone-captura-android
 xone-captura-android --nombre login.png
 
+# VER cómo se pinta un HTML de artefactos (un diagrama, un informe): PNG al lado, en ~1 s.
+# NO lances Chrome a mano: con un perfil propio escribe la captura y NO termina.
+xone-captura-html /artefactos/diagrama.html
+xone-captura-html diagrama.html --nombre vista.png --ancho 1600 --alto 1200
+
 # iOS: levantar el host y dejar el canal listo (desplegar en iOS NO está medido).
 xone-arrancar-ios
 ```

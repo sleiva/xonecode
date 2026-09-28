@@ -6788,10 +6788,47 @@ más» sin que hiciera falta filtrar; el filtro queda de red y lo anota la traza
 texto de la primera, ya leído. Ahora Parar no relanza nada y lo dice con su texto, y Detener solo
 junta lo que nadie ha leído.
 
-**Visto de paso y sin arreglar**: el `device-controller` lanzó Chrome con `--headless=old` para
-capturar el diagrama, un modo que ese Chrome ya no tiene, y se colgó sin tope en la shell. Detener
-no lo alcanzó (límite declarado: no corta un comando en curso); Parar sí.
+**Visto de paso**: el `device-controller` improvisó una captura del diagrama con Chrome y el
+comando se colgó; Detener no lo alcanzó (límite declarado: no corta un comando en curso), Parar
+sí. La causa NO era el `--headless=old` que usó ni una shell sin tope, como se escribió aquí al
+principio: está medida y arreglada en la entrada siguiente (IXCODE-8).
 
 **Probar en vivo sin tocar la casa de la persona**: la lista de proyectos de Ajustes sale del
 servidor de CloudStudio, así que una copia local no se puede marcar. Se levantó la consola con un
 `HOME` aislado —credenciales copiadas y solo la copia del proyecto en su workspace—.
+
+## Capturar un HTML sin esperar a que Chrome termine: `xone-captura-html` (28-09-2026)
+
+IXCODE-8. En la prueba en vivo de IXCODE-4, el `device-controller` compuso a mano un
+`chrome --headless=old --user-data-dir=… --screenshot=…` para ver un diagrama, y el comando se
+quedó colgado hasta que se pulsó Parar. El primer diagnóstico —«ese modo ya no existe» y «la shell
+no tiene tope»— era falso en las dos mitades, y se escribió antes de medir:
+
+- **La shell sí tiene tope**: `TOPE_DE_COMANDO_S` (10 min), que mata el árbol al vencer. Se pulsó
+  Parar antes de que llegara. No se ha tocado: su valor lo justifican los comandos de dispositivo.
+- **El modo no importa.** Medido en el Chrome instalado (154, macOS), dentro y fuera del sandbox de
+  la herramienta que lo probaba: con un `--user-data-dir` NUEVO, `--screenshot` y `--print-to-pdf`
+  ESCRIBEN su fichero y el proceso no termina nunca, con `old` y con `new`. Sin ese flag, sale en
+  medio segundo, incluso con `old`. Ni `--use-mock-keychain` ni `--no-first-run` lo cambian (el
+  intento de «perfil reusado» no cuenta: la carpeta venía de un proceso matado con SIGKILL).
+- **`/pdf` no está afectado**: no pasa `--user-data-dir`, y sale en 0,6 s.
+
+**El arreglo es no depender de que Chrome termine**, la regla de siempre —manda la MEDIDA, no el
+código de salida—: `skills/xone-hotswap/lib/capturaHtml.mjs` lanza Chrome en su propio grupo, con
+un perfil TEMPORAL (sin él usaría el perfil real de la persona), espera a que el PNG exista con un
+tamaño que ya no cambia, y entonces mata el GRUPO, con éxito o sin él, y borra el perfil. Tope
+propio (`TOPE_DE_CAPTURA_MS`, 30 s) muy por debajo del de la shell, y un error legible si no sale
+nada. Lo usa el script `xone-captura-html`, que el prompt del `device-controller` NOMBRA —así el
+test de los scripts nombrados lo ata al disco y al bit de ejecución— junto con la advertencia de no
+lanzar Chrome a mano.
+
+Medido sobre el diagrama de la prueba en vivo: captura de 226 KB en 1 s, ningún proceso de Chrome
+suelto después, y el perfil real de Chrome sin tocar (misma fecha de modificación antes y después,
+con Chrome abierto). Límite declarado: el HTML se abre con JavaScript y red; quien llama ya tiene
+la shell entera, así que no concede nada nuevo.
+
+Probado de punta a punta con el `device-controller` real («hazme una captura del diagrama»): usó el
+script en vez de componer Chrome, y no se colgó. Pero quería la página ENTERA, y como la captura es
+de la ventana, se escribió un script propio por CDP para medir la altura y repitió con `--alto`.
+No se implementa la captura de página entera (pide CDP): la ayuda dice ahora que basta con subir
+`--alto`; pasarse deja fondo vacío, y el revisor visual cobra por píxel.
