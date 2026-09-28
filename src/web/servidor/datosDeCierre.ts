@@ -4,6 +4,12 @@
  * y la última respuesta del asistente, leídos de `reabrirSesion`. El FORMATO es puro y vive en
  * `core/gestorDeTareas.ts#comentarioDeCierre`; aquí solo se compone desde disco.
  *
+ * **El `via` de `cambiosDeSesion` viaja como `atribucion`, SIEMPRE**: no es opcional aquí como
+ * lo es en `DatosDeCierre` (esa laxitud es para quien construya el dato a mano sin `via`, no
+ * para este componedor, que siempre lo tiene). Omitirlo haría que `comentarioDeCierre` tratara
+ * `desde-apertura` —lo normal para un proyecto fuera del workspace— como si fuera atribución
+ * `git` confirmada, y `sin-marca` como una lista vacía en vez de «no se pudo comprobar».
+ *
  * **El `plan` se deja SIN componer**: hoy no hay una forma simple de saber a qué
  * `.xonecode/planes/<slug>/` sigue esta sesión —`EntradaIndice.ticket` liga con Jira, no con un
  * plan— así que inventar ese enlace aquí sería una relación que el resto del código no sostiene.
@@ -17,13 +23,14 @@ import { reabrirSesion } from "./sesiones.js";
 /** Compone `DatosDeCierre` desde el disco real del proyecto: git para lo que cambió, el
  *  `.jsonl` de la sesión para el veredicto y la última respuesta. */
 export async function datosDeCierre(raiz: string, id: string): Promise<DatosDeCierre> {
-  const [{ ficheros }, commits] = await Promise.all([cambiosDeSesion(raiz, id), commitsDeSesion(raiz, id)]);
+  const [{ via, ficheros }, commits] = await Promise.all([cambiosDeSesion(raiz, id), commitsDeSesion(raiz, id)]);
   const { actos } = reabrirSesion(raiz, id);
   const veredicto = ultimoVeredicto(actos);
   const resumen = ultimaRespuesta(actos);
   return {
     ficheros: ficheros.map((f) => ({ ruta: f.ruta, clase: f.clase })),
     commits,
+    atribucion: via,
     ...(veredicto === undefined ? {} : { veredicto }),
     ...(resumen === undefined ? {} : { resumen }),
   };

@@ -85,6 +85,34 @@ describe("comentarioDeCierre", () => {
     expect(texto).not.toContain("Commits:");
   });
 
+  it("sin `atribucion`, se comporta como antes de que existiera: la lista tal cual", () => {
+    const texto = comentarioDeCierre(base);
+    expect(texto).not.toContain("Cambios en la copia");
+    expect(texto).not.toContain("No se pudo comprobar");
+    expect(texto).toContain("## Qué cambió\n\n- `colecciones/Clientes.xne` (nuevo)");
+  });
+
+  it("atribución `git`: igual que ausente, la lista sin avisos", () => {
+    const texto = comentarioDeCierre({ ...base, atribucion: "git" });
+    expect(texto).not.toContain("Cambios en la copia");
+    expect(texto).toContain("## Qué cambió\n\n- `colecciones/Clientes.xne` (nuevo)");
+  });
+
+  it("atribución `desde-apertura`: la lista sale, pero con el aviso de que no está confirmada", () => {
+    const texto = comentarioDeCierre({ ...base, atribucion: "desde-apertura" });
+    expect(texto).toContain(
+      "## Qué cambió\n\nCambios en la copia desde que se abrió la sesión (sin confirmar que sean todos de esta sesión):\n\n- `colecciones/Clientes.xne` (nuevo)"
+    );
+    expect(texto).toContain("- `app.xne` (modificado)");
+  });
+
+  it("atribución `sin-marca`: ni lista ni «sin ficheros», solo que no se pudo comprobar", () => {
+    const texto = comentarioDeCierre({ ficheros: [], commits: [], atribucion: "sin-marca" });
+    expect(texto).toContain("## Qué cambió\n\nNo se pudo comprobar qué cambió.");
+    expect(texto).not.toContain("_(sin ficheros)_");
+    expect(texto).not.toContain("Commits:");
+  });
+
   it("sin veredicto, «no corrió» — NUNCA «verde» sin dato", () => {
     expect(comentarioDeCierre(base)).toContain("## Verificación\n\nno corrió");
   });
@@ -105,11 +133,17 @@ describe("comentarioDeCierre", () => {
     expect(comentarioDeCierre({ ...base, plan: "Falta el paso 3" })).toContain("## Plan\n\nFalta el paso 3");
   });
 
-  it("el resumen se recorta a 1500 caracteres", () => {
+  it("el resumen se recorta a 1500 caracteres, con «…» que dice que se cortó", () => {
     const largo = "x".repeat(2000);
     const texto = comentarioDeCierre({ ...base, resumen: largo });
-    expect(texto).toContain(`## Resumen\n\n${"x".repeat(1500)}`);
+    expect(texto).toContain(`## Resumen\n\n${"x".repeat(1500)}…`);
     expect(texto).not.toContain("x".repeat(1501));
+  });
+
+  it("un resumen que YA cabe en 1500 no lleva «…»", () => {
+    const texto = comentarioDeCierre({ ...base, resumen: "corto y ya" });
+    expect(texto).toContain("## Resumen\n\ncorto y ya");
+    expect(texto).not.toContain("corto y ya…");
   });
 
   it("sin resumen, no sale la sección", () => {

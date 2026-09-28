@@ -98,6 +98,21 @@ export interface DatosDeCierre {
   veredicto?: { verde: boolean; errores: number; avisos: number };
   plan?: string;
   resumen?: string;
+  /**
+   * Qué tan de fiar es la lista de `ficheros`, la MISMA distinción que `CambiosDeSesion.via`
+   * de `agent/sesiones/sesionGit.ts` (redeclarada aquí: `core/` no importa `agent/`). Ausente
+   * mantiene el comportamiento de antes de este campo —la lista tal cual, como si fuera `git`—
+   * para no romper a quien ya llamaba a `comentarioDeCierre` sin saberlo.
+   *
+   * **Por qué esto no es cosmético**: `sin-marca` es una lista VACÍA que NO significa «no
+   * tocaste nada» (`sesionGit.ts#desdeLaApertura`), y `desde-apertura` es el árbol de ahora
+   * contra la foto de apertura —lo normal para un proyecto FUERA del workspace, donde
+   * `commitDeTurno` no commitea nunca— y explícitamente NO es atribución: puede llevar lo que
+   * escribió otra sesión o una tarea de fondo mientras esta estaba abierta. Publicar esa lista
+   * en Jira como «lo que hizo esta sesión» sin decir cuál de las tres es sería la misma mentira
+   * que el comentario de cabecera de `sesionGit.ts` describe para la pestaña Revisión.
+   */
+  atribucion?: "git" | "desde-apertura" | "sin-marca";
 }
 
 /** Cuánto del resumen entra en el comentario: un ticket no es el sitio del transcript entero. */
@@ -110,19 +125,40 @@ const TOPE_DEL_RESUMEN_DE_CIERRE = 1500;
  * persona a mano.
  */
 export function comentarioDeCierre(datos: DatosDeCierre): string {
-  const secciones = [seccionQueCambio(datos.ficheros, datos.commits), seccionVerificacion(datos.veredicto)];
+  const secciones = [
+    seccionQueCambio(datos.ficheros, datos.commits, datos.atribucion),
+    seccionVerificacion(datos.veredicto),
+  ];
   if (datos.plan !== undefined && datos.plan.trim() !== "") secciones.push(`## Plan\n\n${datos.plan.trim()}`);
   if (datos.resumen !== undefined && datos.resumen.trim() !== "") {
-    secciones.push(`## Resumen\n\n${datos.resumen.trim().slice(0, TOPE_DEL_RESUMEN_DE_CIERRE)}`);
+    const recortado = datos.resumen.trim();
+    const texto =
+      recortado.length > TOPE_DEL_RESUMEN_DE_CIERRE ? `${recortado.slice(0, TOPE_DEL_RESUMEN_DE_CIERRE)}…` : recortado;
+    secciones.push(`## Resumen\n\n${texto}`);
   }
   secciones.push("— escrito por xonecode");
   return secciones.join("\n\n");
 }
 
-function seccionQueCambio(ficheros: DatosDeCierre["ficheros"], commits: readonly string[]): string {
+/**
+ * «Qué cambió», con la fiabilidad de la lista dicha antes de la lista — nunca deducida de si
+ * está vacía o no. `sin-marca` no enseña ninguna lista (no habría qué enseñar: `sesionGit.ts`
+ * la devuelve siempre vacía en ese caso); `desde-apertura` la enseña con el aviso de que no es
+ * atribución; ausente y `git` se comportan igual que antes de que este campo existiera.
+ */
+function seccionQueCambio(
+  ficheros: DatosDeCierre["ficheros"],
+  commits: readonly string[],
+  atribucion: DatosDeCierre["atribucion"]
+): string {
+  if (atribucion === "sin-marca") return "## Qué cambió\n\nNo se pudo comprobar qué cambió.";
+  const aviso =
+    atribucion === "desde-apertura"
+      ? "Cambios en la copia desde que se abrió la sesión (sin confirmar que sean todos de esta sesión):\n\n"
+      : "";
   const lista = ficheros.length === 0 ? "_(sin ficheros)_" : ficheros.map((f) => `- \`${f.ruta}\` (${f.clase})`).join("\n");
   const linea = commits.length === 0 ? "" : `\n\nCommits: ${commits.map((c) => `\`${c.slice(0, 7)}\``).join(", ")}`;
-  return `## Qué cambió\n\n${lista}${linea}`;
+  return `## Qué cambió\n\n${aviso}${lista}${linea}`;
 }
 
 function seccionVerificacion(veredicto: DatosDeCierre["veredicto"]): string {
