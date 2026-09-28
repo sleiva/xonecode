@@ -182,7 +182,9 @@ describe("consolaWeb: la entrada", () => {
   });
 
   it("una prosa con ADJUNTOS los apunta en el acto y le pasa al agente el inventario", async () => {
-    const c = crearConsolaWeb({ conAdjuntosDelMensaje: (t, n) => `${t}\n[ADJ:${n.join(",")}]` });
+    const c = crearConsolaWeb({
+      conAdjuntosDelMensaje: (t, n) => ({ texto: `${t}\n[ADJ:${n.join(",")}]`, adjuntos: [...n] }),
+    });
     const it = c.consola.lineas[Symbol.asyncIterator]();
     c.recibir({ clase: "prosa", texto: "pon el icono", adjuntos: ["ic.png"] });
     expect(c.actos()).toEqual([{ tipo: "usuario", texto: "pon el icono", adjuntos: ["ic.png"] }]);
@@ -193,14 +195,16 @@ describe("consolaWeb: la entrada", () => {
     const notas: string[] = [];
     const c = crearConsolaWeb({
       notaMientrasTrabaja: (texto) => (notas.push(texto), true),
-      conAdjuntosDelMensaje: (t, n) => `${t}\n[ADJ:${n.join(",")}]`,
+      conAdjuntosDelMensaje: (t, n) => ({ texto: `${t}\n[ADJ:${n.join(",")}]`, adjuntos: [...n] }),
     });
     c.recibir({ clase: "prosa", texto: "cambia de idea", adjuntos: ["ic.png"] });
     expect(notas).toEqual(["cambia de idea\n[ADJ:ic.png]"]);
   });
 
   it("sin adjuntos (o vacío) el acto NO lleva el campo, y el texto no cambia", async () => {
-    const c = crearConsolaWeb({ conAdjuntosDelMensaje: (t, n) => `${t}\n[ADJ:${n.join(",")}]` });
+    const c = crearConsolaWeb({
+      conAdjuntosDelMensaje: (t, n) => ({ texto: `${t}\n[ADJ:${n.join(",")}]`, adjuntos: [...n] }),
+    });
     const it = c.consola.lineas[Symbol.asyncIterator]();
     c.recibir({ clase: "prosa", texto: "haz un listado", adjuntos: [] });
     expect(c.actos()).toEqual([{ tipo: "usuario", texto: "haz un listado" }]);
@@ -208,19 +212,76 @@ describe("consolaWeb: la entrada", () => {
   });
 
   it("prosa VACÍA con adjuntos se acepta: el texto es el inventario", async () => {
-    const c = crearConsolaWeb({ conAdjuntosDelMensaje: (t, n) => `${t}[ADJ:${n.join(",")}]` });
+    const c = crearConsolaWeb({
+      conAdjuntosDelMensaje: (t, n) => ({ texto: `${t}[ADJ:${n.join(",")}]`, adjuntos: [...n] }),
+    });
     const it = c.consola.lineas[Symbol.asyncIterator]();
     c.recibir({ clase: "prosa", texto: "", adjuntos: ["ic.png"] });
     expect(c.actos()).toEqual([{ tipo: "usuario", texto: "", adjuntos: ["ic.png"] }]);
     expect(await it.next()).toEqual({ value: { texto: "[ADJ:ic.png]", comoComando: false }, done: false });
   });
 
-  it("sin `conAdjuntosDelMensaje` la prosa sigue como hoy, aunque lleguen adjuntos", async () => {
+  /**
+   * Ausente = ni siquiera confirmado, así que no hay nada que afirmar (`conAdjuntosDelMensaje`
+   * es lo ÚNICO que puede confirmar un nombre contra el disco). Antes de la ronda de arreglo
+   * 1/5 esto anotaba `adjuntos:["ic.png"]` sin haberlo comprobado nunca.
+   */
+  it("sin `conAdjuntosDelMensaje` la prosa sigue como hoy: sin adjuntos en el acto y texto intacto", async () => {
     const c = crearConsolaWeb();
     const it = c.consola.lineas[Symbol.asyncIterator]();
     c.recibir({ clase: "prosa", texto: "pon el icono", adjuntos: ["ic.png"] });
-    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "pon el icono", adjuntos: ["ic.png"] }]);
+    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "pon el icono" }]);
     expect(await it.next()).toEqual({ value: { texto: "pon el icono", comoComando: false }, done: false });
+  });
+
+  /**
+   * Ronda de arreglo 1/5, el hallazgo [Important]: `nombreDeAdjuntoAceptable` solo mira la
+   * FORMA del nombre — un nombre bien formado que nunca se subió lo pasaba igual, y el acto
+   * afirmaba un adjunto que el agente nunca recibió (`listarAdjuntosDeSesion` no lo
+   * encuentra). `conAdjuntosDelMensaje` es la única fuente de verdad de qué existe: aquí el
+   * doble simula que solo `si.png` está en disco y `no-subido.png` no.
+   */
+  it("un nombre bien formado que no está en disco no se afirma en el acto", async () => {
+    const c = crearConsolaWeb({
+      conAdjuntosDelMensaje: (t, n) => {
+        const encontrados = n.filter((x) => x === "si.png");
+        return { texto: encontrados.length > 0 ? `${t}\n[ADJ:${encontrados.join(",")}]` : t, adjuntos: encontrados };
+      },
+    });
+    const it = c.consola.lineas[Symbol.asyncIterator]();
+    c.recibir({ clase: "prosa", texto: "pon los iconos", adjuntos: ["si.png", "no-subido.png"] });
+    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "pon los iconos", adjuntos: ["si.png"] }]);
+    expect(await it.next()).toEqual({ value: { texto: "pon los iconos\n[ADJ:si.png]", comoComando: false }, done: false });
+  });
+
+  /**
+   * Ronda de arreglo 1/5, [Minor]: antes, ese `return` de «DETENER sin texto que ya no
+   * encontró turno» miraba SOLO `mensaje.texto`, así que un adjunto REAL adjunto a un
+   * DETENER vacío se descartaba entero — ni acto, ni línea encolada — en vez de tratarse
+   * como algo que la persona sí mandó.
+   */
+  it("DETENER sin texto pero con un adjunto REAL y SIN turno en vuelo: no se descarta, se encola con el inventario", async () => {
+    const c = crearConsolaWeb({
+      conAdjuntosDelMensaje: (t, n) => ({ texto: `${t}[ADJ:${n.join(",")}]`, adjuntos: [...n] }),
+    });
+    const it = c.consola.lineas[Symbol.asyncIterator]();
+    c.recibir({ clase: "prosa", texto: "", detener: true, adjuntos: ["ic.png"] });
+    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "", adjuntos: ["ic.png"] }]);
+    expect(await it.next()).toEqual({ value: { texto: "[ADJ:ic.png]", comoComando: false }, done: false });
+  });
+
+  /**
+   * Ronda de arreglo 1/5, [Minor]: faltaba el caso simétrico de la nota — con turno en
+   * vuelo, DETENER también tiene que recibir el texto YA compuesto con el inventario.
+   */
+  it("con turno en vuelo, DETENER recibe el texto CON el inventario de los adjuntos", () => {
+    const detenidas: string[] = [];
+    const c = crearConsolaWeb({
+      detenerMientrasTrabaja: (texto) => (detenidas.push(texto), true),
+      conAdjuntosDelMensaje: (t, n) => ({ texto: `${t}\n[ADJ:${n.join(",")}]`, adjuntos: [...n] }),
+    });
+    c.recibir({ clase: "prosa", texto: "mejor el menú", detener: true, adjuntos: ["ic.png"] });
+    expect(detenidas).toEqual(["mejor el menú\n[ADJ:ic.png]"]);
   });
 });
 

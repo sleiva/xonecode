@@ -90,11 +90,30 @@ export interface TopesDeAdjuntosDeSesion {
 }
 
 /**
+ * El código de un error, nunca su mensaje: el mensaje de Node lleva la ruta absoluta (`ENOENT:
+ * … open '/Users/…/adjuntos/x'`) y el motivo se devuelve al cliente por HTTP. Mismo apaño que
+ * `codigoDe` en `arranque.ts`/`corredorDeTareas.ts`, copiado y no importado porque los tres son
+ * privados de su módulo.
+ */
+function codigoDe(error: unknown): string {
+  if (typeof error === "object" && error !== null && "code" in error && typeof error.code === "string") {
+    return error.code;
+  }
+  return error instanceof Error ? error.name : "error";
+}
+
+/**
  * Guarda un adjunto anexado en el chat de la sesión `id`, dentro del proyecto `raiz`.
  *
  * Mismo orden que `tareasEnDisco.ts#guardarAdjunto`: primero lo que se sabe SIN tocar disco (el
  * nombre, el tamaño del propio fichero), luego la carpeta —comprobada, no creada— y solo con
  * ella en la mano el tope por sesión (que necesita leer lo que ya hay) y la escritura.
+ *
+ * **Las cuatro llamadas de disco van en un `try`**: `mkdirSync` (un `EACCES` de permisos),
+ * `readdirSync`/`statSync` al sumar lo que ya hay (un `ENOSPC`, o un enlace COLGANTE dentro de
+ * `adjuntos/` — `statSync` lo sigue y `ENOENT` si el destino no existe) y `writeFileSync`. Un
+ * rechazo de guarda se DEVUELVE, nunca se lanza: sin este `try`, cualquiera de esos errores se
+ * llevaba por delante al llamador (`POST /adjunto`), que no los esperaba.
  */
 export function guardarAdjuntoDeSesion(
   raiz: string,
@@ -114,15 +133,19 @@ export function guardarAdjuntoDeSesion(
   // que esto escribiera fuera del proyecto.
   const carpeta = carpetaComprobada(raiz, id);
   if (carpeta === undefined) return { ok: false, motivo: "ese nombre no vale para un adjunto" };
-  mkdirSync(carpeta, { recursive: true, mode: 0o700 });
-  const ya = readdirSync(carpeta).reduce((suma, f) => suma + statSync(join(carpeta, f)).size, 0);
-  if (ya + datos.length > topes.porSesion) {
-    return { ok: false, motivo: `esta sesión ya no admite más adjuntos (tope ${Math.round(topes.porSesion / 1_000_000)} MB)` };
+  try {
+    mkdirSync(carpeta, { recursive: true, mode: 0o700 });
+    const ya = readdirSync(carpeta).reduce((suma, f) => suma + statSync(join(carpeta, f)).size, 0);
+    if (ya + datos.length > topes.porSesion) {
+      return { ok: false, motivo: `esta sesión ya no admite más adjuntos (tope ${Math.round(topes.porSesion / 1_000_000)} MB)` };
+    }
+    // Un adjunto es un documento de la persona, no un dato de sistema: mismo 0600 que los
+    // adjuntos de tarea y que el índice de sesiones.
+    writeFileSync(join(carpeta, nombre), datos, { mode: 0o600 });
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, motivo: `no se pudo guardar el adjunto (${codigoDe(error)})` };
   }
-  // Un adjunto es un documento de la persona, no un dato de sistema: mismo 0600 que los
-  // adjuntos de tarea y que el índice de sesiones.
-  writeFileSync(join(carpeta, nombre), datos, { mode: 0o600 });
-  return { ok: true };
 }
 
 /**

@@ -186,4 +186,28 @@ describe("guardarAdjuntoDeSesion / listarAdjuntosDeSesion", () => {
     expect(listarAdjuntosDeSesion(raiz, "sesion-1").map((a) => a.nombre)).toEqual(["solo-en-1.txt"]);
     expect(listarAdjuntosDeSesion(raiz, "sesion-2").map((a) => a.nombre)).toEqual(["solo-en-2.txt"]);
   });
+
+  /**
+   * Ronda de arreglo 1/5: `statSync` SIGUE un enlace (a diferencia de `lstatSync`, que usa
+   * `listarAdjuntosDeSesion`), así que un enlace COLGANTE dentro de `adjuntos/` —apunta a algo
+   * que ya no existe— hace que la suma de tamaños del tope por sesión LANCE `ENOENT`. Sin el
+   * `try` alrededor de las llamadas de disco, esa excepción se llevaba el `POST /adjunto` por
+   * delante: un rechazo de guarda se devuelve, nunca se lanza.
+   */
+  it("un enlace COLGANTE dentro de `adjuntos/` no revienta: se rechaza con su código, sin ruta", () => {
+    const raiz = proyectoTemporal();
+    const carpeta = join(raiz, ".xonecode", "sesiones", "sesion-1", "adjuntos");
+    mkdirSync(carpeta, { recursive: true });
+    symlinkSync(join(raiz, "esto-no-existe.bin"), join(carpeta, "colgante.bin"));
+
+    const resultado = guardarAdjuntoDeSesion(raiz, "sesion-1", "nota.txt", Buffer.from("hola"));
+
+    expect(resultado.ok).toBe(false);
+    if (!resultado.ok) {
+      expect(resultado.motivo).toMatch(/ENOENT/);
+      expect(resultado.motivo).not.toContain(raiz);
+    }
+    // Y no dejó a medias el fichero que sí se pudo escribir: nada se guardó de este intento.
+    expect(existsSync(join(carpeta, "nota.txt"))).toBe(false);
+  });
 });

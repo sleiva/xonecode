@@ -81,9 +81,17 @@ export interface OpcionesDeConsolaWeb {
    * IXCODE-7: compone el texto con el inventario de los adjuntos del mensaje —
    * `conAdjuntos(texto, listarAdjuntosDeSesion(raiz, idDeHilo, nombres), "mensaje")`—. Lo
    * construye el vestíbulo, que es quien sabe la raíz del proyecto y el id de la sesión; este
-   * módulo no toca disco. Ausente = la prosa con adjuntos viaja tal cual, como hoy.
+   * módulo no toca disco. Ausente = la prosa con adjuntos viaja tal cual, como hoy (y entonces
+   * NINGÚN nombre se afirma: sin poder comprobar el disco no hay nada que prometer).
+   *
+   * **Devuelve `adjuntos`, los nombres que DE VERDAD encontró** (`listarAdjuntosDeSesion` ya
+   * filtra a los que existen, en el orden pedido) — no los `nombres` que se le pasaron. Ronda
+   * de arreglo 1/5: un nombre bien formado que nunca se subió pasaba la lista blanca de forma
+   * (`nombreDeAdjuntoAceptable`) y el acto de usuario afirmaba un adjunto que el agente nunca
+   * vio, porque `listarAdjuntosDeSesion` no lo encontraba. El acto ahora se anota SOLO con lo
+   * que esta función confirmó.
    */
-  conAdjuntosDelMensaje?: (texto: string, nombres: readonly string[]) => string;
+  conAdjuntosDelMensaje?: (texto: string, nombres: readonly string[]) => { texto: string; adjuntos: string[] };
 }
 
 export interface ConsolaWeb {
@@ -418,20 +426,29 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
     if (mensaje.clase === "prosa") {
       if (cerrada) return;
       // Los nombres LLEGADOS del cliente, cribados por la MISMA lista blanca que el
-      // guardado (IXCODE-7): un nombre inventado no se anota ni se cuenta como adjunto.
+      // guardado (IXCODE-7): un nombre inventado no llega ni a preguntarse por el disco.
       const nombres = (mensaje.adjuntos ?? []).filter(nombreDeAdjuntoAceptable);
+      // `conAdjuntosDelMensaje` dice qué encontró DE VERDAD en disco — puede ser MENOS que
+      // `nombres` (ronda de arreglo 1/5): un nombre bien formado que nunca se subió no debe
+      // afirmarse en el acto ni prometérsele al agente. Sin la opción (o sin nombres que
+      // preguntar), no hay nada que comprobar y no se afirma ningún adjunto.
+      const compuesto = nombres.length > 0 ? opciones.conAdjuntosDelMensaje?.(mensaje.texto, nombres) : undefined;
+      const texto = compuesto?.texto ?? mensaje.texto;
+      const adjuntosReales = compuesto?.adjuntos ?? [];
+      // Lo que hace que este mensaje sea «algo que la persona dijera»: texto de verdad, o un
+      // adjunto que SÍ está en disco (uno inventado o no subido no cuenta para nada de esto).
+      const hayAlgoReal = mensaje.texto.trim() !== "" || adjuntosReales.length > 0;
       // El eco de lo tecleado, como hace la TUI (`store.usuario`): el transcript se lo
       // debe a quien escribió la petición, y de ahí sale el título de la sesión.
-      // DETENER a secas, sin texto, no es algo que la persona dijera: no se apunta como suyo.
-      if (mensaje.texto.trim() !== "" || mensaje.detener !== true)
-        anotar({ tipo: "usuario", texto: mensaje.texto, ...(nombres.length > 0 ? { adjuntos: nombres } : {}) });
-      // El inventario se AÑADE al texto que ve el agente (lazo / nota / detener), nunca al
-      // acto: el transcript enseña lo que la persona escribió, y `conAdjuntosDelMensaje` —el
-      // vestíbulo, que conoce la raíz y el id— sabe traducir nombres a rutas virtuales.
-      const texto = nombres.length > 0 && opciones.conAdjuntosDelMensaje ? opciones.conAdjuntosDelMensaje(mensaje.texto, nombres) : mensaje.texto;
+      // DETENER a secas, sin texto NI adjunto real, no es algo que la persona dijera: no se
+      // apunta como suyo.
+      if (hayAlgoReal || mensaje.detener !== true)
+        anotar({ tipo: "usuario", texto: mensaje.texto, ...(adjuntosReales.length > 0 ? { adjuntos: adjuntosReales } : {}) });
       if (mensaje.detener === true && opciones.detenerMientrasTrabaja?.(texto) === true) return;
-      // Un DETENER sin texto que ya no encontró turno no tiene nada que mandar.
-      if (mensaje.detener === true && mensaje.texto.trim() === "") return;
+      // Un DETENER sin texto NI adjunto real que ya no encontró turno no tiene nada que
+      // mandar (ronda de arreglo 1/5: antes miraba solo `mensaje.texto`, y un adjunto real
+      // adjunto a un DETENER vacío se descartaba entero en vez de encolarse).
+      if (mensaje.detener === true && !hayAlgoReal) return;
       if (opciones.notaMientrasTrabaja?.(texto) === true) return;
       const despertar = esperandoLinea.shift();
       // `comoComando: false` y no una cadena pelada, y esta es TODA la diferencia: aquí

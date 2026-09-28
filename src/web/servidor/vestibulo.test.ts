@@ -2641,6 +2641,37 @@ describe("los adjuntos del MENSAJE (IXCODE-7)", () => {
     await v.cerrar();
     rmSync(raiz, { recursive: true, force: true });
   });
+
+  /**
+   * Ronda de arreglo 1/5, con DISCO REAL: un nombre bien formado que nunca se GUARDÓ (nadie
+   * llamó a `guardarAdjuntoDeSesion` con él) no debe acabar en el acto ni en la petición, aunque
+   * pase la lista blanca de forma. Prueba que `listarAdjuntosDeSesion` de verdad filtra —no un
+   * doble que lo simule.
+   */
+  it("un nombre que NO se subió (bien formado, pero ausente en disco) no se afirma en el acto ni llega al agente", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-adj-msj-"));
+    const peticiones: string[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: sesionesEnMemoria().puerto,
+      crearEjecutor: () => async (peticion: string) => {
+        peticiones.push(peticion);
+      },
+    });
+    const proyecto = await v.abrirProyecto({ raiz, sesion: "s1" });
+    // Nadie guardó "fantasma.png": solo pasa la lista blanca de FORMA.
+    proyecto.recibir({ clase: "prosa", texto: "pon el icono", adjuntos: ["fantasma.png"] });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(proyecto.actos()).toEqual([{ tipo: "usuario", texto: "pon el icono" }]);
+    expect(peticiones).toHaveLength(1);
+    expect(peticiones[0]).not.toContain("/adjuntos/");
+    expect(peticiones[0]).toContain("pon el icono");
+
+    await v.cerrar();
+    rmSync(raiz, { recursive: true, force: true });
+  });
 });
 
 describe("el motor de la sesión, por configuración y sin enseñarlo", () => {

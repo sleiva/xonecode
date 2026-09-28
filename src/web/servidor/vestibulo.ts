@@ -1253,9 +1253,15 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
      * conversación (`carpetaDeAdjuntosDeSesion`), y no `sesion` (el parámetro de apertura, que
      * puede venir `undefined` en una sesión nueva)—. Mismo cierre perezoso que las dos de
      * arriba: `idSesion` se declara más abajo y no hace falta reordenar nada.
+     *
+     * **`adjuntos` es lo que `listarAdjuntosDeSesion` ENCONTRÓ, no `nombres`** (ronda de
+     * arreglo 1/5): un nombre bien formado que nunca se subió no vuelve en la lista, así que
+     * `consolaWeb.ts` no lo afirma en el acto ni se lo promete al agente.
      */
-    const conAdjuntosDelMensaje = (texto: string, nombres: readonly string[]): string =>
-      conAdjuntos(texto, listarAdjuntosDeSesion(raiz, idSesion, nombres), "mensaje");
+    const conAdjuntosDelMensaje = (texto: string, nombres: readonly string[]): { texto: string; adjuntos: string[] } => {
+      const encontrados = listarAdjuntosDeSesion(raiz, idSesion, nombres);
+      return { texto: conAdjuntos(texto, encontrados, "mensaje"), adjuntos: encontrados.map((a) => a.nombre) };
+    };
     const consolaWeb = crearConsola({
       catalogoModelos: opciones.catalogoModelos,
       guardarModeloGlobal,
