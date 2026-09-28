@@ -266,7 +266,7 @@ describe("PanelDelProyecto", () => {
    * El PORQUÉ de cuándo se suelta —ni «llegó un error» basta, por `g.ficha()` fallando antes
    * de la transición— vive en `App.test.tsx`, donde está el dato que lo decide (`estado.alta`).
    */
-  it("`empezarEnVuelo` (de App) es el candado de la tarjeta: deshabilita sus tres botones", () => {
+  it("`empezarEnVuelo` (de App) es el candado de la tarjeta: deshabilita los botones que ESCRIBEN, nunca «Cancelar»", () => {
     const pendientes = { cuando: 1, lista: [{ clave: "IXCODE-12", titulo: "Menú", estado: "Por hacer", categoria: "por-hacer" as const }] };
     const transiciones = {
       clave: "IXCODE-12",
@@ -282,9 +282,36 @@ describe("PanelDelProyecto", () => {
       expect((within(dialogo).getByRole("button", { name: nombre }) as HTMLButtonElement).disabled).toBe(false);
     }
     rerender({ gestor: { ...VINCULADO, pendientes, transiciones }, empezarEnVuelo: true });
-    for (const nombre of ["Pasar y empezar", "Empezar sin tocar Jira", "Cancelar"]) {
+    for (const nombre of ["Pasar y empezar", "Empezar sin tocar Jira"]) {
       expect((within(dialogo).getByRole("button", { name: nombre }) as HTMLButtonElement).disabled).toBe(true);
     }
+    // Cancelar sigue vivo: no manda nada, así que no hay envío que doblar cerrando la tarjeta.
+    expect((within(dialogo).getByRole("button", { name: "Cancelar" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  /**
+   * Cancelar mientras `empezarEnVuelo` está puesto: cierra la tarjeta (ya no hay diálogo que
+   * mostrar el error dentro), no manda ninguna petición al gestor, y la FILA se queda
+   * deshabilitada igual —el candado real es `empezarEnVuelo`, que sigue en `true` porque
+   * cerrar el diálogo no cancela lo que el servidor sigue resolviendo.
+   */
+  it("«Cancelar» con `empezarEnVuelo` puesto cierra la tarjeta sin mandar nada, y la fila sigue deshabilitada", () => {
+    const pendientes = { cuando: 1, lista: [{ clave: "IXCODE-12", titulo: "Menú", estado: "Por hacer", categoria: "por-hacer" as const }] };
+    const transiciones = {
+      clave: "IXCODE-12",
+      para: "empezar" as const,
+      propuesta: "11",
+      lista: [{ id: "11", nombre: "Empezar a hacer", destino: "EN CURSO", categoria: "en-curso" as const }],
+    };
+    const { alGestor, rerender } = montar({ gestor: { ...VINCULADO, pendientes, transiciones } });
+    pestana("Tareas");
+    fireEvent.click(screen.getByRole("button", { name: "Nueva sesión con IXCODE-12" }));
+    rerender({ gestor: { ...VINCULADO, pendientes, transiciones }, empezarEnVuelo: true });
+    alGestor.mockClear();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(alGestor).not.toHaveBeenCalled();
+    expect((screen.getByRole("button", { name: "Nueva sesión con IXCODE-12" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   /**
@@ -313,6 +340,37 @@ describe("PanelDelProyecto", () => {
     pestana("Tareas");
     fireEvent.click(screen.getByRole("button", { name: "Nueva sesión con IXCODE-12" }));
     expect(within(screen.getByRole("dialog")).queryByRole("alert")).toBeNull();
+  });
+
+  /**
+   * R8: mientras `empezarEnVuelo` sigue puesto, el error de `empezar` NO se enseña dentro de
+   * la tarjeta —ese motivo es justo el de la sesión que se abre IGUAL, y pintarlo como fallo
+   * mentiría dos veces (aquí dentro y otra vez en el aviso del chat al cerrarse). Solo
+   * aparece cuando `App` suelta el candado sin que haya llegado ningún borrador: el fallo
+   * TOTAL.
+   */
+  it("con `empezarEnVuelo` puesto, el error de `empezar` NO se enseña (R8); se suelta y aparece", () => {
+    const pendientes = { cuando: 1, lista: [{ clave: "IXCODE-12", titulo: "Menú", estado: "Por hacer", categoria: "por-hacer" as const }] };
+    const transiciones = {
+      clave: "IXCODE-12",
+      para: "empezar" as const,
+      propuesta: "11",
+      lista: [{ id: "11", nombre: "Empezar a hacer", destino: "EN CURSO", categoria: "en-curso" as const }],
+    };
+    const { rerender } = montar({ gestor: { ...VINCULADO, pendientes, transiciones }, empezarEnVuelo: false });
+    pestana("Tareas");
+    fireEvent.click(screen.getByRole("button", { name: "Nueva sesión con IXCODE-12" }));
+    rerender({
+      gestor: { ...VINCULADO, pendientes, transiciones, errores: { empezar: { motivo: "no se pudo transicionar" } } },
+      empezarEnVuelo: true,
+    });
+    expect(within(screen.getByRole("dialog")).queryByRole("alert")).toBeNull();
+    // `App` suelta el candado (sin borrador: el fallo fue TOTAL) y el motivo aparece entonces.
+    rerender({
+      gestor: { ...VINCULADO, pendientes, transiciones, errores: { empezar: { motivo: "no se pudo transicionar" } } },
+      empezarEnVuelo: false,
+    });
+    expect(within(screen.getByRole("dialog")).getByRole("alert").textContent).toBe("no se pudo transicionar");
   });
 
   it("un fallo al CONSULTAR las transiciones se enseña dentro de la tarjeta (R6)", () => {

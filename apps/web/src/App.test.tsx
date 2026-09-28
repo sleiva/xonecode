@@ -2152,6 +2152,9 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
     // El orden EXACTO del servidor: el error primero.
     act(() => store.aplicar({ clase: "gestor", error: { accion: "empezar", motivo: "no se pudo transicionar" } }));
     expect(screen.queryByText(/No se pudo pasar/)).toBeNull();
+    // Y TAMPOCO dentro de la propia tarjeta: mientras `empezarEnVuelo` sigue puesto (la
+    // sesión puede seguir abriéndose), ese motivo no se pinta como fallo del diálogo.
+    expect(within(screen.getByRole("dialog")).queryByRole("alert")).toBeNull();
     // Y solo DESPUÉS, el alta de la sesión nueva y el borrador.
     act(() => store.aplicar(altaDe({ sesionActiva: "s9" })));
     act(() =>
@@ -2199,15 +2202,18 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Pasar y empezar" }));
     act(() => store.aplicar({ clase: "gestor", error: { accion: "empezar", motivo: "no se pudo leer la tarea en Jira" } }));
     const dialogo = screen.getByRole("dialog");
-    for (const nombre of ["Pasar y empezar", "Empezar sin tocar Jira", "Cancelar"]) {
+    // Los botones que ESCRIBEN se deshabilitan; «Cancelar» no —cerrar no manda nada, así que
+    // no hay envío que doblar— pero el candado de verdad es `empezarEnVuelo`, no el diálogo.
+    for (const nombre of ["Pasar y empezar", "Empezar sin tocar Jira"]) {
       expect((within(dialogo).getByRole("button", { name: nombre }) as HTMLButtonElement).disabled).toBe(true);
     }
+    expect((within(dialogo).getByRole("button", { name: "Cancelar" }) as HTMLButtonElement).disabled).toBe(false);
     // El `finally` reanuncia el alta con la MISMA sesión («s1»): no se abrió nada.
     act(() => store.aplicar(altaDe({ sesionActiva: "s1" })));
     for (const nombre of ["Pasar y empezar", "Empezar sin tocar Jira", "Cancelar"]) {
       expect((within(dialogo).getByRole("button", { name: nombre }) as HTMLButtonElement).disabled).toBe(false);
     }
-    // Y ahora sí se puede cerrar, por cualquiera de las tres puertas.
+    // Y ahora sí se puede cerrar por Escape.
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
     // No se abrió ninguna sesión nueva, ni se envió nada al compositor.
@@ -2251,7 +2257,7 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
     // ejemplo, el aviso de que una tarea en background empezó a trabajar.
     act(() => store.aplicar(altaDe({ sesionActiva: "s1" })));
     const dialogo = screen.getByRole("dialog");
-    for (const nombre of ["Pasar y empezar", "Empezar sin tocar Jira", "Cancelar"]) {
+    for (const nombre of ["Pasar y empezar", "Empezar sin tocar Jira"]) {
       expect((within(dialogo).getByRole("button", { name: nombre }) as HTMLButtonElement).disabled).toBe(true);
     }
   });

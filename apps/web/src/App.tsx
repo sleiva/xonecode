@@ -684,10 +684,15 @@ export function App({
     const pendiente = destinoDeEmpezarRef.current;
     destinoDeEmpezarRef.current = undefined;
     // R8: NO es «empezar falló» — la sesión se abrió igual, y eso es lo que dice el aviso.
+    // Dos frases y no una interpolación de la misma: «a <destino>» pide una preposición que
+    // «al estado pedido» ya se trae puesta, y una sola plantilla las concatenaba en «a al…».
+    const destino = pendiente?.clave === borradorDelGestor.clave ? pendiente.destino : undefined;
     setAvisoDeEmpezar(
       error === undefined
         ? undefined
-        : `No se pudo pasar ${borradorDelGestor.clave} a ${pendiente?.clave === borradorDelGestor.clave ? pendiente.destino : "al estado pedido"}: ${error.motivo}. La sesión se abrió igual.`
+        : destino === undefined
+          ? `No se pudo cambiar el estado de ${borradorDelGestor.clave}: ${error.motivo}. La sesión se abrió igual.`
+          : `No se pudo pasar ${borradorDelGestor.clave} a ${destino}: ${error.motivo}. La sesión se abrió igual.`
     );
     // Solo el id: el objeto cambia de identidad con cualquier otro mensaje del gestor.
     // eslint-disable-next-line react-hooks/exhaustive-deps

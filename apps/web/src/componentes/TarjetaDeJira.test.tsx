@@ -93,7 +93,7 @@ describe("TarjetaDeEmpezar", () => {
     expect(screen.getByRole("dialog")).toBeTruthy();
   });
 
-  it("mientras la acción está en vuelo los tres botones se deshabilitan: no hay doble envío", () => {
+  it("mientras la acción está en vuelo los botones que ESCRIBEN se deshabilitan: no hay doble envío", () => {
     render(
       <TarjetaDeEmpezar
         clave="IXCODE-12"
@@ -103,9 +103,11 @@ describe("TarjetaDeEmpezar", () => {
         alCancelar={() => {}}
       />
     );
-    for (const nombre of ["Pasar y empezar", "Empezar sin tocar Jira", "Cancelar"]) {
+    for (const nombre of ["Pasar y empezar", "Empezar sin tocar Jira"]) {
       expect((screen.getByRole("button", { name: nombre }) as HTMLButtonElement).disabled).toBe(true);
     }
+    // Cancelar NUNCA se deshabilita: no manda nada de vuelta, así que no hay envío que doblar.
+    expect((screen.getByRole("button", { name: "Cancelar" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("Escape y el clic en el velo VISIBLE cancelan; dentro de la tarjeta no", () => {
@@ -129,11 +131,12 @@ describe("TarjetaDeEmpezar", () => {
   });
 
   /**
-   * Mientras la escritura está EN VUELO, ninguna de las TRES salidas sin botón contesta:
-   * cerrar de un manotazo justo tras pulsar «Pasar y empezar» no puede rechazar en pantalla
-   * mientras el servidor sigue procesando la petición que sí se mandó.
+   * Mientras la escritura está EN VUELO, las TRES salidas sin botón SIGUEN contestando:
+   * `alCancelar` no deshace nada —Jira no tiene un `undo` que este cliente pueda pedir—, así
+   * que bloquear la salida solo atrapaba a la persona delante del diálogo hasta que el cable
+   * se cayera. El doble envío lo evita el candado de la FILA (`ocupado`), no este diálogo.
    */
-  it("mientras enviando, Escape y el velo NO cancelan — la misma puerta que el botón", () => {
+  it("mientras enviando, Escape, el velo Y «Cancelar» SIGUEN cerrando: no hay nada que deshacer", () => {
     const alCancelar = vi.fn();
     render(
       <TarjetaDeEmpezar
@@ -146,8 +149,11 @@ describe("TarjetaDeEmpezar", () => {
     );
     const velo = tarjeta().firstElementChild as HTMLElement;
     fireEvent.keyDown(document, { key: "Escape" });
+    expect(alCancelar).toHaveBeenCalledTimes(1);
     fireEvent.click(velo);
-    expect(alCancelar).not.toHaveBeenCalled();
+    expect(alCancelar).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(alCancelar).toHaveBeenCalledTimes(3);
   });
 
   it("un fallo al CONSULTAR las transiciones se dice (R6), en vez de «Consultando…» para siempre", () => {
@@ -288,7 +294,7 @@ describe("TarjetaDeCerrar", () => {
     expect((screen.getByRole("textbox", { name: "Comentario" }) as HTMLTextAreaElement).value).toBe("lo que escribí");
   });
 
-  it("mientras la acción está en vuelo los botones se deshabilitan", () => {
+  it("mientras la acción está en vuelo los botones que ESCRIBEN se deshabilitan", () => {
     render(
       <TarjetaDeCerrar
         clave="IXCODE-12"
@@ -299,9 +305,10 @@ describe("TarjetaDeCerrar", () => {
         alCancelar={() => {}}
       />
     );
-    for (const nombre of ["Comentar y pasar a PROBAR", "Solo comentar", "Cancelar"]) {
+    for (const nombre of ["Comentar y pasar a PROBAR", "Solo comentar"]) {
       expect((screen.getByRole("button", { name: nombre }) as HTMLButtonElement).disabled).toBe(true);
     }
+    expect((screen.getByRole("button", { name: "Cancelar" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("Escape rechaza sin mandar nada", () => {
@@ -313,13 +320,16 @@ describe("TarjetaDeCerrar", () => {
     expect(alConfirmar).not.toHaveBeenCalled();
   });
 
-  it("mientras enviando, Escape y el velo NO cancelan", () => {
+  it("mientras enviando, Escape, el velo Y «Cancelar» SIGUEN cerrando", () => {
     const alCancelar = vi.fn();
     render(<TarjetaDeCerrar clave="IXCODE-12" comentario="x" enviando alConfirmar={() => {}} alCancelar={alCancelar} />);
     const velo = tarjeta().firstElementChild as HTMLElement;
     fireEvent.keyDown(document, { key: "Escape" });
+    expect(alCancelar).toHaveBeenCalledTimes(1);
     fireEvent.click(velo);
-    expect(alCancelar).not.toHaveBeenCalled();
+    expect(alCancelar).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(alCancelar).toHaveBeenCalledTimes(3);
   });
 
   it("un fallo al consultar las transiciones de cierre se dice, y «Solo comentar» sigue disponible", () => {

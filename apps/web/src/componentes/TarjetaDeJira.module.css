@@ -134,12 +134,6 @@
 }
 
 .cerrarAviso {
+  composes: icono from "./Boton.module.css";
   margin-left: auto;
-  padding: 0 4px;
-  border: none;
-  background: none;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
 }

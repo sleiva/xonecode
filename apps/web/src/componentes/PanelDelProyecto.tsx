@@ -245,7 +245,13 @@ export function PanelDelProyecto({
           {...(transicionesDeEmpezar === undefined ? {} : { transiciones: transicionesDeEmpezar })}
           {...(errorTransicionesAMostrar === undefined ? {} : { errorTransiciones: errorTransicionesAMostrar.motivo })}
           enviando={empezarEnVuelo}
-          {...(errorDeEmpezarAMostrar === undefined ? {} : { error: errorDeEmpezarAMostrar.motivo })}
+          // Mientras `empezarEnVuelo` sigue puesto, el error NO se enseña: en el orden de R8
+          // (error → `abrirProyecto` → alta → borrador) ese motivo es justo el que la sesión
+          // ABRE IGUAL, y pintarlo como fallo de la tarjeta mentiría dos veces — una vez aquí
+          // dentro y otra en el aviso del chat que sale al cerrarse. Solo se enseña cuando YA
+          // no hay nada en vuelo: en el fallo TOTAL (sin transición que siga abriendo nada), el
+          // `alta` con la MISMA sesión suelta `empezarEnVuelo` y el motivo aparece entonces.
+          {...(empezarEnVuelo || errorDeEmpezarAMostrar === undefined ? {} : { error: errorDeEmpezarAMostrar.motivo })}
           alConfirmar={confirmarEmpezar}
           alCancelar={() => setTarjetaEmpezar(undefined)}
         />

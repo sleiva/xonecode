@@ -44,23 +44,23 @@ function useTransicionElegida(transiciones?: TransicionesDeLaTarjeta): [string, 
  * La coraza común: capa, velo con su propio manejador de clic, y la tarjeta centrada con su
  * título. La misma forma que `Pregunta.tsx`, `NuevaSesion.tsx`, `Aprobacion.tsx`.
  *
- * **`enviando` guarda las TRES salidas sin botón, no solo `alConfirmar`**: `Pregunta.tsx`
- * deshabilita sus botones mientras envía, y Escape/el velo son la MISMA puerta —sin este
- * guardián, cerrar de un manotazo justo después de pulsar «Pasar y empezar» rechazaba en la
- * pantalla mientras la escritura seguía en vuelo en el servidor, y `alCancelar` (que aquí
- * solo cierra el diálogo, nunca deshace nada) se llamaba igual que si no se hubiera enviado
- * nada. `cancelar` es la única función que las tres puertas usan.
+ * **Cancelar —el botón, Escape o el velo— SIEMPRE cierra, también con una escritura en
+ * vuelo**: a diferencia de `Pregunta.tsx`, aquí `alCancelar` nunca deshace nada —Jira no
+ * tiene un `undo` que este cliente pueda pedir, el `empezar`/`cerrar` ya mandado sigue su
+ * camino en el servidor pase lo que pase con la tarjeta—, así que bloquear la salida no
+ * evitaba ningún doble envío: solo atrapaba a la persona delante de un diálogo que no podía
+ * cerrar hasta que el cable se cayera (medido: R8 con `g.ficha()` fallando deja el candado
+ * puesto un buen rato). El doble envío lo evita el candado de la FILA
+ * (`empezarEnVuelo`/`ocupado`), que vive en quien MONTA la tarjeta y sobrevive a que esta se
+ * cierre — cerrar el diálogo no reabre esa puerta.
  */
-function Dialogo({ titulo, alCancelar, enviando, children }: { titulo: string; alCancelar: () => void; enviando: boolean; children: ReactNode }) {
-  const cancelar = (): void => {
-    if (!enviando) alCancelar();
-  };
+function Dialogo({ titulo, alCancelar, children }: { titulo: string; alCancelar: () => void; children: ReactNode }) {
   return (
-    <Modal open onClose={cancelar} title={titulo} headless className={estilos.capa}>
+    <Modal open onClose={alCancelar} title={titulo} headless className={estilos.capa}>
       <div
         className={estilos.velo}
         onClick={(evento: MouseEvent<HTMLDivElement>) => {
-          if (evento.target === evento.currentTarget) cancelar();
+          if (evento.target === evento.currentTarget) alCancelar();
         }}
       >
         <div className={estilos.tarjeta}>
@@ -105,7 +105,7 @@ export function TarjetaDeEmpezar({
   const titulo = destino === undefined ? `¿Empezar con ${clave}?` : `¿Pasar ${clave} a ${destino}?`;
 
   return (
-    <Dialogo titulo={titulo} alCancelar={alCancelar} enviando={enviando}>
+    <Dialogo titulo={titulo} alCancelar={alCancelar}>
       {transiciones !== undefined ? null : errorTransiciones === undefined ? (
         <p className={estilos.aviso}>{`Consultando las transiciones de ${clave}…`}</p>
       ) : (
@@ -148,7 +148,9 @@ export function TarjetaDeEmpezar({
         <Button type="button" variant="outline" className={estilos.accion} disabled={enviando} onClick={() => alConfirmar(undefined)}>
           Empezar sin tocar Jira
         </Button>
-        <Button type="button" variant="outline" className={estilos.cancelar} disabled={enviando} onClick={alCancelar}>
+        {/* Cancelar NUNCA se deshabilita: ver `Dialogo` — cerrar no manda nada de vuelta ni
+            deshace lo que ya se mandó, así que no hay envío doble que evitar aquí dentro. */}
+        <Button type="button" variant="outline" className={estilos.cancelar} onClick={alCancelar}>
           Cancelar
         </Button>
       </div>
@@ -195,7 +197,7 @@ export function TarjetaDeCerrar({
   const vacio = texto.trim() === "";
 
   return (
-    <Dialogo titulo={`Cerrar ${clave} en Jira`} alCancelar={alCancelar} enviando={enviando}>
+    <Dialogo titulo={`Cerrar ${clave} en Jira`} alCancelar={alCancelar}>
       <label className={estilos.campo}>
         Comentario
         <textarea className={estilos.textarea} rows={5} value={texto} onChange={(evento) => setTexto(evento.target.value)} />
@@ -238,7 +240,8 @@ export function TarjetaDeCerrar({
         <Button type="button" variant="outline" className={estilos.accion} disabled={enviando || vacio} onClick={() => alConfirmar(texto, undefined)}>
           Solo comentar
         </Button>
-        <Button type="button" variant="outline" className={estilos.cancelar} disabled={enviando} onClick={alCancelar}>
+        {/* Cancelar NUNCA se deshabilita: ver `Dialogo`. */}
+        <Button type="button" variant="outline" className={estilos.cancelar} onClick={alCancelar}>
           Cancelar
         </Button>
       </div>

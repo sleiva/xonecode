@@ -141,3 +141,29 @@
 .grande {
   padding: 8px 16px;
 }
+
+/* El QUINTO rol: un botón SUELTO de icono o glifo —la «×» de un aviso que se descarta—, sin
+   fondo ni borde propios. No es como los cuatro de arriba: esos llevan texto y un fondo que
+   los hace leerse como botón; este vive DENTRO de otra cosa (un aviso, una fila) y solo se
+   nota al pasar el ratón. `TarjetaDeJira.module.css#cerrarAviso` es su primer consumidor. */
+.icono {
+  padding: 0 4px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.icono:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.icono:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
