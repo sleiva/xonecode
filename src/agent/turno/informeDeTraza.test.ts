@@ -304,6 +304,16 @@ describe("paralelismo", () => {
     expect(pintarSesion(s!).join("\n")).toContain("2 escrituras sobre /funciones.js en UNA respuesta");
   });
 
+  /** `incorporar_adjunto` también ESCRIBE, y además sin la cola por fichero: su choque se avisa igual. */
+  it("incorporar_adjunto cuenta como escritura (IXCODE-7)", () => {
+    const [s] = resumirTraza([
+      linea({ tipo: "sesion" }),
+      tool("incorporar_adjunto", "m1", "/icons/ic.png"),
+      tool("write_file", "m1", "/icons/ic.png"),
+    ]);
+    expect(s?.paralelismo.escriturasALaVez).toEqual([{ detalle: "/icons/ic.png", veces: 2 }]);
+  });
+
   /** Dos ficheros distintos en la misma respuesta no chocan: cada uno tiene su contenido. */
   it("dos escrituras a la vez sobre ficheros DISTINTOS no son un choque", () => {
     const [s] = resumirTraza([linea({ tipo: "sesion" }), tool("edit_file", "m1", "/a.js"), tool("edit_file", "m1", "/b.js")]);

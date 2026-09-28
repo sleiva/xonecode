@@ -205,8 +205,17 @@ export function listarAdjuntosDeSesion(raiz: string, id: string, nombres?: reado
   const carpeta = carpetaComprobada(raiz, id);
   if (carpeta === undefined || !existsSync(carpeta)) return [];
 
+  // Listar puede fallar aunque la carpeta exista (EACCES, o ENOTDIR si es un fichero), y esto
+  // corre dentro de `consolaWeb#recibir`: un `throw` aquí se llevaría el mensaje de la persona.
+  // Sin poder mirar, no hay adjuntos que afirmar — la regla de «se afirma solo si está en disco».
+  let entradas: string[];
+  try {
+    entradas = readdirSync(carpeta).sort();
+  } catch {
+    return [];
+  }
   const todos: AdjuntoNombrable[] = [];
-  for (const nombre of readdirSync(carpeta).sort()) {
+  for (const nombre of entradas) {
     if (!nombreDeAdjuntoAceptable(nombre)) continue;
     let bytes: number;
     try {

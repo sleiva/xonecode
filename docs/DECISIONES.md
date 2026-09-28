@@ -6906,10 +6906,18 @@ montarlos también (misma pieza que la sesión).
   MISMO nombre podía dejar que la subida VIEJA, al resolver tarde, pisara el estado de la NUEVA.
   Cada ficha lleva un `id` numérico generado ANTES de mandar la subida, y la resolución empareja
   por `id`, nunca por nombre: si la ficha se quitó, la actualización es un no-op.
-- **Mayúsculas en APFS.** `/.GIT/config`, `/.ENV` y `/.XONECODE/x.png` se rechazan igual que sus
-  formas en minúscula: las guardas de ruta de `incorporar_adjunto` se reaplican sobre el
-  `realpathSync.native` del ancestro que ya existe, que devuelve el nombre TAL COMO ESTÁ en
-  disco, y no sobre el texto que escribió el modelo.
+- **Mayúsculas en APFS.** Lo que se afirmaba aquí —que `/.GIT/config`, `/.ENV` y
+  `/.XONECODE/x.png` se rechazaban igual que sus formas en minúscula porque las guardas se
+  reaplican sobre el `realpathSync.native` del ancestro— era verdad SOLO si el fichero ya estaba
+  en disco: el `realpath` corrige el nombre de lo que existe, y no tiene nada que corregir en lo
+  que no. Medido en la revisión final sobre una raíz SIN `.env` ni `.git`: `/.ENV`, `/.Env.local`
+  y `/.GIT/config` contestaban «Incorporado» y dejaban `.ENV`, `.Env.local` y `.GIT` — y en APFS
+  ese `.ENV` ES el `.env`. Lo que es verdad ahora: `motivoDeDestino` aplica `puedeEscribirRuta`
+  también sobre la ruta en MINÚSCULAS, así que cualquier variante de mayúsculas de un segmento
+  denegado se rechaza exista o no en disco (en un sistema que distingue mayúsculas eso niega de
+  más, que es la dirección barata). Atado con tests de las dos situaciones —con los ficheros en
+  disco y sin ellos—, y con mutación: quitar la comprobación en minúsculas tumba los cuatro casos
+  sin fichero y deja verdes los de con fichero, que es exactamente el agujero que había.
 - **El destino se rejuzga como ruta VIRTUAL, dos veces.** `incorporar_adjunto` repite la
   comprobación de vista aplanada sobre el camino REAL (`aplanadaEnDisco` + `comoVirtual` del
   destino resuelto), no solo sobre el texto: un enlace `/v` → `/pantallas` con `menu.xne` dentro
@@ -6920,6 +6928,11 @@ montarlos también (misma pieza que la sesión).
   (`aplicadasSinPreguntar` no distingue por tool), pero faltaba el test que lo demostrara contra el
   grafo REAL de deepagents (no solo TrueForge): añadido, con mutación confirmando que quitar la
   tool de `hitlDe` tumba tanto el caso autónomo como el supervisado.
+
+- **La copia no hereda el 0600 del adjunto.** `copyFileSync` copia también el MODO, y un adjunto
+  de sesión se guarda 0600: el fichero del proyecto nacía legible solo por su dueño y así entraba
+  en git. Ahora se lee y se escribe con `mode: 0o644`: uno NUEVO nace con 0644 menos la umask, uno
+  que ya existía conserva el suyo. Con mutación (volver a `copyFileSync` da 0600 y el test cae).
 
 **Límites declarados:** la escritura de `incorporar_adjunto` NO pasa por `escriturasEnSerie` (copia
 bytes directo al disco); un `write_file` y un `incorporar_adjunto` sobre la MISMA ruta a la vez no

@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, lstatSync, mkdirSync, realpathSync, statSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, relative, resolve, sep } from "node:path";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
@@ -56,7 +56,7 @@ export { NOMBRE_INCORPORAR_ADJUNTO };
  *    puede apuntar fuera. **A diferencia de `copiar_artefacto`, la contención se comprueba ANTES
  *    de crear carpetas**: sobre el primer ancestro que existe, para que un destino que sale del
  *    proyecto no deje un árbol vacío fuera. El fichero final, si existe, no puede ser un enlace:
- *    `copyFileSync` lo seguiría.
+ *    escribir lo seguiría.
  *
  * Todo rechazo se DEVUELVE como texto, nunca se lanza (un `throw` se lleva el turno), y de un
  * error de Node solo viaja su `code`: su mensaje lleva la ruta de la máquina.
@@ -70,8 +70,9 @@ export { NOMBRE_INCORPORAR_ADJUNTO };
  * `copiar_artefacto` para lo suyo.
  *
  * **Solo llega a `motor: "modelo"`**, sin que esta función lo mire: los de motor externo se montan
- * aparte y no reciben tools propias (corren en otro proceso). Lo que un hijo externo necesite de
- * `/adjuntos/` lo lee él del disco.
+ * aparte y no reciben tools propias (corren en otro proceso), y tampoco ven `/adjuntos/`: es una
+ * ruta virtual de nuestro backend. El inventario que lee el orquestador lo dice
+ * (`core/adjuntos.ts#conAdjuntos`).
  */
 export function recibeIncorporarAdjunto(a: Pick<Agente, "soloLectura" | "ejecucion" | "escribeEn">): boolean {
   return !a.soloLectura && a.ejecucion !== true && (a.escribeEn ?? []).length === 0;
@@ -110,10 +111,16 @@ const MONTAJES = [
  * ¿Por qué no vale `ruta` como destino, mirando SOLO el texto? `undefined` = vale.
  *
  * Se aplica dos veces: a lo que escribió el modelo y a la ruta que sale del `realpath`.
- * Los montajes se comparan sin mayúsculas (APFS: `/Adjuntos/` es la misma carpeta en disco).
+ * Todo se compara también sin mayúsculas (APFS: `/Adjuntos/` es la misma carpeta en disco).
  */
 function motivoDeDestino(perfil: QuienDecidePermisos, ruta: string): string | undefined {
-  if (!puedeEscribirRuta(perfil, ruta)) return `No puedes escribir en «${ruta}».`;
+  // Y en MINÚSCULAS: `puedeEscribirRuta` distingue mayúsculas y APFS no, así que `/.ENV` pasaba el
+  // texto y, sin `.env` en disco, tampoco lo paraba el `realpath` (no hay nombre que corregir):
+  // el `.ENV` que se creaba ES el `.env`. Medido: `/.ENV`, `/.Env.local` y `/.GIT/config` contestaban
+  // «Incorporado» sobre una raíz sin ellos. Negar de más en un sistema que sí distingue es barato.
+  if (!puedeEscribirRuta(perfil, ruta) || !puedeEscribirRuta(perfil, ruta.toLowerCase())) {
+    return `No puedes escribir en «${ruta}».`;
+  }
   if (artefactoFueraDeSitio(ruta) !== undefined) {
     return `«${ruta}» no vale como destino: esa carpeta es la de los artefactos, no la del proyecto.`;
   }
@@ -254,7 +261,11 @@ export function crearIncorporarAdjunto(donde: DondeIncorporar) {
 
       try {
         mkdirSync(dirname(destinoReal), { recursive: true });
-        copyFileSync(origenReal, destinoReal);
+        // Leer y escribir, y no `copyFileSync`: ése copia también el MODO, y un adjunto se guarda
+        // 0600 (es de la sesión), así que el fichero del proyecto nacería legible solo por su
+        // dueño — y así entraría en git. Con `mode: 0o644` un fichero NUEVO nace con el modo
+        // normal (0644 menos la umask del proceso); uno que ya existía conserva el suyo.
+        writeFileSync(destinoReal, readFileSync(origenReal), { mode: 0o644 });
       } catch (error) {
         return `No se pudo incorporar «${origenVirtual}» (${codigoDe(error)}).`;
       }

@@ -16,6 +16,7 @@
  * llamadas donde hubo tres. Las llamadas se cuentan por línea.
  */
 
+import { NOMBRE_INCORPORAR_ADJUNTO } from "../../core/adjuntos.js";
 import type { ConsumoDeSesion, ConsumoDeSesionPorCuenta } from "../../core/ports.js";
 
 /** Lo que gastó un origen: el orquestador, o un especialista por su nombre. */
@@ -368,7 +369,7 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
 }
 
 /** Las escrituras, que son las unicas tools donde coincidir en el mismo fichero pierde datos. */
-const ESCRIBE = new Set(["write_file", "edit_file"]);
+const ESCRIBE = new Set(["write_file", "edit_file", NOMBRE_INCORPORAR_ADJUNTO]);
 
 function resumirParalelismo(
   porRespuesta: Map<string, Array<{ nombre: string; detalle?: string }>>,

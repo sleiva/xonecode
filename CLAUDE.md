@@ -157,7 +157,8 @@ Y las guardas del proyecto:
   dentro de la pila del proyecto y `/artefactos/`/`/planes/` no la heredaban. Va por FUERA de
   `sinContenidoInvalido` para que leer, validar y escribir sean un solo turno. Solo `write` y
   `edit`. Probado por `backendDeAgente` y contra el backend REAL, para comprobar que está
-  CABLEADA.
+  CABLEADA. **Excepción declarada: `incorporar_adjunto`** escribe directo al disco, sin la cola:
+  un `write_file` y un `incorporar_adjunto` sobre la MISMA ruta a la vez no se ordenan.
 - **`/artefactos/` → `.xonecode/sesiones/<id>/artefactos/`**: escribible y **sin aprobación**, se
   ANUNCIA con el evento `artefacto` (nombre, tamaño, ruta virtual — nunca contenido).
   `esRutaDeArtefacto` es una lista BLANCA de forma, no un `startsWith`. No se crea al montar. Tope

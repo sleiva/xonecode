@@ -549,8 +549,8 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
        * nombre está en `hitlDe`, y tras el «sí» es la tool la que copia.
        *
        * Esto es la rama de `motor: "modelo"`: un especialista EXTERNO se monta arriba sin tools
-       * propias, así que la frase del inventario («quien escribe en el proyecto tiene
-       * `incorporar_adjunto`») es verdad solo para los nuestros, y así se quiere.
+       * propias, y el inventario que lee el orquestador (`core/adjuntos.ts#conAdjuntos`) lo dice
+       * así: la tienen los de motor PROPIO, y uno EXTERNO ni la tiene ni ve `/adjuntos/`.
        */
       ...(opciones.adjuntos !== undefined && recibeIncorporarAdjunto(perfil)
         ? [crearIncorporarAdjunto({ raiz: opciones.raiz, carpetaDeAdjuntos: opciones.adjuntos, perfil })]

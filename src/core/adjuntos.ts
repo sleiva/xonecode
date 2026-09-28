@@ -130,8 +130,11 @@ const peso = (bytes: number): string =>
  * MENSAJE lo anexa la persona EN el chat, a mitad de conversación, y además dice cómo llevarlo
  * al proyecto (`incorporar_adjunto`, que pasa por la aprobación) — sin esa línea, el orquestador
  * no tiene forma de saber que delegar «pon este icono en el menú» necesita nombrar el adjunto Y
- * el destino. Omisión `"tarea"` para que el único llamador de hoy (`corredorDeTareas.ts`, con
- * dos argumentos) no cambie de texto.
+ * el destino. Y dice a QUIÉN: la tool solo la montan los especialistas de motor propio (un hijo
+ * externo corre en otro proceso, sin tools nuestras ni `/adjuntos/`), así que «quien escribe la
+ * tiene» era falso para un `developer-xone` de Claude Code. Omisión `"tarea"`: el llamador de
+ * las tareas (`corredorDeTareas.ts`, con dos argumentos) no cambia de texto; el del chat
+ * (`vestibulo.ts`) pasa `"mensaje"`.
  */
 export function conAdjuntos(peticion: string, adjuntos: readonly AdjuntoNombrable[], de: "tarea" | "mensaje" = "tarea"): string {
   if (adjuntos.length === 0) return peticion;
@@ -142,8 +145,10 @@ export function conAdjuntos(peticion: string, adjuntos: readonly AdjuntoNombrabl
           `ADJUNTOS DE ESTE MENSAJE (${adjuntos.length}). Los ha anexado la persona en el chat y están`,
           `montados en «${RUTA_ADJUNTOS}», de SOLO lectura: se leen con las tools de fichero y no se`,
           "pueden escribir ni borrar. No son ficheros del proyecto. Para meter uno en el proyecto (un",
-          "icono en `icons/`, por ejemplo), quien escribe en el proyecto tiene `incorporar_adjunto`, que",
-          "pasa por la aprobación: al delegar, di qué adjunto y dónde va.",
+          `icono en \`icons/\`, por ejemplo), los especialistas de motor PROPIO que escriben en el proyecto`,
+          `tienen \`${NOMBRE_INCORPORAR_ADJUNTO}\`, que pasa por la aprobación: al delegar, di qué adjunto`,
+          "y dónde va. Un especialista de motor EXTERNO (Claude Code, Codex, OpenCode) no la tiene ni ve",
+          `«${RUTA_ADJUNTOS}»: no le delegues incorporar un adjunto.`,
         ]
       : [
           `ADJUNTOS DE ESTA TAREA (${adjuntos.length}). Los ha anexado la persona que la creó y están`,

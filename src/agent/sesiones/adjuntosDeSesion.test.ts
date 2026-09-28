@@ -17,6 +17,15 @@ afterEach(() => {
 });
 
 describe("guardarAdjuntoDeSesion / listarAdjuntosDeSesion", () => {
+  it("una carpeta que no se puede LISTAR (un fichero en su sitio: ENOTDIR) da [], no lanza", () => {
+    // Corre dentro de `consolaWeb#recibir`: un `throw` se llevaría el mensaje de la persona.
+    const raiz = proyectoTemporal();
+    mkdirSync(join(raiz, ".xonecode", "sesiones", "sesion-1"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "sesiones", "sesion-1", "adjuntos"), "no soy una carpeta");
+    expect(listarAdjuntosDeSesion(raiz, "sesion-1")).toEqual([]);
+    expect(listarAdjuntosDeSesion(raiz, "sesion-1", ["a.png"])).toEqual([]);
+  });
+
   it("guarda y lista un adjunto, con su mime deducido del nombre", () => {
     const raiz = proyectoTemporal();
     const resultado = guardarAdjuntoDeSesion(raiz, "sesion-1", "captura.png", Buffer.from("no-son-bytes-de-verdad"));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { crearIncorporarAdjunto, recibeIncorporarAdjunto, NOMBRE_INCORPORAR_ADJUNTO } from "./incorporarAdjunto.js";
@@ -172,6 +172,31 @@ describe("incorporar_adjunto — rechaza, DEVUELVE el motivo y no crea nada", ()
       expect(readdirSync(join(raiz, ".xonecode"))).toEqual([]);
     });
   }
+
+  /**
+   * Lo mismo SIN los ficheros en disco, que es el caso que se colaba: sin `.env` el `realpath` no
+   * tiene nombre que corregir, y en APFS el `.ENV` recién creado ES el `.env`. Lo para la guarda
+   * en minúsculas de `motivoDeDestino`.
+   */
+  for (const destino of ["/.ENV", "/.Env.local", "/.GIT/config", "/.XONECODE/x.png"]) {
+    it(`sin mayúsculas y SIN el fichero en disco: ${destino} se rechaza y el árbol no cambia`, async () => {
+      const { incorporar, arbol } = escenario();
+      const antes = arbol();
+      const r = await incorporar("ic.png", destino);
+      expect(r).not.toMatch(/^Incorporado/);
+      expect(arbol()).toEqual(antes);
+    });
+  }
+
+  it("el fichero NUEVO nace con el modo normal, no con el 0600 del adjunto", async () => {
+    const { raiz, carpetaDeAdjuntos, incorporar } = escenario();
+    chmodSync(join(carpetaDeAdjuntos, "ic.png"), 0o600);
+    await incorporar("ic.png", "/icons/ic.png");
+    const umask = process.umask(0o022);
+    process.umask(umask);
+    expect(statSync(join(raiz, "icons", "ic.png")).mode & 0o777).toBe(0o644 & ~umask);
+    expect(readFileSync(join(raiz, "icons", "ic.png")).equals(PNG)).toBe(true);
+  });
 
   it("un ADJUNTO que es un enlace hacia fuera de su carpeta no se copia", async () => {
     const { base, raiz, carpetaDeAdjuntos, incorporar } = escenario();
