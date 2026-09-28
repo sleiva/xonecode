@@ -9755,14 +9755,14 @@ describe("el gestor de tareas, por el cable", () => {
     const gestor = new GestorDeTareasEnMemoria({ ...datos(), tareas: [{ ...TAREA, asignado: "Ana" }] });
     const t = await abrir({ gestorDeTareas: () => gestor });
     expect((await t.pedir({ clase: "gestor", accion: "ficha", clave: "IXCODE-12" }))?.error)
-      .toEqual({ accion: "ficha", motivo: "este proyecto no tiene gestor de tareas" });
+      .toEqual({ accion: "ficha", motivo: "este proyecto no tiene gestor de tareas", clave: "IXCODE-12" });
     await t.pedir({ clase: "gestor", accion: "vincular", conector: "jira", sitio: "c1", proyecto: "IXCODE" });
     expect(await t.pedir({ clase: "gestor", accion: "ficha", clave: "IXCODE-12" })).toEqual({
       clase: "gestor",
       ficha: { clave: "IXCODE-12", descripcion: "Pestañas y **pendientes**." },
     });
-    // Un fallo del gestor viaja como error de SU acción.
-    expect((await t.pedir({ clase: "gestor", accion: "ficha", clave: "IXCODE-99" }))?.error?.accion).toBe("ficha");
+    // Un fallo del gestor viaja como error de SU acción, con la CLAVE de la tarea pedida.
+    expect((await t.pedir({ clase: "gestor", accion: "ficha", clave: "IXCODE-99" }))?.error).toMatchObject({ accion: "ficha", clave: "IXCODE-99" });
     expect((await t.pedir({ clase: "gestor", accion: "ficha" } as never))?.error).toEqual({ accion: "ficha", motivo: "petición mal formada" });
     expect(gestor.transicionesAplicadas).toEqual([]);
     expect(gestor.comentariosAplicados).toEqual([]);

@@ -28,6 +28,9 @@ describe("leerGestorDelCable", () => {
       leerGestorDelCable({ ficha: { clave: "IXCODE-12", descripcion: "**hola**", asignado: { emailAddress: "a@b.es" }, colado: 1 } })
     ).toEqual({ ficha: { clave: "IXCODE-12", descripcion: "**hola**" } });
     expect(leerGestorDelCable({ ficha: { clave: "IXCODE-12" } })).toEqual({});
+    // El error de `ficha` lleva la clave (solo como texto).
+    expect(leerGestorDelCable({ error: { accion: "ficha", motivo: "x", clave: "IXCODE-12" } })).toEqual({ error: { accion: "ficha", motivo: "x", clave: "IXCODE-12" } });
+    expect(leerGestorDelCable({ error: { accion: "ficha", motivo: "x", clave: 3 } })).toEqual({ error: { accion: "ficha", motivo: "x" } });
   });
 
   it("un vínculo ilegible NO se lee como «sin vínculo»: el estado entero se descarta", () => {

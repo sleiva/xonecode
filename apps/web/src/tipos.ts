@@ -755,7 +755,8 @@ export type MensajeAlCliente =
       /** El resultado de `cerrar`: solo llega si el comentario se escribió. Con la transición
        *  pedida FALLIDA, su motivo va en `falloDeTransicion` y `transicion` no viaja. */
       cerrado?: { clave: string; comento: boolean; transicion?: string; falloDeTransicion?: string };
-      error?: { accion: string; motivo: string };
+      /** `clave` solo en el de `ficha`. */
+      error?: { accion: string; motivo: string; clave?: string };
     }
   | ({ clase: "fichero" } & FicheroDelProyecto)
   /** El estado de sincronización del proyecto abierto (pestaña CloudStudio). `proyecto` y

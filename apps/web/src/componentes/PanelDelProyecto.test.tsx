@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
-import { PanelDelProyecto } from "./PanelDelProyecto.js";
+import { PENDIENTES_POR_CONSULTA, PanelDelProyecto } from "./PanelDelProyecto.js";
 import type { EstadoDelCliente } from "../store.js";
 import type { PlanDelCable } from "../tipos.js";
 
@@ -314,10 +314,54 @@ describe("PanelDelProyecto", () => {
     pestana("Tareas");
     fireEvent.click(screen.getByRole("button", { name: "Login" }));
     expect(screen.queryByText(/viejo/)).toBeNull();
-    rerender({ gestor: { ...base, errores: { ficha: { motivo: "Jira no contesta" } } } });
+    rerender({ gestor: { ...base, errores: { ficha: { motivo: "Jira no contesta", clave: "IXCODE-8" } } } });
     expect(screen.getByRole("alert").textContent).toBe("No se pudo leer la descripción: Jira no contesta");
     rerender({ gestor: { ...base, errores: {}, ficha: { clave: "IXCODE-8", descripcion: "  " } } });
     expect(screen.getByText("Esta tarea no tiene descripción.")).toBeTruthy();
+  });
+
+  it("el fallo de la ficha de A NO se pinta bajo B: lleva su clave", () => {
+    const base = { ...VINCULADO, pendientes: { cuando: 1, lista: IXCODE } };
+    const { rerender } = montar({ gestor: base });
+    pestana("Tareas");
+    fireEvent.click(screen.getByRole("button", { name: "Menú" }));
+    fireEvent.click(screen.getByRole("button", { name: "Menú" }));
+    fireEvent.click(screen.getByRole("button", { name: "Login" }));
+    // Llega tarde el fallo de IXCODE-7 (Menú), con B (Login) desplegada.
+    rerender({ gestor: { ...base, errores: { ficha: { motivo: "Jira no contesta", clave: "IXCODE-7" } } } });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByText("Consultando la descripción…")).toBeTruthy();
+    rerender({ gestor: { ...base, errores: { ficha: { motivo: "otro", clave: "IXCODE-8" } } } });
+    expect(screen.getByRole("alert").textContent).toBe("No se pudo leer la descripción: otro");
+  });
+
+  it("al volver el cable, la fila que seguía desplegada vuelve a pedir su descripción", () => {
+    const { alGestor, rerender } = montar({ gestor: { ...VINCULADO, pendientes: { cuando: 1, lista: IXCODE } } });
+    pestana("Tareas");
+    fireEvent.click(screen.getByRole("button", { name: "Menú" }));
+    alGestor.mockClear();
+    rerender({ conectado: false, gestor: undefined });
+    rerender({ conectado: true, gestor: undefined });
+    expect(alGestor).not.toHaveBeenCalledWith({ accion: "ficha", clave: "IXCODE-7" });
+    rerender({ conectado: true, gestor: { ...VINCULADO, pendientes: { cuando: 2, lista: IXCODE } } });
+    expect(alGestor).toHaveBeenCalledWith({ accion: "ficha", clave: "IXCODE-7" });
+    expect(screen.getByRole("button", { name: "Menú" }).getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("con la lista LLENA (el tope del servidor) lo dice: las cuentas son de un trozo", () => {
+    const llena = Array.from({ length: PENDIENTES_POR_CONSULTA }, (_, i) => ({
+      clave: `IXCODE-${i + 1}`, titulo: `T${i + 1}`, estado: "PROBLEMA", categoria: "por-hacer" as const,
+    }));
+    const { rerender } = montar({ gestor: { ...VINCULADO, pendientes: { cuando: 1, lista: llena } } });
+    pestana("Tareas");
+    expect(screen.getByText(`Se muestran las ${PENDIENTES_POR_CONSULTA} más recientes; afina con la búsqueda.`)).toBeTruthy();
+    rerender({ gestor: { ...VINCULADO, pendientes: { cuando: 1, lista: llena.slice(1) } } });
+    expect(screen.queryByText(/más recientes; afina/)).toBeNull();
+  });
+
+  it("el tope del cliente es el MISMO que pide el adaptador de Jira (redeclarado, no importado)", () => {
+    const adaptador = readFileSync(join(__dirname, "../../../../src/agent/conectores/gestorJira.ts"), "utf8");
+    expect(adaptador.match(/export const PENDIENTES_POR_CONSULTA = (\d+);/)?.[1]).toBe(String(PENDIENTES_POR_CONSULTA));
   });
 
   it("«Nueva sesión con esta tarea» pide transiciones y abre la tarjeta «Empezar», en vez de `empezar` directo", () => {
@@ -686,6 +730,28 @@ describe("PanelDelProyecto", () => {
     // Y un conector que ya estaba conectado cuando llegó el fallo no dispara nada.
     alGestor.mockClear();
     rerender({ gestor: { ...VINCULADO, errores: { pendientes: { motivo: "falta autorizar" } } }, conectores: CONECTORES });
+    expect(alGestor).not.toHaveBeenCalled();
+  });
+
+  it("«no está conectado» (el conector NO está añadido): sin «Conectar», con «Añádelo en Ajustes», en Conectores y en Tareas", () => {
+    const errores = { sitios: { motivo: "«jira» no está conectado" }, pendientes: { motivo: "«jira» no está conectado" } };
+    const { props } = montar({ gestor: { ...VINCULADO, errores }, conectores: { ...CONECTORES, conectores: [] } });
+    pestana("Tareas");
+    expect(screen.queryByRole("button", { name: /^Conectar/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Añádelo en Ajustes" }));
+    expect(props.alAbrirAjustesDeConectores).toHaveBeenCalledTimes(1);
+    pestana("Conectores");
+    expect(screen.queryByRole("button", { name: /^Conectar/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Añádelo en Ajustes" }));
+    expect(props.alAbrirAjustesDeConectores).toHaveBeenCalledTimes(2);
+  });
+
+  it("«no está conectado» no dispara el reintento automático aunque llegue una prueba buena", () => {
+    const conError = { ...VINCULADO, errores: { pendientes: { motivo: "«jira» no está conectado" } } };
+    const { alGestor, rerender } = montar({ gestor: conError, conectores: { ...CONECTORES, conectores: [] } });
+    pestana("Tareas");
+    alGestor.mockClear();
+    rerender({ gestor: conError, conectores: CONECTORES });
     expect(alGestor).not.toHaveBeenCalled();
   });
 

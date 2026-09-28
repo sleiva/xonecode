@@ -3640,7 +3640,10 @@ export function montarRutas(
     const raiz = abierto.raiz;
     // `sinCorreos` también aquí, y no solo en `motivoDelGestor`: la frase de un fallo puede
     // llevar un texto del gestor (una clave de proyecto, un nombre de conector) sin pasar por él.
-    const fallo = (motivo: string): void => emitir({ clase: "gestor", error: { accion: m.accion, motivo: sinCorreos(motivo) } });
+    // El fallo de `ficha` lleva la CLAVE: con dos filas desplegadas una tras otra, el de la
+    // primera no puede acabar pintado bajo la segunda.
+    const fallo = (motivo: string): void =>
+      emitir({ clase: "gestor", error: { accion: m.accion, motivo: sinCorreos(motivo), ...(m.accion === "ficha" ? { clave: m.clave } : {}) } });
     if (opciones.gestorDeTareas === undefined) return fallo("esta ejecución no tiene gestor de tareas");
     const delProyecto = () => {
       const c = cargar(raiz).config.proyecto;

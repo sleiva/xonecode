@@ -599,7 +599,8 @@ export type MensajeAlCliente =
        * `error` a secas invitaría a repetir el cierre y comentar dos veces.
        */
       cerrado?: { clave: string; comento: boolean; transicion?: string; falloDeTransicion?: string };
-      error?: { accion: string; motivo: string };
+      /** `clave` solo en el de `ficha`: dice de QUÉ tarea es la descripción que no se pudo leer. */
+      error?: { accion: string; motivo: string; clave?: string };
     }
   | ({ clase: "fichero" } & FicheroDelProyecto)
   /**

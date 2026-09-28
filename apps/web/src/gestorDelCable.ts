@@ -25,7 +25,7 @@ export interface LecturaDelGestor {
   transiciones?: { clave: string; para: "empezar" | "cerrar"; lista: TransicionDelGestor[]; propuesta?: string };
   cierre?: { clave: string; comentario: string };
   cerrado?: { clave: string; comento: boolean; transicion?: string; falloDeTransicion?: string };
-  error?: { accion: string; motivo: string };
+  error?: { accion: string; motivo: string; clave?: string };
 }
 
 const CATEGORIAS: readonly CategoriaDeTarea[] = ["por-hacer", "en-curso", "terminada"];
@@ -172,5 +172,5 @@ function leerCerrado(v: unknown): LecturaDelGestor["cerrado"] {
 
 function leerError(v: unknown): LecturaDelGestor["error"] {
   if (!esObjeto(v) || typeof v.accion !== "string" || typeof v.motivo !== "string") return undefined;
-  return { accion: v.accion, motivo: v.motivo };
+  return { accion: v.accion, motivo: v.motivo, ...(typeof v.clave === "string" ? { clave: v.clave } : {}) };
 }

@@ -742,7 +742,8 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   conectar se CONECTA desde el panel** con el MISMO `{clase:"conector", accion:"autorizar"}` de
   Ajustes (añadirlo sigue siendo de Ajustes); un fallo de credencial (`falta autorizar`) lleva
   «Conectar» al lado, y lo que falló se repite SOLO, una vez, al llegar una prueba NUEVA y buena
-  de ese conector (`useReintentoTrasConectar`).
+  de ese conector (`useReintentoTrasConectar`). «no está conectado» NO es de credencial: `llamar`
+  lo dice cuando el conector no está AÑADIDO, y lleva «Añádelo en Ajustes».
 - **Una espera de humano saca del panel al chat, en el MISMO render** (`App.tsx#hayEsperaDeHumano`):
   una aprobación, pregunta, secreto o selector pendiente hace que el panel se apague y el chat se
   encienda a la vez, así que el diálogo sale en su sitio de siempre sin duplicarlo dentro del

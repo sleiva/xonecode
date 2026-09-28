@@ -262,6 +262,7 @@ export function PanelDelProyecto({
             alAutorizar={alAutorizarConector}
             alEmpezar={pedirEmpezar}
             alIrAConectores={() => setPestana("conectores")}
+            alAbrirAjustes={alAbrirAjustesDeConectores}
           />
         ) : (
           <ConectoresDelProyecto
@@ -404,13 +405,22 @@ type AccionConConector = "sitios" | "proyectos" | "vincular" | "pendientes";
 const REPETIBLES_AL_CONECTAR: readonly AccionConConector[] = ["sitios", "proyectos", "pendientes"];
 
 /**
- * El motivo de un fallo del gestor que se arregla CONECTANDO el conector: las dos frases que
+ * El motivo de un fallo del gestor que se arregla CONECTANDO el conector: la frase que
  * `ServicioDeConectores.llamar` usa cuando no hay credencial con la que hablar (`falta
- * autorizar`) o cuando el conector no está añadido (`«jira» no está conectado`). Cualquier otro
- * motivo —Jira contestó con un error, no responde— no se arregla con otro «Conectar».
+ * autorizar`). Cualquier otro motivo —Jira contestó con un error, no responde— no se arregla con
+ * otro «Conectar».
  */
 function seArreglaConectando(motivo: string): boolean {
-  return /falta autorizar|no está conectado/.test(motivo);
+  return /falta autorizar/.test(motivo);
+}
+
+/**
+ * `«jira» no está conectado`: `llamar` lo dice exactamente cuando el conector NO está AÑADIDO, así
+ * que no hay fila ni «Conectar» posibles —`autorizar` no hace nada con lo no añadido—. El camino
+ * es añadirlo, y eso es de Ajustes.
+ */
+function seArreglaAnadiendo(motivo: string): boolean {
+  return /no está conectado/.test(motivo);
 }
 
 const esConectado = (c: { prueba?: { ok: boolean } }): boolean => c.prueba?.ok === true;
@@ -481,10 +491,13 @@ function AvisoDelGestor({
   conectores,
   conectado,
   alAutorizar,
+  alAbrirAjustes,
   sinDuplicarLaFila = false,
   children,
 }: {
   error?: { motivo: string };
+  /** «Añádelo en Ajustes», para el conector que no está añadido. */
+  alAbrirAjustes: () => void;
   /** En la pestaña Conectores: el conector sin conectar ya tiene su «Conectar» en su fila. */
   sinDuplicarLaFila?: boolean;
   conector?: string;
@@ -505,6 +518,11 @@ function AvisoDelGestor({
       {conConectar ? (
         <button type="button" className={estilos.accion} onClick={() => alAutorizar(anadido.id)} disabled={!conectado || anadido.autorizando === true}>
           {anadido.autorizando === true ? "Esperando al navegador…" : `Conectar ${nombre}`}
+        </button>
+      ) : null}
+      {seArreglaAnadiendo(error.motivo) ? (
+        <button type="button" className={estilos.accion} onClick={alAbrirAjustes}>
+          Añádelo en Ajustes
         </button>
       ) : null}
       {children}
@@ -535,6 +553,13 @@ function estadosDe(lista: readonly TareaDelGestor[]): { estado: string; cuantas:
     .map(({ estado, cuantas }) => ({ estado, cuantas }));
 }
 
+/**
+ * Cuántas pendientes pide el servidor de una vez (`agent/conectores/gestorJira.ts
+ * #PENDIENTES_POR_CONSULTA`, redeclarada: el cliente no importa del host; un test compara las
+ * dos). Con la lista LLENA, las cuentas de las pastillas son de un trozo, y se dice.
+ */
+export const PENDIENTES_POR_CONSULTA = 100;
+
 /** La consulta de pendientes: lo que se busca y si son solo las mías. Lo vacío no viaja. */
 type ConsultaDePendientes = { texto?: string; mias?: boolean };
 const peticionDePendientes = (c: ConsultaDePendientes): PeticionAlGestor => ({
@@ -553,9 +578,11 @@ function TareasDelGestor({
   alAutorizar,
   alEmpezar,
   alIrAConectores,
+  alAbrirAjustes,
 }: {
   gestor?: EstadoDelCliente["gestor"];
   conectores?: EstadoDelCliente["conectores"];
+  alAbrirAjustes: () => void;
   conectado: boolean;
   /** Hay una tarjeta «Empezar» abierta (para CUALQUIER tarea): mientras tanto no se abre otra. */
   ocupado: boolean;
@@ -574,7 +601,7 @@ function TareasDelGestor({
   /** La clave de la fila desplegada (una a la vez), o `undefined`. */
   const [desplegada, setDesplegada] = useState<string | undefined>(undefined);
   /** El error de `ficha` que ya había al desplegar: uno VIEJO no se pinta en la fila nueva (el R6 de la tarjeta). */
-  const errorDeFichaAlDesplegar = useRef<{ motivo: string } | undefined>(undefined);
+  const errorDeFichaAlDesplegar = useRef<{ motivo: string; clave?: string } | undefined>(undefined);
   /** La última consulta MANDADA: «Actualizar» y «Reintentar» repiten esa, no la última que contestó. */
   const ultimaConsulta = useRef<ConsultaDePendientes>({});
   const consultar = (c: ConsultaDePendientes): void => {
@@ -584,8 +611,15 @@ function TareasDelGestor({
   const clave = vinculo === undefined ? undefined : `${vinculo.conector}|${vinculo.sitio}|${vinculo.proyecto}`;
   // Al abrir la pestaña (y si cambia el vínculo, o vuelve el cable), se pregunta: una lista de
   // antes puede no ser ya la de ahora, y la hora de la foto dice de cuándo es la que se ve.
+  // Y la fila que siguiera desplegada vuelve a pedir su descripción: al caerse el cable el store
+  // tiró `gestor` entero, y sin esto se quedaría en «Consultando la descripción…» para siempre.
   useEffect(() => {
-    if (clave !== undefined) alGestor(peticionDePendientes(ultimaConsulta.current));
+    if (clave === undefined) return;
+    alGestor(peticionDePendientes(ultimaConsulta.current));
+    if (desplegada !== undefined) {
+      errorDeFichaAlDesplegar.current = undefined;
+      alGestor({ accion: "ficha", clave: desplegada });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clave]);
 
@@ -631,7 +665,11 @@ function TareasDelGestor({
   const todasMarcadas = estados.every((e) => marcado(e.estado));
   const visibles = pendientes === undefined ? [] : pendientes.lista.filter((t) => marcado(t.estado));
   const fichaDeLaDesplegada = gestor.ficha !== undefined && gestor.ficha.clave === desplegada ? gestor.ficha : undefined;
-  const errorDeFicha = errores.ficha !== errorDeFichaAlDesplegar.current ? errores.ficha : undefined;
+  // Solo bajo SU fila: el fallo lleva la clave de la tarea que se pidió.
+  const errorDeFicha =
+    errores.ficha !== undefined && errores.ficha !== errorDeFichaAlDesplegar.current && errores.ficha.clave === desplegada
+      ? errores.ficha
+      : undefined;
 
   return (
     <div className={estilos.seccion}>
@@ -689,6 +727,7 @@ function TareasDelGestor({
         {...(conectores === undefined ? {} : { conectores })}
         conectado={conectado}
         alAutorizar={alAutorizar}
+        alAbrirAjustes={alAbrirAjustes}
       >
         <button type="button" className={estilos.accion} onClick={repetir} disabled={!conectado}>
           Reintentar
@@ -727,6 +766,9 @@ function TareasDelGestor({
               </button>
             ))}
           </div>
+          {pendientes.lista.length >= PENDIENTES_POR_CONSULTA ? (
+            <p className={estilos.aviso}>{`Se muestran las ${PENDIENTES_POR_CONSULTA} más recientes; afina con la búsqueda.`}</p>
+          ) : null}
           {visibles.length === 0 ? (
             <p className={estilos.aviso}>Ninguna pendiente con estos filtros.</p>
           ) : (
@@ -908,6 +950,7 @@ function ConectoresDelProyecto({
             {...(conectores === undefined ? {} : { conectores })}
             conectado={conectado}
             alAutorizar={alAutorizar}
+            alAbrirAjustes={alAbrirAjustes}
             sinDuplicarLaFila
           />
         );

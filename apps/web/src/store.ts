@@ -302,7 +302,8 @@ export interface EstadoDelCliente {
     borrador?: { clave: string; texto: string; id: number };
     cierre?: { clave: string; comentario: string; id: number };
     cerrado?: { clave: string; comento: boolean; transicion?: string; falloDeTransicion?: string; id: number };
-    errores?: Partial<Record<string, { motivo: string }>>;
+    /** `clave` solo en el de `ficha` (de qué tarea). */
+    errores?: Partial<Record<string, { motivo: string; clave?: string }>>;
   };
   /**
    * El estado de sincronización del proyecto abierto (pestaña CloudStudio). Ausente = no se
@@ -1577,7 +1578,7 @@ export function crearStoreDelCliente(): {
             ...(cerrado === undefined ? [] : ["cerrar"]),
           ];
           for (const a of aciertos) delete errores[a];
-          if (error !== undefined) errores[error.accion] = { motivo: error.motivo };
+          if (error !== undefined) errores[error.accion] = { motivo: error.motivo, ...(error.clave === undefined ? {} : { clave: error.clave }) };
           mutar({
             gestor: {
               ...antes,
