@@ -545,6 +545,7 @@ export async function abrirSesionTrueforge(
             : clienteDe(`modelo:${agente.modelo}:${agente.esfuerzo ?? ""}`, () => modelos.paraModelo(agente.modelo!, agente.esfuerzo)),
         senal: () => aborto?.signal,
         soloTexto: () => (detencion.soloTexto(params.threadId) ? RESUMEN_DE_RELLENO : undefined),
+        corte: () => detencion.corte(params.threadId),
         alTirarLlamadas: (n) => {
           llamadasTiradasPorDetener += n;
           // A la traza de hitos (con «Depurar»): es la medida de si el filtro hace falta o es red.

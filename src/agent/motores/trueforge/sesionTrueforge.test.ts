@@ -1781,3 +1781,89 @@ describe("detener: la persona para a los especialistas y el orquestador replanif
     expect(r.notasSobrantes).toBe("cambia de plan");
   }, 20_000);
 });
+
+describe("detener CORTA la llamada en curso del especialista (IXCODE-4)", () => {
+  /**
+   * Un modelo cuyo guion puede incluir una llamada LENTA: emite un trozo y se queda esperando
+   * hasta que le aborten la señal —como un informe de 60 s a medio generar—. Respeta la señal
+   * como la respeta LangChain: lanza al abortarse.
+   */
+  function modeloConLlamadaLenta(guiones: (AIMessageChunk[] | "lenta")[], alLlamar?: (n: number) => void) {
+    const vistos: string[][] = [];
+    const senales: (AbortSignal | undefined)[] = [];
+    const modelo = {
+      bindTools: () => modelo,
+      stream: async (mensajes: { content: unknown }[], opciones?: { signal?: AbortSignal }) => {
+        vistos.push(mensajes.map((m) => String(m.content)));
+        senales.push(opciones?.signal);
+        alLlamar?.(vistos.length);
+        const g = guiones.shift() ?? [new AIMessageChunk({ content: "" })];
+        const senal = opciones?.signal;
+        return (async function* () {
+          if (g === "lenta") {
+            yield new AIMessageChunk({ content: "Empiezo el informe…" });
+            await new Promise<void>((_, rechazar) => {
+              if (senal?.aborted) return rechazar(new Error("AbortError"));
+              senal?.addEventListener("abort", () => rechazar(new Error("AbortError")));
+            });
+            // Lo que habría seguido si nadie cortara: la tool que escribe el informe.
+            yield new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "w1", name: "write_file", args: "{}" }] });
+            return;
+          }
+          for (const t of g) yield t;
+        })();
+      },
+    };
+    const m = { paraPapel: () => modelo, paraModelo: () => modelo, descripcion: () => ({}) } as unknown as ModelosPort;
+    return { m, vistos, senales };
+  }
+  const delegar = (id: string, input: string) => [
+    new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input }) }] }),
+  ];
+
+  it("pulsado a MITAD de una llamada del hijo: se corta, el hijo resume en una llamada sin tools, y el turno sigue vivo", async () => {
+    let s: Awaited<ReturnType<typeof abrirSesionTrueforge>> | undefined;
+    const { m, vistos } = modeloConLlamadaLenta(
+      [
+        delegar("d1", "escribe el informe"),
+        "lenta", // 2) el hijo genera el informe… y la persona pulsa mientras
+        // 3) la llamada de RESUMEN del hijo: pide otra tool, que se tira
+        [
+          new AIMessageChunk({
+            content: "No llegué a escribir el informe; había leído el login.",
+            tool_call_chunks: [{ index: 0, id: "w2", name: "write_file", args: "{}" }],
+          }),
+        ],
+        // 4) el raíz replanifica
+        [new AIMessageChunk({ content: "Vale, cambio de plan." })],
+      ],
+      (n) => {
+        if (n === 2) setTimeout(() => s!.detener("mejor un diagrama"), 5);
+      }
+    );
+    s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    const r = await s.turno("escribe el informe", piel().p);
+
+    expect(vistos).toHaveLength(4);
+    // La llamada de resumen lleva la orden al FINAL y lo que el hijo ya había dicho.
+    expect(vistos[2]!.at(-1)).toBe(textoDeDetencionParaHijo("mejor un diagrama"));
+    expect(vistos[2]!.join("\n")).toContain("Empiezo el informe…");
+    // Al raíz le llega el resumen como resultado del hijo, y la orden de replanificar.
+    expect(vistos[3]!.join("\n")).toContain("No llegué a escribir el informe");
+    expect(vistos[3]!.join("\n")).toContain(textoDeDetencionParaRaiz("mejor un diagrama"));
+    // Nada se escribió: ni la tool de la llamada cortada ni la del resumen.
+    expect(r.cambios).toEqual([]);
+    expect(r.notasSobrantes).toBeUndefined();
+  }, 20_000);
+
+  it("Parar (cancelar el turno) sigue cortándolo TODO: el corte del hijo no se traga la cancelación", async () => {
+    let s: Awaited<ReturnType<typeof abrirSesionTrueforge>> | undefined;
+    const { m, vistos } = modeloConLlamadaLenta([delegar("d1", "escribe el informe"), "lenta"], (n) => {
+      if (n === 2) setTimeout(() => s!.cancelar(), 5);
+    });
+    s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("escribe el informe", piel().p).catch(() => undefined);
+    // Sin llamada de resumen ni vuelta al raíz.
+    expect(vistos).toHaveLength(2);
+  }, 20_000);
+});

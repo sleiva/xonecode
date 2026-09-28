@@ -18,8 +18,13 @@
  * las tool calls de esa respuesta: una respuesta sin tool calls cierra el hilo con normalidad
  * (`AGENT_DONE`) y su texto le llega al padre como resultado de `create_sub_agent`. Se FILTRA lo
  * que devuelve el modelo, no se le quitan las tools: con el historial lleno de llamadas, algún
- * proveedor rechaza una petición sin la definición de tools. Detiene en la FRONTERA siguiente: una
- * llamada o un comando en curso terminan primero.
+ * proveedor rechaza una petición sin la definición de tools.
+ *
+ * **Y una llamada EN CURSO se corta** (`corte`): medido con el botón, el analista estaba dentro de
+ * una llamada de 60 s generando un informe entero cuando se pulsó, y sin corte esa llamada acababa
+ * escribiéndolo. Cada hijo lleva su `AbortController`, que aborta SOLO su stream; el modelo del
+ * hijo lo captura y pide el resumen en el acto (`modeloLangchain.ts#corte`). Lo que NO se corta:
+ * un comando de shell en curso, que termina primero —la orden llega en la llamada siguiente—.
  */
 
 /** Lo que llega al padre si el hijo, tras filtrar, no dejó texto. */
@@ -59,6 +64,8 @@ export interface Detencion {
 export function crearControlDeDetencion(hiloRaiz: string) {
   let llamadasDelRaiz = 0;
   const nacimiento = new Map<string, number>();
+  /** El corte de cada hijo: aborta SOLO su stream en curso. */
+  const cortes = new Map<string, AbortController>();
   let detencion: Detencion | undefined;
 
   const debeParar = (threadId: string): boolean => {
@@ -71,11 +78,13 @@ export function crearControlDeDetencion(hiloRaiz: string) {
     reiniciar() {
       llamadasDelRaiz = 0;
       nacimiento.clear();
+      cortes.clear();
       detencion = undefined;
     },
     /** Al crear un hijo: nace de la llamada del raíz en curso. */
     nacio(threadId: string) {
       nacimiento.set(threadId, llamadasDelRaiz);
+      cortes.set(threadId, new AbortController());
     },
     detener(texto: string) {
       // Una segunda pulsación en el mismo turno suma su texto y alcanza a lo que haya nacido desde
@@ -89,6 +98,21 @@ export function crearControlDeDetencion(hiloRaiz: string) {
               hastaLlamadaDelRaiz: llamadasDelRaiz,
               raizAvisado: false,
             };
+      // Y a quien esté a mitad de una llamada, se le corta: pedirá el resumen en el acto.
+      for (const [hilo, control] of cortes) if (debeParar(hilo) && !detencion.avisados.has(hilo)) control.abort();
+    },
+    /** Para el modelo de un hijo, al empezar cada llamada: su señal de corte y la orden que se le da
+     *  si se corta. Darla lo cuenta como avisado —no la recibe otra vez por el procesador—. */
+    corte(threadId: string): { senal: AbortSignal; orden: () => string } | undefined {
+      const control = cortes.get(threadId);
+      if (control === undefined) return undefined;
+      return {
+        senal: control.signal,
+        orden: () => {
+          detencion!.avisados.add(threadId);
+          return textoDeDetencionParaHijo(detencion!.texto);
+        },
+      };
     },
     /** Para el modelo de un hijo: si ya recibió la orden, su respuesta no puede llamar tools. */
     soloTexto(threadId: string): boolean {

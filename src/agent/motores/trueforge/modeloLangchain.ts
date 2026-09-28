@@ -19,6 +19,9 @@ import { AIMessage, AIMessageChunk, HumanMessage, SystemMessage, ToolMessage, ty
 import type { ExtendedChatCompletionChunk, ILLM, LLMCreateParams, LLMCreateParamsStreaming, RawAssistantMessageWithUsage } from "./trueforge.js";
 import { razonamientoDe, razonamientoVisibleDe, textoDe } from "../../turno/puente.js";
 
+/** Lo que llega al padre si, tras un corte, el resumen no dejó texto. */
+const RELLENO_DEL_CORTE = "[Detenido a petición de la persona a mitad de una llamada, antes de poder resumir lo hecho.]";
+
 /** Lo mínimo que se usa de un modelo de LangChain: atarle las tools y pedirle un stream. */
 interface ModeloDeLangchain {
   bindTools?: (tools: unknown[]) => ModeloDeLangchain;
@@ -92,6 +95,14 @@ export function modeloParaTrueforge(opciones: {
   soloTexto?: () => string | undefined;
   /** Cuántas tool calls se tiraron por `soloTexto`: la medida de si el filtro hace falta. */
   alTirarLlamadas?: (cuantas: number) => void;
+  /**
+   * DETENER a MITAD de una llamada: la señal que corta SOLO el stream de este hijo —no el turno—
+   * y la orden con la que se le pide el resumen. Si se aborta mientras genera, la llamada no
+   * falla: se relanza en el acto con lo que ya había dicho y la orden al final, sin tool calls, y
+   * a la librería le llega UNA respuesta normal de texto —que cierra el hilo—. Se pregunta al
+   * empezar cada llamada; con `soloTexto` ya activo no hace falta (la orden llegó antes).
+   */
+  corte?: () => { senal: AbortSignal; orden: () => string } | undefined;
 }): ILLM {
   let secuencia = 0;
 
@@ -108,10 +119,32 @@ export function modeloParaTrueforge(opciones: {
     const id = `xc-${++secuencia}`;
     const creado = Math.floor(Date.now() / 1000);
     const nombre = opciones.nombre ?? "xonecode";
-    const relleno = opciones.soloTexto?.();
+    let relleno = opciones.soloTexto?.();
+    const corte = relleno === undefined ? opciones.corte?.() : undefined;
 
+    const senalDelStream =
+      corte === undefined ? senal : senal === undefined ? corte.senal : AbortSignal.any([senal, corte.senal]);
     let acumulado: AIMessageChunk | undefined;
-    for await (const trozo of await modelo.stream(mensajes, senal === undefined ? {} : { signal: senal })) {
+    /** Los trozos de UNA pasada: la normal y, si se corta, la del resumen. */
+    const pasada = async function* (lista: BaseMessage[], s: AbortSignal | undefined): AsyncGenerator<AIMessageChunk> {
+      for await (const trozo of await modelo.stream(lista, s === undefined ? {} : { signal: s })) yield trozo;
+    };
+    let trozos = pasada(mensajes, senalDelStream);
+    for (;;) {
+      let r: IteratorResult<AIMessageChunk>;
+      try {
+        r = await trozos.next();
+      } catch (e) {
+        // Un aborto que es SOLO del corte —no del turno— no es un fallo: se pide el resumen.
+        if (corte === undefined || !corte.senal.aborted || senal?.aborted === true || relleno !== undefined) throw e;
+        relleno = RELLENO_DEL_CORTE;
+        const dicho = acumulado === undefined ? "" : textoDe(acumulado);
+        acumulado = undefined;
+        trozos = pasada([...mensajes, ...(dicho.trim() === "" ? [] : [new AIMessage(dicho)]), new HumanMessage(corte.orden())], senal);
+        continue;
+      }
+      if (r.done === true) break;
+      const trozo = r.value;
       acumulado = acumulado === undefined ? trozo : acumulado.concat(trozo);
       const texto = textoDe(trozo);
       // En los TROZOS va el razonamiento que se ENSEÑA, DeepSeek incluido: los trozos solo
