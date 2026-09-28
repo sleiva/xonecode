@@ -6832,3 +6832,28 @@ script en vez de componer Chrome, y no se colgó. Pero quería la página ENTERA
 de la ventana, se escribió un script propio por CDP para medir la altura y repitió con `--alto`.
 No se implementa la captura de página entera (pide CDP): la ayuda dice ahora que basta con subir
 `--alto`; pasarse deja fondo vacío, y el revisor visual cobra por píxel.
+
+## Un artefacto no se revisa visualmente, y el conductor es solo para el aparato (28-09-2026)
+
+IXCODE-9. Retira el script `xone-captura-html` de la entrada anterior, que duró un día. En la prueba
+en vivo de IXCODE-4, el diseñador entregó un diagrama HTML diciendo «no he podido
+previsualizarlo», y el orquestador delegó en el `device-controller` SOLO para fotografiarlo: un
+especialista del aparato, con su shell y su prompt de emulador, para un fichero local. De ahí salió
+el Chrome improvisado que se colgó.
+
+El primer arreglo fue darle al conductor un script de captura que no dependiera de que Chrome
+terminara (la entrada anterior), y el segundo iba a ser que el crítico visual aceptara un HTML y lo
+pintara él. Los dos mezclaban cosas del emulador con la revisión de un artefacto, y la persona lo
+cortó con dos decisiones:
+
+- **El `device-controller` es SOLO para ejecutar la app en el aparato.** Su prompt lo dice, con la
+  advertencia de no abrir un navegador, y el script sale de `xone-hotswap`.
+- **Cuando se genera un artefacto, no hay crítica visual.** Lo dice el prompt del orquestador, que
+  es quien delegaba la foto: se entrega tal cual, aunque quien lo hizo diga que no lo pudo
+  previsualizar. `xone_critica_visual` se queda como estaba: pantallas del aparato.
+
+**Aplazado, no descartado**: revisar visualmente un artefacto tendrá sentido cuando haya
+generación de imágenes. Lo medido para entonces: Chrome 154 con un `--user-data-dir` nuevo escribe
+la captura y no termina (la entrada anterior), y por el pipe de depuración (`--remote-debugging-
+pipe`, como `archify/visual-check`) se capturó la página ENTERA —1400×1579— en 1 s, matando el
+grupo al acabar y sin tocar el perfil real.

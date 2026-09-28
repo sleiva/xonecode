@@ -21,6 +21,18 @@ const deSerie = (nombre: string): Agente => AGENTES_DE_SERIE.find((a) => a.nombr
 
 describe("promptOrquestador", () => {
   const CUATRO = AGENTES_DE_SERIE;
+
+  /**
+   * IXCODE-9: un artefacto NO se revisa visualmente, y menos por el conductor. Medido: tras un
+   * «no he podido previsualizarlo» del diseñador, el orquestador delegó en `device-controller`
+   * solo para fotografiar un HTML. Se le dice al que delega, y solo si hay conductor a quien no
+   * mandárselo.
+   */
+  it("no manda un ARTEFACTO a revisar visualmente ni al conductor", () => {
+    expect(promptOrquestador(CUATRO)).toMatch(/Un ARTEFACTO de la sesión .* NO se revisa visualmente/);
+    expect(promptOrquestador(CUATRO)).toMatch(/ni se lo mandes a `device-controller`, que es SOLO para la app en el aparato/);
+    expect(promptOrquestador([deSerie("designer-xone")])).not.toMatch(/NO se revisa visualmente/);
+  });
   const PROMPT_ORQUESTADOR = promptOrquestador(CUATRO);
 
   it("nombra a los especialistas que HAY, no a una lista escrita a mano", () => {

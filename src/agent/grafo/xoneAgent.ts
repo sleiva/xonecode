@@ -248,6 +248,17 @@ export function promptOrquestador(agentes: readonly Agente[]): string {
     hay("developer-xone") && hay("device-controller")
       ? "Si el encargo incluye PROBARLO en un móvil o emulador, son DOS pasos y en este orden: `developer-xone` escribe, y luego `device-controller` lo despliega y lo comprueba. Dile SIEMPRE a qué pantalla o colección tiene que llegar, no solo «pruébalo». Si la persona nombra un fichero SUYO por su ruta absoluta (`/Users/...`, `/tmp/...`), NO está en el proyecto y no hace falta delegar en nadie para leerlo: tráetelo con `traer_de_la_maquina`, que lo copia a `/artefactos/` y te dice con qué nombre queda; a partir de ahí se abre como cualquier artefacto, y si es un `.zip` quien tenga shell lo descomprime ahí mismo. Si tienes `xone_critica_visual`, pásale la captura que deje: ve fallos de pintado que ninguna comprobación estática detecta, y si te pide otra pantalla, encárgasela al conductor y vuelve. Y si el encargo traía un DISEÑO o una MAQUETA, pásasela SIEMPRE en `referencia`: sin ella su verde solo dice que nada está roto, no que la pantalla se parezca a lo que te pidieron. De lo que saque, MANDA A CORREGIR solo lo que sirva al encargo que te hicieron: un defecto que ya estaba ahí y que tu cambio no ha causado NO se arregla, se CUENTA en tu respuesta para que lo decida quien te encargó el trabajo. Y no des por buena una pantalla que nadie ha mirado."
       : "",
+    /**
+     * **Un artefacto NO se revisa visualmente** (IXCODE-9). Medido: el diseñador entregó un
+     * diagrama HTML diciendo «no he podido previsualizarlo», y el orquestador delegó en el
+     * `device-controller` solo para fotografiarlo —un especialista del APARATO para un fichero
+     * local, que improvisó Chrome y se quedó colgado (IXCODE-8)—. Decisión de la persona: el
+     * conductor es solo para la app en el aparato, y la revisión visual de artefactos queda para
+     * cuando haya generación de imágenes. Se dice aquí porque es QUIEN delega.
+     */
+    hay("device-controller")
+      ? "Un ARTEFACTO de la sesión (un HTML, un diagrama, un informe) NO se revisa visualmente: no pidas capturas de él ni se lo mandes a `device-controller`, que es SOLO para la app en el aparato. Entrégalo tal cual, aunque quien lo hizo diga que no lo ha podido previsualizar."
+      : "",
     "Los especialistas no comparten el transcript: al encadenarlos, incluye en la descripción",
     "de la siguiente `task` un bloque `HANDOFF DE ANÁLISIS` compacto con los hechos verificados,",
     "rutas/evidencias y lagunas. No pidas al siguiente especialista redescubrir esos hechos.",

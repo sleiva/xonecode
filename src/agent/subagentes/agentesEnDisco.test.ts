@@ -411,6 +411,18 @@ describe("sembrarAgentes", () => {
    * aparato contesta «not found or not enabled». Si el prompt no dice qué hacer entonces, el
    * modelo repite el mismo clic.
    */
+  /**
+   * IXCODE-9, decisión de la persona: el conductor es SOLO para la app en el aparato. Medido: se le
+   * mandó fotografiar un diagrama HTML, improvisó Chrome y el turno se quedó colgado (IXCODE-8).
+   */
+  it("su trabajo es la APP en el aparato: un artefacto HTML no lo captura ni abre un navegador", () => {
+    const conductor = AGENTES_DE_SERIE.find((a) => a.nombre === "device-controller")!;
+
+    expect(conductor.instrucciones).toMatch(/Tu trabajo es la APP en el aparato/);
+    expect(conductor.instrucciones).toMatch(/no lo captures ni abras un navegador/);
+    expect(conductor.instrucciones).not.toContain("xone-captura-html");
+  });
+
   it("y le dice qué hacer cuando ese control no está en pantalla", () => {
     const conductor = AGENTES_DE_SERIE.find((a) => a.nombre === "device-controller")!;
 
