@@ -323,7 +323,8 @@ export interface FotoDeColecciones {
 }
 
 export type Acto =
-  | { tipo: "usuario"; texto: string }
+  /** `adjuntos`: los NOMBRES que la persona anexó con este mensaje. Ausente ≠ vacío. */
+  | { tipo: "usuario"; texto: string; adjuntos?: string[] }
   | { tipo: "asistente"; texto: string }
   /** Lo que el modelo PENSÓ, cuando lo publica. Aparte de `asistente` porque no es la
    *  respuesta: se pinta apagado y plegado. */
@@ -1057,8 +1058,11 @@ export interface ProveedorDeModelos {
 }
 
 export type MensajeDelCliente =
-  /** `detener`: el botón DETENER y replanificar — `texto` puede ir vacío. */
-  | { clase: "prosa"; texto: string; detener?: true }
+  /**
+   * `detener`: el botón DETENER y replanificar — `texto` puede ir vacío.
+   * `adjuntos`: los NOMBRES ya subidos con `POST /adjunto?para=sesion` antes de este mensaje.
+   */
+  | { clase: "prosa"; texto: string; detener?: true; adjuntos?: string[] }
   /**
    * «Ponme este modelo», dicho por un control: `proveedor/modelo` y nada más. El cliente no
    * manda comandos — ni se apunta actos de usuario que nadie tecleó, ni habla en la

@@ -1125,8 +1125,12 @@ export interface ProveedorDeModelos {
 }
 
 export type MensajeDelCliente =
-  /** `detener`: el botón DETENER y replanificar — `texto` puede ir vacío. */
-  | { clase: "prosa"; texto: string; detener?: true }
+  /**
+   * `detener`: el botón DETENER y replanificar — `texto` puede ir vacío.
+   * `adjuntos` (IXCODE-7): los NOMBRES que ya se subieron con `POST /adjunto?para=sesion` antes
+   * de mandar este mensaje — nunca bytes por el cable, el molde de siempre.
+   */
+  | { clase: "prosa"; texto: string; detener?: true; adjuntos?: string[] }
   /**
    * «Ponme este modelo», dicho por un control de la interfaz: `proveedor/modelo` y nada
    * más.

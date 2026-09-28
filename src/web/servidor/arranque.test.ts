@@ -54,6 +54,8 @@ import { CatalogoModelosEnMemoria } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
 import type { AdjuntoDeTarea, Tarea } from "../../core/tareas.js";
 import { TOPE_DE_ADJUNTO } from "../../agent/tareas/tareasEnDisco.js";
+import { carpetaDeAdjuntosDeSesion } from "../../core/adjuntos.js";
+import { TOPE_DE_ADJUNTO_DE_SESION } from "../../agent/sesiones/adjuntosDeSesion.js";
 import type { ManejadorRuta } from "./servidor.js";
 import { ESTADOS_DEL_LANZAMIENTO, FASES_DEL_LANZAMIENTO } from "./transporte.js";
 import {
@@ -6568,6 +6570,89 @@ describe("POST /adjunto", () => {
     const manejador = servidor.rutas.get(`POST ${RUTA_ADJUNTO}`)!;
     expect(manejador).toBeDefined();
     expect((await subir(manejador, "tarea=b1&nombre=x.png")).estado).toBe(404);
+  });
+
+  /**
+   * IXCODE-7: `?para=sesion` es el segundo camino de esta MISMA ruta — el chat de la
+   * sesión ABIERTA, no una tarea. Con disco REAL (`guardarAdjuntoDeSesion` escribe de
+   * verdad): un doble no probaría que la carpeta cae donde `carpetaDeAdjuntosDeSesion`
+   * dice.
+   */
+  describe("con `para=sesion`", () => {
+    /** Abre un proyecto de verdad (workspace en un temporal) y devuelve el vestíbulo, el
+     *  servidor y la carpeta a limpiar al terminar. */
+    async function conProyectoAbierto() {
+      const base = mkdtempSync(join(tmpdir(), "xonecode-adj-sesion-"));
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
+      // `esProyectoEnDisco` es lo que decide si `atenderSesion` abre directo o pregunta la
+      // rama: una copia BAJADA lleva `config.json` Y `sync.json` (mismo montaje que el test
+      // de «recién abierto el proyecto…», más arriba).
+      const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
+      writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      mkdirSync(join(raizDeVerdad, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raizDeVerdad, ".xonecode", "cloudstudio", "sync.json"), "{}");
+      montarRutas(servidor, vestibulo, {});
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+      await asentar();
+      const abierto = vestibulo.proyectoAbierto()!;
+      const manejador = servidor.rutas.get(`POST ${RUTA_ADJUNTO}`)!;
+      return {
+        base,
+        vestibulo,
+        manejador,
+        abierto,
+        cerrar: async () => {
+          await vestibulo.cerrar();
+          rmSync(base, { recursive: true, force: true });
+        },
+      };
+    }
+
+    it("con proyecto abierto, guarda en la carpeta de adjuntos de ESA sesión: 204", async () => {
+      const { manejador, abierto, cerrar } = await conProyectoAbierto();
+      const r = await subir(manejador, "para=sesion&nombre=ic.png", "PNGPNGPNG");
+      expect(r.estado).toBe(204);
+      const carpeta = carpetaDeAdjuntosDeSesion(abierto.raiz, abierto.idDeHilo);
+      expect(readFileSync(join(carpeta, "ic.png"), "utf8")).toBe("PNGPNGPNG");
+      await cerrar();
+    });
+
+    it("sin proyecto abierto, 409 «no hay ninguna sesión abierta»", async () => {
+      const servidor = servidorDeMentira();
+      montarRutas(servidor, vestibuloDePrueba(), {});
+      const manejador = servidor.rutas.get(`POST ${RUTA_ADJUNTO}`)!;
+      const r = await subir(manejador, "para=sesion&nombre=ic.png");
+      expect(r.estado).toBe(409);
+    });
+
+    it("nombre malo, 403 — antes de mirar si hay sesión", async () => {
+      const servidor = servidorDeMentira();
+      montarRutas(servidor, vestibuloDePrueba(), {});
+      const manejador = servidor.rutas.get(`POST ${RUTA_ADJUNTO}`)!;
+      const r = await subir(manejador, "para=sesion&nombre=..%2Fx.png");
+      expect(r.estado).toBe(403);
+    });
+
+    it("sin `nombre`, 400", async () => {
+      const servidor = servidorDeMentira();
+      montarRutas(servidor, vestibuloDePrueba(), {});
+      const manejador = servidor.rutas.get(`POST ${RUTA_ADJUNTO}`)!;
+      const r = await subir(manejador, "para=sesion");
+      expect(r.estado).toBe(400);
+    });
+
+    it("por encima del tope de un adjunto de sesión, 413", async () => {
+      const { manejador, cerrar } = await conProyectoAbierto();
+      const r = await subir(manejador, "para=sesion&nombre=grande.bin", Buffer.alloc(TOPE_DE_ADJUNTO_DE_SESION + 1));
+      expect(r.estado).toBe(413);
+      await cerrar();
+    });
   });
 });
 

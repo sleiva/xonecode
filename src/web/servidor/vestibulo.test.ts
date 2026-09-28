@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { crearVestibulo, ENTORNOS_OFICIALES, escribirProyectoEnDisco, esProyectoEnDisco } from "./vestibulo.js";
 import { ficheroDeDispositivoDeSesion } from "../../core/dispositivoDeSesion.js";
+import { guardarAdjuntoDeSesion } from "../../agent/sesiones/adjuntosDeSesion.js";
 import { existsSync } from "node:fs";
 import { CatalogoModelosEnMemoria } from "../../core/ports.js";
 import type { Acto, ConsumoDeTurno } from "../../core/actos.js";
@@ -2585,6 +2586,62 @@ describe("el dispositivo de la sesión llega al agente", () => {
   });
 });
 
+
+/**
+ * `conAdjuntosDelMensaje` (IXCODE-7), con DISCO REAL: un doble que simule la composición no
+ * probaría que el id que usa es `idDeHilo` —el que montó `/adjuntos/` en disco— y no
+ * `sesion`, que puede venir `undefined` en una sesión recién abierta.
+ */
+describe("los adjuntos del MENSAJE (IXCODE-7)", () => {
+  it("compone `conAdjuntos(…, listarAdjuntosDeSesion(raiz, idDeHilo, nombres), \"mensaje\")`: el ejecutor recibe `/adjuntos/<nombre>`", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-adj-msj-"));
+    const peticiones: string[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: sesionesEnMemoria().puerto,
+      crearEjecutor: () => async (peticion: string) => {
+        peticiones.push(peticion);
+      },
+    });
+    const proyecto = await v.abrirProyecto({ raiz, sesion: "s1" });
+    // El adjunto se guarda con el MISMO id que `idDeHilo` — la carpeta que monta el disco de
+    // ESTA conversación — y no con `sesion`, aunque hoy coincidan.
+    const guardado = guardarAdjuntoDeSesion(raiz, proyecto.idDeHilo, "ic.png", Buffer.from("ICONO"));
+    expect(guardado).toEqual({ ok: true });
+
+    proyecto.recibir({ clase: "prosa", texto: "pon el icono", adjuntos: ["ic.png"] });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(peticiones).toHaveLength(1);
+    expect(peticiones[0]).toContain("/adjuntos/ic.png");
+    expect(peticiones[0]).toContain("pon el icono");
+
+    await v.cerrar();
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("sin adjuntos en el mensaje, la petición no lleva ningún inventario", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-adj-msj-"));
+    const peticiones: string[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: sesionesEnMemoria().puerto,
+      crearEjecutor: () => async (peticion: string) => {
+        peticiones.push(peticion);
+      },
+    });
+    const proyecto = await v.abrirProyecto({ raiz, sesion: "s1" });
+    proyecto.recibir({ clase: "prosa", texto: "haz un listado" });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(peticiones).toHaveLength(1);
+    expect(peticiones[0]).not.toContain("/adjuntos/");
+
+    await v.cerrar();
+    rmSync(raiz, { recursive: true, force: true });
+  });
+});
 
 describe("el motor de la sesión, por configuración y sin enseñarlo", () => {
   it("una sesión NUEVA toma el del config.json; una REABIERTA sin campo es deepagents", async () => {

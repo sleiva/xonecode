@@ -180,6 +180,48 @@ describe("consolaWeb: la entrada", () => {
     c.recibir({ clase: "prosa", texto: "haz algo" });
     expect(await it.next()).toEqual({ value: { texto: "haz algo", comoComando: false }, done: false });
   });
+
+  it("una prosa con ADJUNTOS los apunta en el acto y le pasa al agente el inventario", async () => {
+    const c = crearConsolaWeb({ conAdjuntosDelMensaje: (t, n) => `${t}\n[ADJ:${n.join(",")}]` });
+    const it = c.consola.lineas[Symbol.asyncIterator]();
+    c.recibir({ clase: "prosa", texto: "pon el icono", adjuntos: ["ic.png"] });
+    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "pon el icono", adjuntos: ["ic.png"] }]);
+    expect(await it.next()).toEqual({ value: { texto: "pon el icono\n[ADJ:ic.png]", comoComando: false }, done: false });
+  });
+
+  it("con turno en vuelo, la NOTA también lleva el inventario de los adjuntos", () => {
+    const notas: string[] = [];
+    const c = crearConsolaWeb({
+      notaMientrasTrabaja: (texto) => (notas.push(texto), true),
+      conAdjuntosDelMensaje: (t, n) => `${t}\n[ADJ:${n.join(",")}]`,
+    });
+    c.recibir({ clase: "prosa", texto: "cambia de idea", adjuntos: ["ic.png"] });
+    expect(notas).toEqual(["cambia de idea\n[ADJ:ic.png]"]);
+  });
+
+  it("sin adjuntos (o vacío) el acto NO lleva el campo, y el texto no cambia", async () => {
+    const c = crearConsolaWeb({ conAdjuntosDelMensaje: (t, n) => `${t}\n[ADJ:${n.join(",")}]` });
+    const it = c.consola.lineas[Symbol.asyncIterator]();
+    c.recibir({ clase: "prosa", texto: "haz un listado", adjuntos: [] });
+    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "haz un listado" }]);
+    expect(await it.next()).toEqual({ value: { texto: "haz un listado", comoComando: false }, done: false });
+  });
+
+  it("prosa VACÍA con adjuntos se acepta: el texto es el inventario", async () => {
+    const c = crearConsolaWeb({ conAdjuntosDelMensaje: (t, n) => `${t}[ADJ:${n.join(",")}]` });
+    const it = c.consola.lineas[Symbol.asyncIterator]();
+    c.recibir({ clase: "prosa", texto: "", adjuntos: ["ic.png"] });
+    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "", adjuntos: ["ic.png"] }]);
+    expect(await it.next()).toEqual({ value: { texto: "[ADJ:ic.png]", comoComando: false }, done: false });
+  });
+
+  it("sin `conAdjuntosDelMensaje` la prosa sigue como hoy, aunque lleguen adjuntos", async () => {
+    const c = crearConsolaWeb();
+    const it = c.consola.lineas[Symbol.asyncIterator]();
+    c.recibir({ clase: "prosa", texto: "pon el icono", adjuntos: ["ic.png"] });
+    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "pon el icono", adjuntos: ["ic.png"] }]);
+    expect(await it.next()).toEqual({ value: { texto: "pon el icono", comoComando: false }, done: false });
+  });
 });
 
 describe("consolaWeb: la aprobación es fail-closed POR TRANSPORTE", () => {

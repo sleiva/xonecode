@@ -24,6 +24,8 @@
  */
 
 import { ficheroDeDispositivoDeSesion, lineaDelDispositivo } from "../../core/dispositivoDeSesion.js";
+import { conAdjuntos } from "../../core/adjuntos.js";
+import { listarAdjuntosDeSesion } from "../../agent/sesiones/adjuntosDeSesion.js";
 import { crearRegistroDeFallos } from "../../agent/turno/registroDeFallos.js";
 import { baseDeWorkspacePorOmision } from "../../agent/config/settingsEnDisco.js";
 import { randomUUID } from "node:crypto";
@@ -1245,6 +1247,15 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       sesionReal.detener(texto);
       return true;
     };
+    /**
+     * IXCODE-7: compone el inventario de los adjuntos del MENSAJE (no de la tarea). El id que
+     * usa es `idSesion` —el mismo con que se montó `/adjuntos/` en el disco de ESTA
+     * conversación (`carpetaDeAdjuntosDeSesion`), y no `sesion` (el parámetro de apertura, que
+     * puede venir `undefined` en una sesión nueva)—. Mismo cierre perezoso que las dos de
+     * arriba: `idSesion` se declara más abajo y no hace falta reordenar nada.
+     */
+    const conAdjuntosDelMensaje = (texto: string, nombres: readonly string[]): string =>
+      conAdjuntos(texto, listarAdjuntosDeSesion(raiz, idSesion, nombres), "mensaje");
     const consolaWeb = crearConsola({
       catalogoModelos: opciones.catalogoModelos,
       guardarModeloGlobal,
@@ -1252,6 +1263,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       consumoAcumulado: consumoVivo,
       notaMientrasTrabaja,
       detenerMientrasTrabaja,
+      conAdjuntosDelMensaje,
     });
     // `Partial<Consola>` sobre el objeto recién creado: lo que depende de la raíz (`/sync`,
     // los escritores del proyecto) no lo puede saber `consolaWeb`, que no conoce ninguna.

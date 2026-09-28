@@ -203,6 +203,7 @@ import {
 } from "../../core/tareas.js";
 import { aplicarFeedback, TOPE_DE_ADJUNTO, type TareasEnDisco } from "../../agent/tareas/tareasEnDisco.js";
 import { nombreDeAdjuntoAceptable } from "../../core/adjuntos.js";
+import { guardarAdjuntoDeSesion, TOPE_DE_ADJUNTO_DE_SESION } from "../../agent/sesiones/adjuntosDeSesion.js";
 import { rutaMemoriaDeProyecto } from "../../agent/grafo/memoriaDeProyecto.js";
 import { crearAumentador, invocarParaAumentar } from "../../agent/tareas/aumentador.js";
 import {
@@ -4318,8 +4319,42 @@ export function montarRutas(
       respuesta.end(texto);
     };
     const query = new URLSearchParams((peticion.url ?? "").split("?")[1] ?? "");
-    const tarea = query.get("tarea");
     const nombre = query.get("nombre");
+    // IXCODE-7: `?para=sesion` es el CHAT de la sesión abierta, no una tarea — el resto de
+    // la ruta (`?tarea=…`) sigue intacto debajo, sin tocar.
+    if (query.get("para") === "sesion") {
+      if (nombre === null || nombre === "") {
+        responder(400, "falta «nombre»");
+        return;
+      }
+      if (!nombreDeAdjuntoAceptable(nombre)) {
+        responder(403, "ese nombre no vale para un adjunto");
+        return;
+      }
+      const abierto = vestibulo.proyectoAbierto();
+      if (abierto === undefined) {
+        responder(409, "no hay ninguna sesión abierta");
+        return;
+      }
+      let datos: Buffer;
+      try {
+        datos = await leerCuerpoCrudo(peticion, TOPE_DE_ADJUNTO_DE_SESION);
+      } catch {
+        responder(413, "el adjunto es demasiado grande");
+        return;
+      }
+      // El id con que se montó `/adjuntos/` en el disco de ESTA conversación
+      // (`idDeHilo`), no `sesion` — que puede ser `undefined` en una sesión recién abierta.
+      const guardado = guardarAdjuntoDeSesion(abierto.raiz, abierto.idDeHilo, nombre, datos);
+      if (!guardado.ok) {
+        responder(413, guardado.motivo ?? "no se pudo guardar el adjunto");
+        return;
+      }
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    const tarea = query.get("tarea");
     if (tarea === null || tarea === "" || nombre === null || nombre === "") {
       responder(400, "faltan «tarea» o «nombre»");
       return;

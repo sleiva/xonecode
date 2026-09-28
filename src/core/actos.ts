@@ -64,7 +64,9 @@ export interface VeredictoDelTurno {
 }
 
 export type Acto =
-  | { tipo: "usuario"; texto: string }
+  /** `adjuntos` (IXCODE-7): los NOMBRES que la persona anexó con este mensaje, si hubo alguno
+   *  aceptable. Ausente ≠ vacío: un mensaje sin adjuntos no lleva el campo. */
+  | { tipo: "usuario"; texto: string; adjuntos?: string[] }
   | { tipo: "asistente"; texto: string }
   /**
    * El razonamiento del modelo, si lo publica. Es un acto APARTE de `asistente` porque no

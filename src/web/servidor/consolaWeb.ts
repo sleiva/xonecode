@@ -27,6 +27,7 @@
  * el prellenado del mapa, no en quién compara la cadena.
  */
 import { crearPielWeb } from "./pielWeb.js";
+import { nombreDeAdjuntoAceptable } from "../../core/adjuntos.js";
 import { anotarPaso } from "../../core/trazaDeErrores.js";
 import { crearTransporte, type MensajeAlCliente, type MensajeDelCliente, type Sumidero } from "./transporte.js";
 import type { Acto, ConsumoDeTurno, NarracionDeSincronizacion } from "../../core/actos.js";
@@ -76,6 +77,13 @@ export interface OpcionesDeConsolaWeb {
   /** El botón DETENER y replanificar (IXCODE-4), con el mismo contrato que `notaMientrasTrabaja`:
    *  `true` si se aplicó al turno en marcha; `false` o ausente y la prosa sigue como siempre. */
   detenerMientrasTrabaja?: (texto: string) => boolean;
+  /**
+   * IXCODE-7: compone el texto con el inventario de los adjuntos del mensaje —
+   * `conAdjuntos(texto, listarAdjuntosDeSesion(raiz, idDeHilo, nombres), "mensaje")`—. Lo
+   * construye el vestíbulo, que es quien sabe la raíz del proyecto y el id de la sesión; este
+   * módulo no toca disco. Ausente = la prosa con adjuntos viaja tal cual, como hoy.
+   */
+  conAdjuntosDelMensaje?: (texto: string, nombres: readonly string[]) => string;
 }
 
 export interface ConsolaWeb {
@@ -409,21 +417,29 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
   const recibir = (mensaje: MensajeDelCliente): void => {
     if (mensaje.clase === "prosa") {
       if (cerrada) return;
+      // Los nombres LLEGADOS del cliente, cribados por la MISMA lista blanca que el
+      // guardado (IXCODE-7): un nombre inventado no se anota ni se cuenta como adjunto.
+      const nombres = (mensaje.adjuntos ?? []).filter(nombreDeAdjuntoAceptable);
       // El eco de lo tecleado, como hace la TUI (`store.usuario`): el transcript se lo
       // debe a quien escribió la petición, y de ahí sale el título de la sesión.
       // DETENER a secas, sin texto, no es algo que la persona dijera: no se apunta como suyo.
-      if (mensaje.texto.trim() !== "" || mensaje.detener !== true) anotar({ tipo: "usuario", texto: mensaje.texto });
-      if (mensaje.detener === true && opciones.detenerMientrasTrabaja?.(mensaje.texto) === true) return;
+      if (mensaje.texto.trim() !== "" || mensaje.detener !== true)
+        anotar({ tipo: "usuario", texto: mensaje.texto, ...(nombres.length > 0 ? { adjuntos: nombres } : {}) });
+      // El inventario se AÑADE al texto que ve el agente (lazo / nota / detener), nunca al
+      // acto: el transcript enseña lo que la persona escribió, y `conAdjuntosDelMensaje` —el
+      // vestíbulo, que conoce la raíz y el id— sabe traducir nombres a rutas virtuales.
+      const texto = nombres.length > 0 && opciones.conAdjuntosDelMensaje ? opciones.conAdjuntosDelMensaje(mensaje.texto, nombres) : mensaje.texto;
+      if (mensaje.detener === true && opciones.detenerMientrasTrabaja?.(texto) === true) return;
       // Un DETENER sin texto que ya no encontró turno no tiene nada que mandar.
       if (mensaje.detener === true && mensaje.texto.trim() === "") return;
-      if (opciones.notaMientrasTrabaja?.(mensaje.texto) === true) return;
+      if (opciones.notaMientrasTrabaja?.(texto) === true) return;
       const despertar = esperandoLinea.shift();
       // `comoComando: false` y no una cadena pelada, y esta es TODA la diferencia: aquí
       // escribe una persona, y en el navegador «/» no abre comandos — no hay ninguno al
       // que apunte, porque cada acción tiene su botón. Una prosa que empiece por «/» (una
       // ruta del proyecto, un `/artefactos/…`) viaja al modelo tal cual. Ver
       // `cli/consola.ts#LineaDeConsola`.
-      const linea: LineaDeConsola = { texto: mensaje.texto, comoComando: false };
+      const linea: LineaDeConsola = { texto, comoComando: false };
       if (despertar !== undefined) despertar({ value: linea, done: false });
       else cola.push(linea);
       return;
