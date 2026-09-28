@@ -6095,6 +6095,12 @@ function servicioDeConectoresDeMentira(inicial: {
     probar: async (id) => {
       llamadas.push({ metodo: "probar", args: [id] });
     },
+    // `llamar` es de `ServicioDeConectores`; este doble todavía no lo ejercita por el cable,
+    // así que basta un stub que no se ha usado en ningún test de aquí.
+    llamar: async (id, nombre, args) => {
+      llamadas.push({ metodo: "llamar", args: [id, nombre, args] });
+      return "";
+    },
     autorizar: async (id, redirectUrl) => {
       llamadas.push({ metodo: "autorizar", args: [id, redirectUrl] });
     },
@@ -6467,6 +6473,7 @@ describe("los conectores MCP, por el cable", () => {
       crear: () => undefined,
       guardarClave: () => {},
       probar: async () => {},
+      llamar: async () => "",
       autorizar: async () => {},
       completar: async () => {
         throw new Error("el proveedor no contestó");
@@ -8178,12 +8185,12 @@ describe("el ajuste de depuración, cableado", () => {
  * `ajusteDeConectoresCableado` es la composición de producción que llega a `montarRutas`
  * desde `arrancarConsolaWeb`. Lo que se comprueba aquí es la COSTURA, no la regla —esa ya la
  * prueba `servicioDeConectores.test.ts`—: que `conectores` está PRESENTE y que la fábrica de
- * verdad (`servicioDeConectoresCableado`) devuelve un servicio real, con sus diez
+ * verdad (`servicioDeConectoresCableado`) devuelve un servicio real, con sus once
  * operaciones. Sin red: `casaDePruebas.ts` ya mudó `HOME` para todo el suite, así que
  * `homedir()` aquí es un temporal y `lista()` es de solo lectura.
  */
 describe("el ajuste de conectores, cableado", () => {
-  it("la fábrica devuelve un servicio REAL, con sus diez operaciones — sin red", () => {
+  it("la fábrica devuelve un servicio REAL, con sus once operaciones — sin red", () => {
     const { conectores } = ajusteDeConectoresCableado({ casa: homedir() });
     expect(typeof conectores).toBe("function");
     const cambios: number[] = [];
@@ -8197,7 +8204,7 @@ describe("el ajuste de conectores, cableado", () => {
       desconocidos: [],
     });
     expect(Object.keys(servicio).sort()).toEqual(
-      ["anadir", "autenticacionDe", "autorizar", "completar", "crear", "desconectar", "guardarClave", "lista", "probar", "quitar"].sort()
+      ["anadir", "autenticacionDe", "autorizar", "completar", "crear", "desconectar", "guardarClave", "lista", "llamar", "probar", "quitar"].sort()
     );
   });
 });
