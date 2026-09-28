@@ -310,6 +310,27 @@ export interface PlanDelCable {
   modificado: number;
 }
 
+/** Categoría de estado de una tarea del gestor (`core/gestorDeTareas.ts#CategoriaDeTarea`). */
+export type CategoriaDeTarea = "por-hacer" | "en-curso" | "terminada";
+
+/** Una tarea del gestor (`core/gestorDeTareas.ts#TareaDelGestor`). Del asignado, solo el nombre. */
+export interface TareaDelGestor {
+  clave: string;
+  titulo: string;
+  estado: string;
+  categoria: CategoriaDeTarea;
+  asignado?: string;
+  url?: string;
+}
+
+/** El vínculo del proyecto con su gestor (`transporte.ts#VinculoDelCable`). */
+export interface VinculoDelCable {
+  conector: string;
+  sitio: string;
+  proyecto: string;
+  nombreDelSitio?: string;
+}
+
 /** Lo que cambió en el modelo de UNA colección (`core/diffDeColecciones.ts`). */
 export interface CambiosDeUnaColeccion {
   nombre: string;
@@ -707,6 +728,17 @@ export type MensajeAlCliente =
   | { clase: "colecciones"; foto?: FotoDeColecciones; error?: string }
   /** Los planes del proyecto (pestaña Planes). Validados en el store (`planesDelCable.ts`). */
   | { clase: "planes"; planes?: PlanDelCable[]; error?: string }
+  /** El gestor de tareas del proyecto (IXCODE-11): un mensaje, un campo por acción, y `error`
+   *  con la acción que falló. Redeclarado de `transporte.ts`. */
+  | {
+      clase: "gestor";
+      estado?: { conectores: string[]; vinculo?: VinculoDelCable };
+      sitios?: { conector: string; lista: { id: string; nombre: string }[] };
+      proyectos?: { sitio: string; lista: { clave: string; nombre: string }[] };
+      pendientes?: { cuando: number; texto?: string; lista: TareaDelGestor[] };
+      borrador?: { clave: string; texto: string };
+      error?: { accion: string; motivo: string };
+    }
   | ({ clase: "fichero" } & FicheroDelProyecto)
   /** El estado de sincronización del proyecto abierto (pestaña CloudStudio). `proyecto` y
    *  `rama` ausentes = no está dado de alta en CloudStudio, que NO es «cero pendientes». */
@@ -1245,6 +1277,16 @@ export type MensajeDelCliente =
   | { clase: "arbol" }
   | { clase: "colecciones" }
   | { clase: "planes" }
+  /** El gestor de tareas del proyecto (IXCODE-11). `empezar` abre una sesión nueva con la
+   *  tarea y contesta con el borrador; nada escribe en el gestor todavía. */
+  | { clase: "gestor"; accion: "estado" }
+  | { clase: "gestor"; accion: "sitios"; conector: string }
+  | { clase: "gestor"; accion: "proyectos"; conector: string; sitio: string }
+  | { clase: "gestor"; accion: "vincular"; conector: string; sitio: string; proyecto: string }
+  | { clase: "gestor"; accion: "desvincular" }
+  | { clase: "gestor"; accion: "usarConector"; conector: string; usar: boolean }
+  | { clase: "gestor"; accion: "pendientes"; texto?: string }
+  | { clase: "gestor"; accion: "empezar"; clave: string }
   | { clase: "fichero"; ruta: string }
   /** La sincronización con CloudStudio: `estado` pide la medida, `subir`/`bajar` son las
    *  dos acciones de `/sync`. Viaja la INTENCIÓN: el servidor las aplica encolando la línea

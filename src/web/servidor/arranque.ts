@@ -113,6 +113,8 @@ import {
   aplicarAuth,
   aplicarCredencialAlProceso,
   cargar,
+  guardarConectoresDeProyecto,
+  guardarGestorDeProyecto,
   guardarModeloGlobal,
 } from "../../agent/config/configEnDisco.js";
 import { borrarCredencial, guardarCredencial } from "../../agent/config/authEnDisco.js";
@@ -239,6 +241,10 @@ import { filaDeTarea } from "./transporte.js";
 import { esEsfuerzo, nivelesDeEsfuerzo, type Esfuerzo } from "../../core/esfuerzo.js";
 import { definicionDelCable, RUTA_CALLBACK_MCP, type AccionDeConector } from "../../core/conectores.js";
 import { servicioDeConectoresCableado, type ServicioDeConectores } from "../../agent/conectores/servicioDeConectores.js";
+import { crearGestorJira } from "../../agent/conectores/gestorJira.js";
+import {
+  motivoDeClaveDeProyecto, type FichaDelGestor, type GestorDeTareasPort, type Vinculo,
+} from "../../core/gestorDeTareas.js";
 
 /** Las dos rutas del cable. El cliente las tiene escritas en `apps/web/src/conexion.ts`. */
 /**
@@ -675,6 +681,13 @@ export interface OpcionesDeMontaje {
    * «un control sin dato detrás no se pinta».
    */
   conectores?: (alCambiar: () => void) => ServicioDeConectores;
+  /**
+   * El gestor de tareas de cada conector (IXCODE-11): `undefined` para un conector que no lo
+   * es. `montarRutas` lo MEMORIZA —una instancia por conector mientras vive el cable—, así que
+   * la fábrica puede construir en cada llamada. Ausente = esta ejecución no tiene gestor, y el
+   * mensaje `gestor` se contesta con ese error. En producción sale de `ajusteDeGestorCableado`.
+   */
+  gestorDeTareas?: (conector: string) => GestorDeTareasPort | undefined;
 }
 
 /** El `Content-Type` con el que se sirve un artefacto inline: al texto se le pone el juego
@@ -693,6 +706,42 @@ function tipoServido(mime: string): string {
  */
 function escaparHtml(texto: string): string {
   return texto.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+}
+
+/**
+ * El mensaje `gestor` con los campos que su ACCIÓN pide, o `undefined`. Llega del navegador sin
+ * tipos: `atenderGestor` confía en esta forma, así que se comprueba aquí y no dentro.
+ */
+function gestorBienFormado(m: object): Extract<MensajeDelCliente, { clase: "gestor" }> | undefined {
+  const x = m as Record<string, unknown>;
+  const texto = (k: string): boolean => typeof x[k] === "string";
+  switch (x.accion) {
+    case "estado":
+      return { clase: "gestor", accion: "estado" };
+    case "desvincular":
+      return { clase: "gestor", accion: "desvincular" };
+    case "sitios":
+      return texto("conector") ? { clase: "gestor", accion: "sitios", conector: x.conector as string } : undefined;
+    case "proyectos":
+      return texto("conector") && texto("sitio")
+        ? { clase: "gestor", accion: "proyectos", conector: x.conector as string, sitio: x.sitio as string }
+        : undefined;
+    case "vincular":
+      return texto("conector") && texto("sitio") && texto("proyecto")
+        ? { clase: "gestor", accion: "vincular", conector: x.conector as string, sitio: x.sitio as string, proyecto: x.proyecto as string }
+        : undefined;
+    case "usarConector":
+      return texto("conector") && typeof x.usar === "boolean"
+        ? { clase: "gestor", accion: "usarConector", conector: x.conector as string, usar: x.usar }
+        : undefined;
+    case "pendientes":
+      if (x.texto !== undefined && !texto("texto")) return undefined;
+      return { clase: "gestor", accion: "pendientes", ...(x.texto === undefined ? {} : { texto: x.texto as string }) };
+    case "empezar":
+      return texto("clave") ? { clase: "gestor", accion: "empezar", clave: x.clave as string } : undefined;
+    default:
+      return undefined;
+  }
 }
 
 /**
@@ -2587,6 +2636,46 @@ export function montarRutas(
     emitir(que === undefined ? { clase: "abriendo", activo: false } : { clase: "abriendo", activo: true, ...que });
   };
 
+  /**
+   * Lo que sigue a abrir una sesión desde el cable, sea la que la persona pidió en la barra
+   * (`atenderSesion`) o la que abre «Empezar» en el panel del proyecto (`atenderGestor`). Una
+   * sola copia: dos caminos que abren sesión con dos colas distintas dejarían a uno sin el
+   * contador limpio o sin mirar la cola de tareas.
+   */
+  const trasAbrirSesion = (): void => {
+    // El cable se muda a la consola del proyecto, como en el alta: sin esto el usuario
+    // mira un transcript vivo cuyas aprobaciones se rechazan solas al otro lado.
+    adjuntar();
+    /**
+     * Y el contador se REEMITE, porque el gasto es de UNA conversación.
+     *
+     * `consumo` solo viaja cuando el consumo CAMBIA (`alCambiarConsumo`), y abrir otra
+     * sesión no cambia nada: cambia de quién es la cuenta. Sin esto —medido en la pantalla
+     * del usuario— la caja seguía enseñando los tokens de la conversación anterior hasta la
+     * primera llamada al modelo de la nueva, que puede tardar.
+     *
+     * **No se usa `emitirConsumo()`, y ese es el detalle que costó el primer intento**: esa
+     * función CALLA cuando no consta la cuenta, y al abrir no consta — el `SesionReal` no se
+     * registra hasta que el primer turno lo construye. O sea que justo en el instante que
+     * hay que limpiar, la vía normal no manda nada. Aquí el cero SÍ está medido: una
+     * conversación recién abierta no ha gastado nada, y su tracker nace a cero aunque la
+     * sesión sea vieja. El cliente no pinta un cero, así que el contador desaparece.
+     *
+     * Y si la cuenta SÍ consta —volver al foco de una consola que está corriendo un turno—
+     * se manda la de verdad: mandar cero ahí borraría un contador vivo a mitad de turno.
+     */
+    const alAbrir = vestibulo.consumoDeSesion();
+    emitir({
+      clase: "consumo",
+      modelo: alAbrir?.modelo ?? SIN_CONSUMO,
+      externo: alAbrir?.externo ?? SIN_CONSUMO,
+      ventana: ventanaDeAhora(alAbrir?.contexto ?? 0),
+    });
+    // Y la cola se vuelve a mirar: este proyecto queda bloqueado para las tareas —gana la
+    // persona— y el que estuviera abierto antes acaba de quedar libre.
+    opciones.revisarTareas?.();
+  };
+
   const atenderSesion = async (peticion: Extract<MensajeDelCliente, { clase: "sesion" }>): Promise<void> => {
     aviso = undefined;
     // Antes de la primera espera, no después: entre el clic y aquí no hay nada que pintar.
@@ -2614,37 +2703,7 @@ export function montarRutas(
         return;
       }
       await vestibulo.abrirProyecto({ raiz, ...(peticion.sesion === undefined ? {} : { sesion: peticion.sesion }) });
-      // El cable se muda a la consola del proyecto, como en el alta: sin esto el usuario
-      // mira un transcript vivo cuyas aprobaciones se rechazan solas al otro lado.
-      adjuntar();
-      /**
-       * Y el contador se REEMITE, porque el gasto es de UNA conversación.
-       *
-       * `consumo` solo viaja cuando el consumo CAMBIA (`alCambiarConsumo`), y abrir otra
-       * sesión no cambia nada: cambia de quién es la cuenta. Sin esto —medido en la pantalla
-       * del usuario— la caja seguía enseñando los tokens de la conversación anterior hasta la
-       * primera llamada al modelo de la nueva, que puede tardar.
-       *
-       * **No se usa `emitirConsumo()`, y ese es el detalle que costó el primer intento**: esa
-       * función CALLA cuando no consta la cuenta, y al abrir no consta — el `SesionReal` no se
-       * registra hasta que el primer turno lo construye. O sea que justo en el instante que
-       * hay que limpiar, la vía normal no manda nada. Aquí el cero SÍ está medido: una
-       * conversación recién abierta no ha gastado nada, y su tracker nace a cero aunque la
-       * sesión sea vieja. El cliente no pinta un cero, así que el contador desaparece.
-       *
-       * Y si la cuenta SÍ consta —volver al foco de una consola que está corriendo un turno—
-       * se manda la de verdad: mandar cero ahí borraría un contador vivo a mitad de turno.
-       */
-      const alAbrir = vestibulo.consumoDeSesion();
-      emitir({
-        clase: "consumo",
-        modelo: alAbrir?.modelo ?? SIN_CONSUMO,
-        externo: alAbrir?.externo ?? SIN_CONSUMO,
-        ventana: ventanaDeAhora(alAbrir?.contexto ?? 0),
-      });
-      // Y la cola se vuelve a mirar: este proyecto queda bloqueado para las tareas —gana la
-      // persona— y el que estuviera abierto antes acaba de quedar libre.
-      opciones.revisarTareas?.();
+      trasAbrirSesion();
     } catch (error) {
       aviso = error instanceof Error ? error.message : String(error);
       /**
@@ -3472,6 +3531,178 @@ export function montarRutas(
     } catch (error) {
       informar(`no se pudieron leer los planes (${codigoDe(error)})`);
       emitir({ clase: "planes", error: "no se pudieron leer los planes" });
+    }
+  };
+
+  /**
+   * El gestor de tareas de cada conector, UNO por conector mientras viva este cable
+   * (IXCODE-11). La fábrica puede devolver una instancia nueva en cada llamada, y el adaptador
+   * de Jira guarda en la instancia la url pública de cada sitio —la que compone el enlace de
+   * cada tarea—, así que pedirla otra vez en cada mensaje perdería esa url. Se memoriza también
+   * el `undefined`: un conector que no es un gestor no deja de serlo entre dos mensajes.
+   */
+  const gestores = new Map<string, GestorDeTareasPort | undefined>();
+  const gestorDe = (conector: string): GestorDeTareasPort | undefined => {
+    if (opciones.gestorDeTareas === undefined) return undefined;
+    if (!gestores.has(conector)) gestores.set(conector, opciones.gestorDeTareas(conector));
+    return gestores.get(conector);
+  };
+  /**
+   * Las instancias cuyo `sitios()` ya contestó en este proceso, y el nombre de cada sitio.
+   * Sin esa pregunta el adaptador no sabe la url del sitio y las tareas llegarían SIN enlace
+   * —ausente, no inventado—; con ella llegan con el suyo. Se marca solo lo que CONTESTÓ: un
+   * fallo se vuelve a intentar en la acción siguiente.
+   */
+  const conSitios = new WeakSet<GestorDeTareasPort>();
+  const nombreDelSitio = new Map<string, string>();
+  const preguntarSitios = async (gestor: GestorDeTareasPort): Promise<{ id: string; nombre: string }[]> => {
+    const lista = (await gestor.sitios()).map((x) => ({ id: x.id, nombre: x.nombre }));
+    conSitios.add(gestor);
+    for (const x of lista) nombreDelSitio.set(x.id, x.nombre);
+    return lista;
+  };
+  const asegurarSitios = async (gestor: GestorDeTareasPort): Promise<void> => {
+    if (!conSitios.has(gestor)) await preguntarSitios(gestor);
+  };
+
+  /** El texto que «Empezar» deja en el compositor. Lo que no consta no se escribe: ni una
+   *  línea `undefined` por un enlace que falta, ni un párrafo vacío por una descripción vacía. */
+  const borradorDeTarea = (f: FichaDelGestor): string => {
+    const cabecera = [`${f.clave} — ${f.titulo}`, `Estado: ${f.estado}`, ...(f.url === undefined ? [] : [f.url])].join("\n");
+    const descripcion = f.descripcion.trim();
+    return `Trabaja en esta tarea de Jira.\n\n${cabecera}${descripcion === "" ? "" : `\n\n${descripcion}`}`;
+  };
+
+  /**
+   * El gestor de tareas del proyecto abierto (IXCODE-11, panel del proyecto). Mismas reglas
+   * que `atenderPlanes`: sin proyecto no se contesta; sin gestor en esta ejecución se contesta
+   * con error —un panel en «consultando…» para siempre es un fallo mudo—; y un fallo viaja
+   * sin la ruta de la máquina (`motivoLegible`: nuestra frase, o el código si es de Node).
+   *
+   * La configuración se lee y se escribe en el `config.json` del PROYECTO, nunca fusionada con
+   * la global: el vínculo y los conectores son de esta carpeta. Y nada escribe en el gestor:
+   * `empezar` abre una sesión y propone un borrador, la transición llega con su aprobación.
+   */
+  const atenderGestor = async (m: Extract<MensajeDelCliente, { clase: "gestor" }>): Promise<void> => {
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined) return;
+    const raiz = abierto.raiz;
+    const fallo = (motivo: string): void => emitir({ clase: "gestor", error: { accion: m.accion, motivo } });
+    if (opciones.gestorDeTareas === undefined) return fallo("esta ejecución no tiene gestor de tareas");
+    const delProyecto = () => {
+      const c = cargar(raiz).config.proyecto;
+      return { conectores: c?.conectores ?? [], vinculo: c?.gestorDeTareas };
+    };
+    const emitirEstado = (): void => {
+      const { conectores, vinculo } = delProyecto();
+      const nombre = vinculo === undefined ? undefined : nombreDelSitio.get(vinculo.sitio);
+      emitir({
+        clase: "gestor",
+        estado: {
+          conectores,
+          ...(vinculo === undefined
+            ? {}
+            : { vinculo: { conector: vinculo.conector, sitio: vinculo.sitio, proyecto: vinculo.proyecto, ...(nombre === undefined ? {} : { nombreDelSitio: nombre }) } }),
+        },
+      });
+    };
+    /** Escribir el `config.json`: su error puede llevar la ruta, así que al cable va una frase fija. */
+    const guardar = (escribir: () => void): boolean => {
+      try {
+        escribir();
+        return true;
+      } catch (error) {
+        informar(`no se pudo guardar la configuración del proyecto (${codigoDe(error)})`);
+        fallo("no se pudo guardar la configuración del proyecto");
+        return false;
+      }
+    };
+    const gestorOFallo = (conector: string): GestorDeTareasPort | undefined => {
+      const g = gestorDe(conector);
+      if (g === undefined) fallo(`«${conector}» no es un gestor de tareas de esta ejecución`);
+      return g;
+    };
+    try {
+      switch (m.accion) {
+        case "estado":
+          return emitirEstado();
+        case "sitios": {
+          const g = gestorOFallo(m.conector);
+          if (g === undefined) return;
+          emitir({ clase: "gestor", sitios: { conector: m.conector, lista: await preguntarSitios(g) } });
+          return;
+        }
+        case "proyectos": {
+          const g = gestorOFallo(m.conector);
+          if (g === undefined) return;
+          const lista = (await g.proyectos(m.sitio)).map((x) => ({ clave: x.clave, nombre: x.nombre }));
+          emitir({ clase: "gestor", proyectos: { sitio: m.sitio, lista } });
+          return;
+        }
+        case "vincular": {
+          // La clave se comprueba ANTES de preguntar: entra en una JQL.
+          const motivo = motivoDeClaveDeProyecto(m.proyecto);
+          if (motivo !== undefined) return fallo(motivo);
+          const g = gestorOFallo(m.conector);
+          if (g === undefined) return;
+          // Solo se escribe lo que el gestor DICE que existe: un vínculo a un proyecto que no se
+          // ve no daría ni una pendiente, y el fallo aparecería lejos de donde se cometió.
+          const visibles = await g.proyectos(m.sitio);
+          if (!visibles.some((x) => x.clave === m.proyecto)) return fallo(`«${m.proyecto}» no está entre los proyectos de ese sitio`);
+          const { conectores } = delProyecto();
+          const vinculo: Vinculo = { conector: m.conector, sitio: m.sitio, proyecto: m.proyecto };
+          if (!guardar(() => guardarGestorDeProyecto(raiz, vinculo))) return;
+          if (!conectores.includes(m.conector) && !guardar(() => guardarConectoresDeProyecto(raiz, [...conectores, m.conector]))) return;
+          return emitirEstado();
+        }
+        case "desvincular":
+          if (!guardar(() => guardarGestorDeProyecto(raiz, undefined))) return;
+          return emitirEstado();
+        case "usarConector": {
+          const { conectores } = delProyecto();
+          const nuevos = m.usar
+            ? (conectores.includes(m.conector) ? conectores : [...conectores, m.conector])
+            : conectores.filter((c) => c !== m.conector);
+          if (!guardar(() => guardarConectoresDeProyecto(raiz, nuevos))) return;
+          return emitirEstado();
+        }
+        case "pendientes": {
+          const { vinculo } = delProyecto();
+          if (vinculo === undefined) return fallo("este proyecto no tiene gestor de tareas");
+          const g = gestorOFallo(vinculo.conector);
+          if (g === undefined) return;
+          await asegurarSitios(g);
+          const cuando = Date.now();
+          const lista = await g.pendientes(vinculo, m.texto);
+          emitir({ clase: "gestor", pendientes: { cuando, ...(m.texto === undefined ? {} : { texto: m.texto }), lista } });
+          return;
+        }
+        case "empezar": {
+          const { vinculo } = delProyecto();
+          if (vinculo === undefined) return fallo("este proyecto no tiene gestor de tareas");
+          const g = gestorOFallo(vinculo.conector);
+          if (g === undefined) return;
+          await asegurarSitios(g);
+          // La ficha ANTES de abrir nada: si el gestor no contesta, no queda una sesión vacía.
+          const ficha = await g.ficha(vinculo, m.clave);
+          const hiloDeAntes = abierto.idDeHilo;
+          // Una sesión NUEVA del mismo proyecto: el camino de `atenderSesion` sin `sesion`.
+          const nueva = await vestibulo.abrirProyecto({ raiz });
+          trasAbrirSesion();
+          // El ticket se estampa solo si de verdad se abrió OTRA: estamparlo en la de antes
+          // ligaría a la tarea una conversación que no se abrió para ella.
+          if (nueva.raiz !== raiz || nueva.idDeHilo === hiloDeAntes) return fallo("no se pudo abrir una sesión nueva");
+          nueva.fijarTicket({ conector: vinculo.conector, sitio: vinculo.sitio, clave: ficha.clave });
+          emitir({ clase: "gestor", borrador: { clave: ficha.clave, texto: borradorDeTarea(ficha) } });
+          return;
+        }
+      }
+    } catch (error) {
+      fallo(motivoLegible(error));
+    } finally {
+      // `empezar` cambió de sesión: el alta dice cuál es la de ahora, igual que al final de
+      // `atenderSesion`. Las demás acciones no mueven el foco, y no se reanuncia nada.
+      if (m.accion === "empezar") await anunciarAlta().catch(contar);
     }
   };
 
@@ -4553,6 +4784,20 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "gestor") {
+      // Los campos se comprueban por ACCIÓN, como `modeloDelCambio`: un mensaje mal formado
+      // se contesta con su error, no revienta dentro de `atenderGestor`.
+      const bien = gestorBienFormado(mensaje);
+      if (bien === undefined) {
+        const accion = typeof (mensaje as { accion?: unknown }).accion === "string" ? (mensaje as { accion: string }).accion : "desconocida";
+        if (vestibulo.proyectoAbierto() !== undefined) emitir({ clase: "gestor", error: { accion, motivo: "petición mal formada" } });
+      } else {
+        void atenderGestor(bien).catch(contar);
+      }
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "colecciones") {
       void atenderColecciones().catch(contar);
       respuesta.writeHead(204);
@@ -5520,6 +5765,38 @@ export function ajusteDeConectoresCableado(opciones: {
   return { conectores: (alCambiar) => servicioDeConectoresCableado({ casa: opciones.casa, alCambiar }) };
 }
 
+/**
+ * Las opciones `conectores` y `gestorDeTareas` de `montarRutas`, cableadas JUNTAS (IXCODE-11).
+ *
+ * Juntas porque el gestor de Jira llama por el MISMO servicio de conectores que `montarRutas`
+ * construye con la fábrica `conectores` —el que lleva en memoria las autorizaciones
+ * pendientes: un segundo servicio no vería la de Ajustes y pisaría su verificador PKCE—. Así
+ * que aquí se ENVUELVE esa fábrica para quedarse con el servicio que devuelve, y el gestor le
+ * llama a ese. El gestor de `"jira"` es UNO (el adaptador guarda la url de cada sitio en la
+ * instancia); cualquier otro conector no es un gestor. Extraída y probada por el patrón de
+ * fallo de siempre: un literal dentro de `arrancarConsolaWeb` no lo mira ningún test.
+ */
+export function ajusteDeGestorCableado(ajuste: { conectores: (alCambiar: () => void) => ServicioDeConectores }): {
+  conectores: (alCambiar: () => void) => ServicioDeConectores;
+  gestorDeTareas: (conector: string) => GestorDeTareasPort | undefined;
+} {
+  let servicio: ServicioDeConectores | undefined;
+  let jira: GestorDeTareasPort | undefined;
+  return {
+    conectores: (alCambiar) => (servicio = ajuste.conectores(alCambiar)),
+    gestorDeTareas: (conector) => {
+      if (conector !== "jira") return undefined;
+      jira ??= crearGestorJira((nombre, args) => {
+        // `montarRutas` construye el servicio al montar, antes de atender ningún mensaje; esto
+        // solo salta si alguien usa el gestor sin haber pasado `conectores` a `montarRutas`.
+        if (servicio === undefined) return Promise.reject(new Error("esta ejecución no tiene conectores"));
+        return servicio.llamar("jira", nombre, args);
+      });
+      return jira;
+    },
+  };
+}
+
 export function construirCorredorDeTareasCableado(opciones: {
   vestibulo: Pick<Vestibulo, "abrirParaTarea" | "proyectosAbiertos" | "sesionesDe">;
   /** La fábrica de `OpcionesDeArranque.tareas`. Ausente = esta ejecución no ejecuta tareas. */
@@ -5949,7 +6226,9 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     ...ajusteDeDepuracionCableado(),
     // Los conectores MCP, con la MISMA disciplina: la composición extraída y probada
     // (`ajusteDeConectoresCableado`), nunca un literal aquí dentro.
-    ...ajusteDeConectoresCableado({ casa: homedir() }),
+    // Y el gestor de tareas (IXCODE-11) llama por ESE mismo servicio: los dos salen de
+    // `ajusteDeGestorCableado`, que envuelve la fábrica de conectores.
+    ...ajusteDeGestorCableado(ajusteDeConectoresCableado({ casa: homedir() })),
     // El selector nativo, solo si este sistema tiene uno. En el que no, la opción no se
     // monta y el botón no llega a existir.
     ...(haySelectorDeCarpeta()

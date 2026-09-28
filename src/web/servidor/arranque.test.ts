@@ -21,6 +21,7 @@ import { MS_DE_PREPARACION,
   ajusteDeWorkspaceCableado,
   ajusteDeDepuracionCableado,
   ajusteDeConectoresCableado,
+  ajusteDeGestorCableado,
   construirCorredorDeTareasCableado,
   FALTA_EL_BUILD,
   RUTA_ACCION,
@@ -50,7 +51,9 @@ import { crearConsolaWeb, type ConsolaWeb, type OpcionesDeConsolaWeb } from "./c
 import { PAPELES } from "../../core/modelos.js";
 import { crearSesion, listarSesiones } from "./sesiones.js";
 import { COMANDOS } from "../../cli/consola.js";
-import { CatalogoModelosEnMemoria } from "../../core/ports.js";
+import { CatalogoModelosEnMemoria, GestorDeTareasEnMemoria } from "../../core/ports.js";
+import type { FichaDelGestor, GestorDeTareasPort } from "../../core/gestorDeTareas.js";
+import { crearGestorJira } from "../../agent/conectores/gestorJira.js";
 import type { Entorno } from "../../core/settings.js";
 import type { AdjuntoDeTarea, Tarea } from "../../core/tareas.js";
 import { TOPE_DE_ADJUNTO } from "../../agent/tareas/tareasEnDisco.js";
@@ -9515,5 +9518,340 @@ describe("GET /imagen-del-proyecto", () => {
     expect((await pedir(ruta, `${RUTA_IMAGEN_DEL_PROYECTO}?ruta=doc%2Fimg%2Fno.png`)).estado).toBe(404);
     expect((await pedir(ruta, `${RUTA_IMAGEN_DEL_PROYECTO}?ruta=..%2F..%2Ffuera.png`)).estado).toBe(403);
     await limpiar();
+  });
+});
+
+/**
+ * El gestor de tareas del proyecto por el cable (IXCODE-11): `estado`, vincular y desvincular,
+ * los conectores que usa, las pendientes y «Empezar». Con `GestorDeTareasEnMemoria` y la
+ * configuración de un proyecto en un temporal: `vincular` escribe en SU `config.json`.
+ */
+describe("el gestor de tareas, por el cable", () => {
+  const TAREA: FichaDelGestor = {
+    clave: "IXCODE-12",
+    titulo: "El panel del proyecto",
+    estado: "Por hacer",
+    categoria: "por-hacer",
+    url: "https://xone.atlassian.net/browse/IXCODE-12",
+    descripcion: "Pestañas y **pendientes**.",
+  };
+  const datos = () => ({
+    sitios: [{ id: "c1", nombre: "xone", url: "https://xone.atlassian.net" }],
+    proyectos: { c1: [{ clave: "IXCODE", nombre: "XOneCode" }] },
+    tareas: [TAREA, { ...TAREA, clave: "IXCODE-1", titulo: "Hecha", estado: "Terminado", categoria: "terminada" as const }],
+  });
+
+  const abrir = async (opciones: Parameters<typeof montarRutas>[2], config: Record<string, unknown> = { modo: "offline" }) => {
+    const base = mkdtempSync(join(tmpdir(), "xonecode-gestor-"));
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
+    const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify(config));
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
+    montarRutas(servidor, vestibulo, { informar: () => {}, ...opciones });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+    await asentar();
+    const gestor = () => cliente.recibidos.filter((x) => x.clase === "gestor") as Extract<MensajeAlCliente, { clase: "gestor" }>[];
+    const pedir = async (m: MensajeDelCliente): Promise<Extract<MensajeAlCliente, { clase: "gestor" }> | undefined> => {
+      const antes = gestor().length;
+      expect(await enviarMensaje(accion, m)).toBe(204);
+      for (let i = 0; i < 20 && gestor().length === antes; i++) await asentar();
+      return gestor().length === antes ? undefined : gestor().at(-1);
+    };
+    const leerConfig = () => readFileSync(join(raiz, ".xonecode", "config.json"), "utf8");
+    return {
+      raiz, vestibulo, cliente, accion, pedir, leerConfig,
+      limpiar: async () => {
+        await vestibulo.cerrar();
+        rmSync(base, { recursive: true, force: true });
+      },
+    };
+  };
+
+  it("sin gestor en esta ejecución se DICE; sin proyecto abierto no se contesta", async () => {
+    const t = await abrir({});
+    expect(await t.pedir({ clase: "gestor", accion: "estado" })).toEqual({
+      clase: "gestor",
+      error: { accion: "estado", motivo: "esta ejecución no tiene gestor de tareas" },
+    });
+    await t.limpiar();
+
+    // Sin proyecto: ni el error. Es la regla de `planes`.
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba();
+    montarRutas(servidor, vestibulo, { gestorDeTareas: () => new GestorDeTareasEnMemoria(datos()) });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    expect(await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "gestor", accion: "estado" })).toBe(204);
+    await asentar();
+    expect(cliente.recibidos.some((x) => x.clase === "gestor")).toBe(false);
+    await vestibulo.cerrar();
+  });
+
+  it("«estado» lee el config.json del PROYECTO: conectores y vínculo", async () => {
+    const t = await abrir(
+      { gestorDeTareas: () => new GestorDeTareasEnMemoria(datos()) },
+      { modo: "offline", conectores: ["jira"], gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } },
+    );
+    expect(await t.pedir({ clase: "gestor", accion: "estado" })).toEqual({
+      clase: "gestor",
+      estado: { conectores: ["jira"], vinculo: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } },
+    });
+    // Tras preguntar los sitios, el vínculo ya lleva el nombre del suyo.
+    expect(await t.pedir({ clase: "gestor", accion: "sitios", conector: "jira" })).toEqual({
+      clase: "gestor",
+      sitios: { conector: "jira", lista: [{ id: "c1", nombre: "xone" }] },
+    });
+    expect((await t.pedir({ clase: "gestor", accion: "estado" }))?.estado?.vinculo?.nombreDelSitio).toBe("xone");
+    expect(await t.pedir({ clase: "gestor", accion: "proyectos", conector: "jira", sitio: "c1" })).toEqual({
+      clase: "gestor",
+      proyectos: { sitio: "c1", lista: [{ clave: "IXCODE", nombre: "XOneCode" }] },
+    });
+    await t.limpiar();
+  });
+
+  it("«vincular» SOLO escribe lo que el gestor dice que existe; si no, el config.json no cambia ni un byte", async () => {
+    const t = await abrir({ gestorDeTareas: (c) => (c === "jira" ? new GestorDeTareasEnMemoria(datos()) : undefined) });
+    const antes = t.leerConfig();
+
+    // Una clave que no es de proyecto: se rechaza antes de preguntar.
+    expect((await t.pedir({ clase: "gestor", accion: "vincular", conector: "jira", sitio: "c1", proyecto: "ixcode" }))?.error)
+      .toMatchObject({ accion: "vincular", motivo: expect.stringContaining("no es una clave de proyecto") });
+    expect(t.leerConfig()).toBe(antes);
+    // Una clave válida que ese sitio no tiene.
+    expect((await t.pedir({ clase: "gestor", accion: "vincular", conector: "jira", sitio: "c1", proyecto: "OTRO" }))?.error)
+      .toEqual({ accion: "vincular", motivo: "«OTRO» no está entre los proyectos de ese sitio" });
+    expect(t.leerConfig()).toBe(antes);
+    // Un conector que no es un gestor.
+    expect((await t.pedir({ clase: "gestor", accion: "vincular", conector: "deepwiki", sitio: "c1", proyecto: "IXCODE" }))?.error?.motivo)
+      .toContain("no es un gestor de tareas");
+    expect(t.leerConfig()).toBe(antes);
+
+    // La buena: escribe el vínculo, AÑADE el conector y conserva el resto del fichero.
+    expect(await t.pedir({ clase: "gestor", accion: "vincular", conector: "jira", sitio: "c1", proyecto: "IXCODE" })).toEqual({
+      clase: "gestor",
+      estado: { conectores: ["jira"], vinculo: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } },
+    });
+    expect(JSON.parse(t.leerConfig())).toEqual({
+      modo: "offline",
+      conectores: ["jira"],
+      gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" },
+    });
+
+    // Desvincular quita la clave; los conectores se quedan.
+    expect((await t.pedir({ clase: "gestor", accion: "desvincular" }))?.estado).toEqual({ conectores: ["jira"] });
+    expect(JSON.parse(t.leerConfig())).toEqual({ modo: "offline", conectores: ["jira"] });
+    // Y usar/dejar de usar un conector.
+    expect((await t.pedir({ clase: "gestor", accion: "usarConector", conector: "deepwiki", usar: true }))?.estado?.conectores).toEqual(["jira", "deepwiki"]);
+    expect((await t.pedir({ clase: "gestor", accion: "usarConector", conector: "jira", usar: false }))?.estado?.conectores).toEqual(["deepwiki"]);
+    expect(JSON.parse(t.leerConfig()).conectores).toEqual(["deepwiki"]);
+    await t.limpiar();
+  });
+
+  it("un mensaje mal formado se contesta con su error, no revienta", async () => {
+    const t = await abrir({ gestorDeTareas: () => new GestorDeTareasEnMemoria(datos()) });
+    expect((await t.pedir({ clase: "gestor", accion: "vincular", conector: "jira" } as never))?.error)
+      .toEqual({ accion: "vincular", motivo: "petición mal formada" });
+    await t.limpiar();
+  });
+
+  it("«pendientes»: sin vínculo se dice; con él, la lista con la hora; un fallo viaja sin la ruta", async () => {
+    let falla: Error | undefined;
+    class Gestor extends GestorDeTareasEnMemoria {
+      override async pendientes(...a: Parameters<GestorDeTareasEnMemoria["pendientes"]>) {
+        if (falla !== undefined) throw falla;
+        return super.pendientes(...a);
+      }
+    }
+    const t = await abrir({ gestorDeTareas: () => new Gestor(datos()) });
+    expect((await t.pedir({ clase: "gestor", accion: "pendientes" }))?.error)
+      .toEqual({ accion: "pendientes", motivo: "este proyecto no tiene gestor de tareas" });
+    await t.pedir({ clase: "gestor", accion: "vincular", conector: "jira", sitio: "c1", proyecto: "IXCODE" });
+
+    const { descripcion: _d, ...sinDescripcion } = TAREA;
+    expect(await t.pedir({ clase: "gestor", accion: "pendientes", texto: "panel" })).toEqual({
+      clase: "gestor",
+      pendientes: { cuando: expect.any(Number), texto: "panel", lista: [sinDescripcion] },
+    });
+    falla = new Error("«jira» no está conectado");
+    expect((await t.pedir({ clase: "gestor", accion: "pendientes" }))?.error).toEqual({ accion: "pendientes", motivo: "«jira» no está conectado" });
+    falla = Object.assign(new Error(`EACCES: open '${t.raiz}/x'`), { code: "EACCES" });
+    expect((await t.pedir({ clase: "gestor", accion: "pendientes" }))?.error).toEqual({ accion: "pendientes", motivo: "EACCES" });
+    expect(JSON.stringify(t.cliente.recibidos)).not.toContain(t.raiz);
+    await t.limpiar();
+  });
+
+  it("el gestor es UNO por conector, y sus sitios se preguntan UNA vez antes de las pendientes", async () => {
+    const instancias: GestorDeTareasPort[] = [];
+    let sitios = 0;
+    const t = await abrir(
+      {
+        // Una instancia NUEVA en cada llamada: la memoria es de `montarRutas`, no de la fábrica.
+        gestorDeTareas: () => {
+          const g = new GestorDeTareasEnMemoria(datos());
+          const original = g.sitios.bind(g);
+          g.sitios = async () => {
+            sitios++;
+            return original();
+          };
+          instancias.push(g);
+          return g;
+        },
+      },
+      { modo: "offline", gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } },
+    );
+    await t.pedir({ clase: "gestor", accion: "pendientes" });
+    await t.pedir({ clase: "gestor", accion: "pendientes" });
+    expect(instancias).toHaveLength(1);
+    expect(sitios).toBe(1);
+    await t.limpiar();
+  });
+
+  /**
+   * Con el adaptador de Jira DE VERDAD y un `llamar` que contesta las formas medidas: el enlace
+   * de cada tarea sale de la url del sitio, que el adaptador solo sabe después de `sitios()`. Sin
+   * la pregunta previa de `montarRutas`, las pendientes llegarían sin `url`.
+   */
+  it("con el adaptador de Jira real, las pendientes llegan CON su enlace y «Empezar» abre sesión con ticket", async () => {
+    const llamadas: string[] = [];
+    const jira = async (nombre: string, args: Record<string, unknown>): Promise<string> => {
+      llamadas.push(nombre);
+      const issue = {
+        id: "1", key: "IXCODE-12",
+        fields: {
+          summary: "El panel del proyecto",
+          description: "Pestañas y **pendientes**.",
+          status: { name: "Por hacer", statusCategory: { key: "new" } },
+          assignee: { displayName: "Ana", emailAddress: "ana@xone.es", accountId: "acc-1" },
+        },
+      };
+      if (nombre === "getAccessibleAtlassianResources") return JSON.stringify([{ id: "c1", url: "https://xone.atlassian.net", name: "xone", scopes: [], avatarUrl: "" }]);
+      if (nombre === "searchJiraIssuesUsingJql") return JSON.stringify({ issues: [issue], isLast: true });
+      if (nombre === "getJiraIssue") return JSON.stringify(issue);
+      throw new Error(`tool inesperada ${nombre} ${JSON.stringify(args)}`);
+    };
+    const doble = servicioDeConectoresDeMentira();
+    const cableado = ajusteDeGestorCableado({ conectores: (cb) => ({ ...doble.fabrica(cb), llamar: (id, n, a) => (id === "jira" ? jira(n, a) : Promise.reject(new Error("otro"))) }) });
+    const t = await abrir(cableado, { modo: "offline", gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } });
+
+    const pendientes = await t.pedir({ clase: "gestor", accion: "pendientes" });
+    expect(pendientes?.pendientes?.lista).toEqual([
+      { clave: "IXCODE-12", titulo: "El panel del proyecto", estado: "Por hacer", categoria: "por-hacer", asignado: "Ana", url: "https://xone.atlassian.net/browse/IXCODE-12" },
+    ]);
+    // Ni el correo ni el id de la cuenta cruzan.
+    expect(JSON.stringify(t.cliente.recibidos)).not.toContain("ana@xone.es");
+    expect(JSON.stringify(t.cliente.recibidos)).not.toContain("acc-1");
+
+    // «Empezar»: una sesión NUEVA, con el ticket estampado en ELLA, y el borrador.
+    const antes = t.vestibulo.proyectoAbierto()!;
+    const fijados: { hilo: string; ticket: unknown }[] = [];
+    const abrirDeVerdad = t.vestibulo.abrirProyecto.bind(t.vestibulo);
+    t.vestibulo.abrirProyecto = async (apertura) => {
+      const c = await abrirDeVerdad(apertura);
+      const fijar = c.fijarTicket.bind(c);
+      c.fijarTicket = (ticket) => {
+        fijados.push({ hilo: c.idDeHilo, ticket });
+        fijar(ticket);
+      };
+      return c;
+    };
+    const borrador = await t.pedir({ clase: "gestor", accion: "empezar", clave: "IXCODE-12" });
+    expect(borrador).toEqual({
+      clase: "gestor",
+      borrador: {
+        clave: "IXCODE-12",
+        texto:
+          "Trabaja en esta tarea de Jira.\n\n" +
+          "IXCODE-12 \u2014 El panel del proyecto\n" +
+          "Estado: Por hacer\n" +
+          "https://xone.atlassian.net/browse/IXCODE-12\n\n" +
+          "Pestañas y **pendientes**.",
+      },
+    });
+    const ahora = t.vestibulo.proyectoAbierto()!;
+    expect(ahora.raiz).toBe(antes.raiz);
+    expect(ahora.idDeHilo).not.toBe(antes.idDeHilo);
+    expect(fijados).toEqual([{ hilo: ahora.idDeHilo, ticket: { conector: "jira", sitio: "c1", clave: "IXCODE-12" } }]);
+    // Los sitios se preguntaron UNA vez para las dos acciones.
+    expect(llamadas.filter((n) => n === "getAccessibleAtlassianResources")).toHaveLength(1);
+    await t.limpiar();
+  });
+
+  it("«Empezar» con una ficha que falla no abre ninguna sesión", async () => {
+    const t = await abrir(
+      { gestorDeTareas: () => new GestorDeTareasEnMemoria(datos()) },
+      { modo: "offline", gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } },
+    );
+    const antes = t.vestibulo.proyectoAbierto()!.idDeHilo;
+    expect((await t.pedir({ clase: "gestor", accion: "empezar", clave: "IXCODE-99" }))?.error)
+      .toEqual({ accion: "empezar", motivo: "no existe IXCODE-99" });
+    expect(t.vestibulo.proyectoAbierto()!.idDeHilo).toBe(antes);
+    await t.limpiar();
+  });
+});
+
+/**
+ * `ajusteDeGestorCableado` es la composición de producción: el gestor de `"jira"` es UNO, llama
+ * por el MISMO servicio que la fábrica `conectores` construyó, y cualquier otro conector no es un
+ * gestor. Con la fábrica REAL de conectores y el HOME mudado: `sitios()` contesta «no está
+ * conectado», que es la prueba de que llega al `llamar` de verdad — sin red.
+ */
+describe("el ajuste del gestor de tareas, cableado", () => {
+  it("un gestor para jira, el mismo siempre, sobre el servicio REAL de conectores", async () => {
+    const { conectores, gestorDeTareas } = ajusteDeGestorCableado(ajusteDeConectoresCableado({ casa: homedir() }));
+    conectores(() => {});
+    const jira = gestorDeTareas("jira");
+    expect(jira).toBeDefined();
+    expect(gestorDeTareas("jira")).toBe(jira);
+    expect(gestorDeTareas("deepwiki")).toBeUndefined();
+    await expect(jira!.sitios()).rejects.toThrow("«jira» no está conectado");
+  });
+
+  /** Y desde FUERA de `arrancarConsolaWeb`: sin el ajuste montado, `sitios` contestaría «esta
+   *  ejecución no tiene gestor de tareas»; montado, llega al servicio real y dice que falta conectar. */
+  it("arrancarConsolaWeb lo monta: `sitios` llega al servicio de conectores de verdad", async () => {
+    const raizDelCliente = mkdtempSync(join(tmpdir(), "xonecode-web-gestor-"));
+    writeFileSync(join(raizDelCliente, "index.html"), "<!doctype html>");
+    const cwd = mkdtempSync(join(tmpdir(), "xonecode-cwd-gestor-"));
+    mkdirSync(join(cwd, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(cwd, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    writeFileSync(join(cwd, ".xonecode", "cloudstudio", "sync.json"), "{}");
+    const rutas = new Map<string, ManejadorRuta>();
+    const cliente = clienteDeMentira();
+    await arrancarConsolaWeb({
+      puerto: 0,
+      abrir: false,
+      guion: true,
+      cwd,
+      raizDelCliente,
+      crearServidor: async () => ({
+        puerto: 4173,
+        direccion: "127.0.0.1",
+        token: "t0k3n",
+        url: "http://127.0.0.1:4173/?t=t0k3n",
+        registrarRuta: (metodo: string, ruta: string, manejador: ManejadorRuta) => {
+          rutas.set(`${metodo} ${ruta}`, manejador);
+        },
+        registrarRutaPublica: () => {},
+        cerrar: async () => {},
+      }),
+      vestibulo: vestibuloDePrueba(),
+      escribir: () => {},
+      esperarCierre: async () => {
+        await rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+        await asentar();
+        await enviarMensaje(rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "gestor", accion: "sitios", conector: "jira" });
+        for (let i = 0; i < 20 && !cliente.recibidos.some((m) => m.clase === "gestor"); i++) await asentar();
+      },
+    });
+    expect(cliente.recibidos.filter((m) => m.clase === "gestor")).toEqual([
+      { clase: "gestor", error: { accion: "sitios", motivo: "«jira» no está conectado" } },
+    ]);
   });
 });

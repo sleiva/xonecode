@@ -12,6 +12,7 @@
  * guarda quien lo tiene en vuelo, que lo suelta en cuanto hay decisión.
  */
 import type { PlanEnDisco } from "../../agent/planesEnDisco.js";
+import type { TareaDelGestor, Vinculo } from "../../core/gestorDeTareas.js";
 import type { CambiosDeUnaColeccion } from "../../core/diffDeColecciones.js";
 import type { FotoDeColecciones } from "../../core/fotoDeColecciones.js";
 import type { InformeDeDispositivos, NombreDeHerramienta } from "../../core/dispositivos.js";
@@ -38,6 +39,10 @@ import type { DispositivoElegido } from "./sesiones.js";
 import type { Esfuerzo } from "../../core/esfuerzo.js";
 import type { AutenticacionDeConector, ConectorDelCable, DefinicionDeConector, FilaDeCatalogo } from "../../core/conectores.js";
 
+/** El vínculo del proyecto con su gestor, tal como cruza el cable: el del `config.json` más el
+ *  nombre del sitio si esta ejecución ya lo sabe (lo dijo `sitios()`). Ausente = no consta. */
+export type VinculoDelCable = Vinculo & { nombreDelSitio?: string };
+
 /**
  * El informe de `core/dispositivos.ts`. **La `ruta` de cada herramienta solo cruza para
  * `adb`/`emulator`** —la excepción declarada, igual que el workspace— y se quita en el
@@ -45,6 +50,7 @@ import type { AutenticacionDeConector, ConectorDelCable, DefinicionDeConector, F
  * cable puede ir por un túnel (`--anfitrion`) y esas dos nunca tuvieron un motivo para
  * cruzarlo.
  */
+
 export type InformeDeDispositivosDelCable = InformeDeDispositivos;
 
 /**
@@ -553,6 +559,23 @@ export type MensajeAlCliente =
    * casillas las marca el modelo—. Sin `planes` y con `error` si no se pudo leer.
    */
   | { clase: "planes"; planes?: PlanEnDisco[]; error?: string }
+  /**
+   * El gestor de tareas del proyecto abierto (IXCODE-11, panel del proyecto): UN mensaje con
+   * campos opcionales, como `planes`, y cada acción del cliente rellena el suyo. `error` dice
+   * QUÉ acción falló, porque el panel espera la respuesta de una en concreto. Nunca viaja un
+   * correo, un token ni una ruta de la máquina: del asignado, solo el nombre visible.
+   */
+  | {
+      clase: "gestor";
+      estado?: { conectores: string[]; vinculo?: VinculoDelCable };
+      sitios?: { conector: string; lista: { id: string; nombre: string }[] };
+      proyectos?: { sitio: string; lista: { clave: string; nombre: string }[] };
+      /** `cuando`: la hora del SERVIDOR a la que se preguntó, para decir «hace N min». */
+      pendientes?: { cuando: number; texto?: string; lista: TareaDelGestor[] };
+      /** El texto que el compositor PROPONE: lo envía la persona, no sale solo. */
+      borrador?: { clave: string; texto: string };
+      error?: { accion: string; motivo: string };
+    }
   | ({ clase: "fichero" } & FicheroDelProyecto)
   /**
    * El estado de sincronización del proyecto abierto (pestaña CloudStudio). Los campos van en
@@ -1439,6 +1462,20 @@ export type MensajeDelCliente =
   | { clase: "colecciones" }
   /** Pide los planes del proyecto abierto (pestaña Planes). */
   | { clase: "planes" }
+  /**
+   * El gestor de tareas del proyecto abierto (IXCODE-11). Leer (`estado`, `sitios`,
+   * `proyectos`, `pendientes`), vincular y desvincular el proyecto del gestor, marcar qué
+   * conectores usa, y `empezar`: abre una sesión NUEVA ligada a esa tarea y contesta con el
+   * borrador para el compositor. Nada de esto escribe en el gestor todavía.
+   */
+  | { clase: "gestor"; accion: "estado" }
+  | { clase: "gestor"; accion: "sitios"; conector: string }
+  | { clase: "gestor"; accion: "proyectos"; conector: string; sitio: string }
+  | { clase: "gestor"; accion: "vincular"; conector: string; sitio: string; proyecto: string }
+  | { clase: "gestor"; accion: "desvincular" }
+  | { clase: "gestor"; accion: "usarConector"; conector: string; usar: boolean }
+  | { clase: "gestor"; accion: "pendientes"; texto?: string }
+  | { clase: "gestor"; accion: "empezar"; clave: string }
   | { clase: "fichero"; ruta: string }
   /**
    * La sincronización con CloudStudio del proyecto abierto (pestaña CloudStudio).
