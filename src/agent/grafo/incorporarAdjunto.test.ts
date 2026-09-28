@@ -139,6 +139,27 @@ describe("incorporar_adjunto — rechaza, DEVUELVE el motivo y no crea nada", ()
     expect(readFileSync(join(raiz, "app.xml"), "utf8")).toBe("<app/>");
   });
 
+  /**
+   * APFS no distingue mayúsculas y `puedeLeerRuta` sí: `/.GIT/config` pasa el TEXTO. Lo para el
+   * `realpathSync.native` del ancestro, que devuelve el nombre como está en disco. Importa sobre
+   * todo sin nadie delante (modo autónomo, tarea de fondo): un `.git/config` pisado puede fijar
+   * `core.hooksPath` y ejecutar algo en la siguiente operación de git.
+   */
+  for (const [destino, real] of [["/.GIT/config", ".git/config"], ["/.ENV", ".env"], ["/.XONECODE/x.png", ".xonecode/x.png"]] as const) {
+    it(`sin mayúsculas: ${destino} no pisa ${real}`, async () => {
+      const { raiz, incorporar } = escenario();
+      mkdirSync(join(raiz, ".git"));
+      mkdirSync(join(raiz, ".xonecode"));
+      writeFileSync(join(raiz, ".git", "config"), "config");
+      writeFileSync(join(raiz, ".env"), "CLAVE=1");
+      const r = await incorporar("ic.png", destino);
+      expect(r).not.toMatch(/^Incorporado/);
+      expect(readFileSync(join(raiz, ".git", "config"), "utf8")).toBe("config");
+      expect(readFileSync(join(raiz, ".env"), "utf8")).toBe("CLAVE=1");
+      expect(readdirSync(join(raiz, ".xonecode"))).toEqual([]);
+    });
+  }
+
   it("un ADJUNTO que es un enlace hacia fuera de su carpeta no se copia", async () => {
     const { base, raiz, carpetaDeAdjuntos, incorporar } = escenario();
     writeFileSync(join(base, "secreto.txt"), "clave");
