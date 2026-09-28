@@ -18,7 +18,18 @@
  *
  * Este módulo es `core/`: datos puros, una lista blanca de forma y el texto con que se le
  * cuentan al agente. Quién los guarda y quién los monta es de `agent/`.
+ *
+ * **IXCODE-7 añade una SEGUNDA fuente**: los adjuntos que una persona anexa en el CHAT de una
+ * sesión, no al crear una tarea. Viven DENTRO del proyecto (`.xonecode/sesiones/<id>/adjuntos/`,
+ * `carpetaDeAdjuntosDeSesion`), hermana de `artefactos/` y con el mismo `segmentoSeguro` porque
+ * el id llega del cliente. Se enseñan por la MISMA `/adjuntos/`, pero el inventario que se le
+ * cuenta al agente cambia («de este MENSAJE» y no «de esta TAREA») y añade cómo meterlo en el
+ * proyecto: quien escribe tiene `incorporar_adjunto`, que pasa por la aprobación. `conAdjuntos`
+ * distingue los dos con un tercer parámetro (`de`), omisión `"tarea"` para no tocar el único
+ * llamador que ya existía (`web/servidor/corredorDeTareas.ts`).
  */
+import { join } from "node:path";
+import { segmentoSeguro } from "./settings.js";
 
 /**
  * El mime de un adjunto, por su EXTENSIÓN.
@@ -30,6 +41,16 @@
  * binario»).
  */
 export { mimeDeArtefacto as mimeDeAdjunto } from "./artefactos.js";
+
+/**
+ * Dónde caen en DISCO los adjuntos que una persona anexa en el CHAT de una sesión (IXCODE-7):
+ * `.xonecode/sesiones/<id>/adjuntos/`, HERMANA de `artefactos/`. A diferencia de los de una tarea
+ * (`~/.xonecode/tareas/<id>/adjuntos/`), una sesión ya tiene carpeta en el proyecto, y `.xonecode`
+ * no entra en git ni sube a CloudStudio. `segmentoSeguro`: el id llega del cliente.
+ */
+export function carpetaDeAdjuntosDeSesion(raiz: string, id: string): string {
+  return join(raiz, ".xonecode", "sesiones", segmentoSeguro(id, "id de sesión"), "adjuntos");
+}
 
 /** El prefijo virtual. Con barra final: `CompositeBackend` la exige para no reconstruir
  *  `//nombre` fuera de la raíz montada — la misma trampa medida con `/skills/`. */
@@ -88,16 +109,36 @@ const peso = (bytes: number): string =>
  * multimodal y es otra tanda). Solo si hay alguna: el aviso pegado a un `.md` sería ruido.
  * Prometerle que «mira» la captura y que la lea como bytes es la peor clase de mentira aquí,
  * porque quien se la cree es el modelo y contestará que la ha mirado.
+ *
+ * **`de` distingue de DÓNDE viene el adjunto** (IXCODE-7), porque el resto de la frase cambia
+ * con el origen: uno de TAREA lo anexó quien la creó, antes de que el agente exista; uno de
+ * MENSAJE lo anexa la persona EN el chat, a mitad de conversación, y además dice cómo llevarlo
+ * al proyecto (`incorporar_adjunto`, que pasa por la aprobación) — sin esa línea, el orquestador
+ * no tiene forma de saber que delegar «pon este icono en el menú» necesita nombrar el adjunto Y
+ * el destino. Omisión `"tarea"` para que el único llamador de hoy (`corredorDeTareas.ts`, con
+ * dos argumentos) no cambie de texto.
  */
-export function conAdjuntos(peticion: string, adjuntos: readonly AdjuntoNombrable[]): string {
+export function conAdjuntos(peticion: string, adjuntos: readonly AdjuntoNombrable[], de: "tarea" | "mensaje" = "tarea"): string {
   if (adjuntos.length === 0) return peticion;
   const hayImagen = adjuntos.some((a) => a.mime?.startsWith("image/") === true);
+  const cabecera =
+    de === "mensaje"
+      ? [
+          `ADJUNTOS DE ESTE MENSAJE (${adjuntos.length}). Los ha anexado la persona en el chat y están`,
+          `montados en «${RUTA_ADJUNTOS}», de SOLO lectura: se leen con las tools de fichero y no se`,
+          "pueden escribir ni borrar. No son ficheros del proyecto. Para meter uno en el proyecto (un",
+          "icono en `icons/`, por ejemplo), quien escribe en el proyecto tiene `incorporar_adjunto`, que",
+          "pasa por la aprobación: al delegar, di qué adjunto y dónde va.",
+        ]
+      : [
+          `ADJUNTOS DE ESTA TAREA (${adjuntos.length}). Los ha anexado la persona que la creó y están`,
+          `montados en «${RUTA_ADJUNTOS}», de SOLO lectura: se leen con las tools de fichero y no se`,
+          "pueden escribir ni borrar. No son ficheros del proyecto.",
+        ];
   return [
     peticion,
     "",
-    `ADJUNTOS DE ESTA TAREA (${adjuntos.length}). Los ha anexado la persona que la creó y están`,
-    `montados en «${RUTA_ADJUNTOS}», de SOLO lectura: se leen con las tools de fichero y no se`,
-    "pueden escribir ni borrar. No son ficheros del proyecto.",
+    ...cabecera,
     ...adjuntos.map((a) => `- ${RUTA_ADJUNTOS}${a.nombre} (${peso(a.bytes)}${a.mime === undefined ? "" : `, ${a.mime}`})`),
     ...(hayImagen
       ? [
