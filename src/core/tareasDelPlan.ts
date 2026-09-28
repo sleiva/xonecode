@@ -16,6 +16,11 @@
  *   «en curso» o un «hecha» son palabras del plan, y traducirlas sería decidir por él.
  * - Un fichero sin ninguna sección con forma de tarea no es un plan vacío: `tareas` va vacío y
  *   quien lo pinta enseña el texto entero.
+ * - La cabecera se reconoce también en la forma que el modelo escribe a veces fuera del formato,
+ *   `## T1 — Título` (nivel 2, prefijo `T`): visto en un plan real que la pestaña pintaba como
+ *   «sin tareas» con siete dentro. El número se conserva TAL CUAL (`T1`), porque es lo que
+ *   citan sus «Bloqueada por». Con ese prefijo solo cuenta como dependencia un número que lo
+ *   lleve: «T2 (resuelta la PENDIENTE 3)» es T2, no T2 y 3.
  */
 
 export interface TareaDelPlan {
@@ -39,7 +44,9 @@ export interface TareasDelPlan {
   tareas: TareaDelPlan[];
 }
 
-const CABECERA_DE_TAREA = /^###\s+(\d{1,3})\s*[—–-]\s*(.+?)\s*$/;
+const CABECERA_DE_TAREA = /^#{2,3}\s+(T?\d{1,3})\s*[—–-]\s*(.+?)\s*$/;
+/** «Ninguna …» o «nada»: la forma de decir que puede empezar ya. */
+export const SIN_DEPENDENCIAS = /^(ninguna|nada)\b/i;
 const ESTADO = /^\*\*Estado:\*\*\s*(.+?)\s*$/i;
 const BLOQUEADA = /^\*\*Bloqueada por:\*\*\s*(.+?)\s*$/i;
 const CASILLA = /^\s*[-*]\s+\[( |x|X)\]\s+/;
@@ -48,7 +55,8 @@ const CASILLA = /^\s*[-*]\s+\[( |x|X)\]\s+/;
  * Los números de tarea que nombra una línea «Bloqueada por». Un rango `01–07` (con guion,
  * raya o «a») se expande con el ancho del primero; «Ninguna» no nombra ninguno.
  */
-export function dependenciasDe(linea: string): string[] {
+export function dependenciasDe(linea: string, conPrefijo = /\bT\d/.test(linea)): string[] {
+  if (conPrefijo) return dependenciasConPrefijo(linea);
   const salida: string[] = [];
   const rango = /\b(\d{1,3})\s*(?:[–—-]|\ba\b)\s*(\d{1,3})\b/g;
   let resto = linea;
@@ -61,6 +69,20 @@ export function dependenciasDe(linea: string): string[] {
     resto = resto.replace(m[0], " ");
   }
   for (const m of resto.matchAll(/\b(\d{1,3})\b/g)) salida.push(m[1]!);
+  return [...new Set(salida)];
+}
+
+/** Las de un plan que numera `T1`, `T2`…: solo los números con prefijo, y `T1–T3` como rango. */
+function dependenciasConPrefijo(linea: string): string[] {
+  const salida: string[] = [];
+  let resto = linea;
+  for (const m of linea.matchAll(/\bT(\d{1,3})\s*(?:[–—-]|\ba\b)\s*T(\d{1,3})\b/g)) {
+    const desde = Number(m[1]);
+    const hasta = Number(m[2]);
+    if (hasta >= desde && hasta - desde < 100) for (let n = desde; n <= hasta; n++) salida.push(`T${n}`);
+    resto = resto.replace(m[0], " ");
+  }
+  for (const m of resto.matchAll(/\bT(\d{1,3})\b/g)) salida.push(`T${m[1]!}`);
   return [...new Set(salida)];
 }
 
@@ -87,14 +109,15 @@ export function leerTareasDelPlan(texto: string): TareasDelPlan {
         if (c[1] !== " ") hechos++;
       }
     }
-    // «Ninguna …» es la forma del formato de decir que puede empezar ya: no nombra tareas aunque
+    // «Ninguna …» (o «nada») es la forma del formato de decir que puede empezar ya: no nombra tareas aunque
     // la prosa de detrás lleve un número (una ruta, una línea de un fichero).
-    const nombra = bloqueadaPorTexto !== undefined && !/^ninguna\b/i.test(bloqueadaPorTexto);
+    const nombra = bloqueadaPorTexto !== undefined && !SIN_DEPENDENCIAS.test(bloqueadaPorTexto);
     tareas.push({
       numero: actual.numero,
       titulo: actual.titulo,
       ...(estado === undefined ? {} : { estado }),
-      bloqueadaPor: nombra ? dependenciasDe(bloqueadaPorTexto!) : [],
+      // La numeración la fija la TAREA: en un plan de `T1`, «PENDIENTE 5» no es la tarea 5.
+      bloqueadaPor: nombra ? dependenciasDe(bloqueadaPorTexto!, actual.numero.startsWith("T")) : [],
       ...(bloqueadaPorTexto === undefined ? {} : { bloqueadaPorTexto }),
       criterios: { hechos, total },
       cuerpo: actual.lineas.join("\n").trim(),

@@ -107,8 +107,8 @@ function Tarea({ tarea: t, abierta, alPulsar }: { tarea: TareaDelPlanDelCable; a
   // no merece línea.
   const soloNumeros =
     t.bloqueadaPorTexto === undefined ||
-    /^[\d\s,–—\-ay]+$/.test(t.bloqueadaPorTexto) ||
-    /^ninguna\b[\s—–-]*(puede empezar ya)?\.?$/i.test(t.bloqueadaPorTexto);
+    /^[\dT\s,–—\-ay]+$/.test(t.bloqueadaPorTexto) ||
+    /^(ninguna|nada)\b[\s—–-]*(puede empezar ya)?\.?$/i.test(t.bloqueadaPorTexto);
   return (
     <li className={estilos.tarea}>
       <button type="button" className={estilos.fila} aria-expanded={abierta} onClick={alPulsar}>
