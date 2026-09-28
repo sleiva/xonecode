@@ -293,11 +293,13 @@ export interface EstadoDelCliente {
    * ahí se llevaría la lista que se estaba mirando—.
    *
    * `errores` va por ACCIÓN, y cada error es un objeto NUEVO por mensaje (dos iguales seguidos
-   * son dos avisos); la respuesta buena de esa acción lo retira. `borrador` lleva un `id` que
-   * solo crece: quien lo consume mira el número, no el texto.
+   * son dos avisos); la respuesta buena de esa acción lo retira. `borrador` y `cerrado` llevan
+   * un `id` que solo crece: quien los consume mira el número, no el texto — la MISMA tarea
+   * empezada o cerrada dos veces son dos sucesos, no uno que se pisa (Task 11, IXCODE-11).
    */
-  gestor?: Omit<LecturaDelGestor, "error" | "borrador"> & {
+  gestor?: Omit<LecturaDelGestor, "error" | "borrador" | "cerrado"> & {
     borrador?: { clave: string; texto: string; id: number };
+    cerrado?: { clave: string; comento: boolean; transicion?: string; id: number };
     errores?: Partial<Record<string, { motivo: string }>>;
   };
   /**
@@ -1552,18 +1554,24 @@ export function crearStoreDelCliente(): {
         }
         case "gestor": {
           const leido = leerGestorDelCable(mensaje);
-          const { error, borrador, ...campos } = leido;
+          const { error, borrador, cerrado, ...campos } = leido;
           if (Object.keys(leido).length === 0) return;
           const antes = estado.gestor ?? {};
           const errores = { ...(antes.errores ?? {}) };
           // La respuesta buena de una acción retira SU error. Las tres que escriben la
           // configuración (vincular, desvincular, usarConector) contestan con `estado`.
+          // Task 11 (IXCODE-11): las tres respuestas de las tarjetas que escriben en Jira —
+          // `transiciones` es de su propia acción, `cierre` es la de `borradorDeCierre` y
+          // `cerrado` es la de `cerrar`, así que el nombre que retiran no es el del campo.
           const aciertos = [
             ...(campos.estado === undefined ? [] : ["estado", "vincular", "desvincular", "usarConector"]),
             ...(campos.sitios === undefined ? [] : ["sitios"]),
             ...(campos.proyectos === undefined ? [] : ["proyectos"]),
             ...(campos.pendientes === undefined ? [] : ["pendientes"]),
             ...(borrador === undefined ? [] : ["empezar"]),
+            ...(campos.transiciones === undefined ? [] : ["transiciones"]),
+            ...(campos.cierre === undefined ? [] : ["borradorDeCierre"]),
+            ...(cerrado === undefined ? [] : ["cerrar"]),
           ];
           for (const a of aciertos) delete errores[a];
           if (error !== undefined) errores[error.accion] = { motivo: error.motivo };
@@ -1572,6 +1580,7 @@ export function crearStoreDelCliente(): {
               ...antes,
               ...campos,
               ...(borrador === undefined ? {} : { borrador: { ...borrador, id: (antes.borrador?.id ?? 0) + 1 } }),
+              ...(cerrado === undefined ? {} : { cerrado: { ...cerrado, id: (antes.cerrado?.id ?? 0) + 1 } }),
               errores,
             },
           });

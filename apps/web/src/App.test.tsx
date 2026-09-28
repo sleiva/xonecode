@@ -2115,4 +2115,389 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Nueva sesión" }));
     expect(campo().value).toBe("");
   });
+
+  /**
+   * R8: el servidor manda `gestor.error{accion:"empezar"}` ANTES del `alta`/`borrador` de la
+   * sesión que se abre IGUAL cuando la transición falla (`arranque.ts#atenderGestor`). El
+   * cliente no lo puede decir como «empezar falló» —bloquearía o parecería deshacer la sesión
+   * nueva, que ya está abierta—: se dice en el CHAT, DESPUÉS de que el borrador llega.
+   */
+  it("R8: la transición fallida se dice en el CHAT tras el borrador, no bloquea la sesión nueva", () => {
+    const { store } = conProyectoAbierto();
+    fireEvent.click(enBarra("AppDemo"));
+    act(() =>
+      store.aplicar({ clase: "gestor", estado: { conectores: ["jira"], vinculo: { conector: "jira", sitio: "s", proyecto: "IXCODE" } } })
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Tareas" }));
+    act(() =>
+      store.aplicar({
+        clase: "gestor",
+        pendientes: { cuando: 1, lista: [{ clave: "IXCODE-12", titulo: "Menú", estado: "Por hacer", categoria: "por-hacer" }] },
+      })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Nueva sesión con IXCODE-12" }));
+    act(() =>
+      store.aplicar({
+        clase: "gestor",
+        transiciones: {
+          clave: "IXCODE-12",
+          para: "empezar",
+          propuesta: "11",
+          lista: [{ id: "11", nombre: "Empezar a hacer", destino: "EN CURSO", categoria: "en-curso" }],
+        },
+      })
+    );
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Pasar y empezar" }));
+
+    // El orden EXACTO del servidor: el error primero.
+    act(() => store.aplicar({ clase: "gestor", error: { accion: "empezar", motivo: "no se pudo transicionar" } }));
+    expect(screen.queryByText(/No se pudo pasar/)).toBeNull();
+    // Y solo DESPUÉS, el alta de la sesión nueva y el borrador.
+    act(() => store.aplicar(altaDe({ sesionActiva: "s9" })));
+    act(() =>
+      store.aplicar({ clase: "gestor", borrador: { clave: "IXCODE-12", texto: "Trabaja en esta tarea de Jira.\n\nIXCODE-12 — Menú" } })
+    );
+    // La sesión nueva se abrió igual: el borrador llegó al compositor, sin enviarse.
+    expect(enPanel()).toBe(false);
+    expect(campo().value).toBe("Trabaja en esta tarea de Jira.\n\nIXCODE-12 — Menú");
+    // Y el aviso, en el chat, con la frase que R8 pide.
+    expect(screen.getByText("No se pudo pasar IXCODE-12 a EN CURSO: no se pudo transicionar. La sesión se abrió igual.")).toBeTruthy();
+  });
+
+  /**
+   * El otro lado de R8: `g.ficha()` —o `vinculo`/`gestorOFallo`— falla ANTES de intentar
+   * ninguna transición, y ahí el servidor SÍ corta: `return fallo(...)`, sin `abrirProyecto`.
+   * La señal de que esto pasó es el `alta` que el `finally` reanuncia con la MISMA sesión de
+   * antes (`arranque.ts#atenderGestor`) — nunca llega ningún `borrador`. La tarjeta tiene que
+   * soltar el candado con esa señal, no quedarse enviando para siempre.
+   */
+  it("un fallo TOTAL (sin sesión que abrir) suelta la tarjeta: el `alta` vuelve con la MISMA sesión, sin borrador", () => {
+    const { store } = conProyectoAbierto();
+    fireEvent.click(enBarra("AppDemo"));
+    act(() =>
+      store.aplicar({ clase: "gestor", estado: { conectores: ["jira"], vinculo: { conector: "jira", sitio: "s", proyecto: "IXCODE" } } })
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Tareas" }));
+    act(() =>
+      store.aplicar({
+        clase: "gestor",
+        pendientes: { cuando: 1, lista: [{ clave: "IXCODE-12", titulo: "Menú", estado: "Por hacer", categoria: "por-hacer" }] },
+      })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Nueva sesión con IXCODE-12" }));
+    act(() =>
+      store.aplicar({
+        clase: "gestor",
+        transiciones: {
+          clave: "IXCODE-12",
+          para: "empezar",
+          propuesta: "11",
+          lista: [{ id: "11", nombre: "Empezar a hacer", destino: "EN CURSO", categoria: "en-curso" }],
+        },
+      })
+    );
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Pasar y empezar" }));
+    act(() => store.aplicar({ clase: "gestor", error: { accion: "empezar", motivo: "no se pudo leer la tarea en Jira" } }));
+    const dialogo = screen.getByRole("dialog");
+    for (const nombre of ["Pasar y empezar", "Empezar sin tocar Jira", "Cancelar"]) {
+      expect((within(dialogo).getByRole("button", { name: nombre }) as HTMLButtonElement).disabled).toBe(true);
+    }
+    // El `finally` reanuncia el alta con la MISMA sesión («s1»): no se abrió nada.
+    act(() => store.aplicar(altaDe({ sesionActiva: "s1" })));
+    for (const nombre of ["Pasar y empezar", "Empezar sin tocar Jira", "Cancelar"]) {
+      expect((within(dialogo).getByRole("button", { name: nombre }) as HTMLButtonElement).disabled).toBe(false);
+    }
+    // Y ahora sí se puede cerrar, por cualquiera de las tres puertas.
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    // No se abrió ninguna sesión nueva, ni se envió nada al compositor.
+    expect(enPanel()).toBe(true);
+  });
+
+  /**
+   * Un `alta` con la MISMA sesión no basta por sí solo: llega por motivos que no tienen nada
+   * que ver con este `empezar` en marcha —una tarea de fondo, otra pestaña, el `historica`/git
+   * diferido—, y soltar el candado ahí reabriría la ventana de doble envío mientras
+   * `g.ficha()`/`g.transicionar()` siguen en el aire. Hace falta TAMBIÉN un error de ESTE
+   * intento.
+   */
+  it("un `alta` con la MISMA sesión pero SIN error de por medio no suelta la tarjeta", () => {
+    const { store } = conProyectoAbierto();
+    fireEvent.click(enBarra("AppDemo"));
+    act(() =>
+      store.aplicar({ clase: "gestor", estado: { conectores: ["jira"], vinculo: { conector: "jira", sitio: "s", proyecto: "IXCODE" } } })
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Tareas" }));
+    act(() =>
+      store.aplicar({
+        clase: "gestor",
+        pendientes: { cuando: 1, lista: [{ clave: "IXCODE-12", titulo: "Menú", estado: "Por hacer", categoria: "por-hacer" }] },
+      })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Nueva sesión con IXCODE-12" }));
+    act(() =>
+      store.aplicar({
+        clase: "gestor",
+        transiciones: {
+          clave: "IXCODE-12",
+          para: "empezar",
+          propuesta: "11",
+          lista: [{ id: "11", nombre: "Empezar a hacer", destino: "EN CURSO", categoria: "en-curso" }],
+        },
+      })
+    );
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Pasar y empezar" }));
+    // Un `alta` de la MISMA sesión, pero sin que haya llegado ningún error todavía: por
+    // ejemplo, el aviso de que una tarea en background empezó a trabajar.
+    act(() => store.aplicar(altaDe({ sesionActiva: "s1" })));
+    const dialogo = screen.getByRole("dialog");
+    for (const nombre of ["Pasar y empezar", "Empezar sin tocar Jira", "Cancelar"]) {
+      expect((within(dialogo).getByRole("button", { name: nombre }) as HTMLButtonElement).disabled).toBe(true);
+    }
+  });
+
+});
+
+/**
+ * Task 11 (IXCODE-11): «Cerrar en Jira», el botón de una sesión ligada a un ticket. La sesión
+ * `s1` de `AppDemo` (`altaDe`, arriba) ya viaja con `ticket: "IXCODE-12"` y es la ABIERTA por
+ * omisión en `conProyectoAbierto()`.
+ */
+describe("App: «Cerrar en Jira» (Task 11, IXCODE-11)", () => {
+  const altaDe = (extra: Record<string, unknown> = {}) => ({
+    clase: "alta",
+    pasos: [],
+    proveedores: [],
+    entornos: [],
+    registrados: [{ id: "webstudio", nombre: "WebStudio", url: "https://x/mcp" }],
+    entornoActivo: "webstudio",
+    proyectos: [
+      { id: "p1", nombre: "AppDemo", local: true, sesiones: [{ id: "s1", titulo: "Menú lateral", ticket: "IXCODE-12" }] },
+      { id: "p2", nombre: "Tienda", local: true },
+    ],
+    ramas: [],
+    proyectoAbierto: true,
+    proyectoActivo: "p1",
+    sesionActiva: "s1",
+    ...extra,
+  });
+
+  function conProyectoAbierto() {
+    const store = crearStoreDelCliente();
+    const enviar: Mock<(mensaje: unknown) => Promise<unknown>> = vi.fn(() => Promise.resolve(undefined as unknown));
+    render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} instalarSkill={instalarSkillDeMentira} />);
+    act(() => store.marcarConectado());
+    act(() => store.aplicar(altaDe()));
+    return { store, enviar };
+  }
+
+  it("se ve con un ticket en la sesión abierta, y se apaga con un turno en vuelo", () => {
+    const { store } = conProyectoAbierto();
+    expect(screen.getByRole("button", { name: "Cerrar en Jira" })).toBeTruthy();
+    expect(screen.getByText("IXCODE-12")).toBeTruthy();
+    act(() => store.aplicar({ clase: "turno", activo: true }));
+    expect(screen.queryByRole("button", { name: "Cerrar en Jira" })).toBeNull();
+    act(() => store.aplicar({ clase: "turno", activo: false }));
+    expect(screen.getByRole("button", { name: "Cerrar en Jira" })).toBeTruthy();
+  });
+
+  it("una sesión SIN ticket no lo ofrece", () => {
+    const { store } = conProyectoAbierto();
+    act(() =>
+      store.aplicar(
+        altaDe({
+          sesionActiva: "s2",
+          proyectos: [
+            { id: "p1", nombre: "AppDemo", local: true, sesiones: [{ id: "s1", titulo: "Menú lateral", ticket: "IXCODE-12" }, { id: "s2", titulo: "Suelta" }] },
+          ],
+        })
+      )
+    );
+    expect(screen.queryByRole("button", { name: "Cerrar en Jira" })).toBeNull();
+  });
+
+  it("pulsarlo pide el borrador del comentario Y las transiciones de cierre; la tarjeta se abre TRAS «cierre»", () => {
+    const { enviar } = conProyectoAbierto();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar en Jira" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "gestor", accion: "borradorDeCierre" });
+    expect(enviar).toHaveBeenCalledWith({ clase: "gestor", accion: "transiciones", clave: "IXCODE-12", para: "cerrar" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("button", { name: "Preparando…" })).toBeTruthy();
+  });
+
+  it("«cierre» abre la tarjeta con el comentario EDITABLE; confirmar manda `cerrar`, y `cerrado` la cierra con un aviso en el chat", () => {
+    const { store, enviar } = conProyectoAbierto();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar en Jira" }));
+    act(() => store.aplicar({ clase: "gestor", cierre: { clave: "IXCODE-12", comentario: "IXCODE-12: comentado." } }));
+    const dialogo = screen.getByRole("dialog", { name: "Cerrar IXCODE-12 en Jira" });
+    expect((within(dialogo).getByRole("textbox", { name: "Comentario" }) as HTMLTextAreaElement).value).toBe("IXCODE-12: comentado.");
+
+    act(() =>
+      store.aplicar({
+        clase: "gestor",
+        transiciones: {
+          clave: "IXCODE-12",
+          para: "cerrar",
+          propuesta: "31",
+          lista: [{ id: "31", nombre: "Marcar como probada", destino: "PROBAR", categoria: "en-curso" }],
+        },
+      })
+    );
+    fireEvent.change(within(dialogo).getByRole("textbox", { name: "Comentario" }), {
+      target: { value: "IXCODE-12: comentado y pasado a PROBAR" },
+    });
+    enviar.mockClear();
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Comentar y pasar a PROBAR" }));
+    expect(enviar).toHaveBeenCalledWith({
+      clase: "gestor",
+      accion: "cerrar",
+      comentario: "IXCODE-12: comentado y pasado a PROBAR",
+      transicion: "31",
+    });
+
+    act(() => store.aplicar({ clase: "gestor", cerrado: { clave: "IXCODE-12", comento: true, transicion: "31" } }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByText("IXCODE-12: comentado y pasado a PROBAR")).toBeTruthy();
+  });
+
+  it("«Solo comentar» manda `cerrar` SIN transición", () => {
+    const { store, enviar } = conProyectoAbierto();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar en Jira" }));
+    act(() => store.aplicar({ clase: "gestor", cierre: { clave: "IXCODE-12", comentario: "x" } }));
+    enviar.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Solo comentar" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "gestor", accion: "cerrar", comentario: "x" });
+  });
+
+  it("un error de «cerrar» deja la tarjeta abierta con el motivo y el texto EDITADO intacto", () => {
+    const { store } = conProyectoAbierto();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar en Jira" }));
+    act(() => store.aplicar({ clase: "gestor", cierre: { clave: "IXCODE-12", comentario: "propuesto" } }));
+    const dialogo = screen.getByRole("dialog");
+    fireEvent.change(within(dialogo).getByRole("textbox", { name: "Comentario" }), { target: { value: "lo que escribí" } });
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Solo comentar" }));
+    act(() => store.aplicar({ clase: "gestor", error: { accion: "cerrar", motivo: "la conexión con Jira falló" } }));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(within(dialogo).getByRole("alert").textContent).toBe("la conexión con Jira falló");
+    expect((within(dialogo).getByRole("textbox", { name: "Comentario" }) as HTMLTextAreaElement).value).toBe("lo que escribí");
+  });
+
+  it("«Cancelar» cierra la tarjeta sin mandar nada", () => {
+    const { store, enviar } = conProyectoAbierto();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar en Jira" }));
+    act(() => store.aplicar({ clase: "gestor", cierre: { clave: "IXCODE-12", comentario: "x" } }));
+    enviar.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(enviar).not.toHaveBeenCalledWith(expect.objectContaining({ accion: "cerrar" }));
+  });
+
+  it("un fallo al pedir el borrador se dice como aviso corto, sin dejar el botón «Preparando…» para siempre", () => {
+    const { store } = conProyectoAbierto();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar en Jira" }));
+    act(() => store.aplicar({ clase: "gestor", error: { accion: "borradorDeCierre", motivo: "espera a que termine el turno" } }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("button", { name: "Cerrar en Jira" })).toBeTruthy();
+    expect(screen.getByText(/espera a que termine el turno/)).toBeTruthy();
+  });
+
+  it("un re-render por algo AJENO (turno, consumo…) no pisa la transición que la persona eligió en el desplegable", () => {
+    const { store } = conProyectoAbierto();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar en Jira" }));
+    act(() => store.aplicar({ clase: "gestor", cierre: { clave: "IXCODE-12", comentario: "x" } }));
+    const transiciones = {
+      clave: "IXCODE-12",
+      para: "cerrar" as const,
+      propuesta: "11",
+      lista: [
+        { id: "11", nombre: "Empezar a hacer", destino: "EN CURSO", categoria: "en-curso" as const },
+        { id: "31", nombre: "Marcar como probada", destino: "PROBAR", categoria: "en-curso" as const },
+      ],
+    };
+    act(() => store.aplicar({ clase: "gestor", transiciones }));
+    const dialogo = screen.getByRole("dialog");
+    fireEvent.change(within(dialogo).getByRole("combobox", { name: "Transición" }), { target: { value: "31" } });
+    expect(within(dialogo).getByRole("button", { name: "Comentar y pasar a PROBAR" })).toBeTruthy();
+    // Un turno EN VUELO no manda ningún mensaje del gestor, pero SÍ re-renderiza `App` entera.
+    act(() => store.aplicar({ clase: "turno", activo: true }));
+    act(() => store.aplicar({ clase: "turno", activo: false }));
+    expect(within(dialogo).getByRole("button", { name: "Comentar y pasar a PROBAR" })).toBeTruthy();
+  });
+
+  it("un error VIEJO de «cerrar» no se enseña en una tarjeta recién abierta (R6): solo el que llega DESPUÉS", () => {
+    const { store } = conProyectoAbierto();
+    // Un intento anterior (de otra sesión, o cancelado) dejó un error en el store.
+    act(() => store.aplicar({ clase: "gestor", error: { accion: "cerrar", motivo: "fallo de antes" } }));
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar en Jira" }));
+    act(() => store.aplicar({ clase: "gestor", cierre: { clave: "IXCODE-12", comentario: "x" } }));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("un fallo al consultar las transiciones de cierre se dice, sin impedir «Solo comentar»", () => {
+    const { store } = conProyectoAbierto();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar en Jira" }));
+    act(() => store.aplicar({ clase: "gestor", cierre: { clave: "IXCODE-12", comentario: "x" } }));
+    act(() => store.aplicar({ clase: "gestor", error: { accion: "transiciones", motivo: "Jira no contesta" } }));
+    const dialogo = screen.getByRole("dialog");
+    expect(within(dialogo).getByRole("alert").textContent).toBe("No se pudieron consultar las transiciones: Jira no contesta");
+    expect(within(dialogo).getByRole("button", { name: "Solo comentar" })).toBeTruthy();
+  });
+
+  /**
+   * El servidor atiende `borradorDeCierre` y `transiciones` a la vez (dos `atenderGestor` sin
+   * esperarse, `arranque.ts`), así que `error{transiciones}` puede llegar ANTES que `cierre`
+   * —el ORDEN inverso del test de arriba—. Si el snapshot de R6 se tomara al abrir la tarjeta
+   * (cuando llega `cierre`), este error —de ESTE mismo intento, no de uno viejo— quedaría
+   * marcado como «anterior a abrir» y se callaría: el snapshot tiene que tomarse al PEDIR.
+   */
+  it("un fallo al consultar las transiciones que llega ANTES que «cierre» se sigue enseñando", () => {
+    const { store } = conProyectoAbierto();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar en Jira" }));
+    act(() => store.aplicar({ clase: "gestor", error: { accion: "transiciones", motivo: "Jira no contesta" } }));
+    act(() => store.aplicar({ clase: "gestor", cierre: { clave: "IXCODE-12", comentario: "x" } }));
+    const dialogo = screen.getByRole("dialog");
+    expect(within(dialogo).getByRole("alert").textContent).toBe("No se pudieron consultar las transiciones: Jira no contesta");
+  });
+
+  /**
+   * R de la tarjeta: `cerrar` actúa sobre la sesión ABIERTA. Si la persona se muda a OTRA
+   * sesión mientras el cierre está pendiente o la tarjeta abierta, seguir mostrándola
+   * escribiría —o parecería escribir— sobre el ticket de una conversación que ya no es la
+   * que está delante.
+   */
+  it("cambiar de sesión suelta la tarjeta y los avisos pendientes de «Cerrar en Jira»", () => {
+    const { store } = conProyectoAbierto();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar en Jira" }));
+    act(() => store.aplicar({ clase: "gestor", cierre: { clave: "IXCODE-12", comentario: "x" } }));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    act(() =>
+      store.aplicar(
+        altaDe({
+          sesionActiva: "s2",
+          proyectos: [
+            { id: "p1", nombre: "AppDemo", local: true, sesiones: [{ id: "s1", titulo: "Menú lateral", ticket: "IXCODE-12" }, { id: "s2", titulo: "Suelta" }] },
+          ],
+        })
+      )
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cerrar en Jira" })).toBeNull();
+  });
+
+  /**
+   * `marcarDesconectado` tira `estado.gestor` entero (`store.ts`): la respuesta al
+   * `borradorDeCierre` que se pidió no va a volver NUNCA. Sin un reset al caerse el cable, el
+   * botón se quedaba diciendo «Preparando…» para siempre tras reconectar —la bienvenida trae
+   * un `alta` con la MISMA sesión, así que ni siquiera el reset por cambio de sesión lo salva.
+   */
+  it("una caída del cable mientras «Preparando…» no deja el botón bloqueado tras reconectar", () => {
+    const { store } = conProyectoAbierto();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar en Jira" }));
+    expect(screen.getByRole("button", { name: "Preparando…" })).toBeTruthy();
+    act(() => store.marcarDesconectado());
+    act(() => store.marcarConectado());
+    act(() => store.aplicar(altaDe()));
+    expect(screen.getByRole("button", { name: "Cerrar en Jira" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Preparando…" })).toBeNull();
+  });
 });

@@ -32,7 +32,8 @@ import { Ficheros } from "./componentes/Ficheros.js";
 import { CloudStudio } from "./componentes/CloudStudio.js";
 import { Artefactos, type ArtefactoEnLista } from "./componentes/Artefactos.js";
 import { TareasDelProyecto } from "./componentes/TareasDelProyecto.js";
-import { PanelDelProyecto } from "./componentes/PanelDelProyecto.js";
+import { PanelDelProyecto, type ContextoDeGestor, type PeticionAlGestor } from "./componentes/PanelDelProyecto.js";
+import { TarjetaDeCerrar, AvisoDelGestor, BotonDeCerrarEnJira } from "./componentes/TarjetaDeJira.js";
 import { Ejecutar } from "./componentes/Ejecutar.js";
 import { aplicarApariencia, guardarApariencia, leerApariencia, type Apariencia } from "./apariencia.js";
 import {
@@ -607,14 +608,244 @@ export function App({
    * misma tarea dos veces son dos borradores.
    */
   const borradorDelGestor = estado.gestor?.borrador;
+  /**
+   * `destinoDeEmpezarRef`: el `destino` (nombre de la transición) que `alGestor` captura al
+   * mandar `empezar` CON `transicion` — lo que el cable NUNCA lleva y R8 necesita para
+   * componer «No se pudo pasar IXCODE-12 a EN CURSO…» (más abajo, `alGestor`). Se declara
+   * aquí, ANTES de su primer lector, para no depender de que los efectos de este componente
+   * corran DESPUÉS de que el resto del cuerpo de la función haya terminado de ejecutarse.
+   */
+  const destinoDeEmpezarRef = useRef<{ clave: string; destino: string } | undefined>(undefined);
+  /**
+   * R8 (IXCODE-11): si la transición de «empezar» falla, el servidor manda `gestor.error`
+   * ANTES del `alta`/`borrador` de la sesión que se abre IGUAL (`arranque.ts#atenderGestor`,
+   * caso `empezar`). Para cuando el borrador llega, ese error ya se retiró de
+   * `estado.gestor.errores.empezar` —la MISMA respuesta que trae el borrador lo borra
+   * (`store.ts`)—, así que se captura en un ref al VUELO, en cuanto aparece, para poder
+   * leerlo todavía un instante después.
+   */
+  const errorDeEmpezarRef = useRef<{ motivo: string } | undefined>(undefined);
+  const errorDeEmpezar = estado.gestor?.errores?.empezar;
+  useEffect(() => {
+    if (errorDeEmpezar !== undefined) errorDeEmpezarRef.current = errorDeEmpezar;
+  }, [errorDeEmpezar]);
+  const [avisoDeEmpezar, setAvisoDeEmpezar] = useState<string | undefined>(undefined);
+  /**
+   * `empezarEnVuelo`: HAY un `empezar` esperando respuesta, ahora mismo — VIVE en `App` y no
+   * en `PanelDelProyecto` a propósito. Ese panel se DESMONTA con «Volver al chat» o con una
+   * espera de humano (`hayEsperaDeHumano`, más abajo), y un candado en su estado local se
+   * habría soltado SOLO con el desmontaje, dejando la fila re-habilitada mientras el
+   * `empezar` de antes seguía resolviendo en el servidor. Aquí sobrevive al panel.
+   *
+   * **Cuándo se suelta, y por qué NO basta con «llegó un error»** (bug medido: `g.ficha()` —
+   * la lectura de la tarea antes de intentar transicionar nada— es una llamada a Jira tan
+   * capaz de fallar como la propia transición, y ese fallo NUNCA llega a `abrirProyecto`; con
+   * transición, en cambio, el `catch` de `transicionar` no corta —`arranque.ts#atenderGestor`,
+   * caso `empezar`— y el servidor SIGUE hacia `abrirProyecto` pase lo que pase. Un error, por
+   * sí solo, no dice en cuál de los dos casos se está.
+   *
+   * La señal que SÍ lo dice es el `alta`: el `finally` de `atenderGestor` reanuncia SIEMPRE
+   * que no se llegó a mandar el borrador (`!anunciada`), y esa reanuncia trae la
+   * `sesionActiva` de ANTES —sin cambiar— porque no se abrió nada; el camino que SÍ abrió
+   * algo manda un `alta` con la sesión NUEVA (y el borrador, después). Por eso se suelta el
+   * candado cuando llega un `alta` fresco (cambia de identidad: es su PROPIO mensaje, no un
+   * re-render por otra cosa) cuya `sesionActiva` sigue siendo la de antes de pedir `empezar`
+   * —guardada en `sesionAlPedirEmpezarRef`—, o cuando llega el `borrador` (éxito).
+   *
+   * **Y hace falta una TERCERA condición, no solo las dos de arriba**: `estado.alta` también
+   * cambia por cosas que no tienen nada que ver con este `empezar` —una tarea de fondo que
+   * marca `trabajando`, otra pestaña, el `historica`/git diferido—, y cualquiera de ellas
+   * podría llegar mientras `g.ficha()`/`g.transicionar()` siguen en el aire, con la MISMA
+   * sesión todavía puesta. Por eso además hace falta que YA haya llegado un `error` de
+   * ESTE intento (`errorDeEmpezarRef.current !== undefined`, puesto por el efecto de
+   * arriba): todo camino de fallo total pasa por `fallo()` ANTES de que el `finally` mande
+   * el `alta`, así que exigirlo no cuesta nada en el caso real y cierra el hueco del falso
+   * positivo.
+   */
+  const [empezarEnVuelo, setEmpezarEnVuelo] = useState(false);
+  const sesionAlPedirEmpezarRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!empezarEnVuelo) return;
+    if (errorDeEmpezarRef.current === undefined) return;
+    if (estado.alta?.sesionActiva !== sesionAlPedirEmpezarRef.current) return;
+    setEmpezarEnVuelo(false);
+    // Se mira el OBJETO `alta` entero: es el único dato que dice «llegó un mensaje `alta`
+    // nuevo» — mirar `sesionActiva` a secas no distinguiría esto de cualquier otro re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estado.alta]);
   useEffect(() => {
     if (borradorDelGestor === undefined) return;
     setEnPanel(false);
     setEnEscritorio(false);
+    setEmpezarEnVuelo(false);
     setBorradorDelCompositor((b) => ({ texto: borradorDelGestor.texto, id: (b?.id ?? 0) + 1 }));
+    const error = errorDeEmpezarRef.current;
+    errorDeEmpezarRef.current = undefined;
+    const pendiente = destinoDeEmpezarRef.current;
+    destinoDeEmpezarRef.current = undefined;
+    // R8: NO es «empezar falló» — la sesión se abrió igual, y eso es lo que dice el aviso.
+    setAvisoDeEmpezar(
+      error === undefined
+        ? undefined
+        : `No se pudo pasar ${borradorDelGestor.clave} a ${pendiente?.clave === borradorDelGestor.clave ? pendiente.destino : "al estado pedido"}: ${error.motivo}. La sesión se abrió igual.`
+    );
     // Solo el id: el objeto cambia de identidad con cualquier otro mensaje del gestor.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [borradorDelGestor?.id]);
+
+  /**
+   * `alGestor`: el ÚNICO punto por el que sale una petición al gestor de tareas (Task 11,
+   * IXCODE-11), tanto para `PanelDelProyecto` como para «Cerrar en Jira» aquí abajo. Lo que
+   * el cable NUNCA lleva —el `destino` de la transición elegida al pulsar «Pasar y
+   * empezar»— se captura en `destinoDeEmpezarRef` (arriba), que el efecto de R8 consulta:
+   * `gestor.transiciones` puede ser ya el de OTRA clave para cuando la respuesta llegue,
+   * porque la sesión ya se mudó (`PanelDelProyecto.js#ContextoDeGestor`).
+   */
+  const alGestor = useCallback(
+    (peticion: PeticionAlGestor, contexto?: ContextoDeGestor): void => {
+      if (peticion.accion === "empezar") {
+        // Una tentativa NUEVA empieza LIMPIA: el motivo de un intento anterior con esta
+        // misma tarjeta —cancelado antes de que llegara su borrador— no se puede colar en
+        // el aviso de ESTA (mismo espíritu que R6, aplicado al ref en vez de al store).
+        errorDeEmpezarRef.current = undefined;
+        destinoDeEmpezarRef.current =
+          peticion.transicion === undefined || contexto?.destino === undefined
+            ? undefined
+            : { clave: peticion.clave, destino: contexto.destino };
+        setEmpezarEnVuelo(true);
+        sesionAlPedirEmpezarRef.current = estado.alta?.sesionActiva;
+      }
+      void enviar({ clase: "gestor", ...peticion } as MensajeDelCliente);
+    },
+    // `estado.alta?.sesionActiva` entra a propósito: sin ella, esta función se quedaría
+    // cerrada sobre la sesión de cuando `enviar` cambió de identidad (casi al montar), y
+    // `sesionAlPedirEmpezarRef` grabaría siempre la MISMA sesión vieja.
+    [enviar, estado.alta?.sesionActiva]
+  );
+
+  /**
+   * «Cerrar en Jira» (IXCODE-11): un botón en una sesión ligada a un ticket, visible sin turno
+   * en vuelo. Pide `borradorDeCierre` (el comentario propuesto) Y `transiciones` a la vez; la
+   * tarjeta se abre TRAS `cierre` —no al pulsar el botón—, así que nunca enseña un campo de
+   * texto vacío mientras espera: el comentario ya está cuando aparece.
+   */
+  const ticketDeLaSesion = estado.alta?.proyectos
+    .find((p) => p.id === proyectoActivoId)
+    ?.sesiones?.find((s) => s.id === estado.alta?.sesionActiva)?.ticket;
+  const [tarjetaCerrarAbierta, setTarjetaCerrarAbierta] = useState(false);
+  const [pidiendoCierre, setPidiendoCierre] = useState(false);
+  const [enviandoCerrar, setEnviandoCerrar] = useState(false);
+  const [avisoDeCierre, setAvisoDeCierre] = useState<string | undefined>(undefined);
+  const destinoDeCerrarRef = useRef<string | undefined>(undefined);
+  /** Lo que ya había en `errores.cerrar`/`errores.transiciones` cuando la tarjeta ABRIÓ (R6):
+   *  ver `erroresAlAbrirRef` de `PanelDelProyecto.tsx`, misma disciplina. */
+  const erroresAlAbrirCerrarRef = useRef<{ cerrar?: { motivo: string }; transiciones?: { motivo: string } }>({});
+
+  const cierreDelGestor = estado.gestor?.cierre;
+  const errorCerrar = estado.gestor?.errores?.cerrar;
+  const errorTransicionesDelGestor = estado.gestor?.errores?.transiciones;
+  useEffect(() => {
+    if (cierreDelGestor === undefined) return;
+    setPidiendoCierre(false);
+    setTarjetaCerrarAbierta(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cierreDelGestor]);
+  const errorBorradorDeCierre = estado.gestor?.errores?.borradorDeCierre;
+  useEffect(() => {
+    // Un fallo de `borradorDeCierre` no llega a abrir la tarjeta: se dice como el mismo aviso
+    // corto que un cierre logrado, en vez de dejar el botón «Preparando…» para siempre.
+    if (errorBorradorDeCierre === undefined) return;
+    setPidiendoCierre(false);
+    setAvisoDeCierre(`No se pudo preparar el cierre: ${errorBorradorDeCierre.motivo}`);
+  }, [errorBorradorDeCierre]);
+  useEffect(() => {
+    // `cerrar` NO tiene un «sigue igual» tras el fallo (a diferencia de `empezar`): si
+    // `comentar` o `transicionar` lanzan, el servidor sale al `catch` de fuera sin más
+    // intentos (Task 10) — así que cualquier error aquí SÍ es el final, y soltar el candado
+    // siempre es correcto. La tarjeta se queda abierta, con su motivo y el texto intacto.
+    if (errorCerrar !== undefined) setEnviandoCerrar(false);
+  }, [errorCerrar]);
+  const cerradoDelGestor = estado.gestor?.cerrado;
+  useEffect(() => {
+    if (cerradoDelGestor === undefined) return;
+    setTarjetaCerrarAbierta(false);
+    setEnviandoCerrar(false);
+    const destino = destinoDeCerrarRef.current;
+    destinoDeCerrarRef.current = undefined;
+    setAvisoDeCierre(`${cerradoDelGestor.clave}: comentado${destino === undefined ? "" : ` y pasado a ${destino}`}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cerradoDelGestor?.id]);
+  /**
+   * Cambiar de SESIÓN suelta todo lo pendiente de la anterior: `cerrar` actúa sobre la
+   * sesión ABIERTA (`arranque.ts#atenderGestor`), así que un `pidiendoCierre`/tarjeta/aviso
+   * que sobreviviera al cambio apuntaría al ticket de OTRA conversación. Cubre también el
+   * guardián de `cierreDelGestor.clave === ticketDeLaSesion` de más abajo: los dos juntos
+   * son lo que impide que la tarjeta se quede pintada sobre una sesión que ya no es la suya.
+   */
+  const sesionActivaActual = estado.alta?.sesionActiva;
+  useEffect(() => {
+    setPidiendoCierre(false);
+    setTarjetaCerrarAbierta(false);
+    setAvisoDeCierre(undefined);
+    // `avisoDeEmpezar` SÍ se resetea aquí, y es SEGURO pese a que «empezar» con éxito TAMBIÉN
+    // cambia `sesionActivaActual` (abre la sesión nueva): ese cambio llega con el `alta`, que
+    // es SIEMPRE anterior al `borrador` que compone el aviso (`arranque.ts#atenderGestor`,
+    // «el alta ANTES que el borrador»). El reset de aquí, pues, corre y no hace nada (el
+    // aviso todavía no existe); el `borrador` lo pone DESPUÉS, en un render posterior, sin que
+    // este efecto vuelva a dispararse (`sesionActivaActual` ya no cambia otra vez).
+    setAvisoDeEmpezar(undefined);
+    // `errorDeEmpezarRef`/`destinoDeEmpezarRef` NO se tocan aquí a propósito: los limpia
+    // `alGestor` al EMPEZAR cada tentativa nueva, no un cambio de sesión — limpiarlos aquí
+    // borraría el ref que R8 necesita leer DESPUÉS del `alta` que este mismo efecto observa.
+    destinoDeCerrarRef.current = undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sesionActivaActual]);
+  /**
+   * Al CAERSE el cable no va a volver ninguna respuesta a lo que estuviera en vuelo
+   * (`marcarDesconectado` tira `estado.gestor` entero, `store.ts`): un candado que sobreviva
+   * a la caída se queda cerrado para siempre, porque la bienvenida de la reconexión trae un
+   * `alta` con la MISMA sesión —la condición de «sigue igual» de arriba también se cumpliría,
+   * pero solo si además llegó un error, y aquí no llega ninguno—. Mismo motivo por el que el
+   * panel viejo lo hacía en su propio efecto de `conectado` antes de que este candado se
+   * mudara a `App` (Task 11).
+   */
+  useEffect(() => {
+    if (estado.conectado) return;
+    setEmpezarEnVuelo(false);
+    setPidiendoCierre(false);
+    setEnviandoCerrar(false);
+    setTarjetaCerrarAbierta(false);
+  }, [estado.conectado]);
+
+  const transicionesDelGestor = estado.gestor?.transiciones;
+  const transicionesDeCerrar =
+    transicionesDelGestor !== undefined &&
+    cierreDelGestor !== undefined &&
+    transicionesDelGestor.clave === cierreDelGestor.clave &&
+    transicionesDelGestor.para === "cerrar"
+      ? transicionesDelGestor
+      : undefined;
+  const errorCerrarAMostrar = errorCerrar !== erroresAlAbrirCerrarRef.current.cerrar ? errorCerrar : undefined;
+  const errorTransicionesCerrarAMostrar =
+    errorTransicionesDelGestor !== erroresAlAbrirCerrarRef.current.transiciones ? errorTransicionesDelGestor : undefined;
+
+  const alPedirCerrar = (): void => {
+    if (ticketDeLaSesion === undefined) return;
+    setPidiendoCierre(true);
+    // El snapshot de R6 se toma AQUÍ, al pedir —no cuando llega `cierre`—: el servidor
+    // atiende `borradorDeCierre` y `transiciones` a la vez (`arranque.ts`, dos `atenderGestor`
+    // sin esperarse), así que un `error{transiciones}` puede llegar ANTES que `cierre`. Si el
+    // snapshot se tomara al abrir la tarjeta, ese error —de ESTE mismo intento— quedaría
+    // marcado como «viejo» y se callaría, justo el fallo mudo que R6 existe para evitar.
+    erroresAlAbrirCerrarRef.current = { cerrar: errorCerrar, transiciones: errorTransicionesDelGestor };
+    alGestor({ accion: "borradorDeCierre" });
+    alGestor({ accion: "transiciones", clave: ticketDeLaSesion, para: "cerrar" });
+  };
+  const confirmarCerrar = (comentario: string, transicion?: string): void => {
+    destinoDeCerrarRef.current = transicion === undefined ? undefined : transicionesDeCerrar?.lista.find((t) => t.id === transicion)?.destino;
+    setEnviandoCerrar(true);
+    alGestor({ accion: "cerrar", comentario, ...(transicion === undefined ? {} : { transicion }) });
+  };
 
   /**
    * Una espera de HUMANO —aprobación, pregunta, secreto, selector— saca del panel al chat.
@@ -1795,6 +2026,50 @@ export function App({
           <>
             <AvisoDeConexion conectado={estado.conectado} />
             {/*
+              IXCODE-11: los avisos cortos de las dos tarjetas que escriben en Jira —el de
+              R8 («la sesión se abrió igual») y el de «Cerrar en Jira» al terminar—, y el
+              botón que abre esta última. Van ANTES del transcript, en la misma fila que la
+              conexión: no son conversación, son lo que el harness acaba de hacer sobre el
+              ticket de esta sesión.
+            */}
+            {avisoDeEmpezar === undefined ? null : (
+              <AvisoDelGestor texto={avisoDeEmpezar} alCerrar={() => setAvisoDeEmpezar(undefined)} />
+            )}
+            {avisoDeCierre === undefined ? null : (
+              <AvisoDelGestor texto={avisoDeCierre} alCerrar={() => setAvisoDeCierre(undefined)} />
+            )}
+            {/*
+              Visible SOLO con un ticket y SIN turno en vuelo: escribir sobre una sesión que
+              el agente sigue tocando compite con lo que está a punto de dejar (misma regla
+              que las dos puertas a una sesión nueva del panel).
+            */}
+            {ticketDeLaSesion === undefined || turnoEnVuelo ? null : (
+              <BotonDeCerrarEnJira ticket={ticketDeLaSesion} ocupado={pidiendoCierre} conectado={estado.conectado} alPedir={alPedirCerrar} />
+            )}
+            {/*
+              R de «Cerrar»: `cierre.clave` es el ticket que `borradorDeCierre` leyó de la
+              sesión ABIERTA en el momento de pedirlo — si la sesión cambió desde entonces
+              (`ticketDeLaSesion` ya es otro, o ninguno), la tarjeta no se pinta: escribiría
+              sobre un ticket que ya no es el de esta conversación. El efecto de
+              `sesionActivaActual` de arriba ya la cierra en ese mismo instante; esto es la
+              segunda llave, contra la tarjeta que la persona todavía tuviera delante.
+            */}
+            {!tarjetaCerrarAbierta || cierreDelGestor === undefined || cierreDelGestor.clave !== ticketDeLaSesion ? null : (
+              <TarjetaDeCerrar
+                clave={cierreDelGestor.clave}
+                comentario={cierreDelGestor.comentario}
+                // El objeto se pasa TAL CUAL —mismo porqué que en `PanelDelProyecto.tsx`—: un
+                // literal `{lista, propuesta}` fresco en cada render de `App` resetearía la
+                // transición que la persona acaba de elegir en el desplegable.
+                {...(transicionesDeCerrar === undefined ? {} : { transiciones: transicionesDeCerrar })}
+                {...(errorTransicionesCerrarAMostrar === undefined ? {} : { errorTransiciones: errorTransicionesCerrarAMostrar.motivo })}
+                enviando={enviandoCerrar}
+                {...(errorCerrarAMostrar === undefined ? {} : { error: errorCerrarAMostrar.motivo })}
+                alConfirmar={confirmarCerrar}
+                alCancelar={() => setTarjetaCerrarAbierta(false)}
+              />
+            )}
+            {/*
               La conversación, o el panel en su sitio si la ventana no da para los dos. La
               tira de pestañas ya no está aquí: se fue DENTRO del panel, que es de quien es
               (`Pestanas.tsx` cuenta las cuatro casas que ha tenido). Puesta aquí seguiría
@@ -2040,8 +2315,9 @@ export function App({
               // Con un turno en marcha el servidor no abre una sesión NUEVA —devuelve la que
               // trabaja—, y el panel lo dice con la vuelta al chat a mano.
               turnoEnVuelo={turnoEnVuelo}
+              empezarEnVuelo={empezarEnVuelo}
               alVolverAlChat={() => setEnPanel(false)}
-              alGestor={(peticion) => void enviar({ clase: "gestor", ...peticion } as MensajeDelCliente)}
+              alGestor={alGestor}
               alAbrirAjustesDeConectores={() => abrirAjustes("conectores")}
             />
           </>

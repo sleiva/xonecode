@@ -1,9 +1,10 @@
 import clsx from "clsx";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { EstadoDelCliente } from "../store.js";
 import type { MensajeDelCliente, PlanDelCable, SesionDelCable, TareaDelGestor } from "../tipos.js";
 import { IconoDeConector } from "./IconoDeConector.js";
 import { BarraDeProgreso, resumenDelPlan } from "./Planes.js";
+import { TarjetaDeEmpezar } from "./TarjetaDeJira.js";
 import conversacion from "../../estilos/ConversationRoot.module.css";
 import pestanas from "./Pestanas.module.css";
 import estilos from "./PanelDelProyecto.module.css";
@@ -13,6 +14,14 @@ export type MensajeDelGestor = Extract<MensajeDelCliente, { clase: "gestor" }>;
 /** Sin la `clase`: la pone quien envía. Distribuido sobre la unión, para que cada acción
  *  conserve SUS campos. */
 export type PeticionAlGestor = MensajeDelGestor extends infer M ? (M extends { clase: "gestor" } ? Omit<M, "clase"> : never) : never;
+/**
+ * Lo que acompaña a una petición al gestor y NO viaja por el cable (Task 11, IXCODE-11):
+ * hoy solo el `destino` (el nombre de la transición elegida) de un `empezar` CON `transicion`,
+ * que R8 necesita para componer «No se pudo pasar IXCODE-12 a EN CURSO…» en el chat DESPUÉS
+ * de que la sesión ya se haya mudado — momento en el que `gestor.transiciones` puede haber
+ * cambiado de clave, así que quien lo necesita lo captura AQUÍ, en el instante del envío.
+ */
+export type ContextoDeGestor = { destino?: string };
 
 type PestanaDelProyecto = "resumen" | "tareas" | "conectores";
 
@@ -55,6 +64,7 @@ export function PanelDelProyecto({
   conectores,
   conectado,
   turnoEnVuelo = false,
+  empezarEnVuelo,
   alVolverAlChat,
   alGestor,
   alAbrirAjustesDeConectores,
@@ -81,24 +91,39 @@ export function PanelDelProyecto({
    * con la sesión que trabaja, no con otra (el «+» de la barra se apaga por lo mismo).
    */
   turnoEnVuelo?: boolean;
+  /**
+   * HAY un `empezar` esperando respuesta, ahora mismo — de CUALQUIER tarea. Viene de `App` y
+   * no es estado local de este panel: el panel se DESMONTA con «Volver al chat» o con una
+   * espera de humano, y un candado local se habría soltado con el desmontaje, dejando la fila
+   * re-habilitada mientras el `empezar` de antes seguía resolviendo en el servidor. `App`
+   * sabe cuándo se suelta de verdad (ver su comentario: ni «llegó un error» basta, porque el
+   * servidor puede seguir camino a abrir la sesión aunque la transición haya fallado).
+   */
+  empezarEnVuelo: boolean;
   alVolverAlChat?: () => void;
-  alGestor: (peticion: PeticionAlGestor) => void;
+  alGestor: (peticion: PeticionAlGestor, contexto?: ContextoDeGestor) => void;
   alAbrirAjustesDeConectores: () => void;
 }) {
   const [pestana, setPestana] = useState<PestanaDelProyecto>("resumen");
   /**
-   * La clave cuya sesión se está abriendo, para que el botón lo diga (R6). Vive AQUÍ y no en la
-   * pestaña porque cambiar de pestaña no cancela nada en el servidor. Se suelta con la respuesta
-   * —el borrador, o el error de `empezar`— y al caerse el cable, que no traerá ninguna de las dos.
+   * La CLAVE de la tarea cuya tarjeta «Empezar» está abierta (Task 11, IXCODE-11); `undefined`
+   * es «cerrada». Vive AQUÍ y no en la pestaña porque cambiar de pestaña no cancela nada en el
+   * servidor. Se abre al pulsar la fila —que pide `transiciones`, de solo LECTURA— y solo se
+   * CIERRA sola con el borrador: un `empezar` puede fallar (transición rechazada) y la sesión
+   * abrirse igual, así que un error a secas deja la tarjeta a la vista con su motivo, no la
+   * cierra (R de la tarjeta: «Con un error… el diálogo sigue abierto»).
    */
-  const [empezando, setEmpezando] = useState<string | undefined>(undefined);
+  const [tarjetaEmpezar, setTarjetaEmpezar] = useState<string | undefined>(undefined);
   const errorDeEmpezar = gestor?.errores?.empezar;
+  const errorTransicionesDelGestor = gestor?.errores?.transiciones;
   const idDelBorrador = gestor?.borrador?.id;
   useEffect(() => {
-    setEmpezando(undefined);
-  }, [errorDeEmpezar, idDelBorrador]);
+    if (idDelBorrador === undefined) return;
+    setTarjetaEmpezar(undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idDelBorrador]);
   useEffect(() => {
-    if (!conectado) setEmpezando(undefined);
+    if (!conectado) setTarjetaEmpezar(undefined);
   }, [conectado]);
 
   // El estado del gestor se pide al montar: es lo que dice si hay vínculo, y sin él la pestaña
@@ -109,9 +134,32 @@ export function PanelDelProyecto({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const empezar = (clave: string): void => {
-    setEmpezando(clave);
-    alGestor({ accion: "empezar", clave });
+  /**
+   * Lo que ya había en `errores.empezar`/`errores.transiciones` AL ABRIR la tarjeta (R6): un
+   * fallo de un intento ANTERIOR no se enseña de rebote en una tarjeta recién abierta para
+   * otra tarea —o la misma, reabierta—; solo se enseña el que llega DESPUÉS.
+   */
+  const erroresAlAbrirRef = useRef<{ empezar?: { motivo: string }; transiciones?: { motivo: string } }>({});
+  /** Abre la tarjeta y pide sus transiciones (Task 10): de solo LECTURA, no escribe nada. */
+  const pedirEmpezar = (clave: string): void => {
+    setTarjetaEmpezar(clave);
+    erroresAlAbrirRef.current = { empezar: errorDeEmpezar, transiciones: errorTransicionesDelGestor };
+    alGestor({ accion: "transiciones", clave, para: "empezar" });
+  };
+  const transicionesDelGestor = gestor?.transiciones;
+  const transicionesDeEmpezar =
+    transicionesDelGestor !== undefined && transicionesDelGestor.clave === tarjetaEmpezar && transicionesDelGestor.para === "empezar"
+      ? transicionesDelGestor
+      : undefined;
+  const errorDeEmpezarAMostrar = errorDeEmpezar !== erroresAlAbrirRef.current.empezar ? errorDeEmpezar : undefined;
+  const errorTransicionesAMostrar = errorTransicionesDelGestor !== erroresAlAbrirRef.current.transiciones ? errorTransicionesDelGestor : undefined;
+  /** Confirmar es la ÚNICA vía por la que sale `empezar`: con o sin `transicion` elegida. */
+  const confirmarEmpezar = (transicion: string | undefined): void => {
+    if (tarjetaEmpezar === undefined) return;
+    // El destino se captura AQUÍ, del desplegable que la persona tiene delante: `gestor.transiciones`
+    // puede haber cambiado de clave para cuando la respuesta llegue (R8, `ContextoDeGestor`).
+    const destino = transicion === undefined ? undefined : transicionesDeEmpezar?.lista.find((t) => t.id === transicion)?.destino;
+    alGestor({ accion: "empezar", clave: tarjetaEmpezar, ...(transicion === undefined ? {} : { transicion }) }, { destino });
   };
 
   return (
@@ -166,10 +214,13 @@ export function PanelDelProyecto({
           <TareasDelGestor
             gestor={gestor}
             conectado={conectado}
-            empezando={empezando}
+            // `empezarEnVuelo` cubre el remonte: si el panel se desmontó («Volver al chat»)
+            // con un `empezar` todavía resolviendo, `tarjetaEmpezar` vuelve a `undefined`
+            // pero la fila no puede volver a lanzarlo hasta que `App` diga que terminó.
+            ocupado={tarjetaEmpezar !== undefined || empezarEnVuelo}
             turnoEnVuelo={turnoEnVuelo}
             alGestor={alGestor}
-            alEmpezar={empezar}
+            alEmpezar={pedirEmpezar}
             alIrAConectores={() => setPestana("conectores")}
           />
         ) : (
@@ -182,6 +233,23 @@ export function PanelDelProyecto({
           />
         )}
       </div>
+      {tarjetaEmpezar === undefined ? null : (
+        <TarjetaDeEmpezar
+          clave={tarjetaEmpezar}
+          // El objeto de `gestor.transiciones` se pasa TAL CUAL, sin envolverlo en un literal
+          // nuevo: un literal `{lista, propuesta}` fresco en CADA render (App se re-renderiza
+          // por consumo, turno, dispositivos…) le habría hecho creer a `useTransicionElegida`
+          // que llegó una lista NUEVA en cada uno, y le devolvía la propuesta a quien ya había
+          // elegido otra transición del desplegable. El objeto del store solo cambia de
+          // identidad cuando de verdad llega un `gestor.transiciones` nuevo (`store.ts`).
+          {...(transicionesDeEmpezar === undefined ? {} : { transiciones: transicionesDeEmpezar })}
+          {...(errorTransicionesAMostrar === undefined ? {} : { errorTransiciones: errorTransicionesAMostrar.motivo })}
+          enviando={empezarEnVuelo}
+          {...(errorDeEmpezarAMostrar === undefined ? {} : { error: errorDeEmpezarAMostrar.motivo })}
+          alConfirmar={confirmarEmpezar}
+          alCancelar={() => setTarjetaEmpezar(undefined)}
+        />
+      )}
     </section>
   );
 }
@@ -285,7 +353,7 @@ function Aviso({ error }: { error?: { motivo: string } }) {
 function TareasDelGestor({
   gestor,
   conectado,
-  empezando,
+  ocupado,
   turnoEnVuelo,
   alGestor,
   alEmpezar,
@@ -293,7 +361,8 @@ function TareasDelGestor({
 }: {
   gestor?: EstadoDelCliente["gestor"];
   conectado: boolean;
-  empezando?: string;
+  /** Hay una tarjeta «Empezar» abierta (para CUALQUIER tarea): mientras tanto no se abre otra. */
+  ocupado: boolean;
   turnoEnVuelo: boolean;
   alGestor: (peticion: PeticionAlGestor) => void;
   alEmpezar: (clave: string) => void;
@@ -370,7 +439,6 @@ function TareasDelGestor({
         </button>
       </form>
       <Aviso {...(errores.pendientes === undefined ? {} : { error: errores.pendientes })} />
-      {empezando === undefined ? <Aviso {...(errores.empezar === undefined ? {} : { error: errores.empezar })} /> : null}
       {pendientes === undefined ? (
         errores.pendientes === undefined ? <p className={estilos.aviso}>Consultando las tareas…</p> : null
       ) : pendientes.lista.length === 0 ? (
@@ -384,8 +452,7 @@ function TareasDelGestor({
               key={t.clave}
               tarea={t}
               conectado={conectado}
-              abriendo={empezando === t.clave}
-              ocupado={empezando !== undefined}
+              ocupado={ocupado}
               turnoEnVuelo={turnoEnVuelo}
               alEmpezar={() => alEmpezar(t.clave)}
             />
@@ -399,14 +466,13 @@ function TareasDelGestor({
 function FilaDeTarea({
   tarea: t,
   conectado,
-  abriendo,
   ocupado,
   turnoEnVuelo,
   alEmpezar,
 }: {
   tarea: TareaDelGestor;
   conectado: boolean;
-  abriendo: boolean;
+  /** Hay una tarjeta «Empezar» abierta, de CUALQUIER tarea: no se lanza una segunda. */
   ocupado: boolean;
   turnoEnVuelo: boolean;
   alEmpezar: () => void;
@@ -431,9 +497,9 @@ function FilaDeTarea({
           onClick={alEmpezar}
           disabled={!conectado || ocupado || turnoEnVuelo}
           {...(turnoEnVuelo ? { title: TITULO_CON_TURNO } : {})}
-          aria-label={abriendo ? `Abriendo la sesión de ${t.clave}…` : `Nueva sesión con ${t.clave}`}
+          aria-label={`Nueva sesión con ${t.clave}`}
         >
-          {abriendo ? "Abriendo…" : "Nueva sesión con esta tarea"}
+          Nueva sesión con esta tarea
         </button>
       </div>
     </li>

@@ -62,4 +62,46 @@ describe("leerGestorDelCable", () => {
     expect(leerGestorDelCable(undefined)).toEqual({});
     expect(leerGestorDelCable({ pendientes: { cuando: "ayer", lista: [] } })).toEqual({});
   });
+
+  /** Task 11 (IXCODE-11): las tres respuestas de las tarjetas que escriben en Jira. */
+  it("transiciones: copia la lista, deja fuera la que no tiene forma, y solo con `para` reconocido", () => {
+    expect(
+      leerGestorDelCable({
+        transiciones: {
+          clave: "IXCODE-12",
+          para: "empezar",
+          propuesta: "11",
+          lista: [
+            { id: "11", nombre: "Empezar a hacer", destino: "EN CURSO", categoria: "en-curso" },
+            { id: "22", nombre: "Mal", destino: "X" },
+          ],
+        },
+      })
+    ).toEqual({
+      transiciones: {
+        clave: "IXCODE-12",
+        para: "empezar",
+        propuesta: "11",
+        lista: [{ id: "11", nombre: "Empezar a hacer", destino: "EN CURSO", categoria: "en-curso" }],
+      },
+    });
+    expect(leerGestorDelCable({ transiciones: { clave: "IXCODE-12", para: "otra", lista: [] } })).toEqual({});
+  });
+
+  it("cierre: la clave y el comentario propuesto, tal cual", () => {
+    expect(leerGestorDelCable({ cierre: { clave: "IXCODE-12", comentario: "Hecho." } })).toEqual({
+      cierre: { clave: "IXCODE-12", comentario: "Hecho." },
+    });
+    expect(leerGestorDelCable({ cierre: { clave: "IXCODE-12" } })).toEqual({});
+  });
+
+  it("cerrado: la transición viaja SOLO si es texto, `comento` es obligatorio", () => {
+    expect(leerGestorDelCable({ cerrado: { clave: "IXCODE-12", comento: true, transicion: "31" } })).toEqual({
+      cerrado: { clave: "IXCODE-12", comento: true, transicion: "31" },
+    });
+    expect(leerGestorDelCable({ cerrado: { clave: "IXCODE-12", comento: true } })).toEqual({
+      cerrado: { clave: "IXCODE-12", comento: true },
+    });
+    expect(leerGestorDelCable({ cerrado: { clave: "IXCODE-12" } })).toEqual({});
+  });
 });

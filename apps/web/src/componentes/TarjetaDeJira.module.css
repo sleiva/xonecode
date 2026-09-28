@@ -1,0 +1,145 @@
+/* Las dos tarjetas que escriben en Jira (Task 11, IXCODE-11): la MISMA coraza de diálogo que
+   `Pregunta.module.css`/`NuevaSesion.module.css` —capa, velo, tarjeta centrada—, porque es la
+   misma familia de ventana y no una nueva. Alias comprobados contra
+   `apps/web/estilos/design-platform.css`: bg-layer-1, bg-layer-2, border-l2, label-primary,
+   label-secondary, label-tertiary, state-error-primary. El velo usa `--xonecode-velo` y el
+   aviso del chat `--xonecode-fila-hover`, los mismos tokens de marca que ya usan las otras
+   ventanas y `PanelDelProyecto.module.css#trabajando`. Los botones COMPONEN de
+   `Boton.module.css` y no redeclaran nada en la misma regla (`Boton.test.ts`). */
+
+/* El `dialog` del primitivo no trae posición: sus CSS Modules son stubs vacíos, así que sin
+   esto la tarjeta se pinta al final del `body`, debajo de la aplicación. */
+.capa {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+}
+
+.velo {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 24px;
+  background: var(--xonecode-velo);
+}
+
+.tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(420px, 100%);
+  padding: 16px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.titulo {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.aviso {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.select,
+.textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+}
+
+.textarea {
+  resize: vertical;
+}
+
+.error {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+}
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.principal {
+  composes: primario grande from "./Boton.module.css";
+}
+
+.accion {
+  composes: secundario grande from "./Boton.module.css";
+}
+
+.cancelar {
+  composes: secundario grande from "./Boton.module.css";
+}
+
+/* El botón «Cerrar en Jira» con la clave del ticket, en su propia fila entre la conexión y
+   el transcript. `.accion` es el mismo secundario+grande de siempre. */
+.barraDeTicket {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 6px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.ticket {
+  margin-right: auto;
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+}
+
+/* El aviso corto de R8: una fila entre la conexión y el transcript, nunca un diálogo — no hay
+   nada que decidir, solo algo que leer y descartar. */
+.avisoDelGestor {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--xonecode-fila-hover);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+}
+
+.cerrarAviso {
+  margin-left: auto;
+  padding: 0 4px;
+  border: none;
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}

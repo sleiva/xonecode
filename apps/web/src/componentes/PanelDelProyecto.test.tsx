@@ -45,6 +45,7 @@ function montar(extra: Partial<Props> = {}) {
     alAbrirSesion: vi.fn(),
     alNuevaSesion: vi.fn(),
     conectado: true,
+    empezarEnVuelo: false,
     alGestor,
     alAbrirAjustesDeConectores: vi.fn(),
     ...extra,
@@ -163,7 +164,7 @@ describe("PanelDelProyecto", () => {
     expect(screen.queryByText("Consultando las tareas…")).toBeNull();
   });
 
-  it("«Nueva sesión con esta tarea» pide empezar, dice «Abriendo…» y lo suelta con el error de empezar", () => {
+  it("«Nueva sesión con esta tarea» pide transiciones y abre la tarjeta «Empezar», en vez de `empezar` directo", () => {
     const pendientes = {
       cuando: 1,
       lista: [
@@ -174,16 +175,153 @@ describe("PanelDelProyecto", () => {
     const { alGestor, rerender } = montar({ gestor: { ...VINCULADO, pendientes } });
     pestana("Tareas");
     fireEvent.click(screen.getByRole("button", { name: "Nueva sesión con IXCODE-12" }));
-    expect(alGestor).toHaveBeenCalledWith({ accion: "empezar", clave: "IXCODE-12" });
-    const abriendo = screen.getByRole("button", { name: "Abriendo la sesión de IXCODE-12…" });
-    expect(abriendo.textContent).toBe("Abriendo…");
-    expect((abriendo as HTMLButtonElement).disabled).toBe(true);
-    // Mientras se abre una, no se lanza otra.
+    expect(alGestor).toHaveBeenCalledWith({ accion: "transiciones", clave: "IXCODE-12", para: "empezar" });
+    expect(alGestor).not.toHaveBeenCalledWith(expect.objectContaining({ accion: "empezar" }));
+    const dialogo = screen.getByRole("dialog");
+    expect(within(dialogo).getByText("Consultando las transiciones de IXCODE-12…")).toBeTruthy();
+    // Mientras la tarjeta está abierta, ninguna otra fila lanza una segunda.
     expect((screen.getByRole("button", { name: "Nueva sesión con IXCODE-13" }) as HTMLButtonElement).disabled).toBe(true);
 
-    rerender({ gestor: { ...VINCULADO, pendientes, errores: { empezar: { motivo: "no se pudo abrir una sesión nueva" } } } });
-    expect(screen.getByRole("alert").textContent).toBe("no se pudo abrir una sesión nueva");
-    expect((screen.getByRole("button", { name: "Nueva sesión con IXCODE-12" }) as HTMLButtonElement).disabled).toBe(false);
+    rerender({
+      gestor: { ...VINCULADO, pendientes, transiciones: { clave: "IXCODE-12", para: "empezar", lista: [], propuesta: undefined } },
+    });
+    expect(within(screen.getByRole("dialog")).getByText("No hay transiciones disponibles para IXCODE-12.")).toBeTruthy();
+    alGestor.mockClear();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Empezar sin tocar Jira" }));
+    expect(alGestor).toHaveBeenCalledWith({ accion: "empezar", clave: "IXCODE-12" }, { destino: undefined });
+
+    rerender({
+      gestor: {
+        ...VINCULADO,
+        pendientes,
+        transiciones: { clave: "IXCODE-12", para: "empezar", lista: [] },
+        errores: { empezar: { motivo: "no se pudo abrir una sesión nueva" } },
+      },
+    });
+    // El error se ve DENTRO de la tarjeta, que sigue abierta: no en la lista de pendientes.
+    expect(within(screen.getByRole("dialog")).getByRole("alert").textContent).toBe("no se pudo abrir una sesión nueva");
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  /**
+   * R8 (IXCODE-11): el `destino` de la transición elegida se captura en el momento del envío
+   * y viaja como SEGUNDO argumento de `alGestor`, que no cruza el cable — es lo que permite
+   * componer «No se pudo pasar IXCODE-12 a EN CURSO…» en el chat DESPUÉS de que la sesión ya
+   * se haya mudado, cuando `gestor.transiciones` puede ser ya el de otra clave.
+   */
+  it("«Pasar y empezar» manda el `destino` de la transición elegida, fuera del cable", () => {
+    const pendientes = { cuando: 1, lista: [{ clave: "IXCODE-12", titulo: "Menú", estado: "Por hacer", categoria: "por-hacer" as const }] };
+    const transiciones = {
+      clave: "IXCODE-12",
+      para: "empezar" as const,
+      propuesta: "11",
+      lista: [{ id: "11", nombre: "Empezar a hacer", destino: "EN CURSO", categoria: "en-curso" as const }],
+    };
+    const { alGestor, rerender } = montar({ gestor: { ...VINCULADO, pendientes } });
+    pestana("Tareas");
+    fireEvent.click(screen.getByRole("button", { name: "Nueva sesión con IXCODE-12" }));
+    rerender({ gestor: { ...VINCULADO, pendientes, transiciones } });
+    alGestor.mockClear();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Pasar y empezar" }));
+    expect(alGestor).toHaveBeenCalledWith({ accion: "empezar", clave: "IXCODE-12", transicion: "11" }, { destino: "EN CURSO" });
+  });
+
+  it("la tarjeta «Empezar» se cierra SOLA con el borrador, que es lo que dice que la sesión se abrió", () => {
+    const pendientes = { cuando: 1, lista: [{ clave: "IXCODE-12", titulo: "Menú", estado: "Por hacer", categoria: "por-hacer" as const }] };
+    const { rerender } = montar({ gestor: { ...VINCULADO, pendientes } });
+    pestana("Tareas");
+    fireEvent.click(screen.getByRole("button", { name: "Nueva sesión con IXCODE-12" }));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    rerender({ gestor: { ...VINCULADO, pendientes, borrador: { clave: "IXCODE-12", texto: "t", id: 1 } } });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("un re-render por algo AJENO (turnoEnVuelo, la misma lista de transiciones) no pisa lo que la persona eligió en el desplegable", () => {
+    const pendientes = { cuando: 1, lista: [{ clave: "IXCODE-12", titulo: "Menú", estado: "Por hacer", categoria: "por-hacer" as const }] };
+    const transiciones = {
+      clave: "IXCODE-12",
+      para: "empezar" as const,
+      propuesta: "11",
+      lista: [
+        { id: "11", nombre: "Empezar a hacer", destino: "EN CURSO", categoria: "en-curso" as const },
+        { id: "31", nombre: "Marcar como probada", destino: "PROBAR", categoria: "en-curso" as const },
+      ],
+    };
+    const { rerender } = montar({ gestor: { ...VINCULADO, pendientes } });
+    pestana("Tareas");
+    fireEvent.click(screen.getByRole("button", { name: "Nueva sesión con IXCODE-12" }));
+    rerender({ gestor: { ...VINCULADO, pendientes, transiciones } });
+    fireEvent.change(within(screen.getByRole("dialog")).getByRole("combobox", { name: "Transición" }), { target: { value: "31" } });
+    expect(screen.getByRole("dialog", { name: "¿Pasar IXCODE-12 a PROBAR?" })).toBeTruthy();
+    // MISMA identidad de `transiciones` (App se re-renderiza por consumo/turno/dispositivos…
+    // sin que llegue un `gestor.transiciones` nuevo): la elección tiene que sobrevivir.
+    rerender({ gestor: { ...VINCULADO, pendientes, transiciones }, turnoEnVuelo: false });
+    expect(screen.getByRole("dialog", { name: "¿Pasar IXCODE-12 a PROBAR?" })).toBeTruthy();
+  });
+
+  /**
+   * El candado de envío («¿sigue en vuelo un `empezar`?») lo decide `App` —no este panel, que
+   * se DESMONTA con «Volver al chat»— y llega como prop `empezarEnVuelo`; aquí solo se
+   * comprueba que la tarjeta lo OBEDECE, sea cual sea el motivo por el que `App` lo puso.
+   * El PORQUÉ de cuándo se suelta —ni «llegó un error» basta, por `g.ficha()` fallando antes
+   * de la transición— vive en `App.test.tsx`, donde está el dato que lo decide (`estado.alta`).
+   */
+  it("`empezarEnVuelo` (de App) es el candado de la tarjeta: deshabilita sus tres botones", () => {
+    const pendientes = { cuando: 1, lista: [{ clave: "IXCODE-12", titulo: "Menú", estado: "Por hacer", categoria: "por-hacer" as const }] };
+    const transiciones = {
+      clave: "IXCODE-12",
+      para: "empezar" as const,
+      propuesta: "11",
+      lista: [{ id: "11", nombre: "Empezar a hacer", destino: "EN CURSO", categoria: "en-curso" as const }],
+    };
+    const { rerender } = montar({ gestor: { ...VINCULADO, pendientes, transiciones } });
+    pestana("Tareas");
+    fireEvent.click(screen.getByRole("button", { name: "Nueva sesión con IXCODE-12" }));
+    const dialogo = screen.getByRole("dialog");
+    for (const nombre of ["Pasar y empezar", "Empezar sin tocar Jira", "Cancelar"]) {
+      expect((within(dialogo).getByRole("button", { name: nombre }) as HTMLButtonElement).disabled).toBe(false);
+    }
+    rerender({ gestor: { ...VINCULADO, pendientes, transiciones }, empezarEnVuelo: true });
+    for (const nombre of ["Pasar y empezar", "Empezar sin tocar Jira", "Cancelar"]) {
+      expect((within(dialogo).getByRole("button", { name: nombre }) as HTMLButtonElement).disabled).toBe(true);
+    }
+  });
+
+  /**
+   * `empezarEnVuelo` también apaga TODAS las filas, no solo la tarjeta abierta: cubre el
+   * remonte —«Volver al chat» y volver desmonta `PanelDelProyecto`, y `tarjetaEmpezar` local
+   * vuelve a `undefined`— sin que eso reabra la puerta a un segundo `empezar` mientras el
+   * primero sigue resolviendo en el servidor.
+   */
+  it("`empezarEnVuelo` deshabilita TODAS las filas, con o sin tarjeta abierta (sobrevive al remonte del panel)", () => {
+    const pendientes = {
+      cuando: 1,
+      lista: [
+        { clave: "IXCODE-12", titulo: "Menú", estado: "Por hacer", categoria: "por-hacer" as const },
+        { clave: "IXCODE-13", titulo: "Login", estado: "Por hacer", categoria: "por-hacer" as const },
+      ],
+    };
+    montar({ gestor: { ...VINCULADO, pendientes }, empezarEnVuelo: true });
+    pestana("Tareas");
+    expect((screen.getByRole("button", { name: "Nueva sesión con IXCODE-12" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Nueva sesión con IXCODE-13" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("un error VIEJO no se enseña en una tarjeta recién abierta (R6): solo el que llega DESPUÉS de abrirla", () => {
+    const pendientes = { cuando: 1, lista: [{ clave: "IXCODE-12", titulo: "Menú", estado: "Por hacer", categoria: "por-hacer" as const }] };
+    montar({ gestor: { ...VINCULADO, pendientes, errores: { empezar: { motivo: "fallo de un intento anterior" } } } });
+    pestana("Tareas");
+    fireEvent.click(screen.getByRole("button", { name: "Nueva sesión con IXCODE-12" }));
+    expect(within(screen.getByRole("dialog")).queryByRole("alert")).toBeNull();
+  });
+
+  it("un fallo al CONSULTAR las transiciones se enseña dentro de la tarjeta (R6)", () => {
+    const pendientes = { cuando: 1, lista: [{ clave: "IXCODE-12", titulo: "Menú", estado: "Por hacer", categoria: "por-hacer" as const }] };
+    const { rerender } = montar({ gestor: { ...VINCULADO, pendientes } });
+    pestana("Tareas");
+    fireEvent.click(screen.getByRole("button", { name: "Nueva sesión con IXCODE-12" }));
+    rerender({ gestor: { ...VINCULADO, pendientes, errores: { transiciones: { motivo: "Jira no contesta" } } } });
+    expect(within(screen.getByRole("dialog")).getByRole("alert").textContent).toBe("No se pudieron consultar las transiciones: Jira no contesta");
   });
 
   it("con un turno en vuelo «Nueva sesión con esta tarea» se apaga y dice por qué", () => {

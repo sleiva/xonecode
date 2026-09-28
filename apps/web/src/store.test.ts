@@ -313,6 +313,38 @@ describe("store del cliente", () => {
     expect(s.leer().gestor).toBeUndefined();
   });
 
+  /**
+   * Task 11 (IXCODE-11): las tres respuestas de las tarjetas que escriben en Jira. `cerrado`
+   * lleva su propio `id` monotónico, igual que `borrador`, y cada campo retira el error de SU
+   * propia acción — que no es el nombre del campo para `cierre` (viene de `borradorDeCierre`)
+   * ni para `cerrado` (viene de `cerrar`).
+   */
+  it("«gestor»: transiciones, cierre y cerrado retiran el error de SU acción, y cerrado lleva un id", () => {
+    const s = crearStoreDelCliente();
+    const alta = (proyectoActivo: string, sesionActiva: string) =>
+      s.aplicar({ clase: "alta", pasos: [], proveedores: [], entornos: [], proyectos: [], ramas: [], proyectoAbierto: true, proyectoActivo, sesionActiva });
+    alta("p1", "s1");
+
+    s.aplicar({ clase: "gestor", error: { accion: "transiciones", motivo: "no contesta" } });
+    expect(s.leer().gestor?.errores?.transiciones).toEqual({ motivo: "no contesta" });
+    s.aplicar({ clase: "gestor", transiciones: { clave: "IXCODE-12", para: "empezar", lista: [], propuesta: "11" } });
+    expect(s.leer().gestor?.transiciones).toEqual({ clave: "IXCODE-12", para: "empezar", lista: [], propuesta: "11" });
+    expect(s.leer().gestor?.errores?.transiciones).toBeUndefined();
+
+    s.aplicar({ clase: "gestor", error: { accion: "borradorDeCierre", motivo: "espera a que termine el turno" } });
+    expect(s.leer().gestor?.errores?.borradorDeCierre).toEqual({ motivo: "espera a que termine el turno" });
+    s.aplicar({ clase: "gestor", cierre: { clave: "IXCODE-12", comentario: "Hecho." } });
+    expect(s.leer().gestor?.cierre).toEqual({ clave: "IXCODE-12", comentario: "Hecho." });
+    expect(s.leer().gestor?.errores?.borradorDeCierre).toBeUndefined();
+
+    s.aplicar({ clase: "gestor", error: { accion: "cerrar", motivo: "el comentario no puede estar vacío" } });
+    expect(s.leer().gestor?.errores?.cerrar).toEqual({ motivo: "el comentario no puede estar vacío" });
+    s.aplicar({ clase: "gestor", cerrado: { clave: "IXCODE-12", comento: true, transicion: "31" } });
+    s.aplicar({ clase: "gestor", cerrado: { clave: "IXCODE-12", comento: true, transicion: "31" } });
+    expect(s.leer().gestor?.cerrado).toEqual({ clave: "IXCODE-12", comento: true, transicion: "31", id: 2 });
+    expect(s.leer().gestor?.errores?.cerrar).toBeUndefined();
+  });
+
   it("«colecciones» guarda la foto VALIDADA, y se tira al caerse el cable", () => {
     const s = crearStoreDelCliente();
     const foto = { colecciones: [], total: 0, entrada: [], login: [], rotas: [] };

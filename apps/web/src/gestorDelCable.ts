@@ -1,4 +1,4 @@
-import type { CategoriaDeTarea, TareaDelGestor, VinculoDelCable } from "./tipos.js";
+import type { CategoriaDeTarea, TareaDelGestor, TransicionDelGestor, VinculoDelCable } from "./tipos.js";
 
 /**
  * El mensaje `gestor` tal como llega por el cable, VALIDADO campo a campo (el molde de
@@ -10,6 +10,10 @@ import type { CategoriaDeTarea, TareaDelGestor, VinculoDelCable } from "./tipos.
  * de Jira a su `displayName`, y esta es la segunda llave. Un `emailAddress` que llegara por
  * error —en la tarea o en un asignado que viniera como objeto— no pasa de aquí: el asignado
  * solo se acepta como TEXTO, y un objeto no se escarba para sacarle el nombre.
+ *
+ * `transiciones`, `cierre` y `cerrado` son de Task 11 (IXCODE-11): las dos tarjetas de
+ * aprobación que escriben en Jira leen su forma de aquí, con la misma disciplina — lo que no
+ * tiene forma se descarta entero, nunca a medias.
  */
 export interface LecturaDelGestor {
   estado?: { conectores: string[]; vinculo?: VinculoDelCable };
@@ -17,6 +21,9 @@ export interface LecturaDelGestor {
   proyectos?: { sitio: string; lista: { clave: string; nombre: string }[] };
   pendientes?: { cuando: number; texto?: string; lista: TareaDelGestor[] };
   borrador?: { clave: string; texto: string };
+  transiciones?: { clave: string; para: "empezar" | "cerrar"; lista: TransicionDelGestor[]; propuesta?: string };
+  cierre?: { clave: string; comentario: string };
+  cerrado?: { clave: string; comento: boolean; transicion?: string };
   error?: { accion: string; motivo: string };
 }
 
@@ -32,6 +39,9 @@ export function leerGestorDelCable(mensaje: unknown): LecturaDelGestor {
   const proyectos = leerProyectos(mensaje.proyectos);
   const pendientes = leerPendientes(mensaje.pendientes);
   const borrador = leerBorrador(mensaje.borrador);
+  const transiciones = leerTransiciones(mensaje.transiciones);
+  const cierre = leerCierre(mensaje.cierre);
+  const cerrado = leerCerrado(mensaje.cerrado);
   const error = leerError(mensaje.error);
   return {
     ...(estado === undefined ? {} : { estado }),
@@ -39,6 +49,9 @@ export function leerGestorDelCable(mensaje: unknown): LecturaDelGestor {
     ...(proyectos === undefined ? {} : { proyectos }),
     ...(pendientes === undefined ? {} : { pendientes }),
     ...(borrador === undefined ? {} : { borrador }),
+    ...(transiciones === undefined ? {} : { transiciones }),
+    ...(cierre === undefined ? {} : { cierre }),
+    ...(cerrado === undefined ? {} : { cerrado }),
     ...(error === undefined ? {} : { error }),
   };
 }
@@ -109,6 +122,35 @@ function leerPendientes(v: unknown): LecturaDelGestor["pendientes"] {
 function leerBorrador(v: unknown): LecturaDelGestor["borrador"] {
   if (!esObjeto(v) || typeof v.clave !== "string" || typeof v.texto !== "string") return undefined;
   return { clave: v.clave, texto: v.texto };
+}
+
+function leerTransicion(t: unknown): TransicionDelGestor[] {
+  if (!esObjeto(t)) return [];
+  if (typeof t.id !== "string" || typeof t.nombre !== "string" || typeof t.destino !== "string") return [];
+  if (!CATEGORIAS.includes(t.categoria as CategoriaDeTarea)) return [];
+  return [{ id: t.id, nombre: t.nombre, destino: t.destino, categoria: t.categoria as CategoriaDeTarea }];
+}
+
+function leerTransiciones(v: unknown): LecturaDelGestor["transiciones"] {
+  if (!esObjeto(v) || typeof v.clave !== "string" || (v.para !== "empezar" && v.para !== "cerrar") || !Array.isArray(v.lista)) {
+    return undefined;
+  }
+  return {
+    clave: v.clave,
+    para: v.para,
+    lista: v.lista.flatMap(leerTransicion),
+    ...(typeof v.propuesta === "string" ? { propuesta: v.propuesta } : {}),
+  };
+}
+
+function leerCierre(v: unknown): LecturaDelGestor["cierre"] {
+  if (!esObjeto(v) || typeof v.clave !== "string" || typeof v.comentario !== "string") return undefined;
+  return { clave: v.clave, comentario: v.comentario };
+}
+
+function leerCerrado(v: unknown): LecturaDelGestor["cerrado"] {
+  if (!esObjeto(v) || typeof v.clave !== "string" || typeof v.comento !== "boolean") return undefined;
+  return { clave: v.clave, comento: v.comento, ...(typeof v.transicion === "string" ? { transicion: v.transicion } : {}) };
 }
 
 function leerError(v: unknown): LecturaDelGestor["error"] {
