@@ -22,6 +22,7 @@ import {
   adaptadoresDeProyecto,
   entornoDeUrl,
   guardarEndpointYEntorno,
+  carpetaDeAdjuntosDelEjecutor,
   type PiezasDeSincronizacion,
 } from "./main.js";
 import { COMANDOS, MENSAJE_BIENVENIDA } from "./consola.js";
@@ -1104,6 +1105,25 @@ describe("los adaptadores de proyecto son los MISMOS en las dos pieles", () => {
     const config = JSON.parse(readFileSync(join(raiz, ".xonecode", "config.json"), "utf8"));
     expect(config.cloudstudio.url).toBe("https://cloudstudio.cliente.example/mcp");
     expect(config.entorno).toBeUndefined();
+  });
+});
+
+describe("carpetaDeAdjuntosDelEjecutor: qué monta `/adjuntos/` en cada consola (IXCODE-7)", () => {
+  // `crearEjecutorReal` no tenía costura para mirar las opciones que le llegan a
+  // `abrirSesionReal`, así que la regla se extrajo a esta función pura.
+  it("los de una TAREA ganan, haya o no carpeta de artefactos por sesión", () => {
+    expect(carpetaDeAdjuntosDelEjecutor("/raiz", "hilo-1", "/adjuntos/de-la-tarea", true)).toBe("/adjuntos/de-la-tarea");
+    expect(carpetaDeAdjuntosDelEjecutor("/raiz", "hilo-1", "/adjuntos/de-la-tarea", false)).toBe("/adjuntos/de-la-tarea");
+  });
+
+  it("sin tarea y CON carpeta de artefactos por sesión (la web): se derivan de la sesión", () => {
+    expect(carpetaDeAdjuntosDelEjecutor("/raiz", "sesion-1", undefined, true)).toBe(
+      join("/raiz", ".xonecode", "sesiones", "sesion-1", "adjuntos")
+    );
+  });
+
+  it("sin tarea y SIN carpeta de artefactos por sesión (el terminal): no hay nada que montar", () => {
+    expect(carpetaDeAdjuntosDelEjecutor("/raiz", "hilo-1", undefined, false)).toBeUndefined();
   });
 });
 

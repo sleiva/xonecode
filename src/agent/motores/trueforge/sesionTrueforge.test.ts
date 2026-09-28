@@ -1938,3 +1938,64 @@ describe("detener CORTA la llamada en curso del especialista (IXCODE-4)", () => 
     expect(vistos).toHaveLength(2);
   }, 20_000);
 });
+
+describe("`/adjuntos/` en TrueForge (IXCODE-7): el agujero que deepagents ya tenía cerrado", () => {
+  it("con `adjuntos`: un hijo que lee /adjuntos/a.txt recibe su contenido", async () => {
+    const raiz = proyecto();
+    const carpeta = mkdtempSync(join(tmpdir(), "xc-tf-adjuntos-"));
+    writeFileSync(join(carpeta, "a.txt"), "contenido del adjunto\n");
+    const { m, vistos } = modelosConGuion([
+      // 1) el raíz delega.
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "lee el adjunto" }) }] })],
+      // 2) el hijo lee /adjuntos/a.txt.
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "r1", name: "read_file", args: JSON.stringify({ file_path: "/adjuntos/a.txt" }) }] })],
+      // 3) el hijo, con el contenido ya en sus mensajes, contesta.
+      [new AIMessageChunk({ content: "Leído." })],
+      // 4) el raíz cierra.
+      [new AIMessageChunk({ content: "Listo." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, adjuntos: carpeta });
+    await s.turno("lee el adjunto", piel().p);
+    expect(vistos[2]!.join("\n")).toContain("contenido del adjunto");
+  }, 20_000);
+
+  it("con `adjuntos`: escribir en /adjuntos/ se deniega — INCONDICIONAL, ni aprobándola", async () => {
+    const raiz = proyecto();
+    const carpeta = mkdtempSync(join(tmpdir(), "xc-tf-adjuntos-"));
+    writeFileSync(join(carpeta, "a.txt"), "original\n");
+    const { m, vistos, toolsPorLlamada } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "toca el adjunto" }) }] })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "w1", name: "write_file", args: JSON.stringify({ file_path: "/adjuntos/a.txt", content: "x" }) }] })],
+      [new AIMessageChunk({ content: "No he podido." })],
+      [new AIMessageChunk({ content: "Listo." })],
+    ]);
+    // `write_file` es de las que piden aprobación por NOMBRE (`developer-xone` escribe), así
+    // que la petición SÍ pausa; lo que se prueba es que la denegación de `/adjuntos/` es del
+    // BACKEND y no de la pregunta — sobrevive a un «sí» humano.
+    const s = await abrirSesionTrueforge({
+      raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, adjuntos: carpeta,
+      pedirAprobacion: async (ps) => new Map(ps.map((p) => [p.id, { type: "approve" as const }])),
+    });
+    const pi = piel();
+    await s.turno("toca el adjunto", pi.p);
+    expect(toolsPorLlamada[1]).toContain("write_file");
+    expect(pi.pausas()).toBe(1);
+    expect(readFileSync(join(carpeta, "a.txt"), "utf8")).toBe("original\n");
+    expect(vistos[2]!.join("\n")).toMatch(/permission denied/i);
+  }, 20_000);
+
+  it("sin `adjuntos`: /adjuntos/a.txt no existe — no se monta el cwd del proceso", async () => {
+    const raiz = proyecto();
+    const { m, vistos } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "lee /adjuntos/a.txt" }) }] })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "r1", name: "read_file", args: JSON.stringify({ file_path: "/adjuntos/a.txt" }) }] })],
+      [new AIMessageChunk({ content: "No existe." })],
+      [new AIMessageChunk({ content: "Listo." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("lee /adjuntos/a.txt", piel().p);
+    // Sin `adjuntos`, `/adjuntos/` no es una raíz montada: `read_file` cae al backend NORMAL
+    // del proyecto, que no tiene ese fichero — ENOENT, no el contenido del adjunto.
+    expect(vistos[2]!.join("\n")).toMatch(/ENOENT|ruta fuera del proyecto/i);
+  }, 20_000);
+});

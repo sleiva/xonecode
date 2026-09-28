@@ -36,6 +36,7 @@ import {
 import { crearCheckpointerDeProyecto } from "../agent/sesiones/checkpointer.js";
 import { crearTareasEnDisco } from "../agent/tareas/tareasEnDisco.js";
 import { carpetaDeArtefactosDeSesion } from "../core/artefactos.js";
+import { carpetaDeAdjuntosDeSesion } from "../core/adjuntos.js";
 import { seEscribeSinPreguntar, TOPE_DE_RONDAS_DE_CONSOLA } from "../core/modoDeEscritura.js";
 import { MAX_APPROVAL_ROUNDS } from "../vendor/hitl.js";
 import { conectarCloudStudio, sesionCloudStudio, PUERTO_CALLBACK } from "../agent/cloudstudio/cloudstudioMcp.js";
@@ -455,6 +456,32 @@ export function parsearOpcionesWeb(argv: string[]): OpcionesWeb {
 }
 
 /**
+ * Qué carpeta ve el agente como `/adjuntos/` en ESTA consola (IXCODE-7). Pura y exportada
+ * para poder probar la regla sin construir una sesión de verdad — `crearEjecutorReal` no
+ * tenía costura para mirar las opciones que le llegan a `abrirSesionReal`.
+ *
+ * Ganan los de una TAREA (`deTarea`, la carpeta que el corredor conoce y reenvía por la
+ * fábrica). Sin tarea, y con carpeta de artefactos POR SESIÓN (`hayArtefactosPorSesion` —
+ * cierto en la web, que deriva `/artefactos/` del `hilo`), se montan los adjuntos de la
+ * MISMA sesión (`carpetaDeAdjuntosDeSesion`, hermana de `artefactos/`): son los que una
+ * persona anexó en el CHAT, y nadie más que este ejecutor sabe en qué sesión está. Sin
+ * carpeta de artefactos por sesión (el terminal: su `hilo` es un uuid nuevo en cada
+ * arranque, y una carpeta por hilo dejaría basura que nadie puede volver a abrir) no hay
+ * nada que montar: `undefined`, y el llamador NO pone el campo (una cadena vacía montaría
+ * el cwd del proceso).
+ */
+export function carpetaDeAdjuntosDelEjecutor(
+  raiz: string,
+  hilo: string,
+  deTarea: string | undefined,
+  hayArtefactosPorSesion: boolean
+): string | undefined {
+  if (deTarea !== undefined) return deTarea;
+  if (!hayArtefactosPorSesion) return undefined;
+  return carpetaDeAdjuntosDeSesion(raiz, hilo);
+}
+
+/**
  * El ejecutor de turno REAL de la consola: cada línea de prosa corre sobre una `SesionReal`
  * que sobrevive entre turnos (mismo agente, mismo hilo).
  *
@@ -488,14 +515,18 @@ export function crearEjecutorReal(
   checkpointerDeProyecto?: (raiz: string) => BaseCheckpointSaver | undefined,
   carpetaDeArtefactos?: (raiz: string, hilo: string) => string,
   /**
-   * La carpeta de los ADJUNTOS de una tarea — `/adjuntos/` para el agente, de solo lectura.
+   * La carpeta de los ADJUNTOS de una TAREA — `/adjuntos/` para el agente, de solo lectura.
    *
    * Es un valor y no una función de `(raiz, hilo)` como las dos de arriba, y esa diferencia
-   * es el dato: los artefactos se derivan de la sesión, pero los adjuntos son de la TAREA, y
-   * la tarea solo la conoce quien abrió esta consola (el corredor). Por eso llega a la
-   * FÁBRICA: es una propiedad de la consola, igual que su checkpointer.
+   * es el dato: los artefactos se derivan de la sesión, pero los adjuntos de una tarea son de
+   * la TAREA, y la tarea solo la conoce quien abrió esta consola (el corredor). Por eso llega
+   * a la FÁBRICA: es una propiedad de la consola, igual que su checkpointer.
    *
-   * Ausente en toda consola de persona y en toda tarea sin adjuntos.
+   * Ausente en toda tarea sin adjuntos. **No es «ausente en toda consola de persona»**
+   * (IXCODE-7): una consola de PERSONA con carpeta de artefactos por sesión —la web—
+   * monta los adjuntos que la persona anexó en el CHAT de ESA sesión, derivados con
+   * `carpetaDeAdjuntosDelEjecutor` y no reenviados por nadie (ver ahí el porqué). Sin
+   * carpeta de artefactos por sesión (el terminal) no hay nada que derivar.
    */
   carpetaDeAdjuntos?: string,
   /** Misma costura que `adaptadoresDeProyecto`: los tests no pueden leer el
@@ -551,6 +582,15 @@ export function crearEjecutorReal(
             "esta conversación no se recordará al reabrirla.\n"
         );
       }
+      // La carpeta de `/adjuntos/` de ESTA consola: los de una tarea ganan, y sin tarea se
+      // derivan de la sesión cuando hay carpeta de artefactos por sesión. Ver
+      // `carpetaDeAdjuntosDelEjecutor`.
+      const carpetaDeAdjuntosResuelta = carpetaDeAdjuntosDelEjecutor(
+        estado.raiz,
+        estado.hilo,
+        carpetaDeAdjuntos,
+        carpetaDeArtefactos !== undefined
+      );
       sesion = await abrirSesionReal({
         raiz: estado.raiz,
         modelos: await modelosDeSesion(estado),
@@ -594,9 +634,10 @@ export function crearEjecutorReal(
         ...(carpetaDeArtefactos === undefined
           ? {}
           : { artefactos: carpetaDeArtefactos(estado.raiz, estado.hilo) }),
-        // Los adjuntos de la tarea, si esta consola es de una tarea con alguno. Ausente es
-        // «no hay», y el campo NO se pone: una cadena vacía montaría el cwd del proceso.
-        ...(carpetaDeAdjuntos === undefined ? {} : { adjuntos: carpetaDeAdjuntos }),
+        // Los adjuntos de esta consola —de una tarea, o si no los hay y hay carpeta de
+        // artefactos por sesión, los del CHAT de esta sesión—. Ausente es «no hay», y el
+        // campo NO se pone: una cadena vacía montaría el cwd del proceso.
+        ...(carpetaDeAdjuntosResuelta === undefined ? {} : { adjuntos: carpetaDeAdjuntosResuelta }),
         /**
          * Cuántas rondas de aprobación admite un turno de ESTA consola.
          *

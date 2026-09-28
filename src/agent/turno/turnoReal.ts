@@ -289,6 +289,10 @@ export async function abrirSesionReal(opciones: {
       // montaba en la consola de terminal ni en `run --real`, y la escritura caía en la raíz del
       // proyecto sin aprobación (medido: `artefactos/panel.html` en la app del cliente).
       artefactos: carpetaDeArtefactosDeLaSesion(opciones.raiz, opciones.artefactos),
+      // `/adjuntos/` de la sesión (IXCODE-7) o de una tarea. Ya se lo pasaba a deepagents
+      // (más abajo, `construirAgente`); a TrueForge le FALTABA por completo — el agujero
+      // que esta rama cierra: TrueForge nunca montaba los adjuntos de una TAREA.
+      ...(opciones.adjuntos === undefined ? {} : { adjuntos: opciones.adjuntos }),
       ...(opciones.hilo === undefined ? {} : { hilo: opciones.hilo }),
       ...(opciones.topeDeRondas === undefined ? {} : { topeDeRondas: opciones.topeDeRondas }),
       ...(opciones.criticaVisual === undefined ? {} : { criticaVisual: opciones.criticaVisual }),

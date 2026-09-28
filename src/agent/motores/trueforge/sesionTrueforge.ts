@@ -209,6 +209,16 @@ export interface OpcionesDeSesionTrueforge {
   sinAprobacion?: () => boolean;
   /** La carpeta de artefactos de la sesión (lo que el agente ve como `/artefactos/`). */
   artefactos?: string;
+  /**
+   * La carpeta de los ADJUNTOS — lo que el agente ve como `/adjuntos/`, de solo lectura
+   * (`core/adjuntos.ts`, `agent/grafo/proyecto.ts#backendConAdjuntos`). Ausente es «no hay»
+   * y `/adjuntos/` no se monta; una cadena vacía montaría el cwd del proceso.
+   *
+   * **Antes de IXCODE-7 este motor no recibía este dato en absoluto**: una tarea con
+   * adjuntos corría en TrueForge sin `/adjuntos/` montada, mudo — los tests de la pieza
+   * pasaban igual porque la composición vivía en `montarBackend`, que ningún test doblaba.
+   */
+  adjuntos?: string;
   hilo?: string;
   /**
    * El índice de `xone_navegacion`. Solo para doblarlo en un test: ausente es el REAL, sobre la
@@ -344,6 +354,7 @@ export async function abrirSesionTrueforge(
       ...(opciones.artefactos === undefined
         ? {}
         : { artefactos: { carpeta: opciones.artefactos, alEscribir: anotarArtefacto } }),
+      ...(opciones.adjuntos === undefined ? {} : { adjuntos: opciones.adjuntos }),
       ...(ejecucion === undefined ? {} : { ejecucion }),
     });
   const backend = montarBackend() as unknown as BackendDeFicheros;
