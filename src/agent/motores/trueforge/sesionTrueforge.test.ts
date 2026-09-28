@@ -1856,6 +1856,36 @@ describe("detener CORTA la llamada en curso del especialista (IXCODE-4)", () => 
     expect(r.notasSobrantes).toBeUndefined();
   }, 20_000);
 
+  it("tras PARAR, lo escrito mientras trabajaba NO arranca un turno solo: se dice, con su texto, y se descarta", async () => {
+    let s: Awaited<ReturnType<typeof abrirSesionTrueforge>> | undefined;
+    // La llamada lenta es la del RAÍZ: a él no se le corta, así que nadie lee lo escrito antes de Parar.
+    const { m } = modeloConLlamadaLenta(["lenta"], (n) => {
+      if (n === 1) {
+        s!.agregarNota("una nota que nadie leyó");
+        s!.detener("un cambio de plan que nadie leyó");
+        setTimeout(() => s!.cancelar(), 5);
+      }
+    });
+    s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    const pi = piel();
+    const r = await s.turno("escribe el informe", pi.p);
+    expect(r.notasSobrantes).toBeUndefined();
+    const dicho = pi.lineas.join("\n");
+    expect(dicho).not.toMatch(/se manda como el turno siguiente/);
+    expect(dicho).toContain("una nota que nadie leyó");
+    expect(dicho).toContain("un cambio de plan que nadie leyó");
+  }, 20_000);
+
+  it("sin Parar, lo que nadie leyó SÍ sale como sobrante (el camino de siempre)", async () => {
+    let s: Awaited<ReturnType<typeof abrirSesionTrueforge>> | undefined;
+    const { m } = modeloConLlamadaLenta([[new AIMessageChunk({ content: "Listo." })]], (n) => {
+      if (n === 1) s!.agregarNota("llega tarde");
+    });
+    s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    const r = await s.turno("algo", piel().p);
+    expect(r.notasSobrantes).toBe("llega tarde");
+  }, 20_000);
+
   it("Parar (cancelar el turno) sigue cortándolo TODO: el corte del hijo no se traga la cancelación", async () => {
     let s: Awaited<ReturnType<typeof abrirSesionTrueforge>> | undefined;
     const { m, vistos } = modeloConLlamadaLenta([delegar("d1", "escribe el informe"), "lenta"], (n) => {

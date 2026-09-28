@@ -87,17 +87,17 @@ export function crearControlDeDetencion(hiloRaiz: string) {
       cortes.set(threadId, new AbortController());
     },
     detener(texto: string) {
-      // Una segunda pulsación en el mismo turno suma su texto y alcanza a lo que haya nacido desde
-      // entonces; quien ya recibió la orden no la recibe otra vez.
-      detencion =
-        detencion === undefined
-          ? { texto, hastaLlamadaDelRaiz: llamadasDelRaiz, avisados: new Set(), raizAvisado: false }
-          : {
-              ...detencion,
-              texto: [detencion.texto, texto].filter((t) => t.trim() !== "").join("\n\n"),
-              hastaLlamadaDelRaiz: llamadasDelRaiz,
-              raizAvisado: false,
-            };
+      // Una segunda pulsación en el mismo turno alcanza a lo que haya nacido desde entonces; quien
+      // ya recibió la orden no la recibe otra vez. Su texto se JUNTA solo con lo que el raíz aún no
+      // leyó: medido, juntarlo con lo ya leído lo volvía a mandar —y tras Parar, como un turno
+      // nuevo que nadie pidió—.
+      const pendiente = detencion === undefined || detencion.raizAvisado ? "" : detencion.texto;
+      detencion = {
+        texto: [pendiente, texto].filter((t) => t.trim() !== "").join("\n\n"),
+        hastaLlamadaDelRaiz: llamadasDelRaiz,
+        avisados: detencion?.avisados ?? new Set(),
+        raizAvisado: false,
+      };
       // Y a quien esté a mitad de una llamada, se le corta: pedirá el resumen en el acto.
       for (const [hilo, control] of cortes) if (debeParar(hilo) && !detencion.avisados.has(hilo)) control.abort();
     },

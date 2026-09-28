@@ -328,6 +328,11 @@ export async function abrirSesionTrueforge(
   /** Tool calls tiradas por DETENER en la sesión: si se queda en cero, el filtro es solo red. */
   let llamadasTiradasPorDetener = 0;
   const capacidadDeNotasDeLaSesion = capacidadDeNotas(notas, detencion);
+  /** Lo que la persona escribió en el turno y nadie leyó: notas y la orden de DETENER. */
+  const sinLeerDelTurno = (): string | undefined => {
+    const sinLeer = [sobrantes(notas), detencion.sobrante()].filter((t): t is string => t !== undefined);
+    return sinLeer.length === 0 ? undefined : sinLeer.join("\n\n");
+  };
   const montarBackend = (ejecucion?: { entorno: Record<string, string>; senal?: () => AbortSignal | undefined }) =>
     backendDeAgente({
       raiz,
@@ -1092,9 +1097,13 @@ export async function abrirSesionTrueforge(
           // deepagents — un aviso que salta cuando no ha pasado nada enseña a ignorarlo.
           avisos: (b) => [
             ...(memoriaDescartada === undefined ? [] : [memoriaDescartada]),
-            ...(sobrantes(notas) === undefined && detencion.sobrante() === undefined
+            ...(sinLeerDelTurno() === undefined
               ? []
-              : [`⚠ una nota no se pudo entregar a tiempo: se manda como el turno siguiente`]),
+              : cancelado
+                ? // PARAR es «para»: lo escrito que nadie leyó no arranca otro turno —medido, lo
+                  // hacía—, pero tampoco se pierde en silencio: se dice, con su texto, para copiarlo.
+                  [`⏹ turno parado: no se manda lo que escribiste mientras trabajaba — «${sinLeerDelTurno()}»`]
+                : [`⚠ una nota no se pudo entregar a tiempo: se manda como el turno siguiente`]),
             ...(b.corrio("verify") || !escribioProyecto
               ? []
               : [`⚠ el verificador no ha corrido en este turno${motivoSinVerificar === undefined ? "" : ` (${motivoSinVerificar})`}`]),
@@ -1175,8 +1184,7 @@ export async function abrirSesionTrueforge(
       // `return`: hacerlo antes (como sugería el borrador) deja una ventana en la que una nota
       // empujada durante ese `await` cae en una cola ya vacía y sobrevive muda al turno
       // siguiente — justo lo que este campo existe para impedir.
-      const sinLeer = [sobrantes(notas), detencion.sobrante()].filter((t): t is string => t !== undefined);
-      const notasSobrantes = sinLeer.length === 0 ? undefined : sinLeer.join("\n\n");
+      const notasSobrantes = cancelado ? undefined : sinLeerDelTurno();
       detencion.reiniciar();
       notas.length = 0; // Se sirvieron o se reportan aquí: no siguen vivas para el próximo turno.
       return {
