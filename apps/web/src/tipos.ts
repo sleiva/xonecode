@@ -749,8 +749,9 @@ export type MensajeAlCliente =
       transiciones?: { clave: string; para: "empezar" | "cerrar"; lista: TransicionDelGestor[]; propuesta?: string };
       /** El comentario de cierre PROPUESTO, para editar antes de mandar `cerrar`. */
       cierre?: { clave: string; comentario: string };
-      /** El resultado de `cerrar`: solo llega si el comentario se escribió. */
-      cerrado?: { clave: string; comento: boolean; transicion?: string };
+      /** El resultado de `cerrar`: solo llega si el comentario se escribió. Con la transición
+       *  pedida FALLIDA, su motivo va en `falloDeTransicion` y `transicion` no viaja. */
+      cerrado?: { clave: string; comento: boolean; transicion?: string; falloDeTransicion?: string };
       error?: { accion: string; motivo: string };
     }
   | ({ clase: "fichero" } & FicheroDelProyecto)

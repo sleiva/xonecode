@@ -2506,4 +2506,67 @@ describe("App: «Cerrar en Jira» (Task 11, IXCODE-11)", () => {
     expect(screen.getByRole("button", { name: "Cerrar en Jira" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Preparando…" })).toBeNull();
   });
+
+  const transicionesDeCierre = {
+    clave: "IXCODE-12",
+    para: "cerrar" as const,
+    propuesta: "31",
+    lista: [{ id: "31", nombre: "Marcar como probada", destino: "PROBAR", categoria: "en-curso" as const }],
+  };
+
+  /**
+   * Revisión final (IXCODE-11), hallazgo 1: el comentario se escribió y la transición no. La
+   * tarjeta NO puede quedarse abierta ofreciendo «Comentar y pasar a PROBAR» otra vez —eso
+   * comentaría DOS veces—: se cierra, y el aviso dice las dos mitades.
+   */
+  it("comentado pero la transición FALLÓ: la tarjeta se cierra y el aviso lo dice, sin ofrecer repetir el comentario", () => {
+    const { store, enviar } = conProyectoAbierto();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar en Jira" }));
+    act(() => store.aplicar({ clase: "gestor", cierre: { clave: "IXCODE-12", comentario: "x" } }));
+    act(() => store.aplicar({ clase: "gestor", transiciones: transicionesDeCierre }));
+    fireEvent.click(screen.getByRole("button", { name: "Comentar y pasar a PROBAR" }));
+    enviar.mockClear();
+    act(() => store.aplicar({ clase: "gestor", cerrado: { clave: "IXCODE-12", comento: true, falloDeTransicion: "la transición no está disponible" } }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByText("IXCODE-12: comentado; no se pudo pasar a PROBAR: la transición no está disponible")).toBeTruthy();
+    expect(enviar).not.toHaveBeenCalledWith(expect.objectContaining({ accion: "cerrar" }));
+  });
+
+  /** Hallazgo 6: un `cierre` NUEVO con la tarjeta abierta trae su propio texto; la tarjeta no
+   *  puede seguir enseñando el de antes (su `useState` solo lee `comentario` al montar). */
+  it("un segundo «cierre» con la tarjeta abierta REMONTA la tarjeta con su texto", () => {
+    const { store } = conProyectoAbierto();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar en Jira" }));
+    act(() => store.aplicar({ clase: "gestor", cierre: { clave: "IXCODE-12", comentario: "primero" } }));
+    fireEvent.change(within(screen.getByRole("dialog")).getByRole("textbox", { name: "Comentario" }), { target: { value: "editado" } });
+    act(() => store.aplicar({ clase: "gestor", cierre: { clave: "IXCODE-12", comentario: "segundo" } }));
+    expect((within(screen.getByRole("dialog")).getByRole("textbox", { name: "Comentario" }) as HTMLTextAreaElement).value).toBe("segundo");
+  });
+
+  /**
+   * Hallazgo 8: cancelar la tarjeta con un `cerrar` YA en vuelo no suelta el candado —la
+   * respuesta todavía puede llegar, y el comentario puede estar ya escrito—. Reabrir enseña los
+   * botones que escriben DESACTIVADOS, y ningún clic manda un segundo `cerrar`.
+   */
+  it("cancelar con un «cerrar» en vuelo y reabrir: los botones que escriben siguen desactivados, no sale otro `cerrar`", () => {
+    const { store, enviar } = conProyectoAbierto();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar en Jira" }));
+    act(() => store.aplicar({ clase: "gestor", cierre: { clave: "IXCODE-12", comentario: "x" } }));
+    act(() => store.aplicar({ clase: "gestor", transiciones: transicionesDeCierre }));
+    fireEvent.click(screen.getByRole("button", { name: "Solo comentar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    enviar.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar en Jira" }));
+    act(() => store.aplicar({ clase: "gestor", cierre: { clave: "IXCODE-12", comentario: "x" } }));
+    act(() => store.aplicar({ clase: "gestor", transiciones: transicionesDeCierre }));
+    const dialogo = screen.getByRole("dialog");
+    const soloComentar = within(dialogo).getByRole("button", { name: "Solo comentar" }) as HTMLButtonElement;
+    const comentarYPasar = within(dialogo).getByRole("button", { name: "Comentar y pasar a PROBAR" }) as HTMLButtonElement;
+    expect(soloComentar.disabled).toBe(true);
+    expect(comentarYPasar.disabled).toBe(true);
+    fireEvent.click(soloComentar);
+    fireEvent.click(comentarYPasar);
+    expect(enviar).not.toHaveBeenCalledWith(expect.objectContaining({ accion: "cerrar" }));
+  });
 });

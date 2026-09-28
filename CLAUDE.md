@@ -745,7 +745,13 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   tocar Jira» de salida) y comentario + transición al cerrar (comentario EDITABLE; un `error` de
   cerrar deja la tarjeta abierta con lo que la persona haya escrito intacto, nunca lo repinta). Si
   la transición de «empezar» falla, la sesión se abre IGUAL y el aviso lo dice DESPUÉS de saltar a
-  ella —nunca se convierte en «empezar falló», porque no lo hizo—.
+  ella —nunca se convierte en «empezar falló», porque no lo hizo—. **Con un turno en vuelo,
+  «empezar» no toca Jira** (el vestíbulo devolvería la MISMA sesión). **Si al cerrar el comentario
+  se escribe y la transición falla**, sale `cerrado` con `falloDeTransicion` y SIN `transicion`, la
+  tarjeta se cierra y el aviso dice las dos mitades: un `error` a secas invitaba a repetir el
+  cierre y comentar DOS veces. Las transiciones de cierre se piden al sitio del TICKET de la
+  sesión, el mismo al que se aplican. Un error del gestor cruza el cable con los correos TACHADOS
+  (`arranque.ts#sinCorreos`, antes de recortar): el texto de una tool de Jira es suyo.
 - **El comentario de cierre lo compone el CÓDIGO, sin llamar al modelo**
   (`core/gestorDeTareas.ts#comentarioDeCierre`, `web/servidor/datosDeCierre.ts`): ficheros y
   commits reales de la sesión, el último veredicto del verificador —«no corrió» sin uno, nunca

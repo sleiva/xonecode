@@ -52,7 +52,7 @@ import { PAPELES } from "../../core/modelos.js";
 import { anotarActo, crearSesion, listarSesiones } from "./sesiones.js";
 import { COMANDOS } from "../../cli/consola.js";
 import { CatalogoModelosEnMemoria, GestorDeTareasEnMemoria } from "../../core/ports.js";
-import type { FichaDelGestor, GestorDeTareasPort, TransicionDelGestor } from "../../core/gestorDeTareas.js";
+import type { FichaDelGestor, GestorDeTareasPort, TransicionDelGestor, Vinculo } from "../../core/gestorDeTareas.js";
 import { crearGestorJira } from "../../agent/conectores/gestorJira.js";
 import type { Entorno } from "../../core/settings.js";
 import type { AdjuntoDeTarea, Tarea } from "../../core/tareas.js";
@@ -9645,7 +9645,12 @@ describe("el gestor de tareas, por el cable", () => {
   });
 
   it("«vincular» SOLO escribe lo que el gestor dice que existe; si no, el config.json no cambia ni un byte", async () => {
-    const t = await abrir({ gestorDeTareas: (c) => (c === "jira" ? new GestorDeTareasEnMemoria(datos()) : undefined) });
+    // Con conectores: «usarConector» solo AÑADE un id que esta consola conoce, y `deepwiki` es
+    // del catálogo del doble.
+    const t = await abrir({
+      gestorDeTareas: (c) => (c === "jira" ? new GestorDeTareasEnMemoria(datos()) : undefined),
+      conectores: servicioDeConectoresDeMentira().fabrica,
+    });
     const antes = t.leerConfig();
 
     // Una clave que no es de proyecto: se rechaza antes de preguntar.
@@ -9846,6 +9851,8 @@ describe("el gestor de tareas, por el cable", () => {
       clase: "gestor",
       transiciones: { clave: "IXCODE-12", para: "empezar", lista: TRANSICIONES, propuesta: "t-encurso" },
     });
+    // Las de CIERRE son del ticket de la SESIÓN (hallazgo 5 de la revisión final).
+    t.vestibulo.proyectoAbierto()!.fijarTicket({ conector: "jira", sitio: "c1", clave: "IXCODE-12" });
     expect(await t.pedir({ clase: "gestor", accion: "transiciones", clave: "IXCODE-12", para: "cerrar" })).toEqual({
       clase: "gestor",
       transiciones: { clave: "IXCODE-12", para: "cerrar", lista: TRANSICIONES, propuesta: "t-probar" },
@@ -10046,6 +10053,130 @@ describe("el gestor de tareas, por el cable", () => {
     expect(instancia.comentariosAplicados).toEqual([]);
     expect(instancia.transicionesAplicadas).toEqual([]);
     await t.limpiar();
+  });
+
+  /**
+   * Revisión final (IXCODE-11), hallazgo 1: el comentario se escribió y la transición falló. El
+   * cierre NO puede contestar `error{cerrar}` a secas —el cliente reabriría «Comentar y pasar a
+   * X» y un segundo intento comentaría DOS veces—: sale `cerrado` con `comento: true`, SIN
+   * `transicion`, y el motivo en `falloDeTransicion`.
+   */
+  it("«cerrar»: comentar va bien y la transición FALLA → `cerrado` con `falloDeTransicion`, nunca un `error` que invite a repetir el comentario", async () => {
+    class GestorQueFallaAlTransicionar extends GestorDeTareasEnMemoria {
+      override async transicionar(): Promise<void> {
+        throw new Error("la transición t-probar no está disponible");
+      }
+    }
+    const instancia = new GestorQueFallaAlTransicionar({ ...datos(), transiciones: { "IXCODE-12": TRANSICIONES } });
+    const t = await abrir(
+      { gestorDeTareas: () => instancia },
+      { modo: "offline", gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } }
+    );
+    t.vestibulo.proyectoAbierto()!.fijarTicket({ conector: "jira", sitio: "c1", clave: "IXCODE-12" });
+    const antes = t.cliente.recibidos.length;
+    expect(await t.pedir({ clase: "gestor", accion: "cerrar", comentario: "Listo.", transicion: "t-probar" })).toEqual({
+      clase: "gestor",
+      cerrado: { clave: "IXCODE-12", comento: true, falloDeTransicion: "la transición t-probar no está disponible" },
+    });
+    // Y NINGÚN `error{cerrar}` además: el store lo borraría con el acierto, pero el cliente ya
+    // habría soltado el candado de la tarjeta al verlo.
+    expect(t.cliente.recibidos.slice(antes).filter((x) => x.clase === "gestor" && "error" in x && x.error !== undefined)).toEqual([]);
+    expect(instancia.comentariosAplicados).toEqual([{ clave: "IXCODE-12", texto: "Listo." }]);
+    expect(instancia.transicionesAplicadas).toEqual([]);
+    await t.limpiar();
+  });
+
+  /** Hallazgo 2: con un turno en vuelo, `abrirProyecto` devuelve la MISMA consola, así que
+   *  transicionar antes de comprobarlo movía el ticket en Jira sin sesión nueva. */
+  it("«empezar» con un turno en vuelo NO transiciona ni abre nada: espera a que termine", async () => {
+    let soltar: (() => void) | undefined;
+    const instancia = new GestorDeTareasEnMemoria({ ...datos(), transiciones: { "IXCODE-12": TRANSICIONES } });
+    const t = await abrir(
+      { gestorDeTareas: () => instancia },
+      { modo: "offline", gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } },
+      { crearEjecutor: () => async () => { await new Promise<void>((resuelto) => { soltar = resuelto; }); } }
+    );
+    const abierta = t.vestibulo.proyectoAbierto()!;
+    const hilo = abierta.idDeHilo;
+    const turno = abierta.ejecutarTurno("algo", abierta.estadoDeSesion, abierta.consola.consola);
+    expect(abierta.turnoEnVuelo).toBe(true);
+    expect((await t.pedir({ clase: "gestor", accion: "empezar", clave: "IXCODE-12", transicion: "t-encurso" }))?.error)
+      .toEqual({ accion: "empezar", motivo: "espera a que termine el turno" });
+    expect(instancia.transicionesAplicadas).toEqual([]);
+    expect(t.vestibulo.proyectoAbierto()!.idDeHilo).toBe(hilo);
+    soltar!();
+    await turno;
+    await t.limpiar();
+  });
+
+  /** Hallazgo 4: el texto de una tool de Jira que falla llega TAL CUAL; un correo dentro de él
+   *  no puede cruzar el cable (restricciones: ni correos). */
+  it("un error del gestor con un correo dentro viaja con el correo TACHADO, también en `falloDeTransicion`", async () => {
+    class Gestor extends GestorDeTareasEnMemoria {
+      override async pendientes(): Promise<never> {
+        throw new Error("Jira: el usuario ana@empresa.com no puede ver el proyecto IXCODE");
+      }
+      override async transicionar(): Promise<void> {
+        throw new Error(`${"x".repeat(190)} pepe.perez@empresa.com`);
+      }
+    }
+    const t = await abrir(
+      { gestorDeTareas: () => new Gestor({ ...datos(), transiciones: { "IXCODE-12": TRANSICIONES } }) },
+      { modo: "offline", gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } }
+    );
+    expect((await t.pedir({ clase: "gestor", accion: "pendientes" }))?.error)
+      .toEqual({ accion: "pendientes", motivo: "Jira: el usuario [correo] no puede ver el proyecto IXCODE" });
+    // Un correo cerca del TOPE de longitud: se tacha ANTES de recortar, o el recorte dejaría
+    // una cola sin punto («pepe.perez@empr») que ningún patrón de correo reconoce.
+    t.vestibulo.proyectoAbierto()!.fijarTicket({ conector: "jira", sitio: "c1", clave: "IXCODE-12" });
+    const cerrado = await t.pedir({ clase: "gestor", accion: "cerrar", comentario: "Listo.", transicion: "t-probar" });
+    expect(cerrado?.cerrado?.falloDeTransicion).toContain("[correo]");
+    const cable = JSON.stringify(t.cliente.recibidos);
+    expect(cable).not.toContain("ana@empresa.com");
+    expect(cable).not.toContain("pepe.perez@");
+    expect(cable).not.toContain("@empresa");
+    await t.limpiar();
+  });
+
+  /** Hallazgo 5: las transiciones de CIERRE se piden al sitio del TICKET de la sesión —el mismo
+   *  al que `cerrar` las aplica—, no al del vínculo del proyecto, que puede ser otro o ninguno. */
+  it("«transiciones» para «cerrar» pregunta al conector y sitio del TICKET de la sesión, no al vínculo del proyecto", async () => {
+    const vistos: Vinculo[] = [];
+    class Gestor extends GestorDeTareasEnMemoria {
+      override async transiciones(v: Vinculo, clave: string) {
+        vistos.push(v);
+        return super.transiciones(v, clave);
+      }
+    }
+    // El proyecto NO está vinculado: antes del arreglo, «cerrar» contestaba «este proyecto no
+    // tiene gestor de tareas» aunque la sesión SÍ tuviera su ticket.
+    const t = await abrir({ gestorDeTareas: () => new Gestor({ ...datos(), transiciones: { "IXCODE-12": TRANSICIONES } }) });
+    expect((await t.pedir({ clase: "gestor", accion: "transiciones", clave: "IXCODE-12", para: "cerrar" }))?.error)
+      .toEqual({ accion: "transiciones", motivo: "esta sesión no está ligada a una tarea" });
+    t.vestibulo.proyectoAbierto()!.fijarTicket({ conector: "jira", sitio: "c2", clave: "IXCODE-12" });
+    expect((await t.pedir({ clase: "gestor", accion: "transiciones", clave: "IXCODE-12", para: "cerrar" }))?.transiciones?.propuesta).toBe("t-probar");
+    expect(vistos.at(-1)).toMatchObject({ conector: "jira", sitio: "c2" });
+    await t.limpiar();
+  });
+
+  /** Hallazgo 7: `usarConector` escribía cualquier texto en el config.json. */
+  it("«usarConector» solo AÑADE un conector que esta consola conoce; uno desconocido no toca el config.json", async () => {
+    const doble = servicioDeConectoresDeMentira();
+    const t = await abrir({ gestorDeTareas: () => new GestorDeTareasEnMemoria(datos()), conectores: doble.fabrica });
+    const antes = t.leerConfig();
+    expect((await t.pedir({ clase: "gestor", accion: "usarConector", conector: "inventado", usar: true }))?.error)
+      .toEqual({ accion: "usarConector", motivo: "«inventado» no es un conector de esta consola" });
+    expect(t.leerConfig()).toBe(antes);
+    expect((await t.pedir({ clase: "gestor", accion: "usarConector", conector: "deepwiki", usar: true }))?.estado?.conectores).toEqual(["deepwiki"]);
+    await t.limpiar();
+
+    // Sin conectores en esta ejecución no hay nada que reconocer: se rechaza, sin escribir.
+    const sin = await abrir({ gestorDeTareas: () => new GestorDeTareasEnMemoria(datos()) });
+    const antesSin = sin.leerConfig();
+    expect((await sin.pedir({ clase: "gestor", accion: "usarConector", conector: "deepwiki", usar: true }))?.error)
+      .toEqual({ accion: "usarConector", motivo: "esta ejecución no tiene conectores" });
+    expect(sin.leerConfig()).toBe(antesSin);
+    await sin.limpiar();
   });
 });
 

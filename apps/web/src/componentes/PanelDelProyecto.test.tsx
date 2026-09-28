@@ -66,6 +66,34 @@ describe("PanelDelProyecto", () => {
     expect(alGestor).toHaveBeenCalledTimes(1);
   });
 
+  /**
+   * Revisión final (IXCODE-11), hallazgo 3: al caerse el cable el store tira `gestor` entero,
+   * pero el panel sigue MONTADO. Si solo pidiera el estado al montar, tras reconectar se quedaría
+   * en «Consultando el gestor de tareas…» para siempre.
+   */
+  it("al RECONECTAR vuelve a pedir el estado del gestor (el store lo tiró al caerse el cable)", () => {
+    const { alGestor, rerender } = montar();
+    expect(alGestor).toHaveBeenCalledTimes(1);
+    rerender({ conectado: false });
+    expect(alGestor).toHaveBeenCalledTimes(1);
+    rerender({ conectado: true });
+    expect(alGestor).toHaveBeenCalledTimes(2);
+    expect(alGestor).toHaveBeenLastCalledWith({ accion: "estado" });
+  });
+
+  it("y la pestaña Tareas vuelve a pedir las pendientes cuando el estado regresa", () => {
+    const { alGestor, rerender } = montar({ gestor: VINCULADO });
+    pestana("Tareas");
+    expect(alGestor).toHaveBeenCalledWith({ accion: "pendientes" });
+    alGestor.mockClear();
+    // Cae el cable: el store tira `gestor`.
+    rerender({ conectado: false, gestor: undefined });
+    rerender({ conectado: true, gestor: undefined });
+    expect(alGestor).toHaveBeenCalledWith({ accion: "estado" });
+    rerender({ conectado: true, gestor: VINCULADO });
+    expect(alGestor).toHaveBeenCalledWith({ accion: "pendientes" });
+  });
+
   it("Resumen: entorno, sesiones (las ligadas con su ticket), planes con su barra y la ranura de tareas", () => {
     const { props } = montar({
       entorno: "XOne WebStudio",

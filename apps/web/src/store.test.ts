@@ -334,7 +334,10 @@ describe("store del cliente", () => {
     s.aplicar({ clase: "gestor", error: { accion: "borradorDeCierre", motivo: "espera a que termine el turno" } });
     expect(s.leer().gestor?.errores?.borradorDeCierre).toEqual({ motivo: "espera a que termine el turno" });
     s.aplicar({ clase: "gestor", cierre: { clave: "IXCODE-12", comentario: "Hecho." } });
-    expect(s.leer().gestor?.cierre).toEqual({ clave: "IXCODE-12", comentario: "Hecho." });
+    expect(s.leer().gestor?.cierre).toEqual({ clave: "IXCODE-12", comentario: "Hecho.", id: 1 });
+    // Un `cierre` NUEVO es otro suceso aunque el texto coincida: la tarjeta se remonta por el id.
+    s.aplicar({ clase: "gestor", cierre: { clave: "IXCODE-12", comentario: "Hecho." } });
+    expect(s.leer().gestor?.cierre?.id).toBe(2);
     expect(s.leer().gestor?.errores?.borradorDeCierre).toBeUndefined();
 
     s.aplicar({ clase: "gestor", error: { accion: "cerrar", motivo: "el comentario no puede estar vacío" } });
@@ -343,6 +346,8 @@ describe("store del cliente", () => {
     s.aplicar({ clase: "gestor", cerrado: { clave: "IXCODE-12", comento: true, transicion: "31" } });
     expect(s.leer().gestor?.cerrado).toEqual({ clave: "IXCODE-12", comento: true, transicion: "31", id: 2 });
     expect(s.leer().gestor?.errores?.cerrar).toBeUndefined();
+    s.aplicar({ clase: "gestor", cerrado: { clave: "IXCODE-12", comento: true, falloDeTransicion: "no disponible" } });
+    expect(s.leer().gestor?.cerrado).toEqual({ clave: "IXCODE-12", comento: true, falloDeTransicion: "no disponible", id: 3 });
   });
 
   it("«colecciones» guarda la foto VALIDADA, y se tira al caerse el cable", () => {

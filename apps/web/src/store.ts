@@ -293,13 +293,15 @@ export interface EstadoDelCliente {
    * ahí se llevaría la lista que se estaba mirando—.
    *
    * `errores` va por ACCIÓN, y cada error es un objeto NUEVO por mensaje (dos iguales seguidos
-   * son dos avisos); la respuesta buena de esa acción lo retira. `borrador` y `cerrado` llevan
-   * un `id` que solo crece: quien los consume mira el número, no el texto — la MISMA tarea
-   * empezada o cerrada dos veces son dos sucesos, no uno que se pisa (Task 11, IXCODE-11).
+   * son dos avisos); la respuesta buena de esa acción lo retira. `borrador`, `cierre` y
+   * `cerrado` llevan un `id` que solo crece: quien los consume mira el número, no el texto — la
+   * MISMA tarea empezada o cerrada dos veces son dos sucesos, no uno que se pisa (Task 11,
+   * IXCODE-11); y un `cierre` nuevo REMONTA la tarjeta por su id (`App.tsx`, `key`).
    */
-  gestor?: Omit<LecturaDelGestor, "error" | "borrador" | "cerrado"> & {
+  gestor?: Omit<LecturaDelGestor, "error" | "borrador" | "cierre" | "cerrado"> & {
     borrador?: { clave: string; texto: string; id: number };
-    cerrado?: { clave: string; comento: boolean; transicion?: string; id: number };
+    cierre?: { clave: string; comentario: string; id: number };
+    cerrado?: { clave: string; comento: boolean; transicion?: string; falloDeTransicion?: string; id: number };
     errores?: Partial<Record<string, { motivo: string }>>;
   };
   /**
@@ -1554,7 +1556,7 @@ export function crearStoreDelCliente(): {
         }
         case "gestor": {
           const leido = leerGestorDelCable(mensaje);
-          const { error, borrador, cerrado, ...campos } = leido;
+          const { error, borrador, cierre, cerrado, ...campos } = leido;
           if (Object.keys(leido).length === 0) return;
           const antes = estado.gestor ?? {};
           const errores = { ...(antes.errores ?? {}) };
@@ -1570,7 +1572,7 @@ export function crearStoreDelCliente(): {
             ...(campos.pendientes === undefined ? [] : ["pendientes"]),
             ...(borrador === undefined ? [] : ["empezar"]),
             ...(campos.transiciones === undefined ? [] : ["transiciones"]),
-            ...(campos.cierre === undefined ? [] : ["borradorDeCierre"]),
+            ...(cierre === undefined ? [] : ["borradorDeCierre"]),
             ...(cerrado === undefined ? [] : ["cerrar"]),
           ];
           for (const a of aciertos) delete errores[a];
@@ -1580,6 +1582,7 @@ export function crearStoreDelCliente(): {
               ...antes,
               ...campos,
               ...(borrador === undefined ? {} : { borrador: { ...borrador, id: (antes.borrador?.id ?? 0) + 1 } }),
+              ...(cierre === undefined ? {} : { cierre: { ...cierre, id: (antes.cierre?.id ?? 0) + 1 } }),
               ...(cerrado === undefined ? {} : { cerrado: { ...cerrado, id: (antes.cerrado?.id ?? 0) + 1 } }),
               errores,
             },

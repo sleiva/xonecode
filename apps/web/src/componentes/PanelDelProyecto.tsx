@@ -126,13 +126,16 @@ export function PanelDelProyecto({
     if (!conectado) setTarjetaEmpezar(undefined);
   }, [conectado]);
 
-  // El estado del gestor se pide al montar: es lo que dice si hay vínculo, y sin él la pestaña
-  // Tareas no sabría si consultar o decir que no hay gestor.
+  // El estado del gestor se pide al montar Y al volver el cable: es lo que dice si hay vínculo,
+  // y sin él la pestaña Tareas no sabría si consultar o decir que no hay gestor. Al caerse el
+  // cable el store tira `gestor` entero (`marcarDesconectado`) pero el panel sigue montado:
+  // pedirlo solo al montar lo dejaba en «Consultando…» para siempre tras reconectar. Tareas
+  // vuelve a pedir sus pendientes sola, al reaparecer el vínculo (su efecto va por la clave).
   useEffect(() => {
-    alGestor({ accion: "estado" });
-    // Solo al montar: `alGestor` puede cambiar de identidad en cada render de `App`.
+    if (conectado) alGestor({ accion: "estado" });
+    // Solo `conectado`: `alGestor` puede cambiar de identidad en cada render de `App`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [conectado]);
 
   /**
    * Lo que ya había en `errores.empezar`/`errores.transiciones` AL ABRIR la tarjeta (R6): un

@@ -104,4 +104,13 @@ describe("leerGestorDelCable", () => {
     });
     expect(leerGestorDelCable({ cerrado: { clave: "IXCODE-12" } })).toEqual({});
   });
+
+  it("cerrado: `falloDeTransicion` viaja si es texto (el comentario sí se escribió; la transición no)", () => {
+    expect(leerGestorDelCable({ cerrado: { clave: "IXCODE-12", comento: true, falloDeTransicion: "no disponible" } })).toEqual({
+      cerrado: { clave: "IXCODE-12", comento: true, falloDeTransicion: "no disponible" },
+    });
+    expect(leerGestorDelCable({ cerrado: { clave: "IXCODE-12", comento: true, falloDeTransicion: 3 } })).toEqual({
+      cerrado: { clave: "IXCODE-12", comento: true },
+    });
+  });
 });

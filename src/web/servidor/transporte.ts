@@ -589,9 +589,11 @@ export type MensajeAlCliente =
       /**
        * El resultado de `cerrar`: se llega aquí solo si `comentar` no falló —si falla, sale
        * `error` en su lugar, así que `comento` es siempre `true`—, y `transicion` viaja SOLO
-       * si además se aplicó una.
+       * si además se aplicó una. Si la transición pedida FALLÓ, su motivo va en
+       * `falloDeTransicion` (y `transicion` no viaja): el comentario ya está escrito, y un
+       * `error` a secas invitaría a repetir el cierre y comentar dos veces.
        */
-      cerrado?: { clave: string; comento: boolean; transicion?: string };
+      cerrado?: { clave: string; comento: boolean; transicion?: string; falloDeTransicion?: string };
       error?: { accion: string; motivo: string };
     }
   | ({ clase: "fichero" } & FicheroDelProyecto)

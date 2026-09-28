@@ -765,9 +765,10 @@ export function App({
   }, [errorBorradorDeCierre]);
   useEffect(() => {
     // `cerrar` NO tiene un «sigue igual» tras el fallo (a diferencia de `empezar`): si
-    // `comentar` o `transicionar` lanzan, el servidor sale al `catch` de fuera sin más
-    // intentos (Task 10) — así que cualquier error aquí SÍ es el final, y soltar el candado
-    // siempre es correcto. La tarjeta se queda abierta, con su motivo y el texto intacto.
+    // `comentar` lanza, el servidor sale al `catch` de fuera sin transicionar (Task 10) — así
+    // que cualquier error aquí SÍ es el final, y soltar el candado siempre es correcto. La
+    // tarjeta se queda abierta, con su motivo y el texto intacto. Un fallo de la TRANSICIÓN,
+    // con el comentario ya escrito, no llega por aquí: viaja en `cerrado.falloDeTransicion`.
     if (errorCerrar !== undefined) setEnviandoCerrar(false);
   }, [errorCerrar]);
   const cerradoDelGestor = estado.gestor?.cerrado;
@@ -777,7 +778,15 @@ export function App({
     setEnviandoCerrar(false);
     const destino = destinoDeCerrarRef.current;
     destinoDeCerrarRef.current = undefined;
-    setAvisoDeCierre(`${cerradoDelGestor.clave}: comentado${destino === undefined ? "" : ` y pasado a ${destino}`}`);
+    // Comentado y la transición FALLÓ: la tarjeta se cierra igual —reabrirla ofrecería
+    // «Comentar y pasar a X» otra vez, y un segundo intento comentaría DOS veces— y el aviso
+    // dice las dos mitades.
+    const fallo = cerradoDelGestor.falloDeTransicion;
+    setAvisoDeCierre(
+      fallo !== undefined
+        ? `${cerradoDelGestor.clave}: comentado; no se pudo ${destino === undefined ? "aplicar la transición" : `pasar a ${destino}`}: ${fallo}`
+        : `${cerradoDelGestor.clave}: comentado${destino === undefined ? "" : ` y pasado a ${destino}`}`
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cerradoDelGestor?.id]);
   /**
@@ -2061,6 +2070,9 @@ export function App({
             */}
             {!tarjetaCerrarAbierta || cierreDelGestor === undefined || cierreDelGestor.clave !== ticketDeLaSesion ? null : (
               <TarjetaDeCerrar
+                // Por el id del `cierre`: uno NUEVO con la tarjeta abierta trae su texto, y el
+                // `useState` de la tarjeta solo lee `comentario` al montar.
+                key={cierreDelGestor.id}
                 clave={cierreDelGestor.clave}
                 comentario={cierreDelGestor.comentario}
                 // El objeto se pasa TAL CUAL —mismo porqué que en `PanelDelProyecto.tsx`—: un

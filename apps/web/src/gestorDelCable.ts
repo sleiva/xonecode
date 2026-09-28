@@ -23,7 +23,7 @@ export interface LecturaDelGestor {
   borrador?: { clave: string; texto: string };
   transiciones?: { clave: string; para: "empezar" | "cerrar"; lista: TransicionDelGestor[]; propuesta?: string };
   cierre?: { clave: string; comentario: string };
-  cerrado?: { clave: string; comento: boolean; transicion?: string };
+  cerrado?: { clave: string; comento: boolean; transicion?: string; falloDeTransicion?: string };
   error?: { accion: string; motivo: string };
 }
 
@@ -150,7 +150,12 @@ function leerCierre(v: unknown): LecturaDelGestor["cierre"] {
 
 function leerCerrado(v: unknown): LecturaDelGestor["cerrado"] {
   if (!esObjeto(v) || typeof v.clave !== "string" || typeof v.comento !== "boolean") return undefined;
-  return { clave: v.clave, comento: v.comento, ...(typeof v.transicion === "string" ? { transicion: v.transicion } : {}) };
+  return {
+    clave: v.clave,
+    comento: v.comento,
+    ...(typeof v.transicion === "string" ? { transicion: v.transicion } : {}),
+    ...(typeof v.falloDeTransicion === "string" ? { falloDeTransicion: v.falloDeTransicion } : {}),
+  };
 }
 
 function leerError(v: unknown): LecturaDelGestor["error"] {

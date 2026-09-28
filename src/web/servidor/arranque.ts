@@ -711,6 +711,16 @@ function escaparHtml(texto: string): string {
 }
 
 /**
+ * El texto con cada cosa con forma de CORREO cambiada por «[correo]». Para lo que cruza el cable
+ * desde el gestor de tareas: ni correos por el cable (IXCODE-11), y el texto de error de una tool
+ * de Jira es suyo, no nuestro. La forma es deliberadamente ANCHA —algo@algo.algo sin espacios—:
+ * tachar de más en un mensaje de error cuesta poco; dejar pasar un correo, no.
+ */
+export function sinCorreos(texto: string): string {
+  return texto.replace(/[^\s@<>()"'«»]+@[^\s@<>()"'«»]+\.[^\s@<>()"'«»]+/g, "[correo]");
+}
+
+/**
  * El mensaje `gestor` con los campos que su ACCIÓN pide, o `undefined`. Llega del navegador sin
  * tipos: `atenderGestor` confía en esta forma, así que se comprueba aquí y no dentro.
  */
@@ -3486,6 +3496,17 @@ export function montarRutas(
       : (error instanceof Error ? error.message : String(error)).split(/\r?\n/)[0]!.slice(0, 200);
 
   /**
+   * `motivoLegible` para el GESTOR de tareas, con los correos TACHADOS: el texto de una tool de
+   * Jira que falla llega tal cual (`servicioDeConectores.ts#ErrorDeTool`) y puede nombrar a una
+   * persona por su correo, que no cruza el cable (IXCODE-11). Se tacha ANTES de recortar: un
+   * correo cortado por el tope queda sin su punto y ya no lo reconoce ningún patrón.
+   */
+  const motivoDelGestor = (error: unknown): string =>
+    typeof error === "object" && error !== null && "code" in error
+      ? codigoDe(error)
+      : sinCorreos((error instanceof Error ? error.message : String(error)).split(/\r?\n/)[0]!).slice(0, 200);
+
+  /**
    * El árbol del proyecto abierto. Sin proyecto no hay pestaña que lo pida, así que no se
    * contesta nada; sin PUERTO sí se contesta, con error: un árbol que nunca llega deja al
    * cliente en «consultando…» para siempre, y un cargando eterno es un fallo mudo.
@@ -3609,7 +3630,9 @@ export function montarRutas(
     const abierto = vestibulo.proyectoAbierto();
     if (abierto === undefined) return;
     const raiz = abierto.raiz;
-    const fallo = (motivo: string): void => emitir({ clase: "gestor", error: { accion: m.accion, motivo } });
+    // `sinCorreos` también aquí, y no solo en `motivoDelGestor`: la frase de un fallo puede
+    // llevar un texto del gestor (una clave de proyecto, un nombre de conector) sin pasar por él.
+    const fallo = (motivo: string): void => emitir({ clase: "gestor", error: { accion: m.accion, motivo: sinCorreos(motivo) } });
     if (opciones.gestorDeTareas === undefined) return fallo("esta ejecución no tiene gestor de tareas");
     const delProyecto = () => {
       const c = cargar(raiz).config.proyecto;
@@ -3682,6 +3705,13 @@ export function montarRutas(
           if (!guardar(() => guardarGestorDeProyecto(raiz, undefined))) return;
           return emitirEstado();
         case "usarConector": {
+          // Solo se AÑADE lo que esta consola conoce (`catálogo ∪ definiciones`): un id cualquiera
+          // escrito en el config.json no sería un conector de nadie. QUITAR no se comprueba, para
+          // poder limpiar uno que ya no existe.
+          if (m.usar) {
+            if (servicioConectores === undefined) return fallo("esta ejecución no tiene conectores");
+            if (!servicioConectores.lista().catalogo.some((c) => c.id === m.conector)) return fallo(`«${m.conector}» no es un conector de esta consola`);
+          }
           const { conectores } = delProyecto();
           const nuevos = m.usar
             ? (conectores.includes(m.conector) ? conectores : [...conectores, m.conector])
@@ -3704,7 +3734,15 @@ export function montarRutas(
         // solo LEE —la lista de transiciones y cuál se propone—, para las dos tarjetas que
         // van a pedir la aprobación (una tarea del cliente).
         case "transiciones": {
-          const { vinculo } = delProyecto();
+          // Las de CIERRE se piden al conector y sitio del TICKET de la sesión, que es a donde
+          // `cerrar` las aplica: los ids de una transición son de SU sitio, y el vínculo del
+          // proyecto puede apuntar ya a otro —o a ninguno—.
+          const ticket = abierto.ticket;
+          if (m.para === "cerrar" && ticket === undefined) return fallo("esta sesión no está ligada a una tarea");
+          const vinculo: Vinculo | undefined =
+            m.para === "cerrar" && ticket !== undefined
+              ? { conector: ticket.conector, sitio: ticket.sitio, proyecto: delProyecto().vinculo?.proyecto ?? "" }
+              : delProyecto().vinculo;
           if (vinculo === undefined) return fallo("este proyecto no tiene gestor de tareas");
           const g = gestorOFallo(vinculo.conector);
           if (g === undefined) return;
@@ -3714,6 +3752,10 @@ export function montarRutas(
           return;
         }
         case "empezar": {
+          // Con un turno en vuelo `abrirProyecto` devuelve la MISMA consola (el vestíbulo vuelve a
+          // lo que trabaja): transicionar antes de saberlo movería el ticket en Jira y luego
+          // contestaría «no se pudo abrir una sesión nueva». Se comprueba ANTES de tocar nada.
+          if (abierto.turnoEnVuelo) return fallo("espera a que termine el turno");
           const { vinculo } = delProyecto();
           if (vinculo === undefined) return fallo("este proyecto no tiene gestor de tareas");
           const g = gestorOFallo(vinculo.conector);
@@ -3728,7 +3770,7 @@ export function montarRutas(
             try {
               await g.transicionar(vinculo, ficha.clave, m.transicion);
             } catch (error) {
-              fallo(motivoLegible(error));
+              fallo(motivoDelGestor(error));
             }
           }
           const hiloDeAntes = abierto.idDeHilo;
@@ -3775,13 +3817,31 @@ export function montarRutas(
           const vinculo: Vinculo = { conector: ticket.conector, sitio: ticket.sitio, proyecto: delProyecto().vinculo?.proyecto ?? "" };
           // Si `comentar` falla, la excepción sale al `catch` de fuera: NO se transiciona.
           await g.comentar(vinculo, ticket.clave, m.comentario);
-          if (m.transicion !== undefined) await g.transicionar(vinculo, ticket.clave, m.transicion);
-          emitir({ clase: "gestor", cerrado: { clave: ticket.clave, comento: true, ...(m.transicion === undefined ? {} : { transicion: m.transicion }) } });
+          // El comentario YA está en Jira: si la transición falla, contestar `error{cerrar}`
+          // invitaría a repetir el cierre entero —y a comentar DOS veces—. Sale `cerrado`, sin
+          // `transicion` y con el motivo en `falloDeTransicion`.
+          let falloDeTransicion: string | undefined;
+          if (m.transicion !== undefined) {
+            try {
+              await g.transicionar(vinculo, ticket.clave, m.transicion);
+            } catch (error) {
+              falloDeTransicion = motivoDelGestor(error);
+            }
+          }
+          emitir({
+            clase: "gestor",
+            cerrado: {
+              clave: ticket.clave,
+              comento: true,
+              ...(m.transicion === undefined || falloDeTransicion !== undefined ? {} : { transicion: m.transicion }),
+              ...(falloDeTransicion === undefined ? {} : { falloDeTransicion }),
+            },
+          });
           return;
         }
       }
     } catch (error) {
-      fallo(motivoLegible(error));
+      fallo(motivoDelGestor(error));
     } finally {
       // `empezar` pudo cambiar de sesión y fallar después: el alta dice cuál es la de ahora,
       // igual que al final de `atenderSesion`. Si ya salió antes del borrador, no se repite. Las
