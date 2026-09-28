@@ -13,6 +13,7 @@ import { crearBusquedaRegex } from "./busquedaRegex.js";
 import { OPCIONES_BUSQUEDA_FICHEROS } from "./opcionesDeFicheros.js";
 import { crearNavegacionXone } from "./navegacionXone.js";
 import { crearCopiarArtefacto } from "./copiarArtefacto.js";
+import { crearMarcarCriteriosDelPlan } from "./marcarCriteriosDelPlan.js";
 import { crearUnirSecciones } from "./unirSecciones.js";
 import { crearIncorporarAdjunto, recibeIncorporarAdjunto } from "./incorporarAdjunto.js";
 import { estilosDeDisco, indiceEnDisco, type CargarIndice } from "../navegacion/indiceEnDisco.js";
@@ -555,6 +556,9 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
       ...(opciones.adjuntos !== undefined && recibeIncorporarAdjunto(perfil)
         ? [crearIncorporarAdjunto({ raiz: opciones.raiz, carpetaDeAdjuntos: opciones.adjuntos, perfil })]
         : []),
+      // Marcar en el plan lo COMPROBADO en el aparato, a quien comprueba: el que EJECUTA, que no
+      // tiene `write_file` ni `edit_file` y sin esto no podía dejar constancia de lo que vio.
+      ...(perfil.ejecucion === true ? [crearMarcarCriteriosDelPlan({ raiz: opciones.raiz })] : []),
     ],
     //
     // Las tools de fichero las monta el `FilesystemMiddleware` a partir del backend, y

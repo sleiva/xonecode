@@ -231,6 +231,14 @@ Y las guardas del proyecto:
   `faltan` en vez de dar error silencioso. Una skill declarada que ya no está en el catálogo se
   sigue pintando, marcada y señalada; sin catálogo NO se pinta una lista vacía (se cae al campo de
   texto).
+- **Lo que se COMPRUEBA en el aparato se marca en el plan** (`agent/grafo/marcarCriteriosDelPlan.ts`,
+  `core/tareasDelPlan.ts#marcarCriterios`): quien ejecuta no tiene `write_file` ni `edit_file` y el
+  orquestador es de solo lectura, así que lo verificado no volvía nunca al `TASKS.md`. La tool
+  cambia SOLO `- [ ]` a `- [x]` en UNA tarea, va a quien tiene `ejecucion` en los dos motores, y
+  reaplica la guarda de slug y de enlace a mano. **Límite declarado**: escribe sin la cola de
+  `escriturasEnSerie`. Una tarea está FINALIZADA con todas sus casillas marcadas
+  (`progresoDeTarea`, que viaja con cada tarea a la pestaña Planes); el estado se reconoce por su
+  PRIMERA palabra (`pendiente`, `en curso`, `implementada`, `hecha`).
 - **`/adjuntos/` es de solo lectura y su fila en `permisosDe` es INCONDICIONAL**: sin ella, un
   `write_file` con la carpeta sin montar escribe un fichero DEL PROYECTO con el nombre de algo
   «adjuntado».

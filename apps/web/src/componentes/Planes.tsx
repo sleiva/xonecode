@@ -9,9 +9,11 @@ import estilos from "./Planes.module.css";
  * La pestaña Planes: lo que el analista dejó en `.xonecode/planes/`, con las tareas de su
  * `TASKS.md` leídas como dato (`core/tareasDelPlan.ts`).
  *
- * **Todo lo que enseña es lo que el plan DICE.** El estado de una tarea y sus casillas las marca
- * el modelo que la desarrolla, y nadie lo mide; por eso la pestaña lo rotula «según el plan» y
- * enseña el estado con la palabra que el plan escribió, sin traducirla a un color que afirme más.
+ * **Todo lo que enseña es lo que el plan DICE.** El estado lo pone quien desarrolla y las
+ * casillas quien COMPRUEBA (el desarrollador, o `device-controller` en el aparato con
+ * `marcar_criterios_del_plan`); por eso la pestaña lo rotula «según el plan» y enseña el estado
+ * con la palabra que el plan escribió. Encima, un RESUMEN de por dónde va, con el progreso que
+ * calcula el servidor: una tarea está FINALIZADA cuando todos sus criterios están marcados.
  * Es de solo lectura: cambiar un plan es del agente, y publicarlo, de `/plan publicar`.
  */
 export function Planes({
@@ -39,6 +41,7 @@ export function Planes({
   const plan = planes.find((p) => p.nombre === elegido) ?? planes[0]!;
   const tareas = plan.tareas?.tareas ?? [];
   const hechas = tareas.filter((t) => t.criterios.total > 0 && t.criterios.hechos === t.criterios.total).length;
+  const conProgreso = tareas.length > 0 && tareas.every((t) => t.progreso !== undefined);
 
   return (
     <div className={estilos.planes}>
@@ -81,9 +84,15 @@ export function Planes({
         <p className={estilos.aviso}>El TASKS.md no tiene ninguna sección con forma de tarea («### 01 — Título»).</p>
       ) : (
         <>
-          <p className={estilos.nota}>
-            {`Según el plan: ${hechas} de ${tareas.length} ${tareas.length === 1 ? "tarea" : "tareas"} con todos sus criterios marcados. El estado y las casillas los marca el agente; nadie los ha medido.`}
-          </p>
+          {conProgreso ? (
+            <p className={estilos.resumen} aria-label="Por dónde va el plan">
+              {resumenDelPlan(tareas)}
+            </p>
+          ) : (
+            <p className={estilos.nota}>
+              {`Según el plan: ${hechas} de ${tareas.length} ${tareas.length === 1 ? "tarea" : "tareas"} con todos sus criterios marcados. El estado y las casillas los marca el agente; nadie los ha medido.`}
+            </p>
+          )}
           <ol className={estilos.tareas}>
             {tareas.map((t) => (
               <Tarea
@@ -100,6 +109,23 @@ export function Planes({
   );
 }
 
+const ROTULO_DE_PROGRESO: Record<NonNullable<TareaDelPlanDelCable["progreso"]>, string> = {
+  pendiente: "pendiente",
+  "en-curso": "en curso",
+  implementada: "implementada, sin comprobar",
+  finalizada: "finalizada: todos sus criterios comprobados",
+};
+
+/** «0 de 7 finalizadas · 5 implementadas sin comprobar · 2 pendientes»: lo que haya, en ese orden. */
+export function resumenDelPlan(tareas: readonly TareaDelPlanDelCable[]): string {
+  const cuantas = (p: TareaDelPlanDelCable["progreso"]) => tareas.filter((t) => t.progreso === p).length;
+  const partes = [`${cuantas("finalizada")} de ${tareas.length} finalizadas`];
+  if (cuantas("implementada") > 0) partes.push(`${cuantas("implementada")} implementadas sin comprobar`);
+  if (cuantas("en-curso") > 0) partes.push(`${cuantas("en-curso")} en curso`);
+  if (cuantas("pendiente") > 0) partes.push(`${cuantas("pendiente")} pendientes`);
+  return `Según el plan: ${partes.join(" · ")}.`;
+}
+
 function Tarea({ tarea: t, abierta, alPulsar }: { tarea: TareaDelPlanDelCable; abierta: boolean; alPulsar: () => void }) {
   // La prosa de «Bloqueada por» se enseña cuando dice algo más que números —«requiere ejecución
   // externa»—, que es justo lo que no se puede leer como dependencia.
@@ -112,6 +138,15 @@ function Tarea({ tarea: t, abierta, alPulsar }: { tarea: TareaDelPlanDelCable; a
   return (
     <li className={estilos.tarea}>
       <button type="button" className={estilos.fila} aria-expanded={abierta} onClick={alPulsar}>
+        {t.progreso === undefined ? null : (
+          <span
+            className={estilos.progreso}
+            data-progreso={t.progreso}
+            role="img"
+            aria-label={ROTULO_DE_PROGRESO[t.progreso]}
+            title={ROTULO_DE_PROGRESO[t.progreso]}
+          />
+        )}
         <span className={estilos.numero}>{t.numero}</span>
         <span className={estilos.tituloDeTarea}>{t.titulo}</span>
         {t.estado === undefined ? null : <span className={estilos.estado}>{t.estado}</span>}

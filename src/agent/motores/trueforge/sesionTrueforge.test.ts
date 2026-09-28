@@ -2107,3 +2107,28 @@ describe("`incorporar_adjunto` en TrueForge (IXCODE-7): pide aprobación y solo 
     expect(existsSync(join(raiz, "icons"))).toBe(false);
   }, 20_000);
 });
+
+/**
+ * `marcar_criterios_del_plan` en TrueForge, con el orquestador REAL: quien comprueba en el aparato
+ * (`device-controller`) marca en el plan lo que vio. Compuesto dentro de `propiasDe`, sin esto el
+ * reparto quedaría escrito y sin probar.
+ */
+describe("`marcar_criterios_del_plan` en TrueForge: el conductor marca lo que comprobó", () => {
+  it("el hijo que EJECUTA la tiene y el TASKS.md cambia; el raíz no la tiene", async () => {
+    const raiz = proyecto();
+    const dir = join(raiz, ".xonecode", "planes", "hoteles");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "TASKS.md"), "# T\n\n## T1 — Uno\n\n- [ ] abre\n- [ ] vuelve\n");
+    const { m, toolsPorLlamada } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "device-controller", input: "comprueba T1 del plan hoteles" }) }] })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "m1", name: "marcar_criterios_del_plan", args: JSON.stringify({ plan: "hoteles", tarea: "T1", criterios: [1] }) }] })],
+      [new AIMessageChunk({ content: "Comprobado el 1." })],
+      [new AIMessageChunk({ content: "Listo." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true });
+    await s.turno("comprueba la T1", piel().p);
+    expect(toolsPorLlamada[1]).toContain("marcar_criterios_del_plan");
+    expect(toolsPorLlamada[0]).not.toContain("marcar_criterios_del_plan");
+    expect(readFileSync(join(dir, "TASKS.md"), "utf8")).toBe("# T\n\n## T1 — Uno\n\n- [x] abre\n- [ ] vuelve\n");
+  }, 20_000);
+});

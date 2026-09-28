@@ -155,3 +155,37 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+/* El resumen de por dónde va el plan, encima de la lista. */
+.resumen {
+  margin: 10px 0 6px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+/* Por dónde va cada tarea: un círculo vacío (pendiente), con el borde marcado (en curso), a medias
+   (implementada, sin comprobar) o lleno (finalizada). NEUTRO, en el color del texto, por la misma
+   razón que el estado: lo marca el agente, y un verde afirmaría una medida que nadie hizo. */
+.progreso {
+  flex: none;
+  align-self: center;
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--dsw-alias-label-tertiary);
+  border-radius: 50%;
+}
+
+.progreso[data-progreso="en-curso"] {
+  border-color: var(--dsw-alias-label-secondary);
+  border-width: 2px;
+}
+
+.progreso[data-progreso="implementada"] {
+  border-color: var(--dsw-alias-label-secondary);
+  background: linear-gradient(90deg, var(--dsw-alias-label-secondary) 50%, var(--dsw-alias-bg-layer-1) 50%);
+}
+
+.progreso[data-progreso="finalizada"] {
+  border-color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-label-secondary);
+}

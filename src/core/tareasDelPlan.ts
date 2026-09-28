@@ -34,8 +34,48 @@ export interface TareaDelPlan {
   /** La línea «Bloqueada por» entera, para enseñarla cuando lleva algo más que números. */
   bloqueadaPorTexto?: string;
   criterios: { hechos: number; total: number };
+  /** Por dónde va, CALCULADO del estado y las casillas (`progresoDeTarea`). */
+  progreso: ProgresoDeTarea;
   /** El markdown de la sección, sin su cabecera: la ficha que se abre al pulsarla. */
   cuerpo: string;
+}
+
+/**
+ * Las cuatro palabras con que se escribe `**Estado:**` (`xone-plan-builder`, `TASKS-FORMAT.md`):
+ * quien desarrolla pone `implementada` al escribir el código y `hecha` cuando lo comprobó.
+ */
+export const ESTADOS_DE_TAREA = ["pendiente", "en curso", "implementada", "hecha"] as const;
+export type EstadoDeTarea = (typeof ESTADOS_DE_TAREA)[number];
+
+/**
+ * Por dónde va una tarea, que es lo que la pestaña resume.
+ *
+ * - `finalizada`: TODAS sus casillas marcadas —cada una es un criterio COMPROBADO—, o `hecha`
+ *   sin casillas que marcar.
+ * - `implementada`: el código está (`implementada` o `hecha`) pero le falta comprobar algo.
+ * - `en-curso` y `pendiente`: lo que dice su estado; un estado que no se reconoce cuenta como
+ *   pendiente, porque afirmar avance que el plan no dice sería peor que quedarse corto.
+ */
+export type ProgresoDeTarea = "pendiente" | "en-curso" | "implementada" | "finalizada";
+
+/**
+ * El estado del plan como una de las cuatro palabras, mirando solo cómo EMPIEZA: un plan real
+ * escribe «implementada — sin verificar en la app» o «pendiente — **NO hecha**», y lo que
+ * cuenta es la primera palabra, no la prosa de detrás (que tiene un «hecha» dentro).
+ */
+export function estadoReconocido(estado: string | undefined): EstadoDeTarea | undefined {
+  if (estado === undefined) return undefined;
+  const limpio = estado.replace(/[*_`]/g, "").trim().toLowerCase();
+  return ESTADOS_DE_TAREA.find((e) => limpio === e || new RegExp(`^${e}\\b`).test(limpio));
+}
+
+export function progresoDeTarea(estado: string | undefined, criterios: { hechos: number; total: number }): ProgresoDeTarea {
+  if (criterios.total > 0 && criterios.hechos === criterios.total) return "finalizada";
+  const reconocido = estadoReconocido(estado);
+  if (reconocido === "hecha" && criterios.total === 0) return "finalizada";
+  if (reconocido === "hecha" || reconocido === "implementada") return "implementada";
+  if (reconocido === "en curso") return "en-curso";
+  return "pendiente";
 }
 
 export interface TareasDelPlan {
@@ -120,6 +160,7 @@ export function leerTareasDelPlan(texto: string): TareasDelPlan {
       bloqueadaPor: nombra ? dependenciasDe(bloqueadaPorTexto!, actual.numero.startsWith("T")) : [],
       ...(bloqueadaPorTexto === undefined ? {} : { bloqueadaPorTexto }),
       criterios: { hechos, total },
+      progreso: progresoDeTarea(estado, { hechos, total }),
       cuerpo: actual.lineas.join("\n").trim(),
     });
     actual = undefined;
@@ -142,4 +183,44 @@ export function leerTareasDelPlan(texto: string): TareasDelPlan {
   }
   cerrar();
   return { ...(titulo === undefined || titulo === "" ? {} : { titulo }), tareas };
+}
+
+/**
+ * Marca como COMPROBADOS unos criterios de una tarea: cambia sus `- [ ]` a `- [x]`, contando las
+ * casillas de la sección de 1 en adelante, en el orden en que aparecen.
+ *
+ * Es lo que usa quien COMPRUEBA en el aparato (`marcar_criterios_del_plan`) y no puede escribir
+ * ficheros: por eso toca SOLO las casillas de UNA tarea, y nada más del fichero cambia. Un número
+ * que no existe se rechaza entero —marcar la mitad dejaría al modelo creyendo que marcó todo—.
+ */
+export function marcarCriterios(
+  texto: string,
+  numero: string,
+  criterios: readonly number[]
+): { texto: string; marcados: number[]; yaEstaban: number[] } | { error: string } {
+  const saltos = texto.includes("\r\n") ? "\r\n" : "\n";
+  const lineas = texto.split(/\r?\n/);
+  const inicio = lineas.findIndex((l) => CABECERA_DE_TAREA.exec(l)?.[1] === numero);
+  if (inicio === -1) return { error: `No hay ninguna tarea «${numero}» en el TASKS.md.` };
+  const casillas: number[] = [];
+  for (let i = inicio + 1; i < lineas.length && !/^##/.test(lineas[i]!); i++) {
+    if (CASILLA.test(lineas[i]!)) casillas.push(i);
+  }
+  const fuera = criterios.filter((n) => !Number.isInteger(n) || n < 1 || n > casillas.length);
+  if (fuera.length > 0) {
+    return { error: `La tarea ${numero} tiene ${casillas.length} criterio(s); no existe el ${fuera.join(", ")}.` };
+  }
+  const marcados: number[] = [];
+  const yaEstaban: number[] = [];
+  for (const n of [...new Set(criterios)].sort((a, b) => a - b)) {
+    const i = casillas[n - 1]!;
+    const c = CASILLA.exec(lineas[i]!)!;
+    if (c[1] !== " ") {
+      yaEstaban.push(n);
+      continue;
+    }
+    lineas[i] = lineas[i]!.replace(/\[ \]/, "[x]");
+    marcados.push(n);
+  }
+  return { texto: lineas.join(saltos), marcados, yaEstaban };
 }

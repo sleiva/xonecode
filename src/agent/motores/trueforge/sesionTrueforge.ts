@@ -91,6 +91,7 @@ import { hechosDelProyectoDe } from "../../navegacion/hechosEnDisco.js";
 import { conHechosDelProyecto } from "../../../core/hechosDelProyecto.js";
 import { crearBusquedaRegex } from "../../grafo/busquedaRegex.js";
 import { crearCopiarArtefacto } from "../../grafo/copiarArtefacto.js";
+import { crearMarcarCriteriosDelPlan } from "../../grafo/marcarCriteriosDelPlan.js";
 import { crearUnirSecciones } from "../../grafo/unirSecciones.js";
 import { crearIncorporarAdjunto, recibeIncorporarAdjunto } from "../../grafo/incorporarAdjunto.js";
 import { crearCriticaVisual } from "../../grafo/criticaVisual.js";
@@ -452,6 +453,8 @@ export async function abrirSesionTrueforge(
     ...(opciones.adjuntos !== undefined && recibeIncorporarAdjunto(agente)
       ? [crearIncorporarAdjunto({ raiz, carpetaDeAdjuntos: opciones.adjuntos, perfil: agente }) as unknown as ToolDeLangchain]
       : []),
+    // Y marcar en el plan lo comprobado en el aparato, con el reparto de deepagents: a quien ejecuta.
+    ...(agente.ejecucion === true ? [crearMarcarCriteriosDelPlan({ raiz }) as unknown as ToolDeLangchain] : []),
   ];
   /**
    * **Un cliente de modelo por papel, modelo y esfuerzo, que dura la SESIÓN** —hasta `/modelo`—, y

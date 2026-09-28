@@ -647,9 +647,12 @@ const TRABAJAR_CON_PLAN = [
   "SI TU ENCARGO NOMBRA UN PLAN (`/planes/<nombre>/`):",
   "- Lee su `TASKS.md` ANTES de tocar nada y trabaja la tarea que te toque, no el plan entero.",
   "  Su `PLAN.md` y su `CONTEXT.md` están al lado si te falta contexto; no los redescubras.",
-  "- Y ACTUALÍZALO en el mismo sitio cuando termines: `**Estado:**` a `hecha`, y las casillas",
-  "  de los criterios a `- [x]` solo si los has COMPROBADO — no por haber escrito el código que",
-  "  debería cumplirlos. Lo que no puedas comprobar se queda sin marcar y lo dices.",
+  "- Y ACTUALÍZALO en el mismo sitio cuando termines. `**Estado:**` lleva UNA de estas cuatro",
+  "  palabras al principio —`pendiente`, `en curso`, `implementada`, `hecha`— y detrás lo que",
+  "  quieras aclarar: `implementada` si el código está escrito, `hecha` si además lo COMPROBASTE.",
+  "  Las casillas de los criterios a `- [x]` solo si los has COMPROBADO — no por haber escrito el",
+  "  código que debería cumplirlos. Lo que no puedas comprobar se queda sin marcar y lo dices:",
+  "  lo que se comprueba en el aparato lo marca `device-controller` al verlo.",
   "- Si el plan se contradice con lo que ves en el código, no lo sigas a ciegas: dilo y para.",
 ].join("\n");
 
@@ -933,6 +936,11 @@ const EJECUCION_EN_LA_MAQUINA = [
   "cuenta qué probaste y qué te falta. Quien lee tu respuesta puede darte las credenciales;",
   "gastar el turno probando contraseñas no.",
   "",
+  "SI TU ENCARGO NOMBRA UN PLAN (`/planes/<nombre>/`), lee su `TASKS.md` y, cada criterio de una",
+  "tarea que COMPRUEBES en el aparato, márcalo con `marcar_criterios_del_plan` (el número de su",
+  "casilla dentro de esa tarea, contando desde 1). Solo lo que VISTE: lo que no pudiste comprobar",
+  "se queda sin marcar y lo dices. Es la única forma de que el plan diga por dónde va.",
+  "",
   "PARA LLEGAR A UNA PANTALLA CONCRETA, no vayas a ciegas: `xone_navegacion` con",
   "`operacion: \"referencias\"` y el nombre de la colección te dice QUÉ control lleva hasta ella",
   "y en qué fichero está. Y si ese control no aparece en el árbol, no es que no exista: es que",
@@ -1090,7 +1098,8 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
       "Dile SIEMPRE a qué pantalla o colección llegar y qué comprobar ahí: «pruébalo» a " +
       "secas le hace improvisar y sale caro. Levanta el emulador si no hay ninguno. Devuelve " +
       "lo que MIDIÓ —salida literal y excepciones del log—, y dice lo que no pudo " +
-      "comprobar en vez de deducirlo. PÍDELE una captura solo si lo que hay que comprobar es " +
+      "comprobar en vez de deducirlo. Si lo que prueba es una tarea de un plan, dile el plan y la " +
+      "tarea: marca en su TASKS.md los criterios que compruebe. PÍDELE una captura solo si lo que hay que comprobar es " +
       "VISUAL: cuesta tokens, y un fallo que el log explica no se ve mejor en una foto. No lo uses para cambiar el proyecto: eso es de " +
       "developer-xone. Y NO lo uses para algo que se ve LEYENDO —un texto cortado, un " +
       "atributo, un error de sintaxis—: arrancar un aparato para eso se come un cuarto del " +

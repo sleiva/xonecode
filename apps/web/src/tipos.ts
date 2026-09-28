@@ -289,6 +289,12 @@ export interface TareaDelPlanDelCable {
   bloqueadaPor: string[];
   bloqueadaPorTexto?: string;
   criterios: { hechos: number; total: number };
+  /**
+   * Por dónde va, calculado en el servidor (`core/tareasDelPlan.ts#progresoDeTarea`). Opcional
+   * porque el cliente se lee del disco y el servidor es el proceso: uno viejo no lo manda, y
+   * entonces no se pinta el indicador.
+   */
+  progreso?: "pendiente" | "en-curso" | "implementada" | "finalizada";
   cuerpo: string;
 }
 

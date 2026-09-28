@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dependenciasDe, leerTareasDelPlan } from "./tareasDelPlan.js";
+import { dependenciasDe, estadoReconocido, leerTareasDelPlan, marcarCriterios, progresoDeTarea } from "./tareasDelPlan.js";
 
 const TASKS = `# Plan de ejecución — Visitas
 
@@ -124,5 +124,74 @@ describe("dependenciasDe", () => {
     expect(dependenciasDe("02-08")).toEqual(["02", "03", "04", "05", "06", "07", "08"]);
     expect(dependenciasDe("Ninguna — puede empezar ya")).toEqual([]);
     expect(dependenciasDe("T1–T3")).toEqual(["T1", "T2", "T3"]);
+  });
+});
+
+describe("por dónde va una tarea", () => {
+  it("el estado se reconoce por cómo EMPIEZA, no por la prosa de detrás", () => {
+    expect(estadoReconocido("implementada — sin verificar en la app")).toBe("implementada");
+    expect(estadoReconocido("implementada con la **VARIANTE A**")).toBe("implementada");
+    expect(estadoReconocido("pendiente — **NO hecha** (requiere emulador)")).toBe("pendiente");
+    expect(estadoReconocido("En curso")).toBe("en curso");
+    expect(estadoReconocido("**hecha**")).toBe("hecha");
+    expect(estadoReconocido("bloqueada")).toBeUndefined();
+    expect(estadoReconocido(undefined)).toBeUndefined();
+  });
+
+  it("finalizada es TODO comprobado; implementada sin comprobar no lo es", () => {
+    expect(progresoDeTarea("implementada", { hechos: 4, total: 4 })).toBe("finalizada");
+    expect(progresoDeTarea("hecha", { hechos: 3, total: 4 })).toBe("implementada");
+    expect(progresoDeTarea("hecha", { hechos: 0, total: 0 })).toBe("finalizada");
+    expect(progresoDeTarea("implementada — sin verificar", { hechos: 0, total: 4 })).toBe("implementada");
+    expect(progresoDeTarea("en curso", { hechos: 1, total: 4 })).toBe("en-curso");
+    expect(progresoDeTarea("bloqueada", { hechos: 0, total: 2 })).toBe("pendiente");
+    expect(progresoDeTarea(undefined, { hechos: 0, total: 0 })).toBe("pendiente");
+  });
+
+  it("viaja con cada tarea leída", () => {
+    const plan = leerTareasDelPlan(TASKS);
+    expect(plan.tareas.map((t) => t.progreso)).toEqual(["implementada", "pendiente", "pendiente"]);
+  });
+});
+
+describe("marcarCriterios", () => {
+  const texto = `# T
+
+## T1 — Uno
+
+**Estado:** implementada
+
+- [ ] abre
+- [x] cierra
+- [ ] vuelve
+
+## T2 — Dos
+
+- [ ] otro
+`;
+
+  it("marca SOLO las casillas pedidas de ESA tarea, y dice cuáles ya estaban", () => {
+    const r = marcarCriterios(texto, "T1", [1, 2]);
+    if ("error" in r) throw new Error(r.error);
+    expect(r.marcados).toEqual([1]);
+    expect(r.yaEstaban).toEqual([2]);
+    expect(r.texto).toContain("- [x] abre");
+    expect(r.texto).toContain("- [ ] vuelve");
+    expect(r.texto).toContain("- [ ] otro");
+    // Nada más del fichero cambia.
+    expect(r.texto.replace("- [x] abre", "- [ ] abre")).toBe(texto);
+  });
+
+  it("una tarea que no existe o un número fuera de rango se rechaza ENTERO", () => {
+    expect(marcarCriterios(texto, "T9", [1])).toEqual({ error: expect.stringContaining("T9") });
+    const r = marcarCriterios(texto, "T1", [1, 4]);
+    expect(r).toEqual({ error: expect.stringContaining("no existe el 4") });
+  });
+
+  it("también en la forma del formato («### 01 — …»)", () => {
+    const r = marcarCriterios(TASKS, "02", [2]);
+    if ("error" in r) throw new Error(r.error);
+    expect(r.texto).toContain("- [x] edición");
+    expect(r.texto).toContain("- [ ] alta");
   });
 });

@@ -41,9 +41,14 @@ Si no existe `PLAN.md`, **detente y pide al usuario que ejecute `xone-spec-build
 
 ## El `TASKS.md` se ACTUALIZA, no se archiva
 
-`**Estado:**` es `pendiente`, `en curso` o `hecha`, y lo mantiene **quien ejecuta la tarea**, en
+`**Estado:**` EMPIEZA por una de cuatro palabras —`pendiente`, `en curso`, `implementada` (el
+código está escrito) o `hecha` (y además comprobado)— y lo mantiene **quien ejecuta la tarea**, en
 este mismo fichero y en esta misma carpeta. Las casillas de los criterios se marcan `- [x]`
-cuando ese criterio está comprobado, no cuando se escribió el código que debería cumplirlo.
+cuando ese criterio está comprobado, no cuando se escribió el código que debería cumplirlo; lo
+que se comprueba en el aparato lo marca `device-controller`. Una tarea está **finalizada** cuando
+todas sus casillas están marcadas, y es lo que la pestaña Planes resume.
+
+Cada tarea es una cabecera `### NN — Título` (no `## T1`), con sus casillas debajo.
 
 Ésa es la razón de que el plan viva en `/planes/` y no entre los artefactos: no es un documento
 que se entrega una vez, es el estado compartido entre quien planifica y quien desarrolla, a lo

@@ -39,6 +39,36 @@ describe("Planes", () => {
     expect(filas).toEqual(["01Tarea 01hecha2 de 2", "02Tarea 02pendiente0 de 2", "03Tarea 030 de 2"]);
   });
 
+  it("con el progreso del servidor: el resumen de por dónde va y un indicador por tarea", () => {
+    const conProgreso: PlanDelCable = {
+      ...VISITAS,
+      tareas: {
+        tareas: [
+          tarea("T1", { estado: "implementada", criterios: { hechos: 2, total: 2 }, progreso: "finalizada" }),
+          tarea("T2", { estado: "implementada — sin verificar", progreso: "implementada" }),
+          tarea("T3", { estado: "implementada", progreso: "implementada" }),
+          tarea("T4", { estado: "pendiente", progreso: "pendiente" }),
+        ],
+      },
+    };
+    render(<Planes planes={[conProgreso]} />);
+    expect(screen.getByLabelText("Por dónde va el plan").textContent).toBe(
+      "Según el plan: 1 de 4 finalizadas · 2 implementadas sin comprobar · 1 pendientes."
+    );
+    expect(screen.getAllByRole("img").map((i) => i.getAttribute("aria-label"))).toEqual([
+      "finalizada: todos sus criterios comprobados",
+      "implementada, sin comprobar",
+      "implementada, sin comprobar",
+      "pendiente",
+    ]);
+  });
+
+  it("sin progreso (un servidor viejo) no se pinta indicador y se queda el recuento de antes", () => {
+    render(<Planes planes={[VISITAS]} />);
+    expect(screen.queryAllByRole("img")).toHaveLength(0);
+    expect(screen.queryByLabelText("Por dónde va el plan")).toBeNull();
+  });
+
   it("las dependencias: los números, y la prosa solo cuando dice algo más que «puede empezar ya»", () => {
     render(<Planes planes={[VISITAS]} />);
     expect(screen.getByText("bloqueada por 01")).toBeTruthy();
