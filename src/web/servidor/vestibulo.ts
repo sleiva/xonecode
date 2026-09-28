@@ -421,10 +421,15 @@ export interface OpcionesDelVestibulo {
     alAbrirSesion: (sesion: SesionCerrable) => void,
     /**
      * Lo que depende de la CONSOLA que se está abriendo y no de su raíz. Hoy solo la
-     * carpeta de los adjuntos de una tarea (`core/adjuntos.ts`): el agente la ve como
+     * carpeta de los adjuntos de una TAREA (`core/adjuntos.ts`): el agente la ve como
      * `/adjuntos/`, de solo lectura, y solo la conoce quien abrió esta consola —el corredor
      * de tareas—. Ausente en toda apertura de PERSONA, que es lo que impide que una consola
      * de humano acabe con los adjuntos de la última tarea montados dentro.
+     *
+     * **No es el único origen de `/adjuntos/` desde IXCODE-7**: los que una persona anexa en
+     * el CHAT de su sesión no viajan por aquí — el propio ejecutor los deriva de la sesión
+     * (`cli/main.ts#carpetaDeAdjuntosDelEjecutor`, como `/artefactos/`). El vestíbulo sigue
+     * sin reenviarle a una PERSONA los de una tarea; el ejecutor es quien enseña los suyos.
      */
     opciones?: { adjuntos?: string }
   ) => EjecutorDeTurno;
@@ -1153,11 +1158,14 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     raiz: string;
     sesion?: string;
     /**
-     * La carpeta de los ADJUNTOS de la tarea que abre esta consola, si es de una tarea con
+     * La carpeta de los ADJUNTOS de la TAREA que abre esta consola, si es de una tarea con
      * alguno. Va hasta `crearEjecutor`, de donde cuelga el backend del agente: es lo que se
-     * monta como `/adjuntos/`. Por la puerta de las personas nunca llega — los adjuntos son
-     * de una tarea, y montar los de la última en la consola de alguien le metería en la
-     * vista un fichero de otra conversación.
+     * monta como `/adjuntos/`. Por la puerta de las personas nunca llega por AQUÍ — el
+     * vestíbulo sigue sin reenviarle a una persona los adjuntos de una tarea ajena, que le
+     * metería en la vista un fichero de otra conversación.
+     *
+     * Los de una PERSONA no pasan por este parámetro: es el ejecutor quien los deriva de la
+     * sesión, como los artefactos (`cli/main.ts#carpetaDeAdjuntosDelEjecutor`, IXCODE-7).
      */
     adjuntos?: string;
     /**
@@ -1362,8 +1370,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
           if (enFoco === raiz) escuchaDeConsumo?.();
         });
       },
-      // Solo si la hay: `undefined` es lo que reciben las aperturas de persona, y de ahí
-      // sale que su agente no tenga `/adjuntos/` montada.
+      // Solo si la hay: `undefined` es lo que reciben las aperturas de persona por ESTE
+      // parámetro — no dice que su agente se quede sin `/adjuntos/`, porque el ejecutor
+      // deriva los de la sesión por su cuenta (`cli/main.ts#carpetaDeAdjuntosDelEjecutor`).
       adjuntos === undefined ? undefined : { adjuntos }
     );
     // El ejecutor que de verdad va a correr los turnos de ESTA consola de proyecto — se

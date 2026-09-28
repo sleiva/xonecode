@@ -1,16 +1,19 @@
 /**
- * Los ADJUNTOS de una tarea: los documentos que una persona anexa al crearla.
+ * Los ADJUNTOS: los documentos que una persona aporta, no que produce el agente. Dos FUENTES,
+ * al crear una TAREA (los de siempre) o, desde IXCODE-7, en el CHAT de una sesión — con dónde
+ * caen en disco distinto para cada una (ver más abajo), pero una sola regla de LECTURA.
  *
  * Una captura de la pantalla que hay que replicar, un `.md` con el detalle del encargo, un
  * CSV con los datos de prueba. **No son ficheros del proyecto y no son artefactos**: no los
  * produce el agente, los aporta quien pide el trabajo, y el agente solo los LEE. De ahí las
  * dos reglas de este módulo:
  *
- * - **Viven FUERA del proyecto** (`~/.xonecode/tareas/<id>/adjuntos/`, ver
+ * - **Los de una TAREA viven FUERA del proyecto** (`~/.xonecode/tareas/<id>/adjuntos/`, ver
  *   `agent/tareas/tareasEnDisco.ts`), y eso trae gratis lo que importaba: no entran en git y no
  *   suben a CloudStudio, sin depender de ninguna exclusión. Una tarea puede crearse para un
  *   proyecto que nadie ha abierto nunca, así que guardarlos en su `.xonecode/` sería
- *   estrenárselo por la puerta de atrás.
+ *   estrenárselo por la puerta de atrás. Los de una SESIÓN son distintos (abajo): una sesión
+ *   ya tiene proyecto abierto, así que no hace falta esa cautela.
  * - **El agente los ve en `/adjuntos/`, de SOLO lectura** — la misma pieza que `/skills/` y
  *   `/artefactos/` (`agent/grafo/proyecto.ts#backendConAdjuntos`), y de solo lectura por lo mismo
  *   que las skills: son material de entrada, no ficheros que reescribir. Lo deniega
@@ -71,15 +74,16 @@ export const NOMBRE_INCORPORAR_ADJUNTO = "incorporar_adjunto";
  * ¿Vale este nombre para un adjunto?
  *
  * **Lista BLANCA de forma, no un `startsWith` ni una lista de trampas**, y de ella depende
- * que un `POST /adjunto?nombre=…` no escriba fuera de la carpeta de la tarea: el nombre
- * llega del cliente y se concatena a una ruta de disco. Cada nombre tiene que ser un
- * segmento de texto llano (letras y cifras ASCII, punto, guion y guion bajo), lo que deja
- * fuera `..`, `.`, el hueco vacío de un `//`, la barra y la barra invertida de Windows, el
- * NUL, los espacios y cualquier `%2e%2e` que llegue sin decodificar.
+ * que un `POST /adjunto?nombre=…` no escriba fuera de la carpeta que le toque —de una tarea
+ * o de una sesión—: el nombre llega del cliente y se concatena a una ruta de disco. Cada
+ * nombre tiene que ser un segmento de texto llano (letras y cifras ASCII, punto, guion y
+ * guion bajo), lo que deja fuera `..`, `.`, el hueco vacío de un `//`, la barra y la barra
+ * invertida de Windows, el NUL, los espacios y cualquier `%2e%2e` que llegue sin decodificar.
  *
  * Es la misma regla —y el mismo patrón— que `esRutaDeArtefacto` (`core/artefactos.ts`), y
- * vive aquí para que la usen los tres sitios que la necesitan sin copiarla: la ruta de
- * subida, el guardado en disco y el listado.
+ * vive aquí para que la usen sin copiarla todos los sitios que la necesitan: la ruta de
+ * subida, el guardado en disco, el listado y —desde IXCODE-7— el filtro del nombre que llega
+ * por el CABLE (`web/servidor/consolaWeb.ts`) y la tool `incorporar_adjunto`.
  */
 const SEGMENTO = /^[A-Za-z0-9._-]+$/;
 

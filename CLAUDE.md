@@ -135,7 +135,10 @@ Cinco cosas no son negociables:
   la denegación de `/.env`, `/.git` y `/.xonecode`.
 - **`SubAgent.tools` lleva SOLO tools propias**, nunca los nombres de las de fichero: las monta
   `createFilesystemMiddleware`; quien las acota es `permissions`.
-- **El HITL va en `write_file` y `edit_file`**, que son las que escriben.
+- **El HITL va en `write_file`, `edit_file` e `incorporar_adjunto`**: las tres escriben. La
+  tercera copia un adjunto del chat dentro del proyecto (IXCODE-7) y entra en la MISMA aprobación
+  por NOMBRE de tool, en los dos motores — la tarjeta lo muestra con la línea `[fichero binario]`
+  en vez de un diff, porque no hay texto que comparar.
 
 Y las guardas del proyecto:
 
@@ -553,6 +556,18 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
 - **Los adjuntos** viven en `~/.xonecode/tareas/<id>/adjuntos/`, fuera del proyecto, subidos por
   `POST /adjunto`. Se DICE que están al mandar el turno (`core/adjuntos.ts#conAdjuntos`); no hay
   poda de huérfanos.
+- **El chat de una SESIÓN tiene su propia fuente de adjuntos (IXCODE-7), y vive DENTRO del
+  proyecto**: `.xonecode/sesiones/<id>/adjuntos/`, hermana de `artefactos/`, subida por el MISMO
+  `POST /adjunto` con `?para=sesion`. **Se montan como la MISMA `/adjuntos/` de solo lectura, y
+  el EJECUTOR las deriva del `hilo`** (`cli/main.ts#carpetaDeAdjuntosDelEjecutor`), igual que
+  `/artefactos/` — solo en la web, porque el terminal no tiene carpeta por sesión. También le
+  llegan a TrueForge. **El nombre final lo decide el SERVIDOR, nunca sobrescribe**:
+  con el nombre ya ocupado, sufija `-2`… y lo dice en la respuesta (`{"nombre"}`), que el cliente
+  adopta en vez del que mandó. **El acto de usuario solo afirma los adjuntos que están EN
+  DISCO** — lo que `listarAdjuntosDeSesion` encontró, nunca los nombres que llegaron por el
+  cable sin comprobar. Meterlos en el PROYECTO es la tool `incorporar_adjunto`, con su propia fila
+  de aprobación; solo `designer-xone` y `developer-xone` de motor `"modelo"` la reciben — a un
+  motor externo no le llegan tools propias.
 - **El encargo se AUMENTA y se enseña EDITABLE antes de encolar** (`AumentadorPort`, papel
   `trabajo`): ocupa el sitio del diff; su fallo encola el texto original y se DICE.
 

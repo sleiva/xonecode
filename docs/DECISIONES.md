@@ -6857,3 +6857,72 @@ generación de imágenes. Lo medido para entonces: Chrome 154 con un `--user-dat
 la captura y no termina (la entrada anterior), y por el pipe de depuración (`--remote-debugging-
 pipe`, como `archify/visual-check`) se capturó la página ENTERA —1400×1579— en 1 s, matando el
 grupo al acabar y sin tocar el perfil real.
+
+## Adjuntos en el chat de una sesión (IXCODE-7) (28-09-2026)
+
+Hasta esta entrada, un adjunto solo existía al crear una TAREA. Faltaba anexar un fichero —un
+icono, una captura, una maqueta— en el chat de una sesión de la consola web y que un especialista
+pudiera meterlo en el proyecto, pasando por la aprobación de siempre.
+
+**Diseño.** Los bytes suben por el `POST /adjunto` que ya usaban las tareas, ampliado con
+`?para=sesion`, a `.xonecode/sesiones/<id>/adjuntos/` —HERMANA de `artefactos/`, no fuera del
+proyecto como la de una tarea—. El agente los ve montados como la MISMA `/adjuntos/` de solo
+lectura (`core/adjuntos.ts`, `agent/grafo/proyecto.ts#backendConAdjuntos`), en los dos motores; el
+mensaje que los anexa viaja con sus NOMBRES (`{clase:"prosa", adjuntos}`) y el servidor compone el
+inventario que ve el agente (`conAdjuntos(…, "mensaje")`), con la línea de cómo meterlo en el
+proyecto. Una tool nueva, `incorporar_adjunto` (`agent/grafo/incorporarAdjunto.ts`), copia los
+bytes al proyecto; su destino va en `file_path` para que la tarjeta de aprobación, `seDetieneEn`,
+el modo autónomo y TrueForge la entiendan sin tocarlos, y entra en el HITL de los dos motores por
+NOMBRE, con una vista de `[fichero binario]` en la tarjeta en vez de un diff. La constante del
+nombre vive en `core/adjuntos.ts` y no junto a la tool: la tool importa `perfiles.ts` para
+reaplicar sus permisos, y declarar el nombre junto a ella habría cerrado un ciclo de VALOR. Solo
+`designer-xone` y `developer-xone`, y solo de motor `"modelo"`, la reciben — a un motor externo no
+le llegan tools propias. TrueForge, que antes NO montaba los adjuntos de una TAREA, pasa a
+montarlos también (misma pieza que la sesión).
+
+**Decisiones tomadas por el camino, no en el plan original:**
+
+- **El nombre final de un adjunto lo decide el SERVIDOR, nunca la persona.** La primera versión
+  dejaba que un segundo fichero con el mismo nombre pisara al primero entre dos turnos —
+  sobrescritura silenciosa, encontrada en revisión—. `guardarAdjuntoDeSesion` comprueba
+  `existsSync` como ÚLTIMA guarda antes de escribir y sufija `-2`… si hace falta (tope de sufijos
+  antes de rendirse); `POST /adjunto?para=sesion` contesta `200` con `{"nombre"}` en vez de `204`,
+  y el cliente adopta ese nombre para lo que manda después. El camino de una TAREA no cambió: sigue
+  `204`.
+- **El acto de usuario solo afirma los adjuntos que están EN DISCO, nunca los nombres que llegaron
+  por el cable.** La primera versión de `conAdjuntosDelMensaje` devolvía el texto compuesto y el
+  servidor anotaba en el acto los nombres que el CLIENTE decía haber subido, sin comprobar nada:
+  un nombre bien formado pero nunca subido se afirmaba igual, prometiéndole al agente un fichero
+  que no existía. Se cambió la firma a `{texto, adjuntos}`, donde `adjuntos` es lo que
+  `listarAdjuntosDeSesion` encontró de VERDAD — nunca los `nombres` pedidos.
+- **El agujero del enlace en `sesiones/`.** La primera versión de la guarda de contención imitaba
+  la de una tarea: `lstat` de `sesiones/<id>` y comparación de `realpath` de `adjuntos` contra
+  `realpath(.xonecode/sesiones)`. Las dos se colaban si el enlace estaba en `sesiones` MISMA (no en
+  `sesiones/<id>`): `lstat` de un hijo sigue el enlace del padre, y comparar el `realpath` del
+  mismo enlace contra sí mismo siempre da igual. Se sustituyó por un recorrido de CADA segmento de
+  la ruta con `lstat`, deteniéndose en el primero que aún no existe — ningún segmento intermedio
+  puede colarse ya.
+- **La carrera por nombre en el cliente.** Quitar una ficha que está SUBIENDO y volver a anexar el
+  MISMO nombre podía dejar que la subida VIEJA, al resolver tarde, pisara el estado de la NUEVA.
+  Cada ficha lleva un `id` numérico generado ANTES de mandar la subida, y la resolución empareja
+  por `id`, nunca por nombre: si la ficha se quitó, la actualización es un no-op.
+- **Mayúsculas en APFS.** `/.GIT/config`, `/.ENV` y `/.XONECODE/x.png` se rechazan igual que sus
+  formas en minúscula: las guardas de ruta de `incorporar_adjunto` se reaplican sobre el
+  `realpathSync.native` del ancestro que ya existe, que devuelve el nombre TAL COMO ESTÁ en
+  disco, y no sobre el texto que escribió el modelo.
+- **El destino se rejuzga como ruta VIRTUAL, dos veces.** `incorporar_adjunto` repite la
+  comprobación de vista aplanada sobre el camino REAL (`aplanadaEnDisco` + `comoVirtual` del
+  destino resuelto), no solo sobre el texto: un enlace `/v` → `/pantallas` con `menu.xne` dentro
+  cuela `/v/menu.xml` si solo se mira el texto. Medido con mutación: quitar la segunda pasada deja
+  el test en verde igual (la del texto ya sigue el enlace por `existsSync`), así que es una llave
+  de MÁS, no la única — documentado como tal en el propio test.
+- **El modo autónomo de deepagents no tenía costura probada.** El criterio ya era genérico
+  (`aplicadasSinPreguntar` no distingue por tool), pero faltaba el test que lo demostrara contra el
+  grafo REAL de deepagents (no solo TrueForge): añadido, con mutación confirmando que quitar la
+  tool de `hitlDe` tumba tanto el caso autónomo como el supervisado.
+
+**Límites declarados:** la escritura de `incorporar_adjunto` NO pasa por `escriturasEnSerie` (copia
+bytes directo al disco); un `write_file` y un `incorporar_adjunto` sobre la MISMA ruta a la vez no
+se ponen en cola. Reemplazar un fichero que ya existe está permitido, y la tarjeta lo dice.
+
+**Medido en vivo:** (lo añade el coordinador tras la prueba en el navegador).

@@ -257,23 +257,27 @@ export function backendConSkills<T extends object>(backend: T, propias: readonly
 }
 
 /**
- * Cuelga `/adjuntos/` de la carpeta de la TAREA, de solo lectura.
+ * Cuelga `/adjuntos/` de la carpeta que le toque, de solo lectura.
  *
  * **La misma pieza que `/skills/` y `/artefactos/`**: otra raíz del `CompositeBackend`. Y de
  * solo lectura por lo mismo que las skills — son material de ENTRADA, los documentos que
- * anexó la persona que creó la tarea, no ficheros que reescribir. Quien lo deniega es
- * `permisosDe` (`agent/grafo/perfiles.ts`), incondicionalmente y por patrón: aquí no hay Proxy que
+ * anexó la persona, no ficheros que reescribir. Quien lo deniega es `permisosDe`
+ * (`agent/grafo/perfiles.ts`), incondicionalmente y por patrón: aquí no hay Proxy que
  * rechace, igual que no lo hay para `/skills/`, porque la denegación que el modelo choca es
  * la del middleware de permisos y ese es el sitio donde vive la regla.
  *
- * La carpeta vive FUERA del proyecto (`~/.xonecode/tareas/<id>/adjuntos/`), y eso trae
- * gratis lo que importaba: no entra en git y no sube a CloudStudio, sin depender de ninguna
- * exclusión. El porqué entero está en `core/adjuntos.ts`.
+ * **`carpeta` puede ser de DOS orígenes** y a este backend le da igual cuál: la de una TAREA
+ * (`~/.xonecode/tareas/<id>/adjuntos/`, FUERA del proyecto) o, desde IXCODE-7, la del CHAT de
+ * una SESIÓN (`carpetaDeAdjuntosDeSesion`, DENTRO de `.xonecode/`). Las dos evitan git y
+ * CloudStudio, por rutas distintas — el porqué entero está en `core/adjuntos.ts`. Meterlos
+ * DENTRO del proyecto es la tool `incorporar_adjunto`, no esta pieza.
  *
  * **La carpeta no se crea aquí**, misma medida que `/artefactos/`: `FilesystemBackend` no
- * exige que su `rootDir` exista. Y quien monta esto solo lo hace cuando la tarea TRAE
- * adjuntos (`web/servidor/corredorDeTareas.ts`): una raíz vacía sería mandar al agente a
- * mirar un sitio donde no hay nada.
+ * exige que su `rootDir` exista. Quien monta esto lo hace por dos criterios DISTINTOS: para
+ * una tarea, solo si TRAE adjuntos (`web/servidor/corredorDeTareas.ts`) — una raíz vacía
+ * sería mandar al agente a mirar un sitio donde no hay nada; para una sesión de la web,
+ * SIEMPRE, derivada del `hilo` igual que `/artefactos/` (`cli/main.ts
+ * #carpetaDeAdjuntosDelEjecutor`), exista o no la carpeta todavía en disco.
  */
 export function backendConAdjuntos<T extends object>(backend: T, carpeta: string): T {
   return new CompositeBackend(backend as never, {
@@ -491,8 +495,8 @@ export function sinDescargasEnElProyecto<T extends object>(backend: T): T {
  * 4b. Y las dos carpetas donde deepagents DESCARGA lo que no cabe en el contexto
  *    (`/large_tool_results/`, `/conversation_history/`), al lado de los artefactos. Sin
  *    ellas caían en el proyecto: medido, commiteadas dentro de la app del usuario.
- * 5. Y `/adjuntos/`, cuando la tarea trae alguno: la misma pieza, de solo lectura por
- *    `permisosDe`.
+ * 5. Y `/adjuntos/`, cuando hay alguno —de una tarea o del chat de esta sesión—: la misma
+ *    pieza, de solo lectura por `permisosDe`.
  */
 export function backendDeAgente(opciones: {
   raiz: string;
@@ -506,10 +510,11 @@ export function backendDeAgente(opciones: {
    */
   ejecucion?: { entorno: Record<string, string>; senal?: () => AbortSignal | undefined };
   /**
-   * La carpeta de los adjuntos de una TAREA, si la hay. Ausente —toda sesión de persona, y
-   * toda tarea sin adjuntos— y `/adjuntos/` no se monta; entonces esa ruta no es nada, y la
-   * denegación incondicional de `permisosDe` evita que se convierta en un fichero del
-   * proyecto (medido: sin ella lo era).
+   * La carpeta de los adjuntos que se montan como `/adjuntos/`, si hay alguna: los de una
+   * TAREA o, desde IXCODE-7, los que una persona anexó en el CHAT de esta sesión — a este
+   * backend le da igual cuál (ver `backendConAdjuntos`). Ausente y `/adjuntos/` no se monta;
+   * entonces esa ruta no es nada, y la denegación incondicional de `permisosDe` evita que se
+   * convierta en un fichero del proyecto (medido: sin ella lo era).
    */
   adjuntos?: string;
   /**
