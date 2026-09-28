@@ -226,6 +226,28 @@ describe("PanelDelProyecto", () => {
     expect(alGestor).toHaveBeenCalledWith({ accion: "vincular", conector: "jira", sitio: "s1", proyecto: "IXCODE" });
   });
 
+  it("el vinculado SIN probar (tras un reinicio) sigue enseñando su vínculo y «Desvincular»", () => {
+    montar({
+      gestor: VINCULADO,
+      conectores: { ...CONECTORES, conectores: [{ id: "jira", estado: "autorizado" }] },
+    });
+    pestana("Conectores");
+    expect(screen.getByText("Vinculado a IXCODE en xone.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Desvincular" })).toBeTruthy();
+    // Y se sigue contando como sin conectar, con el camino para probarlo.
+    expect(screen.getByText(/Un conector añadido no está conectado: Jira/)).toBeTruthy();
+  });
+
+  it("un conector sin conectar y sin usar no se ofrece: ni casilla ni sitios", () => {
+    const { alGestor } = montar({
+      gestor: { estado: { conectores: [] } },
+      conectores: { ...CONECTORES, conectores: [{ id: "jira", estado: "autorizado" }] },
+    });
+    pestana("Conectores");
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(alGestor).not.toHaveBeenCalledWith({ accion: "sitios", conector: "jira" });
+  });
+
   it("los errores de configuración se ven en Conectores", () => {
     montar({
       gestor: { estado: { conectores: [] }, errores: { vincular: { motivo: "«X» no está entre los proyectos de ese sitio" } } },

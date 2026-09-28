@@ -1055,6 +1055,9 @@ export function App({
     }
     setSesionNueva(proyecto);
     setEnEscritorio(false);
+    // Ni el panel: lo que se abra desde esta ventana es una CONVERSACIÓN, y su «Empezar» no pasa
+    // por `abrirSesion` —manda el alta directa—, así que aquí es donde se apaga.
+    setEnPanel(false);
     void enviar({ clase: "alta", paso: "proyecto", proyecto });
   };
 

@@ -2027,6 +2027,17 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
     expect(enPanel()).toBe(false);
   });
 
+  it("desde el panel, el «+» de un proyecto SIN copia apaga el panel: lo que se baje abre en el chat", () => {
+    const { store } = conProyectoAbierto();
+    fireEvent.click(enBarra("AppDemo"));
+    expect(enPanel()).toBe(true);
+    fireEvent.click(enBarra(/nueva sesión en remoto/i));
+    // El servidor termina la descarga y anuncia el proyecto nuevo abierto.
+    act(() => store.aplicar(altaDe({ proyectoActivo: "p3", sesionActiva: "s7" })));
+    expect(enPanel()).toBe(false);
+    expect(campo()).toBeTruthy();
+  });
+
   it("«Nueva sesión» del panel y el «+» de la barra llevan al CHAT", () => {
     const { store, enviar } = conProyectoAbierto();
     fireEvent.click(enBarra("AppDemo"));

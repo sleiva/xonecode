@@ -434,10 +434,16 @@ function ConectoresDelProyecto({
   }
   const nombreDe = (id: string): string => conectores.catalogo.find((f) => f.id === id)?.nombre ?? id;
   // «Conectado» es lo MISMO que dice su pastilla en Ajustes: la última prueba contestó. Un
-  // conector añadido sin eso no se ofrece aquí: usarlo sería apuntar a algo que no responde.
-  const conectados = conectores.conectores.filter((c) => c.prueba?.ok === true);
-  const sinConectar = conectores.conectores.filter((c) => c.prueba?.ok !== true);
+  // conector añadido sin eso no se ofrece para EMPEZAR a usarlo —sería apuntar a algo que no
+  // responde—, pero el que el proyecto YA usa o tiene vinculado se pinta igual: la prueba es una
+  // foto EN MEMORIA que un reinicio borra, y sin esto el vínculo y su «Desvincular» desaparecían
+  // de esta pestaña mientras Tareas seguía trabajando contra él.
   const vinculo = estado.vinculo;
+  const esConectado = (c: { prueba?: { ok: boolean } }): boolean => c.prueba?.ok === true;
+  const conectados = conectores.conectores.filter(
+    (c) => esConectado(c) || estado.conectores.includes(c.id) || vinculo?.conector === c.id
+  );
+  const sinConectar = conectores.conectores.filter((c) => !esConectado(c));
 
   return (
     <div className={estilos.seccion}>
@@ -465,7 +471,10 @@ function ConectoresDelProyecto({
                   </label>
                 </div>
                 {atado ? <p className={estilos.nota}>Está vinculado: desvincula antes de dejar de usarlo.</p> : null}
-                {c.id === "jira" ? <VinculoDeJira gestor={gestor} conectado={conectado} alGestor={alGestor} /> : null}
+                {/* Sin conexión no se le puede preguntar por sitios: solo se enseña el vínculo que ya hay. */}
+                {c.id === "jira" && (esConectado(c) || vinculo?.conector === "jira") ? (
+                  <VinculoDeJira gestor={gestor} conectado={conectado} alGestor={alGestor} />
+                ) : null}
               </li>
             );
           })}
