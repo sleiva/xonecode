@@ -36,6 +36,8 @@ import {
   guardarModeloGlobal,
   guardarTemaDeProyecto,
   guardarModoDeProyecto,
+  guardarConectoresDeProyecto,
+  guardarGestorDeProyecto,
   guardarCloudStudioDeProyecto,
   guardarModelosDeProyecto,
   guardarRamaDeProyecto,
@@ -236,6 +238,32 @@ it("guarda el modo de proyecto sin perder sus otras preferencias", () => {
 
   expect(guardarModoDeProyecto(p, "cloud")).toEqual({ ruta, modo: "cloud" });
   expect(JSON.parse(readFileSync(ruta, "utf8"))).toEqual({ tema: "xone", modo: "cloud" });
+  rmSync(p, { recursive: true, force: true });
+});
+
+it("guardarConectoresDeProyecto conserva el resto de claves", () => {
+  const p = mkdtempSync(join(tmpdir(), "xc-cfg-"));
+  const ruta = rutaConfigDeProyecto(p);
+  mkdirSync(join(p, NOMBRE_CARPETA), { recursive: true });
+  writeFileSync(ruta, JSON.stringify({ tema: "xone" }));
+
+  expect(guardarConectoresDeProyecto(p, ["jira"])).toEqual({ ruta, conectores: ["jira"] });
+  expect(JSON.parse(readFileSync(ruta, "utf8"))).toEqual({ tema: "xone", conectores: ["jira"] });
+  rmSync(p, { recursive: true, force: true });
+});
+
+it("guardarGestorDeProyecto conserva el resto de claves y quita la suya con undefined", () => {
+  const p = mkdtempSync(join(tmpdir(), "xc-cfg-"));
+  const ruta = rutaConfigDeProyecto(p);
+  mkdirSync(join(p, NOMBRE_CARPETA), { recursive: true });
+  writeFileSync(ruta, JSON.stringify({ tema: "xone" }));
+
+  const gestor = { conector: "jira", sitio: "abc-123", proyecto: "IXCODE" };
+  expect(guardarGestorDeProyecto(p, gestor)).toEqual({ ruta, gestorDeTareas: gestor });
+  expect(JSON.parse(readFileSync(ruta, "utf8"))).toEqual({ tema: "xone", gestorDeTareas: gestor });
+
+  expect(guardarGestorDeProyecto(p, undefined)).toEqual({ ruta, gestorDeTareas: undefined });
+  expect(JSON.parse(readFileSync(ruta, "utf8"))).toEqual({ tema: "xone" });
   rmSync(p, { recursive: true, force: true });
 });
 

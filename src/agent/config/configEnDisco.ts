@@ -26,6 +26,7 @@ import {
   validar,
   validarAuth,
 } from "../../core/config.js";
+import type { Vinculo } from "../../core/gestorDeTareas.js";
 import {
   motivoDeEndpointInaceptable, motivoDeSlugInaceptable, parsear, Proveedor, PROVEEDORES,
   variableDeProveedor, type ProveedorDeclarado,
@@ -281,6 +282,42 @@ export function guardarModoDeProyecto(
   const fusionado = { ...base, modo };
   escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
   return { ruta, modo };
+}
+
+/**
+ * Los conectores MCP (IXCODE-11) que este proyecto usa, del catálogo de `core/conectores.ts`.
+ * La lista se REEMPLAZA entera —fusionarla elemento a elemento no tiene un significado
+ * único, a diferencia de un objeto—, y el resto del fichero se conserva igual que en
+ * `guardarModoDeProyecto`.
+ */
+export function guardarConectoresDeProyecto(
+  raiz: string,
+  ids: string[],
+): { ruta: string; conectores: string[] } {
+  const ruta = rutaConfigDeProyecto(raiz);
+  const base = leerObjetoCrudoOAbortar(ruta);
+  const conectores = [...ids];
+  const fusionado = { ...base, conectores };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta, conectores };
+}
+
+/**
+ * El gestor de tareas vinculado a este proyecto (IXCODE-11): a qué conector, sitio y
+ * proyecto remoto. `undefined` QUITA la clave del fichero en vez de dejarla vacía o nula
+ * —un `gestorDeTareas: {}` sería una forma más de dato incompleto que `validar` tendría
+ * que rechazar en cada lectura—, misma mecánica que `guardarEntornoDeProyecto`.
+ */
+export function guardarGestorDeProyecto(
+  raiz: string,
+  gestor: Vinculo | undefined,
+): { ruta: string; gestorDeTareas: Vinculo | undefined } {
+  const ruta = rutaConfigDeProyecto(raiz);
+  const base = leerObjetoCrudoOAbortar(ruta);
+  const { gestorDeTareas: _viejo, ...sinGestor } = base;
+  const fusionado = gestor === undefined ? sinGestor : { ...base, gestorDeTareas: gestor };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta, gestorDeTareas: gestor };
 }
 
 /**

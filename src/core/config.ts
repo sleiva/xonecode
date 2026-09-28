@@ -24,6 +24,7 @@ import {
   esProveedorPersonalizado, motivoDeEndpointInaceptable, motivoDeSlugInaceptable,
   type Proveedor, type ProveedorDeclarado,
 } from "./modelos.js";
+import { motivoDeClaveDeProyecto, type Vinculo } from "./gestorDeTareas.js";
 import type { Papel } from "./ports.js";
 
 /** La configuración: modelos y proveedores. Nunca claves. */
@@ -69,6 +70,10 @@ export interface ConfigDeFichero {
   proveedores?: ProveedorDeclarado[];
   /** Topes de ventana de contexto fijados a mano, por id «proveedor/modelo». */
   contextos?: Record<string, number>;
+  /** Ids de conectores MCP (IXCODE-11, `core/conectores.ts`) que este proyecto usa. */
+  conectores?: string[];
+  /** El gestor de tareas vinculado (IXCODE-11): a qué conector, sitio y proyecto remoto. */
+  gestorDeTareas?: Vinculo;
 }
 
 /** Las credenciales, que viven en OTRO fichero y solo global. */
@@ -322,6 +327,60 @@ export function validar(
           severidad: "aviso",
         });
       }
+      continue;
+    }
+
+    if (clave === "conectores") {
+      // Lista de ids del catálogo de `core/conectores.ts` (IXCODE-11). Una entrada mala no
+      // se lleva la lista entera por delante: el mismo trato que `proveedores`.
+      if (!Array.isArray(valor)) {
+        avisos.push({
+          texto: `«${ruta}»: «conectores» debe ser una lista de ids de conector; se descarta.`,
+          severidad: "aviso",
+        });
+        continue;
+      }
+      const conectores: string[] = [];
+      for (const id of valor) {
+        if (typeof id === "string" && id.trim() !== "") {
+          conectores.push(id);
+        } else {
+          avisos.push({
+            texto: `«${ruta}»: una entrada de «conectores» no es un id de texto no vacío; se descarta.`,
+            severidad: "aviso",
+          });
+        }
+      }
+      config.conectores = conectores;
+      continue;
+    }
+
+    if (clave === "gestorDeTareas") {
+      // El vínculo con el gestor de tareas remoto (IXCODE-11): a diferencia de
+      // «conectores», aquí un campo malo no se descarta suelto — el objeto entero
+      // se descarta, porque un `gestorDeTareas` a medias (sin `proyecto`, por ejemplo)
+      // no sirve para nada: `pendientes()` necesita los tres campos a la vez.
+      if (
+        !esObjeto(valor) ||
+        typeof valor.conector !== "string" || valor.conector.trim() === "" ||
+        typeof valor.sitio !== "string" || valor.sitio.trim() === "" ||
+        typeof valor.proyecto !== "string"
+      ) {
+        avisos.push({
+          texto: `«${ruta}»: «gestorDeTareas» debe ser un objeto con «conector», «sitio» y «proyecto» como texto no vacío; se descarta.`,
+          severidad: "aviso",
+        });
+        continue;
+      }
+      const malaClave = motivoDeClaveDeProyecto(valor.proyecto);
+      if (malaClave !== undefined) {
+        avisos.push({
+          texto: `«${ruta}»: «gestorDeTareas.proyecto» no vale (${malaClave}); se descarta «gestorDeTareas».`,
+          severidad: "aviso",
+        });
+        continue;
+      }
+      config.gestorDeTareas = { conector: valor.conector, sitio: valor.sitio, proyecto: valor.proyecto };
       continue;
     }
 

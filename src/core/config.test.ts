@@ -191,6 +191,58 @@ describe("validar", () => {
     expect(avisos.every((a) => a.severidad === "aviso")).toBe(true);
   });
 
+  it("acepta conectores: una lista de ids no vacíos", () => {
+    const { config, avisos } = validar({ conectores: ["jira", "custom:mio"] }, RUTA, "proyecto");
+    expect(config.conectores).toEqual(["jira", "custom:mio"]);
+    expect(avisos).toHaveLength(0);
+  });
+
+  it("descarta conectores que no es una lista", () => {
+    const { config, avisos } = validar({ conectores: "jira" }, RUTA, "proyecto");
+    expect(config.conectores).toBeUndefined();
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]!.texto).toContain("conectores");
+  });
+
+  it("descarta una entrada de conectores que no es texto no vacío, conservando las buenas", () => {
+    const { config, avisos } = validar({ conectores: ["jira", "", 42, "  "] }, RUTA, "proyecto");
+    expect(config.conectores).toEqual(["jira"]);
+    expect(avisos).toHaveLength(3);
+    expect(avisos.every((a) => a.severidad === "aviso")).toBe(true);
+  });
+
+  it("acepta gestorDeTareas con los tres campos y una clave de proyecto válida", () => {
+    const { config, avisos } = validar(
+      { gestorDeTareas: { conector: "jira", sitio: "abc-123", proyecto: "IXCODE" } },
+      RUTA,
+      "proyecto"
+    );
+    expect(config.gestorDeTareas).toEqual({ conector: "jira", sitio: "abc-123", proyecto: "IXCODE" });
+    expect(avisos).toHaveLength(0);
+  });
+
+  it("descarta gestorDeTareas si le falta un campo", () => {
+    const { config, avisos } = validar(
+      { gestorDeTareas: { conector: "jira", sitio: "abc-123" } },
+      RUTA,
+      "proyecto"
+    );
+    expect(config.gestorDeTareas).toBeUndefined();
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]!.texto).toContain("gestorDeTareas");
+  });
+
+  it("descarta gestorDeTareas entero si la clave de proyecto no vale", () => {
+    const { config, avisos } = validar(
+      { gestorDeTareas: { conector: "jira", sitio: "abc-123", proyecto: "ixcode-11" } },
+      RUTA,
+      "proyecto"
+    );
+    expect(config.gestorDeTareas).toBeUndefined();
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]!.texto).toContain("gestorDeTareas.proyecto");
+  });
+
   it("descarta el fichero entero si el JSON raíz no es objeto", () => {
     for (const bruto of [[1, 2], "texto", 42, null]) {
       const { config, avisos } = validar(bruto, RUTA, "global");
