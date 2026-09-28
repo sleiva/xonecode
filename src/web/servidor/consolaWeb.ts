@@ -73,6 +73,9 @@ export interface OpcionesDeConsolaWeb {
    * sabe si hay turno en vuelo y tiene la sesión real; este módulo no sabe de ninguna.
    */
   notaMientrasTrabaja?: (texto: string) => boolean;
+  /** El botón DETENER y replanificar (IXCODE-4), con el mismo contrato que `notaMientrasTrabaja`:
+   *  `true` si se aplicó al turno en marcha; `false` o ausente y la prosa sigue como siempre. */
+  detenerMientrasTrabaja?: (texto: string) => boolean;
 }
 
 export interface ConsolaWeb {
@@ -87,7 +90,8 @@ export interface ConsolaWeb {
    */
   /** Dice si hay turno en vuelo. Lo llama el envoltorio del ejecutor (`vestibulo.ts`), que
    *  es el único que sabe cuándo empieza y cuándo acaba. */
-  turno(activo: boolean): void;
+  /** `detenible`: el turno en marcha admite DETENER y replanificar (el botón se pinta). */
+  turno(activo: boolean, detenible?: boolean): void;
   /**
    * Encola una línea COMO COMANDO, que es como el servidor aplica `/modelo`, `/aprobacion` o
    * `/sync` sin que nadie teclee la sintaxis.
@@ -407,7 +411,11 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
       if (cerrada) return;
       // El eco de lo tecleado, como hace la TUI (`store.usuario`): el transcript se lo
       // debe a quien escribió la petición, y de ahí sale el título de la sesión.
-      anotar({ tipo: "usuario", texto: mensaje.texto });
+      // DETENER a secas, sin texto, no es algo que la persona dijera: no se apunta como suyo.
+      if (mensaje.texto.trim() !== "" || mensaje.detener !== true) anotar({ tipo: "usuario", texto: mensaje.texto });
+      if (mensaje.detener === true && opciones.detenerMientrasTrabaja?.(mensaje.texto) === true) return;
+      // Un DETENER sin texto que ya no encontró turno no tiene nada que mandar.
+      if (mensaje.detener === true && mensaje.texto.trim() === "") return;
       if (opciones.notaMientrasTrabaja?.(mensaje.texto) === true) return;
       const despertar = esperandoLinea.shift();
       // `comoComando: false` y no una cadena pelada, y esta es TODA la diferencia: aquí
@@ -478,7 +486,7 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
   return {
     consola,
     recibir,
-    turno: (activo) => transporte.emitir({ clase: "turno", activo }),
+    turno: (activo, detenible) => transporte.emitir({ clase: "turno", activo, ...(activo && detenible === true ? { detenible: true } : {}) }),
     encolar: (linea, sustituye) => {
       if (cerrada) return;
       // `comoComando: true`: esto lo pide un CONTROL, no una persona, y es la vía por la

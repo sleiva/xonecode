@@ -548,7 +548,8 @@ export type MensajeAlCliente =
   | { clase: "proveedor"; hecho: boolean; motivo?: string }
   /** Hay un turno EN VUELO, o dejó de haberlo: apaga el compositor y saca el botón de
    *  parar. No se deduce de los actos — un turno que revienta no siempre deja `fin`. */
-  | { clase: "turno"; activo: boolean }
+  /** `detenible`: el turno en marcha admite DETENER y replanificar. Ausente = no. */
+  | { clase: "turno"; activo: boolean; detenible?: true }
   | {
       clase: "consumo";
       modelo: { entrada: number; salida: number; cache: number };
@@ -1056,7 +1057,8 @@ export interface ProveedorDeModelos {
 }
 
 export type MensajeDelCliente =
-  | { clase: "prosa"; texto: string }
+  /** `detener`: el botón DETENER y replanificar — `texto` puede ir vacío. */
+  | { clase: "prosa"; texto: string; detener?: true }
   /**
    * «Ponme este modelo», dicho por un control: `proveedor/modelo` y nada más. El cliente no
    * manda comandos — ni se apunta actos de usuario que nadie tecleó, ni habla en la

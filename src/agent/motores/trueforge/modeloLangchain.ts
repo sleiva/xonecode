@@ -84,6 +84,14 @@ export function modeloParaTrueforge(opciones: {
   modelo: () => unknown;
   senal?: () => AbortSignal | undefined;
   nombre?: string;
+  /**
+   * DETENER (`detencion.ts`): mientras devuelva un texto, la respuesta NO lleva tool calls —se
+   * tiran del stream y del mensaje final— y, si no queda texto, lleva ése. Una respuesta sin tool
+   * calls cierra el hilo. Se pregunta en cada llamada.
+   */
+  soloTexto?: () => string | undefined;
+  /** Cuántas tool calls se tiraron por `soloTexto`: la medida de si el filtro hace falta. */
+  alTirarLlamadas?: (cuantas: number) => void;
 }): ILLM {
   let secuencia = 0;
 
@@ -100,6 +108,7 @@ export function modeloParaTrueforge(opciones: {
     const id = `xc-${++secuencia}`;
     const creado = Math.floor(Date.now() / 1000);
     const nombre = opciones.nombre ?? "xonecode";
+    const relleno = opciones.soloTexto?.();
 
     let acumulado: AIMessageChunk | undefined;
     for await (const trozo of await modelo.stream(mensajes, senal === undefined ? {} : { signal: senal })) {
@@ -109,7 +118,7 @@ export function modeloParaTrueforge(opciones: {
       // alimentan los eventos del chat. El mensaje que se guarda en el hilo es el `output` de
       // abajo, que sigue con `razonamientoDe` — lo de DeepSeek no entra en la memoria.
       const pensado = razonamientoVisibleDe(trozo);
-      const llamadas = (trozo.tool_call_chunks ?? []).map((t, i) => ({
+      const llamadas = (relleno === undefined ? (trozo.tool_call_chunks ?? []) : []).map((t, i) => ({
         index: t.index ?? i,
         ...(t.id === undefined ? {} : { id: t.id, type: "function" as const }),
         function: { ...(t.name === undefined ? {} : { name: t.name }), arguments: t.args ?? "" },
@@ -135,13 +144,16 @@ export function modeloParaTrueforge(opciones: {
       } as ExtendedChatCompletionChunk;
     }
 
-    const llamadas = acumulado?.tool_calls ?? [];
+    const pedidas = acumulado?.tool_calls ?? [];
+    const llamadas = relleno === undefined ? pedidas : [];
+    if (relleno !== undefined && pedidas.length > 0) opciones.alTirarLlamadas?.(pedidas.length);
     const uso = acumulado?.usage_metadata;
     const razonamiento = acumulado === undefined ? "" : razonamientoDe(acumulado);
+    const contenido = acumulado === undefined ? "" : textoDe(acumulado);
     return {
       output: {
         role: "assistant",
-        content: acumulado === undefined ? "" : textoDe(acumulado),
+        content: relleno !== undefined && contenido.trim() === "" ? relleno : contenido,
         ...(llamadas.length === 0
           ? {}
           : {

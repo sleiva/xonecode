@@ -79,10 +79,12 @@ import {
 } from "./capacidades.js";
 import { crearDiagnosticoDeTools, type DiagnosticoDeTools } from "../../turno/diagnosticoDeTools.js";
 import { encenderTrazaDeErrores } from "../../trazaDeErroresEnDisco.js";
+import { anotarPaso } from "../../../core/trazaDeErrores.js";
 import { entornoConDepuracion } from "../../turno/depuracion.js";
 import { detalleDe, parametrosDe } from "../../turno/resumenDeTool.js";
 import { apartarMemoria, cargarMemoria, fotoSaneada, guardarMemoria, textoDeMemoriaDescartada, type FotoDeHilo } from "./memoriaTrueforge.js";
 import { crearNota, sobrantes, type Nota } from "./notas.js";
+import { crearControlDeDetencion, RESUMEN_DE_RELLENO } from "./detencion.js";
 import type { ToolDeLangchain } from "./toolsPropias.js";
 import { crearNavegacionXone } from "../../grafo/navegacionXone.js";
 import { hechosDelProyectoDe } from "../../navegacion/hechosEnDisco.js";
@@ -271,7 +273,7 @@ const claveDe = (hilo: string, id: string): string => `${hilo}:${id}`;
  */
 export async function abrirSesionTrueforge(
   opciones: OpcionesDeSesionTrueforge
-): Promise<SesionReal & { agregarNota(texto: string): void }> {
+): Promise<SesionReal & { agregarNota(texto: string): void; detener(texto: string): void; readonly llamadasTiradasPorDetener: number }> {
   const { raiz } = opciones;
   let modelos = opciones.modelos;
   const logger = winston.createLogger({ silent: true, transports: [] });
@@ -321,7 +323,11 @@ export async function abrirSesionTrueforge(
   /** Lo que la persona escribió mientras el agente trabajaba, IXCODE-4: se entrega por
    *  `capacidadDeNotas`, la MISMA instancia en la raíz y en cada hijo. */
   const notas: Nota[] = [];
-  const capacidadDeNotasDeLaSesion = capacidadDeNotas(notas);
+  /** DETENER y replanificar (`detencion.ts`): viaja por el mismo procesador que las notas. */
+  const detencion = crearControlDeDetencion(HILO_RAIZ);
+  /** Tool calls tiradas por DETENER en la sesión: si se queda en cero, el filtro es solo red. */
+  let llamadasTiradasPorDetener = 0;
+  const capacidadDeNotasDeLaSesion = capacidadDeNotas(notas, detencion);
   const montarBackend = (ejecucion?: { entorno: Record<string, string>; senal?: () => AbortSignal | undefined }) =>
     backendDeAgente({
       raiz,
@@ -499,6 +505,7 @@ export async function abrirSesionTrueforge(
     parent: unknown;
   }): Promise<AgentThread> => {
     const agente = especialistas().find((a) => a.nombre === params.request.name);
+    detencion.nacio(params.threadId);
     quienEs.set(params.threadId, agente?.nombre ?? params.request.name);
     if (agente !== undefined) especialistaDeHilo.set(params.threadId, agente.nombre);
     if (agente !== undefined && agente.motor !== "modelo") return hijoExterno(agente, params);
@@ -537,6 +544,12 @@ export async function abrirSesionTrueforge(
             ? clienteDe(`papel:${papel}:${agente?.esfuerzo ?? ""}`, () => modelos.paraPapel(papel, agente?.esfuerzo))
             : clienteDe(`modelo:${agente.modelo}:${agente.esfuerzo ?? ""}`, () => modelos.paraModelo(agente.modelo!, agente.esfuerzo)),
         senal: () => aborto?.signal,
+        soloTexto: () => (detencion.soloTexto(params.threadId) ? RESUMEN_DE_RELLENO : undefined),
+        alTirarLlamadas: (n) => {
+          llamadasTiradasPorDetener += n;
+          // A la traza de hitos (con «Depurar»): es la medida de si el filtro hace falta o es red.
+          anotarPaso("trueforge.detener", `${quienEs.get(params.threadId) ?? params.threadId}: ${n} tool call(s) tiradas`)();
+        },
       }),
       messages: [{ role: "user", content: params.request.input }],
       // Los topes MEDIDOS de deepagents: el conductor más, porque cada paso suyo es un comando.
@@ -761,6 +774,7 @@ export async function abrirSesionTrueforge(
       if (cerrada) throw new Error("la sesión está cerrada");
       const t0 = Date.now();
       cancelado = false;
+      detencion.reiniciar();
       const instantanea = await tomarInstantanea(raiz, opciones.entorno.git);
       const tope = opciones.topeDeRondas ?? MAX_APPROVAL_ROUNDS;
       const aplicadasSinPreguntar: string[] = [];
@@ -1077,7 +1091,7 @@ export async function abrirSesionTrueforge(
           // deepagents — un aviso que salta cuando no ha pasado nada enseña a ignorarlo.
           avisos: (b) => [
             ...(memoriaDescartada === undefined ? [] : [memoriaDescartada]),
-            ...(sobrantes(notas) === undefined
+            ...(sobrantes(notas) === undefined && detencion.sobrante() === undefined
               ? []
               : [`⚠ una nota no se pudo entregar a tiempo: se manda como el turno siguiente`]),
             ...(b.corrio("verify") || !escribioProyecto
@@ -1160,7 +1174,9 @@ export async function abrirSesionTrueforge(
       // `return`: hacerlo antes (como sugería el borrador) deja una ventana en la que una nota
       // empujada durante ese `await` cae en una cola ya vacía y sobrevive muda al turno
       // siguiente — justo lo que este campo existe para impedir.
-      const notasSobrantes = sobrantes(notas);
+      const sinLeer = [sobrantes(notas), detencion.sobrante()].filter((t): t is string => t !== undefined);
+      const notasSobrantes = sinLeer.length === 0 ? undefined : sinLeer.join("\n\n");
+      detencion.reiniciar();
       notas.length = 0; // Se sirvieron o se reportan aquí: no siguen vivas para el próximo turno.
       return {
         bitacora,
@@ -1211,6 +1227,18 @@ export async function abrirSesionTrueforge(
     agregarNota(texto: string) {
       notas.push(crearNota(texto));
     },
+    /**
+     * DETENER y replanificar (`detencion.ts`): los especialistas en marcha cierran con su resumen
+     * en su siguiente llamada, y el raíz replanifica con ellos y con `texto`. Solo vale DENTRO de
+     * un turno —el siguiente empieza de cero—, y por eso el servidor solo la manda con uno en vuelo;
+     * si el turno cierra sin que nadie la lea, su texto sale como sobrante.
+     */
+    detener(texto: string) {
+      detencion.detener(texto);
+    },
+    get llamadasTiradasPorDetener() {
+      return llamadasTiradasPorDetener;
+    },
     consumo(): ConsumoDeSesionPorCuenta {
       return {
         modelo: { entrada: tracker.input, salida: tracker.output, cache: tracker.cache },
@@ -1226,5 +1254,5 @@ export async function abrirSesionTrueforge(
       cerrada = true;
       aborto?.abort(new Error("sesión cerrada"));
     },
-  } as SesionReal & { agregarNota(texto: string): void };
+  } as SesionReal & { agregarNota(texto: string): void; detener(texto: string): void; readonly llamadasTiradasPorDetener: number };
 }

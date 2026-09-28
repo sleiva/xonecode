@@ -260,6 +260,8 @@ export interface SesionCerrable {
   /** Añade una nota al turno EN MARCHA (IXCODE-4). Opcional: el ejecutor guionizado y
    *  `deepagents` no lo tienen. */
   agregarNota?(texto: string): void;
+  /** DETENER y replanificar el turno EN MARCHA (IXCODE-4). Opcional: solo TrueForge. */
+  detener?(texto: string): void;
 }
 
 export interface OpcionesDelVestibulo {
@@ -543,6 +545,8 @@ export interface ConsolaDeProyecto {
    * ejecutor, que es el único sitio que ve los dos flancos.
    */
   readonly turnoEnVuelo: boolean;
+  /** Hay turno en vuelo Y la sesión sabe DETENER y replanificar: lo que pinta el botón. */
+  readonly turnoDetenible: boolean;
   readonly consola: ConsolaWeb;
   /**
    * Para el turno en vuelo sin cerrar la sesión (`SesionReal.cancelar`). Devuelve si había
@@ -1234,12 +1238,20 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       sesionReal.agregarNota(texto);
       return true;
     };
+    /** El botón DETENER: el mismo contrato que `notaMientrasTrabaja` — solo con turno en marcha
+     *  y una sesión que sepa hacerlo; si no, `false` y la prosa sigue su camino de siempre. */
+    const detenerMientrasTrabaja = (texto: string): boolean => {
+      if (!turnoEnVuelo || sesionReal?.detener === undefined) return false;
+      sesionReal.detener(texto);
+      return true;
+    };
     const consolaWeb = crearConsola({
       catalogoModelos: opciones.catalogoModelos,
       guardarModeloGlobal,
       ...(opciones.msDeEspera === undefined ? {} : { msDeEspera: opciones.msDeEspera }),
       consumoAcumulado: consumoVivo,
       notaMientrasTrabaja,
+      detenerMientrasTrabaja,
     });
     // `Partial<Consola>` sobre el objeto recién creado: lo que depende de la raíz (`/sync`,
     // los escritores del proyecto) no lo puede saber `consolaWeb`, que no conoce ninguna.
@@ -1315,6 +1327,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       (s) => {
         sesionReal = s;
         if (cerrando) s.cerrar();
+        // En el PRIMER turno la sesión llega con el turno ya anunciado, y ese anuncio no sabía
+        // si admite DETENER: se repite ahora que sí se sabe.
+        if (turnoEnVuelo && s.detener !== undefined) consolaWeb.turno(true, true);
         /**
          * La cuenta de tokens se escucha AQUÍ y no al construir la consola porque la sesión
          * se anuncia tarde: `crearEjecutorReal` avisa después de `inspeccionar` y
@@ -1439,7 +1454,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       // `correrConsola` solo lo espera y la piel solo ve eventos. De aquí sale lo que apaga
       // el compositor, saca el botón de parar y enciende el borde vivo.
       turnoEnVuelo = true;
-      consolaWeb.turno(true);
+      consolaWeb.turno(true, sesionReal?.detener !== undefined);
       alFlancoDeTurno?.(true);
       // Guardado fuera del `try` para que el `finally` pueda mirar `notasSobrantes` una vez
       // liberado `turnoEnVuelo` (IXCODE-4): el `return` de abajo ya entrega ESTE resultado a
@@ -1673,6 +1688,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       },
       get turnoEnVuelo() {
         return turnoEnVuelo;
+      },
+      get turnoDetenible() {
+        return turnoEnVuelo && sesionReal?.detener !== undefined;
       },
       consola: consolaWeb,
       cancelarTurno: () => {

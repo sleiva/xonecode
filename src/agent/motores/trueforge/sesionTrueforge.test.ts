@@ -10,6 +10,7 @@ import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ } from "./sesionTruef
 import { TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
 import { topeAgotadoDe, traducirEvento } from "./eventosTrueforge.js";
 import { cargarMemoria, rutaDeMemoria } from "./memoriaTrueforge.js";
+import { RESUMEN_DE_RELLENO, textoDeDetencionParaHijo, textoDeDetencionParaRaiz } from "./detencion.js";
 import { abrirSesionReal } from "../../turno/turnoReal.js";
 import { pintarSesion, resumirTraza } from "../../turno/informeDeTraza.js";
 import { anotarPaso, ponerSumideroDeErrores } from "../../../core/trazaDeErrores.js";
@@ -1682,5 +1683,101 @@ describe("agregarNota: una nota mientras el agente trabaja llega al hilo que tra
     const r = await s.turno("mira algo", piel().p);
     expect(r.notasSobrantes).toBeUndefined();
     expect(vistos[1]!.some((t) => t.includes("a tiempo"))).toBe(true);
+  }, 20_000);
+});
+
+describe("detener: la persona para a los especialistas y el orquestador replanifica (IXCODE-4)", () => {
+  const leer = (id: string) => [
+    new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "read_file", args: JSON.stringify({ file_path: "/app.xml" }) }] }),
+  ];
+  const delegar = (id: string, input: string) => [
+    new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input }) }] }),
+  ];
+
+  it("el hijo que trabajaba cierra con su resumen, SIN ejecutar lo que pidió, y el raíz re-delega UNA vez con un hijo que corre normal", async () => {
+    let s: Awaited<ReturnType<typeof abrirSesionTrueforge>> | undefined;
+    const { m, vistos } = modelosConGuion(
+      [
+        // 1) raíz delega
+        delegar("d1", "revisa el login"),
+        // 2) 1ª del hijo: lee de verdad. Tras ella la persona pulsa DETENER.
+        leer("r1"),
+        // 3) 2ª del hijo: ya lleva la orden de parar, y AUN ASÍ pide otra tool — que se filtra.
+        [
+          new AIMessageChunk({
+            content: "Leí /app.xml; me quedaba el menú.",
+            tool_call_chunks: [{ index: 0, id: "r2", name: "read_file", args: JSON.stringify({ file_path: "/app.xml" }) }],
+          }),
+        ],
+        // 4) raíz: ve el resumen y la orden, y re-delega con lo hecho dentro.
+        delegar("d2", "revisa el menú; ya hecho: leí /app.xml"),
+        // 5) y 6) el hijo NUEVO corre normal: su tool se ejecuta y hace una segunda llamada.
+        leer("r3"),
+        [new AIMessageChunk({ content: "Menú revisado." })],
+        // 7) raíz cierra.
+        [new AIMessageChunk({ content: "Listo." })],
+      ],
+      (n) => {
+        if (n === 2) s!.detener("mejor revisa el menú");
+      }
+    );
+    s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    const r = await s.turno("revisa el login", piel().p);
+
+    const orden = (i: number) => vistos[i]!.join("\n");
+    expect(vistos).toHaveLength(7);
+    // El hijo recibe la orden en su SIGUIENTE llamada, no en la que ya estaba en curso.
+    expect(orden(1)).not.toContain(textoDeDetencionParaHijo("mejor revisa el menú"));
+    expect(orden(2)).toContain(textoDeDetencionParaHijo("mejor revisa el menú"));
+    // La 4ª llamada ya es del RAÍZ: la tool que el hijo pidió tras la orden NO se ejecutó (si no,
+    // el hijo habría hecho una 3ª llamada aquí). Y el raíz ve el resumen y la orden.
+    expect(orden(3)).toContain("Leí /app.xml; me quedaba el menú.");
+    expect(orden(3)).toContain(textoDeDetencionParaRaiz("mejor revisa el menú"));
+    // El hijo re-delegado NO se detiene: su tool se ejecutó y siguió con una 2ª llamada limpia.
+    expect(orden(4)).toContain("revisa el menú; ya hecho");
+    expect(orden(4)).not.toContain("DETENER");
+    expect(orden(5)).toContain("<app/>");
+    expect(orden(5)).not.toContain("DETENER");
+    // Y el raíz no recibe la orden dos veces.
+    expect(orden(6).split(textoDeDetencionParaRaiz("mejor revisa el menú")).length - 1).toBe(1);
+    expect(r.notasSobrantes).toBeUndefined();
+  }, 20_000);
+
+  it("pulsado mientras el raíz decide delegar: el hijo que sale de ESA decisión también se detiene", async () => {
+    let s: Awaited<ReturnType<typeof abrirSesionTrueforge>> | undefined;
+    const { m, vistos } = modelosConGuion(
+      [delegar("d1", "revisa el login"), [new AIMessageChunk({ content: "No empecé." })], [new AIMessageChunk({ content: "Vale, paro." })]],
+      (n) => {
+        if (n === 1) s!.detener("");
+      }
+    );
+    s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("revisa el login", piel().p);
+    expect(vistos[1]!.join("\n")).toContain(textoDeDetencionParaHijo(""));
+    expect(vistos[2]!.join("\n")).toContain(textoDeDetencionParaRaiz(""));
+  }, 20_000);
+
+  it("si tras filtrar no queda texto, el padre recibe un resumen de relleno, no un vacío", async () => {
+    let s: Awaited<ReturnType<typeof abrirSesionTrueforge>> | undefined;
+    const { m, vistos } = modelosConGuion(
+      [delegar("d1", "revisa el login"), leer("r1"), leer("r2"), [new AIMessageChunk({ content: "Vale." })]],
+      (n) => {
+        if (n === 2) s!.detener("para");
+      }
+    );
+    s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("revisa el login", piel().p);
+    expect(vistos).toHaveLength(4);
+    expect(vistos[3]!.join("\n")).toContain(RESUMEN_DE_RELLENO);
+  }, 20_000);
+
+  it("una orden que nadie llega a recibir sale como sobrante, igual que una nota", async () => {
+    let s: Awaited<ReturnType<typeof abrirSesionTrueforge>> | undefined;
+    const { m } = modelosConGuion([[new AIMessageChunk({ content: "Listo." })]], (n) => {
+      if (n === 1) s!.detener("cambia de plan");
+    });
+    s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    const r = await s.turno("algo", piel().p);
+    expect(r.notasSobrantes).toBe("cambia de plan");
   }, 20_000);
 });

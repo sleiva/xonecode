@@ -1555,7 +1555,7 @@ export function montarRutas(
       // Y si hay turno corriendo, se dice: quien conecta a mitad no vio el mensaje que lo
       // anunció, y sin esto vería el compositor encendido y sin borde —«no pasa nada»—
       // mientras lo que escribiera se quedaba en la cola.
-      cliente({ clase: "turno", activo: turnoEnVuelo() });
+      cliente({ clase: "turno", activo: turnoEnVuelo(), ...(vestibulo.proyectoAbierto()?.turnoDetenible === true ? { detenible: true as const } : {}) });
       /**
        * Y la aprobación que esta consola tenga EN VUELO. Hace falta desde que volver a una
        * sesión de segundo plano es posible: su turno pudo pararse en un modal mientras

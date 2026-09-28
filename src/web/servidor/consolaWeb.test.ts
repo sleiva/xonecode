@@ -151,6 +151,29 @@ describe("consolaWeb: la entrada", () => {
     expect(carrera).toBe("sigue-esperando");
   });
 
+  it("DETENER va a `detenerMientrasTrabaja`, no a la nota; sin texto no deja acto de usuario", async () => {
+    const detenidas: string[] = [];
+    const notas: string[] = [];
+    const c = crearConsolaWeb({
+      detenerMientrasTrabaja: (texto) => (detenidas.push(texto), true),
+      notaMientrasTrabaja: (texto) => (notas.push(texto), true),
+    });
+    c.recibir({ clase: "prosa", texto: "", detener: true });
+    c.recibir({ clase: "prosa", texto: "mejor el menú", detener: true });
+    expect(detenidas).toEqual(["", "mejor el menú"]);
+    expect(notas).toEqual([]);
+    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "mejor el menú" }]);
+  });
+
+  it("DETENER que ya no encuentra turno: con texto se encola como prosa; vacío no manda nada", async () => {
+    const c = crearConsolaWeb({ detenerMientrasTrabaja: () => false });
+    const it = c.consola.lineas[Symbol.asyncIterator]();
+    c.recibir({ clase: "prosa", texto: "", detener: true });
+    c.recibir({ clase: "prosa", texto: "haz otra cosa", detener: true });
+    expect(await it.next()).toEqual({ value: { texto: "haz otra cosa", comoComando: false }, done: false });
+    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "haz otra cosa" }]);
+  });
+
   it("sin `notaMientrasTrabaja`, o si dice que no, la prosa se encola como siempre", async () => {
     const c = crearConsolaWeb({ notaMientrasTrabaja: () => false });
     const it = c.consola.lineas[Symbol.asyncIterator]();

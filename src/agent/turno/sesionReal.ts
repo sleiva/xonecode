@@ -84,6 +84,11 @@ export interface SesionReal {
    * `deepagents` no lo tienen.
    */
   agregarNota?(texto: string): void;
+  /**
+   * DETENER y replanificar el turno EN MARCHA (IXCODE-4): los especialistas cierran con su
+   * resumen y el orquestador replanifica con `texto`. Opcional: solo TrueForge lo tiene.
+   */
+  detener?(texto: string): void;
   readonly tracker: TokenTracker;
   /** El `thread_id` ACTUAL: tras `nuevoHilo()` cambia, y hay que leerlo, no cachearlo. */
   readonly hilo: string;

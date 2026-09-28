@@ -26,6 +26,7 @@ import {
 import { fuenteDeLangchain, type ToolDeLangchain } from "./toolsPropias.js";
 import { presupuestoDelPaso, type EscritorDeDesalojo } from "./recortes.js";
 import { pendientesPara, marcarEntregada, textoDeNota, type Nota } from "./notas.js";
+import type { ControlDeDetencion } from "./detencion.js";
 
 /** Una pieza: la `AgentCapability` que se le da a TrueForge y las tools que añade. */
 export interface Capacidad {
@@ -96,8 +97,12 @@ export function capacidadDeRecortes(backend: EscritorDeDesalojo): Capacidad {
  * viven en `notas.ts`, sin importar tipos internos de la librería: ni
  * `PreLLMAgentContextProcessor` ni `AgentContextProcessorAppendContext` se reexportan desde su
  * punto de entrada público.
+ *
+ * La orden de DETENER (`detencion.ts`) va por el MISMO procesador y no por otro: es la única
+ * pieza que corre antes de CADA llamada de cada hilo, y el control necesita contar las del raíz
+ * para saber de qué plan nació cada hijo.
  */
-export function capacidadDeNotas(notas: Nota[]): Capacidad {
+export function capacidadDeNotas(notas: Nota[], detencion?: ControlDeDetencion): Capacidad {
   return {
     nombre: "notas",
     tools: [],
@@ -106,11 +111,14 @@ export function capacidadDeNotas(notas: Nota[]): Capacidad {
         {
           async *processPreLLM(execution: { threadId: string }) {
             const pendientes = pendientesPara(notas, execution.threadId);
-            if (pendientes.length === 0) return;
             for (const n of pendientes) marcarEntregada(n, execution.threadId);
+            const textos = pendientes.map((n) => textoDeNota(n.texto));
+            const orden = detencion?.antesDeLlamar(execution.threadId);
+            if (orden !== undefined) textos.push(orden);
+            if (textos.length === 0) return;
             yield {
               type: "internal.agent.context.append",
-              context: [{ role: "user", content: pendientes.map((n) => textoDeNota(n.texto)).join("\n\n") }],
+              context: [{ role: "user", content: textos.join("\n\n") }],
               output: [],
             };
           },

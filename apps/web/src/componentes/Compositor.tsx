@@ -33,6 +33,7 @@ export function Compositor({
   consumo,
   oculto = false,
   alParar,
+  alDetener,
   modelos,
   alPedirCatalogo,
   alElegirModelo,
@@ -85,6 +86,13 @@ export function Compositor({
   oculto?: boolean;
   /** Parar el turno en vuelo. Ausente = no se ofrece el botón. */
   alParar?: () => void;
+  /**
+   * DETENER y replanificar (IXCODE-4), con lo que haya escrito —puede ir vacío—. No es Parar:
+   * Parar corta el turno y lo de los especialistas se pierde; esto les pide cerrar con un resumen
+   * de lo hecho y deja que el orquestador replanifique con eso. Ausente = el turno no lo admite y
+   * no se pinta.
+   */
+  alDetener?: (texto: string) => void;
   /** El estado de modelos del cable. Ausente = todavía no llegó: no se pinta pastilla, en
    *  vez de una que diga «Elige modelo» sin saber siquiera si hay algo que elegir. */
   modelos?: {
@@ -379,6 +387,20 @@ export function Compositor({
               Dos botones a la vez —uno inerte al lado del otro— dejaría al usuario eligiendo
               entre dos cosas cuando solo una tiene sentido en cada momento.
             */}
+            {turnoEnVuelo && alDetener !== undefined && !hayPendiente ? (
+              <button
+                type="button"
+                className={estilos.detener}
+                disabled={!conectado}
+                title="Los especialistas cierran con lo que llevan hecho y el orquestador replanifica con lo que hayas escrito"
+                onClick={() => {
+                  alDetener(valor.trim());
+                  setValor("");
+                }}
+              >
+                Detener y replanificar
+              </button>
+            ) : null}
             {turnoEnVuelo ? (
               <button
                 type="button"

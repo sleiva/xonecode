@@ -1829,6 +1829,11 @@ export function App({
               // fichero y volver.
               oculto={reparto.panel === "centro"}
               alParar={() => void enviar({ clase: "cancelar" })}
+              // DETENER y replanificar: solo si el servidor dice que ESTE turno lo admite. Un
+              // control sin dato detrás no se pinta.
+              {...(estado.turnoDetenible === true
+                ? { alDetener: (texto: string) => void enviar({ clase: "prosa", texto, detener: true }) }
+                : {})}
               // Una línea que empieza por «/» no tiene camino propio: viaja como prosa
               // igual que cualquier otra, y es `correrConsola` quien la despacha contra
               // `COMANDOS` (`cli/consola.ts:819`) del lado del servidor — así `/ayuda`,

@@ -471,3 +471,11 @@
     opacity: 0.18;
   }
 }
+
+/* DETENER y replanificar (IXCODE-4): al lado de Parar, y con el rol SECUNDARIO — no es la marca
+   ni un estado de alarma, es una acción más sobre el turno. Sin redeclarar nada del rol
+   (`Boton.test.ts`). */
+.detener {
+  composes: secundario from "./Boton.module.css";
+  flex: none;
+}

@@ -263,7 +263,8 @@ export type MensajeAlCliente =
    * los actos (¿llegó un `fin` después del último `usuario`?) fallaría justo cuando importa:
    * un turno que revienta no siempre deja `fin`.
    */
-  | { clase: "turno"; activo: boolean }
+  /** `detenible`: el turno en marcha admite DETENER y replanificar. Ausente = no. */
+  | { clase: "turno"; activo: boolean; detenible?: true }
   /**
    * Lo que lleva consumido la sesión, en sus DOS cuentas.
    *
@@ -1124,7 +1125,8 @@ export interface ProveedorDeModelos {
 }
 
 export type MensajeDelCliente =
-  | { clase: "prosa"; texto: string }
+  /** `detener`: el botón DETENER y replanificar — `texto` puede ir vacío. */
+  | { clase: "prosa"; texto: string; detener?: true }
   /**
    * «Ponme este modelo», dicho por un control de la interfaz: `proveedor/modelo` y nada
    * más.

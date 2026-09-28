@@ -132,6 +132,27 @@ describe("Compositor", () => {
     expect(alEnviar).toHaveBeenCalledWith("cambia de idea");
   });
 
+  it("DETENER solo se pinta con turno en vuelo, sin nada pendiente y si el turno lo admite; manda lo escrito y vacía la caja", () => {
+    const alDetener = vi.fn();
+    const { rerender } = render(<Compositor conectado turnoEnVuelo alEnviar={() => {}} />);
+    // Sin `alDetener` el turno no lo admite (deepagents): no hay botón.
+    expect(screen.queryByRole("button", { name: /detener/i })).toBeNull();
+
+    rerender(<Compositor conectado turnoEnVuelo hayPendiente alDetener={alDetener} alEnviar={() => {}} />);
+    expect(screen.queryByRole("button", { name: /detener/i })).toBeNull();
+
+    rerender(<Compositor conectado alDetener={alDetener} alEnviar={() => {}} />);
+    expect(screen.queryByRole("button", { name: /detener/i })).toBeNull();
+
+    rerender(<Compositor conectado turnoEnVuelo alDetener={alDetener} alEnviar={() => {}} />);
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "  mejor el menú  " } });
+    fireEvent.click(screen.getByRole("button", { name: /detener/i }));
+    expect(alDetener).toHaveBeenCalledWith("mejor el menú");
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("");
+    // Y Parar sigue ahí: son dos gestos distintos.
+    expect(screen.getByRole("button", { name: /parar/i })).toBeTruthy();
+  });
+
   it("el Enter NO cuela con algo pendiente", () => {
     const alEnviar = vi.fn();
     const { rerender } = render(<Compositor conectado alEnviar={alEnviar} />);

@@ -223,6 +223,8 @@ export interface EstadoDelCliente {
   mirada?: { tarea: string; actos: Acto[] };
   /** Hay un turno corriendo AHORA. Lo dice el servidor; el cliente no lo deduce. */
   turnoEnVuelo?: boolean;
+  /** El turno en vuelo admite DETENER y replanificar (TrueForge). Lo dice el servidor. */
+  turnoDetenible?: boolean;
   /**
    * Lo que lleva consumido la SESIÓN, en sus dos cuentas. Lo dice el servidor.
    *
@@ -1787,7 +1789,7 @@ export function crearStoreDelCliente(): {
         case "turno": {
           const activo = (mensaje as { activo?: unknown }).activo;
           if (typeof activo !== "boolean") return;
-          mutar({ turnoEnVuelo: activo });
+          mutar({ turnoEnVuelo: activo, turnoDetenible: activo && (mensaje as { detenible?: unknown }).detenible === true });
           return;
         }
         case "secreto": {
@@ -2020,6 +2022,7 @@ export function crearStoreDelCliente(): {
         // Sin cable no se sabe si el turno sigue: dejarlo en `true` apagaría el compositor
         // para siempre en una pestaña que ya no recibe el «terminó».
         turnoEnVuelo: false,
+        turnoDetenible: false,
         // El consumo se TIRA al caerse el cable, como los modelos y por lo mismo: es del
         // servidor, y mientras no hay cable no se puede afirmar. La reconexión lo trae
         // entero en la ráfaga.

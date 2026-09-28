@@ -1110,6 +1110,35 @@ describe("vestíbulo", () => {
     expect(notas).toEqual(["cambia de idea"]);
   });
 
+  it("DETENER mientras el turno está en marcha llega a `detener` de la sesión, y el turno se anuncia DETENIBLE", async () => {
+    const s = sesionesEnMemoria();
+    const detenidas: string[] = [];
+    const notas: string[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      crearEjecutor: (alAbrirSesion) => async () => {
+        alAbrirSesion({
+          cerrar: () => {},
+          agregarNota: (texto: string) => void notas.push(texto),
+          detener: (texto: string) => void detenidas.push(texto),
+        });
+        await new Promise(() => {});
+      },
+    });
+    const proyecto = await v.abrirProyecto({ raiz: "/w/a" });
+    expect(proyecto.turnoDetenible).toBe(false);
+    proyecto.recibir({ clase: "prosa", texto: "arranca algo largo" });
+    await new Promise((r) => setTimeout(r, 0));
+    // La sesión se anunció DESPUÉS del flanco del turno (como en el primer turno real), y aun así
+    // el turno queda detenible.
+    expect(proyecto.turnoDetenible).toBe(true);
+    proyecto.recibir({ clase: "prosa", texto: "mejor el menú", detener: true });
+    expect(detenidas).toEqual(["mejor el menú"]);
+    expect(notas).toEqual([]);
+  });
+
   /**
    * El cierre de IXCODE-4: `resultado.notasSobrantes` es lo que TrueForge reporta cuando una
    * nota llegó y nadie la recibió a tiempo (`sesionTrueforge.ts`) — este `ejecutarTurno` es
