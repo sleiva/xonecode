@@ -1,0 +1,241 @@
+/* El panel del proyecto (IXCODE-11). Solo alias del tema y tokens de `estilos/marca.css`:
+   ningún color literal (`Barra.test.tsx`). Alias comprobados contra `design-platform.css`, los
+   mismos que ya usan `Escritorio`, `Planes` y `TareasDelProyecto`: bg-layer-1, border-l2,
+   label-primary/secondary/tertiary, interactive-bg-hover, state-warn-label. La tira de
+   pestañas es la de `Pestanas.module.css`. Los botones COMPONEN de `Boton.module.css` y no
+   redeclaran nada en la misma regla (`Boton.test.ts`). */
+
+.panel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.cabecera {
+  padding: 24px 24px 8px;
+}
+
+.nombre {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 4px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.cuerpo {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 24px 32px;
+}
+
+.seccion {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.encabezado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.titulo {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.aviso {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  max-width: 70ch;
+}
+
+.error {
+  margin: 0;
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 12px;
+}
+
+.nota {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.lista {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Una sesión es una fila pulsable: el mismo hover de fila que la barra lateral. */
+.fila {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fila:hover {
+  background: var(--xonecode-fila-hover);
+}
+
+.fila:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.plan {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.nombreDePlan {
+  font-weight: 600;
+}
+
+.busqueda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.campo {
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+}
+
+.tarea {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 8px 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.datos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.clave {
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+}
+
+.tituloDeTarea {
+  font-weight: 500;
+}
+
+.estado {
+  padding: 0 6px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+}
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* El enlace en el color del texto y subrayado: el cian es acento y no sostiene texto. */
+.enlace {
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  text-decoration: underline;
+}
+
+.conector {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.filaDeConector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.casilla {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.filaDeConector .casilla {
+  margin-left: auto;
+}
+
+.vinculo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding-left: 28px;
+}
+
+.principal {
+  composes: primario from "./Boton.module.css";
+}
+
+.accion {
+  composes: secundario from "./Boton.module.css";
+}
+
+.peligro {
+  composes: peligro from "./Boton.module.css";
+}

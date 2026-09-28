@@ -142,7 +142,8 @@ export function porcentajeDelPlan(tareas: readonly TareaDelPlanDelCable[]): { he
   return { hechos, total, porcentaje: Math.round((hechos / total) * 100) };
 }
 
-function BarraDeProgreso({ tareas }: { tareas: readonly TareaDelPlanDelCable[] }) {
+/** La barra del porcentaje, exportada para el Resumen del panel del proyecto: la MISMA pieza, no una copia. */
+export function BarraDeProgreso({ tareas }: { tareas: readonly TareaDelPlanDelCable[] }) {
   const p = porcentajeDelPlan(tareas);
   if (p === undefined) return null;
   const rotulo = `${p.hechos} de ${p.total} criterios comprobados`;

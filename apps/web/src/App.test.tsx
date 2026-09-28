@@ -1956,3 +1956,119 @@ describe("App: la pregunta del AGENTE, en su tarjeta DENTRO del hilo", () => {
     expect(screen.getByRole("region", { name: "Pregunta del agente: ¿Qué pantalla toco?" })).toBeTruthy();
   });
 });
+
+/**
+ * IXCODE-11: pulsar un proyecto abre su PANEL (Resumen, Tareas, Conectores) en vez de una sesión
+ * vacía, y las dos puertas al chat —«Nueva sesión» y «Nueva sesión con esta tarea»— salen de él.
+ * Lo que esto mira y ningún test del componente ve: que `App` cambia el CENTRO, qué manda por el
+ * cable al hacerlo, y que el borrador del servidor llega al compositor SIN enviarse.
+ */
+describe("App: el panel del proyecto (IXCODE-11)", () => {
+  const altaDe = (extra: Record<string, unknown> = {}) => ({
+    clase: "alta",
+    pasos: [],
+    proveedores: [],
+    entornos: [],
+    registrados: [{ id: "webstudio", nombre: "WebStudio", url: "https://x/mcp" }],
+    entornoActivo: "webstudio",
+    proyectos: [
+      { id: "p1", nombre: "AppDemo", local: true, sesiones: [{ id: "s1", titulo: "Menú lateral", ticket: "IXCODE-12" }] },
+      { id: "p2", nombre: "Tienda", local: true },
+      { id: "p3", nombre: "Remoto" },
+    ],
+    ramas: [],
+    proyectoAbierto: true,
+    proyectoActivo: "p1",
+    sesionActiva: "s1",
+    ...extra,
+  });
+
+  function conProyectoAbierto() {
+    const store = crearStoreDelCliente();
+    const enviar: Mock<(mensaje: unknown) => Promise<unknown>> = vi.fn(() => Promise.resolve(undefined as unknown));
+    const vista = render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} instalarSkill={instalarSkillDeMentira} />);
+    act(() => store.marcarConectado());
+    act(() => store.aplicar(altaDe()));
+    return { store, enviar, vista };
+  }
+  const clases = (enviar: Mock<(mensaje: unknown) => Promise<unknown>>) => enviar.mock.calls.map(([m]) => (m as { clase: string }).clase);
+  const campo = (): HTMLTextAreaElement => screen.getByPlaceholderText(/pregunta sobre xone/i) as HTMLTextAreaElement;
+  /** La fila del proyecto en la BARRA: la miga de la cabecera también lleva su nombre. */
+  const enBarra = (nombre: string | RegExp) =>
+    within(screen.getAllByRole("navigation").find((n) => !n.hasAttribute("aria-label"))!).getByRole("button", { name: nombre });
+  const enPanel = () => screen.queryByRole("tablist", { name: "Vistas del proyecto" }) !== null;
+
+  it("pulsar el proyecto ABIERTO enseña su panel sin soltar la sesión: no manda `sesion`, solo pregunta al gestor", () => {
+    const { enviar } = conProyectoAbierto();
+    expect(enPanel()).toBe(false);
+    enviar.mockClear();
+    fireEvent.click(enBarra("AppDemo"));
+    expect(enPanel()).toBe(true);
+    expect(screen.getByRole("heading", { level: 1, name: "AppDemo" })).toBeTruthy();
+    expect(screen.getByText("Entorno: WebStudio")).toBeTruthy();
+    // La sesión ligada, con su ticket, y NINGÚN compositor: esto no es un chat.
+    expect(screen.getByRole("button", { name: "IXCODE-12 · Menú lateral" })).toBeTruthy();
+    expect(screen.queryByPlaceholderText(/pregunta sobre xone/i)).toBeNull();
+    expect(clases(enviar)).not.toContain("sesion");
+    expect(enviar).toHaveBeenCalledWith({ clase: "gestor", accion: "estado" });
+  });
+
+  it("pulsar OTRO proyecto con copia local lo abre como siempre y enseña su panel", () => {
+    const { enviar } = conProyectoAbierto();
+    fireEvent.click(enBarra("Tienda"));
+    expect(enviar).toHaveBeenCalledWith({ clase: "sesion", proyecto: "p2" });
+    expect(enPanel()).toBe(true);
+  });
+
+  it("sin copia local sigue el camino de siempre: la ventana que descarga, sin panel", () => {
+    const { enviar } = conProyectoAbierto();
+    fireEvent.click(enBarra("Remoto"));
+    expect(enviar).toHaveBeenCalledWith({ clase: "alta", paso: "proyecto", proyecto: "p3" });
+    expect(enPanel()).toBe(false);
+  });
+
+  it("«Nueva sesión» del panel y el «+» de la barra llevan al CHAT", () => {
+    const { store, enviar } = conProyectoAbierto();
+    fireEvent.click(enBarra("AppDemo"));
+    fireEvent.click(screen.getByRole("button", { name: "Nueva sesión" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "sesion", proyecto: "p1" });
+    expect(enPanel()).toBe(false);
+    expect(campo()).toBeTruthy();
+    // El servidor contesta con el alta de la sesión nueva, que suelta el «abriendo» de la fila.
+    act(() => store.aplicar(altaDe({ sesionActiva: "s2" })));
+
+    fireEvent.click(enBarra("AppDemo"));
+    expect(enPanel()).toBe(true);
+    fireEvent.click(enBarra(/nueva sesión en appdemo/i));
+    expect(enPanel()).toBe(false);
+  });
+
+  it("pulsar una sesión del panel la reabre en el chat", () => {
+    const { enviar } = conProyectoAbierto();
+    fireEvent.click(enBarra("AppDemo"));
+    fireEvent.click(screen.getByRole("button", { name: "IXCODE-12 · Menú lateral" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "sesion", proyecto: "p1", sesion: "s1" });
+    expect(enPanel()).toBe(false);
+  });
+
+  it("el BORRADOR de «Empezar» saca al chat con la tarea en el compositor, y NO se envía", () => {
+    const { store, enviar } = conProyectoAbierto();
+    fireEvent.click(enBarra("AppDemo"));
+    enviar.mockClear();
+    // El orden del servidor: el alta de la sesión NUEVA, y después el borrador.
+    act(() => store.aplicar(altaDe({ sesionActiva: "s9" })));
+    act(() => store.aplicar({ clase: "gestor", borrador: { clave: "IXCODE-12", texto: "Trabaja en esta tarea de Jira.\n\nIXCODE-12 — Menú" } }));
+    expect(enPanel()).toBe(false);
+    expect(campo().value).toBe("Trabaja en esta tarea de Jira.\n\nIXCODE-12 — Menú");
+    expect(clases(enviar)).not.toContain("prosa");
+  });
+
+  it("ese borrador no REAPARECE en la siguiente sesión nueva abierta desde el panel", () => {
+    const { store } = conProyectoAbierto();
+    act(() => store.aplicar({ clase: "gestor", borrador: { clave: "IXCODE-12", texto: "la tarea" } }));
+    expect(campo().value).toBe("la tarea");
+    fireEvent.click(enBarra("AppDemo"));
+    fireEvent.click(screen.getByRole("button", { name: "Nueva sesión" }));
+    expect(campo().value).toBe("");
+  });
+});

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { Planes } from "./componentes/Planes.js";
 import { Colecciones } from "./componentes/Colecciones.js";
 import type { crearStoreDelCliente } from "./store.js";
-import type { ActoDeSincronizacion } from "./tipos.js";
+import type { ActoDeSincronizacion, MensajeDelCliente } from "./tipos.js";
 import type { Conexion } from "./conexion.js";
 import { ANCHO_BARRA_POR_OMISION, Maqueta } from "./componentes/Maqueta.js";
 import { Barra } from "./componentes/Barra.js";
@@ -32,6 +32,7 @@ import { Ficheros } from "./componentes/Ficheros.js";
 import { CloudStudio } from "./componentes/CloudStudio.js";
 import { Artefactos, type ArtefactoEnLista } from "./componentes/Artefactos.js";
 import { TareasDelProyecto } from "./componentes/TareasDelProyecto.js";
+import { PanelDelProyecto } from "./componentes/PanelDelProyecto.js";
 import { Ejecutar } from "./componentes/Ejecutar.js";
 import { aplicarApariencia, guardarApariencia, leerApariencia, type Apariencia } from "./apariencia.js";
 import {
@@ -249,6 +250,17 @@ export function App({
   const [enEscritorio, setEnEscritorio] = useState(false);
 
   /**
+   * ¿Se está mirando el PANEL del proyecto abierto (IXCODE-11) en vez de su chat?
+   *
+   * Estado de VISTA como `enEscritorio`, y por lo mismo: el proyecto sigue abierto en el
+   * servidor. Lo enciende pulsar el proyecto en la barra —«pulsar un proyecto abre su panel»,
+   * no una sesión vacía— y lo apaga todo lo que lleva a una conversación: abrir una sesión
+   * (`abrirSesion`, que es por donde pasan la barra, el «+» y el propio panel) y el borrador
+   * de «Nueva sesión con esta tarea», que abre el servidor y no pasa por `abrirSesion`.
+   */
+  const [enPanel, setEnPanel] = useState(false);
+
+  /**
    * Abrir una sesión —nueva o guardada— es lo mismo desde los tres sitios que lo ofrecen
    * (la barra, el escritorio y la ventana de sesión nueva), así que va por una función: y
    * además de mandar el mensaje, saca del escritorio. Sin eso, pulsar un proyecto desde el
@@ -276,6 +288,11 @@ export function App({
   const abrirSesion = useCallback(
     (proyecto: string, sesion?: string, pestanaAlAbrir?: Pestana) => {
       setEnEscritorio(false);
+      setEnPanel(false);
+      // Lo que quedara para el compositor era de OTRA conversación: el compositor se desmonta
+      // fuera del chat y, al volver a montarse, reaplicaría ese texto sobre una sesión que no
+      // es la suya (el ticket de un «Empezar» ya enviado, reaparecido en una sesión nueva).
+      setBorradorDelCompositor(undefined);
       altaAlPedir.current = estado.alta;
       setPedidoDeApertura({ proyecto, ...(sesion === undefined ? {} : { sesion }) });
       // Solo si el llamador la nombra: por omisión no toca `pestana`, que es el
@@ -581,6 +598,23 @@ export function App({
   const [borradorDelCompositor, setBorradorDelCompositor] = useState<{ texto: string; id: number } | undefined>(
     undefined
   );
+
+  /**
+   * «Nueva sesión con esta tarea» (IXCODE-11): el servidor abre la sesión nueva, la anuncia, y
+   * DESPUÉS manda el borrador con la tarea. Al llegar se sale del panel al chat y el texto va al
+   * compositor por el MISMO mecanismo que «Pedir corrección». **No se envía**: lo manda la
+   * persona («que lo envíe yo»). Se mira el `id` del borrador, que solo crece, y no el texto: la
+   * misma tarea dos veces son dos borradores.
+   */
+  const borradorDelGestor = estado.gestor?.borrador;
+  useEffect(() => {
+    if (borradorDelGestor === undefined) return;
+    setEnPanel(false);
+    setEnEscritorio(false);
+    setBorradorDelCompositor((b) => ({ texto: borradorDelGestor.texto, id: (b?.id ?? 0) + 1 }));
+    // Solo el id: el objeto cambia de identidad con cualquier otro mensaje del gestor.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [borradorDelGestor?.id]);
 
   // Revisión arranca PLEGADA: al llegar la lista no se despliega ningún bloque ni se pide
   // ningún parche. Lo único que hace este efecto es OLVIDAR lo desplegado cuando el store
@@ -908,7 +942,9 @@ export function App({
   // abierto —era el único paso que podía quedar—; ahora hace falta mirarlo aparte.
   const proyectoAbierto = estado.alta?.proyectoAbierto ?? false;
 
-  const enSesion = proyectoAbierto && !enEscritorio;
+  const enSesion = proyectoAbierto && !enEscritorio && !enPanel;
+  /** El panel del proyecto ocupa el centro: hay proyecto, no se mira el escritorio y se pidió. */
+  const enProyecto = proyectoAbierto && !enEscritorio && enPanel;
 
   /**
    * **El panel es de la SESIÓN, así que en el escritorio no hay panel** aunque la vista
@@ -1023,6 +1059,25 @@ export function App({
   };
 
   /**
+   * Pulsar un proyecto en la barra (IXCODE-11): su PANEL, no una sesión vacía.
+   *
+   * Con copia local se abre el proyecto como siempre (`abrirSesion`) y se pinta el panel; si
+   * ya es el ABIERTO no se manda nada —abrirlo otra vez soltaría la sesión en curso por una
+   * nueva y vacía, justo lo que «no crear una nueva sesión» pide evitar—. Sin copia local sigue
+   * el camino de siempre, la ventana que descarga: no hay panel de algo que no está en el equipo.
+   */
+  const abrirProyecto = (proyecto: string): void => {
+    const identidad = estado.alta?.proyectos.find((p) => p.id === proyecto);
+    if (identidad?.local !== true) {
+      abrirVentanaDeSesion(proyecto);
+      return;
+    }
+    if (!(proyectoAbierto && estado.alta?.proyectoActivo === proyecto)) abrirSesion(proyecto);
+    setEnEscritorio(false);
+    setEnPanel(true);
+  };
+
+  /**
    * Plegar y desplegar, recordándolo en este navegador.
    *
    * **Con una excepción: si la barra está plegada porque el PANEL le quitó el sitio, este
@@ -1067,6 +1122,8 @@ export function App({
   /** El entorno activo con su nombre y su URL, para la portada del escritorio. `undefined`
    *  si no hay ninguno registrado — que es distinto de haberlo y no tener proyectos. */
   const entornoDelEscritorio = estado.alta?.registrados.find((e) => e.id === entornoActivo);
+  /** Las sesiones guardadas del proyecto abierto, para el Resumen de su panel. */
+  const sesionesDelProyectoActivo = estado.alta?.proyectos.find((p) => p.id === proyectoActivoId)?.sesiones;
 
   /** El proyecto de la ventana de sesión nueva, con lo que el servidor sabe de él. */
   const proyectoDeLaSesion = estado.alta?.proyectos.find((p) => p.id === sesionNueva);
@@ -1466,6 +1523,51 @@ export function App({
    * Cerrado es `undefined`, no un elemento escondido: lo que se pliega se DESMONTA, porque
    * un elemento invisible sigue siendo tabulable.
    */
+  /**
+   * La lista de tareas en background del proyecto, montada UNA vez aquí para sus dos casas: la
+   * pestaña Tareas del panel lateral y el Resumen del panel del proyecto. Las dos con los
+   * MISMOS manejadores —no hay una segunda copia de la lista ni de su cableado que diverja—, y
+   * como solo se pinta en una de las dos a la vez (el panel del proyecto no convive con el
+   * lateral), no se monta dos veces.
+   */
+  const tareasEnFondo = (
+    <TareasDelProyecto
+      tareas={tareasDelProyecto}
+      alReintentar={alReintentarTarea}
+      alDescartar={alDescartarTarea}
+      alTerminar={alTerminarTarea}
+      // Antes esta lista no tenía forma de mandar feedback — eso era solo del
+      // kanban del escritorio, así que una tarea aparcada solo se podía atender
+      // desde ahí (Task 13). `AccionesDeTarea` ya la ofrece en las dos vistas.
+      alEnviarFeedback={alEnviarFeedbackTarea}
+      conectado={estado.conectado}
+      // Si las ejecuta OTRO proceso, esta pestaña lo dice — y aquí importa más
+      // que en el kanban, porque aquí vive «Nueva tarea»: la que se cree se
+      // queda quieta hasta que ese proceso mire la cola por su cuenta (F4 de la
+      // revisión final). Ausente mientras la cola no ha llegado: no se afirma.
+      {...(estado.tareas === undefined ? {} : { corriendoAqui: estado.tareas.corriendoAqui })}
+      // Y si las ejecuta OTRO, que no es lo mismo que que no las ejecute nadie:
+      // el primero manda a esperar y el segundo dice que no va a pasar nada.
+      // Ausente se propaga como ausente, que es «no se sabe».
+      {...(estado.tareas?.ejecutaOtroProceso === undefined
+        ? {}
+        : { ejecutaOtroProceso: estado.tareas.ejecutaOtroProceso })}
+      // Task 15: crear una tarea PARA este proyecto sin salir de la pestaña ni
+      // volver al escritorio, con el proyecto ya resuelto — es el mismo id que
+      // abre esta ventana desde una tarjeta del escritorio, solo que aquí no hay
+      // nada que elegir.
+      {...(proyectoActivoId === undefined
+        ? {}
+        : { alNuevaTarea: () => abrirVentanaDeTarea(proyectoActivoId) })}
+      // Ver lo que hace, en vivo (Task 17): la MISMA pieza (`MirarTarea.tsx`,
+      // vía `Kanban.tsx`/`TareasDelProyecto.tsx`) que monta el escritorio — antes
+      // esta pestaña no la ofrecía en absoluto.
+      {...(mirar === undefined ? {} : { alMirar: alMirarTarea, alDejarDeMirar: alDejarDeMirarTarea })}
+      {...(mirandoTarea === undefined ? {} : { mirando: mirandoTarea })}
+      {...(estado.mirada === undefined ? {} : { mirada: estado.mirada })}
+    />
+  );
+
   const elPanel =
     !panelAbierto || vistaDelPanel === undefined ? undefined : (
       <Panel
@@ -1547,43 +1649,7 @@ export function App({
           conectado={estado.conectado}
         />
       }
-      tareas={
-        <TareasDelProyecto
-          tareas={tareasDelProyecto}
-          alReintentar={alReintentarTarea}
-          alDescartar={alDescartarTarea}
-          alTerminar={alTerminarTarea}
-          // Antes esta lista no tenía forma de mandar feedback — eso era solo del
-          // kanban del escritorio, así que una tarea aparcada solo se podía atender
-          // desde ahí (Task 13). `AccionesDeTarea` ya la ofrece en las dos vistas.
-          alEnviarFeedback={alEnviarFeedbackTarea}
-          conectado={estado.conectado}
-          // Si las ejecuta OTRO proceso, esta pestaña lo dice — y aquí importa más
-          // que en el kanban, porque aquí vive «Nueva tarea»: la que se cree se
-          // queda quieta hasta que ese proceso mire la cola por su cuenta (F4 de la
-          // revisión final). Ausente mientras la cola no ha llegado: no se afirma.
-          {...(estado.tareas === undefined ? {} : { corriendoAqui: estado.tareas.corriendoAqui })}
-          // Y si las ejecuta OTRO, que no es lo mismo que que no las ejecute nadie:
-          // el primero manda a esperar y el segundo dice que no va a pasar nada.
-          // Ausente se propaga como ausente, que es «no se sabe».
-          {...(estado.tareas?.ejecutaOtroProceso === undefined
-            ? {}
-            : { ejecutaOtroProceso: estado.tareas.ejecutaOtroProceso })}
-          // Task 15: crear una tarea PARA este proyecto sin salir de la pestaña ni
-          // volver al escritorio, con el proyecto ya resuelto — es el mismo id que
-          // abre esta ventana desde una tarjeta del escritorio, solo que aquí no hay
-          // nada que elegir.
-          {...(proyectoActivoId === undefined
-            ? {}
-            : { alNuevaTarea: () => abrirVentanaDeTarea(proyectoActivoId) })}
-          // Ver lo que hace, en vivo (Task 17): la MISMA pieza (`MirarTarea.tsx`,
-          // vía `Kanban.tsx`/`TareasDelProyecto.tsx`) que monta el escritorio — antes
-          // esta pestaña no la ofrecía en absoluto.
-          {...(mirar === undefined ? {} : { alMirar: alMirarTarea, alDejarDeMirar: alDejarDeMirarTarea })}
-          {...(mirandoTarea === undefined ? {} : { mirando: mirandoTarea })}
-          {...(estado.mirada === undefined ? {} : { mirada: estado.mirada })}
-        />
-      }
+      tareas={tareasEnFondo}
       /*
         Ejecutar la app de este proyecto en un aparato (Task 10): el último tramo del
         viaje —el agente escribe, el verificador mira, y aquí se ARRANCA—, que hasta
@@ -1635,7 +1701,21 @@ export function App({
     trazas a los que llevar, y unas pestañas que no llevan a ningún sitio son el mismo
     botón muerto que este repo no consiente. `Cabecera` las omite cuando no se las pasan.
   */
-  const cabecera = enSesion ? (
+  const cabecera = enProyecto ? (
+    // El panel del proyecto: su nombre arriba y la marca que lleva al escritorio. Sin el botón
+    // del panel lateral —ese panel es de una SESIÓN, y aquí no hay ninguna delante—.
+    <Cabecera
+      titulo={nombreDelProyectoActivo ?? "Proyecto"}
+      {...(estado.alta?.modo === undefined ? {} : { modo: estado.alta.modo })}
+      conectado={estado.conectado}
+      barraContraida={reparto.barra === "plegada"}
+      alAlternarBarra={alternarBarra}
+      alAbrirAjustes={() => abrirAjustes()}
+      apariencia={apariencia}
+      alCambiarApariencia={alCambiarApariencia}
+      alIrAlEscritorio={() => setEnEscritorio(true)}
+    />
+  ) : enSesion ? (
     <Cabecera
       titulo={tituloDeLaSesion ?? nombreDelProyectoActivo ?? "Sesión nueva"}
       // El proyecto delante de la sesión: «AppDemo / Hola». `Cabecera` no lo repite si el
@@ -1912,6 +1992,33 @@ export function App({
               />
             ) : null}
           </>
+        ) : enProyecto ? (
+          <>
+            <AvisoDeConexion conectado={estado.conectado} />
+            <PanelDelProyecto
+              // Uno por proyecto: al cambiar de proyecto se vuelve a montar y vuelve a preguntar
+              // el estado de SU gestor, en vez de quedarse con la pestaña y la búsqueda del otro.
+              key={proyectoActivoId ?? ""}
+              nombre={nombreDelProyectoActivo ?? "Proyecto"}
+              {...(entornoDelEscritorio === undefined ? {} : { entorno: entornoDelEscritorio.nombre })}
+              // La rama solo si ya se midió (`sync`): no se pide aquí una medida para pintarla.
+              {...(estado.sync?.rama === undefined ? {} : { rama: estado.sync.rama })}
+              {...(sesionesDelProyectoActivo === undefined ? {} : { sesiones: sesionesDelProyectoActivo })}
+              alAbrirSesion={(sesion) => {
+                if (proyectoActivoId !== undefined) abrirSesion(proyectoActivoId, sesion);
+              }}
+              alNuevaSesion={() => {
+                if (proyectoActivoId !== undefined) abrirSesion(proyectoActivoId);
+              }}
+              {...(estado.planes?.lista === undefined ? {} : { planes: estado.planes.lista })}
+              tareasEnFondo={tareasEnFondo}
+              {...(estado.gestor === undefined ? {} : { gestor: estado.gestor })}
+              {...(estado.conectores === undefined ? {} : { conectores: estado.conectores })}
+              conectado={estado.conectado}
+              alGestor={(peticion) => void enviar({ clase: "gestor", ...peticion } as MensajeDelCliente)}
+              alAbrirAjustesDeConectores={() => abrirAjustes("conectores")}
+            />
+          </>
         ) : (
           // Sin sesión abierta el centro es el ESCRITORIO, no un hueco: los proyectos con
           // lo que se sabe de cada uno y un clic para empezar. Todo lo que pinta ya viajaba
@@ -2002,7 +2109,10 @@ export function App({
           // Pulsar el proyecto y pulsar «+» abren la MISMA ventana: es la misma decisión
           // —empezar a trabajar en ese proyecto—, y tener dos caminos para ella era lo que
           // hacía que uno de los dos (el «+») no hiciera nada.
-          alAbrirProyecto={(proyecto) => abrirVentanaDeSesion(proyecto)}
+          //
+          // IXCODE-11: ya no. Pulsar el proyecto abre su PANEL (`abrirProyecto`); el «+» sigue
+          // siendo la sesión nueva directa. Sin copia local los dos caen en la misma ventana.
+          alAbrirProyecto={(proyecto) => abrirProyecto(proyecto)}
           // Sesión NUEVA en ese proyecto: el mismo mensaje sin nombrar sesión. Si la copia
           // local todavía no existe, el servidor contesta con las ramas y se cae al camino
           // del alta, que es el que sabe bajarla — por eso hace falta recordar de qué

@@ -16,6 +16,7 @@
  * exactamente lo que la TUI ya evita en `cli/tui/store.ts` con la misma sustitución.
  */
 import { leerPlanesDelCable } from "./planesDelCable.js";
+import { leerGestorDelCable, type LecturaDelGestor } from "./gestorDelCable.js";
 import { leerCambiosDelModelo } from "./cambiosDelModelo.js";
 import { leerFotoDeColecciones } from "./fotoDeColecciones.js";
 import type {
@@ -281,6 +282,24 @@ export interface EstadoDelCliente {
    * con la sesión y sin cable. `lista` vacía es «no hay planes», y entonces no hay pestaña.
    */
   planes?: { lista?: PlanDelCable[]; error?: string };
+  /**
+   * El gestor de tareas del proyecto abierto (IXCODE-11, panel del proyecto), ya validado
+   * (`gestorDelCable.ts`). El servidor contesta UN campo por acción, así que cada mensaje se
+   * FUNDE con lo que había: una lista de pendientes no puede llevarse el `estado` por delante,
+   * o la pestaña Tareas diría «sin gestor» justo después de pintar sus tareas.
+   *
+   * **Es del PROYECTO, no de la sesión**: se tira al cambiar de proyecto y sin cable, pero NO al
+   * cambiar de sesión —«Empezar» abre una sesión nueva ANTES de mandar su borrador, y tirarlo
+   * ahí se llevaría la lista que se estaba mirando—.
+   *
+   * `errores` va por ACCIÓN, y cada error es un objeto NUEVO por mensaje (dos iguales seguidos
+   * son dos avisos); la respuesta buena de esa acción lo retira. `borrador` lleva un `id` que
+   * solo crece: quien lo consume mira el número, no el texto.
+   */
+  gestor?: Omit<LecturaDelGestor, "error" | "borrador"> & {
+    borrador?: { clave: string; texto: string; id: number };
+    errores?: Partial<Record<string, { motivo: string }>>;
+  };
   /**
    * El estado de sincronización del proyecto abierto (pestaña CloudStudio). Ausente = no se
    * ha pedido todavía, y eso se dice: la pestaña arranca en «consultando».
@@ -1531,6 +1550,33 @@ export function crearStoreDelCliente(): {
           });
           return;
         }
+        case "gestor": {
+          const leido = leerGestorDelCable(mensaje);
+          const { error, borrador, ...campos } = leido;
+          if (Object.keys(leido).length === 0) return;
+          const antes = estado.gestor ?? {};
+          const errores = { ...(antes.errores ?? {}) };
+          // La respuesta buena de una acción retira SU error. Las tres que escriben la
+          // configuración (vincular, desvincular, usarConector) contestan con `estado`.
+          const aciertos = [
+            ...(campos.estado === undefined ? [] : ["estado", "vincular", "desvincular", "usarConector"]),
+            ...(campos.sitios === undefined ? [] : ["sitios"]),
+            ...(campos.proyectos === undefined ? [] : ["proyectos"]),
+            ...(campos.pendientes === undefined ? [] : ["pendientes"]),
+            ...(borrador === undefined ? [] : ["empezar"]),
+          ];
+          for (const a of aciertos) delete errores[a];
+          if (error !== undefined) errores[error.accion] = { motivo: error.motivo };
+          mutar({
+            gestor: {
+              ...antes,
+              ...campos,
+              ...(borrador === undefined ? {} : { borrador: { ...borrador, id: (antes.borrador?.id ?? 0) + 1 } }),
+              errores,
+            },
+          });
+          return;
+        }
         case "colecciones": {
           const m = mensaje as { foto?: unknown; error?: unknown };
           const foto = leerFotoDeColecciones(m.foto);
@@ -1920,7 +1966,11 @@ export function crearStoreDelCliente(): {
           // traídos en cada mensaje de estado (que llega con cada cambio de consola).
           const sesionDeAhora = typeof m.sesionActiva === "string" ? m.sesionActiva : undefined;
           const cambioDeSesion = sesionDeAhora !== estado.alta?.sesionActiva;
+          // El gestor es del PROYECTO: solo se tira si el proyecto es otro (ver `gestor`).
+          const proyectoDeAhora = typeof m.proyectoActivo === "string" ? m.proyectoActivo : undefined;
+          const cambioDeProyecto = proyectoDeAhora !== estado.alta?.proyectoActivo;
           mutar({
+            ...(cambioDeProyecto ? { gestor: undefined } : {}),
             ...(cambioDeSesion ? { revision: undefined, parches: undefined, modelosDelCambio: undefined, arbol: undefined, contenidos: undefined, colecciones: undefined, planes: undefined, artefactos: undefined, sync: undefined } : {}),
             alta: {
               pasos: m.pasos as PasoDelWizard[],
@@ -2044,6 +2094,8 @@ export function crearStoreDelCliente(): {
         contenidos: undefined,
         colecciones: undefined,
         planes: undefined,
+        // El gestor por lo mismo que los planes: el vínculo pudo cambiar en disco.
+        gestor: undefined,
         artefactos: undefined,
         // Y la medida de lo que falta por subir: la rama la pudo mover el agente, y arriba
         // —en CloudStudio— pudo cambiar algo desde fuera. Es una foto como las tres de

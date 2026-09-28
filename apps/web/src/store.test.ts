@@ -286,6 +286,33 @@ describe("store del cliente", () => {
     expect(s.leer().planes).toBeUndefined();
   });
 
+  it("«gestor» FUNDE sus campos, retira el error con el acierto de su acción, y es del PROYECTO", () => {
+    const s = crearStoreDelCliente();
+    const alta = (proyectoActivo: string, sesionActiva: string) =>
+      s.aplicar({ clase: "alta", pasos: [], proveedores: [], entornos: [], proyectos: [], ramas: [], proyectoAbierto: true, proyectoActivo, sesionActiva });
+    alta("p1", "s1");
+    s.aplicar({ clase: "gestor", estado: { conectores: ["jira"], vinculo: { conector: "jira", sitio: "s", proyecto: "IXCODE" } } });
+    s.aplicar({ clase: "gestor", error: { accion: "pendientes", motivo: "no contesta" } });
+    expect(s.leer().gestor?.estado?.vinculo?.proyecto).toBe("IXCODE");
+    expect(s.leer().gestor?.errores?.pendientes).toEqual({ motivo: "no contesta" });
+    s.aplicar({ clase: "gestor", pendientes: { cuando: 1, lista: [] } });
+    // La lista NO se lleva el estado, y el acierto retira el error de SU acción.
+    expect(s.leer().gestor?.estado?.conectores).toEqual(["jira"]);
+    expect(s.leer().gestor?.errores?.pendientes).toBeUndefined();
+    // El borrador lleva un id que solo crece: dos iguales son dos.
+    s.aplicar({ clase: "gestor", borrador: { clave: "IXCODE-12", texto: "t" } });
+    s.aplicar({ clase: "gestor", borrador: { clave: "IXCODE-12", texto: "t" } });
+    expect(s.leer().gestor?.borrador).toEqual({ clave: "IXCODE-12", texto: "t", id: 2 });
+    // Otra SESIÓN del mismo proyecto (lo que hace «Empezar») no lo tira; otro proyecto sí.
+    alta("p1", "s2");
+    expect(s.leer().gestor?.pendientes).toBeDefined();
+    alta("p2", "s3");
+    expect(s.leer().gestor).toBeUndefined();
+    s.aplicar({ clase: "gestor", estado: { conectores: [] } });
+    s.marcarDesconectado();
+    expect(s.leer().gestor).toBeUndefined();
+  });
+
   it("«colecciones» guarda la foto VALIDADA, y se tira al caerse el cable", () => {
     const s = crearStoreDelCliente();
     const foto = { colecciones: [], total: 0, entrada: [], login: [], rotas: [] };
