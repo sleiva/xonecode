@@ -80,7 +80,33 @@ describe("sitios y proyectos", () => {
     const { llamar, llamadas } = llamarDoble({ getVisibleJiraProjects: PROYECTOS });
     const g = crearGestorJira(llamar);
     expect(await g.proyectos("cloud-1")).toEqual([{ clave: "IXCODE", nombre: "xonecode" }]);
-    expect(llamadas[0]).toEqual({ nombre: "getVisibleJiraProjects", args: { cloudId: "cloud-1", maxResults: 100 } });
+    // 50, no más: el esquema de la tool declara `maximum: 50` y rechaza 100 con un -32602.
+    expect(llamadas[0]).toEqual({ nombre: "getVisibleJiraProjects", args: { cloudId: "cloud-1", maxResults: 50, startAt: 0 } });
+    expect(llamadas).toHaveLength(1);
+  });
+
+  it("proyectos() sigue las páginas con startAt hasta isLast", async () => {
+    const proyecto = (n: number) => ({ id: String(n), key: `P${n}`, name: `Proyecto ${n}` });
+    const paginas = [
+      { values: Array.from({ length: 50 }, (_, i) => proyecto(i)), isLast: false },
+      { values: [proyecto(50), proyecto(51)], isLast: true },
+    ];
+    const llamadas: Record<string, unknown>[] = [];
+    const llamar = vi.fn(async (_nombre: string, args: Record<string, unknown>) => {
+      llamadas.push(args);
+      return JSON.stringify(paginas[llamadas.length - 1]);
+    });
+    const lista = await crearGestorJira(llamar).proyectos("cloud-1");
+    expect(lista).toHaveLength(52);
+    expect(lista[51]).toEqual({ clave: "P51", nombre: "Proyecto 51" });
+    expect(llamadas.map((a) => a.startAt)).toEqual([0, 50]);
+    expect(llamadas.every((a) => a.maxResults === 50)).toBe(true);
+  });
+
+  it("proyectos() no se queda en bucle si Jira nunca dice isLast", async () => {
+    const llamar = vi.fn(async () => JSON.stringify({ values: [{ id: "1", key: "A1", name: "a" }], isLast: false }));
+    await crearGestorJira(llamar).proyectos("cloud-1");
+    expect(llamar.mock.calls.length).toBeLessThanOrEqual(20);
   });
 });
 

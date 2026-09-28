@@ -78,6 +78,11 @@ function tareaDesdeIssue(tool: string, issue: Record<string, unknown>, urlDelSit
  * volver a preguntar. Un sitio nunca visto por esta instancia deja `url` AUSENTE — no se
  * inventa una URL a partir del `cloudId`.
  */
+/** El máximo que admite `getVisibleJiraProjects` por llamada (medido en su esquema). */
+export const PROYECTOS_POR_PAGINA = 50;
+/** Cuántas páginas de proyectos se piden como mucho: 1000 proyectos. */
+const TOPE_DE_PAGINAS_DE_PROYECTOS = 20;
+
 export function crearGestorJira(llamar: Llamar): GestorDeTareasPort {
   const urlPorSitio = new Map<string, string>();
 
@@ -92,15 +97,30 @@ export function crearGestorJira(llamar: Llamar): GestorDeTareasPort {
     });
   }
 
+  /**
+   * Los proyectos visibles, por PÁGINAS: la tool admite como mucho `PROYECTOS_POR_PAGINA` por
+   * llamada (su esquema declara `maximum: 50` y rechaza más con un -32602; se pidió 100 y el panel
+   * enseñó el error) y pagina con `startAt`. Se sigue hasta `isLast` o una página vacía, con un
+   * tope de páginas para que una respuesta que nunca diga `isLast` no deje el bucle abierto.
+   */
   async function proyectos(sitio: string): Promise<{ clave: string; nombre: string }[]> {
-    const cuerpo = objeto(
-      "getVisibleJiraProjects",
-      json("getVisibleJiraProjects", await llamar("getVisibleJiraProjects", { cloudId: sitio, maxResults: 100 })),
-    );
-    return lista("getVisibleJiraProjects", cuerpo.values).map((v) => {
-      const x = objeto("getVisibleJiraProjects", v);
-      return { clave: texto("getVisibleJiraProjects", x.key), nombre: texto("getVisibleJiraProjects", x.name) };
-    });
+    const salida: { clave: string; nombre: string }[] = [];
+    for (let pagina = 0; pagina < TOPE_DE_PAGINAS_DE_PROYECTOS; pagina++) {
+      const cuerpo = objeto(
+        "getVisibleJiraProjects",
+        json(
+          "getVisibleJiraProjects",
+          await llamar("getVisibleJiraProjects", { cloudId: sitio, maxResults: PROYECTOS_POR_PAGINA, startAt: salida.length }),
+        ),
+      );
+      const valores = lista("getVisibleJiraProjects", cuerpo.values);
+      for (const v of valores) {
+        const x = objeto("getVisibleJiraProjects", v);
+        salida.push({ clave: texto("getVisibleJiraProjects", x.key), nombre: texto("getVisibleJiraProjects", x.name) });
+      }
+      if (valores.length === 0 || cuerpo.isLast !== false) break;
+    }
+    return salida;
   }
 
   async function pendientes(v: Vinculo, filtro?: string): Promise<TareaDelGestor[]> {
