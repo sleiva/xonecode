@@ -2,13 +2,17 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { UnauthorizedError, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import { InvalidGrantError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { TOPE_DE_CONEXION_MS } from "../../core/conectores.js";
 import { guardarOAuth, leerConectores, leerOAuth, rutaDeAnadidos, rutaDeOAuth } from "./conectoresEnDisco.js";
 import { ProveedorDeConector } from "./proveedorDeConector.js";
 import {
-  crearServicioDeConectores, redDeConectoresReal, servicioDeConectoresCableado,
+  crearServicioDeConectores, ErrorDeTool, redDeConectoresReal, servicioDeConectoresCableado,
   type ClienteDeMcp, type CosturaDeRedDeConectores, type RedDeConectores, type ServicioDeConectores, type TransporteDeMcp,
 } from "./servicioDeConectores.js";
 
@@ -19,6 +23,7 @@ const ahora = () => reloj;
 function redDoble(): RedDeConectores {
   return {
     listarTools: vi.fn<RedDeConectores["listarTools"]>(async () => []),
+    llamarTool: vi.fn<RedDeConectores["llamarTool"]>(async () => ""),
     iniciarAutorizacion: vi.fn<RedDeConectores["iniciarAutorizacion"]>(async () => "REDIRECT"),
     canjearCodigo: vi.fn<RedDeConectores["canjearCodigo"]>(async () => {}),
     abrir: vi.fn<RedDeConectores["abrir"]>(() => {}),
@@ -682,13 +687,14 @@ describe("alCambiar", () => {
 describe("servicioDeConectoresCableado", () => {
   afterEach(() => { vi.restoreAllMocks(); });
 
-  it("monta las ocho operaciones y lista() lee del casa sin tocar la red", () => {
+  it("monta las nueve operaciones y lista() lee del casa sin tocar la red", () => {
     const s = servicioDeConectoresCableado({ casa });
     expect(typeof s.lista).toBe("function");
     expect(typeof s.crear).toBe("function");
     expect(typeof s.anadir).toBe("function");
     expect(typeof s.quitar).toBe("function");
     expect(typeof s.probar).toBe("function");
+    expect(typeof s.llamar).toBe("function");
     expect(typeof s.autorizar).toBe("function");
     expect(typeof s.guardarClave).toBe("function");
     expect(typeof s.completar).toBe("function");
@@ -723,6 +729,7 @@ describe("los dos carriles de conexión, sin red", () => {
         }) as ClienteDeMcp["connect"],
         close: async () => {},
         listTools: (async () => ({ tools: [] })) as unknown as ClienteDeMcp["listTools"],
+        callTool: (async () => ({ content: [] })) as unknown as ClienteDeMcp["callTool"],
       }),
       primario: () => primario,
       respaldo: pedirRespaldo,
@@ -764,5 +771,205 @@ describe("los dos carriles de conexión, sin red", () => {
     await expect(red.listarTools("https://mcp.acme.com/mcp", undefined, new AbortController().signal))
       .rejects.toBeInstanceOf(UnauthorizedError);
     expect(pedirRespaldo).not.toHaveBeenCalled();
+  });
+});
+
+describe("llamarTool contra un McpServer real en memoria (Task 3)", () => {
+  /**
+   * Un `McpServer` de verdad, con dos tools —`eco` (devuelve sus argumentos) y `rota` (contesta
+   * `isError: true`)— conectado a un extremo de un par `InMemoryTransport`. El otro extremo se
+   * inyecta por la costura como `primario`, sin tocar la red: es lo que hace que la conexión
+   * factorizada (`conectar`) y el recorte del resultado se prueben contra la librería real y no
+   * contra una promesa de lo que un servidor contesta.
+   */
+  async function servidorDeEcoConectado(): Promise<TransporteDeMcp> {
+    const servidor = new McpServer({ name: "servidor-de-pruebas", version: "0" });
+    servidor.registerTool("eco", { inputSchema: z.looseObject({}) }, async (args) => ({
+      content: [{ type: "text" as const, text: JSON.stringify(args) }],
+    }));
+    servidor.registerTool("rota", {}, async () => ({
+      content: [{ type: "text" as const, text: "x".repeat(400) }],
+      isError: true,
+    }));
+    const [transporteCliente, transporteServidor] = InMemoryTransport.createLinkedPair();
+    await servidor.connect(transporteServidor);
+    return transporteCliente as unknown as TransporteDeMcp;
+  }
+
+  const RESPALDO_INESPERADO = () => { throw new Error("no debería usarse: el primario iba a conectar"); };
+
+  it("devuelve el texto del bloque type:text que da la tool", async () => {
+    const transporteCliente = await servidorDeEcoConectado();
+    const costura: CosturaDeRedDeConectores = {
+      crearCliente: () => new Client({ name: "xonecode-test", version: "0" }),
+      primario: () => transporteCliente,
+      respaldo: RESPALDO_INESPERADO,
+    };
+    const red = redDeConectoresReal(costura);
+
+    const texto = await red.llamarTool("https://mcp.test/mcp", undefined, "eco", { q: "x", n: 1 }, new AbortController().signal);
+
+    expect(JSON.parse(texto)).toEqual({ q: "x", n: 1 });
+  });
+
+  it("isError:true lanza con el texto recortado a EXACTAMENTE 300 caracteres, no menos", async () => {
+    const transporteCliente = await servidorDeEcoConectado();
+    const costura: CosturaDeRedDeConectores = {
+      crearCliente: () => new Client({ name: "xonecode-test", version: "0" }),
+      primario: () => transporteCliente,
+      respaldo: RESPALDO_INESPERADO,
+    };
+    const red = redDeConectoresReal(costura);
+
+    // Un `toThrow(cadena)` compara por SUBCADENA: un mensaje de 400 caracteres sin recortar
+    // también lo pasaría. Se atrapa el error y se mide su longitud a mano.
+    let atrapado: unknown;
+    try {
+      await red.llamarTool("https://mcp.test/mcp", undefined, "rota", {}, new AbortController().signal);
+    } catch (e) {
+      atrapado = e;
+    }
+    expect(atrapado).toBeInstanceOf(Error);
+    expect((atrapado as Error).message).toBe("x".repeat(300));
+    expect((atrapado as Error).message.length).toBe(300);
+  });
+
+  it("un primario que falla al CONECTAR cae al respaldo, y la llamada sigue leyendo la tool real", async () => {
+    const transporteCliente = await servidorDeEcoConectado();
+    const transportePrimarioRoto = {
+      start: async () => { throw new Error("este servidor no habla streamable-http"); },
+      close: async () => {},
+      send: async () => {},
+    } as unknown as TransporteDeMcp;
+    const costura: CosturaDeRedDeConectores = {
+      crearCliente: () => new Client({ name: "xonecode-test", version: "0" }),
+      primario: () => transportePrimarioRoto,
+      respaldo: () => transporteCliente,
+    };
+    const red = redDeConectoresReal(costura);
+
+    const texto = await red.llamarTool("https://mcp.test/mcp", undefined, "eco", { via: "respaldo" }, new AbortController().signal);
+
+    expect(JSON.parse(texto)).toEqual({ via: "respaldo" });
+  });
+
+  it("cierra el cliente en su finally tanto si la tool acaba bien como si acaba en isError", async () => {
+    for (const nombre of ["eco", "rota"] as const) {
+      const transporteCliente = await servidorDeEcoConectado();
+      let cierres = 0;
+      const costura: CosturaDeRedDeConectores = {
+        crearCliente: () => {
+          const cliente = new Client({ name: "xonecode-test", version: "0" });
+          const cerrarOriginal = cliente.close.bind(cliente);
+          cliente.close = async () => { cierres += 1; await cerrarOriginal(); };
+          return cliente;
+        },
+        primario: () => transporteCliente,
+        respaldo: RESPALDO_INESPERADO,
+      };
+      const red = redDeConectoresReal(costura);
+
+      await red.llamarTool("https://mcp.test/mcp", undefined, nombre, {}, new AbortController().signal).catch(() => {});
+
+      expect(cierres).toBe(1);
+    }
+  });
+});
+
+describe("ServicioDeConectores.llamar", () => {
+  it("un id que no está añadido lanza «no está conectado», sin tocar la red", async () => {
+    const red = redDoble();
+    const s = crear(red);
+    await expect(s.llamar("jira", "buscar", {})).rejects.toThrow("«jira» no está conectado");
+    expect(red.llamarTool).not.toHaveBeenCalled();
+  });
+
+  it("un id fuera del catálogo lanza lo mismo que uno no añadido", async () => {
+    const red = redDoble();
+    const s = crear(red);
+    await expect(s.llamar("linear", "buscar", {})).rejects.toThrow("«linear» no está conectado");
+    expect(red.llamarTool).not.toHaveBeenCalled();
+  });
+
+  it("añadido pero sin credencial: «falta autorizar», sin tocar la red", async () => {
+    const red = redDoble();
+    const s = crear(red);
+    s.anadir("jira"); // oauth, sin tokens guardados
+    await expect(s.llamar("jira", "buscar", {})).rejects.toThrow("falta autorizar");
+    expect(red.llamarTool).not.toHaveBeenCalled();
+  });
+
+  it("con credencial, pasa la MISMA que probar y devuelve el texto de la red", async () => {
+    const red = redDoble();
+    (red.llamarTool as ReturnType<typeof vi.fn>).mockResolvedValue("hola");
+    const s = crear(red);
+    s.anadir("deepwiki"); // "ninguna": sin autenticación, credencial undefined
+    await expect(s.llamar("deepwiki", "ask_wiki_question", { q: "x" })).resolves.toBe("hola");
+    expect(red.llamarTool).toHaveBeenCalledWith("https://mcp.deepwiki.com/mcp", undefined, "ask_wiki_question", { q: "x" }, expect.anything());
+  });
+
+  it("un tope que no contesta a tiempo aborta la señal y da su propio motivo", async () => {
+    vi.useFakeTimers();
+    try {
+      const red = redDoble();
+      (red.llamarTool as ReturnType<typeof vi.fn>).mockImplementation(
+        (_url, _credencial, _nombre, _args, senal) => new Promise(() => { void senal; }),
+      );
+      const s = crear(red);
+      s.anadir("deepwiki");
+      const p = s.llamar("deepwiki", "ask_wiki_question", {});
+      // La aserción se crea ANTES de avanzar el reloj: si se espera al `advanceTimersByTimeAsync`
+      // para engancharla, vitest puede marcar el rechazo como no gestionado aunque la aserción
+      // luego pase.
+      const aserto = expect(p).rejects.toThrow("no responde (no contestó a tiempo)");
+      await vi.advanceTimersByTimeAsync(TOPE_DE_CONEXION_MS);
+      await aserto;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("un 401 da el MISMO motivo que probar (motivoDe)", async () => {
+    const red = redDoble();
+    (red.llamarTool as ReturnType<typeof vi.fn>).mockRejectedValue(Object.assign(new Error("x"), { code: 401 }));
+    const s = crear(red);
+    s.anadir("deepwiki");
+    await expect(s.llamar("deepwiki", "ask_wiki_question", {})).rejects.toThrow("no responde (HTTP 401)");
+  });
+
+  it("un ErrorDeTool (isError de la tool) se relanza TAL CUAL, sin aplanarlo a «no responde»", async () => {
+    const red = redDoble();
+    (red.llamarTool as ReturnType<typeof vi.fn>).mockRejectedValue(new ErrorDeTool("la JQL no es válida"));
+    const s = crear(red);
+    s.anadir("deepwiki");
+    await expect(s.llamar("deepwiki", "buscar", {})).rejects.toThrow("la JQL no es válida");
+  });
+
+  it("no toca `pruebas` ni emite `alCambiar`: es una llamada, no una prueba", async () => {
+    const alCambiar = vi.fn();
+    const red = redDoble();
+    (red.llamarTool as ReturnType<typeof vi.fn>).mockResolvedValue("ok");
+    const s = crear(red, alCambiar);
+    s.anadir("deepwiki");
+    alCambiar.mockClear();
+
+    await s.llamar("deepwiki", "ask_wiki_question", {});
+
+    expect(alCambiar).not.toHaveBeenCalled();
+    expect(s.lista().conectores[0]?.prueba).toBeUndefined();
+  });
+
+  it("un `llamar` que falla tampoco toca `pruebas` ni `alCambiar`", async () => {
+    const alCambiar = vi.fn();
+    const red = redDoble();
+    (red.llamarTool as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("ECONNREFUSED"));
+    const s = crear(red, alCambiar);
+    s.anadir("deepwiki");
+    alCambiar.mockClear();
+
+    await expect(s.llamar("deepwiki", "ask_wiki_question", {})).rejects.toThrow();
+
+    expect(alCambiar).not.toHaveBeenCalled();
+    expect(s.lista().conectores[0]?.prueba).toBeUndefined();
   });
 });

@@ -56,6 +56,13 @@ export interface ServicioDeConectores {
   anadir(id: string): void; // un id que esta consola no resuelve deja su frase en `error`
   quitar(id: string): void; // también olvida su credencial y su prueba; de un `custom:`, su definición
   probar(id: string): Promise<void>; // guarda la FOTO en memoria
+  /**
+   * Llama a una tool del conector y devuelve su texto. NO es `probar`: no toca la foto en
+   * memoria (`pruebas`) ni avisa con `alCambiar` — es una llamada de trabajo, no una medida del
+   * estado de la conexión. Lanza si el conector no está conectado, si falta autorizar, si pasa
+   * el tope, o con el motivo de `probar` para el resto de fallos de red.
+   */
+  llamar(id: string, nombre: string, args: Record<string, unknown>): Promise<string>;
   autorizar(id: string, redirectUrl: string): Promise<void>; // abre el navegador; no devuelve la URL
   guardarClave(id: string, clave: string): void; // el carril del `api-key`, que no abre nada
   completar(query: URLSearchParams): Promise<{ ok: boolean; mensaje: string }>;
@@ -74,10 +81,26 @@ export type CredencialDeRed = { proveedor: OAuthClientProvider } | { cabecera: s
 
 export interface RedDeConectores {
   listarTools(url: string, credencial: CredencialDeRed | undefined, senal: AbortSignal): Promise<ToolDeConector[]>;
+  /** Devuelve el texto del primer bloque `type: "text"` del resultado. Lanza `ErrorDeTool` (con
+   *  ese texto, recortado) si el servidor contesta `isError: true` — así `llamar` distingue una
+   *  tool que FALLÓ de un servidor que NO RESPONDE, y no lo aplana con `motivoDe`. */
+  llamarTool(url: string, credencial: CredencialDeRed | undefined, nombre: string, args: Record<string, unknown>, senal: AbortSignal): Promise<string>;
   iniciarAutorizacion(url: string, proveedor: OAuthClientProvider): Promise<"REDIRECT" | "AUTHORIZED">;
   canjearCodigo(url: string, proveedor: OAuthClientProvider, code: string): Promise<void>;
   abrir(url: URL): void;
 }
+
+/** Cuántos caracteres del texto de una tool que contestó `isError: true` llegan al que llamó —
+ *  el mismo tope con el que `motivoDe` corta un mensaje remoto en otros sitios de este fichero. */
+const TOPE_DE_ERROR_DE_TOOL = 300;
+
+/**
+ * El servidor de la tool contestó, pero con `isError: true`: es un fallo DEL ENCARGO (una JQL
+ * mal escrita, un id que no existe…), no de la conexión. `llamar` la distingue de un fallo de
+ * red por CLASE —igual que `motivoDe` distingue un `OAuthError`— y relanza su texto TAL CUAL en
+ * vez de aplanarlo a «no responde»: ese texto es la única pista de qué salió mal en el encargo.
+ */
+export class ErrorDeTool extends Error {}
 
 interface PendienteConRedirect extends Pendiente { redirectUrl: string }
 
@@ -366,6 +389,36 @@ export function crearServicioDeConectores(o: {
         cambio();
       }
     },
+    // NO usa `anadido()`: esa función escribe `error` y llama a `cambio()`, y esto no es una
+    // operación de la pantalla de Ajustes — es una llamada de trabajo que un especialista hace
+    // en medio de un encargo. Resuelve por su cuenta, contra la MISMA foto del registro, y
+    // lanza en vez de dejar la frase en `error` (no hay ningún `lista()` que la vaya a enseñar).
+    async llamar(id, nombre, args) {
+      const registro = leerConectores(o.casa);
+      const c = resolver(id, registro.definiciones);
+      if (c === undefined || !registro.anadidos.includes(id)) throw new Error(`«${id}» no está conectado`);
+      // La misma guarda que `probar`: sin credencial no se toca la red, y es el mismo «falta
+      // autorizar» tanto si falta un token OAuth como una clave.
+      const credencial = credencialDe(c, leerOAuth(o.casa, id));
+      if (credencial === undefined && c.autenticacion !== "ninguna") throw new Error("falta autorizar");
+      const control = new AbortController();
+      let reloj: ReturnType<typeof setTimeout> | undefined;
+      const tope = new Promise<never>((_, rechazar) => {
+        reloj = setTimeout(() => { control.abort(); rechazar(new Error("tope")); }, TOPE_DE_CONEXION_MS);
+      });
+      try {
+        return await Promise.race([o.red.llamarTool(c.url, credencial, nombre, args, control.signal), tope]);
+      } catch (e) {
+        if (control.signal.aborted) throw new Error("no responde (no contestó a tiempo)");
+        // El fallo de la tool (`isError: true`) lleva su propio texto, y ese texto es justo lo
+        // que quien llamó necesita para saber qué corregir: aplanarlo con `motivoDe` (que no
+        // reconoce esta clase y caería en su «no responde» genérico) se lo comería.
+        if (e instanceof ErrorDeTool) throw e;
+        throw new Error(motivoDe(e));
+      } finally {
+        clearTimeout(reloj);
+      }
+    },
     async autorizar(id, redirectUrl) {
       // `autorizar` resolvía el id SOLO contra el catálogo, nunca contra lo AÑADIDO: si el
       // `anadir` del mismo clic había fallado al escribir —o un `quitar` le ganó la carrera—
@@ -446,8 +499,9 @@ export function crearServicioDeConectores(o: {
   return servicio;
 }
 
-/** Lo mínimo que `listarTools` usa del `Client` del SDK, para que la costura pueda doblarlo. */
-export type ClienteDeMcp = Pick<Client, "connect" | "close" | "listTools">;
+/** Lo mínimo que `listarTools` y `llamarTool` usan del `Client` del SDK, para que la costura
+ *  pueda doblarlo. */
+export type ClienteDeMcp = Pick<Client, "connect" | "close" | "listTools" | "callTool">;
 
 /** El transporte de un carril: lo que `Client.connect` acepta. */
 export type TransporteDeMcp = Parameters<Client["connect"]>[0];
@@ -473,41 +527,56 @@ const COSTURA_REAL: CosturaDeRedDeConectores = {
   respaldo: (url, opciones) => new SSEClientTransport(url, opciones),
 };
 
+/** Los dos carriles de credencial, cada uno por SU palanca del SDK: `authProvider` para OAuth
+ *  (es quien refresca tokens y firma la petición) y una cabecera para una clave. No hay un
+ *  tercer camino, y la unión es lo que impide pasar los dos a la vez. */
+function opcionesDe(credencial: CredencialDeRed | undefined, senal: AbortSignal): OpcionesDeTransporte {
+  const cabeceras = credencial !== undefined && "cabecera" in credencial ? { Authorization: credencial.cabecera } : undefined;
+  return {
+    ...(credencial !== undefined && "proveedor" in credencial ? { authProvider: credencial.proveedor } : {}),
+    requestInit: { signal: senal, ...(cabeceras === undefined ? {} : { headers: cabeceras }) },
+  };
+}
+
 export function redDeConectoresReal(costura: CosturaDeRedDeConectores = COSTURA_REAL): RedDeConectores {
+  /**
+   * La conexión: primario y, si falla al CONECTAR (no al hablar), el respaldo — factorizado
+   * porque `listarTools` y `llamarTool` la necesitan idéntica y no hay sitio bueno para tenerla
+   * dos veces. Devuelve el cliente YA conectado; cerrarlo es cosa de quien lo pidió, con SU
+   * propio `finally`, porque cada uno lo usa para una llamada distinta.
+   */
+  async function conectar(url: URL, opciones: OpcionesDeTransporte, senal: AbortSignal): Promise<ClienteDeMcp> {
+    // Un `Client` NUEVO para el intento por SSE, como el ejemplo de compatibilidad del propio
+    // SDK: el que falló al conectar no se reutiliza. Los tres medidos hablan streamable-http;
+    // el SSE queda para un servidor viejo.
+    let cliente = costura.crearCliente();
+    try {
+      await cliente.connect(costura.primario(url, opciones), { signal: senal });
+      return cliente;
+    } catch (error) {
+      if (error instanceof UnauthorizedError || senal.aborted) throw error;
+      await cliente.close().catch(() => {});
+      cliente = costura.crearCliente();
+      try {
+        await cliente.connect(costura.respaldo(url, opciones), { signal: senal });
+        return cliente;
+      } catch {
+        // El motivo lo trae el PRIMARIO, así que el del respaldo se DESCARTA. Medido: un 401
+        // de streamable-http llega como un `Error` con `code: 401` —y `motivoDe` lo convierte
+        // en «no responde (HTTP 401)»—, mientras que un fallo de red por el carril del SSE es
+        // un `Error` pelado sin código. Relanzando el del respaldo, una clave mala se leía
+        // exactamente igual que un host que no resuelve: «no responde», sin el código. Que el
+        // respaldo también falle NO quiere decir que el diagnóstico del primario fuera el
+        // equivocado: quiere decir que este servidor no habla ninguno de los dos protocolos,
+        // y lo que hay que enseñar es por qué falló el que sí era el suyo.
+        throw error;
+      }
+    }
+  }
+
   return {
     async listarTools(url, credencial, senal) {
-      // Los dos carriles de credencial, cada uno por SU palanca del SDK: `authProvider` para
-      // OAuth (es quien refresca tokens y firma la petición) y una cabecera para una clave. No
-      // hay un tercer camino, y la unión es lo que impide pasar los dos a la vez.
-      const cabeceras = credencial !== undefined && "cabecera" in credencial ? { Authorization: credencial.cabecera } : undefined;
-      const opciones = {
-        ...(credencial !== undefined && "proveedor" in credencial ? { authProvider: credencial.proveedor } : {}),
-        requestInit: { signal: senal, ...(cabeceras === undefined ? {} : { headers: cabeceras }) },
-      };
-      // Un `Client` NUEVO para el intento por SSE, como el ejemplo de compatibilidad del
-      // propio SDK: el que falló al conectar no se reutiliza. Los tres medidos hablan
-      // streamable-http; el SSE queda para un servidor viejo.
-      let cliente = costura.crearCliente();
-      try {
-        await cliente.connect(costura.primario(new URL(url), opciones), { signal: senal });
-      } catch (error) {
-        if (error instanceof UnauthorizedError || senal.aborted) throw error;
-        await cliente.close().catch(() => {});
-        cliente = costura.crearCliente();
-        try {
-          await cliente.connect(costura.respaldo(new URL(url), opciones), { signal: senal });
-        } catch {
-          // El motivo lo trae el PRIMARIO, así que el del respaldo se DESCARTA. Medido: un 401
-          // de streamable-http llega como un `Error` con `code: 401` —y `motivoDe` lo convierte
-          // en «no responde (HTTP 401)»—, mientras que un fallo de red por el carril del SSE es
-          // un `Error` pelado sin código. Relanzando el del respaldo, una clave mala se leía
-          // exactamente igual que un host que no resuelve: «no responde», sin el código. Que el
-          // respaldo también falle NO quiere decir que el diagnóstico del primario fuera el
-          // equivocado: quiere decir que este servidor no habla ninguno de los dos protocolos,
-          // y lo que hay que enseñar es por qué falló el que sí era el suyo.
-          throw error;
-        }
-      }
+      const cliente = await conectar(new URL(url), opcionesDe(credencial, senal), senal);
       try {
         const { tools } = await cliente.listTools(undefined, { signal: senal });
         return tools.map((t) => ({
@@ -515,6 +584,30 @@ export function redDeConectoresReal(costura: CosturaDeRedDeConectores = COSTURA_
           ...(t.description ? { descripcion: t.description } : {}),
           ...(typeof t.annotations?.readOnlyHint === "boolean" ? { soloLectura: t.annotations.readOnlyHint } : {}),
         }));
+      } finally {
+        await cliente.close().catch(() => {});
+      }
+    },
+    async llamarTool(url, credencial, nombre, args, senal) {
+      const cliente = await conectar(new URL(url), opcionesDe(credencial, senal), senal);
+      try {
+        // Sin pasar `resultSchema`, el cliente usa `CallToolResultSchema` (el moderno, con
+        // `content`/`isError`) — es la propia librería quien lo elige por OMISIÓN
+        // (`callTool(params, resultSchema = CallToolResultSchema, …)`). El tipo ESTÁTICO del SDK
+        // sigue llevando la unión con la forma vieja de compatibilidad (`toolResult`, que ningún
+        // servidor medido habla), pero el índice `[x: string]: unknown` de las dos ramas hace que
+        // ni `in` ni `Array.isArray` puedan navegar esa unión — se afirma la forma moderna, que
+        // es la única que este código pide.
+        const resultado = await cliente.callTool({ name: nombre, arguments: args }, undefined, { signal: senal }) as unknown as {
+          content: Array<{ type: string; text?: string }>;
+          isError?: boolean;
+        };
+        const bloque = resultado.content.find((b) => b.type === "text");
+        const texto = bloque?.text ?? "";
+        if (resultado.isError === true) {
+          throw new ErrorDeTool(texto.length > 0 ? texto.slice(0, TOPE_DE_ERROR_DE_TOOL) : "la tool falló sin dar un motivo");
+        }
+        return texto;
       } finally {
         await cliente.close().catch(() => {});
       }
