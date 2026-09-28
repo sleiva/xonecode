@@ -111,6 +111,23 @@ describe("cambioDe", () => {
     ]);
   });
 
+  it("incorporar_adjunto: una línea que DICE qué binario se copia y adónde, sin leer el disco", () => {
+    let leidas = 0;
+    const vista = cambioDe(
+      pendiente({ tool: "incorporar_adjunto", args: { adjunto: "/adjuntos/ic.png", file_path: "/icons/ic.png" } }),
+      (r) => { leidas += 1; return disco({})(r); }
+    );
+    expect(vista?.ruta).toBe("/icons/ic.png");
+    expect(vista?.lineas).toHaveLength(1);
+    expect(vista?.lineas[0]!.tipo).toBe("anadido");
+    expect(vista?.lineas[0]!.texto.startsWith("[fichero binario]")).toBe(true);
+    expect(vista?.lineas[0]!.texto).toContain("/adjuntos/ic.png");
+    expect(vista?.lineas[0]!.texto).toContain("se reemplaza");
+    // Son BYTES: pasarlos por `leer` los devolvería como texto roto en la tarjeta.
+    expect(leidas).toBe(0);
+    expect(cambioDe(pendiente({ tool: "incorporar_adjunto", args: { file_path: "/icons/ic.png" } }), disco({}))).toBeUndefined();
+  });
+
   it("una tool que no escribe ficheros no tiene vista", () => {
     expect(cambioDe(pendiente({ tool: "ls", args: { path: "/" } }), disco({}))).toBeUndefined();
   });

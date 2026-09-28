@@ -11,6 +11,8 @@
  * contra su dist (`file_path` con `path` normalizado, `pattern` en glob/grep).
  */
 
+import { NOMBRE_INCORPORAR_ADJUNTO } from "../../core/adjuntos.js";
+
 /** Valores escalares que una traza local puede conservar sin volcar contenido. */
 export type ParametrosSeguros = Record<string, string | number | boolean>;
 
@@ -25,6 +27,9 @@ export const CAMPOS_SEGUROS: Record<string, readonly string[]> = {
   read_file: ["file_path", "offset", "limit"],
   write_file: ["file_path"],
   edit_file: ["file_path"],
+  // El destino y nada más; el ORIGEN (`adjunto`) es un nombre que la persona subió, y la línea
+  // dice adónde va, que es lo que se aprueba.
+  [NOMBRE_INCORPORAR_ADJUNTO]: ["file_path"],
   ls: ["path"],
   glob: ["pattern", "path"],
   grep: ["pattern", "path", "glob", "max_count", "output_mode"],

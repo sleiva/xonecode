@@ -2018,3 +2018,92 @@ describe("`/adjuntos/` en TrueForge (IXCODE-7): el agujero que deepagents ya ten
     }
   }, 20_000);
 });
+
+/**
+ * `incorporar_adjunto` en TrueForge (IXCODE-7), con el orquestador REAL: el hijo `developer-xone`
+ * pide copiar un adjunto al proyecto y el turno se PARA como con `write_file` —la tool está en
+ * `requireApprovalForTools` de su conjunto de propias—, con la ruta y la línea binaria en la tarjeta.
+ */
+describe("`incorporar_adjunto` en TrueForge (IXCODE-7): pide aprobación y solo copia con el «sí»", () => {
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 1]);
+  const guion = (): AIMessageChunk[][] => [
+    [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "pon el icono" }) }] })],
+    [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "i1", name: "incorporar_adjunto", args: JSON.stringify({ adjunto: "/adjuntos/ic.png", file_path: "/icons/x.png" }) }] })],
+    [new AIMessageChunk({ content: "Hecho." })],
+    [new AIMessageChunk({ content: "Listo." })],
+  ];
+  const escenario = () => {
+    const raiz = proyecto();
+    const carpeta = mkdtempSync(join(tmpdir(), "xc-tf-inc-"));
+    writeFileSync(join(carpeta, "ic.png"), PNG);
+    return { raiz, carpeta };
+  };
+
+  it("supervisado: la tarjeta lleva la ruta y la línea binaria; con «allow» se escribe", async () => {
+    const { raiz, carpeta } = escenario();
+    const vistas: { fichero?: string; lineas?: { tipo: string; texto: string }[]; origen: string; descripcion: string }[] = [];
+    const { m, toolsPorLlamada } = modelosConGuion(guion());
+    const s = await abrirSesionTrueforge({
+      raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, adjuntos: carpeta,
+      pedirAprobacion: async (pendientes, ficheros, diffs) => {
+        for (const p of pendientes) {
+          const fichero = ficheros.get(p.id);
+          const lineas = diffs?.get(p.id);
+          vistas.push({ origen: p.origen, descripcion: p.descripcion, ...(fichero === undefined ? {} : { fichero }), ...(lineas === undefined ? {} : { lineas }) });
+        }
+        return new Map(pendientes.map((p) => [p.id, { type: "approve" as const }]));
+      },
+    });
+    const pi = piel();
+    await s.turno("pon el icono adjunto", pi.p);
+    expect(pi.pausas()).toBe(1);
+    expect(vistas).toHaveLength(1);
+    expect(vistas[0]!.fichero).toBe("/icons/x.png");
+    expect(vistas[0]!.origen).toBe("developer-xone");
+    expect(vistas[0]!.descripcion).toBe("quiere copiar un adjunto al proyecto");
+    expect(vistas[0]!.lineas).toHaveLength(1);
+    expect(vistas[0]!.lineas![0]!.texto.startsWith("[fichero binario]")).toBe(true);
+    expect(vistas[0]!.lineas![0]!.texto).toContain("/adjuntos/ic.png");
+    expect(readFileSync(join(raiz, "icons", "x.png")).equals(PNG)).toBe(true);
+    // La tiene el HIJO (llamada 2) y no el raíz (llamada 1), que es de solo lectura.
+    expect(toolsPorLlamada[1]).toContain("incorporar_adjunto");
+    expect(toolsPorLlamada[0]).not.toContain("incorporar_adjunto");
+  }, 20_000);
+
+  it("supervisado y rechazado: no se escribe", async () => {
+    const { raiz, carpeta } = escenario();
+    const s = await abrirSesionTrueforge({
+      raiz, modelos: modelosConGuion(guion()).m, entorno: ENTORNO, skills: CATALOGO, adjuntos: carpeta,
+      pedirAprobacion: async (pendientes) => new Map(pendientes.map((p) => [p.id, { type: "reject" as const }])),
+    });
+    await s.turno("pon el icono adjunto", piel().p);
+    expect(existsSync(join(raiz, "icons", "x.png"))).toBe(false);
+  }, 20_000);
+
+  it("autónomo: se aplica sola y queda en «aplicadas SIN aprobación» por su ruta", async () => {
+    const { raiz, carpeta } = escenario();
+    let preguntada = false;
+    const s = await abrirSesionTrueforge({
+      raiz, modelos: modelosConGuion(guion()).m, entorno: ENTORNO, skills: CATALOGO, adjuntos: carpeta,
+      sinAprobacion: () => true,
+      pedirAprobacion: async (pendientes) => {
+        preguntada = true;
+        return new Map(pendientes.map((p) => [p.id, { type: "reject" as const }]));
+      },
+    });
+    const pi = piel();
+    await s.turno("pon el icono adjunto", pi.p);
+    expect(preguntada).toBe(false);
+    expect(readFileSync(join(raiz, "icons", "x.png")).equals(PNG)).toBe(true);
+    expect(pi.lineas.join("\n")).toMatch(/aplicadas SIN aprobación: \/icons\/x\.png/);
+  }, 20_000);
+
+  it("sin carpeta de adjuntos, el hijo no la tiene", async () => {
+    const raiz = proyecto();
+    const { m, toolsPorLlamada } = modelosConGuion(guion());
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true });
+    await s.turno("pon el icono adjunto", piel().p);
+    expect(toolsPorLlamada[1]).not.toContain("incorporar_adjunto");
+    expect(existsSync(join(raiz, "icons"))).toBe(false);
+  }, 20_000);
+});

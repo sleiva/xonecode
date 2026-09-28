@@ -1,8 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
+import { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { AIMessage, HumanMessage } from "@langchain/core/messages";
+import type { ChatResult } from "@langchain/core/outputs";
+import { Command, MemorySaver } from "@langchain/langgraph";
+import { collectPending } from "../../vendor/hitl.js";
+import { buildResume, cambioDe, ficheroDe } from "../turno/interrupts.js";
+import { AGENTES_DE_SERIE } from "../subagentes/agentesEnDisco.js";
+import { NOMBRE_INCORPORAR_ADJUNTO } from "../../core/adjuntos.js";
 import { construirAgente } from "./xoneAgent.js";
 import { SkillsEnMemoria } from "../../core/ports.js";
 import type { ModelosPort, SubagenteExternoPort } from "../../core/ports.js";
@@ -78,4 +86,102 @@ describe("construirAgente monta la carpeta de adjuntos que le pasan", () => {
     const leido = JSON.stringify(await read.invoke({ file_path: "/adjuntos/encargo.md", offset: 0, limit: 20 }));
     expect(leido).not.toContain("lo que quiero es esto");
   });
+});
+
+/**
+ * `incorporar_adjunto` en el grafo de VERDAD (IXCODE-7): orquestador → `task` → `developer-xone`
+ * → la tool, con el `humanInTheLoopMiddleware` de deepagents y un checkpointer real. Lo que se
+ * prueba es el CABLEADO —que la tool llega al especialista y que su nombre está en su
+ * `interruptOn`—, que es lo que ningún test de piezas ve: `hitlDe` puede tener la fila y el
+ * subagente no recibirla, o al revés.
+ *
+ * El modelo es un guion COMPARTIDO por los dos hilos (el raíz y el hijo piden al mismo
+ * `ModelosPort`), en el orden en que la librería los llama.
+ */
+describe("incorporar_adjunto en deepagents: se PARA a preguntar, y solo escribe con el «sí»", () => {
+  class ModeloConGuion extends BaseChatModel {
+    constructor(private readonly guion: AIMessage[]) {
+      super({});
+    }
+    _llmType(): string {
+      return "guion";
+    }
+    bindTools(): this {
+      return this;
+    }
+    async _generate(): Promise<ChatResult> {
+      const m = this.guion.shift() ?? new AIMessage("fin del guion");
+      return { generations: [{ message: m, text: typeof m.content === "string" ? m.content : "" }] };
+    }
+  }
+
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 1]);
+  const developer = AGENTES_DE_SERIE.find((a) => a.nombre === "developer-xone")!;
+
+  async function turnoHastaLaPausa() {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-ag-inc-"));
+    writeFileSync(join(raiz, "app.xml"), "<app/>");
+    const adjuntos = mkdtempSync(join(tmpdir(), "xonecode-ag-incs-"));
+    writeFileSync(join(adjuntos, "ic.png"), PNG);
+    const guion = [
+      new AIMessage({ content: "", tool_calls: [{ id: "t1", name: "task", args: { subagent_type: "developer-xone", description: "pon el icono en /icons/ic_add.png" } }] }),
+      new AIMessage({ content: "", tool_calls: [{ id: "i1", name: NOMBRE_INCORPORAR_ADJUNTO, args: { adjunto: "/adjuntos/ic.png", file_path: "/icons/ic_add.png" } }] }),
+      new AIMessage("Hecho."),
+      new AIMessage("Listo."),
+    ];
+    const modelo = new ModeloConGuion(guion);
+    const conGuion: ModelosPort = {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      paraPapel: () => modelo as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      paraModelo: () => modelo as any,
+      descripcion: () => ({ rapido: "guion", trabajo: "guion", afilado: "guion" }),
+    };
+    const agente = await construirAgente({
+      agentes: [developer],
+      subagenteExterno: sinExternos,
+      modelos: conGuion,
+      skills: new SkillsEnMemoria(),
+      raiz,
+      ficheros: new Set(["/app.xml"]),
+      adjuntos,
+      checkpointer: new MemorySaver(),
+    });
+    const config = { configurable: { thread_id: "inc-1" }, recursionLimit: 50 };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const a = agente as any;
+    await a.invoke({ messages: [new HumanMessage("pon el icono adjunto en el menú")] }, config);
+    const pendientes = collectPending(await a.getState(config));
+    return { raiz, a, config, pendientes };
+  }
+
+  it("la pausa lleva el destino como fichero y la línea binaria como vista", async () => {
+    const { raiz, pendientes } = await turnoHastaLaPausa();
+    expect(pendientes).toHaveLength(1);
+    const p = pendientes[0]!;
+    expect(p.tool).toBe(NOMBRE_INCORPORAR_ADJUNTO);
+    expect(p.description).toContain("[developer-xone]");
+    expect(ficheroDe(p)).toBe("/icons/ic_add.png");
+    const vista = cambioDe(p, () => "");
+    expect(vista?.lineas).toHaveLength(1);
+    expect(vista!.lineas[0]!.tipo).toBe("anadido");
+    expect(vista!.lineas[0]!.texto.startsWith("[fichero binario]")).toBe(true);
+    expect(vista!.lineas[0]!.texto).toContain("/adjuntos/ic.png");
+    // Parado ANTES de escribir.
+    expect(existsSync(join(raiz, "icons", "ic_add.png"))).toBe(false);
+  }, 30_000);
+
+  it("aprobado, el fichero aparece con sus BYTES", async () => {
+    const { raiz, a, config, pendientes } = await turnoHastaLaPausa();
+    const resume = buildResume(new Map(pendientes.map((p) => [p.id, { type: "approve" as const }])));
+    await a.invoke(new Command({ resume }), config);
+    expect(readFileSync(join(raiz, "icons", "ic_add.png")).equals(PNG)).toBe(true);
+  }, 30_000);
+
+  it("rechazado, no aparece", async () => {
+    const { raiz, a, config, pendientes } = await turnoHastaLaPausa();
+    const resume = buildResume(new Map(pendientes.map((p) => [p.id, { type: "reject" as const, message: "no" }])));
+    await a.invoke(new Command({ resume }), config);
+    expect(existsSync(join(raiz, "icons", "ic_add.png"))).toBe(false);
+  }, 30_000);
 });

@@ -14,6 +14,7 @@
 import { NOOP_AGENT_TRACING, ToolSet, currentDateTime, openUI } from "./trueforge.js";
 import type { Agente } from "../../../core/agentes.js";
 import { permisosDe } from "../../grafo/perfiles.js";
+import { NOMBRE_INCORPORAR_ADJUNTO } from "../../../core/adjuntos.js";
 import {
   fuenteDeEjecucion,
   fuenteDeFicheros,
@@ -62,13 +63,29 @@ export function capacidadDeFicheros(opciones: {
   };
 }
 
-/** Las tools propias de xonecode (`xone_navegacion`, `regex_search`…), adaptadas. */
-export function capacidadDePropias(tools: readonly ToolDeLangchain[], backend: EscritorDeDesalojo): Capacidad {
+/**
+ * Las tools propias de xonecode (`xone_navegacion`, `regex_search`…), adaptadas.
+ *
+ * `conAprobacion`: las de ESTE conjunto que paran el turno como `write_file` —hoy solo
+ * `incorporar_adjunto`, que escribe el proyecto por su cuenta y tras el «sí» copia ella—. Omitido
+ * es «ninguna», que es lo de siempre para las que solo leen.
+ */
+export function capacidadDePropias(
+  tools: readonly ToolDeLangchain[],
+  backend: EscritorDeDesalojo,
+  conAprobacion: readonly string[] = []
+): Capacidad {
   return {
     nombre: "propias",
     tools: tools.map((t) => t.name),
     capability: {
-      systemToolSets: [new ToolSet({ source: fuenteDeLangchain(tools, backend) as never, selectors: SIN_APROBACION, preload: true })],
+      systemToolSets: [
+        new ToolSet({
+          source: fuenteDeLangchain(tools, backend) as never,
+          selectors: { ...SIN_APROBACION, requireApprovalForTools: [...conAprobacion] },
+          preload: true,
+        }),
+      ],
     },
   };
 }
@@ -273,7 +290,12 @@ export function capacidadesDelEspecialista(
       tools: clase === "ejecuta" ? TOOLS_DE_LECTURA : TOOLS_DE_FICHERO,
       conAprobacion: clase === "escribe",
     }),
-    ...(propias.length > 0 ? [capacidadDePropias(propias, deps.backend)] : []),
+    // `incorporar_adjunto` ESCRIBE el proyecto: si está entre las propias, pide aprobación como
+    // `write_file` (el HITL de deepagents la tiene por NOMBRE, `perfiles.ts#hitlDe`). Sin esto la
+    // tool copiaría en cuanto el modelo la pidiera.
+    ...(propias.length > 0
+      ? [capacidadDePropias(propias, deps.backend, propias.some((t) => t.name === NOMBRE_INCORPORAR_ADJUNTO) ? [NOMBRE_INCORPORAR_ADJUNTO] : [])]
+      : []),
     ...(clase === "ejecuta" ? [capacidadDeEjecucion(deps.conShell())] : []),
     capacidadDeRecortes(deps.backend),
     capacidadDeFecha(),

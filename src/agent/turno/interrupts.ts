@@ -1,6 +1,7 @@
 import { collectPending, buildResume, type Decision, type PendingInterrupt } from "../../vendor/hitl.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
 import { diffDeLineas, type LineaDeDiff } from "../../core/diff.js";
+import { NOMBRE_INCORPORAR_ADJUNTO } from "../../core/adjuntos.js";
 
 export { buildResume, type Decision, type PendingInterrupt };
 
@@ -99,6 +100,18 @@ export function cambioDe(
       return { ruta, lineas: [...diffDeLineas(viejo, nuevo)] };
     }
     return { ruta, lineas: diffDeLineas(antes, antes.split(viejo).join(nuevo)) };
+  }
+
+  if (p.tool === NOMBRE_INCORPORAR_ADJUNTO) {
+    const adjunto = p.args.adjunto;
+    if (typeof adjunto !== "string") return undefined;
+    // Un binario no tiene diff de líneas: se DICE qué se copia y adónde. El contenido no se
+    // enseña (son bytes, y `leer` los devolvería como texto roto); lo que se aprueba es el
+    // fichero y su sitio. Y que REEMPLAZA, porque esta tarjeta no enseña el antes.
+    return {
+      ruta,
+      lineas: [{ tipo: "anadido", texto: `[fichero binario] se copia ${adjunto} a ${ruta} (si ya existe, se reemplaza)` }],
+    };
   }
 
   return undefined;

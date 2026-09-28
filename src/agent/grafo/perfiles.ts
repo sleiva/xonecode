@@ -15,6 +15,7 @@ import {
 } from "../turno/resumenDeContexto.js";
 import { esRutaDePlan, RUTA_PLANES } from "../../core/planes.js";
 import { artefactoFueraDeSitio } from "../../core/artefactos.js";
+import { NOMBRE_INCORPORAR_ADJUNTO } from "../../core/adjuntos.js";
 /** Las tools de fichero que monta deepagents sobre el backend. */
 export const TOOLS_LECTURA = ["ls", "read_file", "glob", "grep"] as const;
 export const TOOLS_ESCRITURA = ["write_file", "edit_file"] as const;
@@ -303,6 +304,7 @@ export function toolsDe(perfil: QuienDecidePermisos): string[] {
 export const TEXTO_HITL: Record<string, string> = {
   write_file: "escribir un fichero del proyecto",
   edit_file: "modificar un fichero del proyecto",
+  [NOMBRE_INCORPORAR_ADJUNTO]: "copiar un adjunto al proyecto",
 };
 
 /**
@@ -318,7 +320,11 @@ export const TEXTO_HITL: Record<string, string> = {
 export function hitlDe(perfil: QuienDecidePermisos): Record<string, ConfigDeInterrupt> {
   if (perfil.soloLectura) return {};
   const salida: Record<string, ConfigDeInterrupt> = {};
-  for (const tool of TOOLS_ESCRITURA) {
+  // `incorporar_adjunto` (`incorporarAdjunto.ts`) también ESCRIBE el proyecto, y no por el
+  // backend: tras el «sí» es la propia tool la que copia. Sin su fila aquí copiaría sin que nadie
+  // lo aprobara. Va a todo el que escribe aunque no la tenga montada: una clave de más en
+  // `interruptOn` no hace nada, y una de menos es una escritura sin aprobación.
+  for (const tool of [...TOOLS_ESCRITURA, NOMBRE_INCORPORAR_ADJUNTO]) {
     salida[tool] = {
       allowedDecisions: ["approve", "reject"],
       // El nombre del perfil va DENTRO de la descripción por necesidad: el interrupt que

@@ -14,6 +14,7 @@ import { OPCIONES_BUSQUEDA_FICHEROS } from "./opcionesDeFicheros.js";
 import { crearNavegacionXone } from "./navegacionXone.js";
 import { crearCopiarArtefacto } from "./copiarArtefacto.js";
 import { crearUnirSecciones } from "./unirSecciones.js";
+import { crearIncorporarAdjunto, recibeIncorporarAdjunto } from "./incorporarAdjunto.js";
 import { estilosDeDisco, indiceEnDisco, type CargarIndice } from "../navegacion/indiceEnDisco.js";
 import type { CargarEstilos } from "../navegacion/estilosEnDisco.js";
 import { readFileSync } from "node:fs";
@@ -541,6 +542,19 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
       // Y unir un documento escrito por secciones (`unirSecciones.ts`), con la misma condición de
       // DATO: escribe sin aprobación, así que solo a quien tiene carpetas abiertas con `escribeEn`.
       ...((perfil.escribeEn ?? []).length > 0 ? [crearUnirSecciones({ raiz: opciones.raiz, perfil })] : []),
+      /**
+       * Meter un ADJUNTO del chat en el proyecto (IXCODE-7), a quien escribe el proyecto entero
+       * (`recibeIncorporarAdjunto`: de los de serie, `developer-xone` y `designer-xone`) y solo con
+       * la carpeta montada — sin ella no hay nada que incorporar. **Pasa por la aprobación**: su
+       * nombre está en `hitlDe`, y tras el «sí» es la tool la que copia.
+       *
+       * Esto es la rama de `motor: "modelo"`: un especialista EXTERNO se monta arriba sin tools
+       * propias, así que la frase del inventario («quien escribe en el proyecto tiene
+       * `incorporar_adjunto`») es verdad solo para los nuestros, y así se quiere.
+       */
+      ...(opciones.adjuntos !== undefined && recibeIncorporarAdjunto(perfil)
+        ? [crearIncorporarAdjunto({ raiz: opciones.raiz, carpetaDeAdjuntos: opciones.adjuntos, perfil })]
+        : []),
     ],
     //
     // Las tools de fichero las monta el `FilesystemMiddleware` a partir del backend, y

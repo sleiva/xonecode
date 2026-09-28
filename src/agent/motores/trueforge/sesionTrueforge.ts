@@ -92,6 +92,7 @@ import { conHechosDelProyecto } from "../../../core/hechosDelProyecto.js";
 import { crearBusquedaRegex } from "../../grafo/busquedaRegex.js";
 import { crearCopiarArtefacto } from "../../grafo/copiarArtefacto.js";
 import { crearUnirSecciones } from "../../grafo/unirSecciones.js";
+import { crearIncorporarAdjunto, recibeIncorporarAdjunto } from "../../grafo/incorporarAdjunto.js";
 import { crearCriticaVisual } from "../../grafo/criticaVisual.js";
 import { crearTraerDeLaMaquina } from "../../grafo/traerDeLaMaquina.js";
 import { invocarVisualConModelos } from "../../dispositivos/juezVisual.js";
@@ -445,6 +446,12 @@ export async function abrirSesionTrueforge(
       : []),
     // El mismo reparto que deepagents (`xoneAgent.ts`): a quien declara `escribeEn`.
     ...((agente.escribeEn ?? []).length > 0 ? [crearUnirSecciones({ raiz, perfil: agente }) as unknown as ToolDeLangchain] : []),
+    // Meter un adjunto del chat en el proyecto, con el reparto de deepagents: a quien escribe el
+    // proyecto entero y solo con la carpeta montada. Pide aprobación: `capacidadesDelEspecialista`
+    // la pone en `requireApprovalForTools`, y `rondasDe` la pregunta con su tarjeta (`cambioDe`).
+    ...(opciones.adjuntos !== undefined && recibeIncorporarAdjunto(agente)
+      ? [crearIncorporarAdjunto({ raiz, carpetaDeAdjuntos: opciones.adjuntos, perfil: agente }) as unknown as ToolDeLangchain]
+      : []),
   ];
   /**
    * **Un cliente de modelo por papel, modelo y esfuerzo, que dura la SESIÓN** —hasta `/modelo`—, y

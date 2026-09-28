@@ -57,6 +57,17 @@ export function carpetaDeAdjuntosDeSesion(raiz: string, id: string): string {
 export const RUTA_ADJUNTOS = "/adjuntos/";
 
 /**
+ * El nombre de la tool que mete un adjunto en el PROYECTO (`agent/grafo/incorporarAdjunto.ts`).
+ *
+ * Vive aquí, en un módulo neutral, y no junto a la tool: la aprobación va por NOMBRE de tool en
+ * los dos motores, así que lo necesitan `perfiles.ts` (el HITL), `interrupts.ts` (la tarjeta) y
+ * las capacidades de TrueForge — y la tool importa `perfiles.ts` para reaplicar sus permisos.
+ * Declarada al lado de la tool, esas importaciones cerrarían un ciclo de VALOR
+ * (`src/ciclos.test.ts`). Y un literal repetido en cuatro sitios es cuatro sitios donde divergir.
+ */
+export const NOMBRE_INCORPORAR_ADJUNTO = "incorporar_adjunto";
+
+/**
  * ¿Vale este nombre para un adjunto?
  *
  * **Lista BLANCA de forma, no un `startsWith` ni una lista de trampas**, y de ella depende

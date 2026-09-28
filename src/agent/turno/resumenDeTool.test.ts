@@ -23,6 +23,10 @@ describe("detalleDe", () => {
     expect(detalleDe("regex_search", { pattern: "function\\s+(MT\\w+)", path: "/", glob: "*.js" })).toBe("function\\s+(MT\\w+)");
   });
 
+  it("incorporar_adjunto dice el DESTINO y nada más (IXCODE-7)", () => {
+    expect(detalleDe("incorporar_adjunto", { adjunto: "/adjuntos/ic.png", file_path: "/icons/ic.png" })).toBe("/icons/ic.png");
+  });
+
   it("el contenido y los strings de edición NUNCA salen, aunque estén en los argumentos", () => {
     const detalle = detalleDe("edit_file", {
       file_path: "Login.xne",

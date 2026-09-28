@@ -147,6 +147,17 @@ describe("hitlDe", () => {
     }
   });
 
+  it("incorporar_adjunto también se aprueba, con el MISMO `when` que write_file (IXCODE-7)", () => {
+    // Tras el «sí» es la propia tool la que copia: sin esta fila, copiaría sin preguntar.
+    for (const nombre of ["developer-xone", "designer-xone"]) {
+      const cfg = hitlDe(PERFILES[nombre]!).incorporar_adjunto;
+      expect(cfg, nombre).toBeDefined();
+      expect(cfg!.when).toBe(seDetieneEn);
+      expect(cfg!.allowedDecisions).toEqual(["approve", "reject"]);
+      expect(cfg!.description).toBe(`[${nombre}] quiere copiar un adjunto al proyecto`);
+    }
+  });
+
   it("un perfil de solo lectura no tiene nada que aprobar", () => {
     expect(hitlDe(PERFILES["consultant-xone"]!)).toEqual({});
   });
