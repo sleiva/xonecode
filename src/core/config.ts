@@ -372,10 +372,12 @@ export function validar(
         });
         continue;
       }
-      const malaClave = motivoDeClaveDeProyecto(valor.proyecto);
-      if (malaClave !== undefined) {
+      // El motivo de `motivoDeClaveDeProyecto` interpola la propia clave rechazada
+      // («"${clave}" no es una clave de proyecto…»): NO se usa en el aviso, porque un
+      // aviso nunca lleva el valor de entrada, ni siquiera vía el motivo de otra función.
+      if (motivoDeClaveDeProyecto(valor.proyecto) !== undefined) {
         avisos.push({
-          texto: `«${ruta}»: «gestorDeTareas.proyecto» no vale (${malaClave}); se descarta «gestorDeTareas».`,
+          texto: `«${ruta}»: «gestorDeTareas.proyecto» no es una clave de proyecto válida (mayúsculas, dígitos y _, empezando por letra); se descarta «gestorDeTareas».`,
           severidad: "aviso",
         });
         continue;

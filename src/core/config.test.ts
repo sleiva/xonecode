@@ -232,15 +232,18 @@ describe("validar", () => {
     expect(avisos[0]!.texto).toContain("gestorDeTareas");
   });
 
-  it("descarta gestorDeTareas entero si la clave de proyecto no vale", () => {
+  it("descarta gestorDeTareas entero si la clave de proyecto no vale, sin filtrar el valor rechazado", () => {
     const { config, avisos } = validar(
-      { gestorDeTareas: { conector: "jira", sitio: "abc-123", proyecto: "ixcode-11" } },
+      { gestorDeTareas: { conector: "jira", sitio: "abc-123", proyecto: "clave-secreta-mala" } },
       RUTA,
       "proyecto"
     );
     expect(config.gestorDeTareas).toBeUndefined();
     expect(avisos).toHaveLength(1);
     expect(avisos[0]!.texto).toContain("gestorDeTareas.proyecto");
+    // El motivo de motivoDeClaveDeProyecto interpola la clave rechazada: el aviso NO
+    // puede reusarlo, ni el valor de entrada de ninguna otra forma (config.ts:16-18).
+    expect(avisos[0]!.texto).not.toContain("clave-secreta-mala");
   });
 
   it("descarta el fichero entero si el JSON raíz no es objeto", () => {
