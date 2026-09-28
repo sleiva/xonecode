@@ -1,4 +1,4 @@
-node_modules/
+node_modules
 dist/
 .worktrees/
 # Configuración y CREDENCIALES locales. `auth.json` va con modo 0600 en el HOME del
