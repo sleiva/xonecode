@@ -35,6 +35,16 @@ describe("leerPlanesDelCable", () => {
     ]);
   });
 
+  it("el progreso de cada tarea cruza, y una palabra que no es de las cuatro no", () => {
+    const plan = (progreso: unknown) =>
+      leerPlanesDelCable([
+        { nombre: "p", ficheros: [], modificado: 1, tareas: { tareas: [{ numero: "T1", titulo: "t", bloqueadaPor: [], criterios: { hechos: 0, total: 1 }, cuerpo: "", progreso }] } },
+      ])![0]!.tareas!.tareas[0]!;
+    expect(plan("implementada").progreso).toBe("implementada");
+    expect(plan("finalizada").progreso).toBe("finalizada");
+    expect(plan("hecha")).not.toHaveProperty("progreso");
+  });
+
   it("lo que no es una lista no es «no hay planes»", () => {
     expect(leerPlanesDelCable(undefined)).toBeUndefined();
     expect(leerPlanesDelCable([])).toEqual([]);

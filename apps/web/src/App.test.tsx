@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, cleanup, act, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
-import { App } from "./App.js";
+import { App, MS_ENTRE_LECTURAS_DE_PLANES } from "./App.js";
 import { crearStoreDelCliente } from "./store.js";
 
 /** El `<input type="file">` de «Nueva tarea» está ESCONDIDO —lo dispara un botón nuestro,
@@ -110,6 +110,30 @@ describe("App: la pregunta de texto libre", () => {
     fireEvent.change(screen.getByPlaceholderText(/pregunta sobre xone/i), { target: { value: "haz un listado" } });
     fireEvent.keyDown(screen.getByPlaceholderText(/pregunta sobre xone/i), { key: "Enter" });
     expect(enviar).toHaveBeenCalledWith({ clase: "prosa", texto: "haz un listado" });
+  });
+
+  it("con la pestaña Planes delante y el agente trabajando, el plan se relee solo", () => {
+    vi.useFakeTimers();
+    try {
+      const { store, enviar } = montar();
+      act(() =>
+        store.aplicar({
+          clase: "planes",
+          planes: [{ nombre: "hoteles", ficheros: ["TASKS.md"], modificado: 1, tareas: { tareas: [] } }],
+        })
+      );
+      abrirPestana("Planes");
+      const pedidas = () => enviar.mock.calls.filter(([m]) => (m as { clase?: string }).clase === "planes").length;
+      const antes = pedidas();
+      // Sin turno en marcha no se relee: nadie lo está cambiando.
+      act(() => void vi.advanceTimersByTime(MS_ENTRE_LECTURAS_DE_PLANES * 2));
+      expect(pedidas()).toBe(antes);
+      act(() => store.aplicar({ clase: "turno", activo: true }));
+      act(() => void vi.advanceTimersByTime(MS_ENTRE_LECTURAS_DE_PLANES * 2));
+      expect(pedidas()).toBe(antes + 2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("con un turno DETENIBLE en marcha, el Enter viaja como DETENER y replanificar (IXCODE-4)", () => {

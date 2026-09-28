@@ -28,6 +28,8 @@ export function leerPlanesDelCable(valor: unknown): PlanDelCable[] | undefined {
   });
 }
 
+const PROGRESOS = ["pendiente", "en-curso", "implementada", "finalizada"] as const;
+
 function leerTareas(valor: unknown): PlanDelCable["tareas"] {
   if (typeof valor !== "object" || valor === null) return undefined;
   const v = valor as { titulo?: unknown; tareas?: unknown };
@@ -46,6 +48,8 @@ function leerTareas(valor: unknown): PlanDelCable["tareas"] {
         bloqueadaPor: Array.isArray(x.bloqueadaPor) ? x.bloqueadaPor.filter((n): n is string => typeof n === "string") : [],
         ...(typeof x.bloqueadaPorTexto === "string" ? { bloqueadaPorTexto: x.bloqueadaPorTexto } : {}),
         criterios: { hechos: c.hechos, total: c.total },
+        // Solo una de las cuatro: otra palabra no se pinta (el indicador no afirma lo que no sabe).
+        ...(PROGRESOS.includes(x.progreso as never) ? { progreso: x.progreso as NonNullable<TareaDelPlanDelCable["progreso"]> } : {}),
         cuerpo: x.cuerpo,
       },
     ];

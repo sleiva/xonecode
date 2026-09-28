@@ -55,6 +55,10 @@ type Store = ReturnType<typeof crearStoreDelCliente>;
  * que un `new EventSource` a nivel de módulo de este fichero mataría cualquier test que
  * algún día monte `App`.
  */
+
+/** Cada cuánto se relee el plan mientras el agente trabaja con la pestaña Planes delante. */
+export const MS_ENTRE_LECTURAS_DE_PLANES = 3000;
+
 export function App({
   store,
   enviar,
@@ -634,6 +638,22 @@ export function App({
     // elegir ya piden lo suyo por su cuenta, y tenerlos aquí lo pediría dos veces.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [turnoEnVuelo, vistaDelPanel, pedirRevision, pedirParche, pedirArbol, pedirColecciones, pedirPlanes, pedirSync, enviar]);
+
+  /**
+   * **Con la pestaña Planes delante y el agente trabajando, el plan se relee solo**, cada
+   * `MS_ENTRE_LECTURAS_DE_PLANES`: quien desarrolla marca el estado y quien comprueba en el
+   * aparato marca las casillas A MITAD de turno, y esperar al fin del turno dejaba la pestaña
+   * diciendo «0 de 7» mientras el `TASKS.md` ya decía otra cosa. Se relee el DISCO y no se
+   * escucha a las tools: por el cable llega «se llamó a una tool», no «ya escribió», y así
+   * también se ve un plan que alguien edita a mano. Solo con la pestaña delante: detrás no lo
+   * mira nadie, y el fin del turno lo relee igual.
+   */
+  const planesALaVista = vistaDelPanel === "planes";
+  useEffect(() => {
+    if (!turnoEnVuelo || !planesALaVista || !estado.conectado) return;
+    const reloj = setInterval(pedirPlanes, MS_ENTRE_LECTURAS_DE_PLANES);
+    return () => clearInterval(reloj);
+  }, [turnoEnVuelo, planesALaVista, estado.conectado, pedirPlanes]);
 
   /**
    * Los planes se piden en cuanto hay proyecto abierto y cable, sin esperar a la pestaña: la
