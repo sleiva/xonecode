@@ -6925,4 +6925,13 @@ montarlos también (misma pieza que la sesión).
 bytes directo al disco); un `write_file` y un `incorporar_adjunto` sobre la MISMA ruta a la vez no
 se ponen en cola. Reemplazar un fichero que ya existe está permitido, y la tarjeta lo dice.
 
-**Medido en vivo:** (lo añade el coordinador tras la prueba en el navegador).
+**Medido en vivo** (consola web con `HOME` aislado, copia de MyAllXOne, `deepseek-flash`, modo
+supervisado): el «+» abrió el selector y la ficha pasó a «listo» con el PNG en
+`.xonecode/sesiones/<id>/adjuntos/` (0600, carpeta 0700). Con «pon este icono en la carpeta icons
+del proyecto», el orquestador recibió el inventario, miró `icons/` y delegó en `designer-xone`, que
+llamó a `incorporar_adjunto` con `/icons/ic_prueba.png`. La tarjeta dijo «quiere copiar un adjunto
+al proyecto», la ruta, «quién: designer-xone» y «[fichero binario] se copia
+/adjuntos/ic_prueba.png a /icons/ic_prueba.png (si ya existe, se reemplaza)»; antes de aprobar el
+fichero no existía. Aprobado, quedó idéntico byte a byte (`cmp`), el commit del turno lo añadió
+(`icons/ic_prueba.png | Bin 0 -> 94 bytes`) y el simulador dio verde. El turno: 56 s y 51.963
+tokens de entrada. Visto de paso: la copia hereda el modo 0600 del adjunto.
