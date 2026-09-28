@@ -18,6 +18,7 @@ import type { LineaDeDiff } from "./diff.js";
 import type {
   ContextoRemoto, EntradaRemota, EstructuraRemota, ManifiestoRemoto,
 } from "./cloudstudio.js";
+import type { FichaDelGestor, GestorDeTareasPort, TransicionDelGestor, Vinculo } from "./gestorDeTareas.js";
 
 /**
  * La marca de «esto es un doble», y por qué es un Symbol y no un booleano.
@@ -781,4 +782,35 @@ export class CloudStudioEnMemoria implements CloudStudioPort {
     this.exigirAbierto();
     this.ramaActual = nombre;
   }
+}
+
+/** Un gestor de tareas en memoria: lo que el servidor y el cliente prueban sin red. Apunta lo ESCRITO. */
+export class GestorDeTareasEnMemoria implements GestorDeTareasPort {
+  readonly [ES_DOBLE] = true;
+  readonly transicionesAplicadas: { clave: string; transicion: string }[] = [];
+  readonly comentariosAplicados: { clave: string; texto: string }[] = [];
+  constructor(
+    private readonly datos: {
+      sitios?: { id: string; nombre: string; url?: string }[];
+      proyectos?: Record<string, { clave: string; nombre: string }[]>;
+      tareas?: FichaDelGestor[];
+      transiciones?: Record<string, TransicionDelGestor[]>;
+    } = {}
+  ) {}
+  async sitios() { return this.datos.sitios ?? []; }
+  async proyectos(sitio: string) { return this.datos.proyectos?.[sitio] ?? []; }
+  async pendientes(_v: Vinculo, texto?: string) {
+    const t = (texto ?? "").toLowerCase();
+    return (this.datos.tareas ?? [])
+      .filter((x) => x.categoria !== "terminada" && (t === "" || `${x.titulo} ${x.descripcion}`.toLowerCase().includes(t)))
+      .map(({ descripcion: _d, ...resto }) => resto);
+  }
+  async ficha(_v: Vinculo, clave: string) {
+    const f = (this.datos.tareas ?? []).find((x) => x.clave === clave);
+    if (f === undefined) throw new Error(`no existe ${clave}`);
+    return f;
+  }
+  async transiciones(_v: Vinculo, clave: string) { return this.datos.transiciones?.[clave] ?? []; }
+  async transicionar(_v: Vinculo, clave: string, transicion: string) { this.transicionesAplicadas.push({ clave, transicion }); }
+  async comentar(_v: Vinculo, clave: string, texto: string) { this.comentariosAplicados.push({ clave, texto }); }
 }
