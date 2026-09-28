@@ -4879,6 +4879,21 @@ describe("los artefactos de la sesión", () => {
       await limpiar();
     });
 
+    it("el `.openui` se pinta con el TEMA de la consola (`&tema=`), y solo con uno de la lista", async () => {
+      const { artefacto, limpiar } = await abrirProyecto({
+        leerArtefactoCrudo: async () => ({ ok: true as const, nombre: "panel.openui", datos: Buffer.from("root = A"), mime: "text/x-openui" }),
+        visorOpenui: () => ({ js: "", css: "@media(prefers-color-scheme:dark){x{y:z}}" }),
+      });
+      const claro = (await pedir(artefacto, "/artefacto?n=panel.openui&tema=claro")).cuerpo!.toString("utf8");
+      expect(claro).toContain("@media not all{x{y:z}}");
+      const oscuro = (await pedir(artefacto, "/artefacto?n=panel.openui&tema=oscuro")).cuerpo!.toString("utf8");
+      expect(oscuro).toContain("@media all{x{y:z}}");
+      // Lo que no está en la lista no se interpreta: el CSS queda como venía.
+      const raro = (await pedir(artefacto, "/artefacto?n=panel.openui&tema=%3Cscript%3E")).cuerpo!.toString("utf8");
+      expect(raro).toContain("@media(prefers-color-scheme:dark){x{y:z}}");
+      await limpiar();
+    });
+
     it("sin el visor construido, un `.openui` lo DICE con un 503 y no enseña el programa crudo", async () => {
       const { artefacto, limpiar } = await abrirProyecto({
         leerArtefactoCrudo: async () => ({ ok: true as const, nombre: "panel.openui", datos: Buffer.from("root = A"), mime: "text/x-openui" }),

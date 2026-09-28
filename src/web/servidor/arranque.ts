@@ -169,7 +169,7 @@ import { fotoDeColecciones, type FotoDeColecciones } from "../../core/fotoDeCole
 import type { CambiosDeUnaColeccion } from "../../core/diffDeColecciones.js";
 import { modeloDelCambio } from "../../agent/sesiones/modeloDelCambio.js";
 import { planesDelProyecto, type PlanEnDisco } from "../../agent/planesEnDisco.js";
-import { CSP_DE_OPENUI, documentoDeOpenui, esArtefactoOpenui } from "./visorOpenui.js";
+import { CSP_DE_OPENUI, documentoDeOpenui, esArtefactoOpenui, temaDeVisor } from "./visorOpenui.js";
 import { RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
 import {
   leerArtefactoCrudo,
@@ -4102,7 +4102,9 @@ export function montarRutas(
         responder(503, "el visor de OpenUI no está construido: ejecuta «npm run build:web»");
         return;
       }
-      const documento = Buffer.from(documentoDeOpenui(leido.datos.toString("utf8"), visor, leido.nombre), "utf8");
+      // El tema de la CONSOLA (`&tema=`, solo de la lista): el iframe no lo ve por su cuenta.
+      const tema = temaDeVisor(query.get("tema"));
+      const documento = Buffer.from(documentoDeOpenui(leido.datos.toString("utf8"), visor, leido.nombre, tema), "utf8");
       respuesta.writeHead(200, {
         "Content-Type": "text/html; charset=utf-8",
         "Content-Length": documento.length,

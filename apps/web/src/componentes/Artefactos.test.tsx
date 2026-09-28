@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Artefactos } from "./Artefactos.js";
 import type { ArtefactoEnLista } from "./Artefactos.js";
 
@@ -143,6 +143,27 @@ describe("Artefactos: un programa de OpenUI", () => {
     expect(marco.getAttribute("src")).toContain("panel.openui");
     expect(screen.getByText(/sin red/)).toBeTruthy();
     expect(alPedir).not.toHaveBeenCalled();
+  });
+
+  /**
+   * El visor va en un iframe aislado que NO ve el tema de la consola: si no se le dice, sigue al
+   * del sistema. Medido: XOneCode en claro con el Mac en oscuro dejaba las tablas casi invisibles.
+   * Así que la URL lleva el tema EN VIGOR (el `data-ds-dark-theme` del `body`) y cambia con él.
+   */
+  it("pide el visor con el TEMA de la consola, y lo recarga si el tema cambia", async () => {
+    document.body.removeAttribute("data-ds-dark-theme");
+    render(<Artefactos lista={[PANEL]} contenidos={{}} elegido={PANEL.ruta} alElegir={() => {}} alPedir={() => {}} conectado />);
+    expect(document.querySelector("iframe")!.getAttribute("src")).toContain("tema=claro");
+    await act(async () => {
+      document.body.setAttribute("data-ds-dark-theme", "");
+    });
+    expect(document.querySelector("iframe")!.getAttribute("src")).toContain("tema=oscuro");
+    document.body.removeAttribute("data-ds-dark-theme");
+  });
+
+  it("un HTML NO lleva tema: su documento es el del agente y no se toca", () => {
+    render(<Artefactos lista={[HTML]} contenidos={{}} elegido={HTML.ruta} alElegir={() => {}} alPedir={() => {}} conectado />);
+    expect(document.querySelector("iframe")!.getAttribute("src")).not.toContain("tema=");
   });
 
   it("y tiene su FUENTE, que sí se pide", () => {

@@ -35,8 +35,28 @@ const parametroDe = (ruta: string): string =>
 
 /** La URL de la ruta HTTP. El nombre va escapado: un `+` en una query se lee como espacio,
  *  así que sin escapar se pediría otro fichero. */
-export function urlDeArtefacto(ruta: string, descargar = false): string {
-  return `/artefacto?n=${encodeURIComponent(parametroDe(ruta))}${descargar ? "&descargar=1" : ""}`;
+export function urlDeArtefacto(ruta: string, descargar = false, tema?: "claro" | "oscuro"): string {
+  return `/artefacto?n=${encodeURIComponent(parametroDe(ruta))}${descargar ? "&descargar=1" : ""}${tema === undefined ? "" : `&tema=${tema}`}`;
+}
+
+/**
+ * El tema EN VIGOR de la consola —el `data-ds-dark-theme` que `apariencia.ts` pone en el `body`—,
+ * y se entera cuando cambia.
+ *
+ * Lo necesita el visor de OpenUI: va en un iframe aislado que no ve ese atributo, y sin que se le
+ * diga sigue al SISTEMA. Medido: XOneCode en claro con el Mac en oscuro dejaba sus tablas casi
+ * invisibles. Se lee del atributo y no de la preferencia guardada porque con «como el sistema» el
+ * que manda es lo que se está pintando, no lo que se eligió.
+ */
+function useTemaDeLaConsola(): "claro" | "oscuro" {
+  const leer = (): "claro" | "oscuro" => (document.body.hasAttribute("data-ds-dark-theme") ? "oscuro" : "claro");
+  const [tema, setTema] = useState(leer);
+  useEffect(() => {
+    const observador = new MutationObserver(() => setTema(leer()));
+    observador.observe(document.body, { attributes: true, attributeFilter: ["data-ds-dark-theme"] });
+    return () => observador.disconnect();
+  }, []);
+  return tema;
 }
 
 /**
@@ -109,6 +129,7 @@ export function Artefactos({
 
   /** El marco del iframe, que es lo que se pone a pantalla completa. */
   const marco = useRef<HTMLDivElement>(null);
+  const tema = useTemaDeLaConsola();
   const puedePantallaCompleta = typeof document !== "undefined" && document.fullscreenEnabled === true;
   const mime = actual?.mime;
   const esHtml = mime === "text/html";
@@ -223,7 +244,9 @@ export function Artefactos({
                 {/* Ver la cabecera del componente: `allow-scripts` sin `allow-same-origin`. */}
                 <iframe
                   className={estilos.iframe}
-                  src={urlDeArtefacto(actual.ruta)}
+                  // Un `.openui` con el tema de la consola (su visor no lo ve solo); un HTML, tal
+                  // cual: su documento es el del agente y no se le toca.
+                  src={esOpenui ? urlDeArtefacto(actual.ruta, false, tema) : urlDeArtefacto(actual.ruta)}
                   title={actual.nombre}
                   sandbox="allow-scripts"
                 />

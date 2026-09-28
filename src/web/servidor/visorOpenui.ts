@@ -42,12 +42,41 @@ function sinCierre(texto: string, etiqueta: "script" | "style"): string {
   return texto.replace(new RegExp(`</${etiqueta}`, "gi"), `<\\/${etiqueta}`);
 }
 
+/** El tema con que se pinta el visor: el de la CONSOLA, que el iframe no puede ver solo. */
+export type TemaDeVisor = "claro" | "oscuro";
+
+/** Solo lo de la lista: el valor llega en la query y no se interpreta nada más. */
+export function temaDeVisor(valor: string | null | undefined): TemaDeVisor | undefined {
+  return valor === "claro" || valor === "oscuro" ? valor : undefined;
+}
+
+/**
+ * El CSS de OpenUI con su tema FIJADO al de la consola.
+ *
+ * **Por qué hace falta.** OpenUI cambia a sus colores oscuros con un
+ * `@media (prefers-color-scheme: dark)`, y dentro del iframe esa pregunta la contesta el
+ * SISTEMA, no la consola. Medido: XOneCode en claro con el Mac en oscuro cargaba los textos del
+ * oscuro sobre fondo blanco, y las tablas salían casi invisibles. La vía estándar no sirve:
+ * `color-scheme` en el `<iframe>` NO cambia el `prefers-color-scheme` de dentro (medido en
+ * Chrome 154). Así que el bloque se vuelve `@media all` (oscuro) o `@media not all` (claro):
+ * el mismo CSS de la librería, sin copiarle ni un color. Sin tema, queda como venía.
+ */
+function cssConTema(css: string, tema: TemaDeVisor | undefined): string {
+  if (tema === undefined) return css;
+  return css.replace(/@media\s*\(\s*prefers-color-scheme\s*:\s*dark\s*\)/g, tema === "oscuro" ? "@media all" : "@media not all");
+}
+
 /**
  * El documento entero. El programa viaja como JSON dentro de un `<script type="application/json">`
  * —que el navegador NO ejecuta— con el `<` escapado, así que un programa que contenga
  * `</script>` no puede salirse de su sitio: lo lee el visor con `JSON.parse`, nunca se inyecta.
  */
-export function documentoDeOpenui(programa: string, visor: { js: string; css: string }, titulo: string): string {
+export function documentoDeOpenui(
+  programa: string,
+  visor: { js: string; css: string },
+  titulo: string,
+  tema?: TemaDeVisor
+): string {
   const datos = JSON.stringify(programa).replace(/</g, "\\u003c");
   const tituloSeguro = titulo.replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c]!);
   return [
@@ -55,8 +84,10 @@ export function documentoDeOpenui(programa: string, visor: { js: string; css: st
     '<html lang="es"><head><meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
     `<title>${tituloSeguro}</title>`,
-    `<style>${sinCierre(visor.css, "style")}</style>`,
-    "<style>body{margin:0;padding:16px;background:#fff}.xonecode-openui-errores{margin:0 0 12px;padding:8px 12px;border-left:3px solid #b42318;background:#fef3f2;font:13px/1.5 system-ui}.xonecode-openui-errores ul{margin:4px 0 0;padding-left:18px}</style>",
+    `<style>${sinCierre(cssConTema(visor.css, tema), "style")}</style>`,
+    // El fondo, del TEMA de OpenUI y no un blanco a fuego: con el oscuro, un `#fff` debajo de sus
+    // textos claros era el mismo desvaído de antes.
+    "<style>body{margin:0;padding:16px;background:var(--openui-background,#fff)}.xonecode-openui-errores{margin:0 0 12px;padding:8px 12px;border-left:3px solid #b42318;background:#fef3f2;font:13px/1.5 system-ui}.xonecode-openui-errores ul{margin:4px 0 0;padding-left:18px}</style>",
     "</head><body>",
     '<div id="xonecode-raiz"></div>',
     `<script type="application/json" id="xonecode-programa">${datos}</script>`,

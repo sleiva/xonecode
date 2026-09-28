@@ -4,6 +4,44 @@ import { CSP_DE_OPENUI, documentoDeOpenui, esArtefactoOpenui } from "./visorOpen
 describe("documentoDeOpenui", () => {
   const visor = { js: "console.log('visor')", css: "body{color:red}" };
 
+  /**
+   * El tema lo decide XOneCode, no el sistema. Medido: con el Mac en oscuro y XOneCode en claro,
+   * el visor —dentro de un iframe que no ve el tema de la consola— cargaba los textos del oscuro
+   * de OpenUI (su `@media(prefers-color-scheme:dark)`) sobre un fondo blanco, y las tablas salían
+   * casi invisibles. Y la vía estándar no sirve: `color-scheme` en el `<iframe>` NO cambia el
+   * `prefers-color-scheme` de dentro (medido en Chrome 154).
+   */
+  describe("el tema del visor", () => {
+    const conOscuro = { js: "", css: "a{color:#000}@media(prefers-color-scheme:dark){:root{--openui-foreground:#fff}}b{c:d}" };
+
+    it("en CLARO el bloque del oscuro no aplica NUNCA, aunque el sistema esté en oscuro", () => {
+      const doc = documentoDeOpenui("root = A", conOscuro, "x", "claro");
+      expect(doc).toContain("@media not all{:root{--openui-foreground:#fff}}");
+      expect(doc).not.toContain("prefers-color-scheme");
+    });
+
+    it("en OSCURO aplica SIEMPRE, aunque el sistema esté en claro", () => {
+      const doc = documentoDeOpenui("root = A", conOscuro, "x", "oscuro");
+      expect(doc).toContain("@media all{:root{--openui-foreground:#fff}}");
+      expect(doc).not.toContain("prefers-color-scheme");
+    });
+
+    it("también con la forma sin minificar (`@media (prefers-color-scheme: dark)`)", () => {
+      const doc = documentoDeOpenui("root = A", { js: "", css: "@media (prefers-color-scheme: dark) {x{y:z}}" }, "x", "claro");
+      expect(doc).toContain("@media not all {x{y:z}}");
+    });
+
+    it("sin tema, el CSS queda tal cual (sigue al sistema, lo de antes)", () => {
+      expect(documentoDeOpenui("root = A", conOscuro, "x")).toContain("@media(prefers-color-scheme:dark)");
+    });
+
+    it("el fondo sale del TEMA de OpenUI, no de un blanco a fuego que choca con el oscuro", () => {
+      const doc = documentoDeOpenui("root = A", conOscuro, "x", "oscuro");
+      expect(doc).toContain("background:var(--openui-background");
+      expect(doc).not.toMatch(/body\{[^}]*background:#fff/);
+    });
+  });
+
   it("mete el visor y el programa dentro: el iframe no puede pedir nada al servidor", () => {
     const doc = documentoDeOpenui('root = Stack([t])\nt = TextContent("hola")', visor, "panel");
     expect(doc).toContain("<script>console.log('visor')</script>");
