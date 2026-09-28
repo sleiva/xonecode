@@ -111,6 +111,21 @@ describe("App: la pregunta de texto libre", () => {
     fireEvent.keyDown(screen.getByPlaceholderText(/pregunta sobre xone/i), { key: "Enter" });
     expect(enviar).toHaveBeenCalledWith({ clase: "prosa", texto: "haz un listado" });
   });
+
+  it("con un turno DETENIBLE en marcha, el Enter viaja como DETENER y replanificar (IXCODE-4)", () => {
+    const { store, enviar } = montar();
+    const campo = (): HTMLElement => screen.getByPlaceholderText(/pregunta sobre xone/i);
+    act(() => store.aplicar({ clase: "turno", activo: true, detenible: true }));
+    fireEvent.change(campo(), { target: { value: "mejor el menú" } });
+    fireEvent.keyDown(campo(), { key: "Enter" });
+    expect(enviar).toHaveBeenCalledWith({ clase: "prosa", texto: "mejor el menú", detener: true });
+
+    // Un turno que no lo admite (deepagents): prosa a secas, el servidor decide.
+    act(() => store.aplicar({ clase: "turno", activo: true }));
+    fireEvent.change(campo(), { target: { value: "otra" } });
+    fireEvent.keyDown(campo(), { key: "Enter" });
+    expect(enviar).toHaveBeenLastCalledWith({ clase: "prosa", texto: "otra" });
+  });
 });
 
 /**

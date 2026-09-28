@@ -1838,11 +1838,6 @@ export function App({
               // fichero y volver.
               oculto={reparto.panel === "centro"}
               alParar={() => void enviar({ clase: "cancelar" })}
-              // DETENER y replanificar: solo si el servidor dice que ESTE turno lo admite. Un
-              // control sin dato detrás no se pinta.
-              {...(estado.turnoDetenible === true
-                ? { alDetener: (texto: string) => void enviar({ clase: "prosa", texto, detener: true }) }
-                : {})}
               // El «+», soltar y pegar (Task 6, IXCODE-7): solo con sesión abierta —este
               // `<Compositor>` ya vive entero dentro de `enSesion` (ver más arriba)— y con
               // la capacidad inyectada. Sin ella no se pinta: un control sin dato detrás no
@@ -1858,8 +1853,17 @@ export function App({
               // Los `adjuntos` viajan solo si hay alguno: ausente ≠ vacío, la misma regla
               // que el resto del cable — un mensaje sin ese campo es «ninguno», no «se
               // mandó una lista vacía a propósito».
+              // Enter con el turno en marcha ES «detener y replanificar» (IXCODE-4) cuando el
+              // servidor dice que ESTE turno lo admite: los especialistas cierran con su resumen y
+              // el orquestador replanifica con lo escrito. Sin eso (deepagents) viaja como prosa y
+              // el servidor la encola o la apunta como nota.
               alEnviar={(texto, adjuntos) =>
-                void enviar({ clase: "prosa", texto, ...(adjuntos.length === 0 ? {} : { adjuntos }) })
+                void enviar({
+                  clase: "prosa",
+                  texto,
+                  ...(adjuntos.length === 0 ? {} : { adjuntos }),
+                  ...(turnoEnVuelo && estado.turnoDetenible === true ? { detener: true } : {}),
+                })
               }
             />
             <BarraDeEstado

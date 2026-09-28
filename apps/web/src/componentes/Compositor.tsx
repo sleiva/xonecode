@@ -84,7 +84,6 @@ export function Compositor({
   consumo,
   oculto = false,
   alParar,
-  alDetener,
   modelos,
   alPedirCatalogo,
   alElegirModelo,
@@ -108,14 +107,14 @@ export function Compositor({
    * Hasta IXCODE-4 esto TAMBIÉN apagaba la entrada: una segunda petición mientras el agente
    * trabajaba se quedaba en la cola del lazo sin decirlo, y el usuario veía su texto
    * desaparecer del campo y no pasar nada durante minutos. Ahora la prosa escrita durante un
-   * turno va a `agregarNota` —el servidor decide si se apunta al turno en marcha o abre uno
-   * nuevo—, así que el turno en vuelo A SECAS ya no apaga nada; lo que apaga la entrada es
+   * turno viaja al turno en marcha —como DETENER y replanificar donde el turno lo admite, si no
+   * como nota; lo decide quien monta esto y el servidor—, así que el turno en vuelo A SECAS ya no apaga nada; lo que apaga la entrada es
    * `hayPendiente`.
    */
   turnoEnVuelo?: boolean;
   /**
    * Hay una aprobación, pregunta, selector o secreto EN PANTALLA esperando respuesta. Apaga la
-   * entrada — a diferencia de `turnoEnVuelo` a secas, que desde IXCODE-4 deja escribir una nota
+   * entrada — a diferencia de `turnoEnVuelo` a secas, que desde IXCODE-4 deja escribir
    * mientras el agente trabaja EN SILENCIO. Con un diálogo delante, escribir aquí competiría
    * con la respuesta que de verdad se espera.
    */
@@ -138,13 +137,6 @@ export function Compositor({
   oculto?: boolean;
   /** Parar el turno en vuelo. Ausente = no se ofrece el botón. */
   alParar?: () => void;
-  /**
-   * DETENER y replanificar (IXCODE-4), con lo que haya escrito —puede ir vacío—. No es Parar:
-   * Parar corta el turno y lo de los especialistas se pierde; esto les pide cerrar con un resumen
-   * de lo hecho y deja que el orquestador replanifique con eso. Ausente = el turno no lo admite y
-   * no se pinta.
-   */
-  alDetener?: (texto: string) => void;
   /** El estado de modelos del cable. Ausente = todavía no llegó: no se pinta pastilla, en
    *  vez de una que diga «Elige modelo» sin saber siquiera si hay algo que elegir. */
   modelos?: {
@@ -336,8 +328,11 @@ export function Compositor({
 
   const enviar = (): void => {
     // Con algo pendiente no se manda: una aprobación o pregunta compite por la misma
-    // respuesta. Con turno en vuelo y SIN nada pendiente, sí se manda — es la nota de
-    // IXCODE-4, y el servidor decide si se apunta al turno en marcha o abre uno nuevo.
+    // respuesta. Con turno en vuelo y SIN nada pendiente, sí se manda — es DETENER y
+    // replanificar de IXCODE-4 (quien monta esto decide cómo viaja), y el servidor decide si
+    // se aplica al turno en marcha o abre uno nuevo. Ya no hay botón aparte: la persona lo
+    // pidió así tras usarlo («si hacemos return y enviamos una petición ya debería hacer lo
+    // mismo»).
     if (hayPendiente) return;
     if (fichaEnVuelo || fichaFallida) return;
     const texto = valor.trim();
@@ -630,20 +625,6 @@ export function Compositor({
               Dos botones a la vez —uno inerte al lado del otro— dejaría al usuario eligiendo
               entre dos cosas cuando solo una tiene sentido en cada momento.
             */}
-            {turnoEnVuelo && alDetener !== undefined && !hayPendiente ? (
-              <button
-                type="button"
-                className={estilos.detener}
-                disabled={!conectado}
-                title="Los especialistas cierran con lo que llevan hecho y el orquestador replanifica con lo que hayas escrito"
-                onClick={() => {
-                  alDetener(valor.trim());
-                  setValor("");
-                }}
-              >
-                Detener y replanificar
-              </button>
-            ) : null}
             {turnoEnVuelo ? (
               <button
                 type="button"

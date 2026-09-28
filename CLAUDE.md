@@ -452,8 +452,10 @@ memoria y se APARTA con otro nombre. **El prompt de un hijo va en su prompt de S
 `instructionBuilders`**. **El raíz puede PREGUNTAR** (`ask_user_question`, solo él): con opciones
 sale además como tarjeta con un botón por opción (`Piel.consulta?` opcional), y lo pendiente lo
 decide el hilo. **Solo se compacta el raíz**: en un hijo, resumir un encargo corto y ya cacheado
-costaba más que reenviarlo. **Escribir con el turno en marcha tiene dos gestos** (IXCODE-4, solo la web): una NOTA
-(Enter) y **Detener y replanificar** (botón). Las dos entran por `preLLMProcessors`
+costaba más que reenviarlo. **Escribir con el turno en marcha es UN gesto** (IXCODE-4, solo la web): el Enter, que en
+TrueForge viaja como **detener y replanificar** (`detener: true`, solo con `turnoDetenible`); el
+botón aparte se quitó a petición suya. La NOTA sigue siendo el camino de lo que llega sin
+`detener` (un turno que no lo admite). Las dos entran por `preLLMProcessors`
 (`capacidadDeNotas`), el único punto que corre antes de CADA llamada de cada hilo. **Una nota tiene
 UN dueño** (`notas.ts`): el único hijo que trabaja o el raíz; con varios en paralelo, el raíz; y el
 raíz la ve siempre, como INFORMACIÓN si ya tenía dueño —repartirla a todos hizo el mismo encargo
