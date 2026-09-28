@@ -97,6 +97,21 @@ export interface DispositivoElegido {
   clase: "emulador" | "simulador" | "fisico";
 }
 
+/**
+ * El ticket de Jira al que queda ligada una sesión (IXCODE-11).
+ *
+ * `conector` es el id del conector MCP (`core/conectores.ts`) con el que se abrió, `sitio` es
+ * el subdominio de Atlassian (`<sitio>.atlassian.net`) —hace falta para componer la URL
+ * pública del ticket sin volver a preguntarle nada a Jira— y `clave` es la clave corta
+ * (`IXCODE-12`). Ni el resumen ni el asignado viajan aquí: eso se pide en caliente cuando
+ * hace falta pintarlo, y así una sesión vieja no enseña un título que quedó desactualizado.
+ */
+export interface TicketDeSesion {
+  conector: string;
+  sitio: string;
+  clave: string;
+}
+
 export interface EntradaIndice {
   id: string;
   titulo: string;
@@ -166,6 +181,13 @@ export interface EntradaIndice {
    * `fin` del `.jsonl`, que es donde se mide. `acumularTotales` es quien la quita.
    */
   consumo?: ConsumoDeTurno;
+  /**
+   * El ticket de Jira al que quedó ligada esta sesión (IXCODE-11). Ausente = ninguno.
+   *
+   * Vive AQUÍ por lo mismo que el dispositivo y el esfuerzo: es un dato DE la sesión, no uno
+   * de sus actos, y sin esto la elección se perdía al cerrar la pestaña.
+   */
+  ticket?: TicketDeSesion;
 }
 
 export interface SesionReabierta {
@@ -181,6 +203,8 @@ export interface SesionReabierta {
   motor?: MotorDeAgente;
   /** El modo de escritura que tenía. Ausente = supervisado, o la sesión es anterior a esto. */
   modo?: ModoDeEscritura;
+  /** El ticket al que quedó ligada. Ausente = ninguno, o la sesión es anterior a esto. */
+  ticket?: TicketDeSesion;
 }
 
 function carpetaSesiones(raiz: string): string {
@@ -584,6 +608,25 @@ export function elegirModo(raiz: string, id: string, modo: ModoDeEscritura): boo
   return true;
 }
 
+/**
+ * Liga una sesión a un ticket de Jira (IXCODE-11).
+ *
+ * Gemela de `elegirEsfuerzo` hasta en el `false`: una sesión cuyo id todavía no está en el
+ * índice (nace al volcar el primer acto) no se puede anotar, y crear ahí una entrada a medias
+ * la pintaría en la barra como una sesión vacía. Quien llama lo tiene en memoria de todos
+ * modos —vive en `ConsolaDeProyecto`—, así que perder la anotación no pierde la elección: solo
+ * no sobrevive a cerrar. A diferencia del esfuerzo, no hay forma de QUITAR el ticket todavía
+ * —nadie la pidió—, así que esta función no acepta `undefined`.
+ */
+export function anotarTicket(raiz: string, id: string, ticket: TicketDeSesion): boolean {
+  const entradas = leerIndiceOAbortar(raiz);
+  const entrada = entradas.find((e) => e.id === id);
+  if (entrada === undefined) return false;
+  entrada.ticket = ticket;
+  escribirIndice(raiz, entradas);
+  return true;
+}
+
 /** El índice completo, tal cual lo enseña la lista de sesiones del proyecto. */
 export function listarSesiones(raiz: string): EntradaIndice[] {
   return leerIndice(raiz);
@@ -619,5 +662,6 @@ export function reabrirSesion(raiz: string, id: string): SesionReabierta {
     ...(entrada?.esfuerzo === undefined ? {} : { esfuerzo: entrada.esfuerzo }),
     ...(entrada?.motor === undefined ? {} : { motor: entrada.motor }),
     ...(entrada?.modo === undefined ? {} : { modo: entrada.modo }),
+    ...(entrada?.ticket === undefined ? {} : { ticket: entrada.ticket }),
   };
 }

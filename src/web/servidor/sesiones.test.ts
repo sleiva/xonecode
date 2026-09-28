@@ -6,6 +6,7 @@ import type { Acto } from "../../core/actos.js";
 import { tituloDesde,
   crearSesion,
   anotarActo,
+  anotarTicket,
   listarSesiones,
   reabrirSesion,
   borrarSesion,
@@ -617,5 +618,35 @@ describe("el modo de escritura de una sesión", () => {
     const raiz = mkdtempSync(join(tmpdir(), "xonecode-modo-"));
     const id = crearSesion(raiz);
     expect(reabrirSesion(raiz, id).modo).toBeUndefined();
+  });
+});
+
+/**
+ * El TICKET de Jira al que queda ligada una sesión (IXCODE-11), el cuarto de la misma
+ * familia que el dispositivo, el esfuerzo y el modo: una elección DE la sesión, guardada en
+ * el índice y no en el `.jsonl`, para que sobreviva a cerrar la pestaña.
+ */
+describe("el ticket de una sesión", () => {
+  const TICKET = { conector: "jira", sitio: "xone", clave: "IXCODE-12" };
+
+  it("se guarda con la sesión y vuelve al reabrirla", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-ticket-"));
+    const id = crearSesion(raiz);
+    expect(anotarTicket(raiz, id, TICKET)).toBe(true);
+    expect(listarSesiones(raiz)[0]!.ticket).toEqual(TICKET);
+    expect(reabrirSesion(raiz, id).ticket).toEqual(TICKET);
+  });
+
+  it("una sesión que aún no está en el índice contesta que NO hay dónde anotarlo", () => {
+    // El mismo `false` que `elegirEsfuerzo`, y por el mismo motivo: crear aquí la entrada
+    // pintaría en la barra una sesión vacía que nadie ha empezado.
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-ticket-"));
+    expect(anotarTicket(raiz, "sesion-que-no-existe", TICKET)).toBe(false);
+  });
+
+  it("y una sesión anterior a esto reabre sin ticket, no con uno inventado", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-ticket-"));
+    const id = crearSesion(raiz);
+    expect(reabrirSesion(raiz, id).ticket).toBeUndefined();
   });
 });

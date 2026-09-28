@@ -395,6 +395,7 @@ const FILA_COMPLETA_DE_SESION = {
   deTarea: true as const,
   trabajando: true as const,
   consumo: { modelo: { entrada: 11_000, salida: 200, cache: 9_000 }, externo: { entrada: 7, salida: 3, cache: 0 } },
+  ticket: "IXCODE-12",
 };
 
 /**

@@ -3184,6 +3184,43 @@ describe("montarRutas — el cable, por fin conectado", () => {
       expect("consumo" in (alta.proyectos[0]?.sesiones?.[1] ?? {})).toBe(false);
     });
 
+    it("el ticket de la sesión viaja con su CLAVE, no con el objeto entero (IXCODE-11)", async () => {
+      // Mismo patrón de fallo que el consumo: declarado en el tipo y nunca copiado al
+      // objeto deja la barra sin la etiqueta para siempre, con todo en verde.
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        sesiones: {
+          crear: () => "s1",
+          listar: () => [
+            {
+              id: "s7",
+              titulo: "con ticket",
+              creada: "2026-09-07T08:00:00.000Z",
+              ultimoTurno: "2026-09-07T10:08:23.790Z",
+              ticket: { conector: "jira", sitio: "xone", clave: "IXCODE-12" },
+            },
+            { id: "s8", titulo: "sin ticket", creada: "2026-09-08T08:00:00.000Z", ultimoTurno: "2026-09-08T10:00:00.000Z" },
+          ],
+          anotar: () => {},
+          reabrir: (_r, id) => ({ id, actos: [], historica: true }),
+        },
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.proyectos[0]?.sesiones?.[0]?.ticket).toBe("IXCODE-12");
+      // Ni el conector ni el sitio cruzan: solo la clave.
+      expect(JSON.stringify(cliente.recibidos)).not.toContain("jira");
+      // La que no lo trae NO lleva la clave, por la misma regla que `consumo`.
+      expect("ticket" in (alta.proyectos[0]?.sesiones?.[1] ?? {})).toBe(false);
+    });
+
     it("la siembra corre ANTES de leer la lista: el alta que la dispara ya trae las cifras", async () => {
       // Contra un índice DE VERDAD, y no contra el doble: la siembra es una función real que
       // toca disco y NO pasa por el puerto, así que un doble de sesiones no la ejercita. Es

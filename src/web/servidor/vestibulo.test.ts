@@ -15,12 +15,13 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { crearVestibulo, ENTORNOS_OFICIALES, escribirProyectoEnDisco, esProyectoEnDisco } from "./vestibulo.js";
+import { crearSesion, listarSesiones } from "./sesiones.js";
 import { ficheroDeDispositivoDeSesion } from "../../core/dispositivoDeSesion.js";
 import { guardarAdjuntoDeSesion } from "../../agent/sesiones/adjuntosDeSesion.js";
 import { existsSync } from "node:fs";
 import { CatalogoModelosEnMemoria } from "../../core/ports.js";
 import type { Acto, ConsumoDeTurno } from "../../core/actos.js";
-import type { DispositivoElegido } from "./sesiones.js";
+import type { DispositivoElegido, TicketDeSesion } from "./sesiones.js";
 import type { Entorno } from "../../core/settings.js";
 import { validar } from "../../core/config.js";
 import type { Consola, EjecutorDeTurno } from "../../cli/consola.js";
@@ -80,6 +81,7 @@ function sesionesEnMemoria() {
   const dispositivos = new Map<string, DispositivoElegido | undefined>();
   const esfuerzos = new Map<string, Esfuerzo | undefined>();
   const modos = new Map<string, ModoDeEscritura>();
+  const tickets = new Map<string, TicketDeSesion | undefined>();
   /** Con qué tarea se dio de alta cada sesión, como lo guarda el índice de verdad. */
   const tareas = new Map<string, string | undefined>();
   /** El acumulado de cada sesión, como lo guarda el índice de verdad. */
@@ -89,6 +91,7 @@ function sesionesEnMemoria() {
     dispositivos,
     esfuerzos,
     modos,
+    tickets,
     tareas,
     consumos,
     puerto: {
@@ -119,6 +122,7 @@ function sesionesEnMemoria() {
         const dispositivo = dispositivos.get(`${raiz}|${id}`);
         const esfuerzo = esfuerzos.get(`${raiz}|${id}`);
         const modo = modos.get(`${raiz}|${id}`);
+        const ticket = tickets.get(`${raiz}|${id}`);
         return {
           id,
           actos: [...(jsonl.get(`${raiz}|${id}`) ?? [])],
@@ -126,6 +130,7 @@ function sesionesEnMemoria() {
           ...(dispositivo === undefined ? {} : { dispositivo }),
           ...(esfuerzo === undefined ? {} : { esfuerzo }),
           ...(modo === undefined ? {} : { modo }),
+          ...(ticket === undefined ? {} : { ticket }),
         };
       },
       borrar: (raiz: string, id: string) => jsonl.delete(`${raiz}|${id}`),
@@ -148,6 +153,11 @@ function sesionesEnMemoria() {
         // camino que el de producción.
         if (modo === "supervisado") modos.delete(`${raiz}|${id}`);
         else modos.set(`${raiz}|${id}`, modo);
+        return true;
+      },
+      anotarTicket: (raiz: string, id: string, ticket: TicketDeSesion) => {
+        if (!jsonl.has(`${raiz}|${id}`)) return false;
+        tickets.set(`${raiz}|${id}`, ticket);
         return true;
       },
     },
@@ -692,6 +702,76 @@ describe("vestíbulo", () => {
       abierta.elegirDispositivo(undefined);
       expect(abierta.dispositivo).toBeUndefined();
       expect(s.dispositivos.get(`/w/a|${id}`)).toBeUndefined();
+      await v.cerrar();
+    });
+  });
+
+  /**
+   * El TICKET de Jira al que queda ligada una sesión (IXCODE-11), la hermana del dispositivo
+   * en `fijarTicket`. Mismo patrón de fallo que el esfuerzo y el modo: el viaje memoria →
+   * `volcar()` → índice vive dentro del cierre que construye la consola, un sitio que todos
+   * los tests doblan.
+   */
+  describe("el ticket de la sesión", () => {
+    const TICKET = { conector: "jira", sitio: "xone", clave: "IXCODE-12" };
+
+    it("elegirlo con la sesión ya creada lo anota en el acto", async () => {
+      const s = sesionesEnMemoria();
+      const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
+      const id = s.puerto.crear("/w/a");
+      const abierta = await v.abrirProyecto({ raiz: "/w/a", sesion: id });
+      abierta.fijarTicket(TICKET);
+      expect(s.tickets.get(`/w/a|${id}`)).toEqual(TICKET);
+      await v.cerrar();
+    });
+
+    it("elegido ANTES de que la sesión tenga id, se anota en cuanto la hay", async () => {
+      // El id nace al volcar el primer acto. Sin esta espera en memoria, fijar el ticket
+      // nada más abrir y hablar después perdía la elección al reabrir: no había entrada en
+      // el índice donde escribirla, y nadie volvía a intentarlo.
+      const s = sesionesEnMemoria();
+      let turnoCorrido: () => void;
+      const corrio = new Promise<void>((r) => {
+        turnoCorrido = r;
+      });
+      const v = crearVestibulo({
+        ...dobles(),
+        origenDeTrabajo: "global",
+        sesiones: s.puerto,
+        crearEjecutor: () => async (_peticion, _estado, consola) => {
+          consola.escribir("hecho");
+          turnoCorrido();
+        },
+      });
+      const abierta = await v.abrirProyecto({ raiz: "/w/a" });
+      expect(abierta.sesion).toBeUndefined();
+      abierta.fijarTicket(TICKET);
+      // Todavía no hay dónde escribirlo.
+      expect([...s.tickets.values()]).toEqual([]);
+
+      abierta.recibir({ clase: "prosa", texto: "hola" });
+      await corrio;
+      await abierta.cerrar();
+
+      const id = abierta.sesion!;
+      expect(id).toBeDefined();
+      expect(s.tickets.get(`/w/a|${id}`)).toEqual(TICKET);
+      await v.cerrar();
+    });
+
+    /**
+     * Contra el ÍNDICE REAL y no el doble: es el patrón de fallo de siempre —una composición
+     * de producción viviendo en un cierre que todos los tests doblan— y `SESIONES_EN_DISCO`
+     * es justo esa composición. Sin este test, borrar `anotarTicket` de esa tabla de
+     * cableado dejaba el suite entero en verde con `fijarTicket` sin efecto ninguno en disco.
+     */
+    it("cablea contra el ÍNDICE DE VERDAD, no solo contra el doble", async () => {
+      const raiz = mkdtempSync(join(tmpdir(), "xonecode-ticket-real-"));
+      const id = crearSesion(raiz, "s1");
+      const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global" });
+      const abierta = await v.abrirProyecto({ raiz, sesion: id });
+      abierta.fijarTicket(TICKET);
+      expect(listarSesiones(raiz)[0]!.ticket).toEqual(TICKET);
       await v.cerrar();
     });
   });

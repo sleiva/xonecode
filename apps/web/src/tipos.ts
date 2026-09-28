@@ -214,6 +214,9 @@ export interface SesionDelCable {
    *  **Ausente es «no consta», nunca cero**: un `{0,0}` afirmaría que la sesión salió gratis,
    *  y sobre él se pintaría un `↑0 ↓0` que nadie ha medido. */
   consumo?: ConsumoDeTurno;
+  /** La CLAVE del ticket de Jira al que quedó ligada (`"IXCODE-12"`), si tiene uno
+   *  (IXCODE-11). Solo la clave: el conector y el sitio se quedan en el host. */
+  ticket?: string;
 }
 
 /**

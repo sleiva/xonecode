@@ -798,6 +798,7 @@ function sonSesiones(
   deTarea?: unknown;
   trabajando?: unknown;
   consumo?: unknown;
+  ticket?: unknown;
 }[] {
   return (
     Array.isArray(valor) &&
@@ -1851,6 +1852,12 @@ export function crearStoreDelCliente(): {
                         // trabaja, y con ella un indicador de actividad que nunca se apaga.
                         ...(s.trabajando === true ? { trabajando: true as const } : {}),
                         ...(consumo === undefined ? {} : { consumo }),
+                        // La clave del ticket, IXCODE-11: solo si es texto no vacío. Como
+                        // `ultimoTurno` y no como `deTarea` —no es un booleano de verdad ni
+                        // el peligro de tomar un truthy por cierto—, pero igual se filtra:
+                        // sin esto, un `ticket` mal formado se perdía en silencio como
+                        // pasó con `progreso`.
+                        ...(typeof s.ticket === "string" && s.ticket !== "" ? { ticket: s.ticket } : {}),
                       };
                     }),
                   }

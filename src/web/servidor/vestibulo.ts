@@ -71,6 +71,7 @@ import { asistenteDeModelo, type ResultadoDelAsistente } from "../../cli/wizardI
 import { crearConsolaWeb, type ConsolaWeb, type OpcionesDeConsolaWeb } from "./consolaWeb.js";
 import {
   anotarActo,
+  anotarTicket,
   borrarSesion,
   crearSesion,
   elegirDispositivo,
@@ -81,6 +82,7 @@ import {
   reabrirSesion,
   renombrarSesion,
   type DispositivoElegido,
+  type TicketDeSesion,
 } from "./sesiones.js";
 import type { MensajeAlCliente, MensajeDelCliente, Sumidero } from "./transporte.js";
 import type { Esfuerzo } from "../../core/esfuerzo.js";
@@ -172,7 +174,7 @@ export interface PuertoDeSesiones {
   /** El índice de sesiones de un proyecto ya bajado. Una carpeta que no existe es una
    *  lista vacía, no un error: el proyecto todavía no se ha abierto nunca. `consumo` es el
    *  acumulado de la sesión entera, y ausente es «no consta» — nunca cero. */
-  listar(raiz: string): { id: string; titulo: string; ultimoTurno?: string; tarea?: string; consumo?: ConsumoDeTurno }[];
+  listar(raiz: string): { id: string; titulo: string; ultimoTurno?: string; tarea?: string; consumo?: ConsumoDeTurno; ticket?: TicketDeSesion }[];
   /** Da de alta la entrada del índice. `tarea` es el id de la TAREA que abrió la sesión, y
    *  solo lo trae la puerta de las tareas: ausente es «no consta». */
   crear(raiz: string, id?: string, tarea?: string): string;
@@ -188,6 +190,7 @@ export interface PuertoDeSesiones {
     esfuerzo?: Esfuerzo;
     motor?: MotorDeAgente;
     modo?: ModoDeEscritura;
+    ticket?: TicketDeSesion;
   };
   /** Borra una sesión. Devuelve si había algo que borrar; un id desconocido no es un error
    *  (dos pestañas, un doble clic). Opcional: un puerto de prueba puede no saber borrar. */
@@ -203,6 +206,9 @@ export interface PuertoDeSesiones {
   anotarMotor?(raiz: string, id: string, motor: MotorDeAgente): boolean;
   /** Anota el modo de escritura de una sesión. El tercero de la misma familia. */
   elegirModo?(raiz: string, id: string, modo: ModoDeEscritura): boolean;
+  /** Liga una sesión a un ticket de Jira (IXCODE-11). El cuarto de la misma familia, sin
+   *  forma de quitarlo todavía —nadie la pidió. */
+  anotarTicket?(raiz: string, id: string, ticket: TicketDeSesion): boolean;
 }
 
 const SESIONES_EN_DISCO: PuertoDeSesiones = {
@@ -216,6 +222,7 @@ const SESIONES_EN_DISCO: PuertoDeSesiones = {
   elegirEsfuerzo,
   anotarMotor,
   elegirModo,
+  anotarTicket,
 };
 
 /**
@@ -541,6 +548,15 @@ export interface ConsolaDeProyecto {
   readonly dispositivo: DispositivoElegido | undefined;
   /** Elige —o quita, con `undefined`— el dispositivo preferido de esta sesión. */
   elegirDispositivo(dispositivo: DispositivoElegido | undefined): void;
+  /**
+   * Liga esta sesión a un ticket de Jira (IXCODE-11).
+   *
+   * Misma forma que `elegirDispositivo`: si la sesión todavía no está en el índice —se abre
+   * ANTES del primer mensaje—, la elección se queda en memoria y `volcar()` la estampa en
+   * cuanto crea la entrada. Sin `undefined` a propósito: todavía no hay forma de desligar un
+   * ticket, nadie la pidió.
+   */
+  fijarTicket(ticket: TicketDeSesion): void;
   readonly cerrada: boolean;
   /**
    * Si esta consola tiene un turno EN VUELO ahora mismo.
@@ -691,7 +707,7 @@ export interface Vestibulo {
    *  acumulado de la sesión entera, y ausente es «no consta» — nunca cero. */
   sesionesDe(
     raiz: string
-  ): { id: string; titulo: string; ultimoTurno?: string; tarea?: string; consumo?: ConsumoDeTurno }[];
+  ): { id: string; titulo: string; ultimoTurno?: string; tarea?: string; consumo?: ConsumoDeTurno; ticket?: TicketDeSesion }[];
   /**
    * Borra una sesión guardada, con su marca de git.
    *
@@ -1335,6 +1351,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     // El fichero que leen los scripts del `device-controller` (`core/dispositivoDeSesion.ts`)
     // queda como la pastilla DESDE QUE SE ABRE: también sin elección, que borra uno viejo.
     escribirDispositivoDeSesion(raiz, idSesion, dispositivo);
+    /** El ticket al que quedó ligada, restaurado al reabrir. Misma razón que `dispositivo`:
+     *  es un dato de la sesión, no de sus actos, y vive en memoria hasta que hay entrada. */
+    let ticket: TicketDeSesion | undefined = reabierta?.ticket;
     let cerrada = false;
     /** Ver `ConsolaDeProyecto.turnoEnVuelo`: lo pone y lo quita el envoltorio de abajo, que
      *  es el único sitio que ve los dos flancos. */
@@ -1433,6 +1452,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       if (estadoDeSesion.motor !== undefined && estadoDeSesion.motor !== "deepagents") {
         sesiones.anotarMotor?.(raiz, idSesion, estadoDeSesion.motor);
       }
+      // Y el ticket, por lo mismo: si se ligó antes de que la sesión existiera en el índice,
+      // ésta es la primera oportunidad de anotarlo.
+      if (ticket !== undefined) sesiones.anotarTicket?.(raiz, idSesion, ticket);
     };
 
     /**
@@ -1709,6 +1731,12 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         // cuanto cree la entrada. Escribir aquí una entrada nueva la enseñaría en la barra
         // como una sesión vacía que nadie ha empezado.
         if (anotada) sesiones.elegirDispositivo?.(raiz, idSesion, elegido);
+      },
+      fijarTicket: (elegido) => {
+        ticket = elegido;
+        // Misma regla que `elegirDispositivo`: si todavía no está en el índice, se queda en
+        // memoria y `volcar()` lo anota en cuanto cree la entrada.
+        if (anotada) sesiones.anotarTicket?.(raiz, idSesion, elegido);
       },
       get cerrada() {
         return cerrada;
@@ -2109,14 +2137,15 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       // puerto se lo traga y devuelve vacío, que es la verdad.
       try {
         // Campo a campo y no la entrada entera: del índice cuelgan además `creada` y el
-        // `dispositivo`, que la barra no pinta. Los tres que sí salen son los que distinguen
-        // una fila de otra: CUÁNDO se tocó, de QUIÉN es y CUÁNTO costó.
+        // `dispositivo`, que la barra no pinta. Los que sí salen son los que distinguen una
+        // fila de otra: CUÁNDO se tocó, de QUIÉN es, CUÁNTO costó y a qué ticket queda ligada.
         return sesiones.listar(raiz).map((s) => ({
           id: s.id,
           titulo: s.titulo,
           ...(s.ultimoTurno === undefined ? {} : { ultimoTurno: s.ultimoTurno }),
           ...(s.tarea === undefined ? {} : { tarea: s.tarea }),
           ...(s.consumo === undefined ? {} : { consumo: s.consumo }),
+          ...(s.ticket === undefined ? {} : { ticket: s.ticket }),
         }));
       } catch {
         return [];

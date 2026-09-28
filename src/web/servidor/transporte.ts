@@ -100,6 +100,13 @@ export interface SesionDelCable {
    * barra pintaría un `↑0 ↓0` que nadie ha medido.
    */
   consumo?: ConsumoDeTurno;
+  /**
+   * La CLAVE del ticket de Jira al que quedó ligada esta sesión (`"IXCODE-12"`), si tiene
+   * uno (`EntradaIndice.ticket`, IXCODE-11). Solo la clave, y no el objeto entero: es lo
+   * único que la fila de la barra tiene que pintar; el conector y el sitio se quedan en el
+   * host hasta que algo necesite componer la URL pública.
+   */
+  ticket?: string;
 }
 
 /**

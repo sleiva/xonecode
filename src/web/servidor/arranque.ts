@@ -2360,6 +2360,11 @@ export function montarRutas(
         ...(s.tarea === undefined ? {} : { deTarea: true as const }),
         ...(trabajando.has(s.id) ? { trabajando: true as const } : {}),
         ...(s.consumo === undefined ? {} : { consumo: s.consumo }),
+        // Solo la CLAVE: el resto del ticket (conector, sitio) se queda en el host hasta
+        // que algo lo necesite (`SesionDelCable.ticket`). `?.` y no `===undefined`: un
+        // índice tocado a mano puede traer `ticket: null`, y esto no es sitio para tumbar
+        // la lista ENTERA de sesiones del proyecto por una entrada mal formada.
+        ...(typeof s.ticket?.clave === "string" ? { ticket: s.ticket.clave } : {}),
       }));
     } catch {
       return [];
