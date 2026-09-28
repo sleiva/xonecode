@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { categoriaDeEstado, jqlDePendientes, motivoDeClaveDeProyecto, transicionPropuesta, type TransicionDelGestor } from "./gestorDeTareas.js";
+import {
+  categoriaDeEstado,
+  comentarioDeCierre,
+  jqlDePendientes,
+  motivoDeClaveDeProyecto,
+  transicionPropuesta,
+  type DatosDeCierre,
+  type TransicionDelGestor,
+} from "./gestorDeTareas.js";
 
 describe("jqlDePendientes", () => {
   it("las pendientes de un proyecto, lo último tocado arriba", () => {
@@ -51,5 +59,64 @@ describe("transicionPropuesta", () => {
   it("al cerrar, PROBAR gana aunque una terminada venga primero en la lista", () => {
     const ts2 = [t("31", "Hecho", "TERMINADO", "terminada"), t("2", "PROBAR", "PROBAR", "en-curso")];
     expect(transicionPropuesta(ts2, "cerrar")?.id).toBe("2");
+  });
+});
+
+describe("comentarioDeCierre", () => {
+  const base: DatosDeCierre = {
+    ficheros: [
+      { ruta: "colecciones/Clientes.xne", clase: "nuevo" },
+      { ruta: "app.xne", clase: "modificado" },
+    ],
+    commits: ["abcdef1234567890", "0123456789abcdef"],
+  };
+
+  it("lista los ficheros con su clase y los commits en hash corto de 7", () => {
+    const texto = comentarioDeCierre(base);
+    expect(texto).toContain("## Qué cambió");
+    expect(texto).toContain("- `colecciones/Clientes.xne` (nuevo)");
+    expect(texto).toContain("- `app.xne` (modificado)");
+    expect(texto).toContain("Commits: `abcdef1`, `0123456`");
+  });
+
+  it("sin ficheros ni commits, lo dice y no rompe el formato", () => {
+    const texto = comentarioDeCierre({ ficheros: [], commits: [] });
+    expect(texto).toContain("## Qué cambió\n\n_(sin ficheros)_");
+    expect(texto).not.toContain("Commits:");
+  });
+
+  it("sin veredicto, «no corrió» — NUNCA «verde» sin dato", () => {
+    expect(comentarioDeCierre(base)).toContain("## Verificación\n\nno corrió");
+  });
+
+  it("con veredicto verde, dice verde", () => {
+    const texto = comentarioDeCierre({ ...base, veredicto: { verde: true, errores: 0, avisos: 0 } });
+    expect(texto).toContain("## Verificación\n\nverde");
+  });
+
+  it("con veredicto en rojo, cuenta los errores con el formato literal del criterio", () => {
+    const texto = comentarioDeCierre({ ...base, veredicto: { verde: false, errores: 3, avisos: 2 } });
+    expect(texto).toContain("## Verificación\n\nen rojo: 3 errores");
+  });
+
+  it("el plan solo sale si hay algo que decir", () => {
+    expect(comentarioDeCierre(base)).not.toContain("## Plan");
+    expect(comentarioDeCierre({ ...base, plan: "   " })).not.toContain("## Plan");
+    expect(comentarioDeCierre({ ...base, plan: "Falta el paso 3" })).toContain("## Plan\n\nFalta el paso 3");
+  });
+
+  it("el resumen se recorta a 1500 caracteres", () => {
+    const largo = "x".repeat(2000);
+    const texto = comentarioDeCierre({ ...base, resumen: largo });
+    expect(texto).toContain(`## Resumen\n\n${"x".repeat(1500)}`);
+    expect(texto).not.toContain("x".repeat(1501));
+  });
+
+  it("sin resumen, no sale la sección", () => {
+    expect(comentarioDeCierre(base)).not.toContain("## Resumen");
+  });
+
+  it("siempre cierra con la firma del harness", () => {
+    expect(comentarioDeCierre(base).endsWith("— escrito por xonecode")).toBe(true);
   });
 });

@@ -115,8 +115,12 @@ export function selloDeSesion(id: string): string | undefined {
  *   así que el id `abc` casaría con el sello de `abc1` — o con un id citado dentro del
  *   cuerpo del mensaje. Se pide el valor del trailer con `%(trailers:key=…,valueonly)` y se
  *   compara ENTERO. Es exactamente la misatribución silenciosa que esto viene a quitar.
+ *
+ * Exportada (Task 9, IXCODE-11): `web/servidor/datosDeCierre.ts` la usa para los hashes del
+ * comentario de cierre de una tarea — la MISMA lista que ya sostiene `cambiosDeSesion`, así
+ * que no se recalcula con otro criterio.
  */
-async function commitsDeSesion(raiz: string, id: string, ruta?: string): Promise<string[]> {
+export async function commitsDeSesion(raiz: string, id: string, ruta?: string): Promise<string[]> {
   const sello = selloDeSesion(id);
   if (sello === undefined) return [];
   // Un repo recién creado no tiene `HEAD`, y ahí `git log` FALLA en vez de no decir nada

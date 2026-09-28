@@ -82,3 +82,52 @@ export function transicionPropuesta(ts: readonly TransicionDelGestor[], para: "e
   if (para === "empezar") return ts.find((t) => /^en curso$/i.test(t.destino)) ?? ts.find((t) => t.categoria === "en-curso");
   return ts.find((t) => /^probar$/i.test(t.destino) || /^probar$/i.test(t.nombre)) ?? ts.find((t) => t.categoria === "terminada");
 }
+
+/**
+ * Lo que hace falta para escribir el comentario de cierre de una tarea (Task 9, IXCODE-11): lo que
+ * `datosDeCierre` (`web/servidor/datosDeCierre.ts`) reúne del disco —ficheros y commits de la
+ * sesión, el último veredicto del verificador, y la última respuesta del asistente— más un `plan`
+ * que hoy nadie compone (ver el comentario de cabecera de `datosDeCierre.ts`). El FORMATO es puro
+ * y vive aquí; una tarea posterior lo manda a Jira con `GestorDeTareasPort.comentar`, tras
+ * aprobación de la persona.
+ */
+export interface DatosDeCierre {
+  ficheros: { ruta: string; clase: "nuevo" | "modificado" | "borrado" }[];
+  commits: string[];
+  /** Ausente = el verificador no corrió en la última ronda: NUNCA se pinta «verde» sin esto. */
+  veredicto?: { verde: boolean; errores: number; avisos: number };
+  plan?: string;
+  resumen?: string;
+}
+
+/** Cuánto del resumen entra en el comentario: un ticket no es el sitio del transcript entero. */
+const TOPE_DEL_RESUMEN_DE_CIERRE = 1500;
+
+/**
+ * El texto del comentario de cierre, en markdown, con lo que el harness sabe de la sesión.
+ * Cuatro secciones fijas —«Qué cambió», «Verificación», y «Plan»/«Resumen» solo si hay algo que
+ * decir— y una firma, para que quien lea el ticket sepa que lo escribió el harness y no una
+ * persona a mano.
+ */
+export function comentarioDeCierre(datos: DatosDeCierre): string {
+  const secciones = [seccionQueCambio(datos.ficheros, datos.commits), seccionVerificacion(datos.veredicto)];
+  if (datos.plan !== undefined && datos.plan.trim() !== "") secciones.push(`## Plan\n\n${datos.plan.trim()}`);
+  if (datos.resumen !== undefined && datos.resumen.trim() !== "") {
+    secciones.push(`## Resumen\n\n${datos.resumen.trim().slice(0, TOPE_DEL_RESUMEN_DE_CIERRE)}`);
+  }
+  secciones.push("— escrito por xonecode");
+  return secciones.join("\n\n");
+}
+
+function seccionQueCambio(ficheros: DatosDeCierre["ficheros"], commits: readonly string[]): string {
+  const lista = ficheros.length === 0 ? "_(sin ficheros)_" : ficheros.map((f) => `- \`${f.ruta}\` (${f.clase})`).join("\n");
+  const linea = commits.length === 0 ? "" : `\n\nCommits: ${commits.map((c) => `\`${c.slice(0, 7)}\``).join(", ")}`;
+  return `## Qué cambió\n\n${lista}${linea}`;
+}
+
+function seccionVerificacion(veredicto: DatosDeCierre["veredicto"]): string {
+  if (veredicto === undefined) return "## Verificación\n\nno corrió";
+  if (veredicto.verde) return "## Verificación\n\nverde";
+  // Formato literal del criterio de aceptación: «en rojo: N errores», sin singular especial.
+  return `## Verificación\n\nen rojo: ${veredicto.errores} errores`;
+}
