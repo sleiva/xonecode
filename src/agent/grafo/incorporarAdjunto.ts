@@ -162,6 +162,16 @@ function existeSinSeguir(ruta: string): boolean {
   }
 }
 
+/**
+ * ¿Es `virtual` una vista APLANADA en el disco de `raiz`? `esVistaAplanada` pide el inventario
+ * del proyecto; aquí basta con preguntarle al disco por la ÚNICA fuente que la haría aplanada,
+ * su `.xne` al lado.
+ */
+function aplanadaEnDisco(raiz: string, virtual: string): boolean {
+  const fuente = `${virtual.slice(0, -4)}.xne`;
+  return esVistaAplanada(virtual, new Set(existsSync(resolve(raiz, fuente.slice(1))) ? [fuente] : []));
+}
+
 export function crearIncorporarAdjunto(donde: DondeIncorporar) {
   return tool(
     async ({ adjunto, file_path }: z.infer<typeof Entrada>) => {
@@ -188,17 +198,16 @@ export function crearIncorporarAdjunto(donde: DondeIncorporar) {
       const porTexto = motivoDeDestino(donde.perfil, destinoVirtual);
       if (porTexto !== undefined) return porTexto;
       const destinoReal = resolve(donde.raiz, destinoVirtual.slice(1));
-      // `esVistaAplanada` pide el inventario del proyecto; aquí basta con preguntarle al disco
-      // por la ÚNICA fuente que la haría aplanada, su `.xne` al lado.
-      const fuente = `${destinoVirtual.slice(0, -4)}.xne`;
-      if (esVistaAplanada(destinoVirtual, new Set(existsSync(resolve(donde.raiz, fuente.slice(1))) ? [fuente] : []))) {
-        return porQueNo(destinoVirtual);
-      }
+      if (aplanadaEnDisco(donde.raiz, destinoVirtual)) return porQueNo(destinoVirtual);
 
       // (5a) El origen, por su CAMINO real. La carpeta puede no existir aún: eso es «no existe».
       const origenReal = resolve(donde.carpetaDeAdjuntos, nombre);
+      // El tamaño se toma AQUÍ, del origen ya comprobado: medirlo en el destino después de copiar
+      // sería una llamada fuera del `try` que, en una carrera, rompería «nunca lanza».
+      let bytes: number;
       try {
         const st = lstatSync(origenReal);
+        bytes = st.size;
         if (!st.isFile()) return `«${origenVirtual}» no es un fichero adjunto.`;
         if (!dentroDe(realpathSync.native(origenReal), realpathSync.native(donde.carpetaDeAdjuntos))) {
           return `«${origenVirtual}» apunta fuera de la carpeta de adjuntos.`;
@@ -233,8 +242,12 @@ export function crearIncorporarAdjunto(donde: DondeIncorporar) {
           finalReal = realpathSync.native(destinoReal);
         }
         if (!dentroDe(finalReal, raizReal)) return `«${destinoVirtual}» apunta fuera del proyecto.`;
-        const porCamino = motivoDeDestino(donde.perfil, comoVirtual(finalReal, raizReal));
+        const virtualReal = comoVirtual(finalReal, raizReal);
+        const porCamino = motivoDeDestino(donde.perfil, virtualReal);
         if (porCamino !== undefined) return porCamino;
+        // Y la vista aplanada, también sobre el camino REAL: un enlace `/v` → `/pantallas`
+        // convierte `/v/menu.xml` en `/pantallas/menu.xml`, que el texto no ve.
+        if (aplanadaEnDisco(raizReal, virtualReal)) return porQueNo(virtualReal);
       } catch (error) {
         return `No se pudo comprobar la ruta «${destinoVirtual}» (${codigoDe(error)}).`;
       }
@@ -245,7 +258,6 @@ export function crearIncorporarAdjunto(donde: DondeIncorporar) {
       } catch (error) {
         return `No se pudo incorporar «${origenVirtual}» (${codigoDe(error)}).`;
       }
-      const bytes = statSync(destinoReal).size;
       return `Incorporado ${origenVirtual} → ${destinoVirtual} (${bytes} bytes). Ya es un fichero del proyecto.`;
     },
     {

@@ -98,6 +98,19 @@ describe("incorporar_adjunto — rechaza, DEVUELVE el motivo y no crea nada", ()
     expect(existsSync(join(raiz, "menu.xml"))).toBe(false);
   });
 
+  it("una vista aplanada detrás de un ENLACE de carpeta: se juzga el camino real", async () => {
+    // `/v/menu.xml` es `/pantallas/menu.xml` en disco. Lo paran DOS pasadas, y cada una basta sola
+    // (medido quitándolas una a una): la del texto porque `existsSync` sigue el enlace hasta el
+    // `.xne`, y la del camino real por construcción. Quitar las dos pone esto en rojo.
+    const { raiz, incorporar } = escenario();
+    mkdirSync(join(raiz, "pantallas"));
+    writeFileSync(join(raiz, "pantallas", "menu.xne"), "<coll/>");
+    symlinkSync(join(raiz, "pantallas"), join(raiz, "v"));
+    const r = await incorporar("ic.png", "/v/menu.xml");
+    expect(r).toContain("APLANADA");
+    expect(existsSync(join(raiz, "pantallas", "menu.xml"))).toBe(false);
+  });
+
   it("un enlace en la CARPETA destino que sale del proyecto: rechazo, y nada creado fuera", async () => {
     const { base, raiz, incorporar } = escenario();
     const fuera = join(base, "fuera");
