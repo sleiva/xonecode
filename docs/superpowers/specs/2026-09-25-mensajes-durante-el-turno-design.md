@@ -1,248 +1,219 @@
 # Mensajes mientras el agente trabaja (IXCODE-4)
 
-Hoy, mientras un turno de TrueForge está en marcha, el compositor de la web se deshabilita
-(`Compositor.tsx`, `disabled={!conectado || turnoEnVuelo}`). No es una elección de UX: es que la
-librería lo impide. Verificado contra el código real de `@truefoundry/trueforge-core` (no contra
-un informe de subagente ni contra la documentación):
+> Reescrito el 28-09-2026 tras dos pruebas reales en el navegador (MyAllXOne). La primera versión
+> (25-09) entregaba cada nota a TODOS los hilos y dibujó un diagrama dos veces; esta dice el
+> diseño que quedó, lo que se midió para llegar a él y lo que sigue sin cubrirse.
 
-- `AgentThreadOrchestrator.send()` lanza `InvalidAgentSendInputError("Cannot process user
-  messages while sub agents are running…")` en cuanto `agentThreads.size > 1` — y mientras
-  cualquier especialista existe en el árbol, eso es siempre cierto (`getActiveAgentThreads`: la
-  raíz deja de ser "hoja" en cuanto tiene un hijo).
-- Cuando el especialista activo termina y se borra del mapa (`agentThreads.size` vuelve a 1), el
-  motor no cede el control a nuestro código en ese instante: pasa directo, sin ningún `yield`
-  intermedio, a la siguiente llamada de la raíz. No hay una ventana externa que aprovechar.
-- `AgentThread.send()` (el hilo individual) bloquea igual un mensaje de usuario si hay una
-  aprobación o pregunta pendiente sin resolver (`"user message cannot be sent while approvals or
-  questions are pending"`).
+Lo que pidió la persona: poder escribir mientras el agente trabaja y que **de verdad se incorpore
+al plan**, y que si un especialista ya estaba haciendo algo **no se haga dos veces**. Y poder
+decirle «para» para cambiar de plan.
+
+Hay dos gestos, y el resto del documento es cómo funciona cada uno:
+
+| gesto | qué hace | cómo se pide |
+|---|---|---|
+| **Añadir** (una nota) | lo escrito entra en el trabajo en marcha sin pararlo | Enter, como siempre |
+| **Detener y replanificar** | los especialistas en marcha cierran con un resumen de lo hecho y el orquestador replanifica con eso y con lo escrito | botón, junto a Parar |
+| Parar (ya existía) | corta el turno entero; lo de los especialistas se pierde | botón rojo |
 
 ## Alcance
 
-**Solo TrueForge.** `deepagents` se queda fuera — decisión explícita del usuario, como en IXCODE-5.
+- **Solo TrueForge.** `deepagents` se queda fuera, por decisión explícita, como en IXCODE-5. Todo lo
+  añadido al contrato es opcional (`SesionReal.agregarNota?`, `SesionReal.detener?`).
+- **Solo la consola WEB.** El terminal y la TUI leen stdin línea a línea de forma bloqueante.
+- **Solo con el agente trabajando en silencio.** Con una aprobación o una pregunta en pantalla, el
+  compositor sigue apagado (`hayPendiente`): escribir competiría con la respuesta que se espera.
 
-**Solo la consola WEB.** El terminal/TUI leen stdin línea a línea de forma bloqueante; soportarlo
-ahí es un problema aparte (lectura no bloqueante durante el streaming), fuera de este trabajo.
+## Por qué la librería no deja hacerlo «por la puerta»
 
-**Solo cuando el agente trabaja en silencio.** Si ya hay una aprobación (diff) o una pregunta del
-orquestador visibles esperando respuesta, escribir se sigue tratando como la decisión sobre ESO —
-el mecanismo de este documento no entra en juego ahí, ni falta que hace: ese camino ya funciona.
+Verificado en el código de `@truefoundry/trueforge-core`:
 
-## Lo que se investigó y se descartó
+- `AgentThreadOrchestrator.send()` lanza `InvalidAgentSendInputError("Cannot process user messages
+  while sub agents are running…")` en cuanto hay más de un hilo en el árbol.
+- `AgentThread.send()` rechaza un mensaje de usuario con aprobaciones o preguntas pendientes.
+- `execute()` recibe UNA señal compartida por la raíz y todos los hijos: abortarla es Parar.
+- `agentThreads` está declarado `private readonly` en el `.d.ts`.
 
-Antes de llegar al diseño de abajo se recorrieron dos caminos que no sirven, y merece la pena
-dejarlos escritos para no volver a intentarlos:
+Así que no hay forma de meter un mensaje «normal» en un turno en curso. Lo que sí hay es un punto
+de extensión público: **`AgentCapability.preLLMProcessors`**. Corre antes de CADA llamada al modelo,
+en la raíz y en cada hijo (`AgentThread.stepLLMCall`), y puede devolver un
+`internal.agent.context.append` que **persiste** un mensaje `user` en el contexto de ese hilo. Sus
+tipos no se reexportan desde el punto de entrada público, así que se escriben a mano contra
+`Record<string, unknown>`, como ya hacen `capacidadDeRecortes`/`capacidadDeFecha`.
 
-1. **Abortar el hilo activo e inyectar por fuera del orquestador.** `AgentThreadOrchestrator
-   .agentThreads` es un `Map` público en JS pero **declarado `private readonly` en el
-   `.d.ts`** (`AgentThreadOrchestrator.d.ts`) — usarlo exige saltarse el compilador con un cast.
-   Y aunque se aceptara ese riesgo, aportaría poco: abortar usa una única señal COMPARTIDA por
-   todo el lote de hilos activos (`execute({signal})` se llama igual para la raíz que para cada
-   hijo), deja mensajes de asistente a medio escribir y tool calls abiertas sin resolver, y falla
-   sin remedio contra un hijo de motor EXTERNO (`iterationLimit: 1`, sin capacidad de recibir
-   nada a mitad).
-2. **Forkear `@truefoundry/trueforge-core`.** Es un paquete de terceros real (MIT,
-   `github.com/truefoundry/trueforge`, publicado como `public`), así que forkearlo era viable,
-   pero innecesario: existe un punto de extensión público y pensado para esto.
+Y hay una segunda palanca, que es NUESTRA: **el modelo de cada hijo lo construimos nosotros**
+(`modeloParaTrueforge`, uno por hilo en `crearHijo`). Es él quien recorre el stream de LangChain y
+quien le devuelve a la librería la respuesta completa, así que puede cortar el stream de UN hijo y
+devolver otra cosa sin que la librería se entere.
 
-## El mecanismo: `preLLMProcessors`
+## 1. Añadir: una nota con UN dueño
 
-`AgentCapability.preLLMProcessors` (`AgentCapability.d.ts`) es una lista de procesadores que
-`AgentThread.execute()` ejecuta **antes de cada llamada al modelo**, en la raíz y en cada hijo por
-igual — confirmado en `AgentThread.js:733-740` (`stepLLMCall` llama
-`executeContextProcessors("preLLM")` antes de construir la petición). Un procesador puede devolver
-un `AGENT_CONTEXT_APPEND` que **persiste** un mensaje `user` en el contexto del hilo — no es la
-variante efímera (`preLLMEphemeralProcessors`, que solo transforma la petición saliente sin
-guardar nada).
+`agent/motores/trueforge/notas.ts` (puro), entregada por `capacidadDeNotas` (`capacidades.ts`), una
+sola instancia por sesión montada en la raíz y en cada hijo de motor `"modelo"`.
 
-Ni `PreLLMAgentContextProcessor` ni `AgentContextProcessorAppendContext` se reexportan desde el
-punto de entrada público del paquete (`dist/core/index.d.ts` solo reexporta
-`AgentContextProcessorOutput`, `AgentThreadExecutionContext`, `PostToolCallAgentContextProcessor`
-y `PreLLMEphemeralAgentContextProcessor` — la variante persistida que necesitamos, no). Esto no es
-un problema nuevo: `capacidadDeRecortes`/`capacidadDeFecha` (`capacidades.ts`) ya construyen sus
-piezas SIN importar los tipos internos de la librería, a mano, contra `Record<string, unknown>` —
-el mismo patrón sigue aquí. El campo `type` del objeto que se devuelve es el string literal
-`"internal.agent.context.append"` (`InternalEventType.AGENT_CONTEXT_APPEND` en la librería), y no
-hace falta importar la constante para escribirlo.
+### Lo que se midió y tumbó la primera versión
 
-## Diseño
+La primera versión entregaba cada nota **a cada hilo que aún no la tuviera**. En la prueba real
+(«analiza las colecciones» y, a mitad, «y créame un diagrama»):
 
-### 1. La cola de notas — vive en la sesión, no en un hilo
+1. La nota llegó mientras el orquestador estaba dentro de la llamada que acabó delegando en
+   `analyst-xone`, así que él no la vio.
+2. El analista nació justo después, la recibió en su primera llamada, y dibujó el diagrama (se
+   comprobó que el encargo del orquestador no decía «diagrama»).
+3. Al volver, el orquestador recibió **la misma nota, igual de nueva**. Vio que ya había un mapa,
+   pero la nota le pedía un diagrama, así que se lo encargó a `designer-xone`. Dos diagramas.
 
-Un array en el cierre de `abrirSesionTrueforge`, junto a `aborto`/`cancelado`:
+El fallo no era de prompt: nadie sabía que otro ya la había atendido.
 
-```ts
-interface Nota {
-  texto: string;
-  entregadaA: Set<string>; // thread_id que ya la recibieron
-}
-const notas: Nota[] = [];
-```
+### La regla
 
-### 2. `capacidadDeNotas` — una sola instancia, compartida por todos los hilos
+- **Si trabaja UN solo hijo, la nota es suya** (`textoDeNotaParaHijo`). La incorpora si le cabe en
+  el encargo; si no, no la hace y termina su respuesta con «PENDIENTE DE LA PERSONA: …», para que
+  quien le delegó la replanifique.
+- **Con VARIOS en paralelo no es de ninguno.** Dársela al primero que llame es una carrera; dársela
+  a todos es el bug de arriba. La recibe el orquestador al volver, como encargo.
+- **Sin hijos trabajando, es del orquestador** (`textoDeNota`), que es quien planifica.
+- **El orquestador la ve SIEMPRE.** Si ya tenía dueño, como INFORMACIÓN (`textoDeNotaYaEntregada`):
+  a quién se le pasó, que su respuesta está arriba y que NO la vuelva a encargar.
+- **Un hijo nacido cuando la nota ya tiene dueño —o ya la vio el orquestador— no la recibe**: el
+  orquestador la tiene en cuenta al delegar.
 
-Se construye UNA VEZ por sesión y se añade tal cual —el mismo objeto— a las piezas de la raíz
-(`nuevoOrquestador`) y a las de cada hijo de motor `"modelo"` (`capacidadesDelEspecialista`/
-`crearHijo`). Los hijos de motor EXTERNO (Claude Code, Codex, OpenCode) no llevan `capabilities`
-en absoluto — no reciben notas. Límite declarado, no silencioso.
+«Trabajan a la vez» son los hijos nacidos de la **última llamada del orquestador**
+(`detencion.ts#hijosVivos`): mientras un hijo vive, el orquestador espera su resultado y no vuelve
+a llamar al modelo, así que lo nacido de llamadas anteriores ya terminó. Un hijo de motor EXTERNO
+no pasa por los procesadores y nunca se la queda: la recoge el orquestador.
 
-```ts
-function capacidadDeNotas(notas: Nota[]): Capacidad {
-  return {
-    nombre: "notas",
-    tools: [],
-    capability: {
-      preLLMProcessors: [
-        {
-          async *processPreLLM(execution: { threadId: string }) {
-            const pendientes = notas.filter((n) => !n.entregadaA.has(execution.threadId));
-            if (pendientes.length === 0) return;
-            for (const n of pendientes) n.entregadaA.add(execution.threadId);
-            yield {
-              type: "internal.agent.context.append",
-              context: [{ role: "user", content: pendientes.map((n) => textoDeNota(n.texto)).join("\n\n") }],
-              output: [],
-            };
-          },
-        },
-      ],
-    },
-  };
-}
-```
+### Lo que nadie se quedó
 
-**Semántica de entrega, dicha entera**: una nota se entrega la PRIMERA vez que un hilo con esta
-capacidad hace una llamada al modelo después de que la nota exista, y se marca entregada A ESE
-HILO — nunca se repite para él. No se distingue "estaba trabajando cuando escribiste" de "se creó
-justo después": cualquier hilo cuya primera llamada ocurra mientras la nota sigue en la cola la
-recibe. Es la lectura simple de "a todos los activos" que decidiste para el caso de varios
-especialistas en paralelo (hasta 5, `MAX_PARALLEL_SUB_AGENTS`): no hace falta rastrear qué hilos
-existían en el instante exacto —algo que además exigiría leer `agentThreads`, cerrado más
-arriba—; basta con que cada hilo se sirva a sí mismo la próxima vez que pregunta.
+Si el turno cierra con una nota sin dueño, sale como el turno siguiente (`notasSobrantes` →
+`vestibulo.ts` lo dispara), con un aviso que lo dice. **Salvo que el turno se haya PARADO** (ver §3).
 
-### 3. El framing
+## 2. Detener y replanificar
 
-```ts
-const textoDeNota = (texto: string): string =>
-  `[la persona escribió mientras trabajabas: «${texto}»]`;
-```
+`agent/motores/trueforge/detencion.ts` (el control, puro), por el MISMO procesador que las notas y
+por el modelo de cada hijo (`modeloLangchain.ts`).
 
-Para un hijo, "la persona" es ambigua —su interlocutor normal es el orquestador—, así que el texto
-lo deja claro: es alguien fuera de la conversación entre él y quien le delegó.
+La persona lo propuso como «si le escribo "para" o "detente"». Se hizo con un **botón**, porque en
+castellano «para» es también una preposición («créame un diagrama para Menu» pararía el trabajo) y
+«para el emulador» es ambiguo de verdad.
 
-### 4. Notas sobrantes al final del turno
+### A quién se detiene
 
-Si el turno termina (verificador, juez, respuesta final) con notas que ningún hilo llegó a
-consumir —nadie volvió a preguntarle al modelo antes de que el turno se cerrara—, no se pierden:
-`turno()` en `sesionTrueforge.ts`, en su tramo final, comprueba `notas` y si queda alguna sin
-`entregadaA` no vacío para NINGÚN hilo relevante, la concatena y la lanza como el siguiente
-`turno()` en cuanto el actual devuelve — anunciado como acto de sistema, no en silencio.
+A los hijos nacidos de una llamada del orquestador que **empezó antes de pulsar**. No basta «los
+vivos al pulsar»: si se pulsa mientras el orquestador está decidiendo delegar, el hijo que sale de
+esa decisión nace después, pero de un plan que la persona ya no quiere. Los que el orquestador
+delegue DESPUÉS de leer la orden corren normal: son el plan nuevo.
 
-### 5. El punto exacto de enganche: `consolaWeb.ts#recibir`, rama `clase === "prosa"`
+### Qué recibe cada uno
 
-Hoy, un mensaje `clase: "prosa"` (`consolaWeb.ts:399-413`) SIEMPRE se encola como
-`LineaDeConsola` para que `correrConsola` (`cli/consola.ts`) la consuma en su turno — un bucle que
-solo pide la siguiente línea cuando la anterior terminó del todo, así que hoy nada llegaría al
-modelo hasta que el turno en curso cerrase de todas formas (el cliente solo evita que esto se
-note, deshabilitando el compositor).
+**No es una nota, y a propósito**: si viajara por la cola de notas, el hijo pararía y el
+orquestador… volvería a encargar lo mismo. Cada destinatario recibe SU texto:
 
-Ojo con el nombre: ese mismo fichero ya tiene una función local `anotar` (línea 403, el eco de lo
-tecleado al transcript) — el método nuevo se llama distinto para no chocar: `agregarNota`.
+- el hijo: «para aquí, no hagas ninguna llamada más; di qué has hecho y dónde, y qué te quedaba»
+  (`textoDeDetencionParaHijo`);
+- el orquestador: «los especialistas han parado, su resumen está en su respuesta; replanifica sin
+  repetir lo hecho, y si vuelves a delegar, di qué está hecho y qué cambia»
+  (`textoDeDetencionParaRaiz`).
 
-`consolaWeb.ts` no sabe hoy si hay un turno en vuelo ni tiene una referencia a la sesión —eso vive
-en `vestibulo.ts`, que es quien construye la `ConsolaWeb` y quien lleva `turnoEnVuelo`—, así que
-`OpcionesDeConsolaWeb` gana un campo nuevo, inyectado desde `vestibulo.ts`:
+### Cómo para un hijo sin tocar la librería
 
-```ts
-/** Si hay un turno en marcha, intenta apuntar el texto ahí en vez de encolarlo como línea
- *  nueva. `true` si lo consumió así; `false` (o ausente) y `recibir` sigue el camino de hoy. */
-notaMientrasTrabaja?: (texto: string) => boolean;
-```
+Una respuesta del modelo **sin tool calls** cierra el hilo con normalidad (`AGENT_DONE`) y su texto
+le llega al padre como resultado de `create_sub_agent`. Así que:
 
-La regla en `recibir`, rama `clase === "prosa"`: si `notaMientrasTrabaja?.(mensaje.texto) ===
-true`, no se encola `LineaDeConsola` (el turno en curso ya se hizo cargo); si no, el camino de hoy
-sin cambios. No hace falta que esta rama compruebe además "¿hay algo pendiente?": una aprobación o
-una pregunta viven en un DIÁLOGO aparte (`Aprobacion`/`Pregunta`/`Selector`, `App.tsx`) con su
-PROPIO canal de respuesta —nunca el de "mandar un mensaje"—, así que ese caso no llega por aquí. Y
-si llegara de todos modos (un cliente atrasado, una carrera) el diseño lo tolera solo:
-`agregarNota` únicamente apila la nota en la cola de la sección 1 hasta que ALGÚN hilo vuelva a
-preguntarle al modelo, o se manda como el siguiente turno si nadie lo hace — no revienta nada, se
-entrega tarde.
+- **Entre llamadas**: la orden entra por el procesador antes de su siguiente llamada, y su modelo
+  **filtra las tool calls** de esa respuesta (del stream y del mensaje final). Se filtra la SALIDA y
+  no se le quitan las tools: con el historial lleno de llamadas, algún proveedor rechaza una
+  petición sin la definición de tools. Si tras filtrar no queda texto, va un relleno
+  (`RESUMEN_DE_RELLENO`) y no un vacío.
+- **A mitad de una llamada** (el caso que se midió, abajo): cada hijo lleva su `AbortController`,
+  que corta SOLO su stream. El modelo del hijo captura ese aborto —y solo ése: el del turno se
+  relanza— y **pide el resumen en el acto**, con lo que ya había dicho y la orden al final, sin tool
+  calls. A la librería le llega UNA respuesta normal de texto. `modeloLangchain.ts#corte`.
 
-Lo que sí evita el caso incómodo es el CLIENTE (sección 7): mientras un diálogo de aprobación o
-pregunta está en pantalla, el compositor sigue deshabilitado, así que ese mensaje casi nunca se
-llega a mandar por esta vía.
+### Lo que se midió
 
-### 6. `SesionReal.agregarNota?` — opcional, TrueForge lo implementa, deepagents no
+- **Con el botón, primera versión (sin corte)**: se pulsó con el analista dentro de una llamada de
+  60 s que generaba el informe entero. Esa llamada terminó, el informe se escribió (19 KB, que ya no
+  se quería), y la orden llegó en la llamada siguiente. El resumen y la replanificación sí fueron
+  buenos: el orquestador dio el informe por obsoleto, no repitió el análisis, y preguntó el alcance
+  del diagrama antes de delegarlo.
+- **Con el corte**: se pulsó con el analista 22 s dentro de una llamada. Cerró 2 s después **sin
+  escribir nada**, con un resumen que separaba lo verificado («no repetir») de lo pendiente, y el
+  orquestador delegó el diagrama en `designer-xone` con esos hechos dentro.
 
-```ts
-/** Añade una nota al turno EN MARCHA; no hace nada si no hay ninguno. Ausente en un motor que
- *  no lo soporta (deepagents). */
-agregarNota?(texto: string): void;
-```
+## 3. Parar, después de todo esto
 
-`vestibulo.ts` construye `notaMientrasTrabaja` a partir de esto: `(texto) => { if
-(!turnoEnVuelo || sesion.agregarNota === undefined) return false; sesion.agregarNota(texto);
-return true; }`.
+Parar sigue siendo cortar el turno entero (`SesionReal.cancelar`). Dos cosas se midieron en la
+prueba y se arreglaron:
 
-Se prueba contra la composición REAL del servidor web con una sesión TrueForge real —no contra un
-doble—: es exactamente el patrón de fallo que `CLAUDE.md` nombra («una composición de producción
-viviendo en un cierre que todos los tests doblan»).
+- **Lo que nadie leyó NO arranca otro turno tras Parar.** Antes sí: tras pulsar Parar, lo sobrante
+  salió como el turno siguiente y el orquestador se puso a trabajar sin que nadie lo pidiera. Ahora
+  no se manda, y un aviso lo enseña **con su texto**, para poder copiarlo. Venía de las notas de la
+  primera versión.
+- **Una segunda pulsación de Detener no remanda la primera.** Se juntaba con el texto que el
+  orquestador ya había leído, y como nadie lo volvía a leer, salía como sobrante. Ahora solo se
+  junta con lo que aún nadie ha leído.
 
-### 7. El compositor
+## 4. El cable y la web
 
-`disabled={!conectado || turnoEnVuelo}` pasa a `disabled={!conectado || hayPendiente}`, con
-`hayPendiente` una prop NUEVA de `Compositor.tsx`, calculada en `App.tsx` a partir de lo que YA
-sabe (`estado.aprobacion !== undefined || estado.pregunta !== undefined || estado.selector !==
-undefined || estado.secreto !== undefined` — las mismas condiciones que hoy deciden si se pinta
-uno de esos diálogos). El campo queda habilitado DURANTE el turno —para poder escribir una nota—
-pero se deshabilita en cuanto aparece un diálogo de decisión, exactamente igual que hoy. Enter
-sigue mandando por el mismo sitio de siempre. El botón se queda en "Parar" durante el turno — no
-aparece un botón ni un aviso distintos para esto.
+- **Añadir**: la prosa que llega con el turno en vuelo va a `SesionReal.agregarNota` en vez de a la
+  cola del lazo (`consolaWeb.ts#recibir`, `OpcionesDeConsolaWeb.notaMientrasTrabaja`, construida en
+  `vestibulo.ts`).
+- **Detener**: la MISMA prosa con `detener: true` (`{ clase: "prosa"; texto; detener?: true }`, en
+  `transporte.ts` y redeclarado en `apps/web/src/tipos.ts`) va a `SesionReal.detener`
+  (`detenerMientrasTrabaja`). Sin texto no deja acto de usuario. Si ya no encuentra turno, con texto
+  se encola como prosa normal y vacío no manda nada.
+- **Si el turno lo admite lo dice el SERVIDOR**: `{ clase: "turno"; activo; detenible?: true }`.
+  En el primer turno la sesión se anuncia DESPUÉS del flanco del turno, así que el vestíbulo
+  reanuncia el turno cuando llega la sesión; también va en la ráfaga de bienvenida
+  (`turnoDetenible`).
+- **El compositor**: el campo sigue escribible con el turno en vuelo y se apaga con algo pendiente
+  (`hayPendiente`). «Detener y replanificar» se pinta solo con turno en vuelo, nada pendiente y un
+  turno que lo admita; manda lo escrito (puede ir vacío) y vacía la caja. Rol `secundario` de
+  `Boton.module.css`, junto a Parar.
+
+## Límites declarados
+
+- **Detener no corta un comando de shell en curso.** Visto en vivo: con el `device-controller`
+  dentro de un comando colgado, Detener no hizo nada hasta que se pulsó Parar. La orden llegaría en
+  la llamada siguiente al terminar el comando.
+- **Los especialistas de motor EXTERNO no reciben notas ni se detienen**: son una sola llamada a
+  otro proceso. Solo Parar los corta.
+- **La llamada cortada no se cuenta en tokens**: su stream se corta antes de traer el uso. Se cuenta
+  la del resumen.
+- **La regla del dueño no sabe si un hijo ha terminado ANTES que su hermano**: cuenta a los dos como
+  vivos hasta que el orquestador vuelve a llamar, y entonces la nota la decide el orquestador. Es
+  el lado seguro.
+- **Un hijo al que le cae la nota puede no ser el especialista adecuado** (en la prueba, el analista
+  dibujó un diagrama que por reglas es de `designer-xone`). Se decidió que lo haga si puede: fue lo
+  más rápido y funcionó. La salida es la línea «PENDIENTE DE LA PERSONA».
 
 ## Testing
 
-Contra el `AgentThread`/`AgentThreadOrchestrator` REALES de la librería, con un `ILLM` doblado (el
-mismo nivel al que ata `proyecto.test.ts` contra el backend real) — no contra la librería doblada,
-que es donde este patrón de fallo se ha colado antes en este repo:
+Contra el `AgentThread`/`AgentThreadOrchestrator` REALES con el modelo doblado, nunca con la
+librería doblada:
 
-- Empujar una nota DURANTE la primera tool call de la raíz (antes de que resuelva) y comprobar que
-  la SEGUNDA llamada al modelo ya la lleva en el contexto.
-- Lo mismo con un hijo: la nota llega a su siguiente llamada, no a la de la raíz que lo creó (la
-  raíz ya la habrá consumido si fue ella quien preguntó primero, y el hijo la recibe también, por
-  separado, en su propia primera llamada).
-- Dos especialistas activos a la vez: una nota llega a los DOS.
-- Un hijo de motor EXTERNO no la recibe (no tiene capacidades) — se comprueba que no revienta, no
-  que la reciba.
-- Una nota que nadie consume antes de que el turno cierre se manda como el siguiente `turno()`.
-- Un mensaje `user` insertado justo después de resultados de tool sigue siendo válido al pasar por
-  los adaptadores de `modeloLangchain.ts` (el merge de mensajes de Anthropic en particular: un
-  `user` puede acabar junto a otro `user` si el turno se resume justo después).
+- `notas.test.ts` y `detencion.test.ts`: las reglas, puras.
+- `sesionTrueforge.test.ts`:
+  - el diagrama doble (la nota escrita mientras el raíz delega);
+  - dos hijos en paralelo;
+  - el raíz dueño que no la reparte;
+  - Detener entre llamadas, con la tool pedida tras la orden sin ejecutar y el hijo re-delegado
+    corriendo normal;
+  - Detener a mitad de una llamada lenta que respeta la señal;
+  - Parar que no se traga el corte;
+  - lo sobrante tras Parar.
+- Los tests se comprobaron **mutando** el mecanismo: quitar el filtro, el `abort()`, el registro de
+  nacimientos o el conteo de vivos los tumba.
+- `vestibulo.test.ts`, `consolaWeb.test.ts` y `Compositor.test.tsx`: el cableado de Detener de punta
+  a punta, incluido el reanuncio del primer turno.
 
-## Ficheros que cambian
+## Ficheros
 
-- `agent/motores/trueforge/capacidades.ts` — `capacidadDeNotas`, nueva.
-- `agent/motores/trueforge/notas.ts` — nuevo: `Nota`, `textoDeNota`, la lógica de entrega/sobrantes
-  (separado de `capacidades.ts` para poder probarlo sin construir un `AgentThread`).
-- `agent/motores/trueforge/sesionTrueforge.ts` — la cola `notas`, `agregarNota()` en el objeto
-  devuelto, la pieza añadida a la raíz y a cada hijo de motor `"modelo"`, y el envío de sobrantes
-  al cerrar el turno.
-- `agent/turno/sesionReal.ts` — `agregarNota?` en la interfaz `SesionReal`.
-- `web/servidor/consolaWeb.ts` — `OpcionesDeConsolaWeb.notaMientrasTrabaja?`, consultado en
-  `recibir`, rama `clase === "prosa"`, ANTES de encolar la `LineaDeConsola`.
-- `web/servidor/vestibulo.ts` — construye `notaMientrasTrabaja` a partir de `turnoEnVuelo` y
-  `sesion.agregarNota`, y se lo pasa a `crearConsolaWeb`.
-- `apps/web/src/App.tsx` — la prop `hayPendiente` que calcula a partir de `estado.aprobacion` /
-  `estado.pregunta` / `estado.selector` / `estado.secreto`, pasada a `Compositor`.
-- `apps/web/src/componentes/Compositor.tsx` — `disabled` pasa de mirar `turnoEnVuelo` a mirar la
-  prop nueva `hayPendiente`.
-
-## Qué no se hace en este trabajo
-
-- No se toca `deepagents` (decisión explícita, como en IXCODE-5).
-- No se soporta en TUI ni en el terminal.
-- No se resuelve "activo en el instante exacto en que escribiste": la entrega es "próxima llamada
-  de cada hilo que aún no la tiene", que puede alcanzar a un especialista creado justo después de
-  escribir la nota. Documentado arriba, no es un bug.
-- No cambia nada del camino de aprobación/pregunta ya pendiente: sigue exactamente como hoy.
-- No se toca `agentThreads` ni se aborta nada: el mecanismo entero vive en un punto de extensión
-  público de la librería.
+- `agent/motores/trueforge/notas.ts`, `detencion.ts` (nuevo), `capacidades.ts#capacidadDeNotas`,
+  `modeloLangchain.ts` (`soloTexto`, `corte`), `sesionTrueforge.ts` (`agregarNota`, `detener`, la
+  cuenta de vivos, lo sobrante y Parar).
+- `agent/turno/sesionReal.ts` (`agregarNota?`, `detener?`).
+- `web/servidor/consolaWeb.ts`, `vestibulo.ts`, `transporte.ts`, `arranque.ts` (la ráfaga).
+- `apps/web/src/tipos.ts`, `store.ts` (`turnoDetenible`), `App.tsx`, `componentes/Compositor.tsx` y
+  su hoja.

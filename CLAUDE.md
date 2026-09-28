@@ -448,7 +448,18 @@ memoria y se APARTA con otro nombre. **El prompt de un hijo va en su prompt de S
 `instructionBuilders`**. **El raíz puede PREGUNTAR** (`ask_user_question`, solo él): con opciones
 sale además como tarjeta con un botón por opción (`Piel.consulta?` opcional), y lo pendiente lo
 decide el hilo. **Solo se compacta el raíz**: en un hijo, resumir un encargo corto y ya cacheado
-costaba más que reenviarlo.
+costaba más que reenviarlo. **Escribir con el turno en marcha tiene dos gestos** (IXCODE-4, solo la web): una NOTA
+(Enter) y **Detener y replanificar** (botón). Las dos entran por `preLLMProcessors`
+(`capacidadDeNotas`), el único punto que corre antes de CADA llamada de cada hilo. **Una nota tiene
+UN dueño** (`notas.ts`): el único hijo que trabaja o el raíz; con varios en paralelo, el raíz; y el
+raíz la ve siempre, como INFORMACIÓN si ya tenía dueño —repartirla a todos hizo el mismo encargo
+dos veces—. **Detener NO es una nota** (`detencion.ts`): alcanza a los hijos nacidos de una llamada
+del raíz ANTERIOR a pulsar, y **corta la llamada en curso de ese hijo** con su propio
+`AbortController`; su modelo captura el corte y pide el resumen en el acto, así que a la librería le
+llega una respuesta de texto normal (`modeloLangchain.ts#corte`). Se filtra la SALIDA, no se quitan
+las tools. **Tras Parar, lo que nadie leyó no arranca otro turno**: se dice con su texto. Límites
+declarados: no corta un comando de shell en curso, y un hijo de motor externo ni recibe notas ni se
+detiene.
 
 ### La aprobación
 

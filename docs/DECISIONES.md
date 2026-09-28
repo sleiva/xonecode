@@ -6753,3 +6753,45 @@ omisión: así el test entra por `redDeConectoresReal` y por `probar`, no por un
 y el mutante que quita el relanzamiento deja la fila en «no responde» —medido, es exactamente el
 síntoma que se vio en pantalla— y pone el test en rojo. `npm test` sigue sin red: los transportes
 del doble son una marca, porque lo que hay que distinguir es CUÁL se pidió.
+
+## Escribir mientras el agente trabaja: una nota con UN dueño, y Detener con resumen (28-09-2026)
+
+IXCODE-4, solo TrueForge y solo la web. El diseño entero está en
+`docs/superpowers/specs/2026-09-25-mensajes-durante-el-turno-design.md`; aquí va lo que se MIDIÓ en
+dos pruebas reales en el navegador (MyAllXOne, `deepseek-flash`), porque cada medida cambió el
+diseño.
+
+**El diagrama doble tumbó el reparto a todos.** La primera versión entregaba cada nota a CADA hilo
+que aún no la tuviera. «Analiza las colecciones» y, a mitad, «y créame un diagrama»: la nota llegó
+con el orquestador dentro de la llamada que delegaba en el analista; el analista nació después, la
+recibió y dibujó el diagrama (el encargo no decía «diagrama», se comprobó); al volver, el
+orquestador la recibió igual de nueva y se la encargó a `designer-xone`. No era el prompt: nadie
+sabía que otro ya la había atendido. Ahora UN dueño —el único hijo que trabaja, o el orquestador—
+y el orquestador la ve siempre, como información si ya tenía dueño. Repetido el mismo escenario
+con la regla nueva: un solo diagrama, y el orquestador contestó que no lo volvía a encargar.
+
+**«Para» es un botón y no una palabra**: en castellano es también preposición.
+
+**Detener sin cortar la llamada en curso no basta.** Con el botón y sin corte, el analista estaba
+dentro de una llamada de 60 s que generaba un informe entero: terminó, lo escribió (19 KB que ya
+no se querían) y la orden llegó en la siguiente. Con el corte —un `AbortController` por hijo que
+corta SOLO su stream, y el modelo del hijo pidiendo el resumen en el acto— se pulsó a 22 s de una
+llamada y cerró 2 s después sin escribir nada. La librería no se toca: nuestro adaptador es quien
+recorre el stream y le devuelve la respuesta completa.
+
+**Se filtra la SALIDA, no se quitan las tools**, porque algún proveedor rechaza una petición con
+historial de tool calls y sin su definición. En la primera prueba el modelo obedeció «no llames
+más» sin que hiciera falta filtrar; el filtro queda de red y lo anota la traza de hitos.
+
+**Dos bugs que solo salieron en vivo**: tras Parar, lo sobrante arrancaba un turno que nadie pidió
+(heredado de la primera versión de las notas); y una segunda pulsación de Detener remandaba el
+texto de la primera, ya leído. Ahora Parar no relanza nada y lo dice con su texto, y Detener solo
+junta lo que nadie ha leído.
+
+**Visto de paso y sin arreglar**: el `device-controller` lanzó Chrome con `--headless=old` para
+capturar el diagrama, un modo que ese Chrome ya no tiene, y se colgó sin tope en la shell. Detener
+no lo alcanzó (límite declarado: no corta un comando en curso); Parar sí.
+
+**Probar en vivo sin tocar la casa de la persona**: la lista de proyectos de Ajustes sale del
+servidor de CloudStudio, así que una copia local no se puede marcar. Se levantó la consola con un
+`HOME` aislado —credenciales copiadas y solo la copia del proyecto en su workspace—.
