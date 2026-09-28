@@ -724,6 +724,36 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   vuelo. Lo que el registro guarda es EXACTAMENTE lo que el terminal habría impreso. El enunciado
   de una decisión ya puesta deja de anotarse (viaja en el mensaje `pregunta`). Tampoco entra una
   subida CANCELADA.
+- **Pulsar un proyecto en la barra abre su PANEL, no una sesión directa**
+  (`apps/web/src/componentes/PanelDelProyecto.tsx`, `App.tsx`): pestañas Resumen (sesiones, planes,
+  tareas en background), Tareas (pendientes del gestor de tareas vinculado, con búsqueda y «Nueva
+  sesión con esta tarea») y Conectores (vincular un gestor). El proyecto que YA está abierto
+  enseña el panel SIN mandar `sesion` —soltar la conversación en curso por una vacía es justo lo
+  que se quería evitar—; «Nueva sesión» y pulsar una sesión existente sí llevan al chat. Las
+  pendientes son una FOTO con hora y «Reintentar», sin sondeo; sin vínculo la pestaña lo DICE con
+  el camino a Conectores, nunca una lista vacía que parezca «no hay pendientes».
+- **Una espera de humano saca del panel al chat, en el MISMO render** (`App.tsx#hayEsperaDeHumano`):
+  una aprobación, pregunta, secreto o selector pendiente hace que el panel se apague y el chat se
+  encienda a la vez, así que el diálogo sale en su sitio de siempre sin duplicarlo dentro del
+  panel; al contestar no se vuelve al panel de rebote.
+- **«Nueva sesión con esta tarea» liga la sesión a su ticket, y por el cable solo cruza la CLAVE**
+  (`EntradaIndice.ticket`, `web/servidor/sesiones.ts#anotarTicket`, `SesionDelCable.ticket:
+  string`): ni el conector ni el sitio del vínculo viajan al cliente. El encargo llega al
+  compositor EDITABLE y SIN enviar —lo manda la persona, no se manda solo—.
+- **En Jira escribe el HARNESS, nunca el agente, y cada escritura lleva su propia tarjeta de
+  aprobación** (`componentes/TarjetaDeJira.tsx`): pasar a EN CURSO al empezar (con «empezar sin
+  tocar Jira» de salida) y comentario + transición al cerrar (comentario EDITABLE; un `error` de
+  cerrar deja la tarjeta abierta con lo que la persona haya escrito intacto, nunca lo repinta). Si
+  la transición de «empezar» falla, la sesión se abre IGUAL y el aviso lo dice DESPUÉS de saltar a
+  ella —nunca se convierte en «empezar falló», porque no lo hizo—.
+- **El comentario de cierre lo compone el CÓDIGO, sin llamar al modelo**
+  (`core/gestorDeTareas.ts#comentarioDeCierre`, `web/servidor/datosDeCierre.ts`): ficheros y
+  commits reales de la sesión, el último veredicto del verificador —«no corrió» sin uno, nunca
+  «verde» a secas— y la última respuesta del agente, recortada (`TOPE_DEL_RESUMEN_DE_CIERRE`). La
+  lista de ficheros lleva su ATRIBUCIÓN (`git`/`desde-apertura`/`sin-marca`): fuera del workspace
+  no hay commit sellado que la confirme, y el comentario lo dice en vez de darla por buena.
+  **Límite declarado**: ninguna sesión ata todavía un PLAN al comentario —`comentarioDeCierre`
+  acepta uno, pero nadie se lo pasa—.
 
 ### El workspace: dónde viven las copias locales
 
@@ -782,6 +812,30 @@ escrito a mano lo da de alta una persona desde la misma ventana.
 - **El cliente OAuth es PÚBLICO y va atado a su `redirect_uri`** (`token_endpoint_auth_method:
   "none"`).
 - **La prueba es una FOTO, no un estado en vivo** (`TOPE_DE_CONEXION_MS`, 30 s).
+- **`ServicioDeConectores.llamar` respeta un pendiente vivo, igual que `probar`**: una llamada de
+  trabajo mientras hay una autorización en curso pisaría el verificador PKCE que esa vuelta
+  necesita. Por eso el gestor de tareas y Ajustes comparten UN solo servicio
+  (`arranque.ts#ajusteDeGestorCableado`, que envuelve la MISMA fábrica de conectores): con dos
+  instancias el gestor no vería el pendiente de Ajustes y la guarda no protegería nada.
+- **El SDK ya invalida y reintenta un refresh muerto por su cuenta, DENTRO de `auth()`** (medido
+  contra el paquete instalado, con su porqué entero en `docs/DECISIONES.md`): lo único que faltaba
+  era que `motivoDe` reconociera un `OAuthError` del SDK y dijera «falta autorizar» en vez de «no
+  responde» — no hay reintento propio que añadir encima del suyo.
+- **Un gestor de tareas (hoy Jira) es un conector más, con su propio puerto PURO**
+  (`core/gestorDeTareas.ts`) y su adaptador (`agent/conectores/gestorJira.ts`), el ÚNICO fichero
+  que conoce nombres de tool de Jira y la forma de sus respuestas; el resto del harness solo ve
+  `GestorDeTareasPort`. **Del asignado de una tarea solo cruza el nombre visible**
+  (`nombreDelAsignado`, reducido a `displayName`): el correo y el id de cuenta no salen del
+  adaptador — la medida está en `docs/DECISIONES.md`.
+- **Vincular un proyecto de Jira ESCRIBE la configuración solo después de que Jira confirme la
+  clave** (`vincular`, `web/servidor/arranque.ts`; `guardarGestorDeProyecto`/
+  `guardarConectoresDeProyecto`, `agent/config/configEnDisco.ts`): nunca antes. El vínculo vive en
+  el `config.json` del PROYECTO, no en el global.
+- **Una instancia MEMOIZADA por conector, y `sitios()` se pide ANTES de `pendientes`/`empezar` si
+  esa instancia todavía no contestó** (`web/servidor/arranque.ts`, cableado de `gestorDeTareas`):
+  el adaptador de Jira cachea la URL del sitio en su propio cierre al llamar a `sitios()`, para
+  componer luego `<url>/browse/<clave>`; con una instancia NUEVA en cada llamada esa caché estaría
+  siempre vacía y la URL de «Abrir en Jira» no saldría nunca en producción.
 - **Límites declarados**: no llegan a ningún agente todavía; sin túnel (`redirect_uri` es
   `127.0.0.1`); de OAuth solo hay registro dinámico; la clave va como `Authorization: Bearer`, sin
   otra cabecera soportada.

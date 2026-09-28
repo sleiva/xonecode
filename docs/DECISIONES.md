@@ -6949,3 +6949,60 @@ fichero no existía. Aprobado, quedó idéntico byte a byte (`cmp`), el commit d
 (`icons/ic_prueba.png | Bin 0 -> 94 bytes`) y el simulador dio verde. El turno: 56 s, 7 llamadas
 al modelo (4 del orquestador y 3 de `designer-xone`), 51.963 tokens de entrada y 1.979 de salida.
 Visto de paso: la copia hereda el modo 0600 del adjunto.
+
+## El panel del proyecto y el gestor de tareas (IXCODE-11) (28-09-2026)
+
+Hasta esta entrada, pulsar un proyecto en la barra abría una sesión nueva sin más. Pasa a abrir su
+PANEL, con pestañas, desde donde se vincula un gestor de tareas (Jira, por su conector MCP), se
+buscan sus pendientes y se abre una sesión sobre una tarea; al cerrarla, xonecode escribe en Jira
+un comentario con lo que se hizo y, si se elige, una transición de estado.
+
+**Por qué escribe el HARNESS y no el agente.** Encargarle a un especialista pasar el ticket a EN
+CURSO o comentar el cierre habría metido una escritura remota dentro del mismo turno que edita el
+proyecto, sin la tarjeta de aprobación que ya cubre cada escritura local, y habría atado el texto
+del comentario a lo que el modelo recuerde de la conversación en vez de a lo que el harness puede
+COMPROBAR por su cuenta: los ficheros y commits reales de la sesión (`sesionGit.ts`, la atribución
+por commit), el último veredicto del verificador y la última respuesta del agente, recortada.
+`core/gestorDeTareas.ts#comentarioDeCierre` compone ese texto sin una sola llamada al modelo — es
+código puro, con test de runtime, no una plantilla que el LLM rellena. El harness pide el
+comentario ya escrito y EDITABLE en una tarjeta; la persona decide si lo manda tal cual, lo cambia
+o cancela. Queda declarado como límite: `comentarioDeCierre` también sabe pintar un PLAN, pero
+ninguna sesión se lo pasa todavía — no hay un campo que ate una sesión a un plan, solo a un ticket.
+
+**El catálogo de Atlassian, medido.** Contra `https://mcp.atlassian.com/v1/mcp` se listaron sus
+tools: 32 en total, y las 32 con `readOnlyHint` — 21 de lectura y 11 de escritura. De las 11 de
+escritura, el gestor usa exactamente dos: `transitionJiraIssue` y `addCommentToJiraIssue`. Las
+otras cinco de lectura que usa son `getAccessibleAtlassianResources`, `getVisibleJiraProjects`,
+`searchJiraIssuesUsingJql`, `getJiraIssue` y `getTransitionsForJiraIssue`. El adaptador,
+`agent/conectores/gestorJira.ts`, es el ÚNICO fichero que conoce esos siete nombres y la forma
+exacta de sus respuestas; el resto del harness solo ve `GestorDeTareasPort`
+(`core/gestorDeTareas.ts`, puro).
+
+**El correo del asignado no cruza.** `pendientes()` reduce el `assignee` de cada tarea a un solo
+campo, `nombreDelAsignado` (el `displayName` de Jira); `emailAddress` y `accountId` nunca salen del
+adaptador. Probado con una aserción negativa sobre `pendientes()`: `JSON.stringify` del resultado
+no contiene `@` ni el `accountId` del asignado, contra un fixture que sí los trae (la respuesta
+real de Jira los incluye).
+
+**El arreglo del refresh OAuth, y por qué el diagnóstico original no aguantaba.** El plan de esta
+entrada daba por diagnosticada una cadena completa, heredada de una sesión anterior: un
+`redirectUri` que no coincide hace que el SDK relance un `InvalidGrantError` que nuestro `catch` en
+`autorizar` convertía en «no responde» para siempre, y proponía envolver el intento con un
+reintento propio.
+Leyendo el SDK instalado (`@modelcontextprotocol/sdk` 1.30.0, `client/auth.js`), la función `auth()`
+que exporta el módulo YA captura `InvalidGrantError`/`InvalidClientError`/`UnauthorizedClientError`,
+llama a `provider.invalidateCredentials()` y reintenta UNA vez — antes de que el error llegue a
+nuestro `catch`. Repetido con un repro contra el `auth()` real del SDK (un `ProveedorDeConector` en
+memoria con las mismas reglas que el de producción, y un `fetchFn` que siempre contesta
+`invalid_grant`), con `redirectUri` que coincide y con uno que no: los dos casos terminan en un
+único `REDIRECT` visto desde `autorizar`, con el reintento ya consumido dentro del SDK. El arreglo
+que sí hacía falta era mucho más pequeño: `motivoDe` (`servicioDeConectores.ts`) solo reconocía
+`UnauthorizedError` y un `code` numérico o de texto; un `OAuthError` real —el caso que SÍ puede
+llegar hasta nuestro `catch`, cuando el reintento interno del SDK también falla con una segunda
+credencial mala— caía en el catch-all genérico y salía «no responde» en vez de «falta autorizar».
+Se corrigió importando `OAuthError` del MISMO módulo del que el SDK la exporta (para que el
+`instanceof` compare contra la clase real) y devolviendo «falta autorizar» cuando lo es. **Lo que
+sigue sin medir**: la causa REAL de un conector que un usuario ve «no responde» en producción —un
+error no-OAuth del tramo de discovery/DCR, o un segundo fallo de credencial tras el reintento del
+SDK— sigue sin capturarse con un refresh token muerto de verdad; hace falta esa medida antes de
+tocar más código en este punto.
