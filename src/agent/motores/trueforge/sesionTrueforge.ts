@@ -79,7 +79,6 @@ import {
   capacidadesDelEspecialista,
   clasesDeTools,
   toolsDe,
-  capacidadDeEspera,
 } from "./capacidades.js";
 import { crearDiagnosticoDeTools, type DiagnosticoDeTools } from "../../turno/diagnosticoDeTools.js";
 import { encenderTrazaDeErrores } from "../../trazaDeErroresEnDisco.js";
@@ -140,6 +139,38 @@ const BUCLE_DE_CALIDAD = [
  * el nombre de la tool y las fichas van escritas aquí, con la MISMA función que deepagents.
  */
 /**
+ * El hilo de un especialista que NO arrancó porque espera a otros: nace ya terminado, con la respuesta al orquestador
+ * ya escrita (`preComputedCompletion`), y la librería lo trata como cualquier hijo que acaba. No llama al modelo ni tiene
+ * tools: lo único que hace es contestar al que lo pidió.
+ */
+function hiloQueNoArranca(
+  nombre: string,
+  esperados: readonly string[],
+  params: { threadId: string; parent: unknown; request: { name: string; input: string } },
+  modelo: unknown,
+  logger: unknown
+): AgentThread {
+  const padre = params.parent as { tool_call_id?: string };
+  const texto =
+    `${nombre} NO HA ARRANCADO: espera a que termine ${esperados.join(", ")}, que sigue trabajando y produce lo que ${nombre} necesita. ` +
+    `Cuando ${esperados.join(", ")} te devuelva su informe, vuelve a llamar a ${nombre} con ese informe dentro del encargo.`;
+  return new AgentThread({
+    definition: { modelClient: modelo, iterationLimit: 1 } as never,
+    threadId: params.threadId,
+    title: params.request.name,
+    parent: params.parent as never,
+    agentInfo: { type: "dynamic", ...params.request } as never,
+    preComputedCompletion: {
+      type: "done",
+      output: { role: "assistant", content: texto },
+      send_to_parent: { role: "tool", tool_call_id: padre.tool_call_id ?? "", content: texto },
+    } as never,
+    tracing: NOOP_AGENT_TRACING,
+    logger: logger as never,
+  });
+}
+
+/**
  * Lo que se le cuenta a quien ESPERÓ a otros especialistas, al soltarse: a quién esperó y qué hay en el disco.
  * Solo NOMBRES —los recursos de `icons/` y los `ASSETS.md`/`TASKS.md` del plan—, nunca su contenido: es lo que dejó
  * el otro, que no viaja por ningún canal más que el disco. Sin recursos que nombrar, un aviso corto.
@@ -160,7 +191,7 @@ export function textoDeLoQueDejaronLosEsperados(raiz: string, esperadas: readonl
     notas = [];
   }
   return [
-    `HAS ESPERADO a ${esperadas.join(", ")}, que trabajaba a la vez y ya ha terminado.`,
+    `Antes de ti han terminado ${esperadas.join(", ")}, que trabajaban a la vez o antes que tú.`,
     ...(recursos.length === 0 ? [] : [`Lo que hay ahora en icons/ (${String(recursos.length)}): ${recursos.join(", ")}.`]),
     ...(notas.length === 0 ? [] : [`Lo que dejó escrito para ti: ${notas.join(", ")}. Léelo antes de escribir.`]),
     "USA los recursos que te sirvan por su nombre exacto, y si no vas a usar alguno, dilo al devolver el trabajo.",
@@ -223,10 +254,10 @@ export function notaDeDelegacion(
     ...(opciones.conEsperas === true
       ? [
           "",
-          "ESPERAS ENTRE ESPECIALISTAS: si lanzas a la vez a developer-xone y a designer-xone, el desarrollador ESPERA a que el",
-          "diseñador termine antes de hacer nada (lo que el diseñador produce —los recursos de `icons/`— lo necesita el `.xne`).",
-          "Por eso reparte así: al diseñador los recursos, con los NOMBRES de fichero que ya fija el plan; al desarrollador la",
-          "pantalla que los usa. No hace falta que se lo cuentes al desarrollador: al soltarse ve qué hay en `icons/`.",
+          "ESPERAS ENTRE ESPECIALISTAS: developer-xone NO arranca mientras designer-xone esté trabajando (lo que el diseñador produce",
+          "—los recursos de `icons/`— lo necesita el `.xne`). Si los lanzas a la vez, la llamada al desarrollador te vuelve AL INSTANTE",
+          "diciendo que no ha arrancado; cuando el diseñador te devuelva su informe, llama de nuevo al desarrollador con ESE INFORME dentro",
+          "del encargo (los nombres de los recursos que hizo). Lo más simple es lanzar primero al diseñador y, con su informe, al desarrollador.",
         ]
       : []),
     ...(opciones.conBucle === true
@@ -737,6 +768,16 @@ export async function abrirSesionTrueforge(
     const concedido = permitidos === undefined || (conBucleDelDesarrollador && permitidos.includes(params.request.name));
     if (!concedido) anotarPaso("trueforge.llamada", `${quienPide ?? "?"} pidió a ${params.request.name}: no está en su lista`)();
     const agente = concedido ? especialistas().find((a) => a.nombre === params.request.name) : undefined;
+    // ¿Arranca? Un especialista que declara `espera` NO arranca mientras haya vivo —o anunciado por el mismo mensaje del
+    // orquestador— uno de esos: se le devuelve al instante diciéndolo, y el orquestador lo llama de nuevo con el informe del
+    // otro. No se espera bloqueando: bloqueaba a la librería, que no devuelve el control mientras un hilo no termine su
+    // paso, y una aprobación del otro hilo no se atendía (`esperas.ts`).
+    const debeEsperar = conEsperas && agente !== undefined ? esperas.vivos(agente.espera ?? [], params.threadId) : [];
+    if (agente !== undefined && debeEsperar.length > 0) {
+      anotarPaso("trueforge.espera", `${agente.nombre} no arranca: espera a ${debeEsperar.join(", ")}`)();
+      diagnostico?.memoria?.(agente.nombre, "arranca-sin", `espera a ${debeEsperar.join(", ")}`);
+      return hiloQueNoArranca(agente.nombre, debeEsperar, params, llm, logger);
+    }
     detencion.nacio(params.threadId);
     esperas.nacio(agente?.nombre ?? params.request.name, params.threadId);
     quienEs.set(params.threadId, agente?.nombre ?? params.request.name);
@@ -749,13 +790,6 @@ export async function abrirSesionTrueforge(
       propias: propiasDe,
       notas: capacidadDeNotasDeLaSesion,
       puedeLlamar: (a) => conBucleDelDesarrollador && (a.llama?.length ?? 0) > 0,
-      espera: (a) =>
-        conEsperas && (a.espera?.length ?? 0) > 0
-          ? capacidadDeEspera({
-              esperar: (hilo) => esperas.esperarA(a.espera ?? [], hilo),
-              alTerminar: (esperadas) => textoDeLoQueDejaronLosEsperados(raiz, esperadas),
-            })
-          : undefined,
       conShell: () =>
         montarBackend({
           entorno: entornoDeLaShellDelProyecto(raiz, opciones.artefactos),
@@ -792,9 +826,12 @@ export async function abrirSesionTrueforge(
       if (previa !== undefined) diagnostico?.memoria?.(agente.nombre, "arranca-con", "historial de la sesión", previa.tokens);
       else diagnostico?.memoria?.(agente.nombre, "arranca-sin", "sin" in apertura ? apertura.sin : "primera");
     }
+    // Si lo que esperaba ya terminó en esta conversación, sabe qué dejó (solo nombres, nunca contenido).
+    const esperado = conEsperas && agente !== undefined ? esperas.terminados(agente.espera ?? []) : [];
+    const avisoDeLoEsperado = esperado.length > 0 ? `${textoDeLoQueDejaronLosEsperados(raiz, esperado)}\n\n` : "";
     const mensajesIniciales: unknown[] =
       previa === undefined
-        ? [{ role: "user", content: params.request.input }]
+        ? [{ role: "user", content: `${avisoDeLoEsperado}${params.request.input}` }]
         : [
             ...previa.mensajes,
             {
@@ -802,7 +839,7 @@ export async function abrirSesionTrueforge(
               content:
                 "NUEVO ENCARGO. Ya trabajaste antes en esta sesión: lo de arriba es tu conversación anterior, con lo que leíste y decidiste. " +
                 "No repitas lecturas de ficheros que no hayan cambiado.\n\n" +
-                params.request.input,
+                `${avisoDeLoEsperado}${params.request.input}`,
             },
           ];
     const definicionDelHijo = {
@@ -994,6 +1031,7 @@ export async function abrirSesionTrueforge(
             // Qué le pide el orquestador a quién: el encargo, acotado (ver `DiagnosticoDeTools.delegacion`).
             if (t.function.name === "create_sub_agent" && typeof args["name"] === "string" && typeof args["input"] === "string") {
               diagnostico?.delegacion?.(quien, args["name"], args["input"]);
+              esperas.anunciar(args["name"]);
             }
           }
         }
@@ -1527,7 +1565,7 @@ export async function abrirSesionTrueforge(
       hilo = id ?? `tf-${Date.now()}`;
       // Otra conversación: lo que los especialistas recordaban era de la anterior.
       memoriaDeEspecialistas.olvidar();
-      esperas.darPorMuertos();
+      esperas.olvidar();
       hijosConMemoria.clear();
       // Un hilo NUEVO: lo que hubiera guardado con ese id no se pisa ni se carga a medias. Y una
       // pregunta de la conversación de antes no la contesta el primer mensaje de la nueva.

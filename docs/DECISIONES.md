@@ -7595,15 +7595,23 @@ sí coincidían —el plan los fijaba—, así que no hubo referencias rotas: lo
 Ninguna regla del orquestador hablaba de paralelizar DELEGACIONES: la que hay (`REGLA_DE_ESCRITURAS_EN_PARALELO`) es
 de tools, y la cola por fichero solo evita que dos escriban el mismo a la vez.
 
-**Qué se hizo.** Un campo `espera: [designer-xone]` en el `.md` (`developer-xone` de serie lo lleva) y una capacidad
-que bloquea, antes de CADA llamada del hijo, mientras haya un hilo vivo de esos especialistas (`esperas.ts`,
-`capacidadDeEspera`). Al soltarse, el hijo recibe un mensaje con a quién esperó y qué hay en `icons/` y qué
-`ASSETS.md` hay en los planes —solo nombres—, y la orden de usar los recursos por su nombre exacto o decir cuáles no
-usa. Es de un solo sentido (quien declara espera al otro) y tiene un tope (`TOPE_DE_ESPERA_MS`, 20 min) por si dos
-se declararan mutuamente; un turno cortado o una conversación nueva libera a quien esperaba. Va encendido por
-omisión (`esperasEntreHijos`): es una regla de coherencia, no una palanca de coste. El orquestador lo sabe por su
-nota: recursos al diseñador con los nombres que fija el plan, la pantalla que los usa al desarrollador.
+**Qué se hizo, y la primera versión estaba mal.** Un campo `espera: [designer-xone]` en el `.md` (`developer-xone` de
+serie lo lleva). La primera versión paraba al desarrollador ANTES de cada llamada al modelo (una capacidad con un
+`await` en el procesador previo) mientras hubiera un hilo del diseñador vivo. **Atascó una pasada real (calc8)**: la
+librería ejecuta todos los hilos activos juntos (`mergeAsyncGenerators`) y solo devuelve el control cuando TODOS terminan
+su paso, y una aprobación de escritura del diseñador solo se atiende al devolverlo; el desarrollador, parado en su
+espera, lo impedía, y el diseñador no podía acabar sin la aprobación. Bloqueo mutuo, CPU a cero, sin ningún error. Los
+tests con dobles no lo vieron porque su diseñador no pedía aprobación —el mismo patrón de fallo de siempre—, y el test
+que lo cubre ahora se cuelga los 30 segundos contra la versión bloqueante.
 
-**Sin medir.** Que esperar no alargue la pasada más de lo que gana; cuánto de lo que el diseñador deja acaba en
-la pantalla; y que la comprobación de recursos huérfanos y referencias rotas, pendiente, sea suficiente por sí sola.
+**La versión que vale: no bloquear nunca.** Si al crear el hijo hay uno vivo —o anunciado por el mismo mensaje del
+orquestador, así que el orden no importa— de los que declara, el hijo **no arranca**: nace ya terminado
+(`preComputedCompletion`) y su llamada vuelve al instante con «NO HA ARRANCADO: espera a que termine designer-xone».
+El orquestador, que recibe el informe del diseñador, vuelve a llamar al desarrollador con él en el encargo; y al
+arrancar, este sabe qué hay en `icons/` y qué `ASSETS.md` hay en el plan (solo nombres). Es mejor que esperar: el
+orquestador tiene el informe del diseñador antes de escribir el encargo. Va encendido por omisión
+(`esperasEntreHijos`); un turno cortado libera a los vivos y a los anunciados, y una conversación nueva olvida todo.
+
+**Sin medir.** Que el orquestador vuelva a llamar al desarrollador con el informe (depende de que siga la nota); y
+cuánto de lo que el diseñador deja acaba en la pantalla.
 

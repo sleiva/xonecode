@@ -1,58 +1,46 @@
 import { describe, expect, it } from "vitest";
 import { crearEsperas } from "./esperas.js";
 
-const resuelta = async (p: Promise<unknown>): Promise<boolean> => {
-  let hecho = false;
-  void p.then(() => (hecho = true));
-  await new Promise((r) => setTimeout(r, 5));
-  return hecho;
-};
-
-describe("quién espera a quién entre hijos lanzados a la vez", () => {
-  it("sin nadie vivo de quien esperar, no espera y no dice a nadie", async () => {
+describe("quién no arranca hasta que otro termine", () => {
+  it("sin nadie vivo ni anunciado de quien depender, no hay nadie", () => {
     const e = crearEsperas();
-    e.nacio("developer-xone", "h1");
-    expect(await e.esperarA(["designer-xone"], "h1")).toEqual([]);
+    e.nacio("developer-xone", "v");
+    expect(e.vivos(["designer-xone"], "v")).toEqual([]);
   });
 
-  it("con el diseñador vivo espera, y se suelta al terminar diciendo a quién esperó", async () => {
+  it("un hilo vivo cuenta, y deja de contar al terminar (y consta que terminó)", () => {
     const e = crearEsperas();
     e.nacio("designer-xone", "d");
-    e.nacio("developer-xone", "v");
-    const espera = e.esperarA(["designer-xone"], "v");
-    expect(await resuelta(espera)).toBe(false);
+    expect(e.vivos(["designer-xone"])).toEqual(["designer-xone"]);
     e.murio("d");
-    expect(await espera).toEqual(["designer-xone"]);
+    expect(e.vivos(["designer-xone"])).toEqual([]);
+    expect(e.terminados(["designer-xone", "otro"])).toEqual(["designer-xone"]);
   });
 
-  it("con dos hilos del mismo especialista espera a los dos", async () => {
+  it("uno ANUNCIADO cuenta antes de nacer, así que el orden del mismo mensaje del orquestador no importa", () => {
+    const e = crearEsperas();
+    e.anunciar("designer-xone"); // el orquestador pidió a los dos; el desarrollador nace primero
+    expect(e.vivos(["designer-xone"], "v")).toEqual(["designer-xone"]);
+    e.nacio("designer-xone", "d"); // ya nació: deja de estar solo anunciado, sigue vivo
+    expect(e.vivos(["designer-xone"], "v")).toEqual(["designer-xone"]);
+  });
+
+  it("su propio hilo no cuenta aunque comparta nombre", () => {
+    const e = crearEsperas();
+    e.nacio("designer-xone", "d");
+    expect(e.vivos(["designer-xone"], "d")).toEqual([]);
+  });
+
+  it("darPorMuertos libera a los vivos y a los anunciados pero conserva lo terminado; olvidar lo borra todo", () => {
     const e = crearEsperas();
     e.nacio("designer-xone", "d1");
-    e.nacio("designer-xone", "d2");
-    const espera = e.esperarA(["designer-xone"], "v");
     e.murio("d1");
-    expect(await resuelta(espera)).toBe(false);
-    e.murio("d2");
-    expect(await espera).toEqual(["designer-xone"]);
-  });
-
-  it("su propio hilo no cuenta aunque comparta nombre", async () => {
-    const e = crearEsperas();
-    e.nacio("designer-xone", "d");
-    expect(await e.esperarA(["designer-xone"], "d")).toEqual([]);
-  });
-
-  it("darPorMuertos libera a quien esperaba (un turno cortado no deja a nadie colgado)", async () => {
-    const e = crearEsperas();
-    e.nacio("designer-xone", "d");
-    const espera = e.esperarA(["designer-xone"], "v");
+    e.anunciar("designer-xone");
+    e.nacio("designer-xone", "d2");
     e.darPorMuertos();
-    expect(await espera).toEqual(["designer-xone"]);
-  });
-
-  it("una espera que no se resuelve se suelta al llegar al tope", async () => {
-    const e = crearEsperas(20);
-    e.nacio("designer-xone", "d");
-    expect(await e.esperarA(["designer-xone"], "v")).toEqual(["designer-xone"]);
+    expect(e.vivos(["designer-xone"])).toEqual([]);
+    expect(e.terminados(["designer-xone"])).toEqual(["designer-xone"]);
+    e.olvidar();
+    expect(e.terminados(["designer-xone"])).toEqual([]);
   });
 });

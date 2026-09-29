@@ -939,54 +939,85 @@ describe("una sesión con el motor TrueForge", () => {
     }, 30_000);
   });
 
-  describe("un hijo espera a otro lanzado a la vez", () => {
-    const dosAlaVez = () =>
+  describe("un hijo no arranca hasta que termine el otro del que depende", () => {
+    const pide = (id: string, nombre: string, input: string, indice: number) => ({ index: indice, id, name: "create_sub_agent", args: JSON.stringify({ name: nombre, input }) });
+    const alaVez = (primero: "designer-xone" | "developer-xone") =>
       new AIMessageChunk({
         content: "",
-        tool_call_chunks: [
-          { index: 0, id: "v1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "escribe la pantalla" }) },
-          { index: 1, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "designer-xone", input: "haz los recursos" }) },
-        ],
+        tool_call_chunks:
+          primero === "designer-xone"
+            ? [pide("d1", "designer-xone", "haz los recursos", 0), pide("v1", "developer-xone", "escribe la pantalla", 1)]
+            : [pide("v1", "developer-xone", "escribe la pantalla", 0), pide("d1", "designer-xone", "haz los recursos", 1)],
       });
-
-    it("el desarrollador no llama al modelo hasta que el diseñador termina, y al soltarse sabe que esperó y qué dejó", async () => {
+    const conRecursos = () => {
       const raiz = proyecto();
-      const { m, vistos } = modelosConGuion([
-        [dosAlaVez()],
+      mkdirSync(join(raiz, "icons"), { recursive: true });
+      writeFileSync(join(raiz, "icons", "bg_key_num.svg"), "<svg/>");
+      return raiz;
+    };
+    // raíz lanza a los dos → (el desarrollador vuelve al instante) el diseñador trabaja → raíz vuelve a llamar al desarrollador → raíz cierra.
+    const guion = (primero: "designer-xone" | "developer-xone") => [
+      [alaVez(primero)],
+      [new AIMessageChunk({ content: "Recursos hechos." })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [pide("v2", "developer-xone", "escribe la pantalla con estos recursos: bg_key_num.svg", 0)] })],
+      [new AIMessageChunk({ content: "Pantalla escrita." })],
+      [new AIMessageChunk({ content: "Todo listo." })],
+    ];
+
+    for (const primero of ["designer-xone", "developer-xone"] as const) {
+      it(`lanzados a la vez (${primero} primero): el desarrollador NO arranca, se le devuelve al orquestador diciéndolo, y al volver a llamarlo ya sabe qué dejó el diseñador`, async () => {
+        const raiz = conRecursos();
+        const { m, vistos } = modelosConGuion(guion(primero));
+        const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+        const r = piel();
+        await s.turno("haz la calculadora", r.p);
+        const texto = vistos.map((v) => v.join("\n"));
+        // 2ª llamada: solo el diseñador trabaja (el desarrollador no llamó al modelo).
+        expect(texto[1]).toContain("haz los recursos");
+        // 3ª llamada: el RAÍZ ve que el desarrollador no arrancó y por qué.
+        expect(texto[2]).toContain("developer-xone NO HA ARRANCADO");
+        expect(texto[2]).toContain("espera a que termine designer-xone");
+        // 4ª: el desarrollador, ya llamado de nuevo, sabe qué hay en icons/.
+        expect(texto[3]).toContain("escribe la pantalla con estos recursos");
+        expect(texto[3]).toContain("bg_key_num.svg");
+        expect(r.tokens.join("")).toContain("Todo listo.");
+      }, 30_000);
+    }
+
+    it("con el diseñador PIDIENDO APROBACIÓN de escritura, el turno termina: no hay bloqueo mutuo (lo que atascó una pasada real)", async () => {
+      const raiz = conRecursos();
+      const { m } = modelosConGuion([
+        [alaVez("designer-xone")],
+        [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "w1", name: "write_file", args: JSON.stringify({ file_path: "/icons/ic_x.svg", content: "<svg/>" }) }] })],
         [new AIMessageChunk({ content: "Recursos hechos." })],
+        [new AIMessageChunk({ content: "", tool_call_chunks: [pide("v2", "developer-xone", "escribe la pantalla", 0)] })],
         [new AIMessageChunk({ content: "Pantalla escrita." })],
         [new AIMessageChunk({ content: "Todo listo." })],
       ]);
-      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+      const s = await abrirSesionTrueforge({
+        raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO,
+        pedirAprobacion: async (ps) => new Map(ps.map((p) => [p.id, { type: "approve" as const }])),
+      });
       const r = piel();
-      // Lo que el diseñador «deja» antes de que el desarrollador arranque.
-      mkdirSync(join(raiz, "icons"), { recursive: true });
-      writeFileSync(join(raiz, "icons", "bg_key_num.svg"), "<svg/>");
       await s.turno("haz la calculadora", r.p);
-      const texto = vistos.map((v) => v.join("\n"));
-      // 2ª llamada: el diseñador (el desarrollador espera). 3ª: el desarrollador, ya con lo que esperó.
-      expect(texto[1]).toContain("haz los recursos");
-      expect(texto[1]).not.toContain("HAS ESPERADO");
-      expect(texto[2]).toContain("escribe la pantalla");
-      expect(texto[2]).toContain("HAS ESPERADO a designer-xone");
-      expect(texto[2]).toContain("bg_key_num.svg");
       expect(r.tokens.join("")).toContain("Todo listo.");
+      expect(existsSync(join(raiz, "icons", "ic_x.svg"))).toBe(true);
     }, 30_000);
 
-    it("con las esperas apagadas, el desarrollador arranca sin esperar y sin el aviso", async () => {
-      const raiz = proyecto();
+    it("con las esperas apagadas, el desarrollador arranca a la vez y sin el aviso", async () => {
+      const raiz = conRecursos();
       const { m, vistos } = modelosConGuion([
-        [dosAlaVez()],
+        [alaVez("designer-xone")],
         [new AIMessageChunk({ content: "A." })],
         [new AIMessageChunk({ content: "B." })],
         [new AIMessageChunk({ content: "Listo." })],
       ]);
       const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, esperasEntreHijos: false });
       await s.turno("haz", piel().p);
-      expect(vistos.map((v) => v.join("\n")).some((t) => t.includes("HAS ESPERADO"))).toBe(false);
+      expect(vistos.map((v) => v.join("\n")).some((t) => t.includes("NO HA ARRANCADO"))).toBe(false);
     }, 30_000);
 
-    it("el orquestador sabe cómo repartir: recursos al diseñador, pantalla al desarrollador", async () => {
+    it("el orquestador sabe cómo funciona: lo simple es lanzar primero al diseñador", async () => {
       const raiz = proyecto();
       const { m, vistos } = modelosConGuion([[new AIMessageChunk({ content: "ok" })]]);
       const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
