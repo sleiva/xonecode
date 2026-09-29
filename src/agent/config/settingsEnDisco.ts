@@ -149,8 +149,8 @@ export function guardarEntorno(casa: string | undefined, entorno: Entorno): { ru
 /**
  * Guarda qué destinos se miran, sin tocar nada más del fichero.
  *
- * Se escribe el objeto ENTERO y no una fusión campo a campo: son cuatro interruptores que
- * la ventana manda juntos, y fusionar dejaría vivo un `ios: false` de una versión anterior
+ * Se escribe el objeto ENTERO y no una fusión campo a campo: son cuatro interruptores (y las
+ * dos rutas) que la ventana manda juntos, y fusionar dejaría vivo un `ios: false` de una versión anterior
  * que la persona acaba de apagar en la interfaz sin saber que seguía ahí. Un objeto sin
  * ningún campo se guarda como ausencia —`{}` y «no lo he dicho» significan lo mismo: mirar
  * todo— para no dejar basura en el fichero.
@@ -158,7 +158,15 @@ export function guardarEntorno(casa: string | undefined, entorno: Entorno): { ru
 export function guardarDispositivos(casa: string | undefined, ajustes: AjustesDeDispositivos): { ruta: string } {
   const ruta = rutaSettings(casa ?? homedir());
   const crudo = leerCrudoOAbortar(ruta);
-  const limpio = Object.fromEntries(Object.entries(ajustes).filter(([, v]) => typeof v === "boolean"));
+  // Booleanos para los destinos y TEXTO no vacío para las dos rutas: filtrar solo booleanos
+  // tiraba `rutaAdb`/`rutaEmulator` al escribir y la ruta personalizada nunca se guardaba.
+  const limpio = Object.fromEntries(
+    Object.entries(ajustes).filter(([k, v]) =>
+      k === "rutaAdb" || k === "rutaEmulator"
+        ? typeof v === "string" && v.trim() !== ""
+        : typeof v === "boolean",
+    ),
+  );
   const fusionado =
     Object.keys(limpio).length === 0
       ? Object.fromEntries(Object.entries(crudo).filter(([k]) => k !== "dispositivos"))

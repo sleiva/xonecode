@@ -96,6 +96,27 @@ describe("settingsEnDisco", () => {
     expect(cargarSettings(c).settings.dispositivos).toEqual({ ios: false });
   });
 
+  it("guardarDispositivos GUARDA las rutas personalizadas de adb y emulator (IXCODE-1)", () => {
+    // El filtro de antes solo dejaba pasar booleanos: las dos rutas se descartaban al escribir
+    // y volvían vacías al releer, o sea que «Guardar» no guardaba la ruta.
+    const c = casa();
+    guardarDispositivos(c, { ios: false, rutaAdb: "/sdk/platform-tools/adb", rutaEmulator: "/sdk/emulator/emulator" });
+    expect(cargarSettings(c).settings.dispositivos).toEqual({
+      ios: false,
+      rutaAdb: "/sdk/platform-tools/adb",
+      rutaEmulator: "/sdk/emulator/emulator",
+    });
+    // Sustituye, no fusiona: quitar la ruta en la ventana la quita del fichero.
+    guardarDispositivos(c, { ios: false });
+    expect(cargarSettings(c).settings.dispositivos).toEqual({ ios: false });
+  });
+
+  it("guardarDispositivos con SOLO una ruta no la trata como «objeto vacío»", () => {
+    const c = casa();
+    guardarDispositivos(c, { rutaAdb: "/x/adb" });
+    expect(cargarSettings(c).settings.dispositivos).toEqual({ rutaAdb: "/x/adb" });
+  });
+
   it("guardar TODO encendido borra la clave: ausente y «todos» significan lo mismo", () => {
     const c = casa();
     guardarEntorno(c, { id: "a", nombre: "A", url: "https://a/mcp" });
