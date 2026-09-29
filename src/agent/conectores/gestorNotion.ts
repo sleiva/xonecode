@@ -19,7 +19,7 @@
  * asignado AUSENTE — no se inventa ni se enseña el id.
  */
 import {
-  categoriaDeGrupoDeNotion, motivoDeFuenteDeNotion, motivoDeReferenciaDeNotion, SITIO_DE_NOTION, sqlDePendientes,
+  categoriaDeGrupoDeNotion, etiquetaDeClave, motivoDeFuenteDeNotion, motivoDeReferenciaDeNotion, SITIO_DE_NOTION, sqlDePendientes,
   type CategoriaDeTarea, type DescripcionDelProyecto, type EsquemaDelProyecto, type FichaDelGestor, type GestorDeTareasPort,
   type OpcionesDePendientes, type ProyectoEncontrado, type TareaDelGestor, type TransicionDelGestor, type Vinculo,
 } from "../../core/gestorDeTareas.js";
@@ -58,7 +58,7 @@ function motivoDeClaveDeNotion(clave: string): string | undefined {
 
 /** Lo que se enseña de una página: sus 8 primeros caracteres de id (el UUID entero no se lee). */
 function etiquetaDe(clave: string): string {
-  return clave.replace(/-/g, "").slice(0, 8);
+  return etiquetaDeClave(clave) ?? clave;
 }
 
 /** El orden en que se enseñan los grupos de estado: el de un tablero, de lo por hacer a lo terminado. */

@@ -107,6 +107,18 @@ export function motivoDeClaveDeProyecto(clave: string): string | undefined {
   return /^[A-Z][A-Z0-9_]+$/.test(clave) ? undefined : `«${clave}» no es una clave de proyecto (mayúsculas, dígitos y _, empezando por letra)`;
 }
 
+/**
+ * Lo que se ENSEÑA de una clave que no está hecha para leerse (IXCODE-15): el UUID de una página
+ * de Notion (con o sin guiones) se enseña por sus 8 primeros caracteres; cualquier otra clave (la
+ * de Jira, `IXCODE-11`) no tiene etiqueta y se enseña tal cual. UNA regla: el adaptador la usa para
+ * `TareaDelGestor.etiqueta`, y el cliente la REDECLARA para las claves que cruzan sin fila (el
+ * `ticket` de una sesión, `cierre.clave`, `transiciones.clave`).
+ */
+export function etiquetaDeClave(clave: string): string | undefined {
+  const sinGuiones = clave.toLowerCase().replace(/-/g, "");
+  return /^[0-9a-f]{32}$/.test(sinGuiones) ? sinGuiones.slice(0, 8) : undefined;
+}
+
 /** Un UUID con guiones, en minúsculas: la forma de los ids de Notion (medido). */
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 

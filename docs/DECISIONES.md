@@ -7015,7 +7015,9 @@ usar su conector, y al revés—. Lo que sigue es lo MEDIDO contra `https://mcp.
 la cuenta real, con un script de solo lectura (ni una tool de escritura se llamó al medir).
 
 **La forma de las respuestas.** Todas son `{content:[{type:"text", text:"<JSON>"}]}`. El servidor
-publica 46 tools, todas con `readOnlyHint`. El «proyecto» de Notion es un DATA SOURCE de una base
+listó 45 tools; `readOnlyHint: true` lo llevan las de lectura que se usan aquí (`notion-search`,
+`notion-fetch`, `notion-get-users`, `notion-query-data-sources`) y NO las dos que escriben
+(`notion-update-page`, `notion-create-comment`). El «proyecto» de Notion es un DATA SOURCE de una base
 (`collection://<uuid>`), no la base: `notion-search` devuelve bases (`type: "database"`, con `id`,
 `title` y a veces `path`), y hace falta un `notion-fetch` para llegar a su data source. El fetch de
 una base trae el esquema DENTRO de su `text`, en un bloque `<data-source-state>{JSON}</data-source-state>`

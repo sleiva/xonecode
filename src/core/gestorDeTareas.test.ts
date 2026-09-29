@@ -3,6 +3,7 @@ import {
   categoriaDeEstado,
   categoriaDeGrupoDeNotion,
   comentarioDeCierre,
+  etiquetaDeClave,
   formaDeProyecto,
   motivoDeFuenteDeNotion,
   motivoDeProyectoInaceptable,
@@ -260,4 +261,13 @@ describe("IXCODE-15: categoriaDeGrupoDeNotion", () => {
   it.each([
     ["to_do", "por-hacer"], ["in_progress", "en-curso"], ["complete", "terminada"], ["current", "por-hacer"], ["future", "por-hacer"], ["otro", "por-hacer"],
   ])("%s → %s", (g, c) => expect(categoriaDeGrupoDeNotion(g)).toBe(c));
+});
+
+describe("IXCODE-15: etiquetaDeClave", () => {
+  it("un UUID de página (con o sin guiones) se enseña por sus 8 primeros; una clave de Jira, sin etiqueta", () => {
+    expect(etiquetaDeClave("087e117f-9478-4c60-871d-b5d76c2a7e30")).toBe("087e117f");
+    expect(etiquetaDeClave("087E117F94784C60871DB5D76C2A7E30")).toBe("087e117f");
+    expect(etiquetaDeClave("IXCODE-11")).toBeUndefined();
+    expect(etiquetaDeClave("087e117f")).toBeUndefined();
+  });
 });
