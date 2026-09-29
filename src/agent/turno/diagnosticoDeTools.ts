@@ -14,12 +14,22 @@ import type { OrigenDeTool } from "./puente.js";
 export const VARIABLE_TRAZA_TOOLS = "XONECODE_TRACE_TOOLS";
 export const NOMBRE_TRAZA_TOOLS = "traza-tools.jsonl";
 
+/** Cuánto de un encargo se guarda en la traza. Lo demás se cuenta en `chars`, no se guarda. */
+export const TOPE_DEL_ENCARGO_EN_TRAZA = 2000;
+
 export interface UsoDeModelo {
   input: number;
   output: number;
   cache: number;
   llamadas: number;
   contexto: number;
+  /**
+   * Cuántos de los `output` fueron RAZONAMIENTO. **Opcional y ausente-no-es-cero**: un proveedor que no lo
+   * declara no piensa cero tokens, simplemente no lo dice, y un cero inventado se leería como «este agente
+   * no razona». Existe porque la salida mezcla razonamiento, texto y llamadas a tools, y sin separarlos no
+   * se puede decidir dónde bajar el esfuerzo.
+   */
+  razonamiento?: number;
 }
 
 export interface DiagnosticoDeTools {
@@ -41,7 +51,19 @@ export interface DiagnosticoDeTools {
    * stream, ver `puente.ts#esDelPadre`). No dice CUÁL especialista: sus segmentos son ids
    * opacos. Dos cubos ciertos en vez de cinco dudosos.
    */
-  herramienta(nombre: string, detalle: string | undefined, parametros: ParametrosSeguros | undefined, tracker: TokenTracker, origen?: OrigenDeTool, respuesta?: string): void;
+  herramienta(nombre: string, detalle: string | undefined, parametros: ParametrosSeguros | undefined, tracker: TokenTracker, origen?: OrigenDeTool, respuesta?: string, agente?: string): void;
+  /**
+   * **Quién le pide qué a quién.** Opcional, como `corte`: una delegación del orquestador a un especialista,
+   * con el ENCARGO. Existe porque la traza decía «un especialista» y no cuál, y de lo que el orquestador
+   * pedía solo dejaba una huella: al analizar cuántas pasadas gasta una tarea, la pregunta es qué pidió a
+   * quién y qué hizo cada uno con ello.
+   *
+   * **Es lo único de la traza que lleva TEXTO LIBRE**, y por eso está acotado: recortado a
+   * `TOPE_DEL_ENCARGO_EN_TRAZA` caracteres y solo con la traza encendida. La traza es un fichero local
+   * bajo `.xonecode/` —no viaja por el cable, no entra en git ni sube a CloudStudio—, pero un encargo
+   * puede citar contenido del proyecto, así que quien enciende «Depurar» tiene que saber que queda escrito.
+   */
+  delegacion?(de: string, a: string, encargo: string): void;
   /**
    * **Cuánto METIÓ en el contexto lo que devolvió una tool.** Opcional, como `corte`.
    *
@@ -115,11 +137,21 @@ export function crearDiagnosticoDeTools(
         chars,
       });
     },
-    herramienta(nombre, detalle, parametros, tracker, origen, respuesta) {
+    delegacion(de, a, encargo) {
+      escribir({
+        tipo: "delegacion",
+        de,
+        a,
+        chars: encargo.length,
+        encargo: encargo.length > TOPE_DEL_ENCARGO_EN_TRAZA ? `${encargo.slice(0, TOPE_DEL_ENCARGO_EN_TRAZA)}…` : encargo,
+      });
+    },
+    herramienta(nombre, detalle, parametros, tracker, origen, respuesta, agente) {
       escribir({
         tipo: "tool",
         nombre,
         ...(origen === undefined ? {} : { origen }),
+        ...(agente === undefined ? {} : { agente }),
         ...(respuesta === undefined ? {} : { respuesta }),
         ...(detalle === undefined ? {} : { detalle }),
         ...(parametros === undefined ? {} : { parametros }),

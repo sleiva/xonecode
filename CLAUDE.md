@@ -284,6 +284,21 @@ Y las guardas del proyecto:
   `agent/dispositivos/decodificarImagen.ts` (`pngjs`, `jpeg-js`) las saca a píxeles y **comprueba
   las dimensiones ANTES de descomprimir**, contra una bomba de descompresión. De un error de lectura
   solo cruza su `code`.
+- **Y una sexta, `diferencia_de_capturas`, solo en TrueForge y para quien EJECUTA**
+  (`agent/grafo/diferenciaDeCapturas.ts`, `core/compararCapturas.ts#medirCambio`): dice si una ZONA
+  de la pantalla cambió entre dos capturas de la misma app, con el porcentaje y dónde. Sustituye a lo
+  que el conductor escribía a mano en cada pasada (scripts de imagen y comparaciones de `md5`): un
+  `md5` igual solo dice que TODA la imagen es igual, y uno distinto puede ser un cursor parpadeando.
+  Va al conductor y no al orquestador porque comprueba una ACCIÓN suya (¿mi toque tuvo efecto?), no
+  juzga una pantalla. Con las mismas guardas de ruta, y un «igual» da las DOS explicaciones posibles
+  (no se repinta, o la captura fue antes del repintado) sin decidir entre ellas.
+- **Lo que quien ESCRIBE tiene que saber va en el cuerpo del developer y del designer, no en
+  `REGLAS_XONE`** (`ESCRIBIR_XONE_SIN_ROMPER`, `agent/subagentes/agentesEnDisco.ts`): un comentario
+  XML no admite `--`, un `L`/`TL` pinta su `title`, `elevation` recorta un fondo redondeado, un botón
+  usa `img` y no `imgbk`, y una edición por fichero y ronda. Va ahí porque `REGLAS_XONE` llega al
+  consultor y al analista, que no escriben, y porque viaja en cada llamada. Se acompaña de dos cosas
+  del plan: `TASKS.md` lleva una sección `## Hallazgos`, porque cada sesión empieza sin memoria, y un
+  diseño se destila una vez en `DISENO.md`.
 - **`xone_navegacion` existe por una medida, no por completitud**: contestar «¿qué colecciones
   tiene el proyecto?» leyendo ficheros es mucho más caro que contestarla desde el modelo. Cuatro
   reglas: **el reparto** — la semántica de XOne la pone `xone-linter` como LIBRERÍA

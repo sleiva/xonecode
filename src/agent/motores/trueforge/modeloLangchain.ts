@@ -103,6 +103,12 @@ export function modeloParaTrueforge(opciones: {
    * empezar cada llamada; con `soloTexto` ya activo no hace falta (la orden llegó antes).
    */
   corte?: () => { senal: AbortSignal; orden: () => string } | undefined;
+  /**
+   * Cuántos de los tokens de salida de una llamada fueron RAZONAMIENTO. La librería reconstruye el
+   * uso de sus eventos sin ese campo, así que se avisa aquí, a la salida del adaptador, con los
+   * tokens de salida para emparejarlo con el evento.
+   */
+  alRazonar?: (salida: number, razonamiento: number) => void;
 }): ILLM {
   let secuencia = 0;
 
@@ -183,6 +189,7 @@ export function modeloParaTrueforge(opciones: {
     const uso = acumulado?.usage_metadata;
     const razonamiento = acumulado === undefined ? "" : razonamientoDe(acumulado);
     const contenido = acumulado === undefined ? "" : textoDe(acumulado);
+    if (uso?.output_token_details?.reasoning !== undefined) opciones.alRazonar?.(uso.output_tokens ?? 0, uso.output_token_details.reasoning);
     return {
       output: {
         role: "assistant",
@@ -203,6 +210,9 @@ export function modeloParaTrueforge(opciones: {
         output_tokens: uso?.output_tokens ?? 0,
         total_tokens: uso?.total_tokens ?? 0,
         ...(uso?.input_token_details?.cache_read === undefined ? {} : { cache_read_tokens: uso.input_token_details.cache_read }),
+        // De los tokens de salida, cuántos fueron RAZONAMIENTO (DeepSeek y los modelos que lo declaran). Ausente
+        // = el proveedor no lo dice, que no es lo mismo que cero: por eso no se rellena con 0.
+        ...(uso?.output_token_details?.reasoning === undefined ? {} : { reasoning_tokens: uso.output_token_details.reasoning }),
       },
       finish_reason: llamadas.length > 0 ? "tool_calls" : "stop",
     } as RawAssistantMessageWithUsage;

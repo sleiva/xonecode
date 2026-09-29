@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { crearDiagnosticoDeTools, NOMBRE_TRAZA_TOOLS, rutaTrazaDeTools, VARIABLE_TRAZA_TOOLS } from "./diagnosticoDeTools.js";
+import { crearDiagnosticoDeTools, NOMBRE_TRAZA_TOOLS, rutaTrazaDeTools, TOPE_DEL_ENCARGO_EN_TRAZA, VARIABLE_TRAZA_TOOLS } from "./diagnosticoDeTools.js";
 import { createTokenTracker } from "../../vendor/tokenTracking.js";
 
 describe("diagnóstico de tools", () => {
@@ -43,5 +43,44 @@ describe("diagnóstico de tools", () => {
     const lineas = readFileSync(rutaTrazaDeTools(raiz), "utf8").trim().split("\n").map((l) => JSON.parse(l)) as Array<Record<string, unknown>>;
     expect(lineas.map((l) => l.tipo)).toEqual(["sesion", "corte"]);
     expect(lineas[1]).toMatchObject({ origen: "designer-xone", limite: 15 });
+  });
+
+  it("la línea de una tool lleva el NOMBRE del agente que la llamó, cuando se sabe", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-traza-"));
+    const log = crearDiagnosticoDeTools(raiz, { [VARIABLE_TRAZA_TOOLS]: "1" })!;
+    const tracker = createTokenTracker();
+    log.herramienta("write_file", "/a", undefined, tracker, "especialista", undefined, "designer-xone");
+    log.herramienta("read_file", "/b", undefined, tracker, "orquestador");
+    const lineas = readFileSync(rutaTrazaDeTools(raiz), "utf8").trim().split("\n").map((l) => JSON.parse(l) as Record<string, unknown>);
+    const tools = lineas.filter((l) => l["tipo"] === "tool");
+    expect(tools[0]).toMatchObject({ nombre: "write_file", agente: "designer-xone" });
+    expect(tools[1]).not.toHaveProperty("agente");
+  });
+
+  it("una delegación guarda el encargo, RECORTADO, y su longitud entera", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-traza-"));
+    const log = crearDiagnosticoDeTools(raiz, { [VARIABLE_TRAZA_TOOLS]: "1" })!;
+    log.delegacion?.("orquestador", "developer-xone", "haz X");
+    log.delegacion?.("orquestador", "designer-xone", "y".repeat(TOPE_DEL_ENCARGO_EN_TRAZA + 500));
+    const d = readFileSync(rutaTrazaDeTools(raiz), "utf8").trim().split("\n").map((l) => JSON.parse(l) as Record<string, unknown>).filter((l) => l["tipo"] === "delegacion");
+    expect(d[0]).toMatchObject({ de: "orquestador", a: "developer-xone", chars: 5, encargo: "haz X" });
+    expect(d[1]!["chars"]).toBe(TOPE_DEL_ENCARGO_EN_TRAZA + 500);
+    expect(String(d[1]!["encargo"]).length).toBe(TOPE_DEL_ENCARGO_EN_TRAZA + 1);
+  });
+
+  it("sin la traza encendida no se escribe nada, tampoco de las delegaciones", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-traza-"));
+    const log = crearDiagnosticoDeTools(raiz, {});
+    expect(log).toBeUndefined();
+  });
+
+  it("la línea del modelo lleva el razonamiento cuando se sabe, y NO lo inventa cuando no", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-traza-"));
+    const log = crearDiagnosticoDeTools(raiz, { [VARIABLE_TRAZA_TOOLS]: "1" })!;
+    log.modelo("designer-xone", { input: 10, output: 900, cache: 0, llamadas: 1, contexto: 10, razonamiento: 800 });
+    log.modelo("orquestador", { input: 10, output: 50, cache: 0, llamadas: 2, contexto: 10 });
+    const m = readFileSync(rutaTrazaDeTools(raiz), "utf8").trim().split("\n").map((l) => JSON.parse(l) as Record<string, unknown>).filter((l) => l["tipo"] === "modelo");
+    expect(m[0]).toMatchObject({ origen: "designer-xone", razonamiento: 800 });
+    expect(m[1]).not.toHaveProperty("razonamiento");
   });
 });

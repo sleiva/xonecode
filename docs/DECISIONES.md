@@ -7273,9 +7273,9 @@ horizontal, y hasta dónde llegaba el contenido):
 
 | Captura | Vertical | Horizontal | Contenido acaba al |
 |---|---|---|---|
-| Pasada 3 (teclado a un tercio, banda vacía) | 62 % | 42 % | 33 % |
-| Pasada 4 (teclado llena la pantalla, teclas cortadas) | 26 % | 15 % | 99 % |
-| Pasada 5 (barra superior, marco de pantalla, contenedor del teclado) | 5 % | 3 % | 100 % |
+| Pasada 3 (teclado a un tercio, banda vacía) | 62 % (**56 % corregido**) | 42 % (36 %) | 33 % |
+| Pasada 4 (teclado llena la pantalla, teclas cortadas) | 26 % (21 %) | 15 % (9 %) | 99 % |
+| Pasada 5 (barra superior, marco de pantalla, contenedor del teclado) | 5 % (11 %) | 3 % (5 %) | 100 % |
 
 Tarda unos 35 ms. Da por parecida una estructura bajo el 12 % en las dos direcciones y sin franjas señaladas.
 
@@ -7335,3 +7335,75 @@ de la región del display y las repetí yo con cuatro capturas distintas. Sin me
 **Estado de la calculadora tras nueve pasadas.** Estructura al 6 % y 4 % de la maqueta, las 20 teclas redondeadas completas, el
 texto de `ANS`, `DEG`, `COPY` y `TAPE` entero y el display que se repinta. Faltan la línea de historial, el avatar, el fondo propio
 de la tarjeta del display y el cursor pegado al número (está en una fila propia debajo).
+
+## Nueve pasadas de una calculadora: dónde se fue el tiempo y qué se cambió (29-09-2026)
+
+**Los datos** (traza de tools y cierre de cada `run`, sobre una calculadora de Stitch hecha por los agentes con DeepSeek):
+
+| Concepto | Valor |
+|---|---|
+| Pasadas | 9 |
+| Tiempo de agente | 91 min (5.455 s) |
+| Llamadas al modelo | 606 |
+| Tokens efectivos | ≈4,93 M |
+| Pasadas cortadas por el tope de rondas | 4 de 9 (2, 4, 5 y 6): 65 % de los tokens |
+
+**Dónde iteró.** El fallo que más vivió fue el display que no se repintaba: nació en la primera versión, el agente lo
+diagnosticó en la pasada 4 y no quedó escrito, y se arregló en la 9. Siete pasadas de pulido visual sobre una calculadora
+que no enseñaba lo que se tecleaba. Los comentarios con `--` costaron una pasada entera (el verificador daba verde), y
+`elevation` dos (la causa la encontré yo con un experimento).
+
+**Dónde se fue el tiempo.** El 48 % antes de la primera escritura (en las pasadas 5 y 6, el 96 % y el 92 %) y al menos el
+23 % después de la última, verificando en el aparato. De los 156 comandos de shell del conductor, 46 eran scripts de
+Python con PIL, casi siempre el mismo diff de píxeles, 31 eran `md5`/`ls` de capturas y 13 buscaban a ciegas la documentación
+de hotswap: 90 de 156 eran trabajo que una herramienta o una frase evitaban. `MenuPrincipal.xne` se leyó 75 veces, `default.css` 40,
+`TASKS.md` 36, `DESIGN.md` 24 y `code.html` (28 KB) 21. **Advertencia:** los nueve `run` sueltos inflan la relectura, porque cada
+uno empieza sin memoria, y el tope de rondas es un artefacto de `run` sin terminal (en la consola es mucho más alto). Agrupar
+las escrituras —«una sola escritura de `default.css`»— dejó una pasada en código 0 y en la mitad de tiempo que las que iban fichero a fichero.
+
+**Lo que se cambió, y por qué ahí.**
+- **Reglas del developer y del designer** (`ESCRIBIR_XONE_SIN_ROMPER`, en el cuerpo de los sembrados): las cinco cosas que XOne no
+  avisa cuando fallan. El usuario propuso ponerlas en el developer, y se pusieron también en el designer, que escribe los mismos
+  ficheros. No van a `REGLAS_XONE`, que llega a quien no escribe y viaja en cada llamada.
+- **`diferencia_de_capturas`** para el conductor, en lugar de los scripts y los `md5`.
+- **Una frase falsa del conductor.** Decía «para mirar un fichero de una skill usa `cat`, que sí ve el disco» sin dar la ruta; el
+  agente probaba `cat /skills/...` (virtual) y luego `find /`. La variable `XONECODE_SKILL_<NOMBRE>` ya existía y nadie la nombraba.
+  Ahora dice que la documentación se lee con `read_file /skills/...` y, solo desde la shell, con esa variable.
+- **El plan:** una sección `## Hallazgos` (lo grave que se descubre, con su causa medida), una tarea de comportamiento antes que el
+  pulido visual, y `DISENO.md` destilado una vez por el analista.
+
+**Lo que no se hizo:** partir `MenuPrincipal.xne` en fragmentos. La lectura repetida es real, pero no se midió que eso la reduzca. Y
+las dos comprobaciones estáticas en el verificador (comentario con `--`, y `self.X` sobre un `L`/`TL`) quedaron aparcadas en favor
+de las reglas del developer.
+
+## Corrección de las cifras de `comparar_capturas`: el fondo era el color equivocado (29-09-2026)
+
+**El fallo de la herramienta, no de la calculadora.** El fondo se detectaba como el color más frecuente de toda la imagen. Esa
+suposición se rompe en cuanto una forma grande domina la pantalla: en una calculadora cuyas teclas redondas ocupaban más
+superficie que el fondo, eligió el gris de las teclas y toda la barra superior y la tarjeta del display contaron como contenido al
+cien por cien: una distancia del 46 % a una pantalla que a la vista estaba mucho más cerca de la maqueta. Al mirar por qué, incluso en
+la maqueta y en una captura buena había elegido el color de la tarjeta del display, con menos de un tercio de los píxeles.
+
+**La corrección.** El fondo es el color más frecuente en los MÁRGENES laterales (el tres por ciento de cada lado), que dio el mismo color
+—`#101014`— en las cuatro imágenes probadas; si el borde no es uniforme, se cae al más frecuente global. Con un test de regresión con teclas
+que ocupan más que el fondo.
+
+**Las cifras, recalculadas con el método nuevo** (maqueta contra cada captura; vertical / horizontal):
+
+| Captura | Vertical | Horizontal |
+|---|---|---|
+| Nueve pasadas: la 3 (teclado a un tercio) | 56 % | 36 % |
+| Nueve pasadas: la 4 | 21 % | 9 % |
+| Nueve pasadas: la 5 | 11 % | 5 % |
+| Nueve pasadas: la 7 y la 9 (final) | 12 % | 8 % |
+| Desde cero: pasada 3 | 18 % | 5 % |
+| Desde cero: pasada 4 (barra superior, tarjeta, teclas circulares) | 11 % | 11 % |
+
+**Lo que cambia en la lectura.** Las cifras anteriores del texto («5 % y 3 %», «6 % y 4 %») quedan sustituidas por estas. Y la conclusión de
+la comparación de la calculadora hecha desde cero también: **después de cuatro pasadas y unos 54 minutos y 2,8 millones de tokens llega a una
+estructura del 11 % y el 11 %, equivalente a la de las nueve pasadas de antes (12 % y 8 %, con 91 minutos y 4,9 millones)**, y además con el
+display funcionando desde la tercera. Antes decía que quedaba más lejos; era la medida la que fallaba. **Esto se descubrió porque la cifra no
+cuadraba con la captura**: sin mirar la imagen, un 46 % habría parecido un dato y no un error.
+
+**Y el agente también la usó.** En esas pasadas el orquestador llamó a `comparar_capturas`, así que estuvo decidiendo con un fondo mal
+detectado en parte de ellas. Queda dicho.

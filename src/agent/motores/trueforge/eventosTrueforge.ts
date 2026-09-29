@@ -36,6 +36,8 @@ export interface UsoDeLlamada {
   input: number;
   output: number;
   cache: number;
+  /** Cuántos de los `output` fueron razonamiento. Ausente = el proveedor no lo dice (no es cero). */
+  razonamiento?: number;
 }
 
 const HILO_RAIZ = "main";
@@ -153,12 +155,14 @@ export function traducirEvento(
           const detalle = detalleDe(nombre, args);
           eventos.push({ tipo: "tool", nombre, ...(detalle === undefined ? {} : { detalle }), origen });
         }
-        const u = (m as { usage?: { input_tokens?: number; output_tokens?: number; cache_read_tokens?: number } } | null)?.usage;
+        const u = (m as { usage?: { input_tokens?: number; output_tokens?: number; cache_read_tokens?: number; reasoning_tokens?: number } } | null)?.usage;
         if (u !== undefined) {
+          const razonamiento = u.reasoning_tokens === undefined && uso?.razonamiento === undefined ? undefined : (uso?.razonamiento ?? 0) + (u.reasoning_tokens ?? 0);
           uso = {
             input: (uso?.input ?? 0) + (u.input_tokens ?? 0),
             output: (uso?.output ?? 0) + (u.output_tokens ?? 0),
             cache: (uso?.cache ?? 0) + (u.cache_read_tokens ?? 0),
+            ...(razonamiento === undefined ? {} : { razonamiento }),
           };
         }
       }
@@ -167,9 +171,17 @@ export function traducirEvento(
     case "agent.context.overwrite": {
       // La compactación: una llamada al modelo que también se paga. Su uso viene en el evento y
       // no en un mensaje del contexto, así que sin esto el resumen sería gratis en el contador.
-      const u = (e as { usage?: { input_tokens?: number; output_tokens?: number; cache_read_tokens?: number } }).usage;
+      const u = (e as { usage?: { input_tokens?: number; output_tokens?: number; cache_read_tokens?: number; reasoning_tokens?: number } }).usage;
       if (u === undefined) return { eventos: [] };
-      return { eventos: [], uso: { input: u.input_tokens ?? 0, output: u.output_tokens ?? 0, cache: u.cache_read_tokens ?? 0 } };
+      return {
+        eventos: [],
+        uso: {
+          input: u.input_tokens ?? 0,
+          output: u.output_tokens ?? 0,
+          cache: u.cache_read_tokens ?? 0,
+          ...(u.reasoning_tokens === undefined ? {} : { razonamiento: u.reasoning_tokens }),
+        },
+      };
     }
     case "internal.agent.done": {
       // Un subagente que falla lo dice su padre, que recibe el error como respuesta de tool.

@@ -18,6 +18,7 @@
 
 import { esEsfuerzo, type Esfuerzo } from "./esfuerzo.js";
 import { recibeBuscarIcono } from "./iconos.js";
+import { NUCLEO_XONE } from "./nucleoXone.js";
 
 /** De qué está hecho un subagente. Los tres van al MISMO sitio: la lista de deepagents. */
 export type Motor = "modelo" | "claude-code" | "codex" | "opencode";
@@ -201,6 +202,11 @@ export const REGLAS_XONE = [
   "  Object.assign/keys, Array.isArray/find/forEach, String.includes/startsWith/trim, JSON.",
 ].join("\n");
 
+/** ¿Recibe el núcleo de trabajo? Quien escribe el proyecto entero, o quien conduce el aparato. Regla de DATO. */
+export function recibeNucleoDeTrabajo(a: Pick<Agente, "soloLectura" | "ejecucion" | "escribeEn">): boolean {
+  return recibeBuscarIcono(a) || a.ejecucion === true;
+}
+
 /**
  * El prompt completo de un subagente: sus reglas, su descripción y sus instrucciones.
  *
@@ -213,6 +219,9 @@ export function promptDeAgente(agente: Agente, skills?: EstadoDeSkills): string 
   return [
     REGLAS_XONE,
     "",
+    // El núcleo de trabajo, solo a quien ESCRIBE el proyecto o CONDUCE el aparato (ver `nucleoXone.ts`):
+    // el consultor y el analista leen, y el documentador escribe documentos, no pantallas.
+    ...(recibeNucleoDeTrabajo(agente) ? [NUCLEO_XONE, ""] : []),
     MAPA_DEL_PROYECTO,
     "",
     agente.descripcion,

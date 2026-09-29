@@ -43,6 +43,7 @@ const ICONO: Record<string, string> = {
   regex_search: "✱",
   buscar_icono: "✱",
   comparar_capturas: "✱",
+  diferencia_de_capturas: "✱",
   generar_fondo_svg: "✱",
   task: "⊙",
   // Un icono PROPIO, y no el genérico `⚙`: en un turno donde se lanza una app, la línea del
@@ -62,6 +63,7 @@ const VERBO: Record<string, string> = {
   regex_search: "regex",
   buscar_icono: "icono",
   comparar_capturas: "compara",
+  diferencia_de_capturas: "mide cambio",
   generar_fondo_svg: "fondo",
   task: "delega en",
   execute: "corre",

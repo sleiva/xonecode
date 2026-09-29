@@ -99,6 +99,8 @@ import { crearUnirSecciones } from "../../grafo/unirSecciones.js";
 import { crearIncorporarAdjunto, recibeIncorporarAdjunto } from "../../grafo/incorporarAdjunto.js";
 import { crearCriticaVisual } from "../../grafo/criticaVisual.js";
 import { crearCompararCapturas } from "../../grafo/compararCapturas.js";
+import { crearDiferenciaDeCapturas } from "../../grafo/diferenciaDeCapturas.js";
+import { crearLectorDeReferencias } from "../../grafo/lectorDeReferencias.js";
 import { crearTraerDeLaMaquina } from "../../grafo/traerDeLaMaquina.js";
 import { invocarVisualConModelos } from "../../dispositivos/juezVisual.js";
 import { estilosDeDisco, indiceEnDisco, type CargarIndice } from "../../navegacion/indiceEnDisco.js";
@@ -107,12 +109,34 @@ import { estilosDeDisco, indiceEnDisco, type CargarIndice } from "../../navegaci
 const HILO_RAIZ = "main";
 
 /**
+ * **Ser fiel a un diseño es parte del encargo, y se comprueba con números Y con ojos.**
+ *
+ * Rehaciendo una calculadora de Stitch, el orquestador dio la pantalla por buena una y otra vez con
+ * el crítico en verde, porque corría SIN la maqueta: su verde significaba «nada roto» y no veía que
+ * faltaba la barra superior. Con la maqueta a mano (`/diseno/`, `/adjuntos/`), el bucle es este, y
+ * termina: una condición de parada de estructura y un tope de vueltas, porque sin tope un crítico
+ * y un agente pueden retocar para siempre.
+ */
+const BUCLE_DE_CALIDAD = [
+  "SI EL ENCARGO TRAE UN DISEÑO (una imagen en /diseno/, /adjuntos/ o /artefactos/), SER FIEL A ÉL es parte del",
+  "encargo, y se comprueba con números y con ojos. Tras cada cambio visual: pide al conductor una captura NATIVA",
+  "nueva y contrástala con `comparar_capturas` y con `xone_critica_visual`, pasando el diseño como `referencia` en las",
+  "dos. Sin referencia el crítico solo dice «nada roto», que no es «se parece». Si la estructura o el crítico señalan",
+  "diferencias con el diseño —piezas que faltan, tamaños, formas—, delega el arreglo con esas diferencias concretas y",
+  "repite. Para cuando la estructura coincida y el crítico no señale diferencias con el diseño, o tras TRES vueltas, y",
+  "di lo que sigue faltando en vez de darlo por hecho.",
+].join("\n");
+
+/**
  * Lo que el orquestador tiene que saber para DELEGAR en ESTE motor. Su prompt es el de siempre
  * (`promptOrquestador`), que habla de `task` y de la ficha que va en su descripción: aquí la
  * delegación es `create_sub_agent` y no tiene descripción por especialista, así que se traduce
  * el nombre de la tool y las fichas van escritas aquí, con la MISMA función que deepagents.
  */
-export function notaDeDelegacion(agentes: readonly Agente[], opciones: { conIconos?: boolean } = {}): string {
+export function notaDeDelegacion(
+  agentes: readonly Agente[],
+  opciones: { conIconos?: boolean; conComparacion?: boolean } = {}
+): string {
   if (agentes.length === 0) return "";
   return [
     "NOTA DEL HARNESS: en este entorno NO existe la tool `task`. Se delega con `create_sub_agent`:",
@@ -120,6 +144,7 @@ export function notaDeDelegacion(agentes: readonly Agente[], opciones: { conIcon
     "especialista no ve esta conversación—. Donde estas instrucciones dicen `task` o `subagent_type`,",
     "entiende `create_sub_agent` y `name`. Las fichas de los especialistas:",
     ...agentes.map((a) => `- ${a.nombre}: ${fichaDeAgente(a, opciones)}`),
+    ...(opciones.conComparacion === true ? ["", BUCLE_DE_CALIDAD] : []),
   ].join("\n");
 }
 
@@ -433,6 +458,11 @@ export async function abrirSesionTrueforge(
   const cargarEstilos = estilosDeDisco(raiz);
   const navegacion = (): ToolDeLangchain => crearNavegacionXone(cargarIndice, ficheros, cargarEstilos) as unknown as ToolDeLangchain;
   const carpeta = opciones.artefactos;
+  const lectorDeReferencias = crearLectorDeReferencias({
+    raiz,
+    ...(carpeta === undefined ? {} : { artefactos: carpeta }),
+    ...(opciones.adjuntos === undefined ? {} : { adjuntos: opciones.adjuntos }),
+  });
   const propiasDelRaiz: ToolDeLangchain[] = [
     navegacion(),
     ...(carpeta === undefined
@@ -441,9 +471,11 @@ export async function abrirSesionTrueforge(
           crearCriticaVisual({
             leerArtefacto: async (nombre) => readFileSync(join(carpeta, nombre)),
             invocar: invocarVisualConModelos({ paraPapel: (p) => modelos.paraPapel(p) }),
+            // La maqueta casi nunca está en /artefactos/: la trae la persona (/adjuntos/) o vive en /diseno/.
+            leerReferencia: lectorDeReferencias,
           }),
           // Medir la estructura contra la maqueta: la otra mitad del crítico, con el raíz como él.
-          crearCompararCapturas({ leerArtefacto: async (nombre) => readFileSync(join(carpeta, nombre)) }),
+          crearCompararCapturas({ leerArtefacto: async (nombre) => readFileSync(join(carpeta, nombre)), leerReferencia: lectorDeReferencias }),
           crearTraerDeLaMaquina({ carpeta, alEscribir: anotarArtefacto }),
         ] as unknown as ToolDeLangchain[])),
   ];
@@ -468,6 +500,11 @@ export async function abrirSesionTrueforge(
       : []),
     // Fondos SVG: pura y sin red, sin puerto; a quien escribe el proyecto, como deepagents.
     ...(recibeGenerarFondo(agente) ? [crearGenerarFondoSvg() as unknown as ToolDeLangchain] : []),
+    // ¿Cambió la zona tras el toque? Al conductor, que es quien saca las capturas: comprueba una
+    // ACCIÓN suya, no juzga la pantalla (eso sigue siendo del crítico y de `comparar_capturas`).
+    ...(carpeta !== undefined && agente.ejecucion === true
+      ? [crearDiferenciaDeCapturas({ leerArtefacto: async (nombre) => readFileSync(join(carpeta, nombre)) }) as unknown as ToolDeLangchain]
+      : []),
     // Y marcar en el plan lo comprobado en el aparato, con el reparto de deepagents: a quien ejecuta.
     ...(agente.ejecucion === true ? [crearMarcarCriteriosDelPlan({ raiz }) as unknown as ToolDeLangchain] : []),
   ];
@@ -493,7 +530,13 @@ export async function abrirSesionTrueforge(
     }
     return cliente;
   };
-  const llm = modeloParaTrueforge({ modelo: () => clienteDe("papel:trabajo:", () => modelos.paraPapel("trabajo")), senal: () => aborto?.signal });
+  // Lo que la librería pierde: el razonamiento de cada llamada, por tokens de salida, hasta que su evento llega.
+  const razonamientoPendiente = new Map<number, number[]>();
+  const alRazonar = (salida: number, razonamiento: number): void => {
+    razonamientoPendiente.set(salida, [...(razonamientoPendiente.get(salida) ?? []), razonamiento]);
+  };
+  const razonamientoDeSalida = (salida: number): number | undefined => razonamientoPendiente.get(salida)?.shift();
+  const llm = modeloParaTrueforge({ modelo: () => clienteDe("papel:trabajo:", () => modelos.paraPapel("trabajo")), senal: () => aborto?.signal, alRazonar });
 
   /**
    * El hilo de un hijo EXTERNO: un `AgentThread` normal con UNA llamada, cuyo «modelo» es el
@@ -589,6 +632,7 @@ export async function abrirSesionTrueforge(
             ? clienteDe(`papel:${papel}:${agente?.esfuerzo ?? ""}`, () => modelos.paraPapel(papel, agente?.esfuerzo))
             : clienteDe(`modelo:${agente.modelo}:${agente.esfuerzo ?? ""}`, () => modelos.paraModelo(agente.modelo!, agente.esfuerzo)),
         senal: () => aborto?.signal,
+        alRazonar,
         soloTexto: () => (detencion.soloTexto(params.threadId) ? RESUMEN_DE_RELLENO : undefined),
         corte: () => detencion.corte(params.threadId),
         alTirarLlamadas: (n) => {
@@ -640,7 +684,7 @@ export async function abrirSesionTrueforge(
   const nuevoOrquestador = (foto?: FotoDeHilo): AgentThreadOrchestrator => {
     const definicion = {
       modelClient: llm,
-      instruction: [promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined })].filter((l) => l !== "").join("\n\n"),
+      instruction: [promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conComparacion: carpeta !== undefined })].filter((l) => l !== "").join("\n\n"),
       // Por TURNO, porque el raíz se rehace desde su foto al final de cada uno (ver `turno`).
       iterationLimit: LIMITE_DE_LLAMADAS_DEL_RAIZ,
     };
@@ -748,13 +792,20 @@ export async function abrirSesionTrueforge(
             llamadas.set(claveDe(deHilo, t.id), { nombre: t.function.name, args });
             // La traza: la MISMA lista blanca que el evento (`detalleDe`, `parametrosDe`), nunca
             // los argumentos crudos.
+            const quien = quienEs.get(deHilo) ?? deHilo;
             diagnostico?.herramienta(
               t.function.name,
               detalleDe(t.function.name, args),
               parametrosDe(t.function.name, args),
               tracker,
-              deHilo === HILO_RAIZ ? "orquestador" : "especialista"
+              deHilo === HILO_RAIZ ? "orquestador" : "especialista",
+              undefined,
+              quien
             );
+            // Qué le pide el orquestador a quién: el encargo, acotado (ver `DiagnosticoDeTools.delegacion`).
+            if (t.function.name === "create_sub_agent" && typeof args["name"] === "string" && typeof args["input"] === "string") {
+              diagnostico?.delegacion?.(quien, args["name"], args["input"]);
+            }
           }
         }
       }
@@ -781,12 +832,14 @@ export async function abrirSesionTrueforge(
         // Y solo de una llamada NORMAL: la de la compactación mide lo de ANTES de resumir.
         if (deHilo === HILO_RAIZ && evento.type === "internal.agent.context.append") tracker.contexto = uso.input;
         // Por ORIGEN, como deepagents: el orquestador y cada especialista por su nombre.
+        const razonado = uso.razonamiento ?? razonamientoDeSalida(uso.output);
         diagnostico?.modelo(quienEs.get(deHilo) ?? deHilo, {
           input: uso.input,
           output: uso.output,
           cache: uso.cache,
           llamadas: tracker.calls,
           contexto: uso.input,
+          ...(razonado === undefined ? {} : { razonamiento: razonado }),
         });
         avisar();
       }

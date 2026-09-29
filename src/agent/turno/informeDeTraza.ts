@@ -26,6 +26,15 @@ export interface GastoDeOrigen {
   input: number;
   output: number;
   cache: number;
+  /**
+   * Cuántos tokens de la salida fueron RAZONAMIENTO, sumando SOLO las llamadas que lo declararon
+   * (`conRazonamiento`). **Cero y «no consta» no son lo mismo**: un proveedor que no lo dice no piensa cero
+   * tokens, y por eso se cuenta aparte cuántas llamadas lo traían; el informe solo lo pinta si consta.
+   */
+  razonamiento: number;
+  conRazonamiento: number;
+  /** La salida de ESAS mismas llamadas: el porcentaje se calcula sobre ella y no sobre toda la salida. */
+  salidaConRazonamiento: number;
   /** La MAYOR ventana alcanzada, no la última: tras un resumen el contexto baja. */
   contexto: number;
   /**
@@ -127,6 +136,10 @@ export interface SesionDeTraza {
   contexto: number;
   origenes: GastoDeOrigen[];
   tools: UsoDeTool[];
+  /** Qué tools llamó CADA agente, por nombre. Vacío en una traza anterior a que se registrara. */
+  toolsPorAgente: Array<{ agente: string; total: number; tools: Array<{ nombre: string; veces: number }> }>;
+  /** Lo que el orquestador pidió a cada especialista, con el encargo (acotado). */
+  delegaciones: Array<{ de: string; a: string; chars: number; encargo?: string }>;
   /**
    * Cuántas tools gastó el ORQUESTADOR. El resto son de los especialistas.
    *
@@ -172,6 +185,7 @@ interface EnConstruccion {
   sesion: SesionDeTraza;
   porOrigen: Map<string, GastoDeOrigen>;
   porTool: Map<string, { uso: UsoDeTool; blancos: Map<string, BlancoDeTool> }>;
+  porAgente: Map<string, Map<string, number>>;
 }
 
 /**
@@ -217,7 +231,7 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
     if (ya !== undefined) return ya;
     const nueva: EnConstruccion = {
       sesion: {
-        id, llamadas: 0, input: 0, output: 0, cache: 0, contexto: 0, origenes: [], tools: [], toolsDelOrquestador: 0,
+        id, llamadas: 0, input: 0, output: 0, cache: 0, contexto: 0, origenes: [], tools: [], toolsPorAgente: [], delegaciones: [], toolsDelOrquestador: 0,
         paralelismo: { respuestas: 0, tools: 0, maximo: 0, sinRespuesta: 0, escriturasALaVez: [] },
         pesos: [],
         charsDeTools: 0,
@@ -225,6 +239,7 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
       },
       porOrigen: new Map(),
       porTool: new Map(),
+      porAgente: new Map(),
       porRespuesta: new Map(),
       porPeso: new Map(),
     };
@@ -263,12 +278,18 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
       actual.sesion.cache += cache;
       actual.sesion.contexto = Math.max(actual.sesion.contexto, contexto);
 
-      const gasto = actual.porOrigen.get(origen) ?? { origen, llamadas: 0, input: 0, output: 0, cache: 0, contexto: 0, cortes: 0 };
+      const gasto = actual.porOrigen.get(origen) ?? { origen, llamadas: 0, input: 0, output: 0, cache: 0, razonamiento: 0, conRazonamiento: 0, salidaConRazonamiento: 0, contexto: 0, cortes: 0 };
       gasto.llamadas += 1;
       gasto.input += input;
       gasto.output += output;
       gasto.cache += cache;
       gasto.contexto = Math.max(gasto.contexto, contexto);
+      // Solo si la línea LO TRAE: una traza anterior a este campo no inventa un cero.
+      if (typeof evento.razonamiento === "number" && Number.isFinite(evento.razonamiento) && evento.razonamiento >= 0) {
+        gasto.razonamiento += evento.razonamiento;
+        gasto.conRazonamiento += 1;
+        gasto.salidaConRazonamiento += output;
+      }
       actual.porOrigen.set(origen, gasto);
       continue;
     }
@@ -288,7 +309,7 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
       // Un corte puede llegar ANTES que cualquier línea de modelo de ese origen, así que la
       // entrada se crea aquí si falta: si no, el corte se perdería por llegar el primero.
       const origen = texto(evento.origen) ?? "(sin origen)";
-      const gasto = actual.porOrigen.get(origen) ?? { origen, llamadas: 0, input: 0, output: 0, cache: 0, contexto: 0, cortes: 0 };
+      const gasto = actual.porOrigen.get(origen) ?? { origen, llamadas: 0, input: 0, output: 0, cache: 0, razonamiento: 0, conRazonamiento: 0, salidaConRazonamiento: 0, contexto: 0, cortes: 0 };
       gasto.cortes += 1;
       actual.porOrigen.set(origen, gasto);
       continue;
@@ -315,6 +336,16 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
       continue;
     }
 
+    if (evento.tipo === "delegacion") {
+      const de = texto(evento.de);
+      const a = texto(evento.a);
+      if (de !== undefined && a !== undefined) {
+        const encargo = texto(evento.encargo);
+        actual.sesion.delegaciones.push({ de, a, chars: numero(evento.chars), ...(encargo === undefined ? {} : { encargo }) });
+      }
+      continue;
+    }
+
     if (evento.tipo === "tool") {
       const nombre = texto(evento.nombre) ?? "(sin nombre)";
       // Ausente NO se cuenta como del orquestador: una traza vieja, de antes de que esto se
@@ -325,6 +356,12 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
         blancos: new Map<string, BlancoDeTool>(),
       };
       entrada.uso.veces += 1;
+      const agente = texto(evento.agente);
+      if (agente !== undefined) {
+        const suyas = actual.porAgente.get(agente) ?? new Map<string, number>();
+        suyas.set(nombre, (suyas.get(nombre) ?? 0) + 1);
+        actual.porAgente.set(agente, suyas);
+      }
       const detalle = texto(evento.detalle);
       if (detalle !== undefined) {
         const rango = rangoDe(evento.parametros);
@@ -349,8 +386,14 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
   // con ninguna de verdad, y devolver una lista vacía se leería como «no hay traza».
   if (ilegiblesSinDueño > 0 && sesiones.size === 0) abrir("?");
 
-  return [...sesiones.values()].map(({ sesion, porOrigen, porTool, porRespuesta, porPeso }) => ({
+  return [...sesiones.values()].map(({ sesion, porOrigen, porTool, porRespuesta, porPeso, porAgente }) => ({
     ...sesion,
+    toolsPorAgente: [...porAgente.entries()]
+      .map(([agente, mapa]) => {
+        const tools = [...mapa.entries()].map(([nombre, veces]) => ({ nombre, veces })).sort((a, b) => b.veces - a.veces || a.nombre.localeCompare(b.nombre));
+        return { agente, total: tools.reduce((s, t) => s + t.veces, 0), tools };
+      })
+      .sort((a, b) => b.total - a.total || a.agente.localeCompare(b.agente)),
     paralelismo: resumirParalelismo(porRespuesta, sesion.paralelismo.sinRespuesta),
     // Lo más gordo primero, que es lo que se viene a buscar. Desempate por nombre para que
     // dos pesos iguales no salgan en orden distinto en dos lecturas del mismo fichero.
@@ -454,6 +497,13 @@ export function pintarSesion(sesion: SesionDeTraza): string[] {
           // Al FINAL de su línea y no en una aparte: lo que hay que poder leer de un vistazo es
           // «estas llamadas no son las de un agente que terminó». Separado en otra línea se lee
           // como una nota al pie de algo que ya se dio por bueno.
+          // Cuánto de la salida fue PENSAR, si consta. Si solo constó en parte de las llamadas, se dice: un
+          // porcentaje sobre lo que consta no es un porcentaje sobre todo.
+          (o.conRazonamiento > 0
+            ? `  · razonamiento ${cifra(o.razonamiento)} (${o.salidaConRazonamiento === 0 ? 0 : Math.round((100 * o.razonamiento) / o.salidaConRazonamiento)}% de la salida${
+                o.conRazonamiento < o.llamadas ? `, consta en ${o.conRazonamiento} de ${o.llamadas} llamadas` : ""
+              })`
+            : "") +
           (o.cortes > 0 ? `  ⚠ CORTADO por tope${o.cortes > 1 ? ` ×${o.cortes}` : ""}` : "")
       );
     }
@@ -481,6 +531,24 @@ export function pintarSesion(sesion: SesionDeTraza): string[] {
       // como la lista entera, y aquí eso sería «solo tocó estos diez ficheros».
       const fuera = t.blancos.length - TOPE_DE_BLANCOS;
       if (fuera > 0) lineas.push(`        … y ${fuera} más`);
+    }
+  }
+
+  // Quién llamó a qué, por AGENTE. Solo si CONSTA: una traza de antes de este campo no lo trae.
+  if (sesion.toolsPorAgente.length > 0) {
+    lineas.push("  quién llamó a qué");
+    for (const a of sesion.toolsPorAgente) {
+      const partes = a.tools.slice(0, 8).map((t) => `${t.nombre} ×${t.veces}`).join(", ");
+      const resto = a.tools.length > 8 ? `, … y ${a.tools.length - 8} más` : "";
+      lineas.push(`    ${a.agente.padEnd(18)} ${String(a.total).padStart(3)} tool(s): ${partes}${resto}`);
+    }
+  }
+  // Qué pidió cada uno, con el encargo recortado a una línea: el texto entero está en el .jsonl.
+  if (sesion.delegaciones.length > 0) {
+    lineas.push("  qué se le pidió a quién");
+    for (const d of sesion.delegaciones) {
+      const una = (d.encargo ?? "").replace(/\s+/g, " ").trim();
+      lineas.push(`    ${d.de} → ${d.a} (${cifra(d.chars)} car.): ${una.length > 180 ? `${una.slice(0, 180)}…` : una}`);
     }
   }
 

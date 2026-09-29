@@ -2183,3 +2183,76 @@ describe("`comparar_capturas` en TrueForge (IXCODE-18): con el raíz, como la cr
     expect(toolsPorLlamada[0]).not.toContain("comparar_capturas");
   }, 20_000);
 });
+
+describe("`diferencia_de_capturas` en TrueForge (IXCODE-18): al conductor, no al orquestador", () => {
+  it("con carpeta de artefactos la ve quien EJECUTA y no el raíz ni los demás", async () => {
+    const guion = [
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "device-controller", input: "mira" }) }] })],
+      [new AIMessageChunk({ content: "Hecho." })],
+      [new AIMessageChunk({ content: "Listo." })],
+    ];
+    const { m, toolsPorLlamada } = modelosConGuion(guion);
+    const s = await abrirSesionTrueforge({
+      raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO,
+      artefactos: mkdtempSync(join(tmpdir(), "xc-tf-dif-")),
+    });
+    await s.turno("mira", piel().p).catch(() => undefined);
+    expect(toolsPorLlamada[0]).not.toContain("diferencia_de_capturas");
+    expect(toolsPorLlamada[1]).toContain("diferencia_de_capturas");
+  }, 20_000);
+});
+
+describe("el bucle de calidad de un diseño en la nota del orquestador (IXCODE-18)", () => {
+  it("con carpeta de artefactos la nota lo trae; sin ella no", async () => {
+    const { notaDeDelegacion } = await import("./sesionTrueforge.js");
+    const { AGENTES_DE_SERIE } = await import("../../subagentes/agentesEnDisco.js");
+    const con = notaDeDelegacion(AGENTES_DE_SERIE, { conComparacion: true });
+    expect(con).toMatch(/SER FIEL A ÉL/);
+    expect(con).toMatch(/comparar_capturas/);
+    expect(con).toMatch(/TRES vueltas/);
+    expect(notaDeDelegacion(AGENTES_DE_SERIE)).not.toMatch(/SER FIEL A ÉL/);
+  });
+});
+
+describe("la traza de TrueForge dice QUIÉN llamó a qué y qué se le pidió (IXCODE-18)", () => {
+  it("escribe el nombre del especialista en sus tools y la delegación con su encargo", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { rutaTrazaDeTools, VARIABLE_TRAZA_TOOLS } = await import("../../turno/diagnosticoDeTools.js");
+    const raiz = proyecto();
+    const previo = process.env[VARIABLE_TRAZA_TOOLS];
+    process.env[VARIABLE_TRAZA_TOOLS] = "1";
+    try {
+      const { m } = modelosConGuion([
+        [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "Añade un botón Guardar" }) }] })],
+        [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "r1", name: "ls", args: JSON.stringify({ path: "/" }) }] })],
+        [new AIMessageChunk({ content: "Hecho." })],
+        [new AIMessageChunk({ content: "Listo." })],
+      ]);
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+      await s.turno("añade un botón", piel().p);
+      const l = readFileSync(rutaTrazaDeTools(raiz), "utf8").trim().split("\n").map((x) => JSON.parse(x) as Record<string, unknown>);
+      expect(l.find((x) => x["tipo"] === "delegacion")).toMatchObject({ de: "orquestador", a: "developer-xone", encargo: "Añade un botón Guardar" });
+      expect(l.find((x) => x["tipo"] === "tool" && x["nombre"] === "ls")).toMatchObject({ origen: "especialista", agente: "developer-xone" });
+      expect(l.find((x) => x["tipo"] === "tool" && x["nombre"] === "create_sub_agent")).toMatchObject({ agente: "orquestador" });
+    } finally {
+      if (previo === undefined) delete process.env[VARIABLE_TRAZA_TOOLS];
+      else process.env[VARIABLE_TRAZA_TOOLS] = previo;
+    }
+  }, 20_000);
+});
+
+describe("el razonamiento del uso de una llamada llega al evento (IXCODE-18)", () => {
+  const evento = (usage: Record<string, number>) =>
+    ({ type: "internal.agent.context.append", thread_id: "main", output: [{ role: "assistant", content: "hola", usage }] }) as never;
+
+  it("`reasoning_tokens` del mensaje sale como `razonamiento` del uso", () => {
+    const { uso } = traducirEvento(evento({ input_tokens: 10, output_tokens: 900, reasoning_tokens: 750 }), () => undefined, new Map());
+    expect(uso).toMatchObject({ input: 10, output: 900, razonamiento: 750 });
+  });
+
+  it("sin `reasoning_tokens` NO hay `razonamiento`: ausente no es cero", () => {
+    const { uso } = traducirEvento(evento({ input_tokens: 10, output_tokens: 900 }), () => undefined, new Map());
+    expect(uso).toMatchObject({ input: 10, output: 900 });
+    expect(uso).not.toHaveProperty("razonamiento");
+  });
+});

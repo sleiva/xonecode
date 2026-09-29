@@ -80,15 +80,28 @@ export interface Comparacion {
 
 const pct = (n: number): string => `${Math.round(n * 100)} %`;
 
-/** El color más frecuente, cuantizado a 6 bits por canal para tolerar el ruido de un JPEG. */
-function colorDeFondo(img: ImagenRgba, desde: number, hasta: number): [number, number, number] {
+/** Fracción del ancho, a cada lado, donde se busca el fondo: los márgenes de una pantalla. */
+const BORDE_PARA_EL_FONDO = 0.03;
+/** Si el color más frecuente del borde no llega a esta fracción de los píxeles del borde, el borde no es fiable. */
+const FRACCION_MINIMA_DEL_BORDE = 0.3;
+
+function modaDeColor(
+  img: ImagenRgba,
+  desde: number,
+  hasta: number,
+  dentro: (x: number) => boolean
+): { color: [number, number, number]; fraccion: number } {
   const cuentas = new Map<number, number>();
   const { ancho, datos } = img;
+  let total = 0;
   for (let y = desde; y < hasta; y += PASO_DE_MUESTREO) {
-    for (let x = 0; x < ancho; x += PASO_DE_MUESTREO) {
+    for (let x = 0; x < ancho; x++) {
+      if (!dentro(x)) continue;
       const i = (y * ancho + x) * 4;
+      // Cuantizado a 6 bits por canal para tolerar el ruido de un JPEG.
       const clave = ((datos[i]! >> 2) << 16) | ((datos[i + 1]! >> 2) << 8) | (datos[i + 2]! >> 2);
       cuentas.set(clave, (cuentas.get(clave) ?? 0) + 1);
+      total++;
     }
   }
   let mejor = 0;
@@ -99,7 +112,29 @@ function colorDeFondo(img: ImagenRgba, desde: number, hasta: number): [number, n
       mejor = clave;
     }
   }
-  return [((mejor >> 16) & 63) << 2, ((mejor >> 8) & 63) << 2, (mejor & 63) << 2];
+  return {
+    color: [((mejor >> 16) & 63) << 2, ((mejor >> 8) & 63) << 2, (mejor & 63) << 2],
+    fraccion: total === 0 ? 0 : cuenta / total,
+  };
+}
+
+/**
+ * El color de FONDO: el más frecuente en los MÁRGENES laterales, no en toda la imagen.
+ *
+ * **Lo de «el más frecuente de todos» falló, y se midió**: en una calculadora cuyas teclas redondas
+ * ocupaban más superficie que el fondo, eligió el gris de las teclas, y toda la barra superior y la
+ * tarjeta del display contaron como contenido al cien por cien (una distancia del 46 % a una pantalla
+ * que a la vista estaba mucho más cerca de la maqueta). Incluso en la maqueta y en una captura buena
+ * eligió el color de la tarjeta del display, con menos de un tercio de los píxeles. Los márgenes
+ * laterales, en cambio, son fondo casi siempre —el contenido de una app deja margen a los lados— y
+ * dieron el mismo color en las cuatro imágenes probadas. Si el borde no es uniforme (contenido a
+ * sangre), se cae al más frecuente global, que es lo que había.
+ */
+function colorDeFondo(img: ImagenRgba, desde: number, hasta: number): [number, number, number] {
+  const margen = img.ancho * BORDE_PARA_EL_FONDO;
+  const borde = modaDeColor(img, desde, hasta, (x) => x < margen || x >= img.ancho - margen);
+  if (borde.fraccion >= FRACCION_MINIMA_DEL_BORDE) return borde.color;
+  return modaDeColor(img, desde, hasta, () => true).color;
 }
 
 /**
@@ -271,4 +306,124 @@ export function informeDeComparacion(c: Comparacion): string[] {
       "ni colores, ni cuenta teclas. Para eso está xone_critica_visual, pasándole esta misma referencia."
   );
   return lineas;
+}
+
+/* ------------------------------------------------------------------------------------------- */
+/* ¿CAMBIÓ esta zona entre dos capturas de la MISMA app?                                        */
+/* ------------------------------------------------------------------------------------------- */
+
+/**
+ * Una zona de la imagen, en FRACCIONES de la imagen entera (0 a 1): `x`, `y` y su tamaño. Así sirve
+ * igual a 1080×2400 que a cualquier otra resolución.
+ */
+export interface Region {
+  x: number;
+  y: number;
+  ancho: number;
+  alto: number;
+}
+
+/** Fracción de píxeles de la zona que tienen que diferir para dar la zona por CAMBIADA. */
+export const UMBRAL_DE_CAMBIO = 0.003;
+
+export interface Cambio {
+  region: Region;
+  /** Fracción (0 a 1) de los píxeles de la zona que cambiaron. */
+  cambiados: number;
+  /** El rectángulo mínimo que contiene todo lo que cambió, en fracciones de la imagen; ausente si nada cambió. */
+  cajaDelCambio?: Region;
+  veredicto: "cambio" | "igual";
+}
+
+const IMAGEN_ENTERA: Region = { x: 0, y: 0, ancho: 1, alto: 1 };
+
+/** Por qué una zona no vale, o `undefined`. */
+export function motivoDeRegionInaceptable(r: Region): string | undefined {
+  const finitos = [r.x, r.y, r.ancho, r.alto].every((n) => Number.isFinite(n));
+  if (!finitos || r.x < 0 || r.y < 0 || r.ancho <= 0 || r.alto <= 0 || r.x + r.ancho > 1.0001 || r.y + r.alto > 1.0001) {
+    return "la zona va en fracciones de la imagen (0 a 1): x e y de la esquina y su ancho y su alto, sin salirse";
+  }
+  return undefined;
+}
+
+/**
+ * Cuánto cambió una zona entre dos capturas. **Lanza** si no son comparables: las dos tienen que ser
+ * del MISMO tamaño (dos capturas del mismo aparato); comparar tamaños distintos es la pregunta de
+ * `compararPantallas`, no ésta.
+ *
+ * Es lo que un agente escribía a mano cada pasada (46 scripts de Python con PIL y 31 `md5`): un
+ * `md5` igual solo dice que TODA la imagen es igual, no si cambió lo que importaba, y uno distinto
+ * puede ser solo un cursor parpadeando.
+ */
+export function medirCambio(antes: ImagenRgba, despues: ImagenRgba, region: Region = IMAGEN_ENTERA): Cambio {
+  if (antes.ancho !== despues.ancho || antes.alto !== despues.alto) {
+    throw new Error(
+      `las dos capturas no tienen el mismo tamaño (${antes.ancho}×${antes.alto} frente a ${despues.ancho}×${despues.alto})`
+    );
+  }
+  const motivo = motivoDeRegionInaceptable(region);
+  if (motivo !== undefined) throw new Error(motivo);
+  if (antes.datos.length < antes.ancho * antes.alto * 4 || despues.datos.length < despues.ancho * despues.alto * 4) {
+    throw new Error("una de las imágenes está incompleta");
+  }
+  const x0 = Math.floor(region.x * antes.ancho);
+  const y0 = Math.floor(region.y * antes.alto);
+  const x1 = Math.min(antes.ancho, Math.ceil((region.x + region.ancho) * antes.ancho));
+  const y1 = Math.min(antes.alto, Math.ceil((region.y + region.alto) * antes.alto));
+  let cambiados = 0;
+  let minX = Infinity, minY = Infinity, maxX = -1, maxY = -1;
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const i = (y * antes.ancho + x) * 4;
+      const d =
+        Math.abs(antes.datos[i]! - despues.datos[i]!) +
+        Math.abs(antes.datos[i + 1]! - despues.datos[i + 1]!) +
+        Math.abs(antes.datos[i + 2]! - despues.datos[i + 2]!);
+      if (d > UMBRAL_DE_CONTENIDO) {
+        cambiados++;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  const total = Math.max((x1 - x0) * (y1 - y0), 1);
+  const fraccion = cambiados / total;
+  const cambio = fraccion >= UMBRAL_DE_CAMBIO;
+  return {
+    region,
+    cambiados: fraccion,
+    ...(cambio
+      ? {
+          cajaDelCambio: {
+            x: minX / antes.ancho,
+            y: minY / antes.alto,
+            ancho: (maxX - minX + 1) / antes.ancho,
+            alto: (maxY - minY + 1) / antes.alto,
+          },
+        }
+      : {}),
+    veredicto: cambio ? "cambio" : "igual",
+  };
+}
+
+const pct1 = (n: number): string => `${(n * 100).toFixed(n < 0.1 ? 1 : 0)} %`;
+
+/** El informe en texto. En «igual» dice las DOS explicaciones posibles, para que no se elija una sin mirar. */
+export function informeDeCambio(c: Cambio): string[] {
+  const zona = `zona x ${pct1(c.region.x)}, y ${pct1(c.region.y)}, ${pct1(c.region.ancho)} de ancho por ${pct1(c.region.alto)} de alto`;
+  if (c.veredicto === "cambio" && c.cajaDelCambio !== undefined) {
+    const b = c.cajaDelCambio;
+    return [
+      `CAMBIÓ: el ${pct1(c.cambiados)} de los píxeles de la ${zona} son distintos.`,
+      `Lo que cambió cabe en x ${pct1(b.x)}, y ${pct1(b.y)}, ${pct1(b.ancho)} de ancho por ${pct1(b.alto)} de alto.`,
+    ];
+  }
+  return [
+    `IGUAL: solo el ${pct1(c.cambiados)} de los píxeles de la ${zona} difieren, bajo el ${pct1(UMBRAL_DE_CAMBIO)} que se da por un cambio.`,
+    "Si esperabas un cambio hay DOS explicaciones y no se distinguen con estas dos capturas: que la app no repinta,",
+    "o que la segunda captura se tomó antes del repintado (que es asíncrono). Toma otra unos 500 ms después y vuelve a medir;",
+    "si sigue igual, es que no se repinta. No la des por «cacheada» sin haberlo hecho.",
+  ];
 }

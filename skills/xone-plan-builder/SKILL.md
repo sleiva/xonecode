@@ -50,6 +50,13 @@ todas sus casillas están marcadas, y es lo que la pestaña Planes resume.
 
 Cada tarea es una cabecera `### NN — Título` (no `## T1`), con sus casillas debajo.
 
+**El plan también recuerda lo grave.** `TASKS.md` lleva una sección `## Hallazgos` (vacía al crear
+el plan): quien descubre algo que cambia cómo se trabaja —con su causa medida, no una sospecha— lo
+apunta ahí en cuanto lo sabe, y quien empiece un encargo con plan la lee primero. Cada sesión empieza
+sin memoria: en una calculadora hecha por los agentes, un display que no se repintaba se diagnosticó
+en una sesión que se cortó antes de arreglarlo, no quedó escrito, y siguió sin funcionar siete
+pasadas más. Y si el encargo trae un diseño, se destila UNA vez en `DISENO.md` al lado del plan.
+
 Ésa es la razón de que el plan viva en `/planes/` y no entre los artefactos: no es un documento
 que se entrega una vez, es el estado compartido entre quien planifica y quien desarrolla, a lo
 largo de varios turnos y varias sesiones.
@@ -105,6 +112,7 @@ El orden de ejecución sigue las dependencias del framework:
 - **`mappings.xne` primero.** Empresas y Usuarios deben existir antes que cualquier coll de negocio que haga combo a Empresas.
 - **Una coll antes que su pantalla.** No se puede crear la pantalla de edición de Pedidos sin que la coll Pedidos exista.
 - **`inherits`/`<include-layout>` antes que las colls que los consumen.** Si se define una coll base `special="true"` para herencia, va antes que las colls que heredan de ella.
+- **El comportamiento se comprueba ANTES que el pulido.** En una pantalla interactiva, la tarea «la app reacciona a un toque» —una captura antes y otra después de la zona que debe cambiar— va justo detrás del esqueleto visual y antes de cualquier tarea de aspecto fino. Si no, se pule algo que no funciona: medido, un display que no se repintaba vivió siete pasadas de retoques visuales.
 - **Estilo en paralelo.** `default.css` con las clases base puede empezar desde la tarea 1, pero el ajuste fino de pantallas específicas va después de que la pantalla exista.
 - **Integraciones después de su contenedor.** La firma DR en Pedidos va en una tarea que depende de que Pedidos (coll + pantalla de edición) ya exista.
 - **Validación al final de cada hito.** Si el plan tiene varios hitos, cada uno cierra con una tarea de validación `xone-review`.

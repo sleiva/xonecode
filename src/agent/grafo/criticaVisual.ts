@@ -6,6 +6,7 @@ import {
   nombreDeArtefacto,
   rutaRelativaDeArtefacto,
 } from "../../core/artefactos.js";
+import { imagenReferida, type ImagenReferida } from "../../core/referenciasDeImagen.js";
 import {
   juzgarPantalla,
   TOPE_DE_PETICIONES,
@@ -58,7 +59,7 @@ const Entrada = z.object({
     .string()
     .optional()
     .describe(
-      "OPCIONAL. La ruta virtual bajo /artefactos/ de la MAQUETA o diseño de referencia. " +
+      "OPCIONAL. La ruta virtual de la MAQUETA o diseño de referencia: bajo /artefactos/, bajo /adjuntos/ o un PNG/JPEG del proyecto (/diseno/screen.png). " +
         "Pásala SIEMPRE que el encargo traiga un diseño: con ella comparo la captura contra " +
         "la maqueta (forma, tamaños, colocación). SIN ella solo busco roturas y NO digo nada " +
         "sobre si se parece al diseño."
@@ -70,6 +71,13 @@ export interface DependenciasDeCritica {
   /** Los bytes de un artefacto, por su NOMBRE. Quien la monta sabe dónde está la carpeta. */
   leerArtefacto: (nombre: string) => Promise<Buffer>;
   invocar: InvocarVisual;
+  /**
+   * Lee la MAQUETA de donde esté: `/artefactos/`, `/adjuntos/` o el proyecto
+   * (`core/referenciasDeImagen.ts`). Ausente, la referencia solo puede venir de `/artefactos/`, como
+   * antes. La maqueta de un encargo casi nunca está ahí: la trae la persona en el chat o vive en
+   * `/diseno/`, y sin esto el crítico corría a ciegas y su verde significaba solo «nada roto».
+   */
+  leerReferencia?: (imagen: ImagenReferida) => Promise<Buffer>;
 }
 
 /**
@@ -123,6 +131,21 @@ async function leer(
   }
 }
 
+/** Como `leer`, para una referencia que puede salir de /adjuntos/ o del proyecto. Nunca lanza. */
+async function leerReferida(
+  imagen: ImagenReferida,
+  mime: string,
+  leerReferencia: (imagen: ImagenReferida) => Promise<Buffer>
+): Promise<CapturaDePantalla | string> {
+  try {
+    return { base64: (await leerReferencia(imagen)).toString("base64"), mime };
+  } catch (error) {
+    // El mensaje de un error de Node lleva la ruta absoluta y esto va al modelo: solo su `code`.
+    const codigo = (error as { code?: unknown }).code;
+    return `No pude abrir «${imagen.nombre}» (${typeof codigo === "string" ? codigo : "error"}).`;
+  }
+}
+
 /**
  * **Fail-closed: una referencia que se pidió y no se pudo usar es un NO.**
  *
@@ -148,10 +171,15 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
       // Se comprueban las DOS antes de abrir ninguna: ver `veredictoDeImagen`.
       const deLaCaptura = veredictoDeImagen(entrada.captura, "una captura");
       if (typeof deLaCaptura === "string") return deLaCaptura;
+      // Con lector propio la referencia puede venir de /adjuntos/ y del proyecto; sin él, solo de artefactos.
+      const referida = entrada.referencia !== undefined && deps.leerReferencia !== undefined ? imagenReferida(entrada.referencia) : undefined;
+      if (typeof referida === "string") return sinJuzgar(referida);
       const deLaReferencia =
         entrada.referencia === undefined
           ? undefined
-          : veredictoDeImagen(entrada.referencia, "la referencia");
+          : referida !== undefined
+            ? { mime: referida.nombre.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg" }
+            : veredictoDeImagen(entrada.referencia, "la referencia");
       if (typeof deLaReferencia === "string") return sinJuzgar(deLaReferencia);
 
       const abierta = await leer(entrada.captura, deLaCaptura.mime, deps);
@@ -159,7 +187,10 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
 
       let referencia: CapturaDePantalla | undefined;
       if (entrada.referencia !== undefined && deLaReferencia !== undefined) {
-        const abiertaRef = await leer(entrada.referencia, deLaReferencia.mime, deps);
+        const abiertaRef =
+          referida !== undefined && deps.leerReferencia !== undefined
+            ? await leerReferida(referida, deLaReferencia.mime, deps.leerReferencia)
+            : await leer(entrada.referencia, deLaReferencia.mime, deps);
         /**
          * **Fail-closed: una referencia que se pidió y no se pudo abrir es un NO.**
          *

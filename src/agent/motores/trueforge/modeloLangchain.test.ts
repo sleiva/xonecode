@@ -92,3 +92,29 @@ describe("el modelo de TrueForge hecho con nuestro modelo de LangChain", () => {
     expect(salida.content).toBe("Tiene una colección.");
   }, 20_000);
 });
+
+describe("el uso de una llamada lleva el razonamiento, cuando el proveedor lo dice (IXCODE-18)", () => {
+  const cuerpo = { messages: [{ role: "user", content: "hola" }] } as never;
+  const usoDe = async (chunk: AIMessageChunk) => {
+    const { modelo } = modeloGuionizado([[chunk]]);
+    const r = await modeloParaTrueforge({ modelo: () => modelo }).createNonStream(cuerpo);
+    return (r as unknown as { usage: Record<string, number> }).usage;
+  };
+
+  it("`output_token_details.reasoning` sale como `reasoning_tokens`", async () => {
+    const uso = await usoDe(new AIMessageChunk({ content: "396", usage_metadata: { input_tokens: 50, output_tokens: 26, total_tokens: 76, output_token_details: { reasoning: 24 } } }));
+    expect(uso).toMatchObject({ input_tokens: 50, output_tokens: 26, reasoning_tokens: 24 });
+  });
+
+  it("si el proveedor NO lo dice, no hay `reasoning_tokens`: ausente no es cero", async () => {
+    const uso = await usoDe(new AIMessageChunk({ content: "396", usage_metadata: { input_tokens: 50, output_tokens: 26, total_tokens: 76 } }));
+    expect(uso).toMatchObject({ output_tokens: 26 });
+    expect(uso).not.toHaveProperty("reasoning_tokens");
+  });
+
+  it("un cero DECLARADO se conserva: el proveedor dijo que no pensó", async () => {
+    const uso = await usoDe(new AIMessageChunk({ content: "396", usage_metadata: { input_tokens: 5, output_tokens: 1, total_tokens: 6, output_token_details: { reasoning: 0 } } }));
+    expect(uso["reasoning_tokens"]).toBe(0);
+  });
+});
+

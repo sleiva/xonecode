@@ -53,6 +53,13 @@
 - **Hito 2 — App completa:** tareas 05-09. Validación final.
 ```
 
+## Hallazgos
+
+{Vacío al crear el plan. Quien descubre algo grave lo apunta aquí con su CAUSA MEDIDA, no una sospecha,
+y quien empiece un encargo con este plan lo lee primero. Ejemplo:}
+
+- `lblResultado` es un `TL`, que pinta su `title`: escribir su valor no repinta. Se cambió a `T` de solo lectura.
+
 ## Plantilla por tarea
 
 ```md
@@ -77,6 +84,7 @@
 - **Nombres consistentes con el spec**, y el `MAP_` según `xone-development`.
 - **Evita rutas de archivo específicas.** Envejecen rápido. El ejecutor las infiere del spec y del proyecto.
 - **Criterios de aceptación verificables.** Cada criterio debe poder comprobarse —con `xone-review`, con un smoke, o con un comportamiento observable.
+- **El comportamiento antes que el pulido.** En una pantalla interactiva, «reacciona a un toque» (captura antes y después) va tras el esqueleto visual y antes del aspecto fino.
 - **La validación es una tarea.** Cada hito cierra con una tarea `xone-review`, o al menos una al final del plan.
 
 ## Ejemplo: feature sobre existente

@@ -7,6 +7,7 @@ import {
   rutaRelativaDeArtefacto,
 } from "../../core/artefactos.js";
 import { compararPantallas, informeDeComparacion } from "../../core/compararCapturas.js";
+import { imagenReferida, type ImagenReferida } from "../../core/referenciasDeImagen.js";
 import { decodificarImagen } from "../dispositivos/decodificarImagen.js";
 
 export const NOMBRE_COMPARAR_CAPTURAS = "comparar_capturas";
@@ -29,7 +30,10 @@ export const NOMBRE_COMPARAR_CAPTURAS = "comparar_capturas";
 const Entrada = z.object({
   referencia: z
     .string()
-    .describe("La ruta virtual, bajo /artefactos/, de la MAQUETA o diseño con el que se compara"),
+    .describe(
+      "La ruta virtual de la MAQUETA o diseño con el que se compara: bajo /artefactos/, bajo /adjuntos/ (lo que " +
+        "adjuntó la persona) o un PNG/JPEG del proyecto (/diseno/screen.png)"
+    ),
   captura: z
     .string()
     .describe("La ruta virtual, bajo /artefactos/, de la captura de la pantalla real (mejor la nativa y COMPLETA)"),
@@ -39,6 +43,11 @@ type Entrada = z.infer<typeof Entrada>;
 export interface DependenciasDeComparacion {
   /** Los bytes de un artefacto, por su ruta RELATIVA. Quien la monta sabe dónde está la carpeta. */
   leerArtefacto: (nombre: string) => Promise<Buffer>;
+  /**
+   * Lee una MAQUETA de donde esté (`core/referenciasDeImagen.ts`). Ausente, la referencia solo puede
+   * venir de `/artefactos/`, que es lo que hacía antes y lo que sigue haciendo el motor legacy.
+   */
+  leerReferencia?: (imagen: ImagenReferida) => Promise<Buffer>;
 }
 
 function comprobar(ruta: string, que: string): string | undefined {
@@ -52,11 +61,22 @@ function comprobar(ruta: string, que: string): string | undefined {
   return undefined;
 }
 
-async function abrir(ruta: string, deps: DependenciasDeComparacion) {
+/** Comprueba la ruta de la referencia; con lector propio vale también /adjuntos/ y el proyecto. */
+function comprobarReferencia(ruta: string, deps: DependenciasDeComparacion): string | undefined {
+  if (deps.leerReferencia === undefined) return comprobar(ruta, "la referencia");
+  const r = imagenReferida(ruta);
+  return typeof r === "string" ? r : undefined;
+}
+
+async function abrir(ruta: string, deps: DependenciasDeComparacion, comoReferencia = false) {
   const nombre = nombreDeArtefacto(ruta);
   let bytes: Buffer;
   try {
-    bytes = await deps.leerArtefacto(rutaRelativaDeArtefacto(ruta));
+    const imagen = comoReferencia && deps.leerReferencia !== undefined ? imagenReferida(ruta) : undefined;
+    bytes =
+      typeof imagen === "object" && deps.leerReferencia !== undefined
+        ? await deps.leerReferencia(imagen)
+        : await deps.leerArtefacto(rutaRelativaDeArtefacto(ruta));
   } catch (error) {
     // El mensaje de un error de Node lleva la RUTA ABSOLUTA y esto va al modelo: solo su `code`.
     const codigo = (error as { code?: unknown }).code;
@@ -75,9 +95,9 @@ export function crearCompararCapturas(deps: DependenciasDeComparacion) {
     async (entrada: Entrada): Promise<string> => {
       // Las DOS comprobadas antes de abrir ninguna: una ruta mal escrita no puede descubrirse
       // después de haber leído la otra.
-      const problema = comprobar(entrada.referencia, "la referencia") ?? comprobar(entrada.captura, "una captura");
+      const problema = comprobarReferencia(entrada.referencia, deps) ?? comprobar(entrada.captura, "una captura");
       if (problema !== undefined) return problema;
-      const ref = await abrir(entrada.referencia, deps);
+      const ref = await abrir(entrada.referencia, deps, true);
       if (typeof ref === "string") return ref;
       const cap = await abrir(entrada.captura, deps);
       if (typeof cap === "string") return cap;
@@ -90,12 +110,13 @@ export function crearCompararCapturas(deps: DependenciasDeComparacion) {
     {
       name: NOMBRE_COMPARAR_CAPTURAS,
       description:
-        "MIDE si una captura de pantalla tiene la misma estructura que una maqueta, con números y sin " +
+        "MIDE si una captura de pantalla tiene la misma estructura que una maqueta (la de /diseno/, /adjuntos/ o " +
+        "/artefactos/), con números y sin " +
         "opinar: qué franjas del alto y del ancho tienen contenido en cada una y hasta dónde llega. Caza " +
         "lo grande —una banda vacía, un teclado que ocupa un tercio— y es determinista. NO ve texto " +
         "cortado, estilo ni colores: para eso está xone_critica_visual. Úsala cuando el encargo traiga un " +
-        "diseño, con la captura nativa completa, y antes de dar la pantalla por parecida. Las dos " +
-        "rutas van bajo /artefactos/.",
+        "diseño, con la captura nativa completa, y antes de dar la pantalla por parecida. La captura va bajo " +
+        "/artefactos/.",
       schema: Entrada,
     }
   );

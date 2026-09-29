@@ -76,3 +76,52 @@ describe("comparar_capturas", () => {
     expect(detalleDe(NOMBRE_COMPARAR_CAPTURAS, { captura: "/artefactos/a.png", referencia: "/artefactos/b.png" })).toBe("/artefactos/a.png");
   });
 });
+
+describe("comparar_capturas con la maqueta del PROYECTO o de los ADJUNTOS", () => {
+  const con = (leerReferencia?: (i: { origen: string; relativa: string }) => Promise<Buffer>) =>
+    crearCompararCapturas({
+      leerArtefacto: async (n) => {
+        const b = archivos[n];
+        if (b === undefined) throw Object.assign(new Error("x"), { code: "ENOENT" });
+        return b;
+      },
+      ...(leerReferencia === undefined ? {} : { leerReferencia: leerReferencia as never }),
+    });
+  const llamarCon = (t: ReturnType<typeof con>, e: Record<string, unknown>) => t.invoke(e as never) as Promise<string>;
+
+  it("con lector, /diseno/screen.png sirve de referencia y se compara", async () => {
+    const pedidas: string[] = [];
+    const t = con(async (i) => (pedidas.push(`${i.origen}:${i.relativa}`), archivos["maqueta.png"]!));
+    const r = await llamarCon(t, { referencia: "/diseno/screen.png", captura: "/artefactos/buena.png" });
+    expect(r).toContain("PARECIDA");
+    expect(pedidas).toEqual(["proyecto:diseno/screen.png"]);
+  });
+
+  it("y también un adjunto de la persona", async () => {
+    const pedidas: string[] = [];
+    const t = con(async (i) => (pedidas.push(`${i.origen}:${i.relativa}`), archivos["maqueta.png"]!));
+    await llamarCon(t, { referencia: "/adjuntos/mock.png", captura: "/artefactos/corta.png" });
+    expect(pedidas).toEqual(["adjuntos:mock.png"]);
+  });
+
+  it("SIN lector la referencia solo puede venir de /artefactos/, como antes", async () => {
+    const r = await llamarCon(con(), { referencia: "/diseno/screen.png", captura: "/artefactos/buena.png" });
+    expect(r).toMatch(/no es la referencia de esta sesión|Solo puedo/);
+  });
+
+  it("los dotfiles y la travesía se rechazan aunque haya lector, y sin abrir nada", async () => {
+    let abierto = 0;
+    const t = con(async () => (abierto++, archivos["maqueta.png"]!));
+    for (const mala of ["/.env/a.png", "/.xonecode/sesiones/x/a.png", "/diseno/../.env", "/diseno/code.html"]) {
+      const r = await llamarCon(t, { referencia: mala, captura: "/artefactos/buena.png" });
+      expect(r, mala).toMatch(/vedados|no es|no hay nada que medir|no se puede|aceptable/);
+    }
+    expect(abierto).toBe(0);
+  });
+
+  it("la captura sigue siendo solo de /artefactos/: una captura del proyecto no vale", async () => {
+    const t = con(async () => archivos["maqueta.png"]!);
+    const r = await llamarCon(t, { referencia: "/diseno/screen.png", captura: "/diseno/otra.png" });
+    expect(r).toMatch(/no es una captura de esta sesión|Solo puedo/);
+  });
+});

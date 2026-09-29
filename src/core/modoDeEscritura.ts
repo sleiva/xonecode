@@ -64,6 +64,29 @@ export const MODO_POR_OMISION: ModoDeEscritura = "supervisado";
  */
 export const TOPE_DE_RONDAS_DE_CONSOLA = 20;
 
+/**
+ * El tope de rondas de `xonecode run --real` que se puede subir por ENTORNO, para medir.
+ *
+ * `run` no tiene a nadie delante, así que su tope es el corto (`MAX_APPROVAL_ROUNDS`, cinco). Medido
+ * sobre una calculadora hecha por los agentes, **las cinco pasadas se cortaron con él**, y siempre en
+ * el mismo punto: justo antes de la última vuelta del bucle de calidad, la que compara la captura
+ * final con la maqueta. El tope era un artefacto de medir con `run`, no del agente: en la consola
+ * son veinte. Con esto una prueba puede pedir el de la consola sin tocar el código.
+ *
+ * **Solo lo lee `run`**, nunca la consola ni las tareas, que ya tienen el suyo. Un valor que no sea un
+ * entero entre 1 y `TOPE_MAXIMO_DE_RONDAS_DE_ENTORNO` no se aplica y `run` lo DICE: el tope existe para
+ * cortar un bucle que nadie puede parar, y un `999999` por un descuido lo dejaría sin freno.
+ */
+export const VARIABLE_DEL_TOPE_DE_RONDAS = "XONECODE_TOPE_DE_RONDAS";
+export const TOPE_MAXIMO_DE_RONDAS_DE_ENTORNO = 50;
+
+export function topeDeRondasDeEntorno(valor: string | undefined): number | undefined {
+  const v = valor?.trim();
+  if (v === undefined || !/^[1-9][0-9]{0,2}$/.test(v)) return undefined;
+  const n = Number(v);
+  return n <= TOPE_MAXIMO_DE_RONDAS_DE_ENTORNO ? n : undefined;
+}
+
 /** ¿Es uno de los dos nombres EXACTOS del modo? Nada de tildes ni sinónimos: eso es `modoDeTexto`. */
 export function esModoDeEscritura(candidato: unknown): candidato is ModoDeEscritura {
   return candidato === "supervisado" || candidato === "autonomo";

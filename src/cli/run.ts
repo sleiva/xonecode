@@ -10,6 +10,7 @@ import { Modelos } from "../agent/config/modelos.js";
 import { juzgarPantalla, invocarVisualConModelos } from "../agent/dispositivos/juezVisual.js";
 import { proveedoresPersonalizados } from "../agent/config/configEnDisco.js";
 import { abrirSesionReal } from "../agent/turno/turnoReal.js";
+import { TOPE_MAXIMO_DE_RONDAS_DE_ENTORNO, topeDeRondasDeEntorno, VARIABLE_DEL_TOPE_DE_RONDAS } from "../core/modoDeEscritura.js";
 import { SimuladorVerifier } from "../agent/turno/verificador.js";
 import { pintarGasto } from "../agent/turno/informeDeTraza.js";
 import { hidratarFuentesDeDisco } from "./fuentesDeDisco.js";
@@ -31,6 +32,8 @@ export interface OpcionesRun {
    * escrita. El mismo trato que `verifier` en `abrirSesionReal`.
    */
   hidratar?: typeof hidratarFuentesDeDisco;
+  /** El entorno del proceso, del que se lee `XONECODE_TOPE_DE_RONDAS`. Por parámetro para poder probarlo. */
+  entornoDeProceso?: Record<string, string | undefined>;
 }
 
 /** La cabecera del turno real: qué hay detrás antes de que empiece a gastar. */
@@ -151,11 +154,24 @@ async function correrReal(opciones: OpcionesRun, escribir: Escribir): Promise<nu
   const preguntar = preguntarPorStdin();
   let sinHumano = false;
 
+  // El tope de rondas de `run` (cinco) se puede subir por entorno, para medir; ver `topeDeRondasDeEntorno`.
+  const entornoDeProceso = opciones.entornoDeProceso ?? process.env;
+  const pedido = entornoDeProceso[VARIABLE_DEL_TOPE_DE_RONDAS];
+  const topeDeRondas = topeDeRondasDeEntorno(pedido);
+  if (pedido !== undefined && pedido.trim() !== "") {
+    escribir(
+      topeDeRondas === undefined
+        ? `⚠ ${VARIABLE_DEL_TOPE_DE_RONDAS}=«${pedido}» no vale (un entero de 1 a ${TOPE_MAXIMO_DE_RONDAS_DE_ENTORNO}): se usa el de siempre.\n`
+        : `  tope de rondas de aprobación: ${topeDeRondas} (por ${VARIABLE_DEL_TOPE_DE_RONDAS})\n`
+    );
+  }
+
   const sesion = await abrirSesionReal({
     raiz,
     modelos,
     skills,
     entorno,
+    ...(topeDeRondas === undefined ? {} : { topeDeRondas }),
     // El simulador de verdad. Su ausencia en la máquina no se descubre aquí sino al
     // verificar, y entonces se dice en el turno — sin tumbar nada.
     verifier: new SimuladorVerifier(),

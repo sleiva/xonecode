@@ -464,3 +464,92 @@ describe("el contraste con las métricas del motor", () => {
     expect(pintarSesion(s!).join("\n")).not.toContain("contraste");
   });
 });
+
+describe("informe de traza: quién llamó a qué y qué se le pidió a quién", () => {
+  const conAgente = (nombre: string, agente: string, detalle?: string): string =>
+    linea({ tipo: "tool", nombre, origen: agente === "orquestador" ? "orquestador" : "especialista", agente, ...(detalle === undefined ? {} : { detalle }) });
+  const delegacion = (de: string, a: string, encargo: string): string =>
+    linea({ tipo: "delegacion", de, a, chars: encargo.length, encargo });
+
+  it("reparte las tools por AGENTE, no solo por orquestador o especialista", () => {
+    const [sesion] = resumirTraza([
+      conAgente("read_file", "orquestador", "/a"),
+      conAgente("create_sub_agent", "orquestador"),
+      conAgente("write_file", "designer-xone", "/x"),
+      conAgente("buscar_icono", "designer-xone"),
+      conAgente("buscar_icono", "designer-xone"),
+      conAgente("execute", "device-controller"),
+    ]);
+    const designer = sesion.toolsPorAgente.find((a) => a.agente === "designer-xone")!;
+    expect(designer.total).toBe(3);
+    expect(designer.tools[0]).toEqual({ nombre: "buscar_icono", veces: 2 });
+    expect(sesion.toolsPorAgente.map((a) => a.agente)).toEqual(["designer-xone", "orquestador", "device-controller"]);
+  });
+
+  it("recoge las delegaciones con su encargo, y las pinta en una línea", () => {
+    const [sesion] = resumirTraza([
+      delegacion("orquestador", "designer-xone", "Haz el teclado\n   con   teclas redondas. ".repeat(40)),
+      delegacion("orquestador", "device-controller", "Despliega y toca 7 + 8."),
+    ]);
+    expect(sesion.delegaciones).toHaveLength(2);
+    expect(sesion.delegaciones[1]).toMatchObject({ de: "orquestador", a: "device-controller", encargo: "Despliega y toca 7 + 8." });
+    const pintado = pintarSesion(sesion).join("\n");
+    expect(pintado).toContain("qué se le pidió a quién");
+    expect(pintado).toContain("orquestador → device-controller");
+    expect(pintado).toContain("Despliega y toca 7 + 8.");
+    // Una línea por delegación, recortada: el texto entero está en el .jsonl.
+    expect(pintado.split("\n").filter((l) => l.includes("designer-xone (")).every((l) => l.length < 260)).toBe(true);
+  });
+
+  it("una traza ANTERIOR a estos campos no inventa nada: sin secciones y sin romperse", () => {
+    const [sesion] = resumirTraza([tool("read_file", "/a"), tool("grep", "x")]);
+    expect(sesion.toolsPorAgente).toEqual([]);
+    expect(sesion.delegaciones).toEqual([]);
+    const pintado = pintarSesion(sesion).join("\n");
+    expect(pintado).not.toContain("quién llamó a qué");
+    expect(pintado).not.toContain("qué se le pidió a quién");
+  });
+
+  it("una delegación sin destino o sin origen se ignora, no cuenta ni rompe", () => {
+    const [sesion] = resumirTraza([linea({ tipo: "delegacion", de: "orquestador" }), linea({ tipo: "delegacion", a: "x" })]);
+    expect(sesion.delegaciones).toEqual([]);
+  });
+});
+
+describe("informe de traza: cuánto de la salida fue RAZONAMIENTO", () => {
+  const conRazon = (origen: string, output: number, razonamiento?: number): string =>
+    linea({ tipo: "modelo", origen, input: 100, output, cache: 0, llamadas: 1, contexto: 100, ...(razonamiento === undefined ? {} : { razonamiento }) });
+
+  it("suma el razonamiento por agente y lo dice como porcentaje de SU salida", () => {
+    const [sesion] = resumirTraza([conRazon("designer-xone", 1000, 900), conRazon("designer-xone", 1000, 700), conRazon("device-controller", 500, 50)]);
+    const d = sesion.origenes.find((o) => o.origen === "designer-xone")!;
+    expect(d).toMatchObject({ razonamiento: 1600, conRazonamiento: 2, salidaConRazonamiento: 2000 });
+    const pintado = pintarSesion(sesion).join("\n");
+    expect(pintado).toMatch(/designer-xone[^\n]*razonamiento 1\.?600[^\n]*80% de la salida/);
+    expect(pintado).toMatch(/device-controller[^\n]*razonamiento 50[^\n]*10% de la salida/);
+  });
+
+  /** «No consta» y «cero» no son lo mismo: un proveedor que no lo declara no piensa cero tokens. */
+  it("una traza SIN el campo no inventa un cero: no pinta nada de razonamiento", () => {
+    const [sesion] = resumirTraza([conRazon("orquestador", 800), conRazon("orquestador", 900)]);
+    expect(sesion.origenes[0]).toMatchObject({ razonamiento: 0, conRazonamiento: 0 });
+    expect(pintarSesion(sesion).join("\n")).not.toContain("razonamiento");
+  });
+
+  it("un cero DECLARADO sí se pinta (0 %): el proveedor dijo que no pensó", () => {
+    const [sesion] = resumirTraza([conRazon("x", 400, 0)]);
+    expect(pintarSesion(sesion).join("\n")).toMatch(/razonamiento 0 \(0% de la salida\)/);
+  });
+
+  it("si solo consta en parte de las llamadas, el porcentaje es sobre ESAS y se dice cuántas", () => {
+    const [sesion] = resumirTraza([conRazon("a", 1000, 500), conRazon("a", 9000), conRazon("a", 9000)]);
+    const pintado = pintarSesion(sesion).join("\n");
+    // 500 de 1000 = 50 %, y NO 500 de 19000 = 3 %.
+    expect(pintado).toMatch(/50% de la salida, consta en 1 de 3 llamadas/);
+  });
+
+  it("un valor que no es un número no cuenta, ni rompe", () => {
+    const [sesion] = resumirTraza([linea({ tipo: "modelo", origen: "a", input: 1, output: 10, cache: 0, llamadas: 1, contexto: 1, razonamiento: "muchos" }), conRazon("a", 10, -5)]);
+    expect(sesion.origenes[0]!.conRazonamiento).toBe(0);
+  });
+});

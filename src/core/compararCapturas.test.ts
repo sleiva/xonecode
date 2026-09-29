@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  compararPantallas, informeDeComparacion, medirPantalla, FRANJAS_DE_COLUMNAS, FRANJAS_DE_FILAS,
+  compararPantallas, informeDeCambio, informeDeComparacion, medirCambio, medirPantalla, FRANJAS_DE_COLUMNAS, FRANJAS_DE_FILAS,
   type ImagenRgba,
 } from "./compararCapturas.js";
 
@@ -42,6 +42,25 @@ describe("medirPantalla", () => {
     const m = medirPantalla(pantalla(200, 400, [], [12, 12, 16], 3));
     expect(Math.abs(m.fondo[0] - 12)).toBeLessThanOrEqual(4);
     expect(m.finDelContenido).toBe(0);
+  });
+
+  /**
+   * El fallo real: teclas grandes que ocupan MÁS superficie que el fondo. El color más frecuente de toda
+   * la imagen sería el de las teclas; el fondo, en cambio, se ve en los márgenes laterales.
+   */
+  it("detecta el fondo aunque las teclas ocupen más superficie que él", () => {
+    const grandes: Caja[] = [];
+    for (let f = 0; f < 4; f++) grandes.push({ x0: 0.06, x1: 0.94, y0: 0.3 + f * 0.17, y1: 0.3 + f * 0.17 + 0.16, color: GRIS });
+    const m = medirPantalla(pantalla(400, 800, grandes, [16, 16, 20]));
+    expect(m.fondo).toEqual([16, 16, 20]);
+    // Y por eso la barra de arriba, vacía, NO cuenta como contenido.
+    expect(m.filas[0]).toBeLessThan(0.05);
+    expect(m.filas[1]).toBeLessThan(0.05);
+  });
+
+  it("cae al color más frecuente si el contenido va a sangre y el borde no es fiable", () => {
+    const aSangre: Caja[] = [{ x0: 0, x1: 1, y0: 0, y1: 1, color: GRIS }, { x0: 0, x1: 0.02, y0: 0, y1: 0.4, color: [200, 30, 30] }];
+    expect(medirPantalla(pantalla(400, 800, aSangre, [16, 16, 20])).fondo).toEqual([60, 60, 68]);
   });
 
   it("dice hasta dónde llega el contenido y da una ocupación por franja", () => {
@@ -103,5 +122,49 @@ describe("compararPantallas: lo que ocurrió con la calculadora", () => {
     expect(informe).toMatch(/PARECIDA/);
     expect(informe).toMatch(/no ve texto cortado/);
     expect(informe).toMatch(/xone_critica_visual/);
+  });
+});
+
+describe("medirCambio: ¿cambió esta zona?", () => {
+  const base = () => pantalla(400, 800, teclado(0.4, 0.95));
+  const conNumero = (): ImagenRgba => {
+    const cajas: Caja[] = [...teclado(0.4, 0.95), { x0: 0.6, x1: 0.9, y0: 0.1, y1: 0.16, color: [230, 230, 235] }];
+    return pantalla(400, 800, cajas);
+  };
+  const DISPLAY = { x: 0, y: 0.05, ancho: 1, alto: 0.25 };
+
+  it("una zona donde aparece un número CAMBIÓ, y dice dónde", () => {
+    const c = medirCambio(base(), conNumero(), DISPLAY);
+    expect(c.veredicto).toBe("cambio");
+    expect(c.cajaDelCambio!.x).toBeGreaterThan(0.55);
+    expect(c.cajaDelCambio!.y).toBeLessThan(0.2);
+  });
+
+  it("la misma zona sin diferencias es IGUAL, y el informe da las dos explicaciones", () => {
+    const c = medirCambio(base(), base(), DISPLAY);
+    expect(c.veredicto).toBe("igual");
+    const texto = informeDeCambio(c).join("\n");
+    expect(texto).toMatch(/no repinta/);
+    expect(texto).toMatch(/antes del repintado/);
+    expect(texto).toMatch(/cacheada/);
+  });
+
+  /** Lo que un `md5` no puede decir: la imagen ENTERA cambió, pero no la zona que importaba. */
+  it("un cambio FUERA de la zona no cuenta: es lo que un md5 distinto no distingue", () => {
+    const fuera = pantalla(400, 800, [...teclado(0.4, 0.95), { x0: 0.1, x1: 0.5, y0: 0.7, y1: 0.8, color: [230, 60, 60] }]);
+    expect(medirCambio(base(), fuera, DISPLAY).veredicto).toBe("igual");
+    expect(medirCambio(base(), fuera).veredicto).toBe("cambio");
+  });
+
+  it("un parpadeo minúsculo no llega al umbral", () => {
+    const cursor = pantalla(400, 800, [...teclado(0.4, 0.95), { x0: 0.5, x1: 0.503, y0: 0.1, y1: 0.12, color: [0, 220, 240] }]);
+    expect(medirCambio(base(), cursor, DISPLAY).veredicto).toBe("igual");
+  });
+
+  it("tamaños distintos y zonas absurdas se rechazan con su motivo", () => {
+    expect(() => medirCambio(base(), pantalla(200, 400, []))).toThrow(/mismo tamaño/);
+    for (const mala of [{ x: -0.1, y: 0, ancho: 1, alto: 1 }, { x: 0, y: 0, ancho: 0, alto: 1 }, { x: 0.5, y: 0, ancho: 0.8, alto: 1 }, { x: NaN, y: 0, ancho: 1, alto: 1 }]) {
+      expect(() => medirCambio(base(), base(), mala)).toThrow(/fracciones/);
+    }
   });
 });
