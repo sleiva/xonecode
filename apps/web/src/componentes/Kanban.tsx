@@ -257,7 +257,7 @@ function TarjetaSimple({
         <span className={estilos.proyecto}>{t.proyectoNombre}</span>
         {/* Sin sesión no hay nada que abrir —la tarea no ha corrido—, y en `en-proceso` el
             servidor declina abrirla: en los dos casos sería el botón muerto de siempre
-            (`sePuedeAbrirLaTarea`, la misma regla que el resumen del proyecto). */}
+            (`sePuedeAbrirLaTarea`). */}
         {sePuedeAbrirLaTarea(t) && alAbrirSesion !== undefined ? (
           <button type="button" className={estilos.tituloBoton} onClick={() => alAbrirSesion(t.proyecto, t.sesion!)}>
             {t.titulo}

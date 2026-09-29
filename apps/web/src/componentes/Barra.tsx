@@ -559,8 +559,8 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, fijados, p
   proyectoActivo?: string;
   sesionActiva?: string;
   /**
-   * El proyecto cuyo RESUMEN está en el centro (`ResumenDeProyecto.tsx`). Su fila se marca
-   * como la abierta —fondo y `aria-current`—, porque es de él de quien habla la pantalla.
+   * El proyecto cuyo PANEL está en el centro (`PanelDelProyecto.tsx`). Su fila se marca como la
+   * abierta —fondo y `aria-current`—, porque es de él de quien habla la pantalla.
    */
   proyectoEnResumen?: string;
   /**
@@ -579,13 +579,13 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, fijados, p
   alElegirEntorno: (id: string) => void;
   alAbrirSesion: (proyecto: string, sesion: string) => void;
   /**
-   * El nombre del proyecto es un botón: abre su RESUMEN en el centro (`App.tsx`). Empezar a
-   * trabajar es el «+».
+   * El nombre del proyecto es un botón: abre su PANEL en el centro (`App.tsx#abrirProyecto`).
+   * Empezar a trabajar es el «+».
    *
-   * Con el proyecto TRABAJANDO sigue vivo a propósito, al contrario que el «+»: el resumen
-   * ofrece «Ir a la conversación en marcha», que es la única forma de llegar a ella mientras
-   * no tenga fila propia —su id nace al volcar el primer acto—. Apagarlo aquí dejaría un
-   * proyecto trabajando al que no se puede ni mirar.
+   * Con el proyecto TRABAJANDO sigue vivo a propósito, al contrario que el «+»: su panel dice
+   * «El agente está trabajando» con «Volver al chat», que es la forma de llegar a la
+   * conversación en marcha mientras no tenga fila propia —su id nace al volcar el primer acto—.
+   * Apagarlo aquí dejaría un proyecto trabajando al que no se puede ni mirar.
    */
   alAbrirProyecto: (proyecto: string) => void;
   /** Fijar o dejar de fijar un proyecto. La lista la compone `App.tsx` y la guarda el
