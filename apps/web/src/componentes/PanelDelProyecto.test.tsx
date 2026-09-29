@@ -1,9 +1,9 @@
-import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
+import { act, render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
-import { PENDIENTES_POR_CONSULTA, PanelDelProyecto } from "./PanelDelProyecto.js";
+import { PENDIENTES_POR_CONSULTA, PanelDelProyecto, type CopiaDelPanel } from "./PanelDelProyecto.js";
 import type { EstadoDelCliente } from "../store.js";
 import type { PlanDelCable } from "../tipos.js";
 
@@ -1019,5 +1019,68 @@ describe("PanelDelProyecto", () => {
     expect(screen.getByText("Leyendo el esquema de la base…")).toBeTruthy();
     rerender({ gestor: { ...base, busqueda, errores: { describir: { motivo: "no existe", pedido: "b1" } } } });
     expect(screen.getByRole("alert").textContent).toBe("no existe");
+  });
+});
+
+/**
+ * La fusión con el resumen de Alejandro: UNA pantalla por proyecto. Lo de su copia (pastillas,
+ * acciones, lo que queda por subir y el gasto) va arriba del Resumen, antes de los planes; y un
+ * proyecto sin copia tiene panel con SOLO el Resumen.
+ */
+describe("PanelDelProyecto: lo de la copia en el Resumen", () => {
+  const copia = (local: boolean): CopiaDelPanel => ({
+    proyecto: {
+      id: "p1",
+      nombre: "AppDemo",
+      ...(local ? { local: true } : {}),
+      sesiones: [
+        {
+          id: "s1",
+          titulo: "Menú",
+          ultimoTurno: "2026-09-21T10:00:00.000Z",
+          consumo: { modelo: { entrada: 1500, salida: 500, cache: 0 }, externo: { entrada: 0, salida: 0, cache: 0 } },
+        },
+      ],
+    },
+    alDescargar: vi.fn(),
+    alAbrirCarpeta: vi.fn(() => Promise.resolve(undefined)),
+    alBorrarCopia: vi.fn(() => Promise.resolve(undefined)),
+    alPedirResumen: vi.fn(() => Promise.resolve({ tareas: [], sync: { proyecto: "AppDemo", rama: "main", pendientes: 2 } })),
+  });
+
+  it("con copia: pastillas y acciones, lo que queda por subir y el gasto, y DESPUÉS los planes", async () => {
+    const c = copia(true);
+    montar({ copia: c, planes: [PLAN] });
+    await act(async () => {});
+    expect(c.alPedirResumen).toHaveBeenCalledWith("p1");
+    const grupo = screen.getByRole("group", { name: "Copia local" });
+    expect(grupo.textContent).toMatch(/en tu equipo/);
+    expect(within(grupo).getByRole("button", { name: "Abrir carpeta" })).toBeTruthy();
+    expect(within(grupo).getByRole("button", { name: "Borrar copia local" })).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toMatch(/2 ficheros con cambios sin subir a «main»/);
+    const gasto = screen.getByRole("region", { name: "Gasto del proyecto" });
+    const planes = screen.getByRole("region", { name: "Planes" });
+    // El orden de la decisión: la copia arriba, los planes al final.
+    expect(grupo.compareDocumentPosition(gasto) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(gasto.compareDocumentPosition(planes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Sin sesiones que abrir: el gasto no es una lista de sesiones.
+    expect(screen.queryByRole("region", { name: "Últimas sesiones" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Menú/ })).toBeNull();
+  });
+
+  it("sin copia: solo la pestaña Resumen, con «Descargar», el motivo, y sin preguntar al gestor", () => {
+    const c = copia(false);
+    const { alGestor } = montar({ copia: c, planes: [PLAN] });
+    const tabs = within(screen.getByRole("tablist")).getAllByRole("tab");
+    expect(tabs.map((t) => t.textContent)).toEqual(["Resumen"]);
+    expect(alGestor).not.toHaveBeenCalled();
+    expect(screen.getByText("sin descargar")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Descargar" }));
+    expect(c.alDescargar).toHaveBeenCalled();
+    expect(screen.getByText(/Tareas y Conectores aparecen cuando el proyecto está descargado/)).toBeTruthy();
+    // Ni tira, ni gasto, ni los planes de la consola abierta (que es la de otro proyecto).
+    expect(c.alPedirResumen).not.toHaveBeenCalled();
+    expect(screen.queryByRole("region", { name: "Gasto del proyecto" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Planes" })).toBeNull();
   });
 });

@@ -15,7 +15,7 @@
 import { execFile } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import { diffDeColecciones, type CambiosDeUnaColeccion } from "../../core/diffDeColecciones.js";
 import type { ColeccionDeNavegacion } from "../../core/navegacion.js";
@@ -54,12 +54,15 @@ export async function modeloDelCambio(raiz: string, sesion: string, ruta: string
     const arbol = prefijo === "" ? antes.ref : `${antes.ref}:${prefijo}`;
     const tar = join(temporal, "antes.tar");
     const proyecto = join(temporal, "proyecto");
+    // `tar` se lanza DESDE la carpeta temporal y con rutas relativas: el GNU tar de Git for
+    // Windows, que va primero en el PATH, lee el `C:` de una ruta absoluta como un host
+    // remoto y falla (medido) — y el `catch` de abajo lo convertiría en un «no consta» mudo.
     // Desde la raíz del REPO y no desde la del proyecto: `git archive` lanzado en una
     // subcarpeta se limita a ella, y sobre un subárbol ya recortado por el prefijo ese filtro
     // se aplica dos veces y el tar sale VACÍO (medido).
     await ejecutar("git", ["archive", "--format=tar", "-o", tar, arbol], { cwd: raizDelRepo.trim() });
     mkdirSync(proyecto);
-    await ejecutar("tar", ["-xf", tar, "-C", proyecto]);
+    await ejecutar("tar", ["-xf", basename(tar), "-C", basename(proyecto)], { cwd: temporal });
     return diffDeColecciones(await coleccionesDe(proyecto, ruta), ahora);
   } catch {
     return undefined;

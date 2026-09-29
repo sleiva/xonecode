@@ -115,7 +115,7 @@ describe("Escritorio", () => {
 describe("Escritorio: propios y compartidos", () => {
   afterEach(cleanup);
 
-  it("la tarjeta dice de quién es, con una palabra", () => {
+  it("lo compartido lleva el icono, con su nombre accesible, y lo propio nada", () => {
     render(
       <Escritorio
         {...MANEJADORES}
@@ -125,8 +125,10 @@ describe("Escritorio: propios y compartidos", () => {
         ]}
       />
     );
-    expect(screen.getByText("propio")).toBeTruthy();
-    expect(screen.getByText("compartido")).toBeTruthy();
+    // Uno solo: el de «De otro». La palabra ya no está.
+    expect(screen.getAllByRole("img", { name: "compartido contigo" })).toHaveLength(1);
+    expect(screen.queryByText("propio")).toBeNull();
+    expect(screen.queryByText("compartido")).toBeNull();
   });
 
   /**
@@ -137,15 +139,14 @@ describe("Escritorio: propios y compartidos", () => {
     render(
       <Escritorio {...MANEJADORES} proyectos={[{ id: "p1", nombre: "De otro", compartido: true, local: true }]} />
     );
-    expect(screen.getByText("compartido")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "compartido contigo" })).toBeTruthy();
     expect(screen.getByText("en tu equipo")).toBeTruthy();
   });
 
-  /** Ausente es «no lo sé»: ni «propio» ni «compartido». Ver `Barra.comportamiento.test.tsx`. */
-  it("sin el dato no se pinta ninguna de las dos", () => {
+  /** Ausente es «no lo sé»: no se pinta el icono. Ver `Barra.comportamiento.test.tsx`. */
+  it("sin el dato no se pinta el icono", () => {
     render(<Escritorio {...MANEJADORES} proyectos={[{ id: "p1", nombre: "Sin dato" }]} />);
-    expect(screen.queryByText("propio")).toBeNull();
-    expect(screen.queryByText("compartido")).toBeNull();
+    expect(screen.queryByRole("img", { name: "compartido contigo" })).toBeNull();
   });
 });
 

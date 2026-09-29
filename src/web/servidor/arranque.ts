@@ -88,7 +88,7 @@ import type { NombreDeHerramienta } from "../../core/dispositivos.js";
 import { instalarHerramientaDeDispositivos, verificarDispositivo } from "../../agent/dispositivos/dispositivosEnMaquina.js";
 import { arrancarEmulador } from "../../agent/dispositivos/arranqueDeEmulador.js";
 import { correrPasoDeReceta } from "../../agent/dispositivos/instalacionEnMaquina.js";
-import { abrirCarpetaDelSistema } from "../../agent/config/selectorEnMaquina.js";
+import { abrirCarpetaDelSistema, abrirDirectorioDelSistema } from "../../agent/config/selectorEnMaquina.js";
 import { modelosDeMotor } from "../../agent/config/modelosDeMotor.js";
 import {
   parsear,
@@ -140,6 +140,7 @@ import {
   dentroDelWorkspace,
   depuracionActiva,
   expandirConCasa,
+  mismaRuta,
   motivoParaNoOlvidarEntorno,
   motivoDeNombreDeEntornoInaceptable,
   motivoDeWorkspaceInaceptable,
@@ -231,6 +232,8 @@ import type {
   InformeDeDispositivosDelCable,
   SesionDelCable,
   EstadoDelLanzamiento,
+  EstadoDeSync,
+  FotoDelResumen,
 } from "./transporte.js";
 // Valor y no tipo: la traducción de una `Tarea` a lo que viaja vive JUNTO al tipo que
 // produce y no aquí. Estuvo en este cierre, y ahí se cayó `veredicto` sin que nada se
@@ -520,6 +523,13 @@ export interface OpcionesDeMontaje {
    * Ausente = esta ejecución no lo ofrece y el botón no se pinta.
    */
   abrirCarpetaDeHerramienta?: (ruta: string) => void;
+  /**
+   * Abre la carpeta de la copia local de un proyecto en el explorador de ficheros de ESTA
+   * máquina (el botón del resumen del proyecto). Recibe la raíz ENTERA, que no sale del host.
+   * Nunca lanza. Ausente = esta ejecución no lo ofrece, y el cable contesta 409 con el motivo.
+   * **Límite declarado**: por un túnel se abre en la máquina del servidor, no en la del navegador.
+   */
+  abrirCarpetaDeProyecto?: (raiz: string) => void;
   /**
    * VERIFICA la conexión con un dispositivo (`agent/dispositivos/dispositivosEnMaquina.ts`).
    *
@@ -871,6 +881,13 @@ export function montarRutas(
   let proyectos: readonly ProyectoRemoto[] = [];
   let ramas: string[] = [];
   /**
+   * De QUÉ proyecto son las `ramas` (su id). Viaja con ellas en el alta: sin esto la ventana de
+   * sesión nueva pintaba las ramas del ÚLTIMO proyecto preguntado mientras llegaban las del
+   * nuevo, y se podía empezar con la rama de otro proyecto. Se asigna DESPUÉS de la espera,
+   * junto a las ramas, y se vacía ANTES: una consulta que falla no deja la pareja cruzada.
+   */
+  let ramasDe: string | undefined;
+  /**
    * El paso de cuenta ya conducido en ESTE proceso. Hace falta porque `origenDeTrabajo` se
    * congela al construir el vestíbulo: `pasosPendientes()` seguiría diciendo «cuenta»
    * después de haberla dado, y el wizard volvería a pedirla en cada reconexión.
@@ -1039,6 +1056,8 @@ export function montarRutas(
         // Solo si el entorno lo dice: ausente es «no lo he elegido», y el cliente aplica su
         // omisión. Mandar `[]` en su lugar sería decir «ninguno», que es otra cosa.
         ...(e.proyectos === undefined ? {} : { proyectos: [...e.proyectos] }),
+        // Los fijados, con la misma regla: sin lista no viaja nada.
+        ...(e.fijados === undefined || e.fijados.length === 0 ? {} : { fijados: [...e.fijados] }),
         // Cuántas copias tiene bajadas: lo que la casilla de «borrarlas también» cuenta.
         ...(() => {
           const copias = copiasDeEntorno(opciones.workspace?.() ?? baseDeWorkspacePorOmision(), e.id);
@@ -1072,9 +1091,19 @@ export function montarRutas(
           // qué enseña la ventana de sesión nueva, y decidirlo en el cliente exigiría
           // que supiera dónde vive la copia local.
           ...(hayCopiaLocal(p.nombre) ? { local: true } : {}),
+          // La rama de la que se BAJÓ la copia (`config.json`), que la barra pinta debajo del
+          // nombre. Solo con copia: sin ella no hay rama de nadie, y leer el fichero de una
+          // carpeta a medias diría la de un alta que no terminó.
+          ...(() => {
+            if (!hayCopiaLocal(p.nombre)) return {};
+            const raiz = raizDeProyectoOSilencio(p.nombre);
+            const rama = raiz === undefined ? undefined : cloudstudioDelProyecto(raiz)?.rama;
+            return typeof rama === "string" && rama !== "" ? { rama } : {};
+          })(),
         };
       }),
       ramas,
+      ...(ramasDe === undefined || ramas.length === 0 ? {} : { ramasDe }),
       proyectoAbierto,
       ...(modo === undefined ? {} : { modo }),
       // Solo «XOneCode X.X.X», para el pie de la barra: ahí no hay sitio para el commit ni
@@ -2746,7 +2775,10 @@ export function montarRutas(
         proyectoElegido = peticion.proyecto;
         // La identidad ENTERA, no el id: el servidor abre por nombre. `identidad` ya está
         // resuelta unas líneas más arriba contra el listado.
+        ramas = [];
+        ramasDe = undefined;
         ramas = await vestibulo.ramasDe(entornoElegido, identidad ?? peticion.proyecto);
+        ramasDe = peticion.proyecto;
         return;
       }
       await vestibulo.abrirProyecto({ raiz, ...(peticion.sesion === undefined ? {} : { sesion: peticion.sesion }) });
@@ -4326,7 +4358,10 @@ export function montarRutas(
         // alternativa a inventarse las del primero de la lista antes de que nadie elija.
         proyectoElegido = proyecto;
         // Igual que arriba: el servidor abre por NOMBRE, y el cable trae el id.
+        ramas = [];
+        ramasDe = undefined;
         ramas = await vestibulo.ramasDe(entornoElegido, proyectos.find((p) => p.id === proyecto) ?? proyecto);
+        ramasDe = proyecto;
         return;
       }
       // El proyecto que viene en ESTE mensaje, no el cacheado: lo enviado es la verdad y
@@ -5013,6 +5048,116 @@ export function montarRutas(
         .guardarProyectosVisibles(mensaje.entorno, mensaje.proyectos)
         .catch(contar)
         .finally(() => void anunciarAlta().catch(contar));
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "entorno" &&
+      mensaje.accion === "fijados"
+    ) {
+      // El mismo trato que `visibles`: se guarda con el entorno y el alta siguiente lo trae.
+      void vestibulo
+        .guardarProyectosFijados(mensaje.entorno, mensaje.proyectos)
+        .catch(contar)
+        .finally(() => void anunciarAlta().catch(contar));
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "copiaLocal" && mensaje.accion === "resumen") {
+      // La FOTO del resumen del proyecto: lo que solo sabe el servidor, contestado en la
+      // propia respuesta —como el 409 de las negativas—, así que llega solo a quien la pidió.
+      // Del cable llega el ID; el nombre y la raíz los pone el servidor, como en `borrar`.
+      const identidad = proyectos.find((p) => p.id === mensaje.proyecto);
+      if (entornoElegido === undefined || identidad === undefined) {
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ motivo: "ese proyecto no está en el listado del entorno activo" }));
+        return;
+      }
+      const raiz = vestibulo.raizDeProyecto(entornoElegido, identidad.nombre);
+      // Las tareas de ESTE proyecto las decide la RAÍZ y no el id: una tarea no lleva su
+      // entorno, y el mismo id en otro entorno —o un clon del mismo servidor con otro id—
+      // se colaría filtrando en el cliente. Viajan los ids; sus datos vivos ya están allí.
+      const tareas = (opciones.colaDeTareas?.listar() ?? [])
+        .filter((t) => mismaRuta(t.proyecto.raiz, raiz))
+        .map((t) => t.id);
+      let sync: EstadoDeSync | undefined;
+      if (esProyectoEnDisco(raiz)) {
+        // La MISMA lectura que la banda de CloudStudio en Revisión, y no una segunda cuenta:
+        // dos pantallas midiendo lo mismo de dos formas acaban diciendo dos cifras.
+        const { clase: _clase, ...medida } = await lecturaDeSync(raiz);
+        sync = medida;
+      }
+      const foto: FotoDelResumen = { tareas, ...(sync === undefined ? {} : { sync }) };
+      respuesta.writeHead(200, { "content-type": "application/json" });
+      respuesta.end(JSON.stringify(foto));
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "copiaLocal" && mensaje.accion === "abrirCarpeta") {
+      // Como `borrar`: del cable llega el ID, el nombre sale del listado del servidor y la
+      // ruta la compone el vestíbulo. Solo con la copia BAJADA: una carpeta a medias de un alta
+      // que falló no es «los ficheros del proyecto».
+      const identidad = proyectos.find((p) => p.id === mensaje.proyecto);
+      const negar = (motivo: string): void => {
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ motivo }));
+      };
+      if (entornoElegido === undefined || identidad === undefined) {
+        negar("ese proyecto no está en el listado del entorno activo");
+        return;
+      }
+      if (opciones.abrirCarpetaDeProyecto === undefined) {
+        negar("esta ejecución no puede abrir carpetas del sistema");
+        return;
+      }
+      const raiz = vestibulo.raizDeProyecto(entornoElegido, identidad.nombre);
+      if (!esProyectoEnDisco(raiz)) {
+        negar("ese proyecto no está descargado en este equipo");
+        return;
+      }
+      opciones.abrirCarpetaDeProyecto(raiz);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "copiaLocal" && mensaje.accion === "borrar") {
+      // Como `olvidar`: la negativa se decide AQUÍ y se ESPERA, para poder devolver el motivo
+      // con un 409 — `informar` no llega al navegador desde el vestíbulo. El nombre sale del
+      // listado del SERVIDOR para ese id: del cliente no se acepta ni un nombre ni una ruta.
+      const identidad = proyectos.find((p) => p.id === mensaje.proyecto);
+      if (entornoElegido === undefined || identidad === undefined) {
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ motivo: "ese proyecto no está en el listado del entorno activo" }));
+        return;
+      }
+      let resultado: { cerroLaAbierta: boolean; motivo?: string };
+      try {
+        resultado = await vestibulo.borrarCopia(
+          entornoElegido,
+          identidad.nombre,
+          (opciones.colaDeTareas?.listar() ?? []).map((t) => ({ estado: t.estado, raiz: t.proyecto.raiz }))
+        );
+      } catch (error) {
+        contar(error);
+        resultado = { cerroLaAbierta: false, motivo: "no se pudo borrar la copia local" };
+      }
+      // Lo mismo que al borrar la sesión abierta: el cable se quedaría enganchado a una
+      // consola muerta, así que se muda al vestíbulo —el cliente pinta el escritorio—, y la
+      // raíz queda LIBRE, así que la cola de tareas se vuelve a mirar.
+      if (resultado.cerroLaAbierta) {
+        adjuntar();
+        opciones.revisarTareas?.();
+      }
+      // El alta siguiente ya trae `local` falso, y sin `proyectoActivo` si era el del foco.
+      await anunciarAlta().catch(contar);
+      if (resultado.motivo !== undefined) {
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ motivo: resultado.motivo }));
+        return;
+      }
       respuesta.writeHead(204);
       respuesta.end();
       return;
@@ -6637,6 +6782,7 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     guardarAjustesDeDispositivos: (ajustes) => void guardarDispositivos(undefined, ajustes),
     instalarHerramienta: instalarHerramientaDeDispositivos,
     abrirCarpetaDeHerramienta: abrirCarpetaDelSistema,
+    abrirCarpetaDeProyecto: abrirDirectorioDelSistema,
     verificarDispositivo,
     // Con la función REAL, y no declarada y sin pasar: es la trampa que este repo ha pagado
     // nueve veces, y la que el comentario de justo abajo describe para las cuatro del

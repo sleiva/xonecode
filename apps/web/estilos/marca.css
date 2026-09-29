@@ -162,6 +162,15 @@
    * Por eso el único alias que queda es el de la barra: es acento, que es el papel que el
    * cian conserva. */
   --dsw-specific-sidebar-nav-item-active-accent: var(--xonecode-cian);
+
+  /* Las dos series del gráfico de gasto de un proyecto (`GastoDelProyecto.tsx`): el grafo
+     (`modelo`) y un agente externo, que nunca se suman. VALIDADAS con el validador del skill
+     `dataviz` contra el fondo del panel (blanco): separación en daltonismo y en visión
+     normal, banda de luminosidad y croma, todo en verde. El naranja queda por debajo de 3:1
+     de contraste con el blanco, y eso OBLIGA a lo que el gráfico ya lleva: leyenda con
+     palabras y la tabla con las cifras. */
+  --xonecode-gasto-modelo: #0284c7;
+  --xonecode-gasto-externo: #f58220;
 }
 
 /* En oscuro el acento no cambia —el cian es el mismo color de marca sobre los dos fondos, y
@@ -180,4 +189,8 @@ body[data-ds-dark-theme] {
      TEXTO (borde+letra de `.peligro`, no un relleno) sobre un fondo oscuro. */
   --xonecode-rojo: #f87171;
   --xonecode-verde: #34d399;
+  /* Las series del gasto, validadas OTRA VEZ contra el panel oscuro (`#232324`) y no
+     invertidas: el naranja de claro se salía de la banda de luminosidad sobre este fondo. */
+  --xonecode-gasto-modelo: #0284c7;
+  --xonecode-gasto-externo: #e0701a;
 }

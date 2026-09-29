@@ -371,32 +371,154 @@ describe("propios y compartidos", () => {
         alAbrirProyecto={() => {}}
         alNuevaSesion={() => {}}
         alAccionDeSesion={() => {}}
+        alFijar={() => {}}
         alAbrirAjustes={() => {}}
       />
     );
   }
 
-  it("lo compartido y lo propio se dicen con una PALABRA, no solo con un color", () => {
+  /** La fila de un proyecto por su nombre: el `<div>` que contiene el botón del nombre. */
+  const filaDe = (nombre: string): HTMLElement =>
+    screen.getByRole("button", { name: nombre }).parentElement as HTMLElement;
+
+  it("lo compartido lleva el icono de varias personas, y lo propio NADA", () => {
     montar([
       { id: "p1", nombre: "Mío", sesiones: [], compartido: false },
       { id: "p2", nombre: "De otro", sesiones: [], compartido: true },
     ]);
-    expect(screen.getByText("propio")).toBeTruthy();
-    expect(screen.getByText("compartido")).toBeTruthy();
-  });
-
-  /**
-   * EL caso que importa: un servidor que no manda `shared` (un CloudStudio anterior) no
-   * puede acabar con todos los proyectos etiquetados «propio». Ausente es «no lo sé», y lo
-   * único honesto es no pintar ninguna de las dos — la misma postura que el punto de
-   * credencial de `PastillaDeModelo` o el `via` de la pestaña de ficheros.
-   */
-  it("sin el dato no se pinta NINGUNA de las dos: «no lo dijo» no es «es tuyo»", () => {
-    montar([{ id: "p1", nombre: "Sin dato", sesiones: [] }]);
+    expect(filaDe("De otro").querySelector('[title="Compartido contigo"]')).not.toBeNull();
+    expect(filaDe("Mío").querySelector('[title="Compartido contigo"]')).toBeNull();
+    // Y la palabra ya no está: la pastilla se fue entera.
     expect(screen.queryByText("propio")).toBeNull();
     expect(screen.queryByText("compartido")).toBeNull();
   });
+
+  /**
+   * Un servidor que no manda `shared` (un CloudStudio anterior) no puede acabar con todos los
+   * proyectos marcados como compartidos: ausente no pinta nada, igual que «propio».
+   */
+  it("sin el dato no se pinta el icono: «no lo dijo» no es «es de otro»", () => {
+    montar([{ id: "p1", nombre: "Sin dato", sesiones: [] }]);
+    expect(filaDe("Sin dato").querySelector('[title="Compartido contigo"]')).toBeNull();
+  });
+
+  /**
+   * El icono no ensucia el NOMBRE del botón: sin `aria-hidden`, un lector leería «De otro
+   * Compartido contigo» y la búsqueda por el nombre a secas dejaría de encontrarlo.
+   */
+  it("el botón del proyecto se sigue llamando SOLO por su nombre", () => {
+    montar([{ id: "p2", nombre: "De otro", sesiones: [], compartido: true }]);
+    expect(screen.getByRole("button", { name: "De otro" })).toBeTruthy();
+  });
 });
+
+describe("el «+» y la chincheta de cada proyecto", () => {
+  function montar(extra: Partial<Parameters<typeof Barra>[0]> = {}) {
+    return render(
+      <Barra
+        entornos={[]}
+        entornoActivo=""
+        proyectos={[
+          { id: "p1", nombre: "Tienda", sesiones: [] },
+          { id: "p2", nombre: "Almacén", sesiones: [] },
+          { id: "p3", nombre: "Oficina", sesiones: [] },
+        ]}
+        alElegirEntorno={() => {}}
+        alAbrirSesion={() => {}}
+        alAbrirProyecto={() => {}}
+        alNuevaSesion={() => {}}
+        alAccionDeSesion={() => {}}
+        alFijar={() => {}}
+        alAbrirAjustes={() => {}}
+        {...extra}
+      />
+    );
+  }
+
+  /**
+   * jsdom no evalúa `:hover` ni la opacidad de un build, así que se comprueba lo que la
+   * decide: el «+» ya NO vive en `.rowActions` (la hoja copiada lo esconde con
+   * `display: none` fuera del hover) ni en `.accionesDeFila` (opacidad 0 fuera del hover).
+   */
+  it("el «+» no cuelga de ninguna de las dos clases que lo escondían sin el ratón", () => {
+    montar();
+    const mas = screen.getByRole("button", { name: "nueva sesión en Tienda" });
+    const envoltorio = mas.parentElement as HTMLElement;
+    expect(envoltorio.className).not.toMatch(/rowActions|accionesDeFila/);
+    expect(envoltorio.className).toMatch(/accionFija/);
+  });
+
+  it("la chincheta va la PRIMERA de la fila y dice su estado con `aria-pressed`", () => {
+    const alFijar = vi.fn();
+    montar({ alFijar, fijados: ["p2"] });
+    const chincheta = screen.getByRole("button", { name: "fijar Tienda" });
+    expect(chincheta.parentElement?.firstElementChild).toBe(chincheta);
+    expect(chincheta.getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: "dejar de fijar Almacén" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(chincheta);
+    expect(alFijar).toHaveBeenCalledWith("p1", true);
+    fireEvent.click(screen.getByRole("button", { name: "dejar de fijar Almacén" }));
+    expect(alFijar).toHaveBeenLastCalledWith("p2", false);
+  });
+
+  it("un fijado sale en «Proyectos fijados», ARRIBA, y ya no se repite en «Proyectos»", () => {
+    montar({ fijados: ["p3"] });
+    const texto = document.body.textContent ?? "";
+    expect(texto.indexOf("Proyectos fijados")).toBeGreaterThanOrEqual(0);
+    // El orden de lectura: la cabecera de fijados, la fila fijada, y después «Proyectos».
+    const fijados = texto.indexOf("Proyectos fijados");
+    const oficina = texto.indexOf("Oficina");
+    const proyectos = texto.indexOf("Proyectos", fijados + "Proyectos fijados".length);
+    expect(fijados).toBeLessThan(oficina);
+    expect(oficina).toBeLessThan(proyectos);
+    // Una sola fila de Oficina: no está en los dos grupos.
+    expect(screen.getAllByRole("button", { name: "Oficina" })).toHaveLength(1);
+  });
+
+  it("sin fijados no hay grupo, ni una cabecera vacía", () => {
+    montar();
+    expect(screen.queryByText("Proyectos fijados")).toBeNull();
+  });
+
+  /**
+   * Un fijado se enseña aunque no esté entre los visibles, y NO cuenta como «sin enseñar»:
+   * el aviso del final dice lo que no se ve en NINGÚN grupo.
+   */
+  it("un fijado fuera de los visibles se ve igual, y el aviso de ocultos no lo cuenta", () => {
+    montar({ visibles: ["p1"], fijados: ["p3"] });
+    expect(screen.getByRole("button", { name: "Oficina" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Tienda" })).toBeTruthy();
+    // Solo Almacén se queda fuera de los dos grupos.
+    expect(screen.getByText(/1 proyecto más sin enseñar/)).toBeTruthy();
+  });
+
+  it("un proyecto bajado enseña debajo del nombre la rama de la que se bajó", () => {
+    montar({
+      proyectos: [
+        { id: "p1", nombre: "Tienda", sesiones: [], local: true, rama: "desarrollo" },
+        { id: "p2", nombre: "Almacén", sesiones: [] },
+      ],
+    });
+    const tienda = filaDeProyecto("Tienda");
+    expect(tienda.textContent).toMatch(/desarrollo/);
+    expect(tienda.querySelector('[title="Rama de origen: desarrollo"]')).not.toBeNull();
+    // Sin rama no se pinta línea vacía, y la fila se queda como estaba.
+    expect(filaDeProyecto("Almacén").querySelector('[title^="Rama de origen"]')).toBeNull();
+    expect(filaDeProyecto("Almacén").className).not.toMatch(/filaConRama/);
+    // Y el botón se sigue llamando solo por el nombre del proyecto.
+    expect(screen.getByRole("button", { name: "Tienda" })).toBeTruthy();
+  });
+
+  it("pulsar el nombre marca esa fila como la del resumen", () => {
+    montar({ proyectoEnResumen: "p2" });
+    expect(filaDeProyecto("Almacén").getAttribute("aria-current")).toBe("true");
+    expect(filaDeProyecto("Tienda").getAttribute("aria-current")).toBeNull();
+  });
+});
+
+function filaDeProyecto(nombre: string): HTMLElement {
+  return screen.getByRole("button", { name: nombre }).parentElement as HTMLElement;
+}
 
 describe("la sesión abierta se distingue de la que tienes bajo el ratón", () => {
   const PROYECTOS = [

@@ -421,7 +421,7 @@ export interface EstadoDelCliente {
     entornos: { id: string; nombre: string; url: string }[];
     /** Los REGISTRADOS (`settings.json`), no los ofrecidos: es lo que lista la ventana de
      *  ajustes y lo que la barra debe enseñar. Vacío mientras no haya ninguno. */
-    registrados: { id: string; nombre: string; url: string; proyectos?: string[]; copias?: number }[];
+    registrados: { id: string; nombre: string; url: string; proyectos?: string[]; fijados?: string[]; copias?: number }[];
     proyectos: {
       id: string;
       nombre: string;
@@ -430,12 +430,16 @@ export interface EstadoDelCliente {
        *  que un día se añade en un sitio y no en el otro, y el de la barra sale mudo. */
       sesiones?: SesionDelCable[];
       local?: boolean;
+      /** La rama de la que se bajó la copia local. Ausente = sin copia, o no consta. */
+      rama?: string;
       /** Alguna sesión de este proyecto trabaja AHORA. Ausente = no consta. */
       trabajando?: true;
       /** Compartido CONTIGO. Ausente = el servidor no lo dijo, que no es «es tuyo». */
       compartido?: boolean;
     }[];
     ramas: string[];
+    /** El id del proyecto del que son las `ramas`. Ausente = no consta. */
+    ramasDe?: string;
     /** Lo que falló en el paso anterior, para que lo diga el paso y no solo las Trazas. */
     aviso?: string;
     /** De qué entorno son los `proyectos`. Ausente = de ninguno todavía; el cliente NO
@@ -1898,6 +1902,7 @@ export function crearStoreDelCliente(): {
             trabajoAlAbrir?: unknown;
             proyectos?: unknown;
             ramas?: unknown;
+            ramasDe?: unknown;
             aviso?: unknown;
             nombre?: unknown;
             proyectoAbierto?: unknown;
@@ -1950,6 +1955,9 @@ export function crearStoreDelCliente(): {
                   }
                 : {}),
               ...((p as { local?: unknown }).local === true ? { local: true } : {}),
+              // Nombrada aquí o no llega: esto es lista BLANCA, y sin ella la barra no la
+              // pintaría nunca.
+              ...((r) => (typeof r === "string" && r !== "" ? { rama: r } : {}))((p as { rama?: unknown }).rama),
               // La misma regla del booleano de verdad: una cadena colada aquí dejaría el
               // proyecto «trabajando» para siempre, y con él las sesiones sin poder abrirse.
               ...((p as { trabajando?: unknown }).trabajando === true ? { trabajando: true as const } : {}),
@@ -1979,7 +1987,7 @@ export function crearStoreDelCliente(): {
             Array.isArray(m.registrados) &&
             m.registrados.every((e) => typeof (e as { url?: unknown })?.url === "string") &&
             sonIdentidades(m.registrados)
-              ? (m.registrados as { id: string; nombre: string; url: string; proyectos?: unknown; copias?: unknown }[]).map((e) => ({
+              ? (m.registrados as { id: string; nombre: string; url: string; proyectos?: unknown; fijados?: unknown; copias?: unknown }[]).map((e) => ({
                   id: e.id,
                   nombre: e.nombre,
                   url: e.url,
@@ -1988,6 +1996,11 @@ export function crearStoreDelCliente(): {
                   // que elegir ninguno se leyera como no haber elegido.
                   ...(Array.isArray(e.proyectos) && e.proyectos.every((p) => typeof p === "string")
                     ? { proyectos: e.proyectos as string[] }
+                    : {}),
+                  // Los fijados arriba de la barra. Con la misma criba que `proyectos`: sin
+                  // nombrarlo aquí, la barra no pintaba nunca el grupo y nada se ponía rojo.
+                  ...(Array.isArray(e.fijados) && e.fijados.every((p) => typeof p === "string")
+                    ? { fijados: e.fijados as string[] }
                     : {}),
                   // Nombrado aquí o no llega: el `case` es lista BLANCA.
                   ...(typeof e.copias === "number" && Number.isInteger(e.copias) && e.copias >= 0
@@ -2020,6 +2033,9 @@ export function crearStoreDelCliente(): {
               registrados,
               proyectos,
               ramas: m.ramas as string[],
+              // De QUÉ proyecto son las ramas. Nombrado aquí o no llega: el `case` es lista
+              // BLANCA, y sin él la ventana no sabría si las ramas que ve son las suyas.
+              ...(typeof m.ramasDe === "string" ? { ramasDe: m.ramasDe } : {}),
               proyectoAbierto: m.proyectoAbierto,
               // Ausente o de otro tipo = no hay aviso/nombre, nunca uno inventado.
               ...(typeof m.aviso === "string" ? { aviso: m.aviso } : {}),

@@ -92,6 +92,23 @@ export function crearCheckpointerDeProyecto(raiz: string): BaseCheckpointSaver |
 }
 
 /**
+ * Suelta la conexión de ESE proyecto y la saca del mapa, si la había.
+ *
+ * Existe por borrar la copia local: el mapa de arriba no cierra nunca —es a propósito, una
+ * conexión por proyecto para toda la vida del proceso—, y en Windows un `checkpoint.sqlite`
+ * abierto (y su `-wal`) hace que borrar la carpeta falle con `EBUSY`. Quien borra cierra antes
+ * la consola de esa raíz y DESPUÉS llama aquí: el turno ya no puede estar escribiendo. La
+ * siguiente `crearCheckpointerDeProyecto` sobre esa raíz abre una conexión nueva.
+ */
+export function cerrarCheckpointerDeProyecto(raiz: string): void {
+  const ruta = rutaDelCheckpointer(raiz);
+  const abierto = abiertos.get(ruta);
+  if (abierto === undefined) return;
+  abiertos.delete(ruta);
+  if (abierto instanceof SqliteSaver) abierto.db.close();
+}
+
+/**
  * ¿Hay algo guardado de ese hilo?
  *
  * Es lo que convierte `historica` en un hecho comprobado en vez de en «se reabrió»: una

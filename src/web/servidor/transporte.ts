@@ -874,6 +874,8 @@ export type MensajeAlCliente =
         sesiones?: SesionDelCable[];
         /** La copia local YA existe: se puede abrir sin bajar nada ni preguntar rama. */
         local?: boolean;
+        /** La rama de la que se bajó la copia local. Ausente = sin copia, o no consta. */
+        rama?: string;
         /**
          * Alguna sesión de este proyecto tiene un turno EN MARCHA ahora mismo.
          *
@@ -891,6 +893,8 @@ export type MensajeAlCliente =
         trabajando?: true;
       }[];
       ramas: string[];
+      /** El id del proyecto del que son las `ramas`. Ausente = no hay ramas, o no consta. */
+      ramasDe?: string;
       /**
        * Qué falló en el paso anterior. Ausente = no falló nada.
        *
@@ -952,6 +956,8 @@ export type MensajeAlCliente =
  */
 export interface EntornoRegistrado extends OpcionDeEntorno {
   proyectos?: string[];
+  /** Los fijados arriba de la barra (`Entorno.fijados`). Ausente = ninguno. */
+  fijados?: string[];
   /** Cuántas carpetas de proyecto tiene en el workspace. Ausente = no se pudo mirar, que no
    *  es cero: con cero la casilla de borrarlas no se ofrece. */
   copias?: number;
@@ -1028,6 +1034,19 @@ export interface FicheroDelProyecto {
  * campos de un mensaje EMBEBIDO en otro no se pueden comparar con `camposDeInterfaz`, y ese
  * es el test que vigila que el cliente no se quede con la mitad del contrato.
  */
+/**
+ * La foto del resumen de un proyecto, tal como vuelve en la respuesta de `accion: "resumen"`.
+ *
+ * `tareas` son los IDS de las tareas de la cola cuya raíz es la de este proyecto: la tarea no
+ * lleva su entorno, así que filtrarla por id en el cliente dejaría pasar la de otro entorno.
+ * `sync` es la MISMA medida que la banda de CloudStudio (`lecturaDeSync`), y AUSENTE cuando no
+ * hay copia bajada — que no es lo mismo que «nada por subir».
+ */
+export interface FotoDelResumen {
+  tareas: string[];
+  sync?: EstadoDeSync;
+}
+
 export interface EstadoDeSync {
   proyecto?: string;
   rama?: string;
@@ -1266,6 +1285,25 @@ export type MensajeDelCliente =
   /** Qué proyectos de un entorno se enseñan en la barra. Lista vacía = ninguno, que es una
    *  elección; para volver a la omisión no hay mensaje, porque no hay «deshacer» que pedir. */
   | { clase: "entorno"; accion: "visibles"; entorno: string; proyectos: string[] }
+  /** Qué proyectos de un entorno van FIJADOS arriba de la barra, en su grupo. La lista
+   *  ENTERA, no un «fija este»: el cliente la compone y el servidor la guarda tal cual, el
+   *  mismo trato que `visibles`. Vacía = ninguno fijado. */
+  | { clase: "entorno"; accion: "fijados"; entorno: string; proyectos: string[] }
+  /**
+   * Borrar la COPIA LOCAL de un proyecto del entorno activo: vuelve a «sin descargar», y con
+   * ella se van sus sesiones, su historial, sus artefactos y lo que no se haya subido.
+   *
+   * `proyecto` es el ID del listado, no una ruta: la carpeta la compone el servidor a partir
+   * del nombre que ÉL tiene para ese id. Contesta **409 con `{ motivo }`** si no se puede
+   * ahora (un turno en vuelo, una tarea de fondo sin terminar), igual que `olvidar`.
+   */
+  | { clase: "copiaLocal"; accion: "borrar"; proyecto: string }
+  /** Abrir la carpeta de la copia local en el explorador de ficheros de la máquina del
+   *  servidor. Mismo trato que `borrar`: el ID, nunca una ruta; 409 con `{ motivo }` si no. */
+  | { clase: "copiaLocal"; accion: "abrirCarpeta"; proyecto: string }
+  /** Pedir la FOTO del resumen del proyecto. Contesta 200 con un `FotoDelResumen` en la propia
+   *  respuesta, o 409 con `{ motivo }`. Mismo trato que `borrar`: el ID, nunca una ruta. */
+  | { clase: "copiaLocal"; accion: "resumen"; proyecto: string }
   /**
    * Quitar un entorno registrado. El servidor contesta **409 con `{ motivo }`** si no se puede
    * ahora (un proyecto suyo abierto, una tarea sin terminar): la negativa vive allí, y así el

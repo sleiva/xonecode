@@ -17,6 +17,7 @@ import { IconoDeConector } from "./IconoDeConector.js";
 import { IconoDeActualizar, IconoDeEnlaceExterno } from "./IconosDelVisor.js";
 import { BarraDeProgreso, resumenDelPlan } from "./Planes.js";
 import { TarjetaDeEmpezar } from "./TarjetaDeJira.js";
+import { ResumenDeProyecto, type AccionesDeLaCopia, type ProyectoDelResumen } from "./ResumenDeProyecto.js";
 import conversacion from "../../estilos/ConversationRoot.module.css";
 import pestanas from "./Pestanas.module.css";
 import estilos from "./PanelDelProyecto.module.css";
@@ -66,6 +67,12 @@ const PESTANAS: { id: PestanaDelProyecto; etiqueta: string }[] = [
 ];
 
 /**
+ * Lo de la COPIA local del proyecto para la pestaña Resumen (`ResumenDeProyecto.tsx`): su fila
+ * de `alta.proyectos` y los manejadores que hablan con el servidor. Ausente = no se pinta.
+ */
+export type CopiaDelPanel = { proyecto: ProyectoDelResumen } & AccionesDeLaCopia;
+
+/**
  * El panel de UN proyecto (IXCODE-11): lo que se ve al pulsar el proyecto en la barra, en vez
  * del chat vacío de una sesión recién abierta. «Pulsar un proyecto abre su panel»: desde aquí se
  * empieza una tarea del gestor y se configura lo que haga falta para eso (qué conectores usa, a
@@ -82,6 +89,10 @@ const PESTANAS: { id: PestanaDelProyecto; etiqueta: string }[] = [
  * se pinta, y «no hay vínculo» solo se dice cuando el servidor lo ha dicho — mientras tanto, se
  * está consultando.
  *
+ * **Un proyecto SIN copia local también tiene panel, pero solo con Resumen** (`copia` con
+ * `local` distinto de `true`): Tareas y Conectores le preguntan a la consola ABIERTA, que es la
+ * de otro proyecto, así que no se montan —ni se pregunta al gestor— y el panel dice por qué.
+ *
  * **«Nueva sesión con esta tarea» NO manda nada al agente**: pide `empezar`, el servidor abre una
  * sesión nueva y contesta con un BORRADOR que `App` deja en el compositor. Lo envía la persona.
  */
@@ -90,6 +101,7 @@ export function PanelDelProyecto({
   entorno,
   rama,
   planes,
+  copia,
   tareasEnFondo,
   gestor,
   conectores,
@@ -108,6 +120,9 @@ export function PanelDelProyecto({
   rama?: string;
   /** Los planes del proyecto, ya validados. Ausente o vacío = no se pinta la sección. */
   planes?: PlanDelCable[];
+  /** La copia local, arriba de la pestaña Resumen: pastillas, acciones, lo que queda por
+   *  subir y el gasto. Ausente = no se pinta. Con `local` distinto de `true`, solo Resumen. */
+  copia?: CopiaDelPanel;
   /** Las tareas en background del proyecto: la ranura que `App` ya monta para el panel lateral. */
   tareasEnFondo?: ReactNode;
   gestor?: EstadoDelCliente["gestor"];
@@ -140,6 +155,9 @@ export function PanelDelProyecto({
   alAbrirAjustesDeConectores: () => void;
 }) {
   const [pestana, setPestana] = useState<PestanaDelProyecto>("resumen");
+  /** Sin copia en el equipo no hay consola de ESTE proyecto: solo su Resumen. */
+  const sinCopia = copia !== undefined && copia.proyecto.local !== true;
+  const pestanasALaVista = sinCopia ? PESTANAS.filter((p) => p.id === "resumen") : PESTANAS;
   /**
    * La ÚLTIMA petición de cada acción que salió de este panel: lo que se vuelve a mandar, UNA
    * vez, cuando un conector cuya credencial faltaba pasa a conectado (`useReintentoTrasConectar`).
@@ -190,7 +208,8 @@ export function PanelDelProyecto({
   // pedirlo solo al montar lo dejaba en «Consultando…» para siempre tras reconectar. Tareas
   // vuelve a pedir sus pendientes sola, al reaparecer el vínculo (su efecto va por la clave).
   useEffect(() => {
-    if (conectado) pedir({ accion: "estado" });
+    // Sin copia, el gestor abierto es el de OTRO proyecto: no se le pregunta nada.
+    if (conectado && !sinCopia) pedir({ accion: "estado" });
     // Solo `conectado`: `alGestor` puede cambiar de identidad en cada render de `App`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conectado]);
@@ -249,7 +268,7 @@ export function PanelDelProyecto({
       ) : null}
       <div className={pestanas.cabecera}>
         <div className={clsx(conversacion.tabs, pestanas.tira)} role="tablist" aria-label="Vistas del proyecto">
-          {PESTANAS.map((p) => (
+          {pestanasALaVista.map((p) => (
             <button
               key={p.id}
               type="button"
@@ -264,8 +283,27 @@ export function PanelDelProyecto({
         </div>
       </div>
       <div className={estilos.cuerpo} role="tabpanel">
-        {pestana === "resumen" ? (
-          <Resumen {...(planes === undefined ? {} : { planes })} />
+        {pestana === "resumen" || sinCopia ? (
+          <>
+            {copia === undefined ? null : (
+              <ResumenDeProyecto
+                proyecto={copia.proyecto}
+                conectado={conectado}
+                alDescargar={copia.alDescargar}
+                alAbrirCarpeta={copia.alAbrirCarpeta}
+                alBorrarCopia={copia.alBorrarCopia}
+                alPedirResumen={copia.alPedirResumen}
+              />
+            )}
+            {sinCopia ? (
+              <p className={estilos.aviso}>
+                Tareas y Conectores aparecen cuando el proyecto está descargado: los dos trabajan sobre la copia
+                abierta.
+              </p>
+            ) : (
+              <Resumen {...(planes === undefined ? {} : { planes })} />
+            )}
+          </>
         ) : pestana === "tareas" ? (
           <>
             {/* Primero las tareas en BACKGROUND del proyecto —las que el agente hace solo, que
@@ -333,7 +371,7 @@ export function PanelDelProyecto({
 }
 
 /**
- * El resumen: los planes. Las SESIONES no están aquí —ni la lista ni «Nueva sesión»—, a petición
+ * El resumen: los planes, debajo de lo de la copia (`ResumenDeProyecto`). Las SESIONES no están aquí —ni la lista ni «Nueva sesión»—, a petición
  * suya: ya están en la barra lateral (con su «+»). Las tareas en background tampoco: van en la
  * pestaña Tareas, encima de las del gestor.
  */

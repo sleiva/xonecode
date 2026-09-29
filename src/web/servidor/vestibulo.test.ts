@@ -2602,6 +2602,81 @@ describe("olvidar un entorno", () => {
   });
 });
 
+describe("los proyectos fijados", () => {
+  /** Las dos listas se escriben por separado, y cada una parte del entorno ENTERO. */
+  it("se guardan con el entorno, y fijados y visibles no se pisan el uno al otro", async () => {
+    const d = dobles();
+    const v = crearVestibulo({ ...d, origenDeTrabajo: "global" });
+    await v.guardarProyectosVisibles("webstudio", ["p1"]);
+    await v.guardarProyectosFijados("webstudio", ["p2"]);
+    expect(v.entornosRegistrados()[0]).toMatchObject({ proyectos: ["p1"], fijados: ["p2"] });
+    await v.guardarProyectosVisibles("webstudio", ["p1", "p3"]);
+    expect(v.entornosRegistrados()[0]).toMatchObject({ proyectos: ["p1", "p3"], fijados: ["p2"] });
+    expect(d.escrituras.filter((e) => e === "entorno:webstudio")).toHaveLength(3);
+  });
+});
+
+describe("borrar la copia local de un proyecto", () => {
+  function conWorkspace() {
+    const base = mkdtempSync(join(tmpdir(), "xonecode-borrar-copia-"));
+    const raiz = join(base, "webstudio", "Tienda");
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(join(raiz, "app.xne"), "<app/>");
+    const avisos: string[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      baseDeWorkspace: () => base,
+      informar: (t) => avisos.push(t),
+    });
+    return { base, raiz, v, avisos };
+  }
+
+  it("borra la carpeta del proyecto, y solo la suya", async () => {
+    const { base, raiz, v, avisos } = conWorkspace();
+    mkdirSync(join(base, "webstudio", "Otro"), { recursive: true });
+    const resultado = await v.borrarCopia("webstudio", "Tienda", []);
+    expect(resultado).toEqual({ borrada: true, cerroLaAbierta: false });
+    expect(existsSync(raiz)).toBe(false);
+    expect(existsSync(join(base, "webstudio", "Otro"))).toBe(true);
+    expect(avisos.join("\n")).toMatch(/borrada la copia local de «Tienda»/);
+    await v.cerrar();
+  });
+
+  /**
+   * El orden de `borrarSesion`, y por el mismo motivo: la consola se CIERRA antes de borrar.
+   * Con ella viva, su `volcar()` reescribiría el índice dentro de la carpeta recién borrada.
+   */
+  it("con el proyecto ABIERTO, lo cierra antes de borrar y lo dice", async () => {
+    const { raiz, v } = conWorkspace();
+    const abierta = await v.abrirProyecto({ raiz: v.raizDeProyecto("webstudio", "Tienda") });
+    const resultado = await v.borrarCopia("webstudio", "Tienda", []);
+    expect(resultado).toEqual({ borrada: true, cerroLaAbierta: true });
+    expect(abierta.cerrada).toBe(true);
+    expect(v.proyectoAbierto()).toBeUndefined();
+    expect(existsSync(raiz)).toBe(false);
+    await v.cerrar();
+  });
+
+  it("con una tarea de fondo sin terminar ahí, se NIEGA con motivo y no toca nada", async () => {
+    const { raiz, v } = conWorkspace();
+    const resultado = await v.borrarCopia("webstudio", "Tienda", [
+      { estado: "en-proceso", raiz: v.raizDeProyecto("webstudio", "Tienda") },
+    ]);
+    expect(resultado.borrada).toBe(false);
+    expect(resultado.motivo).toMatch(/tarea de fondo sin terminar/);
+    expect(existsSync(join(raiz, "app.xne"))).toBe(true);
+    await v.cerrar();
+  });
+
+  it("un nombre que no es un segmento llano no borra nada fuera de su sitio", async () => {
+    const { base, v } = conWorkspace();
+    await expect(v.borrarCopia("webstudio", "..", [])).rejects.toThrow();
+    expect(existsSync(join(base, "webstudio", "Tienda"))).toBe(true);
+    await v.cerrar();
+  });
+});
+
 
 describe("esProyectoEnDisco: una copia BAJADA, no un alta a medias", () => {
   it("con solo el `config.json` (la descarga falló) NO es una copia", () => {

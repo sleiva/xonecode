@@ -1,0 +1,157 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`: label-tertiary,
+   bg-layer-2, state-success-primary/tertiary, state-business-primary/tertiary y
+   state-error-primary. Lo demás se COMPONE: la superficie de «Tu equipo» (`Equipo.module.css`)
+   y los roles de botón de `Boton.module.css`. Ni un color propio.
+
+   Son las piezas de la COPIA en la pestaña Resumen del panel del proyecto
+   (`PanelDelProyecto.tsx`): el nombre ya lo pone el panel, aquí van sus pastillas y acciones. */
+
+/* Las pastillas a la izquierda, las acciones pegadas a la derecha. Envuelve: en una ventana
+   estrecha las acciones bajan a su propia línea. */
+.cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  margin-bottom: 20px;
+}
+
+.pastillas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* La pastilla de estado. Mono y en versalitas —la regla del rediseño: la letra de máquina
+   marca lo que es dato— y con el MISMO glifo que la fila de la barra. Los colores son los de
+   siempre: el verde de «en tu equipo» de la tarjeta, el azul que llevaba «compartido», y lo
+   que falta por bajar en neutro, sin alarma: no es un problema, es un hecho. */
+.pastilla {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pastilla[data-estado="local"] {
+  background: var(--dsw-alias-state-success-tertiary);
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.pastilla[data-estado="sin-descargar"] {
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.pastilla[data-estado="compartido"] {
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.secundario {
+  composes: secundario from "./Boton.module.css";
+}
+
+/* «Descargar» es la acción principal de un proyecto sin copia: el azul de la marca, el mismo
+   `.primario` que «Nueva sesión» en el escritorio. */
+.primario {
+  composes: primario from "./Boton.module.css";
+}
+
+/* Destructivo, con el rojo de marca y su tinte: el mismo `.peligro` que «Quitar entorno» y
+   «Eliminar» en Ajustes. El relleno rojo LLENO se queda para el botón de la ventana que
+   confirma, como al borrar una sesión. */
+.borrar {
+  composes: peligro from "./Boton.module.css";
+}
+
+/* Por qué no se abrió la carpeta, dicho por el servidor. */
+.negativa {
+  margin: 0 0 16px;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+}
+
+/* ── Lo que queda por subir ──────────────────────────────────────────────────────────────
+   Una tira con borde, la forma de la del entorno en el escritorio: es un dato de ESTE
+   proyecto al mismo nivel que su nombre. La cifra va en tinta de texto; lo que cambia con el
+   estado es el filo de la izquierda, y el estado se dice además con palabras. */
+.tira {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 20px;
+  padding: 10px 14px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-left-width: 3px;
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.tira[data-estado="pendientes"] {
+  border-left-color: var(--xonecode-naranja);
+  color: var(--dsw-alias-label-primary);
+}
+
+.tira[data-estado="al-dia"] {
+  border-left-color: var(--dsw-alias-state-success-primary);
+}
+
+.tira[data-estado="error"] {
+  border-left-color: var(--dsw-alias-state-error-primary);
+}
+
+.textoDeTira {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.girando {
+  composes: girando from "./Receta.module.css";
+}
+
+/* ── El gasto ────────────────────────────────────────────────────────────────────────────
+   La superficie de los paneles del escritorio («Tu equipo»), compuesta y no copiada. NO la
+   `.tarjeta` de un proyecto: esa es PULSABLE —con su `:hover` y su franja de «en tu equipo»— y
+   un bloque la heredaría sin serlo. El margen del panel, que es para apilarse en el escritorio,
+   se rehace con la clase doblada (hueco solo debajo, antes de los planes), que gana sin depender del orden de las hojas en el bundle. */
+.bloque {
+  composes: equipo from "./Equipo.module.css";
+}
+
+.bloque.bloque {
+  margin: 0 0 24px;
+  min-width: 0;
+}
+
+.tituloDeBloque {
+  composes: titulo from "./Equipo.module.css";
+}
+
+.tituloDeBloque.tituloDeBloque {
+  margin: 0 0 10px;
+}
+
+.vacio {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}

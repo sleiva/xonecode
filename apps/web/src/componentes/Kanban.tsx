@@ -1,4 +1,5 @@
 import type { Acto, TareaDelCable } from "../tipos.js";
+import { sePuedeAbrirLaTarea } from "../tareasAbribles.js";
 import { AccionesDeTarea } from "./AccionesDeTarea.js";
 import { EntregaDeTarea } from "./EntregaDeTarea.js";
 import { MirarTarea } from "./MirarTarea.js";
@@ -254,9 +255,10 @@ function TarjetaSimple({
     <li>
       <div className={estilos.tarjeta}>
         <span className={estilos.proyecto}>{t.proyectoNombre}</span>
-        {/* Sin sesión no hay nada que abrir —la tarea no ha corrido— y un botón que no
-            lleva a ninguna parte es el botón muerto de siempre. */}
-        {t.sesion !== undefined && alAbrirSesion !== undefined ? (
+        {/* Sin sesión no hay nada que abrir —la tarea no ha corrido—, y en `en-proceso` el
+            servidor declina abrirla: en los dos casos sería el botón muerto de siempre
+            (`sePuedeAbrirLaTarea`, la misma regla que el resumen del proyecto). */}
+        {sePuedeAbrirLaTarea(t) && alAbrirSesion !== undefined ? (
           <button type="button" className={estilos.tituloBoton} onClick={() => alAbrirSesion(t.proyecto, t.sesion!)}>
             {t.titulo}
           </button>
@@ -336,7 +338,7 @@ function TarjetaDeAtencion({
     <li>
       <div className={estilos.tarjeta} data-atencion="">
         <span className={estilos.proyecto}>{t.proyectoNombre}</span>
-        {t.sesion !== undefined && alAbrirSesion !== undefined ? (
+        {sePuedeAbrirLaTarea(t) && alAbrirSesion !== undefined ? (
           <button type="button" className={estilos.tituloBoton} onClick={() => alAbrirSesion(t.proyecto, t.sesion!)}>
             {t.titulo}
           </button>

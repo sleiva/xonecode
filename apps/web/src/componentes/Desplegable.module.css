@@ -1,0 +1,45 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`: label-tertiary. La señal de
+   carga la compone `Receta.module.css`, con los suyos. */
+
+.caja {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Sin la flecha del sistema, y con el hueco a la derecha que ocupa la nuestra: el texto de la
+   opción no puede meterse debajo del chevron. El selector va DOBLADO para ganarle al
+   `padding` de la caja de cada sitio (`.entorno`, `.campo`) sin depender del orden de las
+   hojas en el bundle. */
+.select.select {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  appearance: none;
+  padding-right: 32px;
+}
+
+/* El chevron, con 12 px de aire al filo: lo que la nativa no dejaba. No recibe clics — el
+   clic cae en el `<select>`, que es quien abre la lista. */
+.flecha {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  display: inline-flex;
+  transform: translateY(-50%);
+  color: var(--dsw-alias-label-tertiary);
+  pointer-events: none;
+}
+
+/* Bloqueado, la flecha se apaga como el texto. La señal de carga NO: está diciendo que algo
+   se mueve, y apagada se leería como otro control inerte. */
+.select:disabled:not([aria-busy]) + .flecha {
+  opacity: 0.45;
+}
+
+/* La carga, en el sitio de la flecha: la del instalador de Ajustes, compuesta y no copiada,
+   con su trato de `prefers-reduced-motion`. */
+.girando {
+  composes: girando from "./Receta.module.css";
+}

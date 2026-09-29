@@ -9,6 +9,7 @@ import {
   carpetaDeLaSalida,
   comandoDelSelector,
   comandoParaAbrirCarpeta,
+  comandoParaAbrirDirectorio,
   TOPE_DEL_SELECTOR_MS,
   type ComandoDeSelector,
 } from "../../core/selectorDeCarpeta.js";
@@ -54,7 +55,16 @@ export async function elegirCarpetaEnMaquina(opciones?: {
  * `detached`+`unref` para no dejar el proceso padre esperando a una ventana del sistema.
  */
 export function abrirCarpetaDelSistema(ruta: string, plataforma: string = process.platform): void {
-  const comando = comandoParaAbrirCarpeta(plataforma, ruta);
+  lanzarSinEsperar(comandoParaAbrirCarpeta(plataforma, ruta));
+}
+
+/** Abre ESA carpeta (no la que la contiene) en el explorador de ficheros. El mismo trato
+ *  accesorio que `abrirCarpetaDelSistema`: nunca lanza ni espera. */
+export function abrirDirectorioDelSistema(carpeta: string, plataforma: string = process.platform): void {
+  lanzarSinEsperar(comandoParaAbrirDirectorio(plataforma, carpeta));
+}
+
+function lanzarSinEsperar(comando: ComandoDeSelector): void {
   const proceso = spawn(comando.programa, [...comando.argumentos], { detached: true, stdio: "ignore" });
   proceso.on("error", () => {});
   proceso.unref();

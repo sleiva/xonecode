@@ -621,6 +621,43 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   Quitar lo decide el SERVIDOR y contesta **409 con el motivo**. Las copias bajadas se QUEDAN salvo
   con la casilla «borrar también las copias», DESMARCADA siempre al abrir; el botón rojo no se
   activa hasta escribir el nombre del entorno.
+- **Los FIJADOS son otra lista del entorno, no una marca de los visibles** (`Entorno.fijados`,
+  `accion: "fijados"`): salen en «Proyectos fijados», arriba, estén o no entre los visibles, y
+  no se repiten abajo. Las dos listas se escriben por separado partiendo del entorno ENTERO; el
+  store del cliente es lista BLANCA por campo, y sin nombrarlo ahí el grupo no se pintaba nunca.
+- **Lo de la COPIA de un proyecto va arriba de la pestaña Resumen de SU panel, no en otra
+  pantalla** (`ResumenDeProyecto.tsx` son piezas que monta `PanelDelProyecto.tsx`): pastillas
+  (bajado / compartido) y acciones de la copia —Descargar, o «Abrir carpeta» y «Borrar copia
+  local» (`BorrarCopiaLocal.tsx`)—, lo que queda por subir y el gasto; los planes, debajo. Sin
+  sesiones ni tareas: las sesiones son de la barra y las tareas de la pestaña Tareas. **Un proyecto
+  SIN copia también abre su panel, con SOLO el Resumen** (`App.tsx#panelSinCopia`): no se abre
+  nada en el servidor —abrir sería descargar, y eso es «Descargar» o el «+»—, ni se pregunta al
+  gestor ni se enseñan planes, porque son de la consola ABIERTA, que es la de otro proyecto; el
+  panel dice por qué faltan Tareas y Conectores. **Una sola fila marcada** en la barra —la del
+  panel delante (`proyectoEnResumen`) manda sobre la abierta— y con el panel delante ningún chat
+  va marcado. «Abrir carpeta» (`accion: "abrirCarpeta"`) lo lanza el SERVIDOR con la raíz que
+  compone él (`comandoParaAbrirDirectorio`); **límite declarado**: por un túnel se abre en la
+  máquina del servidor.
+- **Lo que queda por subir es UNA foto** (`accion: "resumen"`, `FotoDelResumen`), que vuelve en
+  la PROPIA respuesta del POST y se guarda CON el id del proyecto: una respuesta de otro se tira
+  (el fallo que cerró `ramasDe`). Solo se pide con copia. Los pendientes son `lecturaDeSync`, la
+  MISMA medida que la banda de CloudStudio —dos cuentas darían dos cifras—, con su límite: un
+  fichero nuevo que git no sigue no cuenta y un renombrado cuenta dos. La foto trae también las
+  tareas del proyecto decididas por el SERVIDOR por la raíz (`mismaRuta`); el panel ya no las
+  pinta. **El gasto va en TOKENS por sesión** (`gastoDelProyecto.ts`, `SESIONES_EN_EL_GASTO`):
+  un gráfico, no una lista de sesiones que abrir; cada cuenta con su convención de caché, las dos
+  sin sumarse, y el total DICE cuántas sesiones no constan. Sus dos colores (`--xonecode-gasto-*`)
+  están validados con el skill `dataviz` contra el fondo de cada tema.
+- **Borrar la copia local la CIERRA antes** (`vestibulo.borrarCopia`, el orden de
+  `borrarSesion`) y después suelta el checkpointer (`cerrarCheckpointerDeProyecto`): el mapa de
+  conexiones no cierra nunca, y en Windows un `checkpoint.sqlite` abierto impide borrar la
+  carpeta. Del cable llega el ID; el nombre sale del listado del SERVIDOR y la ruta de
+  `rutaDeWorkspace`, comprobada por el texto y por el `realpath`. **Se RENOMBRA a una lápida
+  oculta antes de borrar** (`borrarCopiaDeProyecto`): con un fichero abierto por otro proceso,
+  `rmSync` en Windows revienta a medias y deja una copia rota; el renombrado falla antes de
+  tocar nada, así que «no se ha tocado nada» es verdad. Se niega con 409 y motivo
+  (`motivoParaNoBorrarCopia`) con un turno en vuelo o una tarea sin terminar ahí; una consola
+  abierta no es motivo.
 - **Una copia «bajada» es `config.json` Y `sync.json`** (`vestibulo.ts#esProyectoEnDisco`): el
   alta escribe `config.json` ANTES de bajar. Un fallo de descarga se APUNTA en `fallos.jsonl`.
 - **La clave de API viaja por el ÚNICO mensaje del cable que la lleva** (`leerSecreto`), y se
@@ -725,8 +762,8 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   de una decisión ya puesta deja de anotarse (viaja en el mensaje `pregunta`). Tampoco entra una
   subida CANCELADA.
 - **Pulsar un proyecto en la barra abre su PANEL, no una sesión directa**
-  (`apps/web/src/componentes/PanelDelProyecto.tsx`, `App.tsx`): pestañas Resumen (solo los
-  planes; las SESIONES y «Nueva sesión» son de la barra, no se repiten aquí), Tareas (las tareas en
+  (`apps/web/src/componentes/PanelDelProyecto.tsx`, `App.tsx`): pestañas Resumen (lo de la
+  copia y los planes; las SESIONES y «Nueva sesión» son de la barra, no se repiten aquí), Tareas (las tareas en
   background del proyecto, PRIMERO, y debajo las pendientes del gestor vinculado, con búsqueda y
   «Nueva sesión con esta tarea») y Conectores, en DOS secciones: «Gestor de tareas» (solo Jira y Notion,
   UNO por proyecto: vincular el otro lo sustituye y la fila lo AVISA antes) y «Conectores para el
