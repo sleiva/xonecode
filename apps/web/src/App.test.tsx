@@ -929,7 +929,7 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
 });
 
 describe("App: abrir un proyecto desde la barra (Layer C)", () => {
-  function montarConProyectos(proyectos: { id: string; nombre: string }[]) {
+  function montarConProyectos(proyectos: { id: string; nombre: string; local?: boolean; compartido?: boolean }[]) {
     const store = crearStoreDelCliente();
     const enviar = vi.fn(() => Promise.resolve(undefined as unknown));
     const vista = render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} instalarSkill={instalarSkillDeMentira} />);
@@ -948,9 +948,9 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
     return { store, enviar, vista };
   }
 
-  it("pulsar un proyecto pide sus ramas SIN abrir nada todavía", () => {
+  it("el «+» de un proyecto sin bajar pide sus ramas SIN abrir nada todavía", () => {
     const { enviar } = montarConProyectos([{ id: "p1", nombre: "Tienda" }]);
-    fireEvent.click(screen.getByRole("button", { name: "Tienda" }));
+    fireEvent.click(screen.getByRole("button", { name: "nueva sesión en Tienda" }));
     expect(enviar).toHaveBeenCalledWith({ clase: "alta", paso: "proyecto", proyecto: "p1" });
     // Nada de Selector todavía: `estado.alta.ramas` sigue vacía hasta que el servidor
     // conteste — no se inventa un catálogo mientras se espera. El conmutador de
@@ -967,7 +967,7 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
    */
   it("la ventana enseña la rama aunque solo haya una, y no empieza sola", () => {
     const { store, enviar } = montarConProyectos([{ id: "p1", nombre: "Tienda" }]);
-    fireEvent.click(screen.getByRole("button", { name: "Tienda" }));
+    fireEvent.click(screen.getByRole("button", { name: "nueva sesión en Tienda" }));
     enviar.mockClear();
 
     act(() =>
@@ -978,6 +978,7 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
         entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }],
         proyectos: [{ id: "p1", nombre: "Tienda" }],
         ramas: ["master"],
+        ramasDe: "p1",
         proyectoAbierto: false,
       })
     );
@@ -993,7 +994,7 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
 
   it("con VARIAS ramas se elige en la ventana, y empezar manda esa rama", () => {
     const { store, enviar } = montarConProyectos([{ id: "p1", nombre: "Tienda" }]);
-    fireEvent.click(screen.getByRole("button", { name: "Tienda" }));
+    fireEvent.click(screen.getByRole("button", { name: "nueva sesión en Tienda" }));
     enviar.mockClear();
 
     act(() =>
@@ -1004,6 +1005,7 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
         entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }],
         proyectos: [{ id: "p1", nombre: "Tienda" }],
         ramas: ["master", "pruebas"],
+        ramasDe: "p1",
         proyectoAbierto: false,
       })
     );
@@ -1023,7 +1025,7 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
     // el equipo no se descarga nada, y medido en pantalla la ventana decía «se abre y ya»
     // y aun así pedía confirmar: un paso sin ninguna decisión dentro.
     const { enviar } = montarConProyectos([{ id: "p1", nombre: "Tienda", local: true }]);
-    fireEvent.click(screen.getByRole("button", { name: "Tienda" }));
+    fireEvent.click(screen.getByRole("button", { name: "nueva sesión en Tienda" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(enviar).toHaveBeenCalledWith({ clase: "sesion", proyecto: "p1" });
   });
@@ -1076,13 +1078,269 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
     expect(screen.getByText("Ajustes")).toBeTruthy();
   });
 
-  it("el «+» de la fila abre la MISMA ventana que pulsar el proyecto", () => {
-    // Sin copia local: es el caso en que HAY ventana (la descarga se confirma). Con copia
-    // local ninguno de los dos caminos la abre.
+  it("pulsar el NOMBRE abre su resumen en el centro, y no manda nada al servidor", () => {
+    const { enviar } = montarConProyectos([{ id: "p1", nombre: "Tienda", compartido: true }]);
+    enviar.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Tienda" }));
+    // Es estado de vista: ni se abre, ni se piden ramas.
+    // Lo único que sale es la FOTO del resumen, una lectura: ni abrir ni descargar.
+    expect(enviar.mock.calls.map(([m]) => m)).toEqual([{ clase: "copiaLocal", accion: "resumen", proyecto: "p1" }]);
+    expect(screen.getByRole("heading", { level: 1, name: "Tienda" })).toBeTruthy();
+    expect(screen.getByText("compartido contigo")).toBeTruthy();
+    expect(screen.getByText("sin descargar")).toBeTruthy();
+    // Sin botón de cerrar: la marca de la barra superior vuelve al escritorio.
+    fireEvent.click(screen.getByRole("button", { name: "XOneCode" }));
+    expect(screen.queryByText("compartido contigo")).toBeNull();
+  });
+
+  /**
+   * Un proyecto BAJADO se abre por detrás al pulsar su nombre: es lo que da el panel de la
+   * sesión junto al resumen. Pero sin salir del resumen, y sin sesión elegida.
+   */
+  it("pulsar un proyecto BAJADO lo abre por detrás, y el centro sigue siendo su resumen", () => {
+    const { store, enviar } = montarConProyectos([{ id: "p1", nombre: "Tienda", local: true }]);
+    enviar.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Tienda" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "sesion", proyecto: "p1" });
+    // El servidor contesta con el proyecto abierto y una sesión en blanco.
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }],
+        proyectos: [{ id: "p1", nombre: "Tienda", local: true, sesiones: [{ id: "s1", titulo: "Vieja" }] }],
+        ramas: [],
+        proyectoAbierto: true,
+        proyectoActivo: "p1",
+        sesionActiva: "s1",
+      })
+    );
+    expect(screen.getByRole("heading", { level: 1, name: "Tienda" })).toBeTruthy();
+    // El botón del panel está, porque ese proyecto es el abierto.
+    expect(screen.getByRole("button", { name: /panel/i })).toBeTruthy();
+    // Y ningún chat va marcado: no se está leyendo ninguno.
+    const barra = screen.getAllByRole("navigation").find((n) => n.getAttribute("aria-label") === null)!;
+    const vieja = within(barra).getByRole("button", { name: "Vieja" }).parentElement as HTMLElement;
+    expect(vieja.getAttribute("aria-current")).toBeNull();
+    // Pulsar otra vez el mismo no reabre nada: daría otra sesión en blanco.
+    enviar.mockClear();
+    fireEvent.click(within(barra).getByRole("button", { name: "Tienda" }));
+    expect(enviar).not.toHaveBeenCalledWith({ clase: "sesion", proyecto: "p1" });
+  });
+
+  /** Un alta de la ventana de sesión nueva, con lo que cambie en cada paso. */
+  const altaDeVentana = (extra: Record<string, unknown>) => ({
+    clase: "alta" as const,
+    pasos: [],
+    proveedores: [],
+    entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }],
+    proyectos: [
+      { id: "p1", nombre: "Tienda" },
+      { id: "p2", nombre: "Almacén" },
+    ],
+    ramas: [],
+    proyectoAbierto: false,
+    ...extra,
+  });
+
+  /** Medido: la ventana de Almacén enseñaba las ramas de Tienda mientras llegaban las suyas. */
+  it("las ramas de OTRO proyecto no se enseñan: la ventana espera con el combo bloqueado", () => {
+    const { store } = montarConProyectos([
+      { id: "p1", nombre: "Tienda" },
+      { id: "p2", nombre: "Almacén" },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "nueva sesión en Almacén" }));
+    act(() => store.aplicar(altaDeVentana({ ramas: ["rama-de-tienda"], ramasDe: "p1" }) as never));
+    const combo = screen.getByLabelText(/rama de origen/i) as HTMLSelectElement;
+    expect(combo.disabled).toBe(true);
+    expect(screen.queryByRole("option", { name: "rama-de-tienda" })).toBeNull();
+    expect((screen.getByRole("button", { name: /^empezar$/i }) as HTMLButtonElement).disabled).toBe(true);
+    // Llegan las suyas: ya se puede elegir.
+    act(() => store.aplicar(altaDeVentana({ ramas: ["main"], ramasDe: "p2" }) as never));
+    expect((screen.getByLabelText(/rama de origen/i) as HTMLSelectElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: /^empezar$/i }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("empezar la descarga deja la ventana diciendo que descarga, y se cierra al abrirse", () => {
+    const { store, enviar } = montarConProyectos([{ id: "p1", nombre: "Tienda" }]);
+    fireEvent.click(screen.getByRole("button", { name: "nueva sesión en Tienda" }));
+    act(() => store.aplicar(altaDeVentana({ ramas: ["master"], ramasDe: "p1" }) as never));
+    fireEvent.click(screen.getByRole("button", { name: /^empezar$/i }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "alta", paso: "proyecto", proyecto: "p1", rama: "master" });
+    expect(screen.getByText("Descargando proyecto…")).toBeTruthy();
+    expect((screen.getByRole("button", { name: /^empezar$/i }) as HTMLButtonElement).disabled).toBe(true);
+    // Un alta intermedia sin nada que decir no la cierra.
+    act(() => store.aplicar(altaDeVentana({ ramas: ["master"], ramasDe: "p1" }) as never));
+    expect(screen.getByText("Descargando proyecto…")).toBeTruthy();
+    // Bajado y abierto: la ventana se va.
+    act(() =>
+      store.aplicar(
+        altaDeVentana({
+          proyectos: [{ id: "p1", nombre: "Tienda", local: true }],
+          proyectoAbierto: true,
+          proyectoActivo: "p1",
+        }) as never
+      )
+    );
+    expect(screen.queryByText("Descargando proyecto…")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^empezar$/i })).toBeNull();
+  });
+
+  it("si la descarga falla, la ventana se queda con el motivo debajo del combo", () => {
+    const { store } = montarConProyectos([{ id: "p1", nombre: "Tienda" }]);
+    fireEvent.click(screen.getByRole("button", { name: "nueva sesión en Tienda" }));
+    act(() => store.aplicar(altaDeVentana({ ramas: ["master"], ramasDe: "p1" }) as never));
+    fireEvent.click(screen.getByRole("button", { name: /^empezar$/i }));
+    act(() => store.aplicar(altaDeVentana({ ramas: ["master"], ramasDe: "p1", aviso: "el zip llegó vacío" }) as never));
+    expect(screen.getByRole("alert").textContent).toMatch(/No se pudo descargar el proyecto: el zip llegó vacío/);
+    expect((screen.getByRole("button", { name: /^empezar$/i }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("el resumen de un proyecto sin bajar ofrece «Descargar», y abre la ventana de la rama", () => {
     const { enviar } = montarConProyectos([{ id: "p1", nombre: "Tienda" }]);
-    fireEvent.click(screen.getByRole("button", { name: /nueva sesión en tienda/i }));
-    expect(screen.getByText(/nueva sesión en tienda/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Tienda" }));
+    expect(screen.queryByRole("button", { name: "Borrar copia local" })).toBeNull();
+    enviar.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Descargar" }));
     expect(enviar).toHaveBeenCalledWith({ clase: "alta", paso: "proyecto", proyecto: "p1" });
+    expect(screen.getByLabelText(/rama de origen/i)).toBeTruthy();
+  });
+
+  it("pulsar una sesión del resumen la abre, y el centro deja de ser el resumen", () => {
+    const { store, enviar } = montarConProyectos([]);
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }],
+        proyectos: [
+          {
+            id: "p1",
+            nombre: "Tienda",
+            sesiones: [{ id: "s1", titulo: "Arreglar el login", ultimoTurno: "2026-09-21T10:00:00.000Z" }],
+          },
+        ],
+        ramas: [],
+        proyectoAbierto: false,
+      })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Tienda" }));
+    const bloque = screen.getByRole("region", { name: "Últimas sesiones" });
+    enviar.mockClear();
+    fireEvent.click(within(bloque).getByRole("button", { name: /Arreglar el login/ }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "sesion", proyecto: "p1", sesion: "s1" });
+    expect(screen.queryByRole("region", { name: "Últimas sesiones" })).toBeNull();
+  });
+
+  it("un proyecto SIN bajar no se abre al pulsar su nombre: abrir sería descargar", () => {
+    const { enviar } = montarConProyectos([{ id: "p1", nombre: "Tienda" }]);
+    enviar.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Tienda" }));
+    // Lo único que sale es la FOTO del resumen, una lectura: ni abrir ni descargar.
+    expect(enviar.mock.calls.map(([m]) => m)).toEqual([{ clase: "copiaLocal", accion: "resumen", proyecto: "p1" }]);
+    expect(screen.queryByRole("button", { name: /panel/i })).toBeNull();
+  });
+
+  /** Una sola fila marcada: con el resumen de B delante, A —el abierto— deja de estarlo. */
+  it("solo hay UN proyecto marcado: el del resumen manda sobre el abierto", () => {
+    const { store } = montarConProyectos([]);
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        registrados: [{ id: "webstudio", nombre: "W", url: "https://mcp.example/mcp", fijados: ["p2"] }],
+        entornoActivo: "webstudio",
+        proyectos: [
+          { id: "p1", nombre: "Tienda", local: true },
+          { id: "p2", nombre: "Almacén" },
+        ],
+        ramas: [],
+        proyectoAbierto: true,
+        proyectoActivo: "p1",
+      })
+    );
+    const barra = screen.getAllByRole("navigation").find((n) => n.getAttribute("aria-label") === null)!;
+    const fila = (nombre: string) => within(barra).getByRole("button", { name: nombre }).parentElement as HTMLElement;
+    // Almacén está fijado (otro grupo), y aun así solo una fila lleva la marca.
+    fireEvent.click(within(barra).getByRole("button", { name: "Almacén" }));
+    expect(fila("Almacén").getAttribute("aria-current")).toBe("true");
+    expect(fila("Tienda").getAttribute("aria-current")).toBeNull();
+  });
+
+  it("borrar la copia desde el resumen manda el ID, y un 409 deja la ventana con su motivo", async () => {
+    const { enviar } = montarConProyectos([{ id: "p1", nombre: "Tienda", local: true }]);
+    enviar.mockImplementation(((m: { clase?: string }) =>
+      Promise.resolve(
+        m.clase === "copiaLocal"
+          ? new Response(JSON.stringify({ motivo: "hay 1 tarea de fondo sin terminar en este proyecto" }), { status: 409 })
+          : undefined
+      )) as never);
+    fireEvent.click(screen.getByRole("button", { name: "Tienda" }));
+    fireEvent.click(screen.getByRole("button", { name: "Borrar copia local" }));
+    const borrar = screen.getByRole("button", { name: "Borrar" }) as HTMLButtonElement;
+    // Sin el nombre escrito no se puede.
+    expect(borrar.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText(/para confirmar/i), { target: { value: "Tienda" } });
+    expect(borrar.disabled).toBe(false);
+    await act(async () => {
+      fireEvent.click(borrar);
+    });
+    expect(enviar).toHaveBeenCalledWith({ clase: "copiaLocal", accion: "borrar", proyecto: "p1" });
+    expect((await screen.findByRole("alert")).textContent).toMatch(/tarea de fondo sin terminar/);
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
+  });
+
+  /** Medido en pantalla: la barra decía «14 más» y el escritorio «otros 15» para la MISMA elección. */
+  it("la barra y el escritorio cuentan igual lo que queda sin enseñar, con fijados", () => {
+    const { store } = montarConProyectos([]);
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        registrados: [
+          { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp", proyectos: ["p1"], fijados: ["p6"] },
+        ],
+        entornoActivo: "webstudio",
+        proyectos: ["p1", "p2", "p3", "p4", "p5", "p6"].map((id) => ({ id, nombre: `Proyecto ${id}` })),
+        ramas: [],
+        proyectoAbierto: false,
+      })
+    );
+    expect(screen.getByText(/4 proyectos más sin enseñar/)).toBeTruthy();
+    expect(screen.getByText(/Otros 4 proyectos del entorno/)).toBeTruthy();
+  });
+
+  it("fijar un proyecto manda la lista ENTERA de fijados del entorno activo", () => {
+    const { store, enviar } = montarConProyectos([]);
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        registrados: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp", fijados: ["p1"] }],
+        entornoActivo: "webstudio",
+        proyectos: [
+          { id: "p1", nombre: "Tienda" },
+          { id: "p2", nombre: "Almacén" },
+        ],
+        ramas: [],
+        proyectoAbierto: false,
+      })
+    );
+    // El fijado sale en su grupo, arriba.
+    expect(screen.getByText("Proyectos fijados")).toBeTruthy();
+    enviar.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "fijar Almacén" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "entorno", accion: "fijados", entorno: "webstudio", proyectos: ["p1", "p2"] });
+    fireEvent.click(screen.getByRole("button", { name: "dejar de fijar Tienda" }));
+    expect(enviar).toHaveBeenLastCalledWith({ clase: "entorno", accion: "fijados", entorno: "webstudio", proyectos: [] });
   });
 
   it("elegir otro entorno lo dice por el cable: sus proyectos los trae el servidor", () => {
@@ -1109,7 +1367,7 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
 
   it("cancelar la ventana no manda nada: el proyecto se queda sin abrir", () => {
     const { store, enviar } = montarConProyectos([{ id: "p1", nombre: "Tienda" }]);
-    fireEvent.click(screen.getByRole("button", { name: "Tienda" }));
+    fireEvent.click(screen.getByRole("button", { name: "nueva sesión en Tienda" }));
     act(() =>
       store.aplicar({
         clase: "alta",
@@ -1118,6 +1376,7 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
         entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }],
         proyectos: [{ id: "p1", nombre: "Tienda" }],
         ramas: ["master", "pruebas"],
+        ramasDe: "p1",
         proyectoAbierto: false,
       })
     );

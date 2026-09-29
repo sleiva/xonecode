@@ -144,8 +144,8 @@
 /* El aviso de proyectos sin enseñar, en TARJETA y no en línea suelta italiza como
    `.sinSesiones`: es un aviso accionable (hay un botón dentro) y quería leerse como tal,
    no como una fila más de la lista que se confunde con el resto de texto atenuado. El
-   fondo es el mismo `bg-layer-2` que ya usa `.duenno` en esta hoja para una superficie
-   ligeramente elevada, sin inventar un tono nuevo. */
+   fondo es el `bg-layer-2` de la paleta copiada para una superficie ligeramente elevada,
+   sin inventar un tono nuevo. */
 .avisoOcultos {
   margin: 6px 10px 8px;
   padding: 8px 10px;
@@ -261,11 +261,10 @@
    se escondiera al salir el ratón, el menú se quedaría colgando de la nada—. La doble
    clase es para ganarle en especificidad al `display: none` de la hoja copiada sin tocarla
    ni recurrir a `!important`. */
-/* Las acciones de una fila («+» en la de proyecto, «…» en la de sesión) llevan AIRE a su
-   izquierda. Medido en pantalla: el «…» arrancaba en el píxel exacto donde acababa la fecha
-   —cero de separación— y en la fila de proyecto quedaba a 6 px de la pastilla de
-   propio/compartido, que es lo mismo que pegado. Dos controles y un dato sin hueco entre
-   ellos se leen como una sola cosa, y encima invita a pulsar el que no querías. */
+/* Las acciones de una fila de sesión (el «…») llevan AIRE a su izquierda. Medido en
+   pantalla: el «…» arrancaba en el píxel exacto donde acababa la fecha —cero de
+   separación—, que es lo mismo que pegado. Dos controles y un dato sin hueco entre ellos se
+   leen como una sola cosa, y encima invita a pulsar el que no querías. */
 .accionesDeFila.accionesDeFila {
   display: inline-flex;
   margin-left: 12px;
@@ -278,34 +277,40 @@
   opacity: 1;
 }
 
-/* De quién es el proyecto, al lado del nombre. Discreta a propósito: el nombre es lo que se
-   lee para elegir, y esto es la respuesta a una pregunta que solo se hace de vez en cuando.
-   Lo compartido se destaca sobre lo propio —tener cosas tuyas es lo normal, lo que cambia
-   cómo trabajas es que sea de otro— y por eso solo esa variante se colorea; la palabra
-   distingue las dos aunque el color no llegue. */
-.duenno {
+/* El «+» de una fila de proyecto, SIEMPRE a la vista. Va fuera de `.accionesDeFila` (que
+   lo dejaba en opacidad 0 hasta posar el ratón) y de `.rowActions` de la hoja copiada (que
+   lo quitaba con `display: none`): empezar a trabajar en un proyecto es la acción principal
+   de su fila, y una acción principal que no se ve no se descubre. El mismo aire a su
+   izquierda que las acciones de sesión, por el mismo motivo. El botón de dentro se queda
+   con `.iconButton` de la hoja copiada: su tamaño, su gris y su hover. */
+.accionFija {
   flex: none;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-tertiary);
-  /* Mono y en versalitas, lo mismo que la del Escritorio: es la MISMA etiqueta en las dos
-     pantallas y tenía que leerse igual en las dos. La regla del rediseño es que la letra de
-     máquina marca lo que es dato —etiquetas de estado, rutas, URLs— frente a la prosa. */
-  font-family: var(--ds-font-family-code);
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  line-height: 1.6;
-  text-transform: uppercase;
-  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 12px;
 }
 
-/* `state-business-tertiary`, no `…-secondary`: ese alias NO EXISTE en la paleta copiada
-   (comprobado — de la familia «state» solo hay secondary para success, error y warn), y
-   usarlo dejaba la pastilla sin fondo. El tertiary es el azul pastel que `Chat.module.css`
-   ya documenta haber medido para su burbuja de usuario. */
-.duenno[data-compartido] {
-  background: var(--dsw-alias-state-business-tertiary);
+/* La chincheta de fijar, lo primero de la fila. En reposo el gris de `.iconButton` (la hoja
+   copiada); fijado, el azul de «esto es tuyo y está elegido» — el mismo alias que la hoja
+   copiada usa para la carpeta activa (`.folderActive`). La forma rellena lo dice además del
+   color. */
+.fijar[data-fijado] {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.fijar:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+/* Compartido CONTIGO, con un icono al lado del nombre; lo propio no lleva nada. El color es
+   el que tenía la pastilla «compartido» que sustituye (`state-business-primary`): lo
+   compartido se sigue destacando igual, solo que sin la palabra. La geometría es la de
+   `.estadoLocal`, su vecino, para que los dos iconos de la fila se alineen. */
+.compartido {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
   color: var(--dsw-alias-state-business-primary);
 }
 
@@ -346,12 +351,24 @@
    dentro —un `<option>` no admite marcado—, así que va fuera y contesta de un vistazo la
    pregunta de esa esquina: en qué servidor estás. Se encoge a cero antes que el nombre:
    con la barra estrecha, lo que hay que poder leer es el nombre. */
+/* El hueco de debajo es de la FILA y no del `<select>`: con el `margin-bottom` en el combo,
+   el icono se centraba contra la caja del combo MÁS ese margen y quedaba unos píxeles por
+   debajo de su texto (medido en pantalla). El combo cede ancho con `flex: 1` en vez de su
+   `calc(100% - 4px)`, que en una fila con icono lo empujaba fuera. */
 .filaDeEntorno {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
+  margin: 0 2px 8px;
 }
+
+/* El combo lo envuelve `Desplegable`, que ya ocupa el ancho libre de la fila y pone la
+   flecha con su hueco; aquí solo se le quita el margen que ahora es de la fila. */
+.filaDeEntorno .entorno {
+  margin: 0;
+}
+
 
 .iconoDeEntorno {
   flex-shrink: 0;
@@ -451,4 +468,25 @@
   color: var(--dsw-alias-label-tertiary);
   font-family: var(--ds-font-family-code);
   font-size: 10px;
+}
+
+/* Una fila de proyecto con su RAMA debajo del nombre. La hoja copiada la fija a 34 px de
+   alto —una línea—, y con dos el texto se salía por abajo: aquí crece lo justo, y las que no
+   llevan rama se quedan exactamente como estaban. La doble clase le gana a `.projectRow` sin
+   depender del orden de las hojas en el bundle. */
+.filaConRama.filaConRama {
+  height: auto;
+  min-height: 34px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+/* La rama: más pequeña y más apagada que el nombre, y en letra de máquina, que es la regla del
+   rediseño para lo que es un dato (una rama es un identificador, no prosa). Doble clase para
+   ganarle a la `.meta` de la hoja copiada, que declara su propio tamaño y alto de línea. */
+.ramaDeProyecto.ramaDeProyecto {
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  line-height: 14px;
 }

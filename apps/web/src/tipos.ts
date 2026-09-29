@@ -781,7 +781,7 @@ export type MensajeAlCliente =
        * nadie lo ha dicho —y manda la omisión de la barra—, mientras que una lista vacía es
        * una elección: ninguno.
        */
-      registrados: { id: string; nombre: string; url: string; proyectos?: string[]; copias?: number }[];
+      registrados: { id: string; nombre: string; url: string; proyectos?: string[]; fijados?: string[]; copias?: number }[];
       /** De qué entorno son los `proyectos` de este mensaje. Ausente = de ninguno todavía. */
       entornoActivo?: string;
       /**
@@ -825,11 +825,15 @@ export type MensajeAlCliente =
         sesiones?: SesionDelCable[];
         /** La copia local ya existe: abrirlo no baja nada ni pregunta rama. */
         local?: boolean;
+        /** La rama de la que se bajó la copia local. Ausente = sin copia, o no consta. */
+        rama?: string;
         /** Alguna sesión de este proyecto trabaja AHORA. No se deriva de las filas: una
          *  sesión nueva no tiene fila hasta su primer volcado. Ver `transporte.ts`. */
         trabajando?: true;
       }[];
       ramas: string[];
+      /** El id del proyecto del que son las `ramas`. Ausente = no hay, o no consta. */
+      ramasDe?: string;
       /** Qué falló en el paso anterior; ausente si no falló nada. Lo pinta el propio paso:
        *  un acto de sistema se va a las Trazas, que no es la pestaña que se está viendo. */
       aviso?: string;
@@ -912,6 +916,16 @@ export interface FicheroDelProyecto {
  * no dice nada de la sesión en vez de decir «ninguno», que sobre una sesión sin sello sería
  * una afirmación sobre quien escribió lo de dentro.
  */
+/**
+ * La foto del resumen de un proyecto (ver `transporte.ts`). `tareas` son los IDS de las de este
+ * proyecto, decididos por el servidor por su raíz; `sync` es la medida de la banda de
+ * CloudStudio, AUSENTE sin copia bajada.
+ */
+export interface FotoDelResumen {
+  tareas: string[];
+  sync?: EstadoDeSync;
+}
+
 export interface EstadoDeSync {
   proyecto?: string;
   rama?: string;
@@ -1093,6 +1107,14 @@ export type MensajeDelCliente =
   | { clase: "sesionAccion"; accion: "renombrar"; proyecto: string; sesion: string; titulo: string }
   /** Qué proyectos de un entorno se enseñan en la barra. Vacío = ninguno, que es elección. */
   | { clase: "entorno"; accion: "visibles"; entorno: string; proyectos: string[] }
+  /** Los fijados arriba de la barra, la lista ENTERA (ver `transporte.ts`). */
+  | { clase: "entorno"; accion: "fijados"; entorno: string; proyectos: string[] }
+  /** Borrar la copia local de un proyecto por su ID. 409 con `{ motivo }` si no se puede. */
+  | { clase: "copiaLocal"; accion: "borrar"; proyecto: string }
+  /** Abrir la carpeta de la copia local en el explorador del sistema. 409 con `{ motivo }`. */
+  | { clase: "copiaLocal"; accion: "abrirCarpeta"; proyecto: string }
+  /** Pedir la FOTO del resumen del proyecto: 200 con `FotoDelResumen`, o 409 con `{ motivo }`. */
+  | { clase: "copiaLocal"; accion: "resumen"; proyecto: string }
   /**
    * Quitar un entorno registrado. El servidor contesta **409 con `{ motivo }`** si no se puede
    * ahora (un proyecto suyo abierto, una tarea sin terminar): la negativa vive allí, y así el

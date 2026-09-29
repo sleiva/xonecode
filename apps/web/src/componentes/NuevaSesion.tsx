@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Modal, Button } from "@deepseek-ai/dsh-client-ui-primitives";
 import estilos from "./NuevaSesion.module.css";
+import { Desplegable } from "./Desplegable.js";
 
 /**
  * Empezar una sesión en un proyecto, con una ventana delante.
@@ -19,14 +20,24 @@ import estilos from "./NuevaSesion.module.css";
  *   (mismo criterio que el alta de terminal), pero se ENSEÑA: elegir por el usuario y
  *   callarlo es cómo se acaba trabajando sobre la rama equivocada.
  *
- * Lo que NO hace es empezar sola. Cerrar no abre nada, y esa es la diferencia con lo de
- * antes: pulsar «+» por error costaba una descarga.
+ * **Es modal de verdad: solo se cierra con «Cancelar».** Ni el velo ni `Escape`: con una
+ * descarga de minutos en marcha, un clic fuera de la ventana la hacía desaparecer y dejaba
+ * solo el «descargando…» de la fila para saber qué pasaba.
+ *
+ * **Mientras no están las ramas DE ESTE proyecto, el combo y «Empezar» esperan bloqueados**,
+ * con la carga DENTRO del propio combo. Quien decide que son de este proyecto es `App.tsx` (`ramasDe`):
+ * aquí llegan vacías hasta entonces, y eso es lo que impide empezar con la rama de otro.
+ *
+ * **Y al empezar la descarga, la ventana se queda** con «Descargando proyecto…» y «Empezar»
+ * bloqueado hasta que el servidor diga cómo acabó: si abre el proyecto, `App.tsx` la cierra;
+ * si falla, el motivo sale debajo del combo y se puede volver a intentar.
  */
 export function NuevaSesion({
   proyecto,
   local,
   ramas,
   aviso,
+  descargando,
   alEmpezar,
   alCerrar,
 }: {
@@ -34,17 +45,17 @@ export function NuevaSesion({
   /** La copia local ya existe (lo dice el servidor): entonces no hay rama que elegir. */
   local: boolean;
   /**
-   * Las ramas del proyecto, cuando hacen falta. Vacío mientras el servidor las busca —se
-   * piden al abrir esta ventana—, y eso se dice en vez de fingir una lista.
+   * Las ramas DE ESTE proyecto. Vacío mientras el servidor las busca —se piden al abrir esta
+   * ventana—, y eso se dice en vez de fingir una lista.
    */
   ramas: readonly string[];
   /**
-   * Lo que falló al buscarlas, si falló. Sin esto la ventana se quedaba en «consultando las
-   * ramas…» para siempre cuando la consulta reventaba —CloudStudio pide una sesión MCP viva
-   * y puede fallar—: el motivo viajaba en el mensaje de alta y aterrizaba en un acto de
-   * sistema, que es la OTRA pantalla. Un «cargando» eterno es un fallo mudo con animación.
+   * Lo que falló en el último paso —consultar las ramas o descargar—, si falló. Sin esto la
+   * ventana se quedaba en «consultando» para siempre cuando la consulta reventaba.
    */
   aviso?: string;
+  /** La descarga pedida desde esta ventana está EN MARCHA. */
+  descargando?: boolean;
   /** `rama` solo cuando hay que bajar el proyecto; con copia local no se manda ninguna. */
   alEmpezar: (rama?: string) => void;
   alCerrar: () => void;
@@ -52,20 +63,20 @@ export function NuevaSesion({
   // La primera rama es la preseleccionada, y se ve cuál es. `undefined` mientras no haya
   // llegado ninguna: no se elige por el usuario un valor que aún no existe.
   const [rama, setRama] = useState<string | undefined>(undefined);
-  const elegida = rama ?? ramas[0];
+  const elegida = rama !== undefined && ramas.includes(rama) ? rama : ramas[0];
+  const enMarcha = descargando === true;
+  const cargandoRamas = !local && ramas.length === 0 && aviso === undefined;
 
   return (
     // Capa y velo propios: los CSS Modules del primitivo son stubs vacíos y su diálogo no
     // trae ni posición ni tamaño — sin esto la ventana se pinta al final del `body`, fuera
     // de la vista. Mismo motivo y misma solución que en `Ajustes` y `Aprobacion`.
-    <Modal open onClose={alCerrar} title="Nueva sesión" headless className={estilos.capa}>
-      <div
-        className={estilos.velo}
-        onClick={(evento) => {
-          if (evento.target === evento.currentTarget) alCerrar();
-        }}
-      >
-        <div className={estilos.ventana}>
+    //
+    // `onClose` NO cierra: es por donde el primitivo avisa del `Escape`, y esta ventana solo
+    // se cierra con «Cancelar».
+    <Modal open onClose={() => {}} title="Nueva sesión" headless className={estilos.capa}>
+      <div className={estilos.velo}>
+        <div className={estilos.ventana} {...(enMarcha || cargandoRamas ? { "aria-busy": "true" as const } : {})}>
           <h2 className={estilos.titulo}>Nueva sesión en {proyecto.nombre}</h2>
           {local ? (
             <p className={estilos.nota}>La copia local ya está en tu equipo: se abre y ya.</p>
@@ -78,43 +89,54 @@ export function NuevaSesion({
               <label className={estilos.etiqueta} htmlFor="nueva-sesion-rama">
                 Rama de origen
               </label>
-              {ramas.length === 0 ? (
-                aviso === undefined ? (
-                  <p className={estilos.espera}>consultando las ramas…</p>
+              {/* El combo está SIEMPRE, y bloqueado mientras no hay nada que elegir o se está
+                  descargando: que aparezca y desaparezca movía la ventana entera. */}
+              <Desplegable
+                id="nueva-sesion-rama"
+                className={estilos.campo}
+                value={elegida ?? ""}
+                disabled={ramas.length === 0 || enMarcha}
+                cargando={cargandoRamas}
+                onChange={(e) => setRama(e.target.value)}
+              >
+                {ramas.length === 0 ? (
+                  <option value="">{cargandoRamas ? "cargando las ramas…" : "sin ramas que elegir"}</option>
                 ) : (
-                  // El motivo, donde el usuario está mirando. Y sin desplegable: no hay nada
-                  // que elegir, así que enseñar uno vacío sería fingir que sí.
-                  <p className={estilos.fallo} role="alert">
-                    No se pudieron consultar las ramas: {aviso}
-                  </p>
-                )
-              ) : (
-                <select
-                  id="nueva-sesion-rama"
-                  className={estilos.campo}
-                  value={elegida ?? ""}
-                  onChange={(e) => setRama(e.target.value)}
-                >
-                  {ramas.map((r) => (
+                  ramas.map((r) => (
                     <option key={r} value={r}>
                       {r}
                     </option>
-                  ))}
-                </select>
-              )}
+                  ))
+                )}
+              </Desplegable>
+              {/* La carga de las ramas va DENTRO del combo (la señal en el sitio de la flecha y
+                  «cargando las ramas…» como su texto). Debajo, UNA de dos cosas: la descarga en
+                  marcha, o por qué falló el último paso. */}
+              {enMarcha ? (
+                <p className={estilos.carga} role="status">
+                  <span className={estilos.girando} aria-hidden="true" />
+                  Descargando proyecto…
+                </p>
+              ) : aviso !== undefined ? (
+                <p className={estilos.fallo} role="alert">
+                  {ramas.length === 0 ? "No se pudieron consultar las ramas" : "No se pudo descargar el proyecto"}: {aviso}
+                </p>
+              ) : null}
             </>
           )}
           <div className={estilos.acciones}>
+            {/* Cancelar sigue vivo durante la descarga: cierra la ventana, no la descarga,
+                que sigue y se ve en la fila del proyecto. Una ventana sin salida mientras un
+                servidor tarda minutos sería peor. */}
             <Button variant="outline" className={estilos.accion} onClick={alCerrar}>
               Cancelar
             </Button>
             <Button
               variant="primary"
               className={`${estilos.accion} ${estilos.principal}`}
-              // Sin rama que mandar no se puede empezar lo que hay que bajar: el botón
-              // espera a que lleguen, en vez de mandar un `undefined` que el servidor
-              // tendría que interpretar.
-              disabled={!local && elegida === undefined}
+              // Sin rama que mandar no se puede empezar lo que hay que bajar, y con la
+              // descarga en marcha un segundo clic pediría otra encima.
+              disabled={enMarcha || (!local && elegida === undefined)}
               onClick={() => alEmpezar(local ? undefined : elegida)}
             >
               {/* «Empezar» en los dos casos. Lo que la descarga implica ya lo dice el

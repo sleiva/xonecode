@@ -113,8 +113,19 @@ export function carpetaDeLaSalida(salida: string): string | undefined {
  * Pura: compone el comando. Lanzarlo es de `agent/config/selectorEnMaquina.ts`.
  */
 export function comandoParaAbrirCarpeta(plataforma: string, ruta: string): ComandoDeSelector {
-  const carpeta = (plataforma === "win32" ? win32 : posix).dirname(ruta);
-  if (plataforma === "win32") return { programa: "explorer.exe", argumentos: [carpeta] };
+  return comandoParaAbrirDirectorio(plataforma, (plataforma === "win32" ? win32 : posix).dirname(ruta));
+}
+
+/**
+ * El comando que abre ESA carpeta —no la que la contiene— en el explorador de ficheros del
+ * sistema. Es el de «ver los ficheros del proyecto» del resumen.
+ *
+ * En Windows la ruta se NORMALIZA a barras invertidas: la raíz de un proyecto sale de
+ * `rutaDeWorkspace`, que junta con `/` sobre una base de `\`, y `explorer.exe` no entiende una
+ * ruta mezclada — abre «Documentos» en su lugar, sin error que leer.
+ */
+export function comandoParaAbrirDirectorio(plataforma: string, carpeta: string): ComandoDeSelector {
+  if (plataforma === "win32") return { programa: "explorer.exe", argumentos: [win32.normalize(carpeta)] };
   if (plataforma === "darwin") return { programa: "open", argumentos: [carpeta] };
   return { programa: "xdg-open", argumentos: [carpeta] };
 }

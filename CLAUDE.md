@@ -595,6 +595,43 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   Quitar lo decide el SERVIDOR y contesta **409 con el motivo**. Las copias bajadas se QUEDAN salvo
   con la casilla «borrar también las copias», DESMARCADA siempre al abrir; el botón rojo no se
   activa hasta escribir el nombre del entorno.
+- **Los FIJADOS son otra lista del entorno, no una marca de los visibles** (`Entorno.fijados`,
+  `accion: "fijados"`): salen en «Proyectos fijados», arriba, estén o no entre los visibles, y
+  no se repiten abajo. Las dos listas se escriben por separado partiendo del entorno ENTERO; el
+  store del cliente es lista BLANCA por campo, y sin nombrarlo ahí el grupo no se pintaba nunca.
+- **Pulsar el NOMBRE de un proyecto abre su RESUMEN en el centro** (`ResumenDeProyecto.tsx`),
+  estado de VISTA como el escritorio; empezar a trabajar es el «+», siempre a la vista. Con el
+  proyecto trabajando, el resumen ofrece ir a la conversación en marcha: era el único camino
+  que daba el nombre. **Uno BAJADO se abre por detrás** (`App.tsx#abrirResumen`, el mismo
+  `clase: "sesion"` sin salir del resumen) porque el PANEL de la sesión le pregunta a la consola
+  abierta; uno sin bajar no se abre (sería descargar) y su resumen no lleva panel. **Una sola
+  fila marcada** en la barra —la del resumen manda sobre la abierta— y con el resumen delante
+  ningún chat va marcado. «Abrir carpeta» (`accion: "abrirCarpeta"`) lo lanza el SERVIDOR con la
+  raíz que compone él (`comandoParaAbrirDirectorio`); **límite declarado**: por un túnel se abre
+  en la máquina del servidor.
+- **Lo que el resumen no sabe lo pide en UNA foto** (`accion: "resumen"`, `FotoDelResumen`), que
+  vuelve en la PROPIA respuesta del POST y se guarda CON el id del proyecto: una respuesta de
+  otro se tira (el fallo que cerró `ramasDe`). Los pendientes son `lecturaDeSync`, la MISMA
+  medida que la banda de CloudStudio —dos cuentas darían dos cifras—, con su límite: un fichero
+  nuevo que git no sigue no cuenta y un renombrado cuenta dos. **Las tareas del proyecto las
+  decide el SERVIDOR por la raíz** (`mismaRuta`): una tarea no lleva su entorno, y filtrarla por
+  id en el cliente dejaba pasar la de otro. Sesiones (`SESIONES_EN_EL_RESUMEN`) y tareas
+  (`TAREAS_EN_EL_RESUMEN`) abren con las reglas de la barra y del kanban
+  (`sePuedeAbrirLaTarea`: nunca una `en-proceso`, que el servidor declina). **El gasto va en
+  TOKENS por sesión** (`gastoDelProyecto.ts`, `SESIONES_EN_EL_GASTO`): cada cuenta con su
+  convención de caché, las dos sin sumarse, y el total DICE cuántas sesiones no constan. Sus dos
+  colores (`--xonecode-gasto-*`) están validados con el skill `dataviz` contra el fondo de cada
+  tema.
+- **Borrar la copia local la CIERRA antes** (`vestibulo.borrarCopia`, el orden de
+  `borrarSesion`) y después suelta el checkpointer (`cerrarCheckpointerDeProyecto`): el mapa de
+  conexiones no cierra nunca, y en Windows un `checkpoint.sqlite` abierto impide borrar la
+  carpeta. Del cable llega el ID; el nombre sale del listado del SERVIDOR y la ruta de
+  `rutaDeWorkspace`, comprobada por el texto y por el `realpath`. **Se RENOMBRA a una lápida
+  oculta antes de borrar** (`borrarCopiaDeProyecto`): con un fichero abierto por otro proceso,
+  `rmSync` en Windows revienta a medias y deja una copia rota; el renombrado falla antes de
+  tocar nada, así que «no se ha tocado nada» es verdad. Se niega con 409 y motivo
+  (`motivoParaNoBorrarCopia`) con un turno en vuelo o una tarea sin terminar ahí; una consola
+  abierta no es motivo.
 - **Una copia «bajada» es `config.json` Y `sync.json`** (`vestibulo.ts#esProyectoEnDisco`): el
   alta escribe `config.json` ANTES de bajar. Un fallo de descarga se APUNTA en `fallos.jsonl`.
 - **La clave de API viaja por el ÚNICO mensaje del cable que la lleva** (`leerSecreto`), y se

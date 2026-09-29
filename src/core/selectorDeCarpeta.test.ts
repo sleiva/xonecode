@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { carpetaDeLaSalida, comandoDelSelector, comandoParaAbrirCarpeta } from "./selectorDeCarpeta.js";
+import { carpetaDeLaSalida, comandoDelSelector, comandoParaAbrirCarpeta, comandoParaAbrirDirectorio } from "./selectorDeCarpeta.js";
 
 describe("comandoDelSelector", () => {
   it("en macOS abre el diálogo del sistema", () => {
@@ -88,5 +88,26 @@ describe("comandoParaAbrirCarpeta", () => {
     // equivocado (no hay ninguna barra `/` que cortar) y devolvería la ruta entera tal cual.
     const comando = comandoParaAbrirCarpeta("win32", "C:\\Sdk\\platform-tools\\adb.exe");
     expect(comando.argumentos[0]).toBe("C:\\Sdk\\platform-tools");
+  });
+});
+
+describe("comandoParaAbrirDirectorio", () => {
+  /** La raíz de un proyecto sale de `rutaDeWorkspace` con `/` sobre una base de `\`. */
+  it("en Windows abre ESA carpeta, con la ruta mezclada normalizada a barras invertidas", () => {
+    expect(comandoParaAbrirDirectorio("win32", "C:\\Users\\ana\\.xonecode\\workspace/webstudio/Tienda")).toEqual({
+      programa: "explorer.exe",
+      argumentos: ["C:\\Users\\ana\\.xonecode\\workspace\\webstudio\\Tienda"],
+    });
+  });
+
+  it("en macOS con `open` y en Linux con `xdg-open`, sobre la carpeta misma y no su padre", () => {
+    expect(comandoParaAbrirDirectorio("darwin", "/Users/ana/ws/webstudio/Tienda")).toEqual({
+      programa: "open",
+      argumentos: ["/Users/ana/ws/webstudio/Tienda"],
+    });
+    expect(comandoParaAbrirDirectorio("linux", "/home/ana/ws/webstudio/Tienda")).toEqual({
+      programa: "xdg-open",
+      argumentos: ["/home/ana/ws/webstudio/Tienda"],
+    });
   });
 });

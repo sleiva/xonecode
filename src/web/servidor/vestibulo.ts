@@ -25,7 +25,8 @@
 
 import { ficheroDeDispositivoDeSesion, lineaDelDispositivo } from "../../core/dispositivoDeSesion.js";
 import { crearRegistroDeFallos } from "../../agent/turno/registroDeFallos.js";
-import { baseDeWorkspacePorOmision } from "../../agent/config/settingsEnDisco.js";
+import { baseDeWorkspacePorOmision, borrarCopiaDeProyecto } from "../../agent/config/settingsEnDisco.js";
+import { cerrarCheckpointerDeProyecto } from "../../agent/sesiones/checkpointer.js";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -36,7 +37,7 @@ import type { Eleccion, FuentesDeEleccion, Proveedor } from "../../core/modelos.
 import type { ConsumoDeSesionPorCuenta, CatalogoModelosPort } from "../../core/ports.js";
 import { consumoDeLaSesion, consumoPersistible, esDoble } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
-import { motivoDeNombreDeEntornoInaceptable, rutaDeWorkspace } from "../../core/settings.js";
+import { motivoDeNombreDeEntornoInaceptable, motivoParaNoBorrarCopia, rutaDeWorkspace } from "../../core/settings.js";
 import {
   URL_CLOUDSTUDIO_POR_OMISION,
   SCOPES_CLOUDSTUDIO_AGENTE,
@@ -647,6 +648,12 @@ export interface Vestibulo {
    */
   guardarProyectosVisibles(entorno: string, proyectos: readonly string[]): Promise<{ ruta: string }>;
   /**
+   * Qué proyectos de un entorno van FIJADOS arriba de la barra. Se guarda con el entorno, igual
+   * que los visibles, y es la otra lista: `Entorno.fijados`. Las dos se escriben por separado y
+   * ninguna pisa a la otra — cada una parte del entorno registrado entero.
+   */
+  guardarProyectosFijados(entorno: string, proyectos: readonly string[]): Promise<{ ruta: string }>;
+  /**
    * El NOMBRE con el que se enseña un entorno —su alias—, escrito a mano.
    *
    * Es un RÓTULO y no un identificador: el `id` —que sale de la URL y es segmento de la
@@ -704,6 +711,23 @@ export interface Vestibulo {
   borrarSesion(
     raiz: string,
     id: string
+  ): Promise<{ borrada: boolean; cerroLaAbierta: boolean; motivo?: string }>;
+  /**
+   * Borra la COPIA LOCAL de un proyecto: `<workspace>/<entorno>/<proyecto>/` entera, con sus
+   * sesiones, su historial, sus artefactos y lo que no se haya subido. Lo de CloudStudio no se
+   * toca: el proyecto vuelve a «sin descargar».
+   *
+   * El mismo orden que `borrarSesion`, y por lo mismo: si hay consola sobre esa raíz se CIERRA
+   * antes —su `volcar()` reescribiría el índice que se va a borrar— y después se suelta la
+   * conexión del checkpointer, que en Windows impediría borrar la carpeta. Se DECLINA con
+   * `motivo` (`core/settings.ts#motivoParaNoBorrarCopia`) si algo escribe ahí: un turno en vuelo
+   * de persona o de tarea, o una tarea sin terminar del índice que pasa quien llama. La ruta
+   * la compone el vestíbulo: de fuera llegan el entorno y el NOMBRE, nunca una ruta.
+   */
+  borrarCopia(
+    entorno: string,
+    proyecto: string,
+    tareas: readonly { estado: string; raiz: string }[]
   ): Promise<{ borrada: boolean; cerroLaAbierta: boolean; motivo?: string }>;
   /** Le pone nombre a una sesión guardada. `false` si no existe o el título viene vacío. */
   renombrarSesion(raiz: string, id: string, titulo: string): boolean;
@@ -2037,6 +2061,16 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       return guardado;
     },
 
+    async guardarProyectosFijados(entorno, proyectos) {
+      const registrado = entornoPorId(entorno);
+      const conFijados: Entorno = { ...registrado, fijados: [...proyectos] };
+      const guardado = opciones.guardarEntorno(conFijados);
+      const donde = registrados.findIndex((e) => e.id === registrado.id);
+      if (donde >= 0) registrados.splice(donde, 1, conFijados);
+      informar(`proyectos fijados de «${registrado.id}»: ${proyectos.length === 0 ? "ninguno" : proyectos.join(", ")}`);
+      return guardado;
+    },
+
     async renombrarEntorno(id, nombre) {
       const registrado = entornoPorId(id);
       // El nombre se comprueba también aquí, y no solo en quien llama: es el dato que, mal
@@ -2134,6 +2168,46 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       // al `borrada`, por lo mismo que la ref.
       await opciones.olvidarMemoriaDeHilo?.(raiz, id);
       return { borrada, cerroLaAbierta };
+    },
+
+    async borrarCopia(entorno, proyecto, tareas) {
+      const registrado = entornoPorId(entorno);
+      const raiz = rutaDeWorkspace(base(), registrado.id, proyecto);
+      const suya = abiertas.get(raiz);
+      // «Trabajando» son las DOS clases de consola que escriben aquí: la de persona con un
+      // turno en vuelo y una de tarea que no ha cerrado. La segunda no está en `abiertas`
+      // (ver `deTareas`), y cerrarla sería matar un turno del agente por limpiar el disco.
+      const trabajando =
+        (suya !== undefined && !suya.cerrada && suya.turnoEnVuelo) ||
+        [...deTareas].some((consola) => consola.raiz === raiz && !consola.cerrada);
+      const motivo = motivoParaNoBorrarCopia({ raiz, trabajando, tareas });
+      if (motivo !== undefined) return { borrada: false, cerroLaAbierta: false, motivo };
+      const cerroLaAbierta = suya !== undefined && enFoco === raiz;
+      if (suya !== undefined) await cerrarConsolaDeProyecto(raiz);
+      // DESPUÉS de cerrar la consola: con ella viva, su turno podría seguir escribiendo en
+      // una conexión que se acaba de soltar.
+      cerrarCheckpointerDeProyecto(raiz);
+      try {
+        const resultado = borrarCopiaDeProyecto(base(), registrado.id, proyecto);
+        if (resultado === "borrada") informar(`borrada la copia local de «${proyecto}» en «${registrado.id}»`);
+        // Ya no está en su sitio —el proyecto sale «sin descargar»—, pero algo de la lápida
+        // no se dejó borrar. Se dice, sin ruta: es una carpeta oculta junto a las copias.
+        if (resultado === "restos") {
+          informar(`borrada la copia local de «${proyecto}»; quedaron restos en una carpeta oculta del workspace que algún programa tenía abiertos`);
+        }
+        return { borrada: resultado !== "nada", cerroLaAbierta };
+      } catch (error) {
+        // Solo el `code`: el mensaje de Node lleva la ruta absoluta, y esto sale por el cable.
+        // Si falló el RENOMBRADO no se ha tocado nada, y eso es lo que se dice.
+        const code = (error as NodeJS.ErrnoException).code;
+        return {
+          borrada: false,
+          cerroLaAbierta,
+          motivo: `no se ha tocado nada${code === undefined ? "" : ` (${code})`}: algún programa tiene abierto un fichero de la copia —otra ventana de XOneCode, un editor—; ciérralo y vuelve a probar`,
+        };
+      } finally {
+        if (cerroLaAbierta || suya !== undefined) avisarDeLasAbiertas();
+      }
     },
 
     renombrarSesion(raiz, id, titulo) {

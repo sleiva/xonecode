@@ -29,6 +29,15 @@ export interface Entorno {
    * el campo es opcional en vez de arrancar en `[]`.
    */
   proyectos?: readonly string[];
+  /**
+   * Qué proyectos de este entorno van FIJADOS arriba de la barra, en su propio grupo, por id.
+   *
+   * Vive con el entorno por lo mismo que `proyectos`: es presentación y lo decide la persona.
+   * Es una lista APARTE y no una marca dentro de `proyectos` porque son dos preguntas: un
+   * fijado se enseña aunque no esté entre los visibles, y deja de pintarse en la lista de
+   * abajo. Aquí ausente y vacía significan lo mismo —ninguno fijado—.
+   */
+  fijados?: readonly string[];
 }
 
 /**
@@ -180,6 +189,7 @@ function validarEntorno(candidato: unknown, avisos: Aviso[]): Entorno | undefine
     // y ahí la diferencia importa, porque `[]` significa «ninguno» y ausente «no lo he
     // dicho».
     ...(Array.isArray(e.proyectos) ? { proyectos: e.proyectos.filter((p) => typeof p === "string") } : {}),
+    ...(Array.isArray(e.fijados) ? { fijados: e.fijados.filter((p) => typeof p === "string") } : {}),
   };
 }
 
@@ -309,15 +319,29 @@ export function segmentoSeguro(valor: string, que: string): string {
  * secas devuelve `false`: ahí no hay ningún proyecto, solo la carpeta que los contiene.
  */
 export function dentroDelWorkspace(raiz: string, base: string): boolean {
-  const windows = esRutaDeWindows(raiz) || esRutaDeWindows(base);
+  const [dentro, fuera] = segmentosComparables(raiz, base);
+  return dentro.length > fuera.length && fuera.every((seg, i) => dentro[i] === seg);
+}
+
+/**
+ * ¿Las dos rutas nombran la MISMA carpeta? Con la misma normalización que
+ * `dentroDelWorkspace` —por segmentos, y en Windows sin distinguir mayúsculas ni barras—,
+ * porque la raíz de una tarea se guardó en su día y la de hoy sale de `rutaDeWorkspace`: dos
+ * textos distintos para la misma copia no pueden dejar pasar un borrado.
+ */
+export function mismaRuta(a: string, b: string): boolean {
+  const [una, otra] = segmentosComparables(a, b);
+  return una.length === otra.length && una.every((seg, i) => otra[i] === seg);
+}
+
+function segmentosComparables(a: string, b: string): [string[], string[]] {
+  const windows = esRutaDeWindows(a) || esRutaDeWindows(b);
   const normal = (r: string): string[] => {
     const barras = windows ? r.replace(/\\/g, "/") : r;
     const limpia = posix.normalize(barras).replace(/\/+$/, "");
     return (windows ? limpia.toLowerCase() : limpia).split("/");
   };
-  const dentro = normal(raiz);
-  const fuera = normal(base);
-  return dentro.length > fuera.length && fuera.every((seg, i) => dentro[i] === seg);
+  return [normal(a), normal(b)];
 }
 
 /**
@@ -476,6 +500,32 @@ export function motivoParaNoOlvidarEntorno(datos: {
   const viva = datos.tareas.filter((t) => t.estado !== "terminada" && suya(t.raiz));
   if (viva.length > 0) {
     return `hay ${viva.length} ${viva.length === 1 ? "tarea de fondo" : "tareas de fondo"} sin terminar en este entorno`;
+  }
+  return undefined;
+}
+
+/**
+ * Por qué NO se puede borrar la copia local de un proyecto ahora mismo, o `undefined` si se
+ * puede.
+ *
+ * Es la hermana de `motivoParaNoOlvidarEntorno`, con una diferencia a propósito: una consola
+ * ABIERTA no es motivo. Quien borra la cierra antes (`vestibulo.borrarCopia`, el mismo orden
+ * que borrar la sesión abierta), y negarse obligaría a cerrar algo que la web no ofrece
+ * cerrar. Lo que sí para el borrado es lo que está ESCRIBIENDO ahí: un turno en vuelo —el
+ * agente tiene ficheros a medio escribir y su hilo en `checkpoint.sqlite`— o una tarea de
+ * fondo sin terminar, que la cola volvería a abrir sobre una carpeta que ya no existe.
+ */
+export function motivoParaNoBorrarCopia(datos: {
+  raiz: string;
+  trabajando: boolean;
+  tareas: readonly { estado: string; raiz: string }[];
+}): string | undefined {
+  if (datos.trabajando) {
+    return "el agente está trabajando en este proyecto: espera a que termine o páralo antes de borrar la copia";
+  }
+  const viva = datos.tareas.filter((t) => t.estado !== "terminada" && mismaRuta(t.raiz, datos.raiz));
+  if (viva.length > 0) {
+    return `hay ${viva.length} ${viva.length === 1 ? "tarea de fondo" : "tareas de fondo"} sin terminar en este proyecto: termínalas o descártalas antes`;
   }
   return undefined;
 }

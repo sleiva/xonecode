@@ -1,5 +1,6 @@
 import { PROYECTOS_POR_OMISION } from "./Barra.js";
 import { IconoDeEntorno } from "./IconoDeEntorno.js";
+import { IconoCompartido } from "./IconosDeProyecto.js";
 import estilos from "./Escritorio.module.css";
 import { Equipo } from "./Equipo.js";
 import { Kanban } from "./Kanban.js";
@@ -41,6 +42,7 @@ export function Escritorio({
   alAbrirAjustes,
   conectado,
   visibles,
+  fijados,
   dispositivos,
   alActualizarDispositivos,
   alVerificarDispositivo,
@@ -80,6 +82,9 @@ export function Escritorio({
    * Ahora los destacados van primero y el resto debajo, con su botón en segundo plano.
    */
   visibles?: readonly string[];
+  /** Los fijados de la barra (`Entorno.fijados`): van primero y nunca cuentan como «sin
+   *  enseñar». Ausente = ninguno. */
+  fijados?: readonly string[];
   alNuevaSesion: (proyecto: string) => void;
   alAbrirAjustes: () => void;
   /**
@@ -164,8 +169,13 @@ export function Escritorio({
   proyectoActivo?: string;
 }) {
   const apagado = conectado === false;
-  const destacados =
+  // Los FIJADOS van primero, y cuentan como enseñados: la misma cuenta que la barra, que los
+  // pinta en su grupo aunque no estén entre los visibles. Sin esto la barra decía «14 más» y
+  // el escritorio «otros 15» para la misma elección.
+  const fijadosALaVista = proyectos.filter((p) => fijados?.includes(p.id) === true);
+  const elegidos =
     visibles === undefined ? proyectos.slice(0, PROYECTOS_POR_OMISION) : proyectos.filter((p) => visibles.includes(p.id));
+  const destacados = [...fijadosALaVista, ...elegidos.filter((p) => !fijadosALaVista.includes(p))];
   const otros = proyectos.filter((p) => !destacados.includes(p));
   return (
     <div className={estilos.escritorio}>
@@ -211,14 +221,15 @@ export function Escritorio({
                       De quién es, pegado al NOMBRE — mientras que «en tu equipo» se queda
                       en su esquina. Son dos preguntas distintas y no pueden compartir sitio:
                       una es de quién es el proyecto allá arriba, la otra si está bajado
-                      aquí. Con una palabra y no solo con color, y solo cuando el servidor
-                      lo dijo: `undefined` no pinta ninguna de las dos.
+                      aquí. El MISMO icono que la barra lateral, y solo para lo compartido:
+                      lo propio es lo normal y no lleva nada. Aquí la tarjeta no es un botón,
+                      así que el icono lleva su propio nombre accesible.
                     */}
-                    {p.compartido === undefined ? null : (
-                      <span className={estilos.duenno} data-compartido={p.compartido ? "" : undefined}>
-                        {p.compartido ? "compartido" : "propio"}
+                    {p.compartido === true ? (
+                      <span className={estilos.compartido} role="img" aria-label="compartido contigo" title="Compartido contigo">
+                        <IconoCompartido size={16} />
                       </span>
-                    )}
+                    ) : null}
                     {/* «En tu equipo» es un dato del servidor, no una promesa: es si existe
                         su copia local, que es lo que decide si empezar baja algo o no. */}
                     <span className={estilos.marca} data-local={p.local === true ? "" : undefined}>

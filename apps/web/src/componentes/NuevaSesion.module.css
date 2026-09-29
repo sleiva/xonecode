@@ -50,7 +50,10 @@
   font-size: 12px;
 }
 
+/* `border-box`: con `width: 100%` y su relleno, el campo se salía de la ventana por la derecha
+   (medido en pantalla, en «Renombrar sesión» y en «Borrar copia local»). */
 .campo {
+  box-sizing: border-box;
   width: 100%;
   padding: 8px 10px;
   border: 0.5px solid var(--dsw-alias-border-l2);
@@ -100,9 +103,25 @@
   cursor: not-allowed;
 }
 
-/* El fallo de la consulta de ramas: ocupa el sitio del desplegable que no se puede pintar. */
+/* Por qué falló el último paso —consultar las ramas o descargar—, DEBAJO del combo. */
 .fallo {
-  margin: 0 0 8px;
+  margin: 6px 0 8px;
   color: var(--dsw-alias-state-error-primary);
   font-size: 12px;
+}
+
+/* Lo que se está esperando —las ramas, o la descarga—, debajo del combo y con la señal que
+   gira. La del instalador de Ajustes (`Receta.module.css`), compuesta y no copiada: la misma
+   espera tiene que verse igual en toda la consola, también su trato de `prefers-reduced-motion`. */
+.carga {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.girando {
+  composes: girando from "./Receta.module.css";
 }

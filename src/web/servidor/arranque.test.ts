@@ -9148,6 +9148,216 @@ describe("el cable: quitar un entorno", () => {
 });
 
 /**
+ * Borrar la copia local y fijar proyectos, por el cable. Lo que se prueba aquí es el
+ * CABLEADO —que el manejador exista y llegue al vestíbulo con lo que debe—, porque la regla
+ * y el borrado ya tienen sus tests puros y de disco: una regla bien escrita en un manejador
+ * que no la llama es el patrón de fallo de este repo.
+ */
+describe("el cable: la copia local y los fijados", () => {
+  /** Un servidor con el cliente conectado: es lo que resuelve el entorno activo y su listado. */
+  async function conectado(vestibulo: Vestibulo, extra: Parameters<typeof montarRutas>[2] = {}) {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibulo, extra);
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const accion = (mensaje: unknown) => postearConCuerpo(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, JSON.stringify(mensaje));
+    return { accion, cliente };
+  }
+
+  it("borrar llega al vestíbulo con el NOMBRE del listado del servidor, no con lo que mande el cliente", async () => {
+    const pedidos: { entorno: string; proyecto: string }[] = [];
+    const { accion } = await conectado({
+      ...vestibuloDePrueba(),
+      borrarCopia: async (entorno, proyecto) => {
+        pedidos.push({ entorno, proyecto });
+        return { borrada: true, cerroLaAbierta: false };
+      },
+    });
+    const r = await accion({ clase: "copiaLocal", accion: "borrar", proyecto: "p1" });
+    expect(r.estado).toBe(204);
+    expect(pedidos).toEqual([{ entorno: "webstudio", proyecto: "Tienda" }]);
+  });
+
+  it("un id que no está en el listado es 409, y no se borra nada", async () => {
+    const pedidos: string[] = [];
+    const { accion } = await conectado({
+      ...vestibuloDePrueba(),
+      borrarCopia: async (_e, proyecto) => (pedidos.push(proyecto), { borrada: true, cerroLaAbierta: false }),
+    });
+    const r = await accion({ clase: "copiaLocal", accion: "borrar", proyecto: "../../casa" });
+    expect(r.estado).toBe(409);
+    expect(pedidos).toEqual([]);
+  });
+
+  it("la negativa del vestíbulo viaja como 409 con su MOTIVO, y las tareas le llegan", async () => {
+    const vistas: { estado: string; raiz: string }[][] = [];
+    const tarea = {
+      estado: "en-proceso",
+      proyecto: { id: "p1", nombre: "Tienda", raiz: "/w/webstudio/Tienda" },
+    } as unknown as Tarea;
+    const { accion } = await conectado(
+      {
+        ...vestibuloDePrueba(),
+        borrarCopia: async (_e, _p, tareas) => {
+          vistas.push([...tareas]);
+          return { borrada: false, cerroLaAbierta: false, motivo: "hay 1 tarea de fondo sin terminar en este proyecto" };
+        },
+      },
+      { colaDeTareas: colaDeMentira([tarea]) }
+    );
+    const r = await accion({ clase: "copiaLocal", accion: "borrar", proyecto: "p1" });
+    expect(r.estado).toBe(409);
+    expect(JSON.parse(r.cuerpo).motivo).toMatch(/tarea de fondo/);
+    expect(vistas).toEqual([[{ estado: "en-proceso", raiz: "/w/webstudio/Tienda" }]]);
+  });
+
+  /** Una copia BAJADA de Tienda en un workspace temporal: `config.json` Y `sync.json`. */
+  function workspaceConTienda(): { base: string; raiz: string } {
+    const base = mkdtempSync(join(tmpdir(), "xc-abrir-carpeta-"));
+    const raiz = join(base, "webstudio", "Tienda");
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), "{}");
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
+    return { base, raiz };
+  }
+
+  it("abrir la carpeta llega al sistema con la raíz que compone el SERVIDOR", async () => {
+    const { base } = workspaceConTienda();
+    const abiertas: string[] = [];
+    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
+    const { accion } = await conectado(vestibulo, { abrirCarpetaDeProyecto: (raiz) => abiertas.push(raiz) });
+    const r = await accion({ clase: "copiaLocal", accion: "abrirCarpeta", proyecto: "p1" });
+    expect(r.estado).toBe(204);
+    expect(abiertas).toEqual([vestibulo.raizDeProyecto("webstudio", "Tienda")]);
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("sin copia bajada, o con un id fuera del listado, es 409 y no se abre nada", async () => {
+    const abiertas: string[] = [];
+    const base = mkdtempSync(join(tmpdir(), "xc-abrir-carpeta-"));
+    const { accion } = await conectado(vestibuloDePrueba({ baseDeWorkspace: () => base }), {
+      abrirCarpetaDeProyecto: (raiz) => abiertas.push(raiz),
+    });
+    const sinCopia = await accion({ clase: "copiaLocal", accion: "abrirCarpeta", proyecto: "p1" });
+    expect(sinCopia.estado).toBe(409);
+    expect(JSON.parse(sinCopia.cuerpo).motivo).toMatch(/no está descargado/);
+    const ajeno = await accion({ clase: "copiaLocal", accion: "abrirCarpeta", proyecto: "C:\\Windows" });
+    expect(ajeno.estado).toBe(409);
+    expect(abiertas).toEqual([]);
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("el alta lleva la rama de la que se bajó una copia, leída de su `config.json`", async () => {
+    const { base, raiz } = workspaceConTienda();
+    writeFileSync(
+      join(raiz, ".xonecode", "config.json"),
+      JSON.stringify({ cloudstudio: { url: "https://mcp.xonewebstudio.com/mcp", rama: "desarrollo" } })
+    );
+    const { cliente } = await conectado(vestibuloDePrueba({ baseDeWorkspace: () => base }));
+    const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as {
+      proyectos?: { id: string; local?: boolean; rama?: string }[];
+    };
+    expect(alta.proyectos?.find((p) => p.id === "p1")).toMatchObject({ local: true, rama: "desarrollo" });
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("sin copia bajada no viaja rama, aunque haya un `config.json` a medias", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xc-rama-"));
+    const raiz = join(base, "webstudio", "Tienda", ".xonecode");
+    mkdirSync(raiz, { recursive: true });
+    // El alta escribe `config.json` ANTES de bajar: sin `sync.json` no hay copia de verdad.
+    writeFileSync(join(raiz, "config.json"), JSON.stringify({ cloudstudio: { url: "https://x.example/mcp", rama: "main" } }));
+    const { cliente } = await conectado(vestibuloDePrueba({ baseDeWorkspace: () => base }));
+    const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as { proyectos?: { id: string; rama?: string }[] };
+    expect(alta.proyectos?.find((p) => p.id === "p1")?.rama).toBeUndefined();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  /**
+   * La foto del resumen: la cifra por subir es la MISMA que la de la banda (`lecturaDeSync`), y
+   * las tareas son las de ESTA raíz — una de otro entorno con el mismo id de proyecto no entra.
+   */
+  it("el resumen trae los pendientes de la banda y solo las tareas de esta raíz", async () => {
+    const { base, raiz } = workspaceConTienda();
+    writeFileSync(
+      join(raiz, ".xonecode", "config.json"),
+      JSON.stringify({ cloudstudio: { url: "https://x/mcp", proyecto: { id: "p1", nombre: "Tienda" }, rama: "main" } })
+    );
+    writeFileSync(join(raiz, "app.xne"), "<app/>");
+    const git = (...args: string[]) => execFileSync("git", args, { cwd: raiz, encoding: "utf8" });
+    git("init", "-q", "-b", "main");
+    git("config", "user.email", "t@t");
+    git("config", "user.name", "t");
+    git("add", "app.xne");
+    git("commit", "-qm", "inicial");
+    git("update-ref", "refs/remotes/cloudstudio/main", "HEAD");
+    // Una edición a mano de un fichero que git ya sigue: cuenta.
+    writeFileSync(join(raiz, "app.xne"), "<app cambiada/>");
+
+    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
+    const deAqui = {
+      id: "t-aqui",
+      estado: "nuevo",
+      proyecto: { id: "p1", nombre: "Tienda", raiz: vestibulo.raizDeProyecto("webstudio", "Tienda") },
+    } as unknown as Tarea;
+    const deOtroEntorno = {
+      id: "t-otro",
+      estado: "nuevo",
+      proyecto: { id: "p1", nombre: "Tienda", raiz: join(base, "otro-entorno", "Tienda") },
+    } as unknown as Tarea;
+    const { accion } = await conectado(vestibulo, { colaDeTareas: colaDeMentira([deAqui, deOtroEntorno]) });
+    const r = await accion({ clase: "copiaLocal", accion: "resumen", proyecto: "p1" });
+    expect(r.estado).toBe(200);
+    const foto = JSON.parse(r.cuerpo) as { tareas: string[]; sync?: { pendientes?: number; rama?: string } };
+    const { clase: _clase, ...banda } = await lecturaDeSync(raiz);
+    expect(foto.sync).toEqual(banda);
+    expect(foto.sync?.pendientes).toBe(1);
+    expect(foto.tareas).toEqual(["t-aqui"]);
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("sin copia bajada el resumen no trae `sync` —no es «nada por subir»—, y un id ajeno es 409", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xc-resumen-"));
+    const { accion } = await conectado(vestibuloDePrueba({ baseDeWorkspace: () => base }));
+    const r = await accion({ clase: "copiaLocal", accion: "resumen", proyecto: "p1" });
+    expect(r.estado).toBe(200);
+    expect(JSON.parse(r.cuerpo)).toEqual({ tareas: [] });
+    const ajeno = await accion({ clase: "copiaLocal", accion: "resumen", proyecto: "no-existe" });
+    expect(ajeno.estado).toBe(409);
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  /** Sin esto la ventana de sesión nueva pintaba las ramas del proyecto ANTERIOR. */
+  it("las ramas viajan con el id del proyecto del que son (`ramasDe`)", async () => {
+    const { accion, cliente } = await conectado(
+      vestibuloDePrueba({ ramasDeProyecto: async () => ["master", "pruebas"] })
+    );
+    await accion({ clase: "sesion", proyecto: "p1" });
+    await asentar();
+    const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as { ramas?: string[]; ramasDe?: string };
+    expect(alta.ramas).toEqual(["master", "pruebas"]);
+    expect(alta.ramasDe).toBe("p1");
+  });
+
+  it("fijar guarda la lista en el entorno y el alta siguiente la trae", async () => {
+    const guardados: Entorno[] = [];
+    const { accion, cliente } = await conectado(
+      vestibuloDePrueba({
+        guardarEntorno: (e) => (guardados.push(e), { ruta: "/casa/.xonecode/settings.json" }),
+      })
+    );
+    const r = await accion({ clase: "entorno", accion: "fijados", entorno: "webstudio", proyectos: ["p1"] });
+    await asentar();
+    expect(r.estado).toBe(204);
+    expect(guardados.at(-1)?.fijados).toEqual(["p1"]);
+    const altas = cliente.recibidos.filter((m) => m.clase === "alta");
+    const registrados = (altas.at(-1) as { registrados?: { id: string; fijados?: string[] }[] }).registrados;
+    expect(registrados?.find((e) => e.id === "webstudio")?.fijados).toEqual(["p1"]);
+  });
+});
+
+/**
  * Renombrar un entorno por el cable. El nombre es un RÓTULO y no una clave —el `id` sigue
  * mandando sobre la carpeta del workspace, las credenciales y la ruta guardada—, así que lo
  * que se comprueba aquí es que el rechazo viaja en la PROPIA respuesta (409 con su motivo,

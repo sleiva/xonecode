@@ -33,6 +33,7 @@ import {
   Settings,
   TOPE_DE_CONCURRENCIA_DE_TAREAS,
   dentroDelWorkspace,
+  rutaDeWorkspace,
   segmentoSeguro,
   validarSettings,
 } from "../../core/settings.js";
@@ -273,4 +274,47 @@ export function borrarCopiasDeEntorno(base: string, entorno: string): number {
   const cuantas = copiasDeEntorno(base, entorno) ?? 0;
   rmSync(carpeta, { recursive: true, force: true });
   return cuantas;
+}
+
+/**
+ * Borra la copia local de UN proyecto, `<workspace>/<entorno>/<proyecto>/`, entera: su git, su
+ * `.xonecode/` (sesiones, `checkpoint.sqlite`, artefactos) y lo que no se haya subido. Lo de
+ * CloudStudio no se toca; el proyecto vuelve a estar «sin descargar».
+ *
+ * Las barreras son las de `borrarCopiasDeEntorno`, y van AQUÍ por lo mismo: la ruta se compone
+ * con `rutaDeWorkspace` (dos segmentos por `segmentoSeguro`, sin `..`) y se comprueba dentro
+ * del workspace por el TEXTO y por el camino REAL — un enlace que apuntara fuera pasaría la
+ * primera. Quien llama ya ha cerrado la consola de esa raíz y comprobado que nada escribe ahí.
+ *
+ * **Primero se RENOMBRA a una lápida y después se borra**, y es lo que hace que un fallo no
+ * deje una copia a medias. `rmSync` borra fichero a fichero: si algo tiene un fichero abierto
+ * dentro —otro proceso de xonecode con su checkpointer, un editor, el antivirus—, en Windows
+ * revienta a mitad, con los `.xne` y el git ya borrados y la carpeta todavía en su sitio, que
+ * se abriría como un proyecto roto. Renombrar una carpeta con un fichero abierto dentro falla
+ * ANTES de tocar nada, así que la negativa es verdad. La lápida empieza por punto: ni
+ * `copiasDeEntorno` ni la barra la cuentan como proyecto.
+ *
+ * Devuelve `"nada"` si no había copia, `"borrada"`, o `"restos"` si ya salió de su sitio pero
+ * quedó algo de la lápida por borrar — el proyecto está «sin descargar» igual.
+ */
+export function borrarCopiaDeProyecto(
+  base: string,
+  entorno: string,
+  proyecto: string
+): "nada" | "borrada" | "restos" {
+  const carpeta = rutaDeWorkspace(base, entorno, proyecto);
+  if (!existsSync(carpeta)) return "nada";
+  const real = realpathSync(carpeta);
+  const baseReal = realpathSync(base);
+  if (!dentroDelWorkspace(carpeta, base) || !dentroDelWorkspace(real, baseReal)) {
+    throw new Error("no se borra una carpeta fuera del workspace de XOneCode");
+  }
+  const lapida = join(dirname(carpeta), `.${segmentoSeguro(proyecto, "nombre de proyecto")}.borrando-${randomUUID()}`);
+  renameSync(carpeta, lapida);
+  try {
+    rmSync(lapida, { recursive: true, force: true });
+    return "borrada";
+  } catch {
+    return "restos";
+  }
 }

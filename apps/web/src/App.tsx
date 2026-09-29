@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { Planes } from "./componentes/Planes.js";
 import { Colecciones } from "./componentes/Colecciones.js";
 import type { crearStoreDelCliente } from "./store.js";
-import type { ActoDeSincronizacion } from "./tipos.js";
+import type { ActoDeSincronizacion, FotoDelResumen } from "./tipos.js";
 import type { Conexion } from "./conexion.js";
 import { ANCHO_BARRA_POR_OMISION, Maqueta } from "./componentes/Maqueta.js";
 import { Barra } from "./componentes/Barra.js";
@@ -23,6 +23,7 @@ import { TarjetaDeAlta } from "./componentes/TarjetaDeAlta.js";
 import { FaseDeArranque } from "./componentes/FaseDeArranque.js";
 import type { PasoDeAlta } from "./componentes/PasosDelAlta.js";
 import { Escritorio } from "./componentes/Escritorio.js";
+import { ResumenDeProyecto } from "./componentes/ResumenDeProyecto.js";
 import { NuevaSesion } from "./componentes/NuevaSesion.js";
 import { NuevaTarea } from "./componentes/NuevaTarea.js";
 import { AccionDeSesion, type AccionPendiente } from "./componentes/AccionDeSesion.js";
@@ -55,6 +56,22 @@ type Store = ReturnType<typeof crearStoreDelCliente>;
  * que un `new EventSource` a nivel de módulo de este fichero mataría cualquier test que
  * algún día monte `App`.
  */
+/**
+ * El motivo de una negativa del servidor (409 con `{ motivo }`), o nada si no se negó. Lo usan
+ * las acciones del resumen del proyecto: la regla vive en el servidor, y así su respuesta
+ * llega a la pantalla en vez de quedarse en el terminal.
+ */
+async function negativaDe(respuesta: unknown): Promise<string | undefined> {
+  const r = respuesta as Response | undefined;
+  if (r?.status !== 409) return undefined;
+  try {
+    const cuerpo = (await r.json()) as { motivo?: unknown };
+    return typeof cuerpo.motivo === "string" ? cuerpo.motivo : "el servidor se negó";
+  } catch {
+    return "el servidor se negó";
+  }
+}
+
 export function App({
   store,
   enviar,
@@ -236,6 +253,16 @@ export function App({
   const [enEscritorio, setEnEscritorio] = useState(false);
 
   /**
+   * El proyecto cuyo RESUMEN se enseña en el centro (`ResumenDeProyecto.tsx`), al pulsar su
+   * nombre en la barra. Estado de VISTA, con el mismo trato que `enEscritorio`: la sesión
+   * abierta sigue viva detrás —su turno corriendo, su panel recordado— y «Cerrar» vuelve a
+   * ella. Se apaga al abrir una sesión o la ventana de sesión nueva, al ir al escritorio y al
+   * cambiar de entorno; y si el proyecto desaparece del listado deja de pintarse solo, porque
+   * se busca en el alta en cada render.
+   */
+  const [resumenDe, setResumenDe] = useState<string | undefined>(undefined);
+
+  /**
    * Abrir una sesión —nueva o guardada— es lo mismo desde los tres sitios que lo ofrecen
    * (la barra, el escritorio y la ventana de sesión nueva), así que va por una función: y
    * además de mandar el mensaje, saca del escritorio. Sin eso, pulsar un proyecto desde el
@@ -263,6 +290,7 @@ export function App({
   const abrirSesion = useCallback(
     (proyecto: string, sesion?: string, pestanaAlAbrir?: Pestana) => {
       setEnEscritorio(false);
+      setResumenDe(undefined);
       altaAlPedir.current = estado.alta;
       setPedidoDeApertura({ proyecto, ...(sesion === undefined ? {} : { sesion }) });
       // Solo si el llamador la nombra: por omisión no toca `pestana`, que es el
@@ -273,6 +301,29 @@ export function App({
       void enviar(sesion === undefined ? { clase: "sesion", proyecto } : { clase: "sesion", proyecto, sesion });
     },
     [enviar, estado.alta, abrirPanel]
+  );
+
+  /**
+   * Pulsar el NOMBRE de un proyecto: su resumen en el centro y, si está BAJADO, el proyecto
+   * abierto por detrás — que es lo que da el panel de la sesión (Ficheros, Revisión…) junto al
+   * resumen, porque sus vistas le preguntan a la consola abierta.
+   *
+   * Es el mismo mensaje que abrir una sesión nueva, pero sin sacar del resumen: no se elige
+   * ningún chat, y el centro sigue siendo el resumen hasta que la persona pulse uno. Sin copia
+   * local no se abre nada —abrir sería DESCARGAR, y eso es la ventana de sesión nueva, con su
+   * aviso—, y si ya es el abierto no se vuelve a pedir: reabrirlo daría otra sesión en blanco.
+   */
+  const abrirResumen = useCallback(
+    (proyecto: string) => {
+      setResumenDe(proyecto);
+      const identidad = estado.alta?.proyectos.find((p) => p.id === proyecto);
+      if (identidad?.local !== true) return;
+      if (estado.alta?.proyectoAbierto === true && estado.alta.proyectoActivo === proyecto) return;
+      altaAlPedir.current = estado.alta;
+      setPedidoDeApertura({ proyecto });
+      void enviar({ clase: "sesion", proyecto });
+    },
+    [enviar, estado.alta]
   );
 
   useEffect(() => {
@@ -666,6 +717,36 @@ export function App({
    */
   const [sesionNueva, setSesionNueva] = useState<string | undefined>(undefined);
   /**
+   * El alta que había al ABRIR la ventana de sesión nueva. Un `aviso` de ese alta es de un
+   * paso anterior —de otro proyecto, quizá—, y la ventana solo enseña los que llegan después.
+   */
+  const altaAlAbrirVentana = useRef<unknown>(undefined);
+  /**
+   * La descarga pedida desde esa ventana, con el alta que había al pedirla. Mientras está, la
+   * ventana dice «Descargando proyecto…» y no deja volver a empezar. La salda el servidor:
+   * con el proyecto ya abierto, la ventana se cierra; sin él y con un `aviso`, el motivo sale
+   * en la ventana y se puede reintentar.
+   */
+  const [descargaPedida, setDescargaPedida] = useState<{ proyecto: string; alta: unknown } | undefined>(undefined);
+  useEffect(() => {
+    if (descargaPedida === undefined) return;
+    if (estado.conectado === false) {
+      setDescargaPedida(undefined);
+      return;
+    }
+    if (estado.alta === descargaPedida.alta) return;
+    if (estado.alta?.proyectoAbierto === true && estado.alta.proyectoActivo === descargaPedida.proyecto) {
+      // Bajado y abierto: la ventana ya no tiene nada que decir, y el centro es la sesión.
+      setDescargaPedida(undefined);
+      setSesionNueva(undefined);
+      setResumenDe(undefined);
+      setEnEscritorio(false);
+      return;
+    }
+    // El servidor ya no está abriendo nada y dice por qué: falló, y la ventana lo enseña.
+    if (estado.abriendo === undefined && estado.alta?.aviso !== undefined) setDescargaPedida(undefined);
+  }, [descargaPedida, estado.alta, estado.abriendo, estado.conectado]);
+  /**
    * La ventana de tarea nueva: para qué proyecto, y bajo qué BORRADOR se suben sus adjuntos.
    *
    * El borrador se decide al ABRIR y no al primer adjunto, porque tiene que ser el mismo
@@ -879,7 +960,26 @@ export function App({
   // abierto —era el único paso que podía quedar—; ahora hace falta mirarlo aparte.
   const proyectoAbierto = estado.alta?.proyectoAbierto ?? false;
 
-  const enSesion = proyectoAbierto && !enEscritorio;
+  /**
+   * El proyecto del resumen, buscado en el alta de AHORA: si ha salido del listado (otro
+   * entorno, un listado nuevo) el resumen deja de pintarse en vez de hablar de algo que ya no
+   * está.
+   */
+  const proyectoDelResumen =
+    resumenDe === undefined ? undefined : estado.alta?.proyectos?.find((p) => p.id === resumenDe);
+
+  // Con el resumen delante no se está «en la sesión»: el panel y el compositor se van por el
+  // mismo camino que en el escritorio, y la vista del panel se conserva para la vuelta.
+  const enSesion = proyectoAbierto && !enEscritorio && proyectoDelResumen === undefined;
+
+  /**
+   * El resumen de un proyecto que ESTÁ abierto lleva el panel de la sesión al lado: sus vistas
+   * (Ficheros, Revisión, Colecciones…) le preguntan a la consola abierta, y esa es la de este
+   * proyecto — `abrirResumen` la abre por detrás al pulsar su nombre. El de uno sin abrir no
+   * lo lleva: sería una columna con los ficheros de OTRO proyecto al lado de su nombre.
+   */
+  const resumenConPanel =
+    proyectoDelResumen !== undefined && proyectoAbierto && estado.alta?.proyectoActivo === proyectoDelResumen.id;
 
   /**
    * **El panel es de la SESIÓN, así que en el escritorio no hay panel** aunque la vista
@@ -888,7 +988,7 @@ export function App({
    * sesión anterior al lado del saludo sería una columna de la que no se sale. Se conserva
    * `vistaDelPanel` a propósito: al volver a la sesión, el panel vuelve por donde estaba.
    */
-  const panelAbierto = enSesion && vistaDelPanel !== undefined;
+  const panelAbierto = (enSesion || resumenConPanel) && vistaDelPanel !== undefined;
 
   /**
    * Quién cabe y quién no. Es la ÚNICA pieza que decide el encuadre, y vive fuera de este
@@ -971,6 +1071,8 @@ export function App({
    * puedan discrepar.
    */
   const entornoActivo = estado.alta?.entornoActivo ?? estado.alta?.registrados[0]?.id ?? "";
+  /** Los fijados del entorno activo (`Entorno.fijados`). Ausente = ninguno. */
+  const fijadosDelEntorno = estado.alta?.registrados.find((e) => e.id === entornoActivo)?.fijados;
 
   /**
    * Abrir la ventana de sesión nueva. Si el proyecto no está bajado hacen falta sus ramas,
@@ -988,8 +1090,11 @@ export function App({
       abrirSesion(proyecto);
       return;
     }
+    // Sin copia, la ventana; el resumen (si se vino desde su «Descargar») se queda debajo
+    // hasta que la descarga abra el proyecto.
+    altaAlAbrirVentana.current = estado.alta;
+    setDescargaPedida(undefined);
     setSesionNueva(proyecto);
-    setEnEscritorio(false);
     void enviar({ clase: "alta", paso: "proyecto", proyecto });
   };
 
@@ -1052,20 +1157,35 @@ export function App({
       <NuevaSesion
         proyecto={{ id: proyectoDeLaSesion.id, nombre: proyectoDeLaSesion.nombre }}
         local={proyectoDeLaSesion.local === true}
-        ramas={estado.alta?.ramas ?? []}
-        // El motivo del último paso fallido: si la consulta de ramas revienta, la ventana
-        // tiene que decirlo en vez de quedarse en «consultando» para siempre.
-        {...(estado.alta?.aviso === undefined ? {} : { aviso: estado.alta.aviso })}
+        // Solo las ramas DE ESTE proyecto (`ramasDe`): las del último proyecto preguntado
+        // seguían en el alta mientras llegaban las nuevas, y se podía empezar con una rama de
+        // otro. Hasta que lleguen, la ventana espera con el combo bloqueado.
+        ramas={estado.alta?.ramasDe === sesionNueva ? (estado.alta?.ramas ?? []) : []}
+        // El motivo del último paso fallido, y solo si llegó DESPUÉS de abrir la ventana: uno
+        // de antes es de otro paso. Sin él la ventana se quedaba en «consultando» para siempre.
+        {...(estado.alta?.aviso === undefined || estado.alta === altaAlAbrirVentana.current || descargaPedida !== undefined
+          ? {}
+          : { aviso: estado.alta.aviso })}
+        descargando={descargaPedida !== undefined}
         alEmpezar={(rama) => {
           const proyecto = sesionNueva;
-          setSesionNueva(undefined);
           // Con copia local es una sesión nueva y ya; sin ella hay que darlo de alta y
-          // bajarlo, que es lo que sabe hacer el camino del alta con su rama.
-          setEnEscritorio(false);
-          if (rama === undefined) abrirSesion(proyecto);
-          else void enviar({ clase: "alta", paso: "proyecto", proyecto, rama });
+          // bajarlo, que es lo que sabe hacer el camino del alta con su rama — y la ventana
+          // se QUEDA, diciendo que descarga, hasta que el servidor diga cómo acabó.
+          if (rama === undefined) {
+            setSesionNueva(undefined);
+            setEnEscritorio(false);
+            abrirSesion(proyecto);
+            return;
+          }
+          setDescargaPedida({ proyecto, alta: estado.alta });
+          void enviar({ clase: "alta", paso: "proyecto", proyecto, rama });
         }}
-        alCerrar={() => setSesionNueva(undefined)}
+        // Cierra la ventana, no la descarga: esa sigue y se ve en la fila del proyecto.
+        alCerrar={() => {
+          setSesionNueva(undefined);
+          setDescargaPedida(undefined);
+        }}
       />
     ) : null;
 
@@ -1606,9 +1726,12 @@ export function App({
     trazas a los que llevar, y unas pestañas que no llevan a ningún sitio son el mismo
     botón muerto que este repo no consiente. `Cabecera` las omite cuando no se las pasan.
   */
-  const cabecera = enSesion ? (
+  const cabecera = enSesion || resumenConPanel ? (
     <Cabecera
-      titulo={tituloDeLaSesion ?? nombreDelProyectoActivo ?? "Sesión nueva"}
+      // Con el resumen delante, la miga dice de QUÉ proyecto se habla, y no el chat de detrás.
+      titulo={
+        resumenConPanel ? proyectoDelResumen!.nombre : (tituloDeLaSesion ?? nombreDelProyectoActivo ?? "Sesión nueva")
+      }
       // El proyecto delante de la sesión: «AppDemo / Hola». `Cabecera` no lo repite si el
       // título todavía ES el nombre del proyecto.
       {...(nombreDelProyectoActivo === undefined ? {} : { proyecto: nombreDelProyectoActivo })}
@@ -1628,17 +1751,31 @@ export function App({
       apariencia={apariencia}
       alCambiarApariencia={alCambiarApariencia}
       // La marca lleva al escritorio, y solo desde la sesión: en el escritorio ya estás.
-      alIrAlEscritorio={() => setEnEscritorio(true)}
+      alIrAlEscritorio={() => {
+        setEnEscritorio(true);
+        setResumenDe(undefined);
+      }}
     />
   ) : (
     <Cabecera
-      titulo="Escritorio"
+      // Con el resumen delante, la miga dice de QUÉ proyecto se habla, no «Escritorio».
+      titulo={proyectoDelResumen?.nombre ?? "Escritorio"}
       conectado={estado.conectado}
       barraContraida={reparto.barra === "plegada"}
       alAlternarBarra={alternarBarra}
       alAbrirAjustes={() => abrirAjustes()}
       apariencia={apariencia}
       alCambiarApariencia={alCambiarApariencia}
+      // Desde el resumen de uno sin abrir, la marca es la salida al escritorio: el resumen
+      // ya no tiene botón de cerrar.
+      {...(proyectoDelResumen === undefined
+        ? {}
+        : {
+            alIrAlEscritorio: () => {
+              setEnEscritorio(true);
+              setResumenDe(undefined);
+            },
+          })}
     />
   );
 
@@ -1660,7 +1797,53 @@ export function App({
         // La rama ya NO se elige aquí: la pregunta de «qué proyecto abro y desde qué rama»
         // vive entera en `NuevaSesion`, que además dice que va a descargar. Un selector
         // suelto en mitad del centro no decía ni de qué proyecto era.
-        enSesion ? (
+        proyectoDelResumen !== undefined ? (
+          // El resumen del proyecto pulsado en la barra, en el sitio de la sesión. Va PRIMERO:
+          // se pide desde una sesión abierta igual que desde el escritorio, y en los dos casos
+          // es lo que el usuario acaba de pedir mirar.
+          <>
+            <AvisoDeConexion conectado={estado.conectado} />
+            {/* Igual que la conversación: si la ventana no da para las tres columnas, el panel
+                ocupa el sitio del resumen, y cerrarlo lo devuelve. */}
+            {resumenConPanel && reparto.panel === "centro" && elPanel !== undefined ? elPanel : (
+            <ResumenDeProyecto
+              proyecto={proyectoDelResumen}
+              conectado={estado.conectado}
+              alAbrirCarpeta={async (proyecto) => negativaDe(await enviar({ clase: "copiaLocal", accion: "abrirCarpeta", proyecto }))}
+              alIrALaConversacion={() => abrirVentanaDeSesion(proyectoDelResumen.id)}
+              alDescargar={() => abrirVentanaDeSesion(proyectoDelResumen.id)}
+              // La foto del servidor: lo que queda por subir (la MISMA medida que la banda de
+              // Revisión) y qué tareas son de este proyecto, decididas por su raíz. Vuelve en la
+              // propia respuesta; lo que no se entiende es «no consta», nunca un cero.
+              alPedirResumen={async (proyecto) => {
+                const r = (await enviar({ clase: "copiaLocal", accion: "resumen", proyecto })) as Response | undefined;
+                if (r === undefined || !r.ok) return undefined;
+                try {
+                  const cuerpo = (await r.json()) as { tareas?: unknown; sync?: unknown };
+                  if (!Array.isArray(cuerpo.tareas) || !cuerpo.tareas.every((t) => typeof t === "string")) return undefined;
+                  return {
+                    tareas: cuerpo.tareas as string[],
+                    ...(typeof cuerpo.sync === "object" && cuerpo.sync !== null
+                      ? { sync: cuerpo.sync as NonNullable<FotoDelResumen["sync"]> }
+                      : {}),
+                  };
+                } catch {
+                  return undefined;
+                }
+              }}
+              alAbrirSesion={(proyecto, sesion) => abrirSesion(proyecto, sesion)}
+              {...(estado.tareas === undefined ? {} : { tareasDeLaCola: estado.tareas.lista })}
+              abriendo={abriendo !== undefined}
+              alBorrarCopia={async (proyecto) => {
+                // Como `alQuitarEntorno`: el servidor contesta 409 con `{ motivo }` si se
+                // niega, y la negativa llega hasta la ventana en vez de quedarse en el
+                // terminal. El alta siguiente trae el proyecto ya «sin descargar».
+                return negativaDe(await enviar({ clase: "copiaLocal", accion: "borrar", proyecto }));
+              }}
+            />
+            )}
+          </>
+        ) : enSesion ? (
           <>
             <AvisoDeConexion conectado={estado.conectado} />
             {/*
@@ -1879,6 +2062,8 @@ export function App({
             {...(estado.alta?.registrados.find((e) => e.id === entornoActivo)?.proyectos === undefined
               ? {}
               : { visibles: estado.alta.registrados.find((e) => e.id === entornoActivo)!.proyectos })}
+            // Y los fijados, para que las dos cuentas de «sin enseñar» coincidan.
+            {...(fijadosDelEntorno === undefined ? {} : { fijados: fijadosDelEntorno })}
             {...(estado.nombre === undefined ? {} : { nombre: estado.nombre })}
             {...(entornoDelEscritorio === undefined ? {} : { entorno: entornoDelEscritorio })}
             proyectos={estado.alta?.proyectos ?? []}
@@ -1944,19 +2129,28 @@ export function App({
           }))}
           // Cambiar de entorno trae SUS proyectos: es una conexión con CloudStudio, así
           // que la hace el servidor y contesta con la lista nueva.
-          alElegirEntorno={(entorno) => void enviar({ clase: "entorno", accion: "activo", entorno })}
+          // El resumen es de un proyecto del entorno que se deja: se cierra con él.
+          alElegirEntorno={(entorno) => {
+            setResumenDe(undefined);
+            void enviar({ clase: "entorno", accion: "activo", entorno });
+          }}
           // Reabrir una sesión guardada: el servidor abre esa copia local con ese hilo.
           alAbrirSesion={(proyecto, sesion) => abrirSesion(proyecto, sesion)}
-          // Pide la rama del proyecto elegido (`vestibulo.ts#completarProyecto` la
-          // necesita) sin abrir nada todavía: el `useEffect` de arriba decide, en cuanto
-          // `estado.alta.ramas` responda, si la manda sola (una) o pinta el `Selector`
-          // de más arriba (varias). Un segundo clic mientras se espera la respuesta
-          // simplemente reemplaza cuál proyecto se está preguntando — no hay candado
-          // porque no hay nada que envíe dos veces la MISMA cosa.
-          // Pulsar el proyecto y pulsar «+» abren la MISMA ventana: es la misma decisión
-          // —empezar a trabajar en ese proyecto—, y tener dos caminos para ella era lo que
-          // hacía que uno de los dos (el «+») no hiciera nada.
-          alAbrirProyecto={(proyecto) => abrirVentanaDeSesion(proyecto)}
+          // Pulsar el NOMBRE abre su resumen en el centro; empezar a trabajar es el «+», que
+          // abre la ventana de sesión nueva. El caso del proyecto trabajando —antes el nombre
+          // llevaba a la conversación en marcha— lo cubre el resumen con su propio botón.
+          alAbrirProyecto={abrirResumen}
+          {...(resumenDe === undefined ? {} : { proyectoEnResumen: resumenDe })}
+          // Los fijados del entorno activo, con el mismo trato que `visibles`.
+          {...(fijadosDelEntorno === undefined ? {} : { fijados: fijadosDelEntorno })}
+          // La lista ENTERA viaja: se compone aquí y el servidor la guarda tal cual.
+          alFijar={(proyecto, fijar) => {
+            const actuales = fijadosDelEntorno ?? [];
+            const proyectos = fijar
+              ? [...actuales.filter((id) => id !== proyecto), proyecto]
+              : actuales.filter((id) => id !== proyecto);
+            void enviar({ clase: "entorno", accion: "fijados", entorno: entornoActivo, proyectos });
+          }}
           // Sesión NUEVA en ese proyecto: el mismo mensaje sin nombrar sesión. Si la copia
           // local todavía no existe, el servidor contesta con las ramas y se cae al camino
           // del alta, que es el que sabe bajarla — por eso hace falta recordar de qué

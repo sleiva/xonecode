@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { cerrarCheckpointerDeProyecto, crearCheckpointerDeProyecto } from "../sesiones/checkpointer.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
@@ -10,6 +11,7 @@ import {
   guardarEntorno,
   guardarWorkspace,
   olvidarEntornoDeSettings,
+  borrarCopiaDeProyecto,
   borrarCopiasDeEntorno,
   copiasDeEntorno,
   rutaSettings,
@@ -222,5 +224,71 @@ describe("borrarCopiasDeEntorno", () => {
     symlinkSync(fuera, join(base, "enlace"));
     expect(() => borrarCopiasDeEntorno(base, "enlace")).toThrow(/fuera del workspace/);
     expect(existsSync(join(fuera, "importante"))).toBe(true);
+  });
+});
+
+describe("borrarCopiaDeProyecto", () => {
+  it("borra SOLO `<workspace>/<entorno>/<proyecto>/`, y dice si había algo", () => {
+    const base = casa();
+    mkdirSync(join(base, "manager", "A", ".xonecode"), { recursive: true });
+    writeFileSync(join(base, "manager", "A", ".xonecode", "checkpoint.sqlite"), "");
+    mkdirSync(join(base, "manager", "B"), { recursive: true });
+    expect(borrarCopiaDeProyecto(base, "manager", "A")).toBe("borrada");
+    expect(existsSync(join(base, "manager", "A"))).toBe(false);
+    expect(existsSync(join(base, "manager", "B"))).toBe(true);
+    // Ni la lápida se queda: la carpeta del entorno solo tiene a B.
+    expect(readdirSync(join(base, "manager"))).toEqual(["B"]);
+    // Lo que ya no está no es un fallo: no había nada que borrar.
+    expect(borrarCopiaDeProyecto(base, "manager", "A")).toBe("nada");
+  });
+
+  /**
+   * EL caso de Windows: algo tiene abierto un fichero de la copia —aquí, un checkpointer que
+   * NO se suelta, como el de otro proceso de xonecode—. Lo que no puede pasar es una copia a
+   * medias: o se va entera de su sitio, o se queda intacta. En Windows se queda intacta (el
+   * renombrado falla antes de tocar nada); en Linux y macOS se va.
+   */
+  it("con un fichero ABIERTO dentro, o se va entera o se queda intacta: nunca a medias", async () => {
+    const base = casa();
+    const raiz = join(base, "manager", "A");
+    mkdirSync(raiz, { recursive: true });
+    writeFileSync(join(raiz, "app.xne"), "<app/>");
+    const saver = crearCheckpointerDeProyecto(raiz)!;
+    await saver.put(
+      { configurable: { thread_id: "s1" } },
+      { v: 4, id: "1", ts: new Date().toISOString(), channel_values: {}, channel_versions: {}, versions_seen: {} } as never,
+      { source: "input", step: 0, parents: {} } as never,
+      {}
+    );
+    let resultado: string;
+    try {
+      resultado = borrarCopiaDeProyecto(base, "manager", "A");
+    } catch {
+      resultado = "negado";
+    }
+    if (resultado === "negado") expect(existsSync(join(raiz, "app.xne"))).toBe(true);
+    else expect(existsSync(raiz)).toBe(false);
+    cerrarCheckpointerDeProyecto(raiz);
+  });
+
+  it("un segmento que no es llano, o un enlace que sale del workspace, se NIEGA", () => {
+    const base = casa();
+    expect(() => borrarCopiaDeProyecto(base, "manager", "..")).toThrow();
+    expect(() => borrarCopiaDeProyecto(base, "..", "A")).toThrow();
+    const fuera = casa();
+    mkdirSync(join(fuera, "importante"));
+    mkdirSync(join(base, "manager"));
+    symlinkSync(fuera, join(base, "manager", "enlace"), "junction");
+    expect(() => borrarCopiaDeProyecto(base, "manager", "enlace")).toThrow(/fuera del workspace/);
+    expect(existsSync(join(fuera, "importante"))).toBe(true);
+  });
+
+  it("los fijados de un entorno se guardan y se leen: la ida y vuelta entera", () => {
+    const c = casa();
+    guardarEntorno(c, { id: "a", nombre: "A", url: "https://a/mcp", proyectos: ["p1"], fijados: ["p2"] });
+    const [a] = cargarSettings(c).settings.entornos;
+    expect(a?.fijados).toEqual(["p2"]);
+    // Y los visibles siguen ahí: una lista no se come a la otra.
+    expect(a?.proyectos).toEqual(["p1"]);
   });
 });

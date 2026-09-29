@@ -10,6 +10,8 @@ import {
   PLATAFORMAS_DE_DISPOSITIVO,
   TOPE_DE_CONCURRENCIA_DE_TAREAS,
   motivoParaNoOlvidarEntorno,
+  motivoParaNoBorrarCopia,
+  mismaRuta,
   motivoDeNombreDeEntornoInaceptable,
   LARGO_NOMBRE_DE_ENTORNO,
 } from "./settings.js";
@@ -303,5 +305,32 @@ describe("motivoDeNombreDeEntornoInaceptable", () => {
     const largo = motivoDeNombreDeEntornoInaceptable("x".repeat(LARGO_NOMBRE_DE_ENTORNO + 1));
     expect(largo).toBeDefined();
     expect(largo).toContain(String(LARGO_NOMBRE_DE_ENTORNO));
+  });
+});
+
+describe("mismaRuta", () => {
+  it("compara por segmentos, y en Windows sin mayúsculas ni barras", () => {
+    expect(mismaRuta("/ws/a/B", "/ws/a/B/")).toBe(true);
+    expect(mismaRuta("/ws/a/B", "/ws/a/b")).toBe(false);
+    expect(mismaRuta("C:\\ws\\a\\B", "c:/ws/a/b")).toBe(true);
+    expect(mismaRuta("/ws/a/B", "/ws/a/B/c")).toBe(false);
+  });
+});
+
+describe("motivoParaNoBorrarCopia", () => {
+  const raiz = "/ws/webstudio/Tienda";
+  it("con un turno en vuelo se niega, y lo dice", () => {
+    expect(motivoParaNoBorrarCopia({ raiz, trabajando: true, tareas: [] })).toMatch(/trabajando/);
+  });
+  it("con una tarea sin terminar sobre ESA raíz se niega; terminada o de otra, no", () => {
+    expect(motivoParaNoBorrarCopia({ raiz, trabajando: false, tareas: [{ estado: "requiere-atencion", raiz }] })).toMatch(/1 tarea/);
+    expect(motivoParaNoBorrarCopia({ raiz, trabajando: false, tareas: [{ estado: "terminada", raiz }] })).toBeUndefined();
+    expect(
+      motivoParaNoBorrarCopia({ raiz, trabajando: false, tareas: [{ estado: "en-proceso", raiz: "/ws/webstudio/Otra" }] })
+    ).toBeUndefined();
+  });
+  /** Una consola ABIERTA no es motivo: quien borra la cierra antes. */
+  it("sin nada escribiendo, se puede", () => {
+    expect(motivoParaNoBorrarCopia({ raiz, trabajando: false, tareas: [] })).toBeUndefined();
   });
 });

@@ -14,6 +14,8 @@ import navegador from "../../estilos/WorkspaceBrowser.module.css";
 import filas from "../../estilos/Rows.module.css";
 import ajustes from "../../estilos/SettingsRoot.module.css";
 import { MenuDeSesion } from "./MenuDeSesion.js";
+import { Desplegable } from "./Desplegable.js";
+import { IconoChincheta, IconoCompartido } from "./IconosDeProyecto.js";
 import { IconoDeEntorno } from "./IconoDeEntorno.js";
 import { selloDeFecha } from "../selloDeFecha.js";
 import estilos from "./Barra.module.css";
@@ -101,25 +103,381 @@ function FichaDeSesion({
   );
 }
 
+/**
+ * Una fila de proyecto con sus sesiones debajo. Extraída con nombre, y no dentro del `map` de
+ * la barra, porque se pinta en DOS grupos —«Proyectos fijados» y «Proyectos»— y una copia por
+ * grupo es cómo divergen el día que se toque una. Todo lo que decide llega por props: la fila
+ * no sabe en qué grupo está.
+ */
+function FilaDeProyecto({
+  p,
+  desplegado,
+  alPlegar,
+  fijado,
+  proyectoActivo,
+  proyectoEnResumen,
+  sesionActiva,
+  abriendo,
+  apagado,
+  abriendoAlgo,
+  alFijar,
+  alAbrirProyecto,
+  alNuevaSesion,
+  alAbrirSesion,
+  alAccionDeSesion,
+}: {
+  p: Proyecto;
+  desplegado: string | undefined;
+  alPlegar: () => void;
+  fijado: boolean;
+  proyectoActivo: string | undefined;
+  proyectoEnResumen: string | undefined;
+  sesionActiva: string | undefined;
+  abriendo: { proyecto?: string; sesion?: string; entorno?: string; descargando?: true } | undefined;
+  apagado: boolean;
+  abriendoAlgo: boolean;
+  alFijar: (proyecto: string, fijar: boolean) => void;
+  alAbrirProyecto: (proyecto: string) => void;
+  alNuevaSesion: (proyecto: string) => void;
+  alAbrirSesion: (proyecto: string, sesion: string) => void;
+  alAccionDeSesion: (proyecto: string, sesion: string, titulo: string, accion: "renombrar" | "borrar") => void;
+}): React.ReactElement {
+  /*
+   * Abrir algo tarda, y la señal va donde estaba el clic: en la fila. Se distingue el
+   * proyecto de la sesión porque son dos filas distintas —una sesión guardada se abre desde
+   * la suya— y porque una sesión NUEVA no tiene fila todavía: en ese caso el indicador se
+   * queda en la del proyecto, que es donde está su «+».
+   */
+  const abriendoProyecto = (id: string): boolean =>
+    abriendo !== undefined && abriendo.proyecto === id && abriendo.sesion === undefined;
+  const abriendoSesion = (id: string): boolean => abriendo !== undefined && abriendo.sesion === id;
+  /*
+   * **Una sola fila marcada en toda la barra**, esté en el grupo que esté. Con el resumen
+   * delante manda el del resumen —es de él de quien habla el centro— y la sesión abierta
+   * detrás no marca a su proyecto; sin resumen, el proyecto abierto. Marcar los dos dejaba dos
+   * filas diciendo «aquí estás».
+   *
+   * Y con el resumen delante NINGÚN chat va marcado: no se está leyendo ninguno. La sesión
+   * sigue abierta detrás, pero marcarla afirmaría que es lo que tienes delante.
+   */
+  const esLaMarcada = p.id === (proyectoEnResumen ?? proyectoActivo);
+  const sesionMarcada = proyectoEnResumen === undefined ? sesionActiva : undefined;
+  return (
+    <div className={navegador.groupSection}>
+      <div
+        className={clsx(
+          filas.projectRow,
+          estilos.filaConAccion,
+          esLaMarcada && estilos.filaAbierta,
+          p.rama !== undefined && estilos.filaConRama
+        )}
+        // Dos señales para lo mismo y no una: el color de fondo lo pierde
+        // quien no distingue bien los tonos, y el `aria-current` es lo que
+        // se lo dice a un lector de pantalla.
+        {...(esLaMarcada ? { "aria-current": "true" as const } : {})}
+        {...(abriendoProyecto(p.id) ? { "aria-busy": "true" as const } : {})}
+      >
+        {/*
+          Fijar, lo PRIMERO de la fila y siempre a la vista: es una decisión sobre el proyecto
+          entero, no sobre su contenido. Hermano del plegador y no dentro de él —un control
+          dentro de otro es HTML inválido—. La chincheta cambia de FORMA (hueca/rellena) además
+          de color, y `aria-pressed` lo dice a un lector de pantalla.
+        */}
+        <button
+          type="button"
+          className={clsx(estilos.reseteoDeBoton, filas.iconButton, estilos.fijar)}
+          data-fijado={fijado ? "" : undefined}
+          aria-pressed={fijado}
+          aria-label={`${fijado ? "dejar de fijar" : "fijar"} ${p.nombre}`}
+          title={fijado ? "Dejar de fijar" : "Fijar arriba"}
+          disabled={apagado}
+          onClick={() => alFijar(p.id, !fijado)}
+        >
+          <IconoChincheta fijado={fijado} size={14} />
+        </button>
+        {/*
+          **El plegador es un botón APARTE, y tiene que serlo.** Va como
+          hermano del botón del nombre y no dentro: un `<button>` anidado en
+          otro es HTML inválido y reparte el clic entre los dos — la misma
+          razón por la que el «…» de una sesión no vive dentro de su fila.
+
+          Y **`.folder` + `.chevron` son de la hoja copiada**, que ya traía
+          esta afordancia hecha: la carpeta se va al posar el ratón
+          (`.projectRow:hover .folder { display: none }`) y deja sitio al
+          triángulo, que gira 90° al abrirse (`.arrowOpen`). Aquí antes se
+          usaba `.slot` a secas —y estaba bien— porque las sesiones se
+          enseñaban siempre y no había nada que desplegar; ahora sí lo hay.
+
+          La carpeta cambia además de glifo (cerrada/abierta), que es lo que
+          dice el estado SIN posar el ratón: el chevron solo aparece en
+          `:hover` y en `:focus-visible`, y con el ratón lejos la única
+          señal de la fila sería el hueco.
+        */}
+        <button
+          type="button"
+          className={clsx(estilos.reseteoDeBoton, estilos.plegador)}
+          aria-expanded={p.id === desplegado}
+          aria-label={`${p.id === desplegado ? "plegar" : "desplegar"} las sesiones de ${p.nombre}`}
+          onClick={alPlegar}
+        >
+          <span className={clsx(filas.slot, filas.folder, estilos.glifoDeCarpeta)} aria-hidden="true">
+            {p.id === desplegado ? <IconFolderOpen16 size={16} /> : <IconFolderClose16 size={16} />}
+          </span>
+          <span className={clsx(filas.slot, filas.chevron, estilos.glifoDeChevron)} aria-hidden="true">
+            <IconTriangleRightFill14
+              size={14}
+              className={clsx(filas.arrow, p.id === desplegado && filas.arrowOpen)}
+            />
+          </span>
+        </button>
+        <button
+          type="button"
+          className={clsx(estilos.reseteoDeBoton, estilos.cuerpoDeFila)}
+          disabled={apagado || abriendoAlgo}
+          onClick={() => alAbrirProyecto(p.id)}
+        >
+          <span className={filas.projectText}>
+            {/* El proyecto activo se marca con el fondo y con el NOMBRE, no
+                con el filo de cian: ese se quedó para la fila que estás
+                leyendo (ver `Barra.module.css`). */}
+            <span className={clsx(filas.title, esLaMarcada && estilos.tituloActivo)}>
+              {p.nombre}
+            </span>
+            {/*
+              La rama de la que se BAJÓ la copia, debajo y más pequeña: es la que manda al
+              subir y al comparar, y hasta ahora solo se veía abriendo el proyecto. Con la
+              `.meta` de la hoja copiada, que es su segunda línea de fila. `aria-hidden` con la
+              rama en `title`, como los iconos de al lado: sin ocultarla, el nombre accesible
+              del botón sería «Tienda master» y no el del proyecto.
+            */}
+            {p.rama === undefined ? null : (
+              <span className={clsx(filas.meta, estilos.ramaDeProyecto)} title={`Rama de origen: ${p.rama}`} aria-hidden="true">
+                {p.rama}
+              </span>
+            )}
+          </span>
+          {abriendoProyecto(p.id) ? (
+            <span
+              className={estilos.actividad}
+              // Con PALABRAS y no solo con el giro: una descarga son minutos
+              // y un punto que gira no distingue eso de medio segundo.
+              title={abriendo?.descargando === true ? "Descargando el proyecto…" : "Abriendo…"}
+            >
+              {abriendo?.descargando === true ? "descargando…" : "abriendo…"}
+            </span>
+          ) : p.trabajando === true || (p.id !== desplegado && p.sesiones.some((se) => se.trabajando === true)) ? (
+            /*
+              **Aquí, y con la lista PLEGADA es obligatorio.** El servidor
+              manda `proyectos[].trabajando` solo cuando ninguna fila suya la
+              lleva —para no decirlo dos veces—, y eso valía cuando las
+              sesiones se enseñaban todas: la fila lo decía. Con la lista
+              plegada esa fila no existe, así que un turno corriendo en un
+              proyecto que no estás mirando no se vería en NINGUNA parte.
+
+              No es el cruce prohibido de datos que este repo evita: la
+              lista de sesiones ya está aquí, plegada o no, y se le pregunta
+              a ella. Y desplegado NO se dice: ahí lo dice la fila, que es
+              la que se abre — la regla de no decirlo dos veces sigue.
+            */
+            <span className={estilos.actividad} title="El agente está trabajando en este proyecto…">
+              trabajando…
+            </span>
+          ) : null}
+          {/*
+            De quién es, con un ICONO y solo cuando es de OTRA persona. Lo propio no lleva
+            nada: es lo normal, y lo que cambia cómo trabajas es que sea de otro. Ausente —el
+            servidor no lo dijo— tampoco pinta nada; a la vista coincide con «propio», pero no
+            en el dato, y el resumen del proyecto sí los distingue.
+
+            `aria-hidden` con la info en `title`, igual que el icono de la copia local de al
+            lado y por lo mismo: sin ocultarlo, un lector de pantalla lo leería como parte del
+            NOMBRE del botón.
+          */}
+          {p.compartido === true ? (
+            <span className={estilos.compartido} title="Compartido contigo" aria-hidden="true">
+              <IconoCompartido size={14} />
+            </span>
+          ) : null}
+          {/*
+            Descargado en local o no. A diferencia de `compartido`, aquí
+            AUSENTE sí significa «no está» —el servidor mide la copia en
+            disco para todo proyecto de este mensaje, nunca «no lo sé»—, así
+            que se pinta SIEMPRE, con un icono por cada uno de los dos
+            estados en vez de la pastilla de texto que usa el Escritorio:
+            esta fila es de una sola línea y no hay sitio para dos palabras
+            más.
+
+            `aria-hidden`, con la info solo en `title`: es supletoria al
+            nombre del botón («abre este proyecto»), y sin ocultarla un
+            lector de pantalla leería «tienda no descargado» como si «no
+            descargado» fuera parte del NOMBRE del proyecto — se comprobó
+            con `Barra.comportamiento.test.tsx`, que busca los botones por
+            el nombre a secas.
+          */}
+          <span
+            className={estilos.estadoLocal}
+            data-local={p.local === true ? "" : undefined}
+            title={p.local === true ? "Descargado en este equipo" : "No descargado: se bajará al abrirlo"}
+            aria-hidden="true"
+          >
+            {p.local === true ? <IconCheckOutline16 size={14} /> : <IconDownloadOutline16 size={14} />}
+          </span>
+        </button>
+        {/* El «+» se ve SIEMPRE, sin posar el ratón: fuera de `.rowActions` (la hoja copiada
+            lo esconde salvo en `:hover`) y de `.accionesDeFila` (que lo deja en opacidad 0). Se
+            queda con `filas.iconButton`, que es su tamaño y su gris. El «…» de las sesiones sigue
+            saliendo al posar el ratón: aquella acción es de segundo plano, ésta no. */}
+        <span className={estilos.accionFija}>
+          <button
+            type="button"
+            className={filas.iconButton}
+            // Y una sesión NUEVA aquí tampoco: sería la segunda sobre la
+            // misma copia de trabajo, o sea el mismo rechazo.
+            disabled={apagado || abriendoAlgo || p.trabajando === true}
+            {...(p.trabajando === true
+              ? {
+                  title:
+                    "este proyecto está trabajando: pulsa su nombre para ver qué hace, y abre otra cuando termine",
+                }
+              : {})}
+            onClick={() => alNuevaSesion(p.id)}
+            aria-label={`nueva sesión en ${p.nombre}`}
+          >
+            <IconNewChatOutline16 size={16} />
+          </button>
+        </span>
+      </div>
+      {/* Plegado: las filas se DESMONTAN, no se esconden. Una fila
+          invisible con `visibility` sigue siendo tabulable, y se llega con
+          el teclado a botones que no se ven — el mismo cuidado que la barra
+          entera al plegarse. */}
+      {p.id !== desplegado ? null : p.sesiones.length === 0 ? (
+        <p className={clsx(navegador.empty, estilos.sinSesiones)}>Sin sesiones todavía.</p>
+      ) : (
+        // Las más recientes ARRIBA, por el ÚLTIMO TURNO y no por el orden
+        // de alta del índice: era `[...].reverse()`, así que una
+        // conversación vieja reabierta hoy se quedaba abajo del todo. Las
+        // que no traen hora van al final —no se les inventa una— y entre
+        // ellas se conserva el orden que traían, que es lo único que se
+        // sabe de ellas.
+        ordenarPorUltimoTurno(p.sesiones).map((s) => (
+          /*
+            Un `<div>` con un botón dentro y el menú al lado, no un botón
+            suelto: el «…» es interactivo y anidarlo dentro del botón de la
+            fila es HTML inválido —un control dentro de otro—, con el clic
+            repartido entre los dos. Es la misma forma que ya tiene la fila
+            de proyecto aquí arriba, y la que la hoja copiada da por hecha
+            (`.sessionRow:hover .rowActions`).
+          */
+          <div
+            key={s.id}
+            className={clsx(
+              filas.sessionRow,
+              estilos.filaConAccion,
+              // NO `filas.selected`: esa clase de la hoja copiada pinta el
+              // MISMO fondo que `:hover`, así que la sesión abierta y la
+              // fila que tienes debajo del ratón se ven idénticas — medido
+              // en pantalla. Se marca como el proyecto abierto: fondo MÁS
+              // barra de acento, y `aria-current` para quien no distingue
+              // el color.
+              s.id === sesionMarcada && estilos.sesionAbierta,
+              s.historica && estilos.historica
+            )}
+            {...(s.id === sesionMarcada ? { "aria-current": "true" as const } : {})}
+            {...(abriendoSesion(s.id) ? { "aria-busy": "true" as const } : {})}
+          >
+            <button
+              type="button"
+              className={clsx(estilos.reseteoDeBoton, estilos.cuerpoDeFila)}
+              /*
+                Con este proyecto trabajando, solo se puede pulsar LA que
+                trabaja: volver a ella es el buen caso —es lo que uno hace
+                para ver cómo va— y las demás las declina el servidor, porque
+                dos conversaciones sobre la misma copia de trabajo se
+                pisarían los ficheros. Decirlo antes del clic es lo que evita
+                el botón muerto; la guarda del servidor sigue estando, que es
+                quien manda si esta lista llega vieja.
+
+                Si el turno corre en una sesión que aún no tiene fila (una
+                nueva, antes de su primer volcado) no hay ninguna marcada y
+                se apagan todas — que es exactamente lo que el servidor
+                contestaría.
+              */
+              disabled={apagado || abriendoAlgo || (p.trabajando === true && s.trabajando !== true)}
+              {...(p.trabajando === true && s.trabajando !== true
+                ? {
+                    title:
+                      "este proyecto está trabajando en otra conversación: pulsa su nombre para verla",
+                  }
+                : {})}
+              onClick={() => alAbrirSesion(p.id, s.id)}
+            >
+              <span className={filas.slot} aria-hidden="true" />
+              <span className={filas.title}>
+                {/*
+                  Una sesión de tarea llega SIN título: el título sale del
+                  primer acto de `usuario` y una tarea no manda ninguno. Se
+                  ROTULA lo que falta —no se inventa un título—, porque una
+                  fila en blanco no se puede ni leer ni reconocer.
+
+                  Y sin marca se rotula igual pero sin decir de quién es: es
+                  el caso de las sesiones de tarea anteriores a la marca, y
+                  ahí «no consta» no puede convertirse en «es una tarea».
+                */}
+                {s.titulo !== "" ? s.titulo : s.deTarea ? "Tarea de fondo" : "Sin título"}
+              </span>
+              {s.deTarea ? (
+                // Con PALABRAS y no solo con un color: es lo que distingue
+                // una conversación tuya de lo que escribió una tarea sola, y
+                // un color no lo dice ni a quien no lo ve ni a un lector de
+                // pantalla.
+                <span className={estilos.marcaDeTarea}>Tarea</span>
+              ) : null}
+              {/*
+                A la derecha del título van dos cosas que NO se excluyen —una
+                sesión tiene fecha Y gasto—, y mientras hay actividad manda la
+                actividad: es el hueco donde ya se mira, y ni la fecha ni el
+                gasto de un turno en vuelo aportan nada en ese segundo.
+              */}
+              <FichaDeSesion sesion={s} abriendo={abriendoSesion(s.id)} />
+            </button>
+            {apagado ? null : (
+            <MenuDeSesion
+              titulo={s.titulo}
+              className={estilos.accionesDeFila}
+              alRenombrar={() => alAccionDeSesion(p.id, s.id, s.titulo, "renombrar")}
+              alBorrar={() => alAccionDeSesion(p.id, s.id, s.titulo, "borrar")}
+            />
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 export interface Proyecto {
   id: string;
   nombre: string;
   sesiones: FilaDeSesion[];
   /**
    * Compartido CONTIGO por otra persona (`shared` de CloudStudio). **Ausente no es «es
-   * tuyo»**: es que el servidor no lo dijo, y entonces no se pinta NADA — ni «propio» ni
-   * «compartido»—, que es lo único honesto cuando el dato no ha llegado.
+   * tuyo»**: es que el servidor no lo dijo. En la fila solo `true` pinta algo —el icono de
+   * compartido—; el resumen del proyecto sí distingue ausente de `false`.
    */
   compartido?: boolean;
   /**
    * La copia local ya existe: no hace falta bajar nada para abrirlo. Se pinta con un icono
-   * (junto al badge de `compartido`) en vez de con la pastilla de texto que usa el
+   * (junto al de compartido) en vez de con la pastilla de texto que usa el
    * Escritorio: aquí la fila es de una sola línea y no hay sitio para dos palabras más.
    * A diferencia de `compartido`, ausente aquí SÍ significa «no está» — el servidor mide
    * la copia en disco para todo proyecto de este mensaje, nunca «no lo sé» —, así que se
    * pinta siempre, con un icono para cada uno de los dos estados.
    */
   local?: boolean;
+  /** La rama de la que se bajó la copia local, para pintarla debajo del nombre. Ausente = sin
+   *  copia, o no consta: entonces la fila se queda en una línea. */
+  rama?: string;
   /**
    * Alguna sesión de este proyecto tiene un turno EN MARCHA. No se deduce de `sesiones`: una
    * sesión nueva no tiene fila en el índice hasta que vuelca su primer acto, así que el caso
@@ -158,10 +516,9 @@ export interface Proyecto {
  * (`.newSession` de la hoja copiada, sin ocupante aquí). Crear una sesión desde cero
  * necesitaría una clase del cable que hoy no existe —`vestibulo.ts` solo sabe ABRIR un
  * proyecto—, y un botón que no hace nada es justo el fallo mudo que este repo persigue.
- * La acción por proyecto sí se enseña (en `.rowActions`, que solo salen al posar el
- * ratón) porque el criterio de aceptación la pide y el manejador puede llegar el día que
- * el cable la lleve; hasta entonces `App.tsx` le pasa uno que no hace nada, igual que a
- * `alElegirEntorno`.
+ * La acción por proyecto sí se enseña, y SIEMPRE a la vista (`.accionFija`, no las
+ * `.rowActions` que solo salen al posar el ratón): es la acción principal de la fila, la que
+ * abre la ventana de sesión nueva.
  *
  * NADA de la marca de DeepSeek viaja aquí, y desde el rediseño tampoco la nuestra: la fila
  * de marca (`.logoRow`, `.brandName`, y el `.brandMark` donde el original monta su
@@ -179,7 +536,7 @@ export interface Proyecto {
  */
 export const PROYECTOS_POR_OMISION = 4;
 
-export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoActivo, sesionActiva, abriendo, alElegirEntorno, alAbrirSesion, alAbrirProyecto, alNuevaSesion, alAccionDeSesion, alAbrirAjustes, alAbrirAjustesEnEntornos, conectado, version }: {
+export function Barra({ entornos, entornoActivo, proyectos, visibles, fijados, proyectoActivo, proyectoEnResumen, sesionActiva, abriendo, alElegirEntorno, alAbrirSesion, alAbrirProyecto, alNuevaSesion, alAccionDeSesion, alFijar, alAbrirAjustes, alAbrirAjustesEnEntornos, conectado, version }: {
   entornos: { id: string; nombre: string }[];
   entornoActivo: string;
   proyectos: Proyecto[];
@@ -190,12 +547,22 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
    */
   visibles?: readonly string[];
   /**
+   * Los ids FIJADOS de este entorno (`Entorno.fijados`): van en su propio grupo, arriba, y ya
+   * no se repiten en «Proyectos». Ausente = ninguno.
+   */
+  fijados?: readonly string[];
+  /**
    * El proyecto ABIERTO ahora mismo, y su sesión. Ausentes = no se sabe, y entonces no se
    * marca nada: marcar «el primero» por no tener el dato es peor que no marcar, porque una
    * fila resaltada afirma que ahí es donde estás.
    */
   proyectoActivo?: string;
   sesionActiva?: string;
+  /**
+   * El proyecto cuyo RESUMEN está en el centro (`ResumenDeProyecto.tsx`). Su fila se marca
+   * como la abierta —fondo y `aria-current`—, porque es de él de quien habla la pantalla.
+   */
+  proyectoEnResumen?: string;
   /**
    * Qué se está abriendo AHORA, dicho por el servidor. Entre el clic y la sesión abierta
    * pasan de unos cientos de milisegundos a los minutos de una descarga, y sin señal la
@@ -212,15 +579,18 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
   alElegirEntorno: (id: string) => void;
   alAbrirSesion: (proyecto: string, sesion: string) => void;
   /**
-   * El nombre del proyecto es un botón: pide su rama y lo abre (o lo enseña, si ya estaba
-   * abierto — el servidor no distingue, `completarProyecto`/`abrirProyecto` corren igual).
+   * El nombre del proyecto es un botón: abre su RESUMEN en el centro (`App.tsx`). Empezar a
+   * trabajar es el «+».
    *
-   * Con el proyecto TRABAJANDO sigue vivo a propósito, al contrario que el «+»: el servidor
-   * lo lleva a la conversación que está en marcha, y es la única forma de llegar a ella
-   * mientras no tenga fila propia —su id nace al volcar el primer acto—. Apagarlo aquí
-   * dejaría un proyecto trabajando al que no se puede ni mirar.
+   * Con el proyecto TRABAJANDO sigue vivo a propósito, al contrario que el «+»: el resumen
+   * ofrece «Ir a la conversación en marcha», que es la única forma de llegar a ella mientras
+   * no tenga fila propia —su id nace al volcar el primer acto—. Apagarlo aquí dejaría un
+   * proyecto trabajando al que no se puede ni mirar.
    */
   alAbrirProyecto: (proyecto: string) => void;
+  /** Fijar o dejar de fijar un proyecto. La lista la compone `App.tsx` y la guarda el
+   *  servidor con el entorno. */
+  alFijar: (proyecto: string, fijar: boolean) => void;
   /** Ver el comentario de cabecera: la acción existe, el mensaje del cable todavía no. */
   alNuevaSesion: (proyecto: string) => void;
   /**
@@ -264,15 +634,6 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
 }) {
   const apagado = conectado === false;
 
-  /**
-   * Abrir algo tarda, y la señal va donde estaba el clic: en la fila. Se distingue el
-   * proyecto de la sesión porque son dos filas distintas —una sesión guardada se abre desde
-   * la suya— y porque una sesión NUEVA no tiene fila todavía: en ese caso el indicador se
-   * queda en la del proyecto, que es donde está su «+».
-   */
-  const abriendoProyecto = (id: string): boolean =>
-    abriendo !== undefined && abriendo.proyecto === id && abriendo.sesion === undefined;
-  const abriendoSesion = (id: string): boolean => abriendo !== undefined && abriendo.sesion === id;
   /** Mientras se abre algo no se pide otra cosa: el segundo clic no cancela el primero. */
   const abriendoAlgo = abriendo !== undefined;
   /**
@@ -293,11 +654,18 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
   const entornoQueSeVe = entornoPendiente ?? entornoActivo;
   // El orden de `visibles` NO manda: manda el del listado, que es el del servidor. Elegir
   // qué se ve es una cosa; reordenar el listado remoto sería otra, y nadie la ha pedido.
-  const alaVista =
+  //
+  // Los FIJADOS salen de la cuenta antes que nada: van en su grupo, arriba, estén o no entre
+  // los visibles, y no se repiten abajo. Con el orden del listado también, por lo mismo.
+  const fijadosALaVista = proyectos.filter((p) => fijados?.includes(p.id) === true);
+  const sinFijar = proyectos.filter((p) => !fijadosALaVista.includes(p));
+  const elegidos =
     visibles === undefined
       ? proyectos.slice(0, PROYECTOS_POR_OMISION)
       : proyectos.filter((p) => visibles.includes(p.id));
-  const ocultos = proyectos.length - alaVista.length;
+  const alaVista = elegidos.filter((p) => !fijadosALaVista.includes(p));
+  // Lo que no se ve en NINGUNO de los dos grupos: ni fijado ni elegido.
+  const ocultos = sinFijar.length - alaVista.length;
 
   /**
    * **Las sesiones se pliegan, y solo hay UNA lista abierta: la del proyecto activo.**
@@ -317,6 +685,24 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
    */
   const [desplegado, setDesplegado] = useState<string | undefined>(proyectoActivo);
   useEffect(() => setDesplegado(proyectoActivo), [proyectoActivo]);
+
+  /** Lo que las filas de los dos grupos comparten: todo menos si están fijadas. */
+  const propsDeFila = (p: Proyecto) => ({
+    p,
+    desplegado,
+    alPlegar: () => setDesplegado(p.id === desplegado ? undefined : p.id),
+    proyectoActivo,
+    proyectoEnResumen,
+    sesionActiva,
+    abriendo,
+    apagado,
+    abriendoAlgo,
+    alFijar,
+    alAbrirProyecto,
+    alNuevaSesion,
+    alAbrirSesion,
+    alAccionDeSesion,
+  });
 
   return (
     <nav className={barra.root}>
@@ -358,7 +744,7 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                 lo que se puede pintar es la marca del entorno ACTIVO — que además es la
                 pregunta que uno se hace mirando esa esquina («¿en qué servidor estoy?»). */}
             <IconoDeEntorno entorno={entornoQueSeVe} size={20} className={estilos.iconoDeEntorno} />
-            <select
+            <Desplegable
               className={estilos.entorno}
               // Mientras algo viaja no se pide otra cosa, la misma regla que las filas del
               // árbol: un segundo cambio de entorno con el primero en vuelo dejaría a
@@ -372,286 +758,44 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                   {e.nombre}
                 </option>
               ))}
-            </select>
+            </Desplegable>
             </div>
           )}
 
-          {/* Niveles 2 y 3 — proyectos, y dentro de cada uno sus sesiones. */}
-          <div className={navegador.sectionHeader}>
-            <span className={clsx(navegador.sectionLabel, estilos.rotulo)}>Proyectos</span>
-            <span className={estilos.rellenoDeSeccion} />
-          </div>
+          {/* Niveles 2 y 3 — proyectos, y dentro de cada uno sus sesiones.
+
+              Los DOS grupos —«Proyectos fijados» y «Proyectos»— van dentro de la lista que
+              hace scroll, cada uno con su cabecera. Fuera de ella, una columna de fijados
+              desplegados empujaría la barra sin poder desplazarse. Las cabeceras son las
+              mismas tres clases que la de «Entorno», para que se lean como iguales. */}
           <div className={navegador.listArea}>
             <div className={navegador.treeBody}>
               <div className={navegador.list}>
+                {fijadosALaVista.length === 0 ? null : (
+                  <>
+                    <div className={navegador.sectionHeader}>
+                      <span className={clsx(navegador.sectionLabel, estilos.rotulo)}>Proyectos fijados</span>
+                      <span className={estilos.rellenoDeSeccion} />
+                    </div>
+                    {fijadosALaVista.map((p) => (
+                      <FilaDeProyecto key={p.id} {...propsDeFila(p)} fijado />
+                    ))}
+                  </>
+                )}
+                <div className={navegador.sectionHeader}>
+                  <span className={clsx(navegador.sectionLabel, estilos.rotulo)}>Proyectos</span>
+                  <span className={estilos.rellenoDeSeccion} />
+                </div>
                 {alaVista.length === 0 ? (
                   <p className={navegador.empty}>
                     {proyectos.length === 0
                       ? "Sin proyectos que enseñar aquí todavía."
-                      : "Ninguno elegido para esta barra; elígelos en Ajustes."}
+                      : fijadosALaVista.length > 0 && ocultos === 0
+                        ? "Todos los elegidos están fijados arriba."
+                        : "Ninguno elegido para esta barra; elígelos en Ajustes."}
                   </p>
                 ) : (
-                  alaVista.map((p) => (
-                    <div key={p.id} className={navegador.groupSection}>
-                      <div
-                        className={clsx(
-                          filas.projectRow,
-                          estilos.filaConAccion,
-                          p.id === proyectoActivo && estilos.filaAbierta
-                        )}
-                        // Dos señales para lo mismo y no una: el color de fondo lo pierde
-                        // quien no distingue bien los tonos, y el `aria-current` es lo que
-                        // se lo dice a un lector de pantalla.
-                        {...(p.id === proyectoActivo ? { "aria-current": "true" as const } : {})}
-                        {...(abriendoProyecto(p.id) ? { "aria-busy": "true" as const } : {})}
-                      >
-                        {/*
-                          **El plegador es un botón APARTE, y tiene que serlo.** Va como
-                          hermano del botón del nombre y no dentro: un `<button>` anidado en
-                          otro es HTML inválido y reparte el clic entre los dos — la misma
-                          razón por la que el «…» de una sesión no vive dentro de su fila.
-
-                          Y **`.folder` + `.chevron` son de la hoja copiada**, que ya traía
-                          esta afordancia hecha: la carpeta se va al posar el ratón
-                          (`.projectRow:hover .folder { display: none }`) y deja sitio al
-                          triángulo, que gira 90° al abrirse (`.arrowOpen`). Aquí antes se
-                          usaba `.slot` a secas —y estaba bien— porque las sesiones se
-                          enseñaban siempre y no había nada que desplegar; ahora sí lo hay.
-
-                          La carpeta cambia además de glifo (cerrada/abierta), que es lo que
-                          dice el estado SIN posar el ratón: el chevron solo aparece en
-                          `:hover` y en `:focus-visible`, y con el ratón lejos la única
-                          señal de la fila sería el hueco.
-                        */}
-                        <button
-                          type="button"
-                          className={clsx(estilos.reseteoDeBoton, estilos.plegador)}
-                          aria-expanded={p.id === desplegado}
-                          aria-label={`${p.id === desplegado ? "plegar" : "desplegar"} las sesiones de ${p.nombre}`}
-                          onClick={() => setDesplegado(p.id === desplegado ? undefined : p.id)}
-                        >
-                          <span className={clsx(filas.slot, filas.folder, estilos.glifoDeCarpeta)} aria-hidden="true">
-                            {p.id === desplegado ? <IconFolderOpen16 size={16} /> : <IconFolderClose16 size={16} />}
-                          </span>
-                          <span className={clsx(filas.slot, filas.chevron, estilos.glifoDeChevron)} aria-hidden="true">
-                            <IconTriangleRightFill14
-                              size={14}
-                              className={clsx(filas.arrow, p.id === desplegado && filas.arrowOpen)}
-                            />
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          className={clsx(estilos.reseteoDeBoton, estilos.cuerpoDeFila)}
-                          disabled={apagado || abriendoAlgo}
-                          onClick={() => alAbrirProyecto(p.id)}
-                        >
-                          <span className={filas.projectText}>
-                            {/* El proyecto activo se marca con el fondo y con el NOMBRE, no
-                                con el filo de cian: ese se quedó para la fila que estás
-                                leyendo (ver `Barra.module.css`). */}
-                            <span className={clsx(filas.title, p.id === proyectoActivo && estilos.tituloActivo)}>
-                              {p.nombre}
-                            </span>
-                          </span>
-                          {abriendoProyecto(p.id) ? (
-                            <span
-                              className={estilos.actividad}
-                              // Con PALABRAS y no solo con el giro: una descarga son minutos
-                              // y un punto que gira no distingue eso de medio segundo.
-                              title={abriendo?.descargando === true ? "Descargando el proyecto…" : "Abriendo…"}
-                            >
-                              {abriendo?.descargando === true ? "descargando…" : "abriendo…"}
-                            </span>
-                          ) : p.trabajando === true || (p.id !== desplegado && p.sesiones.some((se) => se.trabajando === true)) ? (
-                            /*
-                              **Aquí, y con la lista PLEGADA es obligatorio.** El servidor
-                              manda `proyectos[].trabajando` solo cuando ninguna fila suya la
-                              lleva —para no decirlo dos veces—, y eso valía cuando las
-                              sesiones se enseñaban todas: la fila lo decía. Con la lista
-                              plegada esa fila no existe, así que un turno corriendo en un
-                              proyecto que no estás mirando no se vería en NINGUNA parte.
-
-                              No es el cruce prohibido de datos que este repo evita: la
-                              lista de sesiones ya está aquí, plegada o no, y se le pregunta
-                              a ella. Y desplegado NO se dice: ahí lo dice la fila, que es
-                              la que se abre — la regla de no decirlo dos veces sigue.
-                            */
-                            <span className={estilos.actividad} title="El agente está trabajando en este proyecto…">
-                              trabajando…
-                            </span>
-                          ) : null}
-                          {/*
-                            De quién es. Tres cosas de esta etiqueta:
-
-                            - Va con una PALABRA y no solo con un color, como el
-                              `aria-current` de la fila abierta o el «+n −n» de los
-                              ficheros: un punto de color no lo lee quien no distingue los
-                              tonos, ni un lector de pantalla.
-                            - Solo si el servidor lo dijo. `undefined` no pinta NADA, ni
-                              «propio» ni «compartido».
-                            - Al lado del nombre y no debajo: su `.projectText` es una
-                              columna y meterla dentro habría partido la fila en dos
-                              líneas, deshaciendo la decisión que su propia hoja documenta
-                              («Compact one-line Workspace row»).
-                          */}
-                          {p.compartido === undefined ? null : (
-                            <span className={estilos.duenno} data-compartido={p.compartido ? "" : undefined}>
-                              {p.compartido ? "compartido" : "propio"}
-                            </span>
-                          )}
-                          {/*
-                            Descargado en local o no. A diferencia de `compartido`, aquí
-                            AUSENTE sí significa «no está» —el servidor mide la copia en
-                            disco para todo proyecto de este mensaje, nunca «no lo sé»—, así
-                            que se pinta SIEMPRE, con un icono por cada uno de los dos
-                            estados en vez de la pastilla de texto que usa el Escritorio:
-                            esta fila es de una sola línea y no hay sitio para dos palabras
-                            más.
-
-                            `aria-hidden`, con la info solo en `title`: es supletoria al
-                            nombre del botón («abre este proyecto»), y sin ocultarla un
-                            lector de pantalla leería «tienda no descargado» como si «no
-                            descargado» fuera parte del NOMBRE del proyecto — se comprobó
-                            con `Barra.comportamiento.test.tsx`, que busca los botones por
-                            el nombre a secas.
-                          */}
-                          <span
-                            className={estilos.estadoLocal}
-                            data-local={p.local === true ? "" : undefined}
-                            title={p.local === true ? "Descargado en este equipo" : "No descargado: se bajará al abrirlo"}
-                            aria-hidden="true"
-                          >
-                            {p.local === true ? <IconCheckOutline16 size={14} /> : <IconDownloadOutline16 size={14} />}
-                          </span>
-                        </button>
-                        <span className={clsx(filas.rowActions, estilos.accionesDeFila)}>
-                          <button
-                            type="button"
-                            className={filas.iconButton}
-                            // Y una sesión NUEVA aquí tampoco: sería la segunda sobre la
-                            // misma copia de trabajo, o sea el mismo rechazo.
-                            disabled={apagado || abriendoAlgo || p.trabajando === true}
-                            {...(p.trabajando === true
-                              ? {
-                                  title:
-                                    "este proyecto está trabajando: pulsa su nombre para ver qué hace, y abre otra cuando termine",
-                                }
-                              : {})}
-                            onClick={() => alNuevaSesion(p.id)}
-                            aria-label={`nueva sesión en ${p.nombre}`}
-                          >
-                            <IconNewChatOutline16 size={16} />
-                          </button>
-                        </span>
-                      </div>
-                      {/* Plegado: las filas se DESMONTAN, no se esconden. Una fila
-                          invisible con `visibility` sigue siendo tabulable, y se llega con
-                          el teclado a botones que no se ven — el mismo cuidado que la barra
-                          entera al plegarse. */}
-                      {p.id !== desplegado ? null : p.sesiones.length === 0 ? (
-                        <p className={clsx(navegador.empty, estilos.sinSesiones)}>Sin sesiones todavía.</p>
-                      ) : (
-                        // Las más recientes ARRIBA, por el ÚLTIMO TURNO y no por el orden
-                        // de alta del índice: era `[...].reverse()`, así que una
-                        // conversación vieja reabierta hoy se quedaba abajo del todo. Las
-                        // que no traen hora van al final —no se les inventa una— y entre
-                        // ellas se conserva el orden que traían, que es lo único que se
-                        // sabe de ellas.
-                        ordenarPorUltimoTurno(p.sesiones).map((s) => (
-                          /*
-                            Un `<div>` con un botón dentro y el menú al lado, no un botón
-                            suelto: el «…» es interactivo y anidarlo dentro del botón de la
-                            fila es HTML inválido —un control dentro de otro—, con el clic
-                            repartido entre los dos. Es la misma forma que ya tiene la fila
-                            de proyecto aquí arriba, y la que la hoja copiada da por hecha
-                            (`.sessionRow:hover .rowActions`).
-                          */
-                          <div
-                            key={s.id}
-                            className={clsx(
-                              filas.sessionRow,
-                              estilos.filaConAccion,
-                              // NO `filas.selected`: esa clase de la hoja copiada pinta el
-                              // MISMO fondo que `:hover`, así que la sesión abierta y la
-                              // fila que tienes debajo del ratón se ven idénticas — medido
-                              // en pantalla. Se marca como el proyecto abierto: fondo MÁS
-                              // barra de acento, y `aria-current` para quien no distingue
-                              // el color.
-                              s.id === sesionActiva && estilos.sesionAbierta,
-                              s.historica && estilos.historica
-                            )}
-                            {...(s.id === sesionActiva ? { "aria-current": "true" as const } : {})}
-                            {...(abriendoSesion(s.id) ? { "aria-busy": "true" as const } : {})}
-                          >
-                            <button
-                              type="button"
-                              className={clsx(estilos.reseteoDeBoton, estilos.cuerpoDeFila)}
-                              /*
-                                Con este proyecto trabajando, solo se puede pulsar LA que
-                                trabaja: volver a ella es el buen caso —es lo que uno hace
-                                para ver cómo va— y las demás las declina el servidor, porque
-                                dos conversaciones sobre la misma copia de trabajo se
-                                pisarían los ficheros. Decirlo antes del clic es lo que evita
-                                el botón muerto; la guarda del servidor sigue estando, que es
-                                quien manda si esta lista llega vieja.
-
-                                Si el turno corre en una sesión que aún no tiene fila (una
-                                nueva, antes de su primer volcado) no hay ninguna marcada y
-                                se apagan todas — que es exactamente lo que el servidor
-                                contestaría.
-                              */
-                              disabled={apagado || abriendoAlgo || (p.trabajando === true && s.trabajando !== true)}
-                              {...(p.trabajando === true && s.trabajando !== true
-                                ? {
-                                    title:
-                                      "este proyecto está trabajando en otra conversación: pulsa su nombre para verla",
-                                  }
-                                : {})}
-                              onClick={() => alAbrirSesion(p.id, s.id)}
-                            >
-                              <span className={filas.slot} aria-hidden="true" />
-                              <span className={filas.title}>
-                                {/*
-                                  Una sesión de tarea llega SIN título: el título sale del
-                                  primer acto de `usuario` y una tarea no manda ninguno. Se
-                                  ROTULA lo que falta —no se inventa un título—, porque una
-                                  fila en blanco no se puede ni leer ni reconocer.
-
-                                  Y sin marca se rotula igual pero sin decir de quién es: es
-                                  el caso de las sesiones de tarea anteriores a la marca, y
-                                  ahí «no consta» no puede convertirse en «es una tarea».
-                                */}
-                                {s.titulo !== "" ? s.titulo : s.deTarea ? "Tarea de fondo" : "Sin título"}
-                              </span>
-                              {s.deTarea ? (
-                                // Con PALABRAS y no solo con un color: es lo que distingue
-                                // una conversación tuya de lo que escribió una tarea sola, y
-                                // un color no lo dice ni a quien no lo ve ni a un lector de
-                                // pantalla.
-                                <span className={estilos.marcaDeTarea}>Tarea</span>
-                              ) : null}
-                              {/*
-                                A la derecha del título van dos cosas que NO se excluyen —una
-                                sesión tiene fecha Y gasto—, y mientras hay actividad manda la
-                                actividad: es el hueco donde ya se mira, y ni la fecha ni el
-                                gasto de un turno en vuelo aportan nada en ese segundo.
-                              */}
-                              <FichaDeSesion sesion={s} abriendo={abriendoSesion(s.id)} />
-                            </button>
-                            {apagado ? null : (
-                            <MenuDeSesion
-                              titulo={s.titulo}
-                              className={estilos.accionesDeFila}
-                              alRenombrar={() => alAccionDeSesion(p.id, s.id, s.titulo, "renombrar")}
-                              alBorrar={() => alAccionDeSesion(p.id, s.id, s.titulo, "borrar")}
-                            />
-                            )}
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  ))
+                  alaVista.map((p) => <FilaDeProyecto key={p.id} {...propsDeFila(p)} fijado={false} />)
                 )}
                 {/*
                   Lo que NO se está viendo se dice, y se dice dónde se arregla. Callarlo

@@ -161,6 +161,22 @@ describe("Kanban", () => {
     expect(screen.queryByRole("button", { name: /Arregla el login/ })).toBeNull();
   });
 
+  /** El servidor declina abrir la sesión de una tarea EN CURSO: ofrecerlo era un botón muerto. */
+  it("una tarea `en-proceso` no ofrece abrir su conversación, aunque tenga sesión", () => {
+    const abrir = vi.fn();
+    render(
+      <Kanban
+        cola={{
+          lista: [tarea({ estado: "en-proceso", sesion: "s1", empezada: "2026-09-08T10:00:00.000Z" })],
+          concurrencia: 2,
+          corriendoAqui: true,
+        }}
+        alAbrirSesion={abrir}
+      />
+    );
+    expect(screen.queryByRole("button", { name: /Arregla el login/ })).toBeNull();
+  });
+
   it("sin tareas se DICE, en vez de cuatro columnas vacías", () => {
     render(<Kanban cola={{ lista: [], concurrencia: 2, corriendoAqui: true }} />);
     expect(screen.getByText(/ninguna tarea/i)).toBeTruthy();

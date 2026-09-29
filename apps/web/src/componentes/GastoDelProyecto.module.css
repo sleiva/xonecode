@@ -1,0 +1,211 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`: label-primary/secondary/
+   tertiary, border-l2, bg-layer-1, interactive-bg-hover. Las dos series son
+   `--xonecode-gasto-modelo`/`-externo` (`estilos/marca.css`), validadas con el skill `dataviz`.
+   Ningún color literal. */
+
+.gasto {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.totales {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  margin: 0;
+}
+
+.total {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rotulo {
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* La cifra en tinta de TEXTO, nunca del color de su serie: el color va en la marca. */
+.cifra {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.unidad,
+.cache {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.alcance {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.leyenda {
+  display: flex;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.leyenda li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.muestra {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.muestra[data-serie="modelo"],
+.segmento[data-serie="modelo"] {
+  background: var(--xonecode-gasto-modelo);
+}
+
+.muestra[data-serie="externo"],
+.segmento[data-serie="externo"] {
+  background: var(--xonecode-gasto-externo);
+}
+
+/* El lienzo: la escala es UNA —el máximo, recesivo, arriba a la izquierda— y la línea base
+   es el único filo. Nada de rejilla: con diez columnas y un tooltip, sobra. */
+.lienzo {
+  position: relative;
+  padding-top: 16px;
+}
+
+.maximo {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 10px;
+}
+
+.columnas {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 120px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+
+/* La zona de toque es la columna entera —más ancha y más alta que la barra—, y el foco se ve. */
+.columna {
+  display: flex;
+  flex: 1 1 0;
+  align-items: flex-end;
+  justify-content: center;
+  height: 100%;
+  min-width: 0;
+  border-radius: 6px 6px 0 0;
+  outline: none;
+  cursor: default;
+}
+
+.columna:hover,
+.columna:focus-visible {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.columna:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--xonecode-cian);
+}
+
+/* Las dos series APILADAS, con un hueco de 2 px de fondo entre ellas y el extremo redondeado
+   de 4 px arriba (la marca del skill `dataviz`). Barra fina: no llena la columna. */
+.pila {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 2px;
+  width: min(28px, 70%);
+  height: 100%;
+}
+
+.segmento {
+  display: block;
+  min-height: 2px;
+}
+
+.segmento:first-child {
+  border-radius: 4px 4px 0 0;
+}
+
+/* Por ENCIMA del área de las barras, pegado a la derecha: dentro de ella tapaba la más alta
+   (medido en pantalla), que es justo la que más se mira. */
+.tooltip {
+  position: absolute;
+  bottom: calc(100% - 12px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 60%;
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.tituloTooltip {
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fechaTooltip {
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+}
+
+.tabla summary {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tabla table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.tabla th,
+.tabla td {
+  padding: 4px 6px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  text-align: left;
+}
+
+.tabla th {
+  color: var(--dsw-alias-label-tertiary);
+  font-weight: 500;
+}
+
+.tabla td {
+  color: var(--dsw-alias-label-primary);
+}
