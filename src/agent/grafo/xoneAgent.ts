@@ -1,5 +1,6 @@
 import { createDeepAgent, createFilesystemMiddleware } from "deepagents";
 import { MAPA_DEL_PROYECTO, fichaDeAgente, promptDeAgente, repartirSkills, type Agente } from "../../core/agentes.js";
+import { claseDeTrabajo } from "../../core/esfuerzo.js";
 import { REGLA_DE_ESCRITURAS_EN_PARALELO } from "../../core/serieDeEscrituras.js";
 import type { MotorExterno, SubagenteExternoPort } from "../../core/ports.js";
 import { RunnableLambda } from "@langchain/core/runnables";
@@ -633,8 +634,8 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
     // deja pasar el de la sesión, que es lo que `Modelos` resuelve por dentro.
     model:
       perfil.modelo === undefined
-        ? opciones.modelos.paraPapel(perfil.soloLectura ? "rapido" : "trabajo", perfil.esfuerzo)
-        : opciones.modelos.paraModelo(perfil.modelo, perfil.esfuerzo),
+        ? opciones.modelos.paraPapel(perfil.soloLectura ? "rapido" : "trabajo", perfil.esfuerzo, claseDeTrabajo(perfil))
+        : opciones.modelos.paraModelo(perfil.modelo, perfil.esfuerzo, claseDeTrabajo(perfil)),
     };
   });
 

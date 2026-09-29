@@ -23,6 +23,7 @@
  *   (`modeloExterno.ts`).
  * - NO: un presupuesto GLOBAL por turno (la suma de todos los hilos), que deepagents tampoco tiene.
  */
+import { claseDeTrabajo } from "../../../core/esfuerzo.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import winston from "winston";
@@ -627,12 +628,13 @@ export async function abrirSesionTrueforge(
             .join("\n")
             .trimEnd();
     const papel = agente?.soloLectura === true ? "rapido" : "trabajo";
+    const claseDeEsfuerzo = agente === undefined ? undefined : claseDeTrabajo(agente);
     const definicionDelHijo = {
       modelClient: modeloParaTrueforge({
         modelo: () =>
           agente?.modelo === undefined
-            ? clienteDe(`papel:${papel}:${agente?.esfuerzo ?? ""}`, () => modelos.paraPapel(papel, agente?.esfuerzo))
-            : clienteDe(`modelo:${agente.modelo}:${agente.esfuerzo ?? ""}`, () => modelos.paraModelo(agente.modelo!, agente.esfuerzo)),
+            ? clienteDe(`papel:${papel}:${agente?.esfuerzo ?? ""}:${claseDeEsfuerzo ?? ""}`, () => modelos.paraPapel(papel, agente?.esfuerzo, claseDeEsfuerzo))
+            : clienteDe(`modelo:${agente.modelo}:${agente.esfuerzo ?? ""}:${claseDeEsfuerzo ?? ""}`, () => modelos.paraModelo(agente.modelo!, agente.esfuerzo, claseDeEsfuerzo)),
         senal: () => aborto?.signal,
         alRazonar,
         soloTexto: () => (detencion.soloTexto(params.threadId) ? RESUMEN_DE_RELLENO : undefined),

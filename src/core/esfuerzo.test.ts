@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   ESFUERZOS,
+  claseDeTrabajo,
+  esfuerzoPorOmision,
   NIVELES_DE_OLLAMA,
   esEsfuerzo,
   esfuerzoAplicable,
@@ -151,5 +153,19 @@ describe("los niveles de esfuerzo de un modelo", () => {
       ];
       for (const fila of filas) for (const nivel of fila) expect(esEsfuerzo(nivel), nivel).toBe(true);
     });
+  });
+});
+
+describe("el nivel por omisión por familia y clase", () => {
+  it("la clase sale de los datos: solo quien ejecuta es mecánico", () => {
+    expect(claseDeTrabajo({ ejecucion: true })).toBe("mecanica");
+    expect(claseDeTrabajo({ ejecucion: false })).toBeUndefined();
+    expect(claseDeTrabajo({})).toBeUndefined();
+  });
+
+  it("DeepSeek tiene fila para lo mecánico; lo demás, ninguna", () => {
+    expect(esfuerzoPorOmision("deepseek", "mecanica")).toBe("low");
+    expect(esfuerzoPorOmision("deepseek", undefined)).toBeUndefined();
+    expect(esfuerzoPorOmision("anthropic", "mecanica")).toBeUndefined();
   });
 });

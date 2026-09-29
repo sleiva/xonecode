@@ -126,6 +126,37 @@ describe("el esfuerzo, contra el invocationParams de cada cliente", () => {
     expect(p["thinking"]).toBeUndefined();
   });
 
+  /**
+   * El nivel por omisión de un subagente, por FAMILIA de proveedor: solo lo MECÁNICO (quien ejecuta)
+   * y solo en DeepSeek. Lo que el `.md` o la sesión fijaron gana siempre.
+   */
+  describe("el nivel por omisión de un subagente, por familia", () => {
+    const con = (id: string, opciones: { esfuerzo?: "low" | "high" | "max"; sesion?: "low" | "high" | "max"; clase?: "mecanica" }) => {
+      const modelos = new Modelos({ bandera: id }, undefined, undefined, opciones.sesion);
+      return (modelos.paraPapel("trabajo", opciones.esfuerzo, opciones.clase) as {
+        invocationParams: () => Record<string, unknown>;
+      }).invocationParams();
+    };
+
+    it("un subagente que ejecuta, con DeepSeek y sin nivel fijado, va a low", () => {
+      expect(con("deepseek/deepseek-flash", { clase: "mecanica" })["reasoning_effort"]).toBe("low");
+    });
+
+    it("lo que fijó su .md o la sesión gana", () => {
+      expect(con("deepseek/deepseek-flash", { clase: "mecanica", esfuerzo: "max" })["reasoning_effort"]).toBe("max");
+      expect(con("deepseek/deepseek-flash", { clase: "mecanica", sesion: "high" })["reasoning_effort"]).toBe("high");
+    });
+
+    it("sin clase (el raíz, escritores, consulta) no se decide nada", () => {
+      expect(con("deepseek/deepseek-flash", {})["reasoning_effort"]).toBeUndefined();
+    });
+
+    it("otra familia no lo hereda", () => {
+      expect(con("anthropic/claude-opus-5", { clase: "mecanica" })["output_config"]).toBeUndefined();
+      expect(con("nvidia/openai/gpt-oss-20b", { clase: "mecanica" })["reasoning_effort"]).toBeUndefined();
+    });
+  });
+
   /** Las cuatro caras del fail-closed, que es lo que de verdad hay que defender. */
   describe("y lo que NO se manda", () => {
     it("sin esfuerzo elegido, ningún cliente lleva el campo", () => {

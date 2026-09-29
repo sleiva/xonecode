@@ -10,7 +10,7 @@
  */
 
 import type { Proveedor } from "./modelos.js";
-import type { Esfuerzo } from "./esfuerzo.js";
+import type { ClaseDeTrabajo, Esfuerzo } from "./esfuerzo.js";
 import type { ConsumoDeTurno } from "./actos.js";
 import type { EstadoDeVerificador, VeredictoDeTarea } from "./entrega.js";
 import type { HallazgoDelTurno } from "./events.js";
@@ -329,7 +329,7 @@ export interface ModelosPort {
    * parámetro omitido y no en un 400, y el único sitio que conoce las dos mitades —el
    * nivel elegido y el modelo resuelto— está dentro.
    */
-  paraPapel(papel: Papel, esfuerzo?: Esfuerzo): unknown;
+  paraPapel(papel: Papel, esfuerzo?: Esfuerzo, clase?: ClaseDeTrabajo): unknown;
   /**
    * Un modelo CONCRETO, «proveedor/modelo», para el subagente que fija el suyo
    * (`core/agentes.ts`). Los papeles no sirven para esto: son tres funciones del turno
@@ -337,7 +337,7 @@ export interface ModelosPort {
    * un papel, está pidiendo ese modelo. Lanza si el texto no es un `proveedor/modelo`
    * válido, que es lo que hace que un error de escritura en un `.md` se vea.
    */
-  paraModelo(id: string, esfuerzo?: Esfuerzo): unknown;
+  paraModelo(id: string, esfuerzo?: Esfuerzo, clase?: ClaseDeTrabajo): unknown;
   /** Qué modelo concreto resuelve cada papel, para que `describe` lo pueda enseñar. */
   descripcion(): Record<Papel, string>;
 }

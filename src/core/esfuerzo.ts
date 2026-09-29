@@ -24,6 +24,7 @@
  * proveedores que se pudieron medir.
  */
 
+import type { Agente } from "./agentes.js";
 import type { Proveedor } from "./modelos.js";
 
 /**
@@ -193,4 +194,38 @@ export function esfuerzoAplicable(
 ): Esfuerzo | undefined {
   if (elegido === undefined) return undefined;
   return nivelesDeEsfuerzo(proveedor, modelo, vivas)?.includes(elegido) === true ? elegido : undefined;
+}
+
+/**
+ * A qué CLASE de trabajo pertenece un subagente, sacada de sus DATOS y no de su nombre (mismo
+ * criterio que `recibeBuscarIcono`): un subagente propio con `ejecucion: true` es de la misma
+ * clase que `device-controller`.
+ *
+ * Solo hay una clase con nivel por omisión: **`mecanica`**, quien EJECUTA comandos y lee salidas.
+ * Consultor y analista son los dos `soloLectura` y no hay dato que los separe, y uno es una
+ * búsqueda y el otro escribe el plan; escritores y orquestador son donde se cometen los errores.
+ * Ahí no se decide por nadie: se queda lo que haga el proveedor.
+ */
+export type ClaseDeTrabajo = "mecanica";
+
+export function claseDeTrabajo(a: Pick<Agente, "ejecucion">): ClaseDeTrabajo | undefined {
+  return a.ejecucion === true ? "mecanica" : undefined;
+}
+
+/**
+ * El nivel POR OMISIÓN de un subagente, por FAMILIA de proveedor: el que vale cuando ni su `.md`
+ * ni la sesión fijaron uno. Es una tabla aparte de `TABLA` porque contesta otra pregunta —qué
+ * nivel conviene— y no cuáles admite el modelo; y se criba contra esa (`esfuerzoAplicable`), así
+ * que una fila que un modelo no admite se omite en vez de dar un 400.
+ *
+ * **DeepSeek piensa por defecto, con la petición limpia** (medido), y cada llamada del conductor
+ * llevaba razonamiento. Lo mecánico va a `low`. Lo que NO está medido es que ahorre sin empeorar
+ * el resultado: la traza (`razonamiento` por origen) es lo que permite comprobarlo.
+ */
+const OMISION_POR_FAMILIA: Partial<Record<Proveedor, Partial<Record<ClaseDeTrabajo, Esfuerzo>>>> = {
+  deepseek: { mecanica: "low" },
+};
+
+export function esfuerzoPorOmision(proveedor: Proveedor, clase: ClaseDeTrabajo | undefined): Esfuerzo | undefined {
+  return clase === undefined ? undefined : OMISION_POR_FAMILIA[proveedor]?.[clase];
 }

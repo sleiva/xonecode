@@ -9,7 +9,7 @@ import {
   type Eleccion, type FuentesDeEleccion, type Proveedor, type ProveedorDeclarado,
 } from "../../core/modelos.js";
 import { topeDeSalida } from "../../core/contextos.js";
-import { esfuerzoAplicable, type CapacidadesVivas, type Esfuerzo } from "../../core/esfuerzo.js";
+import { esfuerzoAplicable, esfuerzoPorOmision, type CapacidadesVivas, type ClaseDeTrabajo, type Esfuerzo } from "../../core/esfuerzo.js";
 import { baseUrlDeOllama, baseUrlDeOllamaCloud } from "./catalogoModelos.js";
 import { crearMemoriaDeEco, fetchConEcoDeRazonamiento } from "./ecoDeRazonamiento.js";
 import { ChatGoogleGenerativeAICompatible } from "./gemini.js";
@@ -97,9 +97,9 @@ export class Modelos implements ModelosPort {
     this.esfuerzoDeLaSesion = esfuerzo;
   }
 
-  paraPapel(papel: Papel, esfuerzo?: Esfuerzo): unknown {
+  paraPapel(papel: Papel, esfuerzo?: Esfuerzo, clase?: ClaseDeTrabajo): unknown {
     return construirModelo(
-      this.eleccion[papel], this.personalizados(), esfuerzo ?? this.esfuerzoDeLaSesion, this.capacidades, this.identidad,
+      this.eleccion[papel], this.personalizados(), esfuerzo ?? this.esfuerzoDeLaSesion, this.capacidades, this.identidad, clase,
     );
   }
 
@@ -108,9 +108,9 @@ export class Modelos implements ModelosPort {
    * `--modelo` y `/modelo`, no una copia: un id mal escrito en el `.md` de un agente tiene
    * que fallar igual y con el mismo mensaje que uno mal escrito en la línea de comandos.
    */
-  paraModelo(id: string, esfuerzo?: Esfuerzo): unknown {
+  paraModelo(id: string, esfuerzo?: Esfuerzo, clase?: ClaseDeTrabajo): unknown {
     return construirModelo(
-      parsear(id), this.personalizados(), esfuerzo ?? this.esfuerzoDeLaSesion, this.capacidades, this.identidad,
+      parsear(id), this.personalizados(), esfuerzo ?? this.esfuerzoDeLaSesion, this.capacidades, this.identidad, clase,
     );
   }
 
@@ -236,6 +236,7 @@ function construirModelo(
   esfuerzoPedido?: Esfuerzo,
   capacidades: (proveedor: Proveedor, modelo: string) => CapacidadesVivas | undefined = () => undefined,
   identidad: () => string | undefined = () => undefined,
+  clase?: ClaseDeTrabajo,
 ): unknown {
     /**
      * **El nivel se criba AQUÍ y contra ESTE modelo, no donde se eligió.**
@@ -251,7 +252,8 @@ function construirModelo(
      * sustituye por el nivel más parecido: bajar un `xhigh` a `high` por nuestra cuenta
      * sería decidir en nombre de alguien, y aquí eso se paga en tokens que no pidió.
      */
-    const esfuerzo = esfuerzoAplicable(esfuerzoPedido, proveedor, modelo, capacidades(proveedor, modelo));
+    // Lo que nadie fijó (ni el `.md` ni la sesión) lo pone la familia del proveedor, y solo a una clase.
+    const esfuerzo = esfuerzoAplicable(esfuerzoPedido ?? esfuerzoPorOmision(proveedor, clase), proveedor, modelo, capacidades(proveedor, modelo));
     // Un personalizado se resuelve ANTES del switch, contra el registro: sin él no hay URL
     // base, y eso es un alta que falta y no un proveedor roto. El switch de abajo sigue
     // siendo exhaustivo sobre los de serie.
