@@ -7135,3 +7135,16 @@ está escrito en condicional («si tienes la tool `buscar_icono`»). En `obtener
 sale sin detalle (solo se enseña el primer campo de `CAMPOS_SEGUROS`, que es `consulta`). No se probó contra un XOne real cómo pinta el
 SVG tintado ni a qué tamaño: el hexadecimal y los píxeles son la elección que no depende de esa
 respuesta. No hay caché ni sondeo de la API.
+
+**La prueba con el agente real, y lo que ningún test veía (IXCODE-18).** `xonecode run --real` sobre
+un proyecto sin iconos, con «añade tres botones con icono, consíguelos tú». **Primera pasada: cero
+llamadas a `buscar_icono`.** El orquestador mandó a `device-controller` a «conseguirlos»: quien
+ejecuta comandos le sonaba a quien descarga, y no sabía que otro especialista tenía la tool
+(deepagents solo le da `- nombre: descripción` de cada uno). Es el caso de OpenUI, con el mismo
+arreglo: `fichaDeAgente` lo DERIVA y lo dice —«consigue él los iconos… no a quien ejecuta
+comandos»—, solo con la tool de verdad montada (`conIconos`) y solo a quien la recibe
+(`recibeBuscarIcono`, que por eso vive en `core/iconos.ts`). **Tercera pasada, con el encargo sin
+preguntas abiertas:** delegó en `developer-xone`, que llamó nueve veces a la tool (búsquedas en
+paralelo y `obtener`), eligió Material Icons (`ic`) y escribió los SVG con `fill="#FFFFFF"` cocido
+y su aprobación. La segunda paró a preguntar por el aspecto de los botones, que es del encargo y no
+de la tool. Sin verificar todavía en un XOne real cómo pinta ese SVG.

@@ -22,7 +22,23 @@
  * cliente no es un icono.
  */
 
+import type { Agente } from "./agentes.js";
+
 export const NOMBRE_BUSCAR_ICONO = "buscar_icono";
+
+/**
+ * Quién la recibe: quien escribe el proyecto entero, que es quien puede dejar el icono en
+ * `icons/`. Regla de DATO —la misma que `recibeIncorporarAdjunto`—, no una lista de nombres: de
+ * los de serie, `designer-xone` y `developer-xone`. Vive en `core/` porque la usan DOS: la tool
+ * (`agent/grafo/buscarIcono.ts`) y la ficha con la que el orquestador conoce a su equipo
+ * (`fichaDeAgente`), y dos copias de la regla serían dos sitios donde puede divergir.
+ *
+ * Solo llega a `motor: "modelo"`: un especialista de motor externo corre en otro proceso y no
+ * recibe tools propias (la ficha lo comprueba aparte).
+ */
+export function recibeBuscarIcono(a: Pick<Agente, "soloLectura" | "ejecucion" | "escribeEn">): boolean {
+  return !a.soloLectura && a.ejecucion !== true && (a.escribeEn ?? []).length === 0;
+}
 
 /** La carpeta de una app XOne donde viven los iconos (`fundamentos/plataforma-y-anatomia…`). */
 export const CARPETA_DE_ICONOS = "icons";

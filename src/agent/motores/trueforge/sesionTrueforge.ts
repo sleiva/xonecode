@@ -110,14 +110,14 @@ const HILO_RAIZ = "main";
  * delegación es `create_sub_agent` y no tiene descripción por especialista, así que se traduce
  * el nombre de la tool y las fichas van escritas aquí, con la MISMA función que deepagents.
  */
-export function notaDeDelegacion(agentes: readonly Agente[]): string {
+export function notaDeDelegacion(agentes: readonly Agente[], opciones: { conIconos?: boolean } = {}): string {
   if (agentes.length === 0) return "";
   return [
     "NOTA DEL HARNESS: en este entorno NO existe la tool `task`. Se delega con `create_sub_agent`:",
     "`name` es EXACTAMENTE el nombre del especialista y `input` el encargo, autosuficiente —el",
     "especialista no ve esta conversación—. Donde estas instrucciones dicen `task` o `subagent_type`,",
     "entiende `create_sub_agent` y `name`. Las fichas de los especialistas:",
-    ...agentes.map((a) => `- ${a.nombre}: ${fichaDeAgente(a)}`),
+    ...agentes.map((a) => `- ${a.nombre}: ${fichaDeAgente(a, opciones)}`),
   ].join("\n");
 }
 
@@ -634,7 +634,7 @@ export async function abrirSesionTrueforge(
   const nuevoOrquestador = (foto?: FotoDeHilo): AgentThreadOrchestrator => {
     const definicion = {
       modelClient: llm,
-      instruction: [promptOrquestador(especialistas()), notaDeDelegacion(especialistas())].filter((l) => l !== "").join("\n\n"),
+      instruction: [promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined })].filter((l) => l !== "").join("\n\n"),
       // Por TURNO, porque el raíz se rehace desde su foto al final de cada uno (ver `turno`).
       iterationLimit: LIMITE_DE_LLAMADAS_DEL_RAIZ,
     };

@@ -506,7 +506,7 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
     const presupuesto = presupuestoDeLlamadas(perfil);
     return {
     name: perfil.nombre,
-    description: fichaDeAgente(perfil),
+    description: fichaDeAgente(perfil, { conIconos: opciones.iconos !== undefined }),
     systemPrompt: promptDeAgente(perfil, repartirSkills(perfil, catalogoDeSkills)),
     // Los subagentes no heredan las skills del orquestador. Se entregan como fuentes
     // directas para mantener cada perfil limitado a su catálogo declarado.

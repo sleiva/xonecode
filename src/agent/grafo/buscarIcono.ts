@@ -1,13 +1,12 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import type { Agente } from "../../core/agentes.js";
 import {
   LIMITES_DE_BUSQUEDA, LIMITES_DE_TAMANO, motivoDeColorInaceptable, motivoDeIdInaceptable,
-  motivoDePrefijoInaceptable, NOMBRE_BUSCAR_ICONO, nombreDeFicheroDeIcono, rutaDeIcono,
+  motivoDePrefijoInaceptable, NOMBRE_BUSCAR_ICONO, nombreDeFicheroDeIcono, recibeBuscarIcono, rutaDeIcono,
 } from "../../core/iconos.js";
 import type { IconosPort } from "../../core/ports.js";
 
-export { NOMBRE_BUSCAR_ICONO };
+export { NOMBRE_BUSCAR_ICONO, recibeBuscarIcono };
 
 /**
  * Buscar un icono y traer su SVG, para quien no tiene los assets (IXCODE-18).
@@ -28,16 +27,6 @@ export { NOMBRE_BUSCAR_ICONO };
  *
  * El color y la altura son OBLIGATORIOS en `obtener` (motivo en `core/iconos.ts`).
  */
-
-/**
- * Quién la recibe: quien escribe el proyecto entero, que es quien puede dejar el icono en
- * `icons/`. Regla de DATO —la misma que `recibeIncorporarAdjunto`—, no una lista de nombres: de
- * los de serie, `designer-xone` y `developer-xone`. Solo llega a `motor: "modelo"`: un
- * especialista de motor externo corre en otro proceso y no recibe tools propias.
- */
-export function recibeBuscarIcono(a: Pick<Agente, "soloLectura" | "ejecucion" | "escribeEn">): boolean {
-  return !a.soloLectura && a.ejecucion !== true && (a.escribeEn ?? []).length === 0;
-}
 
 const ESQUEMA = z.object({
   operacion: z.enum(["buscar", "obtener"]).describe("buscar: lista ids por texto. obtener: devuelve el SVG de un id."),

@@ -17,6 +17,7 @@
  */
 
 import { esEsfuerzo, type Esfuerzo } from "./esfuerzo.js";
+import { recibeBuscarIcono } from "./iconos.js";
 
 /** De qué está hecho un subagente. Los tres van al MISMO sitio: la lista de deepagents. */
 export type Motor = "modelo" | "claude-code" | "codex" | "opencode";
@@ -415,7 +416,7 @@ export interface Lectura {
  */
 export const SKILL_DE_OPENUI = "openui-builder";
 
-export function fichaDeAgente(agente: Agente): string {
+export function fichaDeAgente(agente: Agente, opciones: { conIconos?: boolean } = {}): string {
   const capacidades: string[] = [];
   /**
    * **Quien EJECUTA es su propio caso, y confundirlo con «escribe» miente dos veces.**
@@ -446,6 +447,20 @@ export function fichaDeAgente(agente: Agente): string {
   if (agente.motor === "modelo" && agente.skills.includes(SKILL_DE_OPENUI)) {
     capacidades.push(
       "hace artefactos también en OpenUI, más baratos para tablas, informes y paneles de datos: el formato lo elige él, no se lo impongas en el encargo"
+    );
+  }
+
+  /**
+   * **Quién consigue iconos se DICE aquí, y la prueba real lo exigió** (IXCODE-18): con «añade
+   * tres botones con icono, sin assets», el orquestador mandó a `device-controller` a
+   * «conseguirlos» —quien ejecuta comandos le sonaba a quien descarga— y nadie llamó a
+   * `buscar_icono`. Es el caso de OpenUI de arriba: la tool se monta en el especialista y el
+   * orquestador no la ve, así que solo la ficha se lo puede decir. **Solo con la tool de verdad
+   * montada** (`conIconos`): prometer una capacidad que no está sería peor que callarla.
+   */
+  if (opciones.conIconos === true && agente.motor === "modelo" && recibeBuscarIcono(agente)) {
+    capacidades.push(
+      "consigue él los iconos que falten (SVG de Iconify) para botones y menús: encárgale los iconos a él, no a quien ejecuta comandos"
     );
   }
 

@@ -99,3 +99,33 @@ describe("fichaDeAgente", () => {
     expect(fichaDeAgente(agente({ skills: ["openui-builder"], motor: "claude-code" }))).not.toContain("OpenUI");
   });
 });
+
+describe("fichaDeAgente y los iconos (IXCODE-18)", () => {
+  const escritor = agente({ soloLectura: false });
+
+  /**
+   * Medido con el agente real: sin esta línea el orquestador mandó a `device-controller` a
+   * «conseguir» los iconos, porque quien ejecuta comandos le sonaba a quien descarga.
+   */
+  it("con la tool montada, quien escribe el proyecto DICE que consigue iconos y a quién NO encargarlos", () => {
+    const ficha = fichaDeAgente(escritor, { conIconos: true });
+    expect(ficha).toMatch(/iconos/);
+    expect(ficha).toMatch(/no a quien ejecuta comandos/);
+  });
+
+  it("sin la tool montada NO lo promete: una capacidad que no está sería peor que callarla", () => {
+    expect(fichaDeAgente(escritor)).not.toMatch(/iconos/);
+    expect(fichaDeAgente(escritor, { conIconos: false })).not.toMatch(/iconos/);
+  });
+
+  it("quien no la recibe no la anuncia: lee, ejecuta, documenta o corre en un motor externo", () => {
+    for (const a of [
+      agente({ soloLectura: true }),
+      agente({ soloLectura: false, ejecucion: true }),
+      agente({ soloLectura: false, escribeEn: ["/doc/"] }),
+      agente({ soloLectura: false, motor: "claude-code" }),
+    ]) {
+      expect(fichaDeAgente(a, { conIconos: true }), a.nombre).not.toMatch(/iconos/);
+    }
+  });
+});

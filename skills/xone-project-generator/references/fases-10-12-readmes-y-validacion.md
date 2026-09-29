@@ -95,7 +95,7 @@ GUID sin guiones: python3 -c "import uuid; print(uuid.uuid4().hex)"
 
 Fuente: Google Material Icons via Iconify API
 URL: https://api.iconify.design/ic/baseline-{nombre}.svg?color={color}
-Si el agente tiene la tool `buscar_icono`, no hace falta montar la URL: `buscar` da el id y `obtener` el SVG con color y altura ya fijados (el color, siempre hexadecimal).
+Los iconos los consigue quien tiene la tool `buscar_icono` (`designer-xone` o `developer-xone`), no quien ejecuta comandos: no hace falta montar la URL: `buscar` da el id y `obtener` el SVG con color y altura ya fijados (el color, siempre hexadecimal).
 
 XOne soporta PNG, JPG y SVG — no es necesario convertir SVG a PNG.
 Iconos comunes: home, search, arrow-back, save, settings, person, add, delete, edit, check, close, menu
