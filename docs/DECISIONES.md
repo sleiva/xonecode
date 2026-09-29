@@ -7458,3 +7458,47 @@ las tools de escritura del acto `herramientas` y la ausencia de `verificacion` e
 buscando la frase de la bitácora. El acto `sistema` de clase `permiso` es una escritura aplicada
 sin preguntar (modo autónomo): del RECHAZO no queda acto, y se declara como límite.
 
+## La memoria de cada especialista en la sesión (TrueForge)
+
+**Qué se midió.** Una sesión real de la calculadora de MyAllXOne (48 min, 10 delegaciones, 362 lecturas y
+búsquedas). Clasificadas con prioridad «mismo especialista en una delegación anterior», luego «otro
+agente»: 156 nuevas, 75 repetidas dentro del mismo hilo, **88 del mismo especialista en una delegación
+anterior** y 43 de otro agente. Una primera cuenta que solo miraba «otro agente» decía un tercio; estaba
+mal, porque un fichero que el propio especialista ya había leído en su delegación anterior contaba como
+leído por otro. Por especialista, lo repetido de su propia delegación anterior: `device-controller` 46,
+`designer-xone` 32, `developer-xone` 10.
+
+**Por qué.** La librería (`AgentThreadOrchestrator`) BORRA el hilo de un hijo al terminar y solo conserva
+sus totales; `create_sub_agent` crea siempre uno nuevo y su propia descripción le dice al hijo que no ve la
+conversación anterior. El orquestador solo puede darle texto, y el encargo (de 2.300 a 6.200 caracteres)
+lleva órdenes, no lo aprendido.
+
+**Qué se hizo** (`agent/motores/trueforge/memoriaDeEspecialistas.ts`). Al terminar un especialista con
+`motor: "modelo"` se guarda su historial completo (`definition.messages` más el contexto del hilo) y la
+siguiente encarnación arranca con él seguido de un «NUEVO ENCARGO». No se inyecta nada ajeno: se descartó el
+paquete de contexto con los ficheros que leyeron otros. Reglas: tope de historial (48.000 tokens,
+provisional, porque un hijo no se compacta), una encarnación viva por especialista, saneado de tool calls
+sin respuesta con el mismo texto que el raíz, y solo si acabó bien.
+
+**Un fallo que lo rondó y lo atrapó un test.** Un hijo al que se pulsó «Detener» lleva en su historial la
+orden «Para aquí: no hagas ninguna llamada más»; heredarla habría parado a la encarnación siguiente sin que
+nadie se lo pidiera. Un hijo cortado, como uno que falló, no deja memoria
+(`sesionTrueforge.test.ts`, la re-delegación tras Detener).
+
+**Prueba real, n=1 por lado** (DeepSeek, dos consultas seguidas a `consultant-xone`, mismo encargo):
+
+| | con memoria | sin memoria |
+|---|---|---|
+| lecturas en la 2ª delegación | 1 | 8 |
+| llamadas al modelo de la 2ª | 2 | 7 |
+| entrada fresca de la 2ª | 2.669 | 16.647 |
+| turno entero (efectivo) | ≈31.615 | ≈52.523 |
+
+Una muestra de uno por lado y con un modelo que varía (la primera delegación ya difirió en una lectura): dice
+que el mecanismo funciona y hacia dónde va, no cuánto ahorra en una sesión larga. Falta medirlo con la
+calculadora, mismo encargo con y sin.
+
+**Límites declarados.** Solo en memoria y por sesión: reabrir una sesión no la recupera (habría que subir
+`VERSION_DE_MEMORIA`). Los especialistas de motor externo quedan fuera. La opción 2 —una ficha de sesión
+compartida— sigue pendiente.
+

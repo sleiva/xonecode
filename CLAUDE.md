@@ -511,7 +511,12 @@ memoria y se APARTA con otro nombre. **El prompt de un hijo va en su prompt de S
 `instructionBuilders`**. **El raíz puede PREGUNTAR** (`ask_user_question`, solo él): con opciones
 sale además como tarjeta con un botón por opción (`Piel.consulta?` opcional), y lo pendiente lo
 decide el hilo. **Solo se compacta el raíz**: en un hijo, resumir un encargo corto y ya cacheado
-costaba más que reenviarlo. **Escribir con el turno en marcha es UN gesto** (IXCODE-4, solo la web): el Enter, que en
+costaba más que reenviarlo. **Cada especialista RECUERDA sus encargos anteriores de la sesión**
+(`memoriaDeEspecialistas.ts`): la librería borra un hijo al terminar y no sabe reanudarlo, así que la
+siguiente encarnación arranca con SU historial (`definition.messages`) más el encargo nuevo —nunca lo que
+leyeron otros—. Tope de historial (`TOPE_DE_MEMORIA_TOKENS`), una encarnación viva por especialista, y un
+hijo que falló o al que se cortó con «Detener» no deja memoria (su historial lleva la orden de parar).
+Solo en memoria y por sesión; `XONECODE_SIN_MEMORIA_DE_ESPECIALISTAS=1` la apaga para comparar. **Escribir con el turno en marcha es UN gesto** (IXCODE-4, solo la web): el Enter, que en
 TrueForge viaja como **detener y replanificar** (`detener: true`, solo con `turnoDetenible`); el
 botón aparte se quitó a petición suya. La NOTA sigue siendo el camino de lo que llega sin
 `detener` (un turno que no lo admite). Las dos entran por `preLLMProcessors`

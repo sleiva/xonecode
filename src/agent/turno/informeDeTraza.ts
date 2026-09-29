@@ -140,6 +140,8 @@ export interface SesionDeTraza {
   toolsPorAgente: Array<{ agente: string; total: number; tools: Array<{ nombre: string; veces: number }> }>;
   /** Lo que el orquestador pidió a cada especialista, con el encargo (acotado). */
   delegaciones: Array<{ de: string; a: string; chars: number; encargo?: string }>;
+  /** Encarnaciones de especialistas que arrancaron con memoria (tokens de su historial) y sin ella. */
+  memoria: { con: number; sin: number; tokens: number };
   /**
    * Cuántas tools gastó el ORQUESTADOR. El resto son de los especialistas.
    *
@@ -231,7 +233,7 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
     if (ya !== undefined) return ya;
     const nueva: EnConstruccion = {
       sesion: {
-        id, llamadas: 0, input: 0, output: 0, cache: 0, contexto: 0, origenes: [], tools: [], toolsPorAgente: [], delegaciones: [], toolsDelOrquestador: 0,
+        id, llamadas: 0, input: 0, output: 0, cache: 0, contexto: 0, origenes: [], tools: [], toolsPorAgente: [], delegaciones: [], memoria: { con: 0, sin: 0, tokens: 0 }, toolsDelOrquestador: 0,
         paralelismo: { respuestas: 0, tools: 0, maximo: 0, sinRespuesta: 0, escriturasALaVez: [] },
         pesos: [],
         charsDeTools: 0,
@@ -333,6 +335,14 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
         ya.chars += chars;
         ya.veces += 1;
       }
+      continue;
+    }
+
+    if (evento.tipo === "memoria") {
+      if (evento.evento === "arranca-con") {
+        actual.sesion.memoria.con += 1;
+        actual.sesion.memoria.tokens += numero(evento.tokens);
+      } else if (evento.evento === "arranca-sin") actual.sesion.memoria.sin += 1;
       continue;
     }
 
@@ -542,6 +552,11 @@ export function pintarSesion(sesion: SesionDeTraza): string[] {
       const resto = a.tools.length > 8 ? `, … y ${a.tools.length - 8} más` : "";
       lineas.push(`    ${a.agente.padEnd(18)} ${String(a.total).padStart(3)} tool(s): ${partes}${resto}`);
     }
+  }
+  if (sesion.memoria.con + sesion.memoria.sin > 0) {
+    lineas.push(
+      `  memoria de especialistas: ${String(sesion.memoria.con)} encarnación(es) con memoria (${cifra(sesion.memoria.tokens)} tokens de historial) y ${String(sesion.memoria.sin)} sin ella`
+    );
   }
   // Qué pidió cada uno, con el encargo recortado a una línea: el texto entero está en el .jsonl.
   if (sesion.delegaciones.length > 0) {

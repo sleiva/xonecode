@@ -87,6 +87,7 @@ import { entornoConDepuracion } from "../../turno/depuracion.js";
 import { detalleDe, parametrosDe } from "../../turno/resumenDeTool.js";
 import { apartarMemoria, cargarMemoria, fotoSaneada, guardarMemoria, textoDeMemoriaDescartada, type FotoDeHilo } from "./memoriaTrueforge.js";
 import { crearNota, sobrantes, type Nota } from "./notas.js";
+import { crearMemoriaDeEspecialistas } from "./memoriaDeEspecialistas.js";
 import { conResumenSeguro } from "./resumenSeguro.js";
 import { crearControlDeDetencion, RESUMEN_DE_RELLENO } from "./detencion.js";
 import type { ToolDeLangchain } from "./toolsPropias.js";
@@ -138,7 +139,7 @@ const BUCLE_DE_CALIDAD = [
  */
 export function notaDeDelegacion(
   agentes: readonly Agente[],
-  opciones: { conIconos?: boolean; conComparacion?: boolean } = {}
+  opciones: { conIconos?: boolean; conComparacion?: boolean; conMemoria?: boolean } = {}
 ): string {
   if (agentes.length === 0) return "";
   return [
@@ -148,6 +149,13 @@ export function notaDeDelegacion(
     "entiende `create_sub_agent` y `name`. Las fichas de los especialistas:",
     ...agentes.map((a) => `- ${a.nombre}: ${fichaDeAgente(a, opciones)}`),
     ...(opciones.conComparacion === true ? ["", BUCLE_DE_CALIDAD] : []),
+    ...(opciones.conMemoria === true
+      ? [
+          "",
+          "MEMORIA DE LOS ESPECIALISTAS: en esta sesión cada especialista RECUERDA sus encargos anteriores (lo que leyó,",
+          "lo que descubrió y lo que hizo). Al volver a llamar a uno, dale solo lo NUEVO: no repitas lo que ya sabe.",
+        ]
+      : []),
   ].join("\n");
 }
 
@@ -272,6 +280,11 @@ export interface OpcionesDeSesionTrueforge {
   /** Tope de rondas de aprobación con alguien delante (el de la consola). */
   topeDeRondas?: number;
   /**
+   * Que cada especialista recuerde sus encargos anteriores de la sesión (`memoriaDeEspecialistas.ts`).
+   * Por omisión SÍ; `XONECODE_SIN_MEMORIA_DE_ESPECIALISTAS=1` lo apaga, para comparar una pasada con y sin ella.
+   */
+  memoriaDeEspecialistas?: boolean;
+  /**
    * El crítico VISUAL y el JUEZ del turno, los MISMOS puertos que deepagents
    * (`turnoReal.ts#abrirSesionReal`): llaman a un modelo, así que entran por parámetro y
    * `npm test` no pregunta a nadie. Ausente es «esta ejecución no tiene», nunca «está bien».
@@ -357,6 +370,10 @@ export async function abrirSesionTrueforge(
    * viaja por el cable como nombre de un especialista tiene que serlo de verdad.
    */
   const especialistaDeHilo = new Map<string, string>();
+  const conMemoriaDeEspecialistas = opciones.memoriaDeEspecialistas ?? process.env.XONECODE_SIN_MEMORIA_DE_ESPECIALISTAS !== "1";
+  const memoriaDeEspecialistas = crearMemoriaDeEspecialistas();
+  /** Los hijos con memoria que corren ahora: su hilo, para leer su historial al terminar. */
+  const hijosConMemoria = new Map<string, { nombre: string; hilo: AgentThread; iniciales: unknown[] }>();
 
   /** Lo que el agente dejó en `/artefactos/` y aún no se ha anunciado: un artefacto se escribe
    *  SIN aprobación, así que tiene que ANUNCIARSE, como en deepagents. */
@@ -631,6 +648,26 @@ export async function abrirSesionTrueforge(
             .trimEnd();
     const papel = agente?.soloLectura === true ? "rapido" : "trabajo";
     const claseDeEsfuerzo = agente === undefined ? undefined : claseDeTrabajo(agente);
+    // La memoria del especialista: su conversación anterior de ESTA sesión, si la hay y se puede usar.
+    const apertura = conMemoriaDeEspecialistas && agente !== undefined ? memoriaDeEspecialistas.abrir(agente.nombre, params.threadId) : undefined;
+    const previa = apertura !== undefined && "previa" in apertura ? apertura.previa : undefined;
+    if (agente !== undefined && apertura !== undefined) {
+      if (previa !== undefined) diagnostico?.memoria?.(agente.nombre, "arranca-con", "historial de la sesión", previa.tokens);
+      else diagnostico?.memoria?.(agente.nombre, "arranca-sin", "sin" in apertura ? apertura.sin : "primera");
+    }
+    const mensajesIniciales: unknown[] =
+      previa === undefined
+        ? [{ role: "user", content: params.request.input }]
+        : [
+            ...previa.mensajes,
+            {
+              role: "user",
+              content:
+                "NUEVO ENCARGO. Ya trabajaste antes en esta sesión: lo de arriba es tu conversación anterior, con lo que leíste y decidiste. " +
+                "No repitas lecturas de ficheros que no hayan cambiado.\n\n" +
+                params.request.input,
+            },
+          ];
     const definicionDelHijo = {
       modelClient: modeloParaTrueforge({
         modelo: () =>
@@ -647,11 +684,11 @@ export async function abrirSesionTrueforge(
           anotarPaso("trueforge.detener", `${quienEs.get(params.threadId) ?? params.threadId}: ${n} tool call(s) tiradas`)();
         },
       }),
-      messages: [{ role: "user", content: params.request.input }],
+      messages: mensajesIniciales,
       // Los topes MEDIDOS de deepagents: el conductor más, porque cada paso suyo es un comando.
       iterationLimit: agente?.ejecucion === true ? TOPE_DE_LLAMADAS_DEL_CONDUCTOR : TOPE_DE_LLAMADAS_DEL_ESPECIALISTA,
     };
-    return new AgentThread({
+    const hijo = new AgentThread({
       definition: definicionDelHijo as never,
       threadId: params.threadId,
       title: params.request.name,
@@ -676,6 +713,8 @@ export async function abrirSesionTrueforge(
       tracing: NOOP_AGENT_TRACING,
       logger,
     });
+    if (agente !== undefined && apertura !== undefined) hijosConMemoria.set(params.threadId, { nombre: agente.nombre, hilo: hijo, iniciales: mensajesIniciales });
+    return hijo;
   };
 
   /**
@@ -688,9 +727,12 @@ export async function abrirSesionTrueforge(
   /** La pregunta del orquestador que espera respuesta: el siguiente mensaje la contesta. */
   let preguntaEnEspera: Pendiente | undefined;
   const nuevoOrquestador = (foto?: FotoDeHilo): AgentThreadOrchestrator => {
+    // Los hijos que corrían no pueden seguir; lo que aprendieron sí se queda.
+    memoriaDeEspecialistas.darPorMuertos();
+    hijosConMemoria.clear();
     const definicion = {
       modelClient: llm,
-      instruction: [promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conComparacion: carpeta !== undefined })].filter((l) => l !== "").join("\n\n"),
+      instruction: [promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas })].filter((l) => l !== "").join("\n\n"),
       // Por TURNO, porque el raíz se rehace desde su foto al final de cada uno (ver `turno`).
       iterationLimit: LIMITE_DE_LLAMADAS_DEL_RAIZ,
     };
@@ -825,6 +867,18 @@ export async function abrirSesionTrueforge(
         diagnostico?.resultado?.(llamada?.nombre, llamada === undefined ? undefined : detalleDe(llamada.nombre, llamada.args), chars);
       }
       // Un hilo que agotó su tope se ANOTA en la traza, con quién era: el raíz y cualquier hijo.
+      if (evento.type === "internal.agent.done") {
+        const h = hijosConMemoria.get(deHilo);
+        if (h !== undefined) {
+          hijosConMemoria.delete(deHilo);
+          const foto = h.hilo.toSnapshot() as unknown as { context: unknown[]; current_context_usage?: { prompt_tokens?: number; completion_tokens?: number } };
+          const tokens = (foto.current_context_usage?.prompt_tokens ?? 0) + (foto.current_context_usage?.completion_tokens ?? 0);
+          const destino = memoriaDeEspecialistas.cerrar(deHilo, { // Un hijo CORTADO por «Detener» lleva en su historial la orden de parar: heredarla lo pararía
+          // sin que nadie se lo haya pedido, así que no deja memoria (como uno que falló).
+          bien: (evento as { status?: string }).status !== "error" && !detencion.soloTexto(deHilo), mensajes: [...h.iniciales, ...foto.context], tokens });
+          diagnostico?.memoria?.(h.nombre, "cierra", destino, tokens);
+        }
+      }
       const tope = topeAgotadoDe(evento);
       if (tope !== undefined) diagnostico?.corte?.(quienEs.get(deHilo) ?? deHilo, tope);
       const { eventos, uso } = traducirEvento(evento, (h) => especialistaDeHilo.get(h), pensamientos);
@@ -1332,6 +1386,9 @@ export async function abrirSesionTrueforge(
     },
     nuevoHilo(id?: string) {
       hilo = id ?? `tf-${Date.now()}`;
+      // Otra conversación: lo que los especialistas recordaban era de la anterior.
+      memoriaDeEspecialistas.olvidar();
+      hijosConMemoria.clear();
       // Un hilo NUEVO: lo que hubiera guardado con ese id no se pisa ni se carga a medias. Y una
       // pregunta de la conversación de antes no la contesta el primer mensaje de la nueva.
       const foto = fotoDeLaSesion(hilo);

@@ -827,6 +827,58 @@ describe("una sesión con el motor TrueForge", () => {
     }, 30_000);
   });
 
+  describe("la memoria de cada especialista en la sesión", () => {
+    const delega = (id: string, input: string) =>
+      new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "create_sub_agent", args: JSON.stringify({ name: "consultant-xone", input }) }] });
+    const guion = () => [
+      [delega("d1", "mira A")],
+      [new AIMessageChunk({ content: "Mirado A." })],
+      [delega("d2", "mira B")],
+      [new AIMessageChunk({ content: "Mirado B." })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ];
+
+    it("la segunda delegación al mismo especialista arranca con SU conversación anterior y el encargo nuevo", async () => {
+      const raiz = proyecto();
+      const { m, vistos } = modelosConGuion(guion());
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+      await s.turno("mira", piel().p);
+      const segundo = vistos[3]!.join("\n");
+      expect(segundo).toContain("mira A");
+      expect(segundo).toContain("Mirado A.");
+      expect(segundo).toContain("NUEVO ENCARGO");
+      expect(segundo).toContain("mira B");
+    }, 30_000);
+
+    it("apagada, la segunda arranca de cero, como antes", async () => {
+      const raiz = proyecto();
+      const { m, vistos } = modelosConGuion(guion());
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, memoriaDeEspecialistas: false });
+      await s.turno("mira", piel().p);
+      const segundo = vistos[3]!.join("\n");
+      expect(segundo).toContain("mira B");
+      expect(segundo).not.toContain("mira A");
+      expect(segundo).not.toContain("NUEVO ENCARGO");
+    }, 30_000);
+
+    it("otra conversación (`nuevoHilo`) la olvida", async () => {
+      const raiz = proyecto();
+      const { m, vistos } = modelosConGuion([
+        [delega("d1", "mira A")],
+        [new AIMessageChunk({ content: "Mirado A." })],
+        [new AIMessageChunk({ content: "Hecho." })],
+        [delega("d2", "mira B")],
+        [new AIMessageChunk({ content: "Mirado B." })],
+        [new AIMessageChunk({ content: "Hecho de nuevo." })],
+      ]);
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+      await s.turno("mira", piel().p);
+      s.nuevoHilo();
+      await s.turno("mira otra vez", piel().p);
+      expect(vistos[4]!.join("\n")).not.toContain("mira A");
+    }, 30_000);
+  });
+
   it("solo el ORQUESTADOR puede preguntar: un hijo no tiene a nadie delante", async () => {
     const raiz = proyecto();
     const { m, toolsPorLlamada } = modelosConGuion([

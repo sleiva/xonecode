@@ -65,6 +65,12 @@ export interface DiagnosticoDeTools {
    */
   delegacion?(de: string, a: string, encargo: string): void;
   /**
+   * La memoria de un especialista en la sesión (`memoriaDeEspecialistas.ts`): con cuántos tokens de su
+   * conversación anterior arrancó una encarnación, o por qué arrancó sin memoria, y qué se hizo con la
+   * suya al terminar. Opcional, como `corte`. Es lo que permite comparar una pasada con y sin ella.
+   */
+  memoria?(agente: string, evento: "arranca-con" | "arranca-sin" | "cierra", dato: string, tokens?: number): void;
+  /**
    * **Cuánto METIÓ en el contexto lo que devolvió una tool.** Opcional, como `corte`.
    *
    * Contar llamadas no dice a donde van los tokens: dos `read_file` son dos líneas iguales y
@@ -153,6 +159,9 @@ export function crearDiagnosticoDeTools(
         ...(detalle === undefined ? {} : { detalle }),
         chars,
       });
+    },
+    memoria(agente, evento, dato, tokens) {
+      escribir({ tipo: "memoria", agente, evento, dato, ...(tokens === undefined ? {} : { tokens }) });
     },
     delegacion(de, a, encargo) {
       escribir({
