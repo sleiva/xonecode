@@ -7476,8 +7476,7 @@ lleva órdenes, no lo aprendido.
 **Qué se hizo** (`agent/motores/trueforge/memoriaDeEspecialistas.ts`). Al terminar un especialista con
 `motor: "modelo"` se guarda su historial completo (`definition.messages` más el contexto del hilo) y la
 siguiente encarnación arranca con él seguido de un «NUEVO ENCARGO». No se inyecta nada ajeno: se descartó el
-paquete de contexto con los ficheros que leyeron otros. Reglas: tope de historial (48.000 tokens,
-provisional, porque un hijo no se compacta), una encarnación viva por especialista, saneado de tool calls
+paquete de contexto con los ficheros que leyeron otros. Reglas: una encarnación viva por especialista, saneado de tool calls
 sin respuesta con el mismo texto que el raíz, y solo si acabó bien.
 
 **Un fallo que lo rondó y lo atrapó un test.** Un hijo al que se pulsó «Detener» lleva en su historial la
@@ -7501,4 +7500,41 @@ calculadora, mismo encargo con y sin.
 **Límites declarados.** Solo en memoria y por sesión: reabrir una sesión no la recupera (habría que subir
 `VERSION_DE_MEMORIA`). Los especialistas de motor externo quedan fuera. La opción 2 —una ficha de sesión
 compartida— sigue pendiente.
+
+**Y el primer tope estaba mal, y lo delató la primera prueba con la calculadora.** La primera versión
+guardaba el historial entero con un tope único de 48.000 tokens. En la primera pasada real de calc3 el
+consultor cerró con 65.044 y el analista con 81.062, y los dos perdieron la memoria («olvidada-por-tope»).
+Mirando las dos sesiones largas de MyAllXOne, el contexto de un especialista al cerrar cada delegación era:
+consultor y analista 62-81 mil, desarrollador 96-122 mil, diseñador 124-198 mil, conductor 16-83 mil. Con
+48.000 solo se salvaban las delegaciones más cortas, y justo se perdía a quien más lee. Guardar entero a un
+diseñador tampoco vale: reenvía 200 mil tokens en cada llamada. De ahí los **dos niveles**
+(`memoriaDeEspecialistas.ts`): entero hasta `TOPE_COMPLETA_TOKENS` (48.000); por encima, REDUCIDO
+(`reducirHistorial`: lo que dijo y lo que pidió, enteros; lo que devolvió cada tool, recortado a
+`MAX_CARACTERES_DE_RESULTADO` con la marca de que puede releerlo; sin el razonamiento de las vueltas
+viejas) hasta `TOPE_REDUCIDA_TOKENS` (40.000, estimado a cuatro caracteres por token); y olvidado si ni así
+cabe. La versión reducida sabe QUÉ hizo y descubrió el especialista, pero no conserva el contenido de lo que
+leyó: si lo necesita, lo relee. Los tres números son provisionales y hay que medirlos con una sesión larga.
+
+## El pensamiento de un subagente: un interruptor, no un nivel
+
+**Qué se midió.** Con el traza nueva (razonamiento por agente), en una sesión real de la calculadora el
+razonamiento era el 75 % de toda la salida: `developer-xone` 74-84 %, `designer-xone` 78-85 %, y el conductor
+(`device-controller`) 60-82 % **aunque se le había fijado `low`** por familia. Una sola llamada de un escritor
+llegó a 29.366 tokens de salida con 29.031 de razonamiento: minutos de espera sin ninguna acción. Antes ya se
+había medido en la API que sin nada, con `low` y con `high` DeepSeek razona casi igual (25, 23 y 23 tokens) y que
+`thinking: {type: "disabled"}` baja la salida de 27 tokens a 1.
+
+**Qué se hizo.** El nivel por omisión `low` para lo mecánico se retiró: no hacía nada. En su lugar, un campo
+`pensamiento: apagado|activo` en el `.md` y una omisión por familia de proveedor y clase de trabajo
+(`core/esfuerzo.ts`): en DeepSeek, quien ejecuta comandos va sin pensar. La clase sale de los datos del agente
+(`ejecucion`), no de su nombre. Solo se aplica donde el modelo lo admite; apagado manda sobre el esfuerzo, y
+`activo` anula la omisión. Va por `modelKwargs` (cuerpo raíz), como el esfuerzo y el `user_id`.
+
+**Prueba real, una muestra:** `adb devices` delegado al conductor, sin pensamiento: 2 llamadas, 268 tokens de
+salida, sin razonamiento, respuesta correcta. Una tarea trivial.
+
+**Lo que NO está medido, y es lo que importa:** que apagar el pensamiento del conductor no empeore el resultado
+cuando tiene que interpretar un log raro o decidir qué medir. Y los escritores, que son donde está el peso, siguen
+pensando: un interruptor no distingue entre pensar para acertar y pensar en bucle, y aún no hay un tope de
+razonamiento por llamada.
 

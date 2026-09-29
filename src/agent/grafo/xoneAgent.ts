@@ -634,8 +634,8 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
     // deja pasar el de la sesión, que es lo que `Modelos` resuelve por dentro.
     model:
       perfil.modelo === undefined
-        ? opciones.modelos.paraPapel(perfil.soloLectura ? "rapido" : "trabajo", perfil.esfuerzo, claseDeTrabajo(perfil))
-        : opciones.modelos.paraModelo(perfil.modelo, perfil.esfuerzo, claseDeTrabajo(perfil)),
+        ? opciones.modelos.paraPapel(perfil.soloLectura ? "rapido" : "trabajo", perfil.esfuerzo, claseDeTrabajo(perfil), perfil.pensamiento)
+        : opciones.modelos.paraModelo(perfil.modelo, perfil.esfuerzo, claseDeTrabajo(perfil), perfil.pensamiento),
     };
   });
 

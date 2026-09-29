@@ -16,7 +16,7 @@
  * el que los avisos de honestidad son código y no prompt (`core/bitacora.ts`).
  */
 
-import { esEsfuerzo, type Esfuerzo } from "./esfuerzo.js";
+import { esEsfuerzo, esPensamiento, type Esfuerzo, type Pensamiento } from "./esfuerzo.js";
 import { recibeBuscarIcono } from "./iconos.js";
 import { NUCLEO_XONE } from "./nucleoXone.js";
 
@@ -74,6 +74,13 @@ export interface Agente {
    * funciona por un campo que solo afinaba su coste.
    */
   esfuerzo?: Esfuerzo;
+  /**
+   * Si su modelo PIENSA antes de contestar: `apagado` o `activo`, aparte del esfuerzo (que es cuánto). Ausente
+   * decide la omisión de la familia del proveedor y la clase de trabajo (`pensamientoPorOmision`); solo se
+   * aplica donde el modelo lo admite (`admiteApagarElPensamiento`), y en otro caso se ignora sin error, como el
+   * esfuerzo. Un valor que no es exactamente uno de los dos se descarta.
+   */
+  pensamiento?: Pensamiento;
   /** Sin escribir nada. Decide `permisosDe` y si se le monta el HITL. */
   soloLectura: boolean;
   /**
@@ -629,6 +636,7 @@ export function leerAgente(
       ...(esEsfuerzo((campos["esfuerzo"] ?? "").trim())
         ? { esfuerzo: (campos["esfuerzo"] ?? "").trim() as Esfuerzo }
         : {}),
+      ...(esPensamiento((campos["pensamiento"] ?? "").trim()) ? { pensamiento: (campos["pensamiento"] ?? "").trim() as Pensamiento } : {}),
       // Misma forma que `skills`: una lista separada por comas. Cada entrada se normaliza
       // a ruta virtual absoluta para que `doc`, `/doc` y `/doc/` digan lo mismo — quien
       // escribe un `.md` no tiene por qué saber cuál esperamos.
@@ -663,6 +671,7 @@ export function escribirAgente(agente: Agente): string {
     `motor: ${agente.motor}`,
     ...(agente.modelo === undefined ? [] : [`modelo: ${agente.modelo}`]),
     ...(agente.esfuerzo === undefined ? [] : [`esfuerzo: ${agente.esfuerzo}`]),
+    ...(agente.pensamiento === undefined ? [] : [`pensamiento: ${agente.pensamiento}`]),
     `soloLectura: ${agente.soloLectura}`,
     ...(agente.ejecucion === true ? ["ejecucion: true"] : []),
     ...(agente.escribeEn === undefined || agente.escribeEn.length === 0

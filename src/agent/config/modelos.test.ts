@@ -130,30 +130,42 @@ describe("el esfuerzo, contra el invocationParams de cada cliente", () => {
    * El nivel por omisión de un subagente, por FAMILIA de proveedor: solo lo MECÁNICO (quien ejecuta)
    * y solo en DeepSeek. Lo que el `.md` o la sesión fijaron gana siempre.
    */
-  describe("el nivel por omisión de un subagente, por familia", () => {
-    const con = (id: string, opciones: { esfuerzo?: "low" | "high" | "max"; sesion?: "low" | "high" | "max"; clase?: "mecanica" }) => {
-      const modelos = new Modelos({ bandera: id }, undefined, undefined, opciones.sesion);
-      return (modelos.paraPapel("trabajo", opciones.esfuerzo, opciones.clase) as {
+  /**
+   * El interruptor de pensamiento de un subagente: apagado por omisión solo para lo MECÁNICO y solo en DeepSeek;
+   * lo que el `.md` dice gana. Apagado manda sobre el esfuerzo.
+   */
+  describe("el pensamiento de un subagente, por familia", () => {
+    const con = (id: string, o: { esfuerzo?: "low" | "high" | "max"; sesion?: "low" | "high" | "max"; clase?: "mecanica"; pensamiento?: "apagado" | "activo" }) => {
+      const modelos = new Modelos({ bandera: id }, undefined, undefined, o.sesion);
+      return (modelos.paraPapel("trabajo", o.esfuerzo, o.clase, o.pensamiento) as {
         invocationParams: () => Record<string, unknown>;
       }).invocationParams();
     };
 
-    it("un subagente que ejecuta, con DeepSeek y sin nivel fijado, va a low", () => {
-      expect(con("deepseek/deepseek-flash", { clase: "mecanica" })["reasoning_effort"]).toBe("low");
+    it("un subagente que ejecuta, con DeepSeek y sin decir nada, va SIN pensamiento", () => {
+      const p = con("deepseek/deepseek-flash", { clase: "mecanica" });
+      expect(p["thinking"]).toEqual({ type: "disabled" });
+      expect(p["reasoning_effort"]).toBeUndefined();
     });
 
-    it("lo que fijó su .md o la sesión gana", () => {
-      expect(con("deepseek/deepseek-flash", { clase: "mecanica", esfuerzo: "max" })["reasoning_effort"]).toBe("max");
-      expect(con("deepseek/deepseek-flash", { clase: "mecanica", sesion: "high" })["reasoning_effort"]).toBe("high");
+    it("apagado manda sobre el esfuerzo: sin pensamiento no hay nivel que pedir", () => {
+      const p = con("deepseek/deepseek-flash", { clase: "mecanica", esfuerzo: "max", sesion: "high" });
+      expect(p["thinking"]).toEqual({ type: "disabled" });
+      expect(p["reasoning_effort"]).toBeUndefined();
+    });
+
+    it("lo que dice el .md gana: `activo` lo enciende, `apagado` lo apaga en cualquier clase", () => {
+      expect(con("deepseek/deepseek-flash", { clase: "mecanica", pensamiento: "activo" })["thinking"]).toBeUndefined();
+      expect(con("deepseek/deepseek-flash", { pensamiento: "apagado" })["thinking"]).toEqual({ type: "disabled" });
     });
 
     it("sin clase (el raíz, escritores, consulta) no se decide nada", () => {
-      expect(con("deepseek/deepseek-flash", {})["reasoning_effort"]).toBeUndefined();
+      expect(con("deepseek/deepseek-flash", {})["thinking"]).toBeUndefined();
     });
 
-    it("otra familia no lo hereda", () => {
-      expect(con("anthropic/claude-opus-5", { clase: "mecanica" })["output_config"]).toBeUndefined();
-      expect(con("nvidia/openai/gpt-oss-20b", { clase: "mecanica" })["reasoning_effort"]).toBeUndefined();
+    it("otra familia no lo hereda ni recibe un parámetro que no conoce", () => {
+      expect(JSON.stringify(con("anthropic/claude-opus-5", { clase: "mecanica", pensamiento: "apagado" }))).not.toContain("disabled");
+      expect(con("nvidia/openai/gpt-oss-20b", { clase: "mecanica" })["thinking"]).toBeUndefined();
     });
   });
 

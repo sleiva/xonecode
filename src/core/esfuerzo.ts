@@ -213,19 +213,47 @@ export function claseDeTrabajo(a: Pick<Agente, "ejecucion">): ClaseDeTrabajo | u
 }
 
 /**
- * El nivel POR OMISIÓN de un subagente, por FAMILIA de proveedor: el que vale cuando ni su `.md`
- * ni la sesión fijaron uno. Es una tabla aparte de `TABLA` porque contesta otra pregunta —qué
- * nivel conviene— y no cuáles admite el modelo; y se criba contra esa (`esfuerzoAplicable`), así
- * que una fila que un modelo no admite se omite en vez de dar un 400.
- *
- * **DeepSeek piensa por defecto, con la petición limpia** (medido), y cada llamada del conductor
- * llevaba razonamiento. Lo mecánico va a `low`. Lo que NO está medido es que ahorre sin empeorar
- * el resultado: la traza (`razonamiento` por origen) es lo que permite comprobarlo.
+ * El interruptor de PENSAMIENTO, aparte del esfuerzo: «cuánto» y «si» son preguntas distintas (`none` no está
+ * entre los niveles por eso mismo). Un `.md` lo declara (`pensamiento: apagado`); ausente decide la familia.
  */
-const OMISION_POR_FAMILIA: Partial<Record<Proveedor, Partial<Record<ClaseDeTrabajo, Esfuerzo>>>> = {
-  deepseek: { mecanica: "low" },
+export type Pensamiento = "apagado" | "activo";
+
+export function esPensamiento(valor: string): valor is Pensamiento {
+  return valor === "apagado" || valor === "activo";
+}
+
+/**
+ * Qué modelos admiten apagar el pensamiento con `thinking: {type: "disabled"}`. Solo DeepSeek, y MEDIDO contra la
+ * API: sin nada piensa, con `low` o `high` piensa casi igual (25, 23 y 23 tokens con una pregunta fácil), y con
+ * `thinking` desactivado la salida bajó de 27 tokens a 1. Lo demás no se sabe, y un parámetro que un modelo no
+ * conoce se paga en un 400: sin fila no hay interruptor.
+ */
+export function admiteApagarElPensamiento(proveedor: Proveedor, modelo: string): boolean {
+  return proveedor === "deepseek" && modelo.startsWith("deepseek");
+}
+
+/**
+ * El pensamiento POR OMISIÓN de un subagente, por FAMILIA de proveedor y clase de trabajo: el que vale cuando
+ * su `.md` no dice nada. Antes esto fue un nivel `low` para lo mecánico, y no hacía nada: en una pasada real
+ * el conductor con `low` seguía dedicando el 80 % de su salida a razonar. Lo mecánico —leer una salida, lanzar
+ * un comando— se apaga. **Lo que NO está medido** es que apagarlo no empeore el resultado del conductor al
+ * interpretar un log raro; la traza (razonamiento por origen) es lo que permite comprobarlo.
+ */
+const PENSAMIENTO_POR_FAMILIA: Partial<Record<Proveedor, Partial<Record<ClaseDeTrabajo, Pensamiento>>>> = {
+  deepseek: { mecanica: "apagado" },
 };
 
-export function esfuerzoPorOmision(proveedor: Proveedor, clase: ClaseDeTrabajo | undefined): Esfuerzo | undefined {
-  return clase === undefined ? undefined : OMISION_POR_FAMILIA[proveedor]?.[clase];
+export function pensamientoPorOmision(proveedor: Proveedor, clase: ClaseDeTrabajo | undefined): Pensamiento | undefined {
+  return clase === undefined ? undefined : PENSAMIENTO_POR_FAMILIA[proveedor]?.[clase];
+}
+
+/** El pensamiento que se va a aplicar de verdad: lo que dice el agente, o la omisión de su familia, y solo si el modelo lo admite. */
+export function pensamientoAplicable(
+  elegido: Pensamiento | undefined,
+  proveedor: Proveedor,
+  modelo: string,
+  clase: ClaseDeTrabajo | undefined,
+): Pensamiento | undefined {
+  const quiere = elegido ?? pensamientoPorOmision(proveedor, clase);
+  return quiere === "apagado" && admiteApagarElPensamiento(proveedor, modelo) ? "apagado" : quiere === "activo" ? "activo" : undefined;
 }

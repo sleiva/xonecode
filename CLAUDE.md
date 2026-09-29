@@ -514,8 +514,10 @@ decide el hilo. **Solo se compacta el raíz**: en un hijo, resumir un encargo co
 costaba más que reenviarlo. **Cada especialista RECUERDA sus encargos anteriores de la sesión**
 (`memoriaDeEspecialistas.ts`): la librería borra un hijo al terminar y no sabe reanudarlo, así que la
 siguiente encarnación arranca con SU historial (`definition.messages`) más el encargo nuevo —nunca lo que
-leyeron otros—. Tope de historial (`TOPE_DE_MEMORIA_TOKENS`), una encarnación viva por especialista, y un
-hijo que falló o al que se cortó con «Detener» no deja memoria (su historial lleva la orden de parar).
+leyeron otros—. **Dos niveles**: entero si cabe (`TOPE_COMPLETA_TOKENS`), REDUCIDO si no (lo que dijo y pidió,
+lo que devolvió cada tool recortado, `TOPE_REDUCIDA_TOKENS`), y olvidado si ni así cabe. Una encarnación
+viva por especialista, y un hijo que falló o al que se cortó con «Detener» no deja memoria (su historial
+lleva la orden de parar).
 Solo en memoria y por sesión; `XONECODE_SIN_MEMORIA_DE_ESPECIALISTAS=1` la apaga para comparar. **Escribir con el turno en marcha es UN gesto** (IXCODE-4, solo la web): el Enter, que en
 TrueForge viaja como **detener y replanificar** (`detener: true`, solo con `turnoDetenible`); el
 botón aparte se quitó a petición suya. La NOTA sigue siendo el camino de lo que llega sin
@@ -1159,7 +1161,11 @@ escrito a mano lo da de alta una persona desde la misma ventana.
   **Ollama se PREGUNTA en vez de tabularse** (`/api/show`), por eso las capacidades entran por
   PARÁMETRO. En Anthropic va ACOPLADO al `thinking` (`aceptaThinkingAdaptativo` junto a
   `pideThinkingAdaptativo`). Se elige en DOS sitios que PERSISTEN: el `.md` de un subagente (gana
-  sobre la sesión) y la sesión (vive en el ÍNDICE). No hay defecto global.
+  sobre la sesión) y la sesión (vive en el ÍNDICE). No hay defecto global. **El PENSAMIENTO es otro interruptor, aparte del esfuerzo** (`pensamiento: apagado|activo` en el `.md`,
+`core/esfuerzo.ts#pensamientoAplicable`): «cuánto» y «si» son preguntas distintas, y en DeepSeek un nivel `low` no
+frena el razonamiento (medido). Ausente decide la familia del proveedor y la clase de trabajo derivada de los
+datos del agente —quien ejecuta comandos va sin pensar en DeepSeek, `claseDeTrabajo`—; solo donde el modelo lo
+admite (`admiteApagarElPensamiento`); apagado manda sobre el esfuerzo. Lo demás sin decidir.
 - **A DeepSeek se le dice QUIÉN pide** (`core/identidadDeProveedor.ts`,
   `agent/config/identidadEnDisco.ts`): un `user_id` en la raíz del cuerpo, del `sub` del login de
   CloudStudio, siempre como HASH. El lector real es la OMISIÓN del constructor de `Modelos`. Sin

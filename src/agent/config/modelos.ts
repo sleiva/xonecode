@@ -9,7 +9,7 @@ import {
   type Eleccion, type FuentesDeEleccion, type Proveedor, type ProveedorDeclarado,
 } from "../../core/modelos.js";
 import { topeDeSalida } from "../../core/contextos.js";
-import { esfuerzoAplicable, esfuerzoPorOmision, type CapacidadesVivas, type ClaseDeTrabajo, type Esfuerzo } from "../../core/esfuerzo.js";
+import { esfuerzoAplicable, pensamientoAplicable, type CapacidadesVivas, type ClaseDeTrabajo, type Esfuerzo, type Pensamiento } from "../../core/esfuerzo.js";
 import { baseUrlDeOllama, baseUrlDeOllamaCloud } from "./catalogoModelos.js";
 import { crearMemoriaDeEco, fetchConEcoDeRazonamiento } from "./ecoDeRazonamiento.js";
 import { ChatGoogleGenerativeAICompatible } from "./gemini.js";
@@ -97,9 +97,9 @@ export class Modelos implements ModelosPort {
     this.esfuerzoDeLaSesion = esfuerzo;
   }
 
-  paraPapel(papel: Papel, esfuerzo?: Esfuerzo, clase?: ClaseDeTrabajo): unknown {
+  paraPapel(papel: Papel, esfuerzo?: Esfuerzo, clase?: ClaseDeTrabajo, pensamiento?: Pensamiento): unknown {
     return construirModelo(
-      this.eleccion[papel], this.personalizados(), esfuerzo ?? this.esfuerzoDeLaSesion, this.capacidades, this.identidad, clase,
+      this.eleccion[papel], this.personalizados(), esfuerzo ?? this.esfuerzoDeLaSesion, this.capacidades, this.identidad, clase, pensamiento,
     );
   }
 
@@ -108,9 +108,9 @@ export class Modelos implements ModelosPort {
    * `--modelo` y `/modelo`, no una copia: un id mal escrito en el `.md` de un agente tiene
    * que fallar igual y con el mismo mensaje que uno mal escrito en la línea de comandos.
    */
-  paraModelo(id: string, esfuerzo?: Esfuerzo, clase?: ClaseDeTrabajo): unknown {
+  paraModelo(id: string, esfuerzo?: Esfuerzo, clase?: ClaseDeTrabajo, pensamiento?: Pensamiento): unknown {
     return construirModelo(
-      parsear(id), this.personalizados(), esfuerzo ?? this.esfuerzoDeLaSesion, this.capacidades, this.identidad, clase,
+      parsear(id), this.personalizados(), esfuerzo ?? this.esfuerzoDeLaSesion, this.capacidades, this.identidad, clase, pensamiento,
     );
   }
 
@@ -157,6 +157,7 @@ function construirCompatibleOpenAi(
   { baseUrl, variable }: { baseUrl: string; variable: string },
   esfuerzo?: Esfuerzo,
   identidad: () => string | undefined = () => undefined,
+  sinPensamiento = false,
 ): unknown {
   const apiKey = process.env[variable];
   if (apiKey === undefined || apiKey.trim() === "") {
@@ -197,6 +198,8 @@ function construirCompatibleOpenAi(
   const userId = proveedor === "deepseek" ? identidad() : undefined;
   const kwargs = {
     ...(esfuerzo === undefined ? {} : { reasoning_effort: esfuerzo }),
+    // El interruptor: `thinking` desactivado, por `modelKwargs` como el esfuerzo (cuerpo raíz de la petición).
+    ...(sinPensamiento ? { thinking: { type: "disabled" } } : {}),
     ...(userId === undefined ? {} : { user_id: userId }),
   };
   /**
@@ -237,6 +240,7 @@ function construirModelo(
   capacidades: (proveedor: Proveedor, modelo: string) => CapacidadesVivas | undefined = () => undefined,
   identidad: () => string | undefined = () => undefined,
   clase?: ClaseDeTrabajo,
+  pensamiento?: Pensamiento,
 ): unknown {
     /**
      * **El nivel se criba AQUÍ y contra ESTE modelo, no donde se eligió.**
@@ -252,8 +256,10 @@ function construirModelo(
      * sustituye por el nivel más parecido: bajar un `xhigh` a `high` por nuestra cuenta
      * sería decidir en nombre de alguien, y aquí eso se paga en tokens que no pidió.
      */
-    // Lo que nadie fijó (ni el `.md` ni la sesión) lo pone la familia del proveedor, y solo a una clase.
-    const esfuerzo = esfuerzoAplicable(esfuerzoPedido ?? esfuerzoPorOmision(proveedor, clase), proveedor, modelo, capacidades(proveedor, modelo));
+    const esfuerzo = esfuerzoAplicable(esfuerzoPedido, proveedor, modelo, capacidades(proveedor, modelo));
+    // Si piensa: lo que dice el `.md`, o la omisión de la familia y la clase, y solo donde el modelo lo admite.
+    // Apagado manda sobre el esfuerzo: sin pensamiento no hay nivel que pedir.
+    const pensamientoApagado = pensamientoAplicable(pensamiento, proveedor, modelo, clase) === "apagado";
     // Un personalizado se resuelve ANTES del switch, contra el registro: sin él no hay URL
     // base, y eso es un alta que falta y no un proveedor roto. El switch de abajo sigue
     // siendo exhaustivo sobre los de serie.
@@ -276,7 +282,7 @@ function construirModelo(
         // Enumerados uno a uno, y no un `default`, para que el switch siga siendo
         // exhaustivo: el día que se añada un proveedor, esto tiene que dar un error de
         // compilación y no construir un cliente equivocado en silencio.
-        return construirCompatibleOpenAi(proveedor, modelo, COMPATIBLES_OPENAI[proveedor], esfuerzo, identidad);
+        return construirCompatibleOpenAi(proveedor, modelo, COMPATIBLES_OPENAI[proveedor], pensamientoApagado ? undefined : esfuerzo, identidad, pensamientoApagado);
       case "openai":
         return new ChatOpenAI({
           model: modelo,

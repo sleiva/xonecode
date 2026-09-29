@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   ESFUERZOS,
   claseDeTrabajo,
-  esfuerzoPorOmision,
+  admiteApagarElPensamiento,
+  esPensamiento,
+  pensamientoAplicable,
+  pensamientoPorOmision,
   NIVELES_DE_OLLAMA,
   esEsfuerzo,
   esfuerzoAplicable,
@@ -156,16 +159,38 @@ describe("los niveles de esfuerzo de un modelo", () => {
   });
 });
 
-describe("el nivel por omisión por familia y clase", () => {
+describe("el interruptor de pensamiento, por familia y clase", () => {
   it("la clase sale de los datos: solo quien ejecuta es mecánico", () => {
     expect(claseDeTrabajo({ ejecucion: true })).toBe("mecanica");
     expect(claseDeTrabajo({ ejecucion: false })).toBeUndefined();
     expect(claseDeTrabajo({})).toBeUndefined();
   });
 
-  it("DeepSeek tiene fila para lo mecánico; lo demás, ninguna", () => {
-    expect(esfuerzoPorOmision("deepseek", "mecanica")).toBe("low");
-    expect(esfuerzoPorOmision("deepseek", undefined)).toBeUndefined();
-    expect(esfuerzoPorOmision("anthropic", "mecanica")).toBeUndefined();
+  it("DeepSeek apaga lo mecánico por omisión; lo demás, nada", () => {
+    expect(pensamientoPorOmision("deepseek", "mecanica")).toBe("apagado");
+    expect(pensamientoPorOmision("deepseek", undefined)).toBeUndefined();
+    expect(pensamientoPorOmision("anthropic", "mecanica")).toBeUndefined();
+  });
+
+  it("solo DeepSeek admite apagarlo (medido); un nombre personalizado o de otra familia, no", () => {
+    expect(admiteApagarElPensamiento("deepseek", "deepseek-flash")).toBe(true);
+    expect(admiteApagarElPensamiento("nvidia", "deepseek-r1")).toBe(false);
+    expect(admiteApagarElPensamiento("anthropic", "claude-opus-5")).toBe(false);
+  });
+
+  it("lo que dice el agente gana a la omisión, y `activo` la anula", () => {
+    expect(pensamientoAplicable(undefined, "deepseek", "deepseek-flash", "mecanica")).toBe("apagado");
+    expect(pensamientoAplicable("activo", "deepseek", "deepseek-flash", "mecanica")).toBe("activo");
+    expect(pensamientoAplicable("apagado", "deepseek", "deepseek-flash", undefined)).toBe("apagado");
+  });
+
+  it("donde el modelo no lo admite, apagado se ignora", () => {
+    expect(pensamientoAplicable("apagado", "anthropic", "claude-opus-5", "mecanica")).toBeUndefined();
+  });
+
+  it("solo son valores exactos", () => {
+    expect(esPensamiento("apagado")).toBe(true);
+    expect(esPensamiento("false")).toBe(false);
+    expect(esPensamiento("")).toBe(false);
   });
 });

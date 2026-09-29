@@ -672,8 +672,8 @@ export async function abrirSesionTrueforge(
       modelClient: modeloParaTrueforge({
         modelo: () =>
           agente?.modelo === undefined
-            ? clienteDe(`papel:${papel}:${agente?.esfuerzo ?? ""}:${claseDeEsfuerzo ?? ""}`, () => modelos.paraPapel(papel, agente?.esfuerzo, claseDeEsfuerzo))
-            : clienteDe(`modelo:${agente.modelo}:${agente.esfuerzo ?? ""}:${claseDeEsfuerzo ?? ""}`, () => modelos.paraModelo(agente.modelo!, agente.esfuerzo, claseDeEsfuerzo)),
+            ? clienteDe(`papel:${papel}:${agente?.esfuerzo ?? ""}:${claseDeEsfuerzo ?? ""}:${agente?.pensamiento ?? ""}`, () => modelos.paraPapel(papel, agente?.esfuerzo, claseDeEsfuerzo, agente?.pensamiento))
+            : clienteDe(`modelo:${agente.modelo}:${agente.esfuerzo ?? ""}:${claseDeEsfuerzo ?? ""}:${agente.pensamiento ?? ""}`, () => modelos.paraModelo(agente.modelo!, agente.esfuerzo, claseDeEsfuerzo, agente.pensamiento)),
         senal: () => aborto?.signal,
         alRazonar,
         soloTexto: () => (detencion.soloTexto(params.threadId) ? RESUMEN_DE_RELLENO : undefined),

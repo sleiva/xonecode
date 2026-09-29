@@ -431,3 +431,21 @@ describe("escribeEn en el frontmatter", () => {
     expect(vuelta.agente.escribeEn).toEqual(["/doc/"]);
   });
 });
+
+describe("el campo `pensamiento` de un subagente", () => {
+  const con = (linea: string) => leerAgente("x", `---\ndescripcion: hace algo\n${linea}\n---\ncuerpo`, "proyecto");
+
+  it("`apagado` y `activo` se leen, y solo esos valores exactos", () => {
+    expect("agente" in con("pensamiento: apagado") && con("pensamiento: apagado")).toMatchObject({ agente: { pensamiento: "apagado" } });
+    expect("agente" in con("pensamiento: activo") && con("pensamiento: activo")).toMatchObject({ agente: { pensamiento: "activo" } });
+    for (const raro of ["pensamiento: false", "pensamiento: Apagado", "pensamiento: no", "pensamiento:"]) {
+      const r = con(raro);
+      expect("agente" in r && r.agente.pensamiento).toBeFalsy();
+    }
+  });
+
+  it("sin el campo, ausente", () => {
+    const r = con("motor: modelo");
+    expect("agente" in r && r.agente.pensamiento).toBeUndefined();
+  });
+});
