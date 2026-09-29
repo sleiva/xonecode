@@ -783,8 +783,9 @@ export type MensajeAlCliente =
       /** El resultado de `cerrar`: solo llega si el comentario se escribió. Con la transición
        *  pedida FALLIDA, su motivo va en `falloDeTransicion` y `transicion` no viaja. */
       cerrado?: { clave: string; comento: boolean; transicion?: string; falloDeTransicion?: string };
-      /** `clave` solo en el de `ficha`. */
-      error?: { accion: string; motivo: string; clave?: string };
+      /** `clave` solo en el de `ficha`; `texto` solo en el de `buscarProyectos` y `pedido` solo en
+       *  el de `describir` (IXCODE-15): de QUÉ búsqueda o base es el fallo. */
+      error?: { accion: string; motivo: string; clave?: string; texto?: string; pedido?: string };
     }
   | ({ clase: "fichero" } & FicheroDelProyecto)
   /** El estado de sincronización del proyecto abierto (pestaña CloudStudio). `proyecto` y

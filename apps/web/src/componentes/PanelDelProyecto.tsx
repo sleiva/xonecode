@@ -51,10 +51,10 @@ export function nombreDelConector(conectores: EstadoDelCliente["conectores"] | u
 
 /**
  * Lo que se ENSEÑA del proyecto vinculado: la clave si está hecha para leerse (Jira, `IXCODE`),
- * y si es la URL `collection://…` de un data source de Notion, el nombre que el servidor ya
- * conozca (`nombreDelProyecto`). `undefined` = no hay nada legible que enseñar: el servidor
- * guarda ese nombre solo en memoria, así que tras reiniciarlo puede faltar, y entonces NO se
- * pinta la URL cruda.
+ * y si es la URL `collection://…` de un data source de Notion, su nombre (`nombreDelProyecto`,
+ * que el servidor GUARDA con el vínculo en el `config.json`). `undefined` = no hay nada legible
+ * que enseñar —un vínculo escrito antes de ese campo, del que este proceso tampoco oyó el
+ * nombre—, y entonces NO se pinta la URL cruda.
  */
 function proyectoALaVista(v: VinculoDelCable): string | undefined {
   return v.proyecto.startsWith("collection://") ? v.nombreDelProyecto : v.proyecto;
@@ -1016,8 +1016,10 @@ function ConectoresDelProyecto({
         <Aviso key={a} {...(errores[a] === undefined ? {} : { error: errores[a] })} />
       ))}
       {/* Los que hablan con UN conector: con la credencial caída, «Conectar» al lado. El
-          conector es el de la ÚLTIMA petición de esa acción (Jira o Notion), no uno fijo. */}
-      {(["vincular", "sitios", "proyectos", "buscarProyectos", "describir"] as const).map((a) => {
+          conector es el de la ÚLTIMA petición de esa acción (Jira o Notion), no uno fijo. Los de
+          `buscarProyectos`/`describir` no van aquí: los pinta la fila de Notion, y solo los de la
+          búsqueda y la base que tiene DELANTE (`VinculoDeNotion`). */}
+      {(["vincular", "sitios", "proyectos"] as const).map((a) => {
         const conector = conectorDelFallo(a);
         return (
           <AvisoDelGestor
@@ -1076,10 +1078,12 @@ function ConectoresDelProyecto({
                 nombre={nombreDe(id)}
                 {...(anadido(id) === undefined ? {} : { fila: anadido(id)! })}
                 gestor={gestor}
+                conectores={conectores}
                 {...(vinculo === undefined ? {} : { vinculo, nombreDelVinculado: nombreDe(vinculo.conector) })}
                 conectado={conectado}
                 alGestor={alGestor}
                 alAutorizar={alAutorizar}
+                alAbrirAjustes={alAbrirAjustes}
               />
             ))}
           </ul>
@@ -1176,17 +1180,21 @@ function FilaDeGestor({
   nombre,
   fila,
   gestor,
+  conectores,
   vinculo,
   nombreDelVinculado,
   conectado,
   alGestor,
   alAutorizar,
+  alAbrirAjustes,
 }: {
   id: string;
   nombre: string;
   /** Ausente = no está añadido (solo se pinta así el VINCULADO: su vínculo sigue en el proyecto). */
   fila?: FilaDeConectorAnadido;
   gestor?: EstadoDelCliente["gestor"];
+  conectores: EstadoDelCliente["conectores"];
+  alAbrirAjustes: () => void;
   vinculo?: VinculoDelCable;
   nombreDelVinculado?: string;
   conectado: boolean;
@@ -1211,7 +1219,16 @@ function FilaDeGestor({
     id === "jira" ? (
       <VinculoDeJira gestor={gestor} conectado={conectado} alGestor={alGestor} {...(sustituye === undefined ? {} : { sustituye })} />
     ) : id === "notion" ? (
-      <VinculoDeNotion gestor={gestor} nombre={nombre} conectado={conectado} alGestor={alGestor} {...(sustituye === undefined ? {} : { sustituye })} />
+      <VinculoDeNotion
+        gestor={gestor}
+        conectores={conectores}
+        nombre={nombre}
+        conectado={conectado}
+        alGestor={alGestor}
+        alAutorizar={alAutorizar}
+        alAbrirAjustes={alAbrirAjustes}
+        {...(sustituye === undefined ? {} : { sustituye })}
+      />
     ) : null;
 
   return (
@@ -1366,12 +1383,18 @@ export function lineaDelEsquema(e: EsquemaDelProyecto): string {
  */
 function VinculoDeNotion({
   gestor,
+  conectores,
   nombre,
   conectado,
   alGestor,
+  alAutorizar,
+  alAbrirAjustes,
   sustituye,
 }: {
   gestor?: EstadoDelCliente["gestor"];
+  conectores: EstadoDelCliente["conectores"];
+  alAutorizar: (id: string) => void;
+  alAbrirAjustes: () => void;
   nombre: string;
   conectado: boolean;
   alGestor: (peticion: PeticionAlGestor) => void;
@@ -1389,6 +1412,23 @@ function VinculoDeNotion({
       ? gestor.descripcion
       : undefined;
   const errores = gestor?.errores ?? {};
+  // Los fallos, con la MISMA regla que las respuestas: el de otra búsqueda o de otra base (uno
+  // viejo, o que llegó tarde) no se pinta delante de la que hay ahora.
+  const errorDeBusqueda =
+    buscado !== undefined && errores.buscarProyectos !== undefined && errores.buscarProyectos.texto === buscado ? errores.buscarProyectos : undefined;
+  const errorDeDescripcion =
+    elegida !== undefined && errores.describir !== undefined && errores.describir.pedido === elegida ? errores.describir : undefined;
+  const avisoDe = (error: { motivo: string }) => (
+    <AvisoDelGestor
+      error={error}
+      conector="notion"
+      {...(conectores === undefined ? {} : { conectores })}
+      conectado={conectado}
+      alAutorizar={alAutorizar}
+      alAbrirAjustes={alAbrirAjustes}
+      sinDuplicarLaFila
+    />
+  );
 
   const buscar = (): void => {
     const t = texto.trim();
@@ -1425,7 +1465,7 @@ function VinculoDeNotion({
         </button>
       </form>
       {buscado === undefined ? null : busqueda === undefined ? (
-        errores.buscarProyectos === undefined ? <p className={estilos.aviso}>Buscando…</p> : null
+        errorDeBusqueda === undefined ? <p className={estilos.aviso}>Buscando…</p> : avisoDe(errorDeBusqueda)
       ) : busqueda.lista.length === 0 ? (
         <p className={estilos.aviso}>{`Ninguna base de ${nombre} coincide con «${busqueda.texto}».`}</p>
       ) : (
@@ -1447,7 +1487,7 @@ function VinculoDeNotion({
         </ul>
       )}
       {elegida === undefined ? null : descripcion === undefined ? (
-        errores.describir === undefined ? <p className={estilos.aviso}>Leyendo el esquema de la base…</p> : null
+        errorDeDescripcion === undefined ? <p className={estilos.aviso}>Leyendo el esquema de la base…</p> : avisoDe(errorDeDescripcion)
       ) : "motivo" in descripcion ? (
         <p className={estilos.error}>{`Esta base no sirve como gestor de tareas: ${descripcion.motivo}`}</p>
       ) : (

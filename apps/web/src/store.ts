@@ -303,7 +303,7 @@ export interface EstadoDelCliente {
     cierre?: { clave: string; comentario: string; id: number };
     cerrado?: { clave: string; comento: boolean; transicion?: string; falloDeTransicion?: string; id: number };
     /** `clave` solo en el de `ficha` (de qué tarea). */
-    errores?: Partial<Record<string, { motivo: string; clave?: string }>>;
+    errores?: Partial<Record<string, { motivo: string; clave?: string; texto?: string; pedido?: string }>>;
   };
   /**
    * El estado de sincronización del proyecto abierto (pestaña CloudStudio). Ausente = no se
@@ -1582,7 +1582,14 @@ export function crearStoreDelCliente(): {
             ...(cerrado === undefined ? [] : ["cerrar"]),
           ];
           for (const a of aciertos) delete errores[a];
-          if (error !== undefined) errores[error.accion] = { motivo: error.motivo, ...(error.clave === undefined ? {} : { clave: error.clave }) };
+          if (error !== undefined) {
+            errores[error.accion] = {
+              motivo: error.motivo,
+              ...(error.clave === undefined ? {} : { clave: error.clave }),
+              ...(error.texto === undefined ? {} : { texto: error.texto }),
+              ...(error.pedido === undefined ? {} : { pedido: error.pedido }),
+            };
+          }
           // IXCODE-15: un `estado` con OTRO vínculo (se vinculó otro gestor u otro proyecto, o se
           // desvinculó) deja sin dueño lo que era del de antes: sus pendientes, la ficha y las
           // transiciones. Fundirlo pintaba la lista de Jira bajo «Pendientes de Tasks» hasta que

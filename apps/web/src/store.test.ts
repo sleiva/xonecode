@@ -291,6 +291,14 @@ describe("store del cliente", () => {
    * de antes. Fundirlo pintaba la lista de Jira bajo el título de la base de Notion hasta que esta
    * contestaba, con filas que mandaban claves de Jira al adaptador de Notion.
    */
+  it("«gestor»: el error de `buscarProyectos`/`describir` conserva su `texto`/`pedido` (IXCODE-15)", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "gestor", error: { accion: "buscarProyectos", motivo: "x", texto: "task" } });
+    s.aplicar({ clase: "gestor", error: { accion: "describir", motivo: "y", pedido: "b1" } });
+    expect(s.leer().gestor?.errores?.buscarProyectos).toEqual({ motivo: "x", texto: "task" });
+    expect(s.leer().gestor?.errores?.describir).toEqual({ motivo: "y", pedido: "b1" });
+  });
+
   it("«gestor»: un `estado` con OTRO vínculo tira pendientes, ficha y transiciones; con el MISMO, no", () => {
     const s = crearStoreDelCliente();
     const jira = { conectores: ["jira"], vinculo: { conector: "jira", sitio: "s", proyecto: "IXCODE" }, admiteMias: true };

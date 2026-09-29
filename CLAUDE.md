@@ -864,7 +864,11 @@ escrito a mano lo da de alta una persona desde la misma ventana.
   vincular (Notion: solo con propiedad de persona) y se GUARDA con el vínculo
   (`gestorDeTareas.admiteMias`, `admiteMiasDelVinculo`), igual que el nombre para mostrar del
   proyecto (`gestorDeTareas.nombreDelProyecto`, el que el gestor dijo al vincular, para que
-  sobreviva a un reinicio): **`estado` no toca la red** —lo contestan
+  sobreviva a un reinicio). **Una lectura que depende del vínculo** (pendientes, ficha, las
+  transiciones de «empezar») **se TIRA si el vínculo cambió mientras se leía**
+  (`arranque.ts#delMismoVinculo`, respuesta o fallo): fundida, pintaba filas de Jira bajo la base
+  de Notion; el fallo de `buscarProyectos`/`describir` lleva su `texto`/`pedido` y el cliente solo
+  pinta el de lo que tiene delante. **`estado` no toca la red** —lo contestan
   también `usarConector` y `desvincular`, y un gestor colgado no puede colgar esa casilla—. El
   comentario de cierre llega a Notion por `comentarioParaNotion` (solo cambia los marcadores de
   bloque, que Notion no pinta). **Del asignado de una tarea solo cruza el nombre visible**

@@ -939,7 +939,7 @@ describe("PanelDelProyecto", () => {
     expect(alGestor).toHaveBeenCalledWith({ accion: "empezar", clave: UUID }, { destino: undefined });
   });
 
-  it("sin el nombre de la base (el servidor se reinició) no pinta la URL `collection://`", () => {
+  it("sin el nombre de la base (un vínculo guardado antes de que se guardara) no pinta la URL `collection://`", () => {
     const sinNombre = { estado: { ...VINCULADO_A_NOTION.estado!, vinculo: { conector: "notion", sitio: "notion", proyecto: COLECCION } } };
     montar({ gestor: sinNombre, conectores: CON_NOTION });
     pestana("Tareas");
@@ -977,7 +977,7 @@ describe("PanelDelProyecto", () => {
     pestana("Conectores");
     fireEvent.change(screen.getByRole("searchbox", { name: "Buscar una base de Notion" }), { target: { value: "task" } });
     fireEvent.submit(screen.getByRole("searchbox", { name: "Buscar una base de Notion" }).closest("form")!);
-    rerender({ gestor: { estado: { conectores: [] }, errores: { buscarProyectos: { motivo: "falta autorizar" } } } });
+    rerender({ gestor: { estado: { conectores: [] }, errores: { buscarProyectos: { motivo: "falta autorizar", texto: "task" } } } });
     expect(screen.getByRole("alert").textContent).toBe("falta autorizar");
     fireEvent.click(screen.getByRole("button", { name: "Conectar Notion" }));
     expect(props.alAutorizarConector).toHaveBeenCalledWith("notion");
@@ -1001,5 +1001,28 @@ describe("PanelDelProyecto", () => {
     expect(alGestor).toHaveBeenCalledWith({ accion: "pendientes" });
     expect(screen.getByText("Consultando las tareas…")).toBeTruthy();
     expect(screen.queryByText("IXCODE-7")).toBeNull();
+  });
+  it("Notion: el fallo de OTRA búsqueda o de OTRA base no se pinta; el de la que hay delante, sí", () => {
+    const { rerender } = montar({ gestor: { estado: { conectores: [] } }, conectores: CON_NOTION });
+    pestana("Conectores");
+    const campo = screen.getByRole("searchbox", { name: "Buscar una base de Notion" });
+    fireEvent.change(campo, { target: { value: "task" } });
+    fireEvent.submit(campo.closest("form")!);
+    const base = { estado: { conectores: [] } };
+    // El fallo de una búsqueda ANTERIOR («my»): sigue «Buscando…», sin aviso.
+    rerender({ gestor: { ...base, errores: { buscarProyectos: { motivo: "Notion no responde", texto: "my" } } } });
+    expect(screen.queryByText("Notion no responde")).toBeNull();
+    expect(screen.getByText("Buscando…")).toBeTruthy();
+    rerender({ gestor: { ...base, errores: { buscarProyectos: { motivo: "Notion no responde", texto: "task" } } } });
+    expect(screen.getByRole("alert").textContent).toBe("Notion no responde");
+    // Ya con la lista: el fallo de describir OTRA base no se pinta bajo la elegida.
+    const busqueda = { conector: "notion", texto: "task", lista: [{ proyecto: "b1", nombre: "Tasks" }, { proyecto: "b2", nombre: "Otra" }] };
+    rerender({ gestor: { ...base, busqueda } });
+    fireEvent.click(screen.getByRole("button", { name: /^Tasks/ }));
+    rerender({ gestor: { ...base, busqueda, errores: { describir: { motivo: "no existe", pedido: "b2" } } } });
+    expect(screen.queryByText("no existe")).toBeNull();
+    expect(screen.getByText("Leyendo el esquema de la base…")).toBeTruthy();
+    rerender({ gestor: { ...base, busqueda, errores: { describir: { motivo: "no existe", pedido: "b1" } } } });
+    expect(screen.getByRole("alert").textContent).toBe("no existe");
   });
 });

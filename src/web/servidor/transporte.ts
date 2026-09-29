@@ -617,8 +617,11 @@ export type MensajeAlCliente =
        * `error` a secas invitaría a repetir el cierre y comentar dos veces.
        */
       cerrado?: { clave: string; comento: boolean; transicion?: string; falloDeTransicion?: string };
-      /** `clave` solo en el de `ficha`: dice de QUÉ tarea es la descripción que no se pudo leer. */
-      error?: { accion: string; motivo: string; clave?: string };
+      /** `clave` solo en el de `ficha`: dice de QUÉ tarea es la descripción que no se pudo leer.
+       *  IXCODE-15: `texto` solo en el de `buscarProyectos` (QUÉ búsqueda falló) y `pedido` solo en
+       *  el de `describir` (QUÉ base): el cliente no pinta el fallo de una búsqueda o base que ya
+       *  no tiene delante. */
+      error?: { accion: string; motivo: string; clave?: string; texto?: string; pedido?: string };
     }
   | ({ clase: "fichero" } & FicheroDelProyecto)
   /**

@@ -10279,9 +10279,9 @@ describe("el gestor de tareas, por el cable", () => {
     });
     // Jira no busca ni describe: con motivo, nunca una lista vacía.
     expect((await t.pedir({ clase: "gestor", accion: "buscarProyectos", conector: "jira", texto: "x" }))?.error)
-      .toEqual({ accion: "buscarProyectos", motivo: "en Jira los proyectos se eligen de la lista" });
+      .toEqual({ accion: "buscarProyectos", motivo: "en Jira los proyectos se eligen de la lista", texto: "x" });
     expect((await t.pedir({ clase: "gestor", accion: "describir", conector: "jira", proyecto: "IXCODE" }))?.error)
-      .toEqual({ accion: "describir", motivo: "Jira no describe sus proyectos" });
+      .toEqual({ accion: "describir", motivo: "Jira no describe sus proyectos", pedido: "IXCODE" });
     // Mal formados.
     expect((await t.pedir({ clase: "gestor", accion: "buscarProyectos", conector: "notion" } as never))?.error)
       .toEqual({ accion: "buscarProyectos", motivo: "petición mal formada" });
@@ -10366,6 +10366,73 @@ describe("el gestor de tareas, por el cable", () => {
     // Ni `estado` ni `usarConector` llaman a NADIE: un gestor colgado no puede colgar la casilla.
     await t.pedir({ clase: "gestor", accion: "desvincular" });
     expect(llamadas).toEqual([]);
+    await t.limpiar();
+  });
+
+  it("IXCODE-15: unas pendientes que vuelven DESPUÉS de vincular otro gestor se TIRAN (ni lista ni error del de antes)", async () => {
+    const soltar: { lista?: () => void; fallo?: () => void } = {};
+    class JiraLento extends GestorDeTareasEnMemoria {
+      override async pendientes(...a: Parameters<GestorDeTareasEnMemoria["pendientes"]>) {
+        const lista = await super.pendientes(...a);
+        await new Promise<void>((r) => { soltar.lista = r; });
+        return lista;
+      }
+      override async ficha(): Promise<FichaDelGestor> {
+        await new Promise<void>((r) => { soltar.fallo = r; });
+        throw new Error("Jira no responde");
+      }
+    }
+    const t = await abrir(
+      { gestorDeTareas: (c) => (c === "jira" ? new JiraLento(datos()) : c === "notion" ? new GestorDeTareasEnMemoria(datosNotion()) : undefined) },
+      { modo: "offline", conectores: ["jira"], gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } },
+    );
+    // En vuelo contra Jira: ni la lista ni la ficha contestan todavía.
+    expect(await t.pedir({ clase: "gestor", accion: "pendientes" })).toBeUndefined();
+    expect(await t.pedir({ clase: "gestor", accion: "ficha", clave: "IXCODE-12" })).toBeUndefined();
+    // La persona vincula Notion mientras tanto.
+    expect((await t.pedir({ clase: "gestor", accion: "vincular", conector: "notion", sitio: "notion", proyecto: FUENTE }))?.estado?.vinculo?.conector).toBe("notion");
+    const antes = t.cliente.recibidos.length;
+    soltar.lista!();
+    soltar.fallo!();
+    for (let i = 0; i < 50; i++) await asentar();
+    // Lo de Jira llega tarde y NO se emite: ni `pendientes` ni el `error` de la ficha.
+    expect(t.cliente.recibidos.slice(antes).filter((m) => m.clase === "gestor")).toEqual([]);
+    // Con el vínculo SIN cambiar, la misma lectura sí contesta (la guarda no tira de más).
+    const t2 = await abrir(
+      { gestorDeTareas: () => new GestorDeTareasEnMemoria(datos()) },
+      { modo: "offline", conectores: ["jira"], gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } },
+    );
+    expect((await t2.pedir({ clase: "gestor", accion: "pendientes" }))?.pendientes?.lista.length).toBeGreaterThan(0);
+    await t2.limpiar();
+    await t.limpiar();
+  });
+
+  it("IXCODE-15: un ticket de JIRA con el proyecto ya vinculado a NOTION se cierra en Jira, con el sitio del ticket", async () => {
+    const vistos: { accion: string; vinculo: Vinculo }[] = [];
+    class JiraQueApunta extends GestorDeTareasEnMemoria {
+      override async transiciones(v: Vinculo, clave: string) { vistos.push({ accion: "transiciones", vinculo: v }); return super.transiciones(v, clave); }
+      override async comentar(v: Vinculo, clave: string, texto: string) { vistos.push({ accion: "comentar", vinculo: v }); return super.comentar(v, clave, texto); }
+      override async transicionar(v: Vinculo, clave: string, id: string) { vistos.push({ accion: "transicionar", vinculo: v }); return super.transicionar(v, clave, id); }
+    }
+    const jira = new JiraQueApunta({ ...datos(), transiciones: { "IXCODE-12": TRANSICIONES } });
+    const notion = new GestorDeTareasEnMemoria(datosNotion());
+    const t = await abrir(
+      { gestorDeTareas: (c) => (c === "jira" ? jira : c === "notion" ? notion : undefined) },
+      { modo: "offline", conectores: ["notion"], gestorDeTareas: { conector: "notion", sitio: "notion", proyecto: FUENTE, admiteMias: true } },
+    );
+    t.vestibulo.proyectoAbierto()!.fijarTicket({ conector: "jira", sitio: "c1", clave: "IXCODE-12" });
+    const trans = await t.pedir({ clase: "gestor", accion: "transiciones", clave: "IXCODE-12", para: "cerrar" });
+    expect(trans?.transiciones?.lista.map((x) => x.id)).toEqual(TRANSICIONES.map((x) => x.id));
+    expect(await t.pedir({ clase: "gestor", accion: "cerrar", comentario: "Listo.", transicion: "t-probar" })).toEqual({
+      clase: "gestor",
+      cerrado: { clave: "IXCODE-12", comento: true, transicion: "t-probar" },
+    });
+    // Las tres, a JIRA y con el sitio DEL TICKET; Notion no recibe nada.
+    expect(vistos.map((x) => x.accion)).toEqual(["transiciones", "comentar", "transicionar"]);
+    for (const x of vistos) expect(x.vinculo).toMatchObject({ conector: "jira", sitio: "c1" });
+    expect(jira.comentariosAplicados).toEqual([{ clave: "IXCODE-12", texto: "Listo." }]);
+    expect(notion.comentariosAplicados).toEqual([]);
+    expect(notion.transicionesAplicadas).toEqual([]);
     await t.limpiar();
   });
 

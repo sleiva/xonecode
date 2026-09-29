@@ -3677,8 +3677,20 @@ export function montarRutas(
     // llevar un texto del gestor (una clave de proyecto, un nombre de conector) sin pasar por él.
     // El fallo de `ficha` lleva la CLAVE: con dos filas desplegadas una tras otra, el de la
     // primera no puede acabar pintado bajo la segunda.
+    // IXCODE-15: el de `buscarProyectos` lleva el TEXTO buscado y el de `describir` la base PEDIDA,
+    // por la misma razón que la clave de `ficha`: el cliente no pinta el fallo de una búsqueda o
+    // una base que ya no tiene delante.
     const fallo = (motivo: string): void =>
-      emitir({ clase: "gestor", error: { accion: m.accion, motivo: sinCorreos(motivo), ...(m.accion === "ficha" ? { clave: m.clave } : {}) } });
+      emitir({
+        clase: "gestor",
+        error: {
+          accion: m.accion,
+          motivo: sinCorreos(motivo),
+          ...(m.accion === "ficha" ? { clave: m.clave } : {}),
+          ...(m.accion === "buscarProyectos" ? { texto: m.texto } : {}),
+          ...(m.accion === "describir" ? { pedido: m.proyecto } : {}),
+        },
+      });
     if (opciones.gestorDeTareas === undefined) return fallo("esta ejecución no tiene gestor de tareas");
     const delProyecto = () => {
       const c = cargar(raiz).config.proyecto;
@@ -3734,6 +3746,26 @@ export function montarRutas(
       const g = gestorDe(conector);
       if (g === undefined) fallo(`«${conector}» no es un gestor de tareas de esta ejecución`);
       return g;
+    };
+    /**
+     * IXCODE-15: una LECTURA que depende del vínculo del proyecto (pendientes, ficha, las
+     * transiciones de «empezar») tarda lo que tarde el gestor, y mientras tanto la persona puede
+     * vincular OTRO. La respuesta es del vínculo de ANTES: se relee el de ahora al volver y, si ya
+     * no es el mismo, la respuesta —o su fallo— se TIRA sin emitir nada. El panel ya pidió lo suyo
+     * al nuevo vínculo; fundirla pintaría filas de Jira bajo la base de Notion. `undefined` = tirada.
+     */
+    const delMismoVinculo = async <T,>(usado: Vinculo, leer: () => Promise<T>): Promise<{ valor: T } | undefined> => {
+      const sigue = (): boolean => {
+        const ahora = delProyecto().vinculo;
+        return ahora !== undefined && ahora.conector === usado.conector && ahora.sitio === usado.sitio && ahora.proyecto === usado.proyecto;
+      };
+      try {
+        const valor = await leer();
+        return sigue() ? { valor } : undefined;
+      } catch (error) {
+        if (!sigue()) return undefined;
+        throw error;
+      }
     };
     let anunciada = false;
     try {
@@ -3858,10 +3890,14 @@ export function montarRutas(
           if (vinculo === undefined) return fallo("este proyecto no tiene gestor de tareas");
           const g = gestorOFallo(vinculo.conector);
           if (g === undefined) return;
-          await asegurarSitios(g);
           const cuando = Date.now();
           const mias = m.mias === true;
-          const lista = await g.pendientes(vinculo, m.texto, mias ? { mias } : undefined);
+          const leida = await delMismoVinculo(vinculo, async () => {
+            await asegurarSitios(g);
+            return g.pendientes(vinculo, m.texto, mias ? { mias } : undefined);
+          });
+          if (leida === undefined) return;
+          const lista = leida.valor;
           emitir({
             clase: "gestor",
             pendientes: { cuando, ...(m.texto === undefined ? {} : { texto: m.texto }), ...(mias ? { mias: true as const } : {}), lista },
@@ -3875,7 +3911,9 @@ export function montarRutas(
           if (vinculo === undefined) return fallo("este proyecto no tiene gestor de tareas");
           const g = gestorOFallo(vinculo.conector);
           if (g === undefined) return;
-          const f = await g.ficha(vinculo, m.clave);
+          const leida = await delMismoVinculo(vinculo, () => g.ficha(vinculo, m.clave));
+          if (leida === undefined) return;
+          const f = leida.valor;
           emitir({ clase: "gestor", ficha: { clave: f.clave, descripcion: f.descripcion } });
           return;
         }
@@ -3895,7 +3933,11 @@ export function montarRutas(
           if (vinculo === undefined) return fallo("este proyecto no tiene gestor de tareas");
           const g = gestorOFallo(vinculo.conector);
           if (g === undefined) return;
-          const lista = await g.transiciones(vinculo, m.clave);
+          // Las de CIERRE van con el TICKET, que no cambia al revincular: solo las de «empezar»
+          // (del vínculo del proyecto) se tiran si el vínculo cambió mientras se leían.
+          const leida = m.para === "cerrar" ? { valor: await g.transiciones(vinculo, m.clave) } : await delMismoVinculo(vinculo, () => g.transiciones(vinculo, m.clave));
+          if (leida === undefined) return;
+          const lista = leida.valor;
           const propuesta = transicionPropuesta(lista, m.para)?.id;
           emitir({ clase: "gestor", transiciones: { clave: m.clave, para: m.para, lista, ...(propuesta === undefined ? {} : { propuesta }) } });
           return;
