@@ -1582,9 +1582,21 @@ export function crearStoreDelCliente(): {
           ];
           for (const a of aciertos) delete errores[a];
           if (error !== undefined) errores[error.accion] = { motivo: error.motivo, ...(error.clave === undefined ? {} : { clave: error.clave }) };
+          // IXCODE-15: un `estado` con OTRO vínculo (se vinculó otro gestor u otro proyecto, o se
+          // desvinculó) deja sin dueño lo que era del de antes: sus pendientes, la ficha y las
+          // transiciones. Fundirlo pintaba la lista de Jira bajo «Pendientes de Tasks» hasta que
+          // Notion contestaba, y una fila de esas mandaba una clave de Jira al adaptador de Notion.
+          // Tras una caída del cable `antes.estado` no está (se tiró `gestor`), así que no se dispara.
+          const claveDelVinculo = (v?: { conector: string; sitio: string; proyecto: string }): string | undefined =>
+            v === undefined ? undefined : `${v.conector}|${v.sitio}|${v.proyecto}`;
+          const otroVinculo =
+            campos.estado !== undefined &&
+            antes.estado !== undefined &&
+            claveDelVinculo(antes.estado.vinculo) !== claveDelVinculo(campos.estado.vinculo);
+          const { pendientes: _p, ficha: _f, transiciones: _t, ...antesSinLoDelVinculo } = antes;
           mutar({
             gestor: {
-              ...antes,
+              ...(otroVinculo ? antesSinLoDelVinculo : antes),
               ...campos,
               ...(borrador === undefined ? {} : { borrador: { ...borrador, id: (antes.borrador?.id ?? 0) + 1 } }),
               ...(cierre === undefined ? {} : { cierre: { ...cierre, id: (antes.cierre?.id ?? 0) + 1 } }),

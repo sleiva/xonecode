@@ -989,4 +989,17 @@ describe("PanelDelProyecto", () => {
     fireEvent.click(screen.getByRole("button", { name: "0687543b · Login" }));
     expect(props.alAbrirSesion).toHaveBeenCalledWith("s1");
   });
+  it("con la lista del de ANTES ya tirada (el store la tira al cambiar de vínculo), Tareas dice «Consultando…» y no pinta filas viejas", () => {
+    const { alGestor, rerender } = montar({ gestor: { ...VINCULADO, pendientes: { cuando: 1, lista: IXCODE } }, conectores: CON_NOTION });
+    pestana("Tareas");
+    expect(screen.getByText("IXCODE-7")).toBeTruthy();
+    // Se revincula desde Conectores: Tareas se DESMONTA (su memoria del vínculo, también).
+    pestana("Conectores");
+    rerender({ gestor: VINCULADO_A_NOTION });
+    alGestor.mockClear();
+    pestana("Tareas");
+    expect(alGestor).toHaveBeenCalledWith({ accion: "pendientes" });
+    expect(screen.getByText("Consultando las tareas…")).toBeTruthy();
+    expect(screen.queryByText("IXCODE-7")).toBeNull();
+  });
 });

@@ -286,6 +286,40 @@ describe("store del cliente", () => {
     expect(s.leer().planes).toBeUndefined();
   });
 
+  /**
+   * IXCODE-15: vincular OTRO gestor (u otro proyecto, o desvincular) deja sin dueño lo que era del
+   * de antes. Fundirlo pintaba la lista de Jira bajo el título de la base de Notion hasta que esta
+   * contestaba, con filas que mandaban claves de Jira al adaptador de Notion.
+   */
+  it("«gestor»: un `estado` con OTRO vínculo tira pendientes, ficha y transiciones; con el MISMO, no", () => {
+    const s = crearStoreDelCliente();
+    const jira = { conectores: ["jira"], vinculo: { conector: "jira", sitio: "s", proyecto: "IXCODE" }, admiteMias: true };
+    s.aplicar({ clase: "gestor", estado: jira });
+    s.aplicar({ clase: "gestor", pendientes: { cuando: 1, lista: [{ clave: "IXCODE-1", titulo: "t", estado: "Por hacer", categoria: "por-hacer" }] } });
+    s.aplicar({ clase: "gestor", ficha: { clave: "IXCODE-1", descripcion: "d" } });
+    s.aplicar({ clase: "gestor", transiciones: { clave: "IXCODE-1", para: "empezar", lista: [] } });
+    s.aplicar({ clase: "gestor", sitios: { conector: "jira", lista: [{ id: "s", nombre: "xone" }] } });
+    // El MISMO vínculo (la respuesta a `usarConector`, por ejemplo): se queda todo.
+    s.aplicar({ clase: "gestor", estado: { ...jira, conectores: ["jira", "deepwiki"] } });
+    expect(s.leer().gestor?.pendientes?.lista).toHaveLength(1);
+    expect(s.leer().gestor?.ficha).toBeDefined();
+    // OTRO: Notion.
+    s.aplicar({
+      clase: "gestor",
+      estado: { conectores: ["notion"], vinculo: { conector: "notion", sitio: "notion", proyecto: "collection://ea517d0b-1234-4abc-8def-0123456789ab" }, admiteMias: false },
+    });
+    expect(s.leer().gestor?.pendientes).toBeUndefined();
+    expect(s.leer().gestor?.ficha).toBeUndefined();
+    expect(s.leer().gestor?.transiciones).toBeUndefined();
+    // Lo que no es de UN vínculo (los sitios de Jira para volver a vincular) se queda.
+    expect(s.leer().gestor?.sitios?.lista).toHaveLength(1);
+    expect(s.leer().gestor?.estado?.vinculo?.conector).toBe("notion");
+    // Desvincular también es «otro».
+    s.aplicar({ clase: "gestor", pendientes: { cuando: 2, lista: [] } });
+    s.aplicar({ clase: "gestor", estado: { conectores: [] } });
+    expect(s.leer().gestor?.pendientes).toBeUndefined();
+  });
+
   it("«gestor» FUNDE sus campos, retira el error con el acierto de su acción, y es del PROYECTO", () => {
     const s = crearStoreDelCliente();
     const alta = (proyectoActivo: string, sesionActiva: string) =>
