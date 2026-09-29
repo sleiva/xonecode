@@ -375,7 +375,8 @@ export function PanelDelProyecto({
  * suya: ya están en la barra lateral (con su «+»). Las tareas en background tampoco: van en la
  * pestaña Tareas, encima de las del gestor.
  */
-function Resumen({ planes }: { planes?: PlanDelCable[] }) {
+function Resumen({ planes: todos }: { planes?: PlanDelCable[] }) {
+  const planes = todos?.filter(esPlanCompleto);
   return (
     <>
       {planes === undefined || planes.length === 0 ? null : (
@@ -404,6 +405,15 @@ function Resumen({ planes }: { planes?: PlanDelCable[] }) {
       )}
     </>
   );
+}
+
+/**
+ * El Resumen solo enseña los planes con `PLAN.md` Y `TASKS.md` (a petición suya): uno a medias
+ * salía como un nombre suelto, sin barra ni explicación. La pestaña Planes los sigue enseñando
+ * todos, con el motivo de que falten las tareas.
+ */
+function esPlanCompleto(plan: PlanDelCable): boolean {
+  return plan.ficheros.includes("PLAN.md") && plan.ficheros.includes("TASKS.md");
 }
 
 /** Por qué «Nueva sesión con esta tarea» se apaga con un turno en marcha. */

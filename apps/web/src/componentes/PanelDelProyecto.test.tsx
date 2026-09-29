@@ -31,7 +31,7 @@ const CONECTORES: NonNullable<EstadoDelCliente["conectores"]> = {
 
 const PLAN: PlanDelCable = {
   nombre: "visitas",
-  ficheros: ["TASKS.md"],
+  ficheros: ["PLAN.md", "TASKS.md"],
   modificado: 1,
   tareas: {
     titulo: "Plan de visitas",
@@ -110,6 +110,24 @@ describe("PanelDelProyecto", () => {
     expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("50");
     // Se mudó a la pestaña Tareas: Resumen ya no la enseña, aunque la ranura venga montada.
     expect(screen.queryByText("la ranura de tareas")).toBeNull();
+  });
+
+  it("Resumen: solo los planes con PLAN.md Y TASKS.md; uno a medias no sale", () => {
+    montar({
+      planes: [
+        PLAN,
+        { nombre: "calculadora", ficheros: ["PLAN.md"], modificado: 1 },
+        { nombre: "suelto", ficheros: ["TASKS.md"], modificado: 1 },
+      ],
+    });
+    expect(screen.getByText("Plan de visitas")).toBeTruthy();
+    expect(screen.queryByText("calculadora")).toBeNull();
+    expect(screen.queryByText("suelto")).toBeNull();
+  });
+
+  it("Resumen: sin ningún plan completo, la sección Planes no se pinta", () => {
+    montar({ planes: [{ nombre: "calculadora", ficheros: ["PLAN.md"], modificado: 1 }] });
+    expect(screen.queryByRole("region", { name: "Planes" })).toBeNull();
   });
 
   it("Tareas: «Tareas en background» va delante de las pendientes del gestor, y Resumen ya no la enseña", () => {
