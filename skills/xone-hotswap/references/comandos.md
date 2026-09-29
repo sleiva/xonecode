@@ -536,6 +536,20 @@ Carga o recarga una colección XML en caliente. **Entrada:** `xmlNode` (XML en *
 `encoding` (default `ISO-8859-15`). **Error:** `ResultMessage(exception)` si el XML es inválido;
 `"App is not running"` si la app no está iniciada.
 
+**Medido en Android, framework 5.0.5.5dev — qué se aplica en caliente y qué no:**
+
+| Cambio | Vía | Resultado |
+|---|---|---|
+| Colección `.xne` | `loadCollection` con el fichero entero en Base64 y `encoding=UTF-8` | Se repinta en ~2 s, **solo en memoria**: al relanzar la app vuelve la versión de disco. Para que persista, subir también el fichero con `uploadFile`. |
+| JavaScript | `uploadFile` y luego `loadIncludeFile` con `compile=true` | Se aplica al instante. Solo subirlo, o `loadCollection`, **no** lo recarga. |
+| CSS | `uploadFile` y luego `launchApplication` | Se aplica al relanzar. `setCssAttribute`, `relayout`, `refresh` y `loadCollection` contestan `result:true` y el color **no cambia**; `loadIncludeFile` no admite css (`Unknown script language css`). |
+
+`uploadFile`: `destinationPath` cuelga del directorio de datos del framework, no del de la app.
+La app vive en `app_<nombre en minúsculas>/`, así que hay que dar `app_holamundo/functions.js`; con
+`functions.js` a secas escribe un fichero suelto fuera de la app. `getFileChecksum` y `listAppFiles`
+piden el nombre en minúsculas, y `getFileChecksum` falla entero si UNO de los ficheros no existe.
+Todo esto lo hace `xone-recargar-android`.
+
 ### `setAttribute` — las dos plataformas
 **Entrada:** `collectionName`, `nodeType`, `name`, `attributeName`, `attributeValue`. Provoca
 relayout o refresh según el atributo. **(iOS)** también es legado: solo WebSocket.

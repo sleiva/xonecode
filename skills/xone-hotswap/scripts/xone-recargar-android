@@ -1,0 +1,269 @@
+#!/usr/bin/env node
+/**
+ * Llevar al Android los ficheros que CAMBIARON, sin desplegar el proyecto entero.
+ *
+ * POR QUÉ EXISTE. `xone-desplegar-android` empaqueta, sube, concede permisos y reinicia el
+ * framework: es la cadena entera y está bien para el primer arranque. Para «cambié un botón» es
+ * desproporcionado. Este script compara los ficheros del proyecto con los del aparato
+ * (`getFileChecksum`), sube SOLO los que difieren (`uploadFile`) y los aplica por la vía más
+ * barata que se MIDIÓ que funciona, contra el framework 5.0.5.5dev:
+ *
+ *   colección (.xne con <coll>)  →  `loadCollection`: se repinta en el acto, PERO solo en memoria.
+ *                                   Por eso también se sube a disco: sin eso, relanzar la app la
+ *                                   devuelve a la versión anterior.
+ *   JavaScript (.js)             →  `loadIncludeFile` con compile=true. Subir el fichero NO basta,
+ *                                   y `loadCollection` tampoco lo recarga.
+ *   CSS, .ini, app.xml, mappings →  relanzar la app (`launchApplication`). Medido: `setCssAttribute`,
+ *                                   `relayout`, `refresh` y `loadCollection` contestan `result:true`
+ *                                   y el color NO cambia; `loadIncludeFile` no admite css.
+ *
+ * **`result:true` es «aceptado», no «aplicado».** Lo que dice si funcionó es el árbol de
+ * controles, y por eso el script lo pide al acabar. Un atributo que XOne no conoce tampoco da
+ * error: comprueba lo que cambiaste, no el código de respuesta.
+ *
+ * USO (desde la raíz del proyecto, que es el `cwd`):
+ *   xone-recargar-android                       compara todo y aplica lo que difiera
+ *   xone-recargar-android MenuPrincipal.xne     solo esos ficheros (sin comparar)
+ *   xone-recargar-android --app MiApp
+ *
+ * **Necesita la app YA desplegada y el túnel puesto** (`xone-desplegar-android` la primera vez).
+ * Lo que no sabe aplicar —iconos, la base de datos, ficheros nuevos que la app no declara— lo
+ * dice y manda a desplegar entero, en vez de fingir.
+ *
+ * NO usa `adb`: habla solo con el canal hotswap, así que sirve igual en Windows.
+ */
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { basename, extname, join, relative, sep } from "node:path";
+import { NODE, dormir } from "../lib/dispositivo.mjs";
+
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+process.removeAllListeners("warning");
+process.on("warning", (aviso) => {
+  if (!String(aviso.message).includes("NODE_TLS_REJECT_UNAUTHORIZED")) console.warn(aviso);
+});
+
+/** Lo que se sincroniza. El resto (iconos, `bd/`, `files/`) se dice, no se sube. */
+const EXTENSIONES = new Set([".xne", ".js", ".css", ".ini", ".xml"]);
+/** Carpetas que nunca viajan. */
+const FUERA = [".xonecode", ".git", "node_modules", "bd", "files", "icons"];
+/**
+ * Tope de lo que cabe en una línea de órdenes de Windows (32.767 caracteres en total). En otros
+ * sistemas el límite es de megas, así que solo se aplica allí.
+ */
+const TOPE_BASE64_WINDOWS = 24_000;
+
+const args = process.argv.slice(2);
+const opcion = (nombre) => {
+  const i = args.indexOf(`--${nombre}`);
+  return i >= 0 ? args[i + 1] : undefined;
+};
+const posicionales = args.filter((a, i) => !a.startsWith("--") && !(i > 0 && args[i - 1] === "--app"));
+
+if (args.includes("--help") || args.includes("-h")) {
+  // Tiene que existir: una orden que no entiende una opción no puede ejecutar nada.
+  console.error(`xone-recargar-android — lleva al Android SOLO lo que cambió, sin desplegar entero.
+
+  xone-recargar-android                     compara el proyecto con el aparato y aplica lo distinto
+  xone-recargar-android A.xne functions.js  solo esos ficheros
+  xone-recargar-android --app MiApp         nombre explícito de la app
+
+Colección → recarga en caliente. JavaScript → recarga del include. CSS, app.xml, app.ini y
+mappings → relanza la app. Necesita la app ya desplegada (xone-desplegar-android) y el túnel.`);
+  process.exit(0);
+}
+
+const cliente = join(import.meta.dirname, "xone-hotswap");
+
+/** Un comando del canal, en `clave=valor`. Devuelve el JSON de la respuesta. */
+function mandar(comando, campos = {}) {
+  const pares = Object.entries(campos).map(([k, v]) =>
+    `${k}=${typeof v === "object" && v !== null ? JSON.stringify(v) : String(v)}`,
+  );
+  const salida = execFileSync(NODE, [cliente, comando, ...pares], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }).trim();
+  try {
+    return JSON.parse(salida);
+  } catch {
+    throw new Error(`el canal no devolvió JSON para ${comando}: ${salida.slice(0, 160)}`);
+  }
+}
+
+/** Como en el despliegue: `app.ini` (`name=`) y, si no, la carpeta. */
+function nombreDeLaApp() {
+  const dicho = opcion("app");
+  if (dicho !== undefined) return dicho;
+  if (existsSync("app.ini")) {
+    const m = /^\s*name\s*=\s*(.+?)\s*$/im.exec(readFileSync("app.ini", "latin1"));
+    if (m !== null && m[1] !== "") return m[1];
+  }
+  return basename(process.cwd());
+}
+
+const TABLA_CRC = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[i] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(buf) {
+  let c = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) c = TABLA_CRC[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+/** Los ficheros del proyecto, en rutas relativas con `/`. Devuelve también los que no se sincronizan. */
+function ficherosDelProyecto(dentro = process.cwd(), salida = { sincronizables: [], otros: [] }) {
+  for (const entrada of readdirSync(dentro, { withFileTypes: true })) {
+    const completa = join(dentro, entrada.name);
+    const rel = relative(process.cwd(), completa).split(sep).join("/");
+    if (FUERA.some((f) => rel === f || rel.startsWith(`${f}/`))) continue;
+    if (entrada.isSymbolicLink()) continue;
+    if (entrada.isDirectory()) ficherosDelProyecto(completa, salida);
+    else if (entrada.isFile()) (EXTENSIONES.has(extname(rel).toLowerCase()) ? salida.sincronizables : salida.otros).push(rel);
+  }
+  return salida;
+}
+
+const app = nombreDeLaApp();
+/** Cómo guarda el framework lo que sube: `app_<nombre en minúsculas>` (medido). */
+const carpetaEnElAparato = `app_${app.toLowerCase()}`;
+
+/** ¿Está la app viva? El árbol de controles es la única comprobación que vale. */
+function estaViva() {
+  try {
+    const r = mandar("getAllElements", { format: "xone" });
+    return r.result === true;
+  } catch {
+    return false;
+  }
+}
+
+if (!estaViva()) {
+  console.error(`la app «${app}» no contesta en el canal hotswap.`);
+  console.error("Esto solo recarga lo cambiado: la primera vez (o si el aparato se reinició) hay que");
+  console.error("desplegar entera con xone-desplegar-android.");
+  process.exit(1);
+}
+
+const { sincronizables, otros } = ficherosDelProyecto();
+let cambiados;
+const nuevos = new Set();
+
+if (posicionales.length > 0) {
+  cambiados = posicionales.map((p) => p.replaceAll("\\", "/"));
+  const ausentes = cambiados.filter((f) => !existsSync(f));
+  if (ausentes.length > 0) {
+    console.error(`no existe en el proyecto: ${ausentes.join(", ")}`);
+    process.exit(1);
+  }
+} else {
+  /**
+   * Un fichero que el aparato no tiene hace FALLAR la llamada entera (`ENOENT` con su ruta), así
+   * que se va quitando de la petición y se cuenta como NUEVO. Es un bucle acotado: cada vuelta
+   * saca uno, y con 500 ficheros nuevos son 500 viajes — para eso está el despliegue entero.
+   */
+  let pedir = [...sincronizables];
+  let remotos = {};
+  for (let vuelta = 0; pedir.length > 0 && vuelta < 25; vuelta++) {
+    const r = mandar("getFileChecksum", { appName: app.toLowerCase(), files: pedir, checksumType: "crc32" });
+    if (r.result !== false && typeof r.result === "object") {
+      remotos = r.result;
+      break;
+    }
+    const falta = /app_[^/\\]+[/\\](.+?): open failed/.exec(String(r.exceptionMessage ?? ""))?.[1];
+    if (falta === undefined || !pedir.includes(falta)) {
+      console.error(`no pude comparar con el aparato: ${r.exceptionMessage ?? r.status ?? "sin motivo"}`);
+      process.exit(1);
+    }
+    nuevos.add(falta);
+    pedir = pedir.filter((f) => f !== falta);
+  }
+  if (nuevos.size >= 25) {
+    console.error("hay demasiados ficheros nuevos para el aparato: despliega entero con xone-desplegar-android.");
+    process.exit(1);
+  }
+  cambiados = sincronizables.filter(
+    (f) => nuevos.has(f) || String(remotos[f]) !== String(crc32(readFileSync(f))),
+  );
+}
+
+if (cambiados.length === 0) {
+  console.log("nada que recargar: los ficheros del proyecto ya son los del aparato.");
+  if (otros.length > 0 && posicionales.length === 0) {
+    console.log(`(no se comparan ${otros.length} fichero(s) que no son xne/js/css/ini/xml: iconos, bd, files…)`);
+  }
+  process.exit(0);
+}
+
+/** Cómo se aplica cada uno. */
+function clase(rel) {
+  const ext = extname(rel).toLowerCase();
+  if (ext === ".js") return "js";
+  if (ext === ".xne") return /<coll[\s>]/.test(readFileSync(rel, "latin1")) ? "coleccion" : "relanzar";
+  return "relanzar";
+}
+
+// 1. Subir a disco (siempre): lo que solo está en memoria se pierde al relanzar.
+const subidos = [];
+for (const rel of cambiados) {
+  const base64 = readFileSync(rel).toString("base64");
+  if (process.platform === "win32" && base64.length > TOPE_BASE64_WINDOWS) {
+    console.error(`«${rel}» es demasiado grande para mandarlo por la línea de órdenes de Windows: despliega entero.`);
+    process.exit(1);
+  }
+  const r = mandar("uploadFile", { destinationPath: `${carpetaEnElAparato}/${rel}`, fileData: base64 });
+  if (r.result !== true) {
+    console.error(`no se pudo subir «${rel}»: ${r.exceptionMessage ?? r.status ?? "sin motivo"}`);
+    process.exit(1);
+  }
+  subidos.push(rel);
+}
+
+// 2. Aplicar. Si algo obliga a relanzar, el relanzamiento carga TODO desde disco y sobra el resto.
+const clases = new Map(subidos.map((f) => [f, clase(f)]));
+const hayQueRelanzar = [...clases.values()].includes("relanzar");
+const fallos = [];
+
+if (hayQueRelanzar) {
+  const r = mandar("launchApplication", { appName: app });
+  if (r.result !== true) fallos.push(`launchApplication: ${r.exceptionMessage ?? r.status ?? "sin motivo"}`);
+  for (let intento = 0; intento < 12; intento++) {
+    dormir(1);
+    if (estaViva()) break;
+  }
+  for (const [f] of clases) console.log(`  ${f}  →  relanzada la app`);
+} else {
+  for (const [f, c] of clases) {
+    if (c === "coleccion") {
+      const r = mandar("loadCollection", { xmlNode: readFileSync(f).toString("base64"), encoding: "UTF-8" });
+      if (r.result !== true) fallos.push(`${f}: loadCollection ${r.exceptionMessage ?? r.status ?? "sin motivo"}`);
+      else console.log(`  ${f}  →  colección recargada en caliente`);
+    } else {
+      const r = mandar("loadIncludeFile", { file: f, language: "javascript", encoding: "UTF-8", compile: true });
+      if (r.result !== true) fallos.push(`${f}: loadIncludeFile ${r.exceptionMessage ?? r.status ?? "sin motivo"}`);
+      else console.log(`  ${f}  →  JavaScript recargado`);
+    }
+  }
+  dormir(1);
+}
+
+if (fallos.length > 0) {
+  console.error("");
+  for (const f of fallos) console.error(`FALLÓ ${f}`);
+  console.error("Lo subido está en el aparato; para aplicarlo del todo, xone-desplegar-android.");
+  process.exit(1);
+}
+
+// 3. Comprobar: el árbol de controles, no el `result:true`.
+if (!estaViva()) {
+  console.error("");
+  console.error("Se aplicó, pero la app YA NO responde: puede haber reventado al cargar lo nuevo.");
+  console.error("Mira el log con xone-log-android.");
+  process.exit(1);
+}
+const pantalla = mandar("getCurrentScreen");
+console.log(`\nviva. ${typeof pantalla.status === "string" ? pantalla.status : ""}`);
+console.log("Recuerda: result:true es «aceptado». Comprueba con `xone-hotswap elements` o `shot` que lo cambiado se ve.");

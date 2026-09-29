@@ -98,6 +98,14 @@ xone-desplegar-android
 xone-desplegar-android --captura                  # …y además captura: solo si quieres VERLO
 xone-desplegar-android --app MiApp --serie emulator-5554
 
+# «cambié un botón / una función / un color»: NO despliegues entero. Compara el proyecto con el
+# aparato, sube SOLO lo que difiere y lo aplica por la vía más barata (1-2 s si es una colección):
+#   colección (.xne)  → recarga en caliente        JavaScript (.js) → recarga del include
+#   CSS, app.xml, app.ini, mappings → relanza la app (unos 6 s)
+# Necesita la app YA desplegada. Lo que no sabe aplicar (iconos, bd) lo dice y manda a desplegar.
+xone-recargar-android
+xone-recargar-android MenuPrincipal.xne functions.js      # solo esos, sin comparar
+
 # Cualquier comando del catálogo de más abajo (varios en orden, si le pasas varios):
 xone-hotswap elements                    # atajo de getAllElements format=xone
 xone-hotswap shot                        # atajo de getScreenshot, a $XONECODE_ARTEFACTOS
