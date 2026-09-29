@@ -36,7 +36,7 @@ Respondes preguntas, depuras problemas y guías el desarrollo en XOne:
 ## Archivos de Referencia
 
 
-Consulta SIEMPRE estos archivos antes de responder. **Este `SKILL.md` es la referencia CORTA**: una lectura por omisión trae ~100 líneas (`DEFAULT_READ_LIMIT`), así que aquí solo van las capacidades, este índice y las reglas críticas; todo lo demás —flujo, plantillas, tamaños y nombres— vive abajo y cada fichero cabe entero. Están incluidos en la carpeta `references/` de este skill:
+Consulta SIEMPRE estos archivos antes de responder. Están incluidos en la carpeta `references/` de este skill:
 
 | Fase / tema | Archivo |
 |---|---|

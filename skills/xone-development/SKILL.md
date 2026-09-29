@@ -8,11 +8,7 @@ Estas son las reglas que aplican a cualquier trabajo sobre un proyecto XOne, sea
 
 ## Referencias
 
-**Este `SKILL.md` es la referencia CORTA y lleva solo las reglas duras.** Una lectura por
-omisión trae **100 líneas** (`DEFAULT_READ_LIMIT` de deepagents) y este fichero tenía 395, así
-que el índice y los anti-patrones no se leían salvo que el modelo pidiera `limit=1000` — lo
-hacía la mitad de las veces (dorado con control, 2026-08-24). Ahora todo lo consultable vive
-al lado, y cada fichero cabe entero:
+Consulta estos ficheros según lo que busques:
 
 | Qué buscas | Dónde |
 |---|---|

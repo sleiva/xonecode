@@ -1,13 +1,10 @@
 # El estilo es un SISTEMA: pega los tokens, elige un carácter
 
-Este fichero era una lista de consejos y se incumplía entera. Medido en un panel real
-(2026-09-01): decía «evita Inter» y salió `Inter`; decía «evita los morados» y salieron índigo
-`#6366f1` + púrpura + rosa; decía «una escala» y salieron cuatro radios sueltos; y cero
-variables CSS. **Un consejo no es un sistema**: lo que sigue se pega y se acabó.
+**Un consejo no es un sistema**: lo que sigue se pega y se acabó.
 
 ## Los tokens, y el tema en TRES bloques
 
-**El de por omisión**, elegido por el usuario el 2026-09-01: fondo casi blanco frío, tinta negra
+**El de por omisión**: fondo casi blanco frío, tinta negra
 azulada, acento azul petróleo y el **cuerpo en SERIF**, que es lo que le quita la cara de
 plantilla. Pega el bloque tal cual y no uses ningún color más.
 
@@ -82,7 +79,7 @@ CSS. Dos cosas que no son negociables en esa fila:
 **El artifact se pinta en un panel, no en una ventana de navegador**, y su ancho lo decide quien
 mira — puede ser 1.700 px. Un `max-w-7xl mx-auto` en el contenedor exterior (que es lo que sale
 por defecto) son **1.280 px centrados**: en ese panel deja **460 px de margen muerto** a los
-lados, con el diagrama encogido en medio. Medido sobre un panel real, 2026-09-01.
+lados, con el diagrama encogido en medio.
 
 - **Nada de `max-w-*` ni `mx-auto` en el envoltorio de la página.** Se respira con `padding`
   (`p-6 md:p-8`), no estrechando.

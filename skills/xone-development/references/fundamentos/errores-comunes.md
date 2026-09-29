@@ -307,6 +307,3 @@ Esta guía ha cubierto los conceptos fundamentales de XOne:
 - **03 - API JavaScript**: Documentación detallada de `ui.*`, `self.*`, `appData.*` y más
 - **05 - Eventos, Patrones y FAQ**: Tutorial paso a paso para crear proyectos completos
 
----
-
-*Este documento forma parte del sistema de ayuda XOne. Basado en el análisis de 224 proyectos de ejemplo reales, 5 proyectos sinteticos documentados y la documentación oficial de la plataforma.*
