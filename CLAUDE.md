@@ -727,16 +727,25 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
 - **Pulsar un proyecto en la barra abre su PANEL, no una sesión directa**
   (`apps/web/src/componentes/PanelDelProyecto.tsx`, `App.tsx`): pestañas Resumen (sesiones, planes,
   tareas en background), Tareas (pendientes del gestor de tareas vinculado, con búsqueda y «Nueva
-  sesión con esta tarea») y Conectores (vincular un gestor). El proyecto que YA está abierto
+  sesión con esta tarea») y Conectores, en DOS secciones: «Gestor de tareas» (solo Jira y Notion,
+  UNO por proyecto: vincular el otro lo sustituye y la fila lo AVISA antes) y «Conectores para el
+  chat» (el resto, con «Conectar» y su casilla). El proyecto que YA está abierto
   enseña el panel SIN mandar `sesion` —soltar la conversación en curso por una vacía es justo lo
   que se quería evitar—; «Nueva sesión» y pulsar una sesión existente sí llevan al chat. Las
   pendientes son una FOTO con hora y un icono de «Actualizar», sin sondeo —«Reintentar» solo
   aparece junto a un fallo—; sin vínculo la pestaña lo DICE con el camino a Conectores, nunca una
   lista vacía que parezca «no hay pendientes». **El filtro por ESTADO es del CLIENTE** sobre la
   lista que llegó (una pastilla por estado con su cuenta, `aria-pressed`; por omisión desmarcados
-  los de «esperando prueba», `ESPERANDO_PRUEBA`), y «Asignadas a mí» es del SERVIDOR (`mias` →
-  `assignee = currentUser()`, `jqlDePendientes`): el asignado se deja de pintar según la
-  RESPUESTA (`pendientes.mias`), no según el conmutador. La acción de cada fila EXISTE siempre y
+  los de «esperando prueba», `ESPERANDO_PRUEBA`), y «Asignadas a mí» es del SERVIDOR (`mias`) y
+  solo se OFRECE con `estado.admiteMias === true`: el asignado se deja de pintar según la
+  RESPUESTA (`pendientes.mias`), no según el conmutador, y cambiar de vínculo olvida la consulta
+  del de antes. **Lo que DICE el panel sale del gestor VINCULADO**: su nombre del catálogo
+  (`nombreDelConector`, también en `App.tsx` para «Cerrar en …»), y sin él una frase NEUTRA —nunca
+  «Jira» a fuego—; una clave se ENSEÑA con `etiquetaDeClave` (el id corto de un UUID de Notion) y
+  viaja ENTERA; el `collection://` de Notion no se pinta nunca. **Notion se vincula en tres
+  pasos** (`VinculoDeNotion`): buscar la base, DESCRIBIR su esquema («Estado: … · Título: … ·
+  Asignado: …», o el motivo de que no valga) y vincular con `esquema.proyecto`, nunca con el id de
+  la búsqueda; una `busqueda` de otro texto o una `descripcion` de otra base no se pintan. La acción de cada fila EXISTE siempre y
   se ve con `:hover`/`:focus-within`; pulsar la fila despliega su descripción (acción `ficha`, de
   LECTURA, markdown con `protegerDolares`), y lo plegado se desmonta. **Un conector añadido sin
   conectar se CONECTA desde el panel** con el MISMO `{clase:"conector", accion:"autorizar"}` de
@@ -752,8 +761,8 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   (`EntradaIndice.ticket`, `web/servidor/sesiones.ts#anotarTicket`, `SesionDelCable.ticket:
   string`): ni el conector ni el sitio del vínculo viajan al cliente. El encargo llega al
   compositor EDITABLE y SIN enviar —lo manda la persona, no se manda solo—.
-- **En Jira escribe el HARNESS, nunca el agente, y cada escritura lleva su propia tarjeta de
-  aprobación** (`componentes/TarjetaDeJira.tsx`): pasar a EN CURSO al empezar (con «empezar sin
+- **En Jira —y en Notion, con las MISMAS tarjetas— escribe el HARNESS, nunca el agente, y cada
+  escritura lleva su propia tarjeta de aprobación** (`componentes/TarjetaDeJira.tsx`): pasar a EN CURSO al empezar (con «empezar sin
   tocar Jira» de salida) y comentario + transición al cerrar (comentario EDITABLE; un `error` de
   cerrar deja la tarjeta abierta con lo que la persona haya escrito intacto, nunca lo repinta). Si
   la transición de «empezar» falla, la sesión se abre IGUAL y el aviso lo dice DESPUÉS de saltar a

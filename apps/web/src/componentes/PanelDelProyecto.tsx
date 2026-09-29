@@ -1,10 +1,19 @@
 import clsx from "clsx";
 import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { etiquetaDeClave } from "../etiquetaDeClave.js";
 import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
 import { protegerDolares } from "../protegerDolares.js";
 import type { EstadoDelCliente } from "../store.js";
-import type { CategoriaDeTarea, MensajeDelCliente, PlanDelCable, SesionDelCable, TareaDelGestor } from "../tipos.js";
+import type {
+  CategoriaDeTarea,
+  EsquemaDelProyecto,
+  MensajeDelCliente,
+  PlanDelCable,
+  SesionDelCable,
+  TareaDelGestor,
+  VinculoDelCable,
+} from "../tipos.js";
 import { IconoDeConector } from "./IconoDeConector.js";
 import { IconoDeActualizar, IconoDeEnlaceExterno } from "./IconosDelVisor.js";
 import { BarraDeProgreso, resumenDelPlan } from "./Planes.js";
@@ -28,6 +37,28 @@ export type PeticionAlGestor = MensajeDelGestor extends infer M ? (M extends { c
 export type ContextoDeGestor = { destino?: string };
 
 type PestanaDelProyecto = "resumen" | "tareas" | "conectores";
+
+/**
+ * El NOMBRE para mostrar de un conector (IXCODE-15): el del catálogo que el cliente ya tiene
+ * (`FilaDeCatalogo.nombre`), nunca uno a fuego. `undefined` cuando no consta —sin catálogo, o
+ * sin vínculo todavía—, y quien lo pinta cae en una frase NEUTRA («Cerrar la tarea»): poner
+ * «Jira» por omisión mentiría en una sesión de Notion. Lo usan el panel y `App.tsx`.
+ */
+export function nombreDelConector(conectores: EstadoDelCliente["conectores"] | undefined, id: string | undefined): string | undefined {
+  if (id === undefined) return undefined;
+  return conectores?.catalogo.find((f) => f.id === id)?.nombre;
+}
+
+/**
+ * Lo que se ENSEÑA del proyecto vinculado: la clave si está hecha para leerse (Jira, `IXCODE`),
+ * y si es la URL `collection://…` de un data source de Notion, el nombre que el servidor ya
+ * conozca (`nombreDelProyecto`). `undefined` = no hay nada legible que enseñar: el servidor
+ * guarda ese nombre solo en memoria, así que tras reiniciarlo puede faltar, y entonces NO se
+ * pinta la URL cruda.
+ */
+function proyectoALaVista(v: VinculoDelCable): string | undefined {
+  return v.proyecto.startsWith("collection://") ? v.nombreDelProyecto : v.proyecto;
+}
 
 const PESTANAS: { id: PestanaDelProyecto; etiqueta: string }[] = [
   { id: "resumen", etiqueta: "Resumen" },
@@ -200,6 +231,9 @@ export function PanelDelProyecto({
     pedir({ accion: "empezar", clave: tarjetaEmpezar, ...(transicion === undefined ? {} : { transicion }) }, { destino });
   };
 
+  /** El nombre del gestor VINCULADO («Jira», «Notion»), del catálogo; ausente = no consta. */
+  const nombreDelGestor = nombreDelConector(conectores, gestor?.estado?.vinculo?.conector);
+
   return (
     <section className={estilos.panel} aria-label={`Proyecto ${nombre}`}>
       <header className={estilos.cabecera}>
@@ -279,6 +313,7 @@ export function PanelDelProyecto({
       {tarjetaEmpezar === undefined ? null : (
         <TarjetaDeEmpezar
           clave={tarjetaEmpezar}
+          {...(nombreDelGestor === undefined ? {} : { nombreDelGestor })}
           // El objeto de `gestor.transiciones` se pasa TAL CUAL, sin envolverlo en un literal
           // nuevo: un literal `{lista, propuesta}` fresco en CADA render (App se re-renderiza
           // por consumo, turno, dispositivos…) le habría hecho creer a `useTransicionElegida`
@@ -342,7 +377,7 @@ function Resumen({
             {sesiones.map((s) => (
               <li key={s.id}>
                 <button type="button" className={estilos.fila} onClick={() => alAbrirSesion(s.id)} disabled={!conectado}>
-                  {s.ticket === undefined ? s.titulo : `${s.ticket} · ${s.titulo}`}
+                  {s.ticket === undefined ? s.titulo : `${etiquetaDeClave(s.ticket) ?? s.ticket} · ${s.titulo}`}
                 </button>
               </li>
             ))}
@@ -400,9 +435,9 @@ function Aviso({ error }: { error?: { motivo: string } }) {
 }
 
 /** Las acciones cuyo fallo dice con QUÉ conector falló, y que por tanto se arreglan conectándolo. */
-type AccionConConector = "sitios" | "proyectos" | "vincular" | "pendientes";
+type AccionConConector = "sitios" | "proyectos" | "buscarProyectos" | "describir" | "vincular" | "pendientes";
 /** Las que se REPITEN solas al conectar: leer. `vincular` escribe la configuración y no se repite sola. */
-const REPETIBLES_AL_CONECTAR: readonly AccionConConector[] = ["sitios", "proyectos", "pendientes"];
+const REPETIBLES_AL_CONECTAR: readonly AccionConConector[] = ["sitios", "proyectos", "buscarProyectos", "describir", "pendientes"];
 
 /**
  * El motivo de un fallo del gestor que se arregla CONECTANDO el conector: la frase que
@@ -562,6 +597,9 @@ export const PENDIENTES_POR_CONSULTA = 100;
 
 /** La consulta de pendientes: lo que se busca y si son solo las mías. Lo vacío no viaja. */
 type ConsultaDePendientes = { texto?: string; mias?: boolean };
+/** La consulta sin `mias` cuando el gestor vinculado no admite «Asignadas a mí». */
+const sinMiasSiNoSeAdmite = (c: ConsultaDePendientes, admite: boolean): ConsultaDePendientes =>
+  admite || c.mias !== true ? c : { ...(c.texto === undefined ? {} : { texto: c.texto }) };
 const peticionDePendientes = (c: ConsultaDePendientes): PeticionAlGestor => ({
   accion: "pendientes",
   ...(c.texto === undefined || c.texto === "" ? {} : { texto: c.texto }),
@@ -609,14 +647,34 @@ function TareasDelGestor({
     alGestor(peticionDePendientes(c));
   };
   const clave = vinculo === undefined ? undefined : `${vinculo.conector}|${vinculo.sitio}|${vinculo.proyecto}`;
+  /**
+   * «Asignadas a mí» solo se OFRECE si el servidor dice que el gestor lo admite (IXCODE-15:
+   * se decide al vincular; una base de Notion sin propiedad de persona no). Ausente o `false`
+   * = no se pinta el conmutador, y una consulta nunca lleva `mias`.
+   */
+  const admiteMias = gestor?.estado?.admiteMias === true;
+  /** El último vínculo que se vio: al VOLVER el mismo (cable caído y vuelto) se conserva lo de la pestaña; con OTRO, no. */
+  const vinculoAnterior = useRef<string | undefined>(undefined);
   // Al abrir la pestaña (y si cambia el vínculo, o vuelve el cable), se pregunta: una lista de
   // antes puede no ser ya la de ahora, y la hora de la foto dice de cuándo es la que se ve.
   // Y la fila que siguiera desplegada vuelve a pedir su descripción: al caerse el cable el store
   // tiró `gestor` entero, y sin esto se quedaría en «Consultando la descripción…» para siempre.
+  // Con un vínculo DISTINTO (se vinculó otro gestor u otro proyecto) lo de la pestaña era del
+  // de antes: la búsqueda, «mías», los estados desmarcados y la fila desplegada se olvidan —un
+  // `mias` heredado de Jira contra una base de Notion sin persona haría fallar la consulta—.
   useEffect(() => {
     if (clave === undefined) return;
-    alGestor(peticionDePendientes(ultimaConsulta.current));
-    if (desplegada !== undefined) {
+    const otro = vinculoAnterior.current !== undefined && vinculoAnterior.current !== clave;
+    vinculoAnterior.current = clave;
+    if (otro) {
+      ultimaConsulta.current = {};
+      setTexto("");
+      setMias(false);
+      setDecididos({});
+      setDesplegada(undefined);
+    }
+    alGestor(peticionDePendientes(sinMiasSiNoSeAdmite(ultimaConsulta.current, admiteMias)));
+    if (!otro && desplegada !== undefined) {
       errorDeFichaAlDesplegar.current = undefined;
       alGestor({ accion: "ficha", clave: desplegada });
     }
@@ -645,8 +703,9 @@ function TareasDelGestor({
   }
 
   const pendientes = gestor.pendientes;
-  const buscar = (): void => consultar({ texto: texto.trim(), mias });
-  const repetir = (): void => consultar(ultimaConsulta.current);
+  const nombreDelGestor = nombreDelConector(conectores, vinculo.conector);
+  const buscar = (): void => consultar({ texto: texto.trim(), mias: admiteMias && mias });
+  const repetir = (): void => consultar(sinMiasSiNoSeAdmite(ultimaConsulta.current, admiteMias));
   const conmutarMias = (): void => {
     setMias(!mias);
     consultar({ texto: texto.trim(), mias: !mias });
@@ -674,7 +733,7 @@ function TareasDelGestor({
   return (
     <div className={estilos.seccion}>
       <div className={estilos.encabezado}>
-        <h2 className={estilos.titulo}>{`Pendientes de ${vinculo.proyecto}`}</h2>
+        <h2 className={estilos.titulo}>{`Pendientes de ${proyectoALaVista(vinculo) ?? "la base vinculada"}`}</h2>
         {pendientes === undefined ? null : (
           <span className={estilos.consultado}>
             <span className={estilos.nota}>{`Consultado a las ${horaDe(pendientes.cuando)}`}</span>
@@ -710,16 +769,18 @@ function TareasDelGestor({
         <button type="submit" className={estilos.accion} disabled={!conectado}>
           Buscar
         </button>
-        <button
-          type="button"
-          className={estilos.pastilla}
-          aria-pressed={mias}
-          title="Solo las asignadas a la cuenta con la que está conectado el gestor"
-          onClick={conmutarMias}
-          disabled={!conectado}
-        >
-          Asignadas a mí
-        </button>
+        {admiteMias ? (
+          <button
+            type="button"
+            className={estilos.pastilla}
+            aria-pressed={mias}
+            title="Solo las asignadas a la cuenta con la que está conectado el gestor"
+            onClick={conmutarMias}
+            disabled={!conectado}
+          >
+            Asignadas a mí
+          </button>
+        ) : null}
       </form>
       <AvisoDelGestor
         {...(errores.pendientes === undefined ? {} : { error: errores.pendientes })}
@@ -777,6 +838,7 @@ function TareasDelGestor({
                 <FilaDeTarea
                   key={t.clave}
                   tarea={t}
+                  {...(nombreDelGestor === undefined ? {} : { nombreDelGestor })}
                   conAsignado={pendientes.mias !== true}
                   desplegada={desplegada === t.clave}
                   {...(desplegada === t.clave && fichaDeLaDesplegada !== undefined ? { descripcion: fichaDeLaDesplegada.descripcion } : {})}
@@ -812,6 +874,7 @@ const CONTROLES = "a, button, input, select, textarea, summary";
  */
 function FilaDeTarea({
   tarea: t,
+  nombreDelGestor,
   conAsignado,
   desplegada,
   descripcion,
@@ -823,6 +886,8 @@ function FilaDeTarea({
   alEmpezar,
 }: {
   tarea: TareaDelGestor;
+  /** «Jira», «Notion»: del catálogo. Ausente = no consta, y el enlace dice «en el gestor». */
+  nombreDelGestor?: string;
   /** Con «Asignadas a mí» contestado, el asignado es siempre quien mira: no se repite en cada fila. */
   conAsignado: boolean;
   desplegada: boolean;
@@ -837,6 +902,10 @@ function FilaDeTarea({
   alEmpezar: () => void;
 }) {
   const idDeFicha = `ficha-${t.clave}`;
+  // Lo que se ENSEÑA de la clave: la de Notion es un UUID, y su etiqueta el id corto. Lo que
+  // viaja por el cable (ficha, transiciones, empezar) sigue siendo la clave entera.
+  const aLaVista = t.etiqueta ?? etiquetaDeClave(t.clave) ?? t.clave;
+  const abrirEn = `Abrir ${aLaVista} en ${nombreDelGestor ?? "el gestor"}`;
   const alPulsarFila = (e: MouseEvent<HTMLDivElement>): void => {
     if (e.target instanceof Element && e.target.closest(CONTROLES) !== null) return;
     alAlternar();
@@ -847,15 +916,15 @@ function FilaDeTarea({
       <div className={estilos.filaDeTarea} onClick={alPulsarFila}>
         <div className={estilos.datos}>
           <div className={estilos.lineaPrincipal}>
-            <span className={estilos.clave}>{t.clave}</span>
+            <span className={estilos.clave}>{aLaVista}</span>
             {t.url === undefined ? null : (
               <a
                 className={estilos.abrirFuera}
                 href={t.url}
                 target="_blank"
                 rel="noreferrer"
-                aria-label={`Abrir ${t.clave} en Jira`}
-                title={`Abrir ${t.clave} en Jira`}
+                aria-label={abrirEn}
+                title={abrirEn}
               >
                 <IconoDeEnlaceExterno />
               </a>
@@ -883,7 +952,7 @@ function FilaDeTarea({
             onClick={alEmpezar}
             disabled={!conectado || ocupado || turnoEnVuelo}
             {...(turnoEnVuelo ? { title: TITULO_CON_TURNO } : {})}
-            aria-label={`Nueva sesión con ${t.clave}`}
+            aria-label={`Nueva sesión con ${aLaVista}`}
           >
             Nueva sesión con esta tarea
           </button>
@@ -909,11 +978,18 @@ function FilaDeTarea({
 }
 
 /**
- * Los conectores que pueden ser GESTOR de tareas (hoy solo Jira). Para ellos no hay casilla
- * «usar en este proyecto»: vincular ya lo marca como usado, y desvincular lo desmarca (el
- * servidor, `atenderGestor`). Una casilla al lado solo podía mentir o quedarse gris.
+ * Los conectores que pueden ser GESTOR de tareas (IXCODE-15: Jira y Notion). Van en su PROPIA
+ * sección, sin casilla «usar en este proyecto»: vincular ya lo marca como usado, y desvincular lo
+ * desmarca (el servidor, `atenderGestor`). Una casilla al lado solo podía mentir o quedarse gris.
+ * **Un proyecto tiene UN gestor**: vincular el otro SUSTITUYE al que hubiera (lo hace el
+ * servidor), y la fila del otro lo DICE antes de pulsar.
  */
-const GESTORES_DE_TAREAS: readonly string[] = ["jira"];
+const GESTORES_DE_TAREAS: readonly string[] = ["jira", "notion"];
+
+/** El `sitio` de Notion: una cuenta OAuth es un solo espacio (`core/gestorDeTareas.ts#SITIO_DE_NOTION`, redeclarado). */
+export const SITIO_DE_NOTION = "notion";
+
+type FilaDeConectorAnadido = NonNullable<EstadoDelCliente["conectores"]>["conectores"][number];
 
 function ConectoresDelProyecto({
   gestor,
@@ -939,14 +1015,15 @@ function ConectoresDelProyecto({
       {(["estado", "usarConector", "desvincular"] as const).map((a) => (
         <Aviso key={a} {...(errores[a] === undefined ? {} : { error: errores[a] })} />
       ))}
-      {/* Los que hablan con UN conector: con la credencial caída, «Conectar» al lado. */}
-      {(["vincular", "sitios", "proyectos"] as const).map((a) => {
-        const conector = conectorDelFallo(a) ?? "jira";
+      {/* Los que hablan con UN conector: con la credencial caída, «Conectar» al lado. El
+          conector es el de la ÚLTIMA petición de esa acción (Jira o Notion), no uno fijo. */}
+      {(["vincular", "sitios", "proyectos", "buscarProyectos", "describir"] as const).map((a) => {
+        const conector = conectorDelFallo(a);
         return (
           <AvisoDelGestor
             key={a}
             {...(errores[a] === undefined ? {} : { error: errores[a] })}
-            conector={conector}
+            {...(conector === undefined ? {} : { conector })}
             {...(conectores === undefined ? {} : { conectores })}
             conectado={conectado}
             alAutorizar={alAutorizar}
@@ -965,64 +1042,85 @@ function ConectoresDelProyecto({
       </div>
     );
   }
-  const nombreDe = (id: string): string => conectores.catalogo.find((f) => f.id === id)?.nombre ?? id;
+  const nombreDe = (id: string): string => nombreDelConector(conectores, id) ?? id;
   // «Conectado» es lo MISMO que dice su pastilla en Ajustes: la última prueba contestó. Cada
   // conector AÑADIDO tiene su fila: el que no está conectado, con su «Conectar» (el mismo
   // `autorizar` de Ajustes); el conectado, con su casilla o, si es un gestor de tareas, con su
-  // vínculo. El vinculado se pinta con su vínculo aunque no esté probado: la prueba es una foto
-  // EN MEMORIA que un reinicio borra, y sin esto el vínculo y su «Desvincular» desaparecían de
-  // esta pestaña mientras Tareas seguía trabajando contra él.
+  // vínculo. El vinculado se pinta con su vínculo aunque no esté probado —ni añadido—: la prueba
+  // es una foto EN MEMORIA que un reinicio borra, y sin esto el vínculo y su «Desvincular»
+  // desaparecían de esta pestaña mientras Tareas seguía trabajando contra él.
   const vinculo = estado.vinculo;
+  const anadido = (id: string): FilaDeConectorAnadido | undefined => conectores.conectores.find((c) => c.id === id);
+  // El vinculado, arriba; luego el otro gestor, si está añadido.
+  const gestores = [...GESTORES_DE_TAREAS]
+    .sort((a, b) => Number(b === vinculo?.conector) - Number(a === vinculo?.conector))
+    .filter((id) => id === vinculo?.conector || anadido(id) !== undefined);
+  const paraElChat = conectores.conectores.filter((c) => !GESTORES_DE_TAREAS.includes(c.id));
 
   return (
     <div className={estilos.seccion}>
       {avisos}
-      {conectores.conectores.length === 0 ? null : (
-        <ul className={estilos.lista}>
-          {conectores.conectores.map((c) => {
-            const usado = estado.conectores.includes(c.id);
-            const esGestor = GESTORES_DE_TAREAS.includes(c.id);
-            const vinculado = vinculo?.conector === c.id;
-            const conCasilla = !esGestor && (esConectado(c) || usado);
-            return (
-              <li key={c.id} className={estilos.conector}>
-                <div className={estilos.filaDeConector}>
-                  <IconoDeConector id={c.id} nombre={nombreDe(c.id)} />
-                  <span className={estilos.tituloDeConector}>{nombreDe(c.id)}</span>
-                  <span className={estilos.alFinal}>
-                    {esConectado(c) ? null : (
-                      <button
-                        type="button"
-                        className={estilos.accion}
-                        onClick={() => alAutorizar(c.id)}
-                        disabled={!conectado || c.autorizando === true}
-                        aria-label={`Conectar ${nombreDe(c.id)}`}
-                      >
-                        {c.autorizando === true ? "Esperando al navegador…" : "Conectar"}
-                      </button>
-                    )}
-                    {conCasilla ? (
-                      <label className={estilos.casilla}>
-                        <input
-                          type="checkbox"
-                          checked={usado}
-                          disabled={!conectado}
-                          onChange={(e) => alGestor({ accion: "usarConector", conector: c.id, usar: e.target.checked })}
-                        />
-                        Usar en este proyecto
-                      </label>
-                    ) : null}
-                  </span>
-                </div>
-                {/* Sin conexión no se le puede preguntar por sitios: solo se enseña el vínculo que ya hay. */}
-                {c.id === "jira" && (esConectado(c) || vinculado) ? (
-                  <VinculoDeJira gestor={gestor} conectado={conectado} alGestor={alGestor} />
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <section className={estilos.seccion} aria-label="Gestor de tareas">
+        <h2 className={estilos.titulo}>Gestor de tareas</h2>
+        <p className={estilos.aviso}>
+          De dónde salen las tareas de la pestaña Tareas. El proyecto tiene uno solo: vincular otro sustituye al que haya.
+        </p>
+        {gestores.length === 0 ? (
+          <p className={estilos.aviso}>Ni Jira ni Notion están añadidos. Se añaden en Ajustes.</p>
+        ) : (
+          <ul className={estilos.lista}>
+            {gestores.map((id) => (
+              <FilaDeGestor
+                key={id}
+                id={id}
+                nombre={nombreDe(id)}
+                {...(anadido(id) === undefined ? {} : { fila: anadido(id)! })}
+                gestor={gestor}
+                {...(vinculo === undefined ? {} : { vinculo, nombreDelVinculado: nombreDe(vinculo.conector) })}
+                conectado={conectado}
+                alGestor={alGestor}
+                alAutorizar={alAutorizar}
+              />
+            ))}
+          </ul>
+        )}
+      </section>
+      <section className={estilos.seccion} aria-label="Conectores para el chat">
+        <h2 className={estilos.titulo}>Conectores para el chat</h2>
+        <p className={estilos.aviso}>Los que usará el agente en el chat de este proyecto.</p>
+        {paraElChat.length === 0 ? (
+          <p className={estilos.aviso}>No hay otros conectores añadidos.</p>
+        ) : (
+          <ul className={estilos.lista}>
+            {paraElChat.map((c) => {
+              const usado = estado.conectores.includes(c.id);
+              const conCasilla = esConectado(c) || usado;
+              return (
+                <li key={c.id} className={estilos.conector}>
+                  <div className={estilos.filaDeConector}>
+                    <IconoDeConector id={c.id} nombre={nombreDe(c.id)} />
+                    <span className={estilos.tituloDeConector}>{nombreDe(c.id)}</span>
+                    <span className={estilos.alFinal}>
+                      <BotonDeConectar fila={c} nombre={nombreDe(c.id)} conectado={conectado} alAutorizar={alAutorizar} />
+                      {conCasilla ? (
+                        <label className={estilos.casilla}>
+                          <input
+                            type="checkbox"
+                            checked={usado}
+                            disabled={!conectado}
+                            onChange={(e) => alGestor({ accion: "usarConector", conector: c.id, usar: e.target.checked })}
+                          />
+                          Usar en este proyecto
+                        </label>
+                      ) : null}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
       {conectores.conectores.length === 0 ? (
         <div className={estilos.encabezado}>
           <p className={estilos.aviso}>No hay ningún conector añadido. Se añaden en Ajustes.</p>
@@ -1041,17 +1139,151 @@ function ConectoresDelProyecto({
   );
 }
 
+/** «Conectar» de un conector añadido sin conectar: el MISMO `autorizar` de Ajustes. Conectado, no se pinta. */
+function BotonDeConectar({
+  fila,
+  nombre,
+  conectado,
+  alAutorizar,
+}: {
+  fila: FilaDeConectorAnadido;
+  nombre: string;
+  conectado: boolean;
+  alAutorizar: (id: string) => void;
+}) {
+  if (esConectado(fila)) return null;
+  return (
+    <button
+      type="button"
+      className={estilos.accion}
+      onClick={() => alAutorizar(fila.id)}
+      disabled={!conectado || fila.autorizando === true}
+      aria-label={`Conectar ${nombre}`}
+    >
+      {fila.autorizando === true ? "Esperando al navegador…" : "Conectar"}
+    </button>
+  );
+}
+
+/**
+ * Una fila de la sección «Gestor de tareas»: el vinculado enseña su vínculo con «Desvincular»;
+ * el otro, conectado, su formulario de vincular. Con OTRO gestor ya vinculado el formulario no se
+ * monta de entrada —montado, el de Jira ya pediría sus sitios—: primero un «Vincular X en su
+ * lugar», y dentro, el aviso de que SUSTITUIRÁ al de ahora.
+ */
+function FilaDeGestor({
+  id,
+  nombre,
+  fila,
+  gestor,
+  vinculo,
+  nombreDelVinculado,
+  conectado,
+  alGestor,
+  alAutorizar,
+}: {
+  id: string;
+  nombre: string;
+  /** Ausente = no está añadido (solo se pinta así el VINCULADO: su vínculo sigue en el proyecto). */
+  fila?: FilaDeConectorAnadido;
+  gestor?: EstadoDelCliente["gestor"];
+  vinculo?: VinculoDelCable;
+  nombreDelVinculado?: string;
+  conectado: boolean;
+  alGestor: (peticion: PeticionAlGestor) => void;
+  alAutorizar: (id: string) => void;
+}) {
+  const [cambiando, setCambiando] = useState(false);
+  const vinculado = vinculo?.conector === id;
+  const otroVinculado = vinculo !== undefined && !vinculado;
+  const conectadoElConector = fila !== undefined && esConectado(fila);
+  // Si el vínculo cambia (se vinculó este, o se desvinculó el otro), el desplegable vuelve a su sitio.
+  const claveDelVinculo = vinculo === undefined ? undefined : `${vinculo.conector}|${vinculo.proyecto}`;
+  useEffect(() => setCambiando(false), [claveDelVinculo]);
+
+  const sustituye =
+    otroVinculado && vinculo !== undefined
+      ? `Vincular ${nombre} sustituirá a ${nombreDelVinculado ?? vinculo.conector}${
+          proyectoALaVista(vinculo) === undefined ? "" : ` (${proyectoALaVista(vinculo)})`
+        } como gestor de este proyecto.`
+      : undefined;
+  const formulario =
+    id === "jira" ? (
+      <VinculoDeJira gestor={gestor} conectado={conectado} alGestor={alGestor} {...(sustituye === undefined ? {} : { sustituye })} />
+    ) : id === "notion" ? (
+      <VinculoDeNotion gestor={gestor} nombre={nombre} conectado={conectado} alGestor={alGestor} {...(sustituye === undefined ? {} : { sustituye })} />
+    ) : null;
+
+  return (
+    <li className={estilos.conector}>
+      <div className={estilos.filaDeConector}>
+        <IconoDeConector id={id} nombre={nombre} />
+        <span className={estilos.tituloDeConector}>{nombre}</span>
+        <span className={estilos.alFinal}>
+          {fila === undefined ? null : <BotonDeConectar fila={fila} nombre={nombre} conectado={conectado} alAutorizar={alAutorizar} />}
+        </span>
+      </div>
+      {vinculado && vinculo !== undefined ? (
+        <VinculoActual vinculo={vinculo} nombre={nombre} conectado={conectado} alGestor={alGestor} />
+      ) : !conectadoElConector ? null : otroVinculado && !cambiando ? (
+        // Sin conexión no se le puede preguntar nada: solo se enseña el vínculo que ya hay.
+        <div className={estilos.vinculo}>
+          <button type="button" className={estilos.accion} onClick={() => setCambiando(true)} disabled={!conectado}>
+            {`Vincular ${nombre} en su lugar…`}
+          </button>
+        </div>
+      ) : (
+        formulario
+      )}
+    </li>
+  );
+}
+
+/** El vínculo que hay, con «Desvincular». Jira dice su clave y su sitio; Notion, el nombre de la base si se sabe. */
+function VinculoActual({
+  vinculo,
+  nombre,
+  conectado,
+  alGestor,
+}: {
+  vinculo: VinculoDelCable;
+  nombre: string;
+  conectado: boolean;
+  alGestor: (peticion: PeticionAlGestor) => void;
+}) {
+  const proyecto = proyectoALaVista(vinculo);
+  const frase = vinculo.proyecto.startsWith("collection://")
+    ? proyecto === undefined
+      ? `Vinculado a una base de ${nombre}.`
+      : `Vinculado a la base «${proyecto}» de ${nombre}.`
+    : `Vinculado a ${vinculo.proyecto} en ${vinculo.nombreDelSitio ?? vinculo.sitio}.`;
+  return (
+    <div className={estilos.vinculo}>
+      <span>{frase}</span>
+      <button type="button" className={estilos.peligro} onClick={() => alGestor({ accion: "desvincular" })} disabled={!conectado}>
+        Desvincular
+      </button>
+    </div>
+  );
+}
+
+/** El aviso de que vincular este gestor sustituye al vinculado (IXCODE-15: un gestor por proyecto). */
+function AvisoDeSustitucion({ texto }: { texto?: string }) {
+  return texto === undefined ? null : <p className={estilos.aviso}>{texto}</p>;
+}
+
 function VinculoDeJira({
   gestor,
   conectado,
   alGestor,
+  sustituye,
 }: {
   gestor?: EstadoDelCliente["gestor"];
   conectado: boolean;
   alGestor: (peticion: PeticionAlGestor) => void;
+  /** Con otro gestor vinculado: la frase de que este lo SUSTITUIRÁ. */
+  sustituye?: string;
 }) {
-  const vinculo = gestor?.estado?.vinculo;
-  const vinculadoAJira = vinculo?.conector === "jira";
   const sitios = gestor?.sitios?.conector === "jira" ? gestor.sitios.lista : undefined;
   const [sitio, setSitio] = useState<string>("");
   const [proyecto, setProyecto] = useState<string>("");
@@ -1059,26 +1291,17 @@ function VinculoDeJira({
   const sitioElegido = sitio !== "" ? sitio : sitios?.length === 1 ? sitios[0]!.id : "";
   const proyectos = gestor?.proyectos?.sitio === sitioElegido && sitioElegido !== "" ? gestor.proyectos.lista : undefined;
 
+  // Se monta SOLO sin vínculo a Jira (el vinculado enseña `VinculoActual`): montarse es preguntar.
   useEffect(() => {
-    if (!vinculadoAJira) alGestor({ accion: "sitios", conector: "jira" });
+    alGestor({ accion: "sitios", conector: "jira" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vinculadoAJira]);
+  }, []);
   useEffect(() => {
     setProyecto("");
-    if (!vinculadoAJira && sitioElegido !== "") alGestor({ accion: "proyectos", conector: "jira", sitio: sitioElegido });
+    if (sitioElegido !== "") alGestor({ accion: "proyectos", conector: "jira", sitio: sitioElegido });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sitioElegido, vinculadoAJira]);
+  }, [sitioElegido]);
 
-  if (vinculadoAJira) {
-    return (
-      <div className={estilos.vinculo}>
-        <span>{`Vinculado a ${vinculo.proyecto} en ${vinculo.nombreDelSitio ?? vinculo.sitio}.`}</span>
-        <button type="button" className={estilos.peligro} onClick={() => alGestor({ accion: "desvincular" })} disabled={!conectado}>
-          Desvincular
-        </button>
-      </div>
-    );
-  }
   return (
     <div className={estilos.vinculo}>
       <label className={estilos.casilla}>
@@ -1103,6 +1326,7 @@ function VinculoDeJira({
           ))}
         </select>
       </label>
+      <AvisoDeSustitucion {...(sustituye === undefined ? {} : { texto: sustituye })} />
       <button
         type="button"
         className={estilos.principal}
@@ -1111,6 +1335,145 @@ function VinculoDeJira({
       >
         Vincular
       </button>
+    </div>
+  );
+}
+
+/**
+ * «Lo que se ha entendido» del esquema de una base de Notion, en UNA línea: la propiedad de
+ * estado con sus opciones, la del título y la de persona. Sin persona no hay «Asignadas a mí», y
+ * se dice aquí, antes de vincular.
+ */
+export function lineaDelEsquema(e: EsquemaDelProyecto): string {
+  const opciones = e.estado.opciones.map((o) => o.nombre).join(" · ");
+  const partes = [
+    `Estado: ${e.estado.propiedad}${opciones === "" ? "" : ` (${opciones})`}`,
+    `Título: ${e.titulo}`,
+    ...(e.asignado === undefined ? [] : [`Asignado: ${e.asignado}`]),
+  ];
+  return partes.join(" · ");
+}
+
+/**
+ * Vincular una base de Notion (IXCODE-15): BUSCAR por nombre → elegir una de la lista →
+ * DESCRIBIR su esquema (qué propiedad es el estado, el título, el asignado, o por qué no vale) →
+ * «Vincular». Nada se pide al montar: buscar necesita texto.
+ *
+ * Dos trampas del cable: la lista trae el id de la BASE, que es lo que se manda a `describir`;
+ * a `vincular` va `esquema.proyecto` (el `collection://…` ya resuelto), nunca ese id. Y una
+ * respuesta de búsqueda o de descripción que no es la de lo que hay AHORA delante (otro texto,
+ * otra base) no se pinta: el servidor contesta cada una por su lado.
+ */
+function VinculoDeNotion({
+  gestor,
+  nombre,
+  conectado,
+  alGestor,
+  sustituye,
+}: {
+  gestor?: EstadoDelCliente["gestor"];
+  nombre: string;
+  conectado: boolean;
+  alGestor: (peticion: PeticionAlGestor) => void;
+  sustituye?: string;
+}) {
+  const [texto, setTexto] = useState("");
+  /** El texto de la ÚLTIMA búsqueda mandada. Ausente = todavía no se buscó. */
+  const [buscado, setBuscado] = useState<string | undefined>(undefined);
+  /** El id de la base elegida (el `proyecto` de la búsqueda). */
+  const [elegida, setElegida] = useState<string | undefined>(undefined);
+  const busqueda =
+    buscado !== undefined && gestor?.busqueda?.conector === "notion" && gestor.busqueda.texto === buscado ? gestor.busqueda : undefined;
+  const descripcion =
+    elegida !== undefined && gestor?.descripcion?.conector === "notion" && gestor.descripcion.pedido === elegida
+      ? gestor.descripcion
+      : undefined;
+  const errores = gestor?.errores ?? {};
+
+  const buscar = (): void => {
+    const t = texto.trim();
+    if (t === "") return;
+    setBuscado(t);
+    setElegida(undefined);
+    alGestor({ accion: "buscarProyectos", conector: "notion", texto: t });
+  };
+  const elegir = (proyecto: string): void => {
+    setElegida(proyecto);
+    alGestor({ accion: "describir", conector: "notion", proyecto });
+  };
+
+  return (
+    <div className={estilos.vinculoNotion}>
+      <form
+        className={estilos.busqueda}
+        role="search"
+        onSubmit={(e) => {
+          e.preventDefault();
+          buscar();
+        }}
+      >
+        <input
+          type="search"
+          className={estilos.campo}
+          aria-label={`Buscar una base de ${nombre}`}
+          placeholder={`Nombre de la base de ${nombre}`}
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+        />
+        <button type="submit" className={estilos.accion} disabled={!conectado || texto.trim() === ""}>
+          Buscar
+        </button>
+      </form>
+      {buscado === undefined ? null : busqueda === undefined ? (
+        errores.buscarProyectos === undefined ? <p className={estilos.aviso}>Buscando…</p> : null
+      ) : busqueda.lista.length === 0 ? (
+        <p className={estilos.aviso}>{`Ninguna base de ${nombre} coincide con «${busqueda.texto}».`}</p>
+      ) : (
+        <ul className={estilos.lista} aria-label={`Bases de ${nombre}`}>
+          {busqueda.lista.map((b) => (
+            <li key={b.proyecto}>
+              <button
+                type="button"
+                className={estilos.base}
+                aria-pressed={elegida === b.proyecto}
+                onClick={() => elegir(b.proyecto)}
+                disabled={!conectado}
+              >
+                <span>{b.nombre}</span>
+                {b.ruta === undefined ? null : <span className={estilos.nota}>{b.ruta}</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {elegida === undefined ? null : descripcion === undefined ? (
+        errores.describir === undefined ? <p className={estilos.aviso}>Leyendo el esquema de la base…</p> : null
+      ) : "motivo" in descripcion ? (
+        <p className={estilos.error}>{`Esta base no sirve como gestor de tareas: ${descripcion.motivo}`}</p>
+      ) : (
+        <div className={estilos.esquema}>
+          <p className={estilos.lineaDelEsquema}>{lineaDelEsquema(descripcion.esquema)}</p>
+          {descripcion.esquema.asignado === undefined ? (
+            <p className={estilos.aviso}>Sin propiedad de persona: no se podrá filtrar por «Asignadas a mí».</p>
+          ) : null}
+          {descripcion.esquema.fuentes === undefined || descripcion.esquema.fuentes <= 1 ? null : (
+            <p className={estilos.aviso}>{`La base tiene ${descripcion.esquema.fuentes} orígenes de datos; se usa el primero.`}</p>
+          )}
+          <AvisoDeSustitucion {...(sustituye === undefined ? {} : { texto: sustituye })} />
+          <div>
+            <button
+              type="button"
+              className={estilos.principal}
+              disabled={!conectado}
+              onClick={() =>
+                alGestor({ accion: "vincular", conector: "notion", sitio: SITIO_DE_NOTION, proyecto: descripcion.esquema.proyecto })
+              }
+            >
+              Vincular
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

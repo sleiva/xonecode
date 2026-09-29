@@ -1,5 +1,6 @@
 import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import { Button, Modal } from "@deepseek-ai/dsh-client-ui-primitives";
+import { etiquetaDeClave } from "../etiquetaDeClave.js";
 import type { TransicionDelGestor } from "../tipos.js";
 import estilos from "./TarjetaDeJira.module.css";
 
@@ -19,6 +20,16 @@ import estilos from "./TarjetaDeJira.module.css";
  * transición falla pero la sesión se abre de todos modos) vive donde vive el resto del
  * cableado del gestor, no aquí dentro.
  */
+
+/**
+ * IXCODE-15: las tarjetas valen igual para Jira y para Notion, y lo que DICEN sale del gestor
+ * vinculado: `nombreDelGestor` es el nombre del catálogo («Jira», «Notion»), y ausente —no
+ * consta todavía— la frase es neutra («el gestor»), nunca «Jira» por omisión. La clave se
+ * ENSEÑA por su etiqueta (`etiquetaDeClave`: el id corto de un UUID de Notion); lo que se
+ * contesta por `alConfirmar` no la lleva, y quien monta la tarjeta manda la clave entera.
+ */
+const enElGestor = (nombre?: string): string => nombre ?? "el gestor";
+const aLaVista = (clave: string): string => etiquetaDeClave(clave) ?? clave;
 
 /** Las transiciones de UNA tarea, ya filtradas por `clave` y `para` (Task 10): quien monta la
  *  tarjeta es quien sabe cuál de las dos peticiones —`empezar` o `cerrar`— es la suya. Ausente
@@ -81,6 +92,7 @@ function Dialogo({ titulo, alCancelar, children }: { titulo: string; alCancelar:
  */
 export function TarjetaDeEmpezar({
   clave,
+  nombreDelGestor,
   transiciones,
   errorTransiciones,
   enviando,
@@ -89,32 +101,35 @@ export function TarjetaDeEmpezar({
   alCancelar,
 }: {
   clave: string;
+  /** «Jira», «Notion» (del catálogo). Ausente = no consta, y se dice «el gestor». */
+  nombreDelGestor?: string;
   transiciones?: TransicionesDeLaTarjeta;
   /** Por qué `transiciones` sigue `undefined` (R6): sin esto, un fallo de la CONSULTA —de
    *  solo lectura, no la escritura— se quedaba en «Consultando…» para siempre. */
   errorTransiciones?: string;
   enviando: boolean;
   error?: string;
-  /** `undefined` es «Empezar sin tocar Jira». */
+  /** `undefined` es «Empezar sin tocar <gestor>». */
   alConfirmar: (transicion?: string) => void;
   alCancelar: () => void;
 }) {
   const [elegida, setElegida] = useTransicionElegida(transiciones);
   const lista = transiciones?.lista ?? [];
   const destino = lista.find((t) => t.id === elegida)?.destino;
-  const titulo = destino === undefined ? `¿Empezar con ${clave}?` : `¿Pasar ${clave} a ${destino}?`;
+  const etiqueta = aLaVista(clave);
+  const titulo = destino === undefined ? `¿Empezar con ${etiqueta}?` : `¿Pasar ${etiqueta} a ${destino}?`;
 
   return (
     <Dialogo titulo={titulo} alCancelar={alCancelar}>
       {transiciones !== undefined ? null : errorTransiciones === undefined ? (
-        <p className={estilos.aviso}>{`Consultando las transiciones de ${clave}…`}</p>
+        <p className={estilos.aviso}>{`Consultando las transiciones de ${etiqueta}…`}</p>
       ) : (
         <p className={estilos.error} role="alert">
           {`No se pudieron consultar las transiciones: ${errorTransiciones}`}
         </p>
       )}
       {transiciones === undefined ? null : lista.length === 0 ? (
-        <p className={estilos.aviso}>{`No hay transiciones disponibles para ${clave}.`}</p>
+        <p className={estilos.aviso}>{`No hay transiciones disponibles para ${etiqueta}.`}</p>
       ) : (
         <label className={estilos.campo}>
           Transición
@@ -146,7 +161,7 @@ export function TarjetaDeEmpezar({
           </Button>
         )}
         <Button type="button" variant="outline" className={estilos.accion} disabled={enviando} onClick={() => alConfirmar(undefined)}>
-          Empezar sin tocar Jira
+          {`Empezar sin tocar ${enElGestor(nombreDelGestor)}`}
         </Button>
         {/* Cancelar NUNCA se deshabilita: ver `Dialogo` — cerrar no manda nada de vuelta ni
             deshace lo que ya se mandó, así que no hay envío doble que evitar aquí dentro. */}
@@ -171,6 +186,7 @@ export function TarjetaDeEmpezar({
  */
 export function TarjetaDeCerrar({
   clave,
+  nombreDelGestor,
   comentario,
   transiciones,
   errorTransiciones,
@@ -180,6 +196,8 @@ export function TarjetaDeCerrar({
   alCancelar,
 }: {
   clave: string;
+  /** «Jira», «Notion» (del catálogo). Ausente = no consta, y se dice «el gestor». */
+  nombreDelGestor?: string;
   comentario: string;
   transiciones?: TransicionesDeLaTarjeta;
   /** Por qué `transiciones` sigue `undefined` (R6): la tarjeta sigue sirviendo —«Solo
@@ -197,7 +215,7 @@ export function TarjetaDeCerrar({
   const vacio = texto.trim() === "";
 
   return (
-    <Dialogo titulo={`Cerrar ${clave} en Jira`} alCancelar={alCancelar}>
+    <Dialogo titulo={`Cerrar ${aLaVista(clave)} en ${enElGestor(nombreDelGestor)}`} alCancelar={alCancelar}>
       <label className={estilos.campo}>
         Comentario
         <textarea className={estilos.textarea} rows={5} value={texto} onChange={(evento) => setTexto(evento.target.value)} />
@@ -257,20 +275,25 @@ export function TarjetaDeCerrar({
  */
 export function BotonDeCerrarEnJira({
   ticket,
+  nombreDelGestor,
   ocupado,
   conectado,
   alPedir,
 }: {
   ticket: string;
+  /** «Jira», «Notion» (del catálogo). Ausente = no consta: «Cerrar la tarea», sin nombrar a nadie. */
+  nombreDelGestor?: string;
   ocupado: boolean;
   conectado: boolean;
   alPedir: () => void;
 }) {
   return (
     <div className={estilos.barraDeTicket}>
-      <span className={estilos.ticket}>{ticket}</span>
+      <span className={estilos.ticket} title={ticket}>
+        {aLaVista(ticket)}
+      </span>
       <button type="button" className={estilos.accion} onClick={alPedir} disabled={!conectado || ocupado}>
-        {ocupado ? "Preparando…" : "Cerrar en Jira"}
+        {ocupado ? "Preparando…" : nombreDelGestor === undefined ? "Cerrar la tarea" : `Cerrar en ${nombreDelGestor}`}
       </button>
     </div>
   );

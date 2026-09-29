@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, cleanup, within } from "@testing-library/react";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { TarjetaDeEmpezar, TarjetaDeCerrar, AvisoDelGestor } from "./TarjetaDeJira.js";
+import { TarjetaDeEmpezar, TarjetaDeCerrar, AvisoDelGestor, BotonDeCerrarEnJira } from "./TarjetaDeJira.js";
 import type { TransicionDelGestor } from "../tipos.js";
 
 // Los diálogos van a un PORTAL sobre `document.body`: sin `cleanup` un segundo `render()`
@@ -19,6 +19,7 @@ describe("TarjetaDeEmpezar", () => {
   it("es un DIÁLOGO por portal, con el título de la transición propuesta", () => {
     const { container } = render(
       <TarjetaDeEmpezar
+        nombreDelGestor="Jira"
         clave="IXCODE-12"
         transiciones={{ lista: TRANSICIONES, propuesta: "11" }}
         enviando={false}
@@ -34,7 +35,7 @@ describe("TarjetaDeEmpezar", () => {
   });
 
   it("sin transiciones (todavía cargando) lo dice y no hay «Pasar y empezar»", () => {
-    render(<TarjetaDeEmpezar clave="IXCODE-12" enviando={false} alConfirmar={() => {}} alCancelar={() => {}} />);
+    render(<TarjetaDeEmpezar nombreDelGestor="Jira" clave="IXCODE-12" enviando={false} alConfirmar={() => {}} alCancelar={() => {}} />);
     expect(screen.getByRole("dialog", { name: "¿Empezar con IXCODE-12?" })).toBeTruthy();
     expect(screen.getByText("Consultando las transiciones de IXCODE-12…")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Pasar y empezar" })).toBeNull();
@@ -42,7 +43,7 @@ describe("TarjetaDeEmpezar", () => {
   });
 
   it("sin ninguna transición disponible lo dice y tampoco hay «Pasar y empezar»", () => {
-    render(<TarjetaDeEmpezar clave="IXCODE-12" transiciones={{ lista: [] }} enviando={false} alConfirmar={() => {}} alCancelar={() => {}} />);
+    render(<TarjetaDeEmpezar nombreDelGestor="Jira" clave="IXCODE-12" transiciones={{ lista: [] }} enviando={false} alConfirmar={() => {}} alCancelar={() => {}} />);
     expect(screen.getByText("No hay transiciones disponibles para IXCODE-12.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Pasar y empezar" })).toBeNull();
   });
@@ -50,6 +51,7 @@ describe("TarjetaDeEmpezar", () => {
   it("elegir otra transición cambia el título: sigue lo que se va a pasar", () => {
     render(
       <TarjetaDeEmpezar
+        nombreDelGestor="Jira"
         clave="IXCODE-12"
         transiciones={{ lista: TRANSICIONES, propuesta: "11" }}
         enviando={false}
@@ -65,6 +67,7 @@ describe("TarjetaDeEmpezar", () => {
     const alConfirmar = vi.fn();
     render(
       <TarjetaDeEmpezar
+        nombreDelGestor="Jira"
         clave="IXCODE-12"
         transiciones={{ lista: TRANSICIONES, propuesta: "11" }}
         enviando={false}
@@ -81,6 +84,7 @@ describe("TarjetaDeEmpezar", () => {
   it("el error se enseña dentro de la tarjeta, que sigue abierta", () => {
     render(
       <TarjetaDeEmpezar
+        nombreDelGestor="Jira"
         clave="IXCODE-12"
         transiciones={{ lista: TRANSICIONES, propuesta: "11" }}
         enviando={false}
@@ -96,6 +100,7 @@ describe("TarjetaDeEmpezar", () => {
   it("mientras la acción está en vuelo los botones que ESCRIBEN se deshabilitan: no hay doble envío", () => {
     render(
       <TarjetaDeEmpezar
+        nombreDelGestor="Jira"
         clave="IXCODE-12"
         transiciones={{ lista: TRANSICIONES, propuesta: "11" }}
         enviando
@@ -114,6 +119,7 @@ describe("TarjetaDeEmpezar", () => {
     const alCancelar = vi.fn();
     render(
       <TarjetaDeEmpezar
+        nombreDelGestor="Jira"
         clave="IXCODE-12"
         transiciones={{ lista: TRANSICIONES, propuesta: "11" }}
         enviando={false}
@@ -140,6 +146,7 @@ describe("TarjetaDeEmpezar", () => {
     const alCancelar = vi.fn();
     render(
       <TarjetaDeEmpezar
+        nombreDelGestor="Jira"
         clave="IXCODE-12"
         transiciones={{ lista: TRANSICIONES, propuesta: "11" }}
         enviando
@@ -159,6 +166,7 @@ describe("TarjetaDeEmpezar", () => {
   it("un fallo al CONSULTAR las transiciones se dice (R6), en vez de «Consultando…» para siempre", () => {
     render(
       <TarjetaDeEmpezar
+        nombreDelGestor="Jira"
         clave="IXCODE-12"
         errorTransiciones="Jira no contesta"
         enviando={false}
@@ -175,6 +183,7 @@ describe("TarjetaDeEmpezar", () => {
     const alConfirmar = vi.fn();
     const { unmount } = render(
       <TarjetaDeEmpezar
+        nombreDelGestor="Jira"
         clave="IXCODE-12"
         transiciones={{ lista: TRANSICIONES, propuesta: "11" }}
         enviando={false}
@@ -194,6 +203,7 @@ describe("TarjetaDeCerrar", () => {
   it("el comentario propuesto sale EDITABLE en el campo", () => {
     render(
       <TarjetaDeCerrar
+        nombreDelGestor="Jira"
         clave="IXCODE-12"
         comentario="IXCODE-12: comentado."
         enviando={false}
@@ -209,7 +219,7 @@ describe("TarjetaDeCerrar", () => {
   });
 
   it("sin transiciones no hay «Comentar y pasar a…»: solo «Solo comentar»", () => {
-    render(<TarjetaDeCerrar clave="IXCODE-12" comentario="x" enviando={false} alConfirmar={() => {}} alCancelar={() => {}} />);
+    render(<TarjetaDeCerrar nombreDelGestor="Jira" clave="IXCODE-12" comentario="x" enviando={false} alConfirmar={() => {}} alCancelar={() => {}} />);
     expect(screen.queryByRole("combobox", { name: "Transición" })).toBeNull();
     expect(screen.queryByRole("button", { name: /comentar y pasar/i })).toBeNull();
     expect(screen.getByRole("button", { name: "Solo comentar" })).toBeTruthy();
@@ -218,6 +228,7 @@ describe("TarjetaDeCerrar", () => {
   it("con transiciones, el botón dice a DÓNDE pasa, y sigue la elegida", () => {
     render(
       <TarjetaDeCerrar
+        nombreDelGestor="Jira"
         clave="IXCODE-12"
         comentario="x"
         transiciones={{ lista: TRANSICIONES, propuesta: "31" }}
@@ -235,6 +246,7 @@ describe("TarjetaDeCerrar", () => {
     const alConfirmar = vi.fn();
     render(
       <TarjetaDeCerrar
+        nombreDelGestor="Jira"
         clave="IXCODE-12"
         comentario="propuesto"
         transiciones={{ lista: TRANSICIONES, propuesta: "31" }}
@@ -255,6 +267,7 @@ describe("TarjetaDeCerrar", () => {
   it("un comentario vacío no se puede mandar por ninguna de las dos vías", () => {
     render(
       <TarjetaDeCerrar
+        nombreDelGestor="Jira"
         clave="IXCODE-12"
         comentario="algo"
         transiciones={{ lista: TRANSICIONES, propuesta: "31" }}
@@ -271,6 +284,7 @@ describe("TarjetaDeCerrar", () => {
   it("un error de «cerrar» deja el diálogo abierto CON el motivo y el texto editado intacto", () => {
     const { rerender } = render(
       <TarjetaDeCerrar
+        nombreDelGestor="Jira"
         clave="IXCODE-12"
         comentario="propuesto"
         enviando={false}
@@ -281,6 +295,7 @@ describe("TarjetaDeCerrar", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Comentario" }), { target: { value: "lo que escribí" } });
     rerender(
       <TarjetaDeCerrar
+        nombreDelGestor="Jira"
         clave="IXCODE-12"
         comentario="propuesto"
         enviando={false}
@@ -297,6 +312,7 @@ describe("TarjetaDeCerrar", () => {
   it("mientras la acción está en vuelo los botones que ESCRIBEN se deshabilitan", () => {
     render(
       <TarjetaDeCerrar
+        nombreDelGestor="Jira"
         clave="IXCODE-12"
         comentario="algo"
         transiciones={{ lista: TRANSICIONES, propuesta: "31" }}
@@ -314,7 +330,7 @@ describe("TarjetaDeCerrar", () => {
   it("Escape rechaza sin mandar nada", () => {
     const alConfirmar = vi.fn();
     const alCancelar = vi.fn();
-    render(<TarjetaDeCerrar clave="IXCODE-12" comentario="x" enviando={false} alConfirmar={alConfirmar} alCancelar={alCancelar} />);
+    render(<TarjetaDeCerrar nombreDelGestor="Jira" clave="IXCODE-12" comentario="x" enviando={false} alConfirmar={alConfirmar} alCancelar={alCancelar} />);
     fireEvent.keyDown(document, { key: "Escape" });
     expect(alCancelar).toHaveBeenCalledTimes(1);
     expect(alConfirmar).not.toHaveBeenCalled();
@@ -322,7 +338,7 @@ describe("TarjetaDeCerrar", () => {
 
   it("mientras enviando, Escape, el velo Y «Cancelar» SIGUEN cerrando", () => {
     const alCancelar = vi.fn();
-    render(<TarjetaDeCerrar clave="IXCODE-12" comentario="x" enviando alConfirmar={() => {}} alCancelar={alCancelar} />);
+    render(<TarjetaDeCerrar nombreDelGestor="Jira" clave="IXCODE-12" comentario="x" enviando alConfirmar={() => {}} alCancelar={alCancelar} />);
     const velo = tarjeta().firstElementChild as HTMLElement;
     fireEvent.keyDown(document, { key: "Escape" });
     expect(alCancelar).toHaveBeenCalledTimes(1);
@@ -335,6 +351,7 @@ describe("TarjetaDeCerrar", () => {
   it("un fallo al consultar las transiciones de cierre se dice, y «Solo comentar» sigue disponible", () => {
     render(
       <TarjetaDeCerrar
+        nombreDelGestor="Jira"
         clave="IXCODE-12"
         comentario="x"
         errorTransiciones="Jira no contesta"
@@ -362,3 +379,36 @@ describe("AvisoDelGestor", () => {
     expect(alCerrar).toHaveBeenCalled();
   });
 });
+
+/**
+ * IXCODE-15: lo que DICEN las tarjetas sale del gestor vinculado (el nombre del catálogo), y sin
+ * él la frase es neutra —nunca «Jira» por omisión—. Una clave de Notion (UUID) se enseña corta.
+ */
+describe("tarjetas con otro gestor (IXCODE-15)", () => {
+  const UUID = "0687543b-1c2d-4e5f-8a9b-0c1d2e3f4a5b";
+
+  it("con Notion: «Empezar sin tocar Notion», «Cerrar … en Notion» y el id corto", () => {
+    const alConfirmar = vi.fn();
+    render(<TarjetaDeEmpezar nombreDelGestor="Notion" clave={UUID} enviando={false} alConfirmar={alConfirmar} alCancelar={() => {}} />);
+    expect(screen.getByRole("dialog", { name: "¿Empezar con 0687543b?" })).toBeTruthy();
+    expect(screen.getByText("Consultando las transiciones de 0687543b…")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Empezar sin tocar Notion" }));
+    expect(alConfirmar).toHaveBeenCalledWith(undefined);
+    cleanup();
+    render(<TarjetaDeCerrar nombreDelGestor="Notion" clave={UUID} comentario="x" enviando={false} alConfirmar={() => {}} alCancelar={() => {}} />);
+    expect(screen.getByRole("dialog", { name: "Cerrar 0687543b en Notion" })).toBeTruthy();
+  });
+
+  it("sin nombre del gestor, la frase es NEUTRA", () => {
+    render(<TarjetaDeEmpezar clave="IXCODE-12" enviando={false} alConfirmar={() => {}} alCancelar={() => {}} />);
+    expect(screen.getByRole("button", { name: "Empezar sin tocar el gestor" })).toBeTruthy();
+    cleanup();
+    render(<TarjetaDeCerrar clave="IXCODE-12" comentario="x" enviando={false} alConfirmar={() => {}} alCancelar={() => {}} />);
+    expect(screen.getByRole("dialog", { name: "Cerrar IXCODE-12 en el gestor" })).toBeTruthy();
+    cleanup();
+    render(<BotonDeCerrarEnJira ticket={UUID} ocupado={false} conectado alPedir={() => {}} />);
+    expect(screen.getByRole("button", { name: "Cerrar la tarea" })).toBeTruthy();
+    expect(screen.getByText("0687543b")).toBeTruthy();
+  });
+});
+

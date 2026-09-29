@@ -12,7 +12,7 @@ afterEach(cleanup);
 type Props = ComponentProps<typeof PanelDelProyecto>;
 
 const VINCULADO: NonNullable<EstadoDelCliente["gestor"]> = {
-  estado: { conectores: ["jira"], vinculo: { conector: "jira", sitio: "s1", proyecto: "IXCODE", nombreDelSitio: "xone" } },
+  estado: { conectores: ["jira"], vinculo: { conector: "jira", sitio: "s1", proyecto: "IXCODE", nombreDelSitio: "xone" }, admiteMias: true },
 };
 
 const CONECTORES: NonNullable<EstadoDelCliente["conectores"]> = {
@@ -150,7 +150,7 @@ describe("PanelDelProyecto", () => {
 
   it("Tareas con vínculo: pide las pendientes al abrir, las pinta con la hora de la foto, busca y reintenta", () => {
     const cuando = new Date(2026, 8, 28, 10, 42).getTime();
-    const { alGestor, rerender } = montar({ gestor: VINCULADO });
+    const { alGestor, rerender } = montar({ gestor: VINCULADO, conectores: CONECTORES });
     pestana("Tareas");
     expect(alGestor).toHaveBeenCalledWith({ accion: "pendientes" });
     expect(screen.getByText("Consultando las tareas…")).toBeTruthy();
@@ -372,7 +372,7 @@ describe("PanelDelProyecto", () => {
         { clave: "IXCODE-13", titulo: "Login", estado: "Por hacer", categoria: "por-hacer" as const },
       ],
     };
-    const { alGestor, rerender } = montar({ gestor: { ...VINCULADO, pendientes } });
+    const { alGestor, rerender } = montar({ gestor: { ...VINCULADO, pendientes }, conectores: CONECTORES });
     pestana("Tareas");
     fireEvent.click(screen.getByRole("button", { name: "Nueva sesión con IXCODE-12" }));
     expect(alGestor).toHaveBeenCalledWith({ accion: "transiciones", clave: "IXCODE-12", para: "empezar" });
@@ -474,7 +474,7 @@ describe("PanelDelProyecto", () => {
       propuesta: "11",
       lista: [{ id: "11", nombre: "Empezar a hacer", destino: "EN CURSO", categoria: "en-curso" as const }],
     };
-    const { rerender } = montar({ gestor: { ...VINCULADO, pendientes, transiciones } });
+    const { rerender } = montar({ gestor: { ...VINCULADO, pendientes, transiciones }, conectores: CONECTORES });
     pestana("Tareas");
     fireEvent.click(screen.getByRole("button", { name: "Nueva sesión con IXCODE-12" }));
     const dialogo = screen.getByRole("dialog");
@@ -762,5 +762,231 @@ describe("PanelDelProyecto", () => {
     });
     pestana("Conectores");
     expect(screen.getByRole("alert").textContent).toBe("«X» no está entre los proyectos de ese sitio");
+  });
+  // ── IXCODE-15: Notion como gestor, y Conectores en dos secciones ──────────────────────────
+
+  const CON_NOTION: NonNullable<EstadoDelCliente["conectores"]> = {
+    ...CONECTORES,
+    catalogo: [...CONECTORES.catalogo, { id: "notion", nombre: "Notion", descripcion: "", autenticacion: "oauth" }],
+    conectores: [...CONECTORES.conectores, { id: "notion", estado: "autorizado", prueba: { cuando: 1, ok: true, tools: [] } }],
+  };
+  const COLECCION = "collection://ea517d0b-1234-4abc-8def-0123456789ab";
+  const VINCULADO_A_NOTION: NonNullable<EstadoDelCliente["gestor"]> = {
+    estado: {
+      conectores: ["notion"],
+      vinculo: { conector: "notion", sitio: "notion", proyecto: COLECCION, nombreDelProyecto: "Tasks" },
+      admiteMias: true,
+    },
+  };
+  const UUID = "0687543b-1c2d-4e5f-8a9b-0c1d2e3f4a5b";
+  const ESQUEMA = {
+    proyecto: COLECCION,
+    nombre: "Tasks",
+    estado: {
+      propiedad: "Status",
+      opciones: [
+        { nombre: "Not started", categoria: "por-hacer" as const },
+        { nombre: "In progress", categoria: "en-curso" as const },
+        { nombre: "Done", categoria: "terminada" as const },
+      ],
+    },
+    titulo: "Name",
+    asignado: "Assigned",
+  };
+  const seccion = (nombre: string) => screen.getByRole("region", { name: nombre });
+  /** La fila de Notion en «Gestor de tareas»: Jira, conectado y sin vínculo, tiene su propio «Vincular». */
+  const notion = () => within(within(seccion("Gestor de tareas")).getByText("Notion", { selector: "span" }).closest("li")!);
+
+  it("Conectores en DOS secciones: «Gestor de tareas» solo con Jira y Notion; «Conectores para el chat» con el resto, «Conectar» y casilla", () => {
+    const { alGestor, props } = montar({ gestor: { estado: { conectores: ["deepwiki"] } }, conectores: CON_NOTION });
+    pestana("Conectores");
+    const gestores = seccion("Gestor de tareas");
+    const chat = seccion("Conectores para el chat");
+    expect(within(gestores).getAllByRole("listitem")).toHaveLength(2);
+    expect(within(gestores).getByText("Jira", { selector: "span" })).toBeTruthy();
+    expect(within(gestores).getByText("Notion", { selector: "span" })).toBeTruthy();
+    expect(within(gestores).queryByText("DeepWiki")).toBeNull();
+    expect(within(gestores).queryByRole("checkbox")).toBeNull();
+    expect(within(chat).getByText("Los que usará el agente en el chat de este proyecto.")).toBeTruthy();
+    expect(within(chat).queryByText("Jira", { selector: "span" })).toBeNull();
+    expect(within(chat).queryByText("Notion", { selector: "span" })).toBeNull();
+    const casilla = within(chat).getByRole("checkbox", { name: "Usar en este proyecto" }) as HTMLInputElement;
+    expect(casilla.checked).toBe(true);
+    fireEvent.click(casilla);
+    expect(alGestor).toHaveBeenCalledWith({ accion: "usarConector", conector: "deepwiki", usar: false });
+    fireEvent.click(within(chat).getByRole("button", { name: "Conectar GitHub" }));
+    expect(props.alAutorizarConector).toHaveBeenCalledWith("github");
+    // Notion, sin vínculo: nada se pide al montar (buscar necesita texto).
+    expect(alGestor).not.toHaveBeenCalledWith(expect.objectContaining({ conector: "notion" }));
+  });
+
+  it("Notion: buscar → lista de bases → describir → lo entendido del esquema → «Vincular» con el `collection://` (no el id de la base)", () => {
+    const { alGestor, rerender } = montar({ gestor: { estado: { conectores: [] } }, conectores: CON_NOTION });
+    pestana("Conectores");
+    const campo = screen.getByRole("searchbox", { name: "Buscar una base de Notion" });
+    const buscar = within(campo.closest("form")!).getByRole("button", { name: "Buscar" }) as HTMLButtonElement;
+    expect(buscar.disabled).toBe(true);
+    fireEvent.change(campo, { target: { value: " task " } });
+    fireEvent.click(buscar);
+    expect(alGestor).toHaveBeenCalledWith({ accion: "buscarProyectos", conector: "notion", texto: "task" });
+    expect(screen.getByText("Buscando…")).toBeTruthy();
+    // Una respuesta de OTRA búsqueda (llegó tarde) no se pinta.
+    const base = { estado: { conectores: [] } };
+    rerender({ gestor: { ...base, busqueda: { conector: "notion", texto: "otra", lista: [{ proyecto: "x", nombre: "Otra" }] } } });
+    expect(screen.queryByRole("button", { name: /Otra/ })).toBeNull();
+    const busqueda = {
+      conector: "notion",
+      texto: "task",
+      lista: [
+        { proyecto: "06aeb13b-0000-4000-8000-000000000001", nombre: "Tasks", ruta: "Hypergraph / Projects & Tasks" },
+        { proyecto: "06aeb13b-0000-4000-8000-000000000002", nombre: "My tasks" },
+      ],
+    };
+    rerender({ gestor: { ...base, busqueda } });
+    const bases = screen.getByRole("list", { name: "Bases de Notion" });
+    expect(within(bases).getAllByRole("button")).toHaveLength(2);
+    expect(within(bases).getByText("Hypergraph / Projects & Tasks")).toBeTruthy();
+    fireEvent.click(within(bases).getByRole("button", { name: /^Tasks/ }));
+    expect(alGestor).toHaveBeenCalledWith({ accion: "describir", conector: "notion", proyecto: "06aeb13b-0000-4000-8000-000000000001" });
+    expect(within(bases).getByRole("button", { name: /^Tasks/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("Leyendo el esquema de la base…")).toBeTruthy();
+    expect(notion().queryByRole("button", { name: "Vincular" })).toBeNull();
+    rerender({
+      gestor: { ...base, busqueda, descripcion: { conector: "notion", pedido: "06aeb13b-0000-4000-8000-000000000001", esquema: ESQUEMA } },
+    });
+    expect(screen.getByText("Estado: Status (Not started · In progress · Done) · Título: Name · Asignado: Assigned")).toBeTruthy();
+    alGestor.mockClear();
+    fireEvent.click(notion().getByRole("button", { name: "Vincular" }));
+    expect(alGestor).toHaveBeenCalledWith({ accion: "vincular", conector: "notion", sitio: "notion", proyecto: COLECCION });
+    expect(alGestor).toHaveBeenCalledTimes(1);
+  });
+
+  it("Notion: una base que no vale dice su MOTIVO y no ofrece «Vincular»; la descripción de OTRA base no se pinta", () => {
+    const { rerender } = montar({ gestor: { estado: { conectores: [] } }, conectores: CON_NOTION });
+    pestana("Conectores");
+    fireEvent.change(screen.getByRole("searchbox", { name: "Buscar una base de Notion" }), { target: { value: "my" } });
+    fireEvent.submit(screen.getByRole("searchbox", { name: "Buscar una base de Notion" }).closest("form")!);
+    const busqueda = { conector: "notion", texto: "my", lista: [{ proyecto: "b1", nombre: "My Tasks" }] };
+    rerender({ gestor: { estado: { conectores: [] }, busqueda, descripcion: { conector: "notion", pedido: "otra", esquema: ESQUEMA } } });
+    fireEvent.click(screen.getByRole("button", { name: /My Tasks/ }));
+    expect(screen.queryByText(/Estado: Status/)).toBeNull();
+    rerender({
+      gestor: {
+        estado: { conectores: [] },
+        busqueda,
+        descripcion: { conector: "notion", pedido: "b1", motivo: "esta base no tiene un data source propio (es una vista)" },
+      },
+    });
+    expect(screen.getByText("Esta base no sirve como gestor de tareas: esta base no tiene un data source propio (es una vista)")).toBeTruthy();
+    expect(notion().queryByRole("button", { name: "Vincular" })).toBeNull();
+    // Sin persona: lo dice antes de vincular (no habrá «Asignadas a mí»).
+    const { asignado: _sinAsignado, ...sinPersona } = ESQUEMA;
+    rerender({ gestor: { estado: { conectores: [] }, busqueda, descripcion: { conector: "notion", pedido: "b1", esquema: { ...sinPersona, fuentes: 2 } } } });
+    expect(screen.getByText("Estado: Status (Not started · In progress · Done) · Título: Name")).toBeTruthy();
+    expect(screen.getByText(/no se podrá filtrar por «Asignadas a mí»/)).toBeTruthy();
+    expect(screen.getByText("La base tiene 2 orígenes de datos; se usa el primero.")).toBeTruthy();
+    expect(notion().getByRole("button", { name: "Vincular" })).toBeTruthy();
+  });
+
+  it("con Jira vinculado, Notion AVISA de que lo sustituirá; y con Notion vinculado, lo mismo desde Jira", () => {
+    const { alGestor, rerender } = montar({ gestor: VINCULADO, conectores: CON_NOTION });
+    pestana("Conectores");
+    const gestores = seccion("Gestor de tareas");
+    // El vinculado, arriba.
+    expect(within(gestores).getAllByRole("listitem")[0]!.textContent).toMatch(/^Jira/);
+    expect(within(gestores).getByText("Vinculado a IXCODE en xone.")).toBeTruthy();
+    // El formulario del otro no se monta de entrada.
+    expect(screen.queryByRole("searchbox", { name: "Buscar una base de Notion" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Vincular Notion en su lugar…" }));
+    fireEvent.change(screen.getByRole("searchbox", { name: "Buscar una base de Notion" }), { target: { value: "task" } });
+    fireEvent.submit(screen.getByRole("searchbox", { name: "Buscar una base de Notion" }).closest("form")!);
+    const busqueda = { conector: "notion", texto: "task", lista: [{ proyecto: "b1", nombre: "Tasks" }] };
+    rerender({ gestor: { ...VINCULADO, busqueda } });
+    fireEvent.click(screen.getByRole("button", { name: /^Tasks/ }));
+    rerender({ gestor: { ...VINCULADO, busqueda, descripcion: { conector: "notion", pedido: "b1", esquema: ESQUEMA } } });
+    expect(screen.getByText("Vincular Notion sustituirá a Jira (IXCODE) como gestor de este proyecto.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Vincular" }));
+    expect(alGestor).toHaveBeenCalledWith({ accion: "vincular", conector: "notion", sitio: "notion", proyecto: COLECCION });
+
+    // Ya con Notion vinculado: arriba, con el nombre de la base; Jira ofrece sustituirlo.
+    alGestor.mockClear();
+    rerender({ gestor: VINCULADO_A_NOTION });
+    expect(within(seccion("Gestor de tareas")).getAllByRole("listitem")[0]!.textContent).toMatch(/^Notion/);
+    expect(screen.getByText("Vinculado a la base «Tasks» de Notion.")).toBeTruthy();
+    expect(alGestor).not.toHaveBeenCalledWith({ accion: "sitios", conector: "jira" });
+    fireEvent.click(screen.getByRole("button", { name: "Vincular Jira en su lugar…" }));
+    expect(alGestor).toHaveBeenCalledWith({ accion: "sitios", conector: "jira" });
+    expect(screen.getByText("Vincular Jira sustituirá a Notion (Tasks) como gestor de este proyecto.")).toBeTruthy();
+  });
+
+  it("Tareas con Notion: los rótulos dicen «Notion», la clave se ENSEÑA corta y viaja ENTERA", () => {
+    const pendientes = {
+      cuando: 1,
+      lista: [{ clave: UUID, etiqueta: "0687543b", titulo: "Pantalla de login", estado: "Not started", categoria: "por-hacer" as const, url: "https://app.notion.com/0687" }],
+    };
+    const { alGestor } = montar({ gestor: { ...VINCULADO_A_NOTION, pendientes }, conectores: CON_NOTION });
+    pestana("Tareas");
+    // Ni la URL `collection://` en el título: el nombre de la base.
+    expect(screen.getByRole("heading", { name: "Pendientes de Tasks" })).toBeTruthy();
+    expect(screen.queryByText(new RegExp(COLECCION))).toBeNull();
+    expect(screen.getByText("0687543b")).toBeTruthy();
+    expect(screen.queryByText(UUID)).toBeNull();
+    expect(screen.getByRole("link", { name: "Abrir 0687543b en Notion" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Nueva sesión con 0687543b" }));
+    expect(alGestor).toHaveBeenCalledWith({ accion: "transiciones", clave: UUID, para: "empezar" });
+    const dialogo = screen.getByRole("dialog", { name: "¿Empezar con 0687543b?" });
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Empezar sin tocar Notion" }));
+    expect(alGestor).toHaveBeenCalledWith({ accion: "empezar", clave: UUID }, { destino: undefined });
+  });
+
+  it("sin el nombre de la base (el servidor se reinició) no pinta la URL `collection://`", () => {
+    const sinNombre = { estado: { ...VINCULADO_A_NOTION.estado!, vinculo: { conector: "notion", sitio: "notion", proyecto: COLECCION } } };
+    montar({ gestor: sinNombre, conectores: CON_NOTION });
+    pestana("Tareas");
+    expect(screen.getByRole("heading", { name: "Pendientes de la base vinculada" })).toBeTruthy();
+    pestana("Conectores");
+    expect(screen.getByText("Vinculado a una base de Notion.")).toBeTruthy();
+  });
+
+  it("«Asignadas a mí» NO se ofrece si el servidor dice que el gestor no lo admite (ni ausente)", () => {
+    const pendientes = { cuando: 1, lista: [{ clave: UUID, titulo: "A", estado: "Not started", categoria: "por-hacer" as const }] };
+    const { rerender } = montar({ gestor: { estado: { ...VINCULADO_A_NOTION.estado!, admiteMias: false }, pendientes }, conectores: CON_NOTION });
+    pestana("Tareas");
+    expect(screen.queryByRole("button", { name: "Asignadas a mí" })).toBeNull();
+    const { admiteMias: _fuera, ...sinDato } = VINCULADO_A_NOTION.estado!;
+    rerender({ gestor: { estado: sinDato, pendientes } });
+    expect(screen.queryByRole("button", { name: "Asignadas a mí" })).toBeNull();
+    rerender({ gestor: { ...VINCULADO_A_NOTION, pendientes } });
+    expect(screen.getByRole("button", { name: "Asignadas a mí" })).toBeTruthy();
+  });
+
+  it("cambiar de vínculo olvida la consulta del de antes: un «mías» de Jira no viaja a una base sin persona", () => {
+    const { alGestor, rerender } = montar({ gestor: { ...VINCULADO, pendientes: { cuando: 1, lista: IXCODE } }, conectores: CON_NOTION });
+    pestana("Tareas");
+    fireEvent.click(screen.getByRole("button", { name: "Asignadas a mí" }));
+    expect(alGestor).toHaveBeenLastCalledWith({ accion: "pendientes", mias: true });
+    alGestor.mockClear();
+    rerender({ gestor: { estado: { ...VINCULADO_A_NOTION.estado!, admiteMias: false } } });
+    expect(alGestor).toHaveBeenCalledWith({ accion: "pendientes" });
+    expect(alGestor).not.toHaveBeenCalledWith(expect.objectContaining({ mias: true }));
+  });
+
+  it("«falta autorizar» al buscar en Notion lleva «Conectar Notion», no Jira", () => {
+    const caido = { ...CON_NOTION, conectores: CON_NOTION.conectores.map((c) => (c.id === "notion" ? { ...c, prueba: { cuando: 1, ok: true as const, tools: [] } } : c)) };
+    const { props, rerender } = montar({ gestor: { estado: { conectores: [] } }, conectores: caido });
+    pestana("Conectores");
+    fireEvent.change(screen.getByRole("searchbox", { name: "Buscar una base de Notion" }), { target: { value: "task" } });
+    fireEvent.submit(screen.getByRole("searchbox", { name: "Buscar una base de Notion" }).closest("form")!);
+    rerender({ gestor: { estado: { conectores: [] }, errores: { buscarProyectos: { motivo: "falta autorizar" } } } });
+    expect(screen.getByRole("alert").textContent).toBe("falta autorizar");
+    fireEvent.click(screen.getByRole("button", { name: "Conectar Notion" }));
+    expect(props.alAutorizarConector).toHaveBeenCalledWith("notion");
+    expect(screen.queryByRole("button", { name: "Conectar Jira" })).toBeNull();
+  });
+
+  it("Resumen: una sesión ligada a una tarea de Notion enseña el id CORTO", () => {
+    const { props } = montar({ sesiones: [{ id: "s1", titulo: "Login", ticket: UUID }] });
+    fireEvent.click(screen.getByRole("button", { name: "0687543b · Login" }));
+    expect(props.alAbrirSesion).toHaveBeenCalledWith("s1");
   });
 });

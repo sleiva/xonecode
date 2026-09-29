@@ -1957,6 +1957,14 @@ describe("App: la pregunta del AGENTE, en su tarjeta DENTRO del hilo", () => {
   });
 });
 
+/** IXCODE-15: el catálogo de conectores con Jira AÑADIDO y probado: de aquí sale el nombre «Jira». */
+const CONECTORES_CON_JIRA = {
+  clase: "conectores",
+  catalogo: [{ id: "jira", nombre: "Jira", descripcion: "", autenticacion: "oauth" }],
+  conectores: [{ id: "jira", estado: "autorizado", prueba: { cuando: 1, ok: true, tools: [] } }],
+  desconocidos: [],
+};
+
 /**
  * IXCODE-11: pulsar un proyecto abre su PANEL (Resumen, Tareas, Conectores) en vez de una sesión
  * vacía, y las dos puertas al chat —«Nueva sesión» y «Nueva sesión con esta tarea»— salen de él.
@@ -1989,6 +1997,8 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
     const vista = render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} instalarSkill={instalarSkillDeMentira} />);
     act(() => store.marcarConectado());
     act(() => store.aplicar(altaDe()));
+    // IXCODE-15: el nombre del gestor («Jira») sale del catálogo de conectores, no de un literal.
+    act(() => store.aplicar(CONECTORES_CON_JIRA as never));
     return { store, enviar, vista };
   }
   const clases = (enviar: Mock<(mensaje: unknown) => Promise<unknown>>) => enviar.mock.calls.map(([m]) => (m as { clase: string }).clase);
@@ -2294,8 +2304,44 @@ describe("App: «Cerrar en Jira» (Task 11, IXCODE-11)", () => {
     render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} instalarSkill={instalarSkillDeMentira} />);
     act(() => store.marcarConectado());
     act(() => store.aplicar(altaDe()));
+    // IXCODE-15: lo que dice el botón sale del gestor VINCULADO y del catálogo.
+    act(() => store.aplicar(CONECTORES_CON_JIRA as never));
+    act(() => store.aplicar({ clase: "gestor", estado: { conectores: ["jira"], vinculo: { conector: "jira", sitio: "s", proyecto: "IXCODE" }, admiteMias: true } }));
     return { store, enviar };
   }
+
+  /**
+   * IXCODE-15: el botón nombra al gestor VINCULADO, del catálogo; sin saberlo todavía, una frase
+   * neutra —nunca «Jira» por omisión—, y el `estado` se pide aquí mismo (sin pasar por el panel).
+   * Un ticket de Notion (UUID) se enseña por su id corto, y a `transiciones` va ENTERO.
+   */
+  it("con Notion vinculado dice «Cerrar en Notion»; sin estado, «Cerrar la tarea» y lo pide", () => {
+    const store = crearStoreDelCliente();
+    const enviar: Mock<(mensaje: unknown) => Promise<unknown>> = vi.fn(() => Promise.resolve(undefined as unknown));
+    render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} instalarSkill={instalarSkillDeMentira} />);
+    act(() => store.marcarConectado());
+    const uuid = "0687543b-1c2d-4e5f-8a9b-0c1d2e3f4a5b";
+    act(() =>
+      store.aplicar(
+        altaDe({ proyectos: [{ id: "p1", nombre: "AppDemo", local: true, sesiones: [{ id: "s1", titulo: "Menú lateral", ticket: uuid }] }] })
+      )
+    );
+    expect(screen.getByRole("button", { name: "Cerrar la tarea" })).toBeTruthy();
+    expect(enviar).toHaveBeenCalledWith({ clase: "gestor", accion: "estado" });
+    act(() => store.aplicar({ ...CONECTORES_CON_JIRA, catalogo: [...CONECTORES_CON_JIRA.catalogo, { id: "notion", nombre: "Notion", descripcion: "", autenticacion: "oauth" }] } as never));
+    act(() =>
+      store.aplicar({
+        clase: "gestor",
+        estado: { conectores: ["notion"], vinculo: { conector: "notion", sitio: "notion", proyecto: "collection://ea517d0b-0000-4000-8000-000000000000" }, admiteMias: true },
+      })
+    );
+    expect(screen.getByText("0687543b")).toBeTruthy();
+    expect(screen.queryByText(uuid)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar en Notion" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "gestor", accion: "transiciones", clave: uuid, para: "cerrar" });
+    act(() => store.aplicar({ clase: "gestor", cierre: { clave: uuid, comentario: "hecho" } }));
+    expect(screen.getByRole("dialog", { name: "Cerrar 0687543b en Notion" })).toBeTruthy();
+  });
 
   it("se ve con un ticket en la sesión abierta, y se apaga con un turno en vuelo", () => {
     const { store } = conProyectoAbierto();
@@ -2503,6 +2549,11 @@ describe("App: «Cerrar en Jira» (Task 11, IXCODE-11)", () => {
     act(() => store.marcarDesconectado());
     act(() => store.marcarConectado());
     act(() => store.aplicar(altaDe()));
+    // El store tiró el `gestor` (y los conectores) al caerse el cable: hasta que vuelven, el botón no
+    // nombra a nadie (IXCODE-15), pero ya no está bloqueado.
+    expect(screen.getByRole("button", { name: "Cerrar la tarea" })).toBeTruthy();
+    act(() => store.aplicar(CONECTORES_CON_JIRA as never));
+    act(() => store.aplicar({ clase: "gestor", estado: { conectores: ["jira"], vinculo: { conector: "jira", sitio: "s", proyecto: "IXCODE" }, admiteMias: true } }));
     expect(screen.getByRole("button", { name: "Cerrar en Jira" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Preparando…" })).toBeNull();
   });
