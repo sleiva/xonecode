@@ -2215,6 +2215,7 @@ export function App({
               empezarEnVuelo={false}
               alGestor={alGestor}
               alAutorizarConector={(id) => void enviar({ clase: "conector", accion: "autorizar", id })}
+              alProbarConector={(id) => void enviar({ clase: "conector", accion: "probar", id })}
               alAbrirAjustesDeConectores={() => abrirAjustes("conectores")}
             />
           </>
@@ -2523,6 +2524,7 @@ export function App({
               // (navegador para OAuth, `leerSecreto` para una clave) y el resultado llega
               // por un `conectores` nuevo.
               alAutorizarConector={(id) => void enviar({ clase: "conector", accion: "autorizar", id })}
+              alProbarConector={(id) => void enviar({ clase: "conector", accion: "probar", id })}
               alAbrirAjustesDeConectores={() => abrirAjustes("conectores")}
             />
           </>

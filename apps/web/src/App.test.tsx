@@ -2194,6 +2194,17 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
     expect(enviar).toHaveBeenCalledWith({ clase: "gestor", accion: "estado" });
   });
 
+  it("tras un reinicio (credencial sí, prueba no), la pestaña Conectores manda PROBAR por el cable, no autorizar", () => {
+    const { store, enviar } = conProyectoAbierto();
+    act(() => store.aplicar({ ...CONECTORES_CON_JIRA, conectores: [{ id: "jira", estado: "autorizado" }] } as never));
+    act(() => store.aplicar({ clase: "gestor", estado: { conectores: [] } } as never));
+    fireEvent.click(enBarra("AppDemo"));
+    enviar.mockClear();
+    fireEvent.click(screen.getByRole("tab", { name: "Conectores" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "conector", accion: "probar", id: "jira" });
+    expect(enviar).not.toHaveBeenCalledWith({ clase: "conector", accion: "autorizar", id: "jira" });
+  });
+
   it("pulsar OTRO proyecto con copia local lo abre como siempre y enseña su panel", () => {
     const { enviar } = conProyectoAbierto();
     fireEvent.click(enBarra("Tienda"));

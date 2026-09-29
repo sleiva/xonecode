@@ -50,6 +50,7 @@ function montar(extra: Partial<Props> = {}) {
     empezarEnVuelo: false,
     alGestor,
     alAutorizarConector: vi.fn(),
+    alProbarConector: vi.fn(),
     alAbrirAjustesDeConectores: vi.fn(),
     ...extra,
   };
@@ -667,25 +668,59 @@ describe("PanelDelProyecto", () => {
     expect(alGestor).toHaveBeenCalledWith({ accion: "vincular", conector: "jira", sitio: "s1", proyecto: "IXCODE" });
   });
 
-  it("el vinculado SIN probar (tras un reinicio) sigue enseñando su vínculo y «Desvincular», con su «Conectar»", () => {
-    montar({
+  it("el vinculado SIN probar (tras un reinicio) sigue enseñando su vínculo y «Desvincular», y se PRUEBA solo en vez de pedir «Conectar»", () => {
+    const { props } = montar({
       gestor: VINCULADO,
       conectores: { ...CONECTORES, conectores: [{ id: "jira", estado: "autorizado" }] },
     });
     pestana("Conectores");
     expect(screen.getByText("Vinculado a IXCODE en xone.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Desvincular" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Conectar Jira" })).toBeTruthy();
+    // Tiene credencial: la prueba se perdió con el reinicio, no la autorización.
+    expect(screen.queryByRole("button", { name: "Conectar Jira" })).toBeNull();
+    expect(screen.getByText("Comprobando…")).toBeTruthy();
+    expect(props.alProbarConector).toHaveBeenCalledWith("jira");
   });
 
-  it("un conector sin conectar y sin usar no se ofrece para usar ni pide sitios: solo «Conectar»", () => {
+  it("la prueba se pide UNA vez por conector: repintar no la repite, y lo que no tiene credencial no se prueba", () => {
+    const { props, rerender } = montar({
+      gestor: { estado: { conectores: [] } },
+      conectores: { ...CONECTORES, conectores: [{ id: "jira", estado: "autorizado" }, { id: "github", estado: "falta-autorizar" }] },
+    });
+    pestana("Conectores");
+    rerender({ conectores: { ...CONECTORES, conectores: [{ id: "jira", estado: "autorizado" }, { id: "github", estado: "falta-autorizar" }] } });
+    expect(props.alProbarConector).toHaveBeenCalledTimes(1);
+    expect(props.alProbarConector).toHaveBeenCalledWith("jira");
+  });
+
+  it("sin credencial: solo «Conectar», sin casilla ni sitios", () => {
     const { alGestor } = montar({
       gestor: { estado: { conectores: [] } },
-      conectores: { ...CONECTORES, conectores: [{ id: "jira", estado: "autorizado" }] },
+      conectores: { ...CONECTORES, conectores: [{ id: "jira", estado: "falta-autorizar" }] },
     });
     pestana("Conectores");
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(alGestor).not.toHaveBeenCalledWith({ accion: "sitios", conector: "jira" });
+    expect(screen.getByRole("button", { name: "Conectar Jira" })).toBeTruthy();
+  });
+
+  it("una prueba que falló por otra cosa que la credencial ofrece «Probar de nuevo», no «Conectar»", () => {
+    const { props } = montar({
+      gestor: { estado: { conectores: [] } },
+      conectores: { ...CONECTORES, conectores: [{ id: "jira", estado: "autorizado", prueba: { cuando: 1, ok: false, motivo: "no responde (HTTP 503)" } }] },
+    });
+    pestana("Conectores");
+    expect(screen.queryByRole("button", { name: "Conectar Jira" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Probar Jira de nuevo" }));
+    expect(props.alProbarConector).toHaveBeenCalledWith("jira");
+  });
+
+  it("una prueba que dijo «falta autorizar» sí ofrece «Conectar»", () => {
+    montar({
+      gestor: { estado: { conectores: [] } },
+      conectores: { ...CONECTORES, conectores: [{ id: "jira", estado: "autorizado", prueba: { cuando: 1, ok: false, motivo: "falta autorizar" } }] },
+    });
+    pestana("Conectores");
     expect(screen.getByRole("button", { name: "Conectar Jira" })).toBeTruthy();
   });
 

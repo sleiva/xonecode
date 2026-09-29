@@ -787,7 +787,10 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   se ve con `:hover`/`:focus-within`; pulsar la fila despliega su descripción (acción `ficha`, de
   LECTURA, markdown con `protegerDolares`), y lo plegado se desmonta. **Un conector añadido sin
   conectar se CONECTA desde el panel** con el MISMO `{clase:"conector", accion:"autorizar"}` de
-  Ajustes (añadirlo sigue siendo de Ajustes); un fallo de credencial (`falta autorizar`) lleva
+  Ajustes (añadirlo sigue siendo de Ajustes), y «Conectar» sale SOLO cuando FALTA la credencial
+  (`BotonDeConectar`): la prueba es una foto EN MEMORIA que un reinicio borra, así que un conector
+  con credencial y sin prueba se PRUEBA solo, una vez por montaje (`useProbarLoSinProbar`), y una
+  prueba fallida por otra cosa ofrece «Probar de nuevo»; un fallo de credencial (`falta autorizar`) lleva
   «Conectar» al lado, y lo que falló se repite SOLO, una vez, al llegar una prueba NUEVA y buena
   de ese conector (`useReintentoTrasConectar`). «no está conectado» NO es de credencial: `llamar`
   lo dice cuando el conector no está AÑADIDO, y lleva «Añádelo en Ajustes».

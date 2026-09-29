@@ -111,6 +111,7 @@ export function PanelDelProyecto({
   alVolverAlChat,
   alGestor,
   alAutorizarConector,
+  alProbarConector,
   alAbrirAjustesDeConectores,
 }: {
   nombre: string;
@@ -152,6 +153,13 @@ export function PanelDelProyecto({
    * conector sigue siendo cosa de Ajustes.
    */
   alAutorizarConector: (id: string) => void;
+  /**
+   * PROBAR un conector añadido: el MISMO `{clase:"conector", accion:"probar", id}` de Ajustes. La
+   * prueba es una foto EN MEMORIA del servidor, así que tras un reinicio todo sale «sin probar»
+   * aunque las credenciales sigan en disco; la pestaña Conectores la pide sola (ver
+   * `useProbarLoSinProbar`) en vez de ofrecer «Conectar» —que volvería a autorizar sin falta—.
+   */
+  alProbarConector: (id: string) => void;
   alAbrirAjustesDeConectores: () => void;
 }) {
   const [pestana, setPestana] = useState<PestanaDelProyecto>("resumen");
@@ -337,6 +345,7 @@ export function PanelDelProyecto({
             conectado={conectado}
             alGestor={pedir}
             alAutorizar={alAutorizarConector}
+            alProbar={alProbarConector}
             conectorDelFallo={conectorDelFallo}
             alAbrirAjustes={alAbrirAjustesDeConectores}
           />
@@ -995,6 +1004,7 @@ function ConectoresDelProyecto({
   conectado,
   alGestor,
   alAutorizar,
+  alProbar,
   conectorDelFallo,
   alAbrirAjustes,
 }: {
@@ -1003,9 +1013,11 @@ function ConectoresDelProyecto({
   conectado: boolean;
   alGestor: (peticion: PeticionAlGestor) => void;
   alAutorizar: (id: string) => void;
+  alProbar: (id: string) => void;
   conectorDelFallo: (accion: AccionConConector) => string | undefined;
   alAbrirAjustes: () => void;
 }) {
+  useProbarLoSinProbar(conectores?.conectores, conectado, alProbar);
   const errores = gestor?.errores ?? {};
   const estado = gestor?.estado;
   const avisos = (
@@ -1081,6 +1093,7 @@ function ConectoresDelProyecto({
                 conectado={conectado}
                 alGestor={alGestor}
                 alAutorizar={alAutorizar}
+                alProbar={alProbar}
                 alAbrirAjustes={alAbrirAjustes}
               />
             ))}
@@ -1103,7 +1116,7 @@ function ConectoresDelProyecto({
                     <IconoDeConector id={c.id} nombre={nombreDe(c.id)} />
                     <span className={estilos.tituloDeConector}>{nombreDe(c.id)}</span>
                     <span className={estilos.alFinal}>
-                      <BotonDeConectar fila={c} nombre={nombreDe(c.id)} conectado={conectado} alAutorizar={alAutorizar} />
+                      <BotonDeConectar fila={c} nombre={nombreDe(c.id)} conectado={conectado} alAutorizar={alAutorizar} alProbar={alProbar} />
                       {conCasilla ? (
                         <label className={estilos.casilla}>
                           <input
@@ -1141,30 +1154,77 @@ function ConectoresDelProyecto({
   );
 }
 
-/** «Conectar» de un conector añadido sin conectar: el MISMO `autorizar` de Ajustes. Conectado, no se pinta. */
+/**
+ * Lo que se ofrece a un conector añadido que NO está conectado, y el orden en que se decide:
+ * esperando al navegador; «Conectar» (el MISMO `autorizar` de Ajustes) solo si FALTA la credencial
+ * —en el disco, o porque la última prueba lo dijo—; «Comprobando…» si tiene credencial y aún no
+ * hay prueba (tras un reinicio: `useProbarLoSinProbar` ya la pidió); y «Probar de nuevo» si la
+ * prueba falló por otra cosa. Antes salía «Conectar» en cuanto no había prueba buena, y tras
+ * reiniciar el servidor pedía volver a autorizar lo que ya lo estaba. Conectado, no se pinta.
+ */
 function BotonDeConectar({
   fila,
   nombre,
   conectado,
   alAutorizar,
+  alProbar,
 }: {
   fila: FilaDeConectorAnadido;
   nombre: string;
   conectado: boolean;
   alAutorizar: (id: string) => void;
+  alProbar: (id: string) => void;
 }) {
   if (esConectado(fila)) return null;
+  const faltaCredencial = fila.estado === "falta-autorizar" || (fila.prueba !== undefined && !fila.prueba.ok && seArreglaConectando(fila.prueba.motivo));
+  if (fila.autorizando === true || faltaCredencial) {
+    return (
+      <button
+        type="button"
+        className={estilos.accion}
+        onClick={() => alAutorizar(fila.id)}
+        disabled={!conectado || fila.autorizando === true}
+        aria-label={`Conectar ${nombre}`}
+      >
+        {fila.autorizando === true ? "Esperando al navegador…" : "Conectar"}
+      </button>
+    );
+  }
+  if (fila.prueba === undefined) return <span className={estilos.nota}>Comprobando…</span>;
   return (
     <button
       type="button"
       className={estilos.accion}
-      onClick={() => alAutorizar(fila.id)}
-      disabled={!conectado || fila.autorizando === true}
-      aria-label={`Conectar ${nombre}`}
+      onClick={() => alProbar(fila.id)}
+      disabled={!conectado}
+      title={fila.prueba.ok ? undefined : fila.prueba.motivo}
+      aria-label={`Probar ${nombre} de nuevo`}
     >
-      {fila.autorizando === true ? "Esperando al navegador…" : "Conectar"}
+      Probar de nuevo
     </button>
   );
+}
+
+/**
+ * Pide UNA prueba por conector que tiene credencial y no tiene prueba: la foto es de memoria y un
+ * reinicio la borra, así que sin esto la pestaña decía «no conectado» de todo lo que sí lo está, y
+ * el formulario de vincular (que necesita la prueba buena) no salía. Una vez por conector y por
+ * montaje: si la prueba falla, se enseña su fallo con «Probar de nuevo», no se reintenta sola.
+ */
+function useProbarLoSinProbar(
+  filas: readonly FilaDeConectorAnadido[] | undefined,
+  conectado: boolean,
+  alProbar: (id: string) => void,
+): void {
+  const pedidos = useRef(new Set<string>());
+  useEffect(() => {
+    if (!conectado || filas === undefined) return;
+    for (const f of filas) {
+      if (f.prueba !== undefined || f.estado === "falta-autorizar" || f.autorizando === true || pedidos.current.has(f.id)) continue;
+      pedidos.current.add(f.id);
+      alProbar(f.id);
+    }
+  }, [filas, conectado, alProbar]);
 }
 
 /**
@@ -1184,6 +1244,7 @@ function FilaDeGestor({
   conectado,
   alGestor,
   alAutorizar,
+  alProbar,
   alAbrirAjustes,
 }: {
   id: string;
@@ -1198,6 +1259,7 @@ function FilaDeGestor({
   conectado: boolean;
   alGestor: (peticion: PeticionAlGestor) => void;
   alAutorizar: (id: string) => void;
+  alProbar: (id: string) => void;
 }) {
   const [cambiando, setCambiando] = useState(false);
   const vinculado = vinculo?.conector === id;
@@ -1235,7 +1297,7 @@ function FilaDeGestor({
         <IconoDeConector id={id} nombre={nombre} />
         <span className={estilos.tituloDeConector}>{nombre}</span>
         <span className={estilos.alFinal}>
-          {fila === undefined ? null : <BotonDeConectar fila={fila} nombre={nombre} conectado={conectado} alAutorizar={alAutorizar} />}
+          {fila === undefined ? null : <BotonDeConectar fila={fila} nombre={nombre} conectado={conectado} alAutorizar={alAutorizar} alProbar={alProbar} />}
         </span>
       </div>
       {vinculado && vinculo !== undefined ? (
