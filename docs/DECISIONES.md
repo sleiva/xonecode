@@ -7305,3 +7305,33 @@ que confirma la causa. Ni `validate` ni `comparar_capturas` lo ven (la estructur
 se ve en una captura y lo confirma un experimento. Queda en la skill `xone-development`, en el apartado de `elevation`
 del CSS. **Sin medir en iOS ni con otro framework.** Los chips de la barra (`.calcChip`, con `elevation`) muestran el
 mismo texto cortado por abajo: es la sospecha que prueba la pasada siguiente.
+
+## La calculadora que no enseñaba lo que se tecleaba: un `TL` pinta su `title` (29-09-2026)
+
+**El fallo, que ningún check vio.** Con la calculadora ya casi terminada, el usuario dijo que al pulsar una tecla «no se ve».
+Reproducido con toques reales: el motor tenía `874577` y la pantalla enseñaba `0` y `0`. `xone-simulator validate` en verde,
+`comparar_capturas` en 5 % y 3 % y `getText` devolviendo el valor correcto: nada lo cazaba porque todo miraba el valor del
+campo o una captura estática con el display en su estado inicial.
+
+**La causa.** Las tres etiquetas del display eran `type="TL"` (alias de `L`, texto de solo lectura cuyo texto visible es su
+`title`) y el JavaScript escribía `self.lblResultado = valor`, que cambia el VALOR del campo. `ui.refreshValue` no repinta, ni con
+tres nombres ni de uno en uno (probado). Con `setAttribute` sobre `title`, el display pasa a `12345`. El árbol de controles lo
+delata: su campo `text` dice lo pintado y `getText` lo escrito.
+
+**El agente lo había encontrado y se perdió entre sesiones.** En la pasada 4 el conductor midió que la pantalla no se repintaba
+(tres capturas tras tres toques con el mismo hash), lo diagnosticó con el consultor de plataforma («los tres labels declaran
+`title`») y la pasada se cortó por el tope de rondas antes de poder arreglarlo. **Cada `run` es una sesión nueva sin memoria** y ese
+hallazgo no quedó en el plan ni en `TASKS.md`: las pasadas 5, 6 y 7 no lo sabían, y la 3 lo había descartado como «captura
+cacheada». Lo redescubrí yo, y tardé en leer el párrafo donde el agente ya lo decía. **Límite abierto:** un hallazgo grave hecho
+en una sesión que se corta debería quedar escrito en un sitio persistente.
+
+**El arreglo, medido en el aparato.** Pasar las tres etiquetas a `type="T"` con `labelwidth="0"` y `locked="true"`, con el
+color y el tamaño en `text-forecolor` y `textfont-size`. Con toques reales y capturas: `AC` → `0/0`, `7` → `7/7`, `+` → `7+/7`,
+`8` → `7+8/15`, y `AC` devuelve una captura con el mismo hash que el arranque. Las verificó el agente con la diferencia de píxeles
+de la región del display y las repetí yo con cuatro capturas distintas. Sin medir en iOS ni con un arranque en frío del agente.
+
+**Quedan en la skill `xone-development` (label) y en `xone-hotswap` (`getText` lee el valor, no lo pintado).**
+
+**Estado de la calculadora tras nueve pasadas.** Estructura al 6 % y 4 % de la maqueta, las 20 teclas redondeadas completas, el
+texto de `ANS`, `DEG`, `COPY` y `TAPE` entero y el display que se repinta. Faltan la línea de historial, el avatar, el fondo propio
+de la tarjeta del display y el cursor pegado al número (está en una fila propia debajo).

@@ -32,6 +32,8 @@ No cuestan lo mismo, ni de lejos. Por orden de lo que vas a necesitar:
 | **qué hay en la pantalla** | `elements` | SOLO para explorar: decenas de miles de caracteres |
 | **si algo se VE mal** | `shot name=MAP_X` | y solo aquí |
 
+**`getText` devuelve el VALOR del campo, no lo que se ve, y comprobar con él engaña.** En un `L`/`TL` el texto pintado es su `title`: el código puede escribir `15` en el campo, `getText` contestar `15` y la pantalla seguir en `0` (medido con una calculadora). Para saber lo PINTADO, el árbol (`elements`, campo `text` de cada control) o una captura nativa tras un toque real (`adb shell input tap`) comparando los píxeles del sitio que debe cambiar antes y después. Otra trampa de lo mismo: en la misma conexión, leer o capturar justo tras un `click` da el valor anterior en 2 de 12 lecturas y ninguna 100–200 ms después, porque el repintado es asíncrono; un hash idéntico entre dos capturas tras un cambio NO prueba que la captura esté cacheada, puede ser que el display no se repinte.
+
 **Y la captura del CANAL no pinta los diálogos.** Lo dice la referencia del equipo del
 framework: `getScreenshot` dibuja la ventana de la ACTIVIDAD, así que un diálogo abierto —el
 «Error loading initial config» de XOne, por ejemplo— **no sale en ella** aunque la persona lo

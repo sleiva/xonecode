@@ -80,6 +80,8 @@ Texto de solo lectura. Ideal para títulos, etiquetas y textos informativos.
 
 > **No pongas `labelwidth="0"` en un label.** En un `L`/`TL` el texto es el propio `title`, que se pinta dentro del ancho reservado para la etiqueta; con `labelwidth="0"` no hay sitio y el texto desaparece (queda un control vacío). Deja `labelwidth` por defecto y, si necesitas centrar o alinear el texto, usa `label-align="left|center|right"`. El `labelwidth="0"` solo es correcto en campos cuyo contenido va en el *valor* (`T`, `N`…) o que no tienen texto (`IMG`, botón de icono).
 
+> **⚠️ Un `L`/`TL` NO se repinta al escribir su valor: pinta su `title`.** Medido en un emulador Android con una calculadora: el JavaScript hacía `self.lblResultado = "15"; ui.refreshValue("lblResultado")` sobre un `TL` y `getText` devolvía `15`, pero el display seguía enseñando `0`, con toques reales y capturas. Cambia el VALOR del campo, no el `title`, que es lo que pinta el label, y `refreshValue` no lo remedia (probado con un nombre y con varios). Con `setAttribute` sobre `title` sí cambia lo visible. **Para un texto que cambia desde JavaScript no uses `L`/`TL`: usa un `T` de solo lectura** (`type="T"`, `labelwidth="0"`, `locked="true"`), cuyo contenido es el valor; el color y el tamaño de ese valor van en `text-forecolor` y `textfont-size`, porque `forecolor` y `fontsize` son del label, que ahí va oculto. `locked` impide editarlo por la interfaz y no la escritura desde JavaScript; `readonly` solo lo excluye del UPDATE a base de datos. Sin medir en iOS.
+
 #### 5.9.3 Numérico (N, N2..N6, TN, TN2..TN6)
 
 ```xml
