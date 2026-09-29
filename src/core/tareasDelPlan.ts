@@ -85,10 +85,41 @@ export interface TareasDelPlan {
 }
 
 const CABECERA_DE_TAREA = /^#{2,3}\s+(T?\d{1,3})\s*[—–-]\s*(.+?)\s*$/;
+/**
+ * `## Tarea 1: Título`, `#### T1. Título`: el mismo encabezado con otra puntuación. Se exige la palabra
+ * «Tarea» o el prefijo `T`: un `## 2. Orden de ejecución` no es una tarea.
+ */
+const CABECERA_FLEXIBLE = /^#{2,4}\s+(?:(?:tarea|task)\s+(T?\d{1,3})|(T\d{1,3}))\s*[—–:.)-]\s*(.+?)\s*$/i;
+/**
+ * `- **T1 — Título.** Bloqueada por: ninguna.`: la tarea como VIÑETA con el título en negrita, que es
+ * como un analista escribió un plan real (`## Cortes verticales` con siete `- **T1 — …**`) y la
+ * pestaña Planes dijo «no tiene ninguna sección con forma de tarea». Solo del 1 en adelante: un
+ * `- **T0** — Nada que refactorizar` es la declaración de que NO hay tarea.
+ */
+const CABECERA_EN_VINETA = /^\s{0,3}[-*]\s+\*\*(T?[1-9]\d{0,2})\s*[—–:.)-]\s*(.+?)\*\*\s*(.*)$/;
+
+/**
+ * Si una línea abre una tarea, en cualquiera de las formas que se han visto, y lo que sobra en esa
+ * MISMA línea (en la forma de viñeta, `Bloqueada por: …` suele ir ahí). El formato de la skill
+ * (`### 01 — Título`) manda; las otras son tolerancia, no un segundo formato.
+ */
+export function cabeceraDeTarea(l: string): { numero: string; titulo: string; resto?: string } | undefined {
+  const a = CABECERA_DE_TAREA.exec(l);
+  if (a !== null) return { numero: a[1]!, titulo: a[2]!.trim() };
+  const f = CABECERA_FLEXIBLE.exec(l);
+  if (f !== null) return { numero: (f[1] ?? f[2])!, titulo: f[3]!.trim() };
+  const v = CABECERA_EN_VINETA.exec(l);
+  if (v === null) return undefined;
+  const titulo = v[2]!.replace(/[\s.:]+$/, "").trim();
+  const resto = (v[3] ?? "").trim();
+  return { numero: v[1]!, titulo, ...(resto === "" ? {} : { resto }) };
+}
 /** «Ninguna …» o «nada»: la forma de decir que puede empezar ya. */
 export const SIN_DEPENDENCIAS = /^(ninguna|nada)\b/i;
-const ESTADO = /^\*\*Estado:\*\*\s*(.+?)\s*$/i;
-const BLOQUEADA = /^\*\*Bloqueada por:\*\*\s*(.+?)\s*$/i;
+const ESTADO = /^\s*(?:[-*]\s+)?\*\*Estado:\*\*\s*(.+?)\s*$/i;
+const BLOQUEADA = /^\s*(?:[-*]\s+)?\*\*Bloqueada por:\*\*\s*(.+?)\s*$/i;
+/** La misma información en línea: `Bloqueada por: T1.` */
+const BLOQUEADA_EN_LINEA = /^\s*bloqueada por:\s*(.+?)\s*$/i;
 const CASILLA = /^\s*[-*]\s+\[( |x|X)\]\s+/;
 
 /**
@@ -167,10 +198,15 @@ export function leerTareasDelPlan(texto: string): TareasDelPlan {
   };
 
   for (const l of lineas) {
-    const cabecera = CABECERA_DE_TAREA.exec(l);
-    if (cabecera !== null) {
+    const cabecera = cabeceraDeTarea(l);
+    if (cabecera !== undefined) {
       cerrar();
-      actual = { numero: cabecera[1]!, titulo: cabecera[2]!, lineas: [] };
+      const enLinea = cabecera.resto === undefined ? undefined : BLOQUEADA_EN_LINEA.exec(cabecera.resto);
+      actual = {
+        numero: cabecera.numero,
+        titulo: cabecera.titulo,
+        lineas: enLinea === null || enLinea === undefined ? [] : [`**Bloqueada por:** ${enLinea[1]!}`],
+      };
       continue;
     }
     // Otra sección de nivel 2 (`## Orden de ejecución`, `## Hitos`) cierra la tarea en curso:
@@ -200,10 +236,10 @@ export function marcarCriterios(
 ): { texto: string; marcados: number[]; yaEstaban: number[] } | { error: string } {
   const saltos = texto.includes("\r\n") ? "\r\n" : "\n";
   const lineas = texto.split(/\r?\n/);
-  const inicio = lineas.findIndex((l) => CABECERA_DE_TAREA.exec(l)?.[1] === numero);
+  const inicio = lineas.findIndex((l) => cabeceraDeTarea(l)?.numero === numero);
   if (inicio === -1) return { error: `No hay ninguna tarea «${numero}» en el TASKS.md.` };
   const casillas: number[] = [];
-  for (let i = inicio + 1; i < lineas.length && !/^##/.test(lineas[i]!); i++) {
+  for (let i = inicio + 1; i < lineas.length && !/^##/.test(lineas[i]!) && cabeceraDeTarea(lineas[i]!) === undefined; i++) {
     if (CASILLA.test(lineas[i]!)) casillas.push(i);
   }
   const fuera = criterios.filter((n) => !Number.isInteger(n) || n < 1 || n > casillas.length);

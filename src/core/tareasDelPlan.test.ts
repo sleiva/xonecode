@@ -195,3 +195,48 @@ describe("marcarCriterios", () => {
     expect(r.texto).toContain("- [ ] alta");
   });
 });
+
+describe("otros formatos de cabecera de tarea", () => {
+  const VINETAS = [
+    "# TASKS.md — Plan",
+    "",
+    "## Prefactoring (0)",
+    "- **T0** — Nada que refactorizar.",
+    "",
+    "## Cortes verticales",
+    "- **T1 — Esqueleto alcanzable (tracer bullet).** Bloqueada por: ninguna.",
+    "  **Estado:** implementada — `/Calculadora.xne` creado.",
+    "  - Crear la coll.",
+    "",
+    "- **T2 — Estilo base oscuro.** Bloqueada por: T1.",
+    "  **Estado:** pendiente",
+    "  - [ ] Pantalla oscura",
+    "  - [x] Cabecera",
+    "",
+    "## Hitos",
+    "- Hito 1: la coll abre desde el drawer.",
+  ].join("\n");
+
+  it("una tarea como viñeta en negrita se reconoce, con su estado y su dependencia en línea", () => {
+    const { tareas } = leerTareasDelPlan(VINETAS);
+    expect(tareas.map((t) => t.numero)).toEqual(["T1", "T2"]);
+    expect(tareas[0]).toMatchObject({ titulo: "Esqueleto alcanzable (tracer bullet)", progreso: "implementada", bloqueadaPor: [] });
+    expect(tareas[1]).toMatchObject({ bloqueadaPor: ["T1"], criterios: { hechos: 1, total: 2 } });
+  });
+
+  it("T0 —la declaración de que no hay tarea— no cuenta", () => {
+    expect(leerTareasDelPlan(VINETAS).tareas.some((t) => t.numero === "T0")).toBe(false);
+  });
+
+  it("`## Tarea 1: Título` y `#### T2. Título` también; `## 2. Orden` no", () => {
+    const { tareas } = leerTareasDelPlan("## Tarea 1: Uno\n**Estado:** hecha\n\n#### T2. Dos\n\n## 3. Orden de ejecución\ntexto");
+    expect(tareas.map((t) => [t.numero, t.titulo])).toEqual([["1", "Uno"], ["T2", "Dos"]]);
+  });
+
+  it("marcar criterios funciona en la forma de viñeta y no se sale a la tarea de al lado", () => {
+    const r = marcarCriterios(VINETAS, "T2", [1]);
+    expect("error" in r).toBe(false);
+    if (!("error" in r)) expect(r.texto).toContain("- [x] Pantalla oscura");
+    expect("error" in marcarCriterios(VINETAS, "T1", [1])).toBe(true);
+  });
+});
