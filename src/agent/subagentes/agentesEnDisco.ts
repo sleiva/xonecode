@@ -1112,8 +1112,10 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     // diagramas son de `designer-xone` y su descripción son ~700 caracteres por llamada.
     skills: ["xone-development", "xone-debugging", "artifacts-builder", "openui-builder"],
     // A quién puede llamar él mismo (`core/agentes.ts#Agente.llama`): solo lo honra TrueForge y solo con el
-    // interruptor del bucle del desarrollador encendido. Es el dato; el texto que se lo explica lo pone la sesión.
-    llama: ["device-controller"],
+    // interruptor del bucle del desarrollador encendido. El de pruebas para comprobar y el diseñador para lo VISUAL:
+    // sin él, lo visual volvía al orquestador y el desarrollador salía en cuanto lo funcional estaba listo.
+    // Es el dato; el texto que se lo explica lo pone la sesión.
+    llama: ["device-controller", "designer-xone"],
     instrucciones: `${TRABAJAR_CON_PLAN}\n\n${MEMORIA_LEER}\n\n${MEMORIA_ESCRIBIR}`,
     origen: "semilla",
   },

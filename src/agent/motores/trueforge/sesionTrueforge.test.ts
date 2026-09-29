@@ -880,6 +880,38 @@ describe("una sesión con el motor TrueForge", () => {
       expect(vistos[1]!.join("\n")).not.toContain("PARA JUZGAR UNA PANTALLA");
     }, 30_000);
 
+    it("el desarrollador sabe cuándo TERMINA: el criterio de aceptación, tres vueltas, y que devolver antes es dejarlo a medias", async () => {
+      const raiz = proyecto();
+      const { m, vistos } = modelosConGuion(guion());
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true });
+      await s.turno("haz la calculadora", piel().p);
+      const sistema = vistos[1]!.join("\n");
+      expect(sistema).toContain("NO TERMINAS hasta que se cumpla el CRITERIO DE ACEPTACIÓN");
+      expect(sistema).toContain("TRES vueltas");
+      expect(sistema).toContain("diciendo QUÉ falta");
+    }, 30_000);
+
+    it("y sabe que lo VISUAL es del diseñador: puede llamarlo, y el nieto diseñador trabaja y responde a él", async () => {
+      const raiz = proyecto();
+      const { m, vistos, toolsPorLlamada } = modelosConGuion(guion("designer-xone"));
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true });
+      const r = piel();
+      await s.turno("haz la calculadora", r.p);
+      expect(vistos[1]!.join("\n")).toContain("Lo VISUAL");
+      // El nieto es el diseñador de verdad (escribe: recibe las tools de fichero), no el ayudante genérico de lectura.
+      expect(toolsPorLlamada[2]).toContain("write_file");
+      expect(toolsPorLlamada[2]).not.toContain("create_sub_agent");
+      expect(r.tokens.join("")).toContain("Hecho.");
+    }, 30_000);
+
+    it("el orquestador, con el bucle, recibe la orden de escribir el criterio medible en cada encargo al desarrollador", async () => {
+      const raiz = proyecto();
+      const { m, vistos } = modelosConGuion(guion());
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true });
+      await s.turno("haz la calculadora", piel().p);
+      expect(vistos[0]!.join("\n")).toContain("CRITERIO ESCRITO y MEDIBLE");
+    }, 30_000);
+
     it("apagado (por omisión), el desarrollador no recibe la tool", async () => {
       const raiz = proyecto();
       const { m, toolsPorLlamada, vistos } = modelosConGuion([

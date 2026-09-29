@@ -143,21 +143,35 @@ const BUCLE_DE_CALIDAD = [
  * veredicto: decidir si lo que escribiste funciona sigue siendo cosa tuya, con lo que ese hijo te traiga.
  */
 export function textoDelBucle(llama: readonly string[], opciones: { conCritica?: boolean } = {}): string {
+  const puedeDiseñar = llama.includes("designer-xone");
   return [
     `PUEDES LLAMAR A: ${llama.join(", ")}, con \`create_sub_agent\` (\`name\` exacto y \`input\` autosuficiente).`,
-    "Tu bucle es: escribe, llama al de pruebas para desplegar y comprobar, lee lo que te devuelve y corrige, hasta que funcione",
-    "o no encuentres qué cambiar. Dile QUÉ comprobar y qué esperas ver. No lo llames por cada línea que cambies: junta los cambios.",
+    "Tu bucle es: escribe, llama al de pruebas para desplegar y comprobar, lee lo que te devuelve y corrige.",
+    "Dile QUÉ comprobar y qué esperas ver. No lo llames por cada línea que cambies: junta los cambios.",
     "Lo que te devuelva es lo que ha visto, no un permiso para dar el trabajo por bueno: si dice que la app se cae, se cae.",
+    ...(puedeDiseñar
+      ? [
+          "Lo VISUAL —layout, CSS, tamaños, iconos, fondos SVG— es de `designer-xone`: si la pantalla se ve mal, no la dejes así ni la",
+          "devuelvas al que te encargó: encárgale el arreglo con las diferencias CONCRETAS (qué pieza, qué tamaño, qué falta), y",
+          "vuelve a comprobar con el de pruebas.",
+        ]
+      : []),
     ...(opciones.conCritica === true
       ? [
           "",
           "PARA JUZGAR UNA PANTALLA tienes `xone_critica_visual` (un modelo aparte mira la captura) y `comparar_capturas` (mide la",
           "estructura contra la maqueta con números). Pídele al de pruebas una captura y que te diga su nombre; pásala con `pantalla` y,",
           "si hay diseño (/diseno/ o un adjunto), como `referencia`. Lo que digan esas dos herramientas manda sobre tu impresión: no",
-          "lo descartes como «no fiable»; si no estás de acuerdo, dilo con el dato. Al final, cuando devuelvas el trabajo, cuenta lo que",
-          "midieron tal cual: el juicio final no es tuyo, y el arnés lo revisa igual.",
+          "lo descartes como «no fiable»; si no estás de acuerdo, dilo con el dato.",
         ]
       : []),
+    "",
+    "NO TERMINAS hasta que se cumpla el CRITERIO DE ACEPTACIÓN de tu encargo. Si el encargo no lo trae, es: (1) todas las casillas",
+    "de la tarea en el `TASKS.md` comprobadas, (2) la app arranca y hace lo que pide, y (3) con diseño, la estructura medida y el",
+    "crítico no señalan diferencias con él. Tienes TRES vueltas de corregir y volver a comprobar para llegar; si al agotarlas algo",
+    "sigue sin cumplirse, devuelve el trabajo diciendo QUÉ falta, con lo que midieron el crítico y la medida tal cual. Devolver antes",
+    "porque «ya funciona» es dejar el trabajo a medias. Al devolver cuenta lo que se midió: el juicio final no es tuyo, y el arnés",
+    "lo revisa igual.",
   ].join("\n");
 }
 
@@ -177,9 +191,12 @@ export function notaDeDelegacion(
       ? [
           "",
           "BUCLE DEL DESARROLLADOR: developer-xone prueba lo que escribe él mismo, llamando a device-controller (despliega, toca y lee",
-          "el log) y corrige hasta que funcione. No se lo encargues a device-controller aparte para comprobar SU trabajo; llámalo",
-          "tú solo para medir o capturar sin cambiar código. Lo que developer-xone te devuelva es lo que él vio, no un veredicto:",
-          "el juicio final es tuyo y del arnés.",
+          "el log), y arregla lo visual llamando a designer-xone, y corrige hasta cumplir el CRITERIO DE ACEPTACIÓN que le des. Por eso",
+          "cada encargo a developer-xone lleva el CRITERIO ESCRITO y MEDIBLE: qué casillas del plan tiene que dejar comprobadas, qué",
+          "tiene que hacer la app, y, si hay diseño, que la estructura medida y el crítico no señalen diferencias con él (di dónde está",
+          "la maqueta). Sin criterio, devolverá el trabajo en cuanto funcione. No le encargues a device-controller comprobar SU",
+          "trabajo, ni a designer-xone lo visual de lo que él escribe: llámalos tú solo para medir, capturar o rediseñar lo que no",
+          "depende de él. Lo que developer-xone te devuelva es lo que él vio y midió, no un veredicto: el juicio final es tuyo y del arnés.",
         ]
       : []),
     ...(opciones.conMemoria === true

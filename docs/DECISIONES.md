@@ -7565,3 +7565,16 @@ decidió dejarlo así.
 **Sin medir.** Que el bucle acorte el tiempo; que el desarrollador no abuse del conductor lanzándolo por cada
 cambio; y cómo se comportan la detención y la aprobación de un nieto.
 
+**Lo que enseñó la primera pasada con el bucle (calc5), y el cambio.** El desarrollador llamó al conductor por su
+cuenta desde el minuto 10, encadenó siete comprobaciones, usó el crítico y la medida sin que nadie se lo pidiera y
+corrigió en unos 74 segundos lo que en calc4 costaba 4,6 minutos. Pero **devolvió el trabajo en cuanto lo funcional
+estaba listo**, con la pantalla exactamente igual de rota que 20 minutos antes: marcos de las cajas visibles, filas
+solapadas, teclas sin forma. El texto decía «itera hasta que funcione», y esa era su condición de parada; la
+fidelidad al diseño era una regla del ORQUESTADOR, que la comprobaba al recibir el informe y llamaba al diseñador.
+De ahí tres cambios: (1) el texto del bucle define TERMINADO —el criterio de aceptación del encargo, o casillas
+comprobadas, app que arranca y estructura y crítico sin diferencias— con tres vueltas como tope y la orden de
+devolver diciendo QUÉ falta; (2) el orquestador escribe ese criterio, medible, en cada encargo al desarrollador; (3)
+`developer-xone` lleva `llama: [device-controller, designer-xone]`, así que lo visual se arregla dentro de su lazo y
+no vuelve al orquestador. **Sin medir con el modelo real**: si tres vueltas bastan, y si el desarrollador abusa de
+llamar al diseñador.
+

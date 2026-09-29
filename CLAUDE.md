@@ -521,10 +521,13 @@ lleva la orden de parar).
 Si ni reducido cabe, se guarda la VENTANA de lo más reciente (`ventanaDeHistorial`), no nada.
 Solo en memoria y por sesión; `XONECODE_SIN_MEMORIA_DE_ESPECIALISTAS=1` la apaga para comparar.
 **El BUCLE del desarrollador** (`XONECODE_BUCLE_DEL_DEVELOPER=1`, apagado por omisión): quien declara `llama` en
-su `.md` recibe `create_sub_agent` y puede llamar SOLO a esos especialistas (hoy `device-controller`), y con
+su `.md` recibe `create_sub_agent` y puede llamar SOLO a esos especialistas (hoy `device-controller` y `designer-xone`), y con
 carpeta de artefactos también `xone_critica_visual` y `comparar_capturas`. Un nombre fuera de su lista cae al
 ayudante genérico de solo lectura. El veredicto sigue siendo de un modelo aparte y el juez final del arnés
-revisa igual: lo que le devuelva el de pruebas es lo que vio, no un permiso para dar el trabajo por bueno. **Escribir con el turno en marcha es UN gesto** (IXCODE-4, solo la web): el Enter, que en
+revisa igual: lo que le devuelva el de pruebas es lo que vio, no un permiso para dar el trabajo por bueno.
+**Sale del bucle cuando cumple el CRITERIO DE ACEPTACIÓN de su encargo**, que el orquestador escribe medible
+(casillas del plan, lo que hace la app, fidelidad al diseño), con tres vueltas como tope; devolver antes porque
+«ya funciona» dejaba lo visual sin hacer. **Escribir con el turno en marcha es UN gesto** (IXCODE-4, solo la web): el Enter, que en
 TrueForge viaja como **detener y replanificar** (`detener: true`, solo con `turnoDetenible`); el
 botón aparte se quitó a petición suya. La NOTA sigue siendo el camino de lo que llega sin
 `detener` (un turno que no lo admite). Las dos entran por `preLLMProcessors`
