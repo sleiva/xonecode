@@ -37,7 +37,6 @@ export function Panel({
   colecciones,
   planes,
   artefactos,
-  tareas,
   ejecutar,
 }: {
   pestana: Pestana;
@@ -60,11 +59,8 @@ export function Panel({
   /** Lo que el agente DIBUJÓ en esta sesión. Su pestaña solo existe si hay alguno, y de eso
    *  se encarga `Pestanas`: aquí es una ranura más. */
   artefactos?: ReactNode;
-  /** Las tareas en background del proyecto ABIERTO. Su pestaña existe SIEMPRE —es de acción,
-   *  no de registro como `artefactos` (`Pestanas.tsx`)—; aquí sigue siendo una ranura más. */
-  tareas?: ReactNode;
   /**
-   * Ejecutar la app de este proyecto en un aparato. Como `tareas`, su pestaña existe SIEMPRE
+   * Ejecutar la app de este proyecto en un aparato. Su pestaña existe SIEMPRE
    * —es de ACCIÓN, no de registro— y aquí es una ranura más.
    *
    * **Su rama del despacho es EXPLÍCITA y tiene que seguir siéndolo**: la última de abajo es
@@ -97,8 +93,6 @@ export function Panel({
           planes
         ) : pestana === "artefactos" ? (
           artefactos
-        ) : pestana === "tareas" ? (
-          tareas
         ) : pestana === "ejecutar" ? (
           ejecutar
         ) : (

@@ -65,11 +65,9 @@ describe("Panel", () => {
     expect(screen.queryByText("lo de ficheros")).toBeNull();
   });
 
-  it("«tareas» y «artefactos» también pintan la suya", () => {
-    render(<Panel {...base} pestana="tareas" tareas={<p>lo de tareas</p>} ficheros={<p>lo de ficheros</p>} />);
-    expect(screen.getByText("lo de tareas")).toBeTruthy();
-    expect(screen.queryByText("lo de ficheros")).toBeNull();
-    cleanup();
+  it("«artefactos» también pinta la suya", () => {
+    // «Tareas» ya no es una ranura de este panel: las tareas en background del proyecto
+    // viven en `PanelDelProyecto.tsx`, no aquí (`Panel.tsx`/`Pestanas.tsx` dicen por qué).
     render(
       <Panel
         {...base}

@@ -2,11 +2,12 @@ import clsx from "clsx";
 import conversacion from "../../estilos/ConversationRoot.module.css";
 import estilos from "./Pestanas.module.css";
 
-export type Pestana = "ficheros" | "revision" | "colecciones" | "planes" | "artefactos" | "tareas" | "ejecutar" | "trazas";
+export type Pestana = "ficheros" | "revision" | "colecciones" | "planes" | "artefactos" | "ejecutar" | "trazas";
 
 /**
- * La tira de pestañas del PANEL: Tareas, Ejecutar, Ficheros, Revisión y Trazas — más
- * Artefactos, si la sesión dejó alguno —, con la salida del panel delante.
+ * La tira de pestañas del PANEL: Ejecutar, Ficheros, Revisión, Colecciones y Trazas — más
+ * Planes y Artefactos, si el proyecto o la sesión dejaron alguno —, con la salida del panel
+ * delante.
  *
  * **«Chat» ya no es una pestaña, y eso es el cambio.** Era la primera de la tira y significaba
  * «devuélveme la conversación», o sea que las otras seis se leían como sus alternativas: para
@@ -24,25 +25,20 @@ export type Pestana = "ficheros" | "revision" | "colecciones" | "planes" | "arte
  * No recuerda nada: cuál está elegida lo sabe `App`, que es quien también decide qué pintar
  * debajo. Este componente solo dice qué se ha pulsado.
  *
- * **«Tareas» NO se condiciona a que haya alguna (Task 15), y eso matiza la regla de
- * `hayArtefactos` de aquí abajo — no la contradice.** Un artefacto es el REGISTRO de algo
- * que el agente ya dibujó, así que una pestaña de artefactos vacía es el control sin dato
- * detrás que este proyecto no se permite en ninguna parte: bien escondida. Una tarea es lo
- * contrario — es donde se ACTÚA —, y antes de esta tarea la pestaña de Tareas SÍ se
- * condicionaba igual que Artefactos: la consecuencia medida fue que, con proyecto abierto,
- * la única puerta para crear la primera tarea de ese proyecto era volver al escritorio (la
- * marca «xonecode»), y la pestaña que enseñaría cómo hacerlo desaparecía justo cuando hacía
- * falta. El criterio que queda, y que no hay que volver a decidir: **una pestaña de
- * REGISTRO existe si hay registro; una pestaña de ACCIÓN existe siempre, y su estado vacío
- * dice cómo se empieza** (ver `TareasDelProyecto.tsx`, que es quien pinta ese estado vacío).
+ * **«Tareas» ya NO es una pestaña de aquí.** Vivió aquí como pestaña de ACCIÓN —siempre
+ * presente, sin condicionarse a que hubiera alguna, a diferencia de Artefactos— hasta que se
+ * movió al panel DEL PROYECTO (`PanelDelProyecto.tsx`, pestaña Tareas, delante de las
+ * pendientes del gestor): son tareas del proyecto y no de la sesión, y viven donde vive lo
+ * demás del proyecto. Lo que queda de aquella regla sigue valiendo para lo que sí está aquí:
+ * **una pestaña de REGISTRO existe si hay registro (Artefactos, Planes); una pestaña de
+ * ACCIÓN existe siempre, y su estado vacío dice cómo se empieza.**
  *
- * **Tareas y Ejecutar abren la tira porque son las de ACCIÓN**: una le manda al agente un
- * encargo para que trabaje solo, la otra ARRANCA la app en un aparato. Ficheros, Revisión y
- * Artefactos son de REGISTRO —enseñan lo que YA pasó— y van detrás; Trazas es de otro
- * destinatario (quien depura el harness, no quien desarrolla la app), así que sigue cerrando
- * la tira. **Y su recorrido —fase, tiempo y la cola del log— vive DENTRO de Ejecutar**, no en
- * una pestaña de historial aparte: un lanzamiento se lee donde se lanzó, que es donde está el
- * botón que lo provoca y el aparato al que fue.
+ * **Ejecutar abre la tira porque es la de ACCIÓN**: arranca la app en un aparato. Ficheros,
+ * Revisión, Colecciones y Artefactos son de REGISTRO —enseñan lo que YA pasó— y van detrás;
+ * Trazas es de otro destinatario (quien depura el harness, no quien desarrolla la app), así
+ * que sigue cerrando la tira. **Y su recorrido —fase, tiempo y la cola del log— vive DENTRO de
+ * Ejecutar**, no en una pestaña de historial aparte: un lanzamiento se lee donde se lanzó, que
+ * es donde está el botón que lo provoca y el aparato al que fue.
  *
  * **La sincronización con CloudStudio NO es una pestaña: vive dentro de Revisión**, como una
  * banda arriba. Tenía la suya —era la tercera de ACCIÓN y existía siempre, con el mismo
@@ -86,13 +82,10 @@ export function Pestanas({
   hayPlanes?: boolean;
 }) {
   const pestanas: { id: Pestana; etiqueta: string }[] = [
-    // Las dos de ACCIÓN abren la tira. La cola de tareas en background es del proyecto
-    // ABIERTO, no de la máquina entera — el kanban global ya vive en el escritorio. SIEMPRE
-    // presente, a propósito.
-    { id: "tareas", etiqueta: "Tareas" },
-    // La segunda de ACCIÓN: es el verbo que cierra el viaje —lanzar la app en un aparato—,
-    // no la foto de lo que ya pasó. SIEMPRE presente, por el mismo criterio que Tareas: su
-    // estado vacío dice cómo se empieza.
+    // La de ACCIÓN abre la tira: es el verbo que cierra el viaje —lanzar la app en un aparato—,
+    // no la foto de lo que ya pasó. SIEMPRE presente: su estado vacío dice cómo se empieza.
+    // (Las tareas en background del proyecto ya NO van aquí: son del PANEL DEL PROYECTO, pestaña
+    // Tareas, encima de las del gestor — a petición suya, «son del proyecto, no de la sesión».)
     { id: "ejecutar", etiqueta: "Ejecutar" },
     // El árbol del proyecto en el que se trabaja, con visor de solo lectura.
     { id: "ficheros", etiqueta: "Ficheros" },

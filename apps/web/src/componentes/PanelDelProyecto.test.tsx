@@ -97,7 +97,7 @@ describe("PanelDelProyecto", () => {
     expect(alGestor).toHaveBeenCalledWith({ accion: "pendientes" });
   });
 
-  it("Resumen: entorno, planes con su barra y la ranura de tareas — y SIN sesiones ni «Nueva sesión» (están en la barra)", () => {
+  it("Resumen: entorno y planes con su barra — SIN sesiones, «Nueva sesión» ni tareas en background (viven en su propia pestaña)", () => {
     montar({ entorno: "XOne WebStudio", planes: [PLAN], tareasEnFondo: <p>la ranura de tareas</p> });
     expect(screen.getByRole("heading", { level: 1, name: "AppDemo" })).toBeTruthy();
     expect(screen.getByText("Entorno: XOne WebStudio")).toBeTruthy();
@@ -108,7 +108,20 @@ describe("PanelDelProyecto", () => {
     expect(screen.getByText("Plan de visitas")).toBeTruthy();
     expect(screen.getByText("Según el plan: 1 de 2 finalizadas · 1 pendientes.")).toBeTruthy();
     expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("50");
-    expect(screen.getByText("la ranura de tareas")).toBeTruthy();
+    // Se mudó a la pestaña Tareas: Resumen ya no la enseña, aunque la ranura venga montada.
+    expect(screen.queryByText("la ranura de tareas")).toBeNull();
+  });
+
+  it("Tareas: «Tareas en background» va delante de las pendientes del gestor, y Resumen ya no la enseña", () => {
+    montar({ tareasEnFondo: <p>la ranura de tareas</p>, gestor: VINCULADO, conectores: CONECTORES });
+    // La pestaña inicial es Resumen, y no la enseña: se mudó a Tareas.
+    expect(screen.queryByText("la ranura de tareas")).toBeNull();
+    pestana("Tareas");
+    const seccion = screen.getByRole("region", { name: "Tareas en background" });
+    expect(within(seccion).getByText("la ranura de tareas")).toBeTruthy();
+    // Y va ANTES que las pendientes del gestor: el orden en el DOM lo dice.
+    const texto = document.body.textContent ?? "";
+    expect(texto.indexOf("Tareas en background")).toBeLessThan(texto.indexOf("Pendientes de IXCODE"));
   });
 
   it("Resumen sin datos no pinta secciones inventadas", () => {

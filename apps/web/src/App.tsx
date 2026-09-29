@@ -1806,11 +1806,10 @@ export function App({
    * un elemento invisible sigue siendo tabulable.
    */
   /**
-   * La lista de tareas en background del proyecto, montada UNA vez aquí para sus dos casas: la
-   * pestaña Tareas del panel lateral y el Resumen del panel del proyecto. Las dos con los
-   * MISMOS manejadores —no hay una segunda copia de la lista ni de su cableado que diverja—, y
-   * como solo se pinta en una de las dos a la vez (el panel del proyecto no convive con el
-   * lateral), no se monta dos veces.
+   * La lista de tareas en background del proyecto, montada aquí y entregada al panel DEL
+   * PROYECTO (`PanelDelProyecto.tsx`, pestaña Tareas, PRIMERO y encima de las pendientes del
+   * gestor). Ya no vive en el panel lateral —la marca «xonecode», son del proyecto y no de la
+   * sesión, a petición suya—, así que solo tiene esta única casa.
    */
   const tareasEnFondo = (
     <TareasDelProyecto
@@ -1931,7 +1930,6 @@ export function App({
           conectado={estado.conectado}
         />
       }
-      tareas={tareasEnFondo}
       /*
         Ejecutar la app de este proyecto en un aparato (Task 10): el último tramo del
         viaje —el agente escribe, el verificador mira, y aquí se ARRANCA—, que hasta

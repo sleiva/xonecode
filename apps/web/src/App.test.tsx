@@ -1445,143 +1445,6 @@ describe("App: la pestaña Ficheros", () => {
   });
 });
 
-describe("App: la pestaña Tareas", () => {
-  const TAREA = (extra: Record<string, unknown> = {}) => ({
-    id: "t1",
-    proyecto: "p1",
-    proyectoNombre: "Tienda",
-    titulo: "Arregla el login",
-    peticion: "Arregla el login",
-    encargo: "Arregla el login",
-    adjuntos: [],
-    estado: "nuevo" as const,
-    creada: "2026-09-08T10:00:00.000Z",
-    ...extra,
-  });
-
-  /** Con proyecto ABIERTO y ACTIVO, que es lo que la pestaña filtra por (`t.proyecto`). */
-  function montarConProyectoActivo() {
-    const store = crearStoreDelCliente();
-    const enviar = vi.fn(() => Promise.resolve(undefined as unknown));
-    render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} instalarSkill={instalarSkillDeMentira} />);
-    act(() => store.marcarConectado());
-    act(() =>
-      store.aplicar({
-        clase: "alta",
-        pasos: [],
-        proveedores: [],
-        entornos: [],
-        // `local: true`: un proyecto ABIERTO tiene por fuerza copia local — es de donde se
-        // abrió—, y `NuevaTarea` rechaza crear sin ella (`local` deducido de `proyectos[]`).
-        proyectos: [{ id: "p1", nombre: "Tienda", local: true }],
-        ramas: [],
-        proyectoAbierto: true,
-        proyectoActivo: "p1",
-      })
-    );
-    return { store, enviar };
-  }
-
-  /**
-   * Task 15: la pestaña ya NO se condiciona a que haya tareas — es de ACCIÓN, no de
-   * registro (`Pestanas.tsx`) — pero el FILTRO por proyecto sigue siendo el mismo: lo que
-   * se pinta DENTRO de ella es solo lo de `proyectoActivo`, nunca lo de otro.
-   */
-  it("la pestaña está desde el principio, y lo que filtra por proyecto ACTIVO es lo que hay DENTRO", () => {
-    const { store } = montarConProyectoActivo();
-    abrirPestana("Tareas");
-    // Antes de que llegue ningún mensaje `tareas`, no se afirma que no haya ninguna.
-    expect(screen.getByText(/consultando/i)).toBeTruthy();
-
-    act(() =>
-      store.aplicar({
-        clase: "tareas",
-        concurrencia: 2,
-        corriendoAqui: true,
-        lista: [TAREA({ id: "otro", proyecto: "p2", proyectoNombre: "Otra" })],
-      })
-    );
-    // Llegó la cola, pero ninguna es de p1: el estado vacío, no «consultando».
-    expect(screen.getByText(/todavía no tiene ninguna/i)).toBeTruthy();
-
-    act(() =>
-      store.aplicar({
-        clase: "tareas",
-        concurrencia: 2,
-        corriendoAqui: true,
-        lista: [TAREA({ id: "otro", proyecto: "p2", proyectoNombre: "Otra" }), TAREA()],
-      })
-    );
-    expect(screen.getByText("Arregla el login")).toBeTruthy();
-    expect(screen.queryByText(/otro|Otra/)).toBeNull();
-  });
-
-  it("pinta el estado y el motivo, y reintentar/dar-por-bueno/descartar mandan la acción sobre el cable", () => {
-    const { store, enviar } = montarConProyectoActivo();
-    act(() =>
-      store.aplicar({
-        clase: "tareas",
-        concurrencia: 2,
-        corriendoAqui: true,
-        lista: [TAREA({ estado: "requiere-atencion", motivo: "el juez marcó el trabajo en rojo" })],
-      })
-    );
-    abrirPestana("Tareas");
-    expect(screen.getByText(/el juez marcó el trabajo en rojo/)).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: /reintentar/i }));
-    expect(enviar).toHaveBeenCalledWith({ clase: "tarea", accion: "reintentar", id: "t1" });
-
-    fireEvent.click(screen.getByRole("button", { name: /dar por bueno/i }));
-    expect(enviar).toHaveBeenCalledWith({ clase: "tarea", accion: "terminar", id: "t1" });
-
-    fireEvent.click(screen.getByRole("button", { name: /^descartar$/i }));
-    fireEvent.click(screen.getByRole("button", { name: /sí, descartar/i }));
-    expect(enviar).toHaveBeenCalledWith({ clase: "tarea", accion: "descartar", id: "t1" });
-  });
-
-  it("al quedarse el proyecto activo sin tareas, la pestaña se QUEDA — a diferencia de Artefactos, a propósito", () => {
-    // Es justo lo que Task 15 cambia: Artefactos SÍ cierra el panel al vaciarse (es
-    // registro), pero Tareas es acción y su estado vacío es la respuesta, no un hueco que
-    // hay que evitar enseñando otra pestaña.
-    const { store } = montarConProyectoActivo();
-    act(() =>
-      store.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [TAREA()] })
-    );
-    abrirPestana("Tareas");
-    expect(screen.getByRole("tab", { name: "Tareas" }).getAttribute("aria-selected")).toBe("true");
-    act(() => store.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [] }));
-    expect(screen.getByRole("tab", { name: "Tareas" })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "Tareas" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByText(/todavía no tiene ninguna/i)).toBeTruthy();
-  });
-
-  /**
-   * El acceptance criterion central: crear una tarea PARA el proyecto abierto sin volver al
-   * escritorio, y con el proyecto ya resuelto — no un selector que haya que rellenar.
-   */
-  it("crear una tarea desde AQUÍ, sin volver al escritorio, y con el proyecto ya resuelto", async () => {
-    const { store, enviar } = montarConProyectoActivo();
-    act(() => store.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [] }));
-    abrirPestana("Tareas");
-    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
-    // Si el punto de entrada abriera la ventana SIN proyecto resuelto —la mutación que el
-    // brief pide vigilar—, `App` no encontraría con qué pintarla (`proyectoDeLaTarea` no
-    // resolvería) y este campo no aparecería: no hay ningún paso más que dar aquí.
-    fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "Arregla el login" } });
-    fireEvent.click(screen.getByRole("button", { name: /encolar/i }));
-    await waitFor(() =>
-      expect(enviar).toHaveBeenCalledWith({
-        clase: "tarea",
-        accion: "crear",
-        proyecto: "p1",
-        peticion: "Arregla el login",
-        encargo: "Arregla el login",
-      })
-    );
-  });
-});
-
 /**
  * Crear una TAREA de fondo: lo que ningún test de componente ve — que `App` monta la
  * ventana desde el escritorio, que los ADJUNTOS se suben antes de encolar y bajo un
@@ -2255,6 +2118,122 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
     }
   });
 
+  /**
+   * Las tareas en BACKGROUND del proyecto ya no viven en el panel lateral: se mudaron a este
+   * panel, pestaña Tareas, delante de las pendientes del gestor (a petición suya, «son del
+   * proyecto, no de la sesión»). Lo que sigue mide la MISMA cosa que medía antes de la
+   * mudanza — filtro por proyecto activo, acciones sobre el cable, el estado vacío que se
+   * queda, y crear desde aquí con el proyecto ya resuelto — pero a través de esta puerta.
+   */
+  describe("y sus tareas en background", () => {
+    const TAREA = (extra: Record<string, unknown> = {}) => ({
+      id: "t1",
+      proyecto: "p1",
+      proyectoNombre: "AppDemo",
+      titulo: "Arregla el login",
+      peticion: "Arregla el login",
+      encargo: "Arregla el login",
+      adjuntos: [],
+      estado: "nuevo" as const,
+      creada: "2026-09-08T10:00:00.000Z",
+      ...extra,
+    });
+    /** Abre el panel del proyecto ABIERTO y su pestaña Tareas. */
+    const abrirTareasDelProyecto = (): void => {
+      fireEvent.click(enBarra("AppDemo"));
+      fireEvent.click(screen.getByRole("tab", { name: "Tareas" }));
+    };
+
+    it("lo que filtra por proyecto ACTIVO es lo que hay DENTRO de «Tareas en background»", () => {
+      const { store } = conProyectoAbierto();
+      abrirTareasDelProyecto();
+      // Antes de que llegue ningún mensaje `tareas`, no se afirma que no haya ninguna. (La
+      // pestaña también consulta al GESTOR, con su propio «Consultando…»: este es el de la
+      // cola de tareas en background, no el suyo.)
+      expect(screen.getByText(/consultando la cola de tareas/i)).toBeTruthy();
+
+      act(() =>
+        store.aplicar({
+          clase: "tareas",
+          concurrencia: 2,
+          corriendoAqui: true,
+          lista: [TAREA({ id: "otro", proyecto: "p2", proyectoNombre: "Otra" })],
+        })
+      );
+      // Llegó la cola, pero ninguna es de p1: el estado vacío, no «consultando».
+      expect(screen.getByText(/todavía no tiene ninguna/i)).toBeTruthy();
+
+      act(() =>
+        store.aplicar({
+          clase: "tareas",
+          concurrencia: 2,
+          corriendoAqui: true,
+          lista: [TAREA({ id: "otro", proyecto: "p2", proyectoNombre: "Otra" }), TAREA()],
+        })
+      );
+      expect(screen.getByText("Arregla el login")).toBeTruthy();
+      expect(screen.queryByText(/otro|Otra/)).toBeNull();
+    });
+
+    it("pinta el estado y el motivo, y reintentar/dar-por-bueno/descartar mandan la acción sobre el cable", () => {
+      const { store, enviar } = conProyectoAbierto();
+      act(() =>
+        store.aplicar({
+          clase: "tareas",
+          concurrencia: 2,
+          corriendoAqui: true,
+          lista: [TAREA({ estado: "requiere-atencion", motivo: "el juez marcó el trabajo en rojo" })],
+        })
+      );
+      abrirTareasDelProyecto();
+      expect(screen.getByText(/el juez marcó el trabajo en rojo/)).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("button", { name: /reintentar/i }));
+      expect(enviar).toHaveBeenCalledWith({ clase: "tarea", accion: "reintentar", id: "t1" });
+
+      fireEvent.click(screen.getByRole("button", { name: /dar por bueno/i }));
+      expect(enviar).toHaveBeenCalledWith({ clase: "tarea", accion: "terminar", id: "t1" });
+
+      fireEvent.click(screen.getByRole("button", { name: /^descartar$/i }));
+      fireEvent.click(screen.getByRole("button", { name: /sí, descartar/i }));
+      expect(enviar).toHaveBeenCalledWith({ clase: "tarea", accion: "descartar", id: "t1" });
+    });
+
+    it("al quedarse el proyecto activo sin tareas, la sección «Tareas en background» se QUEDA con su estado vacío", () => {
+      const { store } = conProyectoAbierto();
+      act(() => store.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [TAREA()] }));
+      abrirTareasDelProyecto();
+      expect(screen.getByRole("region", { name: "Tareas en background" })).toBeTruthy();
+      expect(screen.getByText("Arregla el login")).toBeTruthy();
+      act(() => store.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [] }));
+      expect(screen.getByRole("region", { name: "Tareas en background" })).toBeTruthy();
+      expect(screen.getByText(/todavía no tiene ninguna/i)).toBeTruthy();
+    });
+
+    /**
+     * El acceptance criterion central de Task 15: crear una tarea PARA el proyecto abierto sin
+     * volver al escritorio, y con el proyecto ya resuelto — no un selector que haya que rellenar.
+     */
+    it("crear una tarea desde AQUÍ, sin volver al escritorio, y con el proyecto ya resuelto", async () => {
+      const { store, enviar } = conProyectoAbierto();
+      act(() => store.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [] }));
+      abrirTareasDelProyecto();
+      fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+      // Si el punto de entrada abriera la ventana SIN proyecto resuelto, `App` no encontraría
+      // con qué pintarla (`proyectoDeLaTarea` no resolvería) y este campo no aparecería.
+      fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "Arregla el login" } });
+      fireEvent.click(screen.getByRole("button", { name: /encolar/i }));
+      await waitFor(() =>
+        expect(enviar).toHaveBeenCalledWith({
+          clase: "tarea",
+          accion: "crear",
+          proyecto: "p1",
+          peticion: "Arregla el login",
+          encargo: "Arregla el login",
+        })
+      );
+    });
+  });
 });
 
 /**

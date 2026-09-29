@@ -265,8 +265,17 @@ export function PanelDelProyecto({
       </div>
       <div className={estilos.cuerpo} role="tabpanel">
         {pestana === "resumen" ? (
-          <Resumen {...(planes === undefined ? {} : { planes })} tareasEnFondo={tareasEnFondo} />
+          <Resumen {...(planes === undefined ? {} : { planes })} />
         ) : pestana === "tareas" ? (
+          <>
+            {/* Primero las tareas en BACKGROUND del proyecto —las que el agente hace solo, que
+                son del proyecto y no de una sesión— y debajo las del gestor (Jira/Notion). */}
+            {tareasEnFondo === undefined ? null : (
+              <section className={estilos.seccion} aria-label="Tareas en background">
+                <h2 className={estilos.titulo}>Tareas en background</h2>
+                {tareasEnFondo}
+              </section>
+            )}
           <TareasDelGestor
             gestor={gestor}
             conectado={conectado}
@@ -282,6 +291,7 @@ export function PanelDelProyecto({
             alIrAConectores={() => setPestana("conectores")}
             alAbrirAjustes={alAbrirAjustesDeConectores}
           />
+          </>
         ) : (
           <ConectoresDelProyecto
             gestor={gestor}
@@ -323,17 +333,11 @@ export function PanelDelProyecto({
 }
 
 /**
- * El resumen: planes y tareas en background. Las SESIONES no están aquí —ni la lista ni «Nueva
- * sesión»—, a petición suya: ya están en la barra lateral (con su «+»), y repetirlas aquí era la
- * misma lista dos veces en la misma pantalla.
+ * El resumen: los planes. Las SESIONES no están aquí —ni la lista ni «Nueva sesión»—, a petición
+ * suya: ya están en la barra lateral (con su «+»). Las tareas en background tampoco: van en la
+ * pestaña Tareas, encima de las del gestor.
  */
-function Resumen({
-  planes,
-  tareasEnFondo,
-}: {
-  planes?: PlanDelCable[];
-  tareasEnFondo?: ReactNode;
-}) {
+function Resumen({ planes }: { planes?: PlanDelCable[] }) {
   return (
     <>
       {planes === undefined || planes.length === 0 ? null : (
@@ -358,12 +362,6 @@ function Resumen({
               );
             })}
           </ul>
-        </section>
-      )}
-      {tareasEnFondo === undefined ? null : (
-        <section className={estilos.seccion} aria-label="Tareas en background">
-          <h2 className={estilos.titulo}>Tareas en background</h2>
-          {tareasEnFondo}
         </section>
       )}
     </>

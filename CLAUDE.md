@@ -725,9 +725,10 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   de una decisión ya puesta deja de anotarse (viaja en el mensaje `pregunta`). Tampoco entra una
   subida CANCELADA.
 - **Pulsar un proyecto en la barra abre su PANEL, no una sesión directa**
-  (`apps/web/src/componentes/PanelDelProyecto.tsx`, `App.tsx`): pestañas Resumen (planes y
-  tareas en background; las SESIONES y «Nueva sesión» son de la barra, no se repiten aquí), Tareas (pendientes del gestor de tareas vinculado, con búsqueda y «Nueva
-  sesión con esta tarea») y Conectores, en DOS secciones: «Gestor de tareas» (solo Jira y Notion,
+  (`apps/web/src/componentes/PanelDelProyecto.tsx`, `App.tsx`): pestañas Resumen (solo los
+  planes; las SESIONES y «Nueva sesión» son de la barra, no se repiten aquí), Tareas (las tareas en
+  background del proyecto, PRIMERO, y debajo las pendientes del gestor vinculado, con búsqueda y
+  «Nueva sesión con esta tarea») y Conectores, en DOS secciones: «Gestor de tareas» (solo Jira y Notion,
   UNO por proyecto: vincular el otro lo sustituye y la fila lo AVISA antes) y «Conectores para el
   chat» (el resto, con «Conectar» y su casilla). El proyecto que YA está abierto
   enseña el panel SIN mandar `sesion` —soltar la conversación en curso por una vacía es justo lo

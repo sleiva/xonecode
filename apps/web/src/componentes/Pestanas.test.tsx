@@ -14,7 +14,7 @@ describe("Pestanas", () => {
     render(<Pestanas pestana="ficheros" alElegirPestana={vi.fn()} alCerrar={vi.fn()} />);
     expect(screen.getByRole("tab", { name: "Ficheros" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("tab", { name: "Trazas" }).getAttribute("aria-selected")).toBe("false");
-    expect(screen.getByRole("tab", { name: "Tareas" }).getAttribute("aria-selected")).toBe("false");
+    expect(screen.getByRole("tab", { name: "Ejecutar" }).getAttribute("aria-selected")).toBe("false");
     expect(screen.getByRole("tab", { name: "Revisión" }).getAttribute("aria-selected")).toBe("false");
   });
 
@@ -34,19 +34,21 @@ describe("Pestanas", () => {
     expect(screen.queryByRole("tab", { name: "Chat" })).toBeNull();
   });
 
-  it("son seis por omisión, en este orden: Tareas · Ejecutar · Ficheros · Revisión · Colecciones · Trazas", () => {
-    // Tareas y Ejecutar son las dos pestañas de ACCIÓN —una le manda al agente algo para que
-    // trabaje solo, la otra lanza la app en un aparato— y van juntas al principio. Ficheros,
-    // Revisión (y Artefactos, si lo hay) son de REGISTRO: enseñan lo que ya pasó, y Trazas
-    // —de otro destinatario, quien depura el harness— cierra la tira. Ninguna de las de
-    // acción necesita dato para aparecer: su estado vacío dice cómo se empieza.
+  it("son cinco por omisión, en este orden: Ejecutar · Ficheros · Revisión · Colecciones · Trazas", () => {
+    // Ejecutar es la única pestaña de ACCIÓN que queda aquí —lanza la app en un aparato— y
+    // abre la tira. Ficheros, Revisión (y Artefactos, si lo hay) son de REGISTRO: enseñan lo
+    // que ya pasó, y Trazas —de otro destinatario, quien depura el harness— cierra la tira.
+    // Ejecutar no necesita dato para aparecer: su estado vacío dice cómo se empieza.
     //
-    // CloudStudio ya NO está aquí: su banda vive dentro de Revisión (`Pestanas.tsx` dice por
-    // qué). Si alguien le devolviera su pestaña, esta lista es la que lo tiene que pillar.
+    // Tareas ya NO está aquí: las tareas en background del proyecto se mudaron al panel DEL
+    // PROYECTO, pestaña Tareas (`Pestanas.tsx` dice por qué). Si alguien la devolviera aquí,
+    // esta lista es la que lo tiene que pillar.
+    //
+    // CloudStudio tampoco: su banda vive dentro de Revisión (`Pestanas.tsx` dice por qué). Si
+    // alguien le devolviera su pestaña, esta lista es la que lo tiene que pillar.
     render(<Pestanas pestana="revision" alElegirPestana={vi.fn()} alCerrar={vi.fn()} />);
     expect(screen.getByRole("tablist")).not.toBeNull();
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
-      "Tareas",
       "Ejecutar",
       "Ficheros",
       "Revisión",
@@ -70,11 +72,9 @@ describe("Pestanas", () => {
 
   it("«Artefactos» solo está si la sesión dejó alguno: una pestaña vacía es un control sin dato", () => {
     render(<Pestanas pestana="ficheros" alElegirPestana={vi.fn()} alCerrar={vi.fn()} hayArtefactos />);
-    // Delante de Trazas, que sigue siendo la última: es la de otro destinatario. Las de
-    // acción van juntas al principio y Artefactos entre Revisión y Trazas, con el resto de
-    // las de registro.
+    // Delante de Trazas, que sigue siendo la última: es la de otro destinatario. Ejecutar abre
+    // la tira, y Artefactos va entre Colecciones y Trazas, con el resto de las de registro.
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
-      "Tareas",
       "Ejecutar",
       "Ficheros",
       "Revisión",
@@ -100,24 +100,12 @@ describe("Pestanas", () => {
     expect(alElegirPestana).toHaveBeenCalledWith("artefactos");
   });
 
-  it("«Tareas» está SIEMPRE, aunque el proyecto no tenga ninguna: matiza la regla de Artefactos, no la copia", () => {
-    // «La pestaña solo existe si hay dato» es correcta para Artefactos —un artefacto es el
-    // REGISTRO de algo que ya pasó, y un registro vacío es el control sin dato detrás—, pero
-    // Tareas es una pestaña de ACCIÓN: si desaparece cuando no hay ninguna, se lleva consigo
-    // el único sitio donde aprender que se puede crear una. El criterio que queda: una
-    // pestaña de registro existe si hay registro; una de acción existe siempre, y su estado
-    // vacío dice cómo se empieza (`TareasDelProyecto.tsx`). Por eso este test NO pasa ningún
-    // prop de tareas — si alguien reintrodujera un `hayTareas` que la condicione, esta prueba
-    // es la que lo tiene que pillar.
+  it("no hay ninguna pestaña «Tareas»: las tareas en background del proyecto viven en su panel", () => {
+    // Se fue de aquí a `PanelDelProyecto.tsx` (pestaña Tareas, delante de las pendientes del
+    // gestor): son del PROYECTO y no de la sesión. Si alguien la devolviera aquí, este test
+    // es el que lo tiene que pillar.
     render(<Pestanas pestana="ficheros" alElegirPestana={vi.fn()} alCerrar={vi.fn()} />);
-    expect(screen.getByRole("tab", { name: "Tareas" })).toBeTruthy();
-  });
-
-  it("pulsar Tareas reporta «tareas»", () => {
-    const alElegirPestana = vi.fn();
-    render(<Pestanas pestana="ficheros" alElegirPestana={alElegirPestana} alCerrar={vi.fn()} />);
-    fireEvent.click(screen.getByRole("tab", { name: "Tareas" }));
-    expect(alElegirPestana).toHaveBeenCalledWith("tareas");
+    expect(screen.queryByRole("tab", { name: "Tareas" })).toBeNull();
   });
 
   it("no hay ninguna pestaña «CloudStudio»: su banda vive dentro de Revisión", () => {
