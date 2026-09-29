@@ -889,6 +889,9 @@ describe("una sesión con el motor TrueForge", () => {
       expect(sistema).toContain("NO TERMINAS hasta que se cumpla el CRITERIO DE ACEPTACIÓN");
       expect(sistema).toContain("TRES vueltas");
       expect(sistema).toContain("diciendo QUÉ falta");
+      // El umbral es ALCANZABLE: mide con la herramienta y deja fuera lo que XOne no reproduce.
+      expect(sistema).toContain("por debajo del 10 %");
+      expect(sistema).toContain("las tipografías del diseño");
     }, 30_000);
 
     it("y sabe que lo VISUAL es del diseñador: puede llamarlo, y el nieto diseñador trabaja y responde a él", async () => {
@@ -910,6 +913,7 @@ describe("una sesión con el motor TrueForge", () => {
       const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true });
       await s.turno("haz la calculadora", piel().p);
       expect(vistos[0]!.join("\n")).toContain("CRITERIO ESCRITO y MEDIBLE");
+      expect(vistos[0]!.join("\n")).toContain("por debajo del 10 %");
     }, 30_000);
 
     it("apagado (por omisión), el desarrollador no recibe la tool", async () => {

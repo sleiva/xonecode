@@ -7578,3 +7578,10 @@ devolver diciendo QUÉ falta; (2) el orquestador escribe ese criterio, medible, 
 no vuelve al orquestador. **Sin medir con el modelo real**: si tres vueltas bastan, y si el desarrollador abusa de
 llamar al diseñador.
 
+**El umbral tiene que ser ALCANZABLE.** «Sin diferencias con la maqueta» es inalcanzable en XOne: `code.html` pide
+tres tipografías que no se pueden traer (no hay `.ttf`), dos `backdrop-blur` (XOne ignora los filtros) y animaciones
+que una captura no ve; y con tres vueltas de tope el desarrollador las gastaría persiguiéndolo. Sí se alcanzan los
+iconos (`buscar_icono`), el degradado del `=` (SVG) y las sombras y resplandores (rectángulos apilados). El criterio
+por omisión es la distancia de `comparar_capturas` por debajo del 10 % en vertical y en horizontal —la mejor pasada
+de la calculadora llegó a 7 % y 2 %— y el crítico sin diferencias de forma ni de estructura. El 10 % es provisional.
+
