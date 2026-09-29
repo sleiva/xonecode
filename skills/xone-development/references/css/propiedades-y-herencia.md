@@ -517,6 +517,8 @@ El atributo `visible` usa un sistema de mascara de bits que controla en que modo
 
 > **NOTA:** La propiedad `elevation` funciona principalmente en Android, donde genera una sombra real bajo el elemento. En iOS, el efecto puede variar o no ser visible. Como alternativa multiplataforma, se pueden usar bordes sutiles (`border: true; border-color: #E0E0E0;`) para dar sensacion de profundidad.
 
+> **⚠️ `elevation` recorta el fondo de un botón con esquinas redondeadas.** Medido en un emulador Android: con `elevation: 4` y `border-corner-radius`, las teclas salen con la parte de abajo cortada en plano (forma de lápida: arco arriba, base recta); con `elevation: 0` salen rectángulos redondeados completos, y una tecla con otra clase que conservaba elevación seguía cortada. Ni el verificador (`validate` da verde) ni las medidas de las cajas lo ven: la tecla cabe en su fila. **En un control redondeado no pongas `elevation`; la sombra, si hace falta, se dibuja en el fondo** (un SVG generado, con la sombra hecha de capas). Sin medir en iOS.
+
 **Ejemplo - Footer fijo en la parte inferior (proyecto SocialNetwork):**
 
 ```css

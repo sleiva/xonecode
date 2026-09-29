@@ -7296,3 +7296,12 @@ pasada previa que había en `/artefactos/` y no una nueva: la tool no dice de cu
 `generar_fondo_svg`, que ya estaban, sí llevan cableado en los dos.
 
 **Dependencias nuevas:** `pngjs` y `jpeg-js` (JavaScript puro) y `@types/pngjs`.
+
+**La causa de las teclas «de lápida» de la calculadora, medida: `elevation` (29-09-2026).** Tras la pasada 6 las teclas
+seguían con la base cortada en plano aunque su caja cabía en su fila (198 px de tecla en una fila de 218). Experimento
+reversible: quitar `elevation` de `.calcKey` y `.calcKeyOp`, relanzar y capturar. Con `elevation: 4`, base recta; con
+`elevation: 0`, rectángulos redondeados completos; `AC`, con otra clase que conservaba la elevación, siguió cortada, lo
+que confirma la causa. Ni `validate` ni `comparar_capturas` lo ven (la estructura coincidía con la maqueta al 5 % y 3 %):
+se ve en una captura y lo confirma un experimento. Queda en la skill `xone-development`, en el apartado de `elevation`
+del CSS. **Sin medir en iOS ni con otro framework.** Los chips de la barra (`.calcChip`, con `elevation`) muestran el
+mismo texto cortado por abajo: es la sospecha que prueba la pasada siguiente.
