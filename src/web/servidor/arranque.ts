@@ -239,11 +239,12 @@ import type {
 // doblan.
 import { filaDeTarea } from "./transporte.js";
 import { esEsfuerzo, nivelesDeEsfuerzo, type Esfuerzo } from "../../core/esfuerzo.js";
-import { definicionDelCable, RUTA_CALLBACK_MCP, type AccionDeConector } from "../../core/conectores.js";
+import { CATALOGO_DE_CONECTORES, definicionDelCable, RUTA_CALLBACK_MCP, type AccionDeConector } from "../../core/conectores.js";
 import { servicioDeConectoresCableado, type ServicioDeConectores } from "../../agent/conectores/servicioDeConectores.js";
 import { crearGestorJira } from "../../agent/conectores/gestorJira.js";
+import { crearGestorNotion } from "../../agent/conectores/gestorNotion.js";
 import {
-  motivoDeClaveDeProyecto, transicionPropuesta, comentarioDeCierre,
+  motivoDeProyectoInaceptable, transicionPropuesta, comentarioDeCierre,
   type FichaDelGestor, type GestorDeTareasPort, type TransicionDelGestor, type Vinculo,
 } from "../../core/gestorDeTareas.js";
 import { datosDeCierre } from "./datosDeCierre.js";
@@ -737,6 +738,14 @@ function gestorBienFormado(m: object): Extract<MensajeDelCliente, { clase: "gest
     case "proyectos":
       return texto("conector") && texto("sitio")
         ? { clase: "gestor", accion: "proyectos", conector: x.conector as string, sitio: x.sitio as string }
+        : undefined;
+    case "buscarProyectos":
+      return texto("conector") && texto("texto")
+        ? { clase: "gestor", accion: "buscarProyectos", conector: x.conector as string, texto: x.texto as string }
+        : undefined;
+    case "describir":
+      return texto("conector") && texto("proyecto")
+        ? { clase: "gestor", accion: "describir", conector: x.conector as string, proyecto: x.proyecto as string }
         : undefined;
     case "vincular":
       return texto("conector") && texto("sitio") && texto("proyecto")
@@ -3609,13 +3618,35 @@ export function montarRutas(
   const asegurarSitios = async (gestor: GestorDeTareasPort): Promise<void> => {
     if (!conSitios.has(gestor)) await preguntarSitios(gestor);
   };
+  /**
+   * El nombre para mostrar de cada proyecto que un gestor ha NOMBRADO en este proceso (IXCODE-15):
+   * de `proyectos` (Jira) o de `describir`/`vincular` (Notion, donde el proyecto es un
+   * `collection://…` que no se lee). Lo que no se ha oído no se inventa: el vínculo va sin él.
+   */
+  const nombreDelProyecto = new Map<string, string>();
+  const claveDeProyecto = (conector: string, sitio: string, proyecto: string): string => JSON.stringify([conector, sitio, proyecto]);
+
+  /**
+   * El nombre del conector tal como lo enseña el catálogo («Jira», «Notion»): los rótulos salen de
+   * aquí y no a fuego (IXCODE-15). Sin servicio, la fila del catálogo de CÓDIGO; sin fila, el id.
+   */
+  const nombreDelConector = (conector: string): string => {
+    let catalogo: readonly { id: string; nombre: string }[] = CATALOGO_DE_CONECTORES;
+    try {
+      if (servicioConectores !== undefined) catalogo = servicioConectores.lista().catalogo;
+    } catch {
+      // Un fichero de conectores ilegible no puede tumbar un rótulo: queda el catálogo de código.
+    }
+    return catalogo.find((c) => c.id === conector)?.nombre ?? conector;
+  };
 
   /** El texto que «Empezar» deja en el compositor. Lo que no consta no se escribe: ni una
-   *  línea `undefined` por un enlace que falta, ni un párrafo vacío por una descripción vacía. */
-  const borradorDeTarea = (f: FichaDelGestor): string => {
-    const cabecera = [`${f.clave} — ${f.titulo}`, `Estado: ${f.estado}`, ...(f.url === undefined ? [] : [f.url])].join("\n");
+   *  línea `undefined` por un enlace que falta, ni un párrafo vacío por una descripción vacía.
+   *  La cabecera lleva lo que se ENSEÑA (`etiqueta ?? clave`) y el gestor por su NOMBRE. */
+  const borradorDeTarea = (f: FichaDelGestor, conector: string): string => {
+    const cabecera = [`${f.etiqueta ?? f.clave} — ${f.titulo}`, `Estado: ${f.estado}`, ...(f.url === undefined ? [] : [f.url])].join("\n");
     const descripcion = f.descripcion.trim();
-    return `Trabaja en esta tarea de Jira.\n\n${cabecera}${descripcion === "" ? "" : `\n\n${descripcion}`}`;
+    return `Trabaja en esta tarea de ${nombreDelConector(conector)}.\n\n${cabecera}${descripcion === "" ? "" : `\n\n${descripcion}`}`;
   };
 
   /**
@@ -3649,16 +3680,40 @@ export function montarRutas(
       const c = cargar(raiz).config.proyecto;
       return { conectores: c?.conectores ?? [], vinculo: c?.gestorDeTareas };
     };
-    const emitirEstado = (): void => {
+    /**
+     * El estado del gestor del proyecto. `admiteMias` (IXCODE-15) lo decide el ADAPTADOR para ESE
+     * vínculo —Jira siempre; Notion solo con una propiedad de persona— y viaja SOLO con vínculo y
+     * con un gestor que contestó: ausente es «no consta», y el panel no ofrece «Asignadas a mí».
+     */
+    const emitirEstado = async (): Promise<void> => {
       const { conectores, vinculo } = delProyecto();
       const nombre = vinculo === undefined ? undefined : nombreDelSitio.get(vinculo.sitio);
+      const nombreProyecto = vinculo === undefined ? undefined : nombreDelProyecto.get(claveDeProyecto(vinculo.conector, vinculo.sitio, vinculo.proyecto));
+      const g = vinculo === undefined ? undefined : gestorDe(vinculo.conector);
+      let admiteMias: boolean | undefined;
+      if (vinculo !== undefined && g !== undefined) {
+        try {
+          admiteMias = await g.admiteMias(vinculo);
+        } catch {
+          admiteMias = undefined;
+        }
+      }
       emitir({
         clase: "gestor",
         estado: {
           conectores,
           ...(vinculo === undefined
             ? {}
-            : { vinculo: { conector: vinculo.conector, sitio: vinculo.sitio, proyecto: vinculo.proyecto, ...(nombre === undefined ? {} : { nombreDelSitio: nombre }) } }),
+            : {
+                vinculo: {
+                  conector: vinculo.conector,
+                  sitio: vinculo.sitio,
+                  proyecto: vinculo.proyecto,
+                  ...(nombre === undefined ? {} : { nombreDelSitio: nombre }),
+                  ...(nombreProyecto === undefined ? {} : { nombreDelProyecto: nombreProyecto }),
+                },
+              }),
+          ...(admiteMias === undefined ? {} : { admiteMias }),
         },
       });
     };
@@ -3682,7 +3737,7 @@ export function montarRutas(
     try {
       switch (m.accion) {
         case "estado":
-          return emitirEstado();
+          return await emitirEstado();
         case "sitios": {
           const g = gestorOFallo(m.conector);
           if (g === undefined) return;
@@ -3693,24 +3748,67 @@ export function montarRutas(
           const g = gestorOFallo(m.conector);
           if (g === undefined) return;
           const lista = (await g.proyectos(m.sitio)).map((x) => ({ clave: x.clave, nombre: x.nombre }));
+          for (const x of lista) nombreDelProyecto.set(claveDeProyecto(m.conector, m.sitio, x.clave), x.nombre);
           emitir({ clase: "gestor", proyectos: { sitio: m.sitio, lista } });
           return;
         }
+        // IXCODE-15, de solo LECTURA: buscar proyectos por texto (Notion: sus bases). Un gestor que
+        // no busca (Jira) lo DICE; una lista vacía afirmaría que no hay nada que se llame así.
+        case "buscarProyectos": {
+          const g = gestorOFallo(m.conector);
+          if (g === undefined) return;
+          if (g.buscarProyectos === undefined) return fallo(`en ${nombreDelConector(m.conector)} los proyectos se eligen de la lista`);
+          const lista = (await g.buscarProyectos(m.texto)).map((x) => ({ proyecto: x.proyecto, nombre: x.nombre, ...(x.ruta === undefined ? {} : { ruta: x.ruta }) }));
+          emitir({ clase: "gestor", busqueda: { conector: m.conector, texto: m.texto, lista } });
+          return;
+        }
+        // IXCODE-15, de solo LECTURA: lo que se entiende del esquema de un proyecto ANTES de
+        // vincularlo. `pedido` es lo que llegó (el id de la base); `esquema.proyecto` es lo que
+        // hay que mandar a `vincular` (el data source ya resuelto). Un «no vale» viaja como
+        // `motivo`, no como `error`: la acción salió bien, y la respuesta es que esa base no sirve.
+        case "describir": {
+          const g = gestorOFallo(m.conector);
+          if (g === undefined) return;
+          if (g.describirProyecto === undefined) return fallo(`${nombreDelConector(m.conector)} no describe sus proyectos`);
+          const [sitio] = await g.sitios();
+          const d = await g.describirProyecto({ conector: m.conector, sitio: sitio?.id ?? "", proyecto: m.proyecto });
+          if ("esquema" in d && sitio !== undefined) nombreDelProyecto.set(claveDeProyecto(m.conector, sitio.id, d.esquema.proyecto), d.esquema.nombre);
+          emitir({ clase: "gestor", descripcion: { conector: m.conector, pedido: m.proyecto, ...d } });
+          return;
+        }
         case "vincular": {
-          // La clave se comprueba ANTES de preguntar: entra en una JQL.
-          const motivo = motivoDeClaveDeProyecto(m.proyecto);
+          // La forma se comprueba ANTES de preguntar, con la regla de SU conector (IXCODE-15): la
+          // clave de Jira entra en una JQL, el data source de Notion en un SQL.
+          const motivo = motivoDeProyectoInaceptable(m.conector, m.proyecto);
           if (motivo !== undefined) return fallo(motivo);
           const g = gestorOFallo(m.conector);
           if (g === undefined) return;
           // Solo se escribe lo que el gestor DICE que existe: un vínculo a un proyecto que no se
-          // ve no daría ni una pendiente, y el fallo aparecería lejos de donde se cometió.
-          const visibles = await g.proyectos(m.sitio);
-          if (!visibles.some((x) => x.clave === m.proyecto)) return fallo(`«${m.proyecto}» no está entre los proyectos de ese sitio`);
-          const { conectores } = delProyecto();
+          // ve no daría ni una pendiente, y el fallo aparecería lejos de donde se cometió. Quien
+          // sabe DESCRIBIR (Notion) lo comprueba así —que el data source existe Y que su esquema
+          // vale como gestor—; quien no (Jira), contra la lista de proyectos del sitio, como siempre.
+          if (g.describirProyecto !== undefined) {
+            if (!(await g.sitios()).some((x) => x.id === m.sitio)) return fallo(`«${m.sitio}» no es un sitio de ${nombreDelConector(m.conector)}`);
+            const d = await g.describirProyecto({ conector: m.conector, sitio: m.sitio, proyecto: m.proyecto });
+            if ("motivo" in d) return fallo(d.motivo);
+            if (d.esquema.proyecto !== m.proyecto) return fallo("ese proyecto no es el que se describió");
+            nombreDelProyecto.set(claveDeProyecto(m.conector, m.sitio, m.proyecto), d.esquema.nombre);
+          } else {
+            const visibles = await g.proyectos(m.sitio);
+            const visto = visibles.find((x) => x.clave === m.proyecto);
+            if (visto === undefined) return fallo(`«${m.proyecto}» no está entre los proyectos de ese sitio`);
+            nombreDelProyecto.set(claveDeProyecto(m.conector, m.sitio, m.proyecto), visto.nombre);
+          }
+          // UN gestor por proyecto (IXCODE-15): vincular uno SUSTITUYE al de antes, y el conector
+          // del de antes deja de estar usado —el panel no tiene casilla para un gestor, así que
+          // quedarse en `conectores` lo dejaría usado sin control que lo quite—.
+          const { conectores, vinculo: anterior } = delProyecto();
           const vinculo: Vinculo = { conector: m.conector, sitio: m.sitio, proyecto: m.proyecto };
           if (!guardar(() => guardarGestorDeProyecto(raiz, vinculo))) return;
-          if (!conectores.includes(m.conector) && !guardar(() => guardarConectoresDeProyecto(raiz, [...conectores, m.conector]))) return;
-          return emitirEstado();
+          const sinAnterior = anterior !== undefined && anterior.conector !== m.conector ? conectores.filter((c) => c !== anterior.conector) : conectores;
+          const nuevos = sinAnterior.includes(m.conector) ? sinAnterior : [...sinAnterior, m.conector];
+          if (nuevos.join("\u0000") !== conectores.join("\u0000") && !guardar(() => guardarConectoresDeProyecto(raiz, nuevos))) return;
+          return await emitirEstado();
         }
         case "desvincular": {
           // Desvincular también DEJA DE USAR el conector del vínculo: el panel ya no ofrece una
@@ -3721,7 +3819,7 @@ export function montarRutas(
           if (vinculo !== undefined && conectores.includes(vinculo.conector)) {
             if (!guardar(() => guardarConectoresDeProyecto(raiz, conectores.filter((c) => c !== vinculo.conector)))) return;
           }
-          return emitirEstado();
+          return await emitirEstado();
         }
         case "usarConector": {
           // Solo se AÑADE lo que esta consola conoce (`catálogo ∪ definiciones`): un id cualquiera
@@ -3736,7 +3834,7 @@ export function montarRutas(
             ? (conectores.includes(m.conector) ? conectores : [...conectores, m.conector])
             : conectores.filter((c) => c !== m.conector);
           if (!guardar(() => guardarConectoresDeProyecto(raiz, nuevos))) return;
-          return emitirEstado();
+          return await emitirEstado();
         }
         case "pendientes": {
           const { vinculo } = delProyecto();
@@ -3821,7 +3919,7 @@ export function montarRutas(
           // cuando el texto llega al compositor, o el cambio de sesión se lo llevaría.
           await anunciarAlta().catch(contar);
           anunciada = true;
-          emitir({ clase: "gestor", borrador: { clave: ficha.clave, texto: borradorDeTarea(ficha) } });
+          emitir({ clase: "gestor", borrador: { clave: ficha.clave, texto: borradorDeTarea(ficha, vinculo.conector) } });
           return;
         }
         // Las otras dos acciones que ESCRIBEN (Task 10): de la sesión ABIERTA, no del proyecto
@@ -3844,10 +3942,10 @@ export function montarRutas(
           const g = gestorOFallo(ticket.conector);
           if (g === undefined) return;
           // El adaptador de Jira solo mira `sitio` para comentar y transicionar
-          // (`gestorJira.ts#comentar`/`#transicionar`): el `proyecto` del vínculo del TICKET
-          // no hace falta para escribir, así que basta con lo que la sesión guardó al abrirse.
-          // Se completa con el del proyecto cuando coincide, por si algún adaptador futuro sí
-          // lo necesitara; vacío si el proyecto ya no está vinculado a nada.
+          // (`gestorJira.ts#comentar`/`#transicionar`), y el de Notion saca el data source de la
+          // PROPIA página (`gestorNotion.ts#fuenteParaPagina`): el `proyecto` del vínculo del
+          // TICKET no hace falta para escribir, así que basta con lo que la sesión guardó al
+          // abrirse. Se completa con el del proyecto por si acaso; vacío si ya no hay vínculo.
           const vinculo: Vinculo = { conector: ticket.conector, sitio: ticket.sitio, proyecto: delProyecto().vinculo?.proyecto ?? "" };
           // Si `comentar` falla, la excepción sale al `catch` de fuera: NO se transiciona.
           await g.comentar(vinculo, ticket.clave, m.comentario);
@@ -5951,7 +6049,8 @@ export function ajusteDeConectoresCableado(opciones: {
  * pendientes: un segundo servicio no vería la de Ajustes y pisaría su verificador PKCE—. Así
  * que aquí se ENVUELVE esa fábrica para quedarse con el servicio que devuelve, y el gestor le
  * llama a ese. El gestor de `"jira"` es UNO (el adaptador guarda la url de cada sitio en la
- * instancia); cualquier otro conector no es un gestor. Extraída y probada por el patrón de
+ * instancia), y el de `"notion"` también (guarda el esquema de cada base, IXCODE-15); cualquier
+ * otro conector no es un gestor. Extraída y probada por el patrón de
  * fallo de siempre: un literal dentro de `arrancarConsolaWeb` no lo mira ningún test.
  */
 export function ajusteDeGestorCableado(ajuste: { conectores: (alCambiar: () => void) => ServicioDeConectores }): {
@@ -5959,18 +6058,29 @@ export function ajusteDeGestorCableado(ajuste: { conectores: (alCambiar: () => v
   gestorDeTareas: (conector: string) => GestorDeTareasPort | undefined;
 } {
   let servicio: ServicioDeConectores | undefined;
-  let jira: GestorDeTareasPort | undefined;
+  /** Uno por conector: el de Jira guarda la url de cada sitio, el de Notion el esquema de cada base. */
+  const gestores = new Map<string, GestorDeTareasPort>();
+  /** Las fábricas de los gestores conocidos (IXCODE-15: Jira y Notion). Cualquier otro conector no es un gestor. */
+  const FABRICAS: Record<string, (llamar: (nombre: string, args: Record<string, unknown>) => Promise<string>) => GestorDeTareasPort> = {
+    jira: crearGestorJira,
+    notion: crearGestorNotion,
+  };
   return {
     conectores: (alCambiar) => (servicio = ajuste.conectores(alCambiar)),
     gestorDeTareas: (conector) => {
-      if (conector !== "jira") return undefined;
-      jira ??= crearGestorJira((nombre, args) => {
-        // `montarRutas` construye el servicio al montar, antes de atender ningún mensaje; esto
-        // solo salta si alguien usa el gestor sin haber pasado `conectores` a `montarRutas`.
-        if (servicio === undefined) return Promise.reject(new Error("esta ejecución no tiene conectores"));
-        return servicio.llamar("jira", nombre, args);
-      });
-      return jira;
+      const fabrica = Object.hasOwn(FABRICAS, conector) ? FABRICAS[conector] : undefined;
+      if (fabrica === undefined) return undefined;
+      let g = gestores.get(conector);
+      if (g === undefined) {
+        g = fabrica((nombre, args) => {
+          // `montarRutas` construye el servicio al montar, antes de atender ningún mensaje; esto
+          // solo salta si alguien usa el gestor sin haber pasado `conectores` a `montarRutas`.
+          if (servicio === undefined) return Promise.reject(new Error("esta ejecución no tiene conectores"));
+          return servicio.llamar(conector, nombre, args);
+        });
+        gestores.set(conector, g);
+      }
+      return g;
     },
   };
 }

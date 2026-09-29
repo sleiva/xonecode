@@ -7006,3 +7006,49 @@ sigue sin medir**: la causa REAL de un conector que un usuario ve «no responde�
 error no-OAuth del tramo de discovery/DCR, o un segundo fallo de credencial tras el reintento del
 SDK— sigue sin capturarse con un refresh token muerto de verdad; hace falta esa medida antes de
 tocar más código en este punto.
+
+## Notion como gestor de tareas (IXCODE-15) (29-09-2026)
+
+El gestor de tareas deja de ser solo Jira: `agent/conectores/gestorNotion.ts` implementa el MISMO
+`GestorDeTareasPort`, y un proyecto tiene UN gestor —vincular Notion sustituye a Jira y deja de
+usar su conector, y al revés—. Lo que sigue es lo MEDIDO contra `https://mcp.notion.com/mcp` con
+la cuenta real, con un script de solo lectura (ni una tool de escritura se llamó al medir).
+
+**La forma de las respuestas.** Todas son `{content:[{type:"text", text:"<JSON>"}]}`. El servidor
+publica 46 tools, todas con `readOnlyHint`. El «proyecto» de Notion es un DATA SOURCE de una base
+(`collection://<uuid>`), no la base: `notion-search` devuelve bases (`type: "database"`, con `id`,
+`title` y a veces `path`), y hace falta un `notion-fetch` para llegar a su data source. El fetch de
+una base trae el esquema DENTRO de su `text`, en un bloque `<data-source-state>{JSON}</data-source-state>`
+—con `name`, `schema` por propiedad y `url: "collection://…"`—; el fetch directo de un
+`collection://…` también funciona (`metadata.type: "data_source"`), así que el vínculo guarda el
+data source y no la base. Una propiedad `status` trae sus opciones por GRUPOS (`to_do`,
+`in_progress`, `complete`, `current`, `future`), que son la categoría de cada estado.
+
+**Una base puede no valer, y se DICE.** La base «My Tasks» que Notion crea por su cuenta es una vista
+sin data source propio: su fetch solo trae `<views>` con `dataSourceUrl: ""`. `describir` contesta
+con ese motivo en vez de «no se entiende». Lo mismo sin propiedad de estado o de título.
+
+**El SQL de las pendientes.** `notion-query-data-sources` acepta SQLite de solo lectura con `params`
+posicionales, y se usan SIEMPRE para el texto de la persona (`sqlDePendientes`, puro). Medido: el
+filtro `LIKE ? ESCAPE '\'` funciona, la columna de persona es un JSON `["user://<id>"]` sobre el que
+`LIKE '%user://<id>%'` filtra bien, y la tabla expuesta no tiene columna de última edición —solo
+`createdTime`—, así que se ordena por creación. Una tarea sin estado tiene `NULL`, que `NOT IN` no
+deja pasar: la cláusula es `("Status" IS NULL OR "Status" NOT IN (…))`.
+
+**«Asignadas a mí» sí tiene una forma limpia**: `notion-get-users` con `user_id: "self"` devuelve a
+quien tiene la sesión OAuth. Se ofrece solo si la base tiene una propiedad de persona
+(`admiteMias`, que viaja en el `estado`).
+
+**El nombre del asignado NO siempre se puede saber.** `notion-get-users` por `user_id` de un
+asignado real devolvió una lista vacía, y la lista completa de miembros (una página) no lo contenía:
+los asignados de una base de plantilla no son miembros del espacio. El adaptador pagina la lista de
+miembros una vez por instancia y resuelve lo que puede; lo que no, deja el asignado AUSENTE —nunca
+el id—. La lista trae el correo de cada miembro, y de `nombresDeUsuarios` solo sale el nombre.
+
+**Escribir.** `notion-update-page` con `command: "update_properties"` y el nombre de la opción de
+estado como valor, y `notion-create-comment` con `markdown` (su esquema acepta `markdown` o
+`rich_text`). No se midió escribiendo. Su esquema avisa de que en un comentario los encabezados y
+las listas se guardan como TEXTO, así que las secciones de `comentarioDeCierre` saldrán literales
+en Notion. Las transiciones de Notion no existen como tales: cada OPCIÓN del estado es un destino,
+y el data source se saca de la PROPIA página (`<parent-data-source>`), no del vínculo, para que se
+pueda cerrar una sesión aunque el proyecto ya esté vinculado a otra cosa.

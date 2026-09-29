@@ -839,10 +839,18 @@ escrito a mano lo da de alta una persona desde la misma ventana.
   contra el paquete instalado, con su porqué entero en `docs/DECISIONES.md`): lo único que faltaba
   era que `motivoDe` reconociera un `OAuthError` del SDK y dijera «falta autorizar» en vez de «no
   responde» — no hay reintento propio que añadir encima del suyo.
-- **Un gestor de tareas (hoy Jira) es un conector más, con su propio puerto PURO**
-  (`core/gestorDeTareas.ts`) y su adaptador (`agent/conectores/gestorJira.ts`), el ÚNICO fichero
-  que conoce nombres de tool de Jira y la forma de sus respuestas; el resto del harness solo ve
-  `GestorDeTareasPort`. **Del asignado de una tarea solo cruza el nombre visible**
+- **Un gestor de tareas (Jira o Notion) es un conector más, con su propio puerto PURO**
+  (`core/gestorDeTareas.ts`) y un adaptador por gestor (`agent/conectores/gestorJira.ts`,
+  `gestorNotion.ts`), cada uno el ÚNICO fichero que conoce los nombres de tool de SU gestor y la
+  forma de sus respuestas; el resto del harness solo ve `GestorDeTareasPort`. **UN gestor por
+  proyecto**: vincular uno sustituye al otro y deja de usar su conector. **Qué `proyecto` vale lo
+  decide su CONECTOR** (`motivoDeProyectoInaceptable`, la misma en `config.ts#validar`, `vincular`
+  y los adaptadores): la clave de Jira, o el data source `collection://…` de Notion. En Notion se
+  BUSCA la base (`buscarProyectos`), se DESCRIBE su esquema antes de vincular (`describir`: estado,
+  título, asignado, o el motivo de que no valga) y las pendientes salen de un SQL con `params`
+  (`sqlDePendientes`), nunca interpolado. Las transiciones de Notion son las opciones de su estado,
+  y el data source se saca de la PROPIA página, no del vínculo. «Asignadas a mí» lo ofrece el
+  servidor solo si el adaptador lo admite para ESE vínculo (`admiteMias`). **Del asignado de una tarea solo cruza el nombre visible**
   (`nombreDelAsignado`, reducido a `displayName`): el correo y el id de cuenta no salen del
   adaptador — la medida está en `docs/DECISIONES.md`.
 - **Vincular un proyecto de Jira ESCRIBE la configuración solo después de que Jira confirme la

@@ -327,6 +327,24 @@ describe("store del cliente", () => {
     expect(s.leer().gestor?.ficha?.clave).toBe("IXCODE-12");
   });
 
+  it("IXCODE-15: «busqueda» y «descripcion» se guardan, se FUNDEN con el resto, y retiran el error de SU acción", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "alta", pasos: [], proveedores: [], entornos: [], proyectos: [], ramas: [], proyectoAbierto: true, proyectoActivo: "p1", sesionActiva: "s1" });
+    s.aplicar({ clase: "gestor", estado: { conectores: ["notion"], admiteMias: true } });
+    s.aplicar({ clase: "gestor", error: { accion: "buscarProyectos", motivo: "no contesta" } });
+    s.aplicar({ clase: "gestor", error: { accion: "describir", motivo: "no contesta" } });
+    s.aplicar({ clase: "gestor", busqueda: { conector: "notion", texto: "task", lista: [{ proyecto: "b1", nombre: "Tasks" }] } });
+    expect(s.leer().gestor?.busqueda).toEqual({ conector: "notion", texto: "task", lista: [{ proyecto: "b1", nombre: "Tasks" }] });
+    expect(s.leer().gestor?.errores?.buscarProyectos).toBeUndefined();
+    expect(s.leer().gestor?.errores?.describir).toEqual({ motivo: "no contesta" });
+    s.aplicar({ clase: "gestor", descripcion: { conector: "notion", pedido: "b1", motivo: "esta base no tiene una propiedad de estado" } });
+    expect(s.leer().gestor?.descripcion).toEqual({ conector: "notion", pedido: "b1", motivo: "esta base no tiene una propiedad de estado" });
+    expect(s.leer().gestor?.errores?.describir).toBeUndefined();
+    // Nada se lleva lo de antes: el estado (con `admiteMias`) y la búsqueda siguen.
+    expect(s.leer().gestor?.estado).toEqual({ conectores: ["notion"], admiteMias: true });
+    expect(s.leer().gestor?.busqueda?.texto).toBe("task");
+  });
+
   /**
    * Task 11 (IXCODE-11): las tres respuestas de las tarjetas que escriben en Jira. `cerrado`
    * lleva su propio `id` monotónico, igual que `borrador`, y cada campo retira el error de SU

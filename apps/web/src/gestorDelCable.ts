@@ -1,4 +1,4 @@
-import type { CategoriaDeTarea, TareaDelGestor, TransicionDelGestor, VinculoDelCable } from "./tipos.js";
+import type { CategoriaDeTarea, EsquemaDelProyecto, TareaDelGestor, TransicionDelGestor, VinculoDelCable } from "./tipos.js";
 
 /**
  * El mensaje `gestor` tal como llega por el cable, VALIDADO campo a campo (el molde de
@@ -16,9 +16,13 @@ import type { CategoriaDeTarea, TareaDelGestor, TransicionDelGestor, VinculoDelC
  * tiene forma se descarta entero, nunca a medias.
  */
 export interface LecturaDelGestor {
-  estado?: { conectores: string[]; vinculo?: VinculoDelCable };
+  estado?: { conectores: string[]; vinculo?: VinculoDelCable; admiteMias?: boolean };
   sitios?: { conector: string; lista: { id: string; nombre: string }[] };
   proyectos?: { sitio: string; lista: { clave: string; nombre: string }[] };
+  /** IXCODE-15: la respuesta de `buscarProyectos`. */
+  busqueda?: { conector: string; texto: string; lista: { proyecto: string; nombre: string; ruta?: string }[] };
+  /** IXCODE-15: la respuesta de `describir` — o lo entendido (`esquema`) o por qué no vale (`motivo`), nunca los dos. */
+  descripcion?: { conector: string; pedido: string } & ({ esquema: EsquemaDelProyecto } | { motivo: string });
   pendientes?: { cuando: number; texto?: string; mias?: true; lista: TareaDelGestor[] };
   ficha?: { clave: string; descripcion: string };
   borrador?: { clave: string; texto: string };
@@ -38,6 +42,8 @@ export function leerGestorDelCable(mensaje: unknown): LecturaDelGestor {
   const estado = leerEstado(mensaje.estado);
   const sitios = leerSitios(mensaje.sitios);
   const proyectos = leerProyectos(mensaje.proyectos);
+  const busqueda = leerBusqueda(mensaje.busqueda);
+  const descripcion = leerDescripcion(mensaje.descripcion);
   const pendientes = leerPendientes(mensaje.pendientes);
   const ficha = leerFicha(mensaje.ficha);
   const borrador = leerBorrador(mensaje.borrador);
@@ -49,6 +55,8 @@ export function leerGestorDelCable(mensaje: unknown): LecturaDelGestor {
     ...(estado === undefined ? {} : { estado }),
     ...(sitios === undefined ? {} : { sitios }),
     ...(proyectos === undefined ? {} : { proyectos }),
+    ...(busqueda === undefined ? {} : { busqueda }),
+    ...(descripcion === undefined ? {} : { descripcion }),
     ...(pendientes === undefined ? {} : { pendientes }),
     ...(ficha === undefined ? {} : { ficha }),
     ...(borrador === undefined ? {} : { borrador }),
@@ -67,6 +75,7 @@ function leerVinculo(v: unknown): VinculoDelCable | undefined {
     sitio: v.sitio,
     proyecto: v.proyecto,
     ...(typeof v.nombreDelSitio === "string" ? { nombreDelSitio: v.nombreDelSitio } : {}),
+    ...(typeof v.nombreDelProyecto === "string" ? { nombreDelProyecto: v.nombreDelProyecto } : {}),
   };
 }
 
@@ -76,7 +85,53 @@ function leerEstado(v: unknown): LecturaDelGestor["estado"] {
   // proyecto no tiene gestor, y sobre un dato ilegible sería una afirmación inventada.
   const vinculo = leerVinculo(v.vinculo);
   if (v.vinculo !== undefined && vinculo === undefined) return undefined;
-  return { conectores: soloTextos(v.conectores), ...(vinculo === undefined ? {} : { vinculo }) };
+  return {
+    conectores: soloTextos(v.conectores),
+    ...(vinculo === undefined ? {} : { vinculo }),
+    // Solo un booleano: es lo que decide si se ofrece «Asignadas a mí», y un «sí» de texto no lo es.
+    ...(typeof v.admiteMias === "boolean" ? { admiteMias: v.admiteMias } : {}),
+  };
+}
+
+function leerBusqueda(v: unknown): LecturaDelGestor["busqueda"] {
+  if (!esObjeto(v) || typeof v.conector !== "string" || typeof v.texto !== "string" || !Array.isArray(v.lista)) return undefined;
+  const lista = v.lista.flatMap((p): { proyecto: string; nombre: string; ruta?: string }[] =>
+    esObjeto(p) && typeof p.proyecto === "string" && typeof p.nombre === "string"
+      ? [{ proyecto: p.proyecto, nombre: p.nombre, ...(typeof p.ruta === "string" ? { ruta: p.ruta } : {}) }]
+      : []
+  );
+  return { conector: v.conector, texto: v.texto, lista };
+}
+
+/** Un esquema entendido, entero o nada: a medias diría «Estado: …» de una propiedad que no llegó. */
+function leerEsquema(v: unknown): EsquemaDelProyecto | undefined {
+  if (!esObjeto(v) || typeof v.proyecto !== "string" || typeof v.nombre !== "string" || typeof v.titulo !== "string") return undefined;
+  const e = v.estado;
+  if (!esObjeto(e) || typeof e.propiedad !== "string" || !Array.isArray(e.opciones)) return undefined;
+  const opciones = e.opciones.flatMap((o): { nombre: string; categoria: CategoriaDeTarea }[] =>
+    esObjeto(o) && typeof o.nombre === "string" && CATEGORIAS.includes(o.categoria as CategoriaDeTarea)
+      ? [{ nombre: o.nombre, categoria: o.categoria as CategoriaDeTarea }]
+      : []
+  );
+  if (opciones.length !== e.opciones.length) return undefined;
+  return {
+    proyecto: v.proyecto,
+    nombre: v.nombre,
+    estado: { propiedad: e.propiedad, opciones },
+    titulo: v.titulo,
+    ...(typeof v.asignado === "string" ? { asignado: v.asignado } : {}),
+    ...(typeof v.fuentes === "number" ? { fuentes: v.fuentes } : {}),
+  };
+}
+
+function leerDescripcion(v: unknown): LecturaDelGestor["descripcion"] {
+  if (!esObjeto(v) || typeof v.conector !== "string" || typeof v.pedido !== "string") return undefined;
+  const base = { conector: v.conector, pedido: v.pedido };
+  // Las dos a la vez no significan nada: ni «vale» ni «no vale».
+  if (v.esquema !== undefined && v.motivo !== undefined) return undefined;
+  if (typeof v.motivo === "string") return { ...base, motivo: v.motivo };
+  const esquema = leerEsquema(v.esquema);
+  return esquema === undefined ? undefined : { ...base, esquema };
 }
 
 function leerSitios(v: unknown): LecturaDelGestor["sitios"] {
@@ -102,6 +157,7 @@ function leerTarea(t: unknown): TareaDelGestor[] {
   return [
     {
       clave: t.clave,
+      ...(typeof t.etiqueta === "string" ? { etiqueta: t.etiqueta } : {}),
       titulo: t.titulo,
       estado: t.estado,
       categoria: t.categoria as CategoriaDeTarea,

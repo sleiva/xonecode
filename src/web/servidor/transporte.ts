@@ -12,7 +12,7 @@
  * guarda quien lo tiene en vuelo, que lo suelta en cuanto hay decisión.
  */
 import type { PlanEnDisco } from "../../agent/planesEnDisco.js";
-import type { TareaDelGestor, TransicionDelGestor, Vinculo } from "../../core/gestorDeTareas.js";
+import type { EsquemaDelProyecto, TareaDelGestor, TransicionDelGestor, Vinculo } from "../../core/gestorDeTareas.js";
 import type { CambiosDeUnaColeccion } from "../../core/diffDeColecciones.js";
 import type { FotoDeColecciones } from "../../core/fotoDeColecciones.js";
 import type { InformeDeDispositivos, NombreDeHerramienta } from "../../core/dispositivos.js";
@@ -40,8 +40,10 @@ import type { Esfuerzo } from "../../core/esfuerzo.js";
 import type { AutenticacionDeConector, ConectorDelCable, DefinicionDeConector, FilaDeCatalogo } from "../../core/conectores.js";
 
 /** El vínculo del proyecto con su gestor, tal como cruza el cable: el del `config.json` más el
- *  nombre del sitio si esta ejecución ya lo sabe (lo dijo `sitios()`). Ausente = no consta. */
-export type VinculoDelCable = Vinculo & { nombreDelSitio?: string };
+ *  nombre del sitio si esta ejecución ya lo sabe (lo dijo `sitios()`), y el del PROYECTO si ya
+ *  lo nombró el gestor (IXCODE-15: en Notion `proyecto` es un `collection://…` que no se lee).
+ *  Ausente = no consta. */
+export type VinculoDelCable = Vinculo & { nombreDelSitio?: string; nombreDelProyecto?: string };
 
 /**
  * El informe de `core/dispositivos.ts`. **La `ruta` de cada herramienta solo cruza para
@@ -567,9 +569,19 @@ export type MensajeAlCliente =
    */
   | {
       clase: "gestor";
-      estado?: { conectores: string[]; vinculo?: VinculoDelCable };
+      /** `admiteMias` (IXCODE-15): si el gestor VINCULADO sabe filtrar «asignadas a mí». Solo
+       *  con vínculo; ausente = no consta, y el panel no ofrece el conmutador. */
+      estado?: { conectores: string[]; vinculo?: VinculoDelCable; admiteMias?: boolean };
       sitios?: { conector: string; lista: { id: string; nombre: string }[] };
       proyectos?: { sitio: string; lista: { clave: string; nombre: string }[] };
+      /** IXCODE-15: la respuesta de `buscarProyectos`, con el `texto` que se buscó (para no
+       *  pintar una respuesta vieja). En Notion `proyecto` es el id de la BASE: se manda a
+       *  `describir`, NO a `vincular`. */
+      busqueda?: { conector: string; texto: string; lista: { proyecto: string; nombre: string; ruta?: string }[] };
+      /** IXCODE-15: la respuesta de `describir`. `pedido` es lo que se mandó; con `esquema`, lo
+       *  que hay que mandar a `vincular` es `esquema.proyecto` (el data source ya resuelto). Con
+       *  `motivo`, esa base no vale como gestor —la acción salió bien; no es un `error`—. */
+      descripcion?: { conector: string; pedido: string } & ({ esquema: EsquemaDelProyecto } | { motivo: string });
       /** `cuando`: la hora del SERVIDOR a la que se preguntó, para decir «hace N min».
        *  `mias` viaja SOLO cuando la lista es la de «asignadas a mí»: el cliente pinta lo que
        *  el servidor contestó, no lo que pidió. */
@@ -1497,6 +1509,10 @@ export type MensajeDelCliente =
   | { clase: "gestor"; accion: "estado" }
   | { clase: "gestor"; accion: "sitios"; conector: string }
   | { clase: "gestor"; accion: "proyectos"; conector: string; sitio: string }
+  /** IXCODE-15, de solo LECTURA: buscar proyectos por texto (Notion: sus bases). */
+  | { clase: "gestor"; accion: "buscarProyectos"; conector: string; texto: string }
+  /** IXCODE-15, de solo LECTURA: lo que se entiende del esquema de un proyecto antes de vincularlo. */
+  | { clase: "gestor"; accion: "describir"; conector: string; proyecto: string }
   | { clase: "gestor"; accion: "vincular"; conector: string; sitio: string; proyecto: string }
   | { clase: "gestor"; accion: "desvincular" }
   | { clase: "gestor"; accion: "usarConector"; conector: string; usar: boolean }

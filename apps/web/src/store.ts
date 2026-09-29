@@ -1570,6 +1570,9 @@ export function crearStoreDelCliente(): {
             ...(campos.estado === undefined ? [] : ["estado", "vincular", "desvincular", "usarConector"]),
             ...(campos.sitios === undefined ? [] : ["sitios"]),
             ...(campos.proyectos === undefined ? [] : ["proyectos"]),
+            // IXCODE-15: las dos lecturas de Notion retiran el error de SU acción.
+            ...(campos.busqueda === undefined ? [] : ["buscarProyectos"]),
+            ...(campos.descripcion === undefined ? [] : ["describir"]),
             ...(campos.pendientes === undefined ? [] : ["pendientes"]),
             ...(campos.ficha === undefined ? [] : ["ficha"]),
             ...(borrador === undefined ? [] : ["empezar"]),

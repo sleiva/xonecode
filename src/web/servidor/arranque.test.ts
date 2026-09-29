@@ -9627,9 +9627,10 @@ describe("el gestor de tareas, por el cable", () => {
       { gestorDeTareas: () => new GestorDeTareasEnMemoria(datos()) },
       { modo: "offline", conectores: ["jira"], gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } },
     );
+    // `admiteMias` (IXCODE-15): el gestor lo dice para ESE vínculo, y Jira siempre lo admite.
     expect(await t.pedir({ clase: "gestor", accion: "estado" })).toEqual({
       clase: "gestor",
-      estado: { conectores: ["jira"], vinculo: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } },
+      estado: { conectores: ["jira"], vinculo: { conector: "jira", sitio: "c1", proyecto: "IXCODE" }, admiteMias: true },
     });
     // Tras preguntar los sitios, el vínculo ya lleva el nombre del suyo.
     expect(await t.pedir({ clase: "gestor", accion: "sitios", conector: "jira" })).toEqual({
@@ -9667,9 +9668,10 @@ describe("el gestor de tareas, por el cable", () => {
     expect(t.leerConfig()).toBe(antes);
 
     // La buena: escribe el vínculo, AÑADE el conector y conserva el resto del fichero.
+    // IXCODE-15: el vínculo lleva el nombre del proyecto que el gestor acaba de NOMBRAR, y `admiteMias`.
     expect(await t.pedir({ clase: "gestor", accion: "vincular", conector: "jira", sitio: "c1", proyecto: "IXCODE" })).toEqual({
       clase: "gestor",
-      estado: { conectores: ["jira"], vinculo: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } },
+      estado: { conectores: ["jira"], vinculo: { conector: "jira", sitio: "c1", proyecto: "IXCODE", nombreDelProyecto: "XOneCode" }, admiteMias: true },
     });
     expect(JSON.parse(t.leerConfig())).toEqual({
       modo: "offline",
@@ -10226,6 +10228,201 @@ describe("el gestor de tareas, por el cable", () => {
       .toEqual({ accion: "usarConector", motivo: "esta ejecución no tiene conectores" });
     expect(sin.leerConfig()).toBe(antesSin);
     await sin.limpiar();
+  });
+
+  // ── IXCODE-15: Notion como segundo gestor ──────────────────────────────────────────────────
+  const FUENTE = "collection://ea517d0b-bf30-4b08-8681-dc9c30f5e783";
+  const BASE_NOTION = "06aeb13b-13aa-442f-876d-55626fa55b9f";
+  const ESQUEMA_NOTION = {
+    proyecto: FUENTE,
+    nombre: "Tasks",
+    estado: { propiedad: "Status", opciones: [{ nombre: "Not started", categoria: "por-hacer" as const }, { nombre: "Done", categoria: "terminada" as const }] },
+    titulo: "Name",
+    asignado: "Assigned",
+  };
+  const datosNotion = (extra: Partial<ConstructorParameters<typeof GestorDeTareasEnMemoria>[0]> = {}) => ({
+    sitios: [{ id: "notion", nombre: "Notion" }],
+    encontrados: [{ proyecto: BASE_NOTION, nombre: "Tasks", ruta: "Hypergraph / Projects & Tasks" }, { proyecto: "1bd92005-83d0-451e-8771-c7e2c2b398d1", nombre: "My Tasks" }],
+    descripciones: {
+      [BASE_NOTION]: { esquema: ESQUEMA_NOTION },
+      [FUENTE]: { esquema: ESQUEMA_NOTION },
+      "1bd92005-83d0-451e-8771-c7e2c2b398d1": { motivo: "esta base no tiene un data source propio (es una vista)" },
+    },
+    ...extra,
+  });
+  const dosGestores = (notion = datosNotion()) => (c: string) =>
+    c === "jira" ? new GestorDeTareasEnMemoria(datos()) : c === "notion" ? new GestorDeTareasEnMemoria(notion) : undefined;
+
+  it("IXCODE-15: «buscarProyectos» y «describir» son de LECTURA, y quien no los tiene (Jira) lo DICE", async () => {
+    const t = await abrir({ gestorDeTareas: dosGestores(), conectores: servicioDeConectoresDeMentira().fabrica });
+    const antes = t.leerConfig();
+    expect(await t.pedir({ clase: "gestor", accion: "buscarProyectos", conector: "notion", texto: "task" })).toEqual({
+      clase: "gestor",
+      busqueda: {
+        conector: "notion",
+        texto: "task",
+        lista: [{ proyecto: BASE_NOTION, nombre: "Tasks", ruta: "Hypergraph / Projects & Tasks" }, { proyecto: "1bd92005-83d0-451e-8771-c7e2c2b398d1", nombre: "My Tasks" }],
+      },
+    });
+    // Describir la BASE devuelve el data source que hay que vincular.
+    expect(await t.pedir({ clase: "gestor", accion: "describir", conector: "notion", proyecto: BASE_NOTION })).toEqual({
+      clase: "gestor",
+      descripcion: { conector: "notion", pedido: BASE_NOTION, esquema: ESQUEMA_NOTION },
+    });
+    // Una base que no vale: su motivo, como respuesta y no como `error`.
+    expect(await t.pedir({ clase: "gestor", accion: "describir", conector: "notion", proyecto: "1bd92005-83d0-451e-8771-c7e2c2b398d1" })).toEqual({
+      clase: "gestor",
+      descripcion: { conector: "notion", pedido: "1bd92005-83d0-451e-8771-c7e2c2b398d1", motivo: "esta base no tiene un data source propio (es una vista)" },
+    });
+    // Jira no busca ni describe: con motivo, nunca una lista vacía.
+    expect((await t.pedir({ clase: "gestor", accion: "buscarProyectos", conector: "jira", texto: "x" }))?.error)
+      .toEqual({ accion: "buscarProyectos", motivo: "en Jira los proyectos se eligen de la lista" });
+    expect((await t.pedir({ clase: "gestor", accion: "describir", conector: "jira", proyecto: "IXCODE" }))?.error)
+      .toEqual({ accion: "describir", motivo: "Jira no describe sus proyectos" });
+    // Mal formados.
+    expect((await t.pedir({ clase: "gestor", accion: "buscarProyectos", conector: "notion" } as never))?.error)
+      .toEqual({ accion: "buscarProyectos", motivo: "petición mal formada" });
+    expect((await t.pedir({ clase: "gestor", accion: "describir", conector: "notion", proyecto: 7 } as never))?.error)
+      .toEqual({ accion: "describir", motivo: "petición mal formada" });
+    // Nada de esto escribe.
+    expect(t.leerConfig()).toBe(antes);
+    await t.limpiar();
+  });
+
+  it("IXCODE-15: vincular Notion comprueba con «describir» ANTES de escribir; si no vale, el config.json no cambia", async () => {
+    const t = await abrir({ gestorDeTareas: dosGestores(), conectores: servicioDeConectoresDeMentira().fabrica });
+    const antes = t.leerConfig();
+    // La forma de SU conector: una clave de Jira no es un data source.
+    expect((await t.pedir({ clase: "gestor", accion: "vincular", conector: "notion", sitio: "notion", proyecto: "IXCODE" }))?.error?.motivo)
+      .toContain("collection://");
+    // El id de la BASE tampoco: se vincula el data source ya resuelto.
+    expect((await t.pedir({ clase: "gestor", accion: "vincular", conector: "notion", sitio: "notion", proyecto: BASE_NOTION }))?.error?.motivo)
+      .toContain("collection://");
+    // Un data source que el gestor no describe.
+    expect((await t.pedir({ clase: "gestor", accion: "vincular", conector: "notion", sitio: "notion", proyecto: "collection://00000000-0000-4000-8000-000000000000" }))?.error)
+      .toEqual({ accion: "vincular", motivo: "no existe collection://00000000-0000-4000-8000-000000000000" });
+    // Un sitio que no es el de Notion.
+    expect((await t.pedir({ clase: "gestor", accion: "vincular", conector: "notion", sitio: "c1", proyecto: FUENTE }))?.error)
+      .toEqual({ accion: "vincular", motivo: "«c1» no es un sitio de Notion" });
+    expect(t.leerConfig()).toBe(antes);
+    // La buena: con el nombre para mostrar, y Notion con persona admite «mías».
+    expect(await t.pedir({ clase: "gestor", accion: "vincular", conector: "notion", sitio: "notion", proyecto: FUENTE })).toEqual({
+      clase: "gestor",
+      estado: { conectores: ["notion"], vinculo: { conector: "notion", sitio: "notion", proyecto: FUENTE, nombreDelProyecto: "Tasks" }, admiteMias: true },
+    });
+    expect(JSON.parse(t.leerConfig()).gestorDeTareas).toEqual({ conector: "notion", sitio: "notion", proyecto: FUENTE });
+    await t.limpiar();
+  });
+
+  it("IXCODE-15: UN gestor por proyecto — vincular uno SUSTITUYE al otro y deja de usar su conector, en las dos direcciones", async () => {
+    const t = await abrir(
+      { gestorDeTareas: dosGestores(), conectores: servicioDeConectoresDeMentira().fabrica },
+      { modo: "offline", conectores: ["jira", "deepwiki"], gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } },
+    );
+    expect((await t.pedir({ clase: "gestor", accion: "vincular", conector: "notion", sitio: "notion", proyecto: FUENTE }))?.estado?.conectores)
+      .toEqual(["deepwiki", "notion"]);
+    expect(JSON.parse(t.leerConfig())).toEqual({
+      modo: "offline",
+      conectores: ["deepwiki", "notion"],
+      gestorDeTareas: { conector: "notion", sitio: "notion", proyecto: FUENTE },
+    });
+    expect((await t.pedir({ clase: "gestor", accion: "vincular", conector: "jira", sitio: "c1", proyecto: "IXCODE" }))?.estado?.conectores)
+      .toEqual(["deepwiki", "jira"]);
+    expect(JSON.parse(t.leerConfig()).gestorDeTareas).toEqual({ conector: "jira", sitio: "c1", proyecto: "IXCODE" });
+    // Revincular el MISMO gestor a otro proyecto no toca los conectores.
+    expect((await t.pedir({ clase: "gestor", accion: "vincular", conector: "jira", sitio: "c1", proyecto: "IXCODE" }))?.estado?.conectores)
+      .toEqual(["deepwiki", "jira"]);
+    await t.limpiar();
+  });
+
+  it("IXCODE-15: «admiteMias» lo decide el adaptador para ESE vínculo; un fallo lo deja AUSENTE", async () => {
+    const vinculado = { modo: "offline", conectores: ["notion"], gestorDeTareas: { conector: "notion", sitio: "notion", proyecto: FUENTE } };
+    const no = await abrir({ gestorDeTareas: dosGestores(datosNotion({ admiteMias: false })) }, vinculado);
+    expect((await no.pedir({ clase: "gestor", accion: "estado" }))?.estado?.admiteMias).toBe(false);
+    await no.limpiar();
+    class Roto extends GestorDeTareasEnMemoria {
+      override async admiteMias(): Promise<boolean> { throw new Error("caído"); }
+    }
+    const roto = await abrir({ gestorDeTareas: () => new Roto(datosNotion()) }, vinculado);
+    const estado = (await roto.pedir({ clase: "gestor", accion: "estado" }))?.estado;
+    expect(estado).toEqual({ conectores: ["notion"], vinculo: { conector: "notion", sitio: "notion", proyecto: FUENTE } });
+    await roto.limpiar();
+  });
+
+  it("IXCODE-15: con el adaptador de Notion REAL — pendientes con etiqueta, «Empezar» con el nombre del conector, y cerrar sin vínculo", async () => {
+    const PAGINA = "087e117f-9478-4c60-871d-b5d76c2a7e30";
+    const estado = {
+      name: "Tasks",
+      schema: {
+        Assigned: { name: "Assigned", type: "person" },
+        Name: { name: "Name", type: "title" },
+        Status: { name: "Status", type: "status", groups: { to_do: [{ name: "Not started" }], in_progress: [{ name: "In progress" }], complete: [{ name: "Done" }] } },
+      },
+      url: FUENTE,
+    };
+    const escrito: { nombre: string; args: Record<string, unknown> }[] = [];
+    const notion = async (nombre: string, args: Record<string, unknown>): Promise<string> => {
+      if (nombre === "notion-fetch" && args.id === FUENTE) {
+        return JSON.stringify({ metadata: { type: "data_source" }, title: "Tasks", text: `<data-source-state>\n${JSON.stringify(estado)}\n</data-source-state>` });
+      }
+      if (nombre === "notion-fetch" && args.id === PAGINA) {
+        return JSON.stringify({
+          metadata: { type: "page" },
+          title: "Model to production",
+          url: "https://app.notion.com/p/087e117f94784c60871db5d76c2a7e30",
+          text: `<parent-data-source url="${FUENTE}" name="Tasks"/>\n<properties>\n${JSON.stringify({ Name: "Model to production", Status: "Not started", Assigned: [] })}\n</properties>\n<content>\nHacer **esto**.\n</content>`,
+        });
+      }
+      if (nombre === "notion-query-data-sources") {
+        return JSON.stringify({ results: [{ id: PAGINA, url: "https://app.notion.com/087e117f94784c60871db5d76c2a7e30", Status: "Not started", Name: "Model to production", Assigned: null }], has_more: false });
+      }
+      if (nombre === "notion-update-page" || nombre === "notion-create-comment") {
+        escrito.push({ nombre, args });
+        return JSON.stringify({ ok: true });
+      }
+      throw new Error(`tool inesperada ${nombre}`);
+    };
+    const doble = servicioDeConectoresDeMentira();
+    const cableado = ajusteDeGestorCableado({
+      conectores: (cb) => ({ ...doble.fabrica(cb), llamar: (id, n, a) => (id === "notion" ? notion(n, a) : Promise.reject(new Error("otro"))) }),
+    });
+    const t = await abrir(cableado, { modo: "offline", conectores: ["notion"], gestorDeTareas: { conector: "notion", sitio: "notion", proyecto: FUENTE } });
+
+    expect((await t.pedir({ clase: "gestor", accion: "pendientes" }))?.pendientes?.lista).toEqual([
+      { clave: PAGINA, etiqueta: "087e117f", titulo: "Model to production", estado: "Not started", categoria: "por-hacer", url: "https://app.notion.com/087e117f94784c60871db5d76c2a7e30" },
+    ]);
+    expect((await t.pedir({ clase: "gestor", accion: "transiciones", clave: PAGINA, para: "empezar" }))?.transiciones?.propuesta).toBe("In progress");
+    const borrador = await t.pedir({ clase: "gestor", accion: "empezar", clave: PAGINA, transicion: "In progress" });
+    expect(borrador?.borrador?.texto).toBe(
+      "Trabaja en esta tarea de Notion.\n\n087e117f — Model to production\nEstado: Not started\nhttps://app.notion.com/p/087e117f94784c60871db5d76c2a7e30\n\nHacer **esto**.",
+    );
+    expect(escrito).toEqual([{ nombre: "notion-update-page", args: { page_id: PAGINA, command: "update_properties", properties: { Status: "In progress" } } }]);
+
+    // Cerrar con el proyecto YA desvinculado: el data source sale de la página, no del vínculo.
+    await t.pedir({ clase: "gestor", accion: "desvincular" });
+    expect((await t.pedir({ clase: "gestor", accion: "transiciones", clave: PAGINA, para: "cerrar" }))?.transiciones?.propuesta).toBe("Done");
+    expect((await t.pedir({ clase: "gestor", accion: "cerrar", comentario: "hecho", transicion: "Done" }))?.cerrado).toEqual({ clave: PAGINA, comento: true, transicion: "Done" });
+    expect(escrito.slice(1)).toEqual([
+      { nombre: "notion-create-comment", args: { page_id: PAGINA, markdown: "hecho" } },
+      { nombre: "notion-update-page", args: { page_id: PAGINA, command: "update_properties", properties: { Status: "Done" } } },
+    ]);
+    await t.limpiar();
+  });
+
+  it("IXCODE-15: ajusteDeGestorCableado da UN gestor por conector conocido, cada uno llamando por SU id", async () => {
+    const ids: string[] = [];
+    const doble = servicioDeConectoresDeMentira();
+    const cableado = ajusteDeGestorCableado({
+      conectores: (cb) => ({ ...doble.fabrica(cb), llamar: async (id) => { ids.push(id); return JSON.stringify({ results: [], type: "workspace_search" }); } }),
+    });
+    cableado.conectores(() => {});
+    const n = cableado.gestorDeTareas("notion")!;
+    expect(cableado.gestorDeTareas("notion")).toBe(n);
+    expect(cableado.gestorDeTareas("jira")).not.toBe(n);
+    expect(cableado.gestorDeTareas("deepwiki")).toBeUndefined();
+    expect(cableado.gestorDeTareas("toString")).toBeUndefined();
+    expect(await n.buscarProyectos!("x")).toEqual([]);
+    expect(ids).toEqual(["notion"]);
   });
 });
 

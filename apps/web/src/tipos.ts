@@ -316,6 +316,9 @@ export type CategoriaDeTarea = "por-hacer" | "en-curso" | "terminada";
 /** Una tarea del gestor (`core/gestorDeTareas.ts#TareaDelGestor`). Del asignado, solo el nombre. */
 export interface TareaDelGestor {
   clave: string;
+  /** IXCODE-15: lo que se ENSEÑA cuando la clave no está hecha para leerse (Notion: el id corto).
+   *  Ausente = se enseña `clave`. El cliente pinta `etiqueta ?? clave`. */
+  etiqueta?: string;
   titulo: string;
   estado: string;
   categoria: CategoriaDeTarea;
@@ -329,6 +332,21 @@ export interface VinculoDelCable {
   sitio: string;
   proyecto: string;
   nombreDelSitio?: string;
+  /** IXCODE-15: el nombre para mostrar del proyecto, si el gestor ya lo nombró (en Notion `proyecto` es un `collection://…`). */
+  nombreDelProyecto?: string;
+}
+
+/** Lo que el gestor ENTENDIÓ del esquema de un proyecto (`core/gestorDeTareas.ts#EsquemaDelProyecto`, IXCODE-15). */
+export interface EsquemaDelProyecto {
+  /** Lo que se manda a `vincular` (en Notion, el `collection://…` ya resuelto). */
+  proyecto: string;
+  nombre: string;
+  estado: { propiedad: string; opciones: { nombre: string; categoria: CategoriaDeTarea }[] };
+  titulo: string;
+  /** Ausente = la base no tiene propiedad de persona. */
+  asignado?: string;
+  /** Cuántos data sources tiene la base cuando son VARIOS (se usa el primero). */
+  fuentes?: number;
 }
 
 /** Una transición disponible de una tarea del gestor (`core/gestorDeTareas.ts#TransicionDelGestor`). */
@@ -740,9 +758,16 @@ export type MensajeAlCliente =
    *  con la acción que falló. Redeclarado de `transporte.ts`. */
   | {
       clase: "gestor";
-      estado?: { conectores: string[]; vinculo?: VinculoDelCable };
+      /** `admiteMias` (IXCODE-15): solo con vínculo; ausente = no consta, y no se ofrece «Asignadas a mí». */
+      estado?: { conectores: string[]; vinculo?: VinculoDelCable; admiteMias?: boolean };
       sitios?: { conector: string; lista: { id: string; nombre: string }[] };
       proyectos?: { sitio: string; lista: { clave: string; nombre: string }[] };
+      /** IXCODE-15: la respuesta de `buscarProyectos`, con el `texto` buscado. En Notion `proyecto`
+       *  es el id de la BASE: se manda a `describir`, NO a `vincular`. */
+      busqueda?: { conector: string; texto: string; lista: { proyecto: string; nombre: string; ruta?: string }[] };
+      /** IXCODE-15: la respuesta de `describir`. Con `esquema`, a `vincular` va `esquema.proyecto`;
+       *  con `motivo`, esa base no vale (la acción salió bien: no es un `error`). */
+      descripcion?: { conector: string; pedido: string } & ({ esquema: EsquemaDelProyecto } | { motivo: string });
       /** `mias` solo con la lista de «asignadas a mí». */
       pendientes?: { cuando: number; texto?: string; mias?: true; lista: TareaDelGestor[] };
       /** La descripción de una tarea, para su fila desplegada. */
@@ -1301,6 +1326,10 @@ export type MensajeDelCliente =
   | { clase: "gestor"; accion: "estado" }
   | { clase: "gestor"; accion: "sitios"; conector: string }
   | { clase: "gestor"; accion: "proyectos"; conector: string; sitio: string }
+  /** IXCODE-15, de solo LECTURA: buscar proyectos por texto (Notion: sus bases), y lo que se
+   *  entiende del esquema de uno antes de vincularlo. */
+  | { clase: "gestor"; accion: "buscarProyectos"; conector: string; texto: string }
+  | { clase: "gestor"; accion: "describir"; conector: string; proyecto: string }
   | { clase: "gestor"; accion: "vincular"; conector: string; sitio: string; proyecto: string }
   | { clase: "gestor"; accion: "desvincular" }
   | { clase: "gestor"; accion: "usarConector"; conector: string; usar: boolean }
