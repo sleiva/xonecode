@@ -740,7 +740,7 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   solo se OFRECE con `estado.admiteMias === true`: el asignado se deja de pintar según la
   RESPUESTA (`pendientes.mias`), no según el conmutador, y cambiar de vínculo olvida la consulta
   del de antes. **Lo que DICE el panel sale del gestor VINCULADO**: su nombre del catálogo
-  (`nombreDelConector`, también en `App.tsx` para «Cerrar en …»), y sin él una frase NEUTRA —nunca
+  (`nombreDelConector`; «Cerrar en …» de `App.tsx`, el del conector del TICKET), y sin él una frase NEUTRA —nunca
   «Jira» a fuego—; una clave se ENSEÑA con `etiquetaDeClave` (el id corto de un UUID de Notion) y
   viaja ENTERA; el `collection://` de Notion no se pinta nunca. **Notion se vincula en tres
   pasos** (`VinculoDeNotion`): buscar la base, DESCRIBIR su esquema («Estado: … · Título: … ·
@@ -757,9 +757,11 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   una aprobación, pregunta, secreto o selector pendiente hace que el panel se apague y el chat se
   encienda a la vez, así que el diálogo sale en su sitio de siempre sin duplicarlo dentro del
   panel; al contestar no se vuelve al panel de rebote.
-- **«Nueva sesión con esta tarea» liga la sesión a su ticket, y por el cable solo cruza la CLAVE**
-  (`EntradaIndice.ticket`, `web/servidor/sesiones.ts#anotarTicket`, `SesionDelCable.ticket:
-  string`): ni el conector ni el sitio del vínculo viajan al cliente. El encargo llega al
+- **«Nueva sesión con esta tarea» liga la sesión a su ticket, y por el cable cruzan la CLAVE y su
+  CONECTOR** (`EntradaIndice.ticket`, `web/servidor/sesiones.ts#anotarTicket`,
+  `SesionDelCable.ticket`/`ticketConector`): el sitio se queda en el host. El conector cruza porque
+  con él se CIERRA (`cerrar` usa el del ticket, no el gestor vinculado ahora), y «Cerrar en …»
+  nombra a ESE: una tarea de Jira se cierra en Jira aunque el proyecto ya esté en Notion. El encargo llega al
   compositor EDITABLE y SIN enviar —lo manda la persona, no se manda solo—.
 - **En Jira —y en Notion, con las MISMAS tarjetas— escribe el HARNESS, nunca el agente, y cada
   escritura lleva su propia tarjeta de aprobación** (`componentes/TarjetaDeJira.tsx`): pasar a EN CURSO al empezar (con «empezar sin
@@ -860,7 +862,9 @@ escrito a mano lo da de alta una persona desde la misma ventana.
   (`sqlDePendientes`), nunca interpolado. Las transiciones de Notion son las opciones de su estado,
   y el data source se saca de la PROPIA página, no del vínculo. «Asignadas a mí» se DECIDE al
   vincular (Notion: solo con propiedad de persona) y se GUARDA con el vínculo
-  (`gestorDeTareas.admiteMias`, `admiteMiasDelVinculo`): **`estado` no toca la red** —lo contestan
+  (`gestorDeTareas.admiteMias`, `admiteMiasDelVinculo`), igual que el nombre para mostrar del
+  proyecto (`gestorDeTareas.nombreDelProyecto`, el que el gestor dijo al vincular, para que
+  sobreviva a un reinicio): **`estado` no toca la red** —lo contestan
   también `usarConector` y `desvincular`, y un gestor colgado no puede colgar esa casilla—. El
   comentario de cierre llega a Notion por `comentarioParaNotion` (solo cambia los marcadores de
   bloque, que Notion no pinta). **Del asignado de una tarea solo cruza el nombre visible**

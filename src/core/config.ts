@@ -387,11 +387,18 @@ export function validar(
       if (valor.admiteMias !== undefined && typeof valor.admiteMias !== "boolean") {
         avisos.push({ texto: `«${ruta}»: «gestorDeTareas.admiteMias» debe ser true o false; se ignora.`, severidad: "aviso" });
       }
+      // `nombreDelProyecto` (IXCODE-15) es opcional y se ENSEÑA: solo una cadena no vacía se
+      // conserva. Otra cosa descarta SOLO ese campo, y se dice sin el valor.
+      const nombreValido = typeof valor.nombreDelProyecto === "string" && valor.nombreDelProyecto.trim() !== "";
+      if (valor.nombreDelProyecto !== undefined && !nombreValido) {
+        avisos.push({ texto: `«${ruta}»: «gestorDeTareas.nombreDelProyecto» debe ser un texto; se ignora.`, severidad: "aviso" });
+      }
       config.gestorDeTareas = {
         conector: valor.conector,
         sitio: valor.sitio,
         proyecto: valor.proyecto,
         ...(typeof valor.admiteMias === "boolean" ? { admiteMias: valor.admiteMias } : {}),
+        ...(nombreValido ? { nombreDelProyecto: valor.nombreDelProyecto as string } : {}),
       };
       continue;
     }

@@ -823,6 +823,7 @@ function sonSesiones(
   trabajando?: unknown;
   consumo?: unknown;
   ticket?: unknown;
+  ticketConector?: unknown;
 }[] {
   return (
     Array.isArray(valor) &&
@@ -1933,6 +1934,10 @@ export function crearStoreDelCliente(): {
                         // sin esto, un `ticket` mal formado se perdía en silencio como
                         // pasó con `progreso`.
                         ...(typeof s.ticket === "string" && s.ticket !== "" ? { ticket: s.ticket } : {}),
+                        // IXCODE-15: su conector, solo CON ticket y solo como texto no vacío.
+                        ...(typeof s.ticket === "string" && s.ticket !== "" && typeof s.ticketConector === "string" && s.ticketConector !== ""
+                          ? { ticketConector: s.ticketConector }
+                          : {}),
                       };
                     }),
                   }

@@ -215,8 +215,11 @@ export interface SesionDelCable {
    *  y sobre él se pintaría un `↑0 ↓0` que nadie ha medido. */
   consumo?: ConsumoDeTurno;
   /** La CLAVE del ticket de Jira al que quedó ligada (`"IXCODE-12"`), si tiene uno
-   *  (IXCODE-11). Solo la clave: el conector y el sitio se quedan en el host. */
+   *  (IXCODE-11). Solo la clave: el sitio se queda en el host. */
   ticket?: string;
+  /** IXCODE-15: el conector de ese ticket, solo con `ticket` (`transporte.ts#SesionDelCable`):
+   *  con él se cierra, y de él sale el rótulo «Cerrar en …». */
+  ticketConector?: string;
 }
 
 /**

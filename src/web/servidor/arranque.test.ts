@@ -3200,7 +3200,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
               titulo: "con ticket",
               creada: "2026-09-07T08:00:00.000Z",
               ultimoTurno: "2026-09-07T10:08:23.790Z",
-              ticket: { conector: "jira", sitio: "xone", clave: "IXCODE-12" },
+              ticket: { conector: "jira", sitio: "sitio-que-no-cruza", clave: "IXCODE-12" },
             },
             { id: "s8", titulo: "sin ticket", creada: "2026-09-08T08:00:00.000Z", ultimoTurno: "2026-09-08T10:00:00.000Z" },
           ],
@@ -3218,10 +3218,13 @@ describe("montarRutas — el cable, por fin conectado", () => {
         { clase: "alta" }
       >;
       expect(alta.proyectos[0]?.sesiones?.[0]?.ticket).toBe("IXCODE-12");
-      // Ni el conector ni el sitio cruzan: solo la clave.
-      expect(JSON.stringify(cliente.recibidos)).not.toContain("jira");
-      // La que no lo trae NO lleva la clave, por la misma regla que `consumo`.
+      // IXCODE-15: el CONECTOR del ticket sí cruza (con él se cierra, y de él sale «Cerrar en
+      // Jira»); el sitio sigue sin cruzar.
+      expect(alta.proyectos[0]?.sesiones?.[0]?.ticketConector).toBe("jira");
+      expect(JSON.stringify(cliente.recibidos)).not.toContain("sitio-que-no-cruza");
+      // La que no lo trae NO lleva ni la clave ni el conector, por la misma regla que `consumo`.
       expect("ticket" in (alta.proyectos[0]?.sesiones?.[1] ?? {})).toBe(false);
+      expect("ticketConector" in (alta.proyectos[0]?.sesiones?.[1] ?? {})).toBe(false);
     });
 
     it("la siembra corre ANTES de leer la lista: el alta que la dispara ya trae las cifras", async () => {
@@ -9676,7 +9679,7 @@ describe("el gestor de tareas, por el cable", () => {
     expect(JSON.parse(t.leerConfig())).toEqual({
       modo: "offline",
       conectores: ["jira"],
-      gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE", admiteMias: true },
+      gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE", admiteMias: true, nombreDelProyecto: "XOneCode" },
     });
 
     // Usar otro conector, que no es un gestor: se AÑADE al lado.
@@ -10310,7 +10313,7 @@ describe("el gestor de tareas, por el cable", () => {
       clase: "gestor",
       estado: { conectores: ["notion"], vinculo: { conector: "notion", sitio: "notion", proyecto: FUENTE, nombreDelProyecto: "Tasks" }, admiteMias: true },
     });
-    expect(JSON.parse(t.leerConfig()).gestorDeTareas).toEqual({ conector: "notion", sitio: "notion", proyecto: FUENTE, admiteMias: true });
+    expect(JSON.parse(t.leerConfig()).gestorDeTareas).toEqual({ conector: "notion", sitio: "notion", proyecto: FUENTE, admiteMias: true, nombreDelProyecto: "Tasks" });
     await t.limpiar();
   });
 
@@ -10324,11 +10327,11 @@ describe("el gestor de tareas, por el cable", () => {
     expect(JSON.parse(t.leerConfig())).toEqual({
       modo: "offline",
       conectores: ["deepwiki", "notion"],
-      gestorDeTareas: { conector: "notion", sitio: "notion", proyecto: FUENTE, admiteMias: true },
+      gestorDeTareas: { conector: "notion", sitio: "notion", proyecto: FUENTE, admiteMias: true, nombreDelProyecto: "Tasks" },
     });
     expect((await t.pedir({ clase: "gestor", accion: "vincular", conector: "jira", sitio: "c1", proyecto: "IXCODE" }))?.estado?.conectores)
       .toEqual(["deepwiki", "jira"]);
-    expect(JSON.parse(t.leerConfig()).gestorDeTareas).toEqual({ conector: "jira", sitio: "c1", proyecto: "IXCODE", admiteMias: true });
+    expect(JSON.parse(t.leerConfig()).gestorDeTareas).toEqual({ conector: "jira", sitio: "c1", proyecto: "IXCODE", admiteMias: true, nombreDelProyecto: "XOneCode" });
     // Revincular el MISMO gestor a otro proyecto no toca los conectores.
     expect((await t.pedir({ clase: "gestor", accion: "vincular", conector: "jira", sitio: "c1", proyecto: "IXCODE" }))?.estado?.conectores)
       .toEqual(["deepwiki", "jira"]);
@@ -10353,7 +10356,7 @@ describe("el gestor de tareas, por el cable", () => {
       { gestorDeTareas: (c) => (c === "notion" ? conDescribir(datosNotion({ descripciones: { [FUENTE]: { esquema: sinPersona } } })) : c === "jira" ? new Contado(datos()) : undefined) },
     );
     expect((await t.pedir({ clase: "gestor", accion: "vincular", conector: "notion", sitio: "notion", proyecto: FUENTE }))?.estado?.admiteMias).toBe(false);
-    expect(JSON.parse(t.leerConfig()).gestorDeTareas).toEqual({ conector: "notion", sitio: "notion", proyecto: FUENTE, admiteMias: false });
+    expect(JSON.parse(t.leerConfig()).gestorDeTareas).toEqual({ conector: "notion", sitio: "notion", proyecto: FUENTE, admiteMias: false, nombreDelProyecto: "Tasks" });
     llamadas.length = 0;
     expect((await t.pedir({ clase: "gestor", accion: "estado" }))?.estado).toEqual({
       conectores: ["notion"],
@@ -10364,6 +10367,26 @@ describe("el gestor de tareas, por el cable", () => {
     await t.pedir({ clase: "gestor", accion: "desvincular" });
     expect(llamadas).toEqual([]);
     await t.limpiar();
+  });
+
+  it("IXCODE-15: el nombre del proyecto se GUARDA con el vínculo y sobrevive a un reinicio, sin llamar a nadie", async () => {
+    const t = await abrir({ gestorDeTareas: dosGestores(), conectores: servicioDeConectoresDeMentira().fabrica });
+    await t.pedir({ clase: "gestor", accion: "vincular", conector: "notion", sitio: "notion", proyecto: FUENTE });
+    const escrito = JSON.parse(t.leerConfig());
+    await t.limpiar();
+    // «Reinicio»: otro `montarRutas` sobre el MISMO config, con el adaptador real y una red que no
+    // debe tocarse. La memoria del proceso anterior (lo que oyó en `describir`) ya no está.
+    const llamar = vi.fn(async () => { throw new Error("no debería llamar"); });
+    const doble = servicioDeConectoresDeMentira();
+    const otra = await abrir(ajusteDeGestorCableado({ conectores: (cb) => ({ ...doble.fabrica(cb), llamar }) }), escrito);
+    expect((await otra.pedir({ clase: "gestor", accion: "estado" }))?.estado?.vinculo).toEqual({
+      conector: "notion",
+      sitio: "notion",
+      proyecto: FUENTE,
+      nombreDelProyecto: "Tasks",
+    });
+    expect(llamar).not.toHaveBeenCalled();
+    await otra.limpiar();
   });
 
   it("IXCODE-15: «estado» con el adaptador REAL no llama a la red; un Jira de antes (sin el campo) admite «mías», un Notion de antes no", async () => {

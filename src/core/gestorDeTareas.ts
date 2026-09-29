@@ -25,6 +25,13 @@ export interface Vinculo {
  */
 export interface VinculoGuardado extends Vinculo {
   admiteMias?: boolean;
+  /**
+   * El nombre para MOSTRAR del proyecto vinculado (IXCODE-15), el que el gestor dijo al vincular:
+   * el de la base en Notion (su `proyecto` es un `collection://…` que no se lee), el del proyecto
+   * en Jira. Se guarda con el vínculo para que sobreviva a un reinicio; ausente = no consta (un
+   * vínculo de antes), y entonces no se inventa.
+   */
+  nombreDelProyecto?: string;
 }
 
 /**

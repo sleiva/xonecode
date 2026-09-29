@@ -2457,6 +2457,10 @@ export function montarRutas(
         // índice tocado a mano puede traer `ticket: null`, y esto no es sitio para tumbar
         // la lista ENTERA de sesiones del proyecto por una entrada mal formada.
         ...(typeof s.ticket?.clave === "string" ? { ticket: s.ticket.clave } : {}),
+        // IXCODE-15: y el CONECTOR del ticket, que es con quien se cierra (`cerrar` usa
+        // `ticket.conector`, no el gestor vinculado ahora): «Cerrar en Jira» en una sesión de una
+        // tarea de Jira aunque el proyecto ya esté vinculado a Notion. El sitio sigue en el host.
+        ...(typeof s.ticket?.clave === "string" && typeof s.ticket.conector === "string" ? { ticketConector: s.ticket.conector } : {}),
       }));
     } catch {
       return [];
@@ -3689,7 +3693,12 @@ export function montarRutas(
     const emitirEstado = (): void => {
       const { conectores, vinculo } = delProyecto();
       const nombre = vinculo === undefined ? undefined : nombreDelSitio.get(vinculo.sitio);
-      const nombreProyecto = vinculo === undefined ? undefined : nombreDelProyecto.get(claveDeProyecto(vinculo.conector, vinculo.sitio, vinculo.proyecto));
+      // El nombre del proyecto se GUARDA con el vínculo (IXCODE-15) y sobrevive a un reinicio; lo
+      // oído en este proceso solo sirve de respaldo para un vínculo escrito antes de ese campo.
+      const nombreProyecto =
+        vinculo === undefined
+          ? undefined
+          : (vinculo.nombreDelProyecto ?? nombreDelProyecto.get(claveDeProyecto(vinculo.conector, vinculo.sitio, vinculo.proyecto)));
       const admiteMias = vinculo === undefined ? undefined : admiteMiasDelVinculo(vinculo);
       emitir({
         clase: "gestor",
@@ -3784,24 +3793,34 @@ export function montarRutas(
           // `estado` no pregunta a nadie. Con esquema, solo si tiene una propiedad de persona;
           // sin describir (Jira), siempre —`currentUser()` no depende del proyecto—.
           let admiteMias = true;
+          /** El nombre que el gestor DIJO del proyecto: se guarda con el vínculo, para mostrarlo tras un reinicio. */
+          let nombreVisto: string;
           if (g.describirProyecto !== undefined) {
             if (!(await g.sitios()).some((x) => x.id === m.sitio)) return fallo(`«${m.sitio}» no es un sitio de ${nombreDelConector(m.conector)}`);
             const d = await g.describirProyecto({ conector: m.conector, sitio: m.sitio, proyecto: m.proyecto });
             if ("motivo" in d) return fallo(d.motivo);
             if (d.esquema.proyecto !== m.proyecto) return fallo("ese proyecto no es el que se describió");
             nombreDelProyecto.set(claveDeProyecto(m.conector, m.sitio, m.proyecto), d.esquema.nombre);
+            nombreVisto = d.esquema.nombre;
             admiteMias = d.esquema.asignado !== undefined;
           } else {
             const visibles = await g.proyectos(m.sitio);
             const visto = visibles.find((x) => x.clave === m.proyecto);
             if (visto === undefined) return fallo(`«${m.proyecto}» no está entre los proyectos de ese sitio`);
             nombreDelProyecto.set(claveDeProyecto(m.conector, m.sitio, m.proyecto), visto.nombre);
+            nombreVisto = visto.nombre;
           }
           // UN gestor por proyecto (IXCODE-15): vincular uno SUSTITUYE al de antes, y el conector
           // del de antes deja de estar usado —el panel no tiene casilla para un gestor, así que
           // quedarse en `conectores` lo dejaría usado sin control que lo quite—.
           const { conectores, vinculo: anterior } = delProyecto();
-          const vinculo: VinculoGuardado = { conector: m.conector, sitio: m.sitio, proyecto: m.proyecto, admiteMias };
+          const vinculo: VinculoGuardado = {
+            conector: m.conector,
+            sitio: m.sitio,
+            proyecto: m.proyecto,
+            admiteMias,
+            ...(nombreVisto.trim() === "" ? {} : { nombreDelProyecto: nombreVisto }),
+          };
           if (!guardar(() => guardarGestorDeProyecto(raiz, vinculo))) return;
           const sinAnterior = anterior !== undefined && anterior.conector !== m.conector ? conectores.filter((c) => c !== anterior.conector) : conectores;
           const nuevos = sinAnterior.includes(m.conector) ? sinAnterior : [...sinAnterior, m.conector];

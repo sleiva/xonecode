@@ -272,6 +272,21 @@ describe("validar", () => {
     expect(r.avisos[0]!.texto).not.toContain("sí");
   });
 
+  it("IXCODE-15: «nombreDelProyecto» se conserva solo como texto no vacío; otra cosa se ignora SIN tirar el vínculo", () => {
+    const v = { conector: "notion", sitio: "notion", proyecto: "collection://ea517d0b-bf30-4b08-8681-dc9c30f5e783" };
+    expect(validar({ gestorDeTareas: { ...v, nombreDelProyecto: "Tasks" } }, RUTA, "proyecto")).toEqual({
+      config: { gestorDeTareas: { ...v, nombreDelProyecto: "Tasks" } },
+      avisos: [],
+    });
+    for (const malo of [42, "", "   "]) {
+      const r = validar({ gestorDeTareas: { ...v, nombreDelProyecto: malo } }, RUTA, "proyecto");
+      expect(r.config.gestorDeTareas).toEqual(v);
+      expect(r.avisos).toHaveLength(1);
+      expect(r.avisos[0]!.texto).toContain("nombreDelProyecto");
+      expect(r.avisos[0]!.texto).not.toContain("42");
+    }
+  });
+
   it("descarta el fichero entero si el JSON raíz no es objeto", () => {
     for (const bruto of [[1, 2], "texto", 42, null]) {
       const { config, avisos } = validar(bruto, RUTA, "global");

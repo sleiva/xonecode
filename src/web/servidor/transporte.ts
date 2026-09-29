@@ -115,6 +115,11 @@ export interface SesionDelCable {
    * host hasta que algo necesite componer la URL pública.
    */
   ticket?: string;
+  /**
+   * IXCODE-15: el CONECTOR de ese ticket (`"jira"`, `"notion"`), solo con `ticket`. Es con quien
+   * se cierra la tarea —no con el gestor vinculado ahora—, y de él sale el rótulo «Cerrar en …».
+   */
+  ticketConector?: string;
 }
 
 /**

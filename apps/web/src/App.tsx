@@ -739,20 +739,16 @@ export function App({
     .find((p) => p.id === proyectoActivoId)
     ?.sesiones?.find((s) => s.id === estado.alta?.sesionActiva)?.ticket;
   /**
-   * El NOMBRE del gestor vinculado («Jira», «Notion»), del catálogo (IXCODE-15): lo que dicen el
-   * botón y la tarjeta de cerrar. El `estado` del gestor lo pide el panel del proyecto, y una
-   * sesión abierta desde la barra tras recargar no ha pasado por él: con un ticket delante se
-   * pide aquí también —`estado` no toca la red (lo lee del `config.json`)—. Mientras no
-   * contesta, la frase es neutra («Cerrar la tarea»), nunca «Jira» por omisión.
+   * El NOMBRE del gestor del TICKET de la sesión («Jira», «Notion»), del catálogo (IXCODE-15): lo
+   * que dicen el botón y la tarjeta de cerrar. Es el del ticket y no el del gestor vinculado
+   * AHORA: el servidor cierra con `ticket.conector`, así que una tarea de Jira se cierra en Jira
+   * aunque el proyecto ya esté vinculado a Notion. Sin conector o sin catálogo, la frase es neutra
+   * («Cerrar la tarea»), nunca «Jira» por omisión.
    */
-  const nombreDelGestor = nombreDelConector(estado.conectores, estado.gestor?.estado?.vinculo?.conector);
-  const sinEstadoDelGestor = estado.gestor?.estado === undefined;
-  useEffect(() => {
-    if (ticketDeLaSesion === undefined || !estado.conectado || !sinEstadoDelGestor) return;
-    void enviar({ clase: "gestor", accion: "estado" });
-    // Solo al aparecer el ticket, al volver el cable o al tirarse el estado (otro proyecto).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ticketDeLaSesion, estado.conectado, sinEstadoDelGestor]);
+  const conectorDelTicket = estado.alta?.proyectos
+    .find((p) => p.id === proyectoActivoId)
+    ?.sesiones?.find((s) => s.id === estado.alta?.sesionActiva)?.ticketConector;
+  const nombreDelGestor = nombreDelConector(estado.conectores, conectorDelTicket);
   const [tarjetaCerrarAbierta, setTarjetaCerrarAbierta] = useState(false);
   const [pidiendoCierre, setPidiendoCierre] = useState(false);
   const [enviandoCerrar, setEnviandoCerrar] = useState(false);

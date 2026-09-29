@@ -1980,7 +1980,7 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
     registrados: [{ id: "webstudio", nombre: "WebStudio", url: "https://x/mcp" }],
     entornoActivo: "webstudio",
     proyectos: [
-      { id: "p1", nombre: "AppDemo", local: true, sesiones: [{ id: "s1", titulo: "Menú lateral", ticket: "IXCODE-12" }] },
+      { id: "p1", nombre: "AppDemo", local: true, sesiones: [{ id: "s1", titulo: "Menú lateral", ticket: "IXCODE-12", ticketConector: "jira" }] },
       { id: "p2", nombre: "Tienda", local: true },
       { id: "p3", nombre: "Remoto" },
     ],
@@ -2288,7 +2288,7 @@ describe("App: «Cerrar en Jira» (Task 11, IXCODE-11)", () => {
     registrados: [{ id: "webstudio", nombre: "WebStudio", url: "https://x/mcp" }],
     entornoActivo: "webstudio",
     proyectos: [
-      { id: "p1", nombre: "AppDemo", local: true, sesiones: [{ id: "s1", titulo: "Menú lateral", ticket: "IXCODE-12" }] },
+      { id: "p1", nombre: "AppDemo", local: true, sesiones: [{ id: "s1", titulo: "Menú lateral", ticket: "IXCODE-12", ticketConector: "jira" }] },
       { id: "p2", nombre: "Tienda", local: true },
     ],
     ramas: [],
@@ -2304,37 +2304,35 @@ describe("App: «Cerrar en Jira» (Task 11, IXCODE-11)", () => {
     render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} instalarSkill={instalarSkillDeMentira} />);
     act(() => store.marcarConectado());
     act(() => store.aplicar(altaDe()));
-    // IXCODE-15: lo que dice el botón sale del gestor VINCULADO y del catálogo.
+    // IXCODE-15: lo que dice el botón sale del conector del TICKET y del catálogo.
     act(() => store.aplicar(CONECTORES_CON_JIRA as never));
-    act(() => store.aplicar({ clase: "gestor", estado: { conectores: ["jira"], vinculo: { conector: "jira", sitio: "s", proyecto: "IXCODE" }, admiteMias: true } }));
     return { store, enviar };
   }
 
   /**
-   * IXCODE-15: el botón nombra al gestor VINCULADO, del catálogo; sin saberlo todavía, una frase
-   * neutra —nunca «Jira» por omisión—, y el `estado` se pide aquí mismo (sin pasar por el panel).
-   * Un ticket de Notion (UUID) se enseña por su id corto, y a `transiciones` va ENTERO.
+   * IXCODE-15: el botón nombra al gestor del TICKET (`ticketConector`, con el nombre del
+   * catálogo), no al vinculado ahora: el servidor cierra con el conector del ticket. Sin él, una
+   * frase neutra —nunca «Jira» por omisión—. Un ticket de Notion (UUID) se enseña por su id
+   * corto, y a `transiciones` va ENTERO.
    */
-  it("con Notion vinculado dice «Cerrar en Notion»; sin estado, «Cerrar la tarea» y lo pide", () => {
-    const store = crearStoreDelCliente();
-    const enviar: Mock<(mensaje: unknown) => Promise<unknown>> = vi.fn(() => Promise.resolve(undefined as unknown));
-    render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} instalarSkill={instalarSkillDeMentira} />);
-    act(() => store.marcarConectado());
-    const uuid = "0687543b-1c2d-4e5f-8a9b-0c1d2e3f4a5b";
-    act(() =>
-      store.aplicar(
-        altaDe({ proyectos: [{ id: "p1", nombre: "AppDemo", local: true, sesiones: [{ id: "s1", titulo: "Menú lateral", ticket: uuid }] }] })
-      )
-    );
-    expect(screen.getByRole("button", { name: "Cerrar la tarea" })).toBeTruthy();
-    expect(enviar).toHaveBeenCalledWith({ clase: "gestor", accion: "estado" });
-    act(() => store.aplicar({ ...CONECTORES_CON_JIRA, catalogo: [...CONECTORES_CON_JIRA.catalogo, { id: "notion", nombre: "Notion", descripcion: "", autenticacion: "oauth" }] } as never));
+  it("una tarea de Jira con Notion vinculado dice «Cerrar en Jira»; una de Notion, «Cerrar en Notion» con el id corto", () => {
+    const { store, enviar } = conProyectoAbierto();
+    const catalogo = { ...CONECTORES_CON_JIRA, catalogo: [...CONECTORES_CON_JIRA.catalogo, { id: "notion", nombre: "Notion", descripcion: "", autenticacion: "oauth" }] };
+    act(() => store.aplicar(catalogo as never));
     act(() =>
       store.aplicar({
         clase: "gestor",
         estado: { conectores: ["notion"], vinculo: { conector: "notion", sitio: "notion", proyecto: "collection://ea517d0b-0000-4000-8000-000000000000" }, admiteMias: true },
       })
     );
+    expect(screen.getByRole("button", { name: "Cerrar en Jira" })).toBeTruthy();
+    const uuid = "0687543b-1c2d-4e5f-8a9b-0c1d2e3f4a5b";
+    const sesion = (extra: Record<string, unknown>) =>
+      altaDe({ proyectos: [{ id: "p1", nombre: "AppDemo", local: true, sesiones: [{ id: "s1", titulo: "Menú lateral", ticket: uuid, ...extra }] }] });
+    // Sin conector del ticket (un servidor de antes): neutra.
+    act(() => store.aplicar(sesion({})));
+    expect(screen.getByRole("button", { name: "Cerrar la tarea" })).toBeTruthy();
+    act(() => store.aplicar(sesion({ ticketConector: "notion" })));
     expect(screen.getByText("0687543b")).toBeTruthy();
     expect(screen.queryByText(uuid)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Cerrar en Notion" }));
@@ -2360,7 +2358,7 @@ describe("App: «Cerrar en Jira» (Task 11, IXCODE-11)", () => {
         altaDe({
           sesionActiva: "s2",
           proyectos: [
-            { id: "p1", nombre: "AppDemo", local: true, sesiones: [{ id: "s1", titulo: "Menú lateral", ticket: "IXCODE-12" }, { id: "s2", titulo: "Suelta" }] },
+            { id: "p1", nombre: "AppDemo", local: true, sesiones: [{ id: "s1", titulo: "Menú lateral", ticket: "IXCODE-12", ticketConector: "jira" }, { id: "s2", titulo: "Suelta" }] },
           ],
         })
       )
@@ -2527,7 +2525,7 @@ describe("App: «Cerrar en Jira» (Task 11, IXCODE-11)", () => {
         altaDe({
           sesionActiva: "s2",
           proyectos: [
-            { id: "p1", nombre: "AppDemo", local: true, sesiones: [{ id: "s1", titulo: "Menú lateral", ticket: "IXCODE-12" }, { id: "s2", titulo: "Suelta" }] },
+            { id: "p1", nombre: "AppDemo", local: true, sesiones: [{ id: "s1", titulo: "Menú lateral", ticket: "IXCODE-12", ticketConector: "jira" }, { id: "s2", titulo: "Suelta" }] },
           ],
         })
       )
@@ -2549,11 +2547,10 @@ describe("App: «Cerrar en Jira» (Task 11, IXCODE-11)", () => {
     act(() => store.marcarDesconectado());
     act(() => store.marcarConectado());
     act(() => store.aplicar(altaDe()));
-    // El store tiró el `gestor` (y los conectores) al caerse el cable: hasta que vuelven, el botón no
+    // El store tiró los conectores al caerse el cable: hasta que vuelve el catálogo, el botón no
     // nombra a nadie (IXCODE-15), pero ya no está bloqueado.
     expect(screen.getByRole("button", { name: "Cerrar la tarea" })).toBeTruthy();
     act(() => store.aplicar(CONECTORES_CON_JIRA as never));
-    act(() => store.aplicar({ clase: "gestor", estado: { conectores: ["jira"], vinculo: { conector: "jira", sitio: "s", proyecto: "IXCODE" }, admiteMias: true } }));
     expect(screen.getByRole("button", { name: "Cerrar en Jira" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Preparando…" })).toBeNull();
   });
