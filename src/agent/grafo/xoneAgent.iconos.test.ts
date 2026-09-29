@@ -18,6 +18,7 @@ const { construirAgente } = await import("./xoneAgent.js");
 const { SkillsEnMemoria, ModeloGuionizado, IconosEnMemoria } = await import("../../core/ports.js");
 const { AGENTES_DE_SERIE } = await import("../subagentes/agentesEnDisco.js");
 const { NOMBRE_BUSCAR_ICONO } = await import("./buscarIcono.js");
+const { NOMBRE_GENERAR_FONDO } = await import("./generarFondoSvg.js");
 
 interface Montado {
   tools?: { name: string }[];
@@ -41,9 +42,9 @@ async function montados(opciones: { iconos?: boolean; externo?: boolean } = {}):
   const subagentes = (capturado.opciones?.["subagents"] ?? []) as (Montado & { name: string })[];
   return Object.fromEntries(subagentes.map((s) => [s.name, s]));
 }
-const conTool = (m: Record<string, Montado>) =>
+const conTool = (m: Record<string, Montado>, nombre: string = NOMBRE_BUSCAR_ICONO) =>
   Object.entries(m)
-    .filter(([, s]) => (s.tools ?? []).some((t) => t.name === NOMBRE_BUSCAR_ICONO))
+    .filter(([, s]) => (s.tools ?? []).some((t) => t.name === nombre))
     .map(([n]) => n)
     .sort();
 
@@ -63,5 +64,16 @@ describe("el montaje de buscar_icono", () => {
 
   it("un developer de motor EXTERNO no la recibe", async () => {
     expect(conTool(await montados({ iconos: true, externo: true }))).toEqual(["designer-xone"]);
+  });
+
+  it("generar_fondo_svg: pura y sin red, va a los mismos con o sin el puerto de iconos", async () => {
+    expect(conTool(await montados(), NOMBRE_GENERAR_FONDO)).toEqual(["designer-xone", "developer-xone"]);
+    expect(conTool(await montados({ iconos: true }), NOMBRE_GENERAR_FONDO)).toEqual(["designer-xone", "developer-xone"]);
+  });
+
+  it("generar_fondo_svg: un developer de motor EXTERNO no la recibe, y no pide aprobación", async () => {
+    const m = await montados({ externo: true });
+    expect(conTool(m, NOMBRE_GENERAR_FONDO)).toEqual(["designer-xone"]);
+    for (const s of Object.values(m)) expect(Object.keys(s.interruptOn ?? {})).not.toContain(NOMBRE_GENERAR_FONDO);
   });
 });

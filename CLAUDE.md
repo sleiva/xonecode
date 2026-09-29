@@ -258,6 +258,19 @@ Y las guardas del proyecto:
   devuelve `currentColor` y `1em`, que XOne no documenta, y un icono mal tintado no da error. **Sin
   red la tool lo dice y no devuelve un SVG**; el rechazo se DEVUELVE, nunca se lanza. Límite
   declarado: el modelo reteclea el `path` al escribirlo.
+- **Y una cuarta, pura y sin red: `generar_fondo_svg`** (`agent/grafo/generarFondoSvg.ts`,
+  `core/fondosSvg.ts`): fondos SVG de degradado, sombra y resplandor para `imgbk`, porque XOne no
+  los trae. Va a los mismos especialistas que `buscar_icono` y, al no tener puerto, se monta siempre.
+  **Un frame lo usa por `imgbk`, un BOTÓN por `img`: en un `type="B"` `imgbk` se ignora** (medido), y
+  un icono en el `img` de un botón se estira, así que el icono va en un `type="IMG"` aparte. Las
+  medidas entran como se declaran en el XML (el ancho en porcentaje, el alto en `p`) y son una
+  estimación sobre un aparato de referencia.
+  **Nada de `<filter>`: XOne los ignora en silencio** (medido); la sombra son rectángulos apilados y
+  el resplandor un degradado que acaba transparente. **La esquina se DIBUJA en el SVG**, porque
+  `border-corner-radius` no recorta el fondo, así que la tool pide el ancho y el alto del control y
+  el `viewBox` lleva su proporción. **Los colores entran como en XOne (`#AARRGGBB`, alfa PRIMERO) y
+  se convierten** a `#RRGGBB` más opacidad: pasarlos como `#RRGGBBAA` de HTML los leería mal sin
+  error. Solo lee: el SVG lo escribe `write_file` con su aprobación.
 - **`xone_navegacion` existe por una medida, no por completitud**: contestar «¿qué colecciones
   tiene el proyecto?» leyendo ficheros es mucho más caro que contestarla desde el modelo. Cuatro
   reglas: **el reparto** — la semántica de XOne la pone `xone-linter` como LIBRERÍA

@@ -11,6 +11,7 @@ import type { Artefacto } from "../../core/artefactos.js";
 import { permisosDe, hitlDe, montajeDeFicheros, presupuestoDeLlamadas, puedeEjecutar, type QuienDecidePermisos } from "./perfiles.js";
 import { crearBusquedaRegex } from "./busquedaRegex.js";
 import { crearBuscarIcono, recibeBuscarIcono } from "./buscarIcono.js";
+import { crearGenerarFondoSvg, recibeGenerarFondo } from "./generarFondoSvg.js";
 import { OPCIONES_BUSQUEDA_FICHEROS } from "./opcionesDeFicheros.js";
 import { crearNavegacionXone } from "./navegacionXone.js";
 import { crearCopiarArtefacto } from "./copiarArtefacto.js";
@@ -566,6 +567,8 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
       // Buscar un icono cuando faltan los assets (IXCODE-18), a quien escribe el proyecto y solo con
       // el puerto: es de LECTURA, la escritura del SVG sigue siendo `write_file` con su aprobación.
       ...(opciones.iconos !== undefined && recibeBuscarIcono(perfil) ? [crearBuscarIcono(opciones.iconos)] : []),
+      // Fondos SVG (degradados, sombras, resplandor): pura y sin red, así que SIN puerto; a los mismos.
+      ...(recibeGenerarFondo(perfil) ? [crearGenerarFondoSvg()] : []),
       // Marcar en el plan lo COMPROBADO en el aparato, a quien comprueba: el que EJECUTA, que no
       // tiene `write_file` ni `edit_file` y sin esto no podía dejar constancia de lo que vio.
       ...(perfil.ejecucion === true ? [crearMarcarCriteriosDelPlan({ raiz: opciones.raiz })] : []),

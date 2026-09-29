@@ -92,6 +92,7 @@ import { hechosDelProyectoDe } from "../../navegacion/hechosEnDisco.js";
 import { conHechosDelProyecto } from "../../../core/hechosDelProyecto.js";
 import { crearBusquedaRegex } from "../../grafo/busquedaRegex.js";
 import { crearBuscarIcono, recibeBuscarIcono } from "../../grafo/buscarIcono.js";
+import { crearGenerarFondoSvg, recibeGenerarFondo } from "../../grafo/generarFondoSvg.js";
 import { crearCopiarArtefacto } from "../../grafo/copiarArtefacto.js";
 import { crearMarcarCriteriosDelPlan } from "../../grafo/marcarCriteriosDelPlan.js";
 import { crearUnirSecciones } from "../../grafo/unirSecciones.js";
@@ -462,6 +463,8 @@ export async function abrirSesionTrueforge(
     ...(opciones.iconos !== undefined && recibeBuscarIcono(agente)
       ? [crearBuscarIcono(opciones.iconos) as unknown as ToolDeLangchain]
       : []),
+    // Fondos SVG: pura y sin red, sin puerto; a quien escribe el proyecto, como deepagents.
+    ...(recibeGenerarFondo(agente) ? [crearGenerarFondoSvg() as unknown as ToolDeLangchain] : []),
     // Y marcar en el plan lo comprobado en el aparato, con el reparto de deepagents: a quien ejecuta.
     ...(agente.ejecucion === true ? [crearMarcarCriteriosDelPlan({ raiz }) as unknown as ToolDeLangchain] : []),
   ];

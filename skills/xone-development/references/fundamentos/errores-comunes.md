@@ -180,10 +180,18 @@ El formato más habitual es PNG por compatibilidad historica, pero SVG es perfec
 
 **Cuando el proyecto no trae el icono, no lo dibujes a mano.** Si tienes la tool `buscar_icono` (no todos los agentes la tienen), consulta Iconify (más de 200 colecciones) en dos pasos: `buscar` con un texto —en inglés rinde más— y `obtener` con el id que salió, un **color hexadecimal** y una altura en píxeles. Solo lee: el SVG lo escribes tú con `write_file` en `icons/ic_<nombre>.svg` (la convención `ic_`, con guiones bajos), tal cual, y se aprueba como cualquier escritura. Se referencia con el **nombre a secas** —`img="ic_home.svg"`—, como el resto de imágenes: XOne lo busca en `icons/`. Sin la tool, pide el asset o deja el botón con texto.
 
+**Un icono NO va en el `img` de un botón: se estira.** En un `type="B"`, `img` pinta la imagen llenando el botón entero (medido: un icono de 48 px en un botón ancho salió deformado hasta ocupar todo el ancho). El icono suelto va en su propio `type="IMG"` con `path="ic_home.svg"` y el tamaño que tenga, que sale nítido. El `img` de un botón sirve para un fondo del tamaño del botón (ver abajo).
+
 - **Un solo estilo por app.** Elige UNA colección (`lucide`, `tabler`…) y quédate en ella: mezclar trazos de colecciones distintas se ve desigual.
 - **El color va explícito, y el tamaño también.** Sin ellos Iconify devuelve `currentColor` y `width="1em"`, que esta documentación no dice cómo resuelve XOne; un icono sin tinte o sin tamaño válido no da error, sale mal en silencio. Por eso `obtener` los exige.
 - **Sin red, la tool lo dice.** No inventes el `path` del SVG: pide el asset o deja el botón con texto.
 - **Un icono referenciado que no está en `icons/` tampoco da error**: XOne lo ignora. Tras escribirlos, comprueba que cada `img`/`path` apunta a un fichero que existe.
+
+**Degradados, sombras y resplandores: `imgbk` con un SVG generado.** XOne no los trae, y los filtros SVG (`feGaussianBlur`, `feDropShadow`) **se ignoran en silencio**: no los escribas. Si tienes la tool `generar_fondo_svg`, pásale el ancho y el alto **del control** que lleva el fondo (solo cuenta la proporción) y el tipo (`degradado-lineal`, `degradado-radial`, `sombra`, `glow`); escribe el SVG con `write_file` en `icons/bg_<nombre>.svg`. **En un frame o grupo se usa con `imgbk="bg_<nombre>.svg"`; en un botón (`type="B"`) con `img="bg_<nombre>.svg"`** (y `imgsel` para el pulsado): en un botón `imgbk` se IGNORA, ni como atributo ni desde una clase CSS, y sale el botón nativo gris. Las medidas se pasan como las declaras en el XML (`"90%"`, `"60p"`, `"120px"`); son una estimación sobre un aparato de 1080 px de ancho.
+
+- **La esquina va DIBUJADA en el SVG.** `border-corner-radius` no recorta el `imgbk`, y un SVG de otra proporción que el control deforma la esquina: genera un fondo por cada tamaño de control.
+- **Los colores van como en XOne, `#RRGGBB` o `#AARRGGBB`, con el alfa PRIMERO.** HTML y SVG lo ponen al final (`#RRGGBBAA`): un `#7F00FF00` copiado tal cual a un SVG saldría transparente y de otro color. La tool convierte; si escribes el SVG a mano, separa el alfa en `stop-opacity`/`fill-opacity`.
+- **Sin la tool**, un degradado lineal o radial escrito a mano sí se pinta, pero la sombra y el desenfoque no: pide el asset.
 
 ---
 

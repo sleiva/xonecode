@@ -36,6 +36,15 @@ describe("buscar_icono", () => {
     expect(r).toContain('height="32"');
   });
 
+  it("un color opaco de XOne (#FFRRGGBB) llega a la red normalizado; con alfa se rechaza", async () => {
+    const iconos = new IconosEnMemoria(CATALOGO);
+    await llamar(iconos, { operacion: "obtener", id: "lucide:home", color: "#FF1A73E8" });
+    expect(iconos.peticiones.at(-1)?.color).toBe("#1A73E8");
+    const r = await llamar(iconos, { operacion: "obtener", id: "lucide:home", color: "#801A73E8" });
+    expect(r).toContain("no es opaco");
+    expect(iconos.peticiones).toHaveLength(1);
+  });
+
   it("sin color NO llega a la red: se devuelve el motivo", async () => {
     const iconos = new IconosEnMemoria(CATALOGO);
     const r = await llamar(iconos, { operacion: "obtener", id: "lucide:home" });

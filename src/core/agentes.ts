@@ -465,6 +465,17 @@ export function fichaDeAgente(agente: Agente, opciones: { conIconos?: boolean } 
   }
 
   /**
+   * Los fondos SVG (degradados, sombras, resplandor) van SIEMPRE con quien escribe el proyecto:
+   * la tool es pura y sin red, no depende de ningún puerto. Se dice por lo mismo que arriba: el
+   * orquestador no ve las tools del especialista, y sin esta línea no sabría a quién pedirlos.
+   */
+  if (agente.motor === "modelo" && recibeBuscarIcono(agente)) {
+    capacidades.push(
+      "genera fondos SVG (degradados, sombras y resplandores) para frames y botones, que XOne no trae: encárgale esos fondos a él"
+    );
+  }
+
+  /**
    * Qué DEVUELVE, que es la mitad que falta para encadenar. Derivado de lo mismo: quien solo
    * lee devuelve hechos; quien escribe devuelve cambios; quien ejecuta devuelve lo que MIDIÓ,
    * que no es lo mismo que lo que cree.

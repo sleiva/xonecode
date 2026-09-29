@@ -70,9 +70,23 @@ export function motivoDePrefijoInaceptable(prefijo: string): string | undefined 
 
 /** Solo hexadecimal: `currentColor` o un nombre CSS dejarían el tinte a merced del render. */
 export function motivoDeColorInaceptable(color: string): string | undefined {
+  // Un color de XOne con alfa (#AARRGGBB): no se acepta en silencio sin el alfa, ni se lee como
+  // #RRGGBBAA. El icono no lleva transparencia en su color, así que se dice.
+  if (/^#[0-9a-fA-F]{8}$/.test(color)) {
+    if (color.slice(1, 3).toUpperCase() === "FF") return undefined; // opaco: vale, y se normaliza
+    return `«${color}» es #AARRGGBB (XOne, alfa primero) y no es opaco: un icono no lleva transparencia en el color. Usa #${color.slice(3)} (#RRGGBB)`;
+  }
   return COLOR_HEX.test(color)
     ? undefined
     : `«${color}» no vale: el color va como hexadecimal (#1a73e8). currentColor y los nombres CSS no se usan, porque XOne no los documenta`;
+}
+
+/**
+ * El color como lo pide Iconify: `#RRGGBB`. Un `#FFRRGGBB` de XOne (opaco) pierde su alfa `FF`, que
+ * no dice nada; uno con alfa menor ya lo rechazó `motivoDeColorInaceptable`. Se llama DESPUÉS de validar.
+ */
+export function colorParaIconify(color: string): string {
+  return /^#[0-9a-fA-F]{8}$/.test(color) ? `#${color.slice(3)}` : color;
 }
 
 export function urlDeBusqueda(consulta: string, limite: number, prefijo?: string): string {

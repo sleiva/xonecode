@@ -129,3 +129,21 @@ describe("fichaDeAgente y los iconos (IXCODE-18)", () => {
     }
   });
 });
+
+describe("fichaDeAgente y los fondos SVG (IXCODE-18)", () => {
+  it("quien escribe el proyecto DICE que genera fondos, sin depender de ningún puerto", () => {
+    expect(fichaDeAgente(agente({ soloLectura: false }))).toMatch(/fondos SVG/);
+    expect(fichaDeAgente(agente({ soloLectura: false }), { conIconos: false })).toMatch(/fondos SVG/);
+  });
+
+  it("quien no la recibe no la anuncia", () => {
+    for (const a of [
+      agente({ soloLectura: true }),
+      agente({ soloLectura: false, ejecucion: true }),
+      agente({ soloLectura: false, escribeEn: ["/doc/"] }),
+      agente({ soloLectura: false, motor: "codex" }),
+    ]) {
+      expect(fichaDeAgente(a), a.nombre).not.toMatch(/fondos SVG/);
+    }
+  });
+});

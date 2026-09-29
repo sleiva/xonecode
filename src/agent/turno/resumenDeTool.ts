@@ -36,6 +36,8 @@ export const CAMPOS_SEGUROS: Record<string, readonly string[]> = {
   regex_search: ["pattern", "path", "glob", "flags", "max_count"],
   // De `buscar_icono` solo argumentos cortos, y la línea enseña el PRIMERO: la consulta. En `obtener`
   // no hay consulta, así que esa línea sale sin detalle. El SVG que vuelve es el RESULTADO y no cruza.
+  // El tipo y el nombre: enseñan qué fondo se pide. El SVG que vuelve es el RESULTADO y no cruza.
+  generar_fondo_svg: ["tipo", "nombre", "ancho", "alto"],
   buscar_icono: ["consulta", "id", "prefijo", "color", "tamano", "operacion"],
   /**
    * De `task` sale el NOMBRE del especialista y nada más — nunca su `description`, que es

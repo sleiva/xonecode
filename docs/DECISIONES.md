@@ -7148,3 +7148,105 @@ preguntas abiertas:** delegó en `developer-xone`, que llamó nueve veces a la t
 paralelo y `obtener`), eligió Material Icons (`ic`) y escribió los SVG con `fill="#FFFFFF"` cocido
 y su aprobación. La segunda paró a preguntar por el aspecto de los botones, que es del encargo y no
 de la tool. Sin verificar todavía en un XOne real cómo pinta ese SVG.
+
+## Fondos SVG en XOne: qué pinta y qué no, medido en un emulador (29-09-2026)
+
+**Por qué se midió.** XOne no tiene degradados ni desenfoques propios, y la idea es cubrirlos con un
+SVG en `imgbk` (frames y botones). La documentación dice que el SVG se renderiza nativo, pero no
+qué subconjunto de SVG entiende, y XOne ignora en silencio lo que no entiende: un fondo que no se
+ve no da error. Se montó un proyecto de prueba fuera del repo (frames con `imgbk` a cada SVG),
+desplegado por hotswap en el emulador Android (API 35) y capturado con la vía nativa.
+
+**Medido (una sola plataforma: el emulador Android; iOS sin probar).**
+
+| SVG | Resultado |
+|---|---|
+| `linearGradient` | se pinta |
+| `radialGradient` | se pinta; con `preserveAspectRatio="none"` se estira en elipse |
+| degradado con `stop-opacity` hasta 0 | se pinta con transparencia: sirve de resplandor |
+| `feGaussianBlur` | **se ignora**: el círculo sale nítido |
+| `feDropShadow` | **se ignora**: sin sombra |
+| sombra hecha con `<rect>` apilados de `fill-opacity` baja | **se pinta** y se lee como una sombra suave |
+| `rx`/`ry` con `preserveAspectRatio="none"` en un frame de proporción muy distinta a la del `viewBox` | la esquina se **deforma** (sale achatada) |
+| `rx`/`ry` con el `viewBox` de la MISMA proporción que el frame | esquina circular y limpia, en el frame ancho y en el estrecho |
+| `border-corner-radius="24"` en el frame con un SVG rectangular | **no recorta** el `imgbk`: las esquinas siguen cuadradas |
+
+**Qué se sigue de ello.** Los filtros SVG no valen; el blur y la sombra se hacen con degradados
+transparentes o capas apiladas, sin `<filter>`. **La esquina hay que DIBUJARLA en el SVG**, porque
+el radio del control no recorta el fondo, y por eso el SVG tiene que llevar la proporción del
+control: un `viewBox` con la relación ancho/alto del frame. El tamaño real de un frame sale del
+árbol de controles (`getAllElements`, `bounds`): en la prueba, `90%` de ancho y `90p` de alto eran
+972×103 px, o sea 1,144 px por `p`.
+
+**Sin medir.** Qué pasa cuando la proporción del control cambia en otro dispositivo (el ancho en `%`
+sigue a la pantalla y el alto en `p` a la densidad): solo se probó la proporción exacta y una muy
+distinta con `none`. Tampoco iOS, ni un borde (`stroke`) sobre un fondo que lo deje ver.
+
+**Un hallazgo de paso.** Una etiqueta `TL` con `height` se recorta dentro de su frame; sin `height`
+ocupa el frame y centra el texto. El esqueleto que genera xonecode pone `height="60p"` al título de
+la cabecera y en el emulador sale cortado por abajo. Sin arreglar.
+
+## El generador de fondos SVG: `generar_fondo_svg` (IXCODE-18) (29-09-2026)
+
+**Qué es.** Tool pura y sin red (`core/fondosSvg.ts`, `agent/grafo/generarFondoSvg.ts`) que devuelve un
+SVG de degradado lineal, degradado radial, tarjeta con sombra o resplandor, listo para `imgbk`. Sale
+de la medida anterior («Fondos SVG en XOne»): el modelo no debe teclear degradados a mano —un error
+en un `url(#…)` da un fondo que no se ve, sin ningún error— y la plantilla no falla ahí.
+
+**Lo que la medida decidió.** Ni un `<filter>`: se ignoran, así que la sombra son siete rectángulos
+apilados de opacidad baja con la tarjeta encima, y el resplandor un degradado que acaba transparente.
+La esquina se DIBUJA (`rx`), porque el radio del control no recorta el fondo, y para que salga limpia
+el `viewBox` lleva la proporción del control: la tool pide `ancho` y `alto` en cualquier unidad y
+todo va relativo al alto (alto 100, ancho `ancho/alto·100`), así que el mismo control a otra escala
+da el mismo SVG. El radio es un porcentaje del alto (25 por omisión, 50 es una píldora). La
+proporción se acota a 0,5–40: fuera de ahí la tarjeta de la sombra no cabe o no es un botón.
+
+**Los colores: XOne pone el alfa primero.** XOne escribe `#RRGGBB` o `#AARRGGBB` (la documentación:
+`fillcolor: "#7F00FF00"`, «ARGB: semi-transparente»); HTML y SVG lo esperan al final, `#RRGGBBAA`.
+Un `#7F00FF00` copiado a un SVG se leería como rojo 7F, azul FF y alfa 0: transparente y del color
+equivocado, sin error. La tool acepta la forma de XOne y la separa en `#RRGGBB` más `stop-opacity`
+o `fill-opacity`, que es lo que entiende cualquier renderizador (no se depende de que el SVG acepte
+un hexadecimal de ocho cifras). Un fallo mío de la primera versión lo destapó el usuario al recordar
+la conversión. `buscar_icono` NO acepta alfa —Iconify tiñe con un color opaco—: un `#AARRGGBB` se
+rechaza diciendo cómo dejarlo (`#RRGGBB`), no se descarta el alfa en silencio.
+
+**Medido con la salida de la propia tool, en el emulador Android.** Los seis fondos —lineal azul
+con esquina, lineal con alfa de XOne de rojo a verde y píldora, radial, tarjeta con sombra, resplandor
+con alfa sobre fondo oscuro, y un lineal en un frame estrecho— se pintan como se esperaba, con las
+proporciones medidas en el árbol de controles (`972×103` y `378×126`). El de alfa sale pastel sobre
+el blanco, con el rojo a la izquierda y el verde a la derecha: el alfa se leyó como primer byte.
+**Sin medir:** iOS, ni otra proporción de control en otro dispositivo (el ancho en `%` sigue a la
+pantalla y el alto en `p` a la densidad), ni el borde (`stroke`) sobre un fondo que lo deje ver.
+
+**El reparto.** El mismo que `buscar_icono` (`recibeBuscarIcono`: quien escribe el proyecto entero,
+hoy `designer-xone` y `developer-xone`, con motor `modelo`), en los dos motores, y como no tiene
+puerto se monta siempre. La ficha del orquestador lo dice (`fichaDeAgente`), por lo mismo que los
+iconos: no ve las tools del especialista. No pide aprobación, porque no escribe.
+
+**Corrección de la prueba con botones: en un botón el fondo va en `img`, no en `imgbk`.** Las dos
+secciones anteriores hablaban de `imgbk` «en frames y botones», y solo se había medido en frames. Al
+probar un `type="B"` en el emulador (mismas proporciones medidas):
+
+| Variante | Resultado |
+|---|---|
+| `imgbk` como atributo del botón | se ignora: sale el botón nativo gris |
+| `imgbk` desde una clase CSS del botón | se ignora igual |
+| `img="bg_btn.svg"` | el SVG llena el botón, con el texto centrado |
+| frame con `imgbk` y un botón transparente dentro (`bgcolor="#00000000"`) | funciona |
+| `img="ic_home.svg"` (icono de 48 px) en un botón ancho | **se estira** hasta llenar el botón |
+| `type="IMG"` con `path="ic_home.svg"` | el icono sale nítido, sin estirar |
+
+Lo confirmó el usuario al decir que los botones usan `img`. La tool ya lo dice en cada respuesta y la
+skill lo recoge; el icono suelto va en un `type="IMG"`.
+
+**Otras dos cosas que salieron de la revisión.** (1) Un SVG de proporción 1:1 en un frame ancho, sin
+`preserveAspectRatio`, no deja bandas: se estira y deforma hasta llenar el control. Se escribe
+`preserveAspectRatio="none"` explícito, que es lo que se mide y no depende de que otro renderizador use
+`meet`. (2) La tool aceptaba el ancho y el alto «en la misma unidad», y un control XOne se declara mezclando
+(`width="90%" height="60p"`): un especialista que pasara `90, 60` habría generado un SVG de otra
+proporción. Ahora entran como en el XML —`90%`, `60p`, `120px` o un número—, con el `%` solo en el ancho, y
+se convierten con lo medido (1080 px de ancho de pantalla, 1,144 px por `p`). La respuesta dice que es una
+ESTIMACIÓN cuando hubo `%` o `p`: en otro dispositivo el `%` sigue a la pantalla y la `p` a la densidad.
+Comprobado con la salida real de la tool (`"90%"` × `"60p"`): el botón se pinta como se espera.
+Además, `buscar_icono` acepta un `#FFRRGGBB` opaco de XOne (le quita el `FF`), y rechaza el que trae alfa,
+porque un icono no lleva transparencia en el color y descartarla en silencio sería cambiar lo pedido.

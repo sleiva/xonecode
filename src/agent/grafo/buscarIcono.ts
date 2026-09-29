@@ -1,7 +1,7 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import {
-  LIMITES_DE_BUSQUEDA, LIMITES_DE_TAMANO, motivoDeColorInaceptable, motivoDeIdInaceptable,
+  colorParaIconify, LIMITES_DE_BUSQUEDA, LIMITES_DE_TAMANO, motivoDeColorInaceptable, motivoDeIdInaceptable,
   motivoDePrefijoInaceptable, NOMBRE_BUSCAR_ICONO, nombreDeFicheroDeIcono, recibeBuscarIcono, rutaDeIcono,
 } from "../../core/iconos.js";
 import type { IconosPort } from "../../core/ports.js";
@@ -35,7 +35,7 @@ const ESQUEMA = z.object({
   limite: z.coerce.number().int().min(1).max(LIMITES_DE_BUSQUEDA.maximo).optional()
     .describe(`Solo en «buscar». Por omisión ${LIMITES_DE_BUSQUEDA.porOmision}.`),
   id: z.string().max(80).optional().describe("Solo en «obtener»: prefijo:nombre, tal como sale de «buscar»."),
-  color: z.string().max(32).optional().describe("Obligatorio en «obtener»: hexadecimal (#1a73e8)."),
+  color: z.string().max(32).optional().describe("Obligatorio en «obtener»: #RRGGBB, o #FFRRGGBB de XOne si es opaco (#1a73e8)."),
   tamano: z.coerce.number().int().min(LIMITES_DE_TAMANO.minimo).max(LIMITES_DE_TAMANO.maximo).optional()
     .describe(`Solo en «obtener»: altura en píxeles. Por omisión ${LIMITES_DE_TAMANO.porOmision}.`),
 });
@@ -90,7 +90,8 @@ async function obtener(iconos: IconosPort, e: Entrada): Promise<string> {
   const problema = motivoDeIdInaceptable(e.id) ?? motivoDeColorInaceptable(e.color);
   if (problema !== undefined) return problema;
   const tamano = e.tamano ?? LIMITES_DE_TAMANO.porOmision;
-  const svg = await iconos.svg(e.id, { color: e.color, tamano });
+  const color = colorParaIconify(e.color);
+  const svg = await iconos.svg(e.id, { color, tamano });
   return [
     `SVG de ${e.id} (${e.color}, ${tamano}px). Escríbelo TAL CUAL con write_file en ${rutaDeIcono(e.id)} y refiérelo con el nombre a secas: img="${nombreDeFicheroDeIcono(e.id)}" (XOne lo busca en icons/).`,
     svg,

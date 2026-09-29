@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  idsDeBusqueda, motivoDeColorInaceptable, motivoDeIdInaceptable, motivoDeSvgInaceptable,
+  colorParaIconify, idsDeBusqueda, motivoDeColorInaceptable, motivoDeIdInaceptable, motivoDeSvgInaceptable,
   nombreDeFicheroDeIcono, rutaDeIcono, TOPE_DE_SVG_BYTES, urlDeBusqueda, urlDeSvg,
 } from "./iconos.js";
 
@@ -16,9 +16,21 @@ describe("iconos: qué se pide", () => {
   it("el color es hexadecimal: currentColor y los nombres CSS se rechazan", () => {
     expect(motivoDeColorInaceptable("#1a73e8")).toBeUndefined();
     expect(motivoDeColorInaceptable("#fff")).toBeUndefined();
-    for (const mal of ["currentColor", "red", "#12", "#1a73e8ff", "1a73e8", "rgb(0,0,0)"]) {
+    for (const mal of ["currentColor", "red", "#12", "1a73e8", "rgb(0,0,0)"]) {
       expect(motivoDeColorInaceptable(mal), mal).toBeDefined();
     }
+  });
+
+  it("un #AARRGGBB de XOne con alfa NO se acepta en silencio ni se lee como #RRGGBBAA: se dice cómo dejarlo", () => {
+    const motivo = motivoDeColorInaceptable("#801A73E8");
+    expect(motivo).toContain("#AARRGGBB");
+    expect(motivo).toContain("#1A73E8");
+  });
+
+  it("un #FFRRGGBB opaco de XOne vale, y se normaliza a #RRGGBB para Iconify", () => {
+    expect(motivoDeColorInaceptable("#FF1A73E8")).toBeUndefined();
+    expect(colorParaIconify("#FF1A73E8")).toBe("#1A73E8");
+    expect(colorParaIconify("#1a73e8")).toBe("#1a73e8");
   });
 
   it("la URL del SVG lleva SIEMPRE color y altura, y el # va codificado", () => {

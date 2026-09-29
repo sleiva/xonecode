@@ -2157,5 +2157,7 @@ describe("`buscar_icono` en TrueForge (IXCODE-18): el mismo reparto que deepagen
     const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
     await s.turno("pon un icono de casa", piel().p).catch(() => undefined);
     expect(toolsPorLlamada[1]).not.toContain("buscar_icono");
+    // Los fondos SVG no dependen del puerto: pura y sin red, van igual.
+    expect(toolsPorLlamada[1]).toContain("generar_fondo_svg");
   }, 20_000);
 });
