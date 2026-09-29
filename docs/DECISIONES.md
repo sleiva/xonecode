@@ -7407,3 +7407,54 @@ cuadraba con la captura**: sin mirar la imagen, un 46 % habría parecido un dato
 
 **Y el agente también la usó.** En esas pasadas el orquestador llamó a `comparar_capturas`, así que estuvo decidiendo con un fondo mal
 detectado en parte de ellas. Queda dicho.
+
+## La pestaña Soporte: exportar y analizar sin llamar a un modelo (29-09-2026)
+
+Una pestaña más en el panel del proyecto para entregar a soporte lo que hizo un chat, una tarea o
+el proyecto entero, con un análisis previo por reglas. Lo que se decidió, y por qué:
+
+**Las trazas no se podían atar a un chat.** El campo `sesion` de `traza-tools.jsonl` es un id
+aleatorio por APERTURA (`${Date.now()}-${rand}`), no el de la conversación, y `fallos.jsonl` no
+llevaba ninguno. Se añadió `chat` a las dos, y es el id de la SESIÓN con que se abrió la consola
+(`opciones.hilo`, el mismo que `crearSesion` pone en el índice), no el hilo del momento: la
+primera versión lo leía de `hilo` y tras un `/nuevo` —que abre un hilo huérfano mientras los
+actos siguen yendo a la misma sesión— las líneas habrían quedado con un id que no está en el
+índice. Límite declarado: el paquete de un chat lleva el hilo de la sesión, no el de un `/nuevo`.
+
+**No se reparte por fechas.** La primera versión del plan atribuía las líneas antiguas por la
+ventana `creada`→`ultimoTurno`. Se descartó: las sesiones se reabren, las ventanas de dos chats se
+solapan, y la mayoría de las líneas caerían en el chat equivocado — un paquete que afirma algo
+falso sobre un chat es peor que uno que dice «esto no se puede atribuir». `traza-errores.jsonl`
+tiene además un sumidero GLOBAL (`ponerSumideroDeErrores`): con dos consolas abiertas, sus líneas
+van al proyecto abierto el último, así que ni siquiera es atribuible por proyecto. Solo va en el
+paquete del proyecto, dicho en el manifiesto.
+
+**Streaming y no `zipSync`.** `paqueteDelProyecto.ts` monta el zip en memoria y está bien para un
+hotswap delante de una persona; aquí el mismo proceso sirve todos los turnos y los SSE, y
+comprimir un proyecto con su `checkpoint.sqlite` (que no se poda) los congelaría. Se lee a trozos,
+se comprime a trozos, se cede el bucle entre trozos y se espera al `drain`.
+
+**La base, con el backup de SQLite.** Copiar los bytes de una base en WAL con la conexión de la
+consola abierta da una foto a medias. `better-sqlite3` tiene `backup()` online; se hace desde una
+conexión de SOLO LECTURA aparte, sin tocar la de la consola; es lo del paquete del PROYECTO. El de
+un chat NO copia la base entera para luego borrar: `DELETE` + `VACUUM` son síncronos en
+better-sqlite3 y sobre un checkpoint sin podar congelarían el proceso. Crea una base vacía con las
+dos tablas, ADJUNTA la del proyecto y copia solo las filas de su `thread_id` en una transacción,
+con TODAS sus `checkpoint_ns`: lo que hizo un especialista es donde suele estar el fallo, y el
+espacio raíz solo tiene la llamada a `task`. **Una sesión de TrueForge —el motor por omisión— no
+tiene filas**: su memoria es `memoria-trueforge.json`, que ya va en la carpeta de la sesión, y el
+manifiesto lo dice en vez de meter una base vacía.
+
+**Una descarga cancelada no puede colgar ni tumbar nada.** fflate no sabe de contrapresión, así
+que se espera al `drain` — y si quien descarga se va, el `drain` no llega: se espera también a
+`close`/`error`, y el temporal (con su copia del checkpoint) se borra en el `finally`. La promesa
+del final del zip se marca como atendida al crearla: un rechazo sin manejador tumba el proceso.
+
+**Con un turno en vuelo se exporta.** Negarlo con un 409 bloqueaba justo el caso para el que
+existe la pestaña: un turno colgado o una tarea atascada `en-proceso`.
+
+**Reglas estructuradas, nunca el texto de un aviso.** «Escribió y no se verificó» se calcula con
+las tools de escritura del acto `herramientas` y la ausencia de `verificacion` en el turno, no
+buscando la frase de la bitácora. El acto `sistema` de clase `permiso` es una escritura aplicada
+sin preguntar (modo autónomo): del RECHAZO no queda acto, y se declara como límite.
+

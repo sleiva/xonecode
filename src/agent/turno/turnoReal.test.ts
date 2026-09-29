@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { existsSync, mkdtempSync, mkdirSync, symlinkSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, symlinkSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Command } from "@langchain/langgraph";
@@ -355,6 +355,22 @@ describe("abrirSesionReal", () => {
         depurar: true,
       });
       expect(existsSync(join(raiz, ".xonecode", "traza-tools.jsonl"))).toBe(true);
+    });
+
+    it("la traza lleva el CHAT: el id de la sesión con que se abrió, el mismo del índice", async () => {
+      // Cableado mirado desde fuera: sin esto, el zip de soporte de un chat saldría sin trazas
+      // y nada lo diría (`web/servidor/soporte.ts` elige las líneas por este campo).
+      const raiz = mkdtempSync(join(tmpdir(), "xc-turnoreal-depurar-"));
+      await abrirSesionReal({
+        raiz,
+        modelos: new ModeloGuionizado(),
+        skills: new SkillsEnMemoria(),
+        entorno: entornoFalso,
+        depurar: true,
+        hilo: "sesion-del-indice",
+      });
+      const [primera] = readFileSync(join(raiz, ".xonecode", "traza-tools.jsonl"), "utf8").trim().split("\n");
+      expect(JSON.parse(primera!)).toMatchObject({ tipo: "sesion", chat: "sesion-del-indice" });
     });
 
     it("sin pasar depurar (como cualquier test de siempre) no deja nada: npm test sigue sin necesitarlo", async () => {

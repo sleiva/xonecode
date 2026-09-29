@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { Planes } from "./componentes/Planes.js";
 import { Colecciones } from "./componentes/Colecciones.js";
 import type { crearStoreDelCliente } from "./store.js";
-import type { ActoDeSincronizacion, FotoDelResumen, MensajeDelCliente } from "./tipos.js";
+import type { ActoDeSincronizacion, FotoDelResumen, ListadoDeSoporte, MensajeDelCliente } from "./tipos.js";
 import type { Conexion } from "./conexion.js";
 import { ANCHO_BARRA_POR_OMISION, Maqueta } from "./componentes/Maqueta.js";
 import { Barra } from "./componentes/Barra.js";
@@ -1490,6 +1490,21 @@ export function App({
       }
     },
   });
+  /**
+   * El listado de la pestaña Soporte: chats y tareas con su análisis previo, en la PROPIA
+   * respuesta del POST, como la foto del resumen. Lo que no se entiende es «no se pudo».
+   */
+  const alPedirSoporte = async (id: string): Promise<ListadoDeSoporte | undefined> => {
+    const r = (await enviar({ clase: "soporte", accion: "listar", proyecto: id })) as Response | undefined;
+    if (r === undefined || !r.ok) return undefined;
+    try {
+      const cuerpo = (await r.json()) as { chats?: unknown; tareas?: unknown };
+      if (!Array.isArray(cuerpo.chats) || !Array.isArray(cuerpo.tareas)) return undefined;
+      return { chats: cuerpo.chats as ListadoDeSoporte["chats"], tareas: cuerpo.tareas as ListadoDeSoporte["tareas"] };
+    } catch {
+      return undefined;
+    }
+  };
   /** La fila del proyecto ABIERTO en el alta, para lo de su copia en el panel. */
   const identidadDelActivo = estado.alta?.proyectos.find((p) => p.id === estado.alta?.proyectoActivo);
 
@@ -2217,6 +2232,7 @@ export function App({
               alAutorizarConector={(id) => void enviar({ clase: "conector", accion: "autorizar", id })}
               alProbarConector={(id) => void enviar({ clase: "conector", accion: "probar", id })}
               alAbrirAjustesDeConectores={() => abrirAjustes("conectores")}
+              alPedirSoporte={alPedirSoporte}
             />
           </>
         ) : enSesion ? (
@@ -2526,6 +2542,7 @@ export function App({
               alAutorizarConector={(id) => void enviar({ clase: "conector", accion: "autorizar", id })}
               alProbarConector={(id) => void enviar({ clase: "conector", accion: "probar", id })}
               alAbrirAjustesDeConectores={() => abrirAjustes("conectores")}
+              alPedirSoporte={alPedirSoporte}
             />
           </>
         ) : (

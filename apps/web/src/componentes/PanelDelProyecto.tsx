@@ -8,6 +8,7 @@ import type { EstadoDelCliente } from "../store.js";
 import type {
   CategoriaDeTarea,
   EsquemaDelProyecto,
+  ListadoDeSoporte,
   MensajeDelCliente,
   PlanDelCable,
   TareaDelGestor,
@@ -18,6 +19,7 @@ import { IconoDeActualizar, IconoDeEnlaceExterno } from "./IconosDelVisor.js";
 import { BarraDeProgreso, resumenDelPlan } from "./Planes.js";
 import { TarjetaDeEmpezar } from "./TarjetaDeJira.js";
 import { ResumenDeProyecto, type AccionesDeLaCopia, type ProyectoDelResumen } from "./ResumenDeProyecto.js";
+import { SoporteDelProyecto } from "./SoporteDelProyecto.js";
 import conversacion from "../../estilos/ConversationRoot.module.css";
 import pestanas from "./Pestanas.module.css";
 import estilos from "./PanelDelProyecto.module.css";
@@ -36,7 +38,7 @@ export type PeticionAlGestor = MensajeDelGestor extends infer M ? (M extends { c
  */
 export type ContextoDeGestor = { destino?: string };
 
-type PestanaDelProyecto = "resumen" | "tareas" | "conectores";
+type PestanaDelProyecto = "resumen" | "tareas" | "conectores" | "soporte";
 
 /**
  * El NOMBRE para mostrar de un conector (IXCODE-15): el del catálogo que el cliente ya tiene
@@ -64,6 +66,7 @@ const PESTANAS: { id: PestanaDelProyecto; etiqueta: string }[] = [
   { id: "resumen", etiqueta: "Resumen" },
   { id: "tareas", etiqueta: "Tareas" },
   { id: "conectores", etiqueta: "Conectores" },
+  { id: "soporte", etiqueta: "Soporte" },
 ];
 
 /**
@@ -113,6 +116,7 @@ export function PanelDelProyecto({
   alAutorizarConector,
   alProbarConector,
   alAbrirAjustesDeConectores,
+  alPedirSoporte,
 }: {
   nombre: string;
   /** El NOMBRE del entorno del proyecto. Ausente = no consta, y no se pinta. */
@@ -161,11 +165,20 @@ export function PanelDelProyecto({
    */
   alProbarConector: (id: string) => void;
   alAbrirAjustesDeConectores: () => void;
+  /**
+   * Pide el listado de la pestaña Soporte (chats y tareas con su análisis previo). Ausente = la
+   * pestaña no se pinta: un control sin dato detrás no existe.
+   */
+  alPedirSoporte?: (proyecto: string) => Promise<ListadoDeSoporte | undefined>;
 }) {
   const [pestana, setPestana] = useState<PestanaDelProyecto>("resumen");
   /** Sin copia en el equipo no hay consola de ESTE proyecto: solo su Resumen. */
   const sinCopia = copia !== undefined && copia.proyecto.local !== true;
-  const pestanasALaVista = sinCopia ? PESTANAS.filter((p) => p.id === "resumen") : PESTANAS;
+  /** Soporte exporta la copia: sin copia, sin el id del proyecto o sin quien pida, no hay pestaña. */
+  const hayPestanaDeSoporte = !sinCopia && copia !== undefined && alPedirSoporte !== undefined;
+  const pestanasALaVista = sinCopia
+    ? PESTANAS.filter((p) => p.id === "resumen")
+    : PESTANAS.filter((p) => p.id !== "soporte" || hayPestanaDeSoporte);
   /**
    * La ÚLTIMA petición de cada acción que salió de este panel: lo que se vuelve a mandar, UNA
    * vez, cuando un conector cuya credencial faltaba pasa a conectado (`useReintentoTrasConectar`).
@@ -338,6 +351,8 @@ export function PanelDelProyecto({
             alAbrirAjustes={alAbrirAjustesDeConectores}
           />
           </>
+        ) : pestana === "soporte" && hayPestanaDeSoporte ? (
+          <SoporteDelProyecto proyecto={copia!.proyecto.id} conectado={conectado} alPedir={alPedirSoporte!} />
         ) : (
           <ConectoresDelProyecto
             gestor={gestor}

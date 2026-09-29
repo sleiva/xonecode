@@ -37,6 +37,8 @@ export interface CausaDeFallo {
 export interface RegistroDeFallo {
   v: 1;
   at: string;
+  /** El id de la conversación (el `thread_id`), cuando el fallo ocurrió dentro de una. */
+  chat?: string;
   /** El encargo, recortado: sirve para reconocer el turno, no para reproducirlo. */
   peticion?: string;
   /** Del envoltorio hacia dentro. El PRIMERO es el que llegó arriba. */

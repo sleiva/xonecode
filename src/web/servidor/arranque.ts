@@ -251,6 +251,8 @@ import {
   type FichaDelGestor, type GestorDeTareasPort, type TransicionDelGestor, type Vinculo, type VinculoGuardado,
 } from "../../core/gestorDeTareas.js";
 import { datosDeCierre } from "./datosDeCierre.js";
+import { ErrorDeDescargaCortada, escribirPaquete, listarSoporte, motivoParaNoExportar, type FuenteDeSoporte, type PedidoDeSoporte } from "./soporte.js";
+import { nombreDelPaquete } from "../../core/paqueteDeSoporte.js";
 
 /** Las dos rutas del cable. El cliente las tiene escritas en `apps/web/src/conexion.ts`. */
 /**
@@ -294,6 +296,12 @@ export const RUTA_ACCION = "/accion";
  * el contrato de las skills que los escriben es «autocontenido».
  */
 export const RUTA_ARTEFACTO = "/artefacto";
+/**
+ * `GET /soporte?tipo=<proyecto|chat|tarea>&proyecto=<id>[&id=<id>]` — el PAQUETE de soporte
+ * (`soporte.ts`), escrito en streaming. Del cable llegan IDs; la raíz y lo que existe los decide
+ * el servidor con su propio listado e índice.
+ */
+export const RUTA_SOPORTE = "/soporte";
 /**
  * `POST /skill?nombre=<fichero.zip>&ambito=<global|proyecto>` — los BYTES de un `.zip`.
  *
@@ -625,7 +633,10 @@ export interface OpcionesDeMontaje {
   colaDeTareas?: Pick<
     TareasEnDisco,
     "listar" | "guardar" | "borrarTarea" | "guardarAdjunto" | "listarAdjuntos"
-  >;
+  > &
+    // Opcional: solo la pestaña Soporte lo usa, para meter los adjuntos de una tarea en su
+    // paquete; un doble que no lo tenga exporta la tarea sin ellos.
+    Partial<Pick<TareasEnDisco, "carpetaDeAdjuntos">>;
   /**
    * Lo mínimo del corredor que este cable toca: `corriendoAqui` para LEER (el campo del
    * mensaje `tareas`), y `cortar` para escribir — pero acotado a UNA tarea, nunca
@@ -4738,6 +4749,90 @@ export function montarRutas(
   });
 
   /**
+   * Lo que la pestaña Soporte necesita de UN proyecto, compuesto por el SERVIDOR a partir del
+   * id: la raíz sale del listado del entorno activo (como `resumen` y `borrar`), las tareas se
+   * deciden por la RAÍZ (`mismaRuta`), y lo que está en vuelo se pregunta a las consolas vivas.
+   * Solo con copia bajada: sin ella no hay chats ni trazas que exportar.
+   */
+  const fuenteDeSoporte = (idDeProyecto: string): { fuente: FuenteDeSoporte } | { motivo: string } => {
+    const identidad = proyectos.find((p) => p.id === idDeProyecto);
+    if (entornoElegido === undefined || identidad === undefined) return { motivo: "ese proyecto no está en el listado del entorno activo" };
+    const raiz = vestibulo.raizDeProyecto(entornoElegido, identidad.nombre);
+    if (!esProyectoEnDisco(raiz)) return { motivo: "ese proyecto no tiene copia local" };
+    const cola = opciones.colaDeTareas;
+    const version = opciones.version?.();
+    return {
+      fuente: {
+        raiz,
+        proyecto: identidad.nombre,
+        tareas: (cola?.listar() ?? []).filter((t) => mismaRuta(t.proyecto.raiz, raiz)),
+        ...(cola?.carpetaDeAdjuntos === undefined ? {} : { carpetaDeAdjuntosDeTarea: (id: string) => cola.carpetaDeAdjuntos!(id) }),
+        sesionesEnVuelo: sesionesTrabajando(),
+        raizEnVuelo: [...raicesTrabajando()].some((r) => mismaRuta(r, raiz)),
+        ...(version === undefined ? {} : { version: version.commit === undefined ? version.version : `${version.version}+${version.commit}` }),
+        ...(opciones.topeDeContexto === undefined ? {} : { topeDeContexto: (modelo: string) => opciones.topeDeContexto!(raiz, modelo) }),
+      },
+    };
+  };
+
+  /**
+   * `GET /soporte` — el paquete, escrito MIENTRAS se lee (`soporte.ts`): un proyecto entero no
+   * se monta en memoria en el proceso que sirve todos los turnos. **Con un turno en vuelo se
+   * exporta igual**: es cuando más falta hace, y el manifiesto lo dice.
+   *
+   * Las cabeceras salen ANTES de escribir nada, así que un fallo a medias no puede volverse un
+   * 500: se corta la respuesta (el navegador da la descarga por fallida) y se informa por el
+   * transcript con el código del error, nunca con su mensaje (lleva rutas).
+   */
+  servidor.registrarRuta("GET", RUTA_SOPORTE, async (peticion, respuesta) => {
+    const responder = (codigo: number, texto: string): void => {
+      respuesta.writeHead(codigo, { "Content-Type": "text/plain; charset=utf-8" });
+      respuesta.end(texto);
+    };
+    const query = new URLSearchParams((peticion.url ?? "").split("?")[1] ?? "");
+    const tipo = query.get("tipo");
+    const idDeProyecto = query.get("proyecto");
+    const id = query.get("id");
+    if (idDeProyecto === null || idDeProyecto === "") {
+      responder(400, "falta el proyecto");
+      return;
+    }
+    let pedido: PedidoDeSoporte;
+    if (tipo === "proyecto") pedido = { tipo };
+    else if ((tipo === "chat" || tipo === "tarea") && id !== null && id !== "") pedido = { tipo, id };
+    else {
+      responder(400, "pedido de soporte ilegible");
+      return;
+    }
+    const resuelta = fuenteDeSoporte(idDeProyecto);
+    if ("motivo" in resuelta) {
+      responder(409, resuelta.motivo);
+      return;
+    }
+    const motivo = motivoParaNoExportar(resuelta.fuente, pedido);
+    if (motivo !== undefined) {
+      responder(409, motivo);
+      return;
+    }
+    const nombre = nombreDelPaquete(pedido.tipo, pedido.tipo === "proyecto" ? resuelta.fuente.proyecto : pedido.id, new Date());
+    respuesta.writeHead(200, {
+      "Content-Type": "application/zip",
+      // El nombre lo compone el código con segmentos llanos: entre comillas no rompe la cabecera.
+      "Content-Disposition": `attachment; filename="${nombre}"`,
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "no-store",
+    });
+    try {
+      await escribirPaquete(resuelta.fuente, pedido, respuesta);
+      respuesta.end();
+    } catch (error) {
+      // Una descarga cancelada no es un fallo que contar: quien la pidió se fue.
+      if (!(error instanceof ErrorDeDescargaCortada)) informar(`no se pudo exportar el paquete de soporte (${codigoDe(error)})`);
+      respuesta.destroy();
+    }
+  });
+
+  /**
    * `GET /imagen-del-proyecto?ruta=<relativa>` — una IMAGEN del proyecto abierto, para que un `.md`
    * de la pestaña Ficheros enseñe las suyas.
    *
@@ -5094,6 +5189,20 @@ export function montarRutas(
       const foto: FotoDelResumen = { tareas, ...(sync === undefined ? {} : { sync }) };
       respuesta.writeHead(200, { "content-type": "application/json" });
       respuesta.end(JSON.stringify(foto));
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "soporte" && mensaje.accion === "listar") {
+      // El listado de la pestaña Soporte, con el análisis PREVIO de cada chat y cada tarea
+      // (`core/analisisDeSesion.ts`), contestado en la propia respuesta como `resumen`.
+      const resuelta = fuenteDeSoporte(mensaje.proyecto);
+      if ("motivo" in resuelta) {
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ motivo: resuelta.motivo }));
+        return;
+      }
+      const listado = await listarSoporte(resuelta.fuente);
+      respuesta.writeHead(200, { "content-type": "application/json" });
+      respuesta.end(JSON.stringify(listado));
       return;
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "copiaLocal" && mensaje.accion === "abrirCarpeta") {

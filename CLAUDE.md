@@ -680,7 +680,8 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   pantalla** (`ResumenDeProyecto.tsx` son piezas que monta `PanelDelProyecto.tsx`): pastillas
   (bajado / compartido) y acciones de la copia —Descargar, o «Abrir carpeta» y «Borrar copia
   local» (`BorrarCopiaLocal.tsx`)—, lo que queda por subir y el gasto; los planes, debajo. Sin
-  sesiones ni tareas: las sesiones son de la barra y las tareas de la pestaña Tareas. **Un proyecto
+  sesiones ni tareas: las sesiones son de la barra y las tareas de la pestaña Tareas (Soporte las
+  LISTA, pero solo para exportarlas y analizarlas, sin abrirlas). **Un proyecto
   SIN copia también abre su panel, con SOLO el Resumen** (`App.tsx#panelSinCopia`): no se abre
   nada en el servidor —abrir sería descargar, y eso es «Descargar» o el «+»—, ni se pregunta al
   gestor ni se enseñan planes, porque son de la consola ABIERTA, que es la de otro proyecto; el
@@ -699,6 +700,26 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   un gráfico, no una lista de sesiones que abrir; cada cuenta con su convención de caché, las dos
   sin sumarse, y el total DICE cuántas sesiones no constan. Sus dos colores (`--xonecode-gasto-*`)
   están validados con el skill `dataviz` contra el fondo de cada tema.
+- **La pestaña SOPORTE exporta lo necesario para analizar qué pasó, y un análisis PREVIO hecho
+  con reglas de CÓDIGO** (`web/servidor/soporte.ts`, `core/paqueteDeSoporte.ts`,
+  `core/analisisDeSesion.ts`, `componentes/SoporteDelProyecto.tsx`). Solo con copia. Lista chats
+  (las `SESIONES_EN_SOPORTE` más recientes) y tareas, cada uno con su insignia de gravedad y sus
+  hallazgos plegados; **las filas NO abren el chat**. Tres paquetes por `GET /soporte` —proyecto
+  (código + `.xonecode` + tareas), chat y tarea—, con IDS en la query y la raíz y lo que existe
+  decididos por el SERVIDOR (`motivoParaNoExportar`). **Nunca viajan** `.git`, `.env` ni las
+  credenciales (`viajaEnSoporte`). **El zip se ESCRIBE mientras se lee** (`Zip`/`ZipDeflate` de
+  fflate, esperando al `drain`): el servidor es UN proceso para todos los turnos y un `zipSync`
+  los congelaría. **El checkpoint se copia EN CALIENTE** (backup de SQLite desde una conexión de
+  solo lectura), y el de un chat se RECORTA a su hilo con todas sus `checkpoint_ns`. **Con un
+  turno en vuelo se exporta igual** y el manifiesto lo dice: es cuando más falta hace. **Las
+  trazas de un chat son las líneas con su `chat`, nunca por fechas**: `traza-tools.jsonl` y
+  `fallos.jsonl` lo llevan desde `crearDiagnosticoDeTools`/`crearRegistroDeFallos`, y es el id de
+  la SESIÓN con que se abrió, no el hilo de ahora (`/nuevo` abre uno huérfano y los actos siguen
+  en la misma sesión); lo que no lo lleva —y `traza-errores.jsonl`, cuyo sumidero
+  es del proceso— va solo en el del proyecto. **El análisis no lee el `texto` de un acto
+  `sistema`**, solo campos estructurados. **Límites declarados**: un rechazo de escritura no deja
+  acto que contar, «escribió y no se verificó» puede ser un artefacto, y el paquete puede llevar
+  rutas de la máquina (excepción declarada a `sinRutas`: es un fichero que se entrega a mano).
 - **Borrar la copia local la CIERRA antes** (`vestibulo.borrarCopia`, el orden de
   `borrarSesion`) y después suelta el checkpointer (`cerrarCheckpointerDeProyecto`): el mapa de
   conexiones no cierra nunca, y en Windows un `checkpoint.sqlite` abierto impide borrar la
@@ -816,7 +837,7 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   (`apps/web/src/componentes/PanelDelProyecto.tsx`, `App.tsx`): pestañas Resumen (lo de la
   copia y los planes; las SESIONES y «Nueva sesión» son de la barra, no se repiten aquí), Tareas (las tareas en
   background del proyecto, PRIMERO, y debajo las pendientes del gestor vinculado, con búsqueda y
-  «Nueva sesión con esta tarea») y Conectores, en DOS secciones: «Gestor de tareas» (solo Jira y Notion,
+  «Nueva sesión con esta tarea»), Soporte (ver abajo) y Conectores, en DOS secciones: «Gestor de tareas» (solo Jira y Notion,
   UNO por proyecto: vincular el otro lo sustituye y la fila lo AVISA antes) y «Conectores para el
   chat» (el resto, con «Conectar» y su casilla). El proyecto que YA está abierto
   enseña el panel SIN mandar `sesion` —soltar la conversación en curso por una vacía es justo lo

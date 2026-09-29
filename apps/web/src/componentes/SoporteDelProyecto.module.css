@@ -1,0 +1,173 @@
+/* La pestaña Soporte del panel del proyecto (`SoporteDelProyecto.tsx`). Ni un color propio:
+   los estados salen de los alias del tema (`design-platform.css`: state-error, state-warn,
+   state-success) y los botones se COMPONEN de `Boton.module.css`. */
+
+.soporte {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+/* Un enlace de descarga con la forma del botón principal: exportar es la acción de la pestaña. */
+.principal {
+  composes: primario from "./Boton.module.css";
+  text-decoration: none;
+}
+
+.secundario {
+  composes: secundario from "./Boton.module.css";
+}
+
+/* El botón de «Actualizar» va a la derecha; el filtro, en medio. */
+.barra > .secundario {
+  margin-left: auto;
+}
+
+.filtro {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.aviso {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  max-width: 70ch;
+}
+
+.error {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+}
+
+.grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tituloDeGrupo {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.lista {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.fila + .fila {
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.cabecera {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  min-width: 0;
+}
+
+/* La insignia de gravedad: mono y en versalitas, como las pastillas del Resumen. El estado se
+   dice además con palabras, nunca solo con el color. */
+.insignia {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: var(--ds-font-family-code);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.insignia[data-gravedad="ok"] {
+  background: var(--dsw-alias-state-success-tertiary);
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.insignia[data-gravedad="aviso"] {
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.insignia[data-gravedad="error"] {
+  background: var(--xonecode-rojo-fondo);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.titulo {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.titulo {
+  cursor: pointer;
+}
+
+button.titulo:hover {
+  text-decoration: underline;
+}
+
+.dato {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.exportar {
+  composes: secundario from "./Boton.module.css";
+  flex: none;
+  text-decoration: none;
+}
+
+.hallazgos {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0 12px 10px 24px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.hallazgos li[data-gravedad="error"] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.turno {
+  margin-right: 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+}

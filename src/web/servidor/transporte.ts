@@ -1304,6 +1304,8 @@ export type MensajeDelCliente =
   /** Pedir la FOTO del resumen del proyecto. Contesta 200 con un `FotoDelResumen` en la propia
    *  respuesta, o 409 con `{ motivo }`. Mismo trato que `borrar`: el ID, nunca una ruta. */
   | { clase: "copiaLocal"; accion: "resumen"; proyecto: string }
+  /** La pestaña Soporte: chats y tareas del proyecto con su análisis previo (`soporte.ts`). */
+  | { clase: "soporte"; accion: "listar"; proyecto: string }
   /**
    * Quitar un entorno registrado. El servidor contesta **409 con `{ motivo }`** si no se puede
    * ahora (un proyecto suyo abierto, una tarea sin terminar): la negativa vive allí, y así el

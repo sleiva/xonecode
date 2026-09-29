@@ -102,16 +102,33 @@ export function rutaTrazaDeTools(raiz: string): string {
  */
 export function crearDiagnosticoDeTools(
   raiz: string,
-  entorno: NodeJS.ProcessEnv = process.env
+  entorno: NodeJS.ProcessEnv = process.env,
+  chat?: string | (() => string | undefined)
 ): DiagnosticoDeTools | undefined {
   if (entorno[VARIABLE_TRAZA_TOOLS] !== "1") return undefined;
 
   const ruta = rutaTrazaDeTools(raiz);
   const sesion = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  // `sesion` es la APERTURA (un id aleatorio por construcción de la sesión), no el chat: una
+  // conversación reabierta tiene varias. `chat` es el id de la conversación —el `thread_id`—
+  // y es lo que permite exportar la traza de UN chat (`core/paqueteDeSoporte.ts`). Opcional:
+  // el terminal y `run --real` no tienen conversación con id. Puede ser una FUNCIÓN, que se lee
+  // en cada línea, para quien lo sepa más tarde que al construir.
+  const delChat = (): { chat?: string } => {
+    let id: string | undefined;
+    try {
+      id = typeof chat === "function" ? chat() : chat;
+    } catch {
+      // La primera línea se escribe al construir, y quien pasa la función puede declarar su
+      // `hilo` después (zona muerta temporal): esa línea sale sin `chat`, no tumba la sesión.
+      id = undefined;
+    }
+    return id === undefined ? {} : { chat: id };
+  };
   const escribir = (evento: Record<string, unknown>): void => {
     try {
       mkdirSync(join(raiz, ".xonecode"), { recursive: true });
-      appendFileSync(ruta, `${JSON.stringify({ v: 1, sesion, at: new Date().toISOString(), ...evento })}\n`, "utf8");
+      appendFileSync(ruta, `${JSON.stringify({ v: 1, sesion, ...delChat(), at: new Date().toISOString(), ...evento })}\n`, "utf8");
     } catch {
       // Diagnosticar no puede impedir que el agente responda. La traza es una
       // comodidad local, no parte del camino de ejecución del turno.

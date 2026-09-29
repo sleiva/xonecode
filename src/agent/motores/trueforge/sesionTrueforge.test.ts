@@ -727,6 +727,17 @@ describe("una sesión con el motor TrueForge", () => {
     }
   });
 
+  it("la traza lleva el CHAT: el id de la sesión con que se abrió, el mismo del índice", async () => {
+    const raiz = proyecto();
+    try {
+      await abrirSesionTrueforge({ raiz, modelos: modelos(), entorno: ENTORNO, skills: CATALOGO, depurar: true, hilo: "sesion-del-indice" });
+      const [primera] = readFileSync(join(raiz, ".xonecode", "traza-tools.jsonl"), "utf8").trim().split("\n");
+      expect(JSON.parse(primera!)).toMatchObject({ tipo: "sesion", chat: "sesion-del-indice" });
+    } finally {
+      ponerSumideroDeErrores(undefined);
+    }
+  });
+
   it("con depurar:true enciende TAMBIÉN la traza de hitos/errores, que aquí faltaba", async () => {
     const raiz = proyecto();
     try {

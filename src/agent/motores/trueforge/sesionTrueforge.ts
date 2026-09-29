@@ -326,7 +326,9 @@ export async function abrirSesionTrueforge(
    * parámetro solo sirve para doblarla—, que es lo que evita dejarla escrita y sin montar.
    */
   const entornoDeDiagnostico = entornoConDepuracion(opciones.depurar === true);
-  const diagnostico = opciones.diagnostico ?? crearDiagnosticoDeTools(raiz, entornoDeDiagnostico);
+  // El CHAT es la sesión con la que se abrió (`opciones.hilo`, el id del índice), no el `hilo` de
+  // ahora: `/nuevo` abre otro hilo huérfano pero los actos siguen yendo a la misma sesión.
+  const diagnostico = opciones.diagnostico ?? crearDiagnosticoDeTools(raiz, entornoDeDiagnostico, opciones.hilo);
   /**
    * La traza de EXCEPCIONES e HITOS, la MISMA de deepagents (`turnoReal.ts`) y que aquí
    * faltaba por completo: TrueForge nunca la encendía, ni siquiera con la variable de entorno
