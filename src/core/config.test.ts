@@ -262,6 +262,16 @@ describe("validar", () => {
     expect(validar({ gestorDeTareas: { conector: "deepwiki", sitio: "x", proyecto: "IXCODE" } }, RUTA, "proyecto").config.gestorDeTareas).toBeUndefined();
   });
 
+  it("IXCODE-15: «admiteMias» se conserva solo como booleano; otra cosa se ignora SIN tirar el vínculo", () => {
+    const v = { conector: "notion", sitio: "notion", proyecto: "collection://ea517d0b-bf30-4b08-8681-dc9c30f5e783" };
+    expect(validar({ gestorDeTareas: { ...v, admiteMias: false } }, RUTA, "proyecto")).toEqual({ config: { gestorDeTareas: { ...v, admiteMias: false } }, avisos: [] });
+    const r = validar({ gestorDeTareas: { ...v, admiteMias: "sí" } }, RUTA, "proyecto");
+    expect(r.config.gestorDeTareas).toEqual(v);
+    expect(r.avisos).toHaveLength(1);
+    expect(r.avisos[0]!.texto).toContain("admiteMias");
+    expect(r.avisos[0]!.texto).not.toContain("sí");
+  });
+
   it("descarta el fichero entero si el JSON raíz no es objeto", () => {
     for (const bruto of [[1, 2], "texto", 42, null]) {
       const { config, avisos } = validar(bruto, RUTA, "global");

@@ -26,7 +26,7 @@ import {
   validar,
   validarAuth,
 } from "../../core/config.js";
-import type { Vinculo } from "../../core/gestorDeTareas.js";
+import type { VinculoGuardado } from "../../core/gestorDeTareas.js";
 import {
   motivoDeEndpointInaceptable, motivoDeSlugInaceptable, parsear, Proveedor, PROVEEDORES,
   variableDeProveedor, type ProveedorDeclarado,
@@ -310,8 +310,8 @@ export function guardarConectoresDeProyecto(
  */
 export function guardarGestorDeProyecto(
   raiz: string,
-  gestor: Vinculo | undefined,
-): { ruta: string; gestorDeTareas: Vinculo | undefined } {
+  gestor: VinculoGuardado | undefined,
+): { ruta: string; gestorDeTareas: VinculoGuardado | undefined } {
   const ruta = rutaConfigDeProyecto(raiz);
   const base = leerObjetoCrudoOAbortar(ruta);
   const { gestorDeTareas: _viejo, ...sinGestor } = base;

@@ -569,8 +569,9 @@ export type MensajeAlCliente =
    */
   | {
       clase: "gestor";
-      /** `admiteMias` (IXCODE-15): si el gestor VINCULADO sabe filtrar «asignadas a mí». Solo
-       *  con vínculo; ausente = no consta, y el panel no ofrece el conmutador. */
+      /** `admiteMias` (IXCODE-15): si el gestor VINCULADO sabe filtrar «asignadas a mí». Se
+       *  decidió AL VINCULAR y se lee del `config.json`, sin red. Viaja SIEMPRE con vínculo y
+       *  nunca sin él. */
       estado?: { conectores: string[]; vinculo?: VinculoDelCable; admiteMias?: boolean };
       sitios?: { conector: string; lista: { id: string; nombre: string }[] };
       proyectos?: { sitio: string; lista: { clave: string; nombre: string }[] };

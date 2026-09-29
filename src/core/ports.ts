@@ -807,8 +807,6 @@ export class GestorDeTareasEnMemoria implements GestorDeTareasPort {
        */
       encontrados?: ProyectoEncontrado[];
       descripciones?: Record<string, DescripcionDelProyecto>;
-      /** Lo que contesta `admiteMias`. Ausente = `true`, como Jira. */
-      admiteMias?: boolean;
     } = {}
   ) {
     const { encontrados, descripciones } = datos;
@@ -822,7 +820,6 @@ export class GestorDeTareasEnMemoria implements GestorDeTareasPort {
   /** Solo existen si los datos los piden: su AUSENCIA es la forma de Jira, y el servidor la mira. */
   readonly buscarProyectos?: (texto: string) => Promise<ProyectoEncontrado[]>;
   readonly describirProyecto?: (v: Vinculo) => Promise<DescripcionDelProyecto>;
-  async admiteMias(_v: Vinculo) { return this.datos.admiteMias ?? true; }
   async sitios() { return this.datos.sitios ?? []; }
   async proyectos(sitio: string) { return this.datos.proyectos?.[sitio] ?? []; }
   async pendientes(_v: Vinculo, texto?: string, opciones?: OpcionesDePendientes) {

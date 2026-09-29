@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { crearGestorNotion, descripcionDePagina, esquemaDeFetch, TOPE_DE_DESCRIPCION } from "./gestorNotion.js";
-import { transicionPropuesta, type Vinculo } from "../../core/gestorDeTareas.js";
+import { comentarioParaNotion, crearGestorNotion, descripcionDePagina, esquemaDeFetch, TOPE_DE_DESCRIPCION } from "./gestorNotion.js";
+import { comentarioDeCierre, transicionPropuesta, type Vinculo } from "../../core/gestorDeTareas.js";
 
 /**
  * Las formas MEDIDAS contra `https://mcp.notion.com/mcp` (29-09-2026, IXCODE-15), recortadas a lo
@@ -281,12 +281,6 @@ describe("pendientes", () => {
     const g = crearGestorNotion(llamar);
     await expect(g.pendientes(V, undefined, { mias: true })).rejects.toThrow("no tiene una propiedad de persona");
     expect(de("notion-query-data-sources")).toHaveLength(0);
-    expect(await g.admiteMias(V)).toBe(false);
-  });
-
-  it("admiteMias: con persona sí; si no se puede saber, false (no lanza)", async () => {
-    expect(await crearGestorNotion(llamarDoble({ "notion-fetch": fetchPor }).llamar).admiteMias(V)).toBe(true);
-    expect(await crearGestorNotion(llamarDoble({}).llamar).admiteMias(V)).toBe(false);
   });
 
   it("un vínculo que no es un data source no se consulta", async () => {
@@ -365,9 +359,30 @@ describe("transiciones, transicionar y comentar", () => {
     expect(de("notion-update-page")).toHaveLength(0);
   });
 
-  it("comentar manda el texto como markdown a notion-create-comment", async () => {
+  it("comentar manda a notion-create-comment el texto PASADO por comentarioParaNotion", async () => {
     const { llamar, de } = llamarDoble({ "notion-create-comment": { ok: true } });
     await crearGestorNotion(llamar).comentar(V, PAGINA, "## Qué cambió\n\n- a");
-    expect(de("notion-create-comment")[0]!.args).toEqual({ page_id: PAGINA, markdown: "## Qué cambió\n\n- a" });
+    expect(de("notion-create-comment")[0]!.args).toEqual({ page_id: PAGINA, markdown: "Qué cambió:\n\n• a" });
+  });
+
+  it("comentarioParaNotion: solo los marcadores de bloque; mismas líneas, mismo orden, lo de dentro de la línea intacto", () => {
+    const md = comentarioDeCierre({
+      ficheros: [{ ruta: "app.xne", clase: "modificado" }, { ruta: "js/a.js", clase: "nuevo" }],
+      commits: ["abcdef1234"],
+      veredicto: { verde: false, errores: 2, avisos: 0 },
+      resumen: "Hecho **casi** todo:\n- uno\n  * dos",
+    });
+    const n = comentarioParaNotion(md);
+    expect(n.split("\n")).toHaveLength(md.split("\n").length);
+    expect(n).toBe(
+      [
+        "Qué cambió:", "", "• `app.xne` (modificado)", "• `js/a.js` (nuevo)", "", "Commits: `abcdef1`", "",
+        "Verificación:", "", "en rojo: 2 errores", "",
+        "Resumen:", "", "Hecho **casi** todo:", "• uno", "  • dos", "",
+        "— escrito por xonecode",
+      ].join("\n"),
+    );
+    // Un título que ya acaba en «:» no se dobla; `**x**` no es una lista; `---` tampoco.
+    expect(comentarioParaNotion("# Plan:\n**negrita**\n---\n#sin espacio")).toBe("Plan:\n**negrita**\n---\n#sin espacio");
   });
 });

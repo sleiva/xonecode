@@ -849,8 +849,12 @@ escrito a mano lo da de alta una persona desde la misma ventana.
   BUSCA la base (`buscarProyectos`), se DESCRIBE su esquema antes de vincular (`describir`: estado,
   título, asignado, o el motivo de que no valga) y las pendientes salen de un SQL con `params`
   (`sqlDePendientes`), nunca interpolado. Las transiciones de Notion son las opciones de su estado,
-  y el data source se saca de la PROPIA página, no del vínculo. «Asignadas a mí» lo ofrece el
-  servidor solo si el adaptador lo admite para ESE vínculo (`admiteMias`). **Del asignado de una tarea solo cruza el nombre visible**
+  y el data source se saca de la PROPIA página, no del vínculo. «Asignadas a mí» se DECIDE al
+  vincular (Notion: solo con propiedad de persona) y se GUARDA con el vínculo
+  (`gestorDeTareas.admiteMias`, `admiteMiasDelVinculo`): **`estado` no toca la red** —lo contestan
+  también `usarConector` y `desvincular`, y un gestor colgado no puede colgar esa casilla—. El
+  comentario de cierre llega a Notion por `comentarioParaNotion` (solo cambia los marcadores de
+  bloque, que Notion no pinta). **Del asignado de una tarea solo cruza el nombre visible**
   (`nombreDelAsignado`, reducido a `displayName`): el correo y el id de cuenta no salen del
   adaptador — la medida está en `docs/DECISIONES.md`.
 - **Vincular un proyecto de Jira ESCRIBE la configuración solo después de que Jira confirme la

@@ -123,6 +123,31 @@ export function descripcionDePagina(cuerpoTexto: string): string {
   return limpio.length > TOPE_DE_DESCRIPCION ? `${limpio.slice(0, TOPE_DE_DESCRIPCION)}…` : limpio;
 }
 
+/**
+ * El comentario de cierre tal como Notion lo enseña BIEN (IXCODE-15). El esquema de
+ * `notion-create-comment` dice que los encabezados, las listas, las tablas, las citas y los bloques
+ * de código se guardan como TEXTO —saldrían `## Qué cambió` y `- a` literales—, y que lo de dentro
+ * de la línea (negrita, cursiva, código, enlaces) sí se pinta. Así que solo se cambian los
+ * MARCADORES de bloque: `## Título` → `Título:` en su línea y `- x`/`* x`/`+ x` → `• x`; nada
+ * más (un bloque de código, que `comentarioDeCierre` no produce, se queda como está). Mismas líneas, mismo orden, mismo texto: lo que la persona
+ * aprobó no cambia de sentido. `**x**` y `` `x` `` se quedan porque Notion los pinta.
+ */
+export function comentarioParaNotion(markdown: string): string {
+  return markdown
+    .split("\n")
+    .map((linea) => {
+      const titulo = /^\s{0,3}#{1,6}\s+(.*?)\s*#*\s*$/.exec(linea);
+      if (titulo !== null) {
+        const t = titulo[1]!;
+        return t.endsWith(":") ? t : `${t}:`;
+      }
+      const punto = /^(\s*)[-*+]\s+(.*)$/.exec(linea);
+      if (punto !== null) return `${punto[1]}• ${punto[2]}`;
+      return linea;
+    })
+    .join("\n");
+}
+
 export function crearGestorNotion(llamar: Llamar): GestorDeTareasPort {
   /**
    * El esquema de cada data source ya entendido. `describirProyecto` lo pide SIEMPRE de nuevo (es
@@ -278,14 +303,6 @@ export function crearGestorNotion(llamar: Llamar): GestorDeTareasPort {
     return describir(v.proyecto);
   }
 
-  async function admiteMias(v: Vinculo): Promise<boolean> {
-    try {
-      return (await esquemaDe(v.proyecto)).asignado !== undefined;
-    } catch {
-      return false;
-    }
-  }
-
   async function pendientes(v: Vinculo, filtro?: string, opciones?: OpcionesDePendientes): Promise<TareaDelGestor[]> {
     const esquema = await esquemaDe(v.proyecto);
     if (opciones?.mias === true && esquema.asignado === undefined) throw new Error("esta base no tiene una propiedad de persona");
@@ -352,8 +369,8 @@ export function crearGestorNotion(llamar: Llamar): GestorDeTareasPort {
   async function comentar(_v: Vinculo, clave: string, cuerpo: string): Promise<void> {
     const motivo = motivoDeClaveDeNotion(clave);
     if (motivo !== undefined) throw new Error(motivo);
-    await llamar("notion-create-comment", { page_id: clave, markdown: cuerpo });
+    await llamar("notion-create-comment", { page_id: clave, markdown: comentarioParaNotion(cuerpo) });
   }
 
-  return { sitios, proyectos, buscarProyectos, describirProyecto, admiteMias, pendientes, ficha, transiciones, transicionar, comentar };
+  return { sitios, proyectos, buscarProyectos, describirProyecto, pendientes, ficha, transiciones, transicionar, comentar };
 }

@@ -7054,3 +7054,12 @@ las listas se guardan como TEXTO, así que las secciones de `comentarioDeCierre`
 en Notion. Las transiciones de Notion no existen como tales: cada OPCIÓN del estado es un destino,
 y el data source se saca de la PROPIA página (`<parent-data-source>`), no del vínculo, para que se
 pueda cerrar una sesión aunque el proyecto ya esté vinculado a otra cosa.
+
+**Dos correcciones del mismo día, antes de revisar.** (1) `admiteMias` se preguntaba al adaptador
+en cada `estado`, y con el esquema sin cachear eso era un `notion-fetch`: la respuesta a la casilla
+de un conector del chat esperaba a Notion (hasta `TOPE_DE_CONEXION_MS`). Ahora se decide al
+VINCULAR —la base ya está descrita— y se guarda en `gestorDeTareas.admiteMias`; un vínculo de Jira
+escrito antes del campo se lee como `true`, uno de Notion como `false`. (2) Releído el campo
+`markdown` de `notion-create-comment`: los comentarios pintan lo de DENTRO de la línea (negrita,
+cursiva, código, enlaces) y dejan como texto los bloques (encabezados, listas). `comentarioParaNotion`
+cambia solo esos marcadores —`## X` → `X:`, `- x` → `• x`— con las mismas líneas y en el mismo orden.

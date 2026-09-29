@@ -24,7 +24,7 @@ import {
   esProveedorPersonalizado, motivoDeEndpointInaceptable, motivoDeSlugInaceptable,
   type Proveedor, type ProveedorDeclarado,
 } from "./modelos.js";
-import { formaDeProyecto, motivoDeProyectoInaceptable, type Vinculo } from "./gestorDeTareas.js";
+import { formaDeProyecto, motivoDeProyectoInaceptable, type VinculoGuardado } from "./gestorDeTareas.js";
 import type { Papel } from "./ports.js";
 
 /** La configuración: modelos y proveedores. Nunca claves. */
@@ -73,7 +73,7 @@ export interface ConfigDeFichero {
   /** Ids de conectores MCP (IXCODE-11, `core/conectores.ts`) que este proyecto usa. */
   conectores?: string[];
   /** El gestor de tareas vinculado (IXCODE-11): a qué conector, sitio y proyecto remoto. */
-  gestorDeTareas?: Vinculo;
+  gestorDeTareas?: VinculoGuardado;
 }
 
 /** Las credenciales, que viven en OTRO fichero y solo global. */
@@ -382,7 +382,17 @@ export function validar(
         });
         continue;
       }
-      config.gestorDeTareas = { conector: valor.conector, sitio: valor.sitio, proyecto: valor.proyecto };
+      // `admiteMias` (IXCODE-15) es opcional: solo un booleano se conserva. Otra cosa se descarta
+      // SOLO ese campo —el vínculo sigue valiendo— y se dice, sin el valor.
+      if (valor.admiteMias !== undefined && typeof valor.admiteMias !== "boolean") {
+        avisos.push({ texto: `«${ruta}»: «gestorDeTareas.admiteMias» debe ser true o false; se ignora.`, severidad: "aviso" });
+      }
+      config.gestorDeTareas = {
+        conector: valor.conector,
+        sitio: valor.sitio,
+        proyecto: valor.proyecto,
+        ...(typeof valor.admiteMias === "boolean" ? { admiteMias: valor.admiteMias } : {}),
+      };
       continue;
     }
 

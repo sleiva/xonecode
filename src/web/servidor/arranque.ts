@@ -244,8 +244,8 @@ import { servicioDeConectoresCableado, type ServicioDeConectores } from "../../a
 import { crearGestorJira } from "../../agent/conectores/gestorJira.js";
 import { crearGestorNotion } from "../../agent/conectores/gestorNotion.js";
 import {
-  motivoDeProyectoInaceptable, transicionPropuesta, comentarioDeCierre,
-  type FichaDelGestor, type GestorDeTareasPort, type TransicionDelGestor, type Vinculo,
+  admiteMiasDelVinculo, motivoDeProyectoInaceptable, transicionPropuesta, comentarioDeCierre,
+  type FichaDelGestor, type GestorDeTareasPort, type TransicionDelGestor, type Vinculo, type VinculoGuardado,
 } from "../../core/gestorDeTareas.js";
 import { datosDeCierre } from "./datosDeCierre.js";
 
@@ -3681,23 +3681,16 @@ export function montarRutas(
       return { conectores: c?.conectores ?? [], vinculo: c?.gestorDeTareas };
     };
     /**
-     * El estado del gestor del proyecto. `admiteMias` (IXCODE-15) lo decide el ADAPTADOR para ESE
-     * vínculo —Jira siempre; Notion solo con una propiedad de persona— y viaja SOLO con vínculo y
-     * con un gestor que contestó: ausente es «no consta», y el panel no ofrece «Asignadas a mí».
+     * El estado del gestor del proyecto, SIN tocar la red (IXCODE-15): lo contestan `vincular`,
+     * `desvincular` y `usarConector`, y un gestor que no responde no puede colgar la casilla de un
+     * conector del chat. `admiteMias` se decidió AL VINCULAR y vive en el `config.json`
+     * (`admiteMiasDelVinculo`: lo guardado, o `true` para un Jira de antes); viaja solo con vínculo.
      */
-    const emitirEstado = async (): Promise<void> => {
+    const emitirEstado = (): void => {
       const { conectores, vinculo } = delProyecto();
       const nombre = vinculo === undefined ? undefined : nombreDelSitio.get(vinculo.sitio);
       const nombreProyecto = vinculo === undefined ? undefined : nombreDelProyecto.get(claveDeProyecto(vinculo.conector, vinculo.sitio, vinculo.proyecto));
-      const g = vinculo === undefined ? undefined : gestorDe(vinculo.conector);
-      let admiteMias: boolean | undefined;
-      if (vinculo !== undefined && g !== undefined) {
-        try {
-          admiteMias = await g.admiteMias(vinculo);
-        } catch {
-          admiteMias = undefined;
-        }
-      }
+      const admiteMias = vinculo === undefined ? undefined : admiteMiasDelVinculo(vinculo);
       emitir({
         clase: "gestor",
         estado: {
@@ -3737,7 +3730,7 @@ export function montarRutas(
     try {
       switch (m.accion) {
         case "estado":
-          return await emitirEstado();
+          return emitirEstado();
         case "sitios": {
           const g = gestorOFallo(m.conector);
           if (g === undefined) return;
@@ -3787,12 +3780,17 @@ export function montarRutas(
           // ve no daría ni una pendiente, y el fallo aparecería lejos de donde se cometió. Quien
           // sabe DESCRIBIR (Notion) lo comprueba así —que el data source existe Y que su esquema
           // vale como gestor—; quien no (Jira), contra la lista de proyectos del sitio, como siempre.
+          // `admiteMias` se DECIDE aquí, con la base ya descrita, y se guarda con el vínculo: así
+          // `estado` no pregunta a nadie. Con esquema, solo si tiene una propiedad de persona;
+          // sin describir (Jira), siempre —`currentUser()` no depende del proyecto—.
+          let admiteMias = true;
           if (g.describirProyecto !== undefined) {
             if (!(await g.sitios()).some((x) => x.id === m.sitio)) return fallo(`«${m.sitio}» no es un sitio de ${nombreDelConector(m.conector)}`);
             const d = await g.describirProyecto({ conector: m.conector, sitio: m.sitio, proyecto: m.proyecto });
             if ("motivo" in d) return fallo(d.motivo);
             if (d.esquema.proyecto !== m.proyecto) return fallo("ese proyecto no es el que se describió");
             nombreDelProyecto.set(claveDeProyecto(m.conector, m.sitio, m.proyecto), d.esquema.nombre);
+            admiteMias = d.esquema.asignado !== undefined;
           } else {
             const visibles = await g.proyectos(m.sitio);
             const visto = visibles.find((x) => x.clave === m.proyecto);
@@ -3803,12 +3801,12 @@ export function montarRutas(
           // del de antes deja de estar usado —el panel no tiene casilla para un gestor, así que
           // quedarse en `conectores` lo dejaría usado sin control que lo quite—.
           const { conectores, vinculo: anterior } = delProyecto();
-          const vinculo: Vinculo = { conector: m.conector, sitio: m.sitio, proyecto: m.proyecto };
+          const vinculo: VinculoGuardado = { conector: m.conector, sitio: m.sitio, proyecto: m.proyecto, admiteMias };
           if (!guardar(() => guardarGestorDeProyecto(raiz, vinculo))) return;
           const sinAnterior = anterior !== undefined && anterior.conector !== m.conector ? conectores.filter((c) => c !== anterior.conector) : conectores;
           const nuevos = sinAnterior.includes(m.conector) ? sinAnterior : [...sinAnterior, m.conector];
           if (nuevos.join("\u0000") !== conectores.join("\u0000") && !guardar(() => guardarConectoresDeProyecto(raiz, nuevos))) return;
-          return await emitirEstado();
+          return emitirEstado();
         }
         case "desvincular": {
           // Desvincular también DEJA DE USAR el conector del vínculo: el panel ya no ofrece una
@@ -3819,7 +3817,7 @@ export function montarRutas(
           if (vinculo !== undefined && conectores.includes(vinculo.conector)) {
             if (!guardar(() => guardarConectoresDeProyecto(raiz, conectores.filter((c) => c !== vinculo.conector)))) return;
           }
-          return await emitirEstado();
+          return emitirEstado();
         }
         case "usarConector": {
           // Solo se AÑADE lo que esta consola conoce (`catálogo ∪ definiciones`): un id cualquiera
@@ -3834,7 +3832,7 @@ export function montarRutas(
             ? (conectores.includes(m.conector) ? conectores : [...conectores, m.conector])
             : conectores.filter((c) => c !== m.conector);
           if (!guardar(() => guardarConectoresDeProyecto(raiz, nuevos))) return;
-          return await emitirEstado();
+          return emitirEstado();
         }
         case "pendientes": {
           const { vinculo } = delProyecto();

@@ -9676,7 +9676,7 @@ describe("el gestor de tareas, por el cable", () => {
     expect(JSON.parse(t.leerConfig())).toEqual({
       modo: "offline",
       conectores: ["jira"],
-      gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" },
+      gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE", admiteMias: true },
     });
 
     // Usar otro conector, que no es un gestor: se AÑADE al lado.
@@ -10310,7 +10310,7 @@ describe("el gestor de tareas, por el cable", () => {
       clase: "gestor",
       estado: { conectores: ["notion"], vinculo: { conector: "notion", sitio: "notion", proyecto: FUENTE, nombreDelProyecto: "Tasks" }, admiteMias: true },
     });
-    expect(JSON.parse(t.leerConfig()).gestorDeTareas).toEqual({ conector: "notion", sitio: "notion", proyecto: FUENTE });
+    expect(JSON.parse(t.leerConfig()).gestorDeTareas).toEqual({ conector: "notion", sitio: "notion", proyecto: FUENTE, admiteMias: true });
     await t.limpiar();
   });
 
@@ -10324,29 +10324,62 @@ describe("el gestor de tareas, por el cable", () => {
     expect(JSON.parse(t.leerConfig())).toEqual({
       modo: "offline",
       conectores: ["deepwiki", "notion"],
-      gestorDeTareas: { conector: "notion", sitio: "notion", proyecto: FUENTE },
+      gestorDeTareas: { conector: "notion", sitio: "notion", proyecto: FUENTE, admiteMias: true },
     });
     expect((await t.pedir({ clase: "gestor", accion: "vincular", conector: "jira", sitio: "c1", proyecto: "IXCODE" }))?.estado?.conectores)
       .toEqual(["deepwiki", "jira"]);
-    expect(JSON.parse(t.leerConfig()).gestorDeTareas).toEqual({ conector: "jira", sitio: "c1", proyecto: "IXCODE" });
+    expect(JSON.parse(t.leerConfig()).gestorDeTareas).toEqual({ conector: "jira", sitio: "c1", proyecto: "IXCODE", admiteMias: true });
     // Revincular el MISMO gestor a otro proyecto no toca los conectores.
     expect((await t.pedir({ clase: "gestor", accion: "vincular", conector: "jira", sitio: "c1", proyecto: "IXCODE" }))?.estado?.conectores)
       .toEqual(["deepwiki", "jira"]);
     await t.limpiar();
   });
 
-  it("IXCODE-15: «admiteMias» lo decide el adaptador para ESE vínculo; un fallo lo deja AUSENTE", async () => {
-    const vinculado = { modo: "offline", conectores: ["notion"], gestorDeTareas: { conector: "notion", sitio: "notion", proyecto: FUENTE } };
-    const no = await abrir({ gestorDeTareas: dosGestores(datosNotion({ admiteMias: false })) }, vinculado);
-    expect((await no.pedir({ clase: "gestor", accion: "estado" }))?.estado?.admiteMias).toBe(false);
-    await no.limpiar();
-    class Roto extends GestorDeTareasEnMemoria {
-      override async admiteMias(): Promise<boolean> { throw new Error("caído"); }
+  it("IXCODE-15: «admiteMias» se DECIDE al vincular y se GUARDA; «estado» lo lee sin tocar la red", async () => {
+    // Una base de Notion SIN propiedad de persona: se vincula con `admiteMias: false`.
+    const { asignado: _a, ...sinPersona } = ESQUEMA_NOTION;
+    const llamadas: string[] = [];
+    class Contado extends GestorDeTareasEnMemoria {
+      override async sitios() { llamadas.push("sitios"); return super.sitios(); }
+      override async proyectos(sitio: string) { llamadas.push("proyectos"); return super.proyectos(sitio); }
+      override async pendientes(...a: Parameters<GestorDeTareasEnMemoria["pendientes"]>) { llamadas.push("pendientes"); return super.pendientes(...a); }
     }
-    const roto = await abrir({ gestorDeTareas: () => new Roto(datosNotion()) }, vinculado);
-    const estado = (await roto.pedir({ clase: "gestor", accion: "estado" }))?.estado;
-    expect(estado).toEqual({ conectores: ["notion"], vinculo: { conector: "notion", sitio: "notion", proyecto: FUENTE } });
-    await roto.limpiar();
+    const conDescribir = (d: typeof datosNotion extends (...a: never[]) => infer R ? R : never) => {
+      const g = new Contado(d);
+      const describir = g.describirProyecto!;
+      return Object.assign(g, { describirProyecto: async (v: Vinculo) => { llamadas.push("describir"); return describir(v); } });
+    };
+    const t = await abrir(
+      { gestorDeTareas: (c) => (c === "notion" ? conDescribir(datosNotion({ descripciones: { [FUENTE]: { esquema: sinPersona } } })) : c === "jira" ? new Contado(datos()) : undefined) },
+    );
+    expect((await t.pedir({ clase: "gestor", accion: "vincular", conector: "notion", sitio: "notion", proyecto: FUENTE }))?.estado?.admiteMias).toBe(false);
+    expect(JSON.parse(t.leerConfig()).gestorDeTareas).toEqual({ conector: "notion", sitio: "notion", proyecto: FUENTE, admiteMias: false });
+    llamadas.length = 0;
+    expect((await t.pedir({ clase: "gestor", accion: "estado" }))?.estado).toEqual({
+      conectores: ["notion"],
+      vinculo: { conector: "notion", sitio: "notion", proyecto: FUENTE, nombreDelProyecto: "Tasks" },
+      admiteMias: false,
+    });
+    // Ni `estado` ni `usarConector` llaman a NADIE: un gestor colgado no puede colgar la casilla.
+    await t.pedir({ clase: "gestor", accion: "desvincular" });
+    expect(llamadas).toEqual([]);
+    await t.limpiar();
+  });
+
+  it("IXCODE-15: «estado» con el adaptador REAL no llama a la red; un Jira de antes (sin el campo) admite «mías», un Notion de antes no", async () => {
+    const llamar = vi.fn(async () => { throw new Error("no debería llamar"); });
+    const doble = servicioDeConectoresDeMentira();
+    const cableado = () => ajusteDeGestorCableado({ conectores: (cb) => ({ ...doble.fabrica(cb), llamar }) });
+    const notion = await abrir(cableado(), { modo: "offline", conectores: ["notion"], gestorDeTareas: { conector: "notion", sitio: "notion", proyecto: FUENTE } });
+    expect((await notion.pedir({ clase: "gestor", accion: "estado" }))?.estado?.admiteMias).toBe(false);
+    await notion.limpiar();
+    const jira = await abrir(cableado(), { modo: "offline", conectores: ["jira"], gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } });
+    expect((await jira.pedir({ clase: "gestor", accion: "estado" }))?.estado?.admiteMias).toBe(true);
+    await jira.limpiar();
+    const guardado = await abrir(cableado(), { modo: "offline", gestorDeTareas: { conector: "notion", sitio: "notion", proyecto: FUENTE, admiteMias: true } });
+    expect((await guardado.pedir({ clase: "gestor", accion: "estado" }))?.estado?.admiteMias).toBe(true);
+    await guardado.limpiar();
+    expect(llamar).not.toHaveBeenCalled();
   });
 
   it("IXCODE-15: con el adaptador de Notion REAL — pendientes con etiqueta, «Empezar» con el nombre del conector, y cerrar sin vínculo", async () => {

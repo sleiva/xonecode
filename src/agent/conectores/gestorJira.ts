@@ -196,10 +196,5 @@ export function crearGestorJira(llamar: Llamar): GestorDeTareasPort {
     await llamar("addCommentToJiraIssue", { cloudId: v.sitio, issueIdOrKey: clave, commentBody: cuerpo, contentFormat: "markdown" });
   }
 
-  /** Siempre: `assignee = currentUser()` es una función de la JQL, no depende del proyecto. */
-  async function admiteMias(): Promise<boolean> {
-    return true;
-  }
-
-  return { sitios, proyectos, pendientes, ficha, transiciones, transicionar, comentar, admiteMias };
+  return { sitios, proyectos, pendientes, ficha, transiciones, transicionar, comentar };
 }

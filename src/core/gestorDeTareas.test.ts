@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  admiteMiasDelVinculo,
   categoriaDeEstado,
   categoriaDeGrupoDeNotion,
   comentarioDeCierre,
@@ -269,5 +270,14 @@ describe("IXCODE-15: etiquetaDeClave", () => {
     expect(etiquetaDeClave("087E117F94784C60871DB5D76C2A7E30")).toBe("087e117f");
     expect(etiquetaDeClave("IXCODE-11")).toBeUndefined();
     expect(etiquetaDeClave("087e117f")).toBeUndefined();
+  });
+});
+
+describe("IXCODE-15: admiteMiasDelVinculo", () => {
+  it("lo guardado manda; sin el campo, Jira sí y cualquier otro no", () => {
+    expect(admiteMiasDelVinculo({ conector: "jira", sitio: "c", proyecto: "IXCODE" })).toBe(true);
+    expect(admiteMiasDelVinculo({ conector: "jira", sitio: "c", proyecto: "IXCODE", admiteMias: false })).toBe(false);
+    expect(admiteMiasDelVinculo({ conector: "notion", sitio: "notion", proyecto: "collection://x" })).toBe(false);
+    expect(admiteMiasDelVinculo({ conector: "notion", sitio: "notion", proyecto: "collection://x", admiteMias: true })).toBe(true);
   });
 });

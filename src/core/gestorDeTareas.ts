@@ -18,6 +18,24 @@ export interface Vinculo {
   proyecto: string;
 }
 
+/**
+ * El vínculo tal como se GUARDA en el `config.json` del proyecto (IXCODE-15): el `Vinculo` más si
+ * ese gestor admite «asignadas a mí», decidido UNA vez al vincular —cuando ya se describió la base—
+ * para que `estado` lo lea del disco sin tocar la red.
+ */
+export interface VinculoGuardado extends Vinculo {
+  admiteMias?: boolean;
+}
+
+/**
+ * Si se ofrece «asignadas a mí» para un vínculo guardado. Lo guardado manda; ausente —un vínculo
+ * escrito antes de este campo— es `true` para Jira (su `currentUser()` no depende del proyecto) y
+ * `false` para cualquier otro: lo que no se sabe no se ofrece.
+ */
+export function admiteMiasDelVinculo(v: VinculoGuardado): boolean {
+  return v.admiteMias ?? v.conector === "jira";
+}
+
 /** El único «sitio» de Notion: una cuenta OAuth ve UN espacio, y el MCP no expone su nombre (medido). */
 export const SITIO_DE_NOTION = "notion";
 
@@ -92,8 +110,6 @@ export interface GestorDeTareasPort {
    * ANTES de escribir; quien no (Jira), comprueba contra `proyectos(sitio)` como siempre.
    */
   describirProyecto?(v: Vinculo): Promise<DescripcionDelProyecto>;
-  /** Si «asignadas a mí» tiene sentido para este vínculo. No lanza: lo que no se sabe es `false`. */
-  admiteMias(v: Vinculo): Promise<boolean>;
   /** `opciones.mias`: solo las asignadas a quien tiene la sesión del conector (en Jira, `currentUser()`). */
   pendientes(v: Vinculo, texto?: string, opciones?: OpcionesDePendientes): Promise<TareaDelGestor[]>;
   ficha(v: Vinculo, clave: string): Promise<FichaDelGestor>;
