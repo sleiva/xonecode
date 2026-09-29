@@ -46,8 +46,6 @@ function montar(extra: Partial<Props> = {}) {
   const alGestor = vi.fn();
   const props: Props = {
     nombre: "AppDemo",
-    alAbrirSesion: vi.fn(),
-    alNuevaSesion: vi.fn(),
     conectado: true,
     empezarEnVuelo: false,
     alGestor,
@@ -99,25 +97,14 @@ describe("PanelDelProyecto", () => {
     expect(alGestor).toHaveBeenCalledWith({ accion: "pendientes" });
   });
 
-  it("Resumen: entorno, sesiones (las ligadas con su ticket), planes con su barra y la ranura de tareas", () => {
-    const { props } = montar({
-      entorno: "XOne WebStudio",
-      sesiones: [
-        { id: "s1", titulo: "Menú lateral", ticket: "IXCODE-12" },
-        { id: "s2", titulo: "Prueba suelta" },
-      ],
-      planes: [PLAN],
-      tareasEnFondo: <p>la ranura de tareas</p>,
-    });
+  it("Resumen: entorno, planes con su barra y la ranura de tareas — y SIN sesiones ni «Nueva sesión» (están en la barra)", () => {
+    montar({ entorno: "XOne WebStudio", planes: [PLAN], tareasEnFondo: <p>la ranura de tareas</p> });
     expect(screen.getByRole("heading", { level: 1, name: "AppDemo" })).toBeTruthy();
     expect(screen.getByText("Entorno: XOne WebStudio")).toBeTruthy();
     // La rama no viajó: no se pinta, ni vacía.
     expect(screen.queryByText(/Rama:/)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "IXCODE-12 · Menú lateral" }));
-    expect(props.alAbrirSesion).toHaveBeenCalledWith("s1");
-    expect(screen.getByRole("button", { name: "Prueba suelta" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Nueva sesión" }));
-    expect(props.alNuevaSesion).toHaveBeenCalled();
+    expect(screen.queryByRole("region", { name: "Sesiones" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Nueva sesión" })).toBeNull();
     expect(screen.getByText("Plan de visitas")).toBeTruthy();
     expect(screen.getByText("Según el plan: 1 de 2 finalizadas · 1 pendientes.")).toBeTruthy();
     expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("50");
@@ -984,11 +971,6 @@ describe("PanelDelProyecto", () => {
     expect(screen.queryByRole("button", { name: "Conectar Jira" })).toBeNull();
   });
 
-  it("Resumen: una sesión ligada a una tarea de Notion enseña el id CORTO", () => {
-    const { props } = montar({ sesiones: [{ id: "s1", titulo: "Login", ticket: UUID }] });
-    fireEvent.click(screen.getByRole("button", { name: "0687543b · Login" }));
-    expect(props.alAbrirSesion).toHaveBeenCalledWith("s1");
-  });
   it("con la lista del de ANTES ya tirada (el store la tira al cambiar de vínculo), Tareas dice «Consultando…» y no pinta filas viejas", () => {
     const { alGestor, rerender } = montar({ gestor: { ...VINCULADO, pendientes: { cuando: 1, lista: IXCODE } }, conectores: CON_NOTION });
     pestana("Tareas");

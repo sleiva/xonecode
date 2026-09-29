@@ -1332,6 +1332,10 @@ export function App({
     }
     setSesionNueva(proyecto);
     setEnEscritorio(false);
+    // El borrador que quedara era de OTRA conversación, igual que en `abrirSesion`: esta ventana
+    // abre una sesión nueva sin pasar por ahí, y sin esto el ticket de un «Empezar» anterior
+    // reaparecía en su compositor.
+    setBorradorDelCompositor(undefined);
     // Ni el panel: lo que se abra desde esta ventana es una CONVERSACIÓN, y su «Empezar» no pasa
     // por `abrirSesion` —manda el alta directa—, así que aquí es donde se apaga.
     setEnPanel(false);
@@ -1402,8 +1406,6 @@ export function App({
   /** El entorno activo con su nombre y su URL, para la portada del escritorio. `undefined`
    *  si no hay ninguno registrado — que es distinto de haberlo y no tener proyectos. */
   const entornoDelEscritorio = estado.alta?.registrados.find((e) => e.id === entornoActivo);
-  /** Las sesiones guardadas del proyecto abierto, para el Resumen de su panel. */
-  const sesionesDelProyectoActivo = estado.alta?.proyectos.find((p) => p.id === proyectoActivoId)?.sesiones;
 
   /** El proyecto de la ventana de sesión nueva, con lo que el servidor sabe de él. */
   const proyectoDeLaSesion = estado.alta?.proyectos.find((p) => p.id === sesionNueva);
@@ -2337,13 +2339,6 @@ export function App({
               {...(entornoDelEscritorio === undefined ? {} : { entorno: entornoDelEscritorio.nombre })}
               // La rama solo si ya se midió (`sync`): no se pide aquí una medida para pintarla.
               {...(estado.sync?.rama === undefined ? {} : { rama: estado.sync.rama })}
-              {...(sesionesDelProyectoActivo === undefined ? {} : { sesiones: sesionesDelProyectoActivo })}
-              alAbrirSesion={(sesion) => {
-                if (proyectoActivoId !== undefined) abrirSesion(proyectoActivoId, sesion);
-              }}
-              alNuevaSesion={() => {
-                if (proyectoActivoId !== undefined) abrirSesion(proyectoActivoId);
-              }}
               {...(estado.planes?.lista === undefined ? {} : { planes: estado.planes.lista })}
               tareasEnFondo={tareasEnFondo}
               {...(estado.gestor === undefined ? {} : { gestor: estado.gestor })}

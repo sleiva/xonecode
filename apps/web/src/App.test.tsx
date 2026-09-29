@@ -2016,8 +2016,7 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
     expect(enPanel()).toBe(true);
     expect(screen.getByRole("heading", { level: 1, name: "AppDemo" })).toBeTruthy();
     expect(screen.getByText("Entorno: WebStudio")).toBeTruthy();
-    // La sesión ligada, con su ticket, y NINGÚN compositor: esto no es un chat.
-    expect(screen.getByRole("button", { name: "IXCODE-12 · Menú lateral" })).toBeTruthy();
+    // NINGÚN compositor: esto no es un chat (y las sesiones ya no se listan aquí: son de la barra).
     expect(screen.queryByPlaceholderText(/pregunta sobre xone/i)).toBeNull();
     expect(clases(enviar)).not.toContain("sesion");
     expect(enviar).toHaveBeenCalledWith({ clase: "gestor", accion: "estado" });
@@ -2067,42 +2066,24 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
     expect(screen.getByText("¿Sigo?")).toBeTruthy();
   });
 
-  it("«El agente está trabajando» con «Volver al chat» solo con un turno en vuelo, y las sesiones nuevas apagadas", () => {
+  it("«El agente está trabajando» con «Volver al chat» solo con un turno en vuelo", () => {
     const { store } = conProyectoAbierto();
     fireEvent.click(enBarra("AppDemo"));
     expect(screen.queryByText("El agente está trabajando en esta sesión.")).toBeNull();
-    expect((screen.getByRole("button", { name: "Nueva sesión" }) as HTMLButtonElement).disabled).toBe(false);
     act(() => store.aplicar({ clase: "turno", activo: true }));
     expect(screen.getByText("El agente está trabajando en esta sesión.")).toBeTruthy();
-    const nueva = screen.getByRole("button", { name: "Nueva sesión" }) as HTMLButtonElement;
-    expect(nueva.disabled).toBe(true);
-    expect(nueva.title).toMatch(/turno en marcha/);
     fireEvent.click(screen.getByRole("button", { name: "Volver al chat" }));
     expect(enPanel()).toBe(false);
   });
 
-  it("«Nueva sesión» del panel y el «+» de la barra llevan al CHAT", () => {
-    const { store, enviar } = conProyectoAbierto();
-    fireEvent.click(enBarra("AppDemo"));
-    fireEvent.click(screen.getByRole("button", { name: "Nueva sesión" }));
-    expect(enviar).toHaveBeenCalledWith({ clase: "sesion", proyecto: "p1" });
-    expect(enPanel()).toBe(false);
-    expect(campo()).toBeTruthy();
-    // El servidor contesta con el alta de la sesión nueva, que suelta el «abriendo» de la fila.
-    act(() => store.aplicar(altaDe({ sesionActiva: "s2" })));
-
+  it("el panel ya no tiene sesiones: el «+» de la barra lleva al CHAT", () => {
+    conProyectoAbierto();
     fireEvent.click(enBarra("AppDemo"));
     expect(enPanel()).toBe(true);
+    expect(screen.queryByRole("button", { name: "Nueva sesión" })).toBeNull();
     fireEvent.click(enBarra(/nueva sesión en appdemo/i));
     expect(enPanel()).toBe(false);
-  });
-
-  it("pulsar una sesión del panel la reabre en el chat", () => {
-    const { enviar } = conProyectoAbierto();
-    fireEvent.click(enBarra("AppDemo"));
-    fireEvent.click(screen.getByRole("button", { name: "IXCODE-12 · Menú lateral" }));
-    expect(enviar).toHaveBeenCalledWith({ clase: "sesion", proyecto: "p1", sesion: "s1" });
-    expect(enPanel()).toBe(false);
+    expect(campo()).toBeTruthy();
   });
 
   it("el BORRADOR de «Empezar» saca al chat con la tarea en el compositor, y NO se envía", () => {
@@ -2117,12 +2098,14 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
     expect(clases(enviar)).not.toContain("prosa");
   });
 
-  it("ese borrador no REAPARECE en la siguiente sesión nueva abierta desde el panel", () => {
+  it("ese borrador no REAPARECE en la siguiente sesión nueva (el «+» de la barra)", () => {
     const { store } = conProyectoAbierto();
     act(() => store.aplicar({ clase: "gestor", borrador: { clave: "IXCODE-12", texto: "la tarea" } }));
     expect(campo().value).toBe("la tarea");
+    // Se pasa por el panel (el compositor se DESMONTA) y se abre una nueva con el «+»: al volver a
+    // montarse no puede reaplicar el borrador de la conversación de antes.
     fireEvent.click(enBarra("AppDemo"));
-    fireEvent.click(screen.getByRole("button", { name: "Nueva sesión" }));
+    fireEvent.click(enBarra(/nueva sesión en appdemo/i));
     expect(campo().value).toBe("");
   });
 

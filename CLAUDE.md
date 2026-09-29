@@ -725,13 +725,13 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   de una decisión ya puesta deja de anotarse (viaja en el mensaje `pregunta`). Tampoco entra una
   subida CANCELADA.
 - **Pulsar un proyecto en la barra abre su PANEL, no una sesión directa**
-  (`apps/web/src/componentes/PanelDelProyecto.tsx`, `App.tsx`): pestañas Resumen (sesiones, planes,
-  tareas en background), Tareas (pendientes del gestor de tareas vinculado, con búsqueda y «Nueva
+  (`apps/web/src/componentes/PanelDelProyecto.tsx`, `App.tsx`): pestañas Resumen (planes y
+  tareas en background; las SESIONES y «Nueva sesión» son de la barra, no se repiten aquí), Tareas (pendientes del gestor de tareas vinculado, con búsqueda y «Nueva
   sesión con esta tarea») y Conectores, en DOS secciones: «Gestor de tareas» (solo Jira y Notion,
   UNO por proyecto: vincular el otro lo sustituye y la fila lo AVISA antes) y «Conectores para el
   chat» (el resto, con «Conectar» y su casilla). El proyecto que YA está abierto
   enseña el panel SIN mandar `sesion` —soltar la conversación en curso por una vacía es justo lo
-  que se quería evitar—; «Nueva sesión» y pulsar una sesión existente sí llevan al chat. Las
+  que se quería evitar—; el «+» y pulsar una sesión de la barra sí llevan al chat. Las
   pendientes son una FOTO con hora y un icono de «Actualizar», sin sondeo —«Reintentar» solo
   aparece junto a un fallo—; sin vínculo la pestaña lo DICE con el camino a Conectores, nunca una
   lista vacía que parezca «no hay pendientes». **El filtro por ESTADO es del CLIENTE** sobre la

@@ -10,7 +10,6 @@ import type {
   EsquemaDelProyecto,
   MensajeDelCliente,
   PlanDelCable,
-  SesionDelCable,
   TareaDelGestor,
   VinculoDelCable,
 } from "../tipos.js";
@@ -69,14 +68,14 @@ const PESTANAS: { id: PestanaDelProyecto; etiqueta: string }[] = [
 /**
  * El panel de UN proyecto (IXCODE-11): lo que se ve al pulsar el proyecto en la barra, en vez
  * del chat vacío de una sesión recién abierta. «Pulsar un proyecto abre su panel»: desde aquí se
- * elige qué hacer —una sesión nueva, reabrir una, o empezar una tarea de Jira—, y lo que haga
- * falta configurar para eso (qué conectores usa, a qué proyecto de Jira está vinculado).
+ * empieza una tarea del gestor y se configura lo que haga falta para eso (qué conectores usa, a
+ * qué gestor está vinculado). Las sesiones —abrir una, o una nueva— son de la barra lateral.
  *
  * **Las pestañas son las del panel lateral** (`Pestanas.tsx`: `tablist`/`tab`, las mismas clases
  * de la hoja copiada y el mismo acento), sin la «×»: esto no se cierra, se sale eligiendo una
  * sesión. Van tres y crecerán («después adicionaremos al panel del proyecto algunos tabs»).
  *
- * **No inventa nada y no duplica nada.** Lo del proyecto sale del alta (sesiones, entorno), de
+ * **No inventa nada y no duplica nada.** Lo del proyecto sale del alta (entorno), de
  * los planes que ya se piden al abrirlo, y de la ranura de tareas en background que `App` monta
  * con los MISMOS manejadores del panel lateral. Lo del gestor sale del mensaje `gestor`, que se
  * pide aquí: el `estado` al montar, las pendientes al abrir su pestaña. Lo que no tiene dato no
@@ -90,9 +89,6 @@ export function PanelDelProyecto({
   nombre,
   entorno,
   rama,
-  sesiones,
-  alAbrirSesion,
-  alNuevaSesion,
   planes,
   tareasEnFondo,
   gestor,
@@ -110,10 +106,6 @@ export function PanelDelProyecto({
   entorno?: string;
   /** La rama de la copia, si ya se midió (`sync`). Ausente = no se pinta. */
   rama?: string;
-  /** Las sesiones guardadas del proyecto (`alta.proyectos[].sesiones`). Ausente = no consta. */
-  sesiones?: SesionDelCable[];
-  alAbrirSesion: (sesion: string) => void;
-  alNuevaSesion: () => void;
   /** Los planes del proyecto, ya validados. Ausente o vacío = no se pinta la sección. */
   planes?: PlanDelCable[];
   /** Las tareas en background del proyecto: la ranura que `App` ya monta para el panel lateral. */
@@ -123,7 +115,7 @@ export function PanelDelProyecto({
   conectado: boolean;
   /**
    * Hay un turno en marcha en la sesión abierta. Entonces el panel lo DICE, con la vuelta al
-   * chat, y apaga las dos puertas a una sesión nueva: con un turno en vuelo el servidor contesta
+   * chat, y apaga «Nueva sesión con esta tarea»: con un turno en vuelo el servidor contesta
    * con la sesión que trabaja, no con otra (el «+» de la barra se apaga por lo mismo).
    */
   turnoEnVuelo?: boolean;
@@ -273,15 +265,7 @@ export function PanelDelProyecto({
       </div>
       <div className={estilos.cuerpo} role="tabpanel">
         {pestana === "resumen" ? (
-          <Resumen
-            {...(sesiones === undefined ? {} : { sesiones })}
-            alAbrirSesion={alAbrirSesion}
-            alNuevaSesion={alNuevaSesion}
-            {...(planes === undefined ? {} : { planes })}
-            tareasEnFondo={tareasEnFondo}
-            conectado={conectado}
-            turnoEnVuelo={turnoEnVuelo}
-          />
+          <Resumen {...(planes === undefined ? {} : { planes })} tareasEnFondo={tareasEnFondo} />
         ) : pestana === "tareas" ? (
           <TareasDelGestor
             gestor={gestor}
@@ -338,52 +322,20 @@ export function PanelDelProyecto({
   );
 }
 
+/**
+ * El resumen: planes y tareas en background. Las SESIONES no están aquí —ni la lista ni «Nueva
+ * sesión»—, a petición suya: ya están en la barra lateral (con su «+»), y repetirlas aquí era la
+ * misma lista dos veces en la misma pantalla.
+ */
 function Resumen({
-  sesiones,
-  alAbrirSesion,
-  alNuevaSesion,
   planes,
   tareasEnFondo,
-  conectado,
-  turnoEnVuelo,
 }: {
-  sesiones?: SesionDelCable[];
-  alAbrirSesion: (sesion: string) => void;
-  alNuevaSesion: () => void;
   planes?: PlanDelCable[];
   tareasEnFondo?: ReactNode;
-  conectado: boolean;
-  turnoEnVuelo: boolean;
 }) {
   return (
     <>
-      <section className={estilos.seccion} aria-label="Sesiones">
-        <div className={estilos.encabezado}>
-          <h2 className={estilos.titulo}>Sesiones</h2>
-          <button
-            type="button"
-            className={estilos.principal}
-            onClick={alNuevaSesion}
-            disabled={!conectado || turnoEnVuelo}
-            {...(turnoEnVuelo ? { title: TITULO_CON_TURNO } : {})}
-          >
-            Nueva sesión
-          </button>
-        </div>
-        {sesiones === undefined ? null : sesiones.length === 0 ? (
-          <p className={estilos.aviso}>Este proyecto todavía no tiene sesiones guardadas.</p>
-        ) : (
-          <ul className={estilos.lista}>
-            {sesiones.map((s) => (
-              <li key={s.id}>
-                <button type="button" className={estilos.fila} onClick={() => alAbrirSesion(s.id)} disabled={!conectado}>
-                  {s.ticket === undefined ? s.titulo : `${etiquetaDeClave(s.ticket) ?? s.ticket} · ${s.titulo}`}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
       {planes === undefined || planes.length === 0 ? null : (
         <section className={estilos.seccion} aria-label="Planes">
           <h2 className={estilos.titulo}>Planes</h2>
@@ -418,7 +370,7 @@ function Resumen({
   );
 }
 
-/** Por qué las dos puertas a una sesión nueva se apagan con un turno en marcha. */
+/** Por qué «Nueva sesión con esta tarea» se apaga con un turno en marcha. */
 const TITULO_CON_TURNO = "Hay un turno en marcha: con él en vuelo se volvería a la sesión que trabaja, no a una nueva. Espera a que termine o páralo.";
 
 /** «a las 10:42»: la hora de la foto, que es lo que dice cuánto hace que se preguntó. */
