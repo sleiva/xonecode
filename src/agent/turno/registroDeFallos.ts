@@ -43,12 +43,16 @@ export interface RegistroDeFallos {
  * y un `appendFileSync` de trescientos bytes que se pierde si el proceso muere sería justo
  * el caso en el que hacía falta.
  */
-export function crearRegistroDeFallos(raiz: string): RegistroDeFallos {
+export function crearRegistroDeFallos(raiz: string, chat?: string | (() => string | undefined)): RegistroDeFallos {
   return {
     anotar: (fallo) => {
       let registro: RegistroDeFallo;
       try {
         registro = registroDeFallo(fallo);
+        // El id de la conversación, cuando la hay: sin él un fallo no se puede atar a UN chat
+        // al exportarlo (`core/paqueteDeSoporte.ts`). Un fallo de descarga o de alta no lo tiene.
+        const id = typeof chat === "function" ? chat() : chat;
+        if (id !== undefined) registro = { ...registro, chat: id };
       } catch {
         // Ni siquiera componer el registro puede tumbar nada: si el error es tan raro que
         // no se deja describir, se pierde el registro y no el turno.

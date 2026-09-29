@@ -1016,6 +1016,41 @@ export interface FotoDelResumen {
   sync?: EstadoDeSync;
 }
 
+/**
+ * La pestaña Soporte (redeclarado de `web/servidor/soporte.ts` y `core/analisisDeSesion.ts`):
+ * cada chat y cada tarea con el análisis PREVIO, hecho con reglas de código en el servidor.
+ * `regla` viaja como texto: el cliente no decide nada por ella, solo la enseña.
+ */
+export interface HallazgoDeSoporte {
+  regla: string;
+  gravedad: "info" | "aviso" | "error";
+  mensaje: string;
+  turno?: number;
+}
+
+export interface AnalisisDeSoporte {
+  gravedad: "ok" | "aviso" | "error";
+  hallazgos: HallazgoDeSoporte[];
+}
+
+export interface FilaDeSoporte {
+  id: string;
+  titulo: string;
+  creada?: string;
+  ultimoTurno?: string;
+  /** Solo en una tarea. */
+  estado?: TareaDelCable["estado"];
+  /** Solo en una tarea: la sesión donde corrió. */
+  sesion?: string;
+  enVuelo?: true;
+  analisis: AnalisisDeSoporte;
+}
+
+export interface ListadoDeSoporte {
+  chats: FilaDeSoporte[];
+  tareas: FilaDeSoporte[];
+}
+
 export interface EstadoDeSync {
   proyecto?: string;
   rama?: string;
@@ -1208,6 +1243,8 @@ export type MensajeDelCliente =
   | { clase: "copiaLocal"; accion: "abrirCarpeta"; proyecto: string }
   /** Pedir la FOTO del resumen del proyecto: 200 con `FotoDelResumen`, o 409 con `{ motivo }`. */
   | { clase: "copiaLocal"; accion: "resumen"; proyecto: string }
+  /** La pestaña Soporte: chats y tareas del proyecto con su análisis previo. */
+  | { clase: "soporte"; accion: "listar"; proyecto: string }
   /**
    * Quitar un entorno registrado. El servidor contesta **409 con `{ motivo }`** si no se puede
    * ahora (un proyecto suyo abierto, una tarea sin terminar): la negativa vive allí, y así el

@@ -374,7 +374,9 @@ export async function abrirSesionReal(opciones: {
   const checkpointer = opciones.checkpointer ?? new MemorySaver();
   const tracker = createTokenTracker();
   const entornoDeDiagnostico = entornoConDepuracion(opciones.depurar === true);
-  const diagnostico = crearDiagnosticoDeTools(raiz, entornoDeDiagnostico);
+  // El CHAT es la sesión con la que se abrió (`opciones.hilo`, el id del índice), no el `hilo` de
+  // ahora: `/nuevo` abre otro hilo huérfano pero los actos siguen yendo a la misma sesión.
+  const diagnostico = crearDiagnosticoDeTools(raiz, entornoDeDiagnostico, opciones.hilo);
   /**
    * Y la traza de EXCEPCIONES e HITOS, con la misma variable de entorno que la de tools y el
    * mismo trato: apagada no cuesta nada. Se enciende aquí, al construir la sesión, porque es
@@ -1218,7 +1220,7 @@ export async function abrirSesionReal(opciones: {
     };
   };
 
-  const fallos = crearRegistroDeFallos(raiz);
+  const fallos = crearRegistroDeFallos(raiz, opciones.hilo);
 
   return {
     /**

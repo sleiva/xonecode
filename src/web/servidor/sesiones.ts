@@ -225,6 +225,15 @@ function rutaJsonl(raiz: string, id: string): string {
   return join(carpetaSesiones(raiz), `${segmentoSeguro(id, "id de sesión")}.jsonl`);
 }
 
+/** Las dos rutas de una sesión, para quien las EXPORTA (`soporte.ts`): el `.jsonl` de sus
+ *  actos y su carpeta (artefactos, adjuntos, memoria). Con la misma guarda del id. */
+export function rutaDeActosDeSesion(raiz: string, id: string): string {
+  return rutaJsonl(raiz, id);
+}
+export function carpetaDeLaSesion(raiz: string, id: string): string {
+  return join(carpetaSesiones(raiz), segmentoSeguro(id, "id de sesión"));
+}
+
 
 /** Una entrada que no es un objeto reconocible no cuenta: sin este filtro, un índice con
  * basura colada (`[null]`, `[42]`) hace que `entradas.find` reviente en cuanto alguien lea

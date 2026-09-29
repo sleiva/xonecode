@@ -10,7 +10,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { Readable } from "node:stream";
+import { PassThrough, Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { MS_DE_PREPARACION,
   MS_DE_TRABAJO_AL_ABRIR,
@@ -29,6 +29,7 @@ import { MS_DE_PREPARACION,
   RUTA_SKILL,
   RUTA_ARTEFACTO,
   RUTA_EVENTOS,
+  RUTA_SOPORTE,
   fuentesDelJuez,
   fuentesDeLaConsolaWeb,
   augmentacionCableada,
@@ -45,7 +46,7 @@ import { CLAVE_DE_SELLO, cambiosDeSesion, fotoDeApertura } from "../../agent/ses
 import type { PeticionDeTarea } from "../../core/ports.js";
 import { crearVestibulo, type Vestibulo } from "./vestibulo.js";
 import { rutaGlobalDeAgentes } from "../../agent/subagentes/agentesEnDisco.js";
-import { strToU8, zipSync } from "fflate";
+import { strToU8, unzipSync, zipSync } from "fflate";
 import { rutaGlobalDeSkills } from "../../agent/grafo/skills.js";
 import { crearConsolaWeb, type ConsolaWeb, type OpcionesDeConsolaWeb } from "./consolaWeb.js";
 import { PAPELES } from "../../core/modelos.js";
@@ -212,6 +213,8 @@ describe("montarRutas — el cable, por fin conectado", () => {
       `POST ${RUTA_SKILL}`,
       // Y la sexta, las imágenes que enlaza un `.md` del proyecto: su visor solo pinta `http(s)`.
       `GET ${RUTA_IMAGEN_DEL_PROYECTO}`,
+      // Y la séptima, el paquete de la pestaña Soporte: un zip, escrito en streaming.
+      `GET ${RUTA_SOPORTE}`,
     ].sort());
   });
 
@@ -9528,6 +9531,110 @@ describe("el cable: la copia local y los fijados", () => {
  * que se comprueba aquí es que el rechazo viaja en la PROPIA respuesta (409 con su motivo,
  * como `olvidar`) y que lo que se escribe es el nombre ya recortado.
  */
+describe("el cable: la pestaña Soporte", () => {
+  /** Una copia BAJADA de Tienda con un chat de verdad en su índice. */
+  function tiendaConUnChat(): { base: string; raiz: string; vestibulo: Vestibulo; chat: string } {
+    const base = mkdtempSync(join(tmpdir(), "xc-soporte-cable-"));
+    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
+    const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), "{}");
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
+    writeFileSync(join(raiz, "app.xne"), "<app/>");
+    writeFileSync(join(raiz, ".env"), "SECRETO=1");
+    const chat = crearSesion(raiz);
+    anotarActo(raiz, chat, { tipo: "usuario", texto: "hola" });
+    anotarActo(raiz, chat, { tipo: "error", texto: "se cayó" });
+    return { base, raiz, vestibulo, chat };
+  }
+
+  async function montado(vestibulo: Vestibulo) {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibulo);
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const accion = (mensaje: unknown) => postearConCuerpo(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, JSON.stringify(mensaje));
+    /** Pide el paquete con una respuesta que es un `Writable` DE VERDAD, como la de Node. */
+    const descargar = async (url: string) => {
+      const salida = new PassThrough();
+      const trozos: Buffer[] = [];
+      salida.on("data", (t: Buffer | string) => trozos.push(Buffer.from(t)));
+      let estado = 0;
+      const cabeceras: Record<string, string | number> = {};
+      const respuesta = Object.assign(salida, {
+        writeHead: (codigo: number, extra?: Record<string, string | number>) => {
+          estado = codigo;
+          Object.assign(cabeceras, extra ?? {});
+          return respuesta;
+        },
+      }) as unknown as ServerResponse;
+      await servidor.rutas.get(`GET ${RUTA_SOPORTE}`)!({ method: "GET", url, headers: {} } as unknown as IncomingMessage, respuesta);
+      return { estado, cabeceras, cuerpo: Buffer.concat(trozos) };
+    };
+    return { accion, descargar };
+  }
+
+  it("el listado trae cada chat con su análisis, decidido en el SERVIDOR", async () => {
+    const { base, vestibulo, chat } = tiendaConUnChat();
+    const { accion } = await montado(vestibulo);
+    const r = await accion({ clase: "soporte", accion: "listar", proyecto: "p1" });
+    expect(r.estado).toBe(200);
+    const listado = JSON.parse(r.cuerpo) as { chats: { id: string; analisis: { gravedad: string } }[]; tareas: unknown[] };
+    expect(listado.chats).toEqual([expect.objectContaining({ id: chat, analisis: expect.objectContaining({ gravedad: "error" }) })]);
+    expect(listado.tareas).toEqual([]);
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("sin copia bajada, o con un id ajeno, el listado es 409 con motivo", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xc-soporte-cable-"));
+    const { accion } = await montado(vestibuloDePrueba({ baseDeWorkspace: () => base }));
+    const sinCopia = await accion({ clase: "soporte", accion: "listar", proyecto: "p1" });
+    expect(sinCopia.estado).toBe(409);
+    expect(JSON.parse(sinCopia.cuerpo).motivo).toMatch(/copia local/);
+    expect((await accion({ clase: "soporte", accion: "listar", proyecto: "no-existe" })).estado).toBe(409);
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("el paquete de un chat se descarga como zip, con el empaquetador REAL", async () => {
+    // Sin dobles: la regla de producción (qué entra, el streaming, el manifiesto) se compone
+    // aquí dentro, y un doble del empaquetador la dejaría escrita y sin probar.
+    const { base, vestibulo, chat } = tiendaConUnChat();
+    const { descargar } = await montado(vestibulo);
+    const r = await descargar(`/soporte?tipo=chat&proyecto=p1&id=${chat}`);
+    expect(r.estado).toBe(200);
+    expect(r.cabeceras["Content-Type"]).toBe("application/zip");
+    expect(String(r.cabeceras["Content-Disposition"])).toMatch(/^attachment; filename="soporte-chat-[A-Za-z0-9._-]+\.zip"$/);
+    expect(r.cabeceras["X-Content-Type-Options"]).toBe("nosniff");
+    const zip = unzipSync(new Uint8Array(r.cuerpo));
+    expect(Object.keys(zip)).toEqual(expect.arrayContaining(["sesion/actos.jsonl", "analisis.json", "manifiesto.json"]));
+    const manifiesto = JSON.parse(Buffer.from(zip["manifiesto.json"]!).toString("utf8")) as { proyecto: string; id: string };
+    expect(manifiesto).toMatchObject({ proyecto: "Tienda", id: chat });
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("el del proyecto lleva el código y nunca el .env", async () => {
+    const { base, vestibulo } = tiendaConUnChat();
+    const { descargar } = await montado(vestibulo);
+    const r = await descargar("/soporte?tipo=proyecto&proyecto=p1");
+    expect(r.estado).toBe(200);
+    const rutas = Object.keys(unzipSync(new Uint8Array(r.cuerpo)));
+    expect(rutas).toContain("proyecto/app.xne");
+    expect(rutas.filter((x) => x.endsWith(".env"))).toEqual([]);
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("un chat que no está en el índice, o un pedido ilegible, no compone ninguna ruta", async () => {
+    const { base, vestibulo } = tiendaConUnChat();
+    const { descargar } = await montado(vestibulo);
+    expect((await descargar("/soporte?tipo=chat&proyecto=p1&id=..%2F..%2F.env")).estado).toBe(409);
+    expect((await descargar("/soporte?tipo=chat&proyecto=p1")).estado).toBe(400);
+    expect((await descargar("/soporte?tipo=otro&proyecto=p1")).estado).toBe(400);
+    expect((await descargar("/soporte?tipo=proyecto")).estado).toBe(400);
+    rmSync(base, { recursive: true, force: true });
+  });
+});
+
 describe("el cable: renombrar un entorno", () => {
   /** Un vestíbulo cuyo escritor de entornos apunta lo que le llega. */
   function conEscritor() {

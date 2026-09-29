@@ -1136,4 +1136,22 @@ describe("PanelDelProyecto: lo de la copia en el Resumen", () => {
     expect(screen.queryByRole("region", { name: "Gasto del proyecto" })).toBeNull();
     expect(screen.queryByRole("region", { name: "Planes" })).toBeNull();
   });
+
+  it("la pestaña Soporte sale con copia y con quien pida el listado, y NO sin copia", async () => {
+    const alPedirSoporte = vi.fn(() => Promise.resolve({ chats: [], tareas: [] }));
+    montar({ copia: copia(true), alPedirSoporte });
+    const tabs = within(screen.getByRole("tablist")).getAllByRole("tab");
+    expect(tabs.map((t) => t.textContent)).toEqual(["Resumen", "Tareas", "Conectores", "Soporte"]);
+    expect(alPedirSoporte).not.toHaveBeenCalled();
+    pestana("Soporte");
+    await act(async () => {});
+    expect(alPedirSoporte).toHaveBeenCalledWith("p1");
+    cleanup();
+    montar({ copia: copia(false), alPedirSoporte: vi.fn() });
+    expect(within(screen.getByRole("tablist")).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Resumen"]);
+    cleanup();
+    // Sin manejador no hay pestaña: un control sin dato detrás no se pinta.
+    montar({ copia: copia(true) });
+    expect(screen.queryByRole("tab", { name: "Soporte" })).toBeNull();
+  });
 });
