@@ -1111,6 +1111,9 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     // `artifacts-builder` se queda: escribe documentos e informes. `archify` no, que los
     // diagramas son de `designer-xone` y su descripción son ~700 caracteres por llamada.
     skills: ["xone-development", "xone-debugging", "artifacts-builder", "openui-builder"],
+    // A quién puede llamar él mismo (`core/agentes.ts#Agente.llama`): solo lo honra TrueForge y solo con el
+    // interruptor del bucle del desarrollador encendido. Es el dato; el texto que se lo explica lo pone la sesión.
+    llama: ["device-controller"],
     instrucciones: `${TRABAJAR_CON_PLAN}\n\n${MEMORIA_LEER}\n\n${MEMORIA_ESCRIBIR}`,
     origen: "semilla",
   },

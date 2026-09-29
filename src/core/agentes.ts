@@ -121,6 +121,12 @@ export interface Agente {
    * hace nada, y la ventana de Ajustes lo dice.
    */
   ejecucion?: boolean;
+  /**
+   * A qué otros especialistas puede LLAMAR él mismo, por nombre (`llama: [device-controller]`). Solo lo honra
+   * TrueForge y solo con el interruptor del bucle del desarrollador encendido: es lo que deja que quien escribe
+   * pruebe su trabajo sin pasar por el orquestador. Un nombre que no está en esta lista NO se le concede.
+   */
+  llama?: string[];
   /** Las skills del catálogo que se le cargan, por nombre. */
   skills: string[];
   /** El cuerpo del `.md`: sus instrucciones. Puede estar vacío. */
@@ -643,6 +649,7 @@ export function leerAgente(
       ...(leerLista(campos["escribeEn"]).length === 0
         ? {}
         : { escribeEn: leerLista(campos["escribeEn"]).map((c) => (c.startsWith("/") ? c : `/${c}`)) }),
+      ...(leerLista(campos["llama"]).length === 0 ? {} : { llama: leerLista(campos["llama"]) }),
       skills: leerLista(campos["skills"]),
       instrucciones,
       origen,
@@ -677,6 +684,7 @@ export function escribirAgente(agente: Agente): string {
     ...(agente.escribeEn === undefined || agente.escribeEn.length === 0
       ? []
       : [`escribeEn: [${agente.escribeEn.join(", ")}]`]),
+    ...(agente.llama === undefined || agente.llama.length === 0 ? [] : [`llama: [${agente.llama.join(", ")}]`]),
     `skills: [${agente.skills.join(", ")}]`,
   ];
   return `---\n${campos.join("\n")}\n---\n${agente.instrucciones}`;

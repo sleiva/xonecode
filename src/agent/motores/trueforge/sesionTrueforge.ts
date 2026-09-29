@@ -137,9 +137,33 @@ const BUCLE_DE_CALIDAD = [
  * delegación es `create_sub_agent` y no tiene descripción por especialista, así que se traduce
  * el nombre de la tool y las fichas van escritas aquí, con la MISMA función que deepagents.
  */
+/**
+ * Lo que se le dice a quien puede llamar a otros. Cada llamada de estas es un hilo nuevo que solo sabe lo que le
+ * escribas (aunque recuerde sus encargos anteriores de la sesión), y lo que te devuelve es lo que vio, no un
+ * veredicto: decidir si lo que escribiste funciona sigue siendo cosa tuya, con lo que ese hijo te traiga.
+ */
+export function textoDelBucle(llama: readonly string[], opciones: { conCritica?: boolean } = {}): string {
+  return [
+    `PUEDES LLAMAR A: ${llama.join(", ")}, con \`create_sub_agent\` (\`name\` exacto y \`input\` autosuficiente).`,
+    "Tu bucle es: escribe, llama al de pruebas para desplegar y comprobar, lee lo que te devuelve y corrige, hasta que funcione",
+    "o no encuentres qué cambiar. Dile QUÉ comprobar y qué esperas ver. No lo llames por cada línea que cambies: junta los cambios.",
+    "Lo que te devuelva es lo que ha visto, no un permiso para dar el trabajo por bueno: si dice que la app se cae, se cae.",
+    ...(opciones.conCritica === true
+      ? [
+          "",
+          "PARA JUZGAR UNA PANTALLA tienes `xone_critica_visual` (un modelo aparte mira la captura) y `comparar_capturas` (mide la",
+          "estructura contra la maqueta con números). Pídele al de pruebas una captura y que te diga su nombre; pásala con `pantalla` y,",
+          "si hay diseño (/diseno/ o un adjunto), como `referencia`. Lo que digan esas dos herramientas manda sobre tu impresión: no",
+          "lo descartes como «no fiable»; si no estás de acuerdo, dilo con el dato. Al final, cuando devuelvas el trabajo, cuenta lo que",
+          "midieron tal cual: el juicio final no es tuyo, y el arnés lo revisa igual.",
+        ]
+      : []),
+  ].join("\n");
+}
+
 export function notaDeDelegacion(
   agentes: readonly Agente[],
-  opciones: { conIconos?: boolean; conComparacion?: boolean; conMemoria?: boolean } = {}
+  opciones: { conIconos?: boolean; conComparacion?: boolean; conMemoria?: boolean; conBucle?: boolean } = {}
 ): string {
   if (agentes.length === 0) return "";
   return [
@@ -149,6 +173,15 @@ export function notaDeDelegacion(
     "entiende `create_sub_agent` y `name`. Las fichas de los especialistas:",
     ...agentes.map((a) => `- ${a.nombre}: ${fichaDeAgente(a, opciones)}`),
     ...(opciones.conComparacion === true ? ["", BUCLE_DE_CALIDAD] : []),
+    ...(opciones.conBucle === true
+      ? [
+          "",
+          "BUCLE DEL DESARROLLADOR: developer-xone prueba lo que escribe él mismo, llamando a device-controller (despliega, toca y lee",
+          "el log) y corrige hasta que funcione. No se lo encargues a device-controller aparte para comprobar SU trabajo; llámalo",
+          "tú solo para medir o capturar sin cambiar código. Lo que developer-xone te devuelva es lo que él vio, no un veredicto:",
+          "el juicio final es tuyo y del arnés.",
+        ]
+      : []),
     ...(opciones.conMemoria === true
       ? [
           "",
@@ -285,6 +318,12 @@ export interface OpcionesDeSesionTrueforge {
    */
   memoriaDeEspecialistas?: boolean;
   /**
+   * El BUCLE del desarrollador: quien escribe puede llamar por su cuenta a los especialistas que su `.md`
+   * declara en `llama` (hoy `device-controller`), y así prueba lo que escribe sin pasar por el orquestador.
+   * Apagado por omisión: `XONECODE_BUCLE_DEL_DEVELOPER=1` lo enciende, para compararlo con una pasada sin él.
+   */
+  bucleDelDesarrollador?: boolean;
+  /**
    * El crítico VISUAL y el JUEZ del turno, los MISMOS puertos que deepagents
    * (`turnoReal.ts#abrirSesionReal`): llaman a un modelo, así que entran por parámetro y
    * `npm test` no pregunta a nadie. Ausente es «esta ejecución no tiene», nunca «está bien».
@@ -371,6 +410,7 @@ export async function abrirSesionTrueforge(
    */
   const especialistaDeHilo = new Map<string, string>();
   const conMemoriaDeEspecialistas = opciones.memoriaDeEspecialistas ?? process.env.XONECODE_SIN_MEMORIA_DE_ESPECIALISTAS !== "1";
+  const conBucleDelDesarrollador = opciones.bucleDelDesarrollador ?? process.env.XONECODE_BUCLE_DEL_DEVELOPER === "1";
   const memoriaDeEspecialistas = crearMemoriaDeEspecialistas();
   /** Los hijos con memoria que corren ahora: su hilo, para leer su historial al terminar. */
   const hijosConMemoria = new Map<string, { nombre: string; hilo: AgentThread; iniciales: unknown[] }>();
@@ -485,9 +525,9 @@ export async function abrirSesionTrueforge(
     ...(carpeta === undefined ? {} : { artefactos: carpeta }),
     ...(opciones.adjuntos === undefined ? {} : { adjuntos: opciones.adjuntos }),
   });
-  const propiasDelRaiz: ToolDeLangchain[] = [
-    navegacion(),
-    ...(carpeta === undefined
+  /** El crítico y la medida, con las MISMAS piezas para quien las tenga: el raíz, y con el bucle encendido el desarrollador. */
+  const herramientasDeJuicio = (): ToolDeLangchain[] =>
+    carpeta === undefined
       ? []
       : ([
           crearCriticaVisual({
@@ -498,8 +538,11 @@ export async function abrirSesionTrueforge(
           }),
           // Medir la estructura contra la maqueta: la otra mitad del crítico, con el raíz como él.
           crearCompararCapturas({ leerArtefacto: async (nombre) => readFileSync(join(carpeta, nombre)), leerReferencia: lectorDeReferencias }),
-          crearTraerDeLaMaquina({ carpeta, alEscribir: anotarArtefacto }),
-        ] as unknown as ToolDeLangchain[])),
+        ] as unknown as ToolDeLangchain[]);
+  const propiasDelRaiz: ToolDeLangchain[] = [
+    navegacion(),
+    ...herramientasDeJuicio(),
+    ...(carpeta === undefined ? [] : ([crearTraerDeLaMaquina({ carpeta, alEscribir: anotarArtefacto })] as unknown as ToolDeLangchain[])),
   ];
   const propiasDe = (agente: Agente): ToolDeLangchain[] => [
     crearBusquedaRegex(backend as never) as unknown as ToolDeLangchain,
@@ -529,6 +572,10 @@ export async function abrirSesionTrueforge(
       : []),
     // Y marcar en el plan lo comprobado en el aparato, con el reparto de deepagents: a quien ejecuta.
     ...(agente.ejecucion === true ? [crearMarcarCriteriosDelPlan({ raiz }) as unknown as ToolDeLangchain] : []),
+    // El BUCLE del desarrollador: quien puede llamar al de pruebas también tiene el crítico y la medida, para
+    // juzgar la pantalla con lo que el otro capture. El veredicto sigue siendo de un modelo aparte, no suyo, y el
+    // juez final del arnés revisa igual (`textoDelBucle`).
+    ...(conBucleDelDesarrollador && (agente.llama?.length ?? 0) > 0 ? herramientasDeJuicio() : []),
   ];
   /**
    * **Un cliente de modelo por papel, modelo y esfuerzo, que dura la SESIÓN** —hasta `/modelo`—, y
@@ -614,7 +661,14 @@ export async function abrirSesionTrueforge(
     threadId: string;
     parent: unknown;
   }): Promise<AgentThread> => {
-    const agente = especialistas().find((a) => a.nombre === params.request.name);
+    // Quién lo pide: el raíz, o un especialista que llama a otro. Un especialista solo puede llamar a los que su
+    // `.md` declara en `llama` y con el interruptor puesto; lo demás cae al ayudante genérico de solo lectura,
+    // el mismo de un nombre inventado, y se anota en la traza.
+    const quienPide = params.parent === undefined ? undefined : especialistaDeHilo.get((params.parent as { thread_id?: string }).thread_id ?? "");
+    const permitidos = quienPide === undefined ? undefined : (especialistas().find((a) => a.nombre === quienPide)?.llama ?? []);
+    const concedido = permitidos === undefined || (conBucleDelDesarrollador && permitidos.includes(params.request.name));
+    if (!concedido) anotarPaso("trueforge.llamada", `${quienPide ?? "?"} pidió a ${params.request.name}: no está en su lista`)();
+    const agente = concedido ? especialistas().find((a) => a.nombre === params.request.name) : undefined;
     detencion.nacio(params.threadId);
     quienEs.set(params.threadId, agente?.nombre ?? params.request.name);
     if (agente !== undefined) especialistaDeHilo.set(params.threadId, agente.nombre);
@@ -625,6 +679,7 @@ export async function abrirSesionTrueforge(
       backend: backend as never,
       propias: propiasDe,
       notas: capacidadDeNotasDeLaSesion,
+      puedeLlamar: (a) => conBucleDelDesarrollador && (a.llama?.length ?? 0) > 0,
       conShell: () =>
         montarBackend({
           entorno: entornoDeLaShellDelProyecto(raiz, opciones.artefactos),
@@ -642,7 +697,13 @@ export async function abrirSesionTrueforge(
     const instrucciones =
       agente === undefined
         ? `${nota} Contesta con lo que encuentres y dónde.`
-        : [promptDeAgente(agente, repartirSkills(agente, disponibles)), "", nota, anuncioDeSkills(agente, catalogo)]
+        : [
+            promptDeAgente(agente, repartirSkills(agente, disponibles)),
+            "",
+            nota,
+            anuncioDeSkills(agente, catalogo),
+            ...(conBucleDelDesarrollador && (agente.llama?.length ?? 0) > 0 ? ["", textoDelBucle(agente.llama ?? [], { conCritica: carpeta !== undefined })] : []),
+          ]
             .filter((l) => l !== undefined)
             .join("\n")
             .trimEnd();
@@ -732,7 +793,7 @@ export async function abrirSesionTrueforge(
     hijosConMemoria.clear();
     const definicion = {
       modelClient: llm,
-      instruction: [promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas })].filter((l) => l !== "").join("\n\n"),
+      instruction: [promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas, conBucle: conBucleDelDesarrollador })].filter((l) => l !== "").join("\n\n"),
       // Por TURNO, porque el raíz se rehace desde su foto al final de cada uno (ver `turno`).
       iterationLimit: LIMITE_DE_LLAMADAS_DEL_RAIZ,
     };

@@ -11,7 +11,7 @@
  * sobre lo que declara su `.md`, con la misma partición que deepagents. Es lo que deja probar el
  * reparto sin levantar un hilo.
  */
-import { NOOP_AGENT_TRACING, ToolSet, currentDateTime, openUI } from "./trueforge.js";
+import { NOOP_AGENT_TRACING, ToolSet, currentDateTime, dynamicSubAgents, openUI } from "./trueforge.js";
 import type { Agente } from "../../../core/agentes.js";
 import { permisosDe } from "../../grafo/perfiles.js";
 import { NOMBRE_INCORPORAR_ADJUNTO } from "../../../core/adjuntos.js";
@@ -251,6 +251,20 @@ export function clasesDeTools(agente: Pick<Agente, "soloLectura" | "ejecucion">)
   return agente.soloLectura ? "lee" : "escribe";
 }
 
+/**
+ * `create_sub_agent` para un HIJO: la misma delegación que tiene el raíz, dada a quien su `.md` declara que puede
+ * llamar a otro (`llama`). La librería crea el nieto igual que cualquier hijo y su respuesta vuelve a quien lo
+ * llamó. El nombre no se restringe aquí —el esquema de la tool es un texto libre—: lo hace la fábrica de hijos de la
+ * sesión, que no concede a quien no está en su lista.
+ */
+export function capacidadDeSubagentes(): Capacidad {
+  return {
+    nombre: "subagentes",
+    tools: ["create_sub_agent"],
+    capability: dynamicSubAgents({ sandboxAvailable: false, tracing: NOOP_AGENT_TRACING }) as unknown as Record<string, unknown>,
+  };
+}
+
 /** Lo que el backend y las tools de la sesión ponen para montar a un especialista. */
 export interface DependenciasDelEspecialista {
   backend: BackendDeFicheros & EscritorDeDesalojo;
@@ -260,6 +274,8 @@ export interface DependenciasDelEspecialista {
   conShell: () => { execute(c: string): unknown; write(ruta: string, contenido: string): unknown };
   /** La cola de notas de la SESIÓN, ya envuelta: la misma instancia para todos los hijos. */
   notas: Capacidad;
+  /** ¿Puede ESTE agente llamar a otros? Lo decide la sesión (su `.md` y el interruptor); ausente es que no. */
+  puedeLlamar?: (agente: Agente) => boolean;
 }
 
 /**
@@ -297,6 +313,7 @@ export function capacidadesDelEspecialista(
       ? [capacidadDePropias(propias, deps.backend, propias.some((t) => t.name === NOMBRE_INCORPORAR_ADJUNTO) ? [NOMBRE_INCORPORAR_ADJUNTO] : [])]
       : []),
     ...(clase === "ejecuta" ? [capacidadDeEjecucion(deps.conShell())] : []),
+    ...(deps.puedeLlamar?.(agente) === true ? [capacidadDeSubagentes()] : []),
     capacidadDeRecortes(deps.backend),
     capacidadDeFecha(),
     deps.notas,

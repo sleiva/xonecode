@@ -827,6 +827,82 @@ describe("una sesión con el motor TrueForge", () => {
     }, 30_000);
   });
 
+  describe("el bucle del desarrollador: quien escribe llama a quien prueba", () => {
+    const delega = (id: string, nombre: string, input: string) =>
+      new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "create_sub_agent", args: JSON.stringify({ name: nombre, input }) }] });
+    // raíz → developer-xone → (developer llama a) device-controller → vuelve → vuelve → raíz cierra.
+    const guion = (quienLlama = "device-controller") => [
+      [delega("d1", "developer-xone", "escribe la calculadora")],
+      [delega("n1", quienLlama, "despliega y comprueba")],
+      [new AIMessageChunk({ content: "Vi la app arrancar." })],
+      [new AIMessageChunk({ content: "Escrito y comprobado." })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ];
+
+    it("encendido, el desarrollador recibe `create_sub_agent` y el nieto trabaja y responde al desarrollador", async () => {
+      const raiz = proyecto();
+      const { m, vistos, toolsPorLlamada } = modelosConGuion(guion());
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true });
+      const r = piel();
+      await s.turno("haz la calculadora", r.p);
+      // El desarrollador (2ª llamada) ve la tool y el texto del bucle en su sistema.
+      expect(toolsPorLlamada[1]).toContain("create_sub_agent");
+      expect(vistos[1]!.join("\n")).toContain("PUEDES LLAMAR A: device-controller");
+      // El nieto (3ª llamada) recibe el encargo del desarrollador y NO puede llamar a nadie.
+      expect(vistos[2]!.join("\n")).toContain("despliega y comprueba");
+      expect(toolsPorLlamada[2]).not.toContain("create_sub_agent");
+      // Lo que vio el nieto llega al desarrollador, y el turno cierra con la respuesta del raíz.
+      expect(vistos[3]!.join("\n")).toContain("Vi la app arrancar.");
+      expect(r.tokens.join("")).toContain("Hecho.");
+    }, 30_000);
+
+    it("encendido y con carpeta de artefactos, el desarrollador recibe el crítico y la medida, y se lo dice; el conductor, no", async () => {
+      const raiz = proyecto();
+      const { m, vistos, toolsPorLlamada } = modelosConGuion(guion());
+      const s = await abrirSesionTrueforge({
+        raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true,
+        artefactos: mkdtempSync(join(tmpdir(), "xc-tf-bucle-")),
+      });
+      await s.turno("haz la calculadora", piel().p);
+      expect(toolsPorLlamada[1]).toEqual(expect.arrayContaining(["xone_critica_visual", "comparar_capturas"]));
+      expect(vistos[1]!.join("\n")).toContain("PARA JUZGAR UNA PANTALLA");
+      // El de pruebas no juzga: saca las capturas.
+      expect(toolsPorLlamada[2]).not.toContain("xone_critica_visual");
+      expect(toolsPorLlamada[2]).not.toContain("comparar_capturas");
+    }, 30_000);
+
+    it("sin carpeta de artefactos no hay capturas que juzgar, y el texto no las nombra", async () => {
+      const raiz = proyecto();
+      const { m, vistos, toolsPorLlamada } = modelosConGuion(guion());
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true });
+      await s.turno("haz", piel().p);
+      expect(toolsPorLlamada[1]).not.toContain("xone_critica_visual");
+      expect(vistos[1]!.join("\n")).not.toContain("PARA JUZGAR UNA PANTALLA");
+    }, 30_000);
+
+    it("apagado (por omisión), el desarrollador no recibe la tool", async () => {
+      const raiz = proyecto();
+      const { m, toolsPorLlamada, vistos } = modelosConGuion([
+        [delega("d1", "developer-xone", "escribe")],
+        [new AIMessageChunk({ content: "Escrito." })],
+        [new AIMessageChunk({ content: "Hecho." })],
+      ]);
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: false });
+      await s.turno("haz", piel().p);
+      expect(toolsPorLlamada[1]).not.toContain("create_sub_agent");
+      expect(vistos[1]!.join("\n")).not.toContain("PUEDES LLAMAR A");
+    }, 30_000);
+
+    it("un nombre que no está en su lista cae al ayudante genérico de solo lectura, sin shell", async () => {
+      const raiz = proyecto();
+      const { m, toolsPorLlamada } = modelosConGuion(guion("consultant-xone"));
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true });
+      await s.turno("haz", piel().p);
+      expect(toolsPorLlamada[2]).not.toContain("execute");
+      expect(toolsPorLlamada[2]).not.toContain("write_file");
+    }, 30_000);
+  });
+
   describe("la memoria de cada especialista en la sesión", () => {
     const delega = (id: string, input: string) =>
       new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "create_sub_agent", args: JSON.stringify({ name: "consultant-xone", input }) }] });

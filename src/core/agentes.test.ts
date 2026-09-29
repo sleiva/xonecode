@@ -449,3 +449,20 @@ describe("el campo `pensamiento` de un subagente", () => {
     expect("agente" in r && r.agente.pensamiento).toBeUndefined();
   });
 });
+
+describe("el campo `llama` de un subagente", () => {
+  const con = (linea: string) => leerAgente("x", `---\ndescripcion: hace algo\n${linea}\n---\ncuerpo`, "proyecto");
+
+  it("se lee como una lista y se escribe de vuelta", () => {
+    const r = con("llama: [device-controller, consultant-xone]");
+    expect("agente" in r && r.agente.llama).toEqual(["device-controller", "consultant-xone"]);
+    if ("agente" in r) expect(escribirAgente(r.agente)).toContain("llama: [device-controller, consultant-xone]");
+  });
+
+  it("ausente o vacío, no hay campo", () => {
+    for (const l of ["motor: modelo", "llama: []", "llama:"]) {
+      const r = con(l);
+      expect("agente" in r && r.agente.llama).toBeUndefined();
+    }
+  });
+});

@@ -21,8 +21,9 @@
  *   delató. Y guardar el historial ENTERO de un diseñador reenvía 200 mil tokens en cada llamada.
  *   Así que: si cabe entero, se guarda entero (el especialista conserva lo que leyó); si no, se
  *   guarda REDUCIDO —lo que dijo, lo que pidió y qué contestó cada tool, recortado— y sabe QUÉ hizo y
- *   descubrió aunque tenga que releer un fichero si lo necesita; y si ni reducido cabe, se arranca de
- *   cero y se dice en la traza.
+ *   descubrió aunque tenga que releer un fichero si lo necesita; y si ni reducido cabe, se queda con la VENTANA de
+ *   lo más reciente (`ventanaDeHistorial`), no con nada: la primera versión olvidaba todo y borró a cuatro
+ *   especialistas en una sola pasada.
  * - **Un hilo vivo por especialista**: si ya hay una encarnación corriendo (delegaciones en
  *   paralelo), la segunda arranca de cero. Una memoria no se reparte entre dos hilos vivos.
  * - **Saneada**: un hijo cortado o que acaba con una tool call sin respuesta daría un 400 del
@@ -109,6 +110,34 @@ export function reducirHistorial(
   });
 }
 
+/**
+ * La VENTANA: lo más reciente que cabe. Cada delegación empieza con un mensaje de usuario (el encargo o el «NUEVO
+ * ENCARGO»), así que se descartan delegaciones ENTERAS, las más antiguas primero: una llamada a tool y su respuesta
+ * viven dentro de la misma delegación y nunca quedan partidas. Si ni la última cabe sola, se queda con su encargo y
+ * lo último que dijo el especialista, que es lo que contó que había hecho.
+ *
+ * Existe porque en la primera prueba larga «olvidada-por-tope» llegó a borrar la memoria de los cuatro
+ * especialistas que más trabajaban, incluido lo reciente: perder lo viejo es aceptable, perder lo que acaba de
+ * pasar no. Puro.
+ */
+export function ventanaDeHistorial(mensajes: readonly unknown[], topeTokens: number): unknown[] {
+  const ms = mensajes as readonly Mensaje[];
+  const inicios: number[] = [];
+  ms.forEach((m, i) => {
+    if (m.role === "user") inicios.push(i);
+  });
+  if (inicios.length === 0) return [...mensajes];
+  for (let k = 0; k < inicios.length; k += 1) {
+    const cola = ms.slice(inicios[k]!);
+    if (tokensDe(cola) <= topeTokens) return [...cola];
+  }
+  // Ni la última delegación cabe sola: su encargo y lo último que dijo.
+  const ultima = ms.slice(inicios[inicios.length - 1]!);
+  const dichas = ultima.filter((m) => m.role === "assistant" && typeof m.content === "string" && m.content.trim() !== "");
+  const cierre = dichas[dichas.length - 1];
+  return cierre === undefined ? [ultima[0]!] : [ultima[0]!, cierre];
+}
+
 export interface EncarnacionPrevia {
   /** Los mensajes con los que arranca el hijo nuevo, ya saneados. */
   mensajes: unknown[];
@@ -122,7 +151,7 @@ export interface MemoriaDeEspecialistas {
   /** Abre una encarnación de `nombre`: su memoria si la hay y se puede usar, o el motivo de no. */
   abrir(nombre: string, hilo: string): { previa: EncarnacionPrevia } | { sin: SinMemoria };
   /** La encarnación `hilo` terminó: guarda su historial completo (o lo olvida si falló o pasó el tope). */
-  cerrar(hilo: string, resultado: { bien: boolean; mensajes: readonly unknown[]; tokens: number }): SinMemoria | "guardada" | "guardada-reducida";
+  cerrar(hilo: string, resultado: { bien: boolean; mensajes: readonly unknown[]; tokens: number }): SinMemoria | "guardada" | "guardada-reducida" | "guardada-ventana";
   /** Los hilos vivos se dieron por muertos (turno cortado, orquestador rehecho). La memoria se queda. */
   darPorMuertos(): void;
   /** Otra conversación: se olvida todo. */
@@ -162,14 +191,16 @@ export function crearMemoriaDeEspecialistas(topes: { completa?: number; reducida
       }
       const recortados = reducirHistorial(saneados);
       const tokensReducidos = tokensDe(recortados);
-      if (tokensReducidos > reducida) {
-        guardada.delete(nombre);
-        perdidas.set(nombre, "olvidada-por-tope");
-        return "olvidada-por-tope";
+      if (tokensReducidos <= reducida) {
+        guardada.set(nombre, { mensajes: recortados, tokens: tokensReducidos });
+        perdidas.delete(nombre);
+        return "guardada-reducida";
       }
-      guardada.set(nombre, { mensajes: recortados, tokens: tokensReducidos });
+      // Ni reducido cabe: la ventana con lo más reciente, en vez de olvidarlo todo.
+      const ventana = ventanaDeHistorial(recortados, reducida);
+      guardada.set(nombre, { mensajes: saldarColgadas(ventana), tokens: tokensDe(ventana) });
       perdidas.delete(nombre);
-      return "guardada-reducida";
+      return "guardada-ventana";
     },
     darPorMuertos() {
       vivos.clear();

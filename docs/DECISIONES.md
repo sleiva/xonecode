@@ -7538,3 +7538,30 @@ cuando tiene que interpretar un log raro o decidir qué medir. Y los escritores,
 pensando: un interruptor no distingue entre pensar para acertar y pensar en bucle, y aún no hay un tope de
 razonamiento por llamada.
 
+## El bucle del desarrollador (rama `feat/bucle-del-developer`)
+
+**Qué se midió.** Una sesión real y dos pasadas de la calculadora. Arreglar UNA excepción (`getControl` durante
+`OnCreate`) costó 4,6 minutos de pared con tres traspasos: el conductor detecta, el orquestador consulta, el
+desarrollador corrige, el conductor comprueba. De 22 delegaciones a escritores, solo 5 (23 %) fueron retoques de
+tres escrituras o menos. Y en calc4 ninguno de los especialistas sobrevivió más de tres delegaciones con memoria:
+el consultor, el desarrollador, el diseñador y el conductor cerraron por encima del tope y la memoria
+«olvidada-por-tope» se los llevó entera, incluido lo reciente.
+
+**Qué se hizo.** (1) La memoria, si ni reducida cabe, guarda la ventana de lo más reciente
+(`ventanaDeHistorial`: delegaciones enteras, las más antiguas primero, sin partir una llamada de su respuesta).
+(2) El conductor cuelga del desarrollador: un campo `llama` en el `.md` (`developer-xone` de serie lleva
+`llama: [device-controller]`) y `create_sub_agent` solo para quien lo declara; la fábrica de hijos no concede a
+quien no está en su lista. La librería admite nietos: el orquestador trata un `create_sub_agent` igual venga de
+la raíz o de un hijo, y la respuesta vuelve a quien llamó (`AgentThreadOrchestrator`, sin probar antes con el
+modelo real). (3) El desarrollador recibe `xone_critica_visual` y `comparar_capturas`. El conductor NO: él captura.
+(4) Un texto en el sistema del desarrollador y una nota al orquestador, solo con el interruptor encendido.
+
+**Lo que no cambia, y por qué.** El crítico es una llamada a otro modelo: que el desarrollador lo LLAME no lo
+convierte en su propio juez, que era la razón por la que el conductor no lo tenía. Lo que sería un problema es
+que lo descarte: el texto le dice que manda sobre su impresión. Y el juez final del arnés (verificador, juez del
+turno, crítico de pantalla al cierre) sigue igual, fuera de los agentes. El conductor sigue SIN `edit_file`: se
+decidió dejarlo así.
+
+**Sin medir.** Que el bucle acorte el tiempo; que el desarrollador no abuse del conductor lanzándolo por cada
+cambio; y cómo se comportan la detención y la aprobación de un nieto.
+

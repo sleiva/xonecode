@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_CARACTERES_DE_ARGUMENTO, MAX_CARACTERES_DE_RESULTADO, TOPE_COMPLETA_TOKENS, TOPE_REDUCIDA_TOKENS, crearMemoriaDeEspecialistas, reducirHistorial } from "./memoriaDeEspecialistas.js";
+import { MAX_CARACTERES_DE_ARGUMENTO, MAX_CARACTERES_DE_RESULTADO, TOPE_COMPLETA_TOKENS, TOPE_REDUCIDA_TOKENS, crearMemoriaDeEspecialistas, reducirHistorial, ventanaDeHistorial } from "./memoriaDeEspecialistas.js";
 
 const MSGS = [{ role: "user", content: "haz" }, { role: "assistant", content: "hecho" }];
 
@@ -48,28 +48,42 @@ describe("la memoria de cada especialista en la sesión", () => {
     expect(JSON.stringify(ms[1])).toContain("/a.css");
   });
 
-  it("si ni reducido cabe, se olvida, y se dice por qué", () => {
-    const m = crearMemoriaDeEspecialistas({ completa: 10, reducida: 5 });
+  /** Tres delegaciones seguidas, cada una con su encargo, una llamada a tool y su respuesta, y lo que dijo al cerrar. */
+  const delegacion = (n: number, peso = 200) => [
+    { role: "user", content: `encargo ${String(n)}` },
+    { role: "assistant", content: "", tool_calls: [{ id: `c${String(n)}`, function: { name: "read_file", arguments: "{}" } }] },
+    { role: "tool", tool_call_id: `c${String(n)}`, content: "z".repeat(peso) },
+    { role: "assistant", content: `hecho ${String(n)}` },
+  ];
+  const TRES = [...delegacion(1), ...delegacion(2), ...delegacion(3)];
+
+  it("la ventana descarta delegaciones ENTERAS, las más antiguas primero, y nunca parte una llamada de su respuesta", () => {
+    const una = JSON.stringify(delegacion(3)).length / 4;
+    const v = ventanaDeHistorial(TRES, Math.ceil(una * 2.2)) as { role: string; content?: string; tool_call_id?: string }[];
+    expect(v[0]).toMatchObject({ role: "user", content: "encargo 2" });
+    expect(v.some((m) => m.content === "encargo 1")).toBe(false);
+    // cada tool tiene su llamada delante
+    for (const m of v) if (m.role === "tool") expect(v.some((x) => (x as { tool_calls?: { id: string }[] }).tool_calls?.some((t) => t.id === m.tool_call_id))).toBe(true);
+  });
+
+  it("si nada cabe entero, la última delegación se queda con su encargo y lo último que dijo", () => {
+    const v = ventanaDeHistorial(TRES, 1) as { role: string; content?: string }[];
+    expect(v.map((m) => m.content)).toEqual(["encargo 3", "hecho 3"]);
+  });
+
+  it("sin mensajes de usuario no hay por dónde cortar y se deja tal cual", () => {
+    const sin = [{ role: "assistant", content: "a" }];
+    expect(ventanaDeHistorial(sin, 1)).toEqual(sin);
+  });
+
+  it("si ni reducido cabe, guarda la VENTANA en vez de olvidar todo", () => {
+    const m = crearMemoriaDeEspecialistas({ completa: 10, reducida: 300 });
     m.abrir("device-controller", "h1");
-    expect(m.cerrar("h1", { bien: true, mensajes: CON_FICHERO, tokens: 101 })).toBe("olvidada-por-tope");
-    expect(m.abrir("device-controller", "h2")).toEqual({ sin: "olvidada-por-tope" });
-  });
-
-  it("recorta el contenido largo de los argumentos de una llamada y conserva la ruta", () => {
-    const codigo = "y".repeat(MAX_CARACTERES_DE_ARGUMENTO * 20);
-    const args = JSON.stringify({ file_path: "/Calculadora.css", content: codigo });
-    const r = reducirHistorial([{ role: "assistant", content: "", tool_calls: [{ id: "c1", function: { name: "write_file", arguments: args } }] }]) as {
-      tool_calls: { function: { arguments: string } }[];
-    }[];
-    const recortado = JSON.parse(r[0]!.tool_calls[0]!.function.arguments) as { file_path: string; content: string };
-    expect(recortado.file_path).toBe("/Calculadora.css");
-    expect(recortado.content.length).toBeLessThan(codigo.length / 10);
-    expect(recortado.content).toContain("recortado");
-  });
-
-  it("unos argumentos que no son JSON se dejan tal cual", () => {
-    const m = { role: "assistant", tool_calls: [{ id: "c1", function: { name: "x", arguments: "no es json" } }] };
-    expect(reducirHistorial([m])).toEqual([m]);
+    expect(m.cerrar("h1", { bien: true, mensajes: TRES, tokens: 10_000 })).toBe("guardada-ventana");
+    const r = m.abrir("device-controller", "h2");
+    const ms = ("previa" in r ? r.previa.mensajes : []) as { content?: string }[];
+    expect(ms.length).toBeGreaterThan(0);
+    expect(ms.at(-1)!.content).toBe("hecho 3");
   });
 
   it("reducirHistorial no toca lo corto ni al usuario", () => {
