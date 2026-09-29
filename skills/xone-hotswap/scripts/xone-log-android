@@ -21,7 +21,7 @@
  *   xone-log-android --serie emulator-5554
  */
 import { execFileSync } from "node:child_process";
-import { serieAndroid } from "../lib/dispositivo.mjs";
+import { serieAndroid, rutaDeAdb } from "../lib/dispositivo.mjs";
 
 const PAQUETE = "com.xone.android.framework";
 
@@ -49,7 +49,7 @@ const opcion = (nombre) => {
 const { serie, porque } = serieAndroid(opcion("serie"));
 if (serie !== undefined) process.stderr.write(`dispositivo: ${serie} (${porque})\n`);
 const adb = (...partes) =>
-  execFileSync("adb", [...(serie ? ["-s", serie] : []), ...partes], {
+  execFileSync(rutaDeAdb(), [...(serie ? ["-s", serie] : []), ...partes], {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
   });

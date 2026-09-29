@@ -14,6 +14,7 @@
 import { anotarError, anotarPaso } from "../../core/trazaDeErrores.js";
 import type { HallazgoDeEscritura } from "../../core/validacionDeEscritura.js";
 import {
+  hallazgoDeCadenaJson,
   motivoDelRechazo,
   veredictoDeEscritura,
 } from "../../core/validacionDeEscritura.js";
@@ -186,6 +187,17 @@ export function sinContenidoInvalido<T extends object>(backend: T, validar: Vali
           nuevo = contenidoTrasEditar(antesTexto, args[1], args[2], args[3] === true);
         }
         if (nuevo === undefined) return seguir();
+
+        // Antes que el linter y sin comparar con lo de antes: no depende de que el parser pueda
+        // mirar, y un fichero ya envuelto tampoco puede seguir envuelto.
+        const envuelto = hallazgoDeCadenaJson(ruta, nuevo);
+        if (envuelto !== undefined) {
+          anotarError(
+            "sinContenidoInvalido#rechazo",
+            new Error(`${String(prop)} sobre «${ruta}» rechazada: 1 hallazgo(s) [${envuelto.codigo}]`),
+          );
+          return { error: motivoDelRechazo(ruta, [envuelto]) };
+        }
 
         const despues = await validar(ruta, nuevo);
         // No se pudo mirar: se deja escribir. Un fallo del entorno no es un veredicto.

@@ -48,7 +48,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, join, relative, sep } from "node:path";
 import { deflateRawSync } from "node:zlib";
-import { serieAndroid } from "../lib/dispositivo.mjs";
+import { serieAndroid, rutaDeAdb, NODE, dormir } from "../lib/dispositivo.mjs";
 
 const PAQUETE = "com.xone.android.framework";
 const ACTIVIDAD = `${PAQUETE}/com.xone.android.hotswap.activities.SetupActivity`;
@@ -175,7 +175,7 @@ Studio o \`xone-db-tools\`, no esto, y sin ella la app muere aunque el verificad
 const { serie, porque } = serieAndroid(opcion("serie"));
 if (serie !== undefined) process.stderr.write(`dispositivo: ${serie} (${porque})\n`);
 const adb = (...partes) =>
-  execFileSync("adb", [...(serie ? ["-s", serie] : []), ...partes], { encoding: "utf8" });
+  execFileSync(rutaDeAdb(), [...(serie ? ["-s", serie] : []), ...partes], { encoding: "utf8" });
 
 /**
  * Igual, pero sin dejar hablar al hijo por stderr.
@@ -185,7 +185,7 @@ const adb = (...partes) =>
  * pantallas de ruido que acaban en el contexto del agente y le hacen creer que algo se rompió.
  */
 const adbCallado = (...partes) =>
-  execFileSync("adb", [...(serie ? ["-s", serie] : []), ...partes], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  execFileSync(rutaDeAdb(), [...(serie ? ["-s", serie] : []), ...partes], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
 
 /**
  * Cómo se llama la app, en tres saltos y con el último declarado.
@@ -330,7 +330,7 @@ const app = nombreDeLaApp();
 function exigirAparato() {
   let lista = "";
   try {
-    lista = execFileSync("adb", ["devices"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    lista = execFileSync(rutaDeAdb(), ["devices"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
   } catch (error) {
     console.error(`no pude hablar con adb: ${error.message.split("\n")[0]}`);
     process.exit(1);
@@ -400,9 +400,9 @@ function exigirAparato() {
     const pares = Object.entries(resto).map(([k, v]) =>
       `${k}=${typeof v === "object" && v !== null ? JSON.stringify(v) : String(v)}`,
     );
-    return execFileSync("node", [cliente, command, ...pares], { encoding: "utf8" }).trim();
+    return execFileSync(NODE, [cliente, command, ...pares], { encoding: "utf8" }).trim();
   };
-  const esperar = (segundos) => execFileSync("sleep", [String(segundos)]);
+  const esperar = (segundos) => dormir(segundos);
 
   /**
    * **El canal no está en pie justo después del reinicio**, y esto se descubrió corriéndolo:

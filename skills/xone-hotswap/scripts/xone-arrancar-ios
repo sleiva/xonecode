@@ -25,7 +25,7 @@
  * deja de responder justo después de abrir un menú, es eso y es un defecto AJENO al hotswap.
  */
 import { execFileSync } from "node:child_process";
-import { udidIos } from "../lib/dispositivo.mjs";
+import { udidIos, NODE } from "../lib/dispositivo.mjs";
 
 const HOST = "es.xone.studioapp.swift";
 
@@ -79,7 +79,7 @@ if (app === undefined) {
   console.log(`2/2 lanzando ${app}`);
   const cliente = new URL("hotswap.mjs", import.meta.url).pathname;
   console.log(
-    execFileSync("node", [cliente, JSON.stringify({ command: "launchApplication", appName: app })], {
+    execFileSync(NODE, [cliente, JSON.stringify({ command: "launchApplication", appName: app })], {
       encoding: "utf8",
       env: { ...process.env, HOTSWAP_URL: "wss://localhost:8443/hotswap" },
     }).trim(),

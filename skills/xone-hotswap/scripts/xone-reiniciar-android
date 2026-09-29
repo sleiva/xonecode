@@ -21,7 +21,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
-import { serieAndroid } from "../lib/dispositivo.mjs";
+import { serieAndroid, rutaDeAdb, NODE, dormir } from "../lib/dispositivo.mjs";
 
 const PAQUETE = "com.xone.android.framework";
 const ACTIVIDAD = `${PAQUETE}/com.xone.android.hotswap.activities.SetupActivity`;
@@ -49,11 +49,11 @@ const opcion = (nombre) => {
 const { serie, porque } = serieAndroid(opcion("serie"));
 if (serie !== undefined) process.stderr.write(`dispositivo: ${serie} (${porque})\n`);
 const adb = (...partes) =>
-  execFileSync("adb", [...(serie ? ["-s", serie] : []), ...partes], { encoding: "utf8" });
+  execFileSync(rutaDeAdb(), [...(serie ? ["-s", serie] : []), ...partes], { encoding: "utf8" });
 
 const cliente = join(import.meta.dirname, "xone-hotswap");
 const mandar = (comando) =>
-  execFileSync("node", [cliente, JSON.stringify(comando)], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  execFileSync(NODE, [cliente, JSON.stringify(comando)], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
 
 /**
  * Sin aparato NO se empieza, y se dice el siguiente paso HECHO.
@@ -66,7 +66,7 @@ const mandar = (comando) =>
 function exigirAparato() {
   let lista = "";
   try {
-    lista = execFileSync("adb", ["devices"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    lista = execFileSync(rutaDeAdb(), ["devices"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
   } catch (error) {
     console.error(`no pude hablar con adb: ${error.message.split("\n")[0]}`);
     process.exit(1);
@@ -107,7 +107,7 @@ for (let intento = 1; intento <= 20 && !vivo; intento++) {
     mandar({ command: "getAllElements", format: "xone" });
     vivo = true;
   } catch {
-    execFileSync("sleep", ["1"]);
+    dormir(1);
   }
 }
 if (!vivo) {
@@ -128,7 +128,7 @@ if (app === undefined) {
       console.log(salida);
       process.exit(0);
     }
-    execFileSync("sleep", ["2"]);
+    dormir(2);
   }
   console.error(`«${app}» no llegó a contestar el árbol de controles: NO está viva.`);
   console.error("Si nunca se ha subido a este aparato, primero xone-desplegar-android.");

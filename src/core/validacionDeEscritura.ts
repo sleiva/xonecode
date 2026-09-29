@@ -84,6 +84,41 @@ export function veredictoDeEscritura(
   return { introducidos, preexistentes };
 }
 
+/** El código del hallazgo de un fichero XOne guardado como cadena JSON (ver `hallazgoDeCadenaJson`). */
+export const CODIGO_CADENA_JSON = "contenido-como-cadena-json";
+
+/**
+ * Un `.xne`/`.xml` cuyo contenido es una CADENA JSON con el XML escapado dentro.
+ *
+ * Medido en un proyecto real (IXCODE-16): el primer byte era `"` y el XML iba escapado, en
+ * `app.xml` y en los `.xne`. El parser del framework ve esa comilla como texto y aborta la carga
+ * de `app.xml`, así que la app no arranca y la pantalla se queda en blanco. Es un fallo del
+ * CONTENIDO que no depende de lo que hubiera antes —por eso no pasa por la comparación de
+ * huellas: un fichero así no tiene ninguna forma legítima—, y que el linter puede no ver.
+ *
+ * Solo se reconoce lo inequívoco: comilla al principio y al final, que parsee como JSON a una
+ * cadena, y que esa cadena empiece por `<`. Un XML válido nunca empieza por comilla.
+ */
+export function hallazgoDeCadenaJson(ruta: string, contenido: string): HallazgoDeEscritura | undefined {
+  if (!/\.(xne|xml)$/i.test(ruta)) return undefined;
+  const recortado = contenido.trim();
+  if (recortado.length < 2 || !recortado.startsWith('"') || !recortado.endsWith('"')) return undefined;
+  let desenvuelto: unknown;
+  try {
+    desenvuelto = JSON.parse(recortado);
+  } catch {
+    return undefined;
+  }
+  if (typeof desenvuelto !== "string" || !desenvuelto.trimStart().startsWith("<")) return undefined;
+  return {
+    codigo: CODIGO_CADENA_JSON,
+    mensaje:
+      "el contenido es una CADENA JSON (empieza por «\"» y lleva el XML escapado) y XOne no arranca así. " +
+      "Escribe el XML tal cual, sin comillas envolventes ni \\\" \\n escapados.",
+    linea: 1,
+  };
+}
+
 /**
  * Cuántos hallazgos se enseñan en el rechazo.
  *

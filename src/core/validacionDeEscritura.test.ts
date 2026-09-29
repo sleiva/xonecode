@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  CODIGO_CADENA_JSON,
+  hallazgoDeCadenaJson,
   motivoDelRechazo,
   TOPE_DE_HALLAZGOS,
   veredictoDeEscritura,
@@ -115,5 +117,24 @@ describe("motivoDelRechazo", () => {
 
   it("con un solo problema no habla en plural", () => {
     expect(motivoDelRechazo("/a.xne", [h("X", 1)])).toMatch(/introduce un problema que antes no estaba\./);
+  });
+});
+
+describe("hallazgoDeCadenaJson", () => {
+  const envuelto = JSON.stringify('<?xml version="1.0"?>\n<xml>\n  <coll name="A"/>\n</xml>');
+
+  it("reconoce un .xne y un app.xml guardados como cadena JSON", () => {
+    expect(hallazgoDeCadenaJson("Ambitos.xne", envuelto)?.codigo).toBe(CODIGO_CADENA_JSON);
+    expect(hallazgoDeCadenaJson("/app.xml", `${envuelto}\n`)?.codigo).toBe(CODIGO_CADENA_JSON);
+  });
+
+  it("un XML de verdad no es un hallazgo", () => {
+    expect(hallazgoDeCadenaJson("A.xne", '<?xml version="1.0"?>\n<xml/>')).toBeUndefined();
+  });
+
+  it("una cadena JSON que no envuelve XML, o un fichero de otra clase, se deja", () => {
+    expect(hallazgoDeCadenaJson("A.xne", '"hola"')).toBeUndefined();
+    expect(hallazgoDeCadenaJson("A.xne", '"<sin cerrar')).toBeUndefined();
+    expect(hallazgoDeCadenaJson("datos.json", envuelto)).toBeUndefined();
   });
 });

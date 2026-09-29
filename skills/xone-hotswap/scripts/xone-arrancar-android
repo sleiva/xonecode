@@ -34,6 +34,7 @@
  *   xone-arrancar-android --lista          qué AVDs hay, sin arrancar nada
  */
 import { execFileSync, spawn } from "node:child_process";
+import { dormir } from "../lib/dispositivo.mjs";
 
 /** Lo que tarda un arranque en frío de un AVD con `google_apis`, con margen. Por debajo del
  *  tope de reloj de UN comando del harness (600 s), que es quien mataría al script entero. */
@@ -177,7 +178,7 @@ if (yaEstaba === undefined) {
     fallo = e.message;
   });
   hijo.unref();
-  execFileSync("sleep", [String(ESPERA_S)]);
+  dormir(ESPERA_S);
   if (fallo !== undefined) {
     console.error(`no pude lanzar el emulador: ${fallo}`);
     process.exit(1);
@@ -193,7 +194,7 @@ while (Date.now() - t0 < TOPE_MS) {
     console.log("Siguiente: xone-desplegar-android");
     process.exit(0);
   }
-  execFileSync("sleep", [String(ESPERA_S)]);
+  dormir(ESPERA_S);
 }
 
 // El proceso sigue vivo: se dice lo que se SABE, que es que todavía no está listo.

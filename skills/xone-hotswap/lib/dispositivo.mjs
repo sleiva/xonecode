@@ -37,6 +37,19 @@ export function dispositivoDeLaSesion(entorno = process.env) {
  * poder probarla sin adb delante. Solo cuentan las líneas en estado `device`: uno `offline` o
  * `unauthorized` no se puede usar.
  */
+/** El `adb` a ejecutar: `XONECODE_ADB` (lo pone el harness) o el del PATH. */
+export function rutaDeAdb(entorno = process.env) {
+  return entorno.XONECODE_ADB || "adb";
+}
+
+/** El `node` que YA corre este script: no depende de que esté en el PATH (en Windows a menudo no lo está). */
+export const NODE = process.execPath;
+
+/** Espera síncrona sin lanzar procesos: `sleep` no existe en Windows. */
+export function dormir(segundos) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(segundos) * 1000);
+}
+
 export function preferirEmulador(salidaDeAdbDevices) {
   const listos = String(salidaDeAdbDevices)
     .split("\n")
@@ -48,7 +61,7 @@ export function preferirEmulador(salidaDeAdbDevices) {
 }
 
 /** El serial de Android: `--serie`, el de la sesión o un emulador. Y dice de dónde salió. */
-export function serieAndroid(explicita, { entorno = process.env, adb = "adb" } = {}) {
+export function serieAndroid(explicita, { entorno = process.env, adb = rutaDeAdb(entorno) } = {}) {
   if (explicita) return { serie: explicita, porque: "pasado con --serie" };
   const elegido = dispositivoDeLaSesion(entorno);
   if (elegido?.plataforma === "android") return { serie: elegido.id, porque: `el de la sesión: ${elegido.nombre}` };

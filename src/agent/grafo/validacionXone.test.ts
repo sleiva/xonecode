@@ -35,6 +35,18 @@ describe("sinContenidoInvalido", () => {
     expect(b.escrito["/a.css"]).toBe(".x { fontsize: 4; }");
   });
 
+  it("rechaza un .xne guardado como cadena JSON aunque el validador no vea nada, y NO escribe", async () => {
+    const envuelto = JSON.stringify('<?xml version="1.0"?>\n<xml/>');
+    // Ni con el fichero ya envuelto de antes: eso no es «preexistente» que se deje pasar.
+    const b = backendFalso({ "/A.xne": envuelto });
+    const g = sinContenidoInvalido(b, sinHallazgos);
+    const r = (await g.write("/A.xne", envuelto)) as { error?: string };
+    expect(r.error).toContain("contenido-como-cadena-json");
+    expect(b.escrito["/A.xne"]).toBeUndefined();
+    await g.write("/A.xne", '<?xml version="1.0"?>\n<xml/>');
+    expect(b.escrito["/A.xne"]).toBe('<?xml version="1.0"?>\n<xml/>');
+  });
+
   it("rechaza con {error} y NO escribe", async () => {
     const b = backendFalso({});
     const g = sinContenidoInvalido(b, async () => [
