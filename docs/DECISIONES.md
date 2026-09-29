@@ -7063,3 +7063,75 @@ escrito antes del campo se lee como `true`, uno de Notion como `false`. (2) Rele
 `markdown` de `notion-create-comment`: los comentarios pintan lo de DENTRO de la línea (negrita,
 cursiva, código, enlaces) y dejan como texto los bloques (encabezados, listas). `comentarioParaNotion`
 cambia solo esos marcadores —`## X` → `X:`, `- x` → `• x`— con las mismas líneas y en el mismo orden.
+
+## Iconos para quien no tiene los assets: `buscar_icono` (IXCODE-18) (29-09-2026)
+
+**El encargo.** Que un subagente sepa conseguir los iconos de botones, menús y pestañas cuando el
+proyecto no trae los assets. Se partió de la skill `better-icons`
+(`github.com/better-auth/better-icons/tree/main/skills`).
+
+**Lo que había, y no llegaba a nadie.** El único sitio que hablaba de iconos era la skill
+`xone-project-generator` (§11.5, con la URL de Iconify), que ninguno de los seis especialistas de
+serie tiene asignada; y aunque la tuvieran, «descargar» era una orden que ninguno podía cumplir:
+sin red ni shell. La guía que sí alcanza a `designer-xone` y `developer-xone` es `xone-development`,
+así que la mejora está ahí (`fundamentos/errores-comunes.md`, Error 8) y no en una skill nueva: cada
+skill asignada mete su descripción en el prompt de sistema de CADA llamada.
+
+**Por qué no se copió el `SKILL.md` de better-icons.** Es entero CLI y MCP (`better-icons search`,
+`get`, `setup`) y ningún especialista ejecuta comandos: `device-controller` sí, pero es solo para el
+aparato (IXCODE-9). Se usan sus MISMOS datos —Iconify: `/search` y `/<prefijo>/<nombre>.svg`— con
+una tool propia que llama a la API sin el binario.
+
+**Medido contra `api.iconify.design`.** Sin `color`, el SVG trae `stroke="currentColor"`; sin
+`height`, trae `width="1em" height="1em"`. Con `color=%23ff0000&height=24` trae el trazo en
+`#ff0000` y `width="24" height="24"`. Un id que no existe contesta 404 con el cuerpo `Not found`.
+La documentación de XOne dice que el SVG se renderiza nativo (`icons/`, `type="IMG"`, `img`,
+`imgbk`) y **no dice** qué hace con `currentColor` ni con `em`. Como XOne ignora en silencio lo que
+no entiende, la tool NO deja esa decisión al render: `obtener` exige un color hexadecimal y fija la
+altura (24 px por omisión), y `currentColor` o un nombre CSS se rechazan con su motivo.
+
+**Solo lee.** Un SVG es texto, así que lo escribe `write_file` con su diff y su aprobación. Una
+tool de red que además escribiera sería un segundo camino al proyecto (`incorporar_adjunto` existe
+porque un PNG NO sobrevive a `write(content: string)`; un SVG sí). Se paga con un límite declarado:
+el modelo reteclea el `path` del SVG —unos cientos de caracteres— y un carácter mal copiado saldría
+en el fichero; el diff de la aprobación lo enseña.
+
+**Las guardas.** La red entra por `IconosPort` con su doble (`IconosEnMemoria`): `npm test` sigue
+sin red. Un id vale solo con la forma `prefijo:nombre` en minúsculas (sin barras, `..` ni `?`), lo
+que vuelve de la red se acepta solo si es un SVG sin `<script>`, `foreignObject`, manejadores `on…`
+ni `javascript:` y dentro de `TOPE_DE_SVG_BYTES`, y la llamada lleva `TOPE_DE_ICONOS_MS`. Un fallo
+lleva el código HTTP o «no hay red», nunca la URL ni el cuerpo remoto. **Todo rechazo se DEVUELVE
+como texto** —con «No dibujes el icono a mano»—, porque una excepción se lleva el turno y la
+alternativa, que el modelo invente un SVG, es justo lo que la tool existe para evitar.
+
+**Cómo se referencia el icono, y un error que salió en la revisión.** La primera versión decía
+`path="icons/x.svg"`. Los ejemplos de la plataforma referencian el nombre A SECAS (`img="add.png"`,
+`path="ic_pedidos.png"`) y XOne lo busca en `icons/`; la forma con carpeta solo aparece con
+`##APP##\icons\…`. Con `icons/` delante habría buscado `icons/icons/…` y el icono no habría
+salido, sin un aviso. Ahora la tool dice `img="ic_home.svg"`, y el fichero sigue la convención de
+nombres de la plataforma (`ic_<descripcion>`, guiones bajos): `lucide:arrow-right` →
+`ic_arrow_right.svg`. El prefijo de la colección no entra en el nombre: la regla es UNA colección
+por app, y así cambiar de colección no renombra nada.
+
+**Otra divergencia doble/real, también de la revisión.** Iconify sube un `limit` pequeño a 32
+(medido: pidiendo 3 contestó `"limit":32`), y el doble recortaba pero el cliente real no. Los tests
+pasaban y en producción llegaban 32 ids donde se pidieron 12. `iconosEnRed` recorta ahora, con su
+test.
+
+**El reparto.** A quien escribe el proyecto entero (`recibeBuscarIcono`, regla de dato: hoy
+`designer-xone` y `developer-xone`), en los dos motores (deepagents en `xoneAgent.ts`, TrueForge en
+`sesionTrueforge.ts`), y solo con `motor: "modelo"`. La composición de producción es
+`turnoReal.ts` (`opciones.iconos ?? iconosEnRed()`). Por ser el patrón de fallo de esta
+arquitectura, tiene su propio test por la puerta de verdad (`turnoReal.iconos.test.ts`): abre la
+sesión SIN la opción `iconos`, dobla solo `fetch`, y en cada motor comprueba que la petición sale
+con color y altura y que el SVG llega al disco tras la aprobación del `write_file`. Se comprobó que
+no es vacuo: con el valor por omisión quitado, los dos fallan. Los tests de reparto por motor
+(`xoneAgent.iconos.test.ts` y el de `sesionTrueforge`) inyectan `IconosEnMemoria` y NO cubren esa
+línea. No pide aprobación: no escribe.
+
+**Lo que no se hizo.** No hay `incorporar_icono`. El texto de la skill (`errores-comunes.md`) lo
+leen también `consultant-xone` y los especialistas de motor externo, que no tienen la tool: por eso
+está escrito en condicional («si tienes la tool `buscar_icono`»). En `obtener`, la línea del chat
+sale sin detalle (solo se enseña el primer campo de `CAMPOS_SEGUROS`, que es `consulta`). No se probó contra un XOne real cómo pinta el
+SVG tintado ni a qué tamaño: el hexadecimal y los píxeles son la elección que no depende de esa
+respuesta. No hay caché ni sondeo de la API.

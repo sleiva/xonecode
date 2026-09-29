@@ -248,6 +248,16 @@ Y las guardas del proyecto:
   dónde se declara una o un campo, quién la referencia (`mapcol`, `mapfld`, `linkedfield`,
   `contents`, `inherits`), qué campos tiene. Las dos **re-aplican `puedeLeerRuta` a mano**: una
   tool de LangChain añadida por xonecode **no pasa por el middleware de permisos**.
+- **Y una tercera, de red y de LECTURA, para quien no tiene los assets: `buscar_icono`**
+  (`agent/grafo/buscarIcono.ts`, IXCODE-18). Busca en Iconify y devuelve el SVG; **no escribe**: un
+  SVG es texto y lo escribe `write_file` con su aprobación de siempre, así que no hay una segunda
+  puerta al proyecto. La red entra por `IconosPort` (`core/ports.ts`, doble `IconosEnMemoria`) y
+  sin puerto no se monta. Va a quien escribe el proyecto entero (`recibeBuscarIcono`, regla de
+  dato: `designer-xone` y `developer-xone`) y solo a `motor: "modelo"`. **El color es un
+  hexadecimal EXPLÍCITO y la altura en píxeles, siempre** (`core/iconos.ts`): sin ellos Iconify
+  devuelve `currentColor` y `1em`, que XOne no documenta, y un icono mal tintado no da error. **Sin
+  red la tool lo dice y no devuelve un SVG**; el rechazo se DEVUELVE, nunca se lanza. Límite
+  declarado: el modelo reteclea el `path` al escribirlo.
 - **`xone_navegacion` existe por una medida, no por completitud**: contestar «¿qué colecciones
   tiene el proyecto?» leyendo ficheros es mucho más caro que contestarla desde el modelo. Cuatro
   reglas: **el reparto** — la semántica de XOne la pone `xone-linter` como LIBRERÍA

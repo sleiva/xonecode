@@ -32,6 +32,7 @@ import type { DomainEvent, HallazgoDelTurno, PendienteDeAprobacion } from "../..
 import type {
   ConsumoDeSesion,
   ConsumoDeSesionPorCuenta,
+  IconosPort,
   ModelosPort,
   MotorExterno,
   SkillInfo,
@@ -90,6 +91,7 @@ import { crearNavegacionXone } from "../../grafo/navegacionXone.js";
 import { hechosDelProyectoDe } from "../../navegacion/hechosEnDisco.js";
 import { conHechosDelProyecto } from "../../../core/hechosDelProyecto.js";
 import { crearBusquedaRegex } from "../../grafo/busquedaRegex.js";
+import { crearBuscarIcono, recibeBuscarIcono } from "../../grafo/buscarIcono.js";
 import { crearCopiarArtefacto } from "../../grafo/copiarArtefacto.js";
 import { crearMarcarCriteriosDelPlan } from "../../grafo/marcarCriteriosDelPlan.js";
 import { crearUnirSecciones } from "../../grafo/unirSecciones.js";
@@ -221,6 +223,8 @@ export interface OpcionesDeSesionTrueforge {
    * pasaban igual porque la composición vivía en `montarBackend`, que ningún test doblaba.
    */
   adjuntos?: string;
+  /** De dónde salen los iconos (IXCODE-18). Ausente = `buscar_icono` no se monta. */
+  iconos?: IconosPort;
   hilo?: string;
   /**
    * El índice de `xone_navegacion`. Solo para doblarlo en un test: ausente es el REAL, sobre la
@@ -452,6 +456,11 @@ export async function abrirSesionTrueforge(
     // la pone en `requireApprovalForTools`, y `rondasDe` la pregunta con su tarjeta (`cambioDe`).
     ...(opciones.adjuntos !== undefined && recibeIncorporarAdjunto(agente)
       ? [crearIncorporarAdjunto({ raiz, carpetaDeAdjuntos: opciones.adjuntos, perfil: agente }) as unknown as ToolDeLangchain]
+      : []),
+    // Buscar un icono cuando faltan los assets (IXCODE-18), con el reparto de deepagents: a quien
+    // escribe el proyecto y solo con el puerto. Es de LECTURA: no entra en `requireApprovalForTools`.
+    ...(opciones.iconos !== undefined && recibeBuscarIcono(agente)
+      ? [crearBuscarIcono(opciones.iconos) as unknown as ToolDeLangchain]
       : []),
     // Y marcar en el plan lo comprobado en el aparato, con el reparto de deepagents: a quien ejecuta.
     ...(agente.ejecucion === true ? [crearMarcarCriteriosDelPlan({ raiz }) as unknown as ToolDeLangchain] : []),

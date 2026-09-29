@@ -10,6 +10,7 @@ import { backendDeAgente, entornoDeLaShellDelProyecto } from "./proyecto.js";
 import type { Artefacto } from "../../core/artefactos.js";
 import { permisosDe, hitlDe, montajeDeFicheros, presupuestoDeLlamadas, puedeEjecutar, type QuienDecidePermisos } from "./perfiles.js";
 import { crearBusquedaRegex } from "./busquedaRegex.js";
+import { crearBuscarIcono, recibeBuscarIcono } from "./buscarIcono.js";
 import { OPCIONES_BUSQUEDA_FICHEROS } from "./opcionesDeFicheros.js";
 import { crearNavegacionXone } from "./navegacionXone.js";
 import { crearCopiarArtefacto } from "./copiarArtefacto.js";
@@ -36,7 +37,7 @@ import {
   type AlContarTokens,
   type TokenTracker,
 } from "../../vendor/tokenTracking.js";
-import type { SkillsPort, ModelosPort } from "../../core/ports.js";
+import type { IconosPort, SkillsPort, ModelosPort } from "../../core/ports.js";
 
 export interface OpcionesDelAgente {
   raiz: string;
@@ -74,6 +75,12 @@ export interface OpcionesDelAgente {
   navegacion?: CargarIndice;
   /** El resolvedor de estilos. Ausente, el de disco sobre `raiz`. Doblable como el índice. */
   estilos?: CargarEstilos;
+  /**
+   * De dónde salen los iconos (IXCODE-18). Ausente = `buscar_icono` no se monta: una tool que
+   * siempre contestara «no hay red» sería un botón muerto en el prompt. Entra por parámetro porque
+   * toca la red (`core/ports.ts#IconosPort`).
+   */
+  iconos?: IconosPort;
   /**
    * Quién juzga si lo hecho cumple la rúbrica del encargo, si es que hay rúbrica.
    *
@@ -556,6 +563,9 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
       ...(opciones.adjuntos !== undefined && recibeIncorporarAdjunto(perfil)
         ? [crearIncorporarAdjunto({ raiz: opciones.raiz, carpetaDeAdjuntos: opciones.adjuntos, perfil })]
         : []),
+      // Buscar un icono cuando faltan los assets (IXCODE-18), a quien escribe el proyecto y solo con
+      // el puerto: es de LECTURA, la escritura del SVG sigue siendo `write_file` con su aprobación.
+      ...(opciones.iconos !== undefined && recibeBuscarIcono(perfil) ? [crearBuscarIcono(opciones.iconos)] : []),
       // Marcar en el plan lo COMPROBADO en el aparato, a quien comprueba: el que EJECUTA, que no
       // tiene `write_file` ni `edit_file` y sin esto no podía dejar constancia de lo que vio.
       ...(perfil.ejecucion === true ? [crearMarcarCriteriosDelPlan({ raiz: opciones.raiz })] : []),

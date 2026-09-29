@@ -178,6 +178,13 @@ El formato más habitual es PNG por compatibilidad historica, pero SVG es perfec
 
 **Anti-patrón frecuente — NO renderizar SVG con un `type="WEB"`:** el soporte de SVG en XOne es nativo y completo. Un `.svg` es una imagen más: se refiere con `type="IMG"` (`path="dibujo.svg"`) o con los atributos `img`/`imgbk`, igual que un PNG. Envolverlo en un WebView (`type="WEB"`) para "que se vea" es innecesario, no aporta nada y rompe el escalado y la integración con el control. El control `WEB` es solo para contenido web remoto (URLs), nunca para imágenes locales.
 
+**Cuando el proyecto no trae el icono, no lo dibujes a mano.** Si tienes la tool `buscar_icono` (no todos los agentes la tienen), consulta Iconify (más de 200 colecciones) en dos pasos: `buscar` con un texto —en inglés rinde más— y `obtener` con el id que salió, un **color hexadecimal** y una altura en píxeles. Solo lee: el SVG lo escribes tú con `write_file` en `icons/ic_<nombre>.svg` (la convención `ic_`, con guiones bajos), tal cual, y se aprueba como cualquier escritura. Se referencia con el **nombre a secas** —`img="ic_home.svg"`—, como el resto de imágenes: XOne lo busca en `icons/`. Sin la tool, pide el asset o deja el botón con texto.
+
+- **Un solo estilo por app.** Elige UNA colección (`lucide`, `tabler`…) y quédate en ella: mezclar trazos de colecciones distintas se ve desigual.
+- **El color va explícito, y el tamaño también.** Sin ellos Iconify devuelve `currentColor` y `width="1em"`, que esta documentación no dice cómo resuelve XOne; un icono sin tinte o sin tamaño válido no da error, sale mal en silencio. Por eso `obtener` los exige.
+- **Sin red, la tool lo dice.** No inventes el `path` del SVG: pide el asset o deja el botón con texto.
+- **Un icono referenciado que no está en `icons/` tampoco da error**: XOne lo ignora. Tras escribirlos, comprueba que cada `img`/`path` apunta a un fichero que existe.
+
 ---
 
 ### Error 9: Pensar que hay que declarar `ID` o `ROWID`

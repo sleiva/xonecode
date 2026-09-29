@@ -41,6 +41,7 @@ const ICONO: Record<string, string> = {
   glob: "✱",
   grep: "✱",
   regex_search: "✱",
+  buscar_icono: "✱",
   task: "⊙",
   // Un icono PROPIO, y no el genérico `⚙`: en un turno donde se lanza una app, la línea del
   // comando es la que dice qué está pasando de verdad — y no puede leerse igual que una tool
@@ -57,6 +58,7 @@ const VERBO: Record<string, string> = {
   glob: "busca",
   grep: "busca",
   regex_search: "regex",
+  buscar_icono: "icono",
   task: "delega en",
   execute: "corre",
 };

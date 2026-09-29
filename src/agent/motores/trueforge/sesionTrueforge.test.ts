@@ -2132,3 +2132,30 @@ describe("`marcar_criterios_del_plan` en TrueForge: el conductor marca lo que co
     expect(readFileSync(join(dir, "TASKS.md"), "utf8")).toBe("# T\n\n## T1 — Uno\n\n- [x] abre\n- [ ] vuelve\n");
   }, 20_000);
 });
+
+describe("`buscar_icono` en TrueForge (IXCODE-18): el mismo reparto que deepagents", () => {
+  const guionDeIcono = () => [
+    [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "designer-xone", input: "busca un icono de casa" }) }] })],
+    [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "i1", name: "buscar_icono", args: JSON.stringify({ operacion: "obtener", id: "lucide:home", color: "#1a73e8", tamano: 32 }) }] })],
+    [new AIMessageChunk({ content: "Ahí lo tienes." })],
+    [new AIMessageChunk({ content: "Listo." })],
+  ];
+
+  it("con `iconos`: el especialista la ve, la llama y el SVG llega a sus mensajes con color y tamaño", async () => {
+    const { IconosEnMemoria } = await import("../../../core/ports.js");
+    const iconos = new IconosEnMemoria(["lucide:home"]);
+    const { m, vistos, toolsPorLlamada } = modelosConGuion(guionDeIcono());
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, iconos });
+    await s.turno("pon un icono de casa", piel().p);
+    expect(toolsPorLlamada[1]).toContain("buscar_icono");
+    expect(iconos.peticiones).toEqual([{ id: "lucide:home", color: "#1a73e8", tamano: 32 }]);
+    expect(vistos[2]!.join("\n")).toContain('height="32"');
+  }, 20_000);
+
+  it("sin `iconos`: nadie la ve", async () => {
+    const { m, toolsPorLlamada } = modelosConGuion(guionDeIcono());
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("pon un icono de casa", piel().p).catch(() => undefined);
+    expect(toolsPorLlamada[1]).not.toContain("buscar_icono");
+  }, 20_000);
+});

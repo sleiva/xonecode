@@ -26,7 +26,8 @@ import { rutaRealDeVirtual } from "../../core/rutaVirtual.js";
 import type { Piel } from "../../core/turno.js";
 import { Bitacora } from "../../core/bitacora.js";
 import { correrTurno } from "../../core/turno.js";
-import type { ModelosPort, SkillsPort, VerifierPort } from "../../core/ports.js";
+import type { IconosPort, ModelosPort, SkillsPort, VerifierPort } from "../../core/ports.js";
+import { iconosEnRed } from "../config/iconosEnRed.js";
 import type { EstadoDeVerificador, ResultadoDeTurno } from "../../core/entrega.js";
 import type { DomainEvent, HallazgoDelTurno } from "../../core/events.js";
 import { relative, resolve as resolverRuta } from "node:path";
@@ -248,6 +249,11 @@ export async function abrirSesionReal(opciones: {
    */
   navegacion?: CargarIndice;
   /**
+   * De dónde salen los iconos (IXCODE-18). Ausente = Iconify por la red, que es la composición de
+   * PRODUCCIÓN: un test que no la doble la tendría escrita pero no probada.
+   */
+  iconos?: IconosPort;
+  /**
    * El motor de agente (`core/motor.ts`). Ausente = el de la configuración: `XONECODE_MOTOR`, el
    * `config.json` del proyecto o el global, y si no, `MOTOR_POR_OMISION`. La web lo pasa con el motor con
    * el que NACIÓ la sesión; el terminal, `run`, el banco y los evals lo dejan a la configuración.
@@ -271,6 +277,7 @@ export async function abrirSesionReal(opciones: {
    * con el de siempre por olvido. Con TrueForge, la sesión la construye su adaptador
    * (`motores/trueforge/sesionTrueforge.ts`) con las MISMAS aprobación, modo y artefactos.
    */
+  const iconos = opciones.iconos ?? iconosEnRed();
   const configDelMotor = cargar(opciones.raiz).config;
   const motor =
     opciones.motor ??
@@ -285,6 +292,7 @@ export async function abrirSesionReal(opciones: {
       modelos: opciones.modelos,
       entorno: opciones.entorno,
       skills: opciones.skills.catalogo(),
+      iconos,
       ...(opciones.verifier === undefined ? {} : { verifier: opciones.verifier }),
       ...(opciones.pedirAprobacion === undefined ? {} : { pedirAprobacion: opciones.pedirAprobacion }),
       ...(opciones.sinAprobacion === undefined ? {} : { sinAprobacion: opciones.sinAprobacion }),
@@ -423,6 +431,7 @@ export async function abrirSesionReal(opciones: {
       raiz,
       ficheros: ficherosDelProyecto(raiz),
       navegacion: cargarIndice,
+      iconos,
       // Se releen en CADA construcción del agente y no una vez al abrir la sesión: el
       // usuario puede tocar un `.md` —o guardarlo desde Ajustes— con la consola abierta, y
       // una lista congelada al arrancar le haría creer que su cambio no se aplicó.

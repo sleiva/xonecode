@@ -843,3 +843,46 @@ export class GestorDeTareasEnMemoria implements GestorDeTareasPort {
   async transicionar(_v: Vinculo, clave: string, transicion: string) { this.transicionesAplicadas.push({ clave, transicion }); }
   async comentar(_v: Vinculo, clave: string, texto: string) { this.comentariosAplicados.push({ clave, texto }); }
 }
+
+/**
+ * De dónde salen los iconos (IXCODE-18): Iconify, por la red. Un puerto porque `npm test` no
+ * puede necesitar una conexión, y porque la tool que lo usa (`agent/grafo/buscarIcono.ts`) no
+ * puede saber si hay red.
+ *
+ * **Lanza ante cualquier fallo**, con un mensaje que no lleva la URL ni el cuerpo remoto: quien
+ * lo llama (la tool) lo DEVUELVE como texto, porque una excepción se lleva el turno y el
+ * agente no reintenta. Ni `svg` ni `buscar` inventan nada cuando la red falta.
+ */
+export interface IconosPort {
+  /** Ids `prefijo:nombre`, ya con forma de id. Vacío es «no hay», no un fallo. */
+  buscar(consulta: string, opciones: { limite: number; prefijo?: string }): Promise<string[]>;
+  /** El SVG con el color y la altura ya cocidos (`core/iconos.ts#urlDeSvg`). */
+  svg(id: string, opciones: { color: string; tamano: number }): Promise<string>;
+}
+
+/**
+ * El doble: un catálogo fijo, sin red. Genera un SVG mínimo con el color y el tamaño pedidos, así
+ * que un test ve que llegaron a quien había que llegar. `fallo` simula la red caída.
+ */
+export class IconosEnMemoria implements IconosPort {
+  readonly [ES_DOBLE] = true;
+  readonly peticiones: Array<{ id: string; color: string; tamano: number }> = [];
+  constructor(
+    private readonly ids: readonly string[] = [],
+    private readonly fallo?: string
+  ) {}
+  async buscar(consulta: string, opciones: { limite: number; prefijo?: string }): Promise<string[]> {
+    if (this.fallo !== undefined) throw new Error(this.fallo);
+    const q = consulta.toLowerCase();
+    return this.ids
+      .filter((id) => id.includes(q) && (opciones.prefijo === undefined || id.startsWith(`${opciones.prefijo}:`)))
+      .slice(0, opciones.limite);
+  }
+  async svg(id: string, opciones: { color: string; tamano: number }): Promise<string> {
+    if (this.fallo !== undefined) throw new Error(this.fallo);
+    if (!this.ids.includes(id)) throw new Error("el icono no existe");
+    this.peticiones.push({ id, ...opciones });
+    const { color, tamano } = opciones;
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${tamano}" height="${tamano}" viewBox="0 0 24 24"><path fill="${color}" d="M0 0h24v24H0z"/></svg>`;
+  }
+}
