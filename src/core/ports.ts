@@ -18,7 +18,9 @@ import type { LineaDeDiff } from "./diff.js";
 import type {
   ContextoRemoto, EntradaRemota, EstructuraRemota, ManifiestoRemoto,
 } from "./cloudstudio.js";
-import type { FichaDelGestor, GestorDeTareasPort, OpcionesDePendientes, TransicionDelGestor, Vinculo } from "./gestorDeTareas.js";
+import type {
+  DescripcionDelProyecto, FichaDelGestor, GestorDeTareasPort, OpcionesDePendientes, ProyectoEncontrado, TransicionDelGestor, Vinculo,
+} from "./gestorDeTareas.js";
 
 /**
  * La marca de «esto es un doble», y por qué es un Symbol y no un booleano.
@@ -797,8 +799,30 @@ export class GestorDeTareasEnMemoria implements GestorDeTareasPort {
       transiciones?: Record<string, TransicionDelGestor[]>;
       /** El nombre visible de quien tiene la sesión del conector: lo que `mias` compara con `asignado`. */
       yo?: string;
+      /**
+       * IXCODE-15, la forma de Notion: con `encontrados`, el doble BUSCA proyectos (y sin él no
+       * tiene el método, como Jira); con `descripciones`, DESCRIBE cada uno por su `proyecto`
+       * —y entonces `vincular` comprueba con esto y no con `proyectos(sitio)`—. Uno que no esté
+       * en la tabla se describe con un motivo.
+       */
+      encontrados?: ProyectoEncontrado[];
+      descripciones?: Record<string, DescripcionDelProyecto>;
+      /** Lo que contesta `admiteMias`. Ausente = `true`, como Jira. */
+      admiteMias?: boolean;
     } = {}
-  ) {}
+  ) {
+    const { encontrados, descripciones } = datos;
+    if (encontrados !== undefined) {
+      this.buscarProyectos = async (texto: string) => encontrados.filter((p) => p.nombre.toLowerCase().includes(texto.trim().toLowerCase()));
+    }
+    if (descripciones !== undefined) {
+      this.describirProyecto = async (v: Vinculo) => descripciones[v.proyecto] ?? { motivo: `no existe ${v.proyecto}` };
+    }
+  }
+  /** Solo existen si los datos los piden: su AUSENCIA es la forma de Jira, y el servidor la mira. */
+  readonly buscarProyectos?: (texto: string) => Promise<ProyectoEncontrado[]>;
+  readonly describirProyecto?: (v: Vinculo) => Promise<DescripcionDelProyecto>;
+  async admiteMias(_v: Vinculo) { return this.datos.admiteMias ?? true; }
   async sitios() { return this.datos.sitios ?? []; }
   async proyectos(sitio: string) { return this.datos.proyectos?.[sitio] ?? []; }
   async pendientes(_v: Vinculo, texto?: string, opciones?: OpcionesDePendientes) {

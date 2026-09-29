@@ -1,24 +1,31 @@
 /**
  * El gestor de tareas de un proyecto (IXCODE-11), como PUERTO: el panel del proyecto lista las
  * pendientes, abre una sesión con una, y al empezar y al cerrar escribe en él —siempre el HARNESS,
- * con la aprobación de la persona, nunca el agente—. Hoy lo implementa un solo adaptador, Jira por
- * su conector MCP (`agent/conectores/gestorJira.ts`); nada fuera de él sabe que es Jira.
+ * con la aprobación de la persona, nunca el agente—. Lo implementan DOS adaptadores, cada uno por
+ * su conector MCP: Jira (`agent/conectores/gestorJira.ts`) y Notion (`gestorNotion.ts`, IXCODE-15);
+ * nada fuera de ellos sabe cuál es.
  *
  * Puro: `core/` no importa `@modelcontextprotocol` (`imports.test.ts`).
  */
 export type CategoriaDeTarea = "por-hacer" | "en-curso" | "terminada";
 
 export interface Vinculo {
-  /** El id del conector (`jira`). */
+  /** El id del conector (`jira`, `notion`). */
   conector: string;
-  /** El sitio del gestor (en Jira, el `cloudId`). */
+  /** El sitio del gestor (en Jira, el `cloudId`; en Notion, `SITIO_DE_NOTION`: un espacio por cuenta OAuth). */
   sitio: string;
-  /** La clave del proyecto en el gestor (`IXCODE`). */
+  /** El proyecto en el gestor: en Jira su clave (`IXCODE`); en Notion la URL `collection://…` del data source. */
   proyecto: string;
 }
 
+/** El único «sitio» de Notion: una cuenta OAuth ve UN espacio, y el MCP no expone su nombre (medido). */
+export const SITIO_DE_NOTION = "notion";
+
 export interface TareaDelGestor {
+  /** Lo que identifica la tarea ante el gestor: en Jira `IXCODE-11`, en Notion el UUID de la página. */
   clave: string;
+  /** Lo que se ENSEÑA cuando la clave no está hecha para leerse (Notion: el id corto). Ausente = se enseña `clave`. */
+  etiqueta?: string;
   titulo: string;
   estado: string;
   categoria: CategoriaDeTarea;
@@ -46,9 +53,47 @@ export interface OpcionesDePendientes {
   mias?: boolean;
 }
 
+/** Un proyecto encontrado por texto (`buscarProyectos`). En Notion `proyecto` es el id de la BASE,
+ *  no su data source: el data source se resuelve al ELEGIRLA (`describirProyecto`), no en la lista. */
+export interface ProyectoEncontrado {
+  proyecto: string;
+  nombre: string;
+  /** Dónde vive, para distinguir dos bases con el mismo nombre («Hypergraph / Projects & Tasks»). */
+  ruta?: string;
+}
+
+/** Lo que el adaptador ENTENDIÓ del esquema de un proyecto: qué propiedad es el estado, cuál el título y cuál el asignado. */
+export interface EsquemaDelProyecto {
+  /** Lo que se guarda al vincular (en Notion, la URL `collection://…` del data source ya resuelto). */
+  proyecto: string;
+  nombre: string;
+  estado: { propiedad: string; opciones: { nombre: string; categoria: CategoriaDeTarea }[] };
+  titulo: string;
+  /** Ausente = la base no tiene una propiedad de persona, y entonces no hay «asignadas a mí». */
+  asignado?: string;
+  /** Cuántos data sources tiene la base cuando son VARIOS (se usa el primero, y se dice). */
+  fuentes?: number;
+}
+
+/** O lo entendido, o por qué esa base no vale como gestor. */
+export type DescripcionDelProyecto = { esquema: EsquemaDelProyecto } | { motivo: string };
+
 export interface GestorDeTareasPort {
   sitios(): Promise<{ id: string; nombre: string; url?: string }[]>;
   proyectos(sitio: string): Promise<{ clave: string; nombre: string }[]>;
+  /**
+   * Buscar proyectos por texto (IXCODE-15). Opcional: Jira no lo implementa —sus proyectos se eligen
+   * de la lista de `proyectos(sitio)`—, y quien no lo tiene contesta con un motivo, no con una lista vacía.
+   */
+  buscarProyectos?(texto: string): Promise<ProyectoEncontrado[]>;
+  /**
+   * Lo que se entiende del esquema de un proyecto (`v.proyecto` puede ser lo que dio `buscarProyectos`
+   * o lo ya vinculado). Opcional: quien lo tiene, `vincular` lo usa para comprobar que el proyecto vale
+   * ANTES de escribir; quien no (Jira), comprueba contra `proyectos(sitio)` como siempre.
+   */
+  describirProyecto?(v: Vinculo): Promise<DescripcionDelProyecto>;
+  /** Si «asignadas a mí» tiene sentido para este vínculo. No lanza: lo que no se sabe es `false`. */
+  admiteMias(v: Vinculo): Promise<boolean>;
   /** `opciones.mias`: solo las asignadas a quien tiene la sesión del conector (en Jira, `currentUser()`). */
   pendientes(v: Vinculo, texto?: string, opciones?: OpcionesDePendientes): Promise<TareaDelGestor[]>;
   ficha(v: Vinculo, clave: string): Promise<FichaDelGestor>;
@@ -60,6 +105,109 @@ export interface GestorDeTareasPort {
 /** Una clave de proyecto de Jira: MAYÚSCULAS, dígitos y `_`, empezando por letra. Entra en una JQL. */
 export function motivoDeClaveDeProyecto(clave: string): string | undefined {
   return /^[A-Z][A-Z0-9_]+$/.test(clave) ? undefined : `«${clave}» no es una clave de proyecto (mayúsculas, dígitos y _, empezando por letra)`;
+}
+
+/** Un UUID con guiones, en minúsculas: la forma de los ids de Notion (medido). */
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+
+/** Un data source de Notion: `collection://<uuid>`. Es lo que se guarda como `proyecto` del vínculo. */
+export function motivoDeFuenteDeNotion(proyecto: string): string | undefined {
+  return new RegExp(`^collection://${UUID}$`).test(proyecto) ? undefined : "no es un data source de Notion (collection://…)";
+}
+
+/**
+ * La regla de qué `proyecto` vale, SEGÚN el conector (IXCODE-15): la clave de Jira entra en una JQL,
+ * la URL de Notion en un `notion-fetch` y como tabla de un SQL. Un conector que no es un gestor
+ * conocido no tiene regla que lo acepte. Única, para `config.ts#validar`, `vincular` y los adaptadores.
+ */
+export function motivoDeProyectoInaceptable(conector: string, proyecto: string): string | undefined {
+  if (conector === "jira") return motivoDeClaveDeProyecto(proyecto);
+  if (conector === "notion") return motivoDeFuenteDeNotion(proyecto);
+  return `«${conector}» no es un gestor de tareas`;
+}
+
+/**
+ * La descripción de la regla, SIN el valor: para un aviso de `config.ts`, que nunca lleva la
+ * entrada (ni siquiera a través del motivo de otra función, que la interpola).
+ */
+export function formaDeProyecto(conector: string): string {
+  if (conector === "jira") return "una clave de proyecto válida (mayúsculas, dígitos y _, empezando por letra)";
+  if (conector === "notion") return "un data source de Notion (collection://…)";
+  return "de un gestor de tareas conocido (jira o notion)";
+}
+
+/**
+ * Lo que `describir` acepta de Notion: el id de una BASE (con o sin guiones, como sale de
+ * `notion-search` o de una URL) o un data source ya resuelto. Entra en un `notion-fetch`, no en SQL.
+ */
+export function motivoDeReferenciaDeNotion(ref: string): string | undefined {
+  const r = ref.toLowerCase();
+  if (new RegExp(`^${UUID}$`).test(r) || /^[0-9a-f]{32}$/.test(r) || motivoDeFuenteDeNotion(r) === undefined) return undefined;
+  return "no es una base de Notion (su id) ni un data source (collection://…)";
+}
+
+/** Un identificador de SQLite entre comillas dobles: la comilla de dentro se DOBLA. */
+function identificadorSql(nombre: string): string {
+  return `"${nombre.replace(/"/g, '""')}"`;
+}
+
+/** El texto de un `LIKE … ESCAPE '\\'`: la barra, `%` y `_` se escapan para que cuenten como letras. */
+function literalDeLike(texto: string): string {
+  return texto.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/** Cuántas pendientes se piden a Notion de una vez: el mismo tope que en Jira (`PENDIENTES_POR_CONSULTA`). */
+export const PENDIENTES_DE_NOTION = 100;
+
+/**
+ * El SQL de las pendientes de un data source de Notion (IXCODE-15), con `params` para `?`: NUNCA
+ * se interpola un texto de la persona. Los nombres de propiedad vienen del ESQUEMA de Notion (no
+ * del cliente), pero son identificadores y no parámetros, así que se citan con la comilla doblada.
+ *
+ * - Pendiente = estado fuera de los del grupo `complete`, O sin estado (en SQL, `NULL NOT IN (…)`
+ *   no es cierto, y una tarea recién creada sin estado desaparecería). Sin opciones `complete`,
+ *   no hay cláusula: `IN ()` no es SQL.
+ * - `texto`: sobre el título, `LIKE ? ESCAPE '\\'` (medido: el SQLite de Notion acepta ESCAPE).
+ * - `yo`: el id de quien tiene la sesión; la columna de persona es un JSON `["user://…"]` (medido).
+ * - `ORDER BY createdTime DESC`: la tabla que expone el MCP no trae la última edición (medido).
+ */
+export function sqlDePendientes(
+  esquema: Pick<EsquemaDelProyecto, "proyecto" | "estado" | "titulo" | "asignado">,
+  texto?: string,
+  opciones: { yo?: string } = {},
+): { query: string; params: string[] } {
+  const estado = identificadorSql(esquema.estado.propiedad);
+  const titulo = identificadorSql(esquema.titulo);
+  const cerradas = esquema.estado.opciones.filter((o) => o.categoria === "terminada").map((o) => o.nombre);
+  const columnas = ["id", "url", estado, titulo, ...(esquema.asignado === undefined ? [] : [identificadorSql(esquema.asignado)])];
+  const donde: string[] = [];
+  const params: string[] = [];
+  if (cerradas.length > 0) {
+    donde.push(`(${estado} IS NULL OR ${estado} NOT IN (${cerradas.map(() => "?").join(", ")}))`);
+    params.push(...cerradas);
+  }
+  if (opciones.yo !== undefined) {
+    if (esquema.asignado === undefined) throw new Error("esta base no tiene una propiedad de persona");
+    donde.push(`${identificadorSql(esquema.asignado)} LIKE ? ESCAPE '\\'`);
+    params.push(`%${literalDeLike(`user://${opciones.yo}`)}%`);
+  }
+  const t = texto?.trim() ?? "";
+  if (t !== "") {
+    donde.push(`${titulo} LIKE ? ESCAPE '\\'`);
+    params.push(`%${literalDeLike(t)}%`);
+  }
+  const where = donde.length === 0 ? "" : ` WHERE ${donde.join(" AND ")}`;
+  return {
+    query: `SELECT ${columnas.join(", ")} FROM ${identificadorSql(esquema.proyecto)}${where} ORDER BY createdTime DESC LIMIT ${PENDIENTES_DE_NOTION}`,
+    params,
+  };
+}
+
+/** La categoría de un GRUPO de estado de Notion: `current`/`future` (y lo desconocido), por hacer. */
+export function categoriaDeGrupoDeNotion(grupo: string): CategoriaDeTarea {
+  if (grupo === "in_progress") return "en-curso";
+  if (grupo === "complete") return "terminada";
+  return "por-hacer";
 }
 
 /** Una cadena JQL entre comillas dobles: se escapan la barra y la comilla. */

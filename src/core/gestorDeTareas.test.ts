@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   categoriaDeEstado,
+  categoriaDeGrupoDeNotion,
   comentarioDeCierre,
+  formaDeProyecto,
+  motivoDeFuenteDeNotion,
+  motivoDeProyectoInaceptable,
+  motivoDeReferenciaDeNotion,
+  sqlDePendientes,
   jqlDePendientes,
   motivoDeClaveDeProyecto,
   transicionPropuesta,
@@ -162,4 +168,96 @@ describe("comentarioDeCierre", () => {
   it("siempre cierra con la firma del harness", () => {
     expect(comentarioDeCierre(base).endsWith("— escrito por xonecode")).toBe(true);
   });
+});
+
+describe("IXCODE-15: la regla del proyecto SEGÚN el conector", () => {
+  const FUENTE = "collection://ea517d0b-bf30-4b08-8681-dc9c30f5e783";
+  it("Jira sigue con su clave, Notion con su data source", () => {
+    expect(motivoDeProyectoInaceptable("jira", "IXCODE")).toBeUndefined();
+    expect(motivoDeProyectoInaceptable("jira", FUENTE)).toBeTypeOf("string");
+    expect(motivoDeProyectoInaceptable("notion", FUENTE)).toBeUndefined();
+    expect(motivoDeProyectoInaceptable("notion", "IXCODE")).toBeTypeOf("string");
+  });
+  it.each([
+    "collection://EA517D0B-bf30-4b08-8681-dc9c30f5e783",
+    "collection://ea517d0b-bf30-4b08-8681-dc9c30f5e783 ",
+    'collection://ea517d0b-bf30-4b08-8681-dc9c30f5e783" OR 1=1',
+    "{{collection://ea517d0b-bf30-4b08-8681-dc9c30f5e783}}",
+    "ea517d0b-bf30-4b08-8681-dc9c30f5e783",
+  ])("Notion rechaza %s como proyecto vinculado", (p) => expect(motivoDeFuenteDeNotion(p)).toBeTypeOf("string"));
+  it("un conector que no es un gestor no tiene regla que lo acepte", () => {
+    expect(motivoDeProyectoInaceptable("deepwiki", "IXCODE")).toContain("no es un gestor");
+  });
+  it("la forma se describe SIN el valor (para los avisos de config.ts)", () => {
+    expect(formaDeProyecto("jira")).toContain("clave");
+    expect(formaDeProyecto("notion")).toContain("collection://");
+  });
+  it("«describir» acepta el id de una base (con o sin guiones) o un data source, y nada más", () => {
+    expect(motivoDeReferenciaDeNotion("06aeb13b-13aa-442f-876d-55626fa55b9f")).toBeUndefined();
+    expect(motivoDeReferenciaDeNotion("06aeb13b13aa442f876d55626fa55b9f")).toBeUndefined();
+    expect(motivoDeReferenciaDeNotion(FUENTE)).toBeUndefined();
+    expect(motivoDeReferenciaDeNotion("https://evil.example/x")).toBeTypeOf("string");
+    expect(motivoDeReferenciaDeNotion("../../x")).toBeTypeOf("string");
+  });
+});
+
+describe("IXCODE-15: sqlDePendientes (Notion)", () => {
+  const ESQUEMA = {
+    proyecto: "collection://ea517d0b-bf30-4b08-8681-dc9c30f5e783",
+    estado: {
+      propiedad: "Status",
+      opciones: [
+        { nombre: "Not started", categoria: "por-hacer" as const },
+        { nombre: "In progress", categoria: "en-curso" as const },
+        { nombre: "Done", categoria: "terminada" as const },
+      ],
+    },
+    titulo: "Name",
+    asignado: "Assigned",
+  };
+  it("pendientes = fuera de las terminadas O sin estado; lo reciente arriba; tope de 100", () => {
+    expect(sqlDePendientes(ESQUEMA)).toEqual({
+      query:
+        'SELECT id, url, "Status", "Name", "Assigned" FROM "collection://ea517d0b-bf30-4b08-8681-dc9c30f5e783" WHERE ("Status" IS NULL OR "Status" NOT IN (?)) ORDER BY createdTime DESC LIMIT 100',
+      params: ["Done"],
+    });
+  });
+  it("el texto va por PARÁMETRO, con % _ y la barra escapados; nunca en la query", () => {
+    const { query, params } = sqlDePendientes(ESQUEMA, ` 50%_a\\b' OR 1=1 `);
+    expect(query).toContain(`"Name" LIKE ? ESCAPE '\\'`);
+    expect(query).not.toContain("OR 1=1");
+    expect(params).toEqual(["Done", "%50\\%\\_a\\\\b' OR 1=1%"]);
+  });
+  it("un texto de espacios no filtra", () => {
+    expect(sqlDePendientes(ESQUEMA, "   ")).toEqual(sqlDePendientes(ESQUEMA));
+  });
+  it("«mías» filtra la columna de persona por el id, por parámetro", () => {
+    const { query, params } = sqlDePendientes(ESQUEMA, undefined, { yo: "47b38fa1-cb9d-4dd5-acdb-f23e9ed54a28" });
+    expect(query).toContain(`"Assigned" LIKE ? ESCAPE '\\'`);
+    expect(params).toEqual(["Done", "%user://47b38fa1-cb9d-4dd5-acdb-f23e9ed54a28%"]);
+  });
+  it("«mías» sin propiedad de persona LANZA: ni todas ni ninguna", () => {
+    const { asignado: _a, ...sin } = ESQUEMA;
+    expect(() => sqlDePendientes(sin, undefined, { yo: "x" })).toThrow("no tiene una propiedad de persona");
+    expect(sqlDePendientes(sin).query).toBe(
+      'SELECT id, url, "Status", "Name" FROM "collection://ea517d0b-bf30-4b08-8681-dc9c30f5e783" WHERE ("Status" IS NULL OR "Status" NOT IN (?)) ORDER BY createdTime DESC LIMIT 100'
+    );
+  });
+  it("sin opciones terminadas no hay cláusula de estado (IN () no es SQL)", () => {
+    const e = { ...ESQUEMA, estado: { propiedad: "Status", opciones: [{ nombre: "A", categoria: "por-hacer" as const }] } };
+    expect(sqlDePendientes(e).query).not.toContain("WHERE");
+    expect(sqlDePendientes(e).params).toEqual([]);
+  });
+  it("un nombre de propiedad con comillas se cita DOBLÁNDOLAS", () => {
+    const e = { ...ESQUEMA, titulo: 'Nom"bre', estado: { ...ESQUEMA.estado, propiedad: 'Es"tado' } };
+    const { query } = sqlDePendientes(e);
+    expect(query).toContain('"Nom""bre"');
+    expect(query).toContain('("Es""tado" IS NULL OR "Es""tado" NOT IN (?))');
+  });
+});
+
+describe("IXCODE-15: categoriaDeGrupoDeNotion", () => {
+  it.each([
+    ["to_do", "por-hacer"], ["in_progress", "en-curso"], ["complete", "terminada"], ["current", "por-hacer"], ["future", "por-hacer"], ["otro", "por-hacer"],
+  ])("%s → %s", (g, c) => expect(categoriaDeGrupoDeNotion(g)).toBe(c));
 });

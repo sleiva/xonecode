@@ -24,7 +24,7 @@ import {
   esProveedorPersonalizado, motivoDeEndpointInaceptable, motivoDeSlugInaceptable,
   type Proveedor, type ProveedorDeclarado,
 } from "./modelos.js";
-import { motivoDeClaveDeProyecto, type Vinculo } from "./gestorDeTareas.js";
+import { formaDeProyecto, motivoDeProyectoInaceptable, type Vinculo } from "./gestorDeTareas.js";
 import type { Papel } from "./ports.js";
 
 /** La configuración: modelos y proveedores. Nunca claves. */
@@ -372,12 +372,12 @@ export function validar(
         });
         continue;
       }
-      // El motivo de `motivoDeClaveDeProyecto` interpola la propia clave rechazada
-      // («"${clave}" no es una clave de proyecto…»): NO se usa en el aviso, porque un
-      // aviso nunca lleva el valor de entrada, ni siquiera vía el motivo de otra función.
-      if (motivoDeClaveDeProyecto(valor.proyecto) !== undefined) {
+      // La regla depende del CONECTOR (IXCODE-15: la clave de Jira, el data source de Notion),
+      // y su motivo interpola el valor rechazado: NO se usa en el aviso, porque un aviso nunca
+      // lleva el valor de entrada, ni siquiera vía el motivo de otra función — va la FORMA.
+      if (motivoDeProyectoInaceptable(valor.conector, valor.proyecto) !== undefined) {
         avisos.push({
-          texto: `«${ruta}»: «gestorDeTareas.proyecto» no es una clave de proyecto válida (mayúsculas, dígitos y _, empezando por letra); se descarta «gestorDeTareas».`,
+          texto: `«${ruta}»: «gestorDeTareas.proyecto» no es ${formaDeProyecto(valor.conector)}; se descarta «gestorDeTareas».`,
           severidad: "aviso",
         });
         continue;

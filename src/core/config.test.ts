@@ -246,6 +246,22 @@ describe("validar", () => {
     expect(avisos[0]!.texto).not.toContain("clave-secreta-mala");
   });
 
+  it("IXCODE-15: acepta un gestorDeTareas de Notion con su data source, y la regla es la de SU conector", () => {
+    const notion = { conector: "notion", sitio: "notion", proyecto: "collection://ea517d0b-bf30-4b08-8681-dc9c30f5e783" };
+    expect(validar({ gestorDeTareas: notion }, RUTA, "proyecto")).toEqual({ config: { gestorDeTareas: notion }, avisos: [] });
+    // Una clave de Jira bajo Notion no vale, ni un data source bajo Jira: cada una con la forma de SU regla, sin el valor.
+    const a = validar({ gestorDeTareas: { ...notion, proyecto: "IXCODE" } }, RUTA, "proyecto");
+    expect(a.config.gestorDeTareas).toBeUndefined();
+    expect(a.avisos[0]!.texto).toContain("collection://");
+    expect(a.avisos[0]!.texto).not.toContain("IXCODE");
+    const b = validar({ gestorDeTareas: { conector: "jira", sitio: "c", proyecto: notion.proyecto } }, RUTA, "proyecto");
+    expect(b.config.gestorDeTareas).toBeUndefined();
+    expect(b.avisos[0]!.texto).toContain("clave de proyecto");
+    expect(b.avisos[0]!.texto).not.toContain("ea517d0b");
+    // Un conector que no es un gestor conocido tampoco.
+    expect(validar({ gestorDeTareas: { conector: "deepwiki", sitio: "x", proyecto: "IXCODE" } }, RUTA, "proyecto").config.gestorDeTareas).toBeUndefined();
+  });
+
   it("descarta el fichero entero si el JSON raíz no es objeto", () => {
     for (const bruto of [[1, 2], "texto", 42, null]) {
       const { config, avisos } = validar(bruto, RUTA, "global");
