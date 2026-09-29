@@ -143,3 +143,24 @@ export function seEscribeSinPreguntar(opciones: {
   if (opciones.modo !== "autonomo") return false;
   return opciones.interactivo;
 }
+
+/**
+ * Cuántas preguntas de UN turno se contestan solas en modo autónomo. Un modelo que encadena
+ * preguntas no puede dejar el turno dando vueltas: pasado el tope, la siguiente le llega a la persona.
+ */
+export const TOPE_DE_PREGUNTAS_CONTESTADAS_SOLAS = 8;
+
+const MARCA_DE_RECOMENDADA = /\((?:recommended|recomendad[ao])\)/i;
+
+/**
+ * La opción que el agente MARCÓ como recomendada, o `undefined`. Solo cuenta lo que el modelo
+ * escribió: sin marca no se elige por él, y la pregunta llega a la persona.
+ *
+ * **El modo autónomo quitaba la pregunta de las ESCRITURAS y no la del agente**, y una sesión
+ * autónoma se paraba igual a pedir «alcance» y «tipografías», cada una con su recomendada.
+ * Contestarla sola es decidir por la persona, así que se DICE en el chat, con la opción elegida.
+ */
+export function opcionRecomendada(opciones: readonly string[]): string | undefined {
+  const marcadas = opciones.filter((o) => MARCA_DE_RECOMENDADA.test(o));
+  return marcadas.length === 1 ? marcadas[0] : undefined;
+}

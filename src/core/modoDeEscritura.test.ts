@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  opcionRecomendada,
   MODO_POR_OMISION,
   TOPE_DE_RONDAS_DE_CONSOLA,
   esModoDeEscritura,
@@ -67,5 +68,15 @@ describe("el modo de escritura", () => {
     // constante de la tarea y no contra un 20 literal, porque el número sale de ESA medida
     // — si alguien afina aquella, este test dice que hay que mirar esta.
     expect(TOPE_DE_RONDAS_DE_CONSOLA).toBe(TOPE_DE_RONDAS_DE_TAREA);
+  });
+});
+
+describe("la opción recomendada de una pregunta", () => {
+  it("solo cuenta la que el agente marcó, y solo si es UNA", () => {
+    expect(opcionRecomendada(["Básica", "Científica (Recommended)"])).toBe("Científica (Recommended)");
+    expect(opcionRecomendada(["Básica (Recomendada)", "Otra"])).toBe("Básica (Recomendada)");
+    expect(opcionRecomendada(["Login", "Menú"])).toBeUndefined();
+    expect(opcionRecomendada(["A (Recommended)", "B (Recommended)"])).toBeUndefined();
+    expect(opcionRecomendada([])).toBeUndefined();
   });
 });

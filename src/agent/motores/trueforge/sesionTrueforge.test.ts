@@ -787,6 +787,46 @@ describe("una sesión con el motor TrueForge", () => {
     expect(dos.tokens.join("")).toBe("Vale, el menú.");
   }, 30_000);
 
+  describe("en modo autónomo, lo que el agente ya recomendó se contesta solo", () => {
+    const pregunta = (id: string, question: string, options: string[]) =>
+      new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "ask_user_question", args: JSON.stringify({ question, options }) }] });
+
+    it("con una recomendada: no llega a la persona, vuelve a su hilo y el turno sigue", async () => {
+      const raiz = proyecto();
+      const { m, vistos } = modelosConGuion([
+        [pregunta("q1", "¿Qué alcance?", ["Básica", "Científica (Recommended)"])],
+        [new AIMessageChunk({ content: "Hecho, científica." })],
+      ]);
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true });
+      const uno = piel();
+      await s.turno("haz la calculadora", uno.p);
+      expect(vistos).toHaveLength(2);
+      expect(vistos[1]!.join("\n")).toContain("Científica (Recommended)");
+      expect(uno.tokens.join("")).toContain("Hecho, científica.");
+      expect(uno.tokens.join("")).not.toContain("1. Básica");
+    }, 30_000);
+
+    it("en supervisado la pregunta llega a la persona, aunque lleve recomendada", async () => {
+      const raiz = proyecto();
+      const { m, vistos } = modelosConGuion([[pregunta("q1", "¿Qué alcance?", ["Básica", "Científica (Recommended)"])]]);
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+      const uno = piel();
+      await s.turno("haz la calculadora", uno.p);
+      expect(vistos).toHaveLength(1);
+      expect(uno.tokens.join("")).toMatch(/1\. Básica/);
+    }, 30_000);
+
+    it("sin recomendada, también llega a la persona", async () => {
+      const raiz = proyecto();
+      const { m, vistos } = modelosConGuion([[pregunta("q1", "¿Qué pantalla?", ["Login", "Menú"])]]);
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true });
+      const uno = piel();
+      await s.turno("arregla", uno.p);
+      expect(vistos).toHaveLength(1);
+      expect(uno.tokens.join("")).toMatch(/1\. Login/);
+    }, 30_000);
+  });
+
   it("solo el ORQUESTADOR puede preguntar: un hijo no tiene a nadie delante", async () => {
     const raiz = proyecto();
     const { m, toolsPorLlamada } = modelosConGuion([

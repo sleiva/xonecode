@@ -23,6 +23,7 @@
  *   (`modeloExterno.ts`).
  * - NO: un presupuesto GLOBAL por turno (la suma de todos los hilos), que deepagents tampoco tiene.
  */
+import { TOPE_DE_PREGUNTAS_CONTESTADAS_SOLAS, opcionRecomendada } from "../../../core/modoDeEscritura.js";
 import { claseDeTrabajo } from "../../../core/esfuerzo.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -898,6 +899,7 @@ export async function abrirSesionTrueforge(
       const memoriaDescartada = avisoDeMemoria;
       avisoDeMemoria = undefined;
       let cortadoPorTope = false;
+      let preguntasSolas = 0;
       let sinResolver = 0;
       // El veredicto del turno, con las MISMAS reglas que deepagents (`verificacion.ts`).
       let veredicto: "verde" | "rojo" | "no-corrio" = "no-corrio";
@@ -923,6 +925,27 @@ export async function abrirSesionTrueforge(
           const preguntas: Pendiente[] = [];
           yield* paso(lote, senal, pendientes, preguntas);
           if (pendientes.length === 0) {
+            // **En modo autónomo, lo que el agente ya recomendó se contesta SOLO**, y se dice en el
+            // chat. Todas o ninguna: una pregunta sin recomendada le llega a la persona, y las demás
+            // no pueden quedarse sin contestar. Con tope, para que no dé vueltas.
+            const solas = preguntas.map((q) => ({ q, elegida: opcionRecomendada(consultaDe(q.args).opciones) }));
+            if (
+              preguntas.length > 0 &&
+              opciones.sinAprobacion?.() === true &&
+              solas.every((x) => x.elegida !== undefined) &&
+              preguntasSolas + preguntas.length <= TOPE_DE_PREGUNTAS_CONTESTADAS_SOLAS
+            ) {
+              preguntasSolas += preguntas.length;
+              for (const { q, elegida } of solas) {
+                yield {
+                  tipo: "aviso",
+                  texto: `modo autónomo: a «${consultaDe(q.args).pregunta}» contesto la recomendada: ${elegida ?? ""}`,
+                  severidad: "aviso",
+                };
+              }
+              lote = solas.map(({ q, elegida }) => ({ type: "user.tool_response", thread_id: q.hilo, tool_call_id: q.id, content: elegida }));
+              continue;
+            }
             // El orquestador PREGUNTA: el turno acaba aquí con la pregunta a la vista, y lo que la
             // persona escriba después vuelve como la respuesta de esa tool (`turno`, arriba).
             const pregunta = preguntas[0];

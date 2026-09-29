@@ -551,7 +551,10 @@ detiene.
   !eof()` igual que `pedirDecisiones`; se pregunta en cada RONDA y no al abrir; se DICE dos veces
   (aviso por turno, y `alta.modoDeEscritura`); el mismo predicado alcanza a los motores externos.
   **Gobierna las escrituras LOCALES y nada más**: `/sync subir` conserva su plan y aprobación
-  fail-closed en los dos modos. El tope de rondas de la consola es el MISMO 20 que el de una tarea
+  fail-closed en los dos modos. **En TrueForge, además, una pregunta del agente que trae UNA opción marcada
+  `(Recommended)` se contesta sola en autónomo** (`opcionRecomendada`, tope
+  `TOPE_DE_PREGUNTAS_CONTESTADAS_SOLAS`) y se DICE en el chat; sin marca, o en supervisado, llega a la persona.
+  El tope de rondas de la consola es el MISMO 20 que el de una tarea
   (`TOPE_DE_RONDAS_DE_CONSOLA`); sin nadie delante se queda el cinco de `MAX_APPROVAL_ROUNDS`. Lo
   que `/aprobacion` EXPLICA lo decide el destino, no la línea (`Consola.modoALaVista`): donde el
   modo está siempre a la vista (la web) sale una línea; donde no (el terminal) salen los tres
