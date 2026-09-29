@@ -86,6 +86,7 @@ import { entornoConDepuracion } from "../../turno/depuracion.js";
 import { detalleDe, parametrosDe } from "../../turno/resumenDeTool.js";
 import { apartarMemoria, cargarMemoria, fotoSaneada, guardarMemoria, textoDeMemoriaDescartada, type FotoDeHilo } from "./memoriaTrueforge.js";
 import { crearNota, sobrantes, type Nota } from "./notas.js";
+import { conResumenSeguro } from "./resumenSeguro.js";
 import { crearControlDeDetencion, RESUMEN_DE_RELLENO } from "./detencion.js";
 import type { ToolDeLangchain } from "./toolsPropias.js";
 import { crearNavegacionXone } from "../../grafo/navegacionXone.js";
@@ -713,7 +714,10 @@ export async function abrirSesionTrueforge(
          * instrucciones van en el prompt de sistema —aquí `instruction`, en un hijo su
          * capability—, que no se compacta.
          */
-        contextCompaction({ definition: definicion as never, compactionThresholdTokens: UMBRAL_RESUMEN_TOKENS }),
+        contextCompaction({
+          definition: { ...definicion, modelClient: conResumenSeguro(definicion.modelClient as never, (t) => anotarPaso("trueforge.compactacion", t)()) } as never,
+          compactionThresholdTokens: UMBRAL_RESUMEN_TOKENS,
+        }),
         // `ask_user_question`, SOLO en el raíz —la librería tampoco se la da a un hijo—: es el
         // único que tiene a una persona delante.
         askUserQuestion(),
