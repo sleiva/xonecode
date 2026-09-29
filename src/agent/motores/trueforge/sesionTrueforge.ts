@@ -25,7 +25,7 @@
  */
 import { TOPE_DE_PREGUNTAS_CONTESTADAS_SOLAS, opcionRecomendada } from "../../../core/modoDeEscritura.js";
 import { claseDeTrabajo } from "../../../core/esfuerzo.js";
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import winston from "winston";
 import { AgentThread, AgentThreadOrchestrator, EventType, NOOP_AGENT_TRACING, askUserQuestion, contextCompaction, dynamicSubAgents } from "./trueforge.js";
@@ -79,6 +79,7 @@ import {
   capacidadesDelEspecialista,
   clasesDeTools,
   toolsDe,
+  capacidadDeEspera,
 } from "./capacidades.js";
 import { crearDiagnosticoDeTools, type DiagnosticoDeTools } from "../../turno/diagnosticoDeTools.js";
 import { encenderTrazaDeErrores } from "../../trazaDeErroresEnDisco.js";
@@ -88,6 +89,7 @@ import { detalleDe, parametrosDe } from "../../turno/resumenDeTool.js";
 import { apartarMemoria, cargarMemoria, fotoSaneada, guardarMemoria, textoDeMemoriaDescartada, type FotoDeHilo } from "./memoriaTrueforge.js";
 import { crearNota, sobrantes, type Nota } from "./notas.js";
 import { crearMemoriaDeEspecialistas } from "./memoriaDeEspecialistas.js";
+import { crearEsperas } from "./esperas.js";
 import { conResumenSeguro } from "./resumenSeguro.js";
 import { crearControlDeDetencion, RESUMEN_DE_RELLENO } from "./detencion.js";
 import type { ToolDeLangchain } from "./toolsPropias.js";
@@ -138,6 +140,34 @@ const BUCLE_DE_CALIDAD = [
  * el nombre de la tool y las fichas van escritas aquí, con la MISMA función que deepagents.
  */
 /**
+ * Lo que se le cuenta a quien ESPERÓ a otros especialistas, al soltarse: a quién esperó y qué hay en el disco.
+ * Solo NOMBRES —los recursos de `icons/` y los `ASSETS.md`/`TASKS.md` del plan—, nunca su contenido: es lo que dejó
+ * el otro, que no viaja por ningún canal más que el disco. Sin recursos que nombrar, un aviso corto.
+ */
+export function textoDeLoQueDejaronLosEsperados(raiz: string, esperadas: readonly string[]): string {
+  let recursos: string[] = [];
+  try {
+    recursos = readdirSync(join(raiz, "icons")).filter((f) => /\.(svg|png|jpg|jpeg)$/i.test(f)).sort();
+  } catch {
+    recursos = [];
+  }
+  let notas: string[] = [];
+  try {
+    notas = readdirSync(join(raiz, ".xonecode", "planes"))
+      .flatMap((p) => ["ASSETS.md"].filter((f) => existsSync(join(raiz, ".xonecode", "planes", p, f))).map((f) => `/planes/${p}/${f}`))
+      .sort();
+  } catch {
+    notas = [];
+  }
+  return [
+    `HAS ESPERADO a ${esperadas.join(", ")}, que trabajaba a la vez y ya ha terminado.`,
+    ...(recursos.length === 0 ? [] : [`Lo que hay ahora en icons/ (${String(recursos.length)}): ${recursos.join(", ")}.`]),
+    ...(notas.length === 0 ? [] : [`Lo que dejó escrito para ti: ${notas.join(", ")}. Léelo antes de escribir.`]),
+    "USA los recursos que te sirvan por su nombre exacto, y si no vas a usar alguno, dilo al devolver el trabajo.",
+  ].join("\n");
+}
+
+/**
  * Lo que se le dice a quien puede llamar a otros. Cada llamada de estas es un hilo nuevo que solo sabe lo que le
  * escribas (aunque recuerde sus encargos anteriores de la sesión), y lo que te devuelve es lo que vio, no un
  * veredicto: decidir si lo que escribiste funciona sigue siendo cosa tuya, con lo que ese hijo te traiga.
@@ -180,7 +210,7 @@ export function textoDelBucle(llama: readonly string[], opciones: { conCritica?:
 
 export function notaDeDelegacion(
   agentes: readonly Agente[],
-  opciones: { conIconos?: boolean; conComparacion?: boolean; conMemoria?: boolean; conBucle?: boolean } = {}
+  opciones: { conIconos?: boolean; conComparacion?: boolean; conMemoria?: boolean; conBucle?: boolean; conEsperas?: boolean } = {}
 ): string {
   if (agentes.length === 0) return "";
   return [
@@ -190,6 +220,15 @@ export function notaDeDelegacion(
     "entiende `create_sub_agent` y `name`. Las fichas de los especialistas:",
     ...agentes.map((a) => `- ${a.nombre}: ${fichaDeAgente(a, opciones)}`),
     ...(opciones.conComparacion === true ? ["", BUCLE_DE_CALIDAD] : []),
+    ...(opciones.conEsperas === true
+      ? [
+          "",
+          "ESPERAS ENTRE ESPECIALISTAS: si lanzas a la vez a developer-xone y a designer-xone, el desarrollador ESPERA a que el",
+          "diseñador termine antes de hacer nada (lo que el diseñador produce —los recursos de `icons/`— lo necesita el `.xne`).",
+          "Por eso reparte así: al diseñador los recursos, con los NOMBRES de fichero que ya fija el plan; al desarrollador la",
+          "pantalla que los usa. No hace falta que se lo cuentes al desarrollador: al soltarse ve qué hay en `icons/`.",
+        ]
+      : []),
     ...(opciones.conBucle === true
       ? [
           "",
@@ -346,6 +385,11 @@ export interface OpcionesDeSesionTrueforge {
    */
   bucleDelDesarrollador?: boolean;
   /**
+   * Que un hijo espere al fin de los que su `.md` declara en `espera` cuando el orquestador los lanza a la vez
+   * (`esperas.ts`). Por omisión SÍ: es una regla de coherencia, no una palanca de coste.
+   */
+  esperasEntreHijos?: boolean;
+  /**
    * El crítico VISUAL y el JUEZ del turno, los MISMOS puertos que deepagents
    * (`turnoReal.ts#abrirSesionReal`): llaman a un modelo, así que entran por parámetro y
    * `npm test` no pregunta a nadie. Ausente es «esta ejecución no tiene», nunca «está bien».
@@ -433,6 +477,8 @@ export async function abrirSesionTrueforge(
   const especialistaDeHilo = new Map<string, string>();
   const conMemoriaDeEspecialistas = opciones.memoriaDeEspecialistas ?? process.env.XONECODE_SIN_MEMORIA_DE_ESPECIALISTAS !== "1";
   const conBucleDelDesarrollador = opciones.bucleDelDesarrollador ?? process.env.XONECODE_BUCLE_DEL_DEVELOPER === "1";
+  const conEsperas = opciones.esperasEntreHijos ?? true;
+  const esperas = crearEsperas();
   const memoriaDeEspecialistas = crearMemoriaDeEspecialistas();
   /** Los hijos con memoria que corren ahora: su hilo, para leer su historial al terminar. */
   const hijosConMemoria = new Map<string, { nombre: string; hilo: AgentThread; iniciales: unknown[] }>();
@@ -692,6 +738,7 @@ export async function abrirSesionTrueforge(
     if (!concedido) anotarPaso("trueforge.llamada", `${quienPide ?? "?"} pidió a ${params.request.name}: no está en su lista`)();
     const agente = concedido ? especialistas().find((a) => a.nombre === params.request.name) : undefined;
     detencion.nacio(params.threadId);
+    esperas.nacio(agente?.nombre ?? params.request.name, params.threadId);
     quienEs.set(params.threadId, agente?.nombre ?? params.request.name);
     if (agente !== undefined) especialistaDeHilo.set(params.threadId, agente.nombre);
     if (agente !== undefined && agente.motor !== "modelo") return hijoExterno(agente, params);
@@ -702,6 +749,13 @@ export async function abrirSesionTrueforge(
       propias: propiasDe,
       notas: capacidadDeNotasDeLaSesion,
       puedeLlamar: (a) => conBucleDelDesarrollador && (a.llama?.length ?? 0) > 0,
+      espera: (a) =>
+        conEsperas && (a.espera?.length ?? 0) > 0
+          ? capacidadDeEspera({
+              esperar: (hilo) => esperas.esperarA(a.espera ?? [], hilo),
+              alTerminar: (esperadas) => textoDeLoQueDejaronLosEsperados(raiz, esperadas),
+            })
+          : undefined,
       conShell: () =>
         montarBackend({
           entorno: entornoDeLaShellDelProyecto(raiz, opciones.artefactos),
@@ -812,10 +866,11 @@ export async function abrirSesionTrueforge(
   const nuevoOrquestador = (foto?: FotoDeHilo): AgentThreadOrchestrator => {
     // Los hijos que corrían no pueden seguir; lo que aprendieron sí se queda.
     memoriaDeEspecialistas.darPorMuertos();
+    esperas.darPorMuertos();
     hijosConMemoria.clear();
     const definicion = {
       modelClient: llm,
-      instruction: [promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas, conBucle: conBucleDelDesarrollador })].filter((l) => l !== "").join("\n\n"),
+      instruction: [promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas, conBucle: conBucleDelDesarrollador, conEsperas })].filter((l) => l !== "").join("\n\n"),
       // Por TURNO, porque el raíz se rehace desde su foto al final de cada uno (ver `turno`).
       iterationLimit: LIMITE_DE_LLAMADAS_DEL_RAIZ,
     };
@@ -951,6 +1006,7 @@ export async function abrirSesionTrueforge(
       }
       // Un hilo que agotó su tope se ANOTA en la traza, con quién era: el raíz y cualquier hijo.
       if (evento.type === "internal.agent.done") {
+        esperas.murio(deHilo);
         const h = hijosConMemoria.get(deHilo);
         if (h !== undefined) {
           hijosConMemoria.delete(deHilo);
@@ -1471,6 +1527,7 @@ export async function abrirSesionTrueforge(
       hilo = id ?? `tf-${Date.now()}`;
       // Otra conversación: lo que los especialistas recordaban era de la anterior.
       memoriaDeEspecialistas.olvidar();
+      esperas.darPorMuertos();
       hijosConMemoria.clear();
       // Un hilo NUEVO: lo que hubiera guardado con ese id no se pisa ni se carga a medias. Y una
       // pregunta de la conversación de antes no la contesta el primer mensaje de la nueva.

@@ -1116,6 +1116,9 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     // sin él, lo visual volvía al orquestador y el desarrollador salía en cuanto lo funcional estaba listo.
     // Es el dato; el texto que se lo explica lo pone la sesión.
     llama: ["device-controller", "designer-xone"],
+    // Si el orquestador lo lanza a la vez que al diseñador, espera a que este termine: sin eso escribía el `.xne` antes
+    // de que existieran los recursos que ese `.xne` tiene que usar. Solo TrueForge.
+    espera: ["designer-xone"],
     instrucciones: `${TRABAJAR_CON_PLAN}\n\n${MEMORIA_LEER}\n\n${MEMORIA_ESCRIBIR}`,
     origen: "semilla",
   },

@@ -466,3 +466,20 @@ describe("el campo `llama` de un subagente", () => {
     }
   });
 });
+
+describe("el campo `espera` de un subagente", () => {
+  const con = (linea: string) => leerAgente("x", `---\ndescripcion: hace algo\n${linea}\n---\ncuerpo`, "proyecto");
+
+  it("se lee como una lista y se escribe de vuelta", () => {
+    const r = con("espera: [designer-xone]");
+    expect("agente" in r && r.agente.espera).toEqual(["designer-xone"]);
+    if ("agente" in r) expect(escribirAgente(r.agente)).toContain("espera: [designer-xone]");
+  });
+
+  it("ausente o vacío, no hay campo", () => {
+    for (const l of ["motor: modelo", "espera: []", "espera:"]) {
+      const r = con(l);
+      expect("agente" in r && r.agente.espera).toBeUndefined();
+    }
+  });
+});

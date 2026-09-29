@@ -7585,3 +7585,25 @@ iconos (`buscar_icono`), el degradado del `=` (SVG) y las sombras y resplandores
 por omisión es la distancia de `comparar_capturas` por debajo del 10 % en vertical y en horizontal —la mejor pasada
 de la calculadora llegó a 7 % y 2 %— y el crítico sin diferencias de forma ni de estructura. El 10 % es provisional.
 
+## El desarrollador espera al diseñador
+
+**Qué se midió.** En calc7 el orquestador lanzó a `developer-xone` y a `designer-xone` a la vez. El desarrollador
+escribió `MenuPrincipal.xne` a las 21:31:45, cuando el diseñador aún tenía por escribir varios recursos; de los 26
+recursos de `icons/` del diseñador, **9 quedaron sin usar** (el resplandor del `=`, el fondo de la fila científica,
+el icono de retroceso…) y el desarrollador no volvió a mirar `icons/` ni el `ASSETS.md` del diseñador. Los nombres
+sí coincidían —el plan los fijaba—, así que no hubo referencias rotas: lo que se perdió fue trabajo, no enlaces.
+Ninguna regla del orquestador hablaba de paralelizar DELEGACIONES: la que hay (`REGLA_DE_ESCRITURAS_EN_PARALELO`) es
+de tools, y la cola por fichero solo evita que dos escriban el mismo a la vez.
+
+**Qué se hizo.** Un campo `espera: [designer-xone]` en el `.md` (`developer-xone` de serie lo lleva) y una capacidad
+que bloquea, antes de CADA llamada del hijo, mientras haya un hilo vivo de esos especialistas (`esperas.ts`,
+`capacidadDeEspera`). Al soltarse, el hijo recibe un mensaje con a quién esperó y qué hay en `icons/` y qué
+`ASSETS.md` hay en los planes —solo nombres—, y la orden de usar los recursos por su nombre exacto o decir cuáles no
+usa. Es de un solo sentido (quien declara espera al otro) y tiene un tope (`TOPE_DE_ESPERA_MS`, 20 min) por si dos
+se declararan mutuamente; un turno cortado o una conversación nueva libera a quien esperaba. Va encendido por
+omisión (`esperasEntreHijos`): es una regla de coherencia, no una palanca de coste. El orquestador lo sabe por su
+nota: recursos al diseñador con los nombres que fija el plan, la pantalla que los usa al desarrollador.
+
+**Sin medir.** Que esperar no alargue la pasada más de lo que gana; cuánto de lo que el diseñador deja acaba en
+la pantalla; y que la comprobación de recursos huérfanos y referencias rotas, pendiente, sea suficiente por sí sola.
+

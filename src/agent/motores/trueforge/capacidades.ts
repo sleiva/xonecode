@@ -265,6 +265,34 @@ export function capacidadDeSubagentes(): Capacidad {
   };
 }
 
+/**
+ * Espera a otros hilos ANTES de cada llamada al modelo (`esperas.ts`): mientras haya uno vivo de los que este
+ * especialista declara en `espera`, no llama. Al soltarse, cuenta con un mensaje de usuario a quién esperó y qué
+ * dejó (`alTerminar`), porque lo que el otro hizo no viaja por ningún canal más que el disco. No añade tools.
+ */
+export function capacidadDeEspera(opciones: {
+  esperar: (hilo: string) => Promise<string[]>;
+  alTerminar: (esperadas: string[]) => string | undefined;
+}): Capacidad {
+  return {
+    nombre: "espera",
+    tools: [],
+    capability: {
+      preLLMProcessors: [
+        {
+          async *processPreLLM(execution: { threadId: string }) {
+            const esperadas = await opciones.esperar(execution.threadId);
+            if (esperadas.length === 0) return;
+            const texto = opciones.alTerminar(esperadas);
+            if (texto === undefined) return;
+            yield { type: "internal.agent.context.append", context: [{ role: "user", content: texto }], output: [] };
+          },
+        },
+      ],
+    },
+  };
+}
+
 /** Lo que el backend y las tools de la sesión ponen para montar a un especialista. */
 export interface DependenciasDelEspecialista {
   backend: BackendDeFicheros & EscritorDeDesalojo;
@@ -276,6 +304,8 @@ export interface DependenciasDelEspecialista {
   notas: Capacidad;
   /** ¿Puede ESTE agente llamar a otros? Lo decide la sesión (su `.md` y el interruptor); ausente es que no. */
   puedeLlamar?: (agente: Agente) => boolean;
+  /** La espera de ESTE agente a otros hilos, si la declara y la sesión la concede. Ausente es que no espera. */
+  espera?: (agente: Agente) => Capacidad | undefined;
 }
 
 /**
@@ -314,6 +344,7 @@ export function capacidadesDelEspecialista(
       : []),
     ...(clase === "ejecuta" ? [capacidadDeEjecucion(deps.conShell())] : []),
     ...(deps.puedeLlamar?.(agente) === true ? [capacidadDeSubagentes()] : []),
+    ...(deps.espera?.(agente) === undefined ? [] : [deps.espera(agente)!]),
     capacidadDeRecortes(deps.backend),
     capacidadDeFecha(),
     deps.notas,

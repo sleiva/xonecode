@@ -127,6 +127,13 @@ export interface Agente {
    * pruebe su trabajo sin pasar por el orquestador. Un nombre que no está en esta lista NO se le concede.
    */
   llama?: string[];
+  /**
+   * De qué otros especialistas ESPERA el fin, por nombre (`espera: [designer-xone]`), cuando el orquestador los
+   * lanza a la vez: no hace ninguna llamada al modelo mientras haya un hilo vivo de esos. Solo lo honra TrueForge.
+   * Existe porque dos escritores en paralelo con una dependencia entre ellos (los recursos gráficos del uno, el
+   * `.xne` que los usa del otro) dejaban recursos sin usar.
+   */
+  espera?: string[];
   /** Las skills del catálogo que se le cargan, por nombre. */
   skills: string[];
   /** El cuerpo del `.md`: sus instrucciones. Puede estar vacío. */
@@ -650,6 +657,7 @@ export function leerAgente(
         ? {}
         : { escribeEn: leerLista(campos["escribeEn"]).map((c) => (c.startsWith("/") ? c : `/${c}`)) }),
       ...(leerLista(campos["llama"]).length === 0 ? {} : { llama: leerLista(campos["llama"]) }),
+      ...(leerLista(campos["espera"]).length === 0 ? {} : { espera: leerLista(campos["espera"]) }),
       skills: leerLista(campos["skills"]),
       instrucciones,
       origen,
@@ -685,6 +693,7 @@ export function escribirAgente(agente: Agente): string {
       ? []
       : [`escribeEn: [${agente.escribeEn.join(", ")}]`]),
     ...(agente.llama === undefined || agente.llama.length === 0 ? [] : [`llama: [${agente.llama.join(", ")}]`]),
+    ...(agente.espera === undefined || agente.espera.length === 0 ? [] : [`espera: [${agente.espera.join(", ")}]`]),
     `skills: [${agente.skills.join(", ")}]`,
   ];
   return `---\n${campos.join("\n")}\n---\n${agente.instrucciones}`;

@@ -525,6 +525,10 @@ su `.md` recibe `create_sub_agent` y puede llamar SOLO a esos especialistas (hoy
 carpeta de artefactos también `xone_critica_visual` y `comparar_capturas`. Un nombre fuera de su lista cae al
 ayudante genérico de solo lectura. El veredicto sigue siendo de un modelo aparte y el juez final del arnés
 revisa igual: lo que le devuelva el de pruebas es lo que vio, no un permiso para dar el trabajo por bueno.
+**Un hijo ESPERA a otro lanzado a la vez** (`espera: [designer-xone]` en el `.md`, `esperas.ts`,
+`capacidadDeEspera`): no hace ninguna llamada al modelo mientras haya un hilo vivo de esos, y al soltarse se le
+cuenta a quién esperó y qué hay en `icons/` —nombres, nunca contenido—. Solo en un sentido, con un tope de espera
+(`TOPE_DE_ESPERA_MS`) por si dos se declararan mutuamente. `developer-xone` espera a `designer-xone`.
 **Sale del bucle cuando cumple el CRITERIO DE ACEPTACIÓN de su encargo**, que el orquestador escribe medible
 (casillas del plan, lo que hace la app, fidelidad al diseño), con tres vueltas como tope; devolver antes porque
 «ya funciona» dejaba lo visual sin hacer. **Escribir con el turno en marcha es UN gesto** (IXCODE-4, solo la web): el Enter, que en
