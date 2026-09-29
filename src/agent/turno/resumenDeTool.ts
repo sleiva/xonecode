@@ -38,6 +38,8 @@ export const CAMPOS_SEGUROS: Record<string, readonly string[]> = {
   // no hay consulta, así que esa línea sale sin detalle. El SVG que vuelve es el RESULTADO y no cruza.
   // El tipo y el nombre: enseñan qué fondo se pide. El SVG que vuelve es el RESULTADO y no cruza.
   generar_fondo_svg: ["tipo", "nombre", "ancho", "alto"],
+  // Las dos rutas de artefacto y nada más: el informe con los números es el RESULTADO y no cruza.
+  comparar_capturas: ["captura", "referencia"],
   buscar_icono: ["consulta", "id", "prefijo", "color", "tamano", "operacion"],
   /**
    * De `task` sale el NOMBRE del especialista y nada más — nunca su `description`, que es

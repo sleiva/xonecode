@@ -7250,3 +7250,49 @@ ESTIMACIÓN cuando hubo `%` o `p`: en otro dispositivo el `%` sigue a la pantall
 Comprobado con la salida real de la tool (`"90%"` × `"60p"`): el botón se pinta como se espera.
 Además, `buscar_icono` acepta un `#FFRRGGBB` opaco de XOne (le quita el `FF`), y rechaza el que trae alfa,
 porque un icono no lleva transparencia en el color y descartarla en silencio sería cambiar lo pedido.
+
+## Comparar una captura con una maqueta con aritmética: `comparar_capturas` (IXCODE-18) (29-09-2026)
+
+**Por qué.** Pidiendo «haz este diseño» (una calculadora de Stitch) a un agente con DeepSeek, que no tiene
+visión, el turno cerró con «sin solape ni recorte: los controles caben» mientras la captura nativa
+enseñaba las teclas cortadas por la mitad, dos franjas pisándose y el teclado ocupando un tercio de la
+pantalla. El crítico visual había dicho rojo y el propio agente lo descartó como «no fiable», alegando una
+captura cacheada. Eran dos opiniones de modelos y ninguna cifra. (La «captura cacheada» era otra cosa: en la
+misma conexión, leer o capturar justo tras un `click` da el valor anterior en 2 de 12 casos, y 0 de 12
+100–200 ms después. El repintado es asíncrono.)
+
+**Qué mide.** El fondo (el color más frecuente), el contenido (todo píxel que se aparta del fondo), la
+ocupación por 10 franjas del alto y 8 del ancho y hasta dónde llega el contenido, todo en porcentajes del
+área útil (se recorta el 5 % de arriba y de abajo: barras del sistema), así que una maqueta de 390 px y una
+captura de 1080 px se comparan sin escalar. Es determinista: las mismas imágenes dan siempre el mismo informe.
+**Se probó a contar teclas y se descartó**: 12 manchas en una maqueta de unas 20 (las teclas oscuras sobre
+fondo oscuro se funden) y 30 en la pasada buena. Lo robusto es el perfil por franjas.
+
+**Medido contra las capturas reales de la calculadora** (maqueta contra cada pasada; distancia vertical y
+horizontal, y hasta dónde llegaba el contenido):
+
+| Captura | Vertical | Horizontal | Contenido acaba al |
+|---|---|---|---|
+| Pasada 3 (teclado a un tercio, banda vacía) | 62 % | 42 % | 33 % |
+| Pasada 4 (teclado llena la pantalla, teclas cortadas) | 26 % | 15 % | 99 % |
+| Pasada 5 (barra superior, marco de pantalla, contenedor del teclado) | 5 % | 3 % | 100 % |
+
+Tarda unos 35 ms. Da por parecida una estructura bajo el 12 % en las dos direcciones y sin franjas señaladas.
+
+**Lo que NO ve, y la pasada 5 lo demostró.** Con 5 % y 3 % la estructura coincide con la maqueta, y aun así la
+captura nativa enseña defectos que la medida no puede ver: el fondo de las teclas recortado por abajo (formas de
+lápida), texto cortado en las etiquetas de la barra y de los chips, los paréntesis con el aspecto gris nativo de
+un botón sin estilo y la tecla de borrar sin su fondo. Esa es la división de trabajo: el número dice DÓNDE
+hay contenido y el crítico con visión dice CÓMO se ve. Por eso el informe termina diciendo lo que no mide.
+
+**Con un agente real** (sin darle pistas: «mejora la calculadora para que se parezca más al diseño»), el
+orquestador llamó a `comparar_capturas` y a `xone_critica_visual` a la vez, escribió «las mediciones
+determinista y visual coinciden», y con eso decidió que era un trabajo visual y delegó en `designer-xone`.
+Costó unas 53 llamadas y unos 660 mil tokens efectivos, menos que la pasada anterior. Usó las capturas de la
+pasada previa que había en `/artefactos/` y no una nueva: la tool no dice de cuándo es cada imagen.
+**Límite abierto:** que el informe diga la antigüedad de la captura.
+
+**Solo TrueForge.** El otro motor es legacy: la tool no se cablea en deepagents. `buscar_icono` y
+`generar_fondo_svg`, que ya estaban, sí llevan cableado en los dos.
+
+**Dependencias nuevas:** `pngjs` y `jpeg-js` (JavaScript puro) y `@types/pngjs`.

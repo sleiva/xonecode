@@ -271,6 +271,19 @@ Y las guardas del proyecto:
   el `viewBox` lleva su proporción. **Los colores entran como en XOne (`#AARRGGBB`, alfa PRIMERO) y
   se convierten** a `#RRGGBB` más opacidad: pasarlos como `#RRGGBBAA` de HTML los leería mal sin
   error. Solo lee: el SVG lo escribe `write_file` con su aprobación.
+- **Y una quinta, de lectura y DETERMINISTA, solo en TrueForge: `comparar_capturas`**
+  (`agent/grafo/compararCapturas.ts`, `core/compararCapturas.ts`): mide la ESTRUCTURA de una captura
+  contra una maqueta con aritmética de píxeles —dónde hay contenido por franjas del alto y del
+  ancho y hasta dónde llega—, sin modelo y sin necesitar visión. Existe por un turno real en el que
+  el agente cerró diciendo «sin recorte» mientras el teclado ocupaba un tercio de la pantalla y
+  descartó como «no fiable» al crítico visual, que tenía razón: dos opiniones y ninguna cifra. Es
+  **la otra mitad de `xone_critica_visual`, no su sustituta**: no ve texto cortado, ni el estilo de
+  las formas, ni colores, y **no cuenta teclas** (no es fiable), y su informe lo dice siempre. Va al
+  raíz y solo con carpeta de artefactos, con las MISMAS guardas que el crítico: las dos rutas bajo
+  `/artefactos/`, comprobadas ANTES de abrir ninguna. `core/` no decodifica imágenes:
+  `agent/dispositivos/decodificarImagen.ts` (`pngjs`, `jpeg-js`) las saca a píxeles y **comprueba
+  las dimensiones ANTES de descomprimir**, contra una bomba de descompresión. De un error de lectura
+  solo cruza su `code`.
 - **`xone_navegacion` existe por una medida, no por completitud**: contestar «¿qué colecciones
   tiene el proyecto?» leyendo ficheros es mucho más caro que contestarla desde el modelo. Cuatro
   reglas: **el reparto** — la semántica de XOne la pone `xone-linter` como LIBRERÍA

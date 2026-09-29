@@ -98,6 +98,7 @@ import { crearMarcarCriteriosDelPlan } from "../../grafo/marcarCriteriosDelPlan.
 import { crearUnirSecciones } from "../../grafo/unirSecciones.js";
 import { crearIncorporarAdjunto, recibeIncorporarAdjunto } from "../../grafo/incorporarAdjunto.js";
 import { crearCriticaVisual } from "../../grafo/criticaVisual.js";
+import { crearCompararCapturas } from "../../grafo/compararCapturas.js";
 import { crearTraerDeLaMaquina } from "../../grafo/traerDeLaMaquina.js";
 import { invocarVisualConModelos } from "../../dispositivos/juezVisual.js";
 import { estilosDeDisco, indiceEnDisco, type CargarIndice } from "../../navegacion/indiceEnDisco.js";
@@ -441,6 +442,8 @@ export async function abrirSesionTrueforge(
             leerArtefacto: async (nombre) => readFileSync(join(carpeta, nombre)),
             invocar: invocarVisualConModelos({ paraPapel: (p) => modelos.paraPapel(p) }),
           }),
+          // Medir la estructura contra la maqueta: la otra mitad del crítico, con el raíz como él.
+          crearCompararCapturas({ leerArtefacto: async (nombre) => readFileSync(join(carpeta, nombre)) }),
           crearTraerDeLaMaquina({ carpeta, alEscribir: anotarArtefacto }),
         ] as unknown as ToolDeLangchain[])),
   ];

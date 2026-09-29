@@ -2161,3 +2161,25 @@ describe("`buscar_icono` en TrueForge (IXCODE-18): el mismo reparto que deepagen
     expect(toolsPorLlamada[1]).toContain("generar_fondo_svg");
   }, 20_000);
 });
+
+describe("`comparar_capturas` en TrueForge (IXCODE-18): con el raíz, como la crítica visual", () => {
+  const guion = () => [[new AIMessageChunk({ content: "Listo." })]];
+
+  it("con carpeta de artefactos el RAÍZ la ve", async () => {
+    const { m, toolsPorLlamada } = modelosConGuion(guion());
+    const s = await abrirSesionTrueforge({
+      raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO,
+      artefactos: mkdtempSync(join(tmpdir(), "xc-tf-comparar-")),
+    });
+    await s.turno("hola", piel().p).catch(() => undefined);
+    expect(toolsPorLlamada[0]).toContain("comparar_capturas");
+    expect(toolsPorLlamada[0]).toContain("xone_critica_visual");
+  }, 20_000);
+
+  it("sin carpeta no se monta", async () => {
+    const { m, toolsPorLlamada } = modelosConGuion(guion());
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("hola", piel().p).catch(() => undefined);
+    expect(toolsPorLlamada[0]).not.toContain("comparar_capturas");
+  }, 20_000);
+});
