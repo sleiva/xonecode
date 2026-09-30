@@ -716,6 +716,10 @@ function raizDeAvdsFalsa() {
   writeFileSync(join(base, "hardware-qemu.ini"), `path=${base}\n`);
   writeFileSync(join(base, "emu-launch-params.txt"), base);
   writeFileSync(join(base, "snapshots", "default_boot", "snapshot.pb"), "estado");
+  writeFileSync(
+    join(base, "snapshots", "default_boot", "hardware.ini"),
+    `disk.dataPartition.path = ${raiz}/../${raiz.split("/").pop()}/pixel8.avd/userdata-qemu.img\navd.name = pixel8\navd.id = pixel8\nhw.ramSize = 2048\n`,
+  );
   writeFileSync(join(base, "userdata-qemu.img"), "datos");
   writeFileSync(join(base, "data", "app", "com.xone.android.framework"), "apk");
   writeFileSync(
@@ -795,6 +799,18 @@ describe("crearAvd con base (modo configuración)", () => {
     }
   });
 
+  it("con base también respeta la guarda de plataforma: sin paso de crear, falla sin lanzar", async () => {
+    const f = raizDeAvdsFalsa();
+    try {
+      const m = montar(f.raiz);
+      const r = await crearAvd("x1", { ...m.deps, plataforma: "linux" }, { base: "pixel8" }).terminado;
+      expect(r).toMatchObject({ estado: "fallo", motivo: "crear emuladores no se lanza desde aquí en esta máquina" });
+      expect(m.llamadas).toHaveLength(0);
+    } finally {
+      f.limpiar();
+    }
+  });
+
   it("si no puede sobrescribir el config.ini, fallo con su code y sin ruta", async () => {
     const f = raizDeAvdsFalsa();
     try {
@@ -812,6 +828,17 @@ describe("crearAvd con base (modo configuración)", () => {
   });
 });
 
+/** Foto de un árbol (ruta → contenido) para comprobar que la base queda byte a byte igual. */
+function fotoDe(dir: string, pre = ""): Record<string, string> {
+  const r: Record<string, string> = {};
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    if (e.isDirectory()) Object.assign(r, fotoDe(join(dir, e.name), `${pre}${e.name}/`));
+    else r[`${pre}${e.name}`] = readFileSync(join(dir, e.name)).toString("base64");
+  }
+  return r;
+}
+const fotoDeLaBase = (raiz: string) => ({ avd: fotoDe(join(raiz, "pixel8.avd")), ini: readFileSync(join(raiz, "pixel8.ini"), "utf8") });
+
 describe("clonarAvd (modo clon)", () => {
   const listar = (dir: string, pre = ""): string[] =>
     readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
@@ -823,10 +850,12 @@ describe("clonarAvd (modo clon)", () => {
     const f = raizDeAvdsFalsa();
     try {
       const dicho: string[] = [];
+      const antes = fotoDeLaBase(f.raiz);
       const t = clonarAvd("pixel8", "copia", deps(f.raiz, { alSalirLinea: (l: string) => dicho.push(l) }));
       expect((await t.terminado).estado).toBe("ok");
       expect(listar(join(f.raiz, "copia.avd")).sort()).toEqual([
-        "config.ini", "data/app/com.xone.android.framework", "userdata-qemu.img",
+        "config.ini", "data/app/com.xone.android.framework", "snapshots/default_boot/hardware.ini",
+        "snapshots/default_boot/snapshot.pb", "userdata-qemu.img",
       ]);
       const ini = readFileSync(join(f.raiz, "copia.ini"), "utf8");
       expect(ini).toContain(`path=${join(f.raiz, "copia.avd")}`);
@@ -834,8 +863,13 @@ describe("clonarAvd (modo clon)", () => {
       expect(ini).toContain("target=android-35");
       expect(dicho.length).toBeGreaterThan(1);
       expect(dicho[0]).toMatch(/Se copiar/);
-      // La base no se ha tocado.
-      expect(existsSync(join(f.base, "multiinstance.lock"))).toBe(true);
+      // La instantánea del clon lleva la identidad del clon; la de la base sigue siendo la suya.
+      const hw = readFileSync(join(f.raiz, "copia.avd", "snapshots", "default_boot", "hardware.ini"), "utf8");
+      expect(hw).toContain("/copia.avd/userdata-qemu.img");
+      expect(hw).toContain("avd.name = copia\navd.id = copia\n");
+      expect(hw).not.toContain("pixel8");
+      // La base queda byte a byte igual.
+      expect(fotoDeLaBase(f.raiz)).toEqual(antes);
     } finally {
       f.limpiar();
     }
@@ -861,6 +895,7 @@ describe("clonarAvd (modo clon)", () => {
   it("un fallo al copiar BORRA la carpeta a medias y no escribe el .ini", async () => {
     const f = raizDeAvdsFalsa();
     try {
+      const antes = fotoDeLaBase(f.raiz);
       const t = clonarAvd(
         "pixel8",
         "copia",
@@ -878,6 +913,25 @@ describe("clonarAvd (modo clon)", () => {
       expect(r.motivo).not.toContain(f.raiz);
       expect(existsSync(join(f.raiz, "copia.avd"))).toBe(false);
       expect(existsSync(join(f.raiz, "copia.ini"))).toBe(false);
+      expect(fotoDeLaBase(f.raiz)).toEqual(antes);
+    } finally {
+      f.limpiar();
+    }
+  });
+
+  it("cancelar con el `fs.cp` REAL y su filtro corta la copia, borra lo copiado y deja la base intacta", async () => {
+    const f = raizDeAvdsFalsa();
+    try {
+      for (let i = 0; i < 200; i++) writeFileSync(join(f.base, "data", `f${i}`), "x".repeat(100));
+      const antes = fotoDeLaBase(f.raiz);
+      let cancelar: (() => void) | undefined;
+      // Se cancela al decir que empieza a copiar: el filtro real es quien lo nota.
+      const t = clonarAvd("pixel8", "copia", deps(f.raiz, { alSalirLinea: (l: string) => /^Copiando/.test(l) && cancelar?.() }));
+      cancelar = t.cancelar;
+      expect((await t.terminado).estado).toBe("cancelada");
+      expect(existsSync(join(f.raiz, "copia.avd"))).toBe(false);
+      expect(existsSync(join(f.raiz, "copia.ini"))).toBe(false);
+      expect(fotoDeLaBase(f.raiz)).toEqual(antes);
     } finally {
       f.limpiar();
     }
@@ -887,19 +941,21 @@ describe("clonarAvd (modo clon)", () => {
     const f = raizDeAvdsFalsa();
     try {
       let liberar: (() => void) | undefined;
+      let empezada!: () => void;
+      const enMarcha = new Promise<void>((r) => (empezada = r));
       const t = clonarAvd(
         "pixel8",
         "copia",
         deps(f.raiz, {
           copiarCarpeta: async (_o: string, d: string) => {
             mkdirSync(d);
+            empezada();
             await new Promise<void>((r) => (liberar = r));
           },
         }),
       );
+      await enMarcha;
       t.cancelar();
-      liberar?.();
-      await new Promise((r) => setImmediate(r));
       liberar?.();
       expect((await t.terminado).estado).toBe("cancelada");
       expect(existsSync(join(f.raiz, "copia.avd"))).toBe(false);

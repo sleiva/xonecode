@@ -74,15 +74,39 @@ const FICHEROS_QUE_NO_SE_COPIAN = new Set([
 
 /**
  * ¿Entra en el clon esta ruta, relativa a la carpeta del AVD (separada por `/` o `\`)? Lista NEGRA:
- * los `.lock` en cualquier nivel (el original los tiene cogidos), los ficheros de la última
- * ejecución, y `snapshots/` entera —sus instantáneas llevan el estado del original y con otra
- * identidad no arrancan bien—: el clon arranca en frío la primera vez.
+ * los `.lock` en cualquier nivel (el original los tiene cogidos) y los ficheros de la última
+ * ejecución. `snapshots/` SÍ viaja (medido): al parar, el emulador guarda la memoria en la
+ * instantánea, y lo que aún no se volcó al disco solo vive ahí; sin ella, el clon ve un disco a
+ * medias (un fichero escrito salía con 0 bytes). Hay que reescribirles la identidad
+ * (`hardwareIniDeClon`) o el emulador las rechaza.
  */
 export function seCopiaEnClon(relativa: string): boolean {
   const partes = relativa.split(/[\\/]/).filter((p) => p !== "" && p !== ".");
   if (partes.length === 0) return true;
-  if (partes[0] === "snapshots") return false;
   const ultimo = partes[partes.length - 1]!;
   if (ultimo.endsWith(".lock")) return false;
   return !(partes.length === 1 && FICHEROS_QUE_NO_SE_COPIAN.has(ultimo));
+}
+
+/**
+ * El `hardware.ini` de una instantánea del clon, con la identidad del original cambiada por la del
+ * clon (medido: con solo las rutas el emulador rechaza la instantánea —«cannot load snapshot»—; con
+ * las dos cosas la carga). Formato `clave = valor`, con espacios. Solo se tocan:
+ *  - `avd.name` y `avd.id`, si valen exactamente la base;
+ *  - en cualquier otro valor, los segmentos de ruta `<base>.avd` EXACTOS (entre `/` o `\`, o al
+ *    final), nunca el nombre suelto: la base podría aparecer dentro de otra palabra.
+ */
+export function hardwareIniDeClon(texto: string, base: string, nombre: string): string {
+  const escapada = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const segmento = new RegExp(`(^|[\\\\/])${escapada}\\.avd(?=[\\\\/]|$)`, "g");
+  return texto
+    .split("\n")
+    .map((linea) => {
+      const m = /^(\s*)([^=\s][^=]*?)(\s*=\s*)(.*?)(\r?)$/.exec(linea);
+      if (m === null) return linea;
+      const [, sangria, clave, igual, valor, cr] = m as unknown as string[];
+      if (clave === "avd.name" || clave === "avd.id") return `${sangria}${clave}${igual}${valor === base ? nombre : valor}${cr}`;
+      return `${sangria}${clave}${igual}${valor!.replace(segmento, `$1${nombre}.avd`)}${cr}`;
+    })
+    .join("\n");
 }

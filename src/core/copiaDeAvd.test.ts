@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { iniDeClon, leerIni, paqueteDeImagen, perfilDeTelefono, seCopiaEnClon } from "./copiaDeAvd.js";
+import { hardwareIniDeClon, iniDeClon, leerIni, paqueteDeImagen, perfilDeTelefono, seCopiaEnClon } from "./copiaDeAvd.js";
 
 describe("leerIni", () => {
   it("lee clave=valor y deja pasar las vacías y las sin «=»", () => {
@@ -47,11 +47,45 @@ describe("iniDeClon", () => {
 describe("seCopiaEnClon", () => {
   it.each([
     "multiinstance.lock", "hardware-qemu.ini.lock", "data/misc/x.lock", "hardware-qemu.ini", "emu-launch-params.txt",
-    "read-snapshot.txt", "snapshot.trace", "tmpAdbCmds", "bootcompleted.ini", "snapshots", "snapshots/default_boot/snapshot.pb",
-    "snapshots\\x",
+    "read-snapshot.txt", "snapshot.trace", "tmpAdbCmds", "bootcompleted.ini", "snapshots/default_boot/x.lock",
   ])("NO copia %s", (r) => expect(seCopiaEnClon(r)).toBe(false));
   it.each([
     "config.ini", "userdata-qemu.img", "userdata-qemu.img.qcow2", "data/misc/adb/x", "cache.img", "AVD.conf",
-    "modem_simulator/x", "data/bootcompleted.ini", "data/snapshots/x",
+    "modem_simulator/x", "data/bootcompleted.ini", "data/snapshots/x", "snapshots", "snapshots/default_boot/snapshot.pb", "snapshots/default_boot/hardware.ini", "snapshots\\x",
   ])("copia %s", (r) => expect(seCopiaEnClon(r)).toBe(true));
+});
+
+describe("hardwareIniDeClon", () => {
+  const texto = [
+    "disk.dataPartition.path = /Users/x/.android/avd/../avd/pixel8.avd/userdata-qemu.img",
+    "disk.cachePartition.path=/Users/x/.android/avd/pixel8.avd/cache.img",
+    "avd.name = pixel8",
+    "avd.id = pixel8",
+    "otra.ruta = /Users/x/.android/avd/mipixel8.avd/cache.img",
+    "hw.ramSize = 2048",
+    "avd.name.extra = pixel8",
+    "descripcion = pixel8 y pixel8.avdx",
+    "",
+  ].join("\n");
+  it("reescribe la identidad y los segmentos exactos, y nada más", () => {
+    expect(hardwareIniDeClon(texto, "pixel8", "copia").split("\n")).toEqual([
+      "disk.dataPartition.path = /Users/x/.android/avd/../avd/copia.avd/userdata-qemu.img",
+      "disk.cachePartition.path=/Users/x/.android/avd/copia.avd/cache.img",
+      "avd.name = copia",
+      "avd.id = copia",
+      "otra.ruta = /Users/x/.android/avd/mipixel8.avd/cache.img",
+      "hw.ramSize = 2048",
+      "avd.name.extra = pixel8",
+      "descripcion = pixel8 y pixel8.avdx",
+      "",
+    ]);
+  });
+  it("conserva los finales de línea CRLF y entiende la barra de Windows", () => {
+    expect(hardwareIniDeClon("a = C:\\avd\\pixel8.avd\\x\r\navd.id = pixel8\r\n", "pixel8", "c")).toBe(
+      "a = C:\\avd\\c.avd\\x\r\navd.id = c\r\n",
+    );
+  });
+  it("una base con puntos no se toma por expresión regular", () => {
+    expect(hardwareIniDeClon("p = /a/p.x.avd/z\nq = /a/pyx.avd/z", "p.x", "n")).toBe("p = /a/n.avd/z\nq = /a/pyx.avd/z");
+  });
 });

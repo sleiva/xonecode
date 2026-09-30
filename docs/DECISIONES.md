@@ -7939,9 +7939,15 @@ Medido en esta máquina, y de ahí las reglas:
 - `config.ini` NO lleva el nombre (`avd.id` y `avd.name` son del build), así que se copia tal cual.
 - Llevan la ruta absoluta del ORIGINAL `hardware-qemu.ini` (tres veces) y `emu-launch-params.txt`, pero son de
   la última ejecución y el emulador los regenera: se excluyen, junto a los `*.lock` (en cualquier nivel),
-  `read-snapshot.txt`, `snapshot.trace`, `tmpAdbCmds`, `bootcompleted.ini` y `snapshots/` entera (sus
-  instantáneas llevan el estado del original). El clon arranca en frío la primera vez. Es una lista NEGRA
+  `read-snapshot.txt`, `snapshot.trace`, `tmpAdbCmds` y `bootcompleted.ini`. Es una lista NEGRA
   (`seCopiaEnClon`): lo que el emulador añada en otra versión viaja, que es lo seguro para un clon.
+- **`snapshots/` SÍ viaja, con la identidad reescrita** (medido; la primera versión la excluía y perdía datos):
+  al parar, el emulador guarda la memoria en la instantánea, y lo que aún no se volcó al disco solo vive ahí.
+  Un fichero escrito en el original y clonado sin instantáneas salía con 0 bytes en el clon (arrancaba en frío
+  sobre un disco a medias). Copiando `snapshots/` y reescribiendo en cada `snapshots/<n>/hardware.ini` las rutas
+  `…/<base>.avd/…` y las líneas `avd.name = <base>` y `avd.id = <base>` (formato `clave = valor`) el emulador
+  carga la instantánea y el fichero sale entero. Con solo las rutas la rechaza («cannot load snapshot»). La
+  reescritura (`hardwareIniDeClon`) toca solo esas claves y los segmentos `<base>.avd` exactos, no el nombre suelto.
 - La copia pide `COPYFILE_FICLONE`: en APFS el clon de ficheros es instantáneo y no gasta disco; donde no se
   puede, copia normal.
 - La raíz de los AVD es `ANDROID_AVD_HOME` si está puesta, si no `<casa>/.android/avd`. La base y el nombre pasan
@@ -7949,5 +7955,6 @@ Medido en esta máquina, y de ahí las reglas:
   que esté en `informe.avds`.
 - De un error de disco solo cruza su `code`: su mensaje lleva la ruta absoluta.
 
-Límite declarado: el tamaño que se anuncia al empezar es el de lo que se copiaría, no el que ocupará en disco
+Límites declarados: cancelar corta ENTRE ficheros, no a mitad de uno grande (el que está copiándose termina
+antes de que el corte se note); el tamaño que se anuncia al empezar es el de lo que se copiaría, no el que ocupará en disco
 (los discos del emulador son dispersos).

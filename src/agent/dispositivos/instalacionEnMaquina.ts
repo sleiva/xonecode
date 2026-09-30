@@ -50,8 +50,8 @@
  * lo que harían en un terminal.
  */
 import { join, relative } from "node:path";
-import { constants, existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { cp, rm, writeFile } from "node:fs/promises";
+import { constants, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { cp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { jdkDeLaMaquina, localizadorDeAndroid, pathConCarpetas, unirRuta } from "./dispositivosEnMaquina.js";
 import {
@@ -65,7 +65,7 @@ import {
 } from "./procesosEnMaquina.js";
 import { descargarYDescomprimir } from "./descargaDeHerramientas.js";
 import { motivoDeNombreDeAvdInaceptable } from "../../core/puertosDeAvd.js";
-import { iniDeClon, leerIni, paqueteDeImagen, perfilDeTelefono, seCopiaEnClon } from "../../core/copiaDeAvd.js";
+import { hardwareIniDeClon, iniDeClon, leerIni, paqueteDeImagen, perfilDeTelefono, seCopiaEnClon } from "../../core/copiaDeAvd.js";
 
 /**
  * Y esto se REEXPORTA: lo que este módulo exportaba antes de que existiera el ejecutor
@@ -395,11 +395,10 @@ function trabajoTerminado(motivo: string): Trabajo {
 export function crearAvd(nombre: string, deps: DependenciasDeInstalacion = {}, opciones: { base?: string } = {}): Trabajo {
   const motivo = motivoDeNombreDeAvdInaceptable(nombre, []);
   if (motivo !== undefined) return trabajoTerminado(motivo);
-  if (opciones.base === undefined) {
-    const imagen = IMAGEN_POR_PLATAFORMA[deps.plataforma ?? process.platform];
-    if (imagen === undefined) return trabajoTerminado("crear emuladores no se lanza desde aquí en esta máquina");
-    return correrPaso(pasoDeCrearAvd(nombre, imagen), deps);
-  }
+  // La misma guarda con base y sin ella: sin paso de crear en esta plataforma, no se lanza nada.
+  const imagenPorOmision = IMAGEN_POR_PLATAFORMA[deps.plataforma ?? process.platform];
+  if (imagenPorOmision === undefined) return trabajoTerminado("crear emuladores no se lanza desde aquí en esta máquina");
+  if (opciones.base === undefined) return correrPaso(pasoDeCrearAvd(nombre, imagenPorOmision), deps);
   const base = opciones.base;
   // La base acaba siendo una ruta: pasa por la misma regla de forma que el nombre (sin `..` ni barras).
   const malaBase = motivoDeNombreDeAvdInaceptable(base, []);
@@ -438,18 +437,18 @@ function codigoDe(e: unknown): string {
   return typeof c === "string" ? c : "error";
 }
 
-/** Bytes de lo que SÍ se copiaría, para decirlo antes de empezar (un AVD con datos son gigas). */
-function tamanoDeLoQueSeCopia(carpeta: string, filtro: (ruta: string) => boolean): number {
+/** Bytes de lo que SÍ se copiaría, para decirlo antes de empezar (un AVD con datos son gigas). Asíncrono: no bloquea el servidor. */
+async function tamanoDeLoQueSeCopia(carpeta: string, filtro: (ruta: string) => boolean): Promise<number> {
   let total = 0;
-  const recorrer = (dir: string): void => {
-    for (const e of readdirSync(dir, { withFileTypes: true })) {
+  const recorrer = async (dir: string): Promise<void> => {
+    for (const e of await readdir(dir, { withFileTypes: true })) {
       const ruta = join(dir, e.name);
       if (!filtro(ruta)) continue;
-      if (e.isDirectory()) recorrer(ruta);
-      else if (e.isFile()) total += statSync(ruta).size;
+      if (e.isDirectory()) await recorrer(ruta);
+      else if (e.isFile()) total += (await stat(ruta)).size;
     }
   };
-  recorrer(carpeta);
+  await recorrer(carpeta);
   return total;
 }
 
@@ -462,7 +461,8 @@ function enTexto(bytes: number): string {
  * Modo CLON: copia la carpeta del AVD `base` a `nombre` (lo instalado incluido), sin lo que
  * `seCopiaEnClon` excluye, y SOLO al acabar bien escribe `<nombre>.ini` —un AVD sin `.ini` no
  * existe para el emulador, así que una copia a medias nunca aparece en la lista—. Un fallo o una
- * cancelación BORRAN la carpeta a medias. Nunca lanza. La base tiene que estar apagada: lo comprueba
+ * cancelación BORRAN la carpeta a medias. Nunca lanza. `snapshots/` viaja con la identidad reescrita
+ * (`core/copiaDeAvd.ts`): sin ella un clon pierde lo que el original aún no había volcado al disco. La base tiene que estar apagada: lo comprueba
  * quien llama (la medida de dispositivos), aquí solo se ve el disco.
  */
 export function clonarAvd(base: string, nombre: string, deps: DependenciasDeInstalacion = {}): Trabajo {
@@ -512,17 +512,27 @@ export function clonarAvd(base: string, nombre: string, deps: DependenciasDeInst
   const terminado = (async (): Promise<ResultadoDeTrabajo> => {
     try {
       try {
-        decir(`Se copiarán ${enTexto(tamanoDeLoQueSeCopia(origen, (r) => seCopiaEnClon(relative(origen, r))))} de ${base}`);
+        decir(`Se copiarán ${enTexto(await tamanoDeLoQueSeCopia(origen, (r) => seCopiaEnClon(relative(origen, r))))} de ${base}`);
       } catch {
         // El tamaño es un dato de cortesía: no poder medirlo no impide clonar.
       }
-      decir("Copiando lo instalado y la configuración (sin instantáneas)…");
+      decir("Copiando lo instalado, la configuración y la instantánea…");
       await copiar(origen, destino, filtro);
       if (cancelado) throw CANCELADO;
+      // Las instantáneas llevan la identidad del original: sin reescribirla el emulador las rechaza.
+      const instantaneas = join(destino, "snapshots");
+      if (existe(instantaneas)) {
+        for (const e of await readdir(instantaneas, { withFileTypes: true })) {
+          if (!e.isDirectory()) continue;
+          const hw = join(instantaneas, e.name, "hardware.ini");
+          if (!existe(hw)) continue;
+          await writeFile(hw, hardwareIniDeClon(await readFile(hw, "utf8"), base, nombre));
+        }
+      }
       decir("Registrando el dispositivo nuevo");
       const ini = readFileSync(iniOrigen, "utf8");
       await writeFile(iniDestino, iniDeClon(ini, nombre, destino), { flag: "wx" });
-      decir("Listo. La primera vez arrancará en frío.");
+      decir("Listo.");
       return termina("ok");
     } catch (e) {
       await rm(destino, { recursive: true, force: true }).catch(() => {});
