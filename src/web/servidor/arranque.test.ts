@@ -20,6 +20,7 @@ import { MS_DE_PREPARACION,
   mudarWorkspaceLegadoCableado,
   ajusteDeWorkspaceCableado,
   ajusteDeDepuracionCableado,
+  emuladoresCableados,
   ajusteDeConectoresCableado,
   ajusteDeGestorCableado,
   banderaDeEjecutor,
@@ -56,7 +57,9 @@ import { COMANDOS } from "../../cli/consola.js";
 import { CatalogoModelosEnMemoria, GestorDeTareasEnMemoria } from "../../core/ports.js";
 import type { FichaDelGestor, GestorDeTareasPort, TransicionDelGestor, Vinculo } from "../../core/gestorDeTareas.js";
 import { crearGestorJira } from "../../agent/conectores/gestorJira.js";
-import type { Entorno } from "../../core/settings.js";
+import type { AjustesDeDispositivos, Entorno } from "../../core/settings.js";
+import { cargarSettings } from "../../agent/config/settingsEnDisco.js";
+import type { Dispositivo } from "../../core/dispositivos.js";
 import type { AdjuntoDeTarea, Tarea } from "../../core/tareas.js";
 import { TOPE_DE_ADJUNTO } from "../../agent/tareas/tareasEnDisco.js";
 import { carpetaDeAdjuntosDeSesion } from "../../core/adjuntos.js";
@@ -8675,6 +8678,48 @@ describe("el recorrido por el cable — el veredicto, la intención y las fases"
     await m.cerrar();
   });
 
+  /**
+   * El túnel de un EMULADOR va por el puerto de SU AVD: con dos emuladores y el mismo puerto, el
+   * `adb forward` del segundo le quita el túnel al primero sin error. Un físico no lleva `puerto`
+   * (lo fija el test de arriba: `pedido` sin él), y el lanzador cae en el de fábrica.
+   */
+  it("un emulador con AVD se lanza por el puerto guardado para ese AVD", async () => {
+    const EMU = {
+      id: "emulator-5556",
+      nombre: "pixel9",
+      plataforma: "android" as const,
+      clase: "emulador" as const,
+      estado: "arrancado" as const,
+      avd: "pixel9",
+    };
+    let pedido: PeticionDeLanzamiento | undefined;
+    const m = await montar({
+      xml: APP_XML,
+      conBase: true,
+      elegido: { id: EMU.id, nombre: EMU.nombre, plataforma: "android", clase: "emulador" },
+      opciones: {
+        detectarDispositivos: async () => ({
+          sistema: "mac" as const,
+          herramientas: [],
+          dispositivos: [EMU],
+          avds: ["pixel9"],
+          recetas: [],
+          medido: "2026-09-30T10:00:00.000Z",
+        }),
+        ajustesDeDispositivos: () => ({ avds: { pixel9: { puerto: 8444 } } }),
+        frameworkEnDispositivo: async () => ({ instalado: true }),
+        lanzarEnDispositivo: (peticion) => {
+          pedido = peticion;
+          return { cancelar: () => {}, terminado: Promise.resolve({ estado: "ok", fase: "comprobando-arranque", ms: 1 }) };
+        },
+      },
+    });
+    await enviarMensaje(m.accion, { clase: "lanzarApp" });
+    await esperarA(() => dichos(m.cliente, "lanzamiento").at(-1)?.estado === "ok");
+    expect(pedido).toEqual({ dispositivo: EMU, raiz: m.raiz, app: "AppDemo", puerto: 8444 });
+    await m.cerrar();
+  });
+
   it("las líneas del recorrido van como COLA: una subida suelta decenas y no caben todas", async () => {
     const m = await montar({
       xml: APP_XML,
@@ -10968,5 +11013,349 @@ describe("los conectores llegan a las SESIONES por el mismo servicio de Ajustes"
     crearEjecutor!(() => {}, { adjuntos: "/tmp/adj" });
     crearEjecutor!(() => {});
     expect(recibidas).toEqual([{ adjuntos: "/tmp/adj", conectores: puerto }, { conectores: puerto }]);
+  });
+});
+
+/**
+ * Los emuladores desde Ajustes: crear, ajustar y parar, la siembra de un puerto por AVD al medir,
+ * y quién usa qué. Todo lo que toca la máquina entra por opción, así que aquí no se lanza nada:
+ * lo que se afirma es el CABLE — qué se valida, qué NO se ejecuta, y qué sale en la foto.
+ */
+describe("los emuladores desde Ajustes: crear, ajustar, parar, y un puerto por AVD", () => {
+  const medida = (avds: string[], dispositivos: Dispositivo[] = []) => ({
+    sistema: "mac" as const,
+    herramientas: [],
+    dispositivos,
+    avds,
+    recetas: [],
+    medido: "2026-09-30T10:00:00.000Z",
+  });
+
+  /** Un trabajo que no acaba hasta que se le dice: el cerrojo se queda puesto mientras tanto. */
+  function trabajoPendiente() {
+    let acabar: ((r: { estado: string; ms: number }) => void) | undefined;
+    return {
+      acabar: (estado: string) => acabar?.({ estado, ms: 1 }),
+      trabajo: {
+        titulo: "Creando el emulador",
+        cancelar: () => {},
+        terminado: new Promise<{ estado: string; motivo?: string; ms: number }>((r) => {
+          acabar = r;
+        }),
+      },
+    };
+  }
+
+  const conectar = async (opciones: Parameters<typeof montarRutas>[2], vestibulo: Vestibulo = vestibuloDePrueba()) => {
+    const dichos: string[] = [];
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibulo, { informar: (x) => dichos.push(x), ...opciones });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    return { cliente, accion: servidor.rutas.get(`POST ${RUTA_ACCION}`)!, dichos };
+  };
+  const fotos = (cliente: ReturnType<typeof clienteDeMentira>) =>
+    cliente.recibidos.filter((m) => m.clase === "dispositivos") as Extract<MensajeAlCliente, { clase: "dispositivos" }>[];
+  const progresos = (cliente: ReturnType<typeof clienteDeMentira>) =>
+    cliente.recibidos.filter((m) => m.clase === "instalacion") as Extract<MensajeAlCliente, { clase: "instalacion" }>[];
+
+  it("crear un AVD con un nombre que ya existe NO lanza nada, y dice por qué", async () => {
+    const creados: string[] = [];
+    const { cliente, accion, dichos } = await conectar({
+      detectarDispositivos: async () => medida(["pixel8"]),
+      crearAvd: (nombre) => {
+        creados.push(nombre);
+        return trabajoPendiente().trabajo;
+      },
+    });
+    expect(await enviarMensaje(accion, { clase: "crearEmulador", nombre: "pixel8" })).toBe(204);
+    await asentar();
+    expect(creados).toEqual([]);
+    expect(progresos(cliente)).toEqual([]);
+    expect(dichos.join(" ")).toContain("pixel8 ya existe");
+  });
+
+  it("crear uno nuevo va por el cerrojo de las recetas: `crear-avd`, paso 0, y al acabar se mide", async () => {
+    const t = trabajoPendiente();
+    const creados: string[] = [];
+    let medidas = 0;
+    const { cliente, accion } = await conectar({
+      detectarDispositivos: async () => {
+        medidas++;
+        return medida(["pixel8"]);
+      },
+      crearAvd: (nombre) => {
+        creados.push(nombre);
+        return t.trabajo;
+      },
+    });
+    await enviarMensaje(accion, { clase: "crearEmulador", nombre: "pixel9" });
+    await asentar();
+    expect(creados).toEqual(["pixel9"]);
+    expect(progresos(cliente).at(-1)).toMatchObject({ receta: "crear-avd", paso: 0, estado: "corriendo" });
+    t.acabar("ok");
+    await asentar();
+    expect(progresos(cliente).at(-1)).toMatchObject({ receta: "crear-avd", estado: "ok" });
+    expect(medidas).toBe(2);
+  });
+
+  it("crear con un paso de receta en marcha NO lanza el segundo: reemite el que corre", async () => {
+    const receta = trabajoPendiente();
+    const creados: string[] = [];
+    const { cliente, accion } = await conectar({
+      detectarDispositivos: async () => medida(["pixel8"]),
+      correrPasoDeReceta: () => receta.trabajo,
+      crearAvd: (nombre) => {
+        creados.push(nombre);
+        return trabajoPendiente().trabajo;
+      },
+    });
+    await enviarMensaje(accion, { clase: "receta", id: "android-emulador", paso: 3, accion: "ejecutar" });
+    await asentar();
+    await enviarMensaje(accion, { clase: "crearEmulador", nombre: "pixel9" });
+    await asentar();
+    expect(creados).toEqual([]);
+    expect(progresos(cliente).at(-1)).toMatchObject({ receta: "android-emulador", paso: 3, estado: "corriendo" });
+  });
+
+  it("un puerto que ya es de otro AVD se niega y no se guarda NADA del mensaje", async () => {
+    const guardados: unknown[] = [];
+    const ajustes: AjustesDeDispositivos = { avds: { alfa: { puerto: 8443 }, beta: { puerto: 8444 } } };
+    const { accion, dichos } = await conectar({
+      detectarDispositivos: async () => medida(["alfa", "beta"]),
+      ajustesDeDispositivos: () => ajustes,
+      guardarAjusteDeAvd: (avd, cambio) => {
+        guardados.push([avd, cambio]);
+      },
+    });
+    await enviarMensaje(accion, { clase: "ajusteDeAvd", avd: "beta", puerto: 8443, sinVentana: true });
+    await asentar();
+    expect(guardados).toEqual([]);
+    expect(dichos.join(" ")).toContain("el 8443 ya es de alfa");
+  });
+
+  it("un ajuste válido se guarda y la foto se reemite con los ajustes NUEVOS, sin volver a medir", async () => {
+    let medidas = 0;
+    let ajustes: AjustesDeDispositivos = { avds: { alfa: { puerto: 8443 } } };
+    const { cliente, accion } = await conectar({
+      detectarDispositivos: async () => {
+        medidas++;
+        return medida(["alfa"]);
+      },
+      ajustesDeDispositivos: () => ajustes,
+      guardarAjusteDeAvd: (avd, cambio) => {
+        ajustes = { avds: { ...ajustes.avds, [avd]: { ...ajustes.avds?.[avd], puerto: cambio.puerto ?? 8443, sinVentana: true } } };
+      },
+    });
+    await enviarMensaje(accion, { clase: "ajusteDeAvd", avd: "alfa", puerto: 8450, sinVentana: true });
+    await asentar();
+    expect(fotos(cliente).at(-1)!.ajustes.avds).toEqual({ alfa: { puerto: 8450, sinVentana: true } });
+    expect(medidas).toBe(1);
+  });
+
+  it("un ajuste de un AVD que no está en la medida no se guarda", async () => {
+    const guardados: unknown[] = [];
+    const { accion, dichos } = await conectar({
+      detectarDispositivos: async () => medida(["alfa"]),
+      guardarAjusteDeAvd: (avd, cambio) => {
+        guardados.push([avd, cambio]);
+      },
+    });
+    await enviarMensaje(accion, { clase: "ajusteDeAvd", avd: "inventado", sinVentana: true });
+    await asentar();
+    expect(guardados).toEqual([]);
+    expect(dichos.join(" ")).toContain("«inventado»");
+  });
+
+  /**
+   * La siembra, con DOS AVD y los ajustes con estado: lo que se afirma es que la foto sale con
+   * lo que quedó ESCRITO, no con lo que el stub devolviera de fábrica.
+   */
+  it("al medir con dos AVD sin puerto se siembran los dos ANTES de emitir, y la foto ya los lleva", async () => {
+    let ajustes: AjustesDeDispositivos = {};
+    const siembras: Record<string, number>[] = [];
+    const { cliente } = await conectar({
+      detectarDispositivos: async () => medida(["zeta", "alfa"]),
+      ajustesDeDispositivos: () => ajustes,
+      guardarPuertosAsignados: (asignados) => {
+        siembras.push(asignados);
+        const avds = { ...ajustes.avds };
+        for (const [avd, puerto] of Object.entries(asignados)) avds[avd] = { ...avds[avd], puerto };
+        ajustes = { ...ajustes, avds };
+      },
+    });
+    expect(siembras).toEqual([{ alfa: 8443, zeta: 8444 }]);
+    const [primera] = fotos(cliente);
+    expect(primera!.ajustes.avds).toEqual({ alfa: { puerto: 8443 }, zeta: { puerto: 8444 } });
+  });
+
+  it("si la siembra no se puede escribir, se dice y la foto sale igual", async () => {
+    const { cliente, dichos } = await conectar({
+      detectarDispositivos: async () => medida(["alfa"]),
+      guardarPuertosAsignados: () => {
+        throw Object.assign(new Error("/casa/.xonecode/settings.json: EACCES"), { code: "EACCES" });
+      },
+    });
+    expect(fotos(cliente)).toHaveLength(1);
+    expect(dichos.join(" ")).toContain("no se pudieron guardar los puertos");
+    // Sin la ruta: de un error de Node solo cruza el `code`.
+    expect(dichos.join(" ")).not.toContain("/casa");
+  });
+
+  it("arrancar lleva «sin ventana» si ESE AVD lo tiene guardado", async () => {
+    const pedidos: unknown[] = [];
+    const { accion } = await conectar({
+      detectarDispositivos: async () => medida(["pixel8", "pixel9"]),
+      ajustesDeDispositivos: () => ({ avds: { pixel8: { puerto: 8443, sinVentana: true }, pixel9: { puerto: 8444 } } }),
+      arrancarEmulador: async (avd, o) => {
+        pedidos.push([avd, o]);
+        return { ok: true, detalle: "" };
+      },
+    });
+    await enviarMensaje(accion, { clase: "arrancarEmulador", avd: "pixel8" });
+    await asentar();
+    await enviarMensaje(accion, { clase: "arrancarEmulador", avd: "pixel9" });
+    await asentar();
+    expect(pedidos).toEqual([
+      ["pixel8", { sinVentana: true }],
+      ["pixel9", { sinVentana: false }],
+    ]);
+  });
+
+  it("parar solo llega a un EMULADOR de la última medida, y después se remide", async () => {
+    const parados: string[] = [];
+    let medidas = 0;
+    const { accion, dichos } = await conectar({
+      detectarDispositivos: async () => {
+        medidas++;
+        return medida(
+          [],
+          [
+            { id: "emulator-5554", nombre: "pixel8", plataforma: "android", clase: "emulador", estado: "arrancado", avd: "pixel8" },
+            { id: "ABC", nombre: "Pixel 6", plataforma: "android", clase: "fisico", estado: "conectado" },
+          ]
+        );
+      },
+      pararEmulador: async (serie) => {
+        parados.push(serie);
+        return { ok: true, detalle: "" };
+      },
+    });
+    await enviarMensaje(accion, { clase: "pararEmulador", id: "ABC" });
+    await asentar();
+    await enviarMensaje(accion, { clase: "pararEmulador", id: "emulator-9999" });
+    await asentar();
+    expect(parados).toEqual([]);
+    expect(medidas).toBe(1);
+    expect(dichos.join(" ")).toContain("«ABC»");
+
+    await enviarMensaje(accion, { clase: "pararEmulador", id: "emulator-5554" });
+    await asentar();
+    expect(parados).toEqual(["emulator-5554"]);
+    expect(medidas).toBe(2);
+  });
+
+  it("`enUso` dice el dispositivo de CADA consola abierta, por el nombre de su carpeta y sin rutas", async () => {
+    const abiertas = [
+      { raiz: "/w/webstudio/Tienda", dispositivo: { id: "emulator-5554", nombre: "pixel8", plataforma: "android", clase: "emulador" } },
+      { raiz: "/w/webstudio/Almacen", dispositivo: { id: "emulator-5556", nombre: "pixel9", plataforma: "android", clase: "emulador" } },
+      { raiz: "/w/webstudio/SinNada", dispositivo: undefined },
+    ];
+    const vestibulo = {
+      ...vestibuloDePrueba(),
+      proyectosAbiertos: () => abiertas as unknown as ReturnType<Vestibulo["proyectosAbiertos"]>,
+    };
+    const { cliente } = await conectar({ detectarDispositivos: async () => medida(["pixel8", "pixel9"]) }, vestibulo);
+    expect(fotos(cliente).at(-1)!.enUso).toEqual([
+      { id: "emulator-5554", proyecto: "Tienda" },
+      { id: "emulator-5556", proyecto: "Almacen" },
+    ]);
+    expect(JSON.stringify(fotos(cliente).at(-1)!.enUso)).not.toContain("/w/");
+  });
+
+  it("elegir dispositivo reemite la foto, con quién lo usa, sin volver a medir", async () => {
+    let medidas = 0;
+    // Una copia BAJADA de verdad en un temporal (`config.json` + `sync.json`): sin ella el
+    // proyecto no se abre y no habría consola de la que decir qué usa.
+    const base = mkdtempSync(join(tmpdir(), "xonecode-en-uso-"));
+    const servidor = servidorDeMentira();
+    const real = vestibuloDePrueba({ baseDeWorkspace: () => base });
+    // El lazo de prueba (`correr: async () => 0`) acaba en el acto, así que la consola queda
+    // `cerrada` y `proyectosAbiertos()` la descarta: se cuenta la del foco, que es la que se elige.
+    const vestibulo: Vestibulo = {
+      ...real,
+      proyectosAbiertos: () => {
+        const abierta = real.proyectoAbierto();
+        return abierta === undefined ? [] : [abierta];
+      },
+    };
+    const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
+    montarRutas(servidor, vestibulo, {
+      detectarDispositivos: async () => {
+        medidas++;
+        return medida([], [{ id: "emulator-5554", nombre: "pixel8", plataforma: "android", clase: "emulador", estado: "arrancado" }]);
+      },
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+    await asentar();
+    const antes = medidas;
+    await enviarMensaje(accion, { clase: "dispositivo", id: "emulator-5554" });
+    await asentar();
+    expect(medidas).toBe(antes);
+    expect(fotos(cliente).at(-1)!.enUso).toEqual([{ id: "emulator-5554", proyecto: "Tienda" }]);
+    await vestibulo.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+});
+
+/**
+ * El cableado de los emuladores: las cinco opciones con las funciones de VERDAD. Es el patrón de
+ * fallo de este repo —un campo opcional que se cae del literal de `arrancarConsolaWeb`, o un
+ * argumento que se pierde por el camino, compila y pasa—, así que se mira la composición misma.
+ */
+describe("emuladoresCableados — la composición de producción, no un doble", () => {
+  it("monta las cinco, y «sin ventana» llega a `arrancarEmulador` como su TERCER argumento", async () => {
+    const llamadas: unknown[][] = [];
+    const cableados = emuladoresCableados({
+      arrancar: async (...args) => {
+        llamadas.push(args);
+        return { ok: true, detalle: "" };
+      },
+    });
+    for (const f of Object.values(cableados)) expect(f).toBeTypeOf("function");
+    expect(Object.keys(cableados).sort()).toEqual(
+      ["arrancarEmulador", "crearAvd", "guardarAjusteDeAvd", "guardarPuertosAsignados", "pararEmulador"].sort()
+    );
+    await cableados.arrancarEmulador("pixel8", { sinVentana: true });
+    expect(llamadas).toEqual([["pixel8", {}, { sinVentana: true }]]);
+  });
+
+  it("guarda lo de cada AVD en el `settings.json` de SU casa, y la siembra no pisa lo guardado", () => {
+    const casa = mkdtempSync(join(tmpdir(), "xonecode-emuladores-"));
+    try {
+      const { guardarAjusteDeAvd, guardarPuertosAsignados } = emuladoresCableados({ casa });
+      guardarAjusteDeAvd("alfa", { puerto: 8450, sinVentana: true });
+      guardarPuertosAsignados({ alfa: 8443, beta: 8444 });
+      expect(cargarSettings(casa).settings.dispositivos?.avds).toEqual({
+        alfa: { puerto: 8450, sinVentana: true },
+        beta: { puerto: 8444 },
+      });
+    } finally {
+      rmSync(casa, { recursive: true, force: true });
+    }
+  });
+
+  it("las de la máquina validan antes de lanzar: un nombre o una serie malos no ejecutan nada", async () => {
+    const { crearAvd, pararEmulador } = emuladoresCableados();
+    expect((await crearAvd("-mal", () => {}).terminado).estado).toBe("fallo");
+    expect((await pararEmulador("ABC")).ok).toBe(false);
   });
 });

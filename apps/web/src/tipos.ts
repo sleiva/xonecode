@@ -745,6 +745,9 @@ export type MensajeAlCliente =
        *  el resultado: `emulator` vuelve enseguida y lo que cuenta es si el aparato apareció.
        *  **Ausente = no se ha pedido ninguno**, que no es «salió bien». */
       arranque?: { avd: string; ok: boolean; detalle: string };
+      /** Qué dispositivo tiene elegido cada consola abierta, y de qué proyecto (el nombre de su
+       *  carpeta, nunca una ruta). Ausente = el servidor no lo dice. */
+      enUso?: { id: string; proyecto: string }[];
     }
   /**
    * Los ficheros que la sesión ha tocado, y el parche de uno. Los tres `via` son tres cosas
@@ -1332,6 +1335,13 @@ export type MensajeDelCliente =
    *  medida antes de ejecutar. La respuesta es el `dispositivos` de siempre, con el resultado
    *  dentro — arrancar acaba en una medida, no en un acuse. */
   | { clase: "arrancarEmulador"; avd: string }
+  /** «Crea un AVD con este nombre.» El servidor lo valida contra SU medida; el progreso llega
+   *  como `instalacion` con `receta: "crear-avd"`. */
+  | { clase: "crearEmulador"; nombre: string }
+  /** Lo de UN AVD: su puerto del túnel y si arranca sin ventana. Vuelve `dispositivos`. */
+  | { clase: "ajusteDeAvd"; avd: string; puerto?: number; sinVentana?: boolean }
+  /** «Para este emulador», por su ID de la medida. */
+  | { clase: "pararEmulador"; id: string }
   /**
    * «Habla con este dispositivo y dime si contesta.» Viaja el ID y nada más; el servidor lo
    * resuelve contra su última medida y decide qué comando lanzar. NO vuelve a medir: la

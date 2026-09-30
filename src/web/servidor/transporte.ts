@@ -513,6 +513,13 @@ export type MensajeAlCliente =
        */
       arranque?: { avd: string; ok: boolean; detalle: string };
       /**
+       * Qué dispositivo tiene elegido CADA consola abierta, y de qué proyecto es: con dos
+       * proyectos sobre dos emuladores, Ajustes dice «lo usa Tienda» al lado de cada uno.
+       * `proyecto` es el nombre de su carpeta —el que enseña la barra—, nunca una ruta. Una
+       * consola sin dispositivo elegido no aparece.
+       */
+      enUso?: { id: string; proyecto: string }[];
+      /**
        * Qué destinos se miran (`core/settings.ts#AjustesDeDispositivos`). Viaja CON la
        * foto porque las dos cosas se leen juntas: una herramienta «desactivada» solo se
        * entiende sabiendo qué interruptor la apagó. **Ausente = nadie ha elegido**, y
@@ -1449,6 +1456,20 @@ export type MensajeDelCliente =
    * arrancar acaba en una medida, no en un acuse.
    */
   | { clase: "arrancarEmulador"; avd: string }
+  /**
+   * «Crea un AVD con este nombre.» El servidor valida el nombre (forma, y que no exista en SU
+   * última medida) antes de lanzar `avdmanager`, y lo cuenta como un paso de receta
+   * (`instalacion` con `receta: "crear-avd"`): comparten el cerrojo, uno a la vez.
+   */
+  | { clase: "crearEmulador"; nombre: string }
+  /**
+   * Lo de UN AVD: el puerto local del túnel de hotswap y si arranca sin ventana. El AVD tiene
+   * que estar en la última medida y el puerto no puede ser de otro; la respuesta es el
+   * `dispositivos` de siempre, con los `ajustes` nuevos.
+   */
+  | { clase: "ajusteDeAvd"; avd: string; puerto?: number; sinVentana?: boolean }
+  /** «Para este emulador.» El ID de la medida, y solo si es un emulador; después se remide. */
+  | { clase: "pararEmulador"; id: string }
   /**
    * VERIFICAR la conexión con un dispositivo: hablarle y esperar respuesta.
    *

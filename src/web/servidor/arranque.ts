@@ -86,8 +86,14 @@ import type { Dispositivo, Herramienta, InformeDeDispositivos } from "../../core
 import { PLATAFORMAS_DE_DISPOSITIVO, type AjustesDeDispositivos } from "../../core/settings.js";
 import type { NombreDeHerramienta } from "../../core/dispositivos.js";
 import { instalarHerramientaDeDispositivos, verificarDispositivo } from "../../agent/dispositivos/dispositivosEnMaquina.js";
-import { arrancarEmulador } from "../../agent/dispositivos/arranqueDeEmulador.js";
-import { correrPasoDeReceta } from "../../agent/dispositivos/instalacionEnMaquina.js";
+import { arrancarEmulador, pararEmulador } from "../../agent/dispositivos/arranqueDeEmulador.js";
+import { correrPasoDeReceta, crearAvd } from "../../agent/dispositivos/instalacionEnMaquina.js";
+import {
+  asignarPuertosPendientes,
+  motivoDeNombreDeAvdInaceptable,
+  motivoDePuertoInaceptable,
+  puertoDeAvd,
+} from "../../core/puertosDeAvd.js";
 import { abrirCarpetaDelSistema, abrirDirectorioDelSistema } from "../../agent/config/selectorEnMaquina.js";
 import { modelosDeMotor } from "../../agent/config/modelosDeMotor.js";
 import {
@@ -131,6 +137,8 @@ import {
   guardarDepurar,
   guardarWorkspace as guardarWorkspaceEnDisco,
   guardarDispositivos,
+  guardarAjusteDeAvd,
+  guardarPuertosAsignados,
   guardarEntorno as guardarEntornoEnDisco,
   olvidarEntornoDeSettings,
   copiasDeEntorno,
@@ -552,7 +560,28 @@ export interface OpcionesDeMontaje {
    * (`agent/dispositivos/arranqueDeEmulador.ts`). **Ausente = esta ejecución no puede**, y
    * entonces se dice en vez de pintar un botón muerto. Promete no lanzar.
    */
-  arrancarEmulador?: (avd: string) => Promise<{ ok: boolean; detalle: string }>;
+  arrancarEmulador?: (avd: string, opciones?: { sinVentana?: boolean }) => Promise<{ ok: boolean; detalle: string }>;
+  /**
+   * Crea un AVD con nombre (`agent/dispositivos/instalacionEnMaquina.ts#crearAvd`), con su salida en
+   * vivo. **Ausente = esta ejecución no crea**, y se dice. Comparte el cerrojo de las recetas:
+   * un `avdmanager` y un `sdkmanager` a la vez sobre el mismo SDK son la misma carrera.
+   */
+  crearAvd?: (
+    nombre: string,
+    alSalirLinea: (linea: string) => void
+  ) => { titulo: string; cancelar: () => void; terminado: Promise<{ estado: string; motivo?: string; ms: number }> };
+  /**
+   * Para un emulador por su consola (`arranqueDeEmulador.ts#pararEmulador`). Recibe la SERIE de
+   * la última medida, nunca una cadena del cliente sin comprobar. Promete no lanzar.
+   */
+  pararEmulador?: (serie: string) => Promise<{ ok: boolean; detalle: string }>;
+  /** Guarda lo de UN AVD en `settings.json` (`settingsEnDisco.ts#guardarAjusteDeAvd`). */
+  guardarAjusteDeAvd?: (avd: string, cambio: { puerto?: number; sinVentana?: boolean }) => void;
+  /**
+   * La siembra de puertos al medir (`settingsEnDisco.ts#guardarPuertosAsignados`): solo AÑADE,
+   * un puerto ya guardado no se toca. Ausente = no se siembra y cada AVD sigue en el de fábrica.
+   */
+  guardarPuertosAsignados?: (asignados: Record<string, number>) => void;
   /**
    * Qué se midió del framework de XOne en un dispositivo (`agent/dispositivos/dispositivosEnMaquina.ts`).
    * Lanza adb, así que entra por opción.
@@ -1684,7 +1713,7 @@ export function montarRutas(
       // La foto de la máquina, si ya se tomó. Si no, se dispara abajo UNA vez y llega a
       // todos por el SSE cuando termine: no se espera aquí, que son varios procesos.
       if (informeDeDispositivos !== undefined) {
-        cliente({ clase: "dispositivos", informe: informeDeDispositivos, ajustes: ajustesDeDispositivos() });
+        cliente(mensajeDeDispositivos(informeDeDispositivos));
       }
       // Y si hay turno corriendo, se dice: quien conecta a mitad no vio el mensaje que lo
       // anunció, y sin esto vería el compositor encendido y sin borde —«no pasa nada»—
@@ -2223,6 +2252,31 @@ export function montarRutas(
 
   /** Los ajustes de destino, o `{}` —que es «se miran todos»— si esta ejecución no los lee. */
   const ajustesDeDispositivos = (): AjustesDeDispositivos => opciones.ajustesDeDispositivos?.() ?? {};
+  /**
+   * Qué dispositivo tiene elegido CADA consola abierta, no solo la del foco: con dos proyectos
+   * abiertos sobre dos emuladores, lo que Ajustes tiene que poder decir es «este lo usa Tienda».
+   *
+   * Se pregunta a las consolas vivas y no se guarda, igual que `sesionesTrabajando`: es un
+   * estado de este instante. El `proyecto` es el SEGMENTO de su carpeta —el mismo nombre que ya
+   * viaja en el lanzamiento (`medirLanzable`) y que enseña la barra—, nunca la ruta: `sinRutas`.
+   */
+  const dispositivosEnUso = (): { id: string; proyecto: string }[] =>
+    vestibulo
+      .proyectosAbiertos()
+      .flatMap((c) => (c.dispositivo === undefined ? [] : [{ id: c.dispositivo.id, proyecto: basename(c.raiz) }]));
+  /**
+   * El mensaje `dispositivos` entero, compuesto en UN sitio: la foto, los ajustes leídos AHORA y
+   * quién usa qué. Con cada emisor montando el suyo, uno se quedaba sin el campo nuevo —una
+   * pestaña que reconecta, o una verificación, borrarían el «en uso» de la pantalla—.
+   */
+  const mensajeDeDispositivos = (
+    informe: InformeDeDispositivosDelCable
+  ): Extract<MensajeAlCliente, { clase: "dispositivos" }> => ({
+    clase: "dispositivos",
+    informe,
+    ajustes: ajustesDeDispositivos(),
+    enUso: dispositivosEnUso(),
+  });
   let deteccionEnVuelo: Promise<void> | undefined;
   /**
    * Cómo acabó el último «Arrancar». Viaja con la foto porque el resultado de arrancar ES la
@@ -2238,10 +2292,23 @@ export function montarRutas(
     deteccionEnVuelo = (async () => {
       try {
         informeDeDispositivos = sinRutas(await detectar());
+        // Cada AVD necesita SU puerto, y fijado —también el único, en silencio—: una propuesta que
+        // se recalculara al crear otro AVD le movería el puerto a uno que ya se usa. Se siembra
+        // ANTES de emitir para que la foto salga con los puertos ya puestos, y releyendo después
+        // (`ajustesDeDispositivos` va al disco): lo emitido es lo que quedó escrito. Un AVD recién
+        // creado desde Ajustes recibe el suyo aquí, en la medida que cierra su trabajo.
+        const pendientes = asignarPuertosPendientes(informeDeDispositivos.avds, ajustesDeDispositivos());
+        if (pendientes !== undefined && opciones.guardarPuertosAsignados !== undefined) {
+          try {
+            opciones.guardarPuertosAsignados(pendientes);
+          } catch (error) {
+            // No impide emitir: la foto sigue siendo verdad, y sin puerto guardado el AVD usa el
+            // de fábrica, que es lo que había antes. Lo que no se puede es callarlo.
+            informar(`no se pudieron guardar los puertos de los emuladores (${codigoDe(error)})`);
+          }
+        }
         emitir({
-          clase: "dispositivos",
-          informe: informeDeDispositivos,
-          ajustes: ajustesDeDispositivos(),
+          ...mensajeDeDispositivos(informeDeDispositivos),
           ...(ultimoArranque === undefined ? {} : { arranque: ultimoArranque }),
         });
       } catch (error) {
@@ -2291,7 +2358,9 @@ export function montarRutas(
     }
     arranqueEnVuelo = avd;
     try {
-      const r = await arrancar(avd);
+      // «Sin ventana» es un ajuste de ESE AVD (Ajustes → Dispositivos), leído al arrancar y no
+      // del cliente: lo que se pulsa es «Arrancar», y cómo se arranca ya está elegido.
+      const r = await arrancar(avd, { sinVentana: ajustesDeDispositivos().avds?.[avd]?.sinVentana === true });
       ultimoArranque = { avd, ...r };
     } catch (error) {
       // El puerto promete no lanzar; si lanzara, el botón no puede quedarse mudo.
@@ -2349,7 +2418,76 @@ export function montarRutas(
       ...informeDeDispositivos,
       dispositivos: informeDeDispositivos.dispositivos.map((d) => (d.id === id ? { ...d, verificado } : d)),
     };
-    emitir({ clase: "dispositivos", informe: informeDeDispositivos, ajustes: ajustesDeDispositivos() });
+    emitir(mensajeDeDispositivos(informeDeDispositivos));
+  };
+
+  /**
+   * **Lo de UN AVD: su puerto del túnel y si arranca sin ventana.**
+   *
+   * El nombre llega por el cable, así que tiene que estar en NUESTRA última medida (la misma
+   * guarda que «Arrancar»): guardar ajustes de un AVD que no existe llenaría `settings.json` de
+   * nombres que nadie ve. El puerto pasa por `motivoDePuertoInaceptable` contra los ajustes de
+   * AHORA —dos AVD con el mismo puerto son el fallo que todo esto viene a quitar—, y la negativa
+   * se dice sin guardar NADA del mensaje, tampoco el `sinVentana` que viniera con él: medio
+   * cambio aplicado es un cambio que nadie pidió.
+   *
+   * No se vuelve a medir: el ajuste no cambia la máquina. Se reemite la foto que hay con los
+   * ajustes releídos, que es lo que el campo tiene que enseñar.
+   */
+  const atenderAjusteDeAvd = async (avd: string, cambio: { puerto?: number; sinVentana?: boolean }): Promise<void> => {
+    const guardar = opciones.guardarAjusteDeAvd;
+    if (guardar === undefined) {
+      informar("esta ejecución no puede guardar los ajustes de los emuladores");
+      return;
+    }
+    if (informeDeDispositivos === undefined) await atenderDispositivos().catch(contar);
+    if (informeDeDispositivos === undefined || !informeDeDispositivos.avds.includes(avd)) {
+      informar(`no consta ningún AVD llamado «${avd}» en la última medida`);
+      return;
+    }
+    if (cambio.puerto !== undefined) {
+      const motivo = motivoDePuertoInaceptable(cambio.puerto, avd, ajustesDeDispositivos());
+      if (motivo !== undefined) {
+        informar(`no se cambió el puerto de ${avd}: ${motivo}`);
+        return;
+      }
+    }
+    try {
+      guardar(avd, cambio);
+    } catch (error) {
+      informar(`no se pudieron guardar los ajustes de ${avd} (${codigoDe(error)})`);
+      return;
+    }
+    emitir(mensajeDeDispositivos(informeDeDispositivos));
+  };
+
+  /**
+   * **Parar un emulador**, por su serie de la última medida y solo si ES un emulador: la serie
+   * acaba siendo un argumento de `adb`, y un físico no se «para» desde aquí. Al acabar se mide
+   * SIEMPRE, como al arrancar: la foto es la que dice si se paró.
+   */
+  const atenderParadaDeEmulador = async (id: string): Promise<void> => {
+    const parar = opciones.pararEmulador;
+    if (parar === undefined) {
+      informar("esta ejecución no puede parar emuladores");
+      return;
+    }
+    if (informeDeDispositivos === undefined) await atenderDispositivos().catch(contar);
+    const dispositivo = informeDeDispositivos?.dispositivos.find((d) => d.id === id);
+    if (dispositivo === undefined || dispositivo.clase !== "emulador") {
+      informar(`no consta ningún emulador «${id}» en la última medida`);
+      return;
+    }
+    try {
+      const r = await parar(dispositivo.id);
+      if (!r.ok) informar(`no se pudo parar ${dispositivo.nombre}: ${r.detalle}`);
+    } catch (error) {
+      // El puerto promete no lanzar; si lo hace, se cuenta y se mide igual.
+      informar(`no se pudo parar ${dispositivo.nombre} (${codigoDe(error)})`);
+    } finally {
+      informeDeDispositivos = undefined;
+      await atenderDispositivos().catch(contar);
+    }
   };
 
   const atenderCatalogo = async (proveedor: string): Promise<void> => {
@@ -3506,7 +3644,17 @@ export function montarRutas(
       // `corriendo` para siempre y el botón muerto, que es justo lo que este `try` existe para
       // evitar. Su contrato es no lanzar nunca; esto es por si deja de cumplirlo.
       const enCurso: LanzamientoEnCurso = lanzar(
-        { dispositivo: medida.dispositivo, raiz: medida.abierto.raiz, app: medida.app },
+        {
+          dispositivo: medida.dispositivo,
+          raiz: medida.abierto.raiz,
+          app: medida.app,
+          // El puerto LOCAL del túnel es el de SU AVD: con dos emuladores y el mismo puerto,
+          // el `adb forward` del segundo le quita el túnel al primero sin error. Un físico no
+          // tiene AVD y va por el de fábrica, que es lo que hace el lanzador sin puerto.
+          ...(medida.dispositivo.avd === undefined
+            ? {}
+            : { puerto: puertoDeAvd(ajustesDeDispositivos(), medida.dispositivo.avd) }),
+        },
         { alFase }
       );
       trabajo.cancelar = enCurso.cancelar;
@@ -4205,38 +4353,23 @@ export function montarRutas(
   };
 
   /**
-   * Lanza un paso, o cancela el que corre.
+   * El cerrojo compartido: monta `trabajo`, emite el primer progreso y, al terminar, el último y
+   * una medida nueva. Lo usan los pasos de receta y crear un AVD, que son la misma clase de
+   * trabajo (`sdkmanager`/`avdmanager` sobre el mismo SDK): quien llama ya comprobó que no había
+   * otro en marcha.
    *
-   * Al terminar se vuelve a MEDIR, y es lo que decide si el paso queda hecho: lo que diga el
+   * Al terminar se vuelve a MEDIR, y es lo que decide si el trabajo queda hecho: lo que diga el
    * instalador es lo que él cree, y la foto es lo que hay. Es la misma regla que ya sigue
    * `instalar`.
    */
-  const atenderReceta = (mensaje: Extract<MensajeDelCliente, { clase: "receta" }>): void => {
-    if (mensaje.accion === "cancelar") {
-      trabajo?.cancelar();
-      return;
-    }
-    if (trabajo !== undefined) {
-      // Ya hay uno: se reenvía su estado en vez de lanzar otro.
-      emitirProgreso("corriendo");
-      return;
-    }
-    const correr = opciones.correrPasoDeReceta;
-    if (correr === undefined) {
-      informar("esta ejecución no puede ejecutar pasos de instalación");
-      return;
-    }
-    const enMarcha = correr(mensaje.id, mensaje.paso, (linea) => {
-      if (trabajo === undefined) return;
-      trabajo.lineas.push(linea);
-      // A ritmo: cada emisión manda la cola entera, y por línea sería cuadrático en bytes
-      // con un `sdkmanager` que habla cada pocos milisegundos. Es la misma razón que
-      // `MS_ENTRE_PARCIALES` en la piel web.
-      if (Date.now() - ultimoProgreso >= MS_ENTRE_PROGRESOS) emitirProgreso("corriendo");
-    });
+  const correrTrabajo = (
+    receta: string,
+    paso: number,
+    enMarcha: { titulo: string; cancelar: () => void; terminado: Promise<{ estado: string; motivo?: string }> }
+  ): void => {
     trabajo = {
-      receta: mensaje.id,
-      paso: mensaje.paso,
+      receta,
+      paso,
       titulo: enMarcha.titulo,
       lineas: [],
       cancelar: enMarcha.cancelar,
@@ -4254,6 +4387,72 @@ export function montarRutas(
       informeDeDispositivos = undefined;
       await atenderDispositivos().catch(contar);
     })();
+  };
+
+  /**
+   * Cada línea de la salida, a la cola del trabajo en curso y emitida A RITMO: cada emisión manda
+   * la cola entera, y por línea sería cuadrático en bytes con un `sdkmanager` que habla cada
+   * pocos milisegundos. Es la misma razón que `MS_ENTRE_PARCIALES` en la piel web.
+   */
+  const alSalirLineaDelTrabajo = (linea: string): void => {
+    if (trabajo === undefined) return;
+    trabajo.lineas.push(linea);
+    if (Date.now() - ultimoProgreso >= MS_ENTRE_PROGRESOS) emitirProgreso("corriendo");
+  };
+
+  /** Lanza un paso, o cancela el que corre. */
+  const atenderReceta = (mensaje: Extract<MensajeDelCliente, { clase: "receta" }>): void => {
+    if (mensaje.accion === "cancelar") {
+      trabajo?.cancelar();
+      return;
+    }
+    if (trabajo !== undefined) {
+      // Ya hay uno: se reenvía su estado en vez de lanzar otro.
+      emitirProgreso("corriendo");
+      return;
+    }
+    const correr = opciones.correrPasoDeReceta;
+    if (correr === undefined) {
+      informar("esta ejecución no puede ejecutar pasos de instalación");
+      return;
+    }
+    correrTrabajo(mensaje.id, mensaje.paso, correr(mensaje.id, mensaje.paso, alSalirLineaDelTrabajo));
+  };
+
+  /**
+   * **Crear un AVD con nombre**, por el MISMO cerrojo que las recetas y contado igual
+   * (`receta: "crear-avd"`, `paso: 0`): la pantalla ya sabe pintar ese log.
+   *
+   * El nombre acaba siendo un argumento de `avdmanager`, así que se valida aquí con la regla
+   * pura (forma, largo, y que no exista ya en la última medida) antes de lanzar nada; sin medida
+   * no se puede saber si se repite, así que se mide primero. El cerrojo se vuelve a mirar
+   * DESPUÉS de esa espera: mientras se medía pudo arrancar otro trabajo.
+   */
+  const atenderCrearEmulador = async (nombre: string): Promise<void> => {
+    if (trabajo !== undefined) {
+      emitirProgreso("corriendo");
+      return;
+    }
+    const crear = opciones.crearAvd;
+    if (crear === undefined) {
+      informar("esta ejecución no puede crear emuladores");
+      return;
+    }
+    if (informeDeDispositivos === undefined) await atenderDispositivos().catch(contar);
+    if (informeDeDispositivos === undefined) {
+      informar("no se creó el emulador: todavía no hay una medida con la que comprobar el nombre");
+      return;
+    }
+    const motivo = motivoDeNombreDeAvdInaceptable(nombre, informeDeDispositivos.avds);
+    if (motivo !== undefined) {
+      informar(`no se creó el emulador: ${motivo}`);
+      return;
+    }
+    if (trabajo !== undefined) {
+      emitirProgreso("corriendo");
+      return;
+    }
+    correrTrabajo("crear-avd", 0, crear(nombre, alSalirLineaDelTrabajo));
   };
 
   /**
@@ -5452,6 +5651,46 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "crearEmulador" &&
+      typeof mensaje.nombre === "string"
+    ) {
+      // Suelto, como la receta: el progreso y la foto de después viajan por el SSE.
+      void atenderCrearEmulador(mensaje.nombre).catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "ajusteDeAvd" &&
+      typeof mensaje.avd === "string" &&
+      (mensaje.puerto === undefined || typeof mensaje.puerto === "number") &&
+      (mensaje.sinVentana === undefined || typeof mensaje.sinVentana === "boolean")
+    ) {
+      // Campo a campo: lo que no es un número o un booleano no llega a `settings.json`.
+      void atenderAjusteDeAvd(mensaje.avd, {
+        ...(mensaje.puerto === undefined ? {} : { puerto: mensaje.puerto }),
+        ...(mensaje.sinVentana === undefined ? {} : { sinVentana: mensaje.sinVentana }),
+      }).catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "pararEmulador" &&
+      typeof mensaje.id === "string"
+    ) {
+      void atenderParadaDeEmulador(mensaje.id).catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     /**
      * ANTES del `recibir` de la consola, y también antes que las demás clases de tarea: por
      * aquí no entra nada hacia ningún turno. Ver `atenderMirar`.
@@ -5738,6 +5977,9 @@ export function montarRutas(
         // Suelto: `anunciarAlta` consulta CloudStudio y el `POST` no puede quedarse
         // esperando por eso. El alta nueva llega por el SSE, como siempre.
         void anunciarAlta().catch(contar);
+        // Y la foto que hay, sin volver a medir: lo que cambió es QUIÉN usa ese aparato, y
+        // Ajustes lo enseña al lado de cada uno (`enUso`).
+        if (informeDeDispositivos !== undefined) emitir(mensajeDeDispositivos(informeDeDispositivos));
       }
       respuesta.writeHead(204);
       respuesta.end();
@@ -6321,6 +6563,32 @@ export function ajusteDeWorkspaceCableado(opciones: {
       if (motivoDeWorkspaceInaceptable(absoluta) !== undefined) return;
       guardar(absoluta);
     },
+  };
+}
+
+/**
+ * Los cinco puertos de los emuladores, cableados con las funciones de verdad — extraídos por el
+ * MISMO motivo que `ajusteDeWorkspaceCableado`: dentro de `arrancarConsolaWeb` serían un literal
+ * que ningún test mira, y cada uno es un campo OPCIONAL de `montarRutas`, así que olvidarlo o
+ * perder un argumento por el camino compila y pasa.
+ *
+ * `casa` es la del `settings.json` donde se guardan los ajustes por AVD; ausente, la del usuario
+ * (`guardarAjusteDeAvd(undefined, …)`). `arrancar` entra solo para que un test vea qué recibe la
+ * de verdad sin lanzar un emulador.
+ */
+export function emuladoresCableados(opciones: {
+  casa?: string;
+  arrancar?: typeof arrancarEmulador;
+} = {}): Required<
+  Pick<OpcionesDeMontaje, "arrancarEmulador" | "crearAvd" | "pararEmulador" | "guardarAjusteDeAvd" | "guardarPuertosAsignados">
+> {
+  const arrancar = opciones.arrancar ?? arrancarEmulador;
+  return {
+    arrancarEmulador: (avd, o) => arrancar(avd, {}, o ?? {}),
+    crearAvd: (nombre, alSalirLinea) => crearAvd(nombre, { alSalirLinea }),
+    pararEmulador: (serie) => pararEmulador(serie),
+    guardarAjusteDeAvd: (avd, cambio) => void guardarAjusteDeAvd(opciones.casa, avd, cambio),
+    guardarPuertosAsignados: (asignados) => void guardarPuertosAsignados(opciones.casa, asignados),
   };
 }
 
@@ -6934,7 +7202,12 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     // nueve veces, y la que el comentario de justo abajo describe para las cuatro del
     // lanzamiento. `montarRutas` lo trata como ausente si falta, así que olvidarlo aquí
     // dejaría el botón diciendo «esta ejecución no puede arrancar emuladores» con todo verde.
-    arrancarEmulador: (avd) => arrancarEmulador(avd),
+    // Los cinco de los emuladores —arrancar, crear, parar, y guardar lo de cada AVD—, con las
+    // funciones REALES y compuestos fuera (`emuladoresCableados`) para que la composición tenga
+    // test: `arrancarEmulador: (avd) => arrancarEmulador(avd)` compilaba igual perdiendo el
+    // «sin ventana», y un campo opcional olvidado aquí deja el botón diciendo «esta ejecución no
+    // puede» con todo en verde.
+    ...emuladoresCableados(),
     /**
      * Las cuatro de «¿se puede lanzar y lánzalo?», compuestas con las funciones REALES.
      *
