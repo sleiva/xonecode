@@ -1031,13 +1031,25 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   (`arranque.ts#mudarWorkspaceLegadoCableado`, antes del vestíbulo y del corredor de tareas).
   Proyecto a proyecto; un destino que existe NUNCA se pisa; solo lo movido de verdad reescribe una
   ruta guardada (`proyecto.raiz` del índice de tareas).
-- **Cambiar el workspace NO mueve lo que ya está bajado**, y la pantalla lo dice.
+- **Cambiar el workspace MUDA lo que ya está bajado, en dos actos** (`vestibulo.mudarWorkspace`,
+  `core/mudanzaDeWorkspace.ts#planDeCambioDeBase`, `agent/config/mudanzaEnDisco.ts
+  #mudarBaseDeWorkspace`): `planear` dice qué se movería —por NOMBRE, sin tocar nada— y la
+  pantalla lo CONFIRMA; `aplicar` COPIA a una carpeta oculta, VERIFICA fichero a fichero con
+  hash, y solo entonces guarda la base, remapea `proyecto.raiz` de las tareas y borra el origen
+  por lápida (lo que no se deja borrar sale como «restos»). Se niega con motivo
+  (`motivoParaNoMudarWorkspace`) con un turno en vuelo, una consola de tarea o una tarea sin
+  terminar bajo la base; **una consola abierta y parada no es motivo**, se cierra antes. Ocupa la
+  cola del vestíbulo ENTERA mientras dura, y crear una tarea a la vez se niega.
+- **La regla del workspace tiene DOS copias** (host y `Ajustes.tsx`), atadas por una tabla de casos
+  compartida (`src/core/casosDeWorkspace.json`) que leen las dos suites: la del cliente se quedó
+  en «empieza por /» y en Windows toda ruta salía en rojo.
 - **La ruta del workspace es la excepción NOMBRADA a `sinRutas`, y la única del cable**: viaja
   ENTERA (no abreviada con `~`). El `~` se acepta al TECLEAR (`expandirConCasa`). La regla de qué
   vale (`motivoDeWorkspaceInaceptable`) se aplica en el SERVIDOR.
 - **El selector de carpeta lo abre el SISTEMA, no el navegador** (`core/selectorDeCarpeta.ts`,
-  `agent/config/selectorEnMaquina.ts`): `osascript`/`zenity`/el `FolderBrowserDialog` de PowerShell, solo cruza la carpeta
-  elegida. **Y una ruta de Windows vale** (`C:\…`, `\\servidor\…`): la regla y `rutaDeWorkspace` usan las de la base,
+  `agent/config/selectorEnMaquina.ts`): `osascript`/`zenity`/el `IFileOpenDialog` de Windows por PowerShell
+  (el moderno, donde se TECLEA la ruta; dueño `TopMost` y centrado a mano porque recuerda dónde se
+  cerró; salida en UTF-8), solo cruza la carpeta elegida. **Y una ruta de Windows vale** (`C:\…`, `\\servidor\…`): la regla y `rutaDeWorkspace` usan las de la base,
   no siempre `posix` (IXCODE-22).
   Elegir y guardar son dos actos. **Límite declarado**: por un túnel el botón no sirve.
 

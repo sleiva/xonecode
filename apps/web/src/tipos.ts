@@ -705,6 +705,18 @@ export type MensajeAlCliente =
    */
   | { clase: "carpetaElegida"; ruta?: string }
   /**
+   * Cómo va la MUDANZA de las copias al cambiar el workspace, y cómo acabó. `progreso` mientras
+   * dura (fase, y el proyecto por NOMBRE y entorno: ninguna ruta de la máquina), `resultado`
+   * una vez al final. Los dos ausentes no viajan nunca.
+   */
+  | {
+      clase: "mudanzaDeWorkspace";
+      progreso?: { fase: "comprobar" | "copiar" | "verificar" | "borrar"; proyecto?: string; entorno?: string; indice?: number; total?: number };
+      resultado?:
+        | { estado: "hecho"; mudadas: number; restos: string[]; avisos: string[] }
+        | { estado: "rechazado"; motivo: string };
+    }
+  /**
    * La casilla «Depurar» de Ajustes > General: si las dos trazas opt-in
    * (`XONECODE_TRACE_ERRORES`, `XONECODE_TRACE_TOOLS`) van encendidas sin que nadie ponga una
    * variable de entorno. Va en la ráfaga de bienvenida por lo mismo que el workspace.
@@ -1460,9 +1472,9 @@ export type MensajeDelCliente =
   | { clase: "tarea"; accion: "reintentar" | "descartar" | "terminar"; id: string }
   /** Cambia el tope de concurrencia de la cola de tareas. */
   | { clase: "tareas"; concurrencia: number }
-  /** Elige dónde se bajan las copias locales. **No mueve nada de lo ya bajado**: cambia
-   *  dónde caerá lo siguiente, y la pantalla lo dice. */
-  | { clase: "workspace"; ruta: string }
+  /** Elige dónde se bajan las copias locales y MUDA las ya bajadas: `planear` contesta qué se
+   *  movería sin tocar nada; sin `accion` (o `aplicar`) se cambia de verdad. */
+  | { clase: "workspace"; ruta: string; accion?: "planear" | "aplicar" }
   /** Cambia la casilla «Depurar» de Ajustes > General. */
   | { clase: "depuracion"; activa: boolean }
   /** Abre el selector de carpeta NATIVO **de la máquina donde corre la consola** — ver

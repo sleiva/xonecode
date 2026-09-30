@@ -5275,13 +5275,64 @@ arrancar deja el resto del proceso trabajando con el de antes. Aquí el síntoma
 los dos mudos: lo siguiente se bajaría al sitio viejo mientras la pantalla enseña el nuevo, y
 `dentroDelWorkspace` compararía contra la carpeta de antes y pararía los commits por turno.
 
-### Cambiar la carpeta no mueve nada, y eso se dice
+### Cambiar la carpeta no mueve nada, y eso se dice (SUSTITUIDO, ver abajo)
 
-Se decidió a propósito y la pantalla lo escribe. Las razones: un `renameSync` entre volúmenes
+Se decidió a propósito y la pantalla lo escribía. Las razones: un `renameSync` entre volúmenes
 es EXDEV —y el caso interesante de elegir carpeta es justo un disco externo—, y mover
 gigabytes de trabajo ajeno como efecto secundario de guardar un ajuste no es algo que se pueda
-hacer sin preguntar. Lo que cambia es dónde cae lo SIGUIENTE. Lo que queda abierto es ofrecer
-la mudanza con el plan delante, por la misma puerta que ya usa la subida.
+hacer sin preguntar. Quedaba abierto ofrecer la mudanza con el plan delante; es lo que hace la
+sección siguiente.
+
+### Cambiar la carpeta MUDA lo bajado, con el plan delante (IXCODE-22, 30-09-2026)
+
+No mover dejaba las copias FUERA del workspace: salían «sin descargar», `dentroDelWorkspace`
+dejaba de ser cierto y el commit por turno se paraba sin avisar, y las tareas guardaban una raíz
+que ya no era la de la base. Así que guardar la carpeta ahora MUDA, en dos actos:
+
+- **`planear`** contesta en la propia respuesta del POST qué se movería —por nombre y entorno,
+  nunca una ruta— o por qué no se puede, sin tocar nada (`core/mudanzaDeWorkspace.ts
+  #planDeCambioDeBase`). Se listan las carpetas REALES de la base, no los entornos registrados:
+  quitar un entorno no borra sus copias. Tres noes: una base que cuelga de la otra, una dentro de
+  `~/.xonecode` que no sea su `workspace`, y un destino ya ocupado —que niega la mudanza ENTERA,
+  nunca a medias—.
+- **La pantalla CONFIRMA** con la lista delante (la misma tarjeta de decisión que la subida).
+- **`aplicar`** contesta en el acto y cuenta el recorrido por el cable
+  (`agent/config/mudanzaEnDisco.ts#mudarBaseDeWorkspace`).
+
+**Se COPIA siempre, también en el mismo disco**, a una carpeta OCULTA hermana del destino: así un
+EXDEV no existe y el origen sigue intacto hasta el final. **Se verifica fichero a fichero con
+SHA-256** (rutas relativas, tamaños, enlaces), que es más fuerte que cualquier comprobación de
+git; `git fsck` se descartó porque abortaría por defectos que ya traía el origen. Solo con TODO
+verificado pasan las ocultas a su nombre, se guarda la base y se reescribe `proyecto.raiz` del
+índice de tareas. El origen se borra el ÚLTIMO, por lápida: si algo lo bloquea, el cambio ya está
+hecho y se dice como «restos», porque deshacerlo con la base nueva escrita sería peor.
+
+**Qué la para** (`core/settings.ts#motivoParaNoMudarWorkspace`): un chat con turno en vuelo, una
+consola de tarea abierta o una tarea sin terminar —`requiere-atencion` incluida— bajo la base.
+**Una consola abierta y parada NO**, como en `borrarCopia`: la web siempre tiene una en foco, y
+negarse por ella haría el cambio imposible. Se cierra antes y DESPUÉS se suelta su checkpointer.
+**La mudanza ocupa la cola del vestíbulo entera**, no solo la comprobación: una consola reabierta
+a mitad escribiría en la ruta vieja lo que luego se borra. Crear una tarea mientras dura se niega
+con motivo, por lo mismo.
+
+**Límites declarados**: un `xonecode` de TERMINAL abierto sobre la base no se ve desde el
+servidor; destino en OneDrive o en una ruta de red, y rutas largas de Windows, no se avisan.
+
+### El selector de Windows, probado en Windows (IXCODE-22, 30-09-2026)
+
+El `FolderBrowserDialog` de Forms es el árbol clásico: no tiene barra de direcciones ni campo
+donde teclear, y sin dueño se abría DETRÁS del navegador. Se cambió por `IFileOpenDialog` en modo
+carpetas, compilado al vuelo por `Add-Type` (unas décimas), con un dueño invisible `TopMost`.
+Medido en un Windows de verdad, lanzado como lo lanza `execFile`: sale delante, se teclea la
+ruta, y una carpeta con acentos vuelve entera por el `OutputEncoding` —sin él stdout sale en la
+página de códigos de la consola—. Faltaba una cosa que solo se vio probándolo: **el diálogo
+RECUERDA dónde se cerró la última vez** y se abre ahí, no sobre su dueño, así que un temporizador
+lo recoloca al centro de la pantalla del ratón en cuanto existe.
+
+Y la mitad del IXCODE-22 que nadie había mirado: el cliente llevaba su COPIA de la regla del
+workspace todavía en «empieza por /», así que en Windows TODA ruta salía en rojo y «Guardar» no se
+habilitaba nunca. Las dos copias las ata ahora una tabla de casos compartida
+(`src/core/casosDeWorkspace.json`), leída por las dos suites.
 
 ### La ruta en el cable: la excepción nombrada a `sinRutas`
 

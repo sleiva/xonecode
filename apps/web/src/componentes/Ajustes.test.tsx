@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { Ajustes } from "./Ajustes.js";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import { Ajustes, motivoDeWorkspaceInaceptable } from "./Ajustes.js";
 import { TITULO_DE_REFRESCAR_EQUIPO } from "./Equipo.js";
 import { selloDeFecha } from "../selloDeFecha.js";
 
@@ -39,6 +42,8 @@ describe("Ajustes", () => {
   afterEach(cleanup);
 
   describe("dónde se bajan los proyectos", () => {
+    /** El diálogo de confirmación de la mudanza: Ajustes es otro diálogo, por debajo. */
+    const confirmacion = (): Promise<HTMLElement> => screen.findByRole("dialog", { name: "¿Mover los proyectos a la carpeta nueva?" });
     const campo = (): HTMLInputElement =>
       screen.getByLabelText("Carpeta donde se bajan los proyectos") as HTMLInputElement;
 
@@ -62,6 +67,36 @@ describe("Ajustes", () => {
       fireEvent.change(campo(), { target: { value: "~/xone-proyectos" } });
       fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
       expect(elegidas).toEqual(["~/xone-proyectos"]);
+    });
+
+    it("la copia del cliente da el MISMO veredicto que el host, caso a caso (tabla compartida)", () => {
+      // Por TEXTO, como `tipos.test.ts`: la frontera no deja importar de `src/`. La misma
+      // tabla la pasa `src/core/settings.test.ts` por la regla del host.
+      const ruta = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "src", "core", "casosDeWorkspace.json");
+      const { casos } = JSON.parse(readFileSync(ruta, "utf8")) as { casos: { ruta: string; vale: boolean }[] };
+      expect(casos.length).toBeGreaterThan(0);
+      for (const caso of casos) {
+        expect({ ruta: caso.ruta, vale: motivoDeWorkspaceInaceptable(caso.ruta) === undefined }).toEqual(caso);
+      }
+    });
+
+    it("en Windows la de omisión NO sale en rojo, y editarla habilita Guardar (IXCODE-22)", () => {
+      const elegidas: string[] = [];
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          workspace="C:\Users\lolo\.xonecode\workspace"
+          alCambiarWorkspace={(r) => void elegidas.push(r)}
+        />
+      );
+      expect(campo().getAttribute("aria-invalid")).toBeNull();
+      fireEvent.change(campo(), { target: { value: String.raw`D:\Xone\workspace` } });
+      const guardar = screen.getByRole("button", { name: "Guardar" }) as HTMLButtonElement;
+      expect(guardar.disabled).toBe(false);
+      fireEvent.click(guardar);
+      expect(elegidas).toEqual([String.raw`D:\Xone\workspace`]);
     });
 
     it("sin tocar nada el botón está apagado: guardar lo mismo no es una acción", () => {
@@ -170,12 +205,237 @@ describe("Ajustes", () => {
       expect(campo().value).toBe("/Users/ana/.xonecode/workspace");
     });
 
-    it("DICE que cambiarla no mueve lo que ya está bajado", () => {
-      // Callarlo deja a alguien buscando sus proyectos en una carpeta vacía.
+    it("mientras el diálogo del sistema está abierto, lo DICE con un indicador", () => {
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          workspace="/Users/ana/.xonecode/workspace"
+          alCambiarWorkspace={() => {}}
+          alElegirCarpeta={() => {}}
+        />
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Examinar…" }));
+      expect(screen.getByText(/Esperando la carpeta que elijas/)).toBeTruthy();
+    });
+
+    it("una carpeta elegida y SIN guardar se dice, y cerrar Ajustes AVISA antes de perderla", () => {
+      const cerrados: number[] = [];
+      const props = {
+        ...MANEJADORES,
+        proveedores: PROVEEDORES,
+        conectado: true,
+        workspace: "/Users/ana/.xonecode/workspace",
+        alCambiarWorkspace: () => {},
+        alElegirCarpeta: () => {},
+        alCerrar: () => void cerrados.push(1),
+      };
+      const { rerender } = render(<Ajustes {...props} />);
+      rerender(<Ajustes {...props} carpetaElegida={{ n: 1, ruta: "/datos/xone" }} />);
+      expect(campo().value).toBe("/datos/xone");
+      // Pegado JUSTO debajo del campo, no entre las notas del final.
+      expect(screen.getByText(/Sin guardar/).previousElementSibling?.contains(campo())).toBe(true);
+      fireEvent.click(screen.getByRole("button", { name: /Cerrar/ }));
+      expect(cerrados).toEqual([]);
+      expect(screen.getByText(/Hay cambios sin guardar en la carpeta donde se bajan los proyectos/)).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Descartar y continuar" }));
+      expect(cerrados).toEqual([1]);
+    });
+
+    it("al volver a abrir Ajustes se ve lo GUARDADO, no la carpeta que se eligió y no se guardó", () => {
+      // El store conserva el último acuse del diálogo: la ventana nueva no lo vuelve a aplicar.
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          workspace="/Users/ana/.xonecode/workspace"
+          alCambiarWorkspace={() => {}}
+          carpetaElegida={{ n: 3, ruta: "/datos/xone" }}
+        />
+      );
+      expect(campo().value).toBe("/Users/ana/.xonecode/workspace");
+      expect(screen.queryByText(/Sin guardar/)).toBeNull();
+    });
+
+    it("DICE que cambiarla MUEVE lo que ya está bajado, antes de pulsar", () => {
       render(
         <Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado workspace="/Users/ana/.xonecode/workspace" />
       );
-      expect(screen.getByText(/NO mueve lo que ya está bajado/)).toBeTruthy();
+      expect(screen.getByText(/MUEVE lo que ya está bajado/)).toBeTruthy();
+    });
+
+    it("con copias que mover, CONFIRMA con la lista delante antes de aplicar; cancelar no manda nada", async () => {
+      const aplicadas: string[] = [];
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          workspace="/Users/ana/.xonecode/workspace"
+          alCambiarWorkspace={async (r) => void aplicadas.push(r)}
+          alPlanearWorkspace={async () => ({ proyectos: [{ entorno: "mcp.xone.dev", proyecto: "Dieta" }], megas: 12 })}
+        />
+      );
+      fireEvent.change(campo(), { target: { value: "/datos/xone" } });
+      fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+      const dialogo = await confirmacion();
+      expect(dialogo.textContent).toMatch(/moverá 1 proyecto \(12 MB\) a \/datos\/xone/);
+      expect(dialogo.textContent).toContain("Dieta (mcp.xone.dev)");
+      fireEvent.click(within(dialogo).getByRole("button", { name: "Cancelar" }));
+      await waitFor(() => expect(screen.queryByText("Dieta (mcp.xone.dev)")).toBeNull());
+      expect(aplicadas).toEqual([]);
+
+      fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+      fireEvent.click(within(await confirmacion()).getByRole("button", { name: "Mover y cambiar" }));
+      await waitFor(() => expect(aplicadas).toEqual(["/datos/xone"]));
+    });
+
+    it("la MISMA ventana cuenta el recorrido, no se deja cerrar mientras dura, y al final dice cómo acabó", async () => {
+      const cerrados: number[] = [];
+      const props = {
+        ...MANEJADORES,
+        proveedores: PROVEEDORES,
+        conectado: true,
+        workspace: "/Users/ana/.xonecode/workspace",
+        alCerrar: () => void cerrados.push(1),
+        alCambiarWorkspace: async () => undefined,
+        alPlanearWorkspace: async () => ({ proyectos: [{ entorno: "e", proyecto: "Dieta" }] }),
+      };
+      const { rerender } = render(<Ajustes {...props} />);
+      fireEvent.change(campo(), { target: { value: "/datos/xone" } });
+      fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+      fireEvent.click(within(await confirmacion()).getByRole("button", { name: "Mover y cambiar" }));
+      rerender(<Ajustes {...props} mudanzaDeWorkspace={{ progreso: { fase: "copiar", proyecto: "Dieta", indice: 1, total: 1 } }} />);
+
+      const enCurso = await screen.findByRole("dialog", { name: "Moviendo los proyectos…" });
+      expect(within(enCurso).getByRole("status").textContent).toBe("Copiando «Dieta» (1 de 1)…");
+      // Sin botones, y ni Escape ni cerrar Ajustes la quitan de delante.
+      expect(within(enCurso).queryAllByRole("button")).toEqual([]);
+      fireEvent.keyDown(enCurso, { key: "Escape" });
+      fireEvent.click(screen.getByRole("button", { name: /Cerrar/ }));
+      expect(cerrados).toEqual([]);
+      expect(screen.getByRole("dialog", { name: "Moviendo los proyectos…" })).toBeTruthy();
+
+      rerender(<Ajustes {...props} mudanzaDeWorkspace={{ resultado: { estado: "hecho", mudadas: 1, restos: ["Dieta (e)"], avisos: [] } }} />);
+      const final = await screen.findByRole("dialog", { name: "Carpeta cambiada" });
+      expect(final.textContent).toMatch(/1 proyecto movido.*No se pudo borrar del sitio de antes: Dieta \(e\)/);
+      fireEvent.click(within(final).getByRole("button", { name: "Cerrar" }));
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "Carpeta cambiada" })).toBeNull());
+    });
+
+    it("si la mudanza se rechaza, la ventana lo dice como final, con el motivo", async () => {
+      const props = {
+        ...MANEJADORES,
+        proveedores: PROVEEDORES,
+        conectado: true,
+        workspace: "/Users/ana/.xonecode/workspace",
+        alCambiarWorkspace: async () => undefined,
+        alPlanearWorkspace: async () => ({ proyectos: [{ entorno: "e", proyecto: "Dieta" }] }),
+      };
+      const { rerender } = render(<Ajustes {...props} />);
+      fireEvent.change(campo(), { target: { value: "/datos/xone" } });
+      fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+      fireEvent.click(within(await confirmacion()).getByRole("button", { name: "Mover y cambiar" }));
+      rerender(<Ajustes {...props} mudanzaDeWorkspace={{ resultado: { estado: "rechazado", motivo: "no cabe" } }} />);
+      const final = await screen.findByRole("dialog", { name: "No se ha cambiado la carpeta" });
+      expect(final.textContent).toContain("No cabe.");
+      // Y no sale además el aviso suelto.
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+    });
+
+    it("con un chat trabajando o una tarea sin terminar, PINTA el motivo y no aplica", async () => {
+      const aplicadas: string[] = [];
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          workspace="/Users/ana/.xonecode/workspace"
+          alCambiarWorkspace={async (r) => void aplicadas.push(r)}
+          alPlanearWorkspace={async () => ({ proyectos: [], motivo: "hay un chat trabajando en un proyecto del workspace" })}
+        />
+      );
+      fireEvent.change(campo(), { target: { value: "/datos/xone" } });
+      fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+      // FLOTANDO, en su propia ventana: una línea más de la página no se veía.
+      const aviso = await screen.findByRole("alertdialog", { name: "No se puede cambiar la carpeta" });
+      expect(aviso.textContent).toContain("Hay un chat trabajando en un proyecto del workspace.");
+      expect(aplicadas).toEqual([]);
+      fireEvent.click(within(aviso).getByRole("button", { name: "Entendido" }));
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    });
+
+    it("sin copias que mover, guarda sin diálogo", async () => {
+      const aplicadas: string[] = [];
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          workspace="/Users/ana/.xonecode/workspace"
+          alCambiarWorkspace={async (r) => void aplicadas.push(r)}
+          alPlanearWorkspace={async () => ({ proyectos: [] })}
+        />
+      );
+      fireEvent.change(campo(), { target: { value: "/datos/xone" } });
+      fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+      await waitFor(() => expect(aplicadas).toEqual(["/datos/xone"]));
+      expect(screen.queryByText(/Se moverá/)).toBeNull();
+    });
+
+    it("una mudanza en marcha (de otra ventana) también se enseña en su ventana, y apaga el campo", () => {
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          workspace="/Users/ana/.xonecode/workspace"
+          alCambiarWorkspace={() => {}}
+          alPlanearWorkspace={async () => ({ proyectos: [] })}
+          mudanzaDeWorkspace={{ progreso: { fase: "verificar", proyecto: "Dieta", indice: 1, total: 3 } }}
+        />
+      );
+      const enCurso = screen.getByRole("dialog", { name: "Moviendo los proyectos…" });
+      expect(within(enCurso).getByRole("status").textContent).toBe("Comprobando que la copia «Dieta» (1 de 3) es idéntica…");
+      expect(campo().disabled).toBe(true);
+      expect((screen.getByRole("button", { name: "Guardar" }) as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it("un rechazo que ya estaba al ABRIR Ajustes no se repite: ya se leyó", () => {
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          workspace="/datos/xone"
+          mudanzaDeWorkspace={{ resultado: { estado: "rechazado", motivo: "no cabe" } }}
+        />
+      );
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+    });
+
+    it("el rechazo de una mudanza que NO se lanzó desde esta ventana sale en el aviso flotante", () => {
+      const { rerender } = render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          workspace="/datos/xone"
+          mudanzaDeWorkspace={{ progreso: { fase: "copiar" } }}
+        />
+      );
+      rerender(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          workspace="/datos/xone"
+          mudanzaDeWorkspace={{ resultado: { estado: "rechazado", motivo: "no cabe" } }}
+        />
+      );
+      expect(screen.getByRole("alertdialog", { name: "No se puede cambiar la carpeta" }).textContent).toContain("No cabe.");
     });
 
     it("sin manejador el campo se enseña apagado: la carpeta existe, cambiarla desde aquí no", () => {

@@ -382,7 +382,7 @@ function segmentosComparables(a: string, b: string): [string[], string[]] {
  * del texto y no por `process.platform`, para que el módulo siga puro y se pueda probar en cualquier
  * máquina.
  */
-function esRutaDeWindows(ruta: string): boolean {
+export function esRutaDeWindows(ruta: string): boolean {
   return /^[a-zA-Z]:[\\/]/.test(ruta) || ruta.startsWith("\\\\");
 }
 
@@ -569,6 +569,41 @@ export function motivoParaNoBorrarCopia(datos: {
   const viva = datos.tareas.filter((t) => t.estado !== "terminada" && mismaRuta(t.raiz, datos.raiz));
   if (viva.length > 0) {
     return `hay ${viva.length} ${viva.length === 1 ? "tarea de fondo" : "tareas de fondo"} sin terminar en este proyecto: termínalas o descártalas antes`;
+  }
+  return undefined;
+}
+
+/**
+ * Por qué NO se puede cambiar el workspace ahora mismo —y con él MUDAR las copias que hay
+ * dentro—, o `undefined` si se puede.
+ *
+ * La hermana de `motivoParaNoBorrarCopia` para TODA la base, con la misma diferencia a
+ * propósito: una consola ABIERTA y en reposo no es motivo. La web tiene siempre una en foco,
+ * así que negarse por ella haría el cambio imposible; quien muda la cierra antes, en el orden
+ * de `vestibulo.borrarCopia`. Lo que sí para la mudanza es lo que está ESCRIBIENDO en la base:
+ *
+ * - un turno en vuelo en cualquier copia de la base (`trabajando`: sus raíces);
+ * - una consola de TAREA abierta (`deTareas`), que no se cierra por nadie;
+ * - una tarea de fondo sin terminar con su raíz bajo la base vieja —`requiere-atencion`
+ *   incluida: espera feedback y la cola la volvería a abrir en la ruta de antes—.
+ */
+export function motivoParaNoMudarWorkspace(datos: {
+  base: string;
+  trabajando: readonly string[];
+  deTareas: readonly string[];
+  tareas: readonly { estado: string; raiz: string }[];
+}): string | undefined {
+  const suya = (raiz: string): boolean => dentroDelWorkspace(raiz, datos.base);
+  const enVuelo = datos.trabajando.filter(suya);
+  if (enVuelo.length > 0) {
+    return `hay ${enVuelo.length === 1 ? "un chat trabajando" : `${enVuelo.length} chats trabajando`} en un proyecto del workspace: espera a que termine o páralo antes de cambiar la carpeta`;
+  }
+  if (datos.deTareas.some(suya)) {
+    return "hay una tarea de fondo corriendo en un proyecto del workspace: espera a que termine antes de cambiar la carpeta";
+  }
+  const viva = datos.tareas.filter((t) => t.estado !== "terminada" && suya(t.raiz));
+  if (viva.length > 0) {
+    return `hay ${viva.length} ${viva.length === 1 ? "tarea de fondo" : "tareas de fondo"} sin terminar en el workspace: termínalas o descártalas antes de cambiar la carpeta`;
   }
   return undefined;
 }

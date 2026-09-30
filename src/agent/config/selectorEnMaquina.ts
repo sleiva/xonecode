@@ -76,8 +76,9 @@ function lanzarDeVerdad(comando: ComandoDeSelector): Promise<string> {
       comando.programa,
       [...comando.argumentos],
       // `timeout` mata el proceso al vencer: un diálogo que nadie cierra no puede dejar un
-      // proceso vivo para siempre. `windowsHide` no pinta en los dos sistemas que esto
-      // soporta, pero tampoco estorba.
+      // proceso vivo para siempre. `windowsHide` SÍ aplica en Windows: oculta la consola de
+      // PowerShell, no el diálogo, que sale delante por su dueño `TopMost` (probado así, hijo
+      // de node, en un Windows real). En macOS y Linux no pinta.
       { timeout: TOPE_DEL_SELECTOR_MS, windowsHide: true },
       (error, salida) => (error === null ? resolver(salida) : rechazar(error))
     );

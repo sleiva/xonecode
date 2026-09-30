@@ -433,6 +433,18 @@ export type MensajeAlCliente =
    */
   | { clase: "carpetaElegida"; ruta?: string }
   /**
+   * Cómo va la MUDANZA de las copias al cambiar el workspace, y cómo acabó. `progreso` mientras
+   * dura (fase, y el proyecto por NOMBRE y entorno: ninguna ruta de la máquina), `resultado`
+   * una vez al final. Los dos ausentes no viajan nunca.
+   */
+  | {
+      clase: "mudanzaDeWorkspace";
+      progreso?: { fase: "comprobar" | "copiar" | "verificar" | "borrar"; proyecto?: string; entorno?: string; indice?: number; total?: number };
+      resultado?:
+        | { estado: "hecho"; mudadas: number; restos: string[]; avisos: string[] }
+        | { estado: "rechazado"; motivo: string };
+    }
+  /**
    * La casilla «Depurar» de Ajustes > General: si las dos trazas opt-in van encendidas sin
    * variable de entorno. Va en la ráfaga de bienvenida por lo mismo que el workspace.
    *
@@ -1665,10 +1677,12 @@ export type MensajeDelCliente =
    * en la pantalla — el cliente lleva su copia DECLARADA, como la de la URL de un entorno y
    * la del slug de un subagente, porque la frontera prohíbe compartir módulo.
    *
-   * **No mueve nada de lo que ya está bajado**: cambia dónde caerá lo SIGUIENTE. La pantalla
-   * lo dice con todas las letras.
+   * **MUDA lo que ya está bajado** (`vestibulo.mudarWorkspace`), en dos actos: `planear`
+   * contesta en la PROPIA respuesta qué se movería o por qué no se puede, sin tocar nada; sin
+   * `accion` (o con `aplicar`) se cambia de verdad, y el recorrido llega por
+   * `mudanzaDeWorkspace`.
    */
-  | { clase: "workspace"; ruta: string }
+  | { clase: "workspace"; ruta: string; accion?: "planear" | "aplicar" }
   /** Cambia la casilla «Depurar» de Ajustes > General. */
   | { clase: "depuracion"; activa: boolean }
   /** Abre el selector de carpeta NATIVO **de la máquina donde corre la consola** — ver

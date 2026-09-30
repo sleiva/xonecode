@@ -29,6 +29,75 @@ import { posix, win32 } from "node:path";
  *  existe para que un diálogo que nadie cierra no deje un proceso vivo para siempre. */
 export const TOPE_DEL_SELECTOR_MS = 5 * 60 * 1000;
 
+const TITULO_DEL_SELECTOR = "Dónde se bajan los proyectos de XOneCode";
+
+/**
+ * El C# que PowerShell compila al vuelo (`Add-Type`, en unas décimas de segundo) para abrir
+ * el diálogo moderno de carpetas de Windows: no hay otra forma de llegar a `IFileOpenDialog`
+ * desde PowerShell sin un binario propio que distribuir.
+ */
+const SELECTOR_DE_WINDOWS = String.raw`using System;
+using System.Runtime.InteropServices;
+using System.Windows.Forms;
+public static class SelectorXone {
+  [ComImport, Guid("DC1C5A9C-E88A-4dde-A5A1-60F82A20AEF7")] class FileOpenDialog {}
+  [ComImport, Guid("42f85136-db7e-439c-85f1-e4075d135fc8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  interface IFileOpenDialog {
+    [PreserveSig] int Show(IntPtr hwnd);
+    void SetFileTypes(); void SetFileTypeIndex(); void GetFileTypeIndex(); void Advise(); void Unadvise();
+    void SetOptions(uint fos); void GetOptions(out uint fos);
+    void SetDefaultFolder(IShellItem si); void SetFolder(IShellItem si);
+    void GetFolder(); void GetCurrentSelection(); void SetFileName(); void GetFileName();
+    void SetTitle([MarshalAs(UnmanagedType.LPWStr)] string t);
+    void SetOkButtonLabel(); void SetFileNameLabel();
+    void GetResult(out IShellItem si);
+  }
+  [ComImport, Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  interface IShellItem {
+    void BindToHandler(); void GetParent();
+    void GetDisplayName(uint sigdn, [MarshalAs(UnmanagedType.LPWStr)] out string name);
+  }
+  [StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
+  [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
+  static extern void SHCreateItemFromParsingName(string path, IntPtr pbc, [MarshalAs(UnmanagedType.LPStruct)] Guid riid, out IShellItem item);
+  [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr h, uint cmd);
+  [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
+  public static string Elegir(string titulo, string desde) {
+    var area = Screen.FromPoint(Cursor.Position).WorkingArea;
+    var duenyo = new Form { TopMost = true, ShowInTaskbar = false, FormBorderStyle = FormBorderStyle.None,
+      StartPosition = FormStartPosition.Manual, Opacity = 0 };
+    duenyo.Show();
+    duenyo.Bounds = new System.Drawing.Rectangle(area.Left + area.Width / 2, area.Top + area.Height / 2, 1, 1);
+    SetForegroundWindow(duenyo.Handle); duenyo.Activate();
+    var reloj = new Timer { Interval = 30 };
+    int intentos = 0;
+    reloj.Tick += (o, e) => {
+      if (++intentos > 100) { reloj.Stop(); return; }
+      IntPtr dlg = GetWindow(duenyo.Handle, 6);
+      if (dlg == IntPtr.Zero || dlg == duenyo.Handle) return;
+      RECT r; if (!GetWindowRect(dlg, out r)) return;
+      int w = r.Right - r.Left, h = r.Bottom - r.Top;
+      SetWindowPos(dlg, IntPtr.Zero, area.Left + (area.Width - w) / 2, area.Top + (area.Height - h) / 2, 0, 0, 0x0015);
+      reloj.Stop();
+    };
+    reloj.Start();
+    try {
+      var d = (IFileOpenDialog)new FileOpenDialog();
+      d.SetOptions(0x20 | 0x40);
+      d.SetTitle(titulo);
+      if (!string.IsNullOrEmpty(desde)) {
+        try { IShellItem si; SHCreateItemFromParsingName(desde, IntPtr.Zero, typeof(IShellItem).GUID, out si); d.SetFolder(si); } catch {}
+      }
+      if (d.Show(duenyo.Handle) != 0) return null;
+      IShellItem res; d.GetResult(out res);
+      string ruta; res.GetDisplayName(0x80058000, out ruta);
+      return ruta;
+    } finally { reloj.Stop(); duenyo.Close(); }
+  }
+}`;
+
 export interface ComandoDeSelector {
   programa: string;
   argumentos: readonly string[];
@@ -57,7 +126,7 @@ export function comandoDelSelector(plataforma: string, desde?: string): ComandoD
       "  on error",
       "    set inicio to path to home folder",
       "  end try",
-      '  set elegida to choose folder with prompt "Dónde se bajan los proyectos de XOneCode" default location inicio',
+      `  set elegida to choose folder with prompt "${TITULO_DEL_SELECTOR}" default location inicio`,
       "  return POSIX path of elegida",
       "end run",
     ].join("\n");
@@ -69,20 +138,31 @@ export function comandoDelSelector(plataforma: string, desde?: string): ComandoD
       argumentos: [
         "--file-selection",
         "--directory",
-        "--title=Dónde se bajan los proyectos de XOneCode",
+        `--title=${TITULO_DEL_SELECTOR}`,
         ...(desde === undefined ? [] : [`--filename=${desde.replace(/\/*$/, "/")}`]),
       ],
     };
   }
   if (plataforma === "win32") {
-    // El diálogo de carpetas de Windows, por PowerShell (IXCODE-22: no había ninguno y el botón no hacía nada). `-STA` es
-    // obligatorio para un diálogo de Forms. La ruta de inicio va entre comillas simples con las suyas dobladas.
-    const inicio = desde === undefined ? "" : `$d.SelectedPath = '${desde.replace(/'/g, "''")}'; `;
-    const guion =
-      "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; " +
-      "$d.Description = 'Dónde se bajan los proyectos de XOneCode'; " +
-      inicio +
-      "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $d.SelectedPath }";
+    // IXCODE-22, segunda vuelta. El `FolderBrowserDialog` de Forms es el árbol CLÁSICO: sin
+    // barra de direcciones ni campo donde teclear la ruta, y sin dueño se abría DETRÁS del
+    // navegador. Se usa el diálogo del Explorador actual (`IFileOpenDialog` en modo carpetas)
+    // con un dueño invisible `TopMost`, y se CENTRA a mano: el diálogo recuerda dónde se cerró
+    // la última vez y se abre ahí, no sobre su dueño. Probado en un Windows de verdad, lanzado
+    // como lo lanza `execFile` (hijo de node): sale delante y centrado, se teclea la ruta, y
+    // una carpeta con acentos vuelve entera —por el `OutputEncoding`: sin él stdout sale en la
+    // página de códigos de la consola—. La ruta de inicio va entre comillas simples con las
+    // suyas dobladas; `-STA` es obligatorio para un diálogo.
+    const inicio = desde === undefined ? "''" : `'${desde.replace(/'/g, "''")}'`;
+    const guion = [
+      "[Console]::OutputEncoding = [Text.Encoding]::UTF8",
+      "Add-Type -ReferencedAssemblies System.Windows.Forms,System.Drawing -TypeDefinition @'",
+      SELECTOR_DE_WINDOWS,
+      // El here-string de PowerShell exige que `'@` cierre al PRINCIPIO de una línea.
+      "'@",
+      `$r = [SelectorXone]::Elegir('${TITULO_DEL_SELECTOR}', ${inicio})`,
+      "if ($r) { $r }",
+    ].join("\n");
     return { programa: "powershell.exe", argumentos: ["-NoProfile", "-STA", "-Command", guion] };
   }
   return undefined;

@@ -2851,3 +2851,44 @@ describe("el motor de la sesión, por configuración y sin enseñarlo", () => {
     await v.cerrar();
   });
 });
+
+describe("mudarWorkspace: cambiar la base con copias dentro", () => {
+  /** Un workspace de verdad en un temporal, con una copia, y un vestíbulo que lo lee. */
+  function conCopia() {
+    const casa = mkdtempSync(join(tmpdir(), "xonecode-vestibulo-mudanza-"));
+    const casaXonecode = join(casa, ".xonecode");
+    const estado = { base: join(casaXonecode, "workspace") };
+    const hacia = join(casa, "datos", "xone");
+    const vieja = join(estado.base, "webstudio", "Tienda");
+    mkdirSync(join(vieja, ".xonecode"), { recursive: true });
+    writeFileSync(join(vieja, "app.xne"), "<app/>");
+    const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", baseDeWorkspace: () => estado.base });
+    return { v, estado, hacia, vieja, casaXonecode };
+  }
+
+  it("una apertura pedida a MITAD de la mudanza abre la copia en su sitio nuevo, no la borrada", async () => {
+    const { v, estado, hacia, vieja, casaXonecode } = conCopia();
+    const mudanza = v.mudarWorkspace({
+      hacia,
+      casaXonecode,
+      tareas: () => [],
+      guardar: (r) => void (estado.base = r),
+    });
+    // La raíz se compuso con la base de ANTES, como la compone el cable al llegar el clic.
+    const abierta = v.abrirProyecto({ raiz: vieja });
+    expect((await mudanza).resultado.estado).toBe("hecho");
+    expect((await abierta).raiz).toBe(join(hacia, "webstudio", "Tienda"));
+    expect(existsSync(vieja)).toBe(false);
+    await v.cerrar();
+  });
+
+  it("si la base no quedó GUARDADA, no se borra nada: el origen sigue y el destino se limpia", async () => {
+    const { v, hacia, vieja, casaXonecode } = conCopia();
+    // Quien guarda en producción puede volver sin escribir y sin lanzar.
+    const { resultado } = await v.mudarWorkspace({ hacia, casaXonecode, tareas: () => [], guardar: () => {} });
+    expect(resultado.estado).toBe("rechazado");
+    expect(existsSync(join(vieja, "app.xne"))).toBe(true);
+    expect(readdirSync(join(hacia, "webstudio"))).toEqual([]);
+    await v.cerrar();
+  });
+});

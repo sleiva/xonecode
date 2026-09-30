@@ -58,6 +58,20 @@ import type {
 import { FORMA_DE_NOMBRE_DE_AVD } from "./reglasDeAvd.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, FASES_DEL_LANZAMIENTO, ESTADOS_DEL_LANZAMIENTO, ESFUERZOS, esAutenticacionDeConector } from "./tipos.js";
 
+/** En qué va una mudanza del workspace. Sin rutas: el proyecto va por nombre y entorno. */
+export interface ProgresoDeMudanza {
+  fase: "comprobar" | "copiar" | "verificar" | "borrar";
+  proyecto?: string;
+  entorno?: string;
+  indice?: number;
+  total?: number;
+}
+
+/** Cómo acabó una mudanza del workspace. */
+export type ResultadoDeMudanza =
+  | { estado: "hecho"; mudadas: number; restos: string[]; avisos: string[] }
+  | { estado: "rechazado"; motivo: string };
+
 export interface EstadoDelCliente {
   actos: Acto[];
   conectado: boolean;
@@ -188,6 +202,12 @@ export interface EstadoDelCliente {
    * lo que apaga el «abriendo…».
    */
   carpetaElegida?: { n: number; ruta?: string };
+  /**
+   * La MUDANZA de las copias al cambiar el workspace: `progreso` mientras dura, `resultado`
+   * al acabar. Cada mensaje REEMPLAZA al anterior, así que con `progreso` puesto hay una en
+   * marcha. Ausente = no ha habido ninguna desde que conectó este navegador.
+   */
+  mudanzaDeWorkspace?: { progreso: ProgresoDeMudanza } | { resultado: ResultadoDeMudanza };
   /**
    * El ENCARGO que el aumentador propuso para la tarea que se está creando, o el motivo por
    * el que no pudo.
@@ -1465,6 +1485,29 @@ export function crearStoreDelCliente(): {
           const m = mensaje as Record<string, unknown>;
           if (typeof m["activa"] !== "boolean") return;
           mutar({ depuracionActiva: m["activa"] });
+          return;
+        }
+        case "mudanzaDeWorkspace": {
+          // Lista blanca campo a campo: lo que no se entiende no se pinta.
+          const m = mensaje as Record<string, unknown>;
+          const p = m["progreso"] as Record<string, unknown> | undefined;
+          const r = m["resultado"] as Record<string, unknown> | undefined;
+          const fases = ["comprobar", "copiar", "verificar", "borrar"] as const;
+          if (typeof p === "object" && p !== null && fases.includes(p["fase"] as (typeof fases)[number])) {
+            const progreso: ProgresoDeMudanza = { fase: p["fase"] as ProgresoDeMudanza["fase"] };
+            if (typeof p["proyecto"] === "string") progreso.proyecto = p["proyecto"];
+            if (typeof p["entorno"] === "string") progreso.entorno = p["entorno"];
+            if (typeof p["indice"] === "number") progreso.indice = p["indice"];
+            if (typeof p["total"] === "number") progreso.total = p["total"];
+            mutar({ mudanzaDeWorkspace: { progreso } });
+            return;
+          }
+          const textos = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+          if (typeof r === "object" && r !== null && r["estado"] === "hecho" && typeof r["mudadas"] === "number") {
+            mutar({ mudanzaDeWorkspace: { resultado: { estado: "hecho", mudadas: r["mudadas"], restos: textos(r["restos"]), avisos: textos(r["avisos"]) } } });
+          } else if (typeof r === "object" && r !== null && r["estado"] === "rechazado" && typeof r["motivo"] === "string") {
+            mutar({ mudanzaDeWorkspace: { resultado: { estado: "rechazado", motivo: r["motivo"] } } });
+          }
           return;
         }
         case "carpetaElegida": {

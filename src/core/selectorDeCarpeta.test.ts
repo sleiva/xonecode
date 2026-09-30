@@ -116,8 +116,21 @@ describe("IXCODE-22: el selector de carpeta en Windows", () => {
     const c = comandoDelSelector("win32", "C:\\Users\\O'Brien");
     expect(c?.programa).toBe("powershell.exe");
     expect(c?.argumentos).toContain("-STA");
-    expect(c?.argumentos.at(-1)).toContain("FolderBrowserDialog");
     expect(c?.argumentos.at(-1)).toContain("'C:\\Users\\O''Brien'");
+  });
+  it("es el diálogo MODERNO (se teclea la ruta), delante de todo, centrado y con la salida en UTF-8", () => {
+    // El `FolderBrowserDialog` clásico no tiene barra de direcciones y sin dueño se abría
+    // detrás del navegador; sin `OutputEncoding` los acentos llegaban rotos.
+    const guion = comandoDelSelector("win32")?.argumentos.at(-1) ?? "";
+    expect(guion).not.toContain("FolderBrowserDialog");
+    expect(guion).toContain("IFileOpenDialog");
+    expect(guion).toContain("SetOptions(0x20 | 0x40)"); // FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM
+    expect(guion).toContain("TopMost = true");
+    expect(guion).toContain("SetWindowPos");
+    expect(guion.startsWith("[Console]::OutputEncoding = [Text.Encoding]::UTF8\n")).toBe(true);
+    // El here-string de PowerShell exige que `'@` cierre al PRINCIPIO de una línea.
+    expect(guion).toContain("\n'@\n");
+    expect(guion).toContain("[SelectorXone]::Elegir('Dónde se bajan los proyectos de XOneCode', '')");
   });
   it("la salida de Windows se acepta; la vacía (cancelar) no", () => {
     expect(carpetaDeLaSalida("C:\\Users\\lolo\\xone\r\n")).toBe("C:\\Users\\lolo\\xone");
