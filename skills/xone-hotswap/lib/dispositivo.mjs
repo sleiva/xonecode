@@ -159,3 +159,21 @@ export function puertoConMotivo(explicito, serie, deps = {}) {
   }
   return { puerto: PUERTO_DEL_HOTSWAP };
 }
+
+/**
+ * Retira de los argumentos las opciones que llevan valor (`--puerto 9000`), estén donde estén, y
+ * deja el resto INTACTO (incluidos `--` y los `clave=valor`). Solo quita lo que ESTÁ: con un
+ * índice -1 (ausente) `i === -1 + 1` descartaría el primer argumento.
+ */
+export function retirarOpciones(argumentos, nombres) {
+  const opciones = {};
+  const fuera = new Set();
+  for (const nombre of nombres) {
+    const i = argumentos.indexOf(nombre);
+    if (i < 0) continue;
+    opciones[nombre] = argumentos[i + 1];
+    fuera.add(i);
+    fuera.add(i + 1);
+  }
+  return { opciones, resto: argumentos.filter((_, i) => !fuera.has(i)) };
+}

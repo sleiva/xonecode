@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -10,6 +11,7 @@ type Lib = {
   serieAndroid: (explicita: string | undefined, deps?: Deps & { entorno?: Record<string, string>; adb?: string }) => { serie: string | undefined; porque: string };
   puertoConMotivo: (explicito: string | undefined, serie: string | undefined, deps?: Deps) => { puerto: number; porque?: string };
   BANDERAS_SIN_VENTANA: string[];
+  retirarOpciones: (a: string[], n: string[]) => { opciones: Record<string, string | undefined>; resto: string[] };
   puertoAndroid: (explicito: string | undefined, serie: string | undefined, deps?: Deps) => number;
 };
 
@@ -81,5 +83,41 @@ describe("puerto del aparato, visto desde la skill", () => {
     expect(lib.serieAndroid(undefined, { entorno, ejecutar: () => { throw new Error("ETIMEDOUT"); } })).toEqual({ serie: undefined, porque: "sin elegir" });
     const r = lib.serieAndroid(undefined, { entorno, ejecutar: () => "List of devices attached\nemulator-5556\tdevice\n" });
     expect(r.serie).toBe("emulator-5556");
+  });
+
+  describe("retirarOpciones", () => {
+    const n = ["--puerto", "--serie"];
+    it("sin banderas, el resto es la entrada", () => {
+      const e = ["click", "name=X", "--", "click", "name=Y", "--dry-run"];
+      expect(lib.retirarOpciones(e, n)).toEqual({ opciones: {}, resto: e });
+    });
+    it.each([
+      [["--puerto", "9000", "click", "name=X"]],
+      [["click", "--puerto", "9000", "name=X"]],
+      [["click", "name=X", "--puerto", "9000"]],
+    ])("--puerto en cualquier sitio: %j", (e) => {
+      expect(lib.retirarOpciones(e, n)).toEqual({ opciones: { "--puerto": "9000" }, resto: ["click", "name=X"] });
+    });
+    it("--serie y --puerto juntos, o solo --serie", () => {
+      expect(lib.retirarOpciones(["--serie", "emulator-5556", "click", "--puerto", "9000", "name=X", "--", "screen"], n)).toEqual({
+        opciones: { "--serie": "emulator-5556", "--puerto": "9000" },
+        resto: ["click", "name=X", "--", "screen"],
+      });
+      expect(lib.retirarOpciones(["getAllElements", "--serie", "emulator-5556"], n).resto).toEqual(["getAllElements"]);
+    });
+  });
+});
+
+describe("el script xone-hotswap real, con --dry-run", () => {
+  const script = resolve(__dirname, "../../skills/xone-hotswap/scripts/xone-hotswap");
+  const correr = (...args: string[]) =>
+    execFileSync(process.execPath, [script, ...args], { encoding: "utf8", env: { ...process.env, HOTSWAP_URL: "wss://127.0.0.1:1/hotswap", XONECODE_DISPOSITIVO: "" } }).trim();
+  it.each([
+    [["getAllElements", "--dry-run"], '{"command":"getAllElements"}'],
+    [["click", "name=X", "--dry-run"], '{"command":"click","name":"X"}'],
+    [["--serie", "emulator-5556", "click", "name=X", "--dry-run"], '{"command":"click","name":"X"}'],
+    [["--dry-run", "click", "name=X", "--", "click", "name=Y"], '{"command":"click","name":"X"}\n{"command":"click","name":"Y"}'],
+  ])("%j", (args, esperado) => {
+    expect(correr(...args)).toBe(esperado);
   });
 });

@@ -55,7 +55,7 @@ process.on("warning", (aviso) => {
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { dispositivoDeLaSesion, puertoConMotivo, serieAndroid, PUERTO_DEL_HOTSWAP } from "../lib/dispositivo.mjs";
+import { dispositivoDeLaSesion, puertoConMotivo, retirarOpciones, serieAndroid, PUERTO_DEL_HOTSWAP } from "../lib/dispositivo.mjs";
 
 /**
  * La URL cuando nadie dice `HOTSWAP_URL`: el puerto LOCAL del túnel es del aparato, no un 8443
@@ -107,13 +107,9 @@ const LARGO_PARA_GUARDAR = 2_000;
 
 // `--puerto N` y `--serie S` se retiran ANTES de leer los comandos: no son de ninguno.
 const argumentos = process.argv.slice(2);
-const iPuerto = argumentos.indexOf("--puerto");
-const puertoPedido = iPuerto >= 0 ? argumentos[iPuerto + 1] : undefined;
-const iSerie = argumentos.indexOf("--serie");
-const seriePedida = iSerie >= 0 ? argumentos[iSerie + 1] : undefined;
-const pedidos = argumentos.filter(
-  (_, i) => i !== iPuerto && i !== iPuerto + 1 && i !== iSerie && i !== iSerie + 1,
-);
+const { opciones, resto: pedidos } = retirarOpciones(argumentos, ["--puerto", "--serie"]);
+const puertoPedido = opciones["--puerto"];
+const seriePedida = opciones["--serie"];
 if (pedidos.length === 0 || pedidos.includes("--help") || pedidos.includes("-h")) {
   // El prompt del agente promete que `--help` contesta. Una promesa así, sin cumplir, cuesta
   // un viaje y deja al modelo adivinando argumentos.
