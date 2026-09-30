@@ -21,6 +21,19 @@ describe("AjustesDeAvd", () => {
     expect(alCambiar).toHaveBeenCalledWith({ puerto: 8444 });
   });
 
+  it("un valor tecleado de nuevo tras un rechazo del servidor se reenvía", () => {
+    const alCambiar = vi.fn();
+    render(<AjustesDeAvd avd="pixel8" ajuste={{ puerto: 8443 }} conPuerto conectado alCambiar={alCambiar} />);
+    const campo = screen.getByRole("spinbutton");
+    fireEvent.change(campo, { target: { value: "8444" } });
+    fireEvent.keyDown(campo, { key: "Enter" });
+    fireEvent.change(campo, { target: { value: "8445" } });
+    fireEvent.change(campo, { target: { value: "8444" } });
+    fireEvent.keyDown(campo, { key: "Enter" });
+    expect(alCambiar).toHaveBeenCalledTimes(2);
+    expect(alCambiar).toHaveBeenLastCalledWith({ puerto: 8444 });
+  });
+
   it("Enter sin cambiar nada no manda nada", () => {
     const alCambiar = vi.fn();
     render(<AjustesDeAvd avd="pixel8" ajuste={{ puerto: 8443 }} conPuerto conectado alCambiar={alCambiar} />);

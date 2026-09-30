@@ -63,7 +63,12 @@ export function AjustesDeAvd({
               disabled={conectado !== true}
               aria-label={`Puerto del túnel de ${avd}`}
               title="El puerto de este Mac que lleva al 8443 del aparato. Cada emulador, el suyo."
-              onChange={(e) => setBorrador(e.target.value)}
+              onChange={(e) => {
+                // Editar es querer volver a intentarlo: si el servidor rechazó lo anterior (su
+                // negativa no llega aquí), el mismo valor tecleado de nuevo tiene que reenviarse.
+                enviado.current = undefined;
+                setBorrador(e.target.value);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") confirmar();
               }}
