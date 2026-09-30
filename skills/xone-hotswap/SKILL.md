@@ -1,6 +1,6 @@
 ---
 name: xone-hotswap
-description: Probar una app XOne en un dispositivo o emulador LOCAL —Android o iOS— a través del servidor hotswap que la propia app host levanta en el dispositivo. Usar al desplegar una app en un móvil o simulador, al reiniciarla para que aplique cambios, al capturar la pantalla o el árbol de controles, al pulsar o rellenar controles desde fuera, al leer el log o consultar la base de datos del dispositivo, y al diagnosticar por qué el dispositivo no responde en el puerto 8443. Cubre las dos plataformas y dice, comando por comando, cuál de las dos lo tiene.
+description: Probar una app XOne en un dispositivo o emulador LOCAL —Android o iOS— a través del servidor hotswap que la propia app host levanta en el dispositivo. Usar al desplegar una app en un móvil o simulador, al reiniciarla para que aplique cambios, al capturar la pantalla o el árbol de controles, al pulsar o rellenar controles desde fuera, al leer el log o consultar la base de datos del dispositivo, y al diagnosticar por qué el dispositivo no responde en su puerto. Cubre las dos plataformas y dice, comando por comando, cuál de las dos lo tiene.
 ---
 
 # Probar una app XOne en un dispositivo local (hotswap)
@@ -63,9 +63,10 @@ en vez de ser una foto de la pantalla.
 
 - **HTTPS con certificado autofirmado** en las dos plataformas. Todas las URLs son `https://`;
   con `curl` hace falta `-k`. Solo escucha en `http://` si alguien desactivó la conexión segura.
-- **El puerto 8443 es el POR DEFECTO, no una garantía.** En Android, si está ocupado —otra APK
-  del framework instalada— el servidor coge el siguiente libre, y el real se ve en la pantalla
-  del servidor hotswap (pestaña Información).
+- **El puerto 8443 es el POR DEFECTO DENTRO DEL APARATO, no una garantía.** En Android, si está
+  ocupado —otra APK del framework instalada— el servidor coge el siguiente libre, y el real se ve
+  en la pantalla del servidor hotswap (pestaña Información). Es un puerto DEL APARATO: el que
+  usas desde este Mac es otro asunto y lo resuelven los scripts (ver «Varios emuladores a la vez»).
 - **Subir NO aplica.** El proceso tiene cargado en memoria lo de antes: hay que reiniciar la app.
 - **La base de datos va cifrada con SQLCipher.** Subir un `.db` en claro termina en
   `database disk image is malformed (code 11)`.
@@ -160,8 +161,9 @@ Tres cosas de `xone-hotswap` que conviene saber antes de leer su salida:
   en el contexto para siempre.
 - **La respuesta viene en `status`** —no en un campo `image`— y una captura de Android es
   **JPEG**, no PNG.
-- Si muere con «no se pudo hablar con el aparato», casi siempre falta el túnel
-  (`adb forward tcp:8443 tcp:8443`) o la app host no está viva.
+- Si muere con «no se pudo hablar con el aparato», casi siempre la app host no está viva (o el
+  servidor cogió otro puerto dentro del aparato). El túnel no es lo que falta: lo pone
+  `xone-desplegar-android` o `xone-reiniciar-android`, así que relánzalos en vez de montarlo.
 
 Y `xone-desplegar-android` **no necesita un `zip` del sistema**: construye el ZIP él mismo con
 `zlib`, así que tampoco depende de que haya uno en Windows.
@@ -196,8 +198,8 @@ resuelve con el mismo localizador que la pestaña Ejecutar.
 
 ## Cómo llegar, según la plataforma
 
-**Android** — por `adb forward`, y entonces la IP es `127.0.0.1` (el localhost del PC, que adb
-tuneliza al dispositivo). **Qué aparato usan los scripts `xone-*`**: el que se les pase con
+**Android** — por un túnel de `adb`, y entonces la IP es `127.0.0.1` (el localhost del PC, que adb
+tuneliza al dispositivo). **El túnel lo ponen los scripts**, no tú (ver «Varios emuladores a la vez»). **Qué aparato usan los scripts `xone-*`**: el que se les pase con
 `--serie`; si no, el ELEGIDO en la sesión de XOneCode (lo leen de `$XONECODE_DISPOSITIVO` en cada
 ejecución); si no hay elección, un EMULADOR antes que un dispositivo físico. Lo dicen por stderr
 (`dispositivo: emulator-5554 (el de la sesión: Pixel 8)`). Con `adb` a mano y varios
@@ -206,8 +208,19 @@ dispositivos, `adb -s <serial>`:
 ```bash
 adb devices -l
 adb shell am start -n com.xone.android.framework/com.xone.android.hotswap.activities.SetupActivity
-adb forward tcp:8443 tcp:8443          # reaplicar tras cada reconexión del cable
 ```
+
+### Varios emuladores a la vez
+
+Cada AVD tiene SU puerto en este Mac (Ajustes → Dispositivos; con un solo AVD es el 8443 y no hay
+nada que tocar). Dentro del aparato el servidor sigue en el 8443. **El túnel lo ponen
+`xone-desplegar-android` y `xone-reiniciar-android`** con el puerto del aparato de tu sesión —lo
+resuelven por el AVD de la serie—, y `xone-hotswap` ya se conecta a ese puerto: no pases
+`--puerto N` salvo que te lo pidan (fuerza el puerto local). En iOS no hay túnel y es siempre el 8443.
+
+**No hagas `adb forward` a mano** (se rechaza): dos túneles al mismo puerto local no conviven, y
+el segundo le quita el aparato al primero sin dar error — otra sesión se quedaría hablando con tu
+emulador. Para ver los túneles, `adb forward --list`.
 
 **iOS** — **no hay `adb` ni túnel**. El simulador comparte la pila de red del Mac, así que el
 servidor es alcanzable directamente; en dispositivo físico se llega por la IP de la LAN que
@@ -216,7 +229,7 @@ muestra la propia app:
 ```bash
 xcrun simctl list devices booted
 xcrun simctl launch <UDID> es.xone.studioapp.swift    # arrancar el host levanta el servidor
-curl -sk -X POST https://localhost:8443/command -d '{"command":"getAllElements"}'
+curl -sk -X POST https://localhost:8443/command -d '{"command":"getAllElements"}'   # iOS: sin túnel, siempre 8443
 ```
 
 Detalle de despliegue, relanzado y endpoints de fichero: [conexión y despliegue](references/conexion-y-despliegue.md).

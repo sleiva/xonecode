@@ -6,22 +6,27 @@ comandos, uno a uno: [comandos.md](comandos.md).
 
 ## 1. Llegar
 
-### Android: `adb forward`
+### Android: el túnel de `adb`, que ponen los scripts
 
-El servidor escucha en `localhost` del dispositivo. Para alcanzarlo desde el PC:
+El servidor escucha en `localhost` del dispositivo. Para alcanzarlo desde el PC hace falta un túnel
+`adb -s <serie> forward tcp:<puerto del aparato> tcp:8443`, y **lo ponen `xone-desplegar-android` y
+`xone-reiniciar-android`**, no tú: cada AVD tiene SU puerto local en este Mac (Ajustes →
+Dispositivos; con un solo AVD es el 8443), que los scripts resuelven por el AVD de la serie.
+`--puerto N` lo fuerza. **Un `adb forward` a mano se rechaza**: dos túneles al mismo puerto local no
+conviven y el segundo le quita el aparato al primero sin error. Para ver los que hay:
 
 ```bash
 adb devices -l
-adb forward tcp:8443 tcp:8443            # reaplicar tras cada reconexión o reinicio del demonio
+adb forward --list
 ```
 
-A partir de ahí la IP de destino es **`127.0.0.1`** (el localhost del PC, que adb tuneliza).
-Con varios dispositivos: `adb -s <serial> forward tcp:8443 tcp:8443`. Para deshacerlo:
-`adb forward --remove tcp:8443`.
+A partir de ahí la IP de destino es **`127.0.0.1`** (el localhost del PC, que adb tuneliza) y el
+puerto el del aparato; `xone-hotswap` ya lo sabe (`wss://127.0.0.1:<puerto del aparato>/hotswap`,
+`HOTSWAP_URL` gana si está puesta).
 
 **El canal de los comandos es un WebSocket, y vive en `/hotswap`.** Medido el 16-sep-2026 contra
 `com.xone.android.framework` **5.0.2.2dev** (flavor standalone, Android): `wss://127.0.0.1:8443/hotswap`
-contesta `101`, mientras que `/`, `/ws` y `/api` contestan `400`. Y **el servidor habla primero**: al
+contesta `101` (con un solo AVD, el 8443 del PC), mientras que `/`, `/ws` y `/api` contestan `400`. Y **el servidor habla primero**: al
 abrir manda `{"command":"server_hello","protocol_version":3}`, así que el cliente ESPERA el saludo en
 vez de provocarlo. En esta versión `POST /command` por HTTP da **404** — los comandos van por el
 WebSocket—, y por eso el `curl` de más abajo es solo para iOS.
@@ -36,9 +41,9 @@ adb shell am start -n com.xone.android.framework/com.xone.android.hotswap.activi
 adb shell am start -n com.xone.android.developer.framework/com.xone.android.hotswap.activities.SetupActivity
 ```
 
-**El puerto puede cambiar.** Si 8443 está ocupado (otra APK del framework instalada), el
-servidor coge el siguiente libre; el real se ve en la pestaña **Información** de esa pantalla.
-Ajusta el forward: `adb forward tcp:<local> tcp:<remoto>`.
+**El puerto puede cambiar DENTRO del aparato.** Si 8443 está ocupado (otra APK del framework
+instalada), el servidor coge el siguiente libre; el real se ve en la pestaña **Información** de esa
+pantalla. Eso es el puerto remoto del túnel, no el local del Mac (que es el del AVD).
 
 ### iOS: sin túnel
 
@@ -76,9 +81,12 @@ El comportamiento especial se dispara **solo** con ese nombre de fichero exacto:
 4. **El ZIP se elimina siempre al terminar**, tanto en éxito como en fallo de extracción.
 5. Tras una extracción correcta, la app aparece o se actualiza en la lista.
 
+Lo hace `xone-desplegar-android` por el túnel del aparato. Como diagnóstico, sin script (con
+`<puerto>` el local del AVD, no siempre 8443):
+
 ```bash
 curl -k -X POST --data-binary @debug_app_update.zip \
-  "https://127.0.0.1:8443/file_upload?file=debug_app_update.zip&appName=MiApp"
+  "https://127.0.0.1:<puerto>/file_upload?file=debug_app_update.zip&appName=MiApp"
 ```
 
 > **El ZIP no limpia el destino.** La extracción añade y sobrescribe, pero no borra lo que ya
@@ -260,15 +268,15 @@ Tres causas, en este orden:
    arranca con el proceso. La pantalla del servidor lo levanta y además enseña IP y puerto
    reales:
    `adb shell am start -n com.xone.android.framework/com.xone.android.hotswap.activities.SetupActivity`
-2. **El puerto no es 8443.** Si estaba ocupado —lo normal con DOS APK de framework
+2. **El puerto no es 8443 dentro del aparato.** Si estaba ocupado —lo normal con DOS APK de framework
    instaladas— el servidor tomó el siguiente libre. El override guardado se lee con
    `adb shell run-as com.xone.android.framework cat shared_prefs/hotswap_preferences.xml`
-   (claves `port_number` y `use_secure_connection`); si no dice nada, se sondea 8443–8446
-   rehaciendo el forward a cada puerto remoto.
+   (claves `port_number` y `use_secure_connection`); si no dice nada, se sondea 8443–8446 DENTRO del
+   aparato con los scripts (`--puerto` solo fuerza el puerto local, no el remoto).
 3. **El SSL está desactivado** (`use_secure_connection` a `false`): entonces el servidor habla
    `http://` y el cliente tiene que ir en claro.
 
-Por LAN en vez de USB no hay forward: se apunta a la IP del dispositivo, la que enseña la barra
+Por LAN en vez de USB no hay túnel: se apunta a la IP del dispositivo, la que enseña la barra
 superior de esa pantalla.
 
 ## Dos cosas del despliegue que no dan ningún error cuando se hacen mal
