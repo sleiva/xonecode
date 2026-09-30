@@ -510,7 +510,9 @@ memoria en disco es la FOTO del raíz** (`memoriaTrueforge.ts`, `AgentThread.toS
 **no** la capa `agent-session` de la librería. **La foto lleva VERSIÓN y se lee ESTRICTA**
 (`MIGRACIONES`, `interpretarFoto`): la que no se entiende no se carga a medias — se abre sin
 memoria y se APARTA con otro nombre. **El prompt de un hijo va en su prompt de SISTEMA por
-`instructionBuilders`**. **El raíz puede PREGUNTAR** (`ask_user_question`, solo él): con opciones
+`instructionBuilders`**. **Y el idioma lo dice el código** (`IDIOMA_DE_LA_RESPUESTA`, al raíz y a cada hijo): la
+identidad que añade TrueForge y las descripciones de las tools están en inglés, y sin decirlo el texto entre
+herramientas y el razonamiento salían en inglés. **El raíz puede PREGUNTAR** (`ask_user_question`, solo él): con opciones
 sale además como tarjeta con un botón por opción (`Piel.consulta?` opcional), y lo pendiente lo
 decide el hilo. **Solo se compacta el raíz**: en un hijo, resumir un encargo corto y ya cacheado
 costaba más que reenviarlo. **Cada especialista RECUERDA sus encargos anteriores de la sesión**
@@ -628,9 +630,10 @@ detiene.
   !eof()` igual que `pedirDecisiones`; se pregunta en cada RONDA y no al abrir; se DICE dos veces
   (aviso por turno, y `alta.modoDeEscritura`); el mismo predicado alcanza a los motores externos.
   **Gobierna las escrituras LOCALES y nada más**: `/sync subir` conserva su plan y aprobación
-  fail-closed en los dos modos. **En TrueForge, además, una pregunta del agente que trae UNA opción marcada
-  `(Recommended)` se contesta sola en autónomo** (`opcionRecomendada`, tope
-  `TOPE_DE_PREGUNTAS_CONTESTADAS_SOLAS`) y se DICE en el chat; sin marca, o en supervisado, llega a la persona.
+  fail-closed en los dos modos. **En TrueForge, además, en autónomo no se le pregunta a nadie**: una pregunta del agente
+  con UNA opción `(Recommended)` se contesta con ella (`opcionRecomendada`), una sin marca vuelve al agente pidiéndole
+  que decida y lo diga (`RESPUESTA_AUTONOMA_SIN_RECOMENDADA`), cada una POR SEPARADO —varias a la vez no son «todas o
+  ninguna»— y con tope (`TOPE_DE_PREGUNTAS_CONTESTADAS_SOLAS`); todo se DICE en el chat. En supervisado llegan a la persona.
   El tope de rondas de la consola es el MISMO 20 que el de una tarea
   (`TOPE_DE_RONDAS_DE_CONSOLA`); sin nadie delante se queda el cinco de `MAX_APPROVAL_ROUNDS`. Lo
   que `/aprobacion` EXPLICA lo decide el destino, no la línea (`Consola.modoALaVista`): donde el
@@ -996,7 +999,9 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   ENTERA (no abreviada con `~`). El `~` se acepta al TECLEAR (`expandirConCasa`). La regla de qué
   vale (`motivoDeWorkspaceInaceptable`) se aplica en el SERVIDOR.
 - **El selector de carpeta lo abre el SISTEMA, no el navegador** (`core/selectorDeCarpeta.ts`,
-  `agent/config/selectorEnMaquina.ts`): `osascript`/`zenity`, solo cruza la carpeta elegida.
+  `agent/config/selectorEnMaquina.ts`): `osascript`/`zenity`/el `FolderBrowserDialog` de PowerShell, solo cruza la carpeta
+  elegida. **Y una ruta de Windows vale** (`C:\…`, `\\servidor\…`): la regla y `rutaDeWorkspace` usan las de la base,
+  no siempre `posix` (IXCODE-22).
   Elegir y guardar son dos actos. **Límite declarado**: por un túnel el botón no sirve.
 
 ### Los conectores MCP

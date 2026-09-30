@@ -142,6 +142,22 @@ const BUCLE_DE_CALIDAD = [
  * delegación es `create_sub_agent` y no tiene descripción por especialista, así que se traduce
  * el nombre de la tool y las fichas van escritas aquí, con la MISMA función que deepagents.
  */
+/**
+ * **El idioma, dicho desde código**, al raíz y a cada especialista. Visto en la consola web (MyAllXOne): el texto entre
+ * herramientas y el razonamiento salían en inglés («Let me call…», «I'll start by reconnoitering…») con la persona
+ * escribiendo en español. Nuestros prompts están en español pero ninguno lo decía, y encima hay piezas internas en inglés
+ * que tiran de él: la identidad que añade TrueForge («You are the Agent…»), las descripciones de las tools y la costumbre
+ * de DeepSeek de razonar en inglés.
+ */
+export const IDIOMA_DE_LA_RESPUESTA =
+  "IDIOMA: escribe SIEMPRE en español —lo que dices entre herramientas, tu razonamiento, tus encargos y tus respuestas—, " +
+  "aunque algunas instrucciones internas y las descripciones de las herramientas estén en inglés. El código, los nombres de " +
+  "ficheros, atributos y funciones, y las citas literales se quedan como son.";
+
+/** Lo que recibe el agente en modo autónomo cuando pregunta sin marcar ninguna opción como recomendada. */
+export const RESPUESTA_AUTONOMA_SIN_RECOMENDADA =
+  "Modo autónomo: no hay nadie a quien preguntar. Decide tú con lo que dicen el encargo y el plan, sigue, y di en tu respuesta final qué elegiste y por qué.";
+
 /** Un comando que saca una captura de pantalla del aparato. */
 export const COMANDO_DE_CAPTURA = /xone-captura-android|xone-hotswap\s+shot\b|\bscreencap\b/;
 
@@ -923,8 +939,10 @@ export async function abrirSesionTrueforge(
     ].join("\n");
     const instrucciones =
       agente === undefined
-        ? `${nota} Contesta con lo que encuentres y dónde.`
+        ? `${IDIOMA_DE_LA_RESPUESTA}\n\n${nota} Contesta con lo que encuentres y dónde.`
         : [
+            IDIOMA_DE_LA_RESPUESTA,
+            "",
             promptDeAgente(agente, repartirSkills(agente, disponibles)),
             "",
             nota,
@@ -1024,7 +1042,7 @@ export async function abrirSesionTrueforge(
     hijosConMemoria.clear();
     const definicion = {
       modelClient: llm,
-      instruction: [promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas, conBucle: conBucleDelDesarrollador, conEsperas })].filter((l) => l !== "").join("\n\n"),
+      instruction: [IDIOMA_DE_LA_RESPUESTA, promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas, conBucle: conBucleDelDesarrollador, conEsperas })].filter((l) => l !== "").join("\n\n"),
       // Por TURNO, porque el raíz se rehace desde su foto al final de cada uno (ver `turno`).
       iterationLimit: LIMITE_DE_LLAMADAS_DEL_RAIZ,
     };
@@ -1341,25 +1359,35 @@ export async function abrirSesionTrueforge(
           const preguntas: Pendiente[] = [];
           yield* paso(lote, senal, pendientes, preguntas);
           if (pendientes.length === 0) {
-            // **En modo autónomo, lo que el agente ya recomendó se contesta SOLO**, y se dice en el
-            // chat. Todas o ninguna: una pregunta sin recomendada le llega a la persona, y las demás
-            // no pueden quedarse sin contestar. Con tope, para que no dé vueltas.
-            const solas = preguntas.map((q) => ({ q, elegida: opcionRecomendada(consultaDe(q.args).opciones) }));
-            if (
-              preguntas.length > 0 &&
-              opciones.sinAprobacion?.() === true &&
-              solas.every((x) => x.elegida !== undefined) &&
-              preguntasSolas + preguntas.length <= TOPE_DE_PREGUNTAS_CONTESTADAS_SOLAS
-            ) {
+            /**
+             * **En modo autónomo no se le pregunta a nadie**, y se dice en el chat. Una pregunta con una opción
+             * `(Recommended)` se contesta con ella; una sin recomendada vuelve al agente pidiéndole que decida él y diga
+             * qué eligió. Era «todas o ninguna»: medido en MyAllXOne, el orquestador hizo DOS a la vez —una con
+             * recomendada, la otra no— y no se contestó ninguna, se enseñó solo la primera y la segunda se perdió. Con
+             * tope, para que no dé vueltas.
+             */
+            if (preguntas.length > 0 && opciones.sinAprobacion?.() === true && preguntasSolas + preguntas.length <= TOPE_DE_PREGUNTAS_CONTESTADAS_SOLAS) {
               preguntasSolas += preguntas.length;
-              for (const { q, elegida } of solas) {
+              const respuestas: unknown[] = [];
+              for (const q of preguntas) {
+                const { pregunta, opciones: posibles } = consultaDe(q.args);
+                const elegida = opcionRecomendada(posibles);
                 yield {
                   tipo: "aviso",
-                  texto: `modo autónomo: a «${consultaDe(q.args).pregunta}» contesto la recomendada: ${elegida ?? ""}`,
+                  texto:
+                    elegida !== undefined
+                      ? `modo autónomo: a «${pregunta}» contesto la recomendada: ${elegida}`
+                      : `modo autónomo: «${pregunta}» no se pregunta; lo decide el agente y lo dirá`,
                   severidad: "aviso",
                 };
+                respuestas.push({
+                  type: "user.tool_response",
+                  thread_id: q.hilo,
+                  tool_call_id: q.id,
+                  content: elegida ?? RESPUESTA_AUTONOMA_SIN_RECOMENDADA,
+                });
               }
-              lote = solas.map(({ q, elegida }) => ({ type: "user.tool_response", thread_id: q.hilo, tool_call_id: q.id, content: elegida }));
+              lote = respuestas;
               continue;
             }
             // El orquestador PREGUNTA: el turno acaba aquí con la pregunta a la vista, y lo que la

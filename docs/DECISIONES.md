@@ -7807,3 +7807,20 @@ saber tamaños, a qué control iba cada uno y si llevaban el símbolo. Lo que el
 traza guardaba el encargo y no la respuesta. Ahora el diseñador devuelve una tabla fichero → control → atributo → tamaño →
 símbolo dentro, el orquestador la pasa tal cual y el desarrollador no reabre los SVG; y la traza guarda cada devolución,
 recortada como los encargos.
+
+### IXCODE-22: el workspace no se podía elegir en Windows (30-09-2026)
+
+Dos fallos, los dos de código. La regla de qué ruta vale (`motivoDeWorkspaceInaceptable`) usaba `posix.isAbsolute`, que
+dice que `C:\Users\…` no es absoluta: en Windows se rechazaba toda ruta con «tiene que empezar por /». Y el selector de
+carpeta solo existía para macOS y Linux, así que en Windows el botón no se pintaba y el campo de texto era el único camino
+—el que se rechazaba—. Ahora vale una ruta con unidad o de red (la raíz de una unidad no), `~\` se expande, la ruta de
+cada proyecto se compone con las reglas de la base (`posix.join` mezclaba barras) y Windows tiene su diálogo por
+PowerShell (`FolderBrowserDialog`, `-STA`). Límite declarado: sin probar en un Windows real.
+
+### En autónomo no se pregunta a nadie, y varias preguntas no son «todas o ninguna» (30-09-2026)
+
+Visto en MyAllXOne con la sesión en autónomo: el orquestador hizo DOS preguntas en la misma llamada —el alcance, con una
+opción `(Recommended)`, y el formato de los números, sin marca—. La regla era «todas o ninguna»: no se contestó ninguna,
+la persona vio solo la primera y la segunda se cerró sola con «No se completó». Ahora cada pregunta va por separado: con
+recomendada se contesta con ella, y sin marca vuelve al agente pidiéndole que decida y diga qué eligió, que es lo que la
+persona pidió al poner el modo autónomo. Todo sale como aviso en el chat. En supervisado, igual que antes.

@@ -244,6 +244,9 @@ describe("una sesión con el motor TrueForge", () => {
     // `xone_atributos` va a los dos, montada de verdad (la composición de la sesión, no la tool suelta).
     expect(toolsPorLlamada[0]).toContain("xone_atributos");
     expect(toolsPorLlamada[1]).toContain("xone_atributos");
+    // El idioma lo dicen el prompt del raíz y el del hijo, desde código.
+    expect(vistos[0]![0]).toContain("IDIOMA: escribe SIEMPRE en español");
+    expect(vistos[1]![0]).toContain("IDIOMA: escribe SIEMPRE en español");
     // Y el hijo sabe CUÁNDO usarla: junto a su lista de tools, en su prompt de sistema.
     expect(vistos[1]![0]).toContain("pregunta PRIMERO a `xone_atributos`");
     expect(toolsPorLlamada[0]).not.toContain("get_openui_instructions");
@@ -900,14 +903,39 @@ describe("una sesión con el motor TrueForge", () => {
       expect(uno.tokens.join("")).toMatch(/1\. Básica/);
     }, 30_000);
 
-    it("sin recomendada, también llega a la persona", async () => {
+    it("sin recomendada NO llega a la persona: vuelve al agente pidiéndole que decida él, y se dice en el chat", async () => {
       const raiz = proyecto();
-      const { m, vistos } = modelosConGuion([[pregunta("q1", "¿Qué pantalla?", ["Login", "Menú"])]]);
+      const { m, vistos } = modelosConGuion([
+        [pregunta("q1", "¿Qué pantalla?", ["Login", "Menú"])],
+        [new AIMessageChunk({ content: "Elegí el menú." })],
+      ]);
       const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true });
       const uno = piel();
       await s.turno("arregla", uno.p);
-      expect(vistos).toHaveLength(1);
-      expect(uno.tokens.join("")).toMatch(/1\. Login/);
+      expect(vistos).toHaveLength(2);
+      expect(vistos[1]!.join("\n")).toContain("Modo autónomo: no hay nadie a quien preguntar");
+      expect(uno.tokens.join("")).not.toMatch(/1\. Login/);
+      expect(uno.lineas.join("\n")).toContain("«¿Qué pantalla?» no se pregunta; lo decide el agente");
+    }, 30_000);
+
+    it("DOS preguntas a la vez, una con recomendada y otra sin ella (MyAllXOne): se contestan las dos y el turno sigue", async () => {
+      const raiz = proyecto();
+      const dos = new AIMessageChunk({
+        content: "",
+        tool_call_chunks: [
+          { index: 0, id: "q1", name: "ask_user_question", args: JSON.stringify({ question: "¿Alcance?", options: ["Todo (Recommended)", "Básica"] }) },
+          { index: 1, id: "q2", name: "ask_user_question", args: JSON.stringify({ question: "¿Formato?", options: ["4,850.50", "4.850,50"] }) },
+        ],
+      });
+      const { m, vistos } = modelosConGuion([[dos], [new AIMessageChunk({ content: "Todo, y formato español." })]]);
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true });
+      const uno = piel();
+      await s.turno("haz la calculadora", uno.p);
+      expect(vistos).toHaveLength(2);
+      const contexto = vistos[1]!.join("\n");
+      expect(contexto).toContain("Todo (Recommended)");
+      expect(contexto).toContain("Modo autónomo: no hay nadie a quien preguntar");
+      expect(uno.tokens.join("")).toContain("Todo, y formato español.");
     }, 30_000);
   });
 
