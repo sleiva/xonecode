@@ -526,7 +526,8 @@ memoria en disco es la FOTO del raíz** (`memoriaTrueforge.ts`, `AgentThread.toS
 **no** la capa `agent-session` de la librería. **La foto lleva VERSIÓN y se lee ESTRICTA**
 (`MIGRACIONES`, `interpretarFoto`): la que no se entiende no se carga a medias — se abre sin
 memoria y se APARTA con otro nombre. **El prompt de un hijo va en su prompt de SISTEMA por
-`instructionBuilders`**. **Y el idioma lo dice el código** (`IDIOMA_DE_LA_RESPUESTA`, al raíz y a cada hijo): la
+`instructionBuilders`**. **Y al desarrollador no se le cuenta la maquinaria** (`SIN_HABLAR_DEL_HARNESS`, solo al raíz, que es quien le habla):
+ni tools, ni nombres internos, ni el HANDOFF, ni la foto del arranque. **Y el idioma lo dice el código** (`IDIOMA_DE_LA_RESPUESTA`, al raíz y a cada hijo): la
 identidad que añade TrueForge y las descripciones de las tools están en inglés, y sin decirlo el texto entre
 herramientas y el razonamiento salían en inglés. **El raíz puede PREGUNTAR** (`ask_user_question`, solo él): con opciones
 sale además como tarjeta con un botón por opción (`Piel.consulta?` opcional), y lo pendiente lo

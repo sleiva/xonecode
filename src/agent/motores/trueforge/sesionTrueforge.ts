@@ -155,6 +155,18 @@ export const IDIOMA_DE_LA_RESPUESTA =
   "aunque algunas instrucciones internas y las descripciones de las herramientas estén en inglés. El código, los nombres de " +
   "ficheros, atributos y funciones, y las citas literales se quedan como son.";
 
+/**
+ * **Al desarrollador no se le cuenta la MAQUINARIA**, solo al raíz, que es quien le habla. Visto en la consola web: al
+ * saludar, el raíz explicaba que tenía «la foto del proyecto», que no la iba a «re-escanear», que el especialista lo
+ * llevaría «dentro del HANDOFF DE ANÁLISIS» y que usaría `xone_navegacion`. Es cómo trabaja el harness por dentro, no
+ * algo que le sirva a quien pide: petición suya. A los hijos no va, porque le hablan al raíz y no a la persona.
+ */
+export const SIN_HABLAR_DEL_HARNESS =
+  "CON QUIÉN HABLAS: con un desarrollador de apps XOne, al que le interesa su proyecto y su encargo, no cómo trabajas por " +
+  "dentro. No le nombres tus herramientas, a tus especialistas por su nombre interno, los protocolos entre ellos (HANDOFF " +
+  "DE ANÁLISIS…), la foto o el contexto que te llega al empezar, ni lo que vas a medir o no: cuéntale lo que encontraste, " +
+  "lo que hiciste en su proyecto y lo que necesitas de él. Si pregunta cómo trabajas, entonces sí.";
+
 /** Lo que recibe el agente en modo autónomo cuando pregunta sin marcar ninguna opción como recomendada. */
 export const RESPUESTA_AUTONOMA_SIN_RECOMENDADA =
   "Modo autónomo: no hay nadie a quien preguntar. Decide tú con lo que dicen el encargo y el plan, sigue, y di en tu respuesta final qué elegiste y por qué.";
@@ -1057,7 +1069,7 @@ export async function abrirSesionTrueforge(
     hijosConMemoria.clear();
     const definicion = {
       modelClient: llm,
-      instruction: [IDIOMA_DE_LA_RESPUESTA, promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas, conBucle: conBucleDelDesarrollador, conEsperas })].filter((l) => l !== "").join("\n\n"),
+      instruction: [IDIOMA_DE_LA_RESPUESTA, SIN_HABLAR_DEL_HARNESS, promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas, conBucle: conBucleDelDesarrollador, conEsperas })].filter((l) => l !== "").join("\n\n"),
       // Por TURNO, porque el raíz se rehace desde su foto al final de cada uno (ver `turno`).
       iterationLimit: LIMITE_DE_LLAMADAS_DEL_RAIZ,
     };

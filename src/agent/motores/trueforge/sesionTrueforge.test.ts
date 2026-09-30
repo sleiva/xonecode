@@ -247,6 +247,9 @@ describe("una sesión con el motor TrueForge", () => {
     // El idioma lo dicen el prompt del raíz y el del hijo, desde código.
     expect(vistos[0]![0]).toContain("IDIOMA: escribe SIEMPRE en español");
     expect(vistos[1]![0]).toContain("IDIOMA: escribe SIEMPRE en español");
+    // Al desarrollador no se le cuenta la maquinaria: lo dice el raíz, que es quien le habla; el hijo no lo necesita.
+    expect(vistos[0]![0]).toContain("CON QUIÉN HABLAS");
+    expect(vistos[1]![0]).not.toContain("CON QUIÉN HABLAS");
     // Y el hijo sabe CUÁNDO usarla: junto a su lista de tools, en su prompt de sistema.
     expect(vistos[1]![0]).toContain("pregunta PRIMERO a `xone_atributos`");
     expect(toolsPorLlamada[0]).not.toContain("get_openui_instructions");
