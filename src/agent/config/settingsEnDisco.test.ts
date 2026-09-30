@@ -125,6 +125,11 @@ describe("settingsEnDisco", () => {
     expect(cargarSettings(c).settings.dispositivos).toBeUndefined();
     // Uno que no consta no es un error ni ensucia el fichero.
     expect(() => quitarAjustesDeAvd(c, "no-existe")).not.toThrow();
+    // Un nombre heredado de Object.prototype tampoco es una entrada: no toca el fichero.
+    const antes = readFileSync(rutaSettings(c), "utf8");
+    quitarAjustesDeAvd(c, "constructor");
+    quitarAjustesDeAvd(c, "toString");
+    expect(readFileSync(rutaSettings(c), "utf8")).toBe(antes);
   });
 
   it("quitarAjustesDeAvd conserva lo demás de dispositivos y no escribe sobre un settings.json roto", () => {

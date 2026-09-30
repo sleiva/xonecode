@@ -7,6 +7,13 @@ import propios from "./AccionDeSesion.module.css";
 import propiosDelProgreso from "./EliminarEmulador.module.css";
 
 /**
+ * Cuánto se espera a que llegue un progreso PROPIO (`borrar-avd`) tras pulsar. Las negativas del
+ * servidor por una carrera —otro trabajo en curso, el AVD encendido mientras tanto— van por
+ * `informar` y no llegan al navegador: sin este plazo el diálogo se quedaría en «Eliminando…» para siempre.
+ */
+export const MS_SIN_RESPUESTA_AL_ELIMINAR = 10_000;
+
+/**
  * La pregunta de seguridad antes de ELIMINAR un emulador (AVD) desde Ajustes > Dispositivos.
  *
  * Es el molde de `BorrarCopiaLocal` —misma ventana, mismo botón rojo lleno (`.destructiva`) y la
@@ -38,9 +45,12 @@ export function EliminarEmulador({
 }) {
   const [escrito, setEscrito] = useState("");
   const [enviado, setEnviado] = useState(false);
+  const [sinRespuesta, setSinRespuesta] = useState(false);
   const anterior = useRef(progreso);
   const propio = enviado && progreso !== anterior.current ? progreso : undefined;
   const eliminando = enviado && (propio === undefined || propio.estado === "corriendo");
+  // Solo con el trabajo PROPIO en marcha se bloquea cerrar: mientras no llega, se puede cancelar.
+  const corriendo = propio?.estado === "corriendo";
   const confirmado = escrito.trim() === avd;
 
   useEffect(() => {
@@ -48,18 +58,29 @@ export function EliminarEmulador({
     // `alCerrar` cambia en cada render de quien monta: lo que dispara es el estado.
   }, [propio?.estado]);
 
+  // Sin progreso propio a tiempo, el servidor no empezó: se vuelve al estado normal y se dice.
+  useEffect(() => {
+    if (!enviado || propio !== undefined) return;
+    const t = setTimeout(() => {
+      setEnviado(false);
+      setSinRespuesta(true);
+    }, MS_SIN_RESPUESTA_AL_ELIMINAR);
+    return () => clearTimeout(t);
+  }, [enviado, propio]);
+
   const eliminar = (): void => {
     anterior.current = progreso;
+    setSinRespuesta(false);
     setEnviado(true);
     alConfirmar();
   };
 
   return (
-    <Modal open onClose={alCerrar} title="Eliminar emulador" headless className={estilos.capa}>
+    <Modal open onClose={() => (corriendo ? undefined : alCerrar())} title="Eliminar emulador" headless className={estilos.capa}>
       <div
         className={estilos.velo}
         onClick={(evento) => {
-          if (evento.target === evento.currentTarget && !eliminando) alCerrar();
+          if (evento.target === evento.currentTarget && !corriendo) alCerrar();
         }}
       >
         <div className={estilos.ventana} role="alertdialog" aria-label={`Eliminar el emulador ${avd}`}>
@@ -87,6 +108,12 @@ export function EliminarEmulador({
               if (e.key === "Enter" && confirmado && !eliminando) eliminar();
             }}
           />
+          {!sinRespuesta ? null : (
+            <p className={estilos.fallo} role="alert">
+              El servidor no empezó a eliminarlo: puede que haya otro trabajo en marcha o que el emulador se haya
+              encendido. Vuelve a intentarlo.
+            </p>
+          )}
           {propio === undefined || propio.estado === "corriendo" ? null : (
             <p className={estilos.fallo} role="alert">
               No se ha eliminado: {propio.motivo ?? "el gestor de emuladores no pudo"}
@@ -96,7 +123,7 @@ export function EliminarEmulador({
             <pre className={propiosDelProgreso.log}>{propio.lineas.slice(-5).join("\n")}</pre>
           )}
           <div className={estilos.acciones}>
-            <Button variant="outline" className={estilos.accion} disabled={eliminando} onClick={alCerrar}>
+            <Button variant="outline" className={estilos.accion} disabled={corriendo} onClick={alCerrar}>
               Cancelar
             </Button>
             <Button

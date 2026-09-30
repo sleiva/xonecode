@@ -1,9 +1,13 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { EliminarEmulador } from "./EliminarEmulador.js";
+import { EliminarEmulador, MS_SIN_RESPUESTA_AL_ELIMINAR } from "./EliminarEmulador.js";
 import type { EstadoDelCliente } from "../store.js";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 type Progreso = NonNullable<EstadoDelCliente["instalacion"]>;
 const progreso = (estado: Progreso["estado"], extra: Partial<Progreso> = {}): Progreso => ({
@@ -103,5 +107,34 @@ describe("EliminarEmulador", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
     expect(alCerrar).toHaveBeenCalled();
     expect(alConfirmar).not.toHaveBeenCalled();
+  });
+
+  it("sin progreso propio se puede cancelar; pasado el plazo dice que el servidor no empezó y deja reintentar", () => {
+    vi.useFakeTimers();
+    const alCerrar = vi.fn();
+    const alConfirmar = vi.fn();
+    render(<EliminarEmulador avd="otro" alConfirmar={alConfirmar} alCerrar={alCerrar} />);
+    escribir("otro");
+    fireEvent.click(eliminar());
+    expect(eliminar().textContent).toBe("Eliminando…");
+    expect((screen.getByRole("button", { name: "Cancelar" }) as HTMLButtonElement).disabled).toBe(false);
+    act(() => void vi.advanceTimersByTime(MS_SIN_RESPUESTA_AL_ELIMINAR));
+    expect(screen.getByRole("alert").textContent).toContain("El servidor no empezó a eliminarlo");
+    expect(eliminar().textContent).toBe("Eliminar");
+    expect(eliminar().disabled).toBe(false);
+    fireEvent.click(eliminar());
+    expect(alConfirmar).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(/El servidor no empezó/)).toBeNull();
+  });
+
+  it("con progreso propio a tiempo el plazo no dispara", () => {
+    vi.useFakeTimers();
+    const { rerender } = render(<EliminarEmulador avd="otro" alConfirmar={() => {}} alCerrar={() => {}} />);
+    escribir("otro");
+    fireEvent.click(eliminar());
+    rerender(<EliminarEmulador avd="otro" alConfirmar={() => {}} alCerrar={() => {}} progreso={progreso("corriendo")} />);
+    act(() => void vi.advanceTimersByTime(MS_SIN_RESPUESTA_AL_ELIMINAR * 2));
+    expect(screen.queryByText(/El servidor no empezó/)).toBeNull();
+    expect(eliminar().textContent).toBe("Eliminando…");
   });
 });

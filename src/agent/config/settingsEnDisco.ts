@@ -221,7 +221,8 @@ export function quitarAjustesDeAvd(casa: string | undefined, avd: string): { rut
   const crudo = leerCrudoOAbortar(ruta);
   const dispositivos = { ...((crudo as { dispositivos?: Record<string, unknown> }).dispositivos ?? {}) };
   const avds = { ...((dispositivos.avds as Record<string, unknown> | undefined) ?? {}) };
-  if (!(avd in avds)) return { ruta };
+  // `in` daría cierto para `constructor` o `toString`, que valen por forma: solo las propias.
+  if (!Object.hasOwn(avds, avd)) return { ruta };
   delete avds[avd];
   if (Object.keys(avds).length === 0) delete dispositivos.avds;
   else dispositivos.avds = avds;
