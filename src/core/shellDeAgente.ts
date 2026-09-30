@@ -228,5 +228,17 @@ export function motivoDeComandoRechazado(comando: string): string | undefined {
   if (buscaFicheros.some((p) => p.test(comando))) {
     return `No se lanza: para buscar ficheros no uses la shell. ${tools} Si lo que buscas es un script de tus skills, está en el PATH.`;
   }
+  // El túnel de hotswap es del APARATO (su puerto está en Ajustes → Dispositivos) y lo ponen los
+  // scripts. Medido: un `adb forward` al mismo puerto local le QUITA el túnel al aparato de otra
+  // sesión sin dar error. `--list` solo mira, y pasa.
+  const adb = String.raw`(?:adb|"?\$\{?XONECODE_ADB\}?"?)`;
+  const tunelAMano = new RegExp(String.raw`${inicio}${adb}\s+(?:-\S+\s+\S+\s+)*(?:forward|reverse)\s+(?!--list${fin})`);
+  if (tunelAMano.test(comando)) {
+    return (
+      "No se lanza: el túnel al aparato lo ponen `xone-desplegar-android` y `xone-reiniciar-android`, con el puerto que " +
+      "tiene ESTE aparato; un `adb forward` a mano puede quitarle el túnel al aparato de otra sesión sin avisar. Para " +
+      "hablar con la app usa `xone-hotswap`, que ya sabe a qué puerto ir. Mirar los túneles (`adb forward --list`) sí se puede."
+    );
+  }
   return undefined;
 }

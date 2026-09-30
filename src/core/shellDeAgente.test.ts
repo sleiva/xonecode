@@ -223,3 +223,32 @@ describe("las búsquedas por el disco entero no se lanzan", () => {
     ]) expect(motivoDeComandoRechazado(c), c).toBeUndefined();
   });
 });
+
+describe("un túnel a mano (`adb forward`/`reverse`) no se lanza", () => {
+  it.each([
+    "adb forward tcp:8443 tcp:8443",
+    "adb -s emulator-5556 forward tcp:8444 tcp:8443",
+    '"$XONECODE_ADB" forward tcp:8443 tcp:8443',
+    "xone-log-android && adb forward tcp:1 tcp:2",
+    "adb forward --remove tcp:8443",
+    "adb reverse tcp:8443 tcp:8443",
+  ])("se rechaza: %s", (c) => {
+    const m = motivoDeComandoRechazado(c);
+    expect(m, c).toContain("xone-desplegar-android");
+    expect(m, c).toContain("xone-reiniciar-android");
+    expect(m, c).toContain("xone-hotswap");
+    expect(m, c).toContain("otra sesión");
+  });
+
+  // `echo "adb forward"`: elegido que PASE. La regex exige que `adb` empiece un comando (inicio de línea, `;`, `&`, `|`, `(` o
+  // espacio), y aquí lo precede una comilla; es la regex más sencilla que cumple el resto, y no se lanza nada por ahí.
+  it.each([
+    "adb forward --list",
+    "adb -s emulator-5556 forward --list",
+    "adb devices",
+    "xone-reiniciar-android --app X",
+    'echo "adb forward"',
+  ])("pasa: %s", (c) => {
+    expect(motivoDeComandoRechazado(c), c).toBeUndefined();
+  });
+});
