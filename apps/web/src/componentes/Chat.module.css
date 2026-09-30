@@ -324,27 +324,14 @@
   padding-left: 10px;
 }
 
-/* La fila de acciones del mensaje. Sus BOTONES aparecen al posar el ratón: mientras se lee,
-   el mensaje se lee solo. `focus-within` además de `hover` para que se llegue con el teclado — un
-   control que solo existe con ratón no existe para quien tabula. La HORA (IXCODE-24) no es un
-   control, es un dato, y se queda siempre a la vista: por eso la opacidad va en los hijos que no
-   son la hora y no en la fila. */
+/* La fila de acciones del mensaje: su hora y su botón de copiar, SIEMPRE a la vista (IXCODE-24,
+   petición suya). Antes el botón aparecía solo al posar el ratón, y así no se sabía que estaba. */
 .acciones {
   display: flex;
   justify-content: flex-end;
   align-items: center;
   gap: 8px;
   margin-top: 4px;
-}
-
-.acciones > :not(.hora) {
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-
-.globo:hover .acciones > :not(.hora),
-.acciones:focus-within > :not(.hora) {
-  opacity: 1;
 }
 
 /* La hora de un mensaje: pequeña y apagada, porque acompaña al mensaje, no compite con él. */

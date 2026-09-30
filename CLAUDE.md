@@ -866,8 +866,8 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
 - **La hora de cada mensaje la estampa el SERVIDOR, en el acto** (IXCODE-24, `cuando` en `usuario` y
   `asistente`): la de mandarlo, y la de EMPEZAR a llegar la respuesta (los parciales la conservan). Va
   al disco con el acto, así que una sesión reabierta enseña la real; sin `cuando` no se pinta. La de la
-  respuesta va junto a copiar y siempre a la vista: lo que aparece al posar el ratón es el botón. El
-  mensaje de la persona lleva la MISMA fila (hora y copiar). De ayer se dice «ayer», por el calendario.
+  respuesta va junto a copiar, y los dos siempre a la vista (nada aparece solo al posar el ratón). El
+  mensaje de la persona lleva la MISMA fila (hora y copiar). Siempre con el día: «hoy a las…», «ayer a las…» (por el calendario), o la fecha.
 - **`localStorage` es de ESTE navegador**: todo acceso envuelto en `try`.
 - **Ningún color literal fuera de `estilos/marca.css` y `splash.css`** (`Barra.test.tsx` lo
   vigila recorriendo TODOS los `.module.css`), `transparent` incluido. El cian es ACENTO y no

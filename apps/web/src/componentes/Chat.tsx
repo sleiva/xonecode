@@ -1165,9 +1165,8 @@ export function Chat({
                       ))}
                     </ul>
                   )}
-                  {/* Su hora y su botón de copiar, con la misma fila que la respuesta: la hora
-                      siempre a la vista, el botón al posar el ratón. Copia lo TECLEADO, no los
-                      nombres de los adjuntos. */}
+                  {/* Su hora y su botón de copiar, con la misma fila que la respuesta y siempre a
+                      la vista. Copia lo TECLEADO, no los nombres de los adjuntos. */}
                   <div className={`${estilos.acciones} ${estilos.accionesDelUsuario}`}>
                     <HoraDelMensaje cuando={acto.cuando} clase={estilos.hora} />
                     {acto.texto === "" ? null : <BotonDeCopiar texto={acto.texto} etiqueta="Copiar el mensaje" />}
@@ -1218,8 +1217,7 @@ export function Chat({
                     mensaje completo no se podía sin seleccionar a mano.
                   */}
                   <div className={estilos.acciones}>
-                    {/* La hora (IXCODE-24) va al lado de copiar y SIEMPRE a la vista: la fila
-                        sigue apareciendo al posar el ratón, pero solo para el botón. */}
+                    {/* La hora (IXCODE-24) va al lado de copiar, y los dos SIEMPRE a la vista. */}
                     <HoraDelMensaje cuando={acto.cuando} clase={estilos.hora} />
                     <BotonDeCopiar texto={acto.texto} etiqueta="Copiar la respuesta" />
                   </div>

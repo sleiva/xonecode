@@ -29,16 +29,17 @@ describe("selloDeFecha", () => {
 
 describe("horaDelMensaje (IXCODE-24)", () => {
   const hoy = new Date(2026, 8, 30, 18, 0);
-  it("de HOY, solo la hora", () => {
-    expect(horaDelMensaje(local(2026, 9, 30, 9, 5), hoy)).toBe("09:05");
+  it("de HOY, «hoy a las» y la hora", () => {
+    expect(horaDelMensaje(local(2026, 9, 30, 9, 5), hoy)).toBe("hoy a las 09:05");
   });
   it("de AYER, «ayer» y la hora —por el calendario, no por las 24 h—", () => {
-    expect(horaDelMensaje(local(2026, 9, 29, 23, 59), hoy)).toBe("ayer 23:59");
-    expect(horaDelMensaje(local(2026, 9, 29, 23, 50), new Date(2026, 8, 30, 0, 30))).toBe("ayer 23:50");
-    expect(horaDelMensaje(local(2026, 8, 31, 12, 0), new Date(2026, 8, 1, 9, 0))).toBe("ayer 12:00");
+    expect(horaDelMensaje(local(2026, 9, 29, 23, 59), hoy)).toBe("ayer a las 23:59");
+    expect(horaDelMensaje(local(2026, 9, 29, 23, 50), new Date(2026, 8, 30, 0, 30))).toBe("ayer a las 23:50");
+    expect(horaDelMensaje(local(2026, 8, 31, 12, 0), new Date(2026, 8, 1, 9, 0))).toBe("ayer a las 12:00");
   });
   it("de antes de ayer, también el día", () => {
-    expect(horaDelMensaje(local(2026, 9, 28, 23, 59), hoy)).toBe("28 sept 23:59");
+    expect(horaDelMensaje(local(2026, 9, 28, 23, 59), hoy)).toBe("28 sept a las 23:59");
+    expect(horaDelMensaje(local(2025, 9, 28, 8, 0), hoy)).toBe("28 sept 2025 a las 08:00");
   });
   it("lo que no es una fecha no se pinta", () => {
     expect(horaDelMensaje("ayer", hoy)).toBeUndefined();
