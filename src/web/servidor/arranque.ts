@@ -1618,6 +1618,15 @@ export function montarRutas(
   };
 
   /**
+   * El último progreso de la mudanza del workspace EN MARCHA, o ausente. Existe para la ráfaga:
+   * un navegador que reconecta a mitad de una copia larga tira la mudanza al caerse el cable
+   * (`store.ts#marcarDesconectado`) y el `resultado` solo va a quien está conectado al acabar,
+   * así que sin esto no sabría que sigue una —y los controles del workspace se le quedarían
+   * sueltos mientras el servidor niega cualquier otro cambio—.
+   */
+  let ultimoProgresoDeMudanza: Extract<MensajeAlCliente, { clase: "mudanzaDeWorkspace" }>["progreso"];
+
+  /**
    * Engancha el cable a la consola que toque, con el transcript entero por delante.
    *
    * **La invariante es que TODOS los clientes vivos están registrados en `adjunto`**, y por
@@ -1707,6 +1716,7 @@ export function montarRutas(
       cliente(skills);
       if (tareas !== undefined) cliente(tareas);
       if (workspace !== undefined) cliente(workspace);
+      if (ultimoProgresoDeMudanza !== undefined) cliente({ clase: "mudanzaDeWorkspace", progreso: ultimoProgresoDeMudanza });
       if (depuracion !== undefined) cliente(depuracion);
       if (conectores !== undefined) cliente(conectores);
       if (consumoDeLaSesion !== undefined) {
@@ -5845,7 +5855,10 @@ export function montarRutas(
             casaXonecode,
             tareas: tareasVivas,
             guardar,
-            progreso: (progreso) => emitir({ clase: "mudanzaDeWorkspace", progreso }),
+            progreso: (progreso) => {
+              ultimoProgresoDeMudanza = progreso;
+              emitir({ clase: "mudanzaDeWorkspace", progreso });
+            },
           });
           // El cable se quedaría enganchado a una consola cerrada: al vestíbulo, como al
           // borrar una copia. El alta siguiente ya trae las copias en la base nueva.
@@ -5856,6 +5869,7 @@ export function montarRutas(
           emitir({ clase: "mudanzaDeWorkspace", resultado: { estado: "rechazado", motivo: "no se pudo cambiar la carpeta" } });
         } finally {
           mudandoWorkspace = false;
+          ultimoProgresoDeMudanza = undefined;
           emitirWorkspace();
           opciones.revisarTareas?.();
           await anunciarAlta().catch(contar);

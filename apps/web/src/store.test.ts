@@ -62,6 +62,18 @@ describe("store del cliente", () => {
     expect(s.leer().actos).toHaveLength(0);
   });
 
+  it("marcarDesconectado tira la mudanza en curso: sin cable no se sabe si sigue, y dejarla bloqueaba Ajustes", () => {
+    // El fallo: con el SSE caído a mitad de una copia larga, el último `progreso` se quedaba
+    // en el store, Ajustes seguía en «en curso» sin poder cerrarse y el `resultado` no
+    // llegaba nunca a este cliente. Si la mudanza sigue viva, la ráfaga de la reconexión
+    // la vuelve a traer.
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "mudanzaDeWorkspace", progreso: { fase: "copiar", proyecto: "Tienda", indice: 1, total: 3 } });
+    expect(s.leer().mudanzaDeWorkspace).toEqual({ progreso: { fase: "copiar", proyecto: "Tienda", indice: 1, total: 3 } });
+    s.marcarDesconectado();
+    expect(s.leer().mudanzaDeWorkspace).toBeUndefined();
+  });
+
   it("marcarDesconectado limpia los apartados de espera: el servidor ya los resolvió al caer el SSE", () => {
     const s = crearStoreDelCliente();
     s.aplicar({ clase: "pregunta", texto: "¿nombre?" });

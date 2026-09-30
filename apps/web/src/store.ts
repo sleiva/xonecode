@@ -2272,6 +2272,11 @@ export function crearStoreDelCliente(): {
         // guardado de una skill que ya no está es peor que pedirlo otra vez.
         skills: undefined,
         cuerposDeSkill: undefined,
+        // La mudanza del workspace también: sin cable no se sabe si sigue ni cómo acabó —el
+        // `resultado` va a quien está conectado en ese momento—, y un `progreso` pegado dejaba
+        // Ajustes en «en curso» sin poder cerrarse. Si sigue viva, la ráfaga de la reconexión
+        // trae su último progreso (`arranque.ts#adjuntar`).
+        mudanzaDeWorkspace: undefined,
         // Y los conectores por lo mismo: token y catálogo viven en disco, así que mientras
         // no hay cable pueden haberse tocado a mano. La reconexión los trae enteros en la
         // misma ráfaga.

@@ -6005,6 +6005,35 @@ describe("las tareas en background, por el cable", () => {
       await vi.waitFor(() => expect(cliente.recibidos.filter((m) => m.clase === "workspace").at(-1)).toEqual({ clase: "workspace", ruta: nueva }));
     });
 
+    it("un navegador que conecta A MITAD de la mudanza recibe su último progreso en la ráfaga", async () => {
+      // El fallo: el `resultado` solo va a quien está conectado al acabar y el cliente tira la
+      // mudanza al caerse el cable, así que quien reconectaba a mitad no sabía que había una
+      // en marcha. Se conecta DENTRO de `guardarWorkspace`, que corre tras copiar y verificar.
+      const tarde = clienteDeMentira();
+      let conectando: Promise<unknown> | undefined;
+      const { servidor, nueva } = montarMudanza({
+        guardarWorkspace: () => {
+          conectando = Promise.resolve(servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(tarde.peticion, tarde.respuesta));
+        },
+      });
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      expect(await enviarMensaje(accion, { clase: "workspace", ruta: nueva, accion: "aplicar" })).toBe(204);
+      await vi.waitFor(() => expect(conectando).toBeDefined());
+      await conectando;
+      await asentar();
+      const suyos = tarde.recibidos.filter((m) => m.clase === "mudanzaDeWorkspace");
+      expect(suyos.length).toBeGreaterThan(0);
+      expect("progreso" in suyos[0]! && suyos[0].progreso?.fase).toBeTruthy();
+    });
+
+    it("sin mudanza en marcha, la ráfaga NO trae ninguna", async () => {
+      const { servidor } = montarMudanza();
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+      expect(cliente.recibidos.some((m) => m.clase === "mudanzaDeWorkspace")).toBe(false);
+    });
+
     it("crear una tarea MIENTRAS se muda se niega con motivo: guardaría la raíz vieja", async () => {
       // La mudanza copia y verifica en disco de verdad (E/S asíncrona): las dos peticiones de
       // abajo llegan sin soltar el hilo entre medias, así que la encuentran en marcha.
