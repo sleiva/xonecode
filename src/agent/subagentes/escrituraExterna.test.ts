@@ -11,6 +11,8 @@ import {
   politicaExternaDeSesion,
   opcionesDeSubagenteExterno,
   eventoDeToolExterna,
+  dentroDeUnaLectura,
+  motivoDeBashExterno,
   inventarioDelProyecto,
   diffDeEscrituraExterna,
   TOOLS_EXTERNAS_DE_LECTURA,
@@ -676,5 +678,57 @@ describe("el inventario: lo que el hijo no puede listar, se le DICE", () => {
     // Sale del disco, así que se puede decir — y decirlo es lo que evita que se ponga a
     // adivinar nombres, que es exactamente lo que hacía sin inventario.
     expect(inventarioDelProyecto(new Set())).toMatch(/está vacío/);
+  });
+});
+
+describe("la shell estrecha de un externo con ejecución, en el hook", () => {
+  const ejecucion = { scripts: ["xone-hotswap"], lecturas: [] as string[] };
+  const hook = (command: string, conEjecucion = true) =>
+    decisionDePreToolUse({ nombre: "Bash", entrada: { command }, cwd: "/p", ficheros: new Set(), real: (r) => r, ...(conEjecucion ? { ejecucion } : {}) });
+
+  it("un comando bueno recibe `ask` y NO `allow`: con `allow` el SDK no consulta `canUseTool` (medido)", () => {
+    expect(hook("xone-hotswap shot").permissionDecision).toBe("ask");
+  });
+
+  it("uno malo se deniega con la forma que sí vale; sin ejecución, denegado siempre", () => {
+    const d = hook("./scripts/xone-hotswap shot");
+    expect(d.permissionDecision).toBe("deny");
+    expect(d.permissionDecisionReason).toContain("xone-hotswap");
+    expect(hook("xone-hotswap shot", false).permissionDecision).toBe("deny");
+  });
+
+  it("la línea de actividad lo dice como la de nuestra shell: `execute` con el comando", () => {
+    expect(eventoDeToolExterna("Bash", { command: " xone-hotswap shot " }, "/p", (r) => r)).toEqual({ nombre: "execute", detalle: "xone-hotswap shot" });
+  });
+
+  it("`motivoDeBashExterno` sin `command` de texto no deja pasar nada", () => {
+    expect(motivoDeBashExterno({}, ["xone-hotswap"])).toBeDefined();
+  });
+});
+
+describe("las carpetas de la SESIÓN que un externo con ejecución puede leer", () => {
+  const base = realpathSync(mkdtempSync(join(tmpdir(), "xc-lecturas-")));
+  const xonecode = join(base, ".xonecode", "sesiones", "s1");
+  const artefactos = join(xonecode, "artefactos");
+  mkdirSync(artefactos, { recursive: true });
+  writeFileSync(join(artefactos, "captura.png"), "x");
+  writeFileSync(join(base, ".xonecode", "checkpoint.sqlite"), "secreto");
+  mkdirSync(join(xonecode, "adjuntos"), { recursive: true });
+  writeFileSync(join(xonecode, "adjuntos", "a.txt"), "x");
+  symlinkSync(join(base, ".xonecode", "checkpoint.sqlite"), join(artefactos, "enlace.png"));
+  afterAll(() => rmSync(base, { recursive: true, force: true }));
+  const dentro = (r: string) => dentroDeUnaLectura(r, [artefactos], realpathSync);
+
+  it("lee lo suyo: una captura de su carpeta de artefactos", () => {
+    expect(dentro(join(artefactos, "captura.png"))).toBe(true);
+  });
+
+  it("y nada más: ni el checkpoint, ni los adjuntos de al lado, ni por `..`, ni por un enlace, ni una ruta relativa", () => {
+    expect(dentro(join(base, ".xonecode", "checkpoint.sqlite"))).toBe(false);
+    expect(dentro(join(xonecode, "adjuntos", "a.txt"))).toBe(false);
+    expect(dentro(join(artefactos, "..", "..", "..", "checkpoint.sqlite"))).toBe(false);
+    expect(dentro(join(artefactos, "enlace.png"))).toBe(false);
+    expect(dentro("artefactos/captura.png")).toBe(false);
+    expect(dentro(`${artefactos}-otra/x.png`)).toBe(false);
   });
 });

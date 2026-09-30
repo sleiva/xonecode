@@ -114,11 +114,11 @@ export interface Agente {
    * `permissions` junto a un backend ejecutable. Por eso se declara aquí, en el fichero, en
    * vez de deducirse de nada: lo que no se declara, no se concede.
    *
-   * **Solo tiene efecto con `motor: "modelo"`.** En los tres motores externos la shell está
-   * cerrada a propósito —`Bash` denegada en Claude Code, la tool retirada en OpenCode, el
-   * sandbox `read-only` en Codex— y eso no lo abre un campo del `.md`: ahí el hijo corre en
-   * otro proceso con sus propias reglas. Declararlo con otro motor no rompe nada, pero no
-   * hace nada, y la ventana de Ajustes lo dice.
+   * **Tiene efecto con `motor: "modelo"` y con `claude-code`** (`admiteEjecucion`). En Claude
+   * Code la shell se abre ESTRECHA: solo los scripts de sus skills, por su nombre y con
+   * argumentos que la shell no reinterpreta (`core/comandoExterno.ts`), con el entorno de
+   * nuestra shell. En OpenCode (la tool retirada) y en Codex (sandbox `read-only`) sigue
+   * cerrada: declararlo ahí no rompe nada, pero no hace nada, y la ventana de Ajustes lo dice.
    */
   ejecucion?: boolean;
   /**
@@ -469,9 +469,11 @@ export function fichaDeAgente(agente: Agente, opciones: { conIconos?: boolean } 
    * pasa por ninguna aprobación. Derivarlo de `soloLectura: false` decía lo contrario en las
    * dos mitades, y la segunda en la dirección peligrosa: prometía una barrera que no existe.
    */
-  if (agente.ejecucion === true) {
+  if (agente.ejecucion === true && admiteEjecucion(agente.motor)) {
     capacidades.push(
-      "ejecuta comandos en esta máquina, así que alcanza el disco sin pasar por la aprobación",
+      agente.motor === "modelo"
+        ? "ejecuta comandos en esta máquina, así que alcanza el disco sin pasar por la aprobación"
+        : "ejecuta SOLO los scripts de sus skills en esta máquina, sin pasar por la aprobación",
       "no edita ficheros con las tools de fichero: no las tiene"
     );
   } else if (agente.soloLectura) {
@@ -711,4 +713,14 @@ export function escribirAgente(agente: Agente): string {
     `skills: [${agente.skills.join(", ")}]`,
   ];
   return `---\n${campos.join("\n")}\n---\n${agente.instrucciones}`;
+}
+
+/**
+ * Con qué motores `ejecucion: true` concede de verdad una shell: el nuestro, y Claude Code con la
+ * shell ESTRECHA de `core/comandoExterno.ts`. Codex y OpenCode, no. La usan la ficha con la que el
+ * orquestador conoce a su equipo, Ajustes (su copia declarada) y la sesión: tres sitios que tienen
+ * que contestar lo mismo.
+ */
+export function admiteEjecucion(motor: Motor): boolean {
+  return motor === "modelo" || motor === "claude-code";
 }

@@ -12,6 +12,14 @@ import { abreviar } from "../cifras.js";
 import estilos from "./Agentes.module.css";
 
 /**
+ * Redeclarada de `core/agentes.ts#admiteEjecucion` (la frontera no deja importar de ahí): con qué
+ * motores `ejecucion: true` concede de verdad una shell.
+ */
+function admiteEjecucion(motor: string): boolean {
+  return motor === "modelo" || motor === "claude-code";
+}
+
+/**
  * La sección de subagentes de la ventana de ajustes.
  *
  * Un subagente es un fichero `.md` en `.xonecode/agentes/` (`core/agentes.ts`): nombre,
@@ -716,12 +724,12 @@ export function Agentes({
           </label>
 
           {/*
-            La casilla solo aparece con motor propio, y no es cosmética: en los tres motores
-            externos la shell está cerrada a propósito (`Bash` denegada, la tool retirada, el
-            sandbox `read-only`), así que una casilla marcada ahí prometería lo que no llega.
+            La casilla solo aparece donde se concede (`admiteEjecucion`): el motor propio, y Claude
+            Code con la shell estrecha (solo sus scripts). En OpenCode y Codex la shell sigue
+            cerrada (la tool retirada, el sandbox `read-only`), y una casilla ahí prometería lo que no llega.
             Quien tenga un `.md` con `ejecucion: true` y un motor externo ve el aviso de abajo.
           */}
-          {editando.motor === "modelo" ? (
+          {admiteEjecucion(editando.motor) ? (
             <label className={estilos.casilla}>
               <input
                 type="checkbox"
@@ -738,8 +746,9 @@ export function Agentes({
               <span>
                 Ejecuta comandos{" "}
                 <span className={estilos.pista}>
-                  — alcanza tu máquina entera: no lo acotan ni los permisos de fichero ni la
-                  aprobación de escrituras
+                  {editando.motor === "modelo"
+                    ? "— alcanza tu máquina entera: no lo acotan ni los permisos de fichero ni la aprobación de escrituras"
+                    : "— solo los scripts de sus skills, por su nombre: corren en tu máquina sin pasar por la aprobación"}
                 </span>
               </span>
             </label>
@@ -750,7 +759,7 @@ export function Agentes({
           {editando.motor === "modelo" ? null : (
             <p className={estilos.aviso}>
               {AVISO_EXTERNO} {AVISO_DE_LECTURA[editando.motor] ?? ""}
-              {editando.ejecucion === true
+              {editando.ejecucion === true && !admiteEjecucion(editando.motor)
                 ? " Y «ejecuta comandos» no se aplica con este motor: el hijo corre en otro proceso, con la shell cerrada."
                 : ""}
               {editando.esfuerzo !== undefined
@@ -877,7 +886,7 @@ function FilaDeAgente({
         {/* Lo que ejecuta comandos se DICE en la lista, no solo al abrirlo: es lo único de
             aquí que no lo acota `permisosDe`, y verlo es lo que sustituye a que se pregunte
             antes de cada comando. Con un motor externo no se pinta, porque ahí no se aplica. */}
-        {a.ejecucion === true && a.motor === "modelo" ? (
+        {a.ejecucion === true && admiteEjecucion(a.motor) ? (
           <span className={estilos.ejecucion} title="Puede ejecutar comandos en esta máquina">
             ejecuta
           </span>

@@ -22,11 +22,12 @@
  */
 
 import { realpathSync, readFileSync } from "node:fs";
-import { dirname, basename, resolve, relative, sep } from "node:path";
+import { dirname, basename, isAbsolute, resolve, relative, sep } from "node:path";
+import { motivoDeComandoExternoInaceptable } from "../../core/comandoExterno.js";
 import type { LineaDeDiff } from "../../core/diff.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
 import type { ColaDeEventos } from "../../core/entrelazar.js";
-import type { ConsumoExterno, EscrituraExternaPedida, PoliticaDeEscrituraExterna, ToolDeUnHijo } from "../../core/ports.js";
+import type { ConsumoExterno, EjecucionExterna, EscrituraExternaPedida, PoliticaDeEscrituraExterna, ToolDeUnHijo } from "../../core/ports.js";
 import { artefactoFueraDeSitio } from "../../core/artefactos.js";
 import { descargaFueraDeSitio } from "../../core/descargas.js";
 import type { Decision } from "../../vendor/hitl.js";
@@ -398,11 +399,25 @@ export function decisionDePreToolUse(opciones: {
   cwd: string;
   ficheros: ReadonlySet<string>;
   real?: (ruta: string) => string;
+  /** La ejecución concedida a ESTE hijo (`PeticionExterna.ejecucion`). Ausente: `Bash` se deniega. */
+  ejecucion?: Pick<EjecucionExterna, "scripts" | "lecturas">;
 }): {
   hookEventName: "PreToolUse";
   permissionDecision: "allow" | "deny" | "ask";
   permissionDecisionReason: string;
 } {
+  if (opciones.nombre === "Bash" && opciones.ejecucion !== undefined) {
+    /**
+     * `ask` y NO `allow`, y está medido: un `allow` del hook es una PRE-APROBACIÓN y el SDK ya no
+     * consulta `canUseTool` —con `allow` solo llegó el hook—, así que la segunda llave no
+     * existiría. Con `ask` `canUseTool` recibe el comando EXACTO que se va a ejecutar y lo
+     * vuelve a comprobar (`decisionDeTool`).
+     */
+    const motivo = motivoDeBashExterno(opciones.entrada, opciones.ejecucion.scripts);
+    return motivo === undefined
+      ? { hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: "XOneCode comprueba cada comando" }
+      : { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: motivo };
+  }
   const clase = claseDeToolExterna(opciones.nombre);
   if (clase === "lectura") {
     /**
@@ -417,7 +432,7 @@ export function decisionDePreToolUse(opciones: {
      * `deny` con el motivo. `canUseTool` mantiene la MISMA comprobación como segunda llave
      * para el día que el hook no corra.
      */
-    const v = veredictoDeLectura(opciones);
+    const v = veredictoDeLectura({ ...opciones, ...(opciones.ejecucion === undefined ? {} : { lecturas: opciones.ejecucion.lecturas }) });
     return v.admitida
       ? {
           hookEventName: "PreToolUse",
@@ -472,6 +487,8 @@ export function veredictoDeLectura(opciones: {
   entrada: Record<string, unknown>;
   ficheros: ReadonlySet<string>;
   real?: (ruta: string) => string;
+  /** Carpetas de FUERA del proyecto que este hijo puede leer (`EjecucionExterna.lecturas`). */
+  lecturas?: readonly string[];
 }): { admitida: true } | { admitida: false; motivo: string } {
   const { nombre, entrada } = opciones;
   // La clave donde cada tool lleva la ruta. `Read` la exige; `Glob` y `Grep` no.
@@ -481,8 +498,51 @@ export function veredictoDeLectura(opciones: {
   if (typeof ruta !== "string" || ruta === "") {
     return { admitida: false, motivo: "esa ruta no se entiende, así que no se lee" };
   }
+  if (opciones.lecturas !== undefined && dentroDeUnaLectura(ruta, opciones.lecturas, opciones.real ?? realpathSync)) {
+    return { admitida: true };
+  }
   const v = veredictoDeRuta({ ...opciones, ruta, soloConfinamiento: true });
   return v.admitida ? { admitida: true } : { admitida: false, motivo: v.motivo };
+}
+
+/**
+ * El motivo de NO dejar correr ese `Bash`, o `undefined` si se deja: su `command` tiene que pasar
+ * `motivoDeComandoExternoInaceptable`, y no puede ir en segundo plano (`BashOutput` y `KillShell`
+ * siguen cerrados: un comando que se queda vivo no lo para nadie).
+ */
+export function motivoDeBashExterno(entrada: Record<string, unknown>, scripts: readonly string[]): string | undefined {
+  if (entrada["run_in_background"] === true) return "no se pueden correr comandos en segundo plano: córrelo en primer plano";
+  const comando = entrada["command"];
+  if (typeof comando !== "string") return "ese comando no se entiende, así que no se corre";
+  return motivoDeComandoExternoInaceptable(comando, scripts);
+}
+
+/**
+ * ¿Cae esta ruta dentro de una de las carpetas de la sesión que el hijo con ejecución puede leer
+ * (sus capturas en artefactos, lo de hotswap)? Por TEXTO —`resolve` deshace un `..`— Y por el
+ * camino REAL —un enlace dentro de la carpeta que apunte a `checkpoint.sqlite` no pasa—, las dos,
+ * como el resto de guardas. Lo que no se puede canonicalizar no está dentro.
+ */
+export function dentroDeUnaLectura(ruta: string, lecturas: readonly string[], real: (ruta: string) => string): boolean {
+  if (!isAbsolute(ruta)) return false;
+  const texto = resolve(ruta);
+  let destino: string;
+  try {
+    destino = canonicalizarLoQueExista(texto, real);
+  } catch {
+    return false;
+  }
+  const bajo = (r: string, c: string) => r === c || r.startsWith(c.endsWith(sep) ? c : c + sep);
+  return lecturas.some((carpeta) => {
+    let carpetaReal: string;
+    try {
+      carpetaReal = real(resolve(carpeta));
+    } catch {
+      return false;
+    }
+    // El texto puede venir ya canonicalizado (el hijo resuelve `/tmp` → `/private/tmp`, medido).
+    return (bajo(texto, resolve(carpeta)) || bajo(texto, carpetaReal)) && bajo(destino, carpetaReal);
+  });
 }
 
 /** El motivo que se le devuelve al hijo cuando la tool entera no está concedida. */
@@ -820,6 +880,9 @@ const NOMBRE_CANONICO: Record<string, string> = {
   Grep: "grep",
   Write: "write_file",
   Edit: "edit_file",
+  // Un comando concedido a un hijo con ejecución (`core/comandoExterno.ts`): la misma línea que
+  // nuestra shell, con el comando como detalle.
+  Bash: "execute",
 };
 
 export function eventoDeToolExterna(
@@ -844,6 +907,11 @@ export function eventoDeToolExterna(
   if (canonico === "Skill" || canonico === "ToolSearch") {
     const campo = canonico === "Skill" ? entrada["skill"] : entrada["query"];
     return typeof campo === "string" && campo !== "" ? { nombre: canonico, detalle: campo } : { nombre: canonico };
+  }
+  // El comando concedido, que ya pasó la regla: su nombre de script y argumentos, sin rutas.
+  if (canonico === "execute") {
+    const comando = entrada["command"];
+    return typeof comando === "string" && comando !== "" ? { nombre: canonico, detalle: comando.trim() } : { nombre: canonico };
   }
   // Un patrón para las de búsqueda, una ruta para las de fichero. Igual que `detalleDe`.
   if (canonico === "glob" || canonico === "grep") {

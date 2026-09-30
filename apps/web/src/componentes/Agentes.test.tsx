@@ -688,12 +688,18 @@ describe("la capacidad de EJECUTAR comandos", () => {
     expect(screen.queryByText("ejecuta")).toBeNull();
   });
 
-  it("con un motor EXTERNO no se pinta, porque ahí no se aplica", () => {
-    // La shell está cerrada en los tres motores externos: pintarla sería decir que ese
-    // agente ejecuta cuando no puede.
-    render(<Agentes {...manejadores} agentes={[{ ...CONDUCTOR, motor: "claude-code" }]} />);
+  it("con Codex u OpenCode no se pinta, porque ahí la shell sigue cerrada", () => {
+    // Pintarla sería decir que ese agente ejecuta cuando no puede.
+    for (const motor of ["codex", "opencode"] as const) {
+      cleanup();
+      render(<Agentes {...manejadores} agentes={[{ ...CONDUCTOR, motor }]} />);
+      expect(screen.queryByText("ejecuta")).toBeNull();
+    }
+  });
 
-    expect(screen.queryByText("ejecuta")).toBeNull();
+  it("con Claude Code SÍ se pinta: ahí se le abre la shell estrecha, solo sus scripts", () => {
+    render(<Agentes {...manejadores} agentes={[{ ...CONDUCTOR, motor: "claude-code" }]} />);
+    expect(screen.queryByText("ejecuta")).not.toBeNull();
   });
 
   it("la casilla dice lo que concede, y guarda la AUSENCIA cuando se desmarca", () => {

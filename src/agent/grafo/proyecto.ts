@@ -164,6 +164,34 @@ export function entornoDeLaShellDelProyecto(
 }
 
 /**
+ * Los SCRIPTS que un agente puede correr por su nombre: los ficheros EJECUTABLES de la carpeta
+ * `scripts/` de las skills que declara (`agente.skills`), en el orden de sus skills. Es la lista
+ * que un agente de Claude Code con ejecución tiene permitida (`core/comandoExterno.ts`); un
+ * `.mjs` sin bit de ejecución no cuenta, porque por su nombre no correría.
+ */
+export function scriptsDeLasSkills(raiz: string, skills: readonly string[]): string[] {
+  const salida: string[] = [];
+  for (const skill of skillsConRuta(raiz).filter((s) => skills.includes(s.nombre))) {
+    const carpeta = join(skill.dir, "scripts");
+    let nombres: string[];
+    try {
+      nombres = readdirSync(carpeta);
+    } catch {
+      continue;
+    }
+    for (const n of nombres.sort()) {
+      try {
+        const e = statSync(join(carpeta, n));
+        if (e.isFile() && (e.mode & 0o111) !== 0 && !salida.includes(n)) salida.push(n);
+      } catch {
+        // Un fichero que desaparece entre el listado y la medida no es un script.
+      }
+    }
+  }
+  return salida;
+}
+
+/**
  * El tope de reloj de UN comando, en segundos.
  *
  * El de la librería son 120 s. Se sube porque aquí los comandos normales son de dispositivo
@@ -666,44 +694,71 @@ export function backendDeAgente(opciones: {
  * usuario—, que es el patrón de fallo de siempre. Se crea solo cuando hay ejecución, así que
  * una sesión de los otros cuatro especialistas sigue sin carpeta vacía.
  */
+/**
+ * La FOTO recursiva de la carpeta de artefactos: ruta relativa → `tamaño:mtime`. La comparación de
+ * dos fotos es lo que anuncia lo que dejó un comando (`anunciarArtefactosDeLaShell`, y el hijo de
+ * Claude Code con ejecución). No baja por enlaces.
+ */
+export function fotoDeArtefactos(carpeta: string): Map<string, string> {
+  const m = new Map<string, string>();
+  const recorrer = (dir: string, prefijo: string): void => {
+    let entradas: Dirent[];
+    try {
+      entradas = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entrada of entradas) {
+      // La clave se compone con `/` y nunca con `sep`: es la ruta VIRTUAL que se va a
+      // anunciar, y una barra invertida de Windows no pasaría `esRutaDeArtefacto`.
+      const relativa = prefijo + entrada.name;
+      // `isDirectory()` sobre un `Dirent` es FALSO para un enlace —el dirent dice
+      // `isSymbolicLink()`—, así que no se baja por él. Es la misma disciplina que el
+      // árbol de Ficheros, y aquí importa igual: lo que cuelga de un enlace no es lo que
+      // esta sesión produjo, y se anunciaría con ruta de artefacto.
+      if (entrada.isDirectory()) {
+        recorrer(join(dir, entrada.name), relativa + "/");
+        continue;
+      }
+      if (!entrada.isFile()) continue;
+      try {
+        const e = statSync(join(dir, entrada.name));
+        m.set(relativa, `${e.size}:${e.mtimeMs}`);
+      } catch {
+        // Un fichero que desaparece entre el listado y la medida no es un artefacto nuevo.
+      }
+    }
+  };
+  recorrer(carpeta, "");
+  return m;
+}
+
+/** Lo que cambió entre dos fotos, como artefactos que se pueden anunciar (sin lo que el lector rechazaría ni la basura de un zip). */
+export function artefactosNuevos(antes: Map<string, string>, despues: Map<string, string>): Artefacto[] {
+  const salida: Artefacto[] = [];
+  for (const [relativa, marca] of despues) {
+    if (antes.get(relativa) === marca) continue;
+    const ruta = RUTA_ARTEFACTOS + relativa;
+    // Lo que el LECTOR rechazaría no se anuncia: su barrera es la lista blanca de forma de
+    // `esRutaDeArtefacto`, y una shell escribe el nombre que quiera. Una tarjeta cuyo único final
+    // posible es un 403 es la misma mentira que un modal que solo puede acabar en rechazo.
+    if (!esRutaDeArtefacto(ruta) || esBasuraDeArtefacto(relativa)) continue;
+    // La RUTA lleva el camino relativo —es lo que después se le pide al lector— y el `nombre` es
+    // el último segmento, que es lo que se le enseña a una persona.
+    const nombre = nombreDeArtefacto(ruta);
+    const mime = mimeDeArtefacto(nombre);
+    const bytes = Number(marca.split(":")[0] ?? 0);
+    salida.push({ ruta, nombre, bytes, ...(mime === undefined ? {} : { mime }) });
+  }
+  return salida;
+}
+
 export function anunciarArtefactosDeLaShell<T extends object>(
   backend: T,
   carpeta: string,
   alEscribir: (artefacto: Artefacto) => void,
 ): T {
-  const foto = (): Map<string, string> => {
-    const m = new Map<string, string>();
-    const recorrer = (dir: string, prefijo: string): void => {
-      let entradas: Dirent[];
-      try {
-        entradas = readdirSync(dir, { withFileTypes: true });
-      } catch {
-        return;
-      }
-      for (const entrada of entradas) {
-        // La clave se compone con `/` y nunca con `sep`: es la ruta VIRTUAL que se va a
-        // anunciar, y una barra invertida de Windows no pasaría `esRutaDeArtefacto`.
-        const relativa = prefijo + entrada.name;
-        // `isDirectory()` sobre un `Dirent` es FALSO para un enlace —el dirent dice
-        // `isSymbolicLink()`—, así que no se baja por él. Es la misma disciplina que el
-        // árbol de Ficheros, y aquí importa igual: lo que cuelga de un enlace no es lo que
-        // esta sesión produjo, y se anunciaría con ruta de artefacto.
-        if (entrada.isDirectory()) {
-          recorrer(join(dir, entrada.name), relativa + "/");
-          continue;
-        }
-        if (!entrada.isFile()) continue;
-        try {
-          const e = statSync(join(dir, entrada.name));
-          m.set(relativa, `${e.size}:${e.mtimeMs}`);
-        } catch {
-          // Un fichero que desaparece entre el listado y la medida no es un artefacto nuevo.
-        }
-      }
-    };
-    recorrer(carpeta, "");
-    return m;
-  };
+  const foto = (): Map<string, string> => fotoDeArtefactos(carpeta);
 
   return new Proxy(backend, {
     get(destino, prop) {
@@ -728,22 +783,7 @@ export function anunciarArtefactosDeLaShell<T extends object>(
           // En el `finally`: un comando que acaba en error puede haber dejado el fichero, y
           // un fallo al listar la carpeta no puede llevarse por delante el resultado.
           try {
-            for (const [relativa, marca] of foto()) {
-              if (antes.get(relativa) === marca) continue;
-              const ruta = RUTA_ARTEFACTOS + relativa;
-              // Lo que el LECTOR rechazaría no se anuncia: su barrera es la lista blanca de
-              // forma de `esRutaDeArtefacto`, y una shell escribe el nombre que quiera. Una
-              // tarjeta cuyo único final posible es un 403 es la misma mentira que un modal
-              // que solo puede acabar en rechazo.
-              if (!esRutaDeArtefacto(ruta) || esBasuraDeArtefacto(relativa)) continue;
-              // Se compone igual que el Proxy de `write`/`edit`: la RUTA lleva el camino
-              // relativo —es lo que después se le pide al lector— y el `nombre` es el
-              // último segmento, que es lo que se le enseña a una persona.
-              const nombre = nombreDeArtefacto(ruta);
-              const mime = mimeDeArtefacto(nombre);
-              const bytes = Number(marca.split(":")[0] ?? 0);
-              alEscribir({ ruta, nombre, bytes, ...(mime === undefined ? {} : { mime }) });
-            }
+            for (const a of artefactosNuevos(antes, foto())) alEscribir(a);
           } catch {
             // Un artefacto que no se pudo anunciar no invalida el comando.
           }

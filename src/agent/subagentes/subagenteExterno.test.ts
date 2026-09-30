@@ -341,3 +341,24 @@ describe("los hijos que ESCRIBEN pasan de uno en uno; los que leen, no esperan",
     expect(await lector).toBe("l");
   });
 });
+
+describe("el Bash ESTRECHO de un agente de Claude Code con ejecución", () => {
+  const EJECUCION = { scripts: ["xone-hotswap", "xone-log-android"], entorno: {}, lecturas: [] };
+  const conEjecucion = { ...PETICION, ejecucion: EJECUCION };
+  const bash = (command: string, peticion: typeof PETICION & { ejecucion?: typeof EJECUCION } = conEjecucion, extra: Record<string, unknown> = {}) =>
+    decisionDeTool({ nombre: "Bash", entrada: { command, ...extra }, peticion, ...SIN_DISCO });
+
+  it("la SEGUNDA llave: `canUseTool` vuelve a comprobar el comando exacto que va a correr", async () => {
+    expect((await bash("xone-log-android --app")).behavior).toBe("allow");
+    expect((await bash("xone-log-android --app; rm -rf ~")).behavior).toBe("deny");
+    expect((await bash("ls -la")).behavior).toBe("deny");
+  });
+
+  it("sin ejecución concedida `Bash` sigue denegado, aunque el comando fuera bueno", async () => {
+    expect((await bash("xone-log-android --app", PETICION)).behavior).toBe("deny");
+  });
+
+  it("en segundo plano no: un comando que se queda vivo no lo para nadie", async () => {
+    expect((await bash("xone-log-android --app", conEjecucion, { run_in_background: true })).behavior).toBe("deny");
+  });
+});

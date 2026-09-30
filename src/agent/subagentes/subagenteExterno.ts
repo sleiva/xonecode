@@ -41,6 +41,7 @@ import { montarPluginDeSkills } from "./pluginDeSkills.js";
 import {
   claseDeToolExterna,
   decisionDePreToolUse,
+  motivoDeBashExterno,
   diffDeEscrituraExterna,
   eventoDeToolExterna,
   veredictoDeLectura,
@@ -95,6 +96,12 @@ export async function decisionDeTool(opciones: {
   // Abortado antes de empezar: no se pregunta a nadie por una escritura que ya no va a
   // ocurrir. Sacar un modal para eso enseña a aprobar sin mirar.
   if (signal?.aborted === true) return { behavior: "deny", message: MOTIVO_DE_ESCRITURA_ABORTADA };
+  // La SEGUNDA llave del Bash concedido: el hook contestó `ask`, y aquí llega el comando EXACTO
+  // que el SDK va a ejecutar. La misma regla otra vez, sobre ese texto.
+  if (nombre === "Bash" && peticion.ejecucion !== undefined) {
+    const motivo = motivoDeBashExterno(entrada, peticion.ejecucion.scripts);
+    return motivo === undefined ? { behavior: "allow" } : { behavior: "deny", message: motivo };
+  }
   const clase = claseDeToolExterna(nombre);
   if (clase === "lectura") {
     /**
@@ -108,6 +115,7 @@ export async function decisionDeTool(opciones: {
       entrada,
       ficheros,
       ...(opciones.real === undefined ? {} : { real: opciones.real }),
+      ...(peticion.ejecucion === undefined ? {} : { lecturas: peticion.ejecucion.lecturas }),
     });
     return v.admitida ? { behavior: "allow" } : { behavior: "deny", message: v.motivo };
   }
@@ -436,6 +444,7 @@ export function crearSubagenteExterno(opciones: {
                     entrada: args,
                     cwd: peticion.cwd,
                     ficheros: opciones.ficherosDelProyecto?.() ?? new Set<string>(),
+                    ...(peticion.ejecucion === undefined ? {} : { ejecucion: peticion.ejecucion }),
                   });
                   /**
                    * **Solo se cuenta lo que va a ocurrir.** Una tool DENEGADA no se
@@ -501,6 +510,14 @@ export function crearSubagenteExterno(opciones: {
         // los que su propio SDK documenta, y se prefieren a un id pinchado: sobreviven a
         // la siguiente versión, que es justo para lo que el producto los ofrece.
         ...(peticion.modelo === undefined ? {} : { model: peticion.modelo }),
+        /**
+         * Con ejecución, el entorno del hijo es el de NUESTRA shell: sin nuestras claves de API
+         * (heredaría las que `guardarCredencial` pone en `process.env`), con los `scripts/` de sus
+         * skills en el PATH y las variables de la sesión. Medido con el SDK: su Bash respeta este
+         * `env` —`command -v xone-hotswap` resuelve, ninguna `*_API_KEY`— y autentica con el login
+         * sin la clave. Sin ejecución no se toca: es lo de siempre.
+         */
+        ...(peticion.ejecucion === undefined ? {} : { env: peticion.ejecucion.entorno }),
         /**
          * El envoltorio es el fail-closed llevado al final: **nada de aquí dentro puede
          * lanzar hacia el SDK**. Si la política revienta, si el disco contesta un EACCES

@@ -56,7 +56,8 @@ import type { Artefacto } from "../../../core/artefactos.js";
 import type { LineaDeDiff } from "../../../core/diff.js";
 import { createTokenTracker, type TokenTracker } from "../../../vendor/tokenTracking.js";
 import { MAX_APPROVAL_ROUNDS, type Decision } from "../../../vendor/hitl.js";
-import { backendDeAgente, entornoDeLaShellDelProyecto } from "../../grafo/proyecto.js";
+import { artefactosNuevos, backendDeAgente, entornoDeLaShellDelProyecto, fotoDeArtefactos, scriptsDeLasSkills } from "../../grafo/proyecto.js";
+import { carpetaDeHotswap } from "../../../core/hotswap.js";
 import { cargarAgentes } from "../../subagentes/agentesEnDisco.js";
 import { fichaDeAgente, promptDeAgente, recibeMarcarCriterios, repartirSkills, type Agente } from "../../../core/agentes.js";
 import { PERFIL_DEL_ORQUESTADOR, promptOrquestador } from "../../grafo/xoneAgent.js";
@@ -916,10 +917,47 @@ export async function abrirSesionTrueforge(
     hilosExternos.add(params.threadId);
     externosDelTurno += 1;
     const motor = agente.motor as MotorExterno;
+    /**
+     * La EJECUCIÓN de un externo: solo Claude Code, solo con `ejecucion: true` en su `.md` y con
+     * carpeta de artefactos donde dejar lo que saque (`core/comandoExterno.ts`). Sus scripts, por
+     * su nombre; el entorno de NUESTRA shell; y la lectura de ESTAS dos carpetas de la sesión, que
+     * es donde sus scripts dejan las capturas. Codex y OpenCode siguen sin shell.
+     */
+    const ejecucion =
+      agente.ejecucion === true && motor === "claude-code" && carpeta !== undefined
+        ? {
+            scripts: scriptsDeLasSkills(raiz, agente.skills),
+            entorno: entornoDeLaShellDelProyecto(raiz, carpeta),
+            lecturas: [carpeta, carpetaDeHotswap(carpeta)],
+          }
+        : undefined;
+    /**
+     * Lo que sus comandos dejen en `/artefactos/` se ANUNCIA al volver, con la MISMA foto que nuestra
+     * shell (`fotoDeArtefactos`): por nuestra shell se anunciaba y por la suya no, y una captura
+     * que no se anuncia no la mide nadie.
+     */
+    const puertoDelHijo: typeof externo =
+      ejecucion === undefined || carpeta === undefined
+        ? externo
+        : {
+            disponible: (m) => externo.disponible(m),
+            correr: async (peticion) => {
+              const antes = fotoDeArtefactos(carpeta);
+              try {
+                return await externo.correr(peticion);
+              } finally {
+                try {
+                  for (const a of artefactosNuevos(antes, fotoDeArtefactos(carpeta))) anotarArtefacto(a);
+                } catch {
+                  // Un artefacto que no se pudo anunciar no invalida lo que hizo el hijo.
+                }
+              }
+            },
+          };
     return new AgentThread({
       definition: {
         modelClient: modeloExternoParaTrueforge({
-          puerto: externo,
+          puerto: puertoDelHijo,
           peticion: () => ({
             motor,
             cwd: raiz,
@@ -928,6 +966,7 @@ export async function abrirSesionTrueforge(
             ...(agente.modelo === undefined ? {} : { modelo: agente.modelo }),
             permitirEscritura: !agente.soloLectura,
             agente: agente.nombre,
+            ...(ejecucion === undefined ? {} : { ejecucion }),
           }),
           senal: () => aborto?.signal,
         }),

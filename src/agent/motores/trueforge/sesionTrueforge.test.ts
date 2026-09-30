@@ -2911,3 +2911,66 @@ describe("el consumo POR MODELO de una sesión de TrueForge", () => {
     expect(Object.values(c.porModelo ?? {}).reduce((t, f) => t + f.entrada, 0)).toBe(c.modelo.entrada);
   }, 20_000);
 });
+
+describe("un device-controller en Claude Code: la shell ESTRECHA llega al hijo", () => {
+  const conConductorExterno = (motor: string) => {
+    const raiz = proyecto();
+    mkdirSync(join(raiz, ".xonecode", "agentes"), { recursive: true });
+    writeFileSync(
+      join(raiz, ".xonecode", "agentes", "conductor-ext.md"),
+      `---\ndescripcion: Maneja el aparato\nmotor: ${motor}\nsoloLectura: false\nejecucion: true\nskills: [xone-hotswap]\n---\nPrueba la app.\n`
+    );
+    return raiz;
+  };
+  const guion = () =>
+    modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "conductor-ext", input: "saca una captura" }) }] })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]).m;
+  const abrir = async (motor: string, artefactos: string | undefined, correr: (p: PeticionExterna) => Promise<string>) => {
+    const peticiones: PeticionExterna[] = [];
+    const artefactosAnunciados: string[] = [];
+    const s = await abrirSesionTrueforge({
+      raiz: conConductorExterno(motor), modelos: guion(), entorno: ENTORNO, skills: CATALOGO,
+      ...(artefactos === undefined ? {} : { artefactos }),
+      subagenteExterno: () => ({ disponible: async () => true, correr: async (p: PeticionExterna) => (peticiones.push(p), correr(p)) }),
+    });
+    await s.turno("saca una captura", { ...piel().p, artefacto: (a: { ruta: string }) => void artefactosAnunciados.push(a.ruta) } as never);
+    return { peticiones, artefactosAnunciados };
+  };
+
+  it("Claude Code recibe sus scripts, el entorno de NUESTRA shell (sin claves, con los scripts en el PATH) y la lectura de SUS carpetas", async () => {
+    const artefactos = mkdtempSync(join(tmpdir(), "xc-art-"));
+    process.env["DEEPSEEK_API_KEY"] = "sk-no-debe-llegar";
+    try {
+      const { peticiones } = await abrir("claude-code", artefactos, async () => "hecho");
+      const e = peticiones[0]?.ejecucion;
+      expect(e?.scripts).toEqual(expect.arrayContaining(["xone-hotswap", "xone-log-android", "xone-captura-android"]));
+      expect(e?.entorno["DEEPSEEK_API_KEY"]).toBeUndefined();
+      expect(e?.entorno["PATH"]).toContain(join("xone-hotswap", "scripts"));
+      expect(e?.entorno["XONECODE_ARTEFACTOS"]).toBe(artefactos);
+      expect(e?.lecturas).toEqual([artefactos, expect.stringContaining("hotswap")]);
+    } finally {
+      delete process.env["DEEPSEEK_API_KEY"];
+    }
+  }, 20_000);
+
+  it("lo que el hijo deja en /artefactos/ se ANUNCIA al volver, como con nuestra shell", async () => {
+    const artefactos = mkdtempSync(join(tmpdir(), "xc-art-"));
+    const { artefactosAnunciados } = await abrir("claude-code", artefactos, async () => {
+      writeFileSync(join(artefactos, "captura-1.png"), "png");
+      return "hecho";
+    });
+    expect(artefactosAnunciados).toContain("/artefactos/captura-1.png");
+  }, 20_000);
+
+  it("Codex y OpenCode siguen SIN shell, y sin carpeta de artefactos tampoco se concede", async () => {
+    const artefactos = mkdtempSync(join(tmpdir(), "xc-art-"));
+    for (const motor of ["codex", "opencode"]) {
+      const { peticiones } = await abrir(motor, artefactos, async () => "hecho");
+      expect(peticiones[0]).not.toHaveProperty("ejecucion");
+    }
+    const { peticiones } = await abrir("claude-code", undefined, async () => "hecho");
+    expect(peticiones[0]).not.toHaveProperty("ejecucion");
+  }, 30_000);
+});

@@ -223,7 +223,7 @@ Y las guardas del proyecto:
 - **La tool `Skill` está en la lista de LECTURA de los motores externos**: no pasamos la opción
   `skills` del SDK (omitirla no es skills off). Entra como lectura porque mete instrucciones en el
   contexto, y lo que MANDE hacer vuelve a pasar por el mismo hook. **Dos límites declarados**: un
-  `Bash` que pida una skill se sigue denegando, y un `Read` a otro fichero de su carpeta también
+  `Bash` que pida una skill se sigue denegando (salvo uno de SUS scripts con la shell estrecha), y un `Read` a otro fichero de su carpeta también
   (cae fuera del proyecto). El nombre le llega PREFIJADO (`xonecode:<nombre>`), como Claude Code
   nombra un plugin; `promptDeAgente` lo nombra a secas.
 - **Las skills de un subagente se MARCAN de una lista, no se teclean**
@@ -351,8 +351,8 @@ Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
 (`core/agentes.ts`, `agent/subagentes/agentesEnDisco.ts`). Los cinco de serie —`consultant-xone`,
 `analyst-xone`, `developer-xone`, `designer-xone`, `device-controller`— se siembran al arrancar. El
 sufijo `-xone` viaja como `subagent_type` a los motores externos, donde el hijo tiene sus propios
-agentes. `device-controller` se sale de esa convención a propósito y no viaja a un motor externo
-(ahí la ejecución no se concede). Reglas duras:
+agentes. `device-controller` se sale de esa convención a propósito; en un motor externo solo
+ejecuta si es Claude Code, con la shell ESTRECHA (ver abajo). Reglas duras:
 
 - **La EJECUCIÓN de comandos se DECLARA en el `.md` y la lleva uno solo** (`ejecucion`, cierto
   solo con exactamente `"true"` — trampa del `"false"` de CloudStudio, que aquí concedería la
@@ -360,8 +360,9 @@ agentes. `device-controller` se sale de esa convención a propósito y no viaja 
   `permissions` con un backend ejecutable, así que quien la tiene NO recibe `permissions`
   (`perfiles.ts#montajeDeFicheros`, cableado mirado desde fuera en `xoneAgent.ejecucion.test.ts`).
   Se le quitan `write_file`/`edit_file`. **Y quien ejecuta NO es `soloLectura`**: ese campo
-  también ELIGE EL MODELO (`rapido` vs `trabajo`), así que marcarlo miente dos veces. **Solo con
-  `motor: "modelo"`**: en los tres externos la shell está cerrada. Se compensa VIÉNDOLO: el
+  también ELIGE EL MODELO (`rapido` vs `trabajo`), así que marcarlo miente dos veces. **Con
+  `motor: "modelo"` y, ESTRECHA, con `claude-code`** (`admiteEjecucion`); en Codex y OpenCode la
+  shell sigue cerrada. Se compensa VIÉNDOLO: el
   comando entero sale como `detalle` del evento (lista blanca de `resumenDeTool.ts`); precio
   declarado: una ruta absoluta que el modelo escriba en su comando viaja por el cable.
 - **La shell NO hereda las claves de API** (`core/shellDeAgente.ts`, puro): se quitan por la TABLA
@@ -428,7 +429,20 @@ agentes. `device-controller` se sale de esa convención a propósito y no viaja 
   `interrupt()` ni reejecutar el nodo. `decisionDeTool`, en orden: **TRES listas** de tools
   (lectura/escritura/denegadas, desconocido denegado), el papel del `.md`, las **guardas de RUTA
   reaplicadas**, la política. Escribir son **solo `Write` y `Edit`** (las únicas que encajan en
-  `cambioDe()`); `Bash`, `WebFetch`, `WebSearch` se deniegan.
+  `cambioDe()`); `WebFetch` y `WebSearch` se deniegan, y `Bash` también salvo la shell ESTRECHA.
+- **La shell ESTRECHA de Claude Code** (`core/comandoExterno.ts`, `PeticionExterna.ejecucion`):
+  solo para un `.md` con `ejecucion: true` y con carpeta de artefactos. UNA llamada a uno de los
+  scripts EJECUTABLES de sus skills (`scriptsDeLasSkills`), por su nombre y sin ruta, con
+  argumentos sueltos o entre comillas simples; nada de `;`, `|`, `>`, `$`, comillas dobles ni
+  segundo plano. **El hook contesta `ask`, nunca `allow`**: medido, un `allow` del hook es una
+  pre-aprobación y el SDK ya no consulta `canUseTool`; con `ask` la segunda llave recibe el
+  comando EXACTO y lo vuelve a comprobar. **El hijo corre con el `env` de NUESTRA shell**
+  (`entornoDeLaShellDelProyecto`): medido, su Bash lo respeta —los `scripts/` en el PATH, ninguna
+  `*_API_KEY`— y autentica con su login sin la clave. **Lee además sus dos carpetas de la
+  sesión** (artefactos y hotswap, `dentroDeUnaLectura`: texto Y `realpath`), el resto de
+  `.xonecode/` sigue denegado. Lo que deja en `/artefactos/` se anuncia al volver
+  (`fotoDeArtefactos`). **Límites declarados**: el aviso por número de capturas cuenta nuestro
+  `execute` y no su `Bash`; Parar mata al `claude`, no a un `adb` nieto; solo en TrueForge.
 - **Las guardas de ruta hay que REAPLICARLAS** (`agent/subagentes/escrituraExterna.ts`): el
   `file_path` del hijo es ABSOLUTO y va al disco directo, sin pasar por `permisosDe`,
   `virtualMode`, vistas aplanadas ni guardas de artefactos/descargas. Las MISMAS funciones, **dos

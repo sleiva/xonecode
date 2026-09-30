@@ -274,6 +274,29 @@ export interface PeticionExterna {
    * cerrado. Opcional: sin ella el hijo acaba por su cuenta o por su tope, que es lo de antes.
    */
   senal?: AbortSignal;
+  /**
+   * La EJECUCIÓN que se le concede, solo a un agente con `ejecucion: true` en su `.md` y solo en
+   * Claude Code (`core/comandoExterno.ts`). Ausente —cualquier otro— es que `Bash` se deniega.
+   */
+  ejecucion?: EjecucionExterna;
+}
+
+/** Lo que un agente externo con ejecución puede correr y leer, y con qué entorno. */
+export interface EjecucionExterna {
+  /** Los scripts que puede correr, por su NOMBRE: los ejecutables de sus skills. */
+  scripts: readonly string[];
+  /**
+   * El entorno del hijo: el de NUESTRA shell (`entornoDeShell`) — sin nuestras claves de API, con
+   * los `scripts/` en el PATH y las variables de la sesión (artefactos, hotswap, dispositivo).
+   * Medido: el Bash de Claude Code lo respeta, y autentica con su login sin la clave.
+   */
+  entorno: Record<string, string>;
+  /**
+   * Las carpetas FUERA del proyecto que puede leer, en disco: las de artefactos y hotswap de ESTA
+   * sesión, donde sus scripts dejan las capturas y lo que no cabe. Viven bajo `.xonecode/`, que
+   * sigue denegada entera.
+   */
+  lecturas: readonly string[];
 }
 
 /**
