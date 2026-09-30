@@ -105,7 +105,12 @@ export function CrearEmulador({
               onChange={(e) => setConDatos(e.target.checked)}
             />
             <span>Copiar también lo instalado (framework y apps)</span>
-            {baseEncendida ? <span className={estilos.motivo}>apágalo para clonarlo</span> : null}
+            {/* Con el nombre y el camino: «apágalo» a secas se leía como una casilla rota. */}
+            {baseEncendida ? (
+              <span className={estilos.motivo}>
+                {base} está encendido: pulsa «Parar» en su fila para poder clonarlo
+              </span>
+            ) : null}
           </label>
         </>
       )}

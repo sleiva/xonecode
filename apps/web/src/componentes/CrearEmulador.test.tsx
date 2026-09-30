@@ -77,7 +77,7 @@ describe("CrearEmulador", () => {
     const casilla = screen.getByRole("checkbox") as HTMLInputElement;
     expect(casilla.disabled).toBe(true);
     expect(casilla.checked).toBe(false);
-    expect(screen.getByText(/apágalo para clonarlo/)).toBeTruthy();
+    expect(screen.getByText(/está encendido: pulsa «Parar» en su fila para poder clonarlo/)).toBeTruthy();
     escribir("copia");
     fireEvent.click(boton());
     expect(alCrear).toHaveBeenCalledWith("copia", { base: "pixel8", conDatos: false });

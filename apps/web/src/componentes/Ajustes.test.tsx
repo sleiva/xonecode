@@ -1342,7 +1342,7 @@ describe("Ajustes: la sección de Dispositivos", () => {
     it("«Copia de» sabe cuáles corren: pixel8 está en marcha, así que no se puede clonar con lo instalado", () => {
       const panel = abrir({ conectado: true, dispositivos: dos, ajustesDeDispositivos: ajustes, alCrearEmulador: vi.fn() });
       expect((within(panel).getByRole("checkbox", { name: /Copiar también lo instalado/ }) as HTMLInputElement).disabled).toBe(true);
-      expect(within(panel).getByText(/apágalo para clonarlo/)).toBeTruthy();
+      expect(within(panel).getByText(/está encendido: pulsa «Parar» en su fila para poder clonarlo/)).toBeTruthy();
       fireEvent.change(within(panel).getByRole("combobox", { name: "Emulador del que copiar" }), { target: { value: "tablet" } });
       expect((within(panel).getByRole("checkbox", { name: /Copiar también lo instalado/ }) as HTMLInputElement).disabled).toBe(false);
     });
