@@ -280,20 +280,6 @@
   width: 100%;
 }
 
-/* El `<select>` no viene del paquete: es nativo, así que se viste a mano con los mismos
-   valores que un campo. Misma regla que `Skills.module.css#.selector`. */
-.selector {
-  box-sizing: border-box;
-  width: 100%;
-  padding: 6px 8px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 12px;
-}
-
 /* Lo que no pasa la comprobación LOCAL de la URL, antes de mandar nada: rojo y sin caja,
    como el `.aviso` del formulario de proveedor — es la misma clase de frase. */
 .aviso {

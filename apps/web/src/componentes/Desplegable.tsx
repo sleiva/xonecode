@@ -14,7 +14,9 @@ import estilos from "./Desplegable.module.css";
  * `cargando` cambia la flecha por la señal que gira, dentro de la propia caja.
  *
  * `className` va al `<select>` —es donde cada sitio ya tenía su caja—, y el envoltorio solo
- * pone la flecha: ocupa el ancho que le deje su padre.
+ * pone la flecha: ocupa el ancho que le deje su padre. SIN `className` el `<select>` toma el
+ * aspecto común (`.aspecto`, el de los campos de Ajustes); con él manda el sitio y no se
+ * combinan, porque el orden de dos clases en el bundle no está garantizado.
  */
 export function Desplegable({
   className,
@@ -34,7 +36,7 @@ export function Desplegable({
       <select
         {...resto}
         {...(cargando === true ? { "aria-busy": "true" as const } : {})}
-        className={clsx(className, estilos.select)}
+        className={clsx(className ?? estilos.aspecto, estilos.select)}
       >
         {children}
       </select>

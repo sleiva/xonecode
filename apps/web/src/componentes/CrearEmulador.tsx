@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { motivoDeNombreDeAvdInaceptable } from "../reglasDeAvd.js";
 import type { EstadoDelCliente } from "../store.js";
+import { Desplegable } from "./Desplegable.js";
 import estilos from "./CrearEmulador.module.css";
 
 const TEXTO_DE_ESTADO: Record<NonNullable<EstadoDelCliente["instalacion"]>["estado"], string> = {
@@ -65,7 +66,7 @@ export function CrearEmulador({
         <>
           <label className={estilos.campo}>
             <span>Copia de:</span>
-            <select
+            <Desplegable
               value={base}
               aria-label="Emulador del que copiar"
               disabled={conectado !== true || creando}
@@ -76,7 +77,7 @@ export function CrearEmulador({
                   {a}
                 </option>
               ))}
-            </select>
+            </Desplegable>
           </label>
           <label className={estilos.campo}>
             <input

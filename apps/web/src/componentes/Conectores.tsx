@@ -11,6 +11,7 @@ import { esAutenticacionDeConector } from "../tipos.js";
 import { IconoDeConector } from "./IconoDeConector.js";
 import { Pregunta } from "./Pregunta.js";
 import { AVISO_DE_URL, urlDeEntornoAceptable } from "./Wizard.js";
+import { Desplegable } from "./Desplegable.js";
 import estilos from "./Conectores.module.css";
 
 /**
@@ -551,9 +552,8 @@ function FormularioDeAlta({
       <label className={estilos.etiqueta} htmlFor="conector-autenticacion">
         Autenticación
       </label>
-      <select
+      <Desplegable
         id="conector-autenticacion"
-        className={estilos.selector}
         value={autenticacion}
         onChange={(e) => {
           // El `select` no puede mentir sobre el literal: si el valor no es uno de los tres, se
@@ -568,7 +568,7 @@ function FormularioDeAlta({
             {ETIQUETA_DE_AUTENTICACION[a]}
           </option>
         ))}
-      </select>
+      </Desplegable>
 
       <p className={estilos.nota}>
         {autenticacion === "api-key"

@@ -9,6 +9,7 @@ import {
 import type {
   ProveedorDeModelos, AgenteDelCable, SkillDelCable, Esfuerzo } from "../tipos.js";
 import { abreviar } from "../cifras.js";
+import { Desplegable } from "./Desplegable.js";
 import estilos from "./Agentes.module.css";
 
 /**
@@ -580,8 +581,7 @@ export function Agentes({
 
           <label className={estilos.campo}>
             <span className={estilos.rotulo}>Motor</span>
-            <select
-              className={estilos.selector}
+            <Desplegable
               value={editando.motor}
               onChange={(e) =>
                 setEditando({
@@ -604,7 +604,7 @@ export function Agentes({
                   {m.etiqueta} — {m.detalle}
                 </option>
               ))}
-            </select>
+            </Desplegable>
           </label>
 
           {/*
@@ -618,8 +618,7 @@ export function Agentes({
             <span className={estilos.rotulo}>
               Modelo <span className={estilos.pista}>{PISTA_DE_MODELO[editando.motor] ?? ""}</span>
             </span>
-            <select
-              className={estilos.selector}
+            <Desplegable
               value={editando.modelo ?? ""}
               onChange={(e) =>
                 setEditando({
@@ -657,7 +656,7 @@ export function Agentes({
               {editando.modelo !== undefined && !enLaLista(editando) ? (
                 <option value={editando.modelo}>{editando.modelo} — el que ya tenía</option>
               ) : null}
-            </select>
+            </Desplegable>
             {editando.motor === "modelo" && faltanCatalogos.length > 0 ? (
               <p className={estilos.pista}>Consultando los modelos de {faltanCatalogos.map((p) => p.nombre).join(", ")}…</p>
             ) : null}
@@ -688,8 +687,7 @@ export function Agentes({
                 Esfuerzo{" "}
                 <span className={estilos.pista}>— cuánto razona antes de contestar</span>
               </span>
-              <select
-                className={estilos.selector}
+              <Desplegable
                 value={editando.esfuerzo ?? ""}
                 onChange={(e) =>
                   setEditando({
@@ -708,7 +706,7 @@ export function Agentes({
                     {n}
                   </option>
                 ))}
-              </select>
+              </Desplegable>
             </label>
           ) : null}
 
@@ -790,14 +788,13 @@ export function Agentes({
           {hayProyecto ? (
             <label className={estilos.campo}>
               <span className={estilos.rotulo}>Dónde se guarda</span>
-              <select
-                className={estilos.selector}
+              <Desplegable
                 value={ambito}
                 onChange={(e) => setAmbito(e.target.value === "proyecto" ? "proyecto" : "global")}
               >
                 <option value="proyecto">En este proyecto</option>
                 <option value="global">Global — en todos</option>
-              </select>
+              </Desplegable>
             </label>
           ) : (
             <p className={estilos.pista}>Se guarda como global: no hay ningún proyecto abierto.</p>

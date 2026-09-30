@@ -20,6 +20,30 @@
   padding-right: 32px;
 }
 
+/* El ASPECTO común: los valores de los campos de texto de Ajustes
+   (`.campoDeNombreConBoton input`), para que un desplegable no desentone junto a ellos. Solo
+   tokens del tema, así que vale en claro y en oscuro. Se aplica cuando el sitio NO pasa
+   `className`; con `className` manda el sitio y esta clase no entra (dos clases juntas se
+   pisarían según el orden del bundle). El hueco de la flecha lo da `.select.select`. */
+.aspecto {
+  box-sizing: border-box;
+  padding: 4px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.aspecto[aria-invalid="true"] {
+  border-color: var(--dsw-alias-state-error-primary);
+}
+
+.aspecto:disabled {
+  opacity: 0.45;
+}
+
 /* El chevron, con 12 px de aire al filo: lo que la nativa no dejaba. No recibe clics — el
    clic cae en el `<select>`, que es quien abre la lista. */
 .flecha {

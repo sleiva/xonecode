@@ -258,18 +258,6 @@
   font-size: 12px;
 }
 
-.selector {
-  box-sizing: border-box;
-  width: 100%;
-  padding: 6px 8px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 12px;
-}
-
 /* Mono: el cuerpo de un `.md` es un prompt que se escribe y se relee como texto plano, y la
    proporcional disimula la sangría de las listas que llevan casi todos. */
 .instrucciones {

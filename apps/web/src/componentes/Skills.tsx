@@ -8,6 +8,7 @@ import {
 } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { SkillDelCable } from "../tipos.js";
 import { abreviar } from "../cifras.js";
+import { Desplegable } from "./Desplegable.js";
 import estilos from "./Skills.module.css";
 
 /**
@@ -252,14 +253,13 @@ export function Skills({
         {hayProyecto ? (
           <label className={estilos.campo}>
             <span className={estilos.rotulo}>Dónde se guarda</span>
-            <select
-              className={estilos.selector}
+            <Desplegable
               value={ambito}
               onChange={(e) => setAmbito(e.target.value === "proyecto" ? "proyecto" : "global")}
             >
               <option value="proyecto">En este proyecto</option>
               <option value="global">Para todos tus proyectos</option>
-            </select>
+            </Desplegable>
           </label>
         ) : null}
 
