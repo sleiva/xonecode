@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CrearEmulador } from "./CrearEmulador.js";
+import { CrearEmulador, PISTA_DE_LA_BASE, pistaDeLaCasilla } from "./CrearEmulador.js";
 
 afterEach(cleanup);
 
@@ -158,5 +158,16 @@ describe("CrearEmulador", () => {
     render(<CrearEmulador avds={["a"]} conectado alCrear={() => {}} />);
     escribir("a");
     expect(screen.getByRole("textbox", { name: "Nombre del emulador nuevo" }).getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("la casilla y «Copia de» llevan su hint, y desactivada dice por qué", () => {
+    const { rerender } = render(<CrearEmulador avds={["pixel8"]} conectado alCrear={() => {}} />);
+    const etiqueta = (): HTMLElement => screen.getByRole("checkbox").closest("label") as HTMLElement;
+    expect(etiqueta().title).toBe(pistaDeLaCasilla("pixel8", false));
+    expect(etiqueta().title).toMatch(/Sin marcar: el nuevo arranca vacío/);
+    expect(etiqueta().title).not.toMatch(/Ahora no se puede/);
+    expect((screen.getByRole("combobox").closest("label") as HTMLElement).title).toBe(PISTA_DE_LA_BASE);
+    rerender(<CrearEmulador avds={["pixel8"]} conectado alCrear={() => {}} enMarcha={["pixel8"]} />);
+    expect(etiqueta().title).toMatch(/Ahora no se puede: pixel8 está encendido/);
   });
 });

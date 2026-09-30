@@ -12,6 +12,24 @@ const TEXTO_DE_ESTADO: Record<NonNullable<EstadoDelCliente["instalacion"]>["esta
   colgada: "Sin respuesta",
 };
 
+/** El hint de «Copia de»: de dónde sale lo que no se elige. */
+export const PISTA_DE_LA_BASE =
+  "El emulador nuevo sale de este: la imagen del sistema, el modelo de teléfono, la RAM y el disco.";
+
+/**
+ * El hint de la casilla: qué hace marcada y sin marcar, y —si está desactivada— por qué. Es lo que
+ * faltaba: la regla (la base apagada para clonar) estaba en el código, no delante de quien la usa.
+ */
+export function pistaDeLaCasilla(base: string, baseEncendida: boolean): string {
+  const que =
+    "Marcada: clona el emulador entero —el framework de XOne, las apps, sus datos y su estado—, así que el " +
+    "nuevo queda listo para desplegar. Sin marcar: el nuevo arranca vacío, con la misma configuración.";
+  return baseEncendida
+    ? `${que}\n\nAhora no se puede: ${base} está encendido y, mientras corre, sus discos están bloqueados. ` +
+        "Páralo para clonarlo."
+    : que;
+}
+
 /**
  * «Crear emulador»: un nombre y un botón. El servidor decide (y crea con `avdmanager`); aquí
  * solo se COMPRUEBA antes con las mismas reglas del host, porque su negativa no llega al
@@ -82,7 +100,7 @@ export function CrearEmulador({
       <h4 className={estilos.titulo}>Nuevo emulador</h4>
       {base === undefined ? null : (
         <>
-          <label className={estilos.campo}>
+          <label className={estilos.campo} title={PISTA_DE_LA_BASE}>
             <span>Copia de:</span>
             <Desplegable
               value={base}
@@ -97,7 +115,9 @@ export function CrearEmulador({
               ))}
             </Desplegable>
           </label>
-          <label className={estilos.campo}>
+          {/* El hint va en la ETIQUETA y no en la casilla: una casilla desactivada no recibe el ratón en
+              todos los navegadores, y es justo entonces cuando más falta explicar por qué. */}
+          <label className={estilos.campo} title={pistaDeLaCasilla(base, baseEncendida)}>
             <input
               type="checkbox"
               checked={conDatos}
