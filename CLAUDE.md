@@ -522,7 +522,7 @@ viva por especialista, y un hijo que falló o al que se cortó con «Detener» n
 lleva la orden de parar).
 Si ni reducido cabe, se guarda la VENTANA de lo más reciente (`ventanaDeHistorial`), no nada.
 Solo en memoria y por sesión; `XONECODE_SIN_MEMORIA_DE_ESPECIALISTAS=1` la apaga para comparar.
-**El BUCLE del desarrollador** (`XONECODE_BUCLE_DEL_DEVELOPER=1`, apagado por omisión): quien declara `llama` en
+**El BUCLE del desarrollador** (encendido por omisión; `XONECODE_BUCLE_DEL_DEVELOPER=0` lo apaga): quien declara `llama` en
 su `.md` recibe `create_sub_agent` y puede llamar SOLO a esos especialistas (hoy `device-controller` y `designer-xone`), y con
 carpeta de artefactos también `xone_critica_visual` y `comparar_capturas`. Un nombre fuera de su lista cae al
 ayudante genérico de solo lectura. El veredicto sigue siendo de un modelo aparte y el juez final del arnés

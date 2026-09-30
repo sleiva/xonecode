@@ -579,7 +579,8 @@ export async function abrirSesionTrueforge(
    */
   const especialistaDeHilo = new Map<string, string>();
   const conMemoriaDeEspecialistas = opciones.memoriaDeEspecialistas ?? process.env.XONECODE_SIN_MEMORIA_DE_ESPECIALISTAS !== "1";
-  const conBucleDelDesarrollador = opciones.bucleDelDesarrollador ?? process.env.XONECODE_BUCLE_DEL_DEVELOPER === "1";
+  // Encendido por omisión desde que se midió (calc9-calc15); `XONECODE_BUCLE_DEL_DEVELOPER=0` lo apaga para comparar.
+  const conBucleDelDesarrollador = opciones.bucleDelDesarrollador ?? process.env.XONECODE_BUCLE_DEL_DEVELOPER !== "0";
   const conEsperas = opciones.esperasEntreHijos ?? true;
   /** Cuántas comprobaciones (llamadas a quien EJECUTA) lleva cada hilo que lleva un lazo. */
   const vueltasDeCadaHilo = new Map<string, number>();
