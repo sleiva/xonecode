@@ -52,3 +52,26 @@ export function motivoParaNoEliminarAvd(
   if (enMarcha.includes(avd)) return "apágalo para eliminarlo";
   return undefined;
 }
+
+/** Letras del sufijo aleatorio: minúsculas y cifras, que la forma de un nombre de AVD acepta. */
+const LETRAS_DEL_SUFIJO = "abcdefghijklmnopqrstuvwxyz0123456789";
+const LARGO_DEL_SUFIJO = 4;
+
+/**
+ * El nombre que se PROPONE para un AVD nuevo copiado de `base`: la base y un sufijo aleatorio
+ * (`pixel8-k3f9`), para que crear sea elegir la base y pulsar. No choca con uno que ya exista y
+ * cabe en el largo máximo (la base se recorta si hace falta). `azar` es inyectable para el test.
+ * Solo es una propuesta: quien crea puede escribir otro, y lo decide el servidor igual.
+ */
+export function nombreSugerido(base: string, existentes: readonly string[], azar: () => number = Math.random): string {
+  const raiz = base.slice(0, 64 - LARGO_DEL_SUFIJO - 1);
+  for (let intento = 0; ; intento++) {
+    let sufijo = "";
+    for (let i = 0; i < LARGO_DEL_SUFIJO; i++) {
+      sufijo += LETRAS_DEL_SUFIJO[Math.floor(azar() * LETRAS_DEL_SUFIJO.length) % LETRAS_DEL_SUFIJO.length];
+    }
+    const nombre = `${raiz}-${sufijo}`;
+    // Tras muchos choques (un `azar` roto) se devuelve igual: el campo avisará de que ya existe.
+    if (motivoDeNombreDeAvdInaceptable(nombre, existentes) === undefined || intento >= 50) return nombre;
+  }
+}

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { motivoDeNombreDeAvdInaceptable } from "../reglasDeAvd.js";
+import { useEffect, useRef, useState } from "react";
+import { motivoDeNombreDeAvdInaceptable, nombreSugerido } from "../reglasDeAvd.js";
 import type { EstadoDelCliente } from "../store.js";
 import { Desplegable } from "./Desplegable.js";
 import estilos from "./CrearEmulador.module.css";
@@ -50,11 +50,29 @@ export function CrearEmulador({
   // envía es lo que se ve.
   const conDatos = conDatosPedido && !baseEncendida;
   const propio = progreso;
-  // Creado bien: el nombre ya es un AVD de la lista, y dejarlo puesto diría «ya existe».
   const terminado = propio?.estado === "ok";
+  /**
+   * El nombre viene PROPUESTO: la base y un sufijo aleatorio (`nombreSugerido`), para que crear sea
+   * elegir la base y pulsar. Se propone otro al cambiar de base, pero solo si el campo sigue vacío o
+   * con la propuesta anterior: lo escrito a mano no se pisa. Y al crear bien SIEMPRE: el nombre recién
+   * creado ya es un AVD de la lista, y dejarlo puesto diría «ya existe».
+   *
+   * Depende solo de la base y del «terminado», no de `avds`: esa lista es un array nuevo en cada foto
+   * y, con ella en las dependencias, la propuesta cambiaría de sufijo con cada medida.
+   */
+  const propuesta = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (terminado) setNombre("");
-  }, [terminado]);
+    if (base === undefined) {
+      if (terminado) setNombre("");
+      return;
+    }
+    const nueva = nombreSugerido(base, avds);
+    setNombre((actual) => {
+      if (!terminado && actual !== "" && actual !== propuesta.current) return actual;
+      propuesta.current = nueva;
+      return nueva;
+    });
+  }, [base, terminado]);
   const creando = propio?.estado === "corriendo";
   const motivo = motivoDeNombreDeAvdInaceptable(nombre.trim(), avds);
   // Con el campo vacío no se regaña: el botón apagado ya lo dice y «falta el nombre» sobra.

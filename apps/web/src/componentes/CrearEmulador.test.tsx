@@ -119,8 +119,39 @@ describe("CrearEmulador", () => {
     const base = { receta: "crear-avd", paso: 0, titulo: "Creando pixel9", lineas: [], ms: 10 };
     rerender(<CrearEmulador avds={[]} conectado alCrear={() => {}} progreso={{ ...base, estado: "corriendo" }} />);
     rerender(<CrearEmulador avds={["pixel9"]} conectado alCrear={() => {}} progreso={{ ...base, estado: "ok" }} />);
-    expect((screen.getByRole("textbox", { name: "Nombre del emulador nuevo" }) as HTMLInputElement).value).toBe("");
+    // Ni se queda el nombre recién creado (diría «ya existe») ni se vacía: sale la propuesta para
+    // el siguiente, copiado de la base que ahora hay.
+    expect((screen.getByRole("textbox", { name: "Nombre del emulador nuevo" }) as HTMLInputElement).value).toMatch(/^pixel9-[a-z0-9]{4}$/);
     expect(screen.queryByText("pixel9 ya existe")).toBeNull();
+  });
+
+  const campo = (): HTMLInputElement => screen.getByRole("textbox", { name: "Nombre del emulador nuevo" }) as HTMLInputElement;
+  const elegirBase = (b: string): void => {
+    fireEvent.change(screen.getByRole("combobox", { name: "Emulador del que copiar" }), { target: { value: b } });
+  };
+
+  it("con una base, el nombre viene RELLENO con la base y un sufijo aleatorio, listo para crear", () => {
+    render(<CrearEmulador avds={["pixel8", "tablet"]} conectado alCrear={() => {}} />);
+    expect(campo().value).toMatch(/^pixel8-[a-z0-9]{4}$/);
+    expect((screen.getByRole("button", { name: "Crear emulador" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("cambiar la base cambia la propuesta", () => {
+    render(<CrearEmulador avds={["pixel8", "tablet"]} conectado alCrear={() => {}} />);
+    elegirBase("tablet");
+    expect(campo().value).toMatch(/^tablet-[a-z0-9]{4}$/);
+  });
+
+  it("lo que se ha ESCRITO a mano no se pisa al cambiar la base", () => {
+    render(<CrearEmulador avds={["pixel8", "tablet"]} conectado alCrear={() => {}} />);
+    escribir("mi-emulador");
+    elegirBase("tablet");
+    expect(campo().value).toBe("mi-emulador");
+  });
+
+  it("sin ningún AVD no hay base, así que no se propone nada", () => {
+    render(<CrearEmulador avds={[]} conectado alCrear={() => {}} />);
+    expect(campo().value).toBe("");
   });
 
   it("un nombre que no vale marca el campo como inválido", () => {
