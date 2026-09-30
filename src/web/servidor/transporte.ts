@@ -1474,6 +1474,8 @@ export type MensajeDelCliente =
    * (`instalacion` con `receta: "crear-avd"`): comparten el cerrojo, uno a la vez.
    */
   | { clase: "crearEmulador"; nombre: string; base?: string; conDatos?: boolean }
+  /** Elimina un AVD por su nombre: el servidor lo comprueba contra SU medida (existe, no es el único, está apagado). */
+  | { clase: "eliminarEmulador"; avd: string }
   /**
    * Lo de UN AVD: el puerto local del túnel de hotswap y si arranca sin ventana. El AVD tiene
    * que estar en la última medida y el puerto no puede ser de otro; la respuesta es el

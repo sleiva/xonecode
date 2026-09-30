@@ -9,6 +9,7 @@ import {
   correrPasoDeReceta,
   clonarAvd,
   crearAvd,
+  borrarAvd,
   PASOS_EJECUTABLES,
   TOPE_SIN_SALIDA_MS,
   TOPE_DE_TRABAJO_MS,
@@ -695,6 +696,57 @@ describe("crearAvd", () => {
     const m = montar({ plataforma: "linux" });
     const r = await crearAvd("pixel8-b", m.deps).terminado;
     expect(r).toMatchObject({ estado: "fallo", motivo: "crear emuladores no se lanza desde aquí en esta máquina" });
+    expect(m.llamadas).toHaveLength(0);
+  });
+});
+
+describe("borrarAvd", () => {
+  const montar = (extra: Record<string, unknown> = {}) => {
+    const llamadas: { binario: string; args: string[]; env: Record<string, string | undefined> }[] = [];
+    const hijos: ReturnType<typeof hijoFalso>[] = [];
+    const lanzar = (binario: string, args: string[], opciones: { env: Record<string, string | undefined> }) => {
+      llamadas.push({ binario, args, env: opciones.env });
+      const h = hijoFalso();
+      hijos.push(h);
+      return h.hijo;
+    };
+    return { llamadas, hijos, deps: { ...ANDROID, lanzar, ...extra } };
+  };
+
+  it("lanza `avdmanager delete avd -n <nombre>` dentro del SDK y con JAVA_HOME, por el mismo corredor", async () => {
+    const m = montar();
+    const t = borrarAvd("pixel8-b", m.deps);
+    expect(t.titulo).toBe("Eliminando el dispositivo virtual pixel8-b");
+    expect(m.llamadas[0]!.binario).toMatch(/avdmanager/);
+    expect(m.llamadas[0]!.args).toEqual(["delete", "avd", "-n", "pixel8-b"]);
+    expect(m.llamadas[0]!.env["JAVA_HOME"]).toBeDefined();
+    m.hijos[0]!.cerrar(0);
+    expect(await t.terminado).toMatchObject({ estado: "ok" });
+  });
+
+  it("un código de salida distinto de cero es un fallo con motivo", async () => {
+    const m = montar();
+    const t = borrarAvd("pixel8-b", m.deps);
+    m.hijos[0]!.cerrar(1);
+    const r = await t.terminado;
+    expect(r.estado).toBe("fallo");
+    expect(r.motivo).toBeTruthy();
+  });
+
+  it("no lanza con un nombre que no es de AVD (sin `..` ni barras): falla sin lanzar nada", async () => {
+    const m = montar();
+    for (const malo of ["-x", "../otro", "a/b", "a b", ""]) {
+      const r = await borrarAvd(malo, m.deps).terminado;
+      expect(r.estado, malo).toBe("fallo");
+      expect(r.motivo).toBeTruthy();
+    }
+    expect(m.llamadas).toHaveLength(0);
+  });
+
+  it("sin SDK, falla con su motivo en vez de lanzar", async () => {
+    const m = montar({ existe: () => false });
+    const r = await borrarAvd("pixel8-b", m.deps).terminado;
+    expect(r.estado).toBe("fallo");
     expect(m.llamadas).toHaveLength(0);
   });
 });

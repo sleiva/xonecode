@@ -179,11 +179,14 @@ export function guardarDispositivos(casa: string | undefined, ajustes: AjustesDe
   return { ruta };
 }
 
-/** Cambia UN AVD. `sinVentana: false` borra la clave; un AVD sin nada desaparece. */
+/**
+ * Cambia UN AVD. `sinVentana: false` y `clon: false` borran su clave; un AVD sin nada desaparece.
+ * `copiaDe`/`clon` son la procedencia: se guardan al crear desde «Copia de» y no se piden por el cable.
+ */
 export function guardarAjusteDeAvd(
   casa: string | undefined,
   avd: string,
-  cambio: { puerto?: number; sinVentana?: boolean },
+  cambio: { puerto?: number; sinVentana?: boolean; copiaDe?: string; clon?: boolean },
 ): { ruta: string } {
   const ruta = rutaSettings(casa ?? homedir());
   const crudo = leerCrudoOAbortar(ruta);
@@ -193,8 +196,33 @@ export function guardarAjusteDeAvd(
   if (cambio.puerto !== undefined) actual.puerto = cambio.puerto;
   if (cambio.sinVentana === true) actual.sinVentana = true;
   if (cambio.sinVentana === false) delete actual.sinVentana;
+  if (cambio.copiaDe !== undefined) actual.copiaDe = cambio.copiaDe;
+  if (cambio.clon === true) actual.clon = true;
+  if (cambio.clon === false) delete actual.clon;
   if (Object.keys(actual).length === 0) delete avds[avd];
   else avds[avd] = actual;
+  if (Object.keys(avds).length === 0) delete dispositivos.avds;
+  else dispositivos.avds = avds;
+  const fusionado =
+    Object.keys(dispositivos).length === 0
+      ? Object.fromEntries(Object.entries(crudo).filter(([k]) => k !== "dispositivos"))
+      : { ...crudo, dispositivos };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta };
+}
+
+/**
+ * Quita TODO lo que se recordaba de un AVD (puerto, sin ventana, procedencia): al eliminarlo, su
+ * puerto tiene que quedar libre para el siguiente. Uno que no consta no toca el fichero; lo que
+ * queda vacío (`avds`, `dispositivos`) desaparece, como en `guardarAjusteDeAvd`.
+ */
+export function quitarAjustesDeAvd(casa: string | undefined, avd: string): { ruta: string } {
+  const ruta = rutaSettings(casa ?? homedir());
+  const crudo = leerCrudoOAbortar(ruta);
+  const dispositivos = { ...((crudo as { dispositivos?: Record<string, unknown> }).dispositivos ?? {}) };
+  const avds = { ...((dispositivos.avds as Record<string, unknown> | undefined) ?? {}) };
+  if (!(avd in avds)) return { ruta };
+  delete avds[avd];
   if (Object.keys(avds).length === 0) delete dispositivos.avds;
   else dispositivos.avds = avds;
   const fusionado =

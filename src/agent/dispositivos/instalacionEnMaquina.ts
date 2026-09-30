@@ -431,6 +431,29 @@ export function crearAvd(nombre: string, deps: DependenciasDeInstalacion = {}, o
   };
 }
 
+/**
+ * Eliminar un AVD por su nombre, por el MISMO corredor que crear (topes, SDK, `JAVA_HOME`):
+ * `avdmanager delete avd -n <nombre>` borra la carpeta y el `.ini`, y no toca la imagen del sistema
+ * ni los demás. El nombre acaba en un argumento, así que pasa por la regla de forma de siempre
+ * (sin `..` ni barras). Nunca lanza. Que sea el último, o que esté en marcha, lo decide quien llama
+ * (la última medida): aquí solo se ve el disco.
+ */
+export function borrarAvd(nombre: string, deps: DependenciasDeInstalacion = {}): Trabajo {
+  const motivo = motivoDeNombreDeAvdInaceptable(nombre, []);
+  if (motivo !== undefined) return trabajoTerminado(motivo);
+  return correrPaso(
+    {
+      tipo: "proceso",
+      binario: "avdmanager",
+      conSdk: true,
+      subcarpeta: join("cmdline-tools", "latest", "bin"),
+      invocaciones: [{ args: ["delete", "avd", "-n", nombre], teclear: [] }],
+      titulo: `Eliminando el dispositivo virtual ${nombre}`,
+    },
+    deps,
+  );
+}
+
 /** De un error de Node solo el `code`: su mensaje lleva la ruta absoluta (nada de rutas por el cable). */
 function codigoDe(e: unknown): string {
   const c = (e as { code?: unknown } | null)?.code;

@@ -1350,6 +1350,9 @@ export type MensajeDelCliente =
   /** «Crea un AVD con este nombre.» El servidor lo valida contra SU medida; el progreso llega
    *  como `instalacion` con `receta: "crear-avd"`. */
   | { clase: "crearEmulador"; nombre: string; base?: string; conDatos?: boolean }
+  /** «Elimina este AVD.» El nombre y nada más: el servidor comprueba que esté en SU última medida,
+   *  que no sea el único y que esté apagado. El progreso llega como `instalacion` (`borrar-avd`). */
+  | { clase: "eliminarEmulador"; avd: string }
   /** Lo de UN AVD: su puerto del túnel y si arranca sin ventana. Vuelve `dispositivos`. */
   | { clase: "ajusteDeAvd"; avd: string; puerto?: number; sinVentana?: boolean }
   /** «Para este emulador», por su ID de la medida. */
@@ -1532,7 +1535,7 @@ export type AjustesDeDispositivos = { [K in PlataformaDeDispositivo]?: boolean }
   rutaEmulator?: string;
   /** Lo que se decide POR AVD: su puerto local del túnel y si arranca sin ventana. Redeclarado
    *  de `core/settings.ts`. Ausente = nada decidido (el 8443 de siempre, con ventana). */
-  avds?: Record<string, { puerto?: number; sinVentana?: true }>;
+  avds?: Record<string, { puerto?: number; sinVentana?: true; copiaDe?: string; clon?: true }>;
 };
 
 /** ¿Se mira este destino? Ausente = sí. La misma función que el host (`core/settings.ts`). */

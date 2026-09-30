@@ -145,6 +145,23 @@ describe("los destinos de prueba en settings.json", () => {
     });
     expect(settings.dispositivos?.avds).toEqual({ pixel8: { puerto: 8443 }, y: { sinVentana: true } });
   });
+
+  it("la procedencia de un AVD: copiaDe con forma de nombre y clon solo con true; lo demás se tira", () => {
+    const { settings } = validarSettings({
+      entornos: [],
+      dispositivos: {
+        avds: {
+          a: { copiaDe: "pixel8", clon: true },
+          b: { copiaDe: "pixel8" },
+          c: { copiaDe: "a b", clon: true },
+          d: { copiaDe: 3, clon: "true" },
+          e: { clon: true },
+        },
+      },
+    });
+    // `clon` sin `copiaDe` no dice de quién es clon: no se guarda nada.
+    expect(settings.dispositivos?.avds).toEqual({ a: { copiaDe: "pixel8", clon: true }, b: { copiaDe: "pixel8" } });
+  });
 });
 
 describe("el tope de concurrencia de tareas en settings.json", () => {

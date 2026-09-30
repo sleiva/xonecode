@@ -59,6 +59,10 @@ export interface AjustesDeAvd {
   puerto?: number;
   /** Arrancarlo sin ventana (`-no-window`). Solo `true` se guarda. */
   sinVentana?: true;
+  /** De qué AVD salió, si se creó desde «Copia de». Ausente = los de antes o los creados fuera. */
+  copiaDe?: string;
+  /** Con `copiaDe`: se clonó CON lo instalado (y no solo la configuración). Solo `true` se guarda. */
+  clon?: true;
 }
 
 /**
@@ -277,7 +281,7 @@ function validarDispositivos(candidato: unknown): AjustesDeDispositivos | undefi
   return Object.keys(salida).length === 0 ? undefined : salida;
 }
 
-/** Por AVD: nombre con la forma de una carpeta de AVD, puerto entero, `sinVentana` solo `true`. Lo demás se tira. */
+/** Por AVD: nombre con la forma de una carpeta de AVD, puerto entero, `sinVentana` solo `true`, procedencia. Lo demás se tira. */
 function validarAvds(candidato: unknown): Record<string, AjustesDeAvd> | undefined {
   if (typeof candidato !== "object" || candidato === null) return undefined;
   const salida: Record<string, AjustesDeAvd> = {};
@@ -287,6 +291,12 @@ function validarAvds(candidato: unknown): Record<string, AjustesDeAvd> | undefin
     const a: AjustesDeAvd = {};
     if (typeof v.puerto === "number" && Number.isInteger(v.puerto) && v.puerto >= 1024 && v.puerto <= 65535) a.puerto = v.puerto;
     if (v.sinVentana === true) a.sinVentana = true;
+    // La procedencia: el nombre con la forma de un AVD (acaba en una etiqueta, no en una ruta), y el
+    // clon solo con su origen: sin él no habría a quién decir «clon de».
+    if (typeof v.copiaDe === "string" && FORMA_DE_NOMBRE_DE_AVD.test(v.copiaDe)) {
+      a.copiaDe = v.copiaDe;
+      if (v.clon === true) a.clon = true;
+    }
     if (Object.keys(a).length > 0) salida[nombre] = a;
   }
   return Object.keys(salida).length === 0 ? undefined : salida;

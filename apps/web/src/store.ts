@@ -516,11 +516,16 @@ export function avdsDelCable(candidato: unknown): AjustesDeDispositivos["avds"] 
   for (const [nombre, valor] of Object.entries(candidato as Record<string, unknown>)) {
     if (!FORMA_DE_NOMBRE_DE_AVD.test(nombre) || typeof valor !== "object" || valor === null) continue;
     const v = valor as Record<string, unknown>;
-    const a: { puerto?: number; sinVentana?: true } = {};
+    const a: { puerto?: number; sinVentana?: true; copiaDe?: string; clon?: true } = {};
     if (typeof v["puerto"] === "number" && Number.isInteger(v["puerto"]) && v["puerto"] >= 1024 && v["puerto"] <= 65535) {
       a.puerto = v["puerto"];
     }
     if (v["sinVentana"] === true) a.sinVentana = true;
+    // La procedencia, con la regla del host: `clon` solo acompaña a un `copiaDe` con forma de nombre.
+    if (typeof v["copiaDe"] === "string" && FORMA_DE_NOMBRE_DE_AVD.test(v["copiaDe"])) {
+      a.copiaDe = v["copiaDe"];
+      if (v["clon"] === true) a.clon = true;
+    }
     if (Object.keys(a).length > 0) salida[nombre] = a;
   }
   return Object.keys(salida).length === 0 ? undefined : salida;

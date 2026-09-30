@@ -8,6 +8,7 @@ import {
   guardarConcurrenciaDeTareas,
   guardarDepurar,
   guardarAjusteDeAvd,
+  quitarAjustesDeAvd,
   guardarDispositivos,
   guardarPuertosAsignados,
   guardarEntorno,
@@ -100,6 +101,41 @@ describe("settingsEnDisco", () => {
     guardarAjusteDeAvd(c, "pixel8", { sinVentana: true });
     guardarAjusteDeAvd(c, "pixel8", { sinVentana: false });
     expect(cargarSettings(c).settings.dispositivos).toBeUndefined();
+  });
+
+  it("guardarAjusteDeAvd guarda la procedencia, y solo con `clon` true", () => {
+    const c = casa();
+    guardarAjusteDeAvd(c, "copia", { copiaDe: "pixel8" });
+    guardarAjusteDeAvd(c, "clonado", { copiaDe: "pixel8", clon: true });
+    expect(cargarSettings(c).settings.dispositivos?.avds).toEqual({
+      copia: { copiaDe: "pixel8" },
+      clonado: { copiaDe: "pixel8", clon: true },
+    });
+    guardarAjusteDeAvd(c, "clonado", { clon: false });
+    expect(cargarSettings(c).settings.dispositivos?.avds?.["clonado"]).toEqual({ copiaDe: "pixel8" });
+  });
+
+  it("quitarAjustesDeAvd borra la entrada entera y deja las demás; sin más, limpia `avds` y `dispositivos`", () => {
+    const c = casa();
+    guardarAjusteDeAvd(c, "a", { puerto: 9000, sinVentana: true, copiaDe: "b", clon: true });
+    guardarAjusteDeAvd(c, "b", { puerto: 9001 });
+    quitarAjustesDeAvd(c, "a");
+    expect(cargarSettings(c).settings.dispositivos?.avds).toEqual({ b: { puerto: 9001 } });
+    quitarAjustesDeAvd(c, "b");
+    expect(cargarSettings(c).settings.dispositivos).toBeUndefined();
+    // Uno que no consta no es un error ni ensucia el fichero.
+    expect(() => quitarAjustesDeAvd(c, "no-existe")).not.toThrow();
+  });
+
+  it("quitarAjustesDeAvd conserva lo demás de dispositivos y no escribe sobre un settings.json roto", () => {
+    const c = casa();
+    guardarDispositivos(c, { android: false });
+    guardarAjusteDeAvd(c, "a", { puerto: 9000 });
+    quitarAjustesDeAvd(c, "a");
+    expect(cargarSettings(c).settings.dispositivos).toEqual({ android: false });
+    writeFileSync(rutaSettings(c), "{ roto");
+    expect(() => quitarAjustesDeAvd(c, "a")).toThrow(SettingsRotosEnDisco);
+    expect(readFileSync(rutaSettings(c), "utf8")).toBe("{ roto");
   });
 
   it("guardarPuertosAsignados no pisa lo guardado", () => {
