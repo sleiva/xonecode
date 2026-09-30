@@ -234,8 +234,12 @@ Y las guardas del proyecto:
 - **Lo que se COMPRUEBA en el aparato se marca en el plan** (`agent/grafo/marcarCriteriosDelPlan.ts`,
   `core/tareasDelPlan.ts#marcarCriterios`): quien ejecuta no tiene `write_file` ni `edit_file` y el
   orquestador es de solo lectura, así que lo verificado no volvía nunca al `TASKS.md`. La tool
-  cambia SOLO `- [ ]` a `- [x]` en UNA tarea, va a quien tiene `ejecucion` en los dos motores, y
-  reaplica la guarda de slug y de enlace a mano. **Límite declarado**: escribe sin la cola de
+  cambia SOLO `- [ ]` a `- [x]` en UNA tarea, va a quien TRABAJA las tareas en los dos motores
+  (`recibeMarcarCriterios`: quien ejecuta, el desarrollador y el diseñador), y reaplica la guarda de
+  slug y de enlace a mano. **Se marca TAREA A TAREA, no al final** (`TRABAJAR_CON_PLAN`): medido, el
+  conductor no marcaba porque el desarrollador no le nombraba el plan, y el desarrollador reescribía el
+  `TASKS.md` entero al acabar. Un `TASKS.md` existente no se reescribe entero (lo dice el prompt).
+  Una tarea con ALGUNA casilla marcada va a medias (`implementada`) aunque no tenga `**Estado:**`. **Límite declarado**: escribe sin la cola de
   `escriturasEnSerie`. Una tarea está FINALIZADA con todas sus casillas marcadas
   (`progresoDeTarea`, que viaja con cada tarea a la pestaña Planes); el estado se reconoce por su
   PRIMERA palabra (`pendiente`, `en curso`, `implementada`, `hecha`).

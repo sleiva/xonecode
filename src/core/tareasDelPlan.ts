@@ -52,7 +52,10 @@ export type EstadoDeTarea = (typeof ESTADOS_DE_TAREA)[number];
  *
  * - `finalizada`: TODAS sus casillas marcadas —cada una es un criterio COMPROBADO—, o `hecha`
  *   sin casillas que marcar.
- * - `implementada`: el código está (`implementada` o `hecha`) pero le falta comprobar algo.
+ * - `implementada`: el código está (`implementada` o `hecha`) pero le falta comprobar algo. También
+ *   con ALGUNA casilla marcada, diga lo que diga su estado: un criterio comprobado es código que
+ *   existe, y un plan real marca casillas sin escribir `**Estado:**` por tarea —con 2 de 3
+ *   comprobados, el círculo salía vacío, como si no se hubiera empezado—.
  * - `en-curso` y `pendiente`: lo que dice su estado; un estado que no se reconoce cuenta como
  *   pendiente, porque afirmar avance que el plan no dice sería peor que quedarse corto.
  */
@@ -73,7 +76,7 @@ export function progresoDeTarea(estado: string | undefined, criterios: { hechos:
   if (criterios.total > 0 && criterios.hechos === criterios.total) return "finalizada";
   const reconocido = estadoReconocido(estado);
   if (reconocido === "hecha" && criterios.total === 0) return "finalizada";
-  if (reconocido === "hecha" || reconocido === "implementada") return "implementada";
+  if (reconocido === "hecha" || reconocido === "implementada" || criterios.hechos > 0) return "implementada";
   if (reconocido === "en curso") return "en-curso";
   return "pendiente";
 }

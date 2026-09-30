@@ -143,7 +143,14 @@ describe("por dónde va una tarea", () => {
     expect(progresoDeTarea("hecha", { hechos: 3, total: 4 })).toBe("implementada");
     expect(progresoDeTarea("hecha", { hechos: 0, total: 0 })).toBe("finalizada");
     expect(progresoDeTarea("implementada — sin verificar", { hechos: 0, total: 4 })).toBe("implementada");
-    expect(progresoDeTarea("en curso", { hechos: 1, total: 4 })).toBe("en-curso");
+    expect(progresoDeTarea("en curso", { hechos: 0, total: 4 })).toBe("en-curso");
+  });
+
+  it("con ALGUNA casilla marcada va a medias, aunque su estado no lo diga (o no lo tenga)", () => {
+    expect(progresoDeTarea(undefined, { hechos: 2, total: 3 })).toBe("implementada");
+    expect(progresoDeTarea("pendiente", { hechos: 1, total: 4 })).toBe("implementada");
+    expect(progresoDeTarea("en curso", { hechos: 1, total: 4 })).toBe("implementada");
+    expect(progresoDeTarea(undefined, { hechos: 0, total: 3 })).toBe("pendiente");
     expect(progresoDeTarea("bloqueada", { hechos: 0, total: 2 })).toBe("pendiente");
     expect(progresoDeTarea(undefined, { hechos: 0, total: 0 })).toBe("pendiente");
   });

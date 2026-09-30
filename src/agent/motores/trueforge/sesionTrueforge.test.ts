@@ -2642,6 +2642,26 @@ describe("`marcar_criterios_del_plan` en TrueForge: el conductor marca lo que co
     expect(toolsPorLlamada[0]).not.toContain("marcar_criterios_del_plan");
     expect(readFileSync(join(dir, "TASKS.md"), "utf8")).toBe("# T\n\n## T1 — Uno\n\n- [x] abre\n- [ ] vuelve\n");
   }, 20_000);
+
+  it("el DESARROLLADOR también la tiene y marca al cerrar la tarea; quien solo lee, no", async () => {
+    const raiz = proyecto();
+    const dir = join(raiz, ".xonecode", "planes", "hoteles");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "TASKS.md"), "# T\n\n## T1 — Uno\n\n- [ ] abre\n- [ ] vuelve\n");
+    const { m, toolsPorLlamada } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "haz la T1 del plan hoteles" }) }] })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "m1", name: "marcar_criterios_del_plan", args: JSON.stringify({ plan: "hoteles", tarea: "T1", criterios: [1, 2] }) }] })],
+      [new AIMessageChunk({ content: "T1 cerrada." })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d2", name: "create_sub_agent", args: JSON.stringify({ name: "consultant-xone", input: "¿qué es un mapcol?" }) }] })],
+      [new AIMessageChunk({ content: "Es una referencia." })],
+      [new AIMessageChunk({ content: "Listo." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true });
+    await s.turno("haz la T1", piel().p);
+    expect(toolsPorLlamada[1]).toContain("marcar_criterios_del_plan");
+    expect(toolsPorLlamada[4]).not.toContain("marcar_criterios_del_plan");
+    expect(readFileSync(join(dir, "TASKS.md"), "utf8")).toBe("# T\n\n## T1 — Uno\n\n- [x] abre\n- [x] vuelve\n");
+  }, 20_000);
 });
 
 describe("`buscar_icono` en TrueForge (IXCODE-18): el mismo reparto que deepagents", () => {

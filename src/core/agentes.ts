@@ -228,6 +228,20 @@ export function recibeNucleoDeTrabajo(a: Pick<Agente, "soloLectura" | "ejecucion
 }
 
 /**
+ * ¿Recibe `marcar_criterios_del_plan`? Quien TRABAJA las tareas de un plan: el mismo reparto que el
+ * núcleo de trabajo —de los de serie, `developer-xone`, `designer-xone` y `device-controller`—.
+ *
+ * Solo la llevaba quien ejecuta, y medido en una sesión real el plan no se movió en todo el turno: el
+ * desarrollador llamó tres veces al conductor sin nombrarle el plan, así que el conductor no marcó
+ * nada, y el propio desarrollador reescribió el `TASKS.md` entero al acabar. Quien cierra una tarea
+ * es quien sabe que la cerró. No abre nada: los dos que la ganan ya escriben en `/planes/`
+ * (`permisosDe`), y la tool solo cambia `- [ ]` por `- [x]`. Vive en `core/` porque la usan los DOS motores.
+ */
+export function recibeMarcarCriterios(a: Pick<Agente, "soloLectura" | "ejecucion" | "escribeEn">): boolean {
+  return recibeNucleoDeTrabajo(a);
+}
+
+/**
  * El prompt completo de un subagente: sus reglas, su descripción y sus instrucciones.
  *
  * Las reglas van PRIMERO y las instrucciones al final, en ese orden a propósito: lo último

@@ -1,5 +1,5 @@
 import { createDeepAgent, createFilesystemMiddleware } from "deepagents";
-import { MAPA_DEL_PROYECTO, fichaDeAgente, promptDeAgente, repartirSkills, type Agente } from "../../core/agentes.js";
+import { MAPA_DEL_PROYECTO, fichaDeAgente, promptDeAgente, recibeMarcarCriterios, repartirSkills, type Agente } from "../../core/agentes.js";
 import { claseDeTrabajo } from "../../core/esfuerzo.js";
 import { REGLA_DE_ESCRITURAS_EN_PARALELO } from "../../core/serieDeEscrituras.js";
 import type { MotorExterno, SubagenteExternoPort } from "../../core/ports.js";
@@ -570,9 +570,9 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
       ...(opciones.iconos !== undefined && recibeBuscarIcono(perfil) ? [crearBuscarIcono(opciones.iconos)] : []),
       // Fondos SVG (degradados, sombras, resplandor): pura y sin red, así que SIN puerto; a los mismos.
       ...(recibeGenerarFondo(perfil) ? [crearGenerarFondoSvg()] : []),
-      // Marcar en el plan lo COMPROBADO en el aparato, a quien comprueba: el que EJECUTA, que no
-      // tiene `write_file` ni `edit_file` y sin esto no podía dejar constancia de lo que vio.
-      ...(perfil.ejecucion === true ? [crearMarcarCriteriosDelPlan({ raiz: opciones.raiz })] : []),
+      // Marcar en el plan lo COMPROBADO, a quien trabaja sus tareas (`recibeMarcarCriterios`): el que
+      // EJECUTA, que no tiene `write_file` ni `edit_file`, y quien escribe, que cierra cada tarea.
+      ...(recibeMarcarCriterios(perfil) ? [crearMarcarCriteriosDelPlan({ raiz: opciones.raiz })] : []),
     ],
     //
     // Las tools de fichero las monta el `FilesystemMiddleware` a partir del backend, y

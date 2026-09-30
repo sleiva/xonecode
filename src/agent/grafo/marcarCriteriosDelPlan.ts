@@ -82,8 +82,9 @@ export function crearMarcarCriteriosDelPlan(donde: { raiz: string }) {
       name: NOMBRE_MARCAR_CRITERIOS,
       description:
         "Marca como COMPROBADOS criterios de una tarea de un plan (`/planes/<nombre>/TASKS.md`): pone `- [x]` en sus casillas. " +
-        "Úsala SOLO con lo que acabas de verificar en el aparato —no por lo que alguien dijo que hizo—, y dale los números de " +
-        "las casillas de esa tarea en su orden (lee antes el TASKS.md). No cambia nada más del fichero.",
+        "Úsala AL CERRAR cada tarea, antes de empezar la siguiente, y SOLO con lo COMPROBADO: visto en el aparato por ti o por " +
+        "el de pruebas que llamaste en este encargo, o medido por ti —no por haber escrito el código que debería cumplirlo—. " +
+        "Dale los números de las casillas de esa tarea en su orden (lee antes el TASKS.md). No cambia nada más del fichero.",
       schema: ESQUEMA,
     }
   );

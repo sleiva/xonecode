@@ -19,7 +19,7 @@ const { AGENTES_DE_SERIE } = await import("../subagentes/agentesEnDisco.js");
 const { NOMBRE_MARCAR_CRITERIOS } = await import("./marcarCriteriosDelPlan.js");
 
 describe("el montaje de marcar_criterios_del_plan en deepagents", () => {
-  it("solo quien EJECUTA (device-controller) la tiene; ni el orquestador ni los demás", async () => {
+  it("quien trabaja las tareas la tiene (el que ejecuta, el desarrollador y el diseñador); ni el orquestador ni quien solo lee", async () => {
     const raiz = mkdtempSync(join(tmpdir(), "marcar-cableado-"));
     writeFileSync(join(raiz, "app.xml"), "<app/>\n");
     await construirAgente({
@@ -32,7 +32,7 @@ describe("el montaje de marcar_criterios_del_plan en deepagents", () => {
     });
     const subagentes = (capturado.opciones?.["subagents"] ?? []) as { name: string; tools?: { name: string }[] }[];
     const conTool = subagentes.filter((s) => (s.tools ?? []).some((t) => t.name === NOMBRE_MARCAR_CRITERIOS)).map((s) => s.name);
-    expect(conTool).toEqual(["device-controller"]);
+    expect([...conTool].sort()).toEqual(["designer-xone", "developer-xone", "device-controller"]);
     const delRaiz = (capturado.opciones?.["tools"] ?? []) as { name: string }[];
     expect(delRaiz.map((t) => t.name)).not.toContain(NOMBRE_MARCAR_CRITERIOS);
   });

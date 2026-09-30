@@ -55,7 +55,7 @@ import { createTokenTracker, type TokenTracker } from "../../../vendor/tokenTrac
 import { MAX_APPROVAL_ROUNDS, type Decision } from "../../../vendor/hitl.js";
 import { backendDeAgente, entornoDeLaShellDelProyecto } from "../../grafo/proyecto.js";
 import { cargarAgentes } from "../../subagentes/agentesEnDisco.js";
-import { fichaDeAgente, promptDeAgente, repartirSkills, type Agente } from "../../../core/agentes.js";
+import { fichaDeAgente, promptDeAgente, recibeMarcarCriterios, repartirSkills, type Agente } from "../../../core/agentes.js";
 import { PERFIL_DEL_ORQUESTADOR, promptOrquestador } from "../../grafo/xoneAgent.js";
 import { permisosDe, seDetieneEn, TEXTO_HITL } from "../../grafo/perfiles.js";
 import { cambioDe } from "../../turno/interrupts.js";
@@ -784,8 +784,8 @@ export async function abrirSesionTrueforge(
     ...(carpeta !== undefined && agente.ejecucion === true
       ? [crearDiferenciaDeCapturas({ leerArtefacto: async (nombre) => readFileSync(join(carpeta, nombre)) }) as unknown as ToolDeLangchain]
       : []),
-    // Y marcar en el plan lo comprobado en el aparato, con el reparto de deepagents: a quien ejecuta.
-    ...(agente.ejecucion === true ? [crearMarcarCriteriosDelPlan({ raiz }) as unknown as ToolDeLangchain] : []),
+    // Y marcar en el plan lo comprobado, con el reparto de deepagents (`recibeMarcarCriterios`).
+    ...(recibeMarcarCriterios(agente) ? [crearMarcarCriteriosDelPlan({ raiz }) as unknown as ToolDeLangchain] : []),
     // El BUCLE del desarrollador: quien puede llamar al de pruebas también tiene el crítico y la medida, para
     // juzgar la pantalla con lo que el otro capture. El veredicto sigue siendo de un modelo aparte, no suyo, y el
     // juez final del arnés revisa igual (`textoDelBucle`).
