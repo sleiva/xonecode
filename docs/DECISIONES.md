@@ -7843,3 +7843,25 @@ opción `(Recommended)`, y el formato de los números, sin marca—. La regla er
 la persona vio solo la primera y la segunda se cerró sola con «No se completó». Ahora cada pregunta va por separado: con
 recomendada se contesta con ella, y sin marca vuelve al agente pidiéndole que decida y diga qué eligió, que es lo que la
 persona pidió al poner el modo autónomo. Todo sale como aviso en el chat. En supervisado, igual que antes.
+
+## Un puerto de túnel por AVD, y crear emuladores desde Ajustes (30-09-2026)
+
+Problema: dos proyectos, cada uno con su emulador, compartían el 8443 local del túnel de hotswap. Medido el 30-09-2026 con
+dos AVD a la vez (`emulator-5554`, pixel8 con ventana, y `emulator-5556`, pixel8-tagmyxone sin ventana):
+
+- `adb -s B forward tcp:P tcp:8443` le QUITA el puerto P al aparato A sin error alguno; con `--no-rebind` adb lo rechaza
+  («cannot rebind existing socket»). Por eso cada AVD tiene su puerto y el agente no puede lanzar un `forward` a mano.
+- Con dos túneles a la vez, `adb forward --list` da `emulator-5554 tcp:8443 tcp:8443` y `emulator-5556 tcp:8444 tcp:8443`, y
+  `xone-hotswap` con el dispositivo de la sesión en 5556 abre TLS contra el 8444 (verificado tras dar puerto a cada AVD).
+- `avdmanager` sin TTY necesita `JAVA_HOME=/opt/homebrew/opt/openjdk@17` (keg-only; sin él, «Unable to locate a Java
+  Runtime») y `no\n` por stdin para la pregunta del perfil de hardware. Suelta un error de `devices.xml` y aun así crea el
+  AVD, así que el éxito se mide por el AVD y no por el código de salida.
+- La captura con `screencap` funciona sin ventana (PNG 1080x2400) y la GPU va por hardware sin `-gpu`.
+- Sin ventana NO es más rápido: el arranque desde instantánea tarda unos 14 s con ventana y unos 17 s sin ella, y cada
+  emulador ocupa unos 4 GB. La razón de «sin ventana» es no tener dos ventanas encima, no la velocidad.
+- `-no-metrics` evita un aviso de telemetría que una versión futura del emulador convertirá en pregunta bloqueante.
+
+Límites declarados: dentro del aparato el framework se busca siempre en el mismo puerto (con dos APK de framework los scripts
+no lo persiguen); un aparato físico se queda en el puerto de siempre; `enUso` mira solo las consolas de persona y no se
+refresca al abrir o cerrar una; las negativas del servidor no llegan al navegador desde el vestíbulo, así que el cliente
+valida con las mismas reglas (`apps/web/src/reglasDeAvd.ts`).

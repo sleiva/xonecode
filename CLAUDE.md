@@ -1362,6 +1362,19 @@ admite (`admiteApagarElPensamiento`); apagado manda sobre el esfuerzo. Lo demás
   consume Ejecutar y, por un FICHERO (`core/dispositivoDeSesion.ts`, `XONECODE_DISPOSITIVO`), el
   `device-controller`: los scripts de `xone-hotswap` lo leen en CADA ejecución. Sin elección, un
   emulador antes que un físico.
+- **El puerto del túnel es del AVD, no fijo** (`core/puertosDeAvd.ts`, copia en
+  `skills/xone-hotswap/lib/dispositivo.mjs` atada por test): con un solo AVD, el de siempre; con dos
+  o más, el servidor FIJA uno a cada AVD al medir (`emuladoresCableados`, solo AÑADE, nunca
+  reasigna); dentro del aparato el framework escucha siempre en el mismo, y un aparato físico se
+  queda en el de siempre. Un `adb forward` del agente se RECHAZA (`motivoDeComandoRechazado`): un
+  túnel a mano le quita el puerto al aparato de otra sesión sin error. **Crear un AVD va por el MISMO
+  corredor y cerrojo que la receta** (`crearAvd`, un trabajo a la vez), y arrancar «sin ventana» es
+  `-no-window -no-audio -no-metrics`, que es por lo que existe «Parar» (`AjustesDeAvd.tsx`,
+  `CrearEmulador.tsx`): un emulador sin ventana no se cierra con la mano. **Límites declarados**: si
+  DENTRO del aparato el framework no está donde se espera (dos APK de framework), los scripts no lo
+  persiguen y el agente se lo dice a la persona; `enUso` (`PastillaDeDispositivo.tsx`) mira solo las
+  consolas de persona y no se refresca al abrir o cerrar una; las negativas del servidor no llegan
+  al navegador, así que el cliente valida con las mismas reglas (`apps/web/src/reglasDeAvd.ts`).
 
 ### La TUI y el panel (terminal)
 
