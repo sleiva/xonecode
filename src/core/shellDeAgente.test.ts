@@ -224,16 +224,14 @@ describe("las búsquedas por el disco entero no se lanzan", () => {
   });
 });
 
-describe("un túnel a mano (`adb forward`/`reverse`) no se lanza", () => {
+describe("un túnel a mano (`adb forward`) no se lanza", () => {
   it.each([
     "adb forward tcp:8443 tcp:8443",
     "adb -s emulator-5556 forward tcp:8444 tcp:8443",
     '"$XONECODE_ADB" forward tcp:8443 tcp:8443',
     "xone-log-android && adb forward tcp:1 tcp:2",
     "adb forward --remove tcp:8443",
-    "adb reverse tcp:8443 tcp:8443",
     "adb -e forward tcp:1 tcp:2",
-    "adb -d reverse tcp:1 tcp:2",
     "adb -e -s emulator-5554 forward tcp:1 tcp:2",
   ])("se rechaza: %s", (c) => {
     const m = motivoDeComandoRechazado(c);
@@ -249,6 +247,8 @@ describe("un túnel a mano (`adb forward`/`reverse`) no se lanza", () => {
     "adb forward --list",
     "adb -s emulator-5556 forward --list",
     "adb devices",
+    "adb reverse tcp:8443 tcp:8443",
+    "adb -d reverse tcp:1 tcp:2",
     "xone-reiniciar-android --app X",
     'echo "adb forward"',
   ])("pasa: %s", (c) => {

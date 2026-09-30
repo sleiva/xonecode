@@ -230,9 +230,10 @@ export function motivoDeComandoRechazado(comando: string): string | undefined {
   }
   // El túnel de hotswap es del APARATO (su puerto está en Ajustes → Dispositivos) y lo ponen los
   // scripts. Medido: un `adb forward` al mismo puerto local le QUITA el túnel al aparato de otra
-  // sesión sin dar error. `--list` solo mira, y pasa.
+  // sesión sin dar error. `--list` solo mira, y pasa. `reverse` tampoco se rechaza: no toca puertos LOCALES del
+  // Mac (abre uno en el aparato) y tiene usos legítimos.
   const adb = String.raw`(?:adb|"?\$\{?XONECODE_ADB\}?"?)`;
-  const tunelAMano = new RegExp(String.raw`${inicio}${adb}\s+(?:-[de]\s+|-\S+\s+\S+\s+)*(?:forward|reverse)\s+(?!--list${fin})`);
+  const tunelAMano = new RegExp(String.raw`${inicio}${adb}\s+(?:-[de]\s+|-\S+\s+\S+\s+)*forward\s+(?!--list${fin})`);
   if (tunelAMano.test(comando)) {
     return (
       "No se lanza: el túnel al aparato lo ponen `xone-desplegar-android` y `xone-reiniciar-android`, con el puerto que " +
