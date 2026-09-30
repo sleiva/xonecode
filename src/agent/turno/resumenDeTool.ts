@@ -40,6 +40,8 @@ export const CAMPOS_SEGUROS: Record<string, readonly string[]> = {
   generar_fondo_svg: ["tipo", "nombre", "ancho", "alto"],
   // Las dos rutas de artefacto y nada más: el informe con los números es el RESULTADO y no cruza.
   comparar_capturas: ["captura", "referencia"],
+  // La RUTA de la imagen y nada más: la `pregunta` es texto libre del modelo, y la descripción el RESULTADO.
+  describe_image: ["ruta"],
   // Las dos rutas de artefacto y la zona: nada del contenido de las imágenes.
   diferencia_de_capturas: ["despues", "antes"],
   buscar_icono: ["consulta", "id", "prefijo", "color", "tamano", "operacion"],

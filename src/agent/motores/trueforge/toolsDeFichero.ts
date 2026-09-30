@@ -19,6 +19,7 @@
  * Un rechazo se DEVUELVE como resultado de error y nunca se lanza: el modelo lo lee y reintenta,
  * que es la regla de las guardas del backend.
  */
+import { NOMBRE_DESCRIBIR_IMAGEN } from "../../grafo/describirImagen.js";
 import { posix } from "node:path";
 import micromatch from "micromatch";
 import { toolResultResponse } from "./trueforge.js";
@@ -197,7 +198,14 @@ async function ejecutar(backend: BackendDeFicheros, nombre: ToolDeFichero, args:
       const limit = typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : LINEAS_POR_LECTURA;
       const r = (await backend.read(s(args.file_path), offset, limit)) as Resultado & { content?: unknown };
       if (r.error !== undefined) return { texto: r.error, error: true };
-      if (typeof r.content !== "string") return { texto: "fichero binario: no se puede leer como texto", error: true };
+      if (typeof r.content !== "string") {
+        // Una IMAGEN no se lee como texto, pero se puede VER (IXCODE-23): la llamada va ya escrita, como la navegación
+        // le devuelve la suya a `regex_search`. Sin esto el agente concluía que «no tiene visión».
+        if (/\.(png|jpe?g)$/i.test(s(args.file_path))) {
+          return { texto: `${s(args.file_path)} es una imagen: no se lee como texto. Para ver lo que hay en ella: ${NOMBRE_DESCRIBIR_IMAGEN}({"ruta": ${JSON.stringify(s(args.file_path))}})`, error: true };
+        }
+        return { texto: "fichero binario: no se puede leer como texto", error: true };
+      }
       return { texto: lecturaAcotada(r.content, offset + 1), error: false };
     }
     case "write_file": {

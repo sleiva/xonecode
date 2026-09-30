@@ -31,6 +31,15 @@ function proyecto() {
 }
 
 describe("las tools de fichero de TrueForge, sobre el backend real", () => {
+  it("una IMAGEN no se lee como texto: la respuesta trae la llamada a describe_image ya escrita (IXCODE-23)", async () => {
+    const { raiz, llamar } = proyecto();
+    mkdirSync(join(raiz, "icons"));
+    writeFileSync(join(raiz, "icons", "nuevo.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]));
+    const r = await llamar("read_file", { file_path: "/icons/nuevo.png" });
+    expect(r.error).toBe(true);
+    expect(r.texto).toContain('describe_image({"ruta": "/icons/nuevo.png"})');
+  });
+
   it("read_file numera como deepagents", async () => {
     const { llamar } = proyecto();
     const r = await llamar("read_file", { file_path: "/app.xml" });

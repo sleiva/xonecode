@@ -110,6 +110,7 @@ import { crearCompararCapturas } from "../../grafo/compararCapturas.js";
 import { crearAtributosXone, NOMBRE_ATRIBUTOS_XONE } from "../../grafo/atributosXone.js";
 import { crearDiferenciaDeCapturas } from "../../grafo/diferenciaDeCapturas.js";
 import { crearLectorDeReferencias } from "../../grafo/lectorDeReferencias.js";
+import { crearDescribirImagen } from "../../grafo/describirImagen.js";
 import { crearTraerDeLaMaquina } from "../../grafo/traerDeLaMaquina.js";
 import { invocarVisualConModelos } from "../../dispositivos/juezVisual.js";
 import { estilosDeDisco, indiceEnDisco, type CargarIndice } from "../../navegacion/indiceEnDisco.js";
@@ -751,9 +752,22 @@ export async function abrirSesionTrueforge(
         ] as unknown as ToolDeLangchain[]);
   // ¿Existe este atributo en este nodo? A todos, como la navegación: es de lectura y contesta desde la skill del paquete.
   const atributos = crearAtributosXone() as unknown as ToolDeLangchain;
+  // VER una imagen (IXCODE-23), a TODOS, el raíz incluido: es de lectura, y el raíz es quien recibe los adjuntos.
+  // `read_file` no abre una imagen y el aviso de adjuntos manda aquí (`describirImagen.ts`).
+  const describirImagen = (): ToolDeLangchain =>
+    crearDescribirImagen({
+      invocar: invocarVisualConModelos({ paraPapel: (p) => modelos.paraPapel(p) }),
+      leer: lectorDeReferencias,
+      carpetas: {
+        raiz,
+        ...(carpeta === undefined ? {} : { artefactos: carpeta }),
+        ...(opciones.adjuntos === undefined ? {} : { adjuntos: opciones.adjuntos }),
+      },
+    }) as unknown as ToolDeLangchain;
   const propiasDelRaiz: ToolDeLangchain[] = [
     navegacion(),
     atributos,
+    describirImagen(),
     ...herramientasDeJuicio(),
     ...(carpeta === undefined ? [] : ([crearTraerDeLaMaquina({ carpeta, alEscribir: anotarArtefacto })] as unknown as ToolDeLangchain[])),
   ];
@@ -761,6 +775,7 @@ export async function abrirSesionTrueforge(
     crearBusquedaRegex(backend as never) as unknown as ToolDeLangchain,
     navegacion(),
     atributos,
+    describirImagen(),
     ...(carpeta !== undefined && (agente.escribeEn ?? []).length > 0
       ? [crearCopiarArtefacto({ raiz, carpetaDeArtefactos: carpeta, perfil: agente }) as unknown as ToolDeLangchain]
       : []),

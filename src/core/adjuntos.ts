@@ -162,9 +162,8 @@ export function conAdjuntos(peticion: string, adjuntos: readonly AdjuntoNombrabl
     ...adjuntos.map((a) => `- ${RUTA_ADJUNTOS}${a.nombre} (${peso(a.bytes)}${a.mime === undefined ? "" : `, ${a.mime}`})`),
     ...(hayImagen
       ? [
-          "AVISO sobre las imágenes: las LEES como fichero, pero no las ves — no hay visión en",
-          "este harness todavía. No digas que has mirado una captura ni describas lo que aparece",
-          "en ella: si el encargo depende de verla, dilo y pide que se describa por escrito.",
+          "IMÁGENES: para saber qué hay en una, pásala por `describe_image` con su ruta (`read_file` no",
+          "las abre). No describas una imagen que no hayas pasado por ella.",
         ]
       : []),
   ].join("\n");

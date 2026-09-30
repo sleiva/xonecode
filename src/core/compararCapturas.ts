@@ -12,7 +12,7 @@
  * ## Qué mide, y por qué solo eso
  *
  * Es DETERMINISTA: las mismas dos imágenes dan siempre los mismos números, y no depende de que el
- * modelo tenga visión (DeepSeek no la tiene). Mide **dónde hay contenido**, no cómo es:
+ * modelo tenga visión. Mide **dónde hay contenido**, no cómo es:
  *
  * 1. El FONDO es el color más frecuente (una pantalla de app es un fondo liso con cosas encima).
  * 2. «Contenido» es todo píxel que se aparta del fondo más que `UMBRAL_DE_CONTENIDO`.

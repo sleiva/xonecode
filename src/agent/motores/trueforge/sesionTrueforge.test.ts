@@ -2664,6 +2664,20 @@ describe("`marcar_criterios_del_plan` en TrueForge: el conductor marca lo que co
   }, 20_000);
 });
 
+describe("`describe_image` en TrueForge (IXCODE-23): la tienen el raíz y cada especialista", () => {
+  it("el raíz la ve en su primera llamada y el hijo en la suya", async () => {
+    const { m, toolsPorLlamada } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "consultant-xone", input: "¿qué es esto?" }) }] })],
+      [new AIMessageChunk({ content: "Un icono." })],
+      [new AIMessageChunk({ content: "Listo." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("describe la imagen", piel().p);
+    expect(toolsPorLlamada[0]).toContain("describe_image");
+    expect(toolsPorLlamada[1]).toContain("describe_image");
+  }, 20_000);
+});
+
 describe("`buscar_icono` en TrueForge (IXCODE-18): el mismo reparto que deepagents", () => {
   const guionDeIcono = () => [
     [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "designer-xone", input: "busca un icono de casa" }) }] })],

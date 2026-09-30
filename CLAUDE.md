@@ -492,6 +492,18 @@ agentes. `device-controller` se sale de esa convención a propósito y no viaja 
 
 ### El segundo motor: TrueForge (rama `xonecode-trueforge`)
 
+**deepagents es LEGACY** (`core/motor.ts`): corre las sesiones que nacieron con él, pero lo nuevo va
+solo a TrueForge y en deepagents no se toca nada. Límite declarado: el aviso de adjuntos es común y
+nombra `describe_image`, que deepagents no tiene.
+
+**`describe_image` hace que el agente VEA una imagen** (`agent/grafo/describirImagen.ts`, IXCODE-23):
+manda la imagen al modelo de `trabajo` en una llamada APARTE y devuelve lo que ve como texto —en un
+API compatible con OpenAI el resultado de una tool es texto, y una imagen en el historial se pagaría
+en cada llamada—. A todos, el raíz incluido. Misma guarda que las maquetas del crítico
+(`imagenReferida` + `lectorDeReferencias`); acepta la ruta COMPLETA si cae dentro de lo montado y la
+traduce a la virtual. `read_file` sobre una imagen devuelve la llamada ya escrita. El aviso de adjuntos
+dice el CAMINO y no afirma nada sobre la visión: si el modelo no ve, lo dice la respuesta de la tool.
+
 `core/motor.ts`, `agent/motores/trueforge/`, `docs/VARIANTE-TRUEFORGE-HARNESS.md`. **Se elige por
 configuración y no se ve** (`"motor"` en `config.json`, `XONECODE_MOTOR`; omisión `trueforge`; una
 sesión sin motor guardado se reabre con `deepagents`), y **la elección vive en UN punto,

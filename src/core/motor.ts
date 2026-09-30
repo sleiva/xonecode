@@ -2,6 +2,11 @@
  * Qué motor de agente corre una sesión: `deepagents` (el de siempre) o `trueforge` (el segundo,
  * `docs/VARIANTE-TRUEFORGE-HARNESS.md`).
  *
+ * **deepagents es LEGACY** (decisión suya, 30-09-2026): sigue corriendo las sesiones que nacieron con
+ * él y a un `"motor": "deepagents"` de distancia, pero lo nuevo va solo a TrueForge y ahí no se toca
+ * nada. Primer caso: `describe_image` (IXCODE-23) no existe en deepagents, aunque el aviso de adjuntos,
+ * que es común, la nombra.
+ *
  * **Se elige por CONFIGURACIÓN y no se enseña**: decisión suya —«la conexión que sea por
  * configuración no visible para el usuario»—. La interfaz es la misma con los dos: el motor solo
  * cambia quién produce los eventos de dominio que las pieles pintan.

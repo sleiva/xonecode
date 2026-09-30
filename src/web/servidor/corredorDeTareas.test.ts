@@ -237,8 +237,8 @@ describe("los adjuntos de una tarea llegan a su turno", () => {
     expect(p.aperturas).toEqual([{ raiz: "/w/A", adjuntos: "/tmp/t1/adjuntos", tarea: "t1" }]);
     expect(p.encargos[0]).toContain("e");
     expect(p.encargos[0]).toContain("/adjuntos/mockup.png");
-    // Y la limitación declarada: se leen, no se ven.
-    expect(p.encargos[0]).toMatch(/no las ves|no la ves/i);
+    // Y cómo se ven: con `describe_image` (IXCODE-23).
+    expect(p.encargos[0]).toContain("describe_image");
     p.acabar();
     await corredor.asentar();
     await corredor.parar();
