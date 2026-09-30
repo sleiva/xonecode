@@ -490,7 +490,7 @@ export interface EstadoDelCliente {
  * venga como booleano se queda ausente, que significa «se mira»: el lado que no esconde
  * nada.
  */
-function avdsDelCable(candidato: unknown): AjustesDeDispositivos["avds"] {
+export function avdsDelCable(candidato: unknown): AjustesDeDispositivos["avds"] {
   if (typeof candidato !== "object" || candidato === null) return undefined;
   const salida: NonNullable<AjustesDeDispositivos["avds"]> = {};
   for (const [nombre, valor] of Object.entries(candidato as Record<string, unknown>)) {
