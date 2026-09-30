@@ -34,7 +34,56 @@ describe("CrearEmulador", () => {
     render(<CrearEmulador avds={["pixel8"]} conectado alCrear={alCrear} />);
     escribir("pixel8-b");
     fireEvent.click(boton());
-    expect(alCrear).toHaveBeenCalledWith("pixel8-b");
+    // Con un AVD que copiar, la base viaja siempre (el primero, sin tocar nada) y sin lo instalado.
+    expect(alCrear).toHaveBeenCalledWith("pixel8-b", { base: "pixel8", conDatos: false });
+  });
+
+  it("sin ningún AVD no hay desplegable ni casilla, y se crea como siempre", () => {
+    const alCrear = vi.fn();
+    render(<CrearEmulador avds={[]} conectado alCrear={alCrear} />);
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    escribir("nuevo");
+    fireEvent.click(boton());
+    expect(alCrear).toHaveBeenCalledWith("nuevo");
+  });
+
+  it("«Copia de» lista los AVD, el primero por omisión, y se puede cambiar", () => {
+    const alCrear = vi.fn();
+    render(<CrearEmulador avds={["pixel8", "tablet"]} conectado alCrear={alCrear} />);
+    const sel = screen.getByRole("combobox", { name: "Emulador del que copiar" }) as HTMLSelectElement;
+    expect(sel.value).toBe("pixel8");
+    expect([...sel.options].map((o) => o.value)).toEqual(["pixel8", "tablet"]);
+    fireEvent.change(sel, { target: { value: "tablet" } });
+    escribir("otro");
+    fireEvent.click(boton());
+    expect(alCrear).toHaveBeenCalledWith("otro", { base: "tablet", conDatos: false });
+  });
+
+  it("marcar «Copiar también lo instalado» envía conDatos", () => {
+    const alCrear = vi.fn();
+    render(<CrearEmulador avds={["pixel8"]} conectado alCrear={alCrear} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: /Copiar también lo instalado/ }));
+    escribir("clon");
+    fireEvent.click(boton());
+    expect(alCrear).toHaveBeenCalledWith("clon", { base: "pixel8", conDatos: true });
+  });
+
+  it("con la base en marcha la casilla está apagada, dice por qué, y no envía conDatos aunque se hubiera marcado", () => {
+    const alCrear = vi.fn();
+    const { rerender } = render(<CrearEmulador avds={["pixel8", "tablet"]} conectado alCrear={alCrear} />);
+    fireEvent.click(screen.getByRole("checkbox"));
+    rerender(<CrearEmulador avds={["pixel8", "tablet"]} conectado alCrear={alCrear} enMarcha={["pixel8"]} />);
+    const casilla = screen.getByRole("checkbox") as HTMLInputElement;
+    expect(casilla.disabled).toBe(true);
+    expect(casilla.checked).toBe(false);
+    expect(screen.getByText(/apágalo para clonarlo/)).toBeTruthy();
+    escribir("copia");
+    fireEvent.click(boton());
+    expect(alCrear).toHaveBeenCalledWith("copia", { base: "pixel8", conDatos: false });
+    // Elegir otra base, que está apagada, la reactiva.
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "tablet" } });
+    expect((screen.getByRole("checkbox") as HTMLInputElement).disabled).toBe(false);
   });
 
   it("mientras crea enseña el título y el botón queda en «Creando…»", () => {

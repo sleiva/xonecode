@@ -7916,3 +7916,38 @@ Límites declarados: dentro del aparato el framework se busca siempre en el mism
 no lo persiguen); un aparato físico se queda en el puerto de siempre; `enUso` mira solo las consolas de persona y no se
 refresca al abrir o cerrar una; las negativas del servidor no llegan al navegador desde el vestíbulo, así que el cliente
 valida con las mismas reglas (`apps/web/src/reglasDeAvd.ts`).
+
+## «Nuevo emulador» a partir de uno existente (30-09-2026)
+
+`core/copiaDeAvd.ts` (reglas puras), `agent/dispositivos/instalacionEnMaquina.ts#crearAvd`/`#clonarAvd`,
+`CrearEmulador.tsx`. Dos modos, según la casilla «Copiar también lo instalado»:
+
+- **Configuración (sin marcar)**: `avdmanager create avd` con la imagen y el perfil SACADOS de la base
+  (`image.sysdir.1` → `system-images;android-35;google_apis;arm64-v8a`, `hw.device.name`), y al acabar bien se
+  le pone encima el `config.ini` de la base para que herede RAM y disco. El AVD nace vacío. Vale con la base
+  encendida: no toca sus ficheros, solo los lee.
+- **Clon (marcada)**: se copia la carpeta `<base>.avd` entera (lo instalado, p. ej. `com.xone.android.framework`).
+  La base tiene que estar APAGADA: mientras corre tiene cogidos sus discos (`multiinstance.lock`). Lo decide el
+  servidor contra la última medida (un dispositivo con ese `avd` y estado distinto de `apagado`/`no-disponible`)
+  y el cliente desactiva la casilla con el motivo.
+
+Medido en esta máquina, y de ahí las reglas:
+
+- `<n>.ini` (fuera de la carpeta) lleva RUTAS —`path`, `path.rel`, `target`—: el clon escribe el suyo con
+  `iniDeClon` y SOLO al acabar la copia, porque un AVD sin `.ini` no existe para el emulador y una copia a medias
+  no debe aparecer en la lista. Un fallo o una cancelación borran la carpeta a medias.
+- `config.ini` NO lleva el nombre (`avd.id` y `avd.name` son del build), así que se copia tal cual.
+- Llevan la ruta absoluta del ORIGINAL `hardware-qemu.ini` (tres veces) y `emu-launch-params.txt`, pero son de
+  la última ejecución y el emulador los regenera: se excluyen, junto a los `*.lock` (en cualquier nivel),
+  `read-snapshot.txt`, `snapshot.trace`, `tmpAdbCmds`, `bootcompleted.ini` y `snapshots/` entera (sus
+  instantáneas llevan el estado del original). El clon arranca en frío la primera vez. Es una lista NEGRA
+  (`seCopiaEnClon`): lo que el emulador añada en otra versión viaja, que es lo seguro para un clon.
+- La copia pide `COPYFILE_FICLONE`: en APFS el clon de ficheros es instantáneo y no gasta disco; donde no se
+  puede, copia normal.
+- La raíz de los AVD es `ANDROID_AVD_HOME` si está puesta, si no `<casa>/.android/avd`. La base y el nombre pasan
+  por la misma regla de forma (sin `..` ni barras) antes de ser una ruta, y del servidor solo se acepta una base
+  que esté en `informe.avds`.
+- De un error de disco solo cruza su `code`: su mensaje lleva la ruta absoluta.
+
+Límite declarado: el tamaño que se anuncia al empezar es el de lo que se copiaría, no el que ocupará en disco
+(los discos del emulador son dispersos).

@@ -49,8 +49,9 @@
  * ventana. Mientras eso no se cablee, la salida es `brew`/`sdkmanager` acabando solos, que es
  * lo que harían en un terminal.
  */
-import { join } from "node:path";
-import { existsSync } from "node:fs";
+import { join, relative } from "node:path";
+import { constants, existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { cp, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { jdkDeLaMaquina, localizadorDeAndroid, pathConCarpetas, unirRuta } from "./dispositivosEnMaquina.js";
 import {
@@ -64,6 +65,7 @@ import {
 } from "./procesosEnMaquina.js";
 import { descargarYDescomprimir } from "./descargaDeHerramientas.js";
 import { motivoDeNombreDeAvdInaceptable } from "../../core/puertosDeAvd.js";
+import { iniDeClon, leerIni, paqueteDeImagen, perfilDeTelefono, seCopiaEnClon } from "../../core/copiaDeAvd.js";
 
 /**
  * Y esto se REEXPORTA: lo que este módulo exportaba antes de que existiera el ejecutor
@@ -142,7 +144,7 @@ interface PasoDeDescarga {
  * que se le diga, y la invocación (imagen, perfil, respuesta por `stdin`) tiene que ser LA MISMA.
  * El título de `pixel8` se conserva tal cual; con otro nombre lo lleva detrás.
  */
-function pasoDeCrearAvd(nombre: string, imagen: string): PasoDeProceso {
+function pasoDeCrearAvd(nombre: string, imagen: string, perfil = "pixel_8"): PasoDeProceso {
   return {
     tipo: "proceso",
     binario: "avdmanager",
@@ -150,7 +152,7 @@ function pasoDeCrearAvd(nombre: string, imagen: string): PasoDeProceso {
     subcarpeta: join("cmdline-tools", "latest", "bin"),
     invocaciones: [
       // «Do you wish to create a custom hardware profile? [no]»: sin respuesta, cuelga.
-      { args: ["create", "avd", "-n", nombre, "-k", imagen, "-d", "pixel_8"], teclear: ["no\n"] },
+      { args: ["create", "avd", "-n", nombre, "-k", imagen, "-d", perfil], teclear: ["no\n"] },
     ],
     titulo: nombre === "pixel8" ? "Creando el dispositivo virtual" : `Creando el dispositivo virtual ${nombre}`,
   };
@@ -334,6 +336,11 @@ export interface DependenciasDeInstalacion {
   fetch?: typeof fetch;
   crearCarpeta?: (ruta: string) => void;
   escribir?: (ruta: string, datos: Uint8Array) => void;
+  /**
+   * Copiar una carpeta entera filtrando por ruta ABSOLUTA de origen (`clonarAvd`). Entra por
+   * parámetro para que un test vea la cancelación sin una carpeta de gigas de por medio.
+   */
+  copiarCarpeta?: (origen: string, destino: string, filtro: (ruta: string) => boolean) => Promise<void>;
 }
 
 /**
@@ -364,18 +371,167 @@ export function correrPasoDeReceta(
 
 const IMAGEN_POR_PLATAFORMA: Partial<Record<string, string>> = { darwin: IMAGEN_DARWIN, win32: IMAGEN_WIN32 };
 
-/** Crear un AVD con nombre, por el mismo corredor que la receta (topes, stdin, SDK). Nunca lanza. */
-export function crearAvd(nombre: string, deps: DependenciasDeInstalacion = {}): Trabajo {
-  const terminadoCon = (motivo: string): Trabajo => ({
+/** La raíz de los AVD: `ANDROID_AVD_HOME` si está puesta, si no `<casa>/.android/avd` (como el emulador). */
+function raizDeAvds(deps: DependenciasDeInstalacion): string {
+  const propia = (deps.entorno ?? process.env)["ANDROID_AVD_HOME"];
+  return propia !== undefined && propia !== "" ? propia : join(deps.home ?? homedir(), ".android", "avd");
+}
+
+function trabajoTerminado(motivo: string): Trabajo {
+  return {
     titulo: "",
     cancelar: () => {},
     terminado: Promise.resolve({ estado: "fallo", motivo, ms: 0 }),
-  });
+  };
+}
+
+/**
+ * Crear un AVD con nombre, por el mismo corredor que la receta (topes, stdin, SDK). Nunca lanza.
+ *
+ * Con `base` es el modo CONFIGURACIÓN: la imagen y el perfil salen del `config.ini` de la base
+ * (`avdmanager` los pide), y al acabar BIEN se le pone encima ese mismo `config.ini` para que
+ * herede RAM, disco y el resto. El AVD nuevo arranca vacío; vale con la base encendida.
+ */
+export function crearAvd(nombre: string, deps: DependenciasDeInstalacion = {}, opciones: { base?: string } = {}): Trabajo {
   const motivo = motivoDeNombreDeAvdInaceptable(nombre, []);
-  if (motivo !== undefined) return terminadoCon(motivo);
-  const imagen = IMAGEN_POR_PLATAFORMA[deps.plataforma ?? process.platform];
-  if (imagen === undefined) return terminadoCon("crear emuladores no se lanza desde aquí en esta máquina");
-  return correrPaso(pasoDeCrearAvd(nombre, imagen), deps);
+  if (motivo !== undefined) return trabajoTerminado(motivo);
+  if (opciones.base === undefined) {
+    const imagen = IMAGEN_POR_PLATAFORMA[deps.plataforma ?? process.platform];
+    if (imagen === undefined) return trabajoTerminado("crear emuladores no se lanza desde aquí en esta máquina");
+    return correrPaso(pasoDeCrearAvd(nombre, imagen), deps);
+  }
+  const base = opciones.base;
+  // La base acaba siendo una ruta: pasa por la misma regla de forma que el nombre (sin `..` ni barras).
+  const malaBase = motivoDeNombreDeAvdInaceptable(base, []);
+  if (malaBase !== undefined) return trabajoTerminado(`la base no vale: ${malaBase}`);
+  const carpetaBase = join(raizDeAvds(deps), `${base}.avd`);
+  let configBase: string;
+  try {
+    configBase = readFileSync(join(carpetaBase, "config.ini"), "utf8");
+  } catch (e) {
+    return trabajoTerminado(`no se pudo leer la configuración de ${base} (${codigoDe(e)})`);
+  }
+  const config = leerIni(configBase);
+  const imagen = paqueteDeImagen(config);
+  if (imagen === undefined) return trabajoTerminado(`${base} no dice qué imagen de sistema usa (image.sysdir.1)`);
+  const perfil = perfilDeTelefono(config);
+  if (perfil === undefined) return trabajoTerminado(`${base} no dice qué perfil de teléfono usa (hw.device.name)`);
+  const trabajo = correrPaso(pasoDeCrearAvd(nombre, imagen, perfil), deps);
+  return {
+    ...trabajo,
+    terminado: trabajo.terminado.then((r) => {
+      if (r.estado !== "ok") return r;
+      try {
+        deps.alSalirLinea?.(`Copiando la configuración de ${base}`);
+        writeFileSync(join(raizDeAvds(deps), `${nombre}.avd`, "config.ini"), configBase);
+        return r;
+      } catch (e) {
+        return { estado: "fallo" as const, motivo: `se creó ${nombre} pero no se le pudo copiar la configuración (${codigoDe(e)})`, ms: r.ms };
+      }
+    }),
+  };
+}
+
+/** De un error de Node solo el `code`: su mensaje lleva la ruta absoluta (nada de rutas por el cable). */
+function codigoDe(e: unknown): string {
+  const c = (e as { code?: unknown } | null)?.code;
+  return typeof c === "string" ? c : "error";
+}
+
+/** Bytes de lo que SÍ se copiaría, para decirlo antes de empezar (un AVD con datos son gigas). */
+function tamanoDeLoQueSeCopia(carpeta: string, filtro: (ruta: string) => boolean): number {
+  let total = 0;
+  const recorrer = (dir: string): void => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const ruta = join(dir, e.name);
+      if (!filtro(ruta)) continue;
+      if (e.isDirectory()) recorrer(ruta);
+      else if (e.isFile()) total += statSync(ruta).size;
+    }
+  };
+  recorrer(carpeta);
+  return total;
+}
+
+function enTexto(bytes: number): string {
+  const gb = bytes / 1024 ** 3;
+  return gb >= 1 ? `${gb.toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1024 ** 2))} MB`;
+}
+
+/**
+ * Modo CLON: copia la carpeta del AVD `base` a `nombre` (lo instalado incluido), sin lo que
+ * `seCopiaEnClon` excluye, y SOLO al acabar bien escribe `<nombre>.ini` —un AVD sin `.ini` no
+ * existe para el emulador, así que una copia a medias nunca aparece en la lista—. Un fallo o una
+ * cancelación BORRAN la carpeta a medias. Nunca lanza. La base tiene que estar apagada: lo comprueba
+ * quien llama (la medida de dispositivos), aquí solo se ve el disco.
+ */
+export function clonarAvd(base: string, nombre: string, deps: DependenciasDeInstalacion = {}): Trabajo {
+  const titulo = `Clonando el dispositivo virtual ${base} como ${nombre}`;
+  const ahora = deps.ahora ?? (() => Date.now());
+  const t0 = ahora();
+  const decir = (linea: string): void => deps.alSalirLinea?.(linea);
+  const termina = (estado: ResultadoDeTrabajo["estado"], motivo?: string): ResultadoDeTrabajo => ({
+    estado,
+    ...(motivo === undefined ? {} : { motivo }),
+    ms: ahora() - t0,
+  });
+  const fallo = (motivo: string): Trabajo => ({
+    titulo,
+    cancelar: () => {},
+    terminado: Promise.resolve(termina("fallo", motivo)),
+  });
+
+  const malNombre = motivoDeNombreDeAvdInaceptable(nombre, []);
+  if (malNombre !== undefined) return fallo(malNombre);
+  const malaBase = motivoDeNombreDeAvdInaceptable(base, []);
+  if (malaBase !== undefined) return fallo(`la base no vale: ${malaBase}`);
+  if (base === nombre) return fallo("el clon no puede llamarse como su base");
+
+  const raiz = raizDeAvds(deps);
+  const origen = join(raiz, `${base}.avd`);
+  const destino = join(raiz, `${nombre}.avd`);
+  const iniOrigen = join(raiz, `${base}.ini`);
+  const iniDestino = join(raiz, `${nombre}.ini`);
+  const existe = deps.existe ?? existsSync;
+  if (!existe(origen) || !existe(iniOrigen)) return fallo(`${base} no existe en disco`);
+  if (existe(destino) || existe(iniDestino)) return fallo(`${nombre} ya existe`);
+
+  let cancelado = false;
+  // Cancelar corta por el filtro: `fs.cp` no admite señal, y lanzar desde el filtro lo aborta.
+  const CANCELADO = new Error("cancelado");
+  const filtro = (ruta: string): boolean => {
+    if (cancelado) throw CANCELADO;
+    return seCopiaEnClon(relative(origen, ruta));
+  };
+  const copiar =
+    deps.copiarCarpeta ??
+    // COPYFILE_FICLONE: en APFS el clon es instantáneo y no gasta disco; donde no se puede, copia normal.
+    ((o: string, d: string, f: (r: string) => boolean) =>
+      cp(o, d, { recursive: true, filter: f, mode: constants.COPYFILE_FICLONE }));
+
+  const terminado = (async (): Promise<ResultadoDeTrabajo> => {
+    try {
+      try {
+        decir(`Se copiarán ${enTexto(tamanoDeLoQueSeCopia(origen, (r) => seCopiaEnClon(relative(origen, r))))} de ${base}`);
+      } catch {
+        // El tamaño es un dato de cortesía: no poder medirlo no impide clonar.
+      }
+      decir("Copiando lo instalado y la configuración (sin instantáneas)…");
+      await copiar(origen, destino, filtro);
+      if (cancelado) throw CANCELADO;
+      decir("Registrando el dispositivo nuevo");
+      const ini = readFileSync(iniOrigen, "utf8");
+      await writeFile(iniDestino, iniDeClon(ini, nombre, destino), { flag: "wx" });
+      decir("Listo. La primera vez arrancará en frío.");
+      return termina("ok");
+    } catch (e) {
+      await rm(destino, { recursive: true, force: true }).catch(() => {});
+      if (cancelado || e === CANCELADO) return termina("cancelada");
+      return termina("fallo", `no se pudo clonar ${base} (${codigoDe(e)})`);
+    }
+  })();
+
+  return { titulo, cancelar: () => void (cancelado = true), terminado };
 }
 
 /** El cuerpo común: resolver el entorno y correr las invocaciones de un paso ya elegido. */

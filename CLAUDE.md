@@ -1359,6 +1359,7 @@ admite (`admiteApagarElPensamiento`); apagado manda sobre el esfuerzo. Lo demás
 - **Es una FOTO con hora, no un estado en vivo, y no hay sondeo**: al conectar el primer cliente y
   al pulsar «Refrescar». Tope propio (`TOPES_MS`); un cuelgue se dice «no respondió».
 - **Apagar un destino deja de LANZAR procesos**, no esconde filas.
+- **«Nuevo emulador» parte de uno existente** (`core/copiaDeAvd.ts`, `instalacionEnMaquina.ts#crearAvd`/`#clonarAvd`): sin la casilla, un AVD vacío con la configuración de la base (vale con ella encendida); con ella, se CLONA la carpeta y la base tiene que estar apagada, y lo decide el SERVIDOR contra la última medida. Lo que lleva rutas del original no se copia, y el `.ini` del clon se escribe AL FINAL.
 - **Listar y VERIFICAR son dos preguntas**: `adb devices` puede contestar «device» de un teléfono
   colgado; verificar ejecuta algo al otro lado.
 - **«Terminó bien» y «ya está» son dos cosas**: la MEDIDA manda sobre el código de salida.

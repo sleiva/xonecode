@@ -15,6 +15,16 @@
   composes: campoDeNombreConBoton from "./Ajustes.module.css";
 }
 
+/* «Copia de» y la casilla: una etiqueta y su control, en una línea que se parte si no cabe. */
+.campo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
 .boton {
   composes: boton from "./VerificarDispositivo.module.css";
 }

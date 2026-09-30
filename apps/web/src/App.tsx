@@ -1825,7 +1825,7 @@ export function App({
       alArrancarEmulador={(avd) => void enviar({ clase: "arrancarEmulador", avd })}
       alAjustarAvd={(avd, cambio) => void enviar({ clase: "ajusteDeAvd", avd, ...cambio })}
       alPararEmulador={(id) => void enviar({ clase: "pararEmulador", id })}
-      alCrearEmulador={(nombre) => void enviar({ clase: "crearEmulador", nombre })}
+      alCrearEmulador={(nombre, desde) => void enviar({ clase: "crearEmulador", nombre, ...(desde ?? {}) })}
       {...(estado.arranqueDeEmulador === undefined
         ? {}
         : { arranqueDeEmulador: estado.arranqueDeEmulador })}

@@ -11235,6 +11235,78 @@ describe("los emuladores desde Ajustes: crear, ajustar, parar, y un puerto por A
     expect(medidas).toBe(2);
   });
 
+  const emuladorEn = (avd: string, estado: Dispositivo["estado"]): Dispositivo =>
+    ({ id: `emulator-${avd}`, nombre: avd, clase: "emulador", plataforma: "android", estado, avd }) as Dispositivo;
+
+  it("crear a partir de una base conocida pasa `base` y `conDatos` al puerto", async () => {
+    const vistos: unknown[] = [];
+    const t = trabajoPendiente();
+    const { accion } = await conectar({
+      detectarDispositivos: async () => medida(["pixel8"]),
+      crearAvd: (nombre, _l, desde) => {
+        vistos.push([nombre, desde]);
+        return t.trabajo;
+      },
+    });
+    await enviarMensaje(accion, { clase: "crearEmulador", nombre: "copia", base: "pixel8" });
+    await asentar();
+    t.acabar("ok");
+    await asentar();
+    await enviarMensaje(accion, { clase: "crearEmulador", nombre: "copia2", base: "pixel8", conDatos: true });
+    await asentar();
+    expect(vistos).toEqual([
+      ["copia", { base: "pixel8", conDatos: false }],
+      ["copia2", { base: "pixel8", conDatos: true }],
+    ]);
+  });
+
+  it("una base que no está en la medida se niega y no lanza nada", async () => {
+    const creados: string[] = [];
+    const { accion, dichos } = await conectar({
+      detectarDispositivos: async () => medida(["pixel8"]),
+      crearAvd: (nombre) => {
+        creados.push(nombre);
+        return trabajoPendiente().trabajo;
+      },
+    });
+    await enviarMensaje(accion, { clase: "crearEmulador", nombre: "copia", base: "../fuera", conDatos: true });
+    await asentar();
+    expect(creados).toEqual([]);
+    expect(dichos.join(" ")).toContain("no es un emulador que conozcamos");
+  });
+
+  it("clonar con lo instalado una base ENCENDIDA se niega; solo la configuración sí vale", async () => {
+    const creados: string[] = [];
+    const { accion, dichos } = await conectar({
+      detectarDispositivos: async () => medida(["pixel8"], [emuladorEn("pixel8", "conectado")]),
+      crearAvd: (nombre, _l, desde) => {
+        creados.push(`${nombre}:${desde?.conDatos}`);
+        return trabajoPendiente().trabajo;
+      },
+    });
+    await enviarMensaje(accion, { clase: "crearEmulador", nombre: "clon", base: "pixel8", conDatos: true });
+    await asentar();
+    expect(creados).toEqual([]);
+    expect(dichos.join(" ")).toContain("está en marcha");
+    await enviarMensaje(accion, { clase: "crearEmulador", nombre: "conf", base: "pixel8", conDatos: false });
+    await asentar();
+    expect(creados).toEqual(["conf:false"]);
+  });
+
+  it("una base apagada SÍ se clona", async () => {
+    const creados: string[] = [];
+    const { accion } = await conectar({
+      detectarDispositivos: async () => medida(["pixel8"], [emuladorEn("pixel8", "apagado")]),
+      crearAvd: (nombre, _l, desde) => {
+        creados.push(`${nombre}:${desde?.conDatos}`);
+        return trabajoPendiente().trabajo;
+      },
+    });
+    await enviarMensaje(accion, { clase: "crearEmulador", nombre: "clon", base: "pixel8", conDatos: true });
+    await asentar();
+    expect(creados).toEqual(["clon:true"]);
+  });
+
   it("crear con un paso de receta en marcha NO lanza el segundo: reemite el que corre", async () => {
     const receta = trabajoPendiente();
     const creados: string[] = [];
@@ -11485,6 +11557,29 @@ describe("emuladoresCableados — la composición de producción, no un doble", 
       });
     } finally {
       rmSync(casa, { recursive: true, force: true });
+    }
+  });
+
+  it("crearAvd elige el modo por `conDatos`: clon (copia la carpeta) o configuración (avdmanager)", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-cableado-avd-"));
+    const antes = process.env["ANDROID_AVD_HOME"];
+    process.env["ANDROID_AVD_HOME"] = raiz;
+    try {
+      const { crearAvd } = emuladoresCableados();
+      // Clon: sobre una raíz vacía falla diciendo que la base no está en disco, que solo dice `clonarAvd`.
+      expect(await crearAvd("copia", () => {}, { base: "pixel8", conDatos: true }).terminado).toMatchObject({
+        estado: "fallo",
+        motivo: "pixel8 no existe en disco",
+      });
+      // Configuración: lee el config.ini de la base, que tampoco está, y lo dice `crearAvd`.
+      expect(await crearAvd("copia", () => {}, { base: "pixel8", conDatos: false }).terminado).toMatchObject({
+        estado: "fallo",
+        motivo: expect.stringContaining("no se pudo leer la configuración de pixel8"),
+      });
+    } finally {
+      if (antes === undefined) delete process.env["ANDROID_AVD_HOME"];
+      else process.env["ANDROID_AVD_HOME"] = antes;
+      rmSync(raiz, { recursive: true, force: true });
     }
   });
 

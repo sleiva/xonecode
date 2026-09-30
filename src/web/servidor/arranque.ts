@@ -87,7 +87,7 @@ import { PLATAFORMAS_DE_DISPOSITIVO, type AjustesDeDispositivos } from "../../co
 import type { NombreDeHerramienta } from "../../core/dispositivos.js";
 import { instalarHerramientaDeDispositivos, verificarDispositivo } from "../../agent/dispositivos/dispositivosEnMaquina.js";
 import { arrancarEmulador, pararEmulador } from "../../agent/dispositivos/arranqueDeEmulador.js";
-import { correrPasoDeReceta, crearAvd } from "../../agent/dispositivos/instalacionEnMaquina.js";
+import { clonarAvd, correrPasoDeReceta, crearAvd } from "../../agent/dispositivos/instalacionEnMaquina.js";
 import {
   asignarPuertosPendientes,
   motivoDeNombreDeAvdInaceptable,
@@ -568,7 +568,9 @@ export interface OpcionesDeMontaje {
    */
   crearAvd?: (
     nombre: string,
-    alSalirLinea: (linea: string) => void
+    alSalirLinea: (linea: string) => void,
+    /** A partir de un AVD existente: `conDatos` clona la carpeta entera, si no solo su configuración. */
+    desde?: { base: string; conDatos: boolean }
   ) => { titulo: string; cancelar: () => void; terminado: Promise<{ estado: string; motivo?: string; ms: number }> };
   /**
    * Para un emulador por su consola (`arranqueDeEmulador.ts#pararEmulador`). Recibe la SERIE de
@@ -4441,6 +4443,12 @@ export function montarRutas(
     correrTrabajo(mensaje.id, mensaje.paso, correr(mensaje.id, mensaje.paso, alSalirLineaDelTrabajo));
   };
 
+  /** ¿Corre ahora el AVD `avd`, según la ÚLTIMA medida? Todo lo que no es «apagado» o «no disponible» cuenta. */
+  const baseEnMarcha = (avd: string): boolean =>
+    (informeDeDispositivos?.dispositivos ?? []).some(
+      (d) => d.avd === avd && d.estado !== "apagado" && d.estado !== "no-disponible"
+    );
+
   /**
    * **Crear un AVD con nombre**, por el MISMO cerrojo que las recetas y contado igual
    * (`receta: "crear-avd"`, `paso: 0`): la pantalla ya sabe pintar ese log.
@@ -4450,7 +4458,7 @@ export function montarRutas(
    * no se puede saber si se repite, así que se mide primero. El cerrojo se vuelve a mirar
    * DESPUÉS de esa espera: mientras se medía pudo arrancar otro trabajo.
    */
-  const atenderCrearEmulador = async (nombre: string): Promise<void> => {
+  const atenderCrearEmulador = async (nombre: string, base?: string, conDatos?: boolean): Promise<void> => {
     if (trabajo !== undefined) {
       emitirProgreso("corriendo");
       return;
@@ -4470,11 +4478,28 @@ export function montarRutas(
       informar(`no se creó el emulador: ${motivo}`);
       return;
     }
+    if (base !== undefined) {
+      // La base es un NOMBRE que acaba en una ruta: tiene que ser uno de los que la medida vio.
+      if (!informeDeDispositivos.avds.includes(base)) {
+        informar(`no se creó el emulador: ${base} no es un emulador que conozcamos`);
+        return;
+      }
+      // Clonar copia discos que la base tiene bloqueados mientras corre (`multiinstance.lock`);
+      // copiar solo la configuración no los toca y vale con ella encendida.
+      if (conDatos === true && baseEnMarcha(base)) {
+        informar(`no se creó el emulador: ${base} está en marcha; apágalo para clonarlo con lo instalado`);
+        return;
+      }
+    }
     if (trabajo !== undefined) {
       emitirProgreso("corriendo");
       return;
     }
-    correrTrabajo("crear-avd", 0, crear(nombre, alSalirLineaDelTrabajo));
+    correrTrabajo(
+      "crear-avd",
+      0,
+      crear(nombre, alSalirLineaDelTrabajo, base === undefined ? undefined : { base, conDatos: conDatos === true })
+    );
   };
 
   /**
@@ -5677,10 +5702,12 @@ export function montarRutas(
       typeof mensaje === "object" &&
       mensaje !== null &&
       mensaje.clase === "crearEmulador" &&
-      typeof mensaje.nombre === "string"
+      typeof mensaje.nombre === "string" &&
+      (mensaje.base === undefined || typeof mensaje.base === "string") &&
+      (mensaje.conDatos === undefined || typeof mensaje.conDatos === "boolean")
     ) {
       // Suelto, como la receta: el progreso y la foto de después viajan por el SSE.
-      void atenderCrearEmulador(mensaje.nombre).catch(contar);
+      void atenderCrearEmulador(mensaje.nombre, mensaje.base, mensaje.conDatos).catch(contar);
       respuesta.writeHead(204);
       respuesta.end();
       return;
@@ -6700,7 +6727,11 @@ export function emuladoresCableados(opciones: {
   const arrancar = opciones.arrancar ?? arrancarEmulador;
   return {
     arrancarEmulador: (avd, o) => arrancar(avd, {}, o ?? {}),
-    crearAvd: (nombre, alSalirLinea) => crearAvd(nombre, { alSalirLinea }),
+    // Con `conDatos` se CLONA la carpeta; sin él, solo la configuración de la base sobre un AVD vacío.
+    crearAvd: (nombre, alSalirLinea, desde) =>
+      desde?.conDatos === true
+        ? clonarAvd(desde.base, nombre, { alSalirLinea })
+        : crearAvd(nombre, { alSalirLinea }, desde === undefined ? {} : { base: desde.base }),
     pararEmulador: (serie) => pararEmulador(serie),
     guardarAjusteDeAvd: (avd, cambio) => void guardarAjusteDeAvd(opciones.casa, avd, cambio),
     guardarPuertosAsignados: (asignados) => void guardarPuertosAsignados(opciones.casa, asignados),

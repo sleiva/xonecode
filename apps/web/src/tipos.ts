@@ -1349,7 +1349,7 @@ export type MensajeDelCliente =
   | { clase: "arrancarEmulador"; avd: string }
   /** «Crea un AVD con este nombre.» El servidor lo valida contra SU medida; el progreso llega
    *  como `instalacion` con `receta: "crear-avd"`. */
-  | { clase: "crearEmulador"; nombre: string }
+  | { clase: "crearEmulador"; nombre: string; base?: string; conDatos?: boolean }
   /** Lo de UN AVD: su puerto del túnel y si arranca sin ventana. Vuelve `dispositivos`. */
   | { clase: "ajusteDeAvd"; avd: string; puerto?: number; sinVentana?: boolean }
   /** «Para este emulador», por su ID de la medida. */

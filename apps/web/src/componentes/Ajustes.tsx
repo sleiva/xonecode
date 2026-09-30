@@ -595,7 +595,7 @@ export function Ajustes({
   /** Parar un emulador en marcha (viaja el ID). Ausente = no se pinta «Parar». */
   alPararEmulador?: (id: string) => void;
   /** Crear un AVD nuevo con este nombre; su progreso llega en `instalacion` (`crear-avd`). */
-  alCrearEmulador?: (nombre: string) => void;
+  alCrearEmulador?: (nombre: string, desde?: { base: string; conDatos: boolean }) => void;
   /** Lo que ofrece cada motor externo, por motor, para el desplegable de un subagente. */
   modelosDeMotor?: Record<string, { modelos: { id: string; nombre: string }[]; error?: string }>;
   /** Pide los de un motor. Bajo demanda: el de Codex arranca un proceso. */
@@ -1759,6 +1759,9 @@ export function Ajustes({
                           avds={dispositivos.avds}
                           conectado={conectado}
                           alCrear={alCrearEmulador}
+                          enMarcha={dispositivos.dispositivos.flatMap((d) =>
+                            d.avd !== undefined && d.estado !== "apagado" && d.estado !== "no-disponible" ? [d.avd] : [],
+                          )}
                           {...(instalacion?.receta === "crear-avd" ? { progreso: instalacion } : {})}
                         />
                       ) : null}

@@ -1336,7 +1336,15 @@ describe("Ajustes: la sección de Dispositivos", () => {
       expect(within(panel).getAllByRole("button", { name: "Parar" })).toHaveLength(1);
       fireEvent.change(within(panel).getByRole("textbox", { name: "Nombre del emulador nuevo" }), { target: { value: "nuevo" } });
       fireEvent.click(within(panel).getByRole("button", { name: "Crear emulador" }));
-      expect(alCrearEmulador).toHaveBeenCalledWith("nuevo");
+      expect(alCrearEmulador).toHaveBeenCalledWith("nuevo", { base: "pixel8", conDatos: false });
+    });
+
+    it("«Copia de» sabe cuáles corren: pixel8 está en marcha, así que no se puede clonar con lo instalado", () => {
+      const panel = abrir({ conectado: true, dispositivos: dos, ajustesDeDispositivos: ajustes, alCrearEmulador: vi.fn() });
+      expect((within(panel).getByRole("checkbox", { name: /Copiar también lo instalado/ }) as HTMLInputElement).disabled).toBe(true);
+      expect(within(panel).getByText(/apágalo para clonarlo/)).toBeTruthy();
+      fireEvent.change(within(panel).getByRole("combobox", { name: "Emulador del que copiar" }), { target: { value: "tablet" } });
+      expect((within(panel).getByRole("checkbox", { name: /Copiar también lo instalado/ }) as HTMLInputElement).disabled).toBe(false);
     });
 
     it("con un solo AVD no hay campo de puerto, y sin manejadores no se pinta nada", () => {

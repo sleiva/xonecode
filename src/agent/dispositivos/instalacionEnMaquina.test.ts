@@ -3,8 +3,11 @@ import { recetaDeEmuladorAndroid, recetaDeSimuladorIos } from "../../core/dispos
 import { EventEmitter } from "node:events";
 import { join, win32 } from "node:path";
 import { zipSync } from "fflate";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import {
   correrPasoDeReceta,
+  clonarAvd,
   crearAvd,
   PASOS_EJECUTABLES,
   TOPE_SIN_SALIDA_MS,
@@ -693,5 +696,226 @@ describe("crearAvd", () => {
     const r = await crearAvd("pixel8-b", m.deps).terminado;
     expect(r).toMatchObject({ estado: "fallo", motivo: "crear emuladores no se lanza desde aquí en esta máquina" });
     expect(m.llamadas).toHaveLength(0);
+  });
+});
+
+/**
+ * Una raíz de AVD TEMPORAL (vía `ANDROID_AVD_HOME`): nada de esto toca `~/.android`. La base imita
+ * lo medido en un AVD real: `config.ini`, un `.lock`, `snapshots/` y los ficheros con rutas.
+ */
+function raizDeAvdsFalsa() {
+  const raiz = mkdtempSync(join(tmpdir(), "xonecode-avds-"));
+  const base = join(raiz, "pixel8.avd");
+  mkdirSync(join(base, "snapshots", "default_boot"), { recursive: true });
+  mkdirSync(join(base, "data", "app"), { recursive: true });
+  writeFileSync(
+    join(base, "config.ini"),
+    "image.sysdir.1=system-images/android-35/google_apis/arm64-v8a/\nhw.device.name=pixel_8\nhw.ramSize=2G\ndisk.dataPartition.size=10G\n",
+  );
+  writeFileSync(join(base, "multiinstance.lock"), "1");
+  writeFileSync(join(base, "hardware-qemu.ini"), `path=${base}\n`);
+  writeFileSync(join(base, "emu-launch-params.txt"), base);
+  writeFileSync(join(base, "snapshots", "default_boot", "snapshot.pb"), "estado");
+  writeFileSync(join(base, "userdata-qemu.img"), "datos");
+  writeFileSync(join(base, "data", "app", "com.xone.android.framework"), "apk");
+  writeFileSync(
+    join(raiz, "pixel8.ini"),
+    `avd.ini.encoding=UTF-8\npath=${base}\npath.rel=avd/pixel8.avd\ntarget=android-35\n`,
+  );
+  return { raiz, base, limpiar: () => rmSync(raiz, { recursive: true, force: true }) };
+}
+
+describe("crearAvd con base (modo configuración)", () => {
+  const montar = (raiz: string) => {
+    const llamadas: { args: string[] }[] = [];
+    const hijos: ReturnType<typeof hijoFalso>[] = [];
+    const lanzar = (_b: string, args: string[]) => {
+      llamadas.push({ args });
+      const h = hijoFalso();
+      hijos.push(h);
+      return h.hijo;
+    };
+    return { llamadas, hijos, deps: { ...ANDROID, entorno: { ...ANDROID.entorno, ANDROID_AVD_HOME: raiz }, lanzar } };
+  };
+
+  it("pide a avdmanager la imagen y el perfil de la base, y al acabar bien le pone su config.ini", async () => {
+    const f = raizDeAvdsFalsa();
+    try {
+      const m = montar(f.raiz);
+      const t = crearAvd("pixel8-b", m.deps, { base: "pixel8" });
+      expect(m.llamadas[0]!.args).toEqual([
+        "create", "avd", "-n", "pixel8-b", "-k", "system-images;android-35;google_apis;arm64-v8a", "-d", "pixel_8",
+      ]);
+      // avdmanager crea la carpeta con SU config por omisión…
+      mkdirSync(join(f.raiz, "pixel8-b.avd"));
+      writeFileSync(join(f.raiz, "pixel8-b.avd", "config.ini"), "hw.ramSize=1G\n");
+      m.hijos[0]!.cerrar(0);
+      expect(await t.terminado).toMatchObject({ estado: "ok" });
+      // …y la de la base se la pisa: hereda RAM y disco.
+      expect(readFileSync(join(f.raiz, "pixel8-b.avd", "config.ini"), "utf8")).toBe(
+        readFileSync(join(f.base, "config.ini"), "utf8"),
+      );
+    } finally {
+      f.limpiar();
+    }
+  });
+
+  it("si avdmanager falla no toca la config", async () => {
+    const f = raizDeAvdsFalsa();
+    try {
+      const m = montar(f.raiz);
+      const t = crearAvd("pixel8-b", m.deps, { base: "pixel8" });
+      m.hijos[0]!.cerrar(1);
+      expect((await t.terminado).estado).toBe("fallo");
+      expect(existsSync(join(f.raiz, "pixel8-b.avd"))).toBe(false);
+    } finally {
+      f.limpiar();
+    }
+  });
+
+  it("base sin imagen, sin perfil o inexistente: fallo con motivo, sin lanzar", async () => {
+    const f = raizDeAvdsFalsa();
+    try {
+      const m = montar(f.raiz);
+      writeFileSync(join(f.base, "config.ini"), "hw.device.name=pixel_8\n");
+      expect(await crearAvd("x1", m.deps, { base: "pixel8" }).terminado).toMatchObject({
+        estado: "fallo",
+        motivo: expect.stringContaining("image.sysdir.1"),
+      });
+      writeFileSync(join(f.base, "config.ini"), "image.sysdir.1=system-images/android-35/google_apis/arm64-v8a/\n");
+      expect(await crearAvd("x1", m.deps, { base: "pixel8" }).terminado).toMatchObject({
+        estado: "fallo",
+        motivo: expect.stringContaining("hw.device.name"),
+      });
+      expect(await crearAvd("x1", m.deps, { base: "no-esta" }).terminado).toMatchObject({ estado: "fallo" });
+      expect(await crearAvd("x1", m.deps, { base: "../fuera" }).terminado).toMatchObject({ estado: "fallo" });
+      expect(m.llamadas).toHaveLength(0);
+    } finally {
+      f.limpiar();
+    }
+  });
+
+  it("si no puede sobrescribir el config.ini, fallo con su code y sin ruta", async () => {
+    const f = raizDeAvdsFalsa();
+    try {
+      const m = montar(f.raiz);
+      const t = crearAvd("pixel8-b", m.deps, { base: "pixel8" });
+      // avdmanager «ok» pero sin carpeta: escribir da ENOENT.
+      m.hijos[0]!.cerrar(0);
+      const r = await t.terminado;
+      expect(r.estado).toBe("fallo");
+      expect(r.motivo).toContain("ENOENT");
+      expect(r.motivo).not.toContain(f.raiz);
+    } finally {
+      f.limpiar();
+    }
+  });
+});
+
+describe("clonarAvd (modo clon)", () => {
+  const listar = (dir: string, pre = ""): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? listar(join(dir, e.name), `${pre}${e.name}/`) : [`${pre}${e.name}`],
+    );
+  const deps = (raiz: string, extra: Record<string, unknown> = {}) => ({ entorno: { ANDROID_AVD_HOME: raiz }, ...extra });
+
+  it("copia lo instalado sin lo excluido, y escribe el .ini con la ruta nueva AL FINAL", async () => {
+    const f = raizDeAvdsFalsa();
+    try {
+      const dicho: string[] = [];
+      const t = clonarAvd("pixel8", "copia", deps(f.raiz, { alSalirLinea: (l: string) => dicho.push(l) }));
+      expect((await t.terminado).estado).toBe("ok");
+      expect(listar(join(f.raiz, "copia.avd")).sort()).toEqual([
+        "config.ini", "data/app/com.xone.android.framework", "userdata-qemu.img",
+      ]);
+      const ini = readFileSync(join(f.raiz, "copia.ini"), "utf8");
+      expect(ini).toContain(`path=${join(f.raiz, "copia.avd")}`);
+      expect(ini).toContain("path.rel=avd/copia.avd");
+      expect(ini).toContain("target=android-35");
+      expect(dicho.length).toBeGreaterThan(1);
+      expect(dicho[0]).toMatch(/Se copiar/);
+      // La base no se ha tocado.
+      expect(existsSync(join(f.base, "multiinstance.lock"))).toBe(true);
+    } finally {
+      f.limpiar();
+    }
+  });
+
+  it("no pisa un destino que existe (carpeta o .ini) ni acepta una base que no está", async () => {
+    const f = raizDeAvdsFalsa();
+    try {
+      mkdirSync(join(f.raiz, "ya.avd"));
+      expect(await clonarAvd("pixel8", "ya", deps(f.raiz)).terminado).toMatchObject({ estado: "fallo", motivo: "ya ya existe" });
+      writeFileSync(join(f.raiz, "suelto.ini"), "");
+      expect((await clonarAvd("pixel8", "suelto", deps(f.raiz)).terminado).estado).toBe("fallo");
+      expect((await clonarAvd("nada", "otro", deps(f.raiz)).terminado).estado).toBe("fallo");
+      expect((await clonarAvd("pixel8", "-mal", deps(f.raiz)).terminado).estado).toBe("fallo");
+      expect((await clonarAvd("../x", "otro", deps(f.raiz)).terminado).estado).toBe("fallo");
+      expect((await clonarAvd("pixel8", "pixel8", deps(f.raiz)).terminado).estado).toBe("fallo");
+      expect(existsSync(join(f.raiz, "otro.ini"))).toBe(false);
+    } finally {
+      f.limpiar();
+    }
+  });
+
+  it("un fallo al copiar BORRA la carpeta a medias y no escribe el .ini", async () => {
+    const f = raizDeAvdsFalsa();
+    try {
+      const t = clonarAvd(
+        "pixel8",
+        "copia",
+        deps(f.raiz, {
+          copiarCarpeta: async (_o: string, d: string) => {
+            mkdirSync(d);
+            writeFileSync(join(d, "media"), "x");
+            throw Object.assign(new Error(`sin espacio en ${d}`), { code: "ENOSPC" });
+          },
+        }),
+      );
+      const r = await t.terminado;
+      expect(r.estado).toBe("fallo");
+      expect(r.motivo).toContain("ENOSPC");
+      expect(r.motivo).not.toContain(f.raiz);
+      expect(existsSync(join(f.raiz, "copia.avd"))).toBe(false);
+      expect(existsSync(join(f.raiz, "copia.ini"))).toBe(false);
+    } finally {
+      f.limpiar();
+    }
+  });
+
+  it("cancelar corta la copia, borra lo copiado y no deja .ini", async () => {
+    const f = raizDeAvdsFalsa();
+    try {
+      let liberar: (() => void) | undefined;
+      const t = clonarAvd(
+        "pixel8",
+        "copia",
+        deps(f.raiz, {
+          copiarCarpeta: async (_o: string, d: string) => {
+            mkdirSync(d);
+            await new Promise<void>((r) => (liberar = r));
+          },
+        }),
+      );
+      t.cancelar();
+      liberar?.();
+      await new Promise((r) => setImmediate(r));
+      liberar?.();
+      expect((await t.terminado).estado).toBe("cancelada");
+      expect(existsSync(join(f.raiz, "copia.avd"))).toBe(false);
+      expect(existsSync(join(f.raiz, "copia.ini"))).toBe(false);
+    } finally {
+      f.limpiar();
+    }
+  });
+
+  it("sin ANDROID_AVD_HOME usa <casa>/.android/avd", async () => {
+    const casa = mkdtempSync(join(tmpdir(), "xonecode-casa-"));
+    try {
+      const r = await clonarAvd("pixel8", "copia", { entorno: {}, home: casa }).terminado;
+      expect(r).toMatchObject({ estado: "fallo", motivo: "pixel8 no existe en disco" });
+    } finally {
+      rmSync(casa, { recursive: true, force: true });
+    }
   });
 });

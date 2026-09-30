@@ -1473,7 +1473,7 @@ export type MensajeDelCliente =
    * última medida) antes de lanzar `avdmanager`, y lo cuenta como un paso de receta
    * (`instalacion` con `receta: "crear-avd"`): comparten el cerrojo, uno a la vez.
    */
-  | { clase: "crearEmulador"; nombre: string }
+  | { clase: "crearEmulador"; nombre: string; base?: string; conDatos?: boolean }
   /**
    * Lo de UN AVD: el puerto local del túnel de hotswap y si arranca sin ventana. El AVD tiene
    * que estar en la última medida y el puerto no puede ser de otro; la respuesta es el
