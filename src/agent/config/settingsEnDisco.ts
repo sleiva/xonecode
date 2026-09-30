@@ -167,11 +167,51 @@ export function guardarDispositivos(casa: string | undefined, ajustes: AjustesDe
         : typeof v === "boolean",
     ),
   );
+  const enDisco = (crudo as { dispositivos?: { avds?: unknown } }).dispositivos?.avds;
+  // Los ajustes por AVD NO los manda la ventana de destinos: se guardan aparte
+  // (`guardarAjusteDeAvd`). Escribir el objeto entero sin ellos los borraría.
+  const conAvds = enDisco !== undefined ? { ...limpio, avds: enDisco } : limpio;
   const fusionado =
-    Object.keys(limpio).length === 0
+    Object.keys(conAvds).length === 0
       ? Object.fromEntries(Object.entries(crudo).filter(([k]) => k !== "dispositivos"))
-      : { ...crudo, dispositivos: limpio };
+      : { ...crudo, dispositivos: conAvds };
   escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta };
+}
+
+/** Cambia UN AVD. `sinVentana: false` borra la clave; un AVD sin nada desaparece. */
+export function guardarAjusteDeAvd(
+  casa: string | undefined,
+  avd: string,
+  cambio: { puerto?: number; sinVentana?: boolean },
+): { ruta: string } {
+  const ruta = rutaSettings(casa ?? homedir());
+  const crudo = leerCrudoOAbortar(ruta);
+  const dispositivos = { ...((crudo as { dispositivos?: Record<string, unknown> }).dispositivos ?? {}) };
+  const avds = { ...((dispositivos.avds as Record<string, Record<string, unknown>> | undefined) ?? {}) };
+  const actual = { ...(avds[avd] ?? {}) };
+  if (cambio.puerto !== undefined) actual.puerto = cambio.puerto;
+  if (cambio.sinVentana === true) actual.sinVentana = true;
+  if (cambio.sinVentana === false) delete actual.sinVentana;
+  if (Object.keys(actual).length === 0) delete avds[avd];
+  else avds[avd] = actual;
+  if (Object.keys(avds).length === 0) delete dispositivos.avds;
+  else dispositivos.avds = avds;
+  const fusionado =
+    Object.keys(dispositivos).length === 0
+      ? Object.fromEntries(Object.entries(crudo).filter(([k]) => k !== "dispositivos"))
+      : { ...crudo, dispositivos };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta };
+}
+
+/** La siembra de puertos: solo AÑADE, un puerto que ya esté en disco no se mueve. */
+export function guardarPuertosAsignados(casa: string | undefined, asignados: Record<string, number>): { ruta: string } {
+  const ruta = rutaSettings(casa ?? homedir());
+  const enDisco = cargarSettings(casa ?? homedir()).settings.dispositivos?.avds ?? {};
+  for (const [avd, puerto] of Object.entries(asignados)) {
+    if (enDisco[avd]?.puerto === undefined) guardarAjusteDeAvd(casa, avd, { puerto });
+  }
   return { ruta };
 }
 

@@ -7,7 +7,9 @@ import {
   cargarSettings,
   guardarConcurrenciaDeTareas,
   guardarDepurar,
+  guardarAjusteDeAvd,
   guardarDispositivos,
+  guardarPuertosAsignados,
   guardarEntorno,
   guardarWorkspace,
   olvidarEntornoDeSettings,
@@ -84,6 +86,35 @@ describe("settingsEnDisco", () => {
     const { settings } = cargarSettings(c);
     expect(settings.dispositivos).toEqual({ android: true, ios: false });
     expect(settings.entornos.map((e) => e.id)).toEqual(["a"]);
+  });
+
+  it("guardarDispositivos conserva los ajustes por AVD", () => {
+    const c = casa();
+    guardarAjusteDeAvd(c, "pixel8", { puerto: 8450 });
+    guardarDispositivos(c, { android: false });
+    expect(cargarSettings(c).settings.dispositivos).toEqual({ android: false, avds: { pixel8: { puerto: 8450 } } });
+  });
+
+  it("guardarAjusteDeAvd: sinVentana false borra, y un AVD vacío desaparece", () => {
+    const c = casa();
+    guardarAjusteDeAvd(c, "pixel8", { sinVentana: true });
+    guardarAjusteDeAvd(c, "pixel8", { sinVentana: false });
+    expect(cargarSettings(c).settings.dispositivos).toBeUndefined();
+  });
+
+  it("guardarPuertosAsignados no pisa lo guardado", () => {
+    const c = casa();
+    guardarAjusteDeAvd(c, "a", { puerto: 9000 });
+    guardarPuertosAsignados(c, { a: 8443, b: 8444 });
+    expect(cargarSettings(c).settings.dispositivos?.avds).toEqual({ a: { puerto: 9000 }, b: { puerto: 8444 } });
+  });
+
+  it("guardarAjusteDeAvd no escribe sobre un settings.json roto", () => {
+    const c = casa();
+    mkdirSync(join(c, ".xonecode"), { recursive: true });
+    writeFileSync(rutaSettings(c), "{ roto");
+    expect(() => guardarAjusteDeAvd(c, "pixel8", { puerto: 8450 })).toThrow(SettingsRotosEnDisco);
+    expect(readFileSync(rutaSettings(c), "utf8")).toBe("{ roto");
   });
 
   it("guardarDispositivos SUSTITUYE, no fusiona: lo que ya no viene deja de estar apagado", () => {
