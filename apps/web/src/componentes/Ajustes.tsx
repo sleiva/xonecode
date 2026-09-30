@@ -30,7 +30,10 @@ import type {
 } from "../tipos.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, seMira } from "../tipos.js";
 import { etiquetaDeEstado, inventario, seLlegaAlDispositivo, type FilaDeInventario } from "../inventarioDeDispositivos.js";
+import estilosDeAccion from "./VerificarDispositivo.module.css";
 import { ArrancarEmulador } from "./ArrancarEmulador.js";
+import { AjustesDeAvd } from "./AjustesDeAvd.js";
+import { CrearEmulador } from "./CrearEmulador.js";
 import { useMedirAlVolver } from "../medirAlVolver.js";
 import { Agentes } from "./Agentes.js";
 import { Skills } from "./Skills.js";
@@ -341,6 +344,9 @@ export function Ajustes({
   alVerificarDispositivo,
   alArrancarEmulador,
   arranqueDeEmulador,
+  alAjustarAvd,
+  alPararEmulador,
+  alCrearEmulador,
   modelosDeMotor,
   alPedirModelosDeMotor,
   alPedirCatalogo,
@@ -531,6 +537,12 @@ export function Ajustes({
   alArrancarEmulador?: (avd: string) => void;
   /** Cómo acabó el último arranque. Ausente = no se ha pedido ninguno. */
   arranqueDeEmulador?: { avd: string; ok: boolean; detalle: string };
+  /** Puerto o «sin ventana» de un AVD. Ausente = no se pinta el control. */
+  alAjustarAvd?: (avd: string, cambio: { puerto?: number; sinVentana?: boolean }) => void;
+  /** Parar un emulador en marcha (viaja el ID). Ausente = no se pinta «Parar». */
+  alPararEmulador?: (id: string) => void;
+  /** Crear un AVD nuevo con este nombre; su progreso llega en `instalacion` (`crear-avd`). */
+  alCrearEmulador?: (nombre: string) => void;
   /** Lo que ofrece cada motor externo, por motor, para el desplegable de un subagente. */
   modelosDeMotor?: Record<string, { modelos: { id: string; nombre: string }[]; error?: string }>;
   /** Pide los de un motor. Bajo demanda: el de Codex arranca un proceso. */
@@ -1527,6 +1539,42 @@ export function Ajustes({
                                     : {})}
                                 />
                               ) : null}
+                              {(() => {
+                                // El AVD de la fila: el de la definición, o el que el emulador
+                                // en marcha dice ser (medido). Sin él no hay a quién ajustar.
+                                const avd = d.soloDefinicion === true ? d.nombre : d.clase === "emulador" ? d.avd : undefined;
+                                const enMarcha =
+                                  d.soloDefinicion !== true &&
+                                  d.clase === "emulador" &&
+                                  (d.estado === "conectado" || d.estado === "arrancado");
+                                return (
+                                  <>
+                                    {avd === undefined || alAjustarAvd === undefined ? null : (
+                                      <AjustesDeAvd
+                                        avd={avd}
+                                        ajuste={ajustesDeDispositivos?.avds?.[avd]}
+                                        conPuerto={dispositivos.avds.length >= 2}
+                                        conectado={conectado}
+                                        {...(ajustesDeDispositivos === undefined ? {} : { ajustes: ajustesDeDispositivos })}
+                                        alCambiar={(cambio) => alAjustarAvd(avd, cambio)}
+                                      />
+                                    )}
+                                    {enMarcha && avd !== undefined && alPararEmulador !== undefined ? (
+                                      <span className={estilosDeAccion.envoltura}>
+                                        <button
+                                          type="button"
+                                          className={estilosDeAccion.boton}
+                                          disabled={conectado !== true}
+                                          title={`Para ${avd}`}
+                                          onClick={() => alPararEmulador(d.id)}
+                                        >
+                                          Parar
+                                        </button>
+                                      </span>
+                                    ) : null}
+                                  </>
+                                );
+                              })()}
                               <VerificarDispositivo
                                 dispositivo={d}
                                 conectado={conectado}
@@ -1537,6 +1585,14 @@ export function Ajustes({
                           ))}
                         </ul>
                       )}
+                      {plataformaAbierta === "android" && alCrearEmulador !== undefined ? (
+                        <CrearEmulador
+                          avds={dispositivos.avds}
+                          conectado={conectado}
+                          alCrear={alCrearEmulador}
+                          {...(instalacion?.receta === "crear-avd" ? { progreso: instalacion } : {})}
+                        />
+                      ) : null}
                     </>
                   );
                 })()

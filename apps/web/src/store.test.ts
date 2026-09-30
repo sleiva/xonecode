@@ -862,6 +862,29 @@ describe("la foto de la máquina («dispositivos»)", () => {
     medido: "2026-09-06T10:00:00.000Z",
   };
 
+  it("los ajustes por AVD y `enUso` llegan, y lo inválido se tira", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "dispositivos",
+      informe,
+      ajustes: {
+        avds: {
+          pixel8: { puerto: 8443, sinVentana: true },
+          b: { puerto: 8444.5, sinVentana: "true" },
+          "-malo": { puerto: 8445 },
+          c: { puerto: 80 },
+          d: { puerto: 9000, sinVentana: false },
+        },
+      },
+      enUso: [{ id: "emulator-5554", proyecto: "App" }, { id: 3, proyecto: "x" }, { id: "y" }],
+    });
+    expect(s.leer().ajustesDeDispositivos?.avds).toEqual({ pixel8: { puerto: 8443, sinVentana: true }, d: { puerto: 9000 } });
+    expect(s.leer().enUsoDeDispositivos).toEqual([{ id: "emulator-5554", proyecto: "App" }]);
+    s.aplicar({ clase: "dispositivos", informe, ajustes: {} });
+    expect(s.leer().ajustesDeDispositivos?.avds).toBeUndefined();
+    expect(s.leer().enUsoDeDispositivos).toBeUndefined();
+  });
+
   it("las RECETAS llegan al store: la lista blanca se come lo que no se nombre", () => {
     // La misma trampa que ya mordió con `mime`/`base64` de una imagen: este `case` es una
     // lista blanca, así que un campo nuevo no llega hasta que se escribe aquí — y el
@@ -1125,6 +1148,12 @@ describe("el paso de receta que se está ejecutando", () => {
       lineas: ["58%"],
       ms: 1200,
     });
+  });
+
+  it("el progreso de CREAR un AVD (`crear-avd`, paso 0) también llega", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar(progreso({ receta: "crear-avd", paso: 0, titulo: "Creando pixel9" }));
+    expect(s.leer().instalacion).toMatchObject({ receta: "crear-avd", paso: 0, titulo: "Creando pixel9" });
   });
 
   it("un estado que no conocemos descarta el mensaje: el botón no puede quedarse en un limbo", () => {

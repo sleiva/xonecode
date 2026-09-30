@@ -1518,6 +1518,9 @@ export type PlataformaDeDispositivo = (typeof PLATAFORMAS_DE_DISPOSITIVO)[number
 export type AjustesDeDispositivos = { [K in PlataformaDeDispositivo]?: boolean } & {
   rutaAdb?: string;
   rutaEmulator?: string;
+  /** Lo que se decide POR AVD: su puerto local del túnel y si arranca sin ventana. Redeclarado
+   *  de `core/settings.ts`. Ausente = nada decidido (el 8443 de siempre, con ventana). */
+  avds?: Record<string, { puerto?: number; sinVentana?: true }>;
 };
 
 /** ¿Se mira este destino? Ausente = sí. La misma función que el host (`core/settings.ts`). */

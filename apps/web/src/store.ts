@@ -55,6 +55,7 @@ import type {
   EsfuerzoDelCable,
   ModoDeEscritura,
 } from "./tipos.js";
+import { FORMA_DE_NOMBRE_DE_AVD } from "./reglasDeAvd.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, FASES_DEL_LANZAMIENTO, ESTADOS_DEL_LANZAMIENTO, ESFUERZOS, esAutenticacionDeConector } from "./tipos.js";
 
 export interface EstadoDelCliente {
@@ -93,6 +94,12 @@ export interface EstadoDelCliente {
    * viejo junto a una medida nueva es una contradicción en pantalla.
    */
   arranqueDeEmulador?: { avd: string; ok: boolean; detalle: string };
+  /**
+   * Qué dispositivo tiene elegido cada consola abierta, y de qué proyecto. Ausente = el
+   * servidor no lo dice. Se asigna con CADA foto, también `undefined`: una foto sin él no
+   * puede dejar el reparto de la anterior.
+   */
+  enUsoDeDispositivos?: { id: string; proyecto: string }[];
   proyectosPorEntorno?: Record<
     string,
     { proyectos?: { id: string; nombre: string; compartido?: boolean }[]; error?: string }
@@ -483,6 +490,22 @@ export interface EstadoDelCliente {
  * venga como booleano se queda ausente, que significa «se mira»: el lado que no esconde
  * nada.
  */
+function avdsDelCable(candidato: unknown): AjustesDeDispositivos["avds"] {
+  if (typeof candidato !== "object" || candidato === null) return undefined;
+  const salida: NonNullable<AjustesDeDispositivos["avds"]> = {};
+  for (const [nombre, valor] of Object.entries(candidato as Record<string, unknown>)) {
+    if (!FORMA_DE_NOMBRE_DE_AVD.test(nombre) || typeof valor !== "object" || valor === null) continue;
+    const v = valor as Record<string, unknown>;
+    const a: { puerto?: number; sinVentana?: true } = {};
+    if (typeof v["puerto"] === "number" && Number.isInteger(v["puerto"]) && v["puerto"] >= 1024 && v["puerto"] <= 65535) {
+      a.puerto = v["puerto"];
+    }
+    if (v["sinVentana"] === true) a.sinVentana = true;
+    if (Object.keys(a).length > 0) salida[nombre] = a;
+  }
+  return Object.keys(salida).length === 0 ? undefined : salida;
+}
+
 function ajustesDelCable(candidato: unknown): AjustesDeDispositivos {
   if (typeof candidato !== "object" || candidato === null) return {};
   const c = candidato as Record<string, unknown>;
@@ -490,6 +513,10 @@ function ajustesDelCable(candidato: unknown): AjustesDeDispositivos {
   for (const plataforma of PLATAFORMAS_DE_DISPOSITIVO) {
     if (typeof c[plataforma] === "boolean") salida[plataforma] = c[plataforma] as boolean;
   }
+  // Los AVD, con las MISMAS reglas que el host (`core/settings.ts#validarAvds`): nombre con
+  // forma, puerto entero en rango, `sinVentana` solo con `true`. Lo demás se tira.
+  const avds = avdsDelCable(c["avds"]);
+  if (avds !== undefined) salida.avds = avds;
   return salida;
 }
 
@@ -1294,6 +1321,17 @@ export function crearStoreDelCliente(): {
             // viejo junto a una foto nueva: el usuario leería «arrancado» de un emulador que
             // acaba de matar.
             arranqueDeEmulador: arranque,
+            // Con cada foto, también `undefined`. Solo pares de cadenas: media fila no dice
+            // de quién es qué.
+            enUsoDeDispositivos: Array.isArray((m as { enUso?: unknown }).enUso)
+              ? ((m as { enUso: unknown[] }).enUso.filter(
+                  (x): x is { id: string; proyecto: string } =>
+                    typeof x === "object" &&
+                    x !== null &&
+                    typeof (x as { id?: unknown }).id === "string" &&
+                    typeof (x as { proyecto?: unknown }).proyecto === "string",
+                ).map((x) => ({ id: x.id, proyecto: x.proyecto })))
+              : undefined,
           });
           return;
         }

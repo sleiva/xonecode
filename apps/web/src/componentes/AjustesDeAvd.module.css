@@ -1,0 +1,25 @@
+/* Puerto y «sin ventana» de un AVD, en la fila del dispositivo. Los colores son los tokens
+   de la hoja de `VerificarDispositivo` (nada literal). */
+.envoltura {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.campo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.puerto {
+  width: 72px;
+}
+
+.motivo {
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 11px;
+}

@@ -1051,6 +1051,47 @@ describe("Ajustes: la sección de Dispositivos", () => {
     expect(ios!.textContent).toBe("iOS");
   });
 
+  describe("emuladores: puerto, sin ventana, parar y crear", () => {
+    const dos = {
+      ...INFORME,
+      dispositivos: [
+        ...INFORME.dispositivos,
+        { id: "emulator-5554", nombre: "Pixel 8", plataforma: "android" as const, clase: "emulador" as const, estado: "arrancado" as const, avd: "pixel8" },
+      ],
+      avds: ["pixel8", "tablet"],
+    };
+    const ajustes = { avds: { pixel8: { puerto: 8443 }, tablet: { puerto: 8444 } } };
+
+    it("con dos AVD: puerto por AVD, sin ventana, Parar solo al que corre, y Crear al final", () => {
+      const alAjustarAvd = vi.fn();
+      const alPararEmulador = vi.fn();
+      const alCrearEmulador = vi.fn();
+      const panel = abrir({ conectado: true, dispositivos: dos, ajustesDeDispositivos: ajustes, alAjustarAvd, alPararEmulador, alCrearEmulador });
+      expect(within(panel).getAllByRole("spinbutton")).toHaveLength(2);
+      fireEvent.click(within(panel).getByRole("checkbox", { name: "Arrancar pixel8 sin ventana" }));
+      expect(alAjustarAvd).toHaveBeenCalledWith("pixel8", { sinVentana: true });
+      // Solo el emulador en marcha lleva «Parar».
+      fireEvent.click(within(panel).getByRole("button", { name: "Parar" }));
+      expect(alPararEmulador).toHaveBeenCalledWith("emulator-5554");
+      expect(within(panel).getAllByRole("button", { name: "Parar" })).toHaveLength(1);
+      fireEvent.change(within(panel).getByRole("textbox", { name: "Nombre del emulador nuevo" }), { target: { value: "nuevo" } });
+      fireEvent.click(within(panel).getByRole("button", { name: "Crear emulador" }));
+      expect(alCrearEmulador).toHaveBeenCalledWith("nuevo");
+    });
+
+    it("con un solo AVD no hay campo de puerto, y sin manejadores no se pinta nada", () => {
+      const uno = { ...dos, avds: ["pixel8"] };
+      const panel = abrir({ conectado: true, dispositivos: uno, ajustesDeDispositivos: {}, alAjustarAvd: () => {} });
+      expect(within(panel).queryByRole("spinbutton")).toBeNull();
+      expect(within(panel).getByRole("checkbox", { name: "Arrancar pixel8 sin ventana" })).toBeTruthy();
+      cleanup();
+      const sin = abrir({ conectado: true, dispositivos: dos });
+      expect(within(sin).queryByRole("checkbox", { name: /sin ventana/ })).toBeNull();
+      expect(within(sin).queryByRole("button", { name: "Parar" })).toBeNull();
+      expect(within(sin).queryByRole("button", { name: "Crear emulador" })).toBeNull();
+    });
+  });
+
   it("el inventario va en dos grupos, y cada pestaña enseña el suyo", () => {
     const panel = abrir();
     expect(within(panel).getByRole("heading", { name: "Teléfonos y tablets" })).toBeTruthy();

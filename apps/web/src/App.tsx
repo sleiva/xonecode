@@ -1823,6 +1823,9 @@ export function App({
       // Arrancar un AVD. La respuesta NO es el POST: viaja por el cable con la foto nueva,
       // porque lo que dice si arrancó es la medida y no el código de salida de `emulator`.
       alArrancarEmulador={(avd) => void enviar({ clase: "arrancarEmulador", avd })}
+      alAjustarAvd={(avd, cambio) => void enviar({ clase: "ajusteDeAvd", avd, ...cambio })}
+      alPararEmulador={(id) => void enviar({ clase: "pararEmulador", id })}
+      alCrearEmulador={(nombre) => void enviar({ clase: "crearEmulador", nombre })}
       {...(estado.arranqueDeEmulador === undefined
         ? {}
         : { arranqueDeEmulador: estado.arranqueDeEmulador })}

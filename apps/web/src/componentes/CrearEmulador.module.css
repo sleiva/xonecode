@@ -1,0 +1,49 @@
+.envoltura {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.fila {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.boton {
+  composes: boton from "./VerificarDispositivo.module.css";
+}
+
+.motivo {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.estado {
+  margin: 0;
+  font-size: 11px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.estado[data-estado="fallo"],
+.estado[data-estado="colgada"] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.estado[data-estado="ok"] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.log {
+  margin: 0;
+  padding: 6px 8px;
+  max-height: 96px;
+  overflow: auto;
+  font-family: var(--ds-font-family-code);
+  font-size: 10px;
+  background: var(--dsw-alias-bg-layer-2);
+  border: 1px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-secondary);
+}
