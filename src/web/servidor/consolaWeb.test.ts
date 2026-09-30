@@ -131,10 +131,16 @@ describe("consolaWeb: la entrada", () => {
     expect((await siguiente).done).toBe(true);
   });
 
+  it("el acto de USUARIO lleva la hora en que se MANDÓ, del reloj del servidor (IXCODE-24)", () => {
+    const c = crearConsolaWeb({ ahora: () => Date.UTC(2026, 8, 30, 10, 15) });
+    c.recibir({ clase: "prosa", texto: "hola" });
+    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "hola", cuando: "2026-09-30T10:15:00.000Z" }]);
+  });
+
   it("la prosa deja su acto de USUARIO: el transcript se lo debe a quien la tecleó", () => {
     const c = crearConsolaWeb();
     c.recibir({ clase: "prosa", texto: "añade una colección de clientes" });
-    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "añade una colección de clientes" }]);
+    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "añade una colección de clientes", cuando: expect.any(String) }]);
   });
 
   it("con `notaMientrasTrabaja` disponible y diciendo que sí, la prosa NO se encola como línea", async () => {
@@ -162,7 +168,7 @@ describe("consolaWeb: la entrada", () => {
     c.recibir({ clase: "prosa", texto: "mejor el menú", detener: true });
     expect(detenidas).toEqual(["", "mejor el menú"]);
     expect(notas).toEqual([]);
-    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "mejor el menú" }]);
+    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "mejor el menú", cuando: expect.any(String) }]);
   });
 
   it("DETENER que ya no encuentra turno: con texto se encola como prosa; vacío no manda nada", async () => {
@@ -171,7 +177,7 @@ describe("consolaWeb: la entrada", () => {
     c.recibir({ clase: "prosa", texto: "", detener: true });
     c.recibir({ clase: "prosa", texto: "haz otra cosa", detener: true });
     expect(await it.next()).toEqual({ value: { texto: "haz otra cosa", comoComando: false }, done: false });
-    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "haz otra cosa" }]);
+    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "haz otra cosa", cuando: expect.any(String) }]);
   });
 
   it("sin `notaMientrasTrabaja`, o si dice que no, la prosa se encola como siempre", async () => {
@@ -187,7 +193,7 @@ describe("consolaWeb: la entrada", () => {
     });
     const it = c.consola.lineas[Symbol.asyncIterator]();
     c.recibir({ clase: "prosa", texto: "pon el icono", adjuntos: ["ic.png"] });
-    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "pon el icono", adjuntos: ["ic.png"] }]);
+    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "pon el icono", adjuntos: ["ic.png"], cuando: expect.any(String) }]);
     expect(await it.next()).toEqual({ value: { texto: "pon el icono\n[ADJ:ic.png]", comoComando: false }, done: false });
   });
 
@@ -207,7 +213,7 @@ describe("consolaWeb: la entrada", () => {
     });
     const it = c.consola.lineas[Symbol.asyncIterator]();
     c.recibir({ clase: "prosa", texto: "haz un listado", adjuntos: [] });
-    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "haz un listado" }]);
+    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "haz un listado", cuando: expect.any(String) }]);
     expect(await it.next()).toEqual({ value: { texto: "haz un listado", comoComando: false }, done: false });
   });
 
@@ -217,7 +223,7 @@ describe("consolaWeb: la entrada", () => {
     });
     const it = c.consola.lineas[Symbol.asyncIterator]();
     c.recibir({ clase: "prosa", texto: "", adjuntos: ["ic.png"] });
-    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "", adjuntos: ["ic.png"] }]);
+    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "", adjuntos: ["ic.png"], cuando: expect.any(String) }]);
     expect(await it.next()).toEqual({ value: { texto: "[ADJ:ic.png]", comoComando: false }, done: false });
   });
 
@@ -230,7 +236,7 @@ describe("consolaWeb: la entrada", () => {
     const c = crearConsolaWeb();
     const it = c.consola.lineas[Symbol.asyncIterator]();
     c.recibir({ clase: "prosa", texto: "pon el icono", adjuntos: ["ic.png"] });
-    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "pon el icono" }]);
+    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "pon el icono", cuando: expect.any(String) }]);
     expect(await it.next()).toEqual({ value: { texto: "pon el icono", comoComando: false }, done: false });
   });
 
@@ -250,7 +256,7 @@ describe("consolaWeb: la entrada", () => {
     });
     const it = c.consola.lineas[Symbol.asyncIterator]();
     c.recibir({ clase: "prosa", texto: "pon los iconos", adjuntos: ["si.png", "no-subido.png"] });
-    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "pon los iconos", adjuntos: ["si.png"] }]);
+    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "pon los iconos", adjuntos: ["si.png"], cuando: expect.any(String) }]);
     expect(await it.next()).toEqual({ value: { texto: "pon los iconos\n[ADJ:si.png]", comoComando: false }, done: false });
   });
 
@@ -266,7 +272,7 @@ describe("consolaWeb: la entrada", () => {
     });
     const it = c.consola.lineas[Symbol.asyncIterator]();
     c.recibir({ clase: "prosa", texto: "", detener: true, adjuntos: ["ic.png"] });
-    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "", adjuntos: ["ic.png"] }]);
+    expect(c.actos()).toEqual([{ tipo: "usuario", texto: "", adjuntos: ["ic.png"], cuando: expect.any(String) }]);
     expect(await it.next()).toEqual({ value: { texto: "[ADJ:ic.png]", comoComando: false }, done: false });
   });
 

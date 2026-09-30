@@ -23,3 +23,24 @@ export function selloDeFecha(iso: string, ahora: Date = new Date()): string | un
   const hora = new Intl.DateTimeFormat("es", { hour: "2-digit", minute: "2-digit", hour12: false }).format(fecha);
   return `${dia} ${hora}`;
 }
+
+/**
+ * La hora de un mensaje del chat (IXCODE-24): de HOY, solo la hora —es lo que distingue un mensaje de
+ * los de alrededor—; de otro día, además el día, con la regla de `selloDeFecha`. Lo que no es una
+ * fecha no se pinta, por lo mismo.
+ */
+export function horaDelMensaje(iso: string, ahora: Date = new Date()): string | undefined {
+  const fecha = new Date(iso);
+  if (Number.isNaN(fecha.getTime())) return undefined;
+  const deHoy =
+    fecha.getFullYear() === ahora.getFullYear() && fecha.getMonth() === ahora.getMonth() && fecha.getDate() === ahora.getDate();
+  if (!deHoy) return selloDeFecha(iso, ahora);
+  return new Intl.DateTimeFormat("es", { hour: "2-digit", minute: "2-digit", hour12: false }).format(fecha);
+}
+
+/** La fecha ENTERA, con segundos, para el `title` de la hora de un mensaje: al posar el ratón se lee el día exacto. */
+export function fechaCompleta(iso: string): string | undefined {
+  const fecha = new Date(iso);
+  if (Number.isNaN(fecha.getTime())) return undefined;
+  return new Intl.DateTimeFormat("es", { dateStyle: "long", timeStyle: "medium" }).format(fecha);
+}

@@ -3506,7 +3506,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     await asentar();
 
     await enviarMensaje(accion, { clase: "prosa", texto: "haz un listado" });
-    expect(vestibulo.proyectoAbierto()!.actos()).toContainEqual({ tipo: "usuario", texto: "haz un listado" });
+    expect(vestibulo.proyectoAbierto()!.actos()).toContainEqual({ tipo: "usuario", texto: "haz un listado", cuando: expect.any(String) });
     expect(vestibulo.consola.actos()).not.toContainEqual({ tipo: "usuario", texto: "haz un listado" });
   });
 

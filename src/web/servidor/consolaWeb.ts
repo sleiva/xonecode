@@ -55,6 +55,8 @@ const MS_DE_ESPERA_POR_OMISION = 10 * 60_000;
 export interface OpcionesDeConsolaWeb {
   /** Inyectable para poder probar el vencimiento sin esperarlo de verdad. */
   msDeEspera?: number;
+  /** El reloj con que se fechan los mensajes y las respuestas (IXCODE-24). Inyectable para los tests. */
+  ahora?: () => number;
   catalogoModelos?: CatalogoModelosPort;
   guardarModeloGlobal?: Consola["guardarModeloGlobal"];
   /**
@@ -197,12 +199,13 @@ function esperarAUnHumano<T>(cola: ((valor: T) => void)[], alVencer: T, ms: numb
 
 export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb {
   const msDeEspera = opciones.msDeEspera ?? MS_DE_ESPERA_POR_OMISION;
+  const ahora = opciones.ahora ?? Date.now;
 
   // El transcript FUSIONADO: lo que pinta la piel del turno y lo que escriben los
   // comandos de barra, en el orden en que ocurrió. La piel lleva su propia lista; aquí se
   // guarda dónde cayó su último acto para poder sustituirlo cuando se ACTUALIZA.
   const actos: Acto[] = [];
-  const pielWeb = crearPielWeb(undefined, opciones.consumoAcumulado);
+  const pielWeb = crearPielWeb(ahora, opciones.consumoAcumulado);
   const transporte = crearTransporte(() => actos);
 
   let actosDePiel = 0;
@@ -443,7 +446,14 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
       // DETENER a secas, sin texto NI adjunto real, no es algo que la persona dijera: no se
       // apunta como suyo.
       if (hayAlgoReal || mensaje.detener !== true)
-        anotar({ tipo: "usuario", texto: mensaje.texto, ...(adjuntosReales.length > 0 ? { adjuntos: adjuntosReales } : {}) });
+        anotar({
+          tipo: "usuario",
+          texto: mensaje.texto,
+          ...(adjuntosReales.length > 0 ? { adjuntos: adjuntosReales } : {}),
+          // La hora en que la persona lo mandó (IXCODE-24), estampada AQUÍ y no en el cliente: el
+          // acto va al disco con ella y una sesión reabierta tiene que enseñar esta, no la de reabrir.
+          cuando: new Date(ahora()).toISOString(),
+        });
       if (mensaje.detener === true && opciones.detenerMientrasTrabaja?.(texto) === true) return;
       // Un DETENER sin texto NI adjunto real que ya no encontró turno no tiene nada que
       // mandar (ronda de arreglo 1/5: antes miraba solo `mensaje.texto`, y un adjunto real

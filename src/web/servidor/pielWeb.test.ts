@@ -17,19 +17,19 @@ describe("pielWeb", () => {
     const { piel, actos } = crearPielWeb(() => t);
     piel.token("Hola");
     // El PRIMER token ya sale: es lo que convierte «no pasa nada» en «está escribiendo».
-    expect(actos()).toEqual([{ tipo: "asistente", texto: "Hola" }]);
+    expect(actos()).toEqual([{ tipo: "asistente", texto: "Hola", cuando: "1970-01-01T00:00:00.000Z" }]);
     piel.token(" mundo");
     // Dentro de la ventana de 80 ms no se emite otra vez —cada emisión manda el acto
     // entero—, así que el acto sigue siendo uno solo.
     expect(actos()).toHaveLength(1);
     t = 100;
     piel.token(" y más");
-    expect(actos()).toEqual([{ tipo: "asistente", texto: "Hola mundo y más" }]);
+    expect(actos()).toEqual([{ tipo: "asistente", texto: "Hola mundo y más", cuando: "1970-01-01T00:00:00.000Z" }]);
 
     piel.cerrarLinea();
     // Y el cierre siempre entra, haya pasado el plazo o no: es el trozo que completa la
     // frase.
-    expect(actos()).toEqual([{ tipo: "asistente", texto: "Hola mundo y más" }]);
+    expect(actos()).toEqual([{ tipo: "asistente", texto: "Hola mundo y más", cuando: "1970-01-01T00:00:00.000Z" }]);
     expect(actos()).toHaveLength(1);
   });
 
@@ -41,8 +41,8 @@ describe("pielWeb", () => {
     piel.token("dos");
     piel.cerrarLinea();
     expect(actos()).toEqual([
-      { tipo: "asistente", texto: "uno" },
-      { tipo: "asistente", texto: "dos" },
+      { tipo: "asistente", texto: "uno", cuando: "1970-01-01T00:00:00.000Z" },
+      { tipo: "asistente", texto: "dos", cuando: "1970-01-01T00:00:00.000Z" },
     ]);
   });
 
@@ -74,7 +74,7 @@ describe("pielWeb", () => {
     piel.cerrarLinea();
     expect(actos()).toEqual([
       { tipo: "sistema", texto: "## Resumen\n- hecho A", clase: "resumen" },
-      { tipo: "asistente", texto: "Sigo" },
+      { tipo: "asistente", texto: "Sigo", cuando: "1970-01-01T00:00:00.000Z" },
     ]);
   });
 
@@ -94,7 +94,7 @@ describe("pielWeb", () => {
     piel.cerrarLinea();
     expect(actos()).toEqual([
       { tipo: "razonamiento", texto: "Primero miro el fichero." },
-      { tipo: "asistente", texto: "Hecho" },
+      { tipo: "asistente", texto: "Hecho", cuando: "1970-01-01T00:00:00.100Z" },
     ]);
   });
 
@@ -295,7 +295,7 @@ describe("pielWeb", () => {
     piel.token("- uno\n- dos\n");
     piel.cerrarLinea();
     // El store de la TUI daría tres actos aquí (uno por línea); la web da uno.
-    expect(actos()).toEqual([{ tipo: "asistente", texto: "- uno\n- dos\n" }]);
+    expect(actos()).toEqual([{ tipo: "asistente", texto: "- uno\n- dos\n", cuando: expect.any(String) }]);
   });
 });
 
@@ -404,7 +404,7 @@ describe("pielWeb: el coste del turno en el `fin`", () => {
     piel.token("¿Qué pantalla?\n1. Login\n2. Menú");
     piel.consulta?.({ pregunta: "¿Qué pantalla?", opciones: ["Login", "Menú"] });
     expect(actos()).toEqual([
-      { tipo: "asistente", texto: "¿Qué pantalla?\n1. Login\n2. Menú" },
+      { tipo: "asistente", texto: "¿Qué pantalla?\n1. Login\n2. Menú", cuando: "1970-01-01T00:00:00.000Z" },
       { tipo: "consulta", pregunta: "¿Qué pantalla?", opciones: ["Login", "Menú"] },
     ]);
   });
@@ -419,7 +419,7 @@ describe("pielWeb: el coste del turno en el `fin`", () => {
       yield { tipo: "consulta", pregunta: "¿Qué pantalla?", opciones: ["Login", "Menú"] };
     }
     await correrTurno(eventos(), piel);
-    expect(actos().filter((a) => a.tipo === "asistente")).toEqual([{ tipo: "asistente", texto: "¿Qué pantalla?" }]);
+    expect(actos().filter((a) => a.tipo === "asistente")).toEqual([{ tipo: "asistente", texto: "¿Qué pantalla?", cuando: "1970-01-01T00:00:00.000Z" }]);
     expect(actos().map((a) => a.tipo)).toEqual(["asistente", "consulta", "fin"]);
   });
 });

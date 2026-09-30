@@ -1030,7 +1030,7 @@ describe("vestíbulo", () => {
     expect(v.sesionesDe("/w/a").map((x) => x.id)).toEqual([a.idDeHilo]);
     // Y el acto del usuario ya está en su `.jsonl`: es de donde sale el título de la fila,
     // y nunca muta, que es lo que hace seguro volcarlo suelto.
-    expect(s.jsonl.get(`/w/a|${a.idDeHilo}`)).toEqual([{ tipo: "usuario", texto: "arregla el login" }]);
+    expect(s.jsonl.get(`/w/a|${a.idDeHilo}`)).toEqual([{ tipo: "usuario", texto: "arregla el login", cuando: expect.any(String) }]);
 
     await v.cerrar();
   });
@@ -1432,7 +1432,7 @@ describe("vestíbulo", () => {
     // El acto del usuario se volcó a la MISMA sesión, sin duplicar lo releído.
     expect(s.jsonl.get("/w/a|vieja")).toEqual([
       { tipo: "usuario", texto: "lo de ayer" },
-      { tipo: "usuario", texto: "sigue por aquí" },
+      { tipo: "usuario", texto: "sigue por aquí", cuando: expect.any(String) },
     ]);
   });
 
@@ -2821,7 +2821,7 @@ describe("los adjuntos del MENSAJE (IXCODE-7)", () => {
     proyecto.recibir({ clase: "prosa", texto: "pon el icono", adjuntos: ["fantasma.png"] });
     await new Promise((r) => setTimeout(r, 0));
 
-    expect(proyecto.actos()).toEqual([{ tipo: "usuario", texto: "pon el icono" }]);
+    expect(proyecto.actos()).toEqual([{ tipo: "usuario", texto: "pon el icono", cuando: expect.any(String) }]);
     expect(peticiones).toHaveLength(1);
     expect(peticiones[0]).not.toContain("/adjuntos/");
     expect(peticiones[0]).toContain("pon el icono");

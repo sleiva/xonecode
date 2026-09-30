@@ -383,8 +383,9 @@ export interface FotoDeColecciones {
 
 export type Acto =
   /** `adjuntos`: los NOMBRES que la persona anexó con este mensaje. Ausente ≠ vacío. */
-  | { tipo: "usuario"; texto: string; adjuntos?: string[] }
-  | { tipo: "asistente"; texto: string }
+  /** `cuando` (IXCODE-24): hora ISO en que se mandó / empezó a llegar. Ausente = no consta, no se pinta. */
+  | { tipo: "usuario"; texto: string; adjuntos?: string[]; cuando?: string }
+  | { tipo: "asistente"; texto: string; cuando?: string }
   /** Lo que el modelo PENSÓ, cuando lo publica. Aparte de `asistente` porque no es la
    *  respuesta: se pinta apagado y plegado. */
   /** `origen`: quién pensó (`core/actos.ts`). Ausente = no consta, sin rótulo. */

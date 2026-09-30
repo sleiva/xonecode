@@ -324,20 +324,44 @@
   padding-left: 10px;
 }
 
-/* La fila de acciones del mensaje. Aparece al posar el ratón: mientras se lee, el mensaje
-   se lee solo. `focus-within` además de `hover` para que se llegue con el teclado — un
-   control que solo existe con ratón no existe para quien tabula. */
+/* La fila de acciones del mensaje. Sus BOTONES aparecen al posar el ratón: mientras se lee,
+   el mensaje se lee solo. `focus-within` además de `hover` para que se llegue con el teclado — un
+   control que solo existe con ratón no existe para quien tabula. La HORA (IXCODE-24) no es un
+   control, es un dato, y se queda siempre a la vista: por eso la opacidad va en los hijos que no
+   son la hora y no en la fila. */
 .acciones {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
   margin-top: 4px;
+}
+
+.acciones > :not(.hora) {
   opacity: 0;
   transition: opacity 120ms ease;
 }
 
-.globo:hover .acciones,
-.acciones:focus-within {
+.globo:hover .acciones > :not(.hora),
+.acciones:focus-within > :not(.hora) {
   opacity: 1;
+}
+
+/* La hora de un mensaje: pequeña y apagada, porque acompaña al mensaje, no compite con él. */
+.hora,
+.horaDelUsuario {
+  font-size: 11px;
+  line-height: 1;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* En el globo de la persona, debajo del texto y a la derecha, como la firma de un mensaje. */
+.horaDelUsuario {
+  display: block;
+  margin-top: 4px;
+  text-align: right;
 }
 
 /* El botón de copiar de las vallas de código NO se pinta aquí. Estuvo en esta hoja,

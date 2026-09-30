@@ -66,8 +66,15 @@ export interface VeredictoDelTurno {
 export type Acto =
   /** `adjuntos` (IXCODE-7): los NOMBRES que la persona anexó con este mensaje, si hubo alguno
    *  aceptable. Ausente ≠ vacío: un mensaje sin adjuntos no lleva el campo. */
-  | { tipo: "usuario"; texto: string; adjuntos?: string[] }
-  | { tipo: "asistente"; texto: string }
+  /**
+   * `cuando` (IXCODE-24): la hora ISO en que la persona lo MANDÓ, en `usuario`, y en que la respuesta
+   * EMPEZÓ a llegar, en `asistente` —la de empezar y no la de acabar, como `sincronizacion`: una
+   * respuesta larga no se fecha por su último token—. Se estampa al crear el acto y viaja con él al
+   * disco, así que una sesión reabierta enseña la hora real y no la de reabrirla. Ausente en las
+   * sesiones de antes: «no consta», y entonces no se pinta.
+   */
+  | { tipo: "usuario"; texto: string; adjuntos?: string[]; cuando?: string }
+  | { tipo: "asistente"; texto: string; cuando?: string }
   /**
    * El razonamiento del modelo, si lo publica. Es un acto APARTE de `asistente` porque no
    * es la respuesta: se pinta distinto (apagado, plegable) y quien lea el transcript tiene

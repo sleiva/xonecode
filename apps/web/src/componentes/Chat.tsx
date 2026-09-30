@@ -7,6 +7,7 @@ import { useCronometro } from "../cronometro.js";
 import { protegerDolares } from "../protegerDolares.js";
 import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
 import { BotonDeCopiar } from "./BotonDeCopiar.js";
+import { fechaCompleta, horaDelMensaje } from "../selloDeFecha.js";
 import { CierreDelTurno } from "./CierreDelTurno.js";
 import { urlDeArtefacto } from "./Artefactos.js";
 import { IconoDeAbrir, IconoDeArtefacto } from "./IconosDelVisor.js";
@@ -1164,6 +1165,7 @@ export function Chat({
                       ))}
                     </ul>
                   )}
+                  <HoraDelMensaje cuando={acto.cuando} clase={estilos.horaDelUsuario} />
                 </div>
               );
             }
@@ -1210,6 +1212,9 @@ export function Chat({
                     mensaje completo no se podía sin seleccionar a mano.
                   */}
                   <div className={estilos.acciones}>
+                    {/* La hora (IXCODE-24) va al lado de copiar y SIEMPRE a la vista: la fila
+                        sigue apareciendo al posar el ratón, pero solo para el botón. */}
+                    <HoraDelMensaje cuando={acto.cuando} clase={estilos.hora} />
                     <BotonDeCopiar texto={acto.texto} etiqueta="Copiar la respuesta" />
                   </div>
                 </div>
@@ -1247,5 +1252,22 @@ export function Chat({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * La hora de un mensaje (IXCODE-24): la estampó el SERVIDOR al crear el acto, así que una sesión
+ * reabierta enseña la de entonces. Sin `cuando` —las sesiones de antes— no se pinta nada: ausente es
+ * «no consta», no «ahora». Al posar el ratón, la fecha entera.
+ */
+function HoraDelMensaje({ cuando, clase }: { cuando: string | undefined; clase: string | undefined }) {
+  if (cuando === undefined) return null;
+  const texto = horaDelMensaje(cuando);
+  if (texto === undefined) return null;
+  const titulo = fechaCompleta(cuando);
+  return (
+    <time className={clase} dateTime={cuando} {...(titulo === undefined ? {} : { title: titulo })}>
+      {texto}
+    </time>
   );
 }

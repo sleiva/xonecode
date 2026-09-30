@@ -851,6 +851,10 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
 - **De quién es una sesión se GUARDA, no se deduce** (`EntradaIndice.tarea`): siembra monotónica al
   arrancar el corredor (`marcarTareaDeSesion`) que solo AÑADE. Por el cable viaja un BOOLEANO.
 - **La sesión entra en el índice con el MENSAJE**, no cuando el asistente contesta.
+- **La hora de cada mensaje la estampa el SERVIDOR, en el acto** (IXCODE-24, `cuando` en `usuario` y
+  `asistente`): la de mandarlo, y la de EMPEZAR a llegar la respuesta (los parciales la conservan). Va
+  al disco con el acto, así que una sesión reabierta enseña la real; sin `cuando` no se pinta. La de la
+  respuesta va junto a copiar y siempre a la vista: lo que aparece al posar el ratón es el botón.
 - **`localStorage` es de ESTE navegador**: todo acceso envuelto en `try`.
 - **Ningún color literal fuera de `estilos/marca.css` y `splash.css`** (`Barra.test.tsx` lo
   vigila recorriendo TODOS los `.module.css`), `transparent` incluido. El cian es ACENTO y no

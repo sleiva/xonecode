@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { selloDeFecha } from "./selloDeFecha.js";
+import { horaDelMensaje, selloDeFecha } from "./selloDeFecha.js";
 
 /** Un «ahora» fijo: el sello depende de en qué AÑO estamos, y un test no puede depender
  *  del reloj de la máquina que lo corre. */
@@ -24,5 +24,18 @@ describe("selloDeFecha", () => {
   it("lo que no es una fecha no se pinta, en vez de un «Invalid Date»", () => {
     expect(selloDeFecha("mañana", AHORA)).toBeUndefined();
     expect(selloDeFecha("", AHORA)).toBeUndefined();
+  });
+});
+
+describe("horaDelMensaje (IXCODE-24)", () => {
+  const hoy = new Date(2026, 8, 30, 18, 0);
+  it("de HOY, solo la hora", () => {
+    expect(horaDelMensaje(local(2026, 9, 30, 9, 5), hoy)).toBe("09:05");
+  });
+  it("de otro día, también el día", () => {
+    expect(horaDelMensaje(local(2026, 9, 29, 23, 59), hoy)).toBe("29 sept 23:59");
+  });
+  it("lo que no es una fecha no se pinta", () => {
+    expect(horaDelMensaje("ayer", hoy)).toBeUndefined();
   });
 });

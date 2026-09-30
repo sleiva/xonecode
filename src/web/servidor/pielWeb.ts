@@ -90,6 +90,13 @@ export function crearPielWeb(
    *  sustituyen en vez de anexar. */
   let parcial = false;
   let ultimoParcial = 0;
+  /** La hora en que EMPEZÓ a llegar la respuesta en curso (IXCODE-24): se estampa al abrir el acto y
+   *  los parciales que lo sustituyen la conservan, para que la hora no avance con cada trozo. */
+  let cuandoDeRespuesta = "";
+  const abrirRespuesta = (): void => {
+    cuandoDeRespuesta = new Date(ahora()).toISOString();
+  };
+  const actoDeRespuesta = (texto: string): Acto => ({ tipo: "asistente", texto, cuando: cuandoDeRespuesta });
   /** Lo mismo para el razonamiento, que es otro acto y por tanto otro colchón: mezclarlos
    *  pondría lo que el modelo piensa dentro de lo que dice. */
   let pensamiento = "";
@@ -235,7 +242,8 @@ export function crearPielWeb(
       // quieta — el modelo estaba escribiendo y no se veía.
       if (!parcial) {
         cerrarFase();
-        empujar({ tipo: "asistente", texto: colchon });
+        abrirRespuesta();
+        empujar(actoDeRespuesta(colchon));
         parcial = true;
         ultimoParcial = ahora();
         return;
@@ -243,7 +251,7 @@ export function crearPielWeb(
       const t = ahora();
       if (t - ultimoParcial < MS_ENTRE_PARCIALES) return;
       ultimoParcial = t;
-      sustituir({ tipo: "asistente", texto: colchon });
+      sustituir(actoDeRespuesta(colchon));
     },
 
     razonamiento(texto, origen) {
@@ -308,10 +316,11 @@ export function crearPielWeb(
       // El último trozo entra siempre, aunque no hayan pasado los 80 ms: es el que completa
       // la frase, y perderlo por el reloj dejaría el mensaje cortado en pantalla hasta el
       // siguiente turno.
-      if (parcial) sustituir({ tipo: "asistente", texto: colchon });
+      if (parcial) sustituir(actoDeRespuesta(colchon));
       else {
         cerrarFase();
-        empujar({ tipo: "asistente", texto: colchon });
+        abrirRespuesta();
+        empujar(actoDeRespuesta(colchon));
       }
       parcial = false;
       colchon = "";

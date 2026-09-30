@@ -1197,3 +1197,29 @@ describe("Chat: la captura ampliada", () => {
   });
 });
 
+
+describe("la hora de cada mensaje (IXCODE-24)", () => {
+  const hace = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+
+  it("el mensaje de la persona y la respuesta llevan su hora; la de la respuesta, junto a copiar", () => {
+    const cuandoUsuario = hace(3);
+    const cuandoRespuesta = hace(2);
+    const { container } = render(
+      <Chat
+        actos={[
+          { tipo: "usuario", texto: "hola", cuando: cuandoUsuario },
+          { tipo: "asistente", texto: "qué tal", cuando: cuandoRespuesta },
+        ]}
+      />
+    );
+    const horas = [...container.querySelectorAll("time")].map((t) => t.getAttribute("datetime"));
+    expect(horas).toEqual([cuandoUsuario, cuandoRespuesta]);
+    const copiar = screen.getByRole("button", { name: "Copiar la respuesta" });
+    expect(copiar.parentElement?.querySelector("time")?.getAttribute("datetime")).toBe(cuandoRespuesta);
+  });
+
+  it("sin `cuando` —una sesión de antes— no se pinta ninguna hora", () => {
+    const { container } = render(<Chat actos={[{ tipo: "usuario", texto: "hola" }, asistente("qué tal")]} />);
+    expect(container.querySelector("time")).toBeNull();
+  });
+});
