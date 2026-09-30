@@ -308,7 +308,8 @@ export function Conectores({
       {/* Las dos notas de límite, al PIE: lo primero que hay que ver al abrir la sección es
           lo que hay y lo que se puede añadir, no el aviso. */}
       <p className={estilos.nota}>
-        Estos conectores todavía no llegan a ningún agente: aquí se conectan y se prueban.
+        Aquí se conectan y se prueban. Llegan al agente en los proyectos que los marcan en su panel
+        (Conectores → «Conectores para el chat»), y lo que escriben en el servicio siempre pide aprobación.
       </p>
       <p className={estilos.nota}>
         La autorización se abre en el navegador de la máquina donde corre la consola; por un

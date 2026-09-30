@@ -36,7 +36,7 @@ import { dirname, join } from "node:path";
 import type { Acto, ConsumoDeTurno } from "../../core/actos.js";
 import { consumoDeLosActos, sumarConsumo } from "../../core/actos.js";
 import type { Eleccion, FuentesDeEleccion, Proveedor } from "../../core/modelos.js";
-import type { ConsumoDeSesionPorCuenta, CatalogoModelosPort } from "../../core/ports.js";
+import type { ConsumoDeSesionPorCuenta, CatalogoModelosPort, ConectoresPort } from "../../core/ports.js";
 import { consumoDeLaSesion, consumoPersistible, esDoble } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
 import { motivoDeNombreDeEntornoInaceptable, motivoParaNoBorrarCopia, rutaDeWorkspace } from "../../core/settings.js";
@@ -439,7 +439,7 @@ export interface OpcionesDelVestibulo {
      * (`cli/main.ts#carpetaDeAdjuntosDelEjecutor`, como `/artefactos/`). El vestíbulo sigue
      * sin reenviarle a una PERSONA los de una tarea; el ejecutor es quien enseña los suyos.
      */
-    opciones?: { adjuntos?: string }
+    opciones?: { adjuntos?: string; conectores?: ConectoresPort }
   ) => EjecutorDeTurno;
   /**
    * Fuentes del modelo con las que arranca cada consola de proyecto. Como

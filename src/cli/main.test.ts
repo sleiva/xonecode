@@ -1074,7 +1074,9 @@ describe("los adaptadores de proyecto son los MISMOS en las dos pieles", () => {
     // `abrirParaTarea` y el vestíbulo reenvía aquí. Sin ese reenvío, una tarea con adjuntos
     // correría sin `/adjuntos/` montada y con todos los tests de las piezas en verde.
     expect(fuenteDeMain()).toMatch(/crearEjecutorReal\(\s*alAbrir,\s*crearCheckpointerDeProyecto,/);
-    expect(fuenteDeMain()).toMatch(/carpetaDeArtefactosDeSesion,\s*opcionesDeConsola\?\.adjuntos\s*\)/);
+    // Y un quinto: los conectores MCP, el MISMO servicio de Ajustes, que solo la web tiene. Sin este
+    // reenvío ningún agente recibiría sus tools, con todos los tests de las piezas en verde.
+    expect(fuenteDeMain()).toMatch(/carpetaDeArtefactosDeSesion,\s*opcionesDeConsola\?\.adjuntos,\s*cargarSettings,\s*opcionesDeConsola\?\.conectores\s*\)/);
   });
 
   it("y le pasa también las dependencias de proyecto: sin ellas el alta no bajaría nada", () => {

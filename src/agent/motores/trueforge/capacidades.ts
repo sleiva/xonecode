@@ -25,6 +25,7 @@ import {
   type ToolDeFichero,
 } from "./toolsDeFichero.js";
 import { fuenteDeLangchain, type ToolDeLangchain } from "./toolsPropias.js";
+import type { ClaseDeTool, ConectoresDeSesion } from "./toolsDeConectores.js";
 import { presupuestoDelPaso, type EscritorDeDesalojo } from "./recortes.js";
 import { entregarNotas, type Nota } from "./notas.js";
 import type { ControlDeDetencion } from "./detencion.js";
@@ -83,6 +84,28 @@ export function capacidadDePropias(
         new ToolSet({
           source: fuenteDeLangchain(tools, backend) as never,
           selectors: { ...SIN_APROBACION, requireApprovalForTools: [...conAprobacion] },
+          preload: true,
+        }),
+      ],
+    },
+  };
+}
+
+/**
+ * Las tools de los conectores MCP del proyecto, de UNA clase (`toolsDeConectores.ts`): las de
+ * lectura sin aprobación, y el resto con aprobación TODAS (`@all`), porque lo que el servidor no
+ * declara de lectura escribe en la cuenta de la persona. `tools` va vacío: sus nombres salen de la
+ * red al primer `listTools`, no al montar.
+ */
+export function capacidadDeConectores(conectores: ConectoresDeSesion, clase: ClaseDeTool, backend: EscritorDeDesalojo): Capacidad {
+  return {
+    nombre: `conectores-${clase}`,
+    tools: [],
+    capability: {
+      systemToolSets: [
+        new ToolSet({
+          source: conectores.fuente(clase, backend) as never,
+          selectors: { ...SIN_APROBACION, requireApprovalForTools: clase === "lectura" ? [] : ["@all"] },
           preload: true,
         }),
       ],
@@ -316,6 +339,8 @@ export interface DependenciasDelEspecialista {
   vueltas?: (agente: Agente) => Capacidad | undefined;
   /** Lo que escribieron los hijos que ESTE agente llame (`informesDeHijos.ts`): solo para quien puede llamar. */
   informes?: Capacidad;
+  /** Las tools de los conectores MCP que le tocan a ESTE agente (el reparto vive en la sesión). */
+  conectores?: (agente: Agente) => readonly Capacidad[];
 }
 
 /**
@@ -353,6 +378,7 @@ export function capacidadesDelEspecialista(
       ? [capacidadDePropias(propias, deps.backend, propias.some((t) => t.name === NOMBRE_INCORPORAR_ADJUNTO) ? [NOMBRE_INCORPORAR_ADJUNTO] : [])]
       : []),
     ...(clase === "ejecuta" ? [capacidadDeEjecucion(deps.conShell())] : []),
+    ...(deps.conectores?.(agente) ?? []),
     ...(deps.puedeLlamar?.(agente) === true ? [capacidadDeSubagentes(), ...(deps.informes === undefined ? [] : [deps.informes])] : []),
     ...(deps.vueltas?.(agente) === undefined ? [] : [deps.vueltas(agente)!]),
     capacidadDeRecortes(deps.backend),

@@ -152,4 +152,10 @@ export interface PendienteDeAprobacion {
   origen: string;
   descripcion: string;
   decisionesPermitidas: string[];
+  /**
+   * Escribe FUERA de la máquina: una tool de un conector MCP que no se declara de lectura (crear
+   * o generar en la cuenta de Stitch). No se aplica sola ni en modo autónomo ni en una tarea de
+   * fondo —el mismo trato que `/sync subir`—: sin una persona que diga que sí, es un no.
+   */
+  remota?: true;
 }

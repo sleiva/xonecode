@@ -345,3 +345,18 @@ describe("el juez del turno llega a la sesión", () => {
     expect(typeof opciones.juezDelTurno).toBe("function");
   });
 });
+
+describe("los conectores MCP", () => {
+  const turnoVacio = async () => ({ turno: async () => ({ bitacora: { todo: [] }, cambios: [], cortadoPorTope: false, verificador: "no-corrio" as const, pendientes: 0 }) });
+  it("los que llegan a la fábrica los recibe `abrirSesionReal`, y sin ellos no se inventan", async () => {
+    const puerto = { delProyecto: () => [], tools: async () => [], llamar: async () => "" };
+    dobles.abrirSesionReal.mockImplementation(turnoVacio);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await crearEjecutorReal(() => {}, undefined, undefined, undefined, undefined, puerto)("hola", ESTADO, consolaDeMentira() as any);
+    expect(dobles.abrirSesionReal.mock.calls[0]?.[0]).toMatchObject({ conectores: puerto });
+    dobles.abrirSesionReal.mockClear();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await crearEjecutorReal(() => {})("hola", ESTADO, consolaDeMentira() as any);
+    expect(dobles.abrirSesionReal.mock.calls[0]?.[0]).not.toHaveProperty("conectores");
+  });
+});

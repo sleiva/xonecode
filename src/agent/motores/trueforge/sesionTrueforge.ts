@@ -35,6 +35,7 @@ import type {
   ConsumoDeSesion,
   ConsumoDeSesionPorCuenta,
   IconosPort,
+  ConectoresPort,
   ModelosPort,
   MotorExterno,
   SkillInfo,
@@ -75,12 +76,16 @@ import {
   capacidadDeAvisoDeVueltas,
   capacidadDeInstrucciones,
   capacidadDeNotas,
+  capacidadDeConectores,
   capacidadDePropias,
   capacidadDeRecortes,
   capacidadesDelEspecialista,
+  type Capacidad,
   clasesDeTools,
   toolsDe,
 } from "./capacidades.js";
+import { crearConectoresDeSesion, tarjetaDeRemota } from "./toolsDeConectores.js";
+import { recibeConectores } from "../../../core/conectores.js";
 import { buscarMaqueta, medirContraMaqueta, resumenDeMedida, textoDeMedidaAutomatica, ultimaCaptura } from "./medidaAutomatica.js";
 import { anotarEscritura, capacidadDeInformesDeHijos, escrituraConExito, textoDelInforme, type CambioDeFichero } from "./informesDeHijos.js";
 import { crearDiagnosticoDeTools, type DiagnosticoDeTools } from "../../turno/diagnosticoDeTools.js";
@@ -489,6 +494,11 @@ export interface OpcionesDeSesionTrueforge {
   adjuntos?: string;
   /** De dónde salen los iconos (IXCODE-18). Ausente = `buscar_icono` no se monta. */
   iconos?: IconosPort;
+  /**
+   * Los conectores MCP del proyecto (Stitch…). El MISMO servicio de Ajustes, que solo tiene la
+   * web: ausente —el terminal, `run`, los evals— es que ningún agente recibe sus tools.
+   */
+  conectores?: ConectoresPort;
   hilo?: string;
   /**
    * El índice de `xone_navegacion`. Solo para doblarlo en un test: ausente es el REAL, sobre la
@@ -783,6 +793,20 @@ export async function abrirSesionTrueforge(
     ...herramientasDeJuicio(),
     ...(carpeta === undefined ? [] : ([crearTraerDeLaMaquina({ carpeta, alEscribir: anotarArtefacto })] as unknown as ToolDeLangchain[])),
   ];
+  /**
+   * Los conectores MCP del proyecto, una vez por sesión: se leen los marcados AHORA y sus tools se
+   * piden a la red al primer uso (`toolsDeConectores.ts`). El raíz recibe las de LECTURA; un
+   * especialista, las dos clases si `recibeConectores`.
+   */
+  const deConectores = (() => {
+    if (opciones.conectores === undefined) return undefined;
+    const delProyecto = opciones.conectores.delProyecto(raiz);
+    return delProyecto.length === 0 ? undefined : crearConectoresDeSesion(opciones.conectores, delProyecto);
+  })();
+  const conectoresDe = (agente: Agente): readonly Capacidad[] =>
+    deConectores === undefined || !recibeConectores(agente)
+      ? []
+      : [capacidadDeConectores(deConectores, "lectura", backend as never), capacidadDeConectores(deConectores, "escritura", backend as never)];
   const propiasDe = (agente: Agente): ToolDeLangchain[] => [
     crearBusquedaRegex(backend as never) as unknown as ToolDeLangchain,
     navegacion(),
@@ -938,6 +962,7 @@ export async function abrirSesionTrueforge(
     const piezas = capacidadesDelEspecialista(agente, params.request.name, {
       backend: backend as never,
       propias: propiasDe,
+      conectores: conectoresDe,
       notas: capacidadDeNotasDeLaSesion,
       puedeLlamar: (a) => conBucleDelDesarrollador && (a.llama?.length ?? 0) > 0,
       informes: capacidadDeInformes,
@@ -1083,6 +1108,7 @@ export async function abrirSesionTrueforge(
         ...capabilitiesDe([
           capacidadDeFicheros({ backend, reglas: permisosDe(PERFIL_DEL_ORQUESTADOR), tools: TOOLS_DE_LECTURA, conAprobacion: false }),
           capacidadDePropias(propiasDelRaiz, backend as never),
+          ...(deConectores === undefined ? [] : [capacidadDeConectores(deConectores, "lectura", backend as never)]),
           capacidadDeRecortes(backend as never),
           capacidadDeFecha(),
           capacidadDeNotasDeLaSesion,
@@ -1447,6 +1473,22 @@ export async function abrirSesionTrueforge(
           const diffs = new Map<string, LineaDeDiff[]>();
           const autonomo = opciones.sinAprobacion?.() === true;
           for (const p of pendientes) {
+            // Una tool de un CONECTOR que escribe (generar en Stitch…) va SIEMPRE a una persona, también
+            // en modo autónomo: el modo gobierna las escrituras LOCALES, como con `/sync subir`. Sin
+            // fichero: la tarjeta enseña el conector, la tool y sus argumentos enteros.
+            const remota = deConectores?.remotaDe(p.nombre);
+            if (remota !== undefined) {
+              const tarjeta = tarjetaDeRemota(remota, p.args);
+              humanos.push({
+                id: p.clave,
+                origen: quienEs.get(p.hilo) ?? p.hilo,
+                descripcion: tarjeta.descripcion,
+                decisionesPermitidas: ["approve", "reject"],
+                remota: true,
+              });
+              diffs.set(p.clave, tarjeta.lineas);
+              continue;
+            }
             const ruta = typeof p.args.file_path === "string" ? p.args.file_path : "";
             // Lo que NO es el proyecto —artefactos y planes— y lo que el backend va a rechazar de
             // todas formas no se pregunta: la MISMA función que el HITL de deepagents.

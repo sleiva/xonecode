@@ -250,7 +250,10 @@ export function crearConsolaDeTarea(opciones: {
          * puede resolver sin una persona, se rechaza con su mensaje y se APARCA. Fail
          * closed, que es la única dirección posible aquí.
          */
-        if (!p.decisionesPermitidas.includes("approve")) {
+        // Y lo que escribe FUERA de la máquina (una tool de un conector MCP) tampoco: crear la
+        // tarea autoriza escribir el PROYECTO, no gastar ni crear en la cuenta de otro servicio.
+        // Mismo trato que `/sync subir`, que conserva su aprobación en los dos modos.
+        if (!p.decisionesPermitidas.includes("approve") || p.remota === true) {
           decisiones.set(p.id, { type: "reject", message: MENSAJE_DE_RECHAZO_DE_TAREA });
           sinResolver.push(nombreDe(p));
           continue;

@@ -15,6 +15,7 @@ import type { ConsumoDeTurno } from "./actos.js";
 import type { EstadoDeVerificador, VeredictoDeTarea } from "./entrega.js";
 import type { HallazgoDelTurno } from "./events.js";
 import type { LineaDeDiff } from "./diff.js";
+import type { ConectorParaElAgente, ToolConEsquema } from "./conectores.js";
 import type {
   ContextoRemoto, EntradaRemota, EstructuraRemota, ManifiestoRemoto,
 } from "./cloudstudio.js";
@@ -884,5 +885,43 @@ export class IconosEnMemoria implements IconosPort {
     this.peticiones.push({ id, ...opciones });
     const { color, tamano } = opciones;
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${tamano}" height="${tamano}" viewBox="0 0 24 24"><path fill="${color}" d="M0 0h24v24H0z"/></svg>`;
+  }
+}
+
+/**
+ * Los conectores MCP, tal como los ve una SESIÓN del agente. Lo implementa el MISMO
+ * `ServicioDeConectores` de Ajustes y del gestor de tareas —uno por proceso: una segunda
+ * instancia no vería la autorización que Ajustes tiene a medias y pisaría su verificador PKCE—,
+ * así que aquí no se construye nada: se pasa.
+ *
+ * Todo LANZA con una frase sin URL ni cuerpo remoto; quien lo llama (la tool) lo DEVUELVE como
+ * texto, porque una excepción se lleva el turno.
+ */
+export interface ConectoresPort {
+  /** Los conectores que ESTE proyecto usa en el chat (`core/conectores.ts#conectoresParaElAgente`). */
+  delProyecto(raiz: string): ConectorParaElAgente[];
+  tools(id: string): Promise<ToolConEsquema[]>;
+  llamar(id: string, nombre: string, args: Record<string, unknown>, opciones?: { topeMs?: number }): Promise<string>;
+}
+
+/** El doble: conectores fijos, sin red. `llamadas` deja ver qué llegó; `fallo` simula la red caída. */
+export class ConectoresEnMemoria implements ConectoresPort {
+  readonly [ES_DOBLE] = true;
+  readonly llamadas: Array<{ id: string; nombre: string; args: Record<string, unknown>; topeMs?: number }> = [];
+  constructor(
+    private readonly conectores: Record<string, { nombre: string; tools: ToolConEsquema[]; respuesta?: string }> = {},
+    private readonly fallo?: string
+  ) {}
+  delProyecto(): ConectorParaElAgente[] {
+    return Object.entries(this.conectores).map(([id, c]) => ({ id, nombre: c.nombre, fueraDelAgente: [], camposFueraDelResultado: {} }));
+  }
+  async tools(id: string): Promise<ToolConEsquema[]> {
+    if (this.fallo !== undefined) throw new Error(this.fallo);
+    return this.conectores[id]?.tools ?? [];
+  }
+  async llamar(id: string, nombre: string, args: Record<string, unknown>, opciones?: { topeMs?: number }): Promise<string> {
+    this.llamadas.push({ id, nombre, args, ...(opciones?.topeMs === undefined ? {} : { topeMs: opciones.topeMs }) });
+    if (this.fallo !== undefined) throw new Error(this.fallo);
+    return this.conectores[id]?.respuesta ?? "";
   }
 }

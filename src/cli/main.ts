@@ -76,6 +76,7 @@ import {
   CatalogoModelos, baseUrlDeOllama, baseUrlDeOllamaCloud, capacidadesDeOllama,
 } from "../agent/config/catalogoModelos.js";
 import type { Esfuerzo } from "../core/esfuerzo.js";
+import type { ConectoresPort } from "../core/ports.js";
 import { abrirSesionReal } from "../agent/turno/turnoReal.js";
 import type { SesionReal } from "../agent/turno/sesionReal.js";
 import { ficherosDelProyecto } from "../agent/turno/ficherosDelProyecto.js";
@@ -532,6 +533,8 @@ export function crearEjecutorReal(
   /** Misma costura que `adaptadoresDeProyecto`: los tests no pueden leer el
    *  `~/.xonecode/settings.json` de quien corre la suite. */
   leerSettings: typeof cargarSettings = cargarSettings,
+  /** Los conectores MCP, el mismo servicio de Ajustes. Solo la web lo tiene; ver `abrirSesionReal`. */
+  conectores?: ConectoresPort,
 ): EjecutorDeTurno {
   let sesion: SesionReal | undefined;
   let fuentesVistas: FuentesDeEleccion | undefined;
@@ -593,6 +596,7 @@ export function crearEjecutorReal(
       );
       sesion = await abrirSesionReal({
         raiz: estado.raiz,
+        ...(conectores === undefined ? {} : { conectores }),
         modelos: await modelosDeSesion(estado),
         // El motor con el que NACIÓ la sesión (la web lo guarda en el índice); sin él, el de la
         // configuración. Ver `core/motor.ts`.
@@ -1483,7 +1487,9 @@ export async function main(argvCrudo: string[]): Promise<number> {
               alAbrir,
               crearCheckpointerDeProyecto,
               carpetaDeArtefactosDeSesion,
-              opcionesDeConsola?.adjuntos
+              opcionesDeConsola?.adjuntos,
+              cargarSettings,
+              opcionesDeConsola?.conectores
             ),
           // El tope de la ventana para el contador de contexto de la web, con LA MISMA
           // función que la barra de stdio y la de la TUI. Dos resoluciones del tope serían

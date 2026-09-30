@@ -22,6 +22,7 @@ import { MS_DE_PREPARACION,
   ajusteDeDepuracionCableado,
   ajusteDeConectoresCableado,
   ajusteDeGestorCableado,
+  banderaDeEjecutor,
   construirCorredorDeTareasCableado,
   FALTA_EL_BUILD,
   RUTA_ACCION,
@@ -10925,5 +10926,47 @@ describe("el ajuste del gestor de tareas, cableado", () => {
     expect(cliente.recibidos.filter((m) => m.clase === "gestor")).toEqual([
       { clase: "gestor", error: { accion: "sitios", motivo: "«jira» no está conectado" } },
     ]);
+  });
+});
+
+describe("los conectores llegan a las SESIONES por el mismo servicio de Ajustes", () => {
+  it("`conectoresDeSesion` habla con el servicio que construye `montarRutas`, y sin él no hay nada", async () => {
+    const doble = servicioDeConectoresDeMentira();
+    const llamadas: unknown[][] = [];
+    const cableado = ajusteDeGestorCableado({
+      conectores: (cb) => ({ ...doble.fabrica(cb), llamar: async (...a) => { llamadas.push(a); return "hecho"; } }),
+    });
+    const raiz = mkdtempSync(join(tmpdir(), "xc-conectores-sesion-"));
+    // Antes de montar: la sesión abre igual, sin conectores; y una llamada lo DICE en vez de colgar.
+    expect(cableado.conectoresDeSesion.delProyecto(raiz)).toEqual([]);
+    await expect(cableado.conectoresDeSesion.llamar("stitch", "x", {})).rejects.toThrow("no tiene conectores");
+    cableado.conectores(() => {});
+    expect(await cableado.conectoresDeSesion.llamar("stitch", "list_projects", {}, { topeMs: 5 })).toBe("hecho");
+    expect(llamadas).toEqual([["stitch", "list_projects", {}, { topeMs: 5 }]]);
+  });
+
+  it("`delProyecto` lee los MARCADOS del proyecto AHORA, sin el gestor de tareas vinculado", () => {
+    const doble = servicioDeConectoresDeMentira({ conectores: [{ id: "stitch", estado: "autorizado" }, { id: "jira", estado: "autorizado" }] });
+    const cableado = ajusteDeGestorCableado({ conectores: doble.fabrica });
+    cableado.conectores(() => {});
+    const raiz = mkdtempSync(join(tmpdir(), "xc-conectores-sesion-"));
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(
+      join(raiz, ".xonecode", "config.json"),
+      JSON.stringify({ modo: "offline", conectores: ["jira", "stitch"], gestorDeTareas: { conector: "jira", sitio: "c1", proyecto: "IXCODE" } })
+    );
+    expect(cableado.conectoresDeSesion.delProyecto(raiz).map((c) => c.id)).toEqual(["stitch"]);
+  });
+
+  it("`banderaDeEjecutor` añade los conectores a TODAS las consolas que abre, sin pisar lo demás", () => {
+    const recibidas: unknown[] = [];
+    const puerto = { delProyecto: () => [], tools: async () => [], llamar: async () => "" };
+    const { crearEjecutor } = banderaDeEjecutor(
+      { crearEjecutor: (_alAbrir: unknown, o: unknown) => { recibidas.push(o); return {} as never; } } as never,
+      puerto
+    );
+    crearEjecutor!(() => {}, { adjuntos: "/tmp/adj" });
+    crearEjecutor!(() => {});
+    expect(recibidas).toEqual([{ adjuntos: "/tmp/adj", conectores: puerto }, { conectores: puerto }]);
   });
 });

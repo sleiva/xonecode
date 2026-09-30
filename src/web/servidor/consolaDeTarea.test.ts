@@ -346,6 +346,17 @@ describe("crearConsolaDeTarea", () => {
  * No hay red, ni clave, ni modelo: se invocan las tools a mano, que es lo que hace
  * `agent/proyecto.test.ts` con la otra mitad de esta costura.
  */
+describe("una tarea de fondo y un conector MCP", () => {
+  it("lo que escribe FUERA de la máquina se RECHAZA y aparca la tarea: crearla autoriza el proyecto, no la cuenta de Stitch", async () => {
+    const { consola, aparcado } = montar();
+    const remota: PendienteDeAprobacion = { ...PENDIENTE, id: "r", descripcion: "quiere usar Stitch: generate_screen_from_text", remota: true };
+    const decisiones = await consola.aprobacionesTui!([remota, PENDIENTE], new Map([["1", "/src/app.xne"]]), new Map());
+    expect(decisiones.get("r")?.type).toBe("reject");
+    expect(decisiones.get("1")).toEqual({ type: "approve" });
+    expect(aparcado.join(" ")).toContain("Stitch");
+  });
+});
+
 describe("una tarea aplica, y aun así estas rutas NO se escriben", () => {
   /** El texto que el modelo vería, venga como cadena o dentro de un `ToolMessage`. */
   function textoDeResultado(resultado: unknown): string {

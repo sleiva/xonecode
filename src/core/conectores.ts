@@ -9,10 +9,13 @@
  * abajo —estado, prueba, autorización, botones— nada sabe de qué familia viene: es lo que
  * hace que un servidor añadido a mano se comporte como Jira.
  *
- * **Todavía no llegan a ningún agente.** Esta pieza es la conexión y la configuración; qué
- * agente recibe sus tools, y con qué política de aprobación, es la pieza siguiente.
+ * **Llegan a los agentes de TrueForge** por `ConectoresPort` (`agent/motores/trueforge/
+ * toolsDeConectores.ts`): qué conectores (`conectoresParaElAgente`), a quién (`recibeConectores`)
+ * y qué ve el modelo (`esquemaParaElModelo`, `resultadoRecortado`) se decide aquí, puro.
  */
 
+import type { Agente } from "./agentes.js";
+import { CARPETA_DE_ICONOS } from "./iconos.js";
 import { motivoDeEndpointInaceptable, motivoDeSlugInaceptable, PREFIJO_PERSONALIZADO, slugDesdeNombre } from "./modelos.js";
 
 export type AutenticacionDeConector = "ninguna" | "oauth" | "api-key";
@@ -48,6 +51,21 @@ export interface ConectorDeCatalogo {
    * clave y con una clave falsa, así que sin esto «Conectado · 15 tools» saldría con cualquier cosa.
    */
   readonly comprobacion?: string;
+  /**
+   * Tools que NO se montan en un agente, aunque el servidor las ofrezca. Medido en Stitch: sus 15
+   * tools son unos 11k tokens en CADA llamada del agente que las recibe, y `create_design_system`
+   * y `update_design_system` son dos tercios (el mismo esquema de 15 KB cada una) — el sistema de
+   * diseño se hace igual con `upload_design_md` + `create_design_system_from_design_md`. Y borrar
+   * un proyecto de la cuenta no es trabajo de un agente.
+   */
+  readonly fueraDelAgente?: readonly string[];
+  /**
+   * Por tool, los campos del resultado (JSON) que el agente NO recibe, a cualquier profundidad.
+   * Medido en Stitch: `list_projects` son 143 KB para 16 proyectos —el `designMd` entero de cada
+   * uno, sus pantallas y miniaturas— y el agente no podía ni contarlos (se desalojaba y acabó
+   * lanzando scripts). Sin esos campos, 4 KB. El detalle sigue a mano con `get_project`.
+   */
+  readonly camposFueraDelResultado?: Readonly<Record<string, readonly string[]>>;
 }
 
 /**
@@ -87,6 +105,8 @@ export const CATALOGO_DE_CONECTORES: readonly ConectorDeCatalogo[] = [
     autenticacion: "api-key",
     cabeceraDeClave: "X-Goog-Api-Key",
     comprobacion: "list_projects",
+    fueraDelAgente: ["delete_project", "create_design_system", "update_design_system"],
+    camposFueraDelResultado: { list_projects: ["designTheme", "screenInstances", "thumbnailScreenshot", "metadata"] },
   },
 ];
 
@@ -320,4 +340,135 @@ export function interpretarCallback(query: URLSearchParams, pendientes: Map<stri
   const code = query.get("code");
   if (code === null || code.length === 0) return { ok: false, motivo: "la respuesta no trae código de autorización" };
   return { ok: true, id: pendiente.id, code };
+}
+
+/** Un conector tal como lo monta una sesión del agente: con lo que el catálogo le recorta. */
+export interface ConectorParaElAgente {
+  id: string;
+  nombre: string;
+  fueraDelAgente: readonly string[];
+  camposFueraDelResultado: Readonly<Record<string, readonly string[]>>;
+}
+
+/**
+ * Qué conectores del proyecto llegan a un AGENTE: los marcados en su `config.json`
+ * (`conectores`), que sigan AÑADIDOS y que esta consola sepa nombrar — y NUNCA el del gestor de
+ * tareas vinculado, aunque esté en la misma lista (vincular lo marca): en Jira y en Notion escribe
+ * el HARNESS, con su tarjeta, nunca el agente. El orden es el de los marcados; un id repetido
+ * sale una vez.
+ */
+export function conectoresParaElAgente(entrada: {
+  marcados: readonly string[];
+  gestor?: string | undefined;
+  anadidos: readonly string[];
+  catalogo: readonly FilaDeCatalogo[];
+}): ConectorParaElAgente[] {
+  const vistos = new Set<string>();
+  const salida: ConectorParaElAgente[] = [];
+  for (const id of entrada.marcados) {
+    if (vistos.has(id) || id === entrada.gestor || !entrada.anadidos.includes(id)) continue;
+    const fila = entrada.catalogo.find((c) => c.id === id);
+    if (fila === undefined) continue;
+    vistos.add(id);
+    const deCodigo = conectorDelCatalogo(id);
+    salida.push({ id, nombre: fila.nombre, fueraDelAgente: deCodigo?.fueraDelAgente ?? [], camposFueraDelResultado: deCodigo?.camposFueraDelResultado ?? {} });
+  }
+  return salida;
+}
+
+/** Lo que admite un nombre de función en los proveedores de modelos: `^[a-zA-Z0-9_-]{1,64}$`. */
+export const LARGO_MAXIMO_DE_NOMBRE_DE_TOOL = 64;
+
+/**
+ * Cómo se llama la tool `tool` del conector `id` DENTRO del agente: `stitch__list_projects`. El
+ * prefijo evita que dos conectores con una tool del mismo nombre se pisen, y dice de dónde viene.
+ * Un `custom:acme` lleva `:`, que un proveedor rechaza como nombre de función: todo lo que no sea
+ * `[a-zA-Z0-9_-]` pasa a `_`. Recortado al máximo; devuelve `undefined` si ni así cabe algo que
+ * identifique a la tool (un prefijo que ya ocupa el máximo).
+ */
+export function nombreDeToolDeConector(id: string, tool: string): string | undefined {
+  const limpio = (t: string) => t.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const nombre = `${limpio(id)}__${limpio(tool)}`;
+  return nombre.length <= LARGO_MAXIMO_DE_NOMBRE_DE_TOOL ? nombre : undefined;
+}
+
+/**
+ * Qué tools de los conectores recibe un ESPECIALISTA: todas, solo quien hace los RECURSOS —su
+ * `escribeEn` cubre `icons/`, de los de serie `designer-xone`—, que es quien diseña; el resto,
+ * ninguna. Regla de DATO, no una lista de nombres. Estrecha a propósito: las tools de un conector
+ * viajan en CADA llamada del agente que las recibe (las de Stitch, miles de tokens). El raíz recibe
+ * solo las de LECTURA, y eso lo decide la sesión: es de solo lectura por permisos.
+ */
+export function recibeConectores(a: Pick<Agente, "soloLectura" | "ejecucion" | "escribeEn">): boolean {
+  if (a.soloLectura || a.ejecucion === true) return false;
+  const carpetas = a.escribeEn ?? [];
+  return carpetas.some((c) => `/${CARPETA_DE_ICONOS}/`.startsWith(c.endsWith("/") ? c : `${c}/`));
+}
+
+/** Cuántos `$ref` anidados se incrustan antes de cortar: un esquema recursivo no puede colgar esto. */
+export const PROFUNDIDAD_MAXIMA_DE_REF = 8;
+
+/**
+ * El esquema de una tool tal como se le puede dar a CUALQUIER proveedor de modelos. Medido con
+ * Stitch y Gemini: los esquemas de Google llevan claves propias (`x-google-identifier`,
+ * `x-google-enum-descriptions`…) y la API de Gemini RECHAZA la petición entera por una sola —el
+ * turno moría antes de empezar—. Se quitan las claves `x-…` (son anotaciones, no restricciones) y
+ * se INCRUSTA cada `$ref` local (`#/$defs/…`), que no todos los proveedores siguen; `$defs` sale
+ * con ellos. Dentro de `properties` las claves son NOMBRES de campo y no se tocan. Puro: no
+ * modifica lo que recibe.
+ */
+export function esquemaParaElModelo(esquema: Record<string, unknown>): Record<string, unknown> {
+  const defs = (esquema["$defs"] ?? {}) as Record<string, unknown>;
+  const limpiar = (nodo: unknown, profundidad: number): unknown => {
+    if (Array.isArray(nodo)) return nodo.map((n) => limpiar(n, profundidad));
+    if (nodo === null || typeof nodo !== "object") return nodo;
+    const o = nodo as Record<string, unknown>;
+    const ref = o["$ref"];
+    if (typeof ref === "string" && ref.startsWith("#/$defs/")) {
+      const destino = defs[ref.slice("#/$defs/".length)];
+      const { $ref: _ref, ...resto } = o;
+      if (destino === undefined || profundidad >= PROFUNDIDAD_MAXIMA_DE_REF) return limpiar({ type: "object", ...resto }, profundidad);
+      return limpiar({ ...(destino as Record<string, unknown>), ...resto }, profundidad + 1);
+    }
+    const salida: Record<string, unknown> = {};
+    for (const [clave, valor] of Object.entries(o)) {
+      if (clave.startsWith("x-") || clave === "$defs" || clave === "$schema") continue;
+      salida[clave] =
+        clave === "properties" && valor !== null && typeof valor === "object" && !Array.isArray(valor)
+          ? Object.fromEntries(Object.entries(valor as Record<string, unknown>).map(([nombre, v]) => [nombre, limpiar(v, profundidad)]))
+          : limpiar(valor, profundidad);
+    }
+    return salida;
+  };
+  return limpiar(esquema, 0) as Record<string, unknown>;
+}
+
+/**
+ * El resultado de una tool sin los `campos` que el catálogo le recorta (`camposFueraDelResultado`),
+ * a cualquier profundidad, con una línea al final que dice cuáles faltan —que el agente no los dé
+ * por inexistentes—. Lo que no es JSON, o no trae ninguno, vuelve TAL CUAL.
+ */
+export function resultadoRecortado(texto: string, campos: readonly string[]): string {
+  if (campos.length === 0) return texto;
+  let datos: unknown;
+  try {
+    datos = JSON.parse(texto);
+  } catch {
+    return texto;
+  }
+  const fuera = new Set(campos);
+  const quitados = new Set<string>();
+  const podar = (n: unknown): unknown => {
+    if (Array.isArray(n)) return n.map(podar);
+    if (n === null || typeof n !== "object") return n;
+    const salida: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(n as Record<string, unknown>)) {
+      if (fuera.has(k)) quitados.add(k);
+      else salida[k] = podar(v);
+    }
+    return salida;
+  };
+  const podado = podar(datos);
+  if (quitados.size === 0) return texto;
+  return `${JSON.stringify(podado)}\n(recortado por el harness: sin ${[...quitados].join(", ")}; el detalle de uno, con la tool que lo lee entero)`;
 }

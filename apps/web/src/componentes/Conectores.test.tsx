@@ -55,7 +55,7 @@ describe("Conectores", () => {
 
   it("las dos notas fijas de límite siempre están, con datos o sin ellos", () => {
     render(<Conectores {...props()} />);
-    expect(screen.getByText(/todavía no llegan a ningún agente/)).not.toBeNull();
+    expect(screen.getByText(/Llegan al agente en los proyectos que los marcan/)).not.toBeNull();
     expect(screen.getByText(/por un túnel no vuelve/)).not.toBeNull();
   });
 

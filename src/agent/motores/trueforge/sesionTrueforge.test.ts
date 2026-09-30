@@ -7,6 +7,8 @@ import { PNG } from "pngjs";
 import type { Piel } from "../../../core/turno.js";
 import type { DetalleDeLinea } from "../../../core/actos.js";
 import type { ModelosPort, PeticionExterna } from "../../../core/ports.js";
+import { ConectoresEnMemoria } from "../../../core/ports.js";
+import { TOPE_DE_LLAMADA_MS } from "../../../core/conectores.js";
 import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ } from "./sesionTrueforge.js";
 import { TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
 import { topeAgotadoDe, traducirEvento } from "./eventosTrueforge.js";
@@ -2803,4 +2805,83 @@ describe("el razonamiento del uso de una llamada llega al evento (IXCODE-18)", (
     expect(uso).toMatchObject({ input: 10, output: 900 });
     expect(uso).not.toHaveProperty("razonamiento");
   });
+});
+
+describe("los conectores MCP en una sesión de TrueForge", () => {
+  const ESQUEMA = { type: "object", properties: { prompt: { type: "string" } } };
+  const stitch = () =>
+    new ConectoresEnMemoria({
+      stitch: {
+        nombre: "Stitch",
+        respuesta: "{\"screens\":[]}",
+        tools: [
+          { nombre: "list_projects", soloLectura: true, esquema: ESQUEMA },
+          { nombre: "generate_screen_from_text", soloLectura: false, esquema: ESQUEMA },
+          // Sin anotación: lo que no se declara de lectura, ESCRIBE.
+          { nombre: "sin_anotar", esquema: ESQUEMA },
+        ],
+      },
+    });
+  const alDiseñador = (tool: string, id: string): AIMessageChunk[][] => [
+    [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "designer-xone", input: "rediseña en Stitch" }) }] })],
+    [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: tool, args: JSON.stringify({ prompt: "una calculadora" }) }] })],
+    [new AIMessageChunk({ content: "Hecho." })],
+    [new AIMessageChunk({ content: "Listo." })],
+  ];
+
+  it("en AUTÓNOMO, una tool que ESCRIBE en Stitch llega a la persona igual, con conector, tool y argumentos; aprobada, se llama con el tope largo", async () => {
+    const conectores = stitch();
+    const vistas: { remota?: true; descripcion: string; diff: string }[] = [];
+    const { m } = modelosConGuion(alDiseñador("stitch__generate_screen_from_text", "g1"));
+    const s = await abrirSesionTrueforge({
+      raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, conectores,
+      sinAprobacion: () => true,
+      pedirAprobacion: async (pendientes, _f, diffs) => {
+        for (const p of pendientes) vistas.push({ ...(p.remota ? { remota: p.remota } : {}), descripcion: p.descripcion, diff: (diffs.get(p.id) ?? []).map((l) => l.texto).join("\n") });
+        return new Map(pendientes.map((p) => [p.id, { type: "approve" as const }]));
+      },
+    });
+    await s.turno("rediseña la calculadora", piel().p);
+    expect(vistas).toHaveLength(1);
+    expect(vistas[0]).toMatchObject({ remota: true, descripcion: expect.stringContaining("Stitch: generate_screen_from_text") });
+    expect(vistas[0]?.diff).toContain("una calculadora");
+    expect(conectores.llamadas).toEqual([{ id: "stitch", nombre: "generate_screen_from_text", args: { prompt: "una calculadora" }, topeMs: TOPE_DE_LLAMADA_MS }]);
+  }, 20_000);
+
+  it("RECHAZADA, Stitch no recibe nada", async () => {
+    const conectores = stitch();
+    const { m } = modelosConGuion(alDiseñador("stitch__sin_anotar", "g2"));
+    const s = await abrirSesionTrueforge({
+      raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, conectores,
+      pedirAprobacion: async (pendientes) => new Map(pendientes.map((p) => [p.id, { type: "reject" as const }])),
+    });
+    await s.turno("rediseña", piel().p);
+    expect(conectores.llamadas).toEqual([]);
+  }, 20_000);
+
+  it("una de LECTURA no pregunta; el raíz recibe solo las de lectura y el desarrollador ninguna", async () => {
+    const conectores = stitch();
+    let preguntas = 0;
+    const { m, toolsPorLlamada } = modelosConGuion(alDiseñador("stitch__list_projects", "l1"));
+    const s = await abrirSesionTrueforge({
+      raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, conectores,
+      pedirAprobacion: async (pendientes) => { preguntas += 1; return new Map(pendientes.map((p) => [p.id, { type: "reject" as const }])); },
+    });
+    await s.turno("lista", piel().p);
+    expect(preguntas).toBe(0);
+    expect(conectores.llamadas.map((l) => l.nombre)).toEqual(["list_projects"]);
+    const delRaiz = toolsPorLlamada[0] ?? [];
+    expect(delRaiz).toContain("stitch__list_projects");
+    expect(delRaiz).not.toContain("stitch__generate_screen_from_text");
+    const delDiseñador = toolsPorLlamada[1] ?? [];
+    expect(delDiseñador).toEqual(expect.arrayContaining(["stitch__list_projects", "stitch__generate_screen_from_text", "stitch__sin_anotar"]));
+  }, 20_000);
+
+  it("sin conectores marcados no se monta nada ni se pregunta a la red", async () => {
+    const vacio = new ConectoresEnMemoria({});
+    const { m, toolsPorLlamada } = modelosConGuion([[new AIMessageChunk({ content: "Listo." })]]);
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, conectores: vacio });
+    await s.turno("hola", piel().p);
+    expect((toolsPorLlamada[0] ?? []).some((t) => t.includes("__"))).toBe(false);
+  }, 20_000);
 });

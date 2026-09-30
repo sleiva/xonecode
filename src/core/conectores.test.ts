@@ -3,6 +3,12 @@ import {
   CATALOGO_DE_CONECTORES,
   conectorDeDefinicion,
   conectorDelCatalogo,
+  conectoresParaElAgente,
+  esquemaParaElModelo,
+  resultadoRecortado,
+  filaDeCatalogo,
+  nombreDeToolDeConector,
+  recibeConectores,
   definicionDelCable,
   esAutenticacionDeConector,
   esConectorPropio,
@@ -187,5 +193,74 @@ describe("interpretarCallback", () => {
   });
   it("sin code no hay nada que canjear", () => {
     expect(interpretarCallback(new URLSearchParams("state=s1"), pendientes(), ahora).ok).toBe(false);
+  });
+});
+
+describe("los conectores que llegan a un agente", () => {
+  const catalogo = CATALOGO_DE_CONECTORES.map(filaDeCatalogo);
+  it("los marcados y añadidos, sin el gestor de tareas vinculado ni lo que no se sabe nombrar", () => {
+    expect(conectoresParaElAgente({ marcados: ["jira", "stitch", "fantasma", "stitch", "deepwiki"], gestor: "jira", anadidos: ["jira", "stitch", "fantasma"], catalogo })).toEqual([
+      {
+        id: "stitch",
+        nombre: "Stitch",
+        fueraDelAgente: ["delete_project", "create_design_system", "update_design_system"],
+        camposFueraDelResultado: { list_projects: ["designTheme", "screenInstances", "thumbnailScreenshot", "metadata"] },
+      },
+    ]);
+  });
+  it("el nombre en el agente lleva prefijo y solo `[a-zA-Z0-9_-]`, y no pasa de 64", () => {
+    expect(nombreDeToolDeConector("stitch", "list_projects")).toBe("stitch__list_projects");
+    expect(nombreDeToolDeConector("custom:acme", "buscar.cosas")).toBe("custom_acme__buscar_cosas");
+    expect(nombreDeToolDeConector("stitch", "x".repeat(60))).toBeUndefined();
+  });
+  it("las recibe quien hace los RECURSOS (su `escribeEn` cubre icons/): ni el desarrollador, ni quien ejecuta, ni el de solo lectura", () => {
+    expect(recibeConectores({ soloLectura: false, escribeEn: ["/icons/", "/planes/"] })).toBe(true);
+    expect(recibeConectores({ soloLectura: false })).toBe(false);
+    expect(recibeConectores({ soloLectura: false, ejecucion: true, escribeEn: ["/icons/"] })).toBe(false);
+    expect(recibeConectores({ soloLectura: true, escribeEn: ["/icons/"] })).toBe(false);
+    expect(recibeConectores({ soloLectura: false, escribeEn: ["/doc/"] })).toBe(false);
+  });
+});
+
+describe("el esquema que ve el modelo", () => {
+  it("sin claves `x-…` (Gemini rechaza el turno entero por una) y con los `$ref` incrustados; los NOMBRES de campo no se tocan", () => {
+    const original = {
+      type: "object",
+      $defs: { Opciones: { type: "object", properties: { n: { type: "integer", "x-google-identifier": true } } } },
+      properties: {
+        name: { type: "string", "x-google-identifier": true },
+        "x-campo-raro": { type: "string" },
+        tipo: { type: "string", enum: ["A", "B"], "x-google-enum-descriptions": ["a", "b"] },
+        opciones: { $ref: "#/$defs/Opciones", description: "las opciones" },
+      },
+      required: ["name"],
+    };
+    const copia = JSON.parse(JSON.stringify(original));
+    expect(esquemaParaElModelo(original)).toEqual({
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        "x-campo-raro": { type: "string" },
+        tipo: { type: "string", enum: ["A", "B"] },
+        opciones: { type: "object", properties: { n: { type: "integer" } }, description: "las opciones" },
+      },
+      required: ["name"],
+    });
+    expect(original).toEqual(copia);
+  });
+  it("un `$ref` recursivo se corta en vez de colgar", () => {
+    const r = esquemaParaElModelo({ $defs: { N: { type: "object", properties: { hijo: { $ref: "#/$defs/N" } } } }, $ref: "#/$defs/N" });
+    expect(JSON.stringify(r)).not.toContain("$ref");
+  });
+});
+
+describe("el resultado recortado", () => {
+  it("quita los campos a cualquier profundidad y deja lo demás; lo que no es JSON o no los trae vuelve TAL CUAL", () => {
+    const r = resultadoRecortado(JSON.stringify({ projects: [{ title: "A", metadata: { x: 1 }, sub: { metadata: 2, keep: 3 } }] }), ["metadata"]);
+    expect(JSON.parse(r.split("\n")[0]!)).toEqual({ projects: [{ title: "A", sub: { keep: 3 } }] });
+    expect(r).toContain("sin metadata");
+    expect(resultadoRecortado("no es json", ["metadata"])).toBe("no es json");
+    expect(resultadoRecortado('{"a":1}', ["metadata"])).toBe('{"a":1}');
+    expect(resultadoRecortado('{"metadata":1}', [])).toBe('{"metadata":1}');
   });
 });

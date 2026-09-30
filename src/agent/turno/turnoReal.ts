@@ -26,7 +26,7 @@ import { rutaRealDeVirtual } from "../../core/rutaVirtual.js";
 import type { Piel } from "../../core/turno.js";
 import { Bitacora } from "../../core/bitacora.js";
 import { correrTurno } from "../../core/turno.js";
-import type { IconosPort, ModelosPort, SkillsPort, VerifierPort } from "../../core/ports.js";
+import type { ConectoresPort, IconosPort, ModelosPort, SkillsPort, VerifierPort } from "../../core/ports.js";
 import { iconosEnRed } from "../config/iconosEnRed.js";
 import type { EstadoDeVerificador, ResultadoDeTurno } from "../../core/entrega.js";
 import type { DomainEvent, HallazgoDelTurno } from "../../core/events.js";
@@ -254,6 +254,12 @@ export async function abrirSesionReal(opciones: {
    */
   iconos?: IconosPort;
   /**
+   * Los conectores MCP del proyecto, el MISMO servicio de Ajustes. Solo lo pasa la web (el único
+   * proceso que lo tiene); ausente, ningún agente recibe sus tools. Solo TrueForge los monta:
+   * deepagents es legacy.
+   */
+  conectores?: ConectoresPort;
+  /**
    * El motor de agente (`core/motor.ts`). Ausente = el de la configuración: `XONECODE_MOTOR`, el
    * `config.json` del proyecto o el global, y si no, `MOTOR_POR_OMISION`. La web lo pasa con el motor con
    * el que NACIÓ la sesión; el terminal, `run`, el banco y los evals lo dejan a la configuración.
@@ -293,6 +299,7 @@ export async function abrirSesionReal(opciones: {
       entorno: opciones.entorno,
       skills: opciones.skills.catalogo(),
       iconos,
+      ...(opciones.conectores === undefined ? {} : { conectores: opciones.conectores }),
       ...(opciones.verifier === undefined ? {} : { verifier: opciones.verifier }),
       ...(opciones.pedirAprobacion === undefined ? {} : { pedirAprobacion: opciones.pedirAprobacion }),
       ...(opciones.sinAprobacion === undefined ? {} : { sinAprobacion: opciones.sinAprobacion }),

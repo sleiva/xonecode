@@ -1032,7 +1032,28 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
 conector es un servidor MCP REMOTO: el catálogo es una tabla cerrada que crece por código, y uno
 escrito a mano lo da de alta una persona desde la misma ventana.
 
-- **Todavía no llegan a ningún agente.** Esta pieza es la conexión y la configuración.
+- **Llegan a los agentes de TrueForge, y solo en la web** (`agent/motores/trueforge/toolsDeConectores.ts`,
+  `ConectoresPort`): los que el proyecto marca en «Conectores para el chat» (`config.conectores`),
+  añadidos y SIN el gestor de tareas vinculado (`conectoresParaElAgente`: en Jira/Notion escribe
+  el harness). Por el MISMO servicio de Ajustes, enlazado TARDE (`ajusteDeGestorCableado
+  #conectoresDeSesion`: el vestíbulo nace antes que `montarRutas`) y añadido a TODA consola por
+  `banderaDeEjecutor`. Terminal, `run`, evals y motores externos no los tienen.
+- **Dos conjuntos por conector: LECTURA (`readOnlyHint: true`) sin aprobación, y el RESTO con
+  aprobación** —lo que el servidor no declara de lectura ESCRIBE; la etiqueta `@write` de la
+  librería exige `readOnlyHint === false` y dejaría pasar una tool sin anotar—. El raíz recibe
+  la lectura; un especialista, las dos si `recibeConectores` (su `escribeEn` cubre `icons/`: el
+  diseñador). Nombre `<conector>__<tool>`, saneado a `[a-zA-Z0-9_-]{1,64}`.
+- **Una escritura remota va SIEMPRE a una persona** (`PendienteDeAprobacion.remota`): también en
+  modo autónomo —el modo gobierna lo LOCAL, como `/sync subir`— y en una tarea de fondo se
+  RECHAZA y aparca. La tarjeta dice conector y tool y enseña los argumentos enteros.
+- **Lo que el modelo ve se LIMPIA y se RECORTA**: el esquema sin `x-…` ni `$ref`
+  (`esquemaParaElModelo`; con los de Google, Gemini rechazaba el turno entero), las tools caras
+  fuera (`fueraDelAgente`) y los campos que sobran del resultado (`camposFueraDelResultado`:
+  `list_projects` de Stitch, de 143 KB a 4 KB; el agente acababa lanzando scripts para contarlos).
+- **Una llamada de agente lleva su propio tope** (`TOPE_DE_LLAMADA_MS`, 10 min), que se pasa
+  también como `timeout` al SDK: el suyo corta cada petición antes y una generación de Stitch
+  pasa de él. Solo se REPITE una de lectura (`PAUSA_ANTES_DE_REPETIR_MS`); repetir una que
+  genera gastaría otra. Las tools se piden a la red una vez por sesión, al primer uso.
 - **El catálogo es una TABLA** (`CATALOGO_DE_CONECTORES`): id, nombre, URL, descripción, y con qué
   se autentica (`ninguna`/`oauth`/`api-key`). El icono se ata al `id`, no al nombre; lo que no lo
   tenga cae en un MONOGRAMA.
@@ -1110,7 +1131,8 @@ escrito a mano lo da de alta una persona desde la misma ventana.
   el adaptador de Jira cachea la URL del sitio en su propio cierre al llamar a `sitios()`, para
   componer luego `<url>/browse/<clave>`; con una instancia NUEVA en cada llamada esa caché estaría
   siempre vacía y la URL de «Abrir en Jira» no saldría nunca en producción.
-- **Límites declarados**: no llegan a ningún agente todavía; sin túnel (`redirect_uri` es
+- **Límites declarados**: solo a TrueForge y en la web; un conector marcado con la sesión abierta
+  no llega hasta la siguiente; sin túnel (`redirect_uri` es
   `127.0.0.1`); de OAuth solo hay registro dinámico; un conector escrito a mano solo manda la clave
   como `Authorization: Bearer` (la otra cabecera es de las filas del catálogo).
 

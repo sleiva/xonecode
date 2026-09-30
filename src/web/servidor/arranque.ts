@@ -186,7 +186,7 @@ import {
 import { Modelos } from "../../agent/config/modelos.js";
 import { crearJuezDeTarea, invocarConModelos } from "../../agent/tareas/juezDeTarea.js";
 import { SIN_CONSUMO } from "../../agent/subagentes/consumoExterno.js";
-import type { AumentadorPort, JuezDeTareaPort } from "../../core/ports.js";
+import type { AumentadorPort, ConectoresPort, JuezDeTareaPort } from "../../core/ports.js";
 import { AumentadorGuionizado } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
 import { arrancarServidor, type ServidorWeb } from "./servidor.js";
@@ -242,7 +242,7 @@ import type {
 // doblan.
 import { filaDeTarea } from "./transporte.js";
 import { esEsfuerzo, nivelesDeEsfuerzo, type Esfuerzo } from "../../core/esfuerzo.js";
-import { CATALOGO_DE_CONECTORES, definicionDelCable, RUTA_CALLBACK_MCP, type AccionDeConector } from "../../core/conectores.js";
+import { CATALOGO_DE_CONECTORES, conectoresParaElAgente, definicionDelCable, RUTA_CALLBACK_MCP, type AccionDeConector } from "../../core/conectores.js";
 import { servicioDeConectoresCableado, type ServicioDeConectores } from "../../agent/conectores/servicioDeConectores.js";
 import { crearGestorJira } from "../../agent/conectores/gestorJira.js";
 import { crearGestorNotion } from "../../agent/conectores/gestorNotion.js";
@@ -6369,6 +6369,12 @@ export function ajusteDeConectoresCableado(opciones: {
 export function ajusteDeGestorCableado(ajuste: { conectores: (alCambiar: () => void) => ServicioDeConectores }): {
   conectores: (alCambiar: () => void) => ServicioDeConectores;
   gestorDeTareas: (conector: string) => GestorDeTareasPort | undefined;
+  /**
+   * Los conectores para las SESIONES del agente, sobre ese MISMO servicio —el tercer usuario del
+   * servicio único, por la misma razón del PKCE—. Enlazado TARDE: el vestíbulo, que abre las
+   * sesiones, nace antes que `montarRutas`, que es quien construye el servicio.
+   */
+  conectoresDeSesion: ConectoresPort;
 } {
   let servicio: ServicioDeConectores | undefined;
   /** Uno por conector: el de Jira guarda la url de cada sitio, el de Notion el esquema de cada base. */
@@ -6378,8 +6384,27 @@ export function ajusteDeGestorCableado(ajuste: { conectores: (alCambiar: () => v
     jira: crearGestorJira,
     notion: crearGestorNotion,
   };
+  const sinServicio = (): never => {
+    throw new Error("esta ejecución no tiene conectores");
+  };
   return {
     conectores: (alCambiar) => (servicio = ajuste.conectores(alCambiar)),
+    conectoresDeSesion: {
+      delProyecto: (raiz) => {
+        if (servicio === undefined) return [];
+        const proyecto = cargar(raiz).config.proyecto;
+        const lista = servicio.lista();
+        return conectoresParaElAgente({
+          marcados: proyecto?.conectores ?? [],
+          gestor: proyecto?.gestorDeTareas?.conector,
+          anadidos: lista.conectores.map((c) => c.id),
+          catalogo: lista.catalogo,
+        });
+      },
+      // `async`: sin servicio, el fallo sale como promesa RECHAZADA, que es lo que la tool devuelve como texto.
+      tools: async (id) => (servicio === undefined ? sinServicio() : servicio.tools(id)),
+      llamar: async (id, nombre, args, opciones) => (servicio === undefined ? sinServicio() : servicio.llamar(id, nombre, args, opciones)),
+    },
     gestorDeTareas: (conector) => {
       const fabrica = Object.hasOwn(FABRICAS, conector) ? FABRICAS[conector] : undefined;
       if (fabrica === undefined) return undefined;
@@ -6604,7 +6629,7 @@ export interface OpcionesDeArranque {
     /** Lo que depende de la CONSOLA y no de su raíz: hoy la carpeta de adjuntos de una
      *  tarea. La misma forma que `OpcionesDelVestibulo.crearEjecutor`, porque esto se le
      *  pasa tal cual. */
-    opciones?: { adjuntos?: string }
+    opciones?: { adjuntos?: string; conectores?: ConectoresPort }
   ) => EjecutorDeTurno;
   /** Lo que la consola de proyecto necesita y depende de la raíz (`/sync`, los escritores). */
   dependenciasDeProyecto?: (raiz: string) => Partial<Consola>;
@@ -6727,7 +6752,10 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     vestibulo?.consola.consola.escribir(`${texto}\n`);
   };
 
-  vestibulo = opciones.vestibulo ?? vestibuloReal(opciones, servidor, escribir, informar);
+  // Los conectores y el gestor de tareas, sobre UN servicio —construido luego por `montarRutas`—, y
+  // las sesiones sobre ese mismo: por eso esto va ANTES del vestíbulo, que es quien las abre.
+  const conectoresYGestor = ajusteDeGestorCableado(ajusteDeConectoresCableado({ casa: homedir() }));
+  vestibulo = opciones.vestibulo ?? vestibuloReal(opciones, servidor, escribir, informar, conectoresYGestor.conectoresDeSesion);
   const conVestibulo = vestibulo;
 
   /**
@@ -6829,7 +6857,8 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     // (`ajusteDeConectoresCableado`), nunca un literal aquí dentro.
     // Y el gestor de tareas (IXCODE-11) llama por ESE mismo servicio: los dos salen de
     // `ajusteDeGestorCableado`, que envuelve la fábrica de conectores.
-    ...ajusteDeGestorCableado(ajusteDeConectoresCableado({ casa: homedir() })),
+    conectores: conectoresYGestor.conectores,
+    gestorDeTareas: conectoresYGestor.gestorDeTareas,
     // El selector nativo, solo si este sistema tiene uno. En el que no, la opción no se
     // monta y el botón no llega a existir.
     ...(haySelectorDeCarpeta()
@@ -7074,11 +7103,12 @@ function vestibuloReal(
   opciones: OpcionesDeArranque,
   servidor: ServidorWeb,
   escribir: (texto: string) => void,
-  informar: (texto: string) => void
+  informar: (texto: string) => void,
+  conectores?: ConectoresPort
 ): Vestibulo {
   // Lo PRIMERO, antes de leer nada de disco: si esto va a fallar, que falle sin haber
   // aplicado credenciales al proceso ni construido medio vestíbulo.
-  const ejecutor = banderaDeEjecutor(opciones);
+  const ejecutor = banderaDeEjecutor(opciones, conectores);
   const cargado = cargar(opciones.cwd);
   aplicarAuth(cargado.auth);
   // La lectura NO se hace aquí: se hace al abrir cada consola, que es lo que hace que una
@@ -7191,14 +7221,19 @@ function vestibuloReal(
  * O el ejecutor real, o el de pega PEDIDO con `--guion`, o un error. Lo que no hay es una
  * tercera opción muda.
  */
-function banderaDeEjecutor(opciones: OpcionesDeArranque): Pick<OpcionesDelVestibulo, "crearEjecutor"> {
+export function banderaDeEjecutor(opciones: OpcionesDeArranque, conectores?: ConectoresPort): Pick<OpcionesDelVestibulo, "crearEjecutor"> {
   if (opciones.guion === true) return {};
-  if (opciones.crearEjecutor === undefined) {
+  const crear = opciones.crearEjecutor;
+  if (crear === undefined) {
     throw new Error(
       "esta consola web se montó sin `crearEjecutor`: correría el agente de pega sin decirlo (usa --guion si es lo que quieres)"
     );
   }
-  return { crearEjecutor: opciones.crearEjecutor };
+  // Los conectores se AÑADEN aquí, a todas las consolas —de persona y de tarea—: el vestíbulo no
+  // tiene que acordarse de pasarlos en cada puerta. En una tarea, lo que escriben se rechaza igual
+  // (`consolaDeTarea.ts`).
+  if (conectores === undefined) return { crearEjecutor: crear };
+  return { crearEjecutor: (alAbrir, o) => crear(alAbrir, { ...o, conectores }) };
 }
 
 /** Los pasos, reexportados para quien monte otra piel sobre el mismo vestíbulo. */
