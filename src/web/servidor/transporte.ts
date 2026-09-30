@@ -17,7 +17,7 @@ import type { CambiosDeUnaColeccion } from "../../core/diffDeColecciones.js";
 import type { FotoDeColecciones } from "../../core/fotoDeColecciones.js";
 import type { InformeDeDispositivos, NombreDeHerramienta } from "../../core/dispositivos.js";
 import type { AjustesDeDispositivos } from "../../core/settings.js";
-import type { Acto, ConsumoDeTurno } from "../../core/actos.js";
+import type { Acto, ConsumoDeTurno, ConsumoPorModelo } from "../../core/actos.js";
 import type { Tarea } from "../../core/tareas.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
 import type { LineaDeDiff } from "../../core/diff.js";
@@ -309,6 +309,12 @@ export type MensajeAlCliente =
        * porcentaje sobre un número inventado es una mentira con forma de cifra.
        */
       ventana: { usado: number; tope?: number };
+      /**
+       * Lo mismo, POR MODELO: un especialista puede correr en otro modelo que el raíz. Ausente =
+       * no consta (una sesión de antes, o un motor que no lo mide); lo gastado antes de medirlo
+       * llega bajo `SIN_DESGLOSE`, así que las filas suman el total.
+       */
+      porModelo?: ConsumoPorModelo;
     }
   /**
    * Se está ABRIENDO algo: una sesión, o un proyecto que además hay que descargar.

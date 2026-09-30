@@ -47,6 +47,7 @@ import type {
   AjustesDeDispositivos,
   DispositivoElegido,
   ConsumoDeTurno,
+  ConsumoPorModelo,
   SesionDelCable,
   FaseDelLanzamiento,
   EstadoDelLanzamiento,
@@ -237,6 +238,8 @@ export interface EstadoDelCliente {
     externo: { entrada: number; salida: number; cache: number };
     /** Cuánto ocupa la ventana ahora, y su tope si se sabe. Otra pregunta que los acumulados. */
     ventana: { usado: number; tope?: number };
+    /** Lo mismo por modelo. Ausente = no consta, y el contador no abre el diálogo. */
+    porModelo?: ConsumoPorModelo;
   };
   /**
    * Qué se está abriendo ahora mismo, si algo. Lo dice el servidor (`clase: "abriendo"`) y
@@ -794,6 +797,23 @@ function cuenta(v: unknown): { entrada: number; salida: number; cache: number } 
 }
 
 /**
+ * El desglose POR MODELO de lo que venga por el cable. Una entrada con una `cuenta` que no es
+ * ninguna de las dos se TIRA (su caché se contaría con la convención equivocada); vacío o no
+ * objeto es «no consta» (`undefined`), no un desglose vacío.
+ */
+function porModeloDelCable(v: unknown): ConsumoPorModelo | undefined {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return undefined;
+  const salida: ConsumoPorModelo = {};
+  for (const [id, e] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof e !== "object" || e === null) continue;
+    const c = (e as { cuenta?: unknown }).cuenta;
+    if (c !== "modelo" && c !== "externo") continue;
+    salida[id] = { cuenta: c, ...cuenta(e) };
+  }
+  return Object.keys(salida).length === 0 ? undefined : salida;
+}
+
+/**
  * El acumulado de una SESIÓN, tal como llega dentro de la fila del alta. `undefined` = «no
  * consta», que es lo que hay que distinguir de un `{0,0}`.
  *
@@ -812,7 +832,8 @@ function cuenta(v: unknown): { entrada: number; salida: number; cache: number } 
 function consumoDeSesion(v: unknown): ConsumoDeTurno | undefined {
   if (typeof v !== "object" || v === null || Array.isArray(v)) return undefined;
   const o = v as Record<string, unknown>;
-  return { modelo: cuenta(o["modelo"]), externo: cuenta(o["externo"]) };
+  const desglose = porModeloDelCable(o["porModelo"]);
+  return { modelo: cuenta(o["modelo"]), externo: cuenta(o["externo"]), ...(desglose === undefined ? {} : { porModelo: desglose }) };
 }
 
 /** `{id, titulo}`: una sesión guardada. NO vale `sonIdentidades` —una sesión no tiene
@@ -1859,7 +1880,8 @@ export function crearStoreDelCliente(): {
            * módulo, compartidas con la fila de sesión: dos copias de una guarda es como
            * divergen, y la que se queda vieja es la que deja pasar la cifra inventada.
            */
-          const m = mensaje as { modelo?: unknown; externo?: unknown; ventana?: unknown };
+          const m = mensaje as { modelo?: unknown; externo?: unknown; ventana?: unknown; porModelo?: unknown };
+          const desglose = porModeloDelCable(m.porModelo);
           const v = (typeof m.ventana === "object" && m.ventana !== null ? m.ventana : {}) as Record<string, unknown>;
           // `tope` ausente es «no se sabe» y se propaga ausente hasta el componente: con
           // Ollama no hay tope A PROPÓSITO, y un denominador inventado es la misma mentira
@@ -1870,6 +1892,7 @@ export function crearStoreDelCliente(): {
               modelo: cuenta(m.modelo),
               externo: cuenta(m.externo),
               ventana: { usado: numero(v["usado"]), ...(tope === undefined ? {} : { tope }) },
+              ...(desglose === undefined ? {} : { porModelo: desglose }),
             },
           });
           return;

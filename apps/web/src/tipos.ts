@@ -186,7 +186,20 @@ export interface ConsumoDeTurno {
   modelo: { entrada: number; salida: number; cache: number };
   externo: { entrada: number; salida: number; cache: number };
   ventana?: number;
+  /** Por modelo (`core/actos.ts#ConsumoPorModelo`). Ausente = no consta. */
+  porModelo?: ConsumoPorModelo;
 }
+
+/** El consumo de UN modelo, y a qué cuenta pertenece (la caché se cuenta distinto en cada una). */
+export interface ConsumoDeUnModelo {
+  cuenta: "modelo" | "externo";
+  entrada: number;
+  salida: number;
+  cache: number;
+}
+export type ConsumoPorModelo = Record<string, ConsumoDeUnModelo>;
+/** Redeclarado de `core/actos.ts#SIN_DESGLOSE`: lo gastado antes de medir por modelo. */
+export const SIN_DESGLOSE = "(sin desglose)";
 
 /**
  * Una sesión tal como viaja dentro del alta de un proyecto. Espejo de `SesionDelCable`
@@ -616,6 +629,7 @@ export type MensajeAlCliente =
       modelo: { entrada: number; salida: number; cache: number };
       externo: { entrada: number; salida: number; cache: number };
       ventana: { usado: number; tope?: number };
+      porModelo?: ConsumoPorModelo;
     }
   /** Se está abriendo una sesión —o descargando un proyecto, o mudando el entorno activo—,
    *  dicho por el servidor: es el único que sabe cuándo empieza y cuándo acaba. */

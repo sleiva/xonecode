@@ -19,7 +19,7 @@
  */
 import type { Piel } from "../../core/turno.js";
 import type { Acto } from "../../core/actos.js";
-import { conLlamadaDeTool } from "../../core/actos.js";
+import { conLlamadaDeTool, restarPorModelo } from "../../core/actos.js";
 import type { ConsumoDeTurno, ConsumoDeUnaCuenta, DetalleDeLinea } from "../../core/actos.js";
 import type { Fase, OrigenDeLaTool, PendienteDeAprobacion } from "../../core/events.js";
 
@@ -208,6 +208,8 @@ export function crearPielWeb(
             modelo: restar(ahora.modelo, antes.modelo),
             externo: restar(ahora.externo, antes.externo),
             ...(ahora.ventana === undefined ? {} : { ventana: ahora.ventana }),
+            // El desglose por modelo, con la MISMA resta: lo que se movió en este turno.
+            ...(ahora.porModelo === undefined ? {} : { porModelo: restarPorModelo(ahora.porModelo, antes.porModelo ?? {}) }),
           };
     const gastado =
       delta.modelo.entrada + delta.modelo.salida + delta.externo.entrada + delta.externo.salida > 0;

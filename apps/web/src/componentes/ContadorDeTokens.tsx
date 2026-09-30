@@ -1,4 +1,7 @@
+import { useState } from "react";
 import { abreviar } from "../cifras.js";
+import type { ConsumoPorModelo } from "../tipos.js";
+import { DesgloseDeTokens } from "./DesgloseDeTokens.js";
 import { desglosarConsumo } from "../consumoPintable.js";
 import estilos from "./ContadorDeTokens.module.css";
 
@@ -41,9 +44,12 @@ export interface ConsumoPintable {
    * estado. Sigue en el tipo porque el consumidor del cable es el mismo.
    */
   ventana: { usado: number; tope?: number };
+  /** Por modelo. Con él el contador es un BOTÓN que abre el desglose; sin él, sigue siendo texto. */
+  porModelo?: ConsumoPorModelo;
 }
 
 export function ContadorDeTokens({ consumo }: { consumo?: ConsumoPintable }): React.ReactElement | null {
+  const [abierto, setAbierto] = useState(false);
   if (consumo === undefined) return null;
   const { nueva, cache, salida, entradaTotal } = desglosarConsumo(consumo.modelo, consumo.externo);
   // Nada consumido todavía tampoco se pinta: en una sesión recién abierta el contador a
@@ -62,8 +68,8 @@ export function ContadorDeTokens({ consumo }: { consumo?: ConsumoPintable }): Re
     "Se cuentan los turnos anteriores a este, así que sobreviven a cerrar y reabrir la sesión.",
   ].join("\n");
 
-  return (
-    <span className={estilos.contador} title={detalle}>
+  const cifras = (
+    <>
       {/* Los glifos van con `aria-hidden` y el sentido en texto: un lector de pantalla que
           lea «flecha arriba 1,2k» no dice nada, y «entrada» sí. */}
       <span aria-hidden="true">↑</span>
@@ -85,6 +91,30 @@ export function ContadorDeTokens({ consumo }: { consumo?: ConsumoPintable }): Re
       <span aria-hidden="true">↓</span>
       <span className={estilos.cifra}>{abreviar(salida)}</span>
       <span className={estilos.rotulo}>salida</span>
-    </span>
+    </>
+  );
+  // Un control sin dato detrás no se pinta: sin desglose no hay botón, solo el texto de siempre.
+  const porModelo = consumo.porModelo;
+  if (porModelo === undefined || Object.keys(porModelo).length === 0) {
+    return (
+      <span className={estilos.contador} title={detalle}>
+        {cifras}
+      </span>
+    );
+  }
+  return (
+    <>
+      <button
+        type="button"
+        className={`${estilos.contador} ${estilos.boton}`}
+        title={`${detalle}\nPulsa para verlo por modelo.`}
+        aria-haspopup="dialog"
+        onClick={() => setAbierto(true)}
+      >
+        {cifras}
+      </button>
+      {/* Lo que se pliega se DESMONTA: cerrado, el diálogo no existe. */}
+      {abierto ? <DesgloseDeTokens porModelo={porModelo} alCerrar={() => setAbierto(false)} /> : null}
+    </>
   );
 }

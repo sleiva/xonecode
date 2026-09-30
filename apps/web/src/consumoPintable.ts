@@ -1,3 +1,4 @@
+import { SIN_DESGLOSE, type ConsumoPorModelo } from "./tipos.js";
 /**
  * Cómo se descompone el consumo que se ENSEÑA: entrada nueva, caché y salida.
  *
@@ -51,4 +52,31 @@ export function desglosarConsumo(modelo: CuentaDeTokens, externo: CuentaDeTokens
   const nueva = Math.max(0, modelo.entrada - modelo.cache) + externo.entrada;
   const cache = modelo.cache + externo.cache;
   return { nueva, cache, salida: modelo.salida + externo.salida, entradaTotal: nueva + cache };
+}
+
+/** Una fila del diálogo de tokens: UN modelo, con las cifras ya en la misma convención. */
+export interface FilaDeModelo {
+  id: string;
+  cuenta: "modelo" | "externo";
+  nueva: number;
+  cache: number;
+  salida: number;
+  /** Lo gastado antes de medir por modelo (`SIN_DESGLOSE`): se pinta distinto y al final. */
+  sinDesglose: boolean;
+}
+
+/**
+ * Las filas del desglose POR MODELO, normalizadas con la misma regla de `desglosarConsumo` —el
+ * grafo trae la caché DENTRO de la entrada y un externo FUERA—, de más a menos gasto, con lo de
+ * «sin desglose» al final. Una fila que no gastó nada no sale.
+ */
+export function filasPorModelo(porModelo: ConsumoPorModelo): FilaDeModelo[] {
+  const filas: FilaDeModelo[] = [];
+  for (const [id, c] of Object.entries(porModelo)) {
+    const nueva = c.cuenta === "modelo" ? Math.max(0, c.entrada - c.cache) : c.entrada;
+    if (nueva === 0 && c.cache === 0 && c.salida === 0) continue;
+    filas.push({ id, cuenta: c.cuenta, nueva, cache: c.cache, salida: c.salida, sinDesglose: id.startsWith(SIN_DESGLOSE) });
+  }
+  const peso = (f: FilaDeModelo) => f.nueva + f.cache + f.salida;
+  return filas.sort((a, b) => Number(a.sinDesglose) - Number(b.sinDesglose) || peso(b) - peso(a));
 }

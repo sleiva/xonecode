@@ -114,6 +114,11 @@ export class Modelos implements ModelosPort {
     );
   }
 
+  idDePapel(papel: Papel): string {
+    const e = this.eleccion[papel];
+    return `${e.proveedor}/${e.modelo}`;
+  }
+
   descripcion(): Record<Papel, string> {
     const salida = {} as Record<Papel, string>;
     for (const [papel, e] of Object.entries(this.eleccion) as [Papel, Eleccion][]) {

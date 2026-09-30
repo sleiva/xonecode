@@ -2885,3 +2885,29 @@ describe("los conectores MCP en una sesión de TrueForge", () => {
     expect((toolsPorLlamada[0] ?? []).some((t) => t.includes("__"))).toBe(false);
   }, 20_000);
 });
+
+describe("el consumo POR MODELO de una sesión de TrueForge", () => {
+  it("el raíz apunta al modelo de su papel y un especialista con `modelo:` en su `.md`, al SUYO", async () => {
+    const raiz = proyecto();
+    mkdirSync(join(raiz, ".xonecode", "agentes"), { recursive: true });
+    writeFileSync(
+      join(raiz, ".xonecode", "agentes", "consultor-gemini.md"),
+      "---\ndescripcion: responde dudas\nmotor: modelo\nsoloLectura: true\nmodelo: gemini/gemini-3.8-flash\n---\nContesta.\n"
+    );
+    const { m } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "consultor-gemini", input: "¿existe imgbk?" }) }], usage_metadata: { input_tokens: 100, output_tokens: 10, total_tokens: 110 } })],
+      [new AIMessageChunk({ content: "Sí existe.", usage_metadata: { input_tokens: 40, output_tokens: 4, total_tokens: 44 } })],
+      [new AIMessageChunk({ content: "Existe.", usage_metadata: { input_tokens: 120, output_tokens: 3, total_tokens: 123 } })],
+    ]);
+    const modelos = Object.assign(m, { idDePapel: (p: string) => (p === "trabajo" ? "deepseek/deepseek-chat" : "deepseek/rapido") });
+    const s = await abrirSesionTrueforge({ raiz, modelos, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("¿existe imgbk?", piel().p);
+    const c = s.consumo();
+    expect(c.porModelo).toEqual({
+      "deepseek/deepseek-chat": { cuenta: "modelo", entrada: 220, salida: 13, cache: 0 },
+      "gemini/gemini-3.8-flash": { cuenta: "modelo", entrada: 40, salida: 4, cache: 0 },
+    });
+    // Y las filas suman el total de la cuenta.
+    expect(Object.values(c.porModelo ?? {}).reduce((t, f) => t + f.entrada, 0)).toBe(c.modelo.entrada);
+  }, 20_000);
+});

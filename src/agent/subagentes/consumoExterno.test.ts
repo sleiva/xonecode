@@ -13,16 +13,25 @@ describe("lo que consumió Claude Code, de su `modelUsage`", () => {
           "claude-haiku-4-5": { inputTokens: 7, outputTokens: 3, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
         },
       })
-    ).toEqual({ entrada: 107, salida: 23, cache: 6 });
+    ).toEqual({
+      entrada: 107,
+      salida: 23,
+      cache: 6,
+      // Y el mismo gasto por modelo: el total del especialista ya no se lleva de quién fue.
+      porModelo: {
+        "claude-sonnet-5": { entrada: 100, salida: 20, cache: 6 },
+        "claude-haiku-4-5": { entrada: 7, salida: 3, cache: 0 },
+      },
+    });
   });
 
   it("sin `modelUsage`, o con basura, cuenta CERO y no NaN", () => {
     // Un `result` de arranque fallido «may carry zeroed values», y lo que llega es de otro
     // proceso: un NaN se propagaría a la cifra que se enseña y la volvería ilegible.
     for (const malo of [undefined, null, {}, { modelUsage: null }, { modelUsage: { x: "no" } }]) {
-      expect(consumoDeClaude(malo)).toEqual(SIN_CONSUMO);
+      expect(consumoDeClaude(malo)).toMatchObject(SIN_CONSUMO);
     }
-    expect(consumoDeClaude({ modelUsage: { x: { inputTokens: "500", outputTokens: -3 } } })).toEqual(SIN_CONSUMO);
+    expect(consumoDeClaude({ modelUsage: { x: { inputTokens: "500", outputTokens: -3 } } })).toMatchObject(SIN_CONSUMO);
   });
 });
 

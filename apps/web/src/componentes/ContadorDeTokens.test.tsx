@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { ContadorDeTokens } from "./ContadorDeTokens.js";
 
 const cuenta = (entrada: number, salida: number, cache = 0) => ({ entrada, salida, cache });
@@ -101,5 +101,28 @@ describe("la ventana NO se pinta aquí, y eso es la mitad del arreglo", () => {
   it("y sin tope tampoco: el campo sigue viajando, pero lo pinta otro", () => {
     const { container } = render(<ContadorDeTokens consumo={{ ...base, ventana: { usado: 2100 } }} />);
     expect(container.textContent).toBe("↑100nueva·⟳0caché·↓10salida");
+  });
+});
+
+describe("el contador abre el desglose POR MODELO", () => {
+  const porModelo = {
+    "deepseek/deepseek-chat": { cuenta: "modelo" as const, entrada: 1000, salida: 100, cache: 600 },
+    "gemini/gemini-3.8-flash": { cuenta: "modelo" as const, entrada: 300, salida: 30, cache: 0 },
+  };
+
+  it("con desglose es un BOTÓN, y pulsarlo abre el diálogo con una fila por modelo y el total", () => {
+    render(<ContadorDeTokens consumo={{ modelo: cuenta(1300, 130, 600), externo: cuenta(0, 0), ventana: sinVentana, porModelo }} />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByText("deepseek/deepseek-chat")).not.toBeNull();
+    expect(screen.getByText("gemini/gemini-3.8-flash")).not.toBeNull();
+    expect(screen.getByText("Total")).not.toBeNull();
+    fireEvent.click(screen.getByText("Cerrar"));
+    expect(screen.queryByText("gemini/gemini-3.8-flash")).toBeNull();
+  });
+
+  it("sin desglose sigue siendo texto: un control sin dato detrás no se pinta", () => {
+    render(<ContadorDeTokens consumo={{ modelo: cuenta(1300, 130, 600), externo: cuenta(0, 0), ventana: sinVentana }} />);
+    expect(screen.queryByRole("button")).toBeNull();
   });
 });

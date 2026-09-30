@@ -236,6 +236,63 @@ export interface ConsumoDeTurno {
   externo: ConsumoDeUnaCuenta;
   /** Ocupación del historial al cerrar el turno. Ausente = no consta. */
   ventana?: number;
+  /**
+   * Lo mismo, POR MODELO: un especialista puede correr en otro modelo que el raíz (el `modelo:` de
+   * su `.md`), y el total no dice cuál gastó qué. Cada entrada dice a qué CUENTA pertenece, porque
+   * las dos cuentan la caché distinto. Ausente = no se midió (un turno de antes de esto): al sumar
+   * cae en `SIN_DESGLOSE`, así el desglose cuadra siempre con el total sin inventar de quién fue.
+   */
+  porModelo?: ConsumoPorModelo;
+}
+
+/** El consumo de UN modelo, y la cuenta a la que pertenece. */
+export interface ConsumoDeUnModelo extends ConsumoDeUnaCuenta {
+  cuenta: "modelo" | "externo";
+}
+
+/**
+ * Por id de modelo: `deepseek/deepseek-chat` en el grafo; `claude-code:claude-sonnet-4-5` (motor y,
+ * si se sabe, modelo) en uno externo.
+ */
+export type ConsumoPorModelo = Record<string, ConsumoDeUnModelo>;
+
+/** La fila de lo que se gastó sin saber en qué modelo: turnos de antes de medirlo. */
+export const SIN_DESGLOSE = "(sin desglose)";
+
+const esCero = (c: ConsumoDeUnaCuenta): boolean => c.entrada === 0 && c.salida === 0 && c.cache === 0;
+
+/**
+ * El desglose de un consumo: el suyo si lo trae, o sus dos cuentas bajo `SIN_DESGLOSE` (sin las que
+ * van a cero). Es lo que hace que la suma de un turno viejo y uno nuevo no pierda tokens.
+ */
+export function desgloseDe(c: ConsumoDeTurno): ConsumoPorModelo {
+  if (c.porModelo !== undefined) return c.porModelo;
+  const d: ConsumoPorModelo = {};
+  if (!esCero(c.modelo)) d[SIN_DESGLOSE] = { cuenta: "modelo", ...c.modelo };
+  if (!esCero(c.externo)) d[`${SIN_DESGLOSE} externo`] = { cuenta: "externo", ...c.externo };
+  return d;
+}
+
+/** Suma dos desgloses, modelo a modelo. Devuelve uno NUEVO. */
+export function sumarPorModelo(a: ConsumoPorModelo, b: ConsumoPorModelo): ConsumoPorModelo {
+  const total: ConsumoPorModelo = {};
+  for (const [id, c] of Object.entries(a)) total[id] = { ...c };
+  for (const [id, c] of Object.entries(b)) {
+    const previo = total[id];
+    total[id] = previo === undefined ? { ...c } : { cuenta: previo.cuenta, entrada: previo.entrada + c.entrada, salida: previo.salida + c.salida, cache: previo.cache + c.cache };
+  }
+  return total;
+}
+
+/** Lo que va de `antes` a `despues`, modelo a modelo, sin negativos y sin los que no se movieron. */
+export function restarPorModelo(despues: ConsumoPorModelo, antes: ConsumoPorModelo): ConsumoPorModelo {
+  const delta: ConsumoPorModelo = {};
+  for (const [id, d] of Object.entries(despues)) {
+    const a = antes[id];
+    const c = { cuenta: d.cuenta, entrada: Math.max(0, d.entrada - (a?.entrada ?? 0)), salida: Math.max(0, d.salida - (a?.salida ?? 0)), cache: Math.max(0, d.cache - (a?.cache ?? 0)) };
+    if (!esCero(c)) delta[id] = c;
+  }
+  return delta;
 }
 
 /** Suma dos consumos, cuenta por cuenta. La ventana gana la del SEGUNDO: es la más reciente. */
@@ -246,10 +303,13 @@ export function sumarConsumo(a: ConsumoDeTurno, b: ConsumoDeTurno): ConsumoDeTur
     cache: x.cache + y.cache,
   });
   const ventana = b.ventana ?? a.ventana;
+  // Con que UNO lo traiga hay desglose: el otro entra por `desgloseDe` (su total bajo `SIN_DESGLOSE`).
+  const hayDesglose = a.porModelo !== undefined || b.porModelo !== undefined;
   return {
     modelo: suma(a.modelo, b.modelo),
     externo: suma(a.externo, b.externo),
     ...(ventana === undefined ? {} : { ventana }),
+    ...(hayDesglose ? { porModelo: sumarPorModelo(desgloseDe(a), desgloseDe(b)) } : {}),
   };
 }
 
@@ -270,7 +330,7 @@ export function consumoDeLosActos(actos: readonly Acto[]): ConsumoDeTurno | unde
   let total: ConsumoDeTurno | undefined;
   for (const acto of actos) {
     if (acto.tipo !== "fin" || acto.consumo === undefined) continue;
-    total = total === undefined ? { ...acto.consumo } : sumarConsumo(total, acto.consumo);
+    total = total === undefined ? { ...acto.consumo, ...(acto.consumo.porModelo === undefined ? {} : { porModelo: sumarPorModelo({}, acto.consumo.porModelo) }) } : sumarConsumo(total, acto.consumo);
   }
   return total;
 }
@@ -294,6 +354,7 @@ export function acumularTotales(a: ConsumoDeTurno | undefined, delta: ConsumoDeT
   return {
     modelo: { ...total.modelo },
     externo: { ...total.externo },
+    ...(total.porModelo === undefined ? {} : { porModelo: sumarPorModelo({}, total.porModelo) }),
   };
 }
 

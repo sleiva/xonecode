@@ -36,6 +36,7 @@ import type {
   ConsumoDeSesionPorCuenta,
   IconosPort,
   ConectoresPort,
+  Papel,
   ModelosPort,
   MotorExterno,
   SkillInfo,
@@ -45,6 +46,7 @@ import type {
 import { crearSubagenteExterno } from "../../subagentes/subagenteExterno.js";
 import { inventarioDelProyecto, opcionesDeSubagenteExterno } from "../../subagentes/escrituraExterna.js";
 import { sumarConsumo, SIN_CONSUMO } from "../../subagentes/consumoExterno.js";
+import { sumarPorModelo, type ConsumoPorModelo } from "../../../core/actos.js";
 import { ColaDeEventos, entrelazar } from "../../../core/entrelazar.js";
 import { modeloExternoParaTrueforge } from "./modeloExterno.js";
 import { diferenciasDelContraste, metricasDeTrueforge } from "./metricasTrueforge.js";
@@ -701,6 +703,17 @@ export async function abrirSesionTrueforge(
    */
   const eventosExternos = new ColaDeEventos();
   let consumoExterno: ConsumoDeSesion = SIN_CONSUMO;
+  /**
+   * El consumo POR MODELO (`ConsumoPorModelo`): un especialista puede correr en otro modelo que el
+   * raíz. Cada hilo apunta al id con que NACIÓ (`modeloDeHilo`); el raíz, al de su papel AHORA
+   * (`/modelo` lo cambia). Suma lo mismo que `tracker` y `consumoExterno`, repartido.
+   */
+  let porModelo: ConsumoPorModelo = {};
+  const modeloDeHilo = new Map<string, string>();
+  const idDelPapel = (papel: Papel): string => modelos.idDePapel?.(papel) ?? `papel ${papel}`;
+  const apuntarModelo = (id: string, cuenta: "modelo" | "externo", c: { entrada: number; salida: number; cache: number }): void => {
+    porModelo = sumarPorModelo(porModelo, { [id]: { cuenta, ...c } });
+  };
   let apuntarAplicadasSinPreguntar: ((rutas: readonly string[]) => void) | undefined;
   const externo = (opciones.subagenteExterno ?? crearSubagenteExterno)(
     opcionesDeSubagenteExterno({
@@ -709,6 +722,10 @@ export async function abrirSesionTrueforge(
       eventos: eventosExternos,
       alConsumir: (c) => {
         consumoExterno = sumarConsumo(consumoExterno, c);
+        // Claude Code dice su gasto por modelo; los otros dos, solo por motor.
+        if (c.porModelo !== undefined && Object.keys(c.porModelo).length > 0) {
+          for (const [id, m] of Object.entries(c.porModelo)) apuntarModelo(`${c.motor}:${id}`, "externo", m);
+        } else apuntarModelo(c.motor, "externo", c);
         avisar();
       },
       modo: {
@@ -1018,6 +1035,7 @@ export async function abrirSesionTrueforge(
             .join("\n")
             .trimEnd();
     const papel = agente?.soloLectura === true ? "rapido" : "trabajo";
+    modeloDeHilo.set(params.threadId, agente?.modelo ?? idDelPapel(papel));
     const claseDeEsfuerzo = agente === undefined ? undefined : claseDeTrabajo(agente);
     // La memoria del especialista: su conversación anterior de ESTA sesión, si la hay y se puede usar.
     const apertura = conMemoriaDeEspecialistas && agente !== undefined ? memoriaDeEspecialistas.abrir(agente.nombre, params.threadId) : undefined;
@@ -1338,6 +1356,11 @@ export async function abrirSesionTrueforge(
         tracker.output += uso.output;
         tracker.cache += uso.cache;
         tracker.calls += 1;
+        apuntarModelo(deHilo === HILO_RAIZ ? idDelPapel("trabajo") : (modeloDeHilo.get(deHilo) ?? idDelPapel("trabajo")), "modelo", {
+          entrada: uso.input,
+          salida: uso.output,
+          cache: uso.cache,
+        });
         // Y solo de una llamada NORMAL: la de la compactación mide lo de ANTES de resumir.
         if (deHilo === HILO_RAIZ && evento.type === "internal.agent.context.append") tracker.contexto = uso.input;
         // Por ORIGEN, como deepagents: el orquestador y cada especialista por su nombre.
@@ -1886,6 +1909,7 @@ export async function abrirSesionTrueforge(
       tracker.calls = 0;
       tracker.contexto = 0;
       consumoExterno = SIN_CONSUMO;
+      porModelo = {};
       avisar();
     },
     cancelar() {
@@ -1918,6 +1942,8 @@ export async function abrirSesionTrueforge(
         modelo: { entrada: tracker.input, salida: tracker.output, cache: tracker.cache },
         externo: consumoExterno,
         contexto: tracker.contexto,
+        // Sin nada gastado no hay desglose: vacío no es «no consta», y un objeto vacío lo afirmaría.
+        ...(Object.keys(porModelo).length === 0 ? {} : { porModelo: sumarPorModelo({}, porModelo) }),
       };
     },
     alCambiarConsumo(oyente: () => void) {

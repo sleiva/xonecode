@@ -11,7 +11,8 @@
 
 import type { Proveedor } from "./modelos.js";
 import type { ClaseDeTrabajo, Esfuerzo, Pensamiento } from "./esfuerzo.js";
-import type { ConsumoDeTurno } from "./actos.js";
+import type { ConsumoDeTurno, ConsumoPorModelo } from "./actos.js";
+import { sumarPorModelo } from "./actos.js";
 import type { EstadoDeVerificador, VeredictoDeTarea } from "./entrega.js";
 import type { HallazgoDelTurno } from "./events.js";
 import type { LineaDeDiff } from "./diff.js";
@@ -137,6 +138,11 @@ export type MotorExterno = "claude-code" | "codex" | "opencode";
  */
 export interface ConsumoExterno extends ConsumoDeSesion {
   motor: MotorExterno;
+  /**
+   * Por modelo, si el motor lo dice (Claude Code trae `modelUsage` por id). Ausente: todo es del
+   * modelo que se le PIDIÓ, o del motor si no se pidió ninguno.
+   */
+  porModelo?: Record<string, ConsumoDeSesion>;
 }
 
 /** Tokens de entrada, de salida y de caché. La caché aparte, por lo de arriba. */
@@ -167,6 +173,8 @@ export interface ConsumoDeSesionPorCuenta {
    * `contexto`, y la que la barra del terminal ya pinta como dos cosas.
    */
   contexto: number;
+  /** Lo mismo, por modelo (`core/actos.ts#ConsumoPorModelo`). Ausente = este motor no lo mide. */
+  porModelo?: ConsumoPorModelo;
 }
 
 /**
@@ -194,6 +202,7 @@ export function consumoPersistible(c: ConsumoDeSesionPorCuenta): ConsumoDeTurno 
     modelo: { ...c.modelo },
     externo: { ...c.externo },
     ...(c.contexto === 0 ? {} : { ventana: c.contexto }),
+    ...(c.porModelo === undefined ? {} : { porModelo: sumarPorModelo({}, c.porModelo) }),
   };
 }
 
@@ -210,6 +219,7 @@ export function consumoDeLaSesion(c: ConsumoDeTurno): ConsumoDeSesionPorCuenta {
     modelo: { ...c.modelo },
     externo: { ...c.externo },
     contexto: c.ventana ?? 0,
+    ...(c.porModelo === undefined ? {} : { porModelo: sumarPorModelo({}, c.porModelo) }),
   };
 }
 
@@ -341,6 +351,12 @@ export interface ModelosPort {
   paraModelo(id: string, esfuerzo?: Esfuerzo, clase?: ClaseDeTrabajo, pensamiento?: Pensamiento): unknown;
   /** Qué modelo concreto resuelve cada papel, para que `describe` lo pueda enseñar. */
   descripcion(): Record<Papel, string>;
+  /**
+   * El `proveedor/modelo` que resuelve ese papel, a secas: con qué id se APUNTA el consumo de una
+   * llamada (`ConsumoPorModelo`). Opcional para que los dobles no cambien; ausente, el consumo va a
+   * nombre del papel.
+   */
+  idDePapel?(papel: Papel): string;
 }
 
 /** Modelo normalizado publicado por un proveedor, sin detalles de su cliente. */

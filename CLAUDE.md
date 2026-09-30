@@ -1276,6 +1276,16 @@ escrito a mano lo da de alta una persona desde la misma ventana.
     (se relee el `.jsonl` entero con `reabrirSesion`). La siembra
     (`sembrarConsumosPendientes`) es de PRESENTACIÓN y MONOTÓNICA: rellena solo lo que no trae
     acumulado, no da de alta lo que falte, y su fallo se TRAGA.
+  - **Y POR MODELO** (`core/actos.ts#ConsumoPorModelo`, `porModelo` en el `fin`, el índice y el
+    mensaje `consumo`): un especialista con `modelo:` en su `.md` corre en otro modelo que el raíz.
+    La sesión de TrueForge apunta cada hilo al id con que NACIÓ y el raíz al de su papel AHORA
+    (`ModelosPort.idDePapel?`, opcional); Claude Code conserva su `modelUsage` por id, Codex y
+    OpenCode van a nombre del motor. Cada entrada lleva su `cuenta`, porque las dos cuentan la
+    caché distinto. **Un turno sin desglose cae en `SIN_DESGLOSE` al sumar** (`desgloseDe`): las
+    filas suman el total sin inventar de quién fue; si ninguno lo trae, no hay desglose. El
+    contador del compositor es un BOTÓN solo con desglose y abre `DesgloseDeTokens`. **Límite
+    declarado**: las llamadas que no pasan por un hilo (`describe_image`, el crítico visual, el
+    juez) no cuentan en ninguna cuenta.
   Falta la vista AGREGADA por proyecto/histórico: el COSTE no se puede sumar entre cuentas.
 - **El modelo en vigor lo dice el SERVIDOR** (`resolver(estadoDeSesion.fuentes).trabajo`),
   `Consola.alEstado`. **El modelo por DEFECTO es otra pregunta y otro campo** (`porDefecto` en el

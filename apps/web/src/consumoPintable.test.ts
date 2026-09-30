@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { desglosarConsumo } from "./consumoPintable.js";
+import { filasPorModelo, describe, it, expect } from "vitest";
+import { desglosarConsumo, filasPorModelo } from "./consumoPintable.js";
 
 const sin = { entrada: 0, salida: 0, cache: 0 };
 
@@ -40,5 +40,22 @@ describe("desglosarConsumo", () => {
 
   it("sin nada, todo a cero", () => {
     expect(desglosarConsumo(sin, sin)).toEqual({ nueva: 0, cache: 0, salida: 0, entradaTotal: 0 });
+  });
+});
+
+describe("las filas del desglose por modelo", () => {
+  it("cada una en la MISMA convención (el grafo trae la caché dentro), de más a menos, con «sin desglose» al final", () => {
+    const filas = filasPorModelo({
+      "(sin desglose)": { cuenta: "modelo", entrada: 9000, salida: 900, cache: 8000 },
+      "gemini/gemini-3.8-flash": { cuenta: "modelo", entrada: 100, salida: 10, cache: 60 },
+      "deepseek/deepseek-chat": { cuenta: "modelo", entrada: 5000, salida: 300, cache: 4000 },
+      "claude-code:claude-sonnet-5": { cuenta: "externo", entrada: 200, salida: 20, cache: 50 },
+      vacio: { cuenta: "modelo", entrada: 0, salida: 0, cache: 0 },
+    });
+    expect(filas.map((f) => f.id)).toEqual(["deepseek/deepseek-chat", "claude-code:claude-sonnet-5", "gemini/gemini-3.8-flash", "(sin desglose)"]);
+    expect(filas[0]).toMatchObject({ nueva: 1000, cache: 4000, salida: 300 });
+    // Un externo trae la caché APARTE: su entrada es toda nueva.
+    expect(filas[1]).toMatchObject({ nueva: 200, cache: 50, cuenta: "externo" });
+    expect(filas[3]?.sinDesglose).toBe(true);
   });
 });

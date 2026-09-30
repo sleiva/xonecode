@@ -1,0 +1,91 @@
+/* El diálogo de tokens por modelo: la tarjeta de `Pregunta.module.css`, un poco más ancha
+   porque los ids de modelo son largos. Las cifras en mono (`estilos/tipografia.css`: el
+   mono es para cifras y rutas). */
+.tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(560px, 100%);
+  margin: 0 auto;
+  padding: 14px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.titulo {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.tabla th,
+.tabla td {
+  padding: 6px 8px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tabla td {
+  font-family: var(--dsw-font-mono);
+}
+
+.tabla thead th {
+  color: var(--dsw-alias-label-secondary);
+  font-weight: 500;
+}
+
+.tabla th:first-child {
+  text-align: left;
+}
+
+.tabla tfoot th,
+.tabla tfoot td {
+  border-bottom: none;
+  font-weight: 600;
+}
+
+/* El id del modelo: mono, y cortado con puntos si no cabe (el `title` de la celda no hace falta:
+   el texto entero está en el DOM). */
+.modelo {
+  font-family: var(--dsw-font-mono);
+  font-weight: 400;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Lo gastado antes de medir por modelo: tenue, porque no dice de quién fue. */
+.tabla tr[data-sin-desglose] {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.marca {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 10px;
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.nota {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+}
+
+.acciones {
+  display: flex;
+  justify-content: flex-end;
+}

@@ -35,20 +35,33 @@ const entero = (v: unknown): number => (typeof v === "number" && Number.isFinite
  * se leyeron pero no se pagaron igual, y meterlos en «entrada» inflaría la cifra que se
  * enseña. Que existan los dos campos es lo que permite decir la verdad sin elegir cuál.
  */
-export function consumoDeClaude(resultado: unknown): { entrada: number; salida: number; cache: number } {
+export function consumoDeClaude(resultado: unknown): {
+  entrada: number;
+  salida: number;
+  cache: number;
+  /** El mismo gasto, por el id de modelo que Claude Code da como clave de `modelUsage`. */
+  porModelo: Record<string, { entrada: number; salida: number; cache: number }>;
+} {
   const uso = (resultado as { modelUsage?: unknown } | null | undefined)?.modelUsage;
-  if (typeof uso !== "object" || uso === null) return { entrada: 0, salida: 0, cache: 0 };
+  if (typeof uso !== "object" || uso === null) return { entrada: 0, salida: 0, cache: 0, porModelo: {} };
   let entrada = 0;
   let salida = 0;
   let cache = 0;
-  for (const porModelo of Object.values(uso as Record<string, unknown>)) {
-    if (typeof porModelo !== "object" || porModelo === null) continue;
-    const m = porModelo as Record<string, unknown>;
-    entrada += entero(m["inputTokens"]);
-    salida += entero(m["outputTokens"]);
-    cache += entero(m["cacheReadInputTokens"]) + entero(m["cacheCreationInputTokens"]);
+  const porModelo: Record<string, { entrada: number; salida: number; cache: number }> = {};
+  for (const [id, deUno] of Object.entries(uso as Record<string, unknown>)) {
+    if (typeof deUno !== "object" || deUno === null) continue;
+    const m = deUno as Record<string, unknown>;
+    const este = {
+      entrada: entero(m["inputTokens"]),
+      salida: entero(m["outputTokens"]),
+      cache: entero(m["cacheReadInputTokens"]) + entero(m["cacheCreationInputTokens"]),
+    };
+    entrada += este.entrada;
+    salida += este.salida;
+    cache += este.cache;
+    porModelo[id] = este;
   }
-  return { entrada, salida, cache };
+  return { entrada, salida, cache, porModelo };
 }
 
 /**

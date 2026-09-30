@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
 import type { Acto } from "./actos.js";
-import { conLineaDeTool, acumularTotales, consumoDeLosActos, sumarConsumo } from "./actos.js";
+import { conLineaDeTool, acumularTotales, consumoDeLosActos, restarPorModelo, SIN_DESGLOSE, sumarConsumo, type ConsumoDeTurno } from "./actos.js";
 
 describe("core/actos", () => {
   it("no importa nada de cli/: el acto es de dominio, no de una piel", () => {
@@ -133,5 +133,46 @@ describe("el acumulado de una sesión, que es lo que se estampa en el índice", 
     acumularTotales(previo, consumo(50, 5, 7000));
     expect(previo.modelo).toEqual(cuenta(1000, 100));
     expect(previo.ventana).toBe(4000);
+  });
+});
+
+describe("el consumo POR MODELO", () => {
+  const CERO = { entrada: 0, salida: 0, cache: 0 };
+  const viejo: ConsumoDeTurno = { modelo: { entrada: 100, salida: 10, cache: 60 }, externo: CERO };
+  const nuevo: ConsumoDeTurno = {
+    modelo: { entrada: 50, salida: 5, cache: 20 },
+    externo: { entrada: 7, salida: 3, cache: 1 },
+    porModelo: {
+      "deepseek/deepseek-chat": { cuenta: "modelo", entrada: 30, salida: 4, cache: 20 },
+      "gemini/gemini-3.8-flash": { cuenta: "modelo", entrada: 20, salida: 1, cache: 0 },
+      "claude-code:claude-sonnet-4-5": { cuenta: "externo", entrada: 7, salida: 3, cache: 1 },
+    },
+  };
+
+  it("un turno viejo sin desglose cae en «sin desglose»: las filas suman el total, sin inventar de quién fue", () => {
+    const total = sumarConsumo(viejo, nuevo);
+    expect(total.porModelo?.[SIN_DESGLOSE]).toEqual({ cuenta: "modelo", entrada: 100, salida: 10, cache: 60 });
+    const filas = Object.values(total.porModelo ?? {}).filter((f) => f.cuenta === "modelo");
+    expect(filas.reduce((t, f) => t + f.entrada, 0)).toBe(total.modelo.entrada);
+    expect(filas.reduce((t, f) => t + f.salida, 0)).toBe(total.modelo.salida);
+  });
+
+  it("si NINGUNO lo trae no se inventa un desglose", () => {
+    expect(sumarConsumo(viejo, viejo)).not.toHaveProperty("porModelo");
+  });
+
+  it("se suma modelo a modelo, y los actos y el acumulado del índice lo conservan", () => {
+    const dos = sumarConsumo(nuevo, nuevo);
+    expect(dos.porModelo?.["gemini/gemini-3.8-flash"]).toEqual({ cuenta: "modelo", entrada: 40, salida: 2, cache: 0 });
+    const actos: Acto[] = [{ tipo: "fin", ms: 1, consumo: nuevo }, { tipo: "fin", ms: 1, consumo: nuevo }];
+    expect(consumoDeLosActos(actos)?.porModelo).toEqual(dos.porModelo);
+    expect(acumularTotales(undefined, nuevo).porModelo).toEqual(nuevo.porModelo);
+    expect(acumularTotales(undefined, nuevo).porModelo).not.toBe(nuevo.porModelo);
+  });
+
+  it("el delta de un turno es la resta modelo a modelo, sin negativos y sin los que no se movieron", () => {
+    const antes = { a: { cuenta: "modelo" as const, entrada: 10, salida: 1, cache: 5 }, b: { cuenta: "modelo" as const, entrada: 3, salida: 0, cache: 0 } };
+    const despues = { a: { cuenta: "modelo" as const, entrada: 25, salida: 3, cache: 9 }, b: antes.b, c: { cuenta: "externo" as const, entrada: 1, salida: 1, cache: 0 } };
+    expect(restarPorModelo(despues, antes)).toEqual({ a: { cuenta: "modelo", entrada: 15, salida: 2, cache: 4 }, c: { cuenta: "externo", entrada: 1, salida: 1, cache: 0 } });
   });
 });

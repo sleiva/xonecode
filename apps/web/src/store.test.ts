@@ -1786,6 +1786,25 @@ describe("el consumo de la sesión entra por lista BLANCA", () => {
     });
   });
 
+  it("el desglose POR MODELO también entra campo a campo, y una entrada con una cuenta desconocida se TIRA", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "consumo",
+      modelo: { entrada: 100, salida: 20, cache: 5 },
+      externo: { entrada: 0, salida: 0, cache: 0 },
+      ventana: { usado: 10 },
+      porModelo: {
+        "deepseek/deepseek-chat": { cuenta: "modelo", entrada: 100, salida: 20, cache: 5, extra: "x" },
+        raro: { cuenta: "otra", entrada: 1, salida: 1, cache: 0 },
+        malo: "no",
+      },
+    } as never);
+    expect(s.leer().consumo?.porModelo).toEqual({ "deepseek/deepseek-chat": { cuenta: "modelo", entrada: 100, salida: 20, cache: 5 } });
+    // Sin desglose que valga, no consta: no un objeto vacío.
+    s.aplicar({ clase: "consumo", modelo: {}, externo: {}, ventana: {}, porModelo: { raro: { cuenta: "otra" } } } as never);
+    expect(s.leer().consumo).not.toHaveProperty("porModelo");
+  });
+
   it("lo que llega mal se lee como CERO, no como NaN", () => {
     // Viene de un `JSON.parse` de la red: un NaN o una cadena dejarían el contador ilegible
     // en vez de dar un error que alguien pueda ver.

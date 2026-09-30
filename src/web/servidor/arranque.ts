@@ -1678,6 +1678,7 @@ export function montarRutas(
           modelo: consumoDeLaSesion.modelo,
           externo: consumoDeLaSesion.externo,
           ventana: ventanaDeAhora(consumoDeLaSesion.contexto),
+          ...(consumoDeLaSesion.porModelo === undefined ? {} : { porModelo: consumoDeLaSesion.porModelo }),
         });
       }
       // La foto de la máquina, si ya se tomó. Si no, se dispara abajo UNA vez y llega a
@@ -2757,6 +2758,7 @@ export function montarRutas(
       modelo: alAbrir?.modelo ?? SIN_CONSUMO,
       externo: alAbrir?.externo ?? SIN_CONSUMO,
       ventana: ventanaDeAhora(alAbrir?.contexto ?? 0),
+      ...(alAbrir?.porModelo === undefined ? {} : { porModelo: alAbrir.porModelo }),
     });
     // Y la cola se vuelve a mirar: este proyecto queda bloqueado para las tareas —gana la
     // persona— y el que estuviera abierto antes acaba de quedar libre.
@@ -4439,7 +4441,13 @@ export function montarRutas(
     // Ausente es «no consta», y entonces no se manda nada: el cliente prefiere no pintar el
     // contador a pintar un cero que nadie ha medido.
     if (c === undefined) return;
-    emitir({ clase: "consumo", modelo: c.modelo, externo: c.externo, ventana: ventanaDeAhora(c.contexto) });
+    emitir({
+      clase: "consumo",
+      modelo: c.modelo,
+      externo: c.externo,
+      ventana: ventanaDeAhora(c.contexto),
+      ...(c.porModelo === undefined ? {} : { porModelo: c.porModelo }),
+    });
   };
 
   /**

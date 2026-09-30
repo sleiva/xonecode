@@ -65,3 +65,21 @@
    el nombre de un módulo CSS va hasheado y desde el otro fichero esta clase no se puede
    nombrar, así que allí la envuelve una caja con nombre propio. Aquí no se declara el
    contenedor porque el ancho que importa es el del RENGLÓN, no el de la pastilla. */
+
+/* Con desglose por modelo el contador es un botón: la misma pastilla, que se puede pulsar. */
+.boton {
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-family: var(--dsw-font-mono);
+  font-size: 11px;
+}
+
+.boton:hover {
+  filter: brightness(0.96);
+}
+
+.boton:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 1px;
+}
