@@ -33,7 +33,6 @@ describe("comandoDelSelector", () => {
   it("en un sistema sin selector conocido, AUSENTE — y eso no es un fallo", () => {
     // Ausente = «aquí no hay selector», y entonces no se ofrece el botón. Un botón que no
     // hace nada es peor que no tenerlo, y el campo de texto ya resuelve el caso.
-    expect(comandoDelSelector("win32")).toBeUndefined();
     expect(comandoDelSelector("aix")).toBeUndefined();
   });
 });
@@ -109,5 +108,20 @@ describe("comandoParaAbrirDirectorio", () => {
       programa: "xdg-open",
       argumentos: ["/home/ana/ws/webstudio/Tienda"],
     });
+  });
+});
+
+describe("IXCODE-22: el selector de carpeta en Windows", () => {
+  it("hay diálogo en win32 (PowerShell, STA) y la ruta de inicio va escapada", () => {
+    const c = comandoDelSelector("win32", "C:\\Users\\O'Brien");
+    expect(c?.programa).toBe("powershell.exe");
+    expect(c?.argumentos).toContain("-STA");
+    expect(c?.argumentos.at(-1)).toContain("FolderBrowserDialog");
+    expect(c?.argumentos.at(-1)).toContain("'C:\\Users\\O''Brien'");
+  });
+  it("la salida de Windows se acepta; la vacía (cancelar) no", () => {
+    expect(carpetaDeLaSalida("C:\\Users\\lolo\\xone\r\n")).toBe("C:\\Users\\lolo\\xone");
+    expect(carpetaDeLaSalida("\\\\srv\\comp\\xone\\")).toBe("\\\\srv\\comp\\xone");
+    expect(carpetaDeLaSalida("")).toBeUndefined();
   });
 });

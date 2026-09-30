@@ -74,6 +74,17 @@ export function comandoDelSelector(plataforma: string, desde?: string): ComandoD
       ],
     };
   }
+  if (plataforma === "win32") {
+    // El diálogo de carpetas de Windows, por PowerShell (IXCODE-22: no había ninguno y el botón no hacía nada). `-STA` es
+    // obligatorio para un diálogo de Forms. La ruta de inicio va entre comillas simples con las suyas dobladas.
+    const inicio = desde === undefined ? "" : `$d.SelectedPath = '${desde.replace(/'/g, "''")}'; `;
+    const guion =
+      "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; " +
+      "$d.Description = 'Dónde se bajan los proyectos de XOneCode'; " +
+      inicio +
+      "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $d.SelectedPath }";
+    return { programa: "powershell.exe", argumentos: ["-NoProfile", "-STA", "-Command", guion] };
+  }
   return undefined;
 }
 
@@ -90,7 +101,10 @@ export function comandoDelSelector(plataforma: string, desde?: string): ComandoD
  * hasta el validador disfrazada de ruta.
  */
 export function carpetaDeLaSalida(salida: string): string | undefined {
-  const limpia = salida.trim().replace(/\/+$/, "");
+  const bruta = salida.trim();
+  // Windows: `C:\…` o `\\servidor\…`, que es lo que devuelve su diálogo.
+  if (/^[a-zA-Z]:[\\/]/.test(bruta) || bruta.startsWith("\\\\")) return bruta.replace(/(?<=.)[\\/]+$/, "");
+  const limpia = bruta.replace(/\/+$/, "");
   return limpia.startsWith("/") ? limpia : undefined;
 }
 

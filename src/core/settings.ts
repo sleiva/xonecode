@@ -9,7 +9,7 @@
  * TypeScript puro: ni disco ni red. El disco lo pone `agent/config/settingsEnDisco.ts`, igual
  * que `core/config.ts` deja el I/O a `agent/config/configEnDisco.ts` y `agent/config/authEnDisco.ts`.
  */
-import { posix } from "node:path";
+import { posix, win32 } from "node:path";
 import { type Aviso, CLAVES_DENEGADAS } from "./config.js";
 
 export interface Entorno {
@@ -371,7 +371,9 @@ function esRutaDeWindows(ruta: string): boolean {
 export function expandirConCasa(ruta: string, casa: string): string {
   const limpio = ruta.trim();
   if (limpio === "~") return casa;
-  return limpio.startsWith("~/") ? posix.join(casa, limpio.slice(2)) : limpio;
+  // `~\…` también: es como se teclea en Windows, y la casa de allí es `C:\Users\…`.
+  if (limpio.startsWith("~/") || limpio.startsWith("~\\")) return (esRutaDeWindows(casa) ? win32 : posix).join(casa, limpio.slice(2));
+  return limpio;
 }
 
 /**
@@ -385,8 +387,18 @@ export function expandirConCasa(ruta: string, casa: string): string {
 export function motivoDeWorkspaceInaceptable(ruta: string): string | undefined {
   const limpio = ruta.trim();
   if (limpio === "") return "escribe una carpeta: en blanco no es una elección";
+  /**
+   * **Windows también** (IXCODE-22): la regla era `posix.isAbsolute`, así que `C:\Users\lolo\xonecode` —que es como es
+   * una ruta absoluta allí— se rechazaba con «tiene que empezar por /», y en Windows no había ninguna que valiera. Vale
+   * una con unidad (`C:\…`, `C:/…`) o de red (`\\servidor\recurso\…`); la raíz de una unidad no, por lo mismo que `/`.
+   */
+  if (esRutaDeWindows(limpio)) {
+    const normal = win32.normalize(limpio).replace(/[\\/]+$/, "");
+    if (/^[a-zA-Z]:$/.test(normal)) return "la raíz de la unidad no: ahí cada entorno sería una carpeta de primer nivel del disco";
+    return undefined;
+  }
   if (!posix.isAbsolute(limpio)) {
-    return "tiene que ser una ruta absoluta, que empiece por «/» o por «~/»";
+    return "tiene que ser una ruta absoluta: que empiece por «/», por «~/» o, en Windows, por la unidad («C:\\…»)";
   }
   if (posix.normalize(limpio).replace(/\/+$/, "") === "") {
     return "la raíz del disco no: ahí cada entorno sería una carpeta de primer nivel del sistema";
@@ -395,7 +407,8 @@ export function motivoDeWorkspaceInaceptable(ruta: string): string | undefined {
 }
 
 export function rutaDeWorkspace(base: string, entorno: string, proyecto: string): string {
-  return posix.join(base, segmentoSeguro(entorno, "id de entorno"), segmentoSeguro(proyecto, "nombre de proyecto"));
+  // Con las reglas de la ruta BASE: sobre `C:\…`, `posix.join` dejaba `C:\Users\x\ws/entorno/proyecto`, mezclado.
+  return (esRutaDeWindows(base) ? win32 : posix).join(base, segmentoSeguro(entorno, "id de entorno"), segmentoSeguro(proyecto, "nombre de proyecto"));
 }
 
 /**

@@ -40,13 +40,25 @@ describe("elegirCarpetaEnMaquina", () => {
   it("en un sistema sin selector no se lanza NADA", async () => {
     let lanzado = false;
     const elegida = await elegirCarpetaEnMaquina({
-      plataforma: "win32",
+      plataforma: "aix",
       lanzar: async () => {
         lanzado = true;
         return "/x";
       },
     });
     expect({ elegida, lanzado }).toEqual({ elegida: undefined, lanzado: false });
+  });
+
+  it("en Windows lanza su diálogo y acepta la ruta con unidad que devuelve", async () => {
+    let programa = "";
+    const elegida = await elegirCarpetaEnMaquina({
+      plataforma: "win32",
+      lanzar: async (c) => {
+        programa = (c as { programa: string }).programa;
+        return "C:\\Users\\lolo\\xone\r\n";
+      },
+    });
+    expect({ programa, elegida }).toEqual({ programa: "powershell.exe", elegida: "C:\\Users\\lolo\\xone" });
   });
 
   it("una salida que no es una ruta no se cuela", async () => {
@@ -62,6 +74,8 @@ describe("haySelectorDeCarpeta", () => {
   it("es lo que decide si se OFRECE el botón", () => {
     expect(haySelectorDeCarpeta("darwin")).toBe(true);
     expect(haySelectorDeCarpeta("linux")).toBe(true);
-    expect(haySelectorDeCarpeta("win32")).toBe(false);
+    // IXCODE-22: Windows tiene el suyo (PowerShell); sin él, el campo de texto era el único camino y se rechazaba.
+    expect(haySelectorDeCarpeta("win32")).toBe(true);
+    expect(haySelectorDeCarpeta("aix")).toBe(false);
   });
 });

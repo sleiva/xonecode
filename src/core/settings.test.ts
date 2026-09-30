@@ -1,20 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  validarSettings,
-  expandirConCasa,
-  motivoDeWorkspaceInaceptable,
-  rutaDeWorkspace,
-  dentroDelWorkspace,
-  seMira,
-  depuracionActiva,
-  PLATAFORMAS_DE_DISPOSITIVO,
-  TOPE_DE_CONCURRENCIA_DE_TAREAS,
-  motivoParaNoOlvidarEntorno,
-  motivoParaNoBorrarCopia,
-  mismaRuta,
-  motivoDeNombreDeEntornoInaceptable,
-  LARGO_NOMBRE_DE_ENTORNO,
-} from "./settings.js";
+import { validarSettings, expandirConCasa, motivoDeWorkspaceInaceptable, rutaDeWorkspace, dentroDelWorkspace, seMira, depuracionActiva, PLATAFORMAS_DE_DISPOSITIVO, TOPE_DE_CONCURRENCIA_DE_TAREAS, motivoParaNoOlvidarEntorno, motivoParaNoBorrarCopia, mismaRuta, motivoDeNombreDeEntornoInaceptable, LARGO_NOMBRE_DE_ENTORNO } from "./settings.js";
 
 describe("validarSettings", () => {
   it("conserva los entornos bien formados, sin avisos", () => {
@@ -332,5 +317,23 @@ describe("motivoParaNoBorrarCopia", () => {
   /** Una consola ABIERTA no es motivo: quien borra la cierra antes. */
   it("sin nada escribiendo, se puede", () => {
     expect(motivoParaNoBorrarCopia({ raiz, trabajando: false, tareas: [] })).toBeUndefined();
+  });
+});
+
+describe("IXCODE-22: el workspace en Windows", () => {
+  it("una ruta de Windows con unidad o de red VALE; la raíz de una unidad, no", () => {
+    expect(motivoDeWorkspaceInaceptable("C:\\Users\\lolo\\xonecode")).toBeUndefined();
+    expect(motivoDeWorkspaceInaceptable("D:/proyectos/xone")).toBeUndefined();
+    expect(motivoDeWorkspaceInaceptable("\\\\servidor\\compartida\\xone")).toBeUndefined();
+    expect(motivoDeWorkspaceInaceptable("C:\\")).toContain("raíz de la unidad");
+    expect(motivoDeWorkspaceInaceptable("xonecode\\ws")).toContain("en Windows, por la unidad");
+  });
+  it("la ruta de un proyecto se compone con las reglas de la base: sin mezclar barras", () => {
+    expect(rutaDeWorkspace("C:\\Users\\lolo\\ws", "manager", "MyApp")).toBe("C:\\Users\\lolo\\ws\\manager\\MyApp");
+    expect(rutaDeWorkspace("/Users/x/ws", "manager", "MyApp")).toBe("/Users/x/ws/manager/MyApp");
+  });
+  it("`~\\` se expande contra la casa de Windows", () => {
+    expect(expandirConCasa("~\\xone", "C:\\Users\\lolo")).toBe("C:\\Users\\lolo\\xone");
+    expect(expandirConCasa("~/xone", "/Users/x")).toBe("/Users/x/xone");
   });
 });
