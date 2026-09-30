@@ -2046,6 +2046,76 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
   // de la ida, ya borrada por la vuelta (`rutaTrasLasMudanzas`).
   const trasLaMudanza = (raiz: string): string => rutaTrasLasMudanzas(raiz, mudadas);
 
+  /**
+   * Descargar y mudar no pueden coincidir, y la pantalla sola no lo impedía (otra pestaña,
+   * recargar a mitad, o una descarga larga ya en marcha al abrir Ajustes). Una descarga en
+   * curso mientras se muda escribe en la base VIEJA —o la mudanza le borra el origen a mitad—,
+   * así que cada una NIEGA a la otra con su motivo: la mudanza en el plan y en el resultado,
+   * la descarga con un error que el alta enseña. La mudanza se marca al PEDIRLA, no al salir
+   * de la cola: una descarga que llega mientras espera turno también caería en la base vieja.
+   */
+  let descargasEnCurso = 0;
+  let mudando = false;
+  const MOTIVO_DESCARGANDO = "hay una descarga de proyecto en marcha: espera a que termine para cambiar la carpeta";
+
+  /** El alta y la descarga de verdad; `completarProyecto` la envuelve con la guarda de la mudanza. */
+  const completarDeVerdad = async ({
+    entorno,
+    proyecto,
+    rama,
+  }: Parameters<Vestibulo["completarProyecto"]>[0]): ReturnType<Vestibulo["completarProyecto"]> => {
+    const registrado = entornoPorId(entorno);
+    // El listado remoto trae `{id, nombre}`; un nombre suelto vale porque en CloudStudio
+    // el proyecto se abre POR NOMBRE (`studio_open_project`) y el id solo identifica.
+    //
+    // Se DESESTRUCTURA, y no es estilo: lo que entre aquí acaba en el `config.json` del
+    // proyecto (`guardarProyectoCloudStudioDeProyecto`, abajo), y quien llama le pasa una
+    // fila del listado remoto — que hoy trae además `compartido` y mañana podría traer
+    // otra cosa. TypeScript no avisa: la comprobación de propiedades de más solo salta
+    // con un literal, no con un objeto que llega por variable. Copiar los dos campos que
+    // SON la identidad es lo que impide que el disco se llene de datos del servidor.
+    const identidad =
+      typeof proyecto === "string"
+        ? { id: proyecto, nombre: proyecto }
+        : { id: proyecto.id, nombre: proyecto.nombre };
+    const raiz = rutaDeWorkspace(base(), registrado.id, identidad.nombre);
+    const datos: DatosDeProyecto = {
+      entorno: registrado.id,
+      url: registrado.url,
+      scopes: registrado.scopes ?? SCOPES_CLOUDSTUDIO_AGENTE,
+      proyecto: identidad,
+      rama,
+    };
+
+    // El alta se escribe ENTERA antes de bajar, y no después. No es un descuido: la
+    // frase que se dice cuando la descarga falla es «reintenta con /sync bajar», y
+    // `/sync` lee del disco el proyecto y la rama — sin el alta escrita, ese consejo
+    // sería mentira. «No a medias» significa completa o nada, no «nada».
+    const { ruta } = opciones.guardarConfigDeProyecto(raiz, datos);
+    proyectoEscrito = { raiz, ruta };
+    informar(`proyecto dado de alta en ${ruta}`);
+
+    try {
+      await opciones.descargar({ ...datos, raiz });
+    } catch (error) {
+      const detalle = error instanceof Error ? error.message : String(error);
+      // Se APUNTA en el registro de fallos del proyecto, con qué se bajaba y la cadena de
+      // causas: hasta ahora solo salía en pantalla, y el «sigue diciendo que no hay proyecto
+      // abierto» de una descarga no dejó ningún rastro con el que mirar después.
+      anotarFallo(raiz, {
+        error,
+        peticion: `descarga de «${identidad.nombre}» (entorno ${registrado.id}, rama ${rama})`,
+      });
+      informar(`no se pudo descargar el proyecto: ${detalle}`);
+      informar(`el alta quedó completa en ${ruta}; reintenta la descarga con «/sync bajar»`);
+      // Se propaga: quien llama decide si vuelve al paso de proyecto o abre igualmente
+      // la copia vacía. Tragárselo aquí dejaría creer que el proyecto está bajado.
+      throw error;
+    }
+    return { raiz, ruta };
+  };
+
+
   /** Las raíces donde algo ESCRIBE ahora: un chat con turno en vuelo y una consola de tarea
    *  sin cerrar. Lo que `motivoParaNoMudarWorkspace` necesita para decir que no. */
   const raicesOcupadas = (): { trabajando: string[]; deTareas: string[] } => ({
@@ -2323,13 +2393,18 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     planearWorkspace(hacia, casaXonecode, tareas) {
       const desde = base();
       if (mismaRuta(desde, hacia)) return { mudanzas: [] };
+      if (descargasEnCurso > 0) return { mudanzas: [], motivo: MOTIVO_DESCARGANDO };
       const motivo = motivoParaNoMudarWorkspace({ base: desde, ...raicesOcupadas(), tareas });
       if (motivo !== undefined) return { mudanzas: [], motivo };
       return planDeCambioDeBaseEnDisco({ desde, hacia, casaXonecode });
     },
 
-    mudarWorkspace: ({ hacia, casaXonecode, tareas, guardar, progreso }) =>
-      enCola(async () => {
+    mudarWorkspace: ({ hacia, casaXonecode, tareas, guardar, progreso }) => {
+      if (descargasEnCurso > 0) {
+        return Promise.resolve({ resultado: { estado: "rechazado" as const, motivo: MOTIVO_DESCARGANDO }, cerroLaAbierta: false });
+      }
+      mudando = true;
+      return enCola(async () => {
         const desde = base();
         if (mismaRuta(desde, hacia)) {
           return { resultado: { estado: "hecho" as const, mudadas: 0, restos: [], avisos: [] }, cerroLaAbierta: false };
@@ -2365,62 +2440,25 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         } finally {
           if (deLaBase.length > 0) avisarDeLasAbiertas();
         }
-      }),
+      }).finally(() => {
+        mudando = false;
+      });
+    },
 
     renombrarSesion(raiz, id, titulo) {
       return sesiones.renombrar?.(raiz, id, titulo) ?? false;
     },
 
-    async completarProyecto({ entorno, proyecto, rama }) {
-      const registrado = entornoPorId(entorno);
-      // El listado remoto trae `{id, nombre}`; un nombre suelto vale porque en CloudStudio
-      // el proyecto se abre POR NOMBRE (`studio_open_project`) y el id solo identifica.
-      //
-      // Se DESESTRUCTURA, y no es estilo: lo que entre aquí acaba en el `config.json` del
-      // proyecto (`guardarProyectoCloudStudioDeProyecto`, abajo), y quien llama le pasa una
-      // fila del listado remoto — que hoy trae además `compartido` y mañana podría traer
-      // otra cosa. TypeScript no avisa: la comprobación de propiedades de más solo salta
-      // con un literal, no con un objeto que llega por variable. Copiar los dos campos que
-      // SON la identidad es lo que impide que el disco se llene de datos del servidor.
-      const identidad =
-        typeof proyecto === "string"
-          ? { id: proyecto, nombre: proyecto }
-          : { id: proyecto.id, nombre: proyecto.nombre };
-      const raiz = rutaDeWorkspace(base(), registrado.id, identidad.nombre);
-      const datos: DatosDeProyecto = {
-        entorno: registrado.id,
-        url: registrado.url,
-        scopes: registrado.scopes ?? SCOPES_CLOUDSTUDIO_AGENTE,
-        proyecto: identidad,
-        rama,
-      };
-
-      // El alta se escribe ENTERA antes de bajar, y no después. No es un descuido: la
-      // frase que se dice cuando la descarga falla es «reintenta con /sync bajar», y
-      // `/sync` lee del disco el proyecto y la rama — sin el alta escrita, ese consejo
-      // sería mentira. «No a medias» significa completa o nada, no «nada».
-      const { ruta } = opciones.guardarConfigDeProyecto(raiz, datos);
-      proyectoEscrito = { raiz, ruta };
-      informar(`proyecto dado de alta en ${ruta}`);
-
-      try {
-        await opciones.descargar({ ...datos, raiz });
-      } catch (error) {
-        const detalle = error instanceof Error ? error.message : String(error);
-        // Se APUNTA en el registro de fallos del proyecto, con qué se bajaba y la cadena de
-        // causas: hasta ahora solo salía en pantalla, y el «sigue diciendo que no hay proyecto
-        // abierto» de una descarga no dejó ningún rastro con el que mirar después.
-        anotarFallo(raiz, {
-          error,
-          peticion: `descarga de «${identidad.nombre}» (entorno ${registrado.id}, rama ${rama})`,
-        });
-        informar(`no se pudo descargar el proyecto: ${detalle}`);
-        informar(`el alta quedó completa en ${ruta}; reintenta la descarga con «/sync bajar»`);
-        // Se propaga: quien llama decide si vuelve al paso de proyecto o abre igualmente
-        // la copia vacía. Tragárselo aquí dejaría creer que el proyecto está bajado.
-        throw error;
+    async completarProyecto(eleccion) {
+      if (mudando) {
+        throw new Error("se está cambiando la carpeta de los proyectos: espera a que termine y vuelve a descargarlo");
       }
-      return { raiz, ruta };
+      descargasEnCurso++;
+      try {
+        return await completarDeVerdad(eleccion);
+      } finally {
+        descargasEnCurso--;
+      }
     },
 
     // La raíz se TRADUCE dentro de la cola: quien llama la compuso con la base de antes, y si

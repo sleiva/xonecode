@@ -2898,6 +2898,45 @@ describe("mudarWorkspace: cambiar la base con copias dentro", () => {
     await v.cerrar();
   });
 
+  it("con una DESCARGA en marcha no se muda: ni el plan ni el aplicar, y se dice por qué", async () => {
+    // El fallo: la mudanza copiaba la carpeta a medio bajar y después borraba el origen
+    // mientras la descarga seguía escribiendo en él.
+    const casa = mkdtempSync(join(tmpdir(), "xonecode-vestibulo-descarga-"));
+    const casaXonecode = join(casa, ".xonecode");
+    const estado = { base: join(casaXonecode, "workspace") };
+    let soltar: () => void = () => {};
+    const bajando = new Promise<void>((r) => (soltar = r));
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      baseDeWorkspace: () => estado.base,
+      descargar: () => bajando,
+    });
+    const descarga = v.completarProyecto({ entorno: "webstudio", proyecto: "Grande", rama: "master" });
+    const hacia = join(casa, "otra");
+    expect(v.planearWorkspace(hacia, casaXonecode, []).motivo).toMatch(/descarga/);
+    const { resultado } = await v.mudarWorkspace({ hacia, casaXonecode, tareas: () => [], guardar: (r) => void (estado.base = r) });
+    expect(resultado).toEqual({ estado: "rechazado", motivo: expect.stringMatching(/descarga/) });
+    expect(estado.base).toBe(join(casaXonecode, "workspace"));
+    soltar();
+    await descarga;
+    // Acabada la descarga, ya se puede.
+    expect(v.planearWorkspace(hacia, casaXonecode, []).motivo).toBeUndefined();
+    await v.cerrar();
+  });
+
+  it("con una MUDANZA en marcha no se descarga: la copia caería en la base vieja", async () => {
+    const { v, estado, hacia, casaXonecode } = conCopia();
+    const mudanza = v.mudarWorkspace({ hacia, casaXonecode, tareas: () => [], guardar: (r) => void (estado.base = r) });
+    await expect(v.completarProyecto({ entorno: "webstudio", proyecto: "Otro", rama: "master" })).rejects.toThrow(
+      /cambiando la carpeta/
+    );
+    expect((await mudanza).resultado.estado).toBe("hecho");
+    // Acabada la mudanza, ya se puede descargar.
+    await expect(v.completarProyecto({ entorno: "webstudio", proyecto: "Otro", rama: "master" })).resolves.toBeDefined();
+    await v.cerrar();
+  });
+
   it("si la base no quedó GUARDADA, no se borra nada: el origen sigue y el destino se limpia", async () => {
     const { v, hacia, vieja, casaXonecode } = conCopia();
     // Quien guarda en producción puede volver sin escribir y sin lanzar.
