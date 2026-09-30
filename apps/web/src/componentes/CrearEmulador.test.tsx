@@ -63,4 +63,20 @@ describe("CrearEmulador", () => {
     );
     expect(screen.getByText(/no hay imagen de sistema/)).toBeTruthy();
   });
+
+  it("tras crear bien, el campo se vacía (si no, diría «ya existe»)", () => {
+    const { rerender } = render(<CrearEmulador avds={[]} conectado alCrear={() => {}} />);
+    escribir("pixel9");
+    const base = { receta: "crear-avd", paso: 0, titulo: "Creando pixel9", lineas: [], ms: 10 };
+    rerender(<CrearEmulador avds={[]} conectado alCrear={() => {}} progreso={{ ...base, estado: "corriendo" }} />);
+    rerender(<CrearEmulador avds={["pixel9"]} conectado alCrear={() => {}} progreso={{ ...base, estado: "ok" }} />);
+    expect((screen.getByRole("textbox", { name: "Nombre del emulador nuevo" }) as HTMLInputElement).value).toBe("");
+    expect(screen.queryByText("pixel9 ya existe")).toBeNull();
+  });
+
+  it("un nombre que no vale marca el campo como inválido", () => {
+    render(<CrearEmulador avds={["a"]} conectado alCrear={() => {}} />);
+    escribir("a");
+    expect(screen.getByRole("textbox", { name: "Nombre del emulador nuevo" }).getAttribute("aria-invalid")).toBe("true");
+  });
 });

@@ -54,12 +54,13 @@ export function AjustesDeAvd({
       <span className={estilos.celdaDePuerto}>
         {conPuerto ? (
           <>
-            <label className={estilos.campo}>
+            <label className={estilos.campoDePuerto}>
               Puerto
               <input
                 type="number"
                 inputMode="numeric"
                 className={estilos.puerto}
+                aria-invalid={motivo === undefined ? undefined : true}
                 value={borrador}
                 disabled={conectado !== true}
                 aria-label={`Puerto del túnel de ${avd}`}

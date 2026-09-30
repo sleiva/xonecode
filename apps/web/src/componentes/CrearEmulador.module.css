@@ -5,11 +5,14 @@
   margin-top: 10px;
 }
 
+/* El título, con el estilo de «Teléfonos y tablets» / «Simuladores y emuladores». */
+.titulo {
+  composes: subsubencabezado from "./Ajustes.module.css";
+}
+
+/* Campo + botón, el MISMO estilo que el del nombre de Ajustes (incluye `aria-invalid`). */
 .fila {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
+  composes: campoDeNombreConBoton from "./Ajustes.module.css";
 }
 
 .boton {

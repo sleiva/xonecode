@@ -23,8 +23,17 @@
   gap: 4px;
 }
 
-.puerto {
-  width: 72px;
+/* Cinco cifras y nada más, en el estilo de los campos de Ajustes (el label compone
+   `campoDeNombreConBoton`, que estila su input). Más específico que esa regla para el ancho. */
+.campoDePuerto {
+  composes: campoDeNombreConBoton from "./Ajustes.module.css";
+  font-size: 11px;
+}
+
+.campoDePuerto input.puerto {
+  flex: none;
+  width: 76px;
+  font-variant-numeric: tabular-nums;
 }
 
 .motivo {

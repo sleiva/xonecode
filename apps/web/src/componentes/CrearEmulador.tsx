@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motivoDeNombreDeAvdInaceptable } from "../reglasDeAvd.js";
 import type { EstadoDelCliente } from "../store.js";
 import estilos from "./CrearEmulador.module.css";
@@ -32,18 +32,25 @@ export function CrearEmulador({
 }) {
   const [nombre, setNombre] = useState("");
   const propio = progreso;
+  // Creado bien: el nombre ya es un AVD de la lista, y dejarlo puesto diría «ya existe».
+  const terminado = propio?.estado === "ok";
+  useEffect(() => {
+    if (terminado) setNombre("");
+  }, [terminado]);
   const creando = propio?.estado === "corriendo";
   const motivo = motivoDeNombreDeAvdInaceptable(nombre.trim(), avds);
   // Con el campo vacío no se regaña: el botón apagado ya lo dice y «falta el nombre» sobra.
   const aviso = nombre.trim() === "" ? undefined : motivo;
   return (
     <div className={estilos.envoltura}>
+      <h4 className={estilos.titulo}>Nuevo emulador</h4>
       <div className={estilos.fila}>
         <input
           type="text"
           value={nombre}
           placeholder="Nombre del emulador"
           aria-label="Nombre del emulador nuevo"
+          aria-invalid={aviso === undefined ? undefined : true}
           disabled={conectado !== true || creando}
           onChange={(e) => setNombre(e.target.value)}
         />
@@ -56,8 +63,8 @@ export function CrearEmulador({
         >
           {creando ? "Creando…" : "Crear emulador"}
         </button>
-        {aviso === undefined ? null : <span className={estilos.motivo}>{aviso}</span>}
       </div>
+      {aviso === undefined ? null : <span className={estilos.motivo}>{aviso}</span>}
       {propio === undefined ? null : (
         <>
           <p className={estilos.estado} data-estado={propio.estado}>
