@@ -1050,6 +1050,13 @@ escrito a mano lo da de alta una persona desde la misma ventana.
   (`esquemaParaElModelo`; con los de Google, Gemini rechazaba el turno entero), las tools caras
   fuera (`fueraDelAgente`) y los campos que sobran del resultado (`camposFueraDelResultado`:
   `list_projects` de Stitch, de 143 KB a 4 KB; el agente acababa lanzando scripts para contarlos).
+- **Una pantalla de Stitch se TRAE con `traer_pantalla_de_stitch`** (`agent/motores/trueforge/
+  traerDeStitch.ts`, reglas puras en `core/stitch.ts`): Stitch da ENLACES y el agente no baja URLs.
+  El modelo da la pantalla, nunca la URL; solo se bajan los dos hosts medidos, con tope y tipo
+  comprobado (la extensión la decide el tipo), y la imagen a tamaño real (`=s0`). Destino FIJO,
+  `/artefactos/diseno/` (imagen, `code.html`, `DESIGN.md`), que `buscarMaqueta` prefiere y que
+  `ultimaCaptura` y el crítico de pantalla NO toman por capturas del aparato. Dice los BYTES, no
+  las medidas que declara Stitch (no son las de la imagen bajada).
 - **Una llamada de agente lleva su propio tope** (`TOPE_DE_LLAMADA_MS`, 10 min), que se pasa
   también como `timeout` al SDK: el suyo corta cada petición antes y una generación de Stitch
   pasa de él. Solo se REPITE una de lectura (`PAUSA_ANTES_DE_REPETIR_MS`); repetir una que

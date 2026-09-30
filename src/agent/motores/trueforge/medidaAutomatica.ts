@@ -12,6 +12,7 @@
  * Lo cualitativo —texto cortado, formas, colores— sigue siendo del crítico, que cuesta una llamada de visión: aquí
  * solo se le RECUERDA pasarlo si la medida no llega y no lo ha pasado desde su última escritura.
  */
+import { CARPETA_DE_DISENO, RUTA_DE_DISENO } from "../../../core/stitch.js";
 import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { compararPantallas, desajusteDeEncaje, informeDeComparacion, TOLERANCIA_DE_ENCAJE, type Comparacion } from "../../../core/compararCapturas.js";
@@ -28,8 +29,18 @@ export const CRITERIO_DE_DISTANCIA = 0.1;
 
 const ES_IMAGEN = /\.(png|jpe?g)$/i;
 
-/** La maqueta de la sesión: `/diseno/screen.png` si está, si no la primera imagen de `/diseno/` y después la de los adjuntos. */
-export function buscarMaqueta(raiz: string, adjuntos?: string): { virtual: string; disco: string } | undefined {
+/**
+ * La maqueta de la sesión. PRIMERO la traída de Stitch (`/artefactos/diseno/screen.*`, `traerDeStitch.ts`):
+ * traerla es un acto de ESTA sesión, así que manda sobre una carpeta del proyecto que puede ser de otro
+ * encargo. Después `/diseno/screen.png`, la primera imagen de `/diseno/` y la de los adjuntos.
+ */
+export function buscarMaqueta(raiz: string, adjuntos?: string, artefactos?: string): { virtual: string; disco: string } | undefined {
+  if (artefactos !== undefined) {
+    for (const extension of ["png", "jpg", "webp"]) {
+      const traida = join(artefactos, CARPETA_DE_DISENO, `screen.${extension}`);
+      if (existsSync(traida)) return { virtual: `${RUTA_DE_DISENO}screen.${extension}`, disco: traida };
+    }
+  }
   const diseno = join(raiz, "diseno");
   const preferida = join(diseno, "screen.png");
   if (existsSync(preferida)) return { virtual: "/diseno/screen.png", disco: preferida };
@@ -66,7 +77,8 @@ export function ultimaCaptura(carpeta: string, desdeMs: number): string | undefi
         continue;
       }
       if (st.isDirectory()) {
-        if (nivel < 1) mirar(ruta, nivel + 1);
+        // La maqueta traída no es una captura del aparato: medirla contra sí misma daría «igual».
+        if (nivel < 1 && !(nivel === 0 && n === CARPETA_DE_DISENO)) mirar(ruta, nivel + 1);
       } else if (ES_IMAGEN.test(n) && st.mtimeMs >= desdeMs && (mejor === undefined || st.mtimeMs > mejor.t)) {
         mejor = { nombre: relative(carpeta, ruta).split(sep).join("/"), t: st.mtimeMs };
       }

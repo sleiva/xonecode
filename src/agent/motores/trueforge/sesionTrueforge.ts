@@ -85,6 +85,8 @@ import {
   toolsDe,
 } from "./capacidades.js";
 import { crearConectoresDeSesion, tarjetaDeRemota } from "./toolsDeConectores.js";
+import { CONECTOR_STITCH, crearTraerDeStitch } from "./traerDeStitch.js";
+import { esDeLaMaqueta } from "../../../core/stitch.js";
 import { recibeConectores } from "../../../core/conectores.js";
 import { buscarMaqueta, medirContraMaqueta, resumenDeMedida, textoDeMedidaAutomatica, ultimaCaptura } from "./medidaAutomatica.js";
 import { anotarEscritura, capacidadDeInformesDeHijos, escrituraConExito, textoDelInforme, type CambioDeFichero } from "./informesDeHijos.js";
@@ -656,7 +658,9 @@ export async function abrirSesionTrueforge(
   let capturasDelTurno: Artefacto[] = [];
   const anotarArtefacto = (a: Artefacto): void => {
     artefactosPorAnunciar.push(a);
-    if (a.mime !== undefined && a.mime.startsWith("image/")) capturasDelTurno.push(a);
+    // La MAQUETA traída (`/artefactos/diseno/`) no es una captura del aparato: el crítico de pantalla
+    // la juzgaría como si fuera la app.
+    if (a.mime !== undefined && a.mime.startsWith("image/") && !esDeLaMaqueta(a.ruta)) capturasDelTurno.push(a);
   };
   /** Lo que la persona escribió mientras el agente trabajaba, IXCODE-4: se entrega por
    *  `capacidadDeNotas`, la MISMA instancia en la raíz y en cada hijo. */
@@ -786,27 +790,35 @@ export async function abrirSesionTrueforge(
         ...(opciones.adjuntos === undefined ? {} : { adjuntos: opciones.adjuntos }),
       },
     }) as unknown as ToolDeLangchain;
+  /**
+   * Los conectores MCP del proyecto, una vez por sesión: se leen los marcados AHORA y sus tools se
+   * piden a la red al primer uso (`toolsDeConectores.ts`). El raíz recibe las de LECTURA; un
+   * especialista, las dos clases si `recibeConectores`.
+   */
+  const delProyecto = opciones.conectores?.delProyecto(raiz) ?? [];
+  const deConectores = opciones.conectores === undefined || delProyecto.length === 0 ? undefined : crearConectoresDeSesion(opciones.conectores, delProyecto);
+  const conStitch = delProyecto.some((c) => c.id === CONECTOR_STITCH);
+  const conectoresDe = (agente: Agente): readonly Capacidad[] =>
+    deConectores === undefined || !recibeConectores(agente)
+      ? []
+      : [capacidadDeConectores(deConectores, "lectura", backend as never), capacidadDeConectores(deConectores, "escritura", backend as never)];
+  /**
+   * `traer_pantalla_de_stitch` (`traerDeStitch.ts`), solo si la sesión tiene Stitch entre sus
+   * conectores y carpeta de artefactos donde dejar la maqueta. La reciben el raíz y quien recibe
+   * los conectores: quien pide la pantalla y quien la construye a partir de ella.
+   */
+  const traerDeStitch = (): ToolDeLangchain[] =>
+    opciones.conectores !== undefined && carpeta !== undefined && conStitch
+      ? [crearTraerDeStitch({ conectores: opciones.conectores, carpeta, alEscribir: anotarArtefacto }) as unknown as ToolDeLangchain]
+      : [];
   const propiasDelRaiz: ToolDeLangchain[] = [
     navegacion(),
     atributos,
     describirImagen(),
     ...herramientasDeJuicio(),
     ...(carpeta === undefined ? [] : ([crearTraerDeLaMaquina({ carpeta, alEscribir: anotarArtefacto })] as unknown as ToolDeLangchain[])),
+    ...traerDeStitch(),
   ];
-  /**
-   * Los conectores MCP del proyecto, una vez por sesión: se leen los marcados AHORA y sus tools se
-   * piden a la red al primer uso (`toolsDeConectores.ts`). El raíz recibe las de LECTURA; un
-   * especialista, las dos clases si `recibeConectores`.
-   */
-  const deConectores = (() => {
-    if (opciones.conectores === undefined) return undefined;
-    const delProyecto = opciones.conectores.delProyecto(raiz);
-    return delProyecto.length === 0 ? undefined : crearConectoresDeSesion(opciones.conectores, delProyecto);
-  })();
-  const conectoresDe = (agente: Agente): readonly Capacidad[] =>
-    deConectores === undefined || !recibeConectores(agente)
-      ? []
-      : [capacidadDeConectores(deConectores, "lectura", backend as never), capacidadDeConectores(deConectores, "escritura", backend as never)];
   const propiasDe = (agente: Agente): ToolDeLangchain[] => [
     crearBusquedaRegex(backend as never) as unknown as ToolDeLangchain,
     navegacion(),
@@ -825,6 +837,7 @@ export async function abrirSesionTrueforge(
       : []),
     // Buscar un icono cuando faltan los assets (IXCODE-18), con el reparto de deepagents: a quien
     // escribe el proyecto y solo con el puerto. Es de LECTURA: no entra en `requireApprovalForTools`.
+    ...(recibeConectores(agente) ? traerDeStitch() : []),
     ...(opciones.iconos !== undefined && recibeBuscarIcono(agente)
       ? [crearBuscarIcono(opciones.iconos) as unknown as ToolDeLangchain]
       : []),
@@ -1192,7 +1205,7 @@ export async function abrirSesionTrueforge(
    */
   function medidaTrasProbar(deHilo: string, hiloPadre: string, quien: Agente | undefined): string | undefined {
     if (carpeta === undefined || quien?.ejecucion !== true) return undefined;
-    const maqueta = buscarMaqueta(raiz, opciones.adjuntos);
+    const maqueta = buscarMaqueta(raiz, opciones.adjuntos, carpeta);
     const captura = ultimaCaptura(carpeta, nacimientoDeHilo.get(deHilo) ?? Date.now());
     if (maqueta === undefined || captura === undefined) return undefined;
     try {
