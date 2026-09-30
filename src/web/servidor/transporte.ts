@@ -514,7 +514,7 @@ export type MensajeAlCliente =
       arranque?: { avd: string; ok: boolean; detalle: string };
       /**
        * Qué dispositivo tiene elegido CADA consola abierta, y de qué proyecto es: con dos
-       * proyectos sobre dos emuladores, Ajustes dice «lo usa Tienda» al lado de cada uno.
+       * proyectos sobre dos emuladores, la pastilla del chat avisa «lo usa Tienda» en el aparato ajeno.
        * `proyecto` es el nombre de su carpeta —el que enseña la barra—, nunca una ruta. Una
        * consola sin dispositivo elegido no aparece.
        */

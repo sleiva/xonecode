@@ -2254,11 +2254,13 @@ export function montarRutas(
   const ajustesDeDispositivos = (): AjustesDeDispositivos => opciones.ajustesDeDispositivos?.() ?? {};
   /**
    * Qué dispositivo tiene elegido CADA consola abierta, no solo la del foco: con dos proyectos
-   * abiertos sobre dos emuladores, lo que Ajustes tiene que poder decir es «este lo usa Tienda».
+   * abiertos sobre dos emuladores, lo que la PASTILLA del chat tiene que poder decir es «este lo usa Tienda».
    *
    * Se pregunta a las consolas vivas y no se guarda, igual que `sesionesTrabajando`: es un
    * estado de este instante. El `proyecto` es el SEGMENTO de su carpeta —el mismo nombre que ya
    * viaja en el lanzamiento (`medirLanzable`) y que enseña la barra—, nunca la ruta: `sinRutas`.
+   * **Límite declarado**: va por `basename(raiz)`, así que el mismo nombre de proyecto en dos
+   * entornos (`<entorno>/<proyecto>`) se confunde.
    */
   const dispositivosEnUso = (): { id: string; proyecto: string }[] =>
     vestibulo

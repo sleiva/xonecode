@@ -7,8 +7,8 @@
  *
  * **Las fases, y por qué ese orden** (el de arriba abajo es el del código, y no es casual):
  *
- * 1. **`comprobando`.** El túnel PRIMERO, porque sin él `127.0.0.1:8443` no lleva a ninguna
- *    parte: el servidor escucha en el `localhost` del aparato, y quien lo trae aquí es
+ * 1. **`comprobando`.** El túnel PRIMERO, porque sin él el puerto local del aparato
+ *    (8443 por omisión, o el de su AVD) no lleva a ninguna parte: el servidor escucha en el `localhost` del aparato, y quien lo trae aquí es
  *    `adb forward`. **Se aplica siempre y NO se quita al terminar**: se reaplica tras cada
  *    reconexión del cable, así que quitarlo dejaría el SIGUIENTE lanzamiento hablando con
  *    nadie. Y va antes de la comprobación del framework porque un aparato al que no se llega
@@ -46,9 +46,9 @@
  * dobles viven en el test. El único `node:https` de verdad es el que se usa cuando nadie pasa
  * un doble.
  *
- * **Y el puerto 8443 es el de FÁBRICA, no una garantía**: si el del aparato está ocupado, el
+ * **Y el 8443 DENTRO del aparato es el de FÁBRICA, no una garantía**: si está ocupado, el
  * servidor coge el siguiente libre y el real se ve en la pantalla del framework. Esto se
- * implementa contra 8443 y se anota; leer el puerto real no está implementado.
+ * implementa contra 8443 dentro del aparato (el puerto LOCAL del túnel es el del AVD) y se anota; leer el puerto real no está implementado.
  */
 import { request, type RequestOptions } from "node:https";
 import { existsSync } from "node:fs";

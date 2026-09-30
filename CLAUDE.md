@@ -1363,18 +1363,25 @@ admite (`admiteApagarElPensamiento`); apagado manda sobre el esfuerzo. Lo demás
   `device-controller`: los scripts de `xone-hotswap` lo leen en CADA ejecución. Sin elección, un
   emulador antes que un físico.
 - **El puerto del túnel es del AVD, no fijo** (`core/puertosDeAvd.ts`, copia en
-  `skills/xone-hotswap/lib/dispositivo.mjs` atada por test): con un solo AVD, el de siempre; con dos
-  o más, el servidor FIJA uno a cada AVD al medir (`emuladoresCableados`, solo AÑADE, nunca
-  reasigna); dentro del aparato el framework escucha siempre en el mismo, y un aparato físico se
-  queda en el de siempre. Un `adb forward` del agente se RECHAZA (`motivoDeComandoRechazado`): un
-  túnel a mano le quita el puerto al aparato de otra sesión sin error. **Crear un AVD va por el MISMO
+  `skills/xone-hotswap/lib/dispositivo.mjs` atada por test, igual que las banderas de «sin ventana»
+  y las reglas de nombre y puerto del cliente, `apps/web/src/reglasDeAvd.ts`): con un solo AVD, el de
+  siempre; con dos o más, el servidor FIJA uno a cada AVD al medir (`atenderDispositivos`, con
+  `asignarPuertosPendientes` y `guardarPuertosAsignados`; `emuladoresCableados` solo la cablea),
+  solo AÑADE y nunca reasigna. La siembra ocurre también con UN AVD, en silencio (la UI no enseña el
+  campo con uno), para que el primero conserve el de siempre cuando llegue otro. Dentro del aparato
+  el framework escucha siempre en el mismo, y un aparato físico se queda en el de siempre. Si una
+  serie `emulator-*` no resuelve su AVD, los scripts caen al de siempre y lo DICEN por stderr. A
+  `xone-hotswap` se le pasa el MISMO `--serie` que a desplegar/reiniciar. Un `adb forward` del agente
+  se RECHAZA (`motivoDeComandoRechazado`): un túnel a mano le quita el puerto al aparato de otra
+  sesión sin error; `adb reverse` no, porque no toca puertos locales. **Crear un AVD va por el MISMO
   corredor y cerrojo que la receta** (`crearAvd`, un trabajo a la vez), y arrancar «sin ventana» es
-  `-no-window -no-audio -no-metrics`, que es por lo que existe «Parar» (`AjustesDeAvd.tsx`,
+  `-no-window -no-audio -no-metrics`, que es por lo que existe «Parar» (`Ajustes.tsx`,
   `CrearEmulador.tsx`): un emulador sin ventana no se cierra con la mano. **Límites declarados**: si
   DENTRO del aparato el framework no está donde se espera (dos APK de framework), los scripts no lo
-  persiguen y el agente se lo dice a la persona; `enUso` (`PastillaDeDispositivo.tsx`) mira solo las
-  consolas de persona y no se refresca al abrir o cerrar una; las negativas del servidor no llegan
-  al navegador, así que el cliente valida con las mismas reglas (`apps/web/src/reglasDeAvd.ts`).
+  persiguen y el agente se lo dice a la persona; `enUso` lo pinta la pastilla del chat
+  (`PastillaDeDispositivo.tsx`), mira solo las consolas de persona y no se refresca al abrir o cerrar
+  una; va por `basename(raiz)`, así que el mismo nombre de proyecto en dos entornos se confunde; las
+  negativas del servidor no llegan al navegador, así que el cliente valida con las mismas reglas.
 
 ### La TUI y el panel (terminal)
 
