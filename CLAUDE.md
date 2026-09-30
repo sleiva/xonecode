@@ -1360,6 +1360,14 @@ admite (`admiteApagarElPensamiento`); apagado manda sobre el esfuerzo. Lo demás
   al pulsar «Refrescar». Tope propio (`TOPES_MS`); un cuelgue se dice «no respondió».
 - **Apagar un destino deja de LANZAR procesos**, no esconde filas.
 - **«Nuevo emulador» parte de uno existente** (`core/copiaDeAvd.ts`, `instalacionEnMaquina.ts#crearAvd`/`#clonarAvd`): sin la casilla, un AVD vacío con la configuración de la base (vale con ella encendida); con ella, se CLONA la carpeta y la base tiene que estar apagada, y lo decide el SERVIDOR contra la última medida. Lo que lleva rutas del original no se copia, salvo `snapshots/` (con la identidad reescrita: sin ella el clon pierde lo no volcado al disco), y el `.ini` del clon se escribe AL FINAL.
+- **Un AVD se ELIMINA desde Ajustes, y de él se recuerda de dónde salió** (`instalacionEnMaquina.ts#borrarAvd`,
+  `arranque.ts#atenderEliminarEmulador`, `EliminarEmulador.tsx`): por el MISMO cerrojo que crear
+  (`receta: "borrar-avd"`), con el nombre ya comprobado contra la última medida. **Nunca el ÚLTIMO** —es la base
+  de las copias— **ni uno EN MARCHA** (el criterio de `baseEnMarcha`); la negativa del servidor no llega al
+  navegador, así que el cliente aplica las mismas (`motivoParaNoEliminarAvd`) y no deja pulsar. La confirmación es
+  la de `BorrarCopiaLocal`: escribir el nombre. Al acabar BIEN se quitan sus ajustes (`quitarAjustesDeAvd`) y su
+  puerto queda libre. La procedencia (`copiaDe`, y `clon` si se copió lo instalado) se guarda al crear desde «Copia
+  de» y se pinta en la fila; ausente es un AVD de antes o creado fuera, y no se pinta nada.
 - **Listar y VERIFICAR son dos preguntas**: `adb devices` puede contestar «device» de un teléfono
   colgado; verificar ejecuta algo al otro lado.
 - **«Terminó bien» y «ya está» son dos cosas**: la MEDIDA manda sobre el código de salida.

@@ -1347,6 +1347,101 @@ describe("Ajustes: la sección de Dispositivos", () => {
       expect((within(panel).getByRole("checkbox", { name: /Copiar también lo instalado/ }) as HTMLInputElement).disabled).toBe(false);
     });
 
+    describe("eliminar", () => {
+      const tablet = (panel: HTMLElement) => within(panel).getByText("tablet").closest("li") as HTMLElement;
+
+      it("cada fila de AVD lleva «Eliminar»: el que corre y el único, apagados y diciendo por qué; el resto, activo", () => {
+        const panel = abrir({ conectado: true, dispositivos: dos, ajustesDeDispositivos: ajustes, alEliminarEmulador: vi.fn() });
+        const enMarcha = within(panel).getByRole("button", { name: /^Eliminar pixel8/ }) as HTMLButtonElement;
+        expect(enMarcha.disabled).toBe(true);
+        expect(enMarcha.title).toBe("apágalo para eliminarlo");
+        expect(enMarcha.getAttribute("aria-label")).toContain("apágalo para eliminarlo");
+        const apagado = within(panel).getByRole("button", { name: "Eliminar tablet" }) as HTMLButtonElement;
+        expect(apagado.disabled).toBe(false);
+        expect(apagado.className).toMatch(/peligro/);
+        cleanup();
+        const solo = abrir({
+          conectado: true,
+          dispositivos: { ...INFORME, avds: ["tablet"] },
+          ajustesDeDispositivos: {},
+          alEliminarEmulador: vi.fn(),
+        });
+        const unico = within(solo).getByRole("button", { name: /^Eliminar tablet/ }) as HTMLButtonElement;
+        expect(unico.disabled).toBe(true);
+        expect(unico.title).toBe("es el único: siempre tiene que quedar al menos uno");
+      });
+
+      it("sin cable, o sin manejador, no se puede eliminar / no se pinta", () => {
+        const sinCable = abrir({ conectado: false, dispositivos: dos, ajustesDeDispositivos: ajustes, alEliminarEmulador: vi.fn() });
+        expect((within(sinCable).getByRole("button", { name: "Eliminar tablet" }) as HTMLButtonElement).disabled).toBe(true);
+        cleanup();
+        const sin = abrir({ conectado: true, dispositivos: dos, ajustesDeDispositivos: ajustes });
+        expect(within(sin).queryByRole("button", { name: /^Eliminar/ })).toBeNull();
+      });
+
+      it("pulsarlo abre el diálogo; solo con el nombre escrito se envía, y Cancelar lo desmonta", () => {
+        const alEliminarEmulador = vi.fn();
+        const panel = abrir({ conectado: true, dispositivos: dos, ajustesDeDispositivos: ajustes, alEliminarEmulador });
+        expect(screen.queryByRole("alertdialog")).toBeNull();
+        fireEvent.click(within(panel).getByRole("button", { name: "Eliminar tablet" }));
+        const dialogo = screen.getByRole("alertdialog");
+        const rojo = within(dialogo).getByRole("button", { name: "Eliminar" }) as HTMLButtonElement;
+        expect(rojo.disabled).toBe(true);
+        fireEvent.click(rojo);
+        expect(alEliminarEmulador).not.toHaveBeenCalled();
+        fireEvent.change(within(dialogo).getByRole("textbox"), { target: { value: "tablet" } });
+        fireEvent.click(rojo);
+        expect(alEliminarEmulador).toHaveBeenCalledWith("tablet");
+        cleanup();
+        const otra = abrir({ conectado: true, dispositivos: dos, ajustesDeDispositivos: ajustes, alEliminarEmulador });
+        fireEvent.click(within(otra).getByRole("button", { name: "Eliminar tablet" }));
+        fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Cancelar" }));
+        expect(screen.queryByRole("alertdialog")).toBeNull();
+      });
+
+      it("el diálogo enseña el progreso de `borrar-avd` y se cierra con ok; el de otra receta no le afecta", () => {
+        const alEliminarEmulador = vi.fn();
+        const pro = (receta: string, estado: "corriendo" | "ok") => ({ receta, paso: 0, titulo: "x", estado, lineas: ["borrando tablet"], ms: 1 });
+        const propiedades = (extra: Record<string, unknown> = {}) => (
+          <Ajustes {...MANEJADORES} dispositivos={dos} ajustesDeDispositivos={ajustes} alCambiarDispositivos={() => {}} conectado alEliminarEmulador={alEliminarEmulador} {...extra} />
+        );
+        const { rerender } = render(propiedades());
+        fireEvent.click(screen.getByRole("button", { name: "Dispositivos" }));
+        const panel = screen.getByRole("heading", { name: "Dispositivos", level: 2 }).parentElement!;
+        const rerenderizar = (extra: Record<string, unknown>) => rerender(propiedades(extra));
+        fireEvent.click(within(panel).getByRole("button", { name: "Eliminar tablet" }));
+        fireEvent.change(within(screen.getByRole("alertdialog")).getByRole("textbox"), { target: { value: "tablet" } });
+        fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Eliminar" }));
+        rerenderizar({ instalacion: pro("crear-avd", "ok") });
+        expect(screen.getByRole("alertdialog")).toBeTruthy();
+        rerenderizar({ instalacion: pro("borrar-avd", "corriendo") });
+        expect(screen.getByText("borrando tablet")).toBeTruthy();
+        rerenderizar({ instalacion: pro("borrar-avd", "ok") });
+        expect(screen.queryByRole("alertdialog")).toBeNull();
+      });
+
+      it("la procedencia sale en la fila: «copia de» o «clon de»; los que no la llevan, nada", () => {
+        const conProcedencia = {
+          avds: {
+            pixel8: { puerto: 8443 },
+            tablet: { puerto: 8444, copiaDe: "pixel8", clon: true as const },
+          },
+        };
+        const panel = abrir({ conectado: true, dispositivos: dos, ajustesDeDispositivos: conProcedencia });
+        expect(within(tablet(panel)).getByText("clon de pixel8")).toBeTruthy();
+        expect(within(panel).queryByText(/copia de/)).toBeNull();
+        cleanup();
+        const soloCopia = abrir({
+          conectado: true,
+          dispositivos: dos,
+          ajustesDeDispositivos: { avds: { tablet: { copiaDe: "pixel8" } } },
+        });
+        expect(within(tablet(soloCopia)).getByText("copia de pixel8")).toBeTruthy();
+        const enMarcha = within(soloCopia).getByText("Pixel 8").closest("li") as HTMLElement;
+        expect(within(enMarcha).queryByText(/copia de|clon de/)).toBeNull();
+      });
+    });
+
     it("con un solo AVD no hay campo de puerto, y sin manejadores no se pinta nada", () => {
       const uno = { ...dos, avds: ["pixel8"] };
       const panel = abrir({ conectado: true, dispositivos: uno, ajustesDeDispositivos: {}, alAjustarAvd: () => {} });

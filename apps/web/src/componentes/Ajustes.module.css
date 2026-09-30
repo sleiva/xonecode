@@ -1074,7 +1074,7 @@
    punto, identidad, puerto, casilla, arrancar/parar, verificar. */
 .filas.tablaDeAvd {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto auto auto;
   gap: 8px 10px;
   /* Contenedor de la consulta de abajo (que solo alcanza a los DESCENDIENTES: las filas). */
   container-type: inline-size;

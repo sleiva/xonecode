@@ -1,0 +1,4 @@
+/* La cola del log de la eliminación, con la misma letra que la de crear un emulador. */
+.log {
+  composes: log from "./CrearEmulador.module.css";
+}

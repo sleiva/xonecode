@@ -34,6 +34,8 @@ import estilosDeAccion from "./VerificarDispositivo.module.css";
 import { ArrancarEmulador } from "./ArrancarEmulador.js";
 import { AjustesDeAvd } from "./AjustesDeAvd.js";
 import { CrearEmulador } from "./CrearEmulador.js";
+import { EliminarEmulador } from "./EliminarEmulador.js";
+import { motivoParaNoEliminarAvd } from "../reglasDeAvd.js";
 import { useMedirAlVolver } from "../medirAlVolver.js";
 import { Agentes } from "./Agentes.js";
 import { Skills } from "./Skills.js";
@@ -398,6 +400,7 @@ export function Ajustes({
   alAjustarAvd,
   alPararEmulador,
   alCrearEmulador,
+  alEliminarEmulador,
   modelosDeMotor,
   alPedirModelosDeMotor,
   alPedirCatalogo,
@@ -596,6 +599,8 @@ export function Ajustes({
   alPararEmulador?: (id: string) => void;
   /** Crear un AVD nuevo con este nombre; su progreso llega en `instalacion` (`crear-avd`). */
   alCrearEmulador?: (nombre: string, desde?: { base: string; conDatos: boolean }) => void;
+  /** Eliminar un AVD (viaja el nombre); su progreso llega en `instalacion` (`borrar-avd`). Ausente = no se pinta «Eliminar». */
+  alEliminarEmulador?: (avd: string) => void;
   /** Lo que ofrece cada motor externo, por motor, para el desplegable de un subagente. */
   modelosDeMotor?: Record<string, { modelos: { id: string; nombre: string }[]; error?: string }>;
   /** Pide los de un motor. Bajo demanda: el de Codex arranca un proceso. */
@@ -704,6 +709,8 @@ export function Ajustes({
    * guardar Y al descartar (el botón «Descartar y continuar» del aviso), que son los dos
    * momentos en que el valor del servidor vuelve a ser la verdad.
    */
+  // El AVD cuyo diálogo de «Eliminar» está abierto. Lo plegado se desmonta: sin él no hay ventana.
+  const [avdAEliminar, setAvdAEliminar] = useState<string | undefined>(undefined);
   const [dispositivosTecleados, setDispositivosTecleados] = useState<AjustesDeDispositivos | undefined>(undefined);
   const dispositivosEnElCampo = dispositivosTecleados ?? ajustesDeDispositivos ?? {};
   const dispositivosCambiados =
@@ -1635,6 +1642,11 @@ export function Ajustes({
                     ds.filter((d) => d.plataforma === plataformaAbierta);
                   const telefonos = deAqui(fisicos);
                   const simuladores = deAqui(virtuales);
+                  // Los que corren según la MEDIDA —el criterio del servidor, no el punto verde de la
+                  // fila—: «Eliminar» aplica aquí las mismas negativas que allí, que no llegan de vuelta.
+                  const avdsEnMarcha = dispositivos.dispositivos.flatMap((d) =>
+                    d.avd !== undefined && d.estado !== "apagado" && d.estado !== "no-disponible" ? [d.avd] : [],
+                  );
                   return (
                     <>
                       <h4 className={estilos.subsubencabezado}>Teléfonos y tablets</h4>
@@ -1699,6 +1711,14 @@ export function Ajustes({
                                 <span className={estilos.identidadDeAvd}>
                                   <span className={estilos.nombre}>{d.nombre}</span>
                                   <span className={estilos.detalleDeAvd}>{etiquetaDeEstado(d)}</span>
+                                  {/* De dónde salió, si se creó desde «Copia de». Los de antes y los creados
+                                      fuera no lo llevan y no se les pinta nada. */}
+                                  {avd === undefined || ajustesDeDispositivos?.avds?.[avd]?.copiaDe === undefined ? null : (
+                                    <span className={estilos.detalleDeAvd}>
+                                      {ajustesDeDispositivos.avds[avd]!.clon === true ? "clon de" : "copia de"}{" "}
+                                      {ajustesDeDispositivos.avds[avd]!.copiaDe}
+                                    </span>
+                                  )}
                                 </span>
                                 {avd === undefined || alAjustarAvd === undefined ? (
                                   <>
@@ -1749,6 +1769,31 @@ export function Ajustes({
                                     {...(alVerificarDispositivo === undefined ? {} : { alVerificar: alVerificarDispositivo })}
                                   />
                                 </span>
+                                {/* Eliminar, en la ÚLTIMA columna y en TODAS las filas de AVD para que no
+                                    baile; apagado y con su motivo cuando es el único o está en marcha. */}
+                                <span className={estilos.celdaDeAccion}>
+                                  {avd === undefined || alEliminarEmulador === undefined ? null : (
+                                    (() => {
+                                      const motivoDeNo = motivoParaNoEliminarAvd(avd, dispositivos.avds, avdsEnMarcha);
+                                      return (
+                                        <button
+                                          type="button"
+                                          className={estilos.peligro}
+                                          disabled={conectado !== true || motivoDeNo !== undefined}
+                                          title={motivoDeNo === undefined ? `Elimina el emulador ${avd}` : motivoDeNo}
+                                          aria-label={
+                                            motivoDeNo === undefined
+                                              ? `Eliminar ${avd}`
+                                              : `Eliminar ${avd} (no se puede: ${motivoDeNo})`
+                                          }
+                                          onClick={() => setAvdAEliminar(avd)}
+                                        >
+                                          Eliminar
+                                        </button>
+                                      );
+                                    })()
+                                  )}
+                                </span>
                               </li>
                             );
                           })}
@@ -1763,6 +1808,14 @@ export function Ajustes({
                             d.avd !== undefined && d.estado !== "apagado" && d.estado !== "no-disponible" ? [d.avd] : [],
                           )}
                           {...(instalacion?.receta === "crear-avd" ? { progreso: instalacion } : {})}
+                        />
+                      ) : null}
+                      {avdAEliminar !== undefined && alEliminarEmulador !== undefined ? (
+                        <EliminarEmulador
+                          avd={avdAEliminar}
+                          alConfirmar={() => alEliminarEmulador(avdAEliminar)}
+                          alCerrar={() => setAvdAEliminar(undefined)}
+                          {...(instalacion?.receta === "borrar-avd" ? { progreso: instalacion } : {})}
                         />
                       ) : null}
                     </>

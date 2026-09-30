@@ -36,3 +36,19 @@ export function motivoDeNombreDeAvdInaceptable(nombre: string, existentes: reado
   if (existentes.includes(nombre)) return `${nombre} ya existe`;
   return undefined;
 }
+
+/**
+ * ¿Se puede ELIMINAR este AVD ahora? Las dos negativas del servidor (`atenderEliminarEmulador`),
+ * con sus mismas frases, para aplicarlas ANTES de enviar: la del servidor no llega al navegador.
+ * `avds` son todos los que la medida vio; `enMarcha`, los que corren (no «apagado» ni «no disponible»).
+ * El último no se elimina nunca —es la base de las copias— y uno encendido tiene sus discos bloqueados.
+ */
+export function motivoParaNoEliminarAvd(
+  avd: string,
+  avds: readonly string[],
+  enMarcha: readonly string[],
+): string | undefined {
+  if (avds.length <= 1) return "es el único: siempre tiene que quedar al menos uno";
+  if (enMarcha.includes(avd)) return "apágalo para eliminarlo";
+  return undefined;
+}
