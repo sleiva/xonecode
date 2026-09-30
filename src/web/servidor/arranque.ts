@@ -87,7 +87,7 @@ import { PLATAFORMAS_DE_DISPOSITIVO, type AjustesDeDispositivos } from "../../co
 import type { NombreDeHerramienta } from "../../core/dispositivos.js";
 import { instalarHerramientaDeDispositivos, verificarDispositivo } from "../../agent/dispositivos/dispositivosEnMaquina.js";
 import { arrancarEmulador, pararEmulador } from "../../agent/dispositivos/arranqueDeEmulador.js";
-import { clonarAvd, correrPasoDeReceta, crearAvd } from "../../agent/dispositivos/instalacionEnMaquina.js";
+import { borrarAvd, clonarAvd, correrPasoDeReceta, crearAvd } from "../../agent/dispositivos/instalacionEnMaquina.js";
 import {
   asignarPuertosPendientes,
   motivoDeNombreDeAvdInaceptable,
@@ -138,6 +138,7 @@ import {
   guardarWorkspace as guardarWorkspaceEnDisco,
   guardarDispositivos,
   guardarAjusteDeAvd,
+  quitarAjustesDeAvd,
   guardarPuertosAsignados,
   guardarEntorno as guardarEntornoEnDisco,
   olvidarEntornoDeSettings,
@@ -577,8 +578,21 @@ export interface OpcionesDeMontaje {
    * la última medida, nunca una cadena del cliente sin comprobar. Promete no lanzar.
    */
   pararEmulador?: (serie: string) => Promise<{ ok: boolean; detalle: string }>;
-  /** Guarda lo de UN AVD en `settings.json` (`settingsEnDisco.ts#guardarAjusteDeAvd`). */
-  guardarAjusteDeAvd?: (avd: string, cambio: { puerto?: number; sinVentana?: boolean }) => void;
+  /**
+   * Elimina un AVD con su salida en vivo (`instalacionEnMaquina.ts#borrarAvd`). **Ausente = esta
+   * ejecución no elimina**, y se dice. Comparte el cerrojo con crear y las recetas. Promete no lanzar.
+   */
+  borrarAvd?: (
+    nombre: string,
+    alSalirLinea: (linea: string) => void
+  ) => { titulo: string; cancelar: () => void; terminado: Promise<{ estado: string; motivo?: string; ms: number }> };
+  /** Guarda lo de UN AVD en `settings.json` (`settingsEnDisco.ts#guardarAjusteDeAvd`); `copiaDe`/`clon` son su procedencia. */
+  guardarAjusteDeAvd?: (
+    avd: string,
+    cambio: { puerto?: number; sinVentana?: boolean; copiaDe?: string; clon?: boolean }
+  ) => void;
+  /** Quita TODO lo guardado de un AVD al eliminarlo (`settingsEnDisco.ts#quitarAjustesDeAvd`): su puerto queda libre. */
+  quitarAjustesDeAvd?: (avd: string) => void;
   /**
    * La siembra de puertos al medir (`settingsEnDisco.ts#guardarPuertosAsignados`): solo AÑADE,
    * un puerto ya guardado no se toca. Ausente = no se siembra y cada AVD sigue en el de fábrica.
@@ -4389,7 +4403,13 @@ export function montarRutas(
   const correrTrabajo = (
     receta: string,
     paso: number,
-    enMarcha: { titulo: string; cancelar: () => void; terminado: Promise<{ estado: string; motivo?: string }> }
+    enMarcha: { titulo: string; cancelar: () => void; terminado: Promise<{ estado: string; motivo?: string }> },
+    /**
+     * Lo que el servidor apunta al acabar (la procedencia de un AVD nuevo, los ajustes de uno
+     * eliminado), ANTES del último progreso y de la medida: así la foto que sigue ya lo trae.
+     * Un fallo suyo se dice y no tumba el cierre del trabajo.
+     */
+    alAcabar?: (resultado: { estado: string; motivo?: string }) => void
   ): void => {
     trabajo = {
       receta,
@@ -4402,6 +4422,11 @@ export function montarRutas(
     emitirProgreso("corriendo");
     void (async () => {
       const resultado = await enMarcha.terminado;
+      try {
+        alAcabar?.(resultado);
+      } catch (error) {
+        informar(`no se pudo apuntar lo que cambió al acabar (${codigoDe(error)})`);
+      }
       // El último progreso SIEMPRE se emite, aunque no haya pasado el plazo: es el que
       // completa el log y el que dice cómo acabó.
       ultimoProgreso = 0;
@@ -4498,8 +4523,64 @@ export function montarRutas(
     correrTrabajo(
       "crear-avd",
       0,
-      crear(nombre, alSalirLineaDelTrabajo, base === undefined ? undefined : { base, conDatos: conDatos === true })
+      crear(nombre, alSalirLineaDelTrabajo, base === undefined ? undefined : { base, conDatos: conDatos === true }),
+      // La procedencia se GUARDA al acabar bien: «copia de X» (configuración) o «clon de X» (con lo
+      // instalado). Sin base no hay de quién, y un fallo no deja AVD al que apuntarla.
+      base === undefined
+        ? undefined
+        : (r) => {
+            if (r.estado !== "ok") return;
+            opciones.guardarAjusteDeAvd?.(nombre, { copiaDe: base, ...(conDatos === true ? { clon: true } : {}) });
+          }
     );
+  };
+
+  /**
+   * **Eliminar un AVD**, por el MISMO cerrojo que crear (`receta: "borrar-avd"`, `paso: 0`). El
+   * nombre llega por el cable y acaba en un argumento de `avdmanager`, así que tiene que ser uno de
+   * los de NUESTRA última medida. Tres negativas, en orden, y cada una se DICE (la del navegador no
+   * llega de vuelta: el cliente aplica las mismas reglas antes y no deja pulsar):
+   *  - nunca el ÚLTIMO: es la base de las copias, y siempre tiene que quedar uno;
+   *  - nunca uno EN MARCHA (el mismo criterio que `baseEnMarcha`): el emulador tiene sus discos
+   *    bloqueados y borrar la carpeta por debajo lo dejaría roto.
+   * Al acabar BIEN se quitan también sus ajustes (puerto, sin ventana, procedencia) para que su
+   * puerto quede libre, y `correrTrabajo` vuelve a medir.
+   */
+  const atenderEliminarEmulador = async (avd: string): Promise<void> => {
+    if (trabajo !== undefined) {
+      emitirProgreso("corriendo");
+      return;
+    }
+    const borrar = opciones.borrarAvd;
+    if (borrar === undefined) {
+      informar("esta ejecución no puede eliminar emuladores");
+      return;
+    }
+    if (informeDeDispositivos === undefined) await atenderDispositivos().catch(contar);
+    if (informeDeDispositivos === undefined) {
+      informar("no se eliminó el emulador: todavía no hay una medida con la que comprobarlo");
+      return;
+    }
+    if (!informeDeDispositivos.avds.includes(avd)) {
+      informar(`no se eliminó el emulador: ${avd} no es un emulador que conozcamos`);
+      return;
+    }
+    if (informeDeDispositivos.avds.length <= 1) {
+      informar(`no se eliminó ${avd}: es el único: siempre tiene que quedar al menos uno`);
+      return;
+    }
+    if (baseEnMarcha(avd)) {
+      informar(`no se eliminó ${avd}: está en marcha; apágalo para eliminarlo`);
+      return;
+    }
+    // Mientras se medía pudo arrancar otro trabajo.
+    if (trabajo !== undefined) {
+      emitirProgreso("corriendo");
+      return;
+    }
+    correrTrabajo("borrar-avd", 0, borrar(avd, alSalirLineaDelTrabajo), (r) => {
+      if (r.estado === "ok") opciones.quitarAjustesDeAvd?.(avd);
+    });
   };
 
   /**
@@ -5701,6 +5782,17 @@ export function montarRutas(
     if (
       typeof mensaje === "object" &&
       mensaje !== null &&
+      mensaje.clase === "eliminarEmulador" &&
+      typeof mensaje.avd === "string"
+    ) {
+      void atenderEliminarEmulador(mensaje.avd).catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
       mensaje.clase === "crearEmulador" &&
       typeof mensaje.nombre === "string" &&
       (mensaje.base === undefined || typeof mensaje.base === "string") &&
@@ -6709,7 +6801,7 @@ export function ajusteDeWorkspaceCableado(opciones: {
 }
 
 /**
- * Los cinco puertos de los emuladores, cableados con las funciones de verdad — extraídos por el
+ * Los siete puertos de los emuladores, cableados con las funciones de verdad — extraídos por el
  * MISMO motivo que `ajusteDeWorkspaceCableado`: dentro de `arrancarConsolaWeb` serían un literal
  * que ningún test mira, y cada uno es un campo OPCIONAL de `montarRutas`, así que olvidarlo o
  * perder un argumento por el camino compila y pasa.
@@ -6722,7 +6814,10 @@ export function emuladoresCableados(opciones: {
   casa?: string;
   arrancar?: typeof arrancarEmulador;
 } = {}): Required<
-  Pick<OpcionesDeMontaje, "arrancarEmulador" | "crearAvd" | "pararEmulador" | "guardarAjusteDeAvd" | "guardarPuertosAsignados">
+  Pick<
+    OpcionesDeMontaje,
+    "arrancarEmulador" | "crearAvd" | "borrarAvd" | "pararEmulador" | "guardarAjusteDeAvd" | "quitarAjustesDeAvd" | "guardarPuertosAsignados"
+  >
 > {
   const arrancar = opciones.arrancar ?? arrancarEmulador;
   return {
@@ -6732,8 +6827,10 @@ export function emuladoresCableados(opciones: {
       desde?.conDatos === true
         ? clonarAvd(desde.base, nombre, { alSalirLinea })
         : crearAvd(nombre, { alSalirLinea }, desde === undefined ? {} : { base: desde.base }),
+    borrarAvd: (nombre, alSalirLinea) => borrarAvd(nombre, { alSalirLinea }),
     pararEmulador: (serie) => pararEmulador(serie),
     guardarAjusteDeAvd: (avd, cambio) => void guardarAjusteDeAvd(opciones.casa, avd, cambio),
+    quitarAjustesDeAvd: (avd) => void quitarAjustesDeAvd(opciones.casa, avd),
     guardarPuertosAsignados: (asignados) => void guardarPuertosAsignados(opciones.casa, asignados),
   };
 }

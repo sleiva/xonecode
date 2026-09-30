@@ -11326,6 +11326,171 @@ describe("los emuladores desde Ajustes: crear, ajustar, parar, y un puerto por A
     expect(progresos(cliente).at(-1)).toMatchObject({ receta: "android-emulador", paso: 3, estado: "corriendo" });
   });
 
+  it("al acabar BIEN un AVD creado desde «Copia de» se guarda su procedencia, antes de la medida siguiente", async () => {
+    const guardados: unknown[] = [];
+    const ordenes: string[] = [];
+    const t = trabajoPendiente();
+    const { accion } = await conectar({
+      detectarDispositivos: async () => {
+        ordenes.push("medida");
+        return medida(["pixel8"]);
+      },
+      crearAvd: () => t.trabajo,
+      guardarAjusteDeAvd: (avd, cambio) => {
+        ordenes.push("guardar");
+        guardados.push([avd, cambio]);
+      },
+    });
+    await enviarMensaje(accion, { clase: "crearEmulador", nombre: "copia", base: "pixel8", conDatos: true });
+    await asentar();
+    t.acabar("ok");
+    await asentar();
+    expect(guardados).toEqual([["copia", { copiaDe: "pixel8", clon: true }]]);
+    expect(ordenes.slice(-2)).toEqual(["guardar", "medida"]);
+  });
+
+  it("sin `conDatos` la procedencia es solo «copiaDe»; sin base o con un fallo no se guarda nada", async () => {
+    const guardados: unknown[] = [];
+    const vuelta = async (mensaje: Record<string, unknown>, fin: string) => {
+      const t = trabajoPendiente();
+      const { accion } = await conectar({
+        detectarDispositivos: async () => medida(["pixel8"]),
+        crearAvd: () => t.trabajo,
+        guardarAjusteDeAvd: (avd, cambio) => void guardados.push([avd, cambio]),
+      });
+      await enviarMensaje(accion, { clase: "crearEmulador", ...mensaje } as never);
+      await asentar();
+      t.acabar(fin);
+      await asentar();
+    };
+    await vuelta({ nombre: "conf", base: "pixel8", conDatos: false }, "ok");
+    expect(guardados).toEqual([["conf", { copiaDe: "pixel8" }]]);
+    guardados.length = 0;
+    await vuelta({ nombre: "suelto" }, "ok");
+    await vuelta({ nombre: "roto", base: "pixel8", conDatos: true }, "fallo");
+    expect(guardados).toEqual([]);
+  });
+
+  describe("eliminar un AVD", () => {
+    const dosAvds = (dispositivos: Dispositivo[] = []) => medida(["pixel8", "otro"], dispositivos);
+
+    it("va por el cerrojo (`borrar-avd`, paso 0), al acabar BIEN quita sus ajustes y mide", async () => {
+      const t = trabajoPendiente();
+      const borrados: string[] = [];
+      const quitados: string[] = [];
+      let medidas = 0;
+      const { cliente, accion } = await conectar({
+        detectarDispositivos: async () => {
+          medidas++;
+          return dosAvds();
+        },
+        borrarAvd: (nombre) => {
+          borrados.push(nombre);
+          return t.trabajo;
+        },
+        quitarAjustesDeAvd: (avd) => void quitados.push(avd),
+      });
+      await enviarMensaje(accion, { clase: "eliminarEmulador", avd: "otro" });
+      await asentar();
+      expect(borrados).toEqual(["otro"]);
+      expect(quitados).toEqual([]);
+      expect(progresos(cliente).at(-1)).toMatchObject({ receta: "borrar-avd", paso: 0, estado: "corriendo" });
+      t.acabar("ok");
+      await asentar();
+      expect(progresos(cliente).at(-1)).toMatchObject({ receta: "borrar-avd", estado: "ok" });
+      expect(quitados).toEqual(["otro"]);
+      expect(medidas).toBe(2);
+    });
+
+    it("un fallo de avdmanager NO quita los ajustes: el AVD sigue ahí", async () => {
+      const t = trabajoPendiente();
+      const quitados: string[] = [];
+      const { cliente, accion } = await conectar({
+        detectarDispositivos: async () => dosAvds(),
+        borrarAvd: () => t.trabajo,
+        quitarAjustesDeAvd: (avd) => void quitados.push(avd),
+      });
+      await enviarMensaje(accion, { clase: "eliminarEmulador", avd: "otro" });
+      await asentar();
+      t.acabar("fallo");
+      await asentar();
+      expect(progresos(cliente).at(-1)).toMatchObject({ receta: "borrar-avd", estado: "fallo" });
+      expect(quitados).toEqual([]);
+    });
+
+    it("el ÚLTIMO no se elimina, y dice por qué", async () => {
+      const borrados: string[] = [];
+      const { cliente, accion, dichos } = await conectar({
+        detectarDispositivos: async () => medida(["pixel8"]),
+        borrarAvd: (nombre) => {
+          borrados.push(nombre);
+          return trabajoPendiente().trabajo;
+        },
+      });
+      await enviarMensaje(accion, { clase: "eliminarEmulador", avd: "pixel8" });
+      await asentar();
+      expect(borrados).toEqual([]);
+      expect(progresos(cliente)).toEqual([]);
+      expect(dichos.join(" ")).toContain("es el único: siempre tiene que quedar al menos uno");
+    });
+
+    it("uno EN MARCHA no se elimina, y dice que se apague", async () => {
+      const borrados: string[] = [];
+      const { accion, dichos } = await conectar({
+        detectarDispositivos: async () => dosAvds([emuladorEn("otro", "conectado")]),
+        borrarAvd: (nombre) => {
+          borrados.push(nombre);
+          return trabajoPendiente().trabajo;
+        },
+      });
+      await enviarMensaje(accion, { clase: "eliminarEmulador", avd: "otro" });
+      await asentar();
+      expect(borrados).toEqual([]);
+      expect(dichos.join(" ")).toContain("apágalo para eliminarlo");
+    });
+
+    it("uno que la medida no conoce no llega a avdmanager", async () => {
+      const borrados: string[] = [];
+      const { accion, dichos } = await conectar({
+        detectarDispositivos: async () => dosAvds(),
+        borrarAvd: (nombre) => {
+          borrados.push(nombre);
+          return trabajoPendiente().trabajo;
+        },
+      });
+      await enviarMensaje(accion, { clase: "eliminarEmulador", avd: "../fuera" });
+      await asentar();
+      expect(borrados).toEqual([]);
+      expect(dichos.join(" ")).toContain("no es un emulador que conozcamos");
+    });
+
+    it("con otro trabajo en marcha no lanza el segundo: reemite el que corre", async () => {
+      const receta = trabajoPendiente();
+      const borrados: string[] = [];
+      const { cliente, accion } = await conectar({
+        detectarDispositivos: async () => dosAvds(),
+        correrPasoDeReceta: () => receta.trabajo,
+        borrarAvd: (nombre) => {
+          borrados.push(nombre);
+          return trabajoPendiente().trabajo;
+        },
+      });
+      await enviarMensaje(accion, { clase: "receta", id: "android-emulador", paso: 3, accion: "ejecutar" });
+      await asentar();
+      await enviarMensaje(accion, { clase: "eliminarEmulador", avd: "otro" });
+      await asentar();
+      expect(borrados).toEqual([]);
+      expect(progresos(cliente).at(-1)).toMatchObject({ receta: "android-emulador", estado: "corriendo" });
+    });
+
+    it("sin puerto para borrar lo dice en vez de callar", async () => {
+      const { accion, dichos } = await conectar({ detectarDispositivos: async () => dosAvds() });
+      await enviarMensaje(accion, { clase: "eliminarEmulador", avd: "otro" });
+      await asentar();
+      expect(dichos.join(" ")).toContain("no puede eliminar emuladores");
+    });
+  });
+
   it("un puerto que ya es de otro AVD se niega y no se guarda NADA del mensaje", async () => {
     const guardados: unknown[] = [];
     const ajustes: AjustesDeDispositivos = { avds: { alfa: { puerto: 8443 }, beta: { puerto: 8444 } } };
@@ -11524,12 +11689,12 @@ describe("los emuladores desde Ajustes: crear, ajustar, parar, y un puerto por A
 });
 
 /**
- * El cableado de los emuladores: las cinco opciones con las funciones de VERDAD. Es el patrón de
+ * El cableado de los emuladores: las siete opciones con las funciones de VERDAD. Es el patrón de
  * fallo de este repo —un campo opcional que se cae del literal de `arrancarConsolaWeb`, o un
  * argumento que se pierde por el camino, compila y pasa—, así que se mira la composición misma.
  */
 describe("emuladoresCableados — la composición de producción, no un doble", () => {
-  it("monta las cinco, y «sin ventana» llega a `arrancarEmulador` como su TERCER argumento", async () => {
+  it("monta las siete, y «sin ventana» llega a `arrancarEmulador` como su TERCER argumento", async () => {
     const llamadas: unknown[][] = [];
     const cableados = emuladoresCableados({
       arrancar: async (...args) => {
@@ -11539,7 +11704,15 @@ describe("emuladoresCableados — la composición de producción, no un doble", 
     });
     for (const f of Object.values(cableados)) expect(f).toBeTypeOf("function");
     expect(Object.keys(cableados).sort()).toEqual(
-      ["arrancarEmulador", "crearAvd", "guardarAjusteDeAvd", "guardarPuertosAsignados", "pararEmulador"].sort()
+      [
+        "arrancarEmulador",
+        "borrarAvd",
+        "crearAvd",
+        "guardarAjusteDeAvd",
+        "guardarPuertosAsignados",
+        "pararEmulador",
+        "quitarAjustesDeAvd",
+      ].sort()
     );
     await cableados.arrancarEmulador("pixel8", { sinVentana: true });
     expect(llamadas).toEqual([["pixel8", {}, { sinVentana: true }]]);
@@ -11581,6 +11754,28 @@ describe("emuladoresCableados — la composición de producción, no un doble", 
       else process.env["ANDROID_AVD_HOME"] = antes;
       rmSync(raiz, { recursive: true, force: true });
     }
+  });
+
+  it("guardar la procedencia y quitar los ajustes escriben en el `settings.json` de SU casa", () => {
+    const casa = mkdtempSync(join(tmpdir(), "xonecode-emuladores-"));
+    try {
+      const { guardarAjusteDeAvd, quitarAjustesDeAvd } = emuladoresCableados({ casa });
+      guardarAjusteDeAvd("copia", { copiaDe: "pixel8", clon: true });
+      guardarAjusteDeAvd("otra", { puerto: 8450 });
+      expect(cargarSettings(casa).settings.dispositivos?.avds).toEqual({
+        copia: { copiaDe: "pixel8", clon: true },
+        otra: { puerto: 8450 },
+      });
+      quitarAjustesDeAvd("copia");
+      expect(cargarSettings(casa).settings.dispositivos?.avds).toEqual({ otra: { puerto: 8450 } });
+    } finally {
+      rmSync(casa, { recursive: true, force: true });
+    }
+  });
+
+  it("borrarAvd es el de verdad: valida el nombre antes de lanzar nada", async () => {
+    const { borrarAvd } = emuladoresCableados();
+    expect((await borrarAvd("../fuera", () => {}).terminado).estado).toBe("fallo");
   });
 
   it("las de la máquina validan antes de lanzar: un nombre o una serie malos no ejecutan nada", async () => {
