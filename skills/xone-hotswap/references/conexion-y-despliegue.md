@@ -12,7 +12,7 @@ El servidor escucha en `localhost` del dispositivo. Para alcanzarlo desde el PC 
 `adb -s <serie> forward tcp:<puerto del aparato> tcp:8443`, y **lo ponen `xone-desplegar-android` y
 `xone-reiniciar-android`**, no tú: cada AVD tiene SU puerto local en este Mac (Ajustes →
 Dispositivos; con un solo AVD es el 8443), que los scripts resuelven por el AVD de la serie.
-`--puerto N` lo fuerza. **Un `adb forward` a mano se rechaza**: dos túneles al mismo puerto local no
+`--puerto N` fuerza el puerto LOCAL. **Un `adb forward` a mano se rechaza**: dos túneles al mismo puerto local no
 conviven y el segundo le quita el aparato al primero sin error. Para ver los que hay:
 
 ```bash
@@ -43,7 +43,9 @@ adb shell am start -n com.xone.android.developer.framework/com.xone.android.hots
 
 **El puerto puede cambiar DENTRO del aparato.** Si 8443 está ocupado (otra APK del framework
 instalada), el servidor coge el siguiente libre; el real se ve en la pestaña **Información** de esa
-pantalla. Eso es el puerto remoto del túnel, no el local del Mac (que es el del AVD).
+pantalla. Los scripts resuelven el puerto LOCAL (el del AVD); el remoto del túnel es SIEMPRE 8443. Si el
+servidor está en otro, hoy no hay camino para el agente: avisa a la persona con el puerto de esa
+pantalla, sin reintentar en bucle ni montar el túnel a mano.
 
 ### iOS: sin túnel
 
@@ -271,8 +273,9 @@ Tres causas, en este orden:
 2. **El puerto no es 8443 dentro del aparato.** Si estaba ocupado —lo normal con DOS APK de framework
    instaladas— el servidor tomó el siguiente libre. El override guardado se lee con
    `adb shell run-as com.xone.android.framework cat shared_prefs/hotswap_preferences.xml`
-   (claves `port_number` y `use_secure_connection`); si no dice nada, se sondea 8443–8446 DENTRO del
-   aparato con los scripts (`--puerto` solo fuerza el puerto local, no el remoto).
+   (claves `port_number` y `use_secure_connection`); el túnel de los scripts va siempre al
+   8443 del aparato, así que si el servidor cogió otro no hay camino para el agente: avisa a la
+   persona con el puerto que diga la pantalla del framework, y no montes el túnel a mano.
 3. **El SSL está desactivado** (`use_secure_connection` a `false`): entonces el servidor habla
    `http://` y el cliente tiene que ir en claro.
 

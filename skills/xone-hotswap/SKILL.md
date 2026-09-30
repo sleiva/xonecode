@@ -67,6 +67,8 @@ en vez de ser una foto de la pantalla.
   ocupado —otra APK del framework instalada— el servidor coge el siguiente libre, y el real se ve
   en la pantalla del servidor hotswap (pestaña Información). Es un puerto DEL APARATO: el que
   usas desde este Mac es otro asunto y lo resuelven los scripts (ver «Varios emuladores a la vez»).
+  Los scripts resuelven el puerto LOCAL; el remoto es SIEMPRE 8443. Si el servidor cogió otro,
+  no tienes camino: díselo a la persona con el puerto que enseñe la pantalla, y no montes el túnel a mano.
 - **Subir NO aplica.** El proceso tiene cargado en memoria lo de antes: hay que reiniciar la app.
 - **La base de datos va cifrada con SQLCipher.** Subir un `.db` en claro termina en
   `database disk image is malformed (code 11)`.
@@ -161,9 +163,9 @@ Tres cosas de `xone-hotswap` que conviene saber antes de leer su salida:
   en el contexto para siempre.
 - **La respuesta viene en `status`** —no en un campo `image`— y una captura de Android es
   **JPEG**, no PNG.
-- Si muere con «no se pudo hablar con el aparato», casi siempre la app host no está viva (o el
-  servidor cogió otro puerto dentro del aparato). El túnel no es lo que falta: lo pone
-  `xone-desplegar-android` o `xone-reiniciar-android`, así que relánzalos en vez de montarlo.
+- Si muere con «no se pudo hablar con el aparato», casi siempre la app host no está viva: relanza
+  `xone-desplegar-android` o `xone-reiniciar-android`, que ponen el túnel. Si el servidor está en OTRO
+  puerto dentro del aparato, relanzar no lo arregla (el túnel va siempre al 8443): avisa a la persona.
 
 Y `xone-desplegar-android` **no necesita un `zip` del sistema**: construye el ZIP él mismo con
 `zlib`, así que tampoco depende de que haya uno en Windows.
