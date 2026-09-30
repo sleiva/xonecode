@@ -7641,3 +7641,23 @@ siga), y que empezar por lo mínimo adelante la primera comprobación sin alarga
 **Lo que sigue abierto, del mismo informe:** pruebas del aparato reutilizables con resultado estructurado, y
 compactar o dividir en fases un encargo largo del desarrollador (llegó a 292.075 tokens de entrada).
 
+## El conductor toma demasiadas capturas para comprobar lógica
+
+**Qué se midió** (calc10, una pasada con los tres arreglos). En `artefactos/` quedaron 61 ficheros y 8 MB. Solo 2
+eran idénticos byte a byte, pero 92 pares eran CASI iguales (mismas dimensiones y tamaño con un 1 % de diferencia):
+fotos de la misma pantalla con cambios mínimos, con series como `d0_1`…`d0_6`, `toast_v2_copy_1`…`_4` y `t0`…`t4`. El
+conductor lanzó 36 comandos de captura frente a 67 de `elements`/`getFields`/`screen` y 17 de log, y UNA sola comprobación
+—«prueba completa», con casos que se contestan leyendo `txtExpresion` y `txtResultado`— sacó 18 capturas con 31 lecturas
+de elementos. Su prompt ya decía «una CAPTURA no es una herramienta de diagnóstico»: no bastó, igual que «tres vueltas»
+no fue un contador.
+
+**Qué se hizo.** El mismo mecanismo del aviso de vueltas, con otro contador: se cuentan los comandos de captura
+(`xone-captura-android`, `xone-hotswap shot`, `screencap`) de cada hilo que ejecuta, y al llegar a 4 y a 8 recibe UN mensaje
+por umbral: para un valor, un estado o una excepción no hace falta ninguna; una captura es para lo visual, una por cosa
+que se comprueba y con `shot name=<qué pruebas>`; y para saber si algo cambió, `diferencia_de_capturas`. No prohíbe
+ninguna: hay casos visuales de verdad —un aviso que solo se ve en pantalla— y lo que se corta es la repetición.
+
+**Sin medir con el modelo real:** que el aviso reduzca las capturas sin que el conductor deje de sacar las que sí hacen
+falta, y cuánto tiempo y cuántos tokens de imagen se ahorran. **Límite declarado:** solo se cuentan comandos de captura
+escritos en el `execute`; una captura que salga de otro script no se ve.
+

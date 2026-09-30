@@ -139,6 +139,27 @@ const BUCLE_DE_CALIDAD = [
  * delegación es `create_sub_agent` y no tiene descripción por especialista, así que se traduce
  * el nombre de la tool y las fichas van escritas aquí, con la MISMA función que deepagents.
  */
+/** Un comando que saca una captura de pantalla del aparato. */
+export const COMANDO_DE_CAPTURA = /xone-captura-android|xone-hotswap\s+shot\b|\bscreencap\b/;
+
+/** Con cuántas capturas de UN encargo se le avisa a quien ejecuta. */
+export const UMBRALES_DE_CAPTURAS = [4, 8] as const;
+
+/**
+ * El aviso de capturas. El prompt del conductor ya decía que una captura «no es una herramienta de diagnóstico», y una
+ * comprobación de una pasada real sacó 18 —61 ficheros y 92 pares casi iguales en total—, casi todas para mirar valores
+ * y excepciones que `getText`/`getFields` y el log contestan sin mirar nada. Un texto no es un contador.
+ */
+export function textoDeCapturas(capturas: number): string {
+  return [
+    `LLEVAS ${String(capturas)} CAPTURAS en este encargo.`,
+    "Para un VALOR, un estado o una excepción no hace falta ninguna: `getText`, `getFields`, `elements` acotado y el log lo",
+    "dicen sin mirar la pantalla. Una captura es para lo VISUAL (algo cortado, tapado, del color o tamaño equivocado) y una por",
+    "cosa que compruebes, con `shot name=<qué pruebas>`. Si solo quieres saber si algo cambió, `diferencia_de_capturas`.",
+    "No repitas la misma pantalla: si la anterior ya lo decía, no hay nada nuevo que sacar.",
+  ].join("\n");
+}
+
 /** Con cuántas comprobaciones seguidas se le avisa a quien lleva un lazo. El primero es el «tres vueltas» del prompt. */
 export const UMBRALES_DE_VUELTAS = [3, 5] as const;
 
@@ -533,6 +554,8 @@ export async function abrirSesionTrueforge(
   const conEsperas = opciones.esperasEntreHijos ?? true;
   /** Cuántas comprobaciones (llamadas a quien EJECUTA) lleva cada hilo que lleva un lazo. */
   const vueltasDeCadaHilo = new Map<string, number>();
+  /** Cuántas CAPTURAS ha sacado cada hilo que ejecuta comandos (`xone-captura-android`, `xone-hotswap shot`). */
+  const capturasDeCadaHilo = new Map<string, number>();
   const esperas = crearEsperas();
   const memoriaDeEspecialistas = crearMemoriaDeEspecialistas();
   /** Los hijos con memoria que corren ahora: su hilo, para leer su historial al terminar. */
@@ -820,9 +843,11 @@ export async function abrirSesionTrueforge(
       notas: capacidadDeNotasDeLaSesion,
       puedeLlamar: (a) => conBucleDelDesarrollador && (a.llama?.length ?? 0) > 0,
       vueltas: (a) =>
-        conBucleDelDesarrollador && (a.llama?.length ?? 0) > 0
-          ? capacidadDeAvisoDeVueltas({ vueltasDe: (hilo) => vueltasDeCadaHilo.get(hilo) ?? 0, umbrales: UMBRALES_DE_VUELTAS, texto: textoDeVueltas })
-          : undefined,
+        a.ejecucion === true
+          ? capacidadDeAvisoDeVueltas({ vueltasDe: (hilo) => capturasDeCadaHilo.get(hilo) ?? 0, umbrales: UMBRALES_DE_CAPTURAS, texto: textoDeCapturas })
+          : conBucleDelDesarrollador && (a.llama?.length ?? 0) > 0
+            ? capacidadDeAvisoDeVueltas({ vueltasDe: (hilo) => vueltasDeCadaHilo.get(hilo) ?? 0, umbrales: UMBRALES_DE_VUELTAS, texto: textoDeVueltas })
+            : undefined,
       conShell: () =>
         montarBackend({
           entorno: entornoDeLaShellDelProyecto(raiz, opciones.artefactos),
@@ -1061,6 +1086,10 @@ export async function abrirSesionTrueforge(
               undefined,
               quien
             );
+            // Una CAPTURA más de quien ejecuta: es lo que dispara el aviso de capturas (`textoDeCapturas`).
+            if (t.function.name === "execute" && typeof args["command"] === "string" && COMANDO_DE_CAPTURA.test(args["command"])) {
+              capturasDeCadaHilo.set(deHilo, (capturasDeCadaHilo.get(deHilo) ?? 0) + 1);
+            }
             // Qué le pide el orquestador a quién: el encargo, acotado (ver `DiagnosticoDeTools.delegacion`).
             if (t.function.name === "create_sub_agent" && typeof args["name"] === "string" && typeof args["input"] === "string") {
               diagnostico?.delegacion?.(quien, args["name"], args["input"]);
@@ -1600,6 +1629,7 @@ export async function abrirSesionTrueforge(
       memoriaDeEspecialistas.olvidar();
       esperas.olvidar();
       vueltasDeCadaHilo.clear();
+      capturasDeCadaHilo.clear();
       hijosConMemoria.clear();
       // Un hilo NUEVO: lo que hubiera guardado con ese id no se pisa ni se carga a medias. Y una
       // pregunta de la conversación de antes no la contesta el primer mensaje de la nueva.

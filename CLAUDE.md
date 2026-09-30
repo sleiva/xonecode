@@ -536,6 +536,10 @@ real. `developer-xone` espera a `designer-xone`.
 entera; y al llegar a cada umbral de llamadas al que ejecuta recibe UN mensaje que no dice «para» sino «cambia de
 procedimiento» (hipótesis, experimento mínimo, arreglo a todos los sitios parecidos). «Tres vueltas» en un prompt no
 era un contador. La regla del ciclo de vida de `getControl` vive en `NUCLEO_XONE` y en `errores-comunes.md`.
+**Las capturas del conductor se cuentan** (`COMANDO_DE_CAPTURA`, `UMBRALES_DE_CAPTURAS`, el mismo
+`capacidadDeAvisoDeVueltas`): su prompt ya decía que una captura no es una herramienta de diagnóstico y no bastó;
+al llegar a cada umbral recibe UN mensaje —para un valor, un estado o una excepción, `getText`, `elements` y el
+log; la captura es para lo visual, una por cosa que se comprueba—. Vale para quien ejecuta, con o sin el bucle.
 **Sale del bucle cuando cumple el CRITERIO DE ACEPTACIÓN de su encargo**, que el orquestador escribe medible
 (casillas del plan, lo que hace la app, fidelidad al diseño), con tres vueltas como tope; devolver antes porque
 «ya funciona» dejaba lo visual sin hacer. **Escribir con el turno en marcha es UN gesto** (IXCODE-4, solo la web): el Enter, que en

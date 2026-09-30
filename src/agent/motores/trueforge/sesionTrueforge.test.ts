@@ -939,6 +939,48 @@ describe("una sesión con el motor TrueForge", () => {
     }, 30_000);
   });
 
+  describe("el conductor y sus capturas: aviso al pasarse", () => {
+    const orden = (id: string, comando: string) =>
+      new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "execute", args: JSON.stringify({ command: comando }) }] });
+    const delega = new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "device-controller", input: "comprueba" }) }] });
+    const todo = (vistos: string[][], i: number): string => vistos[i]!.join("\n");
+
+    it("tras CUATRO capturas el conductor recibe el aviso: para valores y excepciones, `getText`, `elements` y el log", async () => {
+      const raiz = proyecto();
+      const { m, vistos } = modelosConGuion([
+        [delega],
+        [orden("c1", "echo xone-captura-android 1")],
+        [orden("c2", "echo xone-captura-android 2")],
+        [orden("c3", "echo xone-hotswap shot name=uno")],
+        [orden("c4", "echo xone-captura-android 4")],
+        [new AIMessageChunk({ content: "Comprobado." })],
+        [new AIMessageChunk({ content: "Listo." })],
+      ]);
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+      await s.turno("comprueba", piel().p);
+      // La llamada del conductor DESPUÉS de la cuarta captura (la 6ª de todas) lleva el aviso; las anteriores, no.
+      expect(todo(vistos, 5)).toContain("LLEVAS 4 CAPTURAS");
+      expect(todo(vistos, 5)).toContain("diferencia_de_capturas");
+      expect(vistos.slice(0, 5).some((_, i) => todo(vistos, i).includes("CAPTURAS en este encargo"))).toBe(false);
+    }, 30_000);
+
+    it("un comando que no saca captura no cuenta", async () => {
+      const raiz = proyecto();
+      const { m, vistos } = modelosConGuion([
+        [delega],
+        [orden("c1", "echo hola")],
+        [orden("c2", "echo getText name=X")],
+        [orden("c3", "echo xone-log-android")],
+        [orden("c4", "echo xone-hotswap elements")],
+        [new AIMessageChunk({ content: "Comprobado." })],
+        [new AIMessageChunk({ content: "Listo." })],
+      ]);
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+      await s.turno("comprueba", piel().p);
+      expect(vistos.some((_, i) => todo(vistos, i).includes("CAPTURAS en este encargo"))).toBe(false);
+    }, 30_000);
+  });
+
   describe("el lazo del desarrollador: primero lo mínimo, y aviso tras varias comprobaciones seguidas", () => {
     const llama = (id: string) =>
       new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "create_sub_agent", args: JSON.stringify({ name: "device-controller", input: "comprueba" }) }] });
