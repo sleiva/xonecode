@@ -40,7 +40,7 @@ import type { ConsumoDeSesionPorCuenta, CatalogoModelosPort, ConectoresPort } fr
 import { consumoDeLaSesion, consumoPersistible, esDoble } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
 import { dentroDelWorkspace, mismaRuta, motivoDeNombreDeEntornoInaceptable, motivoParaNoBorrarCopia, motivoParaNoMudarWorkspace, rutaDeWorkspace } from "../../core/settings.js";
-import { rutaMudada, type Mudanza } from "../../core/mudanzaDeWorkspace.js";
+import { rutaTrasLasMudanzas, type Mudanza } from "../../core/mudanzaDeWorkspace.js";
 import { mudarBaseDeWorkspace, planDeCambioDeBaseEnDisco, type ProgresoDeMudanza, type ResultadoDeCambioDeBase } from "../../agent/config/mudanzaEnDisco.js";
 import {
   URL_CLOUDSTUDIO_POR_OMISION,
@@ -2041,8 +2041,10 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
    * (`raizDeProyecto`, con la base de ese instante) y solo el abrir espera dentro: un clic a
    * mitad de la copia abriría después la carpeta vieja, ya borrada.
    */
-  const mudadas: Mudanza[] = [];
-  const trasLaMudanza = (raiz: string): string => rutaMudada(raiz, mudadas) ?? raiz;
+  const mudadas: Mudanza[][] = [];
+  // Una TANDA por mudanza y en orden: con una lista plana, ir y volver traducía a la carpeta
+  // de la ida, ya borrada por la vuelta (`rutaTrasLasMudanzas`).
+  const trasLaMudanza = (raiz: string): string => rutaTrasLasMudanzas(raiz, mudadas);
 
   /** Las raíces donde algo ESCRIBE ahora: un chat con turno en vuelo y una consola de tarea
    *  sin cerrar. Lo que `motivoParaNoMudarWorkspace` necesita para decir que no. */
@@ -2358,7 +2360,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
             guardarWorkspace: guardarComprobado,
             ...(progreso === undefined ? {} : { progreso }),
           });
-          if (resultado.estado === "hecho") mudadas.push(...plan.mudanzas);
+          if (resultado.estado === "hecho" && plan.mudanzas.length > 0) mudadas.push(plan.mudanzas);
           return { resultado, cerroLaAbierta };
         } finally {
           if (deLaBase.length > 0) avisarDeLasAbiertas();

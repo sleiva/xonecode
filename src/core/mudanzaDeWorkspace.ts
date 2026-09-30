@@ -143,6 +143,21 @@ export function rutaMudada(ruta: string, mudanzas: readonly Mudanza[]): string |
   return undefined;
 }
 
+/**
+ * Una ruta traducida a través de VARIAS mudanzas, en el orden en que ocurrieron: cada tanda
+ * es el plan de un cambio de base, y la salida de una es la entrada de la siguiente.
+ *
+ * Existe porque `rutaMudada` coge la PRIMERA coincidencia, que dentro de UN plan es correcto
+ * (sus orígenes no se solapan) y entre varios no: con ir de A a B y volver a A, una lista plana
+ * traducía `A/…` a `B/…` —la ida— aunque la vuelta ya había vaciado `B`, y abrir el proyecto
+ * abría una carpeta que no existe. Encadenadas, `A/…` va a `B/…` y vuelve a `A/…`.
+ */
+export function rutaTrasLasMudanzas(ruta: string, tandas: readonly (readonly Mudanza[])[]): string {
+  let actual = ruta;
+  for (const tanda of tandas) actual = rutaMudada(actual, tanda) ?? actual;
+  return actual;
+}
+
 /** Lo que el plan de un cambio de base necesita saber del disco. `listar` son CARPETAS. */
 export interface FotoDeLaBase {
   existe: (ruta: string) => boolean;

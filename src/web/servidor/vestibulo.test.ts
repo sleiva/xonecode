@@ -2882,6 +2882,22 @@ describe("mudarWorkspace: cambiar la base con copias dentro", () => {
     await v.cerrar();
   });
 
+  it("ir y VOLVER: abrir el proyecto abre la copia de ahora, no la carpeta que la vuelta borró", async () => {
+    // El fallo: la lista de mudanzas crecía sin vaciarse y se traducía con la PRIMERA
+    // coincidencia, así que tras A→B→A la raíz de A se mandaba a B, ya borrada, hasta
+    // reiniciar el proceso.
+    const { v, estado, hacia, vieja, casaXonecode } = conCopia();
+    const original = estado.base;
+    const guardar = (r: string): void => void (estado.base = r);
+    expect((await v.mudarWorkspace({ hacia, casaXonecode, tareas: () => [], guardar })).resultado.estado).toBe("hecho");
+    expect((await v.mudarWorkspace({ hacia: original, casaXonecode, tareas: () => [], guardar })).resultado.estado).toBe("hecho");
+    expect(existsSync(join(hacia, "webstudio", "Tienda"))).toBe(false);
+    const abierta = await v.abrirProyecto({ raiz: vieja });
+    expect(abierta.raiz).toBe(vieja);
+    expect(existsSync(join(abierta.raiz, "app.xne"))).toBe(true);
+    await v.cerrar();
+  });
+
   it("si la base no quedó GUARDADA, no se borra nada: el origen sigue y el destino se limpia", async () => {
     const { v, hacia, vieja, casaXonecode } = conCopia();
     // Quien guarda en producción puede volver sin escribir y sin lanzar.

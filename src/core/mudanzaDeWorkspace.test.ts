@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { mudanzasPendientes, planDeCambioDeBase, rutaMudada } from "./mudanzaDeWorkspace.js";
+import { mudanzasPendientes, planDeCambioDeBase, rutaMudada, rutaTrasLasMudanzas } from "./mudanzaDeWorkspace.js";
 import { motivoParaNoMudarWorkspace } from "./settings.js";
 
 /** Una foto de disco de mentira: qué existe y qué carpetas cuelgan de dónde. */
@@ -147,6 +147,28 @@ describe("rutaMudada: las rutas absolutas que ya están grabadas", () => {
   it("se normaliza antes de comparar: una barra final no es otra ruta", () => {
     expect(rutaMudada("/casa/.xonecode/webstudio/workspace/AppDemo/", mudanzas))
       .toBe("/casa/.xonecode/workspace/webstudio/AppDemo");
+  });
+});
+
+describe("rutaTrasLasMudanzas: varias mudanzas seguidas, EN ORDEN", () => {
+  const ida = [{ entorno: "e", proyecto: "p", desde: "/A/e/p", hacia: "/B/e/p" }];
+  const vuelta = [{ entorno: "e", proyecto: "p", desde: "/B/e/p", hacia: "/A/e/p" }];
+
+  it("ir y volver deja la ruta donde está AHORA, no en la carpeta que la vuelta ya borró", () => {
+    // El fallo: con una lista plana y la PRIMERA coincidencia, `/A/e/p` se traducía a
+    // `/B/e/p` —la ida— aunque la vuelta ya la había vaciado, y abrir el proyecto abría
+    // una carpeta que no existe hasta reiniciar el proceso.
+    expect(rutaTrasLasMudanzas("/A/e/p", [ida, vuelta])).toBe("/A/e/p");
+  });
+
+  it("una raíz compuesta ENTRE las dos también llega al sitio de ahora", () => {
+    expect(rutaTrasLasMudanzas("/B/e/p/doc/x.md", [ida, vuelta])).toBe("/A/e/p/doc/x.md");
+  });
+
+  it("con una sola tanda es lo mismo que rutaMudada, y lo que no se mudó se queda igual", () => {
+    expect(rutaTrasLasMudanzas("/A/e/p", [ida])).toBe("/B/e/p");
+    expect(rutaTrasLasMudanzas("/otra/cosa", [ida, vuelta])).toBe("/otra/cosa");
+    expect(rutaTrasLasMudanzas("/A/e/p", [])).toBe("/A/e/p");
   });
 });
 
