@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   arrancarEmulador,
+  pararEmulador,
   ESPERA_ENTRE_SONDEOS_MS,
   TOPE_DE_ARRANQUE_MS,
   type DependenciasDeArranque,
@@ -86,6 +87,25 @@ describe("arrancarEmulador", () => {
    * nombre de AVD que contesta su consola, que es lo único que los ata; sin eso, arrancar
    * `pixel8` mientras otro emulador se levantaba habría dicho «ya está» por el equivocado.
    */
+  it("sin ventana lanza con las banderas de argsDeArranque", async () => {
+    const { deps, lanzamientos } = montar({ listas: [LISTA_CON_EMULADOR] });
+    await arrancarEmulador("pixel8", deps, { sinVentana: true });
+    expect(lanzamientos[0]?.args).toEqual(["-avd", "pixel8", "-no-window", "-no-audio", "-no-metrics"]);
+  });
+
+  it("pararEmulador mata por la consola y no acepta cualquier serie", async () => {
+    const llamadas: string[][] = [];
+    const ejecutar = async (_b: string, args: string[]) => {
+      llamadas.push(args);
+      return { stdout: "OK\n", stderr: "" };
+    };
+    const base = { plataforma: "linux" as const, entorno: { PATH: "/bin" }, home: "/home/yo", existe: (r: string) => r === "/bin/adb" };
+    expect((await pararEmulador("emulator-5556", { ...base, ejecutar })).ok).toBe(true);
+    expect(llamadas).toEqual([["-s", "emulator-5556", "emu", "kill"]]);
+    expect((await pararEmulador("R58M; rm -rf /", { ...base, ejecutar })).ok).toBe(false);
+    expect(llamadas).toHaveLength(1);
+  });
+
   it("un emulador de OTRO AVD no cuenta como arrancado", async () => {
     const { deps } = montar({ listas: [LISTA_CON_EMULADOR], nombreDeAvd: "tablet9" });
     const r = await arrancarEmulador("pixel8", deps);

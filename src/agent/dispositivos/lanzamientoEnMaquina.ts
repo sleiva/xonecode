@@ -60,6 +60,7 @@ import {
   type DependenciasDeDeteccion,
   type FrameworkEnDispositivo,
 } from "./dispositivosEnMaquina.js";
+import { PUERTO_DEL_HOTSWAP } from "../../core/puertosDeAvd.js";
 import { lanzarYComprobar, type AbrirSocketHotswap } from "./hotswap.js";
 import {
   crearEjecutor,
@@ -79,15 +80,6 @@ import { empaquetarProyecto, enMegas, type PaqueteDelProyecto } from "./paqueteD
  * que usan los dos módulos.
  */
 export { TOPE_DE_TRABAJO_MS, TOPE_SIN_SALIDA_MS };
-
-/**
- * El puerto del servidor del framework. El de fábrica: ver el docstring del módulo.
- *
- * El mismo número para el `adb forward` y para la subida, y no dos constantes: son las dos
- * puntas del MISMO túnel, y escribirlas por separado dejaría un lanzamiento hablando por un
- * agujero y subiendo por otro.
- */
-const PUERTO_DEL_SERVIDOR = 8443;
 
 /**
  * El nombre EXACTO del ZIP. La extracción automática se dispara **solo** con este nombre, y con
@@ -139,6 +131,11 @@ export interface PeticionDeLanzamiento {
    * query de la subida: es el mismo dato en los dos sitios.
    */
   app: string;
+  /**
+   * El puerto LOCAL del túnel, el del AVD de este aparato (Ajustes → Dispositivos). Ausente,
+   * el de siempre. Dentro del aparato es siempre `PUERTO_DEL_HOTSWAP`.
+   */
+  puerto?: number;
 }
 
 /**
@@ -347,15 +344,16 @@ export function lanzarEnDispositivo(
     }
 
     const serial = peticion.dispositivo.id;
+    const local = peticion.puerto ?? PUERTO_DEL_HOTSWAP;
     const tunel = await unProceso("comprobando", adb, [
       "-s",
       serial,
       "forward",
-      `tcp:${PUERTO_DEL_SERVIDOR}`,
-      `tcp:${PUERTO_DEL_SERVIDOR}`,
+      `tcp:${local}`,
+      `tcp:${PUERTO_DEL_HOTSWAP}`,
     ]);
     if (tunel.estado !== "ok") return acabar("comprobando", tunel);
-    decir("comprobando", `túnel aplicado: 127.0.0.1:${PUERTO_DEL_SERVIDOR} es el aparato ${serial}`);
+    decir("comprobando", `túnel aplicado: 127.0.0.1:${local} es el aparato ${serial}`);
 
     const instalado = await marco(peticion.dispositivo, { plataforma, entorno, home, existe });
     if (!instalado.instalado || instalado.paquete === undefined) {
@@ -379,14 +377,14 @@ export function lanzarEnDispositivo(
 
     // ---- 3. subiendo --------------------------------------------------------------------
     const bytes = paquete.bytes;
-    decir("subiendo", `subiendo ${NOMBRE_DEL_ZIP} (${enMegas(bytes.length)}) a 127.0.0.1:${PUERTO_DEL_SERVIDOR}`);
+    decir("subiendo", `subiendo ${NOMBRE_DEL_ZIP} (${enMegas(bytes.length)}) a 127.0.0.1:${local}`);
     abortar = new AbortController();
     let respuesta: RespuestaDeSubida;
     try {
       respuesta = await subir(
         {
           host: "127.0.0.1",
-          puerto: PUERTO_DEL_SERVIDOR,
+          puerto: local,
           ruta: rutaDeSubida(peticion.app),
           metodo: "POST",
           cabeceras: cabecerasDeSubida(bytes),
@@ -427,6 +425,7 @@ export function lanzarEnDispositivo(
     const veredicto = await Promise.race([
       lanzarYComprobar(peticion.app, {
         abrirSocket: deps.abrirSocket,
+        destino: `wss://127.0.0.1:${local}/hotswap`,
         // Las líneas del canal se cuelgan de la fase del lanzamiento: son suyas, y el saludo
         // del servidor con su `protocol_version` es parte de lo que hay que poder leer.
         alLinea: (linea) => decir("lanzando", linea),

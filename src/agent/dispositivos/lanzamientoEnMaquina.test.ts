@@ -130,11 +130,13 @@ function servidorHotswap(contestar: (comando: Record<string, unknown>) => unknow
       cerrado = true;
     },
   };
-  const abrirSocket: AbrirSocketHotswap = () => {
+  const urls: string[] = [];
+  const abrirSocket: AbrirSocketHotswap = (url) => {
+    urls.push(url);
     queueMicrotask(() => emitir({ command: "server_hello", protocol_version: 2 }));
     return socket;
   };
-  return { abrirSocket, enviados, cerrado: () => cerrado };
+  return { abrirSocket, enviados, urls, cerrado: () => cerrado };
 }
 
 /**
@@ -166,14 +168,18 @@ async function atender(l: ReturnType<typeof lanzador>, cuantos: number): Promise
 }
 
 /** El recorrido entero con todo doblado, y el reloj en la mano. */
-function recorrido(extra: Partial<DependenciasDeLanzamiento> = {}, l: ReturnType<typeof lanzador> = lanzador()) {
+function recorrido(
+  extra: Partial<DependenciasDeLanzamiento> = {},
+  l: ReturnType<typeof lanzador> = lanzador(),
+  peticion: PeticionDeLanzamiento = PETICION
+) {
   const subidas: PeticionDeSubida[] = [];
   const fases: { fase: FaseDeLanzamiento; linea: string }[] = [];
   const servidor = servidorHotswap((comando) =>
     comando["command"] === "launchApplication" ? { result: true, status: "" } : { result: true, status: ARBOL }
   );
   let reloj = 1_000;
-  const trabajo = lanzarEnDispositivo(PETICION, {
+  const trabajo = lanzarEnDispositivo(peticion, {
     ...ANDROID,
     lanzar: l.lanzar,
     frameworkEnDispositivo: async () => ({
@@ -284,6 +290,16 @@ describe("lanzarEnDispositivo", () => {
     // Y NO se quita: se reaplica tras cada reconexión del cable, así que quitarlo dejaría el
     // SIGUIENTE lanzamiento hablando con nadie.
     expect(JSON.stringify(r.l.llamadas)).not.toContain("--remove");
+  });
+
+  it("con `puerto` el túnel, la subida y el canal van por el del aparato; dentro sigue siendo el 8443", async () => {
+    const r = recorrido({}, lanzador(), { ...PETICION, puerto: 8444 });
+    await atender(r.l, 3);
+    await r.trabajo.terminado;
+
+    expect(r.l.llamadas[0]!.args.slice(2)).toEqual(["forward", "tcp:8444", "tcp:8443"]);
+    expect(r.subidas[0]).toMatchObject({ host: "127.0.0.1", puerto: 8444 });
+    expect(r.servidor.urls).toEqual(["wss://127.0.0.1:8444/hotswap"]);
   });
 
   it("la subida va por POST al nombre exacto del ZIP, con la app escapada y con Content-Length", async () => {

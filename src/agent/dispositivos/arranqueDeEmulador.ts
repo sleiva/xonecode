@@ -19,9 +19,10 @@
  * (`core/dispositivos.ts#nombreDeAvdDeConsola`). Sin esa comprobación, arrancar `pixel8`
  * mientras otro emulador se levantaba diría «ya está» por el aparato equivocado.
  */
-import { localizadorDeAndroid, TOPES_MS, type DependenciasDeDeteccion, type Ejecucion } from "./dispositivosEnMaquina.js";
+import { describirFallo, localizadorDeAndroid, TOPES_MS, type DependenciasDeDeteccion, type Ejecucion } from "./dispositivosEnMaquina.js";
 import { lanzarReal, type Lanzar } from "./procesosEnMaquina.js";
 import { nombreDeAvdDeConsola, parsearAdbDevices } from "../../core/dispositivos.js";
+import { argsDeArranque } from "../../core/puertosDeAvd.js";
 import { existsSync } from "node:fs";
 import { execFile } from "node:child_process";
 
@@ -60,7 +61,8 @@ export interface DependenciasDeArranque extends DependenciasDeDeteccion {
  */
 export async function arrancarEmulador(
   avd: string,
-  deps: DependenciasDeArranque = {}
+  deps: DependenciasDeArranque = {},
+  opciones: { sinVentana?: boolean } = {}
 ): Promise<ResultadoDeArranque> {
   /**
    * El nombre del AVD se convierte en un ARGUMENTO de proceso, así que se cierra por forma y
@@ -100,7 +102,7 @@ export async function arrancarEmulador(
   }
 
   try {
-    const hijo = lanzar(emulator, ["-avd", avd], { env: { ...entorno } });
+    const hijo = lanzar(emulator, argsDeArranque(avd, opciones), { env: { ...entorno } });
     // No se lee su salida ni se espera su cierre: es un demonio. Pero SÍ se escucha el
     // `error` del propio spawn —un binario que no se puede ejecutar— porque eso sí es un
     // fallo del arranque y no del emulador.
@@ -126,6 +128,27 @@ export async function arrancarEmulador(
     };
   } catch (error) {
     return { ok: false, detalle: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/**
+ * Para un emulador por su consola. Sin ventana no hay nada que cerrar: esto es lo que hace de
+ * botón. Nunca lanza; la serie se cierra por forma porque es un argumento de proceso.
+ */
+export async function pararEmulador(serie: string, deps: DependenciasDeDeteccion = {}): Promise<ResultadoDeArranque> {
+  if (!/^emulator-\d+$/.test(serie)) return { ok: false, detalle: `«${serie}» no es un emulador` };
+  const plataforma = deps.plataforma ?? process.platform;
+  const entorno = deps.entorno ?? process.env;
+  const home = deps.home ?? process.env.HOME ?? "";
+  const existe = deps.existe ?? ((ruta: string) => existeDeVerdad(ruta));
+  const ejecutar = deps.ejecutar ?? ejecutarDeVerdad;
+  const adb = localizadorDeAndroid({ plataforma, entorno, home, existe }).enSdk("adb", "platform-tools");
+  if (adb === undefined) return { ok: false, detalle: "no encuentro «adb»" };
+  try {
+    await ejecutar(adb, ["-s", serie, "emu", "kill"], { timeout: TOPES_MS.adb });
+    return { ok: true, detalle: `${serie} parado` };
+  } catch (error) {
+    return { ok: false, detalle: describirFallo(error, TOPES_MS.adb) };
   }
 }
 
