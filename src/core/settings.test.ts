@@ -127,6 +127,21 @@ describe("los destinos de prueba en settings.json", () => {
     const { settings } = validarSettings({ entornos: [], dispositivos: { rutaAdb: 123, rutaEmulator: null } });
     expect(settings.dispositivos).toBeUndefined();
   });
+
+  it("los AVD se conservan por nombre; se descartan nombre inválido, puerto no entero y sinVentana no booleano", () => {
+    const { settings } = validarSettings({
+      entornos: [],
+      dispositivos: {
+        avds: {
+          pixel8: { puerto: 8443 },
+          "a b": { puerto: 1 },
+          x: { puerto: "9000", sinVentana: "true" },
+          y: { sinVentana: true },
+        },
+      },
+    });
+    expect(settings.dispositivos?.avds).toEqual({ pixel8: { puerto: 8443 }, y: { sinVentana: true } });
+  });
 });
 
 describe("el tope de concurrencia de tareas en settings.json", () => {

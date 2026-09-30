@@ -11,6 +11,7 @@
  */
 import { posix, win32 } from "node:path";
 import { type Aviso, CLAVES_DENEGADAS } from "./config.js";
+import { FORMA_DE_NOMBRE_DE_AVD } from "./puertosDeAvd.js";
 
 export interface Entorno {
   id: string;
@@ -72,9 +73,21 @@ export type PlataformaDeDispositivo = (typeof PLATAFORMAS_DE_DISPOSITIVO)[number
  * descartó, ver `expandirConCasa`), y solo para `adb`/`emulator`; `xcrun`/`devicectl` se
  * quedan en el host.
  */
+/**
+ * Lo que se recuerda de UN AVD, por su NOMBRE y no por su serie: `emulator-5554`/`-5556`
+ * dependen del orden en que se arrancan, el nombre no. Ausente = nada que decir.
+ */
+export interface AjustesDeAvd {
+  /** El puerto LOCAL del túnel de hotswap (`adb forward tcp:<puerto> tcp:8443`). */
+  puerto?: number;
+  /** Arrancarlo sin ventana (`-no-window`). Solo `true` se guarda. */
+  sinVentana?: true;
+}
+
 export type AjustesDeDispositivos = { [K in PlataformaDeDispositivo]?: boolean } & {
   rutaAdb?: string;
   rutaEmulator?: string;
+  avds?: Record<string, AjustesDeAvd>;
 };
 
 /** ¿Se mira este destino? Ausente = sí. */
@@ -258,6 +271,23 @@ function validarDispositivos(candidato: unknown): AjustesDeDispositivos | undefi
   for (const campo of ["rutaAdb", "rutaEmulator"] as const) {
     const valor = c[campo];
     if (typeof valor === "string" && valor.trim() !== "") salida[campo] = valor.trim();
+  }
+  const avds = validarAvds(c.avds);
+  if (avds !== undefined) salida.avds = avds;
+  return Object.keys(salida).length === 0 ? undefined : salida;
+}
+
+/** Por AVD: nombre con la forma de una carpeta de AVD, puerto entero, `sinVentana` solo `true`. Lo demás se tira. */
+function validarAvds(candidato: unknown): Record<string, AjustesDeAvd> | undefined {
+  if (typeof candidato !== "object" || candidato === null) return undefined;
+  const salida: Record<string, AjustesDeAvd> = {};
+  for (const [nombre, valor] of Object.entries(candidato as Record<string, unknown>)) {
+    if (!FORMA_DE_NOMBRE_DE_AVD.test(nombre) || typeof valor !== "object" || valor === null) continue;
+    const v = valor as Record<string, unknown>;
+    const a: AjustesDeAvd = {};
+    if (typeof v.puerto === "number" && Number.isInteger(v.puerto) && v.puerto >= 1024 && v.puerto <= 65535) a.puerto = v.puerto;
+    if (v.sinVentana === true) a.sinVentana = true;
+    if (Object.keys(a).length > 0) salida[nombre] = a;
   }
   return Object.keys(salida).length === 0 ? undefined : salida;
 }
