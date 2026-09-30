@@ -300,6 +300,40 @@ Declararlas explícitamente (`<prop name="ID">` / `<prop name="ROWID">`) **no ca
 
 **Lo que NO es valido:** dos `<coll>` con el mismo `name` en el proyecto.
 
+### Error 12: Pedir un control con `getControl` cuando todavía no existe
+
+```javascript
+// MAL: en <create> la vista aún no está montada
+function calcInit() {
+    var c = getControl("MAP_EXPRESION");   // LANZA
+    c.setText("0");
+}
+```
+
+`getControl("X")` **lanza** una `IllegalArgumentException` («Cannot find control "X"») si el control no existe, y **un
+`try/catch` de JavaScript no la detiene**: viene del puente nativo, aborta el evento entero (`CXoneDataObject::OnCreate
+failed`) y deja un diálogo de error encima de la pantalla. Medido en un emulador Android.
+
+**No existen** los controles de la vista durante `<create>` (todavía no está montada) ni los hijos de un frame
+**oculto** (`visible="0"`), como un cajón cerrado.
+
+```javascript
+// BIEN: en <create> solo estado y valores
+function calcInit() {
+    self.MAP_EXPRESION = "0";
+}
+
+// BIEN: una sonda que NO lanza, para un control que puede no existir
+function calcControl(nombre) {
+    var v = ui.getView(self);
+    return v ? (v[nombre] || null) : null;   // ui.getView(self)["X"] da undefined, no lanza
+}
+```
+
+La documentación de `getControl` y la indexación de la vista (`ui.getView(self)["X"]`) las presenta como equivalentes:
+para acceder no lo son, y esa diferencia es la que evita el diálogo. **Y un texto que cambia desde JavaScript no va en
+un `L`/`TL`** (pintan su `title`): usa un `T` con `labelwidth="0"` y `locked="true"`.
+
 ---
 
 Esta guía ha cubierto los conceptos fundamentales de XOne:

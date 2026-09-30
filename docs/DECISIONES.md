@@ -7615,3 +7615,29 @@ orquestador tiene el informe del diseñador antes de escribir el encargo. Va enc
 **Sin medir.** Que el orquestador vuelva a llamar al desarrollador con el informe (depende de que siga la nota); y
 cuánto de lo que el diseñador deja acaba en la pantalla.
 
+
+
+## Los tres arreglos del informe de latencia
+
+`docs/ANALISIS-LATENCIA-CALC-2026-09-30.md` (independiente) coincide con las cifras medidas aquí (calc4: 391
+llamadas y 42 minutos; calc5: 259 y 30; calc7: 139 y 15) y añadió tres hallazgos que faltaban.
+
+1. **El conocimiento no viaja entre ejecuciones.** «En `<create>` no se puede llamar a `getControl`» se midió en el
+   aparato y quedó escrito en el plan de calc5; el mismo fallo reapareció en calc4 (`lblExpresion`), calc9
+   (`MAP_EXPRESION`) y, por la misma causa, en el cajón oculto (`MAP_ITEMSTXT`). La memoria por especialista vive
+   dentro de una sesión, así que no lo cubre. Ahora es una regla del núcleo (`NUCLEO_XONE`, con la sonda que no lanza,
+   `ui.getView(self)["X"]`, medida en calc9) y el «Error 12» de `errores-comunes.md`. El núcleo queda en el tope de
+   100 líneas: para caber, se quitó una línea repetida del crítico, que ya está en «Honestidad».
+2. **La primera comprobación llegó al minuto 16 de una pasada.** El texto del bucle ahora empieza por lo mínimo:
+   arranque, display y UN botón, probado con el conductor antes de escribir la pantalla entera.
+3. **«Tres vueltas» no era un contador.** Calc9 hizo seis llamadas al conductor. Ahora se cuentan las llamadas de
+   quien lleva un lazo a quien EJECUTA (`vueltasDeCadaHilo`) y al llegar a `UMBRALES_DE_VUELTAS` (3 y 5) recibe un
+   mensaje de usuario, una sola vez por umbral. **No dice «para»**: dice que, si el fallo es de la misma familia, no
+   reescriba otra vez, sino que enuncie la hipótesis, pida UN experimento mínimo, lea el resultado bruto del aparato
+   y aplique el arreglo a todos los sitios parecidos. El informe lo pedía así y es mejor que mi idea de cortar.
+
+**Sin medir con el modelo real:** que el aviso cambie de verdad el procedimiento (depende de que el desarrollador lo
+siga), y que empezar por lo mínimo adelante la primera comprobación sin alargar el total.
+**Lo que sigue abierto, del mismo informe:** pruebas del aparato reutilizables con resultado estructurado, y
+compactar o dividir en fases un encargo largo del desarrollador (llegó a 292.075 tokens de entrada).
+

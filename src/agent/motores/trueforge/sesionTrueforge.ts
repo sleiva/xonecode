@@ -72,6 +72,7 @@ import {
   capabilitiesDe,
   capacidadDeFecha,
   capacidadDeFicheros,
+  capacidadDeAvisoDeVueltas,
   capacidadDeInstrucciones,
   capacidadDeNotas,
   capacidadDePropias,
@@ -138,6 +139,24 @@ const BUCLE_DE_CALIDAD = [
  * delegación es `create_sub_agent` y no tiene descripción por especialista, así que se traduce
  * el nombre de la tool y las fichas van escritas aquí, con la MISMA función que deepagents.
  */
+/** Con cuántas comprobaciones seguidas se le avisa a quien lleva un lazo. El primero es el «tres vueltas» del prompt. */
+export const UMBRALES_DE_VUELTAS = [3, 5] as const;
+
+/**
+ * El aviso: no dice «para», dice «cambia de procedimiento». La misma familia de fallo se vio arreglada de cinco
+ * maneras (un control que falta, y al arreglarlo, otro): lo que hay que hacer es aislar la causa una vez y aplicarla
+ * a todos los sitios, no reescribir otra vez.
+ */
+export function textoDeVueltas(vueltas: number): string {
+  return [
+    `LLEVAS ${String(vueltas)} COMPROBACIONES SEGUIDAS con el aparato.`,
+    "Si el fallo de la última es de la MISMA FAMILIA que el anterior (la misma excepción, el mismo tipo de control), NO hagas otra",
+    "reescritura: (1) di la hipótesis en una frase, (2) pide al de pruebas UN experimento mínimo —un control, un evento— y lee",
+    "el resultado BRUTO del aparato, (3) con la causa confirmada, aplica el arreglo a TODOS los sitios parecidos de una vez.",
+    "Si tras eso el fallo sigue igual, devuelve el trabajo diciendo qué falta y qué mediste, en vez de otra vuelta.",
+  ].join("\n");
+}
+
 /**
  * El hilo de un especialista que NO arrancó porque espera a otros: nace ya terminado, con la respuesta al orquestador
  * ya escrita (`preComputedCompletion`), y la librería lo trata como cualquier hijo que acaba. No llama al modelo ni tiene
@@ -210,6 +229,9 @@ export function textoDelBucle(llama: readonly string[], opciones: { conCritica?:
     "Tu bucle es: escribe, llama al de pruebas para desplegar y comprobar, lee lo que te devuelve y corrige.",
     "Dile QUÉ comprobar y qué esperas ver. No lo llames por cada línea que cambies: junta los cambios.",
     "Lo que te devuelva es lo que ha visto, no un permiso para dar el trabajo por bueno: si dice que la app se cae, se cae.",
+    "EMPIEZA POR LO MÍNIMO: no escribas la pantalla entera de una vez. Primero la versión más pequeña que se pueda VER y PULSAR",
+    "—el arranque, el display y UN botón—, y pídele al de pruebas que la arranque y la toque. Solo cuando eso funcione, amplía",
+    "(el teclado, las funciones, el historial). Un fallo de arranque descubierto con la pantalla entera escrita cuesta reescribirla.",
     ...(puedeDiseñar
       ? [
           "Lo VISUAL —layout, CSS, tamaños, iconos, fondos SVG— es de `designer-xone`: si la pantalla se ve mal, no la dejes así ni la",
@@ -509,6 +531,8 @@ export async function abrirSesionTrueforge(
   const conMemoriaDeEspecialistas = opciones.memoriaDeEspecialistas ?? process.env.XONECODE_SIN_MEMORIA_DE_ESPECIALISTAS !== "1";
   const conBucleDelDesarrollador = opciones.bucleDelDesarrollador ?? process.env.XONECODE_BUCLE_DEL_DEVELOPER === "1";
   const conEsperas = opciones.esperasEntreHijos ?? true;
+  /** Cuántas comprobaciones (llamadas a quien EJECUTA) lleva cada hilo que lleva un lazo. */
+  const vueltasDeCadaHilo = new Map<string, number>();
   const esperas = crearEsperas();
   const memoriaDeEspecialistas = crearMemoriaDeEspecialistas();
   /** Los hijos con memoria que corren ahora: su hilo, para leer su historial al terminar. */
@@ -768,6 +792,11 @@ export async function abrirSesionTrueforge(
     const concedido = permitidos === undefined || (conBucleDelDesarrollador && permitidos.includes(params.request.name));
     if (!concedido) anotarPaso("trueforge.llamada", `${quienPide ?? "?"} pidió a ${params.request.name}: no está en su lista`)();
     const agente = concedido ? especialistas().find((a) => a.nombre === params.request.name) : undefined;
+    // Cuenta una COMPROBACIÓN: quien lleva un lazo llamó a quien ejecuta. Es lo que dispara el aviso de vueltas.
+    if (concedido && agente?.ejecucion === true && params.parent !== undefined) {
+      const padre = (params.parent as { thread_id?: string }).thread_id ?? "";
+      if (padre !== "") vueltasDeCadaHilo.set(padre, (vueltasDeCadaHilo.get(padre) ?? 0) + 1);
+    }
     // ¿Arranca? Un especialista que declara `espera` NO arranca mientras haya vivo —o anunciado por el mismo mensaje del
     // orquestador— uno de esos: se le devuelve al instante diciéndolo, y el orquestador lo llama de nuevo con el informe del
     // otro. No se espera bloqueando: bloqueaba a la librería, que no devuelve el control mientras un hilo no termine su
@@ -790,6 +819,10 @@ export async function abrirSesionTrueforge(
       propias: propiasDe,
       notas: capacidadDeNotasDeLaSesion,
       puedeLlamar: (a) => conBucleDelDesarrollador && (a.llama?.length ?? 0) > 0,
+      vueltas: (a) =>
+        conBucleDelDesarrollador && (a.llama?.length ?? 0) > 0
+          ? capacidadDeAvisoDeVueltas({ vueltasDe: (hilo) => vueltasDeCadaHilo.get(hilo) ?? 0, umbrales: UMBRALES_DE_VUELTAS, texto: textoDeVueltas })
+          : undefined,
       conShell: () =>
         montarBackend({
           entorno: entornoDeLaShellDelProyecto(raiz, opciones.artefactos),
@@ -1566,6 +1599,7 @@ export async function abrirSesionTrueforge(
       // Otra conversación: lo que los especialistas recordaban era de la anterior.
       memoriaDeEspecialistas.olvidar();
       esperas.olvidar();
+      vueltasDeCadaHilo.clear();
       hijosConMemoria.clear();
       // Un hilo NUEVO: lo que hubiera guardado con ese id no se pisa ni se carga a medias. Y una
       // pregunta de la conversación de antes no la contesta el primer mensaje de la nueva.

@@ -85,4 +85,12 @@ describe("a quién llega el núcleo", () => {
   it("un subagente que escribe el usuario también lo recibe: viene del código, no del .md", () => {
     expect(promptDeAgente(agente({ nombre: "mio", descripcion: "El mío." }))).toContain("NÚCLEO DE TRABAJO EN XONE");
   });
+
+  it("dice cómo NO fallar con `getControl`: lanza, el `try/catch` no lo detiene, y no hay controles en `<create>` ni en un frame oculto", () => {
+    expect(NUCLEO_XONE).toContain("LANZA si el control no existe");
+    expect(NUCLEO_XONE).toContain("`try/catch` NO lo detiene");
+    expect(NUCLEO_XONE).toContain("`<create>`");
+    expect(NUCLEO_XONE).toContain("frame OCULTO");
+    expect(NUCLEO_XONE).toContain("ui.getView(self)");
+  });
 });

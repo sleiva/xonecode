@@ -939,6 +939,61 @@ describe("una sesión con el motor TrueForge", () => {
     }, 30_000);
   });
 
+  describe("el lazo del desarrollador: primero lo mínimo, y aviso tras varias comprobaciones seguidas", () => {
+    const llama = (id: string) =>
+      new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "create_sub_agent", args: JSON.stringify({ name: "device-controller", input: "comprueba" }) }] });
+    const texto = (vistos: string[][], i: number): string => vistos[i]!.join("\n");
+
+    it("el desarrollador recibe la orden de empezar por lo mínimo (arranque, display y un botón)", async () => {
+      const raiz = proyecto();
+      const { m, vistos } = modelosConGuion([
+        [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "escribe" }) }] })],
+        [new AIMessageChunk({ content: "Hecho." })],
+        [new AIMessageChunk({ content: "Listo." })],
+      ]);
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true });
+      await s.turno("haz", piel().p);
+      expect(texto(vistos, 1)).toContain("EMPIEZA POR LO MÍNIMO");
+      expect(texto(vistos, 1)).toContain("UN botón");
+    }, 30_000);
+
+    it("tras TRES comprobaciones seguidas al de pruebas, el desarrollador recibe el aviso de cambiar de procedimiento (una sola vez)", async () => {
+      const raiz = proyecto();
+      const { m, vistos } = modelosConGuion([
+        [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "escribe" }) }] })],
+        [llama("n1")],
+        [new AIMessageChunk({ content: "Falla A." })],
+        [llama("n2")],
+        [new AIMessageChunk({ content: "Falla B." })],
+        [llama("n3")],
+        [new AIMessageChunk({ content: "Falla C." })],
+        [new AIMessageChunk({ content: "Devuelvo." })],
+        [new AIMessageChunk({ content: "Todo." })],
+      ]);
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true });
+      await s.turno("haz", piel().p);
+      const todo = vistos.map((_, i) => texto(vistos, i));
+      // La llamada del desarrollador DESPUÉS de la tercera comprobación (la 8ª de todas) lleva el aviso; las de antes, no.
+      expect(todo[7]).toContain("LLEVAS 3 COMPROBACIONES SEGUIDAS");
+      expect(todo[7]).toContain("MISMA FAMILIA");
+      expect(todo.slice(0, 7).some((t) => t.includes("COMPROBACIONES SEGUIDAS"))).toBe(false);
+      // Una vez: en las llamadas que le siguen, el aviso ya está en el contexto y no se añade otro.
+      expect((todo[7]!.match(/LLEVAS 3 COMPROBACIONES SEGUIDAS/g) ?? []).length).toBe(1);
+    }, 30_000);
+
+    it("sin el interruptor del bucle no hay contador ni aviso", async () => {
+      const raiz = proyecto();
+      const { m, vistos } = modelosConGuion([
+        [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "escribe" }) }] })],
+        [new AIMessageChunk({ content: "Hecho." })],
+        [new AIMessageChunk({ content: "Listo." })],
+      ]);
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: false });
+      await s.turno("haz", piel().p);
+      expect(vistos.map((_, i) => texto(vistos, i)).some((t) => t.includes("EMPIEZA POR LO MÍNIMO") || t.includes("COMPROBACIONES SEGUIDAS"))).toBe(false);
+    }, 30_000);
+  });
+
   describe("un hijo no arranca hasta que termine el otro del que depende", () => {
     const pide = (id: string, nombre: string, input: string, indice: number) => ({ index: indice, id, name: "create_sub_agent", args: JSON.stringify({ name: nombre, input }) });
     const alaVez = (primero: "designer-xone" | "developer-xone") =>

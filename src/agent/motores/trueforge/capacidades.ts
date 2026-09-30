@@ -265,6 +265,42 @@ export function capacidadDeSubagentes(): Capacidad {
   };
 }
 
+/**
+ * Avisa a quien lleva un LAZO (escribir, comprobar, corregir) de cuántas comprobaciones lleva, por
+ * `preLLMProcessors`: al llegar a cada umbral se le añade UN mensaje de usuario, y no otro más hasta el siguiente.
+ *
+ * Existe porque «tres vueltas» estaba solo en el prompt del desarrollador y una pasada real hizo seis llamadas al
+ * conductor: un texto no es un contador. Y el aviso no dice «para», dice «cambia de procedimiento»: repetir la
+ * misma familia de fallo con otra reescritura completa es lo que se vio (un control que falta, y al arreglarlo,
+ * otro), y lo que hay que hacer es aislar la causa, no cortar. No añade tools.
+ */
+export function capacidadDeAvisoDeVueltas(opciones: {
+  vueltasDe: (hilo: string) => number;
+  umbrales: readonly number[];
+  texto: (vueltas: number) => string;
+}): Capacidad {
+  const avisados = new Map<string, Set<number>>();
+  return {
+    nombre: "vueltas",
+    tools: [],
+    capability: {
+      preLLMProcessors: [
+        {
+          async *processPreLLM(execution: { threadId: string }) {
+            const n = opciones.vueltasDe(execution.threadId);
+            const ya = avisados.get(execution.threadId) ?? new Set<number>();
+            const toca = [...opciones.umbrales].filter((u) => n >= u && !ya.has(u));
+            if (toca.length === 0) return;
+            for (const u of toca) ya.add(u);
+            avisados.set(execution.threadId, ya);
+            yield { type: "internal.agent.context.append", context: [{ role: "user", content: opciones.texto(n) }], output: [] };
+          },
+        },
+      ],
+    },
+  };
+}
+
 /** Lo que el backend y las tools de la sesión ponen para montar a un especialista. */
 export interface DependenciasDelEspecialista {
   backend: BackendDeFicheros & EscritorDeDesalojo;
@@ -276,6 +312,8 @@ export interface DependenciasDelEspecialista {
   notas: Capacidad;
   /** ¿Puede ESTE agente llamar a otros? Lo decide la sesión (su `.md` y el interruptor); ausente es que no. */
   puedeLlamar?: (agente: Agente) => boolean;
+  /** El aviso de vueltas de ESTE agente, si lleva un lazo. Ausente es que no lo lleva. */
+  vueltas?: (agente: Agente) => Capacidad | undefined;
 }
 
 /**
@@ -314,6 +352,7 @@ export function capacidadesDelEspecialista(
       : []),
     ...(clase === "ejecuta" ? [capacidadDeEjecucion(deps.conShell())] : []),
     ...(deps.puedeLlamar?.(agente) === true ? [capacidadDeSubagentes()] : []),
+    ...(deps.vueltas?.(agente) === undefined ? [] : [deps.vueltas(agente)!]),
     capacidadDeRecortes(deps.backend),
     capacidadDeFecha(),
     deps.notas,

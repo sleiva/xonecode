@@ -531,6 +531,11 @@ informe del otro; al arrancar sabe qué dejó (nombres de `icons/`, nunca conten
 la librería no devuelve el control mientras un hilo no termine su paso, y una aprobación de escritura del otro hilo
 solo se atiende al devolverlo — la primera versión, que paraba al hijo antes de cada llamada, atascó una pasada
 real. `developer-xone` espera a `designer-xone`.
+**Empieza por lo mínimo y se le avisa tras varias comprobaciones seguidas** (`textoDelBucle`,
+`capacidadDeAvisoDeVueltas`, `UMBRALES_DE_VUELTAS`): primero una versión que se pueda ver y pulsar, no la pantalla
+entera; y al llegar a cada umbral de llamadas al que ejecuta recibe UN mensaje que no dice «para» sino «cambia de
+procedimiento» (hipótesis, experimento mínimo, arreglo a todos los sitios parecidos). «Tres vueltas» en un prompt no
+era un contador. La regla del ciclo de vida de `getControl` vive en `NUCLEO_XONE` y en `errores-comunes.md`.
 **Sale del bucle cuando cumple el CRITERIO DE ACEPTACIÓN de su encargo**, que el orquestador escribe medible
 (casillas del plan, lo que hace la app, fidelidad al diseño), con tres vueltas como tope; devolver antes porque
 «ya funciona» dejaba lo visual sin hacer. **Escribir con el turno en marcha es UN gesto** (IXCODE-4, solo la web): el Enter, que en
