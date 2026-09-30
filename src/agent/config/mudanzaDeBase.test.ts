@@ -121,6 +121,43 @@ describe("mudarBaseDeWorkspace", () => {
 });
 
 describe("mudarBaseDeWorkspace: el origen que no se deja borrar", () => {
+  it("si guardar la base FALLA, la copia ya puesta se retira y un reintento no queda bloqueado", async () => {
+    const origen = copia("webstudio", "Tienda");
+    const r = await mudar({
+      guardarWorkspace: () => {
+        throw Object.assign(new Error("disco lleno"), { code: "ENOSPC" });
+      },
+    });
+    expect(r).toEqual({ estado: "rechazado", motivo: expect.stringContaining("no se ha cambiado nada") });
+    expect(existsSync(join(origen, "app.xne"))).toBe(true);
+    // Nada en el destino, ni a la vista ni oculto: si quedara, el plan siguiente diría «ya hay
+    // una copia de…» y cada reintento se bloquearía.
+    expect(existsSync(join(nuevo, "webstudio", "Tienda"))).toBe(false);
+    expect(readdirSync(join(nuevo, "webstudio"))).toEqual([]);
+    expect(planear().motivo).toBeUndefined();
+  });
+
+  it("si ni así se puede retirar la copia, NO dice «no se ha cambiado nada»: dice qué quedó y dónde", async () => {
+    // El fallo: la vuelta atrás se tragaba su error, quedaba una copia entera en la base nueva
+    // y el resultado seguía diciendo que no se había cambiado nada.
+    copia("webstudio", "Tienda");
+    const r = await mudar({
+      guardarWorkspace: () => {
+        throw new Error("no");
+      },
+      retirar: async () => {
+        throw Object.assign(new Error("ocupado"), { code: "EBUSY" });
+      },
+    });
+    expect(r.estado).toBe("rechazado");
+    const motivo = (r as { motivo: string }).motivo;
+    expect(motivo).not.toContain("no se ha cambiado nada");
+    expect(motivo).toContain("Tienda (webstudio)");
+    expect(motivo).toMatch(/bórrala|a mano/);
+    // Ninguna ruta de la máquina en el motivo: viaja por el cable.
+    expect(motivo).not.toContain(nuevo);
+  });
+
   it("si un programa tiene abierta una copia, el cambio YA está hecho y se dice como «restos»", async () => {
     copia("e", "A");
     copia("e", "B");

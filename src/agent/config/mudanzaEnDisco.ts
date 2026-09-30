@@ -274,6 +274,9 @@ export async function mudarBaseDeWorkspace(opciones: {
   /** Cómo se renombra el origen a su lápida. Inyectable: un fichero bloqueado por otro
    *  programa no se provoca en un temporal. */
   enterrar?: (desde: string, lapida: string) => Promise<void>;
+  /** Cómo se retira una copia ya puesta en el destino al deshacer el paso 4. Inyectable por lo
+   *  mismo que `enterrar`: una carpeta que no se deja borrar no se provoca en un temporal. */
+  retirar?: (copia: string) => Promise<void>;
 }): Promise<ResultadoDeCambioDeBase> {
   const { mudanzas, progreso } = opciones;
   const copiar =
@@ -350,8 +353,31 @@ export async function mudarBaseDeWorkspace(opciones: {
     }
     opciones.guardarWorkspace(opciones.hacia);
   } catch (error) {
-    for (const i of puestas) await rename(mudanzas[i]!.hacia, ocultas[i]!).catch(() => {});
+    // Deshacer es RETIRAR la copia puesta, que se puede: el origen sigue intacto (el paso 5 no
+    // ha corrido). Antes se renombraba de vuelta tragándose el error, y si fallaba quedaba una
+    // copia entera en la base nueva mientras el resultado decía «no se ha cambiado nada» —y el
+    // plan siguiente, al verla, bloqueaba cada reintento con «ya hay una copia de…»—.
+    const retirar = opciones.retirar ?? ((copia: string) => rm(copia, { recursive: true, force: true }));
+    const sueltas: string[] = [];
+    for (const i of puestas) {
+      const m = mudanzas[i]!;
+      try {
+        await retirar(m.hacia);
+      } catch {
+        sueltas.push(`${m.proyecto} (${m.entorno})`);
+      }
+    }
     await descartar();
+    if (sueltas.length > 0) {
+      // Sin rutas: viaja por el cable. El proyecto y el entorno dicen dónde en la carpeta nueva.
+      return {
+        estado: "rechazado",
+        motivo:
+          `no se pudo terminar el cambio (${codigoDe(error)}): el workspace sigue siendo el de antes y tus copias ` +
+          `están intactas, pero en la carpeta nueva quedó una copia de ${sueltas.join(", ")} que no se pudo retirar: ` +
+          "bórrala a mano antes de volver a intentarlo",
+      };
+    }
     return { estado: "rechazado", motivo: `no se pudo terminar el cambio (${codigoDe(error)}): no se ha cambiado nada` };
   }
   const avisos: string[] = [];
