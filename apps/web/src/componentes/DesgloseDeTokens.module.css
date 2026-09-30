@@ -1,35 +1,51 @@
-/* El diálogo de tokens por modelo: la tarjeta de `Pregunta.module.css`, un poco más ancha
-   porque los ids de modelo son largos. Las cifras en mono (`estilos/tipografia.css`: el
-   mono es para cifras y rutas). */
+/* El diálogo de tokens por modelo. La tarjeta es la de los diálogos de la app
+   (`Pregunta.module.css#pregunta`: filo `border-l2`, fondo `bg-layer-2`, radio 12), un poco
+   más ancha porque los ids de modelo son largos. El azul pastel es el del contador que lo abre
+   (`ContadorDeTokens.module.css`, `state-business-*`): el diálogo es el detalle de esa
+   pastilla y se viste igual. Las cifras en mono (`estilos/tipografia.css`). */
 .tarjeta {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  width: min(560px, 100%);
+  gap: 14px;
+  box-sizing: border-box;
+  width: min(580px, 100%);
   margin: 0 auto;
-  padding: 14px;
+  padding: 18px 18px 16px;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 12px;
   background: var(--dsw-alias-bg-layer-2);
 }
 
+.cabecera {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .titulo {
   margin: 0;
   color: var(--dsw-alias-label-primary);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
+}
+
+.subtitulo {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
 }
 
 .tabla {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 12px;
   color: var(--dsw-alias-label-primary);
 }
 
 .tabla th,
 .tabla td {
-  padding: 6px 8px;
+  padding: 8px 10px;
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
   text-align: right;
   white-space: nowrap;
@@ -40,28 +56,25 @@
 }
 
 .tabla thead th {
-  color: var(--dsw-alias-label-secondary);
+  padding-top: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
   font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .tabla th:first-child {
   text-align: left;
 }
 
-.tabla tfoot th,
-.tabla tfoot td {
-  border-bottom: none;
-  font-weight: 600;
-}
-
-/* El id del modelo: mono, y cortado con puntos si no cabe (el `title` de la celda no hace falta:
-   el texto entero está en el DOM). */
+/* El id del modelo: mono, cortado con puntos si no cabe. */
 .modelo {
-  font-family: var(--dsw-font-mono);
-  font-weight: 400;
-  max-width: 260px;
+  max-width: 280px;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-family: var(--dsw-font-mono);
+  font-weight: 400;
 }
 
 /* Lo gastado antes de medir por modelo: tenue, porque no dice de quién fue. */
@@ -69,11 +82,27 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* El total, en la pastilla del contador: es la cifra que ya se ve en el compositor. */
+.total th,
+.total td {
+  border-bottom: none;
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-state-business-primary);
+  font-weight: 600;
+}
+
+.total th:first-child {
+  border-radius: 8px 0 0 8px;
+}
+
+.total td:last-child {
+  border-radius: 0 8px 8px 0;
+}
+
 .marca {
   margin-left: 6px;
   padding: 1px 6px;
   border-radius: 999px;
-  font-family: inherit;
   font-size: 10px;
   background: var(--dsw-alias-state-business-tertiary);
   color: var(--dsw-alias-state-business-primary);

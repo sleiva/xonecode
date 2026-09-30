@@ -1,5 +1,5 @@
-import { type MouseEvent } from "react";
-import { Button, Modal } from "@deepseek-ai/dsh-client-ui-primitives";
+import { useEffect, useRef, type MouseEvent } from "react";
+import { Modal } from "@deepseek-ai/dsh-client-ui-primitives";
 import { abreviar } from "../cifras.js";
 import { filasPorModelo } from "../consumoPintable.js";
 import type { ConsumoPorModelo } from "../tipos.js";
@@ -21,6 +21,10 @@ import estilos from "./DesgloseDeTokens.module.css";
  */
 export function DesgloseDeTokens({ porModelo, alCerrar }: { porModelo: ConsumoPorModelo; alCerrar: () => void }): React.ReactElement {
   const filas = filasPorModelo(porModelo);
+  // El foco va a «Cerrar» al abrir, como en el visor de imágenes: es la única acción, y con el
+  // teclado se cierra sin tener que ir a buscarla.
+  const cerrar = useRef<HTMLButtonElement>(null);
+  useEffect(() => cerrar.current?.focus(), []);
   const total = filas.reduce((t, f) => ({ nueva: t.nueva + f.nueva, cache: t.cache + f.cache, salida: t.salida + f.salida }), { nueva: 0, cache: 0, salida: 0 });
   const hayExterno = filas.some((f) => f.cuenta === "externo");
   const haySinDesglose = filas.some((f) => f.sinDesglose);
@@ -33,7 +37,10 @@ export function DesgloseDeTokens({ porModelo, alCerrar }: { porModelo: ConsumoPo
         }}
       >
         <div className={estilos.tarjeta}>
-          <p className={estilos.titulo}>Tokens de esta conversación, por modelo</p>
+          <header className={estilos.cabecera}>
+            <p className={estilos.titulo}>Tokens por modelo</p>
+            <p className={estilos.subtitulo}>Lo que lleva gastado esta conversación, modelo a modelo.</p>
+          </header>
           <table className={estilos.tabla}>
             <thead>
               <tr>
@@ -57,7 +64,7 @@ export function DesgloseDeTokens({ porModelo, alCerrar }: { porModelo: ConsumoPo
               ))}
             </tbody>
             <tfoot>
-              <tr>
+              <tr className={estilos.total}>
                 <th scope="row">Total</th>
                 <td title={String(total.nueva)}>{abreviar(total.nueva)}</td>
                 <td title={String(total.cache)}>{abreviar(total.cache)}</td>
@@ -72,9 +79,11 @@ export function DesgloseDeTokens({ porModelo, alCerrar }: { porModelo: ConsumoPo
             <p className={estilos.nota}>Un agente externo va contra su propia suscripción: se suman tokens, no coste.</p>
           ) : null}
           <div className={estilos.acciones}>
-            <Button type="button" variant="outline" onClick={alCerrar}>
+            {/* El primario de la app (`Boton.module.css`, por la coraza de `Pregunta`), como el
+                «Cerrar» del visor de imágenes: el `Button` del paquete no lleva nuestro estilo. */}
+            <button ref={cerrar} type="button" className={coraza.accion} onClick={alCerrar}>
               Cerrar
-            </Button>
+            </button>
           </div>
         </div>
       </div>
