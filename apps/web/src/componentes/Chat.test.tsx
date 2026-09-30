@@ -1216,6 +1216,9 @@ describe("la hora de cada mensaje (IXCODE-24)", () => {
     expect(horas).toEqual([cuandoUsuario, cuandoRespuesta]);
     const copiar = screen.getByRole("button", { name: "Copiar la respuesta" });
     expect(copiar.parentElement?.querySelector("time")?.getAttribute("datetime")).toBe(cuandoRespuesta);
+    // Y el mensaje de la persona también se copia, con su hora al lado.
+    const copiarMensaje = screen.getByRole("button", { name: "Copiar el mensaje" });
+    expect(copiarMensaje.parentElement?.querySelector("time")?.getAttribute("datetime")).toBe(cuandoUsuario);
   });
 
   it("sin `cuando` —una sesión de antes— no se pinta ninguna hora", () => {

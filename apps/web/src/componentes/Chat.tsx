@@ -1165,7 +1165,13 @@ export function Chat({
                       ))}
                     </ul>
                   )}
-                  <HoraDelMensaje cuando={acto.cuando} clase={estilos.horaDelUsuario} />
+                  {/* Su hora y su botón de copiar, con la misma fila que la respuesta: la hora
+                      siempre a la vista, el botón al posar el ratón. Copia lo TECLEADO, no los
+                      nombres de los adjuntos. */}
+                  <div className={`${estilos.acciones} ${estilos.accionesDelUsuario}`}>
+                    <HoraDelMensaje cuando={acto.cuando} clase={estilos.hora} />
+                    {acto.texto === "" ? null : <BotonDeCopiar texto={acto.texto} etiqueta="Copiar el mensaje" />}
+                  </div>
                 </div>
               );
             }

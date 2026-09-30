@@ -348,8 +348,7 @@
 }
 
 /* La hora de un mensaje: pequeña y apagada, porque acompaña al mensaje, no compite con él. */
-.hora,
-.horaDelUsuario {
+.hora {
   font-size: 11px;
   line-height: 1;
   color: var(--dsw-alias-label-tertiary);
@@ -357,11 +356,10 @@
   white-space: nowrap;
 }
 
-/* En el globo de la persona, debajo del texto y a la derecha, como la firma de un mensaje. */
-.horaDelUsuario {
-  display: block;
-  margin-top: 4px;
-  text-align: right;
+/* En el globo de la persona la fila va debajo del texto, y sin la prosa heredada del globo
+   (`white-space: pre-wrap`), que separaría la hora del botón con el salto del JSX. */
+.accionesDelUsuario {
+  white-space: normal;
 }
 
 /* El botón de copiar de las vallas de código NO se pinta aquí. Estuvo en esta hoja,

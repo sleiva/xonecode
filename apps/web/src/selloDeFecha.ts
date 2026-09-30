@@ -26,16 +26,20 @@ export function selloDeFecha(iso: string, ahora: Date = new Date()): string | un
 
 /**
  * La hora de un mensaje del chat (IXCODE-24): de HOY, solo la hora —es lo que distingue un mensaje de
- * los de alrededor—; de otro día, además el día, con la regla de `selloDeFecha`. Lo que no es una
- * fecha no se pinta, por lo mismo.
+ * los de alrededor—; de AYER, «ayer» y la hora, que se lee antes que una fecha; de otro día, además el
+ * día, con la regla de `selloDeFecha`. Lo que no es una fecha no se pinta, por lo mismo.
  */
 export function horaDelMensaje(iso: string, ahora: Date = new Date()): string | undefined {
   const fecha = new Date(iso);
   if (Number.isNaN(fecha.getTime())) return undefined;
-  const deHoy =
-    fecha.getFullYear() === ahora.getFullYear() && fecha.getMonth() === ahora.getMonth() && fecha.getDate() === ahora.getDate();
-  if (!deHoy) return selloDeFecha(iso, ahora);
-  return new Intl.DateTimeFormat("es", { hour: "2-digit", minute: "2-digit", hour12: false }).format(fecha);
+  const mismoDia = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  const hora = new Intl.DateTimeFormat("es", { hour: "2-digit", minute: "2-digit", hour12: false }).format(fecha);
+  if (mismoDia(fecha, ahora)) return hora;
+  // Ayer por el CALENDARIO, no «hace menos de 24 h»: a las 00:30, un mensaje de las 23:50 es de ayer.
+  const ayer = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() - 1);
+  if (mismoDia(fecha, ayer)) return `ayer ${hora}`;
+  return selloDeFecha(iso, ahora);
 }
 
 /** La fecha ENTERA, con segundos, para el `title` de la hora de un mensaje: al posar el ratón se lee el día exacto. */
