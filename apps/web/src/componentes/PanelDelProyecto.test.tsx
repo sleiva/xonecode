@@ -617,17 +617,19 @@ describe("PanelDelProyecto", () => {
     pestana("Conectores");
     const filaDe = (nombre: string) => screen.getByText(nombre, { selector: "span" }).closest("li")!;
     // Jira: ni casilla ni la frase de «desvincula antes»; el vínculo y «Desvincular».
-    expect(within(filaDe("Jira")).queryByRole("checkbox")).toBeNull();
+    expect(within(filaDe("Jira")).queryByRole("switch")).toBeNull();
     expect(screen.queryByText(/desvincula antes de dejar de usarlo/)).toBeNull();
     expect(screen.getByText("Vinculado a IXCODE en xone.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Desvincular" }));
     expect(alGestor).toHaveBeenCalledWith({ accion: "desvincular" });
-    // DeepWiki, conectado y no gestor: su casilla de siempre.
-    const casilla = within(filaDe("DeepWiki")).getByRole("checkbox", { name: "Usar en este proyecto" }) as HTMLInputElement;
-    expect(casilla.checked).toBe(false);
-    fireEvent.click(casilla);
+    // DeepWiki, conectado y no gestor: su interruptor, el primero de la fila.
+    const interruptor = within(filaDe("DeepWiki")).getByRole("switch", { name: "Usar en este proyecto" });
+    expect(interruptor.getAttribute("aria-checked")).toBe("false");
+    expect(filaDe("DeepWiki").querySelector("div")?.firstElementChild).toBe(interruptor);
+    fireEvent.click(interruptor);
     expect(alGestor).toHaveBeenCalledWith({ accion: "usarConector", conector: "deepwiki", usar: true });
-    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    expect(screen.getAllByRole("switch")).toHaveLength(1);
+    expect(screen.queryByRole("checkbox")).toBeNull();
     // GitHub, añadido y sin conectar: su fila con «Conectar», el MISMO `autorizar` de Ajustes.
     fireEvent.click(within(filaDe("GitHub")).getByRole("button", { name: "Conectar GitHub" }));
     expect(props.alAutorizarConector).toHaveBeenCalledWith("github");
@@ -859,13 +861,13 @@ describe("PanelDelProyecto", () => {
     expect(within(gestores).getByText("Jira", { selector: "span" })).toBeTruthy();
     expect(within(gestores).getByText("Notion", { selector: "span" })).toBeTruthy();
     expect(within(gestores).queryByText("DeepWiki")).toBeNull();
-    expect(within(gestores).queryByRole("checkbox")).toBeNull();
+    expect(within(gestores).queryByRole("switch")).toBeNull();
     expect(within(chat).getByText("Los que usará el agente en el chat de este proyecto.")).toBeTruthy();
     expect(within(chat).queryByText("Jira", { selector: "span" })).toBeNull();
     expect(within(chat).queryByText("Notion", { selector: "span" })).toBeNull();
-    const casilla = within(chat).getByRole("checkbox", { name: "Usar en este proyecto" }) as HTMLInputElement;
-    expect(casilla.checked).toBe(true);
-    fireEvent.click(casilla);
+    const interruptor = within(chat).getByRole("switch", { name: "Usar en este proyecto" });
+    expect(interruptor.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(interruptor);
     expect(alGestor).toHaveBeenCalledWith({ accion: "usarConector", conector: "deepwiki", usar: false });
     fireEvent.click(within(chat).getByRole("button", { name: "Conectar GitHub" }));
     expect(props.alAutorizarConector).toHaveBeenCalledWith("github");

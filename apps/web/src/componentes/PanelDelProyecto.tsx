@@ -1128,21 +1128,29 @@ function ConectoresDelProyecto({
               return (
                 <li key={c.id} className={estilos.conector}>
                   <div className={estilos.filaDeConector}>
+                    {/* El INTERRUPTOR va el primero: es lo que se decide en esta fila. Sin él (un
+                        conector sin conectar, que antes pide «Conectar») queda su hueco, para que
+                        los iconos y los nombres sigan en columna. */}
+                    {conCasilla ? (
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={usado}
+                        aria-label="Usar en este proyecto"
+                        title={usado ? "Lo usa el agente en este proyecto" : "No lo usa el agente en este proyecto"}
+                        className={estilos.interruptor}
+                        disabled={!conectado}
+                        onClick={() => alGestor({ accion: "usarConector", conector: c.id, usar: !usado })}
+                      >
+                        <span className={estilos.bolita} aria-hidden="true" />
+                      </button>
+                    ) : (
+                      <span className={estilos.huecoDeInterruptor} aria-hidden="true" />
+                    )}
                     <IconoDeConector id={c.id} nombre={nombreDe(c.id)} />
                     <span className={estilos.tituloDeConector}>{nombreDe(c.id)}</span>
                     <span className={estilos.alFinal}>
                       <BotonDeConectar fila={c} nombre={nombreDe(c.id)} conectado={conectado} alAutorizar={alAutorizar} alProbar={alProbar} />
-                      {conCasilla ? (
-                        <label className={estilos.casilla}>
-                          <input
-                            type="checkbox"
-                            checked={usado}
-                            disabled={!conectado}
-                            onChange={(e) => alGestor({ accion: "usarConector", conector: c.id, usar: e.target.checked })}
-                          />
-                          Usar en este proyecto
-                        </label>
-                      ) : null}
                     </span>
                   </div>
                 </li>
