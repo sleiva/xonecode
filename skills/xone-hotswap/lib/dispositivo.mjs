@@ -17,6 +17,8 @@
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 /** El dispositivo elegido en la sesión, o `undefined`. Un fichero roto es «no hay elección». */
 export function dispositivoDeLaSesion(entorno = process.env) {
@@ -82,4 +84,50 @@ export function udidIos(explicito, entorno = process.env) {
   if (explicito) return explicito;
   const elegido = dispositivoDeLaSesion(entorno);
   return elegido?.plataforma === "ios" && elegido.clase === "simulador" ? elegido.id : undefined;
+}
+
+/** El puerto del hotswap DENTRO del aparato y el local por omisión. Copia de `core/puertosDeAvd.ts#PUERTO_DEL_HOTSWAP`. */
+export const PUERTO_DEL_HOTSWAP = 8443;
+
+const ejecutarAdb = (binario, args) =>
+  execFileSync(binario, args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+
+/** El AVD detrás de un emulador en marcha, por su consola. Un físico no tiene: `undefined` sin preguntar. */
+export function avdDeLaSerie(serie, { entorno = process.env, ejecutar = ejecutarAdb } = {}) {
+  if (!serie || !serie.startsWith("emulator-")) return undefined;
+  try {
+    return ejecutar(rutaDeAdb(entorno), ["-s", serie, "emu", "avd", "name"])
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .find((l) => l !== "" && l !== "OK");
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Lo guardado para ese AVD en `~/.xonecode/settings.json` (`dispositivos.avds`). Se lee en CADA
+ * ejecución, como el dispositivo de la sesión: cambiar el puerto en Ajustes alcanza al siguiente
+ * comando. Un fichero ausente o roto es «nada guardado».
+ */
+export function ajusteDelAvd(avd, { casa = homedir(), leer = (r) => readFileSync(r, "utf8") } = {}) {
+  if (!avd) return {};
+  try {
+    const s = JSON.parse(leer(join(casa, ".xonecode", "settings.json")));
+    const a = s?.dispositivos?.avds?.[avd];
+    return typeof a === "object" && a !== null ? a : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * El puerto LOCAL del túnel. De más explícito a menos: `--puerto`, el guardado del AVD de esta
+ * serie, 8443. Misma regla que `core/puertosDeAvd.ts#puertoDeAvd` (un test compara las dos).
+ */
+export function puertoAndroid(explicito, serie, deps = {}) {
+  const n = Number(explicito);
+  if (explicito !== undefined && Number.isInteger(n) && n >= 1024 && n <= 65535) return n;
+  const guardado = ajusteDelAvd(avdDeLaSerie(serie, deps), deps).puerto;
+  return Number.isInteger(guardado) ? guardado : PUERTO_DEL_HOTSWAP;
 }
