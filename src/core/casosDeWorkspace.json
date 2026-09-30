@@ -1,0 +1,24 @@
+{
+  "casa": "C:\\Users\\lolo",
+  "casos": [
+    { "ruta": "/Users/ana/xone", "vale": true },
+    { "ruta": "~", "vale": true },
+    { "ruta": "~/xone-proyectos", "vale": true },
+    { "ruta": "~\\xone", "vale": true },
+    { "ruta": "C:\\Users\\lolo\\.xonecode\\workspace", "vale": true },
+    { "ruta": "C:\\Users\\lolo\\xonecode\\", "vale": true },
+    { "ruta": "D:/proyectos/xone", "vale": true },
+    { "ruta": "\\\\servidor\\compartida\\xone", "vale": true },
+    { "ruta": "  C:\\Xone\\ws  ", "vale": true },
+    { "ruta": "", "vale": false },
+    { "ruta": "   ", "vale": false },
+    { "ruta": "proyectos", "vale": false },
+    { "ruta": "./proyectos", "vale": false },
+    { "ruta": "xonecode\\ws", "vale": false },
+    { "ruta": "~otra/cosa", "vale": false },
+    { "ruta": "/", "vale": false },
+    { "ruta": "C:\\", "vale": false },
+    { "ruta": "C:/", "vale": false },
+    { "ruta": "d:\\\\", "vale": false }
+  ]
+}

@@ -1,4 +1,7 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { validarSettings, expandirConCasa, motivoDeWorkspaceInaceptable, rutaDeWorkspace, dentroDelWorkspace, seMira, depuracionActiva, PLATAFORMAS_DE_DISPOSITIVO, TOPE_DE_CONCURRENCIA_DE_TAREAS, motivoParaNoOlvidarEntorno, motivoParaNoBorrarCopia, mismaRuta, motivoDeNombreDeEntornoInaceptable, LARGO_NOMBRE_DE_ENTORNO } from "./settings.js";
 
 describe("validarSettings", () => {
@@ -335,5 +338,17 @@ describe("IXCODE-22: el workspace en Windows", () => {
   it("`~\\` se expande contra la casa de Windows", () => {
     expect(expandirConCasa("~\\xone", "C:\\Users\\lolo")).toBe("C:\\Users\\lolo\\xone");
     expect(expandirConCasa("~/xone", "/Users/x")).toBe("/Users/x/xone");
+  });
+});
+
+describe("la regla del workspace es UNA: la tabla que comparte con la copia del cliente", () => {
+  // La MISMA tabla la lee `apps/web/src/componentes/Ajustes.test.tsx` contra su copia
+  // declarada. La del cliente se había quedado en «empieza por /» y en Windows toda ruta
+  // salía en rojo: con la tabla compartida, divergir da rojo aquí o allí.
+  const { casa, casos } = JSON.parse(
+    readFileSync(join(dirname(fileURLToPath(import.meta.url)), "casosDeWorkspace.json"), "utf8"),
+  ) as { casa: string; casos: { ruta: string; vale: boolean }[] };
+  it.each(casos)("«$ruta» → vale: $vale", ({ ruta, vale }) => {
+    expect(motivoDeWorkspaceInaceptable(expandirConCasa(ruta, casa)) === undefined).toBe(vale);
   });
 });

@@ -151,7 +151,7 @@ import {
   MODO_POR_OMISION,
   type ModoDeEscritura,
 } from "../../core/modoDeEscritura.js";
-import { mudarWorkspaceLegado, type ResultadoDeMudanza } from "../../agent/config/mudanzaEnDisco.js";
+import { megasDeLasMudanzas, mudarWorkspaceLegado, type ResultadoDeMudanza } from "../../agent/config/mudanzaEnDisco.js";
 import { elegirCarpetaEnMaquina, haySelectorDeCarpeta } from "../../agent/config/selectorEnMaquina.js";
 import { cloudstudioDelProyecto } from "../../agent/config/configEnDisco.js";
 import { abrirEnSistema, olvidarEntorno as olvidarCredencialesDeEntorno, rutaAuthPorDefecto } from "../../agent/cloudstudio/cloudstudioMcp.js";
@@ -665,6 +665,14 @@ export interface OpcionesDeMontaje {
    * que `guardarConcurrencia`.
    */
   guardarWorkspace?: (ruta: string) => void;
+  /**
+   * Lo tecleado, EXPANDIDO contra la casa y validado con la regla del host: la ruta absoluta,
+   * o el motivo de que no valga. Ausente = no se puede MUDAR, y cambiar el workspace sigue
+   * siendo solo escribir el ajuste.
+   */
+  resolverWorkspace?: (ruta: string) => { ruta: string } | { motivo: string };
+  /** `~/.xonecode`: dónde vive el índice de tareas que la mudanza reescribe. */
+  casaXonecode?: string;
   /**
    * Abre el selector de carpeta NATIVO de esta máquina y devuelve la elegida, o AUSENTE si
    * no se eligió ninguna. Ausente la OPCIÓN = este sistema no tiene selector (o esta
@@ -1829,6 +1837,8 @@ export function montarRutas(
       ? { clase: "workspace", ruta }
       : { clase: "workspace", ruta, puedeElegir: true };
   };
+  /** Hay una mudanza del workspace en marcha: una segunda se niega, y crear una tarea también. */
+  let mudandoWorkspace = false;
   const emitirWorkspace = (): void => {
     const m = mensajeDeWorkspace();
     if (m !== undefined) emitir(m);
@@ -5462,6 +5472,13 @@ export function montarRutas(
       return;
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "tarea") {
+      if (mensaje.accion === "crear" && mudandoWorkspace) {
+        // Una tarea creada a mitad de la mudanza guardaría la raíz VIEJA, que está a punto de
+        // borrarse. Se niega con motivo, como cualquier otra negativa del cable.
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ motivo: "se está cambiando la carpeta de los proyectos: crea la tarea cuando termine" }));
+        return;
+      }
       if (mensaje.accion === "crear" && opciones.colaDeTareas !== undefined) {
         const creada = atenderCrearTarea(mensaje.proyecto, mensaje.peticion, mensaje.encargo, mensaje.borrador);
         if (creada !== undefined) {
@@ -5521,9 +5538,80 @@ export function montarRutas(
        * Y se reemite SIEMPRE, se haya escrito o no: con el valor nuevo cuando valió y con el
        * de antes cuando no, así el campo acaba enseñando lo que hay en disco y no lo que se
        * tecleó. Un rechazo mudo dejaría la pantalla afirmando un ajuste que no está puesto.
+       *
+       * **Y cambiarla MUDA lo que ya está bajado**, en dos actos (`vestibulo.mudarWorkspace`):
+       * `planear` contesta en la PROPIA respuesta qué se movería —por nombre y entorno, nunca
+       * una ruta— o por qué no se puede, sin tocar nada; `aplicar` (o sin `accion`) contesta
+       * 204 en el acto y el recorrido llega por `mudanzaDeWorkspace`, porque copiar y
+       * verificar cientos de megas no cabe en una petición. La negativa que se sabe ANTES
+       * de empezar —una ruta que no vale, una mudanza ya en marcha— va en un 409 con motivo.
        */
-      opciones.guardarWorkspace?.(mensaje.ruta);
-      emitirWorkspace();
+      const negarWorkspace = (motivo: string): void => {
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ motivo }));
+      };
+      const tareasVivas = (): { estado: string; raiz: string }[] =>
+        (opciones.colaDeTareas?.listar() ?? []).map((t) => ({ estado: t.estado, raiz: t.proyecto.raiz }));
+      const resuelta = opciones.resolverWorkspace?.(mensaje.ruta);
+      if (resuelta === undefined || opciones.casaXonecode === undefined) {
+        // Esta ejecución no sabe mudar: el comportamiento de siempre, solo escribir el ajuste.
+        opciones.guardarWorkspace?.(mensaje.ruta);
+        emitirWorkspace();
+        respuesta.writeHead(204);
+        respuesta.end();
+        return;
+      }
+      if ("motivo" in resuelta) {
+        emitirWorkspace();
+        negarWorkspace(resuelta.motivo);
+        return;
+      }
+      if (mensaje.accion === "planear") {
+        const plan = vestibulo.planearWorkspace(resuelta.ruta, opciones.casaXonecode, tareasVivas());
+        let megas: number | undefined;
+        if (plan.motivo === undefined && plan.mudanzas.length > 0) {
+          megas = await megasDeLasMudanzas(plan.mudanzas).catch(() => undefined);
+        }
+        respuesta.writeHead(200, { "content-type": "application/json" });
+        respuesta.end(
+          JSON.stringify({
+            proyectos: plan.mudanzas.map((m) => ({ entorno: m.entorno, proyecto: m.proyecto })),
+            ...(megas === undefined ? {} : { megas }),
+            ...(plan.motivo === undefined ? {} : { motivo: plan.motivo }),
+          })
+        );
+        return;
+      }
+      if (mudandoWorkspace) {
+        negarWorkspace("ya hay un cambio de carpeta en marcha: espera a que termine");
+        return;
+      }
+      mudandoWorkspace = true;
+      const casaXonecode = opciones.casaXonecode;
+      const guardar = opciones.guardarWorkspace ?? (() => {});
+      void (async () => {
+        try {
+          const { resultado, cerroLaAbierta } = await vestibulo.mudarWorkspace({
+            hacia: resuelta.ruta,
+            casaXonecode,
+            tareas: tareasVivas,
+            guardar,
+            progreso: (progreso) => emitir({ clase: "mudanzaDeWorkspace", progreso }),
+          });
+          // El cable se quedaría enganchado a una consola cerrada: al vestíbulo, como al
+          // borrar una copia. El alta siguiente ya trae las copias en la base nueva.
+          if (cerroLaAbierta) adjuntar();
+          emitir({ clase: "mudanzaDeWorkspace", resultado });
+        } catch (error) {
+          contar(error);
+          emitir({ clase: "mudanzaDeWorkspace", resultado: { estado: "rechazado", motivo: "no se pudo cambiar la carpeta" } });
+        } finally {
+          mudandoWorkspace = false;
+          emitirWorkspace();
+          opciones.revisarTareas?.();
+          await anunciarAlta().catch(contar);
+        }
+      })().catch(contar);
       respuesta.writeHead(204);
       respuesta.end();
       return;
@@ -6303,11 +6391,22 @@ export function ajusteDeWorkspaceCableado(opciones: {
   casa: string;
   leer?: () => string | undefined;
   guardar?: (ruta: string) => void;
-}): { workspace: () => string; guardarWorkspace: (ruta: string) => void } {
+}): {
+  workspace: () => string;
+  guardarWorkspace: (ruta: string) => void;
+  resolverWorkspace: (ruta: string) => { ruta: string } | { motivo: string };
+  casaXonecode: string;
+} {
   const leer = opciones.leer ?? (() => cargarSettings().settings.workspace);
   const guardar = opciones.guardar ?? ((ruta: string) => void guardarWorkspaceEnDisco(undefined, ruta));
   return {
     workspace: () => leer() ?? baseDeWorkspacePorOmision(),
+    casaXonecode: join(opciones.casa, ".xonecode"),
+    resolverWorkspace: (ruta) => {
+      const absoluta = expandirConCasa(ruta, opciones.casa);
+      const motivo = motivoDeWorkspaceInaceptable(absoluta);
+      return motivo === undefined ? { ruta: absoluta } : { motivo };
+    },
     guardarWorkspace: (ruta) => {
       const absoluta = expandirConCasa(ruta, opciones.casa);
       if (motivoDeWorkspaceInaceptable(absoluta) !== undefined) return;

@@ -39,7 +39,9 @@ import type { Eleccion, FuentesDeEleccion, Proveedor } from "../../core/modelos.
 import type { ConsumoDeSesionPorCuenta, CatalogoModelosPort } from "../../core/ports.js";
 import { consumoDeLaSesion, consumoPersistible, esDoble } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
-import { motivoDeNombreDeEntornoInaceptable, motivoParaNoBorrarCopia, rutaDeWorkspace } from "../../core/settings.js";
+import { dentroDelWorkspace, mismaRuta, motivoDeNombreDeEntornoInaceptable, motivoParaNoBorrarCopia, motivoParaNoMudarWorkspace, rutaDeWorkspace } from "../../core/settings.js";
+import { rutaMudada, type Mudanza } from "../../core/mudanzaDeWorkspace.js";
+import { mudarBaseDeWorkspace, planDeCambioDeBaseEnDisco, type ProgresoDeMudanza, type ResultadoDeCambioDeBase } from "../../agent/config/mudanzaEnDisco.js";
 import {
   URL_CLOUDSTUDIO_POR_OMISION,
   SCOPES_CLOUDSTUDIO_AGENTE,
@@ -755,6 +757,34 @@ export interface Vestibulo {
     proyecto: string,
     tareas: readonly { estado: string; raiz: string }[]
   ): Promise<{ borrada: boolean; cerroLaAbierta: boolean; motivo?: string }>;
+  /**
+   * Lo que se MUDARÍA al cambiar el workspace a `hacia`, o por qué no se puede ahora — sin
+   * tocar nada. La misma decisión que `mudarWorkspace` vuelve a tomar dentro de la cola: entre
+   * esta foto y el «Aceptar» de la persona el estado puede cambiar.
+   */
+  planearWorkspace(
+    hacia: string,
+    casaXonecode: string,
+    tareas: readonly { estado: string; raiz: string }[]
+  ): { mudanzas: Mudanza[]; motivo?: string };
+  /**
+   * CAMBIA el workspace a `hacia` MUDANDO las copias que hay en el de ahora
+   * (`agent/config/mudanzaEnDisco.ts#mudarBaseDeWorkspace`: copiar, verificar, borrar).
+   *
+   * **Ocupa la cola ENTERA mientras dura**, no solo la comprobación: si un clic en la barra o
+   * un segundo navegador reabrieran una consola en la ruta vieja a mitad de la copia, lo que
+   * escribiera se perdería al borrar el origen, y su `checkpoint.sqlite` abierto bloquearía la
+   * lápida. El motivo se RECALCULA aquí dentro (`motivoParaNoMudarWorkspace`). Luego, el orden
+   * de `borrarCopia`: se cierran las consolas en reposo de la base y DESPUÉS se sueltan sus
+   * checkpointers —en Windows un SQLite abierto no se deja copiar entero ni borrar—.
+   */
+  mudarWorkspace(opciones: {
+    hacia: string;
+    casaXonecode: string;
+    tareas: () => readonly { estado: string; raiz: string }[];
+    guardar: (ruta: string) => void;
+    progreso?: (p: ProgresoDeMudanza) => void;
+  }): Promise<{ resultado: ResultadoDeCambioDeBase; cerroLaAbierta: boolean }>;
   /** Le pone nombre a una sesión guardada. `false` si no existe o el título viene vacío. */
   renombrarSesion(raiz: string, id: string, titulo: string): boolean;
   /** El paso 3 completo: escribe el alta y baja la copia local. */
@@ -2005,6 +2035,22 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     return consolaDeProyecto;
   };
 
+  /**
+   * Las copias que ha movido una mudanza del workspace en este proceso, y la traducción de una
+   * raíz a su sitio nuevo. Existe porque la raíz de una apertura se compone FUERA de la cola
+   * (`raizDeProyecto`, con la base de ese instante) y solo el abrir espera dentro: un clic a
+   * mitad de la copia abriría después la carpeta vieja, ya borrada.
+   */
+  const mudadas: Mudanza[] = [];
+  const trasLaMudanza = (raiz: string): string => rutaMudada(raiz, mudadas) ?? raiz;
+
+  /** Las raíces donde algo ESCRIBE ahora: un chat con turno en vuelo y una consola de tarea
+   *  sin cerrar. Lo que `motivoParaNoMudarWorkspace` necesita para decir que no. */
+  const raicesOcupadas = (): { trabajando: string[]; deTareas: string[] } => ({
+    trabajando: [...abiertas].filter(([, c]) => !c.cerrada && c.turnoEnVuelo).map(([raiz]) => raiz),
+    deTareas: [...deTareas].filter((c) => !c.cerrada).map((c) => c.raiz),
+  });
+
   /** Cierra las consolas de tarea que queden vivas. Ver `deTareas`. */
   const cerrarLasDeTareas = async (): Promise<void> => {
     for (const consola of [...deTareas]) {
@@ -2272,6 +2318,53 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       }
     },
 
+    planearWorkspace(hacia, casaXonecode, tareas) {
+      const desde = base();
+      if (mismaRuta(desde, hacia)) return { mudanzas: [] };
+      const motivo = motivoParaNoMudarWorkspace({ base: desde, ...raicesOcupadas(), tareas });
+      if (motivo !== undefined) return { mudanzas: [], motivo };
+      return planDeCambioDeBaseEnDisco({ desde, hacia, casaXonecode });
+    },
+
+    mudarWorkspace: ({ hacia, casaXonecode, tareas, guardar, progreso }) =>
+      enCola(async () => {
+        const desde = base();
+        if (mismaRuta(desde, hacia)) {
+          return { resultado: { estado: "hecho" as const, mudadas: 0, restos: [], avisos: [] }, cerroLaAbierta: false };
+        }
+        const motivo = motivoParaNoMudarWorkspace({ base: desde, ...raicesOcupadas(), tareas: tareas() });
+        const plan = motivo === undefined ? planDeCambioDeBaseEnDisco({ desde, hacia, casaXonecode }) : { mudanzas: [], motivo };
+        if (plan.motivo !== undefined) {
+          return { resultado: { estado: "rechazado" as const, motivo: plan.motivo }, cerroLaAbierta: false };
+        }
+        const deLaBase = [...abiertas.keys()].filter((raiz) => dentroDelWorkspace(raiz, desde));
+        const cerroLaAbierta = enFoco !== undefined && deLaBase.includes(enFoco);
+        try {
+          for (const raiz of deLaBase) await cerrarConsolaDeProyecto(raiz).catch(() => abiertas.delete(raiz));
+          // DESPUÉS de cerrar las consolas, como en `borrarCopia`.
+          for (const m of plan.mudanzas) cerrarCheckpointerDeProyecto(m.desde);
+          // Guardar se COMPRUEBA releyendo la base: quien guarda en producción puede volver sin
+          // escribir (su regla dice que no) y sin lanzar, y borrar el origen con el ajuste viejo
+          // en disco dejaría todas las copias «sin descargar».
+          const guardarComprobado = (ruta: string): void => {
+            guardar(ruta);
+            if (!mismaRuta(base(), ruta)) throw Object.assign(new Error("la base no se guardó"), { code: "NO_GUARDADA" });
+          };
+          const resultado = await mudarBaseDeWorkspace({
+            desde,
+            hacia,
+            mudanzas: plan.mudanzas,
+            casaXonecode,
+            guardarWorkspace: guardarComprobado,
+            ...(progreso === undefined ? {} : { progreso }),
+          });
+          if (resultado.estado === "hecho") mudadas.push(...plan.mudanzas);
+          return { resultado, cerroLaAbierta };
+        } finally {
+          if (deLaBase.length > 0) avisarDeLasAbiertas();
+        }
+      }),
+
     renombrarSesion(raiz, id, titulo) {
       return sesiones.renombrar?.(raiz, id, titulo) ?? false;
     },
@@ -2328,7 +2421,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       return { raiz, ruta };
     },
 
-    abrirProyecto: (apertura) => enCola(() => abrirDeVerdad(apertura)),
+    // La raíz se TRADUCE dentro de la cola: quien llama la compuso con la base de antes, y si
+    // una mudanza se coló entre medias esa carpeta ya no existe (ver `mudadas`).
+    abrirProyecto: (apertura) => enCola(() => abrirDeVerdad({ ...apertura, raiz: trasLaMudanza(apertura.raiz) })),
     /**
      * Abrir un proyecto para una TAREA: la misma construcción, sin registrarlo como el
      * proyecto abierto ni mudar el sumidero del cable.
@@ -2344,7 +2439,8 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
      * todavía vive. El precio, dicho: una tarea que llega mientras se cierra un turno
      * humano de minutos espera a que acabe. Para trabajo de fondo es el lado correcto.
      */
-    abrirParaTarea: (raiz, sesion, adjuntos, tarea) => enCola(() => abrirParaTarea(raiz, sesion, adjuntos, tarea)),
+    abrirParaTarea: (raiz, sesion, adjuntos, tarea) =>
+      enCola(() => abrirParaTarea(trasLaMudanza(raiz), sesion, adjuntos, tarea)),
     proyectoAbierto: () => consolaEnFoco(),
     // La del foco INCLUIDA, y las cerradas fuera: una consola cuyo lazo ya terminó no ocupa
     // su raíz, y de esta lista cuelga la guarda de «gana la persona».

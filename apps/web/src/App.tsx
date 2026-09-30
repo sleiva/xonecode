@@ -1834,7 +1834,31 @@ export function App({
       // no se pinta: un control sin dato detrás no se pinta, y aquí un campo en blanco se
       // leería como «no hay ninguna carpeta puesta».
       {...(estado.workspace === undefined ? {} : { workspace: estado.workspace })}
-      alCambiarWorkspace={(ruta) => void enviar({ clase: "workspace", ruta })}
+      // Guardar MUDA lo bajado: primero se pregunta qué se movería —la respuesta viene en el
+      // propio POST—, y aplicar devuelve la negativa del servidor (409) si la hay.
+      alCambiarWorkspace={async (ruta) => negativaDe(await enviar({ clase: "workspace", ruta, accion: "aplicar" }))}
+      alPlanearWorkspace={async (ruta) => {
+        const r = (await enviar({ clase: "workspace", ruta, accion: "planear" })) as Response | undefined;
+        const negativa = await negativaDe(r);
+        if (negativa !== undefined) return { proyectos: [], motivo: negativa };
+        if (r === undefined || !r.ok) return undefined;
+        try {
+          const cuerpo = (await r.json()) as { proyectos?: unknown; megas?: unknown; motivo?: unknown };
+          if (!Array.isArray(cuerpo.proyectos)) return undefined;
+          const proyectos = cuerpo.proyectos.filter(
+            (p): p is { entorno: string; proyecto: string } =>
+              typeof p === "object" && p !== null && typeof (p as { entorno?: unknown }).entorno === "string" && typeof (p as { proyecto?: unknown }).proyecto === "string"
+          );
+          return {
+            proyectos,
+            ...(typeof cuerpo.megas === "number" ? { megas: cuerpo.megas } : {}),
+            ...(typeof cuerpo.motivo === "string" ? { motivo: cuerpo.motivo } : {}),
+          };
+        } catch {
+          return undefined;
+        }
+      }}
+      {...(estado.mudanzaDeWorkspace === undefined ? {} : { mudanzaDeWorkspace: estado.mudanzaDeWorkspace })}
       // La casilla «Depurar». Ausente = el servidor no lo dice, y entonces no se pinta.
       {...(estado.depuracionActiva === undefined ? {} : { depuracionActiva: estado.depuracionActiva })}
       alCambiarDepuracion={(activa) => void enviar({ clase: "depuracion", activa })}

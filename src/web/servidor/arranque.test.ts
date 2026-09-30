@@ -16,6 +16,7 @@ import { MS_DE_PREPARACION,
   MS_DE_TRABAJO_AL_ABRIR,
   arrancarConsolaWeb,
   montarRutas,
+  type OpcionesDeMontaje,
   commitDeTurnoCableado,
   mudarWorkspaceLegadoCableado,
   ajusteDeWorkspaceCableado,
@@ -5922,6 +5923,104 @@ describe("las tareas en background, por el cable", () => {
     expect(cliente.recibidos.at(-1)).toEqual({ clase: "workspace", ruta: "~/xone-proyectos" });
   });
 
+  describe("cambiar el workspace MUDA lo bajado: planear y aplicar", () => {
+    /** Un workspace de verdad en un temporal, con una copia dentro, y la base que cambia. */
+    function montarMudanza(extra: Partial<OpcionesDeMontaje> = {}) {
+      const casa = mkdtempSync(join(tmpdir(), "xonecode-mudanza-web-"));
+      const casaXonecode = join(casa, ".xonecode");
+      let base = join(casaXonecode, "workspace");
+      const nueva = join(casa, "datos", "xone");
+      const raiz = join(base, "webstudio", "Tienda");
+      mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+      writeFileSync(join(raiz, "app.xne"), "<app/>");
+      const servidor = servidorDeMentira();
+      montarRutas(servidor, vestibuloDePrueba({ baseDeWorkspace: () => base }), {
+        workspace: () => base,
+        guardarWorkspace: (r) => void (base = r),
+        resolverWorkspace: (r) => (r.startsWith("/") || /^[A-Za-z]:/.test(r) ? { ruta: r } : { motivo: "tiene que ser una ruta absoluta" }),
+        casaXonecode,
+        ...extra,
+      });
+      return { servidor, nueva, raiz, base: () => base };
+    }
+
+    it("`planear` contesta en la PROPIA respuesta qué se movería, por nombre y entorno, sin tocar nada", async () => {
+      const { servidor, nueva, raiz } = montarMudanza();
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      const r = await postearConCuerpo(accion, JSON.stringify({ clase: "workspace", ruta: nueva, accion: "planear" }));
+      expect(r.estado).toBe(200);
+      const cuerpo = JSON.parse(r.cuerpo) as { proyectos: unknown; megas?: number; motivo?: string };
+      expect(cuerpo.proyectos).toEqual([{ entorno: "webstudio", proyecto: "Tienda" }]);
+      expect(typeof cuerpo.megas).toBe("number");
+      expect(cuerpo.motivo).toBeUndefined();
+      // Ni una ruta de la máquina en la respuesta, y nada movido.
+      expect(r.cuerpo).not.toContain(raiz);
+      expect(existsSync(raiz)).toBe(true);
+    });
+
+    it("con una tarea sin terminar en la base, `planear` trae el motivo", async () => {
+      const { servidor, nueva, raiz } = montarMudanza({
+        colaDeTareas: {
+          listar: () => [{ estado: "requiere-atencion", proyecto: { raiz } }],
+        } as unknown as OpcionesDeMontaje["colaDeTareas"],
+      });
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      const r = await postearConCuerpo(accion, JSON.stringify({ clase: "workspace", ruta: nueva, accion: "planear" }));
+      expect((JSON.parse(r.cuerpo) as { motivo?: string }).motivo).toContain("sin terminar");
+    });
+
+    it("una ruta que no vale se NIEGA con 409 y motivo, en vez de callarse", async () => {
+      const { servidor } = montarMudanza();
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      const r = await postearConCuerpo(accion, JSON.stringify({ clase: "workspace", ruta: "relativa", accion: "aplicar" }));
+      expect(r.estado).toBe(409);
+      expect(JSON.parse(r.cuerpo)).toEqual({ motivo: "tiene que ser una ruta absoluta" });
+    });
+
+    it("`aplicar` contesta en el acto, cuenta el recorrido por el SSE y deja la copia en la base nueva", async () => {
+      const { servidor, nueva, raiz, base } = montarMudanza();
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      expect(await enviarMensaje(accion, { clase: "workspace", ruta: nueva, accion: "aplicar" })).toBe(204);
+      await vi.waitFor(() => expect(cliente.recibidos.some((m) => m.clase === "mudanzaDeWorkspace" && "resultado" in m)).toBe(true));
+      const mudanza = cliente.recibidos.filter((m) => m.clase === "mudanzaDeWorkspace");
+      expect(mudanza.map((m) => ("progreso" in m && m.progreso ? m.progreso.fase : "fin"))).toEqual([
+        "comprobar",
+        "copiar",
+        "verificar",
+        "borrar",
+        "fin",
+      ]);
+      expect(mudanza.at(-1)).toEqual({ clase: "mudanzaDeWorkspace", resultado: { estado: "hecho", mudadas: 1, restos: [], avisos: [] } });
+      expect(base()).toBe(nueva);
+      expect(existsSync(join(nueva, "webstudio", "Tienda", "app.xne"))).toBe(true);
+      expect(existsSync(raiz)).toBe(false);
+      // Y el campo acaba enseñando la base nueva.
+      await vi.waitFor(() => expect(cliente.recibidos.filter((m) => m.clase === "workspace").at(-1)).toEqual({ clase: "workspace", ruta: nueva }));
+    });
+
+    it("crear una tarea MIENTRAS se muda se niega con motivo: guardaría la raíz vieja", async () => {
+      // La mudanza copia y verifica en disco de verdad (E/S asíncrona): las dos peticiones de
+      // abajo llegan sin soltar el hilo entre medias, así que la encuentran en marcha.
+      const { servidor, nueva } = montarMudanza({
+        colaDeTareas: { listar: () => [] } as unknown as OpcionesDeMontaje["colaDeTareas"],
+      });
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      expect(await enviarMensaje(accion, { clase: "workspace", ruta: nueva, accion: "aplicar" })).toBe(204);
+      const r = await postearConCuerpo(
+        accion,
+        JSON.stringify({ clase: "tarea", accion: "crear", proyecto: "p1", peticion: "x", encargo: "y" })
+      );
+      expect(r.estado).toBe(409);
+      expect(JSON.parse(r.cuerpo).motivo).toContain("cambiando la carpeta");
+      // Y una segunda mudanza a la vez, tampoco.
+      const otra = await postearConCuerpo(accion, JSON.stringify({ clase: "workspace", ruta: nueva, accion: "aplicar" }));
+      expect(otra.estado).toBe(409);
+    });
+  });
+
   it("el selector de carpeta se OFRECE solo si esta ejecución lo monta", async () => {
     const servidor = servidorDeMentira();
     montarRutas(servidor, vestibuloDePrueba(), { workspace: () => "/w" });
@@ -8164,6 +8263,13 @@ describe("el ajuste del workspace, cableado", () => {
     guardarWorkspace("   ");
     guardarWorkspace("~otra/cosa");
     expect(guardadas).toEqual([]);
+  });
+
+  it("`resolverWorkspace` expande contra la casa y DICE por qué no vale, para el 409 de la mudanza", () => {
+    const { resolverWorkspace, casaXonecode } = ajusteDeWorkspaceCableado({ casa: "/Users/ana" });
+    expect(resolverWorkspace("~/xone")).toEqual({ ruta: "/Users/ana/xone" });
+    expect(resolverWorkspace("proyectos")).toEqual({ motivo: expect.stringContaining("absoluta") });
+    expect(casaXonecode).toBe(join("/Users/ana", ".xonecode"));
   });
 });
 

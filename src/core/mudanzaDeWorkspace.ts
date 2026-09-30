@@ -1,6 +1,6 @@
-import { posix } from "node:path";
+import { posix, win32 } from "node:path";
 
-import { rutaDeWorkspace } from "./settings.js";
+import { esRutaDeWindows, rutaDeWorkspace } from "./settings.js";
 
 /**
  * El literal que vivía en MEDIO del reparto: `<base>/<entorno>/workspace/<proyecto>`.
@@ -36,17 +36,33 @@ function esSegmentoLlano(valor: string): boolean {
   return valor !== "" && valor !== "." && valor !== ".." && !/[/\\]/.test(valor);
 }
 
-function normalizar(ruta: string): string {
-  return posix.normalize(ruta).replace(/\/+$/, "");
+/**
+ * Los segmentos de una ruta, con la barra invertida de Windows como separador cuando la ruta
+ * es de Windows. Con `posix` a secas, `C:\Users\…` era UN segmento y ni la guarda de anidadas
+ * ni `rutaMudada` veían nada dentro de nada.
+ */
+function segmentos(ruta: string): string[] {
+  const windows = esRutaDeWindows(ruta);
+  const barras = windows ? ruta.replace(/\\/g, "/") : ruta;
+  return posix.normalize(barras).replace(/(?<=.)\/+$/, "").split("/");
+}
+
+/** Dos segmentos son el mismo: en Windows sin distinguir mayúsculas, como su disco. */
+function mismoSegmento(a: string, b: string, windows: boolean): boolean {
+  return windows ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
+
+/** ¿`prefijo` es la ruta `ruta` o una antepasada suya? Por SEGMENTOS, nunca por texto. */
+function empiezaPor(ruta: string[], prefijo: string[], windows: boolean): boolean {
+  return prefijo.length <= ruta.length && prefijo.every((seg, i) => mismoSegmento(seg, ruta[i]!, windows));
 }
 
 /** ¿Son la misma ruta, o una es antepasada de la otra? Por SEGMENTOS, nunca por texto. */
 function unaCuelgaDeLaOtra(a: string, b: string): boolean {
-  const uno = normalizar(a).split("/");
-  const otro = normalizar(b).split("/");
-  const corto = uno.length <= otro.length ? uno : otro;
-  const largo = corto === uno ? otro : uno;
-  return corto.every((seg, i) => largo[i] === seg);
+  const windows = esRutaDeWindows(a) || esRutaDeWindows(b);
+  const uno = segmentos(a);
+  const otro = segmentos(b);
+  return empiezaPor(uno, otro, windows) || empiezaPor(otro, uno, windows);
 }
 
 /**
@@ -116,12 +132,80 @@ export function mudanzasPendientes(
  * entrada para decidir si reescribe el fichero.
  */
 export function rutaMudada(ruta: string, mudanzas: readonly Mudanza[]): string | undefined {
-  const partes = normalizar(ruta).split("/");
+  const partes = segmentos(ruta);
   for (const mudanza of mudanzas) {
-    const origen = normalizar(mudanza.desde).split("/");
-    if (partes.length < origen.length) continue;
-    if (!origen.every((seg, i) => partes[i] === seg)) continue;
-    return posix.join(normalizar(mudanza.hacia), ...partes.slice(origen.length));
+    const windows = esRutaDeWindows(ruta) || esRutaDeWindows(mudanza.desde);
+    const origen = segmentos(mudanza.desde);
+    if (!empiezaPor(partes, origen, windows)) continue;
+    // Con las reglas del DESTINO: una base de Windows se compone con `\`.
+    return (esRutaDeWindows(mudanza.hacia) ? win32 : posix).join(mudanza.hacia, ...partes.slice(origen.length));
   }
   return undefined;
+}
+
+/** Lo que el plan de un cambio de base necesita saber del disco. `listar` son CARPETAS. */
+export interface FotoDeLaBase {
+  existe: (ruta: string) => boolean;
+  listar: (ruta: string) => readonly string[];
+}
+
+/**
+ * Qué copias hay que MUDAR al cambiar el workspace de `desde` a `hacia`, o por qué no se
+ * puede — antes de tocar nada.
+ *
+ * **Se listan las carpetas REALES** `<desde>/<entorno>/<proyecto>`, no los entornos
+ * registrados: quitar un entorno de Ajustes no borra sus copias, y una mudanza que solo mirara
+ * la lista las dejaría huérfanas en la base vieja. Lo OCULTO no es un proyecto —las lápidas
+ * `.<proyecto>.borrando-…` que un borrado a medias deja (`borrarCopiaDeProyecto`) y las
+ * carpetas temporales de una mudanza cortada—, y se queda fuera.
+ *
+ * Tres noes, y todos antes de copiar un byte:
+ * - **una base cuelga de la otra** (o son la misma): copiar una carpeta dentro de sí misma no
+ *   termina, y al revés la base vieja pasaría a parecer un entorno de la nueva;
+ * - **dentro de la casa de xonecode** (`~/.xonecode`), salvo su `workspace` de omisión: ahí
+ *   viven `tareas/`, `agentes/` y `auth.json`, y un entorno llamado igual se mezclaría con
+ *   ellos;
+ * - **un destino que ya existe**: se NIEGA ENTERO, nunca se pisa. En esa carpeta puede haber
+ *   otra historia de git y otro checkpoint, y mudar la mitad dejaría el workspace partido.
+ */
+export function planDeCambioDeBase(
+  opciones: { desde: string; hacia: string; casaXonecode: string } & FotoDeLaBase
+): { mudanzas: Mudanza[]; motivo?: string } {
+  const { desde, hacia, casaXonecode } = opciones;
+  if (unaCuelgaDeLaOtra(desde, hacia)) {
+    return {
+      mudanzas: [],
+      motivo: "la carpeta nueva no puede estar dentro de la de ahora, ni al revés: elige una que no cuelgue de la otra",
+    };
+  }
+  const windows = esRutaDeWindows(hacia) || esRutaDeWindows(casaXonecode);
+  const nueva = segmentos(hacia);
+  const casa = segmentos(casaXonecode);
+  const deOmision = segmentos((esRutaDeWindows(casaXonecode) ? win32 : posix).join(casaXonecode, "workspace"));
+  if (empiezaPor(nueva, casa, windows) && !empiezaPor(nueva, deOmision, windows)) {
+    return {
+      mudanzas: [],
+      motivo: "esa carpeta es la de la configuración de XOneCode (tareas, agentes, credenciales): elige otra fuera de ella",
+    };
+  }
+
+  const mudanzas: Mudanza[] = [];
+  const ocupadas: string[] = [];
+  const separador = esRutaDeWindows(desde) ? win32 : posix;
+  for (const entorno of opciones.listar(desde)) {
+    if (!esSegmentoLlano(entorno) || entorno.startsWith(".")) continue;
+    for (const proyecto of opciones.listar(separador.join(desde, entorno))) {
+      if (!esSegmentoLlano(proyecto) || proyecto.startsWith(".")) continue;
+      const mudanza = { entorno, proyecto, desde: separador.join(desde, entorno, proyecto), hacia: rutaDeWorkspace(hacia, entorno, proyecto) };
+      if (opciones.existe(mudanza.hacia)) ocupadas.push(`${proyecto} (${entorno})`);
+      else mudanzas.push(mudanza);
+    }
+  }
+  if (ocupadas.length > 0) {
+    return {
+      mudanzas: [],
+      motivo: `en la carpeta nueva ya hay ${ocupadas.length === 1 ? "una copia" : "copias"} de ${ocupadas.join(", ")}: no se pisa nada, así que no se muda ninguna`,
+    };
+  }
+  return { mudanzas };
 }

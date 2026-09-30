@@ -39,7 +39,43 @@ import { TITULO_DE_REFRESCAR_EQUIPO } from "./Equipo.js";
 import { Receta } from "./Receta.js";
 import { VerificarDispositivo } from "./VerificarDispositivo.js";
 import { Pregunta } from "./Pregunta.js";
+import type { ProgresoDeMudanza, ResultadoDeMudanza } from "../store.js";
 import { urlDeEntornoAceptable, AVISO_DE_URL } from "./Wizard.js";
+
+/** Lo que el servidor contesta a `planear`: qué copias se moverían, o por qué no se puede. */
+export interface PlanDeWorkspace {
+  proyectos: { entorno: string; proyecto: string }[];
+  megas?: number;
+  motivo?: string;
+}
+
+/** La línea que cuenta la mudanza: en qué va mientras dura, y cómo acabó. */
+export function lineaDeLaMudanza(
+  mudanza: { progreso: ProgresoDeMudanza } | { resultado: ResultadoDeMudanza } | undefined
+): string | undefined {
+  if (mudanza === undefined) return undefined;
+  if ("progreso" in mudanza) {
+    const { fase, proyecto, indice, total } = mudanza.progreso;
+    const cual = proyecto === undefined ? "" : ` «${proyecto}»${indice !== undefined && total !== undefined ? ` (${indice} de ${total})` : ""}`;
+    if (fase === "comprobar") return "Comprobando la carpeta nueva…";
+    if (fase === "copiar") return `Copiando${cual}…`;
+    if (fase === "verificar") return `Comprobando que la copia${cual} es idéntica…`;
+    return `Borrando del sitio de antes${cual}…`;
+  }
+  const r = mudanza.resultado;
+  // El rechazo sale en su aviso FLOTANTE (`AvisoQueBloquea`): repetirlo aquí lo diría dos veces.
+  if (r.estado === "rechazado") return undefined;
+  const partes = [
+    r.mudadas === 0 ? "Carpeta cambiada." : `Carpeta cambiada: ${r.mudadas === 1 ? "1 proyecto movido" : `${r.mudadas} proyectos movidos`} y comprobados.`,
+  ];
+  if (r.restos.length > 0) {
+    partes.push(
+      `No se pudo borrar del sitio de antes: ${r.restos.join(", ")} —algún programa tenía ficheros abiertos—; la copia buena ya está en la carpeta nueva, y lo de antes se puede borrar a mano.`
+    );
+  }
+  partes.push(...r.avisos);
+  return partes.join(" ");
+}
 
 /**
  * La copia DECLARADA de `core/settings.ts#motivoDeWorkspaceInaceptable`, igual que
@@ -50,12 +86,27 @@ import { urlDeEntornoAceptable, AVISO_DE_URL } from "./Wizard.js";
  *
  * Las frases son las mismas a propósito: leer un motivo distinto según dónde se teclee la
  * carpeta haría dudar de cuál es la regla.
+ *
+ * **Windows también** (IXCODE-22). El host aprendió `C:\…` y `\\servidor\…` y esta copia se
+ * quedó en «empieza por /», así que en Windows TODA ruta salía en rojo —la de omisión
+ * incluida— y «Guardar» no se habilitaba nunca. Que las dos copias digan lo mismo lo ata
+ * ahora una tabla de casos compartida (`src/core/casosDeWorkspace.json`), leída por las DOS
+ * suites: divergir da rojo en `npm test`, no un campo en rojo en la máquina de alguien.
+ *
+ * Esta ve lo TECLEADO (`~` sin expandir); la del host, lo ya expandido contra la casa.
  */
 export function motivoDeWorkspaceInaceptable(ruta: string): string | undefined {
   const limpio = ruta.trim();
   if (limpio === "") return "escribe una carpeta: en blanco no es una elección";
-  if (!limpio.startsWith("/") && !limpio.startsWith("~/") && limpio !== "~") {
-    return "tiene que ser una ruta absoluta, que empiece por «/» o por «~/»";
+  if (limpio === "~" || limpio.startsWith("~/") || limpio.startsWith("~\\")) return undefined;
+  if (/^[a-zA-Z]:[\\/]/.test(limpio) || limpio.startsWith("\\\\")) {
+    if (/^[a-zA-Z]:[\\/]*$/.test(limpio)) {
+      return "la raíz de la unidad no: ahí cada entorno sería una carpeta de primer nivel del disco";
+    }
+    return undefined;
+  }
+  if (!limpio.startsWith("/")) {
+    return "tiene que ser una ruta absoluta: que empiece por «/», por «~/» o, en Windows, por la unidad («C:\\…»)";
   }
   // La raíz del disco, que el host también rechaza. Sin esta línea un «/» pasaba aquí, lo
   // rechazaba el servidor y el campo volvía al valor de antes SIN decir por qué — el no
@@ -376,6 +427,8 @@ export function Ajustes({
   alCambiarConcurrencia,
   workspace,
   alCambiarWorkspace,
+  alPlanearWorkspace,
+  mudanzaDeWorkspace,
   depuracionActiva,
   alCambiarDepuracion,
   alElegirCarpeta,
@@ -591,9 +644,14 @@ export function Ajustes({
    * texto vacía se leería como «no hay ninguna carpeta puesta», y sí la hay.
    */
   workspace?: string;
-  /** Elige la carpeta. Ausente = esta ejecución no puede, y el campo se enseña de solo
-   *  lectura — que es la verdad: la carpeta existe, cambiarla desde aquí no. */
-  alCambiarWorkspace?: (ruta: string) => void;
+  /** Elige la carpeta —y MUDA lo bajado—. Ausente = esta ejecución no puede, y el campo se
+   *  enseña de solo lectura. Si devuelve un texto, es la negativa del servidor (409). */
+  alCambiarWorkspace?: (ruta: string) => void | Promise<string | undefined>;
+  /** Qué se movería al cambiarla, sin tocar nada. `undefined` = no se pudo preguntar.
+   *  Ausente la prop = esta ejecución no muda, y guardar es solo escribir el ajuste. */
+  alPlanearWorkspace?: (ruta: string) => Promise<PlanDeWorkspace | undefined>;
+  /** Cómo va (o cómo acabó) la mudanza, tal como la cuenta el servidor. */
+  mudanzaDeWorkspace?: { progreso: ProgresoDeMudanza } | { resultado: ResultadoDeMudanza };
   /**
    * La casilla «Depurar»: si las dos trazas opt-in van encendidas sin variable de entorno.
    * **Ausente = esta ejecución no lo dice**, y entonces la casilla no se pinta: un control
@@ -644,13 +702,26 @@ export function Ajustes({
    * sección o cerrar Ajustes. Puesto = el aviso está en pantalla.
    */
   const [pendienteDeConfirmar, setPendienteDeConfirmar] = useState<(() => void) | undefined>(undefined);
-  const hayCambiosSinGuardar = seccion === "dispositivos" && dispositivosCambiados;
+  /**
+   * DÓNDE hay cambios sin guardar, o ausente si no hay. Es una función y no un valor porque el
+   * borrador del workspace se declara más abajo: se pregunta al pulsar, no al pintar. La
+   * carpeta de los proyectos también avisa (IXCODE-22): elegirla en el diálogo y cerrar Ajustes
+   * sin pulsar «Guardar» dejaba creer que se había cambiado.
+   */
+  const cambiosSinGuardar = (): string | undefined => {
+    if (seccion === "dispositivos" && dispositivosCambiados) return "Dispositivos";
+    if (seccion === "general" && workspaceCambiado) return "la carpeta donde se bajan los proyectos";
+    return undefined;
+  };
   const alIntentarCambiarSeccion = (nueva: SeccionDeAjustes): void => {
-    if (hayCambiosSinGuardar && nueva !== seccion) setPendienteDeConfirmar(() => () => setSeccion(nueva));
+    // Con una mudanza en marcha nada se mueve de sitio: su ventana es la que manda.
+    if (faseDeLaMudanza === "en-curso") return;
+    if (cambiosSinGuardar() !== undefined && nueva !== seccion) setPendienteDeConfirmar(() => () => setSeccion(nueva));
     else setSeccion(nueva);
   };
   const alIntentarCerrar = (): void => {
-    if (hayCambiosSinGuardar) setPendienteDeConfirmar(() => alCerrar);
+    if (faseDeLaMudanza === "en-curso") return;
+    if (cambiosSinGuardar() !== undefined) setPendienteDeConfirmar(() => alCerrar);
     else alCerrar();
   };
 
@@ -674,7 +745,9 @@ export function Ajustes({
    * Se sigue el CONTADOR del acuse y no la ruta: elegir dos veces la misma carpeta no cambia
    * la cadena, y entonces ni se recogería el acuse ni se apagaría el «abriendo…».
    */
-  const [acusePintado, setAcusePintado] = useState(0);
+  // Arranca en el acuse que YA hay: el store lo conserva al cerrar Ajustes, y empezar en cero
+  // hacía que, al volver a abrir, la carpeta elegida y NO guardada reapareciera en el campo.
+  const [acusePintado, setAcusePintado] = useState(() => carpetaElegida?.n ?? 0);
   const [abriendoSelector, setAbriendoSelector] = useState(false);
   if (carpetaElegida !== undefined && carpetaElegida.n !== acusePintado) {
     setAcusePintado(carpetaElegida.n);
@@ -682,6 +755,96 @@ export function Ajustes({
     // Cancelar no toca el campo, que es lo que significa: no elegí ninguna.
     if (carpetaElegida.ruta !== undefined) setWorkspaceTecleado(carpetaElegida.ruta);
   }
+
+  /**
+   * Guardar es MUDAR, en dos actos: se pregunta al servidor qué se movería (o por qué no se
+   * puede: un chat trabajando, una tarea sin terminar, una carpeta ocupada) y, si hay copias,
+   * se CONFIRMA en un diálogo con la lista delante antes de mover nada. Sin copias que mover,
+   * guardar es lo de siempre. La negativa se PINTA: un no mudo dejaría el campo afirmando un
+   * cambio que no se hizo.
+   */
+  const [pidiendoPlan, setPidiendoPlan] = useState(false);
+  const [negativaDelWorkspace, setNegativaDelWorkspace] = useState<string | undefined>(undefined);
+  /**
+   * La VENTANA de la mudanza, que es una sola de principio a fin: confirmar con la lista
+   * delante, el recorrido mientras dura y cómo acabó. Mientras dura NO se puede cerrar —ni ella
+   * ni Ajustes—: el progreso debajo del campo no se veía, y cerrar a mitad dejaba creer que se
+   * había cancelado. `antes` es el mensaje de mudanza que había al aceptar: el resultado que
+   * cuenta es uno NUEVO, no el de una mudanza anterior que el store conserva.
+   */
+  const [ventanaDeMudanza, setVentanaDeMudanza] = useState<
+    { ruta: string; plan: PlanDeWorkspace; aplicada?: { antes: typeof mudanzaDeWorkspace }; negativa?: string } | undefined
+  >(undefined);
+  const mudanzaEnCurso = mudanzaDeWorkspace !== undefined && "progreso" in mudanzaDeWorkspace;
+  const faseDeLaMudanza: FaseDeLaMudanza | undefined =
+    ventanaDeMudanza === undefined
+      ? mudanzaEnCurso
+        ? "en-curso"
+        : undefined
+      : ventanaDeMudanza.negativa !== undefined
+        ? "final"
+        : ventanaDeMudanza.aplicada === undefined
+          ? "confirmar"
+          : mudanzaDeWorkspace !== ventanaDeMudanza.aplicada.antes && mudanzaDeWorkspace !== undefined && "resultado" in mudanzaDeWorkspace
+            ? "final"
+            : "en-curso";
+  const workspaceOcupado = pidiendoPlan || mudanzaEnCurso || ventanaDeMudanza !== undefined;
+  const aplicarWorkspace = async (ruta: string): Promise<void> => {
+    const negativa = await alCambiarWorkspace?.(ruta);
+    if (typeof negativa === "string") {
+      setNegativaDelWorkspace(negativa);
+      return;
+    }
+    // Se suelta lo tecleado: a partir de aquí manda lo que conteste el servidor, que reemite
+    // el valor que acabó en disco — el nuevo al terminar la mudanza, o el de antes.
+    setWorkspaceTecleado(undefined);
+  };
+  const guardarWorkspace = async (ruta: string): Promise<void> => {
+    setNegativaDelWorkspace(undefined);
+    if (alPlanearWorkspace === undefined) {
+      await aplicarWorkspace(ruta);
+      return;
+    }
+    setPidiendoPlan(true);
+    const plan = await alPlanearWorkspace(ruta).catch(() => undefined);
+    setPidiendoPlan(false);
+    if (plan === undefined) setNegativaDelWorkspace("no se pudo preguntar al servidor qué se movería: no se ha cambiado nada");
+    else if (plan.motivo !== undefined) setNegativaDelWorkspace(plan.motivo);
+    else if (plan.proyectos.length === 0) await aplicarWorkspace(ruta);
+    else setVentanaDeMudanza({ ruta, plan });
+  };
+  const aceptarMudanza = async (): Promise<void> => {
+    if (ventanaDeMudanza === undefined) return;
+    setVentanaDeMudanza({ ...ventanaDeMudanza, aplicada: { antes: mudanzaDeWorkspace } });
+    const negativa = await alCambiarWorkspace?.(ventanaDeMudanza.ruta);
+    if (typeof negativa === "string") setVentanaDeMudanza((v) => (v === undefined ? v : { ...v, negativa }));
+    else setWorkspaceTecleado(undefined);
+  };
+  /**
+   * El rechazo de una mudanza también sale FLOTANDO, como la negativa de antes de empezar:
+   * es la misma noticia —no se ha cambiado nada— y una línea más entre las notas no se veía.
+   * Se recuerda el último que se cerró, y se parte del que ya había al abrir Ajustes: el store
+   * lo conserva, y volver a abrir la ventana no puede repetir un aviso ya leído.
+   */
+  const [rechazoLeido, setRechazoLeido] = useState(() => mudanzaDeWorkspace);
+  const rechazoDeLaMudanza =
+    faseDeLaMudanza === undefined &&
+    mudanzaDeWorkspace !== undefined &&
+    mudanzaDeWorkspace !== rechazoLeido &&
+    "resultado" in mudanzaDeWorkspace &&
+    mudanzaDeWorkspace.resultado.estado === "rechazado"
+      ? mudanzaDeWorkspace.resultado.motivo
+      : undefined;
+  const avisoDelWorkspace = negativaDelWorkspace ?? rechazoDeLaMudanza;
+  const cerrarAvisoDelWorkspace = (): void => {
+    setNegativaDelWorkspace(undefined);
+    setRechazoLeido(mudanzaDeWorkspace);
+  };
+  const cerrarVentanaDeMudanza = (): void => {
+    setVentanaDeMudanza(undefined);
+    // Lo que acabó se leyó en la ventana: no vuelve a salir en el aviso suelto.
+    setRechazoLeido(mudanzaDeWorkspace);
+  };
   /** Qué fila está pidiendo clave: es donde se pinta la pregunta del servidor. */
   const [editando, setEditando] = useState<string | undefined>(undefined);
   /** Registrar un entorno es un MODO: mientras dura, la lista no está (ver más abajo). */
@@ -1613,7 +1776,7 @@ export function Ajustes({
               */}
               {/*
                 DÓNDE se bajan las copias. Va en General y arriba de Tareas porque es lo
-                más estructural que hay aquí: decide en qué carpeta de este Mac vive el
+                más estructural que hay aquí: decide en qué carpeta de esta máquina vive el
                 trabajo. El campo solo se pinta si el servidor dice cuál es — ausente ≠
                 vacío, y una caja en blanco se leería como «no hay ninguna puesta».
               */}
@@ -1638,17 +1801,26 @@ export function Ajustes({
                       // que da la ventana, y aun así una ruta puede no caber.
                       title={workspaceEnElCampo}
                       aria-invalid={motivoDelWorkspace === undefined ? undefined : true}
-                      disabled={!conectado || alCambiarWorkspace === undefined}
-                      onChange={(e) => setWorkspaceTecleado(e.target.value)}
+                      disabled={!conectado || alCambiarWorkspace === undefined || workspaceOcupado}
+                      onChange={(e) => {
+                        setWorkspaceTecleado(e.target.value);
+                        setNegativaDelWorkspace(undefined);
+                      }}
                     />
                   </label>
+                  {/* Pegado al campo, como tarjeta: entre las notas de abajo no se veía. */}
+                  {workspaceCambiado && !workspaceOcupado && motivoDelWorkspace === undefined ? (
+                    <p className={estilos.sinGuardar} role="status">
+                      Sin guardar: la carpeta no cambia hasta que pulses «Guardar».
+                    </p>
+                  ) : null}
                   <div className={estilos.accionesDeWorkspace}>
                     {alElegirCarpeta === undefined ? null : (
                       <button
                         type="button"
                         className={estilos.accion}
-                        title="Abre el explorador de este Mac, donde corre la consola"
-                        disabled={!conectado || abriendoSelector}
+                        title="Abre el selector de carpetas del sistema, en la máquina donde corre la consola"
+                        disabled={!conectado || abriendoSelector || workspaceOcupado}
                         onClick={() => {
                           setAbriendoSelector(true);
                           alElegirCarpeta();
@@ -1664,19 +1836,22 @@ export function Ajustes({
                         !conectado ||
                         alCambiarWorkspace === undefined ||
                         !workspaceCambiado ||
-                        motivoDelWorkspace !== undefined
+                        motivoDelWorkspace !== undefined ||
+                        workspaceOcupado
                       }
-                      onClick={() => {
-                        // Se suelta lo tecleado: a partir de aquí manda lo que conteste el
-                        // servidor, que reemite el valor que acabó en disco — el que valió
-                        // o el de antes.
-                        alCambiarWorkspace?.(workspaceEnElCampo.trim());
-                        setWorkspaceTecleado(undefined);
-                      }}
+                      onClick={() => void guardarWorkspace(workspaceEnElCampo.trim())}
                     >
-                      Guardar
+                      {pidiendoPlan ? "Comprobando…" : "Guardar"}
                     </button>
                   </div>
+                  {abriendoSelector || pidiendoPlan ? (
+                    <p className={estilos.enMarcha} role="status">
+                      <span className={estilos.girando} aria-hidden="true" />
+                      {abriendoSelector
+                        ? "Esperando la carpeta que elijas en la ventana del sistema…"
+                        : "Comprobando qué se movería a la carpeta nueva…"}
+                    </p>
+                  ) : null}
                   {/*
                     La regla es la copia DECLARADA de la del host
                     (`core/settings.ts#motivoDeWorkspaceInaceptable`), como la de la URL de
@@ -1689,13 +1864,13 @@ export function Ajustes({
                     </p>
                   )}
                   {/*
-                    Y lo que NO hace, dicho antes de que lo descubra nadie: cambiarla no
-                    mueve lo que ya está bajado. Callarlo dejaría a alguien buscando sus
-                    proyectos en una carpeta vacía.
+                    Lo que hace, dicho antes de pulsar: cambiarla MUDA lo que ya está bajado,
+                    y no se puede con un chat trabajando o una tarea sin terminar.
                   */}
                   <p className={estilos.nota}>
-                    Cambiarla NO mueve lo que ya está bajado: las copias que tengas se quedan donde están y
-                    siguen abriéndose desde ahí. Lo que cambia es dónde caerá lo siguiente que bajes.
+                    Cambiarla MUEVE lo que ya está bajado a la carpeta nueva: se copia, se comprueba que la copia es
+                    idéntica y se borra del sitio de antes. No se puede con un chat trabajando ni con tareas de fondo
+                    sin terminar.
                   </p>
                 </>
               )}
@@ -2262,11 +2437,27 @@ export function Ajustes({
       </div>
       </div>
     </Modal>
+    {faseDeLaMudanza === undefined ? null : (
+      <VentanaDeMudanza
+        fase={faseDeLaMudanza}
+        {...(ventanaDeMudanza === undefined ? {} : { ruta: ventanaDeMudanza.ruta, plan: ventanaDeMudanza.plan })}
+        {...(ventanaDeMudanza?.negativa === undefined ? {} : { negativa: ventanaDeMudanza.negativa })}
+        {...(mudanzaDeWorkspace === undefined ? {} : { mudanza: mudanzaDeWorkspace })}
+        onAceptar={() => void aceptarMudanza()}
+        onCancelar={() => setVentanaDeMudanza(undefined)}
+        onCerrar={cerrarVentanaDeMudanza}
+      />
+    )}
+    {avisoDelWorkspace === undefined ? null : (
+      <AvisoQueBloquea titulo="No se puede cambiar la carpeta" texto={avisoDelWorkspace} onCerrar={cerrarAvisoDelWorkspace} />
+    )}
     {pendienteDeConfirmar === undefined ? null : (
       <ConfirmarCambiosSinGuardar
+        donde={cambiosSinGuardar() ?? "esta sección"}
         onCancelar={() => setPendienteDeConfirmar(undefined)}
         onConfirmar={() => {
           setDispositivosTecleados(undefined);
+          setWorkspaceTecleado(undefined);
           pendienteDeConfirmar();
           setPendienteDeConfirmar(undefined);
         }}
@@ -2289,7 +2480,152 @@ export function Ajustes({
  * ejecuta lo que estaba pendiente (cambiar de sección o cerrar) — en ese orden, para que
  * `dispositivosCambiados` ya sea falso cuando el efecto pendiente se dispara.
  */
-function ConfirmarCambiosSinGuardar({ onCancelar, onConfirmar }: { onCancelar: () => void; onConfirmar: () => void }) {
+/** En qué punto está la ventana de la mudanza. */
+export type FaseDeLaMudanza = "confirmar" | "en-curso" | "final";
+
+/**
+ * La ventana de la MUDANZA del workspace, la misma de principio a fin: se abre para confirmar
+ * con la lista delante, se queda contando en qué va mientras copia, comprueba y borra, y dice
+ * cómo acabó.
+ *
+ * **Mientras dura no se puede cerrar**: ni Escape, ni el clic fuera, ni un botón. Cerrarla a
+ * mitad no cancela nada —el servidor sigue mudando— y dejaría creer que se paró. Al confirmar,
+ * Cancelar y Escape descartan; al final, Cerrar y Escape cierran.
+ */
+function VentanaDeMudanza({
+  fase,
+  ruta,
+  plan,
+  negativa,
+  mudanza,
+  onAceptar,
+  onCancelar,
+  onCerrar,
+}: {
+  fase: FaseDeLaMudanza;
+  ruta?: string;
+  plan?: PlanDeWorkspace;
+  negativa?: string;
+  mudanza?: { progreso: ProgresoDeMudanza } | { resultado: ResultadoDeMudanza };
+  onAceptar: () => void;
+  onCancelar: () => void;
+  onCerrar: () => void;
+}) {
+  const salir = fase === "confirmar" ? onCancelar : fase === "final" ? onCerrar : () => {};
+  const rechazo =
+    negativa ??
+    (mudanza !== undefined && "resultado" in mudanza && mudanza.resultado.estado === "rechazado" ? mudanza.resultado.motivo : undefined);
+  const titulo =
+    fase === "confirmar"
+      ? "¿Mover los proyectos a la carpeta nueva?"
+      : fase === "en-curso"
+        ? "Moviendo los proyectos…"
+        : rechazo !== undefined
+          ? "No se ha cambiado la carpeta"
+          : "Carpeta cambiada";
+  const cuantos = plan?.proyectos.length ?? 0;
+  return (
+    <Modal open onClose={salir} title={titulo} headless className={modalDeAviso.capa}>
+      <div
+        className={modalDeAviso.velo}
+        onClick={(evento) => {
+          if (evento.target === evento.currentTarget) salir();
+        }}
+      >
+        <div className={modalDeAviso.ventana} aria-busy={fase === "en-curso"}>
+          <h2 className={modalDeAviso.titulo}>{titulo}</h2>
+          {fase === "confirmar" && plan !== undefined ? (
+            <>
+              <p className={modalDeAviso.nota}>
+                {`Se ${cuantos === 1 ? "moverá 1 proyecto" : `moverán ${cuantos} proyectos`}`}
+                {plan.megas === undefined ? "" : ` (${plan.megas} MB)`} a <code>{ruta}</code>. Se copian, se comprueba que
+                cada copia es idéntica a su original fichero a fichero, y solo entonces se borran del sitio de antes.
+                Cierra antes cualquier terminal o editor que tenga abierto alguno de estos proyectos.
+              </p>
+              <ul className={estilos.listaDeMudanza}>
+                {plan.proyectos.map((p) => (
+                  <li key={`${p.entorno}/${p.proyecto}`}>{`${p.proyecto} (${p.entorno})`}</li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+          {fase === "en-curso" ? (
+            <>
+              <p className={estilos.enMarcha} role="status">
+                <span className={estilos.girando} aria-hidden="true" />
+                {lineaDeLaMudanza(mudanza !== undefined && "progreso" in mudanza ? mudanza : { progreso: { fase: "comprobar" } })}
+              </p>
+              <p className={modalDeAviso.nota}>Cuando termine verás aquí cómo acabó. No cierres la consola mientras tanto.</p>
+            </>
+          ) : null}
+          {fase === "final" ? (
+            <p className={modalDeAviso.nota} role="status">
+              {rechazo !== undefined
+                ? `${rechazo.charAt(0).toUpperCase()}${rechazo.slice(1)}.`
+                : lineaDeLaMudanza(mudanza)}
+            </p>
+          ) : null}
+          <div className={modalDeAviso.acciones}>
+            {fase === "confirmar" ? (
+              <>
+                <Button variant="outline" className={modalDeAviso.accion} onClick={onCancelar}>
+                  Cancelar
+                </Button>
+                <Button variant="primary" className={`${modalDeAviso.accion} ${modalDeAviso.principal}`} onClick={onAceptar}>
+                  Mover y cambiar
+                </Button>
+              </>
+            ) : null}
+            {fase === "final" ? (
+              <Button variant="primary" className={`${modalDeAviso.accion} ${modalDeAviso.principal}`} onClick={onCerrar}>
+                Cerrar
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Un NO que para una acción, dicho en una ventana flotante y no en una línea más de la página:
+ * «hay un chat trabajando…» debajo del campo pasaba desapercibido y parecía que Guardar no
+ * hacía nada. El mismo velo que `ConfirmarCambiosSinGuardar`, con una sola salida porque no hay
+ * nada que decidir: es una noticia. Escape y el clic fuera también la cierran.
+ */
+function AvisoQueBloquea({ titulo, texto, onCerrar }: { titulo: string; texto: string; onCerrar: () => void }) {
+  return (
+    <Modal open onClose={onCerrar} title={titulo} headless className={modalDeAviso.capa}>
+      <div
+        className={modalDeAviso.velo}
+        onClick={(evento) => {
+          if (evento.target === evento.currentTarget) onCerrar();
+        }}
+      >
+        <div className={modalDeAviso.ventana} role="alertdialog" aria-label={titulo}>
+          <h2 className={modalDeAviso.titulo}>{titulo}</h2>
+          <p className={modalDeAviso.nota}>{texto.charAt(0).toUpperCase() + texto.slice(1)}.</p>
+          <div className={modalDeAviso.acciones}>
+            <Button variant="primary" className={`${modalDeAviso.accion} ${modalDeAviso.principal}`} onClick={onCerrar}>
+              Entendido
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function ConfirmarCambiosSinGuardar({
+  donde,
+  onCancelar,
+  onConfirmar,
+}: {
+  donde: string;
+  onCancelar: () => void;
+  onConfirmar: () => void;
+}) {
   return (
     <Modal open onClose={onCancelar} title="Cambios sin guardar" headless className={modalDeAviso.capa}>
       <div
@@ -2300,7 +2636,7 @@ function ConfirmarCambiosSinGuardar({ onCancelar, onConfirmar }: { onCancelar: (
       >
         <div className={modalDeAviso.ventana}>
           <h2 className={modalDeAviso.titulo}>Cambios sin guardar</h2>
-          <p className={modalDeAviso.nota}>Hay cambios sin guardar en Dispositivos. Si continúas, se pierden.</p>
+          <p className={modalDeAviso.nota}>Hay cambios sin guardar en {donde}. Si continúas, se pierden.</p>
           <div className={modalDeAviso.acciones}>
             <Button variant="outline" className={modalDeAviso.accion} onClick={onCancelar}>
               Cancelar

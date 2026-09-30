@@ -1067,3 +1067,70 @@
   font-family: var(--ds-font-family-code);
   font-size: 12px;
 }
+
+/* Lo que está EN MARCHA en el campo del workspace: esperando al diálogo del sistema, pidiendo el
+   plan o mudando. El diálogo se abre en OTRA ventana y, al cerrarse, el campo tarda en recibir la
+   carpeta: sin esta línea parecía que no había pasado nada. El mismo giro que `Receta.module.css`,
+   quieto pero visible con `prefers-reduced-motion`. */
+.enMarcha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.girando {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--dsw-alias-border-l2);
+  border-top-color: var(--xonecode-cian);
+  border-radius: 50%;
+  animation: xonecode-gira-ajustes 0.8s linear infinite;
+}
+
+@keyframes xonecode-gira-ajustes {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .girando {
+    animation: none;
+    border-color: var(--xonecode-cian);
+  }
+}
+
+/* Lo elegido o tecleado que NO se ha guardado: una TARJETA de aviso pegada al campo, no una
+   nota más entre las de abajo —se leía como texto de ayuda y nadie la veía—. Ámbar y no rojo:
+   no está mal, está a medias. El par de aviso ya viene ajustado por tema. */
+.sinGuardar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Hueco por ABAJO también: los botones van justo debajo y, pegados, parecían parte del aviso. */
+  margin: 8px 0 14px;
+  padding: 8px 12px;
+  border: 1px solid var(--dsw-alias-state-warn-primary);
+  border-radius: 8px;
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Los proyectos que se van a mover, en la ventana de la mudanza: una lista corta, en código
+   porque son nombres de carpeta, y con tope de alto para que los botones no salgan de la vista. */
+.listaDeMudanza {
+  max-height: 160px;
+  overflow-y: auto;
+  margin: 8px 0 0;
+  padding: 8px 12px 8px 28px;
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+}
