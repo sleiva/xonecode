@@ -77,7 +77,7 @@ export interface ServicioDeConectores {
  * Una unión y no dos campos opcionales: `{proveedor?, cabecera?}` admite las dos cosas a la
  * vez, que no significa nada, y a un tercer campo opcional le pasaría lo mismo.
  */
-export type CredencialDeRed = { proveedor: OAuthClientProvider } | { cabecera: string };
+export type CredencialDeRed = { proveedor: OAuthClientProvider } | { cabecera: { nombre: string; valor: string } };
 
 export interface RedDeConectores {
   listarTools(url: string, credencial: CredencialDeRed | undefined, senal: AbortSignal): Promise<ToolDeConector[]>;
@@ -204,7 +204,8 @@ export function crearServicioDeConectores(o: {
    * elegir UN carril.
    *
    * `Bearer ` lo pone el CÓDIGO y no se le pide a nadie: `motivoDeClaveInaceptable` no deja pasar
-   * un valor con espacios, así que el prefijo no cabe en la clave que pega una persona.
+   * un valor con espacios, así que el prefijo no cabe en la clave que pega una persona. Una fila
+   * con `cabeceraDeClave` manda la clave a secas en ESA cabecera (Stitch: `X-Goog-Api-Key`).
    */
   const credencialDe = (c: ConectorDeCatalogo, guardado: SecretosDeConector): CredencialDeRed | undefined => {
     if (c.autenticacion === "oauth") {
@@ -212,13 +213,20 @@ export function crearServicioDeConectores(o: {
         ? { proveedor: proveedor(c.id, guardado.redirectUri, "") }
         : undefined;
     }
-    if (c.autenticacion === "api-key") return guardado.clave === undefined ? undefined : { cabecera: `Bearer ${guardado.clave}` };
+    if (c.autenticacion === "api-key") {
+      if (guardado.clave === undefined) return undefined;
+      return {
+        cabecera: c.cabeceraDeClave === undefined
+          ? { nombre: "Authorization", valor: `Bearer ${guardado.clave}` }
+          : { nombre: c.cabeceraDeClave, valor: guardado.clave },
+      };
+    }
     return undefined;
   };
   const proveedor = (id: string, redirectUrl: string, state: string, alRedirigir: (u: URL) => void = () => {}) =>
     new ProveedorDeConector({ casa: o.casa, id, redirectUrl, state, alRedirigir });
 
-  const motivoDe = (error: unknown): string => {
+  const motivoDe = (error: unknown, c?: ConectorDeCatalogo): string => {
     if (error instanceof UnauthorizedError) return "falta autorizar";
     // Un `OAuthError` (`InvalidGrantError`, `InvalidClientError`, `UnauthorizedClientError`, …)
     // es una credencial que YA NO SIRVE, no un servidor que no contesta. El propio `auth()` del
@@ -230,6 +238,10 @@ export function crearServicioDeConectores(o: {
     // caía en el catch-all genérico de más abajo y salía «no responde».
     if (error instanceof OAuthError) return "falta autorizar";
     const code = (error as { code?: unknown } | null)?.code;
+    // Con una CLAVE, un 401/403 es la clave, no el servidor: medido en Stitch, una clave falsa
+    // llega como `StreamableHTTPError` con `code: 401` y se leía «no responde (HTTP 401)». Va con
+    // «falta autorizar» delante porque es lo que el panel reconoce para ofrecer «Conectar».
+    if (c?.autenticacion === "api-key" && (code === 401 || code === 403)) return `falta autorizar (la clave no vale: HTTP ${code})`;
     if (typeof code === "number") return `no responde (HTTP ${code})`;
     if (typeof code === "string") return `no responde (código ${code})`;
     return "no responde";
@@ -367,6 +379,9 @@ export function crearServicioDeConectores(o: {
         // Sin autenticación la credencial es `undefined` y así se pasa: un `authProvider` haría
         // que el SDK intentara un registro contra un servidor que no lo pide.
         const tools = await Promise.race([o.red.listarTools(c.url, credencial, control.signal), tope]);
+        // Un servidor que lista sus tools a cualquiera no dice nada de la credencial con eso: se
+        // le pide una tool de LECTURA de verdad. Su `isError` es un fallo, no un «Conectado».
+        if (c.comprobacion !== undefined) await Promise.race([o.red.llamarTool(c.url, credencial, c.comprobacion, {}, control.signal), tope]);
         // El mundo pudo cambiar MIENTRAS la red respondía: un `quitar`/`desconectar` disparado
         // después de pulsar «Probar» pero antes de que conteste corre en SÍNCRONO y no espera a
         // esto. Sin repetir aquí la comprobación, este resultado — de una petición que arrancó
@@ -383,7 +398,7 @@ export function crearServicioDeConectores(o: {
           error = undefined;
         }
       } catch (error) {
-        pruebas.set(id, { cuando: ahora(), ok: false, motivo: control.signal.aborted ? "no responde (no contestó a tiempo)" : motivoDe(error) });
+        pruebas.set(id, { cuando: ahora(), ok: false, motivo: control.signal.aborted ? "no responde (no contestó a tiempo)" : error instanceof ErrorDeTool ? error.message : motivoDe(error, c) });
       } finally {
         clearTimeout(reloj);
         cambio();
@@ -418,7 +433,7 @@ export function crearServicioDeConectores(o: {
         // que quien llamó necesita para saber qué corregir: aplanarlo con `motivoDe` (que no
         // reconoce esta clase y caería en su «no responde» genérico) se lo comería.
         if (e instanceof ErrorDeTool) throw e;
-        throw new Error(motivoDe(e));
+        throw new Error(motivoDe(e, c));
       } finally {
         clearTimeout(reloj);
       }
@@ -535,7 +550,7 @@ const COSTURA_REAL: CosturaDeRedDeConectores = {
  *  (es quien refresca tokens y firma la petición) y una cabecera para una clave. No hay un
  *  tercer camino, y la unión es lo que impide pasar los dos a la vez. */
 function opcionesDe(credencial: CredencialDeRed | undefined, senal: AbortSignal): OpcionesDeTransporte {
-  const cabeceras = credencial !== undefined && "cabecera" in credencial ? { Authorization: credencial.cabecera } : undefined;
+  const cabeceras = credencial !== undefined && "cabecera" in credencial ? { [credencial.cabecera.nombre]: credencial.cabecera.valor } : undefined;
   return {
     ...(credencial !== undefined && "proveedor" in credencial ? { authProvider: credencial.proveedor } : {}),
     requestInit: { signal: senal, ...(cabeceras === undefined ? {} : { headers: cabeceras }) },

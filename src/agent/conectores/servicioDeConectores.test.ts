@@ -594,7 +594,7 @@ describe("un conector escrito a mano", () => {
 
     // `Bearer ` lo pone el CÓDIGO: la criba no deja pasar un valor con espacios, así que el
     // prefijo no cabe en lo que pega una persona.
-    expect((red.listarTools as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]).toEqual({ cabecera: "Bearer sk-abc" });
+    expect((red.listarTools as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]).toEqual({ cabecera: { nombre: "Authorization", valor: "Bearer sk-abc" } });
     expect(s.lista().conectores[0]?.prueba).toMatchObject({ ok: true });
   });
 
@@ -737,7 +737,7 @@ describe("los dos carriles de conexión, sin red", () => {
     return { red: redDeConectoresReal(costura), pedirRespaldo };
   }
 
-  it("una clave mala se lee «no responde (HTTP 401)», y no como un servidor que no existe", async () => {
+  it("una clave mala se lee «la clave no vale (HTTP 401)», y no como un servidor que no existe", async () => {
     // Medido: un 401 de streamable-http llega como un `Error` con `code: 401`, y un fallo de red
     // por el carril del SSE es un `Error` pelado sin código. Relanzando el del respaldo, los dos
     // casos acababan en el mismo «no responde» y no había forma de saber que la clave era mala.
@@ -751,7 +751,7 @@ describe("los dos carriles de conexión, sin red", () => {
 
     await s.probar("custom:acme-tools");
 
-    expect(s.lista().conectores[0]?.prueba).toMatchObject({ ok: false, motivo: "no responde (HTTP 401)" });
+    expect(s.lista().conectores[0]?.prueba).toMatchObject({ ok: false, motivo: "falta autorizar (la clave no vale: HTTP 401)" });
   });
 
   it("un primario que falla sin código y un respaldo que conecta: la conexión sale por el respaldo", async () => {
@@ -985,5 +985,72 @@ describe("ServicioDeConectores.llamar", () => {
 
     expect(alCambiar).not.toHaveBeenCalled();
     expect(s.lista().conectores[0]?.prueba).toBeUndefined();
+  });
+});
+
+describe("Stitch: la clave en SU cabecera y una llamada de verdad para probarla", () => {
+  // Medido el 30-09-2026 contra stitch.googleapis.com/mcp: la clave va en `X-Goog-Api-Key` (como
+  // `Bearer` da 401), y `tools/list` contesta 200 sin clave y con una FALSA — solo `list_projects`
+  // distingue. Una clave mala llega del SDK como `StreamableHTTPError` con `code: 401`.
+  it("la clave viaja a secas en `X-Goog-Api-Key`, no como `Bearer`", async () => {
+    const red = redDoble();
+    const s = crear(red);
+    s.anadir("stitch");
+    s.guardarClave("stitch", "AQ.abc");
+    await s.probar("stitch");
+    expect((red.listarTools as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]).toEqual({ cabecera: { nombre: "X-Goog-Api-Key", valor: "AQ.abc" } });
+  });
+
+  it("probar LLAMA a `list_projects` después de listar, y solo entonces sale Conectado", async () => {
+    const red = redDoble();
+    (red.listarTools as ReturnType<typeof vi.fn>).mockResolvedValue([{ nombre: "list_projects" }]);
+    const s = crear(red);
+    s.anadir("stitch");
+    s.guardarClave("stitch", "AQ.abc");
+    await s.probar("stitch");
+    const llamada = (red.llamarTool as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(llamada?.[2]).toBe("list_projects");
+    expect(llamada?.[3]).toEqual({});
+    expect(s.lista().conectores[0]?.prueba).toMatchObject({ ok: true });
+  });
+
+  it("una clave mala —listar pasa, la llamada da 401— NO es Conectado: es «falta autorizar», que ofrece Conectar", async () => {
+    const red = redDoble();
+    (red.listarTools as ReturnType<typeof vi.fn>).mockResolvedValue([{ nombre: "list_projects" }]);
+    (red.llamarTool as ReturnType<typeof vi.fn>).mockRejectedValue(Object.assign(new Error("Streamable HTTP error"), { code: 401 }));
+    const s = crear(red);
+    s.anadir("stitch");
+    s.guardarClave("stitch", "AQ.mala");
+    await s.probar("stitch");
+    expect(s.lista().conectores[0]?.prueba).toMatchObject({ ok: false, motivo: "falta autorizar (la clave no vale: HTTP 401)" });
+  });
+
+  it("si la llamada de comprobación contesta isError, el motivo es SU texto", async () => {
+    const red = redDoble();
+    (red.llamarTool as ReturnType<typeof vi.fn>).mockRejectedValue(new ErrorDeTool("cuota agotada"));
+    const s = crear(red);
+    s.anadir("stitch");
+    s.guardarClave("stitch", "AQ.abc");
+    await s.probar("stitch");
+    expect(s.lista().conectores[0]?.prueba).toMatchObject({ ok: false, motivo: "cuota agotada" });
+  });
+
+  it("un conector SIN comprobación no hace ninguna llamada al probar", async () => {
+    const red = redDoble();
+    const s = crear(red);
+    s.anadir("deepwiki");
+    await s.probar("deepwiki");
+    expect(red.llamarTool).not.toHaveBeenCalled();
+  });
+
+  it("la cabecera llega al TRANSPORTE con su nombre, no dentro de `Authorization`", async () => {
+    let opciones: { requestInit?: RequestInit } | undefined;
+    const costura: CosturaDeRedDeConectores = {
+      crearCliente: () => ({ connect: async () => {}, close: async () => {}, listTools: async () => ({ tools: [] }) }) as unknown as ClienteDeMcp,
+      primario: (_url, o) => { opciones = o; return {} as TransporteDeMcp; },
+      respaldo: () => { throw new Error("no debería usarse"); },
+    };
+    await redDeConectoresReal(costura).listarTools("https://mcp.test/mcp", { cabecera: { nombre: "X-Goog-Api-Key", valor: "AQ.abc" } }, new AbortController().signal);
+    expect(opciones?.requestInit?.headers).toEqual({ "X-Goog-Api-Key": "AQ.abc" });
   });
 });

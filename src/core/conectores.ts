@@ -36,12 +36,25 @@ export interface ConectorDeCatalogo {
   readonly url: string;
   readonly descripcion: string;
   readonly autenticacion: AutenticacionDeConector;
+  /**
+   * En qué cabecera viaja la clave de un `api-key`, con el valor TAL CUAL. Ausente es
+   * `Authorization: Bearer <clave>`, lo de siempre. Existe por Stitch, medido el 30-09-2026: su
+   * clave va en `X-Goog-Api-Key`, y como `Bearer` contesta 401.
+   */
+  readonly cabeceraDeClave?: string;
+  /**
+   * Una tool de LECTURA, sin argumentos, que `probar` llama después de `listTools`, para los
+   * servidores que listan sus tools a cualquiera. Medido en Stitch: `tools/list` contesta 200 sin
+   * clave y con una clave falsa, así que sin esto «Conectado · 15 tools» saldría con cualquier cosa.
+   */
+  readonly comprobacion?: string;
 }
 
 /**
  * Medido contra los tres servidores el 24-09-2026: deepwiki contesta `listTools` sin
  * credenciales; Notion y Atlassian publican `registration_endpoint` y S256, y aceptan un
- * cliente público con `redirect_uri` en loopback. El transporte NO se declara: se prueba
+ * cliente público con `redirect_uri` en loopback. Stitch (30-09-2026) lleva la clave en su propia
+ * cabecera y se comprueba con una llamada, ver `cabeceraDeClave`. El transporte NO se declara: se prueba
  * `streamable-http` y, si no, `sse`, como hace TrueForge.
  */
 export const CATALOGO_DE_CONECTORES: readonly ConectorDeCatalogo[] = [
@@ -65,6 +78,15 @@ export const CATALOGO_DE_CONECTORES: readonly ConectorDeCatalogo[] = [
     url: "https://mcp.notion.com/mcp",
     descripcion: "Busca páginas, lee contenido, consulta bases de datos y crea páginas.",
     autenticacion: "oauth",
+  },
+  {
+    id: "stitch",
+    nombre: "Stitch",
+    url: "https://stitch.googleapis.com/mcp",
+    descripcion: "Diseña pantallas con Google Stitch y lee sus proyectos, pantallas y sistemas de diseño.",
+    autenticacion: "api-key",
+    cabeceraDeClave: "X-Goog-Api-Key",
+    comprobacion: "list_projects",
   },
 ];
 

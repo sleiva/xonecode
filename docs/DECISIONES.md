@@ -6644,6 +6644,25 @@ solo uso que `interpretarCallback` consume al reconocerlo, vaya la autorización
 un reintento del mismo `state` (el usuario pulsando atrás, o un proveedor reintentando la
 redirección) no puede colarse una segunda vez.
 
+## Stitch como conector: su cabecera, y un «Conectado» que mentía (30-09-2026)
+
+Medido contra `https://stitch.googleapis.com/mcp` con `curl` y con el SDK, con una clave real y
+con la misma clave estropeada:
+
+- **La clave va en `X-Goog-Api-Key`, a secas.** Como `Authorization: Bearer <clave>` contesta 401
+  «invalid authentication credentials». De ahí `cabeceraDeClave` en la fila del catálogo; ausente
+  sigue siendo el `Bearer` de siempre.
+- **`initialize` y `tools/list` contestan 200 sin clave y con una falsa**, con sus 15 tools. Solo
+  una llamada distingue: `list_projects` con la buena devuelve los proyectos; con la falsa, HTTP
+  401 «API key not valid», que el SDK lanza como `StreamableHTTPError` con `code: 401`. Así que
+  la prueba de un conector que lista a cualquiera no puede ser `listTools`: `comprobacion` nombra
+  una tool de LECTURA sin argumentos que `probar` llama después.
+- **Un 401 con clave se leía «no responde (HTTP 401)».** Con una clave es la clave: ahora es
+  «falta autorizar (la clave no vale: HTTP 401)», que el panel reconoce para ofrecer «Conectar».
+
+Límite que sigue: un conector escrito a mano no puede nombrar otra cabecera ni una comprobación
+(el formulario no tiene esos campos).
+
 ## «Add MCP server»: un servidor escrito a mano (24-09-2026)
 
 El catálogo son tres filas de código, y su límite estaba declarado en tres sitios: «no hay añadir

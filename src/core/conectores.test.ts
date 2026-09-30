@@ -19,12 +19,20 @@ import {
 import { motivoDeEndpointInaceptable } from "./modelos.js";
 
 describe("catálogo de conectores", () => {
-  it("son los tres medidos, con su URL y su autenticación", () => {
+  it("son los cuatro medidos, con su URL y su autenticación", () => {
     expect(CATALOGO_DE_CONECTORES.map((c) => [c.id, c.url, c.autenticacion])).toEqual([
       ["deepwiki", "https://mcp.deepwiki.com/mcp", "ninguna"],
       ["jira", "https://mcp.atlassian.com/v1/mcp", "oauth"],
       ["notion", "https://mcp.notion.com/mcp", "oauth"],
+      ["stitch", "https://stitch.googleapis.com/mcp", "api-key"],
     ]);
+  });
+  it("Stitch lleva su cabecera y su comprobación, medidas; los demás, ninguna de las dos", () => {
+    expect(conectorDelCatalogo("stitch")).toMatchObject({ cabeceraDeClave: "X-Goog-Api-Key", comprobacion: "list_projects" });
+    for (const id of ["deepwiki", "jira", "notion"]) {
+      expect(conectorDelCatalogo(id)?.cabeceraDeClave).toBeUndefined();
+      expect(conectorDelCatalogo(id)?.comprobacion).toBeUndefined();
+    }
   });
   it("cada URL pasa la MISMA regla que un MCP", () => {
     for (const c of CATALOGO_DE_CONECTORES) expect(motivoDeEndpointInaceptable(c.url)).toBeUndefined();

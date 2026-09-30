@@ -1044,7 +1044,12 @@ escrito a mano lo da de alta una persona desde la misma ventana.
   `FilaDeCatalogo`. La `url` no vuelve nunca al cliente.
 - **La clave de un `api-key` va al fichero de SECRETOS, no a `auth.json`** (`SecretosDeConector`,
   0600, `escribirAtomico`). El `Authorization: Bearer` lo compone el CÓDIGO; la criba
-  (`motivoDeClaveInaceptable`) rechaza valores con espacios.
+  (`motivoDeClaveInaceptable`) rechaza valores con espacios. Una fila del catálogo puede nombrar
+  OTRA cabecera (`cabeceraDeClave`: Stitch va en `X-Goog-Api-Key`, a secas).
+- **«Conectado» con clave exige una llamada, si el servidor lista a cualquiera**
+  (`ConectorDeCatalogo.comprobacion`): Stitch contesta `tools/list` sin clave y con una falsa, así
+  que `probar` llama además a una tool de LECTURA (`list_projects`). Un 401/403 con clave es
+  «falta autorizar (la clave no vale…)», no «no responde»: es lo que ofrece «Conectar» en el panel.
 - **El formulario no tiene campo para la clave**: «Clave de API» es un TIPO de autenticación y la
   clave se pide DESPUÉS por `leerSecreto`. `estadoDeConector` usa `hayCredencial`, no `hayTokens`.
 - **El encadenado es del SERVIDOR**: `crear` escribe la definición y, si su auth no es `ninguna`,
@@ -1106,8 +1111,8 @@ escrito a mano lo da de alta una persona desde la misma ventana.
   componer luego `<url>/browse/<clave>`; con una instancia NUEVA en cada llamada esa caché estaría
   siempre vacía y la URL de «Abrir en Jira» no saldría nunca en producción.
 - **Límites declarados**: no llegan a ningún agente todavía; sin túnel (`redirect_uri` es
-  `127.0.0.1`); de OAuth solo hay registro dinámico; la clave va como `Authorization: Bearer`, sin
-  otra cabecera soportada.
+  `127.0.0.1`); de OAuth solo hay registro dinámico; un conector escrito a mano solo manda la clave
+  como `Authorization: Bearer` (la otra cabecera es de las filas del catálogo).
 
 ### Exportar a PDF
 
