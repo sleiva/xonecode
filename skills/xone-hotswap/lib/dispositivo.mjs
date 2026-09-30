@@ -63,17 +63,18 @@ export function preferirEmulador(salidaDeAdbDevices) {
 }
 
 /** El serial de Android: `--serie`, el de la sesión o un emulador. Y dice de dónde salió. */
-export function serieAndroid(explicita, { entorno = process.env, adb = rutaDeAdb(entorno) } = {}) {
+export function serieAndroid(explicita, { entorno = process.env, adb = rutaDeAdb(entorno), ejecutar = ejecutarAdb } = {}) {
   if (explicita) return { serie: explicita, porque: "pasado con --serie" };
   const elegido = dispositivoDeLaSesion(entorno);
   if (elegido?.plataforma === "android") return { serie: elegido.id, porque: `el de la sesión: ${elegido.nombre}` };
   try {
-    const serie = preferirEmulador(execFileSync(adb, ["devices"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }));
+    // Con tope (`ejecutarAdb`): un adb colgado cae en el `catch` en vez de colgar el script.
+    const serie = preferirEmulador(ejecutar(adb, ["devices"]));
     if (serie !== undefined) {
       return { serie, porque: serie.startsWith("emulator-") ? "sin elegir en la sesión: un emulador" : "el único conectado" };
     }
   } catch {
-    // Sin adb que conteste, el script sigue sin `-s` y su propia comprobación dirá qué falta.
+    // Sin adb que conteste (o con el tope cumplido), el script sigue sin `-s` y su propia comprobación dirá qué falta.
   }
   return { serie: undefined, porque: "sin elegir" };
 }
@@ -85,6 +86,12 @@ export function udidIos(explicito, entorno = process.env) {
   const elegido = dispositivoDeLaSesion(entorno);
   return elegido?.plataforma === "ios" && elegido.clase === "simulador" ? elegido.id : undefined;
 }
+
+/** La forma de un nombre de AVD. Copia de `core/puertosDeAvd.ts#FORMA_DE_NOMBRE_DE_AVD`. */
+export const FORMA_DE_NOMBRE_DE_AVD = /^[A-Za-z0-9._][A-Za-z0-9._-]*$/;
+
+/** Las banderas de «sin ventana». Copia de `core/puertosDeAvd.ts#argsDeArranque` (un test las compara). */
+export const BANDERAS_SIN_VENTANA = ["-no-window", "-no-audio", "-no-metrics"];
 
 /** El puerto del hotswap DENTRO del aparato y el local por omisión. Copia de `core/puertosDeAvd.ts#PUERTO_DEL_HOTSWAP`. */
 export const PUERTO_DEL_HOTSWAP = 8443;
@@ -116,7 +123,12 @@ export function ajusteDelAvd(avd, { casa = homedir(), leer = (r) => readFileSync
   try {
     const s = JSON.parse(leer(join(casa, ".xonecode", "settings.json")));
     const a = s?.dispositivos?.avds?.[avd];
-    return typeof a === "object" && a !== null ? a : {};
+    // El MISMO filtro que `core/settings.ts#validarAvds`: lo que allí se tira, aquí no se usa.
+    if (!FORMA_DE_NOMBRE_DE_AVD.test(avd) || typeof a !== "object" || a === null) return {};
+    const salida = {};
+    if (Number.isInteger(a.puerto) && a.puerto >= 1024 && a.puerto <= 65535) salida.puerto = a.puerto;
+    if (a.sinVentana === true) salida.sinVentana = true;
+    return salida;
   } catch {
     return {};
   }
@@ -127,8 +139,23 @@ export function ajusteDelAvd(avd, { casa = homedir(), leer = (r) => readFileSync
  * serie, 8443. Misma regla que `core/puertosDeAvd.ts#puertoDeAvd` (un test compara las dos).
  */
 export function puertoAndroid(explicito, serie, deps = {}) {
+  return puertoConMotivo(explicito, serie, deps).puerto;
+}
+
+/**
+ * Lo mismo que `puertoAndroid`, y además DICE cuándo cae al 8443 sin haber podido saber de qué
+ * AVD es la serie (adb falló o venció el tope): ése es el puerto del primer AVD, y callarlo
+ * dejaría a un segundo emulador hablando con el aparato de otro. `porque` es `undefined` cuando
+ * no hay nada que avisar.
+ */
+export function puertoConMotivo(explicito, serie, deps = {}) {
   const n = Number(explicito);
-  if (explicito !== undefined && Number.isInteger(n) && n >= 1024 && n <= 65535) return n;
-  const guardado = ajusteDelAvd(avdDeLaSerie(serie, deps), deps).puerto;
-  return Number.isInteger(guardado) ? guardado : PUERTO_DEL_HOTSWAP;
+  if (explicito !== undefined && Number.isInteger(n) && n >= 1024 && n <= 65535) return { puerto: n };
+  const avd = avdDeLaSerie(serie, deps);
+  const guardado = ajusteDelAvd(avd, deps).puerto;
+  if (guardado !== undefined) return { puerto: guardado };
+  if (avd === undefined && serie?.startsWith("emulator-")) {
+    return { puerto: PUERTO_DEL_HOTSWAP, porque: `no pude saber qué AVD es ${serie}; uso el ${PUERTO_DEL_HOTSWAP}, que puede ser el de otro emulador` };
+  }
+  return { puerto: PUERTO_DEL_HOTSWAP };
 }

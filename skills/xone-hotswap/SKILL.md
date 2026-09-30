@@ -218,7 +218,8 @@ Cada AVD tiene SU puerto en este Mac (Ajustes → Dispositivos; con un solo AVD 
 nada que tocar). Dentro del aparato el servidor sigue en el 8443. **El túnel lo ponen
 `xone-desplegar-android` y `xone-reiniciar-android`** con el puerto del aparato de tu sesión —lo
 resuelven por el AVD de la serie—, y `xone-hotswap` ya se conecta a ese puerto: no pases
-`--puerto N` salvo que te lo pidan (fuerza el puerto local). En iOS no hay túnel y es siempre el 8443.
+`--puerto N` salvo que te lo pidan (fuerza el puerto local). **Si a desplegar/reiniciar les pasas `--serie`,
+pasa EL MISMO `--serie` a `xone-hotswap`**: sin él habla con el aparato de la sesión. En iOS no hay túnel y es siempre el 8443.
 
 **No hagas `adb forward` a mano** (se rechaza): dos túneles al mismo puerto local no conviven, y
 el segundo le quita el aparato al primero sin dar error — otra sesión se quedaría hablando con tu

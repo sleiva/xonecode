@@ -18,7 +18,8 @@
  * ANTES DE LLAMARLO (Android): tiene que estar el túnel, o el puerto local no lleva a
  * ninguna parte —el servidor escucha en el localhost del APARATO—. Lo ponen
  * `xone-desplegar-android` y `xone-reiniciar-android`, con el puerto del aparato: no hagas
- * `adb forward` a mano. Este cliente usa ese mismo puerto (`--puerto N` lo fuerza).
+ * `adb forward` a mano. Este cliente usa ese mismo puerto (`--puerto N` lo fuerza). Con varios
+ * aparatos, `--serie S` elige a cuál hablar: el MISMO que se pasó a desplegar/reiniciar.
  * En iOS no hay túnel: el simulador comparte la pila de red del Mac (8443).
  *
  * VARIABLES
@@ -54,18 +55,20 @@ process.on("warning", (aviso) => {
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { dispositivoDeLaSesion, puertoAndroid, serieAndroid, PUERTO_DEL_HOTSWAP } from "../lib/dispositivo.mjs";
+import { dispositivoDeLaSesion, puertoConMotivo, serieAndroid, PUERTO_DEL_HOTSWAP } from "../lib/dispositivo.mjs";
 
 /**
  * La URL cuando nadie dice `HOTSWAP_URL`: el puerto LOCAL del túnel es del aparato, no un 8443
  * fijo (con dos emuladores, un segundo `adb forward` al mismo puerto le quita el aparato al
  * primero sin error). Solo se resuelve si hace falta: con `HOTSWAP_URL` no se llama a adb.
  */
-function urlPorOmision(puertoPedido) {
+function urlPorOmision(puertoPedido, seriePedida) {
   // iOS no tiene túnel: el simulador comparte el localhost del Mac.
   if (dispositivoDeLaSesion()?.plataforma === "ios") return `wss://127.0.0.1:${PUERTO_DEL_HOTSWAP}/hotswap`;
-  const { serie } = serieAndroid(undefined);
-  return `wss://127.0.0.1:${puertoAndroid(puertoPedido, serie)}/hotswap`;
+  const { serie, porque } = serieAndroid(seriePedida);
+  const { puerto, porque: porquePuerto } = puertoConMotivo(puertoPedido, serie);
+  if (porquePuerto !== undefined) process.stderr.write(`puerto: ${puerto} (${porquePuerto})\n`);
+  return `wss://127.0.0.1:${puerto}/hotswap`;
 }
 const TOPE_MS = Number(process.env.HOTSWAP_TOPE_MS ?? 40_000);
 const ARTEFACTOS = process.env.XONECODE_ARTEFACTOS;
@@ -102,11 +105,15 @@ const RUTA_VIRTUAL = process.env.XONECODE_HOTSWAP === undefined ? "/artefactos/"
  */
 const LARGO_PARA_GUARDAR = 2_000;
 
-// `--puerto N` se retira ANTES de leer los comandos: no es de ninguno.
+// `--puerto N` y `--serie S` se retiran ANTES de leer los comandos: no son de ninguno.
 const argumentos = process.argv.slice(2);
 const iPuerto = argumentos.indexOf("--puerto");
 const puertoPedido = iPuerto >= 0 ? argumentos[iPuerto + 1] : undefined;
-const pedidos = iPuerto >= 0 ? argumentos.filter((_, i) => i !== iPuerto && i !== iPuerto + 1) : argumentos;
+const iSerie = argumentos.indexOf("--serie");
+const seriePedida = iSerie >= 0 ? argumentos[iSerie + 1] : undefined;
+const pedidos = argumentos.filter(
+  (_, i) => i !== iPuerto && i !== iPuerto + 1 && i !== iSerie && i !== iSerie + 1,
+);
 if (pedidos.length === 0 || pedidos.includes("--help") || pedidos.includes("-h")) {
   // El prompt del agente promete que `--help` contesta. Una promesa así, sin cumplir, cuesta
   // un viaje y deja al modelo adivinando argumentos.
@@ -127,6 +134,7 @@ Con --dry-run se imprime lo que se enviaría, sin conectar.
 
 Antes, en Android, hace falta el túnel: lo ponen xone-desplegar-android y xone-reiniciar-android con el
 puerto del aparato; no hagas adb forward a mano. --puerto N fuerza el puerto local (8443 por omisión).
+--serie S elige el aparato Android (el MISMO que pasaste a desplegar/reiniciar); sin ella, el de la sesión.
 Una respuesta larga no se imprime: una IMAGEN va a $XONECODE_ARTEFACTOS (y sale en el chat),
 el TEXTO va a $XONECODE_HOTSWAP y se relee con read_file en /hotswap/<nombre>.
 Variables: HOTSWAP_URL (por omisión wss://127.0.0.1:<puerto del aparato>/hotswap), XONECODE_ARTEFACTOS, XONECODE_HOTSWAP, HOTSWAP_TOPE_MS.
@@ -324,7 +332,7 @@ function sinBinarios(respuesta) {
   return copia;
 }
 
-const ws = new WebSocket(process.env.HOTSWAP_URL ?? urlPorOmision(puertoPedido));
+const ws = new WebSocket(process.env.HOTSWAP_URL ?? urlPorOmision(puertoPedido, seriePedida));
 let saludado = false;
 let pendiente;
 let reloj;

@@ -22,7 +22,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
-import { serieAndroid, rutaDeAdb, NODE, dormir, PUERTO_DEL_HOTSWAP, puertoAndroid } from "../lib/dispositivo.mjs";
+import { serieAndroid, rutaDeAdb, NODE, dormir, PUERTO_DEL_HOTSWAP, puertoConMotivo } from "../lib/dispositivo.mjs";
 
 const PAQUETE = "com.xone.android.framework";
 const ACTIVIDAD = `${PAQUETE}/com.xone.android.hotswap.activities.SetupActivity`;
@@ -52,7 +52,8 @@ const { serie, porque } = serieAndroid(opcion("serie"));
 if (serie !== undefined) process.stderr.write(`dispositivo: ${serie} (${porque})\n`);
 // El puerto LOCAL es del aparato (Ajustes → Dispositivos): con dos emuladores, un 8443 fijo
 // hacía que el segundo túnel le quitara el aparato al primero sin avisar. Dentro sigue en 8443.
-const PUERTO = puertoAndroid(opcion("puerto"), serie);
+const { puerto: PUERTO, porque: porquePuerto } = puertoConMotivo(opcion("puerto"), serie);
+if (porquePuerto !== undefined) process.stderr.write(`puerto: ${PUERTO} (${porquePuerto})\n`);
 const adb = (...partes) =>
   execFileSync(rutaDeAdb(), [...(serie ? ["-s", serie] : []), ...partes], { encoding: "utf8" });
 

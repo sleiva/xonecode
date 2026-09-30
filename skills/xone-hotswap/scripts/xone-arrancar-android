@@ -35,7 +35,7 @@
  *   xone-arrancar-android --sin-ventana    sin ventana (también si el AVD lo tiene marcado en Ajustes)
  */
 import { execFileSync, spawn } from "node:child_process";
-import { dormir, ajusteDelAvd } from "../lib/dispositivo.mjs";
+import { dormir, ajusteDelAvd, BANDERAS_SIN_VENTANA } from "../lib/dispositivo.mjs";
 
 /** Lo que tarda un arranque en frío de un AVD con `google_apis`, con margen. Por debajo del
  *  tope de reloj de UN comando del harness (600 s), que es quien mataría al script entero. */
@@ -175,9 +175,9 @@ if (yaEstaba === undefined) {
    * de turno tirados—. `unref` es lo que deja que este proceso acabe con el nieto vivo.
    */
   // «Sin ventana» viene de Ajustes → Dispositivos (por AVD) o de `--sin-ventana`. Es la misma
-  // receta que el botón de la web (`argsDeArranque`), copiada porque la skill no importa TS.
+  // receta que el botón de la web (`argsDeArranque`), la constante es copia de la de core porque la skill no importa TS (un test las compara).
   const sinVentana = args.includes("--sin-ventana") || ajusteDelAvd(avd).sinVentana === true;
-  const banderas = sinVentana ? ["-no-window", "-no-audio", "-no-metrics"] : [];
+  const banderas = sinVentana ? BANDERAS_SIN_VENTANA : [];
   if (sinVentana) console.log(`${avd} arranca SIN ventana: para verlo, captura; para pararlo, adb -s <serie> emu kill`);
   const hijo = spawn(EMULATOR, ["-avd", avd, ...banderas], { detached: true, stdio: "ignore" });
   let fallo;

@@ -12,7 +12,8 @@ El servidor escucha en `localhost` del dispositivo. Para alcanzarlo desde el PC 
 `adb -s <serie> forward tcp:<puerto del aparato> tcp:8443`, y **lo ponen `xone-desplegar-android` y
 `xone-reiniciar-android`**, no tú: cada AVD tiene SU puerto local en este Mac (Ajustes →
 Dispositivos; con un solo AVD es el 8443), que los scripts resuelven por el AVD de la serie.
-`--puerto N` fuerza el puerto LOCAL. **Un `adb forward` a mano se rechaza**: dos túneles al mismo puerto local no
+`--puerto N` fuerza el puerto LOCAL. Con varios aparatos, si a desplegar/reiniciar les pasas `--serie`, pasa EL MISMO
+`--serie` a `xone-hotswap`. **Un `adb forward` a mano se rechaza**: dos túneles al mismo puerto local no
 conviven y el segundo le quita el aparato al primero sin error. Para ver los que hay:
 
 ```bash
