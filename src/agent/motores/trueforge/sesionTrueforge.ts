@@ -154,15 +154,25 @@ const BUCLE_DE_CALIDAD = [
  * el nombre de la tool y las fichas van escritas aquí, con la MISMA función que deepagents.
  */
 /**
- * **El idioma, dicho desde código**, al raíz y a cada especialista. Visto en la consola web (MyAllXOne): el texto entre
- * herramientas y el razonamiento salían en inglés («Let me call…», «I'll start by reconnoitering…») con la persona
- * escribiendo en español. Nuestros prompts están en español pero ninguno lo decía, y encima hay piezas internas en inglés
- * que tiran de él: la identidad que añade TrueForge («You are the Agent…»), las descripciones de las tools y la costumbre
- * de DeepSeek de razonar en inglés.
+ * **El idioma de la SALIDA, dicho desde código**, al raíz y a cada especialista. Visto en la consola web (MyAllXOne):
+ * el texto entre herramientas salía en inglés («Let me call…») con la persona escribiendo en español: nuestros prompts
+ * están en español pero ninguno lo decía, y hay piezas internas en inglés que tiran de él (la identidad que añade
+ * TrueForge, las descripciones de las tools, la costumbre de DeepSeek de razonar en inglés).
+ *
+ * **Lo que importa es lo que LEE la persona, en SU idioma** (decisión suya): las respuestas, lo que se dice entre
+ * herramientas y lo que se entrega. El razonamiento queda libre. Y no es «español» a fuego, es el idioma del usuario: el
+ * raíz lo lee de su mensaje; un hijo no lo ve, así que sigue el de su encargo, que el raíz escribe en ese idioma.
  */
 export const IDIOMA_DE_LA_RESPUESTA =
-  "IDIOMA: escribe SIEMPRE en español —lo que dices entre herramientas, tu razonamiento, tus encargos y tus respuestas—, " +
-  "aunque algunas instrucciones internas y las descripciones de las herramientas estén en inglés. El código, los nombres de " +
+  "IDIOMA: contesta en el idioma en que te escribe el usuario (el de su último mensaje): tus respuestas y lo que dices " +
+  "entre herramientas, que es lo que él lee. Los encargos a tus especialistas, escríbelos en ese mismo idioma. Tu " +
+  "razonamiento puede ir en el idioma que quieras. El código, los nombres de ficheros, atributos y funciones, y las citas " +
+  "literales se quedan como son.";
+
+/** Lo mismo para un ESPECIALISTA, que no ve el mensaje del usuario: sigue el idioma de su encargo. */
+export const IDIOMA_DEL_ESPECIALISTA =
+  "IDIOMA: lo que devuelves y lo que entregas (un documento, un texto de la app, un informe) va en el idioma de tu " +
+  "encargo, que es el del usuario. Tu razonamiento puede ir en el idioma que quieras. El código, los nombres de " +
   "ficheros, atributos y funciones, y las citas literales se quedan como son.";
 
 /**
@@ -1060,9 +1070,9 @@ export async function abrirSesionTrueforge(
     ].join("\n");
     const instrucciones =
       agente === undefined
-        ? `${IDIOMA_DE_LA_RESPUESTA}\n\n${nota} Contesta con lo que encuentres y dónde.`
+        ? `${IDIOMA_DEL_ESPECIALISTA}\n\n${nota} Contesta con lo que encuentres y dónde.`
         : [
-            IDIOMA_DE_LA_RESPUESTA,
+            IDIOMA_DEL_ESPECIALISTA,
             "",
             promptDeAgente(agente, repartirSkills(agente, disponibles)),
             "",
