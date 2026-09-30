@@ -232,7 +232,7 @@ export function motivoDeComandoRechazado(comando: string): string | undefined {
   // scripts. Medido: un `adb forward` al mismo puerto local le QUITA el túnel al aparato de otra
   // sesión sin dar error. `--list` solo mira, y pasa.
   const adb = String.raw`(?:adb|"?\$\{?XONECODE_ADB\}?"?)`;
-  const tunelAMano = new RegExp(String.raw`${inicio}${adb}\s+(?:-\S+\s+\S+\s+)*(?:forward|reverse)\s+(?!--list${fin})`);
+  const tunelAMano = new RegExp(String.raw`${inicio}${adb}\s+(?:-[de]\s+|-\S+\s+\S+\s+)*(?:forward|reverse)\s+(?!--list${fin})`);
   if (tunelAMano.test(comando)) {
     return (
       "No se lanza: el túnel al aparato lo ponen `xone-desplegar-android` y `xone-reiniciar-android`, con el puerto que " +

@@ -232,6 +232,9 @@ describe("un túnel a mano (`adb forward`/`reverse`) no se lanza", () => {
     "xone-log-android && adb forward tcp:1 tcp:2",
     "adb forward --remove tcp:8443",
     "adb reverse tcp:8443 tcp:8443",
+    "adb -e forward tcp:1 tcp:2",
+    "adb -d reverse tcp:1 tcp:2",
+    "adb -e -s emulator-5554 forward tcp:1 tcp:2",
   ])("se rechaza: %s", (c) => {
     const m = motivoDeComandoRechazado(c);
     expect(m, c).toContain("xone-desplegar-android");
