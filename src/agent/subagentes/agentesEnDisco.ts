@@ -18,6 +18,7 @@
 
 import { createHash } from "node:crypto";
 import {
+  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -457,6 +458,16 @@ const RENOMBRADOS: Readonly<Record<string, string>> = {
  * El fichero de marca empieza por punto y no acaba en `.md`, así que `leerCarpetaDeAgentes`
  * ni lo mira — no hace falta excluirlo a mano en dos sitios.
  */
+/** Dónde se guarda la copia de un agente de serie editado antes de actualizarlo: `.anteriores/<nombre>.<fecha>.md`. */
+export const CARPETA_DE_ANTERIORES = ".anteriores";
+
+function guardarAnterior(carpeta: string, nombre: string, ruta: string): void {
+  const destino = join(carpeta, CARPETA_DE_ANTERIORES);
+  mkdirSync(destino, { recursive: true });
+  const fecha = new Date().toISOString().replace(/[:.]/g, "-");
+  copyFileSync(ruta, join(destino, `${nombre}.${fecha}.md`));
+}
+
 export function sembrarAgentes(base: string = homedir()): Siembra {
   const carpeta = rutaDeAgentes(base);
   const escritos: string[] = [];
@@ -535,8 +546,22 @@ export function sembrarAgentes(base: string = homedir()): Siembra {
       escritos.push(agente.nombre);
       continue;
     }
-    marca[agente.nombre] = AJENO;
-    desactualizados.push(agente.nombre);
+    if (marca[agente.nombre] === nuestro) {
+      // El usuario lo editó y la versión de serie NO ha cambiado desde que se entregó: su edición se respeta.
+      desactualizados.push(agente.nombre);
+      continue;
+    }
+    /**
+     * Editado por el usuario Y con una versión de serie NUEVA (o sin saber cuál se entregó, `ajeno`): se ACTUALIZA, y su
+     * copia se guarda antes en `.anteriores/`. Decisión suya (30-09-2026): con la regla de antes —«lo tocado no se pisa»—
+     * un `device-controller.md` con dos líneas cambiadas (modelo y esfuerzo) se quedó un día entero sin ninguna de las
+     * correcciones del conductor, y así le pasaría a cada usuario con cada versión. Los agentes de serie son de xonecode y
+     * los trae cada versión; los que crea el usuario no son de serie y este bucle no los ve.
+     */
+    guardarAnterior(carpeta, agente.nombre, ruta);
+    writeFileSync(ruta, contenido, "utf8");
+    marca[agente.nombre] = nuestro;
+    escritos.push(agente.nombre);
   }
 
   /**
@@ -899,6 +924,18 @@ const CONSULTA_ACOTADA_DOCS = [
   "- En cuanto tengas la evidencia para contestar, deja de llamar tools y responde.",
 ].join("\n");
 
+/**
+ * Lo que devuelve el diseñador al terminar: la relación de cada recurso con su control. Medido en calc15: con 44 SVG y solo
+ * sus nombres, el orquestador los volvió a revisar con búsquedas y el desarrollador abrió 16 para saber su tamaño, a qué
+ * control iban y si llevaban el símbolo dentro.
+ */
+const DEVOLVER_RECURSOS = [
+  "AL DEVOLVER, UNA TABLA DE LO QUE DEJASTE EN `icons/`, una fila por fichero:",
+  "| fichero | control(es) del `.xne` | atributo (`img`, `imgbk`, `imgsel`) | tamaño en px | ¿lleva el símbolo dentro? |",
+  "Es lo que necesita quien cablea la pantalla: con ella no abre los SVG. Si un fichero sirve a varios controles, dilos todos;",
+  "si no sabes el nombre del control, di la pieza del diseño («tecla de operador», «pill DEG»).",
+].join("\n");
+
 const HANDOFF_MOCKUP = [
   "HANDOFF PARA DIAGRAMAS:",
   "- Si la descripción de tu tarea incluye `HANDOFF DE ANÁLISIS`, ese bloque es tu evidencia de código real.",
@@ -948,6 +985,14 @@ const EJECUCION_EN_LA_MAQUINA = [
   "virtual); solo desde la SHELL hace falta la ruta real, que está en `$XONECODE_SKILL_<NOMBRE>`",
   "(`$XONECODE_SKILL_XONE_HOTSWAP/references/comandos.md`), y `/skills/...` no existe en el disco:",
   "no la busques con `find`.",
+  "",
+  "PARA COMPROBAR UNA ACCIÓN («teclea 8», «pulsa =»), el LOG manda y la captura es el último recurso:",
+  "`xone-log-android --limpiar`, haz la acción (por el NOMBRE del control), `xone-log-android --app` —trae",
+  "SOLO lo que la app escribió con `console.log` y sus errores— y, si hace falta, el valor de los campos.",
+  "Devuelve por cada acción lo que salió LITERAL. Saca una captura SOLO si el log y los valores no bastan para",
+  "decidir qué pasó, o si lo que te piden comprobar es visual. No uses `ui.showToast` ni",
+  "`appData.writeConsoleString` para ver qué pasa: el aviso no deja rastro y el segundo no escribe en el log de",
+  "Android (medido).",
   "",
   "PARA SABER SI ALGO SE REPINTÓ, no compares capturas con `md5` ni con un script tuyo: si tienes la",
   "tool `diferencia_de_capturas`, pásale la captura de antes, la de después y la zona que debía",
@@ -1101,7 +1146,9 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     nombre: "developer-xone",
     descripcion:
       "Para CAMBIAR el proyecto: crear o modificar colecciones, escribir scripts, editar " +
-      "ficheros. Dale los hechos ya averiguados —no le hagas redescubrirlos— y QUÉ tiene que " +
+      "ficheros, y MAQUETAR pantallas —el layout del `.xne` y el CSS, también cuando algo se ve " +
+      "cortado, descuadrado o del tamaño equivocado—. Los recursos que XOne no trae (iconos, " +
+      "fondos SVG) los hace designer-xone. Dale los hechos ya averiguados —no le hagas redescubrirlos— y QUÉ tiene que " +
       "conseguir, no cómo. Si hay un plan en `/planes/<nombre>/`, dale el nombre y la tarea " +
       "concreta: lo lee y marca ahí lo que deja hecho. Devuelve los ficheros que cambió; cada " +
       "escritura para el turno y pide aprobación, así que un encargo enorme son muchas " +
@@ -1110,10 +1157,11 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     soloLectura: false,
     // `artifacts-builder` se queda: escribe documentos e informes. `archify` no, que los
     // diagramas son de `designer-xone` y su descripción son ~700 caracteres por llamada.
-    skills: ["xone-development", "xone-debugging", "artifacts-builder", "openui-builder"],
+    // `xone-debugging` se quitó: 0 lecturas en seis pasadas, y su método es correr `xone-simulator`, que quien no tiene shell no puede.
+    skills: ["xone-development", "artifacts-builder", "openui-builder"],
     // A quién puede llamar él mismo (`core/agentes.ts#Agente.llama`): solo lo honra TrueForge y solo con el
-    // interruptor del bucle del desarrollador encendido. El de pruebas para comprobar y el diseñador para lo VISUAL:
-    // sin él, lo visual volvía al orquestador y el desarrollador salía en cuanto lo funcional estaba listo.
+    // interruptor del bucle del desarrollador encendido. El de pruebas para comprobar y el diseñador para los RECURSOS
+    // (iconos y fondos SVG): lo visual de la pantalla es suyo, y devolverlo al orquestador o al diseñador lo rehacía entero.
     // Es el dato; el texto que se lo explica lo pone la sesión.
     llama: ["device-controller", "designer-xone"],
     // Si el orquestador lo lanza a la vez que al diseñador, espera a que este termine: sin eso escribía el `.xne` antes
@@ -1163,28 +1211,29 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
      * Ninguna de las dos cosas se compone leyendo, y un prompt no las suple.
      */
     ejecucion: true,
-    skills: ["xone-hotswap", "xone-debugging"],
+    // `xone-debugging` se quitó: 0 lecturas en seis pasadas; la depuración en el aparato va por `xone-log-android --app`.
+    skills: ["xone-hotswap"],
     instrucciones: EJECUCION_EN_LA_MAQUINA,
     origen: "semilla",
   },
   {
     nombre: "designer-xone",
     descripcion:
-      "Para cambiar cómo se VE algo: el layout de una pantalla, el CSS, los recursos, y los " +
-      "diagramas de la app. Cuando el encargo sea CAMBIAR algo, suyo es todo síntoma visual " +
-      "y da igual que suene a avería: algo " +
-      "CORTADO, que SE SALE, que NO SE LEE, que NO CABE, apretado, pegado al borde, " +
-      "desalineado, del color o del tamaño equivocado — también cuando se arregle en un " +
-      "`.xne` y no en el CSS. De developer-xone es qué HACE un botón al pulsarlo, aunque se " +
-      "toque el CSS. Dale la pantalla, qué se ve mal y qué tendría que verse — y si el " +
-      "arreglo depende del código real, el análisis ya hecho. Devuelve los ficheros que " +
-      "cambió, con aprobación como cualquier otra escritura. **Si el encargo es DOCUMENTAR " +
-      "y no cambiar, una pantalla que se ve mal no es suya: es document-writer quien la " +
-      "describe.**",
+      "Para los RECURSOS visuales que XOne no trae: busca iconos en una biblioteca y genera fondos SVG " +
+      "(degradados, sombras, brillos, esquinas) y los deja en `icons/`; y hace los diagramas de la app. " +
+      "NO maqueta pantallas ni toca un `.xne`, el CSS ni los scripts: el layout, el CSS y todo lo que se ve " +
+      "mal en una pantalla son de developer-xone. Dale la lista de recursos —para qué control, tamaño en " +
+      "píxeles, colores— o la maqueta de la que sacarla. Devuelve una TABLA de lo que dejó en `icons/`: " +
+      "fichero → control(es) del `.xne` → atributo (`img`, `imgbk`, `imgsel`) → tamaño en píxeles → si lleva el " +
+      "símbolo dibujado dentro. Pásasela TAL CUAL a quien cablee la pantalla: con ella no tiene que abrir los SVG. " +
+      "**Si el encargo es DOCUMENTAR, es document-writer.**",
     motor: "modelo",
     soloLectura: false,
+    // **Lo que lo confina es `escribeEn`, no el prompt**: medido en calc10, el diseñador rehízo `MenuPrincipal.xne` entero
+    // dos veces sobre la lógica del desarrollador. Un recurso es un fichero de `icons/`; la pantalla es de quien la cablea.
+    escribeEn: ["/icons/"],
     skills: ["xone-development", "archify", "artifacts-builder", "openui-builder"],
-    instrucciones: `${TRABAJAR_CON_PLAN}\n\n${HANDOFF_MOCKUP}\n\n${MEMORIA_LEER_CON_HANDOFF}\n\n${MEMORIA_ESCRIBIR}`,
+    instrucciones: `${TRABAJAR_CON_PLAN}\n\n${HANDOFF_MOCKUP}\n\n${DEVOLVER_RECURSOS}\n\n${MEMORIA_LEER_CON_HANDOFF}\n\n${MEMORIA_ESCRIBIR}`,
     origen: "semilla",
   },
   {

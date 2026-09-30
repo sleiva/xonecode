@@ -17,6 +17,7 @@
  *   xone-log-android                      errores y excepciones recientes
  *   xone-log-android --lineas 400         más cola
  *   xone-log-android --todo               todo lo del host, no solo errores
+ *   xone-log-android --app                SOLO lo que escribió la app con console.log, más sus errores
  *   xone-log-android --limpiar            vacía el buffer y sale (para aislar lo siguiente)
  *   xone-log-android --serie emulator-5554
  */
@@ -32,6 +33,7 @@ if (args.includes("--help") || args.includes("-h")) {
   xone-log-android                 errores y excepciones recientes (por omisión, 200 líneas)
   xone-log-android --lineas 400    más cola
   xone-log-android --todo          todo lo del host, no solo errores
+  xone-log-android --app           SOLO los console.log de la app (etiqueta XOneJavaScript) y sus errores
   xone-log-android --limpiar       vacía el buffer y sale, para aislar lo que pase después
   xone-log-android --serie <id>    con varios aparatos conectados
 
@@ -62,6 +64,13 @@ if (args.includes("--limpiar")) {
 
 const lineas = Number(opcion("lineas") ?? 200);
 const todo = args.includes("--todo");
+/**
+ * `--app`: lo que la APP escribió con `console.log`, y sus errores, sin el resto del host. Medido en el emulador: un
+ * `console.log("X")` de un script sale como `V XOneJavaScript: X` en el log del host, y la vista por omisión —solo
+ * errores— lo tira; `--todo` lo entierra entre cientos de líneas del sistema. `appData.writeConsoleString` (legacy) no
+ * deja nada en el log de Android. Es lo que hay que leer para saber qué ha pasado tras una acción, antes que una captura.
+ */
+const app = args.includes("--app");
 
 /** El PID del host, si está vivo. Sin él no se puede acotar por proceso: se dice y se sigue. */
 let pid;
@@ -76,7 +85,7 @@ const salida = [];
 if (pid !== undefined && pid !== "") {
   const suyo = adb("logcat", "-d", "--pid", pid, "-t", String(lineas));
   salida.push(`--- ${PAQUETE} (pid ${pid}) ---`);
-  salida.push(todo ? suyo : soloInteresante(suyo));
+  salida.push(todo ? suyo : app ? soloDeLaApp(suyo) : soloInteresante(suyo));
 } else {
   salida.push(`--- ${PAQUETE} no está vivo ahora mismo: solo queda lo que dejó escrito ---`);
 }
@@ -89,6 +98,14 @@ if (pid !== undefined && pid !== "") {
 const caidas = adb("logcat", "-d", "-t", String(lineas * 4), "AndroidRuntime:E", "DEBUG:F", "*:F", "*:S").trim();
 if (caidas !== "") {
   salida.push("", "--- caídas duras (cualquier proceso) ---", caidas);
+}
+
+/** Los `console.log` de la app (etiqueta XOneJavaScript) y los errores del host, en su orden. */
+function soloDeLaApp(texto) {
+  const filas = texto.split("\n").filter((l) => /\sXOneJavaScript\s*:/.test(l) || /\s[EF]\s/.test(l) || /Caused by:|Exception/.test(l));
+  return filas.length === 0
+    ? "(la app no ha escrito nada con console.log ni ha dado errores en esas líneas; si esperabas una línea, no se ejecutó ese código)"
+    : filas.join("\n");
 }
 
 /** Lo que merece la pena leer de un volcado del host: errores, avisos y trazas de excepción. */

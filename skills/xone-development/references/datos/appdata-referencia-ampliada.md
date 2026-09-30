@@ -119,8 +119,8 @@ let sFrameVersion = appData.getGlobalMacro("##FRAME_VERSION##");
 let valor = appData.getGlobalMacro("##MI_MACRO##");
 appData.setGlobalMacro("##MI_MACRO##", "mi_valor");
 
-// Escribir mensaje de debug
-appData.writeConsoleString("Debug: valor = " + valor);
+// Escribir mensaje de debug: console.log (writeConsoleString es legacy y no llega al log de Android)
+console.log("Debug: valor = " + valor);
 
 // Limpiar errores acumulados
 appData.error().clear();

@@ -372,8 +372,8 @@ appData.exit();
 // === Cerrar la ventana actual ===
 ui.getView(self).exit();
 
-// === Escribir en consola de debug ===
-appData.writeConsoleString("Debug: valor = " + valor);
+// === Escribir en consola de debug: console.log (writeConsoleString es legacy) ===
+console.log("Debug: valor = " + valor);
 
 // === Cargar archivos include (solo para casos dinámicos — preferir <include>/<script> en <app>; ver 4.11) ===
 appData.loadIncludeFile("scripts/miModulo.js", "javascript", "UTF-8");
@@ -456,7 +456,9 @@ if (error.getNumber() != 0) {
 }
 ```
 
-#### writeConsoleString(message) - Consola de Depuracion
+#### writeConsoleString(message) - Consola de Depuracion (legacy)
+
+> **Legacy: para depurar, `console.log`.** Medido en un emulador Android: `console.log("X")` sale en el log del host como `V XOneJavaScript: X` (se lee con `xone-log-android --app`), y `appData.writeConsoleString` no deja nada en el log. No uses tampoco `ui.showToast` para depurar: el aviso desaparece y no deja rastro.
 
 ```javascript
 appData.writeConsoleString("App_log_xone->Mensaje de depuracion");

@@ -314,6 +314,8 @@ export interface DependenciasDelEspecialista {
   puedeLlamar?: (agente: Agente) => boolean;
   /** El aviso de vueltas de ESTE agente, si lleva un lazo. Ausente es que no lo lleva. */
   vueltas?: (agente: Agente) => Capacidad | undefined;
+  /** Lo que escribieron los hijos que ESTE agente llame (`informesDeHijos.ts`): solo para quien puede llamar. */
+  informes?: Capacidad;
 }
 
 /**
@@ -351,7 +353,7 @@ export function capacidadesDelEspecialista(
       ? [capacidadDePropias(propias, deps.backend, propias.some((t) => t.name === NOMBRE_INCORPORAR_ADJUNTO) ? [NOMBRE_INCORPORAR_ADJUNTO] : [])]
       : []),
     ...(clase === "ejecuta" ? [capacidadDeEjecucion(deps.conShell())] : []),
-    ...(deps.puedeLlamar?.(agente) === true ? [capacidadDeSubagentes()] : []),
+    ...(deps.puedeLlamar?.(agente) === true ? [capacidadDeSubagentes(), ...(deps.informes === undefined ? [] : [deps.informes])] : []),
     ...(deps.vueltas?.(agente) === undefined ? [] : [deps.vueltas(agente)!]),
     capacidadDeRecortes(deps.backend),
     capacidadDeFecha(),

@@ -80,6 +80,9 @@ export const CAMPOS_SEGUROS: Record<string, readonly string[]> = {
    * cerrado de siete valores: no hay nada del proyecto dentro.
    */
   xone_navegacion: ["operacion"],
+  // El atributo y el nodo por los que se pregunta: vocabulario de XOne, no del proyecto. Hace falta para medir QUÉ se
+  // consulta al índice en vez de a la skill; sin ellos la traza decía «xone_atributos» a secas.
+  xone_atributos: ["atributo", "nodo"],
   /**
    * **El comando ENTERO**, y es la única entrada de esta tabla que no es una ruta ni un
    * patrón. Está aquí a propósito: a un agente con `ejecucion: true` no se le pregunta antes

@@ -275,7 +275,7 @@ describe("el prompt de un especialista sembrado", () => {
   it("expone cada skill disponible como una ruta que carga Deep Agents", () => {
     expect(rutasDeSkills(deSerie("developer-xone"), disponibles(conSkills))).toEqual([
       "/skills/xone-development/",
-      "/skills/xone-debugging/",
+      // Sin `xone-debugging`: 0 lecturas en seis pasadas, y su método (correr `xone-simulator`) no es de quien no tiene shell.
       // Sin `archify`: los diagramas son de `designer-xone`, y cada skill asignada mete su
       // descripción en el prompt de sistema EN CADA llamada (la suya son ~650 caracteres).
       // Conserva `artifacts-builder` porque sí escribe documentos e informes.

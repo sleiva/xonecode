@@ -43,13 +43,13 @@
 6. 06 — Integración GPS + ClientesMapa (bloqueada por 02)
 7. 07 — Firma DR en Pedidos (bloqueada por 03)
 8. 08 — Estilo: default.css completo + variantes (en paralelo desde 01)
-9. 09 — Validación xone-review (bloqueada por 02-08)
+9. 09 — Comprobación en el aparato con device-controller (bloqueada por 02-08)
 
 ## Hitos
 
 {si aplica: qué conjunto de tareas forma un hito verificable. Ejemplo:}
 
-- **Hito 1 — CRUD básico:** tareas 01-04. Al cerrar, validar con xone-review.
+- **Hito 1 — CRUD básico:** tareas 01-04. Al cerrar, comprobarlo en el aparato con device-controller.
 - **Hito 2 — App completa:** tareas 05-09. Validación final.
 ```
 
@@ -83,9 +83,9 @@ y quien empiece un encargo con este plan lo lee primero. Ejemplo:}
 - **Decisiones, no código.** Sin XML/JS/CSS pegado. Excepción: si un snippet codifica una decisión más preciso que prosa (esquema, state machine), inclúyelo y nota su origen.
 - **Nombres consistentes con el spec**, y el `MAP_` según `xone-development`.
 - **Evita rutas de archivo específicas.** Envejecen rápido. El ejecutor las infiere del spec y del proyecto.
-- **Criterios de aceptación verificables.** Cada criterio debe poder comprobarse —con `xone-review`, con un smoke, o con un comportamiento observable.
+- **Criterios de aceptación verificables.** Cada criterio debe poder comprobarse —en el aparato con un toque y lo que dice el log, o con un comportamiento observable.
 - **El comportamiento antes que el pulido.** En una pantalla interactiva, «reacciona a un toque» (captura antes y después) va tras el esqueleto visual y antes del aspecto fino.
-- **La validación es una tarea.** Cada hito cierra con una tarea `xone-review`, o al menos una al final del plan.
+- **La comprobación es una tarea.** Cada hito cierra con una tarea de comprobación en el aparato (`device-controller`). La validación estática no es una tarea: la hace el verificador del arnés solo, al cerrar cada turno. No nombres herramientas que no estén en esta skill ni en las de los especialistas: quien ejecuta las buscará.
 
 ## Ejemplo: feature sobre existente
 
@@ -136,5 +136,5 @@ Antes de entregar el plan:
 - [ ] El orden respeta las dependencias naturales de XOne (mappings → colls → pantallas → integraciones → estilo → validación).
 - [ ] No hay tareas que dependan de cosas que el spec no especifica —o están marcadas como notas.
 - [ ] El usuario aprobó el desglose.
-- [ ] Las tareas de validación xone-review están en su sitio.
+- [ ] Las tareas de comprobación en el aparato están en su sitio.
 - [ ] Los hitos (si los hay) están definidos y cierran con validación.

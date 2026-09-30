@@ -102,6 +102,49 @@ describe("sembrarAgentes", () => {
     expect(readFileSync(ruta, "utf8")).toContain("MIS INSTRUCCIONES");
   });
 
+  /**
+   * Decisión suya (30-09-2026): una versión NUEVA de xonecode actualiza sus agentes de serie aunque el usuario los haya
+   * tocado. Con la regla de antes un `device-controller.md` con dos líneas cambiadas se quedó sin ninguna corrección. Su
+   * copia no se pierde: va a `.anteriores/`. Y los agentes que crea el usuario no se tocan nunca.
+   */
+  it("uno AFINADO se ACTUALIZA cuando llega una versión de serie nueva, y su copia se guarda en `.anteriores/`", () => {
+    const raiz = base();
+    sembrarAgentes(raiz);
+    const carpeta = rutaDeAgentes(raiz);
+    const ruta = join(carpeta, "device-controller.md");
+    // Lo que entregó una versión ANTERIOR (anotado en la marca) y, encima, lo que el usuario cambió.
+    const marca = JSON.parse(readFileSync(join(carpeta, FICHERO_DE_SEMILLA), "utf8")) as Record<string, string>;
+    marca["device-controller"] = createHash("sha256").update("lo que se entregó antes", "utf8").digest("hex").slice(0, 16);
+    writeFileSync(join(carpeta, FICHERO_DE_SEMILLA), JSON.stringify(marca), "utf8");
+    writeFileSync(ruta, "---\ndescripcion: el mío\nmodelo: deepseek/deepseek-flash\n---\nMIS INSTRUCCIONES", "utf8");
+    // Y un agente PROPIO del usuario, que no es de serie.
+    writeFileSync(join(carpeta, "advisor.md"), "---\ndescripcion: mío de verdad\n---\nNO ME TOQUES", "utf8");
+
+    const siembra = sembrarAgentes(raiz);
+    expect(siembra.escritos).toEqual(["device-controller"]);
+    expect(readFileSync(ruta, "utf8")).not.toContain("MIS INSTRUCCIONES");
+    const anteriores = readdirSync(join(carpeta, ".anteriores"));
+    expect(anteriores).toHaveLength(1);
+    expect(anteriores[0]).toMatch(/^device-controller\..+\.md$/);
+    expect(readFileSync(join(carpeta, ".anteriores", anteriores[0]!), "utf8")).toContain("MIS INSTRUCCIONES");
+    expect(readFileSync(join(carpeta, "advisor.md"), "utf8")).toContain("NO ME TOQUES");
+    // Y la siguiente siembra, con la misma versión, ya no hace nada.
+    expect(sembrarAgentes(raiz).escritos).toEqual([]);
+  });
+
+  it("uno marcado `ajeno` por la regla de antes también se actualiza, con su copia guardada", () => {
+    const raiz = base();
+    sembrarAgentes(raiz);
+    const carpeta = rutaDeAgentes(raiz);
+    const marca = JSON.parse(readFileSync(join(carpeta, FICHERO_DE_SEMILLA), "utf8")) as Record<string, string>;
+    marca["analyst-xone"] = "ajeno";
+    writeFileSync(join(carpeta, FICHERO_DE_SEMILLA), JSON.stringify(marca), "utf8");
+    writeFileSync(join(carpeta, "analyst-xone.md"), "---\ndescripcion: tocado\n---\nVIEJO", "utf8");
+    expect(sembrarAgentes(raiz).escritos).toEqual(["analyst-xone"]);
+    expect(readFileSync(join(carpeta, "analyst-xone.md"), "utf8")).not.toContain("VIEJO");
+    expect(readdirSync(join(carpeta, ".anteriores")).some((f) => f.startsWith("analyst-xone."))).toBe(true);
+  });
+
   it("un agente NUEVO llega a quien ya tenía la carpeta", () => {
     const raiz = base();
     sembrarAgentes(raiz);

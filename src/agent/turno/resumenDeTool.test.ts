@@ -190,3 +190,10 @@ describe("la huella del encargo de un task", () => {
     });
   });
 });
+
+describe("xone_atributos", () => {
+  it("la traza lleva el atributo y el nodo por los que se pregunta, y la línea enseña el atributo", () => {
+    expect(parametrosDe("xone_atributos", { atributo: "imgbk", nodo: "frame" })).toEqual({ atributo: "imgbk", nodo: "frame" });
+    expect(detalleDe("xone_atributos", { atributo: "imgbk" })).toBe("imgbk");
+  });
+});

@@ -107,3 +107,15 @@ describe("diagnóstico de tools", () => {
     expect(m[1]).not.toHaveProperty("razonamiento");
   });
 });
+
+describe("la traza guarda también lo que DEVUELVE cada especialista", () => {
+  it("con quién, a quién y el texto acotado al mismo tope que el encargo", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-devolucion-"));
+    const log = crearDiagnosticoDeTools(raiz, { [VARIABLE_TRAZA_TOOLS]: "1" })!;
+    log.devolucion?.("designer-xone", "orquestador", "z".repeat(TOPE_DEL_ENCARGO_EN_TRAZA + 10));
+    const d = readFileSync(rutaTrazaDeTools(raiz), "utf8").trim().split("\n").map((l) => JSON.parse(l) as Record<string, unknown>).filter((l) => l["tipo"] === "devolucion");
+    expect(d).toHaveLength(1);
+    expect(d[0]).toMatchObject({ de: "designer-xone", a: "orquestador", chars: TOPE_DEL_ENCARGO_EN_TRAZA + 10 });
+    expect(String(d[0]!["respuesta"]).length).toBe(TOPE_DEL_ENCARGO_EN_TRAZA + 1);
+  });
+});

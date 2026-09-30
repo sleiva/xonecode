@@ -380,7 +380,9 @@ agentes. `device-controller` se sale de esa convención a propósito y no viaja 
   trampa del `"false"` de CloudStudio, que aquí concedería ESCRITURA.
 - **La marca de la siembra es `.semilla.json` con el hash de lo que escribimos**, no «la carpeta
   existe»: un agente nuevo o corregido alcanza a quien ya arrancó sin resucitar lo que el usuario
-  borró ni pisar lo que tocó. Un renombrado tiene caso propio (`RENOMBRADOS`): la clave vieja de la
+  borró. **Lo que tocó se respeta dentro de la MISMA versión de serie; con una versión nueva se
+  ACTUALIZA** y su copia va a `.anteriores/` (`CARPETA_DE_ANTERIORES`): los de serie son de xonecode
+  y los trae cada versión. Los agentes que crea el usuario no son de serie y la siembra no los ve. Un renombrado tiene caso propio (`RENOMBRADOS`): la clave vieja de la
   marca se RETIRA con su fichero si sigue intacta, y si el usuario la afinó se queda y se dice.
 - **De QUIÉN es un `.md` viaja por el cable, y no es su carpeta** (`AgenteCargado.semilla`): tres
   estados —ausente, `intacta`, `modificada`—, porque `origen` (la carpeta) no basta: un subagente
@@ -542,7 +544,51 @@ al llegar a cada umbral recibe UN mensaje —para un valor, un estado o una exce
 log; la captura es para lo visual, una por cosa que se comprueba—. Vale para quien ejecuta, con o sin el bucle.
 **Sale del bucle cuando cumple el CRITERIO DE ACEPTACIÓN de su encargo**, que el orquestador escribe medible
 (casillas del plan, lo que hace la app, fidelidad al diseño), con tres vueltas como tope; devolver antes porque
-«ya funciona» dejaba lo visual sin hacer. **Escribir con el turno en marcha es UN gesto** (IXCODE-4, solo la web): el Enter, que en
+«ya funciona» dejaba lo visual sin hacer. **Los traspasos de código entre agentes, acotados por el harness** (`toolsDeFichero.ts`, `informesDeHijos.ts`):
+`write_file` solo CREA un `.xne`/`.js`/`.css` del proyecto —sobre uno que existe devuelve el error con el camino,
+`edit_file` por ancla— porque reescribir entero es volver a teclear lo que puso el otro; un SVG, un plan o un
+artefacto se siguen regenerando. `read_file` devuelve hasta `LINEAS_POR_LECTURA` acotado por
+`CARACTERES_POR_LECTURA` y dice por dónde seguir. Y al terminar un hijo, quien lo llamó recibe en UN mensaje lo que
+ESCRIBIÓ, contado por el harness (ficheros, ediciones, líneas; nunca contenido): el padre releía para saberlo. **Límite
+declarado**: el rechazo de la reescritura llega DESPUÉS de la aprobación, porque la pone la librería antes de correr la tool.
+**La pantalla la MIDE el harness tras cada prueba** (`medidaAutomatica.ts`): cuando vuelve quien ejecuta, su última
+captura nueva de `/artefactos/` se mide contra la maqueta (`/diseno/screen.png`, otra imagen de `/diseno/` o de
+`/adjuntos/`) con la aritmética de `comparar_capturas`, sin modelo, y quien lo llamó la recibe con el criterio
+(`CRITERIO_DE_DISTANCIA`) y, si no ha pasado el crítico desde su última escritura, el recordatorio de pasarlo. La
+última medida viaja también en el informe al orquestador. El prompt del bucle ya daba las herramientas y el criterio;
+era texto, y quien menos lo seguía era quien más rediseños acababa necesitando. **Y el criterio incluye el ENCAJE**
+(`TOLERANCIA_DE_ENCAJE`, `compararCapturas.ts#desajusteDeEncaje`): cada borde del contenido —arriba, abajo, y a los lados
+la MEDIANA de las franjas, no el recuadro de la pantalla entera, que lo fija la barra de arriba— cerca del de la maqueta.
+Las distancias por franjas PROMEDIAN, y un teclado que no llega al borde las pasaba.
+**El diseñador hace RECURSOS, no pantallas** (`designer-xone`, `escribeEn: [/icons/]`): iconos y fondos SVG, y los
+diagramas. El layout del `.xne` y el CSS son del desarrollador, también lo que se ve mal: lo confina el PERMISO, no el
+prompt, porque dos agentes turnándose en el mismo `.xne` se pisaban. `recibeBuscarIcono` admite un `escribeEn` que cubra
+`icons/`; el documentador (`/doc/`) sigue sin esas tools. **Y devuelve una TABLA** (`DEVOLVER_RECURSOS`): fichero → control → atributo → tamaño →
+si lleva el símbolo dentro, que el orquestador pasa tal cual al desarrollador; sin ella el orquestador revisaba los SVG y el
+desarrollador abría uno por uno. **La traza guarda lo que DEVUELVE cada hijo** (`DiagnosticoDeTools.devolucion`), la otra
+mitad de `delegacion`, con el mismo tope de texto.
+**`xone_atributos`: un ÍNDICE DE CONSULTA RÁPIDA de los atributos por nodo** (`core/atributosXone.ts`,
+`agent/grafo/atributosXone.ts`), a todos. No sustituye a la skill: se LEE de sus tablas (`REFERENCIAS_DE_ATRIBUTOS`) en
+cada construcción, nunca de una copia a mano, y cada respuesta lo dice. Tres reglas para no contradecirla: donde dos
+ficheros de la skill no coinciden se enseñan LOS DOS con el aviso; lo que no está en las tablas NO se da por inexistente;
+y entonces la respuesta manda a la skill con el `grep` sobre `/skills/` ya escrito. El test corre contra la skill REAL. Y
+a quien la tiene se le dice CUÁNDO usarla junto a su lista de tools (`USO_DE_XONE_ATRIBUTOS`): nombrada solo en la lista,
+quien escribe los atributos no la usaba. No va en el `SKILL.md`, que llega también a los motores externos.
+**Las pruebas del aparato van por el LOG antes que por la captura** (`xone-log-android --app`, `textoDelBucle`,
+`EJECUCION_EN_LA_MAQUINA`): el desarrollador instrumenta con `console.log` —nunca `ui.showToast` ni
+`appData.writeConsoleString`, legacy y mudo en Android— y encarga las pruebas FUNCIONALES (acciones y lo esperado, sin
+captura) aparte de las VISUALES (una captura por ronda, `RONDAS_VISUALES`, y en la última se le dice que devuelva). El
+conductor lee lo que salió y saca captura solo si el log no lo decide; su aviso de capturas es `UMBRALES_DE_CAPTURAS`.
+**Un `TASKS.md` se escribe con casillas o no se escribe** (`core/tareasDelPlan.ts#motivoDeTasksInaceptable`, en el
+`write_file` de TrueForge): cada tarea reconocida tiene que traer sus criterios como `- [ ]`, que es lo único que
+`marcar_criterios_del_plan` sabe marcar. El rechazo se devuelve con el formato. Solo al escribirlo ENTERO: editar un
+plan viejo sin casillas sigue valiendo.
+**Quien ejecuta no busca ficheros con la shell** (`core/shellDeAgente.ts#motivoDeComandoRechazado`, en el `execute` de
+TrueForge): un `find`, un `grep -r` o un `ls -R` se DEVUELVE como error que manda a las tools `glob`, `grep` y `ls`, que
+son lo mismo confinado a las rutas virtuales; si además arrancaba en la raíz, la casa o una carpeta del sistema, el aviso
+lo dice. Un `grep` que filtra la salida de otro comando pasa. Es una lista de lo visto, no un filtro de shell: un límite
+declarado.
+**Escribir con el turno en marcha es UN gesto** (IXCODE-4, solo la web): el Enter, que en
 TrueForge viaja como **detener y replanificar** (`detener: true`, solo con `turnoDetenible`); el
 botón aparte se quitó a petición suya. La NOTA sigue siendo el camino de lo que llega sin
 `detener` (un turno que no lo admite). Las dos entran por `preLLMProcessors`
@@ -662,7 +708,7 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   adopta en vez del que mandó. **El acto de usuario solo afirma los adjuntos que están EN
   DISCO** — lo que `listarAdjuntosDeSesion` encontró, nunca los nombres que llegaron por el
   cable sin comprobar. Meterlos en el PROYECTO es la tool `incorporar_adjunto`, con su propia fila
-  de aprobación; solo `designer-xone` y `developer-xone` de motor `"modelo"` la reciben — a un
+  de aprobación; solo `developer-xone` de motor `"modelo"` la recibe —el diseñador está confinado a `icons/`— y a un
   motor externo no le llegan tools propias.
 - **El encargo se AUMENTA y se enseña EDITABLE antes de encolar** (`AumentadorPort`, papel
   `trabajo`): ocupa el sitio del diff; su fallo encola el texto original y se DICE.

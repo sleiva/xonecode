@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFil
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AIMessageChunk } from "@langchain/core/messages";
+import { PNG } from "pngjs";
 import type { Piel } from "../../../core/turno.js";
 import type { DetalleDeLinea } from "../../../core/actos.js";
 import type { ModelosPort, PeticionExterna } from "../../../core/ports.js";
@@ -97,6 +98,20 @@ function piel() {
   return { p, tokens, lineas, pausas: () => pausas };
 }
 
+/** Un PNG oscuro con un bloque claro entre `desde` y `hasta` (fracciones del alto): una «pantalla» que medir. */
+function pngConBloque(desde: number, hasta: number, ancho = 108, alto = 240): Buffer {
+  const png = new PNG({ width: ancho, height: alto });
+  for (let y = 0; y < alto; y++) {
+    for (let x = 0; x < ancho; x++) {
+      const i = (y * ancho + x) * 4;
+      const claro = y >= desde * alto && y < hasta * alto && x > ancho * 0.1 && x < ancho * 0.9;
+      png.data[i] = png.data[i + 1] = png.data[i + 2] = claro ? 230 : 20;
+      png.data[i + 3] = 255;
+    }
+  }
+  return PNG.sync.write(png);
+}
+
 const proyecto = () => {
   const raiz = mkdtempSync(join(tmpdir(), "xc-tf-sesion-"));
   writeFileSync(join(raiz, "app.xml"), "<app/>\n");
@@ -134,6 +149,70 @@ describe("una sesión con el motor TrueForge", () => {
     expect(s.consumo().contexto).toBe(70);
   }, 20_000);
 
+  it("al terminar el hijo, el ORQUESTADOR recibe lo que escribió contado por el harness, no solo su informe", async () => {
+    const { m, vistos } = modelosConGuion(guionDeEscritura());
+    const s = await abrirSesionTrueforge({
+      raiz: proyecto(),
+      modelos: m,
+      entorno: ENTORNO,
+      skills: CATALOGO,
+      pedirAprobacion: async (ps) => new Map(ps.map((p) => [p.id, { type: "approve" as const }])),
+    });
+    await s.turno("escribe una nota", piel().p);
+    // La cuarta llamada es la del orquestador tras volver el hijo: lleva el informe del harness, con la escritura
+    // aprobada en OTRO paso (la respuesta de una aprobada no llega en el paso que la pidió).
+    const tras = vistos[3]!.join("\n");
+    expect(tras).toContain("Lo que ESCRIBIÓ developer-xone");
+    expect(tras).toContain("- /nota.txt: nuevo, +1 −0 líneas");
+    expect(tras).not.toContain("hola");
+    // Y el hijo no lo recibe de sí mismo.
+    expect(vistos[2]!.join("\n")).not.toContain("Lo que ESCRIBIÓ");
+  }, 20_000);
+
+  it("un hijo que intenta REESCRIBIR un .xne existente lo tiene rechazado, el disco queda igual y el orquestador lo sabe", async () => {
+    const raiz = proyecto();
+    writeFileSync(join(raiz, "Menu.xne"), "<coll name=\"Menu\"/>\n");
+    const { m, vistos } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "rehaz el menú" }) }] })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "w1", name: "write_file", args: JSON.stringify({ file_path: "/Menu.xne", content: "<coll/>\n" }) }] })],
+      [new AIMessageChunk({ content: "No pude." })],
+      [new AIMessageChunk({ content: "Listo." })],
+    ]);
+    const s = await abrirSesionTrueforge({
+      raiz,
+      modelos: m,
+      entorno: ENTORNO,
+      skills: CATALOGO,
+      pedirAprobacion: async (ps) => new Map(ps.map((p) => [p.id, { type: "approve" as const }])),
+    });
+    await s.turno("rehaz el menú", piel().p);
+    expect(readFileSync(join(raiz, "Menu.xne"), "utf8")).toBe("<coll name=\"Menu\"/>\n");
+    expect(vistos[2]!.join("\n")).toContain("Cámbialo con edit_file");
+    expect(vistos[3]!.join("\n")).toContain("developer-xone ha terminado su encargo SIN escribir ningún fichero");
+  }, 20_000);
+
+  it("cuando vuelve el conductor con una captura, quien lo llamó recibe la MEDIDA contra la maqueta hecha por el harness", async () => {
+    const raiz = proyecto();
+    mkdirSync(join(raiz, "diseno"));
+    writeFileSync(join(raiz, "diseno", "screen.png"), pngConBloque(0.1, 0.9));
+    const fuera = mkdtempSync(join(tmpdir(), "xc-cap-"));
+    writeFileSync(join(fuera, "cap.png"), pngConBloque(0.1, 0.5));
+    const artefactos = mkdtempSync(join(tmpdir(), "xc-art-"));
+    const { m, vistos } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "device-controller", input: "captura la pantalla" }) }] })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "x1", name: "execute", args: JSON.stringify({ command: `cp '${join(fuera, "cap.png")}' "$XONECODE_ARTEFACTOS/cap.png"` }) }] })],
+      [new AIMessageChunk({ content: "Capturada." })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, artefactos });
+    await s.turno("mira la pantalla", piel().p);
+    const tras = vistos[3]!.join("\n");
+    expect(tras).toContain("Medida AUTOMÁTICA de la última captura que dejó device-controller (/artefactos/cap.png) contra la maqueta /diseno/screen.png");
+    expect(tras).toContain("NO cumple el criterio");
+    // Nadie pasó el crítico: se le recuerda.
+    expect(tras).toContain("pásala con pantalla=/artefactos/cap.png");
+  }, 30_000);
+
   it("cada tool dice QUIÉN la pidió: el orquestador delega, el especialista escribe con su nombre", async () => {
     const s = await abrirSesionTrueforge({
       raiz: proyecto(),
@@ -162,6 +241,11 @@ describe("una sesión con el motor TrueForge", () => {
     });
     await s.turno("escribe una nota", piel().p);
     // La primera llamada es del orquestador; la segunda, del hijo `developer-xone`.
+    // `xone_atributos` va a los dos, montada de verdad (la composición de la sesión, no la tool suelta).
+    expect(toolsPorLlamada[0]).toContain("xone_atributos");
+    expect(toolsPorLlamada[1]).toContain("xone_atributos");
+    // Y el hijo sabe CUÁNDO usarla: junto a su lista de tools, en su prompt de sistema.
+    expect(vistos[1]![0]).toContain("pregunta PRIMERO a `xone_atributos`");
     expect(toolsPorLlamada[0]).not.toContain("get_openui_instructions");
     expect(toolsPorLlamada[1]).toContain("get_openui_instructions");
     // Y su prompt de sistema lleva nuestras reglas, no solo la línea de la librería.
@@ -894,13 +978,14 @@ describe("una sesión con el motor TrueForge", () => {
       expect(sistema).toContain("las tipografías del diseño");
     }, 30_000);
 
-    it("y sabe que lo VISUAL es del diseñador: puede llamarlo, y el nieto diseñador trabaja y responde a él", async () => {
+    it("y sabe que el LAYOUT es suyo y el diseñador solo hace RECURSOS: puede llamarlo, y el nieto diseñador trabaja y responde a él", async () => {
       const raiz = proyecto();
       const { m, vistos, toolsPorLlamada } = modelosConGuion(guion("designer-xone"));
       const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true });
       const r = piel();
       await s.turno("haz la calculadora", r.p);
-      expect(vistos[1]!.join("\n")).toContain("Lo VISUAL");
+      expect(vistos[1]!.join("\n")).toContain("El LAYOUT y el CSS son TUYOS");
+      expect(vistos[1]!.join("\n")).toContain("solo hace RECURSOS");
       // El nieto es el diseñador de verdad (escribe: recibe las tools de fichero), no el ayudante genérico de lectura.
       expect(toolsPorLlamada[2]).toContain("write_file");
       expect(toolsPorLlamada[2]).not.toContain("create_sub_agent");
@@ -945,23 +1030,22 @@ describe("una sesión con el motor TrueForge", () => {
     const delega = new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "device-controller", input: "comprueba" }) }] });
     const todo = (vistos: string[][], i: number): string => vistos[i]!.join("\n");
 
-    it("tras CUATRO capturas el conductor recibe el aviso: para valores y excepciones, `getText`, `elements` y el log", async () => {
+    it("tras DOS capturas el conductor recibe el aviso (y otro a las cuatro): para valores, el log de la app y los campos", async () => {
       const raiz = proyecto();
       const { m, vistos } = modelosConGuion([
         [delega],
         [orden("c1", "echo xone-captura-android 1")],
-        [orden("c2", "echo xone-captura-android 2")],
-        [orden("c3", "echo xone-hotswap shot name=uno")],
-        [orden("c4", "echo xone-captura-android 4")],
+        [orden("c2", "echo xone-hotswap shot name=uno")],
+        [orden("c3", "echo hola")],
         [new AIMessageChunk({ content: "Comprobado." })],
         [new AIMessageChunk({ content: "Listo." })],
       ]);
       const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
       await s.turno("comprueba", piel().p);
-      // La llamada del conductor DESPUÉS de la cuarta captura (la 6ª de todas) lleva el aviso; las anteriores, no.
-      expect(todo(vistos, 5)).toContain("LLEVAS 4 CAPTURAS");
-      expect(todo(vistos, 5)).toContain("diferencia_de_capturas");
-      expect(vistos.slice(0, 5).some((_, i) => todo(vistos, i).includes("CAPTURAS en este encargo"))).toBe(false);
+      // La llamada del conductor DESPUÉS de la segunda captura (la 4ª de todas) lleva el aviso; las anteriores, no.
+      expect(todo(vistos, 3)).toContain("LLEVAS 2 CAPTURAS");
+      expect(todo(vistos, 3)).toContain("xone-log-android --app");
+      expect(vistos.slice(0, 3).some((_, i) => todo(vistos, i).includes("CAPTURAS en este encargo"))).toBe(false);
     }, 30_000);
 
     it("un comando que no saca captura no cuenta", async () => {

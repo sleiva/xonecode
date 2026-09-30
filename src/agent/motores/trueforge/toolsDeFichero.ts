@@ -24,6 +24,8 @@ import micromatch from "micromatch";
 import { toolResultResponse } from "./trueforge.js";
 import { REGLA_DE_ESCRITURAS_EN_PARALELO } from "../../../core/serieDeEscrituras.js";
 import { desalojarSiGrande, MAXIMO_DE_COINCIDENCIAS, truncarSiLargo } from "./recortes.js";
+import { motivoDeTasksInaceptable, RUTA_DE_TASKS } from "../../../core/tareasDelPlan.js";
+import { motivoDeComandoRechazado } from "../../../core/shellDeAgente.js";
 
 /** El backend de deepagents en su versión nueva, en lo que se usa. */
 export interface BackendDeFicheros {
@@ -67,7 +69,11 @@ const ESQUEMAS: Record<ToolDeFichero, { descripcion: string; propiedades: Record
     propiedades: { file_path: cadena, offset: { type: "number" }, limit: { type: "number" } },
     obligatorias: ["file_path"],
   },
-  write_file: { descripcion: `Writes a NEW file with the given content. ${REGLA_DE_ESCRITURAS_EN_PARALELO}`, propiedades: { file_path: cadena, content: cadena }, obligatorias: ["file_path", "content"] },
+  write_file: {
+    descripcion: `Writes a NEW file with the given content. An existing .xne, .js or .css is refused: change it with edit_file. ${REGLA_DE_ESCRITURAS_EN_PARALELO}`,
+    propiedades: { file_path: cadena, content: cadena },
+    obligatorias: ["file_path", "content"],
+  },
   edit_file: {
     descripcion: `Replaces old_string with new_string in a file. old_string must match exactly. ${REGLA_DE_ESCRITURAS_EN_PARALELO}`,
     propiedades: { file_path: cadena, old_string: cadena, new_string: cadena, replace_all: { type: "boolean" } },
@@ -124,6 +130,59 @@ function numerado(contenido: string, desde: number): string {
 
 type Resultado = { error?: string; [k: string]: unknown };
 
+/**
+ * Las líneas que devuelve un `read_file` sin `limit`, y el tope de caracteres que las acota. Eran 100, el valor de
+ * deepagents copiado al adaptador, y medido en una pasada real (calc10): un fichero de 450 líneas se leía en tres o
+ * cuatro páginas, y las lecturas por página eran la mayoría de las «relecturas» de la traza. opencode devuelve hasta
+ * 2.000 líneas o 50 KB; aquí lo mismo, y lo que no cabe se DICE con el `offset` por donde seguir.
+ */
+export const LINEAS_POR_LECTURA = 2_000;
+export const CARACTERES_POR_LECTURA = 50_000;
+
+/**
+ * Los ficheros de CÓDIGO del proyecto que `write_file` no reescribe si ya existen: se cambian con `edit_file`.
+ *
+ * Medido en calc10: `MenuPrincipal.xne` se reescribió ENTERO cinco veces, alternando el diseñador y el desarrollador,
+ * y cada vez quien reescribía lo había leído entero antes —así que «leer antes de escribir» no habría parado ninguna—.
+ * Reescribir es volver a teclear lo que puso el otro, y lo que se cae por el camino no da error. Es el reparto del editor
+ * de aider (`editor-diff`), de Codex (`apply_patch`) y de Claude Code (`Edit` por ancla). Solo el código: un SVG, un plan
+ * o un artefacto se regeneran enteros con razón, y `/artefactos/`, `/planes/`, `/hotswap/` no son del proyecto.
+ */
+const EXTENSIONES_QUE_SE_EDITAN = /\.(xne|js|css)$/i;
+const FUERA_DEL_PROYECTO = /^\/(artefactos|planes|hotswap|large_tool_results|conversation_history)\//;
+
+export function seReescribeConEdit(ruta: string): boolean {
+  return EXTENSIONES_QUE_SE_EDITAN.test(ruta) && !FUERA_DEL_PROYECTO.test(ruta);
+}
+
+export function textoDeReescrituraRechazada(ruta: string): string {
+  return (
+    `write_file solo crea ficheros nuevos, y ${ruta} ya existe: reescribirlo entero se llevaría lo que otro haya cambiado. ` +
+    "Cámbialo con edit_file: old_string copiado EXACTO del fichero actual (reléelo si no lo tienes delante) y new_string; " +
+    "para varios cambios, varias ediciones."
+  );
+}
+
+/** ¿Existe ya? Se pregunta al MISMO backend, con una lectura de una línea: un error es que no (y si era otra cosa, la escritura lo dirá). */
+async function existe(backend: BackendDeFicheros, ruta: string): Promise<boolean> {
+  try {
+    const r = (await backend.read(ruta, 0, 1)) as Resultado;
+    return r.error === undefined;
+  } catch {
+    return false;
+  }
+}
+
+/** El contenido numerado, cortado por una LÍNEA entera si pasa del tope de caracteres, diciendo por dónde seguir. */
+export function lecturaAcotada(contenido: string, desde: number, tope = CARACTERES_POR_LECTURA): string {
+  const texto = numerado(contenido, desde);
+  if (texto.length <= tope) return texto;
+  const corte = texto.lastIndexOf("\n", tope);
+  const cabe = corte > 0 ? texto.slice(0, corte) : texto.slice(0, tope);
+  const lineas = cabe.split("\n").length;
+  return `${cabe}\n... [lectura cortada a ${tope} caracteres: sigue con offset=${desde - 1 + lineas}]`;
+}
+
 /** Lo que el backend contestó, en el texto que ve el modelo. */
 async function ejecutar(backend: BackendDeFicheros, nombre: ToolDeFichero, args: Record<string, unknown>): Promise<{ texto: string; error: boolean }> {
   const s = (v: unknown): string => (typeof v === "string" ? v : "");
@@ -135,13 +194,21 @@ async function ejecutar(backend: BackendDeFicheros, nombre: ToolDeFichero, args:
     }
     case "read_file": {
       const offset = typeof args.offset === "number" && args.offset > 0 ? Math.floor(args.offset) : 0;
-      const limit = typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : 100;
+      const limit = typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : LINEAS_POR_LECTURA;
       const r = (await backend.read(s(args.file_path), offset, limit)) as Resultado & { content?: unknown };
       if (r.error !== undefined) return { texto: r.error, error: true };
       if (typeof r.content !== "string") return { texto: "fichero binario: no se puede leer como texto", error: true };
-      return { texto: numerado(r.content, offset + 1), error: false };
+      return { texto: lecturaAcotada(r.content, offset + 1), error: false };
     }
     case "write_file": {
+      if (seReescribeConEdit(s(args.file_path)) && (await existe(backend, s(args.file_path)))) {
+        return { texto: textoDeReescrituraRechazada(s(args.file_path)), error: true };
+      }
+      // Un TASKS.md sin casillas no se escribe: sin ellas no hay nada que marcar al comprobar (`motivoDeTasksInaceptable`).
+      if (RUTA_DE_TASKS.test(s(args.file_path))) {
+        const motivo = motivoDeTasksInaceptable(s(args.content));
+        if (motivo !== undefined) return { texto: motivo, error: true };
+      }
       const r = (await backend.write(s(args.file_path), s(args.content))) as Resultado;
       if (r.error !== undefined) return { texto: r.error, error: true };
       return { texto: `Successfully wrote to ${s(args.file_path)}`, error: false };
@@ -277,6 +344,9 @@ export function fuenteDeEjecucion(backend: BackendQueEjecuta) {
       if (params.name !== "execute" || typeof comando !== "string" || comando.trim() === "") {
         return toolResultResponse({ text: "execute necesita un `command`", isError: true });
       }
+      // Una búsqueda por el disco entero no se lanza (`motivoDeComandoRechazado`): se devuelve el camino bueno.
+      const rechazo = motivoDeComandoRechazado(comando);
+      if (rechazo !== undefined) return toolResultResponse({ text: rechazo, isError: true });
       try {
         const r = (await backend.execute(comando)) as { output?: string; exitCode?: number | null; truncated?: boolean };
         const salida = `${r.output ?? ""}${r.truncated === true ? "\n[salida truncada]" : ""}`;

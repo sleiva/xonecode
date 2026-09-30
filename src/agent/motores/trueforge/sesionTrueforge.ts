@@ -81,6 +81,8 @@ import {
   clasesDeTools,
   toolsDe,
 } from "./capacidades.js";
+import { buscarMaqueta, medirContraMaqueta, resumenDeMedida, textoDeMedidaAutomatica, ultimaCaptura } from "./medidaAutomatica.js";
+import { anotarEscritura, capacidadDeInformesDeHijos, escrituraConExito, textoDelInforme, type CambioDeFichero } from "./informesDeHijos.js";
 import { crearDiagnosticoDeTools, type DiagnosticoDeTools } from "../../turno/diagnosticoDeTools.js";
 import { encenderTrazaDeErrores } from "../../trazaDeErroresEnDisco.js";
 import { anotarPaso } from "../../../core/trazaDeErrores.js";
@@ -105,6 +107,7 @@ import { crearUnirSecciones } from "../../grafo/unirSecciones.js";
 import { crearIncorporarAdjunto, recibeIncorporarAdjunto } from "../../grafo/incorporarAdjunto.js";
 import { crearCriticaVisual } from "../../grafo/criticaVisual.js";
 import { crearCompararCapturas } from "../../grafo/compararCapturas.js";
+import { crearAtributosXone, NOMBRE_ATRIBUTOS_XONE } from "../../grafo/atributosXone.js";
 import { crearDiferenciaDeCapturas } from "../../grafo/diferenciaDeCapturas.js";
 import { crearLectorDeReferencias } from "../../grafo/lectorDeReferencias.js";
 import { crearTraerDeLaMaquina } from "../../grafo/traerDeLaMaquina.js";
@@ -128,7 +131,7 @@ const BUCLE_DE_CALIDAD = [
   "encargo, y se comprueba con números y con ojos. Tras cada cambio visual: pide al conductor una captura NATIVA",
   "nueva y contrástala con `comparar_capturas` y con `xone_critica_visual`, pasando el diseño como `referencia` en las",
   "dos. Sin referencia el crítico solo dice «nada roto», que no es «se parece». Si la estructura o el crítico señalan",
-  "diferencias con el diseño —piezas que faltan, tamaños, formas—, delega el arreglo con esas diferencias concretas y",
+  "diferencias con el diseño —piezas que faltan, tamaños, formas—, delega el arreglo en quien MAQUETA la pantalla (el que escribe su `.xne`, no el de los recursos) con esas diferencias concretas y",
   "repite. Para cuando la distancia estructural baje del 10 % en vertical y en horizontal y el crítico no señale diferencias de forma con el diseño, o tras TRES vueltas, y",
   "di lo que sigue faltando en vez de darlo por hecho.",
 ].join("\n");
@@ -143,7 +146,7 @@ const BUCLE_DE_CALIDAD = [
 export const COMANDO_DE_CAPTURA = /xone-captura-android|xone-hotswap\s+shot\b|\bscreencap\b/;
 
 /** Con cuántas capturas de UN encargo se le avisa a quien ejecuta. */
-export const UMBRALES_DE_CAPTURAS = [4, 8] as const;
+export const UMBRALES_DE_CAPTURAS = [2, 4] as const;
 
 /**
  * El aviso de capturas. El prompt del conductor ya decía que una captura «no es una herramienta de diagnóstico», y una
@@ -153,8 +156,8 @@ export const UMBRALES_DE_CAPTURAS = [4, 8] as const;
 export function textoDeCapturas(capturas: number): string {
   return [
     `LLEVAS ${String(capturas)} CAPTURAS en este encargo.`,
-    "Para un VALOR, un estado o una excepción no hace falta ninguna: `getText`, `getFields`, `elements` acotado y el log lo",
-    "dicen sin mirar la pantalla. Una captura es para lo VISUAL (algo cortado, tapado, del color o tamaño equivocado) y una por",
+    "Para un VALOR, un estado o una excepción no hace falta ninguna: `xone-log-android --app` (lo que la app escribió con",
+    "`console.log`), `getFields`, `elements` acotado y el log de errores lo dicen sin mirar la pantalla. Una captura es para lo VISUAL (algo cortado, tapado, del color o tamaño equivocado) y una por",
     "cosa que compruebes, con `shot name=<qué pruebas>`. Si solo quieres saber si algo cambió, `diferencia_de_capturas`.",
     "No repitas la misma pantalla: si la anterior ya lo decía, no hay nada nuevo que sacar.",
   ].join("\n");
@@ -249,15 +252,28 @@ export function textoDelBucle(llama: readonly string[], opciones: { conCritica?:
     `PUEDES LLAMAR A: ${llama.join(", ")}, con \`create_sub_agent\` (\`name\` exacto y \`input\` autosuficiente).`,
     "Tu bucle es: escribe, llama al de pruebas para desplegar y comprobar, lee lo que te devuelve y corrige.",
     "Dile QUÉ comprobar y qué esperas ver. No lo llames por cada línea que cambies: junta los cambios.",
+    "",
+    "PRUEBAS FUNCIONALES Y VISUALES, SEPARADAS Y EN ESTE ORDEN:",
+    "- Instrumenta tu código con `console.log(\"CALC tecla 8\")`, `console.log(\"CALC resultado \" + r)` en los puntos",
+    "  que deciden (tecla, expresión, resultado, error). Nunca `ui.showToast` ni `appData.writeConsoleString` para depurar:",
+    "  el aviso no deja rastro y el segundo es legacy y no llega al log de Android.",
+    "- FUNCIONAL: UN encargo con TODOS los casos, como acciones y lo que esperas («teclea 2 + 3 × 4 = → log `CALC resultado",
+    "  14`, display 14»). El de pruebas los hace, lee el log con `xone-log-android --app` y te devuelve cada caso: pasa o falla",
+    "  con lo que salió. SIN capturas. Corrige todos los fallos juntos y repite solo los que fallaron.",
+    "- VISUAL, solo cuando lo funcional pasa: UNA captura por ronda. Con ella el harness te trae la medida contra la maqueta;",
+    "  pasa el crítico, arregla TODAS las diferencias en la misma ronda y solo entonces pide otra captura. Tres rondas como mucho.",
+    "- Una pantalla que se parece a la maqueta con datos de ejemplo fijos NO está terminada: la lógica tiene que funcionar.",
     "Lo que te devuelva es lo que ha visto, no un permiso para dar el trabajo por bueno: si dice que la app se cae, se cae.",
     "EMPIEZA POR LO MÍNIMO: no escribas la pantalla entera de una vez. Primero la versión más pequeña que se pueda VER y PULSAR",
     "—el arranque, el display y UN botón—, y pídele al de pruebas que la arranque y la toque. Solo cuando eso funcione, amplía",
     "(el teclado, las funciones, el historial). Un fallo de arranque descubierto con la pantalla entera escrita cuesta reescribirla.",
     ...(puedeDiseñar
       ? [
-          "Lo VISUAL —layout, CSS, tamaños, iconos, fondos SVG— es de `designer-xone`: si la pantalla se ve mal, no la dejes así ni la",
-          "devuelvas al que te encargó: encárgale el arreglo con las diferencias CONCRETAS (qué pieza, qué tamaño, qué falta), y",
-          "vuelve a comprobar con el de pruebas.",
+          "El LAYOUT y el CSS son TUYOS: si la pantalla se ve mal, lo arreglas tú, no se lo pasas a nadie ni lo devuelves al que te",
+          "encargó. `designer-xone` solo hace RECURSOS —iconos de una biblioteca y fondos SVG en `icons/`—: pídeselos juntos, con para",
+          "qué control, tamaño en píxeles y colores, y usa los nombres que te devuelva. No le pidas que toque el `.xne` ni el CSS: no puede.",
+          "Los recursos te llegan con una TABLA (fichero → control → atributo → tamaño → si lleva el símbolo dentro): úsala y no abras",
+          "los SVG para enterarte de lo que ya dice.",
         ]
       : []),
     ...(opciones.conCritica === true
@@ -267,12 +283,15 @@ export function textoDelBucle(llama: readonly string[], opciones: { conCritica?:
           "estructura contra la maqueta con números). Pídele al de pruebas una captura y que te diga su nombre; pásala con `pantalla` y,",
           "si hay diseño (/diseno/ o un adjunto), como `referencia`. Lo que digan esas dos herramientas manda sobre tu impresión: no",
           "lo descartes como «no fiable»; si no estás de acuerdo, dilo con el dato.",
+          "Cada vez que vuelva el de pruebas con una captura, el HARNESS te trae su medida contra la maqueta: no hace falta que",
+          "la pidas tú. El juicio es tuyo: con esa cifra y el crítico decides si sigues; no se lo devuelvas al que te encargó para que juzgue.",
         ]
       : []),
     "",
     "NO TERMINAS hasta que se cumpla el CRITERIO DE ACEPTACIÓN de tu encargo. Si el encargo no lo trae, es: (1) todas las casillas",
     "de la tarea en el `TASKS.md` comprobadas, (2) la app arranca y hace lo que pide, y (3) con diseño, la distancia que mide",
-    "`comparar_capturas` por debajo del 10 % en vertical y en horizontal, y el crítico sin diferencias de forma ni de estructura.",
+    "`comparar_capturas` por debajo del 10 % en vertical y en horizontal, que ENCAJE en la pantalla (cada borde del contenido a",
+    "un 3 % o menos del de la maqueta: que llegue a los lados y abajo como ella), y el crítico sin diferencias de forma ni de estructura.",
     "Lo que XOne NO puede reproducir no cuenta y no lo persigas: las tipografías del diseño (no hay .ttf), el desenfoque de fondo y",
     "las animaciones; una sombra o un degradado se aproximan con un SVG. Tienes TRES vueltas de corregir y volver a comprobar para",
     "llegar; si al agotarlas algo",
@@ -300,21 +319,21 @@ export function notaDeDelegacion(
           "ESPERAS ENTRE ESPECIALISTAS: developer-xone NO arranca mientras designer-xone esté trabajando (lo que el diseñador produce",
           "—los recursos de `icons/`— lo necesita el `.xne`). Si los lanzas a la vez, la llamada al desarrollador te vuelve AL INSTANTE",
           "diciendo que no ha arrancado; cuando el diseñador te devuelva su informe, llama de nuevo al desarrollador con ESE INFORME dentro",
-          "del encargo (los nombres de los recursos que hizo). Lo más simple es lanzar primero al diseñador y, con su informe, al desarrollador.",
+          "del encargo: su TABLA de recursos (fichero → control → atributo → tamaño) TAL CUAL, no un resumen, y no revises tú los SVG. Lo más simple es lanzar primero al diseñador y, con su informe, al desarrollador.",
         ]
       : []),
     ...(opciones.conBucle === true
       ? [
           "",
           "BUCLE DEL DESARROLLADOR: developer-xone prueba lo que escribe él mismo, llamando a device-controller (despliega, toca y lee",
-          "el log), y arregla lo visual llamando a designer-xone, y corrige hasta cumplir el CRITERIO DE ACEPTACIÓN que le des. Por eso",
+          "el log), maqueta y arregla lo visual él mismo —designer-xone solo le hace iconos y fondos SVG—, y corrige hasta cumplir el CRITERIO DE ACEPTACIÓN que le des. Por eso",
           "cada encargo a developer-xone lleva el CRITERIO ESCRITO y MEDIBLE: qué casillas del plan tiene que dejar comprobadas, qué",
           "tiene que hacer la app, y, si hay diseño, que la distancia de `comparar_capturas` quede por debajo del 10 % en vertical y en",
-          "horizontal y que el crítico no señale diferencias de forma o de estructura (di dónde está la maqueta). No se puede pedir",
+          "horizontal, que ENCAJE en la pantalla (cada borde a un 3 % o menos del de la maqueta) y que el crítico no señale diferencias de forma o de estructura (di dónde está la maqueta). No se puede pedir",
           "lo que XOne no reproduce —las tipografías del diseño, el desenfoque de fondo, las animaciones—. Sin criterio, devolverá el",
           "trabajo en cuanto funcione. No le encargues a device-controller comprobar SU",
-          "trabajo, ni a designer-xone lo visual de lo que él escribe: llámalos tú solo para medir, capturar o rediseñar lo que no",
-          "depende de él. Lo que developer-xone te devuelva es lo que él vio y midió, no un veredicto: el juicio final es tuyo y del arnés.",
+          "trabajo, ni a designer-xone lo visual de su pantalla (designer-xone no puede tocar un `.xne` ni el CSS): llama tú al diseñador",
+          "para los RECURSOS que la pantalla necesite, antes del desarrollador. Lo que developer-xone te devuelva es lo que él vio y midió, no un veredicto: el juicio final es tuyo y del arnés.",
         ]
       : []),
     ...(opciones.conMemoria === true
@@ -338,6 +357,16 @@ const LIMITES_DE: Record<ReturnType<typeof clasesDeTools>, string> = {
  * La frase de las tools que TIENE, sacada de los nombres que de verdad se le montan: escrita a
  * mano se quedaba vieja en cuanto se añadía una —la nota decía cuatro y el modelo veía seis—.
  */
+/**
+ * CUÁNDO usar el índice de atributos, junto a la lista de tools y solo a quien la tiene. Medido en calc13: con la tool
+ * montada y descrita, el consultor la consultó 9 veces y el desarrollador —quien escribe los atributos— ninguna, con 13
+ * lecturas de la skill: su prompt solo la nombraba en la lista, y el `SKILL.md` le manda a las referencias. No va en el
+ * `SKILL.md` porque ese llega también a los motores externos, que no tienen la tool.
+ */
+export const USO_DE_XONE_ATRIBUTOS =
+  "Para saber si un atributo XML existe en un nodo (coll, group, frame, prop) y qué hace, pregunta PRIMERO a `xone_atributos`: " +
+  "contesta en una línea desde las tablas de la skill. Lee la referencia de la skill solo si no lo encuentra, o si necesitas ejemplos o matices.";
+
 export function notaDeTools(nombres: readonly string[], limite: string): string {
   return `NOTA DEL HARNESS: aunque tu identidad diga lo contrario, NO tienes las mismas tools que quien te delega. Tienes ${nombres
     .map((n) => `\`${n}\``)
@@ -556,6 +585,24 @@ export async function abrirSesionTrueforge(
   const vueltasDeCadaHilo = new Map<string, number>();
   /** Cuántas CAPTURAS ha sacado cada hilo que ejecuta comandos (`xone-captura-android`, `xone-hotswap shot`). */
   const capturasDeCadaHilo = new Map<string, number>();
+  /** Lo que escribió cada hijo en su encargo, quién lo llamó, y los informes que esperan a ese padre (`informesDeHijos.ts`). */
+  const escritosDeCadaHilo = new Map<string, Map<string, CambioDeFichero>>();
+  const padreDeHilo = new Map<string, string>();
+  const informesPendientes = new Map<string, string[]>();
+  /** Las escrituras pedidas y aún sin respuesta, por hilo e id: la respuesta de una aprobada llega en OTRO `paso`. */
+  const escriturasEnVuelo = new Map<string, { nombre: string; args: Record<string, unknown> }>();
+  /** Para la medida automática (`medidaAutomatica.ts`): cuándo nació cada hilo, su última escritura, su última crítica y la última medida que recibió. */
+  const nacimientoDeHilo = new Map<string, number>();
+  const ultimaEscrituraDeHilo = new Map<string, number>();
+  const ultimaCriticaDeHilo = new Map<string, number>();
+  const ultimaMedidaDeHilo = new Map<string, string>();
+  /** Cuántas rondas VISUALES lleva cada hilo: una por medida automática recibida (`RONDAS_VISUALES`). */
+  const rondasVisualesDeHilo = new Map<string, number>();
+  const capacidadDeInformes = capacidadDeInformesDeHijos((hiloPadre) => {
+    const textos = informesPendientes.get(hiloPadre) ?? [];
+    informesPendientes.delete(hiloPadre);
+    return textos;
+  });
   const esperas = crearEsperas();
   const memoriaDeEspecialistas = crearMemoriaDeEspecialistas();
   /** Los hijos con memoria que corren ahora: su hilo, para leer su historial al terminar. */
@@ -685,14 +732,18 @@ export async function abrirSesionTrueforge(
           // Medir la estructura contra la maqueta: la otra mitad del crítico, con el raíz como él.
           crearCompararCapturas({ leerArtefacto: async (nombre) => readFileSync(join(carpeta, nombre)), leerReferencia: lectorDeReferencias }),
         ] as unknown as ToolDeLangchain[]);
+  // ¿Existe este atributo en este nodo? A todos, como la navegación: es de lectura y contesta desde la skill del paquete.
+  const atributos = crearAtributosXone() as unknown as ToolDeLangchain;
   const propiasDelRaiz: ToolDeLangchain[] = [
     navegacion(),
+    atributos,
     ...herramientasDeJuicio(),
     ...(carpeta === undefined ? [] : ([crearTraerDeLaMaquina({ carpeta, alEscribir: anotarArtefacto })] as unknown as ToolDeLangchain[])),
   ];
   const propiasDe = (agente: Agente): ToolDeLangchain[] => [
     crearBusquedaRegex(backend as never) as unknown as ToolDeLangchain,
     navegacion(),
+    atributos,
     ...(carpeta !== undefined && (agente.escribeEn ?? []).length > 0
       ? [crearCopiarArtefacto({ raiz, carpetaDeArtefactos: carpeta, perfil: agente }) as unknown as ToolDeLangchain]
       : []),
@@ -832,6 +883,9 @@ export async function abrirSesionTrueforge(
     }
     detencion.nacio(params.threadId);
     esperas.nacio(agente?.nombre ?? params.request.name, params.threadId);
+    const hiloDelPadre = (params.parent as { thread_id?: string } | undefined)?.thread_id;
+    if (hiloDelPadre !== undefined && hiloDelPadre !== "") padreDeHilo.set(params.threadId, hiloDelPadre);
+    nacimientoDeHilo.set(params.threadId, Date.now());
     quienEs.set(params.threadId, agente?.nombre ?? params.request.name);
     if (agente !== undefined) especialistaDeHilo.set(params.threadId, agente.nombre);
     if (agente !== undefined && agente.motor !== "modelo") return hijoExterno(agente, params);
@@ -842,6 +896,7 @@ export async function abrirSesionTrueforge(
       propias: propiasDe,
       notas: capacidadDeNotasDeLaSesion,
       puedeLlamar: (a) => conBucleDelDesarrollador && (a.llama?.length ?? 0) > 0,
+      informes: capacidadDeInformes,
       vueltas: (a) =>
         a.ejecucion === true
           ? capacidadDeAvisoDeVueltas({ vueltasDe: (hilo) => capturasDeCadaHilo.get(hilo) ?? 0, umbrales: UMBRALES_DE_CAPTURAS, texto: textoDeCapturas })
@@ -861,7 +916,10 @@ export async function abrirSesionTrueforge(
         },
     });
     const nombres = toolsDe(piezas);
-    const nota = notaDeTools(nombres, agente === undefined ? LIMITE_DEL_GENERICO : LIMITES_DE[clase]);
+    const nota = [
+      notaDeTools(nombres, agente === undefined ? LIMITE_DEL_GENERICO : LIMITES_DE[clase]),
+      ...(nombres.includes(NOMBRE_ATRIBUTOS_XONE) ? [USO_DE_XONE_ATRIBUTOS] : []),
+    ].join("\n");
     const instrucciones =
       agente === undefined
         ? `${nota} Contesta con lo que encuentres y dónde.`
@@ -982,6 +1040,7 @@ export async function abrirSesionTrueforge(
           capacidadDeRecortes(backend as never),
           capacidadDeFecha(),
           capacidadDeNotasDeLaSesion,
+          capacidadDeInformes,
         ]),
         /**
          * **La conversación se RESUME al mismo umbral que deepagents** (`UMBRAL_RESUMEN_TOKENS`):
@@ -1054,6 +1113,37 @@ export async function abrirSesionTrueforge(
    * `thread_id`: mandarla al raíz no la contestaría —o la rechazaría por hilo desconocido—.
    * Por eso las tool calls se apuntan por hilo Y por id: dos hijos pueden repetir id.
    */
+  /**
+   * Cuando vuelve quien EJECUTA, la medida de su última captura contra la maqueta, para quien lo llamó
+   * (`medidaAutomatica.ts`). Sin carpeta de artefactos, sin maqueta o sin captura nueva, nada. Un fallo al abrir o
+   * decodificar se anota y no tumba el turno.
+   */
+  function medidaTrasProbar(deHilo: string, hiloPadre: string, quien: Agente | undefined): string | undefined {
+    if (carpeta === undefined || quien?.ejecucion !== true) return undefined;
+    const maqueta = buscarMaqueta(raiz, opciones.adjuntos);
+    const captura = ultimaCaptura(carpeta, nacimientoDeHilo.get(deHilo) ?? Date.now());
+    if (maqueta === undefined || captura === undefined) return undefined;
+    try {
+      const comparacion = medirContraMaqueta(join(carpeta, captura), maqueta.disco);
+      ultimaMedidaDeHilo.set(hiloPadre, resumenDeMedida(comparacion, captura));
+      const ronda = (rondasVisualesDeHilo.get(hiloPadre) ?? 0) + 1;
+      rondasVisualesDeHilo.set(hiloPadre, ronda);
+      const escribio = ultimaEscrituraDeHilo.get(hiloPadre);
+      const critico = ultimaCriticaDeHilo.get(hiloPadre);
+      return textoDeMedidaAutomatica({
+        quien: quien.nombre,
+        captura,
+        maqueta: maqueta.virtual,
+        comparacion,
+        pedirCritica: critico === undefined || (escribio !== undefined && escribio > critico),
+        ronda,
+      });
+    } catch (e) {
+      anotarPaso("trueforge.medida", `no se pudo medir ${captura}: ${e instanceof Error ? e.message : String(e)}`)();
+      return undefined;
+    }
+  }
+
   async function* paso(lote: unknown[], senal: AbortSignal, pendientes: Pendiente[], preguntas: Pendiente[] = []): AsyncGenerator<DomainEvent> {
     for await (const _ of orquestador.send(lote as never)) void _;
     const llamadas = new Map<string, { nombre: string; args: Record<string, unknown> }>();
@@ -1074,6 +1164,8 @@ export async function abrirSesionTrueforge(
               args = {};
             }
             llamadas.set(claveDe(deHilo, t.id), { nombre: t.function.name, args });
+            if (t.function.name === "write_file" || t.function.name === "edit_file") escriturasEnVuelo.set(claveDe(deHilo, t.id), { nombre: t.function.name, args });
+            if (t.function.name === "xone_critica_visual") ultimaCriticaDeHilo.set(deHilo, Date.now());
             // La traza: la MISMA lista blanca que el evento (`detalleDe`, `parametrosDe`), nunca
             // los argumentos crudos.
             const quien = quienEs.get(deHilo) ?? deHilo;
@@ -1103,10 +1195,40 @@ export async function abrirSesionTrueforge(
         const llamada = llamadas.get(claveDe(deHilo, evento.tool_call_id));
         const chars = typeof evento.content === "string" ? evento.content.length : 0;
         diagnostico?.resultado?.(llamada?.nombre, llamada === undefined ? undefined : detalleDe(llamada.nombre, llamada.args), chars);
+        // Lo que ESCRIBIÓ este hilo, para decírselo a quien lo llamó al terminar (`informesDeHijos.ts`).
+        const escritura = escriturasEnVuelo.get(claveDe(deHilo, evento.tool_call_id));
+        if (escritura !== undefined) {
+          escriturasEnVuelo.delete(claveDe(deHilo, evento.tool_call_id));
+          if (deHilo !== HILO_RAIZ && escrituraConExito(evento.content)) {
+            const cambios = escritosDeCadaHilo.get(deHilo) ?? new Map<string, CambioDeFichero>();
+            anotarEscritura(cambios, escritura.nombre, escritura.args);
+            escritosDeCadaHilo.set(deHilo, cambios);
+            ultimaEscrituraDeHilo.set(deHilo, Date.now());
+          }
+        }
       }
       // Un hilo que agotó su tope se ANOTA en la traza, con quién era: el raíz y cualquier hijo.
       if (evento.type === "internal.agent.done") {
         esperas.murio(deHilo);
+        const hiloPadre = padreDeHilo.get(deHilo);
+        // Lo que devolvió a quien lo llamó, a la traza (`DiagnosticoDeTools.devolucion`): la otra mitad del encargo.
+        const devuelto = (evento as { send_to_parent?: { content?: unknown } }).send_to_parent?.content;
+        if (hiloPadre !== undefined && devuelto !== undefined) {
+          const texto = typeof devuelto === "string" ? devuelto : JSON.stringify(devuelto);
+          diagnostico?.devolucion?.(quienEs.get(deHilo) ?? deHilo, quienEs.get(hiloPadre) ?? (hiloPadre === HILO_RAIZ ? "orquestador" : hiloPadre), texto);
+        }
+        if (hiloPadre !== undefined) {
+          padreDeHilo.delete(deHilo);
+          const nombre = especialistaDeHilo.get(deHilo);
+          const quien = especialistas().find((a) => a.nombre === nombre);
+          const medida = medidaTrasProbar(deHilo, hiloPadre, quien);
+          const texto =
+            medida ??
+            textoDelInforme(quienEs.get(deHilo) ?? deHilo, escritosDeCadaHilo.get(deHilo) ?? new Map(), quien !== undefined && quien.motor === "modelo" && clasesDeTools(quien) === "escribe", ultimaMedidaDeHilo.get(deHilo));
+          escritosDeCadaHilo.delete(deHilo);
+          nacimientoDeHilo.delete(deHilo);
+          if (texto !== undefined) informesPendientes.set(hiloPadre, [...(informesPendientes.get(hiloPadre) ?? []), texto]);
+        }
         const h = hijosConMemoria.get(deHilo);
         if (h !== undefined) {
           hijosConMemoria.delete(deHilo);
@@ -1630,6 +1752,15 @@ export async function abrirSesionTrueforge(
       esperas.olvidar();
       vueltasDeCadaHilo.clear();
       capturasDeCadaHilo.clear();
+      escritosDeCadaHilo.clear();
+      escriturasEnVuelo.clear();
+      nacimientoDeHilo.clear();
+      ultimaEscrituraDeHilo.clear();
+      ultimaCriticaDeHilo.clear();
+      ultimaMedidaDeHilo.clear();
+      rondasVisualesDeHilo.clear();
+      padreDeHilo.clear();
+      informesPendientes.clear();
       hijosConMemoria.clear();
       // Un hilo NUEVO: lo que hubiera guardado con ese id no se pisa ni se carga a medias. Y una
       // pregunta de la conversación de antes no la contesta el primer mensaje de la nueva.

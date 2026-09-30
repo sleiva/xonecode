@@ -47,6 +47,15 @@ export const FRANJAS_DE_COLUMNAS = 8;
 export const UMBRAL_DE_CONTENIDO = 24;
 /** Una franja «tiene contenido» si al menos esta fracción de sus píxeles no es fondo. */
 const DENSIDAD_MINIMA_DE_FILA = 0.02;
+/** En una franja, una columna tiene contenido si al menos esta fracción de su alto no es fondo. */
+const DENSIDAD_MINIMA_DE_COLUMNA_EN_FRANJA = 0.05;
+/**
+ * El ENCAJE: cuánto puede separarse cada borde del contenido (arriba, abajo, izquierda, derecha) del de la maqueta, en
+ * fracción de la pantalla. Existe porque las distancias por franjas PROMEDIAN: calc12 cumplía el 10 % en horizontal
+ * (8 %) con el teclado acabando al 85 % del ancho donde la maqueta llega al 96 %, y 12 puntos vacíos abajo. Calibrado
+ * contra las capturas de las pasadas: la mejor (calc9) queda en 0-1,6 puntos por lado.
+ */
+export const TOLERANCIA_DE_ENCAJE = 0.03;
 /** Diferencia de ocupación (en puntos de 0 a 1) a partir de la cual una franja se señala. */
 export const DIFERENCIA_QUE_SE_SEÑALA = 0.3;
 /** Diferencia media de perfil bajo la que dos pantallas se dan por parecidas en estructura. */
@@ -60,6 +69,9 @@ export interface MedidaDePantalla {
   /** De 0 a 1: hasta dónde llega el contenido (primera a última fila con contenido, sobre el alto útil). */
   inicioDelContenido: number;
   finDelContenido: number;
+  /** De 0 a 1: dónde empieza y acaba el contenido a lo ANCHO, la mediana de las franjas del alto que tienen contenido. */
+  izquierdaDelContenido: number;
+  derechaDelContenido: number;
   /** Ocupación (0 a 1) de cada franja horizontal, de arriba abajo. */
   filas: number[];
   /** Ocupación (0 a 1) de cada franja vertical, de izquierda a derecha. */
@@ -74,6 +86,8 @@ export interface Comparacion {
   /** Diferencia media de ocupación por franjas, de 0 (igual) a 1. */
   distanciaVertical: number;
   distanciaHorizontal: number;
+  /** Cuánto se separa cada borde del contenido del de la maqueta (captura − referencia, fracción de la pantalla). */
+  encaje: { arriba: number; abajo: number; izquierda: number; derecha: number };
   hallazgos: string[];
   veredicto: Veredicto;
 }
@@ -189,10 +203,43 @@ export function medirPantalla(img: ImagenRgba, recorte: number = RECORTE_DE_BARR
     media(cuentaDeColumna, Math.floor((k * ancho) / FRANJAS_DE_COLUMNAS), Math.floor(((k + 1) * ancho) / FRANJAS_DE_COLUMNAS)) /
     alto
   );
+  // Dónde empieza y acaba el contenido por los LADOS: la MEDIANA de cada franja del alto, no el recuadro de la pantalla
+  // entera, que lo fija el elemento más ancho (la barra de arriba ocupa todo) y no dice si el teclado llega al borde.
+  const bordesDeFranja: Array<[number, number]> = [];
+  for (let k = 0; k < FRANJAS_DE_FILAS; k++) {
+    const y0 = Math.floor((k * alto) / FRANJAS_DE_FILAS);
+    const y1 = Math.floor(((k + 1) * alto) / FRANJAS_DE_FILAS);
+    const cuenta = new Float64Array(ancho);
+    for (let y = y0; y < y1; y++) {
+      const base = (desde + y) * ancho * 4;
+      for (let x = 0; x < ancho; x++) {
+        const i = base + x * 4;
+        const d = Math.abs(datos[i]! - fondo[0]) + Math.abs(datos[i + 1]! - fondo[1]) + Math.abs(datos[i + 2]! - fondo[2]);
+        if (d > UMBRAL_DE_CONTENIDO) cuenta[x]! += 1;
+      }
+    }
+    let a = -1;
+    let b = -1;
+    for (let x = 0; x < ancho; x++) {
+      if (cuenta[x]! / Math.max(y1 - y0, 1) > DENSIDAD_MINIMA_DE_COLUMNA_EN_FRANJA) {
+        if (a < 0) a = x;
+        b = x;
+      }
+    }
+    if (a >= 0) bordesDeFranja.push([a / ancho, (b + 1) / ancho]);
+  }
+  const mediana = (v: number[]): number => {
+    if (v.length === 0) return 0;
+    const o = [...v].sort((x, y) => x - y);
+    const m = Math.floor(o.length / 2);
+    return o.length % 2 === 1 ? o[m]! : (o[m - 1]! + o[m]!) / 2;
+  };
   return {
     fondo,
     inicioDelContenido: primera < 0 ? 0 : primera / alto,
     finDelContenido: ultima < 0 ? 0 : (ultima + 1) / alto,
+    izquierdaDelContenido: mediana(bordesDeFranja.map(([a]) => a)),
+    derechaDelContenido: mediana(bordesDeFranja.map(([, b]) => b)),
     filas,
     columnas,
   };
@@ -240,31 +287,51 @@ function describirRangos(
   });
 }
 
+/** El peor borde, en valor absoluto: lo que decide si encaja. */
+export function desajusteDeEncaje(e: Comparacion["encaje"]): number {
+  return Math.max(Math.abs(e.arriba), Math.abs(e.abajo), Math.abs(e.izquierda), Math.abs(e.derecha));
+}
+
+/** Un hallazgo por borde que se sale de la tolerancia, dicho como lo que hay que hacer para que ocupe la pantalla como la maqueta. */
+function hallazgosDeEncaje(e: Comparacion["encaje"], ref: MedidaDePantalla, cap: MedidaDePantalla): string[] {
+  const salida: string[] = [];
+  const fuera = (d: number): boolean => Math.abs(d) > TOLERANCIA_DE_ENCAJE;
+  if (fuera(e.derecha)) {
+    salida.push(
+      `ENCAJE a la derecha: el contenido acaba al ${pct(cap.derechaDelContenido)} del ancho y en la maqueta al ${pct(ref.derechaDelContenido)} ` +
+        (e.derecha < 0 ? `(le faltan ${pct(-e.derecha)}: ensánchalo hasta el borde de la maqueta)` : `(se pasa ${pct(e.derecha)})`)
+    );
+  }
+  if (fuera(e.izquierda)) {
+    salida.push(
+      `ENCAJE a la izquierda: el contenido empieza al ${pct(cap.izquierdaDelContenido)} del ancho y en la maqueta al ${pct(ref.izquierdaDelContenido)}`
+    );
+  }
+  if (fuera(e.abajo)) {
+    salida.push(
+      `ENCAJE abajo: el contenido acaba al ${pct(cap.finDelContenido)} del alto útil y en la maqueta al ${pct(ref.finDelContenido)} ` +
+        (e.abajo < 0 ? `(queda una banda vacía de ${pct(-e.abajo)}: el contenido tiene que llegar abajo como en la maqueta)` : `(se pasa ${pct(e.abajo)})`)
+    );
+  }
+  if (fuera(e.arriba)) {
+    salida.push(`ENCAJE arriba: el contenido empieza al ${pct(cap.inicioDelContenido)} del alto útil y en la maqueta al ${pct(ref.inicioDelContenido)}`);
+  }
+  return salida;
+}
+
 /** Compara dos pantallas ya medidas. Puro: los números salen de `medirPantalla`. */
 export function compararMedidas(referencia: MedidaDePantalla, captura: MedidaDePantalla): Comparacion {
   const dv = distancia(referencia.filas, captura.filas);
   const dh = distancia(referencia.columnas, captura.columnas);
   const hallazgos: string[] = [];
 
-  const finRef = referencia.finDelContenido;
-  const finCap = captura.finDelContenido;
-  if (finRef - finCap > 0.15) {
-    hallazgos.push(
-      `El contenido de la captura acaba al ${pct(finCap)} del alto útil y el de la referencia al ${pct(finRef)}: ` +
-        `queda una banda vacía de un ${pct(finRef - finCap)} debajo`
-    );
-  } else if (finCap - finRef > 0.15) {
-    hallazgos.push(
-      `El contenido de la captura llega al ${pct(finCap)} del alto útil y el de la referencia solo al ${pct(finRef)}`
-    );
-  }
-  const inicioRef = referencia.inicioDelContenido;
-  const inicioCap = captura.inicioDelContenido;
-  if (Math.abs(inicioRef - inicioCap) > 0.1) {
-    hallazgos.push(
-      `El contenido de la captura empieza al ${pct(inicioCap)} del alto útil y el de la referencia al ${pct(inicioRef)}`
-    );
-  }
+  const encaje = {
+    arriba: captura.inicioDelContenido - referencia.inicioDelContenido,
+    abajo: captura.finDelContenido - referencia.finDelContenido,
+    izquierda: captura.izquierdaDelContenido - referencia.izquierdaDelContenido,
+    derecha: captura.derechaDelContenido - referencia.derechaDelContenido,
+  };
+  hallazgos.push(...hallazgosDeEncaje(encaje, referencia, captura));
   hallazgos.push(...describirRangos("alto", referencia.filas, captura.filas));
   hallazgos.push(...describirRangos("ancho", referencia.columnas, captura.columnas));
 
@@ -274,6 +341,7 @@ export function compararMedidas(referencia: MedidaDePantalla, captura: MedidaDeP
     captura,
     distanciaVertical: dv,
     distanciaHorizontal: dh,
+    encaje,
     hallazgos,
     veredicto: parecida ? "parecida" : "distinta",
   };
@@ -288,10 +356,13 @@ export function compararPantallas(referencia: ImagenRgba, captura: ImagenRgba): 
  * El informe en texto, que es lo que lee el modelo. **Termina diciendo lo que esto NO mide**: un
  * «parecida» de aquí es «la estructura coincide», y se leería como «se ve bien» si no se dijera.
  */
+const pp = (x: number): string => `${x >= 0 ? "+" : "−"}${Math.round(Math.abs(x) * 100)}`;
+
 export function informeDeComparacion(c: Comparacion): string[] {
   const filas = (m: MedidaDePantalla): string => m.filas.map((f) => String(Math.round(f * 100)).padStart(3)).join("");
   const lineas = [
     `Estructura ${c.veredicto === "parecida" ? "PARECIDA" : "DISTINTA"} (distancia vertical ${pct(c.distanciaVertical)}, horizontal ${pct(c.distanciaHorizontal)}; se da por parecida bajo ${pct(DISTANCIA_PARECIDA)}).`,
+    `Encaje de los bordes del contenido frente a la maqueta (tolerancia ${pct(TOLERANCIA_DE_ENCAJE)} por lado): arriba ${pp(c.encaje.arriba)}, abajo ${pp(c.encaje.abajo)}, izquierda ${pp(c.encaje.izquierda)}, derecha ${pp(c.encaje.derecha)} → ${desajusteDeEncaje(c.encaje) <= TOLERANCIA_DE_ENCAJE ? "ENCAJA" : "NO ENCAJA"}.`,
     `Ocupación por franjas del alto, de arriba abajo (%):`,
     `  referencia:${filas(c.referencia)}`,
     `  captura:   ${filas(c.captura)}`,

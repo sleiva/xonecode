@@ -221,6 +221,31 @@ export function leerTareasDelPlan(texto: string): TareasDelPlan {
   return { ...(titulo === undefined || titulo === "" ? {} : { titulo }), tareas };
 }
 
+/** La ruta del `TASKS.md` de un plan: `/planes/<slug>/TASKS.md`. */
+export const RUTA_DE_TASKS = /^\/planes\/[^/]+\/TASKS\.md$/;
+
+/**
+ * Por qué NO vale un `TASKS.md` que se va a escribir entero, o `undefined` si vale: tiene que reconocerse al menos una
+ * tarea, y CADA tarea tiene que traer sus criterios como casillas `- [ ]`.
+ *
+ * Existe por una medida: en cinco pasadas de la misma calculadora el analista escribió las casillas en tres y en dos
+ * (calc10, calc13) no, con los criterios como viñetas sueltas. Sin casillas, quien comprueba en el aparato no puede marcar
+ * nada (`marcarCriterios` solo cambia `- [ ]`), el plan no dice por dónde va y la pestaña Planes no enseña progreso. El
+ * prompt ya pedía el formato; era texto. Se aplica al ESCRIBIR el fichero entero, no al editarlo: un plan viejo sin
+ * casillas se puede seguir anotando.
+ */
+export function motivoDeTasksInaceptable(texto: string): string | undefined {
+  const { tareas } = leerTareasDelPlan(texto);
+  const formato =
+    "Cada tarea va como `### 01 — Título` y sus criterios de aceptación, uno por línea, como casillas `- [ ] criterio comprobable`: " +
+    "son las que se marcan `- [x]` al comprobarlas en el aparato.";
+  if (tareas.length === 0) return `No reconozco ninguna tarea en este TASKS.md. ${formato}`;
+  const sin = tareas.filter((t) => t.criterios.total === 0).map((t) => t.numero);
+  if (sin.length === 0) return undefined;
+  const lista = sin.length > 8 ? `${sin.slice(0, 8).join(", ")} y ${sin.length - 8} más` : sin.join(", ");
+  return `El TASKS.md no se ha escrito: ${sin.length === tareas.length ? "ninguna tarea trae" : `las tareas ${lista} no traen`} sus criterios como casillas. ${formato} Reescríbelo con ellas.`;
+}
+
 /**
  * Marca como COMPROBADOS unos criterios de una tarea: cambia sus `- [ ]` a `- [x]`, contando las
  * casillas de la sección de 1 en adelante, en el orden en que aparecen.

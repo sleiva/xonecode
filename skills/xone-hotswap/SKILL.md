@@ -26,6 +26,7 @@ No cuestan lo mismo, ni de lejos. Por orden de lo que vas a necesitar:
 |---|---|---|
 | **dónde estoy** | `screen` | una línea: colección activa, diálogos abiertos, ventana con el foco |
 | **qué está fallando** | `xone-log-android` | un error de JavaScript o una excepción salen ahí con su mensaje y su línea |
+| **qué ha pasado tras una acción** | `xone-log-android --limpiar`, la acción, `xone-log-android --app` | trae SOLO los `console.log` de la app, sus errores y qué manejador corrió (`Executing script: [MenuPrincipal][btnD8][onclick]`): casi siempre basta sin captura |
 | **el valor de un campo** | `getText name=X` | un viaje, una respuesta corta |
 | **varios campos** | `getFields names=A,B,C` | UN viaje; un campo que falle no tumba a los demás |
 | **el contenido de una lista** | `getRows content=X fields=…` | alcanza todas las filas, no solo las pintadas |
@@ -117,6 +118,7 @@ xone-hotswap waitForElement name=BTN_OK timeout=5000 -- click name=BTN_OK   # UN
 # Por qué algo no se pinta o la app se muere: las excepciones del aparato.
 xone-log-android
 xone-log-android --limpiar        # aísla lo que pase a partir de ahora
+xone-log-android --app            # SOLO los console.log de la app, sus errores y qué manejador corrió
 
 # RESPALDO de la captura, para cuando el canal no contesta: `adb exec-out screencap` pero
 # guardándola donde toca. Nunca redirijas ese `adb` tú: el `cwd` es la raíz del proyecto.

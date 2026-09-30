@@ -7661,3 +7661,149 @@ ninguna: hay casos visuales de verdad —un aviso que solo se ve en pantalla— 
 falta, y cuánto tiempo y cuántos tokens de imagen se ahorran. **Límite declarado:** solo se cuentan comandos de captura
 escritos en el `execute`; una captura que salga de otro script no se ve.
 
+
+## Los traspasos de código entre agentes: calc10 frente a otros harnesses (30-09-2026)
+
+calc10 terminó en 69 min (unos 50 sin el corte de red), 364 llamadas y 478.838 de salida, con la pantalla más lejos de
+la maqueta que calc9 (13 %/12 % frente a 11 %/5 %). Se leyó la traza antes de tocar nada, y dos hipótesis cayeron:
+
+- **No se escribía a ciegas.** `MenuPrincipal.xne` se reescribió ENTERO cinco veces —diseñador, desarrollador dos veces,
+  diseñador dos veces—, y en cada una quien reescribía lo había leído entero justo antes. «Leer antes de escribir», que
+  qwen-code y deepseek-harness imponen por código (mtime/tamaño, o la versión con un cerrojo por fichero), no habría
+  parado ninguna. El fallo era ELEGIR reescribir en vez de editar, aunque la descripción de `write_file` ya decía «un
+  fichero NUEVO».
+- **Las «relecturas» eran páginas.** Las 16 lecturas de `functions.js` y las 15 de `MenuPrincipal.xne` eran sobre todo
+  `{}` seguido de `offset: 100`: el `read_file` del adaptador devolvía 100 líneas, el valor de deepagents. La estimación
+  de 750.000 caracteres releídos multiplicaba cada lectura por el fichero entero y estaba mal. Relecturas del mismo
+  rango sin cambios dentro del mismo hilo había pocas, así que el aviso `file_unchanged` de qwen ahorraría poco.
+
+Lo que hacen los demás, visto en su código (opencode, qwen-code, aider, deepseek-harness, TrueForge) y en su
+documentación (Claude Code, Codex, Roo, Cognition, Anthropic): **ninguno deja a dos agentes escribir el mismo fichero**
+—propiedad por fichero, un worktree por agente o un solo editor—, **ninguno le pasa al padre qué cambió el hijo** (lo
+más cercano, aider, devuelve los hashes de commit) y el editor de aider, Codex y Claude Code editan por ANCLA. opencode
+pide «lee antes de escribir» en la descripción y su código V1 ya no lo comprueba.
+
+Se hicieron tres cambios:
+
+1. **`write_file` solo crea `.xne`/`.js`/`.css`** del proyecto: sobre uno que existe devuelve el error con el camino
+   (`edit_file`). Solo el código, porque un SVG, un plan o un artefacto se regeneran enteros con razón. Límite
+   declarado: el rechazo llega tras la aprobación (la pone la librería antes de correr la tool).
+2. **`read_file` devuelve hasta 2.000 líneas acotadas a 50.000 caracteres** (los de opencode), cortando por una línea
+   entera y diciendo el `offset` por donde seguir.
+3. **Al terminar un hijo, quien lo llamó recibe lo que ESCRIBIÓ**, contado por el harness: ficheros, ediciones y
+   líneas que entran y salen, nunca contenido. A uno que podía escribir y no escribió se le dice. La respuesta de una
+   escritura aprobada llega en OTRO paso del bucle que la pidió, así que las escrituras en vuelo se guardan por sesión.
+
+Lo que queda por demostrar es el efecto: que calc11 reescriba menos, pagine menos y que el orquestador relea menos.
+
+### Y la medida de la pantalla, puesta por el harness (30-09-2026)
+
+Contado en las tres pasadas: en calc9 (11 %/5 %) el desarrollador juzgó su pantalla 10 veces (7 `comparar_capturas`, 3
+críticas) y el orquestador 3; en calc10 (13 %/12 %) el desarrollador 1 y el orquestador 6, con dos rondas de rediseño que
+no convergieron. `textoDelBucle` ya le daba las dos herramientas y el criterio del 10 %. Ahora, cuando vuelve el conductor
+con una captura nueva, el harness la mide contra la maqueta y se la da a quien lo llamó (`medidaAutomatica.ts`), con el
+recordatorio de pasar el crítico si no lo ha hecho desde su última escritura; la última medida va también en el informe al
+orquestador, para que juzgue sin volver a medir. Cero llamadas de modelo. Límite: mide la ÚLTIMA captura del encargo, que
+puede ser un paso intermedio o un recorte; y la parte cualitativa sigue dependiendo de que el desarrollador pase el crítico.
+
+### El diseñador hace recursos, no pantallas (30-09-2026)
+
+Decisión suya, sobre calc11: el diseñador está para generar fondos SVG y buscar iconos, no para arreglar lo que se ve
+mal. En calc10 y calc11 era el diseñador quien maquetaba la pantalla y el desarrollador quien la cableaba, y los dos
+escribían el MISMO `.xne` y el mismo CSS; los rediseños pasaban de uno a otro (en calc10 por el orquestador, en calc11
+por el propio desarrollador). Ahora `designer-xone` lleva `escribeEn: [/icons/]` —más `/artefactos/` y `/planes/`, que
+`permisosDe` concede siempre— y el desarrollador es el dueño del layout, del CSS y de los scripts. Es el patrón de
+propiedad por fichero de los agent teams de Claude Code, impuesto por el permiso. Precio: `incorporar_adjunto` deja de
+ir al diseñador (copia a cualquier ruta del proyecto).
+
+### Un índice de atributos en vez de leer la referencia entera (30-09-2026)
+
+Idea suya: un árbol mínimo de atributos por nodo, y el detalle en la skill. Medido antes de hacerlo: en calc9-12 los
+agentes leyeron referencias de la skill 45-61 veces por pasada, 15-25 ficheros distintos, los mismos releídos 4-8 veces
+(`atributos-prop.md` son 34 KB). `xone_atributos` contesta desde las tablas de `atributos-coll-group-frame.md` y
+`atributos-prop.md` —354 atributos, 422 pares atributo/nodo— con 250-700 caracteres por respuesta. Se eligió la vista por
+ATRIBUTO primero porque contesta la pregunta del bug mudo («¿existe aquí?»); la vista por nodo sale de la misma tabla.
+No entra en `NUCLEO_XONE`: está en su tope de líneas y la tool se describe sola. Queda por medir si baja el número de
+lecturas de la skill.
+
+Al montarlo salió que **la skill se contradice**: `imgbk` en `<group>` está en `nodos-group-y-frame.md` y no en
+`atributos-coll-group-frame.md`, y `border` en `<frame>` es una máscara entera en uno y un booleano en el otro. Por eso el
+índice lee también los capítulos de cada nodo, enseña las dos fuentes con un aviso cuando el tipo no coincide, y nunca
+dice «no existe»: dice «no está en las tablas» y da el `grep` sobre `/skills/`. Las dos contradicciones son un arreglo
+pendiente de la skill, no del índice.
+
+### El encaje en la pantalla, más estricto que las distancias (30-09-2026)
+
+Visto por él en calc12: la horizontal daba 8 % —cumplía el 10 %— con el teclado acabando antes del borde derecho y una
+banda vacía abajo. Las distancias por franjas promedian la ocupación y no lo ven. Se midió el borde del contenido de dos
+formas: con el recuadro de la pantalla entera no sirve (la barra de arriba ocupa todo el ancho y fija los lados); con la
+MEDIANA de las franjas del alto, sí. Calibrado contra las capturas (captura − maqueta, en puntos): calc9 −2/0/0/0 (arriba,
+abajo, izquierda, derecha), calc10 al cierre y calc11 0 por los lados, calc12 −1/−12/0/−11. Tolerancia 3 puntos por lado
+y condición del criterio de aceptación: calc9 encaja, calc12 no. Los hallazgos dicen qué hacer («ensánchalo hasta el
+borde de la maqueta», «el contenido tiene que llegar abajo»). El hallazgo antiguo de la banda vacía (> 15 %) lo sustituye.
+
+Medido en calc13 con la tool montada y solo descrita: el consultor la consultó 9 veces; el desarrollador, que es quien
+escribe los atributos, ninguna, con 13 lecturas de la skill. Su prompt solo la nombraba en la lista de tools, y el
+`SKILL.md` le manda a las referencias. Ahora, a quien la tiene, una línea junto a esa lista le dice cuándo preguntarle
+primero (`USO_DE_XONE_ATRIBUTOS`). Queda por medir en calc14.
+
+### Las pruebas por el log, no por la captura (30-09-2026)
+
+calc9, calc12 y calc13 sacaron 25, 24 y 20 capturas: cada prueba del desarrollador pedía desplegar, log, captura y los
+`bounds` de una docena de controles, y entre una y otra cambiaba una o dos cosas. Y en calc13 ninguna de sus ocho pruebas
+comprobó una operación: las teclas hacían `ui.showToast` y el display llevaba valores de muestra, así que la pantalla más
+parecida a la maqueta era una maqueta estática. Idea suya: `console.log` y que el conductor haga la acción y cuente lo
+que pasó, con captura solo si el log no concluye.
+
+Medido en el emulador antes de hacerlo:
+- `console.log("X")` desde un script sale en el log del host como `V XOneJavaScript: X`; `xone-log-android` por omisión
+  (solo errores) lo tira y `--todo` lo entierra. `--app` trae solo esas líneas y los errores.
+- `appData.writeConsoleString` —la que la skill recomendaba para depurar— no deja nada en el log de Android (logcat entero,
+  todos los procesos y niveles). Es legacy: la skill lo dice ahora.
+- De punta a punta: la tecla 8 con un `console.log` en su `onclick`, un toque real (`adb shell input tap`) y
+  `xone-log-android --app` devolvieron `Executing script: [MenuPrincipal][btnD8][onclick]`, `CALC tecla 8`, `CALC display
+  8`, y la captura confirmó el 8. Hasta sin `console.log`, la línea `Executing script` dice qué manejador corrió.
+
+Cambios: `--app`; el conductor comprueba una acción por el log; el desarrollador separa pruebas funcionales (todos los
+casos en un encargo, sin captura) de visuales (una captura por ronda, tres como mucho, `RONDAS_VISUALES`, y en la última la
+medida automática le dice que devuelva); el aviso de capturas baja de 4/8 a 2/4.
+
+### Las casillas del TASKS.md, obligatorias por código (30-09-2026)
+
+Contado en cinco pasadas: el analista escribió los criterios como casillas en calc9, calc11 y calc12, y como viñetas
+sueltas en calc10, calc13 y calc14 (0 casillas). Sin casillas nadie puede marcar lo comprobado y el plan no dice por dónde
+va. El prompt ya pedía el formato. Ahora el `write_file` de TrueForge rechaza un `/planes/<slug>/TASKS.md` en el que una
+tarea reconocida no trae ninguna casilla (o en el que no se reconoce ninguna tarea), y devuelve el formato para que lo
+reescriba. Solo al escribirlo entero: las ediciones —marcar, añadir hallazgos— no pasan por aquí.
+
+### Las búsquedas por el disco entero, cortadas (30-09-2026)
+
+En calc14 el conductor buscó `xone-validate` —el plan decía «Validación por hito con `xone-review`» y una skill nombraba
+`/xone-validate`, un comando de Claude Code— con `find /` por la máquina entera: más de 4 minutos con el turno parado, hasta
+que se mató a mano; luego otro `find /` para la carpeta del plan, que es virtual. Dos arreglos: las skills de plan y spec
+solo nombran lo que existe aquí (el verificador del arnés al cerrar y `device-controller` en el aparato, sin tareas
+«xone-review»), y el `execute` de TrueForge devuelve como error una búsqueda que arranca en la raíz, la casa o una carpeta
+del sistema, con dónde buscar. Y `xone-debugging` deja de montarse al desarrollador y al conductor: 0 lecturas en seis
+pasadas, y su método es correr `xone-simulator`, que el desarrollador no puede.
+Ampliado a petición suya: cualquier `find`, `grep -r` o `ls -R` en el `execute` —también dentro del proyecto— vuelve como
+error que manda a las tools `glob`, `grep` y `ls`: el conductor las tenía y se fue a la shell, y la shell no está confinada.
+Un `grep` que filtra la salida de otro comando pasa.
+
+### Una versión nueva actualiza los agentes de serie, aunque estén tocados (30-09-2026)
+
+Decisión suya: «la actualización de los agentes quiero que se haga cuando actualizas npx; los que ha hecho el usuario no
+importan». Con la regla de antes —lo tocado no se pisa, se marca `ajeno`— su `device-controller.md`, con dos líneas
+cambiadas (modelo y esfuerzo), se quedó sin ninguna de las correcciones del conductor de ese día, y tres de sus seis
+agentes de serie estaban así. Ahora la siembra, que corre en cada arranque, compara lo que entregó (la marca) con lo que
+trae la versión de hoy: si es lo mismo, una edición del usuario se respeta; si la versión trae otra cosa —o la marca dice
+`ajeno`, que no recuerda qué se entregó—, el agente se reescribe y la copia del usuario se guarda en
+`.anteriores/<nombre>.<fecha>.md`. Los agentes que no son de serie no pasan por ese bucle.
+
+### La tabla de recursos, y la traza de lo que devuelve un hijo (30-09-2026)
+
+calc15: el diseñador dejó 44 SVG (un fondo por tecla, con el símbolo dibujado dentro, y su versión pulsada). Al volver, el
+orquestador revisó los SVG con búsquedas propias (`filter`, colores de 8 dígitos, `blur`) y el desarrollador abrió 16 para
+saber tamaños, a qué control iba cada uno y si llevaban el símbolo. Lo que el diseñador DEVOLVIÓ no se podía ver: la
+traza guardaba el encargo y no la respuesta. Ahora el diseñador devuelve una tabla fichero → control → atributo → tamaño →
+símbolo dentro, el orquestador la pasa tal cual y el desarrollador no reabre los SVG; y la traza guarda cada devolución,
+recortada como los encargos.

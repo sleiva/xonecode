@@ -37,7 +37,11 @@ export const NOMBRE_BUSCAR_ICONO = "buscar_icono";
  * recibe tools propias (la ficha lo comprueba aparte).
  */
 export function recibeBuscarIcono(a: Pick<Agente, "soloLectura" | "ejecucion" | "escribeEn">): boolean {
-  return !a.soloLectura && a.ejecucion !== true && (a.escribeEn ?? []).length === 0;
+  if (a.soloLectura || a.ejecucion === true) return false;
+  // Sin `escribeEn` escribe el proyecto entero; con él, solo si una de sus carpetas cubre `icons/` —el diseñador, que
+  // es quien hace los recursos—. El documentador (`/doc/`) sigue sin ellas.
+  const carpetas = a.escribeEn ?? [];
+  return carpetas.length === 0 || carpetas.some((c) => `/${CARPETA_DE_ICONOS}/`.startsWith(c.endsWith("/") ? c : `${c}/`));
 }
 
 /** La carpeta de una app XOne donde viven los iconos (`fundamentos/plataforma-y-anatomia…`). */

@@ -187,3 +187,46 @@ export function entornoDeShell(opciones: {
 
   return limpio;
 }
+
+/**
+ * Por qué un comando de quien ejecuta NO se lanza, o `undefined` si se lanza: una búsqueda que recorre el DISCO ENTERO.
+ *
+ * Medido en calc14: el conductor buscaba un script que el plan nombraba y no existe (`xone-validate`) y lanzó
+ * `find / -name "xone-validate*"`, que tardó más de cuatro minutos con el turno parado; luego otro `find /` para la carpeta
+ * del plan, que es virtual y no está en el disco con ese nombre. Nada de lo que busca vive fuera del proyecto, de sus
+ * variables o de su PATH, y recorrer la máquina del usuario es además mirar donde no le toca. Se reconoce `find`, `grep -r`
+ * y `ls -R` / `du` cuando su punto de partida es la raíz, la casa o una carpeta del sistema; lo relativo (`find .`) y lo de
+ * sus variables (`$XONECODE_…`) pasan. Es una lista de lo que se ha visto, no un filtro de shell: un límite declarado.
+ */
+export function motivoDeComandoRechazado(comando: string): string | undefined {
+  const raices = String.raw`(?:\/|~|\$HOME|\$\{HOME\}|\/Users|\/private|\/System|\/Library|\/Applications|\/Volumes|\/opt|\/usr|\/var|\/tmp)(?:\/)?`;
+  const fin = String.raw`(?=\s|$|;|\||&|\))`;
+  const inicio = String.raw`(?:^|[;&|(]\s*|&&\s*|\s)`;
+  const porElDisco = [
+    new RegExp(String.raw`${inicio}find\s+(?:-[HLP]\s+)*["']?${raices}["']?${fin}`),
+    new RegExp(String.raw`${inicio}(?:grep|rg)\s+(?:-\S+\s+)*(?:-[a-zA-Z]*[rR][a-zA-Z]*\s+)(?:-\S+\s+|"[^"]*"\s+|'[^']*'\s+|\S+\s+)*["']?${raices}["']?${fin}`),
+    new RegExp(String.raw`${inicio}(?:ls\s+-[a-zA-Z]*R[a-zA-Z]*|du)\s+(?:-\S+\s+)*["']?${raices}["']?${fin}`),
+  ];
+  const tools =
+    "Para buscar un fichero por NOMBRE usa la tool `glob` (`pattern: \"**/*.xne\"`, y `path` para acotar), para buscar TEXTO en " +
+    "ficheros la tool `grep`, y para listar una carpeta la tool `ls`: ven el proyecto, `/skills/`, `/planes/`, `/artefactos/` y " +
+    "`/hotswap/` por su ruta virtual y no salen de ahí.";
+  if (porElDisco.some((p) => p.test(comando))) {
+    return (
+      "No se lanza: recorre el disco entero de la máquina (se vio tardar más de 4 minutos con el turno parado), y nada de lo que " +
+      `buscas vive ahí. ${tools} Tus scripts están en el PATH (\`xone-*\`, se llaman por su nombre; \`--help\` dice cómo); la ` +
+      "documentación de tus skills, en `$XONECODE_SKILL_<NOMBRE>`. Si algo que te nombran no aparece ahí, NO existe: dilo."
+    );
+  }
+  // Buscar FICHEROS desde la shell, aunque sea en una carpeta: lo mismo que las tools de fichero, sin su confinamiento. Un
+  // `grep` que filtra la salida de otro comando (`xone-log-android --app | grep CALC`) no busca ficheros y pasa.
+  const buscaFicheros = [
+    new RegExp(String.raw`${inicio}find\s`),
+    new RegExp(String.raw`${inicio}(?:grep|rg)\s+(?:-\S+\s+)*-[a-zA-Z]*[rR][a-zA-Z]*\s`),
+    new RegExp(String.raw`${inicio}ls\s+(?:-\S+\s+)*-[a-zA-Z]*R[a-zA-Z]*(?:\s|$)`),
+  ];
+  if (buscaFicheros.some((p) => p.test(comando))) {
+    return `No se lanza: para buscar ficheros no uses la shell. ${tools} Si lo que buscas es un script de tus skills, está en el PATH.`;
+  }
+  return undefined;
+}

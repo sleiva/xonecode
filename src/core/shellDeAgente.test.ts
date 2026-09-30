@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { VARIABLES_POR_PROVEEDOR } from "./modelos.js";
-import { entornoDeShell, variableDeSkill, variablesDeAndroid } from "./shellDeAgente.js";
+import { entornoDeShell, variableDeSkill, variablesDeAndroid, motivoDeComandoRechazado } from "./shellDeAgente.js";
 
 describe("entornoDeShell", () => {
   it("quita las claves de API de los proveedores de serie", () => {
@@ -183,5 +183,43 @@ describe("entornoDeShell con Android", () => {
 
     expect(entorno).not.toHaveProperty("XONECODE_EMULATOR");
     expect(entorno).not.toHaveProperty("XONECODE_ADB");
+  });
+});
+
+describe("las búsquedas por el disco entero no se lanzan", () => {
+  it("las dos de calc14, y sus parientes, se rechazan con el camino bueno", () => {
+    for (const c of [
+      'find / -name "xone-validate*" 2>/dev/null | head; find / -name "xone-hotswap" -type f 2>/dev/null | head',
+      'find / -type d -name "calculadora-menu-principal" 2>/dev/null | head',
+      "which x; find ~ -name '*.xne'",
+      "find $HOME -maxdepth 6 -name x",
+      "grep -rn TASKS /Users",
+      "ls -laR / | head",
+      "du -sh ~",
+    ]) {
+      const m = motivoDeComandoRechazado(c);
+      expect(m, c).toContain("recorre el disco entero");
+      expect(m, c).toContain("$XONECODE_SKILL_<NOMBRE>");
+      expect(m, c).toContain("usa la tool `glob`");
+    }
+  });
+  it("buscar FICHEROS desde la shell, aunque sea en una carpeta, manda a las tools `glob`, `grep` y `ls`", () => {
+    for (const c of ["find . -name '*.xne'", "find icons -name '*.svg'", "find $XONECODE_SKILL_XONE_HOTSWAP -name '*.md'", "grep -rn CALC .", "cd $XONECODE_ARTEFACTOS && ls -R"]) {
+      const m = motivoDeComandoRechazado(c);
+      expect(m, c).toContain("para buscar ficheros no uses la shell");
+      expect(m, c).toContain("usa la tool `glob`");
+    }
+  });
+
+  it("lo que no busca ficheros pasa: scripts, filtros de su salida, listar una carpeta", () => {
+    for (const c of [
+      'ls -t $XONECODE_HOTSWAP/ | head',
+      "xone-log-android --app | grep CALC",
+      'cd $XONECODE_ARTEFACTOS && ls',
+      "adb -s emulator-5554 shell input tap 415 1390",
+      "ls /planes 2>/dev/null",
+      "xone-log-android --app 2>&1 | grep -i CALC",
+      "adb shell pidof com.xone.android.framework | grep -c .",
+    ]) expect(motivoDeComandoRechazado(c), c).toBeUndefined();
   });
 });

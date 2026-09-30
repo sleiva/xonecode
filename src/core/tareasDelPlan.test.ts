@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dependenciasDe, estadoReconocido, leerTareasDelPlan, marcarCriterios, progresoDeTarea } from "./tareasDelPlan.js";
+import { dependenciasDe, estadoReconocido, leerTareasDelPlan, marcarCriterios, progresoDeTarea, motivoDeTasksInaceptable } from "./tareasDelPlan.js";
 
 const TASKS = `# Plan de ejecución — Visitas
 
@@ -238,5 +238,20 @@ describe("otros formatos de cabecera de tarea", () => {
     expect("error" in r).toBe(false);
     if (!("error" in r)) expect(r.texto).toContain("- [x] Pantalla oscura");
     expect("error" in marcarCriterios(VINETAS, "T1", [1])).toBe(true);
+  });
+});
+
+describe("un TASKS.md se escribe con casillas, o no se escribe", () => {
+  it("con casillas en cada tarea vale", () => {
+    expect(motivoDeTasksInaceptable("# P\n\n### 01 — Uno\n- [ ] a\n\n### 02 — Dos\n- [x] b\n")).toBeUndefined();
+  });
+  it("una tarea con los criterios como viñetas sueltas lo tumba, y dice cuál y el formato", () => {
+    const m = motivoDeTasksInaceptable("### 01 — Uno\n- [ ] a\n\n### 02 — Dos\n- **Criterios**:\n  - el display dice 14\n");
+    expect(m).toContain("las tareas 02 no traen");
+    expect(m).toContain("`- [ ] criterio comprobable`");
+  });
+  it("sin ninguna tarea reconocible también, y sin ninguna casilla lo dice de todas", () => {
+    expect(motivoDeTasksInaceptable("# Plan\n\nhaz la calculadora")).toContain("No reconozco ninguna tarea");
+    expect(motivoDeTasksInaceptable("## T1 — A\n- a\n## T2 — B\n- b\n")).toContain("ninguna tarea trae");
   });
 });

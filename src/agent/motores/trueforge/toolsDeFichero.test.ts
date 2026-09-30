@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { backendDeAgente } from "../../grafo/proyecto.js";
 import { permisosDe } from "../../grafo/perfiles.js";
-import { decidirAccesoDeRuta, fuenteDeFicheros, normalizarRuta, type BackendDeFicheros } from "./toolsDeFichero.js";
+import { CARACTERES_POR_LECTURA, decidirAccesoDeRuta, fuenteDeEjecucion, fuenteDeFicheros, lecturaAcotada, normalizarRuta, seReescribeConEdit, type BackendDeFicheros } from "./toolsDeFichero.js";
 
 /**
  * Contra el backend REAL, con toda su pila de guardas: lo que se prueba es que las tools de
@@ -58,6 +58,42 @@ describe("las tools de fichero de TrueForge, sobre el backend real", () => {
     expect(await llamar("write_file", { file_path: "/nuevo.js", content: "var a = 1;\n" })).toMatchObject({ error: false });
     expect(await llamar("edit_file", { file_path: "/nuevo.js", old_string: "1", new_string: "2" })).toMatchObject({ error: false });
     expect(readFileSync(join(raiz, "nuevo.js"), "utf8")).toBe("var a = 2;\n");
+  });
+
+  it("`write_file` NO reescribe un .xne/.js/.css que ya existe: devuelve el error con el camino (edit_file) y el disco no cambia", async () => {
+    const { raiz, llamar } = proyecto();
+    const r = await llamar("write_file", { file_path: "/Clientes.xne", content: "<coll/>\n" });
+    expect(r.error).toBe(true);
+    expect(r.texto).toContain("Cámbialo con edit_file");
+    expect(readFileSync(join(raiz, "Clientes.xne"), "utf8")).toBe("<coll name=\"Clientes\"/>\n");
+    // Editarlo sí.
+    expect(await llamar("edit_file", { file_path: "/Clientes.xne", old_string: "Clientes", new_string: "Socios" })).toMatchObject({ error: false });
+  });
+
+  it("lo que no es código, o no es del proyecto, se sigue regenerando entero", async () => {
+    const { raiz, llamar } = proyecto();
+    writeFileSync(join(raiz, "fondo.svg"), "<svg/>\n");
+    expect(await llamar("write_file", { file_path: "/fondo.svg", content: "<svg><rect/></svg>\n" })).toMatchObject({ error: false });
+    expect(seReescribeConEdit("/planes/demo/app.js")).toBe(false);
+    expect(seReescribeConEdit("/artefactos/panel.css")).toBe(false);
+    expect(seReescribeConEdit("/default.css")).toBe(true);
+    expect(seReescribeConEdit("/js/functions.JS")).toBe(true);
+  });
+
+  it("`read_file` sin límite devuelve el fichero entero, no las 100 primeras líneas", async () => {
+    const { raiz, llamar } = proyecto();
+    writeFileSync(join(raiz, "largo.js"), Array.from({ length: 450 }, (_, i) => `var l${i} = ${i};`).join("\n") + "\n");
+    const r = await llamar("read_file", { file_path: "/largo.js" });
+    expect(r.texto).toContain("   450\tvar l449 = 449;");
+  });
+
+  it("un TASKS.md de un plan sin casillas NO se escribe: vuelve el motivo con el formato", async () => {
+    const { raiz, llamar } = proyecto();
+    const r = await llamar("write_file", { file_path: "/planes/demo/TASKS.md", content: "### 01 — Uno\n- el display dice 14\n" });
+    expect(r.error).toBe(true);
+    expect(r.texto).toContain("`- [ ] criterio comprobable`");
+    expect(existsSync(join(raiz, ".xonecode", "planes", "demo", "TASKS.md"))).toBe(false);
+    expect(await llamar("write_file", { file_path: "/planes/demo/TASKS.md", content: "### 01 — Uno\n- [ ] el display dice 14\n" })).toMatchObject({ error: false });
   });
 
   it("un rechazo se DEVUELVE como error y no se lanza", async () => {
@@ -127,3 +163,31 @@ describe("lo que TrueForge le dice al modelo sobre escribir en paralelo", () => 
   });
 });
 
+
+describe("una lectura que no cabe se corta por una LÍNEA y dice por dónde seguir", () => {
+  it("con el tope, el offset siguiente es la primera línea que no entró", () => {
+    const contenido = Array.from({ length: 10 }, (_, i) => `linea-${i + 1}`).join("\n");
+    const texto = lecturaAcotada(contenido, 1, 40);
+    expect(texto.split("\n").at(-1)).toMatch(/sigue con offset=\d+/);
+    const n = Number(/offset=(\d+)/.exec(texto)![1]);
+    // La última línea que entró es la n (1-based), así que se sigue en offset=n.
+    expect(texto).toContain(`\t${"linea-" + n}`);
+    expect(texto).not.toContain(`linea-${n + 1}`);
+  });
+
+  it("lo que cabe va entero y sin aviso", () => {
+    expect(lecturaAcotada("a\nb\n", 1)).toBe("     1\ta\n     2\tb");
+    expect(CARACTERES_POR_LECTURA).toBe(50_000);
+  });
+});
+
+describe("execute no recorre el disco entero", () => {
+  it("un `find /` vuelve como error con el camino bueno y NO llega a la shell", async () => {
+    let corrio = false;
+    const fuente = fuenteDeEjecucion({ execute: () => { corrio = true; return { output: "", exitCode: 0 }; }, write: () => ({}) });
+    const r = (await fuente.callTool({ name: "execute", arguments: { command: 'find / -name "xone-validate*"' } })) as unknown as { result: { content: { text: string }[]; isError?: boolean } };
+    expect(r.result.isError).toBe(true);
+    expect(r.result.content[0]!.text).toContain("recorre el disco entero");
+    expect(corrio).toBe(false);
+  });
+});

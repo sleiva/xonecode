@@ -237,9 +237,9 @@ describe("donde no se pregunta, la tool rechaza", () => {
 });
 
 describe("quién la recibe", () => {
-  it("de los de serie, exactamente designer-xone y developer-xone", () => {
+  it("de los de serie, solo developer-xone: el diseñador escribe SOLO en icons/ y esta tool copia a cualquier ruta del proyecto", () => {
     const reciben = AGENTES_DE_SERIE.filter(recibeIncorporarAdjunto).map((a) => a.nombre).sort();
-    expect(reciben).toEqual(["designer-xone", "developer-xone"]);
+    expect(reciben).toEqual(["developer-xone"]);
   });
 
   it("es regla de DATO: solo lectura, ejecución o `escribeEn` la quitan", () => {

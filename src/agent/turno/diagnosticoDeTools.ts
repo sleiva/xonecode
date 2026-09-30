@@ -65,6 +65,12 @@ export interface DiagnosticoDeTools {
    */
   delegacion?(de: string, a: string, encargo: string): void;
   /**
+   * **Lo que un especialista DEVUELVE a quien lo llamó**, la otra mitad de `delegacion`, con el mismo tope de texto. Existe
+   * porque la traza guardaba el encargo y no la respuesta: en calc15 no se podía saber si el diseñador había dicho qué
+   * fondo era de qué control, ni por qué el orquestador se puso a releer sus SVG. Opcional, como `delegacion`.
+   */
+  devolucion?(de: string, a: string, respuesta: string): void;
+  /**
    * La memoria de un especialista en la sesión (`memoriaDeEspecialistas.ts`): con cuántos tokens de su
    * conversación anterior arrancó una encarnación, o por qué arrancó sin memoria, y qué se hizo con la
    * suya al terminar. Opcional, como `corte`. Es lo que permite comparar una pasada con y sin ella.
@@ -170,6 +176,15 @@ export function crearDiagnosticoDeTools(
         a,
         chars: encargo.length,
         encargo: encargo.length > TOPE_DEL_ENCARGO_EN_TRAZA ? `${encargo.slice(0, TOPE_DEL_ENCARGO_EN_TRAZA)}…` : encargo,
+      });
+    },
+    devolucion(de, a, respuesta) {
+      escribir({
+        tipo: "devolucion",
+        de,
+        a,
+        chars: respuesta.length,
+        respuesta: respuesta.length > TOPE_DEL_ENCARGO_EN_TRAZA ? `${respuesta.slice(0, TOPE_DEL_ENCARGO_EN_TRAZA)}…` : respuesta,
       });
     },
     herramienta(nombre, detalle, parametros, tracker, origen, respuesta, agente) {

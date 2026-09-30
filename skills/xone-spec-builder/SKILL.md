@@ -18,7 +18,7 @@ El spec builder es el primer paso de cualquier trabajo XOne. Lo que sigue:
 - **`xone-plan-builder`** lee el `PLAN.md` y lo descompone en tareas tracer-bullet con dependencias (`TASKS.md`).
 - **App nueva** → `xone-project-generator` lee el `PLAN.md` y genera el proyecto completo.
 - **Feature, refactor, integración, cambio de modelo, rediseño** sobre un proyecto existente → `xone-development` aplica el `PLAN.md` sobre los `.xne`, `.js` y `.css` que ya viven en el repo.
-- **Validación final** → `xone-review` con `xone-simulator` en ambos casos.
+- **Validación final** → el verificador del arnés (corre `xone-simulator validate` solo, al cerrar cada turno que escribió) y la comprobación en el aparato de `device-controller`, en ambos casos.
 
 `xone-spec-builder` es **especificación**: produce decisiones de diseño y un spec, no código ni tareas. La tentación de empezar a generar archivos o a descomponer el trabajo es la señal de que has llegado al borde del spec; para ahí y entrega el `PLAN.md`.
 
@@ -76,7 +76,7 @@ No toda petición necesita una entrevista de 8 rounds. Antes de empezar, clasifi
 
 | Nivel | Cuándo | Qué hace el spec-builder |
 |---|---|---|
-| **Trivial** | Una sola acción mecánica, sin decisiones de diseño. Ej: «añadir un prop EMAIL (T) a Clientes», «cambiar el color del header», «añadir un botón de salir». | **No produces PLAN.md.** Confirmas la petición en 1-2 preguntas, ejecutas con `xone-development` o `xone-project-generator` directamente, y validas con `xone-review`. Sin `CONTEXT.md` ni ADRs. |
+| **Trivial** | Una sola acción mecánica, sin decisiones de diseño. Ej: «añadir un prop EMAIL (T) a Clientes», «cambiar el color del header», «añadir un botón de salir». | **No produces PLAN.md.** Confirmas la petición en 1-2 preguntas, ejecutas con `xone-development` o `xone-project-generator` directamente; lo valida el verificador del arnés (al cerrar cada turno) y device-controller en el aparato. Sin `CONTEXT.md` ni ADRs. |
 | **Simple** | Un cambio acotado con alguna decisión menor. Ej: «añadir campo IVA a LineasPedido con formula», «pasar Clientes a mapa», «añadir escáner QR en una pantalla». | **Spec ligero.** Entrevista reducida: solo los rounds que apliquen (típicamente 1, 3 y/o 4 y/o 5). `PLAN.md` en formato condensado —una sección por round, sin secciones vacías—. `CONTEXT.md` solo si hay término de dominio nuevo; ADR solo si hay decisión dura. |
 | **Normal** | Feature con varias colls/pantallas, refactor, integración multi-pantalla. Ej: «firma de entrega en Pedidos», «login con OAuth2», «módulo de incidencias con fotos». | **Spec completo.** Entrevista con los rounds que apliquen al tipo. `PLAN.md` con las secciones condicionales del formato. `CONTEXT.md` y ADRs según se resuelvan. |
 | **Grande** | App nueva completa, re-arquitectura, o un desarrollo que no cabe en una sesión de plan-builder. | **Spec completo + considerar wayfinder.** Entrevista los 8 rounds. Si el scope es tan grande que ni el spec cabe en una sesión, considera dividir el esfuerzo con un enfoque tipo wayfinder (chart el mapa de decisiones primero, luego spec por contexto). |
@@ -209,7 +209,7 @@ Revisa el `PLAN.md` completo contra el checklist de [PLAN-FORMAT.md](references/
 - ¿Los términos de dominio nuevos están en `CONTEXT.md` y las decisiones duras en ADRs?
 - ¿Quedan preguntas abiertas? Márcalas en `PLAN.md` §Pendientes; no las resuelvas tú.
 
-Si falta algo, vuelve al round correspondiente. Si todo está, entrega el spec y señala el siguiente paso: `xone-plan-builder` para descomponer en tareas, después `xone-project-generator` (app nueva) o `xone-development` (sobre existente), y `xone-review` para validar al final.
+Si falta algo, vuelve al round correspondiente. Si todo está, entrega el spec y señala el siguiente paso: `xone-plan-builder` para descomponer en tareas, después `xone-project-generator` (app nueva) o `xone-development` (sobre existente), y el verificador del arnés (al cerrar cada turno) y device-controller en el aparato para validar.
 
 ## Disciplina durante la entrevista
 
