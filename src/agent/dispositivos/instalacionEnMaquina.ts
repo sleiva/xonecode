@@ -63,6 +63,7 @@ import {
   type ProcesoHijo,
 } from "./procesosEnMaquina.js";
 import { descargarYDescomprimir } from "./descargaDeHerramientas.js";
+import { motivoDeNombreDeAvdInaceptable } from "../../core/puertosDeAvd.js";
 
 /**
  * Y esto se REEXPORTA: lo que este módulo exportaba antes de que existiera el ejecutor
@@ -137,6 +138,25 @@ interface PasoDeDescarga {
 }
 
 /**
+ * El paso que crea un AVD. Una función y no dos literales: la receta crea `pixel8`, Ajustes el
+ * que se le diga, y la invocación (imagen, perfil, respuesta por `stdin`) tiene que ser LA MISMA.
+ * El título de `pixel8` se conserva tal cual; con otro nombre lo lleva detrás.
+ */
+function pasoDeCrearAvd(nombre: string, imagen: string): PasoDeProceso {
+  return {
+    tipo: "proceso",
+    binario: "avdmanager",
+    conSdk: true,
+    subcarpeta: join("cmdline-tools", "latest", "bin"),
+    invocaciones: [
+      // «Do you wish to create a custom hardware profile? [no]»: sin respuesta, cuelga.
+      { args: ["create", "avd", "-n", nombre, "-k", imagen, "-d", "pixel_8"], teclear: ["no\n"] },
+    ],
+    titulo: nombre === "pixel8" ? "Creando el dispositivo virtual" : `Creando el dispositivo virtual ${nombre}`,
+  };
+}
+
+/**
  * Los pasos que xonecode lanza él. Tabla CERRADA y por `receta:plataforma:paso`: lo que
  * llega del cliente es un número, y un número que no esté aquí no lanza nada.
  *
@@ -204,17 +224,7 @@ export const PASOS_EJECUTABLES = new Map<string, PasoEjecutable>([
   ],
   [
     "android-emulador:darwin:3",
-    {
-      tipo: "proceso",
-      binario: "avdmanager",
-      conSdk: true,
-      subcarpeta: join("cmdline-tools", "latest", "bin"),
-      invocaciones: [
-        // «Do you wish to create a custom hardware profile? [no]»: sin respuesta, cuelga.
-        { args: ["create", "avd", "-n", "pixel8", "-k", IMAGEN_DARWIN, "-d", "pixel_8"], teclear: ["no\n"] },
-      ],
-      titulo: "Creando el dispositivo virtual",
-    },
+    pasoDeCrearAvd("pixel8", IMAGEN_DARWIN),
   ],
   [
     "android-emulador:win32:1",
@@ -280,16 +290,7 @@ export const PASOS_EJECUTABLES = new Map<string, PasoEjecutable>([
   ],
   [
     "android-emulador:win32:5",
-    {
-      tipo: "proceso",
-      binario: "avdmanager",
-      conSdk: true,
-      subcarpeta: join("cmdline-tools", "latest", "bin"),
-      invocaciones: [
-        { args: ["create", "avd", "-n", "pixel8", "-k", IMAGEN_WIN32, "-d", "pixel_8"], teclear: ["no\n"] },
-      ],
-      titulo: "Creando el dispositivo virtual",
-    },
+    pasoDeCrearAvd("pixel8", IMAGEN_WIN32),
   ],
 ]);
 
@@ -349,12 +350,6 @@ export function correrPasoDeReceta(
   deps: DependenciasDeInstalacion = {}
 ): Trabajo {
   const plataforma = deps.plataforma ?? process.platform;
-  const entorno = deps.entorno ?? process.env;
-  const home = deps.home ?? homedir();
-  const existe = deps.existe ?? existsSync;
-  const ahora = deps.ahora ?? (() => Date.now());
-  const t0 = ahora();
-  const decir = (linea: string): void => deps.alSalirLinea?.(linea);
 
   const paso = PASOS_EJECUTABLES.get(`${receta}:${plataforma}:${numero}`);
   if (paso === undefined) {
@@ -364,6 +359,34 @@ export function correrPasoDeReceta(
       terminado: Promise.resolve({ estado: "fallo", motivo: "ese paso no se lanza desde aquí", ms: 0 }),
     };
   }
+  return correrPaso(paso, deps);
+}
+
+const IMAGEN_POR_PLATAFORMA: Partial<Record<string, string>> = { darwin: IMAGEN_DARWIN, win32: IMAGEN_WIN32 };
+
+/** Crear un AVD con nombre, por el mismo corredor que la receta (topes, stdin, SDK). Nunca lanza. */
+export function crearAvd(nombre: string, deps: DependenciasDeInstalacion = {}): Trabajo {
+  const terminadoCon = (motivo: string): Trabajo => ({
+    titulo: "",
+    cancelar: () => {},
+    terminado: Promise.resolve({ estado: "fallo", motivo, ms: 0 }),
+  });
+  const motivo = motivoDeNombreDeAvdInaceptable(nombre, []);
+  if (motivo !== undefined) return terminadoCon(motivo);
+  const imagen = IMAGEN_POR_PLATAFORMA[deps.plataforma ?? process.platform];
+  if (imagen === undefined) return terminadoCon("crear emuladores no se lanza desde aquí en esta máquina");
+  return correrPaso(pasoDeCrearAvd(nombre, imagen), deps);
+}
+
+/** El cuerpo común: resolver el entorno y correr las invocaciones de un paso ya elegido. */
+function correrPaso(paso: PasoEjecutable, deps: DependenciasDeInstalacion): Trabajo {
+  const plataforma = deps.plataforma ?? process.platform;
+  const entorno = deps.entorno ?? process.env;
+  const home = deps.home ?? homedir();
+  const existe = deps.existe ?? existsSync;
+  const ahora = deps.ahora ?? (() => Date.now());
+  const t0 = ahora();
+  const decir = (linea: string): void => deps.alSalirLinea?.(linea);
 
   // La DESCARGA es un camino aparte y mucho más corto: no hay binario que resolver ni SDK que
   // exigir, solo dónde cae. `descargaDeHerramientas.ts` ya devuelve el MISMO vocabulario

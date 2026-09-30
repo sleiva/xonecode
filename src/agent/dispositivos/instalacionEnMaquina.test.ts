@@ -5,6 +5,7 @@ import { join, win32 } from "node:path";
 import { zipSync } from "fflate";
 import {
   correrPasoDeReceta,
+  crearAvd,
   PASOS_EJECUTABLES,
   TOPE_SIN_SALIDA_MS,
   TOPE_DE_TRABAJO_MS,
@@ -651,5 +652,46 @@ describe("los pasos de Windows", () => {
       trabajo.cancelar();
       expect(await trabajo.terminado).toMatchObject({ estado: "cancelada" });
     });
+  });
+});
+
+describe("crearAvd", () => {
+  const montar = (extra: Record<string, unknown> = {}) => {
+    const llamadas: { binario: string; args: string[]; env: Record<string, string | undefined> }[] = [];
+    const hijos: ReturnType<typeof hijoFalso>[] = [];
+    const lanzar = (binario: string, args: string[], opciones: { env: Record<string, string | undefined> }) => {
+      llamadas.push({ binario, args, env: opciones.env });
+      const h = hijoFalso();
+      hijos.push(h);
+      return h.hijo;
+    };
+    return { llamadas, hijos, deps: { ...ANDROID, lanzar, ...extra } };
+  };
+
+  it("usa la invocación del paso de la receta con otro nombre", async () => {
+    const m = montar();
+    const t = crearAvd("pixel8-b", m.deps);
+    expect(m.llamadas[0]!.args).toEqual([
+      "create", "avd", "-n", "pixel8-b", "-k", "system-images;android-35;google_apis;arm64-v8a", "-d", "pixel_8",
+    ]);
+    expect(m.hijos[0]!.escrito).toContain("no\n");
+    expect(m.llamadas[0]!.env["JAVA_HOME"]).toBeDefined();
+    m.hijos[0]!.cerrar(0);
+    expect(await t.terminado).toMatchObject({ estado: "ok" });
+  });
+
+  it("no lanza con un nombre inaceptable", async () => {
+    const m = montar();
+    const r = await crearAvd("-x", m.deps).terminado;
+    expect(r.estado).toBe("fallo");
+    expect(r.motivo).toBeTruthy();
+    expect(m.llamadas).toHaveLength(0);
+  });
+
+  it("en una plataforma sin paso de crear, falla sin lanzar", async () => {
+    const m = montar({ plataforma: "linux" });
+    const r = await crearAvd("pixel8-b", m.deps).terminado;
+    expect(r).toMatchObject({ estado: "fallo", motivo: "crear emuladores no se lanza desde aquí en esta máquina" });
+    expect(m.llamadas).toHaveLength(0);
   });
 });
