@@ -118,4 +118,48 @@ describe("PastillaDeDispositivo", () => {
     rerender(<PastillaDeDispositivo informe={INFORME} alElegir={() => {}} />);
     expect(screen.queryByRole("button", { name: "Volver a medir" })).toBeNull();
   });
+  describe("aparato en uso por otra sesión", () => {
+    const DOS = {
+      ...INFORME,
+      dispositivos: [
+        { id: "emulator-5554", nombre: "Pixel 8", plataforma: "android" as const, clase: "emulador" as const, estado: "arrancado" as const },
+        { id: "emulator-5556", nombre: "Pixel 9", plataforma: "android" as const, clase: "emulador" as const, estado: "arrancado" as const },
+      ],
+      avds: [],
+    };
+    const USO = [{ id: "emulator-5556", proyecto: "TagMyXOne" }];
+
+    it("marca el aparato de otra consola y sigue siendo elegible", () => {
+      const alElegir = vi.fn();
+      render(<PastillaDeDispositivo informe={DOS} alElegir={alElegir} enUso={USO} proyectoActual="MyAllXOne" />);
+      fireEvent.click(screen.getByRole("button", { name: /sin dispositivo/i }));
+      expect(screen.getByText("en uso en TagMyXOne")).toBeTruthy();
+      fireEvent.click(screen.getByRole("menuitem", { name: /Pixel 9/ }));
+      expect(alElegir).toHaveBeenCalledWith("emulator-5556");
+    });
+
+    it("si el elegido lo usa otra, la pastilla lo dice", () => {
+      render(
+        <PastillaDeDispositivo
+          informe={DOS}
+          elegido={{ id: "emulator-5556", nombre: "Pixel 9", plataforma: "android", clase: "emulador" }}
+          alElegir={() => {}}
+          enUso={USO}
+          proyectoActual="MyAllXOne"
+        />
+      );
+      expect(screen.getByLabelText("también lo usa TagMyXOne")).toBeTruthy();
+    });
+
+    it("lo de esta misma consola no avisa, y sin enUso todo queda igual", () => {
+      const elegido = { id: "emulator-5556", nombre: "Pixel 9", plataforma: "android" as const, clase: "emulador" as const };
+      const { unmount } = render(<PastillaDeDispositivo informe={DOS} elegido={elegido} alElegir={() => {}} enUso={USO} proyectoActual="TagMyXOne" />);
+      fireEvent.click(screen.getByRole("button", { name: /Pixel 9/ }));
+      expect(screen.queryByText(/en uso en/)).toBeNull();
+      expect(screen.queryByLabelText(/también lo usa/)).toBeNull();
+      unmount();
+      render(<PastillaDeDispositivo informe={DOS} elegido={elegido} alElegir={() => {}} />);
+      expect(screen.queryByLabelText(/también lo usa/)).toBeNull();
+    });
+  });
 });

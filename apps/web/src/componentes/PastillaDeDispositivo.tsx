@@ -38,6 +38,8 @@ export function PastillaDeDispositivo({
   conectado = true,
   alElegir,
   alMedir,
+  enUso,
+  proyectoActual,
 }: {
   /** El de la sesión, tal como lo cuenta el servidor. Ausente = ninguno elegido. */
   elegido?: DispositivoElegido;
@@ -53,6 +55,14 @@ export function PastillaDeDispositivo({
    * se ofrece.
    */
   alMedir?: () => void;
+  /**
+   * Qué aparato tiene elegido CADA consola abierta, tal como lo cuenta el servidor. Es un AVISO,
+   * no un bloqueo: dos sesiones pueden querer el mismo aparato y decidirlo es de la persona.
+   * Ausente = no se sabe, y todo se pinta como siempre.
+   */
+  enUso?: { id: string; proyecto: string }[];
+  /** El proyecto de ESTA consola, con la forma que usa el servidor en `enUso`: la propia no cuenta como «otra». */
+  proyectoActual?: string;
 }) {
   const [abierta, setAbierta] = useState(false);
   const envoltura = useRef<HTMLDivElement>(null);
@@ -75,6 +85,11 @@ export function PastillaDeDispositivo({
   // ¿El elegido sigue estando? Con `informe` ausente no se afirma ninguna de las dos cosas:
   // no hay medida contra la que comprobarlo, y decir «no está» sería inventarlo.
   const presente = informe === undefined || todos.some((d) => d.id === elegido?.id);
+
+  // Las entradas de esta misma consola no avisan de nada: el aparato es suyo.
+  const otros = (enUso ?? []).filter((u) => u.proyecto !== proyectoActual);
+  const usoDe = (id: string): string | undefined => otros.find((u) => u.id === id)?.proyecto;
+  const usoDelElegido = elegido === undefined ? undefined : usoDe(elegido.id);
 
   const elegir = (id: string | undefined): void => {
     setAbierta(false);
@@ -122,6 +137,7 @@ export function PastillaDeDispositivo({
             {/* Los nombres de iOS ya traen su plataforma desde el host («iPhone 16 · iOS 18.2»):
                 añadirla otra vez salía como «iOS · iOS». Solo a los de Android. */}
             {d.plataforma === "android" ? `${d.nombre} · Android` : d.nombre} · {etiquetaDeEstado(d)}
+            {usoDe(d.id) === undefined ? null : <span className={estilos.espera}>{`en uso en ${usoDe(d.id)}`}</span>}
           </button>
         ))}
       </div>
@@ -137,13 +153,22 @@ export function PastillaDeDispositivo({
         disabled={!conectado}
         // El nombre a secas en la pastilla y el aviso en el título: la fila de controles del
         // compositor es estrecha, y «iPhone 16 (no está ahora)» la parte en dos.
-        title={elegido === undefined ? "Elige el dispositivo de esta sesión" : presente ? elegido.nombre : `${elegido.nombre} — no está en la última medida`}
+        title={
+          elegido === undefined
+            ? "Elige el dispositivo de esta sesión"
+            : `${presente ? elegido.nombre : `${elegido.nombre} — no está en la última medida`}${usoDelElegido === undefined ? "" : ` — también lo usa ${usoDelElegido}`}`
+        }
         onClick={() => setAbierta((v) => !v)}
       >
         <IconoDeDispositivo />
         <span>
           {elegido === undefined ? "Sin dispositivo" : elegido.nombre}
           {elegido !== undefined && !presente ? " ·" : null}
+          {usoDelElegido === undefined ? null : (
+            <span role="img" aria-label={`también lo usa ${usoDelElegido}`}>
+              {" ⚠"}
+            </span>
+          )}
         </span>
         <IconoDeChevron />
       </button>

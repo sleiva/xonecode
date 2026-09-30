@@ -94,6 +94,8 @@ export function Compositor({
   modoDeEscritura,
   alElegirModoDeEscritura,
   alElegirDispositivo,
+  dispositivosEnUso,
+  proyectoActual,
   alMedirDispositivos,
   alSubirAdjunto,
   alEnviar,
@@ -176,6 +178,10 @@ export function Compositor({
   alElegirModoDeEscritura?: (modo: ModoDeEscritura) => void;
   /** Elegir dispositivo: el id, o `undefined` para quitarlo. Ausente = no se pinta pastilla. */
   alElegirDispositivo?: (id: string | undefined) => void;
+  /** Qué aparato usa cada consola abierta; la pastilla avisa de los de OTRAS. Ausente = no avisa. */
+  dispositivosEnUso?: { id: string; proyecto: string }[];
+  /** El proyecto de esta consola, para no avisarse a sí misma. */
+  proyectoActual?: string;
   /** Volver a medir la máquina desde el menú de la pastilla. Ausente = no se ofrece. */
   alMedirDispositivos?: () => void;
   /**
@@ -431,6 +437,8 @@ export function Compositor({
                 conectado={conectado}
                 alElegir={alElegirDispositivo}
                 {...(alMedirDispositivos === undefined ? {} : { alMedir: alMedirDispositivos })}
+                {...(dispositivosEnUso === undefined ? {} : { enUso: dispositivosEnUso })}
+                {...(proyectoActual === undefined ? {} : { proyectoActual })}
               />
             </div>
           )}
