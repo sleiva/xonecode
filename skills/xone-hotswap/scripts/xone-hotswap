@@ -15,13 +15,15 @@
  *
  * Los comandos se mandan EN ORDEN y cada uno espera la respuesta del anterior.
  *
- * ANTES DE LLAMARLO (Android): tiene que estar el túnel, o `127.0.0.1:8443` no lleva a
- * ninguna parte —el servidor escucha en el localhost del APARATO—:
- *   adb forward tcp:8443 tcp:8443
- * En iOS no hay túnel: el simulador comparte la pila de red del Mac.
+ * ANTES DE LLAMARLO (Android): tiene que estar el túnel, o el puerto local no lleva a
+ * ninguna parte —el servidor escucha en el localhost del APARATO—. Lo ponen
+ * `xone-desplegar-android` y `xone-reiniciar-android`, con el puerto del aparato: no hagas
+ * `adb forward` a mano. Este cliente usa ese mismo puerto (`--puerto N` lo fuerza).
+ * En iOS no hay túnel: el simulador comparte la pila de red del Mac (8443).
  *
  * VARIABLES
- *   HOTSWAP_URL          el destino. Por omisión `wss://127.0.0.1:8443/hotswap`.
+ *   HOTSWAP_URL          el destino. Por omisión `wss://127.0.0.1:<puerto del aparato>/hotswap`
+ *                        (8443 si el aparato no tiene otro guardado en Ajustes → Dispositivos).
  *   XONECODE_ARTEFACTOS  dónde dejar lo binario (una captura). Si no está, se dice y no se
  *                        guarda: escribirlo en el proyecto sería ensuciar la app del usuario.
  *   HOTSWAP_TOPE_MS      tope de espera de UNA respuesta. Por omisión 40000.
@@ -52,8 +54,19 @@ process.on("warning", (aviso) => {
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { dispositivoDeLaSesion, puertoAndroid, serieAndroid, PUERTO_DEL_HOTSWAP } from "../lib/dispositivo.mjs";
 
-const URL_POR_OMISION = "wss://127.0.0.1:8443/hotswap";
+/**
+ * La URL cuando nadie dice `HOTSWAP_URL`: el puerto LOCAL del túnel es del aparato, no un 8443
+ * fijo (con dos emuladores, un segundo `adb forward` al mismo puerto le quita el aparato al
+ * primero sin error). Solo se resuelve si hace falta: con `HOTSWAP_URL` no se llama a adb.
+ */
+function urlPorOmision(puertoPedido) {
+  // iOS no tiene túnel: el simulador comparte el localhost del Mac.
+  if (dispositivoDeLaSesion()?.plataforma === "ios") return `wss://127.0.0.1:${PUERTO_DEL_HOTSWAP}/hotswap`;
+  const { serie } = serieAndroid(undefined);
+  return `wss://127.0.0.1:${puertoAndroid(puertoPedido, serie)}/hotswap`;
+}
 const TOPE_MS = Number(process.env.HOTSWAP_TOPE_MS ?? 40_000);
 const ARTEFACTOS = process.env.XONECODE_ARTEFACTOS;
 /**
@@ -89,7 +102,11 @@ const RUTA_VIRTUAL = process.env.XONECODE_HOTSWAP === undefined ? "/artefactos/"
  */
 const LARGO_PARA_GUARDAR = 2_000;
 
-const pedidos = process.argv.slice(2);
+// `--puerto N` se retira ANTES de leer los comandos: no es de ninguno.
+const argumentos = process.argv.slice(2);
+const iPuerto = argumentos.indexOf("--puerto");
+const puertoPedido = iPuerto >= 0 ? argumentos[iPuerto + 1] : undefined;
+const pedidos = iPuerto >= 0 ? argumentos.filter((_, i) => i !== iPuerto && i !== iPuerto + 1) : argumentos;
 if (pedidos.length === 0 || pedidos.includes("--help") || pedidos.includes("-h")) {
   // El prompt del agente promete que `--help` contesta. Una promesa así, sin cumplir, cuesta
   // un viaje y deja al modelo adivinando argumentos.
@@ -108,10 +125,11 @@ conexion, que es lo que hay que hacer (el servidor admite una sola y cierra la a
 Los valores se tipan solos: número, true/false y {...}/[...] como JSON.
 Con --dry-run se imprime lo que se enviaría, sin conectar.
 
-Antes, en Android, hace falta el túnel: adb forward tcp:8443 tcp:8443
+Antes, en Android, hace falta el túnel: lo ponen xone-desplegar-android y xone-reiniciar-android con el
+puerto del aparato; no hagas adb forward a mano. --puerto N fuerza el puerto local (8443 por omisión).
 Una respuesta larga no se imprime: una IMAGEN va a $XONECODE_ARTEFACTOS (y sale en el chat),
 el TEXTO va a $XONECODE_HOTSWAP y se relee con read_file en /hotswap/<nombre>.
-Variables: HOTSWAP_URL (${URL_POR_OMISION}), XONECODE_ARTEFACTOS, XONECODE_HOTSWAP, HOTSWAP_TOPE_MS.
+Variables: HOTSWAP_URL (por omisión wss://127.0.0.1:<puerto del aparato>/hotswap), XONECODE_ARTEFACTOS, XONECODE_HOTSWAP, HOTSWAP_TOPE_MS.
 El catálogo entero de comandos está en el SKILL.md de xone-hotswap.`);
   process.exit(pedidos.length === 0 ? 1 : 0);
 }
@@ -306,7 +324,7 @@ function sinBinarios(respuesta) {
   return copia;
 }
 
-const ws = new WebSocket(process.env.HOTSWAP_URL ?? URL_POR_OMISION);
+const ws = new WebSocket(process.env.HOTSWAP_URL ?? urlPorOmision(puertoPedido));
 let saludado = false;
 let pendiente;
 let reloj;

@@ -15,17 +15,17 @@
  *   xone-reiniciar-android                        deja el host en su pantalla de inicio
  *   xone-reiniciar-android --app MiApp            y además lanza esa app
  *   xone-reiniciar-android --serie emulator-5554  con varios aparatos conectados
+ *   xone-reiniciar-android --puerto 8444          puerto LOCAL del túnel (por omisión el del aparato)
  *
  * **No despliega nada**: no sube ficheros ni toca el proyecto. Para eso está
  * `xone-desplegar-android`, que ya hace este reinicio como uno de sus pasos.
  */
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
-import { serieAndroid, rutaDeAdb, NODE, dormir } from "../lib/dispositivo.mjs";
+import { serieAndroid, rutaDeAdb, NODE, dormir, PUERTO_DEL_HOTSWAP, puertoAndroid } from "../lib/dispositivo.mjs";
 
 const PAQUETE = "com.xone.android.framework";
 const ACTIVIDAD = `${PAQUETE}/com.xone.android.hotswap.activities.SetupActivity`;
-const PUERTO = 8443;
 
 const args = process.argv.slice(2);
 if (args.includes("--help") || args.includes("-h")) {
@@ -34,6 +34,8 @@ if (args.includes("--help") || args.includes("-h")) {
   xone-reiniciar-android                        lo deja en su pantalla de inicio
   xone-reiniciar-android --app MiApp            y además lanza esa app
   xone-reiniciar-android --serie emulator-5554  con varios aparatos conectados
+  xone-reiniciar-android --puerto 8444          puerto LOCAL del túnel (por omisión, el del aparato en
+                                                Ajustes → Dispositivos; si no, 8443)
 
 Úsalo cuando el canal no conteste: el host reabre la última app ejecutada, y si ésa se quedó
 en un error, nada responde aunque el aparato esté perfectamente. No despliega ni sube nada.`);
@@ -48,12 +50,25 @@ const opcion = (nombre) => {
 // dice por stderr con cuál y por qué: con varios aparatos, callarlo haría adivinar dónde pasó.
 const { serie, porque } = serieAndroid(opcion("serie"));
 if (serie !== undefined) process.stderr.write(`dispositivo: ${serie} (${porque})\n`);
+// El puerto LOCAL es del aparato (Ajustes → Dispositivos): con dos emuladores, un 8443 fijo
+// hacía que el segundo túnel le quitara el aparato al primero sin avisar. Dentro sigue en 8443.
+const PUERTO = puertoAndroid(opcion("puerto"), serie);
 const adb = (...partes) =>
   execFileSync(rutaDeAdb(), [...(serie ? ["-s", serie] : []), ...partes], { encoding: "utf8" });
 
 const cliente = join(import.meta.dirname, "xone-hotswap");
-const mandar = (comando) =>
-  execFileSync(NODE, [cliente, JSON.stringify(comando)], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+// En `clave=valor`: el cliente ya no recibe JSON. Y por el MISMO puerto que el túnel de abajo.
+const mandar = (comando) => {
+  const { command, ...resto } = comando;
+  const pares = Object.entries(resto).map(([k, v]) =>
+    `${k}=${typeof v === "object" && v !== null ? JSON.stringify(v) : String(v)}`,
+  );
+  return execFileSync(NODE, [cliente, command, ...pares], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+    env: { ...process.env, HOTSWAP_URL: process.env.HOTSWAP_URL ?? `wss://127.0.0.1:${PUERTO}/hotswap` },
+  }).trim();
+};
 
 /**
  * Sin aparato NO se empieza, y se dice el siguiente paso HECHO.
@@ -83,10 +98,10 @@ function exigirAparato() {
 }
 
 exigirAparato();
-console.log(`1/3 túnel y parada de ${PAQUETE}`);
+console.log(`1/3 túnel (127.0.0.1:${PUERTO} → ${PUERTO_DEL_HOTSWAP} del aparato) y parada de ${PAQUETE}`);
 // El túnel PRIMERO y sin quitarlo después: hay que reaplicarlo tras cada reconexión del cable,
 // así que quitarlo dejaría al siguiente hablando con nadie.
-adb("forward", `tcp:${PUERTO}`, `tcp:${PUERTO}`);
+adb("forward", `tcp:${PUERTO}`, `tcp:${PUERTO_DEL_HOTSWAP}`);
 adb("shell", "am", "force-stop", PAQUETE);
 
 console.log("2/3 levantando el host");
@@ -112,7 +127,7 @@ for (let intento = 1; intento <= 20 && !vivo; intento++) {
 }
 if (!vivo) {
   console.error(`el canal no levantó. Comprueba que ${PAQUETE} está instalado (adb shell pm list packages | grep xone)`);
-  console.error(`y que el puerto es el ${PUERTO}: si estaba ocupado, el framework coge el siguiente libre y lo dice en su pantalla.`);
+  console.error(`y que el puerto del aparato es el ${PUERTO_DEL_HOTSWAP} (local ${PUERTO}): si estaba ocupado, el framework coge el siguiente libre y lo dice en su pantalla.`);
   process.exit(1);
 }
 

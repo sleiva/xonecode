@@ -32,9 +32,10 @@
  *   xone-arrancar-android                  el único AVD que haya
  *   xone-arrancar-android --avd pixel8     con varios
  *   xone-arrancar-android --lista          qué AVDs hay, sin arrancar nada
+ *   xone-arrancar-android --sin-ventana    sin ventana (también si el AVD lo tiene marcado en Ajustes)
  */
 import { execFileSync, spawn } from "node:child_process";
-import { dormir } from "../lib/dispositivo.mjs";
+import { dormir, ajusteDelAvd } from "../lib/dispositivo.mjs";
 
 /** Lo que tarda un arranque en frío de un AVD con `google_apis`, con margen. Por debajo del
  *  tope de reloj de UN comando del harness (600 s), que es quien mataría al script entero. */
@@ -53,6 +54,7 @@ if (args.includes("--help") || args.includes("-h")) {
   xone-arrancar-android                  el único AVD que haya
   xone-arrancar-android --avd pixel8     con varios
   xone-arrancar-android --lista          qué AVDs hay, sin arrancar nada
+  xone-arrancar-android --sin-ventana    sin ventana ni audio (también si el AVD lo tiene marcado en Ajustes)
 
 Si ya hay un emulador vivo con ese AVD, lo dice y no lanza nada. Espera a que el sistema
 diga \`sys.boot_completed=1\`, no solo a que el aparato aparezca en \`adb devices\`: sobre un
@@ -172,7 +174,12 @@ if (yaEstaba === undefined) {
    * pipes, no sale, y entonces el que muere por el tope de reloj es el SCRIPT —diez minutos
    * de turno tirados—. `unref` es lo que deja que este proceso acabe con el nieto vivo.
    */
-  const hijo = spawn(EMULATOR, ["-avd", avd], { detached: true, stdio: "ignore" });
+  // «Sin ventana» viene de Ajustes → Dispositivos (por AVD) o de `--sin-ventana`. Es la misma
+  // receta que el botón de la web (`argsDeArranque`), copiada porque la skill no importa TS.
+  const sinVentana = args.includes("--sin-ventana") || ajusteDelAvd(avd).sinVentana === true;
+  const banderas = sinVentana ? ["-no-window", "-no-audio", "-no-metrics"] : [];
+  if (sinVentana) console.log(`${avd} arranca SIN ventana: para verlo, captura; para pararlo, adb -s <serie> emu kill`);
+  const hijo = spawn(EMULATOR, ["-avd", avd, ...banderas], { detached: true, stdio: "ignore" });
   let fallo;
   hijo.on("error", (e) => {
     fallo = e.message;

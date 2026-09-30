@@ -11,6 +11,7 @@
  *   xone-desplegar-android
  *   xone-desplegar-android --captura
  *   xone-desplegar-android --app MiApp --serie emulator-5554
+ *   xone-desplegar-android --puerto 8444   puerto LOCAL del túnel (por omisión el del aparato, Ajustes → Dispositivos)
  *
  * EL ORDEN, Y POR QUÉ ES ESE:
  *  1. **El túnel primero.** Sin `adb forward`, `127.0.0.1:8443` no lleva a ninguna parte: el
@@ -48,11 +49,10 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, join, relative, sep } from "node:path";
 import { deflateRawSync } from "node:zlib";
-import { serieAndroid, rutaDeAdb, NODE, dormir } from "../lib/dispositivo.mjs";
+import { serieAndroid, rutaDeAdb, NODE, dormir, PUERTO_DEL_HOTSWAP, puertoAndroid } from "../lib/dispositivo.mjs";
 
 const PAQUETE = "com.xone.android.framework";
 const ACTIVIDAD = `${PAQUETE}/com.xone.android.hotswap.activities.SetupActivity`;
-const PUERTO = 8443;
 
 /**
  * Un ZIP en memoria, sin `zip` del sistema y sin dependencias.
@@ -160,6 +160,7 @@ if (args.includes("--help") || args.includes("-h")) {
   xone-desplegar-android                       nombre de app tomado de app.xml
   xone-desplegar-android --app MiApp           nombre explícito
   xone-desplegar-android --serie emulator-5554 con varios aparatos conectados
+  xone-desplegar-android --puerto 8444          puerto LOCAL del túnel (por omisión, el del aparato en Ajustes; si no, 8443)
 
 Hace la cadena entera: túnel adb, ZIP del proyecto (sin .xonecode ni .git), subida, reinicio del
 framework y lanzamiento, y COMPRUEBA que la app esté viva pidiendo su árbol de controles.
@@ -174,6 +175,9 @@ Studio o \`xone-db-tools\`, no esto, y sin ella la app muere aunque el verificad
 // dice por stderr con cuál y por qué: con varios aparatos, callarlo haría adivinar dónde pasó.
 const { serie, porque } = serieAndroid(opcion("serie"));
 if (serie !== undefined) process.stderr.write(`dispositivo: ${serie} (${porque})\n`);
+// El puerto LOCAL es del aparato (Ajustes → Dispositivos): con dos emuladores, un 8443 fijo
+// hacía que el segundo túnel le quitara el aparato al primero sin avisar. Dentro sigue en 8443.
+const PUERTO = puertoAndroid(opcion("puerto"), serie);
 const adb = (...partes) =>
   execFileSync(rutaDeAdb(), [...(serie ? ["-s", serie] : []), ...partes], { encoding: "utf8" });
 
@@ -347,8 +351,8 @@ function exigirAparato() {
 }
 
   exigirAparato();
-  console.log(`1/5 túnel: ${PUERTO}`);
-  adb("forward", `tcp:${PUERTO}`, `tcp:${PUERTO}`);
+  console.log(`1/5 túnel: 127.0.0.1:${PUERTO} → ${PUERTO_DEL_HOTSWAP} del aparato`);
+  adb("forward", `tcp:${PUERTO}`, `tcp:${PUERTO_DEL_HOTSWAP}`);
 
   console.log("2/5 empaquetando el proyecto (sin .xonecode ni .git)");
   const cuerpo = crearZip(process.cwd(), [".xonecode", ".git"]);
@@ -400,7 +404,8 @@ function exigirAparato() {
     const pares = Object.entries(resto).map(([k, v]) =>
       `${k}=${typeof v === "object" && v !== null ? JSON.stringify(v) : String(v)}`,
     );
-    return execFileSync(NODE, [cliente, command, ...pares], { encoding: "utf8" }).trim();
+    // El hijo habla por el MISMO puerto que el túnel de arriba, aunque venga de `--puerto`.
+    return execFileSync(NODE, [cliente, command, ...pares], { encoding: "utf8", env: { ...process.env, HOTSWAP_URL: process.env.HOTSWAP_URL ?? `wss://127.0.0.1:${PUERTO}/hotswap` } }).trim();
   };
   const esperar = (segundos) => dormir(segundos);
 
@@ -421,7 +426,7 @@ function exigirAparato() {
   }
   if (!listo) {
     console.error(`el servidor hotswap no levantó tras el reinicio. Comprueba que ${PAQUETE} está instalado`);
-    console.error("y que el puerto es el 8443 (si estaba ocupado, el framework coge el siguiente libre).");
+    console.error(`y que el puerto del aparato es el ${PUERTO_DEL_HOTSWAP} (si estaba ocupado, el framework coge el siguiente libre; el local es el ${PUERTO}).`);
     process.exit(1);
   }
 

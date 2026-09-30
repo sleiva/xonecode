@@ -89,8 +89,9 @@ export function udidIos(explicito, entorno = process.env) {
 /** El puerto del hotswap DENTRO del aparato y el local por omisión. Copia de `core/puertosDeAvd.ts#PUERTO_DEL_HOTSWAP`. */
 export const PUERTO_DEL_HOTSWAP = 8443;
 
+// Con tope: un adb colgado cae en el `catch` de quien llama (puerto por omisión) en vez de colgar el script.
 const ejecutarAdb = (binario, args) =>
-  execFileSync(binario, args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  execFileSync(binario, args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 5000 });
 
 /** El AVD detrás de un emulador en marcha, por su consola. Un físico no tiene: `undefined` sin preguntar. */
 export function avdDeLaSerie(serie, { entorno = process.env, ejecutar = ejecutarAdb } = {}) {
