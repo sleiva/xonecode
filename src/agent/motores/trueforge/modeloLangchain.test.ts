@@ -112,6 +112,13 @@ describe("el uso de una llamada lleva el razonamiento, cuando el proveedor lo di
     expect(uso).not.toHaveProperty("reasoning_tokens");
   });
 
+  it("la caché no pasa de la entrada: Gemini la cuenta dos veces en streaming y la pantalla decía 0 de entrada", async () => {
+    const uso = await usoDe(new AIMessageChunk({ content: "x", usage_metadata: { input_tokens: 20097, output_tokens: 5, total_tokens: 20102, input_token_details: { cache_read: 32696 } } }));
+    expect(uso["cache_read_tokens"]).toBe(20097);
+    const normal = await usoDe(new AIMessageChunk({ content: "x", usage_metadata: { input_tokens: 100, output_tokens: 5, total_tokens: 105, input_token_details: { cache_read: 60 } } }));
+    expect(normal["cache_read_tokens"]).toBe(60);
+  });
+
   it("un cero DECLARADO se conserva: el proveedor dijo que no pensó", async () => {
     const uso = await usoDe(new AIMessageChunk({ content: "396", usage_metadata: { input_tokens: 5, output_tokens: 1, total_tokens: 6, output_token_details: { reasoning: 0 } } }));
     expect(uso["reasoning_tokens"]).toBe(0);

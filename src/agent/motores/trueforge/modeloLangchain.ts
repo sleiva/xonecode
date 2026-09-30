@@ -209,7 +209,13 @@ export function modeloParaTrueforge(opciones: {
         input_tokens: uso?.input_tokens ?? 0,
         output_tokens: uso?.output_tokens ?? 0,
         total_tokens: uso?.total_tokens ?? 0,
-        ...(uso?.input_token_details?.cache_read === undefined ? {} : { cache_read_tokens: uso.input_token_details.cache_read }),
+        // La caché es una PARTE de la entrada y no puede superarla: la MISMA cota que
+        // `vendor/tokenTracking.ts`, que este motor no heredaba. Medido con Gemini en MyAllXOne:
+        // `@langchain/google-genai` suma `cache_read` dos veces en streaming, una sesión acabó con
+        // 5,8 M de caché sobre 3,6 M de entrada, y la pantalla («entrada − caché») decía 0 de entrada.
+        ...(uso?.input_token_details?.cache_read === undefined
+          ? {}
+          : { cache_read_tokens: Math.min(uso.input_token_details.cache_read, uso.input_tokens ?? 0) }),
         // De los tokens de salida, cuántos fueron RAZONAMIENTO (DeepSeek y los modelos que lo declaran). Ausente
         // = el proveedor no lo dice, que no es lo mismo que cero: por eso no se rellena con 0.
         ...(uso?.output_token_details?.reasoning === undefined ? {} : { reasoning_tokens: uso.output_token_details.reasoning }),
