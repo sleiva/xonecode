@@ -51,6 +51,17 @@ export const PLATAFORMAS_DE_DISPOSITIVO = ["android", "androidEmulador", "ios", 
 export type PlataformaDeDispositivo = (typeof PLATAFORMAS_DE_DISPOSITIVO)[number];
 
 /**
+ * Lo que se recuerda de UN AVD, por su NOMBRE y no por su serie: `emulator-5554`/`-5556`
+ * dependen del orden en que se arrancan, el nombre no. Ausente = nada que decir.
+ */
+export interface AjustesDeAvd {
+  /** El puerto LOCAL del túnel de hotswap (`adb forward tcp:<puerto> tcp:8443`). */
+  puerto?: number;
+  /** Arrancarlo sin ventana (`-no-window`). Solo `true` se guarda. */
+  sinVentana?: true;
+}
+
+/**
  * Qué destinos se MIRAN al medir la máquina.
  *
  * Vive en global y no en el proyecto porque describe el equipo, no la app: el mismo Mac
@@ -73,17 +84,6 @@ export type PlataformaDeDispositivo = (typeof PLATAFORMAS_DE_DISPOSITIVO)[number
  * descartó, ver `expandirConCasa`), y solo para `adb`/`emulator`; `xcrun`/`devicectl` se
  * quedan en el host.
  */
-/**
- * Lo que se recuerda de UN AVD, por su NOMBRE y no por su serie: `emulator-5554`/`-5556`
- * dependen del orden en que se arrancan, el nombre no. Ausente = nada que decir.
- */
-export interface AjustesDeAvd {
-  /** El puerto LOCAL del túnel de hotswap (`adb forward tcp:<puerto> tcp:8443`). */
-  puerto?: number;
-  /** Arrancarlo sin ventana (`-no-window`). Solo `true` se guarda. */
-  sinVentana?: true;
-}
-
 export type AjustesDeDispositivos = { [K in PlataformaDeDispositivo]?: boolean } & {
   rutaAdb?: string;
   rutaEmulator?: string;
