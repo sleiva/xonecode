@@ -1067,3 +1067,69 @@
   font-family: var(--ds-font-family-code);
   font-size: 12px;
 }
+
+/* «Simuladores y emuladores»: las MISMAS columnas en todas las filas. La lista es la
+   cuadrícula y cada fila un SUBGRID suyo, así que «auto» mide la celda más ancha de TODAS las
+   filas y el puerto, la casilla y las acciones empiezan en la misma x de fila a fila. Orden:
+   punto, identidad, puerto, casilla, arrancar/parar, verificar. */
+.filas.tablaDeAvd {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
+  gap: 8px 10px;
+  /* Contenedor de la consulta de abajo (que solo alcanza a los DESCENDIENTES: las filas). */
+  container-type: inline-size;
+}
+
+.fila.filaDeAvd {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  align-items: center;
+}
+
+.identidadDeAvd {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.detalleDeAvd {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+/* Una celda de acción: su botón pegado a la derecha, y el margen automático que trae la hoja
+   de Verificar (pensado para una fila flex) no pinta nada aquí. */
+.celdaDeAccion {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.celdaDeAccion > span {
+  margin-left: 0;
+}
+
+/* Estrecho: la cuadrícula se rinde y cada fila envuelve en orden, sin scroll horizontal. Lo
+   vacío no ocupa sitio. */
+@container (max-width: 640px) {
+  .filas.tablaDeAvd {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .fila.filaDeAvd {
+    display: flex;
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .fila.filaDeAvd > :empty {
+    display: none;
+  }
+
+  .identidadDeAvd {
+    flex: 1 1 140px;
+  }
+}

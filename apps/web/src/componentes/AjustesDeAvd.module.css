@@ -1,10 +1,18 @@
 /* Puerto y «sin ventana» de un AVD, en la fila del dispositivo. Los colores son los tokens
    de la hoja de `VerificarDispositivo` (nada literal). */
+/* El envoltorio no existe para el maquetado: sus dos celdas (puerto y casilla) son columnas de
+   la cuadrícula de la fila (`Ajustes.module.css#tablaDeAvd`), y vacías cuando no hay dato. */
 .envoltura {
-  display: inline-flex;
+  display: contents;
+}
+
+.celdaDePuerto,
+.celdaDeCasilla {
+  display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+  min-width: 0;
   font-size: 11px;
   color: var(--dsw-alias-label-secondary);
 }

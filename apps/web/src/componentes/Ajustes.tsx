@@ -1512,77 +1512,83 @@ export function Ajustes({
                         // equipo» los CUENTA justamente por eso. Aquí sí se listan —es donde
                         // se elegirá uno— pero acotados en alto, para que la sección de
                         // requisitos de arriba no se vaya de la pantalla.
-                        <ul className={`${estilos.filas} ${estilos.listaLarga}`}>
-                          {simuladores.map((d) => (
-                            <li key={d.id} className={estilos.fila}>
-                              <span
-                                className={estilos.punto}
-                                data-herramienta={seLlegaAlDispositivo(d) ? "ok" : "otro"}
-                                aria-label={etiquetaDeEstado(d)}
-                              />
-                              <span className={estilos.nombre}>{d.nombre}</span>
-                              <span className={estilos.detalle}>{etiquetaDeEstado(d)}</span>
-                              {/*
-                                **Arrancar, solo donde hay algo que arrancar.** Un AVD que
-                                existe y no está en marcha (`soloDefinicion`) es el único caso:
-                                un simulador de iOS apagado no lo arranca xonecode, y uno ya
-                                arrancado no se arranca dos veces. Sin el manejador no se pinta
-                                —esta ejecución no puede—, que es la regla de esta ventana.
-                              */}
-                              {d.soloDefinicion === true && alArrancarEmulador !== undefined ? (
-                                <ArrancarEmulador
-                                  avd={d.nombre}
-                                  conectado={conectado}
-                                  alArrancar={alArrancarEmulador}
-                                  {...(arranqueDeEmulador?.avd === d.nombre
-                                    ? { resultado: arranqueDeEmulador }
-                                    : {})}
+                        <ul className={`${estilos.filas} ${estilos.listaLarga} ${estilos.tablaDeAvd}`}>
+                          {simuladores.map((d) => {
+                            // El AVD de la fila: el de la definición, o el que el emulador en
+                            // marcha dice ser (medido). Sin él no hay a quién ajustar.
+                            const avd = d.soloDefinicion === true ? d.nombre : d.clase === "emulador" ? d.avd : undefined;
+                            const enMarcha =
+                              d.soloDefinicion !== true &&
+                              d.clase === "emulador" &&
+                              (d.estado === "conectado" || d.estado === "arrancado");
+                            return (
+                              /* **Las mismas COLUMNAS en todas las filas** (subgrid, ver
+                                 `.tablaDeAvd`): punto, identidad, puerto, casilla, y dos
+                                 casillas de acción en orden fijo —arrancar/parar y luego
+                                 verificar—. Cada celda se pinta SIEMPRE, vacía si no hay
+                                 dato, para que las demás no se muevan. */
+                              <li key={d.id} className={`${estilos.fila} ${estilos.filaDeAvd}`}>
+                                <span
+                                  className={estilos.punto}
+                                  data-herramienta={seLlegaAlDispositivo(d) ? "ok" : "otro"}
+                                  aria-label={etiquetaDeEstado(d)}
                                 />
-                              ) : null}
-                              {(() => {
-                                // El AVD de la fila: el de la definición, o el que el emulador
-                                // en marcha dice ser (medido). Sin él no hay a quién ajustar.
-                                const avd = d.soloDefinicion === true ? d.nombre : d.clase === "emulador" ? d.avd : undefined;
-                                const enMarcha =
-                                  d.soloDefinicion !== true &&
-                                  d.clase === "emulador" &&
-                                  (d.estado === "conectado" || d.estado === "arrancado");
-                                return (
+                                <span className={estilos.identidadDeAvd}>
+                                  <span className={estilos.nombre}>{d.nombre}</span>
+                                  <span className={estilos.detalleDeAvd}>{etiquetaDeEstado(d)}</span>
+                                </span>
+                                {avd === undefined || alAjustarAvd === undefined ? (
                                   <>
-                                    {avd === undefined || alAjustarAvd === undefined ? null : (
-                                      <AjustesDeAvd
-                                        avd={avd}
-                                        ajuste={ajustesDeDispositivos?.avds?.[avd]}
-                                        conPuerto={dispositivos.avds.length >= 2}
-                                        conectado={conectado}
-                                        {...(ajustesDeDispositivos === undefined ? {} : { ajustes: ajustesDeDispositivos })}
-                                        alCambiar={(cambio) => alAjustarAvd(avd, cambio)}
-                                      />
-                                    )}
-                                    {enMarcha && avd !== undefined && alPararEmulador !== undefined ? (
-                                      <span className={estilosDeAccion.envoltura}>
-                                        <button
-                                          type="button"
-                                          className={estilosDeAccion.boton}
-                                          disabled={conectado !== true}
-                                          title={`Para ${avd}`}
-                                          onClick={() => alPararEmulador(d.id)}
-                                        >
-                                          Parar
-                                        </button>
-                                      </span>
-                                    ) : null}
+                                    <span />
+                                    <span />
                                   </>
-                                );
-                              })()}
-                              <VerificarDispositivo
-                                dispositivo={d}
-                                conectado={conectado}
-                                medidoDeLaFoto={dispositivos.medido}
-                                {...(alVerificarDispositivo === undefined ? {} : { alVerificar: alVerificarDispositivo })}
-                              />
-                            </li>
-                          ))}
+                                ) : (
+                                  <AjustesDeAvd
+                                    avd={avd}
+                                    ajuste={ajustesDeDispositivos?.avds?.[avd]}
+                                    conPuerto={dispositivos.avds.length >= 2}
+                                    conectado={conectado}
+                                    {...(ajustesDeDispositivos === undefined ? {} : { ajustes: ajustesDeDispositivos })}
+                                    alCambiar={(cambio) => alAjustarAvd(avd, cambio)}
+                                  />
+                                )}
+                                {/* Arrancar, solo donde hay algo que arrancar (`soloDefinicion`:
+                                    un simulador de iOS apagado no lo arranca xonecode, y uno
+                                    ya arrancado no se arranca dos veces); Parar, solo al que
+                                    corre. Sin el manejador no se pinta: esta ejecución no puede. */}
+                                <span className={estilos.celdaDeAccion}>
+                                  {d.soloDefinicion === true && alArrancarEmulador !== undefined ? (
+                                    <ArrancarEmulador
+                                      avd={d.nombre}
+                                      conectado={conectado}
+                                      alArrancar={alArrancarEmulador}
+                                      {...(arranqueDeEmulador?.avd === d.nombre ? { resultado: arranqueDeEmulador } : {})}
+                                    />
+                                  ) : enMarcha && avd !== undefined && alPararEmulador !== undefined ? (
+                                    <span className={estilosDeAccion.envoltura}>
+                                      <button
+                                        type="button"
+                                        className={estilosDeAccion.boton}
+                                        disabled={conectado !== true}
+                                        title={`Para ${avd}`}
+                                        onClick={() => alPararEmulador(d.id)}
+                                      >
+                                        Parar
+                                      </button>
+                                    </span>
+                                  ) : null}
+                                </span>
+                                <span className={estilos.celdaDeAccion}>
+                                  <VerificarDispositivo
+                                    dispositivo={d}
+                                    conectado={conectado}
+                                    medidoDeLaFoto={dispositivos.medido}
+                                    {...(alVerificarDispositivo === undefined ? {} : { alVerificar: alVerificarDispositivo })}
+                                  />
+                                </span>
+                              </li>
+                            );
+                          })}
                         </ul>
                       )}
                       {plataformaAbierta === "android" && alCrearEmulador !== undefined ? (

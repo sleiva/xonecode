@@ -51,47 +51,51 @@ export function AjustesDeAvd({
   };
   return (
     <span className={estilos.envoltura}>
-      {conPuerto ? (
-        <>
-          <label className={estilos.campo}>
-            Puerto
-            <input
-              type="number"
-              inputMode="numeric"
-              className={estilos.puerto}
-              value={borrador}
-              disabled={conectado !== true}
-              aria-label={`Puerto del túnel de ${avd}`}
-              title="El puerto de este Mac que lleva al 8443 del aparato. Cada emulador, el suyo."
-              onChange={(e) => {
-                // Editar es querer volver a intentarlo: si el servidor rechazó lo anterior (su
-                // negativa no llega aquí), el mismo valor tecleado de nuevo tiene que reenviarse.
-                enviado.current = undefined;
-                setBorrador(e.target.value);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") confirmar();
-              }}
-              onBlur={confirmar}
-            />
-          </label>
-          {motivo === undefined ? null : (
-            <span className={estilos.motivo} role="alert">
-              {motivo}
-            </span>
-          )}
-        </>
-      ) : null}
-      <label className={estilos.campo}>
-        <input
-          type="checkbox"
-          checked={ajuste?.sinVentana === true}
-          disabled={conectado !== true}
-          aria-label={`Arrancar ${avd} sin ventana`}
-          onChange={(e) => alCambiar({ sinVentana: e.target.checked })}
-        />
-        Sin ventana
-      </label>
+      <span className={estilos.celdaDePuerto}>
+        {conPuerto ? (
+          <>
+            <label className={estilos.campo}>
+              Puerto
+              <input
+                type="number"
+                inputMode="numeric"
+                className={estilos.puerto}
+                value={borrador}
+                disabled={conectado !== true}
+                aria-label={`Puerto del túnel de ${avd}`}
+                title="El puerto de este Mac que lleva al 8443 del aparato. Cada emulador, el suyo."
+                onChange={(e) => {
+                  // Editar es querer volver a intentarlo: si el servidor rechazó lo anterior (su
+                  // negativa no llega aquí), el mismo valor tecleado de nuevo tiene que reenviarse.
+                  enviado.current = undefined;
+                  setBorrador(e.target.value);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") confirmar();
+                }}
+                onBlur={confirmar}
+              />
+            </label>
+            {motivo === undefined ? null : (
+              <span className={estilos.motivo} role="alert">
+                {motivo}
+              </span>
+            )}
+          </>
+        ) : null}
+      </span>
+      <span className={estilos.celdaDeCasilla}>
+        <label className={estilos.campo}>
+          <input
+            type="checkbox"
+            checked={ajuste?.sinVentana === true}
+            disabled={conectado !== true}
+            aria-label={`Arrancar ${avd} sin ventana`}
+            onChange={(e) => alCambiar({ sinVentana: e.target.checked })}
+          />
+          Sin ventana
+        </label>
+      </span>
     </span>
   );
 }
