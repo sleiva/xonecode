@@ -250,6 +250,15 @@ export interface ToolDeConector {
   soloLectura?: boolean;
 }
 
+/**
+ * Una tool tal como la recibe un AGENTE: la de Ajustes más su esquema de entrada (JSON Schema,
+ * con sus `$defs`). Es otro tipo y no un campo más de `ToolDeConector` porque aquella viaja por el
+ * cable en cada foto de la prueba, y los esquemas de Stitch pesan decenas de KB.
+ */
+export interface ToolConEsquema extends ToolDeConector {
+  esquema: Record<string, unknown>;
+}
+
 /** La última vez que se probó: una FOTO con hora. Ausente = no se ha probado. */
 export type PruebaDeConector =
   | { cuando: number; ok: true; tools: ToolDeConector[] }
@@ -277,6 +286,12 @@ export interface ConectorDelCable {
 export const TTL_DE_AUTORIZACION_MS = 10 * 60 * 1000;
 /** Conectar + listar tools: más que esto es «no responde». */
 export const TOPE_DE_CONEXION_MS = 30 * 1000;
+/**
+ * Una llamada de un AGENTE a una tool: generar una pantalla en Stitch tarda minutos (medido: casi
+ * dos), y con el tope de conexión el agente veía un fallo de algo que sí terminaba. El SDK tiene su
+ * PROPIO tope por petición (60 s por omisión), así que este valor se le pasa también a él.
+ */
+export const TOPE_DE_LLAMADA_MS = 10 * 60 * 1000;
 /** La ruta del callback. PÚBLICA: la redirección llega sin cookie (`SameSite=Strict`). */
 export const RUTA_CALLBACK_MCP = "/mcp/oauth/callback";
 

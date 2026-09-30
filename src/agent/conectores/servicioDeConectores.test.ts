@@ -8,7 +8,7 @@ import { UnauthorizedError, type OAuthClientProvider } from "@modelcontextprotoc
 import { InvalidGrantError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { TOPE_DE_CONEXION_MS } from "../../core/conectores.js";
+import { TOPE_DE_CONEXION_MS, TOPE_DE_LLAMADA_MS } from "../../core/conectores.js";
 import { guardarOAuth, leerConectores, leerOAuth, rutaDeAnadidos, rutaDeOAuth } from "./conectoresEnDisco.js";
 import { ProveedorDeConector } from "./proveedorDeConector.js";
 import {
@@ -919,7 +919,7 @@ describe("ServicioDeConectores.llamar", () => {
     const s = crear(red);
     s.anadir("deepwiki"); // "ninguna": sin autenticación, credencial undefined
     await expect(s.llamar("deepwiki", "ask_wiki_question", { q: "x" })).resolves.toBe("hola");
-    expect(red.llamarTool).toHaveBeenCalledWith("https://mcp.deepwiki.com/mcp", undefined, "ask_wiki_question", { q: "x" }, expect.anything());
+    expect(red.llamarTool).toHaveBeenCalledWith("https://mcp.deepwiki.com/mcp", undefined, "ask_wiki_question", { q: "x" }, expect.anything(), TOPE_DE_CONEXION_MS);
   });
 
   it("un tope que no contesta a tiempo aborta la señal y da su propio motivo", async () => {
@@ -1052,5 +1052,48 @@ describe("Stitch: la clave en SU cabecera y una llamada de verdad para probarla"
     };
     await redDeConectoresReal(costura).listarTools("https://mcp.test/mcp", { cabecera: { nombre: "X-Goog-Api-Key", valor: "AQ.abc" } }, new AbortController().signal);
     expect(opciones?.requestInit?.headers).toEqual({ "X-Goog-Api-Key": "AQ.abc" });
+  });
+});
+
+describe("las llamadas de un agente y sus tools con esquema", () => {
+  it("`llamar` con `topeMs` pasa ESE tope a la red, que se lo da al SDK (su omisión corta a los 60 s)", async () => {
+    const red = redDoble();
+    const s = crear(red);
+    s.anadir("deepwiki");
+    await s.llamar("deepwiki", "ask_wiki_question", {}, { topeMs: TOPE_DE_LLAMADA_MS });
+    expect((red.llamarTool as ReturnType<typeof vi.fn>).mock.calls[0]?.[5]).toBe(TOPE_DE_LLAMADA_MS);
+  });
+
+  it("`tools` devuelve el esquema; la foto de `probar` NO lo lleva, porque viaja por el cable", async () => {
+    const red = redDoble();
+    const esquema = { type: "object", properties: { q: { type: "string" } } };
+    (red.listarTools as ReturnType<typeof vi.fn>).mockResolvedValue([{ nombre: "ask", soloLectura: true, esquema }]);
+    const s = crear(red);
+    s.anadir("deepwiki");
+    expect(await s.tools("deepwiki")).toEqual([{ nombre: "ask", soloLectura: true, esquema }]);
+    await s.probar("deepwiki");
+    expect(s.lista().conectores[0]?.prueba).toEqual({ cuando: reloj, ok: true, tools: [{ nombre: "ask", soloLectura: true }] });
+  });
+
+  it("`tools` de un conector sin credencial no toca la red: lanza «falta autorizar»", async () => {
+    const red = redDoble();
+    const s = crear(red);
+    s.anadir("stitch");
+    await expect(s.tools("stitch")).rejects.toThrow("falta autorizar");
+    expect(red.listarTools).not.toHaveBeenCalled();
+  });
+
+  it("el tope largo llega al `callTool` del SDK como `timeout`", async () => {
+    let opcionesDeLaPeticion: unknown;
+    const costura: CosturaDeRedDeConectores = {
+      crearCliente: () => ({
+        connect: async () => {}, close: async () => {}, listTools: async () => ({ tools: [] }),
+        callTool: async (_p: unknown, _s: unknown, o: unknown) => { opcionesDeLaPeticion = o; return { content: [{ type: "text", text: "ok" }] }; },
+      }) as unknown as ClienteDeMcp,
+      primario: () => ({}) as TransporteDeMcp,
+      respaldo: () => { throw new Error("no debería usarse"); },
+    };
+    await redDeConectoresReal(costura).llamarTool("https://mcp.test/mcp", undefined, "x", {}, new AbortController().signal, TOPE_DE_LLAMADA_MS);
+    expect(opcionesDeLaPeticion).toMatchObject({ timeout: TOPE_DE_LLAMADA_MS });
   });
 });

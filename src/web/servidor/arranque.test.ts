@@ -6106,6 +6106,7 @@ function servicioDeConectoresDeMentira(inicial: {
     },
     // `llamar` es de `ServicioDeConectores`; este doble todavía no lo ejercita por el cable,
     // así que basta un stub que no se ha usado en ningún test de aquí.
+    tools: async () => [],
     llamar: async (id, nombre, args) => {
       llamadas.push({ metodo: "llamar", args: [id, nombre, args] });
       return "";
@@ -6483,6 +6484,7 @@ describe("los conectores MCP, por el cable", () => {
       guardarClave: () => {},
       probar: async () => {},
       llamar: async () => "",
+      tools: async () => [],
       autorizar: async () => {},
       completar: async () => {
         throw new Error("el proveedor no contestó");
@@ -8199,7 +8201,7 @@ describe("el ajuste de depuración, cableado", () => {
  * `homedir()` aquí es un temporal y `lista()` es de solo lectura.
  */
 describe("el ajuste de conectores, cableado", () => {
-  it("la fábrica devuelve un servicio REAL, con sus once operaciones — sin red", () => {
+  it("la fábrica devuelve un servicio REAL, con sus doce operaciones — sin red", () => {
     const { conectores } = ajusteDeConectoresCableado({ casa: homedir() });
     expect(typeof conectores).toBe("function");
     const cambios: number[] = [];
@@ -8213,7 +8215,7 @@ describe("el ajuste de conectores, cableado", () => {
       desconocidos: [],
     });
     expect(Object.keys(servicio).sort()).toEqual(
-      ["anadir", "autenticacionDe", "autorizar", "completar", "crear", "desconectar", "guardarClave", "lista", "llamar", "probar", "quitar"].sort()
+      ["anadir", "autenticacionDe", "autorizar", "completar", "crear", "desconectar", "guardarClave", "lista", "llamar", "probar", "quitar", "tools"].sort()
     );
   });
 });

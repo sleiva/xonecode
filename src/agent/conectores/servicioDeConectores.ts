@@ -22,9 +22,9 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import {
   CATALOGO_DE_CONECTORES, conectorDeDefinicion, conectorDelCatalogo, esConectorPropio, estadoDeConector,
   filaDeCatalogo, idDeConectorDesdeNombre, interpretarCallback, motivoDeDefinicionInaceptable,
-  TOPE_DE_CONEXION_MS, TTL_DE_AUTORIZACION_MS,
+  TOPE_DE_CONEXION_MS, TOPE_DE_LLAMADA_MS, TTL_DE_AUTORIZACION_MS,
   type AutenticacionDeConector, type ConectorDeCatalogo, type ConectorDelCable, type DefinicionDeConector,
-  type FilaDeCatalogo, type Pendiente, type PruebaDeConector, type ToolDeConector,
+  type FilaDeCatalogo, type Pendiente, type PruebaDeConector, type ToolConEsquema, type ToolDeConector,
 } from "../../core/conectores.js";
 import { motivoDeClaveInaceptable } from "../../core/config.js";
 import {
@@ -62,7 +62,12 @@ export interface ServicioDeConectores {
    * estado de la conexión. Lanza si el conector no está conectado, si falta autorizar, si pasa
    * el tope, o con el motivo de `probar` para el resto de fallos de red.
    */
-  llamar(id: string, nombre: string, args: Record<string, unknown>): Promise<string>;
+  llamar(id: string, nombre: string, args: Record<string, unknown>, opciones?: { topeMs?: number }): Promise<string>;
+  /**
+   * Las tools del conector CON su esquema, preguntadas a la red en el acto (no la foto de
+   * `probar`). Para montarlas en un agente. Lanza como `llamar` si no se puede hablar con él.
+   */
+  tools(id: string): Promise<ToolConEsquema[]>;
   autorizar(id: string, redirectUrl: string): Promise<void>; // abre el navegador; no devuelve la URL
   guardarClave(id: string, clave: string): void; // el carril del `api-key`, que no abre nada
   completar(query: URLSearchParams): Promise<{ ok: boolean; mensaje: string }>;
@@ -80,14 +85,20 @@ export interface ServicioDeConectores {
 export type CredencialDeRed = { proveedor: OAuthClientProvider } | { cabecera: { nombre: string; valor: string } };
 
 export interface RedDeConectores {
-  listarTools(url: string, credencial: CredencialDeRed | undefined, senal: AbortSignal): Promise<ToolDeConector[]>;
+  listarTools(url: string, credencial: CredencialDeRed | undefined, senal: AbortSignal): Promise<ToolConEsquema[]>;
   /** Devuelve el texto del primer bloque `type: "text"` del resultado. Lanza `ErrorDeTool` (con
    *  ese texto, recortado) si el servidor contesta `isError: true` — así `llamar` distingue una
    *  tool que FALLÓ de un servidor que NO RESPONDE, y no lo aplana con `motivoDe`. */
-  llamarTool(url: string, credencial: CredencialDeRed | undefined, nombre: string, args: Record<string, unknown>, senal: AbortSignal): Promise<string>;
+  llamarTool(url: string, credencial: CredencialDeRed | undefined, nombre: string, args: Record<string, unknown>, senal: AbortSignal, topeMs?: number): Promise<string>;
   iniciarAutorizacion(url: string, proveedor: OAuthClientProvider): Promise<"REDIRECT" | "AUTHORIZED">;
   canjearCodigo(url: string, proveedor: OAuthClientProvider, code: string): Promise<void>;
   abrir(url: URL): void;
+}
+
+/** Una tool tal como viaja en la foto de la prueba: sin su esquema. */
+function sinEsquema(t: ToolConEsquema): ToolDeConector {
+  const { esquema: _esquema, ...resto } = t;
+  return resto;
 }
 
 /** Cuántos caracteres del texto de una tool que contestó `isError: true` llegan al que llamó —
@@ -247,6 +258,44 @@ export function crearServicioDeConectores(o: {
     return "no responde";
   };
 
+  /**
+   * Lo que `llamar` y `tools` comprueban antes de tocar la red, en este orden: que esté AÑADIDO,
+   * que no haya una autorización abierta —un 401 haría que el SDK arrancara OTRA y pisara el
+   * verificador PKCE que el callback pendiente va a necesitar— y que haya credencial, que es el
+   * mismo «falta autorizar» tanto si falta un token OAuth como una clave. Sin `cambio()` ni tocar
+   * `pruebas`: esto no es una medida de la conexión.
+   */
+  const paraHablar = (id: string): { c: ConectorDeCatalogo; credencial: CredencialDeRed | undefined } => {
+    const registro = leerConectores(o.casa);
+    const c = resolver(id, registro.definiciones);
+    if (c === undefined || !registro.anadidos.includes(id)) throw new Error(`«${id}» no está conectado`);
+    if (hayPendienteVivo(id)) throw new Error("autorización en curso");
+    const credencial = credencialDe(c, leerOAuth(o.casa, id));
+    if (credencial === undefined && c.autenticacion !== "ninguna") throw new Error("falta autorizar");
+    return { c, credencial };
+  };
+
+  /** La red con su tope, y sus fallos traducidos a UNA frase. */
+  const conTope = async <T,>(topeMs: number, hablar: (senal: AbortSignal) => Promise<T>, c: ConectorDeCatalogo): Promise<T> => {
+    const control = new AbortController();
+    let reloj: ReturnType<typeof setTimeout> | undefined;
+    const tope = new Promise<never>((_, rechazar) => {
+      reloj = setTimeout(() => { control.abort(); rechazar(new Error("tope")); }, topeMs);
+    });
+    try {
+      return await Promise.race([hablar(control.signal), tope]);
+    } catch (e) {
+      if (control.signal.aborted) throw new Error("no responde (no contestó a tiempo)");
+      // El fallo de la tool (`isError: true`) lleva su propio texto, y ese texto es justo lo
+      // que quien llamó necesita para saber qué corregir: aplanarlo con `motivoDe` (que no
+      // reconoce esta clase y caería en su «no responde» genérico) se lo comería.
+      if (e instanceof ErrorDeTool) throw e;
+      throw new Error(motivoDe(e, c));
+    } finally {
+      clearTimeout(reloj);
+    }
+  };
+
   const servicio: ServicioDeConectores = {
     lista() {
       const registro = leerConectores(o.casa);
@@ -392,7 +441,8 @@ export function crearServicioDeConectores(o: {
         const sigueAnadido = leerConectores(o.casa).anadidos.includes(id);
         const sigueAutorizado = c.autenticacion === "ninguna" || credencialDe(c, leerOAuth(o.casa, id)) !== undefined;
         if (sigueAnadido && sigueAutorizado) {
-          pruebas.set(id, { cuando: ahora(), ok: true, tools });
+          // La foto viaja por el cable: sin el esquema, que es solo para montar la tool en un agente.
+          pruebas.set(id, { cuando: ahora(), ok: true, tools: tools.map(sinEsquema) });
           // Un `error` de una operación ANTERIOR no puede quedarse junto a un estado que ya es
           // correcto: «ausente ≠ vacío» también vale para lo que ya no es cierto.
           error = undefined;
@@ -408,35 +458,14 @@ export function crearServicioDeConectores(o: {
     // operación de la pantalla de Ajustes — es una llamada de trabajo que un especialista hace
     // en medio de un encargo. Resuelve por su cuenta, contra la MISMA foto del registro, y
     // lanza en vez de dejar la frase en `error` (no hay ningún `lista()` que la vaya a enseñar).
-    async llamar(id, nombre, args) {
-      const registro = leerConectores(o.casa);
-      const c = resolver(id, registro.definiciones);
-      if (c === undefined || !registro.anadidos.includes(id)) throw new Error(`«${id}» no está conectado`);
-      // La MISMA razón que en `probar`: con una autorización abierta no se toca la red — un 401
-      // haría que el SDK arrancara OTRA y pisara el verificador PKCE que el callback pendiente
-      // va a necesitar. Sin `cambio()` ni tocar `pruebas`: esto no es una medida de la conexión.
-      if (hayPendienteVivo(id)) throw new Error("autorización en curso");
-      // La misma guarda que `probar`: sin credencial no se toca la red, y es el mismo «falta
-      // autorizar» tanto si falta un token OAuth como una clave.
-      const credencial = credencialDe(c, leerOAuth(o.casa, id));
-      if (credencial === undefined && c.autenticacion !== "ninguna") throw new Error("falta autorizar");
-      const control = new AbortController();
-      let reloj: ReturnType<typeof setTimeout> | undefined;
-      const tope = new Promise<never>((_, rechazar) => {
-        reloj = setTimeout(() => { control.abort(); rechazar(new Error("tope")); }, TOPE_DE_CONEXION_MS);
-      });
-      try {
-        return await Promise.race([o.red.llamarTool(c.url, credencial, nombre, args, control.signal), tope]);
-      } catch (e) {
-        if (control.signal.aborted) throw new Error("no responde (no contestó a tiempo)");
-        // El fallo de la tool (`isError: true`) lleva su propio texto, y ese texto es justo lo
-        // que quien llamó necesita para saber qué corregir: aplanarlo con `motivoDe` (que no
-        // reconoce esta clase y caería en su «no responde» genérico) se lo comería.
-        if (e instanceof ErrorDeTool) throw e;
-        throw new Error(motivoDe(e, c));
-      } finally {
-        clearTimeout(reloj);
-      }
+    async llamar(id, nombre, args, opciones) {
+      const { c, credencial } = paraHablar(id);
+      const topeMs = opciones?.topeMs ?? TOPE_DE_CONEXION_MS;
+      return conTope(topeMs, (senal) => o.red.llamarTool(c.url, credencial, nombre, args, senal, topeMs), c);
+    },
+    async tools(id) {
+      const { c, credencial } = paraHablar(id);
+      return conTope(TOPE_DE_CONEXION_MS, (senal) => o.red.listarTools(c.url, credencial, senal), c);
     },
     async autorizar(id, redirectUrl) {
       // `autorizar` resolvía el id SOLO contra el catálogo, nunca contra lo AÑADIDO: si el
@@ -602,12 +631,13 @@ export function redDeConectoresReal(costura: CosturaDeRedDeConectores = COSTURA_
           nombre: t.name,
           ...(t.description ? { descripcion: t.description } : {}),
           ...(typeof t.annotations?.readOnlyHint === "boolean" ? { soloLectura: t.annotations.readOnlyHint } : {}),
+          esquema: t.inputSchema as Record<string, unknown>,
         }));
       } finally {
         await cliente.close().catch(() => {});
       }
     },
-    async llamarTool(url, credencial, nombre, args, senal) {
+    async llamarTool(url, credencial, nombre, args, senal, topeMs) {
       const cliente = await conectar(new URL(url), opcionesDe(credencial, senal), senal);
       try {
         // Sin pasar `resultSchema`, el cliente usa `CallToolResultSchema` (el moderno, con
@@ -617,7 +647,9 @@ export function redDeConectoresReal(costura: CosturaDeRedDeConectores = COSTURA_
         // servidor medido habla), pero el índice `[x: string]: unknown` de las dos ramas hace que
         // ni `in` ni `Array.isArray` puedan navegar esa unión — se afirma la forma moderna, que
         // es la única que este código pide.
-        const resultado = await cliente.callTool({ name: nombre, arguments: args }, undefined, { signal: senal }) as unknown as {
+        // El SDK corta CADA petición a los 60 s por su cuenta (`DEFAULT_REQUEST_TIMEOUT_MSEC`), por
+        // debajo de nuestro tope: una generación de Stitch moría ahí aunque el nuestro fuera mayor.
+        const resultado = await cliente.callTool({ name: nombre, arguments: args }, undefined, { signal: senal, ...(topeMs === undefined ? {} : { timeout: topeMs }) }) as unknown as {
           content: Array<{ type: string; text?: string }>;
           isError?: boolean;
         };
