@@ -47,7 +47,7 @@
  * prompt dice `$XONECODE_SKILL_XONE_HOTSWAP/scripts/android.mjs` y ni el contexto ni el
  * cable ven una ruta.
  */
-import { VARIABLE_DE_DISPOSITIVO } from "./dispositivoDeSesion.js";
+import { VARIABLE_DE_DISPOSITIVO, type DispositivoDeLaSesion } from "./dispositivoDeSesion.js";
 import { VARIABLES_POR_PROVEEDOR } from "./modelos.js";
 
 /** El prefijo de las claves de un proveedor personalizado (`core/modelos.ts#variableDeProveedor`). */
@@ -240,6 +240,62 @@ export function motivoDeComandoRechazado(comando: string): string | undefined {
       "tiene ESTE aparato; un `adb forward` a mano puede quitarle el túnel al aparato de otra sesión sin avisar. Para " +
       "hablar con la app usa `xone-hotswap`, que ya sabe a qué puerto ir. Mirar los túneles (`adb forward --list`) sí se puede."
     );
+  }
+  return undefined;
+}
+
+/** Lo que `adb` hace sin tocar ningún aparato: listar, versión, el servidor, emparejar. */
+const ADB_SIN_APARATO = new Set(["devices", "version", "help", "start-server", "kill-server", "reconnect", "mdns", "pair", "connect", "disconnect", "keygen"]);
+/** Opciones globales de `adb` que llevan VALOR detrás. */
+const ADB_CON_VALOR = new Set(["-s", "-t", "-H", "-P", "-L"]);
+
+const esAdb = (palabra: string): boolean => /^(?:"?\$\{?XONECODE_ADB\}?"?|(?:\S*\/)?adb(?:\.exe)?)$/.test(palabra);
+const esEmulator = (palabra: string): boolean => /^(?:"?\$\{?XONECODE_EMULATOR\}?"?|(?:\S*\/)?emulator(?:\.exe)?)$/.test(palabra);
+
+/**
+ * Un comando que iría a OTRO aparato que el de la sesión (IXCODE-32), o `undefined` si no.
+ *
+ * El síntoma, de un usuario: con un móvil físico elegido, a mitad de sesión el trabajo pasó al
+ * emulador. Los scripts de `xone-hotswap` ya se niegan (`lib/dispositivo.mjs`); esto cierra la otra
+ * puerta, que es `adb` a mano en la shell. La regla es la que se pidió: **el aparato elegido se pasa
+ * SIEMPRE** —todo `adb` que actúe sobre un aparato lleva el `-s` de la sesión—, y con un físico o un
+ * iPhone elegido no se lanza un emulador. Lo que no toca un aparato (`adb devices`, `version`…) pasa.
+ *
+ * Como `motivoDeComandoRechazado`, mira palabras y no es un intérprete de shell: un `adb` dentro de
+ * un script propio, o un `ANDROID_SERIAL=` puesto a mano, no se ven. Límite declarado; tampoco mira
+ * el `--udid` de un `xcrun simctl` (los scripts de iOS sí).
+ */
+export function motivoDeOtroAparato(comando: string, d: DispositivoDeLaSesion | undefined): string | undefined {
+  if (d === undefined) return undefined;
+  const nombre = `«${d.nombre}» (${d.id})`;
+  const otro =
+    "Si hace falta otro aparato, que la persona lo cambie en la pastilla del chat; los scripts `xone-*` ya van al de la sesión.";
+  for (const tramo of comando.split(/;|&&|\|\||\||\n|\$\(|`|&/)) {
+    const palabras = tramo.trim().split(/\s+/).filter((p) => p !== "");
+    // Las asignaciones de variables delante del comando (`X=1 adb …`) no son el comando.
+    while (palabras.length > 0 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(palabras[0]!)) palabras.shift();
+    const primera = palabras[0];
+    if (primera === undefined) continue;
+    if (esEmulator(primera) && palabras.includes("-avd") && !(d.plataforma === "android" && d.clase === "emulador")) {
+      return `No se lanza: la sesión usa ${nombre} y no se levanta un emulador por su cuenta. ${otro}`;
+    }
+    if (!esAdb(primera)) continue;
+    let serie: string | undefined;
+    let i = 1;
+    while (i < palabras.length && palabras[i]!.startsWith("-")) {
+      const opcion = palabras[i]!;
+      if (opcion === "-s") serie = palabras[i + 1];
+      i += ADB_CON_VALOR.has(opcion) ? 2 : 1;
+    }
+    const sub = palabras[i];
+    if (sub === undefined || ADB_SIN_APARATO.has(sub)) continue;
+    if (d.plataforma === "ios") return `No se lanza: la sesión usa ${nombre}, un aparato de iOS, y \`adb\` es de Android. ${otro}`;
+    if (serie !== d.id) {
+      return (
+        `No se lanza: la sesión usa ${nombre}${serie === undefined ? "" : ` y esto iba a ${serie}`}. Con \`adb\` el aparato ` +
+        `se pasa SIEMPRE: \`adb -s ${d.id} ${sub} …\`. ${otro}`
+      );
+    }
   }
   return undefined;
 }

@@ -199,4 +199,30 @@ describe("execute no recorre el disco entero", () => {
     expect(r.result.content[0]!.text).toContain("recorre el disco entero");
     expect(corrio).toBe(false);
   });
+
+  it("un adb a OTRO aparato que el de la sesión no se lanza; el de la sesión sí (IXCODE-32)", async () => {
+    let corridos = 0;
+    let elegido: { id: string; nombre: string; plataforma: "android"; clase: "fisico" } | undefined = {
+      id: "R58N",
+      nombre: "Galaxy",
+      plataforma: "android",
+      clase: "fisico",
+    };
+    const fuente = fuenteDeEjecucion(
+      { execute: () => { corridos++; return { output: "", exitCode: 0 }; }, write: () => ({}) },
+      () => elegido
+    );
+    const ejecutar = async (command: string) =>
+      (await fuente.callTool({ name: "execute", arguments: { command } })) as unknown as { result: { content: { text: string }[]; isError?: boolean } };
+    const otro = await ejecutar("adb -s emulator-5554 shell input tap 1 1");
+    expect(otro.result.isError).toBe(true);
+    expect(otro.result.content[0]!.text).toMatch(/Galaxy/);
+    expect(corridos).toBe(0);
+    expect((await ejecutar("adb -s R58N shell input tap 1 1")).result.isError).not.toBe(true);
+    expect(corridos).toBe(1);
+    // Se lee en CADA comando: cambiar la pastilla alcanza al siguiente.
+    elegido = undefined;
+    expect((await ejecutar("adb -s emulator-5554 shell ls")).result.isError).not.toBe(true);
+    expect(corridos).toBe(2);
+  });
 });

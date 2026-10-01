@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { ficheroDeDispositivoDeSesion, lineaDelDispositivo } from "./dispositivoDeSesion.js";
+import { dispositivoDeTexto, ficheroDeDispositivoDeSesion, lineaDelDispositivo } from "./dispositivoDeSesion.js";
 import { carpetaDeArtefactosDeSesion } from "./artefactos.js";
 
 describe("el dispositivo de la sesión, para el agente", () => {
@@ -27,9 +27,13 @@ describe("el dispositivo de la sesión, para el agente", () => {
  */
 describe("los scripts de xone-hotswap eligen aparato", () => {
   const lib = async (): Promise<{
-    serieAndroid: (e: string | undefined, o: { entorno: Record<string, string | undefined>; adb: string }) => { serie?: string; porque: string };
+    serieAndroid: (
+      e: string | undefined,
+      o: { entorno: Record<string, string | undefined>; adb: string; negar?: (texto: string) => never }
+    ) => { serie?: string; porque: string };
     preferirEmulador: (s: string) => string | undefined;
-    udidIos: (e: string | undefined, entorno: Record<string, string | undefined>) => string | undefined;
+    udidIos: (e: string | undefined, entorno: Record<string, string | undefined>, negar?: (texto: string) => never) => string | undefined;
+    puedeArrancarEmulador: (entorno: Record<string, string | undefined>) => string | undefined;
   }> => import(pathToFileURL(resolve(__dirname, "../../skills/xone-hotswap/lib/dispositivo.mjs")).href);
 
   const conFichero = (d: unknown): Record<string, string> => {
@@ -38,11 +42,41 @@ describe("los scripts de xone-hotswap eligen aparato", () => {
     return { XONECODE_DISPOSITIVO: f };
   };
 
-  it("`--serie` manda; si no, el de la SESIÓN, aunque haya otros conectados", async () => {
+  /** Se lanza en vez de salir del proceso: así se ve el texto y el test sigue. */
+  const negar = (texto: string): never => {
+    throw new Error(texto);
+  };
+
+  it("el de la SESIÓN manda siempre: sin --serie, ése, aunque haya otros conectados (IXCODE-32)", async () => {
     const { serieAndroid } = await lib();
     const entorno = conFichero({ id: "R58N", nombre: "Galaxy", plataforma: "android", clase: "fisico" });
-    expect(serieAndroid("emulator-5556", { entorno, adb: "/no/existe" }).serie).toBe("emulator-5556");
-    expect(serieAndroid(undefined, { entorno, adb: "/no/existe" }).serie).toBe("R58N");
+    expect(serieAndroid(undefined, { entorno, adb: "/no/existe", negar }).serie).toBe("R58N");
+    // Pasar el MISMO no es otro aparato.
+    expect(serieAndroid("R58N", { entorno, adb: "/no/existe", negar }).serie).toBe("R58N");
+  });
+
+  it("un --serie DISTINTO del de la sesión se niega, y dice cuál es y cómo se cambia", async () => {
+    const { serieAndroid } = await lib();
+    const entorno = conFichero({ id: "R58N", nombre: "Galaxy", plataforma: "android", clase: "fisico" });
+    expect(() => serieAndroid("emulator-5556", { entorno, adb: "/no/existe", negar })).toThrow(/Galaxy.*R58N.*pastilla/s);
+  });
+
+  it("sin aparato en la sesión, --serie sigue mandando", async () => {
+    const { serieAndroid } = await lib();
+    expect(serieAndroid("emulator-5556", { entorno: {}, adb: "/no/existe", negar }).serie).toBe("emulator-5556");
+  });
+
+  it("con un iPhone en la sesión, un script de ANDROID no cae a un emulador: se niega", async () => {
+    const { serieAndroid } = await lib();
+    const entorno = conFichero({ id: "UDID-1", nombre: "iPhone", plataforma: "ios", clase: "simulador" });
+    expect(() => serieAndroid(undefined, { entorno, adb: "/no/existe", negar })).toThrow(/iPhone/);
+  });
+
+  it("arrancar un emulador solo se puede sin aparato o con un EMULADOR en la sesión", async () => {
+    const { puedeArrancarEmulador } = await lib();
+    expect(puedeArrancarEmulador({})).toBeUndefined();
+    expect(puedeArrancarEmulador(conFichero({ id: "emulator-5554", nombre: "pixel8", plataforma: "android", clase: "emulador" }))).toBeUndefined();
+    expect(puedeArrancarEmulador(conFichero({ id: "R58N", nombre: "Galaxy", plataforma: "android", clase: "fisico" }))).toMatch(/Galaxy/);
   });
 
   it("sin elección, un EMULADOR antes que un físico; con varios físicos, no adivina", async () => {
@@ -54,6 +88,15 @@ describe("los scripts de xone-hotswap eligen aparato", () => {
     expect(preferirEmulador("List of devices attached\nemulator-5554\toffline\nR58N\tdevice\n")).toBe("R58N");
   });
 
+  it("en iOS, un --udid distinto del de la sesión se niega, y uno de Android en la sesión también", async () => {
+    const { udidIos } = await lib();
+    const ios = conFichero({ id: "UDID-1", nombre: "iPhone 16", plataforma: "ios", clase: "simulador" });
+    expect(udidIos("UDID-1", ios, negar)).toBe("UDID-1");
+    expect(() => udidIos("UDID-2", ios, negar)).toThrow(/iPhone 16/);
+    const android = conFichero({ id: "R58N", nombre: "Galaxy", plataforma: "android", clase: "fisico" });
+    expect(() => udidIos(undefined, android, negar)).toThrow(/Galaxy/);
+  });
+
   it("en iOS solo cuenta un SIMULADOR elegido; un fichero roto es «no hay elección»", async () => {
     const { udidIos } = await lib();
     expect(udidIos(undefined, conFichero({ id: "UDID-1", nombre: "iPhone", plataforma: "ios", clase: "simulador" }))).toBe("UDID-1");
@@ -61,5 +104,19 @@ describe("los scripts de xone-hotswap eligen aparato", () => {
     const roto = join(mkdtempSync(join(tmpdir(), "xc-disp-")), "dispositivo.json");
     writeFileSync(roto, "{no es json");
     expect(udidIos(undefined, { XONECODE_DISPOSITIVO: roto })).toBeUndefined();
+  });
+});
+
+describe("la lectura del fichero desde el harness (IXCODE-32)", () => {
+  it("coincide con la de los scripts: id y plataforma obligatorios, roto es «no hay»", () => {
+    expect(dispositivoDeTexto(JSON.stringify({ id: "R58N", nombre: "Galaxy", plataforma: "android", clase: "fisico" }))).toEqual({
+      id: "R58N",
+      nombre: "Galaxy",
+      plataforma: "android",
+      clase: "fisico",
+    });
+    expect(dispositivoDeTexto(JSON.stringify({ id: "", plataforma: "android" }))).toBeUndefined();
+    expect(dispositivoDeTexto(JSON.stringify({ id: "X", plataforma: "windows" }))).toBeUndefined();
+    expect(dispositivoDeTexto("{no es json")).toBeUndefined();
   });
 });

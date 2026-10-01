@@ -37,6 +37,23 @@ export function ficheroDeDispositivoDeSesion(raiz: string, id: string): string {
   return ficheroDeDispositivo(carpetaDeArtefactosDeSesion(raiz, id));
 }
 
+/**
+ * El contenido del fichero, validado como lo valida `skills/xone-hotswap/lib/dispositivo.mjs`
+ * (`dispositivoDeLaSesion`): las dos lecturas tienen que coincidir, o la shell y los scripts
+ * creerían en aparatos distintos. Roto o incompleto = no hay elección.
+ */
+export function dispositivoDeTexto(texto: string): DispositivoDeLaSesion | undefined {
+  try {
+    const d = JSON.parse(texto) as Partial<DispositivoDeLaSesion> | null;
+    if (typeof d?.id !== "string" || d.id === "") return undefined;
+    if (d.plataforma !== "android" && d.plataforma !== "ios") return undefined;
+    const clase = d.clase === "emulador" || d.clase === "simulador" || d.clase === "fisico" ? d.clase : "fisico";
+    return { id: d.id, nombre: typeof d.nombre === "string" ? d.nombre : d.id, plataforma: d.plataforma, clase };
+  } catch {
+    return undefined;
+  }
+}
+
 const CLASE: Record<DispositivoDeLaSesion["clase"], string> = {
   emulador: "emulador",
   simulador: "simulador",
@@ -60,6 +77,7 @@ export function lineaDelDispositivo(d: DispositivoDeLaSesion | undefined): strin
   return (
     `[Dispositivo de esta sesión: ${d.nombre} (${CLASE[d.clase]} ${plataforma}, id ${d.id}). ` +
     `Los scripts de xone-hotswap ya lo usan por omisión; no hace falta pasar ${como}. ` +
-    "No pruebes en otro aparato sin que te lo pidan.]"
+    (d.plataforma === "android" ? `Con \`adb\` a mano pásalo SIEMPRE: \`adb -s ${d.id} …\`. ` : "") +
+    "Otro aparato se rechaza: lo cambia la persona en la pastilla del chat.]"
   );
 }

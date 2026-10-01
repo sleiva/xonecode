@@ -56,7 +56,7 @@ import type { Artefacto } from "../../../core/artefactos.js";
 import type { LineaDeDiff } from "../../../core/diff.js";
 import { createTokenTracker, type TokenTracker } from "../../../vendor/tokenTracking.js";
 import { MAX_APPROVAL_ROUNDS, type Decision } from "../../../vendor/hitl.js";
-import { artefactosNuevos, backendDeAgente, entornoDeLaShellDelProyecto, fotoDeArtefactos, scriptsDeLasSkills } from "../../grafo/proyecto.js";
+import { artefactosNuevos, backendDeAgente, entornoDeLaShellDelProyecto, fotoDeArtefactos, lectorDelDispositivoDeSesion, scriptsDeLasSkills } from "../../grafo/proyecto.js";
 import { carpetaDeHotswap } from "../../../core/hotswap.js";
 import { cargarAgentes } from "../../subagentes/agentesEnDisco.js";
 import { fichaDeAgente, promptDeAgente, recibeMarcarCriterios, repartirSkills, type Agente } from "../../../core/agentes.js";
@@ -1051,6 +1051,8 @@ export async function abrirSesionTrueforge(
           : conBucleDelDesarrollador && (a.llama?.length ?? 0) > 0
             ? capacidadDeAvisoDeVueltas({ vueltasDe: (hilo) => vueltasDeCadaHilo.get(hilo) ?? 0, umbrales: UMBRALES_DE_VUELTAS, texto: textoDeVueltas })
             : undefined,
+      // El aparato elegido manda también en la shell (IXCODE-32): del MISMO fichero que leen los scripts.
+      dispositivo: lectorDelDispositivoDeSesion(opciones.artefactos),
       conShell: () =>
         montarBackend({
           entorno: entornoDeLaShellDelProyecto(raiz, opciones.artefactos),

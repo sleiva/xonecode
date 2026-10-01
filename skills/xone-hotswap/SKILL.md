@@ -201,11 +201,12 @@ resuelve con el mismo localizador que la pestaña Ejecutar.
 ## Cómo llegar, según la plataforma
 
 **Android** — por un túnel de `adb`, y entonces la IP es `127.0.0.1` (el localhost del PC, que adb
-tuneliza al dispositivo). **El túnel lo ponen los scripts**, no tú (ver «Varios emuladores a la vez»). **Qué aparato usan los scripts `xone-*`**: el que se les pase con
-`--serie`; si no, el ELEGIDO en la sesión de XOneCode (lo leen de `$XONECODE_DISPOSITIVO` en cada
-ejecución); si no hay elección, un EMULADOR antes que un dispositivo físico. Lo dicen por stderr
-(`dispositivo: emulator-5554 (el de la sesión: Pixel 8)`). Con `adb` a mano y varios
-dispositivos, `adb -s <serial>`:
+tuneliza al dispositivo). **El túnel lo ponen los scripts**, no tú (ver «Varios emuladores a la vez»). **Qué aparato usan los scripts `xone-*`**: el ELEGIDO en la sesión de
+XOneCode, SIEMPRE (lo leen de `$XONECODE_DISPOSITIVO` en cada ejecución): un `--serie`/`--udid` distinto
+se rechaza, y con un móvil físico elegido `xone-arrancar-android` no levanta un emulador. Si no hay
+elección, el que se les pase con `--serie`, y si no, un EMULADOR antes que un dispositivo físico. Lo
+dicen por stderr (`dispositivo: emulator-5554 (el de la sesión: Pixel 8)`). **Con `adb` a mano, el aparato
+de la sesión se pasa siempre**, `adb -s <serial>`; sin él, o con otro, el comando se rechaza:
 
 ```bash
 adb devices -l

@@ -1,5 +1,5 @@
-import { ficheroDeDispositivo } from "../../core/dispositivoDeSesion.js";
-import { existsSync, mkdirSync, readdirSync, statSync, type Dirent } from "node:fs";
+import { dispositivoDeTexto, ficheroDeDispositivo, type DispositivoDeLaSesion } from "../../core/dispositivoDeSesion.js";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, type Dirent } from "node:fs";
 import { join } from "node:path";
 import { CompositeBackend, FilesystemBackend, LocalShellBackend } from "deepagents";
 import { RUTA_MEMORIA_INTERNA, RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
@@ -109,6 +109,25 @@ export function backendDelProyectoConShell(
   (backend as unknown as { execute: (comando: string) => ReturnType<typeof ejecutar> }).execute = (comando: string) =>
     ejecutar(comando, senalDelTurno?.());
   return backend;
+}
+
+/**
+ * El aparato de la sesión, leído AHORA del mismo fichero que leen los scripts (la variable
+ * `XONECODE_DISPOSITIVO` de la shell apunta aquí). Lo usa la guarda del `execute`
+ * (`core/shellDeAgente.ts#motivoDeOtroAparato`, IXCODE-32): se lee en cada comando porque la
+ * persona puede cambiar de aparato con la sesión abierta. Sin carpeta de artefactos, o sin
+ * fichero, no hay aparato elegido.
+ */
+export function lectorDelDispositivoDeSesion(artefactos: string | undefined): () => DispositivoDeLaSesion | undefined {
+  if (artefactos === undefined) return () => undefined;
+  const fichero = ficheroDeDispositivo(artefactos);
+  return () => {
+    try {
+      return dispositivoDeTexto(readFileSync(fichero, "utf8"));
+    } catch {
+      return undefined;
+    }
+  };
 }
 
 /**

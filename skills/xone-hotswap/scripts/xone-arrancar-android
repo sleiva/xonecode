@@ -35,7 +35,7 @@
  *   xone-arrancar-android --sin-ventana    sin ventana (también si el AVD lo tiene marcado en Ajustes)
  */
 import { execFileSync, spawn } from "node:child_process";
-import { dormir, ajusteDelAvd, BANDERAS_SIN_VENTANA } from "../lib/dispositivo.mjs";
+import { dormir, ajusteDelAvd, BANDERAS_SIN_VENTANA, puedeArrancarEmulador } from "../lib/dispositivo.mjs";
 
 /** Lo que tarda un arranque en frío de un AVD con `google_apis`, con margen. Por debajo del
  *  tope de reloj de UN comando del harness (600 s), que es quien mataría al script entero. */
@@ -144,6 +144,14 @@ function elegirAvd() {
     process.exit(1);
   }
   return avds[0];
+}
+
+// Con un móvil físico o un iPhone elegido en la sesión NO se levanta un emulador (IXCODE-32): era la
+// puerta por la que la sesión acababa en el emulador sin que nadie lo eligiera. Mirar (`--lista`) sí.
+const negativa = puedeArrancarEmulador();
+if (negativa !== undefined) {
+  console.error(negativa);
+  process.exit(2);
 }
 
 const avd = elegirAvd();

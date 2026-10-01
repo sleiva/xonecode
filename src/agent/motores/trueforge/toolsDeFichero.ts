@@ -26,7 +26,8 @@ import { toolResultResponse } from "./trueforge.js";
 import { REGLA_DE_ESCRITURAS_EN_PARALELO } from "../../../core/serieDeEscrituras.js";
 import { desalojarSiGrande, MAXIMO_DE_COINCIDENCIAS, truncarSiLargo } from "./recortes.js";
 import { motivoDeTasksInaceptable, RUTA_DE_TASKS } from "../../../core/tareasDelPlan.js";
-import { motivoDeComandoRechazado } from "../../../core/shellDeAgente.js";
+import { motivoDeComandoRechazado, motivoDeOtroAparato } from "../../../core/shellDeAgente.js";
+import type { DispositivoDeLaSesion } from "../../../core/dispositivoDeSesion.js";
 
 /** El backend de deepagents en su versión nueva, en lo que se usa. */
 export interface BackendDeFicheros {
@@ -329,7 +330,11 @@ interface BackendQueEjecuta {
  * lo que lo compensa es que el comando entero se VE en el chat (`resumenDeTool.ts` lo tiene en su
  * lista blanca).
  */
-export function fuenteDeEjecucion(backend: BackendQueEjecuta) {
+export function fuenteDeEjecucion(
+  backend: BackendQueEjecuta,
+  /** El aparato de la sesión, leído en CADA comando (IXCODE-32). Ausente = no hay ninguno elegido. */
+  dispositivo: () => DispositivoDeLaSesion | undefined = () => undefined
+) {
   return {
     name: "shell",
     id: "shell",
@@ -353,7 +358,8 @@ export function fuenteDeEjecucion(backend: BackendQueEjecuta) {
         return toolResultResponse({ text: "execute necesita un `command`", isError: true });
       }
       // Una búsqueda por el disco entero no se lanza (`motivoDeComandoRechazado`): se devuelve el camino bueno.
-      const rechazo = motivoDeComandoRechazado(comando);
+      // Y uno que iría a OTRO aparato que el de la sesión (`motivoDeOtroAparato`): el elegido se pasa siempre.
+      const rechazo = motivoDeComandoRechazado(comando) ?? motivoDeOtroAparato(comando, dispositivo());
       if (rechazo !== undefined) return toolResultResponse({ text: rechazo, isError: true });
       try {
         const r = (await backend.execute(comando)) as { output?: string; exitCode?: number | null; truncated?: boolean };

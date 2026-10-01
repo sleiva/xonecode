@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { VARIABLES_POR_PROVEEDOR } from "./modelos.js";
-import { entornoDeShell, variableDeSkill, variablesDeAndroid, motivoDeComandoRechazado } from "./shellDeAgente.js";
+import { entornoDeShell, variableDeSkill, variablesDeAndroid, motivoDeComandoRechazado, motivoDeOtroAparato } from "./shellDeAgente.js";
 
 describe("entornoDeShell", () => {
   it("quita las claves de API de los proveedores de serie", () => {
@@ -253,5 +253,44 @@ describe("un túnel a mano (`adb forward`) no se lanza", () => {
     'echo "adb forward"',
   ])("pasa: %s", (c) => {
     expect(motivoDeComandoRechazado(c), c).toBeUndefined();
+  });
+});
+
+describe("el aparato de la sesión manda también en la shell (IXCODE-32)", () => {
+  const fisico = { id: "R58N", nombre: "Galaxy", plataforma: "android", clase: "fisico" } as const;
+  const iphone = { id: "UDID-1", nombre: "iPhone 16", plataforma: "ios", clase: "simulador" } as const;
+
+  it("un adb sobre el aparato tiene que llevar el -s de la sesión", () => {
+    expect(motivoDeOtroAparato("adb -s R58N shell getprop", fisico)).toBeUndefined();
+    expect(motivoDeOtroAparato('"$XONECODE_ADB" -s R58N logcat -d', fisico)).toBeUndefined();
+    expect(motivoDeOtroAparato("adb -s emulator-5554 shell input tap 10 10", fisico)).toMatch(/Galaxy.*-s R58N/s);
+    expect(motivoDeOtroAparato("adb shell screencap -p", fisico)).toMatch(/-s R58N/);
+    expect(motivoDeOtroAparato("adb -e install app.apk", fisico)).toMatch(/-s R58N/);
+  });
+
+  it("lo que no actúa sobre un aparato pasa: listar, la versión, el servidor", () => {
+    expect(motivoDeOtroAparato("adb devices -l", fisico)).toBeUndefined();
+    expect(motivoDeOtroAparato("adb version && adb devices", fisico)).toBeUndefined();
+    expect(motivoDeOtroAparato("adb kill-server", fisico)).toBeUndefined();
+  });
+
+  it("mira CADA llamada de una cadena, no solo la primera", () => {
+    expect(motivoDeOtroAparato("adb -s R58N shell ls; adb -s emulator-5554 shell ls", fisico)).toMatch(/emulator-5554/);
+    expect(motivoDeOtroAparato("xone-log-android --app | grep X && adb shell ps", fisico)).toMatch(/-s R58N/);
+  });
+
+  it("no se lanza un emulador a mano con un físico o un iPhone en la sesión", () => {
+    expect(motivoDeOtroAparato("emulator -avd pixel8 -no-window &", fisico)).toMatch(/emulador/);
+    expect(motivoDeOtroAparato('"$XONECODE_EMULATOR" -avd pixel8', iphone)).toMatch(/iPhone 16/);
+    expect(motivoDeOtroAparato("emulator -avd pixel8", { id: "emulator-5554", nombre: "pixel8", plataforma: "android", clase: "emulador" })).toBeUndefined();
+  });
+
+  it("con un iPhone en la sesión, adb sobre un aparato se rechaza", () => {
+    expect(motivoDeOtroAparato("adb shell ls", iphone)).toMatch(/iPhone 16/);
+  });
+
+  it("sin aparato en la sesión no dice nada: la regla de siempre", () => {
+    expect(motivoDeOtroAparato("adb -s emulator-5554 shell ls", undefined)).toBeUndefined();
+    expect(motivoDeOtroAparato("emulator -avd pixel8", undefined)).toBeUndefined();
   });
 });

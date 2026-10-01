@@ -4,12 +4,16 @@
  * Es UNA regla para todos los scripts, y por eso vive aquí y no copiada en cada uno: con cinco
  * copias, la del día que alguien la afine sería la única que cambia.
  *
- * El orden, de más explícito a menos:
- *   1. Lo que se pasó a mano (`--serie` / `--udid`).
- *   2. El dispositivo ELEGIDO en la sesión: XOneCode deja en `XONECODE_DISPOSITIVO` la ruta de un
- *      fichero con la elección de la pastilla del chat, y se lee AHORA, en cada ejecución — así un
- *      cambio de aparato con la sesión abierta alcanza al siguiente comando.
- *   3. Sin elección: un EMULADOR antes que un dispositivo físico. Con uno solo conectado, ése.
+ * El orden:
+ *   1. El dispositivo ELEGIDO en la sesión, y SIEMPRE (IXCODE-32): XOneCode deja en
+ *      `XONECODE_DISPOSITIVO` la ruta de un fichero con la elección de la pastilla del chat, y se lee
+ *      AHORA, en cada ejecución — así un cambio de aparato con la sesión abierta alcanza al siguiente
+ *      comando. Un `--serie`/`--udid` DISTINTO se niega (`negar`), y un script de la otra plataforma
+ *      también: medido, con un móvil físico elegido la sesión acababa en el emulador, y la frase
+ *      del prompt «no pruebes en otro aparato» no lo impedía. Quien cambia de aparato es la persona,
+ *      en la pastilla.
+ *   2. Sin elección, lo que se pasó a mano (`--serie` / `--udid`).
+ *   3. Sin nada: un EMULADOR antes que un dispositivo físico. Con uno solo conectado, ése.
  *      Con varios físicos y ningún emulador no se adivina: se devuelve `undefined` y adb dirá
  *      que hay más de uno, que es verdad.
  *
@@ -62,11 +66,47 @@ export function preferirEmulador(salidaDeAdbDevices) {
   return listos.find((serial) => serial.startsWith("emulator-"));
 }
 
-/** El serial de Android: `--serie`, el de la sesión o un emulador. Y dice de dónde salió. */
-export function serieAndroid(explicita, { entorno = process.env, adb = rutaDeAdb(entorno), ejecutar = ejecutarAdb } = {}) {
-  if (explicita) return { serie: explicita, porque: "pasado con --serie" };
+const CLASE = { emulador: "emulador", simulador: "simulador", fisico: "dispositivo físico" };
+
+/** Cómo se nombra el aparato de la sesión en una negativa: nombre, clase, plataforma e id. */
+function nombreDelAparato(d) {
+  return `«${d.nombre}» (${CLASE[d.clase] ?? d.clase} ${d.plataforma === "android" ? "Android" : "iOS"}, ${d.id})`;
+}
+
+/** Lo que se le dice a quien pide OTRO aparato: cuál manda y quién lo cambia. */
+function textoDeOtroAparato(d, que) {
+  return (
+    `La sesión usa ${nombreDelAparato(d)} y ${que}. No se usa otro aparato: los scripts ya van al de la sesión ` +
+    "sin pasar --serie ni --udid. Si hace falta otro, que la persona lo cambie en la pastilla del chat."
+  );
+}
+
+/** Sale del script con 2 y el motivo en stderr. Por parámetro en las funciones, para poder probarlas. */
+export function negarYSalir(texto) {
+  console.error(texto);
+  process.exit(2);
+}
+
+/**
+ * ¿Se puede levantar un emulador? Sin aparato en la sesión, o con un EMULADOR elegido, sí
+ * (`undefined`); con un físico o un iPhone elegido, no, y devuelve por qué: arrancar uno era la
+ * puerta por la que la sesión acababa en el emulador sin que nadie lo eligiera.
+ */
+export function puedeArrancarEmulador(entorno = process.env) {
   const elegido = dispositivoDeLaSesion(entorno);
-  if (elegido?.plataforma === "android") return { serie: elegido.id, porque: `el de la sesión: ${elegido.nombre}` };
+  if (elegido === undefined || (elegido.plataforma === "android" && elegido.clase === "emulador")) return undefined;
+  return textoDeOtroAparato(elegido, "no se levanta un emulador por su cuenta");
+}
+
+/** El serial de Android: el de la sesión (siempre), si no `--serie`, si no un emulador. Y dice de dónde salió. */
+export function serieAndroid(explicita, { entorno = process.env, adb = rutaDeAdb(entorno), ejecutar = ejecutarAdb, negar = negarYSalir } = {}) {
+  const elegido = dispositivoDeLaSesion(entorno);
+  if (elegido?.plataforma === "ios") return negar(textoDeOtroAparato(elegido, "este script es de Android"));
+  if (elegido?.plataforma === "android") {
+    if (explicita && explicita !== elegido.id) return negar(textoDeOtroAparato(elegido, `se ha pedido --serie ${explicita}`));
+    return { serie: elegido.id, porque: `el de la sesión: ${elegido.nombre}` };
+  }
+  if (explicita) return { serie: explicita, porque: "pasado con --serie" };
   try {
     // Con tope (`ejecutarAdb`): un adb colgado cae en el `catch` en vez de colgar el script.
     const serie = preferirEmulador(ejecutar(adb, ["devices"]));
@@ -81,10 +121,15 @@ export function serieAndroid(explicita, { entorno = process.env, adb = rutaDeAdb
 
 /** El UDID de iOS: `--udid`, o el SIMULADOR elegido en la sesión. Un iPhone físico no: estos
  *  scripts solo hablan con simuladores (`xcrun simctl`). */
-export function udidIos(explicito, entorno = process.env) {
-  if (explicito) return explicito;
+export function udidIos(explicito, entorno = process.env, negar = negarYSalir) {
   const elegido = dispositivoDeLaSesion(entorno);
-  return elegido?.plataforma === "ios" && elegido.clase === "simulador" ? elegido.id : undefined;
+  if (elegido?.plataforma === "android") return negar(textoDeOtroAparato(elegido, "este script es de iOS"));
+  if (elegido?.plataforma === "ios") {
+    if (explicito && explicito !== elegido.id) return negar(textoDeOtroAparato(elegido, `se ha pedido --udid ${explicito}`));
+    // Un iPhone FÍSICO elegido no lo manejan estos scripts: sin --udid se queda sin aparato, como antes.
+    return elegido.clase === "simulador" ? elegido.id : explicito || undefined;
+  }
+  return explicito || undefined;
 }
 
 /** La forma de un nombre de AVD. Copia de `core/puertosDeAvd.ts#FORMA_DE_NOMBRE_DE_AVD`. */

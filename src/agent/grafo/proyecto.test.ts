@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { esVistaAplanada, porQueNo, sinArtefactosEnElProyecto, sinVistasAplanadas, backendConArtefactos, backendConSkills, backendDeAgente, backendDelProyecto, backendDelProyectoConShell, entornoDeLaShellDelProyecto, exponerMemoriaDeProyecto } from "./proyecto.js";
-import { mkdirSync, mkdtempSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { esVistaAplanada, porQueNo, sinArtefactosEnElProyecto, sinVistasAplanadas, backendConArtefactos, backendConSkills, backendDeAgente, backendDelProyecto, backendDelProyectoConShell, entornoDeLaShellDelProyecto, exponerMemoriaDeProyecto, lectorDelDispositivoDeSesion } from "./proyecto.js";
+import { mkdirSync, mkdtempSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFilesystemMiddleware, createSkillsMiddleware, isSandboxBackend } from "deepagents";
@@ -1015,5 +1015,18 @@ describe("la shell del agente sabe dónde está el dispositivo de la sesión", (
       join(raiz, ".xonecode", "sesiones", "s1", "dispositivo.json")
     );
     expect(entornoDeLaShellDelProyecto(raiz, undefined, () => undefined)).not.toHaveProperty("XONECODE_DISPOSITIVO");
+  });
+});
+
+describe("lectorDelDispositivoDeSesion (IXCODE-32)", () => {
+  it("lee AHORA el fichero de al lado de los artefactos, y sin él no hay aparato", () => {
+    const sesion = mkdtempSync(join(tmpdir(), "xc-disp-"));
+    const artefactos = join(sesion, "artefactos");
+    const leer = lectorDelDispositivoDeSesion(artefactos);
+    expect(leer()).toBeUndefined();
+    writeFileSync(join(sesion, "dispositivo.json"), JSON.stringify({ id: "R58N", nombre: "Galaxy", plataforma: "android", clase: "fisico" }));
+    expect(leer()?.id).toBe("R58N");
+    expect(lectorDelDispositivoDeSesion(undefined)()).toBeUndefined();
+    rmSync(sesion, { recursive: true, force: true });
   });
 });
