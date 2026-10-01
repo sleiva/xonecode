@@ -725,6 +725,8 @@ export type MensajeAlCliente =
    * `settings.json` llega aquí como `true`, que es la omisión de esta etapa de pruebas.
    */
   | { clase: "depuracion"; activa: boolean }
+  /** El modo con que nacen las sesiones nuevas en cualquier proyecto (IXCODE-31), ya RESUELTO. */
+  | { clase: "modoPorDefecto"; modo: ModoDeEscritura }
   /**
    * Cómo fue la última augmentación pedida (`{clase:"tarea", accion:"augmentar"}`): el
    * encargo que propone el modelo, o por qué no se pudo. Nunca los dos a la vez.
@@ -1044,6 +1046,9 @@ export interface FicheroDelProyecto {
 export interface FotoDelResumen {
   tareas: string[];
   sync?: EstadoDeSync;
+  /** El modo con que nacen las sesiones nuevas de este proyecto (IXCODE-31). Presente solo con
+   *  copia; `proyecto` ausente dentro = «como el global». */
+  modoDeEscritura?: { proyecto?: ModoDeEscritura };
 }
 
 /**
@@ -1273,6 +1278,11 @@ export type MensajeDelCliente =
   | { clase: "copiaLocal"; accion: "abrirCarpeta"; proyecto: string }
   /** Pedir la FOTO del resumen del proyecto: 200 con `FotoDelResumen`, o 409 con `{ motivo }`. */
   | { clase: "copiaLocal"; accion: "resumen"; proyecto: string }
+  /** Fijar —o quitar, sin `modo`— el modo de las sesiones nuevas del proyecto (IXCODE-31): 200
+   *  con `{ proyecto? }`, 409 con `{ motivo }`. */
+  | { clase: "copiaLocal"; accion: "modoDeEscritura"; proyecto: string; modo?: ModoDeEscritura }
+  /** Fijar el modo de las sesiones nuevas en cualquier proyecto (Ajustes > General). */
+  | { clase: "modoPorDefecto"; modo: ModoDeEscritura }
   /** La pestaña Soporte: chats y tareas del proyecto con su análisis previo. */
   | { clase: "soporte"; accion: "listar"; proyecto: string }
   /**

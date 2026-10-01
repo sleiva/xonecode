@@ -155,3 +155,20 @@
   color: var(--dsw-alias-label-secondary);
   font-size: 13px;
 }
+
+/* ── Conversaciones nuevas (IXCODE-31) ───────────────────────────────────────────────────
+   Una fila: la etiqueta y el desplegable común, y debajo la nota en tinta secundaria. */
+.filaDeModo {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+}
+
+.notaDeModo {
+  margin: 8px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}

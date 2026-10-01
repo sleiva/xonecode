@@ -211,6 +211,24 @@ describe("validar", () => {
     expect(avisos.every((a) => a.severidad === "aviso")).toBe(true);
   });
 
+  it("acepta el modoDeEscritura del proyecto (IXCODE-31)", () => {
+    const { config, avisos } = validar({ modoDeEscritura: "autonomo" }, RUTA, "proyecto");
+    expect(config.modoDeEscritura).toBe("autonomo");
+    expect(avisos).toHaveLength(0);
+  });
+
+  it("descarta un modoDeEscritura desconocido, y lo dice", () => {
+    const { config, avisos } = validar({ modoDeEscritura: "auto" }, RUTA, "proyecto");
+    expect(config.modoDeEscritura).toBeUndefined();
+    expect(avisos[0]!.texto).toContain("modoDeEscritura");
+  });
+
+  it("en el config.json GLOBAL no vale: el global vive en settings.json, y se dice", () => {
+    const { config, avisos } = validar({ modoDeEscritura: "autonomo" }, RUTA, "global");
+    expect(config.modoDeEscritura).toBeUndefined();
+    expect(avisos[0]!.texto).toMatch(/Ajustes/);
+  });
+
   it("acepta gestorDeTareas con los tres campos y una clave de proyecto válida", () => {
     const { config, avisos } = validar(
       { gestorDeTareas: { conector: "jira", sitio: "abc-123", proyecto: "IXCODE" } },

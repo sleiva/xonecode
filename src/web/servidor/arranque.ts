@@ -135,6 +135,7 @@ import {
   cargarSettings,
   guardarConcurrenciaDeTareas,
   guardarDepurar,
+  guardarModoPorDefecto,
   guardarWorkspace as guardarWorkspaceEnDisco,
   guardarDispositivos,
   guardarAjusteDeAvd,
@@ -162,7 +163,7 @@ import {
 } from "../../core/modoDeEscritura.js";
 import { megasDeLasMudanzas, mudarWorkspaceLegado, type ResultadoDeMudanza } from "../../agent/config/mudanzaEnDisco.js";
 import { elegirCarpetaEnMaquina, haySelectorDeCarpeta } from "../../agent/config/selectorEnMaquina.js";
-import { cloudstudioDelProyecto } from "../../agent/config/configEnDisco.js";
+import { cloudstudioDelProyecto, guardarModoDeEscrituraDeProyecto, modoDeEscrituraDelProyecto } from "../../agent/config/configEnDisco.js";
 import { abrirEnSistema, olvidarEntorno as olvidarCredencialesDeEntorno, rutaAuthPorDefecto } from "../../agent/cloudstudio/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/config/persona.js";
 import { cambiosDeSesion, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesiones/sesionGit.js";
@@ -733,6 +734,17 @@ export interface OpcionesDeMontaje {
   depuracionActiva?: () => boolean;
   /** Cambia la casilla. Ausente = Ajustes la enseña pero no deja cambiarla. */
   guardarDepuracion?: (activa: boolean) => void;
+  /**
+   * El modo con que NACEN las sesiones nuevas en cualquier proyecto (IXCODE-31), ya RESUELTO
+   * (ausente en disco = supervisado). Ausente la OPCIÓN = Ajustes no pinta el control.
+   */
+  modoPorDefectoGlobal?: () => ModoDeEscritura;
+  /** Cambia el global. Ausente = Ajustes lo enseña pero no deja cambiarlo. */
+  guardarModoPorDefectoGlobal?: (modo: ModoDeEscritura) => void;
+  /** El modo de las sesiones nuevas de un proyecto, por su RAÍZ. Ausente = el panel no lo pinta. */
+  modoDelProyecto?: (raiz: string) => ModoDeEscritura | undefined;
+  /** Fija —o quita, con `undefined`— el de un proyecto. */
+  guardarModoDelProyecto?: (raiz: string, modo: ModoDeEscritura | undefined) => void;
   /**
    * Augmenta una petición en un encargo revisado (`agent/tareas/aumentador.ts`, Task 9). Ausente =
    * el botón «Preparar el encargo» no está disponible.
@@ -1712,6 +1724,8 @@ export function montarRutas(
     // La casilla «Depurar», por lo mismo que el workspace: Ajustes se puede abrir en cuanto
     // conecta.
     const depuracion = mensajeDeDepuracion();
+    // El modo de las sesiones nuevas (IXCODE-31), por lo mismo: está en Ajustes > General.
+    const modoPorDefecto = mensajeDeModoPorDefecto();
     // Y los conectores MCP, tras el workspace y por la misma regla: solo si esta ejecución
     // los monta, y entonces la ventana de Ajustes no se abre con la sección en blanco.
     const conectores = mensajeDeConectores();
@@ -1734,6 +1748,7 @@ export function montarRutas(
       if (workspace !== undefined) cliente(workspace);
       if (ultimoProgresoDeMudanza !== undefined) cliente({ clase: "mudanzaDeWorkspace", progreso: ultimoProgresoDeMudanza });
       if (depuracion !== undefined) cliente(depuracion);
+      if (modoPorDefecto !== undefined) cliente(modoPorDefecto);
       if (conectores !== undefined) cliente(conectores);
       if (consumoDeLaSesion !== undefined) {
         cliente({
@@ -1907,6 +1922,11 @@ export function montarRutas(
   const emitirDepuracion = (): void => {
     const m = mensajeDeDepuracion();
     if (m !== undefined) emitir(m);
+  };
+
+  const mensajeDeModoPorDefecto = (): MensajeAlCliente | undefined => {
+    const modo = opciones.modoPorDefectoGlobal?.();
+    return modo === undefined ? undefined : { clase: "modoPorDefecto", modo };
   };
 
   /**
@@ -5521,9 +5541,57 @@ export function montarRutas(
         const { clase: _clase, ...medida } = await lecturaDeSync(raiz);
         sync = medida;
       }
-      const foto: FotoDelResumen = { tareas, ...(sync === undefined ? {} : { sync }) };
+      // El modo de las sesiones nuevas de ESTE proyecto (IXCODE-31): solo con copia, que es
+      // donde vive su `config.json`; dentro, ausente es «como el global».
+      const modoDeEscritura =
+        opciones.modoDelProyecto === undefined || !esProyectoEnDisco(raiz)
+          ? undefined
+          : (() => {
+              const proyecto = opciones.modoDelProyecto(raiz);
+              return proyecto === undefined ? {} : { proyecto };
+            })();
+      const foto: FotoDelResumen = {
+        tareas,
+        ...(sync === undefined ? {} : { sync }),
+        ...(modoDeEscritura === undefined ? {} : { modoDeEscritura }),
+      };
       respuesta.writeHead(200, { "content-type": "application/json" });
       respuesta.end(JSON.stringify(foto));
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "copiaLocal" && mensaje.accion === "modoDeEscritura") {
+      // IXCODE-31. Del cable llega el ID y, opcional, el modo; la raíz la pone el servidor,
+      // como en `resumen`. Sin `modo` se QUITA: vuelve a mandar el global.
+      const pedido = (mensaje as { modo?: unknown }).modo;
+      if (pedido !== undefined && !esModoDeEscritura(pedido)) {
+        respuesta.writeHead(400);
+        respuesta.end();
+        return;
+      }
+      const identidad = proyectos.find((p) => p.id === mensaje.proyecto);
+      const raiz = entornoElegido === undefined || identidad === undefined
+        ? undefined
+        : vestibulo.raizDeProyecto(entornoElegido, identidad.nombre);
+      if (raiz === undefined || !esProyectoEnDisco(raiz) || opciones.guardarModoDelProyecto === undefined) {
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({
+          motivo: raiz === undefined
+            ? "ese proyecto no está en el listado del entorno activo"
+            : "el proyecto no tiene copia local: el modo se guarda en su configuración",
+        }));
+        return;
+      }
+      try {
+        opciones.guardarModoDelProyecto(raiz, pedido);
+      } catch (error) {
+        // Un `config.json` roto PARA sin escribir (`leerObjetoCrudoOAbortar`): se dice, sin la ruta.
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ motivo: `no se pudo guardar en la configuración del proyecto (${codigoDe(error) ?? "su config.json no se puede leer"})` }));
+        return;
+      }
+      const proyecto = opciones.modoDelProyecto?.(raiz);
+      respuesta.writeHead(200, { "content-type": "application/json" });
+      respuesta.end(JSON.stringify(proyecto === undefined ? {} : { proyecto }));
       return;
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "soporte" && mensaje.accion === "listar") {
@@ -5994,6 +6062,17 @@ export function montarRutas(
           await anunciarAlta().catch(contar);
         }
       })().catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "modoPorDefecto") {
+      // Un modo que no existe no se guarda: el cliente manda la intención, el servidor decide.
+      if (esModoDeEscritura((mensaje as { modo?: unknown }).modo)) {
+        opciones.guardarModoPorDefectoGlobal?.(mensaje.modo);
+        const m = mensajeDeModoPorDefecto();
+        if (m !== undefined) emitir(m);
+      }
       respuesta.writeHead(204);
       respuesta.end();
       return;
@@ -6856,6 +6935,45 @@ export function ajusteDeDepuracionCableado(opciones: {
 }
 
 /**
+ * El modo con que NACEN las sesiones nuevas (IXCODE-31), cableado: el global
+ * (`settings.json#modoDeEscritura`, Ajustes > General) y el de cada proyecto
+ * (`.xonecode/config.json#modoDeEscritura`, panel del proyecto). Extraída por el patrón de
+ * fallo de siempre, y con una trampa concreta que el test vigila: el del proyecto se lee por la
+ * RAÍZ, porque en la web `fuentes().proyecto` no se rellena nunca — leerlo de ahí daría el
+ * ajuste por guardado y no se aplicaría jamás.
+ */
+export function ajusteDeModoPorDefectoCableado(opciones: {
+  leerGlobal?: () => ModoDeEscritura | undefined;
+  guardarGlobal?: (modo: ModoDeEscritura) => void;
+  leerProyecto?: (raiz: string) => ModoDeEscritura | undefined;
+  guardarProyecto?: (raiz: string, modo: ModoDeEscritura | undefined) => void;
+} = {}): {
+  modoPorDefecto: (raiz: string) => { proyecto?: ModoDeEscritura; global?: ModoDeEscritura };
+  modoPorDefectoGlobal: () => ModoDeEscritura;
+  guardarModoPorDefectoGlobal: (modo: ModoDeEscritura) => void;
+  modoDelProyecto: (raiz: string) => ModoDeEscritura | undefined;
+  guardarModoDelProyecto: (raiz: string, modo: ModoDeEscritura | undefined) => void;
+} {
+  const leerGlobal = opciones.leerGlobal ?? (() => cargarSettings().settings.modoDeEscritura);
+  const guardarGlobal = opciones.guardarGlobal ?? ((modo: ModoDeEscritura) => void guardarModoPorDefecto(undefined, modo));
+  const leerProyecto = opciones.leerProyecto ?? modoDeEscrituraDelProyecto;
+  const guardarProyecto =
+    opciones.guardarProyecto ??
+    ((raiz: string, modo: ModoDeEscritura | undefined) => void guardarModoDeEscrituraDeProyecto(raiz, modo));
+  return {
+    modoPorDefecto: (raiz) => {
+      const proyecto = leerProyecto(raiz);
+      const global = leerGlobal();
+      return { ...(proyecto === undefined ? {} : { proyecto }), ...(global === undefined ? {} : { global }) };
+    },
+    modoPorDefectoGlobal: () => leerGlobal() ?? MODO_POR_OMISION,
+    guardarModoPorDefectoGlobal: (modo) => guardarGlobal(modo),
+    modoDelProyecto: (raiz) => leerProyecto(raiz),
+    guardarModoDelProyecto: (raiz, modo) => guardarProyecto(raiz, modo),
+  };
+}
+
+/**
  * La opción `conectores` de `montarRutas`, cableada — extraída por el MISMO motivo que
  * `ajusteDeWorkspaceCableado`: un literal inline dentro de `arrancarConsolaWeb` no quedaría
  * probado, y esa composición concreta —que la fábrica de verdad (`servicioDeConectoresCableado`)
@@ -7372,6 +7490,9 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     // La casilla «Depurar», con la MISMA disciplina: composición extraída y probada
     // (`ajusteDeDepuracionCableado`).
     ...ajusteDeDepuracionCableado(),
+    // El modo con que nacen las sesiones nuevas (IXCODE-31), con la MISMA disciplina. El
+    // lector por raíz va al vestíbulo (`vestibuloReal`); aquí, los de Ajustes y del panel.
+    ...(({ modoPorDefecto: _paraElVestibulo, ...resto }) => resto)(ajusteDeModoPorDefectoCableado()),
     // Los conectores MCP, con la MISMA disciplina: la composición extraída y probada
     // (`ajusteDeConectoresCableado`), nunca un literal aquí dentro.
     // Y el gestor de tareas (IXCODE-11) llama por ESE mismo servicio: los dos salen de
@@ -7645,6 +7766,8 @@ function vestibuloReal(
     informar,
     origenDeTrabajo: resolver(fuentes()).trabajo.origen,
     fuentes,
+    // Con qué modo nace una sesión nueva (IXCODE-31): el del proyecto de ESA raíz, si no el global.
+    modoPorDefecto: ajusteDeModoPorDefectoCableado().modoPorDefecto,
     // Se resuelve UNA vez, aquí, y no en cada `anunciarAlta`: `git config`/`os.userInfo`
     // no cambian a media conexión, y repetir el subproceso en cada anuncio del alta sería
     // gastar sin motivo. Nunca viaja hacia CloudStudio ni hacia ningún acto —

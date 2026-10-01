@@ -645,6 +645,35 @@ describe("vestíbulo", () => {
       await v.cerrar();
     });
 
+    /** IXCODE-31: con qué modo NACE una sesión nueva — el del proyecto, si no el global. */
+    it("una sesión NUEVA nace con el modo GLOBAL por defecto", async () => {
+      const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", modoPorDefecto: () => ({ global: "autonomo" }) });
+      const abierta = await v.abrirProyecto({ raiz: "/w/a" });
+      expect(abierta.estadoDeSesion.modo).toBe("autonomo");
+      await v.cerrar();
+    });
+
+    it("el del PROYECTO gana al global si está puesto", async () => {
+      const v = crearVestibulo({
+        ...dobles(),
+        origenDeTrabajo: "global",
+        // Por la RAÍZ que se abre: es lo que hace que cada proyecto tenga el suyo.
+        modoPorDefecto: (raiz) => (raiz === "/w/a" ? { proyecto: "supervisado", global: "autonomo" } : { global: "autonomo" }),
+      });
+      const abierta = await v.abrirProyecto({ raiz: "/w/a" });
+      expect(abierta.estadoDeSesion.modo).toBe("supervisado");
+      await v.cerrar();
+    });
+
+    it("una REABIERTA conserva la suya: el valor por defecto no la toca", async () => {
+      const s = sesionesEnMemoria();
+      const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto, modoPorDefecto: () => ({ global: "autonomo" }) });
+      const id = s.puerto.crear("/w/a");
+      const abierta = await v.abrirProyecto({ raiz: "/w/a", sesion: id });
+      expect(abierta.estadoDeSesion.modo).toBeUndefined();
+      await v.cerrar();
+    });
+
     it("una sesión sin esfuerzo guardado abre SIN esfuerzo, no con uno inventado", async () => {
       const s = sesionesEnMemoria();
       const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
@@ -1008,6 +1037,23 @@ describe("vestíbulo", () => {
    * enseñar trabajando, ni que reabrir. La entrada la creaba `volcar()`, que corre en la
    * frontera del turno.
    */
+  it("una sesión nacida autónoma por defecto se ANOTA así en el índice con su primer acto (IXCODE-31)", async () => {
+    const s = sesionesEnMemoria();
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      modoPorDefecto: () => ({ global: "autonomo" }),
+      crearEjecutor: () => async () => {},
+    });
+    const a = await v.abrirProyecto({ raiz: "/w/a" });
+    a.recibir({ clase: "prosa", texto: "arregla el login" });
+    expect(a.sesion).toBe(a.idDeHilo);
+    // Sin esto, al reabrirla volvería supervisada: la elección de la apertura viviría solo en memoria.
+    expect(s.modos.get(`/w/a|${a.idDeHilo}`)).toBe("autonomo");
+    await v.cerrar();
+  });
+
   it("una prosa del usuario da de alta la sesión en el ACTO, con su título", async () => {
     const s = sesionesEnMemoria();
     const v = crearVestibulo({
@@ -1674,6 +1720,16 @@ describe("abrirParaTarea — la segunda puerta", () => {
     humana.consola.consola.alEstado?.({ ...humana.estadoDeSesion, hilo: "otro" });
     expect(estados).toBe(1);
 
+    await deTarea.cerrar();
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("una consola de TAREA no usa el modo por defecto: su autorización es crear la tarea (IXCODE-31)", async () => {
+    const base = baseTemporal();
+    const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", baseDeWorkspace: () => base, modoPorDefecto: () => ({ global: "autonomo" }) });
+    const deTarea = await v.abrirParaTarea(proyectoEnDisco(base, "A"));
+    expect(deTarea.estadoDeSesion.modo).toBeUndefined();
     await deTarea.cerrar();
     await v.cerrar();
     rmSync(base, { recursive: true, force: true });

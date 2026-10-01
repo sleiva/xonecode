@@ -7958,3 +7958,36 @@ Medido en esta máquina, y de ahí las reglas:
 Límites declarados: cancelar corta ENTRE ficheros, no a mitad de uno grande (el que está copiándose termina
 antes de que el corte se note); el tamaño que se anuncia al empezar es el de lo que se copiaría, no el que ocupará en disco
 (los discos del emulador son dispersos).
+
+## Con qué modo NACE una sesión: global y por proyecto (IXCODE-31, 01-10-2026)
+
+La entrada «El modo de escritura vive en la sesión» decidió que **no hubiera defecto global**.
+IXCODE-31 lo pidió («en nueva conversación sale por defecto Supervisado; poder cambiarlo en
+Ajustes»), se le enseñó esa decisión, y lo quiso igualmente con dos niveles: **uno global y
+otro por proyecto, y gana el del proyecto si está puesto**.
+
+Lo que lo hace distinto del `settings.sinAprobacion` retirado, y es por lo que cabe:
+
+- **Solo decide la posición INICIAL del conmutador** de una sesión nueva de una persona
+  (`core/modoDeEscritura.ts#modoParaSesionNueva`, aplicado en `vestibulo.ts` al construir el
+  `EstadoDeSesion`). No gobierna ninguna escritura: lo que gobierna sigue siendo el modo de la
+  sesión, que se ve en la caja del chat desde el primer momento y se cambia ahí. Por eso no hay
+  «dos sitios donde se decide lo mismo».
+- **Una sesión reabierta conserva el suyo**, del índice. Cambiar el valor por defecto no toca
+  ninguna conversación que ya exista.
+- **Una tarea de fondo no lo usa**: su autorización es crear la tarea. Lo pasa solo la puerta
+  de las personas (`conModoPorDefecto`); ausente es supervisado, la dirección segura si
+  aparece una tercera puerta.
+- **Se anota con el primer acto**, por el camino de siempre (`volcar`): nacida autónoma, se
+  reabre autónoma.
+
+Dónde vive cada uno: el global en `settings.json#modoDeEscritura` (Ajustes > General; elegir
+supervisado BORRA la clave, es la omisión) y el del proyecto en `.xonecode/config.json
+#modoDeEscritura` (panel del proyecto, pestaña Resumen, con «Como el global» como tercera
+opción, que QUITA la clave). En el `config.json` global se descarta diciéndolo.
+
+**La trampa que había**: el del proyecto se lee por la RAÍZ (`modoDeEscrituraDelProyecto`),
+no de `fuentes().proyecto`, que en la web no se rellena nunca. Leído de ahí, el ajuste se
+habría guardado y no se habría aplicado jamás, con todos los tests en verde: los del vestíbulo
+inyectaban `fuentes`. La segunda, del mismo patrón: el panel le pasa al resumen sus props uno a
+uno y los dos nuevos son opcionales, así que olvidarlos no daba error. Las dos tienen test.

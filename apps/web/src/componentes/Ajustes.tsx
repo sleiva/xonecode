@@ -28,7 +28,8 @@ import type {
   ProveedorDeModelos,
   SistemaOperativo,
 } from "../tipos.js";
-import { PLATAFORMAS_DE_DISPOSITIVO, seMira } from "../tipos.js";
+import { PLATAFORMAS_DE_DISPOSITIVO, seMira, type ModoDeEscritura } from "../tipos.js";
+import { SelectorDeModo } from "./SelectorDeModo.js";
 import { etiquetaDeEstado, inventario, seLlegaAlDispositivo, type FilaDeInventario } from "../inventarioDeDispositivos.js";
 import estilosDeAccion from "./VerificarDispositivo.module.css";
 import { ArrancarEmulador } from "./ArrancarEmulador.js";
@@ -440,6 +441,8 @@ export function Ajustes({
   mudanzaDeWorkspace,
   depuracionActiva,
   alCambiarDepuracion,
+  modoPorDefecto,
+  alCambiarModoPorDefecto,
   alElegirCarpeta,
   carpetaElegida,
   alCerrar,
@@ -677,6 +680,13 @@ export function Ajustes({
   depuracionActiva?: boolean;
   /** Cambia la casilla. Ausente = esta ejecución no puede, y se enseña de solo lectura. */
   alCambiarDepuracion?: (activa: boolean) => void;
+  /**
+   * Con qué modo NACEN las conversaciones nuevas en cualquier proyecto (IXCODE-31). El de un
+   * proyecto, en su panel, gana sobre éste. Ausente = esta ejecución no lo dice, y no se pinta.
+   */
+  modoPorDefecto?: ModoDeEscritura;
+  /** Cambia el modo por defecto. Ausente = se enseña sin poder cambiarlo. */
+  alCambiarModoPorDefecto?: (modo: ModoDeEscritura) => void;
   /**
    * Abre el selector de carpeta del sistema. **Ausente = esta máquina no tiene ninguno** —o
    * la consola se mira por un túnel, que es el límite declarado— y entonces el botón no se
@@ -2012,6 +2022,24 @@ export function Ajustes({
                     carpeta <code>.xonecode/</code> del proyecto: no suben a CloudStudio y el agente no
                     puede leerlos. Solo afecta a las conversaciones que abras a partir de ahora, no a la
                     que tengas abierta. Apágala si te sobra el ruido.
+                  </p>
+                </>
+              )}
+
+              {modoPorDefecto === undefined ? null : (
+                <>
+                  <h3 className={estilos.subencabezado}>Conversaciones nuevas</h3>
+                  <SelectorDeModo
+                    actual={modoPorDefecto}
+                    conectado={conectado && alCambiarModoPorDefecto !== undefined}
+                    rotulo="modo de escritura de las conversaciones nuevas"
+                    alElegir={(modo) => alCambiarModoPorDefecto?.(modo)}
+                  />
+                  <p className={estilos.nota}>
+                    El modo con el que empieza cada conversación nueva, en cualquier proyecto. Un proyecto
+                    puede tener el suyo (en su panel, pestaña Resumen), y entonces manda el del proyecto. No
+                    cambia las conversaciones que ya existen, ni las tareas de fondo; y en cada conversación
+                    se puede cambiar en la caja del chat.
                   </p>
                 </>
               )}

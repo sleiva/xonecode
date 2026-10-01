@@ -27,6 +27,7 @@ import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Aviso } from "../../core/config.js";
+import { MODO_POR_OMISION, type ModoDeEscritura } from "../../core/modoDeEscritura.js";
 import {
   AjustesDeDispositivos,
   Entorno,
@@ -276,6 +277,20 @@ export function guardarDepurar(casa: string | undefined, depurar: boolean): { ru
   const fusionado = depurar
     ? Object.fromEntries(Object.entries(crudo).filter(([k]) => k !== "depurar"))
     : { ...crudo, depurar: false };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta };
+}
+
+/**
+ * Guarda el modo con que nacen las sesiones nuevas (IXCODE-31), sin tocar nada más del fichero.
+ * `supervisado` BORRA la clave: es la omisión, y escribirla solo ensuciaría el fichero.
+ */
+export function guardarModoPorDefecto(casa: string | undefined, modo: ModoDeEscritura): { ruta: string } {
+  const ruta = rutaSettings(casa ?? homedir());
+  const crudo = leerCrudoOAbortar(ruta);
+  const fusionado = modo === MODO_POR_OMISION
+    ? Object.fromEntries(Object.entries(crudo).filter(([k]) => k !== "modoDeEscritura"))
+    : { ...crudo, modoDeEscritura: modo };
   escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
   return { ruta };
 }

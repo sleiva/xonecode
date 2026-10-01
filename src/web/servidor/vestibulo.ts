@@ -90,7 +90,7 @@ import {
 import type { MensajeAlCliente, MensajeDelCliente, Sumidero } from "./transporte.js";
 import type { Esfuerzo } from "../../core/esfuerzo.js";
 import { resolverMotor, type MotorDeAgente } from "../../core/motor.js";
-import { MODO_POR_OMISION, type ModoDeEscritura } from "../../core/modoDeEscritura.js";
+import { MODO_POR_OMISION, modoParaSesionNueva, type ModoDeEscritura } from "../../core/modoDeEscritura.js";
 
 /**
  * Un paso del alta — o, para «proyecto», una ACCIÓN que ya no es un paso del alta:
@@ -458,6 +458,14 @@ export interface OpcionesDelVestibulo {
    * `gemini`.
    */
   fuentes?: () => FuentesDeEleccion;
+  /**
+   * Los dos valores de los que sale el modo con que NACE una sesión nueva de una persona
+   * (IXCODE-31): el del PROYECTO de esa raíz (`config.json#modoDeEscritura`) y el GLOBAL
+   * (`settings.json#modoDeEscritura`, Ajustes > General). Por la RAÍZ y no por `fuentes`: en la
+   * web `fuentes().proyecto` no se rellena nunca. Se pregunta en CADA apertura, así que cambiarlo
+   * alcanza a la sesión siguiente sin reiniciar. Ausente = ninguno, y entonces supervisado.
+   */
+  modoPorDefecto?: (raiz: string) => { proyecto?: ModoDeEscritura; global?: ModoDeEscritura };
   /**
    * Lo que la consola de PROYECTO necesita y `consolaWeb` no puede saber: `/sync`, los
    * escritores de config del proyecto, el tema. Depende de la RAÍZ, que no existe hasta
@@ -1227,6 +1235,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     tarea,
     enElCable,
     alFlancoDeTurno,
+    conModoPorDefecto,
   }: {
     raiz: string;
     sesion?: string;
@@ -1273,6 +1282,12 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
      * NO se pasa: un turno de tarea no puede emitir nada al cable.
      */
     alFlancoDeTurno?: (activo: boolean) => void;
+    /**
+     * ¿Nace con el modo por defecto del proyecto o del global (IXCODE-31)? Solo la puerta de
+     * las PERSONAS lo pasa: una tarea autoriza al crearse, no por el modo de una sesión.
+     * Ausente = no, y entonces supervisado — la dirección segura si aparece otra puerta.
+     */
+    conModoPorDefecto?: true;
   }): Promise<ConsolaDeProyecto> => {
     const reabierta = sesion === undefined ? undefined : sesiones.reabrir(raiz, sesion);
     /**
@@ -1652,6 +1667,21 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     // modelo en vigor no tendría qué enseñar hasta el primer `/modelo` — que es justo lo
     // que se quiere evitar (enseñar «no se sabe» cuando sí se sabe).
     const fuentesDeLaSesion = opciones.fuentes?.() ?? {};
+    /**
+     * El modo con que arranca (IXCODE-31). Una REABIERTA, el suyo del índice —ausente es
+     * supervisado, como siempre—. Una de TAREA, ninguno (`conModoPorDefecto`): su autorización
+     * es haber creado la tarea, no el modo de una sesión. Y una NUEVA de una persona, el del proyecto o el global
+     * (`modoParaSesionNueva`); sin ninguno de los dos se queda ausente, que ya es supervisado.
+     */
+    const modoAlAbrir: ModoDeEscritura | undefined =
+      reabierta !== undefined
+        ? reabierta.modo
+        : conModoPorDefecto !== true
+          ? undefined
+          : (() => {
+              const elegido = modoParaSesionNueva(opciones.modoPorDefecto?.(raiz) ?? {});
+              return elegido.origen === "omision" ? undefined : elegido.modo;
+            })();
     let estadoDeSesion: EstadoDeSesion = {
       // El hilo ES el id de la sesión: es lo que permite que reabrirla continúe la
       // conversación en vez de releerla. `/nuevo` sigue pudiendo cambiarlo — abre otro hilo
@@ -1690,7 +1720,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
        * una cuyo índice no se pudo leer, se reabre preguntando — que es la dirección en la
        * que perder el dato no cuesta nada.
        */
-      ...(reabierta?.modo === undefined ? {} : { modo: reabierta.modo }),
+      ...(modoAlAbrir === undefined ? {} : { modo: modoAlAbrir }),
     };
     // `/modelo` y `/modelos` cambian el modelo EN CALIENTE y no tocan disco, así que esta
     // es la única forma de enterarse. Ver `Consola.alEstado`.
@@ -1965,6 +1995,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     const consolaDeProyecto = await construirConsolaDeProyecto({
       ...apertura,
       enElCable: () => enFoco === raiz,
+      conModoPorDefecto: true,
       alFlancoDeTurno: (activo) => {
         // La barra se repinta en los DOS flancos y esté o no en foco: de aquí sale que una
         // sesión de segundo plano está trabajando.

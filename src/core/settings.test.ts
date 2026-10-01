@@ -384,3 +384,16 @@ describe("la regla del workspace es UNA: la tabla que comparte con la copia del 
     expect(motivoDeWorkspaceInaceptable(expandirConCasa(ruta, casa)) === undefined).toBe(vale);
   });
 });
+
+describe("modoDeEscritura en settings.json (IXCODE-31)", () => {
+  it("lee los dos modos", () => {
+    expect(validarSettings({ entornos: [], modoDeEscritura: "autonomo" }).settings.modoDeEscritura).toBe("autonomo");
+    expect(validarSettings({ entornos: [], modoDeEscritura: "supervisado" }).settings.modoDeEscritura).toBe("supervisado");
+  });
+
+  it("ausente o desconocido es «no lo he dicho», no un modo inventado", () => {
+    expect(validarSettings({ entornos: [] }).settings.modoDeEscritura).toBeUndefined();
+    expect(validarSettings({ entornos: [], modoDeEscritura: "autónomo" }).settings.modoDeEscritura).toBeUndefined();
+    expect(validarSettings({ entornos: [], modoDeEscritura: true }).settings.modoDeEscritura).toBeUndefined();
+  });
+});

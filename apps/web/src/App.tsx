@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { Planes } from "./componentes/Planes.js";
 import { Colecciones } from "./componentes/Colecciones.js";
 import type { crearStoreDelCliente } from "./store.js";
-import type { ActoDeSincronizacion, FotoDelResumen, ListadoDeSoporte, MensajeDelCliente } from "./tipos.js";
+import type { ActoDeSincronizacion, FotoDelResumen, ListadoDeSoporte, MensajeDelCliente, ModoDeEscritura } from "./tipos.js";
 import type { Conexion } from "./conexion.js";
 import { ANCHO_BARRA_POR_OMISION, Maqueta } from "./componentes/Maqueta.js";
 import { Barra } from "./componentes/Barra.js";
@@ -74,6 +74,18 @@ export const MS_ENTRE_LECTURAS_DE_PLANES = 3000;
  * las acciones del resumen del proyecto: la regla vive en el servidor, y así su respuesta
  * llega a la pantalla en vez de quedarse en el terminal.
  */
+/**
+ * El `{ proyecto? }` del modo de un proyecto (IXCODE-31), tal como viaja en la foto del resumen
+ * y en la respuesta de fijarlo. Lo que no se entiende es `undefined` —«no consta»—, nunca
+ * «como el global», que es un dato.
+ */
+function modoDelProyectoDe(valor: unknown): { proyecto?: ModoDeEscritura } | undefined {
+  if (typeof valor !== "object" || valor === null) return undefined;
+  const proyecto = (valor as { proyecto?: unknown }).proyecto;
+  if (proyecto === undefined) return {};
+  return proyecto === "supervisado" || proyecto === "autonomo" ? { proyecto } : undefined;
+}
+
 async function negativaDe(respuesta: unknown): Promise<string | undefined> {
   const r = respuesta as Response | undefined;
   if (r?.status !== 409) return undefined;
@@ -1473,17 +1485,38 @@ export function App({
     },
     // La foto del servidor: lo que queda por subir, la MISMA medida que la banda de Revisión.
     // Lo que no se entiende es «no consta», nunca un cero.
+    // IXCODE-31: el modo de las conversaciones nuevas de ESTE proyecto. Vuelve el valor que
+    // quedó guardado, o el MOTIVO de la negativa (409).
+    alFijarModoDelProyecto: async (id, modo) => {
+      const r = (await enviar({
+        clase: "copiaLocal",
+        accion: "modoDeEscritura",
+        proyecto: id,
+        ...(modo === undefined ? {} : { modo }),
+      })) as Response | undefined;
+      if (r === undefined) return { motivo: "no se pudo hablar con el servidor" };
+      if (!r.ok) return { motivo: (await negativaDe(r)) ?? "el servidor no lo ha guardado" };
+      try {
+        return { guardado: modoDelProyectoDe(await r.json()) ?? {} };
+      } catch {
+        return { motivo: "el servidor contestó algo que no se entiende" };
+      }
+    },
+    // El global, para que el desplegable diga «Como el global (…)» con el valor de verdad.
+    ...(estado.modoPorDefecto === undefined ? {} : { modoGlobal: estado.modoPorDefecto }),
     alPedirResumen: async (id) => {
       const r = (await enviar({ clase: "copiaLocal", accion: "resumen", proyecto: id })) as Response | undefined;
       if (r === undefined || !r.ok) return undefined;
       try {
-        const cuerpo = (await r.json()) as { tareas?: unknown; sync?: unknown };
+        const cuerpo = (await r.json()) as { tareas?: unknown; sync?: unknown; modoDeEscritura?: unknown };
         if (!Array.isArray(cuerpo.tareas) || !cuerpo.tareas.every((t) => typeof t === "string")) return undefined;
+        const modo = modoDelProyectoDe(cuerpo.modoDeEscritura);
         return {
           tareas: cuerpo.tareas as string[],
           ...(typeof cuerpo.sync === "object" && cuerpo.sync !== null
             ? { sync: cuerpo.sync as NonNullable<FotoDelResumen["sync"]> }
             : {}),
+          ...(modo === undefined ? {} : { modoDeEscritura: modo }),
         };
       } catch {
         return undefined;
@@ -1866,6 +1899,8 @@ export function App({
       // La casilla «Depurar». Ausente = el servidor no lo dice, y entonces no se pinta.
       {...(estado.depuracionActiva === undefined ? {} : { depuracionActiva: estado.depuracionActiva })}
       alCambiarDepuracion={(activa) => void enviar({ clase: "depuracion", activa })}
+      {...(estado.modoPorDefecto === undefined ? {} : { modoPorDefecto: estado.modoPorDefecto })}
+      alCambiarModoPorDefecto={(modo) => void enviar({ clase: "modoPorDefecto", modo })}
       // El selector de carpeta, solo si el servidor dice que esta máquina tiene uno.
       {...(estado.puedeElegirCarpeta === true ? { alElegirCarpeta: () => void enviar({ clase: "elegirCarpeta" }) } : {})}
       {...(estado.carpetaElegida === undefined ? {} : { carpetaElegida: estado.carpetaElegida })}

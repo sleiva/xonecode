@@ -7,6 +7,7 @@ import {
   esModoDeEscritura,
   modoDeTexto,
   seEscribeSinPreguntar,
+  modoParaSesionNueva,
 } from "./modoDeEscritura.js";
 import { TOPE_DE_RONDAS_DE_TAREA } from "./tareas.js";
 
@@ -78,5 +79,20 @@ describe("la opción recomendada de una pregunta", () => {
     expect(opcionRecomendada(["Login", "Menú"])).toBeUndefined();
     expect(opcionRecomendada(["A (Recommended)", "B (Recommended)"])).toBeUndefined();
     expect(opcionRecomendada([])).toBeUndefined();
+  });
+});
+
+describe("el modo de una sesión NUEVA (IXCODE-31)", () => {
+  it("gana el del proyecto si está puesto", () => {
+    expect(modoParaSesionNueva({ proyecto: "supervisado", global: "autonomo" })).toEqual({ modo: "supervisado", origen: "proyecto" });
+    expect(modoParaSesionNueva({ proyecto: "autonomo", global: "supervisado" })).toEqual({ modo: "autonomo", origen: "proyecto" });
+  });
+
+  it("sin el del proyecto, el global", () => {
+    expect(modoParaSesionNueva({ global: "autonomo" })).toEqual({ modo: "autonomo", origen: "global" });
+  });
+
+  it("sin ninguno, supervisado: la omisión de siempre", () => {
+    expect(modoParaSesionNueva({})).toEqual({ modo: MODO_POR_OMISION, origen: "omision" });
   });
 });

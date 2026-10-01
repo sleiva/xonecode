@@ -453,6 +453,13 @@ export type MensajeAlCliente =
    */
   | { clase: "depuracion"; activa: boolean }
   /**
+   * El modo con que NACEN las sesiones nuevas en cualquier proyecto (IXCODE-31, Ajustes >
+   * General). Va en la ráfaga de bienvenida por lo mismo que «Depurar». Ya RESUELTO: ausente en
+   * `settings.json` llega como `supervisado`. El de cada proyecto, que gana sobre éste, viaja en
+   * la foto del resumen (`FotoDelResumen.modoDeEscritura`).
+   */
+  | { clase: "modoPorDefecto"; modo: "supervisado" | "autonomo" }
+  /**
    * El catálogo de conectores MCP y los que esta consola tiene AÑADIDOS, para la sección de
    * Ajustes. Va en la ráfaga de bienvenida por lo mismo que el workspace: Ajustes se puede
    * abrir en cuanto conecta, y solo si la opción `conectores` está puesta — «un control sin
@@ -1070,6 +1077,12 @@ export interface FicheroDelProyecto {
 export interface FotoDelResumen {
   tareas: string[];
   sync?: EstadoDeSync;
+  /**
+   * El modo con que nacen las sesiones nuevas de ESTE proyecto (IXCODE-31). Presente solo con
+   * copia bajada —sin ella no hay `config.json` que lo guarde—; `proyecto` ausente dentro es
+   * «como el global», que no es lo mismo que no saberlo.
+   */
+  modoDeEscritura?: { proyecto?: "supervisado" | "autonomo" };
 }
 
 export interface EstadoDeSync {
@@ -1329,6 +1342,12 @@ export type MensajeDelCliente =
   /** Pedir la FOTO del resumen del proyecto. Contesta 200 con un `FotoDelResumen` en la propia
    *  respuesta, o 409 con `{ motivo }`. Mismo trato que `borrar`: el ID, nunca una ruta. */
   | { clase: "copiaLocal"; accion: "resumen"; proyecto: string }
+  /** Fijar —o quitar, sin `modo`— el modo con que nacen las sesiones nuevas de este proyecto
+   *  (IXCODE-31). 200 con `{ proyecto? }`, 409 con `{ motivo }` sin copia o con un id ajeno, y
+   *  400 con un modo que no existe. Mismo trato que `resumen`: el ID, nunca una ruta. */
+  | { clase: "copiaLocal"; accion: "modoDeEscritura"; proyecto: string; modo?: "supervisado" | "autonomo" }
+  /** Fijar el modo con que nacen las sesiones nuevas en cualquier proyecto (Ajustes > General). */
+  | { clase: "modoPorDefecto"; modo: "supervisado" | "autonomo" }
   /** La pestaña Soporte: chats y tareas del proyecto con su análisis previo (`soporte.ts`). */
   | { clase: "soporte"; accion: "listar"; proyecto: string }
   /**

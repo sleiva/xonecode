@@ -477,6 +477,38 @@ describe("Ajustes", () => {
     });
   });
 
+  describe("las conversaciones nuevas (IXCODE-31)", () => {
+    const GRUPO = "modo de escritura de las conversaciones nuevas";
+
+    it("sin dato del servidor NO se pinta", () => {
+      render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado />);
+      expect(screen.queryByRole("group", { name: GRUPO })).toBeNull();
+    });
+
+    it("enseña el modo puesto y avisa al cambiarlo", () => {
+      const vistos: string[] = [];
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          modoPorDefecto="supervisado"
+          alCambiarModoPorDefecto={(m) => void vistos.push(m)}
+        />
+      );
+      const grupo = screen.getByRole("group", { name: GRUPO });
+      expect(within(grupo).getByRole("button", { name: /Supervisado/ }).getAttribute("aria-pressed")).toBe("true");
+      fireEvent.click(within(grupo).getByRole("button", { name: /Autónomo/ }));
+      expect(vistos).toEqual(["autonomo"]);
+    });
+
+    it("sin manejador se enseña sin poder cambiarlo", () => {
+      render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado modoPorDefecto="autonomo" />);
+      const grupo = screen.getByRole("group", { name: GRUPO });
+      expect((within(grupo).getByRole("button", { name: /Supervisado/ }) as HTMLButtonElement).disabled).toBe(true);
+    });
+  });
+
   it("mientras se registra un entorno, la sección enseña SOLO el formulario", () => {
     // Medido en pantalla: con la lista de proyectos debajo, el campo de la URL quedaba
     // detrás de dieciocho casillas de 54 px — fuera de la vista justo después de pulsar el

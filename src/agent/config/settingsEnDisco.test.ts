@@ -7,6 +7,7 @@ import {
   cargarSettings,
   guardarConcurrenciaDeTareas,
   guardarDepurar,
+  guardarModoPorDefecto,
   guardarAjusteDeAvd,
   quitarAjustesDeAvd,
   guardarDispositivos,
@@ -238,6 +239,23 @@ describe("settingsEnDisco", () => {
     const crudo = JSON.parse(readFileSync(join(c, ".xonecode", "settings.json"), "utf8")) as Record<string, unknown>;
     expect("depurar" in crudo).toBe(false);
     expect(cargarSettings(c).settings.depurar).toBeUndefined();
+  });
+
+  it("guardarModoPorDefecto(autonomo) lo escribe sin tocar los entornos (IXCODE-31)", () => {
+    const c = casa();
+    guardarEntorno(c, { id: "a", nombre: "A", url: "https://a/mcp" });
+    guardarModoPorDefecto(c, "autonomo");
+    const { settings } = cargarSettings(c);
+    expect(settings.modoDeEscritura).toBe("autonomo");
+    expect(settings.entornos.map((e) => e.id)).toEqual(["a"]);
+  });
+
+  it("guardarModoPorDefecto(supervisado) BORRA la clave: es la omisión", () => {
+    const c = casa();
+    guardarModoPorDefecto(c, "autonomo");
+    guardarModoPorDefecto(c, "supervisado");
+    const crudo = JSON.parse(readFileSync(join(c, ".xonecode", "settings.json"), "utf8")) as Record<string, unknown>;
+    expect("modoDeEscritura" in crudo).toBe(false);
   });
 
   it("guardarWorkspace fija la base sin tocar los entornos ya guardados", () => {

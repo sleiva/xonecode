@@ -211,3 +211,59 @@ describe("ResumenDeProyecto", () => {
     expect(alBorrarCopia).not.toHaveBeenCalled();
   });
 });
+
+describe("con qué modo nacen las conversaciones nuevas del proyecto (IXCODE-31)", () => {
+  const copia: ProyectoDelResumen = { id: "p1", nombre: "AppDemo", local: true };
+
+  function montarConModo(foto: FotoDelResumen, alFijar: Parameters<typeof ResumenDeProyecto>[0]["alFijarModoDelProyecto"]) {
+    return render(
+      <ResumenDeProyecto
+        proyecto={copia}
+        alDescargar={vi.fn()}
+        alAbrirCarpeta={() => Promise.resolve(undefined)}
+        alBorrarCopia={() => Promise.resolve(undefined)}
+        alPedirResumen={() => Promise.resolve(foto)}
+        {...(alFijar === undefined ? {} : { alFijarModoDelProyecto: alFijar })}
+        modoGlobal="autonomo"
+      />
+    );
+  }
+
+  it("sin el campo en la foto no se pinta: un control sin dato detrás no se pinta", async () => {
+    montarConModo({ tareas: [] }, vi.fn());
+    await asentar();
+    expect(screen.queryByRole("region", { name: "Conversaciones nuevas" })).toBeNull();
+  });
+
+  it("dice el global por su nombre, y pinta lo que el SERVIDOR dijo que quedó", async () => {
+    const alFijar = vi.fn(() => Promise.resolve({ guardado: { proyecto: "supervisado" as const } }));
+    montarConModo({ tareas: [], modoDeEscritura: {} }, alFijar);
+    await asentar();
+    const combo = within(screen.getByRole("region", { name: "Conversaciones nuevas" })).getByRole("combobox") as HTMLSelectElement;
+    expect(combo.value).toBe("global");
+    expect(combo.selectedOptions[0]!.textContent).toBe("Como el global (Autónomo)");
+    await act(async () => {
+      fireEvent.change(combo, { target: { value: "supervisado" } });
+    });
+    expect(alFijar).toHaveBeenCalledWith("p1", "supervisado");
+    expect(combo.value).toBe("supervisado");
+    // «Como el global» viaja como QUITAR la clave, no como un tercer valor.
+    await act(async () => {
+      fireEvent.change(combo, { target: { value: "global" } });
+    });
+    expect(alFijar).toHaveBeenLastCalledWith("p1", undefined);
+  });
+
+  it("una negativa se enseña y el valor no se mueve", async () => {
+    const alFijar = vi.fn(() => Promise.resolve({ motivo: "su config.json no se puede leer" }));
+    montarConModo({ tareas: [], modoDeEscritura: { proyecto: "autonomo" } }, alFijar);
+    await asentar();
+    const combo = screen.getByRole("combobox") as HTMLSelectElement;
+    expect(combo.value).toBe("autonomo");
+    await act(async () => {
+      fireEvent.change(combo, { target: { value: "supervisado" } });
+    });
+    expect(screen.getByRole("alert").textContent).toMatch(/No se ha guardado: su config.json no se puede leer/);
+    expect(combo.value).toBe("autonomo");
+  });
+});

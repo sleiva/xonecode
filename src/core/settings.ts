@@ -12,6 +12,7 @@
 import { posix, win32 } from "node:path";
 import { type Aviso, CLAVES_DENEGADAS } from "./config.js";
 import { FORMA_DE_NOMBRE_DE_AVD } from "./puertosDeAvd.js";
+import { esModoDeEscritura, type ModoDeEscritura } from "./modoDeEscritura.js";
 
 export interface Entorno {
   id: string;
@@ -149,6 +150,13 @@ export interface Settings {
    * apaga; volver a encenderla borra la clave en vez de escribir `true`.
    */
   depurar?: boolean;
+  /**
+   * El modo con que NACEN las sesiones nuevas de una persona en cualquier proyecto (IXCODE-31,
+   * Ajustes > General). Lo pisa el del proyecto (`config.json#modoDeEscritura`); ver
+   * `core/modoDeEscritura.ts#modoParaSesionNueva`. Ausente = supervisado, y por eso elegir
+   * supervisado BORRA la clave en vez de escribirla.
+   */
+  modoDeEscritura?: ModoDeEscritura;
 }
 
 
@@ -242,6 +250,7 @@ export function validarSettings(bruto: unknown): { settings: Settings; avisos: A
   const dispositivos = validarDispositivos(objeto.dispositivos);
   const concurrenciaDeTareas = validarConcurrenciaDeTareas(objeto.concurrenciaDeTareas);
   const depurar = typeof objeto.depurar === "boolean" ? objeto.depurar : undefined;
+  const modoDeEscritura = esModoDeEscritura(objeto.modoDeEscritura) ? objeto.modoDeEscritura : undefined;
   return {
     settings: {
       entornos,
@@ -249,6 +258,7 @@ export function validarSettings(bruto: unknown): { settings: Settings; avisos: A
       ...(dispositivos === undefined ? {} : { dispositivos }),
       ...(concurrenciaDeTareas === undefined ? {} : { concurrenciaDeTareas }),
       ...(depurar === undefined ? {} : { depurar }),
+      ...(modoDeEscritura === undefined ? {} : { modoDeEscritura }),
     },
     avisos,
   };

@@ -314,6 +314,8 @@ export function PanelDelProyecto({
                 alAbrirCarpeta={copia.alAbrirCarpeta}
                 alBorrarCopia={copia.alBorrarCopia}
                 alPedirResumen={copia.alPedirResumen}
+                {...(copia.alFijarModoDelProyecto === undefined ? {} : { alFijarModoDelProyecto: copia.alFijarModoDelProyecto })}
+                {...(copia.modoGlobal === undefined ? {} : { modoGlobal: copia.modoGlobal })}
               />
             )}
             {sinCopia ? (

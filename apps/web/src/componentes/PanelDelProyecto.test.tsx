@@ -1123,6 +1123,26 @@ describe("PanelDelProyecto: lo de la copia en el Resumen", () => {
     expect(screen.queryByRole("button", { name: /Menú/ })).toBeNull();
   });
 
+  it("el modo de las conversaciones nuevas LLEGA al resumen: el panel le pasa sus dos props (IXCODE-31)", async () => {
+    // Sin esto los dos props, opcionales, se quedaban en el panel y el control no salía nunca.
+    const alFijarModoDelProyecto = vi.fn(() => Promise.resolve({ guardado: { proyecto: "autonomo" as const } }));
+    const c = {
+      ...copia(true),
+      alPedirResumen: vi.fn(() => Promise.resolve({ tareas: [], modoDeEscritura: {} })),
+      alFijarModoDelProyecto,
+      modoGlobal: "supervisado" as const,
+    };
+    montar({ copia: c, planes: [PLAN] });
+    await act(async () => {});
+    const region = screen.getByRole("region", { name: "Conversaciones nuevas" });
+    const combo = within(region).getByRole("combobox") as HTMLSelectElement;
+    expect(combo.selectedOptions[0]!.textContent).toBe("Como el global (Supervisado)");
+    await act(async () => {
+      fireEvent.change(combo, { target: { value: "autonomo" } });
+    });
+    expect(alFijarModoDelProyecto).toHaveBeenCalledWith("p1", "autonomo");
+  });
+
   it("sin copia: solo la pestaña Resumen, con «Descargar», el motivo, y sin preguntar al gestor", () => {
     const c = copia(false);
     const { alGestor } = montar({ copia: c, planes: [PLAN] });

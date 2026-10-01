@@ -658,7 +658,9 @@ detiene.
   min) con cadena vacía.
 - **La única grieta es el MODO DE ESCRITURA, y vive en la SESIÓN** (`core/modoDeEscritura.ts`,
   comando `/aprobacion`): `supervisado` —cada escritura con su diff— o `autonomo` —se aplican
-  solas—. Ausente es supervisado; hace falta alguien delante, calculado como `interactivo &&
+  solas—. Ausente es supervisado; **con qué modo NACE una sesión nueva de una persona sí tiene
+  valor por defecto**, global (`settings.json`) y por proyecto (`config.json`, gana si está),
+  y solo decide eso: ni reabiertas ni tareas (`modoParaSesionNueva`, IXCODE-31); hace falta alguien delante, calculado como `interactivo &&
   !eof()` igual que `pedirDecisiones`; se pregunta en cada RONDA y no al abrir; se DICE dos veces
   (aviso por turno, y `alta.modoDeEscritura`); el mismo predicado alcanza a los motores externos.
   **Gobierna las escrituras LOCALES y nada más**: `/sync subir` conserva su plan y aprobación

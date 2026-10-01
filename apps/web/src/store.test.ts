@@ -1666,6 +1666,22 @@ describe("la casilla «Depurar» de Ajustes > General", () => {
   });
 });
 
+describe("el modo de las conversaciones nuevas de Ajustes > General (IXCODE-31)", () => {
+  it("se guarda tal cual", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "modoPorDefecto", modo: "autonomo" });
+    expect(s.leer().modoPorDefecto).toBe("autonomo");
+    s.aplicar({ clase: "modoPorDefecto", modo: "supervisado" });
+    expect(s.leer().modoPorDefecto).toBe("supervisado");
+  });
+
+  it("un modo que no existe no se guarda", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "modoPorDefecto", modo: "autónomo" } as never);
+    expect(s.leer().modoPorDefecto).toBeUndefined();
+  });
+});
+
 /**
  * **Mirar en vivo lo que hace una tarea** (Task 16).
  *

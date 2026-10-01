@@ -193,6 +193,9 @@ export interface EstadoDelCliente {
    * detrás no se pinta.
    */
   depuracionActiva?: boolean;
+  /** El modo con que nacen las sesiones nuevas (IXCODE-31, Ajustes > General). Ausente = el
+   *  servidor no lo dice, y el control no se pinta. */
+  modoPorDefecto?: ModoDeEscritura;
   /**
    * La carpeta que acaba de elegir el diálogo del sistema, para que el campo la recoja.
    *
@@ -1490,6 +1493,12 @@ export function crearStoreDelCliente(): {
           const m = mensaje as Record<string, unknown>;
           if (typeof m["activa"] !== "boolean") return;
           mutar({ depuracionActiva: m["activa"] });
+          return;
+        }
+        case "modoPorDefecto": {
+          const m = mensaje as Record<string, unknown>;
+          if (m["modo"] !== "supervisado" && m["modo"] !== "autonomo") return;
+          mutar({ modoPorDefecto: m["modo"] });
           return;
         }
         case "mudanzaDeWorkspace": {

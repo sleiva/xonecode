@@ -32,6 +32,7 @@ import {
   variableDeProveedor, type ProveedorDeclarado,
 } from "../../core/modelos.js";
 import type { Papel } from "../../core/ports.js";
+import type { ModoDeEscritura } from "../../core/modoDeEscritura.js";
 
 export const NOMBRE_CARPETA = ".xonecode";
 
@@ -303,6 +304,23 @@ export function guardarConectoresDeProyecto(
 }
 
 /**
+ * El modo con que nacen las sesiones nuevas de este proyecto (IXCODE-31). `undefined` QUITA la
+ * clave (vuelve a mandar el global); `supervisado` SÍ se escribe: en un proyecto es una
+ * elección que pisa a un global autónomo, no la omisión.
+ */
+export function guardarModoDeEscrituraDeProyecto(
+  raiz: string,
+  modo: ModoDeEscritura | undefined,
+): { ruta: string; modoDeEscritura: ModoDeEscritura | undefined } {
+  const ruta = rutaConfigDeProyecto(raiz);
+  const base = leerObjetoCrudoOAbortar(ruta);
+  const { modoDeEscritura: _viejo, ...sinModo } = base;
+  const fusionado = modo === undefined ? sinModo : { ...base, modoDeEscritura: modo };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta, modoDeEscritura: modo };
+}
+
+/**
  * El gestor de tareas vinculado a este proyecto (IXCODE-11): a qué conector, sitio y
  * proyecto remoto. `undefined` QUITA la clave del fichero en vez de dejarla vacía o nula
  * —un `gestorDeTareas: {}` sería una forma más de dato incompleto que `validar` tendría
@@ -402,6 +420,20 @@ export function cloudstudioDelProyecto(raiz: string): ConfigDeFichero["cloudstud
     // Sin poder leerlo no se puede afirmar que sea offline. Se devuelve algo definido para
     // que la guarda cierre: fallar cerrado aquí es pedir aprobación de más, nunca de menos.
     return { url: "" };
+  }
+}
+
+/**
+ * El modo con que nacen las sesiones nuevas de ESTE proyecto (IXCODE-31), leído por la RAÍZ: en
+ * la consola web `FuentesDeEleccion.proyecto` no se rellena nunca (la trampa que ya resolvió
+ * `cloudstudioDelProyecto`). Sin poder leerlo, `undefined`: manda el global, que es lo que
+ * pasaría sin la clave.
+ */
+export function modoDeEscrituraDelProyecto(raiz: string): ModoDeEscritura | undefined {
+  try {
+    return cargar(raiz).config.proyecto?.modoDeEscritura;
+  } catch {
+    return undefined;
   }
 }
 

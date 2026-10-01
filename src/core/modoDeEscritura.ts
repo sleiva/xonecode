@@ -10,9 +10,14 @@
  * caja del chat se lee como «esta conversación», y una bandera global encendida sobre la app
  * de un cliente que nadie recuerda haber dejado encendida es el peor final posible. Es la
  * misma decisión que el esfuerzo de razonamiento (`core/esfuerzo.ts`), que también se elige
- * por sesión, se anota en el índice y vuelve al reabrirla — y que tampoco tiene defecto
- * global, porque un tercer valor «para todas las nuevas» decide en nombre de conversaciones
- * que todavía no existen.
+ * por sesión, se anota en el índice y vuelve al reabrirla.
+ *
+ * **Con qué modo NACE una sesión sí tiene un valor por defecto (IXCODE-31)**, global y por
+ * proyecto (`modoParaSesionNueva`), y no es volver a `sinAprobacion`: aquello era un ajuste
+ * que GOBERNABA cada escritura de todas las sesiones; esto solo decide la posición inicial
+ * del conmutador de una sesión NUEVA de una persona, que lo ve en la caja del chat desde el
+ * primer momento y lo cambia ahí. Una sesión reabierta conserva el suyo y una tarea de fondo
+ * no lo usa.
  *
  * **Lo que el modo gobierna son las escrituras LOCALES, y solo eso.** No toca la subida:
  * `/sync subir` conserva su plan delante y su aprobación fail-closed por TIPO en los dos
@@ -39,6 +44,24 @@ export type ModoDeEscritura = "supervisado" | "autonomo";
  * la única dirección segura para resolverlo es la que enseña el diff.
  */
 export const MODO_POR_OMISION: ModoDeEscritura = "supervisado";
+
+/** De dónde salió el modo de una sesión nueva: lo dice el código, para poder decirlo. */
+export type OrigenDelModo = "proyecto" | "global" | "omision";
+
+/**
+ * El modo con que NACE una sesión de una persona (IXCODE-31): el del PROYECTO si está puesto
+ * (`.xonecode/config.json#modoDeEscritura`), si no el GLOBAL (`settings.json#modoDeEscritura`,
+ * Ajustes > General), y si no ninguno, la omisión de siempre. Ausente en cada nivel es «no lo
+ * he dicho», y entonces decide el siguiente.
+ */
+export function modoParaSesionNueva(valores: {
+  proyecto?: ModoDeEscritura;
+  global?: ModoDeEscritura;
+}): { modo: ModoDeEscritura; origen: OrigenDelModo } {
+  if (valores.proyecto !== undefined) return { modo: valores.proyecto, origen: "proyecto" };
+  if (valores.global !== undefined) return { modo: valores.global, origen: "global" };
+  return { modo: MODO_POR_OMISION, origen: "omision" };
+}
 
 /**
  * Cuántas rondas de aprobación admite un turno de la CONSOLA, en los dos modos.

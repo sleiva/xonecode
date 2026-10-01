@@ -5,7 +5,8 @@ import { IconoCompartido } from "./IconosDeProyecto.js";
 import { BorrarCopiaLocal } from "./BorrarCopiaLocal.js";
 import { GastoDelProyecto } from "./GastoDelProyecto.js";
 import { gastoDelProyecto } from "../gastoDelProyecto.js";
-import type { ConsumoDeTurno, FotoDelResumen } from "../tipos.js";
+import type { ConsumoDeTurno, FotoDelResumen, ModoDeEscritura } from "../tipos.js";
+import { Desplegable } from "./Desplegable.js";
 
 /** Lo que el gasto necesita de una sesión: su id, su título y su acumulado. NO es una lista
  *  de sesiones para abrirlas —esas son de la barra—: es la serie del gráfico. */
@@ -51,6 +52,17 @@ export interface AccionesDeLaCopia {
   /** Pide la FOTO del servidor (pendientes de subir). `undefined` = no se pudo: ni red ni
    *  respuesta que entender. */
   alPedirResumen: (proyecto: string) => Promise<FotoDelResumen | undefined>;
+  /**
+   * Fija —o quita, con `undefined`— el modo con que nacen las conversaciones nuevas de este
+   * proyecto (IXCODE-31). Devuelve lo que quedó guardado o el MOTIVO de la negativa. Ausente =
+   * esta ejecución no puede, y el control no se pinta.
+   */
+  alFijarModoDelProyecto?: (
+    proyecto: string,
+    modo: ModoDeEscritura | undefined
+  ) => Promise<{ guardado: { proyecto?: ModoDeEscritura } } | { motivo: string }>;
+  /** El modo GLOBAL (Ajustes > General), para nombrarlo en «Como el global». Ausente = no consta. */
+  modoGlobal?: ModoDeEscritura;
 }
 
 /**
@@ -74,6 +86,8 @@ export function ResumenDeProyecto({
   alAbrirCarpeta,
   alBorrarCopia,
   alPedirResumen,
+  alFijarModoDelProyecto,
+  modoGlobal,
 }: { proyecto: ProyectoDelResumen; conectado?: boolean } & AccionesDeLaCopia) {
   const apagado = conectado === false;
   const [confirmando, setConfirmando] = useState(false);
@@ -166,6 +180,24 @@ export function ResumenDeProyecto({
       {proyecto.local === true ? (
         <>
           <TiraDePendientes medida={vigente} apagado={apagado} alActualizar={pedir} />
+          {vigente?.foto?.modoDeEscritura === undefined || alFijarModoDelProyecto === undefined ? null : (
+            <ModoDelProyecto
+              guardado={vigente.foto.modoDeEscritura.proyecto}
+              {...(modoGlobal === undefined ? {} : { modoGlobal })}
+              apagado={apagado}
+              alFijar={async (modo) => {
+                const id = proyecto.id;
+                const r = await alFijarModoDelProyecto(id, modo).catch(() => ({ motivo: "no se pudo hablar con el servidor" }));
+                if ("guardado" in r && enVista.current === id) {
+                  // Lo que dijo el SERVIDOR que quedó, no lo que se pidió.
+                  setMedida((m) =>
+                    m?.proyecto !== id || m.foto === undefined ? m : { ...m, foto: { ...m.foto, modoDeEscritura: r.guardado } }
+                  );
+                }
+                return "motivo" in r ? r.motivo : undefined;
+              }}
+            />
+          )}
           <section className={estilos.bloque} aria-label="Gasto del proyecto">
             <h2 className={estilos.tituloDeBloque}>Gasto</h2>
             <BloqueDeGasto sesiones={proyecto.sesiones ?? []} />
@@ -185,6 +217,67 @@ export function ResumenDeProyecto({
         />
       ) : null}
     </>
+  );
+}
+
+const NOMBRE_DEL_MODO: Record<ModoDeEscritura, string> = { supervisado: "Supervisado", autonomo: "Autónomo" };
+
+/**
+ * Con qué modo NACEN las conversaciones nuevas de este proyecto (IXCODE-31): el suyo, o el
+ * global de Ajustes > General. Tres opciones y no un conmutador: «como el global» es un valor
+ * de verdad (quitar la clave), y un conmutador de dos no lo puede decir. Lo que se pinta es lo
+ * que el servidor dice que quedó; una negativa se enseña al lado, sin tocar el valor.
+ */
+function ModoDelProyecto({
+  guardado,
+  modoGlobal,
+  apagado,
+  alFijar,
+}: {
+  guardado: ModoDeEscritura | undefined;
+  modoGlobal?: ModoDeEscritura;
+  apagado: boolean;
+  alFijar: (modo: ModoDeEscritura | undefined) => Promise<string | undefined>;
+}) {
+  const [enCurso, setEnCurso] = useState(false);
+  const [negativa, setNegativa] = useState<string | undefined>(undefined);
+  return (
+    <section className={estilos.bloque} aria-label="Conversaciones nuevas">
+      <h2 className={estilos.tituloDeBloque}>Conversaciones nuevas</h2>
+      <label className={estilos.filaDeModo}>
+        <span>Empiezan en</span>
+        <Desplegable
+          value={guardado ?? "global"}
+          disabled={apagado || enCurso}
+          cargando={enCurso}
+          onChange={(e) => {
+            const valor = e.target.value;
+            const modo = valor === "supervisado" || valor === "autonomo" ? valor : undefined;
+            setNegativa(undefined);
+            setEnCurso(true);
+            void alFijar(modo).then((motivo) => {
+              setEnCurso(false);
+              setNegativa(motivo);
+            });
+          }}
+        >
+          <option value="global">
+            {modoGlobal === undefined ? "Como el global" : `Como el global (${NOMBRE_DEL_MODO[modoGlobal]})`}
+          </option>
+          <option value="supervisado">Supervisado en este proyecto</option>
+          <option value="autonomo">Autónomo en este proyecto</option>
+        </Desplegable>
+      </label>
+      <p className={estilos.notaDeModo}>
+        Solo decide cómo empiezan las conversaciones nuevas de este proyecto; en cada una se puede cambiar
+        en la caja del chat. El global está en Ajustes &gt; General.
+      </p>
+      {negativa === undefined ? null : (
+        <p className={estilos.negativa} role="alert">
+          No se ha guardado: {negativa}
+        </p>
+      )}
+    </section>
   );
 }
 

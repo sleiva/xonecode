@@ -50,11 +50,14 @@ import estilos from "./SelectorDeModo.module.css";
 export function SelectorDeModo({
   actual,
   conectado = true,
+  rotulo = "modo de escritura",
   alElegir,
 }: {
   /** El modo de la sesión abierta. Ausente = no hay sesión, y entonces no se pinta. */
   actual?: ModoDeEscritura;
   conectado?: boolean;
+  /** El `aria-label` del grupo: el de Ajustes no es el modo de ESTA sesión (IXCODE-31). */
+  rotulo?: string;
   alElegir: (modo: ModoDeEscritura) => void;
 }) {
   /**
@@ -110,7 +113,7 @@ export function SelectorDeModo({
   ];
 
   return (
-    <div className={estilos.pista} role="group" aria-label="modo de escritura">
+    <div className={estilos.pista} role="group" aria-label={rotulo}>
       {MITADES.map(({ modo, etiqueta, que, icono: Icono }) => (
         <button
           key={modo}

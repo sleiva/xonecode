@@ -21,6 +21,7 @@ import { MS_DE_PREPARACION,
   mudarWorkspaceLegadoCableado,
   ajusteDeWorkspaceCableado,
   ajusteDeDepuracionCableado,
+  ajusteDeModoPorDefectoCableado,
   emuladoresCableados,
   ajusteDeConectoresCableado,
   ajusteDeGestorCableado,
@@ -8331,6 +8332,49 @@ describe("el ajuste de depuración, cableado", () => {
   });
 });
 
+describe("el modo por defecto de las sesiones nuevas, cableado (IXCODE-31)", () => {
+  it("el vestíbulo recibe los DOS valores por la raíz que se abre", () => {
+    const { modoPorDefecto } = ajusteDeModoPorDefectoCableado({
+      leerGlobal: () => "autonomo",
+      leerProyecto: (raiz) => (raiz === "/w/a" ? "supervisado" : undefined),
+    });
+    expect(modoPorDefecto("/w/a")).toEqual({ proyecto: "supervisado", global: "autonomo" });
+    expect(modoPorDefecto("/w/b")).toEqual({ global: "autonomo" });
+  });
+
+  it("el global ausente se enseña supervisado; se RELEE tras guardar", () => {
+    let enDisco: "supervisado" | "autonomo" | undefined;
+    const { modoPorDefectoGlobal, guardarModoPorDefectoGlobal } = ajusteDeModoPorDefectoCableado({
+      leerGlobal: () => enDisco,
+      guardarGlobal: (m) => void (enDisco = m),
+    });
+    expect(modoPorDefectoGlobal()).toBe("supervisado");
+    guardarModoPorDefectoGlobal("autonomo");
+    expect(modoPorDefectoGlobal()).toBe("autonomo");
+  });
+
+  it("el del proyecto se lee y se guarda POR RAÍZ, y undefined lo quita", () => {
+    const enDisco = new Map<string, "supervisado" | "autonomo">();
+    const { modoDelProyecto, guardarModoDelProyecto } = ajusteDeModoPorDefectoCableado({
+      leerProyecto: (r) => enDisco.get(r),
+      guardarProyecto: (r, m) => void (m === undefined ? enDisco.delete(r) : enDisco.set(r, m)),
+    });
+    guardarModoDelProyecto("/w/a", "autonomo");
+    expect(modoDelProyecto("/w/a")).toBe("autonomo");
+    expect(modoDelProyecto("/w/b")).toBeUndefined();
+    guardarModoDelProyecto("/w/a", undefined);
+    expect(modoDelProyecto("/w/a")).toBeUndefined();
+  });
+
+  it("sin dobles lee el disco de verdad: un proyecto con su config.json", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-modo-"));
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modoDeEscritura: "autonomo" }));
+    expect(ajusteDeModoPorDefectoCableado().modoPorDefecto(raiz).proyecto).toBe("autonomo");
+    rmSync(raiz, { recursive: true, force: true });
+  });
+});
+
 /**
  * `ajusteDeConectoresCableado` es la composición de producción que llega a `montarRutas`
  * desde `arrancarConsolaWeb`. Lo que se comprueba aquí es la COSTURA, no la regla —esa ya la
@@ -9676,6 +9720,67 @@ describe("el cable: la copia local y los fijados", () => {
     expect(JSON.parse(r.cuerpo)).toEqual({ tareas: [] });
     const ajeno = await accion({ clase: "copiaLocal", accion: "resumen", proyecto: "no-existe" });
     expect(ajeno.estado).toBe(409);
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  /** IXCODE-31: el modo con que nacen las sesiones nuevas, global y por proyecto. */
+  it("el modo GLOBAL viaja en la bienvenida y se cambia por el cable", async () => {
+    let enDisco: "supervisado" | "autonomo" = "supervisado";
+    const { accion, cliente } = await conectado(vestibuloDePrueba(), {
+      modoPorDefectoGlobal: () => enDisco,
+      guardarModoPorDefectoGlobal: (m) => void (enDisco = m),
+    });
+    expect(cliente.recibidos.filter((m) => m.clase === "modoPorDefecto").at(-1)).toEqual({ clase: "modoPorDefecto", modo: "supervisado" });
+    const r = await accion({ clase: "modoPorDefecto", modo: "autonomo" });
+    expect(r.estado).toBe(204);
+    await asentar();
+    expect(enDisco).toBe("autonomo");
+    expect(cliente.recibidos.filter((m) => m.clase === "modoPorDefecto").at(-1)).toEqual({ clase: "modoPorDefecto", modo: "autonomo" });
+    // Un modo que no existe no se guarda.
+    await accion({ clase: "modoPorDefecto", modo: "a medias" });
+    expect(enDisco).toBe("autonomo");
+  });
+
+  it("el resumen de un proyecto CON copia trae su modo; sin copia no lo trae", async () => {
+    const { base } = workspaceConTienda();
+    const modos = new Map<string, "supervisado" | "autonomo">();
+    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
+    const { accion } = await conectado(vestibulo, {
+      modoDelProyecto: (r) => modos.get(r),
+      guardarModoDelProyecto: (r, m) => void (m === undefined ? modos.delete(r) : modos.set(r, m)),
+    });
+    const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+    // Sin valor: el campo VA (hay copia), vacío — «como el global».
+    let foto = JSON.parse((await accion({ clase: "copiaLocal", accion: "resumen", proyecto: "p1" })).cuerpo);
+    expect(foto.modoDeEscritura).toEqual({});
+
+    const r = await accion({ clase: "copiaLocal", accion: "modoDeEscritura", proyecto: "p1", modo: "autonomo" });
+    expect(r.estado).toBe(200);
+    expect(JSON.parse(r.cuerpo)).toEqual({ proyecto: "autonomo" });
+    expect(modos.get(raiz)).toBe("autonomo");
+    foto = JSON.parse((await accion({ clase: "copiaLocal", accion: "resumen", proyecto: "p1" })).cuerpo);
+    expect(foto.modoDeEscritura).toEqual({ proyecto: "autonomo" });
+
+    // Sin `modo`: vuelve a mandar el global.
+    const quitar = await accion({ clase: "copiaLocal", accion: "modoDeEscritura", proyecto: "p1" });
+    expect(JSON.parse(quitar.cuerpo)).toEqual({});
+    expect(modos.has(raiz)).toBe(false);
+
+    expect((await accion({ clase: "copiaLocal", accion: "modoDeEscritura", proyecto: "p1", modo: "auto" })).estado).toBe(400);
+    expect((await accion({ clase: "copiaLocal", accion: "modoDeEscritura", proyecto: "no-existe", modo: "autonomo" })).estado).toBe(409);
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("sin copia bajada no se puede fijar el modo del proyecto: no hay config.json que escribir", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xc-modo-sin-copia-"));
+    const guardados: string[] = [];
+    const { accion } = await conectado(vestibuloDePrueba({ baseDeWorkspace: () => base }), {
+      modoDelProyecto: () => undefined,
+      guardarModoDelProyecto: (r) => void guardados.push(r),
+    });
+    const r = await accion({ clase: "copiaLocal", accion: "modoDeEscritura", proyecto: "p1", modo: "autonomo" });
+    expect(r.estado).toBe(409);
+    expect(guardados).toEqual([]);
     rmSync(base, { recursive: true, force: true });
   });
 

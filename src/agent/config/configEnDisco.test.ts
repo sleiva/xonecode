@@ -37,6 +37,7 @@ import {
   guardarTemaDeProyecto,
   guardarModoDeProyecto,
   guardarConectoresDeProyecto,
+  guardarModoDeEscrituraDeProyecto,
   guardarGestorDeProyecto,
   guardarCloudStudioDeProyecto,
   guardarModelosDeProyecto,
@@ -434,4 +435,20 @@ describe("cloudstudioDelProyecto", () => {
     expect(cloudstudioDelProyecto(raiz)).toBeUndefined();
     rmSync(raiz, { recursive: true, force: true });
   });
+});
+
+it("guardarModoDeEscrituraDeProyecto conserva el resto de claves y quita la suya con undefined (IXCODE-31)", () => {
+  const p = mkdtempSync(join(tmpdir(), "xc-cfg-"));
+  const ruta = rutaConfigDeProyecto(p);
+  mkdirSync(join(p, NOMBRE_CARPETA), { recursive: true });
+  writeFileSync(ruta, JSON.stringify({ tema: "xone" }));
+
+  guardarModoDeEscrituraDeProyecto(p, "autonomo");
+  expect(JSON.parse(readFileSync(ruta, "utf8"))).toEqual({ tema: "xone", modoDeEscritura: "autonomo" });
+  // Supervisado SÍ se guarda aquí: en un proyecto es una elección que pisa al global.
+  guardarModoDeEscrituraDeProyecto(p, "supervisado");
+  expect(JSON.parse(readFileSync(ruta, "utf8"))).toEqual({ tema: "xone", modoDeEscritura: "supervisado" });
+  guardarModoDeEscrituraDeProyecto(p, undefined);
+  expect(JSON.parse(readFileSync(ruta, "utf8"))).toEqual({ tema: "xone" });
+  rmSync(p, { recursive: true, force: true });
 });

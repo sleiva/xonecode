@@ -26,6 +26,7 @@ import {
 } from "./modelos.js";
 import { formaDeProyecto, motivoDeProyectoInaceptable, type VinculoGuardado } from "./gestorDeTareas.js";
 import type { Papel } from "./ports.js";
+import { esModoDeEscritura, type ModoDeEscritura } from "./modoDeEscritura.js";
 
 /** La configuración: modelos y proveedores. Nunca claves. */
 export interface ConfigDeFichero {
@@ -74,6 +75,13 @@ export interface ConfigDeFichero {
   conectores?: string[];
   /** El gestor de tareas vinculado (IXCODE-11): a qué conector, sitio y proyecto remoto. */
   gestorDeTareas?: VinculoGuardado;
+  /**
+   * El modo con que NACEN las sesiones nuevas de este proyecto (IXCODE-31). Pisa al global
+   * (`settings.json#modoDeEscritura`); ausente = el global. **Solo en el config.json del
+   * PROYECTO**: el global vive en `settings.json`, y uno aquí se descarta diciéndolo, porque dos
+   * sitios para el mismo valor global son dos valores.
+   */
+  modoDeEscritura?: ModoDeEscritura;
 }
 
 /** Las credenciales, que viven en OTRO fichero y solo global. */
@@ -157,9 +165,8 @@ export function validar(
   ruta: string,
   procedencia: Procedencia
 ): { config: ConfigDeFichero; avisos: Aviso[] } {
-  // La procedencia no cambia ninguna regla —una clave de API se rechaza igual venga del
-  // proyecto o del global—: va en la firma por simetría con `validarAuth`, que sí la usa.
-  void procedencia;
+  // La procedencia solo cambia UNA regla: `modoDeEscritura` es de proyecto (ver abajo). Una
+  // clave de API se rechaza igual venga de donde venga.
 
   const avisos: Aviso[] = [];
 
@@ -352,6 +359,23 @@ export function validar(
         }
       }
       config.conectores = conectores;
+      continue;
+    }
+
+    if (clave === "modoDeEscritura") {
+      if (procedencia === "global") {
+        avisos.push({
+          texto: `«${ruta}»: «modoDeEscritura» es de proyecto; el de todos los proyectos se elige en Ajustes > General; se descarta.`,
+          severidad: "aviso",
+        });
+      } else if (esModoDeEscritura(valor)) {
+        config.modoDeEscritura = valor;
+      } else {
+        avisos.push({
+          texto: `«${ruta}»: «modoDeEscritura» debe ser «supervisado» o «autonomo»; se descarta.`,
+          severidad: "aviso",
+        });
+      }
       continue;
     }
 
