@@ -2036,7 +2036,8 @@ export function Ajustes({
                     alElegir={(modo) => alCambiarModoPorDefecto?.(modo)}
                   />
                   <p className={estilos.nota}>
-                    El modo con el que empieza cada conversación nueva, en cualquier proyecto. Un proyecto
+                    El modo con el que empieza cada conversación nueva de esta consola web, en cualquier
+                    proyecto (el terminal sigue empezando en supervisado). Un proyecto
                     puede tener el suyo (en su panel, pestaña Resumen), y entonces manda el del proyecto. No
                     cambia las conversaciones que ya existen, ni las tareas de fondo; y en cada conversación
                     se puede cambiar en la caja del chat.

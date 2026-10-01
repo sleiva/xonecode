@@ -8366,12 +8366,27 @@ describe("el modo por defecto de las sesiones nuevas, cableado (IXCODE-31)", () 
     expect(modoDelProyecto("/w/a")).toBeUndefined();
   });
 
-  it("sin dobles lee el disco de verdad: un proyecto con su config.json", () => {
+  it("sin dobles: lo que guarda el panel es lo que lee el vestíbulo, en el config.json de verdad", () => {
     const raiz = mkdtempSync(join(tmpdir(), "xc-modo-"));
     mkdirSync(join(raiz, ".xonecode"), { recursive: true });
-    writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modoDeEscritura: "autonomo" }));
-    expect(ajusteDeModoPorDefectoCableado().modoPorDefecto(raiz).proyecto).toBe("autonomo");
+    writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ tema: "xone" }));
+    const cableado = ajusteDeModoPorDefectoCableado();
+    cableado.guardarModoDelProyecto(raiz, "autonomo");
+    expect(cableado.modoPorDefecto(raiz).proyecto).toBe("autonomo");
+    expect(cableado.modoDelProyecto(raiz)).toBe("autonomo");
+    expect(JSON.parse(readFileSync(join(raiz, ".xonecode", "config.json"), "utf8"))).toEqual({ tema: "xone", modoDeEscritura: "autonomo" });
+    cableado.guardarModoDelProyecto(raiz, undefined);
+    expect(cableado.modoPorDefecto(raiz).proyecto).toBeUndefined();
     rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("sin dobles, el global va al settings.json de la casa (la de pruebas) y vuelve", () => {
+    const cableado = ajusteDeModoPorDefectoCableado();
+    cableado.guardarModoPorDefectoGlobal("autonomo");
+    expect(cableado.modoPorDefectoGlobal()).toBe("autonomo");
+    expect(cableado.modoPorDefecto("/no/existe").global).toBe("autonomo");
+    cableado.guardarModoPorDefectoGlobal("supervisado");
+    expect(cableado.modoPorDefecto("/no/existe")).toEqual({});
   });
 });
 
