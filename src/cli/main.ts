@@ -1102,6 +1102,11 @@ export function crearSincronizador(
           politicaDeAprobacion: politicaDeAprobacion ?? (async () => false),
           informar,
         });
+        // Negada por ficheros ilegibles: el recorrido ya dijo cuáles; «subidos 0, fallaron 0»
+        // haría creer que no había nada pendiente.
+        if (informe.ilegibles !== undefined) {
+          return { tipo: "texto", texto: `no se ha subido nada: ${informe.ilegibles.length} ficheros ilegibles\n` };
+        }
         return { tipo: "texto", texto: `subidos ${informe.ok.length}, fallaron ${informe.fallos.length}\n` };
       }
       const pendientes = await piezas.pendientes(raiz, config.rama);

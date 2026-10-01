@@ -32,6 +32,7 @@ import { NOMBRE_CARPETA } from "../config/configEnDisco.js";
 import { cambiosPendientes, marcarSubido } from "../sesiones/gitSync.js";
 import { rutaSyncJson } from "./descarga.js";
 import { ramaActiva } from "./ramaActiva.js";
+import { validarTrasDescarga, type FicheroIlegible } from "./validarTrasDescarga.js";
 
 export interface OpcionesDeSubida {
   puerto: CloudStudioPort;
@@ -65,6 +66,11 @@ export interface InformeDeSubida {
    * —el borrado de un binario, un fichero de más de 5 MB— no atasque la subida entera.
    */
   omitidas: OperacionOmitida[];
+  /**
+   * Los ficheros que NEGARON la subida entera por no poderse leer (`validarTrasDescarga`).
+   * Presente = no se ha escrito nada en Studio ni se ha pedido autorización.
+   */
+  ilegibles?: FicheroIlegible[];
 }
 
 export function rutaSyncLog(raiz: string): string {
@@ -99,15 +105,19 @@ function fuentesXne(raiz: string): Set<string> {
  *
  * `EstadoDeSync` ya guarda proyecto y rama: se comparan, y si no casan se cae a conjunto
  * vacío —que prohíbe TODO borrado— en vez de a uno inventado. Fail-closed, como el resto.
+ *
+ * De ahí salen también los `ilegibles` de la bajada, con la MISMA comprobación de identidad: son
+ * solo RUTAS que mirar, porque lo que decide es el disco de ahora (ver `subir`).
  */
-function descargadosDe(
+function bajadaDe(
   raiz: string,
   proyecto: { id: string; nombre: string },
   rama: string,
   informar: (texto: string) => void
-): Set<string> {
+): { descargados: Set<string>; ilegibles: string[] } {
+  const nada = { descargados: new Set<string>(), ilegibles: [] };
   const ruta = rutaSyncJson(raiz);
-  if (!existsSync(ruta)) return new Set();
+  if (!existsSync(ruta)) return nada;
   try {
     const estado = JSON.parse(readFileSync(ruta, "utf8")) as Partial<EstadoDeSync>;
     if (estado.proyecto?.id !== proyecto.id || estado.rama !== rama) {
@@ -115,13 +125,16 @@ function descargadosDe(
         "el sync.json en disco no es de este proyecto/rama: no se borrará nada en Studio " +
           "hasta que vuelvas a bajar con /sync bajar\n"
       );
-      return new Set();
+      return nada;
     }
-    return new Set(estado.descargados ?? []);
+    return {
+      descargados: new Set(estado.descargados ?? []),
+      ilegibles: (estado.ilegibles ?? []).map((f) => f.ruta).filter((r) => typeof r === "string"),
+    };
   } catch {
     // Sin manifiesto legible no se puede afirmar qué se bajó, y sin eso el candado no
     // existe: mejor un conjunto vacío (que prohíbe TODO borrado) que uno inventado.
-    return new Set();
+    return nada;
   }
 }
 
@@ -135,9 +148,10 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
     if (existsSync(ruta)) tamanos.set(cambio.ruta, statSync(ruta).size);
   }
 
+  const bajada = bajadaDe(raiz, proyecto, ramaOrigen, informar);
   const { operaciones: plan, omitidas } = planDeSubida({
     cambios,
-    descargados: descargadosDe(raiz, proyecto, ramaOrigen, informar),
+    descargados: bajada.descargados,
     tamanos,
     fuentesXne: fuentesXne(raiz),
   });
@@ -182,6 +196,25 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
     // haya OTRAS operaciones, la ref avanzará con ellas y arrastrará también lo omitido
     // —por eso queda además escrito en `sync.log`, que sí sobrevive al turno—.
     registrar();
+    return informe;
+  }
+
+  // Una copia que no se puede leer NO se sube (IXCODE-16): subir un `app.xml` guardado como
+  // cadena JSON lo deja roto TAMBIÉN en Studio, para todo el que lo baje. Se revalida en el
+  // DISCO de ahora —lo que se va a escribir más lo que la bajada dejó marcado—, no se cree el
+  // `sync.json`: una copia reparada a mano sube sin tener que volver a bajarla. Y antes de la
+  // política: no se pide autorizar algo que de todos modos se va a negar.
+  const aMirar = [...new Set([...plan.filter((o) => o.tipo === "texto").map((o) => o.ruta), ...bajada.ilegibles])]
+    .filter((r) => existsSync(join(raiz, r)));
+  const ilegibles = validarTrasDescarga(raiz, aMirar);
+  if (ilegibles.length > 0) {
+    informar(
+      `subida negada: ${ilegibles.length} ficheros no se pueden leer y romperían el proyecto en Studio. ` +
+        "Repáralos (o vuelve a bajar con /sync bajar) y sube de nuevo:\n" +
+        ilegibles.map((f) => `  ${f.ruta}: ${f.motivo}\n`).join("")
+    );
+    informe.ilegibles = ilegibles;
+    registrar(`subida negada: ${ilegibles.length} ficheros ilegibles`);
     return informe;
   }
 

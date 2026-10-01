@@ -18,7 +18,7 @@ async function proyectoConCambios() {
   const raiz = mkdtempSync(join(tmpdir(), "xc-sub-"));
   writeFileSync(join(raiz, "app.xml"), "<app/>");
   await prepararRepo(raiz, "master");
-  writeFileSync(join(raiz, "app.xml"), "<app cambiada/>");
+  writeFileSync(join(raiz, "app.xml"), "<app cambiada='si'/>");
   execFileSync("git", ["add", "-A"], { cwd: raiz });
   execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "cambio"], { cwd: raiz });
   return raiz;
@@ -289,7 +289,7 @@ describe("subir", () => {
       descargados: descargado ? ["viejo.js"] : [],
     }));
 
-    writeFileSync(join(raiz, "app.xml"), "<app cambiada/>");
+    writeFileSync(join(raiz, "app.xml"), "<app cambiada='si'/>");
     execFileSync("git", ["rm", "-q", "viejo.js"], { cwd: raiz });
     execFileSync("git", ["add", "-A"], { cwd: raiz });
     execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "cambios"], { cwd: raiz });
@@ -341,7 +341,7 @@ describe("subir", () => {
       descargados: ["app.xml", "icons/viejo.png"],
     }));
 
-    writeFileSync(join(raiz, "app.xml"), "<app cambiada/>");
+    writeFileSync(join(raiz, "app.xml"), "<app cambiada='si'/>");
     execFileSync("git", ["rm", "-q", "icons/viejo.png"], { cwd: raiz });
     execFileSync("git", ["add", "-A"], { cwd: raiz });
     execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "borro el icono"], { cwd: raiz });
@@ -468,5 +468,72 @@ describe("subir", () => {
       expect(await cambiosPendientes(raiz, "master")).toHaveLength(1);
       expect(avisos.join("")).toContain("no se ha aplicado nada");
     });
+  });
+});
+
+describe("subir se niega con ficheros ilegibles (IXCODE-16)", () => {
+  const proyecto = { id: "96fe", nombre: "AppForTest" };
+
+  /** Un proyecto bajado cuyo último commit deja `app.xml` con `contenido`. */
+  async function proyectoConAppXml(contenido: string) {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-sub-ileg-"));
+    writeFileSync(join(raiz, "app.xml"), "<app/>");
+    writeFileSync(join(raiz, "Main.xne"), "<coll/>");
+    await prepararRepo(raiz, "master");
+    writeFileSync(join(raiz, "app.xml"), contenido);
+    execFileSync("git", ["add", "-A"], { cwd: raiz });
+    execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "cambio"], { cwd: raiz });
+    return raiz;
+  }
+
+  const syncJson = (raiz: string, ilegibles: Array<{ ruta: string; motivo: string }>) => {
+    mkdirSync(dirname(rutaSyncJson(raiz)), { recursive: true });
+    writeFileSync(rutaSyncJson(raiz), JSON.stringify({ proyecto, rama: "master", descargados: ["app.xml", "Main.xne"], ilegibles }));
+  };
+
+  async function subirCon(raiz: string) {
+    const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
+    await puerto.abrir("AppForTest");
+    const avisos: string[] = [];
+    let preguntado = false;
+    const informe = await subir({
+      puerto, raiz, ramaOrigen: "master", proyecto,
+      politicaDeAprobacion: async () => { preguntado = true; return true; },
+      informar: (t) => avisos.push(t),
+    });
+    return { informe, puerto, avisos: avisos.join(""), preguntado };
+  }
+
+  it("lo que se iba a subir está como cadena JSON: no se sube NADA, ni se pregunta", async () => {
+    const raiz = await proyectoConAppXml(JSON.stringify("<app cambiada='si'/>"));
+    const { informe, puerto, avisos, preguntado } = await subirCon(raiz);
+
+    expect(informe.ilegibles?.map((f) => f.ruta)).toEqual(["app.xml"]);
+    expect(informe.ok).toEqual([]);
+    expect(puerto.escrituras).toEqual([]);
+    expect(preguntado).toBe(false);
+    expect(avisos).toMatch(/subida negada/);
+    // La ref no se mueve: lo pendiente sigue pendiente.
+    expect(await cambiosPendientes(raiz, "master")).toHaveLength(1);
+    expect(JSON.parse(readFileSync(rutaSyncLog(raiz), "utf8").trim()).error).toMatch(/ilegibles/);
+  });
+
+  it("un ilegible de la bajada que SIGUE roto en disco niega aunque no esté en el plan", async () => {
+    const raiz = await proyectoConAppXml("<app cambiada='si'/>");
+    writeFileSync(join(raiz, "Main.xne"), JSON.stringify("<coll/>"));
+    syncJson(raiz, [{ ruta: "Main.xne", motivo: "guardado como cadena JSON" }]);
+    const { informe, puerto } = await subirCon(raiz);
+
+    expect(informe.ilegibles?.map((f) => f.ruta)).toEqual(["Main.xne"]);
+    expect(puerto.escrituras).toEqual([]);
+  });
+
+  it("un ilegible de la bajada que YA se reparó en disco no niega: se revalida, no se cree", async () => {
+    const raiz = await proyectoConAppXml("<app cambiada='si'/>");
+    syncJson(raiz, [{ ruta: "Main.xne", motivo: "guardado como cadena JSON" }]);
+    const { informe } = await subirCon(raiz);
+
+    expect(informe).not.toHaveProperty("ilegibles");
+    expect(informe.ok).toEqual(["app.xml"]);
   });
 });
