@@ -56,6 +56,28 @@ function registro(valor: unknown): Record<string, unknown> {
   return typeof valor === "object" && valor !== null ? valor as Record<string, unknown> : {};
 }
 
+/**
+ * El contenido de un fichero tal y como lo manda `studio_get_file`: SERIALIZADO como cadena
+ * JSON (medido contra el servidor, en AppDemo y en ActivoMobileDev: `"name=…\nicon=…"`, con
+ * las comillas envolventes y los `\n`/`\"` escapados). Escrito tal cual, `app.xml` empezaba
+ * por `"` y la app no arrancaba (IXCODE-16); solo pasaba cuando el ZIP fallaba y la descarga
+ * bajaba fichero a fichero. El doble `CloudStudioEnMemoria` devuelve el texto en CRUDO, por eso
+ * ningún test lo vio.
+ *
+ * Se decodifica cuando parsea a una CADENA; si no (un servidor que algún día mande el texto en
+ * crudo), se devuelve tal cual. El caso que esto no distingue —un servidor en crudo con un
+ * fichero que sea literalmente una cadena JSON— no se ha visto nunca: el que hay codifica siempre.
+ */
+function contenidoDeFichero(bruto: string): string {
+  if (!bruto.startsWith('"')) return bruto;
+  try {
+    const decodificado: unknown = JSON.parse(bruto);
+    return typeof decodificado === "string" ? decodificado : bruto;
+  } catch {
+    return bruto;
+  }
+}
+
 /** Cuánto del cuerpo remoto se deja ver en un error de formato: lo justo para reconocerlo. */
 const TOPE_DE_MUESTRA = 120;
 
@@ -187,9 +209,14 @@ export function clienteCloudStudio(
       return { proyecto: String(r.project ?? ""), rama: String(r.branch ?? "") };
     },
     async descargarZip() {
-      const r = registro(await conSesion("studio_download_project", { unified: false }));
-      const zip = r.base64Zip;
-      if (typeof zip !== "string" || zip === "") throw new Error("CloudStudio no devolvió el ZIP del proyecto");
+      const bruto = await conSesion("studio_download_project", { unified: false });
+      const zip = registro(bruto).base64Zip;
+      if (typeof zip !== "string" || zip === "") {
+        // Con la muestra: «no devolvió el ZIP» a secas es lo que quedaba en `sync.json#motivo`
+        // y no decía POR QUÉ, que es justo la pista de por qué una copia baja `parcial`.
+        const dicho = texto(bruto) || (typeof bruto === "string" ? bruto : JSON.stringify(bruto ?? ""));
+        throw new Error(`CloudStudio no devolvió el ZIP del proyecto: «${muestra(dicho)}»`);
+      }
       return zip;
     },
     async estructura(directorio): Promise<EstructuraRemota> {
@@ -206,7 +233,7 @@ export function clienteCloudStudio(
     async leerTexto(ruta) {
       const bruto = await conSesion("studio_get_file", { filePath: ruta });
       const desenvuelto = texto(bruto);
-      return desenvuelto !== "" ? desenvuelto : typeof bruto === "string" ? bruto : "";
+      return contenidoDeFichero(desenvuelto !== "" ? desenvuelto : typeof bruto === "string" ? bruto : "");
     },
     async escribirTexto(ruta, contenido) {
       await conSesion("studio_edit_file", { filePath: ruta, content: contenido, editMode: "replace" });

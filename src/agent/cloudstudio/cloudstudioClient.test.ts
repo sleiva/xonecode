@@ -158,6 +158,27 @@ describe("clienteCloudStudio", () => {
     expect(await clienteCloudStudio(falso.invocar, "AppForTest").leerTexto("a.js")).toBe("hola");
   });
 
+  it("studio_get_file manda el fichero como CADENA JSON (medido) y se decodifica (IXCODE-16)", async () => {
+    // La forma REAL, medida contra el servidor: el texto del bloque es el contenido
+    // serializado con `JSON.stringify` —comillas envolventes, `\"` y `\n` escapados—.
+    // Escribirlo tal cual dejaba `app.xml` empezando por `"` y la app sin arrancar.
+    const original = '<?xml version="1.0" encoding="utf-8"?>\n<app name="Validación"/>\n';
+    const falso = clienteFalso([{ content: [{ type: "text", text: JSON.stringify(original) }] }]);
+    expect(await clienteCloudStudio(falso.invocar, "AppForTest").leerTexto("app.xml")).toBe(original);
+  });
+
+  it("un fichero cuyo contenido ES una cadena entre comillas se recupera entero, comillas incluidas", async () => {
+    const original = '"hola"';
+    const falso = clienteFalso([{ content: [{ type: "text", text: JSON.stringify(original) }] }]);
+    expect(await clienteCloudStudio(falso.invocar, "AppForTest").leerTexto("a.txt")).toBe(original);
+  });
+
+  it("si el ZIP no llega, el error enseña una muestra de lo que contestó el servidor", async () => {
+    const falso = clienteFalso([{ content: [{ type: "text", text: "Error: project too large to zip" }] }]);
+    await expect(clienteCloudStudio(falso.invocar, "AppForTest").descargarZip())
+      .rejects.toThrow(/no devolvió el ZIP.*project too large to zip/);
+  });
+
   it("estructura() propaga el truncado del servidor con sus argumentos reales", async () => {
     const falso = clienteFalso([
       {

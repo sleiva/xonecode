@@ -354,6 +354,51 @@ describe("descargarProyecto", () => {
  * La limpieza de «Actualizar repo local» la hace la descarga, y SOLO con el zip en la mano:
  * vaciar primero y que después falle la bajada dejaría la copia sin nada.
  */
+describe("descargarProyecto valida lo bajado (IXCODE-16)", () => {
+  it("vía parcial con ficheros como CADENA JSON: se dice cuáles y queda en sync.json", async () => {
+    // Lo que pasaba antes del arreglo de `leerTexto`: el contenido llega serializado y se
+    // escribe tal cual. Aquí se simula ese puerto para probar la SEGUNDA capa por sí sola.
+    const raiz = raizNueva();
+    const base = new CloudStudioEnMemoria({
+      zipFalla: "sin zip",
+      textos: { "app.xml": "<?xml version=\"1.0\"?>\n<xml/>", "app.ini": "name=X\nicon=icon.png", "Main.xne": "<coll name=\"Main\"/>" },
+    });
+    const puerto = conLeerTextoEnvuelto(base, async (original, ruta) => JSON.stringify(await original(ruta)));
+    const avisos: string[] = [];
+    const estado = await descargarProyecto({ puerto, raiz, proyecto, ramaOrigen: "master", informar: (t) => avisos.push(t) });
+
+    expect(estado.ilegibles?.map((f) => f.ruta)).toEqual(["Main.xne", "app.ini", "app.xml"]);
+    expect(estado.ilegibles?.[0]?.motivo).toMatch(/cadena JSON/);
+    expect(avisos.join("")).toMatch(/3 ficheros bajados no se pueden leer/);
+    expect(avisos.join("")).toMatch(/app\.ini/);
+    const enDisco = JSON.parse(readFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "utf8"));
+    expect(enDisco.ilegibles).toHaveLength(3);
+  });
+
+  it("también por la vía ZIP: un .xne mal formado se dice (puede venir así de Studio)", async () => {
+    const raiz = raizNueva();
+    const ficheros = { "app.xml": "<xml/>", "Roto.xne": "<coll name=\"Roto\">", "lang/dic.xml": "<a>" };
+    const puerto = new CloudStudioEnMemoria({ zipBase64: zip(ficheros), textos: ficheros });
+    const estado = await descargarProyecto({ puerto, raiz, proyecto, ramaOrigen: "master" });
+
+    expect(estado.via).toBe("zip");
+    // `lang/dic.xml` no es de XOne: solo `app.xml` y los `.xne` se parsean.
+    expect(estado.ilegibles?.map((f) => f.ruta)).toEqual(["Roto.xne"]);
+    expect(estado.ilegibles?.[0]?.motivo).toMatch(/XML mal formado/);
+  });
+
+  it("una copia sana no lleva el campo, ni avisa", async () => {
+    const raiz = raizNueva();
+    const ficheros = { "app.xml": "<xml/>", "app.ini": "name=X\nsuelta", "Main.xne": "<coll/>", "a.js": "\"use strict\";" };
+    const puerto = new CloudStudioEnMemoria({ zipBase64: zip(ficheros), textos: ficheros });
+    const avisos: string[] = [];
+    const estado = await descargarProyecto({ puerto, raiz, proyecto, ramaOrigen: "master", informar: (t) => avisos.push(t) });
+
+    expect(estado).not.toHaveProperty("ilegibles");
+    expect(avisos.join("")).not.toMatch(/no se pueden leer/);
+  });
+});
+
 describe("descargarProyecto con vaciado", () => {
   it("vacía DESPUÉS de tener el zip y ANTES de escribirlo: lo nuevo queda, lo viejo no", async () => {
     const raiz = raizNueva();

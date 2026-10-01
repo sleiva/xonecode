@@ -15,6 +15,7 @@ import { NOMBRE_CARPETA } from "../config/configEnDisco.js";
 import { ramaActiva } from "./ramaActiva.js";
 import { destinoSeguro, extraerZipBase64 } from "./zip.js";
 import { enumerarRemoto } from "./manifiesto.js";
+import { validarTrasDescarga } from "./validarTrasDescarga.js";
 
 /** Bastante para que la espera de red se solape; poco para no parecer un ataque. */
 export const CONCURRENCIA = 6;
@@ -180,6 +181,17 @@ export async function descargarProyecto(opciones: OpcionesDeDescarga): Promise<E
       descargados = retirarVistasAplanadas(raiz, traidos);
     }
 
+    // Lo bajado se comprueba en el DISCO, por las dos vías: una copia que no se puede leer
+    // (IXCODE-16: `app.xml` como cadena JSON, la app en blanco en el aparato) se dice AHORA,
+    // con los ficheros, y no cuando el aparato no arranca.
+    const ilegibles = validarTrasDescarga(raiz, descargados);
+    if (ilegibles.length > 0) {
+      informar(
+        `${ilegibles.length} ficheros bajados no se pueden leer, y la app puede no arrancar:\n` +
+          ilegibles.map((f) => `  ${f.ruta}: ${f.motivo}\n`).join("")
+      );
+    }
+
     // La rama del estado es la ORIGEN pedida, no una que se vuelva a leer de `contexto()`:
     // es la que se acaba de fijar arriba (o la que ya estaba, si coincidían), así que
     // «lo que se bajó» y «lo que dice `sync.json`» nunca pueden divergir.
@@ -192,6 +204,7 @@ export async function descargarProyecto(opciones: OpcionesDeDescarga): Promise<E
       descargados: [...descargados].sort(),
       ...(motivo === undefined ? {} : { motivo }),
       ...(raizTruncada ? { raizTruncada: true } : {}),
+      ...(ilegibles.length > 0 ? { ilegibles } : {}),
     };
 
     const ruta = rutaSyncJson(raiz);

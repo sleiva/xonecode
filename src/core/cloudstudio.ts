@@ -54,6 +54,13 @@ export interface EstadoDeSync {
    * de consola que nadie vuelve a leer una vez pasa el turno.
    */
   raizTruncada?: boolean;
+  /**
+   * Los ficheros bajados que no se pueden leer como lo que son (`validarTrasDescarga`): una
+   * cadena JSON en vez del fichero, o un `app.xml`/`.xne` mal formado. Ausente = todo se lee.
+   * Se escribe aquí por lo mismo que `raizTruncada`: el aviso de consola no sobrevive al turno,
+   * y una copia así no arranca en el aparato (IXCODE-16).
+   */
+  ilegibles?: Array<{ ruta: string; motivo: string }>;
 }
 
 /**

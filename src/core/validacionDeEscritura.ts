@@ -84,6 +84,22 @@ export function veredictoDeEscritura(
   return { introducidos, preexistentes };
 }
 
+/**
+ * Lo que hay DENTRO de un contenido que es entero una cadena JSON (comilla al principio y al
+ * final, y parsea a una cadena), o `undefined` si no lo es. Es la forma en que `studio_get_file`
+ * manda los ficheros; la comparten la guarda de escritura y la validación tras la descarga.
+ */
+export function cadenaJsonEnvuelta(contenido: string): string | undefined {
+  const recortado = contenido.trim();
+  if (recortado.length < 2 || !recortado.startsWith('"') || !recortado.endsWith('"')) return undefined;
+  try {
+    const desenvuelto: unknown = JSON.parse(recortado);
+    return typeof desenvuelto === "string" ? desenvuelto : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** El código del hallazgo de un fichero XOne guardado como cadena JSON (ver `hallazgoDeCadenaJson`). */
 export const CODIGO_CADENA_JSON = "contenido-como-cadena-json";
 
@@ -101,15 +117,8 @@ export const CODIGO_CADENA_JSON = "contenido-como-cadena-json";
  */
 export function hallazgoDeCadenaJson(ruta: string, contenido: string): HallazgoDeEscritura | undefined {
   if (!/\.(xne|xml)$/i.test(ruta)) return undefined;
-  const recortado = contenido.trim();
-  if (recortado.length < 2 || !recortado.startsWith('"') || !recortado.endsWith('"')) return undefined;
-  let desenvuelto: unknown;
-  try {
-    desenvuelto = JSON.parse(recortado);
-  } catch {
-    return undefined;
-  }
-  if (typeof desenvuelto !== "string" || !desenvuelto.trimStart().startsWith("<")) return undefined;
+  const desenvuelto = cadenaJsonEnvuelta(contenido);
+  if (desenvuelto === undefined || !desenvuelto.trimStart().startsWith("<")) return undefined;
   return {
     codigo: CODIGO_CADENA_JSON,
     mensaje:
