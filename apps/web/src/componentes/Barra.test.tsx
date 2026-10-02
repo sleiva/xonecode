@@ -4,7 +4,13 @@ import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
-const modulos = readdirSync(AQUI).filter((f) => f.endsWith(".module.css"));
+const EDITOR = join(AQUI, "..", "editor");
+const modulos = [
+  ...readdirSync(AQUI).filter((f) => f.endsWith(".module.css")),
+  // El editor vive en `editor/` por su frontera (solo se llega con `import()`), pero sus hojas son
+  // nuestras y la disciplina de colores es la misma: sin esto, sus `.module.css` escaparían a ella.
+  ...readdirSync(EDITOR).filter((f) => f.endsWith(".module.css")).map((f) => join("..", "editor", f)),
+];
 
 /**
  * Los `.module.css` COPIADOS de deepseek viven aparte, en `apps/web/estilos/`, y no en

@@ -1,0 +1,253 @@
+/* El editor de la pestaña Ficheros. Alias comprobados contra el puente de temas
+   (`estilos/temas.css`): bg-layer-1/2, border-l2, label-primary/secondary/tertiary,
+   interactive-bg-hover, state-business/success/error-primary, state-warn-tertiary; y
+   `--xonecode-fila-elegida`, `--shiki-*`.
+   **La clase propia va TRIPLE en todo lo que el tema base de CodeMirror también pinta**: lo
+   inyecta en tiempo de ejecución (`style-mod`), así que llega DESPUÉS de esta hoja y gana todo
+   EMPATE de especificidad, y sus reglas ya son de tres clases (`.ͼ1.ͼ2 .cm-gutters`) o más
+   (`.ͼ1.ͼ2.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground`). Con dos, el
+   margen saldría gris claro en un tema oscuro. jsdom no lo ve: lo comprueba el paso del navegador. */
+
+.editor {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.codigo {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.codigo.codigo.codigo :global(.cm-editor) {
+  height: 100%;
+  background: var(--shiki-background);
+  color: var(--shiki-foreground);
+  font-size: 12px;
+}
+
+.codigo.codigo.codigo :global(.cm-editor.cm-focused) {
+  outline: none;
+}
+
+/* También la letra: el tema base pone `monospace` con dos clases (`.ͼ1 .cm-scroller`). */
+.codigo.codigo.codigo :global(.cm-scroller) {
+  font-family: var(--ds-font-family-code);
+  line-height: 1.6;
+}
+
+.codigo.codigo.codigo :global(.cm-content) {
+  caret-color: var(--dsw-alias-label-primary);
+}
+
+.codigo.codigo.codigo :global(.cm-cursor) {
+  border-left-color: var(--dsw-alias-label-primary);
+}
+
+.codigo.codigo.codigo :global(.cm-editor .cm-selectionLayer .cm-selectionBackground),
+.codigo.codigo.codigo :global(.cm-editor.cm-focused .cm-selectionLayer .cm-selectionBackground) {
+  background: var(--xonecode-fila-elegida);
+}
+
+.codigo.codigo.codigo :global(.cm-activeLine),
+.codigo.codigo.codigo :global(.cm-activeLineGutter) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.codigo.codigo.codigo :global(.cm-gutters) {
+  border-right: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--shiki-background);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.codigo.codigo.codigo :global(.cm-panels) {
+  border-color: var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+}
+
+.codigo.codigo.codigo :global(.cm-panels input),
+.codigo.codigo.codigo :global(.cm-panels button) {
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+}
+
+.codigo.codigo.codigo :global(.cm-searchMatch) {
+  background: var(--dsw-alias-state-warn-tertiary);
+}
+
+.codigo.codigo.codigo :global(.cm-matchingBracket),
+.codigo.codigo.codigo :global(.cm-editor.cm-focused .cm-matchingBracket) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* El resaltado, con las MISMAS variables que shiki: el editor y el visor se ven igual, y los
+   dos siguen el tema sin redefinir nada. */
+.codigo :global(.tok-keyword) {
+  color: var(--shiki-token-keyword);
+}
+
+.codigo :global(.tok-string),
+.codigo :global(.tok-string2) {
+  color: var(--shiki-token-string);
+}
+
+.codigo :global(.tok-comment),
+.codigo :global(.tok-meta) {
+  color: var(--shiki-token-comment);
+}
+
+.codigo :global(.tok-comment) {
+  font-style: italic;
+}
+
+.codigo :global(.tok-number),
+.codigo :global(.tok-bool),
+.codigo :global(.tok-atom),
+.codigo :global(.tok-literal) {
+  color: var(--shiki-token-constant);
+}
+
+/* Los nombres de etiqueta de XML son `typeName` para Lezer. */
+.codigo :global(.tok-typeName),
+.codigo :global(.tok-className),
+.codigo :global(.tok-namespace),
+.codigo :global(.tok-macroName),
+.codigo :global(.tok-variableName.tok-definition) {
+  color: var(--shiki-token-function);
+}
+
+/* Y los atributos, `propertyName`. */
+.codigo :global(.tok-propertyName) {
+  color: var(--shiki-token-parameter);
+}
+
+.codigo :global(.tok-punctuation),
+.codigo :global(.tok-operator) {
+  color: var(--shiki-token-punctuation);
+}
+
+.codigo :global(.tok-link),
+.codigo :global(.tok-url) {
+  color: var(--shiki-token-link);
+  text-decoration: underline;
+}
+
+.codigo :global(.tok-heading),
+.codigo :global(.tok-strong) {
+  font-weight: 600;
+}
+
+.codigo :global(.tok-emphasis) {
+  font-style: italic;
+}
+
+.codigo :global(.tok-invalid) {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* El margen de las marcas: barra azul (cambiada), verde (nueva) y triángulo rojo (borrado)
+   ENTRE líneas, dibujado con `clip-path` sobre un bloque lleno —sin bordes transparentes—. */
+.margen {
+  width: 6px;
+}
+
+.margen :global(.cm-gutterElement) {
+  overflow: visible;
+}
+
+.marca {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+.marca[data-marca~="cambiada"] {
+  background: var(--dsw-alias-state-business-primary);
+}
+
+.marca[data-marca~="nueva"] {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.marca[data-marca~="borrado-debajo"]::after,
+.marca[data-marca~="borrado-encima"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: 6px;
+  height: 8px;
+  background: var(--dsw-alias-state-error-primary);
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+}
+
+.marca[data-marca~="borrado-debajo"]::after {
+  bottom: -4px;
+}
+
+.marca[data-marca~="borrado-encima"]::after {
+  top: -4px;
+}
+
+/* Lo de antes de un trozo, desplegado debajo. */
+.loQueHabia {
+  margin: 2px 0 6px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--dsw-alias-state-error-primary);
+  background: var(--dsw-alias-bg-layer-2);
+  font-family: var(--ds-font-family-code);
+}
+
+.rotuloDelTrozo {
+  margin: 0 0 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+}
+
+.antes {
+  margin: 0 0 8px;
+  overflow-x: auto;
+  color: var(--dsw-alias-label-secondary);
+  white-space: pre;
+  text-decoration: line-through;
+}
+
+.deshacer {
+  composes: secundario from "../componentes/Boton.module.css";
+}
+
+/* La barra de abajo: las cuentas y el selector de base. */
+.barra {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 16px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.selector select {
+  padding: 2px 6px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+}
