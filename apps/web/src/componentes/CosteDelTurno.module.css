@@ -8,22 +8,23 @@
  * es lo que se lee, y esto se consulta. Un dato de máquina al mismo peso que su frase deja
  * las dos sin jerarquía.
  */
+/* Los alias que había aquí (`--dsw-alias-text-tertiary y text-secondary`) no existen en ninguna paleta y resolvían a nada; estos son los que se querían. */
 .coste {
   display: inline-flex;
   align-items: center;
   gap: 3px;
   font-family: var(--dsw-font-mono);
   font-size: 11px;
-  color: var(--dsw-alias-text-tertiary);
+  color: var(--dsw-alias-label-tertiary);
   white-space: nowrap;
 }
 
 .cifra {
-  color: var(--dsw-alias-text-secondary);
+  color: var(--dsw-alias-label-secondary);
 }
 
 /* La caché, todavía más tenue: es la lectura que NO se suma a la entrada, y pintarla igual
    que las otras dos invitaría a sumarla de cabeza. */
 .cache {
-  color: var(--dsw-alias-text-tertiary);
+  color: var(--dsw-alias-label-tertiary);
 }

@@ -373,11 +373,12 @@
  * `transparent` es un literal de color que `Barra.test.tsx` prohíbe con razón; y una sombra
  * no ocupa sitio, así que la fila no se mueve medio píxel al cambiar de pestaña.
  */
+/* Los alias que había aquí (`--dsw-alias-border-secondary`) no existen en ninguna paleta y resolvían a nada; estos son los que se querían. */
 .pestanas {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  border-bottom: 1px solid var(--dsw-alias-border-secondary);
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
   margin-bottom: 14px;
 }
 

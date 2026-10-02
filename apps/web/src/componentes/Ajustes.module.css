@@ -724,11 +724,12 @@
    «esto es lo que estás mirando». El borde inferior es lo que las hace leerse como pestañas
    y no como otra fila de botones redondos, que es lo que ya es la navegación de la
    izquierda: dos niveles distintos tienen que verse distintos. */
+/* Los alias que había aquí (`--dsw-alias-border-secondary`) no existen en ninguna paleta y resolvían a nada; estos son los que se querían. */
 .pestanas {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  border-bottom: 1px solid var(--dsw-alias-border-secondary);
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
   margin-bottom: 14px;
 }
 

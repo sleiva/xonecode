@@ -114,9 +114,10 @@
    pero es lo único de esta lista que alcanza la máquina entera, así que no puede leerse igual
    que «solo lectura». El par de aviso ya viene ajustado por tema; inventar aquí un color sería
    el literal que `Barra.test.tsx` persigue por todos los `.module.css`. */
+/* Los alias que había aquí (`--dsw-alias-state-warning-* y border-secondary`) no existen en ninguna paleta y resolvían a nada; estos son los que se querían. */
 .ejecucion {
-  background: var(--dsw-alias-state-warning-tertiary);
-  color: var(--dsw-alias-state-warning-primary);
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-state-warn-label);
 }
 
 .descripcion {
@@ -395,7 +396,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  border-bottom: 1px solid var(--dsw-alias-border-secondary);
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
   margin-bottom: 14px;
 }
 
