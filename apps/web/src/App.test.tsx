@@ -1927,9 +1927,32 @@ describe("App: editar en la pestaña Ficheros", () => {
     fireEvent.change(screen.getByDisplayValue("XOne WebStudio"), { target: { value: "casa" } });
     expect(screen.getByRole("alertdialog", { name: "Cambios sin guardar" })).toBeTruthy();
     expect(mandados(enviar, "entorno")).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Seguir editando" }));
+    // Cancelar no deja la fila a medias: el `<select>` vuelve al entorno de verdad.
+    expect(screen.getByDisplayValue("XOne WebStudio")).toBeTruthy();
+    expect(screen.queryByText("cambiando…")).toBeNull();
+    fireEvent.change(screen.getByDisplayValue("XOne WebStudio"), { target: { value: "casa" } });
     fireEvent.click(screen.getByRole("button", { name: "Descartar cambios" }));
     expect(enviar).toHaveBeenCalledWith({ clase: "entorno", accion: "activo", entorno: "casa" });
     void vista;
+  });
+
+  it("con otro proyecto abierto y SU árbol, lo editado sigue a la vista con su banda, sin diálogo", async () => {
+    const { store, vista } = await conFichero();
+    teclear(vista, "X");
+    // Lo que pasa de verdad: el alta del otro proyecto, el store tira el árbol, y llega el suyo.
+    act(() =>
+      store.aplicar({ clase: "alta", pasos: [], proveedores: [], entornos: [], proyectos: [], ramas: [], proyectoAbierto: true, proyectoActivo: "p2" })
+    );
+    act(() => store.aplicar({ clase: "arbol", rutas: ["otro.xne"], recortado: false }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(screen.getByText("El proyecto abierto ya no es este: guardar está desactivado. Copia tus cambios o descártalos.")).toBeTruthy();
+    await waitFor(() => expect(vistaDelEditor().state.doc.toString()).toBe("Xuno\n"));
+    // «Descartar» lo suelta, y entonces sí se ve el proyecto nuevo.
+    fireEvent.click(screen.getByRole("button", { name: "Descartar" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(document.querySelector(".cm-editor")).toBeNull();
+    expect(screen.getByRole("treeitem", { name: "otro.xne" })).toBeTruthy();
   });
 
   it("la ventana de «Cambios sin guardar» enseña la ruta de cuando se ABRIÓ, aunque la edición se cierre debajo", async () => {
@@ -1939,7 +1962,7 @@ describe("App: editar en la pestaña Ficheros", () => {
     act(() =>
       store.aplicar({ clase: "alta", pasos: [], proveedores: [], entornos: [], proyectos: [], ramas: [], proyectoAbierto: true, proyectoActivo: "p2" })
     );
-    fireEvent.click(screen.getByRole("treeitem", { name: "b.xne" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar el panel" }));
     const dialogo = screen.getByRole("alertdialog", { name: "Cambios sin guardar" });
     expect(dialogo.textContent).toContain("«a.xne»");
     expect(document.activeElement?.textContent).toBe("Seguir editando");

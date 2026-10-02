@@ -115,11 +115,22 @@ export function Ficheros({
     alPedirCambios?.();
   }, [cambiados, conectado, alPedirCambios]);
 
+  /**
+   * Una edición con cambios cuyo proyecto ya NO es el abierto (`usarEdicion.ts#proyectoCambiado`).
+   * El árbol y `elegido` son ya del proyecto nuevo —el store tiró el árbol al cambiar, y el que
+   * llega no tiene por qué traer esa ruta—, así que la edición se enseña SOLA, sin el árbol, hasta
+   * que se copie y se descarte: si dependiera de ellos, «Consultando el árbol…» la escondería y el
+   * cierre de abajo sacaría el diálogo de «Cambios sin guardar» sin que nadie lo pidiera.
+   */
+  const huerfana = edicion?.actual?.proyectoCambiado === true ? edicion.actual : undefined;
+
   // Con el árbol RECORTADO no se cierra: la lista no es el proyecto entero, así que «no
   // está en el árbol» no significa «ya no existe». Un fichero real más allá del tope se
-  // cerraría solo, y el usuario vería desaparecer lo que estaba leyendo sin motivo.
+  // cerraría solo, y el usuario vería desaparecer lo que estaba leyendo sin motivo. Con una
+  // edición huérfana tampoco: se cierra cuando se descarte (por eso va en las dependencias).
   useEffect(() => {
     if (
+      huerfana === undefined &&
       elegido !== undefined &&
       arbol !== undefined &&
       arbol.error === undefined &&
@@ -128,7 +139,7 @@ export function Ficheros({
     ) {
       alElegir(undefined);
     }
-  }, [arbol, elegido, alElegir]);
+  }, [arbol, elegido, alElegir, huerfana]);
 
   const [filtro, setFiltro] = useState("");
   // Renderizado o fuente, para lo que tiene las dos caras. Se recuerda al cambiar de
@@ -136,6 +147,47 @@ export function Ficheros({
   // devolverle la vista en el siguiente sería deshacerle la elección cada vez.
   const [cara, setCara] = useState<"vista" | "fuente">("vista");
 
+  if (huerfana !== undefined && edicion !== undefined) {
+    const lenguajeHuerfano = lenguajeDe(huerfana.ruta);
+    return (
+      <div className={estilos.caja}>
+        <div className={estilos.ficheros}>
+          <div className={estilos.visor} data-editando="">
+            <div className={estilos.cabecera}>
+              <span className={estilos.ruta}>
+                {huerfana.ruta}
+                <span className={estilos.sinGuardar} aria-label="Hay cambios sin guardar" title="Hay cambios sin guardar">
+                  ●
+                </span>
+              </span>
+              <div className={estilos.acciones}>
+                <button type="button" className={estilos.accionPrincipal} disabled>
+                  Guardar
+                </button>
+              </div>
+            </div>
+            <div className={estilos.banda} role="alert">
+              <span>El proyecto abierto ya no es este: guardar está desactivado. Copia tus cambios o descártalos.</span>
+              <button type="button" className={estilos.accion} onClick={edicion.descartar}>
+                Descartar
+              </button>
+            </div>
+            <Suspense fallback={<p className={estilos.aviso}>Cargando el editor…</p>}>
+              <EditorDeFichero
+                key={`${huerfana.ruta}:${huerfana.generacion}`}
+                texto={edicion.textoVivo()}
+                {...(lenguajeHuerfano === undefined ? {} : { lenguaje: lenguajeHuerfano })}
+                baseElegida={edicion.baseElegida}
+                alCambiar={edicion.cambiar}
+                alGuardar={edicion.guardar}
+                alElegirBase={edicion.elegirBase}
+              />
+            </Suspense>
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (arbol === undefined) {
     return <p className={estilos.aviso}>Consultando el árbol del proyecto…</p>;
   }
