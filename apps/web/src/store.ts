@@ -54,6 +54,7 @@ import type {
   Esfuerzo,
   EsfuerzoDelCable,
   ModoDeEscritura,
+  BaseDelFichero,
 } from "./tipos.js";
 import { FORMA_DE_NOMBRE_DE_AVD } from "./reglasDeAvd.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, FASES_DEL_LANZAMIENTO, ESTADOS_DEL_LANZAMIENTO, ESFUERZOS, esAutenticacionDeConector } from "./tipos.js";
@@ -304,6 +305,16 @@ export interface EstadoDelCliente {
    */
   arbol?: { rutas: string[]; recortado: boolean; error?: string };
   contenidos?: Record<string, FicheroDelProyecto>;
+  /**
+   * La última respuesta a un guardado del editor, de CUALQUIER pestaña (el servidor la manda a
+   * todas). `secuencia` sube con cada una y es lo que `usarEdicion` compara —dos rechazos iguales
+   * seguidos son dos respuestas—, por eso esto NO se tira nunca: tirarlo reiniciaría la cuenta y
+   * la siguiente respuesta se confundiría con una ya vista.
+   */
+  ultimoGuardado?: { ruta: string; huella?: string; error?: string; secuencia: number };
+  /** La base de comparación del editor, por ruta (la última que llegó). Una foto de git: se tira
+   *  con la sesión y sin cable, como los parches. */
+  bases?: Record<string, BaseDelFichero>;
   /**
    * La foto del modelo XOne del proyecto abierto (pestaña Colecciones), ya VALIDADA
    * (`fotoDeColecciones.ts`). Una foto del disco como el árbol: se tira con la sesión y sin
@@ -1811,7 +1822,39 @@ export function crearStoreDelCliente(): {
                 // La vista de un markdown con imágenes, por la misma trampa: sin nombrarla aquí,
                 // el visor se quedaba con el texto crudo y sus imágenes rotas.
                 ...(typeof m.vista === "string" ? { vista: m.vista } : {}),
+                // La huella del editor, por la misma trampa: sin nombrarla aquí no hay «Editar».
+                ...(typeof m.huella === "string" ? { huella: m.huella } : {}),
                 ...(typeof m.error === "string" ? { error: m.error } : {}),
+              },
+            },
+          });
+          return;
+        }
+        case "ficheroGuardado": {
+          const m = mensaje as { ruta?: unknown; huella?: unknown; error?: unknown };
+          if (typeof m.ruta !== "string") return;
+          mutar({
+            ultimoGuardado: {
+              ruta: m.ruta,
+              ...(typeof m.huella === "string" ? { huella: m.huella } : {}),
+              ...(typeof m.error === "string" ? { error: m.error } : {}),
+              secuencia: (estado.ultimoGuardado?.secuencia ?? 0) + 1,
+            },
+          });
+          return;
+        }
+        case "baseDeFichero": {
+          const m = mensaje as { ruta?: unknown; base?: unknown; texto?: unknown; vacio?: unknown; sinBase?: unknown };
+          if (typeof m.ruta !== "string" || (m.base !== "sesion" && m.base !== "commit")) return;
+          mutar({
+            bases: {
+              ...estado.bases,
+              [m.ruta]: {
+                ruta: m.ruta,
+                base: m.base,
+                ...(typeof m.texto === "string" ? { texto: m.texto } : {}),
+                ...(m.vacio === true ? { vacio: true as const } : {}),
+                ...(typeof m.sinBase === "string" ? { sinBase: m.sinBase } : {}),
               },
             },
           });
@@ -2143,7 +2186,7 @@ export function crearStoreDelCliente(): {
           const cambioDeProyecto = proyectoDeAhora !== estado.alta?.proyectoActivo;
           mutar({
             ...(cambioDeProyecto ? { gestor: undefined } : {}),
-            ...(cambioDeSesion ? { revision: undefined, parches: undefined, modelosDelCambio: undefined, arbol: undefined, contenidos: undefined, colecciones: undefined, planes: undefined, artefactos: undefined, sync: undefined } : {}),
+            ...(cambioDeSesion ? { revision: undefined, parches: undefined, modelosDelCambio: undefined, arbol: undefined, contenidos: undefined, bases: undefined, colecciones: undefined, planes: undefined, artefactos: undefined, sync: undefined } : {}),
             alta: {
               pasos: m.pasos as PasoDelWizard[],
               proveedores: m.proveedores,
@@ -2267,6 +2310,9 @@ export function crearStoreDelCliente(): {
         modelosDelCambio: undefined,
         arbol: undefined,
         contenidos: undefined,
+        // La base de las marcas del editor, por lo mismo que los contenidos. `ultimoGuardado` NO
+        // se tira: su secuencia es la que se compara (ver su declaración).
+        bases: undefined,
         colecciones: undefined,
         planes: undefined,
         // El gestor por lo mismo que los planes: el vínculo pudo cambiar en disco.

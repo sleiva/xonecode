@@ -2076,3 +2076,50 @@ describe("store: `case \"conectores\"` no deja pasar un campo que no se nombra",
     expect(s.leer().conectores).toBeUndefined();
   });
 });
+
+describe("store: guardar desde el editor y la base de sus marcas", () => {
+  const ALTA = { clase: "alta", pasos: [], proveedores: [], entornos: [], proyectos: [], ramas: [], proyectoAbierto: true };
+
+  it("el fichero trae su huella: un campo nuevo no llega hasta que se nombra en la lista blanca", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "fichero", ruta: "a.xne", texto: "uno", recortado: false, binario: false, bytes: 3, codificacion: "utf-8", huella: "h1" });
+    expect(s.leer().contenidos?.["a.xne"]?.huella).toBe("h1");
+  });
+
+  it("cada «ficheroGuardado» sube la secuencia, aunque repita lo mismo", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "ficheroGuardado", ruta: "a.xne", error: "el fichero cambió desde que lo abriste: recárgalo antes de guardar" });
+    expect(s.leer().ultimoGuardado).toEqual({ ruta: "a.xne", error: "el fichero cambió desde que lo abriste: recárgalo antes de guardar", secuencia: 1 });
+    s.aplicar({ clase: "ficheroGuardado", ruta: "a.xne", error: "el fichero cambió desde que lo abriste: recárgalo antes de guardar" });
+    expect(s.leer().ultimoGuardado?.secuencia).toBe(2);
+    s.aplicar({ clase: "ficheroGuardado", ruta: "a.xne", huella: "h2", basura: "no viaja" });
+    expect(s.leer().ultimoGuardado).toEqual({ ruta: "a.xne", huella: "h2", secuencia: 3 });
+  });
+
+  it("«baseDeFichero» se guarda por ruta con lo que trae, y una base desconocida se tira", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "baseDeFichero", ruta: "a.xne", base: "sesion", texto: "antes" });
+    s.aplicar({ clase: "baseDeFichero", ruta: "b.xne", base: "commit", vacio: true });
+    s.aplicar({ clase: "baseDeFichero", ruta: "c.xne", base: "sesion", sinBase: "el proyecto no está en un repositorio git" });
+    s.aplicar({ clase: "baseDeFichero", ruta: "d.xne", base: "ayer", texto: "x" });
+    expect(s.leer().bases).toEqual({
+      "a.xne": { ruta: "a.xne", base: "sesion", texto: "antes" },
+      "b.xne": { ruta: "b.xne", base: "commit", vacio: true },
+      "c.xne": { ruta: "c.xne", base: "sesion", sinBase: "el proyecto no está en un repositorio git" },
+    });
+  });
+
+  it("la base se tira con la sesión y sin cable; el último guardado NO, porque su secuencia es la que se compara", () => {
+    const s = crearStoreDelCliente();
+    s.marcarConectado();
+    s.aplicar({ ...ALTA, sesionActiva: "s1" });
+    s.aplicar({ clase: "baseDeFichero", ruta: "a.xne", base: "sesion", texto: "antes" });
+    s.aplicar({ clase: "ficheroGuardado", ruta: "a.xne", huella: "h2" });
+    s.aplicar({ ...ALTA, sesionActiva: "s2" });
+    expect(s.leer().bases).toBeUndefined();
+    s.aplicar({ clase: "baseDeFichero", ruta: "a.xne", base: "sesion", texto: "antes" });
+    s.marcarDesconectado();
+    expect(s.leer().bases).toBeUndefined();
+    expect(s.leer().ultimoGuardado?.secuencia).toBe(1);
+  });
+});

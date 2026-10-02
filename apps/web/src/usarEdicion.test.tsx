@@ -1,0 +1,162 @@
+import { act, renderHook } from "@testing-library/react";
+import { describe, expect, it, vi, type Mock } from "vitest";
+import { DEMASIADO_GRANDE, SE_CORTO_EL_CABLE, usarEdicion, type UltimoGuardado } from "./usarEdicion.js";
+import { TOPE_DEL_CUERPO_DEL_CABLE } from "./edicion.js";
+import type { BaseDelFichero, FicheroDelProyecto } from "./tipos.js";
+
+const FICHERO: FicheroDelProyecto = { ruta: "a.xne", texto: "uno\r\ndos\r\n", recortado: false, binario: false, bytes: 10, codificacion: "utf-8", huella: "h1" };
+
+interface Entrada {
+  proyecto: string | undefined;
+  contenidos: Record<string, FicheroDelProyecto> | undefined;
+  bases: Record<string, BaseDelFichero> | undefined;
+  ultimoGuardado: UltimoGuardado | undefined;
+  conectado: boolean | undefined;
+}
+
+function montar(enviar: Mock<(m: unknown) => Promise<unknown>> = vi.fn(() => Promise.resolve(undefined))) {
+  const inicial: Entrada = { proyecto: "p1", contenidos: { "a.xne": FICHERO }, bases: undefined, ultimoGuardado: undefined, conectado: true };
+  const vista = renderHook((e: Entrada) => usarEdicion({ enviar, ...e }), { initialProps: inicial });
+  return { enviar, vista, inicial };
+}
+const mandados = (enviar: Mock<(m: unknown) => Promise<unknown>>, clase: string) =>
+  enviar.mock.calls.map(([m]) => m as { clase: string }).filter((m) => m.clase === clase);
+
+describe("usarEdicion", () => {
+  it("abrir un fichero editable pide su base del inicio de la sesión; uno que no lo es no abre nada", () => {
+    const { enviar, vista } = montar();
+    act(() => vista.result.current.abrir({ ...FICHERO, codificacion: "latin1" }));
+    expect(vista.result.current.actual).toBeUndefined();
+    act(() => vista.result.current.abrir(FICHERO));
+    expect(vista.result.current.actual).toMatchObject({ ruta: "a.xne", original: "uno\ndos\n", huella: "h1", finDeLinea: "\r\n", sucio: false, guardando: false });
+    expect(vista.result.current.textoVivo()).toBe("uno\ndos\n");
+    expect(enviar).toHaveBeenCalledWith({ clase: "baseDeFichero", ruta: "a.xne", base: "sesion" });
+  });
+
+  it("cambiar marca «sucio», y volver al texto de antes lo desmarca", () => {
+    const { vista } = montar();
+    act(() => vista.result.current.abrir(FICHERO));
+    act(() => vista.result.current.cambiar("uno\nDOS\n"));
+    expect(vista.result.current.actual?.sucio).toBe(true);
+    act(() => vista.result.current.cambiar("uno\ndos\n"));
+    expect(vista.result.current.actual?.sucio).toBe(false);
+  });
+
+  it("guardar manda la huella y el texto con su CRLF; sin cambios no manda nada", () => {
+    const { enviar, vista } = montar();
+    act(() => vista.result.current.abrir(FICHERO));
+    act(() => vista.result.current.guardar());
+    expect(mandados(enviar, "guardarFichero")).toEqual([]);
+    act(() => vista.result.current.cambiar("uno\nDOS\n"));
+    act(() => vista.result.current.guardar());
+    expect(mandados(enviar, "guardarFichero")).toEqual([{ clase: "guardarFichero", ruta: "a.xne", texto: "uno\r\nDOS\r\n", huella: "h1" }]);
+    expect(vista.result.current.actual?.guardando).toBe(true);
+  });
+
+  it("lo que no cabe por el cable no se manda: se dice", () => {
+    const { enviar, vista } = montar();
+    act(() => vista.result.current.abrir(FICHERO));
+    act(() => vista.result.current.cambiar("\t".repeat(TOPE_DEL_CUERPO_DEL_CABLE)));
+    act(() => vista.result.current.guardar());
+    expect(mandados(enviar, "guardarFichero")).toEqual([]);
+    expect(vista.result.current.actual?.error).toBe(DEMASIADO_GRANDE);
+  });
+
+  it("la respuesta con huella deja limpio lo que se mandó, y pide fichero, revisión y base", () => {
+    const { enviar, vista, inicial } = montar();
+    act(() => vista.result.current.abrir(FICHERO));
+    act(() => vista.result.current.cambiar("uno\nDOS\n"));
+    act(() => vista.result.current.guardar());
+    enviar.mockClear();
+    vista.rerender({ ...inicial, ultimoGuardado: { ruta: "a.xne", huella: "h2", secuencia: 1 } });
+    expect(vista.result.current.actual).toMatchObject({ original: "uno\nDOS\n", huella: "h2", sucio: false, guardando: false });
+    expect(enviar).toHaveBeenCalledWith({ clase: "fichero", ruta: "a.xne" });
+    expect(enviar).toHaveBeenCalledWith({ clase: "revision" });
+    expect(enviar).toHaveBeenCalledWith({ clase: "baseDeFichero", ruta: "a.xne", base: "sesion" });
+  });
+
+  it("la respuesta con error lo enseña y deja guardar otra vez", () => {
+    const { vista, inicial } = montar();
+    act(() => vista.result.current.abrir(FICHERO));
+    act(() => vista.result.current.cambiar("uno\nDOS\n"));
+    act(() => vista.result.current.guardar());
+    vista.rerender({ ...inicial, ultimoGuardado: { ruta: "a.xne", error: "espera a que termine el turno: el agente está trabajando en este proyecto", secuencia: 1 } });
+    expect(vista.result.current.actual).toMatchObject({ guardando: false, sucio: true, error: "espera a que termine el turno: el agente está trabajando en este proyecto" });
+  });
+
+  it("un guardado de OTRA pestaña (sin uno en vuelo aquí) es un cambio en disco: se pide el fichero", () => {
+    const { enviar, vista, inicial } = montar();
+    act(() => vista.result.current.abrir(FICHERO));
+    enviar.mockClear();
+    vista.rerender({ ...inicial, ultimoGuardado: { ruta: "a.xne", huella: "h9", secuencia: 1 } });
+    expect(enviar).toHaveBeenCalledWith({ clase: "fichero", ruta: "a.xne" });
+    expect(vista.result.current.actual?.huella).toBe("h1");
+  });
+
+  it("una versión nueva sin cambios propios se recarga sola", () => {
+    const { vista, inicial } = montar();
+    act(() => vista.result.current.abrir(FICHERO));
+    const generacion = vista.result.current.actual!.generacion;
+    vista.rerender({ ...inicial, contenidos: { "a.xne": { ...FICHERO, texto: "otro\n", huella: "h3" } } });
+    expect(vista.result.current.actual).toMatchObject({ original: "otro\n", huella: "h3", sucio: false, finDeLinea: "\n" });
+    expect(vista.result.current.actual!.generacion).toBe(generacion + 1);
+    expect(vista.result.current.textoVivo()).toBe("otro\n");
+  });
+
+  it("una versión nueva con cambios sin guardar NO los pisa: sale la banda, y se elige", () => {
+    const { vista, inicial } = montar();
+    act(() => vista.result.current.abrir(FICHERO));
+    act(() => vista.result.current.cambiar("mío\n"));
+    const nueva = { ...inicial, contenidos: { "a.xne": { ...FICHERO, texto: "otro\n", huella: "h3" } } };
+    vista.rerender(nueva);
+    expect(vista.result.current.actual?.versionNueva).toEqual({ original: "otro\n", huella: "h3", finDeLinea: "\n" });
+    expect(vista.result.current.textoVivo()).toBe("mío\n");
+
+    act(() => vista.result.current.seguirConLosMios());
+    expect(vista.result.current.actual?.versionNueva).toBeUndefined();
+    vista.rerender({ ...nueva, contenidos: { "a.xne": { ...FICHERO, texto: "otro\n", huella: "h3" } } });
+    expect(vista.result.current.actual?.versionNueva).toBeUndefined(); // la misma huella no vuelve a salir
+
+    vista.rerender({ ...inicial, contenidos: { "a.xne": { ...FICHERO, texto: "tercero\n", huella: "h4" } } });
+    act(() => vista.result.current.recargar());
+    expect(vista.result.current.actual).toMatchObject({ original: "tercero\n", huella: "h4", sucio: false });
+    expect(vista.result.current.textoVivo()).toBe("tercero\n");
+  });
+
+  it("«haySinGuardar» contesta al momento, sin esperar a repintar: tras cerrar ya es falso", () => {
+    const { vista } = montar();
+    act(() => vista.result.current.abrir(FICHERO));
+    act(() => vista.result.current.cambiar("mío\n"));
+    const control = vista.result.current;
+    expect(control.haySinGuardar()).toBe(true);
+    act(() => control.cerrar());
+    // El mismo objeto, sin repintar entre medias: es lo que ve la acción que sigue a «Descartar».
+    expect(control.haySinGuardar()).toBe(false);
+  });
+
+  it("cambiar de proyecto suelta la edición: guardar escribe en el ABIERTO", () => {
+    const { vista, inicial } = montar();
+    act(() => vista.result.current.abrir(FICHERO));
+    vista.rerender({ ...inicial, proyecto: "p2" });
+    expect(vista.result.current.actual).toBeUndefined();
+  });
+
+  it("si se cae el cable con un guardado en vuelo, se dice que no se sabe", () => {
+    const { vista, inicial } = montar();
+    act(() => vista.result.current.abrir(FICHERO));
+    act(() => vista.result.current.cambiar("mío\n"));
+    act(() => vista.result.current.guardar());
+    vista.rerender({ ...inicial, conectado: false });
+    expect(vista.result.current.actual).toMatchObject({ guardando: false, error: SE_CORTO_EL_CABLE });
+  });
+
+  it("la base es la de la ruta y la base ELEGIDA; elegir otra la pide", () => {
+    const { enviar, vista, inicial } = montar();
+    act(() => vista.result.current.abrir(FICHERO));
+    vista.rerender({ ...inicial, bases: { "a.xne": { ruta: "a.xne", base: "sesion", texto: "uno\n" } } });
+    expect(vista.result.current.base).toEqual({ ruta: "a.xne", base: "sesion", texto: "uno\n" });
+    act(() => vista.result.current.elegirBase("commit"));
+    expect(vista.result.current.base).toBeUndefined();
+    expect(enviar).toHaveBeenCalledWith({ clase: "baseDeFichero", ruta: "a.xne", base: "commit" });
+  });
+});
