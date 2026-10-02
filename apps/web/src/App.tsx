@@ -43,7 +43,16 @@ import {
 import { etiquetaDeClave } from "./etiquetaDeClave.js";
 import { TarjetaDeCerrar, AvisoDelGestor, BotonDeCerrarEnJira } from "./componentes/TarjetaDeJira.js";
 import { Ejecutar } from "./componentes/Ejecutar.js";
-import { aplicarApariencia, guardarApariencia, leerApariencia, type Apariencia } from "./apariencia.js";
+import {
+  aplicarApariencia,
+  guardarApariencia,
+  guardarTema,
+  leerApariencia,
+  leerTemas,
+  type Apariencia,
+  type TemasElegidos,
+} from "./apariencia.js";
+import type { ModoDeTema } from "./temas.js";
 import {
   guardarAnchoBarra,
   guardarAnchoPanel,
@@ -1026,21 +1035,32 @@ export function App({
     pedirPlanes();
   }, [estado.conectado, hayProyectoAbierto, tienePlanes, pedirPlanes]);
   const [apariencia, setApariencia] = useState<Apariencia>(() => leerApariencia());
+  /** El tema de cada modo: de este navegador, como la apariencia (`apariencia.ts`). */
+  const [temas, setTemas] = useState<TemasElegidos>(() => leerTemas());
+  /** Qué modo pinta AHORA: lo dice el atributo que pone `aplicarApariencia`, no la preferencia. */
+  const [modoEnVigor, setModoEnVigor] = useState<ModoDeTema>("claro");
 
   useEffect(() => {
-    aplicarApariencia(apariencia);
+    const aplicar = (): void => {
+      aplicarApariencia(apariencia, temas);
+      setModoEnVigor(document.body.hasAttribute("data-ds-dark-theme") ? "oscuro" : "claro");
+    };
+    aplicar();
     // Con «sistema» hay que seguir escuchando: el usuario puede cambiar el modo del sistema
     // con la pestaña abierta, y quedarse en claro sobre un escritorio que se ha puesto
-    // oscuro es justo lo que «como el sistema» promete que no pasa.
+    // oscuro es justo lo que «como el sistema» promete que no pasa. El tema va con el modo.
     if (apariencia !== "sistema" || typeof window.matchMedia !== "function") return;
     const medio = window.matchMedia("(prefers-color-scheme: dark)");
-    const alCambiar = (): void => aplicarApariencia("sistema");
-    medio.addEventListener("change", alCambiar);
-    return () => medio.removeEventListener("change", alCambiar);
-  }, [apariencia]);
+    medio.addEventListener("change", aplicar);
+    return () => medio.removeEventListener("change", aplicar);
+  }, [apariencia, temas]);
   const alCambiarApariencia = (nueva: Apariencia): void => {
     setApariencia(nueva);
     guardarApariencia(nueva);
+  };
+  const alCambiarTema = (modo: ModoDeTema, id: string): void => {
+    setTemas((antes) => ({ ...antes, [modo]: id }));
+    guardarTema(modo, id);
   };
 
   /**
@@ -1746,6 +1766,9 @@ export function App({
 
   const ventanaDeAjustes = ajustesAbiertos ? (
     <Ajustes
+      temas={temas}
+      modoEnVigor={modoEnVigor}
+      alCambiarTema={alCambiarTema}
       {...(seccionDeAjustes === undefined ? {} : { seccionInicial: seccionDeAjustes })}
       {...(estado.modelos === undefined ? {} : { proveedores: estado.modelos.proveedores })}
       entornos={estado.alta?.registrados ?? []}

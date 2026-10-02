@@ -30,6 +30,9 @@ import type {
 } from "../tipos.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, seMira, type ModoDeEscritura } from "../tipos.js";
 import { SelectorDeModo } from "./SelectorDeModo.js";
+import { SelectorDeTema } from "./SelectorDeTema.js";
+import type { TemasElegidos } from "../apariencia.js";
+import type { ModoDeTema } from "../temas.js";
 import { etiquetaDeEstado, inventario, seLlegaAlDispositivo, type FilaDeInventario } from "../inventarioDeDispositivos.js";
 import estilosDeAccion from "./VerificarDispositivo.module.css";
 import { ArrancarEmulador } from "./ArrancarEmulador.js";
@@ -442,6 +445,9 @@ export function Ajustes({
   depuracionActiva,
   alCambiarDepuracion,
   modoPorDefecto,
+  temas,
+  modoEnVigor,
+  alCambiarTema,
   alCambiarModoPorDefecto,
   alElegirCarpeta,
   carpetaElegida,
@@ -685,6 +691,14 @@ export function Ajustes({
    * proyecto, en su panel, gana sobre éste. Ausente = esta ejecución no lo dice, y no se pinta.
    */
   modoPorDefecto?: ModoDeEscritura;
+  /**
+   * El tema elegido para cada modo (`src/temas.ts`). Es de ESTE navegador, como el modo, y no
+   * viaja por el cable. Ausente = no se pinta la sección.
+   */
+  temas?: TemasElegidos;
+  /** Qué modo pinta la consola AHORA: decide en qué fila sale «se aplica cuando…». */
+  modoEnVigor?: ModoDeTema;
+  alCambiarTema?: (modo: ModoDeTema, id: string) => void;
   /** Cambia el modo por defecto. Ausente = se enseña sin poder cambiarlo. */
   alCambiarModoPorDefecto?: (modo: ModoDeEscritura) => void;
   /**
@@ -2023,6 +2037,31 @@ export function Ajustes({
                     puede leerlos. Solo afecta a las conversaciones que abras a partir de ahora, no a la
                     que tengas abierta. Apágala si te sobra el ruido.
                   </p>
+                </>
+              )}
+
+              {/*
+                Los temas: uno por modo. Va en General porque es de esta MÁQUINA (este navegador),
+                no de un proyecto. El modo se sigue eligiendo en la cabecera; aquí, qué tema pinta
+                cada modo.
+              */}
+              {temas === undefined ? null : (
+                <>
+                  <h3 className={estilos.subencabezado}>Temas</h3>
+                  <p className={estilos.nota}>
+                    Un tema para el modo claro y otro para el oscuro. El modo lo eliges en la cabecera; aquí, con
+                    qué colores se pinta cada uno. Se recuerda en este navegador.
+                  </p>
+                  {(["claro", "oscuro"] as const).map((modo) => (
+                    <SelectorDeTema
+                      key={modo}
+                      modo={modo}
+                      elegido={temas[modo]}
+                      enVigor={modoEnVigor === undefined || modoEnVigor === modo}
+                      rotulo={modo === "claro" ? "Tema claro" : "Tema oscuro"}
+                      alElegir={(id) => alCambiarTema?.(modo, id)}
+                    />
+                  ))}
                 </>
               )}
 

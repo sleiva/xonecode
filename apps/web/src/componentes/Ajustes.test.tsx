@@ -477,6 +477,37 @@ describe("Ajustes", () => {
     });
   });
 
+  describe("los temas", () => {
+    it("sin temas NO se pinta la sección", () => {
+      render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado seccionInicial="general" />);
+      expect(screen.queryByRole("group", { name: "Tema claro" })).toBeNull();
+      expect(screen.queryByRole("group", { name: "Tema oscuro" })).toBeNull();
+    });
+
+    it("enseña los dos con lo elegido, y avisa al cambiar", () => {
+      const vistos: Array<[string, string]> = [];
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          seccionInicial="general"
+          temas={{ claro: "github-claro", oscuro: "dracula" }}
+          modoEnVigor="oscuro"
+          alCambiarTema={(modo, id) => void vistos.push([modo, id])}
+        />
+      );
+      const claro = screen.getByRole("group", { name: "Tema claro" });
+      const oscuro = screen.getByRole("group", { name: "Tema oscuro" });
+      expect(within(claro).getByRole("button", { name: "GitHub Light" }).getAttribute("aria-pressed")).toBe("true");
+      expect(within(oscuro).getByRole("button", { name: "Dracula" }).getAttribute("aria-pressed")).toBe("true");
+      expect(screen.getByText("Se aplica cuando la consola esté en claro.")).toBeTruthy();
+      expect(screen.queryByText("Se aplica cuando la consola esté en oscuro.")).toBeNull();
+      fireEvent.click(within(oscuro).getByRole("button", { name: "One Dark" }));
+      expect(vistos).toEqual([["oscuro", "one-oscuro"]]);
+    });
+  });
+
   describe("las conversaciones nuevas (IXCODE-31)", () => {
     const GRUPO = "modo de escritura de las conversaciones nuevas";
 
