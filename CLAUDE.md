@@ -887,9 +887,20 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   respuesta va junto a copiar, y los dos siempre a la vista (nada aparece solo al posar el ratón). El
   mensaje de la persona lleva la MISMA fila (hora y copiar). Siempre con el día: «hoy a las…», «ayer a las…» (por el calendario), o la fecha.
 - **`localStorage` es de ESTE navegador**: todo acceso envuelto en `try`.
-- **Ningún color literal fuera de `estilos/marca.css` y `splash.css`** (`Barra.test.tsx` lo
+- **Ningún color literal fuera de `estilos/marca.css`, `splash.css` y `src/temas.ts`** (`Barra.test.tsx` lo
   vigila recorriendo TODOS los `.module.css`), `transparent` incluido. El cian es ACENTO y no
   sostiene texto.
+- **Un tema por MODO, y XOneCode no pasa por el puente** (`src/temas.ts`, `estilos/temas.css`):
+  el modo (sistema/claro/oscuro) lo decide `apariencia.ts`, y encima se aplica el tema elegido
+  para ESE modo. Un tema son semillas (`NOMBRES_DE_SEMILLA`) que `aplicarApariencia` escribe como
+  `--tema-*` en el `body` junto a `data-tema`; el puente las reparte a los alias. **XOneCode no
+  tiene semillas**: aplicarlo QUITA `data-tema`, así que se ve como siempre por construcción. Se
+  recuerda en ESTE navegador (`xonecode.tema.claro`/`.oscuro`) y un id desconocido es XOneCode.
+  Los tests: el contraste WCAG de cada tema (`temas.test.ts`, un fallo se arregla en la semilla,
+  nunca bajando el umbral), que el puente cubra CADA alias usado y no lleve literales
+  y que todo alias usado EXISTA (los dos en `estilosDelCliente.test.ts`: uno inexistente resuelve a nada
+  y no da error). Los derivados se REDECLARAN en el puente: en `:root` un `var()`
+  se resuelve donde se declara. **Límite declarado**: el visor de OpenUI solo recibe claro/oscuro.
 - **El botón de enviar lleva el AZUL de la marca** (`--xonecode-azul`/`--xonecode-sobre-azul`); el
   cian se queda para su hover. PARAR se queda ROJO —es un estado, no la marca—.
 - **La caja del compositor va en TRES BANDAS** (maqueta de Stitch, `code.html`): arriba modelo +
