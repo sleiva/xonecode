@@ -68,7 +68,7 @@ describe("usarEdicion", () => {
     act(() => vista.result.current.cambiar("uno\nDOS\n"));
     act(() => vista.result.current.guardar());
     enviar.mockClear();
-    vista.rerender({ ...inicial, ultimoGuardado: { ruta: "a.xne", huella: "h2", secuencia: 1 } });
+    vista.rerender({ ...inicial, ultimoGuardado: { ruta: "a.xne", huella: "h2", desde: "h1", secuencia: 1 } });
     expect(vista.result.current.actual).toMatchObject({ original: "uno\nDOS\n", huella: "h2", sucio: false, guardando: false });
     expect(enviar).toHaveBeenCalledWith({ clase: "fichero", ruta: "a.xne" });
     expect(enviar).toHaveBeenCalledWith({ clase: "revision" });
@@ -80,7 +80,7 @@ describe("usarEdicion", () => {
     act(() => vista.result.current.abrir(FICHERO));
     act(() => vista.result.current.cambiar("uno\nDOS\n"));
     act(() => vista.result.current.guardar());
-    vista.rerender({ ...inicial, ultimoGuardado: { ruta: "a.xne", error: "espera a que termine el turno: el agente está trabajando en este proyecto", secuencia: 1 } });
+    vista.rerender({ ...inicial, ultimoGuardado: { ruta: "a.xne", desde: "h1", error: "espera a que termine el turno: el agente está trabajando en este proyecto", secuencia: 1 } });
     expect(vista.result.current.actual).toMatchObject({ guardando: false, sucio: true, error: "espera a que termine el turno: el agente está trabajando en este proyecto" });
   });
 
@@ -91,6 +91,22 @@ describe("usarEdicion", () => {
     vista.rerender({ ...inicial, ultimoGuardado: { ruta: "a.xne", huella: "h9", secuencia: 1 } });
     expect(enviar).toHaveBeenCalledWith({ clase: "fichero", ruta: "a.xne" });
     expect(vista.result.current.actual?.huella).toBe("h1");
+  });
+
+  it("la respuesta de OTRA pestaña mientras guardo no es la mía: no adopto su huella, y mi rechazo llega después", () => {
+    const { enviar, vista, inicial } = montar();
+    act(() => vista.result.current.abrir(FICHERO));
+    act(() => vista.result.current.cambiar("uno\nMIO\n"));
+    act(() => vista.result.current.guardar());
+    enviar.mockClear();
+    // La otra pestaña guardó desde h1 y el servidor la aceptó: yo también partía de h1.
+    vista.rerender({ ...inicial, ultimoGuardado: { ruta: "a.xne", huella: "h2", desde: "h1x", secuencia: 1 } });
+    expect(vista.result.current.actual).toMatchObject({ huella: "h1", sucio: true, guardando: true, original: "uno\ndos\n" });
+    expect(enviar).toHaveBeenCalledWith({ clase: "fichero", ruta: "a.xne" });
+    // Y ahora mi rechazo, que sí lleva la huella que mandé.
+    vista.rerender({ ...inicial, ultimoGuardado: { ruta: "a.xne", desde: "h1", error: "el fichero cambió desde que lo abriste: recárgalo antes de guardar", secuencia: 2 } });
+    expect(vista.result.current.actual).toMatchObject({ guardando: false, sucio: true, error: "el fichero cambió desde que lo abriste: recárgalo antes de guardar" });
+    expect(vista.result.current.textoVivo()).toBe("uno\nMIO\n");
   });
 
   it("una versión nueva sin cambios propios se recarga sola", () => {
@@ -148,6 +164,18 @@ describe("usarEdicion", () => {
     act(() => vista.result.current.guardar());
     vista.rerender({ ...inicial, conectado: false });
     expect(vista.result.current.actual).toMatchObject({ guardando: false, error: SE_CORTO_EL_CABLE });
+  });
+
+  it("elegir «commit» y volver a «sesion» no deja la base de commit: se pide otra vez", () => {
+    const { enviar, vista, inicial } = montar();
+    act(() => vista.result.current.abrir(FICHERO));
+    act(() => vista.result.current.elegirBase("commit"));
+    act(() => vista.result.current.elegirBase("sesion"));
+    enviar.mockClear();
+    // La respuesta de «commit» llega TARDE, después de haber vuelto a «sesion».
+    vista.rerender({ ...inicial, bases: { "a.xne": { ruta: "a.xne", base: "commit", texto: "viejo\n" } } });
+    expect(vista.result.current.base).toBeUndefined();
+    expect(enviar).toHaveBeenLastCalledWith({ clase: "baseDeFichero", ruta: "a.xne", base: "sesion" });
   });
 
   it("la base es la de la ruta y la base ELEGIDA; elegir otra la pide", () => {

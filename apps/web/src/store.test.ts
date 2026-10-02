@@ -2094,6 +2094,8 @@ describe("store: guardar desde el editor y la base de sus marcas", () => {
     expect(s.leer().ultimoGuardado?.secuencia).toBe(2);
     s.aplicar({ clase: "ficheroGuardado", ruta: "a.xne", huella: "h2", basura: "no viaja" });
     expect(s.leer().ultimoGuardado).toEqual({ ruta: "a.xne", huella: "h2", secuencia: 3 });
+    s.aplicar({ clase: "ficheroGuardado", ruta: "a.xne", huella: "h3", desde: "h2" });
+    expect(s.leer().ultimoGuardado).toEqual({ ruta: "a.xne", huella: "h3", desde: "h2", secuencia: 4 });
   });
 
   it("«baseDeFichero» se guarda por ruta con lo que trae, y una base desconocida se tira", () => {

@@ -311,7 +311,7 @@ export interface EstadoDelCliente {
    * seguidos son dos respuestas—, por eso esto NO se tira nunca: tirarlo reiniciaría la cuenta y
    * la siguiente respuesta se confundiría con una ya vista.
    */
-  ultimoGuardado?: { ruta: string; huella?: string; error?: string; secuencia: number };
+  ultimoGuardado?: { ruta: string; desde?: string; huella?: string; error?: string; secuencia: number };
   /** La base de comparación del editor, por ruta (la última que llegó). Una foto de git: se tira
    *  con la sesión y sin cable, como los parches. */
   bases?: Record<string, BaseDelFichero>;
@@ -1831,11 +1831,12 @@ export function crearStoreDelCliente(): {
           return;
         }
         case "ficheroGuardado": {
-          const m = mensaje as { ruta?: unknown; huella?: unknown; error?: unknown };
+          const m = mensaje as { ruta?: unknown; desde?: unknown; huella?: unknown; error?: unknown };
           if (typeof m.ruta !== "string") return;
           mutar({
             ultimoGuardado: {
               ruta: m.ruta,
+              ...(typeof m.desde === "string" ? { desde: m.desde } : {}),
               ...(typeof m.huella === "string" ? { huella: m.huella } : {}),
               ...(typeof m.error === "string" ? { error: m.error } : {}),
               secuencia: (estado.ultimoGuardado?.secuencia ?? 0) + 1,

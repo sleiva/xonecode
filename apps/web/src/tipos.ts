@@ -821,7 +821,7 @@ export type MensajeAlCliente =
     }
   | ({ clase: "fichero" } & FicheroDelProyecto)
   /** La respuesta a guardar: con `huella` se escribió; con `error`, no se tocó nada. */
-  | { clase: "ficheroGuardado"; ruta: string; huella?: string; error?: string }
+  | { clase: "ficheroGuardado"; ruta: string; desde: string; huella?: string; error?: string }
   /** La base de comparación de un fichero. */
   | ({ clase: "baseDeFichero" } & BaseDelFichero)
   /** El estado de sincronización del proyecto abierto (pestaña CloudStudio). `proyecto` y

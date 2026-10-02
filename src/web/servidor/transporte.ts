@@ -661,7 +661,7 @@ export type MensajeAlCliente =
    * escribió y esa es la nueva; con `error`, no se tocó nada. Va a TODOS los clientes: otra pestaña
    * con el mismo fichero abierto se entera de que el disco cambió.
    */
-  | { clase: "ficheroGuardado"; ruta: string; huella?: string; error?: string }
+  | { clase: "ficheroGuardado"; ruta: string; desde: string; huella?: string; error?: string }
   /** La base de comparación de un fichero, para las marcas del margen del editor. */
   | ({ clase: "baseDeFichero" } & BaseDelFichero)
   /**

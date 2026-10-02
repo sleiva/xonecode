@@ -39,6 +39,8 @@ export interface EstadoDeEdicion {
 
 export interface UltimoGuardado {
   ruta: string;
+  /** La huella de la que PARTIÓ el guardado al que contesta: así se sabe si es el de esta pestaña. */
+  desde?: string;
   huella?: string;
   error?: string;
   secuencia: number;
@@ -91,12 +93,17 @@ export function usarEdicion({
   conectado: boolean | undefined;
 }): ControlDeEdicion {
   const [actual, setActual] = useState<EstadoDeEdicion | undefined>(undefined);
+  // La base guardada que ya se miró al elegir otra: si llega una DISTINTA de la elegida (la respuesta
+  // tardía de la que se dejó), se vuelve a pedir; la misma no, para no pedir en bucle.
+  const baseVista = useRef<BaseDelFichero | undefined>(undefined);
   const [baseElegida, setBaseElegida] = useState<BaseElegida>("sesion");
   // El estado también en un `ref`, escrito a la vez: dos llamadas en el mismo tic (cambiar y
   // guardar con Cmd+S) tienen que ver lo que dejó la primera, no lo del último render.
   const actualRef = useRef<EstadoDeEdicion | undefined>(actual);
   const textoRef = useRef("");
   const enviadoRef = useRef<string | undefined>(undefined);
+  // La huella de la que partió el guardado en vuelo: con ella se reconoce SU respuesta.
+  const huellaMandadaRef = useRef<string | undefined>(undefined);
   // La secuencia ya vista AL MONTAR: una respuesta vieja que siga en el store no es para nosotros.
   const guardadoVisto = useRef(ultimoGuardado?.secuencia ?? 0);
 
@@ -173,6 +180,7 @@ export function usarEdicion({
     }
     // Lo que se manda, no lo que haya al llegar la respuesta: se puede seguir tecleando mientras.
     enviadoRef.current = textoRef.current;
+    huellaMandadaRef.current = a.huella;
     const { error: _error, ...sinError } = a;
     fijar({ ...sinError, guardando: true });
     enviar(mensaje).then(
@@ -191,7 +199,10 @@ export function usarEdicion({
     guardadoVisto.current = ultimoGuardado.secuencia;
     const a = actualRef.current;
     if (a === undefined || a.ruta !== ultimoGuardado.ruta) return;
-    if (!a.guardando) {
+    // La respuesta llega a TODAS las pestañas: es la mía solo si partía de la huella que mandé.
+    // Otra (de otra pestaña, aunque acepte o rechace) es un cambio en disco: se pide el fichero y
+    // el flujo de «versión nueva» decide —recarga sola o banda—.
+    if (!a.guardando || ultimoGuardado.desde !== huellaMandadaRef.current) {
       void enviar({ clase: "fichero", ruta: a.ruta });
       return;
     }
@@ -269,6 +280,7 @@ export function usarEdicion({
     (base: BaseElegida) => {
       setBaseElegida(base);
       const a = actualRef.current;
+      baseVista.current = a === undefined ? undefined : basesRef.current?.[a.ruta];
       if (a !== undefined) pedirBaseDe(a.ruta, base);
     },
     [pedirBaseDe]
@@ -279,10 +291,19 @@ export function usarEdicion({
     if (a !== undefined) pedirBaseDe(a.ruta, baseElegida);
   }, [pedirBaseDe, baseElegida]);
 
+  const basesRef = useRef(bases);
+  basesRef.current = bases;
+
   const textoVivo = useCallback(() => textoRef.current, []);
   const haySinGuardar = useCallback(() => actualRef.current?.sucio === true, []);
 
   const deLaRuta = actual === undefined ? undefined : bases?.[actual.ruta];
+  const rutaEnEdicion = actual?.ruta;
+  useEffect(() => {
+    if (rutaEnEdicion === undefined || deLaRuta === undefined || deLaRuta.base === baseElegida || deLaRuta === baseVista.current) return;
+    baseVista.current = deLaRuta;
+    pedirBaseDe(rutaEnEdicion, baseElegida);
+  }, [rutaEnEdicion, deLaRuta, baseElegida, pedirBaseDe]);
   const base = deLaRuta !== undefined && deLaRuta.base === baseElegida ? deLaRuta : undefined;
 
   return useMemo(

@@ -4368,23 +4368,25 @@ export function montarRutas(
   const atenderGuardarFichero = async (ruta: string, texto: string, huella: string): Promise<void> => {
     const abierto = vestibulo.proyectoAbierto();
     if (abierto === undefined) {
-      emitir({ clase: "ficheroGuardado", ruta, error: "no hay ningún proyecto abierto" });
+      emitir({ clase: "ficheroGuardado", ruta, desde: huella, error: "no hay ningún proyecto abierto" });
       return;
     }
     if (opciones.escribirFichero === undefined) {
-      emitir({ clase: "ficheroGuardado", ruta, error: "esta ejecución no puede escribir en el proyecto" });
+      emitir({ clase: "ficheroGuardado", ruta, desde: huella, error: "esta ejecución no puede escribir en el proyecto" });
       return;
     }
     const ocupado = vestibulo.motivoParaNoEditar(abierto.raiz);
     if (ocupado !== undefined) {
-      emitir({ clase: "ficheroGuardado", ruta, error: ocupado });
+      emitir({ clase: "ficheroGuardado", ruta, desde: huella, error: ocupado });
       return;
     }
     try {
-      emitir({ clase: "ficheroGuardado", ...(await opciones.escribirFichero(abierto.raiz, ruta, texto, huella)) });
+      // `desde` es la huella con que PARTIÓ este guardado: la respuesta va a todas las pestañas, y cada
+      // una reconoce la suya por ella (dos pestañas que parten de la misma versión no se confunden).
+      emitir({ clase: "ficheroGuardado", ...(await opciones.escribirFichero(abierto.raiz, ruta, texto, huella)), desde: huella });
     } catch (error) {
       informar(`no se pudo guardar «${ruta}» (${codigoDe(error)})`);
-      emitir({ clase: "ficheroGuardado", ruta, error: "no se pudo guardar el fichero" });
+      emitir({ clase: "ficheroGuardado", ruta, desde: huella, error: "no se pudo guardar el fichero" });
     }
   };
 
