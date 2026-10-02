@@ -189,6 +189,38 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
+## CodeMirror (el editor de la pestaña Ficheros)
+
+`apps/web/dist/` empaqueta, en un trozo que solo se carga al pulsar «Editar», `@codemirror/state`,
+`@codemirror/view`, `@codemirror/commands`, `@codemirror/language`, `@codemirror/search`,
+`@codemirror/merge`, `@codemirror/lang-xml`, `@codemirror/lang-javascript`, `@codemirror/lang-css`,
+`@codemirror/lang-markdown`, `@codemirror/lang-json`, `@lezer/highlight` y sus dependencias
+`@lezer/*`, todos con licencia MIT.
+
+```
+MIT License
+
+Copyright (C) 2018-2022 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+```
+
 ## Lucide (iconos de los artefactos)
 
 `apps/web/src/componentes/IconosDelVisor.tsx` copia los trazados de doce iconos de
