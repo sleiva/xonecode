@@ -36,6 +36,9 @@
 .codigo.codigo.codigo :global(.cm-scroller) {
   font-family: var(--ds-font-family-code);
   line-height: 1.6;
+  /* Sin ligaduras: en XML, «-->» pintado como una flecha esconde justo los caracteres que XOne no
+     admite dentro de un comentario (`--`), y lo que se edita tiene que verse tal cual es. */
+  font-variant-ligatures: none;
 }
 
 .codigo.codigo.codigo :global(.cm-content) {

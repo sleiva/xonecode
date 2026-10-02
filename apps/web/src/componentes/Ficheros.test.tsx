@@ -241,6 +241,12 @@ describe("Ficheros", () => {
     expect(screen.getByText(/recortado a/i)).toBeTruthy();
   });
 
+  it("ni el editor ni el visor pintan ligaduras: en XML, «-->» como flecha escondería lo que XOne no admite", () => {
+    const editor = readFileSync(join(AQUI, "..", "editor", "EditorDeFichero.module.css"), "utf8");
+    expect(editor).toMatch(/:global\(\.cm-scroller\)\s*\{[^}]*font-variant-ligatures:\s*none/);
+    expect(readFileSync(join(AQUI, "Visor.module.css"), "utf8")).toMatch(/\.visor\s*\{[^}]*font-variant-ligatures:\s*none/);
+  });
+
   it("en estrecho el árbol sube por encima del visor con order, sin reordenar el DOM", () => {
     // El DOM se queda con el visor primero (Tab en el layout ancho); en estrecho es
     // `order: -1` sobre `.arbol` quien lo pone visualmente arriba.

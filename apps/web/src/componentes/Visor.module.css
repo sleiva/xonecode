@@ -3,6 +3,9 @@
 
 .visor {
   padding: 0 16px 16px;
+  /* Sin ligaduras, como el editor: «-->» como flecha escondería el `--` que XOne no admite dentro
+     de un comentario XML. */
+  font-variant-ligatures: none;
 }
 
 /* El bloque ocupa el ancho del visor y no lleva el borde de tarjeta del chat: aquí es la
