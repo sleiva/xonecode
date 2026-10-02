@@ -4,14 +4,14 @@
     {
       "id": 1,
       "subject": "Guardar en el servidor con las guardas de leer",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [],
       "description": "**Goal:** `escribirFicheroDeProyecto(raiz, ruta, texto, huella)` escribe de forma atómica conservando permisos y BOM, tras las MISMAS guardas que leer (extraídas a `resolverEnProyecto`) y la comprobación de huella; la lectura trae `huella`.\n\n**Files:**\n- Modify: `src/agent/grafo/arbolDeProyecto.ts` (imports :1-7; cabecera :9-17; `FicheroLeido` :77-103; :135-210 sustituidas por `resolverEnProyecto` + `leerFicheroDeProyecto`; rama de texto de `leerContenidoDeFichero` :317-337; funciones nuevas al final)\n- Test: `src/agent/grafo/arbolDeProyecto.test.ts` (imports :1-15; describe nuevo al final)\n\n**Acceptance Criteria:**\n- [ ] `leerFicheroDeProyecto` devuelve `huella` (sha256 hex de los bytes) solo con texto entero en UTF-8; sin ella para recortado, latin1 y binario.\n- [ ] Todos los tests existentes de `arbolDeProyecto.test.ts` siguen en verde (la lectura pasa por `resolverEnProyecto`).\n- [ ] Guardar con la huella buena escribe, devuelve la huella nueva y no deja `*.xonecode.tmp`.\n- [ ] Se niegan `../x`, `/etc/passwd`, `.env`, `.git/HEAD`, `.xonecode/config.json`, `app/Clientes.xml` (aplanada), `enlace.txt` (sale del proyecto), `enlace-env.txt`, `alias.xml`, `carpeta-enlazada/config.json`, `app` (carpeta), `no-existe.xne`, `a//b`: con motivo, sin la ruta de la máquina y sin tocar el disco.\n- [ ] Huella vieja → «el fichero cambió desde que lo abriste…», disco intacto, sin temporal.\n- [ ] Texto de más de `TOPE_DE_FICHERO` bytes (aunque tenga menos caracteres) → negado.\n- [ ] CRLF llega tal cual, permisos `0o755` se conservan, el BOM que el lector quitó vuelve, un enlace DENTRO del proyecto escribe en su destino y sigue siendo enlace, una imagen se niega, y un `EACCES` vuelve como error con su código y sin ruta.\n\n**Verify:** `npx vitest run --project host --maxWorkers=2` → todo PASS (el proyecto `host` entero: `huella` aparece también en lo que leen los artefactos y el cable, y un `toEqual` exacto en otro fichero se pondría rojo aquí y no en una tarea posterior)\n\n```json:metadata\n{\"files\": [\"src/agent/grafo/arbolDeProyecto.ts\", \"src/agent/grafo/arbolDeProyecto.test.ts\"], \"verifyCommand\": \"npx vitest run --project host --maxWorkers=2\", \"acceptanceCriteria\": [\"la lectura trae huella solo con texto entero UTF-8\", \"los tests existentes siguen verdes con resolverEnProyecto\", \"guardar con huella buena escribe y no deja temporales\", \"las trece rutas negadas sin tocar disco ni filtrar rutas\", \"huella vieja niega sin tocar disco\", \"tope en bytes\", \"CRLF, permisos, BOM, enlace interno, imagen y EACCES\"], \"modelTier\": \"standard\"}\n```"
     },
     {
       "id": 2,
       "subject": "La base de comparación, de git",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         1
       ],
@@ -20,7 +20,7 @@
     {
       "id": 3,
       "subject": "El cable: guardar y base, negado por raíz",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         2
       ],
@@ -29,7 +29,7 @@
     {
       "id": 4,
       "subject": "CodeMirror y las funciones puras del editor",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         3
       ],
@@ -38,7 +38,7 @@
     {
       "id": 5,
       "subject": "Estado de la edición: store y usarEdicion",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         4
       ],
@@ -47,7 +47,7 @@
     {
       "id": 6,
       "subject": "El editor diferido con marcas en el margen",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         5
       ],
@@ -56,7 +56,7 @@
     {
       "id": 7,
       "subject": "Ficheros y App: editar sin perder cambios",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         6
       ],
@@ -65,12 +65,12 @@
     {
       "id": 8,
       "subject": "Frontera del editor, mapa y navegador",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         7
       ],
       "description": "**Goal:** Un test de frontera que exige que CodeMirror solo se importe desde `editor/` y que a `editor/` solo se llegue con `import()`; el mapa (`CLAUDE.md`) al día; el build con el editor en un trozo aparte; y la pasada en el navegador del spec §6.\n\n**Files:**\n- Create: `apps/web/src/editor/frontera.test.ts`\n- Modify: `CLAUDE.md` (sección «La consola web», viñeta «**Ficheros y Revisión**…», ~:1003)\n\n**Acceptance Criteria:**\n- [ ] Fuera de `apps/web/src/editor/` ningún fichero que no sea test importa `@codemirror/` ni `@lezer/`, ni importa nada de `editor/` de forma estática; `Ficheros.tsx` lo carga con `lazy(() => import(\"../editor/EditorDeFichero.js\"))`.\n- [ ] `CLAUDE.md` deja de decir que Ficheros es de solo lectura, tiene la viñeta nueva y `src/documentacion.test.ts` sigue en verde.\n- [ ] `npm run build:web` deja el editor en un trozo propio (`apps/web/dist/assets/EditorDeFichero-*.js`).\n- [ ] `npm test` entero en verde y `npm run typecheck` sin errores.\n- [ ] En el navegador, con un tema claro y uno oscuro: editar un `.xne`, ver las marcas contra el inicio de la sesión, deshacer un trozo, guardar, y que el turno siguiente lo commitee.\n\n**Verify:** `npx vitest run --project cliente apps/web/src/editor/frontera.test.ts && npx vitest run --project host src/documentacion.test.ts && npm run build:web && ls apps/web/dist/assets | grep EditorDeFichero` → PASS y un `EditorDeFichero-<hash>.js`\n\n```json:metadata\n{\"files\": [\"apps/web/src/editor/frontera.test.ts\", \"CLAUDE.md\"], \"verifyCommand\": \"npx vitest run --project cliente apps/web/src/editor/frontera.test.ts && npx vitest run --project host src/documentacion.test.ts && npm run build:web && ls apps/web/dist/assets | grep EditorDeFichero\", \"acceptanceCriteria\": [\"CodeMirror solo en editor/ y editor/ solo con import()\", \"CLAUDE.md al día y documentacion.test verde\", \"el editor en un trozo propio del build\", \"npm test y typecheck verdes\", \"pasada en el navegador con tema claro y oscuro\"], \"modelTier\": \"mechanical\"}\n```"
     }
   ],
-  "lastUpdated": "2026-10-02T12:22:27.856742+00:00"
+  "lastUpdated": "2026-10-02T15:59:31"
 }
