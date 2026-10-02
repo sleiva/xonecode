@@ -19,12 +19,13 @@
  * conserva al escribir: lo que se filtra es la LECTURA, no la fusión, que es el mismo
  * reparto que ya hacían `leerAnadidos` e `idsCrudos`.
  */
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import type { OAuthClientInformationMixed, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { conectorDelCatalogo, definicionDelCable, esConectorPropio } from "../../core/conectores.js";
 import type { DefinicionDeConector } from "../../core/conectores.js";
+import { renombrarSobreSync } from "../renombrarSobre.js";
 
 export class ErrorDeFicheroDeConectores extends Error {}
 
@@ -68,7 +69,7 @@ function escribirAtomico(ruta: string, contenido: unknown): void {
     writeFileSync(fd, JSON.stringify(contenido, null, 2) + "\n", "utf8");
     closeSync(fd);
     fd = undefined;
-    renameSync(temporal, ruta);
+    renombrarSobreSync(temporal, ruta);
   } catch (error) {
     if (fd !== undefined) closeSync(fd);
     try { unlinkSync(temporal); } catch { /* no llegó a crearse */ }

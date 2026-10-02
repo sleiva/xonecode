@@ -33,6 +33,7 @@ import {
 } from "../../core/modelos.js";
 import type { Papel } from "../../core/ports.js";
 import type { ModoDeEscritura } from "../../core/modoDeEscritura.js";
+import { renombrarSobreSync } from "../renombrarSobre.js";
 
 export const NOMBRE_CARPETA = ".xonecode";
 
@@ -86,7 +87,9 @@ const OPERACIONES_DE_ESCRITURA: OperacionesDeEscritura = {
   openSync,
   writeFileSync,
   closeSync,
-  renameSync,
+  // Con el reintento de Windows: ver `agent/renombrarSobre.ts` (un antivirus que tiene el
+  // fichero abierto hace fallar el rename con EPERM durante unos milisegundos).
+  renameSync: (origen, destino) => renombrarSobreSync(String(origen), String(destino)),
   unlinkSync,
 };
 

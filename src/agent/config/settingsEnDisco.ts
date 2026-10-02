@@ -38,6 +38,7 @@ import {
   segmentoSeguro,
   validarSettings,
 } from "../../core/settings.js";
+import { renombrarSobreSync } from "../renombrarSobre.js";
 
 const NOMBRE_CARPETA = ".xonecode";
 
@@ -116,7 +117,7 @@ function escribirAtomico(ruta: string, contenido: string): void {
     writeFileSync(descriptor, contenido, "utf8");
     closeSync(descriptor);
     descriptor = undefined;
-    renameSync(temporal, ruta);
+    renombrarSobreSync(temporal, ruta);
   } catch (error) {
     if (descriptor !== undefined) {
       try {

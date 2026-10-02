@@ -32,6 +32,7 @@
 import { chmodSync, existsSync, mkdirSync, openSync, closeSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { VERSION_DE_TRUEFORGE } from "./trueforge.js";
+import { renombrarSobreSync } from "../../renombrarSobre.js";
 
 /** Lo que se guarda de un hilo: lo que su constructor sabe recibir de vuelta. */
 export interface FotoDeHilo {
@@ -276,7 +277,7 @@ export function guardarMemoria(raiz: string, hilo: string, foto: FotoDeHilo): vo
   closeSync(openSync(temporal, "w", 0o600));
   chmodSync(temporal, 0o600);
   writeFileSync(temporal, JSON.stringify(enDisco), { mode: 0o600 });
-  renameSync(temporal, ruta);
+  renombrarSobreSync(temporal, ruta);
 }
 
 /**

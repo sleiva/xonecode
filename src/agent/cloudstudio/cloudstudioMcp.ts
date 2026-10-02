@@ -10,7 +10,7 @@ import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { spawn } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -18,6 +18,7 @@ import { auth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { Entorno } from "../../core/settings.js";
 import { motivoDeEndpointInaceptable } from "../../core/modelos.js";
+import { renombrarSobreSync } from "../renombrarSobre.js";
 
 const NOMBRE_CARPETA = ".xonecode";
 const NOMBRE_AUTH = "cloudstudio-oauth.json";
@@ -340,7 +341,7 @@ function guardarEstado(ruta: string, estado: EstadoOAuth): void {
     writeFileSync(fd, JSON.stringify(estado, null, 2) + "\n", "utf8");
     closeSync(fd);
     fd = undefined;
-    renameSync(temporal, ruta);
+    renombrarSobreSync(temporal, ruta);
   } catch (error) {
     if (fd !== undefined) closeSync(fd);
     try { unlinkSync(temporal); } catch { /* no llegó a crearse */ }

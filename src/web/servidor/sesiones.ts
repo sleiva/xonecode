@@ -33,7 +33,7 @@
  * obligaría a un segundo sitio a mantenerla sincronizada con ese momento.
  *
  * `indice.json` se reescribe entero (es pequeño, una entrada por sesión) con el mismo
- * cuidado atómico que `agent/config/settingsEnDisco.ts#escribirAtomico` — temporal + `renameSync`,
+ * cuidado atómico que `agent/config/settingsEnDisco.ts#escribirAtomico` — temporal + rename (con el reintento de Windows, `agent/renombrarSobre.ts`),
  * porque un `writeFileSync` a medias tras un crash dejaría corrompido el índice de TODAS
  * las sesiones, no solo la que se estaba anotando. El `.jsonl` de una sesión, en cambio, se
  * **anexa** (`appendFileSync`): reescribirlo entero en cada acto lo haría cuadrático en el
@@ -48,7 +48,6 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
-  renameSync,
   rmSync,
   statSync,
   unlinkSync,
@@ -64,6 +63,7 @@ import { tituloDesde } from "../../core/textos.js";
 import type { Esfuerzo } from "../../core/esfuerzo.js";
 import type { MotorDeAgente } from "../../core/motor.js";
 import type { ModoDeEscritura } from "../../core/modoDeEscritura.js";
+import { renombrarSobreSync } from "../../agent/renombrarSobre.js";
 
 /** Cuántos caracteres de la primera prosa del usuario se guardan como título. */
 const LARGO_TITULO = 80;
@@ -284,7 +284,7 @@ function leerIndiceOAbortar(raiz: string): EntradaIndice[] {
   return bruto.filter(esEntrada);
 }
 
-/** Temporal + `renameSync`, igual que `settingsEnDisco.ts#escribirAtomico`: un rename es
+/** Temporal + `renombrarSobreSync` (el rename que aguanta el bloqueo pasajero de Windows), igual que `settingsEnDisco.ts#escribirAtomico`: un rename es
  * atómico y un `writeFileSync` directo no lo es, así que un crash a mitad de escritura
  * dejaría el índice de TODAS las sesiones truncado en vez de solo la última entrada.
  */
@@ -299,7 +299,7 @@ function escribirIndice(raiz: string, entradas: EntradaIndice[]): void {
     writeFileSync(descriptor, JSON.stringify(entradas, null, 2) + "\n", "utf8");
     closeSync(descriptor);
     descriptor = undefined;
-    renameSync(temporal, ruta);
+    renombrarSobreSync(temporal, ruta);
   } catch (error) {
     if (descriptor !== undefined) {
       try {

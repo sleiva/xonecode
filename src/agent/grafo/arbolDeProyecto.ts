@@ -1,11 +1,12 @@
 import { existsSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
-import { open, readFile, realpath, rename, stat, unlink, type FileHandle } from "node:fs/promises";
+import { open, readFile, realpath, stat, unlink, type FileHandle } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { ficherosDelProyecto } from "../turno/ficherosDelProyecto.js";
 import { puedeLeerRuta } from "./perfiles.js";
 import { esVistaAplanada } from "./proyecto.js";
 import { conImagenesIncrustadas, enlacesDeImagen, imagenEnProyecto, RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
+import { renombrarSobre } from "../renombrarSobre.js";
 
 /**
  * El proyecto tal como lo enseña la pestaña Ficheros de la consola web: el árbol, el
@@ -470,7 +471,7 @@ async function escribirAtomico(destino: string, bytes: Buffer, modo: number): Pr
     await fh.sync();
     await fh.close();
     fh = undefined;
-    await rename(temporal, destino);
+    await renombrarSobre(temporal, destino);
   } catch (error) {
     await fh?.close().catch(() => {});
     await unlink(temporal).catch(() => {});
