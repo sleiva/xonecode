@@ -189,8 +189,11 @@ export function usarEdicion({
       const a = actualRef.current;
       if (a === undefined || a.ruta !== ruta || !a.guardando) return;
       fijar({ ...a, guardando: false, error });
+      // Como un rechazo con respuesta: se vuelve a pedir el fichero por si el disco cambió. Sin red
+      // también fallará, y se traga: el error de arriba ya lo dice.
+      if (a.proyectoCambiado !== true) enviar({ clase: "fichero", ruta }).catch(() => {});
     },
-    [fijar]
+    [fijar, enviar]
   );
 
   const guardar = useCallback(() => {

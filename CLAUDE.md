@@ -993,7 +993,8 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   latin1 tampoco lleva marcas (`sinBase`); guardar no pasa por la cola de `escriturasEnSerie` del
   agente; la edición se atribuye en git a la sesión cuyo turno siguiente la commitea; entre comprobar
   (huella, turno, proyecto) y escribir queda un hueco sin cerrojo; `/sync bajar` no cuenta como turno,
-  así que un guardado de contenido idéntico en ese hueco quedaría absorbido en la línea base; y un
+  así que guardar MIENTRAS corre no se niega, y un guardado de contenido idéntico al bajado quedaría
+  absorbido en su línea base; y un
   cierre brusco puede dejar un temporal `.X.<uuid>.xonecode.tmp` junto al fichero.
 - **Revisión arranca PLEGADA**: cada diff se pide al pulsar su cabecera. El efecto de `App.tsx`
   solo OLVIDA lo desplegado cuando el store tira la foto.

@@ -1904,7 +1904,9 @@ describe("App: editar en la pestaña Ficheros", () => {
   it("cambiar de entorno en la barra con cambios pregunta antes; al descartar, se cambia", async () => {
     // Ancha, para que la barra quepa al lado del panel.
     Object.defineProperty(window, "innerWidth", { value: 2400, configurable: true, writable: true });
-    onTestFinished(() => Object.defineProperty(window, "innerWidth", { value: 1024, configurable: true, writable: true }));
+    onTestFinished(() => {
+      Object.defineProperty(window, "innerWidth", { value: 1024, configurable: true, writable: true });
+    });
     const { enviar, store, vista } = await conFichero();
     act(() =>
       store.aplicar({

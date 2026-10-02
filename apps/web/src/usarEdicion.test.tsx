@@ -127,6 +127,17 @@ describe("usarEdicion", () => {
     expect(vista.result.current.textoVivo()).toBe("mío\n");
   });
 
+  it("un guardado que el servidor no aceptó (4xx) también vuelve a pedir el fichero", async () => {
+    const enviar = vi.fn((m: unknown) => Promise.resolve((m as { clase: string }).clase === "guardarFichero" ? { ok: false } : undefined));
+    const { vista } = montar(enviar);
+    act(() => vista.result.current.abrir(FICHERO));
+    act(() => vista.result.current.cambiar("mío\n"));
+    enviar.mockClear();
+    await act(async () => vista.result.current.guardar());
+    expect(vista.result.current.actual).toMatchObject({ guardando: false, error: "el servidor no aceptó el guardado" });
+    expect(enviar).toHaveBeenCalledWith({ clase: "fichero", ruta: "a.xne" });
+  });
+
   it("«Seguir con los míos» adopta la huella nueva: el siguiente guardado sobrescribe a sabiendas", () => {
     const { enviar, vista, inicial } = montar();
     act(() => vista.result.current.abrir(FICHERO));

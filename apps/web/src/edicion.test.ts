@@ -57,8 +57,8 @@ describe("cabe en el cable", () => {
   });
 
   it("mide el mensaje SERIALIZADO en bytes: lo que escapa el JSON también cuenta", () => {
-    expect(cabeEnElCable({ clase: "guardarFichero", ruta: "a", texto: "x", huella: "h" })).toBe(true);
+    expect(cabeEnElCable({ clase: "guardarFichero", ruta: "a", texto: "x", huella: "h", id: "i", proyecto: "p" })).toBe(true);
     // Un tabulador son dos bytes en JSON: la mitad del tope en tabuladores ya no cabe.
-    expect(cabeEnElCable({ clase: "guardarFichero", ruta: "a", texto: "\t".repeat(TOPE_DEL_CUERPO_DEL_CABLE / 2), huella: "h" })).toBe(false);
+    expect(cabeEnElCable({ clase: "guardarFichero", ruta: "a", texto: "\t".repeat(TOPE_DEL_CUERPO_DEL_CABLE / 2), huella: "h", id: "i", proyecto: "p" })).toBe(false);
   });
 });
