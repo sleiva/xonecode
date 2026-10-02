@@ -27,6 +27,8 @@
 
 .campo,
 .envoltorio input {
+  /* Sin reset global en este cliente: sin esto, 100% + padding + borde se sale de su caja. */
+  box-sizing: border-box;
   width: 100%;
   padding: 8px 10px;
   border: 0.5px solid var(--dsw-alias-border-l2);

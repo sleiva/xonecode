@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { etiquetaDeEstado } from "../inventarioDeDispositivos.js";
 import type { Dispositivo, Herramienta, InformeDeDispositivos } from "../tipos.js";
 import { VerificarDispositivo } from "./VerificarDispositivo.js";
+import { GiroDeCarga } from "./GiroDeCarga.js";
 import estilos from "./Equipo.module.css";
 
 /**
@@ -77,11 +78,13 @@ export function Equipo({
             className={estilos.actualizar}
             title={TITULO_DE_REFRESCAR_EQUIPO}
             disabled={!conectado || mirando || informe === undefined}
+            aria-busy={mirando}
             onClick={() => {
               setMirando(true);
               alActualizar();
             }}
           >
+            {mirando ? <GiroDeCarga /> : null}
             {mirando ? "Refrescando…" : "Refrescar"}
           </button>
         )}

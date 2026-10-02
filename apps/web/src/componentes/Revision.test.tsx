@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { Revision } from "./Revision.js";
 import type { FicheroTocado } from "../tipos.js";
 
@@ -264,18 +264,42 @@ describe("Revision: la banda de CloudStudio", () => {
     expect(contenedor.textContent).toContain("cuánto queda por subir");
     expect(contenedor.textContent).toContain("Sesión");
     const banda = contenedor.firstElementChild!;
-    expect(banda.textContent).toBe("cuánto queda por subir");
+    // La banda es la sección «Sincronización con CloudStudio», con su título y su contenido.
+    expect(within(banda as HTMLElement).getByRole("heading", { name: /sincronización con cloudstudio/i })).toBeTruthy();
+    expect(banda.textContent).toContain("cuánto queda por subir");
+    expect(banda.textContent).not.toContain("Sesión");
+  });
+
+  it("las tres secciones van en orden: sincronización, últimas subidas, cambios", () => {
+    render(
+      <Revision
+        via="git"
+        ficheros={[{ ruta: "a.xne", clase: "modificado", mas: 1, menos: 1 }]}
+        parches={{}}
+        desplegados={VACIO}
+        alDesplegar={NADA}
+        alPlegar={NADA}
+        alRecargar={NADA}
+        cloudstudio={<p>acciones</p>}
+        registro={<p>operaciones</p>}
+      />
+    );
+    expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
+      "Sincronización con CloudStudio",
+      "Últimas subidas",
+      "Cambios de esta sesión",
+    ]);
   });
 
   it("sin banda no se pinta un hueco: la pestaña es lo de siempre", () => {
     const { container } = render(
       <Revision via="git" ficheros={[]} parches={{}} desplegados={VACIO} alDesplegar={NADA} alPlegar={NADA} alRecargar={NADA} />
     );
-    // Un solo hijo y es el aviso: sin ranura no queda un contenedor vacío con su borde
-    // debajo, que sería una línea separando la nada de la nada.
+    // El título de los cambios y el aviso, y nada más: sin ranura no queda un contenedor vacío
+    // con su borde debajo, que sería una línea separando la nada de la nada.
     const contenedor = container.firstElementChild!;
-    expect(contenedor.children).toHaveLength(1);
-    expect(contenedor.firstElementChild!.textContent).toMatch(/no ha tocado ningún fichero/i);
+    expect(contenedor.children).toHaveLength(2);
+    expect(contenedor.lastElementChild!.textContent).toMatch(/no ha tocado ningún fichero/i);
   });
 });
 
@@ -431,5 +455,113 @@ describe("Revision: los cambios en el MODELO de un `.xne`", () => {
   it("sin la prop no se pinta nada nuevo: lo que había", () => {
     pinta(undefined);
     expect(screen.queryByText(/modelo/)).toBeNull();
+  });
+});
+
+/**
+ * Lo PENDIENTE de la sesión: lo marca el servidor (`marcarPendientes`) en la misma foto que la
+ * lista, y Revisión enseña solo eso cuando la marca está. Sin ella —no se pudo medir— lo
+ * enseña todo: no se esconde nada sobre una pregunta sin contestar.
+ */
+describe("Revision: solo lo pendiente de la sesión", () => {
+  const montarCon = (ficheros: Parameters<typeof Revision>[0]["ficheros"]) =>
+    render(
+      <Revision via="git" ficheros={ficheros} parches={{}} desplegados={VACIO} alDesplegar={NADA} alPlegar={NADA} alRecargar={NADA} />
+    );
+
+  it("con la marca, la pila y el árbol enseñan solo lo pendiente", () => {
+    montarCon([
+      { ruta: "subido.xne", clase: "modificado", mas: 1, menos: 0, pendiente: false },
+      { ruta: "falta.xne", clase: "nuevo", mas: 3, menos: 0, pendiente: true },
+    ]);
+    expect(screen.getByRole("heading", { name: "Cambios de esta sesión pendientes de subir" })).toBeTruthy();
+    expect(screen.getAllByText("falta.xne").length).toBeGreaterThan(0);
+    expect(screen.queryByText("subido.xne")).toBeNull();
+  });
+
+  it("si todo lo de la sesión ya está subido, lo DICE en vez de enseñar una lista vacía", () => {
+    montarCon([{ ruta: "subido.xne", clase: "modificado", mas: 1, menos: 0, pendiente: false }]);
+    expect(screen.getByText(/ya está subido a CloudStudio/i)).toBeTruthy();
+  });
+
+  it("sin la marca (no se pudo medir) se enseña todo", () => {
+    montarCon([
+      { ruta: "a.xne", clase: "modificado", mas: 1, menos: 0 },
+      { ruta: "b.xne", clase: "nuevo", mas: 1, menos: 0 },
+    ]);
+    expect(screen.getByRole("heading", { name: "Cambios de esta sesión" })).toBeTruthy();
+    expect(screen.getAllByText("a.xne").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("b.xne").length).toBeGreaterThan(0);
+  });
+});
+
+describe("Revision: «Refrescar» dice que está en ello", () => {
+  afterEach(cleanup);
+
+  it("gira y se apaga hasta que llega la lista nueva", () => {
+    cleanup();
+    const props = { via: "git" as const, parches: {}, desplegados: VACIO, alDesplegar: NADA, alPlegar: NADA, alRecargar: NADA };
+    const { rerender } = render(<Revision {...props} ficheros={[{ ruta: "a.xne", clase: "nuevo", mas: 1, menos: 0 }]} />);
+    const boton = (): HTMLButtonElement => screen.getByRole("button", { name: "Refrescar" });
+    fireEvent.click(boton());
+    expect(boton().getAttribute("aria-busy")).toBe("true");
+    expect(boton().disabled).toBe(true);
+    rerender(<Revision {...props} ficheros={[{ ruta: "a.xne", clase: "nuevo", mas: 1, menos: 0 }]} />);
+    expect(boton().getAttribute("aria-busy")).toBe("false");
+  });
+});
+
+describe("Revision en modo `pendientes` (la pestaña Sincronización del panel)", () => {
+  afterEach(cleanup);
+  const props = { parches: {}, desplegados: VACIO, alDesplegar: NADA, alPlegar: NADA, alRecargar: NADA, modo: "pendientes" as const };
+
+  it("sin lista todavía dice que consulta LO PENDIENTE, no los ficheros de una sesión", () => {
+    cleanup();
+    render(<Revision {...props} ficheros={[]} />);
+    expect(screen.getByText("Consultando lo pendiente de subir…")).toBeTruthy();
+    expect(screen.queryByText(/sesión/i)).toBeNull();
+  });
+
+  it("enseña TODO lo que llega, sin filtrar por `pendiente`, y no habla de la sesión", () => {
+    cleanup();
+    render(
+      <Revision
+        {...props}
+        via="git"
+        mezclados={2}
+        ficheros={[
+          { ruta: "a.xne", clase: "modificado", mas: 1, menos: 1 },
+          { ruta: "b.js", clase: "nuevo", mas: 2, menos: 0, sinCommitear: true },
+        ]}
+      />
+    );
+    expect(screen.getByRole("heading", { name: "Pendiente de subir a CloudStudio" })).toBeTruthy();
+    expect(screen.getByText("Pendiente")).toBeTruthy();
+    expect(screen.getAllByText("b.js").length).toBeGreaterThan(0);
+    // Ni las notas de sesión (commits de otras sesiones) ni el rótulo «Sesión».
+    expect(screen.queryByText(/commits de otras sesiones/)).toBeNull();
+    expect(screen.queryByText("Sesión")).toBeNull();
+  });
+
+  it("vacía dice que no hay nada pendiente; con error, el porqué", () => {
+    cleanup();
+    const { rerender } = render(<Revision {...props} via="git" ficheros={[]} />);
+    expect(screen.getByText(/No hay nada pendiente de subir/)).toBeTruthy();
+    rerender(<Revision {...props} ficheros={[]} error="este proyecto no está dado de alta en CloudStudio" />);
+    expect(screen.getByText(/no está dado de alta/)).toBeTruthy();
+  });
+
+  it("un diff NEGADO (la regla del lector) lo dice en vez de enseñar nada", () => {
+    cleanup();
+    render(
+      <Revision
+        {...props}
+        via="git"
+        ficheros={[{ ruta: ".env", clase: "modificado", mas: 1, menos: 1 }]}
+        parches={{ ".env": { texto: "", recortado: false, negado: "esa ruta no se enseña" } }}
+        desplegados={new Set([".env"])}
+      />
+    );
+    expect(screen.getByText(/no se enseña: esa ruta no se enseña/)).toBeTruthy();
   });
 });

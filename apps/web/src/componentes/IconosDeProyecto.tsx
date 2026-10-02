@@ -12,9 +12,29 @@
  * `aria-label` del envoltorio, que es donde se decide qué se dice en cada sitio.
  */
 
-function Trazo({ children, lado, relleno }: { children: React.ReactNode; lado: number; relleno?: boolean }) {
+/**
+ * El MOLDE de todos los glifos de contorno de la consola: lo usan también los iconos de
+ * carpeta y fichero del árbol (`IconosDeFichero.tsx`), para que se lean como de la misma
+ * familia que los de la barra de proyectos.
+ */
+export function Trazo({
+  children,
+  lado,
+  relleno,
+  className,
+  familia,
+}: {
+  children: React.ReactNode;
+  lado: number;
+  relleno?: boolean;
+  className?: string;
+  /** Una etiqueta del dibujo (p. ej. la familia de un fichero), solo como dato del DOM. */
+  familia?: string;
+}) {
   return (
     <svg
+      {...(className === undefined ? {} : { className })}
+      {...(familia === undefined ? {} : { "data-familia": familia })}
       aria-hidden="true"
       focusable="false"
       width={lado}

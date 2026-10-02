@@ -16,6 +16,8 @@ import type {
 } from "../tipos.js";
 import { IconoDeConector } from "./IconoDeConector.js";
 import { IconoDeActualizar, IconoDeEnlaceExterno } from "./IconosDelVisor.js";
+import { useEsperaDeRefresco } from "../esperaDeRefresco.js";
+import giro from "./GiroDeCarga.module.css";
 import { BarraDeProgreso, resumenDelPlan } from "./Planes.js";
 import { TarjetaDeEmpezar } from "./TarjetaDeJira.js";
 import { ResumenDeProyecto, type AccionesDeLaCopia, type ProyectoDelResumen } from "./ResumenDeProyecto.js";
@@ -38,7 +40,7 @@ export type PeticionAlGestor = MensajeDelGestor extends infer M ? (M extends { c
  */
 export type ContextoDeGestor = { destino?: string };
 
-type PestanaDelProyecto = "resumen" | "tareas" | "conectores" | "soporte";
+type PestanaDelProyecto = "resumen" | "sincronizacion" | "tareas" | "conectores" | "soporte";
 
 /**
  * El NOMBRE para mostrar de un conector (IXCODE-15): el del catálogo que el cliente ya tiene
@@ -64,6 +66,7 @@ function proyectoALaVista(v: VinculoDelCable): string | undefined {
 
 const PESTANAS: { id: PestanaDelProyecto; etiqueta: string }[] = [
   { id: "resumen", etiqueta: "Resumen" },
+  { id: "sincronizacion", etiqueta: "Sincronización" },
   { id: "tareas", etiqueta: "Tareas" },
   { id: "conectores", etiqueta: "Conectores" },
   { id: "soporte", etiqueta: "Soporte" },
@@ -106,6 +109,7 @@ export function PanelDelProyecto({
   planes,
   copia,
   tareasEnFondo,
+  sincronizacion,
   gestor,
   conectores,
   conectado,
@@ -130,6 +134,13 @@ export function PanelDelProyecto({
   copia?: CopiaDelPanel;
   /** Las tareas en background del proyecto: la ranura que `App` ya monta para el panel lateral. */
   tareasEnFondo?: ReactNode;
+  /**
+   * La pestaña «Sincronización»: Subir / Actualizar repo local, las últimas subidas y TODO lo
+   * pendiente de subir con su diff contra CloudStudio. Subir es del PROYECTO, no de un chat, así
+   * que vive aquí. Ranura montada por `App`; ausente = no hay pestaña (sin copia, o no es el
+   * proyecto abierto, que es el que sincroniza el servidor).
+   */
+  sincronizacion?: ReactNode;
   gestor?: EstadoDelCliente["gestor"];
   conectores?: EstadoDelCliente["conectores"];
   conectado: boolean;
@@ -178,7 +189,9 @@ export function PanelDelProyecto({
   const hayPestanaDeSoporte = !sinCopia && copia !== undefined && alPedirSoporte !== undefined;
   const pestanasALaVista = sinCopia
     ? PESTANAS.filter((p) => p.id === "resumen")
-    : PESTANAS.filter((p) => p.id !== "soporte" || hayPestanaDeSoporte);
+    : PESTANAS.filter(
+        (p) => (p.id !== "soporte" || hayPestanaDeSoporte) && (p.id !== "sincronizacion" || sincronizacion !== undefined)
+      );
   /**
    * La ÚLTIMA petición de cada acción que salió de este panel: lo que se vuelve a mandar, UNA
    * vez, cuando un conector cuya credencial faltaba pasa a conectado (`useReintentoTrasConectar`).
@@ -314,6 +327,9 @@ export function PanelDelProyecto({
                 alAbrirCarpeta={copia.alAbrirCarpeta}
                 alBorrarCopia={copia.alBorrarCopia}
                 alPedirResumen={copia.alPedirResumen}
+                {...(copia.subida === undefined ? {} : { subida: copia.subida })}
+                {...(copia.marcaDeSubida === undefined ? {} : { marcaDeSubida: copia.marcaDeSubida })}
+                {...(sincronizacion === undefined ? {} : { alVerPendientes: () => setPestana("sincronizacion") })}
               />
             )}
             {sinCopia ? (
@@ -325,6 +341,8 @@ export function PanelDelProyecto({
               <Resumen {...(planes === undefined ? {} : { planes })} />
             )}
           </>
+        ) : pestana === "sincronizacion" && sincronizacion !== undefined ? (
+          <div className={estilos.sincronizacion}>{sincronizacion}</div>
         ) : pestana === "tareas" ? (
           <>
             {/* Primero las tareas en BACKGROUND del proyecto —las que el agente hace solo, que
@@ -704,6 +722,11 @@ function TareasDelGestor({
   }, [clave]);
 
   const errores = gestor?.errores ?? {};
+  // El icono de «Actualizar» gira hasta que llegan las pendientes NUEVAS, o su error.
+  const refresco = useEsperaDeRefresco(
+    errores.pendientes === undefined ? gestor?.pendientes : errores.pendientes,
+    conectado
+  );
   if (gestor?.estado === undefined) {
     return errores.estado === undefined ? (
       <p className={estilos.aviso}>Consultando el gestor de tareas…</p>
@@ -764,10 +787,17 @@ function TareasDelGestor({
               className={estilos.icono}
               aria-label="Actualizar"
               title="Volver a consultar las pendientes"
-              onClick={repetir}
-              disabled={!conectado}
+              onClick={() => {
+                refresco.empezar();
+                repetir();
+              }}
+              disabled={!conectado || refresco.esperando}
+              aria-busy={refresco.esperando}
             >
-              <IconoDeActualizar />
+              {/* Gira el ICONO mismo: es un botón sin texto, y un aro al lado lo descuadraría. */}
+              <span className={refresco.esperando ? `${giro.icono} ${giro.girando}` : giro.icono}>
+                <IconoDeActualizar />
+              </span>
             </button>
           </span>
         )}

@@ -248,6 +248,7 @@ export function Ficheros({
           alElegir={alElegir}
           filtro={filtro}
           abiertas="ninguna"
+          variante="explorador"
         />
       </aside>
     </div>

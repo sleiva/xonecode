@@ -196,7 +196,28 @@ export type Acto =
       accion: AccionDeSincronizacion;
       cuando: string;
       lineas: string[];
+      /**
+       * Lo que pasó con una SUBIDA que llegó a correr, como DATO: cuántos ficheros subieron y
+       * cuántos fallaron. Es lo que lee el diálogo de la subida para decir «todo subido» o no,
+       * en vez de leer «subidos N, fallaron M» del texto de una línea. Ausente = la operación
+       * no terminó con un informe (otra acción, el árbol sucio, o una excepción).
+       */
+      resultado?: ResultadoDeSubida;
+      /** Cuántos ficheros trajo una BAJADA que terminó. Ausente = no terminó, u otra acción. */
+      bajados?: number;
+      /**
+       * La operación LANZÓ, y esto es lo que se dijo: el MISMO texto que el bucle de comandos
+       * escribe en el hilo (`describirError`), así que no viaja nada nuevo por el cable. Va como
+       * dato para que el diálogo de la operación lo enseñe donde se pulsó Aceptar.
+       */
+      error?: string;
     };
+
+/** El recuento de una subida que corrió. Ver `resultado` en el acto `sincronizacion`. */
+export interface ResultadoDeSubida {
+  subidos: number;
+  fallidos: number;
+}
 
 /**
  * El acto `sincronizacion` SIN su discriminante: lo que se le entrega a la piel para que lo

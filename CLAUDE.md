@@ -653,9 +653,24 @@ detiene.
   `modificado`, `borrado`), nunca deducido del `+`/`~`/`-` de texto. En el navegador la tarjeta NO
   es un `<form>` y contesta `"s"`/`"n"`. La AUSENCIA se conserva de punta a punta (`decision ===
   undefined`). Esa tarjeta es un DIÁLOGO, no un renglón del hilo (`Pregunta.tsx`, misma puerta que
-  `Aprobacion`): solo «Aceptar» autoriza, `Escape` y clic en el velo RECHAZAN, y desmontar no
-  contesta nada. Lo sin contestar lo salda el plazo del servidor (`MS_DE_ESPERA_POR_OMISION`, 10
-  min) con cadena vacía.
+  `Aprobacion`) y un modal DE VERDAD: solo «Aceptar» autoriza y solo «Cancelar» rechaza; `Escape`
+  y el clic en el velo NO hacen nada (rechazar con ellos tiraba sin querer una subida que se
+  revisaba), y desmontar no contesta nada. Lo sin contestar lo salda el plazo del servidor
+  (`MS_DE_ESPERA_POR_OMISION`, 10 min) con cadena vacía.
+- **La subida deja ELEGIR qué ficheros suben, y quién decide lo que sube es el SERVIDOR**
+  (`DecisionDeConsola.seleccionable`, `LineaDelPlan.ruta`, `Consola.decidirConSeleccion?`, solo en
+  la web): el plan sale como el árbol de Revisión con casillas (`seleccionDelArbol.ts`, puro), y
+  la `respuesta` lleva `seleccion`. `PoliticaDeAprobacion` contesta `boolean | {rutas}` y lo que
+  se ejecuta lo dice SIEMPRE `core/cloudstudio.ts#planAutorizado` —la intersección con el plan—,
+  **nunca la veracidad**: `{rutas: []}` es «verdadero» y es un rechazo. El terminal sigue todo o
+  nada.
+  **Aceptar NO cierra el diálogo, ni al subir ni al «Actualizar repo local»**: la decisión dice
+  de QUÉ operación es (`DecisionDeConsola.operacion`), y `App` la retiene (`operacionEnDialogo`)
+  con Aceptar girando y Cancelar (y las casillas) bloqueados, hasta que llega el acto de ESA
+  acción; entonces dice cómo fue y su «Aceptar» lo cierra. Todo viaja como DATO en el acto
+  (`resultado`, `bajados`, `error`), nunca leído del texto; sin él no se dice «todo bien». El
+  `error` es el mismo texto que el bucle de comandos escribe en el hilo (`describirError`): `/sync`
+  lo apunta y RELANZA.
 - **La única grieta es el MODO DE ESCRITURA, y vive en la SESIÓN** (`core/modoDeEscritura.ts`,
   comando `/aprobacion`): `supervisado` —cada escritura con su diff— o `autonomo` —se aplican
   solas—. Ausente es supervisado; hace falta alguien delante, calculado como `interactivo &&
@@ -939,15 +954,34 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   `mime`+`base64`, se pinta en un `<img>`, nunca marcado inyectado.
 - **Revisión arranca PLEGADA**: cada diff se pide al pulsar su cabecera. El efecto de `App.tsx`
   solo OLVIDA lo desplegado cuando el store tira la foto.
-- **La sincronización con CloudStudio es la BANDA de arriba de Revisión, no una pestaña**, como
-  ranura (`cloudstudio`) pintada en los SEIS estados de Revisión. `estado` se MIDE en el servidor
+- **Subir es del PROYECTO, no de un chat: vive en la pestaña «Sincronización» del panel del
+  proyecto** (`PanelDelProyecto#sincronizacion`, ranura montada por `App`, solo con copia). Es la
+  MISMA vista que Revisión en su modo `pendientes` (`Revision.tsx#modo`): arriba la banda de
+  CloudStudio y «Últimas subidas de la conversación abierta» (salen de los actos del chat abierto,
+  no son la historia del proyecto), en una región ACOTADA con scroll propio, y debajo TODO lo
+  pendiente con su diff CONTRA CLOUDSTUDIO (`pendientesDeSubida`/`parcheDeSubida`,
+  `arranque.ts#lecturaDePendientesDeSubida`/`#lecturaDeParcheDeSubida`). Lo que git no sigue sale
+  MARCADO `sinCommitear` (la cifra de la banda no lo cuenta, y Subir se niega sin commit). **Un
+  diff solo sale de una ruta que está en la lista RECIÉN medida y que pasa la regla del lector**
+  (`arbolDeProyecto.ts#motivoParaNoEnsenar`, texto y `realpath`): un `.env` pendiente sale en la
+  lista, su diff NUNCA. La cifra y la lista se piden JUNTAS. **La Revisión del CHAT ya no lleva
+  sincronización ni registro**: solo lo de la sesión que falta por subir, marcado por el SERVIDOR en la misma foto que la lista
+  (`arranque.ts#marcarPendientes`, `FicheroTocado.pendiente`): cruzar `revision` con `sync` en el
+  cliente escondería lo recién escrito. Sin la marca (sin CloudStudio, o la medida falló) se
+  enseña todo. Tras una subida se vuelven a pedir la lista y la cifra. Límite declarado: los diffs
+  siguen siendo contra el sello de la sesión, no contra CloudStudio.
+- **La sincronización con CloudStudio es la BANDA de arriba de la pestaña Sincronización del
+  panel** (la ranura `cloudstudio` de `Revision`), pintada en todos sus estados. `estado` se MIDE en el servidor
   contra la ref de la bajada (`agent/sesiones/gitSync.ts#cambiosPendientes`), sin abrir sesión MCP;
   `subir`/`bajar` se ENCOLAN como `/sync <accion>` con el MISMO plan, guarda de árbol sucio y
-  aprobación que el terminal. `proyecto`/`rama` ausentes no son «cero pendientes». La cifra dice DE
-  QUIÉN son los ficheros (`deLaSesion` = `cambiosPendientes` ∩ `cambiosDeSesion`); ausente cuando
-  no se pudo atribuir, y cero es un dato medido. Con la subida al día «Subir» NO se pinta, y solo
+  aprobación que el terminal. `proyecto`/`rama` ausentes no son «cero pendientes». La cifra ya NO
+  dice de qué sesión son (`deLaSesion` sigue viajando y no se pinta): en el panel del PROYECTO
+  «de esta sesión» no se refería a nada de lo que hay en pantalla. Con la subida al día «Subir» NO se pinta, y solo
   con la subida MEDIDA. La otra dirección se llama «Actualizar repo local» (clase sigue siendo
-  `.bajar`). **El recorrido de la operación se cuenta en la BANDA, no en el hilo** (acto
+  `.bajar`). «Subir» está también en la tarjeta de pendientes del Resumen, como el MISMO
+  `BotonSubir` y la MISMA intención, solo para el proyecto ABIERTO; gira desde el clic hasta que
+  llega la pregunta, el acto de la operación, un `sync` con error o se cae el cable, y con un
+  turno en vuelo se apaga diciendo por qué (la orden esperaría detrás). **El recorrido de la operación se cuenta en la BANDA, no en el hilo** (acto
   `sincronizacion`: `accion`, `cuando`, `lineas`), por un método OPCIONAL del puerto
   (`anotarSincronizacion?`); quien no lo implemente sigue recibiendo el recorrido por `escribir` al
   vuelo. Lo que el registro guarda es EXACTAMENTE lo que el terminal habría impreso. El enunciado
@@ -987,9 +1021,12 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   de ese conector (`useReintentoTrasConectar`). «no está conectado» NO es de credencial: `llamar`
   lo dice cuando el conector no está AÑADIDO, y lleva «Añádelo en Ajustes».
 - **Una espera de humano saca del panel al chat, en el MISMO render** (`App.tsx#hayEsperaDeHumano`):
-  una aprobación, pregunta, secreto o selector pendiente hace que el panel se apague y el chat se
-  encienda a la vez, así que el diálogo sale en su sitio de siempre sin duplicarlo dentro del
-  panel; al contestar no se vuelve al panel de rebote.
+  una aprobación, pregunta de texto, secreto o selector pendiente hace que el panel se apague y el
+  chat se encienda a la vez, así que el diálogo sale en su sitio de siempre sin duplicarlo dentro
+  del panel; al contestar no se vuelve al panel de rebote. **Una DECISIÓN no**: su diálogo (la
+  subida, «Actualizar repo local») se monta en UN solo sitio de `App` (`dialogoDeDecision`), fuera
+  de las vistas, y sale por portal encima de donde se esté —pulsar «Subir» en el Resumen no te
+  saca de él—.
 - **«Nueva sesión con esta tarea» liga la sesión a su ticket, y por el cable cruzan la CLAVE y su
   CONECTOR** (`EntradaIndice.ticket`, `web/servidor/sesiones.ts#anotarTicket`,
   `SesionDelCable.ticket`/`ticketConector`): el sitio se queda en el host. El conector cruza porque
@@ -1239,7 +1276,11 @@ escrito a mano lo da de alta una persona desde la misma ventana.
   `undefined` en vez de lanzar; `CloudStudioPort.contexto()` sigue LANZANDO.
 - **El `switch` de rama CIERRA el proyecto en el servidor** (`action: "closeandopenproject"`), así
   que `cambiarRama` REABRE después del `switch`.
-- **La ref se mueve solo si la subida terminó entera.**
+- **La ref se mueve solo si la subida terminó entera, y solo por lo SUBIDO**: una subida parcial
+  no la lleva a `HEAD` (afirmaría que está arriba lo no elegido); `marcarSubidoParcial` compone
+  en un índice PRIVADO el árbol de la ref con las rutas subidas tomadas de `HEAD`, y la ref pasa
+  a ese commit —que ya no es antepasado de `HEAD`: nada lo exige, la ref solo se usa en `git
+  diff`—.
 - **`.xonecode` no sube nunca.**
 - **Orden al descargar: extraer → borrar vistas aplanadas → commit de baseline.**
 - **Guarda de árbol limpio al SUBIR** (`arbolLimpio`). **Bajar dentro del workspace VACÍA la copia

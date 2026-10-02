@@ -32,11 +32,12 @@ import type { ResultadoDeTurno } from "../core/entrega.js";
 import type { LineaDeDiff } from "../core/diff.js";
 import { interpretAnswer, type Decision } from "../vendor/hitl.js";
 import type { AccionDeSincronizacion, ConfirmacionDeBajada, PoliticaDeAprobacion } from "../core/cloudstudio.js";
-import type { NarracionDeSincronizacion } from "../core/actos.js";
+import { planAutorizado } from "../core/cloudstudio.js";
+import type { NarracionDeSincronizacion, ResultadoDeSubida } from "../core/actos.js";
 import { crearPielStdio, type Escribir } from "./stdio.js";
 import { esTema, seleccionarTema, TEMAS, type IdTema } from "./tema.js";
 import { acuseDeModelo } from "./acuseDeModelo.js";
-import type { LineaDelPlan, Preguntar } from "./aprobar.js";
+import type { DecisionDeConsola, LineaDelPlan, Preguntar, RespuestaConSeleccion } from "./aprobar.js";
 import { guardarCredencial, AuthRotoEnDisco } from "../agent/config/authEnDisco.js";
 import {
   MODO_POR_OMISION,
@@ -229,7 +230,8 @@ export interface Consola {
      */
     confirmarBajada?: ConfirmacionDeBajada
   ) => Promise<
-    | { tipo: "texto"; texto: string }
+    // `subida`: el recuento de una subida que corrió, como dato (`ResultadoDeSubida`).
+    | { tipo: "texto"; texto: string; subida?: ResultadoDeSubida; bajada?: { bajados: number } }
     // `accion` viaja con el rechazo porque el porqué NO es el mismo en las dos
     // direcciones: subir exige un commit para que mover la ref signifique algo; bajar lo
     // exige porque SOBRESCRIBE el disco y sin commit no hay nada que recuperar.
@@ -253,6 +255,17 @@ export interface Consola {
    * Implementado, `/sync` no escribe ni una línea por `escribir`.
    */
   anotarSincronizacion?: (operacion: NarracionDeSincronizacion) => void;
+  /**
+   * Una decisión en la que quien contesta puede quedarse con PARTE del plan: la subida a
+   * CloudStudio en el navegador, donde el plan es un árbol con casillas.
+   *
+   * **OPCIONAL por la misma asimetría que `anotarSincronizacion?`**: stdio, la TUI, la consola
+   * de una tarea y los dobles no la tienen, y `politicaInteractiva` cae entonces en `preguntar`
+   * —todo o nada, byte a byte como siempre—. La implementa `web/servidor/consolaWeb.ts`, y un
+   * test de esa consola REAL comprueba que la selección llega a la política: un método opcional
+   * declarado y nunca implementado no da ningún error que leer.
+   */
+  decidirConSeleccion?: (pregunta: string, decision: DecisionDeConsola) => Promise<RespuestaConSeleccion>;
 }
 
 /**
@@ -1070,17 +1083,43 @@ export function politicaInteractiva(
       ...plan.map((operacion): LineaDelPlan => {
         const cambio = operacion.tipo === "borrado" ? "borrado" : operacion.clase;
         const signo = cambio === "borrado" ? "-" : cambio === "nuevo" ? "+" : "~";
-        return { texto: `  ${signo} ${operacion.ruta}`, cambio };
+        return { texto: `  ${signo} ${operacion.ruta}`, cambio, ruta: operacion.ruta };
       }),
     ];
     decir(`\n${"─".repeat(60)}\n`);
     for (const linea of lineas) decir(`${linea.texto}\n`);
     // Sin pista de tecleo en el enunciado: la pone la piel que se contesta escribiendo
     // (`PISTA_DE_DECISION`), y por eso viaja un `decision` con esta pregunta.
-    const respuesta = await consola.preguntar("¿Subir a CloudStudio?", { lineas });
-    const decision = interpretAnswer(respuesta);
-    decir(decision.type === "approve" ? "  → APROBADO\n" : "  → rechazado, no se ha aplicado nada\n");
-    return decision.type === "approve";
+    //
+    // Con `decidirConSeleccion` (la web) la persona puede quedarse con PARTE del plan. Sin
+    // él, todo o nada como siempre. Lo que se sube lo vuelve a decidir `planAutorizado` en
+    // `subida.ts`: aquí solo se cuenta qué se contestó.
+    const contestada =
+      consola.decidirConSeleccion === undefined
+        ? { respuesta: await consola.preguntar("¿Subir a CloudStudio?", { lineas, operacion: "subir" }) }
+        : await consola.decidirConSeleccion("¿Subir a CloudStudio?", { lineas, seleccionable: true, operacion: "subir" });
+    if (interpretAnswer(contestada.respuesta).type !== "approve") {
+      decir("  → rechazado, no se ha aplicado nada\n");
+      return false;
+    }
+    if (contestada.seleccion === undefined) {
+      decir("  → APROBADO\n");
+      return true;
+    }
+    const elegidas = planAutorizado(plan, { rutas: contestada.seleccion });
+    if (elegidas.length === 0) {
+      decir("  → no se marcó ningún fichero, no se ha aplicado nada\n");
+      return false;
+    }
+    if (elegidas.length === plan.length) {
+      decir("  → APROBADO\n");
+      return true;
+    }
+    decir(`  → APROBADO: ${elegidas.length} de ${plan.length}\n`);
+    // Los NOMBRES de lo elegido: el plan de arriba lista los M, y sin esto el registro de una
+    // subida parcial no diría cuáles de ellos subieron.
+    for (const operacion of elegidas) decir(`    ${operacion.ruta}\n`);
+    return { rutas: elegidas.map((operacion) => operacion.ruta) };
   };
 }
 
@@ -1106,7 +1145,7 @@ export function confirmacionInteractiva(
     ];
     decir(`\n${"─".repeat(60)}\n`);
     for (const linea of lineas) decir(`${linea.texto}\n`);
-    const respuesta = await consola.preguntar("¿Vaciar la copia y actualizarla desde CloudStudio?", { lineas });
+    const respuesta = await consola.preguntar("¿Vaciar la copia y actualizarla desde CloudStudio?", { lineas, operacion: "bajar" });
     const decision = interpretAnswer(respuesta);
     decir(decision.type === "approve" ? "  → APROBADO\n" : "  → cancelado, no se ha tocado nada\n");
     return decision.type === "approve";
@@ -1334,6 +1373,11 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
        * sigue diciendo («→ rechazado»): ahí es la respuesta a lo que tecleaste.
        */
       let rechazada = false;
+      /** El recuento de la subida, si corrió: viaja en el acto como DATO (`resultado`). */
+      let resultadoDeSubida: ResultadoDeSubida | undefined;
+      /** Cuántos trajo la bajada, y el error si la operación LANZÓ: los dos viajan en el acto. */
+      let bajados: number | undefined;
+      let error: string | undefined;
 
       try {
         // El hueco de política solo se rellena para «subir»: es la única acción que
@@ -1355,7 +1399,8 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
             ? undefined
             : async (plan) => {
                 const autorizada = await base(plan);
-                if (!autorizada) rechazada = true;
+                // Por `planAutorizado` y no por su veracidad: `{rutas: []}` es «verdadero».
+                if (planAutorizado(plan, autorizada).length === 0) rechazada = true;
                 return autorizada;
               };
         const resultado = await consola.sincronizar(accion, estado.raiz, politicaDeAprobacion, decir, confirmarBajada);
@@ -1370,7 +1415,14 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
           decir(`hay cambios sin commitear (${resultado.pendientes.join(", ")}); ${porque}\n`);
         } else {
           decir(resultado.texto);
+          resultadoDeSubida = resultado.subida;
+          bajados = resultado.bajada?.bajados;
         }
+      } catch (e) {
+        // Se APUNTA para el acto y se RELANZA: el bucle de comandos lo sigue diciendo en el
+        // hilo, como siempre. Es el mismo texto (`describirError`).
+        error = describirError(e);
+        throw e;
       } finally {
         // En el `finally` y no al final del `try`, por un motivo medido: `crearSincronizador`
         // puede LANZAR —`limpio`, `descargar`, `subirProyecto` y hasta el `sesion.cerrar()` de
@@ -1381,7 +1433,16 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
         // La excepción se deja PROPAGAR: un fallo inesperado lo dice el harness en el hilo,
         // que es donde tiene que verse. Esconderlo en el registro sería lo contrario de lo
         // que esto busca — el registro es de las operaciones que corrieron, no de las que no.
-        if (!rechazada) anotar?.({ accion, cuando, lineas });
+        if (!rechazada) {
+          anotar?.({
+            accion,
+            cuando,
+            lineas,
+            ...(resultadoDeSubida === undefined ? {} : { resultado: resultadoDeSubida }),
+            ...(bajados === undefined ? {} : { bajados }),
+            ...(error === undefined ? {} : { error }),
+          });
+        }
       }
       return { seguir: true };
     },

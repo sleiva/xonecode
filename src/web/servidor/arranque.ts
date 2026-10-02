@@ -166,7 +166,14 @@ import { cloudstudioDelProyecto } from "../../agent/config/configEnDisco.js";
 import { abrirEnSistema, olvidarEntorno as olvidarCredencialesDeEntorno, rutaAuthPorDefecto } from "../../agent/cloudstudio/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/config/persona.js";
 import { cambiosDeSesion, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesiones/sesionGit.js";
-import { commitDeTurno, cambiosPendientes, trabajoSinCommitear } from "../../agent/sesiones/gitSync.js";
+import {
+  commitDeTurno,
+  cambiosPendientes,
+  parcheDeSubida,
+  pendientesDeSubida,
+  sinSeguir,
+  trabajoSinCommitear,
+} from "../../agent/sesiones/gitSync.js";
 import { marcarTareaDeSesion, sembrarConsumosPendientes, type DispositivoElegido } from "./sesiones.js";
 import { RUTA_ARTEFACTOS, esRutaDeArtefacto } from "../../core/artefactos.js";
 import {
@@ -174,6 +181,7 @@ import {
   leerFicheroDeProyecto,
   mimeDeImagen,
   motivoDeRutaInaceptable,
+  motivoParaNoEnsenar,
 } from "../../agent/grafo/arbolDeProyecto.js";
 import { modeloEnDisco } from "../../agent/navegacion/indiceEnDisco.js";
 import { ficherosDelProyecto } from "../../agent/turno/ficherosDelProyecto.js";
@@ -3371,7 +3379,24 @@ export function montarRutas(
       return;
     }
     const { via, ficheros, mezclados } = await opciones.cambiosDeSesion(abierto.raiz, sesion);
-    emitir({ clase: "revision", via, ficheros, ...(mezclados === undefined ? {} : { mezclados }) });
+    // Lo pendiente de subir se marca AQUÍ, en la misma foto que la lista: cruzarlo en el
+    // cliente con el `sync` —que llega en otro momento— escondería lo recién escrito.
+    const marcados = await marcarPendientes(abierto.raiz, ficheros);
+    emitir({ clase: "revision", via, ficheros: marcados, ...(mezclados === undefined ? {} : { mezclados }) });
+  };
+
+  /**
+   * Lo pendiente de subir del proyecto ABIERTO —el mismo que sincroniza `atenderSync`—: la
+   * lista sin `ruta`, el diff de uno con ella. Las reglas viven en `lecturaDePendientesDeSubida`
+   * y `lecturaDeParcheDeSubida`, exportadas y probadas contra git de verdad.
+   */
+  const atenderPendientesDeSubida = async (ruta?: string): Promise<void> => {
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined) {
+      emitir({ clase: "pendientesDeSubida", error: "no hay ningún proyecto abierto" });
+      return;
+    }
+    emitir(ruta === undefined ? await lecturaDePendientesDeSubida(abierto.raiz) : await lecturaDeParcheDeSubida(abierto.raiz, ruta));
   };
 
   /**
@@ -5679,6 +5704,13 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "pendientesDeSubida") {
+      const ruta = (mensaje as { ruta?: unknown }).ruta;
+      void atenderPendientesDeSubida(typeof ruta === "string" ? ruta : undefined).catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "revision") {
       void atenderRevision(mensaje.ruta).catch(contar);
       respuesta.writeHead(204);
@@ -6590,6 +6622,92 @@ export async function lecturaDeSync(
       rama,
       error: "no se pudo medir lo que falta por subir: la copia local no se puede comparar con la rama",
     };
+  }
+}
+
+/**
+ * TODO lo pendiente de subir del proyecto, como mensaje del cable (la pestaña Sincronización del
+ * panel). Sin CloudStudio, o si la medida falla, lo DICE: «no se pudo medir» no es «nada».
+ */
+export async function lecturaDePendientesDeSubida(
+  raiz: string
+): Promise<Extract<MensajeAlCliente, { clase: "pendientesDeSubida" }>> {
+  const rama = cloudstudioDelProyecto(raiz)?.rama;
+  if (rama === undefined || rama === "") {
+    return { clase: "pendientesDeSubida", error: "este proyecto no está dado de alta en CloudStudio" };
+  }
+  try {
+    return { clase: "pendientesDeSubida", ficheros: await pendientesDeSubida(raiz, rama) };
+  } catch {
+    return {
+      clase: "pendientesDeSubida",
+      error: "no se pudo medir lo que falta por subir: la copia local no se puede comparar con la rama",
+    };
+  }
+}
+
+/**
+ * El diff de UN fichero pendiente, con las DOS guardas antes de tocar git:
+ * - la ruta tiene que estar en la lista pendiente RECIÉN medida —una ruta inventada por el
+ *   cable no saca nada del disco—;
+ * - y tiene que poder ENSEÑARSE con la MISMA regla del lector que Ficheros y Revisión
+ *   (`motivoParaNoEnsenar`, texto y `realpath`): un `.env` pendiente sale en la lista, pero su
+ *   diff NO viaja nunca.
+ */
+export async function lecturaDeParcheDeSubida(
+  raiz: string,
+  ruta: string
+): Promise<Extract<MensajeAlCliente, { clase: "parcheDeSubida" }>> {
+  const vacio = (negado?: string): Extract<MensajeAlCliente, { clase: "parcheDeSubida" }> => ({
+    clase: "parcheDeSubida",
+    ruta,
+    texto: "",
+    recortado: false,
+    ...(negado === undefined ? {} : { negado }),
+  });
+  const rama = cloudstudioDelProyecto(raiz)?.rama;
+  if (rama === undefined || rama === "") return vacio("el proyecto no está dado de alta en CloudStudio");
+  let fichero: { sinCommitear?: true } | undefined;
+  try {
+    fichero = (await pendientesDeSubida(raiz, rama)).find((f) => f.ruta === ruta);
+  } catch {
+    return vacio("no se pudo medir lo que falta por subir");
+  }
+  if (fichero === undefined) return vacio("ya no está pendiente de subir");
+  const motivo = await motivoParaNoEnsenar(raiz, ruta);
+  if (motivo !== undefined) return vacio(motivo);
+  const parche = await parcheDeSubida(raiz, rama, ruta, fichero.sinCommitear === true);
+  return parche === undefined ? vacio() : { clase: "parcheDeSubida", ruta, ...parche };
+}
+
+/**
+ * Marca cada fichero de la sesión con si sigue PENDIENTE de subir a CloudStudio.
+ *
+ * Revisión enseña solo lo de la sesión que falta por subir: lo ya subido no es nada que
+ * revisar antes de subir. Se decide aquí y no en el cliente porque la lista (`revision`) y la
+ * medida (`sync`) son dos mensajes que llegan en momentos distintos, y cruzar uno nuevo con
+ * uno viejo escondería justo el fichero que el agente acaba de escribir —sin un solo error—.
+ *
+ * Misma medida que la banda (`cambiosPendientes` contra la ref de la bajada) y mismo cruce
+ * por ruta exacta que `cuantosDeLaSesion`, **más lo que git aún no sigue** (`sinSeguir`): un
+ * fichero recién creado a mitad de turno no sale en `git diff` y quedaría escondido justo
+ * cuando más falta hace verlo. La regla: lo que la ref no confirma como subido, se enseña. **Sin CloudStudio, o si la medida falla, los
+ * ficheros vuelven SIN la marca**: «no consta» no es «nada pendiente», y Revisión enseña
+ * entonces todo. No va dentro de `cambiosDeSesion`, que usan también el comentario de cierre,
+ * Soporte y `cuantosDeLaSesion`.
+ */
+export async function marcarPendientes<F extends { ruta: string }>(
+  raiz: string,
+  ficheros: readonly F[]
+): Promise<Array<F & { pendiente?: boolean }>> {
+  const rama = cloudstudioDelProyecto(raiz)?.rama;
+  if (rama === undefined || rama === "" || ficheros.length === 0) return [...ficheros];
+  try {
+    const [cambios, nuevos] = await Promise.all([cambiosPendientes(raiz, rama), sinSeguir(raiz)]);
+    const pendientes = new Set([...cambios.map((cambio) => cambio.ruta), ...nuevos]);
+    return ficheros.map((fichero) => ({ ...fichero, pendiente: pendientes.has(fichero.ruta) }));
+  } catch {
+    return [...ficheros];
   }
 }
 

@@ -1,0 +1,38 @@
+/* El giro de «estoy en ello», el mismo de las recetas (`Receta.module.css#girando`), con sus
+   mismos alias: el aro en `border-l2` y el tramo que gira en el cian de la marca. `inline-block`
+   porque va dentro de botones que no son flex, y un `span` en línea no toma tamaño. */
+.giro {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  margin-right: 6px;
+  vertical-align: -1px;
+  border: 1.5px solid var(--dsw-alias-border-l2);
+  border-top-color: var(--xonecode-cian);
+  border-radius: 50%;
+  animation: gira 0.8s linear infinite;
+}
+
+@keyframes gira {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Para un botón de ICONO: el icono mismo gira, sin aro aparte. `.icono` lo envuelve siempre, para
+   que el botón no cambie de forma al empezar a girar. */
+.icono {
+  display: inline-flex;
+}
+
+.girando {
+  animation: gira 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .giro,
+  .girando {
+    animation: none;
+  }
+}

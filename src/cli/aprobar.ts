@@ -34,6 +34,12 @@ export { MAX_APPROVAL_ROUNDS, REJECT_MESSAGE, type Decision };
 export interface LineaDelPlan {
   texto: string;
   cambio?: "nuevo" | "modificado" | "borrado";
+  /**
+   * La ruta del fichero de la línea, relativa al proyecto, como DATO: es lo que una piel
+   * necesita para pintar el plan como árbol y dejar elegir qué entra. Sacarla del `texto`
+   * sería leer sintaxis otra vez. Ausente en la cabecera, que no habla de un fichero.
+   */
+  ruta?: string;
 }
 
 /**
@@ -65,6 +71,28 @@ export interface LineaDelPlan {
  */
 export interface DecisionDeConsola {
   lineas: readonly LineaDelPlan[];
+  /**
+   * `true` = quien contesta puede quedarse con PARTE de las líneas con `ruta` (la subida a
+   * CloudStudio en la consola web). Solo la honra una consola con `decidirConSeleccion`; las
+   * demás preguntan sí o no al plan entero, como siempre.
+   */
+  seleccionable?: true;
+  /**
+   * De QUÉ operación de sincronización es esta decisión, como dato: la web mantiene el diálogo
+   * abierto tras «Aceptar» hasta que llega el acto de ESA operación, y lo identifica por esto,
+   * no por el enunciado. Ausente = una decisión que no lanza ninguna operación.
+   */
+  operacion?: "subir" | "bajar";
+}
+
+/**
+ * La respuesta de una decisión que admite selección: la cadena de siempre
+ * (`interpretAnswer`) y, si la piel dejó elegir, las rutas que la persona dejó marcadas.
+ * `seleccion` AUSENTE es «no se eligió nada aparte»: el plan entero, como con `preguntar`.
+ */
+export interface RespuestaConSeleccion {
+  respuesta: string;
+  seleccion?: readonly string[];
 }
 
 /**

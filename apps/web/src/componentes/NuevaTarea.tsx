@@ -1,7 +1,15 @@
 import { useRef, useState } from "react";
 import { Modal, Button } from "@deepseek-ai/dsh-client-ui-primitives";
 import { nombreDeAdjuntoSeguro } from "../nombreDeAdjunto.js";
+import { useEsperaDeRefresco } from "../esperaDeRefresco.js";
+import { GiroDeCarga } from "./GiroDeCarga.js";
 import estilos from "./NuevaTarea.module.css";
+
+/** El `onClose` del modal: no cierra. Solo su botón lo hace. */
+const SIN_CERRAR = (): void => {};
+
+/** Cuánto gira «Preparar el encargo» como mucho: lo prepara un modelo, no una medida. */
+const TOPE_DE_PREPARAR_MS = 180_000;
 
 /**
  * Crear una TAREA en background: la petición, el encargo revisado y los adjuntos.
@@ -116,6 +124,9 @@ export function NuevaTarea({
   >([]);
 
   const encargo = editado ?? encargoPropuesto?.encargo ?? "";
+  // «Preparar el encargo» gira hasta que llega la propuesta (o su error): un `encargoPropuesto`
+  // NUEVO. Lo prepara un modelo, así que el tope es largo (`TOPE_DE_PREPARAR_MS`).
+  const preparando = useEsperaDeRefresco(encargoPropuesto, true, TOPE_DE_PREPARAR_MS);
   const enVuelo = adjuntos.some((a) => a.estado === "subiendo");
   const algunoFalló = adjuntos.some((a) => a.estado === "falló");
   // Sin petición no hay nada que encolar; con un adjunto a medias o roto tampoco: los bytes
@@ -179,13 +190,12 @@ export function NuevaTarea({
   return (
     // Capa y velo propios: los CSS Modules del primitivo son stubs vacíos y su diálogo no
     // trae ni posición ni tamaño. Mismo motivo y misma solución que en `NuevaSesion`.
-    <Modal open onClose={alCerrar} title="Nueva tarea" headless className={estilos.capa}>
-      <div
-        className={estilos.velo}
-        onClick={(evento) => {
-          if (evento.target === evento.currentTarget) alCerrar();
-        }}
-      >
+    //
+    // Un modal DE VERDAD: ni Escape ni el clic fuera lo cierran, solo su botón. Lo que se ha
+    // tecleado y el encargo preparado (que ha costado una llamada a un modelo) no se pueden
+    // perder por un clic fuera de la ventana.
+    <Modal open onClose={SIN_CERRAR} title="Nueva tarea" headless className={estilos.capa}>
+      <div className={estilos.velo}>
         <div className={estilos.ventana}>
           <h2 className={estilos.titulo}>Nueva tarea en {proyecto.nombre}</h2>
           {local ? null : (
@@ -253,9 +263,14 @@ export function NuevaTarea({
               <Button
                 variant="outline"
                 className={estilos.accion}
-                disabled={peticion.trim() === ""}
-                onClick={() => alAugmentar(peticion)}
+                disabled={peticion.trim() === "" || preparando.esperando}
+                aria-busy={preparando.esperando}
+                onClick={() => {
+                  preparando.empezar();
+                  alAugmentar(peticion);
+                }}
               >
+                {preparando.esperando ? <GiroDeCarga /> : null}
                 Preparar el encargo
               </Button>
             ) : null}

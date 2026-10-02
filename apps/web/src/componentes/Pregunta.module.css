@@ -241,3 +241,143 @@
   border-color: var(--dsw-alias-border-l4);
   background: var(--dsw-alias-interactive-bg-hover);
 }
+
+/* ── La decisión SELECCIONABLE (la subida): el plan como árbol con casillas ── */
+
+/* Más ancha que la tarjeta de siempre: las rutas de un proyecto XOne son largas (fuentes,
+   iconos) y el árbol suma sangría por nivel. Con `max-height` para que el árbol, y no la
+   tarjeta, sea lo que se desplaza. */
+.pregunta[data-seleccionable] {
+  width: min(640px, 100%);
+  max-height: 100%;
+  box-sizing: border-box;
+}
+
+/* La cuenta a la izquierda y los dos atajos a la derecha, en una fila. */
+.herramientas {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cuenta {
+  margin-right: auto;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+/* Los atajos son texto pulsable y no botones grandes: la acción de la tarjeta es Aceptar. */
+.enlace {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.enlace:disabled {
+  color: var(--dsw-alias-label-tertiary);
+  text-decoration: none;
+  cursor: default;
+}
+
+/* La caja del árbol, la misma que la del `<pre>` del plan: acotada y con scroll propio, para
+   que los botones no se salgan de la tarjeta con una subida de cientos de ficheros. */
+.arbol {
+  min-height: 0;
+  max-height: min(420px, 60vh);
+  padding: 4px;
+  overflow: auto;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+/* La letra A/M/D, la MISMA de Revisión (`Revision.module.css#clase`): mismos alias y mismo
+   porqué de `label-primary` sobre el fondo de estado. */
+.clase {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.clase[data-clase="nuevo"] {
+  background: var(--dsw-alias-state-success-secondary);
+  color: var(--dsw-alias-label-primary);
+}
+
+.clase[data-clase="borrado"] {
+  background: var(--dsw-alias-state-error-secondary);
+  color: var(--dsw-alias-label-primary);
+}
+
+.clase[data-clase="modificado"] {
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* -- Tras aceptar una subida: el giro de «Subiendo…» y el mensaje del final -------------- */
+
+/* El mismo giro del botón «Subir» (`BotonSubir.module.css`), dentro de Aceptar. */
+.girando {
+  composes: girando from "./BotonSubir.module.css";
+  display: inline-block;
+  margin-right: 6px;
+  vertical-align: -1px;
+  /* Sobre el azul del botón el aro gris no se veía: el aro en el azul hondo, más oscuro que el
+     azul, y el tramo que gira en el blanco del texto. */
+  border-color: var(--xonecode-azul-hondo);
+  border-top-color: var(--xonecode-sobre-azul);
+}
+
+/* Mientras sube, Aceptar está apagado pero NO desvaído: es lo que está pasando, no una opción
+   que falte. Gana al `:disabled` de `Boton.module.css` por especificidad. */
+.accion[aria-busy="true"]:disabled {
+  opacity: 1;
+  cursor: progress;
+}
+
+.fin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 8px 4px;
+  text-align: center;
+}
+
+/* La marca del final: verde con todo subido, roja si no. Alias de estado, que cambian con el
+   tema. */
+.marcaDeFin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-error-secondary);
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.fin[data-bien] .marcaDeFin {
+  background: var(--dsw-alias-state-success-secondary);
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.detalle {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}

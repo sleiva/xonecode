@@ -262,6 +262,22 @@ describe("store del cliente", () => {
     expect(s.leer().revision).toEqual({ via: "git", lista: [{ ruta: "a.xne", clase: "nuevo", mas: 1, menos: 0 }] });
   });
 
+  /** La marca de pendiente la pone el servidor, y sin ella Revisión enseñaría lo ya subido. */
+  it("«revision» conserva `pendiente` de cada fichero: ni se pierde ni se inventa", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "revision",
+      via: "git",
+      ficheros: [
+        { ruta: "a.xne", clase: "nuevo", mas: 1, menos: 0, pendiente: true },
+        { ruta: "b.xne", clase: "modificado", mas: 1, menos: 1, pendiente: false },
+        { ruta: "c.xne", clase: "modificado", mas: 1, menos: 1 },
+      ],
+    });
+    expect(s.leer().revision?.lista.map((f) => f.pendiente)).toEqual([true, false, undefined]);
+    expect("pendiente" in s.leer().revision!.lista[2]!).toBe(false);
+  });
+
   it("«arbol» y «fichero» se guardan, y se tiran al cambiar de sesión y al caerse el cable", () => {
     const s = crearStoreDelCliente();
     s.aplicar({ clase: "arbol", rutas: ["app.xml", "src/a.xne"], recortado: false });
@@ -2058,5 +2074,33 @@ describe("store: `case \"conectores\"` no deja pasar un campo que no se nombra",
     s.aplicar({ clase: "conectores", catalogo, conectores: [], desconocidos: [] } as never);
     s.marcarDesconectado();
     expect(s.leer().conectores).toBeUndefined();
+  });
+});
+
+describe("store: lo pendiente de subir (la pestaña Sincronización)", () => {
+  it("guarda la lista con la MISMA criba de filas, su error, y los parches por ruta", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "pendientesDeSubida",
+      ficheros: [
+        { ruta: "a.xne", clase: "modificado", mas: 1, menos: 1 },
+        { ruta: "b.js", clase: "nuevo", sinCommitear: true },
+        { ruta: 7, clase: "nuevo" },
+      ],
+    } as never);
+    expect(s.leer().pendientesDeSubida?.lista?.map((f) => f.ruta)).toEqual(["a.xne", "b.js"]);
+    s.aplicar({ clase: "parcheDeSubida", ruta: ".env", texto: "", recortado: false, negado: "esa ruta no se enseña" });
+    expect(s.leer().parchesDeSubida?.[".env"]).toEqual({ texto: "", recortado: false, negado: "esa ruta no se enseña" });
+    s.aplicar({ clase: "pendientesDeSubida", error: "no dado de alta" });
+    expect(s.leer().pendientesDeSubida).toEqual({ error: "no dado de alta" });
+  });
+
+  it("se tira al caerse el cable: es una FOTO", () => {
+    const s = crearStoreDelCliente();
+    s.marcarConectado();
+    s.aplicar({ clase: "pendientesDeSubida", ficheros: [] });
+    s.marcarDesconectado();
+    expect(s.leer().pendientesDeSubida).toBeUndefined();
+    expect(s.leer().parchesDeSubida).toBeUndefined();
   });
 });

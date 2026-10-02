@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { FilaDeSoporte, ListadoDeSoporte } from "../tipos.js";
+import { GiroDeCarga } from "./GiroDeCarga.js";
 import estilos from "./SoporteDelProyecto.module.css";
 
 /** La ruta del paquete (`web/servidor/arranque.ts#RUTA_SOPORTE`). Viajan IDs, nunca rutas. */
@@ -159,6 +160,8 @@ export function SoporteDelProyecto({
 
   const delProyecto = medida?.proyecto === proyecto ? medida : undefined;
   const listado = delProyecto?.listado;
+  /** Pedido y sin contestar todavía: «Actualizar» gira. */
+  const consultando = delProyecto !== undefined && !delProyecto.respondida;
   const filtrar = (filas: readonly FilaDeSoporte[]) => (soloProblemas ? filas.filter((f) => f.analisis.gravedad !== "ok") : filas);
 
   return (
@@ -171,7 +174,14 @@ export function SoporteDelProyecto({
           <input type="checkbox" checked={soloProblemas} onChange={(e) => setSoloProblemas(e.target.checked)} />
           Solo con problemas
         </label>
-        <button type="button" className={estilos.secundario} disabled={!conectado} onClick={() => setVuelta((v) => v + 1)}>
+        <button
+          type="button"
+          className={estilos.secundario}
+          disabled={!conectado || consultando}
+          aria-busy={consultando}
+          onClick={() => setVuelta((v) => v + 1)}
+        >
+          {consultando ? <GiroDeCarga /> : null}
           Actualizar
         </button>
       </div>

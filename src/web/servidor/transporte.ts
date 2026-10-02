@@ -567,6 +567,16 @@ export type MensajeAlCliente =
     }
   | { clase: "parche"; ruta: string; texto: string; recortado: boolean }
   /**
+   * TODO lo pendiente de subir a CloudStudio del proyecto abierto (la pestaña Sincronización del
+   * panel), o por qué no se pudo medir. Lo que git aún no sigue va marcado `sinCommitear`.
+   */
+  | { clase: "pendientesDeSubida"; ficheros?: FicheroTocado[]; error?: string }
+  /**
+   * El diff de UN fichero pendiente contra CloudStudio. `negado` = la ruta no se enseña (la
+   * regla del lector), y entonces no viaja texto.
+   */
+  | { clase: "parcheDeSubida"; ruta: string; texto: string; recortado: boolean; negado?: string }
+  /**
    * Lo que cambió en el MODELO de un `.xne` de Revisión (`core/diffDeColecciones.ts`), entre el
    * mismo «antes» que su parche y ahora. Sin `cambios` y con `error` si no se pudo
    * reconstruir; `cambios` vacío es «ningún cambio que el modelo vea».
@@ -1014,6 +1024,13 @@ export interface FicheroTocado {
    *  en la fila: el turno en vuelo commitea al terminar, y esta es la única marca que
    *  distingue «lo escribió esta sesión» de «esto está aquí y no consta de quién es». */
   sinCommitear?: true;
+  /**
+   * ¿Sigue pendiente de subir a CloudStudio? Lo decide el SERVIDOR en la misma foto que la
+   * lista (`arranque.ts#marcarPendientes`), no el cliente cruzando dos mensajes que llegan en
+   * momentos distintos. AUSENTE = no se pudo medir (proyecto sin CloudStudio, o la medida
+   * falló), y entonces Revisión enseña todo en vez de esconder sobre una pregunta sin contestar.
+   */
+  pendiente?: boolean;
 }
 
 /** Un fichero del proyecto tal como viaja. Redeclarado en `apps/web/src/tipos.ts`. */
@@ -1379,7 +1396,12 @@ export type MensajeDelCliente =
    * `proyectosDeEntorno`, con su lista o con su `error`.
    */
   | { clase: "entorno"; accion: "proyectos"; entorno: string }
-  | { clase: "respuesta"; texto: string }
+  /**
+   * La respuesta a una `pregunta`. `seleccion` solo la manda el diálogo de una decisión
+   * `seleccionable` (la subida a CloudStudio): las rutas que la persona dejó marcadas.
+   * Ausente = el plan entero, o una pregunta que no deja elegir.
+   */
+  | { clase: "respuesta"; texto: string; seleccion?: string[] }
   /**
    * La respuesta a `seleccionar`. **Sin `id` (o con `id: null`) es CANCELAR**, que es
    * exactamente lo que `seleccionar` ya devuelve al desconectarse y al vencer su plazo — en
@@ -1582,6 +1604,8 @@ export type MensajeDelCliente =
   | { clase: "cancelar" }
   /** Pide lo que la sesión abierta ha tocado, o el parche de un fichero concreto. */
   | { clase: "revision"; ruta?: string }
+  /** Lo pendiente de subir (sin `ruta`) o el diff de uno (con `ruta`). */
+  | { clase: "pendientesDeSubida"; ruta?: string }
   /** Pide el diff SEMÁNTICO de un `.xne` de Revisión. */
   | { clase: "modeloDelCambio"; ruta: string }
   /** Pide el árbol del proyecto abierto, o el contenido de una ruta relativa a su raíz. */

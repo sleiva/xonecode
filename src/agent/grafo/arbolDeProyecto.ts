@@ -151,6 +151,35 @@ export function motivoDeRutaInaceptable(ruta: string): string | undefined {
   return undefined;
 }
 
+/**
+ * ¿Se puede ENSEÑAR esta ruta? La MISMA regla que `leerFicheroDeProyecto`, para quien enseña
+ * algo de un fichero que no es su contenido tal cual —el diff de lo pendiente de subir—:
+ * criba de texto, vista aplanada, y la segunda pasada sobre el camino REAL cuando el fichero
+ * existe (mayúsculas en un disco que no las distingue, enlaces a un fichero denegado). Un
+ * fichero que ya no existe —un borrado— solo pasa la criba de texto: no hay camino que resolver,
+ * y su contenido sale de git, no del disco.
+ */
+export async function motivoParaNoEnsenar(raiz: string, ruta: string): Promise<string | undefined> {
+  const motivo = motivoDeRutaInaceptable(ruta);
+  if (motivo !== undefined) return motivo;
+  const normal = ruta.split(/[\\/]/).join("/");
+  if (normal.endsWith(".xml") && existsSync(resolve(raiz, `${normal.slice(0, -4)}.xne`))) return MOTIVO_APLANADA;
+  if (!existsSync(resolve(raiz, normal))) return undefined;
+  let real: string;
+  let raizReal: string;
+  try {
+    raizReal = await realpath(raiz);
+    real = await realpath(resolve(raiz, normal));
+  } catch {
+    return "no se puede comprobar";
+  }
+  if (!real.startsWith(raizReal + sep)) return "está fuera del proyecto";
+  const relReal = relative(raizReal, real).split(sep).join("/");
+  if (!puedeLeerRuta(`/${relReal}`)) return "esa ruta no se enseña";
+  if (relReal.endsWith(".xml") && existsSync(`${real.slice(0, -4)}.xne`)) return MOTIVO_APLANADA;
+  return undefined;
+}
+
 export async function leerFicheroDeProyecto(raiz: string, ruta: string): Promise<FicheroLeido> {
   const rechazo = (error: string): FicheroLeido => ({ ruta, recortado: false, binario: false, bytes: 0, error });
 

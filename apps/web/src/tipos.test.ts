@@ -265,8 +265,10 @@ describe("tipos del cliente", () => {
     const decision = {
       lineas: [
         { texto: "SUBIDA A CLOUDSTUDIO — 1 operación" },
-        { texto: "  + app/Clientes.xne", cambio: "nuevo" as const },
+        { texto: "  + app/Clientes.xne", cambio: "nuevo" as const, ruta: "app/Clientes.xne" },
       ],
+      seleccionable: true as const,
+      operacion: "subir" as const,
     };
 
     s.aplicar({ clase: "pregunta", texto: "¿Subir a CloudStudio?", decision });

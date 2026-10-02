@@ -291,6 +291,14 @@ export interface EstadoDelCliente {
   };
   parches?: Record<string, { texto: string; recortado: boolean }>;
   /**
+   * TODO lo pendiente de subir del proyecto abierto (la pestaña Sincronización del panel), y por
+   * qué no se pudo medir. Ausente = no se ha pedido o se tiró (otra sesión, cable caído).
+   */
+  pendientesDeSubida?: { lista?: FicheroTocado[]; error?: string };
+  /** El diff contra CloudStudio de cada fichero pendiente desplegado, por ruta. `negado` = no se
+   *  enseña (la regla del lector), y entonces no hay texto. */
+  parchesDeSubida?: Record<string, { texto: string; recortado: boolean; negado?: string }>;
+  /**
    * El diff SEMÁNTICO de cada `.xne` desplegado en Revisión, por ruta y ya validado
    * (`cambiosDelModelo.ts`). Se tira con los parches: son la misma foto contada de otra forma.
    */
@@ -640,7 +648,11 @@ function esSelector(valor: unknown): valor is SelectorDeConsola {
  * cualquier cosa —el tipo dice `unknown` a propósito, para que el guard no prometa más de lo
  * que ha mirado—, y quien lo convierte es `cambioDeLinea`.
  */
-type DecisionCruda = { readonly lineas: readonly { texto: string; cambio?: unknown }[] };
+type DecisionCruda = {
+  readonly lineas: readonly { texto: string; cambio?: unknown; ruta?: unknown }[];
+  readonly seleccionable?: unknown;
+  readonly operacion?: unknown;
+};
 
 function esDecision(valor: unknown): valor is DecisionCruda {
   if (typeof valor !== "object" || valor === null) return false;
@@ -1060,8 +1072,20 @@ export function crearStoreDelCliente(): {
                     decision: {
                       lineas: m.decision.lineas.map((l) => {
                         const cambio = cambioDeLinea(l.cambio);
-                        return { texto: l.texto, ...(cambio === undefined ? {} : { cambio }) };
+                        return {
+                          texto: l.texto,
+                          ...(cambio === undefined ? {} : { cambio }),
+                          // La ruta, si es una cadena: sin ella la línea no entra en el árbol,
+                          // pero sigue en el plan (no se tira la decisión por un campo raro).
+                          ...(typeof l.ruta === "string" ? { ruta: l.ruta } : {}),
+                        };
                       }),
+                      // Solo con `true` exacto: lo demás es la decisión de siempre, sin casillas.
+                      ...(m.decision.seleccionable === true ? { seleccionable: true as const } : {}),
+                      // Solo los dos valores que existen: otro no es una operación que esperar.
+                      ...(m.decision.operacion === "subir" || m.decision.operacion === "bajar"
+                        ? { operacion: m.decision.operacion }
+                        : {}),
                     },
                   }
                 : {}),
@@ -1628,6 +1652,32 @@ export function crearStoreDelCliente(): {
           });
           return;
         }
+        case "pendientesDeSubida": {
+          // Lista blanca, fila a fila con la MISMA criba que la revisión (`esFicheroTocado`).
+          const m = mensaje as { ficheros?: unknown; error?: unknown };
+          mutar({
+            pendientesDeSubida: {
+              ...(Array.isArray(m.ficheros) ? { lista: m.ficheros.filter(esFicheroTocado).map((f) => ({ ...f })) } : {}),
+              ...(typeof m.error === "string" ? { error: m.error } : {}),
+            },
+          });
+          return;
+        }
+        case "parcheDeSubida": {
+          const m = mensaje as { ruta?: unknown; texto?: unknown; recortado?: unknown; negado?: unknown };
+          if (typeof m.ruta !== "string" || typeof m.texto !== "string") return;
+          mutar({
+            parchesDeSubida: {
+              ...estado.parchesDeSubida,
+              [m.ruta]: {
+                texto: m.texto,
+                recortado: m.recortado === true,
+                ...(typeof m.negado === "string" ? { negado: m.negado } : {}),
+              },
+            },
+          });
+          return;
+        }
         case "parche": {
           const m = mensaje as { ruta?: unknown; texto?: unknown; recortado?: unknown };
           if (typeof m.ruta !== "string" || typeof m.texto !== "string") return;
@@ -2134,7 +2184,7 @@ export function crearStoreDelCliente(): {
           const cambioDeProyecto = proyectoDeAhora !== estado.alta?.proyectoActivo;
           mutar({
             ...(cambioDeProyecto ? { gestor: undefined } : {}),
-            ...(cambioDeSesion ? { revision: undefined, parches: undefined, modelosDelCambio: undefined, arbol: undefined, contenidos: undefined, colecciones: undefined, planes: undefined, artefactos: undefined, sync: undefined } : {}),
+            ...(cambioDeSesion ? { revision: undefined, parches: undefined, pendientesDeSubida: undefined, parchesDeSubida: undefined, modelosDelCambio: undefined, arbol: undefined, contenidos: undefined, colecciones: undefined, planes: undefined, artefactos: undefined, sync: undefined } : {}),
             alta: {
               pasos: m.pasos as PasoDelWizard[],
               proveedores: m.proveedores,
@@ -2255,6 +2305,8 @@ export function crearStoreDelCliente(): {
         // vez al volver.
         revision: undefined,
         parches: undefined,
+        pendientesDeSubida: undefined,
+        parchesDeSubida: undefined,
         modelosDelCambio: undefined,
         arbol: undefined,
         contenidos: undefined,

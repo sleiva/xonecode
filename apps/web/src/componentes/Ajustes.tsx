@@ -37,6 +37,8 @@ import { CrearEmulador } from "./CrearEmulador.js";
 import { EliminarEmulador } from "./EliminarEmulador.js";
 import { motivoParaNoEliminarAvd } from "../reglasDeAvd.js";
 import { useMedirAlVolver } from "../medirAlVolver.js";
+import { useEsperaDeRefresco } from "../esperaDeRefresco.js";
+import { GiroDeCarga } from "./GiroDeCarga.js";
 import { Agentes } from "./Agentes.js";
 import { Skills } from "./Skills.js";
 import { Conectores } from "./Conectores.js";
@@ -153,6 +155,9 @@ import { IconoDeEntorno } from "./IconoDeEntorno.js";
 import { IconoDeProveedor } from "./IconoDeProveedor.js";
 import { PastillaDeModelo } from "./PastillaDeModelo.js";
 import estilos from "./Ajustes.module.css";
+/** El `onClose` de la ventana de Ajustes: no cierra. Solo su botón lo hace. */
+const SIN_CERRAR_AJUSTES = (): void => {};
+
 // La coraza del aviso de «cambios sin guardar»: mismo velo que `ConfirmarDescarte`
 // (`AccionesDeTarea.tsx`) y `AccionDeSesion.tsx` — dos copias del mismo velo es cómo se
 // acaba con dos velos distintos.
@@ -1027,6 +1032,8 @@ export function Ajustes({
    * pestaña Ejecutar: dos copias del mismo efecto con su suscripción es como divergen.
    */
   useMedirAlVolver(seccion === "dispositivos", alActualizarDispositivos);
+  // «Refrescar» de Dispositivos gira hasta que llega una medida NUEVA (otro `medido`).
+  const refrescoDeDispositivos = useEsperaDeRefresco(dispositivos?.medido, conectado);
 
   const [avisoDeUrl, setAvisoDeUrl] = useState<string | undefined>(undefined);
 
@@ -1298,17 +1305,10 @@ export function Ajustes({
         stubs vacíos, así que su `dialog` y su máscara no traen ni posición ni tamaño. Sin
         esto la ventana se pintaba al final del `body`, debajo de la aplicación entera —
         montada y fuera de la vista, que desde fuera se lee como «el botón no hace nada». */}
-    <Modal open onClose={alIntentarCerrar} title="Ajustes" headless className={estilos.capa}>
-      <div
-        className={estilos.velo}
-        // Pinchar FUERA cierra; la comprobación de `target` es lo que distingue «fuera» de
-        // «dentro», porque un clic en cualquier botón de la ventana burbujea hasta aquí.
-        // Pasa por `alIntentarCerrar` y no por `alCerrar` a pelo: con un borrador sucio en
-        // Dispositivos, cerrar SÍ decide algo — si se pierde lo tecleado.
-        onClick={(evento) => {
-          if (evento.target === evento.currentTarget) alIntentarCerrar();
-        }}
-      >
+    // Un modal DE VERDAD: ni Escape ni el clic fuera lo cierran, solo su botón de cerrar
+    // (que pasa por `alIntentarCerrar`: con un borrador sucio, cerrar decide si se pierde).
+    <Modal open onClose={SIN_CERRAR_AJUSTES} title="Ajustes" headless className={estilos.capa}>
+      <div className={estilos.velo}>
       <div className={estilos.ventana}>
         <nav className={estilos.navegacion} aria-label="Secciones de ajustes">
           {/* La cabecera del rediseño. El subtítulo no es adorno: dice el ALCANCE, que es la
@@ -1840,9 +1840,14 @@ export function Ajustes({
                     // La MISMA frase que el botón del escritorio, importada y no copiada: es
                     // la misma medida, y dos copias es donde divergirían.
                     title={TITULO_DE_REFRESCAR_EQUIPO}
-                    disabled={!conectado}
-                    onClick={alActualizarDispositivos}
+                    disabled={!conectado || refrescoDeDispositivos.esperando}
+                    aria-busy={refrescoDeDispositivos.esperando}
+                    onClick={() => {
+                      refrescoDeDispositivos.empezar();
+                      alActualizarDispositivos();
+                    }}
                   >
+                    {refrescoDeDispositivos.esperando ? <GiroDeCarga /> : null}
                     Refrescar
                   </button>
                 )}
@@ -2333,11 +2338,13 @@ export function Ajustes({
                         className={estilos.recargar}
                         title="Vuelve a preguntar a CloudStudio por los proyectos propios y compartidos de este entorno"
                         disabled={!conectado || refrescandoProyectos[entornoEnPestana] === true}
+                        aria-busy={refrescandoProyectos[entornoEnPestana] === true}
                         onClick={() => {
                           setRefrescandoProyectos((previo) => ({ ...previo, [entornoEnPestana]: true }));
                           alPedirProyectosDeEntorno(entornoEnPestana);
                         }}
                       >
+                        {refrescandoProyectos[entornoEnPestana] === true ? <GiroDeCarga /> : null}
                         {refrescandoProyectos[entornoEnPestana] === true ? "Refrescando…" : "Refrescar"}
                       </button>
                     )}

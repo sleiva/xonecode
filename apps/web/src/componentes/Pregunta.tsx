@@ -1,6 +1,8 @@
-import { Fragment, useEffect, useRef, useState, type FormEvent, type MouseEvent } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Input, Button, Modal } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { DecisionDeConsola } from "../tipos.js";
+import { arbolDeRutas } from "../arbolDeRutas.js";
+import { Arbol } from "./Arbol.js";
 import estilos from "./Pregunta.module.css";
 
 /*
@@ -11,6 +13,33 @@ import estilos from "./Pregunta.module.css";
  */
 const SI = "s";
 const NO = "n";
+
+/** El `onClose` del modal de una decisión: no cierra. Solo los botones contestan. */
+const SIN_CERRAR = (): void => {};
+
+/**
+ * Lo que pasa DESPUÉS de aceptar una operación de sincronización —subir o «Actualizar repo
+ * local»—, para que el diálogo no se cierre en el acto: tardan, y cerrarlo al pulsar dejaba a la
+ * persona sin saber si había terminado, ni cómo, ni por qué falló.
+ *
+ * - `trabajando`: Aceptar gira, Cancelar (y las casillas de la subida) se bloquean.
+ * - `terminada`: el diálogo dice cómo fue y un único «Aceptar» lo cierra. Todo viene como DATO
+ *   en el acto de la operación (`core/actos.ts`): `resultado` (el recuento de una subida),
+ *   `bajados` (lo que trajo una bajada) y `error` (lanzó, con el mismo texto que se dijo en el
+ *   hilo). Sin ninguno, NO se pinta como «todo bien». `motivo` cubre lo que no viene del
+ *   servidor (el cable que se cae).
+ */
+export type ProgresoDeOperacion =
+  | { fase: "trabajando"; operacion: "subir" | "bajar" }
+  | {
+      fase: "terminada";
+      operacion: "subir" | "bajar";
+      resultado?: { subidos: number; fallidos: number };
+      bajados?: number;
+      error?: string;
+      lineas: readonly string[];
+      motivo?: string;
+    };
 
 /**
  * La pregunta de texto libre, la del secreto y la de una DECISIÓN: el `consola.preguntar`
@@ -59,9 +88,17 @@ const NO = "n";
  * esta rama: significa «sin borde propio, para no anidar dos cajas iguales», y un diálogo no
  * tiene ninguna caja alrededor en la que anidarse.
  *
- * Fail-closed, igual que el modal de la aprobación: solo «Aceptar» autoriza, y Escape y el
- * clic fuera RECHAZAN. Lo que se contesta sin querer no escribe nada — lo que se autoriza sin
- * querer, sí.
+ * **Es un modal DE VERDAD: solo se cierra con sus botones.** Solo «Aceptar» autoriza y solo
+ * «Cancelar» rechaza; Escape y el clic fuera NO hacen nada. Antes rechazaban, y era tirar sin
+ * querer una subida que se estaba revisando —el plan es largo y se lee con calma, y un clic
+ * fuera de la tarjeta la descartaba entera—. Sigue siendo fail-closed: lo que nadie contesta lo
+ * salda el plazo del servidor como rechazo.
+ *
+ * **Con `decision.seleccionable` el plan es un ÁRBOL con casillas** (la subida a CloudStudio):
+ * el mismo `Arbol` de Revisión con la misma letra A/M/D, todo abierto y todo marcado al nacer
+ * —Aceptar sin tocar nada sube lo mismo que antes—, «Seleccionar todo» y «Deseleccionar todo»
+ * arriba, y Aceptar apagado con nada marcado. La respuesta lleva las rutas marcadas; qué se
+ * sube lo vuelve a decidir el servidor cruzándolas con su plan.
  *
  * Y no hay una tercera salida, que es la diferencia con el modal de la aprobación: allí
  * desmontar sin contestar también rechaza, y aquí NO se contesta nada. La razón es de dónde
@@ -84,6 +121,8 @@ export function Pregunta({
   alResponder,
   anidado = false,
   decision,
+  progreso,
+  alCerrar,
 }: {
   texto: string;
   /** La forma `leerSecreto`: campo de contraseña y sin autocompletado del navegador. */
@@ -93,7 +132,7 @@ export function Pregunta({
    * dar la respuesta por entregada: retirar la pregunta con el envío fallido dejaría al
    * usuario creyendo que contestó, mientras el servidor sigue esperando hasta su plazo.
    */
-  alResponder: (respuesta: string) => void | Promise<unknown>;
+  alResponder: (respuesta: string, seleccion?: string[]) => void | Promise<unknown>;
   /**
    * `true` dentro de `TarjetaDeAlta` (la clave de API del paso de cuenta): sin borde ni
    * fondo propio, para no anidar dos cajas iguales — ver `Selector.tsx`, mismo motivo y
@@ -106,6 +145,10 @@ export function Pregunta({
    * `lineas` y dos botones. Ausente, pregunta de texto libre, que es lo de siempre.
    */
   decision?: DecisionDeConsola;
+  /** Una decisión de sincronización: qué pasa tras aceptar (ver `ProgresoDeOperacion`). */
+  progreso?: ProgresoDeOperacion;
+  /** El «Aceptar» del final, con `progreso.fase === "terminada"`: lo cierra todo. */
+  alCerrar?: () => void;
 }) {
   const [valor, setValor] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -127,11 +170,11 @@ export function Pregunta({
    * DOS resolutores de la cola FIFO del servidor, y el segundo se comería la respuesta de
    * la pregunta siguiente.
    */
-  const responder = (respuesta: string): void => {
+  const responder = (respuesta: string, seleccion?: string[]): void => {
     if (enviando) return;
     setEnviando(true);
     setFalloDeEnvio(false);
-    void Promise.resolve(alResponder(respuesta)).catch(() => {
+    void Promise.resolve(seleccion === undefined ? alResponder(respuesta) : alResponder(respuesta, seleccion)).catch(() => {
       if (!montado.current) return;
       setEnviando(false);
       setFalloDeEnvio(true);
@@ -145,7 +188,26 @@ export function Pregunta({
     </p>
   ) : null;
 
+  if (decision !== undefined && decision.seleccionable === true) {
+    return (
+      <DecisionConSeleccion
+        texto={texto}
+        decision={decision}
+        enviando={enviando}
+        fallo={fallo}
+        alResponder={responder}
+        {...(progreso === undefined ? {} : { progreso })}
+        {...(alCerrar === undefined ? {} : { alCerrar })}
+      />
+    );
+  }
+
+  if (decision !== undefined && progreso?.fase === "terminada") {
+    return <FinDeLaOperacion texto={texto} progreso={progreso} alCerrar={alCerrar ?? SIN_CERRAR} />;
+  }
+
   if (decision !== undefined) {
+    const trabajando = progreso?.fase === "trabajando";
     // El enunciado va ARRIBA y como título, con el plan debajo: la tarjeta se lee como un
     // aviso —qué se pregunta, y qué se decide— y no como un formulario, donde el rótulo se
     // pega a su campo. Y no lleva `<form>`: sin campo no hay envío por Enter, y **eso es
@@ -164,32 +226,18 @@ export function Pregunta({
     return (
       <Modal
         open
-        /*
-          Escape y el clic en el velo llegan por aquí: en esta pregunta cerrar es RECHAZAR, no
-          «dejarlo para luego» — al otro lado hay un turno parado esperando la respuesta, y el
-          servidor la convertiría en un rechazo igualmente, pero diez minutos después
-          (`consolaWeb.ts#MS_DE_ESPERA_POR_OMISION`).
-        */
-        onClose={() => responder(NO)}
+        // Escape llega por aquí, y NO cierra: es un modal de verdad (ver la cabecera). Solo
+        // los botones contestan.
+        onClose={SIN_CERRAR}
         // El nombre accesible del diálogo ES el enunciado: `headless` no pinta cabecera
         // propia, así que sin esto el `dialog` se anunciaría sin decir de qué es.
         title={texto}
         headless
         className={estilos.capa}
       >
-        {/*
-          Pinchar FUERA de la tarjeta rechaza, y la comprobación de `target` es lo que
-          distingue «fuera» de «dentro»: un clic en un botón de la tarjeta burbujea hasta
-          aquí, y sin ella cualquier pulsación acabaría rechazando. El velo es NUESTRO y no
-          el `mask` del paquete —ese es un `<div aria-hidden="true">` sin clase, o sea que ni
-          se pinta ni se puede pulsar—.
-        */}
-        <div
-          className={estilos.velo}
-          onClick={(evento: MouseEvent<HTMLDivElement>) => {
-            if (evento.target === evento.currentTarget) responder(NO);
-          }}
-        >
+        {/* El velo es NUESTRO y no el `mask` del paquete —ese es un `<div aria-hidden="true">`
+            sin clase, o sea que ni se pinta ni se puede pulsar—. Pincharlo no hace nada. */}
+        <div className={estilos.velo}>
           <div className={estilos.pregunta}>
             <p className={estilos.titulo}>{texto}</p>
             <pre className={estilos.plan}>
@@ -205,16 +253,18 @@ export function Pregunta({
                 type="button"
                 variant="primary"
                 className={estilos.accion}
-                disabled={enviando}
+                disabled={enviando || trabajando}
+                aria-busy={trabajando}
                 onClick={() => responder(SI)}
               >
-                Aceptar
+                {trabajando ? <span className={estilos.girando} aria-hidden="true" /> : null}
+                {trabajando ? (progreso.operacion === "bajar" ? "Actualizando…" : "Subiendo…") : "Aceptar"}
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 className={estilos.cancelar}
-                disabled={enviando}
+                disabled={enviando || trabajando}
                 onClick={() => responder(NO)}
               >
                 Cancelar
@@ -269,5 +319,194 @@ export function Pregunta({
       </div>
       {fallo}
     </form>
+  );
+}
+
+/**
+ * El diálogo de una decisión SELECCIONABLE: el plan como árbol con casillas. El porqué está
+ * en la cabecera de `Pregunta`; aquí solo vive lo marcado, que es de este diálogo y muere con él.
+ */
+function DecisionConSeleccion({
+  texto,
+  decision,
+  enviando,
+  fallo,
+  alResponder,
+  progreso,
+  alCerrar,
+}: {
+  texto: string;
+  decision: DecisionDeConsola;
+  enviando: boolean;
+  fallo: ReactNode;
+  alResponder: (respuesta: string, seleccion?: string[]) => void;
+  progreso?: ProgresoDeOperacion;
+  alCerrar?: () => void;
+}) {
+  const subiendo = progreso?.fase === "trabajando";
+  // Las líneas que hablan de un fichero, con lo que le pasa: la cabecera no lleva `ruta`.
+  const ficheros = useMemo(
+    () =>
+      decision.lineas.flatMap((linea) =>
+        linea.ruta === undefined ? [] : [{ ruta: linea.ruta, cambio: linea.cambio ?? "modificado" }]
+      ),
+    [decision]
+  );
+  const nodos = useMemo(() => arbolDeRutas(ficheros.map((f) => f.ruta)), [ficheros]);
+  const cambioDe = useMemo(() => new Map(ficheros.map((f) => [f.ruta, f.cambio])), [ficheros]);
+  // Todo marcado al nacer: Aceptar sin tocar nada sube lo mismo que antes de poder elegir.
+  const [marcadas, setMarcadas] = useState<ReadonlySet<string>>(() => new Set(ficheros.map((f) => f.ruta)));
+  const total = ficheros.length;
+  const cuantas = ficheros.filter((f) => marcadas.has(f.ruta)).length;
+  // Desde que se acepta, nada de lo elegido se puede tocar: ni casillas, ni atajos, ni Cancelar.
+  const bloqueado = enviando || subiendo;
+
+  if (progreso?.fase === "terminada") {
+    return <FinDeLaOperacion texto={texto} progreso={progreso} alCerrar={alCerrar ?? SIN_CERRAR} />;
+  }
+
+  return (
+    <Modal open onClose={SIN_CERRAR} title={texto} headless className={estilos.capa}>
+      <div className={estilos.velo}>
+        <div className={estilos.pregunta} data-seleccionable="">
+          <p className={estilos.titulo}>{texto}</p>
+          <div className={estilos.herramientas}>
+            <span className={estilos.cuenta} aria-live="polite">
+              {cuantas} de {total} {total === 1 ? "fichero" : "ficheros"}
+            </span>
+            <button
+              type="button"
+              className={estilos.enlace}
+              disabled={bloqueado || cuantas === total}
+              onClick={() => setMarcadas(new Set(ficheros.map((f) => f.ruta)))}
+            >
+              Seleccionar todo
+            </button>
+            <button
+              type="button"
+              className={estilos.enlace}
+              disabled={bloqueado || cuantas === 0}
+              onClick={() => setMarcadas(new Set())}
+            >
+              Deseleccionar todo
+            </button>
+          </div>
+          <div className={estilos.arbol}>
+            <Arbol
+              nodos={nodos}
+              alElegir={() => {}}
+              abiertas="todas"
+              variante="explorador"
+              seleccion={{ marcadas, alCambiar: setMarcadas, bloqueada: bloqueado }}
+              insignia={(ruta) => {
+                const cambio = cambioDe.get(ruta) ?? "modificado";
+                return (
+                  <span className={estilos.clase} data-clase={cambio} aria-label={cambio}>
+                    {cambio === "nuevo" ? "A" : cambio === "borrado" ? "D" : "M"}
+                  </span>
+                );
+              }}
+            />
+          </div>
+          <div className={estilos.decisiones}>
+            <Button
+              type="button"
+              variant="primary"
+              className={estilos.accion}
+              disabled={bloqueado || cuantas === 0}
+              aria-busy={subiendo}
+              // Las marcadas en el ORDEN del plan, no en el de los clics.
+              onClick={() => alResponder(SI, ficheros.filter((f) => marcadas.has(f.ruta)).map((f) => f.ruta))}
+            >
+              {subiendo ? <span className={estilos.girando} aria-hidden="true" /> : null}
+              {subiendo ? "Subiendo…" : "Aceptar"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className={estilos.cancelar}
+              disabled={bloqueado}
+              onClick={() => alResponder(NO)}
+            >
+              Cancelar
+            </Button>
+          </div>
+          {fallo}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * El final de una operación de sincronización, en el MISMO diálogo: cómo fue y un único
+ * «Aceptar» que lo cierra.
+ *
+ * «Todo bien» SOLO con el dato delante: el recuento sin un fallo (subir) o lo bajado (bajar).
+ * Con `error` se dice que no se pudo y POR QUÉ, en vez de mandar a buscarlo al hilo. Sin dato
+ * —la operación no terminó con informe, o se cayó el cable— se dice que no se sabe y se enseña
+ * lo que la operación contó, que es lo que hace falta para decidir qué hacer.
+ */
+function FinDeLaOperacion({
+  texto,
+  progreso,
+  alCerrar,
+}: {
+  texto: string;
+  progreso: Extract<ProgresoDeOperacion, { fase: "terminada" }>;
+  alCerrar: () => void;
+}) {
+  const { resultado, bajados, error, operacion } = progreso;
+  const subir = operacion === "subir";
+  const bien =
+    error === undefined &&
+    (subir ? resultado !== undefined && resultado.fallidos === 0 && resultado.subidos > 0 : bajados !== undefined);
+  let titulo: string;
+  let detalle: string;
+  if (error !== undefined) {
+    titulo = subir ? "No se ha podido subir" : "No se ha podido actualizar el repo local";
+    detalle = error;
+  } else if (!subir) {
+    titulo = bien ? "Repo local actualizado" : "La actualización no ha terminado bien";
+    detalle =
+      bajados !== undefined
+        ? `${bajados} ${bajados === 1 ? "fichero bajado" : "ficheros bajados"} de la rama.`
+        : (progreso.motivo ?? "No consta cómo terminó. Esto es lo que contó la operación:");
+  } else if (bien && resultado !== undefined) {
+    titulo = "Todo subido correctamente";
+    detalle = `${resultado.subidos} ${resultado.subidos === 1 ? "fichero subido" : "ficheros subidos"} a CloudStudio.`;
+  } else if (resultado === undefined) {
+    titulo = "La subida no ha terminado bien";
+    detalle = progreso.motivo ?? "No consta cómo terminó. Esto es lo que contó la operación:";
+  } else if (resultado.subidos === 0 && resultado.fallidos === 0) {
+    titulo = "No se ha subido nada";
+    detalle = `Subidos ${resultado.subidos}, fallaron ${resultado.fallidos}. Lo que falló sigue pendiente y se reintenta en la próxima subida.`;
+  } else {
+    titulo = "La subida ha terminado con fallos";
+    detalle = `Subidos ${resultado.subidos}, fallaron ${resultado.fallidos}. Lo que falló sigue pendiente y se reintenta en la próxima subida.`;
+  }
+  // Lo que contó la operación, solo cuando no fue bien: con todo subido sobra.
+  const lineas = bien ? [] : progreso.lineas.slice(-12);
+
+  return (
+    <Modal open onClose={SIN_CERRAR} title={texto} headless className={estilos.capa}>
+      <div className={estilos.velo}>
+        <div className={estilos.pregunta} data-seleccionable="">
+          <div className={estilos.fin} data-bien={bien ? "" : undefined} role="status">
+            <span className={estilos.marcaDeFin} aria-hidden="true">
+              {bien ? "✓" : "!"}
+            </span>
+            <p className={estilos.titulo}>{titulo}</p>
+            <p className={estilos.detalle}>{detalle}</p>
+          </div>
+          {lineas.length === 0 ? null : <pre className={estilos.plan}>{lineas.join("\n")}</pre>}
+          <div className={estilos.decisiones}>
+            <Button type="button" variant="primary" className={estilos.accion} autoFocus onClick={alCerrar}>
+              Aceptar
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Modal>
   );
 }

@@ -1086,7 +1086,11 @@ export function crearSincronizador(
         // `prepararRepo` va DESPUÉS de bajar, y es quien hace el `git init`: con la copia
         // vaciada no hay `.git`, así que el primer commit es la bajada entera.
         await piezas.preparar(raiz, bajada.rama, informar, vaciar ? { propio: true } : {});
-        return { tipo: "texto", texto: `bajados ${bajada.descargados.length} ficheros (${bajada.via})\n` };
+        return {
+          tipo: "texto",
+          texto: `bajados ${bajada.descargados.length} ficheros (${bajada.via})\n`,
+          bajada: { bajados: bajada.descargados.length },
+        };
       }
       if (accion === "subir") {
         const informe = await piezas.subirProyecto({
@@ -1102,7 +1106,11 @@ export function crearSincronizador(
           politicaDeAprobacion: politicaDeAprobacion ?? (async () => false),
           informar,
         });
-        return { tipo: "texto", texto: `subidos ${informe.ok.length}, fallaron ${informe.fallos.length}\n` };
+        return {
+          tipo: "texto",
+          texto: `subidos ${informe.ok.length}, fallaron ${informe.fallos.length}\n`,
+          subida: { subidos: informe.ok.length, fallidos: informe.fallos.length },
+        };
       }
       const pendientes = await piezas.pendientes(raiz, config.rama);
       return { tipo: "texto", texto: `rama ${config.rama}: ${pendientes.length} ficheros por subir\n` };

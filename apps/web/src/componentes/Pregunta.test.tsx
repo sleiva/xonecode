@@ -212,33 +212,27 @@ describe("Pregunta: la forma de una decisión", () => {
 
   /**
    * Las dos salidas SIN botón, que son las que un diálogo trae consigo: Escape y el clic en el
-   * velo. Las dos RECHAZAN y no cierran en silencio, por el mismo motivo que en la aprobación
-   * —al otro lado hay un turno esperando, y el servidor lo convertiría en un rechazo de todos
-   * modos, diez minutos después (`consolaWeb.ts#MS_DE_ESPERA_POR_OMISION`)—, y la dirección es
-   * la segura: lo que no se contesta no escribe nada.
+   * velo. **No hacen NADA**: es un modal de verdad, y solo se cierra con sus botones. Antes
+   * rechazaban, y tiraban sin querer una subida que se estaba revisando. Sigue siendo
+   * fail-closed: lo que nadie contesta lo salda el plazo del servidor como rechazo.
    */
-  it("Escape rechaza: la salida sin decidir es la que no sube nada", () => {
+  it("Escape NO cierra ni contesta: solo los botones", () => {
     const alResponder = vi.fn();
     render(<Pregunta texto="¿Subir a CloudStudio?" decision={DECISION} alResponder={alResponder} />);
     fireEvent.keyDown(document, { key: "Escape" });
-    expect(alResponder).toHaveBeenCalledWith("n");
+    expect(alResponder).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeTruthy();
   });
 
-  /**
-   * El `mask` del paquete SÍ llama a `onClose`, pero es un `<div aria-hidden="true">` sin
-   * clase y, como sus CSS Modules son stubs vacíos, no se pinta: nadie puede pulsarlo. El velo
-   * que el usuario ve es el nuestro, y sin su propio manejador pinchar fuera de la tarjeta no
-   * haría nada mientras el comentario prometía lo contrario.
-   */
-  it("pinchar en el velo VISIBLE rechaza; pinchar dentro de la tarjeta no", () => {
+  it("pinchar en el velo NO cierra ni contesta", () => {
     const alResponder = vi.fn();
     render(<Pregunta texto="¿Subir a CloudStudio?" decision={DECISION} alResponder={alResponder} />);
     // El velo es el único hijo del `dialog`; la tarjeta cuelga de él.
     const velo = tarjeta().firstElementChild as HTMLElement;
+    fireEvent.click(velo);
     fireEvent.click(velo.firstElementChild as HTMLElement);
     expect(alResponder).not.toHaveBeenCalled();
-    fireEvent.click(velo);
-    expect(alResponder).toHaveBeenCalledWith("n");
+    expect(screen.getByRole("dialog")).toBeTruthy();
   });
 
   /**
@@ -273,5 +267,123 @@ describe("Pregunta: la forma de una decisión", () => {
     await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/no llegó/i));
     fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
     expect(alResponder).toHaveBeenLastCalledWith("n");
+  });
+});
+
+describe("Pregunta: la subida deja ELEGIR qué ficheros suben", () => {
+  const SELECCIONABLE = {
+    lineas: [
+      { texto: "SUBIDA A CLOUDSTUDIO — 3 operaciones" },
+      { texto: "  ~ app.xml", cambio: "modificado" as const, ruta: "app.xml" },
+      { texto: "  + fonts/a.ttf", cambio: "nuevo" as const, ruta: "fonts/a.ttf" },
+      { texto: "  - fonts/b.ttf", cambio: "borrado" as const, ruta: "fonts/b.ttf" },
+    ],
+    seleccionable: true as const,
+  };
+  const casilla = (ruta: string): HTMLInputElement => screen.getByRole("checkbox", { name: `Subir ${ruta}` });
+
+  it("es el árbol de Revisión: carpetas abiertas, letra A/M/D, y todo marcado al nacer", () => {
+    render(<Pregunta texto="¿Subir a CloudStudio?" decision={SELECCIONABLE} alResponder={() => {}} />);
+    expect(screen.getByRole("tree")).toBeTruthy();
+    expect(screen.getByRole("treeitem", { name: "fonts" }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByLabelText("nuevo").textContent).toBe("A");
+    expect(screen.getByLabelText("borrado").textContent).toBe("D");
+    expect(casilla("fonts").checked).toBe(true);
+    expect(screen.getByText("3 de 3 ficheros")).toBeTruthy();
+  });
+
+  it("Aceptar sin tocar nada manda TODAS las rutas, en el orden del plan", () => {
+    const alResponder = vi.fn();
+    render(<Pregunta texto="¿Subir a CloudStudio?" decision={SELECCIONABLE} alResponder={alResponder} />);
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
+    expect(alResponder).toHaveBeenCalledWith("s", ["app.xml", "fonts/a.ttf", "fonts/b.ttf"]);
+  });
+
+  it("desmarcar una carpeta desmarca lo de dentro, y lo de dentro decide la carpeta", () => {
+    const alResponder = vi.fn();
+    render(<Pregunta texto="¿Subir a CloudStudio?" decision={SELECCIONABLE} alResponder={alResponder} />);
+    fireEvent.click(casilla("fonts"));
+    expect(casilla("fonts/a.ttf").checked).toBe(false);
+    expect(casilla("fonts/b.ttf").checked).toBe(false);
+    // Al revés: marcar un hijo deja la carpeta a medias.
+    fireEvent.click(casilla("fonts/a.ttf"));
+    expect(casilla("fonts").indeterminate).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
+    expect(alResponder).toHaveBeenCalledWith("s", ["app.xml", "fonts/a.ttf"]);
+  });
+
+  it("pulsar el NOMBRE de una hoja también alterna su casilla", () => {
+    render(<Pregunta texto="¿Subir a CloudStudio?" decision={SELECCIONABLE} alResponder={() => {}} />);
+    fireEvent.click(screen.getByRole("treeitem", { name: /app\.xml/ }));
+    expect(casilla("app.xml").checked).toBe(false);
+  });
+
+  it("Deseleccionar todo apaga Aceptar; Seleccionar todo lo vuelve a encender", () => {
+    render(<Pregunta texto="¿Subir a CloudStudio?" decision={SELECCIONABLE} alResponder={() => {}} />);
+    const aceptar = (): HTMLButtonElement => screen.getByRole("button", { name: /aceptar/i });
+    fireEvent.click(screen.getByRole("button", { name: "Deseleccionar todo" }));
+    expect(aceptar().disabled).toBe(true);
+    expect(screen.getByText("0 de 3 ficheros")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar todo" }));
+    expect(aceptar().disabled).toBe(false);
+  });
+
+  it("Cancelar contesta «n» sin selección, y Escape no hace nada", () => {
+    const alResponder = vi.fn();
+    render(<Pregunta texto="¿Subir a CloudStudio?" decision={SELECCIONABLE} alResponder={alResponder} />);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(alResponder).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
+    expect(alResponder).toHaveBeenCalledWith("n");
+  });
+});
+
+describe("Pregunta: «Actualizar repo local» se queda hasta que termina", () => {
+  afterEach(cleanup);
+  const BAJAR = {
+    lineas: [{ texto: "ACTUALIZAR REPO LOCAL — se vacía esta copia y se baja entera de la rama" }],
+    operacion: "bajar" as const,
+  };
+
+  it("trabajando: Aceptar gira con «Actualizando…» y Cancelar se bloquea", () => {
+    render(
+      <Pregunta texto="¿Vaciar la copia?" decision={BAJAR} progreso={{ fase: "trabajando", operacion: "bajar" }} alResponder={() => {}} />
+    );
+    const aceptar = screen.getByRole("button", { name: /actualizando/i }) as HTMLButtonElement;
+    expect(aceptar.getAttribute("aria-busy")).toBe("true");
+    expect(aceptar.disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /cancelar/i }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("terminada bien: dice cuántos ficheros bajó, y Aceptar cierra", () => {
+    const alCerrar = vi.fn();
+    render(
+      <Pregunta
+        texto="¿Vaciar la copia?"
+        decision={BAJAR}
+        progreso={{ fase: "terminada", operacion: "bajar", bajados: 42, lineas: [] }}
+        alCerrar={alCerrar}
+        alResponder={() => {}}
+      />
+    );
+    expect(screen.getByText("Repo local actualizado")).toBeTruthy();
+    expect(screen.getByText("42 ficheros bajados de la rama.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
+    expect(alCerrar).toHaveBeenCalledTimes(1);
+  });
+
+  it("con error lo enseña EN el modal, con lo que contó la operación", () => {
+    render(
+      <Pregunta
+        texto="¿Vaciar la copia?"
+        decision={BAJAR}
+        progreso={{ fase: "terminada", operacion: "bajar", error: "CloudStudio no responde", lineas: ["descargando el zip…"] }}
+        alResponder={() => {}}
+      />
+    );
+    expect(screen.getByText("No se ha podido actualizar el repo local")).toBeTruthy();
+    expect(screen.getByText("CloudStudio no responde")).toBeTruthy();
+    expect(screen.getByText(/descargando el zip/)).toBeTruthy();
+    expect(screen.queryByText("Repo local actualizado")).toBeNull();
   });
 });

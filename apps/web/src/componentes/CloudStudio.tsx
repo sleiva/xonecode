@@ -1,6 +1,9 @@
 import { useEffect, useRef } from "react";
 import type { ActoDeSincronizacion, EstadoDeSync } from "../tipos.js";
 import { selloDeFecha } from "../selloDeFecha.js";
+import { BotonSubir, type EstadoDeSubida } from "./BotonSubir.js";
+import { GiroDeCarga } from "./GiroDeCarga.js";
+import { useEsperaDeRefresco } from "../esperaDeRefresco.js";
 import estilos from "./CloudStudio.module.css";
 
 /**
@@ -49,13 +52,11 @@ import estilos from "./CloudStudio.module.css";
  * `AVISO_DE_ACTUALIZAR`: el nombre nuevo dice la DIRECCIÓN, y se lee como el `git pull` que
  * esta operación no es.
  *
- * **Y la cifra dice DE QUIÉN son los ficheros**, que es lo que la hace cuadrar con la lista
- * que tiene justo debajo. Las dos se miden contra referencias distintas —aquí la rama, ahí el
- * sello de la sesión— así que pueden no tocarse, y sin decirlo parecen contradecirse: medido
- * en el AppDemo del usuario el 16-09-2026, la banda decía «3 ficheros por subir» encima de
- * una sesión cuyos cambios no estaban entre esos 3 ni podían estarlo. `deLaSesion` ausente
- * —sin sesión, o con una sin sello— no se pinta: sería afirmar algo sobre quien escribió lo
- * de dentro.
+ * **La cifra ya no dice de qué sesión son los ficheros.** Lo decía («2 de esta sesión y 15
+ * de antes») cuando la banda vivía en la Revisión de un chat, encima de la lista de ESA sesión.
+ * Desde que vive en la pestaña Sincronización del panel del PROYECTO, con TODO lo pendiente
+ * debajo, «esta sesión» no se refería a nada de lo que hay en pantalla. `deLaSesion` sigue
+ * viajando por el cable; aquí no se pinta.
  *
  * **Y el recorrido de lo que pasó se cuenta AQUÍ, en el registro de abajo, no en el hilo.**
  * Antes cada operación volcaba sus líneas en el chat: el plan con su sangría, el `→ APROBADO`,
@@ -67,30 +68,12 @@ import estilos from "./CloudStudio.module.css";
  * fuente es la misma que la del `case` de Trazas, y no se recompone nada.
  */
 
-/**
- * La frase de la cuenta, con la procedencia cuando se PUDO atribuir.
- *
- * Va aparte del componente porque son cuatro casos y una decisión, no un detalle del render:
- * lo que se dice de la sesión depende de si se pudo atribuir, y las dos cosas se leen mejor
- * juntas que repartidas por el JSX.
- */
+/** La frase de la cuenta: cuántos ficheros faltan por subir, sin decir de qué sesión. */
 function cuentaDe(sync: EstadoDeSync): string {
   const cuantos = sync.pendientes;
   if (cuantos === undefined) return "No consta cuánto falta por subir.";
   if (cuantos === 0) return "No hay nada por subir: lo que está en esta copia ya está en la rama.";
-
-  const cabeza = `${cuantos} ${cuantos === 1 ? "fichero" : "ficheros"} por subir`;
-  const deLaSesion = sync.deLaSesion;
-  // Ausente = no se pudo atribuir. No se pinta «ninguno»: sobre una sesión sin sello, la
-  // lista de la que saldría ese cero incluye lo que escribiera cualquiera desde que se
-  // abrió, así que el cero sería una afirmación sobre quien lo escribió.
-  if (deLaSesion === undefined) return `${cabeza}.`;
-  // Cero SÍ se pinta, y es el caso que motivó esto: se atribuyó y ninguno es suyo. El `>=`
-  // y no `===` porque la cuenta es una intersección: si algún día llegara de más, «todos»
-  // es la lectura segura y un «−1 de antes» no lo es.
-  if (deLaSesion === 0) return `${cabeza}. Ninguno lo tocó esta sesión.`;
-  if (deLaSesion >= cuantos) return `${cabeza}, y ${cuantos === 1 ? "lo tocó" : "los tocó"} esta sesión.`;
-  return `${cabeza}: ${deLaSesion} de esta sesión y ${cuantos - deLaSesion} de antes.`;
+  return `${cuantos} ${cuantos === 1 ? "fichero" : "ficheros"} por subir.`;
 }
 
 /**
@@ -148,11 +131,12 @@ const NOMBRE_DE_LA_ACCION: Record<ActoDeSincronizacion["accion"], string> = {
  * operación nueva heredaría el plegado de la anterior, con lo que la de arriba podría
  * quedarse cerrada justo al llegar.
  *
- * Vive fuera del componente porque se pinta en DOS de sus ramas: la banda normal y la del
- * proyecto sin dar de alta. Un `return` temprano que se llevara por delante el registro
- * borraría la historia de una operación que sí ocurrió el día que alguien quite el alta.
+ * **Es su PROPIA sección de Revisión («Últimas subidas»)**, montada por `App` en la ranura
+ * `registro`, y no parte de esta banda: así se pinta igual con el proyecto dado de alta que
+ * sin él —la historia de una operación que sí ocurrió no depende del alta—, y la banda solo
+ * lleva las acciones.
  */
-function Registro({ operaciones }: { operaciones?: readonly ActoDeSincronizacion[] }) {
+export function Registro({ operaciones }: { operaciones?: readonly ActoDeSincronizacion[] }) {
   if (operaciones === undefined || operaciones.length === 0) return null;
   return (
     <section className={estilos.registro} aria-label="Registro de la sincronización">
@@ -182,22 +166,19 @@ function Registro({ operaciones }: { operaciones?: readonly ActoDeSincronizacion
 
 export function CloudStudio({
   sync,
-  registro,
   alPedir,
+  subida,
   alRecargar,
   conectado,
 }: {
   /** Ausente = todavía no ha llegado la lectura; con `error`, se pidió y no se pudo medir. */
   sync?: EstadoDeSync;
-  /**
-   * Las operaciones de sincronización de esta sesión, **de la más reciente a la más vieja**.
-   *
-   * Es OPCIONAL por lo mismo que todo lo de arriba: una sesión sin sincronizar no tiene
-   * registro, y ausente ≠ vacío ≠ cero también aquí. `App.tsx` la deriva de los actos y la
-   * omite entera cuando no hay ninguno, en vez de pasar `[]`.
-   */
-  registro?: readonly ActoDeSincronizacion[];
   alPedir: (accion: "subir" | "bajar") => void;
+  /**
+   * El estado del botón «Subir» (su espera y si se puede), el MISMO que el de la tarjeta del
+   * Resumen. Ausente = el botón de antes, que solo pide (`alPedir("subir")`).
+   */
+  subida?: EstadoDeSubida;
   alRecargar: () => void;
   /** ¿Hay cable? Sin él no se pide nada: la petición se perdería sin decirlo. */
   conectado?: boolean;
@@ -221,6 +202,10 @@ export function CloudStudio({
     alRecargar();
   }, [sinLectura, conectado, alRecargar]);
 
+  // «Refrescar» gira hasta que llega la medida nueva: el store guarda cada `sync` como un
+  // objeto nuevo, así que llegar es que `sync` cambie.
+  const refresco = useEsperaDeRefresco(sync, conectado);
+
   if (sync === undefined) {
     return <p className={estilos.aviso}>Consultando la sincronización con CloudStudio…</p>;
   }
@@ -237,7 +222,6 @@ export function CloudStudio({
           ahí esta banda enseña lo que hay pendiente.
         </p>
         {sync.error === undefined ? null : <p className={estilos.aviso}>{sync.error}</p>}
-        <Registro operaciones={registro} />
       </div>
     );
   }
@@ -269,8 +253,14 @@ export function CloudStudio({
           type="button"
           className={estilos.recargar}
           title="Vuelve a medir cuánto queda por subir a CloudStudio"
-          onClick={alRecargar}
+          disabled={refresco.esperando || conectado === false}
+          aria-busy={refresco.esperando}
+          onClick={() => {
+            refresco.empezar();
+            alRecargar();
+          }}
         >
+          {refresco.esperando ? <GiroDeCarga /> : null}
           Refrescar
         </button>
       </div>
@@ -287,9 +277,11 @@ export function CloudStudio({
 
       <div className={estilos.botones}>
         {nadaQueSubir ? null : (
-          <button type="button" className={estilos.subir} onClick={() => alPedir("subir")}>
-            Subir
-          </button>
+          <BotonSubir
+            subida={subida ?? { esperando: false, alSubir: () => alPedir("subir") }}
+            className={estilos.subir}
+            apagado={conectado === false}
+          />
         )}
         <button
           type="button"
@@ -308,10 +300,8 @@ export function CloudStudio({
       <p className={estilos.nota}>
         {nadaQueSubir
           ? `«Actualizar repo local» ${AVISO_DE_ACTUALIZAR} Lo que pasa queda aquí abajo, en el registro de esta sesión.`
-          : `Subir pide el plan y lo apruebas en la pregunta de siempre, y se niega con cambios sin commitear. «Actualizar repo local» ${AVISO_DE_ACTUALIZAR} Lo que pasa —lo que sube, lo que no y por qué— queda aquí abajo, en el registro de esta sesión.`}
+          : `Subir pide el plan y eliges qué ficheros suben antes de aprobarlo, y se niega con cambios sin commitear. «Actualizar repo local» ${AVISO_DE_ACTUALIZAR} Lo que pasa —lo que sube, lo que no y por qué— queda aquí abajo, en el registro de esta sesión.`}
       </p>
-
-      <Registro operaciones={registro} />
     </div>
   );
 }

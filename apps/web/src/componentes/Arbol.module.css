@@ -71,3 +71,87 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Con casillas (el diálogo de la subida): la fila lleva la sangría, y la casilla va delante
+   del botón, hermana suya. */
+.fila {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.fila > .hoja,
+.fila > .carpeta {
+  flex: 1;
+  min-width: 0;
+}
+
+.casilla {
+  flex: none;
+  margin: 0;
+  accent-color: var(--xonecode-azul);
+  cursor: pointer;
+}
+
+/* -- variante «explorador» (el diálogo de la subida) --------------------------------------
+   Iconos, carpetas en negrita, guías de anidado y la insignia al final. La sangría la hacen
+   los `<ul>` anidados con su guía vertical, no el `padding` de cada fila: así la guía cae
+   justo debajo del icono de la carpeta que la abre. */
+
+/* La guía cae bajo el chevron de la carpeta que abre el nivel. Sin casillas (Revisión,
+   Ficheros): botón (4) + medio chevron (6). Con casillas (el diálogo de la subida): fila (4) +
+   casilla (13) + hueco (2) + botón (4) + medio chevron (6). En `border-l4`: el `l2` (un 10 %
+   de negro) no se veía. */
+.nivel[data-explorador] .nivel[data-explorador] {
+  margin-left: 9px;
+  padding-left: 0;
+  border-left: 1px solid var(--dsw-alias-border-l4);
+}
+
+.nivel[data-casillas] .nivel[data-casillas] {
+  margin-left: 29px;
+}
+
+.nivel[data-explorador] .hoja,
+.nivel[data-explorador] .carpeta {
+  gap: 7px;
+  min-height: 28px;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.nivel[data-explorador] .carpeta {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.chevron {
+  flex: none;
+  fill: none;
+  stroke: var(--dsw-alias-label-tertiary);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 120ms ease;
+}
+
+.chevron[data-abierta] {
+  transform: rotate(90deg);
+}
+
+.alFinal {
+  margin-left: auto;
+  padding-left: 8px;
+}
+
+.cuenta {
+  flex: none;
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}

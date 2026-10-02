@@ -2265,6 +2265,41 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
     expect(screen.getByText("¿Sigo?")).toBeTruthy();
   });
 
+  it("una DECISIÓN (la subida) sale ENCIMA del panel: ni salta al chat ni cambia de vista", async () => {
+    const { store } = conProyectoAbierto();
+    fireEvent.click(enBarra("AppDemo"));
+    expect(enPanel()).toBe(true);
+    act(() =>
+      store.aplicar({
+        clase: "pregunta",
+        texto: "¿Subir a CloudStudio?",
+        decision: { lineas: [{ texto: "x", cambio: "nuevo", ruta: "a.xne" }], seleccionable: true },
+      })
+    );
+    expect(enPanel()).toBe(true);
+    // UN solo diálogo: la decisión se monta en un único sitio de `App`.
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
+    await screen.findByRole("button", { name: /subiendo/i });
+    expect(enPanel()).toBe(true);
+    act(() =>
+      store.aplicar({
+        clase: "acto",
+        acto: {
+          tipo: "sincronizacion",
+          accion: "subir",
+          cuando: "2026-10-02T12:00:00.000Z",
+          lineas: [],
+          resultado: { subidos: 1, fallidos: 0 },
+        },
+      })
+    );
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(enPanel()).toBe(true);
+  });
+
   it("«El agente está trabajando» con «Volver al chat» solo con un turno en vuelo", () => {
     const { store } = conProyectoAbierto();
     fireEvent.click(enBarra("AppDemo"));
@@ -2914,5 +2949,233 @@ describe("App: «Cerrar en Jira» (Task 11, IXCODE-11)", () => {
     fireEvent.click(soloComentar);
     fireEvent.click(comentarYPasar);
     expect(enviar).not.toHaveBeenCalledWith(expect.objectContaining({ accion: "cerrar" }));
+  });
+});
+
+/**
+ * De punta a punta en el CLIENTE, que es el tramo que ningún otro test cubre: el `Pregunta`
+ * se prueba hasta `alResponder` y la consola del servidor desde `recibir`. Si `App` perdiera
+ * aquí la `seleccion`, el servidor leería «sin selección» como el plan ENTERO y subiría lo que
+ * la persona desmarcó — con todo en verde.
+ */
+describe("App: «Subir» y la subida con selección", () => {
+  /**
+   * Subir es del PROYECTO: vive en la pestaña Sincronización de su panel, no en la Revisión del
+   * chat. Hace falta un proyecto ABIERTO con copia (`local: true`), que es el que sincroniza.
+   */
+  function abrirSincronizacion(store: ReturnType<typeof crearStoreDelCliente>): void {
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        registrados: [{ id: "webstudio", nombre: "WebStudio", url: "https://x/mcp" }],
+        entornoActivo: "webstudio",
+        proyectos: [{ id: "p1", nombre: "AppDemo", local: true }],
+        ramas: [],
+        proyectoAbierto: true,
+        proyectoActivo: "p1",
+        sesionActiva: "s1",
+      })
+    );
+    const barra = screen.getAllByRole("navigation").find((n) => !n.hasAttribute("aria-label"))!;
+    fireEvent.click(within(barra).getByRole("button", { name: "AppDemo" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Sincronización" }));
+  }
+
+  it("Subir gira hasta que llega el diálogo, y lo DESMARCADO no viaja en la respuesta", async () => {
+    const { store, enviar } = montar();
+    abrirSincronizacion(store);
+    act(() => store.aplicar({ clase: "sync", proyecto: "AppDemo", rama: "main", pendientes: 2 }));
+
+    const subir = screen.getByRole("button", { name: /^subir$/i });
+    fireEvent.click(subir);
+    expect(enviar).toHaveBeenCalledWith({ clase: "sync", accion: "subir" });
+    expect(subir.getAttribute("aria-busy")).toBe("true");
+
+    act(() =>
+      store.aplicar({
+        clase: "pregunta",
+        texto: "¿Subir a CloudStudio?",
+        decision: {
+          lineas: [
+            { texto: "SUBIDA A CLOUDSTUDIO — 2 operaciones" },
+            { texto: "  ~ app.xml", cambio: "modificado", ruta: "app.xml" },
+            { texto: "  + fonts/a.ttf", cambio: "nuevo", ruta: "fonts/a.ttf" },
+          ],
+          seleccionable: true,
+        },
+      })
+    );
+    // Llegó el diálogo: el botón deja de esperar.
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Subir fonts" }));
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "respuesta", texto: "s", seleccion: ["app.xml"] });
+
+    // Aceptar NO cierra: el diálogo sigue, Aceptar gira y Cancelar se bloquea mientras sube.
+    const subiendo = await screen.findByRole("button", { name: /subiendo/i });
+    expect(subiendo.getAttribute("aria-busy")).toBe("true");
+    expect((screen.getByRole("button", { name: /cancelar/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("checkbox", { name: "Subir app.xml" }) as HTMLInputElement).disabled).toBe(true);
+
+    // Termina la operación: el diálogo dice cómo fue, y su «Aceptar» lo cierra todo.
+    act(() =>
+      store.aplicar({
+        clase: "acto",
+        acto: {
+          tipo: "sincronizacion",
+          accion: "subir",
+          cuando: "2026-10-02T11:00:00.000Z",
+          lineas: ["subidos 1, fallaron 0"],
+          resultado: { subidos: 1, fallidos: 0 },
+        },
+      })
+    );
+    expect(screen.getByText("Todo subido correctamente")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("con fallos lo DICE, no «todo subido»; y sin recuento tampoco", async () => {
+    const { store } = montar();
+    const preguntar = () =>
+      act(() =>
+        store.aplicar({
+          clase: "pregunta",
+          texto: "¿Subir a CloudStudio?",
+          decision: { lineas: [{ texto: "x", cambio: "nuevo", ruta: "a.xne" }], seleccionable: true },
+        })
+      );
+    const terminar = (cuando: string, resultado?: { subidos: number; fallidos: number }) =>
+      act(() =>
+        store.aplicar({
+          clase: "acto",
+          acto: { tipo: "sincronizacion", accion: "subir", cuando, lineas: ["503 en a.xne"], ...(resultado ? { resultado } : {}) },
+        })
+      );
+
+    preguntar();
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
+    await screen.findByRole("button", { name: /subiendo/i });
+    terminar("2026-10-02T11:00:00.000Z", { subidos: 0, fallidos: 1 });
+    expect(screen.getByText("La subida ha terminado con fallos")).toBeTruthy();
+    expect(screen.getByText(/503 en a\.xne/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
+
+    preguntar();
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
+    await screen.findByRole("button", { name: /subiendo/i });
+    terminar("2026-10-02T11:05:00.000Z");
+    expect(screen.getByText("La subida no ha terminado bien")).toBeTruthy();
+    expect(screen.queryByText("Todo subido correctamente")).toBeNull();
+  });
+
+  it("Cancelar sí cierra en el acto: no hay nada que esperar", async () => {
+    const { store } = montar();
+    act(() =>
+      store.aplicar({
+        clase: "pregunta",
+        texto: "¿Subir a CloudStudio?",
+        decision: { lineas: [{ texto: "x", cambio: "nuevo", ruta: "a.xne" }], seleccionable: true },
+      })
+    );
+    fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("si no sale diálogo (árbol sucio, nada que subir), el acto de la operación para el giro", () => {
+    const { store } = montar();
+    abrirSincronizacion(store);
+    act(() => store.aplicar({ clase: "sync", proyecto: "AppDemo", rama: "main", pendientes: 2 }));
+    fireEvent.click(screen.getByRole("button", { name: /^subir$/i }));
+    expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
+    act(() =>
+      store.aplicar({
+        clase: "acto",
+        acto: { tipo: "sincronizacion", accion: "subir", cuando: "2026-10-02T10:00:00.000Z", lineas: ["hay cambios sin commitear"] },
+      })
+    );
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+  });
+
+  it("con un turno en marcha «Subir» se apaga y dice por qué", () => {
+    const { store } = montar();
+    abrirSincronizacion(store);
+    act(() => store.aplicar({ clase: "sync", proyecto: "AppDemo", rama: "main", pendientes: 2 }));
+    act(() => store.aplicar({ clase: "turno", activo: true }));
+    const subir = screen.getByRole("button", { name: /^subir$/i }) as HTMLButtonElement;
+    expect(subir.disabled).toBe(true);
+    expect(subir.title).toMatch(/turno en marcha/);
+  });
+
+  it("la pestaña Sincronización pide TODO lo pendiente, lo pinta y despliega su diff contra CloudStudio", () => {
+    const { store, enviar } = montar();
+    abrirSincronizacion(store);
+    expect(enviar).toHaveBeenCalledWith({ clase: "pendientesDeSubida" });
+    // UNA petición de cada al abrir: la banda y la lista miden lo mismo, y cada una pide al
+    // montarse. Sin esto salían dos de cada (git y recuento de líneas dos veces).
+    const listas = enviar.mock.calls.filter(([m]) => (m as { clase: string; ruta?: string }).clase === "pendientesDeSubida" && (m as { ruta?: string }).ruta === undefined);
+    const medidas = enviar.mock.calls.filter(([m]) => (m as { clase: string; accion?: string }).clase === "sync" && (m as { accion?: string }).accion === "estado");
+    expect(listas).toHaveLength(1);
+    expect(medidas).toHaveLength(1);
+    act(() =>
+      store.aplicar({
+        clase: "pendientesDeSubida",
+        ficheros: [
+          { ruta: "a.xne", clase: "modificado", mas: 1, menos: 1 },
+          { ruta: "nuevo.js", clase: "nuevo", sinCommitear: true, mas: 2, menos: 0 },
+        ],
+      })
+    );
+    expect(screen.getByRole("heading", { name: "Pendiente de subir a CloudStudio" })).toBeTruthy();
+    expect(screen.getAllByText("nuevo.js").length).toBeGreaterThan(0);
+    expect(screen.getByText("sin commitear")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /a\.xne/, expanded: false }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "pendientesDeSubida", ruta: "a.xne" });
+    act(() => store.aplicar({ clase: "parcheDeSubida", ruta: "a.xne", texto: "@@ -1 +1 @@\n-<a/>\n+<b/>\n", recortado: false }));
+    expect(document.body.textContent).toContain("<b/>");
+  });
+
+  it("«Actualizar repo local»: tras Aceptar se queda girando, el ERROR sale en el modal, y se sigue en el panel", async () => {
+    const { store, enviar } = montar();
+    abrirSincronizacion(store);
+    act(() =>
+      store.aplicar({
+        clase: "pregunta",
+        texto: "¿Vaciar la copia y actualizarla desde CloudStudio?",
+        decision: { lineas: [{ texto: "ACTUALIZAR REPO LOCAL" }], operacion: "bajar" },
+      })
+    );
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "respuesta", texto: "s" });
+    await screen.findByRole("button", { name: /actualizando/i });
+    act(() =>
+      store.aplicar({
+        clase: "acto",
+        acto: {
+          tipo: "sincronizacion",
+          accion: "bajar",
+          cuando: "2026-10-02T13:00:00.000Z",
+          lineas: ["descargando…"],
+          error: "CloudStudio no responde",
+        },
+      })
+    );
+    expect(screen.getByText("No se ha podido actualizar el repo local")).toBeTruthy();
+    expect(screen.getByText("CloudStudio no responde")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("tab", { name: "Sincronización" })).toBeTruthy();
+  });
+
+  it("la Revisión del CHAT ya no ofrece Subir ni Actualizar repo local", () => {
+    const { store } = montar();
+    abrirPestana("Revisión");
+    act(() => store.aplicar({ clase: "sync", proyecto: "AppDemo", rama: "main", pendientes: 2 }));
+    expect(screen.queryByRole("button", { name: /^subir$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Actualizar repo local" })).toBeNull();
   });
 });

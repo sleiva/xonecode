@@ -1,0 +1,8 @@
+/* Monocromos, como los glifos de la barra de proyectos: el trazo es `currentColor` (atributo del
+   SVG, `IconosDeProyecto.tsx#Trazo`) y el tono lo pone esta clase desde un alias del tema. El
+   tipo de fichero lo dice el DIBUJO, no el color. */
+.icono {
+  flex: none;
+  display: block;
+  color: var(--dsw-alias-label-secondary);
+}

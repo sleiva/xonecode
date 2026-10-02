@@ -2042,3 +2042,18 @@ describe("Ajustes: quitar un entorno, contra un clic por error", () => {
     expect(screen.queryByRole("checkbox")).toBeNull();
   });
 });
+
+describe("Ajustes: un modal de verdad", () => {
+  afterEach(cleanup);
+
+  it("ni Escape ni el clic fuera la cierran: solo su botón de cerrar", () => {
+    const alCerrar = vi.fn();
+    render(<Ajustes {...MANEJADORES} alCerrar={alCerrar} />);
+    fireEvent.keyDown(document, { key: "Escape" });
+    const velo = screen.getByRole("dialog").firstElementChild as HTMLElement;
+    fireEvent.click(velo);
+    expect(alCerrar).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar ajustes" }));
+    expect(alCerrar).toHaveBeenCalledTimes(1);
+  });
+});

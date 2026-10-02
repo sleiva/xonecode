@@ -5,6 +5,8 @@ import { IconoCompartido } from "./IconosDeProyecto.js";
 import { BorrarCopiaLocal } from "./BorrarCopiaLocal.js";
 import { GastoDelProyecto } from "./GastoDelProyecto.js";
 import { gastoDelProyecto } from "../gastoDelProyecto.js";
+import { BotonSubir, type EstadoDeSubida } from "./BotonSubir.js";
+import { GiroDeCarga } from "./GiroDeCarga.js";
 import type { ConsumoDeTurno, FotoDelResumen } from "../tipos.js";
 
 /** Lo que el gasto necesita de una sesión: su id, su título y su acumulado. NO es una lista
@@ -51,6 +53,19 @@ export interface AccionesDeLaCopia {
   /** Pide la FOTO del servidor (pendientes de subir). `undefined` = no se pudo: ni red ni
    *  respuesta que entender. */
   alPedirResumen: (proyecto: string) => Promise<FotoDelResumen | undefined>;
+  /**
+   * «Subir» en la tarjeta de lo pendiente: el MISMO botón y la MISMA intención que la banda de
+   * Revisión. Solo lo trae el proyecto ABIERTO —que es el que sincroniza el servidor—; ausente,
+   * la tarjeta no ofrece subir.
+   */
+  subida?: EstadoDeSubida;
+  /**
+   * Cambia cuando termina una subida (la hora de la última operación). Al cambiar se vuelve a
+   * medir: la cifra de la tarjeta es una FOTO, y lo que acaba de subir ya no está pendiente.
+   */
+  marcaDeSubida?: string;
+  /** Abre la pestaña Sincronización, con TODO lo pendiente y su diff. Ausente = no hay pestaña. */
+  alVerPendientes?: () => void;
 }
 
 /**
@@ -74,6 +89,9 @@ export function ResumenDeProyecto({
   alAbrirCarpeta,
   alBorrarCopia,
   alPedirResumen,
+  subida,
+  marcaDeSubida,
+  alVerPendientes,
 }: { proyecto: ProyectoDelResumen; conectado?: boolean } & AccionesDeLaCopia) {
   const apagado = conectado === false;
   const [confirmando, setConfirmando] = useState(false);
@@ -99,6 +117,15 @@ export function ResumenDeProyecto({
   // `local` también: al terminar de bajarse, lo que hay que medir cambia.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(pedir, [proyecto.id, proyecto.local]);
+  // Y al terminar una subida: lo subido deja de estar pendiente. El primer valor no cuenta
+  // —ese ya lo mide el efecto de arriba al entrar—.
+  const marcaVista = useRef(marcaDeSubida);
+  useEffect(() => {
+    if (marcaVista.current === marcaDeSubida) return;
+    marcaVista.current = marcaDeSubida;
+    pedir();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marcaDeSubida]);
   const vigente = medida?.proyecto === proyecto.id ? medida : undefined;
 
   return (
@@ -165,7 +192,13 @@ export function ResumenDeProyecto({
       {/* Sin copia no hay nada que subir, ni sesiones de las que contar gasto. */}
       {proyecto.local === true ? (
         <>
-          <TiraDePendientes medida={vigente} apagado={apagado} alActualizar={pedir} />
+          <TiraDePendientes
+            medida={vigente}
+            apagado={apagado}
+            alActualizar={pedir}
+            {...(subida === undefined ? {} : { subida })}
+            {...(alVerPendientes === undefined ? {} : { alVerPendientes })}
+          />
           <section className={estilos.bloque} aria-label="Gasto del proyecto">
             <h2 className={estilos.tituloDeBloque}>Gasto</h2>
             <BloqueDeGasto sesiones={proyecto.sesiones ?? []} />
@@ -197,10 +230,14 @@ function TiraDePendientes({
   medida,
   apagado,
   alActualizar,
+  subida,
+  alVerPendientes,
 }: {
   medida: Medida | undefined;
   apagado: boolean;
   alActualizar: () => void;
+  subida?: EstadoDeSubida;
+  alVerPendientes?: () => void;
 }) {
   const sync = medida?.foto?.sync;
   let contenido: React.ReactNode;
@@ -242,12 +279,26 @@ function TiraDePendientes({
   return (
     <div className={estilos.tira} data-estado={estado} role="status">
       <span className={estilos.textoDeTira}>{contenido}</span>
+      {/* «Subir» solo con pendientes MEDIDOS: con cero no llevaría a ninguna parte, y sin
+          cifra la tarjeta no sabe si hay algo (la banda de Revisión, que sí lo ofrece entonces,
+          sigue ahí). Mientras espera se queda aunque la medida se rehaga debajo. */}
+      {/* Con pendientes medidos, a la lista entera con sus diffs: la pestaña Sincronización. */}
+      {alVerPendientes !== undefined && estado === "pendientes" ? (
+        <button type="button" className={estilos.secundario} onClick={alVerPendientes}>
+          Ver cambios
+        </button>
+      ) : null}
+      {subida !== undefined && (estado === "pendientes" || subida.esperando) ? (
+        <BotonSubir subida={subida} className={estilos.primario} apagado={apagado} />
+      ) : null}
       <button
         type="button"
         className={estilos.secundario}
         disabled={apagado || medida?.respondida === false}
+        aria-busy={medida?.respondida === false}
         onClick={alActualizar}
       >
+        {medida?.respondida === false ? <GiroDeCarga /> : null}
         Actualizar
       </button>
     </div>
