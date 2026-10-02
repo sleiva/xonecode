@@ -2453,6 +2453,28 @@ describe("abrirParaTarea — la segunda puerta", () => {
     await v.cerrar();
     rmSync(base, { recursive: true, force: true });
   });
+
+  it("motivoParaNoEditar: una consola de TAREA viva ocupa su raíz, y la deja al cerrarse", async () => {
+    // Guardar a mano desde la pestaña Ficheros compite con lo que escribe una tarea de fondo en
+    // la MISMA copia. La consola de tarea no está en `proyectosAbiertos()` (es de `deTareas`),
+    // así que esta pregunta es la única que la ve.
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto, baseDeWorkspace: () => base });
+    const raizA = proyectoEnDisco(base, "A");
+    const raizB = proyectoEnDisco(base, "B");
+    await v.abrirProyecto({ raiz: raizA });
+    expect(v.motivoParaNoEditar(raizA)).toBeUndefined();
+
+    const deTarea = await v.abrirParaTarea(raizB);
+    expect(v.motivoParaNoEditar(raizB)).toMatch(/tarea de fondo/);
+    expect(v.motivoParaNoEditar(raizA)).toBeUndefined();
+
+    await deTarea.cerrar();
+    expect(v.motivoParaNoEditar(raizB)).toBeUndefined();
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
 });
 
 describe("el consumo de tokens de la sesión llega al vestíbulo", () => {

@@ -172,10 +172,12 @@ import { marcarTareaDeSesion, sembrarConsumosPendientes, type DispositivoElegido
 import { RUTA_ARTEFACTOS, esRutaDeArtefacto } from "../../core/artefactos.js";
 import {
   arbolDeProyecto,
+  escribirFicheroDeProyecto,
   leerFicheroDeProyecto,
   mimeDeImagen,
   motivoDeRutaInaceptable,
 } from "../../agent/grafo/arbolDeProyecto.js";
+import { baseDeFichero } from "../../agent/sesiones/baseDeFichero.js";
 import { modeloEnDisco } from "../../agent/navegacion/indiceEnDisco.js";
 import { ficherosDelProyecto } from "../../agent/turno/ficherosDelProyecto.js";
 import { fotoDeColecciones, type FotoDeColecciones } from "../../core/fotoDeColecciones.js";
@@ -244,6 +246,7 @@ import type {
   EstadoDelLanzamiento,
   EstadoDeSync,
   FotoDelResumen,
+  BaseDelFichero,
 } from "./transporte.js";
 // Valor y no tipo: la traducción de una `Tarea` a lo que viaja vive JUNTO al tipo que
 // produce y no aquí. Estuvo en este cierre, y ahí se cayó `veredicto` sin que nada se
@@ -499,6 +502,14 @@ export interface OpcionesDeMontaje {
    */
   modeloDelCambio?: (raiz: string, sesion: string, ruta: string) => Promise<CambiosDeUnaColeccion[] | undefined>;
   leerFichero?: (raiz: string, ruta: string) => Promise<FicheroDelProyecto>;
+  /**
+   * Guardar un fichero que la persona editó en la pestaña Ficheros
+   * (`agent/grafo/arbolDeProyecto.ts#escribirFicheroDeProyecto`). Por opción porque escribe en el
+   * disco del proyecto: un test del cable usa dobles.
+   */
+  escribirFichero?: (raiz: string, ruta: string, texto: string, huella: string) => Promise<{ ruta: string; huella?: string; error?: string }>;
+  /** La base de las marcas del editor (`agent/sesiones/baseDeFichero.ts`). Por opción porque toca git. */
+  baseDeFichero?: (raiz: string, sesion: string | undefined, ruta: string, base: "sesion" | "commit") => Promise<BaseDelFichero>;
   /**
    * Los dos lectores de ARTEFACTOS (`agent/grafo/artefactosEnDisco.ts`), y son dos porque son dos
    * transportes con necesidades opuestas: el del cable devuelve la forma de un fichero
@@ -4346,6 +4357,58 @@ export function montarRutas(
   };
 
   /**
+   * Guardar lo que la persona editó. Tres cosas antes de tocar el disco, y cada una contesta en
+   * vez de callar —el editor tiene un «Guardando…» encendido esperando—:
+   *  - que haya proyecto abierto y puerto que escriba;
+   *  - que nadie trabaje en esa RAÍZ (`vestibulo.motivoParaNoEditar`): un turno o una tarea que
+   *    escribe en la misma copia pisaría, o sería pisado, sin avisar;
+   *  - lo demás —guardas de ruta, huella, tope— lo decide el puerto y lo DEVUELVE.
+   * El `try` es el de `atenderFichero`: un fallo inesperado contesta sin la ruta de la máquina.
+   */
+  const atenderGuardarFichero = async (ruta: string, texto: string, huella: string): Promise<void> => {
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined) {
+      emitir({ clase: "ficheroGuardado", ruta, error: "no hay ningún proyecto abierto" });
+      return;
+    }
+    if (opciones.escribirFichero === undefined) {
+      emitir({ clase: "ficheroGuardado", ruta, error: "esta ejecución no puede escribir en el proyecto" });
+      return;
+    }
+    const ocupado = vestibulo.motivoParaNoEditar(abierto.raiz);
+    if (ocupado !== undefined) {
+      emitir({ clase: "ficheroGuardado", ruta, error: ocupado });
+      return;
+    }
+    try {
+      emitir({ clase: "ficheroGuardado", ...(await opciones.escribirFichero(abierto.raiz, ruta, texto, huella)) });
+    } catch (error) {
+      informar(`no se pudo guardar «${ruta}» (${codigoDe(error)})`);
+      emitir({ clase: "ficheroGuardado", ruta, error: "no se pudo guardar el fichero" });
+    }
+  };
+
+  /**
+   * La base de las marcas del editor. Con la sesión ABIERTA (`abierto.sesion`, la misma que mira
+   * Revisión): su ref es la foto del inicio. Sin puerto se contesta `sinBase` —el editor funciona
+   * igual, sin marcas, y lo dice— en vez de dejar la barra en «Trayendo la base…».
+   */
+  const atenderBaseDeFichero = async (ruta: string, base: "sesion" | "commit"): Promise<void> => {
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined) return;
+    if (opciones.baseDeFichero === undefined) {
+      emitir({ clase: "baseDeFichero", ruta, base, sinBase: "esta ejecución no puede leer git" });
+      return;
+    }
+    try {
+      emitir({ clase: "baseDeFichero", ...(await opciones.baseDeFichero(abierto.raiz, abierto.sesion, ruta, base)) });
+    } catch (error) {
+      informar(`no se pudo leer la base de «${ruta}» (${codigoDe(error)})`);
+      emitir({ clase: "baseDeFichero", ruta, base, sinBase: "no se pudo leer la base" });
+    }
+  };
+
+  /**
    * El contenido de un ARTEFACTO de la sesión abierta, por su nombre.
    *
    * El id que se usa es `idDeHilo` y no `sesion`, y la diferencia es la que hace que esto
@@ -5815,6 +5878,31 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "guardarFichero" &&
+      typeof mensaje.ruta === "string" &&
+      typeof mensaje.texto === "string" &&
+      typeof mensaje.huella === "string"
+    ) {
+      void atenderGuardarFichero(mensaje.ruta, mensaje.texto, mensaje.huella).catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "baseDeFichero" &&
+      typeof mensaje.ruta === "string" &&
+      (mensaje.base === "sesion" || mensaje.base === "commit")
+    ) {
+      void atenderBaseDeFichero(mensaje.ruta, mensaje.base).catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "artefacto" && typeof mensaje.nombre === "string") {
       void atenderArtefacto(mensaje.nombre).catch(contar);
       respuesta.writeHead(204);
@@ -6880,6 +6968,16 @@ export function ajusteDeWorkspaceCableado(opciones: {
 }
 
 /**
+ * Los tres puertos de la pestaña Ficheros —leer, guardar y la base de las marcas—, cableados con las
+ * funciones de verdad y extraídos por el MISMO motivo que `emuladoresCableados`: dentro de
+ * `arrancarConsolaWeb` serían un literal que ningún test mira, y cada uno es un campo OPCIONAL de
+ * `montarRutas`, así que olvidarlo compila y pasa.
+ */
+export function ficherosCableados(): Required<Pick<OpcionesDeMontaje, "leerFichero" | "escribirFichero" | "baseDeFichero">> {
+  return { leerFichero: leerFicheroDeProyecto, escribirFichero: escribirFicheroDeProyecto, baseDeFichero };
+}
+
+/**
  * Los siete puertos de los emuladores, cableados con las funciones de verdad — extraídos por el
  * MISMO motivo que `ajusteDeWorkspaceCableado`: dentro de `arrancarConsolaWeb` serían un literal
  * que ningún test mira, y cada uno es un campo OPCIONAL de `montarRutas`, así que olvidarlo o
@@ -7547,7 +7645,8 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     modeloDelCambio,
     planesDelProyecto,
     visorOpenui: () => leerVisorOpenui(raizDelCliente),
-    leerFichero: leerFicheroDeProyecto,
+        // Leer, guardar y la base del editor, compuestos fuera para que la composición tenga test.
+        ...ficherosCableados(),
     leerArtefacto: leerArtefactoDeSesion,
     leerArtefactoCrudo,
     correrPasoDeReceta: (receta, paso, alSalirLinea) => correrPasoDeReceta(receta, paso, { alSalirLinea }),

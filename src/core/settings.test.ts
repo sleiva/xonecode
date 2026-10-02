@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { validarSettings, expandirConCasa, motivoDeWorkspaceInaceptable, rutaDeWorkspace, dentroDelWorkspace, seMira, depuracionActiva, PLATAFORMAS_DE_DISPOSITIVO, TOPE_DE_CONCURRENCIA_DE_TAREAS, motivoParaNoOlvidarEntorno, motivoParaNoBorrarCopia, mismaRuta, motivoDeNombreDeEntornoInaceptable, LARGO_NOMBRE_DE_ENTORNO } from "./settings.js";
+import { validarSettings, expandirConCasa, motivoDeWorkspaceInaceptable, rutaDeWorkspace, dentroDelWorkspace, seMira, depuracionActiva, PLATAFORMAS_DE_DISPOSITIVO, TOPE_DE_CONCURRENCIA_DE_TAREAS, motivoParaNoOlvidarEntorno, motivoParaNoBorrarCopia, motivoParaNoEditarFichero, mismaRuta, motivoDeNombreDeEntornoInaceptable, LARGO_NOMBRE_DE_ENTORNO } from "./settings.js";
 
 describe("validarSettings", () => {
   it("conserva los entornos bien formados, sin avisos", () => {
@@ -352,6 +352,33 @@ describe("motivoParaNoBorrarCopia", () => {
   /** Una consola ABIERTA no es motivo: quien borra la cierra antes. */
   it("sin nada escribiendo, se puede", () => {
     expect(motivoParaNoBorrarCopia({ raiz, trabajando: false, tareas: [] })).toBeUndefined();
+  });
+});
+
+describe("motivoParaNoEditarFichero", () => {
+  const raiz = "/w/webstudio/Tienda";
+  const otra = "/w/webstudio/Otra";
+
+  it("nadie escribiendo en esa raíz: se puede guardar", () => {
+    expect(motivoParaNoEditarFichero({ raiz, personas: [{ raiz, turnoEnVuelo: false }], tareas: [] })).toBeUndefined();
+    expect(motivoParaNoEditarFichero({ raiz, personas: [{ raiz: otra, turnoEnVuelo: true }], tareas: [{ raiz: otra, cerrada: false, turnoEnVuelo: true }] })).toBeUndefined();
+  });
+
+  it("un turno en vuelo de una persona en ESA raíz lo impide", () => {
+    expect(motivoParaNoEditarFichero({ raiz, personas: [{ raiz, turnoEnVuelo: true }], tareas: [] })).toBe(
+      "espera a que termine el turno: el agente está trabajando en este proyecto"
+    );
+  });
+
+  it("una consola de tarea sin cerrar lo impide aunque no esté en un turno; cerrada no, salvo con el turno vivo", () => {
+    const motivo = "hay una tarea de fondo trabajando en este proyecto: espera a que termine";
+    expect(motivoParaNoEditarFichero({ raiz, personas: [], tareas: [{ raiz, cerrada: false, turnoEnVuelo: false }] })).toBe(motivo);
+    expect(motivoParaNoEditarFichero({ raiz, personas: [], tareas: [{ raiz, cerrada: true, turnoEnVuelo: false }] })).toBeUndefined();
+    expect(motivoParaNoEditarFichero({ raiz, personas: [], tareas: [{ raiz, cerrada: true, turnoEnVuelo: true }] })).toBe(motivo);
+  });
+
+  it("compara rutas con mismaRuta: una barra final no la hace otra raíz", () => {
+    expect(motivoParaNoEditarFichero({ raiz: `${raiz}/`, personas: [{ raiz, turnoEnVuelo: true }], tareas: [] })).toBeTypeOf("string");
   });
 });
 

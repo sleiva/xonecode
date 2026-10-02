@@ -39,7 +39,7 @@ import type { Eleccion, FuentesDeEleccion, Proveedor } from "../../core/modelos.
 import type { ConsumoDeSesionPorCuenta, CatalogoModelosPort, ConectoresPort } from "../../core/ports.js";
 import { consumoDeLaSesion, consumoPersistible, esDoble } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
-import { dentroDelWorkspace, mismaRuta, motivoDeNombreDeEntornoInaceptable, motivoParaNoBorrarCopia, motivoParaNoMudarWorkspace, rutaDeWorkspace } from "../../core/settings.js";
+import { dentroDelWorkspace, mismaRuta, motivoDeNombreDeEntornoInaceptable, motivoParaNoBorrarCopia, motivoParaNoEditarFichero, motivoParaNoMudarWorkspace, rutaDeWorkspace } from "../../core/settings.js";
 import { rutaTrasLasMudanzas, type Mudanza } from "../../core/mudanzaDeWorkspace.js";
 import { mudarBaseDeWorkspace, planDeCambioDeBaseEnDisco, type ProgresoDeMudanza, type ResultadoDeCambioDeBase } from "../../agent/config/mudanzaEnDisco.js";
 import {
@@ -829,6 +829,13 @@ export interface Vestibulo {
    * Una consola por RAÍZ: nunca dos sobre la misma copia de trabajo. Ver `abrirDeVerdad`.
    */
   proyectosAbiertos(): readonly ConsolaDeProyecto[];
+
+  /**
+   * Por qué no se puede guardar a mano en esa raíz ahora mismo (`core/settings.ts
+   * #motivoParaNoEditarFichero`), o `undefined`. Mira TODAS las consolas de persona —también una
+   * cerrada con el turno vivo— y las de tarea, que no salen en `proyectosAbiertos()`.
+   */
+  motivoParaNoEditar(raiz: string): string | undefined;
   /** El usuario se va sin terminar. No escribe nada; DICE lo que ya quedó escrito. */
   cancelar(): Promise<void>;
   /**
@@ -2516,6 +2523,10 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     // La del foco INCLUIDA, y las cerradas fuera: una consola cuyo lazo ya terminó no ocupa
     // su raíz, y de esta lista cuelga la guarda de «gana la persona».
     proyectosAbiertos: () => [...abiertas.values()].filter((c) => !c.cerrada),
+    // Sin filtrar `cerrada` en las de persona: lo que importa es el turno, y un turno que sigue
+    // vivo escribe aunque su lazo haya terminado. Las de tarea, vivas o con turno.
+    motivoParaNoEditar: (raiz) =>
+      motivoParaNoEditarFichero({ raiz, personas: [...abiertas.values()], tareas: [...deTareas] }),
 
     cancelar: () => enCola(async () => {
       await cerrarLasDeProyecto();

@@ -23,6 +23,7 @@ import { MS_DE_PREPARACION,
   ajusteDeDepuracionCableado,
   ajusteDeModoPorDefectoCableado,
   emuladoresCableados,
+  ficherosCableados,
   ajusteDeConectoresCableado,
   ajusteDeGestorCableado,
   banderaDeEjecutor,
@@ -2206,6 +2207,126 @@ describe("montarRutas — el cable, por fin conectado", () => {
       expect(f.texto).toBeUndefined();
       await vestibulo.cerrar();
       rmSync(base, { recursive: true, force: true });
+    });
+  });
+
+  describe("guardar un fichero y pedir su base, por el cable", () => {
+    const abrir = async (
+      opciones: Parameters<typeof montarRutas>[2],
+      vestibuloExtra: Partial<Parameters<typeof crearVestibulo>[0]> = {}
+    ) => {
+      const base = mkdtempSync(join(tmpdir(), "xonecode-editar-"));
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base, ...vestibuloExtra });
+      const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      mkdirSync(join(raizDeVerdad, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      writeFileSync(join(raizDeVerdad, ".xonecode", "cloudstudio", "sync.json"), "{}");
+      montarRutas(servidor, vestibulo, { informar: () => {}, ...opciones });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+      await asentar();
+      const ultimo = <C extends MensajeAlCliente["clase"]>(clase: C) =>
+        cliente.recibidos.filter((x) => x.clase === clase).at(-1) as Extract<MensajeAlCliente, { clase: C }> | undefined;
+      const limpiar = async (): Promise<void> => {
+        await vestibulo.cerrar();
+        rmSync(base, { recursive: true, force: true });
+      };
+      return { servidor, vestibulo, raizDeVerdad, cliente, accion, ultimo, limpiar };
+    };
+
+    it("«guardarFichero» llega al puerto con la raíz abierta, y la respuesta trae la huella nueva", async () => {
+      const pedidos: unknown[] = [];
+      const t = await abrir({
+        escribirFichero: async (raiz, ruta, texto, huella) => {
+          pedidos.push({ raiz, ruta, texto, huella });
+          return { ruta, huella: "h2" };
+        },
+      });
+      expect(await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "<a/>", huella: "h1" })).toBe(204);
+      await asentar();
+      expect(pedidos).toEqual([{ raiz: t.vestibulo.proyectoAbierto()!.raiz, ruta: "a.xne", texto: "<a/>", huella: "h1" }]);
+      expect(t.ultimo("ficheroGuardado")).toEqual({ clase: "ficheroGuardado", ruta: "a.xne", huella: "h2" });
+      await t.limpiar();
+    });
+
+    it("con un turno en vuelo en esa raíz se niega, y el puerto NO se llama", async () => {
+      let soltar: (() => void) | undefined;
+      const escritos: string[] = [];
+      const t = await abrir(
+        {
+          escribirFichero: async (_raiz, ruta) => {
+            escritos.push(ruta);
+            return { ruta, huella: "h2" };
+          },
+        },
+        // La costura de `vestibulo.test.ts`: un ejecutor que no termina deja el turno EN VUELO.
+        { crearEjecutor: () => async () => { await new Promise<void>((resuelto) => { soltar = resuelto; }); } }
+      );
+      const abierta = t.vestibulo.proyectoAbierto()!;
+      const turno = abierta.ejecutarTurno("algo", abierta.estadoDeSesion, abierta.consola.consola);
+      expect(abierta.turnoEnVuelo).toBe(true);
+      await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "<a/>", huella: "h1" });
+      await asentar();
+      expect(t.ultimo("ficheroGuardado")).toEqual({
+        clase: "ficheroGuardado",
+        ruta: "a.xne",
+        error: "espera a que termine el turno: el agente está trabajando en este proyecto",
+      });
+      expect(escritos).toEqual([]);
+      soltar!();
+      await turno;
+      await t.limpiar();
+    });
+
+    it("sin puerto lo dice; y si el puerto lanza con una ruta, el error no la lleva", async () => {
+      const sinPuerto = await abrir({});
+      await enviarMensaje(sinPuerto.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "x", huella: "h" });
+      await asentar();
+      expect(sinPuerto.ultimo("ficheroGuardado")).toEqual({ clase: "ficheroGuardado", ruta: "a.xne", error: "esta ejecución no puede escribir en el proyecto" });
+      await sinPuerto.limpiar();
+
+      const dichos: string[] = [];
+      let raiz = "";
+      const t = await abrir({
+        informar: (texto) => dichos.push(texto),
+        escribirFichero: async () => {
+          throw Object.assign(new Error(`EACCES: permission denied, open '${raiz}/a.xne'`), { code: "EACCES" });
+        },
+      });
+      raiz = t.raizDeVerdad;
+      await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "x", huella: "h" });
+      await asentar();
+      expect(t.ultimo("ficheroGuardado")).toEqual({ clase: "ficheroGuardado", ruta: "a.xne", error: "no se pudo guardar el fichero" });
+      expect(JSON.stringify(t.cliente.recibidos)).not.toContain(t.raizDeVerdad);
+      expect(dichos.join("\n")).not.toContain(t.raizDeVerdad);
+      expect(dichos.join("\n")).toContain("EACCES");
+      await t.limpiar();
+    });
+
+    it("«baseDeFichero» llega al puerto con raíz, sesión, ruta y base; sin puerto contesta sinBase", async () => {
+      const pedidos: unknown[] = [];
+      const t = await abrir({
+        baseDeFichero: async (raiz, sesion, ruta, base) => {
+          pedidos.push({ raiz, sesion, ruta, base });
+          return { ruta, base, texto: "antes" };
+        },
+      });
+      expect(await enviarMensaje(t.accion, { clase: "baseDeFichero", ruta: "a.xne", base: "commit" })).toBe(204);
+      await asentar();
+      const abierta = t.vestibulo.proyectoAbierto()!;
+      expect(pedidos).toEqual([{ raiz: abierta.raiz, sesion: abierta.sesion, ruta: "a.xne", base: "commit" }]);
+      expect(t.ultimo("baseDeFichero")).toEqual({ clase: "baseDeFichero", ruta: "a.xne", base: "commit", texto: "antes" });
+      await t.limpiar();
+
+      const sinPuerto = await abrir({});
+      await enviarMensaje(sinPuerto.accion, { clase: "baseDeFichero", ruta: "a.xne", base: "sesion" });
+      await asentar();
+      expect(sinPuerto.ultimo("baseDeFichero")).toEqual({ clase: "baseDeFichero", ruta: "a.xne", base: "sesion", sinBase: "esta ejecución no puede leer git" });
+      await sinPuerto.limpiar();
     });
   });
 
@@ -11902,5 +12023,28 @@ describe("emuladoresCableados — la composición de producción, no un doble", 
     const { crearAvd, pararEmulador } = emuladoresCableados();
     expect((await crearAvd("-mal", () => {}).terminado).estado).toBe("fallo");
     expect((await pararEmulador("ABC")).ok).toBe(false);
+  });
+});
+
+/**
+ * El cableado de la pestaña Ficheros: leer, guardar y la base con las funciones de VERDAD, sobre un
+ * temporal real. Es el patrón de fallo de este repo —un campo opcional que se cae del literal de
+ * `arrancarConsolaWeb` compila y pasa, y el botón diría «esta ejecución no puede escribir»—.
+ */
+describe("ficherosCableados — la composición de producción, no un doble", () => {
+  it("lee con huella, guarda con ella, y la base dice que aquí no hay repositorio", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-cableados-"));
+    try {
+      writeFileSync(join(raiz, "a.xne"), "uno\n");
+      const c = ficherosCableados();
+      const leido = await c.leerFichero(raiz, "a.xne");
+      expect(leido.huella).toBeTypeOf("string");
+      const guardado = await c.escribirFichero(raiz, "a.xne", "dos\n", leido.huella!);
+      expect(guardado.error).toBeUndefined();
+      expect(readFileSync(join(raiz, "a.xne"), "utf8")).toBe("dos\n");
+      expect((await c.baseDeFichero(raiz, undefined, "a.xne", "commit")).sinBase).toMatch(/repositorio/);
+    } finally {
+      rmSync(raiz, { recursive: true, force: true });
+    }
   });
 });

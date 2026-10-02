@@ -820,6 +820,10 @@ export type MensajeAlCliente =
       error?: { accion: string; motivo: string; clave?: string; texto?: string; pedido?: string };
     }
   | ({ clase: "fichero" } & FicheroDelProyecto)
+  /** La respuesta a guardar: con `huella` se escribió; con `error`, no se tocó nada. */
+  | { clase: "ficheroGuardado"; ruta: string; huella?: string; error?: string }
+  /** La base de comparación de un fichero. */
+  | ({ clase: "baseDeFichero" } & BaseDelFichero)
   /** El estado de sincronización del proyecto abierto (pestaña CloudStudio). `proyecto` y
    *  `rama` ausentes = no está dado de alta en CloudStudio, que NO es «cero pendientes». */
   | ({ clase: "sync" } & EstadoDeSync)
@@ -1021,7 +1025,21 @@ export interface FicheroDelProyecto {
   /** Un markdown con imágenes del proyecto: el texto para la VISTA, con sus enlaces a la ruta
    *  que las sirve (`imagenesDelDocumento.ts`). `texto` sigue siendo la fuente. */
   vista?: string;
+  /** El sha256 de los bytes en disco, solo con el texto entero en UTF-8. Vuelve al guardar. */
+  huella?: string;
   error?: string;
+}
+
+/** Contra qué se comparan las marcas del editor. Redeclarado de `web/servidor/transporte.ts`. */
+export type BaseElegida = "sesion" | "commit";
+
+/** La versión de un fichero para las marcas del editor. Redeclarado de `web/servidor/transporte.ts`. */
+export interface BaseDelFichero {
+  ruta: string;
+  base: BaseElegida;
+  texto?: string;
+  vacio?: true;
+  sinBase?: string;
 }
 
 /**
@@ -1455,6 +1473,10 @@ export type MensajeDelCliente =
   | { clase: "gestor"; accion: "borradorDeCierre" }
   | { clase: "gestor"; accion: "cerrar"; comentario: string; transicion?: string }
   | { clase: "fichero"; ruta: string }
+  /** Guardar lo editado en la pestaña Ficheros, con la huella del fichero que se cargó. */
+  | { clase: "guardarFichero"; ruta: string; texto: string; huella: string }
+  /** Pedir la base de comparación de un fichero. */
+  | { clase: "baseDeFichero"; ruta: string; base: BaseElegida }
   /** La sincronización con CloudStudio: `estado` pide la medida, `subir`/`bajar` son las
    *  dos acciones de `/sync`. Viaja la INTENCIÓN: el servidor las aplica encolando la línea
    *  en el lazo, con su plan, su guarda de árbol sucio y su aprobación. */

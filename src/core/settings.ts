@@ -594,6 +594,36 @@ export function motivoParaNoBorrarCopia(datos: {
 }
 
 /**
+ * Por qué NO se puede guardar a mano un fichero en esa raíz ahora mismo (el editor de la pestaña
+ * Ficheros), o `undefined` si se puede.
+ *
+ * La hermana de `motivoParaNoBorrarCopia` con la misma idea —lo que importa es quién ESCRIBE ahí—
+ * y una diferencia: aquí no cuenta el índice de tareas sino las consolas VIVAS de este proceso,
+ * porque una tarea `requiere-atencion` espera feedback y no escribe. Dos fuentes:
+ *
+ * - una consola de persona de esa raíz con un turno en vuelo (no solo la del foco: puede haber
+ *   varias consolas vivas a la vez);
+ * - una consola de TAREA de esa raíz sin cerrar, o cerrada con el turno aún en vuelo.
+ *
+ * Con esto el guardado no necesita la cola de `escriturasEnSerie`: los únicos que escriben en la
+ * copia son los turnos y las tareas, y mientras corren se niega. **Límite declarado**: una tarea
+ * en OTRO proceso no se ve, el mismo que ya declara `borrarSesion`.
+ */
+export function motivoParaNoEditarFichero(datos: {
+  raiz: string;
+  personas: readonly { raiz: string; turnoEnVuelo: boolean }[];
+  tareas: readonly { raiz: string; cerrada: boolean; turnoEnVuelo: boolean }[];
+}): string | undefined {
+  if (datos.personas.some((c) => c.turnoEnVuelo && mismaRuta(c.raiz, datos.raiz))) {
+    return "espera a que termine el turno: el agente está trabajando en este proyecto";
+  }
+  if (datos.tareas.some((c) => (!c.cerrada || c.turnoEnVuelo) && mismaRuta(c.raiz, datos.raiz))) {
+    return "hay una tarea de fondo trabajando en este proyecto: espera a que termine";
+  }
+  return undefined;
+}
+
+/**
  * Por qué NO se puede cambiar el workspace ahora mismo —y con él MUDAR las copias que hay
  * dentro—, o `undefined` si se puede.
  *

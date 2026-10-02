@@ -657,6 +657,14 @@ export type MensajeAlCliente =
     }
   | ({ clase: "fichero" } & FicheroDelProyecto)
   /**
+   * La respuesta a guardar un fichero desde el editor de la pestaña Ficheros: con `huella` se
+   * escribió y esa es la nueva; con `error`, no se tocó nada. Va a TODOS los clientes: otra pestaña
+   * con el mismo fichero abierto se entera de que el disco cambió.
+   */
+  | { clase: "ficheroGuardado"; ruta: string; huella?: string; error?: string }
+  /** La base de comparación de un fichero, para las marcas del margen del editor. */
+  | ({ clase: "baseDeFichero" } & BaseDelFichero)
+  /**
    * El estado de sincronización del proyecto abierto (pestaña CloudStudio). Los campos van en
    * `EstadoDeSync`, aquí arriba, para poder compararlos con los del cliente.
    */
@@ -1044,7 +1052,26 @@ export interface FicheroDelProyecto {
    * ruta que las sirve, para la VISTA (`arbolDeProyecto.ts#vistaDeMarkdown`). `texto` es la fuente.
    */
   vista?: string;
+  /**
+   * El sha256 de los bytes en disco, solo con el texto ENTERO en UTF-8
+   * (`arbolDeProyecto.ts#huellaDeContenido`). Vuelve al guardar: si el disco ya no coincide, no se
+   * escribe nada.
+   */
+  huella?: string;
   error?: string;
+}
+
+/**
+ * La versión de un fichero contra la que el editor pinta sus marcas (`agent/sesiones/baseDeFichero.ts`).
+ * `texto` = había una versión; `vacio` = en esa base no existía; `sinBase` = no hay con qué comparar,
+ * y por qué. Redeclarado en `apps/web/src/tipos.ts`.
+ */
+export interface BaseDelFichero {
+  ruta: string;
+  base: "sesion" | "commit";
+  texto?: string;
+  vacio?: true;
+  sinBase?: string;
 }
 
 /**
@@ -1640,6 +1667,14 @@ export type MensajeDelCliente =
   | { clase: "gestor"; accion: "borradorDeCierre" }
   | { clase: "gestor"; accion: "cerrar"; comentario: string; transicion?: string }
   | { clase: "fichero"; ruta: string }
+  /**
+   * Guardar lo que la persona editó. La única escritura del cliente en un fichero del proyecto:
+   * sin tarjeta de aprobación porque lo teclea ella, con las guardas de ruta de leer y negada con
+   * un turno o una tarea en marcha en esa raíz. `huella` es la del fichero que se cargó.
+   */
+  | { clase: "guardarFichero"; ruta: string; texto: string; huella: string }
+  /** Pedir la base de comparación de un fichero: la foto del inicio de la sesión o el último commit. */
+  | { clase: "baseDeFichero"; ruta: string; base: "sesion" | "commit" }
   /**
    * La sincronización con CloudStudio del proyecto abierto (pestaña CloudStudio).
    * `estado` pide la medida; `subir` y `bajar` son las dos acciones de `/sync`.
