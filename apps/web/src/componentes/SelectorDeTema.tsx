@@ -12,8 +12,9 @@ import estilos from "./SelectorDeTema.module.css";
  *   los colores de ESE tema.
  * - **`aria-pressed` en todos**, como `SelectorDeModo`: son botones de un conmutador. Pulsar el
  *   ya elegido no hace nada.
- * - **Si el modo no está en vigor, se DICE**: elegir el tema oscuro estando en claro no cambia
- *   nada en pantalla, y sin la línea eso se lee como un botón roto.
+ * - **Si el modo no está en vigor, se DICE qué pasará**: elegir un tema de esa fila pone la
+ *   consola en ese modo (`App.tsx#alCambiarTema`), y sin la línea el salto de claro a oscuro
+ *   cogería por sorpresa.
  */
 export function SelectorDeTema({
   modo,
@@ -60,7 +61,7 @@ export function SelectorDeTema({
           );
         })}
       </div>
-      {enVigor ? null : <p className={estilos.nota}>Se aplica cuando la consola esté en {modo}.</p>}
+      {enVigor ? null : <p className={estilos.nota}>Elegirlo pone la consola en {modo}.</p>}
     </div>
   );
 }

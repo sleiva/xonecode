@@ -898,6 +898,8 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   `--xonecode-*` con color y a `--shiki-*`. **XOneCode no
   tiene semillas**: aplicarlo QUITA `data-tema`, así que se ve como siempre por construcción. Se
   recuerda en ESTE navegador (`xonecode.tema.claro`/`.oscuro`) y un id desconocido es XOneCode.
+  **Elegir un tema lo ENSEÑA** (`App.tsx#alCambiarTema`): uno del otro modo pasa la consola a
+  ese modo y la fija (saca de «sistema»); uno del modo en vigor no toca la apariencia.
   Los tests: el contraste WCAG de cada tema (`temas.test.ts`, un fallo se arregla en la semilla,
   nunca bajando el umbral), que el puente cubra CADA alias usado y no lleve literales
   y que todo alias usado EXISTA (los dos en `estilosDelCliente.test.ts`: uno inexistente resuelve a nada

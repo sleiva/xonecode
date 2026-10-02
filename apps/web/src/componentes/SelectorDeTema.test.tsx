@@ -34,12 +34,12 @@ describe("SelectorDeTema", () => {
     expect(vistos).toEqual([]);
   });
 
-  it("si el modo no está en vigor lo DICE, para que elegir sin ver cambio no parezca roto", () => {
+  it("si el modo no está en vigor DICE que elegir cambia de modo, para que el salto no coja por sorpresa", () => {
     montar({ enVigor: false });
-    expect(screen.getByText("Se aplica cuando la consola esté en oscuro.")).toBeTruthy();
+    expect(screen.getByText("Elegirlo pone la consola en oscuro.")).toBeTruthy();
     cleanup();
     montar({ enVigor: true });
-    expect(screen.queryByText(/Se aplica cuando/)).toBeNull();
+    expect(screen.queryByText(/Elegirlo pone/)).toBeNull();
   });
 
   it("la muestra de un tema lleva SUS colores; la de XOneCode, los suyos, sea cual sea el tema puesto", () => {

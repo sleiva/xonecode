@@ -696,7 +696,7 @@ export function Ajustes({
    * viaja por el cable. Ausente = no se pinta la sección.
    */
   temas?: TemasElegidos;
-  /** Qué modo pinta la consola AHORA: decide en qué fila sale «se aplica cuando…». */
+  /** Qué modo pinta la consola AHORA: decide en qué fila sale «elegirlo pone la consola en…». */
   modoEnVigor?: ModoDeTema;
   alCambiarTema?: (modo: ModoDeTema, id: string) => void;
   /** Cambia el modo por defecto. Ausente = se enseña sin poder cambiarlo. */
@@ -2049,8 +2049,8 @@ export function Ajustes({
                 <>
                   <h3 className={estilos.subencabezado}>Temas</h3>
                   <p className={estilos.nota}>
-                    Un tema para el modo claro y otro para el oscuro. El modo lo eliges en la cabecera; aquí, con
-                    qué colores se pinta cada uno. Se recuerda en este navegador.
+                    Un tema para el modo claro y otro para el oscuro. Elegir uno del otro modo pone la consola en
+                    ese modo; también lo cambias en la cabecera. Se recuerda en este navegador.
                   </p>
                   {(["claro", "oscuro"] as const).map((modo) => (
                     <SelectorDeTema

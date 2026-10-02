@@ -1058,9 +1058,17 @@ export function App({
     setApariencia(nueva);
     guardarApariencia(nueva);
   };
+  /**
+   * Elegir un tema lo ENSEÑA: si es del otro modo, la consola pasa a ese modo. Antes se
+   * guardaba y no se veía hasta cambiar de modo en la cabecera, y eso se leía como un botón
+   * que no hace nada. Un tema del modo que ya está en vigor no toca la apariencia, así que
+   * con «sistema» se sigue al sistema; uno del otro modo sí lo fija, porque no hay forma de
+   * enseñarlo sin salir de él (la cabecera dice el modo y vuelve a «sistema» con un clic).
+   */
   const alCambiarTema = (modo: ModoDeTema, id: string): void => {
     setTemas((antes) => ({ ...antes, [modo]: id }));
     guardarTema(modo, id);
+    if (modo !== modoEnVigor) alCambiarApariencia(modo);
   };
 
   /**

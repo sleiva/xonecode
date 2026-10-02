@@ -501,8 +501,8 @@ describe("Ajustes", () => {
       const oscuro = screen.getByRole("group", { name: "Tema oscuro" });
       expect(within(claro).getByRole("button", { name: "GitHub Light" }).getAttribute("aria-pressed")).toBe("true");
       expect(within(oscuro).getByRole("button", { name: "Dracula" }).getAttribute("aria-pressed")).toBe("true");
-      expect(screen.getByText("Se aplica cuando la consola esté en claro.")).toBeTruthy();
-      expect(screen.queryByText("Se aplica cuando la consola esté en oscuro.")).toBeNull();
+      expect(screen.getByText("Elegirlo pone la consola en claro.")).toBeTruthy();
+      expect(screen.queryByText("Elegirlo pone la consola en oscuro.")).toBeNull();
       fireEvent.click(within(oscuro).getByRole("button", { name: "One Dark" }));
       expect(vistos).toEqual([["oscuro", "one-oscuro"]]);
     });

@@ -614,6 +614,31 @@ describe("App: el tema del modo en vigor", () => {
     expect(document.body.style.getPropertyValue("--tema-fondo")).toBe("#282a36");
     expect(window.localStorage.getItem("xonecode.tema.oscuro")).toBe("dracula");
   });
+
+  it("elegir un tema del OTRO modo pasa la consola a ese modo: lo elegido se ve en el acto", () => {
+    window.localStorage.setItem("xonecode.apariencia", "claro");
+    montar();
+    expect(document.body.hasAttribute("data-ds-dark-theme")).toBe(false);
+    fireEvent.click(screen.getAllByRole("button", { name: "Ajustes" })[0]!);
+    fireEvent.click(within(screen.getByRole("group", { name: "Tema oscuro" })).getByRole("button", { name: "Dracula" }));
+    expect(document.body.hasAttribute("data-ds-dark-theme")).toBe(true);
+    expect(document.body.getAttribute("data-tema")).toBe("dracula");
+    expect(window.localStorage.getItem("xonecode.apariencia")).toBe("oscuro");
+  });
+
+  it("con «sistema», un tema del modo que ya está en vigor NO saca al sistema", () => {
+    window.localStorage.setItem("xonecode.apariencia", "sistema");
+    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: () => {}, removeEventListener: () => {} }));
+    try {
+      montar();
+      fireEvent.click(screen.getAllByRole("button", { name: "Ajustes" })[0]!);
+      fireEvent.click(within(screen.getByRole("group", { name: "Tema oscuro" })).getByRole("button", { name: "One Dark" }));
+      expect(document.body.getAttribute("data-tema")).toBe("one-oscuro");
+      expect(window.localStorage.getItem("xonecode.apariencia")).toBe("sistema");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 describe("App: un envío que falla no puede parecer que salió bien", () => {
