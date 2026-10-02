@@ -590,6 +590,32 @@ describe("App: el secreto y el selector, que también colgaban", () => {
   });
 });
 
+describe("App: el tema del modo en vigor", () => {
+  const CLAVES = ["xonecode.apariencia", "xonecode.tema.claro", "xonecode.tema.oscuro"];
+  const limpiar = (): void => {
+    document.body.removeAttribute("data-tema");
+    document.body.removeAttribute("data-ds-dark-theme");
+    document.body.removeAttribute("style");
+    for (const k of CLAVES) window.localStorage.removeItem(k);
+  };
+  beforeEach(limpiar);
+  afterEach(limpiar);
+
+  it("elegir Dracula en Ajustes aplica sus semillas al body y lo recuerda", () => {
+    // El CABLEADO que ningún test de componente ve: `App` guarda el tema, lo mete en el
+    // estado y se lo pasa a `aplicarApariencia` junto a la apariencia. Si `temas` faltara de
+    // la llamada o de las dependencias del efecto, el body no cambiaría y esto se pondría rojo.
+    window.localStorage.setItem("xonecode.apariencia", "oscuro");
+    montar();
+    fireEvent.click(screen.getAllByRole("button", { name: "Ajustes" })[0]!);
+    const grupo = screen.getByRole("group", { name: "Tema oscuro" });
+    fireEvent.click(within(grupo).getByRole("button", { name: "Dracula" }));
+    expect(document.body.getAttribute("data-tema")).toBe("dracula");
+    expect(document.body.style.getPropertyValue("--tema-fondo")).toBe("#282a36");
+    expect(window.localStorage.getItem("xonecode.tema.oscuro")).toBe("dracula");
+  });
+});
+
 describe("App: un envío que falla no puede parecer que salió bien", () => {
   it("la aprobación se queda en pantalla, lo dice, y nada se da por aprobado", async () => {
     const { store, enviar } = montar(enviarQueFalla());
