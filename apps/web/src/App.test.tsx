@@ -1901,6 +1901,37 @@ describe("App: editar en la pestaña Ficheros", () => {
     expect(screen.getByRole("button", { name: "Editar" })).toBeTruthy();
   });
 
+  it("cambiar de entorno en la barra con cambios pregunta antes; al descartar, se cambia", async () => {
+    // Ancha, para que la barra quepa al lado del panel.
+    Object.defineProperty(window, "innerWidth", { value: 2400, configurable: true, writable: true });
+    onTestFinished(() => Object.defineProperty(window, "innerWidth", { value: 1024, configurable: true, writable: true }));
+    const { enviar, store, vista } = await conFichero();
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        registrados: [
+          { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" },
+          { id: "casa", nombre: "On-premise", url: "https://mcp.casa.local/mcp" },
+        ],
+        entornoActivo: "webstudio",
+        proyectos: [{ id: "p1", nombre: "Tienda" }],
+        ramas: [],
+        proyectoAbierto: true,
+        proyectoActivo: "p1",
+      })
+    );
+    teclear(vistaDelEditor(), "X");
+    fireEvent.change(screen.getByDisplayValue("XOne WebStudio"), { target: { value: "casa" } });
+    expect(screen.getByRole("alertdialog", { name: "Cambios sin guardar" })).toBeTruthy();
+    expect(mandados(enviar, "entorno")).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Descartar cambios" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "entorno", accion: "activo", entorno: "casa" });
+    void vista;
+  });
+
   it("cerrar el panel con cambios también pregunta", async () => {
     const { vista } = await conFichero();
     teclear(vista, "X");

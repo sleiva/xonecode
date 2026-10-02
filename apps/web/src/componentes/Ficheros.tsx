@@ -186,7 +186,7 @@ export function Ficheros({
                   <button
                     type="button"
                     className={estilos.accionPrincipal}
-                    disabled={!actual.sucio || actual.guardando}
+                    disabled={!actual.sucio || actual.guardando || actual.proyectoCambiado === true}
                     onClick={edicion.guardar}
                   >
                     {actual.guardando ? "Guardando…" : "Guardar"}
@@ -227,6 +227,14 @@ export function Ficheros({
             </div>
             {actual !== undefined && edicion !== undefined ? (
               <>
+                {actual.proyectoCambiado === true ? (
+                  <div className={estilos.banda} role="alert">
+                    <span>El proyecto abierto ya no es este: guardar está desactivado. Copia tus cambios o descártalos.</span>
+                    <button type="button" className={estilos.accion} onClick={edicion.descartar}>
+                      Descartar
+                    </button>
+                  </div>
+                ) : null}
                 {actual.versionNueva !== undefined ? (
                   <div className={estilos.banda} role="alert">
                     <span>El fichero ha cambiado en el disco mientras lo editabas.</span>

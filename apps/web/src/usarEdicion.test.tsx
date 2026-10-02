@@ -166,11 +166,42 @@ describe("usarEdicion", () => {
     expect(control.haySinGuardar()).toBe(false);
   });
 
-  it("cambiar de proyecto suelta la edición: guardar escribe en el ABIERTO", () => {
+  it("cambiar de proyecto SIN cambios suelta la edición: guardar escribe en el ABIERTO", () => {
     const { vista, inicial } = montar();
     act(() => vista.result.current.abrir(FICHERO));
     vista.rerender({ ...inicial, proyecto: "p2" });
     expect(vista.result.current.actual).toBeUndefined();
+  });
+
+  it("cambiar de proyecto CON cambios no se los lleva: se conservan, se marca y guardar no manda nada", () => {
+    const { enviar, vista, inicial } = montar();
+    act(() => vista.result.current.abrir(FICHERO));
+    act(() => vista.result.current.cambiar("mío\n"));
+    enviar.mockClear();
+    vista.rerender({ ...inicial, proyecto: "p2" });
+    expect(vista.result.current.actual).toMatchObject({ ruta: "a.xne", proyecto: "p1", sucio: true, proyectoCambiado: true });
+    expect(vista.result.current.textoVivo()).toBe("mío\n");
+    act(() => vista.result.current.guardar());
+    expect(mandados(enviar, "guardarFichero")).toEqual([]);
+    // Un fichero de la MISMA ruta en el otro proyecto no es una versión nueva de este.
+    vista.rerender({ ...inicial, proyecto: "p2", contenidos: { "a.xne": { ...FICHERO, texto: "del otro\n", huella: "h7" } } });
+    expect(vista.result.current.actual?.versionNueva).toBeUndefined();
+    // «Descartar» lo suelta sin preguntar más.
+    act(() => vista.result.current.descartar());
+    expect(vista.result.current.actual).toBeUndefined();
+  });
+
+  it("si el proyecto vuelve a ser el de la edición, la marca se quita y se puede guardar", () => {
+    const { enviar, vista, inicial } = montar();
+    act(() => vista.result.current.abrir(FICHERO));
+    act(() => vista.result.current.cambiar("mío\n"));
+    // Un corte del cable vacía el alta: el proyecto pasa por `undefined` y vuelve.
+    vista.rerender({ ...inicial, proyecto: undefined });
+    expect(vista.result.current.actual?.proyectoCambiado).toBe(true);
+    vista.rerender(inicial);
+    expect(vista.result.current.actual?.proyectoCambiado).toBeUndefined();
+    act(() => vista.result.current.guardar());
+    expect(mandados(enviar, "guardarFichero")).toHaveLength(1);
   });
 
   it("si se cae el cable con un guardado en vuelo, se dice que no se sabe", () => {

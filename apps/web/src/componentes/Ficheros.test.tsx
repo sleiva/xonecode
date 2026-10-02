@@ -268,6 +268,7 @@ describe("Ficheros: editar", () => {
       pedirBase: vi.fn(),
       recargar: vi.fn(),
       seguirConLosMios: vi.fn(),
+      descartar: vi.fn(),
       ...parcial,
     };
   }
@@ -328,6 +329,15 @@ describe("Ficheros: editar", () => {
     expect(c.recargar).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Seguir con los míos" }));
     expect(c.seguirConLosMios).toHaveBeenCalledTimes(1);
+  });
+
+  it("con el proyecto cambiado: la banda lo dice, «Guardar» no se deja pulsar y «Descartar» suelta", () => {
+    const c = control({ actual: { ...EDITANDO, sucio: true, proyectoCambiado: true } });
+    pintar({}, c);
+    expect(screen.getByText("El proyecto abierto ya no es este: guardar está desactivado. Copia tus cambios o descártalos.")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Guardar" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Descartar" }));
+    expect(c.descartar).toHaveBeenCalledTimes(1);
   });
 
   it("el error de guardar se enseña", () => {

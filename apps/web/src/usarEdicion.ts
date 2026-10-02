@@ -20,7 +20,10 @@ export interface VersionDelDisco {
 
 export interface EstadoDeEdicion {
   ruta: string;
-  /** El proyecto en el que se abrió: guardar escribe en el ABIERTO, así que si cambia se suelta. */
+  /**
+   * El proyecto en el que se abrió. Guardar escribe en el ABIERTO, así que si cambia: sin cambios
+   * se suelta; con cambios se conservan y se marca `proyectoCambiado`.
+   */
   proyecto: string | undefined;
   /** El texto cargado (o el último guardado), con los finales de línea ya en «\n». */
   original: string;
@@ -35,6 +38,13 @@ export interface EstadoDeEdicion {
   descartada?: string;
   /** Sube cada vez que el texto se reemplaza desde fuera: el editor se rehace con esta `key`. */
   generacion: number;
+  /**
+   * El proyecto abierto dejó de ser el de la edición con cambios sin guardar. El foco es del
+   * servidor —cambiar de entorno, otra pestaña que abre otro proyecto— y no se le puede preguntar
+   * antes, así que no se tira lo tecleado: se conserva, guardar se apaga y la banda lo dice. Se
+   * quita sola si el proyecto vuelve a ser este (un corte del cable vacía el alta y la repone).
+   */
+  proyectoCambiado?: true;
 }
 
 export interface UltimoGuardado {
@@ -61,6 +71,11 @@ export interface ControlDeEdicion {
   abrir: (f: FicheroDelProyecto) => void;
   /** Suelta la edición SIN preguntar: la pregunta la hace `App` (`CambiosSinGuardar`). */
   cerrar: () => void;
+  /**
+   * Lo mismo que `cerrar`, con otro nombre a propósito: `App` envuelve `cerrar` con su pregunta
+   * para la pestaña, y el «Descartar» de la banda de proyecto cambiado ya ES la respuesta.
+   */
+  descartar: () => void;
   cambiar: (texto: string) => void;
   guardar: () => void;
   elegirBase: (base: BaseElegida) => void;
@@ -176,7 +191,7 @@ export function usarEdicion({
 
   const guardar = useCallback(() => {
     const a = actualRef.current;
-    if (a === undefined || a.guardando || !a.sucio) return;
+    if (a === undefined || a.guardando || !a.sucio || a.proyectoCambiado === true) return;
     // Aquí y no solo en el botón: Cmd+S llama a `guardar` directamente.
     if (a.proyecto === undefined) {
       fijar({ ...a, error: SIN_PROYECTO });
@@ -218,11 +233,15 @@ export function usarEdicion({
     guardadoVisto.current = ultimoGuardado.secuencia;
     const a = actualRef.current;
     if (a === undefined || a.ruta !== ultimoGuardado.ruta) return;
+    const mio = a.guardando && ultimoGuardado.id === idMandadoRef.current;
+    // Con el proyecto cambiado, lo de otra pestaña es de OTRO proyecto, y pedir nada traería un
+    // fichero de la misma ruta del abierto ahora.
+    if (a.proyectoCambiado === true && !mio) return;
     // La respuesta llega a TODAS las pestañas: es la mía solo si lleva el id que mandé (la huella no
     // sirve: dos pestañas que parten de la misma versión mandan la misma).
     // Otra (de otra pestaña, aunque acepte o rechace) es un cambio en disco: se pide el fichero y
     // el flujo de «versión nueva» decide —recarga sola o banda—.
-    if (!a.guardando || ultimoGuardado.id !== idMandadoRef.current) {
+    if (!mio) {
       void enviar({ clase: "fichero", ruta: a.ruta });
       return;
     }
@@ -233,6 +252,7 @@ export function usarEdicion({
     const guardado = enviadoRef.current ?? textoRef.current;
     enviadoRef.current = undefined;
     fijar({ ...sinAvisos(a), original: guardado, huella: ultimoGuardado.huella, guardando: false, sucio: textoRef.current !== guardado });
+    if (a.proyectoCambiado === true) return;
     // El visor, la `M` del árbol y las marcas se quedaron con el disco de antes.
     void enviar({ clase: "fichero", ruta: a.ruta });
     void enviar({ clase: "revision" });
@@ -244,7 +264,7 @@ export function usarEdicion({
   const llegado = actual === undefined ? undefined : contenidos?.[actual.ruta];
   useEffect(() => {
     const a = actualRef.current;
-    if (a === undefined || a.guardando || !esEditable(llegado) || llegado.ruta !== a.ruta || llegado.huella === a.huella) return;
+    if (a === undefined || a.guardando || a.proyectoCambiado === true || !esEditable(llegado) || llegado.ruta !== a.ruta || llegado.huella === a.huella) return;
     if (a.descartada === llegado.huella || a.versionNueva?.huella === llegado.huella) return;
     const version: VersionDelDisco = { original: normalizarFinesDeLinea(llegado.texto), huella: llegado.huella, finDeLinea: finDeLineaDe(llegado.texto) };
     if (a.sucio) {
@@ -258,8 +278,17 @@ export function usarEdicion({
 
   useEffect(() => {
     const a = actualRef.current;
-    if (a !== undefined && a.proyecto !== proyecto) cerrar();
-  }, [proyecto, cerrar]);
+    if (a === undefined) return;
+    if (a.proyecto === proyecto) {
+      if (a.proyectoCambiado === true) {
+        const { proyectoCambiado: _cambiado, ...resto } = a;
+        fijar(resto);
+      }
+      return;
+    }
+    if (!a.sucio) cerrar();
+    else if (a.proyectoCambiado !== true) fijar({ ...a, proyectoCambiado: true });
+  }, [proyecto, cerrar, fijar]);
 
   useEffect(() => {
     const a = actualRef.current;
@@ -327,7 +356,7 @@ export function usarEdicion({
   const base = deLaRuta !== undefined && deLaRuta.base === baseElegida ? deLaRuta : undefined;
 
   return useMemo(
-    () => ({ actual, base, baseElegida, textoVivo, haySinGuardar, abrir, cerrar, cambiar, guardar, elegirBase, pedirBase, recargar, seguirConLosMios }),
+    () => ({ actual, base, baseElegida, textoVivo, haySinGuardar, abrir, cerrar, descartar: cerrar, cambiar, guardar, elegirBase, pedirBase, recargar, seguirConLosMios }),
     [actual, base, baseElegida, textoVivo, haySinGuardar, abrir, cerrar, cambiar, guardar, elegirBase, pedirBase, recargar, seguirConLosMios]
   );
 }

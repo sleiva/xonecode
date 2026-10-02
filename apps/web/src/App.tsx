@@ -2830,10 +2830,14 @@ export function App({
           // Cambiar de entorno trae SUS proyectos: es una conexión con CloudStudio, así
           // que la hace el servidor y contesta con la lista nueva.
           // El panel de un proyecto sin copia es del entorno que se deja: se cierra con él.
-          alElegirEntorno={(entorno) => {
-            setPanelSinCopia(undefined);
-            void enviar({ clase: "entorno", accion: "activo", entorno });
-          }}
+          // Con cambios sin guardar en Ficheros, pregunta antes: el entorno nuevo trae otro proyecto
+          // abierto y la edición se quedaría sin dónde guardar.
+          alElegirEntorno={(entorno) =>
+            conGuarda(() => {
+              setPanelSinCopia(undefined);
+              void enviar({ clase: "entorno", accion: "activo", entorno });
+            })
+          }
           // Reabrir una sesión guardada: el servidor abre esa copia local con ese hilo.
           alAbrirSesion={(proyecto, sesion) => abrirSesion(proyecto, sesion)}
           // Pide la rama del proyecto elegido (`vestibulo.ts#completarProyecto` la
