@@ -1,14 +1,16 @@
 import { existsSync } from "node:fs";
-import { open, readFile, realpath, stat } from "node:fs/promises";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { createHash, randomUUID } from "node:crypto";
+import { open, readFile, realpath, rename, stat, unlink, type FileHandle } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { ficherosDelProyecto } from "../turno/ficherosDelProyecto.js";
 import { puedeLeerRuta } from "./perfiles.js";
 import { esVistaAplanada } from "./proyecto.js";
 import { conImagenesIncrustadas, enlacesDeImagen, imagenEnProyecto, RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
 
 /**
- * El proyecto tal como lo enseña la pestaña Ficheros de la consola web: el árbol y el
- * contenido de un fichero, de SOLO lectura.
+ * El proyecto tal como lo enseña la pestaña Ficheros de la consola web: el árbol, el
+ * contenido de un fichero y, desde el editor de la pestaña, GUARDARLO (`escribirFicheroDeProyecto`): la
+ * única escritura del cliente en un fichero del proyecto, con las MISMAS guardas que la lectura.
  *
  * Lo que se lista y lo que se lee es lo mismo que ve el agente, con las mismas reglas y
  * por las mismas funciones: `puedeLeerRuta` (la barrera de las tools propias) y
@@ -98,6 +100,12 @@ export interface FicheroLeido {
    * sigue siendo la fuente tal cual: «Fuente» enseña lo que hay en el fichero, no lo que se pinta.
    */
   vista?: string;
+  /**
+   * El sha256 de los BYTES en disco (`huellaDeContenido`), solo con el texto ENTERO en UTF-8: es
+   * lo que el editor devuelve al guardar para que se sepa si el disco cambió mientras tanto. Un
+   * recortado, un latin1 o un binario no la llevan, y sin ella no se edita.
+   */
+  huella?: string;
   /** El motivo del paso que falló. Sin él, la lectura fue bien. */
   error?: string;
 }
@@ -151,17 +159,31 @@ export function motivoDeRutaInaceptable(ruta: string): string | undefined {
   return undefined;
 }
 
-export async function leerFicheroDeProyecto(raiz: string, ruta: string): Promise<FicheroLeido> {
-  const rechazo = (error: string): FicheroLeido => ({ ruta, recortado: false, binario: false, bytes: 0, error });
+/** Una ruta del cable ya resuelta contra el disco y que ha pasado las DOS cribas. */
+export interface RutaResuelta {
+  /** El camino REAL (`realpath`): el único sobre el que se abre o se escribe. */
+  real: string;
+  /** Ese camino real relativo a la raíz real, con «/». Es el que se le da a git. */
+  relativa: string;
+  /** La ruta pedida con «/» en vez de «\». */
+  normal: string;
+}
 
+/**
+ * La cadena ENTERA de guardas de una ruta del cable, en UN sitio: la usan leer, guardar y la base
+ * de las marcas del editor (`agent/sesiones/baseDeFichero.ts`). Se extrajo de la lectura cuando
+ * apareció la escritura: copiarla habría sido la segunda copia que diverge el primer día, y en el
+ * lado que escribe un agujero ya no enseña un secreto, lo pisa.
+ */
+export async function resolverEnProyecto(raiz: string, ruta: string): Promise<RutaResuelta | { error: string }> {
   const motivo = motivoDeRutaInaceptable(ruta);
-  if (motivo !== undefined) return rechazo(motivo);
+  if (motivo !== undefined) return { error: motivo };
 
   // La misma regla que `esVistaAplanada` (un `.xml` con su `.xne` al lado), preguntada al
   // disco en O(1) en vez de recorrer el árbol entero por cada fichero que se abre.
   const normal = ruta.split(/[\\/]/).join("/");
   if (normal.endsWith(".xml") && existsSync(resolve(raiz, `${normal.slice(0, -4)}.xne`))) {
-    return rechazo(MOTIVO_APLANADA);
+    return { error: MOTIVO_APLANADA };
   }
 
   let real: string;
@@ -174,11 +196,11 @@ export async function leerFicheroDeProyecto(raiz: string, ruta: string): Promise
     // invertida sin traducir, fallando con «no existe» aunque el fichero SÍ estuviera.
     real = await realpath(resolve(raiz, normal));
   } catch {
-    return rechazo("no existe");
+    return { error: "no existe" };
   }
   // Un enlace simbólico dentro del proyecto que apunte fuera se queda aquí: la lección que
   // el repo ya pagó con `virtualMode: true` en el backend del agente.
-  if (!real.startsWith(raizReal + sep)) return rechazo("está fuera del proyecto");
+  if (!real.startsWith(raizReal + sep)) return { error: "está fuera del proyecto" };
 
   // **La barrera se aplica DOS veces, y una sola no basta.** La primera pasada es sobre el
   // TEXTO que teclea el cliente (`motivoDeRutaInaceptable` y la criba de aplanadas de
@@ -195,15 +217,22 @@ export async function leerFicheroDeProyecto(raiz: string, ruta: string): Promise
   // `realpath` canonicaliza las mayúsculas y sigue los enlaces, así que recomprobar sobre
   // su resultado cierra los tres a la vez. Y sigue siendo una recomprobación y no una
   // prohibición de enlaces: un enlace a un fichero que SÍ se enseña se lee con normalidad.
-  const relReal = relative(raizReal, real).split(sep).join("/");
-  if (!puedeLeerRuta(`/${relReal}`)) return rechazo("esa ruta no se enseña");
-  if (relReal.endsWith(".xml") && existsSync(`${real.slice(0, -4)}.xne`)) return rechazo(MOTIVO_APLANADA);
+  const relativa = relative(raizReal, real).split(sep).join("/");
+  if (!puedeLeerRuta(`/${relativa}`)) return { error: "esa ruta no se enseña" };
+  if (relativa.endsWith(".xml") && existsSync(`${real.slice(0, -4)}.xne`)) return { error: MOTIVO_APLANADA };
+  return { real, relativa, normal };
+}
 
-  const leido = await leerContenidoDeFichero(real, ruta, mimeDeImagen(normal));
+export async function leerFicheroDeProyecto(raiz: string, ruta: string): Promise<FicheroLeido> {
+  const rechazo = (error: string): FicheroLeido => ({ ruta, recortado: false, binario: false, bytes: 0, error });
+  const resuelta = await resolverEnProyecto(raiz, ruta);
+  if ("error" in resuelta) return rechazo(resuelta.error);
+
+  const leido = await leerContenidoDeFichero(resuelta.real, ruta, mimeDeImagen(resuelta.normal));
   // Un markdown con imágenes del proyecto lleva además su VISTA: enlazadas en relativo, en la página
   // de la consola salían rotas (`core/imagenesDeDocumento.ts`).
-  if (/\.(md|markdown)$/i.test(normal) && leido.texto !== undefined && !leido.recortado) {
-    const vista = vistaDeMarkdown(normal, leido.texto);
+  if (/\.(md|markdown)$/i.test(resuelta.normal) && leido.texto !== undefined && !leido.recortado) {
+    const vista = vistaDeMarkdown(resuelta.normal, leido.texto);
     if (vista !== undefined) return { ...leido, vista };
   }
   return leido;
@@ -325,13 +354,17 @@ export async function leerContenidoDeFichero(
     const recortado = bytesRead > TOPE_DE_FICHERO;
     const cuerpo = recortado ? leido.subarray(0, TOPE_DE_FICHERO) : leido;
     const { texto, codificacion } = decodificar(cuerpo, recortado);
+    // La huella, solo con el fichero ENTERO y en UTF-8: es la condición para editarlo, y sobre
+    // los BYTES (no sobre el texto decodificado, que ha perdido el BOM) para que se compare
+    // contra lo mismo que se volverá a leer al guardar.
+    const conHuella = !recortado && codificacion === "utf-8" ? { huella: huellaDeContenido(cuerpo) } : {};
     // El SVG viaja con las dos caras: la fuente que se acaba de decodificar y el dibujo
     // para pintarlo. El dibujo solo si el fichero entró ENTERO —un SVG cortado por la mitad
     // no abre— y solo desde el mismo cuerpo que ya está en memoria.
     if (mime === "image/svg+xml" && !recortado) {
-      return { ruta, texto, recortado, binario: false, bytes, codificacion, mime, base64: Buffer.from(cuerpo).toString("base64") };
+      return { ruta, texto, recortado, binario: false, bytes, codificacion, mime, base64: Buffer.from(cuerpo).toString("base64"), ...conHuella };
     }
-    return { ruta, texto, recortado, binario: false, bytes, codificacion };
+    return { ruta, texto, recortado, binario: false, bytes, codificacion, ...conHuella };
   } finally {
     await fh.close();
   }
@@ -354,4 +387,93 @@ function decodificar(cuerpo: Uint8Array, recortado: boolean): { texto: string; c
     }
   }
   return { texto: new TextDecoder("latin1").decode(cuerpo), codificacion: "latin1" };
+}
+
+/**
+ * La HUELLA de un contenido: sha256 de sus bytes. Es la concurrencia optimista del editor: viaja
+ * al leer y vuelve al guardar, y si el disco ya no coincide no se escribe nada. Un hash y no una
+ * fecha de modificación porque una fecha no distingue «lo reescribió con lo mismo» de «lo cambió»,
+ * y en una copia mudada o bajada de nuevo las fechas no dicen nada.
+ */
+export function huellaDeContenido(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+/** El resultado de guardar: con `huella` se escribió; con `error`, no se tocó nada. */
+export interface FicheroGuardado {
+  ruta: string;
+  huella?: string;
+  error?: string;
+}
+
+const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
+
+/**
+ * Guarda lo que la persona editó en la pestaña Ficheros. En orden, y cualquier paso que falle
+ * DEVUELVE su motivo sin haber tocado el disco:
+ *
+ * 1. Las MISMAS guardas que leer (`resolverEnProyecto`), y además que sea un fichero normal —una
+ *    carpeta no— y que no sea una imagen, que no se edita desde aquí.
+ * 2. La huella: si lo que hay en disco no es lo que el cliente cargó, alguien (el agente, otra
+ *    pestaña, un editor de fuera) lo cambió, y escribir encima lo perdería sin avisar.
+ * 3. El tope, en BYTES: el mismo que la lectura, porque lo que no se puede leer entero no se edita.
+ * 4. Escritura ATÓMICA sobre el camino REAL (temporal en la misma carpeta + `rename`): un corte a
+ *    mitad deja el fichero viejo, no uno truncado; y sobre el real porque renombrar encima de un
+ *    enlace lo sustituiría por un fichero normal.
+ *
+ * Lo que NO hace es comprobar que nadie trabaja en el proyecto: eso es del manejador del cable
+ * (`arranque.ts#atenderGuardarFichero`), que es quien ve las consolas vivas.
+ *
+ * El BOM: el lector decodifica con `TextDecoder`, que lo QUITA, así que el editor nunca lo ve; si
+ * el fichero lo llevaba y el texto no, se le devuelve —si no, guardar un fichero sin tocar una
+ * coma cambiaría sus bytes—.
+ */
+export async function escribirFicheroDeProyecto(raiz: string, ruta: string, texto: string, huella: string): Promise<FicheroGuardado> {
+  const rechazo = (error: string): FicheroGuardado => ({ ruta, error });
+  const resuelta = await resolverEnProyecto(raiz, ruta);
+  if ("error" in resuelta) return rechazo(resuelta.error);
+  try {
+    const info = await stat(resuelta.real);
+    if (!info.isFile()) return rechazo("no es un fichero");
+    if (mimeDeImagen(resuelta.normal) !== undefined) return rechazo("una imagen no se edita desde aquí");
+    const actual = await readFile(resuelta.real);
+    if (huellaDeContenido(actual) !== huella) {
+      return rechazo("el fichero cambió desde que lo abriste: recárgalo antes de guardar");
+    }
+    const conBom = actual.subarray(0, BOM.length).equals(BOM) && !texto.startsWith("﻿");
+    const bytes = Buffer.concat([conBom ? BOM : Buffer.alloc(0), Buffer.from(texto, "utf8")]);
+    if (bytes.length > TOPE_DE_FICHERO) {
+      return rechazo(`pasa del tope de ${Math.round(TOPE_DE_FICHERO / 1000)} KB que se edita desde aquí`);
+    }
+    await escribirAtomico(resuelta.real, bytes, info.mode & 0o7777);
+    return { ruta, huella: huellaDeContenido(bytes) };
+  } catch (error) {
+    // Solo el `code`: el mensaje de Node lleva la ruta absoluta, y esto sale por el cable.
+    const code = (error as NodeJS.ErrnoException).code;
+    return rechazo(`no se pudo escribir el fichero${code === undefined ? "" : ` (${code})`}`);
+  }
+}
+
+/**
+ * Temporal en la MISMA carpeta + `rename`, el patrón de `settingsEnDisco.ts#escribirAtomico`. No se
+ * reutiliza aquella: fija 0600, crea la carpeta y nombra el temporal como el de `settings.json`, y
+ * aquí los permisos son los del fichero del usuario (un `.sh` ejecutable tiene que seguir
+ * siéndolo). El `chmod` explícito es porque el umask recorta el modo que se pide al abrir.
+ */
+async function escribirAtomico(destino: string, bytes: Buffer, modo: number): Promise<void> {
+  const temporal = join(dirname(destino), `.${basename(destino)}.${randomUUID()}.xonecode.tmp`);
+  let fh: FileHandle | undefined;
+  try {
+    fh = await open(temporal, "wx", modo);
+    await fh.writeFile(bytes);
+    await fh.chmod(modo);
+    await fh.sync();
+    await fh.close();
+    fh = undefined;
+    await rename(temporal, destino);
+  } catch (error) {
+    await fh?.close().catch(() => {});
+    await unlink(temporal).catch(() => {});
+    throw error;
+  }
 }

@@ -1,9 +1,23 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { conImagenesDelProyecto,
   arbolDeProyecto,
+  escribirFicheroDeProyecto,
+  huellaDeContenido,
   leerFicheroDeProyecto,
   motivoDeRutaInaceptable,
   mimeDeImagen,
@@ -12,6 +26,8 @@ import { conImagenesDelProyecto,
   TOPE_DE_FICHERO,
   TOPE_DE_IMAGEN,
 } from "./arbolDeProyecto.js";
+
+
 
 let raiz: string;
 let fuera: string;
@@ -305,5 +321,129 @@ describe("las imágenes de un markdown, incrustadas para la VISTA", () => {
   it("sin imágenes que incrustar no hay `vista`: el visor usa el texto de siempre", async () => {
     const leido = await leerFicheroDeProyecto(proyectoConDoc("# Solo texto\n"), "doc/manual.md");
     expect(leido.vista).toBeUndefined();
+  });
+});
+
+/** ¿Corre como root? Entonces un `chmod 0555` no impide escribir y el caso de EACCES no se puede montar. */
+const ES_ROOT = typeof process.getuid === "function" && process.getuid() === 0;
+
+describe("escribirFicheroDeProyecto", () => {
+  const huellaDe = (ruta: string): string => huellaDeContenido(readFileSync(join(raiz, ruta)));
+  const temporales = (dir: string): string[] => readdirSync(dir).filter((n) => n.endsWith(".xonecode.tmp"));
+  /** Lo que una escritura negada NO puede haber tocado. */
+  const foto = (): Record<string, string> =>
+    Object.fromEntries(
+      [".env", ".git/HEAD", ".xonecode/config.json", "app/Clientes.xml", "app/Clientes.xne"].map((r) => [r, readFileSync(join(raiz, r), "utf8")])
+    );
+
+  it("la lectura trae la huella de los BYTES, y solo con el texto entero en UTF-8", async () => {
+    expect((await leerFicheroDeProyecto(raiz, "app/Clientes.xne")).huella).toBe(huellaDe("app/Clientes.xne"));
+    // Sin huella no hay «Editar»: recortado, latin1 y binario son de solo lectura.
+    expect((await leerFicheroDeProyecto(raiz, "grande.js")).huella).toBeUndefined();
+    expect((await leerFicheroDeProyecto(raiz, "viejo.txt")).huella).toBeUndefined();
+    expect((await leerFicheroDeProyecto(raiz, "datos.bin")).huella).toBeUndefined();
+  });
+
+  it("guarda, devuelve la huella nueva y no deja temporales", async () => {
+    const r = await escribirFicheroDeProyecto(raiz, "app/Clientes.xne", "<coll name=\"Otra\"/>", huellaDe("app/Clientes.xne"));
+    expect(r.error).toBeUndefined();
+    expect(readFileSync(join(raiz, "app", "Clientes.xne"), "utf8")).toBe("<coll name=\"Otra\"/>");
+    expect(r).toEqual({ ruta: "app/Clientes.xne", huella: huellaDe("app/Clientes.xne") });
+    expect(temporales(join(raiz, "app"))).toEqual([]);
+  });
+
+  it.each([
+    "../x",
+    "/etc/passwd",
+    ".env",
+    ".git/HEAD",
+    ".xonecode/config.json",
+    "app/Clientes.xml",
+    "enlace.txt",
+    "enlace-env.txt",
+    "alias.xml",
+    "carpeta-enlazada/config.json",
+    "app",
+    "no-existe.xne",
+    "a//b",
+  ])("niega «%s» con motivo, sin la ruta de la máquina y sin tocar nada", async (ruta) => {
+    const antes = foto();
+    const fueraAntes = readFileSync(join(fuera, "secreto.txt"), "utf8");
+    const r = await escribirFicheroDeProyecto(raiz, ruta, "PISADO", "cualquiera");
+    expect(r.error).toBeTypeOf("string");
+    expect(r.huella).toBeUndefined();
+    expect(r.error).not.toContain(raiz);
+    expect(r.error).not.toContain(fuera);
+    expect(foto()).toEqual(antes);
+    expect(readFileSync(join(fuera, "secreto.txt"), "utf8")).toBe(fueraAntes);
+    expect(existsSync(join(raiz, "no-existe.xne"))).toBe(false);
+  });
+
+  it("con la huella vieja no escribe: el disco se queda con lo que dejó otro", async () => {
+    const vieja = huellaDe("app/Clientes.xne");
+    writeFileSync(join(raiz, "app", "Clientes.xne"), "<coll name=\"DeOtro\"/>");
+    const r = await escribirFicheroDeProyecto(raiz, "app/Clientes.xne", "<coll name=\"Mio\"/>", vieja);
+    expect(r.error).toMatch(/cambió desde que lo abriste/);
+    expect(readFileSync(join(raiz, "app", "Clientes.xne"), "utf8")).toBe("<coll name=\"DeOtro\"/>");
+    expect(temporales(join(raiz, "app"))).toEqual([]);
+  });
+
+  it("niega un texto por encima del tope, medido en BYTES y no en caracteres", async () => {
+    // «ñ» son dos bytes: la cadena tiene MENOS caracteres que el tope y más bytes.
+    const texto = "ñ".repeat(TOPE_DE_FICHERO / 2 + 1);
+    expect(texto.length).toBeLessThan(TOPE_DE_FICHERO);
+    const r = await escribirFicheroDeProyecto(raiz, "app/Clientes.xne", texto, huellaDe("app/Clientes.xne"));
+    expect(r.error).toMatch(/tope/);
+    expect(readFileSync(join(raiz, "app", "Clientes.xne"), "utf8")).toBe("<coll name=\"Clientes\"/>");
+  });
+
+  it("escribe los finales de línea tal como llegan: el CRLF lo conserva quien edita", async () => {
+    writeFileSync(join(raiz, "crlf.js"), "a\r\nb\r\n");
+    await escribirFicheroDeProyecto(raiz, "crlf.js", "a\r\nB\r\n", huellaDe("crlf.js"));
+    expect(readFileSync(join(raiz, "crlf.js"), "utf8")).toBe("a\r\nB\r\n");
+  });
+
+  it.skipIf(process.platform === "win32")("conserva los permisos del original", async () => {
+    writeFileSync(join(raiz, "script.js"), "uno");
+    chmodSync(join(raiz, "script.js"), 0o755);
+    await escribirFicheroDeProyecto(raiz, "script.js", "dos", huellaDe("script.js"));
+    expect(statSync(join(raiz, "script.js")).mode & 0o777).toBe(0o755);
+  });
+
+  it("el BOM que el lector quitó vuelve al guardar", async () => {
+    writeFileSync(join(raiz, "bom.xne"), Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from("hola")]));
+    const leido = await leerFicheroDeProyecto(raiz, "bom.xne");
+    expect(leido.texto).toBe("hola");
+    const r = await escribirFicheroDeProyecto(raiz, "bom.xne", "adiós", leido.huella!);
+    expect(r.error).toBeUndefined();
+    const enDisco = readFileSync(join(raiz, "bom.xne"));
+    expect([...enDisco.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    expect(enDisco.subarray(3).toString("utf8")).toBe("adiós");
+  });
+
+  it("por un enlace DENTRO del proyecto escribe en su destino, y el enlace sigue siendo enlace", async () => {
+    symlinkSync(join(raiz, "app", "Clientes.xne"), join(raiz, "atajo.xne"));
+    const r = await escribirFicheroDeProyecto(raiz, "atajo.xne", "<nuevo/>", huellaDe("app/Clientes.xne"));
+    expect(r.error).toBeUndefined();
+    expect(readFileSync(join(raiz, "app", "Clientes.xne"), "utf8")).toBe("<nuevo/>");
+    expect(lstatSync(join(raiz, "atajo.xne")).isSymbolicLink()).toBe(true);
+  });
+
+  it("una imagen no se edita desde aquí", async () => {
+    const r = await escribirFicheroDeProyecto(raiz, "icono.svg", "<svg/>", huellaDe("icono.svg"));
+    expect(r.error).toMatch(/imagen/);
+    expect(readFileSync(join(raiz, "icono.svg"), "utf8")).toBe("<svg xmlns=\"http://www.w3.org/2000/svg\"/>");
+  });
+
+  it.skipIf(process.platform === "win32" || ES_ROOT)("si el disco no deja escribir, lo dice con su código y sin la ruta", async () => {
+    const huella = huellaDe("app/Clientes.xne");
+    chmodSync(join(raiz, "app"), 0o555);
+    try {
+      const r = await escribirFicheroDeProyecto(raiz, "app/Clientes.xne", "<x/>", huella);
+      expect(r.error).toMatch(/EACCES|EPERM/);
+      expect(r.error).not.toContain(raiz);
+    } finally {
+      chmodSync(join(raiz, "app"), 0o755);
+    }
   });
 });
