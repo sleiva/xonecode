@@ -31,6 +31,10 @@ import "../estilos/shiki.css";
 // el chat y la pestaña Ficheros. Después de `marca.css`, de donde sale el icono de copiar
 // como máscara.
 import "../estilos/markdown.css";
+// NUESTRA: el puente de los temas (`src/temas.ts`). DESPUÉS de `marca.css`, `shiki.css` y
+// `markdown.css` porque redefine sus variables con la misma especificidad y gana por orden;
+// solo actúa con `data-tema` en el `body`, que XOneCode no pone nunca.
+import "../estilos/temas.css";
 // NUESTRA, y la ÚLTIMA a propósito: aplica al documento los tokens de tipografía que las
 // hojas copiadas solo declaran. Sin ella la interfaz entera sale en serif — medido.
 import "../estilos/tipografia.css";

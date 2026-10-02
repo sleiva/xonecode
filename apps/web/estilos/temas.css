@@ -1,0 +1,100 @@
+/* NUESTRO. El puente de los temas: de 24 semillas (`--tema-*`, que `apariencia.ts` escribe en
+ * el `style` del `body`) a los alias que pinta la interfaz.
+ *
+ * Solo se aplica con `data-tema` puesto, y XOneCode no lo pone nunca: el tema de omisión sigue
+ * siendo la cascada de `design-platform.css` + `marca.css` + `shiki.css`, sin pasar por aquí.
+ *
+ * Tres reglas:
+ * - **Ningún color literal.** Solo `var(--tema-*)`, `color-mix` y `transparent` como segundo
+ *   color de un `color-mix` (`estilosDelCliente.test.ts`). Los colores viven en `src/temas.ts`.
+ * - **Cubre CADA alias que la interfaz usa** (mismo test): uno sin redefinir saldría con el
+ *   color de XOneCode dentro de otro tema.
+ * - **Los derivados se REDECLARAN aquí** aunque `marca.css` ya los derive: allí viven en
+ *   `:root`, y una custom property con `var()` se resuelve donde se DECLARA y se hereda ya
+ *   resuelta — cambiar la semilla en el `body` no les llegaría.
+ *
+ * Especificidad: `body[data-tema]` empata con `body[data-ds-dark-theme]` de las hojas
+ * copiadas, y gana por ORDEN: `main.tsx` importa esta hoja después de todas las que pisa. */
+body[data-tema] {
+  /* Superficies */
+  --dsw-alias-bg-base: var(--tema-fondo);
+  --dsw-alias-bg-layer-1: var(--tema-capa1);
+  --dsw-alias-bg-layer-2: var(--tema-capa2);
+  --dsw-alias-bg-layer-3: var(--tema-capa3);
+  --dsw-alias-bg-module-platform: var(--tema-capa1);
+  --dsw-alias-button-elevated-fill: var(--tema-capa2);
+  --dsw-alias-button-floating-fill: var(--tema-capa2);
+  --dsw-alias-button-floating-hover: var(--tema-capa3);
+  --dsw-alias-interactive-bg-hover: color-mix(in srgb, var(--tema-texto) 8%, transparent);
+  --dsw-alias-markdown-code-block: var(--tema-capa1);
+  --dsw-alias-markdown-inline-code: var(--tema-capa3);
+
+  /* Texto */
+  --dsw-alias-label-primary: var(--tema-texto);
+  --dsw-alias-label-secondary: var(--tema-texto2);
+  --dsw-alias-label-tertiary: var(--tema-texto3);
+  --dsw-alias-label-caption: var(--tema-texto3);
+  --dsw-alias-label-dimmed: color-mix(in srgb, var(--tema-texto3) 55%, var(--tema-fondo));
+  --dsw-alias-label-primary-inverted: var(--tema-fondo);
+  --dsw-alias-brand-primary: var(--tema-texto);
+
+  /* Bordes: el del tema, y dos escalones más marcados hacia el texto */
+  --dsw-alias-border-l2: var(--tema-borde);
+  --dsw-alias-border-l2-darkmode-thin: var(--tema-borde);
+  --dsw-alias-border-l3: color-mix(in srgb, var(--tema-borde) 85%, var(--tema-texto));
+  --dsw-alias-border-l4: color-mix(in srgb, var(--tema-borde) 70%, var(--tema-texto));
+
+  /* Estados */
+  --dsw-alias-state-error-primary: var(--tema-peligro);
+  --dsw-alias-state-error-secondary: color-mix(in srgb, var(--tema-peligro) 70%, var(--tema-fondo));
+  --dsw-alias-state-success-primary: var(--tema-exito);
+  --dsw-alias-state-success-secondary: color-mix(in srgb, var(--tema-exito) 70%, var(--tema-fondo));
+  --dsw-alias-state-success-tertiary: color-mix(in srgb, var(--tema-exito) 15%, var(--tema-fondo));
+  --dsw-alias-state-warn-primary: var(--tema-aviso);
+  --dsw-alias-state-warn-label: var(--tema-aviso);
+  --dsw-alias-state-warn-tertiary: color-mix(in srgb, var(--tema-aviso) 15%, var(--tema-fondo));
+  --dsw-alias-state-business-primary: var(--tema-negocio);
+  --dsw-alias-state-business-tertiary: color-mix(in srgb, var(--tema-negocio) 15%, var(--tema-fondo));
+
+  /* Barras de desplazamiento */
+  --dsw-alias-scrollbar-bg-l1: color-mix(in srgb, var(--tema-texto3) 35%, transparent);
+  --dsw-alias-scrollbar-bg-l2: color-mix(in srgb, var(--tema-texto3) 35%, transparent);
+  --dsw-alias-scrollbar-hover-l1: color-mix(in srgb, var(--tema-texto3) 60%, transparent);
+  --dsw-alias-scrollbar-hover-l2: color-mix(in srgb, var(--tema-texto3) 60%, transparent);
+
+  /* La marca dentro de un tema: el acento del TEMA ocupa el sitio del cian y del azul de XOne */
+  --xonecode-cian: var(--tema-acento);
+  --xonecode-cian-oscuro: color-mix(in srgb, var(--tema-acento) 85%, var(--tema-texto));
+  --xonecode-azul: var(--tema-acento);
+  --xonecode-azul-hondo: color-mix(in srgb, var(--tema-acento) 70%, var(--tema-fondo));
+  --xonecode-sobre-azul: var(--tema-sobreAcento);
+  --xonecode-sobre-azul-suave: color-mix(in srgb, var(--tema-sobreAcento) 75%, transparent);
+  --xonecode-borde-azul: color-mix(in srgb, var(--tema-acento) 80%, var(--tema-fondo));
+  --xonecode-naranja: var(--tema-aviso);
+  --xonecode-rojo: var(--tema-peligro);
+  --xonecode-verde: var(--tema-exito);
+  --xonecode-rojo-fondo: color-mix(in srgb, var(--tema-peligro) 12%, transparent);
+  --xonecode-rojo-fondo-hover: color-mix(in srgb, var(--tema-peligro) 20%, transparent);
+  --xonecode-verde-fondo: color-mix(in srgb, var(--tema-exito) 12%, transparent);
+  --xonecode-verde-fondo-hover: color-mix(in srgb, var(--tema-exito) 20%, transparent);
+  --xonecode-velo: color-mix(in srgb, var(--tema-sombra) 50%, transparent);
+  --xonecode-fila-elegida: color-mix(in srgb, var(--tema-acento) 18%, transparent);
+  --xonecode-fila-hover: color-mix(in srgb, var(--tema-acento) 9%, transparent);
+  --xonecode-sombra-caja:
+    0 1px 2px color-mix(in srgb, var(--tema-sombra) 8%, transparent),
+    0 8px 24px -8px color-mix(in srgb, var(--tema-sombra) 14%, transparent);
+  --dsw-specific-sidebar-nav-item-active-accent: var(--tema-acento);
+
+  /* El resaltado de código (tema `css-variables` de shiki) */
+  --shiki-foreground: var(--tema-texto);
+  --shiki-background: var(--tema-capa1);
+  --shiki-token-keyword: var(--tema-palabraClave);
+  --shiki-token-string: var(--tema-cadena);
+  --shiki-token-function: var(--tema-funcion);
+  --shiki-token-comment: var(--tema-comentario);
+  --shiki-token-constant: var(--tema-constante);
+  --shiki-token-parameter: var(--tema-parametro);
+  --shiki-token-punctuation: var(--tema-puntuacion);
+  --shiki-token-link: var(--tema-enlace);
+  --shiki-token-string-expression: var(--tema-expresionDeCadena);
+}

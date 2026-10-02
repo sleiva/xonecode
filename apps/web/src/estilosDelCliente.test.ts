@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { NOMBRES_DE_SEMILLA } from "./temas.js";
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
 const ESTILOS = join(AQUI, "..", "estilos");
@@ -53,5 +54,48 @@ describe("los alias que usa el cliente existen", () => {
       for (const a of aliasUsados(h.css)) if (!definidos.has(a)) faltan.push(`${a} (${h.ruta.split("apps/web/")[1]})`);
     }
     expect(faltan).toEqual([]);
+  });
+});
+
+const PUENTE = (): string => sinComentarios(readFileSync(join(ESTILOS, "temas.css"), "utf8"));
+const declarados = (prefijo: string, css: string): Set<string> =>
+  new Set([...css.matchAll(new RegExp(`--${prefijo}([a-z0-9-]+)\\s*:`, "g"))].map((m) => m[1]!));
+
+/**
+ * Un tema que deja un alias sin redefinir lo pinta con el color de XOneCode, sin avisar: un
+ * borde navy en Dracula, un fondo blanco en One Dark. Por eso no basta con «se ve bien»: el
+ * puente tiene que cubrir CADA alias que la interfaz usa, y uno nuevo que alguien use mañana
+ * da rojo aquí.
+ */
+describe("el puente de temas", () => {
+  it("redefine cada alias --dsw-alias-* que usa el cliente", () => {
+    const enElPuente = declarados("dsw-alias-", PUENTE());
+    const faltan = new Set<string>();
+    for (const ruta of hojasDelCliente()) {
+      if (ruta.endsWith("temas.css")) continue;
+      for (const a of aliasUsados(readFileSync(ruta, "utf8"))) if (!enElPuente.has(a)) faltan.add(a);
+    }
+    expect([...faltan].sort()).toEqual([]);
+  });
+
+  it("redefine el resaltado de código entero", () => {
+    const shiki = declarados("shiki-", sinComentarios(readFileSync(join(ESTILOS, "shiki.css"), "utf8")));
+    const enElPuente = declarados("shiki-", PUENTE());
+    expect([...shiki].filter((v) => !enElPuente.has(v))).toEqual([]);
+  });
+
+  it("no lleva colores literales: solo semillas, color-mix y transparent", () => {
+    const css = PUENTE();
+    expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(css).not.toMatch(/\b(rgb|rgba|hsl|hsla)\s*\(/);
+    const palabras = css.replace(/--[\w-]+/g, "").match(/\b[a-z]+\b/g) ?? [];
+    const colores = palabras.filter((p) => ["white", "black", "red", "green", "blue", "gray", "grey", "currentcolor"].includes(p));
+    expect(colores).toEqual([]);
+  });
+
+  it("solo usa semillas que existen", () => {
+    const usadas = new Set([...PUENTE().matchAll(/var\(--tema-([a-zA-Z0-9]+)\)/g)].map((m) => m[1]!));
+    const nombres = new Set<string>(NOMBRES_DE_SEMILLA);
+    expect([...usadas].filter((u) => !nombres.has(u))).toEqual([]);
   });
 });

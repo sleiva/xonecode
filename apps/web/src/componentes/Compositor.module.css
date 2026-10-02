@@ -80,6 +80,16 @@
 }
 
 /*
+ * Con un TEMA puesto (`data-tema`, `src/temas.ts`), el filo sale del borde del tema y no del
+ * navy de XOne aclarado: en Dracula un filo azul sería un color que el tema no tiene. Va
+ * después de la regla del modo oscuro, con la misma especificidad, para ganarle en los dos
+ * modos.
+ */
+:global([data-tema]) .compositor {
+  border-color: var(--dsw-alias-border-l3);
+}
+
+/*
  * La banda de arriba: el motor. Envuelve porque son tres controles y el nombre de un modelo
  * es largo —`deepseek/deepseek-flash` ya ocupa 166 px—, así que en estrecho el dispositivo
  * baja a su renglón en vez de salirse.
