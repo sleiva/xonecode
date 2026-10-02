@@ -1,6 +1,6 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css`. Los colores de cada
-   muestra llegan por `--muestra-*` en el `style` (de `src/temas.ts`); XOneCode no los trae y
-   XOneCode trae los suyos (`muestra`). */
+   muestra llegan por `--muestra-*` en el `style`, desde `src/temas.ts`: de las semillas del
+   tema o, en XOneCode, que no tiene, de su `muestra`. */
 
 .fila {
   display: flex;

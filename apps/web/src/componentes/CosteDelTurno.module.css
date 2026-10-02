@@ -8,8 +8,8 @@
  * es lo que se lee, y esto se consulta. Un dato de máquina al mismo peso que su frase deja
  * las dos sin jerarquía.
  */
-/* Los alias que había aquí (`--dsw-alias-text-tertiary y text-secondary`) no existen en ninguna paleta y resolvían a nada; estos son los que se querían. */
 .coste {
+  /* Los alias que había aquí (`text-tertiary` y `text-secondary`) no existen en ninguna paleta y resolvían a nada; estos son los que se querían. */
   display: inline-flex;
   align-items: center;
   gap: 3px;

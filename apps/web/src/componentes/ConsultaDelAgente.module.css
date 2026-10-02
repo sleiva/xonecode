@@ -2,8 +2,8 @@
    de las tarjetas de artefacto. Los botones y el aviso de fallo son los de `Pregunta.module.css`,
    importados tal cual: es el mismo «Responder», no uno que se le parece. La forma, la del modo
    de pregunta del `ToolFallback` de assistant-ui, con nuestros alias. */
-/* Los alias que había aquí (`--dsw-alias-border-primary y bg-secondary`) no existen en ninguna paleta y resolvían a nada; estos son los que se querían. */
 .tarjeta {
+  /* Los alias que había aquí (`border-primary` y `bg-secondary`) no existen en ninguna paleta y resolvían a nada; estos son los que se querían. */
   align-self: flex-start;
   display: flex;
   flex-direction: column;

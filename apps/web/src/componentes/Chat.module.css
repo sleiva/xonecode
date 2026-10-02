@@ -510,8 +510,8 @@
    horizontal, así que cada una toma el ancho que le toque en vez de recortarse al centro —
    ahí se perdería la barra superior, que es lo que dice en qué pantalla está. El tope de
    ancho es para que un panorama no se coma la fila él solo. */
-/* Los alias que había aquí (`--dsw-alias-border-primary y bg-secondary`) no existen en ninguna paleta y resolvían a nada; estos son los que se querían. */
 .captura {
+  /* Los alias que había aquí (`border-primary` y `bg-secondary`) no existen en ninguna paleta y resolvían a nada; estos son los que se querían. */
   display: block;
   height: 112px;
   width: auto;
