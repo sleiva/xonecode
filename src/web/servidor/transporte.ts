@@ -1670,9 +1670,10 @@ export type MensajeDelCliente =
   /**
    * Guardar lo que la persona editó. La única escritura del cliente en un fichero del proyecto:
    * sin tarjeta de aprobación porque lo teclea ella, con las guardas de ruta de leer y negada con
-   * un turno o una tarea en marcha en esa raíz. `huella` es la del fichero que se cargó.
+   * un turno o una tarea en marcha en esa raíz. `huella` es la del fichero que se cargó, y
+   * `proyecto` el `proyectoActivo` con que se ABRIÓ la edición: si el foco ya es otro, se niega.
    */
-  | { clase: "guardarFichero"; ruta: string; texto: string; huella: string; id: string }
+  | { clase: "guardarFichero"; ruta: string; texto: string; huella: string; id: string; proyecto: string }
   /** Pedir la base de comparación de un fichero: la foto del inicio de la sesión o el último commit. */
   | { clase: "baseDeFichero"; ruta: string; base: "sesion" | "commit" }
   /**

@@ -1473,8 +1473,8 @@ export type MensajeDelCliente =
   | { clase: "gestor"; accion: "borradorDeCierre" }
   | { clase: "gestor"; accion: "cerrar"; comentario: string; transicion?: string }
   | { clase: "fichero"; ruta: string }
-  /** Guardar lo editado en la pestaña Ficheros, con la huella del fichero que se cargó. */
-  | { clase: "guardarFichero"; ruta: string; texto: string; huella: string; id: string }
+  /** Guardar lo editado en la pestaña Ficheros, con la huella del fichero que se cargó y el proyecto en que se abrió. */
+  | { clase: "guardarFichero"; ruta: string; texto: string; huella: string; id: string; proyecto: string }
   /** Pedir la base de comparación de un fichero. */
   | { clase: "baseDeFichero"; ruta: string; base: BaseElegida }
   /** La sincronización con CloudStudio: `estado` pide la medida, `subir`/`bajar` son las

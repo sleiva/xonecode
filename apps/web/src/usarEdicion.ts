@@ -78,6 +78,7 @@ function nuevoId(): string {
 }
 
 export const DEMASIADO_GRANDE = "el fichero es demasiado grande para guardarlo desde aquí";
+export const SIN_PROYECTO = "no hay ningún proyecto abierto";
 export const SE_CORTO_EL_CABLE = "se cortó la conexión antes de saber si se guardó: al volver, recarga el fichero para comprobarlo";
 
 function sinAvisos(a: EstadoDeEdicion): EstadoDeEdicion {
@@ -176,6 +177,11 @@ export function usarEdicion({
   const guardar = useCallback(() => {
     const a = actualRef.current;
     if (a === undefined || a.guardando || !a.sucio) return;
+    // Aquí y no solo en el botón: Cmd+S llama a `guardar` directamente.
+    if (a.proyecto === undefined) {
+      fijar({ ...a, error: SIN_PROYECTO });
+      return;
+    }
     const id = nuevoId();
     const mensaje: MensajeDelCliente = {
       clase: "guardarFichero",
@@ -183,6 +189,9 @@ export function usarEdicion({
       texto: conFinDeLinea(textoRef.current, a.finDeLinea),
       huella: a.huella,
       id,
+      // El proyecto con que se ABRIÓ: el servidor escribe en el del foco, y si ya es otro se niega
+      // en vez de dejar el texto en un fichero de la misma ruta de otro proyecto.
+      proyecto: a.proyecto,
     };
     if (!cabeEnElCable(mensaje)) {
       fijar({ ...a, error: DEMASIADO_GRANDE });

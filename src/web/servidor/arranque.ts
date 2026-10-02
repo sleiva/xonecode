@@ -1049,6 +1049,30 @@ export function montarRutas(
   };
 
   /**
+   * CUÁL es el proyecto abierto, deducido de su raíz: la que le tocaría a cada proyecto de la
+   * lista se calcula con la misma función que la creó. Guardar el id aparte al abrirlo sería una
+   * segunda fuente de verdad que se queda vieja el día que alguien abra por otro camino.
+   *
+   * Lo usan el alta (`proyectoActivo`) y el guardado del editor, que compara con él el proyecto
+   * con que se ABRIÓ la edición: tiene que ser la MISMA cuenta, o el editor y el servidor
+   * podrían no estar de acuerdo sobre cuál es «el abierto».
+   *
+   * El `entorno` se copia a una constante porque TypeScript no puede saber que `entornoElegido`
+   * —una variable del cierre, que otro mensaje puede cambiar— sigue definida dentro del callback.
+   */
+  const proyectoActivoDe = (abierto: { raiz: string } | undefined): string | undefined => {
+    const entorno = entornoElegido;
+    if (abierto === undefined || entorno === undefined) return undefined;
+    return proyectos.find((p) => {
+      try {
+        return vestibulo.raizDeProyecto(entorno, p.nombre) === abierto.raiz;
+      } catch {
+        return false;
+      }
+    })?.id;
+  };
+
+  /**
    * El mensaje de alta: qué falta, y con qué elegirlo.
    *
    * Con proyecto YA abierto no falta nada, y se dice con `pasos` vacío SIN mirar
@@ -1077,24 +1101,11 @@ export function montarRutas(
     // puede escribirlo después de abrir (el alta de un proyecto cloud), y una copia
     // tomada antes se quedaría diciendo lo de antes.
     const modo = abierto === undefined ? undefined : modoDeProyecto(abierto.raiz);
-    // CUÁL es el abierto, deducido de su raíz: la que le tocaría a cada proyecto de la
-    // lista se calcula con la misma función que la creó. Guardar el id aparte al abrirlo
-    // sería una segunda fuente de verdad que se queda vieja el día que alguien abra por
-    // otro camino.
-    // El `entorno` se copia a una constante porque TypeScript no puede saber que
-    // `entornoElegido` —una variable del cierre, que otro mensaje puede cambiar— sigue
-    // definida dentro del callback.
+    // CUÁL es el abierto, deducido de su raíz (`proyectoActivoDe`). El `entorno` se copia a una
+    // constante porque `entornoElegido` es una variable del cierre que otro mensaje puede cambiar,
+    // y TypeScript no sabría que sigue definida dentro de los callbacks de abajo.
     const entorno = entornoElegido;
-    const activo =
-      abierto === undefined || entorno === undefined
-        ? undefined
-        : proyectos.find((p) => {
-            try {
-              return vestibulo.raizDeProyecto(entorno, p.nombre) === abierto.raiz;
-            } catch {
-              return false;
-            }
-          })?.id;
+    const activo = proyectoActivoDe(abierto);
     const pendientes = proyectoAbierto ? [] : await vestibulo.pasosPendientes();
     // Lo que ya había sin commitear al ABRIR. `abierto` se capturó arriba, antes de este
     // `await`: `anunciarAlta` no va en la cola del vestíbulo, así que entre medias puede
@@ -4365,10 +4376,19 @@ export function montarRutas(
    *  - lo demás —guardas de ruta, huella, tope— lo decide el puerto y lo DEVUELVE.
    * El `try` es el de `atenderFichero`: un fallo inesperado contesta sin la ruta de la máquina.
    */
-  const atenderGuardarFichero = async (ruta: string, texto: string, huella: string, id: string): Promise<void> => {
+  const atenderGuardarFichero = async (ruta: string, texto: string, huella: string, id: string, proyecto: string): Promise<void> => {
     const abierto = vestibulo.proyectoAbierto();
     if (abierto === undefined) {
       emitir({ clase: "ficheroGuardado", ruta, id, error: "no hay ningún proyecto abierto" });
+      return;
+    }
+    // El guardado va al proyecto del FOCO, que puede haber cambiado desde que se abrió la edición
+    // (otra pestaña abre otro, se cambia de entorno). La huella no lo frena si el contenido es
+    // idéntico —el mismo proyecto en dos entornos, dos proyectos del mismo esqueleto—, así que se
+    // compara el proyecto con que se abrió con el de ahora, con la MISMA cuenta que el alta. Si no
+    // se puede deducir, tampoco se escribe: no se sabe dónde caería.
+    if (proyectoActivoDe(abierto) !== proyecto) {
+      emitir({ clase: "ficheroGuardado", ruta, id, error: "el proyecto abierto ya no es el de este fichero: vuelve a abrirlo" });
       return;
     }
     if (opciones.escribirFichero === undefined) {
@@ -5888,9 +5908,10 @@ export function montarRutas(
       typeof mensaje.ruta === "string" &&
       typeof mensaje.texto === "string" &&
       typeof mensaje.huella === "string" &&
-      typeof mensaje.id === "string"
+      typeof mensaje.id === "string" &&
+      typeof mensaje.proyecto === "string"
     ) {
-      void atenderGuardarFichero(mensaje.ruta, mensaje.texto, mensaje.huella, mensaje.id).catch(contar);
+      void atenderGuardarFichero(mensaje.ruta, mensaje.texto, mensaje.huella, mensaje.id, mensaje.proyecto).catch(contar);
       respuesta.writeHead(204);
       respuesta.end();
       return;

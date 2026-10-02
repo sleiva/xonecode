@@ -1812,6 +1812,10 @@ describe("App: editar en la pestaña Ficheros", () => {
 
   const conFichero = async () => {
     const montado = montar();
+    // El proyecto abierto: la edición lo apunta al abrirse y viaja en cada guardado.
+    act(() =>
+      montado.store.aplicar({ clase: "alta", pasos: [], proveedores: [], entornos: [], proyectos: [], ramas: [], proyectoAbierto: true, proyectoActivo: "p1" })
+    );
     abrirPestana("Ficheros");
     act(() => montado.store.aplicar({ clase: "arbol", rutas: ["a.xne", "b.xne"], recortado: false }));
     fireEvent.click(screen.getByRole("treeitem", { name: "a.xne" }));
@@ -1846,7 +1850,7 @@ describe("App: editar en la pestaña Ficheros", () => {
     expect(screen.getByLabelText("Hay cambios sin guardar")).toBeTruthy();
     const revisionesAntes = mandados(enviar, "revision").length;
     guardarYContestar(enviar, store, "h2");
-    expect(enviar).toHaveBeenCalledWith({ clase: "guardarFichero", ruta: "a.xne", texto: "Xuno\n", huella: "h1", id: expect.any(String) });
+    expect(enviar).toHaveBeenCalledWith({ clase: "guardarFichero", ruta: "a.xne", texto: "Xuno\n", huella: "h1", id: expect.any(String), proyecto: "p1" });
     expect(screen.queryByLabelText("Hay cambios sin guardar")).toBeNull();
     // La `M` del árbol se queda con el disco de antes: guardar vuelve a pedir Revisión.
     expect(mandados(enviar, "revision").length).toBeGreaterThan(revisionesAntes);

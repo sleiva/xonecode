@@ -2246,10 +2246,62 @@ describe("montarRutas — el cable, por fin conectado", () => {
           return { ruta, huella: "h2" };
         },
       });
-      expect(await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "<a/>", huella: "h1", id: "i1" })).toBe(204);
+      expect(await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "<a/>", huella: "h1", id: "i1", proyecto: "p1" })).toBe(204);
       await asentar();
       expect(pedidos).toEqual([{ raiz: t.vestibulo.proyectoAbierto()!.raiz, ruta: "a.xne", texto: "<a/>", huella: "h1" }]);
       expect(t.ultimo("ficheroGuardado")).toEqual({ clase: "ficheroGuardado", ruta: "a.xne", huella: "h2", id: "i1" });
+      await t.limpiar();
+    });
+
+    it("el guardado lleva el proyecto con que se abrió: si coincide con el abierto, escribe", async () => {
+      const escritos: string[] = [];
+      const t = await abrir({ escribirFichero: async (_raiz, ruta) => { escritos.push(ruta); return { ruta, huella: "h2" }; } });
+      // El fixture abre «p1»: el alta lo dice como `proyectoActivo`, y es lo que manda el editor.
+      expect(t.ultimo("alta")?.proyectoActivo).toBe("p1");
+      await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "x", huella: "h1", id: "i1", proyecto: "p1" });
+      await asentar();
+      expect(escritos).toEqual(["a.xne"]);
+      expect(t.ultimo("ficheroGuardado")).toEqual({ clase: "ficheroGuardado", ruta: "a.xne", huella: "h2", id: "i1" });
+      await t.limpiar();
+    });
+
+    it("con OTRO proyecto abierto que el del guardado, se niega y el disco no se toca", async () => {
+      const t = await abrir({ escribirFichero: async (raiz, ruta, texto) => { writeFileSync(join(raiz, ruta), texto); return { ruta, huella: "h2" }; } });
+      writeFileSync(join(t.raizDeVerdad, "a.xne"), "antes");
+      await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "después", huella: "h1", id: "i1", proyecto: "p2" });
+      await asentar();
+      expect(t.ultimo("ficheroGuardado")).toEqual({
+        clase: "ficheroGuardado",
+        ruta: "a.xne",
+        id: "i1",
+        error: "el proyecto abierto ya no es el de este fichero: vuelve a abrirlo",
+      });
+      expect(readFileSync(join(t.raizDeVerdad, "a.xne"), "utf8")).toBe("antes");
+      await t.limpiar();
+    });
+
+    it("si no se puede saber qué proyecto está abierto, se niega igual", async () => {
+      const escritos: string[] = [];
+      let lista = [{ id: "p1", nombre: "Tienda" }];
+      const t = await abrir(
+        { escribirFichero: async (_raiz, ruta) => { escritos.push(ruta); return { ruta, huella: "h2" }; } },
+        { proyectosDeEntorno: async () => ({ proyectos: lista }) }
+      );
+      // El entorno se refresca y su lista ya no trae el proyecto de la raíz abierta: el activo no
+      // se puede deducir, y sin él no se sabe a qué proyecto iría el guardado.
+      lista = [];
+      await enviarMensaje(t.accion, { clase: "entorno", accion: "activo", entorno: "webstudio" });
+      await asentar();
+      expect(t.ultimo("alta")?.proyectoActivo).toBeUndefined();
+      await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "x", huella: "h1", id: "i1", proyecto: "p1" });
+      await asentar();
+      expect(escritos).toEqual([]);
+      expect(t.ultimo("ficheroGuardado")).toEqual({
+        clase: "ficheroGuardado",
+        ruta: "a.xne",
+        id: "i1",
+        error: "el proyecto abierto ya no es el de este fichero: vuelve a abrirlo",
+      });
       await t.limpiar();
     });
 
@@ -2266,7 +2318,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
 
     it("un rechazo del puerto también devuelve el id del guardado", async () => {
       const t = await abrir({ escribirFichero: async (_raiz, ruta) => ({ ruta, error: "el fichero cambió desde que lo abriste: recárgalo antes de guardar" }) });
-      await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "x", huella: "h1", id: "i1" });
+      await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "x", huella: "h1", id: "i1", proyecto: "p1" });
       await asentar();
       expect(t.ultimo("ficheroGuardado")).toEqual({
         clase: "ficheroGuardado",
@@ -2293,7 +2345,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const abierta = t.vestibulo.proyectoAbierto()!;
       const turno = abierta.ejecutarTurno("algo", abierta.estadoDeSesion, abierta.consola.consola);
       expect(abierta.turnoEnVuelo).toBe(true);
-      await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "<a/>", huella: "h1", id: "i1" });
+      await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "<a/>", huella: "h1", id: "i1", proyecto: "p1" });
       await asentar();
       expect(t.ultimo("ficheroGuardado")).toEqual({
         clase: "ficheroGuardado",
@@ -2309,7 +2361,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
 
     it("sin puerto lo dice; y si el puerto lanza con una ruta, el error no la lleva", async () => {
       const sinPuerto = await abrir({});
-      await enviarMensaje(sinPuerto.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "x", huella: "h", id: "i1" });
+      await enviarMensaje(sinPuerto.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "x", huella: "h", id: "i1", proyecto: "p1" });
       await asentar();
       expect(sinPuerto.ultimo("ficheroGuardado")).toEqual({ clase: "ficheroGuardado", ruta: "a.xne", id: "i1", error: "esta ejecución no puede escribir en el proyecto" });
       await sinPuerto.limpiar();
@@ -2323,7 +2375,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
         },
       });
       raiz = t.raizDeVerdad;
-      await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "x", huella: "h", id: "i1" });
+      await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "x", huella: "h", id: "i1", proyecto: "p1" });
       await asentar();
       expect(t.ultimo("ficheroGuardado")).toEqual({ clase: "ficheroGuardado", ruta: "a.xne", id: "i1", error: "no se pudo guardar el fichero" });
       expect(JSON.stringify(t.cliente.recibidos)).not.toContain(t.raizDeVerdad);

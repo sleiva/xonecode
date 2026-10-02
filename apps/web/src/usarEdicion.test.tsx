@@ -51,7 +51,7 @@ describe("usarEdicion", () => {
     expect(mandados(enviar, "guardarFichero")).toEqual([]);
     act(() => vista.result.current.cambiar("uno\nDOS\n"));
     act(() => vista.result.current.guardar());
-    expect(mandados(enviar, "guardarFichero")).toEqual([{ clase: "guardarFichero", ruta: "a.xne", texto: "uno\r\nDOS\r\n", huella: "h1", id: expect.any(String) }]);
+    expect(mandados(enviar, "guardarFichero")).toEqual([{ clase: "guardarFichero", ruta: "a.xne", texto: "uno\r\nDOS\r\n", huella: "h1", id: expect.any(String), proyecto: "p1" }]);
     expect(vista.result.current.actual?.guardando).toBe(true);
   });
 
