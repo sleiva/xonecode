@@ -4418,7 +4418,11 @@ export function montarRutas(
    */
   const atenderBaseDeFichero = async (ruta: string, base: "sesion" | "commit"): Promise<void> => {
     const abierto = vestibulo.proyectoAbierto();
-    if (abierto === undefined) return;
+    if (abierto === undefined) {
+      // Contesta igual: callar dejaría la barra del editor en «Trayendo la base…».
+      emitir({ clase: "baseDeFichero", ruta, base, sinBase: "no hay ningún proyecto abierto" });
+      return;
+    }
     if (opciones.baseDeFichero === undefined) {
       emitir({ clase: "baseDeFichero", ruta, base, sinBase: "esta ejecución no puede leer git" });
       return;

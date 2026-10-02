@@ -2405,6 +2405,26 @@ describe("montarRutas — el cable, por fin conectado", () => {
       expect(sinPuerto.ultimo("baseDeFichero")).toEqual({ clase: "baseDeFichero", ruta: "a.xne", base: "sesion", sinBase: "esta ejecución no puede leer git" });
       await sinPuerto.limpiar();
     });
+    it("«baseDeFichero» sin proyecto abierto también contesta: el editor no se queda esperando", async () => {
+      const base = mkdtempSync(join(tmpdir(), "xonecode-editar-"));
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
+      montarRutas(servidor, vestibulo, { informar: () => {}, baseDeFichero: async (_r, _s, ruta, b) => ({ ruta, base: b, texto: "x" }) });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "baseDeFichero", ruta: "a.xne", base: "sesion" });
+      await asentar();
+      expect(cliente.recibidos.filter((x) => x.clase === "baseDeFichero").at(-1)).toEqual({
+        clase: "baseDeFichero",
+        ruta: "a.xne",
+        base: "sesion",
+        sinBase: "no hay ningún proyecto abierto",
+      });
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
   });
 
   describe("la sincronización con CloudStudio", () => {
