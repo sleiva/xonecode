@@ -340,6 +340,11 @@ describe("Ficheros: editar", () => {
     expect(c.descartar).toHaveBeenCalledTimes(1);
   });
 
+  it("tras «Seguir con los míos», la banda avisa de que guardar sustituirá la versión del disco", () => {
+    pintar({}, control({ actual: { ...EDITANDO, sucio: true, sobrescribe: true } }));
+    expect(screen.getByText("Seguir con los míos: al guardar, tu versión sustituirá a la del disco")).toBeTruthy();
+  });
+
   it("el error de guardar se enseña", () => {
     pintar({}, control({ actual: { ...EDITANDO, sucio: true, error: "el fichero cambió desde que lo abriste: recárgalo antes de guardar" } }));
     expect(screen.getByRole("alert").textContent).toContain("el fichero cambió desde que lo abriste");

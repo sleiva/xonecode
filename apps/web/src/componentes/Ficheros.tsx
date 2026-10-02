@@ -246,6 +246,11 @@ export function Ficheros({
                     </button>
                   </div>
                 ) : null}
+                {actual.sobrescribe === true ? (
+                  <p className={estilos.banda} role="status">
+                    Seguir con los míos: al guardar, tu versión sustituirá a la del disco
+                  </p>
+                ) : null}
                 {actual.error !== undefined ? (
                   <p className={estilos.fallo} role="alert">
                     No se ha guardado: {actual.error}

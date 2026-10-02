@@ -113,6 +113,35 @@ describe("usarEdicion", () => {
     expect(vista.result.current.textoVivo()).toBe("uno\nMIO\n");
   });
 
+  it("un rechazo de MI guardado vuelve a pedir el fichero: si cambió, sale la banda con mis cambios", () => {
+    const { enviar, vista, inicial } = montar();
+    act(() => vista.result.current.abrir(FICHERO));
+    act(() => vista.result.current.cambiar("mío\n"));
+    act(() => vista.result.current.guardar());
+    const mio = idMandado(enviar);
+    enviar.mockClear();
+    vista.rerender({ ...inicial, ultimoGuardado: { ruta: "a.xne", id: mio, error: "el fichero cambió desde que lo abriste: recárgalo antes de guardar", secuencia: 1 } });
+    expect(enviar).toHaveBeenCalledWith({ clase: "fichero", ruta: "a.xne" });
+    vista.rerender({ ...inicial, ultimoGuardado: { ruta: "a.xne", id: mio, error: "x", secuencia: 1 }, contenidos: { "a.xne": { ...FICHERO, texto: "otro\n", huella: "h2" } } });
+    expect(vista.result.current.actual?.versionNueva).toEqual({ original: "otro\n", huella: "h2", finDeLinea: "\n" });
+    expect(vista.result.current.textoVivo()).toBe("mío\n");
+  });
+
+  it("«Seguir con los míos» adopta la huella nueva: el siguiente guardado sobrescribe a sabiendas", () => {
+    const { enviar, vista, inicial } = montar();
+    act(() => vista.result.current.abrir(FICHERO));
+    act(() => vista.result.current.cambiar("mío\n"));
+    vista.rerender({ ...inicial, contenidos: { "a.xne": { ...FICHERO, texto: "otro\n", huella: "h2" } } });
+    act(() => vista.result.current.seguirConLosMios());
+    expect(vista.result.current.actual).toMatchObject({ huella: "h2", sobrescribe: true });
+    expect(vista.result.current.actual?.versionNueva).toBeUndefined();
+    act(() => vista.result.current.guardar());
+    expect(mandados(enviar, "guardarFichero").at(-1)).toMatchObject({ huella: "h2", texto: "mío\r\n" });
+    // Y al guardar bien, el aviso se va.
+    vista.rerender({ ...inicial, contenidos: { "a.xne": { ...FICHERO, texto: "otro\n", huella: "h2" } }, ultimoGuardado: { ruta: "a.xne", id: idMandado(enviar), huella: "h3", secuencia: 1 } });
+    expect(vista.result.current.actual?.sobrescribe).toBeUndefined();
+  });
+
   it("cada guardado lleva un id distinto", () => {
     const { enviar, vista, inicial } = montar();
     act(() => vista.result.current.abrir(FICHERO));

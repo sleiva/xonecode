@@ -34,8 +34,12 @@ export interface EstadoDeEdicion {
   error?: string;
   /** Llegó otra versión del disco con cambios sin guardar: no se pisan, se pregunta. */
   versionNueva?: VersionDelDisco;
-  /** La huella de una versión nueva a la que se dijo «Seguir con los míos»: no vuelve a salir. */
-  descartada?: string;
+  /**
+   * Se dijo «Seguir con los míos» a una versión nueva: se ADOPTÓ su huella, así que el siguiente
+   * guardado la sustituye a sabiendas —sin adoptarla, todo guardado posterior fallaba por huella
+   * vieja para siempre—. La banda lo avisa antes de guardar; se va al guardar o al recargar.
+   */
+  sobrescribe?: true;
   /** Sube cada vez que el texto se reemplaza desde fuera: el editor se rehace con esta `key`. */
   generacion: number;
   /**
@@ -97,7 +101,7 @@ export const SIN_PROYECTO = "no hay ningún proyecto abierto";
 export const SE_CORTO_EL_CABLE = "se cortó la conexión antes de saber si se guardó: al volver, recarga el fichero para comprobarlo";
 
 function sinAvisos(a: EstadoDeEdicion): EstadoDeEdicion {
-  const { error: _error, versionNueva: _version, descartada: _descartada, ...resto } = a;
+  const { error: _error, versionNueva: _version, sobrescribe: _sobrescribe, ...resto } = a;
   return resto;
 }
 
@@ -247,6 +251,10 @@ export function usarEdicion({
     }
     if (ultimoGuardado.huella === undefined) {
       fijar({ ...a, guardando: false, error: ultimoGuardado.error ?? "no se ha guardado" });
+      // Sea cual sea el motivo, se vuelve a pedir el fichero: si el disco cambió (huella vieja), el
+      // flujo de versión nueva saca la banda con los cambios intactos; sin esto el rechazo se
+      // quedaba sin salida. Con el proyecto cambiado no: traería el fichero de OTRO proyecto.
+      if (a.proyectoCambiado !== true) void enviar({ clase: "fichero", ruta: a.ruta });
       return;
     }
     const guardado = enviadoRef.current ?? textoRef.current;
@@ -265,7 +273,7 @@ export function usarEdicion({
   useEffect(() => {
     const a = actualRef.current;
     if (a === undefined || a.guardando || a.proyectoCambiado === true || !esEditable(llegado) || llegado.ruta !== a.ruta || llegado.huella === a.huella) return;
-    if (a.descartada === llegado.huella || a.versionNueva?.huella === llegado.huella) return;
+    if (a.versionNueva?.huella === llegado.huella) return;
     const version: VersionDelDisco = { original: normalizarFinesDeLinea(llegado.texto), huella: llegado.huella, finDeLinea: finDeLineaDe(llegado.texto) };
     if (a.sucio) {
       fijar({ ...a, versionNueva: version });
@@ -322,7 +330,9 @@ export function usarEdicion({
     const v = a?.versionNueva;
     if (a === undefined || v === undefined) return;
     const { versionNueva: _version, ...resto } = a;
-    fijar({ ...resto, descartada: v.huella });
+    // Se adopta la huella del disco, NO su texto ni sus finales de línea: lo que se guarde será lo
+    // tecleado, sustituyendo deliberadamente a esa versión.
+    fijar({ ...resto, huella: v.huella, sobrescribe: true });
   }, [fijar]);
 
   const elegirBase = useCallback(
