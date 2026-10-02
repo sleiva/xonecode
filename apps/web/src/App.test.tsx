@@ -1,7 +1,9 @@
 import { render, screen, fireEvent, cleanup, act, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, onTestFinished, vi, type Mock } from "vitest";
+import { EditorView } from "@codemirror/view";
 import { App, MS_ENTRE_LECTURAS_DE_PLANES } from "./App.js";
 import { crearStoreDelCliente } from "./store.js";
+import { prepararJsdomParaElEditor } from "./editor/jsdomParaElEditor.js";
 
 /** El `<input type="file">` de «Nueva tarea» está ESCONDIDO —lo dispara un botón nuestro,
  *  porque el nativo se pinta como la cromo del navegador—, así que no hay etiqueta que lo
@@ -1802,6 +1804,149 @@ describe("App: la pestaña Ficheros", () => {
     act(() => store.aplicar({ clase: "turno", activo: true }));
     act(() => store.aplicar({ clase: "turno", activo: false }));
     expect(arboles(enviar)).toHaveLength(0);
+  });
+});
+
+describe("App: editar en la pestaña Ficheros", () => {
+  beforeAll(prepararJsdomParaElEditor);
+
+  const conFichero = async () => {
+    const montado = montar();
+    abrirPestana("Ficheros");
+    act(() => montado.store.aplicar({ clase: "arbol", rutas: ["a.xne", "b.xne"], recortado: false }));
+    fireEvent.click(screen.getByRole("treeitem", { name: "a.xne" }));
+    act(() =>
+      montado.store.aplicar({ clase: "fichero", ruta: "a.xne", texto: "uno\n", recortado: false, binario: false, bytes: 4, codificacion: "utf-8", huella: "h1" })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Editar" }));
+    // Por el DOM y no por el rol: el compositor del chat también es un «textbox».
+    await waitFor(() => expect(document.querySelector(".cm-editor")).not.toBeNull());
+    return { ...montado, vista: vistaDelEditor() };
+  };
+  /** La vista VIVA del editor: tras remontarlo (otra `key`), la de antes es una instancia muerta. */
+  const vistaDelEditor = (): EditorView => EditorView.findFromDOM(document.querySelector(".cm-editor") as HTMLElement)!;
+  const teclear = (vista: EditorView, texto: string): void => {
+    act(() => {
+      vista.dispatch({ changes: { from: 0, insert: texto } });
+    });
+  };
+  const mandados = (enviar: Mock<(m: unknown) => Promise<unknown>>, clase: string) =>
+    enviar.mock.calls.map(([m]) => m as { clase: string; ruta?: string; id?: string }).filter((m) => m.clase === clase);
+  /** Guardar y contestar como el servidor: con el `id` que llevó el guardado, que es lo que la pestaña reconoce. */
+  const guardarYContestar = (enviar: Mock<(m: unknown) => Promise<unknown>>, store: ReturnType<typeof crearStoreDelCliente>, huella: string): void => {
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    const id = mandados(enviar, "guardarFichero").at(-1)!.id!;
+    act(() => store.aplicar({ clase: "ficheroGuardado", ruta: "a.xne", id, huella }));
+  };
+
+  it("«Editar» pide la base de la sesión; guardar manda la huella y la respuesta quita el «●»", async () => {
+    const { enviar, store, vista } = await conFichero();
+    expect(enviar).toHaveBeenCalledWith({ clase: "baseDeFichero", ruta: "a.xne", base: "sesion" });
+    teclear(vista, "X");
+    expect(screen.getByLabelText("Hay cambios sin guardar")).toBeTruthy();
+    const revisionesAntes = mandados(enviar, "revision").length;
+    guardarYContestar(enviar, store, "h2");
+    expect(enviar).toHaveBeenCalledWith({ clase: "guardarFichero", ruta: "a.xne", texto: "Xuno\n", huella: "h1", id: expect.any(String) });
+    expect(screen.queryByLabelText("Hay cambios sin guardar")).toBeNull();
+    // La `M` del árbol se queda con el disco de antes: guardar vuelve a pedir Revisión.
+    expect(mandados(enviar, "revision").length).toBeGreaterThan(revisionesAntes);
+  });
+
+  it("guardar bien NO rehace el editor: sigue la misma vista con el mismo texto", async () => {
+    const { enviar, store, vista } = await conFichero();
+    teclear(vista, "X");
+    guardarYContestar(enviar, store, "h2");
+    // Lo que el servidor relee tras guardar trae la huella nueva: no es una versión distinta.
+    act(() =>
+      store.aplicar({ clase: "fichero", ruta: "a.xne", texto: "Xuno\n", recortado: false, binario: false, bytes: 5, codificacion: "utf-8", huella: "h2" })
+    );
+    expect(vistaDelEditor()).toBe(vista);
+    expect(vistaDelEditor().state.doc.toString()).toBe("Xuno\n");
+  });
+
+  it("una versión nueva de un fichero SIN cambios se recarga sola, y el editor la enseña", async () => {
+    const { store } = await conFichero();
+    act(() =>
+      store.aplicar({ clase: "fichero", ruta: "a.xne", texto: "otro\n", recortado: false, binario: false, bytes: 5, codificacion: "utf-8", huella: "h3" })
+    );
+    await waitFor(() => expect(vistaDelEditor().state.doc.toString()).toBe("otro\n"));
+  });
+
+  it("cambiar de fichero con cambios pregunta antes; «Seguir editando» no cambia nada y «Descartar» sí", async () => {
+    const { enviar, vista } = await conFichero();
+    teclear(vista, "X");
+    fireEvent.click(screen.getByRole("treeitem", { name: "b.xne" }));
+    expect(screen.getByRole("alertdialog", { name: "Cambios sin guardar" })).toBeTruthy();
+    expect(mandados(enviar, "fichero").filter((m) => m.ruta === "b.xne")).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Seguir editando" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(screen.getByLabelText("Hay cambios sin guardar")).toBeTruthy();
+    fireEvent.click(screen.getByRole("treeitem", { name: "b.xne" }));
+    fireEvent.click(screen.getByRole("button", { name: "Descartar cambios" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "fichero", ruta: "b.xne" });
+    expect(screen.queryByLabelText("Hay cambios sin guardar")).toBeNull();
+  });
+
+  it("«Cerrar» con cambios pregunta; sin cambios cierra sin preguntar", async () => {
+    const { vista } = await conFichero();
+    teclear(vista, "X");
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+    expect(screen.getByRole("alertdialog", { name: "Cambios sin guardar" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Descartar cambios" }));
+    expect(document.querySelector(".cm-editor")).toBeNull();
+    expect(screen.getByRole("button", { name: "Editar" })).toBeTruthy();
+  });
+
+  it("cerrar el panel con cambios también pregunta", async () => {
+    const { vista } = await conFichero();
+    teclear(vista, "X");
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar el panel" }));
+    expect(screen.getByRole("alertdialog", { name: "Cambios sin guardar" })).toBeTruthy();
+  });
+
+  it("«Abrir» un hallazgo de otro fichero con cambios pregunta, y al descartar llega a su línea", async () => {
+    // Ancha, para que el chat (con su veredicto en rojo) quepa al lado del panel.
+    Object.defineProperty(window, "innerWidth", { value: 2400, configurable: true, writable: true });
+    onTestFinished(() => Object.defineProperty(window, "innerWidth", { value: 1024, configurable: true, writable: true }));
+    const { enviar, store, vista } = await conFichero();
+    teclear(vista, "X");
+    act(() => store.aplicar({ clase: "acto", acto: { tipo: "usuario", texto: "arregla" } }));
+    act(() =>
+      store.aplicar({
+        clase: "acto",
+        acto: { tipo: "verificacion", verde: false, errores: 1, avisos: 0, hallazgos: [{ code: "E1", severidad: "error", mensaje: "falta", fichero: "b.xne", linea: 1 }] },
+      })
+    );
+    act(() => store.aplicar({ clase: "acto", acto: { tipo: "fin", ms: 10 } }));
+    fireEvent.click(screen.getByRole("button", { name: "Abrir" }));
+    expect(screen.getByRole("alertdialog", { name: "Cambios sin guardar" })).toBeTruthy();
+    expect(mandados(enviar, "fichero").filter((m) => m.ruta === "b.xne")).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Descartar cambios" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "fichero", ruta: "b.xne" });
+    act(() =>
+      store.aplicar({ clase: "fichero", ruta: "b.xne", texto: "dos\n", recortado: false, binario: false, bytes: 4, codificacion: "utf-8", huella: "h9" })
+    );
+    expect(screen.getByLabelText("Línea 1")).toBeTruthy();
+  });
+
+  it("una versión nueva del disco con cambios sin guardar no los pisa: sale la banda, y «Recargar» la trae", async () => {
+    const { store, vista } = await conFichero();
+    teclear(vista, "X");
+    act(() =>
+      store.aplicar({ clase: "fichero", ruta: "a.xne", texto: "otro\n", recortado: false, binario: false, bytes: 5, codificacion: "utf-8", huella: "h3" })
+    );
+    expect(screen.getByText(/ha cambiado en el disco/)).toBeTruthy();
+    expect(vista.state.doc.toString()).toBe("Xuno\n");
+    fireEvent.click(screen.getByRole("button", { name: "Recargar (pierdes los tuyos)" }));
+    await waitFor(() => expect(vistaDelEditor().state.doc.toString()).toBe("otro\n"));
+    expect(screen.queryByLabelText("Hay cambios sin guardar")).toBeNull();
+    expect(screen.queryByText(/ha cambiado en el disco/)).toBeNull();
+  });
+
+  it("las «M» del árbol salen de Revisión", async () => {
+    const { store } = await conFichero();
+    act(() => store.aplicar({ clase: "revision", via: "git", ficheros: [{ ruta: "b.xne", clase: "modificado", mas: 1, menos: 0 }] }));
+    expect(within(screen.getByRole("treeitem", { name: /b\.xne/ })).getByLabelText("Cambiado en la sesión")).toBeTruthy();
   });
 });
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
 import { vistaParaElVisor } from "../imagenesDelDocumento.js";
 import type { FicheroDelProyecto } from "../tipos.js";
@@ -10,10 +10,19 @@ import { Arbol } from "./Arbol.js";
 import { Dibujo, kb } from "./Dibujo.js";
 import { Visor } from "./Visor.js";
 import estilos from "./Ficheros.module.css";
+import { esEditable } from "../edicion.js";
+import type { ControlDeEdicion } from "../usarEdicion.js";
+
+/**
+ * El editor, en DIFERIDO: CodeMirror solo se descarga al pulsar «Editar». Es la única puerta a
+ * `editor/` desde fuera de él (`editor/frontera.test.ts`).
+ */
+const EditorDeFichero = lazy(() => import("../editor/EditorDeFichero.js"));
 
 /**
  * El proyecto en el que se trabaja: el árbol a la derecha con un filtro encima, y el
- * fichero elegido en el centro, de SOLO lectura.
+ * fichero elegido en el centro, que se lee y, si es texto entero en UTF-8, se EDITA
+ * (`edicion`, cuyo estado vive en `App`: ver `usarEdicion.ts`).
  *
  * Lo que se lista y lo que se lee es lo que ve el agente y nada más (`.xonecode`, `.env`,
  * `.git` y los `.xml` aplanados no salen): lo decide el servidor
@@ -52,6 +61,9 @@ export function Ficheros({
   alRecargar,
   conectado,
   linea,
+  edicion,
+  cambiados,
+  alPedirCambios,
 }: {
   /** Ausente = todavía no ha llegado; con `error`, no se pudo listar. */
   arbol?: { rutas: string[]; recortado: boolean; error?: string };
@@ -67,6 +79,12 @@ export function Ficheros({
    * en la vista renderizada de un `.md` no hay líneas que numerar.
    */
   linea?: number;
+  /** La edición (`usarEdicion.ts`), de `App`. Ausente = esta pestaña no edita y no hay «Editar». */
+  edicion?: ControlDeEdicion;
+  /** Lo que la sesión cambió según Revisión (las `M` del árbol). Ausente = no se sabe, y no se pinta ninguna. */
+  cambiados?: ReadonlySet<string>;
+  /** Pedir esa lista: se llama al montar si no se tiene, como el árbol. */
+  alPedirCambios?: () => void;
 }) {
   /**
    * Se pide el árbol siempre que NO se tenga, no solo al montar.
@@ -89,6 +107,13 @@ export function Ficheros({
     if (conectado === false || arbol !== undefined) return;
     alRecargar();
   }, [arbol, conectado, alRecargar]);
+
+  // Las `M` del árbol salen de la MISMA lista que Revisión, y se piden igual que el árbol: cuando no
+  // se tienen (al montar, o porque el store las tiró al cambiar de sesión) y hay cable.
+  useEffect(() => {
+    if (conectado === false || cambiados !== undefined) return;
+    alPedirCambios?.();
+  }, [cambiados, conectado, alPedirCambios]);
 
   // Con el árbol RECORTADO no se cierra: la lista no es el proyecto entero, así que «no
   // está en el árbol» no significa «ya no existe». Un fichero real más allá del tope se
@@ -133,39 +158,106 @@ export function Ficheros({
   const dosCaras = contenido?.error === undefined && contenido?.texto !== undefined && lenguaje === "markdown";
   // Una imagen que NO es un SVG con fuente ocupa el visor entera: no hay otra cara a la que ir.
   const soloDibujo = hayDibujo && !svgConDibujo;
+  // Editando ESTE fichero: el editor sustituye al visor, y su estado manda sobre `contenido`
+  // (que el store tira sin cable, y no por eso se pierde lo tecleado).
+  const actual = edicion?.actual !== undefined && edicion.actual.ruta === elegido ? edicion.actual : undefined;
 
   return (
     // La caja de fuera es la que declara el CONTENEDOR de la consulta; `.ficheros` es su
     // hija porque una `@container` no puede estilar al elemento que la declara.
     <div className={estilos.caja}>
     <div className={estilos.ficheros}>
-      <div className={estilos.visor}>
+      <div className={estilos.visor} data-editando={actual !== undefined ? "" : undefined}>
         {elegido === undefined ? (
           <p className={estilos.aviso}>Elige un fichero del árbol.</p>
         ) : (
           <>
             <div className={estilos.cabecera}>
-              <span className={estilos.ruta}>{elegido}</span>
-              {dosCaras ? (
-                <div className={estilos.caras} role="group" aria-label="Cómo se enseña el fichero">
-                  {(["vista", "fuente"] as const).map((cual) => (
-                    <button
-                      key={cual}
-                      type="button"
-                      className={estilos.cara}
-                      // `aria-pressed` y no `aria-current`: son dos interruptores de un
-                      // mismo grupo, no la posición dentro de una lista.
-                      aria-pressed={cara === cual}
-                      data-activa={cara === cual ? "" : undefined}
-                      onClick={() => setCara(cual)}
-                    >
-                      {cual === "vista" ? "Vista" : "Fuente"}
-                    </button>
-                  ))}
+              <span className={estilos.ruta}>
+                {elegido}
+                {actual?.sucio === true ? (
+                  <span className={estilos.sinGuardar} aria-label="Hay cambios sin guardar" title="Hay cambios sin guardar">
+                    ●
+                  </span>
+                ) : null}
+              </span>
+              {actual !== undefined && edicion !== undefined ? (
+                <div className={estilos.acciones}>
+                  <button
+                    type="button"
+                    className={estilos.accionPrincipal}
+                    disabled={!actual.sucio || actual.guardando}
+                    onClick={edicion.guardar}
+                  >
+                    {actual.guardando ? "Guardando…" : "Guardar"}
+                  </button>
+                  <button type="button" className={estilos.accion} onClick={edicion.cerrar}>
+                    Cerrar
+                  </button>
                 </div>
-              ) : null}
+              ) : (
+                <div className={estilos.acciones}>
+                  {dosCaras ? (
+                    <div className={estilos.caras} role="group" aria-label="Cómo se enseña el fichero">
+                      {(["vista", "fuente"] as const).map((cual) => (
+                        <button
+                          key={cual}
+                          type="button"
+                          className={estilos.cara}
+                          // `aria-pressed` y no `aria-current`: son dos interruptores de un
+                          // mismo grupo, no la posición dentro de una lista.
+                          aria-pressed={cara === cual}
+                          data-activa={cara === cual ? "" : undefined}
+                          onClick={() => setCara(cual)}
+                        >
+                          {cual === "vista" ? "Vista" : "Fuente"}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  {/* Un control sin dato detrás no se pinta: sin `edicion`, o con un fichero que no
+                      es texto entero en UTF-8, no hay botón. */}
+                  {edicion !== undefined && esEditable(contenido) ? (
+                    <button type="button" className={estilos.accion} onClick={() => edicion.abrir(contenido)}>
+                      Editar
+                    </button>
+                  ) : null}
+                </div>
+              )}
             </div>
-            {contenido === undefined ? (
+            {actual !== undefined && edicion !== undefined ? (
+              <>
+                {actual.versionNueva !== undefined ? (
+                  <div className={estilos.banda} role="alert">
+                    <span>El fichero ha cambiado en el disco mientras lo editabas.</span>
+                    <button type="button" className={estilos.accion} onClick={edicion.recargar}>
+                      Recargar (pierdes los tuyos)
+                    </button>
+                    <button type="button" className={estilos.accion} onClick={edicion.seguirConLosMios}>
+                      Seguir con los míos
+                    </button>
+                  </div>
+                ) : null}
+                {actual.error !== undefined ? (
+                  <p className={estilos.fallo} role="alert">
+                    No se ha guardado: {actual.error}
+                  </p>
+                ) : null}
+                <Suspense fallback={<p className={estilos.aviso}>Cargando el editor…</p>}>
+                  <EditorDeFichero
+                    // Otra `generacion` es otro texto venido de fuera (abrir, recargar): se remonta.
+                    key={`${actual.ruta}:${actual.generacion}`}
+                    texto={edicion.textoVivo()}
+                    {...(lenguaje === undefined ? {} : { lenguaje })}
+                    {...(edicion.base === undefined ? {} : { base: edicion.base })}
+                    baseElegida={edicion.baseElegida}
+                    alCambiar={edicion.cambiar}
+                    alGuardar={edicion.guardar}
+                    alElegirBase={edicion.elegirBase}
+                  />
+                </Suspense>
+              </>
+            ) : contenido === undefined ? (
               <p className={estilos.aviso}>Trayendo {elegido}…</p>
             ) : contenido.error !== undefined ? (
               <p className={estilos.aviso}>No se puede enseñar este fichero: {contenido.error}.</p>
@@ -248,6 +340,16 @@ export function Ficheros({
           alElegir={alElegir}
           filtro={filtro}
           abiertas="ninguna"
+          {...(cambiados === undefined && actual?.sucio !== true
+            ? {}
+            : {
+                insignia: (ruta: string) =>
+                  ruta === actual?.ruta && actual.sucio ? (
+                    <span className={estilos.marcaDelArbol} aria-label="Sin guardar en el editor">●</span>
+                  ) : cambiados?.has(ruta) === true ? (
+                    <span className={estilos.marcaDelArbol} aria-label="Cambiado en la sesión">M</span>
+                  ) : null,
+              })}
         />
       </aside>
     </div>

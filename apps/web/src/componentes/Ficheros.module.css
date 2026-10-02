@@ -162,3 +162,61 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+
+/* Lo que se hace con el fichero: Vista/Fuente, Editar, y editando Guardar/Cerrar. */
+.acciones {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.accion {
+  composes: secundario from "./Boton.module.css";
+}
+
+.accionPrincipal {
+  composes: primario from "./Boton.module.css";
+}
+
+/* El «●» de cambios sin guardar, junto a la ruta. */
+.sinGuardar {
+  margin-left: 6px;
+  color: var(--dsw-alias-state-business-primary);
+}
+
+/* Editando, el visor deja de desplazarse: lo hace el editor, que ocupa lo que queda. */
+.visor[data-editando] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* El disco cambió mientras se editaba. */
+.banda {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 16px 0;
+  padding: 8px 12px;
+  border: 0.5px solid var(--dsw-alias-state-warn-primary);
+  border-radius: 8px;
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+}
+
+.fallo {
+  margin: 8px 16px 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+}
+
+/* `M` y `●` en el árbol, delante del nombre como la letra de Revisión. */
+.marcaDelArbol {
+  margin-right: 4px;
+  color: var(--dsw-alias-state-business-primary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+}

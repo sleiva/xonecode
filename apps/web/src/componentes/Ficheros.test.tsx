@@ -1,9 +1,11 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { Ficheros } from "./Ficheros.js";
+import type { ControlDeEdicion, EstadoDeEdicion } from "../usarEdicion.js";
+import { prepararJsdomParaElEditor } from "../editor/jsdomParaElEditor.js";
 
 afterEach(cleanup);
 const NADA = () => {};
@@ -244,5 +246,111 @@ describe("Ficheros", () => {
     // `order: -1` sobre `.arbol` quien lo pone visualmente arriba.
     const hoja = readFileSync(join(AQUI, "Ficheros.module.css"), "utf8");
     expect(hoja).toMatch(/@container[^{]*\{[\s\S]*?\.arbol\s*\{[^}]*order:\s*-1/);
+  });
+});
+
+describe("Ficheros: editar", () => {
+  beforeAll(prepararJsdomParaElEditor);
+  const UTF8 = { ruta: "src/Clientes.xne", texto: "<coll/>", recortado: false, binario: false, bytes: 7, codificacion: "utf-8" as const, huella: "h1" };
+  const EDITANDO: EstadoDeEdicion = { ruta: "src/Clientes.xne", proyecto: "p1", original: "<coll/>", huella: "h1", finDeLinea: "\n", sucio: false, guardando: false, generacion: 1 };
+  function control(parcial: Partial<ControlDeEdicion> = {}): ControlDeEdicion {
+    return {
+      actual: undefined,
+      base: undefined,
+      baseElegida: "sesion",
+      textoVivo: () => "<coll/>",
+      haySinGuardar: () => false,
+      abrir: vi.fn(),
+      cerrar: vi.fn(),
+      cambiar: vi.fn(),
+      guardar: vi.fn(),
+      elegirBase: vi.fn(),
+      pedirBase: vi.fn(),
+      recargar: vi.fn(),
+      seguirConLosMios: vi.fn(),
+      ...parcial,
+    };
+  }
+  const pintar = (contenido: Record<string, unknown>, edicion?: ControlDeEdicion, cambiados?: ReadonlySet<string>) =>
+    render(
+      <Ficheros
+        arbol={ARBOL}
+        contenidos={{ "src/Clientes.xne": { ...UTF8, ...contenido } }}
+        elegido="src/Clientes.xne"
+        alElegir={NADA}
+        alRecargar={NADA}
+        {...(edicion === undefined ? {} : { edicion })}
+        {...(cambiados === undefined ? {} : { cambiados })}
+      />
+    );
+
+  it("«Editar» solo para texto entero en UTF-8 con huella, y nunca sin `edicion`", () => {
+    const c = control();
+    pintar({}, c);
+    fireEvent.click(screen.getByRole("button", { name: "Editar" }));
+    expect(c.abrir).toHaveBeenCalledWith({ ...UTF8 });
+    cleanup();
+    for (const distinto of [{ codificacion: "latin1" }, { recortado: true }, { huella: undefined }, { mime: "image/svg+xml" }]) {
+      pintar(distinto, control());
+      expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
+      cleanup();
+    }
+    pintar({});
+    expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
+  });
+
+  it("editando: «Guardar» sin cambios está deshabilitado; con cambios, «●» y guarda", () => {
+    const limpio = control({ actual: EDITANDO });
+    pintar({}, limpio);
+    expect((screen.getByRole("button", { name: "Guardar" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByLabelText("Hay cambios sin guardar")).toBeNull();
+    cleanup();
+    const sucio = control({ actual: { ...EDITANDO, sucio: true } });
+    pintar({}, sucio);
+    expect(screen.getByLabelText("Hay cambios sin guardar")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(sucio.guardar).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+    expect(sucio.cerrar).toHaveBeenCalledTimes(1);
+  });
+
+  it("guardando: el botón lo dice y no se deja pulsar", () => {
+    pintar({}, control({ actual: { ...EDITANDO, sucio: true, guardando: true } }));
+    const boton = screen.getByRole("button", { name: "Guardando…" }) as HTMLButtonElement;
+    expect(boton.disabled).toBe(true);
+  });
+
+  it("una versión nueva del disco con cambios saca la banda con sus dos salidas", () => {
+    const c = control({ actual: { ...EDITANDO, sucio: true, versionNueva: { original: "otro", huella: "h3", finDeLinea: "\n" } } });
+    pintar({}, c);
+    expect(screen.getByText(/ha cambiado en el disco/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Recargar (pierdes los tuyos)" }));
+    expect(c.recargar).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Seguir con los míos" }));
+    expect(c.seguirConLosMios).toHaveBeenCalledTimes(1);
+  });
+
+  it("el error de guardar se enseña", () => {
+    pintar({}, control({ actual: { ...EDITANDO, sucio: true, error: "el fichero cambió desde que lo abriste: recárgalo antes de guardar" } }));
+    expect(screen.getByRole("alert").textContent).toContain("el fichero cambió desde que lo abriste");
+  });
+
+  it("el árbol lleva «M» para lo cambiado en la sesión y «●» para lo que no se ha guardado", () => {
+    pintar({}, control({ actual: { ...EDITANDO, sucio: true } }), new Set(["app.xml"]));
+    expect(within(screen.getByRole("treeitem", { name: /app\.xml/ })).getByLabelText("Cambiado en la sesión")).toBeTruthy();
+    fireEvent.click(screen.getByRole("treeitem", { name: "src" }));
+    expect(within(screen.getByRole("treeitem", { name: /Clientes\.xne/ })).getByLabelText("Sin guardar en el editor")).toBeTruthy();
+  });
+
+  it("sin `cambiados` y sin edición, ninguna insignia en el árbol", () => {
+    pintar({});
+    expect(screen.queryByLabelText("Cambiado en la sesión")).toBeNull();
+    expect(screen.queryByLabelText("Sin guardar en el editor")).toBeNull();
+  });
+
+  it("pide los cambios de la sesión al montar si no los tiene", () => {
+    const pedir = vi.fn();
+    render(<Ficheros arbol={ARBOL} contenidos={{}} alElegir={NADA} alRecargar={NADA} alPedirCambios={pedir} conectado={true} />);
+    expect(pedir).toHaveBeenCalledTimes(1);
   });
 });

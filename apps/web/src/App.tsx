@@ -30,6 +30,8 @@ import { AccionDeSesion, type AccionPendiente } from "./componentes/AccionDeSesi
 import { Ajustes, type SeccionDeAjustes } from "./componentes/Ajustes.js";
 import { Revision } from "./componentes/Revision.js";
 import { Ficheros } from "./componentes/Ficheros.js";
+import { CambiosSinGuardar } from "./componentes/CambiosSinGuardar.js";
+import { usarEdicion } from "./usarEdicion.js";
 import { CloudStudio } from "./componentes/CloudStudio.js";
 import { Artefactos, type ArtefactoEnLista } from "./componentes/Artefactos.js";
 import { TareasDelProyecto } from "./componentes/TareasDelProyecto.js";
@@ -142,6 +144,42 @@ export function App({
   const estado = useSyncExternalStore(store.suscribir, store.leer);
 
   /**
+   * La edición de la pestaña Ficheros (`usarEdicion.ts`). Vive AQUÍ y no en el editor: el panel
+   * desmonta sus pestañas al cambiar, al plegarse o al ceder al chat, y lo tecleado no puede irse
+   * con ellas. Lo que sí pregunta antes de perderlo son los gestos de la persona —cambiar de
+   * fichero, cerrar el editor, salir de la pestaña, abrir otro proyecto—, por `conGuarda`.
+   */
+  const edicion = usarEdicion({
+    enviar,
+    proyecto: estado.alta?.proyectoActivo,
+    contenidos: estado.contenidos,
+    bases: estado.bases,
+    ultimoGuardado: estado.ultimoGuardado,
+    conectado: estado.conectado,
+  });
+  const edicionRef = useRef(edicion);
+  edicionRef.current = edicion;
+  /** Lo que se iba a hacer cuando salió el diálogo de «Cambios sin guardar». */
+  const [descartePendiente, setDescartePendiente] = useState<{ accion: () => void } | undefined>(undefined);
+  /** Hace `accion` ya, o —con cambios sin guardar— después de que la persona elija descartarlos. */
+  const conGuarda = useCallback((accion: () => void) => {
+    if (edicionRef.current.haySinGuardar()) {
+      setDescartePendiente({ accion });
+      return;
+    }
+    accion();
+  }, []);
+  // Van aquí, antes de cualquier `return` temprano (`enAlta`): son hooks.
+  /** Las `M` del árbol: lo que la sesión cambió según Revisión, sin los borrados (no están en el árbol). */
+  const cambiadosEnLaSesion = useMemo(
+    () => (estado.revision === undefined ? undefined : new Set(estado.revision.lista.filter((f) => f.clase !== "borrado").map((f) => f.ruta))),
+    [estado.revision]
+  );
+  /** La edición para Ficheros, con «Cerrar» pasando por la guarda. */
+  const edicionDeFicheros = useMemo(() => ({ ...edicion, cerrar: () => conGuarda(edicion.cerrar) }), [edicion, conGuarda]);
+
+
+  /**
    * Layer C: abrir un proyecto desde la barra. El servidor reutiliza EL MISMO mensaje que
    * usaba el paso de proyecto del wizard (`{clase:"alta", paso:"proyecto", proyecto,
    * rama}`, `vestibulo.ts#completarProyecto`): sin `rama` no abre nada y contesta con las
@@ -177,11 +215,38 @@ export function App({
    */
   const ultimaVistaDelPanel = useRef<Pestana>("ficheros");
 
+  const vistaRef = useRef(vistaDelPanel);
+  vistaRef.current = vistaDelPanel;
+  /**
+   * Salir de la pestaña Ficheros cierra el editor —y con cambios, pregunta antes—. Cerrarlo y no
+   * dejarlo vivo detrás: un editor que nadie mira se quedaría con un texto que el disco ya no tiene.
+   */
+  const dejarFicheros = useCallback(
+    (hacer: () => void) => {
+      if (vistaRef.current === "ficheros" && edicionRef.current.actual !== undefined) {
+        conGuarda(() => {
+          edicionRef.current.cerrar();
+          hacer();
+        });
+        return;
+      }
+      hacer();
+    },
+    [conGuarda]
+  );
+
   /** Abrir el panel por una vista concreta, recordándola para la próxima vez. */
-  const abrirPanel = useCallback((vista: Pestana) => {
-    ultimaVistaDelPanel.current = vista;
-    setVistaDelPanel(vista);
-  }, []);
+  const abrirPanel = useCallback(
+    (vista: Pestana) => {
+      const hacer = (): void => {
+        ultimaVistaDelPanel.current = vista;
+        setVistaDelPanel(vista);
+      };
+      if (vista === "ficheros") hacer();
+      else dejarFicheros(hacer);
+    },
+    [dejarFicheros]
+  );
    /**
    * Las rutas con el diff desplegado en Revisión. **Arranca sin ninguna**: la pestaña se
    * abre enseñando la LISTA de lo que tocó el agente, y cada diff se despliega al pulsarlo
@@ -343,23 +408,28 @@ export function App({
 
   const abrirSesion = useCallback(
     (proyecto: string, sesion?: string, pestanaAlAbrir?: Pestana) => {
-      setEnEscritorio(false);
-      setEnPanel(false);
-      // Lo que quedara para el compositor era de OTRA conversación: el compositor se desmonta
-      // fuera del chat y, al volver a montarse, reaplicaría ese texto sobre una sesión que no
-      // es la suya (el ticket de un «Empezar» ya enviado, reaparecido en una sesión nueva).
-      setBorradorDelCompositor(undefined);
-      setPanelSinCopia(undefined);
-      altaAlPedir.current = estado.alta;
-      setPedidoDeApertura({ proyecto, ...(sesion === undefined ? {} : { sesion }) });
-      // Solo si el llamador la nombra: por omisión no toca `pestana`, que es el
-      // comportamiento de siempre para la barra y el escritorio. Quien abre desde una
-      // tarjeta de tarea «esperando feedback» sí la nombra —«revision»—, porque ahí la
-      // verdad sobre lo que cambió está en esa pestaña y no en el chat.
-      if (pestanaAlAbrir !== undefined) abrirPanel(pestanaAlAbrir);
-      void enviar(sesion === undefined ? { clase: "sesion", proyecto } : { clase: "sesion", proyecto, sesion });
+      const hacer = (): void => {
+        setEnEscritorio(false);
+        setEnPanel(false);
+        // Lo que quedara para el compositor era de OTRA conversación: el compositor se desmonta
+        // fuera del chat y, al volver a montarse, reaplicaría ese texto sobre una sesión que no
+        // es la suya (el ticket de un «Empezar» ya enviado, reaparecido en una sesión nueva).
+        setBorradorDelCompositor(undefined);
+        setPanelSinCopia(undefined);
+        altaAlPedir.current = estado.alta;
+        setPedidoDeApertura({ proyecto, ...(sesion === undefined ? {} : { sesion }) });
+        // Solo si el llamador la nombra: por omisión no toca `pestana`, que es el
+        // comportamiento de siempre para la barra y el escritorio. Quien abre desde una
+        // tarjeta de tarea «esperando feedback» sí la nombra —«revision»—, porque ahí la
+        // verdad sobre lo que cambió está en esa pestaña y no en el chat.
+        if (pestanaAlAbrir !== undefined) abrirPanel(pestanaAlAbrir);
+        void enviar(sesion === undefined ? { clase: "sesion", proyecto } : { clase: "sesion", proyecto, sesion });
+      };
+      // Otro PROYECTO suelta la edición (guardar escribe en el abierto): con cambios, se pregunta.
+      if (proyecto !== estado.alta?.proyectoActivo) conGuarda(hacer);
+      else hacer();
     },
-    [enviar, estado.alta, abrirPanel]
+    [enviar, estado.alta, abrirPanel, conGuarda]
   );
 
   useEffect(() => {
@@ -627,12 +697,19 @@ export function App({
   const [lineaElegida, setLineaElegida] = useState<number | undefined>(undefined);
   const elegirFichero = useCallback(
     (ruta: string | undefined) => {
-      setFicheroElegido(ruta);
-      // Elegirlo en el árbol es mirarlo entero: la línea de un hallazgo de antes ya no aplica.
-      setLineaElegida(undefined);
-      if (ruta !== undefined) void enviar({ clase: "fichero", ruta });
+      const hacer = (): void => {
+        const enEdicion = edicionRef.current.actual;
+        // El editor es de UN fichero: elegir otro lo cierra.
+        if (enEdicion !== undefined && enEdicion.ruta !== ruta) edicionRef.current.cerrar();
+        setFicheroElegido(ruta);
+        // Elegirlo en el árbol es mirarlo entero: la línea de un hallazgo de antes ya no aplica.
+        setLineaElegida(undefined);
+        if (ruta !== undefined) void enviar({ clase: "fichero", ruta });
+      };
+      if (ruta !== undefined && ruta === edicionRef.current.actual?.ruta) hacer();
+      else conGuarda(hacer);
     },
-    [enviar]
+    [enviar, conGuarda]
   );
 
   /**
@@ -643,12 +720,18 @@ export function App({
    */
   const abrirFicheroDeHallazgo = useCallback(
     (ruta: string, linea?: number) => {
-      elegirFichero(ruta);
-      // DESPUÉS de elegir, que la borra: la línea es lo que distingue llegar desde un hallazgo.
-      setLineaElegida(linea);
-      abrirPanel("ficheros");
+      const hacer = (): void => {
+        // Tras «Descartar» ya no hay nada sin guardar (`haySinGuardar`), así que esto no vuelve a preguntar.
+        elegirFichero(ruta);
+        // DESPUÉS de elegir, que la borra: la línea es lo que distingue llegar desde un hallazgo.
+        setLineaElegida(linea);
+        abrirPanel("ficheros");
+      };
+      // El mismo fichero que se edita no se pierde: se va a él sin preguntar.
+      if (ruta === edicionRef.current.actual?.ruta) hacer();
+      else conGuarda(hacer);
     },
-    [elegirFichero, abrirPanel]
+    [elegirFichero, abrirPanel, conGuarda]
   );
 
   /** Lo que «Pedir corrección» deja en el compositor; el `id` hace que dos iguales cuenten dos. */
@@ -993,9 +1076,12 @@ export function App({
       pedirSync();
     }
     if (vistaDelPanel === "ficheros") {
-      // El agente puede haber creado o cambiado ficheros: el árbol y el abierto se releen.
+      // El agente puede haber creado o cambiado ficheros: el árbol, el abierto, las `M` y la base
+      // del editor se releen. El editor decide solo qué hacer con la versión nueva (`usarEdicion`).
       pedirArbol();
+      pedirRevision();
       if (ficheroElegido !== undefined) void enviar({ clase: "fichero", ruta: ficheroElegido });
+      edicionRef.current.pedirBase();
     }
     // El agente pudo escribir un `.xne`, y un modelo viejo contesta con autoridad y equivocado.
     if (vistaDelPanel === "colecciones") pedirColecciones();
@@ -1580,7 +1666,7 @@ export function App({
    */
   const alternarBarra = (): void => {
     if (!barraContraida && reparto.barra === "plegada") {
-      setVistaDelPanel(undefined);
+      dejarFicheros(() => setVistaDelPanel(undefined));
       return;
     }
     setBarraContraida((plegada) => {
@@ -1592,7 +1678,8 @@ export function App({
   /** Abrir el panel por donde se dejó, o cerrarlo. La otra mitad del par es la «×» de su
    *  propia tira; este vive fuera porque cerrado el panel no está. */
   const alternarPanel = (): void => {
-    setVistaDelPanel((actual) => (actual === undefined ? ultimaVistaDelPanel.current : undefined));
+    if (vistaDelPanel === undefined) setVistaDelPanel(ultimaVistaDelPanel.current);
+    else dejarFicheros(() => setVistaDelPanel(undefined));
   };
 
   /**
@@ -1649,8 +1736,11 @@ export function App({
             abrirSesion(proyecto);
             return;
           }
-          setDescargaPedida({ proyecto, alta: estado.alta });
-          void enviar({ clase: "alta", paso: "proyecto", proyecto, rama });
+          // Bajar otro proyecto lo ABRE: suelta la edición, así que con cambios se pregunta.
+          conGuarda(() => {
+            setDescargaPedida({ proyecto, alta: estado.alta });
+            void enviar({ clase: "alta", paso: "proyecto", proyecto, rama });
+          });
         }}
         // Cierra la ventana, no la descarga: esa sigue y se ve en la fila del proyecto.
         alCerrar={() => {
@@ -1754,6 +1844,21 @@ export function App({
    * cambia lo que se avisa —borrar la que estás mirando cierra la consola y te devuelve al
    * escritorio—, nunca lo que se hace. Deducirlo del transcript diría lo de antes.
    */
+  /** La pregunta antes de perder lo editado. «Descartar» suelta la edición y hace lo que se iba a hacer. */
+  const ventanaDeCambiosSinGuardar =
+    descartePendiente === undefined ? null : (
+      <CambiosSinGuardar
+        ruta={edicion.actual?.ruta ?? ""}
+        alSeguir={() => setDescartePendiente(undefined)}
+        alDescartar={() => {
+          const pendiente = descartePendiente;
+          setDescartePendiente(undefined);
+          edicion.cerrar();
+          pendiente.accion();
+        }}
+      />
+    );
+
   const ventanaDeAccionDeSesion =
     accionDeSesion === undefined ? null : (
       <AccionDeSesion
@@ -2110,7 +2215,7 @@ export function App({
       <Panel
         pestana={vistaDelPanel}
         alElegirPestana={abrirPanel}
-        alCerrar={() => setVistaDelPanel(undefined)}
+        alCerrar={() => dejarFicheros(() => setVistaDelPanel(undefined))}
         hayArtefactos={artefactos.length > 0}
         // La pestaña Planes solo existe con algún plan: una lista MEDIDA y no vacía.
         hayPlanes={(estado.planes?.lista?.length ?? 0) > 0}
@@ -2174,6 +2279,9 @@ export function App({
           alElegir={elegirFichero}
           alRecargar={pedirArbol}
           conectado={estado.conectado}
+          edicion={edicionDeFicheros}
+          {...(cambiadosEnLaSesion === undefined ? {} : { cambiados: cambiadosEnLaSesion })}
+          alPedirCambios={pedirRevision}
         />
       }
       artefactos={
@@ -2788,6 +2896,7 @@ export function App({
     {ventanaDeSesion}
     {ventanaDeTarea}
     {ventanaDeAccionDeSesion}
+    {ventanaDeCambiosSinGuardar}
     </>
   );
 }
