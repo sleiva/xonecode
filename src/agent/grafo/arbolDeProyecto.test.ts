@@ -344,6 +344,18 @@ describe("escribirFicheroDeProyecto", () => {
     expect((await leerFicheroDeProyecto(raiz, "datos.bin")).huella).toBeUndefined();
   });
 
+  it("«.ENV» en mayúsculas también se niega, sin tocar el disco ni dejar temporales", async () => {
+    // En APFS/NTFS «.ENV» abre «.env»; en un FS que distingue no existe. En los dos se niega.
+    const antes = foto();
+    const r = await escribirFicheroDeProyecto(raiz, ".ENV", "PISADO", "cualquiera");
+    expect(r.error).toBeTypeOf("string");
+    expect(r.huella).toBeUndefined();
+    expect(r.error).not.toContain(raiz);
+    expect(foto()).toEqual(antes);
+    expect(readdirSync(raiz).filter((n) => n.toLowerCase() === ".env")).toEqual([".env"]);
+    expect(temporales(raiz)).toEqual([]);
+  });
+
   it("guarda, devuelve la huella nueva y no deja temporales", async () => {
     const r = await escribirFicheroDeProyecto(raiz, "app/Clientes.xne", "<coll name=\"Otra\"/>", huellaDe("app/Clientes.xne"));
     expect(r.error).toBeUndefined();

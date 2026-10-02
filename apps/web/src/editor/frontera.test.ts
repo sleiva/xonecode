@@ -21,12 +21,24 @@ function ficheros(dir: string): string[] {
   });
 }
 
-const deFuera = (): string[] => ficheros(src).filter((f) => !relative(src, f).startsWith("editor"));
+/** Fuera de `editor/` es lo que NO tiene `editor` como PRIMER segmento: un `editorial/` vecino no es el editor. */
+const deFuera = (): string[] => ficheros(src).filter((f) => relative(src, f).split(/[\\/]/)[0] !== "editor");
+
+/** Las tres formas de traer un paquete: `from "…"`, el import de EFECTO `import "…"` y el dinámico `import("…")`. */
+const IMPORTA_CODEMIRROR = /(?:from\s+|import\s*\(?\s*)["']@(?:codemirror|lezer)\//;
 
 describe("la frontera del editor en el cliente", () => {
+  it("la búsqueda caza las tres formas de importar, y hay ficheros que mirar", () => {
+    for (const forma of ['import { x } from "@codemirror/view";', 'import "@codemirror/view";', 'const m = await import("@lezer/highlight");']) {
+      expect(IMPORTA_CODEMIRROR.test(forma), forma).toBe(true);
+    }
+    expect(IMPORTA_CODEMIRROR.test('import { x } from "./codemirror.js";')).toBe(false);
+    expect(deFuera().length).toBeGreaterThan(0);
+  });
+
   it("fuera de src/editor/ nadie importa CodeMirror ni Lezer", () => {
     const culpables = deFuera()
-      .filter((f) => /from\s+["']@(codemirror|lezer)\//.test(readFileSync(f, "utf8")))
+      .filter((f) => IMPORTA_CODEMIRROR.test(readFileSync(f, "utf8")))
       .map((f) => relative(src, f));
     expect(culpables).toEqual([]);
   });

@@ -969,8 +969,12 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   por HUELLA: el sha256 de los bytes viaja al leer y vuelve al guardar, y si el disco ya no coincide
   no se escribe nada. **Cada guardado lleva un `id` que genera el cliente y el servidor devuelve en
   `ficheroGuardado`**: dos pestañas que parten de la misma versión no se distinguirían por la huella.
-  Escritura atómica que conserva permisos y BOM; los finales de línea los conserva el cliente
-  (`edicion.ts`). Solo se edita el texto ENTERO en UTF-8 que no es imagen (`edicion.ts#esEditable`).
+  **Y lleva el `proyecto` con que se ABRIÓ la edición**: el servidor escribe en el del FOCO y lo
+  compara con el activo calculado como el alta (`arranque.ts#proyectoActivoDe`); si no coincide o no
+  se puede deducir, contesta sin escribir — la huella no lo frena con el contenido idéntico (el mismo
+  proyecto en dos entornos). Escritura atómica que conserva permisos y BOM; los finales de línea los
+  conserva el cliente (`apps/web/src/edicion.ts`). Solo se edita el texto ENTERO en UTF-8 que no es
+  imagen (`apps/web/src/edicion.ts#esEditable`).
   **CodeMirror solo se importa desde `apps/web/src/editor/`, y a eso solo se llega con `import()`**
   (`editor/frontera.test.ts`): quien no edita no paga el peso. Su tema son variables CSS (`.tok-*` →
   `--shiki-token-*` y alias del puente), nunca `EditorView.theme`, que escaparía a `Barra.test.tsx`.
@@ -978,11 +982,19 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   (`agent/sesiones/baseDeFichero.ts`: la ref de la sesión o `HEAD`); sin base no hay marcas y se
   dice. **El texto vive en `App` (`usarEdicion.ts`), no en el editor**: el panel desmonta sus
   pestañas, y lo tecleado no se va con ellas; cambiar de fichero, cerrar el editor, salir de la
-  pestaña o abrir otro proyecto con cambios pregunta antes (`CambiosSinGuardar.tsx`), y una versión
-  nueva del disco con cambios no los pisa. **Límites declarados**: ni crear, ni borrar, ni renombrar;
+  pestaña, abrir otro proyecto o cambiar de entorno con cambios pregunta antes (`CambiosSinGuardar.tsx`),
+  y una versión nueva del disco con cambios no los pisa. **El proyecto activo lo cambia el SERVIDOR
+  sin preguntar** (otra pestaña, quitar un entorno): sin cambios la edición se suelta; con cambios se
+  CONSERVA, guardar se apaga y una banda ofrece «Descartar» (`proyectoCambiado`). **Un conflicto
+  tiene salida**: tras un rechazo de un guardado propio se vuelve a pedir el fichero (recarga o
+  banda), y «Seguir con los míos» ADOPTA la huella del disco, así que el siguiente guardado lo
+  sustituye a sabiendas y la banda lo avisa. **Límites declarados**: ni crear, ni borrar, ni renombrar;
   una tarea en OTRO proceso no se ve; un fichero en latin1 o recortado es de solo lectura y el
   latin1 tampoco lleva marcas (`sinBase`); guardar no pasa por la cola de `escriturasEnSerie` del
-  agente; la edición se atribuye en git a la sesión cuyo turno siguiente la commitea.
+  agente; la edición se atribuye en git a la sesión cuyo turno siguiente la commitea; entre comprobar
+  (huella, turno, proyecto) y escribir queda un hueco sin cerrojo; `/sync bajar` no cuenta como turno,
+  así que un guardado de contenido idéntico en ese hueco quedaría absorbido en la línea base; y un
+  cierre brusco puede dejar un temporal `.X.<uuid>.xonecode.tmp` junto al fichero.
 - **Revisión arranca PLEGADA**: cada diff se pide al pulsar su cabecera. El efecto de `App.tsx`
   solo OLVIDA lo desplegado cuando el store tira la foto.
 - **La sincronización con CloudStudio es la BANDA de arriba de Revisión, no una pestaña**, como

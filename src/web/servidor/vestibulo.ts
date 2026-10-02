@@ -832,8 +832,10 @@ export interface Vestibulo {
 
   /**
    * Por qué no se puede guardar a mano en esa raíz ahora mismo (`core/settings.ts
-   * #motivoParaNoEditarFichero`), o `undefined`. Mira TODAS las consolas de persona —también una
-   * cerrada con el turno vivo— y las de tarea, que no salen en `proyectosAbiertos()`.
+   * #motivoParaNoEditarFichero`), o `undefined`. Mira las consolas de persona que siguen en el
+   * mapa —una cerrada con el turno vivo cuenta MIENTRAS siga ahí, pero abrir otro proyecto la poda
+   * (`cerrarLasOciosasSalvo`) y desde entonces ya no se ve: límite declarado— y las de tarea, que
+   * no salen en `proyectosAbiertos()`.
    */
   motivoParaNoEditar(raiz: string): string | undefined;
   /** El usuario se va sin terminar. No escribe nada; DICE lo que ya quedó escrito. */
@@ -2524,7 +2526,8 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     // su raíz, y de esta lista cuelga la guarda de «gana la persona».
     proyectosAbiertos: () => [...abiertas.values()].filter((c) => !c.cerrada),
     // Sin filtrar `cerrada` en las de persona: lo que importa es el turno, y un turno que sigue
-    // vivo escribe aunque su lazo haya terminado. Las de tarea, vivas o con turno.
+    // vivo escribe aunque su lazo haya terminado — mientras la consola siga en `abiertas`, que la
+    // poda de `cerrarLasOciosasSalvo` al abrir otro proyecto la saca. Las de tarea, vivas o con turno.
     motivoParaNoEditar: (raiz) =>
       motivoParaNoEditarFichero({ raiz, personas: [...abiertas.values()], tareas: [...deTareas] }),
 

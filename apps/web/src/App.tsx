@@ -160,11 +160,12 @@ export function App({
   const edicionRef = useRef(edicion);
   edicionRef.current = edicion;
   /** Lo que se iba a hacer cuando salió el diálogo de «Cambios sin guardar». */
-  const [descartePendiente, setDescartePendiente] = useState<{ accion: () => void } | undefined>(undefined);
+  // La `ruta` se guarda AL ABRIR el diálogo: la edición puede cerrarse con él delante.
+  const [descartePendiente, setDescartePendiente] = useState<{ accion: () => void; ruta: string } | undefined>(undefined);
   /** Hace `accion` ya, o —con cambios sin guardar— después de que la persona elija descartarlos. */
   const conGuarda = useCallback((accion: () => void) => {
     if (edicionRef.current.haySinGuardar()) {
-      setDescartePendiente({ accion });
+      setDescartePendiente({ accion, ruta: edicionRef.current.actual?.ruta ?? "" });
       return;
     }
     accion();
@@ -1848,7 +1849,7 @@ export function App({
   const ventanaDeCambiosSinGuardar =
     descartePendiente === undefined ? null : (
       <CambiosSinGuardar
-        ruta={edicion.actual?.ruta ?? ""}
+        ruta={descartePendiente.ruta}
         alSeguir={() => setDescartePendiente(undefined)}
         alDescartar={() => {
           const pendiente = descartePendiente;

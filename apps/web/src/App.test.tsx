@@ -1932,6 +1932,22 @@ describe("App: editar en la pestaña Ficheros", () => {
     void vista;
   });
 
+  it("la ventana de «Cambios sin guardar» enseña la ruta de cuando se ABRIÓ, aunque la edición se cierre debajo", async () => {
+    const { store, vista } = await conFichero();
+    teclear(vista, "X");
+    // Otro proyecto abierto: la edición se conserva con su banda.
+    act(() =>
+      store.aplicar({ clase: "alta", pasos: [], proveedores: [], entornos: [], proyectos: [], ramas: [], proyectoAbierto: true, proyectoActivo: "p2" })
+    );
+    fireEvent.click(screen.getByRole("treeitem", { name: "b.xne" }));
+    const dialogo = screen.getByRole("alertdialog", { name: "Cambios sin guardar" });
+    expect(dialogo.textContent).toContain("«a.xne»");
+    expect(document.activeElement?.textContent).toBe("Seguir editando");
+    // La edición se suelta por otro camino (el «Descartar» de la banda) con la ventana abierta.
+    fireEvent.click(screen.getByRole("button", { name: "Descartar" }));
+    expect(screen.getByRole("alertdialog", { name: "Cambios sin guardar" }).textContent).toContain("«a.xne»");
+  });
+
   it("cerrar el panel con cambios también pregunta", async () => {
     const { vista } = await conFichero();
     teclear(vista, "X");

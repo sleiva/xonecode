@@ -9,7 +9,9 @@ import propios from "./AccionDeSesion.module.css";
  * La misma coraza que `BorrarCopiaLocal` (`NuevaSesion.module.css`) y el mismo botón rojo, porque es
  * la misma clase de acto: lo descartado no vuelve.
  *
- * La salida SEGURA es la de por omisión: `Escape` y el clic en el velo son «Seguir editando».
+ * La salida SEGURA es la de por omisión: `Escape` y el clic en el velo son «Seguir editando», y el
+ * foco nace en ese botón. La `ruta` la fija quien la abre, al ABRIRLA: la edición viva puede
+ * cerrarse con la ventana delante y entonces se pintaría «».
  */
 export function CambiosSinGuardar({ ruta, alDescartar, alSeguir }: { ruta: string; alDescartar: () => void; alSeguir: () => void }) {
   return (
@@ -26,7 +28,8 @@ export function CambiosSinGuardar({ ruta, alDescartar, alSeguir }: { ruta: strin
             «{ruta}» tiene cambios que no has guardado. Si sigues, se pierden.
           </p>
           <div className={estilos.acciones}>
-            <Button variant="outline" className={estilos.accion} onClick={alSeguir}>
+            {/* El foco a la salida SEGURA: un Enter que llegue por inercia no descarta nada. */}
+            <Button variant="outline" className={estilos.accion} onClick={alSeguir} autoFocus>
               Seguir editando
             </Button>
             <Button variant="primary" className={clsx(estilos.accion, estilos.principal, propios.destructiva)} onClick={alDescartar}>

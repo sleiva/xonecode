@@ -7674,8 +7674,8 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     modeloDelCambio,
     planesDelProyecto,
     visorOpenui: () => leerVisorOpenui(raizDelCliente),
-        // Leer, guardar y la base del editor, compuestos fuera para que la composición tenga test.
-        ...ficherosCableados(),
+    // Leer, guardar y la base del editor, compuestos fuera para que la composición tenga test.
+    ...ficherosCableados(),
     leerArtefacto: leerArtefactoDeSesion,
     leerArtefactoCrudo,
     correrPasoDeReceta: (receta, paso, alSalirLinea) => correrPasoDeReceta(receta, paso, { alSalirLinea }),
