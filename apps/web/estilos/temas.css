@@ -28,6 +28,7 @@ body[data-tema] {
   --dsw-alias-interactive-bg-hover: color-mix(in srgb, var(--tema-texto) 8%, transparent);
   --dsw-alias-markdown-code-block: var(--tema-capa1);
   --dsw-alias-markdown-inline-code: var(--tema-capa3);
+  --dsw-specific-sidebar-fill: var(--tema-capa1);
 
   /* Texto */
   --dsw-alias-label-primary: var(--tema-texto);

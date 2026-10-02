@@ -78,6 +78,23 @@ describe("el puente de temas", () => {
     expect([...faltan].sort()).toEqual([]);
   });
 
+  it("redefine cada --dsw-specific-* que usa el cliente (el fondo de la barra lateral, por ejemplo)", () => {
+    const enElPuente = declarados("dsw-specific-", PUENTE());
+    const faltan = new Set<string>();
+    let alias = 0;
+    for (const ruta of hojasDelCliente()) {
+      if (ruta.endsWith("temas.css")) continue;
+      const css = readFileSync(ruta, "utf8");
+      alias += aliasUsados(css).size;
+      for (const m of sinComentarios(css).matchAll(/var\(\s*--dsw-specific-([a-z0-9-]+)\s*\)/g)) {
+        if (!enElPuente.has(m[1]!)) faltan.add(m[1]!);
+      }
+    }
+    // Guarda contra el vacío: si el recorrido no encuentra hojas, «no falta nada» no prueba nada.
+    expect(alias).toBeGreaterThan(0);
+    expect([...faltan].sort()).toEqual([]);
+  });
+
   it("redefine el resaltado de código entero", () => {
     const shiki = declarados("shiki-", sinComentarios(readFileSync(join(ESTILOS, "shiki.css"), "utf8")));
     const enElPuente = declarados("shiki-", PUENTE());
