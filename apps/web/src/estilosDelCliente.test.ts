@@ -95,6 +95,32 @@ describe("el puente de temas", () => {
     expect([...faltan].sort()).toEqual([]);
   });
 
+  it("redefine cada --xonecode-* que usa el cliente, salvo las excepciones declaradas", () => {
+    // Un `--xonecode-*` con color que el puente no toca se queda con el valor de XOneCode
+    // dentro de un tema: la misma trampa muda que los alias, con otro prefijo.
+    const EXCEPCIONES: Record<string, string> = {
+      "gasto-": "validados con dataviz contra el fondo de cada modo: no se puentean (límite declarado)",
+      "splash-": "presentación de marca, ajena al tema",
+      "barra-placa": "la placa del símbolo es blanca siempre, resuelve en :root",
+      angulo: "un ángulo de degradado, no es un color",
+      "icono-copiar": "una máscara SVG, no es un color",
+    };
+    const excepcion = (n: string): boolean =>
+      Object.keys(EXCEPCIONES).some((k) => (k.endsWith("-") ? n.startsWith(k) : n === k));
+    const enElPuente = declarados("xonecode-", PUENTE());
+    const faltan = new Set<string>();
+    let vistos = 0;
+    for (const ruta of hojasDelCliente()) {
+      if (ruta.endsWith("temas.css")) continue;
+      for (const m of sinComentarios(readFileSync(ruta, "utf8")).matchAll(/var\(\s*--xonecode-([a-z0-9-]+)\s*\)/g)) {
+        vistos++;
+        if (!enElPuente.has(m[1]!) && !excepcion(m[1]!)) faltan.add(m[1]!);
+      }
+    }
+    expect(vistos).toBeGreaterThan(0);
+    expect([...faltan].sort()).toEqual([]);
+  });
+
   it("redefine el resaltado de código entero", () => {
     const shiki = declarados("shiki-", sinComentarios(readFileSync(join(ESTILOS, "shiki.css"), "utf8")));
     const enElPuente = declarados("shiki-", PUENTE());
