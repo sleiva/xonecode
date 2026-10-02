@@ -1,7 +1,7 @@
 /* El editor de la pestaña Ficheros. Alias comprobados contra el puente de temas
    (`estilos/temas.css`): bg-layer-1/2, border-l2, label-primary/secondary/tertiary,
    interactive-bg-hover, state-business/success/error-primary, state-warn-tertiary; y
-   `--xonecode-fila-elegida`, `--shiki-*`.
+   `--xonecode-fila-elegida`, `--xonecode-marca-cambiada`, `--shiki-*`.
    **La clase propia va TRIPLE en todo lo que el tema base de CodeMirror también pinta**: lo
    inyecta en tiempo de ejecución (`style-mod`), así que llega DESPUÉS de esta hoja y gana todo
    EMPATE de especificidad, y sus reglas ya son de tres clases (`.ͼ1.ͼ2 .cm-gutters`) o más
@@ -170,7 +170,8 @@
 }
 
 .marca[data-marca~="cambiada"] {
-  background: var(--dsw-alias-state-business-primary);
+  /* Azul en todos los temas (`marca.css`, y la semilla `cambio` en los demás). */
+  background: var(--xonecode-marca-cambiada);
 }
 
 .marca[data-marca~="nueva"] {

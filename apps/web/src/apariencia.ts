@@ -80,7 +80,7 @@ export function guardarTema(modo: ModoDeTema, id: string): void {
  * vez en su sistema operativo — preguntársela otra vez es peaje.
  *
  * El tema: XOneCode QUITA `data-tema` y cada `--tema-*`, y queda la cascada de siempre; otro pone
- * `data-tema` y escribe sus 24 semillas en el `style` del `body`, de donde las lee el puente
+ * `data-tema` y escribe sus semillas en el `style` del `body`, de donde las lee el puente
  * (`estilos/temas.css`). Sin `temas`, XOneCode en los dos: quien llamaba antes con un solo
  * argumento sigue viendo exactamente lo mismo.
  */

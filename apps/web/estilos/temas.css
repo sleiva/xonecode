@@ -1,4 +1,4 @@
-/* NUESTRO. El puente de los temas: de 24 semillas (`--tema-*`, que `apariencia.ts` escribe en
+/* NUESTRO. El puente de los temas: de las semillas (`--tema-*`, que `apariencia.ts` escribe en
  * el `style` del `body`) a los alias que pinta la interfaz.
  *
  * Solo se aplica con `data-tema` puesto, y XOneCode no lo pone nunca: el tema de omisión sigue
@@ -78,6 +78,8 @@ body[data-tema] {
   --xonecode-naranja: var(--tema-aviso);
   --xonecode-rojo: var(--tema-peligro);
   --xonecode-verde: var(--tema-exito);
+  /* La marca «cambiada» del editor y la `M` del árbol: azul en todos los temas, de su semilla. */
+  --xonecode-marca-cambiada: var(--tema-cambio);
   --xonecode-rojo-fondo: color-mix(in srgb, var(--tema-peligro) 12%, transparent);
   --xonecode-rojo-fondo-hover: color-mix(in srgb, var(--tema-peligro) 20%, transparent);
   --xonecode-verde-fondo: color-mix(in srgb, var(--tema-exito) 12%, transparent);

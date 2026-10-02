@@ -182,6 +182,11 @@
      palabras y la tabla con las cifras. */
   --xonecode-gasto-modelo: #0284c7;
   --xonecode-gasto-externo: #f58220;
+  /* La marca «cambiada» del editor de Ficheros (la barra del margen) y la `M` del árbol: AZUL en
+     todos los temas, por decisión del usuario. No es el cian del acento —que ya marca la fila
+     elegida y el foco, y una marca de cambio del mismo color se confundiría con «seleccionado»—
+     ni `state-business`, que en la paleta copiada es violeta. */
+  --xonecode-marca-cambiada: #3b82f6;
 }
 
 /* En oscuro el acento no cambia —el cian es el mismo color de marca sobre los dos fondos, y
@@ -204,4 +209,6 @@ body[data-ds-dark-theme] {
      invertidas: el naranja de claro se salía de la banda de luminosidad sobre este fondo. */
   --xonecode-gasto-modelo: #0284c7;
   --xonecode-gasto-externo: #e0701a;
+  /* El azul de la marca «cambiada», un paso más claro: sobre fondo oscuro el de claro se hunde. */
+  --xonecode-marca-cambiada: #60a5fa;
 }

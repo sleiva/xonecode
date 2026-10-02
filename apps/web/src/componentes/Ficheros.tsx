@@ -360,7 +360,7 @@ export function Ficheros({
                   ruta === actual?.ruta && actual.sucio ? (
                     <span className={estilos.marcaDelArbol} aria-label="Sin guardar en el editor">●</span>
                   ) : cambiados?.has(ruta) === true ? (
-                    <span className={estilos.marcaDelArbol} aria-label="Cambiado en la sesión">M</span>
+                    <span className={estilos.marcaDelArbol} data-marca="cambiada" aria-label="Cambiado en la sesión">M</span>
                   ) : null,
               })}
         />

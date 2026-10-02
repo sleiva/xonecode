@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { NOMBRES_DE_SEMILLA, TEMAS, contraste, temaPorId, temasDe, type Semillas } from "./temas.js";
 
@@ -19,7 +22,7 @@ describe("el catálogo de temas", () => {
     for (const modo of ["claro", "oscuro"] as const) expect(temasDe(modo)[0]!.semillas).toBeUndefined();
   });
 
-  it("cada tema con semillas trae las 24, todas #rrggbb", () => {
+  it("cada tema con semillas trae TODAS las semillas, todas #rrggbb", () => {
     for (const t of TEMAS) {
       if (t.semillas === undefined) continue;
       expect(Object.keys(t.semillas).sort(), t.id).toEqual([...NOMBRES_DE_SEMILLA].sort());
@@ -66,4 +69,35 @@ describe("contraste WCAG de cada tema", () => {
       expect(fallos).toEqual([]);
     });
   }
+});
+
+/**
+ * La marca «cambiada» del editor y la `M` del árbol van en AZUL en todos los temas (decisión del
+ * usuario): en XOneCode por `--xonecode-marca-cambiada` de `marca.css`, y en los demás por la
+ * semilla `cambio`, que el puente reparte al mismo token.
+ */
+describe("la marca «cambiada», azul en todos los temas", () => {
+  const AQUI = dirname(fileURLToPath(import.meta.url));
+  const leer = (...partes: string[]): string => readFileSync(join(AQUI, ...partes), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+
+  it("cada tema con semillas trae su azul en `cambio`", () => {
+    const azules = Object.fromEntries(TEMAS.filter((t) => t.semillas !== undefined).map((t) => [t.id, t.semillas!.cambio]));
+    expect(azules).toEqual({
+      "github-oscuro": "#1f6feb",
+      "one-oscuro": "#61afef",
+      dracula: "#8be9fd",
+      "github-claro": "#0969da",
+      "one-claro": "#4078f2",
+      "ayu-claro": "#399ee6",
+    });
+  });
+
+  it("XOneCode lo declara en claro y en oscuro, el puente lo toma de `cambio`, y el editor y el árbol lo usan", () => {
+    const marca = leer("..", "estilos", "marca.css");
+    expect(marca).toMatch(/:root\s*\{[^}]*--xonecode-marca-cambiada:\s*#3b82f6;/);
+    expect(marca).toMatch(/body\[data-ds-dark-theme\]\s*\{[^}]*--xonecode-marca-cambiada:\s*#60a5fa;/);
+    expect(leer("..", "estilos", "temas.css")).toMatch(/--xonecode-marca-cambiada:\s*var\(--tema-cambio\);/);
+    expect(leer("editor", "EditorDeFichero.module.css")).toMatch(/\.marca\[data-marca~="cambiada"\]\s*\{[^}]*var\(--xonecode-marca-cambiada\)/);
+    expect(leer("componentes", "Ficheros.module.css")).toMatch(/\.marcaDelArbol\[data-marca="cambiada"\]\s*\{[^}]*var\(--xonecode-marca-cambiada\)/);
+  });
 });

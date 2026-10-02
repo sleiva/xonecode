@@ -96,7 +96,7 @@ describe("temas por modo", () => {
     expect(() => guardarTema("oscuro", "dracula")).not.toThrow();
   });
 
-  it("aplica el tema del modo EN VIGOR: atributo y las 24 semillas", () => {
+  it("aplica el tema del modo EN VIGOR: atributo y todas sus semillas", () => {
     aplicarApariencia("oscuro", { claro: "github-claro", oscuro: "dracula" });
     expect(document.body.hasAttribute("data-ds-dark-theme")).toBe(true);
     expect(document.body.getAttribute("data-tema")).toBe("dracula");
