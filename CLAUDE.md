@@ -816,7 +816,8 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   pinta. **El gasto va en TOKENS por sesión** (`gastoDelProyecto.ts`, `SESIONES_EN_EL_GASTO`):
   un gráfico, no una lista de sesiones que abrir; cada cuenta con su convención de caché, las dos
   sin sumarse, y el total DICE cuántas sesiones no constan. Sus dos colores (`--xonecode-gasto-*`)
-  están validados con el skill `dataviz` contra el fondo de cada tema.
+  están validados con el skill `dataviz` contra el fondo de cada MODO. **Límite declarado**: no se
+  puentean, así que no están validados contra los fondos de los otros temas.
 - **La pestaña SOPORTE exporta lo necesario para analizar qué pasó, y un análisis PREVIO hecho
   con reglas de CÓDIGO** (`web/servidor/soporte.ts`, `core/paqueteDeSoporte.ts`,
   `core/analisisDeSesion.ts`, `componentes/SoporteDelProyecto.tsx`). Solo con copia. Lista chats
@@ -893,16 +894,23 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
 - **Un tema por MODO, y XOneCode no pasa por el puente** (`src/temas.ts`, `estilos/temas.css`):
   el modo (sistema/claro/oscuro) lo decide `apariencia.ts`, y encima se aplica el tema elegido
   para ESE modo. Un tema son semillas (`NOMBRES_DE_SEMILLA`) que `aplicarApariencia` escribe como
-  `--tema-*` en el `body` junto a `data-tema`; el puente las reparte a los alias. **XOneCode no
+  `--tema-*` en el `body` junto a `data-tema`; el puente las reparte a los alias `--dsw-alias-*`, a los `--dsw-specific-*` con color, a los
+  `--xonecode-*` con color y a `--shiki-*`. **XOneCode no
   tiene semillas**: aplicarlo QUITA `data-tema`, así que se ve como siempre por construcción. Se
   recuerda en ESTE navegador (`xonecode.tema.claro`/`.oscuro`) y un id desconocido es XOneCode.
   Los tests: el contraste WCAG de cada tema (`temas.test.ts`, un fallo se arregla en la semilla,
   nunca bajando el umbral), que el puente cubra CADA alias usado y no lleve literales
   y que todo alias usado EXISTA (los dos en `estilosDelCliente.test.ts`: uno inexistente resuelve a nada
   y no da error). Los derivados se REDECLARAN en el puente: en `:root` un `var()`
-  se resuelve donde se declara. **Límite declarado**: el visor de OpenUI solo recibe claro/oscuro.
+  se resuelve donde se declara. **La BARRA superior tiene tokens propios** (`--xonecode-barra*` en
+  `marca.css`): en un tema toma la SUPERFICIE del tema y no el acento, porque
+  `--xonecode-azul`/`--xonecode-sobre-azul` se puentean al acento para los botones; la placa del
+  símbolo (`--xonecode-barra-placa`) NO se puentea y se queda blanca (resuelve en `:root`). Una
+  superficie de marca nueva no se pinta con `--xonecode-azul`. **Las muestras de XOneCode llevan
+  colores fijos** (`muestra` en `temas.ts`), porque dentro de un tema los alias del modo son los
+  del tema. **Límite declarado**: el visor de OpenUI solo recibe claro/oscuro.
 - **El botón de enviar lleva el AZUL de la marca** (`--xonecode-azul`/`--xonecode-sobre-azul`); el
-  cian se queda para su hover. PARAR se queda ROJO —es un estado, no la marca—.
+  cian se queda para su hover; dentro de un tema es el acento del tema. PARAR se queda ROJO —es un estado, no la marca—.
 - **La caja del compositor va en TRES BANDAS** (maqueta de Stitch, `code.html`): arriba modelo +
   esfuerzo + dispositivo, en medio el campo, abajo modo de escritura + gasto + botón. En REPOSO la
   banda de arriba NO ESTÁ y el campo es bajo; se pliega **desmontando** y lo decide
