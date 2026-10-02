@@ -957,9 +957,32 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   `openui-builder`**, solo en TrueForge (`capacidadDeOpenui`). A un motor externo no le llega la
   tool.
 - **Ficheros y Revisión**: el lector filtra con las MISMAS reglas que el agente
-  (`puedeLeerRuta`, `esVistaAplanada`), aplicadas DOS veces (texto y `realpath`). El árbol NO
+  (`puedeLeerRuta`, `esVistaAplanada`), aplicadas DOS veces (texto y `realpath`) por UN solo
+  resolvedor (`arbolDeProyecto.ts#resolverEnProyecto`), que es también el de guardar y el de la base. El árbol NO
   recorre detrás de un enlace (`lstatSync`). La imagen se decide por EXTENSIÓN, viaja como
   `mime`+`base64`, se pinta en un `<img>`, nunca marcado inyectado.
+- **Ficheros EDITA, y guardar es la ÚNICA escritura del cliente en un fichero del proyecto**
+  (`arbolDeProyecto.ts#escribirFicheroDeProyecto`, `componentes/Ficheros.tsx`, `editor/`): sin
+  tarjeta de aprobación —lo teclea la persona—, con las MISMAS guardas que leer, negado por RAÍZ
+  con un turno en vuelo de una consola de persona de esa raíz o una consola de tarea viva
+  (`core/settings.ts#motivoParaNoEditarFichero`, `vestibulo.motivoParaNoEditar`), y con concurrencia
+  por HUELLA: el sha256 de los bytes viaja al leer y vuelve al guardar, y si el disco ya no coincide
+  no se escribe nada. **Cada guardado lleva un `id` que genera el cliente y el servidor devuelve en
+  `ficheroGuardado`**: dos pestañas que parten de la misma versión no se distinguirían por la huella.
+  Escritura atómica que conserva permisos y BOM; los finales de línea los conserva el cliente
+  (`edicion.ts`). Solo se edita el texto ENTERO en UTF-8 que no es imagen (`edicion.ts#esEditable`).
+  **CodeMirror solo se importa desde `apps/web/src/editor/`, y a eso solo se llega con `import()`**
+  (`editor/frontera.test.ts`): quien no edita no paga el peso. Su tema son variables CSS (`.tok-*` →
+  `--shiki-token-*` y alias del puente), nunca `EditorView.theme`, que escaparía a `Barra.test.tsx`.
+  Las marcas del margen salen de `@codemirror/merge` contra una BASE pedida aparte
+  (`agent/sesiones/baseDeFichero.ts`: la ref de la sesión o `HEAD`); sin base no hay marcas y se
+  dice. **El texto vive en `App` (`usarEdicion.ts`), no en el editor**: el panel desmonta sus
+  pestañas, y lo tecleado no se va con ellas; cambiar de fichero, cerrar el editor, salir de la
+  pestaña o abrir otro proyecto con cambios pregunta antes (`CambiosSinGuardar.tsx`), y una versión
+  nueva del disco con cambios no los pisa. **Límites declarados**: ni crear, ni borrar, ni renombrar;
+  una tarea en OTRO proceso no se ve; un fichero en latin1 o recortado es de solo lectura y el
+  latin1 tampoco lleva marcas (`sinBase`); guardar no pasa por la cola de `escriturasEnSerie` del
+  agente; la edición se atribuye en git a la sesión cuyo turno siguiente la commitea.
 - **Revisión arranca PLEGADA**: cada diff se pide al pulsar su cabecera. El efecto de `App.tsx`
   solo OLVIDA lo desplegado cuando el store tira la foto.
 - **La sincronización con CloudStudio es la BANDA de arriba de Revisión, no una pestaña**, como
