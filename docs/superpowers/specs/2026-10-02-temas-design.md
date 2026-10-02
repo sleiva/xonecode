@@ -51,10 +51,11 @@ interface Tema {
 }
 ```
 
-**Las semillas** son 23 colores con significado:
+**Las semillas** son 24 colores con significado:
 
-- **14 de interfaz**: `fondo`, `capa1`, `capa2`, `capa3`, `texto`, `texto2`, `texto3`, `borde`, `acento`,
-  `sobreAcento`, `peligro`, `exito`, `aviso`, `negocio`.
+- **15 de interfaz**: `fondo`, `capa1`, `capa2`, `capa3`, `texto`, `texto2`, `texto3`, `borde`, `acento`,
+  `sobreAcento`, `peligro`, `exito`, `aviso`, `negocio` y `sombra` (el color del velo de los diálogos y de la sombra
+  de la caja: oscuro en TODOS los temas, porque un velo claro sobre un tema claro no separa nada).
 - **9 de código**, que alimentan los `--shiki-token-*`: `palabraClave`, `cadena`, `funcion`, `comentario`,
   `constante`, `parametro`, `puntuacion`, `enlace`, `expresionDeCadena`.
 
@@ -79,10 +80,18 @@ Una regla `body[data-tema] { … }` que deriva de las semillas:
   `sobre-azul` → `sobreAcento`; `rojo`, `verde` → `peligro`, `exito`; `velo`, `fila-elegida`, `fila-hover`,
   `borde-azul`, `sombra-caja` y el acento de la barra lateral (`--dsw-specific-sidebar-nav-item-active-accent`);
 - los **`--shiki-token-*`** y `--shiki-background` / `--shiki-foreground`;
-- los degradados de `gradient-shadow-text.css` que tiran del fondo.
 
 Los tintes (hover, fondos de peligro/éxito, bordes suaves, fila elegida) se sacan con `color-mix` de la semilla, como
-ya hace `marca.css` con el rojo. El fichero **no lleva ningún color literal**: solo `var(--tema-*)` y `color-mix`.
+ya hace `marca.css` con el rojo. El fichero **no lleva ningún color literal**: solo `var(--tema-*)`, `color-mix` y la
+palabra `transparent` como segundo color de un `color-mix` (sin ella no hay tinte translúcido).
+
+**Los derivados se REDECLARAN en el puente** (`--xonecode-rojo-fondo`, `-verde-fondo`, `-fila-elegida`, `-fila-hover`,
+`-sombra-caja`, `--shiki-foreground`/`-background`): `marca.css` y `shiki.css` los declaran en `:root`, y una custom
+property con `var()` se resuelve en el elemento donde se DECLARA y se hereda ya resuelta, así que cambiar la semilla en
+el `body` no los alcanzaría.
+
+**Lo que no se toca**: los dos colores del gráfico de gasto (`--xonecode-gasto-*`), validados con el skill `dataviz`
+contra el fondo de cada modo, y las variables del splash.
 
 `temas.css` se carga DESPUÉS de `marca.css`, `shiki.css` y `gradient-shadow-text.css`, y su selector
 (`body[data-tema]`) tiene igual o más especificidad que `body[data-ds-dark-theme]`, para que gane en los dos modos.
@@ -139,21 +148,25 @@ el catálogo, o que es de otro modo, se lee como XOneCode.
   `texto` y `texto2` ≥ 4,5:1; `texto3` ≥ 3:1; `sobreAcento` sobre `acento` ≥ 4,5:1; `peligro`, `exito`, `aviso` ≥ 3:1
   sobre `fondo`. El fallo nombra el tema y el par. Un tema que no llegue se corrige en su semilla, sin rebajar el
   umbral.
-- **Completitud**: cada tema con semillas trae las 23; los ids son únicos; `temasDe(modo)` devuelve cuatro por modo
+- **Completitud**: cada tema con semillas trae las 24; los ids son únicos; `temasDe(modo)` devuelve cuatro por modo
   con XOneCode primero; `temaPorId` cae en XOneCode con un id desconocido o de otro modo.
 - **El puente cubre lo que se usa**: recorre todos los `.css` y `.module.css` del cliente (`estilos/` y `src/`), saca
   cada `var(--dsw-alias-…)` y exige que `temas.css` lo redefina. Un alias nuevo que el puente no conozca da rojo.
   Lo mismo para `var(--shiki-token-…)`.
-- **`temas.css` sin literales**: ningún `#hex`, `rgb(`, `hsl(` ni nombre de color.
-- **`apariencia.test.ts`**: XOneCode → sin `data-tema` y sin `--tema-*`; otro → atributo y las 23 variables; cambiar
+- **`temas.css` sin literales**: ningún `#hex`, `rgb(`, `hsl(` ni nombre de color, salvo `transparent` dentro de un
+  `color-mix`.
+- **`apariencia.test.ts`**: XOneCode → sin `data-tema` y sin `--tema-*`; otro → atributo y las 24 variables; cambiar
   de modo cambia el tema; un `localStorage` que lanza no tumba nada y lee XOneCode.
 - **Ajustes**: las dos filas con sus cuatro opciones, la elegida con `aria-pressed="true"`, elegir llama a
   `alCambiarTema(modo, id)`, la línea de «se aplica cuando…» sale solo en la fila que no está en vigor, y sin
   `temas` no se pinta la sección.
 
-**Dos alias raros** que salen al hacer el censo: `--dsw-alias-que-no-existe` (probablemente de un test) y
-`--dsw-alias-state-warning-*` (en la paleta el nombre es `warn`). Se miran al implementar: si son errores, se
-arreglan en un commit aparte, antes del puente, para que el test de cobertura no los tenga que listar.
+**Alias que se usan y NO existen** (censo hecho al planificar): `border-primary`, `bg-secondary`, `border-secondary`,
+`text-secondary`, `text-tertiary`, `state-warning-primary`/`-tertiary` (el nombre real es `warn`) y `fill-tsp-secondary`
+(solo en un comentario). Hoy resuelven a nada: bordes que no se pintan, fondos transparentes, letra heredada. Se
+arreglan en un commit APARTE y ANTES del puente, apuntando cada uno a su alias real, con un test que exige que todo
+alias usado esté definido (o lleve fallback, como `font-mono`). **Esto cambia lo que se ve en XOneCode** en esos
+sitios: es un arreglo, no parte de los temas. `--dsw-alias-que-no-existe` es del propio `Barra.test.tsx` y se queda.
 
 ### 9. Verificación al acabar
 
