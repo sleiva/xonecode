@@ -38,10 +38,12 @@ export interface Tema {
   modo: ModoDeTema;
   /** Ausente SOLO en XOneCode: ver la cabecera. */
   semillas?: Semillas;
+  /** Solo XOneCode, que no tiene semillas: los tres colores con que se ENSEÑA en el selector. */
+  muestra?: { fondo: string; texto: string; acento: string };
 }
 
 export const TEMAS: readonly Tema[] = [
-  { id: "xonecode-oscuro", nombre: "XOneCode", modo: "oscuro" },
+  { id: "xonecode-oscuro", nombre: "XOneCode", modo: "oscuro", muestra: { fondo: "#151517", texto: "#cfd3d6", acento: "#00a3e0" } },
   {
     id: "github-oscuro",
     nombre: "GitHub Dark",
@@ -88,7 +90,7 @@ export const TEMAS: readonly Tema[] = [
       expresionDeCadena: "#f1fa8c",
     },
   },
-  { id: "xonecode-claro", nombre: "XOneCode", modo: "claro" },
+  { id: "xonecode-claro", nombre: "XOneCode", modo: "claro", muestra: { fondo: "#ffffff", texto: "#61666b", acento: "#00a3e0" } },
   {
     id: "github-claro",
     nombre: "GitHub Light",

@@ -62,6 +62,17 @@
   --xonecode-sobre-azul-suave: rgba(224, 242, 254, 0.75);
   --xonecode-borde-azul: #0d4b6c;
 
+  /* La BARRA SUPERIOR tiene sus propios tokens. Los de arriba (`azul`, `sobre-azul`…) los puentea
+     un tema al ACENTO, que es lo que quieren los botones; una barra entera en naranja o morado
+     chillón no se lee y el «conectado» verde se pierde. Por omisión valen lo de siempre, así que
+     XOneCode no cambia; `temas.css` los lleva a las superficies del tema. La placa del símbolo
+     NO se puentea: su arte está dibujado para blanco, y resuelta aquí en `:root` lo es siempre. */
+  --xonecode-barra: var(--xonecode-azul);
+  --xonecode-barra-borde: var(--xonecode-borde-azul);
+  --xonecode-barra-texto: var(--xonecode-sobre-azul);
+  --xonecode-barra-texto-suave: var(--xonecode-sobre-azul-suave);
+  --xonecode-barra-placa: var(--xonecode-sobre-azul);
+
   /**
    * El velo de los modales. Existe porque el alias de la paleta copiada
    * (`--dsw-alias-bg-overlay`) es un gris OPACO —`rgb(233, 236, 242)`, medido—, así que

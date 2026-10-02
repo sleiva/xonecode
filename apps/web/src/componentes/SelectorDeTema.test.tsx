@@ -42,12 +42,23 @@ describe("SelectorDeTema", () => {
     expect(screen.queryByText(/Se aplica cuando/)).toBeNull();
   });
 
-  it("la muestra de un tema lleva SUS colores; la de XOneCode, los del modo", () => {
+  it("la muestra de un tema lleva SUS colores; la de XOneCode, los suyos, sea cual sea el tema puesto", () => {
     const { grupo } = montar();
     const dracula = within(grupo).getByRole("button", { name: "Dracula" }).querySelector("[data-muestra]") as HTMLElement;
     expect(dracula.style.getPropertyValue("--muestra-fondo")).toBe("#282a36");
     expect(dracula.style.getPropertyValue("--muestra-acento")).toBe("#bd93f9");
     const xone = within(grupo).getByRole("button", { name: "XOneCode" }).querySelector("[data-muestra]") as HTMLElement;
-    expect(xone.style.getPropertyValue("--muestra-fondo")).toBe("");
+    expect(xone.style.getPropertyValue("--muestra-fondo")).toBe("#151517");
+  });
+
+  it("la muestra de XOneCode claro es blanca", () => {
+    const { grupo } = montar({ modo: "claro", elegido: "xonecode-claro" });
+    const xone = within(grupo).getByRole("button", { name: "XOneCode" }).querySelector("[data-muestra]") as HTMLElement;
+    expect(xone.style.getPropertyValue("--muestra-fondo")).toBe("#ffffff");
+  });
+
+  it("el rótulo del grupo se VE, para saber cuál fila es cuál", () => {
+    montar();
+    expect(screen.getByText("Tema oscuro")).toBeTruthy();
   });
 });

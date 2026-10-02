@@ -8,7 +8,8 @@ import estilos from "./SelectorDeTema.module.css";
  * Tres reglas:
  * - **La muestra pinta con los colores del TEMA**, por variables en `style` (`--muestra-*`): el
  *   `.module.css` no lleva ningún literal (`Barra.test.tsx`). XOneCode no tiene semillas
- *   (`temas.ts`) y su muestra usa los alias del modo, que es lo que XOneCode es.
+ *   y trae su `muestra` (`temas.ts`): con los alias del modo, dentro de otro tema saldría con
+ *   los colores de ESE tema.
  * - **`aria-pressed` en todos**, como `SelectorDeModo`: son botones de un conmutador. Pulsar el
  *   ya elegido no hace nada.
  * - **Si el modo no está en vigor, se DICE**: elegir el tema oscuro estando en claro no cambia
@@ -29,13 +30,15 @@ export function SelectorDeTema({
 }) {
   return (
     <div className={estilos.fila}>
+      <span className={estilos.rotulo}>{rotulo}</span>
       <div role="group" aria-label={rotulo} className={estilos.opciones}>
         {temasDe(modo).map((tema) => {
           const s = tema.semillas;
+          const m = s !== undefined ? { fondo: s.fondo, texto: s.texto2, acento: s.acento } : tema.muestra;
           const colores =
-            s === undefined
+            m === undefined
               ? undefined
-              : ({ "--muestra-fondo": s.fondo, "--muestra-texto": s.texto2, "--muestra-acento": s.acento } as CSSProperties);
+              : ({ "--muestra-fondo": m.fondo, "--muestra-texto": m.texto, "--muestra-acento": m.acento } as CSSProperties);
           const puesto = tema.id === elegido;
           return (
             <button

@@ -67,6 +67,10 @@ body[data-tema] {
   --xonecode-cian: var(--tema-acento);
   --xonecode-cian-oscuro: color-mix(in srgb, var(--tema-acento) 85%, var(--tema-texto));
   --xonecode-azul: var(--tema-acento);
+  --xonecode-barra: var(--tema-capa1);
+  --xonecode-barra-borde: var(--tema-borde);
+  --xonecode-barra-texto: var(--tema-texto);
+  --xonecode-barra-texto-suave: var(--tema-texto2);
   --xonecode-azul-hondo: color-mix(in srgb, var(--tema-acento) 70%, var(--tema-fondo));
   --xonecode-sobre-azul: var(--tema-sobreAcento);
   --xonecode-sobre-azul-suave: color-mix(in srgb, var(--tema-sobreAcento) 75%, transparent);

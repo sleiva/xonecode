@@ -1,11 +1,17 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css`. Los colores de cada
    muestra llegan por `--muestra-*` en el `style` (de `src/temas.ts`); XOneCode no los trae y
-   cae en los alias del modo, que es lo que XOneCode es. */
+   XOneCode trae los suyos (`muestra`). */
 
 .fila {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.rotulo {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-secondary);
 }
 
 .opciones {

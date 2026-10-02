@@ -28,8 +28,8 @@
  * 0 abajo: se veía empujado hacia el borde inferior en vez de centrado en el alto de la
  * barra. Se iguala al `padding-top` del original para centrarlo. */
 .barraSuperior.barraSuperior {
-  background: var(--xonecode-azul);
-  border-bottom: 1px solid var(--xonecode-borde-azul);
+  background: var(--xonecode-barra);
+  border-bottom: 1px solid var(--xonecode-barra-borde);
   padding-bottom: 12px;
 }
 
@@ -44,8 +44,8 @@
    (así lo monta la hoja original) y el navegador le baja el color por su cuenta. */
 .barraSuperior.barraSuperior button:disabled,
 .barraSuperior.barraSuperior [class*="crumb"] {
-  color: var(--xonecode-sobre-azul);
-  -webkit-text-fill-color: var(--xonecode-sobre-azul);
+  color: var(--xonecode-barra-texto);
+  -webkit-text-fill-color: var(--xonecode-barra-texto);
 }
 
 /* Aquí había tres reglas para pintar las pestañas sobre el azul. Se fueron con ellas al
@@ -55,7 +55,7 @@
 
 /* La pastilla de modo, que sobre azul necesita su propio fondo: el suyo es de paleta clara. */
 .barraSuperior.barraSuperior [class*="label"] {
-  color: var(--xonecode-sobre-azul-suave);
+  color: var(--xonecode-barra-texto-suave);
 }
 
 .estado {
@@ -96,13 +96,13 @@
   border: none;
   border-radius: 6px;
   background: none;
-  color: var(--xonecode-sobre-azul-suave);
+  color: var(--xonecode-barra-texto-suave);
   font: inherit;
   cursor: pointer;
 }
 
 .plegar:hover {
-  color: var(--xonecode-sobre-azul);
+  color: var(--xonecode-barra-texto);
 }
 
 /* El conmutador de apariencia: sistema / claro / oscuro, la pista hundida de
@@ -117,7 +117,7 @@
   gap: 2px;
   padding: 2px;
   margin-right: 10px;
-  border: 1px solid var(--xonecode-borde-azul);
+  border: 1px solid var(--xonecode-barra-borde);
   border-radius: 8px;
 }
 
@@ -131,21 +131,21 @@
   justify-content: center;
   width: 24px;
   height: 22px;
-  border: 1px solid var(--xonecode-azul);
+  border: 1px solid var(--xonecode-barra);
   border-radius: 6px;
   background: none;
-  color: var(--xonecode-sobre-azul-suave);
+  color: var(--xonecode-barra-texto-suave);
   cursor: pointer;
 }
 
 .temaBoton:hover:not([data-puesto]) {
-  color: var(--xonecode-sobre-azul);
+  color: var(--xonecode-barra-texto);
 }
 
 .temaBoton[data-puesto] {
-  border-color: var(--xonecode-sobre-azul-suave);
-  background: var(--xonecode-borde-azul);
-  color: var(--xonecode-sobre-azul);
+  border-color: var(--xonecode-barra-texto-suave);
+  background: var(--xonecode-barra-borde);
+  color: var(--xonecode-barra-texto);
 }
 
 /* Ajustes, con el mismo trazo que el botón de plegar: ambos son de la aplicación. */
@@ -157,22 +157,22 @@
   border: none;
   border-radius: 6px;
   background: none;
-  color: var(--xonecode-sobre-azul-suave);
+  color: var(--xonecode-barra-texto-suave);
   cursor: pointer;
 }
 
 .ajustes:hover {
-  color: var(--xonecode-sobre-azul);
+  color: var(--xonecode-barra-texto);
 }
 
 
 /* La marca, en la barra superior desde que cruza las dos columnas. En blanco de marca y no
    en un `label-*` de la paleta clara: esos tonos están pensados para fondo claro y sobre el
    azul profundo no se leen — es la misma medición que documenta `estilos/marca.css` para
-   `--xonecode-sobre-azul`. */
+   `--xonecode-barra-texto`. */
 .marca {
   flex: none;
-  color: var(--xonecode-sobre-azul);
+  color: var(--xonecode-barra-texto);
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -183,7 +183,7 @@
    y dentro de él, esto». */
 .separador {
   flex: none;
-  color: var(--xonecode-sobre-azul-suave);
+  color: var(--xonecode-barra-texto-suave);
   font-size: 14px;
 }
 
@@ -218,14 +218,14 @@
    Medido en pantalla: el icono lleva dos tintas —el cian del anillo y el azul marino de la
    flecha y del glifo—, y ese azul marino sobre la barra azul profunda desaparecía: la marca
    se quedaba en un anillo cian partido, o sea sin la mitad de su forma. La placa es el
-   mismo blanco sobre el que está dibujado (`--xonecode-sobre-azul`, el token que ya define
-   qué se lee encima de esta barra), así que el arte se ve tal cual se diseñó en vez de
+   mismo blanco sobre el que está dibujado (`--xonecode-barra-placa`, blanco siempre: el arte está
+   dibujado para ese fondo y un tema no lo cambia), así que el arte se ve tal cual se diseñó en vez de
    recolorearlo con un filtro. No se encoge: una marca a medias no es una marca. */
 .simbolo {
   flex-shrink: 0;
   margin-right: 8px;
   padding: 2px;
   border-radius: 6px;
-  background: var(--xonecode-sobre-azul);
+  background: var(--xonecode-barra-placa);
   vertical-align: middle;
 }

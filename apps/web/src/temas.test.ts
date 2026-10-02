@@ -7,6 +7,10 @@ describe("el catálogo de temas", () => {
     expect(temasDe("claro").map((t) => t.id)).toEqual(["xonecode-claro", "github-claro", "one-claro", "ayu-claro"]);
   });
 
+  it("los dos XOneCode traen `muestra` y los demás no", () => {
+    expect(TEMAS.filter((t) => t.muestra !== undefined).map((t) => t.id)).toEqual(["xonecode-oscuro", "xonecode-claro"]);
+  });
+
   it("los ids son únicos", () => {
     expect(new Set(TEMAS.map((t) => t.id)).size).toBe(TEMAS.length);
   });
