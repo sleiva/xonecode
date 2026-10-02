@@ -19,6 +19,21 @@
   padding: 24px 24px 8px;
 }
 
+/* Icono de la app + nombre, en fila. Solo existe con icono: sin él el `h1` va suelto como siempre. */
+.titular {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.iconoDeApp {
+  flex: none;
+  display: block;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
 .nombre {
   margin: 0;
   font-size: 24px;

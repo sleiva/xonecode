@@ -1,3 +1,6 @@
+import { useState, type ReactNode } from "react";
+import { urlDelIcono } from "../imagenesDelDocumento.js";
+
 /**
  * Los glifos de una fila de proyecto que la librería de deepseek no trae: «compartido» (varias
  * personas) y la chincheta de fijar. Allí solo hay `IconUserOutline16`, que es UNA persona y
@@ -74,5 +77,44 @@ export function IconoChincheta({ fijado, size = 14 }: { fijado: boolean; size?: 
       <path d="M12 17v5" />
       <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
     </Trazo>
+  );
+}
+
+/**
+ * El ICONO DE LA APP de un proyecto bajado (`icon=` de su `app.ini`), servido por el host por su ID
+ * (`urlDelIcono`): el cliente nunca nombra un fichero. Un `<img>` y nunca marcado inyectado, así
+ * que un `.svg` no ejecuta nada (y el servidor lo manda además con `CSP: sandbox`).
+ *
+ * Solo se monta cuando el alta dijo `icono: true`, pero entre el anuncio y la petición el fichero
+ * puede desaparecer: si la imagen no carga se pinta el `respaldo` (la carpeta en la barra; nada en
+ * el panel), en vez del icono roto del navegador. Decorativo (`alt=""`, `aria-hidden`): el nombre
+ * accesible lo lleva el control de al lado.
+ */
+export function IconoDeApp({
+  id,
+  lado,
+  respaldo = null,
+  className,
+}: {
+  id: string;
+  lado: number;
+  respaldo?: ReactNode;
+  className?: string;
+}) {
+  // El fallo se recuerda POR ID: si la fila pasa a ser de otro proyecto, ese se vuelve a intentar.
+  const [falloDe, setFalloDe] = useState<string | undefined>(undefined);
+  if (falloDe === id) return <>{respaldo}</>;
+  return (
+    <img
+      {...(className === undefined ? {} : { className })}
+      src={urlDelIcono(id)}
+      alt=""
+      aria-hidden="true"
+      width={lado}
+      height={lado}
+      draggable={false}
+      data-icono-de-app=""
+      onError={() => setFalloDe(id)}
+    />
   );
 }

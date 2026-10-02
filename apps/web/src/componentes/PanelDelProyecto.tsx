@@ -15,6 +15,7 @@ import type {
   VinculoDelCable,
 } from "../tipos.js";
 import { IconoDeConector } from "./IconoDeConector.js";
+import { IconoDeApp } from "./IconosDeProyecto.js";
 import { IconoDeActualizar, IconoDeEnlaceExterno } from "./IconosDelVisor.js";
 import { useEsperaDeRefresco } from "../esperaDeRefresco.js";
 import giro from "./GiroDeCarga.module.css";
@@ -282,7 +283,19 @@ export function PanelDelProyecto({
   return (
     <section className={estilos.panel} aria-label={`Proyecto ${nombre}`}>
       <header className={estilos.cabecera}>
-        <h1 className={estilos.nombre}>{nombre}</h1>
+        {/*
+          El icono de la app junto al nombre, SOLO si la copia lo tiene (`copia.proyecto.icono`, la
+          misma fila del alta que la barra). Sin él la cabecera es exactamente la de siempre: aquí
+          no hay carpeta de respaldo, y si la imagen no carga tampoco se pinta nada.
+        */}
+        {copia?.proyecto.icono === true ? (
+          <div className={estilos.titular}>
+            <IconoDeApp id={copia.proyecto.id} lado={32} className={estilos.iconoDeApp} />
+            <h1 className={estilos.nombre}>{nombre}</h1>
+          </div>
+        ) : (
+          <h1 className={estilos.nombre}>{nombre}</h1>
+        )}
         {entorno === undefined && rama === undefined ? null : (
           <p className={estilos.meta}>
             {entorno === undefined ? null : <span>{`Entorno: ${entorno}`}</span>}

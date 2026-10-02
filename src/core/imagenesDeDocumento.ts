@@ -19,6 +19,14 @@
  */
 export const RUTA_IMAGEN_DEL_PROYECTO = "/imagen-del-proyecto";
 
+/**
+ * La ruta HTTP que sirve el ICONO de la app de un proyecto bajado (`?id=<id del proyecto>`), para la
+ * barra y la cabecera de su panel. Lleva el ID y no una ruta: qué fichero es lo decide el servidor
+ * leyendo `app.ini` (`agent/grafo/arbolDeProyecto.ts#iconoDelProyecto`). Copiada en el cliente
+ * (`apps/web/src/imagenesDelDocumento.ts`).
+ */
+export const RUTA_ICONO_DEL_PROYECTO = "/icono-del-proyecto";
+
 /** Un esquema de URL (`http:`, `data:`, `file:`…): eso no es una ruta del proyecto. */
 const CON_ESQUEMA = /^[a-z][a-z0-9+.-]*:/i;
 

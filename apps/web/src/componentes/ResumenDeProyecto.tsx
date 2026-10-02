@@ -26,6 +26,8 @@ export interface ProyectoDelResumen {
   local?: boolean;
   /** Ausente = el servidor no lo dijo, que NO es «propio». Solo `true` pinta algo. */
   compartido?: boolean;
+  /** La copia tiene icono de app: el panel lo pinta junto al nombre. Ausente = no se pinta nada. */
+  icono?: true;
   sesiones?: readonly SesionDelResumen[];
 }
 

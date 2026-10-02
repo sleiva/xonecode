@@ -970,6 +970,8 @@ export type MensajeAlCliente =
         local?: boolean;
         /** La rama de la que se bajó la copia local. Ausente = sin copia, o no consta. */
         rama?: string;
+        /** La copia tiene icono de app, servido por `RUTA_ICONO_DEL_PROYECTO`. Ausente = carpeta. */
+        icono?: true;
         /** Alguna sesión de este proyecto trabaja AHORA. No se deriva de las filas: una
          *  sesión nueva no tiene fila hasta su primer volcado. Ver `transporte.ts`. */
         trabajando?: true;

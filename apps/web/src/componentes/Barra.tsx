@@ -15,7 +15,7 @@ import filas from "../../estilos/Rows.module.css";
 import ajustes from "../../estilos/SettingsRoot.module.css";
 import { MenuDeSesion } from "./MenuDeSesion.js";
 import { Desplegable } from "./Desplegable.js";
-import { IconoChincheta, IconoCompartido } from "./IconosDeProyecto.js";
+import { IconoChincheta, IconoCompartido, IconoDeApp } from "./IconosDeProyecto.js";
 import { IconoDeEntorno } from "./IconoDeEntorno.js";
 import { selloDeFecha } from "../selloDeFecha.js";
 import estilos from "./Barra.module.css";
@@ -161,6 +161,7 @@ function FilaDeProyecto({
    * sigue abierta detrás, pero marcarla afirmaría que es lo que tienes delante.
    */
   const esLaMarcada = p.id === (proyectoEnResumen ?? proyectoActivo);
+  const carpeta = p.id === desplegado ? <IconFolderOpen16 size={16} /> : <IconFolderClose16 size={16} />;
   const sesionMarcada = proyectoEnResumen === undefined ? sesionActiva : undefined;
   return (
     <div className={navegador.groupSection}>
@@ -212,6 +213,12 @@ function FilaDeProyecto({
           dice el estado SIN posar el ratón: el chevron solo aparece en
           `:hover` y en `:focus-visible`, y con el ratón lejos la única
           señal de la fila sería el hueco.
+
+          **Con icono de app, el icono ocupa el sitio de la carpeta** (`p.icono`): es lo que
+          distingue un proyecto de otro de un vistazo. Sigue la misma afordancia —se va al posar
+          el ratón y deja el triángulo—, y lo que se pierde es el cambio cerrada/abierta sin ratón:
+          el estado lo siguen diciendo `aria-expanded` y el triángulo. Si la imagen no carga, vuelve
+          la carpeta.
         */}
         <button
           type="button"
@@ -221,7 +228,11 @@ function FilaDeProyecto({
           onClick={alPlegar}
         >
           <span className={clsx(filas.slot, filas.folder, estilos.glifoDeCarpeta)} aria-hidden="true">
-            {p.id === desplegado ? <IconFolderOpen16 size={16} /> : <IconFolderClose16 size={16} />}
+            {p.icono === true ? (
+              <IconoDeApp id={p.id} lado={16} className={estilos.iconoDeApp} respaldo={carpeta} />
+            ) : (
+              carpeta
+            )}
           </span>
           <span className={clsx(filas.slot, filas.chevron, estilos.glifoDeChevron)} aria-hidden="true">
             <IconTriangleRightFill14
@@ -478,6 +489,9 @@ export interface Proyecto {
   /** La rama de la que se bajó la copia local, para pintarla debajo del nombre. Ausente = sin
    *  copia, o no consta: entonces la fila se queda en una línea. */
   rama?: string;
+  /** La copia local tiene icono de app (`app.ini`): se pinta en el sitio de la carpeta. Ausente =
+   *  sin copia o sin icono, y entonces la carpeta de siempre. */
+  icono?: true;
   /**
    * Alguna sesión de este proyecto tiene un turno EN MARCHA. No se deduce de `sesiones`: una
    * sesión nueva no tiene fila en el índice hasta que vuelca su primer acto, así que el caso

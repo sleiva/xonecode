@@ -5,6 +5,7 @@ import { ficherosDelProyecto } from "../turno/ficherosDelProyecto.js";
 import { puedeLeerRuta } from "./perfiles.js";
 import { esVistaAplanada } from "./proyecto.js";
 import { conImagenesIncrustadas, enlacesDeImagen, imagenEnProyecto, RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
+import { candidatosDeIcono } from "../../core/descriptoresDeApp.js";
 
 /**
  * El proyecto tal como lo enseña la pestaña Ficheros de la consola web: el árbol y el
@@ -177,6 +178,36 @@ export async function motivoParaNoEnsenar(raiz: string, ruta: string): Promise<s
   const relReal = relative(raizReal, real).split(sep).join("/");
   if (!puedeLeerRuta(`/${relReal}`)) return "esa ruta no se enseña";
   if (relReal.endsWith(".xml") && existsSync(`${real.slice(0, -4)}.xne`)) return MOTIVO_APLANADA;
+  return undefined;
+}
+
+/**
+ * La ruta RELATIVA del icono de la app de un proyecto bajado, o `undefined` si no tiene uno que se
+ * pueda enseñar.
+ *
+ * El nombre sale de `app.ini` (`core/descriptoresDeApp.ts#candidatosDeIcono`) y cada candidato pasa
+ * la MISMA barrera que la pestaña Ficheros (`motivoParaNoEnsenar`: texto y `realpath`), además de
+ * ser una imagen que sabemos pintar, un fichero de verdad y caber en `TOPE_DE_IMAGEN`. Un
+ * `icon=../.env` o un `icon.png` enlazado a un fichero denegado se quedan en «sin icono», que en la
+ * barra es la carpeta de siempre. Nunca lanza: un icono es decoración y no puede tumbar un anuncio.
+ */
+export async function iconoDelProyecto(raiz: string): Promise<string | undefined> {
+  try {
+    const ini = await readFile(resolve(raiz, "app.ini"), "utf-8");
+    for (const candidato of candidatosDeIcono(ini)) {
+      if (mimeDeImagen(candidato) === undefined) continue;
+      const motivo = motivoDeRutaInaceptable(candidato);
+      if (motivo !== undefined) continue;
+      const enDisco = resolve(raiz, candidato.split(/[\\/]/).join("/"));
+      if (!existsSync(enDisco)) continue;
+      const datos = await stat(enDisco);
+      if (!datos.isFile() || datos.size > TOPE_DE_IMAGEN) continue;
+      if ((await motivoParaNoEnsenar(raiz, candidato)) !== undefined) continue;
+      return candidato;
+    }
+  } catch {
+    // Sin `app.ini`, o ilegible: sin icono.
+  }
   return undefined;
 }
 

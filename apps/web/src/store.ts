@@ -470,6 +470,8 @@ export interface EstadoDelCliente {
       local?: boolean;
       /** La rama de la que se bajó la copia local. Ausente = sin copia, o no consta. */
       rama?: string;
+      /** La copia tiene icono de app (`RUTA_ICONO_DEL_PROYECTO`). Ausente = carpeta en la barra. */
+      icono?: true;
       /** Alguna sesión de este proyecto trabaja AHORA. Ausente = no consta. */
       trabajando?: true;
       /** Compartido CONTIGO. Ausente = el servidor no lo dijo, que no es «es tuyo». */
@@ -2117,6 +2119,8 @@ export function crearStoreDelCliente(): {
               // Nombrada aquí o no llega: esto es lista BLANCA, y sin ella la barra no la
               // pintaría nunca.
               ...((r) => (typeof r === "string" && r !== "" ? { rama: r } : {}))((p as { rama?: unknown }).rama),
+              // El icono, nombrado aquí o no llega (lista BLANCA), y solo un `true` de verdad.
+              ...((p as { icono?: unknown }).icono === true ? { icono: true as const } : {}),
               // La misma regla del booleano de verdad: una cadena colada aquí dejaría el
               // proyecto «trabajando» para siempre, y con él las sesiones sin poder abrirse.
               ...((p as { trabajando?: unknown }).trabajando === true ? { trabajando: true as const } : {}),

@@ -46,8 +46,8 @@ import { MS_DE_PREPARACION,
   FICHEROS_DEL_AVISO,
 } from "./arranque.js";
 import { ErrorDelAumentador } from "../../agent/tareas/aumentador.js";
-import { leerFicheroDeProyecto, motivoDeRutaInaceptable } from "../../agent/grafo/arbolDeProyecto.js";
-import { RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
+import { iconoDelProyecto, leerFicheroDeProyecto, motivoDeRutaInaceptable } from "../../agent/grafo/arbolDeProyecto.js";
+import { RUTA_ICONO_DEL_PROYECTO, RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
 import { CLAVE_DE_SELLO, cambiosDeSesion, fotoDeApertura } from "../../agent/sesiones/sesionGit.js";
 import type { PeticionDeTarea } from "../../core/ports.js";
 import { crearVestibulo, type Vestibulo } from "./vestibulo.js";
@@ -223,6 +223,8 @@ describe("montarRutas — el cable, por fin conectado", () => {
       `GET ${RUTA_IMAGEN_DEL_PROYECTO}`,
       // Y la séptima, el paquete de la pestaña Soporte: un zip, escrito en streaming.
       `GET ${RUTA_SOPORTE}`,
+      // Y la octava, el icono de la app de un proyecto bajado, para la barra y su panel.
+      `GET ${RUTA_ICONO_DEL_PROYECTO}`,
     ].sort());
   });
 
@@ -10213,6 +10215,146 @@ describe("GET /imagen-del-proyecto", () => {
     expect(String(trampa.cuerpo)).not.toContain("secreta");
     expect((await pedir(ruta, `${RUTA_IMAGEN_DEL_PROYECTO}?ruta=doc%2Fimg%2Fno.png`)).estado).toBe(404);
     expect((await pedir(ruta, `${RUTA_IMAGEN_DEL_PROYECTO}?ruta=..%2F..%2Ffuera.png`)).estado).toBe(403);
+    await limpiar();
+  });
+});
+
+/**
+ * El ICONO de la app de cada proyecto bajado: el alta dice SI lo hay (un booleano, nunca la ruta) y
+ * `RUTA_ICONO_DEL_PROYECTO` lo sirve por el ID, decidiendo el fichero con `app.ini` y la barrera de
+ * Ficheros. Con el disco y los lectores de VERDAD: es la composición de producción la que se prueba.
+ */
+describe("el icono del proyecto", () => {
+  const PNG = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
+
+  async function pedir(manejador: ManejadorRuta, url: string) {
+    const peticion = { method: "GET", url, headers: {} } as unknown as IncomingMessage;
+    let estado = 0;
+    const cabeceras: Record<string, string | number> = {};
+    let cuerpo: Buffer | string | undefined;
+    const respuesta = {
+      writeHead: (codigo: number, extra?: Record<string, string | number>) => ((estado = codigo), Object.assign(cabeceras, extra ?? {}), respuesta),
+      setHeader: (clave: string, valor: string | number) => ((cabeceras[clave] = valor), respuesta),
+      end: (trozo?: Buffer | string) => ((cuerpo = trozo), respuesta),
+    } as unknown as ServerResponse;
+    await manejador(peticion, respuesta);
+    return { estado, cabeceras, cuerpo };
+  }
+
+  /** Una copia de «Tienda» con lo que `preparar` deje en su raíz, y el cable conectado. */
+  const abrir = async (preparar: (raiz: string) => void, conCopia = true) => {
+    const base = mkdtempSync(join(tmpdir(), "xonecode-icono-"));
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
+    const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    if (conCopia) {
+      writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
+    }
+    preparar(raiz);
+    montarRutas(servidor, vestibulo, { leerFichero: leerFicheroDeProyecto, iconoDelProyecto });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    // Buscar el icono toca el disco de verdad, así que un solo `asentar` no basta: se espera al
+    // alta que ya trae el listado.
+    const conListado = (): boolean =>
+      (ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }> | undefined)?.proyectos.some((p) => p.id === "p1") === true;
+    for (let i = 0; i < 200 && !conListado(); i++) await new Promise((r) => setTimeout(r, 5));
+    return {
+      alta: () => ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>,
+      ruta: servidor.rutas.get(`GET ${RUTA_ICONO_DEL_PROYECTO}`)!,
+      limpiar: async () => {
+        await vestibulo.cerrar();
+        rmSync(base, { recursive: true, force: true });
+      },
+    };
+  };
+
+  it("un proyecto real (`icon=icon.png` en la raíz): el alta lo marca y la ruta sirve sus bytes", async () => {
+    const { alta, ruta, limpiar } = await abrir((raiz) => {
+      writeFileSync(join(raiz, "app.ini"), "name=Tienda\r\nicon=icon.png\r\nIconFolder=icons\r\n");
+      writeFileSync(join(raiz, "icon.png"), PNG);
+    });
+    const fila = alta().proyectos.find((p) => p.id === "p1");
+    expect(fila?.local).toBe(true);
+    expect(fila?.icono).toBe(true);
+    // Ninguna ruta viaja: solo el booleano.
+    expect(JSON.stringify(fila)).not.toContain("icon.png");
+    const r = await pedir(ruta, `${RUTA_ICONO_DEL_PROYECTO}?id=p1`);
+    expect(r.estado).toBe(200);
+    expect(Buffer.from(r.cuerpo as Buffer)).toEqual(PNG);
+    expect(r.cabeceras).toMatchObject({
+      "Content-Type": "image/png",
+      "Content-Security-Policy": "sandbox",
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "no-store",
+    });
+    await limpiar();
+  });
+
+  it("el del esqueleto (`Icon=` dentro de `icons/`) también vale", async () => {
+    const { alta, ruta, limpiar } = await abrir((raiz) => {
+      writeFileSync(join(raiz, "app.ini"), "Name=Tienda\nIcon=app_icon.png\nIconFolder=icons\n");
+      mkdirSync(join(raiz, "icons"));
+      writeFileSync(join(raiz, "icons", "app_icon.png"), PNG);
+    });
+    expect(alta().proyectos[0]?.icono).toBe(true);
+    expect((await pedir(ruta, `${RUTA_ICONO_DEL_PROYECTO}?id=p1`)).estado).toBe(200);
+    await limpiar();
+  });
+
+  it("sin icono declarado, o declarado y sin fichero: ni marca ni bytes", async () => {
+    const sinDeclarar = await abrir((raiz) => writeFileSync(join(raiz, "app.ini"), "name=Tienda\n"));
+    expect(sinDeclarar.alta().proyectos[0]?.icono).toBeUndefined();
+    expect((await pedir(sinDeclarar.ruta, `${RUTA_ICONO_DEL_PROYECTO}?id=p1`)).estado).toBe(404);
+    await sinDeclarar.limpiar();
+
+    const sinFichero = await abrir((raiz) => writeFileSync(join(raiz, "app.ini"), "icon=icon.png\n"));
+    expect(sinFichero.alta().proyectos[0]?.icono).toBeUndefined();
+    expect((await pedir(sinFichero.ruta, `${RUTA_ICONO_DEL_PROYECTO}?id=p1`)).estado).toBe(404);
+    await sinFichero.limpiar();
+  });
+
+  it("sin copia bajada no hay icono, aunque la carpeta tenga uno", async () => {
+    const { alta, ruta, limpiar } = await abrir((raiz) => {
+      writeFileSync(join(raiz, "app.ini"), "icon=icon.png\n");
+      writeFileSync(join(raiz, "icon.png"), PNG);
+    }, false);
+    expect(alta().proyectos[0]?.icono).toBeUndefined();
+    expect((await pedir(ruta, `${RUTA_ICONO_DEL_PROYECTO}?id=p1`)).estado).toBe(404);
+    await limpiar();
+  });
+
+  it("lo que la barrera de Ficheros rechaza no se sirve: `icon=` hacia fuera, o un enlace a `.env`", async () => {
+    const fuera = await abrir((raiz) => {
+      writeFileSync(join(raiz, "app.ini"), "icon=../../fuera.png\nIconFolder=..\n");
+      writeFileSync(join(raiz, "..", "..", "fuera.png"), PNG);
+    });
+    expect(fuera.alta().proyectos[0]?.icono).toBeUndefined();
+    expect((await pedir(fuera.ruta, `${RUTA_ICONO_DEL_PROYECTO}?id=p1`)).estado).toBe(404);
+    await fuera.limpiar();
+
+    const enlace = await abrir((raiz) => {
+      writeFileSync(join(raiz, ".env"), "CLAVE=secreta");
+      writeFileSync(join(raiz, "app.ini"), "icon=trampa.png\n");
+      symlinkSync(join(raiz, ".env"), join(raiz, "trampa.png"));
+    });
+    expect(enlace.alta().proyectos[0]?.icono).toBeUndefined();
+    const r = await pedir(enlace.ruta, `${RUTA_ICONO_DEL_PROYECTO}?id=p1`);
+    expect(r.estado).toBe(404);
+    expect(String(r.cuerpo)).not.toContain("secreta");
+    await enlace.limpiar();
+  });
+
+  it("solo un ID del listado del servidor: uno desconocido o ausente no resuelve nada", async () => {
+    const { ruta, limpiar } = await abrir((raiz) => {
+      writeFileSync(join(raiz, "app.ini"), "icon=icon.png\n");
+      writeFileSync(join(raiz, "icon.png"), PNG);
+    });
+    expect((await pedir(ruta, `${RUTA_ICONO_DEL_PROYECTO}?id=..%2F..%2Fotro`)).estado).toBe(404);
+    expect((await pedir(ruta, `${RUTA_ICONO_DEL_PROYECTO}?id=p2`)).estado).toBe(404);
+    expect((await pedir(ruta, RUTA_ICONO_DEL_PROYECTO)).estado).toBe(400);
     await limpiar();
   });
 });

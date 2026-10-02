@@ -912,6 +912,12 @@ export type MensajeAlCliente =
         /** La rama de la que se bajó la copia local. Ausente = sin copia, o no consta. */
         rama?: string;
         /**
+         * La copia local tiene un icono de app que se puede enseñar (`app.ini`), servido por
+         * `RUTA_ICONO_DEL_PROYECTO`. Un booleano y no la ruta: ninguna ruta sale del host.
+         * Ausente = sin copia, sin icono, o no consta; la barra pinta entonces la carpeta.
+         */
+        icono?: true;
+        /**
          * Alguna sesión de este proyecto tiene un turno EN MARCHA ahora mismo.
          *
          * No se DERIVA de `sesiones[].trabajando`, y ahí está el motivo de que exista: una
