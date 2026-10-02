@@ -19,6 +19,8 @@ function montar(enviar: Mock<(m: unknown) => Promise<unknown>> = vi.fn(() => Pro
   const vista = renderHook((e: Entrada) => usarEdicion({ enviar, ...e }), { initialProps: inicial });
   return { enviar, vista, inicial };
 }
+const idMandado = (enviar: Mock<(m: unknown) => Promise<unknown>>): string =>
+  (mandados(enviar, "guardarFichero").at(-1) as unknown as { id: string }).id;
 const mandados = (enviar: Mock<(m: unknown) => Promise<unknown>>, clase: string) =>
   enviar.mock.calls.map(([m]) => m as { clase: string }).filter((m) => m.clase === clase);
 
@@ -49,7 +51,7 @@ describe("usarEdicion", () => {
     expect(mandados(enviar, "guardarFichero")).toEqual([]);
     act(() => vista.result.current.cambiar("uno\nDOS\n"));
     act(() => vista.result.current.guardar());
-    expect(mandados(enviar, "guardarFichero")).toEqual([{ clase: "guardarFichero", ruta: "a.xne", texto: "uno\r\nDOS\r\n", huella: "h1" }]);
+    expect(mandados(enviar, "guardarFichero")).toEqual([{ clase: "guardarFichero", ruta: "a.xne", texto: "uno\r\nDOS\r\n", huella: "h1", id: expect.any(String) }]);
     expect(vista.result.current.actual?.guardando).toBe(true);
   });
 
@@ -67,8 +69,9 @@ describe("usarEdicion", () => {
     act(() => vista.result.current.abrir(FICHERO));
     act(() => vista.result.current.cambiar("uno\nDOS\n"));
     act(() => vista.result.current.guardar());
+    const mio = idMandado(enviar);
     enviar.mockClear();
-    vista.rerender({ ...inicial, ultimoGuardado: { ruta: "a.xne", huella: "h2", desde: "h1", secuencia: 1 } });
+    vista.rerender({ ...inicial, ultimoGuardado: { ruta: "a.xne", huella: "h2", id: mio, secuencia: 1 } });
     expect(vista.result.current.actual).toMatchObject({ original: "uno\nDOS\n", huella: "h2", sucio: false, guardando: false });
     expect(enviar).toHaveBeenCalledWith({ clase: "fichero", ruta: "a.xne" });
     expect(enviar).toHaveBeenCalledWith({ clase: "revision" });
@@ -76,11 +79,11 @@ describe("usarEdicion", () => {
   });
 
   it("la respuesta con error lo enseña y deja guardar otra vez", () => {
-    const { vista, inicial } = montar();
+    const { enviar, vista, inicial } = montar();
     act(() => vista.result.current.abrir(FICHERO));
     act(() => vista.result.current.cambiar("uno\nDOS\n"));
     act(() => vista.result.current.guardar());
-    vista.rerender({ ...inicial, ultimoGuardado: { ruta: "a.xne", desde: "h1", error: "espera a que termine el turno: el agente está trabajando en este proyecto", secuencia: 1 } });
+    vista.rerender({ ...inicial, ultimoGuardado: { ruta: "a.xne", id: idMandado(enviar), error: "espera a que termine el turno: el agente está trabajando en este proyecto", secuencia: 1 } });
     expect(vista.result.current.actual).toMatchObject({ guardando: false, sucio: true, error: "espera a que termine el turno: el agente está trabajando en este proyecto" });
   });
 
@@ -93,20 +96,33 @@ describe("usarEdicion", () => {
     expect(vista.result.current.actual?.huella).toBe("h1");
   });
 
-  it("la respuesta de OTRA pestaña mientras guardo no es la mía: no adopto su huella, y mi rechazo llega después", () => {
+  it("la respuesta de OTRA pestaña mientras guardo no es la mía, aunque las dos partan de h1", () => {
     const { enviar, vista, inicial } = montar();
     act(() => vista.result.current.abrir(FICHERO));
     act(() => vista.result.current.cambiar("uno\nMIO\n"));
     act(() => vista.result.current.guardar());
+    const mio = idMandado(enviar);
     enviar.mockClear();
-    // La otra pestaña guardó desde h1 y el servidor la aceptó: yo también partía de h1.
-    vista.rerender({ ...inicial, ultimoGuardado: { ruta: "a.xne", huella: "h2", desde: "h1x", secuencia: 1 } });
+    // La otra pestaña también partía de h1, y el servidor la aceptó primero.
+    vista.rerender({ ...inicial, ultimoGuardado: { ruta: "a.xne", id: "otro", huella: "h2", secuencia: 1 } });
     expect(vista.result.current.actual).toMatchObject({ huella: "h1", sucio: true, guardando: true, original: "uno\ndos\n" });
     expect(enviar).toHaveBeenCalledWith({ clase: "fichero", ruta: "a.xne" });
-    // Y ahora mi rechazo, que sí lleva la huella que mandé.
-    vista.rerender({ ...inicial, ultimoGuardado: { ruta: "a.xne", desde: "h1", error: "el fichero cambió desde que lo abriste: recárgalo antes de guardar", secuencia: 2 } });
-    expect(vista.result.current.actual).toMatchObject({ guardando: false, sucio: true, error: "el fichero cambió desde que lo abriste: recárgalo antes de guardar" });
+    // Y ahora MI rechazo, que lleva el id que mandé.
+    vista.rerender({ ...inicial, ultimoGuardado: { ruta: "a.xne", id: mio, error: "el fichero cambió desde que lo abriste: recárgalo antes de guardar", secuencia: 2 } });
+    expect(vista.result.current.actual).toMatchObject({ guardando: false, sucio: true, huella: "h1", error: "el fichero cambió desde que lo abriste: recárgalo antes de guardar" });
     expect(vista.result.current.textoVivo()).toBe("uno\nMIO\n");
+  });
+
+  it("cada guardado lleva un id distinto", () => {
+    const { enviar, vista, inicial } = montar();
+    act(() => vista.result.current.abrir(FICHERO));
+    act(() => vista.result.current.cambiar("a\n"));
+    act(() => vista.result.current.guardar());
+    const primero = idMandado(enviar);
+    vista.rerender({ ...inicial, ultimoGuardado: { ruta: "a.xne", id: primero, huella: "h2", secuencia: 1 } });
+    act(() => vista.result.current.cambiar("b\n"));
+    act(() => vista.result.current.guardar());
+    expect(idMandado(enviar)).not.toBe(primero);
   });
 
   it("una versión nueva sin cambios propios se recarga sola", () => {

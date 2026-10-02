@@ -661,7 +661,7 @@ export type MensajeAlCliente =
    * escribió y esa es la nueva; con `error`, no se tocó nada. Va a TODOS los clientes: otra pestaña
    * con el mismo fichero abierto se entera de que el disco cambió.
    */
-  | { clase: "ficheroGuardado"; ruta: string; desde: string; huella?: string; error?: string }
+  | { clase: "ficheroGuardado"; ruta: string; id: string; huella?: string; error?: string }
   /** La base de comparación de un fichero, para las marcas del margen del editor. */
   | ({ clase: "baseDeFichero" } & BaseDelFichero)
   /**
@@ -1672,7 +1672,7 @@ export type MensajeDelCliente =
    * sin tarjeta de aprobación porque lo teclea ella, con las guardas de ruta de leer y negada con
    * un turno o una tarea en marcha en esa raíz. `huella` es la del fichero que se cargó.
    */
-  | { clase: "guardarFichero"; ruta: string; texto: string; huella: string }
+  | { clase: "guardarFichero"; ruta: string; texto: string; huella: string; id: string }
   /** Pedir la base de comparación de un fichero: la foto del inicio de la sesión o el último commit. */
   | { clase: "baseDeFichero"; ruta: string; base: "sesion" | "commit" }
   /**

@@ -39,8 +39,8 @@ export interface EstadoDeEdicion {
 
 export interface UltimoGuardado {
   ruta: string;
-  /** La huella de la que PARTIÓ el guardado al que contesta: así se sabe si es el de esta pestaña. */
-  desde?: string;
+  /** El id del guardado al que contesta (lo puso la pestaña que lo mandó): así se sabe si es el de esta. */
+  id?: string;
   huella?: string;
   error?: string;
   secuencia: number;
@@ -67,6 +67,14 @@ export interface ControlDeEdicion {
   pedirBase: () => void;
   recargar: () => void;
   seguirConLosMios: () => void;
+}
+
+let contador = 0;
+/** Un id por guardado. `randomUUID` solo existe en contextos seguros: sin él, contador + azar. */
+function nuevoId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  contador += 1;
+  return `${Date.now().toString(36)}-${contador}-${Math.random().toString(36).slice(2)}`;
 }
 
 export const DEMASIADO_GRANDE = "el fichero es demasiado grande para guardarlo desde aquí";
@@ -102,8 +110,8 @@ export function usarEdicion({
   const actualRef = useRef<EstadoDeEdicion | undefined>(actual);
   const textoRef = useRef("");
   const enviadoRef = useRef<string | undefined>(undefined);
-  // La huella de la que partió el guardado en vuelo: con ella se reconoce SU respuesta.
-  const huellaMandadaRef = useRef<string | undefined>(undefined);
+  // El id del guardado en vuelo: con él se reconoce SU respuesta entre las de todas las pestañas.
+  const idMandadoRef = useRef<string | undefined>(undefined);
   // La secuencia ya vista AL MONTAR: una respuesta vieja que siga en el store no es para nosotros.
   const guardadoVisto = useRef(ultimoGuardado?.secuencia ?? 0);
 
@@ -168,11 +176,13 @@ export function usarEdicion({
   const guardar = useCallback(() => {
     const a = actualRef.current;
     if (a === undefined || a.guardando || !a.sucio) return;
+    const id = nuevoId();
     const mensaje: MensajeDelCliente = {
       clase: "guardarFichero",
       ruta: a.ruta,
       texto: conFinDeLinea(textoRef.current, a.finDeLinea),
       huella: a.huella,
+      id,
     };
     if (!cabeEnElCable(mensaje)) {
       fijar({ ...a, error: DEMASIADO_GRANDE });
@@ -180,7 +190,7 @@ export function usarEdicion({
     }
     // Lo que se manda, no lo que haya al llegar la respuesta: se puede seguir tecleando mientras.
     enviadoRef.current = textoRef.current;
-    huellaMandadaRef.current = a.huella;
+    idMandadoRef.current = id;
     const { error: _error, ...sinError } = a;
     fijar({ ...sinError, guardando: true });
     enviar(mensaje).then(
@@ -199,10 +209,11 @@ export function usarEdicion({
     guardadoVisto.current = ultimoGuardado.secuencia;
     const a = actualRef.current;
     if (a === undefined || a.ruta !== ultimoGuardado.ruta) return;
-    // La respuesta llega a TODAS las pestañas: es la mía solo si partía de la huella que mandé.
+    // La respuesta llega a TODAS las pestañas: es la mía solo si lleva el id que mandé (la huella no
+    // sirve: dos pestañas que parten de la misma versión mandan la misma).
     // Otra (de otra pestaña, aunque acepte o rechace) es un cambio en disco: se pide el fichero y
     // el flujo de «versión nueva» decide —recarga sola o banda—.
-    if (!a.guardando || ultimoGuardado.desde !== huellaMandadaRef.current) {
+    if (!a.guardando || ultimoGuardado.id !== idMandadoRef.current) {
       void enviar({ clase: "fichero", ruta: a.ruta });
       return;
     }

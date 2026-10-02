@@ -4365,28 +4365,29 @@ export function montarRutas(
    *  - lo demás —guardas de ruta, huella, tope— lo decide el puerto y lo DEVUELVE.
    * El `try` es el de `atenderFichero`: un fallo inesperado contesta sin la ruta de la máquina.
    */
-  const atenderGuardarFichero = async (ruta: string, texto: string, huella: string): Promise<void> => {
+  const atenderGuardarFichero = async (ruta: string, texto: string, huella: string, id: string): Promise<void> => {
     const abierto = vestibulo.proyectoAbierto();
     if (abierto === undefined) {
-      emitir({ clase: "ficheroGuardado", ruta, desde: huella, error: "no hay ningún proyecto abierto" });
+      emitir({ clase: "ficheroGuardado", ruta, id, error: "no hay ningún proyecto abierto" });
       return;
     }
     if (opciones.escribirFichero === undefined) {
-      emitir({ clase: "ficheroGuardado", ruta, desde: huella, error: "esta ejecución no puede escribir en el proyecto" });
+      emitir({ clase: "ficheroGuardado", ruta, id, error: "esta ejecución no puede escribir en el proyecto" });
       return;
     }
     const ocupado = vestibulo.motivoParaNoEditar(abierto.raiz);
     if (ocupado !== undefined) {
-      emitir({ clase: "ficheroGuardado", ruta, desde: huella, error: ocupado });
+      emitir({ clase: "ficheroGuardado", ruta, id, error: ocupado });
       return;
     }
     try {
-      // `desde` es la huella con que PARTIÓ este guardado: la respuesta va a todas las pestañas, y cada
-      // una reconoce la suya por ella (dos pestañas que parten de la misma versión no se confunden).
-      emitir({ clase: "ficheroGuardado", ...(await opciones.escribirFichero(abierto.raiz, ruta, texto, huella)), desde: huella });
+      // `id` lo pone la pestaña en CADA guardado y vuelve en la respuesta: esta va a todas las
+      // pestañas, y cada una reconoce la suya por él. La huella no vale —dos pestañas que parten de
+      // la misma versión mandan la misma—.
+      emitir({ clase: "ficheroGuardado", ...(await opciones.escribirFichero(abierto.raiz, ruta, texto, huella)), id });
     } catch (error) {
       informar(`no se pudo guardar «${ruta}» (${codigoDe(error)})`);
-      emitir({ clase: "ficheroGuardado", ruta, desde: huella, error: "no se pudo guardar el fichero" });
+      emitir({ clase: "ficheroGuardado", ruta, id, error: "no se pudo guardar el fichero" });
     }
   };
 
@@ -5886,9 +5887,10 @@ export function montarRutas(
       mensaje.clase === "guardarFichero" &&
       typeof mensaje.ruta === "string" &&
       typeof mensaje.texto === "string" &&
-      typeof mensaje.huella === "string"
+      typeof mensaje.huella === "string" &&
+      typeof mensaje.id === "string"
     ) {
-      void atenderGuardarFichero(mensaje.ruta, mensaje.texto, mensaje.huella).catch(contar);
+      void atenderGuardarFichero(mensaje.ruta, mensaje.texto, mensaje.huella, mensaje.id).catch(contar);
       respuesta.writeHead(204);
       respuesta.end();
       return;

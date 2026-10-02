@@ -2246,21 +2246,32 @@ describe("montarRutas — el cable, por fin conectado", () => {
           return { ruta, huella: "h2" };
         },
       });
-      expect(await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "<a/>", huella: "h1" })).toBe(204);
+      expect(await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "<a/>", huella: "h1", id: "i1" })).toBe(204);
       await asentar();
       expect(pedidos).toEqual([{ raiz: t.vestibulo.proyectoAbierto()!.raiz, ruta: "a.xne", texto: "<a/>", huella: "h1" }]);
-      expect(t.ultimo("ficheroGuardado")).toEqual({ clase: "ficheroGuardado", ruta: "a.xne", huella: "h2", desde: "h1" });
+      expect(t.ultimo("ficheroGuardado")).toEqual({ clase: "ficheroGuardado", ruta: "a.xne", huella: "h2", id: "i1" });
       await t.limpiar();
     });
 
-    it("un rechazo del puerto también devuelve la huella de la que partió el guardado", async () => {
+    it("un guardarFichero sin «id» se rechaza: ni respuesta ni escritura", async () => {
+      const escritos: string[] = [];
+      const t = await abrir({ escribirFichero: async (_raiz, ruta) => { escritos.push(ruta); return { ruta, huella: "h2" }; } });
+      // Como cualquier mensaje mal formado: no casa con ninguna rama y no hace nada.
+      await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "x", huella: "h1" } as unknown as MensajeDelCliente);
+      await asentar();
+      expect(escritos).toEqual([]);
+      expect(t.ultimo("ficheroGuardado")).toBeUndefined();
+      await t.limpiar();
+    });
+
+    it("un rechazo del puerto también devuelve el id del guardado", async () => {
       const t = await abrir({ escribirFichero: async (_raiz, ruta) => ({ ruta, error: "el fichero cambió desde que lo abriste: recárgalo antes de guardar" }) });
-      await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "x", huella: "h1" });
+      await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "x", huella: "h1", id: "i1" });
       await asentar();
       expect(t.ultimo("ficheroGuardado")).toEqual({
         clase: "ficheroGuardado",
         ruta: "a.xne",
-        desde: "h1",
+        id: "i1",
         error: "el fichero cambió desde que lo abriste: recárgalo antes de guardar",
       });
       await t.limpiar();
@@ -2282,12 +2293,12 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const abierta = t.vestibulo.proyectoAbierto()!;
       const turno = abierta.ejecutarTurno("algo", abierta.estadoDeSesion, abierta.consola.consola);
       expect(abierta.turnoEnVuelo).toBe(true);
-      await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "<a/>", huella: "h1" });
+      await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "<a/>", huella: "h1", id: "i1" });
       await asentar();
       expect(t.ultimo("ficheroGuardado")).toEqual({
         clase: "ficheroGuardado",
         ruta: "a.xne",
-        desde: "h1",
+        id: "i1",
         error: "espera a que termine el turno: el agente está trabajando en este proyecto",
       });
       expect(escritos).toEqual([]);
@@ -2298,9 +2309,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
 
     it("sin puerto lo dice; y si el puerto lanza con una ruta, el error no la lleva", async () => {
       const sinPuerto = await abrir({});
-      await enviarMensaje(sinPuerto.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "x", huella: "h" });
+      await enviarMensaje(sinPuerto.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "x", huella: "h", id: "i1" });
       await asentar();
-      expect(sinPuerto.ultimo("ficheroGuardado")).toEqual({ clase: "ficheroGuardado", ruta: "a.xne", desde: "h", error: "esta ejecución no puede escribir en el proyecto" });
+      expect(sinPuerto.ultimo("ficheroGuardado")).toEqual({ clase: "ficheroGuardado", ruta: "a.xne", id: "i1", error: "esta ejecución no puede escribir en el proyecto" });
       await sinPuerto.limpiar();
 
       const dichos: string[] = [];
@@ -2312,9 +2323,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
         },
       });
       raiz = t.raizDeVerdad;
-      await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "x", huella: "h" });
+      await enviarMensaje(t.accion, { clase: "guardarFichero", ruta: "a.xne", texto: "x", huella: "h", id: "i1" });
       await asentar();
-      expect(t.ultimo("ficheroGuardado")).toEqual({ clase: "ficheroGuardado", ruta: "a.xne", desde: "h", error: "no se pudo guardar el fichero" });
+      expect(t.ultimo("ficheroGuardado")).toEqual({ clase: "ficheroGuardado", ruta: "a.xne", id: "i1", error: "no se pudo guardar el fichero" });
       expect(JSON.stringify(t.cliente.recibidos)).not.toContain(t.raizDeVerdad);
       expect(dichos.join("\n")).not.toContain(t.raizDeVerdad);
       expect(dichos.join("\n")).toContain("EACCES");

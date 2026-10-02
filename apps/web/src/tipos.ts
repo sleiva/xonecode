@@ -821,7 +821,7 @@ export type MensajeAlCliente =
     }
   | ({ clase: "fichero" } & FicheroDelProyecto)
   /** La respuesta a guardar: con `huella` se escribió; con `error`, no se tocó nada. */
-  | { clase: "ficheroGuardado"; ruta: string; desde: string; huella?: string; error?: string }
+  | { clase: "ficheroGuardado"; ruta: string; id: string; huella?: string; error?: string }
   /** La base de comparación de un fichero. */
   | ({ clase: "baseDeFichero" } & BaseDelFichero)
   /** El estado de sincronización del proyecto abierto (pestaña CloudStudio). `proyecto` y
@@ -1474,7 +1474,7 @@ export type MensajeDelCliente =
   | { clase: "gestor"; accion: "cerrar"; comentario: string; transicion?: string }
   | { clase: "fichero"; ruta: string }
   /** Guardar lo editado en la pestaña Ficheros, con la huella del fichero que se cargó. */
-  | { clase: "guardarFichero"; ruta: string; texto: string; huella: string }
+  | { clase: "guardarFichero"; ruta: string; texto: string; huella: string; id: string }
   /** Pedir la base de comparación de un fichero. */
   | { clase: "baseDeFichero"; ruta: string; base: BaseElegida }
   /** La sincronización con CloudStudio: `estado` pide la medida, `subir`/`bajar` son las
