@@ -191,14 +191,14 @@
   /* Los iconos por tipo de fichero (`componentes/IconoDeFichero.tsx`): el color de cada TIPO, como
      en cualquier editor, así que los temas no los tocan. Valores de la maqueta aprobada,
      comprobados en claro y en oscuro. Los dibujos son de CONTORNO (trazo 2, el molde de la barra),
-     así que el amarillo del JS y el azul de la carpeta, que en la maqueta eran rellenos, bajan aquí
-     hasta 3:1 sobre blanco: con trazo fino el amarillo de la maqueta no se veía. */
-  --xonecode-icono-xne: #00a3e0;
+     así que en claro los tonos bajan hasta 3:1 sobre blanco: con trazo fino el amarillo del JS, el
+     cian del `.xne`, el ámbar de la base de datos y el azul de la carpeta de la maqueta no se veían. */
+  --xonecode-icono-xne: #0284c7;
   --xonecode-icono-js: #b38a00;
   --xonecode-icono-css: #2f6fd8;
   --xonecode-icono-gris: #7b8590;
   --xonecode-icono-imagen: #9b51e0;
-  --xonecode-icono-bd: #d38b00;
+  --xonecode-icono-bd: #b07400;
   --xonecode-icono-texto: #4a5059;
   --xonecode-icono-carpeta: #6e95bd;
 }
@@ -225,8 +225,8 @@ body[data-ds-dark-theme] {
   --xonecode-gasto-externo: #e0701a;
   /* El azul de la marca «cambiada», un paso más claro: sobre fondo oscuro el de claro se hunde. */
   --xonecode-marca-cambiada: #60a5fa;
-  /* Los iconos por tipo, un paso más claros donde sobre fondo oscuro se hundían (el `.xne` es el
-     cian de la marca y no cambia; la carpeta, al revés, baja para no brillar más que su nombre). */
+  /* Los iconos por tipo, un paso más claros donde sobre fondo oscuro se hundían (el `.xne` vuelve al
+     cian de la marca, que sobre oscuro sí se lee; la carpeta, al revés, baja para no brillar más que su nombre). */
   --xonecode-icono-xne: #00a3e0;
   --xonecode-icono-js: #f1d64f;
   --xonecode-icono-css: #60a5fa;
