@@ -87,4 +87,8 @@ describe("metadatosDelFichero", () => {
     const f = fichero({ ruta: "a.xne", texto: "uno\r\ndos\r\n", codificacion: "utf-8" });
     expect(metadatosDelFichero(f.ruta, f, "\r\n")).toEqual(["XML de XOne", "2 líneas", "UTF-8", "CRLF"]);
   });
+
+  it("editando, un fichero de una sola línea sin salto tampoco afirma LF", () => {
+    expect(metadatosDelFichero("a.json", fichero({ ruta: "a.json", texto: "{}" }), "\n")).toEqual(["JSON", "1 línea"]);
+  });
 });

@@ -780,15 +780,17 @@ export function App({
   const llegadoParaEditar = edicionPendiente === undefined ? undefined : estado.contenidos?.[edicionPendiente.ruta];
   useEffect(() => {
     if (edicionPendiente === undefined) return;
-    // Se eligió otro fichero (o se cerró) antes de que llegara: ya no hay nada que abrir.
-    if (ficheroElegido !== edicionPendiente.ruta) {
+    // Se eligió otro fichero (o se cerró) antes de que llegara, o se cayó el cable y la petición se
+    // perdió: ya no hay nada que abrir, y una copia que llegara mucho después (al acabar un turno)
+    // no puede abrir el editor sola.
+    if (ficheroElegido !== edicionPendiente.ruta || estado.conectado === false) {
       setEdicionPendiente(undefined);
       return;
     }
     if (llegadoParaEditar === undefined || llegadoParaEditar === edicionPendiente.copia) return;
     setEdicionPendiente(undefined);
     if (esEditable(llegadoParaEditar)) edicion.abrir(llegadoParaEditar);
-  }, [edicionPendiente, llegadoParaEditar, ficheroElegido, edicion]);
+  }, [edicionPendiente, llegadoParaEditar, ficheroElegido, edicion, estado.conectado]);
   // El árbol de ahora ya llegó: el viejo deja de esconderse.
   useEffect(() => {
     if (arbolViejo !== undefined && estado.arbol !== arbolViejo) setArbolViejo(undefined);

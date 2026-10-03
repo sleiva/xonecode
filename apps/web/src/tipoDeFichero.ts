@@ -88,7 +88,8 @@ export function metadatosDelFichero(ruta: string, contenido: FicheroDelProyecto 
     partes.push(`${n} ${n === 1 ? "línea" : "líneas"}`);
   }
   if (contenido.codificacion !== undefined) partes.push(contenido.codificacion === "utf-8" ? "UTF-8" : "Latin-1");
-  const fin = finDeLinea ?? (contenido.texto.includes("\n") ? finDeLineaDe(contenido.texto) : undefined);
+  // También editando: el final que guarda la edición sale de `finDeLineaDe`, que da «\n» sin ningún salto.
+  const fin = contenido.texto.includes("\n") ? (finDeLinea ?? finDeLineaDe(contenido.texto)) : undefined;
   if (fin !== undefined) partes.push(fin === "\r\n" ? "CRLF" : "LF");
   return partes;
 }
