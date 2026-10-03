@@ -7202,8 +7202,10 @@ export function ajusteDeWorkspaceCableado(opciones: {
  * `arrancarConsolaWeb` serían un literal que ningún test mira, y cada uno es un campo OPCIONAL de
  * `montarRutas`, así que olvidarlo compila y pasa.
  */
-export function ficherosCableados(): Required<Pick<OpcionesDeMontaje, "leerFichero" | "escribirFichero" | "baseDeFichero">> {
-  return { leerFichero: leerFicheroDeProyecto, escribirFichero: escribirFicheroDeProyecto, baseDeFichero };
+export function ficherosCableados(): Required<
+  Pick<OpcionesDeMontaje, "leerFichero" | "escribirFichero" | "baseDeFichero" | "iconoDelProyecto">
+> {
+  return { leerFichero: leerFicheroDeProyecto, escribirFichero: escribirFicheroDeProyecto, baseDeFichero, iconoDelProyecto };
 }
 
 /**
@@ -7876,7 +7878,6 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     visorOpenui: () => leerVisorOpenui(raizDelCliente),
     // Leer, guardar y la base del editor, compuestos fuera para que la composición tenga test.
     ...ficherosCableados(),
-    iconoDelProyecto,
     leerArtefacto: leerArtefactoDeSesion,
     leerArtefactoCrudo,
     correrPasoDeReceta: (receta, paso, alSalirLinea) => correrPasoDeReceta(receta, paso, { alSalirLinea }),

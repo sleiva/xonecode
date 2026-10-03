@@ -12479,4 +12479,18 @@ describe("ficherosCableados — la composición de producción, no un doble", ()
       rmSync(raiz, { recursive: true, force: true });
     }
   });
+
+  it("el icono de la app (IXCODE-37) va en la MISMA composición: lo nombra `app.ini` y existe", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-cableados-"));
+    try {
+      const c = ficherosCableados();
+      expect(await c.iconoDelProyecto(raiz)).toBeUndefined();
+      writeFileSync(join(raiz, "app.ini"), "[app]\nicon=icon.png\n");
+      expect(await c.iconoDelProyecto(raiz)).toBeUndefined();
+      writeFileSync(join(raiz, "icon.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+      expect(await c.iconoDelProyecto(raiz)).toBe("icon.png");
+    } finally {
+      rmSync(raiz, { recursive: true, force: true });
+    }
+  });
 });
