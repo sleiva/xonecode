@@ -11,6 +11,8 @@ import { Dibujo, kb } from "./Dibujo.js";
 import { Visor } from "./Visor.js";
 import estilos from "./Ficheros.module.css";
 import { esEditable } from "../edicion.js";
+import { metadatosDelFichero } from "../tipoDeFichero.js";
+import { IconoDeFichero } from "./IconoDeFichero.js";
 import type { ControlDeEdicion } from "../usarEdicion.js";
 
 /**
@@ -154,12 +156,11 @@ export function Ficheros({
         <div className={estilos.ficheros}>
           <div className={estilos.visor} data-editando="">
             <div className={estilos.cabecera}>
-              <span className={estilos.ruta}>
-                {huerfana.ruta}
-                <span className={estilos.sinGuardar} aria-label="Hay cambios sin guardar" title="Hay cambios sin guardar">
-                  ●
-                </span>
-              </span>
+              <RutaDelFichero
+                ruta={huerfana.ruta}
+                sinGuardar
+                metadatos={metadatosDelFichero(huerfana.ruta, comoFichero(huerfana.ruta, huerfana.original), huerfana.finDeLinea)}
+              />
               <div className={estilos.acciones}>
                 <button type="button" className={estilos.accionPrincipal} disabled>
                   Guardar
@@ -225,14 +226,17 @@ export function Ficheros({
         ) : (
           <>
             <div className={estilos.cabecera}>
-              <span className={estilos.ruta}>
-                {elegido}
-                {actual?.sucio === true ? (
-                  <span className={estilos.sinGuardar} aria-label="Hay cambios sin guardar" title="Hay cambios sin guardar">
-                    ●
-                  </span>
-                ) : null}
-              </span>
+              <RutaDelFichero
+                ruta={elegido}
+                sinGuardar={actual?.sucio === true}
+                metadatos={
+                  // Editando, el contenido del store puede faltar (se tira sin cable) y el final de
+                  // línea es el que la edición guardó aparte; sin editar, lo que llegó del disco.
+                  actual === undefined
+                    ? metadatosDelFichero(elegido, contenido)
+                    : metadatosDelFichero(elegido, contenido ?? comoFichero(elegido, actual.original), actual.finDeLinea)
+                }
+              />
               {actual !== undefined && edicion !== undefined ? (
                 <div className={estilos.acciones}>
                   <button
@@ -418,6 +422,54 @@ export function Ficheros({
         />
       </aside>
     </div>
+    </div>
+  );
+}
+
+/**
+ * Lo que la edición sabe de su fichero, con la forma de uno llegado del disco: si se edita, llegó
+ * como texto entero en UTF-8 (`edicion.ts#esEditable`), así que eso sí consta.
+ */
+function comoFichero(ruta: string, texto: string): FicheroDelProyecto {
+  return { ruta, texto, recortado: false, binario: false, bytes: 0, codificacion: "utf-8" };
+}
+
+/**
+ * La ruta del fichero abierto en la cabecera: su icono, la carpeta en terciario, «/» y el nombre en
+ * 600 —el nombre es lo que se busca con la vista; la carpeta, el contexto—, el «●» de sin guardar al
+ * lado, y debajo la línea de lo que se SABE del contenido (`metadatosDelFichero`). Sin nada que
+ * decir, la línea no se pinta.
+ */
+function RutaDelFichero({ ruta, sinGuardar, metadatos }: { ruta: string; sinGuardar: boolean; metadatos: readonly string[] }) {
+  const corte = ruta.lastIndexOf("/");
+  return (
+    <div className={estilos.titulo} data-cabecera-del-fichero="">
+      <IconoDeFichero ruta={ruta} tamano={24} />
+      <div className={estilos.textos}>
+        <span className={estilos.ruta}>
+          {corte === -1 ? null : (
+            <>
+              <span className={estilos.carpetaDeRuta} data-parte="carpeta">
+                {ruta.slice(0, corte)}
+              </span>
+              <span className={estilos.separador}>/</span>
+            </>
+          )}
+          <span className={estilos.nombreDeRuta} data-parte="nombre">
+            {ruta.slice(corte + 1)}
+          </span>
+          {sinGuardar ? (
+            <span className={estilos.sinGuardar} aria-label="Hay cambios sin guardar" title="Hay cambios sin guardar">
+              ●
+            </span>
+          ) : null}
+        </span>
+        {metadatos.length === 0 ? null : (
+          <span className={estilos.metadatos} data-metadatos="">
+            {metadatos.join(" · ")}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

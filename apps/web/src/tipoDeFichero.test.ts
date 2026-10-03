@@ -73,9 +73,9 @@ describe("metadatosDelFichero", () => {
     expect(metadatosDelFichero("app.xml", fichero({ ruta: "app.xml", texto: "<a/>" }))).toEqual(["XML", "1 línea"]);
   });
 
-  it("sin texto (una imagen, un binario) no se pinta ni líneas ni finales: solo qué es", () => {
-    expect(metadatosDelFichero("i.png", fichero({ ruta: "i.png", binario: true, mime: "image/png", base64: "AA==" }))).toEqual(["Imagen"]);
-    expect(metadatosDelFichero("b.db", fichero({ ruta: "b.db", binario: true }))).toEqual(["Binario"]);
+  it("sin texto (una imagen, un binario) no hay línea: lo que es ya lo dice el visor de debajo", () => {
+    expect(metadatosDelFichero("i.png", fichero({ ruta: "i.png", binario: true, mime: "image/png", base64: "AA==" }))).toEqual([]);
+    expect(metadatosDelFichero("b.db", fichero({ ruta: "b.db", binario: true }))).toEqual([]);
   });
 
   it("con un error o sin contenido todavía, nada", () => {

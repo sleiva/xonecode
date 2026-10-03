@@ -87,12 +87,49 @@
   font-size: 12px;
 }
 
-/* La ruta es DATO DE MÁQUINA, así que va en mono; el interruptor de al lado es interfaz y
-   se queda con la letra de la aplicación. Antes el mono estaba en `.cabecera` entera. */
+/* Icono + ruta + línea de metadatos, a la izquierda; cede ella y no las acciones de al lado. */
+.titulo {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.textos {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* La ruta partida, en la letra de la interfaz como en la maqueta: lo que se busca con la vista es
+   el NOMBRE (600), y la carpeta es contexto (terciario). Partir en `/` y no en mono la hace leerse
+   como un título, que es lo que es aquí; copiarla entera sigue dando la ruta de verdad. */
 .ruta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
   min-width: 0;
   overflow-wrap: anywhere;
-  font-family: var(--ds-font-family-code);
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+}
+
+.carpetaDeRuta,
+.separador {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.nombreDeRuta {
+  font-weight: 600;
+}
+
+/* «XML de XOne · 214 líneas · UTF-8 · LF»: solo lo que se sabe, en terciario. */
+.metadatos {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
 }
 
 /* Vista / Fuente: dos botones pegados en una sola cápsula, no un desplegable — son dos
@@ -179,9 +216,9 @@
   composes: primario from "./Boton.module.css";
 }
 
-/* El «●» de cambios sin guardar, junto a la ruta. */
+/* El «●» de cambios sin guardar, junto a la ruta (el `gap` de `.ruta` ya lo separa). */
 .sinGuardar {
-  margin-left: 6px;
+  margin-left: 2px;
   color: var(--dsw-alias-state-business-primary);
 }
 

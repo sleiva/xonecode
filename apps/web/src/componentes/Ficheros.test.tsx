@@ -375,3 +375,41 @@ describe("Ficheros: editar", () => {
     expect(pedir).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("Ficheros: la cabecera del fichero", () => {
+  const cabecera = (): HTMLElement => document.querySelector("[data-cabecera-del-fichero]") as HTMLElement;
+
+  it("icono del tipo, la ruta partida (carpeta, «/», nombre) y la línea de lo que se sabe", () => {
+    render(
+      <Ficheros
+        arbol={ARBOL}
+        contenidos={{ "src/Clientes.xne": { ruta: "src/Clientes.xne", texto: "<coll>\n</coll>\n", recortado: false, binario: false, bytes: 15, codificacion: "utf-8" } }}
+        elegido="src/Clientes.xne"
+        alElegir={NADA}
+        alRecargar={NADA}
+      />
+    );
+    const c = cabecera();
+    expect(c.querySelector("svg[data-icono]")?.getAttribute("data-icono")).toBe("xne");
+    expect(c.querySelector("svg[data-icono]")?.getAttribute("width")).toBe("24");
+    expect(within(c).getByText("src").getAttribute("data-parte")).toBe("carpeta");
+    expect(within(c).getByText("Clientes.xne").getAttribute("data-parte")).toBe("nombre");
+    expect(within(c).getByText("XML de XOne · 2 líneas · UTF-8 · LF")).toBeTruthy();
+  });
+
+  it("un fichero de la raíz no lleva carpeta ni «/»", () => {
+    render(
+      <Ficheros arbol={ARBOL} contenidos={{ "app.xml": { ruta: "app.xml", texto: "<app/>", recortado: false, binario: false, bytes: 6 } }} elegido="app.xml" alElegir={NADA} alRecargar={NADA} />
+    );
+    expect(cabecera().querySelector('[data-parte="carpeta"]')).toBeNull();
+    expect(within(cabecera()).queryByText("/")).toBeNull();
+    expect(within(cabecera()).getByText("XML · 1 línea")).toBeTruthy();
+  });
+
+  it("un binario no lleva la línea de metadatos: no hay líneas ni finales que contar", () => {
+    render(
+      <Ficheros arbol={ARBOL} contenidos={{ "app.xml": { ruta: "app.xml", recortado: false, binario: true, bytes: 2048 } }} elegido="app.xml" alElegir={NADA} alRecargar={NADA} />
+    );
+    expect(cabecera().querySelector("[data-metadatos]")).toBeNull();
+  });
+});

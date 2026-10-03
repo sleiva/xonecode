@@ -70,7 +70,7 @@ function lineas(texto: string): number {
 /**
  * La línea de debajo de la ruta en la cabecera de Ficheros —«XML de XOne · 214 líneas · UTF-8 · LF»—,
  * con SOLO lo que se sabe del contenido que llegó. Nada se rellena por omisión:
- *   - sin texto (una imagen, un binario) no hay líneas ni finales que contar, solo QUÉ es;
+ *   - sin texto (una imagen, un binario) no hay líneas ni finales que contar, y no hay línea;
  *   - recortado, la cuenta sería la del trozo, así que no se da;
  *   - sin un solo salto de línea no se afirma LF (`finDeLineaDe("abc")` diría «\n» sin motivo);
  *   - sin `codificacion` del servidor no se supone ninguna.
@@ -78,7 +78,9 @@ function lineas(texto: string): number {
  */
 export function metadatosDelFichero(ruta: string, contenido: FicheroDelProyecto | undefined, finDeLinea?: FinDeLinea): string[] {
   if (contenido === undefined || contenido.error !== undefined) return [];
-  if (contenido.texto === undefined) return [tipoDeFichero(ruta) === "imagen" || contenido.mime !== undefined ? "Imagen" : "Binario"];
+  // Sin texto no hay línea: «es una imagen / un binario de N KB» ya lo dice el visor de debajo, y
+  // decirlo dos veces en la misma pantalla no añade nada.
+  if (contenido.texto === undefined) return [];
   const ext = extension(ruta);
   const partes = [(ext === undefined ? undefined : LENGUAJES_LEGIBLES.get(ext)) ?? "Texto"];
   if (!contenido.recortado) {
