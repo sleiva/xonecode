@@ -504,6 +504,13 @@ describe("Revision: «Editar» en cada fichero", () => {
     expect(alDesplegar).not.toHaveBeenCalled();
   });
 
+  it("sin cable, «Editar» se ve pero no se puede pulsar: el fichero no llegaría", () => {
+    render(
+      <Revision via="git" ficheros={FICHEROS} parches={{}} desplegados={VACIO} alDesplegar={NADA} alPlegar={NADA} alRecargar={NADA} alEditar={vi.fn()} conectado={false} />
+    );
+    expect(editar("src/Clientes.xne")!.disabled).toBe(true);
+  });
+
   it("sin `alEditar` no hay ningún botón: un control sin dato detrás no se pinta", () => {
     pintar();
     expect(document.querySelector('button[aria-label^="Editar"]')).toBeNull();

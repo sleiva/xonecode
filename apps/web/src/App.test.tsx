@@ -3261,6 +3261,46 @@ describe("App: «Editar» desde Revisión", () => {
     expect(screen.getByRole("treeitem", { name: /nuevo\.js$/ }).getAttribute("aria-current")).toBe("true");
   });
 
+  /** Tras lo que haga `entre`, la copia llega igual: el editor NO puede abrirse por su cuenta. */
+  const noAbreTras = async (entre: (m: ReturnType<typeof enRevision>) => void): Promise<void> => {
+    const montado = enRevision([{ ruta: "app.xml", clase: "modificado", mas: 1, menos: 0 }]);
+    fireEvent.click(screen.getByRole("button", { name: "Editar app.xml" }));
+    entre(montado);
+    act(() => montado.store.aplicar({ clase: "arbol", rutas: ["app.xml"], recortado: false }));
+    llega(montado.store, "app.xml");
+    if (screen.queryByRole("tab", { name: "Ficheros" })?.getAttribute("aria-selected") !== "true") abrirPestana("Ficheros");
+    // Por los botones de la cabecera y no por `.cm-editor`, que llega DIFERIDO: editando hay
+    // «Guardar»; sin editar, el fichero llegado y editable ofrece «Editar».
+    expect(screen.queryByRole("button", { name: "Guardar" })).toBeNull();
+  };
+
+  it("lo pendiente se olvida al caerse el cable: la petición se perdió", async () => {
+    await noAbreTras(({ store }) => {
+      act(() => store.marcarDesconectado());
+      act(() => store.marcarConectado());
+    });
+  });
+
+  it("lo pendiente se olvida si cambia el proyecto abierto: la misma ruta sería OTRO fichero", async () => {
+    await noAbreTras(({ store }) => {
+      act(() =>
+        store.aplicar({ clase: "alta", pasos: [], proveedores: [], entornos: [], proyectos: [], ramas: [], proyectoAbierto: true, proyectoActivo: "p2" })
+      );
+    });
+  });
+
+  it("lo pendiente se olvida si cambia la sesión", async () => {
+    await noAbreTras(({ store }) => {
+      act(() =>
+        store.aplicar({ clase: "alta", pasos: [], proveedores: [], entornos: [], proyectos: [], ramas: [], proyectoAbierto: true, proyectoActivo: "p1", sesionActiva: "s2" })
+      );
+    });
+  });
+
+  it("lo pendiente se olvida al dejar la pestaña Ficheros: no se abre un editor a escondidas", async () => {
+    await noAbreTras(() => abrirPestana("Revisión"));
+  });
+
   it("ni un borrado ni un binario ofrecen «Editar»", () => {
     enRevision([
       { ruta: "viejo.xne", clase: "borrado", mas: 0, menos: 3 },

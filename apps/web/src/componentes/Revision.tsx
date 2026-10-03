@@ -277,7 +277,14 @@ export function Revision({
                   {/* Sin motivo escrito al lado cuando no se puede: el «binario» ya va en la fila, y
                       un borrado o una vista aplanada se leen en su letra y su nombre. */}
                   {alEditar !== undefined && sePuedeEditar(f, conocidas) ? (
-                    <button type="button" className={estilos.editar} aria-label={`Editar ${f.ruta}`} onClick={() => alEditar(f.ruta)}>
+                    <button
+                      type="button"
+                      className={estilos.editar}
+                      aria-label={`Editar ${f.ruta}`}
+                      // Sin cable el fichero no llegaría: se cambiaría de pestaña a un visor vacío.
+                      disabled={conectado === false}
+                      onClick={() => alEditar(f.ruta)}
+                    >
                       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
                         <path d="M10.8 2.7l2.5 2.5-7.6 7.6-3.2.7.7-3.2z" strokeLinejoin="round" />
                       </svg>

@@ -755,14 +755,16 @@ export function App({
    * entero. Entonces se pide el de ahora y, mientras llega, a `Ficheros` no se le pasa el viejo
    * (`arbolViejo`): un árbol de antes del turno no puede decidir que un fichero de después no existe.
    */
-  const [edicionPendiente, setEdicionPendiente] = useState<{ ruta: string; copia: unknown } | undefined>(undefined);
+  const [edicionPendiente, setEdicionPendiente] = useState<
+    { ruta: string; copia: unknown; proyecto: string | undefined; sesion: string | undefined } | undefined
+  >(undefined);
   const [arbolViejo, setArbolViejo] = useState<object | undefined>(undefined);
   const editarDesdeRevision = useCallback(
     (ruta: string) => {
       const hacer = (): void => {
         if (edicionRef.current.actual?.ruta !== ruta) {
           if (edicionRef.current.baseElegida !== "sesion") edicionRef.current.elegirBase("sesion");
-          setEdicionPendiente({ ruta, copia: estado.contenidos?.[ruta] });
+          setEdicionPendiente({ ruta, copia: estado.contenidos?.[ruta], proyecto: estado.alta?.proyectoActivo, sesion: estado.alta?.sesionActiva });
         }
         const arbol = estado.arbol;
         if (arbol !== undefined && arbol.error === undefined && !arbol.recortado && !arbol.rutas.includes(ruta)) {
@@ -775,22 +777,29 @@ export function App({
       if (ruta === edicionRef.current.actual?.ruta) hacer();
       else conGuarda(hacer);
     },
-    [estado.contenidos, estado.arbol, pedirArbol, elegirFichero, abrirPanel, conGuarda]
+    [estado.contenidos, estado.arbol, estado.alta?.proyectoActivo, estado.alta?.sesionActiva, pedirArbol, elegirFichero, abrirPanel, conGuarda]
   );
   const llegadoParaEditar = edicionPendiente === undefined ? undefined : estado.contenidos?.[edicionPendiente.ruta];
   useEffect(() => {
     if (edicionPendiente === undefined) return;
-    // Se eligió otro fichero (o se cerró) antes de que llegara, o se cayó el cable y la petición se
-    // perdió: ya no hay nada que abrir, y una copia que llegara mucho después (al acabar un turno)
-    // no puede abrir el editor sola.
-    if (ficheroElegido !== edicionPendiente.ruta || estado.conectado === false) {
+    // Ya no hay nada que abrir si, antes de que llegara: se eligió otro fichero (o se cerró); se cayó
+    // el cable y la petición se perdió (una copia de mucho después, al acabar un turno, no puede
+    // abrir el editor sola); cambió el proyecto o la sesión (la MISMA ruta relativa sería el fichero
+    // de OTRO proyecto); o se dejó la pestaña Ficheros (abriría un editor a escondidas, detrás del chat).
+    if (
+      ficheroElegido !== edicionPendiente.ruta ||
+      estado.conectado === false ||
+      estado.alta?.proyectoActivo !== edicionPendiente.proyecto ||
+      estado.alta?.sesionActiva !== edicionPendiente.sesion ||
+      vistaDelPanel !== "ficheros"
+    ) {
       setEdicionPendiente(undefined);
       return;
     }
     if (llegadoParaEditar === undefined || llegadoParaEditar === edicionPendiente.copia) return;
     setEdicionPendiente(undefined);
     if (esEditable(llegadoParaEditar)) edicion.abrir(llegadoParaEditar);
-  }, [edicionPendiente, llegadoParaEditar, ficheroElegido, edicion, estado.conectado]);
+  }, [edicionPendiente, llegadoParaEditar, ficheroElegido, edicion, estado.conectado, estado.alta?.proyectoActivo, estado.alta?.sesionActiva, vistaDelPanel]);
   // El árbol de ahora ya llegó: el viejo deja de esconderse.
   useEffect(() => {
     if (arbolViejo !== undefined && estado.arbol !== arbolViejo) setArbolViejo(undefined);
