@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
-import { open, readFile, realpath, stat, unlink, type FileHandle } from "node:fs/promises";
+import { lstat, open, readFile, realpath, stat, unlink, type FileHandle } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { ficherosDelProyecto } from "../turno/ficherosDelProyecto.js";
 import { puedeLeerRuta } from "./perfiles.js";
@@ -184,7 +184,14 @@ export async function motivoParaNoEnsenar(raiz: string, ruta: string): Promise<s
   if (motivo !== undefined) return motivo;
   const normal = ruta.split(/[\\/]/).join("/");
   if (normal.endsWith(".xml") && existsSync(resolve(raiz, `${normal.slice(0, -4)}.xne`))) return MOTIVO_APLANADA;
-  if (!existsSync(resolve(raiz, normal))) return undefined;
+  // `lstat` y no `existsSync`: este último sigue los enlaces, y un enlace COLGANTE se tomaría por
+  // un borrado —solo criba de texto— y el diff enseñaría su destino. Con `lstat` el enlace existe
+  // y pasa por la cadena entera, que falla cerrado al no poder resolverlo.
+  try {
+    await lstat(resolve(raiz, normal));
+  } catch {
+    return undefined;
+  }
   // Si existe, la cadena ENTERA de guardas es la de leer y guardar (`resolverEnProyecto`): una
   // segunda copia de la recomprobación sobre `realpath` divergiría el primer día.
   const resuelta = await resolverEnProyecto(raiz, ruta);

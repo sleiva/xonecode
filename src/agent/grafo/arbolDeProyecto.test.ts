@@ -21,6 +21,7 @@ import { conImagenesDelProyecto,
   leerFicheroDeProyecto,
   motivoDeRutaInaceptable,
   mimeDeImagen,
+  motivoParaNoEnsenar,
   ordenarRutas,
   TOPE_DE_ENTRADAS,
   TOPE_DE_FICHERO,
@@ -456,6 +457,29 @@ describe("escribirFicheroDeProyecto", () => {
       expect(r.error).not.toContain(raiz);
     } finally {
       chmodSync(join(raiz, "app"), 0o755);
+    }
+  });
+});
+
+describe("motivoParaNoEnsenar", () => {
+  it("un fichero borrado (no existe) solo pasa la criba de texto", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-ensenar-"));
+    try {
+      expect(await motivoParaNoEnsenar(raiz, "borrado.xne")).toBeUndefined();
+      expect(await motivoParaNoEnsenar(raiz, ".env")).toBeDefined();
+    } finally {
+      rmSync(raiz, { recursive: true, force: true });
+    }
+  });
+
+  it("un enlace COLGANTE no es un borrado: pasa por la cadena entera y falla cerrado", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-ensenar-"));
+    try {
+      // Apunta fuera y a nada: `existsSync` lo daría por inexistente y el diff enseñaría el destino.
+      symlinkSync(join(tmpdir(), "no-existe-xonecode", "secreto.txt"), join(raiz, "colgante.txt"));
+      expect(await motivoParaNoEnsenar(raiz, "colgante.txt")).toBeDefined();
+    } finally {
+      rmSync(raiz, { recursive: true, force: true });
     }
   });
 });
