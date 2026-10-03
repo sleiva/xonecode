@@ -172,15 +172,27 @@
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
-/* La cabecera del bloque, pegajosa y opaca: pasa por encima del diff al scrollear. */
-.cabeceraDeBloque {
+/* La fila de la cabecera del bloque, pegajosa y opaca: pasa por encima del diff al scrollear.
+   Lleva el botón de desplegar (que ocupa lo que queda) y, al lado, «Editar»: dos hermanos, porque
+   un `<button>` no puede contener otro. Lo pegajoso vive aquí y no en el botón para que los dos
+   se queden arriba juntos. */
+.filaDeBloque {
   position: sticky;
   top: 0;
   z-index: 1;
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
+  padding-right: 12px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.cabeceraDeBloque {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
   padding: 8px 16px;
   border: none;
   background: var(--dsw-alias-bg-layer-1);
@@ -192,6 +204,16 @@
 
 .cabeceraDeBloque:hover {
   background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* «Editar»: el secundario de siempre, con el lápiz delante. Solo se añade la disposición del
+   icono; tamaño, borde y colores son del rol (`Boton.module.css`, regla dura de su test). */
+.editar {
+  composes: secundario from "./Boton.module.css";
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
 }
 
 .parche {

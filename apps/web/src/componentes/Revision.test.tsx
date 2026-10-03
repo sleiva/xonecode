@@ -433,3 +433,85 @@ describe("Revision: los cambios en el MODELO de un `.xne`", () => {
     expect(screen.queryByText(/modelo/)).toBeNull();
   });
 });
+
+describe("Revision: «Editar» en cada fichero", () => {
+  afterEach(cleanup);
+
+  const FICHEROS: FicheroTocado[] = [
+    { ruta: "src/Clientes.xne", clase: "modificado", mas: 3, menos: 1 },
+    { ruta: "src/nuevo.js", clase: "nuevo", mas: 10, menos: 0 },
+    { ruta: "src/viejo.css", clase: "borrado", mas: 0, menos: 4 },
+    { ruta: "img/logo.png", clase: "nuevo" },
+    // La vista aplanada de Clientes: la genera Studio y el agente no la ve.
+    { ruta: "src/Clientes.xml", clase: "modificado", mas: 1, menos: 1 },
+  ];
+  const pintar = (alEditar?: (ruta: string) => void, rutasDelProyecto?: readonly string[]) =>
+    render(
+      <Revision
+        via="git"
+        ficheros={FICHEROS}
+        parches={{}}
+        desplegados={VACIO}
+        alDesplegar={NADA}
+        alPlegar={NADA}
+        alRecargar={NADA}
+        {...(alEditar === undefined ? {} : { alEditar })}
+        {...(rutasDelProyecto === undefined ? {} : { rutasDelProyecto })}
+      />
+    );
+  const bloque = (ruta: string): HTMLElement => document.querySelector(`[data-bloque="${ruta}"]`) as HTMLElement;
+  const editar = (ruta: string): HTMLButtonElement | null =>
+    bloque(ruta).querySelector('button[aria-label^="Editar"]') as HTMLButtonElement | null;
+
+  it("solo en lo que se puede editar: ni borrado, ni binario, ni una vista aplanada", () => {
+    pintar(vi.fn());
+    expect(editar("src/Clientes.xne")).not.toBeNull();
+    expect(editar("src/nuevo.js")).not.toBeNull();
+    expect(editar("src/viejo.css")).toBeNull();
+    expect(editar("img/logo.png")).toBeNull();
+    expect(editar("src/Clientes.xml")).toBeNull();
+  });
+
+  it("una vista aplanada también se reconoce por el .xne del ÁRBOL, aunque la sesión no lo tocara", () => {
+    render(
+      <Revision
+        via="git"
+        ficheros={[{ ruta: "Otra.xml", clase: "modificado", mas: 1, menos: 0 }, { ruta: "app.xml", clase: "modificado", mas: 1, menos: 0 }]}
+        parches={{}}
+        desplegados={VACIO}
+        alDesplegar={NADA}
+        alPlegar={NADA}
+        alRecargar={NADA}
+        alEditar={vi.fn()}
+        rutasDelProyecto={["Otra.xne", "app.xml"]}
+      />
+    );
+    expect(editar("Otra.xml")).toBeNull();
+    expect(editar("app.xml")).not.toBeNull();
+  });
+
+  it("va AL LADO del botón de desplegar, no dentro; pulsarlo edita y no despliega", () => {
+    const alEditar = vi.fn();
+    const alDesplegar = vi.fn();
+    render(
+      <Revision via="git" ficheros={FICHEROS} parches={{}} desplegados={VACIO} alDesplegar={alDesplegar} alPlegar={NADA} alRecargar={NADA} alEditar={alEditar} />
+    );
+    const boton = editar("src/Clientes.xne")!;
+    expect(boton.closest("button[aria-expanded]")).toBeNull();
+    expect(boton.textContent).toContain("Editar");
+    fireEvent.click(boton);
+    expect(alEditar).toHaveBeenCalledWith("src/Clientes.xne");
+    expect(alDesplegar).not.toHaveBeenCalled();
+  });
+
+  it("sin `alEditar` no hay ningún botón: un control sin dato detrás no se pinta", () => {
+    pintar();
+    expect(document.querySelector('button[aria-label^="Editar"]')).toBeNull();
+  });
+
+  it("la cabecera de cada bloque lleva el icono de su tipo", () => {
+    pintar(vi.fn());
+    expect(bloque("src/nuevo.js").querySelector("svg[data-icono]")?.getAttribute("data-icono")).toBe("js");
+    expect(bloque("img/logo.png").querySelector("svg[data-icono]")?.getAttribute("data-icono")).toBe("imagen");
+  });
+});

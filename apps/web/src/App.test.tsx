@@ -3188,3 +3188,84 @@ describe("App: «Cerrar en Jira» (Task 11, IXCODE-11)", () => {
     expect(enviar).not.toHaveBeenCalledWith(expect.objectContaining({ accion: "cerrar" }));
   });
 });
+
+describe("App: «Editar» desde Revisión", () => {
+  beforeAll(prepararJsdomParaElEditor);
+
+  const mandados = (enviar: Mock<(m: unknown) => Promise<unknown>>, clase: string) =>
+    enviar.mock.calls.map(([m]) => m as { clase: string; ruta?: string; base?: string }).filter((m) => m.clase === clase);
+  const enRevision = (ficheros: { ruta: string; clase: "nuevo" | "modificado" | "borrado"; mas?: number; menos?: number }[]) => {
+    const montado = montar();
+    act(() =>
+      montado.store.aplicar({ clase: "alta", pasos: [], proveedores: [], entornos: [], proyectos: [], ramas: [], proyectoAbierto: true, proyectoActivo: "p1" })
+    );
+    abrirPestana("Revisión");
+    act(() => montado.store.aplicar({ clase: "revision", via: "git", ficheros }));
+    return montado;
+  };
+  const llega = (store: ReturnType<typeof crearStoreDelCliente>, ruta: string, extra: Record<string, unknown> = {}): void => {
+    act(() =>
+      store.aplicar({ clase: "fichero", ruta, texto: "uno\n", recortado: false, binario: false, bytes: 4, codificacion: "utf-8", huella: "h1", ...extra })
+    );
+  };
+
+  it("lleva a Ficheros con ESE fichero elegido y el editor abierto, con la base de la sesión", async () => {
+    const { store, enviar } = enRevision([{ ruta: "src/a.xne", clase: "modificado", mas: 1, menos: 0 }]);
+    fireEvent.click(screen.getByRole("button", { name: "Editar src/a.xne" }));
+    expect(screen.getByRole("tab", { name: "Ficheros" }).getAttribute("aria-selected")).toBe("true");
+    expect(mandados(enviar, "fichero").map((m) => m.ruta)).toContain("src/a.xne");
+    // Hasta que no llega el contenido no hay editor: solo se puede abrir lo que se sabe editable.
+    expect(document.querySelector(".cm-editor")).toBeNull();
+    act(() => store.aplicar({ clase: "arbol", rutas: ["src/a.xne"], recortado: false }));
+    llega(store, "src/a.xne");
+    await waitFor(() => expect(document.querySelector(".cm-editor")).not.toBeNull());
+    expect(enviar).toHaveBeenCalledWith({ clase: "baseDeFichero", ruta: "src/a.xne", base: "sesion" });
+  });
+
+  it("una copia VIEJA del fichero en el store no abre el editor: espera a la que se acaba de pedir", async () => {
+    const { store, enviar } = enRevision([{ ruta: "src/a.xne", clase: "modificado", mas: 1, menos: 0 }]);
+    llega(store, "src/a.xne", { huella: "vieja", texto: "viejo\n" });
+    fireEvent.click(screen.getByRole("button", { name: "Editar src/a.xne" }));
+    act(() => store.aplicar({ clase: "arbol", rutas: ["src/a.xne"], recortado: false }));
+    expect(document.querySelector(".cm-editor")).toBeNull();
+    expect(mandados(enviar, "baseDeFichero")).toEqual([]);
+    llega(store, "src/a.xne", { huella: "nueva", texto: "nuevo\n" });
+    await waitFor(() => expect(document.querySelector(".cm-editor")).not.toBeNull());
+    expect(EditorView.findFromDOM(document.querySelector(".cm-editor") as HTMLElement)!.state.doc.toString()).toBe("nuevo\n");
+  });
+
+  it("si al llegar no es editable (latin1), se queda en el visor sin error", async () => {
+    const { store } = enRevision([{ ruta: "src/a.xne", clase: "modificado", mas: 1, menos: 0 }]);
+    fireEvent.click(screen.getByRole("button", { name: "Editar src/a.xne" }));
+    act(() => store.aplicar({ clase: "arbol", rutas: ["src/a.xne"], recortado: false }));
+    llega(store, "src/a.xne", { codificacion: "latin1", huella: undefined });
+    expect(screen.getByText(/leído como latin1/i)).toBeTruthy();
+    expect(document.querySelector(".cm-editor")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    // Y lo pendiente se olvida: una versión editable que llegue luego (fin de turno) no abre nada sola.
+    llega(store, "src/a.xne", { huella: "h2" });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.querySelector(".cm-editor")).toBeNull();
+  });
+
+  it("un fichero NUEVO que el árbol guardado aún no tiene no se pierde: se espera al árbol de ahora", async () => {
+    const { store, enviar } = enRevision([{ ruta: "nuevo.js", clase: "nuevo", mas: 3, menos: 0 }]);
+    // El árbol de antes del turno que creó `nuevo.js`.
+    act(() => store.aplicar({ clase: "arbol", rutas: ["a.xne"], recortado: false }));
+    const arbolesAntes = mandados(enviar, "arbol").length;
+    fireEvent.click(screen.getByRole("button", { name: "Editar nuevo.js" }));
+    expect(mandados(enviar, "arbol").length).toBeGreaterThan(arbolesAntes);
+    llega(store, "nuevo.js");
+    act(() => store.aplicar({ clase: "arbol", rutas: ["a.xne", "nuevo.js"], recortado: false }));
+    await waitFor(() => expect(document.querySelector(".cm-editor")).not.toBeNull());
+    expect(screen.getByRole("treeitem", { name: /nuevo\.js$/ }).getAttribute("aria-current")).toBe("true");
+  });
+
+  it("ni un borrado ni un binario ofrecen «Editar»", () => {
+    enRevision([
+      { ruta: "viejo.xne", clase: "borrado", mas: 0, menos: 3 },
+      { ruta: "logo.png", clase: "nuevo" },
+    ]);
+    expect(screen.queryByRole("button", { name: /^Editar / })).toBeNull();
+  });
+});

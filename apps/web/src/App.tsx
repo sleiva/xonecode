@@ -32,6 +32,7 @@ import { Revision } from "./componentes/Revision.js";
 import { Ficheros } from "./componentes/Ficheros.js";
 import { CambiosSinGuardar } from "./componentes/CambiosSinGuardar.js";
 import { usarEdicion } from "./usarEdicion.js";
+import { esEditable } from "./edicion.js";
 import { CloudStudio } from "./componentes/CloudStudio.js";
 import { Artefactos, type ArtefactoEnLista } from "./componentes/Artefactos.js";
 import { TareasDelProyecto } from "./componentes/TareasDelProyecto.js";
@@ -734,6 +735,64 @@ export function App({
     },
     [elegirFichero, abrirPanel, conGuarda]
   );
+
+  /**
+   * «Editar» en un bloque de Revisión: el MISMO camino que abrir un hallazgo —elegirlo en Ficheros,
+   * pedir su contenido y abrir esa pestaña— y, además, abrir el editor cuando llegue. No se abre al
+   * pulsar porque el editor solo acepta lo que se sabe editable (`edicion.ts#esEditable`), y eso lo
+   * dice el contenido; por eso queda PENDIENTE con la copia que había en el store en ese momento, y
+   * se abre con la PRIMERA que llegue distinta —la que se acaba de pedir—: abrir con una copia vieja
+   * partiría de una huella vieja, y lo primero que se tecleara chocaría con la banda de «versión
+   * nueva». Si la que llega no es editable (latin1, recortada, un error), se queda en el visor y lo
+   * pendiente se olvida: es lo mismo que enseñaría el árbol.
+   *
+   * La base es la del inicio de la sesión, que es la que va por omisión: se REPONE si alguien eligió
+   * otra antes (al pulsar no hay edición abierta, así que solo cambia la elección, y `abrir` —que
+   * llega en otro render— ya la ve).
+   *
+   * **El árbol guardado puede no tener el fichero**: si el agente lo creó con otra pestaña delante,
+   * nadie volvió a pedir el árbol, y `Ficheros` cierra al montar lo elegido que no está en un árbol
+   * entero. Entonces se pide el de ahora y, mientras llega, a `Ficheros` no se le pasa el viejo
+   * (`arbolViejo`): un árbol de antes del turno no puede decidir que un fichero de después no existe.
+   */
+  const [edicionPendiente, setEdicionPendiente] = useState<{ ruta: string; copia: unknown } | undefined>(undefined);
+  const [arbolViejo, setArbolViejo] = useState<object | undefined>(undefined);
+  const editarDesdeRevision = useCallback(
+    (ruta: string) => {
+      const hacer = (): void => {
+        if (edicionRef.current.actual?.ruta !== ruta) {
+          if (edicionRef.current.baseElegida !== "sesion") edicionRef.current.elegirBase("sesion");
+          setEdicionPendiente({ ruta, copia: estado.contenidos?.[ruta] });
+        }
+        const arbol = estado.arbol;
+        if (arbol !== undefined && arbol.error === undefined && !arbol.recortado && !arbol.rutas.includes(ruta)) {
+          setArbolViejo(arbol);
+          pedirArbol();
+        }
+        elegirFichero(ruta);
+        abrirPanel("ficheros");
+      };
+      if (ruta === edicionRef.current.actual?.ruta) hacer();
+      else conGuarda(hacer);
+    },
+    [estado.contenidos, estado.arbol, pedirArbol, elegirFichero, abrirPanel, conGuarda]
+  );
+  const llegadoParaEditar = edicionPendiente === undefined ? undefined : estado.contenidos?.[edicionPendiente.ruta];
+  useEffect(() => {
+    if (edicionPendiente === undefined) return;
+    // Se eligió otro fichero (o se cerró) antes de que llegara: ya no hay nada que abrir.
+    if (ficheroElegido !== edicionPendiente.ruta) {
+      setEdicionPendiente(undefined);
+      return;
+    }
+    if (llegadoParaEditar === undefined || llegadoParaEditar === edicionPendiente.copia) return;
+    setEdicionPendiente(undefined);
+    if (esEditable(llegadoParaEditar)) edicion.abrir(llegadoParaEditar);
+  }, [edicionPendiente, llegadoParaEditar, ficheroElegido, edicion]);
+  // El árbol de ahora ya llegó: el viejo deja de esconderse.
+  useEffect(() => {
+    if (arbolViejo !== undefined && estado.arbol !== arbolViejo) setArbolViejo(undefined);
+  }, [arbolViejo, estado.arbol]);
 
   /** Lo que «Pedir corrección» deja en el compositor; el `id` hace que dos iguales cuenten dos. */
   const [borradorDelCompositor, setBorradorDelCompositor] = useState<{ texto: string; id: number } | undefined>(
@@ -2234,6 +2293,8 @@ export function App({
           alPlegar={plegar}
           alRecargar={pedirRevision}
           conectado={estado.conectado}
+          alEditar={editarDesdeRevision}
+          {...(estado.arbol?.rutas === undefined ? {} : { rutasDelProyecto: estado.arbol.rutas })}
           // La banda de la sincronización, que ya no es pestaña propia: «cuánto queda
           // por subir» es la misma pregunta que contesta Revisión medida contra otra
           // referencia. Se monta CON la pestaña, y montarse es lo que la hace medir
@@ -2273,7 +2334,7 @@ export function App({
       }
       ficheros={
         <Ficheros
-          {...(estado.arbol === undefined ? {} : { arbol: estado.arbol })}
+          {...(estado.arbol === undefined || estado.arbol === arbolViejo ? {} : { arbol: estado.arbol })}
           contenidos={estado.contenidos ?? {}}
           {...(ficheroElegido === undefined ? {} : { elegido: ficheroElegido })}
           {...(lineaElegida === undefined ? {} : { linea: lineaElegida })}

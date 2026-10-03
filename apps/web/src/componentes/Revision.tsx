@@ -4,6 +4,7 @@ import type { CambiosDeUnaColeccion, FicheroTocado } from "../tipos.js";
 import { numerarParche } from "../numerarParche.js";
 import { arbolDeRutas } from "../arbolDeRutas.js";
 import { Arbol } from "./Arbol.js";
+import { IconoDeFichero } from "./IconoDeFichero.js";
 import estilos from "./Revision.module.css";
 
 /**
@@ -51,6 +52,8 @@ export function Revision({
   historica,
   conectado,
   cloudstudio,
+  alEditar,
+  rutasDelProyecto,
 }: {
   /**
    * CÓMO se ha medido lo que se enseña, y de eso depende lo que la pestaña puede AFIRMAR:
@@ -90,6 +93,16 @@ export function Revision({
    * cuando la lista está vacía y esa cifra es lo único que hay que mirar.
    */
   cloudstudio?: ReactNode;
+  /**
+   * «Editar» en la cabecera de un bloque: abre ESE fichero en el editor de Ficheros (lo cablea
+   * `App`, con su guarda de cambios sin guardar). Ausente = no hay botón.
+   */
+  alEditar?: (ruta: string) => void;
+  /**
+   * Las rutas del árbol del proyecto, si se tienen: con ellas se reconoce una vista aplanada cuyo
+   * `.xne` la sesión no tocó. Ausente = solo se mira la lista de Revisión.
+   */
+  rutasDelProyecto?: readonly string[];
 }) {
   // Se pide siempre que NO se tenga la lista, no solo al montar: entrar a mirar ES la
   // petición, pero también volver a tenerla vacía. Al cambiar de proyecto el store tira la
@@ -147,6 +160,7 @@ export function Revision({
     const totalMas = conCuenta.reduce((s, f) => s + (f.mas ?? 0), 0);
     const totalMenos = conCuenta.reduce((s, f) => s + (f.menos ?? 0), 0);
     const claseDe = new Map(ficheros.map((f) => [f.ruta, f.clase] as const));
+    const conocidas = new Set([...ficheros.map((f) => f.ruta), ...(rutasDelProyecto ?? [])]);
 
     const irA = (ruta: string): void => {
       alDesplegar(ruta);
@@ -223,38 +237,54 @@ export function Revision({
               <section
                 key={f.ruta}
                 className={estilos.bloque}
+                data-bloque={f.ruta}
                 ref={(el) => {
                   if (el === null) bloques.current.delete(f.ruta);
                   else bloques.current.set(f.ruta, el);
                 }}
               >
                 {/* La cabecera del bloque es PEGAJOSA: en un diff de trescientas líneas hay
-                    que seguir sabiendo de qué fichero es sin volver arriba. */}
-                <button
-                  type="button"
-                  className={estilos.cabeceraDeBloque}
-                  aria-expanded={abierto}
-                  onClick={() => (abierto ? alPlegar(f.ruta) : alDesplegar(f.ruta))}
-                >
-                  <span className={estilos.clase} data-clase={f.clase} aria-label={f.clase}>
-                    {f.clase === "nuevo" ? "A" : f.clase === "borrado" ? "D" : "M"}
-                  </span>
-                  <span className={estilos.ruta}>
-                    {carpeta(f.ruta) === "" ? null : <span className={estilos.carpeta}>{carpeta(f.ruta)}</span>}
-                    <span className={estilos.hoja}>{hoja(f.ruta)}</span>
-                  </span>
-                  {/* Lo que nadie ha commiteado se dice EN la fila: puede ser el turno en vuelo
-                      (se commitea al terminar) o algo que estaba suelto de antes, y en ninguno
-                      de los dos casos consta de quién es. */}
-                  {f.sinCommitear === true ? <span className={estilos.pendiente}>sin commitear</span> : null}
-                  {f.mas === undefined && f.menos === undefined ? (
-                    <span className={estilos.binario}>binario</span>
-                  ) : (
-                    <span className={estilos.cuenta}>
-                      <span className={estilos.mas}>+{f.mas ?? 0}</span> <span className={estilos.menos}>−{f.menos ?? 0}</span>
+                    que seguir sabiendo de qué fichero es sin volver arriba. Es una FILA con dos
+                    botones hermanos —desplegar y «Editar»— porque un `<button>` no puede llevar
+                    otro dentro. */}
+                <div className={estilos.filaDeBloque}>
+                  <button
+                    type="button"
+                    className={estilos.cabeceraDeBloque}
+                    aria-expanded={abierto}
+                    onClick={() => (abierto ? alPlegar(f.ruta) : alDesplegar(f.ruta))}
+                  >
+                    <span className={estilos.clase} data-clase={f.clase} aria-label={f.clase}>
+                      {f.clase === "nuevo" ? "A" : f.clase === "borrado" ? "D" : "M"}
                     </span>
-                  )}
-                </button>
+                    <IconoDeFichero ruta={f.ruta} />
+                    <span className={estilos.ruta}>
+                      {carpeta(f.ruta) === "" ? null : <span className={estilos.carpeta}>{carpeta(f.ruta)}</span>}
+                      <span className={estilos.hoja}>{hoja(f.ruta)}</span>
+                    </span>
+                    {/* Lo que nadie ha commiteado se dice EN la fila: puede ser el turno en vuelo
+                        (se commitea al terminar) o algo que estaba suelto de antes, y en ninguno
+                        de los dos casos consta de quién es. */}
+                    {f.sinCommitear === true ? <span className={estilos.pendiente}>sin commitear</span> : null}
+                    {f.mas === undefined && f.menos === undefined ? (
+                      <span className={estilos.binario}>binario</span>
+                    ) : (
+                      <span className={estilos.cuenta}>
+                        <span className={estilos.mas}>+{f.mas ?? 0}</span> <span className={estilos.menos}>−{f.menos ?? 0}</span>
+                      </span>
+                    )}
+                  </button>
+                  {/* Sin motivo escrito al lado cuando no se puede: el «binario» ya va en la fila, y
+                      un borrado o una vista aplanada se leen en su letra y su nombre. */}
+                  {alEditar !== undefined && sePuedeEditar(f, conocidas) ? (
+                    <button type="button" className={estilos.editar} aria-label={`Editar ${f.ruta}`} onClick={() => alEditar(f.ruta)}>
+                      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                        <path d="M10.8 2.7l2.5 2.5-7.6 7.6-3.2.7.7-3.2z" strokeLinejoin="round" />
+                      </svg>
+                      Editar
+                    </button>
+                  ) : null}
+                </div>
 
                 {abierto && modelosDelCambio !== undefined && f.ruta.toLowerCase().endsWith(".xne") ? (
                   <CambiosDelModelo ruta={f.ruta} estado={modelosDelCambio[f.ruta]} />
@@ -369,6 +399,20 @@ function CambiosDelModelo({ ruta, estado }: { ruta: string; estado?: { cambios?:
       <p className={estilos.modeloNota}>Del campo solo consta el tipo: tamaño y demás atributos, en el diff de abajo.</p>
     </div>
   );
+}
+
+/**
+ * ¿Tiene sentido «Editar» en este bloque? No en un borrado (no hay fichero), ni en un binario (git
+ * no contó líneas: `mas`/`menos` ausentes), ni en una vista aplanada —un `X.xml` con su `X.xne` al
+ * lado, que genera Studio y que el agente ni ve—. Lo último es una heurística del cliente sobre lo
+ * que conoce (la lista y, si llegó, el árbol): la regla de verdad vive en el servidor, que no deja
+ * leer una vista aplanada, y un fichero que llega con error no se abre en el editor.
+ */
+function sePuedeEditar(f: FicheroTocado, conocidas: ReadonlySet<string>): boolean {
+  if (f.clase === "borrado") return false;
+  if (f.mas === undefined && f.menos === undefined) return false;
+  if (/\.xml$/i.test(f.ruta) && conocidas.has(f.ruta.replace(/\.xml$/i, ".xne"))) return false;
+  return true;
 }
 
 /** La parte de la ruta que se puede recortar: todo menos el nombre del fichero. */
