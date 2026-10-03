@@ -1,5 +1,6 @@
 /* Alias comprobados contra `estilos/design-platform.css`: label-primary/secondary/tertiary,
-   interactive-bg-hover. `--xonecode-cian` es de `estilos/marca.css`. */
+   border-l2. `--xonecode-cian` y `--xonecode-fila-*` son de `estilos/marca.css` (y el puente de
+   temas los redefine). */
 
 .nivel {
   margin: 0;
@@ -7,21 +8,24 @@
   list-style: none;
 }
 
+/* El NOMBRE va en la letra de la interfaz, no en mono: en un árbol se lee como una lista de
+   nombres, no como rutas que copiar (la ruta entera, que sí es dato de máquina, está en la
+   cabecera del visor). `position: relative` sostiene las líneas guía. */
 .hoja,
 .carpeta {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
   width: 100%;
-  min-height: 26px;
-  padding: 2px 8px;
+  height: 26px;
+  padding: 0 8px;
   border: none;
   border-radius: 6px;
   background: none;
   color: var(--dsw-alias-label-primary);
   font: inherit;
-  font-family: var(--ds-font-family-code);
-  font-size: 12px;
+  font-size: 13px;
   text-align: left;
   cursor: pointer;
 }
@@ -32,14 +36,17 @@
 
 .hoja:hover,
 .carpeta:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--xonecode-fila-hover);
 }
 
-/* Dos señales, como la fila activa de la barra: fondo Y barra de acento, porque el fondo
-   de elegida es el MISMO alias que el de hover de la fila de al lado. */
+/* Tres señales, como la fila activa de la barra: fondo, barra de acento y el nombre en 600. El
+   fondo solo no basta cuando la fila de al lado está en `:hover`. */
 .hoja[data-elegida] {
-  position: relative;
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--xonecode-fila-elegida);
+}
+
+.hoja[data-elegida] .nombre {
+  font-weight: 600;
 }
 
 .hoja[data-elegida]::before {
@@ -60,9 +67,29 @@
   font-size: 10px;
 }
 
+/* La insignia (`M`, `●`, la letra de Revisión) sigue en mono: son marcas de una sola letra que
+   tienen que ocupar lo mismo. */
 .insignia {
   flex: none;
   display: inline-flex;
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+}
+
+/* Las líneas guía del sangrado, tenues: dicen de qué carpeta cuelga una fila sin competir con
+   los nombres. */
+.guia {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0.5px;
+  background: var(--dsw-alias-border-l2);
+  pointer-events: none;
+}
+
+/* El `.xml` lo genera XOne Studio y no se toca: su nombre, en terciario. */
+.hoja[data-fichero="xml"] .nombre {
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .nombre {

@@ -1,0 +1,60 @@
+/* El color de cada tipo de fichero sale de un token de `estilos/marca.css` (`--xonecode-icono-*`),
+   nunca de un literal: el SVG pinta con `currentColor` y aquí se fija ese color por tipo. Los temas
+   NO los redefinen —son los colores de cada tipo, como en cualquier editor—, y por eso son una
+   excepción declarada en `estilosDelCliente.test.ts`. Alias comprobados: bg-layer-1. */
+
+.icono {
+  flex: none;
+  display: block;
+}
+
+.xne {
+  color: var(--xonecode-icono-xne);
+}
+
+.js {
+  color: var(--xonecode-icono-js);
+}
+
+.css {
+  color: var(--xonecode-icono-css);
+}
+
+/* El `.xml` lo genera XOne Studio y no se toca: gris, como su nombre en el árbol. Configuración y
+   «otro» comparten ese gris: son ficheros de acompañamiento, no fuente de la app. */
+.xml,
+.config,
+.otro {
+  color: var(--xonecode-icono-gris);
+}
+
+.imagen {
+  color: var(--xonecode-icono-imagen);
+}
+
+.bd {
+  color: var(--xonecode-icono-bd);
+}
+
+.markdown,
+.fuente {
+  color: var(--xonecode-icono-texto);
+}
+
+.carpeta {
+  color: var(--xonecode-icono-carpeta);
+}
+
+/* Lo que va ENCIMA del relleno: el aspa del `.xne` y la almohadilla del CSS en blanco, las letras
+   del JS en oscuro. Fijos en los dos modos: se leen contra el relleno del icono, no contra el fondo. */
+.sobre {
+  stroke: var(--xonecode-icono-sobre);
+}
+
+.sobreJs {
+  fill: var(--xonecode-icono-sobre-js);
+}
+
+.hueco {
+  fill: var(--dsw-alias-bg-layer-1);
+}

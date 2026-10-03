@@ -1,5 +1,7 @@
 import { useId, useState, type ReactNode } from "react";
 import type { NodoDelArbol } from "../arbolDeRutas.js";
+import { tipoDeFichero } from "../tipoDeFichero.js";
+import { IconoDeFichero } from "./IconoDeFichero.js";
 import estilos from "./Arbol.module.css";
 
 /**
@@ -10,6 +12,20 @@ import estilos from "./Arbol.module.css";
  */
 function idDeGrupo(ruta: string): string {
   return `arbol-grupo-${ruta.replace(/[^A-Za-z0-9_-]/g, "_")}`;
+}
+
+/** El sangrado de un nivel, en px: lo usan la fila y sus líneas guía, que tienen que caer juntas. */
+const sangrado = (nivel: number): number => 8 + nivel * 14;
+
+/**
+ * Las líneas guía del sangrado: una vertical por cada nivel por ENCIMA de la fila, a la altura de
+ * la flecha de la carpeta de la que cuelga. Son spans absolutos DENTRO del botón de la fila (un
+ * `<ul>` no admite nada entre sus `<li>`), y decorativos: el nivel ya lo dice `aria-level`.
+ */
+function guias(nivel: number): ReactNode {
+  return Array.from({ length: nivel }, (_, k) => (
+    <span key={k} className={estilos.guia} style={{ left: sangrado(k) + 5 }} data-guia="" aria-hidden="true" />
+  ));
 }
 
 /**
@@ -31,6 +47,8 @@ function idDeGrupo(ruta: string): string {
  *   buscar, y una coincidencia dentro de una carpeta plegada no se ve.
  * - La elegida lleva `aria-current` además del fondo, como la fila activa de la barra: el
  *   fondo solo no basta cuando la de al lado está en `:hover`.
+ * - Cada fila lleva el icono de su tipo (`IconoDeFichero.tsx`), o el de carpeta abierta/cerrada,
+ *   decorativo: el nombre accesible de la fila sigue siendo solo su nombre.
  */
 export function Arbol({
   nodos,
@@ -85,12 +103,19 @@ export function Arbol({
               type="button"
               role="treeitem"
               className={estilos.hoja}
-              style={{ paddingLeft: 8 + nivel * 14 }}
+              style={{ paddingLeft: sangrado(nivel) }}
               aria-level={nivel + 1}
+              // Para pintar en gris el nombre de un `.xml`, que genera XOne Studio y no se toca.
+              data-fichero={tipoDeFichero(nodo.ruta)}
               {...(nodo.ruta === elegida ? { "aria-current": "true" as const } : {})}
               data-elegida={nodo.ruta === elegida ? "" : undefined}
               onClick={() => alElegir(nodo.ruta)}
             >
+              {guias(nivel)}
+              {/* El hueco de la flecha, vacío: así el icono de una hoja cae bajo el de las carpetas
+                  de su mismo nivel y la columna de iconos se lee recta. */}
+              <span className={estilos.flecha} aria-hidden="true" />
+              <IconoDeFichero ruta={nodo.ruta} />
               {insignia === undefined ? null : <span className={estilos.insignia}>{insignia(nodo.ruta)}</span>}
               <span className={estilos.nombre}>{nodo.nombre}</span>
             </button>
@@ -101,7 +126,7 @@ export function Arbol({
               type="button"
               role="treeitem"
               className={estilos.carpeta}
-              style={{ paddingLeft: 8 + nivel * 14 }}
+              style={{ paddingLeft: sangrado(nivel) }}
               aria-expanded={abierta(nodo, nivel)}
               aria-level={nivel + 1}
               // El nombre accesible se fija con aria-label: sin él, aria-owns hace que el
@@ -116,9 +141,11 @@ export function Arbol({
               aria-owns={abierta(nodo, nivel) ? idDelGrupo(nodo.ruta) : undefined}
               onClick={() => alternar(nodo.ruta)}
             >
+              {guias(nivel)}
               <span className={estilos.flecha} aria-hidden="true">
                 {abierta(nodo, nivel) ? "▾" : "▸"}
               </span>
+              <IconoDeFichero ruta={nodo.ruta} carpeta abierta={abierta(nodo, nivel)} />
               <span className={estilos.nombre}>{nodo.nombre}</span>
             </button>
             {abierta(nodo, nivel) ? pintar(nodo.hijos, nivel + 1, idDelGrupo(nodo.ruta)) : null}

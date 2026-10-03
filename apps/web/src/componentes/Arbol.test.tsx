@@ -67,4 +67,33 @@ describe("Arbol", () => {
     expect(src.getAttribute("aria-level")).toBe("1");
     expect(clientes.getAttribute("aria-level")).toBe("2");
   });
+  it("cada hoja lleva el icono de su TIPO, y no cambia su nombre accesible", () => {
+    render(<Arbol nodos={NODOS} alElegir={vi.fn()} />);
+    const tipo = (nombre: string): string | null =>
+      screen.getByRole("treeitem", { name: nombre }).querySelector("svg[data-icono]")?.getAttribute("data-icono") ?? null;
+    expect(tipo("app.xml")).toBe("xml");
+    expect(tipo("Clientes.xne")).toBe("xne");
+    // Decorativo: el «JS» o el «Aa» de dentro de un icono no pueden colarse en el nombre de la fila.
+    for (const svg of document.querySelectorAll("svg[data-icono]")) expect(svg.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("cada carpeta lleva el icono de carpeta, abierta o cerrada según esté", () => {
+    render(<Arbol nodos={NODOS} alElegir={vi.fn()} />);
+    expect(screen.getByRole("treeitem", { name: "src" }).querySelector("svg[data-icono]")?.getAttribute("data-icono")).toBe("carpeta-abierta");
+    expect(screen.getByRole("treeitem", { name: "ui" }).querySelector("svg[data-icono]")?.getAttribute("data-icono")).toBe("carpeta");
+  });
+
+  it("una línea guía por cada nivel de sangrado, decorativa", () => {
+    render(<Arbol nodos={NODOS} alElegir={vi.fn()} />);
+    expect(screen.getByRole("treeitem", { name: "app.xml" }).querySelectorAll("[data-guia]")).toHaveLength(0);
+    const guias = screen.getByRole("treeitem", { name: "Clientes.xne" }).querySelectorAll("[data-guia]");
+    expect(guias).toHaveLength(1);
+    expect(guias[0]!.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("los .xml de XOne Studio llevan la marca para ir en gris: no se tocan", () => {
+    render(<Arbol nodos={NODOS} alElegir={vi.fn()} />);
+    expect(screen.getByRole("treeitem", { name: "app.xml" }).getAttribute("data-fichero")).toBe("xml");
+    expect(screen.getByRole("treeitem", { name: "Clientes.xne" }).getAttribute("data-fichero")).toBe("xne");
+  });
 });

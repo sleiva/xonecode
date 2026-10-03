@@ -187,6 +187,21 @@
      elegida y el foco, y una marca de cambio del mismo color se confundiría con «seleccionado»—
      ni `state-business`, que en la paleta copiada es violeta. */
   --xonecode-marca-cambiada: #3b82f6;
+
+  /* Los iconos por tipo de fichero (`componentes/IconoDeFichero.tsx`): el color de cada TIPO, como
+     en cualquier editor, así que los temas no los tocan. Valores de la maqueta aprobada,
+     comprobados en claro y en oscuro. `sobre`/`sobre-js` son lo que va ENCIMA del relleno —el
+     aspa del `.xne`, la almohadilla del CSS, las letras del JS— y no cambian con el modo. */
+  --xonecode-icono-xne: #00a3e0;
+  --xonecode-icono-js: #f0c419;
+  --xonecode-icono-css: #2f6fd8;
+  --xonecode-icono-gris: #7b8590;
+  --xonecode-icono-imagen: #9b51e0;
+  --xonecode-icono-bd: #d38b00;
+  --xonecode-icono-texto: #4a5059;
+  --xonecode-icono-carpeta: #8fb3d4;
+  --xonecode-icono-sobre: #ffffff;
+  --xonecode-icono-sobre-js: #1f2328;
 }
 
 /* En oscuro el acento no cambia —el cian es el mismo color de marca sobre los dos fondos, y
@@ -211,4 +226,14 @@ body[data-ds-dark-theme] {
   --xonecode-gasto-externo: #e0701a;
   /* El azul de la marca «cambiada», un paso más claro: sobre fondo oscuro el de claro se hunde. */
   --xonecode-marca-cambiada: #60a5fa;
+  /* Los iconos por tipo, un paso más claros donde sobre fondo oscuro se hundían (el `.xne` es el
+     cian de la marca y no cambia; la carpeta, al revés, baja para no brillar más que su nombre). */
+  --xonecode-icono-xne: #00a3e0;
+  --xonecode-icono-js: #f1d64f;
+  --xonecode-icono-css: #60a5fa;
+  --xonecode-icono-gris: #9aa3ad;
+  --xonecode-icono-imagen: #c084fc;
+  --xonecode-icono-bd: #fbbf24;
+  --xonecode-icono-texto: #cfd3d6;
+  --xonecode-icono-carpeta: #6b8db0;
 }

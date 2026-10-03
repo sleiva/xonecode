@@ -103,7 +103,7 @@ describe("el puente de temas", () => {
       "splash-": "presentación de marca, ajena al tema",
       "barra-placa": "la placa del símbolo es blanca siempre, resuelve en :root",
       angulo: "un ángulo de degradado, no es un color",
-      "icono-copiar": "una máscara SVG, no es un color",
+      "icono-": "colores de tipo de fichero (y la máscara de `icono-copiar`): son de la marca, no del tema; validados en claro y oscuro",
     };
     const excepcion = (n: string): boolean =>
       Object.keys(EXCEPCIONES).some((k) => (k.endsWith("-") ? n.startsWith(k) : n === k));
