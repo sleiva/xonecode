@@ -118,7 +118,34 @@ export interface OperacionOmitida {
  *   sustentaría, así que esta política no se implementa todavía: el hueco queda limpio
  *   para enchufarla el día que exista.
  */
-export type PoliticaDeAprobacion = (plan: readonly OperacionDeSubida[]) => Promise<boolean>;
+export type PoliticaDeAprobacion = (plan: readonly OperacionDeSubida[]) => Promise<AutorizacionDeSubida>;
+
+/**
+ * Lo que contesta la política: nada (`false`), el plan ENTERO (`true`), o solo las rutas que
+ * la persona dejó marcadas (`{rutas}`) — la consola web deja elegir qué ficheros suben.
+ *
+ * **Nunca se decide por su veracidad**: `{rutas: []}` es un objeto y por tanto «verdadero», y
+ * leerlo así convertiría «no marqué nada» en «súbelo». Lo que se ejecuta lo dice SIEMPRE
+ * `planAutorizado`, y un plan autorizado vacío es un rechazo.
+ */
+export type AutorizacionDeSubida = boolean | { rutas: readonly string[] };
+
+/**
+ * Las operaciones que se ejecutan de verdad: el plan cruzado con lo autorizado.
+ *
+ * Es una INTERSECCIÓN y no una lista que llega de fuera: una ruta que no está en el plan —un
+ * cliente roto, una selección de otra pregunta— no añade nada, solo puede quitar. Conserva el
+ * orden del plan, que es el que decidió `planDeSubida`.
+ */
+export function planAutorizado(
+  plan: readonly OperacionDeSubida[],
+  autorizacion: AutorizacionDeSubida
+): OperacionDeSubida[] {
+  if (autorizacion === true) return [...plan];
+  if (autorizacion === false || typeof autorizacion !== "object" || !Array.isArray(autorizacion.rutas)) return [];
+  const elegidas = new Set(autorizacion.rutas.filter((ruta): ruta is string => typeof ruta === "string"));
+  return plan.filter((operacion) => elegidas.has(operacion.ruta));
+}
 
 /**
  * Quién autoriza que «Actualizar repo local» VACÍE la copia y la baje entera.

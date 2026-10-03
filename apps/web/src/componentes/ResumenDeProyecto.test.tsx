@@ -267,3 +267,70 @@ describe("con qué modo nacen las conversaciones nuevas del proyecto (IXCODE-31)
     expect(combo.value).toBe("autonomo");
   });
 });
+
+describe("«Subir» en la tarjeta de lo pendiente", () => {
+  const CON_PENDIENTES = () =>
+    Promise.resolve({ tareas: [], sync: { proyecto: "Tienda", rama: "main", pendientes: 3 } } as FotoDelResumen);
+
+  function conSubida(subida: { esperando: boolean; motivoParaNo?: string }, alPedirResumen = CON_PENDIENTES, marcaDeSubida?: string) {
+    const alSubir = vi.fn();
+    const props = {
+      proyecto: { id: "p1", nombre: "Tienda", local: true },
+      alDescargar: () => {},
+      alAbrirCarpeta: () => Promise.resolve(undefined),
+      alBorrarCopia: () => Promise.resolve(undefined),
+      alPedirResumen: vi.fn(alPedirResumen),
+      subida: { ...subida, alSubir },
+    };
+    const vista = render(
+      <ResumenDeProyecto {...props} {...(marcaDeSubida === undefined ? {} : { marcaDeSubida })} />
+    );
+    return { alSubir, props, vista };
+  }
+
+  it("con pendientes medidos sale «Subir», y pulsarlo manda la intención", async () => {
+    const { alSubir } = conSubida({ esperando: false });
+    await asentar();
+    fireEvent.click(within(screen.getByRole("status")).getByRole("button", { name: /subir/i }));
+    expect(alSubir).toHaveBeenCalledTimes(1);
+  });
+
+  it("con nada por subir NO sale: no llevaría a ninguna parte", async () => {
+    conSubida({ esperando: false }, () =>
+      Promise.resolve({ tareas: [], sync: { proyecto: "Tienda", rama: "main", pendientes: 0 } } as FotoDelResumen)
+    );
+    await asentar();
+    expect(within(screen.getByRole("status")).queryByRole("button", { name: /subir/i })).toBeNull();
+  });
+
+  it("mientras espera el diálogo gira DENTRO del botón y no se puede volver a pulsar", async () => {
+    conSubida({ esperando: true });
+    await asentar();
+    const boton = within(screen.getByRole("status")).getByRole("button", { name: /subir/i }) as HTMLButtonElement;
+    expect(boton.disabled).toBe(true);
+    expect(boton.getAttribute("aria-busy")).toBe("true");
+  });
+
+  it("con un turno en marcha se apaga y DICE por qué", async () => {
+    conSubida({ esperando: false, motivoParaNo: "Hay un turno en marcha" });
+    await asentar();
+    const boton = within(screen.getByRole("status")).getByRole("button", { name: /subir/i }) as HTMLButtonElement;
+    expect(boton.disabled).toBe(true);
+    expect(boton.title).toMatch(/turno en marcha/);
+  });
+
+  it("sin `subida` (un proyecto que no es el abierto) no se ofrece", async () => {
+    montar({ id: "p1", nombre: "Tienda", local: true }, { alPedirResumen: CON_PENDIENTES });
+    await asentar();
+    expect(within(screen.getByRole("status")).queryByRole("button", { name: /subir/i })).toBeNull();
+  });
+
+  it("al terminar una subida vuelve a MEDIR: lo subido deja de estar pendiente", async () => {
+    const { props, vista } = conSubida({ esperando: false });
+    await asentar();
+    expect(props.alPedirResumen).toHaveBeenCalledTimes(1);
+    vista.rerender(<ResumenDeProyecto {...props} marcaDeSubida="2026-10-02T10:00:00.000Z" />);
+    await asentar();
+    expect(props.alPedirResumen).toHaveBeenCalledTimes(2);
+  });
+});

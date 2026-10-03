@@ -19,6 +19,21 @@
   padding: 24px 24px 8px;
 }
 
+/* Icono de la app + nombre, en fila. Solo existe con icono: sin él el `h1` va suelto como siempre. */
+.titular {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.iconoDeApp {
+  flex: none;
+  display: block;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
 .nombre {
   margin: 0;
   font-size: 24px;
@@ -520,4 +535,18 @@
 
 .peligro {
   composes: peligro from "./Boton.module.css";
+}
+
+/* La pestaña Sincronización monta `Revision`, que lleva su PROPIO scroll (la banda acotada, la
+   pila y el árbol): aquí ocupa el alto del cuerpo en vez de crecer con su contenido, o el
+   scroll del cuerpo se comería el suyo y la banda dejaría de estar acotada. */
+.sincronizacion {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 420px;
+  overflow: hidden;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
 }

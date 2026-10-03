@@ -312,3 +312,29 @@ describe("NuevaTarea", () => {
     expect(alEncolar).not.toHaveBeenCalled();
   });
 });
+
+describe("NuevaTarea: un modal de verdad, y «Preparar el encargo» dice que está en ello", () => {
+  afterEach(cleanup);
+
+  it("ni Escape ni el clic fuera la cierran: solo su botón", () => {
+    const alCerrar = vi.fn();
+    render(<NuevaTarea {...base} alCerrar={alCerrar} />);
+    fireEvent.keyDown(document, { key: "Escape" });
+    const velo = screen.getByRole("dialog").firstElementChild as HTMLElement;
+    fireEvent.click(velo);
+    expect(alCerrar).not.toHaveBeenCalled();
+    fireEvent.click(screen.getAllByRole("button", { name: "Cancelar" })[0]!);
+    expect(alCerrar).toHaveBeenCalledTimes(1);
+  });
+
+  it("«Preparar el encargo» gira y se apaga hasta que llega la propuesta", () => {
+    const { rerender } = render(<NuevaTarea {...base} />);
+    fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "buscar por NIF" } });
+    const boton = (): HTMLButtonElement => screen.getByRole("button", { name: /preparar el encargo/i });
+    fireEvent.click(boton());
+    expect(boton().getAttribute("aria-busy")).toBe("true");
+    expect(boton().disabled).toBe(true);
+    rerender(<NuevaTarea {...base} encargoPropuesto={{ encargo: "Añade la búsqueda por NIF" }} />);
+    expect(boton().getAttribute("aria-busy")).toBe("false");
+  });
+});

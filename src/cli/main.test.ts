@@ -953,7 +953,12 @@ describe("crearSincronizador", () => {
     const resultado = await sincronizar("bajar", raiz);
 
     expect(orden).toEqual(["descargar", "preparar"]);
-    expect(resultado).toEqual({ tipo: "texto", texto: expect.stringContaining("bajados 2 ficheros (zip)") });
+    expect(resultado).toEqual({
+      tipo: "texto",
+      texto: expect.stringContaining("bajados 2 ficheros (zip)"),
+      // Y como DATO, para que el diálogo de «Actualizar repo local» diga cuántos sin leer el texto.
+      bajada: { bajados: 2 },
+    });
   });
 
   it("cierra la sesión en un `finally` incluso si la subida revienta", async () => {

@@ -1086,7 +1086,11 @@ export function crearSincronizador(
         // `prepararRepo` va DESPUÉS de bajar, y es quien hace el `git init`: con la copia
         // vaciada no hay `.git`, así que el primer commit es la bajada entera.
         await piezas.preparar(raiz, bajada.rama, informar, vaciar ? { propio: true } : {});
-        return { tipo: "texto", texto: `bajados ${bajada.descargados.length} ficheros (${bajada.via})\n` };
+        return {
+          tipo: "texto",
+          texto: `bajados ${bajada.descargados.length} ficheros (${bajada.via})\n`,
+          bajada: { bajados: bajada.descargados.length },
+        };
       }
       if (accion === "subir") {
         const informe = await piezas.subirProyecto({
@@ -1104,10 +1108,17 @@ export function crearSincronizador(
         });
         // Negada por ficheros ilegibles: el recorrido ya dijo cuáles; «subidos 0, fallaron 0»
         // haría creer que no había nada pendiente.
+        // Sin `subida`: no se intentó escribir nada, y un «fallaron N» contaría como fallos de
+        // escritura lo que fue una negativa. El diálogo lo dice «no ha terminado bien» con el
+        // recorrido, que ya nombra los ficheros.
         if (informe.ilegibles !== undefined) {
           return { tipo: "texto", texto: `no se ha subido nada: ${informe.ilegibles.length} ficheros ilegibles\n` };
         }
-        return { tipo: "texto", texto: `subidos ${informe.ok.length}, fallaron ${informe.fallos.length}\n` };
+        return {
+          tipo: "texto",
+          texto: `subidos ${informe.ok.length}, fallaron ${informe.fallos.length}\n`,
+          subida: { subidos: informe.ok.length, fallidos: informe.fallos.length },
+        };
       }
       const pendientes = await piezas.pendientes(raiz, config.rama);
       return { tipo: "texto", texto: `rama ${config.rama}: ${pendientes.length} ficheros por subir\n` };

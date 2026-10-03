@@ -250,14 +250,42 @@ export function conexionesDeApp(xml: string): ConexionDeclarada[] {
  * una ambigüedad que resolver, son un fichero que alguien tocó.
  */
 export function nombreDeApp(ini: string): string | undefined {
+  return claveDeIni(ini, "name");
+}
+
+/** La primera `clave=` de un `.ini`, sin distinguir mayúsculas y recortada; vacía es `undefined`. */
+function claveDeIni(ini: string, clave: string): string | undefined {
   for (const linea of ini.split("\n")) {
     const corte = linea.indexOf("=");
     if (corte < 0) continue;
-    if (linea.slice(0, corte).trim().toLowerCase() !== "name") continue;
+    if (linea.slice(0, corte).trim().toLowerCase() !== clave) continue;
     const valor = linea.slice(corte + 1).trim();
     return valor === "" ? undefined : valor;
   }
   return undefined;
+}
+
+/** El icono de la app (`icon=`/`Icon=` de `app.ini`), con las mismas reglas que `nombreDeApp`. */
+export function iconoDeApp(ini: string): string | undefined {
+  return claveDeIni(ini, "icon");
+}
+
+/**
+ * Dónde puede estar el icono, en orden y como rutas RELATIVAS a la raíz del proyecto.
+ *
+ * **Dos sitios, porque el censo y la documentación no coinciden.** Los proyectos reales
+ * (ProyectoDieta, ProyectoPruebasXOneCode, mRED_Web) escriben `icon=icon.png` y dejan el fichero
+ * en la RAÍZ, junto a `splash.png`; la documentación y nuestro esqueleto dicen `Icon=app_icon.png`
+ * dentro de `IconFolder` (`icons/` por omisión). Se prueba primero lo que hacen los reales.
+ *
+ * Aquí no se decide nada de seguridad: un `icon=../.env` sale tal cual y lo para quien LEE
+ * (`leerFicheroDeProyecto`, texto y `realpath`), que es la misma barrera de Ficheros.
+ */
+export function candidatosDeIcono(ini: string): string[] {
+  const icono = iconoDeApp(ini);
+  if (icono === undefined) return [];
+  const carpeta = (claveDeIni(ini, "iconfolder") ?? "icons").replace(/[\\/]+$/, "");
+  return carpeta === "" ? [icono] : [icono, `${carpeta}/${icono}`];
 }
 
 /**

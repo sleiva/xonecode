@@ -107,6 +107,14 @@
   display: none;
 }
 
+/* El icono de la app en el sitio de la carpeta: la imagen se ajusta a su caja sin deformarse
+   (un icono de app no tiene por qué ser cuadrado), con la esquina un poco redondeada. */
+.iconoDeApp {
+  display: block;
+  object-fit: contain;
+  border-radius: 3px;
+}
+
 .cuerpoDeFila {
   flex: 1;
   min-width: 0;

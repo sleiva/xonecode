@@ -40,13 +40,16 @@ import { MS_DE_PREPARACION,
   augmentacionCableada,
   contextoDelProyecto,
   lecturaDeSync,
+  marcarPendientes,
+  lecturaDePendientesDeSubida,
+  lecturaDeParcheDeSubida,
   LINEAS_DE_LOG,
   TOPE_DE_MEMORIA,
   FICHEROS_DEL_AVISO,
 } from "./arranque.js";
 import { ErrorDelAumentador } from "../../agent/tareas/aumentador.js";
-import { leerFicheroDeProyecto, motivoDeRutaInaceptable } from "../../agent/grafo/arbolDeProyecto.js";
-import { RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
+import { iconoDelProyecto, leerFicheroDeProyecto, motivoDeRutaInaceptable } from "../../agent/grafo/arbolDeProyecto.js";
+import { RUTA_ICONO_DEL_PROYECTO, RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
 import { CLAVE_DE_SELLO, cambiosDeSesion, fotoDeApertura } from "../../agent/sesiones/sesionGit.js";
 import type { PeticionDeTarea } from "../../core/ports.js";
 import { crearVestibulo, type Vestibulo } from "./vestibulo.js";
@@ -222,6 +225,8 @@ describe("montarRutas — el cable, por fin conectado", () => {
       `GET ${RUTA_IMAGEN_DEL_PROYECTO}`,
       // Y la séptima, el paquete de la pestaña Soporte: un zip, escrito en streaming.
       `GET ${RUTA_SOPORTE}`,
+      // Y la octava, el icono de la app de un proyecto bajado, para la barra y su panel.
+      `GET ${RUTA_ICONO_DEL_PROYECTO}`,
     ].sort());
   });
 
@@ -2514,6 +2519,44 @@ describe("montarRutas — el cable, por fin conectado", () => {
       await enviarMensaje(accion, { clase: "sync", accion: "estado" });
       await esperarLecturas(cliente, 2);
       expect(ultimoSync(cliente).pendientes).toBe(1);
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    /**
+     * Lo pendiente de subir por el CABLE de verdad (la pestaña Sincronización del panel): la
+     * rama del POST, la criba de `ruta` y el proyecto ABIERTO del vestíbulo, que las funciones
+     * exportadas solas no ven. Y un `.env` pendiente sale en la lista, pero su diff no viaja.
+     */
+    it("«pendientesDeSubida» contesta la lista, y el diff de un .env no viaja", async () => {
+      const { base, cliente, accion, vestibulo, raiz } = await conProyectoDeCloudStudio();
+      writeFileSync(join(raiz, "app.xml"), "<app cambiada/>");
+      writeFileSync(join(raiz, ".env"), "CLAVE=secreta");
+      execFileSync("git", ["add", "-A"], { cwd: raiz });
+      execFileSync("git", ["commit", "-qm", "cambios"], { cwd: raiz });
+      const de = (clase: string) => cliente.recibidos.filter((m) => m.clase === clase);
+      const esperar = async (clase: string, cuantos: number): Promise<void> => {
+        for (let i = 0; i < 300; i++) {
+          if (de(clase).length >= cuantos) return;
+          await new Promise((r) => setTimeout(r, 10));
+        }
+        throw new Error(`no llegó ${clase}`);
+      };
+
+      expect(await enviarMensaje(accion, { clase: "pendientesDeSubida" })).toBe(204);
+      await esperar("pendientesDeSubida", 1);
+      const lista = de("pendientesDeSubida").at(-1) as Extract<MensajeAlCliente, { clase: "pendientesDeSubida" }>;
+      expect(lista.ficheros?.map((f) => f.ruta)).toEqual([".env", "app.xml"]);
+
+      await enviarMensaje(accion, { clase: "pendientesDeSubida", ruta: ".env" });
+      await esperar("parcheDeSubida", 1);
+      const parche = de("parcheDeSubida").at(-1) as Extract<MensajeAlCliente, { clase: "parcheDeSubida" }>;
+      expect(parche.negado).toBeDefined();
+      expect(JSON.stringify(cliente.recibidos)).not.toContain("secreta");
+
+      await enviarMensaje(accion, { clase: "pendientesDeSubida", ruta: "app.xml" });
+      await esperar("parcheDeSubida", 2);
+      expect((de("parcheDeSubida").at(-1) as { texto: string }).texto).toContain("+<app cambiada/>");
       await vestibulo.cerrar();
       rmSync(base, { recursive: true, force: true });
     });
@@ -7382,6 +7425,158 @@ describe("contextoDelProyecto", () => {
  * dejó la última bajada (`agent/sesiones/gitSync.ts#cambiosPendientes`, el mismo que decide qué sube
  * el plan). Con un doble se probaría el doble.
  */
+describe("marcarPendientes — Revisión enseña solo lo de la sesión que falta por subir", () => {
+  const git = (raiz: string, ...args: string[]): string =>
+    execFileSync("git", args, { cwd: raiz, encoding: "utf8" }).trim();
+
+  function proyecto(conCloudStudio: boolean): string {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-pendientes-"));
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(
+      join(raiz, ".xonecode", "config.json"),
+      JSON.stringify(
+        conCloudStudio
+          ? { modo: "cloud", cloudstudio: { url: "https://x/mcp", proyecto: { id: "p1", nombre: "Tienda" }, rama: "main" } }
+          : { modo: "offline" }
+      )
+    );
+    writeFileSync(join(raiz, "a.xne"), "<a/>");
+    writeFileSync(join(raiz, "b.xne"), "<b/>");
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: raiz });
+    git(raiz, "config", "user.email", "t@t");
+    git(raiz, "config", "user.name", "t");
+    git(raiz, "add", "-A");
+    git(raiz, "commit", "-qm", "inicial");
+    if (conCloudStudio) git(raiz, "update-ref", "refs/remotes/cloudstudio/main", "HEAD");
+    return raiz;
+  }
+
+  it("marca cada fichero con si sigue pendiente, contra la ref de la bajada", async () => {
+    const raiz = proyecto(true);
+    writeFileSync(join(raiz, "a.xne"), "<a2/>");
+    git(raiz, "add", "-A");
+    git(raiz, "commit", "-qm", "cambio");
+    const marcados = await marcarPendientes(raiz, [
+      { ruta: "a.xne", clase: "modificado" as const },
+      { ruta: "b.xne", clase: "modificado" as const },
+    ]);
+    expect(marcados.map((f) => [f.ruta, f.pendiente])).toEqual([
+      ["a.xne", true],
+      ["b.xne", false],
+    ]);
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("un fichero NUEVO que git aún no sigue cuenta como pendiente: no se esconde lo recién escrito", async () => {
+    // A mitad de turno —antes del commit del turno— lo que el agente acaba de crear no está en
+    // el índice, y `git diff <ref>` no lo ve. Sin esto, Revisión lo ESCONDERÍA (o diría «todo
+    // subido») justo cuando más falta hace verlo.
+    const raiz = proyecto(true);
+    mkdirSync(join(raiz, "js"));
+    writeFileSync(join(raiz, "js", "nuevo.js"), "var a;");
+    const marcados = await marcarPendientes(raiz, [{ ruta: "js/nuevo.js", clase: "nuevo" as const }]);
+    expect(marcados[0]!.pendiente).toBe(true);
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("sin CloudStudio NO marca: «no consta» no es «nada pendiente»", async () => {
+    const raiz = proyecto(false);
+    const marcados = await marcarPendientes(raiz, [{ ruta: "a.xne", clase: "modificado" as const }]);
+    expect("pendiente" in marcados[0]!).toBe(false);
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("si la medida falla (sin la ref de la bajada) tampoco marca", async () => {
+    const raiz = proyecto(true);
+    git(raiz, "update-ref", "-d", "refs/remotes/cloudstudio/main");
+    const marcados = await marcarPendientes(raiz, [{ ruta: "a.xne", clase: "modificado" as const }]);
+    expect("pendiente" in marcados[0]!).toBe(false);
+    rmSync(raiz, { recursive: true, force: true });
+  });
+});
+
+describe("lo pendiente de subir, con su diff — la pestaña Sincronización", () => {
+  const git = (raiz: string, ...args: string[]): string =>
+    execFileSync("git", args, { cwd: raiz, encoding: "utf8" }).trim();
+
+  function proyecto(): string {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-subida-"));
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(
+      join(raiz, ".xonecode", "config.json"),
+      JSON.stringify({ modo: "cloud", cloudstudio: { url: "https://x/mcp", proyecto: { id: "p1", nombre: "Tienda" }, rama: "main" } })
+    );
+    writeFileSync(join(raiz, "a.xne"), "<a/>\n");
+    writeFileSync(join(raiz, ".env"), "CLAVE=vieja\n");
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: raiz });
+    git(raiz, "config", "user.email", "t@t");
+    git(raiz, "config", "user.name", "t");
+    git(raiz, "add", "-A");
+    git(raiz, "commit", "-qm", "inicial");
+    git(raiz, "update-ref", "refs/remotes/cloudstudio/main", "HEAD");
+    // Un cambio commiteado, un secreto commiteado y un fichero que git aún no sigue.
+    writeFileSync(join(raiz, "a.xne"), "<a cambiada/>\n");
+    writeFileSync(join(raiz, ".env"), "CLAVE=secreta\n");
+    git(raiz, "add", "-A");
+    git(raiz, "commit", "-qm", "cambios");
+    mkdirSync(join(raiz, "fonts"));
+    writeFileSync(join(raiz, "fonts", "Nueva[FILL,GRAD].txt"), "uno\ndos\n");
+    return raiz;
+  }
+
+  it("lista lo commiteado con sus cifras y lo no seguido MARCADO sin commitear", async () => {
+    const raiz = proyecto();
+    const lectura = await lecturaDePendientesDeSubida(raiz);
+    expect(lectura.ficheros).toEqual([
+      { ruta: ".env", clase: "modificado", mas: 1, menos: 1 },
+      { ruta: "a.xne", clase: "modificado", mas: 1, menos: 1 },
+      { ruta: "fonts/Nueva[FILL,GRAD].txt", clase: "nuevo", sinCommitear: true, mas: 2, menos: 0 },
+    ]);
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("el diff de uno modificado es contra CloudStudio, y el de uno no seguido contra nada", async () => {
+    const raiz = proyecto();
+    const modificado = await lecturaDeParcheDeSubida(raiz, "a.xne");
+    expect(modificado.texto).toContain("-<a/>");
+    expect(modificado.texto).toContain("+<a cambiada/>");
+    const nuevo = await lecturaDeParcheDeSubida(raiz, "fonts/Nueva[FILL,GRAD].txt");
+    expect(nuevo.negado).toBeUndefined();
+    expect(nuevo.texto).toContain("+uno");
+    expect(nuevo.texto).toContain("+dos");
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("un .env pendiente sale en la lista pero su diff NO viaja nunca", async () => {
+    const raiz = proyecto();
+    const parche = await lecturaDeParcheDeSubida(raiz, ".env");
+    expect(parche.texto).toBe("");
+    expect(parche.negado).toBeDefined();
+    expect(JSON.stringify(parche)).not.toContain("secreta");
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("una ruta que no está pendiente no saca nada del disco", async () => {
+    const raiz = proyecto();
+    writeFileSync(join(raiz, "otro.txt"), "privado");
+    git(raiz, "add", "-A");
+    git(raiz, "commit", "-qm", "otro");
+    git(raiz, "update-ref", "refs/remotes/cloudstudio/main", "HEAD");
+    const parche = await lecturaDeParcheDeSubida(raiz, "otro.txt");
+    expect(parche.texto).toBe("");
+    expect(parche.negado).toMatch(/no está pendiente/);
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("sin CloudStudio lo DICE: no es «nada pendiente»", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-subida-sin-"));
+    const lectura = await lecturaDePendientesDeSubida(raiz);
+    expect(lectura.ficheros).toBeUndefined();
+    expect(lectura.error).toMatch(/no está dado de alta/);
+    rmSync(raiz, { recursive: true, force: true });
+  });
+});
+
 describe("lecturaDeSync — lo que la banda de CloudStudio enseña", () => {
   const git = (raiz: string, ...args: string[]): string =>
     execFileSync("git", args, { cwd: raiz, encoding: "utf8" }).trim();
@@ -10358,6 +10553,146 @@ describe("GET /imagen-del-proyecto", () => {
     expect(String(trampa.cuerpo)).not.toContain("secreta");
     expect((await pedir(ruta, `${RUTA_IMAGEN_DEL_PROYECTO}?ruta=doc%2Fimg%2Fno.png`)).estado).toBe(404);
     expect((await pedir(ruta, `${RUTA_IMAGEN_DEL_PROYECTO}?ruta=..%2F..%2Ffuera.png`)).estado).toBe(403);
+    await limpiar();
+  });
+});
+
+/**
+ * El ICONO de la app de cada proyecto bajado: el alta dice SI lo hay (un booleano, nunca la ruta) y
+ * `RUTA_ICONO_DEL_PROYECTO` lo sirve por el ID, decidiendo el fichero con `app.ini` y la barrera de
+ * Ficheros. Con el disco y los lectores de VERDAD: es la composición de producción la que se prueba.
+ */
+describe("el icono del proyecto", () => {
+  const PNG = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
+
+  async function pedir(manejador: ManejadorRuta, url: string) {
+    const peticion = { method: "GET", url, headers: {} } as unknown as IncomingMessage;
+    let estado = 0;
+    const cabeceras: Record<string, string | number> = {};
+    let cuerpo: Buffer | string | undefined;
+    const respuesta = {
+      writeHead: (codigo: number, extra?: Record<string, string | number>) => ((estado = codigo), Object.assign(cabeceras, extra ?? {}), respuesta),
+      setHeader: (clave: string, valor: string | number) => ((cabeceras[clave] = valor), respuesta),
+      end: (trozo?: Buffer | string) => ((cuerpo = trozo), respuesta),
+    } as unknown as ServerResponse;
+    await manejador(peticion, respuesta);
+    return { estado, cabeceras, cuerpo };
+  }
+
+  /** Una copia de «Tienda» con lo que `preparar` deje en su raíz, y el cable conectado. */
+  const abrir = async (preparar: (raiz: string) => void, conCopia = true) => {
+    const base = mkdtempSync(join(tmpdir(), "xonecode-icono-"));
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
+    const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    if (conCopia) {
+      writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
+    }
+    preparar(raiz);
+    montarRutas(servidor, vestibulo, { leerFichero: leerFicheroDeProyecto, iconoDelProyecto });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    // Buscar el icono toca el disco de verdad, así que un solo `asentar` no basta: se espera al
+    // alta que ya trae el listado.
+    const conListado = (): boolean =>
+      (ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }> | undefined)?.proyectos.some((p) => p.id === "p1") === true;
+    for (let i = 0; i < 200 && !conListado(); i++) await new Promise((r) => setTimeout(r, 5));
+    return {
+      alta: () => ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>,
+      ruta: servidor.rutas.get(`GET ${RUTA_ICONO_DEL_PROYECTO}`)!,
+      limpiar: async () => {
+        await vestibulo.cerrar();
+        rmSync(base, { recursive: true, force: true });
+      },
+    };
+  };
+
+  it("un proyecto real (`icon=icon.png` en la raíz): el alta lo marca y la ruta sirve sus bytes", async () => {
+    const { alta, ruta, limpiar } = await abrir((raiz) => {
+      writeFileSync(join(raiz, "app.ini"), "name=Tienda\r\nicon=icon.png\r\nIconFolder=icons\r\n");
+      writeFileSync(join(raiz, "icon.png"), PNG);
+    });
+    const fila = alta().proyectos.find((p) => p.id === "p1");
+    expect(fila?.local).toBe(true);
+    expect(fila?.icono).toBe(true);
+    // Ninguna ruta viaja: solo el booleano.
+    expect(JSON.stringify(fila)).not.toContain("icon.png");
+    const r = await pedir(ruta, `${RUTA_ICONO_DEL_PROYECTO}?id=p1`);
+    expect(r.estado).toBe(200);
+    expect(Buffer.from(r.cuerpo as Buffer)).toEqual(PNG);
+    expect(r.cabeceras).toMatchObject({
+      "Content-Type": "image/png",
+      "Content-Security-Policy": "sandbox",
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "no-store",
+    });
+    await limpiar();
+  });
+
+  it("el del esqueleto (`Icon=` dentro de `icons/`) también vale", async () => {
+    const { alta, ruta, limpiar } = await abrir((raiz) => {
+      writeFileSync(join(raiz, "app.ini"), "Name=Tienda\nIcon=app_icon.png\nIconFolder=icons\n");
+      mkdirSync(join(raiz, "icons"));
+      writeFileSync(join(raiz, "icons", "app_icon.png"), PNG);
+    });
+    expect(alta().proyectos[0]?.icono).toBe(true);
+    expect((await pedir(ruta, `${RUTA_ICONO_DEL_PROYECTO}?id=p1`)).estado).toBe(200);
+    await limpiar();
+  });
+
+  it("sin icono declarado, o declarado y sin fichero: ni marca ni bytes", async () => {
+    const sinDeclarar = await abrir((raiz) => writeFileSync(join(raiz, "app.ini"), "name=Tienda\n"));
+    expect(sinDeclarar.alta().proyectos[0]?.icono).toBeUndefined();
+    expect((await pedir(sinDeclarar.ruta, `${RUTA_ICONO_DEL_PROYECTO}?id=p1`)).estado).toBe(404);
+    await sinDeclarar.limpiar();
+
+    const sinFichero = await abrir((raiz) => writeFileSync(join(raiz, "app.ini"), "icon=icon.png\n"));
+    expect(sinFichero.alta().proyectos[0]?.icono).toBeUndefined();
+    expect((await pedir(sinFichero.ruta, `${RUTA_ICONO_DEL_PROYECTO}?id=p1`)).estado).toBe(404);
+    await sinFichero.limpiar();
+  });
+
+  it("sin copia bajada no hay icono, aunque la carpeta tenga uno", async () => {
+    const { alta, ruta, limpiar } = await abrir((raiz) => {
+      writeFileSync(join(raiz, "app.ini"), "icon=icon.png\n");
+      writeFileSync(join(raiz, "icon.png"), PNG);
+    }, false);
+    expect(alta().proyectos[0]?.icono).toBeUndefined();
+    expect((await pedir(ruta, `${RUTA_ICONO_DEL_PROYECTO}?id=p1`)).estado).toBe(404);
+    await limpiar();
+  });
+
+  it("lo que la barrera de Ficheros rechaza no se sirve: `icon=` hacia fuera, o un enlace a `.env`", async () => {
+    const fuera = await abrir((raiz) => {
+      writeFileSync(join(raiz, "app.ini"), "icon=../../fuera.png\nIconFolder=..\n");
+      writeFileSync(join(raiz, "..", "..", "fuera.png"), PNG);
+    });
+    expect(fuera.alta().proyectos[0]?.icono).toBeUndefined();
+    expect((await pedir(fuera.ruta, `${RUTA_ICONO_DEL_PROYECTO}?id=p1`)).estado).toBe(404);
+    await fuera.limpiar();
+
+    const enlace = await abrir((raiz) => {
+      writeFileSync(join(raiz, ".env"), "CLAVE=secreta");
+      writeFileSync(join(raiz, "app.ini"), "icon=trampa.png\n");
+      symlinkSync(join(raiz, ".env"), join(raiz, "trampa.png"));
+    });
+    expect(enlace.alta().proyectos[0]?.icono).toBeUndefined();
+    const r = await pedir(enlace.ruta, `${RUTA_ICONO_DEL_PROYECTO}?id=p1`);
+    expect(r.estado).toBe(404);
+    expect(String(r.cuerpo)).not.toContain("secreta");
+    await enlace.limpiar();
+  });
+
+  it("solo un ID del listado del servidor: uno desconocido o ausente no resuelve nada", async () => {
+    const { ruta, limpiar } = await abrir((raiz) => {
+      writeFileSync(join(raiz, "app.ini"), "icon=icon.png\n");
+      writeFileSync(join(raiz, "icon.png"), PNG);
+    });
+    expect((await pedir(ruta, `${RUTA_ICONO_DEL_PROYECTO}?id=..%2F..%2Fotro`)).estado).toBe(404);
+    expect((await pedir(ruta, `${RUTA_ICONO_DEL_PROYECTO}?id=p2`)).estado).toBe(404);
+    expect((await pedir(ruta, RUTA_ICONO_DEL_PROYECTO)).estado).toBe(400);
     await limpiar();
   });
 });

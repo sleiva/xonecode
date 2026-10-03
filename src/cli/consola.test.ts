@@ -545,8 +545,8 @@ describe("/sync", () => {
 
       expect(formas[0]?.lineas).toEqual([
         { texto: "SUBIDA A CLOUDSTUDIO — 2 operaciones" },
-        { texto: "  + app/Clientes.xne", cambio: "nuevo" },
-        { texto: "  - app/Viejo.xne", cambio: "borrado" },
+        { texto: "  + app/Clientes.xne", cambio: "nuevo", ruta: "app/Clientes.xne" },
+        { texto: "  - app/Viejo.xne", cambio: "borrado", ruta: "app/Viejo.xne" },
       ]);
     });
 
@@ -645,6 +645,59 @@ describe("/sync", () => {
       // Y NADA por el otro camino: si el plan siguiera saliendo por `escribir`, el hilo del
       // navegador volvería a llenarse de renglones de consola, que es lo que esto arregla.
       for (const linea of operacion.lineas) expect(salida()).not.toContain(linea);
+      // Sin recuento del sincronizador, el acto no inventa uno.
+      expect("resultado" in operacion).toBe(false);
+    });
+
+    it("una bajada que termina deja en el acto cuántos trajo, y la decisión dice que es «bajar»", async () => {
+      const { consola, operaciones } = consolaQueRegistra("/sync bajar", "/salir");
+      const formas: unknown[] = [];
+      const conSync: Consola = {
+        ...consola,
+        preguntar: async (_enunciado, decision) => {
+          formas.push(decision);
+          return "s";
+        },
+        sincronizar: async (_accion, _raiz, _politica, _informar, confirmar) => {
+          await confirmar!({ sinCommitear: [] });
+          return { tipo: "texto", texto: "bajados 4 ficheros (zip)\n", bajada: { bajados: 4 } };
+        },
+      };
+
+      await correrConsola(conSync, estadoDe());
+
+      expect(operaciones[0]?.bajados).toBe(4);
+      expect((formas[0] as { operacion?: string }).operacion).toBe("bajar");
+    });
+
+    it("si la operación LANZA, el acto lleva el error y la excepción se sigue diciendo en el hilo", async () => {
+      const { consola, operaciones, salida } = consolaQueRegistra("/sync bajar", "/salir");
+      const conSync: Consola = {
+        ...consola,
+        sincronizar: async () => {
+          throw new Error("CloudStudio no responde");
+        },
+      };
+
+      await correrConsola(conSync, estadoDe());
+
+      expect(operaciones[0]?.error).toMatch(/CloudStudio no responde/);
+      expect(salida()).toMatch(/CloudStudio no responde/);
+    });
+
+    it("el recuento de la subida viaja en el acto como DATO, no solo en el texto", async () => {
+      const { consola, operaciones } = consolaQueRegistra("/sync subir", "/salir");
+      const conSync: Consola = {
+        ...consola,
+        sincronizar: async (_accion, _raiz, politica) => {
+          await politica!([{ tipo: "texto", ruta: "app.xml", clase: "nuevo" }]);
+          return { tipo: "texto", texto: "subidos 1, fallaron 2\n", subida: { subidos: 1, fallidos: 2 } };
+        },
+      };
+
+      await correrConsola(conSync, estadoDe());
+
+      expect(operaciones[0]?.resultado).toEqual({ subidos: 1, fallidos: 2 });
     });
 
     it("una subida CANCELADA no deja entrada en el registro, y en el terminal se sigue diciendo", async () => {

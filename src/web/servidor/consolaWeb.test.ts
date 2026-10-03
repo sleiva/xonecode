@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import type { MensajeAlCliente } from "./transporte.js";
 import { crearConsolaWeb } from "./consolaWeb.js";
+import { politicaInteractiva } from "../../cli/consola.js";
+import type { OperacionDeSubida } from "../../core/cloudstudio.js";
 
 import { REJECT_MESSAGE, type Decision } from "../../vendor/hitl.js";
 
@@ -688,6 +690,75 @@ describe("consolaWeb: la forma de una pregunta viaja con ella", () => {
     expect("decision" in pregunta).toBe(false);
     c.recibir({ clase: "respuesta", texto: "http://otra" });
     expect(await promesa).toBe("http://otra");
+  });
+});
+
+describe("consolaWeb: la subida deja ELEGIR qué ficheros suben", () => {
+  const PLAN: OperacionDeSubida[] = [
+    { tipo: "texto", ruta: "a.xne", clase: "nuevo" },
+    { tipo: "texto", ruta: "js/b.js", clase: "modificado" },
+    { tipo: "borrado", ruta: "viejo.xne" },
+  ];
+
+  function conCable(): { c: ReturnType<typeof crearConsolaWeb>; vistos: MensajeAlCliente[] } {
+    const c = crearConsolaWeb({ msDeEspera: 60_000 });
+    const vistos: MensajeAlCliente[] = [];
+    c.conectar((m) => vistos.push(m));
+    return { c, vistos };
+  }
+
+  it("la política de la consola REAL devuelve solo lo marcado, cruzado con el plan", async () => {
+    const { c, vistos } = conCable();
+    const promesa = politicaInteractiva(c.consola)(PLAN);
+
+    const pregunta = vistos.find((m) => m.clase === "pregunta");
+    expect(pregunta?.clase === "pregunta" && pregunta.decision?.seleccionable).toBe(true);
+    // Cada línea de fichero lleva su ruta como DATO: el árbol del diálogo sale de ahí.
+    expect(pregunta?.clase === "pregunta" && pregunta.decision?.lineas.map((l) => l.ruta)).toEqual([
+      undefined,
+      "a.xne",
+      "js/b.js",
+      "viejo.xne",
+    ]);
+    c.recibir({ clase: "respuesta", texto: "s", seleccion: ["js/b.js", "inventada.xne", 7 as unknown as string] });
+    expect(await promesa).toEqual({ rutas: ["js/b.js"] });
+  });
+
+  it("el registro de la operación NOMBRA lo que se eligió, no solo cuántos", async () => {
+    const { c } = conCable();
+    const lineas: string[] = [];
+    const promesa = politicaInteractiva(c.consola, (texto) => lineas.push(texto))(PLAN);
+    c.recibir({ clase: "respuesta", texto: "s", seleccion: ["a.xne", "viejo.xne"] });
+    await promesa;
+    const dicho = lineas.join("");
+    expect(dicho).toContain("APROBADO: 2 de 3");
+    expect(dicho).toMatch(/^ {4}a\.xne$/m);
+    expect(dicho).toMatch(/^ {4}viejo\.xne$/m);
+    expect(dicho).not.toMatch(/^ {4}js\/b\.js$/m);
+  });
+
+  it("todo marcado es el plan entero, y nada marcado es un rechazo", async () => {
+    const entera = conCable();
+    const todo = politicaInteractiva(entera.c.consola)(PLAN);
+    entera.c.recibir({ clase: "respuesta", texto: "s", seleccion: PLAN.map((o) => o.ruta) });
+    expect(await todo).toBe(true);
+
+    const vacia = conCable();
+    const nada = politicaInteractiva(vacia.c.consola)(PLAN);
+    vacia.c.recibir({ clase: "respuesta", texto: "s", seleccion: [] });
+    expect(await nada).toBe(false);
+  });
+
+  it("Cancelar rechaza aunque viaje una selección, y caerse el cable también", async () => {
+    const cancelada = conCable();
+    const no = politicaInteractiva(cancelada.c.consola)(PLAN);
+    cancelada.c.recibir({ clase: "respuesta", texto: "n", seleccion: ["a.xne"] });
+    expect(await no).toBe(false);
+
+    const caida = conCable();
+    const sinCable = politicaInteractiva(caida.c.consola)(PLAN);
+    caida.c.desconectar();
+    expect(await sinCable).toBe(false);
   });
 });
 

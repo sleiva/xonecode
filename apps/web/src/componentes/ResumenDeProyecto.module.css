@@ -117,11 +117,14 @@
   border-left-color: var(--dsw-alias-state-error-primary);
 }
 
+/* `margin-right: auto` se come el hueco libre: con «Subir» la tira tiene TRES hijos, y el
+   `space-between` dejaba el botón en medio en vez de junto a «Actualizar». */
 .textoDeTira {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
+  margin-right: auto;
 }
 
 .girando {

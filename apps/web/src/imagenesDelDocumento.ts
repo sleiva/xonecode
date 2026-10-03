@@ -4,6 +4,14 @@
  */
 export const RUTA_IMAGEN_DEL_PROYECTO = "/imagen-del-proyecto";
 
+/** La que sirve el icono de la app de un proyecto bajado (`?id=`), copiada igual (`#RUTA_ICONO_DEL_PROYECTO`). */
+export const RUTA_ICONO_DEL_PROYECTO = "/icono-del-proyecto";
+
+/** La URL del icono de ese proyecto. Relativa: el `<img>` la resuelve contra la página, túnel incluido. */
+export function urlDelIcono(id: string): string {
+  return `${RUTA_ICONO_DEL_PROYECTO}?id=${encodeURIComponent(id)}`;
+}
+
 /**
  * La vista de un markdown lista para el visor: cada enlace a la ruta de imágenes, con el ORIGEN de
  * la página delante. Hace falta porque `MarkdownText` solo pinta imágenes con URL `http(s)`

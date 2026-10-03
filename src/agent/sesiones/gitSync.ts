@@ -8,7 +8,7 @@
  */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { dentroDelWorkspace } from "../../core/settings.js";
 import type { CambioLocal } from "../../core/planDeSubida.js";
@@ -337,6 +337,122 @@ export async function cambiosPendientes(raiz: string, rama: string): Promise<Cam
 }
 
 /**
+ * Los ficheros del proyecto que git todavía NO sigue (ni en el índice ni ignorados), con su
+ * ruta relativa al PROYECTO.
+ *
+ * Es la otra mitad de «¿falta por subir?» para quien ENSEÑA, no para quien sube:
+ * `cambiosPendientes` es `git diff <ref>` y no ve lo que nadie ha añadido, así que a mitad de
+ * turno —antes del commit del turno— lo que el agente acaba de crear no saldría como pendiente.
+ * `git ls-files` contesta relativo al directorio desde el que se lanza, que es la raíz del
+ * proyecto: no hace falta recortar prefijo. `-z` evita las comillas de rutas con bytes raros.
+ */
+export async function sinSeguir(raiz: string): Promise<string[]> {
+  const { stdout } = await git(raiz, ["ls-files", "--others", "--exclude-standard", "-z", "--", "."]);
+  return stdout.split("\0").filter((ruta) => ruta !== "");
+}
+
+/** Un fichero pendiente de subir, como se enseña: lo de `FicheroTocado` del cable. */
+export interface FicheroPendiente {
+  ruta: string;
+  clase: "nuevo" | "modificado" | "borrado";
+  mas?: number;
+  menos?: number;
+  /** Git aún no lo sigue: hay que commitearlo antes de poder subirlo. */
+  sinCommitear?: true;
+}
+
+/** Por encima de esto no se cuentan las líneas de un fichero que git no sigue: se lee entero. */
+const TOPE_PARA_CONTAR_LINEAS = 400_000;
+/** El mismo tope que el parche de una sesión (`sesionGit.ts`). */
+const TOPE_DE_PARCHE_DE_SUBIDA = 400_000;
+
+/** Lo que dice `git` relativo al proyecto, para una ruta que no sigue: líneas o nada si es binario. */
+function lineasDeFicheroSinSeguir(raiz: string, ruta: string): number | undefined {
+  try {
+    const camino = join(raiz, ruta);
+    if (statSync(camino).size > TOPE_PARA_CONTAR_LINEAS) return undefined;
+    const contenido = readFileSync(camino);
+    if (contenido.includes(0)) return undefined;
+    const texto = contenido.toString("utf8");
+    if (texto === "") return 0;
+    return texto.split("\n").length - (texto.endsWith("\n") ? 1 : 0);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * TODO lo que falta por subir a CloudStudio, como LISTA que enseñar (la pestaña Sincronización
+ * del panel del proyecto): lo que difiere de la ref de la bajada (`cambiosPendientes`, con sus
+ * líneas por `--numstat`) más lo que git aún no sigue (`sinSeguir`), MARCADO `sinCommitear`
+ * porque no se puede subir sin commitearlo y la cifra de la banda no lo cuenta. Esconderlo sería
+ * esconder trabajo nuevo.
+ */
+export async function pendientesDeSubida(raiz: string, rama: string): Promise<FicheroPendiente[]> {
+  const ref = `refs/remotes/${REMOTO}/${rama}`;
+  const [cambios, nuevos, { stdout: numstat }] = await Promise.all([
+    cambiosPendientes(raiz, rama),
+    sinSeguir(raiz),
+    git(raiz, ["-c", "core.quotePath=false", "diff", "--no-renames", "--numstat", "--relative", ref, "--", "."]),
+  ]);
+  const cifras = new Map<string, { mas: number; menos: number }>();
+  for (const linea of numstat.split("\n")) {
+    const [mas, menos, ruta] = linea.split("\t");
+    // Un binario sale con «-»: sin cifra, que poner cero diría que no cambió nada.
+    if (ruta === undefined || mas === "-" || menos === "-") continue;
+    cifras.set(ruta, { mas: Number(mas), menos: Number(menos) });
+  }
+  const seguidos: FicheroPendiente[] = cambios.map((cambio) => ({
+    ruta: cambio.ruta,
+    clase: cambio.clase,
+    ...(cifras.get(cambio.ruta) ?? {}),
+  }));
+  const yaListados = new Set(seguidos.map((f) => f.ruta));
+  const sinSeguirAun: FicheroPendiente[] = nuevos
+    .filter((ruta) => !yaListados.has(ruta) && ruta.split("/")[0] !== NOMBRE_CARPETA)
+    .map((ruta) => {
+      const lineas = lineasDeFicheroSinSeguir(raiz, ruta);
+      return { ruta, clase: "nuevo" as const, sinCommitear: true as const, ...(lineas === undefined ? {} : { mas: lineas, menos: 0 }) };
+    });
+  return [...seguidos, ...sinSeguirAun].sort((a, b) => a.ruta.localeCompare(b.ruta));
+}
+
+/**
+ * El diff de UN fichero pendiente contra lo que consta en CloudStudio (la ref de la bajada), o
+ * contra NADA si git aún no lo sigue. Quien lo llama comprueba antes que la ruta está en la
+ * lista pendiente y que se puede enseñar: aquí solo se pide a git.
+ */
+export async function parcheDeSubida(
+  raiz: string,
+  rama: string,
+  ruta: string,
+  sinCommitear: boolean
+): Promise<{ texto: string; recortado: boolean } | undefined> {
+  let texto: string;
+  try {
+    if (sinCommitear) {
+      // `--no-index` sale con código 1 cuando HAY diferencias: el diff viene en el error.
+      texto = await git(raiz, ["--literal-pathspecs", "diff", "--no-index", "--", "/dev/null", ruta])
+        .then((r) => r.stdout)
+        .catch((error: { stdout?: string; code?: number }) => {
+          if (error.code === 1 && typeof error.stdout === "string") return error.stdout;
+          throw error;
+        });
+    } else {
+      const { stdout } = await git(raiz, [
+        "--literal-pathspecs", "-c", "core.quotePath=false",
+        "diff", "--no-renames", "--relative", `refs/remotes/${REMOTO}/${rama}`, "--", ruta,
+      ]);
+      texto = stdout;
+    }
+  } catch {
+    return undefined;
+  }
+  if (texto.length <= TOPE_DE_PARCHE_DE_SUBIDA) return { texto, recortado: false };
+  return { texto: texto.slice(0, TOPE_DE_PARCHE_DE_SUBIDA), recortado: true };
+}
+
+/**
  * «Simular el push»: mover la ref. Solo se llama cuando la subida terminó ENTERA.
  *
  * Se mueve la ref de la rama a la que se escribió, que ahora es la MISMA de la que se
@@ -347,6 +463,71 @@ export async function cambiosPendientes(raiz: string, rama: string): Promise<Cam
 export async function marcarSubido(raiz: string, rama: string, mensaje: string): Promise<void> {
   const { stdout } = await git(raiz, ["rev-parse", "HEAD"]);
   await git(raiz, ["update-ref", "-m", mensaje, `refs/remotes/${REMOTO}/${rama}`, stdout.trim()]);
+}
+
+/**
+ * Mover la ref SOLO por lo que subió: la subida parcial, cuando la persona eligió qué ficheros
+ * subían.
+ *
+ * `marcarSubido` lleva la ref a `HEAD`, y eso afirma «todo lo de esta copia está arriba»: con
+ * una selección sería mentira, y lo que se dejó sin marcar desaparecería de los pendientes sin
+ * haber viajado. Aquí se compone un commit NUEVO cuyo árbol es el de la ref con las rutas
+ * subidas tomadas de `HEAD` (o quitadas, si lo subido era un borrado), y la ref pasa a él. Así
+ * `cambiosPendientes` —que compara la ref contra el árbol— sigue diciendo la verdad: lo no
+ * elegido sigue pendiente.
+ *
+ * Se hace en un índice PRIVADO (`indicePrivado`), como las fotos de `instantanea.ts`: el índice
+ * del usuario no se toca. El commit es hijo de la ref anterior, no de `HEAD`, así que la ref
+ * deja de ser antepasada de `HEAD`; nada lo necesita —la ref solo se usa en `git diff <ref>`,
+ * árbol contra árbol—. Identidad NUESTRA por `-c`, como `commitDeTurno`: sin `user.email`
+ * configurado, `commit-tree` se niega.
+ *
+ * `rutas` son relativas al PROYECTO; git habla desde la raíz del repo, así que se les pone el
+ * prefijo y los comandos corren en la raíz del repo.
+ */
+export async function marcarSubidoParcial(
+  raiz: string,
+  rama: string,
+  rutas: readonly string[],
+  mensaje: string
+): Promise<void> {
+  const ref = `refs/remotes/${REMOTO}/${rama}`;
+  const prefijo = await prefijoDelProyecto(raiz);
+  const { stdout: superior } = await git(raiz, ["rev-parse", "--show-toplevel"]);
+  const repo = superior.trim();
+  const { stdout: anterior } = await git(repo, ["rev-parse", "--verify", `${ref}^{commit}`]);
+  const padre = anterior.trim();
+
+  const indice = indicePrivado("subida-parcial");
+  try {
+    const env = { ...process.env, GIT_INDEX_FILE: indice.ruta };
+    await git(repo, ["read-tree", padre], env);
+    for (const ruta of rutas) {
+      const completa = `${prefijo}${ruta}`;
+      const { stdout: entrada } = await git(repo, [
+        // Literal: una ruta con corchetes (`MaterialSymbols…[FILL,GRAD,opsz,wght].ttf`) es un
+        // comodín de pathspec, y no encontrarla en HEAD la apuntaría como BORRADO.
+        "--literal-pathspecs", "-c", "core.quotePath=false", "ls-tree", "--full-tree", "HEAD", "--", completa,
+      ]);
+      const linea = entrada.split("\n").find((l) => l.endsWith(`\t${completa}`));
+      if (linea === undefined) {
+        // No está en HEAD: lo subido era un borrado.
+        await git(repo, ["update-index", "--force-remove", "--", completa], env);
+      } else {
+        const [cabeza] = linea.split("\t");
+        const [modo, , sha] = cabeza!.split(" ");
+        await git(repo, ["update-index", "--add", "--cacheinfo", `${modo},${sha},${completa}`], env);
+      }
+    }
+    const { stdout: arbol } = await git(repo, ["write-tree"], env);
+    const { stdout: commit } = await git(repo, [
+      "-c", "user.email=xonecode@local", "-c", "user.name=xonecode",
+      "commit-tree", arbol.trim(), "-p", padre, "-m", mensaje,
+    ]);
+    await git(repo, ["update-ref", "-m", mensaje, ref, commit.trim(), padre]);
+  } finally {
+    indice.limpiar();
+  }
 }
 
 /**

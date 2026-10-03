@@ -190,18 +190,17 @@
 
   /* Los iconos por tipo de fichero (`componentes/IconoDeFichero.tsx`): el color de cada TIPO, como
      en cualquier editor, así que los temas no los tocan. Valores de la maqueta aprobada,
-     comprobados en claro y en oscuro. `sobre`/`sobre-js` son lo que va ENCIMA del relleno —el
-     aspa del `.xne`, la almohadilla del CSS, las letras del JS— y no cambian con el modo. */
+     comprobados en claro y en oscuro. Los dibujos son de CONTORNO (trazo 2, el molde de la barra),
+     así que el amarillo del JS y el azul de la carpeta, que en la maqueta eran rellenos, bajan aquí
+     hasta 3:1 sobre blanco: con trazo fino el amarillo de la maqueta no se veía. */
   --xonecode-icono-xne: #00a3e0;
-  --xonecode-icono-js: #f0c419;
+  --xonecode-icono-js: #b38a00;
   --xonecode-icono-css: #2f6fd8;
   --xonecode-icono-gris: #7b8590;
   --xonecode-icono-imagen: #9b51e0;
   --xonecode-icono-bd: #d38b00;
   --xonecode-icono-texto: #4a5059;
-  --xonecode-icono-carpeta: #8fb3d4;
-  --xonecode-icono-sobre: #ffffff;
-  --xonecode-icono-sobre-js: #1f2328;
+  --xonecode-icono-carpeta: #6e95bd;
 }
 
 /* En oscuro el acento no cambia —el cian es el mismo color de marca sobre los dos fondos, y

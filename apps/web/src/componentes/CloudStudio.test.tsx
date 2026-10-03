@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ActoDeSincronizacion } from "../tipos.js";
 import { selloDeFecha } from "../selloDeFecha.js";
-import { CloudStudio } from "./CloudStudio.js";
+import { CloudStudio, Registro } from "./CloudStudio.js";
 
 const NADA = () => {};
 
@@ -81,42 +81,11 @@ describe("CloudStudio: la medida", () => {
   });
 
   /**
-   * La cifra dice DE QUIÉN son los ficheros, que es lo que la hace cuadrar con la lista que
-   * tiene justo debajo. Las dos se miden contra referencias distintas —la banda contra la rama
-   * de la bajada, la lista contra el sello de la sesión—, así que pueden no tocarse: sin decirlo
-   * parecen contradecirse.
+   * La cifra ya NO dice de qué sesión son los ficheros: la banda vive en el panel del PROYECTO,
+   * con todo lo pendiente debajo, y «de esta sesión y de antes» no se refería a nada de lo que
+   * hay en pantalla. Aunque `deLaSesion` llegue por el cable, no se pinta.
    */
-  it("con `deLaSesion` a cero dice que ninguno es suyo, sin callarse la cifra", () => {
-    render(
-      <CloudStudio
-        sync={{ proyecto: "Tienda", rama: "main", pendientes: 3, deLaSesion: 0 }}
-        alPedir={NADA}
-        alRecargar={NADA}
-      />
-    );
-    expect(screen.getByText("3 ficheros por subir. Ninguno lo tocó esta sesión.")).toBeTruthy();
-  });
-
-  it("con todos suyos lo dice en singular y en plural", () => {
-    const { rerender } = render(
-      <CloudStudio
-        sync={{ proyecto: "Tienda", rama: "main", pendientes: 1, deLaSesion: 1 }}
-        alPedir={NADA}
-        alRecargar={NADA}
-      />
-    );
-    expect(screen.getByText("1 fichero por subir, y lo tocó esta sesión.")).toBeTruthy();
-    rerender(
-      <CloudStudio
-        sync={{ proyecto: "Tienda", rama: "main", pendientes: 3, deLaSesion: 3 }}
-        alPedir={NADA}
-        alRecargar={NADA}
-      />
-    );
-    expect(screen.getByText("3 ficheros por subir, y los tocó esta sesión.")).toBeTruthy();
-  });
-
-  it("con parte suya y parte de antes reparte la cuenta", () => {
+  it("con `deLaSesion` tampoco dice nada de la sesión: solo la cifra", () => {
     render(
       <CloudStudio
         sync={{ proyecto: "Tienda", rama: "main", pendientes: 3, deLaSesion: 1 }}
@@ -124,15 +93,11 @@ describe("CloudStudio: la medida", () => {
         alRecargar={NADA}
       />
     );
-    expect(screen.getByText("3 ficheros por subir: 1 de esta sesión y 2 de antes.")).toBeTruthy();
+    const cuenta = screen.getByText("3 ficheros por subir.");
+    expect(cuenta.textContent).not.toMatch(/esta sesión/i);
+    expect(cuenta.textContent).not.toMatch(/de antes/i);
   });
 
-  /**
-   * Y AUSENTE no es cero, que es la distinción de toda la consola: sin sesión —o con una sin
-   * sello— no hay atribución que hacer, y ahí la lista de la que saldría ese cero incluye lo
-   * que escribiera cualquiera desde que se abrió. Decir «ninguno lo tocó esta sesión» sería una
-   * afirmación sobre quien lo escribió; la frase se queda en la cifra y nada más.
-   */
   it("sin `deLaSesion` no se dice nada de la sesión, y menos un «ninguno»", () => {
     render(
       <CloudStudio sync={{ proyecto: "Tienda", rama: "main", pendientes: 3 }} alPedir={NADA} alRecargar={NADA} />
@@ -206,6 +171,20 @@ describe("CloudStudio: los botones", () => {
     recargar.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "Refrescar" }));
     expect(recargar).toHaveBeenCalledTimes(1);
+  });
+
+  it("«Refrescar» gira y se apaga hasta que llega la medida nueva", () => {
+    const { rerender } = render(
+      <CloudStudio sync={{ proyecto: "Tienda", rama: "main", pendientes: 1 }} alPedir={NADA} alRecargar={NADA} />
+    );
+    const boton = (): HTMLButtonElement => screen.getByRole("button", { name: "Refrescar" });
+    fireEvent.click(boton());
+    expect(boton().getAttribute("aria-busy")).toBe("true");
+    expect(boton().disabled).toBe(true);
+    // Llega la medida: un `sync` NUEVO, aunque diga lo mismo.
+    rerender(<CloudStudio sync={{ proyecto: "Tienda", rama: "main", pendientes: 1 }} alPedir={NADA} alRecargar={NADA} />);
+    expect(boton().getAttribute("aria-busy")).toBe("false");
+    expect(boton().disabled).toBe(false);
   });
 });
 
@@ -316,12 +295,10 @@ describe("CloudStudio: el registro de lo que pasó", () => {
    * los dos tienen que caer en el `null`.
    */
   it("sin operaciones no se pinta el registro", () => {
-    const { container, rerender } = render(
-      <CloudStudio sync={CON_PROYECTO} alPedir={NADA} alRecargar={NADA} />
-    );
+    const { container, rerender } = render(<Registro />);
     expect(container.querySelectorAll("details")).toHaveLength(0);
     expect(screen.queryByLabelText(/registro de la sincronización/i)).toBeNull();
-    rerender(<CloudStudio sync={CON_PROYECTO} registro={[]} alPedir={NADA} alRecargar={NADA} />);
+    rerender(<Registro operaciones={[]} />);
     expect(container.querySelectorAll("details")).toHaveLength(0);
   });
 
@@ -338,12 +315,7 @@ describe("CloudStudio: el registro de lo que pasó", () => {
    */
   it("cada operación lleva su acción y su hora, por el sello de siempre", () => {
     const { container } = render(
-      <CloudStudio
-        sync={CON_PROYECTO}
-        registro={[DE_SUBIDA, OPERACION("bajar", "2019-03-05T09:00:00.000Z", ["bajados 2 ficheros (git)"])]}
-        alPedir={NADA}
-        alRecargar={NADA}
-      />
+      <Registro operaciones={[DE_SUBIDA, OPERACION("bajar", "2019-03-05T09:00:00.000Z", ["bajados 2 ficheros (git)"])]} />
     );
 
     const operaciones = container.querySelectorAll("details");
@@ -363,12 +335,7 @@ describe("CloudStudio: el registro de lo que pasó", () => {
    */
   it("sale abierta la más reciente y plegadas las demás", () => {
     const { container } = render(
-      <CloudStudio
-        sync={CON_PROYECTO}
-        registro={[DE_SUBIDA, OPERACION("bajar", "2019-03-05T09:00:00.000Z", ["bajados 2 ficheros (git)"])]}
-        alPedir={NADA}
-        alRecargar={NADA}
-      />
+      <Registro operaciones={[DE_SUBIDA, OPERACION("bajar", "2019-03-05T09:00:00.000Z", ["bajados 2 ficheros (git)"])]} />
     );
     const abiertas = [...container.querySelectorAll("details")].map((op) => op.open);
     expect(abiertas).toEqual([true, false]);
@@ -381,7 +348,7 @@ describe("CloudStudio: el registro de lo que pasó", () => {
    */
   it("las líneas se pintan tal cual, con su sangría y sin recomponer", () => {
     const { container } = render(
-      <CloudStudio sync={CON_PROYECTO} registro={[DE_SUBIDA]} alPedir={NADA} alRecargar={NADA} />
+      <Registro operaciones={[DE_SUBIDA]} />
     );
     const lineas = container.querySelector("pre")!.textContent;
     expect(lineas).toBe(DE_SUBIDA.lineas.join("\n"));
@@ -397,12 +364,7 @@ describe("CloudStudio: el registro de lo que pasó", () => {
    */
   it("con una hora ilegible la operación se pinta sin sello, y no con un «undefined»", () => {
     const { container } = render(
-      <CloudStudio
-        sync={CON_PROYECTO}
-        registro={[OPERACION("subir", "no-es-una-fecha", ["subidos 1, fallaron 0"])]}
-        alPedir={NADA}
-        alRecargar={NADA}
-      />
+      <Registro operaciones={[OPERACION("subir", "no-es-una-fecha", ["subidos 1, fallaron 0"])]} />
     );
     const cabecera = container.querySelector("summary")!.textContent!;
     expect(cabecera).toBe("Subir");
@@ -411,17 +373,15 @@ describe("CloudStudio: el registro de lo que pasó", () => {
   });
 
   /**
-   * **El registro se pinta también sin alta**, y esa es la mitad que un `return` temprano se
-   * lleva por delante: la banda de un proyecto que ya no está dado de alta no ofrece botones
-   * —no se puede sincronizar—, pero la operación que SÍ ocurrió consta, y borrarla al quitar
-   * el alta es perder la historia por un cambio de configuración. Se pinta en las dos ramas
-   * porque el componente vive fuera de las dos.
+   * **El registro se pinta también sin alta**: es su PROPIA sección de Revisión, fuera de la
+   * banda, así que no depende de ella. La operación que SÍ ocurrió consta aunque el proyecto
+   * ya no esté dado de alta; borrarla al quitar el alta sería perder la historia por un cambio
+   * de configuración.
    */
-  it("sin alta en CloudStudio, el registro sigue ahí", () => {
+  it("el registro es independiente de la banda: sin alta sigue ahí", () => {
     const { container } = render(
-      <CloudStudio sync={{}} registro={[DE_SUBIDA]} alPedir={NADA} alRecargar={NADA} />
+      <Registro operaciones={[DE_SUBIDA]} />
     );
-    expect(screen.getByText(/no está dado de alta/i)).toBeTruthy();
     const op = container.querySelector("details")!;
     expect(within(op).getByText("Subir")).toBeTruthy();
     expect(op.querySelector("pre")!.textContent).toContain("subidos 1, fallaron 0");

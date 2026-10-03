@@ -1,0 +1,37 @@
+/* El aspecto lo pone quien monta el botón (azul en la banda, secundario en el Resumen); aquí
+   solo el hueco para la espera y su giro. `--xonecode-cian` es de `estilos/marca.css`. */
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.boton:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+/* El mismo giro que el de las recetas (`Receta.module.css#girando`), con sus mismos alias: el
+   aro en `border-l2` y el tramo que gira en el cian de la marca. */
+.girando {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--dsw-alias-border-l2);
+  border-top-color: var(--xonecode-cian);
+  border-radius: 50%;
+  animation: gira 0.8s linear infinite;
+}
+
+@keyframes gira {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .girando {
+    animation: none;
+  }
+}

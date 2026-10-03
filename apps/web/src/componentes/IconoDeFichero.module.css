@@ -1,7 +1,7 @@
 /* El color de cada tipo de fichero sale de un token de `estilos/marca.css` (`--xonecode-icono-*`),
-   nunca de un literal: el SVG pinta con `currentColor` y aquí se fija ese color por tipo. Los temas
-   NO los redefinen —son los colores de cada tipo, como en cualquier editor—, y por eso son una
-   excepción declarada en `estilosDelCliente.test.ts`. Alias comprobados: bg-layer-1. */
+   nunca de un literal: el SVG traza con `currentColor` (`IconosDeProyecto.tsx#Trazo`) y aquí se
+   fija ese color por tipo. Los temas NO los redefinen —son los colores de cada tipo, como en
+   cualquier editor—, y por eso son una excepción declarada en `estilosDelCliente.test.ts`. */
 
 .icono {
   flex: none;
@@ -43,18 +43,4 @@
 
 .carpeta {
   color: var(--xonecode-icono-carpeta);
-}
-
-/* Lo que va ENCIMA del relleno: el aspa del `.xne` y la almohadilla del CSS en blanco, las letras
-   del JS en oscuro. Fijos en los dos modos: se leen contra el relleno del icono, no contra el fondo. */
-.sobre {
-  stroke: var(--xonecode-icono-sobre);
-}
-
-.sobreJs {
-  fill: var(--xonecode-icono-sobre-js);
-}
-
-.hueco {
-  fill: var(--dsw-alias-bg-layer-1);
 }

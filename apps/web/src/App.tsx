@@ -33,7 +33,9 @@ import { Ficheros } from "./componentes/Ficheros.js";
 import { CambiosSinGuardar } from "./componentes/CambiosSinGuardar.js";
 import { usarEdicion } from "./usarEdicion.js";
 import { esEditable } from "./edicion.js";
-import { CloudStudio } from "./componentes/CloudStudio.js";
+import { CloudStudio, Registro } from "./componentes/CloudStudio.js";
+import type { EstadoDeSubida } from "./componentes/BotonSubir.js";
+import type { ProgresoDeOperacion } from "./componentes/Pregunta.js";
 import { Artefactos, type ArtefactoEnLista } from "./componentes/Artefactos.js";
 import { TareasDelProyecto } from "./componentes/TareasDelProyecto.js";
 import {
@@ -336,6 +338,41 @@ export function App({
     },
     [pedirParche]
   );
+
+  /**
+   * TODO lo pendiente de subir (la pestaña Sincronización del panel). Va JUNTO con la cifra de
+   * la banda (`sync`): las dos miden lo mismo, y pedirlas por separado es la carrera de dos
+   * respuestas que llegan en momentos distintos.
+   */
+  //
+  // Y UNA vez por instante: al abrir la pestaña la banda y la lista se montan a la vez y las dos
+  // piden al montarse; sin esto salían dos peticiones de cada (git y recuento de líneas dos
+  // veces). La marca se suelta en la microtarea siguiente, así que un «Refrescar» después sí pide.
+  const pidiendoPendientes = useRef(false);
+  const pedirPendientesDeSubida = useCallback(() => {
+    if (pidiendoPendientes.current) return;
+    pidiendoPendientes.current = true;
+    queueMicrotask(() => {
+      pidiendoPendientes.current = false;
+    });
+    void enviar({ clase: "pendientesDeSubida" });
+    void enviar({ clase: "sync", accion: "estado" });
+  }, [enviar]);
+  const [desplegadosDeSubida, setDesplegadosDeSubida] = useState<ReadonlySet<string> | undefined>(undefined);
+  const desplegarDeSubida = useCallback(
+    (ruta: string) => {
+      setDesplegadosDeSubida((previas) => new Set([...(previas ?? []), ruta]));
+      void enviar({ clase: "pendientesDeSubida", ruta });
+    },
+    [enviar]
+  );
+  const plegarDeSubida = useCallback((ruta: string) => {
+    setDesplegadosDeSubida((previas) => {
+      const siguientes = new Set(previas ?? []);
+      siguientes.delete(ruta);
+      return siguientes;
+    });
+  }, []);
 
   const plegar = useCallback((ruta: string) => {
     setDesplegados((previas) => {
@@ -657,10 +694,162 @@ export function App({
 
   const sincronizar = useCallback(
     (accion: "subir" | "bajar") => {
+      if (accion === "subir") setSubidaEsperando(true);
       void enviar({ clase: "sync", accion });
     },
     [enviar]
   );
+
+  /**
+   * «Subir» se pulsó y aún no ha salido el diálogo: el servidor mide git ANTES de preguntar, y
+   * sin esto el clic no hacía nada visible durante segundos. Lo comparten la banda de Revisión
+   * y la tarjeta del Resumen, que mandan la misma intención.
+   *
+   * **Deja de esperar por lo que PASA, no por un temporizador**: llega la pregunta con el plan;
+   * llega el acto de una operación de subida (`/sync` lo anota siempre que no se rechace —árbol
+   * sucio, nada que subir, el final de la subida—); llega un `sync` con error (sin proyecto
+   * abierto); o se cae el cable, y con él la petición.
+   */
+  const [subidaEsperando, setSubidaEsperando] = useState(false);
+  const ultimaSubida = registroDeSync.find((operacion) => operacion.accion === "subir")?.cuando;
+  const ultimaSubidaVista = useRef(ultimaSubida);
+  useEffect(() => {
+    const operacionNueva = ultimaSubidaVista.current !== ultimaSubida;
+    ultimaSubidaVista.current = ultimaSubida;
+    if (
+      operacionNueva ||
+      estado.pregunta?.decision !== undefined ||
+      estado.sync?.error !== undefined ||
+      estado.conectado === false
+    ) {
+      setSubidaEsperando(false);
+    }
+  }, [ultimaSubida, estado.pregunta, estado.sync?.error, estado.conectado]);
+  // Al terminar una subida, lo subido deja de estar pendiente: se vuelven a pedir la LISTA de
+  // Revisión (cuyas marcas de pendiente pone el servidor) y la cifra de la banda. Las dos: con
+  // solo la cifra, la lista seguiría enseñando lo que ya está arriba.
+  const subidaRefrescada = useRef(ultimaSubida);
+  useEffect(() => {
+    if (subidaRefrescada.current === ultimaSubida) return;
+    subidaRefrescada.current = ultimaSubida;
+    if (estado.conectado !== true) return;
+    pedirRevision();
+    pedirSync();
+    if (pendientesPedidos) void enviar({ clase: "pendientesDeSubida" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ultimaSubida, estado.conectado, pedirRevision, pedirSync]);
+  /**
+   * El diálogo de una operación de sincronización —subir o «Actualizar repo local»— SIGUE
+   * abierto después de aceptar: gira mientras trabaja y al final dice cómo fue (o por qué
+   * falló), y solo su «Aceptar» lo cierra. El servidor ya no tiene pregunta pendiente —se
+   * contestó—, así que el diálogo se retiene AQUÍ con la pregunta, su operación y la última
+   * operación de ESA acción que se conocía: la nueva que llegue después es la suya, y su acto
+   * trae el resultado como dato (`resultado`, `bajados`, `error`).
+   *
+   * Se retiene en el MISMO `<Pregunta>` y en el mismo sitio del árbol de React, no en otro
+   * componente: así no se desmonta y lo marcado sigue a la vista mientras sube.
+   */
+  const [operacionEnDialogo, setOperacionEnDialogo] = useState<
+    | {
+        pregunta: NonNullable<typeof estado.pregunta>;
+        operacion: "subir" | "bajar";
+        desde: string | undefined;
+        cableCaido?: boolean;
+      }
+    | undefined
+  >(undefined);
+  useEffect(() => {
+    if (operacionEnDialogo !== undefined && estado.conectado === false && operacionEnDialogo.cableCaido !== true) {
+      setOperacionEnDialogo({ ...operacionEnDialogo, cableCaido: true });
+    }
+  }, [estado.conectado, operacionEnDialogo]);
+  /** La última operación conocida de una acción: su acto, el más reciente de ella. */
+  const ultimaDe = (accion: "subir" | "bajar") => registroDeSync.find((operacion) => operacion.accion === accion);
+  const operacionTerminada =
+    operacionEnDialogo === undefined || ultimaDe(operacionEnDialogo.operacion)?.cuando === operacionEnDialogo.desde
+      ? undefined
+      : ultimaDe(operacionEnDialogo.operacion);
+  const progresoDeOperacion: ProgresoDeOperacion | undefined =
+    operacionEnDialogo === undefined
+      ? undefined
+      : operacionTerminada !== undefined
+        ? {
+            fase: "terminada",
+            operacion: operacionEnDialogo.operacion,
+            lineas: operacionTerminada.lineas,
+            ...(operacionTerminada.resultado === undefined ? {} : { resultado: operacionTerminada.resultado }),
+            ...(operacionTerminada.bajados === undefined ? {} : { bajados: operacionTerminada.bajados }),
+            ...(operacionTerminada.error === undefined ? {} : { error: operacionTerminada.error }),
+          }
+        : operacionEnDialogo.cableCaido === true
+          ? {
+              fase: "terminada",
+              operacion: operacionEnDialogo.operacion,
+              lineas: [],
+              motivo:
+                operacionEnDialogo.operacion === "subir"
+                  ? "Se ha perdido la conexión con xonecode mientras subía. Mira las últimas subidas al reconectar para saber qué llegó a subir."
+                  : "Se ha perdido la conexión con xonecode mientras se actualizaba el repo local. Mira el estado de la copia al reconectar.",
+            }
+          : { fase: "trabajando", operacion: operacionEnDialogo.operacion };
+  /**
+   * La pregunta de DECISIÓN en pantalla: la pendiente del servidor si es de sí o no, o, tras
+   * aceptar una subida, la retenida. La de texto libre NO es de aquí: vive en el hilo.
+   */
+  const preguntaDeDecision =
+    estado.pregunta?.decision !== undefined ? estado.pregunta : operacionEnDialogo?.pregunta;
+  /** La pregunta de TEXTO libre pendiente: esa sí es una mitad de conversación, y va en el hilo. */
+  const preguntaDeTexto = estado.pregunta?.decision === undefined ? estado.pregunta : undefined;
+
+  /**
+   * El diálogo de una DECISIÓN —la subida, «Actualizar repo local»—, montado en UN solo sitio
+   * y fuera de cualquier vista.
+   *
+   * Vivía en la columna del chat, y para verlo `hayEsperaDeHumano` sacaba del panel al chat:
+   * pulsar «Subir» en el Resumen del proyecto te llevaba a otra pantalla para enseñarte un
+   * diálogo que de todos modos sale por PORTAL, encima de todo. Ahora se monta aquí, en las
+   * dos ramas del `return` (alta y maqueta), y sale donde se esté; las otras esperas de
+   * humano —que sí son del hilo— siguen sacando al chat. Un solo sitio, además, es lo que
+   * hace imposible pintar dos diálogos con dos estados de casillas distintos.
+   */
+  const dialogoDeDecision =
+    preguntaDeDecision?.decision === undefined ? null : (
+      <Pregunta
+        texto={preguntaDeDecision.texto}
+        decision={preguntaDeDecision.decision}
+        {...(progresoDeOperacion === undefined ? {} : { progreso: progresoDeOperacion })}
+        alCerrar={() => setOperacionEnDialogo(undefined)}
+        alResponder={async (respuesta, seleccion) => {
+          // Aceptar una operación de sincronización no cierra el diálogo: se retiene con la
+          // última operación conocida de ESA acción, y la nueva dirá cómo terminó. La operación
+          // la dice la decisión (`operacion`); una seleccionable sin ella es la subida.
+          const pregunta = estado.pregunta;
+          const operacion =
+            pregunta?.decision?.operacion ?? (pregunta?.decision?.seleccionable === true ? "subir" : undefined);
+          const retener = pregunta !== undefined && operacion !== undefined && respuesta === "s";
+          if (retener) setOperacionEnDialogo({ pregunta, operacion, desde: ultimaDe(operacion)?.cuando });
+          try {
+            // Las rutas marcadas, cuando el diálogo dejó elegir (la subida).
+            await enviar({ clase: "respuesta", texto: respuesta, ...(seleccion === undefined ? {} : { seleccion }) });
+          } catch (error) {
+            // El envío no llegó: el diálogo vuelve a ser la pregunta, para reintentar.
+            if (retener) setOperacionEnDialogo(undefined);
+            throw error;
+          }
+          store.contestarPregunta();
+        }}
+      />
+    );
+
+  const estadoDeSubida: EstadoDeSubida = {
+    esperando: subidaEsperando,
+    // Con un turno en marcha la orden se encola DETRÁS de él y el diálogo tardaría lo que
+    // tarde el turno: se dice en vez de dejar el botón girando minutos.
+    ...(estado.turnoEnVuelo === true && !subidaEsperando
+      ? { motivoParaNo: "Hay un turno en marcha: se podrá subir cuando termine" }
+      : {}),
+    alSubir: () => sincronizar("subir"),
+  };
 
   /**
    * Las acciones de la pestaña «Ejecutar» (Task 10): volver a medir, lanzar, cancelar y
@@ -1092,9 +1281,11 @@ export function App({
    * contestar ya se está donde el turno sigue. El efecto apaga `enPanel` para que, contestada,
    * no se vuelva al panel de rebote; `hayEsperaDeHumano` lo cubre ya en el mismo render.
    */
+  // Las DECISIONES no cuentan: su diálogo se monta fuera de las vistas (`dialogoDeDecision`)
+  // y sale donde se esté, así que no hace falta llevar a nadie al chat para verlo.
   const hayEsperaDeHumano =
     estado.aprobacion !== undefined ||
-    estado.pregunta !== undefined ||
+    preguntaDeTexto !== undefined ||
     estado.secreto !== undefined ||
     estado.selector !== undefined;
   useEffect(() => {
@@ -1112,6 +1303,10 @@ export function App({
   useEffect(() => {
     if (listaDeRevision === undefined) setDesplegados(undefined);
   }, [listaDeRevision]);
+  const pendientesPedidos = estado.pendientesDeSubida !== undefined;
+  useEffect(() => {
+    if (!pendientesPedidos) setDesplegadosDeSubida(undefined);
+  }, [pendientesPedidos]);
 
   /**
    * Al TERMINAR un turno, si la pestaña de Revisión está delante, se refresca sola.
@@ -1153,6 +1348,12 @@ export function App({
       pedirRevision();
       if (ficheroElegido !== undefined) void enviar({ clase: "fichero", ruta: ficheroElegido });
       edicionRef.current.pedirBase();
+    }
+    // Lo pendiente de subir (la pestaña Sincronización del panel), si ya se pidió alguna vez: el
+    // turno acaba de escribir, así que hay más. Y sus diffs abiertos, que pueden haber cambiado.
+    if (pendientesPedidos) {
+      pedirPendientesDeSubida();
+      for (const ruta of desplegadosDeSubida ?? []) void enviar({ clase: "pendientesDeSubida", ruta });
     }
     // El agente pudo escribir un `.xne`, y un modelo viejo contesta con autoridad y equivocado.
     if (vistaDelPanel === "colecciones") pedirColecciones();
@@ -1368,6 +1569,8 @@ export function App({
     // `centrada` cuando no hay tarjeta: la marca se queda el centro óptico y crece. Con
     // tarjeta vuelve a ser la cabecera compacta, que es de quien es el centro entonces.
     return (
+      <>
+      {dialogoDeDecision}
       <PantallaDeArranque centrada={soloElLienzo}>
         {/*
           Antes de que llegue el primer `selector`/`secreto`/`alta` (la conexión SSE
@@ -1413,12 +1616,9 @@ export function App({
             if (id === "modelo") void enviar({ clase: "alta", paso: "cuenta" });
           }}
         >
-          {estado.pregunta !== undefined ? (
+          {preguntaDeTexto !== undefined ? (
             <Pregunta
-              texto={estado.pregunta.texto}
-              {...(estado.pregunta.decision === undefined
-                ? {}
-                : { decision: estado.pregunta.decision })}
+              texto={preguntaDeTexto.texto}
               anidado
               alResponder={async (respuesta) => {
                 await enviar({ clase: "respuesta", texto: respuesta });
@@ -1474,6 +1674,7 @@ export function App({
         </TarjetaDeAlta>
         )}
       </PantallaDeArranque>
+      </>
     );
   }
 
@@ -2306,24 +2507,8 @@ export function App({
           conectado={estado.conectado}
           alEditar={editarDesdeRevision}
           {...(estado.arbol?.rutas === undefined ? {} : { rutasDelProyecto: estado.arbol.rutas })}
-          // La banda de la sincronización, que ya no es pestaña propia: «cuánto queda
-          // por subir» es la misma pregunta que contesta Revisión medida contra otra
-          // referencia. Se monta CON la pestaña, y montarse es lo que la hace medir
-          // (`CloudStudio` pide al entrar): abrir Revisión ES entrar a mirarlo.
-          cloudstudio={
-            <CloudStudio
-              {...(estado.sync === undefined ? {} : { sync: estado.sync })}
-              // El registro va con el mismo trato que `sync`: AUSENTE cuando esta
-              // sesión no ha sincronizado nada todavía. Un array vacío diría «hay un
-              // registro y está vacío», y la banda no tiene nada que enseñar en
-              // ninguno de los dos casos — pero la distinción se conserva en la capa
-              // que la sabe, que es donde el repo la exige.
-              {...(registroDeSync.length === 0 ? {} : { registro: registroDeSync })}
-              alPedir={sincronizar}
-              alRecargar={pedirSync}
-              conectado={estado.conectado}
-            />
-          }
+          // Sin sincronización ni registro: Subir es del PROYECTO y vive en la pestaña
+          // Sincronización de su panel. Aquí queda lo de esta conversación pendiente de subir.
         />
       }
       planes={
@@ -2468,6 +2653,39 @@ export function App({
       alAbrirAjustes={() => abrirAjustes()}
       apariencia={apariencia}
       alCambiarApariencia={alCambiarApariencia}
+    />
+  );
+
+  /**
+   * La pestaña Sincronización del panel del proyecto: la MISMA vista que Revisión, en su modo
+   * `pendientes` —todo lo que falta por subir, con el diff contra CloudStudio—, con la banda de
+   * Subir / Actualizar repo local y las últimas subidas arriba. `via` solo cuando la lista ha
+   * llegado: `Revision` pide al montar mientras falta.
+   */
+  const pendientesDeSubida = estado.pendientesDeSubida;
+  const pestanaDeSincronizacion = (
+    <Revision
+      modo="pendientes"
+      {...(pendientesDeSubida?.lista === undefined ? {} : { via: "git" as const })}
+      {...(pendientesDeSubida?.error === undefined ? {} : { error: pendientesDeSubida.error })}
+      ficheros={pendientesDeSubida?.lista ?? []}
+      parches={estado.parchesDeSubida ?? {}}
+      desplegados={desplegadosDeSubida ?? new Set()}
+      alDesplegar={desplegarDeSubida}
+      alPlegar={plegarDeSubida}
+      alRecargar={pedirPendientesDeSubida}
+      conectado={estado.conectado}
+      {...(registroDeSync.length === 0 ? {} : { registro: <Registro operaciones={registroDeSync} /> })}
+      cloudstudio={
+        <CloudStudio
+          {...(estado.sync === undefined ? {} : { sync: estado.sync })}
+          alPedir={sincronizar}
+          subida={estadoDeSubida}
+          // La cifra y la lista, juntas: miden lo mismo.
+          alRecargar={pedirPendientesDeSubida}
+          conectado={estado.conectado}
+        />
+      }
     />
   );
 
@@ -2616,22 +2834,12 @@ export function App({
               el `POST` fallido, lo que se queda en pantalla es la pregunta sin contestar, que
               es la verdad.
 
-              El sitio en el árbol solo coloca a DOS de ellas. La de una DECISIÓN se monta
-              aquí igual, pero se pinta en un diálogo por PORTAL (`Pregunta.tsx`), así que no
-              es esta posición lo que la pone delante del compositor: nació aquí y aquí se
-              quedaba pegada al fondo de la columna, que es el defecto que el portal arregla.
-              Se deja en el mismo sitio porque lo que decide quién la monta es el ESTADO
-              —`estado.pregunta`—, no el orden dentro de esta columna.
+              La de una DECISIÓN ya no se monta aquí: es un diálogo por portal y vive en
+              `dialogoDeDecision`, fuera de las vistas, para salir donde se esté.
             */}
-            {estado.pregunta !== undefined ? (
+            {preguntaDeTexto !== undefined ? (
               <Pregunta
-                texto={estado.pregunta.texto}
-                // La FORMA, cuando el servidor la manda: la pregunta de sí o no enseña el
-                // plan y contesta con dos botones en vez de con un campo. Ausente, campo
-                // de texto — y se copia AUSENTE, no con una lista vacía.
-                {...(estado.pregunta.decision === undefined
-                  ? {}
-                  : { decision: estado.pregunta.decision })}
+                texto={preguntaDeTexto.texto}
                 alResponder={async (respuesta) => {
                   await enviar({ clase: "respuesta", texto: respuesta });
                   store.contestarPregunta();
@@ -2802,8 +3010,20 @@ export function App({
               {...(estado.sync?.rama === undefined ? {} : { rama: estado.sync.rama })}
               {...(estado.planes?.lista === undefined ? {} : { planes: estado.planes.lista })}
               // Lo de la copia, arriba del Resumen: la fila del proyecto ABIERTO en el alta.
-              {...(identidadDelActivo === undefined ? {} : { copia: copiaDelPanel(identidadDelActivo) })}
+              {...(identidadDelActivo === undefined
+                ? {}
+                : {
+                    // El proyecto ABIERTO es el que sincroniza el servidor: solo su tarjeta
+                    // ofrece «Subir», y vuelve a medir cuando una subida termina.
+                    copia: {
+                      ...copiaDelPanel(identidadDelActivo),
+                      subida: estadoDeSubida,
+                      ...(ultimaSubida === undefined ? {} : { marcaDeSubida: ultimaSubida }),
+                    },
+                  })}
               tareasEnFondo={tareasEnFondo}
+              // La pestaña Sincronización: solo con copia, que es el proyecto que sincroniza.
+              {...(identidadDelActivo === undefined ? {} : { sincronizacion: pestanaDeSincronizacion })}
               {...(estado.gestor === undefined ? {} : { gestor: estado.gestor })}
               {...(estado.conectores === undefined ? {} : { conectores: estado.conectores })}
               conectado={estado.conectado}
@@ -2974,6 +3194,7 @@ export function App({
     {ventanaDeTarea}
     {ventanaDeAccionDeSesion}
     {ventanaDeCambiosSinGuardar}
+    {dialogoDeDecision}
     </>
   );
 }

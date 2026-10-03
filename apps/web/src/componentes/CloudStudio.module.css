@@ -153,6 +153,9 @@
    línea larga se parta en vez de sacar una barra de scroll horizontal dentro del panel, y
    `anywhere` porque una ruta sin espacios larga no tiene dónde partir. */
 .lineas {
+  /* Acotadas: un plan de setenta ficheros empujaba todo lo demás fuera de la vista. */
+  max-height: 220px;
+  overflow: auto;
   margin: 0;
   padding: 8px 12px;
   border-top: 0.5px solid var(--dsw-alias-border-l2);

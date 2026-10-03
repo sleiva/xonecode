@@ -9,9 +9,11 @@
  * su propio nombre.
  *
  * Dos propiedades que no son negociables:
- * - La ref se mueve SOLO si todo terminó. Con fallos parciales se queda donde estaba, así
- *   que el siguiente `/sync` vuelve a calcular el plan ENTERO contra esa misma ref sin
- *   mover —no solo lo que falló— y lo reenvía completo, incluidas las operaciones que la
+ * - La ref se mueve SOLO si todo terminó, y SOLO por lo que se autorizó: una subida PARCIAL
+ *   (la persona eligió qué ficheros) la mueve con `marcarSubidoParcial`, no a HEAD. Con
+ *   fallos parciales se queda donde estaba, así que el siguiente `/sync` vuelve a calcular
+ *   el plan ENTERO contra esa misma ref sin mover —no solo lo que
+ *   falló— y lo reenvía completo, incluidas las operaciones que la
  *   vez anterior SÍ funcionaron. Eso NO es «idempotente por construcción»: es seguro
  *   únicamente si escribir/borrar dos veces la misma ruta en CloudStudio no tiene efecto
  *   observable la segunda vez. Esta función no lo garantiza ni lo comprueba, solo lo
@@ -27,9 +29,10 @@ import { appendFileSync, mkdirSync, readFileSync, statSync, existsSync, readdirS
 import { dirname, join } from "node:path";
 import type { CloudStudioPort } from "../../core/ports.js";
 import type { EstadoDeSync, OperacionOmitida, PoliticaDeAprobacion } from "../../core/cloudstudio.js";
+import { planAutorizado } from "../../core/cloudstudio.js";
 import { planDeSubida } from "../../core/planDeSubida.js";
 import { NOMBRE_CARPETA } from "../config/configEnDisco.js";
-import { cambiosPendientes, marcarSubido } from "../sesiones/gitSync.js";
+import { cambiosPendientes, marcarSubido, marcarSubidoParcial } from "../sesiones/gitSync.js";
 import { rutaSyncJson } from "./descarga.js";
 import { ramaActiva } from "./ramaActiva.js";
 import { validarTrasDescarga, type FicheroIlegible } from "./validarTrasDescarga.js";
@@ -221,11 +224,16 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
   // La política decide ANTES de tocar el puerto: ni `abrir` ni `contexto` ni una sola
   // escritura corren sin su autorización. Que no autorice deja el disco, el puerto y la
   // ref exactamente como estaban — sea cual sea la política que haya detrás.
-  if (!(await politicaDeAprobacion(plan))) {
+  //
+  // Lo que se ejecuta lo dice `planAutorizado`, nunca la veracidad de la respuesta: una
+  // selección vacía es un objeto —«verdadero»— y aun así no autoriza nada.
+  const autorizado = planAutorizado(plan, await politicaDeAprobacion(plan));
+  if (autorizado.length === 0) {
     informar("subida cancelada: no se ha aplicado nada\n");
     registrar();
     return informe;
   }
+  const parcial = autorizado.length < plan.length;
 
   await puerto.abrir(proyecto.nombre);
   // `undefined` = no se pudo leer (`ramaActiva.ts`). Aquí el posicionamiento ya era
@@ -242,7 +250,7 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
       // arreglaría nada y firmaría un linaje falso.
       await puerto.cambiarRama(ramaOrigen);
 
-      for (const operacion of plan) {
+      for (const operacion of autorizado) {
         try {
           if (operacion.tipo === "borrado") await puerto.borrarTexto(operacion.ruta);
           else if (operacion.tipo === "texto") {
@@ -273,8 +281,21 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
     throw error;
   }
 
-  if (informe.fallos.length === 0) {
+  if (informe.fallos.length === 0 && !parcial) {
     await marcarSubido(raiz, ramaOrigen, `sync: ${informe.ok.length} ficheros a ${ramaOrigen}`);
+  } else if (informe.fallos.length === 0) {
+    // Solo lo ELEGIDO avanza: la ref no puede ir a HEAD, o afirmaría que está arriba lo que
+    // la persona dejó sin marcar. Lo omitido tampoco avanza: se sigue declarando.
+    await marcarSubidoParcial(
+      raiz,
+      ramaOrigen,
+      informe.ok,
+      `sync: ${informe.ok.length} de ${plan.length} ficheros a ${ramaOrigen}`
+    );
+    const resto = plan.length - autorizado.length;
+    informar(
+      `subidos ${autorizado.length} de ${plan.length}; ${resto === 1 ? "el otro sigue" : `los otros ${resto} siguen`} pendiente${resto === 1 ? "" : "s"}\n`
+    );
   } else {
     // La ref no se mueve: el siguiente `/sync` recalcula el plan entero desde ahí y lo
     // reenvía completo, incluido lo que sí subió esta vez (ver la nota de cabecera).

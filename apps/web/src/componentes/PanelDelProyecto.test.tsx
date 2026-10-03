@@ -1103,6 +1103,29 @@ describe("PanelDelProyecto: lo de la copia en el Resumen", () => {
     alPedirResumen: vi.fn(() => Promise.resolve({ tareas: [], sync: { proyecto: "AppDemo", rama: "main", pendientes: 2 } })),
   });
 
+  it("la cabecera lleva el icono de la app junto al nombre SOLO si la copia lo tiene", async () => {
+    const c = copia(true);
+    const { container } = montar({ copia: { ...c, proyecto: { ...c.proyecto, icono: true } } });
+    await act(async () => {});
+    const cabecera = container.querySelector("header")!;
+    expect(cabecera.querySelector("img")?.getAttribute("src")).toBe("/icono-del-proyecto?id=p1");
+    expect(within(cabecera).getByRole("heading", { level: 1, name: "AppDemo" })).toBeTruthy();
+    // Si no carga, no se pinta nada: aquí no hay carpeta de respaldo.
+    fireEvent.error(cabecera.querySelector("img")!);
+    expect(cabecera.querySelector("img")).toBeNull();
+    expect(cabecera.querySelector("svg")).toBeNull();
+    cleanup();
+
+    const sinIcono = montar({ copia: copia(true) });
+    await act(async () => {});
+    expect(sinIcono.container.querySelector("header img")).toBeNull();
+    cleanup();
+    // Y sin copia tampoco: el panel de un proyecto no bajado no tiene icono que enseñar.
+    const sinCopia = montar({ copia: copia(false) });
+    await act(async () => {});
+    expect(sinCopia.container.querySelector("header img")).toBeNull();
+  });
+
   it("con copia: pastillas y acciones, lo que queda por subir y el gasto, y DESPUÉS los planes", async () => {
     const c = copia(true);
     montar({ copia: c, planes: [PLAN] });

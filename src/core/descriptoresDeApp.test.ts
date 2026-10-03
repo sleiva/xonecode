@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   TOPE_DE_XML,
+  candidatosDeIcono,
   conexionesDeApp,
+  iconoDeApp,
   esRutaDeFichero,
   nombreDeApp,
 } from "./descriptoresDeApp.js";
@@ -249,6 +251,32 @@ describe("nombreDeApp", () => {
 
   it("aguanta el CRLF de un fichero tocado en Windows", () => {
     expect(nombreDeApp("Environment=Pro\r\nname=ConRetorno\r\nTitle=x\r\n")).toBe("ConRetorno");
+  });
+});
+
+describe("candidatosDeIcono: dónde buscar el icono de la app", () => {
+  it("un proyecto real (`icon=` en minúscula, fichero en la raíz) prueba primero la RAÍZ", () => {
+    expect(
+      candidatosDeIcono("Environment=Pro\r\nname=Replanteos_2026\r\nicon=icon.png\r\nIconFolder=icons\r\n"),
+    ).toEqual(["icon.png", "icons/icon.png"]);
+  });
+
+  it("el esqueleto (`Icon=` en `icons/`) también se encuentra", () => {
+    expect(candidatosDeIcono("Name=MiApp\nIcon=app_icon.png\nIconFolder=icons\n")).toEqual([
+      "app_icon.png",
+      "icons/app_icon.png",
+    ]);
+  });
+
+  it("sin `IconFolder` se usa `icons`, y su barra final no se duplica", () => {
+    expect(candidatosDeIcono("icon=a.png\n")).toEqual(["a.png", "icons/a.png"]);
+    expect(candidatosDeIcono("icon=a.png\nIconFolder=graficos/\n")).toEqual(["a.png", "graficos/a.png"]);
+  });
+
+  it("sin icono declarado no hay dónde buscar", () => {
+    expect(iconoDeApp("name=x\nIconFolder=icons\n")).toBeUndefined();
+    expect(candidatosDeIcono("name=x\nicon=\n")).toEqual([]);
+    expect(candidatosDeIcono("")).toEqual([]);
   });
 });
 

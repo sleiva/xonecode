@@ -1,5 +1,5 @@
 /* Alias comprobados contra `estilos/design-platform.css`: label-primary/secondary/tertiary,
-   border-l2. `--xonecode-cian` y `--xonecode-fila-*` son de `estilos/marca.css` (y el puente de
+   border-l2, bg-layer-2. `--xonecode-cian` y `--xonecode-fila-*` son de `estilos/marca.css` (y el puente de
    temas los redefine). */
 
 .nivel {
@@ -97,4 +97,51 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Con casillas (el diálogo de la subida): la fila lleva la sangría y las líneas guía (por eso
+   `position: relative`), y la casilla va delante del botón, hermana suya. */
+.fila {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.fila > .hoja,
+.fila > .carpeta {
+  flex: 1;
+  min-width: 0;
+}
+
+.casilla {
+  flex: none;
+  margin: 0;
+  accent-color: var(--xonecode-azul);
+  cursor: pointer;
+}
+
+/* -- variante «explorador» (Revisión y el diálogo de la subida) ---------------------------
+   La MISMA fila que el plano (iconos, guías, 26 px); cambia el acabado: carpetas en negrita
+   con la cuenta de lo marcado, y la insignia al final. */
+.nivel[data-explorador] .carpeta {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.alFinal {
+  margin-left: auto;
+  padding-left: 8px;
+}
+
+.cuenta {
+  flex: none;
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }

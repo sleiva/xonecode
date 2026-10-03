@@ -412,6 +412,50 @@ describe("propios y compartidos", () => {
   });
 });
 
+describe("el icono de la app en el sitio de la carpeta", () => {
+  function montar(proyectos: Parameters<typeof Barra>[0]["proyectos"]) {
+    return render(
+      <Barra
+        entornos={[]}
+        entornoActivo=""
+        proyectos={proyectos}
+        alElegirEntorno={() => {}}
+        alAbrirSesion={() => {}}
+        alAbrirProyecto={() => {}}
+        alNuevaSesion={() => {}}
+        alAccionDeSesion={() => {}}
+        alFijar={() => {}}
+        alAbrirAjustes={() => {}}
+      />
+    );
+  }
+  const plegadorDe = (nombre: string): HTMLElement =>
+    screen.getByRole("button", { name: `desplegar las sesiones de ${nombre}` });
+
+  it("con `icono`, el plegador pinta la imagen del servidor por el ID, y no la carpeta", () => {
+    montar([{ id: "p 1", nombre: "Con icono", sesiones: [], local: true, icono: true }]);
+    const img = plegadorDe("Con icono").querySelector("img");
+    expect(img?.getAttribute("src")).toBe("/icono-del-proyecto?id=p%201");
+    expect(img?.getAttribute("alt")).toBe("");
+    expect(plegadorDe("Con icono").querySelectorAll("svg")).toHaveLength(1); // solo el triángulo
+    // Decorativo: el botón del proyecto se sigue llamando solo por su nombre.
+    expect(screen.getByRole("button", { name: "Con icono" })).toBeTruthy();
+  });
+
+  it("sin `icono`, la carpeta de siempre", () => {
+    montar([{ id: "p1", nombre: "Sin icono", sesiones: [], local: true }]);
+    expect(plegadorDe("Sin icono").querySelector("img")).toBeNull();
+    expect(plegadorDe("Sin icono").querySelectorAll("svg")).toHaveLength(2); // carpeta + triángulo
+  });
+
+  it("si la imagen no carga, vuelve la carpeta en vez del icono roto", () => {
+    montar([{ id: "p1", nombre: "Rota", sesiones: [], local: true, icono: true }]);
+    fireEvent.error(plegadorDe("Rota").querySelector("img")!);
+    expect(plegadorDe("Rota").querySelector("img")).toBeNull();
+    expect(plegadorDe("Rota").querySelectorAll("svg")).toHaveLength(2);
+  });
+});
+
 describe("el «+» y la chincheta de cada proyecto", () => {
   function montar(extra: Partial<Parameters<typeof Barra>[0]> = {}) {
     return render(

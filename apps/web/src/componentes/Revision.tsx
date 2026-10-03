@@ -5,6 +5,8 @@ import { numerarParche } from "../numerarParche.js";
 import { arbolDeRutas } from "../arbolDeRutas.js";
 import { Arbol } from "./Arbol.js";
 import { IconoDeFichero } from "./IconoDeFichero.js";
+import { GiroDeCarga } from "./GiroDeCarga.js";
+import { useEsperaDeRefresco } from "../esperaDeRefresco.js";
 import estilos from "./Revision.module.css";
 
 /**
@@ -33,6 +35,23 @@ import estilos from "./Revision.module.css";
  * ficheros y +582 líneas volcaban un diff de 483 que nadie había pedido y dejaban la lista
  * fuera de la vista.
  *
+ * **Tres secciones, de arriba abajo**: la sincronización con CloudStudio (acciones), las
+ * últimas subidas (el registro) y los cambios de la sesión. Las dos primeras comparten UNA
+ * región acotada con su propio scroll: crecían sin tope y, con dos operaciones del registro
+ * abiertas, se comían el alto entero y la lista de debajo dejaba de verse.
+ *
+ * **Y la lista enseña solo lo de la sesión que FALTA por subir**, cuando se sabe: cada fichero
+ * trae `pendiente`, marcado por el servidor en la misma foto que la lista
+ * (`arranque.ts#marcarPendientes`). Lo ya subido no es nada que revisar antes de subir. Sin la
+ * marca —proyecto sin CloudStudio, o la medida falló— se enseña todo, que es no esconder nada
+ * sobre una pregunta sin contestar.
+ *
+ * **Dos modos, la misma vista** (`modo`): `sesion` —la pestaña Revisión del chat, lo que esta
+ * conversación tocó y sigue pendiente— y `pendientes` —la pestaña Sincronización del panel del
+ * proyecto, TODO lo que falta por subir, con el diff contra CloudStudio—. Comparten la pila, el
+ * árbol, los diffs numerados y la banda acotada; cambian los textos, que en `pendientes` no
+ * hablan de ninguna sesión.
+ *
  * **Y arriba va la sincronización con CloudStudio**, que ya no tiene pestaña propia
  * (`Pestanas.tsx` dice por qué): «cuánto queda por subir» es esta misma pregunta —qué ha
  * cambiado— medida contra la rama de la bajada en vez de contra la foto de la sesión. Va
@@ -54,6 +73,9 @@ export function Revision({
   cloudstudio,
   alEditar,
   rutasDelProyecto,
+  registro,
+  modo = "sesion",
+  error,
 }: {
   /**
    * CÓMO se ha medido lo que se enseña, y de eso depende lo que la pestaña puede AFIRMAR:
@@ -70,8 +92,9 @@ export function Revision({
    */
   historica?: boolean;
   ficheros: readonly FicheroTocado[];
-  /** Los parches ya traídos, por ruta. El que falta está pedido y en camino. */
-  parches: Record<string, { texto: string; recortado: boolean }>;
+  /** Los parches ya traídos, por ruta. El que falta está pedido y en camino. `negado` = esa
+   *  ruta no se enseña (la regla del lector), y entonces no hay texto. */
+  parches: Record<string, { texto: string; recortado: boolean; negado?: string }>;
   /**
    * Lo que cambió en el MODELO de cada `.xne` desplegado, por ruta. Ausente la ruta = pedido y
    * en camino. Opcional: sin él no se pinta el bloque, que es lo que había.
@@ -103,7 +126,19 @@ export function Revision({
    * `.xne` la sesión no tocó. Ausente = solo se mira la lista de Revisión.
    */
   rutasDelProyecto?: readonly string[];
+  /** Las últimas operaciones de sincronización (`Registro`). Ausente = ninguna todavía. */
+  registro?: ReactNode;
+  /** `sesion` (omisión): lo de esta conversación. `pendientes`: todo lo que falta por subir. */
+  modo?: "sesion" | "pendientes";
+  /** Solo en `pendientes`: por qué no se pudo medir. Se enseña en vez de la lista. */
+  error?: string;
 }) {
+  const pendientes = modo === "pendientes";
+  // ¿Se midió lo pendiente? Con la marca en algún fichero, la lista enseña solo lo pendiente.
+  // En `pendientes` la lista YA es todo lo pendiente: no hay nada que filtrar.
+  const medidoPendiente = !pendientes && ficheros.some((f) => f.pendiente !== undefined);
+  const todos = ficheros;
+  const visibles = medidoPendiente ? todos.filter((f) => f.pendiente === true) : todos;
   // Se pide siempre que NO se tenga la lista, no solo al montar: entrar a mirar ES la
   // petición, pero también volver a tenerla vacía. Al cambiar de proyecto el store tira la
   // revisión (es del anterior) sin que este componente se desmonte, y con la petición solo
@@ -115,14 +150,30 @@ export function Revision({
     alRecargar();
   }, [via, conectado, alRecargar]);
 
+  // «Refrescar» gira hasta que llega la lista nueva (un `ficheros` NUEVO, aunque sea igual).
+  const refresco = useEsperaDeRefresco(ficheros, conectado);
+
   // Para desplazar la pila hasta un bloque cuando se pulsa su hoja en el árbol.
   const bloques = useRef(new Map<string, HTMLElement>());
 
   // Lo de debajo de la banda, en una variable y no en cinco `return` sueltos: la banda tiene
   // que verse en los SEIS estados (ver `cloudstudio` en los props).
   let cuerpo: ReactNode;
-  if (via === undefined) {
-    cuerpo = <p className={estilos.aviso}>Consultando los ficheros de la sesión…</p>;
+  if (pendientes && error !== undefined) {
+    cuerpo = <p className={estilos.aviso}>{`No se puede enseñar lo pendiente de subir: ${error}.`}</p>;
+  } else if (via === undefined) {
+    cuerpo = (
+      <p className={estilos.aviso}>
+        {pendientes ? "Consultando lo pendiente de subir…" : "Consultando los ficheros de la sesión…"}
+      </p>
+    );
+  } else if (pendientes && visibles.length === 0) {
+    cuerpo = (
+      <p className={estilos.aviso}>No hay nada pendiente de subir: la copia está igual que la rama en CloudStudio.</p>
+    );
+  } else if (pendientes) {
+    // Las ramas de abajo son de una SESIÓN (sin empezar, sin marca…): en este modo no aplican.
+    cuerpo = undefined;
   } else if (via === "sin-empezar") {
     cuerpo = (
       <p className={estilos.aviso}>
@@ -146,7 +197,14 @@ export function Revision({
         no haya cambios — es que no hay con qué compararlos.
       </p>
     );
-  } else if (ficheros.length === 0) {
+  } else if (todos.length > 0 && visibles.length === 0) {
+    cuerpo = (
+      <p className={estilos.aviso}>
+        Todo lo que ha tocado esta sesión ya está subido a CloudStudio: no queda nada suyo
+        pendiente de subir.
+      </p>
+    );
+  } else if (visibles.length === 0) {
     cuerpo = (
       <p className={estilos.aviso}>
         {via === "git"
@@ -154,12 +212,13 @@ export function Revision({
           : "No ha cambiado ningún fichero del proyecto desde que se abrió esta sesión."}
       </p>
     );
-  } else {
-    const conCuenta = ficheros.filter((f) => f.mas !== undefined || f.menos !== undefined);
-    const binarios = ficheros.length - conCuenta.length;
+  }
+  if (cuerpo === undefined && via !== undefined) {
+    const conCuenta = visibles.filter((f) => f.mas !== undefined || f.menos !== undefined);
+    const binarios = visibles.length - conCuenta.length;
     const totalMas = conCuenta.reduce((s, f) => s + (f.mas ?? 0), 0);
     const totalMenos = conCuenta.reduce((s, f) => s + (f.menos ?? 0), 0);
-    const claseDe = new Map(ficheros.map((f) => [f.ruta, f.clase] as const));
+    const claseDe = new Map(visibles.map((f) => [f.ruta, f.clase] as const));
     const conocidas = new Set([...ficheros.map((f) => f.ruta), ...(rutasDelProyecto ?? [])]);
 
     const irA = (ruta: string): void => {
@@ -184,7 +243,7 @@ export function Revision({
               escribió una tarea veinte minutos después). El rótulo es lo único que separa las
               dos afirmaciones, así que cambia con la medida. */}
           <div className={estilos.cabecera}>
-            <span className={estilos.alcance}>{via === "git" ? "Sesión" : "Desde que abriste"}</span>
+            <span className={estilos.alcance}>{pendientes ? "Pendiente" : via === "git" ? "Sesión" : "Desde que abriste"}</span>
             <span className={estilos.total}>
               {/* Sin ningún fichero con cuenta —todo binario— no se inventa un «+0 −0»: es la
                   misma regla que ya evita esa mentira por fila, aplicada a la suma. */}
@@ -206,14 +265,20 @@ export function Revision({
             <button
               type="button"
               className={estilos.recargar}
-              title="Vuelve a mirar qué ficheros ha tocado esta sesión"
-              onClick={alRecargar}
+              title={pendientes ? "Vuelve a medir qué falta por subir a CloudStudio" : "Vuelve a mirar qué ficheros ha tocado esta sesión"}
+              disabled={refresco.esperando || conectado === false}
+              aria-busy={refresco.esperando}
+              onClick={() => {
+                refresco.empezar();
+                alRecargar();
+              }}
             >
+              {refresco.esperando ? <GiroDeCarga /> : null}
               Refrescar
             </button>
           </div>
 
-          {via === "desde-apertura" ? (
+          {!pendientes && via === "desde-apertura" ? (
             <p className={estilos.nota}>
               Esta sesión no tiene ningún commit suyo con el que atribuir sus cambios (es de antes
               de que xonecode los sellara), así que esto es todo lo que ha cambiado en la copia del
@@ -222,7 +287,7 @@ export function Revision({
             </p>
           ) : null}
 
-          {mezclados !== undefined && mezclados > 0 ? (
+          {!pendientes && mezclados !== undefined && mezclados > 0 ? (
             <p className={estilos.nota}>
               {mezclados === 1
                 ? "Hay 1 commit de otra sesión entremedias: la lista de ficheros es de esta sesión, pero un diff puede traer cambios de la otra."
@@ -230,7 +295,7 @@ export function Revision({
             </p>
           ) : null}
 
-          {ficheros.map((f) => {
+          {visibles.map((f) => {
             const abierto = desplegados.has(f.ruta);
             const parche = abierto ? parches[f.ruta] : undefined;
             return (
@@ -265,7 +330,14 @@ export function Revision({
                     {/* Lo que nadie ha commiteado se dice EN la fila: puede ser el turno en vuelo
                         (se commitea al terminar) o algo que estaba suelto de antes, y en ninguno
                         de los dos casos consta de quién es. */}
-                    {f.sinCommitear === true ? <span className={estilos.pendiente}>sin commitear</span> : null}
+                    {f.sinCommitear === true ? (
+                      <span
+                        className={estilos.pendiente}
+                        title={pendientes ? "Git aún no lo sigue: commitéalo para poder subirlo" : undefined}
+                      >
+                        sin commitear
+                      </span>
+                    ) : null}
                     {f.mas === undefined && f.menos === undefined ? (
                       <span className={estilos.binario}>binario</span>
                     ) : (
@@ -299,6 +371,9 @@ export function Revision({
                 {abierto ? (
                   parche === undefined ? (
                     <p className={estilos.aviso}>Trayendo el diff de {f.ruta}…</p>
+                  ) : parche.negado !== undefined ? (
+                    // La regla del lector: un `.env` pendiente sale en la lista, su diff no.
+                    <p className={estilos.aviso}>{`Este fichero no se enseña: ${parche.negado}.`}</p>
                   ) : parche.texto === "" ? (
                     <p className={estilos.aviso}>Sin diff que enseñar para este fichero.</p>
                   ) : (
@@ -314,7 +389,8 @@ export function Revision({
             Pulsar uno despliega su bloque y desplaza la pila hasta él. */}
         <aside className={estilos.indice} aria-label="Ficheros cambiados">
           <Arbol
-            nodos={arbolDeRutas(ficheros.map((f) => f.ruta))}
+            nodos={arbolDeRutas(visibles.map((f) => f.ruta))}
+            variante="explorador"
             alElegir={irA}
             insignia={(ruta) => {
               const clase = claseDe.get(ruta) ?? "modificado";
@@ -334,8 +410,34 @@ export function Revision({
     <div className={estilos.tab}>
       {/* La banda cruza TODO el ancho —también el del índice— porque no es una tercera
           columna ni un bloque de la pila: es la otra referencia con la que se mide lo de
-          abajo, y va arriba y aparte. */}
-      {cloudstudio === undefined ? null : <div className={estilos.banda}>{cloudstudio}</div>}
+          abajo, y va arriba y aparte. Lleva las DOS primeras secciones y su propio scroll. */}
+      {cloudstudio === undefined && registro === undefined ? null : (
+        <div className={estilos.banda}>
+          {cloudstudio === undefined ? null : (
+            <section className={estilos.seccion} aria-label="Sincronización con CloudStudio">
+              <h2 className={estilos.tituloDeSeccion}>Sincronización con CloudStudio</h2>
+              {cloudstudio}
+            </section>
+          )}
+          {registro === undefined ? null : (
+            <section className={estilos.seccion} aria-label="Últimas subidas">
+              <h2 className={estilos.tituloDeSeccion}>
+                {/* En el panel del proyecto se dice de DÓNDE sale: de los actos de la conversación
+                    abierta, no de una historia del proyecto. */}
+                {pendientes ? "Últimas subidas de la conversación abierta" : "Últimas subidas"}
+              </h2>
+              {registro}
+            </section>
+          )}
+        </div>
+      )}
+      <h2 className={`${estilos.tituloDeSeccion} ${estilos.tituloDeCambios}`}>
+        {pendientes
+          ? "Pendiente de subir a CloudStudio"
+          : medidoPendiente
+            ? "Cambios de esta sesión pendientes de subir"
+            : "Cambios de esta sesión"}
+      </h2>
       {cuerpo}
     </div>
   );

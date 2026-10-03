@@ -167,15 +167,24 @@ import { cloudstudioDelProyecto, guardarModoDeEscrituraDeProyecto, modoDeEscritu
 import { abrirEnSistema, olvidarEntorno as olvidarCredencialesDeEntorno, rutaAuthPorDefecto } from "../../agent/cloudstudio/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/config/persona.js";
 import { cambiosDeSesion, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesiones/sesionGit.js";
-import { commitDeTurno, cambiosPendientes, trabajoSinCommitear } from "../../agent/sesiones/gitSync.js";
+import {
+  commitDeTurno,
+  cambiosPendientes,
+  parcheDeSubida,
+  pendientesDeSubida,
+  sinSeguir,
+  trabajoSinCommitear,
+} from "../../agent/sesiones/gitSync.js";
 import { marcarTareaDeSesion, sembrarConsumosPendientes, type DispositivoElegido } from "./sesiones.js";
 import { RUTA_ARTEFACTOS, esRutaDeArtefacto } from "../../core/artefactos.js";
 import {
   arbolDeProyecto,
   escribirFicheroDeProyecto,
+  iconoDelProyecto,
   leerFicheroDeProyecto,
   mimeDeImagen,
   motivoDeRutaInaceptable,
+  motivoParaNoEnsenar,
 } from "../../agent/grafo/arbolDeProyecto.js";
 import { baseDeFichero } from "../../agent/sesiones/baseDeFichero.js";
 import { modeloEnDisco } from "../../agent/navegacion/indiceEnDisco.js";
@@ -185,7 +194,7 @@ import type { CambiosDeUnaColeccion } from "../../core/diffDeColecciones.js";
 import { modeloDelCambio } from "../../agent/sesiones/modeloDelCambio.js";
 import { planesDelProyecto, type PlanEnDisco } from "../../agent/planesEnDisco.js";
 import { CSP_DE_OPENUI, documentoDeOpenui, esArtefactoOpenui, temaDeVisor } from "./visorOpenui.js";
-import { RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
+import { RUTA_ICONO_DEL_PROYECTO, RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
 import {
   leerArtefactoCrudo,
   leerArtefactoDeSesion,
@@ -510,6 +519,12 @@ export interface OpcionesDeMontaje {
   escribirFichero?: (raiz: string, ruta: string, texto: string, huella: string) => Promise<{ ruta: string; huella?: string; error?: string }>;
   /** La base de las marcas del editor (`agent/sesiones/baseDeFichero.ts`). Por opción porque toca git. */
   baseDeFichero?: (raiz: string, sesion: string | undefined, ruta: string, base: "sesion" | "commit") => Promise<BaseDelFichero>;
+  /**
+   * La ruta relativa del icono de la app de una copia bajada (`agent/grafo/arbolDeProyecto.ts
+   * #iconoDelProyecto`), o `undefined` sin icono. Por opción porque lee el disco; ausente = ningún
+   * proyecto lleva icono y la barra pinta la carpeta de siempre.
+   */
+  iconoDelProyecto?: (raiz: string) => Promise<string | undefined>;
   /**
    * Los dos lectores de ARTEFACTOS (`agent/grafo/artefactosEnDisco.ts`), y son dos porque son dos
    * transportes con necesidades opuestas: el del cable devuelve la forma de un fichero
@@ -1140,6 +1155,22 @@ export function montarRutas(
         return undefined;
       }
     };
+    /**
+     * Qué proyectos BAJADOS tienen icono de app, una vez por anuncio y antes de componerlo (la
+     * lista se compone síncrona). Por el cable solo viaja el booleano: qué fichero es lo vuelve a
+     * decidir `RUTA_ICONO_DEL_PROYECTO` al servirlo, y ninguna ruta sale del host.
+     */
+    const conIcono = new Set<string>();
+    const buscarIcono = opciones.iconoDelProyecto;
+    if (buscarIcono !== undefined) {
+      await Promise.all(
+        proyectos.map(async (p) => {
+          if (!hayCopiaLocal(p.nombre)) return;
+          const raiz = raizDeProyectoOSilencio(p.nombre);
+          if (raiz !== undefined && (await buscarIcono(raiz).catch(() => undefined)) !== undefined) conIcono.add(p.id);
+        })
+      );
+    }
     emitir({
       clase: "alta",
       pasos,
@@ -1198,6 +1229,8 @@ export function montarRutas(
             const rama = raiz === undefined ? undefined : cloudstudioDelProyecto(raiz)?.rama;
             return typeof rama === "string" && rama !== "" ? { rama } : {};
           })(),
+          // El icono de la app, solo si la copia tiene uno que se pueda enseñar (ver `conIcono`).
+          ...(conIcono.has(p.id) ? { icono: true as const } : {}),
         };
       }),
       ramas,
@@ -3413,7 +3446,24 @@ export function montarRutas(
       return;
     }
     const { via, ficheros, mezclados } = await opciones.cambiosDeSesion(abierto.raiz, sesion);
-    emitir({ clase: "revision", via, ficheros, ...(mezclados === undefined ? {} : { mezclados }) });
+    // Lo pendiente de subir se marca AQUÍ, en la misma foto que la lista: cruzarlo en el
+    // cliente con el `sync` —que llega en otro momento— escondería lo recién escrito.
+    const marcados = await marcarPendientes(abierto.raiz, ficheros);
+    emitir({ clase: "revision", via, ficheros: marcados, ...(mezclados === undefined ? {} : { mezclados }) });
+  };
+
+  /**
+   * Lo pendiente de subir del proyecto ABIERTO —el mismo que sincroniza `atenderSync`—: la
+   * lista sin `ruta`, el diff de uno con ella. Las reglas viven en `lecturaDePendientesDeSubida`
+   * y `lecturaDeParcheDeSubida`, exportadas y probadas contra git de verdad.
+   */
+  const atenderPendientesDeSubida = async (ruta?: string): Promise<void> => {
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined) {
+      emitir({ clase: "pendientesDeSubida", error: "no hay ningún proyecto abierto" });
+      return;
+    }
+    emitir(ruta === undefined ? await lecturaDePendientesDeSubida(abierto.raiz) : await lecturaDeParcheDeSubida(abierto.raiz, ruta));
   };
 
   /**
@@ -5339,6 +5389,63 @@ export function montarRutas(
   });
 
   /**
+   * `GET RUTA_ICONO_DEL_PROYECTO?id=<id>` — el icono de la app de un proyecto BAJADO, para su fila
+   * de la barra y la cabecera de su panel.
+   *
+   * Del cable llega el ID, nunca una ruta: el nombre sale del listado del SERVIDOR (como al borrar
+   * la copia local), la raíz de `vestibulo.raizDeProyecto`, y el fichero lo decide `app.ini` con la
+   * barrera de Ficheros (`iconoDelProyecto`). Se lee luego con `leerFichero`, que la vuelve a
+   * aplicar. A diferencia de `RUTA_IMAGEN_DEL_PROYECTO`, vale para cualquier copia, no solo la
+   * abierta: la barra enseña todas. Mismas cabeceras de seguridad (un `.svg` no ejecuta nada).
+   */
+  servidor.registrarRuta("GET", RUTA_ICONO_DEL_PROYECTO, async (peticion, respuesta) => {
+    const responder = (codigo: number, texto: string): void => {
+      respuesta.writeHead(codigo, { "Content-Type": "text/plain; charset=utf-8" });
+      respuesta.end(texto);
+    };
+    const id = new URLSearchParams((peticion.url ?? "").split("?")[1] ?? "").get("id");
+    if (id === null || id === "") {
+      responder(400, "falta el proyecto");
+      return;
+    }
+    const entorno = entornoElegido;
+    const proyecto = proyectos.find((p) => p.id === id);
+    const buscar = opciones.iconoDelProyecto;
+    const leer = opciones.leerFichero;
+    if (entorno === undefined || proyecto === undefined || buscar === undefined || leer === undefined || !hayCopiaLocal(proyecto.nombre)) {
+      responder(404, "no hay icono");
+      return;
+    }
+    let leido: FicheroDelProyecto;
+    try {
+      const raiz = vestibulo.raizDeProyecto(entorno, proyecto.nombre);
+      const ruta = await buscar(raiz);
+      if (ruta === undefined) {
+        responder(404, "no hay icono");
+        return;
+      }
+      leido = await leer(raiz, ruta);
+    } catch (error) {
+      informar(`no se pudo servir el icono de «${proyecto.nombre}» (${codigoDe(error)})`);
+      responder(500, "no se pudo leer");
+      return;
+    }
+    if (leido.error !== undefined || leido.base64 === undefined || leido.mime === undefined) {
+      responder(404, "no hay icono");
+      return;
+    }
+    const datos = Buffer.from(leido.base64, "base64");
+    respuesta.writeHead(200, {
+      "Content-Type": leido.mime,
+      "Content-Length": datos.length,
+      "Content-Security-Policy": "sandbox",
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "no-store",
+    });
+    respuesta.end(datos);
+  });
+
+  /**
    * `GET RUTA_CALLBACK_MCP` — a donde vuelve el navegador tras autorizar un conector.
    *
    * **Ruta PÚBLICA**, registrada con `registrarRutaPublica`: la cookie de sesión es
@@ -5833,6 +5940,13 @@ export function montarRutas(
         .renombrarEntorno(mensaje.entorno, mensaje.nombre)
         .catch(contar)
         .finally(() => void anunciarAlta().catch(contar));
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "pendientesDeSubida") {
+      const ruta = (mensaje as { ruta?: unknown }).ruta;
+      void atenderPendientesDeSubida(typeof ruta === "string" ? ruta : undefined).catch(contar);
       respuesta.writeHead(204);
       respuesta.end();
       return;
@@ -6790,6 +6904,92 @@ export async function lecturaDeSync(
 }
 
 /**
+ * TODO lo pendiente de subir del proyecto, como mensaje del cable (la pestaña Sincronización del
+ * panel). Sin CloudStudio, o si la medida falla, lo DICE: «no se pudo medir» no es «nada».
+ */
+export async function lecturaDePendientesDeSubida(
+  raiz: string
+): Promise<Extract<MensajeAlCliente, { clase: "pendientesDeSubida" }>> {
+  const rama = cloudstudioDelProyecto(raiz)?.rama;
+  if (rama === undefined || rama === "") {
+    return { clase: "pendientesDeSubida", error: "este proyecto no está dado de alta en CloudStudio" };
+  }
+  try {
+    return { clase: "pendientesDeSubida", ficheros: await pendientesDeSubida(raiz, rama) };
+  } catch {
+    return {
+      clase: "pendientesDeSubida",
+      error: "no se pudo medir lo que falta por subir: la copia local no se puede comparar con la rama",
+    };
+  }
+}
+
+/**
+ * El diff de UN fichero pendiente, con las DOS guardas antes de tocar git:
+ * - la ruta tiene que estar en la lista pendiente RECIÉN medida —una ruta inventada por el
+ *   cable no saca nada del disco—;
+ * - y tiene que poder ENSEÑARSE con la MISMA regla del lector que Ficheros y Revisión
+ *   (`motivoParaNoEnsenar`, texto y `realpath`): un `.env` pendiente sale en la lista, pero su
+ *   diff NO viaja nunca.
+ */
+export async function lecturaDeParcheDeSubida(
+  raiz: string,
+  ruta: string
+): Promise<Extract<MensajeAlCliente, { clase: "parcheDeSubida" }>> {
+  const vacio = (negado?: string): Extract<MensajeAlCliente, { clase: "parcheDeSubida" }> => ({
+    clase: "parcheDeSubida",
+    ruta,
+    texto: "",
+    recortado: false,
+    ...(negado === undefined ? {} : { negado }),
+  });
+  const rama = cloudstudioDelProyecto(raiz)?.rama;
+  if (rama === undefined || rama === "") return vacio("el proyecto no está dado de alta en CloudStudio");
+  let fichero: { sinCommitear?: true } | undefined;
+  try {
+    fichero = (await pendientesDeSubida(raiz, rama)).find((f) => f.ruta === ruta);
+  } catch {
+    return vacio("no se pudo medir lo que falta por subir");
+  }
+  if (fichero === undefined) return vacio("ya no está pendiente de subir");
+  const motivo = await motivoParaNoEnsenar(raiz, ruta);
+  if (motivo !== undefined) return vacio(motivo);
+  const parche = await parcheDeSubida(raiz, rama, ruta, fichero.sinCommitear === true);
+  return parche === undefined ? vacio() : { clase: "parcheDeSubida", ruta, ...parche };
+}
+
+/**
+ * Marca cada fichero de la sesión con si sigue PENDIENTE de subir a CloudStudio.
+ *
+ * Revisión enseña solo lo de la sesión que falta por subir: lo ya subido no es nada que
+ * revisar antes de subir. Se decide aquí y no en el cliente porque la lista (`revision`) y la
+ * medida (`sync`) son dos mensajes que llegan en momentos distintos, y cruzar uno nuevo con
+ * uno viejo escondería justo el fichero que el agente acaba de escribir —sin un solo error—.
+ *
+ * Misma medida que la banda (`cambiosPendientes` contra la ref de la bajada) y mismo cruce
+ * por ruta exacta que `cuantosDeLaSesion`, **más lo que git aún no sigue** (`sinSeguir`): un
+ * fichero recién creado a mitad de turno no sale en `git diff` y quedaría escondido justo
+ * cuando más falta hace verlo. La regla: lo que la ref no confirma como subido, se enseña. **Sin CloudStudio, o si la medida falla, los
+ * ficheros vuelven SIN la marca**: «no consta» no es «nada pendiente», y Revisión enseña
+ * entonces todo. No va dentro de `cambiosDeSesion`, que usan también el comentario de cierre,
+ * Soporte y `cuantosDeLaSesion`.
+ */
+export async function marcarPendientes<F extends { ruta: string }>(
+  raiz: string,
+  ficheros: readonly F[]
+): Promise<Array<F & { pendiente?: boolean }>> {
+  const rama = cloudstudioDelProyecto(raiz)?.rama;
+  if (rama === undefined || rama === "" || ficheros.length === 0) return [...ficheros];
+  try {
+    const [cambios, nuevos] = await Promise.all([cambiosPendientes(raiz, rama), sinSeguir(raiz)]);
+    const pendientes = new Set([...cambios.map((cambio) => cambio.ruta), ...nuevos]);
+    return ficheros.map((fichero) => ({ ...fichero, pendiente: pendientes.has(fichero.ruta) }));
+  } catch {
+    return [...ficheros];
+  }
+}
+
+/**
  * De los pendientes, cuántos tocó ESTA sesión — o `undefined` cuando no se puede atribuir.
  *
  * Existe porque las dos cifras que la pestaña enseña juntas se miden contra referencias
@@ -7676,6 +7876,7 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     visorOpenui: () => leerVisorOpenui(raizDelCliente),
     // Leer, guardar y la base del editor, compuestos fuera para que la composición tenga test.
     ...ficherosCableados(),
+    iconoDelProyecto,
     leerArtefacto: leerArtefactoDeSesion,
     leerArtefactoCrudo,
     correrPasoDeReceta: (receta, paso, alSalirLinea) => correrPasoDeReceta(receta, paso, { alSalirLinea }),

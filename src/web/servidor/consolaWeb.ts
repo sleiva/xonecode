@@ -35,6 +35,7 @@ import type { PendienteDeAprobacion } from "../../core/events.js";
 import type { LineaDeDiff } from "../../core/diff.js";
 import type { Piel } from "../../core/turno.js";
 import { type Consola, type LineaDeConsola, type SelectorDeConsola } from "../../cli/consola.js";
+import type { RespuestaConSeleccion } from "../../cli/aprobar.js";
 import { CatalogoModelosEnMemoria, type CatalogoModelosPort, type Papel } from "../../core/ports.js";
 import { REJECT_MESSAGE, type Decision } from "../../vendor/hitl.js";
 
@@ -249,6 +250,12 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
   const esperandoTexto: ((texto: string) => void)[] = [];
   const esperandoSecreto: ((texto: string) => void)[] = [];
   const esperandoSeleccion: ((id: string | undefined) => void)[] = [];
+  /**
+   * Quien espera una DECISIÓN con selección (la subida, con su árbol de casillas). Cola
+   * propia y no `esperandoTexto`: su resolutor devuelve la respuesta Y las rutas marcadas, y
+   * meterlo en la cola de texto perdería la selección o la cruzaría con otra pregunta.
+   */
+  const esperandoDecision: ((respuesta: RespuestaConSeleccion) => void)[] = [];
 
   let aprobacionEnVuelo: AprobacionEnVuelo | undefined;
 
@@ -259,6 +266,7 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
     while (esperandoTexto.length > 0) esperandoTexto.shift()!("");
     while (esperandoSecreto.length > 0) esperandoSecreto.shift()!("");
     while (esperandoSeleccion.length > 0) esperandoSeleccion.shift()!(undefined);
+    while (esperandoDecision.length > 0) esperandoDecision.shift()!({ respuesta: "" });
     aprobacionEnVuelo?.terminar();
   });
 
@@ -348,6 +356,18 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
           ? { clase: "pregunta", texto: pregunta }
           : { clase: "pregunta", texto: pregunta, decision }
       );
+      return espera;
+    },
+
+    /**
+     * La decisión con selección: lo mismo que `preguntar` con `decision` —no se anota en el
+     * hilo, mismo plazo, cadena vacía sin cliente o al vencer, que es rechazo— y además las
+     * rutas que la persona dejó marcadas en el árbol del diálogo.
+     */
+    decidirConSeleccion: async (pregunta, decision) => {
+      if (!transporte.conectado()) return { respuesta: "" };
+      const espera = esperarAUnHumano<RespuestaConSeleccion>(esperandoDecision, { respuesta: "" }, msDeEspera);
+      transporte.emitir({ clase: "pregunta", texto: pregunta, decision });
       return espera;
     },
 
@@ -472,6 +492,20 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
       return;
     }
     if (mensaje.clase === "respuesta") {
+      // Una decisión con selección en espera va PRIMERO: en el lazo hay una pregunta a la vez,
+      // y la de la subida es la única que la usa. La selección viene de un `JSON.parse` de la
+      // red: se criba a cadenas aquí, y lo que se sube lo vuelve a cruzar con el plan
+      // `planAutorizado`, así que una ruta inventada no añade nada.
+      const decision = esperandoDecision.shift();
+      if (decision !== undefined) {
+        const texto = typeof mensaje.texto === "string" ? mensaje.texto : "";
+        decision(
+          Array.isArray(mensaje.seleccion)
+            ? { respuesta: texto, seleccion: mensaje.seleccion.filter((r): r is string => typeof r === "string") }
+            : { respuesta: texto }
+        );
+        return;
+      }
       esperandoTexto.shift()?.(mensaje.texto);
       return;
     }

@@ -467,6 +467,13 @@ export type Acto =
       accion: "estado" | "bajar" | "subir";
       cuando: string;
       lineas: string[];
+      /** El recuento de una subida que corrió (`core/actos.ts#ResultadoDeSubida`). Ausente =
+       *  no terminó con informe: el diálogo de la subida lo dice así, no como «todo bien». */
+      resultado?: { subidos: number; fallidos: number };
+      /** Cuántos trajo una bajada que terminó (`core/actos.ts`). */
+      bajados?: number;
+      /** La operación lanzó: el mismo texto que se dijo en el hilo. */
+      error?: string;
     }
   | { tipo: "error"; texto: string };
 
@@ -518,6 +525,8 @@ export interface SelectorDeConsola {
 export interface LineaDelPlan {
   texto: string;
   cambio?: "nuevo" | "modificado" | "borrado";
+  /** La ruta del fichero, como DATO (ausente en la cabecera): de aquí sale el árbol del diálogo. */
+  ruta?: string;
 }
 
 /**
@@ -535,6 +544,10 @@ export interface LineaDelPlan {
  */
 export interface DecisionDeConsola {
   lineas: readonly LineaDelPlan[];
+  /** `true` = se puede elegir qué líneas con `ruta` entran (la subida): árbol con casillas. */
+  seleccionable?: true;
+  /** De qué operación es: el diálogo sigue abierto tras Aceptar hasta su acto. */
+  operacion?: "subir" | "bajar";
 }
 
 /**
@@ -780,6 +793,16 @@ export type MensajeAlCliente =
       mezclados?: number;
     }
   | { clase: "parche"; ruta: string; texto: string; recortado: boolean }
+  /**
+   * TODO lo pendiente de subir a CloudStudio del proyecto abierto (la pestaña Sincronización del
+   * panel), o por qué no se pudo medir. Lo que git aún no sigue va marcado `sinCommitear`.
+   */
+  | { clase: "pendientesDeSubida"; ficheros?: FicheroTocado[]; error?: string }
+  /**
+   * El diff de UN fichero pendiente contra CloudStudio. `negado` = la ruta no se enseña (la
+   * regla del lector), y entonces no viaja texto.
+   */
+  | { clase: "parcheDeSubida"; ruta: string; texto: string; recortado: boolean; negado?: string }
   /** El diff SEMÁNTICO de un `.xne` (`core/diffDeColecciones.ts`). Validado en el store. */
   | { clase: "modeloDelCambio"; ruta: string; cambios?: CambiosDeUnaColeccion[]; error?: string }
   /** El árbol del proyecto abierto y el contenido de uno de sus ficheros (pestaña Ficheros). */
@@ -953,6 +976,8 @@ export type MensajeAlCliente =
         local?: boolean;
         /** La rama de la que se bajó la copia local. Ausente = sin copia, o no consta. */
         rama?: string;
+        /** La copia tiene icono de app, servido por `RUTA_ICONO_DEL_PROYECTO`. Ausente = carpeta. */
+        icono?: true;
         /** Alguna sesión de este proyecto trabaja AHORA. No se deriva de las filas: una
          *  sesión nueva no tiene fila hasta su primer volcado. Ver `transporte.ts`. */
         trabajando?: true;
@@ -1005,6 +1030,8 @@ export interface FicheroTocado {
   menos?: number;
   /** Nadie ha commiteado esto todavía, así que no consta de quién es. */
   sinCommitear?: true;
+  /** ¿Sigue pendiente de subir? Lo marca el servidor; ausente = no se pudo medir. */
+  pendiente?: boolean;
 }
 
 /** Un fichero del proyecto tal como viaja. Redeclarado de `web/servidor/transporte.ts`. */
@@ -1331,7 +1358,8 @@ export type MensajeDelCliente =
   /** «Dime los proyectos de este entorno», sin hacerlo activo: las casillas de su pestaña
    *  en Ajustes. Mudar el activo le cambiaría la barra a quien trabaja en otro servidor. */
   | { clase: "entorno"; accion: "proyectos"; entorno: string }
-  | { clase: "respuesta"; texto: string }
+  /** `seleccion`: las rutas marcadas en el diálogo de una decisión `seleccionable`. */
+  | { clase: "respuesta"; texto: string; seleccion?: string[] }
   /**
    * La respuesta a `seleccionar`. **Sin `id` (o con `id: null`) es CANCELAR** — la misma
    * salida que en el terminal («número, Enter cancela»). El servidor lo traduce a
@@ -1448,6 +1476,8 @@ export type MensajeDelCliente =
   | { clase: "cancelar" }
   /** Pide lo que la sesión abierta ha tocado, o el parche de un fichero concreto. */
   | { clase: "revision"; ruta?: string }
+  /** Lo pendiente de subir (sin `ruta`) o el diff de uno (con `ruta`). */
+  | { clase: "pendientesDeSubida"; ruta?: string }
   | { clase: "modeloDelCambio"; ruta: string }
   | { clase: "arbol" }
   | { clase: "colecciones" }

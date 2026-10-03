@@ -7,6 +7,7 @@ import { puedeLeerRuta } from "./perfiles.js";
 import { esVistaAplanada } from "./proyecto.js";
 import { conImagenesIncrustadas, enlacesDeImagen, imagenEnProyecto, RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
 import { renombrarSobre } from "../renombrarSobre.js";
+import { candidatosDeIcono } from "../../core/descriptoresDeApp.js";
 
 /**
  * El proyecto tal como lo enseña la pestaña Ficheros de la consola web: el árbol, el
@@ -169,6 +170,58 @@ export interface RutaResuelta {
   /** La ruta pedida con «/» en vez de «\». */
   normal: string;
 }
+
+/**
+ * ¿Se puede ENSEÑAR esta ruta? La MISMA regla que `leerFicheroDeProyecto`, para quien enseña
+ * algo de un fichero que no es su contenido tal cual —el diff de lo pendiente de subir—:
+ * criba de texto, vista aplanada, y la segunda pasada sobre el camino REAL cuando el fichero
+ * existe (mayúsculas en un disco que no las distingue, enlaces a un fichero denegado). Un
+ * fichero que ya no existe —un borrado— solo pasa la criba de texto: no hay camino que resolver,
+ * y su contenido sale de git, no del disco.
+ */
+export async function motivoParaNoEnsenar(raiz: string, ruta: string): Promise<string | undefined> {
+  const motivo = motivoDeRutaInaceptable(ruta);
+  if (motivo !== undefined) return motivo;
+  const normal = ruta.split(/[\\/]/).join("/");
+  if (normal.endsWith(".xml") && existsSync(resolve(raiz, `${normal.slice(0, -4)}.xne`))) return MOTIVO_APLANADA;
+  if (!existsSync(resolve(raiz, normal))) return undefined;
+  // Si existe, la cadena ENTERA de guardas es la de leer y guardar (`resolverEnProyecto`): una
+  // segunda copia de la recomprobación sobre `realpath` divergiría el primer día.
+  const resuelta = await resolverEnProyecto(raiz, ruta);
+  if (!("error" in resuelta)) return undefined;
+  return resuelta.error === "no existe" ? "no se puede comprobar" : resuelta.error;
+}
+
+/**
+ * La ruta RELATIVA del icono de la app de un proyecto bajado, o `undefined` si no tiene uno que se
+ * pueda enseñar.
+ *
+ * El nombre sale de `app.ini` (`core/descriptoresDeApp.ts#candidatosDeIcono`) y cada candidato pasa
+ * la MISMA barrera que la pestaña Ficheros (`motivoParaNoEnsenar`: texto y `realpath`), además de
+ * ser una imagen que sabemos pintar, un fichero de verdad y caber en `TOPE_DE_IMAGEN`. Un
+ * `icon=../.env` o un `icon.png` enlazado a un fichero denegado se quedan en «sin icono», que en la
+ * barra es la carpeta de siempre. Nunca lanza: un icono es decoración y no puede tumbar un anuncio.
+ */
+export async function iconoDelProyecto(raiz: string): Promise<string | undefined> {
+  try {
+    const ini = await readFile(resolve(raiz, "app.ini"), "utf-8");
+    for (const candidato of candidatosDeIcono(ini)) {
+      if (mimeDeImagen(candidato) === undefined) continue;
+      const motivo = motivoDeRutaInaceptable(candidato);
+      if (motivo !== undefined) continue;
+      const enDisco = resolve(raiz, candidato.split(/[\\/]/).join("/"));
+      if (!existsSync(enDisco)) continue;
+      const datos = await stat(enDisco);
+      if (!datos.isFile() || datos.size > TOPE_DE_IMAGEN) continue;
+      if ((await motivoParaNoEnsenar(raiz, candidato)) !== undefined) continue;
+      return candidato;
+    }
+  } catch {
+    // Sin `app.ini`, o ilegible: sin icono.
+  }
+  return undefined;
+}
+
 
 /**
  * La cadena ENTERA de guardas de una ruta del cable, en UN sitio: la usan leer, guardar y la base

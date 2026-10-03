@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, existsSync } from 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { CloudStudioEnMemoria, type CloudStudioPort } from "../../core/ports.js";
-import { prepararRepo, cambiosPendientes, REMOTO } from "../sesiones/gitSync.js";
+import { prepararRepo, cambiosPendientes, marcarSubidoParcial, REMOTO } from "../sesiones/gitSync.js";
 import { rutaSyncJson } from "./descarga.js";
 import { subir, rutaSyncLog } from "./subida.js";
 import type { OperacionDeSubida } from "../../core/cloudstudio.js";
@@ -468,6 +468,111 @@ describe("subir", () => {
       expect(await cambiosPendientes(raiz, "master")).toHaveLength(1);
       expect(avisos.join("")).toContain("no se ha aplicado nada");
     });
+
+    /** Tres cambios commiteados: uno modificado, uno nuevo en carpeta y uno borrado. */
+    async function proyectoConTresCambios() {
+      const raiz = mkdtempSync(join(tmpdir(), "xc-sub-parcial-"));
+      writeFileSync(join(raiz, "app.xml"), "<app/>");
+      writeFileSync(join(raiz, "viejo.txt"), "adiós");
+      await prepararRepo(raiz, "master");
+      writeFileSync(join(raiz, "app.xml"), "<app cambiada='si'/>");
+      mkdirSync(join(raiz, "js"));
+      writeFileSync(join(raiz, "js", "nuevo.js"), "var a = 1;");
+      execFileSync("git", ["rm", "-q", "viejo.txt"], { cwd: raiz });
+      execFileSync("git", ["add", "-A"], { cwd: raiz });
+      execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "cambios"], { cwd: raiz });
+      return raiz;
+    }
+
+    it("con una SELECCIÓN sube solo eso, y la ref avanza solo por lo subido", async () => {
+      const raiz = await proyectoConTresCambios();
+      const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
+      await puerto.abrir("AppForTest");
+      const avisos: string[] = [];
+
+      const informe = await subir({
+        puerto, raiz, ramaOrigen: "master",
+        proyecto: { id: "1", nombre: "AppForTest" },
+        politicaDeAprobacion: async () => ({ rutas: ["js/nuevo.js", "no-esta-en-el-plan.xne"] }),
+        informar: (t) => avisos.push(t),
+      });
+
+      expect(informe.ok).toEqual(["js/nuevo.js"]);
+      expect(puerto.escrituras.map((e) => e.ruta)).toEqual(["js/nuevo.js"]);
+      // Lo NO elegido sigue pendiente: la ref no fue a HEAD. El borrado de `viejo.txt` no
+      // entró en el plan (no consta como bajado: se OMITE), y con una subida parcial lo
+      // omitido tampoco avanza.
+      expect((await cambiosPendientes(raiz, "master")).map((c) => c.ruta)).toEqual(["app.xml", "viejo.txt"]);
+      expect(avisos.join("")).toContain("subidos 1 de 2");
+      // El índice del usuario no se tocó.
+      expect(git(raiz, "status", "--porcelain")).toBe("");
+    });
+
+    it("una selección VACÍA es un rechazo: no abre, no escribe, la ref no se mueve", async () => {
+      const raiz = await proyectoConCambios();
+      const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
+      const avisos: string[] = [];
+
+      const informe = await subir({
+        puerto, raiz, ramaOrigen: "master",
+        proyecto: { id: "1", nombre: "AppForTest" },
+        politicaDeAprobacion: async () => ({ rutas: [] }),
+        informar: (t) => avisos.push(t),
+      });
+
+      expect(informe.ok).toEqual([]);
+      expect(puerto.escrituras).toEqual([]);
+      await expect(puerto.contexto()).rejects.toThrow("No project is open");
+      expect(await cambiosPendientes(raiz, "master")).toHaveLength(1);
+      expect(avisos.join("")).toContain("no se ha aplicado nada");
+    });
+  });
+});
+
+describe("marcarSubidoParcial", () => {
+  it("avanza la ref por un modificado y por un borrado, y deja el resto pendiente", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-ref-parcial-"));
+    writeFileSync(join(raiz, "a.xne"), "<a/>");
+    writeFileSync(join(raiz, "b.xne"), "<b/>");
+    writeFileSync(join(raiz, "c.xne"), "<c/>");
+    await prepararRepo(raiz, "master");
+    writeFileSync(join(raiz, "a.xne"), "<a2/>");
+    writeFileSync(join(raiz, "b.xne"), "<b2/>");
+    execFileSync("git", ["rm", "-q", "c.xne"], { cwd: raiz });
+    execFileSync("git", ["add", "-A"], { cwd: raiz });
+    execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "c"], { cwd: raiz });
+
+    await marcarSubidoParcial(raiz, "master", ["a.xne", "c.xne"], "sync: parcial");
+
+    expect((await cambiosPendientes(raiz, "master")).map((c) => c.ruta)).toEqual(["b.xne"]);
+    expect(git(raiz, "show", `refs/remotes/${REMOTO}/master:a.xne`)).toBe("<a2/>");
+    expect(git(raiz, "status", "--porcelain")).toBe("");
+  });
+
+  it("funciona con el proyecto en una SUBCARPETA del repo", async () => {
+    const repo = mkdtempSync(join(tmpdir(), "xc-ref-sub-"));
+    execFileSync("git", ["init", "-q"], { cwd: repo });
+    writeFileSync(join(repo, "fuera.txt"), "x");
+    execFileSync("git", ["add", "-A"], { cwd: repo });
+    execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base"], { cwd: repo });
+    const raiz = join(repo, "app");
+    mkdirSync(raiz);
+    writeFileSync(join(raiz, "a.xne"), "<a/>");
+    writeFileSync(join(raiz, "b.xne"), "<b/>");
+    // El nombre de verdad de una fuente de iconos: corchetes —comodín de pathspec en git— y
+    // comas —el separador de `--cacheinfo`—. Si se leyera como patrón, no se encontraría en
+    // HEAD y se apuntaría en la ref como BORRADO, sin un solo error.
+    mkdirSync(join(raiz, "fonts"));
+    const fuente = "fonts/MaterialSymbolsOutlined[FILL,GRAD,opsz,wght].ttf";
+    writeFileSync(join(raiz, fuente), "ttf");
+    execFileSync("git", ["add", "-A"], { cwd: repo });
+    execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "app"], { cwd: repo });
+    execFileSync("git", ["update-ref", `refs/remotes/${REMOTO}/master`, "HEAD~1"], { cwd: repo });
+
+    await marcarSubidoParcial(raiz, "master", ["a.xne", fuente], "sync: parcial");
+
+    expect((await cambiosPendientes(raiz, "master")).map((c) => c.ruta)).toEqual(["b.xne"]);
+    expect(git(repo, "show", `refs/remotes/${REMOTO}/master:app/${fuente}`)).toBe("ttf");
   });
 });
 
