@@ -107,7 +107,7 @@ import { conResumenSeguro } from "./resumenSeguro.js";
 import { crearControlDeDetencion, RESUMEN_DE_RELLENO } from "./detencion.js";
 import type { ToolDeLangchain } from "./toolsPropias.js";
 import { crearNavegacionXone } from "../../grafo/navegacionXone.js";
-import { crearValidarXml } from "../../grafo/validarXml.js";
+import { crearValidarFicheroXone } from "../../grafo/validarFicheroXone.js";
 import { topeResuelto, umbralDeCompactacion } from "../../../core/contextos.js";
 import { parsear } from "../../../core/modelos.js";
 import { cargar as cargarConfig } from "../../config/configEnDisco.js";
@@ -861,12 +861,12 @@ export async function abrirSesionTrueforge(
     opciones.conectores !== undefined && carpeta !== undefined && conStitch
       ? [crearTraerDeStitch({ conectores: opciones.conectores, carpeta, alEscribir: anotarArtefacto }) as unknown as ToolDeLangchain]
       : [];
-  // ¿Está bien formado? A TODOS, el raíz incluido: es quien recibe el error que pega la persona, y
+  // ¿Está bien este .xne/.xml/.css/.js? A TODOS, el raíz incluido: es quien recibe el error que pega la persona, y
   // sin ella lo comprobaba leyendo el fichero a ojo (soporte de APPSalud). Pura y de lectura.
-  const validarXml = (): ToolDeLangchain => crearValidarXml(backend as never) as unknown as ToolDeLangchain;
+  const validarFichero = (): ToolDeLangchain => crearValidarFicheroXone(backend as never) as unknown as ToolDeLangchain;
   const propiasDelRaiz: ToolDeLangchain[] = [
     navegacion(),
-    validarXml(),
+    validarFichero(),
     atributos,
     describirImagen(),
     ...herramientasDeJuicio(),
@@ -876,7 +876,7 @@ export async function abrirSesionTrueforge(
   const propiasDe = (agente: Agente): ToolDeLangchain[] => [
     crearBusquedaRegex(backend as never) as unknown as ToolDeLangchain,
     navegacion(),
-    validarXml(),
+    validarFichero(),
     atributos,
     describirImagen(),
     ...(carpeta !== undefined && (agente.escribeEn ?? []).length > 0

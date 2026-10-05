@@ -46,6 +46,7 @@
     "@langchain/openai": "1.5.5",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@truefoundry/trueforge-core": "0.2.1",
+    "acorn": "^8.19.0",
     "better-sqlite3": "13.0.3",
     "deepagents": "^1.14.0",
     "fflate": "^0.8.3",

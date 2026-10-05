@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { crearValidarXml, NOMBRE_VALIDAR_XML, TOPE_DE_FICHEROS_A_VALIDAR } from "./validarXml.js";
+import { crearValidarFicheroXone, NOMBRE_VALIDAR_FICHERO_XONE, TOPE_DE_FICHEROS_A_VALIDAR } from "./validarFicheroXone.js";
 
 const BIEN = '<?xml version="1.0"?>\n<coll name="Inicio">\n  <prop name="MAP_A" type="T"/>\n</coll>\n';
 const MAL = '<?xml version="1.0"?>\n<coll name="Perfil">\n  <prop visible name="MAP_A"/>\n</coll>\n';
@@ -27,18 +27,18 @@ function backend(ficheros: Record<string, string | { error: string }>) {
 }
 
 const correr = (b: ReturnType<typeof backend>, path?: string): Promise<string> =>
-  crearValidarXml(b as never).invoke(path === undefined ? {} : { path }) as Promise<string>;
+  crearValidarFicheroXone(b as never).invoke(path === undefined ? {} : { path }) as Promise<string>;
 
-describe("validar_xml", () => {
+describe("validar_fichero_xone", () => {
   it("se llama así, y su descripción dice qué significa un «bien formado» frente a un error que alguien vio", () => {
-    const t = crearValidarXml(backend({}) as never);
-    expect(t.name).toBe(NOMBRE_VALIDAR_XML);
+    const t = crearValidarFicheroXone(backend({}) as never);
+    expect(t.name).toBe(NOMBRE_VALIDAR_FICHERO_XONE);
     expect(t.description).toContain("OTRA copia");
   });
 
   it("un fichero bien formado lo dice en una línea", async () => {
     const b = backend({ "/Inicio.xne": BIEN });
-    expect(await correr(b, "/Inicio.xne")).toBe("/Inicio.xne está bien formado.");
+    expect(await correr(b, "/Inicio.xne")).toBe("/Inicio.xne está bien.");
   });
 
   it("uno roto da fichero, línea, columna, motivo y el texto de la línea", async () => {
@@ -51,11 +51,11 @@ describe("validar_xml", () => {
   it("sin ruta revisa el proyecto entero y cuenta lo que está bien", async () => {
     const b = backend({ "/Inicio.xne": BIEN, "/Perfil.xne": MAL, "/app.xml": "<xml><app/></xml>" });
     const r = await correr(b);
-    expect(b.pedidos).toEqual([{ patron: "**/*.{xne,xml}", ruta: "/" }]);
-    expect(r).toContain("Mal formados (1)");
-    expect(r).toContain("Bien formados: 2.");
+    expect(b.pedidos).toEqual([{ patron: "**/*.{xne,xml,css,js}", ruta: "/" }]);
+    expect(r).toContain("Con errores (1)");
+    expect(r).toContain("Bien: 2.");
     const todoBien = await correr(backend({ "/Inicio.xne": BIEN, "/app.xml": "<xml/>" }));
-    expect(todoBien).toBe("Los 2 ficheros están bien formados.");
+    expect(todoBien).toBe("Los 2 ficheros están bien.");
   });
 
   it("reaplica puedeLeerRuta: lo protegido ni se lee", async () => {
@@ -70,11 +70,24 @@ describe("validar_xml", () => {
     const r = await correr(b);
     expect(r).toContain("Sin poder leer (1)");
     expect(r).toContain("/Inicio.xml: es una vista aplanada");
-    expect(r).not.toContain("están bien formados");
+    expect(r).not.toContain("están bien.");
+  });
+
+  it("un .css y un .js van cada uno por SU comprobador", async () => {
+    const b = backend({
+      "/default.css": ".a {\n  bgcolor: #FFF;\n",
+      "/funciones.js": "var s = `hola ${nombre}`;\n",
+      "/bien.css": "/* tema */\n.a { bgcolor: #FFFFFF; }\n// otra nota\n",
+      "/bien.js": "var f = (x) => x * 2;\n",
+    });
+    const r = await correr(b);
+    expect(r).toContain("/default.css:1:4: un bloque «{» que no se cierra");
+    expect(r).toContain("/funciones.js:1:9: una template literal");
+    expect(r).toContain("Bien: 2.");
   });
 
   it("una carpeta sin XML lo dice", async () => {
-    expect(await correr(backend({ "/doc/a.md": "x" }), "/doc")).toBe("No hay ficheros .xne ni .xml en /doc.");
+    expect(await correr(backend({ "/doc/a.md": "x" }), "/doc")).toBe("No hay ficheros .xne, .xml, .css ni .js en /doc.");
   });
 
   it("con más ficheros que el tope, revisa los primeros y lo dice", async () => {

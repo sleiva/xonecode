@@ -8173,3 +8173,23 @@ previously scanned lines 1–460 and found all tags well-formed»). Dos arreglos
   picos medidos en esos turnos rondaban los 30.000, así que no habrían compactado. Se resuelve con la
   MISMA regla que la barra (`topeResuelto`). **Sin medir**: el coste de turnos que ahora lleguen a
   128.000 sin compactar; con DeepSeek la caché se llevó el 94 % de la entrada en la prueba.
+
+## `validar_xml` pasa a `validar_fichero_xone`: también CSS y JS, sin simulador (05-10-2026)
+
+Pedido: una sola tool para lo que un error de parsing puede romper —`.xne`, `.xml` (el `app.xml`), `.css` y
+`.js`—, propia y rápida («el simulador es muy lento»). Cada extensión con su comprobador puro de `core/`:
+
+- **CSS** (`comprobarCss`): la gramática de la skill (§18 de `buenas-practicas-y-parser.md`): comentarios
+  `/* */` y `//` —un `//` dentro de un VALOR no es comentario: una URL lo lleva—, llaves, declaraciones con
+  `:`, lo de fuera de un bloque acaba en `{` o es una at-rule. **Prudente**: no mira propiedades ni valores,
+  porque XOne ignora en silencio lo que no conoce y un aviso de algo que funciona manda a reescribir código
+  bueno. Sobre las 59 hojas reales de las copias: 57 bien y 2 mal, las dos de ActivoMobileDev guardadas
+  como cadena JSON (IXCODE-16). El `default.css` de APPSalud sale bien, como el error de su soporte
+  apuntaba a otra copia. **Sin medir contra el parser del framework** (`com.xone.android.cssparser`): el
+  comentario con una línea en blanco dentro se da por bueno porque la skill no dice lo contrario.
+- **JS** (`comprobarJs`): `acorn` a `ecmaVersion: 2015` más la negación por tipo de nodo de la rodaja que
+  Rhino no lee —la matriz MEDIDA ejecutando en el emulador, entera en el test—. No `new Function`/`vm`:
+  V8 lee ES2022 y en modo laxo deja pasar `if (a = 0)`, que Rhino rechaza. `acorn` pasa a dependencia
+  DIRECTA (ya venía por xone-linter; JS puro, sin red ni procesos). Sobre los 133 `.js` reales: 0 marcados.
+  **Sin medir**: la coma final en una LLAMADA `f(a, b,)` (lo medido es en los parámetros); se marca porque es
+  posterior a 2015.

@@ -551,7 +551,7 @@ describe("una sesión con el motor TrueForge", () => {
     expect(vistos[1]!.join("\n")).toContain("/skills/xone-development/SKILL.md");
     // Las tools PROPIAS, con el reparto de deepagents: los especialistas llevan las dos, y su
     // nota las NOMBRA — sale de lo que se monta, no de una frase escrita a mano.
-    expect(toolsPorLlamada[1]).toEqual(expect.arrayContaining(["xone_navegacion", "regex_search", "validar_xml"]));
+    expect(toolsPorLlamada[1]).toEqual(expect.arrayContaining(["xone_navegacion", "regex_search", "validar_fichero_xone"]));
     expect(vistos[1]!.join("\n")).toContain("`xone_navegacion`");
     expect(vistos[4]!.join("\n")).toMatch(/cada escritura la aprueba una persona/i);
   }, 30_000);
@@ -589,18 +589,18 @@ describe("una sesión con el motor TrueForge", () => {
     expect(pi.tokens.join("")).toBe("Hay una: Clientes.");
   }, 30_000);
 
-  it("el ORQUESTADOR lleva `validar_xml` y contesta desde el proyecto de VERDAD: bien formado, o la línea del fallo", async () => {
+  it("el ORQUESTADOR lleva `validar_fichero_xone` y contesta desde el proyecto de VERDAD: bien formado, o la línea del fallo", async () => {
     const raiz = proyecto();
     writeFileSync(join(raiz, "Roto.xne"), '<coll name="Roto">\n  <prop visible name="A"/>\n</coll>\n');
     const { m, vistos, toolsPorLlamada } = modelosConGuion([
-      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "v1", name: "validar_xml", args: JSON.stringify({ path: "/app.xml" }) }] })],
-      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "v2", name: "validar_xml", args: JSON.stringify({ path: "/Roto.xne" }) }] })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "v1", name: "validar_fichero_xone", args: JSON.stringify({ path: "/app.xml" }) }] })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "v2", name: "validar_fichero_xone", args: JSON.stringify({ path: "/Roto.xne" }) }] })],
       [new AIMessageChunk({ content: "app.xml está bien; Roto.xne no." })],
     ]);
     const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
     await s.turno("¿está bien formado?", piel().p);
-    expect(toolsPorLlamada[0]).toContain("validar_xml");
-    expect(vistos[1]!.join("\n")).toContain("/app.xml está bien formado.");
+    expect(toolsPorLlamada[0]).toContain("validar_fichero_xone");
+    expect(vistos[1]!.join("\n")).toContain("/app.xml está bien.");
     expect(vistos[2]!.join("\n")).toContain("/Roto.xne:2:17: al atributo «visible» le falta el «=» y su valor");
   }, 30_000);
 

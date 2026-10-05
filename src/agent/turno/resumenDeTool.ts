@@ -39,7 +39,7 @@ export const CAMPOS_SEGUROS: Record<string, readonly string[]> = {
   // El tipo y el nombre: enseñan qué fondo se pide. El SVG que vuelve es el RESULTADO y no cruza.
   generar_fondo_svg: ["tipo", "nombre", "ancho", "alto"],
   // La ruta que se valida; el veredicto es el RESULTADO y no cruza.
-  validar_xml: ["path"],
+  validar_fichero_xone: ["path"],
   // Las dos rutas de artefacto y nada más: el informe con los números es el RESULTADO y no cruza.
   comparar_capturas: ["captura", "referencia"],
   // La RUTA de la imagen y nada más: la `pregunta` es texto libre del modelo, y la descripción el RESULTADO.

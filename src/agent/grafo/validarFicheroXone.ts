@@ -1,12 +1,17 @@
 import { tool } from "@langchain/core/tools";
 import type { FilesystemBackend } from "deepagents";
 import { z } from "zod";
-import { comprobarXml } from "../../core/xmlBienFormado.js";
+import { comprobarCss } from "../../core/cssBienFormado.js";
+import { comprobarJs } from "../../core/jsParaRhino.js";
+import { comprobarXml, type ResultadoXml } from "../../core/xmlBienFormado.js";
 import { puedeLeerRuta } from "./perfiles.js";
 
 /**
- * `validar_xml`: ¿está bien formado este `.xne` / `.xml`? Una respuesta exacta en vez de leer el
- * fichero a ojo.
+ * `validar_fichero_xone`: ¿está bien este `.xne`, `.xml` (el `app.xml`), `.css` o `.js`? Una respuesta
+ * exacta en vez de leer el fichero a ojo. Cada extensión con su comprobador puro de `core/`:
+ * `comprobarXml` (bien formado), `comprobarCss` (estructura de la hoja, con la gramática de XOne) y
+ * `comprobarJs` (lo que lee Rhino, el motor de Android: `acorn` a ES2015 más la rodaja medida que le
+ * falta).
  *
  * Existe por un turno real (soporte de APPSalud): la persona pegó un error del parser de Studio
  * («'name' is an unexpected token…, Line 381») y el agente, sin forma de comprobarlo, se pasó
@@ -20,7 +25,7 @@ import { puedeLeerRuta } from "./perfiles.js";
  * - **Solo lectura**: no corrige nada. Y su descripción dice qué significa un «bien formado»
  *   frente a un error que alguien ha visto: que ese error viene de OTRA copia del fichero.
  */
-export const NOMBRE_VALIDAR_XML = "validar_xml";
+export const NOMBRE_VALIDAR_FICHERO_XONE = "validar_fichero_xone";
 
 /** Cuántos ficheros como mucho en una pasada sobre una carpeta. */
 export const TOPE_DE_FICHEROS_A_VALIDAR = 300;
@@ -30,28 +35,36 @@ const ESQUEMA = z.object({
     .string()
     .min(1)
     .default("/")
-    .describe("Un fichero .xne/.xml, o una carpeta para revisar todos los que cuelgan de ella (por omisión, el proyecto entero)"),
+    .describe("Un fichero .xne, .xml, .css o .js, o una carpeta para revisar todos los que cuelgan de ella (por omisión, el proyecto entero)"),
 });
 
 type BackendDeValidacion = Pick<FilesystemBackend, "glob" | "readRaw">;
 
-const ES_XML = /\.(xne|xml)$/i;
+const VALIDABLE = /\.(xne|xml|css|js)$/i;
 
-export function crearValidarXml(backend: BackendDeValidacion) {
+/** El comprobador de cada extensión. */
+function comprobar(ruta: string, texto: string): ResultadoXml {
+  const ext = ruta.slice(ruta.lastIndexOf(".")).toLowerCase();
+  if (ext === ".css") return comprobarCss(texto);
+  if (ext === ".js") return comprobarJs(texto);
+  return comprobarXml(texto);
+}
+
+export function crearValidarFicheroXone(backend: BackendDeValidacion) {
   return tool(
     async (entrada: z.infer<typeof ESQUEMA>) => {
       const ruta = entrada.path.startsWith("/") ? entrada.path : `/${entrada.path}`;
       let candidatos: string[];
-      if (ES_XML.test(ruta)) {
+      if (VALIDABLE.test(ruta)) {
         if (!puedeLeerRuta(ruta)) return `No se puede leer ${ruta}.`;
         candidatos = [ruta];
       } else {
-        const listado = await backend.glob("**/*.{xne,xml}", ruta);
+        const listado = await backend.glob("**/*.{xne,xml,css,js}", ruta);
         if (listado.error) return `No se pudo listar ${ruta}: ${listado.error}`;
         candidatos = (listado.files ?? [])
-          .filter((f) => !f.is_dir && ES_XML.test(f.path) && puedeLeerRuta(f.path))
+          .filter((f) => !f.is_dir && VALIDABLE.test(f.path) && puedeLeerRuta(f.path))
           .map((f) => f.path);
-        if (candidatos.length === 0) return `No hay ficheros .xne ni .xml en ${ruta}.`;
+        if (candidatos.length === 0) return `No hay ficheros .xne, .xml, .css ni .js en ${ruta}.`;
       }
 
       const recortado = candidatos.length > TOPE_DE_FICHEROS_A_VALIDAR;
@@ -64,7 +77,7 @@ export function crearValidarXml(backend: BackendDeValidacion) {
           sinLeer.push(`${fichero}: ${leido.error ?? "no se pudo leer"}`);
           continue;
         }
-        const r = comprobarXml(leido.data.content);
+        const r = comprobar(fichero, leido.data.content);
         if (r.ok) {
           bien += 1;
           continue;
@@ -77,26 +90,29 @@ export function crearValidarXml(backend: BackendDeValidacion) {
       if (malos.length === 0 && sinLeer.length === 0) {
         partes.push(
           candidatos.length === 1
-            ? `${candidatos[0]} está bien formado.`
-            : `Los ${bien} ficheros están bien formados.`
+            ? `${candidatos[0]} está bien.`
+            : `Los ${bien} ficheros están bien.`
         );
       } else {
-        if (malos.length > 0) partes.push(`Mal formados (${malos.length}):\n${malos.join("\n")}`);
-        if (bien > 0) partes.push(`Bien formados: ${bien}.`);
+        if (malos.length > 0) partes.push(`Con errores (${malos.length}):\n${malos.join("\n")}`);
+        if (bien > 0) partes.push(`Bien: ${bien}.`);
         if (sinLeer.length > 0) partes.push(`Sin poder leer (${sinLeer.length}):\n${sinLeer.join("\n")}`);
       }
       if (recortado) partes.push(`Se revisaron los primeros ${TOPE_DE_FICHEROS_A_VALIDAR} de ${candidatos.length}: acota la carpeta.`);
       return partes.join("\n\n");
     },
     {
-      name: NOMBRE_VALIDAR_XML,
+      name: NOMBRE_VALIDAR_FICHERO_XONE,
       description:
-        "Comprueba que un .xne/.xml del proyecto está BIEN FORMADO (etiquetas que abren y cierran, atributos con su " +
-        "«=» y su valor entre comillas, comentarios, entidades), como un parser XML. Contesta «bien formado» o el " +
-        "fichero, la línea, la columna y el motivo. Úsala ANTES de leer un fichero a ojo cuando alguien te pase un " +
-        "error de parsing. Si dice «bien formado», el fichero del proyecto está bien: un error de parsing que alguien " +
-        "ha visto viene de OTRA copia (la de Studio tras una subida, la del aparato); dilo así en vez de seguir " +
-        "releyendo. No comprueba atributos de XOne (para eso, xone_atributos).",
+        "Comprueba un fichero XOne del proyecto, o todos los de una carpeta, como lo haría su parser: un .xne o .xml " +
+        "(el app.xml) bien formado —etiquetas, atributos con su «=» y comillas, comentarios, entidades—; un .css con " +
+        "su estructura —llaves, comentarios /* */ y //, declaraciones con «:»—; un .js que pueda leer Rhino, el motor " +
+        "de Android (ES5 más arrow, let/const, destructuring y for…of; NO template literals, class, spread, valores " +
+        "por defecto, ?. ni ??). Contesta «está bien» o fichero, línea, columna y motivo. Úsala ANTES de leer un " +
+        "fichero a ojo cuando alguien te pase un error de parsing, y después de escribir uno. Si dice que está bien, " +
+        "el fichero del proyecto está bien: un error de parsing que alguien ha visto viene de OTRA copia (la de Studio " +
+        "tras una subida, la del aparato); dilo así en vez de seguir releyendo. No comprueba qué atributos o " +
+        "propiedades existen en XOne (para eso, xone_atributos).",
       schema: ESQUEMA,
     }
   );
