@@ -104,6 +104,8 @@ import {
 import { textoDeRecarga, type ResultadoDeRecarga } from "../../core/recargaEnCaliente.js";
 import { nombreDeApp } from "../../core/descriptoresDeApp.js";
 import { modelosDeMotor } from "../../agent/config/modelosDeMotor.js";
+import { crearServicioDeMotoresLocales, type ServicioDeMotoresLocales } from "../../agent/motores/motoresLocales.js";
+import { esMotorLocal } from "../../core/motoresLocales.js";
 import {
   parsear,
   compatibleConOpenAi,
@@ -678,6 +680,12 @@ export interface OpcionesDeMontaje {
    * ejecución no los sabe, y el desplegable lo dice en vez de quedarse vacío.
    */
   modelosDeMotor?: (motor: string) => Promise<{ modelos: { id: string; nombre: string }[]; error?: string }>;
+  /**
+   * Los motores locales de Ajustes (`agent/motores/motoresLocales.ts`): medir, probar e iniciar
+   * la sesión de Claude Code. Recibe con qué avisar de cada cambio. Ausente = esta ejecución no
+   * los toca, y la sección lo dice en vez de pintar botones muertos.
+   */
+  motoresLocales?: (alCambiar: () => void) => ServicioDeMotoresLocales;
   /**
    * Ejecuta un paso de una receta (`agent/dispositivos/instalacionEnMaquina.ts`), con su salida en vivo.
    * Ausente = esta ejecución no lanza nada y el botón no se ofrece: el paso se copia, que es
@@ -4931,6 +4939,63 @@ export function montarRutas(
     emitirlos(r);
   };
 
+  /**
+   * Ajustes → Motores locales. El servicio vive lo que vive el servidor (un login en curso es un
+   * proceso suyo) y se crea al primer uso: la sección casi nunca se abre.
+   */
+  let servicioDeMotores: ServicioDeMotoresLocales | undefined;
+  const emitirMotores = (): void => {
+    const motores = servicioDeMotores?.foto();
+    if (motores !== undefined) emitir({ clase: "motoresLocales", motores });
+  };
+  const atenderMotorLocal = async (mensaje: Extract<MensajeDelCliente, { clase: "motorLocal" }>): Promise<void> => {
+    if (opciones.motoresLocales === undefined) {
+      // Una lista VACÍA y no un `informar`: ese no llega al navegador desde el vestíbulo, y la
+      // sección se quedaría en «Comprobando…» para siempre. Vacía es «aquí no hay motores que
+      // mirar», y la sección lo dice.
+      emitir({ clase: "motoresLocales", motores: [] });
+      return;
+    }
+    servicioDeMotores ??= opciones.motoresLocales(emitirMotores);
+    const servicio = servicioDeMotores;
+    if (mensaje.accion === "medir") {
+      // Lo que ya se sabe sale al momento; la medida nueva llega detrás.
+      emitirMotores();
+      await servicio.medir();
+      return;
+    }
+    if (!esMotorLocal(mensaje.motor)) return;
+    const motor = mensaje.motor;
+    switch (mensaje.accion) {
+      case "probar":
+        await servicio.probar(motor);
+        return;
+      case "login":
+        if (!servicio.iniciarSesion(motor, mensaje.modo === "console" ? "console" : "claudeai")) {
+          informar("ya hay un inicio de sesión en curso, o este motor no se puede iniciar desde aquí");
+        }
+        return;
+      case "codigo":
+        if (typeof mensaje.codigo !== "string" || !servicio.enviarCodigo(motor, mensaje.codigo)) {
+          informar("no hay ningún inicio de sesión esperando un código, o el código no es válido");
+        }
+        return;
+      case "cancelar":
+        servicio.cancelarSesion(motor);
+        return;
+      case "navegador":
+        if (!servicio.abrirNavegador(motor)) informar("todavía no hay ninguna página de inicio de sesión que abrir");
+        return;
+      case "consola":
+        if (!servicio.abrirConsola(motor)) informar("en este sistema no se puede abrir una consola desde aquí");
+        return;
+      case "modelo":
+        if (mensaje.modelo !== undefined && typeof mensaje.modelo !== "string") return;
+        if (!servicio.elegirModelo(motor, mensaje.modelo)) informar("ese modelo no se ha podido guardar: tiene que ser «proveedor/modelo»");
+        return;
+    }
+  };
+
   /** Un paso del alta resuelto en el navegador. Cada rama termina volviendo a anunciar. */
   const atenderAlta = async (mensaje: Extract<MensajeDelCliente, { clase: "alta" }>): Promise<void> => {
     // Se limpia al empezar: un aviso viejo pegado a un paso que ya salió bien mentiría.
@@ -6580,6 +6645,17 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "motorLocal" &&
+      ["medir", "probar", "login", "codigo", "cancelar", "navegador", "consola", "modelo"].includes(mensaje.accion)
+    ) {
+      void atenderMotorLocal(mensaje).catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "modelosDeMotor" && typeof mensaje.motor === "string") {
       void atenderModelosDeMotor(mensaje.motor).catch(contar);
       respuesta.writeHead(204);
@@ -7393,6 +7469,15 @@ export function ficherosCableados(): Required<
 }
 
 /**
+ * Los motores locales de Ajustes, con el servicio de VERDAD: sin más que el aviso, todo lo demás
+ * —el binario del SDK, los procesos, la prueba por el mismo puerto que un subagente— son sus
+ * omisiones. Compuesto aquí y no en línea para que la composición de producción tenga test.
+ */
+export function motoresLocalesCableados(): Required<Pick<OpcionesDeMontaje, "motoresLocales">> {
+  return { motoresLocales: (alCambiar) => crearServicioDeMotoresLocales({ alCambiar }) };
+}
+
+/**
  * Los siete puertos de los emuladores, cableados con las funciones de verdad — extraídos por el
  * MISMO motivo que `ajusteDeWorkspaceCableado`: dentro de `arrancarConsolaWeb` serían un literal
  * que ningún test mira, y cada uno es un campo OPCIONAL de `montarRutas`, así que olvidarlo o
@@ -8078,6 +8163,9 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     leerArtefactoCrudo,
     correrPasoDeReceta: (receta, paso, alSalirLinea) => correrPasoDeReceta(receta, paso, { alSalirLinea }),
     modelosDeMotor,
+    // Con el servicio REAL, compuesto fuera para que tenga test (`motoresLocalesCableados`):
+    // olvidarlo aquí deja la sección diciendo «esta ejecución no puede» con todo en verde.
+    ...motoresLocalesCableados(),
     // La máquina de verdad: adb/emulator del PATH o del SDK, xcrun solo en macOS y solo con
     // herramientas de desarrollo. Cada proceso con su tope.
     detectarDispositivos: () => detectarDispositivos({}, cargarSettings().settings.dispositivos ?? {}),

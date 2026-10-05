@@ -2318,6 +2318,9 @@ export function App({
       // Los modelos de un motor externo, para el desplegable de un subagente.
       {...(estado.modelosDeMotor === undefined ? {} : { modelosDeMotor: estado.modelosDeMotor })}
       alPedirModelosDeMotor={(motor) => void enviar({ clase: "modelosDeMotor", motor })}
+      // Ajustes → Motores locales: la foto y la intención; qué se lanza lo decide el servidor.
+      {...(estado.motoresLocales === undefined ? {} : { motoresLocales: estado.motoresLocales })}
+      alMotorLocal={(accion) => void enviar({ clase: "motorLocal", ...accion })}
       alPedirCatalogo={(proveedor) => void enviar({ clase: "catalogo", proveedor })}
       // El modelo por DEFECTO, que es una pregunta distinta de la del compositor: allí se
       // pinta el de la sesión abierta y aquí el que usarán las nuevas. Los dos campos del

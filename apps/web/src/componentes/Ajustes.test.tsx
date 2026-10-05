@@ -708,6 +708,8 @@ describe("Ajustes", () => {
     expect(within(navegacion).getAllByRole("button").map((b) => b.textContent)).toEqual([
       "General",
       "Modelos",
+      // Motores locales justo debajo: la otra mitad de «con qué piensa cada agente».
+      "Motores locales",
       "Entornos",
       "Subagentes",
       // Skills va JUNTO a Subagentes y debajo: es la otra mitad de la misma pregunta —quién

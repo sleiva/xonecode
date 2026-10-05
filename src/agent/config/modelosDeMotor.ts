@@ -13,6 +13,8 @@
  * producto, y el síntoma sería un modelo que el usuario elige y el hijo rechaza.
  */
 import { spawn } from "node:child_process";
+import { binarioDeCodex } from "../subagentes/subagenteCodex.js";
+import { binarioDeOpencode } from "../subagentes/subagenteOpencode.js";
 
 /**
  * Los alias de Claude Code, tal como los documenta su SDK instalado:
@@ -96,7 +98,7 @@ export function modelosDeRespuestaDeCodex(respuesta: unknown): ModeloDeMotor[] {
  * app-server mezcla trazas suyas por stdout en algunas versiones—.
  */
 async function preguntarACodexDeVerdad(): Promise<ModeloDeMotor[]> {
-  const binario = process.env.CODEX_BIN ?? "codex";
+  const binario = binarioDeCodex();
   return new Promise<ModeloDeMotor[]>((resolver, rechazar) => {
     const hijo = spawn(binario, ["app-server", "--stdio"], { stdio: ["pipe", "pipe", "pipe"] });
     let acabado = false;
@@ -184,7 +186,7 @@ export function modelosDeSalidaDeOpencode(salida: string): ModeloDeMotor[] {
 }
 
 async function preguntarAOpencodeDeVerdad(): Promise<ModeloDeMotor[]> {
-  const binario = process.env.OPENCODE_BIN ?? "opencode";
+  const binario = binarioDeOpencode();
   return new Promise<ModeloDeMotor[]>((resolver, rechazar) => {
     let hijo: ReturnType<typeof spawn>;
     try {

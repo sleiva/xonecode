@@ -5,6 +5,7 @@ import {
   Input,
   IconSettingsOutline16,
   IconSparkle16,
+  IconCodeOutline16,
   IconDataOutline16,
   IconUserOutline16,
   IconSkillOutline16,
@@ -27,6 +28,7 @@ import type {
   PlataformaDeDispositivo,
   ProveedorDeModelos,
   SistemaOperativo,
+  EstadoDeMotorLocal,
 } from "../tipos.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, seMira, type ModoDeEscritura } from "../tipos.js";
 import { SelectorDeModo } from "./SelectorDeModo.js";
@@ -49,6 +51,7 @@ import { Conectores } from "./Conectores.js";
 import { TITULO_DE_REFRESCAR_EQUIPO } from "./Equipo.js";
 import { Receta } from "./Receta.js";
 import { VerificarDispositivo } from "./VerificarDispositivo.js";
+import { MotoresLocales, type AccionDeMotorLocal } from "./MotoresLocales.js";
 import { Pregunta } from "./Pregunta.js";
 import type { ProgresoDeMudanza, ResultadoDeMudanza } from "../store.js";
 import { urlDeEntornoAceptable, AVISO_DE_URL } from "./Wizard.js";
@@ -201,6 +204,7 @@ import modalDeAviso from "./NuevaSesion.module.css";
  */
 export type SeccionDeAjustes =
   | "modelos"
+  | "motores"
   | "entornos"
   | "agentes"
   | "skills"
@@ -237,6 +241,11 @@ const SECCIONES: readonly {
   // confesaba —«el modelo en uso se elige en la pastilla del compositor»— porque no había
   // dónde fijar el defecto; ahora sí, y es lo primero que se ve al abrirla.
   { id: "modelos", etiqueta: "Modelos", Icono: IconSparkle16 },
+  // Justo debajo de Modelos porque es la otra mitad de la misma pregunta —con qué piensa cada
+  // agente—: los subagentes de motor Claude Code, Codex u OpenCode no usan un proveedor de aquí
+  // arriba sino el programa del equipo con su propia sesión. `IconCodeOutline16` SÍ lo exporta el
+  // paquete instalado (comprobado sobre `lib/index.js`, la lección de `IconAgentPresetOutline16`).
+  { id: "motores", etiqueta: "Motores locales", Icono: IconCodeOutline16 },
   { id: "entornos", etiqueta: "Entornos", Icono: IconDataOutline16 },
   { id: "agentes", etiqueta: "Subagentes", Icono: IconUserOutline16 },
   // Skills va JUNTO a Subagentes y debajo, porque contesta la otra mitad de la misma
@@ -412,6 +421,8 @@ export function Ajustes({
   alEliminarEmulador,
   modelosDeMotor,
   alPedirModelosDeMotor,
+  motoresLocales,
+  alMotorLocal,
   alPedirCatalogo,
   modeloPorDefecto,
   alElegirModelo,
@@ -617,6 +628,10 @@ export function Ajustes({
   alEliminarEmulador?: (avd: string) => void;
   /** Lo que ofrece cada motor externo, por motor, para el desplegable de un subagente. */
   modelosDeMotor?: Record<string, { modelos: { id: string; nombre: string }[]; error?: string }>;
+  /** Ajustes → Motores locales: la foto que manda el servidor. Ausente = no ha llegado. */
+  motoresLocales?: readonly EstadoDeMotorLocal[];
+  /** Sin él, la sección dice que esta ejecución no puede y no pinta botones. */
+  alMotorLocal?: (accion: AccionDeMotorLocal) => void;
   /** Pide los de un motor. Bajo demanda: el de Codex arranca un proceso. */
   alPedirModelosDeMotor?: (motor: string) => void;
   /** Pide el catálogo de un proveedor nuestro, para el desplegable de un subagente. */
@@ -1366,6 +1381,17 @@ export function Ajustes({
           ))}
         </nav>
         <div className={estilos.panel}>
+
+          {seccion === "motores" ? (
+            <MotoresLocales
+              {...(motoresLocales === undefined ? {} : { motores: motoresLocales })}
+              conectado={conectado}
+              {...(agentes === undefined ? {} : { agentes: agentes.lista })}
+              {...(alMotorLocal === undefined ? {} : { alAccion: alMotorLocal })}
+              {...(modelosDeMotor === undefined ? {} : { modelosDeMotor })}
+              {...(alPedirModelosDeMotor === undefined ? {} : { alPedirModelosDeMotor })}
+            />
+          ) : null}
 
           {seccion === "dispositivos" ? (
             <>

@@ -412,6 +412,16 @@ describe("la regla del workspace es UNA: la tabla que comparte con la copia del 
   });
 });
 
+describe("modeloDeOpencode en settings.json", () => {
+  it("se lee con la forma «proveedor/modelo», y lo demás se descarta sin inventar uno", () => {
+    expect(validarSettings({ entornos: [], modeloDeOpencode: "opencode-go/glm-5.3" }).settings.modeloDeOpencode).toBe("opencode-go/glm-5.3");
+    expect(validarSettings({ entornos: [] }).settings.modeloDeOpencode).toBeUndefined();
+    expect(validarSettings({ entornos: [], modeloDeOpencode: "glm-5.3" }).settings.modeloDeOpencode).toBeUndefined();
+    expect(validarSettings({ entornos: [], modeloDeOpencode: "a/b c" }).settings.modeloDeOpencode).toBeUndefined();
+    expect(validarSettings({ entornos: [], modeloDeOpencode: 7 }).settings.modeloDeOpencode).toBeUndefined();
+  });
+});
+
 describe("modoDeEscritura en settings.json (IXCODE-31)", () => {
   it("lee los dos modos", () => {
     expect(validarSettings({ entornos: [], modoDeEscritura: "autonomo" }).settings.modoDeEscritura).toBe("autonomo");

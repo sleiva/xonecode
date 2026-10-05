@@ -296,6 +296,33 @@ export function guardarModoPorDefecto(casa: string | undefined, modo: ModoDeEscr
   return { ruta };
 }
 
+/**
+ * Guarda el modelo de OpenCode de Ajustes → Motores locales, sin tocar nada más del fichero.
+ * `undefined` BORRA la clave («sin modelo elegido»). La forma la comprueba quien llama
+ * (`motivoDeModeloDeMotorInaceptable`), y la vuelve a comprobar `validarSettings` al leer.
+ */
+export function guardarModeloDeOpencode(casa: string | undefined, modelo: string | undefined): { ruta: string } {
+  const ruta = rutaSettings(casa ?? homedir());
+  const crudo = leerCrudoOAbortar(ruta);
+  const fusionado = modelo === undefined
+    ? Object.fromEntries(Object.entries(crudo).filter(([k]) => k !== "modeloDeOpencode"))
+    : { ...crudo, modeloDeOpencode: modelo };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta };
+}
+
+/**
+ * El modelo de OpenCode guardado, leído en CADA uso (se cambia desde Ajustes con la consola en
+ * marcha). Un `settings.json` roto no tumba un encargo: es «no hay modelo elegido».
+ */
+export function modeloDeOpencodeGuardado(casa?: string): string | undefined {
+  try {
+    return cargarSettings(casa).settings.modeloDeOpencode;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Guarda solo la base del workspace, sin tocar la lista de entornos. */
 export function guardarWorkspace(casa: string | undefined, base: string): { ruta: string } {
   const ruta = rutaSettings(casa ?? homedir());

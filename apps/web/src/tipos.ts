@@ -139,6 +139,46 @@ export type PruebaDeConector =
   | { cuando: number; ok: false; motivo: string };
 
 /**
+ * Un motor local (Claude Code, Codex, OpenCode) en Ajustes → Motores locales. Copia de
+ * `src/core/motoresLocales.ts#EstadoDeMotorLocal`, comparada campo a campo por `tipos.test.ts`.
+ * Cada campo ausente es «no consta», nunca «no».
+ */
+export interface EstadoDeMotorLocal {
+  motor: MotorLocal;
+  instalado: "ok" | "no-encontrado" | "fallo";
+  version?: string;
+  detalle?: string;
+  conSesion?: boolean;
+  sesion?: string;
+  conClave?: true;
+  pruebas?: PruebaDeMotorLocal[];
+  probando?: true;
+  login?: LoginDeMotorLocal;
+  admiteLogin?: true;
+  admiteConsola?: true;
+  admiteModelo?: true;
+  modelo?: string;
+  medido: string;
+}
+
+export type MotorLocal = "claude-code" | "codex" | "opencode";
+
+export interface PruebaDeMotorLocal {
+  camino: "unico" | "sin-ejecucion" | "con-ejecucion";
+  ok: boolean;
+  detalle: string;
+  ms: number;
+  medido: string;
+}
+
+export interface LoginDeMotorLocal {
+  fase: "esperando" | "hecho" | "fallo" | "cancelado";
+  pideCodigo?: true;
+  detalle?: string;
+  desde: string;
+}
+
+/**
  * Un conector AÑADIDO, en la forma del cable. Nunca lleva tokens ni URL de autorización:
  * eso se queda en el host.
  *
@@ -911,6 +951,8 @@ export type MensajeAlCliente =
     }
   /** Lo que ofrece un motor externo, o por qué no se pudo saber. */
   | { clase: "modelosDeMotor"; motor: string; modelos: { id: string; nombre: string }[]; error?: string }
+  /** La foto de los motores locales, entera en cada cambio. */
+  | { clase: "motoresLocales"; motores: EstadoDeMotorLocal[] }
   | { clase: "secreto"; pregunta: string }
   /**
    * El alta que falta, para el wizard (`vestibulo.ts#pasosPendientes` del lado servidor).
@@ -1539,6 +1581,16 @@ export type MensajeDelCliente =
   | { clase: "receta"; id: string; paso: number; accion: "ejecutar" | "cancelar" }
   /** Los modelos de un motor externo, bajo demanda: el de Codex arranca un proceso. */
   | { clase: "modelosDeMotor"; motor: string }
+  /** Una acción sobre un motor local: la intención; el binario lo decide el servidor. */
+  | {
+      clase: "motorLocal";
+      accion: "medir" | "probar" | "login" | "codigo" | "cancelar" | "navegador" | "consola" | "modelo";
+      motor?: string;
+      modo?: "claudeai" | "console";
+      codigo?: string;
+      /** Con `accion: "modelo"`: el elegido (`proveedor/modelo`); ausente o vacío lo quita. */
+      modelo?: string;
+    }
   /**
    * Las acciones sobre una tarea. Viaja el ID del proyecto y su nombre, NUNCA su raíz: es
    * una ruta de la máquina, y el cable puede ir por un túnel.

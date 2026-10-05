@@ -57,11 +57,16 @@ import { carpetasDeSkillsParaElMotor } from "../grafo/skills.js";
 import { MOTIVO_DE_CANCELACION_EXTERNA } from "./escrituraExterna.js";
 import { consumoDeOpencode } from "./consumoExterno.js";
 import { decisionDeEscrituraDeOpencode } from "./escrituraDeOpencode.js";
+import { ejecutableParaLanzar } from "./ejecutableEnWindows.js";
+import { modeloDeOpencodeGuardado } from "../config/settingsEnDisco.js";
 
-/** El binario. `OPENCODE_BIN` gana, igual que `CODEX_BIN` en el otro motor. */
+/**
+ * El binario. `OPENCODE_BIN` gana, igual que `CODEX_BIN` en el otro motor. En Windows se resuelve
+ * al `.exe` de verdad (`ejecutableParaLanzar`): el `opencode.cmd` de npm no se lanza sin shell.
+ */
 export function binarioDeOpencode(): string {
   const puesto = process.env["OPENCODE_BIN"];
-  return puesto !== undefined && puesto.trim() !== "" ? puesto : "opencode";
+  return ejecutableParaLanzar(puesto !== undefined && puesto.trim() !== "" ? puesto : "opencode");
 }
 
 /** La carpeta de configuración que gobernamos. Fuera del proyecto, a propósito. */
@@ -172,8 +177,9 @@ export function conRemedio(mensaje: string): string {
   if (!/free tier can only be used from within OpenCode/i.test(mensaje)) return mensaje;
   return (
     `${mensaje} — ese modelo es del tier GRATUITO de opencode y no funciona fuera de su propia ` +
-    "consola, así que desde aquí no hay forma de usarlo. Elige otro modelo para este subagente " +
-    "en Ajustes → Subagentes: uno de un proveedor con credencial tuya."
+    "consola, así que desde aquí no hay forma de usarlo. Elige uno de un proveedor con credencial " +
+    "tuya en Ajustes → Motores locales → OpenCode (vale para la prueba y para todo subagente sin " +
+    "modelo propio), o para este subagente en Ajustes → Subagentes."
   );
 }
 
@@ -223,8 +229,15 @@ export async function correrOpencode(
     alUsarTool?: (tool: ToolDeUnHijo) => void;
     /** La casa de xonecode. Entra por parámetro porque esto escribe en disco. */
     casa?: string;
+    /**
+     * El modelo cuando el `.md` no dice ninguno: el de Ajustes → Motores locales, leído en cada
+     * encargo. Sin ninguno de los dos, OpenCode elige solo uno de su tier gratuito, que no
+     * contesta fuera de su consola (medido). La prueba de Ajustes pasa por aquí igual.
+     */
+    modeloPorOmision?: () => string | undefined;
   } = {}
 ): Promise<string> {
+  const modelo = peticion.modelo ?? (opciones.modeloPorOmision ?? modeloDeOpencodeGuardado)();
   const carpeta = carpetaDeConfigDeOpencode(opciones.casa);
   mkdirSync(carpeta, { recursive: true });
   // Se REESCRIBE en cada arranque a propósito: así no puede quedarse una configuración vieja
@@ -233,7 +246,7 @@ export async function correrOpencode(
     join(carpeta, "opencode.json"),
     configuracionDeOpencode({
       vistasAplanadas: opciones.vistasAplanadas?.() ?? [],
-      ...(peticion.modelo === undefined ? {} : { modelo: peticion.modelo }),
+      ...(modelo === undefined ? {} : { modelo }),
       // Las carpetas que EXISTEN, no las tres a ciegas: una ruta que no está es una entrada
       // de configuración que opencode tiene que descartar por su cuenta, y cómo la descarte
       // no lo decidimos nosotros.

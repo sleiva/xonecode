@@ -1,0 +1,230 @@
+/* Ajustes → Motores locales. Las piezas de texto y las pestañas se COMPONEN de la hoja de
+   Ajustes y los botones de la de Boton: la misma ventana no puede tener dos pestañas distintas. */
+
+.encabezado {
+  composes: encabezado from "./Ajustes.module.css";
+}
+
+.nota {
+  composes: nota from "./Ajustes.module.css";
+}
+
+.vacio {
+  composes: vacio from "./Ajustes.module.css";
+}
+
+.pestanas {
+  composes: pestanas from "./Ajustes.module.css";
+}
+
+.pestana {
+  composes: pestana from "./Ajustes.module.css";
+}
+
+.boton {
+  composes: secundario from "./Boton.module.css";
+}
+
+.primario {
+  composes: primario from "./Boton.module.css";
+}
+
+/* «Probar» comprueba: el verde de marca, como «Verificar» en Dispositivos. */
+.boton.exito {
+  border-color: var(--xonecode-verde);
+  background: var(--xonecode-verde-fondo);
+  color: var(--xonecode-verde);
+}
+
+.boton.exito:hover {
+  background: var(--xonecode-verde-fondo-hover);
+}
+
+/* Listo (programa y sesión) en verde; lo demás, hueco: que falte un motor que no usas no es un
+   error, la misma regla que el punto de las credenciales. */
+.punto {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: inset 0 0 0 1.5px var(--dsw-alias-label-tertiary);
+}
+
+.punto[data-listo] {
+  background: var(--dsw-alias-state-success-primary);
+  box-shadow: none;
+}
+
+.tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
+  font-size: 13px;
+}
+
+.datos {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.datos dt {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.datos dd {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  overflow-wrap: anywhere;
+}
+
+.datos dd[data-estado="ok"] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.detalle {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* El modelo de OpenCode: etiqueta y desplegable en una fila, y el aviso debajo. */
+.modelo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.modelo label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.modelo select {
+  flex: 1;
+  min-width: 0;
+}
+
+.modelo .nota,
+.modelo .detalle {
+  margin: 0;
+  font-size: 12px;
+}
+
+.aviso {
+  margin: 0;
+  color: var(--dsw-alias-state-warn-primary);
+  font-size: 12px;
+}
+
+.pruebas {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+}
+
+.pruebas li[data-ok] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.hora {
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 10px;
+}
+
+.resultadoDeLogin {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+}
+
+.resultadoDeLogin[data-ok] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.login {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.login p {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.filaDeCodigo {
+  display: flex;
+  gap: 8px;
+}
+
+.filaDeCodigo input {
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+}
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.tarjeta .acciones {
+  margin: 0;
+}
+
+.plegable {
+  margin: 8px 0 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.guia {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding-left: 20px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.comando {
+  display: block;
+  width: fit-content;
+  margin-top: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--ds-font-family-code);
+  user-select: all;
+}
