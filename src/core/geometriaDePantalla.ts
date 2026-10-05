@@ -64,6 +64,11 @@ export interface MaquetaMedida {
   ancho: number;
   alto: number;
   elementos: ElementoDeMaqueta[];
+  /**
+   * Los BLOQUES anchos de la maqueta (cabecera, visor, panel…): casi tan anchos como la pantalla. No son controles,
+   * pero su fondo y su forma también son el diseño (medido: una cabecera amarilla que la maqueta no tiene no salía).
+   */
+  bloques?: Caja[];
 }
 
 export interface HallazgosDeGeometria {
@@ -83,6 +88,12 @@ const FRACCION_TAPADA = 0.1;
 const CAMBIO_DE_TAMAÑO = 0.4;
 /** Distancia máxima (en fracción de la pantalla) para emparejar un icono sin texto por su posición. */
 const DISTANCIA_PARA_ICONOS = 0.08;
+/**
+ * Cuánto puede moverse el borde de una fila (en fracción del ancho de la pantalla) sin que sea noticia. Medido en la
+ * calculadora: un teclado cuya cuarta columna acababa en el 87 % del ancho, con la maqueta llegando al 94 %, dejaba
+ * una franja vacía a la derecha que ni las filas ni los anchos relativos veían.
+ */
+const ENCAJE = 0.04;
 
 // ---------------------------------------------------------------- el árbol del aparato
 
@@ -363,6 +374,31 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
     // Misma fila en los dos: el ORDEN de izquierda a derecha.
     const ordenA = indices.slice().sort((a, b) => parejas[a]!.aparato.caja.x - parejas[b]!.aparato.caja.x).map((i) => etiqueta(parejas[i]!.maqueta));
     if (ordenA.join("|") !== nombres.join("|")) diferencias.push(`En la fila ${nombres.join(", ")} el ORDEN cambia: en ${elAparato} va ${ordenA.join(", ")}.`);
+  }
+
+  // ENCAJE: dónde empieza y acaba cada fila, en fracción del ancho de su pantalla. Solo con las dos medidas (una
+  // maqueta descrita es una rejilla y su ancho no es el de nada). Las filas con el mismo desajuste van juntas.
+  if (!aproximada) {
+    const porcentaje = (x: number) => `${Math.round(x * 100)} %`;
+    const encajes = new Map<string, string[]>();
+    for (const indices of porFilaM.values()) {
+      if (indices.length < 2) continue;
+      const borde = (lado: "maqueta" | "aparato", ancho: number) => ({
+        izq: Math.min(...indices.map((i) => parejas[i]![lado].caja.x)) / ancho,
+        der: Math.max(...indices.map((i) => parejas[i]![lado].caja.x + parejas[i]![lado].caja.ancho)) / ancho,
+      });
+      const bm = borde("maqueta", m.ancho);
+      const ba = borde("aparato", g.pantalla.ancho);
+      const primera = etiqueta(parejas[indices.slice().sort((a, b) => parejas[a]!.maqueta.caja.x - parejas[b]!.maqueta.caja.x)[0]!]!.maqueta);
+      const partes: string[] = [];
+      if (Math.abs(ba.izq - bm.izq) > ENCAJE) partes.push(`empieza{n} en el ${porcentaje(ba.izq)} del ancho (en ${laMaqueta}, en el ${porcentaje(bm.izq)})`);
+      if (Math.abs(ba.der - bm.der) > ENCAJE) partes.push(`acaba{n} en el ${porcentaje(ba.der)} del ancho (en ${laMaqueta}, en el ${porcentaje(bm.der)})`);
+      if (partes.length > 0) encajes.set(partes.join(" y "), [...(encajes.get(partes.join(" y ")) ?? []), primera]);
+    }
+    for (const [como, filas] of encajes) {
+      const n = filas.length > 1 ? "n" : "";
+      diferencias.push(`${filas.length > 1 ? `Las filas de ${filas.join(", ")}` : `La fila de ${filas[0]}`} ${como.replaceAll("{n}", n)}: no ocupa${n} el mismo ANCHO.`);
+    }
   }
 
   // TAMAÑO relativo a sus vecinas de fila (en la maqueta y en el aparato, cada uno con las suyas). Solo

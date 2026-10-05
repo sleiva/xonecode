@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  compararConMaqueta,
   controlesDelArbol,
   emparejar,
   hallazgosDeGeometria,
@@ -102,5 +103,25 @@ describe("emparejar y textoParaEmparejar", () => {
       ],
     };
     expect(emparejar(m, g).parejas[0]?.aparato.nombre).toBe("TECLA_0");
+  });
+});
+
+describe("el ENCAJE: dónde empieza y acaba cada fila", () => {
+  const tecla = (texto: string, x: number, ancho: number) => ({ texto, caja: { x, y: 100, ancho, alto: 50 } });
+  const maqueta: MaquetaMedida = { ancho: 400, alto: 800, elementos: ["7", "8", "9", "×"].map((t, i) => tecla(t, 20 + i * 90, 80)) };
+  const aparato = (escala: number): GeometriaDelAparato => ({
+    pantalla: { ancho: 1000, alto: 2000 },
+    controles: ["7", "8", "9", "×"].map((t, i) => ({ texto: t, tipo: "prop", clase: "B", caja: { x: 50 + i * 225 * escala, y: 250, ancho: 200 * escala, alto: 125 } })),
+  });
+
+  it("una fila que no llega al borde derecho de la maqueta deja una franja vacía, y se dice con cifras", () => {
+    // Maqueta: del 5 % al 93 % (370 de 400). Aparato: del 5 % al 83 % (829 de 1000).
+    expect(compararConMaqueta(maqueta, aparato(0.89)).diferencias).toContain(
+      "La fila de «7» acaba en el 83 % del ancho (en la maqueta, en el 93 %): no ocupa el mismo ANCHO."
+    );
+  });
+
+  it("y la que encaja no dice nada", () => {
+    expect(compararConMaqueta(maqueta, aparato(0.98)).diferencias.join("\n")).not.toContain("ANCHO");
   });
 });

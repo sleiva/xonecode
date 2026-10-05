@@ -334,7 +334,11 @@ Y las guardas del proyecto:
   el modelo**: medido, la misma imagen descrita otra vez difería y no vio el recorte.
   Un texto distinto en el mismo sitio MEDIDO es «otro estado», no «falta». El recorte solo se mide
   en lo que no pinta fondo propio. El informe se guarda junto a la captura (`.critica.txt`), y un
-  rojo va a `developer-xone`: el diseñador solo escribe en `icons/`.
+  rojo va a `developer-xone`: el diseñador solo escribe en `icons/`. **Y el ENCAJE y los BLOQUES**:
+  dónde empieza y acaba cada fila en fracción del ancho (`ENCAJE`), y el color y la forma de los
+  bloques anchos —cabecera, visor, panel— emparejados por altura relativa (`compararBloques`, solo
+  lo emparejado: el aparato puede partir en filas lo que la maqueta tiene en un panel). **La foto de
+  UN control no lleva geometría** (`esCapturaDeUnControl`): sus cajas serían las de la pantalla.
 - **Y una séptima, de lectura, pura y sin llamar a nadie: `validar_fichero_xone`**
   (`agent/grafo/validarFicheroXone.ts`), solo en TrueForge y a TODOS, el raíz incluido. Comprueba un
   fichero —o todos los de una carpeta— con el comprobador puro de su extensión: `.xne`/`.xml` bien formado

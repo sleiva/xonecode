@@ -8300,3 +8300,20 @@ excluye); un degradado de fondo llega al borde (el recorte solo se mide en lo qu
 contrastada con su panel salía recta (el umbral del relleno es la mitad de ese contraste). **Límites declarados**: el
 color es el más repetido, así que un icono de dos tintas da una; la letra se compara solo en textos con letras o
 cifras; y sin `code.html` no hay cajas en la maqueta y solo se mide el recorte de la captura.
+
+### El encaje, los bloques y la foto de un control (05-10-2026)
+
+Tercera iteración de la calculadora, con el estilo medido: 43 min, terminó sola y es la más fiel de las tres
+(visor limpio, teclas cuadradas redondeadas, «Tape», DEG/RAD). Lo que se veía mal y la medida NO decía: la cabecera
+amarilla del proyecto (la de la maqueta es oscura) y un teclado que acaba en el 87 % del ancho con la maqueta llegando
+al 94 %, una franja vacía a la derecha. Ahora se miden las dos: el ENCAJE de cada fila contra la maqueta, y el color y
+la forma de los BLOQUES anchos de su `code.html` (cabecera, visor, panel) contra los marcos anchos del árbol,
+emparejados por su altura relativa en la franja útil de cada pantalla. Solo se dice lo emparejado: decir «sin pareja»
+salía para cada fila de teclas, porque el aparato las tenía en marcos separados y la maqueta en un panel.
+
+Y un fallo del sidecar destapado en la misma pasada: `xone-hotswap shot name=…` fotografía UN control y se le guardaba
+el árbol de la pantalla entera, así que el crítico medía sus píxeles con cajas que no eran (siete «recortes» falsos en
+una foto del visor). Se reconoce porque la imagen es claramente más pequeña que lo que ocupa el árbol; el script no
+la guarda y el crítico lo dice. Esa iteración corrió además con el medidor de ANTES de arreglar el contorno de las
+teclas: el agente acabó llamando «falso positivo» a lo que le decía el crítico, y tenía razón. Un crítico que se
+equivoca enseña al agente a no hacerle caso.

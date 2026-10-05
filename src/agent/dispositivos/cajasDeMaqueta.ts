@@ -32,7 +32,7 @@ export const TOPE_DE_RENDER_MS = 45_000;
 const MARCA = "__xonecode_cajas";
 
 /** El script que mide, DENTRO de la maqueta: mira sus propios botones y se lo pasa al envoltorio. */
-const MEDIDOR = `<script>addEventListener("load",function(){setTimeout(function(){var o=[];var es=document.querySelectorAll("button,[role=button]");for(var i=0;i<es.length;i++){var r=es[i].getBoundingClientRect();if(r.width>0&&r.height>0)o.push({texto:(es[i].innerText||"").trim().replace(/\\s+/g," "),caja:{x:r.left,y:r.top,ancho:r.width,alto:r.height}});}parent.postMessage(JSON.stringify({ancho:innerWidth,alto:innerHeight,tailwind:typeof tailwind!=="undefined",pideTailwind:!!document.querySelector('script[src*="tailwindcss"]'),elementos:o}),"*");},1200);});</script>`;
+const MEDIDOR = `<script>addEventListener("load",function(){setTimeout(function(){var o=[];var es=document.querySelectorAll("button,[role=button]");for(var i=0;i<es.length;i++){var r=es[i].getBoundingClientRect();if(r.width>0&&r.height>0)o.push({texto:(es[i].innerText||"").trim().replace(/\\s+/g," "),caja:{x:r.left,y:r.top,ancho:r.width,alto:r.height}});}var b=[];var cs=document.querySelectorAll("header,nav,section,main,footer,div");for(var j=0;j<cs.length;j++){var q=cs[j].getBoundingClientRect();if(q.width<innerWidth*0.85||q.height<24||q.height>innerHeight*0.6)continue;var rep=false;for(var k=0;k<b.length;k++){if(Math.abs(b[k].y-q.top)<3&&Math.abs(b[k].alto-q.height)<3)rep=true;}if(!rep)b.push({x:q.left,y:q.top,ancho:q.width,alto:q.height});}parent.postMessage(JSON.stringify({ancho:innerWidth,alto:innerHeight,tailwind:typeof tailwind!=="undefined",pideTailwind:!!document.querySelector('script[src*="tailwindcss"]'),elementos:o,bloques:b}),"*");},1200);});</script>`;
 
 function envoltorio(ancho: number, alto: number): string {
   return `<!doctype html><html><body style="margin:0"><iframe src="maqueta.html" style="border:0;width:${ancho}px;height:${alto}px"></iframe><script>addEventListener("message",function(e){var p=document.createElement("pre");p.id="${MARCA}";p.textContent=e.data;document.body.appendChild(p);});</script></body></html>`;
@@ -121,7 +121,7 @@ export async function cajasDeMaqueta(
     if (medida === undefined) resultado = { motivo: "el navegador no devolvió la medida de la maqueta" };
     else if (medida.pideTailwind && !medida.tailwind) resultado = { motivo: "la maqueta no cargó sus estilos (Tailwind, de un CDN): ¿hay red?" };
     else if (medida.elementos.length === 0) resultado = { motivo: "la maqueta no tiene botones que medir" };
-    else resultado = { ancho: medida.ancho, alto: medida.alto, elementos: medida.elementos };
+    else resultado = { ancho: medida.ancho, alto: medida.alto, elementos: medida.elementos, ...(medida.bloques === undefined ? {} : { bloques: medida.bloques }) };
     // Un fallo por la RED no se guarda: con red, la siguiente vez saldrá.
     if (!("motivo" in resultado) || !resultado.motivo.includes("red")) cache.set(clave, resultado);
     return resultado;

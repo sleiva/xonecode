@@ -26,7 +26,7 @@ import {
   type ComparacionDeDescripciones,
   type PantallaDescrita,
 } from "../../core/descripcionDePantalla.js";
-import { pantallaMedida, type ControlAMedir } from "../../core/estiloMedido.js";
+import { compararBloques, pantallaMedida, type ControlAMedir } from "../../core/estiloMedido.js";
 import type { ImagenRgba } from "../../core/compararCapturas.js";
 import {
   juzgarPantalla,
@@ -342,7 +342,8 @@ function medirEstilo(
   try {
     const comoMedir = (fila: readonly { texto?: string; nombre?: string; caja: ControlAMedir["caja"] }[]): ControlAMedir[] =>
       fila.map((c) => ({ texto: c.texto ?? `[${c.nombre ?? "sin nombre"}]`, caja: c.caja }));
-    const vista = pantallaMedida(deps.decodificar(Buffer.from(captura.base64, "base64")), filasDelAparato(geometria.aparato).map(comoMedir));
+    const imagenDeLaCaptura = deps.decodificar(Buffer.from(captura.base64, "base64"));
+    const vista = pantallaMedida(imagenDeLaCaptura, filasDelAparato(geometria.aparato).map(comoMedir));
     if (referencia === undefined || geometria.maqueta === undefined) {
       const sola = compararDescripciones({ filas: [], extras: [] }, vista);
       return { comparacion: { diferencias: [], faltan: [], recortes: sola.recortes, extras: { maqueta: [], captura: [] } }, completa: false };
@@ -358,7 +359,21 @@ function medirEstilo(
       porFila.set(indice[i]!, [...(porFila.get(indice[i]!) ?? []), { texto: e.texto, caja }]);
     });
     const filasDeLaMaqueta = [...porFila.entries()].sort((a, b) => a[0] - b[0]).map(([, f]) => f.sort((a, b) => a.caja.x - b.caja.x));
-    return { comparacion: compararDescripciones(pantallaMedida(imagen, filasDeLaMaqueta), vista), completa: true };
+    const comparacion = compararDescripciones(pantallaMedida(imagen, filasDeLaMaqueta), vista);
+    // Y los BLOQUES anchos (cabecera, visor, panel): su color y su forma también son el diseño.
+    const g = geometria.aparato;
+    const util = { arriba: g.barras?.estado?.abajo ?? 0, abajo: g.barras?.navegacion?.arriba ?? g.pantalla.alto };
+    const bloquesDelAparato = g.controles
+      .filter((c) => (c.tipo === "frame" || c.tipo === "group") && c.caja.ancho >= g.pantalla.ancho * 0.85 && c.caja.alto >= 40 && c.caja.alto <= g.pantalla.alto * 0.6 && c.caja.y >= util.arriba - 2)
+      .map((c) => c.caja);
+    const bloques =
+      m.bloques === undefined || bloquesDelAparato.length === 0
+        ? []
+        : compararBloques(
+            { img: imagen, bloques: m.bloques.map((b) => ({ x: b.x * escala, y: b.y * escala, ancho: b.ancho * escala, alto: b.alto * escala })), util: { arriba: 0, abajo: m.alto * escala } },
+            { img: imagenDeLaCaptura, bloques: bloquesDelAparato, util }
+          );
+    return { comparacion: { ...comparacion, diferencias: [...bloques, ...comparacion.diferencias] }, completa: true };
   } catch {
     return undefined;
   }

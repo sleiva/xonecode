@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ImagenRgba } from "./compararCapturas.js";
-import { formaDe, letraDe, medirControl } from "./estiloMedido.js";
+import { bloquesDeFuera, formaDe, letraDe, medirControl } from "./estiloMedido.js";
 
 /** Un lienzo RGBA de un color, y lo que se pinta encima. */
 function lienzo(ancho: number, alto: number, fondo: [number, number, number]): ImagenRgba & { pintar: (dentro: (x: number, y: number) => boolean, c: [number, number, number]) => void } {
@@ -67,5 +67,14 @@ describe("las categorías salen de las cifras", () => {
   });
   it("letra, en fracción del ancho de la pantalla", () => {
     expect([letraDe(0.02), letraDe(0.04), letraDe(0.054), letraDe(0.09)]).toEqual(["pequena", "normal", "grande", "enorme"]);
+  });
+});
+
+describe("bloquesDeFuera", () => {
+  it("se queda con la cabecera y no con su título, y con uno de dos iguales", () => {
+    const cabecera = { x: 0, y: 0, ancho: 390, alto: 96 };
+    const titulo = { x: 16, y: 36, ancho: 358, alto: 56 };
+    const visor = { x: 16, y: 96, ancho: 358, alto: 178 };
+    expect(bloquesDeFuera([cabecera, titulo, visor, { ...visor }])).toEqual([cabecera, visor]);
   });
 });

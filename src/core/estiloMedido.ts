@@ -271,3 +271,70 @@ export function pantallaMedida(img: ImagenRgba, filas: readonly (readonly Contro
     extras: [],
   };
 }
+
+// ---------------------------------------------------------------- los bloques anchos (cabecera, visor, panel)
+
+/** Los bloques que no están dentro de otro: la cabecera y no su título, el visor y no sus filas. Pura. */
+export function bloquesDeFuera(cajas: readonly Caja[]): Caja[] {
+  const dentro = (a: Caja, b: Caja) => a !== b && a.x >= b.x - 2 && a.y >= b.y - 2 && a.x + a.ancho <= b.x + b.ancho + 2 && a.y + a.alto <= b.y + b.alto + 2;
+  return cajas.filter((a) => !cajas.some((b) => dentro(a, b) && !(dentro(b, a) && cajas.indexOf(b) > cajas.indexOf(a))));
+}
+
+/** Un bloque y la imagen en la que vive, con la franja útil de la pantalla (sin barras del sistema), en píxeles. */
+export interface BloquesAMedir {
+  img: ImagenRgba;
+  bloques: readonly Caja[];
+  util: { arriba: number; abajo: number };
+}
+
+const porciento = (x: number) => `${Math.round(x * 100)} %`;
+
+/** El color más repetido dentro de una caja: el del fondo del bloque, sea propio o el de lo que tiene detrás. */
+function colorDominante(img: ImagenRgba, caja: Caja): Rgb | undefined {
+  const colores: Rgb[] = [];
+  const paso = Math.max(1, Math.floor(Math.sqrt((caja.ancho * caja.alto) / 4000)));
+  for (let y = Math.round(caja.y); y < caja.y + caja.alto; y += paso) for (let x = Math.round(caja.x); x < caja.x + caja.ancho; x += paso) colores.push(pixel(img, x, y));
+  return moda(colores);
+}
+
+/**
+ * Compara el COLOR y la FORMA de los bloques anchos, emparejados por su altura relativa dentro de la franja útil de
+ * cada pantalla (la maqueta y el aparato no tienen la misma proporción). Pura. Existe por la calculadora: una cabecera
+ * amarilla donde la maqueta tiene la del fondo oscuro no la veía nadie, porque solo se comparaban los botones.
+ *
+ * Solo dice DIFERENCIAS de lo emparejado: un bloque sin pareja no es noticia, porque los dos lados no parten igual
+ * (el aparato puede tener un bloque por fila de teclas donde la maqueta tiene un solo panel).
+ */
+export function compararBloques(maqueta: BloquesAMedir, aparato: BloquesAMedir): string[] {
+  const situar = (b: BloquesAMedir) =>
+    bloquesDeFuera(b.bloques)
+      .slice()
+      .sort((x, y) => x.y - y.y)
+      .map((caja) => {
+        const alto = Math.max(1, b.util.abajo - b.util.arriba);
+        return { caja, y0: (caja.y - b.util.arriba) / alto, y1: (caja.y + caja.alto - b.util.arriba) / alto, color: colorDominante(b.img, caja), forma: medirControl(b.img, caja).forma };
+      });
+  const ms = situar(maqueta);
+  const as = situar(aparato);
+  const usados = new Set<number>();
+  const salida: string[] = [];
+  for (const a of as) {
+    let mejor: { i: number; solape: number } | undefined;
+    ms.forEach((m, i) => {
+      const solape = Math.min(a.y1, m.y1) - Math.max(a.y0, m.y0);
+      if (!usados.has(i) && solape > 0 && (mejor === undefined || solape > mejor.solape)) mejor = { i, solape };
+    });
+    if (mejor === undefined || mejor.solape < (a.y1 - a.y0) * 0.4) continue;
+    usados.add(mejor.i);
+    const m = ms[mejor.i]!;
+    const donde = a.y0 < 0.12 ? "de arriba del todo" : `que va del ${porciento(Math.max(0, a.y0))} al ${porciento(Math.min(1, a.y1))} del alto`;
+    if (a.color !== undefined && m.color !== undefined && Math.hypot(a.color[0] - m.color[0], a.color[1] - m.color[1], a.color[2] - m.color[2]) > 90) {
+      salida.push(`El bloque ${donde} es de color ${hex(a.color)}; en la maqueta, ${hex(m.color)}.`);
+    }
+    const proporcion = (a.y1 - a.y0) / Math.max(0.001, m.y1 - m.y0);
+    if (a.forma !== undefined && m.forma !== undefined && a.forma !== m.forma && proporcion > 0.6 && proporcion < 1.6) {
+      salida.push(`El bloque ${donde} tiene forma ${a.forma}; en la maqueta, ${m.forma}.`);
+    }
+  }
+  return salida;
+}

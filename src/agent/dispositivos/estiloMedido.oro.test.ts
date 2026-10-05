@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { compararDescripciones, hayQueArreglar } from "../../core/descripcionDePantalla.js";
-import { pantallaMedida, type ControlAMedir } from "../../core/estiloMedido.js";
+import { compararBloques, pantallaMedida, type ControlAMedir } from "../../core/estiloMedido.js";
 import { controlesDelArbol, filas, filasDelAparato, type MaquetaMedida } from "../../core/geometriaDePantalla.js";
 import { decodificarImagen } from "./decodificarImagen.js";
 
@@ -63,5 +63,27 @@ describe("teclas con contorno fino, medidas sin confundir el contorno con el tex
 
   it("los dígitos son del color de la maqueta (blancos), no el gris de un contorno", () => {
     expect(c2.diferencias.join("\n")).not.toMatch(/color del texto .* en .*«7»/);
+  });
+});
+
+describe("los BLOQUES anchos: la cabecera también es el diseño", () => {
+  const imgMaqueta = decodificarImagen(oro("calculadora.maqueta.png"));
+  const bloquesDe = (nombre: string, imagen: string) => {
+    const g = JSON.parse(oro(nombre).toString("utf8"));
+    const util = { arriba: g.barras?.estado?.abajo ?? 0, abajo: g.barras?.navegacion?.arriba ?? g.pantalla.alto };
+    const bloques = controlesDelArbol(g.arbol)
+      .filter((c) => (c.tipo === "frame" || c.tipo === "group") && c.caja.ancho >= g.pantalla.ancho * 0.85 && c.caja.alto >= 40 && c.caja.alto <= g.pantalla.alto * 0.6 && c.caja.y >= util.arriba - 2)
+      .map((c) => c.caja);
+    return compararBloques({ img: imgMaqueta, bloques: cajas.bloques ?? [], util: { arriba: 0, abajo: cajas.alto } }, { img: decodificarImagen(oro(imagen)), bloques, util });
+  };
+
+  it("una cabecera AMARILLA donde la maqueta la tiene oscura se dice", () => {
+    expect(bloquesDe("calculadora.teclas-con-borde.geometria.json", "calculadora.teclas-con-borde.jpg")).toEqual([
+      expect.stringMatching(/^El bloque de arriba del todo es de color #F[0-9A-F]{5}; en la maqueta, #0[0-9A-F]{5}\.$/),
+    ]);
+  });
+
+  it("y una cabecera oscura, como la de la maqueta, no", () => {
+    expect(bloquesDe("calculadora.captura-final.geometria.json", "calculadora.captura-final.png").join("\n")).not.toContain("arriba del todo");
   });
 });
