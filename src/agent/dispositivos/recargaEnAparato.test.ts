@@ -90,21 +90,33 @@ describe("recargarEnAparato", () => {
     expect(f.enviados[2]).toMatchObject({ command: "loadIncludeFile", file: "js/funciones.js", compile: true });
   });
 
-  it("un CSS: sube, lo recarga con unloadCssFile/loadCssFile por runScript y repinta, SIN relanzar (medido)", async () => {
+  it("un CSS: sube y lo recarga con el comando loadCssFile del canal, SIN relanzar ni refresh (5.0.5.7dev, medido)", async () => {
     const f = framework(vivaYAcepta);
     const r = await recargarEnAparato(peticion("css/estilos.css", "a{}"), { abrirSocket: f.abrirSocket, aplicarTunel: tunelBueno });
     expect(r).toEqual({ estado: "aplicada", clase: "css" });
-    expect(f.nombres()).toEqual(["getAllElements", "uploadFile", "runScript", "refresh", "getAllElements"]);
-    expect(Buffer.from(String(f.enviados[2]!["scriptText"]), "base64").toString("utf8")).toBe(
+    expect(f.nombres()).toEqual(["getAllElements", "uploadFile", "loadCssFile", "getAllElements"]);
+    expect(f.enviados[2]).toMatchObject({ fileName: "css/estilos.css", encoding: "UTF-8" });
+  });
+
+  it("en un framework ANTERIOR (Unknown command) usa appData.loadCssFile por runScript y un refresh (medido)", async () => {
+    const f = framework((c) =>
+      c["command"] === "loadCssFile"
+        ? { result: false, exceptionClass: "IllegalArgumentException", exceptionMessage: "Unknown command: loadCssFile" }
+        : vivaYAcepta(c)
+    );
+    const r = await recargarEnAparato(peticion("css/estilos.css", "a{}"), { abrirSocket: f.abrirSocket, aplicarTunel: tunelBueno });
+    expect(r).toEqual({ estado: "aplicada", clase: "css" });
+    expect(f.nombres()).toEqual(["getAllElements", "uploadFile", "loadCssFile", "runScript", "refresh", "getAllElements"]);
+    expect(Buffer.from(String(f.enviados[3]!["scriptText"]), "base64").toString("utf8")).toBe(
       'appData.unloadCssFile("css/estilos.css"); appData.loadCssFile("css/estilos.css", "UTF-8"); return "ok";'
     );
   });
 
-  it("un CSS cuyo script FALLA cae a relanzar la app", async () => {
-    const f = framework((c) => (c["command"] === "runScript" ? { result: false, exceptionMessage: "FileNotFoundException" } : vivaYAcepta(c)));
+  it("un CSS que el framework no deja cargar (no es «Unknown command») cae a relanzar, sin probar el script", async () => {
+    const f = framework((c) => (c["command"] === "loadCssFile" ? { result: false, exceptionMessage: "File not Found: estilos.css" } : vivaYAcepta(c)));
     const r = await recargarEnAparato(peticion("estilos.css", "a{}"), { abrirSocket: f.abrirSocket, aplicarTunel: tunelBueno });
     expect(r).toEqual({ estado: "relanzada", clase: "css" });
-    expect(f.nombres()).toEqual(["getAllElements", "uploadFile", "runScript", "launchApplication", "getAllElements"]);
+    expect(f.nombres()).toEqual(["getAllElements", "uploadFile", "loadCssFile", "launchApplication", "getAllElements"]);
   });
 
   it("app.ini sube y RELANZA la app, porque solo se lee al cargarla", async () => {

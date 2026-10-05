@@ -8117,3 +8117,11 @@ pintado. Si el script falla —`loadCssFile` de un nombre que no existe contesta
 mappings siguen relanzando. **Sin medir**: que lo tecleado en un campo sobreviva (`fill` no escribió en
 un campo de etiqueta flotante), y que el orden de la cascada no cambie al recargar una hoja que comparte
 clases con otra. El script `xone-recargar-android` lleva la misma regla.
+
+**Y el framework 5.0.5.7dev trae `loadCssFile` y `unloadCssFile` como comandos del canal** (los añadió el
+equipo de Android; documentados en su `agents/dispositivo-xone.md`). `loadCssFile fileName=<hoja>`
+sustituye la hoja en su sitio —lo que deja resuelto lo de la cascada— y relayouta solo, sin `refresh`.
+Medido en el emulador con 5.0.5.7dev: el botón cambia en ~45 ms con `recargarFicheroDelProyecto`. Se usa
+el comando nativo primero; si contesta `Unknown command` (un framework anterior), el `runScript` de
+arriba; si falla por otra cosa (`File not Found`), se relanza. La skill `xone-hotswap` lo documenta y
+`xone-recargar-android` sigue el mismo orden.

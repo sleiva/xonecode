@@ -13,10 +13,12 @@
  *                                   devuelve a la versión anterior.
  *   JavaScript (.js)             →  `loadIncludeFile` con compile=true. Subir el fichero NO basta,
  *                                   y `loadCollection` tampoco lo recarga.
- *   CSS (.css)                   →  `runScript` con `appData.unloadCssFile` + `appData.loadCssFile` y
- *                                   un `refresh`: medido, el color cambia SIN relanzar. Lo que no
- *                                   sirve, también medido: `setCssAttribute`, `relayout`, `refresh` o
- *                                   `loadCollection` solos; `loadIncludeFile` no admite css.
+ *   CSS (.css)                   →  el comando `loadCssFile` (framework 5.0.5.7dev en adelante): la
+ *                                   sustituye y relayouta solo. En uno anterior, que contesta
+ *                                   `Unknown command`, `runScript` con `appData.unloadCssFile` +
+ *                                   `appData.loadCssFile` y un `refresh`. Medidos los dos: el color
+ *                                   cambia SIN relanzar. Lo que no sirve, también medido:
+ *                                   `setCssAttribute`, `relayout`, `refresh` o `loadCollection` solos.
  *   .ini, app.xml, mappings      →  relanzar la app (`launchApplication`): solo se leen al cargarla.
  *
  * **`result:true` es «aceptado», no «aplicado».** Lo que dice si funcionó es el árbol de
@@ -251,6 +253,7 @@ for (const rel of cambiados) {
 const clases = new Map(subidos.map((f) => [f, clase(f)]));
 const hayQueRelanzar = [...clases.values()].includes("relanzar");
 const fallos = [];
+let necesitaRefresh = false;
 
 if (hayQueRelanzar) {
   const r = mandar("launchApplication", { appName: app });
@@ -274,18 +277,31 @@ if (hayQueRelanzar) {
       } catch {
         tabla = "windows-1252";
       }
-      const script = `appData.unloadCssFile(${JSON.stringify(f)}); appData.loadCssFile(${JSON.stringify(f)}, ${JSON.stringify(tabla)}); return "ok";`;
-      const r = mandar("runScript", { scriptLanguage: "javascript", scriptText: Buffer.from(script, "utf8").toString("base64") });
-      if (r.result !== true) fallos.push(`${f}: loadCssFile ${r.exceptionMessage ?? r.status ?? "sin motivo"}`);
-      else console.log(`  ${f}  →  estilos recargados en caliente`);
+      const nativo = mandar("loadCssFile", { fileName: f, encoding: tabla });
+      if (nativo.result === true) {
+        console.log(`  ${f}  →  estilos recargados en caliente`);
+      } else if (/Unknown command/i.test(String(nativo.exceptionMessage ?? nativo.status ?? ""))) {
+        // Framework anterior a 5.0.5.7dev: las mismas funciones de XOne, por `runScript`, y un
+        // `refresh` (abajo) para que se pinte.
+        const script = `appData.unloadCssFile(${JSON.stringify(f)}); appData.loadCssFile(${JSON.stringify(f)}, ${JSON.stringify(tabla)}); return "ok";`;
+        const r = mandar("runScript", { scriptLanguage: "javascript", scriptText: Buffer.from(script, "utf8").toString("base64") });
+        if (r.result !== true) fallos.push(`${f}: loadCssFile ${r.exceptionMessage ?? r.status ?? "sin motivo"}`);
+        else {
+          necesitaRefresh = true;
+          console.log(`  ${f}  →  estilos recargados en caliente (por runScript)`);
+        }
+      } else {
+        fallos.push(`${f}: loadCssFile ${nativo.exceptionMessage ?? nativo.status ?? "sin motivo"}`);
+      }
     } else {
       const r = mandar("loadIncludeFile", { file: f, language: "javascript", encoding: "UTF-8", compile: true });
       if (r.result !== true) fallos.push(`${f}: loadIncludeFile ${r.exceptionMessage ?? r.status ?? "sin motivo"}`);
       else console.log(`  ${f}  →  JavaScript recargado`);
     }
   }
-  // Los estilos recargados se ven en el SIGUIENTE pintado: sin este `refresh`, no cambia nada (medido).
-  if ([...clases.values()].includes("css")) mandar("refresh");
+  // Por `runScript` los estilos se ven en el SIGUIENTE pintado: sin este `refresh`, no cambia nada
+  // (medido). El comando `loadCssFile` relayouta él solo.
+  if (necesitaRefresh) mandar("refresh");
   dormir(1);
 }
 

@@ -81,6 +81,7 @@ por los dos canales.
 | `deleteAttribute` | sí | sí | **solo WS** |
 | `replaceProperty` | sí | — | — |
 | `setCssAttribute` / `deleteCssAttribute` | sí | — | — |
+| `loadCssFile` / `unloadCssFile` (desde 5.0.5.7dev) | sí | — | — |
 | `refresh` / `relayout` | sí | — | — |
 | `status` / `state` | sí | sí | **solo WS** |
 | `uploadFile` | sí | — | — |
@@ -542,7 +543,8 @@ Carga o recarga una colección XML en caliente. **Entrada:** `xmlNode` (XML en *
 |---|---|---|
 | Colección `.xne` | `loadCollection` con el fichero entero en Base64 y `encoding=UTF-8` | Se repinta en ~2 s, **solo en memoria**: al relanzar la app vuelve la versión de disco. Para que persista, subir también el fichero con `uploadFile`. |
 | JavaScript | `uploadFile` y luego `loadIncludeFile` con `compile=true` | Se aplica al instante. Solo subirlo, o `loadCollection`, **no** lo recarga. |
-| CSS | `uploadFile` y luego `launchApplication` | Se aplica al relanzar. `setCssAttribute`, `relayout`, `refresh` y `loadCollection` contestan `result:true` y el color **no cambia**; `loadIncludeFile` no admite css (`Unknown script language css`). |
+| CSS (5.0.5.7dev en adelante) | `uploadFile` y luego `loadCssFile` con `fileName` | Se aplica al instante (medido: ~50 ms), **sin relanzar ni `refresh`**: sustituye la hoja en su sitio de la cascada y relayouta. |
+| CSS (antes de 5.0.5.7dev, donde `loadCssFile` es `Unknown command`) | `uploadFile`, `runScript` con `appData.unloadCssFile(n); appData.loadCssFile(n, enc); return "ok";` y luego `refresh` | Se aplica sin relanzar. **Sin el `refresh` no se ve**: el cambio entra en el siguiente pintado. `setCssAttribute`, `relayout`, `refresh` y `loadCollection` solos contestan `result:true` y el color **no cambia**; `loadIncludeFile` no admite css (`Unknown script language css`). |
 
 `uploadFile`: `destinationPath` cuelga del directorio de datos del framework, no del de la app.
 La app vive en `app_<nombre en minúsculas>/`, así que hay que dar `app_holamundo/functions.js`; con
@@ -566,6 +568,20 @@ relayout o refresh según el atributo. **(iOS)** también es legado: solo WebSoc
 
 ### `setCssAttribute` / `deleteCssAttribute` — solo Android
 `fileName`, `className`, `attributeName` (+ `attributeValue` en el set).
+
+### `loadCssFile` / `unloadCssFile` — solo Android, desde 5.0.5.7dev
+`loadCssFile`: `fileName` (sí), `encoding` (no, `UTF-8`), `conditions` (no, vacío = siempre),
+`strictMode` (no, `false`). Carga una hoja que **ya está en el dispositivo** (súbela antes con
+`uploadFile`), como un `<style>` del `<app>`, y relayouta las ventanas visibles. Si ya estaba cargada
+con las mismas `conditions`, la **sustituye** en su sitio: así se aplica una hoja recién subida, sin
+`unloadCssFile` antes. `unloadCssFile`: `fileName` (sí); quita la hoja y relayouta; una que no está
+cargada responde éxito.
+
+**Medido (5.0.5.7dev, emulador):** `uploadFile` + `loadCssFile fileName=default-colors.css` cambia el
+color de un botón en ~50 ms, sin relanzar. Un nombre que no existe: `result:false` con
+`FileNotFoundException`. Sin app cargada contestan `App is not running` en `status`. En 5.0.5.5dev el
+comando no existe (`Unknown command: loadCssFile`): ahí, las funciones de XOne por `runScript` + `refresh`
+(tabla de arriba).
 
 ### `refresh` / `relayout` — solo Android
 En iOS las ramas existen en el dispatcher pero están **vacías**: no hacen nada.

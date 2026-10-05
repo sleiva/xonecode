@@ -107,7 +107,8 @@ xone-desplegar-android --app MiApp --serie emulator-5554
 # «cambié un botón / una función / un color»: NO despliegues entero. Compara el proyecto con el
 # aparato, sube SOLO lo que difiere y lo aplica por la vía más barata (1-2 s si es una colección):
 #   colección (.xne)  → recarga en caliente        JavaScript (.js) → recarga del include
-#   CSS, app.xml, app.ini, mappings → relanza la app (unos 6 s)
+#   CSS (.css)        → recarga en caliente (loadCssFile; en frameworks viejos, por runScript)
+#   app.xml, app.ini, mappings → relanza la app (unos 6 s)
 # Necesita la app YA desplegada. Lo que no sabe aplicar (iconos, bd) lo dice y manda a desplegar.
 xone-recargar-android
 xone-recargar-android MenuPrincipal.xne functions.js      # solo esos, sin comparar
@@ -246,7 +247,7 @@ Detalle de despliegue, relanzado y endpoints de fichero: [conexión y despliegue
 | Tocar (`click`, `tap`, `doubleTap`, `longPress`, `openSelector`, `fill`, `clear`, `scroll`, `pressKey`) | sí | **sí**, con desviaciones (abajo) |
 | Ciclo de app (`launchApplication`, `exitApplication`, `directdownload`) | sí | `launchApplication` y `directdownload` sí; `exitApplication` no |
 | Atributos y colecciones (`setAttribute`, `deleteAttribute`, `loadCollection`) | sí | sí |
-| CSS, `replaceProperty`, `refresh`, `relayout`, `loadIncludeFile` | sí | **no** |
+| CSS (`setCssAttribute`, `loadCssFile`/`unloadCssFile`), `replaceProperty`, `refresh`, `relayout`, `loadIncludeFile` | sí | **no** |
 | Ficheros (`/file_upload`, `/file_download`, `uploadFile`, `getFileChecksum`) | sí | **no** (`listappfiles` sí) |
 | Scripts y SQL (`runScript`, `runSql`, `getDatabaseTableNames`, `queryDatabaseTable`) | sí | **no** |
 | Logs (`getLog`, `*DeviceLogging`, `setLog*`) | sí | **no** |

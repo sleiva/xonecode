@@ -94,19 +94,29 @@ export async function recargarEnAparato(
     if (subida.result !== true) return { estado: "fallo", clase, motivo: `uploadFile: ${decirDe(subida)}` };
 
     if (clase === "css") {
-      // Un CSS se recarga con las funciones de XOne, por `runScript`: `unloadCssFile` + `loadCssFile`
-      // invalidan las cachés de estilos y un `refresh` repinta. MEDIDO: el botón cambia de color sin
-      // relanzar. Lo que NO funciona, también medido: `setCssAttribute`, `relayout`, `refresh` o
-      // `loadCollection` solos. Si el script falla (un nombre que no encaja), se cae a relanzar.
-      const nombre = JSON.stringify(peticion.ruta.replace(/^\/+/, ""));
-      const tabla = JSON.stringify(codificacionParaElAparato(peticion.bytes));
-      const script = `appData.unloadCssFile(${nombre}); appData.loadCssFile(${nombre}, ${tabla}); return "ok";`;
-      const recargado = await pedir("runScript", {
-        scriptLanguage: "javascript",
-        scriptText: Buffer.from(script, "utf8").toString("base64"),
-      });
-      if (recargado.result === true) {
-        await pedir("refresh");
+      // Un CSS se recarga en caliente, sin relanzar. Dos caminos, los dos MEDIDOS en el emulador:
+      //  - el comando `loadCssFile` del canal (framework 5.0.5.7dev en adelante): sustituye la hoja en
+      //    su sitio de la cascada y relayouta solo;
+      //  - en un framework anterior, que contesta `Unknown command`, las funciones de XOne por
+      //    `runScript` (`appData.unloadCssFile` + `loadCssFile`) y un `refresh`, sin el cual no se ve.
+      // Lo que NO funciona, también medido: `setCssAttribute`, `relayout`, `refresh` o
+      // `loadCollection` solos. Si nada aplica (un nombre que no encaja), se cae a relanzar.
+      const nombre = peticion.ruta.replace(/^\/+/, "");
+      const tabla = codificacionParaElAparato(peticion.bytes);
+      const nativo = await pedir("loadCssFile", { fileName: nombre, encoding: tabla });
+      let recargado = nativo.result === true;
+      if (!recargado && /Unknown command/i.test(decirDe(nativo))) {
+        const script = `appData.unloadCssFile(${JSON.stringify(nombre)}); appData.loadCssFile(${JSON.stringify(nombre)}, ${JSON.stringify(tabla)}); return "ok";`;
+        const porScript = await pedir("runScript", {
+          scriptLanguage: "javascript",
+          scriptText: Buffer.from(script, "utf8").toString("base64"),
+        });
+        if (porScript.result === true) {
+          await pedir("refresh");
+          recargado = true;
+        }
+      }
+      if (recargado) {
         const despues = await pedir("getAllElements", { format: "xone" });
         if (estaViva(despues)) return { estado: "aplicada", clase };
       }
