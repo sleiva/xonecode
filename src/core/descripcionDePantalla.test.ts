@@ -172,3 +172,23 @@ describe("interpretarDescripcion y el prompt", () => {
     expect(promptDescribirPantalla()).not.toContain("EXISTEN");
   });
 });
+
+describe("lo MENOR no pone el rojo", () => {
+  const medido = (texto: string, forma: "recta" | "redondeada" | "pildora" | "circulo", proporcion: number, radio: number, alturaDeLetra = 0.05): ControlVisto => ({ texto, forma, proporcion, radio, alturaDeLetra, centro: { x: 0.5, y: 0.5 } });
+
+  it("una forma VECINA con las dos cifras casi iguales es menor; con otra proporción, no", () => {
+    const vecina = compararDescripciones({ filas: [{ controles: [medido("DEG", "pildora", 2.2, 0.39)] }], extras: [] }, { filas: [{ controles: [medido("DEG", "redondeada", 2.2, 0.36)] }], extras: [] });
+    expect(vecina.diferencias).toEqual([]);
+    expect(vecina.menores?.[0]).toMatch(/^forma píldora/);
+    expect(hayQueArreglar(vecina)).toBe(false);
+    // El caso de las teclas de la calculadora: radio parecido, 1,2:1 frente a 1,0:1. Se ve.
+    const teclas = compararDescripciones({ filas: [{ controles: [medido("7", "redondeada", 1.2, 0.48)] }], extras: [] }, { filas: [{ controles: [medido("7", "circulo", 1.0, 0.5)] }], extras: [] });
+    expect(hayQueArreglar(teclas)).toBe(true);
+  });
+
+  it("la letra de UN solo control que discrepa es un glifo (menor); la de varios, el tamaño (mayor)", () => {
+    const fila = (alturas: number[]) => ({ filas: [{ controles: alturas.map((a, i) => ({ ...medido(String(i + 1), "redondeada", 1.2, 0.3, a), centro: { x: i / 4, y: 0.5 } })) }], extras: [] });
+    expect(hayQueArreglar(compararDescripciones(fila([0.05, 0.05, 0.05]), fila([0.09, 0.05, 0.05])))).toBe(false);
+    expect(hayQueArreglar(compararDescripciones(fila([0.05, 0.05, 0.05]), fila([0.035, 0.035, 0.035])))).toBe(true);
+  });
+});

@@ -242,6 +242,12 @@ const decimal = (x: number, d = 1): string => x.toFixed(d).replace(".", ",");
 export interface ComparacionDeDescripciones {
   /** «forma píldora → círculo en «7», «8»…»: una línea por diferencia, con los controles que la tienen. */
   diferencias: string[];
+  /**
+   * Diferencias MENORES: se enseñan, pero no ponen el rojo. Una forma de una categoría VECINA con casi la misma
+   * proporción (una píldora de 2,9:1 que sale «recta» de 2,8:1) es un radio unos píxeles distinto en el límite entre dos
+   * nombres. Medido en la calculadora: sin esta separación el crítico medido no daba verde nunca y el bucle no acababa.
+   */
+  menores?: string[];
   /** Lo de la maqueta que no está en la captura. */
   faltan: string[];
   /** Texto RECORTADO en la captura: se dice siempre, haya maqueta o no. */
@@ -251,6 +257,19 @@ export interface ComparacionDeDescripciones {
    * para que lo mire quien arregla, pero no cuenta para el veredicto —no se puede comparar por código—.
    */
   extras: { maqueta: string[]; captura: string[] };
+}
+
+/**
+ * Dos formas VECINAS (recta ↔ redondeada ↔ píldora/círculo) con casi la misma proporción, medida en los dos: el radio
+ * está en el límite entre dos nombres. Sin cifras (una descripción), no se sabe, y no es menor.
+ */
+function formaVecina(m: ControlVisto, a: ControlVisto): boolean {
+  // Las DOS cifras casi iguales: un cuadrado redondeado de 1,2:1 frente a un círculo de 1,0:1 (radio parecido, otra
+  // proporción) es una diferencia que se ve —la de las teclas de la calculadora—, no un límite entre nombres.
+  if (m.proporcion === undefined || a.proporcion === undefined || Math.abs(m.proporcion - a.proporcion) > 0.1) return false;
+  if (m.radio === undefined || a.radio === undefined || Math.abs(m.radio - a.radio) > 0.1) return false;
+  const nivel = (f: Forma) => (f === "recta" ? 0 : f === "redondeada" ? 1 : 2);
+  return Math.abs(nivel(m.forma!) - nivel(a.forma!)) === 1;
 }
 
 /** El texto de un control en un hallazgo. */
@@ -294,6 +313,12 @@ export function compararDescripciones(maqueta: PantallaDescrita, captura: Pantal
 
   const grupos = new Map<string, string[]>();
   const anotar = (que: string, quien: ControlVisto) => grupos.set(que, [...(grupos.get(que) ?? []), nombrar(quien)]);
+  const gruposMenores = new Map<string, string[]>();
+  // La letra se agrupa aparte: la de UN solo control que discrepa es un glifo (el «1» es estrecho y bajo en unas
+  // fuentes), no el tamaño de la fuente. Si son varios, es el tamaño.
+  const gruposDeLetra = new Map<string, string[]>();
+  const anotarLetra = (que: string, quien: ControlVisto) => gruposDeLetra.set(que, [...(gruposDeLetra.get(que) ?? []), nombrar(quien)]);
+  const anotarMenor = (que: string, quien: ControlVisto) => gruposMenores.set(que, [...(gruposMenores.get(que) ?? []), nombrar(quien)]);
 
   // Un texto que en la captura dice OTRA cosa en el mismo sitio (un interruptor DEG que está en RAD): no falta. Solo
   // con los dos sitios MEDIDOS: con la fila y la columna de una descripción, el «0» de muestra del visor «estaba en
@@ -320,12 +345,14 @@ export function compararDescripciones(maqueta: PantallaDescrita, captura: Pantal
     const a = as[j]!.c;
     if (m.forma !== undefined && a.forma !== undefined && m.forma !== a.forma) {
       const cifra = (c: ControlVisto) => (c.proporcion === undefined ? "" : ` (${decimal(c.proporcion)}:1)`);
-      anotar(`forma ${NOMBRE_DE_FORMA[m.forma]}${cifra(m)} → ${NOMBRE_DE_FORMA[a.forma]}${cifra(a)}`, m);
+      const que = `forma ${NOMBRE_DE_FORMA[m.forma]}${cifra(m)} → ${NOMBRE_DE_FORMA[a.forma]}${cifra(a)}`;
+      if (formaVecina(m, a)) anotarMenor(que, m);
+      else anotar(que, m);
     }
     if (conLetras(m.texto)) {
       if (m.alturaDeLetra !== undefined && a.alturaDeLetra !== undefined) {
         const veces = a.alturaDeLetra / m.alturaDeLetra;
-        if (veces > 1.3 || veces < 0.77) anotar(`letra ${decimal(veces)} veces la de la maqueta`, m);
+        if (veces > 1.3 || veces < 0.77) anotarLetra(`letra ${decimal(veces)} veces la de la maqueta`, m);
       } else if (m.letra !== undefined && a.letra !== undefined && m.letra !== a.letra) {
         anotar(`letra ${NOMBRE_DE_LETRA[m.letra]} → ${NOMBRE_DE_LETRA[a.letra]}`, m);
       }
@@ -344,6 +371,11 @@ export function compararDescripciones(maqueta: PantallaDescrita, captura: Pantal
     });
   }
 
+  const deLetra = [...gruposDeLetra.values()].reduce((n, q) => n + q.length, 0);
+  for (const [que, quienes] of gruposDeLetra) (deLetra > 1 ? grupos : gruposMenores).set(que, quienes);
+  const lineas = (g: Map<string, string[]>) =>
+    [...g.entries()].sort((x, y) => y[1].length - x[1].length).map(([que, quienes]) => `${que} en ${quienes.join(", ")}${quienes.length > 3 ? ` (${quienes.length} controles)` : ""}.`);
+  const menores = lineas(gruposMenores);
   const diferencias = [...grupos.entries()]
     .sort((x, y) => y[1].length - x[1].length)
     .map(([que, quienes]) =>
@@ -355,7 +387,7 @@ export function compararDescripciones(maqueta: PantallaDescrita, captura: Pantal
     .map((x) => x.c)
     .filter((c) => c.recortado === true)
     .map((c) => `${nombrar(c)} se ve RECORTADO (le falta un trozo de las letras).`);
-  return { diferencias, faltan, recortes, extras: { maqueta: maqueta.extras, captura: captura.extras } };
+  return { diferencias, faltan, recortes, extras: { maqueta: maqueta.extras, captura: captura.extras }, ...(menores.length === 0 ? {} : { menores }) };
 }
 
 /** El bloque que ve el agente. `medida`: las dos salen de los píxeles de cada control, no de un modelo. */
@@ -374,7 +406,8 @@ export function informeDeComparacion(c: ComparacionDeDescripciones, como: "medid
         (c.extras.maqueta.length > 0 ? ` En la maqueta: ${c.extras.maqueta.join("; ")}.` : " En la maqueta, nada así.")
     );
   }
-  if (lineas.length === 1) lineas.push("- Nada: cada control se ve como en la maqueta.");
+  if (lineas.length === 1) lineas.push(c.menores === undefined ? "- Nada: cada control se ve como en la maqueta." : "- Nada que arreglar.");
+  for (const m of c.menores ?? []) lineas.push(`- (menor, no hace falta arreglarlo) ${m}`);
   return lineas;
 }
 
