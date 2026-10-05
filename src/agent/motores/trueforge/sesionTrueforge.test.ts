@@ -634,8 +634,22 @@ describe("una sesión con el motor TrueForge", () => {
       [new AIMessageChunk({ content: "RESUMEN-DE-LA-CONVERSACION", usage_metadata: { input_tokens: 900, output_tokens: 50, total_tokens: 950 } })],
       [new AIMessageChunk({ content: "Listo.", usage_metadata: { input_tokens: 1_000, output_tokens: 2, total_tokens: 1_002 } })],
     ]);
-    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    // Qué pensamiento pidió quien construyó el cliente de CADA llamada: la de resumir va sin pensar.
+    const pensamientoDeLlamada: (string | undefined)[] = [];
+    const conPensamiento = {
+      ...m,
+      paraPapel: (papel: string, esfuerzo?: string, clase?: string, pensamiento?: string) => {
+        const base = (m.paraPapel as (...a: unknown[]) => { stream: (x: unknown) => unknown; bindTools: (t: unknown) => unknown })(papel, esfuerzo, clase, pensamiento);
+        const propio = {
+          bindTools: (t: unknown) => (base.bindTools(t), propio),
+          stream: (x: unknown) => (pensamientoDeLlamada.push(pensamiento), base.stream(x)),
+        };
+        return propio;
+      },
+    } as unknown as ModelosPort;
+    const s = await abrirSesionTrueforge({ raiz, modelos: conPensamiento, entorno: ENTORNO, skills: CATALOGO });
     await s.turno("mira la raíz", piel().p);
+    expect(pensamientoDeLlamada).toEqual([undefined, "apagado", undefined]);
     expect(vistos[1]!.join("\n")).toMatch(/summary of the conversation/);
     expect(vistos[2]!.join("\n")).toContain("RESUMEN-DE-LA-CONVERSACION");
     // Las tres llamadas pagan, la del resumen incluida; la ventana es la de la ÚLTIMA normal.

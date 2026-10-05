@@ -919,6 +919,18 @@ export async function abrirSesionTrueforge(
   };
   const razonamientoDeSalida = (salida: number): number | undefined => razonamientoPendiente.get(salida)?.shift();
   const llm = modeloParaTrueforge({ modelo: () => clienteDe("papel:trabajo:", () => modelos.paraPapel("trabajo")), senal: () => aborto?.signal, alRazonar });
+  /**
+   * El modelo de la COMPACTACIÓN: el mismo del raíz, con el pensamiento APAGADO donde el modelo lo
+   * admite (`core/esfuerzo.ts#pensamientoAplicable`: hoy DeepSeek; en los demás no se manda nada que
+   * no esté medido, así que se quedan como el raíz). Resumir no necesita razonar, y medido en dos
+   * sesiones de soporte la compactación sí razonaba: hasta 13.650 tokens de razonamiento para un
+   * resumen de ~4.000, 72 s de los 164 del turno, y en otro, 13 compactaciones en 30 min.
+   */
+  const llmDeCompactacion = modeloParaTrueforge({
+    modelo: () => clienteDe("papel:trabajo:compactacion", () => modelos.paraPapel("trabajo", undefined, undefined, "apagado")),
+    senal: () => aborto?.signal,
+    alRazonar,
+  });
 
   /**
    * El hilo de un hijo EXTERNO: un `AgentThread` normal con UNA llamada, cuyo «modelo» es el
@@ -1211,7 +1223,7 @@ export async function abrirSesionTrueforge(
          * capability—, que no se compacta.
          */
         contextCompaction({
-          definition: { ...definicion, modelClient: conResumenSeguro(definicion.modelClient as never, (t) => anotarPaso("trueforge.compactacion", t)()) } as never,
+          definition: { ...definicion, modelClient: conResumenSeguro(llmDeCompactacion as never, (t) => anotarPaso("trueforge.compactacion", t)()) } as never,
           compactionThresholdTokens: UMBRAL_RESUMEN_TOKENS,
         }),
         // `ask_user_question`, SOLO en el raíz —la librería tampoco se la da a un hijo—: es el
