@@ -97,6 +97,11 @@ export interface AdjuntoNombrable {
   nombre: string;
   bytes: number;
   mime?: string;
+  /**
+   * Lo que el harness DESCOMPRIMIÓ de un `.zip` al guardarlo (`core/zipDeAdjunto.ts`), con el nombre
+   * relativo a la carpeta de adjuntos (`x/screen.png`). Ausente si no es un zip o no se extrajo.
+   */
+  contenido?: readonly AdjuntoNombrable[];
 }
 
 /** Un tamaño para leer. KB de 1000, como el resto de la interfaz. */
@@ -138,7 +143,10 @@ const peso = (bytes: number): string =>
  */
 export function conAdjuntos(peticion: string, adjuntos: readonly AdjuntoNombrable[], de: "tarea" | "mensaje" = "tarea"): string {
   if (adjuntos.length === 0) return peticion;
-  const hayImagen = adjuntos.some((a) => a.mime?.startsWith("image/") === true);
+  const todos = adjuntos.flatMap((a) => [a, ...(a.contenido ?? [])]);
+  const hayImagen = todos.some((a) => a.mime?.startsWith("image/") === true);
+  const linea = (a: AdjuntoNombrable, sangria = ""): string =>
+    `${sangria}- ${RUTA_ADJUNTOS}${a.nombre} (${peso(a.bytes)}${a.mime === undefined ? "" : `, ${a.mime}`})`;
   const cabecera =
     de === "mensaje"
       ? [
@@ -159,7 +167,15 @@ export function conAdjuntos(peticion: string, adjuntos: readonly AdjuntoNombrabl
     peticion,
     "",
     ...cabecera,
-    ...adjuntos.map((a) => `- ${RUTA_ADJUNTOS}${a.nombre} (${peso(a.bytes)}${a.mime === undefined ? "" : `, ${a.mime}`})`),
+    ...adjuntos.flatMap((a) =>
+      a.contenido === undefined || a.contenido.length === 0
+        ? [linea(a)]
+        : [
+            linea(a),
+            `  YA DESCOMPRIMIDO por el harness: léelo de aquí, no hace falta abrir el .zip (${a.contenido.length} fichero${a.contenido.length === 1 ? "" : "s"}):`,
+            ...a.contenido.map((c) => linea(c, "  ")),
+          ]
+    ),
     ...(hayImagen
       ? [
           "IMÁGENES: para saber qué hay en una, pásala por `describe_image` con su ruta (`read_file` no",

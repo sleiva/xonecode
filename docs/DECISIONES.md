@@ -8193,3 +8193,29 @@ Pedido: una sola tool para lo que un error de parsing puede romper —`.xne`, `.
   DIRECTA (ya venía por xone-linter; JS puro, sin red ni procesos). Sobre los 133 `.js` reales: 0 marcados.
   **Sin medir**: la coma final en una LLAMADA `f(a, b,)` (lo medido es en los parámetros); se marca porque es
   posterior a 2015.
+
+## Un `.zip` adjunto se descomprime al guardarlo, y `glob` ya no enseña lo denegado (05-10-2026)
+
+Conversación de MyAllXOne: «puedes crear esta calculadora y lanzarla desde el drawer», con el diseño de
+Stitch en un `.zip` adjunto (`code.html`, `screen.png`, `DESIGN.md`). Ningún agente tenía con qué abrirlo:
+`read_file` de un zip devuelve sus bytes crudos (49.981 caracteres de `PK…`, medido) y `describe_image` no
+entra dentro. El analista probó rutas como `…zip/screen.png` y `…zip!/DESIGN.md`, inventó tools
+(`descomprimir_zip`, `extraer_zip`, `unzip`, `bash`, `run_command`…), el diseñador tampoco pudo, y en modo
+autónomo el turno acabó pidiendo los ficheros sueltos: 7 min, 2,6 M de tokens de entrada, sin calculadora.
+
+**Lo hace el HARNESS, al guardar** (`guardarAdjuntoDeSesion`), no una tool: el modelo no tiene que saber de
+zips, ve una carpeta. El zip se queda; su contenido va a `adjuntos/<nombre sin .zip>/`. Las barreras son las
+de instalar una skill desde `.zip` —es la misma entrada de poca confianza—: forma de ruta en lista BLANCA y
+cada segmento un nombre de adjunto (los que no lo son se arreglan a `_`: «Captura de pantalla.png»), topes
+de entradas y de tamaño decididos con lo que DECLARA cada entrada ANTES de inflar nada (dos pasadas de
+`fflate`: la primera solo lee cabeceras), y una entrada mala se lleva el zip entero. El tope por sesión
+cuenta ahora lo descomprimido (y no sigue enlaces). Un zip que no se extrae se guarda igual y se dice por
+qué: subirlo nunca falla por esto. Con el zip real de MyAllXOne: los tres ficheros, y el aviso del mensaje
+los enseña colgados del zip con sus rutas. Y `read_file` de un `.zip` contesta dónde está extraído en vez de
+los bytes. **Límite declarado**: solo los adjuntos del CHAT; los de una TAREA no se descomprimen.
+
+De paso, en la misma traza: **`glob` enseñaba los NOMBRES de lo denegado.** En TrueForge el permiso se
+comprobaba solo sobre el `path` de `ls`/`glob`/`grep` —la raíz por omisión—, así que `glob
+/.xonecode/**/*` listaba la traza y la memoria de la sesión, y `**/.env*` decía que había un `.env`. Leerlos
+ya estaba denegado y `grep` no devolvía su contenido (el backend se los salta, comprobado). Ahora lo que
+devuelven los tres se filtra con la misma regla de leer.

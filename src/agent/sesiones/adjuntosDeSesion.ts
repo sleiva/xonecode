@@ -14,9 +14,11 @@
  * `lstatSync` (que no necesita que exista nada) y, si la carpeta YA existe, compara su camino
  * REAL contra el de `.xonecode/sesiones`. Solo si esa comprobación pasa se llama a `mkdirSync`.
  */
-import { existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join, relative, sep } from "node:path";
+import { unzipSync } from "fflate";
 import { carpetaDeAdjuntosDeSesion, mimeDeAdjunto, nombreDeAdjuntoAceptable, type AdjuntoNombrable } from "../../core/adjuntos.js";
+import { carpetaDeExtraccion, esZip, planDeExtraccion } from "../../core/zipDeAdjunto.js";
 
 /** Bytes que se aceptan por adjunto y por sesión. Mismos valores que `TOPE_DE_ADJUNTO` /
  *  `TOPE_DE_ADJUNTOS_POR_TAREA` de `tareasEnDisco.ts`: es la misma regla, aplicada a otra cola. */
@@ -137,6 +139,72 @@ function codigoDe(error: unknown): string {
 }
 
 /**
+ * Lo que ocupan los adjuntos de la sesión, contando lo DESCOMPRIMIDO de un zip. Sin seguir enlaces
+ * (`lstat`): uno que alguien plantara no suma lo de fuera.
+ */
+function ocupado(carpeta: string): number {
+  let suma = 0;
+  for (const nombre of readdirSync(carpeta)) {
+    const ruta = join(carpeta, nombre);
+    const info = lstatSync(ruta);
+    if (info.isDirectory()) suma += ocupado(ruta);
+    else if (info.isFile()) suma += info.size;
+  }
+  return suma;
+}
+
+/**
+ * Descomprime `nombreDelZip` (ya escrito en `carpeta`) en `carpeta/<nombre sin .zip>/`. Devuelve los
+ * ficheros extraídos, relativos a `carpeta`, o el motivo de no hacerlo. **Nunca lanza, y nunca hace
+ * fallar el guardado**: el zip ya está en disco y se queda; lo que no se extrae se dice.
+ *
+ * Dos pasadas por `fflate`: la primera solo LEE las cabeceras (el `filter` contesta que no a todo), y
+ * con los tamaños que declaran decide la regla pura (`core/zipDeAdjunto.ts`) ANTES de inflar nada —un
+ * zip bomba no llega a ocupar memoria—; la segunda infla solo lo aprobado, y se comprueba que cada
+ * entrada ocupa lo que declaraba.
+ */
+function extraerZip(carpeta: string, nombreDelZip: string, datos: Buffer, disponible: number): { extraidos: string[] } | { motivo: string } {
+  const destino = join(carpeta, carpetaDeExtraccion(nombreDelZip));
+  if (existsSync(destino)) return { motivo: "ya hay algo con el nombre de la carpeta donde iría" };
+  const cabeceras: { ruta: string; bytes: number }[] = [];
+  try {
+    unzipSync(datos, {
+      filter: (f) => {
+        if (!f.name.endsWith("/")) cabeceras.push({ ruta: f.name, bytes: f.originalSize });
+        return false;
+      },
+    });
+  } catch {
+    return { motivo: "no se pudo abrir: ¿es un .zip de verdad?" };
+  }
+  const plan = planDeExtraccion(cabeceras, disponible);
+  if ("error" in plan) return { motivo: plan.error };
+  const aprobadas = new Map(plan.ficheros.map((f) => [f.enElZip, f.destino]));
+  const declarado = new Map(cabeceras.map((c) => [c.ruta, c.bytes]));
+  try {
+    const inflado = unzipSync(datos, { filter: (f) => aprobadas.has(f.name) });
+    for (const [enElZip, contenido] of Object.entries(inflado)) {
+      if (contenido.length !== declarado.get(enElZip)) throw new Error("el tamaño no es el que declaraba");
+    }
+    mkdirSync(destino, { mode: 0o700 });
+    for (const [enElZip, contenido] of Object.entries(inflado)) {
+      const salida = join(destino, ...aprobadas.get(enElZip)!.split("/"));
+      mkdirSync(dirname(salida), { recursive: true, mode: 0o700 });
+      writeFileSync(salida, contenido, { mode: 0o600 });
+    }
+    return { extraidos: plan.ficheros.map((f) => `${carpetaDeExtraccion(nombreDelZip)}/${f.destino}`).sort() };
+  } catch {
+    // A medias es peor que nada: lo escrito se retira y queda solo el zip.
+    try {
+      rmSync(destino, { recursive: true, force: true });
+    } catch {
+      // Si ni eso se puede, queda lo que haya: el listado solo enseña ficheros con nombre aceptable.
+    }
+    return { motivo: "no se pudo descomprimir entero" };
+  }
+}
+
+/**
  * Guarda un adjunto anexado en el chat de la sesión `id`, dentro del proyecto `raiz`.
  *
  * Mismo orden que `tareasEnDisco.ts#guardarAdjunto`: primero lo que se sabe SIN tocar disco (el
@@ -162,7 +230,7 @@ export function guardarAdjuntoDeSesion(
   nombre: string,
   datos: Buffer,
   topes: TopesDeAdjuntosDeSesion = { porFichero: TOPE_DE_ADJUNTO_DE_SESION, porSesion: TOPE_DE_ADJUNTOS_POR_SESION }
-): { ok: true; nombre: string } | { ok: false; motivo: string } {
+): { ok: true; nombre: string; extraidos?: string[]; sinExtraer?: string } | { ok: false; motivo: string } {
   if (!nombreDeAdjuntoAceptable(nombre)) {
     return { ok: false, motivo: "ese nombre no vale para un adjunto" };
   }
@@ -176,7 +244,7 @@ export function guardarAdjuntoDeSesion(
   if (carpeta === undefined) return { ok: false, motivo: "ese nombre no vale para un adjunto" };
   try {
     mkdirSync(carpeta, { recursive: true, mode: 0o700 });
-    const ya = readdirSync(carpeta).reduce((suma, f) => suma + statSync(join(carpeta, f)).size, 0);
+    const ya = ocupado(carpeta);
     if (ya + datos.length > topes.porSesion) {
       return { ok: false, motivo: `esta sesión ya no admite más adjuntos (tope ${Math.round(topes.porSesion / 1_000_000)} MB)` };
     }
@@ -187,10 +255,48 @@ export function guardarAdjuntoDeSesion(
     // Un adjunto es un documento de la persona, no un dato de sistema: mismo 0600 que los
     // adjuntos de tarea y que el índice de sesiones.
     writeFileSync(join(carpeta, nombreFinal), datos, { mode: 0o600 });
-    return { ok: true, nombre: nombreFinal };
+    // Un .zip se DESCOMPRIME al lado: el agente ve sus ficheros sueltos (MyAllXOne: nadie podía abrirlo).
+    if (!esZip(nombreFinal)) return { ok: true, nombre: nombreFinal };
+    const extraccion = extraerZip(carpeta, nombreFinal, datos, topes.porSesion - ya - datos.length);
+    return "extraidos" in extraccion
+      ? { ok: true, nombre: nombreFinal, extraidos: extraccion.extraidos }
+      : { ok: true, nombre: nombreFinal, sinExtraer: extraccion.motivo };
   } catch (error) {
     return { ok: false, motivo: `no se pudo guardar el adjunto (${codigoDe(error)})` };
   }
+}
+
+/**
+ * Lo descomprimido de un zip: los ficheros bajo `carpeta/<sub>/`, recursivo, con el nombre relativo a
+ * `carpeta`. Con las mismas cribas que el listado: cada segmento con nombre aceptable y `lstat` (ni un
+ * enlace ni lo que no sea fichero cuenta).
+ */
+function extraidoDe(carpeta: string, sub: string, profundidad = 0): AdjuntoNombrable[] {
+  if (profundidad > 8 || !nombreDeAdjuntoAceptable(sub.split("/").at(-1) ?? "")) return [];
+  const dentro = join(carpeta, ...sub.split("/"));
+  let nombres: string[];
+  try {
+    if (!lstatSync(dentro).isDirectory()) return [];
+    nombres = readdirSync(dentro).sort();
+  } catch {
+    return [];
+  }
+  const salida: AdjuntoNombrable[] = [];
+  for (const n of nombres) {
+    if (!nombreDeAdjuntoAceptable(n)) continue;
+    const relativo = `${sub}/${n}`;
+    try {
+      const info = lstatSync(join(dentro, n));
+      if (info.isDirectory()) salida.push(...extraidoDe(carpeta, relativo, profundidad + 1));
+      else if (info.isFile()) {
+        const mime = mimeDeAdjunto(n);
+        salida.push({ nombre: relativo, bytes: info.size, ...(mime === undefined ? {} : { mime }) });
+      }
+    } catch {
+      continue;
+    }
+  }
+  return salida;
 }
 
 /**
@@ -226,7 +332,8 @@ export function listarAdjuntosDeSesion(raiz: string, id: string, nombres?: reado
       continue;
     }
     const mime = mimeDeAdjunto(nombre);
-    todos.push({ nombre, bytes, ...(mime === undefined ? {} : { mime }) });
+    const contenido = esZip(nombre) ? extraidoDe(carpeta, carpetaDeExtraccion(nombre)) : [];
+    todos.push({ nombre, bytes, ...(mime === undefined ? {} : { mime }), ...(contenido.length === 0 ? {} : { contenido }) });
   }
 
   if (nombres === undefined) return todos;

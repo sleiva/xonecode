@@ -471,6 +471,9 @@ ejecuta si es Claude Code, con la shell ESTRECHA (ver abajo). Reglas duras:
   `.xonecode/` sigue denegado. Lo que deja en `/artefactos/` se anuncia al volver
   (`fotoDeArtefactos`). **Límites declarados**: el aviso por número de capturas cuenta nuestro
   `execute` y no su `Bash`; Parar mata al `claude`, no a un `adb` nieto; solo en TrueForge.
+- **En TrueForge, `ls`, `glob` y `grep` FILTRAN lo que devuelven con la regla de leer**
+  (`toolsDeFichero.ts#ejecutar`, `puedeLeer`): el permiso se comprobaba solo sobre su `path` —la raíz por
+  omisión— y un `glob` de `/.xonecode/**` listaba los nombres de lo denegado. Leer ya estaba denegado.
 - **Las guardas de ruta hay que REAPLICARLAS** (`agent/subagentes/escrituraExterna.ts`): el
   `file_path` del hijo es ABSOLUTO y va al disco directo, sin pasar por `permisosDe`,
   `virtualMode`, vistas aplanadas ni guardas de artefactos/descargas. Las MISMAS funciones, **dos
@@ -792,7 +795,13 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   con el nombre ya ocupado, sufija `-2`… y lo dice en la respuesta (`{"nombre"}`), que el cliente
   adopta en vez del que mandó. **El acto de usuario solo afirma los adjuntos que están EN
   DISCO** — lo que `listarAdjuntosDeSesion` encontró, nunca los nombres que llegaron por el
-  cable sin comprobar. Meterlos en el PROYECTO es la tool `incorporar_adjunto`, con su propia fila
+  cable sin comprobar. **Un `.zip` se DESCOMPRIME al guardarlo** (`core/zipDeAdjunto.ts`, `adjuntosDeSesion.ts#extraerZip`): el
+  zip se queda y su contenido va a `adjuntos/<nombre>/`, que el aviso del mensaje enseña colgado del zip
+  (`AdjuntoNombrable.contenido`). Lo hace el harness: el agente no tiene con qué abrir un zip, y `read_file`
+  de uno contesta dónde está ya extraído. Las barreras de instalar una skill desde `.zip` (forma de ruta en
+  lista BLANCA, topes contra un zip bomba decididos con lo DECLARADO antes de inflar), más el tope por
+  sesión, que cuenta lo descomprimido. Un zip que no se puede extraer se guarda igual y se dice por qué.
+  Meterlos en el PROYECTO es la tool `incorporar_adjunto`, con su propia fila
   de aprobación; solo `developer-xone` de motor `"modelo"` la recibe —el diseñador está confinado a `icons/`— y a un
   motor externo no le llegan tools propias.
 - **El encargo se AUMENTA y se enseña EDITABLE antes de encolar** (`AumentadorPort`, papel

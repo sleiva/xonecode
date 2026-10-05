@@ -19,6 +19,7 @@
  * Un rechazo se DEVUELVE como resultado de error y nunca se lanza: el modelo lo lee y reintenta,
  * que es la regla de las guardas del backend.
  */
+import { carpetaDeExtraccion, esZip } from "../../../core/zipDeAdjunto.js";
 import { NOMBRE_DESCRIBIR_IMAGEN } from "../../grafo/describirImagen.js";
 import { posix } from "node:path";
 import micromatch from "micromatch";
@@ -67,7 +68,8 @@ const cadena = { type: "string" } as const;
 const ESQUEMAS: Record<ToolDeFichero, { descripcion: string; propiedades: Record<string, unknown>; obligatorias: string[] }> = {
   ls: { descripcion: "Lists files and directories in a directory (non-recursive).", propiedades: { path: cadena }, obligatorias: ["path"] },
   read_file: {
-    descripcion: "Reads a file. Returns its lines numbered. Use offset/limit to page through long files.",
+    descripcion:
+      "Reads a file. Returns its lines numbered. Use offset/limit to page through long files: offset is 0-based (offset=0 starts at line 1, offset=380 at line 381).",
     propiedades: { file_path: cadena, offset: { type: "number" }, limit: { type: "number" } },
     obligatorias: ["file_path"],
   },
@@ -186,15 +188,36 @@ export function lecturaAcotada(contenido: string, desde: number, tope = CARACTER
 }
 
 /** Lo que el backend contestó, en el texto que ve el modelo. */
-async function ejecutar(backend: BackendDeFicheros, nombre: ToolDeFichero, args: Record<string, unknown>): Promise<{ texto: string; error: boolean }> {
+async function ejecutar(
+  backend: BackendDeFicheros,
+  nombre: ToolDeFichero,
+  args: Record<string, unknown>,
+  /**
+   * ¿Se puede LEER esta ruta? Lo que devuelven `ls`, `glob` y `grep` se filtra con ella: el permiso se
+   * comprobaba solo sobre su `path` —la raíz por omisión—, y un `glob` de `/.xonecode/**` desde la raíz
+   * listaba los nombres de lo denegado (medido en MyAllXOne: el analista vio la traza y la memoria de la
+   * sesión, y que había un `.env`). Leerlos ya estaba denegado; ahora tampoco se ven sus nombres.
+   */
+  puedeLeer: (ruta: string) => boolean = () => true
+): Promise<{ texto: string; error: boolean }> {
   const s = (v: unknown): string => (typeof v === "string" ? v : "");
   switch (nombre) {
     case "ls": {
       const r = (await backend.ls(s(args.path) || "/")) as Resultado & { files?: { path: string; is_dir?: boolean }[] };
       if (r.error !== undefined) return { texto: r.error, error: true };
-      return { texto: truncarSiLargo((r.files ?? []).map((f) => (f.is_dir === true ? `${f.path}/` : f.path)).join("\n")) || "(vacío)", error: false };
+      const visibles = (r.files ?? []).filter((f) => puedeLeer(f.path.replace(/\/$/, "")));
+      return { texto: truncarSiLargo(visibles.map((f) => (f.is_dir === true ? `${f.path}/` : f.path)).join("\n")) || "(vacío)", error: false };
     }
     case "read_file": {
+      // Un .zip leído como texto son bytes crudos (`PK…`): medido en MyAllXOne, 50.000 caracteres de basura
+      // en el contexto y ningún dato. Un adjunto .zip lo DESCOMPRIME el harness al guardarlo (`core/zipDeAdjunto.ts`).
+      if (esZip(s(args.file_path))) {
+        const carpeta = `${carpetaDeExtraccion(s(args.file_path))}/`;
+        return {
+          texto: `${s(args.file_path)} es un .zip: no se lee como texto. Si es un adjunto, el harness ya lo descomprimió en ${carpeta} — lista esa carpeta con ls y lee sus ficheros sueltos.`,
+          error: true,
+        };
+      }
       const offset = typeof args.offset === "number" && args.offset > 0 ? Math.floor(args.offset) : 0;
       const limit = typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : LINEAS_POR_LECTURA;
       const r = (await backend.read(s(args.file_path), offset, limit)) as Resultado & { content?: unknown };
@@ -232,7 +255,7 @@ async function ejecutar(backend: BackendDeFicheros, nombre: ToolDeFichero, args:
     case "glob": {
       const r = (await backend.glob(s(args.pattern), s(args.path) || "/")) as Resultado & { files?: { path: string }[] };
       if (r.error !== undefined) return { texto: r.error, error: true };
-      return { texto: truncarSiLargo((r.files ?? []).map((f) => f.path).join("\n")) || "(ninguno)", error: false };
+      return { texto: truncarSiLargo((r.files ?? []).filter((f) => puedeLeer(f.path)).map((f) => f.path).join("\n")) || "(ninguno)", error: false };
     }
     case "grep": {
       const r = (await backend.grep(s(args.pattern), s(args.path) || "/", s(args.glob) || null)) as Resultado & {
@@ -241,7 +264,7 @@ async function ejecutar(backend: BackendDeFicheros, nombre: ToolDeFichero, args:
       if (r.error !== undefined) return { texto: r.error, error: true };
       // El tope de coincidencias y el truncado de deepagents (`recortes.ts`): sin ellos un `grep`
       // sobre la raíz metía cientos de líneas que se reenviaban en cada llamada siguiente.
-      const todas = r.matches ?? [];
+      const todas = (r.matches ?? []).filter((m) => puedeLeer(m.path));
       const lineas = todas.slice(0, MAXIMO_DE_COINCIDENCIAS).map((m) => `${m.path}:${m.line}: ${m.text}`);
       const resto = todas.length > MAXIMO_DE_COINCIDENCIAS ? `\n... [${todas.length - MAXIMO_DE_COINCIDENCIAS} coincidencias más: afina el patrón o la ruta]` : "";
       return { texto: truncarSiLargo(lineas.join("\n") + resto) || "(sin coincidencias)", error: false };
@@ -292,7 +315,7 @@ export function fuenteDeFicheros(opciones: {
         return toolResultResponse({ text: `permission denied: ${operacion} ${ruta}`, isError: true });
       }
       try {
-        const { texto, error } = await ejecutar(opciones.backend, params.name, args);
+        const { texto, error } = await ejecutar(opciones.backend, params.name, args, (r) => decidirAccesoDeRuta(opciones.reglas, "read", r) === "allow");
         return toolResultResponse({ text: texto, isError: error });
       } catch (e) {
         // Un backend que LANZA no tumba el turno: se le devuelve al modelo, como las guardas.

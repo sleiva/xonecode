@@ -40,6 +40,30 @@ describe("las tools de fichero de TrueForge, sobre el backend real", () => {
     expect(r.texto).toContain('describe_image({"ruta": "/icons/nuevo.png"})');
   });
 
+  it("un .zip no se lee como bytes crudos: la respuesta dice dónde está ya descomprimido", async () => {
+    const { raiz, llamar } = proyecto();
+    writeFileSync(join(raiz, "diseno.zip"), Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]));
+    const r = await llamar("read_file", { file_path: "/diseno.zip" });
+    expect(r.error).toBe(true);
+    expect(r.texto).toContain("es un .zip: no se lee como texto");
+    expect(r.texto).toContain("/diseno/");
+    expect(r.texto).not.toContain("PK");
+  });
+
+  it("`glob`, `ls` y `grep` no enseñan los NOMBRES de lo denegado, aunque su `path` sea la raíz (MyAllXOne)", async () => {
+    const { raiz, llamar } = proyecto();
+    writeFileSync(join(raiz, ".xonecode", "traza-tools.jsonl"), "{}\n");
+    const glob = await llamar("glob", { pattern: "/.xonecode/**/*" });
+    expect(glob.texto).not.toContain(".xonecode");
+    const env = await llamar("glob", { pattern: "**/.env*" });
+    expect(env.texto).not.toContain(".env");
+    const ls = await llamar("ls", { path: "/" });
+    expect(ls.texto).not.toMatch(/\.xonecode|\.env/);
+    expect(ls.texto).toContain("/app.xml");
+    const grep = await llamar("grep", { pattern: "CLAVE=secreta", path: "/" });
+    expect(grep.texto).not.toContain(".env");
+  });
+
   it("read_file numera como deepagents", async () => {
     const { llamar } = proyecto();
     const r = await llamar("read_file", { file_path: "/app.xml" });

@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, sym
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { zipSync } from "fflate";
 import { guardarAdjuntoDeSesion, listarAdjuntosDeSesion, TOPE_DE_ADJUNTO_DE_SESION, TOPE_DE_ADJUNTOS_POR_SESION } from "./adjuntosDeSesion.js";
 
 const carpetas: string[] = [];
@@ -233,26 +234,77 @@ describe("guardarAdjuntoDeSesion / listarAdjuntosDeSesion", () => {
   });
 
   /**
-   * Ronda de arreglo 1/5: `statSync` SIGUE un enlace (a diferencia de `lstatSync`, que usa
-   * `listarAdjuntosDeSesion`), así que un enlace COLGANTE dentro de `adjuntos/` —apunta a algo
-   * que ya no existe— hace que la suma de tamaños del tope por sesión LANCE `ENOENT`. Sin el
-   * `try` alrededor de las llamadas de disco, esa excepción se llevaba el `POST /adjunto` por
-   * delante: un rechazo de guarda se devuelve, nunca se lanza.
+   * Ronda de arreglo 1/5: un enlace COLGANTE dentro de `adjuntos/` —apunta a algo que ya no
+   * existe— hacía LANZAR `ENOENT` a la suma de tamaños del tope (`statSync` sigue el enlace), y sin
+   * el `try` se llevaba el `POST /adjunto` por delante. La suma va ahora con `lstat` y NO sigue
+   * enlaces (`ocupado`): el colgante ni revienta ni cuenta —tampoco contaría uno a un fichero de
+   * fuera, que es lo correcto—, y el adjunto se guarda.
    */
-  it("un enlace COLGANTE dentro de `adjuntos/` no revienta: se rechaza con su código, sin ruta", () => {
+  it("un enlace COLGANTE dentro de `adjuntos/` no revienta ni cuenta en el tope: el adjunto se guarda", () => {
     const raiz = proyectoTemporal();
     const carpeta = join(raiz, ".xonecode", "sesiones", "sesion-1", "adjuntos");
     mkdirSync(carpeta, { recursive: true });
     symlinkSync(join(raiz, "esto-no-existe.bin"), join(carpeta, "colgante.bin"));
 
-    const resultado = guardarAdjuntoDeSesion(raiz, "sesion-1", "nota.txt", Buffer.from("hola"));
+    expect(guardarAdjuntoDeSesion(raiz, "sesion-1", "nota.txt", Buffer.from("hola"))).toEqual({ ok: true, nombre: "nota.txt" });
+    expect(readFileSync(join(carpeta, "nota.txt"), "utf8")).toBe("hola");
+  });
+});
 
-    expect(resultado.ok).toBe(false);
-    if (!resultado.ok) {
-      expect(resultado.motivo).toMatch(/ENOENT/);
-      expect(resultado.motivo).not.toContain(raiz);
-    }
-    // Y no dejó a medias el fichero que sí se pudo escribir: nada se guardó de este intento.
-    expect(existsSync(join(carpeta, "nota.txt"))).toBe(false);
+describe("un .zip adjunto se DESCOMPRIME al guardarlo (MyAllXOne: nadie podía abrirlo)", () => {
+  const zipDeStitch = (): Buffer =>
+    Buffer.from(zipSync({ "code.html": Buffer.from("<html></html>"), "screen.png": Buffer.from("PNGFALSO"), "DESIGN.md": Buffer.from("# Diseño") }));
+
+  it("queda el zip y, al lado, su contenido; el listado lo cuelga del zip", () => {
+    const raiz = proyectoTemporal();
+    const r = guardarAdjuntoDeSesion(raiz, "s1", "stitch.zip", zipDeStitch());
+    expect(r).toEqual({ ok: true, nombre: "stitch.zip", extraidos: ["stitch/DESIGN.md", "stitch/code.html", "stitch/screen.png"] });
+    const carpeta = join(raiz, ".xonecode", "sesiones", "s1", "adjuntos");
+    expect(readFileSync(join(carpeta, "stitch", "DESIGN.md"), "utf8")).toBe("# Diseño");
+    expect(existsSync(join(carpeta, "stitch.zip"))).toBe(true);
+    const [zip] = listarAdjuntosDeSesion(raiz, "s1", ["stitch.zip"]);
+    expect(zip?.contenido?.map((c) => c.nombre)).toEqual(["stitch/DESIGN.md", "stitch/code.html", "stitch/screen.png"]);
+    expect(zip?.contenido?.find((c) => c.nombre === "stitch/screen.png")?.mime).toBe("image/png");
+  });
+
+  it("un segundo zip con el mismo nombre va a SU carpeta, sin pisar la primera", () => {
+    const raiz = proyectoTemporal();
+    guardarAdjuntoDeSesion(raiz, "s1", "stitch.zip", zipDeStitch());
+    const r = guardarAdjuntoDeSesion(raiz, "s1", "stitch.zip", zipDeStitch());
+    expect(r).toMatchObject({ ok: true, nombre: "stitch-2.zip" });
+    expect(existsSync(join(raiz, ".xonecode", "sesiones", "s1", "adjuntos", "stitch-2", "screen.png"))).toBe(true);
+  });
+
+  it("un zip malicioso (zip slip) se GUARDA igual, pero no se extrae nada y se dice por qué", () => {
+    const raiz = proyectoTemporal();
+    const malo = Buffer.from(zipSync({ "../../fuera.txt": Buffer.from("x"), "bien.txt": Buffer.from("y") }));
+    const r = guardarAdjuntoDeSesion(raiz, "s1", "malo.zip", malo);
+    expect(r).toEqual({ ok: true, nombre: "malo.zip", sinExtraer: "el .zip trae una ruta que se sale de su carpeta" });
+    expect(existsSync(join(raiz, ".xonecode", "sesiones", "s1", "adjuntos", "malo"))).toBe(false);
+    expect(existsSync(join(raiz, ".xonecode", "fuera.txt"))).toBe(false);
+  });
+
+  it("un zip BOMBA no se infla: lo descomprimido no cabe en la sesión", () => {
+    const raiz = proyectoTemporal();
+    const bomba = Buffer.from(zipSync({ "ceros.bin": new Uint8Array(5_000_000) }, { level: 9 }));
+    expect(bomba.length).toBeLessThan(100_000);
+    const r = guardarAdjuntoDeSesion(raiz, "s1", "bomba.zip", bomba, { porFichero: 1_000_000, porSesion: 1_000_000 });
+    expect(r).toEqual({ ok: true, nombre: "bomba.zip", sinExtraer: "descomprimido no cabe en los adjuntos de esta sesión" });
+  });
+
+  it("lo que no es un zip de verdad se guarda y se dice", () => {
+    const raiz = proyectoTemporal();
+    expect(guardarAdjuntoDeSesion(raiz, "s1", "falso.zip", Buffer.from("no soy un zip"))).toEqual({
+      ok: true,
+      nombre: "falso.zip",
+      sinExtraer: "no se pudo abrir: ¿es un .zip de verdad?",
+    });
+  });
+
+  it("el tope por sesión cuenta también lo DESCOMPRIMIDO", () => {
+    const raiz = proyectoTemporal();
+    guardarAdjuntoDeSesion(raiz, "s1", "a.zip", Buffer.from(zipSync({ "grande.bin": new Uint8Array(600_000) })), { porFichero: 1_000_000, porSesion: 1_000_000 });
+    const r = guardarAdjuntoDeSesion(raiz, "s1", "b.png", Buffer.alloc(500_000), { porFichero: 1_000_000, porSesion: 1_000_000 });
+    expect(r).toMatchObject({ ok: false });
   });
 });
