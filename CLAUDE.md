@@ -144,17 +144,23 @@ Y las guardas del proyecto:
 
 - **Las vistas aplanadas** (`X.xml` con un `X.xne` al lado) se retiran del backend con un Proxy
   (`agent/grafo/proyecto.ts`): la regla es propiedad del proyecto, no de un prompt.
-- **El agente lee y escribe un texto del proyecto en la codificación que YA tenía**
-  (`agent/grafo/codificacionDelProyecto.ts`, el envoltorio MÁS interno de `backendDeAgente`):
-  `FilesystemBackend` lee y escribe siempre en UTF-8, y sobre un `.xne` Latin-1 un `edit` de una línea
-  reescribía el fichero entero con «�» en cada tilde contestando que bien. Un texto que existe y no es
-  UTF-8 se lee con el decodificador de la pestaña Ficheros y se escribe con su inverso
-  (`core/codificacion.ts`); un carácter que no cabe se DEVUELVE como error. Va por dentro de
+- **El agente lee y escribe un texto del proyecto en la codificación que YA tenía, o en la que
+  DECLARA** (`agent/grafo/codificacionDelProyecto.ts`, el envoltorio MÁS interno de
+  `backendDeAgente`): `FilesystemBackend` lee y escribe siempre en UTF-8, y sobre un `.xne` Latin-1 un
+  `edit` de una línea reescribía el fichero entero con «�» en cada tilde contestando que bien. La
+  regla es UNA, la misma del editor (`core/codificacion.ts#codificacionParaEscribir`): lo que no es
+  UTF-8 sigue en su tabla de 8 bits; un UTF-8 con tildes sigue en UTF-8; un ASCII puro o un fichero
+  NUEVO siguen el `encoding=` del prólogo de lo que se escribe —toda colección nueva de la plantilla
+  declara `iso-8859-15`—. **La tabla va por declaración y en las DOS direcciones**: ISO-8859-15 si el
+  prólogo la declara (su € en 0xA4), si no windows-1252, en todo sitio que decodifica o codifica
+  (Ficheros, el guardado, el agente, `readRaw` de `regex_search`, la base de marcas). Un carácter que
+  no cabe se DEVUELVE como error, y llega DESPUÉS de la aprobación (la tarjeta la pone la librería
+  antes de correr la tool, como el rechazo de una reescritura). Va por dentro de
   `sinContenidoInvalido` (valida el texto bien decodificado) y de `enSerie`. **El ANTES de la tarjeta
-  de aprobación se lee IGUAL** (`decodificarComoTexto`, en los dos motores): leído en UTF-8, el ancla
-  con tilde no calzaba y la tarjeta enseñaba un diff que no era. **Límites declarados**:
-  `grep`/`glob` y las tools propias que leen el disco siguen en UTF-8, y un Latin-1 que hoy es ASCII
-  puro ES UTF-8 válido, así que su primera tilde se escribe en UTF-8.
+  de aprobación se lee IGUAL** (`decodificarComoTexto`, en los dos motores y en la de los motores
+  externos): leído en UTF-8, el ancla con tilde no calzaba y la tarjeta enseñaba un diff que no era.
+  **Límites declarados**: `grep`/`glob` y `xone_navegacion` siguen en UTF-8, y los motores externos
+  ESCRIBEN con sus propias tools, sin esta regla.
 - **Un rechazo de guarda se DEVUELVE como `{error}`, nunca se lanza**: una excepción se lleva el
   turno por delante y el agente no reintenta. Vale para `sinVistasAplanadas`,
   `sinArtefactosEnElProyecto` y `sinDescargasEnElProyecto`. `proyecto.test.ts` lo ata contra la
@@ -1001,11 +1007,11 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   proyecto en dos entornos). Escritura atómica que conserva permisos y BOM; los finales de línea los
   conserva el cliente (`apps/web/src/edicion.ts`). Solo se edita el texto ENTERO, en UTF-8 o latin1,
   que no es imagen (`apps/web/src/edicion.ts#esEditable`); sin «Editar», la cabecera DICE por qué
-  (`motivoParaNoEditar`). **Un latin1 se guarda en windows-1252, no se convierte**: la codificación
-  la deciden los BYTES del disco, no el cliente, con el codificador inverso del mismo
-  `TextDecoder("latin1")` de la lectura (`core/codificacion.ts`, una sola tabla), y un carácter que no
-  cabe se NIEGA con cuál y su línea, sin tocar nada —nunca un `?`—. Su base de marcas se decodifica
-  igual.
+  (`motivoParaNoEditar`). **Un latin1 se guarda en su tabla de 8 bits, no se convierte**: la
+  codificación la deciden los BYTES del disco y, si son ASCII puro, el prólogo —nunca el cliente—, con
+  la regla y las tablas del agente (`core/codificacion.ts`, cada codificador el inverso de su
+  decodificador), y un carácter que no cabe se NIEGA con cuál y su línea, sin tocar nada —nunca un
+  `?`—. Su base de marcas se decodifica igual.
   **CodeMirror solo se importa desde `apps/web/src/editor/`, y a eso solo se llega con `import()`**
   (`editor/frontera.test.ts`): quien no edita no paga el peso. Su tema son variables CSS (`.tok-*` →
   `--shiki-token-*` y alias del puente), nunca `EditorView.theme`, que escaparía a `Barra.test.tsx`.
@@ -1020,9 +1026,7 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   tiene salida**: tras un rechazo de un guardado propio se vuelve a pedir el fichero (recarga o
   banda), y «Seguir con los míos» ADOPTA la huella del disco, así que el siguiente guardado lo
   sustituye a sabiendas y la banda lo avisa. **Límites declarados**: ni crear, ni borrar, ni renombrar;
-  una tarea en OTRO proceso no se ve; un fichero recortado es de solo lectura; un latin1 se guarda con
-  la tabla de windows-1252 aunque declare ISO-8859-15 (un «€» nuevo no va donde ese juego lo espera);
-  guardar no pasa por la cola de `escriturasEnSerie` del
+  una tarea en OTRO proceso no se ve; un fichero recortado es de solo lectura; guardar no pasa por la cola de `escriturasEnSerie` del
   agente; la edición se atribuye en git a la sesión cuyo turno siguiente la commitea; entre comprobar
   (huella, turno, proyecto) y escribir queda un hueco sin cerrojo; `/sync bajar` no cuenta como turno,
   así que guardar MIENTRAS corre no se niega, y un guardado de contenido idéntico al bajado quedaría

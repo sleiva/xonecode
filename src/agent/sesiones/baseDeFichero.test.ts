@@ -48,6 +48,14 @@ describe("baseDeFichero", () => {
     expect(await baseDeFichero(raiz, undefined, "viejo.xne", "commit")).toEqual({ ruta: "viejo.xne", base: "commit", texto: "Tamaño €\n" });
   });
 
+  it("una base que declara ISO-8859-15 se decodifica con SU tabla: 0xA4 es «€»", async () => {
+    const raiz = repo();
+    const prologo = '<?xml version="1.0" encoding="iso-8859-15"?>\n';
+    writeFileSync(join(raiz, "iso.xne"), Buffer.concat([Buffer.from(prologo), Buffer.from([0xa4, 0xf1, 0x0a])]));
+    commit(raiz, "base");
+    expect((await baseDeFichero(raiz, undefined, "iso.xne", "commit")).texto).toBe(prologo + "€ñ\n");
+  });
+
   it("un fichero que no existía en la base es «vacio»: todo él es nuevo", async () => {
     const raiz = repo();
     writeFileSync(join(raiz, "app.xne"), "uno\n");

@@ -9,8 +9,9 @@ import type { FicheroDelProyecto, MensajeDelCliente } from "./tipos.js";
 /**
  * Un fichero se edita si y solo si llegó como texto ENTERO, en UTF-8 o latin1, y con huella: uno
  * recortado se guardaría cortado, y sin huella no hay forma de saber si el disco cambió. El latin1
- * se edita porque el SERVIDOR lo guarda en la codificación que ya tenía —windows-1252, decidido por
- * los bytes del disco y no por el cliente— y niega lo que no cabe en ella. Una imagen tampoco —ni el
+ * se edita porque el SERVIDOR lo guarda en la codificación que ya tenía —su tabla de 8 bits,
+ * windows-1252 o ISO-8859-15 si la declara, decidida por los bytes del disco y no por el cliente— y
+ * niega lo que no cabe en ella. Una imagen tampoco —ni el
  * SVG, que tiene texto—: así lo pide el diseño, y su visor enseña el dibujo, que no se repintaría al
  * teclear.
  */

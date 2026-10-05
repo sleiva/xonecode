@@ -350,7 +350,7 @@ describe("escribirFicheroDeProyecto", () => {
   const enLatin1 = (texto: string): Buffer => Buffer.from([...texto].map((c) => (c === "€" ? 0x80 : c.charCodeAt(0))));
 
   it("un latin1 se guarda en windows-1252: lo que no se tocó queda byte a byte, lo nuevo en un byte", async () => {
-    const original = '<?xml version="1.0" encoding="iso-8859-15"?>\r\n<coll name="Tamaño" title="acción €">\r\n<prop name="uno"/>\r\n';
+    const original = '<?xml version="1.0" encoding="windows-1252"?>\r\n<coll name="Tamaño" title="acción €">\r\n<prop name="uno"/>\r\n';
     writeFileSync(join(raiz, "Datos.xne"), enLatin1(original));
     const leido = await leerFicheroDeProyecto(raiz, "Datos.xne");
     expect(leido.codificacion).toBe("latin1");
@@ -389,6 +389,34 @@ describe("escribirFicheroDeProyecto", () => {
     expect(readFileSync(join(raiz, "viejo.txt")).length).toBe(TOPE_DE_FICHERO);
     const otra = await escribirFicheroDeProyecto(raiz, "viejo.txt", texto + "ñ", huellaDe("viejo.txt"));
     expect(otra.error).toMatch(/tope/);
+  });
+
+  const ISO15 = '<?xml version="1.0" encoding="iso-8859-15"?>\n';
+
+  it("un ASCII puro que DECLARA iso-8859-15 recibe su primera «ñ» en un byte, no en UTF-8", async () => {
+    writeFileSync(join(raiz, "Nuevo.xne"), ISO15 + "<coll/>\n");
+    const leido = await leerFicheroDeProyecto(raiz, "Nuevo.xne");
+    const r = await escribirFicheroDeProyecto(raiz, "Nuevo.xne", ISO15 + '<coll name="Año €"/>\n', leido.huella!);
+    expect(r.error).toBeUndefined();
+    expect(readFileSync(join(raiz, "Nuevo.xne")).equals(Buffer.concat([Buffer.from(ISO15 + '<coll name="A'), Buffer.from([0xf1]), Buffer.from("o "), Buffer.from([0xa4]), Buffer.from('"/>\n')]))).toBe(true);
+  });
+
+  it("un ASCII puro que declara utf-8 sigue en UTF-8", async () => {
+    const utf = '<?xml version="1.0" encoding="utf-8"?>\n';
+    writeFileSync(join(raiz, "U.xne"), utf + "<coll/>\n");
+    const r = await escribirFicheroDeProyecto(raiz, "U.xne", utf + "<coll name=\"Año\"/>\n", huellaDe("U.xne"));
+    expect(r.error).toBeUndefined();
+    expect(readFileSync(join(raiz, "U.xne"), "utf8")).toBe(utf + "<coll name=\"Año\"/>\n");
+  });
+
+  it("un fichero ISO-8859-15 se lee y se guarda con SU tabla: el € existente (0xA4) se ve, y uno nuevo va a 0xA4", async () => {
+    const bytes = Buffer.concat([Buffer.from(ISO15 + "<a t=\""), Buffer.from([0xa4, 0xf1]), Buffer.from('"/>\n<b/>\n')]);
+    writeFileSync(join(raiz, "Iso.xne"), bytes);
+    const leido = await leerFicheroDeProyecto(raiz, "Iso.xne");
+    expect(leido.texto).toBe(ISO15 + '<a t="€ñ"/>\n<b/>\n');
+    const r = await escribirFicheroDeProyecto(raiz, "Iso.xne", leido.texto!.replace("<b/>", '<b t="€"/>'), leido.huella!);
+    expect(r.error).toBeUndefined();
+    expect(readFileSync(join(raiz, "Iso.xne")).equals(Buffer.concat([Buffer.from(ISO15 + "<a t=\""), Buffer.from([0xa4, 0xf1]), Buffer.from('"/>\n<b t="'), Buffer.from([0xa4]), Buffer.from('"/>\n')]))).toBe(true);
   });
 
   it("un UTF-8 sigue guardándose en UTF-8", async () => {

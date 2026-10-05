@@ -16,12 +16,13 @@ import { backendDeAgente } from "./proyecto.js";
 
 interface Backend {
   read(ruta: string, offset?: number, limit?: number): Promise<Record<string, unknown>>;
+  readRaw(ruta: string): Promise<{ data?: { content?: unknown }; error?: string }>;
   write(ruta: string, contenido: string): Promise<Record<string, unknown>>;
   edit(ruta: string, viejo: string, nuevo: string, todas?: boolean): Promise<Record<string, unknown>>;
 }
 
 const TEXTO =
-  '<?xml version="1.0" encoding="iso-8859-15"?>\r\n<coll name="Tamaño" title="acción €">\r\n<prop name="uno"/>\r\n</coll>\r\n';
+  '<?xml version="1.0" encoding="windows-1252"?>\r\n<coll name="Tamaño" title="acción €">\r\n<prop name="uno"/>\r\n</coll>\r\n';
 
 /** Lo que dejaría XOne Studio: un byte por carácter, windows-1252. */
 function enLatin1(texto: string): Buffer {
@@ -104,6 +105,54 @@ describe.each(RAMAS)("backendDeAgente %s: un .xne Latin-1 se conserva en Latin-1
         await conCodificacion.read("/utf.js", offset, limit)
       );
     }
+  });
+});
+
+describe.each(RAMAS)("backendDeAgente %s: la codificación DECLARADA y la tabla de ISO-8859-15", (_nombre, ejecucion) => {
+  const ISO15 = '<?xml version="1.0" encoding="iso-8859-15"?>\n';
+  function proyecto() {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-declarada-"));
+    const backend = backendDeAgente({
+      raiz,
+      ficheros: new Set(),
+      ...(ejecucion === undefined ? {} : { ejecucion }),
+    }) as unknown as Backend;
+    return { raiz, backend, disco: (n: string) => readFileSync(join(raiz, n)) };
+  }
+
+  it("una colección NUEVA con el prólogo iso-8859-15 se escribe en 8 bits (el € en 0xA4)", async () => {
+    const { backend, disco } = proyecto();
+    expect((await backend.write("/Nueva.xne", ISO15 + '<coll name="Año €"/>\n'))["error"]).toBeUndefined();
+    expect(disco("Nueva.xne").equals(Buffer.concat([Buffer.from(ISO15 + '<coll name="A'), Buffer.from([0xf1]), Buffer.from("o "), Buffer.from([0xa4]), Buffer.from('"/>\n')]))).toBe(true);
+  });
+
+  it("un ASCII puro que declara iso-8859-15: editar añadiendo «ñ» deja el byte F1", async () => {
+    const { raiz, backend, disco } = proyecto();
+    writeFileSync(join(raiz, "A.xne"), ISO15 + '<coll name="x"/>\n');
+    expect((await backend.edit("/A.xne", 'name="x"', 'name="ñ"'))["error"]).toBeUndefined();
+    expect(disco("A.xne").equals(Buffer.concat([Buffer.from(ISO15 + '<coll name="'), Buffer.from([0xf1]), Buffer.from('"/>\n')]))).toBe(true);
+  });
+
+  it("un ASCII puro que declara utf-8 sigue en UTF-8", async () => {
+    const { raiz, backend } = proyecto();
+    const utf = '<?xml version="1.0" encoding="utf-8"?>\n';
+    writeFileSync(join(raiz, "U.xne"), utf + '<coll name="x"/>\n');
+    await backend.edit("/U.xne", 'name="x"', 'name="ñ"');
+    expect(readFileSync(join(raiz, "U.xne"), "utf8")).toBe(utf + '<coll name="ñ"/>\n');
+  });
+
+  it("un fichero ISO-8859-15: el € existente (0xA4) se LEE como €, uno nuevo va a 0xA4 y lo demás no se toca", async () => {
+    const { raiz, backend, disco } = proyecto();
+    writeFileSync(join(raiz, "I.xne"), Buffer.concat([Buffer.from(ISO15 + '<a t="'), Buffer.from([0xa4, 0xf1]), Buffer.from('"/>\n<b/>\n')]));
+    expect((await backend.read("/I.xne"))["content"]).toBe(ISO15 + '<a t="€ñ"/>\n<b/>\n');
+    expect((await backend.edit("/I.xne", "<b/>", '<b t="€"/>'))["error"]).toBeUndefined();
+    expect(disco("I.xne").equals(Buffer.concat([Buffer.from(ISO15 + '<a t="'), Buffer.from([0xa4, 0xf1]), Buffer.from('"/>\n<b t="'), Buffer.from([0xa4]), Buffer.from('"/>\n')]))).toBe(true);
+  });
+
+  it("`readRaw` (lo que usa `regex_search`) también da el texto bien decodificado", async () => {
+    const { raiz, backend } = proyecto();
+    writeFileSync(join(raiz, "L.xne"), enLatin1(TEXTO));
+    expect((await backend.readRaw("/L.xne")).data?.content).toBe(TEXTO);
   });
 });
 

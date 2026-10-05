@@ -22,6 +22,7 @@
  */
 
 import { realpathSync, readFileSync } from "node:fs";
+import { decodificarComoTexto } from "../../core/codificacion.js";
 import { dirname, basename, isAbsolute, resolve, relative, sep } from "node:path";
 import { motivoDeComandoExternoInaceptable } from "../../core/comandoExterno.js";
 import type { LineaDeDiff } from "../../core/diff.js";
@@ -828,7 +829,9 @@ export function diffDeEscrituraExterna(
 /** El ANTES de una escritura: el disco. Un fichero que no está es cadena vacía, no un fallo. */
 function leerDelDisco(ruta: string): string {
   try {
-    return readFileSync(ruta, "utf8");
+    // Con la codificación con que se leería en Ficheros y en el agente: un Latin-1 en UTF-8 daría
+    // «�» en cada tilde y la tarjeta enseñaría un diff que no es.
+    return decodificarComoTexto(readFileSync(ruta));
   } catch {
     return "";
   }

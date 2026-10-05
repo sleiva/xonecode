@@ -16,7 +16,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { resolverEnProyecto, TOPE_DE_FICHERO } from "../grafo/arbolDeProyecto.js";
 import { refDeSesion } from "./sesionGit.js";
-import { decodificarWindows1252, esUtf8Valido } from "../../core/codificacion.js";
+import { decodificar8Bits, esUtf8Valido, tablaDeLosBytes } from "../../core/codificacion.js";
 
 const ejecutar = promisify(execFile);
 
@@ -73,10 +73,10 @@ export async function baseDeFichero(
   if (salida.length > TOPE_DE_FICHERO) return sin("esa versión del fichero pasa del tope que se compara");
   // Estricto, y quitando el BOM igual que la lectura (`TextDecoder` por omisión): la base y el
   // texto del editor tienen que haberse decodificado igual o la primera línea saldría cambiada.
-  // Por lo mismo, lo que no es UTF-8 se decodifica con el MISMO windows-1252 que la lectura
+  // Por lo mismo, lo que no es UTF-8 se decodifica con la MISMA tabla de 8 bits que la lectura
   // (`core/codificacion.ts`): un `.xne` latin1 se edita, y sin base no tendría marcas.
   if (esUtf8Valido(salida)) return { ruta, base, texto: new TextDecoder("utf-8").decode(salida) };
-  return { ruta, base, texto: decodificarWindows1252(salida) };
+  return { ruta, base, texto: decodificar8Bits(salida, tablaDeLosBytes(salida)) };
 }
 
 async function enUnRepositorio(raiz: string): Promise<boolean> {

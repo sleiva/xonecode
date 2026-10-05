@@ -9,30 +9,42 @@
  * bien. Medido contra `backendDeAgente` antes de este arreglo (`codificacionDelProyecto.test.ts`).
  *
  * El arreglo vive en NUESTRA capa, como Proxy sobre el backend base, y solo toma el control cuando
- * hace falta: un fichero que EXISTE, normal (ni enlace ni carpeta), sin NUL, cuyos bytes NO son
- * UTF-8 y que la librería trata como TEXTO. Todo lo demás —UTF-8, nuevo, imagen, ruta rara— va al
- * método original sin tocarlo, así que no hay regresión posible fuera de ese caso.
+ * hace falta; todo lo demás va al método original sin tocarlo:
  *
- * - LEER: se decodifica con el MISMO `TextDecoder("latin1")` que la pestaña Ficheros
- *   (`core/codificacion.ts`) y se pagina como la librería.
- * - ESCRIBIR / EDITAR: el resultado se codifica en windows-1252 con el codificador inverso de esa
- *   misma tabla. El ancla de `edit` se busca sobre el texto bien decodificado. Un carácter que no
- *   cabe se DEVUELVE como `{error}` —nunca se lanza: una excepción se lleva el turno y el agente no
- *   reintenta— y el disco no se toca.
+ * - LEER (`read`, y `readRaw`, que usa `regex_search`): un fichero que existe, normal (ni enlace ni
+ *   carpeta), sin NUL, NO UTF-8 y que la librería trata como TEXTO se decodifica con SU tabla de 8
+ *   bits (`core/codificacion.ts`: ISO-8859-15 si su prólogo lo declara, si no windows-1252, las
+ *   mismas que la pestaña Ficheros) y se pagina como la librería.
+ * - ESCRIBIR / EDITAR: la codificación la decide `codificacionParaEscribir`, la misma regla que el
+ *   editor —lo que no es UTF-8 sigue en su tabla; un UTF-8 con tildes sigue en UTF-8; un ASCII puro
+ *   o un fichero NUEVO siguen el `encoding=` que DECLARE lo que se escribe—. Lo último es toda
+ *   colección nueva de la plantilla de la skill, que declara `iso-8859-15`: sin ello, sus tildes iban
+ *   en UTF-8 bajo esa declaración. El ancla de `edit` se busca sobre el texto bien decodificado. Un
+ *   carácter que no cabe se DEVUELVE como `{error}` —nunca se lanza: una excepción se lleva el turno
+ *   y el agente no reintenta— y el disco no se toca.
  *
  * El sitio: el MÁS INTERNO de la pila de `backendDeAgente`, pegado al backend que toca bytes. Así
  * `sinContenidoInvalido` (que reconstruye el «después» leyendo por `read`) valida el texto de
  * verdad, y la cola de `escriturasEnSerie` sigue siendo la de fuera.
  *
  * **Límites declarados**: `grep` y `glob` siguen siendo los de la librería (un `grep` con tildes
- * no encuentra una línea Latin-1), igual que las tools propias que leen el disco por su cuenta;
- * un fichero Latin-1 que hoy es ASCII puro ES UTF-8 válido, así que su primera tilde se escribe en
- * UTF-8; y la tabla es windows-1252, no ISO-8859-15: un «€» nuevo va como 0x80, no como 0xA4.
+ * no encuentra una línea Latin-1), igual que `xone_navegacion`, que lee el disco por su cuenta; y
+ * el rechazo de un carácter que no cabe llega DESPUÉS de la aprobación, porque la tarjeta la pone
+ * la librería antes de correr la tool (el mismo precedente que el rechazo de una reescritura).
  */
 import { constants } from "node:fs";
-import { lstat, open } from "node:fs/promises";
+import { lstat, mkdir, open } from "node:fs/promises";
+import { dirname } from "node:path";
 import { normalizeReadPagination } from "deepagents";
-import { codificarWindows1252, decodificarWindows1252, esUtf8Valido } from "../../core/codificacion.js";
+import {
+  codificacionParaEscribir,
+  codificar8Bits,
+  decodificar8Bits,
+  esUtf8Valido,
+  nombreDeTabla,
+  tablaDeLosBytes,
+  type Tabla8Bits,
+} from "../../core/codificacion.js";
 
 /** La misma ventana que la lectura de Ficheros para olfatear un binario: un NUL ahí y no es texto. */
 const VENTANA_DE_BINARIO = 8000;
@@ -40,12 +52,22 @@ const VENTANA_DE_BINARIO = 8000;
 /** En Windows no existe `O_NOFOLLOW`; el `lstat` previo es entonces la única guarda, como en la librería. */
 const SIN_SEGUIR_ENLACES = constants.O_NOFOLLOW ?? 0;
 
+/** El modo con que la librería crea un fichero nuevo (`FilesystemBackend.write`). */
+const MODO_DE_FICHERO_NUEVO = 0o644;
+
 type Metodo = (...args: unknown[]) => Promise<unknown>;
 
-/** El fichero Latin-1 al que hay que atender a mano, o `undefined` para delegar en la librería. */
-interface FicheroLatin1 {
+/** Lo que hay en la ruta, visto antes de decidir. `delegar` es cualquier duda: lo contesta la librería. */
+type Inspeccion =
+  | { tipo: "delegar" }
+  | { tipo: "nuevo"; real: string }
+  | { tipo: "existe"; real: string; bytes: Buffer; utf8: boolean };
+
+/** Un fichero de 8 bits al que hay que atender a mano. */
+interface FicheroDe8Bits {
   real: string;
   texto: string;
+  tabla: Tabla8Bits;
   /** El que la librería le da por extensión, para que `read` conteste lo mismo que ella. */
   mimeType: unknown;
 }
@@ -57,18 +79,22 @@ export function conCodificacionDelFichero<T extends object>(backend: T): T {
   };
 
   /**
-   * ¿Es un texto Latin-1 que la librería estropearía? Cualquier duda —ruta que no resuelve, no
-   * existe, es un enlace, tiene NUL, es UTF-8, la librería lo trata como binario— es «no», y
-   * entonces se delega: lo que la librería contestaría hoy.
+   * Qué hay en la ruta. Cualquier duda —ruta que no resuelve, enlace, carpeta, NUL, un error al
+   * leer— es `delegar`: lo que la librería contestaría hoy.
    */
-  async function latin1(ruta: unknown): Promise<FicheroLatin1 | undefined> {
-    if (typeof ruta !== "string") return undefined;
+  async function inspeccionar(ruta: unknown): Promise<Inspeccion> {
+    if (typeof ruta !== "string") return { tipo: "delegar" };
+    let real: string;
     try {
       // `resolvePath` es de la propia librería (protegido en sus tipos, normal en ejecución): el
       // mismo confinamiento de `virtualMode` que usarían sus métodos.
-      const real = (backend as unknown as { resolvePath(r: string): string }).resolvePath(ruta);
+      real = (backend as unknown as { resolvePath(r: string): string }).resolvePath(ruta);
+    } catch {
+      return { tipo: "delegar" };
+    }
+    try {
       const info = await lstat(real);
-      if (!info.isFile()) return undefined;
+      if (!info.isFile()) return { tipo: "delegar" };
       const fh = await open(real, constants.O_RDONLY | SIN_SEGUIR_ENLACES);
       let bytes: Buffer;
       try {
@@ -76,20 +102,38 @@ export function conCodificacionDelFichero<T extends object>(backend: T): T {
       } finally {
         await fh.close();
       }
-      if (bytes.subarray(0, VENTANA_DE_BINARIO).includes(0)) return undefined;
-      if (esUtf8Valido(bytes)) return undefined;
-      // Binario o texto lo decide la LIBRERÍA (por extensión), preguntándole a ella y no con una
-      // copia de su tabla: una imagen casi nunca es UTF-8 válido, y tomarla por Latin-1 haría que
-      // `write` codificara su base64 como texto en vez de decodificarlo.
+      if (bytes.subarray(0, VENTANA_DE_BINARIO).includes(0)) return { tipo: "delegar" };
+      return { tipo: "existe", real, bytes, utf8: esUtf8Valido(bytes) };
+    } catch (e) {
+      return (e as NodeJS.ErrnoException)?.code === "ENOENT" ? { tipo: "nuevo", real } : { tipo: "delegar" };
+    }
+  }
+
+  /**
+   * Binario o texto lo decide la LIBRERÍA (por extensión), preguntándole a ella y no con una copia
+   * de su tabla: una imagen casi nunca es UTF-8 válido, y tomarla por Latin-1 haría que `write`
+   * codificara su base64 como texto en vez de decodificarlo. Devuelve el `mimeType` del texto.
+   */
+  async function sondaDeTexto(ruta: string): Promise<{ mimeType: unknown } | undefined> {
+    try {
       const sonda = (await original("read")(ruta, 0, 0)) as { content?: unknown; mimeType?: unknown };
-      if (ArrayBuffer.isView(sonda?.content)) return undefined;
-      const texto = decodificarWindows1252(bytes);
-      // Un texto en blanco lo contesta la librería con su aviso de fichero vacío.
-      if (texto.trim() === "") return undefined;
-      return { real, texto, mimeType: sonda?.mimeType };
+      return ArrayBuffer.isView(sonda?.content) ? undefined : { mimeType: sonda?.mimeType };
     } catch {
       return undefined;
     }
+  }
+
+  /** ¿Es un texto de 8 bits que la librería estropearía al LEER? Si no, se delega. */
+  async function de8Bits(ruta: unknown): Promise<FicheroDe8Bits | undefined> {
+    const i = await inspeccionar(ruta);
+    if (i.tipo !== "existe" || i.utf8) return undefined;
+    const sonda = await sondaDeTexto(ruta as string);
+    if (sonda === undefined) return undefined;
+    const tabla = tablaDeLosBytes(i.bytes);
+    const texto = decodificar8Bits(i.bytes, tabla);
+    // Un texto en blanco lo contesta la librería con su aviso de fichero vacío.
+    if (texto.trim() === "") return undefined;
+    return { real: i.real, texto, tabla, mimeType: sonda.mimeType };
   }
 
   /** Lo de la librería, línea a línea (`FilesystemBackend.read`), sobre el texto bien decodificado. */
@@ -115,11 +159,16 @@ export function conCodificacionDelFichero<T extends object>(backend: T): T {
     };
   }
 
-  /** Codifica y escribe en sitio (como la librería: `O_TRUNC` sin seguir enlaces), o devuelve el motivo. */
-  async function escribir(f: FicheroLatin1, ruta: string, texto: string): Promise<{ error: string } | undefined> {
-    const r = codificarWindows1252(texto);
-    if (!("bytes" in r)) return { error: motivoDeNoRepresentable(ruta, r.caracter, r.linea) };
-    const fh = await open(f.real, constants.O_WRONLY | constants.O_TRUNC | SIN_SEGUIR_ENLACES);
+  /**
+   * Codifica con `tabla` y escribe como la librería (`O_TRUNC` sin seguir enlaces; uno nuevo con su
+   * carpeta y su modo), o devuelve el motivo sin tocar el disco.
+   */
+  async function escribir(real: string, ruta: string, texto: string, tabla: Tabla8Bits, nuevo: boolean): Promise<{ error: string } | undefined> {
+    const r = codificar8Bits(texto, tabla);
+    if (!("bytes" in r)) return { error: motivoDeNoRepresentable(ruta, r.caracter, r.linea, tabla) };
+    if (nuevo) await mkdir(dirname(real), { recursive: true });
+    const banderas = constants.O_WRONLY | constants.O_TRUNC | SIN_SEGUIR_ENLACES | (nuevo ? constants.O_CREAT : 0);
+    const fh = await open(real, banderas, MODO_DE_FICHERO_NUEVO);
     try {
       await fh.writeFile(r.bytes);
     } finally {
@@ -130,29 +179,55 @@ export function conCodificacionDelFichero<T extends object>(backend: T): T {
 
   const propios: Record<string, Metodo> = {
     async read(ruta, offset, limit) {
-      const f = await latin1(ruta);
+      const f = await de8Bits(ruta);
       if (f === undefined) return original("read")(ruta, offset, limit);
       return paginar(f.texto, offset, limit, f.mimeType);
     },
+    /** Lo usa `regex_search` (`busquedaRegex.ts`): sin esto buscaría sobre «�». */
+    async readRaw(ruta) {
+      const f = await de8Bits(ruta);
+      const r = (await original("readRaw")(ruta)) as { data?: Record<string, unknown> } & Record<string, unknown>;
+      if (f === undefined || r?.data === undefined || typeof r.data["content"] !== "string") return r;
+      return { ...r, data: { ...r.data, content: f.texto } };
+    },
     async write(ruta, contenido) {
-      const f = await latin1(ruta);
-      if (f === undefined || typeof contenido !== "string") return original("write")(ruta, contenido);
+      if (typeof contenido !== "string") return original("write")(ruta, contenido);
+      const i = await inspeccionar(ruta);
+      if (i.tipo === "delegar") return original("write")(ruta, contenido);
+      // Un existente que no es UTF-8 tiene que ser TEXTO para la librería: un PNG no se toca.
+      if (i.tipo === "existe" && !i.utf8 && (await sondaDeTexto(ruta as string)) === undefined) {
+        return original("write")(ruta, contenido);
+      }
+      const destino = codificacionParaEscribir(i.tipo === "existe" ? i.bytes : undefined, contenido);
+      if (destino === "utf-8") return original("write")(ruta, contenido);
       try {
-        const fallo = await escribir(f, ruta as string, contenido);
+        const fallo = await escribir(i.real, ruta as string, contenido, destino, i.tipo === "nuevo");
         return fallo ?? { path: ruta, filesUpdate: null };
       } catch (e) {
         return { error: `Error writing file '${String(ruta)}': ${codigoDe(e)}` };
       }
     },
     async edit(ruta, viejo, nuevo, todas) {
-      const f = await latin1(ruta);
-      if (f === undefined || typeof viejo !== "string" || typeof nuevo !== "string") {
-        return original("edit")(ruta, viejo, nuevo, todas);
+      const delegar = () => original("edit")(ruta, viejo, nuevo, todas);
+      if (typeof viejo !== "string" || typeof nuevo !== "string") return delegar();
+      const i = await inspeccionar(ruta);
+      if (i.tipo !== "existe") return delegar();
+      let texto: string;
+      if (i.utf8) {
+        // Un UTF-8 con tildes se queda en UTF-8: la librería lo hace bien. Solo un ASCII puro puede
+        // acabar en 8 bits, si lo que queda DECLARA una tabla de 8 bits.
+        if (i.bytes.some((b) => b >= 0x80)) return delegar();
+        texto = i.bytes.toString("latin1");
+      } else {
+        if ((await sondaDeTexto(ruta as string)) === undefined) return delegar();
+        texto = decodificar8Bits(i.bytes, tablaDeLosBytes(i.bytes));
       }
-      const r = reemplazar(f.texto, viejo, nuevo, todas === true);
+      const r = reemplazar(texto, viejo, nuevo, todas === true);
       if (typeof r === "string") return { error: r };
+      const destino = codificacionParaEscribir(i.bytes, r[0]);
+      if (destino === "utf-8") return delegar();
       try {
-        const fallo = await escribir(f, ruta as string, r[0]);
+        const fallo = await escribir(i.real, ruta as string, r[0], destino, false);
         return fallo ?? { path: ruta, filesUpdate: null, occurrences: r[1] };
       } catch (e) {
         return { error: `Error editing file '${String(ruta)}': ${codigoDe(e)}` };
@@ -176,7 +251,7 @@ export function conCodificacionDelFichero<T extends object>(backend: T): T {
  * Lo que el agente lee cuando su texto no cabe. Le dice qué hacer en lugar de solo «no»: en un XML
  * la entidad numérica es el mismo carácter para XOne; en JavaScript, el escape `\u`; en CSS, `\XX `.
  */
-export function motivoDeNoRepresentable(ruta: string, caracter: string, linea: number): string {
+export function motivoDeNoRepresentable(ruta: string, caracter: string, linea: number, tabla: Tabla8Bits = "windows-1252"): string {
   const punto = caracter.codePointAt(0)!;
   const js = /\.js$/i.test(ruta);
   // En JavaScript, por unidades UTF-16 (`😀` para un emoji): el runtime de XOne es ES5 y
@@ -191,7 +266,7 @@ export function motivoDeNoRepresentable(ruta: string, caracter: string, linea: n
     : css
       ? `el escape CSS \\${punto.toString(16).toUpperCase()} (con un espacio detrás)`
       : `la entidad &#${punto};`;
-  return `este fichero está en Latin-1 y «${caracter}» (línea ${linea}) no cabe en esa codificación: no se ha escrito nada. Usa solo caracteres Latin-1, o ${alternativa}`;
+  return `este fichero está en ${nombreDeTabla(tabla)} y «${caracter}» (línea ${linea}) no cabe en esa codificación: no se ha escrito nada. Usa solo caracteres ${nombreDeTabla(tabla)}, o ${alternativa}`;
 }
 
 /**

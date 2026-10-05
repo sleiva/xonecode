@@ -336,6 +336,18 @@ describe("el diff de una escritura externa lo compone la MISMA función del graf
     ]);
   });
 
+  it("el ANTES por omisión se lee del disco con la codificación del fichero: un Latin-1 no sale con «�»", () => {
+    const dir = mkdtempSync(join(tmpdir(), "xc-ext-latin1-"));
+    writeFileSync(join(dir, "x.xne"), Buffer.from([...'Tamaño\nuno\n'].map((c) => c.charCodeAt(0))));
+    const lineas = diffDeEscrituraExterna("Edit", { file_path: join(dir, "x.xne"), old_string: "uno", new_string: "dos" }, "/x.xne");
+    expect(lineas).toEqual([
+      { tipo: "igual", texto: "Tamaño" },
+      { tipo: "quitado", texto: "uno" },
+      { tipo: "anadido", texto: "dos" },
+    ]);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it("`Edit` es un `edit_file`, con las mismas claves de argumentos", () => {
     const lineas = diffDeEscrituraExterna(
       "Edit",
