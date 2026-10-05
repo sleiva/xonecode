@@ -8028,7 +8028,12 @@ Tres decisiones de cableado, cada una por un fallo conocido:
   anterior. Con un despliegue de Ejecutar en curso no se recarga.
 
 «Probar» (petición suya en la misma sesión): con la app viva recarga; sin ella lanza el despliegue entero
-de Ejecutar, que ya sube el proyecto entero.
+de Ejecutar, que ya sube el proyecto entero, y la MISMA línea dice después cómo acabó (`desplegada` o el
+fallo): sin eso se quedaba en «desplegando» para siempre. Sin a dónde recargar no se despliega: se dice
+por qué, y son tres motivos distintos —no hay aparato elegido, el elegido no está en la última foto de
+Dispositivos (un emulador arrancado después de medir; se arregla con «Refrescar»), o `app.ini` sin
+`name=`—, que «la app no corre» mezclaba. Un guardado que llega mientras se RELANZA queda en cola y se
+recarga al acabar.
 
 **La medida que cambió el código: la codificación de `loadCollection`.** En el emulador `pixel8`
 (framework 5.0.5.5dev), AppDemo, `LoginColl.xne` pasado a ISO-8859-15 con su prólogo y el rótulo «Año ñá»:

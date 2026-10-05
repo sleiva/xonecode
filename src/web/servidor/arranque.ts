@@ -3699,15 +3699,21 @@ export function montarRutas(
    * se pintó el botón. Una revalidación que no pasa se contesta con un `lanzamiento` en `fallo`
    * y NO se llama al lanzador.
    */
-  const atenderLanzarApp = async (): Promise<void> => {
+  /**
+   * `alAcabar` es para quien lanzó por OTRO camino que la pestaña (el «Probar» del editor): le dice
+   * cómo acabó, para que su línea no se quede en «desplegando» para siempre.
+   */
+  const atenderLanzarApp = async (alAcabar?: (estado: "ok" | "fallo" | "ocupado", motivo?: string) => void): Promise<void> => {
     // Ya hay uno: se reenvía su estado en vez de lanzar otro, como `atenderReceta`.
     if (lanzamiento !== undefined) {
       emitirLanzamiento("corriendo");
+      alAcabar?.("ocupado");
       return;
     }
     const medida = await medirLanzamiento();
     if (medida === undefined) {
       informar("no hay ningún proyecto abierto que lanzar");
+      alAcabar?.("fallo", "no hay ningún proyecto abierto");
       return;
     }
     const foto = medida.dispositivo === undefined ? undefined : fotoDeDispositivo(medida.dispositivo);
@@ -3722,6 +3728,7 @@ export function montarRutas(
         ms: 0,
         motivo,
       });
+      alAcabar?.("fallo", motivo);
     };
     const lanzar = opciones.lanzarEnDispositivo;
     const primeraFalta = medida.veredicto.causas[0];
@@ -3810,12 +3817,14 @@ export function montarRutas(
       ultimoLanzamiento = 0;
       trabajo.fase = resultado.fase;
       emitirLanzamiento(resultado.estado, resultado.motivo);
+      alAcabar?.(resultado.estado === "ok" ? "ok" : "fallo", resultado.motivo ?? (resultado.estado === "ok" ? undefined : resultado.estado));
     } catch (error) {
       // El contrato del lanzador es no lanzar nunca, así que esto es un bug suyo; aun así hay
       // que CERRAR el recorrido, o la pestaña se queda en `corriendo` para siempre con el botón
       // muerto y sin una palabra.
       ultimoLanzamiento = 0;
       emitirLanzamiento("fallo", motivoLegible(error));
+      alAcabar?.("fallo", motivoLegible(error));
     } finally {
       lanzamiento = undefined;
     }
@@ -4495,12 +4504,18 @@ export function montarRutas(
    * emuladores, el 8443 le hablaría al otro sin error) y el nombre de la app de `app.ini`, el
    * MISMO que usa Ejecutar. `undefined` = no hay a dónde recargar, y eso no es un fallo.
    */
-  const destinoDeRecarga = async (abierto: ConsolaDeProyecto): Promise<DestinoDeRecarga | undefined> => {
+  const destinoDeRecarga = async (abierto: ConsolaDeProyecto): Promise<DestinoDeRecarga | { motivo: string }> => {
+    if (abierto.dispositivo === undefined) return { motivo: "no hay un aparato elegido en la sesión" };
     const { dispositivo } = dispositivoDeLaSesion(abierto.dispositivo, informeDeDispositivos);
-    if (dispositivo === undefined || dispositivo.plataforma !== "android") return undefined;
+    // La foto de Dispositivos solo se toma al conectar y al pulsar «Refrescar»: un emulador
+    // arrancado después no está en ella, y decir «la app no corre» mandaría a buscar donde no es.
+    if (dispositivo === undefined) {
+      return { motivo: "el aparato de la sesión no está en la última medida: pulsa Refrescar en Dispositivos" };
+    }
+    if (dispositivo.plataforma !== "android") return { motivo: "la recarga en caliente solo existe en Android" };
     const ini = await leerDescriptor(abierto.raiz, "app.ini");
     const app = ini.texto === undefined ? undefined : nombreDeApp(ini.texto);
-    if (app === undefined) return undefined;
+    if (app === undefined) return { motivo: "app.ini no dice el nombre de la app (name=)" };
     return {
       serie: dispositivo.id,
       puerto: dispositivo.avd === undefined ? PUERTO_DEL_HOTSWAP : puertoDeAvd(ajustesDeDispositivos(), dispositivo.avd),
@@ -4547,17 +4562,24 @@ export function montarRutas(
       }
       const destino = await destinoDeRecarga(abierto);
       const recargar = opciones.recargarEnAparato;
-      if (destino === undefined || recargar === undefined) {
-        if (probar) {
-          emitirRecarga(ruta, { estado: "desplegando" });
-          void atenderLanzarApp().catch(contar);
-        } else emitirRecarga(ruta, { estado: "sin-app" });
+      if ("motivo" in destino) {
+        // Sin a dónde recargar tampoco hay a dónde desplegar: se dice por qué, y nada más.
+        emitirRecarga(ruta, { estado: "sin-app", motivo: destino.motivo });
+        return;
+      }
+      if (recargar === undefined) {
+        emitirRecarga(ruta, { estado: "sin-app", motivo: "esta ejecución no recarga en el aparato" });
         return;
       }
       const resultado = await recargar(raiz, ruta, destino);
       if (resultado.estado === "sin-app" && probar) {
         emitirRecarga(ruta, { estado: "desplegando" });
-        void atenderLanzarApp().catch(contar);
+        // Y cómo acabó, en la MISMA línea: sin esto se quedaba en «desplegando» para siempre.
+        void atenderLanzarApp((estado, motivo) => {
+          if (estado === "ok") emitirRecarga(ruta, { estado: "desplegada" });
+          else if (estado === "ocupado") emitirRecarga(ruta, { estado: "ocupado" });
+          else emitirRecarga(ruta, { estado: "fallo", motivo: `el despliegue no acabó bien: ${motivo ?? "sin motivo"}` });
+        }).catch(contar);
         return;
       }
       emitirRecarga(ruta, resultado);
@@ -4582,8 +4604,8 @@ export function montarRutas(
     }
     const destino = await destinoDeRecarga(abierto);
     const relanzar = opciones.relanzarEnAparato;
-    if (destino === undefined || relanzar === undefined) {
-      emitirRecarga(ruta, { estado: "sin-app" });
+    if ("motivo" in destino || relanzar === undefined) {
+      emitirRecarga(ruta, { estado: "sin-app", motivo: "motivo" in destino ? destino.motivo : "esta ejecución no relanza" });
       return;
     }
     recargando = true;
@@ -4593,6 +4615,10 @@ export function montarRutas(
       emitirRecarga(ruta, { estado: "fallo", motivo: motivoLegible(error) });
     } finally {
       recargando = false;
+      // Un guardado que llegó mientras se relanzaba quedó como siguiente: sin esto se perdía.
+      const otra = siguienteRecarga;
+      siguienteRecarga = undefined;
+      if (otra !== undefined) void atenderRecarga(otra.raiz, otra.ruta, { probar: otra.probar }).catch(contar);
     }
   };
 

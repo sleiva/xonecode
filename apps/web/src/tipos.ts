@@ -853,7 +853,7 @@ export type MensajeAlCliente =
   | {
       clase: "recargaEnAparato";
       ruta: string;
-      estado: "aplicada" | "relanzar" | "relanzada" | "sin-app" | "desplegando" | "ocupado" | "no-aplica" | "fallo";
+      estado: "aplicada" | "relanzar" | "relanzada" | "sin-app" | "desplegando" | "desplegada" | "ocupado" | "no-aplica" | "fallo";
       tipo?: "coleccion" | "js" | "relanzar" | "no-aplica";
       texto: string;
     }

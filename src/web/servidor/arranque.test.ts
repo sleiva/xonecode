@@ -9599,9 +9599,83 @@ describe("el recorrido por el cable — el veredicto, la intención y las fases"
         },
       });
       await enviarMensaje(t.accion, { clase: "recargarEnAparato", ruta: "Inicio.xne", probar: true });
-      await hastaQue(() => t.cliente.recibidos.some((m) => m.clase === "recargaEnAparato"));
-      expect(t.cliente.recibidos.find((m) => m.clase === "recargaEnAparato")).toMatchObject({ estado: "desplegando" });
+      const recargas = () => t.cliente.recibidos.filter((m) => m.clase === "recargaEnAparato");
+      await hastaQue(() => recargas().length >= 2);
+      // «desplegando» y luego CÓMO acabó: la línea no se queda en «desplegando» para siempre.
+      expect(recargas().map((m) => (m as { estado: string }).estado)).toEqual(["desplegando", "desplegada"]);
       expect(lanzados).toBe(1);
+      await t.cerrar();
+    });
+
+    it("PROBAR con un despliegue que FALLA lo dice en la misma línea", async () => {
+      const t = await montar({
+        conBase: true,
+        xml: APP_XML,
+        opciones: {
+          recargarEnAparato: async () => ({ estado: "sin-app", motivo: "App is not running" }),
+          frameworkEnDispositivo: async () => ({ instalado: true, paquete: "com.xone.android.framework", detalle: "instalado" }),
+          lanzarEnDispositivo: () => ({
+            cancelar: () => {},
+            terminado: Promise.resolve({ estado: "fallo" as const, fase: "subiendo" as const, motivo: "el aparato dijo 400", ms: 1 }),
+          }),
+        },
+      });
+      await enviarMensaje(t.accion, { clase: "recargarEnAparato", ruta: "Inicio.xne", probar: true });
+      const recargas = () => t.cliente.recibidos.filter((m) => m.clase === "recargaEnAparato");
+      await hastaQue(() => recargas().length >= 2);
+      expect(recargas().at(-1)).toMatchObject({ estado: "fallo" });
+      expect((recargas().at(-1) as { texto: string }).texto).toContain("el aparato dijo 400");
+      await t.cerrar();
+    });
+
+    it("un guardado que llega MIENTRAS se relanza no se pierde: se recarga al acabar", async () => {
+      let soltar: () => void = () => {};
+      let relanzando = false;
+      const recargadas: string[] = [];
+      const t = await montar({
+        opciones: {
+          escribirFichero: escribir,
+          relanzarEnAparato: () =>
+            new Promise((h) => {
+              relanzando = true;
+              soltar = () => h({ estado: "relanzada" });
+            }),
+          recargarEnAparato: async (_raiz, ruta) => {
+            recargadas.push(ruta);
+            return { estado: "aplicada", clase: "coleccion" };
+          },
+        },
+      });
+      await enviarMensaje(t.accion, { clase: "recargarEnAparato", ruta: "estilos.css", relanzar: true });
+      await hastaQue(() => relanzando);
+      await guardar(t.accion);
+      await hastaQue(() => t.cliente.recibidos.some((m) => m.clase === "ficheroGuardado"));
+      await new Promise((h) => setTimeout(h, 50));
+      expect(recargadas).toEqual([]);
+      soltar();
+      await hastaQue(() => recargadas.length > 0);
+      expect(recargadas).toEqual(["Inicio.xne"]);
+      await t.cerrar();
+    });
+
+    it("un aparato elegido que no está en la última medida lo DICE, en vez de «la app no corre»", async () => {
+      let llamadas = 0;
+      const t = await montar({
+        elegido: { id: "emulator-5556", nombre: "Otro", plataforma: "android", clase: "emulador" },
+        opciones: {
+          escribirFichero: escribir,
+          recargarEnAparato: async () => {
+            llamadas += 1;
+            return { estado: "aplicada" };
+          },
+        },
+      });
+      await guardar(t.accion);
+      await hastaQue(() => t.cliente.recibidos.some((m) => m.clase === "recargaEnAparato"));
+      const r = t.cliente.recibidos.find((m) => m.clase === "recargaEnAparato") as { estado: string; texto: string };
+      expect(r.estado).toBe("sin-app");
+      expect(r.texto).toContain("Refrescar");
+      expect(llamadas).toBe(0);
       await t.cerrar();
     });
 

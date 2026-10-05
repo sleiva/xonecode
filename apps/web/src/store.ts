@@ -1898,6 +1898,9 @@ export function crearStoreDelCliente(): {
               ...(typeof m.error === "string" ? { error: m.error } : {}),
               secuencia: (estado.ultimoGuardado?.secuencia ?? 0) + 1,
             },
+            // Un guardado BUENO de ese fichero deja vieja la línea del aparato: si se pidió recarga,
+            // su `recargaEnAparato` llega DESPUÉS; si no, «recargada» hablaría de la versión anterior.
+            ...(typeof m.huella === "string" && estado.ultimaRecarga?.ruta === m.ruta ? { ultimaRecarga: undefined } : {}),
           });
           return;
         }

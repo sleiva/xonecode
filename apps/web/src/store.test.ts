@@ -2102,6 +2102,20 @@ describe("store: guardar desde el editor y la base de sus marcas", () => {
     expect(s.leer().contenidos?.["a.xne"]?.huella).toBe("h1");
   });
 
+  it("«recargaEnAparato» es la foto de la última; un guardado BUENO de ese fichero la deja vieja y se tira", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "recargaEnAparato", ruta: "a.xne", estado: "aplicada", tipo: "coleccion", texto: "Aparato: x", basura: 1 });
+    expect(s.leer().ultimaRecarga).toEqual({ ruta: "a.xne", estado: "aplicada", texto: "Aparato: x", secuencia: 1 });
+    // Un rechazo no cambia el disco: la línea sigue valiendo.
+    s.aplicar({ clase: "ficheroGuardado", ruta: "a.xne", id: "i1", error: "no" });
+    expect(s.leer().ultimaRecarga?.ruta).toBe("a.xne");
+    // Otro fichero, tampoco.
+    s.aplicar({ clase: "ficheroGuardado", ruta: "b.xne", id: "i2", huella: "h" });
+    expect(s.leer().ultimaRecarga?.ruta).toBe("a.xne");
+    s.aplicar({ clase: "ficheroGuardado", ruta: "a.xne", id: "i3", huella: "h2" });
+    expect(s.leer().ultimaRecarga).toBeUndefined();
+  });
+
   it("cada «ficheroGuardado» sube la secuencia, aunque repita lo mismo", () => {
     const s = crearStoreDelCliente();
     s.aplicar({ clase: "ficheroGuardado", ruta: "a.xne", error: "el fichero cambió desde que lo abriste: recárgalo antes de guardar" });

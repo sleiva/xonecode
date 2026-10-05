@@ -97,9 +97,11 @@ export function destinoEnElAparato(app: string, ruta: string): string {
  *   es «aceptado», y lo que se cambió lo comprueba quien mira la pantalla).
  * - `relanzar`: subido; para verse hay que relanzar la app, y eso se ofrece, no se hace.
  * - `relanzada`: se relanzó a petición y la app volvió a contestar.
- * - `sin-app`: la app no contesta en el canal (no está lanzada, o el aparato no está): no se tocó nada.
+ * - `sin-app`: no hay a dónde recargar —la app no contesta, o no hay aparato, o no está en la medida—;
+ *   `motivo` dice cuál. No se tocó nada.
  * - `desplegando`: se pidió PROBAR y la app no corría, así que se lanzó el despliegue entero (el de
  *   Ejecutar); su recorrido se cuenta allí.
+ * - `desplegada`: el despliegue que lanzó «Probar» acabó con la app viva.
  * - `ocupado`: hay un despliegue en curso; no se recarga encima de él.
  * - `no-aplica`: este fichero no se lleva suelto.
  * - `fallo`: algo dijo que no; `motivo` es la frase literal.
@@ -110,6 +112,7 @@ export type EstadoDeRecarga =
   | "relanzada"
   | "sin-app"
   | "desplegando"
+  | "desplegada"
   | "ocupado"
   | "no-aplica"
   | "fallo";
@@ -118,7 +121,7 @@ export interface ResultadoDeRecarga {
   estado: EstadoDeRecarga;
   /** Qué se hizo, cuando se hizo algo: la clase con que se aplicó. */
   clase?: ClaseDeRecarga;
-  /** UNA línea: lo que el framework dijo, sin traducir. Solo en `fallo` y `sin-app`. */
+  /** UNA línea: lo que dijo el framework, o por qué no hay a dónde recargar. En `fallo` y `sin-app`. */
   motivo?: string;
 }
 
@@ -134,7 +137,13 @@ export function textoDeRecarga(r: ResultadoDeRecarga): string {
     case "relanzada":
       return "Aparato: app relanzada y viva";
     case "sin-app":
-      return "Aparato: la app no está corriendo; lánzala desde Ejecutar";
+      // El motivo, si se sabe: «no hay aparato elegido» y «no está en la medida» no se arreglan
+      // en el mismo sitio que «la app no corre».
+      return r.motivo !== undefined && !r.motivo.includes("App is not running")
+        ? `Aparato: no se recarga (${r.motivo})`
+        : "Aparato: la app no está corriendo; lánzala desde Ejecutar o pulsa Probar";
+    case "desplegada":
+      return "Aparato: proyecto desplegado y la app viva";
     case "desplegando":
       return "Aparato: la app no corría; desplegando el proyecto (el recorrido, en Ejecutar)";
     case "ocupado":
