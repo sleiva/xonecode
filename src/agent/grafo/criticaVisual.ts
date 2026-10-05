@@ -169,7 +169,12 @@ async function geometriaDe(
   const controles = controlesDelArbol(g.arbol);
   // Una captura de UN CONTROL (`shot name=…`) es más pequeña que lo que ocupa el árbol: sus cajas son de la pantalla
   // entera y medirían píxeles que no son. El script ya no la guarda así; esto cubre las de antes.
-  const extension = controles.reduce((e, c) => ({ ancho: Math.max(e.ancho, c.caja.x + c.caja.ancho), alto: Math.max(e.alto, c.caja.y + c.caja.alto) }), { ancho: 0, alto: 0 });
+  // La pantalla la dice la barra de navegación; sin ella, lo que ocupa el árbol (que puede pasarse: un pie flotante).
+  const navegacion = g.barras?.navegacion;
+  const extension =
+    navegacion !== undefined
+      ? { ancho: navegacion.derecha, alto: navegacion.abajo }
+      : controles.reduce((e, c) => ({ ancho: Math.max(e.ancho, c.caja.x + c.caja.ancho), alto: Math.max(e.alto, c.caja.y + c.caja.alto) }), { ancho: 0, alto: 0 });
   if (g.pantalla.alto < extension.alto * 0.95 || g.pantalla.ancho < extension.ancho * 0.95) {
     return {
       lineas: [

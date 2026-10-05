@@ -62,8 +62,12 @@ export function extensionDelArbol(arbol) {
  * lo que ocupa el árbol. Su geometría no le corresponde —las cajas son de la pantalla— y el crítico mediría píxeles
  * que no son (medido: una foto del visor salía con siete textos «recortados»). Pura.
  */
-export function esCapturaDeUnControl(pantalla, arbol) {
-  const e = extensionDelArbol(arbol);
+export function esCapturaDeUnControl(pantalla, arbol, barras) {
+  // La PANTALLA la dice la barra de navegación (llega al borde inferior y ocupa el ancho entero). Sin ella, lo que
+  // ocupa el árbol, que puede pasarse: medido, un pie flotante de la app llegaba a y=2542 en una pantalla de 2400, y
+  // la captura completa parecía la de un control.
+  const n = barras?.navegacion;
+  const e = n !== undefined ? { ancho: n.derecha, alto: n.abajo } : extensionDelArbol(arbol);
   return pantalla !== undefined && e.alto > 0 && (pantalla.alto < e.alto * 0.95 || pantalla.ancho < e.ancho * 0.95);
 }
 
@@ -130,7 +134,7 @@ export function guardarGeometria({ nombreDeCaptura, bytes, serie, entorno = proc
   }
   const nombre = nombreDeGeometria(nombreDeCaptura);
   const pantalla = medidasDeImagen(bytes);
-  if (esCapturaDeUnControl(pantalla, arbol)) {
+  if (esCapturaDeUnControl(pantalla, arbol, barras)) {
     process.stderr.write("(captura de un control, no de la pantalla entera: sin geometría para el crítico)\n");
     return undefined;
   }

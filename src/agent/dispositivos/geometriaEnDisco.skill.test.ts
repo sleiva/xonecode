@@ -15,7 +15,7 @@ const skill = (): Promise<{
   nombreDeGeometria: (n: string) => string;
   barrasDeDumpsys: (s: string) => unknown;
   medidasDeImagen: (b: Buffer) => unknown;
-  esCapturaDeUnControl: (pantalla: { ancho: number; alto: number }, arbol: unknown) => boolean;
+  esCapturaDeUnControl: (pantalla: { ancho: number; alto: number }, arbol: unknown, barras?: unknown) => boolean;
 }> => import(pathToFileURL(resolve(__dirname, "../../../skills/xone-hotswap/lib/geometria.mjs")).href);
 
 describe("la geometría guardada con cada captura", () => {
@@ -58,5 +58,14 @@ describe("una captura de UN CONTROL no lleva la geometría de la pantalla", () =
     // `shot name=MAP_DSH` (medido: 1080×1998 y 993×110 en la calculadora).
     expect(s.esCapturaDeUnControl({ ancho: 1080, alto: 1998 }, arbol)).toBe(true);
     expect(s.esCapturaDeUnControl({ ancho: 993, alto: 110 }, arbol)).toBe(true);
+  });
+
+  it("un pie flotante que se sale por abajo no convierte la pantalla entera en «un control»: manda la barra de navegación", async () => {
+    const s = await skill();
+    // Medido en la calculadora: FLOAT_FOOTER_FRAME hasta y=2542 en una pantalla de 2400.
+    const arbol = [{ bounds: { left: 0, top: 338, width: 1080, height: 1996 } }, { bounds: { left: 0, top: 2336, width: 1080, height: 206 } }];
+    const barras = { navegacion: { izquierda: 0, arriba: 2337, derecha: 1080, abajo: 2400 } };
+    expect(s.esCapturaDeUnControl({ ancho: 1080, alto: 2400 }, arbol, barras)).toBe(false);
+    expect(s.esCapturaDeUnControl({ ancho: 1080, alto: 1998 }, arbol, barras)).toBe(true);
   });
 });
