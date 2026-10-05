@@ -215,6 +215,27 @@
   font-size: 11px;
 }
 
+/* «Recargar en el aparato al guardar»: una casilla pequeña, en secundario, junto a Probar. */
+.recargarAlGuardar {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* Lo que contestó el aparato. En terciario siempre: el guardado ya salió bien, esto es aparte. */
+.recarga {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 16px 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
 .accion {
   composes: secundario from "./Boton.module.css";
 }

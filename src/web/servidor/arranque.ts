@@ -93,8 +93,16 @@ import {
   motivoDeNombreDeAvdInaceptable,
   motivoDePuertoInaceptable,
   puertoDeAvd,
+  PUERTO_DEL_HOTSWAP,
 } from "../../core/puertosDeAvd.js";
 import { abrirCarpetaDelSistema, abrirDirectorioDelSistema } from "../../agent/config/selectorEnMaquina.js";
+import {
+  recargarFicheroDelProyecto,
+  relanzarEnAparato,
+  type DestinoDeRecarga,
+} from "../../agent/dispositivos/recargaEnAparato.js";
+import { textoDeRecarga, type ResultadoDeRecarga } from "../../core/recargaEnCaliente.js";
+import { nombreDeApp } from "../../core/descriptoresDeApp.js";
 import { modelosDeMotor } from "../../agent/config/modelosDeMotor.js";
 import {
   parsear,
@@ -658,6 +666,13 @@ export interface OpcionesDeMontaje {
     peticion: PeticionDeLanzamiento,
     deps: Pick<DependenciasDeLanzamiento, "alFase">
   ) => LanzamientoEnCurso;
+  /**
+   * Llevar al aparato UN fichero recién guardado en el editor (`agent/dispositivos/recargaEnAparato.ts`).
+   * Ausente = esta ejecución no recarga, y el guardado sigue igual: la recarga es TRANSPARENTE.
+   */
+  recargarEnAparato?: (raiz: string, ruta: string, destino: DestinoDeRecarga) => Promise<ResultadoDeRecarga>;
+  /** Relanzar la app, a petición (lo que pide un CSS para verse). Ausente = no se ofrece. */
+  relanzarEnAparato?: (destino: DestinoDeRecarga) => Promise<ResultadoDeRecarga>;
   /**
    * Los modelos que ofrece un motor EXTERNO (`agent/config/modelosDeMotor.ts`). Ausente = esta
    * ejecución no los sabe, y el desplegable lo dice en vez de quedarse vacío.
@@ -4426,7 +4441,14 @@ export function montarRutas(
    *  - lo demás —guardas de ruta, huella, tope— lo decide el puerto y lo DEVUELVE.
    * El `try` es el de `atenderFichero`: un fallo inesperado contesta sin la ruta de la máquina.
    */
-  const atenderGuardarFichero = async (ruta: string, texto: string, huella: string, id: string, proyecto: string): Promise<void> => {
+  const atenderGuardarFichero = async (
+    ruta: string,
+    texto: string,
+    huella: string,
+    id: string,
+    proyecto: string,
+    recargar = false
+  ): Promise<void> => {
     const abierto = vestibulo.proyectoAbierto();
     if (abierto === undefined) {
       emitir({ clase: "ficheroGuardado", ruta, id, error: "no hay ningún proyecto abierto" });
@@ -4454,10 +4476,123 @@ export function montarRutas(
       // `id` lo pone la pestaña en CADA guardado y vuelve en la respuesta: esta va a todas las
       // pestañas, y cada una reconoce la suya por él. La huella no vale —dos pestañas que parten de
       // la misma versión mandan la misma—.
-      emitir({ clase: "ficheroGuardado", ...(await opciones.escribirFichero(abierto.raiz, ruta, texto, huella)), id });
+      const guardado = await opciones.escribirFichero(abierto.raiz, ruta, texto, huella);
+      emitir({ clase: "ficheroGuardado", ...guardado, id });
+      // DESPUÉS de contestar el guardado, y sin esperarla: el «Guardando…» no depende del aparato,
+      // y nada de la recarga puede convertir un guardado bueno en uno fallido.
+      if (recargar && guardado.huella !== undefined && guardado.error === undefined) {
+        void atenderRecarga(abierto.raiz, ruta, { probar: false }).catch(contar);
+      }
     } catch (error) {
       informar(`no se pudo guardar «${ruta}» (${codigoDe(error)})`);
       emitir({ clase: "ficheroGuardado", ruta, id, error: "no se pudo guardar el fichero" });
+    }
+  };
+
+  /**
+   * A qué aparato y app va una recarga, resuelto aquí y no en el cliente: el dispositivo ELEGIDO en
+   * la sesión (si no hay, no se recarga — sin adivinar uno), Android, el puerto de SU AVD (con dos
+   * emuladores, el 8443 le hablaría al otro sin error) y el nombre de la app de `app.ini`, el
+   * MISMO que usa Ejecutar. `undefined` = no hay a dónde recargar, y eso no es un fallo.
+   */
+  const destinoDeRecarga = async (abierto: ConsolaDeProyecto): Promise<DestinoDeRecarga | undefined> => {
+    const { dispositivo } = dispositivoDeLaSesion(abierto.dispositivo, informeDeDispositivos);
+    if (dispositivo === undefined || dispositivo.plataforma !== "android") return undefined;
+    const ini = await leerDescriptor(abierto.raiz, "app.ini");
+    const app = ini.texto === undefined ? undefined : nombreDeApp(ini.texto);
+    if (app === undefined) return undefined;
+    return {
+      serie: dispositivo.id,
+      puerto: dispositivo.avd === undefined ? PUERTO_DEL_HOTSWAP : puertoDeAvd(ajustesDeDispositivos(), dispositivo.avd),
+      app,
+    };
+  };
+
+  /**
+   * UNA recarga a la vez para toda la máquina, como el lanzamiento: dos al mismo aparato se
+   * cruzarían en el canal (las respuestas se emparejan por ORDEN). Un guardado que llega con una en
+   * vuelo deja su ruta como SIGUIENTE, y la última pisa a la anterior: tras varios Cmd+S seguidos lo
+   * que importa es cómo quedó el fichero, no cada versión intermedia.
+   */
+  let recargando = false;
+  let siguienteRecarga: { raiz: string; ruta: string; probar: boolean } | undefined;
+
+  const emitirRecarga = (ruta: string, resultado: ResultadoDeRecarga): void => {
+    emitir({
+      clase: "recargaEnAparato",
+      ruta,
+      estado: resultado.estado,
+      ...(resultado.clase === undefined ? {} : { tipo: resultado.clase }),
+      texto: textoDeRecarga(resultado),
+    });
+  };
+
+  /**
+   * Recargar en el aparato. **Nunca lanza ni contesta un error al guardado**: sin aparato o sin
+   * app, dice `sin-app` y ya. Con `probar` y la app sin correr, lanza el despliegue entero de
+   * Ejecutar —que sube el proyecto entero— en vez de recargar lo que nadie tiene cargado.
+   */
+  const atenderRecarga = async (raiz: string, ruta: string, { probar }: { probar: boolean }): Promise<void> => {
+    if (recargando) {
+      siguienteRecarga = { raiz, ruta, probar };
+      return;
+    }
+    recargando = true;
+    try {
+      const abierto = vestibulo.proyectoAbierto();
+      if (abierto === undefined || abierto.raiz !== raiz) return;
+      if (lanzamiento !== undefined) {
+        emitirRecarga(ruta, { estado: "ocupado" });
+        return;
+      }
+      const destino = await destinoDeRecarga(abierto);
+      const recargar = opciones.recargarEnAparato;
+      if (destino === undefined || recargar === undefined) {
+        if (probar) {
+          emitirRecarga(ruta, { estado: "desplegando" });
+          void atenderLanzarApp().catch(contar);
+        } else emitirRecarga(ruta, { estado: "sin-app" });
+        return;
+      }
+      const resultado = await recargar(raiz, ruta, destino);
+      if (resultado.estado === "sin-app" && probar) {
+        emitirRecarga(ruta, { estado: "desplegando" });
+        void atenderLanzarApp().catch(contar);
+        return;
+      }
+      emitirRecarga(ruta, resultado);
+    } catch (error) {
+      // Su contrato es no lanzar; si lo hace, se dice como fallo de la RECARGA, nunca del guardado.
+      emitirRecarga(ruta, { estado: "fallo", motivo: motivoLegible(error) });
+    } finally {
+      recargando = false;
+      const otra = siguienteRecarga;
+      siguienteRecarga = undefined;
+      if (otra !== undefined) void atenderRecarga(otra.raiz, otra.ruta, { probar: otra.probar }).catch(contar);
+    }
+  };
+
+  /** Relanzar la app a petición (un CSS solo se ve así). Con las mismas reglas que la recarga. */
+  const atenderRelanzar = async (ruta: string): Promise<void> => {
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined) return;
+    if (lanzamiento !== undefined || recargando) {
+      emitirRecarga(ruta, { estado: "ocupado" });
+      return;
+    }
+    const destino = await destinoDeRecarga(abierto);
+    const relanzar = opciones.relanzarEnAparato;
+    if (destino === undefined || relanzar === undefined) {
+      emitirRecarga(ruta, { estado: "sin-app" });
+      return;
+    }
+    recargando = true;
+    try {
+      emitirRecarga(ruta, await relanzar(destino));
+    } catch (error) {
+      emitirRecarga(ruta, { estado: "fallo", motivo: motivoLegible(error) });
+    } finally {
+      recargando = false;
     }
   };
 
@@ -6029,7 +6164,14 @@ export function montarRutas(
       typeof mensaje.id === "string" &&
       typeof mensaje.proyecto === "string"
     ) {
-      void atenderGuardarFichero(mensaje.ruta, mensaje.texto, mensaje.huella, mensaje.id, mensaje.proyecto).catch(contar);
+      void atenderGuardarFichero(
+        mensaje.ruta,
+        mensaje.texto,
+        mensaje.huella,
+        mensaje.id,
+        mensaje.proyecto,
+        mensaje.recargar === true
+      ).catch(contar);
       respuesta.writeHead(204);
       respuesta.end();
       return;
@@ -6539,6 +6681,22 @@ export function montarRutas(
       // Suelto: revalida (otro adb), y el lanzamiento entero tarda minutos. La respuesta va
       // por el SSE, en forma de `lanzamiento`, y no se espera aquí ni de lejos.
       void atenderLanzarApp().catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "recargarEnAparato" &&
+      typeof mensaje.ruta === "string"
+    ) {
+      // Suelto: habla con el aparato, y la respuesta va por el SSE como `recargaEnAparato`.
+      const abierto = vestibulo.proyectoAbierto();
+      if (abierto !== undefined) {
+        if (mensaje.relanzar === true) void atenderRelanzar(mensaje.ruta).catch(contar);
+        else void atenderRecarga(abierto.raiz, mensaje.ruta, { probar: mensaje.probar === true }).catch(contar);
+      }
       respuesta.writeHead(204);
       respuesta.end();
       return;
@@ -7218,6 +7376,18 @@ export function ficherosCableados(): Required<
  * (`guardarAjusteDeAvd(undefined, …)`). `arrancar` entra solo para que un test vea qué recibe la
  * de verdad sin lanzar un emulador.
  */
+/**
+ * La recarga en caliente del editor, con las funciones de VERDAD y compuesta fuera del cableado
+ * por la trampa de siempre: un campo opcional olvidado en `arrancarConsolaWeb` deja la casilla
+ * pintada y sin hacer nada, con todo en verde. El `adb` y el canal reales los ponen ellas.
+ */
+export function recargaCableada(): Required<Pick<OpcionesDeMontaje, "recargarEnAparato" | "relanzarEnAparato">> {
+  return {
+    recargarEnAparato: (raiz, ruta, destino) => recargarFicheroDelProyecto(raiz, ruta, destino),
+    relanzarEnAparato: (destino) => relanzarEnAparato(destino),
+  };
+}
+
 export function emuladoresCableados(opciones: {
   casa?: string;
   arrancar?: typeof arrancarEmulador;
@@ -7928,6 +8098,7 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
      * arriba: una composición de producción que solo existe en el cableado nadie la prueba.
      */
     lanzarEnDispositivo,
+    ...recargaCableada(),
     catalogoDeModelos: async (proveedor) => {
       const modelos = await new CatalogoModelos(undefined, undefined, proveedoresPersonalizados).listar(proveedor);
       return modelos.map((m) => ({ id: m.id, ...(m.nombre === undefined ? {} : { nombre: m.nombre }) }));

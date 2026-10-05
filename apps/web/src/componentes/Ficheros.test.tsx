@@ -5,6 +5,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { Ficheros } from "./Ficheros.js";
 import type { ControlDeEdicion, EstadoDeEdicion } from "../usarEdicion.js";
+import type { ControlDeRecarga } from "../usarRecargaEnAparato.js";
 import { prepararJsdomParaElEditor } from "../editor/jsdomParaElEditor.js";
 
 afterEach(cleanup);
@@ -333,6 +334,67 @@ describe("Ficheros: editar", () => {
     expect(sucio.guardar).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
     expect(sucio.cerrar).toHaveBeenCalledTimes(1);
+  });
+
+  describe("la recarga en el aparato", () => {
+    const aparato = (parcial: Partial<ControlDeRecarga> = {}): ControlDeRecarga => ({
+      disponible: true,
+      alGuardar: false,
+      alternar: vi.fn(),
+      probar: vi.fn(),
+      relanzar: vi.fn(),
+      ...parcial,
+    });
+    const conAparato = (edicion: ControlDeEdicion, a: ControlDeRecarga, ultimaRecarga?: { ruta: string; estado: string; texto: string }) =>
+      render(
+        <Ficheros
+          arbol={ARBOL}
+          contenidos={{ "src/Clientes.xne": UTF8 }}
+          elegido="src/Clientes.xne"
+          alElegir={NADA}
+          alRecargar={NADA}
+          edicion={edicion}
+          aparato={a}
+          {...(ultimaRecarga === undefined ? {} : { ultimaRecarga })}
+        />
+      );
+
+    it("sin un Android en la sesión no se pinta nada: ni casilla ni «Probar»", () => {
+      conAparato(control({ actual: EDITANDO }), aparato({ disponible: false }));
+      expect(screen.queryByRole("checkbox", { name: /Recargar en el aparato/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Probar" })).toBeNull();
+    });
+
+    it("la casilla conmuta, y «Probar» lleva la ruta abierta", () => {
+      const a = aparato();
+      conAparato(control({ actual: EDITANDO }), a);
+      fireEvent.click(screen.getByRole("checkbox", { name: /Recargar en el aparato al guardar/ }));
+      expect(a.alternar).toHaveBeenCalledTimes(1);
+      fireEvent.click(screen.getByRole("button", { name: "Probar" }));
+      expect(a.probar).toHaveBeenCalledWith("src/Clientes.xne");
+    });
+
+    it("con cambios sin guardar, «Probar» espera: se lleva lo que está en disco", () => {
+      conAparato(control({ actual: { ...EDITANDO, sucio: true } }), aparato());
+      expect((screen.getByRole("button", { name: "Probar" }) as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it("lo que dijo el aparato sale como ESTADO y solo para su fichero; «relanzar» ofrece el botón", () => {
+      const a = aparato();
+      conAparato(control({ actual: EDITANDO }), a, {
+        ruta: "src/Clientes.xne",
+        estado: "relanzar",
+        texto: "Aparato: subido; para verlo hay que relanzar la app",
+      });
+      expect(screen.getByRole("status").textContent).toContain("relanzar la app");
+      // Nunca como alerta: el guardado ya salió bien.
+      expect(screen.queryByRole("alert")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Relanzar la app" }));
+      expect(a.relanzar).toHaveBeenCalledWith("src/Clientes.xne");
+      cleanup();
+      conAparato(control({ actual: EDITANDO }), aparato(), { ruta: "otro.xne", estado: "aplicada", texto: "Aparato: x" });
+      expect(screen.queryByText("Aparato: x")).toBeNull();
+    });
   });
 
   it("guardando: el botón lo dice y no se deja pulsar", () => {

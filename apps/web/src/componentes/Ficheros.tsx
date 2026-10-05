@@ -14,6 +14,7 @@ import { esEditable, motivoParaNoEditar } from "../edicion.js";
 import { metadatosDelFichero } from "../tipoDeFichero.js";
 import { IconoDeFichero } from "./IconoDeFichero.js";
 import type { ControlDeEdicion } from "../usarEdicion.js";
+import type { ControlDeRecarga } from "../usarRecargaEnAparato.js";
 
 /**
  * El editor, en DIFERIDO: CodeMirror solo se descarga al pulsar «Editar». Es la única puerta a
@@ -66,6 +67,8 @@ export function Ficheros({
   edicion,
   cambiados,
   alPedirCambios,
+  aparato,
+  ultimaRecarga,
 }: {
   /** Ausente = todavía no ha llegado; con `error`, no se pudo listar. */
   arbol?: { rutas: string[]; recortado: boolean; error?: string };
@@ -87,6 +90,13 @@ export function Ficheros({
   cambiados?: ReadonlySet<string>;
   /** Pedir esa lista: se llama al montar si no se tiene, como el árbol. */
   alPedirCambios?: () => void;
+  /**
+   * La recarga en caliente en el aparato de la sesión (`usarRecargaEnAparato.ts`). Sin un Android
+   * en la sesión (`disponible: false`) no se pinta nada.
+   */
+  aparato?: ControlDeRecarga;
+  /** Lo último que contestó el aparato. Se enseña solo si es del fichero abierto. */
+  ultimaRecarga?: { ruta: string; estado: string; texto: string };
 }) {
   /**
    * Se pide el árbol siempre que NO se tenga, no solo al montar.
@@ -239,6 +249,31 @@ export function Ficheros({
               />
               {actual !== undefined && edicion !== undefined ? (
                 <div className={estilos.acciones}>
+                  {aparato?.disponible === true ? (
+                    <>
+                      <label
+                        className={estilos.recargarAlGuardar}
+                        title="Tras guardar, lleva el fichero a la app del aparato de la sesión. Si no hay app corriendo, guarda igual."
+                      >
+                        <input type="checkbox" checked={aparato.alGuardar} onChange={aparato.alternar} />
+                        Recargar en el aparato al guardar
+                      </label>
+                      <button
+                        type="button"
+                        className={estilos.accion}
+                        // Lleva lo GUARDADO: con cambios a medias se probaría otra versión que la que se ve.
+                        disabled={actual.sucio || actual.guardando}
+                        title={
+                          actual.sucio
+                            ? "Guarda antes de probar: se lleva al aparato lo que está en disco"
+                            : "Lleva este fichero al aparato; si la app no está corriendo, despliega el proyecto entero"
+                        }
+                        onClick={() => aparato.probar(actual.ruta)}
+                      >
+                        Probar
+                      </button>
+                    </>
+                  ) : null}
                   <button
                     type="button"
                     className={estilos.accionPrincipal}
@@ -313,6 +348,17 @@ export function Ficheros({
                 {actual.error !== undefined ? (
                   <p className={estilos.fallo} role="alert">
                     No se ha guardado: {actual.error}
+                  </p>
+                ) : null}
+                {aparato?.disponible === true && ultimaRecarga !== undefined && ultimaRecarga.ruta === actual.ruta ? (
+                  // En GRIS siempre, también un fallo: es del aparato, no del guardado, que ya salió bien.
+                  <p className={estilos.recarga} role="status">
+                    <span>{ultimaRecarga.texto}</span>
+                    {ultimaRecarga.estado === "relanzar" ? (
+                      <button type="button" className={estilos.accion} onClick={() => aparato.relanzar(actual.ruta)}>
+                        Relanzar la app
+                      </button>
+                    ) : null}
                   </p>
                 ) : null}
                 <Suspense fallback={<p className={estilos.aviso}>Cargando el editor…</p>}>

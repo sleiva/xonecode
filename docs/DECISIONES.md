@@ -8001,3 +8001,54 @@ no de `fuentes().proyecto`, que en la web no se rellena nunca. Leído de ahí, e
 habría guardado y no se habría aplicado jamás, con todos los tests en verde: los del vestíbulo
 inyectaban `fuentes`. La segunda, del mismo patrón: el panel le pasa al resumen sus props uno a
 uno y los dos nuevos son opcionales, así que olvidarlos no daba error. Las dos tienen test.
+
+## Recargar en el aparato al guardar desde el editor (05-10-2026)
+
+Pedido: que el editor de Ficheros lleve al emulador lo que se guarda, con una condición dura: **el
+guardado no puede fallar ni esperar por esto**. Sin emulador, o con el emulador y sin la app, se guarda
+igual. Por eso el servidor contesta `ficheroGuardado` PRIMERO y la recarga va después, aparte y sin que
+nadie la espere (`arranque.ts#atenderRecarga`); un error de la recarga se cuenta como de la recarga
+(`recargaEnAparato`, siempre en gris en la cabecera), nunca del guardado.
+
+Lo que se hace con cada fichero es la regla ya medida de `xone-recargar-android`
+(`core/recargaEnCaliente.ts#claseDeRecarga`): colección → `uploadFile` + `loadCollection`; JS →
+`uploadFile` + `loadIncludeFile compile`; CSS, `app.ini`, `app.xml`, mappings → `uploadFile` y
+«hace falta relanzar», que se OFRECE y no se hace solo (se perdería la pantalla en que está la persona).
+`setAttribute` se descartó: habría que traducir un diff del `.xne` a órdenes sueltas, cuando
+`loadCollection` ya repinta la colección entera, y un atributo inventado contesta `result:true`.
+
+Tres decisiones de cableado, cada una por un fallo conocido:
+
+- **El túnel se REAPLICA antes de hablar**, con el puerto de SU AVD: un emulador reiniciado pierde el
+  `adb forward`, y el `ECONNREFUSED` se leería como «no hay app».
+- **La vida se pregunta una vez, sin el reintento de un minuto** de `lanzarYComprobar`: detrás de un
+  guardado, «no está» se dice ya. Relanzar sí va por `lanzarYComprobar` (un `launchApplication` suelto
+  sobre una app viva la tumba).
+- **Una recarga a la vez**; la que llega con otra en vuelo queda como siguiente y la última pisa a la
+  anterior. Con un despliegue de Ejecutar en curso no se recarga.
+
+«Probar» (petición suya en la misma sesión): con la app viva recarga; sin ella lanza el despliegue entero
+de Ejecutar, que ya sube el proyecto entero.
+
+**La medida que cambió el código: la codificación de `loadCollection`.** En el emulador `pixel8`
+(framework 5.0.5.5dev), AppDemo, `LoginColl.xne` pasado a ISO-8859-15 con su prólogo y el rótulo «Año ñá»:
+
+| lo que se manda a `loadCollection` | lo que pinta |
+|---|---|
+| los bytes Latin-1 con `encoding: "ISO-8859-15"` (lo primero que se escribió) | «AÃ±o Ã±Ã¡», y estropea también el «Contraseña» que ya estaba |
+| los bytes Latin-1 con `encoding: "UTF-8"` (lo que hacía el script) | «Aï¿½o ï¿½ï¿½» |
+| el texto en UTF-8, `encoding: "UTF-8"`, prólogo cambiado a UTF-8 | «Año ñá» |
+| el texto en Latin-1 SIN prólogo, `encoding: "ISO-8859-15"` | «Año ñá» |
+
+Se aisló repitiendo la mala y la buena una detrás de otra. La lectura: el framework decodifica con
+`encoding` y su analizador vuelve a leer el prólogo, así que si los dos no dicen lo mismo que los bytes
+la tilde sale doble. Se eligió la tercera (`xmlParaCargarEnMemoria`), porque vale igual para un UTF-8.
+**Es solo para la copia EN MEMORIA**: a disco (`uploadFile`) van los bytes tal cual; relanzando con el
+CSS cambiado, el rótulo siguió en «Año ñá», leído del disco. El script `xone-recargar-android` tenía el
+mismo fallo y lleva la misma regla.
+
+Medido además, con el código del servidor (`recargarFicheroDelProyecto`) contra el aparato: la colección
+repinta en unos 80 ms sin relanzar; una función nueva en `clientes.js` contesta por `runScript` tras
+recargar, y cambiarla otra vez devuelve el valor nuevo; el CSS pide relanzar, y tras «relanzar» el botón
+sale con el color nuevo; un serial que no existe contesta `sin-app` sin colgarse. **Sin medir**: un `.js`
+en Latin-1 (su `encoding` es el de sus bytes, por analogía, no por medida), e iOS, que no tiene camino.

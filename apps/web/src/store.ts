@@ -320,6 +320,11 @@ export interface EstadoDelCliente {
    * la siguiente respuesta se confundiría con una ya vista.
    */
   ultimoGuardado?: { ruta: string; id?: string; huella?: string; error?: string; secuencia: number };
+  /**
+   * Lo último que contestó el aparato al recargar un fichero (`recargaEnAparato`). Es una FOTO de
+   * la última, no un historial: la cabecera del editor la enseña si es de SU ruta.
+   */
+  ultimaRecarga?: { ruta: string; estado: string; texto: string; secuencia: number };
   /** La base de comparación del editor, por ruta (la última que llegó). Una foto de git: se tira
    *  con la sesión y sin cable, como los parches. */
   bases?: Record<string, BaseDelFichero>;
@@ -1896,6 +1901,19 @@ export function crearStoreDelCliente(): {
           });
           return;
         }
+        case "recargaEnAparato": {
+          const m = mensaje as { ruta?: unknown; estado?: unknown; texto?: unknown };
+          if (typeof m.ruta !== "string" || typeof m.estado !== "string" || typeof m.texto !== "string") return;
+          mutar({
+            ultimaRecarga: {
+              ruta: m.ruta,
+              estado: m.estado,
+              texto: m.texto,
+              secuencia: (estado.ultimaRecarga?.secuencia ?? 0) + 1,
+            },
+          });
+          return;
+        }
         case "baseDeFichero": {
           const m = mensaje as { ruta?: unknown; base?: unknown; texto?: unknown; vacio?: unknown; sinBase?: unknown };
           if (typeof m.ruta !== "string" || (m.base !== "sesion" && m.base !== "commit")) return;
@@ -2370,6 +2388,8 @@ export function crearStoreDelCliente(): {
         // La base de las marcas del editor, por lo mismo que los contenidos. `ultimoGuardado` NO
         // se tira: su secuencia es la que se compara (ver su declaración).
         bases: undefined,
+        // Lo que dijo el aparato es una foto del servidor: sin cable no se afirma.
+        ultimaRecarga: undefined,
         colecciones: undefined,
         planes: undefined,
         // El gestor por lo mismo que los planes: el vínculo pudo cambiar en disco.

@@ -845,6 +845,18 @@ export type MensajeAlCliente =
   | ({ clase: "fichero" } & FicheroDelProyecto)
   /** La respuesta a guardar: con `huella` se escribió; con `error`, no se tocó nada. */
   | { clase: "ficheroGuardado"; ruta: string; id: string; huella?: string; error?: string }
+  /**
+   * Lo que pasó al llevar un fichero guardado al aparato de la sesión (recarga en caliente). Va
+   * SIEMPRE después de su `ficheroGuardado` y aparte: el guardado no depende del aparato. `texto`
+   * es la frase hecha (`core/recargaEnCaliente.ts#textoDeRecarga`); `tipo`, cómo se aplicó.
+   */
+  | {
+      clase: "recargaEnAparato";
+      ruta: string;
+      estado: "aplicada" | "relanzar" | "relanzada" | "sin-app" | "desplegando" | "ocupado" | "no-aplica" | "fallo";
+      tipo?: "coleccion" | "js" | "relanzar" | "no-aplica";
+      texto: string;
+    }
   /** La base de comparación de un fichero. */
   | ({ clase: "baseDeFichero" } & BaseDelFichero)
   /** El estado de sincronización del proyecto abierto (pestaña CloudStudio). `proyecto` y
@@ -1504,7 +1516,16 @@ export type MensajeDelCliente =
   | { clase: "gestor"; accion: "cerrar"; comentario: string; transicion?: string }
   | { clase: "fichero"; ruta: string }
   /** Guardar lo editado en la pestaña Ficheros, con la huella del fichero que se cargó y el proyecto en que se abrió. */
-  | { clase: "guardarFichero"; ruta: string; texto: string; huella: string; id: string; proyecto: string }
+  | {
+      clase: "guardarFichero";
+      ruta: string;
+      texto: string;
+      huella: string;
+      id: string;
+      proyecto: string;
+      /** Tras guardar, llevarlo al aparato de la sesión. Nunca hace fallar el guardado. */
+      recargar?: true;
+    }
   /** Pedir la base de comparación de un fichero. */
   | { clase: "baseDeFichero"; ruta: string; base: BaseElegida }
   /** La sincronización con CloudStudio: `estado` pide la medida, `subir`/`bajar` son las
@@ -1562,6 +1583,11 @@ export type MensajeDelCliente =
   | { clase: "revisarLanzamiento" }
   | { clase: "lanzarApp" }
   | { clase: "cancelarLanzamiento" }
+  /**
+   * Llevar un fichero ya guardado al aparato de la sesión. `probar`: si la app no corre, desplegar
+   * el proyecto entero (lo de Ejecutar). `relanzar`: relanzar la app (lo que pide un CSS).
+   */
+  | { clase: "recargarEnAparato"; ruta: string; probar?: true; relanzar?: true }
   /**
    * Una acción sobre UN conector: añadirlo, quitarlo, probarlo, autorizarlo, desconectarlo o
    * darlo de alta a mano.

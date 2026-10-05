@@ -206,6 +206,28 @@ function clase(rel) {
   return "relanzar";
 }
 
+/**
+ * Lo que se le da a `loadCollection`: el MISMO XML en UTF-8 y con el prólogo diciendo UTF-8.
+ * MEDIDO (5.0.5.5dev): con los bytes de un `.xne` en ISO-8859-15, cada tilde salía doble («AÃ±o»).
+ * La misma regla que `core/recargaEnCaliente.ts#xmlParaCargarEnMemoria`. Solo para memoria: a disco
+ * va el fichero tal cual, que es lo que el framework lee al relanzar.
+ */
+function xmlEnUtf8(bytes) {
+  let texto;
+  try {
+    texto = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    const cabeza = bytes.subarray(0, 256).toString("latin1");
+    const tabla = /encoding\s*=\s*["'][^"']*(8859-15|latin-?9)/i.test(cabeza) ? "iso-8859-15" : "windows-1252";
+    texto = new TextDecoder(tabla).decode(bytes);
+  }
+  texto = texto.replace(/^\uFEFF/, "").replace(
+    /^(\s*<\?xml[^?]*?encoding\s*=\s*)(["'])[^"']*\2/i,
+    (_t, antes, comilla) => `${antes}${comilla}UTF-8${comilla}`,
+  );
+  return Buffer.from(texto, "utf8");
+}
+
 // 1. Subir a disco (siempre): lo que solo está en memoria se pierde al relanzar.
 const subidos = [];
 for (const rel of cambiados) {
@@ -238,7 +260,7 @@ if (hayQueRelanzar) {
 } else {
   for (const [f, c] of clases) {
     if (c === "coleccion") {
-      const r = mandar("loadCollection", { xmlNode: readFileSync(f).toString("base64"), encoding: "UTF-8" });
+      const r = mandar("loadCollection", { xmlNode: xmlEnUtf8(readFileSync(f)).toString("base64"), encoding: "UTF-8" });
       if (r.result !== true) fallos.push(`${f}: loadCollection ${r.exceptionMessage ?? r.status ?? "sin motivo"}`);
       else console.log(`  ${f}  →  colección recargada en caliente`);
     } else {

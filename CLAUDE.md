@@ -1504,6 +1504,16 @@ admite (`admiteApagarElPensamiento`); apagado manda sobre el esfuerzo. Lo demás
   la de `BorrarCopiaLocal`: escribir el nombre. Al acabar BIEN se quitan sus ajustes (`quitarAjustesDeAvd`) y su
   puerto queda libre. La procedencia (`copiaDe`, y `clon` si se copió lo instalado) se guarda al crear desde «Copia
   de» y se pinta en la fila; ausente es un AVD de antes o creado fuera, y no se pinta nada.
+- **Guardar en el editor puede RECARGAR en el aparato, y es TRANSPARENTE para el guardado**
+  (`core/recargaEnCaliente.ts`, `agent/dispositivos/recargaEnAparato.ts`, `arranque.ts#atenderRecarga`,
+  casilla y «Probar» en la cabecera del editor, solo con un Android ELEGIDO en la sesión): el servidor
+  contesta `ficheroGuardado` PRIMERO y la recarga va aparte, sin aparato o sin app se guarda igual y la
+  cabecera lo dice en gris. Colección en caliente, JS por su include, CSS/`app.ini`/`app.xml` piden
+  RELANZAR y se ofrece, no se hace. El túnel se reaplica con el puerto de SU AVD; la composición va
+  extraída (`recargaCableada`). **`loadCollection` recibe UTF-8 con el prólogo diciendo UTF-8**
+  (`xmlParaCargarEnMemoria`), medido: con los bytes Latin-1 cada tilde salía doble; a disco van los
+  bytes tal cual. «Probar» sin la app corriendo lanza el despliegue de Ejecutar. **Límites declarados**:
+  solo Android; un `.js` Latin-1 sin medir; otra sesión o el agente sobre el MISMO aparato no se ven.
 - **Listar y VERIFICAR son dos preguntas**: `adb devices` puede contestar «device» de un teléfono
   colgado; verificar ejecuta algo al otro lado.
 - **«Terminó bien» y «ya está» son dos cosas**: la MEDIDA manda sobre el código de salida.

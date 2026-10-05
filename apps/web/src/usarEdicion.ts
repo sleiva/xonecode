@@ -112,6 +112,7 @@ export function usarEdicion({
   bases,
   ultimoGuardado,
   conectado,
+  recargarAlGuardar = false,
 }: {
   enviar: (mensaje: MensajeDelCliente) => Promise<unknown>;
   proyecto: string | undefined;
@@ -119,6 +120,11 @@ export function usarEdicion({
   bases: Record<string, BaseDelFichero> | undefined;
   ultimoGuardado: UltimoGuardado | undefined;
   conectado: boolean | undefined;
+  /**
+   * Pedir que, tras guardar, el servidor lleve el fichero al aparato de la sesión. Es TRANSPARENTE:
+   * el guardado se contesta antes y nunca falla por el aparato.
+   */
+  recargarAlGuardar?: boolean;
 }): ControlDeEdicion {
   const [actual, setActual] = useState<EstadoDeEdicion | undefined>(undefined);
   // La base guardada que ya se miró al elegir otra: si llega una DISTINTA de la elegida (la respuesta
@@ -128,6 +134,9 @@ export function usarEdicion({
   // El estado también en un `ref`, escrito a la vez: dos llamadas en el mismo tic (cambiar y
   // guardar con Cmd+S) tienen que ver lo que dejó la primera, no lo del último render.
   const actualRef = useRef<EstadoDeEdicion | undefined>(actual);
+  // En un `ref` para que `guardar` no cambie de identidad al conmutarlo.
+  const recargarRef = useRef(recargarAlGuardar);
+  recargarRef.current = recargarAlGuardar;
   const textoRef = useRef("");
   const enviadoRef = useRef<string | undefined>(undefined);
   // El id del guardado en vuelo: con él se reconoce SU respuesta entre las de todas las pestañas.
@@ -214,6 +223,7 @@ export function usarEdicion({
       // El proyecto con que se ABRIÓ: el servidor escribe en el del foco, y si ya es otro se niega
       // en vez de dejar el texto en un fichero de la misma ruta de otro proyecto.
       proyecto: a.proyecto,
+      ...(recargarRef.current ? { recargar: true as const } : {}),
     };
     if (!cabeEnElCable(mensaje)) {
       fijar({ ...a, error: DEMASIADO_GRANDE });

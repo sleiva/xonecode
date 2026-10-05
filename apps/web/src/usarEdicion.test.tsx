@@ -55,6 +55,18 @@ describe("usarEdicion", () => {
     expect(vista.result.current.actual?.guardando).toBe(true);
   });
 
+  it("con «recargar al guardar», el guardado lo PIDE; sin ella, el mensaje es el de siempre", () => {
+    const enviar: Mock<(m: unknown) => Promise<unknown>> = vi.fn(() => Promise.resolve(undefined));
+    const inicial = { proyecto: "p1", contenidos: { "a.xne": FICHERO }, bases: undefined, ultimoGuardado: undefined, conectado: true };
+    const vista = renderHook((e: Entrada & { recargarAlGuardar: boolean }) => usarEdicion({ enviar, ...e }), {
+      initialProps: { ...inicial, recargarAlGuardar: true },
+    });
+    act(() => vista.result.current.abrir(FICHERO));
+    act(() => vista.result.current.cambiar("uno\nDOS\n"));
+    act(() => vista.result.current.guardar());
+    expect(mandados(enviar, "guardarFichero").at(-1)).toMatchObject({ recargar: true });
+  });
+
   it("lo que no cabe por el cable no se manda: se dice", () => {
     const { enviar, vista } = montar();
     act(() => vista.result.current.abrir(FICHERO));

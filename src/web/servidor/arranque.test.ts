@@ -23,6 +23,7 @@ import { MS_DE_PREPARACION,
   ajusteDeDepuracionCableado,
   ajusteDeModoPorDefectoCableado,
   emuladoresCableados,
+  recargaCableada,
   ficherosCableados,
   ajusteDeConectoresCableado,
   ajusteDeGestorCableado,
@@ -9477,6 +9478,150 @@ describe("el recorrido por el cable — el veredicto, la intención y las fases"
     expect(JSON.stringify(m.cliente.recibidos)).not.toContain(m.raiz);
     await m.cerrar();
   });
+
+  describe("la recarga en el aparato al guardar — transparente para el guardado", () => {
+    const guardar = (accion: Parameters<typeof enviarMensaje>[0], recargar = true) =>
+      enviarMensaje(accion, {
+        clase: "guardarFichero",
+        ruta: "Inicio.xne",
+        texto: "<coll/>",
+        huella: "h1",
+        id: "i1",
+        proyecto: "p1",
+        ...(recargar ? { recargar: true as const } : {}),
+      });
+    /** La recarga lee `app.ini` del disco: se espera a lo que se afirma, no un rato fijo. */
+    const hastaQue = async (condicion: () => boolean): Promise<void> => {
+      for (let i = 0; i < 200 && !condicion(); i++) await new Promise((r) => setTimeout(r, 5));
+    };
+    const escribir: NonNullable<Opciones>["escribirFichero"] = async (_raiz, ruta) => ({ ruta, huella: "h2" });
+
+    it("contesta el GUARDADO primero, y la recarga va después y aparte, con el destino resuelto en el servidor", async () => {
+      const pedidas: unknown[] = [];
+      const t = await montar({
+        opciones: {
+          escribirFichero: escribir,
+          recargarEnAparato: async (_raiz, ruta, destino) => {
+            pedidas.push({ ruta, destino });
+            return { estado: "aplicada", clase: "coleccion" };
+          },
+        },
+      });
+      await guardar(t.accion);
+      await hastaQue(() => t.cliente.recibidos.some((m) => m.clase === "recargaEnAparato"));
+      const clases = t.cliente.recibidos.map((m) => m.clase);
+      expect(clases.indexOf("ficheroGuardado")).toBeGreaterThanOrEqual(0);
+      expect(clases.indexOf("ficheroGuardado")).toBeLessThan(clases.indexOf("recargaEnAparato"));
+      // El aparato es el ELEGIDO, el puerto el de fábrica (un físico no tiene AVD) y la app la de `app.ini`.
+      expect(pedidas).toEqual([{ ruta: "Inicio.xne", destino: { serie: "ABC", puerto: 8443, app: "AppDemo" } }]);
+      const r = t.cliente.recibidos.find((m) => m.clase === "recargaEnAparato");
+      expect(r).toMatchObject({ estado: "aplicada", tipo: "coleccion", ruta: "Inicio.xne" });
+      await t.cerrar();
+    });
+
+    it("una recarga que REVIENTA no toca el guardado: sale bien, y el fallo es de la recarga", async () => {
+      const t = await montar({
+        opciones: {
+          escribirFichero: escribir,
+          recargarEnAparato: async () => {
+            throw new Error("se cayó el canal");
+          },
+        },
+      });
+      await guardar(t.accion);
+      await hastaQue(() => t.cliente.recibidos.some((m) => m.clase === "recargaEnAparato"));
+      expect(t.cliente.recibidos.find((m) => m.clase === "ficheroGuardado")).toEqual({
+        clase: "ficheroGuardado",
+        ruta: "Inicio.xne",
+        huella: "h2",
+        id: "i1",
+      });
+      expect(t.cliente.recibidos.find((m) => m.clase === "recargaEnAparato")).toMatchObject({ estado: "fallo" });
+      await t.cerrar();
+    });
+
+    it("sin aparato en la sesión, guarda igual y la recarga solo dice que no hay app", async () => {
+      let llamadas = 0;
+      const t = await montar({
+        elegido: null,
+        opciones: {
+          escribirFichero: escribir,
+          recargarEnAparato: async () => {
+            llamadas += 1;
+            return { estado: "aplicada" };
+          },
+        },
+      });
+      await guardar(t.accion);
+      await hastaQue(() => t.cliente.recibidos.some((m) => m.clase === "recargaEnAparato"));
+      expect(t.cliente.recibidos.find((m) => m.clase === "ficheroGuardado")).toMatchObject({ huella: "h2" });
+      expect(t.cliente.recibidos.find((m) => m.clase === "recargaEnAparato")).toMatchObject({ estado: "sin-app" });
+      expect(llamadas).toBe(0);
+      await t.cerrar();
+    });
+
+    it("sin pedirla, no se recarga; y un guardado RECHAZADO tampoco recarga", async () => {
+      let llamadas = 0;
+      const recargarEnAparato = async () => {
+        llamadas += 1;
+        return { estado: "aplicada" as const };
+      };
+      const t = await montar({ opciones: { escribirFichero: escribir, recargarEnAparato } });
+      await guardar(t.accion, false);
+      await hastaQue(() => t.cliente.recibidos.some((m) => m.clase === "ficheroGuardado"));
+      await new Promise((h) => setTimeout(h, 100));
+      expect(llamadas).toBe(0);
+      await t.cerrar();
+
+      const r = await montar({
+        opciones: { escribirFichero: async (_raiz, ruta) => ({ ruta, error: "el fichero cambió" }), recargarEnAparato },
+      });
+      await guardar(r.accion);
+      await hastaQue(() => r.cliente.recibidos.some((m) => m.clase === "ficheroGuardado"));
+      await new Promise((h) => setTimeout(h, 100));
+      expect(llamadas).toBe(0);
+      expect(r.cliente.recibidos.some((m) => m.clase === "recargaEnAparato")).toBe(false);
+      await r.cerrar();
+    });
+
+    it("PROBAR con la app sin correr despliega el proyecto entero (el lanzamiento de Ejecutar)", async () => {
+      let lanzados = 0;
+      const t = await montar({
+        conBase: true,
+        xml: APP_XML,
+        opciones: {
+          recargarEnAparato: async () => ({ estado: "sin-app", motivo: "App is not running" }),
+          frameworkEnDispositivo: async () => ({ instalado: true, paquete: "com.xone.android.framework", detalle: "instalado" }),
+          lanzarEnDispositivo: () => {
+            lanzados += 1;
+            return { cancelar: () => {}, terminado: Promise.resolve({ estado: "ok" as const, fase: "comprobando-arranque" as const, ms: 1 }) };
+          },
+        },
+      });
+      await enviarMensaje(t.accion, { clase: "recargarEnAparato", ruta: "Inicio.xne", probar: true });
+      await hastaQue(() => t.cliente.recibidos.some((m) => m.clase === "recargaEnAparato"));
+      expect(t.cliente.recibidos.find((m) => m.clase === "recargaEnAparato")).toMatchObject({ estado: "desplegando" });
+      expect(lanzados).toBe(1);
+      await t.cerrar();
+    });
+
+    it("«relanzar» pasa por su propia función, con el mismo destino", async () => {
+      const destinos: unknown[] = [];
+      const t = await montar({
+        opciones: {
+          relanzarEnAparato: async (destino) => {
+            destinos.push(destino);
+            return { estado: "relanzada" };
+          },
+        },
+      });
+      await enviarMensaje(t.accion, { clase: "recargarEnAparato", ruta: "estilos.css", relanzar: true });
+      await hastaQue(() => t.cliente.recibidos.some((m) => m.clase === "recargaEnAparato"));
+      expect(destinos).toEqual([{ serie: "ABC", puerto: 8443, app: "AppDemo" }]);
+      expect(t.cliente.recibidos.find((m) => m.clase === "recargaEnAparato")).toMatchObject({ estado: "relanzada" });
+      await t.cerrar();
+    });
+  });
 });
 
 /**
@@ -12366,6 +12511,20 @@ describe("los emuladores desde Ajustes: crear, ajustar, parar, y un puerto por A
  * fallo de este repo —un campo opcional que se cae del literal de `arrancarConsolaWeb`, o un
  * argumento que se pierde por el camino, compila y pasa—, así que se mira la composición misma.
  */
+describe("recargaCableada — la composición de producción, no un doble", () => {
+  it("lleva las dos funciones de verdad: un fichero que no viaja suelto contesta sin tocar adb", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-recarga-"));
+    mkdirSync(join(raiz, "icons"));
+    writeFileSync(join(raiz, "icons", "a.svg"), "<svg/>");
+    const { recargarEnAparato, relanzarEnAparato } = recargaCableada();
+    expect(typeof relanzarEnAparato).toBe("function");
+    expect(await recargarEnAparato(raiz, "icons/a.svg", { serie: "X", puerto: 8443, app: "A" })).toEqual({ estado: "no-aplica" });
+    // Lo que el lector no enseña no viaja: misma guarda que Ficheros.
+    expect(await recargarEnAparato(raiz, ".env", { serie: "X", puerto: 8443, app: "A" })).toEqual({ estado: "no-aplica" });
+    rmSync(raiz, { recursive: true, force: true });
+  });
+});
+
 describe("emuladoresCableados — la composición de producción, no un doble", () => {
   it("monta las siete, y «sin ventana» llega a `arrancarEmulador` como su TERCER argumento", async () => {
     const llamadas: unknown[][] = [];

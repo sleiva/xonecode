@@ -31,6 +31,7 @@ import { Ajustes, type SeccionDeAjustes } from "./componentes/Ajustes.js";
 import { Revision } from "./componentes/Revision.js";
 import { Ficheros } from "./componentes/Ficheros.js";
 import { CambiosSinGuardar } from "./componentes/CambiosSinGuardar.js";
+import { usarRecargaEnAparato } from "./usarRecargaEnAparato.js";
 import { usarEdicion } from "./usarEdicion.js";
 import { esEditable } from "./edicion.js";
 import { CloudStudio, Registro } from "./componentes/CloudStudio.js";
@@ -152,6 +153,7 @@ export function App({
    * con ellas. Lo que sí pregunta antes de perderlo son los gestos de la persona —cambiar de
    * fichero, cerrar el editor, salir de la pestaña, abrir otro proyecto—, por `conGuarda`.
    */
+  const recarga = usarRecargaEnAparato({ enviar, plataforma: estado.alta?.dispositivoActivo?.plataforma });
   const edicion = usarEdicion({
     enviar,
     proyecto: estado.alta?.proyectoActivo,
@@ -159,6 +161,7 @@ export function App({
     bases: estado.bases,
     ultimoGuardado: estado.ultimoGuardado,
     conectado: estado.conectado,
+    recargarAlGuardar: recarga.alGuardar,
   });
   const edicionRef = useRef(edicion);
   edicionRef.current = edicion;
@@ -2540,6 +2543,8 @@ export function App({
           edicion={edicionDeFicheros}
           {...(cambiadosEnLaSesion === undefined ? {} : { cambiados: cambiadosEnLaSesion })}
           alPedirCambios={pedirRevision}
+          aparato={recarga}
+          {...(estado.ultimaRecarga === undefined ? {} : { ultimaRecarga: estado.ultimaRecarga })}
         />
       }
       artefactos={
