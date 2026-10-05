@@ -125,3 +125,31 @@ describe("el ENCAJE: dónde empieza y acaba cada fila", () => {
     expect(compararConMaqueta(maqueta, aparato(0.98)).diferencias.join("\n")).not.toContain("ANCHO");
   });
 });
+
+describe("una lista con scroll y un panel encima no son errores de maqueta", () => {
+  const pantalla = { ancho: 1000, alto: 2000 };
+  const barras = { estado: { izquierda: 0, arriba: 0, derecha: 1000, abajo: 100 }, navegacion: { izquierda: 0, arriba: 1900, derecha: 1000, abajo: 2000 } };
+
+  it("lo que el árbol da sin `visibleBounds` está fuera por el scroll: ni «se sale» ni «tapado»", () => {
+    const arbol = [
+      { name: "FILA_9", type: "prop", text: "636", visible: true, bounds: { left: 50, top: 2400, width: 600, height: 90 }, visibleBounds: null },
+      { name: "FILA_1", type: "prop", text: "8", visible: true, bounds: { left: 50, top: 500, width: 600, height: 90 }, visibleBounds: { left: 50, top: 500, width: 600, height: 90 } },
+    ];
+    const h = hallazgosDelAparato({ pantalla, barras, controles: controlesDelArbol(arbol) });
+    expect(h.bloqueantes).toEqual([]);
+  });
+
+  it("un panel que se abre ENCIMA del teclado no «se solapa» con él; dos teclas del mismo panel sí", () => {
+    const marco = (name: string, left: number, top: number, width: number, height: number) => ({ name, type: "frame", visible: true, bounds: { left, top, width, height } });
+    const prop = (name: string, text: string, left: number, top: number) => ({ name, type: "prop", text, visible: true, bounds: { left, top, width: 200, height: 150 } });
+    const arbol = [
+      marco("TECLADO", 0, 900, 1000, 900),
+      prop("BT_7", "7", 50, 1000),
+      prop("BT_8", "8", 150, 1050), // se pisa con el 7: mismo marco
+      marco("CINTA", 20, 950, 960, 600),
+      prop("MAP_T1", "4+4", 60, 1000),
+    ];
+    const h = hallazgosDelAparato({ pantalla, barras, controles: controlesDelArbol(arbol) });
+    expect(h.diferencias).toEqual(["«7» (BT_7) y «8» (BT_8) se SOLAPAN."]);
+  });
+});

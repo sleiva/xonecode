@@ -44,6 +44,10 @@ export interface ControlDelAparato {
   /** El `propType` de XOne: `B` botón, `IMG` imagen, `T`/`TL`/`L` texto o etiqueta… */
   clase?: string;
   caja: Caja;
+  /** El contenedor del que cuelga (un número por contenedor del árbol): solo los HERMANOS pueden solaparse por error. */
+  padre?: number;
+  /** El árbol dice que no se ve (`visibleBounds: null`): está fuera por el scroll de su lista, no fuera de la pantalla. */
+  fueraDeVista?: true;
 }
 
 export interface GeometriaDelAparato {
@@ -100,9 +104,10 @@ const ENCAJE = 0.04;
 /** Los controles del árbol de `getAllElements` (lista anidada de nodos con `bounds`), aplanados. */
 export function controlesDelArbol(arbol: unknown): ControlDelAparato[] {
   const salida: ControlDelAparato[] = [];
-  const visitar = (n: unknown): void => {
+  let contenedores = 0;
+  const visitar = (n: unknown, padre?: number): void => {
     if (Array.isArray(n)) {
-      for (const x of n) visitar(x);
+      for (const x of n) visitar(x, padre);
       return;
     }
     if (n === null || typeof n !== "object") return;
@@ -119,22 +124,30 @@ export function controlesDelArbol(arbol: unknown): ControlDelAparato[] {
       b["height"] > 0
     ) {
       const texto = typeof nodo["text"] === "string" ? nodo["text"].trim() : "";
+      contenedores += 1;
+      const yo = contenedores;
       salida.push({
+        ...(padre === undefined ? {} : { padre }),
+        ...("visibleBounds" in nodo && nodo["visibleBounds"] === null ? { fueraDeVista: true as const } : {}),
         ...(typeof nodo["name"] === "string" ? { nombre: nodo["name"] } : {}),
         ...(texto === "" ? {} : { texto }),
         ...(typeof nodo["type"] === "string" ? { tipo: nodo["type"] } : {}),
         ...(typeof nodo["propType"] === "string" ? { clase: nodo["propType"] } : {}),
         caja: { x: b["left"] as number, y: b["top"] as number, ancho: b["width"] as number, alto: b["height"] as number },
       });
+      for (const v of Object.values(nodo)) if (v !== null && typeof v === "object") visitar(v, yo);
+      return;
     }
-    for (const v of Object.values(nodo)) if (v !== null && typeof v === "object") visitar(v);
+    for (const v of Object.values(nodo)) if (v !== null && typeof v === "object") visitar(v, padre);
   };
   visitar(arbol);
   return salida;
 }
 
 /** Un control «de verdad» (con texto, o que no es un contenedor): los marcos llegan de borde a borde y solo meten ruido. */
-const esHoja = (c: ControlDelAparato): boolean => c.texto !== undefined || (c.tipo !== undefined && c.tipo !== "frame" && c.tipo !== "group");
+/** Un control que se juzga: con texto o que no es un marco, y que se VE (no está fuera por el scroll de su lista). */
+const esHoja = (c: ControlDelAparato): boolean =>
+  c.fueraDeVista !== true && (c.texto !== undefined || (c.tipo !== undefined && c.tipo !== "frame" && c.tipo !== "group"));
 
 /** Cómo se nombra un control en un hallazgo: su texto entre comillas, y su nombre si lo tiene. */
 function nombrar(c: ControlDelAparato): string {
@@ -169,10 +182,25 @@ export function hallazgosDelAparato(g: GeometriaDelAparato): HallazgosDeGeometri
     }
   }
 
-  // Solapes entre controles con texto: dos teclas montadas una encima de otra se ven, pero no se pulsan.
+  // Solapes entre controles con texto: dos teclas montadas una encima de otra se ven, pero no se pulsan. Solo entre
+  // HERMANOS: un panel que se abre encima del teclado (medido: la cinta de la calculadora) no es un error de maqueta. El
+  // árbol de `getAllElements` viene PLANO pero en el orden de la jerarquía (cada marco antes que lo suyo), así que el
+  // contenedor es el último marco ANTERIOR en la lista que lo contiene. Por geometría sola, un panel que tapa una tecla
+  // entera pasaba por su contenedor.
+  const contiene = (m: Caja, c: Caja) => c.x >= m.x - 1 && c.y >= m.y - 1 && c.x + c.ancho <= m.x + m.ancho + 1 && c.y + c.alto <= m.y + m.alto + 1;
+  const contenedor = (c: ControlDelAparato): number | ControlDelAparato | undefined => {
+    if (c.padre !== undefined) return c.padre;
+    const i = g.controles.indexOf(c);
+    for (let k = i - 1; k >= 0; k--) {
+      const m = g.controles[k]!;
+      if ((m.tipo === "frame" || m.tipo === "group") && contiene(m.caja, c.caja)) return m;
+    }
+    return undefined;
+  };
   const conTexto = hojas.filter((c) => c.texto !== undefined);
   for (let i = 0; i < conTexto.length; i++) {
     for (let j = i + 1; j < conTexto.length; j++) {
+      if (contenedor(conTexto[i]!) !== contenedor(conTexto[j]!)) continue;
       const a = conTexto[i]!.caja;
       const b = conTexto[j]!.caja;
       const ancho = Math.min(a.x + a.ancho, b.x + b.ancho) - Math.max(a.x, b.x);
