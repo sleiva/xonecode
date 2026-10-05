@@ -98,6 +98,27 @@ export function topeResuelto(
   return deTabla !== undefined ? { tope: deTabla, origen: "tabla" } : undefined;
 }
 /**
+ * Cuándo se COMPACTA el contexto del raíz en TrueForge, según la ventana del modelo.
+ *
+ * Era un 32.000 fijo heredado de deepagents, puesto por Ollama —sin tope que leer y con la
+ * compresión llegando tarde—. Con DeepSeek, que tiene un millón de ventana, eso es compactar al
+ * 3 %: medido en soporte, cada dos o tres lecturas de fichero, y la compactación de TrueForge
+ * SUSTITUYE el contexto entero, así que el agente releía lo que acababa de leer (13
+ * compactaciones en un turno de 30 min). Ahora: un cuarto de la ventana conocida, nunca menos
+ * del 32.000 de antes (que se queda para lo que no tiene tope, Ollama) y nunca más de 128.000,
+ * porque compactar también limita lo que cuesta cada llamada.
+ */
+export const UMBRAL_DE_COMPACTACION_MINIMO = 32_000;
+export const UMBRAL_DE_COMPACTACION_MAXIMO = 128_000;
+export const FRACCION_DE_LA_VENTANA_PARA_COMPACTAR = 0.25;
+
+export function umbralDeCompactacion(tope: number | undefined): number {
+  if (tope === undefined || !Number.isFinite(tope) || tope <= 0) return UMBRAL_DE_COMPACTACION_MINIMO;
+  const cuarto = Math.floor(tope * FRACCION_DE_LA_VENTANA_PARA_COMPACTAR);
+  return Math.min(UMBRAL_DE_COMPACTACION_MAXIMO, Math.max(UMBRAL_DE_COMPACTACION_MINIMO, cuarto));
+}
+
+/**
  * El tope de SALIDA que le fijamos a un modelo, o `undefined` para dejarlo en manos del
  * cliente.
  *

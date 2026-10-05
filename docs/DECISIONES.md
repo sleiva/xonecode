@@ -8144,3 +8144,32 @@ comentarios sin `--`, CDATA, `<?…?>`, entidades, una raíz— y una tool de le
 los 22 que marca —todos de ActivoMobileDev— los marca también `xmllint`, y son ficheros guardados como una
 cadena JSON (el fallo IXCODE-16 de la descarga, en una copia anterior al arreglo). Su descripción dice qué
 hacer con un «bien formado»: decir que el error viene de otra copia, en vez de seguir releyendo.
+
+## La compactación del raíz de TrueForge: sin pensar, y al umbral de la ventana del modelo (05-10-2026)
+
+Lo destaparon las mismas sesiones de soporte de APPSalud que `validar_xml`. La compactación de TrueForge
+(`ContextCompaction.mjs`) salta cuando la entrada más la salida de la llamada anterior, más 931 tokens de
+su prompt, llegan al umbral, y **sustituye el contexto ENTERO** por un resumen y un «continúa»: no
+conserva lo reciente (los 8.000 «de reciente» son de deepagents). El umbral era el 32.000 de deepagents,
+puesto por Ollama. Medido, con el contexto que entra a cada llamada:
+
+| sesión | duración | compactaciones | razonamiento por compactación |
+|---|---|---|---|
+| 04-10, el `.xne` | 8,6 min (cancelado) | 3 | 2.104 – 9.833 |
+| 04-10, el CSS | 30,5 min | 13 (~10 min entre todas) | 471 – 8.496 |
+| 05-10 con la 0.29.0, el `.xne` | 2,7 min (cancelado) | 1 (72 s de 164) | 13.650 para un resumen de ~4.000 |
+
+Tras cada compactación el agente volvía a leer el mismo fichero («Let me reconstruct where we are… I
+previously scanned lines 1–460 and found all tags well-formed»). Dos arreglos, los dos solo en TrueForge
+(deepagents es legacy y no se toca):
+
+- **Resumir sin pensar** (`llmDeCompactacion`): el mismo modelo del raíz con `pensamiento: apagado`, que
+  `pensamientoAplicable` solo aplica donde está medido —hoy DeepSeek—; los demás proveedores no reciben
+  nada nuevo (un parámetro desconocido es un 400). Contra la API real: sin error, sin tokens de
+  razonamiento y menos de la mitad de tiempo con el mismo texto.
+- **El umbral, según la ventana** (`umbralDeCompactacion`): un cuarto de la ventana conocida, nunca menos
+  de 32.000 —que se queda para lo que no tiene tope, Ollama— y nunca más de 128.000, porque compactar
+  también limita lo que cuesta cada llamada. Con DeepSeek (un millón) pasa de 32.000 a 128.000; los
+  picos medidos en esos turnos rondaban los 30.000, así que no habrían compactado. Se resuelve con la
+  MISMA regla que la barra (`topeResuelto`). **Sin medir**: el coste de turnos que ahora lleguen a
+  128.000 sin compactar; con DeepSeek la caché se llevó el 94 % de la entrada en la prueba.

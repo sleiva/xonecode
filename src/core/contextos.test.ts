@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { topeDeContexto, topeDeSalida, topeResuelto } from "./contextos.js";
+import { topeDeContexto, topeDeSalida, topeResuelto, umbralDeCompactacion } from "./contextos.js";
 
 describe("topeDeContexto", () => {
   it("las familias conocidas tienen tope, emparejadas por prefijo", () => {
@@ -103,5 +103,21 @@ describe("topeDeSalida", () => {
     expect(topeDeSalida("openai", "gpt-4o")).toBeUndefined();
     expect(topeDeSalida("gemini", "gemini-2.5-flash")).toBeUndefined();
     expect(topeDeSalida("ollama", "llama3")).toBeUndefined();
+  });
+});
+
+describe("umbralDeCompactacion", () => {
+  it("un cuarto de la ventana conocida, entre el 32.000 de antes y 128.000", () => {
+    // DeepSeek: un millón de ventana; con el 32.000 fijo compactaba cada dos o tres lecturas.
+    expect(umbralDeCompactacion(topeDeContexto("deepseek", "deepseek-flash"))).toBe(128_000);
+    expect(umbralDeCompactacion(200_000)).toBe(50_000);
+    expect(umbralDeCompactacion(64_000)).toBe(32_000);
+  });
+
+  it("sin tope conocido (Ollama), el 32.000 de siempre", () => {
+    expect(topeDeContexto("ollama", "qwen3")).toBeUndefined();
+    expect(umbralDeCompactacion(undefined)).toBe(32_000);
+    expect(umbralDeCompactacion(0)).toBe(32_000);
+    expect(umbralDeCompactacion(Number.NaN)).toBe(32_000);
   });
 });

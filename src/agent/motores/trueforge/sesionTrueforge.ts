@@ -29,7 +29,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import winston from "winston";
 import { AgentThread, AgentThreadOrchestrator, EventType, NOOP_AGENT_TRACING, askUserQuestion, contextCompaction, dynamicSubAgents } from "./trueforge.js";
-import { TOPE_DE_LLAMADAS_DEL_CONDUCTOR, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA, UMBRAL_RESUMEN_TOKENS } from "../../turno/resumenDeContexto.js";
+import { TOPE_DE_LLAMADAS_DEL_CONDUCTOR, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
 import type { DomainEvent, HallazgoDelTurno, PendienteDeAprobacion } from "../../../core/events.js";
 import type {
   ConsumoDeSesion,
@@ -108,6 +108,9 @@ import { crearControlDeDetencion, RESUMEN_DE_RELLENO } from "./detencion.js";
 import type { ToolDeLangchain } from "./toolsPropias.js";
 import { crearNavegacionXone } from "../../grafo/navegacionXone.js";
 import { crearValidarXml } from "../../grafo/validarXml.js";
+import { topeResuelto, umbralDeCompactacion } from "../../../core/contextos.js";
+import { parsear } from "../../../core/modelos.js";
+import { cargar as cargarConfig } from "../../config/configEnDisco.js";
 import { hechosDelProyectoDe } from "../../navegacion/hechosEnDisco.js";
 import { conHechosDelProyecto } from "../../../core/hechosDelProyecto.js";
 import { crearBusquedaRegex } from "../../grafo/busquedaRegex.js";
@@ -724,6 +727,23 @@ export async function abrirSesionTrueforge(
   let porModelo: ConsumoPorModelo = {};
   const modeloDeHilo = new Map<string, string>();
   const idDelPapel = (papel: Papel): string => modelos.idDePapel?.(papel) ?? `papel ${papel}`;
+  /**
+   * El umbral de compactación del raíz, según la ventana de SU modelo (`core/contextos.ts
+   * #umbralDeCompactacion`), con la MISMA resolución que la barra (`topeResuelto`: lo fijado a mano
+   * en el proyecto, luego en el global, luego la tabla). Sin id de modelo o sin tope conocido, el
+   * 32.000 de siempre. Se lee al construir el raíz: un `/modelo` lo rehace.
+   */
+  const umbralDelRaiz = (): number => {
+    const id = modelos.idDePapel?.("trabajo");
+    if (id === undefined) return umbralDeCompactacion(undefined);
+    try {
+      const { proveedor, modelo } = parsear(id);
+      const { config } = cargarConfig(raiz);
+      return umbralDeCompactacion(topeResuelto(proveedor, modelo, { proyecto: config.proyecto?.contextos, global: config.global?.contextos })?.tope);
+    } catch {
+      return umbralDeCompactacion(undefined);
+    }
+  };
   const apuntarModelo = (id: string, cuenta: "modelo" | "externo", c: { entrada: number; salida: number; cache: number }): void => {
     porModelo = sumarPorModelo(porModelo, { [id]: { cuenta, ...c } });
   };
@@ -1216,15 +1236,16 @@ export async function abrirSesionTrueforge(
           capacidadDeInformes,
         ]),
         /**
-         * **La conversación se RESUME al mismo umbral que deepagents** (`UMBRAL_RESUMEN_TOKENS`):
-         * sin esto no se compactaba nunca y cada turno reenviaba la sesión entera. La
-         * compactación de TrueForge sustituye el contexto ENTERO por el resumen, y por eso las
-         * instrucciones van en el prompt de sistema —aquí `instruction`, en un hijo su
-         * capability—, que no se compacta.
+         * **La conversación se RESUME a un umbral que depende de la ventana del modelo**
+         * (`umbralDelRaiz`): sin compactar, cada turno reenviaba la sesión entera; con el 32.000
+         * fijo de deepagents, DeepSeek compactaba cada dos o tres lecturas. La compactación de
+         * TrueForge sustituye el contexto ENTERO por el resumen, y por eso las instrucciones van
+         * en el prompt de sistema —aquí `instruction`, en un hijo su capability—, que no se
+         * compacta. Y resume con el pensamiento APAGADO (`llmDeCompactacion`).
          */
         contextCompaction({
           definition: { ...definicion, modelClient: conResumenSeguro(llmDeCompactacion as never, (t) => anotarPaso("trueforge.compactacion", t)()) } as never,
-          compactionThresholdTokens: UMBRAL_RESUMEN_TOKENS,
+          compactionThresholdTokens: umbralDelRaiz(),
         }),
         // `ask_user_question`, SOLO en el raíz —la librería tampoco se la da a un hijo—: es el
         // único que tiene a una persona delante.

@@ -572,7 +572,12 @@ inglés, y sin decirlo el texto entre herramientas salía en inglés. Es el idio
 de su mensaje; un hijo, que no lo ve, sigue el de su encargo—, y solo de lo que la persona LEE: el razonamiento queda libre. **El raíz puede PREGUNTAR** (`ask_user_question`, solo él): con opciones
 sale además como tarjeta con un botón por opción (`Piel.consulta?` opcional), y lo pendiente lo
 decide el hilo. **Solo se compacta el raíz**: en un hijo, resumir un encargo corto y ya cacheado
-costaba más que reenviarlo. **Cada especialista RECUERDA sus encargos anteriores de la sesión**
+costaba más que reenviarlo. **Y a un umbral que sale de la ventana de SU modelo**
+(`core/contextos.ts#umbralDeCompactacion`, entre `UMBRAL_DE_COMPACTACION_MINIMO` y
+`UMBRAL_DE_COMPACTACION_MAXIMO`; sin tope conocido, el mínimo de siempre), **resumiendo con el
+pensamiento APAGADO** donde el modelo lo admite (`llmDeCompactacion`): la compactación SUSTITUYE el
+contexto entero, y con el umbral fijo de deepagents un modelo de ventana grande compactaba cada pocas
+lecturas y releía lo que acababa de leer. **Cada especialista RECUERDA sus encargos anteriores de la sesión**
 (`memoriaDeEspecialistas.ts`): la librería borra un hijo al terminar y no sabe reanudarlo, así que la
 siguiente encarnación arranca con SU historial (`definition.messages`) más el encargo nuevo —nunca lo que
 leyeron otros—. **Dos niveles**: entero si cabe (`TOPE_COMPLETA_TOKENS`), REDUCIDO si no (lo que dijo y pidió,

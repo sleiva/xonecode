@@ -657,6 +657,26 @@ describe("una sesión con el motor TrueForge", () => {
     expect(s.consumo().contexto).toBe(1_000);
   }, 30_000);
 
+  it("con un modelo de ventana GRANDE (DeepSeek) el raíz NO se compacta a 40.000: el umbral sale de su ventana", async () => {
+    const raiz = proyecto();
+    const { m, vistos } = modelosConGuion([
+      [
+        new AIMessageChunk({
+          content: "",
+          tool_call_chunks: [{ index: 0, id: "n1", name: "ls", args: JSON.stringify({ path: "/" }) }],
+          usage_metadata: { input_tokens: 40_000, output_tokens: 10, total_tokens: 40_010 },
+        }),
+      ],
+      [new AIMessageChunk({ content: "Listo.", usage_metadata: { input_tokens: 41_000, output_tokens: 2, total_tokens: 41_002 } })],
+    ]);
+    const conVentana = { ...m, idDePapel: () => "deepseek/deepseek-flash" } as unknown as ModelosPort;
+    const s = await abrirSesionTrueforge({ raiz, modelos: conVentana, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("mira la raíz", piel().p);
+    // Dos llamadas y ninguna de resumen: con un millón de ventana el umbral es 128.000.
+    expect(vistos).toHaveLength(2);
+    expect(vistos.join("\n")).not.toMatch(/summary of the conversation/);
+  }, 30_000);
+
   it("un ROJO del simulador se REPARA en el mismo hilo, con el objetivo delante, y el turno cierra en VERDE", async () => {
     const raiz = proyecto();
     const escritura = (id: string, contenido: string) =>
