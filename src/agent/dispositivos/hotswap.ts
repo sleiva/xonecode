@@ -386,6 +386,35 @@ async function abrirConReintento(destino: string, deps: DependenciasDeHotswap): 
 }
 
 /**
+ * ¿Saluda el servidor del framework? `undefined` si sí; si no, UNA línea con el motivo. Nunca lanza.
+ *
+ * Existe porque **la subida del despliegue va por el servidor del FRAMEWORK**, y antes del reinicio:
+ * medido, con el framework parado (`am force-stop`) Ejecutar moría en «subiendo» con «Client network
+ * socket disconnected before secure TLS…», porque el túnel acepta y no hay nadie detrás. Con
+ * `reintentar` se espera a que arranque (`abrirConReintento`, el MISMO tope que tras el reinicio);
+ * sin él, se pregunta una vez, que es lo que hace falta para decidir si hay que arrancarlo.
+ */
+export async function esperarAlServidor(
+  destino: string,
+  deps: DependenciasDeHotswap = {},
+  { reintentar }: { reintentar: boolean }
+): Promise<string | undefined> {
+  let cliente: ClienteHotswap | undefined;
+  try {
+    if (reintentar) cliente = await abrirConReintento(destino, deps);
+    else {
+      cliente = abrirHotswap(destino, deps);
+      await cliente.esperarSaludo();
+    }
+    return undefined;
+  } catch (error) {
+    return unaLinea(error);
+  } finally {
+    cliente?.cerrar();
+  }
+}
+
+/**
  * Lanza la app y COMPRUEBA que está viva.
  *
  * Las dos partes están separadas a propósito porque son dos hechos distintos: el acuse de

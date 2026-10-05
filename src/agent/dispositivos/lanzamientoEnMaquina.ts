@@ -61,7 +61,7 @@ import {
   type FrameworkEnDispositivo,
 } from "./dispositivosEnMaquina.js";
 import { PUERTO_DEL_HOTSWAP } from "../../core/puertosDeAvd.js";
-import { lanzarYComprobar, type AbrirSocketHotswap } from "./hotswap.js";
+import { esperarAlServidor, lanzarYComprobar, type AbrirSocketHotswap } from "./hotswap.js";
 import {
   crearEjecutor,
   TOPE_DE_TRABAJO_MS,
@@ -364,6 +364,36 @@ export function lanzarEnDispositivo(
     // flavors tienen nombres distintos y un valor a fuego lanzaría el de otro.
     const delFramework = instalado.paquete;
     decir("comprobando", instalado.detalle);
+
+    // El servidor del framework, ANTES de subir: la subida va por él, y con el framework parado
+    // el túnel acepta y no hay nadie detrás. Si no saluda, se arranca su pantalla —la MISMA del
+    // reinicio— y se espera a que salude. Si ya saluda, no se toca nada ni se dice nada.
+    const canal = `wss://127.0.0.1:${local}/hotswap`;
+    const delSocket = deps.abrirSocket === undefined ? {} : { abrirSocket: deps.abrirSocket };
+    const callado = await esperarAlServidor(canal, delSocket, { reintentar: false });
+    if (cancelado) return acabar("comprobando", { estado: "cancelada" });
+    if (callado !== undefined) {
+      decir("comprobando", "el servidor del framework no contesta: se arranca su pantalla");
+      const arranque = await unProceso("comprobando", adb, [
+        "-s",
+        serial,
+        "shell",
+        "am",
+        "start",
+        "-n",
+        `${delFramework}/${ACTIVIDAD_DEL_SERVIDOR}`,
+      ]);
+      if (arranque.estado !== "ok") return acabar("comprobando", arranque);
+      const espera = await Promise.race([
+        esperarAlServidor(canal, delSocket, { reintentar: true }),
+        cancelacion.then(() => "cancelada" as const),
+      ]);
+      if (espera === "cancelada" || cancelado) return acabar("comprobando", { estado: "cancelada" });
+      if (espera !== undefined) {
+        return acabar("comprobando", { estado: "fallo", motivo: `el servidor del framework no arrancó: ${espera}` });
+      }
+      decir("comprobando", "el servidor del framework ya contesta");
+    }
 
     // ---- 2. empaquetando ----------------------------------------------------------------
     let paquete: PaqueteDelProyecto;

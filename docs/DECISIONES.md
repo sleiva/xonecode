@@ -8057,3 +8057,21 @@ repinta en unos 80 ms sin relanzar; una función nueva en `clientes.js` contesta
 recargar, y cambiarla otra vez devuelve el valor nuevo; el CSS pide relanzar, y tras «relanzar» el botón
 sale con el color nuevo; un serial que no existe contesta `sin-app` sin colgarse. **Sin medir**: un `.js`
 en Latin-1 (su `encoding` es el de sus bytes, por analogía, no por medida), e iOS, que no tiene camino.
+
+## Ejecutar arranca el servidor del framework antes de subir (05-10-2026)
+
+Visto en el navegador probando «Probar»: con el framework PARADO (`am force-stop`), Ejecutar moría en
+«subiendo» con «Client network socket disconnected before secure TLS connection was established». La
+subida del ZIP va por el servidor HTTP del FRAMEWORK, y en el recorrido iba antes del reinicio, que es
+lo único que arrancaba ese servidor: con el framework vivo funcionaba de casualidad.
+
+Ahora, en «comprobando» y tras ver que el framework está instalado, se pregunta UNA vez si su servidor
+saluda (`hotswap.ts#esperarAlServidor`, sin reintento). Si no saluda, se arranca su pantalla —la MISMA
+`SetupActivity` del reinicio— y se espera a que salude con el reintento de apertura de siempre
+(`TOPE_DE_APERTURA_MS`); si no llega, el fallo lo dice en «comprobando», no en «subiendo». Con el
+servidor ya en marcha no se arranca nada de más ni se añade ninguna línea.
+
+Medido en `pixel8`, framework parado de partida: Ejecutar desde su pestaña acaba en «La app arrancó y
+está viva», y «Probar» desde el editor en «proyecto desplegado y la app viva». **Sin tocar**: el script
+`xone-desplegar-android` tiene el mismo orden (sube antes de reiniciar) y fallaría igual con el
+framework parado.

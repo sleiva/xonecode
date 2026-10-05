@@ -299,7 +299,56 @@ describe("lanzarEnDispositivo", () => {
 
     expect(r.l.llamadas[0]!.args.slice(2)).toEqual(["forward", "tcp:8444", "tcp:8443"]);
     expect(r.subidas[0]).toMatchObject({ host: "127.0.0.1", puerto: 8444 });
-    expect(r.servidor.urls).toEqual(["wss://127.0.0.1:8444/hotswap"]);
+    // Dos canales —la comprobación del servidor antes de subir, y el lanzamiento—, los dos por el
+    // puerto del aparato.
+    expect(r.servidor.urls).toEqual(["wss://127.0.0.1:8444/hotswap", "wss://127.0.0.1:8444/hotswap"]);
+  });
+
+  it("con el framework PARADO, arranca su servidor antes de subir y espera a que salude", async () => {
+    // El primer canal no llega a abrir (lo medido: el túnel acepta y corta); el segundo, sí.
+    const servidor = servidorHotswap((comando) =>
+      comando["command"] === "launchApplication" ? { result: true, status: "" } : { result: true, status: ARBOL }
+    );
+    let aperturas = 0;
+    const abrirSocket: AbrirSocketHotswap = (url) => {
+      aperturas += 1;
+      if (aperturas > 1) return servidor.abrirSocket(url);
+      const oyentes = new Map<string, ((v: unknown) => void)[]>();
+      setTimeout(() => {
+        for (const cb of oyentes.get("error") ?? []) cb(new Error("Client network socket disconnected before secure TLS connection was established"));
+        for (const cb of oyentes.get("close") ?? []) cb(1006);
+      }, 0);
+      return {
+        on: (evento, cb) => void oyentes.set(evento, [...(oyentes.get(evento) ?? []), cb as (v: unknown) => void]),
+        send: () => {},
+        close: () => {},
+      };
+    };
+    const r = recorrido({ abrirSocket });
+    // túnel, arrancar el servidor, parar, arrancar la pantalla: cuatro procesos. El canal que no
+    // abre falla por reloj, así que entre el primero y el segundo se deja correr el bucle.
+    await cerrarHijo(r.l, 0);
+    for (let i = 0; i < 20 && r.l.hijos.length < 2; i++) await reposar();
+    for (let i = 1; i < 4; i++) await cerrarHijo(r.l, i);
+    const resultado = await r.trabajo.terminado;
+    expect(resultado.estado).toBe("ok");
+    expect(r.l.llamadas.map((c) => c.args.filter((a) => ["forward", "start", "force-stop"].includes(a)))).toEqual([
+      ["forward"],
+      ["start"],
+      ["force-stop"],
+      ["start"],
+    ]);
+    // Y ANTES de la subida: la subida va por ese servidor.
+    expect(r.deFase("comprobando")).toContain("el servidor del framework no contesta: se arranca su pantalla");
+    expect(r.deFase("comprobando")).toContain("el servidor del framework ya contesta");
+    expect(r.subidas).toHaveLength(1);
+  });
+
+  it("con el servidor ya en marcha no se arranca nada de más ni se dice nada", async () => {
+    const r = recorrido();
+    await atender(r.l, 3);
+    await r.trabajo.terminado;
+    expect(r.deFase("comprobando").some((l) => l.includes("servidor del framework"))).toBe(false);
   });
 
   it("la subida va por POST al nombre exacto del ZIP, con la app escapada y con Content-Length", async () => {
