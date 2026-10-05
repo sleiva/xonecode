@@ -45,6 +45,7 @@ const ICONO: Record<string, string> = {
   comparar_capturas: "✱",
   diferencia_de_capturas: "✱",
   generar_fondo_svg: "✱",
+  validar_xml: "✓",
   task: "⊙",
   // Un icono PROPIO, y no el genérico `⚙`: en un turno donde se lanza una app, la línea del
   // comando es la que dice qué está pasando de verdad — y no puede leerse igual que una tool
@@ -65,6 +66,7 @@ const VERBO: Record<string, string> = {
   comparar_capturas: "compara",
   diferencia_de_capturas: "mide cambio",
   generar_fondo_svg: "fondo",
+  validar_xml: "valida",
   task: "delega en",
   execute: "corre",
 };

@@ -313,6 +313,14 @@ Y las guardas del proyecto:
   Va al conductor y no al orquestador porque comprueba una ACCIÓN suya (¿mi toque tuvo efecto?), no
   juzga una pantalla. Con las mismas guardas de ruta, y un «igual» da las DOS explicaciones posibles
   (no se repinta, o la captura fue antes del repintado) sin decidir entre ellas.
+- **Y una séptima, de lectura, pura y sin llamar a nadie: `validar_xml`** (`agent/grafo/validarXml.ts`,
+  `core/xmlBienFormado.ts`), solo en TrueForge y a TODOS, el raíz incluido. Contesta si un `.xne`/`.xml`
+  —o todos los de una carpeta— está BIEN FORMADO, o fichero, línea, columna y motivo, como un parser; ni
+  simulador ni linter ni red. Existe por un turno de soporte: la persona pegó el error del parser de
+  Studio y el agente, sin forma de comprobarlo, releyó a ojo un fichero que estaba bien. Su descripción
+  dice qué significa un «bien formado» frente a un error que alguien ha visto: viene de OTRA copia (Studio
+  tras una subida, el aparato). Lee por el backend (codificación y vistas aplanadas) y reaplica
+  `puedeLeerRuta` a mano. Solo la forma del XML: los atributos de XOne son de `xone_atributos`.
 - **Lo que quien ESCRIBE tiene que saber va en el cuerpo del developer y del designer, no en
   `REGLAS_XONE`** (`ESCRIBIR_XONE_SIN_ROMPER`, `agent/subagentes/agentesEnDisco.ts`): un comentario
   XML no admite `--`, un `L`/`TL` pinta su `title`, `elevation` recorta un fondo redondeado, un botón

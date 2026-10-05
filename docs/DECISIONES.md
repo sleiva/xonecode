@@ -8125,3 +8125,22 @@ Medido en el emulador con 5.0.5.7dev: el botón cambia en ~45 ms con `recargarFi
 el comando nativo primero; si contesta `Unknown command` (un framework anterior), el `runScript` de
 arriba; si falla por otra cosa (`File not Found`), se relanza. La skill `xone-hotswap` lo documenta y
 `xone-recargar-android` sigue el mismo orden.
+
+## `validar_xml`: comprobar que un XML está bien formado, sin llamar a nadie (05-10-2026)
+
+Dos paquetes de soporte de APPSalud con la MISMA pregunta —«File: Inicio.xne Error: 'name' is an
+unexpected token. The expected token is '='. Line 381, position 4.»—, uno del 04-10 y otro de hoy con la
+0.29.0, acabaron igual: la persona cancela tras minutos (8,6 y 2,7) y el fichero local estaba BIEN. El
+agente lo dijo pronto (a los 2,5 min en el primero) y no se lo creyó: no tenía forma de comprobarlo —el
+verificador no corre en esa máquina, `xone-simulator ENOENT`— y releía 381/460 líneas a ojo; y la
+compactación del raíz (otra entrada) le borraba lo leído. El error es del parser .NET de Studio, que lee
+la copia de STUDIO: en el primer caso, `Inicio.xne` se había subido 57 s antes, sin la verificación de
+subida de la 0.26.1 (probable, no probado).
+
+Se pidió explícitamente que no dependiera de nada externo (ni xone-linter ni simulador): un comprobador
+PURO en `core/` (`comprobarXml`) —etiquetas en orden, atributos con `=` y comillas, sin repetir y separados,
+comentarios sin `--`, CDATA, `<?…?>`, entidades, una raíz— y una tool de lectura, a todos. **Medido sobre
+1.038 `.xne`/`.xml` reales** (las siete copias del workspace y el paquete): 0 discrepancias con `xmllint`;
+los 22 que marca —todos de ActivoMobileDev— los marca también `xmllint`, y son ficheros guardados como una
+cadena JSON (el fallo IXCODE-16 de la descarga, en una copia anterior al arreglo). Su descripción dice qué
+hacer con un «bien formado»: decir que el error viene de otra copia, en vez de seguir releyendo.

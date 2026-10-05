@@ -107,6 +107,7 @@ import { conResumenSeguro } from "./resumenSeguro.js";
 import { crearControlDeDetencion, RESUMEN_DE_RELLENO } from "./detencion.js";
 import type { ToolDeLangchain } from "./toolsPropias.js";
 import { crearNavegacionXone } from "../../grafo/navegacionXone.js";
+import { crearValidarXml } from "../../grafo/validarXml.js";
 import { hechosDelProyectoDe } from "../../navegacion/hechosEnDisco.js";
 import { conHechosDelProyecto } from "../../../core/hechosDelProyecto.js";
 import { crearBusquedaRegex } from "../../grafo/busquedaRegex.js";
@@ -840,8 +841,12 @@ export async function abrirSesionTrueforge(
     opciones.conectores !== undefined && carpeta !== undefined && conStitch
       ? [crearTraerDeStitch({ conectores: opciones.conectores, carpeta, alEscribir: anotarArtefacto }) as unknown as ToolDeLangchain]
       : [];
+  // ¿Está bien formado? A TODOS, el raíz incluido: es quien recibe el error que pega la persona, y
+  // sin ella lo comprobaba leyendo el fichero a ojo (soporte de APPSalud). Pura y de lectura.
+  const validarXml = (): ToolDeLangchain => crearValidarXml(backend as never) as unknown as ToolDeLangchain;
   const propiasDelRaiz: ToolDeLangchain[] = [
     navegacion(),
+    validarXml(),
     atributos,
     describirImagen(),
     ...herramientasDeJuicio(),
@@ -851,6 +856,7 @@ export async function abrirSesionTrueforge(
   const propiasDe = (agente: Agente): ToolDeLangchain[] => [
     crearBusquedaRegex(backend as never) as unknown as ToolDeLangchain,
     navegacion(),
+    validarXml(),
     atributos,
     describirImagen(),
     ...(carpeta !== undefined && (agente.escribeEn ?? []).length > 0
