@@ -359,6 +359,68 @@ function exigirAparato() {
   const cuerpo = crearZip(process.cwd(), [".xonecode", ".git"]);
   console.log(`    ${(cuerpo.length / 1024).toFixed(0)} KB`);
 
+  const cliente = join(import.meta.dirname, "xone-hotswap");
+  /**
+   * **En `clave=valor`, que es lo único que el cliente entiende.**
+   *
+   * Esto mandaba `JSON.stringify(comando)` y se rompió ENTERO el día que el cliente dejó de
+   * aceptar JSON: el objeto se metía como NOMBRE del comando, el aparato contestaba
+   * `Unknown command: {…}` y el despliegue no lanzaba nada. Lanzar la app, pedir el árbol y
+   * capturar —las tres cosas que hace este paso— pasaban por aquí, así que se cayeron las
+   * tres a la vez, y en silencio: el script reintenta diez veces y acaba diciendo que el
+   * canal no levantó, que manda a mirar el puerto y el paquete en vez de al cliente.
+   *
+   * La conversión es la misma que hace el cliente al revés: cada campo que no es `command`
+   * sale como `clave=valor`, y un objeto o un array se serializan porque el tipado del
+   * cliente los reconoce por la forma.
+   */
+  const mandar = (comando) => {
+    const { command, ...resto } = comando;
+    const pares = Object.entries(resto).map(([k, v]) =>
+      `${k}=${typeof v === "object" && v !== null ? JSON.stringify(v) : String(v)}`,
+    );
+    // El hijo habla por el MISMO puerto que el túnel de arriba, aunque venga de `--puerto`.
+    return execFileSync(NODE, [cliente, command, ...pares], { encoding: "utf8", env: { ...process.env, HOTSWAP_URL: process.env.HOTSWAP_URL ?? `wss://127.0.0.1:${PUERTO}/hotswap` } }).trim();
+  };
+  const esperar = (segundos) => dormir(segundos);
+
+  /**
+   * **El servidor del framework, ANTES de subir: la subida va por él.** Medido en el emulador: con el
+   * framework parado (`am force-stop`) la subida moría con un error de TLS, porque el túnel acepta y no
+   * hay nadie detrás; el reinicio del paso 4 —lo único que lo arrancaba— llega DESPUÉS. Se pregunta una
+   * vez (`getAllElements` contesta «App is not running» con el framework vivo y sin app, y el cliente
+   * sale con error si no hay servidor); si no contesta, se arranca su pantalla y se espera a que conteste.
+   * Es la misma regla que Ejecutar (`lanzamientoEnMaquina.ts`).
+   */
+  const contesta = () => {
+    try {
+      // Con su stderr CALLADO: aquí que falle es la respuesta, no un error, y la línea del cliente
+      // («no se pudo hablar con el aparato») haría creer que el despliegue va mal.
+      execFileSync(NODE, [cliente, "getAllElements", "format=xone"], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+        env: { ...process.env, HOTSWAP_URL: process.env.HOTSWAP_URL ?? `wss://127.0.0.1:${PUERTO}/hotswap` },
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (!contesta()) {
+    console.log("    el servidor del framework no contesta: se arranca su pantalla");
+    adb("shell", "am", "start", "-n", ACTIVIDAD);
+    let arranco = false;
+    for (let intento = 1; intento <= 60 && !arranco; intento++) {
+      esperar(1);
+      arranco = contesta();
+    }
+    if (!arranco) {
+      console.error(`el servidor del framework no arrancó en 60 s. Comprueba que ${PAQUETE} está instalado.`);
+      process.exit(1);
+    }
+    console.log("    el servidor del framework ya contesta");
+  }
+
   console.log(`3/5 subiendo a ${app}`);
   const url = `https://127.0.0.1:${PUERTO}/file_upload?file=debug_app_update.zip&appName=${encodeURIComponent(app)}`;
   const respuesta = await fetch(url, {
@@ -385,30 +447,6 @@ function exigirAparato() {
   adb("shell", "am", "start", "-n", ACTIVIDAD);
 
   console.log("5/5 esperando al canal, lanzando y comprobando que está VIVA");
-  const cliente = join(import.meta.dirname, "xone-hotswap");
-  /**
-   * **En `clave=valor`, que es lo único que el cliente entiende.**
-   *
-   * Esto mandaba `JSON.stringify(comando)` y se rompió ENTERO el día que el cliente dejó de
-   * aceptar JSON: el objeto se metía como NOMBRE del comando, el aparato contestaba
-   * `Unknown command: {…}` y el despliegue no lanzaba nada. Lanzar la app, pedir el árbol y
-   * capturar —las tres cosas que hace este paso— pasaban por aquí, así que se cayeron las
-   * tres a la vez, y en silencio: el script reintenta diez veces y acaba diciendo que el
-   * canal no levantó, que manda a mirar el puerto y el paquete en vez de al cliente.
-   *
-   * La conversión es la misma que hace el cliente al revés: cada campo que no es `command`
-   * sale como `clave=valor`, y un objeto o un array se serializan porque el tipado del
-   * cliente los reconoce por la forma.
-   */
-  const mandar = (comando) => {
-    const { command, ...resto } = comando;
-    const pares = Object.entries(resto).map(([k, v]) =>
-      `${k}=${typeof v === "object" && v !== null ? JSON.stringify(v) : String(v)}`,
-    );
-    // El hijo habla por el MISMO puerto que el túnel de arriba, aunque venga de `--puerto`.
-    return execFileSync(NODE, [cliente, command, ...pares], { encoding: "utf8", env: { ...process.env, HOTSWAP_URL: process.env.HOTSWAP_URL ?? `wss://127.0.0.1:${PUERTO}/hotswap` } }).trim();
-  };
-  const esperar = (segundos) => dormir(segundos);
 
   /**
    * **El canal no está en pie justo después del reinicio**, y esto se descubrió corriéndolo:

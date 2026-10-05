@@ -8072,6 +8072,8 @@ saluda (`hotswap.ts#esperarAlServidor`, sin reintento). Si no saluda, se arranca
 servidor ya en marcha no se arranca nada de más ni se añade ninguna línea.
 
 Medido en `pixel8`, framework parado de partida: Ejecutar desde su pestaña acaba en «La app arrancó y
-está viva», y «Probar» desde el editor en «proyecto desplegado y la app viva». **Sin tocar**: el script
-`xone-desplegar-android` tiene el mismo orden (sube antes de reiniciar) y fallaría igual con el
-framework parado.
+está viva», y «Probar» desde el editor en «proyecto desplegado y la app viva». El script
+`xone-desplegar-android` tenía el mismo orden (sube antes de reiniciar) y lleva la misma regla: pregunta
+con `getAllElements` (con el framework vivo contesta aunque no haya app; sin servidor el cliente sale con
+error), y si no contesta arranca la `SetupActivity` y espera hasta 60 s. Medido igual, con el framework
+parado y con él en marcha (en ese caso no añade ni una línea).
