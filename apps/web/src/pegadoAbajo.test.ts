@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { usarPegadoAbajo } from "./pegadoAbajo.js";
 
@@ -57,5 +57,77 @@ describe("usarPegadoAbajo", () => {
     Object.defineProperty(nodo, "scrollHeight", { value: 1400, configurable: true });
     rerender({ dep: 2 });
     expect(nodo.scrollTop).toBe(1400);
+  });
+  it("`alFinal` dice si se está abajo, y lo que llega estando arriba lo deja en falso", () => {
+    const { result, rerender } = renderHook(({ dep }) => usarPegadoAbajo(dep), { initialProps: { dep: 1 } });
+    expect(result.current.alFinal).toBe(true);
+    const nodo = scrollerFalso(1000, 400, 100);
+    result.current.nodo.current = nodo;
+    act(() => result.current.alDesplazar());
+    expect(result.current.alFinal).toBe(false);
+    // Arriba leyendo, llega más: sigue sin estar al final.
+    Object.defineProperty(nodo, "scrollHeight", { value: 1400, configurable: true });
+    rerender({ dep: 2 });
+    expect(result.current.alFinal).toBe(false);
+    // Al fondo a mano (dentro del umbral): ya está al final.
+    nodo.scrollTop = 980;
+    act(() => result.current.alDesplazar());
+    expect(result.current.alFinal).toBe(true);
+  });
+
+  it("`bajar` lleva al fondo y vuelve a enganchar: lo siguiente que llega se sigue", () => {
+    const { result, rerender } = renderHook(({ dep }) => usarPegadoAbajo(dep), { initialProps: { dep: 1 } });
+    const nodo = scrollerFalso(1000, 400, 100);
+    result.current.nodo.current = nodo;
+    act(() => result.current.alDesplazar());
+    act(() => result.current.bajar());
+    expect(result.current.alFinal).toBe(true);
+    expect(nodo.scrollTop).toBe(1000);
+    Object.defineProperty(nodo, "scrollHeight", { value: 1400, configurable: true });
+    rerender({ dep: 2 });
+    expect(nodo.scrollTop).toBe(1400);
+  });
+
+  it("con la bajada SUAVE, los `scroll` de camino no desenganchan", () => {
+    const { result } = renderHook(() => usarPegadoAbajo(1));
+    const nodo = scrollerFalso(1000, 400, 100);
+    const scrollTo = vi.fn();
+    Object.defineProperty(nodo, "scrollTo", { value: scrollTo, configurable: true });
+    result.current.nodo.current = nodo;
+    act(() => result.current.alDesplazar());
+    act(() => result.current.bajar());
+    expect(scrollTo).toHaveBeenCalledWith({ top: 1000, behavior: "smooth" });
+    // A medio camino: el navegador avisa de un scroll que aún no está abajo.
+    nodo.scrollTop = 400;
+    act(() => result.current.alDesplazar());
+    expect(result.current.alFinal).toBe(true);
+  });
+
+  it("el `ResizeObserver` solo se crea si se pide (los tramos de trabajo no lo piden)", () => {
+    const creados: unknown[] = [];
+    const original = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      constructor() {
+        creados.push(this);
+      }
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    } as unknown as typeof ResizeObserver;
+    try {
+      const conNodo = (vigilarTamano: boolean) =>
+        renderHook(() => {
+          const r = usarPegadoAbajo(1, { vigilarTamano });
+          // El nodo tiene que existir ANTES del efecto: se lo da un ref de callback de mentira.
+          if (r.nodo.current === null) r.nodo.current = document.createElement("div");
+          return r;
+        });
+      conNodo(false);
+      expect(creados).toHaveLength(0);
+      conNodo(true);
+      expect(creados).toHaveLength(1);
+    } finally {
+      globalThis.ResizeObserver = original;
+    }
   });
 });
