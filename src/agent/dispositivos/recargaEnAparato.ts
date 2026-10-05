@@ -118,8 +118,11 @@ export async function recargarEnAparato(
       return { estado: "fallo", clase, motivo: "se aplicó y la app dejó de contestar: puede haber reventado al cargarlo" };
     }
     return { estado: "aplicada", clase };
-  } catch (error) {
-    return { estado: "sin-app", motivo: unaLinea(error) };
+  } catch {
+    // Un canal que no abre o se corta ES el síntoma medido de «no hay app»: el servidor vive dentro
+    // de la app, y con el túnel puesto el `adb forward` acepta y resetea («socket disconnected before
+    // secure TLS…»). Enseñar esa línea cruda en el editor no le dice nada a quien guarda.
+    return { estado: "sin-app" };
   } finally {
     cliente?.cerrar();
   }
@@ -182,14 +185,6 @@ function decirDe(respuesta: RespuestaHotswap): string {
   const status = typeof respuesta.status === "string" ? respuesta.status.trim() : "";
   const excepcion = typeof respuesta["exceptionMessage"] === "string" ? respuesta["exceptionMessage"].trim() : "";
   return (excepcion || status || JSON.stringify(respuesta)).split(/\r?\n/)[0]!.slice(0, 160);
-}
-
-/** Una línea, nunca una ruta de la máquina. */
-function unaLinea(error: unknown): string {
-  const e = error as { code?: unknown; message?: unknown } | null;
-  if (e !== null && typeof e === "object" && e.code === "ECONNREFUSED") return "no hay app escuchando en el aparato";
-  const mensaje = e !== null && typeof e === "object" && typeof e.message === "string" ? e.message : String(error);
-  return mensaje.split(/\r?\n/)[0]!.slice(0, 160);
 }
 
 /** El `adb forward` de verdad, con el adb que localiza la detección de dispositivos. */

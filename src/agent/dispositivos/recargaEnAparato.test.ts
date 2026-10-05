@@ -119,7 +119,8 @@ describe("recargarEnAparato", () => {
       throw Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" });
     };
     const r = await recargarEnAparato(peticion("Inicio.xne", "<coll>"), { abrirSocket, aplicarTunel: tunelBueno });
-    expect(r.estado).toBe("sin-app");
+    // Sin el error crudo: es «la app no corre», no un fallo que leer.
+    expect(r).toEqual({ estado: "sin-app" });
   });
 
   it("un icono no se recarga suelto, y ni siquiera se pone el túnel", async () => {

@@ -77,9 +77,13 @@
   top: 0;
   z-index: 1;
   display: flex;
+  /* En dos filas cuando no cabe: editando con un aparato, las acciones (casilla, Probar, Guardar,
+     Cerrar) se comían el ancho entero y el título salía con una letra por línea. Medido en el
+     navegador con el panel a la derecha del chat. */
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   padding: 10px 16px;
   border-bottom: 0.5px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-1);
@@ -90,7 +94,8 @@
 /* Icono + ruta + línea de metadatos, a la izquierda; cede ella y no las acciones de al lado. */
 .titulo {
   display: flex;
-  flex: 1 1 auto;
+  /* La base es lo que el título se reserva antes de que las acciones bajen a la otra fila. */
+  flex: 1 1 14em;
   align-items: center;
   gap: 10px;
   min-width: 0;
@@ -203,9 +208,12 @@
 /* Lo que se hace con el fichero: Vista/Fuente, Editar, y editando Guardar/Cerrar. */
 .acciones {
   display: flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px;
+  margin-left: auto;
 }
 
 /* «No se puede editar: …» en el sitio del botón: una línea corta en terciario, que se lee sin
