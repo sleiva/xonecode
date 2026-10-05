@@ -142,5 +142,6 @@ describe("motivoDeNoRepresentable", () => {
     const { motivoDeNoRepresentable } = await import("./codificacionDelProyecto.js");
     expect(motivoDeNoRepresentable("/Datos.xne", "Ω", 2)).toContain("&#937;");
     expect(motivoDeNoRepresentable("/script.js", "😀", 1)).toContain("\\uD83D\\uDE00");
+    expect(motivoDeNoRepresentable("/estilos.css", "Ω", 1)).toContain("\\3A9");
   });
 });

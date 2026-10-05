@@ -63,6 +63,7 @@ import { fichaDeAgente, promptDeAgente, recibeMarcarCriterios, repartirSkills, t
 import { PERFIL_DEL_ORQUESTADOR, promptOrquestador } from "../../grafo/xoneAgent.js";
 import { permisosDe, seDetieneEn, TEXTO_HITL } from "../../grafo/perfiles.js";
 import { cambioDe } from "../../turno/interrupts.js";
+import { decodificarComoTexto } from "../../../core/codificacion.js";
 import { tomarInstantanea, type Cambio } from "../../turno/instantanea.js";
 import { ficherosDelProyecto } from "../../turno/ficherosDelProyecto.js";
 import type { SesionReal } from "../../turno/sesionReal.js";
@@ -1548,7 +1549,9 @@ export async function abrirSesionTrueforge(
 
           const leer = (ruta: string): string => {
             try {
-              return readFileSync(join(raiz, ruta), "utf8");
+              // Con la MISMA codificación con que lo lee el agente (`codificacionDelProyecto.ts`): con
+              // UTF-8 a secas, el ancla con tilde de un Latin-1 no calzaba y la tarjeta mentía.
+              return decodificarComoTexto(readFileSync(join(raiz, ruta)));
             } catch {
               return "";
             }

@@ -9,6 +9,7 @@ import { collectPending, type Decision, MAX_APPROVAL_ROUNDS } from "../../vendor
 import { esRutaDeArtefacto, type Artefacto } from "../../core/artefactos.js";
 
 import { aPendiente, ficheroDe, cambioDe, buildResume } from "./interrupts.js";
+import { decodificarComoTexto } from "../../core/codificacion.js";
 import { cargarAgentes } from "../subagentes/agentesEnDisco.js";
 import { resolverMotor, type MotorDeAgente } from "../../core/motor.js";
 import { cargar } from "../config/configEnDisco.js";
@@ -532,7 +533,9 @@ export async function abrirSesionReal(opciones: {
       const raizReal = realpathSync(raiz);
       const destino = realpathSync(real);
       if (destino !== raizReal && !destino.startsWith(raizReal + sep)) return "";
-      return readFileSync(destino, "utf8");
+      // Con la MISMA codificación con que lo lee el agente: un Latin-1 en UTF-8 daría «�» en cada
+      // tilde, el ancla de un `edit` no calzaría y la tarjeta enseñaría un diff que no es.
+      return decodificarComoTexto(readFileSync(destino));
     } catch {
       return "";
     }

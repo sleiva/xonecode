@@ -174,7 +174,7 @@ export function conCodificacionDelFichero<T extends object>(backend: T): T {
 
 /**
  * Lo que el agente lee cuando su texto no cabe. Le dice qué hacer en lugar de solo «no»: en un XML
- * la entidad numérica es el mismo carácter para XOne; en JavaScript, el escape `\u`.
+ * la entidad numérica es el mismo carácter para XOne; en JavaScript, el escape `\u`; en CSS, `\XX `.
  */
 export function motivoDeNoRepresentable(ruta: string, caracter: string, linea: number): string {
   const punto = caracter.codePointAt(0)!;
@@ -184,7 +184,13 @@ export function motivoDeNoRepresentable(ruta: string, caracter: string, linea: n
   const escape = Array.from({ length: caracter.length }, (_, i) =>
     `\\u${caracter.charCodeAt(i).toString(16).toUpperCase().padStart(4, "0")}`
   ).join("");
-  const alternativa = js ? `el escape ${escape}` : `la entidad &#${punto};`;
+  // En CSS, el escape de barra con el code point en hexadecimal y un espacio que lo cierra.
+  const css = /\.css$/i.test(ruta);
+  const alternativa = js
+    ? `el escape ${escape}`
+    : css
+      ? `el escape CSS \\${punto.toString(16).toUpperCase()} (con un espacio detrás)`
+      : `la entidad &#${punto};`;
   return `este fichero está en Latin-1 y «${caracter}» (línea ${linea}) no cabe en esa codificación: no se ha escrito nada. Usa solo caracteres Latin-1, o ${alternativa}`;
 }
 

@@ -151,6 +151,38 @@ describe("una sesión con el motor TrueForge", () => {
     expect(s.consumo().contexto).toBe(70);
   }, 20_000);
 
+  it("un .xne Latin-1: el hijo lo edita por un ancla CON tilde, la tarjeta enseña el diff real y el disco sigue en windows-1252", async () => {
+    // De punta a punta por la composición de producción: el backend lee el Latin-1 con sus tildes,
+    // la tarjeta de aprobación lee el ANTES con la misma codificación, y la escritura vuelve en
+    // windows-1252. Con el ANTES en UTF-8, el ancla «Tamaño» no calzaba y la tarjeta enseñaba solo
+    // las dos piezas sueltas.
+    const raiz = proyecto();
+    const enLatin1 = (t: string) => Buffer.from([...t].map((c) => (c === "€" ? 0x80 : c.charCodeAt(0))));
+    writeFileSync(join(raiz, "Datos.xne"), enLatin1('<coll name="Tamaño" title="€">\n<prop name="uno"/>\n</coll>\n'));
+    const { m } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "renombra" }) }] })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "e1", name: "edit_file", args: JSON.stringify({ file_path: "/Datos.xne", old_string: 'name="Tamaño"', new_string: 'name="Año"' }) }] })],
+      [new AIMessageChunk({ content: "Hecho." })],
+      [new AIMessageChunk({ content: "Listo." })],
+    ]);
+    const vistas: { tipo: string; texto: string }[][] = [];
+    const s = await abrirSesionTrueforge({
+      raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO,
+      pedirAprobacion: async (pendientes, _f, diffs) => {
+        for (const p of pendientes) vistas.push(diffs?.get(p.id) ?? []);
+        return new Map(pendientes.map((p) => [p.id, { type: "approve" as const }]));
+      },
+    });
+    await s.turno("renombra la colección", piel().p);
+    expect(vistas[0]).toEqual([
+      { tipo: "quitado", texto: '<coll name="Tamaño" title="€">' },
+      { tipo: "anadido", texto: '<coll name="Año" title="€">' },
+      { tipo: "igual", texto: '<prop name="uno"/>' },
+      { tipo: "igual", texto: "</coll>" },
+    ]);
+    expect(readFileSync(join(raiz, "Datos.xne")).equals(enLatin1('<coll name="Año" title="€">\n<prop name="uno"/>\n</coll>\n'))).toBe(true);
+  }, 20_000);
+
   it("al terminar el hijo, el ORQUESTADOR recibe lo que escribió contado por el harness, no solo su informe", async () => {
     const { m, vistos } = modelosConGuion(guionDeEscritura());
     const s = await abrirSesionTrueforge({

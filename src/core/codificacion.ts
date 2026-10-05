@@ -66,3 +66,14 @@ export function esUtf8Valido(bytes: Uint8Array): boolean {
     return false;
   }
 }
+
+/**
+ * Bytes de un texto del proyecto → el texto que ve el AGENTE: UTF-8 si lo es (con el BOM dentro,
+ * como `readFile(…, "utf8")`, que es lo que hace la librería), y si no, windows-1252. Es lo que
+ * tiene que leer cualquiera que compare contra lo que el agente leyó —el ANTES de la tarjeta de
+ * aprobación—: con UTF-8 a secas, un ancla con tilde de un Latin-1 no calzaba y cada línea con
+ * tilde salía cambiada.
+ */
+export function decodificarComoTexto(bytes: Uint8Array): string {
+  return esUtf8Valido(bytes) ? new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes) : decodificarWindows1252(bytes);
+}

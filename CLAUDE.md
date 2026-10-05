@@ -150,7 +150,9 @@ Y las guardas del proyecto:
   reescribía el fichero entero con «�» en cada tilde contestando que bien. Un texto que existe y no es
   UTF-8 se lee con el decodificador de la pestaña Ficheros y se escribe con su inverso
   (`core/codificacion.ts`); un carácter que no cabe se DEVUELVE como error. Va por dentro de
-  `sinContenidoInvalido` (valida el texto bien decodificado) y de `enSerie`. **Límites declarados**:
+  `sinContenidoInvalido` (valida el texto bien decodificado) y de `enSerie`. **El ANTES de la tarjeta
+  de aprobación se lee IGUAL** (`decodificarComoTexto`, en los dos motores): leído en UTF-8, el ancla
+  con tilde no calzaba y la tarjeta enseñaba un diff que no era. **Límites declarados**:
   `grep`/`glob` y las tools propias que leen el disco siguen en UTF-8, y un Latin-1 que hoy es ASCII
   puro ES UTF-8 válido, así que su primera tilde se escribe en UTF-8.
 - **Un rechazo de guarda se DEVUELVE como `{error}`, nunca se lanza**: una excepción se lleva el

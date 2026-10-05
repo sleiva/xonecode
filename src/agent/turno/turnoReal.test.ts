@@ -526,6 +526,31 @@ describe("abrirSesionReal", () => {
       rmSync(dir, { recursive: true, force: true });
     });
 
+    it("el ANTES de un fichero Latin-1 se lee con sus tildes: la tarjeta no enseña «�» ni marca cambiado lo que no cambia", async () => {
+      // El agente lee el Latin-1 bien (`codificacionDelProyecto.ts`) y escribe con tildes de verdad;
+      // si la tarjeta leyera el disco como UTF-8, cada línea con tilde saldría quitada y añadida.
+      const dir = mkdtempSync(join(tmpdir(), "turnoreal-latin1-"));
+      writeFileSync(join(dir, "app.xne"), Buffer.from([...'<coll name="Tamaño">\nviejo\n</coll>\n'].map((c) => c.charCodeAt(0))));
+      const vistos: Array<Map<string, LineaDeDiff[]> | undefined> = [];
+      const sesion = await abrir({
+        escribe: true,
+        raiz: dir,
+        interruptArgs: { file_path: "/app.xne", content: '<coll name="Tamaño">\nnuevo\n</coll>\n' },
+        pedir: async (pendientes, _ficheros, diffs) => {
+          vistos.push(diffs);
+          return rechazarTodo()(pendientes);
+        },
+      });
+      await sesion.turno("escribe algo", pielFalsa());
+      expect(vistos[0]?.get("int-1")).toEqual([
+        { tipo: "igual", texto: '<coll name="Tamaño">' },
+        { tipo: "quitado", texto: "viejo" },
+        { tipo: "anadido", texto: "nuevo" },
+        { tipo: "igual", texto: "</coll>" },
+      ]);
+      rmSync(dir, { recursive: true, force: true });
+    });
+
     it("y con la ruta ROOTEADA también: es la forma que de verdad manda el backend", async () => {
       // El test de arriba usaba `"app.xne"` sin barra, y por eso este agujero vivió sin que
       // nada chistara: el backend del agente va con `virtualMode: true`, así que lo que llega
