@@ -120,7 +120,8 @@ function esAscii(bytes: Uint8Array): boolean {
 /**
  * En qué bytes se guarda `texto` sobre lo que hay (`actual`, ausente si el fichero es NUEVO). En
  * orden:
- * 1. Lo que ya no es UTF-8 sigue en SU tabla de 8 bits (`tablaDeLosBytes`).
+ * 1. Lo que ya no es UTF-8 sigue en 8 bits: con la tabla que declare lo que se escribe, si declara
+ *    una de 8 bits (la que usará la próxima lectura), o si no con la de sus bytes (`tablaDeLosBytes`).
  * 2. Un UTF-8 con algo que no es ASCII se queda en UTF-8: nunca se transcodifica lo que nadie tocó.
  * 3. Un ASCII puro —que es UTF-8 válido y no delata nada— o un fichero nuevo siguen lo que DECLARE el
  *    texto que se escribe; sin declaración, UTF-8. Es el caso de toda colección nueva con la
@@ -128,7 +129,12 @@ function esAscii(bytes: Uint8Array): boolean {
  *    una declaración de 8 bits.
  */
 export function codificacionParaEscribir(actual: Uint8Array | undefined, texto: string): CodificacionDeEscritura {
-  if (actual !== undefined && !esUtf8Valido(actual)) return tablaDeLosBytes(actual);
+  if (actual !== undefined && !esUtf8Valido(actual)) {
+    // Si lo que se escribe CAMBIA la declaración a otra tabla de 8 bits, manda la nueva: es con la
+    // que se volverá a leer, y escribir con la vieja dejaría un € en 0x80 leído luego como control.
+    const declarada = codificacionDeclarada(texto);
+    return declarada !== undefined && declarada !== "utf-8" ? declarada : tablaDeLosBytes(actual);
+  }
   if (actual !== undefined && !esAscii(actual)) return "utf-8";
   return codificacionDeclarada(texto) ?? "utf-8";
 }

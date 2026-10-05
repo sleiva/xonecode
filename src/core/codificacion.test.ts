@@ -74,6 +74,16 @@ describe("codificacionParaEscribir: en qué bytes se guarda", () => {
     expect(codificacionParaEscribir(Uint8Array.from([...ascii(ISO15), 0xa4]), "x")).toBe("iso-8859-15");
     expect(codificacionParaEscribir(Uint8Array.of(0xf1), "x")).toBe("windows-1252");
   });
+  it("(i) si lo que se escribe CAMBIA la declaración de 8 bits, manda la nueva: es la tabla con que se volverá a leer", () => {
+    const W1252 = '<?xml version="1.0" encoding="windows-1252"?>\n';
+    // windows-1252 → iso-8859-15, y al revés.
+    expect(codificacionParaEscribir(Uint8Array.from([...ascii(W1252), 0x80]), ISO15 + "€")).toBe("iso-8859-15");
+    expect(codificacionParaEscribir(Uint8Array.from([...ascii(ISO15), 0xa4]), W1252 + "€")).toBe("windows-1252");
+    // Una declaración utf-8, o ninguna, no cambia la tabla de los bytes.
+    expect(codificacionParaEscribir(Uint8Array.from([...ascii(ISO15), 0xa4]), '<?xml version="1.0" encoding="utf-8"?>\n')).toBe("iso-8859-15");
+    expect(codificacionParaEscribir(Uint8Array.from([...ascii(ISO15), 0xa4]), "sin prólogo")).toBe("iso-8859-15");
+  });
+
   it("(ii) un UTF-8 con algo que no es ASCII se queda en UTF-8, declare lo que declare", () => {
     expect(codificacionParaEscribir(new TextEncoder().encode(ISO15 + "ñ"), ISO15 + "ñ")).toBe("utf-8");
   });

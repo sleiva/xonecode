@@ -401,6 +401,17 @@ describe("escribirFicheroDeProyecto", () => {
     expect(readFileSync(join(raiz, "Nuevo.xne")).equals(Buffer.concat([Buffer.from(ISO15 + '<coll name="A'), Buffer.from([0xf1]), Buffer.from("o "), Buffer.from([0xa4]), Buffer.from('"/>\n')]))).toBe(true);
   });
 
+  it("cambiar el prólogo de windows-1252 a iso-8859-15 escribe con la tabla NUEVA: el € va a 0xA4 y se relee como €", async () => {
+    const W1252 = '<?xml version="1.0" encoding="windows-1252"?>\n';
+    writeFileSync(join(raiz, "Cambia.xne"), Buffer.concat([Buffer.from(W1252), Buffer.from([0x80, 0x0a])]));
+    const leido = await leerFicheroDeProyecto(raiz, "Cambia.xne");
+    expect(leido.texto).toBe(W1252 + "€\n");
+    const r = await escribirFicheroDeProyecto(raiz, "Cambia.xne", ISO15 + "€\n", leido.huella!);
+    expect(r.error).toBeUndefined();
+    expect(readFileSync(join(raiz, "Cambia.xne")).equals(Buffer.concat([Buffer.from(ISO15), Buffer.from([0xa4, 0x0a])]))).toBe(true);
+    expect((await leerFicheroDeProyecto(raiz, "Cambia.xne")).texto).toBe(ISO15 + "€\n");
+  });
+
   it("un ASCII puro que declara utf-8 sigue en UTF-8", async () => {
     const utf = '<?xml version="1.0" encoding="utf-8"?>\n';
     writeFileSync(join(raiz, "U.xne"), utf + "<coll/>\n");
