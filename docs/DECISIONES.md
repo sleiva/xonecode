@@ -3356,9 +3356,8 @@ ningún aviso; forzando borrado + alta por separado, el borrado de `A` sí pasa 
 candado.
 
 **Lo IMPOSIBLE sale del plan y se declara** (`core/planDeSubida.ts`, que devuelve
-`{ operaciones, omitidas }`). Un binario por encima del tope del servidor no cabe —hoy
-`TOPE_BINARIO`, el del modo `chunked`, que es el que se usa desde que la subida se verifica:
-el `base64` de una llamada tenía un tope más bajo y no comprobaba nada—, y el borrado
+`{ operaciones, omitidas }`). El modo `chunked` NO está implementado —`subirBinario` del
+puerto ni recibe el modo y el adaptador manda siempre `base64`—, y el borrado
 (`borrarTexto`, sobre `studio_edit_file` con `editMode: "delete"`) es una tool de TEXTO,
 así que un binario borrado no se puede propagar. Las dos cosas eran operaciones que
 fallaban SIEMPRE, y como la ref solo avanza con `fallos` vacío, el siguiente `/sync`
@@ -3367,6 +3366,16 @@ dejaba `/sync subir` inútil de forma permanente. Ahora salen del plan como `omi
 con motivo accionable, y se dicen por consola Y en `sync.log` —que sobrevive al turno—
 mientras el resto sube y la ref avanza. Si no hay ningún «resto», la ref no se mueve: se
 vuelven a declarar en cada `/sync`, que es la verdad.
+
+**La subida de TEXTO se verifica; la de binarios no.** Hay ficheros que se cortan al subirlos y la
+causa no se ha encontrado, así que cada texto se relee y se compara (`core/verificacionDeSubida.ts`),
+normalizando solo lo medido contra el servidor real: Studio quita el salto de línea final y pasa CRLF a
+LF; el BOM, las tildes y los emoji vuelven intactos. Un binario no se puede releer (`studio_get_file`
+solo sirve texto), y el modo `chunked` con `expectedSha256`, que sí lo comprobaría, se probó contra el
+servidor y su `commit` falla siempre, con el hash bueno y con uno malo: queda pendiente del lado de
+CloudStudio y los binarios siguen en `base64` con su tope. Antes de subir se lee la rama activa tras el
+`switch` (contesta con el mismo identificador que `ramas()`): otra rama no sube nada, ilegible sube con
+aviso.
 
 **La sincronización con CloudStudio manda la INTENCIÓN, no la sintaxis** (mensaje `sync`,
 `apps/web/src/componentes/CloudStudio.tsx`). Contesta una pregunta que hasta ahora solo tenía

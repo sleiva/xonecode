@@ -745,7 +745,7 @@ export interface OpcionesCloudStudioEnMemoria {
   textoRecortadoA?: Record<string, number>;
   /** Motivo con el que `leerTexto` rechaza DESPUÉS de una escritura (la relectura que comprueba). */
   relecturaFalla?: string;
-  /** Motivo con el que `subirBinario` rechaza: p. ej. el hash que el servidor no casa en el `commit`. */
+  /** Motivo con el que `subirBinario` rechaza. */
   binarioFalla?: string;
   /**
    * El `switch` contesta bien pero la rama activa NO cambia: `contexto` sigue diciendo la de

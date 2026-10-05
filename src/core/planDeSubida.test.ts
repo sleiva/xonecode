@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extensionDe, planDeSubida, TOPE_BINARIO } from "./planDeSubida.js";
+import { extensionDe, planDeSubida, TOPE_BASE64 } from "./planDeSubida.js";
 
 const base = {
   descargados: new Set(["app.xml", "BuscarFarmacias.xne", "icons/icon_check.svg", "AlquilerCoches.js"]),
@@ -22,50 +22,40 @@ describe("planDeSubida", () => {
     })).toEqual({
       operaciones: [
         { tipo: "texto", ruta: "BuscarFarmacias.xne", clase: "modificado" },
-        { tipo: "binario", ruta: "icons/icon_nuevo.png", bytes: 1024, modo: "chunked", clase: "nuevo" },
+        { tipo: "binario", ruta: "icons/icon_nuevo.png", bytes: 1024, modo: "base64", clase: "nuevo" },
       ],
       omitidas: [],
     });
   });
 
   it("un binario por encima del tope es IMPOSIBLE, no pendiente: sale del plan y se declara", () => {
-    // El modo troceado del servidor admite hasta `TOPE_BINARIO`. Dejar en el plan algo que
-    // lo pasa lo haría fallar contra el servidor una y otra vez: el siguiente `/sync`
-    // recalcularía la MISMA operación y `/sync subir` volvería a fallar por ella siempre.
+    // El modo `chunked` nunca se ejecutó: `CloudStudioPort.subirBinario` ni lleva el modo
+    // y el adaptador manda siempre base64. Dejar la operación en el plan la hacía fallar
+    // contra el servidor, y como la ref solo avanza con `fallos` vacío, el siguiente
+    // `/sync` recalculaba el MISMO plan: `/sync subir` inútil de forma PERMANENTE.
     const plan = planDeSubida({
       ...base,
       cambios: [{ clase: "nuevo", ruta: "bd/gestion.db" }],
-      tamanos: new Map([["bd/gestion.db", TOPE_BINARIO + 1]]),
+      tamanos: new Map([["bd/gestion.db", TOPE_BASE64 + 1]]),
     });
     expect(plan.operaciones).toEqual([]);
     expect(plan.omitidas).toHaveLength(1);
     expect(plan.omitidas[0]!.ruta).toBe("bd/gestion.db");
     // El motivo tiene que ser accionable: qué hacer, no solo que no se hizo.
-    expect(plan.omitidas[0]!.motivo).toMatch(/admite hasta/);
+    expect(plan.omitidas[0]!.motivo).toMatch(/troceado no está implementado/);
     expect(plan.omitidas[0]!.motivo).toMatch(/Studio/);
   });
 
-  it("el tope es el del modo troceado (50 MB), no el del base64 de una llamada (5 MB)", () => {
-    expect(TOPE_BINARIO).toBe(50 * 1024 * 1024);
-    const plan = planDeSubida({
-      ...base,
-      cambios: [{ clase: "nuevo", ruta: "bd/gestion.db" }],
-      tamanos: new Map([["bd/gestion.db", 6 * 1024 * 1024]]),
-    });
-    expect(plan.omitidas).toEqual([]);
-    expect(plan.operaciones).toHaveLength(1);
-  });
-
   it("el binario que cabe JUSTO en el tope sí sube", () => {
-    // El límite exacto: `> TOPE_BINARIO`, no `>=`. Un test solo por encima del tope no
+    // El límite exacto: `> TOPE_BASE64`, no `>=`. Un test solo por encima del tope no
     // distinguiría una comparación de la otra.
     const plan = planDeSubida({
       ...base,
       cambios: [{ clase: "nuevo", ruta: "bd/justo.db" }],
-      tamanos: new Map([["bd/justo.db", TOPE_BINARIO]]),
+      tamanos: new Map([["bd/justo.db", TOPE_BASE64]]),
     });
     expect(plan.operaciones).toEqual([
-      { tipo: "binario", ruta: "bd/justo.db", bytes: TOPE_BINARIO, modo: "chunked", clase: "nuevo" },
+      { tipo: "binario", ruta: "bd/justo.db", bytes: TOPE_BASE64, modo: "base64", clase: "nuevo" },
     ]);
     expect(plan.omitidas).toEqual([]);
   });
@@ -170,7 +160,7 @@ describe("planDeSubida", () => {
       ...base,
       cambios: [{ clase: "nuevo", ruta: "LICENSE" }],
       tamanos: new Map([["LICENSE", 1000]]),
-    }).operaciones).toEqual([{ tipo: "binario", ruta: "LICENSE", bytes: 1000, modo: "chunked", clase: "nuevo" }]);
+    }).operaciones).toEqual([{ tipo: "binario", ruta: "LICENSE", bytes: 1000, modo: "base64", clase: "nuevo" }]);
   });
 
   it("reconoce la vista aplanada sin importar la mayúscula de la extensión", () => {

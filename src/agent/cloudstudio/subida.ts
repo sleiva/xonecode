@@ -17,7 +17,8 @@
  *   garantiza, lo asume del servidor.
  * - Nada se da por subido sin COMPROBARLO: hay ficheros que se cortan al subirlos y la causa
  *   no se ha encontrado. Cada texto se RELEE y se compara exacto (`core/verificacionDeSubida.ts`);
- *   un binario va troceado con su sha256, que comprueba el servidor (`cloudstudioClient.ts`).
+ *   un binario NO se verifica: Studio no deja releerlo (`studio_get_file` solo sirve texto), y
+ *   el modo troceado con hash del servidor está pendiente del lado de CloudStudio.
  *   Y antes de tocar un fichero se mira que Studio esté de verdad en la rama del proyecto: si
  *   dice otra, no se sube nada; si no se puede leer, se sube con un AVISO (`avisoDeRama`).
  * - La rama activa del servidor se restaura al terminar (incluso si falló al posicionar
@@ -87,7 +88,7 @@ export interface InformeDeSubida {
   /**
    * Lo que NO se puede sincronizar, con el porqué (`core/planDeSubida.ts`). No son
    * fallos: no bloquean la ref. Son el camino de escape para que una operación imposible
-   * —el borrado de un binario, un binario por encima de `TOPE_BINARIO`— no atasque la subida.
+   * —el borrado de un binario, un fichero de más de 5 MB— no atasque la subida entera.
    */
   omitidas: OperacionOmitida[];
   /**
@@ -95,6 +96,17 @@ export interface InformeDeSubida {
    * Presente = no se ha escrito nada en Studio ni se ha pedido autorización.
    */
   ilegibles?: FicheroIlegible[];
+}
+
+/**
+ * El motivo de un fallo, apto para el diálogo y `sync.log`. Un error de Node (`readFileSync`
+ * de un fichero que desapareció o no se deja leer) lleva la ruta ABSOLUTA en el mensaje, y una
+ * ruta de la máquina no viaja: de él solo su `code`. Un error del servidor sí se dice entero.
+ */
+function motivoDeFallo(error: unknown): string {
+  const code = (error as { code?: unknown } | null)?.code;
+  if (typeof code === "string") return `no se pudo leer el fichero en local (${code})`;
+  return error instanceof Error ? error.message : String(error);
 }
 
 export function rutaSyncLog(raiz: string): string {
@@ -312,13 +324,12 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
               continue;
             }
           } else {
-            // El hash lo comprueba el SERVIDOR en el `commit` del modo troceado
-            // (`cloudstudioClient.ts#subirBinario`): si no casa, esto lanza.
+            // Sin verificación: Studio no deja releer un binario (ver la cabecera).
             await puerto.subirBinario(operacion.ruta, readFileSync(join(raiz, operacion.ruta)));
           }
           informe.ok.push(operacion.ruta);
         } catch (error) {
-          const motivo = (error as Error).message;
+          const motivo = motivoDeFallo(error);
           informe.fallos.push({ ruta: operacion.ruta, motivo });
           // Dicho, no solo contado: el diálogo de la subida enseña las últimas líneas del
           // recorrido, y «fallaron 1» sin el porqué no deja ver un corte.
@@ -332,7 +343,8 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
       // posicionando la rama no puede dejar el suelo movido bajo quien tenga Studio
       // abierto en el navegador. Y sin `antes` no hay a dónde volver: adivinar una rama
       // movería ese suelo con más seguridad de la que hay.
-      if (antes !== undefined) await puerto.cambiarRama(antes);
+      // Una rama VACÍA es «el servidor no la dijo», no una rama a la que volver.
+      if (antes !== undefined && antes !== "") await puerto.cambiarRama(antes);
     }
   } catch (error) {
     // No se pudo ni intentar el plan (crear/cambiar de rama falló): se registra el
@@ -343,29 +355,36 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
     throw error;
   }
 
-  if (informe.fallos.length === 0 && !parcial) {
-    await marcarSubido(raiz, ramaOrigen, `sync: ${informe.ok.length} ficheros a ${ramaOrigen}`);
-  } else if (informe.fallos.length === 0 || informe.ok.length > 0) {
-    // Solo lo ELEGIDO y COMPROBADO avanza: la ref no puede ir a HEAD, o afirmaría que está arriba lo que
-    // la persona dejó sin marcar. Lo omitido tampoco avanza: se sigue declarando.
-    await marcarSubidoParcial(
-      raiz,
-      ramaOrigen,
-      informe.ok,
-      `sync: ${informe.ok.length} de ${plan.length} ficheros a ${ramaOrigen}`
-    );
-    // Lo que FALLÓ no avanza: el próximo `/sync` lo vuelve a calcular y a intentar.
-    const resto = plan.length - informe.ok.length;
-    if (informe.fallos.length > 0) {
-      informar(`${informe.fallos.length} ficheros no subieron bien; siguen pendientes y el próximo /sync los reintenta\n`);
-    } else {
-      informar(
-        `subidos ${informe.ok.length} de ${plan.length}; ${resto === 1 ? "el otro sigue" : `los otros ${resto} siguen`} pendiente${resto === 1 ? "" : "s"}\n`
+  // Si mover la ref revienta, la operación sigue constando en `sync.log`: lo subido YA está en
+  // Studio, y perder su rastro sería peor que el error.
+  try {
+    if (informe.fallos.length === 0 && !parcial) {
+      await marcarSubido(raiz, ramaOrigen, `sync: ${informe.ok.length} ficheros a ${ramaOrigen}`);
+    } else if (informe.fallos.length === 0 || informe.ok.length > 0) {
+      // Solo lo ELEGIDO y COMPROBADO avanza: la ref no puede ir a HEAD, o afirmaría que está arriba lo que
+      // la persona dejó sin marcar. Lo omitido tampoco avanza: se sigue declarando.
+      await marcarSubidoParcial(
+        raiz,
+        ramaOrigen,
+        informe.ok,
+        `sync: ${informe.ok.length} de ${plan.length} ficheros a ${ramaOrigen}`
       );
+      // Lo que FALLÓ no avanza: el próximo `/sync` lo vuelve a calcular y a intentar.
+      const resto = plan.length - informe.ok.length;
+      if (informe.fallos.length > 0) {
+        informar(`${informe.fallos.length} ficheros no subieron bien; siguen pendientes y el próximo /sync los reintenta\n`);
+      } else {
+        informar(
+          `subidos ${informe.ok.length} de ${plan.length}; ${resto === 1 ? "el otro sigue" : `los otros ${resto} siguen`} pendiente${resto === 1 ? "" : "s"}\n`
+        );
+      }
+    } else {
+      // Nada subió bien: la ref no se mueve y el siguiente `/sync` lo reintenta todo.
+      informar(`${informe.fallos.length} ficheros no subieron; la ref no se mueve y el próximo /sync reintenta\n`);
     }
-  } else {
-    // Nada subió bien: la ref no se mueve y el siguiente `/sync` lo reintenta todo.
-    informar(`${informe.fallos.length} ficheros no subieron; la ref no se mueve y el próximo /sync reintenta\n`);
+  } catch (error) {
+    registrar(`subido, pero no se pudo mover la ref: ${motivoDeFallo(error)}`);
+    throw error;
   }
 
   registrar();

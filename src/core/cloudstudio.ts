@@ -66,11 +66,11 @@ export interface EstadoDeSync {
 /**
  * Una operación de subida ya decidida. La ejecuta `agent/cloudstudio/subida.ts`.
  *
- * El binario va siempre por el modo `chunked` del servidor con su sha256
- * (`agent/cloudstudio/cloudstudioClient.ts#subirBinario`): es el único en que el servidor
- * comprueba que llegó entero. Un binario por encima de su tope (`TOPE_BINARIO`) no es una
- * operación pendiente sino IMPOSIBLE (`OperacionOmitida`) — dejarla en el plan la haría
- * fallar en cada `/sync`.
+ * El binario solo tiene modo `base64`. El modo `chunked` del servidor NO está
+ * implementado: `CloudStudioPort.subirBinario` ni siquiera lleva el modo, y el adaptador
+ * manda siempre base64. Mientras siga así, un binario que no cabe en base64 no es una
+ * operación pendiente sino una operación IMPOSIBLE (`OperacionOmitida`) — dejarla en el
+ * plan atascaba la subida entera para siempre, porque la ref solo avanza sin fallos.
  *
  * **`clase` viaja porque es lo que se MIRA al decidir, y `tipo` no lo dice.** Un texto que
  * ya estaba en Studio y se edita y un texto que es nuevo se suben igual —con la misma
@@ -82,7 +82,7 @@ export interface EstadoDeSync {
  */
 export type OperacionDeSubida =
   | { tipo: "texto"; ruta: string; clase: "nuevo" | "modificado" }
-  | { tipo: "binario"; ruta: string; bytes: number; modo: "chunked"; clase: "nuevo" | "modificado" }
+  | { tipo: "binario"; ruta: string; bytes: number; modo: "base64"; clase: "nuevo" | "modificado" }
   | { tipo: "borrado"; ruta: string };
 
 /**
@@ -90,7 +90,7 @@ export type OperacionDeSubida =
  *
  * Es el camino de escape: sale del plan, se declara (por consola y en `sync.log`) y deja
  * que la ref avance con el resto. Sin él, una sola operación imposible —la primera imagen
- * borrada, el primer `.db` por encima del tope— dejaba `/sync subir` inútil de forma
+ * borrada, el primer `.db` de más de 5 MB— dejaba `/sync subir` inútil de forma
  * PERMANENTE: fallaba, la ref no se movía, el siguiente `/sync` recalculaba el mismo plan
  * y volvía a fallar, para siempre.
  */
