@@ -56,6 +56,8 @@ export interface ElementoDeMaqueta {
   /** El texto visible. Un botón de solo icono trae el nombre de la ligadura (`backspace`): eso NO es texto. */
   texto: string;
   caja: Caja;
+  /** Su ancho no se conoce (una maqueta DESCRITA sin unidades): no entra en la comparación de anchos. */
+  sinAncho?: true;
 }
 
 export interface MaquetaMedida {
@@ -187,6 +189,8 @@ const ADORNOS = /[•◦▪●]/g;
  * icono, no texto que se vea.
  */
 export function textoParaEmparejar(texto: string): string {
+  // `[borrar]`: así nombra un icono quien DESCRIBE una maqueta (`maquetaDescrita.ts`).
+  if (/^\[[^\]]*\]$/.test(texto.trim())) return "";
   const palabras = texto.replace(ADORNOS, " ").trim().split(/\s+/).filter((p) => p !== "");
   const visibles = palabras.filter((p) => !/^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(p) && !(palabras.length === 1 && /^[a-z]{4,}$/.test(p)));
   const unido = visibles.join(" ");
@@ -212,7 +216,12 @@ const centro = (c: Caja, ancho: number, alto: number): [number, number] => [(c.x
  * la tecla no se empareja con el «0» del visor); después los ICONOS por posición, solo si el más cercano
  * está cerca y libre. Lo que no se empareja se devuelve aparte.
  */
-export function emparejar(m: MaquetaMedida, g: GeometriaDelAparato): { parejas: Pareja[]; sinPareja: ElementoDeMaqueta[] } {
+export function emparejar(
+  m: MaquetaMedida,
+  g: GeometriaDelAparato,
+  /** Solo por texto: con una maqueta DESCRITA las posiciones son de una rejilla, y un icono «cerca» no significa nada. */
+  soloTexto = false
+): { parejas: Pareja[]; sinPareja: ElementoDeMaqueta[] } {
   const hojas = g.controles.filter(esHoja);
   const usadosM = new Set<number>();
   const usadosA = new Set<number>();
@@ -241,7 +250,7 @@ export function emparejar(m: MaquetaMedida, g: GeometriaDelAparato): { parejas: 
   // Iconos —y lo que en la maqueta es texto y en el aparato una IMAGEN («√»)—: por posición, contra
   // controles SIN texto que nadie ha cogido.
   m.elementos.forEach((e, i) => {
-    if (usadosM.has(i)) return;
+    if (soloTexto || usadosM.has(i)) return;
     let mejor: { j: number; d: number } | undefined;
     hojas.forEach((c, j) => {
       if (usadosA.has(j) || c.texto !== undefined) return;
@@ -283,19 +292,47 @@ const etiqueta = (e: ElementoDeMaqueta): string => {
   return /^[a-z][a-z0-9_]*$/.test(t) ? `el icono «${t}»` : `«${t.replace(/^[a-z_]+\s+/, "")}»`;
 };
 const veces = (x: number): string => x.toFixed(1).replace(".", ",");
+const mayuscula = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
 
-export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato): HallazgosDeGeometria {
+/**
+ * Cómo se compara. Por omisión, una maqueta MEDIDA contra el aparato. `aproximada` es una maqueta DESCRITA
+ * por el modelo (`maquetaDescrita.ts`): sus cajas son una rejilla, así que se empareja solo por texto, no hay
+ * proporción que comparar, y lo que falta NO es bloqueante —es lo que el modelo dijo ver, no una medida—.
+ */
+export interface ModoDeComparacion {
+  aproximada?: true;
+  /** Cómo se nombra cada lado en los hallazgos: por omisión «la maqueta» y «el aparato». */
+  nombres?: { maqueta: string; aparato: string };
+}
+
+export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, modo: ModoDeComparacion = {}): HallazgosDeGeometria {
   const bloqueantes: string[] = [];
   const diferencias: string[] = [];
   const notas: string[] = [];
-  const { parejas, sinPareja } = emparejar(m, g);
+  const aproximada = modo.aproximada === true;
+  const { maqueta: laMaqueta, aparato: elAparato } = modo.nombres ?? { maqueta: "la maqueta", aparato: "el aparato" };
+  const { parejas, sinPareja } = emparejar(m, g, aproximada);
   for (const p of parejas) {
-    if (p.porPosicion === true) notas.push(`${etiqueta(p.maqueta)} de la maqueta es en el aparato un control SIN texto (${p.aparato.nombre ?? "sin nombre"}): una imagen en su sitio. Comparo su caja igual.`);
+    if (p.porPosicion === true) notas.push(`${etiqueta(p.maqueta)} de ${laMaqueta} es en ${elAparato} un control SIN texto (${p.aparato.nombre ?? "sin nombre"}): una imagen en su sitio. Comparo su caja igual.`);
   }
 
+  /**
+   * En una maqueta DESCRITA, un texto sin pareja solo es noticia si su FILA existe en el otro lado (algún
+   * vecino suyo sí se emparejó): medido sobre la calculadora, los textos de ejemplo del visor
+   * («1,240 × 15% + 450 = 636») no están en el aparato, y no tienen por qué.
+   */
+  const filasConPareja = new Set(parejas.map((p) => p.maqueta.caja.y));
+  const sinFila: string[] = [];
   for (const e of sinPareja) {
-    if (textoParaEmparejar(e.texto) === "") notas.push(`${etiqueta(e)} de la maqueta no lo puedo emparejar: no tiene texto y nada del aparato cae cerca de su sitio.`);
-    else bloqueantes.push(`${etiqueta(e)} de la maqueta NO está en el aparato (ningún control con ese texto).`);
+    if (textoParaEmparejar(e.texto) === "") {
+      if (!aproximada) notas.push(`${etiqueta(e)} de ${laMaqueta} no lo puedo emparejar: no tiene texto y nada de ${elAparato} cae cerca de su sitio.`);
+    } else if (aproximada) {
+      if (filasConPareja.has(e.caja.y)) diferencias.push(`${etiqueta(e)} de ${laMaqueta} no lo encuentro en ${elAparato} con ese texto (puede ser una imagen en su sitio: míralo).`);
+      else sinFila.push(etiqueta(e));
+    } else bloqueantes.push(`${etiqueta(e)} de ${laMaqueta} NO está en ${elAparato} (ningún control con ese texto).`);
+  }
+  if (sinFila.length > 0) {
+    notas.push(`sin el mismo texto en ${elAparato}, ni en su fila: ${sinFila.slice(0, 5).join(", ")}${sinFila.length > 5 ? "…" : ""} (si son datos de ejemplo de un visor, es normal).`);
   }
   if (parejas.length < 2) {
     notas.push("con menos de dos controles emparejados no hay filas ni tamaños que comparar.");
@@ -320,12 +357,12 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato): Ha
       // La parte más grande es «la fila»; lo demás, lo que se ha ido a otra.
       const grupos = [...enAparato.values()].sort((a, b) => b.length - a.length);
       const fuera = grupos.slice(1).flat().map((i) => etiqueta(parejas[i]!.maqueta));
-      diferencias.push(`En la maqueta ${nombres.join(", ")} van en la MISMA fila; en el aparato ${fuera.join(", ")} va${fuera.length > 1 ? "n" : ""} en otra.`);
+      diferencias.push(`${mayuscula(`en ${laMaqueta}`)} ${nombres.join(", ")} van en la MISMA fila; en ${elAparato} ${fuera.join(", ")} va${fuera.length > 1 ? "n" : ""} en otra.`);
       continue;
     }
     // Misma fila en los dos: el ORDEN de izquierda a derecha.
     const ordenA = indices.slice().sort((a, b) => parejas[a]!.aparato.caja.x - parejas[b]!.aparato.caja.x).map((i) => etiqueta(parejas[i]!.maqueta));
-    if (ordenA.join("|") !== nombres.join("|")) diferencias.push(`En la fila ${nombres.join(", ")} el ORDEN cambia: en el aparato va ${ordenA.join(", ")}.`);
+    if (ordenA.join("|") !== nombres.join("|")) diferencias.push(`En la fila ${nombres.join(", ")} el ORDEN cambia: en ${elAparato} va ${ordenA.join(", ")}.`);
   }
 
   // TAMAÑO relativo a sus vecinas de fila (en la maqueta y en el aparato, cada uno con las suyas). Solo
@@ -336,7 +373,7 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato): Ha
     return clase === undefined || clase === "B" || clase === "IMG";
   };
   for (const todos of porFilaM.values()) {
-    const indices = todos.filter(comparable);
+    const indices = todos.filter((i) => comparable(i) && parejas[i]!.maqueta.sinAncho !== true);
     if (indices.length < 2) continue;
     const anchosM = indices.map((i) => parejas[i]!.maqueta.caja.ancho);
     const anchosA = indices.map((i) => parejas[i]!.aparato.caja.ancho);
@@ -347,12 +384,13 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato): Ha
       const rm = anchosM[k]! / medM;
       const ra = anchosA[k]! / medA;
       if (Math.abs(ra / rm - 1) > CAMBIO_DE_TAMAÑO) {
-        diferencias.push(`${etiqueta(parejas[i]!.maqueta)} mide ${veces(ra)} veces el ancho de las de su fila; en la maqueta, ${veces(rm)}.`);
+        diferencias.push(`${etiqueta(parejas[i]!.maqueta)} mide ${veces(ra)} veces el ancho de las de su fila; en ${laMaqueta}, ${veces(rm)}.`);
       }
     });
   }
   // PROPORCIÓN de cada control (alto entre ancho): una tecla aplastada o estirada. Si su ANCHO ya se ha
   // dicho, la proporción es la misma noticia contada otra vez.
+  if (aproximada) return { bloqueantes, diferencias, notas };
   const yaDichos = new Set(diferencias.filter((d) => d.includes("veces el ancho")).map((d) => d.split(" mide ")[0]));
   parejas.forEach((p, i) => {
     if (!comparable(i) || yaDichos.has(etiqueta(p.maqueta))) return;

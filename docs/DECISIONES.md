@@ -8260,3 +8260,19 @@ Sobre la calculadora real, el informe dice exactamente lo que costó diez rondas
 barra, la «=» en otra fila que «0» y «.», y el «0» a 1,9 veces el ancho de su fila. **Límites declarados**: solo
 Android (iOS no tiene el sidecar todavía); la medida automática tras cada prueba (`medidaAutomatica.ts`) sigue
 con la aritmética de franjas y NO usa esta geometría; y sin `code.html` no hay comparación caja a caja.
+
+### Y la maqueta se DESCRIBE aparte, en dos fases (05-10-2026)
+
+Una maqueta que es solo un PNG se quedaba sin estructura que comparar, y con las dos imágenes delante el
+modelo comparaba de memoria. Ahora la imagen de la maqueta se describe SOLA, primero su geometría (filas de
+arriba abajo, controles de izquierda a derecha con su ancho en unidades) y después su estilo (forma, fondo,
+letra, con vocabulario cerrado), una vez por imagen y guardada por huella (`core/maquetaDescrita.ts`,
+`juezVisual.ts#describirMaqueta`). Sin `code.html`, sus filas se comparan por CÓDIGO contra el árbol medido,
+en un bloque aparte que nunca decide el rojo; con `code.html`, solo vigila que imagen y HTML cuenten lo
+mismo. El estilo descrito va al crítico como especificación.
+
+Medido con el modelo real sobre `screen.png` (dos vueltas): las dos sacan la «=» en otra fila y el «0» a 1,9
+veces el ancho, sin `code.html`. Una de ellas añadió el «±» en otra fila —ruido: en el aparato hay dos «±» y
+uno es el de otra fila—. Los textos de ejemplo de un visor («1,240 × 15%…») no son «falta»: solo cuentan si
+su fila existe en el aparato. Precio: describir tarda 77–90 s la primera vez (luego, caché); el crítico pasa
+de unos 20 s a unos 115 s en esa primera ronda.

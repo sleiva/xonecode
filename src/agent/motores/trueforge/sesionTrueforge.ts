@@ -129,7 +129,7 @@ import { cajasDeMaqueta, medidasDeImagen, viewportDeMaqueta } from "../../dispos
 import { geometriaDeCaptura } from "../../dispositivos/geometriaEnDisco.js";
 import { crearDescribirImagen } from "../../grafo/describirImagen.js";
 import { crearTraerDeLaMaquina } from "../../grafo/traerDeLaMaquina.js";
-import { invocarVisualConModelos } from "../../dispositivos/juezVisual.js";
+import { describirMaqueta, invocarVisualConModelos } from "../../dispositivos/juezVisual.js";
 import { estilosDeDisco, indiceEnDisco, type CargarIndice } from "../../navegacion/indiceEnDisco.js";
 
 /** El hilo raíz de TrueForge. Se llama así en la librería y no se elige. */
@@ -827,6 +827,8 @@ export async function abrirSesionTrueforge(
           crearCriticaVisual({
             leerArtefacto: async (nombre) => readFileSync(join(carpeta, nombre)),
             invocar: invocarVisualConModelos({ paraPapel: (p) => modelos.paraPapel(p) }),
+            // La maqueta, descrita SOLA y una vez por imagen: geometría y luego estilo.
+            describirMaqueta: (referencia) => describirMaqueta(referencia, invocarVisualConModelos({ paraPapel: (p) => modelos.paraPapel(p) })),
             // La maqueta casi nunca está en /artefactos/: la trae la persona (/adjuntos/) o vive en /diseno/.
             leerReferencia: lectorDeReferencias,
             // La GEOMETRÍA: el árbol guardado con la captura, y las cajas de la maqueta si trae `code.html`.

@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import type { MaquetaDescrita } from "../../core/maquetaDescrita.js";
 import { describe, expect, it } from "vitest";
 import { crearCriticaVisual } from "./criticaVisual.js";
 import type { InvocarVisual } from "../dispositivos/juezVisual.js";
@@ -302,7 +303,11 @@ describe("xone_critica_visual con la GEOMETRÍA medida (MyAllXOne, la calculador
   const maqueta = JSON.parse(readFileSync(new URL("../../core/__oro__/geometria/calculadora.maqueta.json", import.meta.url), "utf8"));
   const png = async () => Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0x86, 0, 0, 2, 0xea]);
 
-  const conGeometria = (respuesta: string, vista: { prompt?: string } = {}, opciones: { sinHtml?: true; sinArbol?: true } = {}) =>
+  const conGeometria = (
+    respuesta: string,
+    vista: { prompt?: string } = {},
+    opciones: { sinHtml?: true; sinArbol?: true; descrita?: MaquetaDescrita } = {}
+  ) =>
     crearCriticaVisual({
       leerArtefacto: unosBytes,
       invocar: async (_papel, prompt) => {
@@ -312,7 +317,52 @@ describe("xone_critica_visual con la GEOMETRÍA medida (MyAllXOne, la calculador
       leerReferencia: png,
       leerGeometria: async () => (opciones.sinArbol ? undefined : geo),
       cajasDeMaqueta: async () => (opciones.sinHtml ? undefined : maqueta),
+      ...(opciones.descrita === undefined ? {} : { describirMaqueta: async () => opciones.descrita }),
     });
+
+  /** Lo que un modelo cuenta de `screen.png` mirándola sola. */
+  const fila = (...textos: string[]) => textos.map((texto) => ({ texto, unidades: 1 }));
+  const descrita: MaquetaDescrita = {
+    filas: [fila("AC", "±", "%", "÷"), fila("7", "8", "9", "×"), fila("4", "5", "6", "−"), fila("1", "2", "3", "+"), fila("0", ".", "[borrar]", "=")],
+    estilo: [{ texto: "=", forma: "pildora", relleno: "#FF7A59", letra: "grande" }],
+  };
+
+  it("SOLO un PNG, pero descrito: la estructura sale contra la descripción, aparte y sin decidir el rojo", async () => {
+    const vista: { prompt?: string } = {};
+    const salida = await conGeometria('{"veredicto":"verde","hallazgos":[]}', vista, { sinHtml: true, descrita }).invoke({
+      captura: "/artefactos/calc_ronda9.jpg",
+      pantalla: "DemoCalculadora",
+      referencia: "/adjuntos/diseno.png",
+    });
+    expect(salida).toContain("ESTRUCTURA CONTRA LA MAQUETA DESCRITA");
+    expect(salida).toContain("en el aparato «=» va en otra");
+    expect(salida).toContain("«0» mide 1,9 veces el ancho de las de su fila");
+    // Va DESPUÉS del bloque medido, y lo de la descripción no entra en los hechos del modelo.
+    expect(salida.indexOf("GEOMETRÍA, MEDIDA")).toBeLessThan(salida.indexOf("ESTRUCTURA CONTRA LA MAQUETA DESCRITA"));
+    expect(vista.prompt).not.toContain("va en otra");
+    // El estilo descrito sí: es la especificación.
+    expect(vista.prompt).toContain("ESTILO DE LA MAQUETA");
+    expect(vista.prompt).toContain("«=»: forma píldora, fondo #FF7A59, letra grande");
+  });
+
+  it("con code.html, la descripción solo vigila que la imagen y el HTML cuenten lo mismo", async () => {
+    const igual = await conGeometria('{"veredicto":"verde","hallazgos":[]}', {}, { descrita }).invoke({
+      captura: "/artefactos/calc_ronda9.jpg",
+      pantalla: "DemoCalculadora",
+      referencia: "/adjuntos/stitch/screen.png",
+    });
+    expect(igual).not.toContain("NO CUENTAN LO MISMO");
+    expect(igual).not.toContain("ESTRUCTURA CONTRA LA MAQUETA DESCRITA");
+
+    const distinta: MaquetaDescrita = { ...descrita, filas: [...descrita.filas.slice(0, -2), fila("1", "2", "3", "+", "="), fila("0", ".")] };
+    const salida = await conGeometria('{"veredicto":"verde","hallazgos":[]}', {}, { descrita: distinta }).invoke({
+      captura: "/artefactos/calc_ronda9.jpg",
+      pantalla: "DemoCalculadora",
+      referencia: "/adjuntos/stitch/screen.png",
+    });
+    expect(salida).toContain("LA IMAGEN DE LA MAQUETA Y SU code.html NO CUENTAN LO MISMO");
+    expect(salida).toContain("en su code.html «=» va en otra");
+  });
 
   it("lo MEDIDO decide: con la «=» tapada es ROJO aunque el modelo diga verde, y lo dice", async () => {
     const vista: { prompt?: string } = {};

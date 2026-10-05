@@ -8,12 +8,19 @@ import {
 } from "../../core/artefactos.js";
 import { imagenReferida, type ImagenReferida } from "../../core/referenciasDeImagen.js";
 import {
+  compararConMaqueta,
   controlesDelArbol,
   hallazgosDeGeometria,
   informeDeGeometria,
   type GeometriaDelAparato,
   type MaquetaMedida,
 } from "../../core/geometriaDePantalla.js";
+import {
+  htmlComoAparato,
+  lineasDeEstilo,
+  maquetaDeLaDescripcion,
+  type MaquetaDescrita,
+} from "../../core/maquetaDescrita.js";
 import {
   juzgarPantalla,
   TOPE_DE_PETICIONES,
@@ -96,6 +103,12 @@ export interface DependenciasDeCritica {
    * maqueta que es solo un PNG); `{motivo}` = lo hay y no se pudo medir.
    */
   cajasDeMaqueta?: (imagen: ImagenReferida, bytes: Buffer) => Promise<MaquetaMedida | { motivo: string } | undefined>;
+  /**
+   * La maqueta DESCRITA por el modelo mirándola SOLA, primero su geometría y después su estilo
+   * (`core/maquetaDescrita.ts`, `juezVisual.ts#describirMaqueta`). `undefined` = no se entendió. Ausente la
+   * dependencia, el crítico trabaja como antes.
+   */
+  describirMaqueta?: (referencia: CapturaDePantalla) => Promise<MaquetaDescrita | undefined>;
 }
 
 /** Lo que la geometría le añade al crítico: el bloque para el agente, los hechos para el modelo y si hay algo bloqueante. */
@@ -113,7 +126,8 @@ async function geometriaDe(
   entrada: Entrada,
   referida: ImagenReferida | undefined,
   referencia: CapturaDePantalla | undefined,
-  deps: DependenciasDeCritica
+  deps: DependenciasDeCritica,
+  descrita: MaquetaDescrita | undefined
 ): Promise<GeometriaDeLaCritica | undefined> {
   if (deps.leerGeometria === undefined) return undefined;
   let crudo: unknown;
@@ -147,13 +161,46 @@ async function geometriaDe(
     } catch {
       medida = { motivo: "no se pudo medir" };
     }
-    if (medida === undefined) notas.push("la maqueta es solo una imagen (sin code.html al lado): comparo solo lo que se ve en el propio aparato.");
-    else if ("motivo" in medida) notas.push(`no pude medir las cajas de la maqueta: ${medida.motivo}. Comparo solo lo del propio aparato.`);
+    const conDescripcion = descrita === undefined ? "" : " (la estructura de la maqueta va abajo, según su descripción)";
+    if (medida === undefined) notas.push(`la maqueta es solo una imagen (sin code.html al lado): aquí, solo lo que se ve en el propio aparato${conDescripcion}.`);
+    else if ("motivo" in medida) notas.push(`no pude medir las cajas de la maqueta: ${medida.motivo}. Aquí, solo lo del propio aparato${conDescripcion}.`);
     else maqueta = medida;
   }
   const h = hallazgosDeGeometria(aparato, maqueta);
   const lineas = informeDeGeometria({ ...h, notas: [...h.notas, ...notas] }, maqueta !== undefined);
+  if (descrita !== undefined) lineas.push(...estructuraDescrita(descrita, aparato, maqueta));
   return { lineas, hechos: [...h.bloqueantes, ...h.diferencias], bloqueante: h.bloqueantes.length > 0 };
+}
+
+/**
+ * Lo que aporta la maqueta DESCRITA, en un bloque APARTE del medido: nunca decide el rojo.
+ *
+ * - **Sin `code.html`**, es la única estructura de la maqueta que hay: sus filas, orden y anchos contra el
+ *   árbol medido. Así una maqueta que es solo un PNG también dice «la = va en otra fila».
+ * - **Con `code.html`**, la estructura la dan las cajas medidas, y la descripción solo VIGILA que la imagen
+ *   y el HTML cuenten lo mismo: la imagen es lo que se aprobó, y si el HTML se aparta, alguien tiene que
+ *   decirlo.
+ */
+function estructuraDescrita(descrita: MaquetaDescrita, aparato: GeometriaDelAparato, maqueta: MaquetaMedida | undefined): string[] {
+  if (maqueta !== undefined) {
+    const h = compararConMaqueta(maquetaDeLaDescripcion(descrita, false), htmlComoAparato(maqueta), {
+      aproximada: true,
+      nombres: { maqueta: "la imagen de la maqueta", aparato: "su code.html" },
+    });
+    if (h.diferencias.length === 0) return [];
+    return [
+      "",
+      "LA IMAGEN DE LA MAQUETA Y SU code.html NO CUENTAN LO MISMO (según la descripción de la imagen, que hizo un modelo; míralo):",
+      ...h.diferencias.map((d) => `- ${d}`),
+    ];
+  }
+  const h = compararConMaqueta(maquetaDeLaDescripcion(descrita), aparato, { aproximada: true });
+  return [
+    "",
+    "ESTRUCTURA CONTRA LA MAQUETA DESCRITA (las filas, el orden y los anchos de la maqueta los dijo un modelo mirándola sola; los del aparato están medidos. Orientativo: compruébalo antes de cambiar nada):",
+    ...(h.diferencias.length === 0 ? ["- Nada: las filas y el orden cuadran con lo descrito."] : h.diferencias.map((d) => `- ${d}`)),
+    ...h.notas.map((n) => `- (nota) ${n}`),
+  ];
 }
 
 /**
@@ -281,7 +328,17 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
       }
 
       // Lo MEDIDO primero: el modelo lo recibe como hechos y no tiene que adivinar la estructura.
-      const geometria = await geometriaDe(entrada, referida, referencia, deps);
+      // La maqueta, DESCRITA aparte y antes —geometría y luego estilo—: sin ella, el estilo queda a la memoria
+      // del modelo y una maqueta sin code.html no tiene estructura. No poder describirla no impide juzgar.
+      let descrita: MaquetaDescrita | undefined;
+      if (referencia !== undefined && deps.describirMaqueta !== undefined) {
+        try {
+          descrita = await deps.describirMaqueta(referencia);
+        } catch {
+          descrita = undefined;
+        }
+      }
+      const geometria = await geometriaDe(entrada, referida, referencia, deps, descrita);
 
       let veredicto;
       try {
@@ -290,7 +347,8 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
           { pantalla: entrada.pantalla },
           deps.invocar,
           referencia,
-          geometria?.hechos ?? []
+          geometria?.hechos ?? [],
+          descrita === undefined ? [] : lineasDeEstilo(descrita)
         );
       } catch (error) {
         // Fallo del ENTORNO —sin modelo, sin clave, sin red—: se dice, y no se convierte en un

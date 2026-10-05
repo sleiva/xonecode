@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  describirMaqueta,
   ErrorDelJuezVisual,
   juzgarPantalla,
   invocarVisualConModelos,
@@ -289,5 +290,28 @@ describe("el crítico con una maqueta delante", () => {
     await invocarVisualConModelos(modelos)("afilado", "el prompt", PANTALLA);
 
     expect(contenido.map((b) => b.type)).toEqual(["text", "image_url"]);
+  });
+});
+
+describe("describirMaqueta", () => {
+  it("la mira SOLA, una vez por imagen, y lo que no entiende no lo guarda", async () => {
+    const llamadas: { prompt: string; referencia: unknown }[] = [];
+    let respuesta = "no es json";
+    const invocar: InvocarVisual = async (_papel, prompt, _imagen, referencia) => {
+      llamadas.push({ prompt, referencia });
+      return respuesta;
+    };
+    const maqueta = { base64: "bWFxdWV0YS11bmljYQ==", mime: "image/png" };
+    expect(await describirMaqueta(maqueta, invocar)).toBeUndefined();
+    respuesta = '{"filas":[[{"texto":"=","unidades":1}]],"estilo":[]}';
+    expect(await describirMaqueta(maqueta, invocar)).toEqual({ filas: [[{ texto: "=", unidades: 1 }]], estilo: [] });
+    expect(await describirMaqueta(maqueta, invocar)).toEqual({ filas: [[{ texto: "=", unidades: 1 }]], estilo: [] });
+    expect(llamadas).toHaveLength(2);
+    expect(llamadas[0]!.referencia).toBeUndefined();
+    expect(llamadas[0]!.prompt).toMatch(/FASE 1, GEOMETRÍA[\s\S]*FASE 2, ESTILO/);
+  });
+
+  it("no poder preguntar LANZA, como juzgarPantalla", async () => {
+    await expect(describirMaqueta({ base64: "b3RyYQ==", mime: "image/png" }, async () => { throw new Error("sin red"); })).rejects.toThrow(ErrorDelJuezVisual);
   });
 });
