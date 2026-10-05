@@ -8,6 +8,7 @@ import { esVistaAplanada } from "./proyecto.js";
 import { conImagenesIncrustadas, enlacesDeImagen, imagenEnProyecto, RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
 import { renombrarSobre } from "../renombrarSobre.js";
 import { candidatosDeIcono } from "../../core/descriptoresDeApp.js";
+import { codificarWindows1252, decodificarWindows1252, esUtf8Valido } from "../../core/codificacion.js";
 
 /**
  * El proyecto tal como lo enseña la pestaña Ficheros de la consola web: el árbol, el
@@ -103,9 +104,10 @@ export interface FicheroLeido {
    */
   vista?: string;
   /**
-   * El sha256 de los BYTES en disco (`huellaDeContenido`), solo con el texto ENTERO en UTF-8: es
-   * lo que el editor devuelve al guardar para que se sepa si el disco cambió mientras tanto. Un
-   * recortado, un latin1 o un binario no la llevan, y sin ella no se edita.
+   * El sha256 de los BYTES en disco (`huellaDeContenido`), solo con el texto ENTERO —UTF-8 o
+   * latin1, que se guarda en windows-1252—: es lo que el editor devuelve al guardar para que se
+   * sepa si el disco cambió mientras tanto. Un recortado o un binario no la llevan, y sin ella no
+   * se edita.
    */
   huella?: string;
   /** El motivo del paso que falló. Sin él, la lectura fue bien. */
@@ -415,10 +417,10 @@ export async function leerContenidoDeFichero(
     const recortado = bytesRead > TOPE_DE_FICHERO;
     const cuerpo = recortado ? leido.subarray(0, TOPE_DE_FICHERO) : leido;
     const { texto, codificacion } = decodificar(cuerpo, recortado);
-    // La huella, solo con el fichero ENTERO y en UTF-8: es la condición para editarlo, y sobre
-    // los BYTES (no sobre el texto decodificado, que ha perdido el BOM) para que se compare
-    // contra lo mismo que se volverá a leer al guardar.
-    const conHuella = !recortado && codificacion === "utf-8" ? { huella: huellaDeContenido(cuerpo) } : {};
+    // La huella, solo con el fichero ENTERO —UTF-8 o latin1, que se guarda en windows-1252—: es
+    // la condición para editarlo, y sobre los BYTES (no sobre el texto decodificado, que ha
+    // perdido el BOM) para que se compare contra lo mismo que se volverá a leer al guardar.
+    const conHuella = !recortado ? { huella: huellaDeContenido(cuerpo) } : {};
     // El SVG viaja con las dos caras: la fuente que se acaba de decodificar y el dibujo
     // para pintarlo. El dibujo solo si el fichero entró ENTERO —un SVG cortado por la mitad
     // no abre— y solo desde el mismo cuerpo que ya está en memoria.
@@ -447,7 +449,8 @@ function decodificar(cuerpo: Uint8Array, recortado: boolean): { texto: string; c
       // siguiente intento
     }
   }
-  return { texto: new TextDecoder("latin1").decode(cuerpo), codificacion: "latin1" };
+  // El MISMO decodificador cuyo inverso usa el guardado (`core/codificacion.ts`): una sola tabla.
+  return { texto: decodificarWindows1252(cuerpo), codificacion: "latin1" };
 }
 
 /**
@@ -477,8 +480,11 @@ const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
  *    carpeta no— y que no sea una imagen, que no se edita desde aquí.
  * 2. La huella: si lo que hay en disco no es lo que el cliente cargó, alguien (el agente, otra
  *    pestaña, un editor de fuera) lo cambió, y escribir encima lo perdería sin avisar.
- * 3. El tope, en BYTES: el mismo que la lectura, porque lo que no se puede leer entero no se edita.
- * 4. Escritura ATÓMICA sobre el camino REAL (temporal en la misma carpeta + `rename`): un corte a
+ * 3. La codificación, la que YA tenía el fichero (sus bytes actuales): UTF-8, o windows-1252 si
+ *    no lo era; un carácter que no cabe en windows-1252 se niega con cuál y en qué línea.
+ * 4. El tope, en BYTES ya codificados: el mismo que la lectura, porque lo que no se puede leer
+ *    entero no se edita.
+ * 5. Escritura ATÓMICA sobre el camino REAL (temporal en la misma carpeta + `rename`): un corte a
  *    mitad deja el fichero viejo, no uno truncado; y sobre el real porque renombrar encima de un
  *    enlace lo sustituiría por un fichero normal.
  *
@@ -501,8 +507,24 @@ export async function escribirFicheroDeProyecto(raiz: string, ruta: string, text
     if (huellaDeContenido(actual) !== huella) {
       return rechazo("el fichero cambió desde que lo abriste: recárgalo antes de guardar");
     }
-    const conBom = actual.subarray(0, BOM.length).equals(BOM) && !texto.startsWith("﻿");
-    const bytes = Buffer.concat([conBom ? BOM : Buffer.alloc(0), Buffer.from(texto, "utf8")]);
+    // La codificación de destino la deciden los BYTES que hay en disco, no el cliente: UTF-8
+    // válido sigue en UTF-8 (con su BOM); si no, es el latin1 que la lectura decodificó con
+    // windows-1252, y se vuelve a escribir en windows-1252 —XOne lo lee según su `encoding=`, y
+    // convertirlo a UTF-8 rompería cada tilde—.
+    let bytes: Buffer;
+    if (esUtf8Valido(actual)) {
+      const conBom = actual.subarray(0, BOM.length).equals(BOM) && !texto.startsWith("\uFEFF");
+      bytes = Buffer.concat([conBom ? BOM : Buffer.alloc(0), Buffer.from(texto, "utf8")]);
+    } else {
+      const codificado = codificarWindows1252(texto);
+      // Nunca se sustituye por «?»: una letra cambiada por otra es el mismo bug mudo.
+      if (!("bytes" in codificado)) {
+        return rechazo(
+          `este fichero está en Latin-1 y «${codificado.caracter}» (línea ${codificado.linea}) no cabe en esa codificación: no se ha guardado nada`
+        );
+      }
+      bytes = Buffer.from(codificado.bytes);
+    }
     if (bytes.length > TOPE_DE_FICHERO) {
       return rechazo(`pasa del tope de ${Math.round(TOPE_DE_FICHERO / 1000)} KB que se edita desde aquí`);
     }

@@ -27,7 +27,7 @@ const mandados = (enviar: Mock<(m: unknown) => Promise<unknown>>, clase: string)
 describe("usarEdicion", () => {
   it("abrir un fichero editable pide su base del inicio de la sesión; uno que no lo es no abre nada", () => {
     const { enviar, vista } = montar();
-    act(() => vista.result.current.abrir({ ...FICHERO, codificacion: "latin1" }));
+    act(() => vista.result.current.abrir({ ...FICHERO, recortado: true }));
     expect(vista.result.current.actual).toBeUndefined();
     act(() => vista.result.current.abrir(FICHERO));
     expect(vista.result.current.actual).toMatchObject({ ruta: "a.xne", original: "uno\ndos\n", huella: "h1", finDeLinea: "\r\n", sucio: false, guardando: false });

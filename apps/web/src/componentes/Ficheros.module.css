@@ -208,6 +208,13 @@
   gap: 6px;
 }
 
+/* «No se puede editar: …» en el sitio del botón: una línea corta en terciario, que se lee sin
+   competir con el contenido. */
+.motivoSinEditar {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
 .accion {
   composes: secundario from "./Boton.module.css";
 }

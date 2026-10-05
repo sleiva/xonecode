@@ -932,7 +932,7 @@ export function App({
    * dice el contenido; por eso queda PENDIENTE con la copia que había en el store en ese momento, y
    * se abre con la PRIMERA que llegue distinta —la que se acaba de pedir—: abrir con una copia vieja
    * partiría de una huella vieja, y lo primero que se tecleara chocaría con la banda de «versión
-   * nueva». Si la que llega no es editable (latin1, recortada, un error), se queda en el visor y lo
+   * nueva». Si la que llega no es editable (recortada, binaria, un error), se queda en el visor y lo
    * pendiente se olvida: es lo mismo que enseñaría el árbol.
    *
    * La base es la del inicio de la sesión, que es la que va por omisión: se REPONE si alguien eligió

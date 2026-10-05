@@ -40,6 +40,14 @@ describe("baseDeFichero", () => {
     expect(await baseDeFichero(raiz, "s1", "app.xne", "commit")).toEqual({ ruta: "app.xne", base: "commit", texto: "dos\n" });
   });
 
+  it("una base en latin1 se decodifica con windows-1252, igual que la lectura, en vez de quedarse sin base", async () => {
+    const raiz = repo();
+    // «Tamaño €» en windows-1252: no es UTF-8 válido.
+    writeFileSync(join(raiz, "viejo.xne"), Buffer.from([0x54, 0x61, 0x6d, 0x61, 0xf1, 0x6f, 0x20, 0x80, 0x0a]));
+    commit(raiz, "base");
+    expect(await baseDeFichero(raiz, undefined, "viejo.xne", "commit")).toEqual({ ruta: "viejo.xne", base: "commit", texto: "Tamaño €\n" });
+  });
+
   it("un fichero que no existía en la base es «vacio»: todo él es nuevo", async () => {
     const raiz = repo();
     writeFileSync(join(raiz, "app.xne"), "uno\n");

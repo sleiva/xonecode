@@ -7,10 +7,12 @@ import type { FicheroDelProyecto, MensajeDelCliente } from "./tipos.js";
  */
 
 /**
- * Un fichero se edita si y solo si llegó como texto ENTERO en UTF-8 y con huella: un latin1
- * guardado como UTF-8 cambiaría cada «ñ», uno recortado se guardaría cortado, y sin huella no hay
- * forma de saber si el disco cambió. Una imagen tampoco —ni el SVG, que tiene texto—: así lo pide
- * el diseño, y su visor enseña el dibujo, que no se repintaría al teclear.
+ * Un fichero se edita si y solo si llegó como texto ENTERO, en UTF-8 o latin1, y con huella: uno
+ * recortado se guardaría cortado, y sin huella no hay forma de saber si el disco cambió. El latin1
+ * se edita porque el SERVIDOR lo guarda en la codificación que ya tenía —windows-1252, decidido por
+ * los bytes del disco y no por el cliente— y niega lo que no cabe en ella. Una imagen tampoco —ni el
+ * SVG, que tiene texto—: así lo pide el diseño, y su visor enseña el dibujo, que no se repintaría al
+ * teclear.
  */
 export function esEditable(f: FicheroDelProyecto | undefined): f is FicheroDelProyecto & { texto: string; huella: string } {
   return (
@@ -20,9 +22,22 @@ export function esEditable(f: FicheroDelProyecto | undefined): f is FicheroDelPr
     typeof f.huella === "string" &&
     !f.recortado &&
     !f.binario &&
-    (f.codificacion === undefined || f.codificacion === "utf-8") &&
+    (f.codificacion === undefined || f.codificacion === "utf-8" || f.codificacion === "latin1") &&
     f.mime === undefined
   );
+}
+
+/**
+ * Por qué NO hay «Editar», para decirlo en la cabecera en vez de esconder el botón sin más. Sin
+ * motivo cuando sí se edita, cuando no hay fichero, o cuando la lectura dio un error: ese ya lo
+ * enseña el visor, y repetirlo aquí sería decirlo dos veces.
+ */
+export function motivoParaNoEditar(f: FicheroDelProyecto | undefined): string | undefined {
+  if (f === undefined || f.error !== undefined || esEditable(f)) return undefined;
+  if (f.mime !== undefined) return "No se puede editar: es una imagen";
+  if (f.binario) return "No se puede editar: es binario";
+  if (f.recortado) return "No se puede editar: el fichero pasa del tope de tamaño";
+  return undefined;
 }
 
 export type FinDeLinea = "\n" | "\r\n";

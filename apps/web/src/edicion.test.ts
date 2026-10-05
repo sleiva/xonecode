@@ -8,6 +8,7 @@ import {
   conFinDeLinea,
   esEditable,
   finDeLineaDe,
+  motivoParaNoEditar,
   normalizarFinesDeLinea,
 } from "./edicion.js";
 import type { FicheroDelProyecto } from "./tipos.js";
@@ -17,14 +18,31 @@ const RUTA_ARRANQUE = join(aqui, "..", "..", "..", "src", "web", "servidor", "ar
 
 const TEXTO: FicheroDelProyecto = { ruta: "a.xne", texto: "uno", recortado: false, binario: false, bytes: 3, codificacion: "utf-8", huella: "h" };
 
+describe("motivoParaNoEditar", () => {
+  it("dice por qué no hay «Editar» en vez de esconderlo sin más", () => {
+    expect(motivoParaNoEditar({ ...TEXTO, recortado: true })).toBe("No se puede editar: el fichero pasa del tope de tamaño");
+    expect(motivoParaNoEditar({ ...TEXTO, texto: undefined, binario: true })).toBe("No se puede editar: es binario");
+    expect(motivoParaNoEditar({ ...TEXTO, texto: undefined, binario: true, mime: "image/png" })).toBe("No se puede editar: es una imagen");
+    expect(motivoParaNoEditar({ ...TEXTO, mime: "image/svg+xml" })).toBe("No se puede editar: es una imagen");
+  });
+
+  it("sin motivo cuando se puede editar, sin fichero o con un error (el visor ya lo dice)", () => {
+    expect(motivoParaNoEditar(TEXTO)).toBeUndefined();
+    expect(motivoParaNoEditar({ ...TEXTO, codificacion: "latin1" })).toBeUndefined();
+    expect(motivoParaNoEditar(undefined)).toBeUndefined();
+    expect(motivoParaNoEditar({ ...TEXTO, error: "no existe" })).toBeUndefined();
+  });
+});
+
 describe("esEditable", () => {
-  it("solo el texto ENTERO en UTF-8, con huella, sin error y que no es imagen", () => {
+  it("solo el texto ENTERO en UTF-8 o latin1, con huella, sin error y que no es imagen", () => {
     expect(esEditable(TEXTO)).toBe(true);
     const { codificacion: _c, ...sinCodificacion } = TEXTO;
     expect(esEditable(sinCodificacion)).toBe(true);
     expect(esEditable(undefined)).toBe(false);
     expect(esEditable({ ...TEXTO, recortado: true })).toBe(false);
-    expect(esEditable({ ...TEXTO, codificacion: "latin1" })).toBe(false);
+    // Un latin1 entero se edita: el servidor lo guarda en windows-1252.
+    expect(esEditable({ ...TEXTO, codificacion: "latin1" })).toBe(true);
     expect(esEditable({ ...TEXTO, binario: true })).toBe(false);
     expect(esEditable({ ...TEXTO, error: "no existe" })).toBe(false);
     expect(esEditable({ ...TEXTO, mime: "image/svg+xml" })).toBe(false);

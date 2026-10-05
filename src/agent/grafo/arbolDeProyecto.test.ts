@@ -337,12 +337,64 @@ describe("escribirFicheroDeProyecto", () => {
       [".env", ".git/HEAD", ".xonecode/config.json", "app/Clientes.xml", "app/Clientes.xne"].map((r) => [r, readFileSync(join(raiz, r), "utf8")])
     );
 
-  it("la lectura trae la huella de los BYTES, y solo con el texto entero en UTF-8", async () => {
+  it("la lectura trae la huella de los BYTES con el texto ENTERO, sea UTF-8 o latin1", async () => {
     expect((await leerFicheroDeProyecto(raiz, "app/Clientes.xne")).huella).toBe(huellaDe("app/Clientes.xne"));
-    // Sin huella no hay «Editar»: recortado, latin1 y binario son de solo lectura.
+    // Un latin1 entero también: se edita y se guarda en windows-1252.
+    expect((await leerFicheroDeProyecto(raiz, "viejo.txt")).huella).toBe(huellaDe("viejo.txt"));
+    // Sin huella no hay «Editar»: recortado y binario son de solo lectura.
     expect((await leerFicheroDeProyecto(raiz, "grande.js")).huella).toBeUndefined();
-    expect((await leerFicheroDeProyecto(raiz, "viejo.txt")).huella).toBeUndefined();
     expect((await leerFicheroDeProyecto(raiz, "datos.bin")).huella).toBeUndefined();
+  });
+
+  /** Lo que dejaría XOne Studio: un byte por carácter, windows-1252 (0x80 es el euro). */
+  const enLatin1 = (texto: string): Buffer => Buffer.from([...texto].map((c) => (c === "€" ? 0x80 : c.charCodeAt(0))));
+
+  it("un latin1 se guarda en windows-1252: lo que no se tocó queda byte a byte, lo nuevo en un byte", async () => {
+    const original = '<?xml version="1.0" encoding="iso-8859-15"?>\r\n<coll name="Tamaño" title="acción €">\r\n<prop name="uno"/>\r\n';
+    writeFileSync(join(raiz, "Datos.xne"), enLatin1(original));
+    const leido = await leerFicheroDeProyecto(raiz, "Datos.xne");
+    expect(leido.codificacion).toBe("latin1");
+    expect(leido.texto).toBe(original);
+    const editado = leido.texto!.replace('<prop name="uno"/>', '<prop name="año €"/>');
+    const r = await escribirFicheroDeProyecto(raiz, "Datos.xne", editado, leido.huella!);
+    expect(r.error).toBeUndefined();
+    expect(readFileSync(join(raiz, "Datos.xne")).equals(enLatin1(editado))).toBe(true);
+    expect(r.huella).toBe(huellaDe("Datos.xne"));
+  });
+
+  it("los C1 que windows-1252 no define sobreviven la ida y vuelta", async () => {
+    const bytes = Buffer.from([0x61, 0x81, 0x8d, 0x8f, 0x90, 0x9d, 0xf1, 0x0a]);
+    writeFileSync(join(raiz, "c1.txt"), bytes);
+    const leido = await leerFicheroDeProyecto(raiz, "c1.txt");
+    const r = await escribirFicheroDeProyecto(raiz, "c1.txt", leido.texto!, leido.huella!);
+    expect(r.error).toBeUndefined();
+    expect(readFileSync(join(raiz, "c1.txt")).equals(bytes)).toBe(true);
+  });
+
+  it("un carácter que no cabe en latin1 NO se guarda: dice cuál y su línea, y el disco no se toca", async () => {
+    const huella = huellaDe("viejo.txt");
+    const r = await escribirFicheroDeProyecto(raiz, "viejo.txt", "hola ñ\nadiós 😀", huella);
+    expect(r.error).toContain("Latin-1");
+    expect(r.error).toContain("«😀» (línea 2)");
+    expect(r.error).toContain("no se ha guardado nada");
+    expect(readFileSync(join(raiz, "viejo.txt")).equals(Buffer.from([0x68, 0x6f, 0x6c, 0x61, 0x20, 0xf1]))).toBe(true);
+    expect(temporales(raiz)).toEqual([]);
+  });
+
+  it("el tope de un latin1 se mide en los bytes CODIFICADOS: «ñ» es un byte, no dos", async () => {
+    // En UTF-8 pasaría del tope; en windows-1252 cabe justo.
+    const texto = "ñ".repeat(TOPE_DE_FICHERO);
+    const r = await escribirFicheroDeProyecto(raiz, "viejo.txt", texto, huellaDe("viejo.txt"));
+    expect(r.error).toBeUndefined();
+    expect(readFileSync(join(raiz, "viejo.txt")).length).toBe(TOPE_DE_FICHERO);
+    const otra = await escribirFicheroDeProyecto(raiz, "viejo.txt", texto + "ñ", huellaDe("viejo.txt"));
+    expect(otra.error).toMatch(/tope/);
+  });
+
+  it("un UTF-8 sigue guardándose en UTF-8", async () => {
+    const r = await escribirFicheroDeProyecto(raiz, "app/Clientes.xne", "<coll name=\"Año €\"/>", huellaDe("app/Clientes.xne"));
+    expect(r.error).toBeUndefined();
+    expect(readFileSync(join(raiz, "app", "Clientes.xne"), "utf8")).toBe("<coll name=\"Año €\"/>");
   });
 
   it("«.ENV» en mayúsculas también se niega, sin tocar el disco ni dejar temporales", async () => {

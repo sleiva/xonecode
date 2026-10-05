@@ -291,19 +291,33 @@ describe("Ficheros: editar", () => {
       />
     );
 
-  it("«Editar» solo para texto entero en UTF-8 con huella, y nunca sin `edicion`", () => {
+  it("«Editar» solo para texto entero en UTF-8 o latin1 con huella, y nunca sin `edicion`", () => {
     const c = control();
     pintar({}, c);
     fireEvent.click(screen.getByRole("button", { name: "Editar" }));
     expect(c.abrir).toHaveBeenCalledWith({ ...UTF8 });
     cleanup();
-    for (const distinto of [{ codificacion: "latin1" }, { recortado: true }, { huella: undefined }, { mime: "image/svg+xml" }]) {
+    pintar({ codificacion: "latin1" }, control());
+    expect(screen.getByRole("button", { name: "Editar" })).toBeTruthy();
+    cleanup();
+    for (const distinto of [{ recortado: true }, { huella: undefined }, { mime: "image/svg+xml" }]) {
       pintar(distinto, control());
       expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
       cleanup();
     }
     pintar({});
     expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
+  });
+
+  it("sin «Editar», la cabecera DICE por qué en vez de esconder el botón sin más", () => {
+    pintar({ recortado: true }, control());
+    expect(screen.getByText("No se puede editar: el fichero pasa del tope de tamaño")).toBeTruthy();
+    cleanup();
+    pintar({ mime: "image/svg+xml" }, control());
+    expect(screen.getByText("No se puede editar: es una imagen")).toBeTruthy();
+    cleanup();
+    pintar({}, control());
+    expect(screen.queryByText(/No se puede editar/)).toBeNull();
   });
 
   it("editando: «Guardar» sin cambios está deshabilitado; con cambios, «●» y guarda", () => {

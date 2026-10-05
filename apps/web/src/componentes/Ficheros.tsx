@@ -10,7 +10,7 @@ import { Arbol } from "./Arbol.js";
 import { Dibujo, kb } from "./Dibujo.js";
 import { Visor } from "./Visor.js";
 import estilos from "./Ficheros.module.css";
-import { esEditable } from "../edicion.js";
+import { esEditable, motivoParaNoEditar } from "../edicion.js";
 import { metadatosDelFichero } from "../tipoDeFichero.js";
 import { IconoDeFichero } from "./IconoDeFichero.js";
 import type { ControlDeEdicion } from "../usarEdicion.js";
@@ -23,7 +23,7 @@ const EditorDeFichero = lazy(() => import("../editor/EditorDeFichero.js"));
 
 /**
  * El proyecto en el que se trabaja: el árbol a la derecha con un filtro encima, y el
- * fichero elegido en el centro, que se lee y, si es texto entero en UTF-8, se EDITA
+ * fichero elegido en el centro, que se lee y, si es texto entero (UTF-8 o latin1), se EDITA
  * (`edicion`, cuyo estado vive en `App`: ver `usarEdicion.ts`).
  *
  * Lo que se lista y lo que se lee es lo que ve el agente y nada más (`.xonecode`, `.env`,
@@ -272,11 +272,14 @@ export function Ficheros({
                     </div>
                   ) : null}
                   {/* Un control sin dato detrás no se pinta: sin `edicion`, o con un fichero que no
-                      es texto entero en UTF-8, no hay botón. */}
+                      es texto entero, no hay botón — pero se DICE por qué (`motivoParaNoEditar`):
+                      que desaparezca sin más parecía un fallo. */}
                   {edicion !== undefined && esEditable(contenido) ? (
                     <button type="button" className={estilos.accion} onClick={() => edicion.abrir(contenido)}>
                       Editar
                     </button>
+                  ) : edicion !== undefined && motivoParaNoEditar(contenido) !== undefined ? (
+                    <span className={estilos.motivoSinEditar}>{motivoParaNoEditar(contenido)}</span>
                   ) : null}
                 </div>
               )}
@@ -427,11 +430,12 @@ export function Ficheros({
 }
 
 /**
- * Lo que la edición sabe de su fichero, con la forma de uno llegado del disco: si se edita, llegó
- * como texto entero en UTF-8 (`edicion.ts#esEditable`), así que eso sí consta.
+ * Lo que la edición sabe de su fichero, con la forma de uno llegado del disco. La codificación NO:
+ * se edita en UTF-8 y en latin1 (`edicion.ts#esEditable`), y afirmar «UTF-8» de un latin1 sería
+ * falso; ausente, la línea de metadatos no la nombra.
  */
 function comoFichero(ruta: string, texto: string): FicheroDelProyecto {
-  return { ruta, texto, recortado: false, binario: false, bytes: 0, codificacion: "utf-8" };
+  return { ruta, texto, recortado: false, binario: false, bytes: 0 };
 }
 
 /**

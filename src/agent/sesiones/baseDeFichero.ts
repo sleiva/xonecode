@@ -16,6 +16,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { resolverEnProyecto, TOPE_DE_FICHERO } from "../grafo/arbolDeProyecto.js";
 import { refDeSesion } from "./sesionGit.js";
+import { decodificarWindows1252, esUtf8Valido } from "../../core/codificacion.js";
 
 const ejecutar = promisify(execFile);
 
@@ -70,13 +71,12 @@ export async function baseDeFichero(
     return sin("git no pudo leer esa versión del fichero, o pasa del tope que se compara");
   }
   if (salida.length > TOPE_DE_FICHERO) return sin("esa versión del fichero pasa del tope que se compara");
-  try {
-    // Estricto, y quitando el BOM igual que la lectura (`TextDecoder` por omisión): la base y el
-    // texto del editor tienen que haberse decodificado igual o la primera línea saldría cambiada.
-    return { ruta, base, texto: new TextDecoder("utf-8", { fatal: true }).decode(salida) };
-  } catch {
-    return sin("esa versión del fichero no está en UTF-8");
-  }
+  // Estricto, y quitando el BOM igual que la lectura (`TextDecoder` por omisión): la base y el
+  // texto del editor tienen que haberse decodificado igual o la primera línea saldría cambiada.
+  // Por lo mismo, lo que no es UTF-8 se decodifica con el MISMO windows-1252 que la lectura
+  // (`core/codificacion.ts`): un `.xne` latin1 se edita, y sin base no tendría marcas.
+  if (esUtf8Valido(salida)) return { ruta, base, texto: new TextDecoder("utf-8").decode(salida) };
+  return { ruta, base, texto: decodificarWindows1252(salida) };
 }
 
 async function enUnRepositorio(raiz: string): Promise<boolean> {
