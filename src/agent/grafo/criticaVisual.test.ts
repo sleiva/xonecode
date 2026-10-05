@@ -480,3 +480,22 @@ describe("xone_critica_visual con la captura de UN CONTROL", () => {
     expect(salida).not.toContain("RECORTADO");
   });
 });
+
+describe("xone_critica_visual con MAQUETA y la captura de un control", () => {
+  it("no juzga: contesta al momento, sin modelo, que hace falta la pantalla entera", async () => {
+    const geo = JSON.parse(readFileSync(new URL("../../core/__oro__/geometria/calculadora.captura-final.geometria.json", import.meta.url), "utf8"));
+    const llamadas: string[] = [];
+    const salida = await crearCriticaVisual({
+      leerArtefacto: unosBytes,
+      invocar: async (_p, prompt) => {
+        llamadas.push(prompt);
+        return '{"veredicto":"verde","hallazgos":[]}';
+      },
+      leerReferencia: async () => Buffer.from("png"),
+      leerGeometria: async () => ({ ...geo, pantalla: { ancho: 951, alto: 344 } }),
+    }).invoke({ captura: "/artefactos/visor.jpg", pantalla: "X", referencia: "/adjuntos/diseno.png" });
+    expect(salida).toMatch(/^NO he juzgado la captura: es de UN CONTROL/);
+    expect(salida).toContain("`xone-hotswap shot` (sin `name=`)");
+    expect(llamadas).toEqual([]);
+  });
+});

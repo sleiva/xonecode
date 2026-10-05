@@ -135,6 +135,8 @@ interface GeometriaDeLaCritica {
   aparato?: GeometriaDelAparato;
   /** Las cajas de la maqueta (de su `code.html`), si las hay. */
   maqueta?: MaquetaMedida;
+  /** La captura es de UN CONTROL, no de la pantalla entera. */
+  parcial?: true;
 }
 
 /**
@@ -183,6 +185,7 @@ async function geometriaDe(
       ],
       hechos: [],
       bloqueante: false,
+      parcial: true,
     };
   }
   const aparato: GeometriaDelAparato = {
@@ -435,6 +438,19 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
         }
       }
       const geometria = await geometriaDe(entrada, referida, referencia, deps, descrita);
+      /**
+       * **Con maqueta, la foto de UN CONTROL no se juzga**: la maqueta es la pantalla entera, y comparar contra un
+       * trozo es la opinión de un modelo sobre lo que falta alrededor. Medido en la calculadora: el desarrollador pasaba
+       * una y otra vez la foto del visor, el crítico le decía «captura la pantalla entera» y opinaba igual. Se contesta
+       * al momento y sin modelo, con el paso siguiente escrito.
+       */
+      if (referencia !== undefined && geometria?.parcial === true) {
+        return [
+          "NO he juzgado la captura: es de UN CONTROL (un trozo de la pantalla), y la maqueta es la pantalla entera.",
+          "Comparar un trozo contra el diseño entero no dice nada. Pide al conductor una captura de la PANTALLA ENTERA",
+          "con `xone-hotswap shot` (sin `name=`) y vuelve a llamarme con ella y con la misma `referencia`.",
+        ].join("\n");
+      }
 
       /**
        * **El estilo se MIDE en los píxeles de cada control**, con el MISMO esquema para la maqueta y para la captura
