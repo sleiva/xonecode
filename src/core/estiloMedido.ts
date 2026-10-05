@@ -189,26 +189,52 @@ export function medirControl(img: ImagenRgba, caja: Caja): EstiloMedido {
   const margen = !medido.borde ? 0 : conFondo ? 6 + arco : 1;
   // Desde el rectángulo del FONDO si lo hay: la caja del árbol puede ser mayor que lo dibujado.
   const [ix0, iy0, ix1, iy1] = [bx0 + margen, by0 + margen, bx1 - margen, by1 - margen];
-  // La tinta, fila a fila.
-  const porFila = new Map<number, { colores: Rgb[]; x0: number; x1: number }>();
+  // La tinta, como máscara.
+  const anchoI = Math.max(0, ix1 - ix0 + 1);
+  const altoI = Math.max(0, iy1 - iy0 + 1);
+  const esTinta = new Uint8Array(anchoI * altoI);
+  const porColumna = new Uint32Array(anchoI);
+  const porFilaN = new Uint32Array(altoI);
   for (let y = iy0; y <= iy1; y += 1)
     for (let x = ix0; x <= ix1; x += 1) {
       const p = pixel(img, x, y);
       if (distancia(p, fondo) <= TINTA || distancia(p, fuera) <= TINTA) continue;
+      esTinta[(y - iy0) * anchoI + (x - ix0)] = 1;
+      porColumna[x - ix0]! += 1;
+      porFilaN[y - iy0]! += 1;
+    }
+  /**
+   * Una LÍNEA no es texto: una columna con tinta en casi todo el alto (el lado de un contorno) o una fila con tinta en
+   * casi todo el ancho (su tapa) se quita. Hace falta aunque no se haya detectado el borde: medido, un contorno tenue
+   * sobre una tecla poco contrastada no se detectaba y sus lados hacían medir a la letra todo el alto de la tecla.
+   */
+  const lineaVertical = (cx: number) => porColumna[cx]! > altoI * 0.8;
+  const lineaHorizontal = (cy: number) => porFilaN[cy]! > anchoI * 0.8;
+  const porFila = new Map<number, { colores: Rgb[]; x0: number; x1: number }>();
+  for (let cy = 0; cy < altoI; cy += 1) {
+    if (lineaHorizontal(cy)) continue;
+    for (let cx = 0; cx < anchoI; cx += 1) {
+      if (esTinta[cy * anchoI + cx] !== 1 || lineaVertical(cx)) continue;
+      const [x, y] = [ix0 + cx, iy0 + cy];
       const fila = porFila.get(y) ?? { colores: [], x0: x, x1: x };
-      fila.colores.push(p);
+      fila.colores.push(pixel(img, x, y));
       fila.x1 = x;
       porFila.set(y, fila);
     }
+  }
   /**
    * El TEXTO es el bloque continuo de filas con más tinta (huecos de hasta 3 filas: la «i», el «=»). Lo que sobra de un
    * contorno, unos pocos píxeles sueltos lejos del texto, forma bloques aparte y no estira la altura de la letra
    * (medido: una tecla «8» con borde redondeado medía cuatro veces su letra).
    */
   const bloques: { y0: number; y1: number; n: number }[] = [];
+  // Una fila con solo un par de píxeles de tinta (lo que deja un contorno tenue en cada lado) no es texto, y no puede
+  // unir el texto con la tapa y el pie de la caja.
+  const minimo = Math.max(4, Math.round(anchoI * 0.02));
   for (const y of [...porFila.keys()].sort((a, b) => a - b)) {
     const ultimo = bloques[bloques.length - 1];
     const n = porFila.get(y)!.colores.length;
+    if (n <= minimo) continue;
     if (ultimo !== undefined && y - ultimo.y1 <= 4) {
       ultimo.y1 = y;
       ultimo.n += n;

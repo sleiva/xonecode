@@ -87,3 +87,18 @@ describe("los BLOQUES anchos: la cabecera también es el diseño", () => {
     expect(bloquesDe("calculadora.captura-final.geometria.json", "calculadora.captura-final.png").join("\n")).not.toContain("arriba del todo");
   });
 });
+
+/**
+ * Teclas con un contorno TENUE sobre un panel poco contrastado: el borde no se detecta, y sus lados (unos pocos píxeles
+ * por fila) unían el dígito con la tapa y el pie de la tecla. La letra medía cuatro veces la de la maqueta.
+ */
+describe("teclas con contorno tenue: la letra mide la letra", () => {
+  const g3 = JSON.parse(oro("calculadora.contorno-tenue.geometria.json").toString("utf8"));
+  const vista3 = pantallaMedida(
+    decodificarImagen(oro("calculadora.contorno-tenue.jpg")),
+    filasDelAparato({ pantalla: g3.pantalla, controles: controlesDelArbol(g3.arbol) }).map((f) => f.map((x) => ({ texto: x.texto ?? `[${x.nombre}]`, caja: x.caja })))
+  );
+  it("ningún dígito sale con la letra del doble o más (lo que medía todo el alto de la tecla)", () => {
+    expect(compararDescripciones(maqueta, vista3).diferencias.join("\n")).not.toMatch(/letra [2-9],\d veces la de la maqueta en .*«[0-9]»/);
+  });
+});
