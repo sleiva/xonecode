@@ -8099,3 +8099,21 @@ Así que un CSS, `app.ini`, `app.xml` o unos mappings se suben y RELANZAN la app
 (`recargaEnAparato.ts`), por `lanzarYComprobar` (un `launchApplication` suelto sobre una app viva la
 tumba). La frase lo dice: «estilos aplicados relanzando la app (vuelve a su pantalla de inicio)». Medido
 con `recargarFicheroDelProyecto`: azul → verde en ≈1,4 s.
+
+**Corrección, el mismo día: un CSS SÍ se recarga en caliente, con las funciones de XOne.** Lo apuntó él:
+`appData.loadCssFile`/`unloadCssFile` (documentadas en la skill: invalidan las cachés de estilos), por
+`runScript` del canal. Medido con el mismo píxel:
+
+| lo que se hizo | el botón |
+|---|---|
+| `uploadFile` del CSS | sigue verde (lo de antes) |
+| + `runScript` con `appData.unloadCssFile("default-colors.css"); appData.loadCssFile("default-colors.css", "UTF-8")` | sigue verde |
+| + `refresh` | naranja, sin relanzar |
+
+Así que un CSS va por `uploadFile` + ese `runScript` + `refresh` (≈0,2–0,3 s, contra ≈1,4 s relanzando,
+y sin sacar a nadie de su pantalla). El `refresh` es imprescindible: el cambio se ve en el SIGUIENTE
+pintado. Si el script falla —`loadCssFile` de un nombre que no existe contesta `result:false` con
+`FileNotFoundException`; `unloadCssFile` de uno que no está, no—, se relanza. `app.ini`, `app.xml` y los
+mappings siguen relanzando. **Sin medir**: que lo tecleado en un campo sobreviva (`fill` no escribió en
+un campo de etiqueta flotante), y que el orden de la cascada no cambie al recargar una hoja que comparte
+clases con otra. El script `xone-recargar-android` lleva la misma regla.

@@ -854,7 +854,7 @@ export type MensajeAlCliente =
       clase: "recargaEnAparato";
       ruta: string;
       estado: "aplicada" | "relanzar" | "relanzada" | "sin-app" | "desplegando" | "desplegada" | "ocupado" | "no-aplica" | "fallo";
-      tipo?: "coleccion" | "js" | "relanzar" | "no-aplica";
+      tipo?: "coleccion" | "js" | "css" | "relanzar" | "no-aplica";
       texto: string;
     }
   /** La base de comparación de un fichero. */

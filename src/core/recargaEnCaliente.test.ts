@@ -16,7 +16,7 @@ describe("claseDeRecarga", () => {
     expect(claseDeRecarga("Vacia.xne", b("<coll/>"))).toBe("coleccion");
     expect(claseDeRecarga("mappings.xne", b("<mappings/>"))).toBe("relanzar");
     expect(claseDeRecarga("js/a.js", b(""))).toBe("js");
-    expect(claseDeRecarga("estilos.css", b(""))).toBe("relanzar");
+    expect(claseDeRecarga("estilos.css", b(""))).toBe("css");
     expect(claseDeRecarga("app.ini", b(""))).toBe("relanzar");
     expect(claseDeRecarga("app.xml", b(""))).toBe("relanzar");
     expect(claseDeRecarga("icons/a.svg", b(""))).toBe("no-aplica");

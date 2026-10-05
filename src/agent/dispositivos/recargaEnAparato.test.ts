@@ -90,9 +90,26 @@ describe("recargarEnAparato", () => {
     expect(f.enviados[2]).toMatchObject({ command: "loadIncludeFile", file: "js/funciones.js", compile: true });
   });
 
-  it("un CSS: sube y RELANZA la app, porque es lo único que relee los estilos (medido)", async () => {
+  it("un CSS: sube, lo recarga con unloadCssFile/loadCssFile por runScript y repinta, SIN relanzar (medido)", async () => {
     const f = framework(vivaYAcepta);
+    const r = await recargarEnAparato(peticion("css/estilos.css", "a{}"), { abrirSocket: f.abrirSocket, aplicarTunel: tunelBueno });
+    expect(r).toEqual({ estado: "aplicada", clase: "css" });
+    expect(f.nombres()).toEqual(["getAllElements", "uploadFile", "runScript", "refresh", "getAllElements"]);
+    expect(Buffer.from(String(f.enviados[2]!["scriptText"]), "base64").toString("utf8")).toBe(
+      'appData.unloadCssFile("css/estilos.css"); appData.loadCssFile("css/estilos.css", "UTF-8"); return "ok";'
+    );
+  });
+
+  it("un CSS cuyo script FALLA cae a relanzar la app", async () => {
+    const f = framework((c) => (c["command"] === "runScript" ? { result: false, exceptionMessage: "FileNotFoundException" } : vivaYAcepta(c)));
     const r = await recargarEnAparato(peticion("estilos.css", "a{}"), { abrirSocket: f.abrirSocket, aplicarTunel: tunelBueno });
+    expect(r).toEqual({ estado: "relanzada", clase: "css" });
+    expect(f.nombres()).toEqual(["getAllElements", "uploadFile", "runScript", "launchApplication", "getAllElements"]);
+  });
+
+  it("app.ini sube y RELANZA la app, porque solo se lee al cargarla", async () => {
+    const f = framework(vivaYAcepta);
+    const r = await recargarEnAparato(peticion("app.ini", "name=A"), { abrirSocket: f.abrirSocket, aplicarTunel: tunelBueno });
     expect(r).toEqual({ estado: "relanzada", clase: "relanzar" });
     expect(f.nombres()).toEqual(["getAllElements", "uploadFile", "launchApplication", "getAllElements"]);
   });

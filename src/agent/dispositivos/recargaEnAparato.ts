@@ -93,11 +93,27 @@ export async function recargarEnAparato(
     });
     if (subida.result !== true) return { estado: "fallo", clase, motivo: `uploadFile: ${decirDe(subida)}` };
 
-    if (clase === "relanzar") {
-      // El CSS (y `app.ini`, `app.xml`, los mappings) solo se lee al CARGAR la app. MEDIDO en el
-      // emulador: `setCssAttribute`, `relayout`, `refresh`, `loadCollection` de la pantalla y
-      // `uploadFile` + `loadCollection`, sueltos y combinados, contestan `result:true` y el color no
-      // cambia; relanzando, sí (≈1,3 s). Así que se relanza, por el camino que no tumba una app viva.
+    if (clase === "css") {
+      // Un CSS se recarga con las funciones de XOne, por `runScript`: `unloadCssFile` + `loadCssFile`
+      // invalidan las cachés de estilos y un `refresh` repinta. MEDIDO: el botón cambia de color sin
+      // relanzar. Lo que NO funciona, también medido: `setCssAttribute`, `relayout`, `refresh` o
+      // `loadCollection` solos. Si el script falla (un nombre que no encaja), se cae a relanzar.
+      const nombre = JSON.stringify(peticion.ruta.replace(/^\/+/, ""));
+      const tabla = JSON.stringify(codificacionParaElAparato(peticion.bytes));
+      const script = `appData.unloadCssFile(${nombre}); appData.loadCssFile(${nombre}, ${tabla}); return "ok";`;
+      const recargado = await pedir("runScript", {
+        scriptLanguage: "javascript",
+        scriptText: Buffer.from(script, "utf8").toString("base64"),
+      });
+      if (recargado.result === true) {
+        await pedir("refresh");
+        const despues = await pedir("getAllElements", { format: "xone" });
+        if (estaViva(despues)) return { estado: "aplicada", clase };
+      }
+    }
+    if (clase === "relanzar" || clase === "css") {
+      // `app.ini`, `app.xml` y los mappings solo se leen al CARGAR la app; y un CSS cuyo script falló.
+      // Se relanza, por el camino que no tumba una app viva.
       cliente.cerrar();
       cliente = undefined;
       const arranque = await lanzarYComprobar(peticion.app, {

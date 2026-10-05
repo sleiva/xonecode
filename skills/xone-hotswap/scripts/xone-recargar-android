@@ -13,9 +13,11 @@
  *                                   devuelve a la versión anterior.
  *   JavaScript (.js)             →  `loadIncludeFile` con compile=true. Subir el fichero NO basta,
  *                                   y `loadCollection` tampoco lo recarga.
- *   CSS, .ini, app.xml, mappings →  relanzar la app (`launchApplication`). Medido: `setCssAttribute`,
- *                                   `relayout`, `refresh` y `loadCollection` contestan `result:true`
- *                                   y el color NO cambia; `loadIncludeFile` no admite css.
+ *   CSS (.css)                   →  `runScript` con `appData.unloadCssFile` + `appData.loadCssFile` y
+ *                                   un `refresh`: medido, el color cambia SIN relanzar. Lo que no
+ *                                   sirve, también medido: `setCssAttribute`, `relayout`, `refresh` o
+ *                                   `loadCollection` solos; `loadIncludeFile` no admite css.
+ *   .ini, app.xml, mappings      →  relanzar la app (`launchApplication`): solo se leen al cargarla.
  *
  * **`result:true` es «aceptado», no «aplicado».** Lo que dice si funcionó es el árbol de
  * controles, y por eso el script lo pide al acabar. Un atributo que XOne no conoce tampoco da
@@ -202,6 +204,7 @@ if (cambiados.length === 0) {
 function clase(rel) {
   const ext = extname(rel).toLowerCase();
   if (ext === ".js") return "js";
+  if (ext === ".css") return "css";
   if (ext === ".xne") return /<coll[\s>]/.test(readFileSync(rel, "latin1")) ? "coleccion" : "relanzar";
   return "relanzar";
 }
@@ -263,12 +266,26 @@ if (hayQueRelanzar) {
       const r = mandar("loadCollection", { xmlNode: xmlEnUtf8(readFileSync(f)).toString("base64"), encoding: "UTF-8" });
       if (r.result !== true) fallos.push(`${f}: loadCollection ${r.exceptionMessage ?? r.status ?? "sin motivo"}`);
       else console.log(`  ${f}  →  colección recargada en caliente`);
+    } else if (c === "css") {
+      // La codificación de SUS bytes: `loadCssFile` asume UTF-8 si no se le dice.
+      let tabla = "UTF-8";
+      try {
+        new TextDecoder("utf-8", { fatal: true }).decode(readFileSync(f));
+      } catch {
+        tabla = "windows-1252";
+      }
+      const script = `appData.unloadCssFile(${JSON.stringify(f)}); appData.loadCssFile(${JSON.stringify(f)}, ${JSON.stringify(tabla)}); return "ok";`;
+      const r = mandar("runScript", { scriptLanguage: "javascript", scriptText: Buffer.from(script, "utf8").toString("base64") });
+      if (r.result !== true) fallos.push(`${f}: loadCssFile ${r.exceptionMessage ?? r.status ?? "sin motivo"}`);
+      else console.log(`  ${f}  →  estilos recargados en caliente`);
     } else {
       const r = mandar("loadIncludeFile", { file: f, language: "javascript", encoding: "UTF-8", compile: true });
       if (r.result !== true) fallos.push(`${f}: loadIncludeFile ${r.exceptionMessage ?? r.status ?? "sin motivo"}`);
       else console.log(`  ${f}  →  JavaScript recargado`);
     }
   }
+  // Los estilos recargados se ven en el SIGUIENTE pintado: sin este `refresh`, no cambia nada (medido).
+  if ([...clases.values()].includes("css")) mandar("refresh");
   dormir(1);
 }
 

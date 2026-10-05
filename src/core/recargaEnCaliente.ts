@@ -9,19 +9,20 @@
  *                                      en memoria, y por eso se sube también a disco — sin eso,
  *                                      relanzar la app la devuelve a la versión anterior.
  *   JavaScript (`.js`)              →  `uploadFile` + `loadIncludeFile` con `compile: true`.
- *   CSS, `.ini`, `app.xml`, un `.xne` sin colección (mappings)
+ *   CSS (`.css`)                    →  `uploadFile` + `runScript` con `appData.unloadCssFile` y
+ *                                      `appData.loadCssFile` + `refresh` (idea suya, medido: el
+ *                                      color cambia sin relanzar). Si el script falla, se relanza.
+ *   `.ini`, `app.xml`, un `.xne` sin colección (mappings)
  *                                   →  `uploadFile` y se RELANZA la app, que es lo único que los
- *                                      relee. Medido: `setCssAttribute`, `relayout`, `refresh` y
- *                                      `loadCollection`, sueltos y combinados, contestan
- *                                      `result:true` y no cambian nada.
+ *                                      relee.
  *   todo lo demás (iconos, `bd/`, `files/`)  →  no se recarga: lo lleva el despliegue entero.
  *
- * **Relanzar SÍ se hace solo** (lo pidió así: guardar un CSS tiene que verse): el precio, que la app
+ * **Relanzar SÍ se hace solo** (lo pidió así: lo guardado tiene que verse): el precio, que la app
  * vuelve a su pantalla de inicio, lo dice la frase.
  */
 import { decodificarComoTexto, esUtf8Valido, tablaDeLosBytes } from "./codificacion.js";
 
-export type ClaseDeRecarga = "coleccion" | "js" | "relanzar" | "no-aplica";
+export type ClaseDeRecarga = "coleccion" | "js" | "css" | "relanzar" | "no-aplica";
 
 /** Las extensiones que el aparato sabe tomar sueltas. Las mismas del script. */
 const EXTENSIONES = new Set([".xne", ".js", ".css", ".ini", ".xml"]);
@@ -48,6 +49,7 @@ export function claseDeRecarga(ruta: string, bytes: Uint8Array): ClaseDeRecarga 
   const ext = extension(limpia);
   if (!EXTENSIONES.has(ext)) return "no-aplica";
   if (ext === ".js") return "js";
+  if (ext === ".css") return "css";
   if (ext === ".xne") {
     let cabeza = "";
     for (const b of bytes) cabeza += String.fromCharCode(b);
@@ -132,12 +134,14 @@ export function textoDeRecarga(r: ResultadoDeRecarga): string {
     case "aplicada":
       return r.clase === "js"
         ? "Aparato: JavaScript recargado; la app sigue viva"
-        : "Aparato: pantalla recargada en caliente; la app sigue viva";
+        : r.clase === "css"
+          ? "Aparato: estilos recargados en caliente; la app sigue viva"
+          : "Aparato: pantalla recargada en caliente; la app sigue viva";
     case "relanzar":
       return "Aparato: subido; para verlo hay que relanzar la app";
     case "relanzada":
-      return r.clase === "relanzar"
-        ? "Aparato: estilos aplicados relanzando la app (vuelve a su pantalla de inicio)"
+      return r.clase === "relanzar" || r.clase === "css"
+        ? "Aparato: cambios aplicados relanzando la app (vuelve a su pantalla de inicio)"
         : "Aparato: app relanzada y viva";
     case "sin-app":
       // El motivo, si se sabe: «no hay aparato elegido» y «no está en la medida» no se arreglan

@@ -1508,8 +1508,9 @@ admite (`admiteApagarElPensamiento`); apagado manda sobre el esfuerzo. Lo demás
   (`core/recargaEnCaliente.ts`, `agent/dispositivos/recargaEnAparato.ts`, `arranque.ts#atenderRecarga`,
   casilla y «Probar» en la cabecera del editor, solo con un Android ELEGIDO en la sesión): el servidor
   contesta `ficheroGuardado` PRIMERO y la recarga va aparte, sin aparato o sin app se guarda igual y la
-  cabecera lo dice en gris. Colección en caliente, JS por su include, CSS/`app.ini`/`app.xml` RELANZAN
-  la app solos (medido: nada del canal relee un estilo sin relanzar). El túnel se reaplica con el puerto de SU AVD; la composición va
+  cabecera lo dice en gris. Colección en caliente, JS por su include, **CSS en caliente con
+  `appData.unloadCssFile` + `loadCssFile` por `runScript` y un `refresh`** (si el script falla, se
+  relanza); `app.ini`/`app.xml`/mappings RELANZAN la app solos. El túnel se reaplica con el puerto de SU AVD; la composición va
   extraída (`recargaCableada`). **`loadCollection` recibe UTF-8 con el prólogo diciendo UTF-8**
   (`xmlParaCargarEnMemoria`), medido: con los bytes Latin-1 cada tilde salía doble; a disco van los
   bytes tal cual. «Probar» sin la app corriendo lanza el despliegue de Ejecutar. **Límites declarados**:
