@@ -331,7 +331,7 @@ Y las guardas del proyecto:
   `code.html` (maqueta), con el MISMO esquema para las dos y comparado por CÓDIGO, control a control
   y agrupado por diferencia. Con `code.html` decide ella y no se pregunta al modelo; sin él, se miden
   los recortes de la captura y el crítico opina con ellos delante. **No se describe la captura con
-  el modelo**: medido, la misma imagen descrita dos veces difería y ninguna pasada vio el recorte.
+  el modelo**: medido, la misma imagen descrita otra vez difería y no vio el recorte.
   Un texto distinto en el mismo sitio MEDIDO es «otro estado», no «falta». El recorte solo se mide
   en lo que no pinta fondo propio. El informe se guarda junto a la captura (`.critica.txt`), y un
   rojo va a `developer-xone`: el diseñador solo escribe en `icons/`.
