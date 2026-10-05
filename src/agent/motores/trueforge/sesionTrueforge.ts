@@ -127,6 +127,7 @@ import { crearDiferenciaDeCapturas } from "../../grafo/diferenciaDeCapturas.js";
 import { crearLectorDeReferencias, crearLocalizadorDeHtmlDeMaqueta } from "../../grafo/lectorDeReferencias.js";
 import { cajasDeMaqueta, medidasDeImagen, viewportDeMaqueta } from "../../dispositivos/cajasDeMaqueta.js";
 import { geometriaDeCaptura } from "../../dispositivos/geometriaEnDisco.js";
+import { decodificarImagen } from "../../dispositivos/decodificarImagen.js";
 import { crearDescribirImagen } from "../../grafo/describirImagen.js";
 import { crearTraerDeLaMaquina } from "../../grafo/traerDeLaMaquina.js";
 import { describirPantalla, invocarVisualConModelos } from "../../dispositivos/juezVisual.js";
@@ -829,6 +830,8 @@ export async function abrirSesionTrueforge(
             invocar: invocarVisualConModelos({ paraPapel: (p) => modelos.paraPapel(p) }),
             // La maqueta y la captura, cada una descrita SOLA con el mismo esquema: geometría y luego estilo.
             describirPantalla: (imagen, existen) => describirPantalla(imagen, invocarVisualConModelos({ paraPapel: (p) => modelos.paraPapel(p) }), existen),
+            // El estilo de cada control se MIDE en sus píxeles: hace falta sacarlos de la imagen.
+            decodificar: decodificarImagen,
             // El informe se queda junto a la captura, para poder auditar qué se le dijo al agente.
             guardarInforme: async (nombre, informe) => {
               mkdirSync(carpetaDeHotswap(carpeta), { recursive: true });

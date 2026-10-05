@@ -325,6 +325,16 @@ Y las guardas del proyecto:
   medido y lo opinado van SEPARADOS, y al modelo se le pasan los hechos para que se centre en lo que
   solo se VE. **Una maqueta que es solo un PNG** mide solo el aparato y lo dice. **Límites
   declarados**: solo Android, y `medidaAutomatica.ts` no la usa.
+- **Y el ESTILO de cada control también se MIDE, en sus píxeles** (`core/estiloMedido.ts`, puro; la
+  comparación en `core/descripcionDePantalla.ts`): forma (radio y proporción), fondo, color del texto,
+  altura de la letra, borde, alineación y texto RECORTADO, en las cajas del árbol (captura) y del
+  `code.html` (maqueta), con el MISMO esquema para las dos y comparado por CÓDIGO, control a control
+  y agrupado por diferencia. Con `code.html` decide ella y no se pregunta al modelo; sin él, se miden
+  los recortes de la captura y el crítico opina con ellos delante. **No se describe la captura con
+  el modelo**: medido, la misma imagen descrita dos veces difería y ninguna pasada vio el recorte.
+  Un texto distinto en el mismo sitio MEDIDO es «otro estado», no «falta». El recorte solo se mide
+  en lo que no pinta fondo propio. El informe se guarda junto a la captura (`.critica.txt`), y un
+  rojo va a `developer-xone`: el diseñador solo escribe en `icons/`.
 - **Y una séptima, de lectura, pura y sin llamar a nadie: `validar_fichero_xone`**
   (`agent/grafo/validarFicheroXone.ts`), solo en TrueForge y a TODOS, el raíz incluido. Comprueba un
   fichero —o todos los de una carpeta— con el comprobador puro de su extensión: `.xne`/`.xml` bien formado

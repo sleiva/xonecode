@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import type { PantallaDescrita } from "../../core/descripcionDePantalla.js";
 import { describe, expect, it } from "vitest";
 import { crearCriticaVisual } from "./criticaVisual.js";
+import { decodificarImagen } from "../dispositivos/decodificarImagen.js";
 import type { InvocarVisual } from "../dispositivos/juezVisual.js";
 
 const invocando = (respuesta: string): InvocarVisual => async () => respuesta;
@@ -390,7 +391,7 @@ describe("xone_critica_visual con la GEOMETRÍA medida (MyAllXOne, la calculador
       pantalla: "DemoCalculadora",
       referencia: "/adjuntos/stitch/screen.png",
     });
-    expect(salida).toMatch(/: rojo \(lo decide la geometría medida\)/);
+    expect(salida).toMatch(/: rojo \(lo decide lo medido\)/);
     expect(salida).toContain("GEOMETRÍA, MEDIDA");
     expect(salida).toContain("«=» (MAP_T_IGUAL) queda TAPADO por la barra de navegación");
     expect(salida).toContain("«0» mide 1,9 veces el ancho de las de su fila");
@@ -426,5 +427,40 @@ describe("xone_critica_visual con la GEOMETRÍA medida (MyAllXOne, la calculador
     });
     expect(salida).toContain("no trae su árbol de controles");
     expect(salida).toMatch(/: verde\./);
+  });
+});
+
+describe("xone_critica_visual MIDE el estilo en los píxeles (la calculadora real)", () => {
+  const oro = (n: string) => readFileSync(new URL(`../../core/__oro__/geometria/${n}`, import.meta.url));
+  const crear = (llamadas: string[], conHtml = true) =>
+    crearCriticaVisual({
+      leerArtefacto: async () => oro("calculadora.captura-final.png"),
+      invocar: async (_papel, prompt) => {
+        llamadas.push(prompt);
+        return '{"veredicto":"verde","hallazgos":[]}';
+      },
+      leerReferencia: async () => oro("calculadora.maqueta.png"),
+      leerGeometria: async () => JSON.parse(oro("calculadora.captura-final.geometria.json").toString("utf8")),
+      cajasDeMaqueta: async () => (conHtml ? JSON.parse(oro("calculadora.maqueta.json").toString("utf8")) : undefined),
+      decodificar: decodificarImagen,
+    });
+
+  it("con code.html: la comparación MEDIDA decide, control a control, y no se le pregunta al modelo", async () => {
+    const llamadas: string[] = [];
+    const salida = await crear(llamadas).invoke({ captura: "/artefactos/calc_final.png", pantalla: "DemoCalculadora", referencia: "/adjuntos/stitch/screen.png" });
+    expect(salida).toMatch(/: rojo/);
+    expect(salida).toContain("COMPARACIÓN CONTROL A CONTROL, MEDIDA en los píxeles");
+    expect(salida).toContain("«12 + 3» se ve RECORTADO");
+    expect(salida).toMatch(/forma redondeada \(1,2:1\) → círculo \(1,0:1\)/);
+    expect(llamadas).toEqual([]);
+  });
+
+  it("solo un PNG: mide los recortes del aparato, el modelo opina con ellos delante, y lo medido manda en el rojo", async () => {
+    const llamadas: string[] = [];
+    const salida = await crear(llamadas, false).invoke({ captura: "/artefactos/calc_final.png", pantalla: "DemoCalculadora", referencia: "/adjuntos/diseno.png" });
+    expect(salida).toContain("MEDIDO en los píxeles de la captura");
+    expect(salida).toContain("«RAD» se ve RECORTADO");
+    expect(salida).toMatch(/: rojo \(lo decide lo medido\)/);
+    expect(llamadas[0]).toContain("«12 + 3» se ve RECORTADO");
   });
 });

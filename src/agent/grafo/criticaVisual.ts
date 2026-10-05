@@ -10,6 +10,7 @@ import { imagenReferida, type ImagenReferida } from "../../core/referenciasDeIma
 import {
   compararConMaqueta,
   controlesDelArbol,
+  filas as filasDeCajas,
   filasDelAparato,
   hallazgosDeGeometria,
   informeDeGeometria,
@@ -18,7 +19,6 @@ import {
 } from "../../core/geometriaDePantalla.js";
 import {
   compararDescripciones,
-  filasParaElDescriptor,
   hayQueArreglar,
   htmlComoAparato,
   informeDeComparacion,
@@ -26,6 +26,8 @@ import {
   type ComparacionDeDescripciones,
   type PantallaDescrita,
 } from "../../core/descripcionDePantalla.js";
+import { pantallaMedida, type ControlAMedir } from "../../core/estiloMedido.js";
+import type { ImagenRgba } from "../../core/compararCapturas.js";
 import {
   juzgarPantalla,
   TOPE_DE_PETICIONES,
@@ -115,6 +117,11 @@ export interface DependenciasDeCritica {
    * `undefined` = no se entendió. Ausente la dependencia, el crítico trabaja como antes.
    */
   describirPantalla?: (imagen: CapturaDePantalla, controlesQueExisten?: readonly string[]) => Promise<PantallaDescrita | undefined>;
+  /**
+   * Saca los píxeles de un PNG o un JPEG (`decodificarImagen`). Con ella, el estilo de cada control se MIDE en su
+   * caja (`core/estiloMedido.ts`) en vez de pedírselo a un modelo. Ausente, no hay comparación control a control.
+   */
+  decodificar?: (bytes: Buffer) => ImagenRgba;
   /** Guarda el informe junto a la captura (`<captura>.critica.txt` en `/hotswap/`), para poder auditar qué se dijo. */
   guardarInforme?: (nombreDeCaptura: string, informe: string) => Promise<void>;
 }
@@ -124,8 +131,10 @@ interface GeometriaDeLaCritica {
   lineas: string[];
   hechos: string[];
   bloqueante: boolean;
-  /** El aparato medido, si la captura trae su árbol: da la estructura a quien describe la captura. */
+  /** El aparato medido, si la captura trae su árbol: da las cajas en que se mide cada control. */
   aparato?: GeometriaDelAparato;
+  /** Las cajas de la maqueta (de su `code.html`), si las hay. */
+  maqueta?: MaquetaMedida;
 }
 
 /**
@@ -179,7 +188,13 @@ async function geometriaDe(
   const h = hallazgosDeGeometria(aparato, maqueta);
   const lineas = informeDeGeometria({ ...h, notas: [...h.notas, ...notas] }, maqueta !== undefined);
   if (descrita !== undefined) lineas.push(...estructuraDescrita(descrita, aparato, maqueta));
-  return { lineas, hechos: [...h.bloqueantes, ...h.diferencias], bloqueante: h.bloqueantes.length > 0, aparato };
+  return {
+    lineas,
+    hechos: [...h.bloqueantes, ...h.diferencias],
+    bloqueante: h.bloqueantes.length > 0,
+    aparato,
+    ...(maqueta === undefined ? {} : { maqueta }),
+  };
 }
 
 /**
@@ -298,6 +313,43 @@ function sinJuzgar(motivo: string): string {
   ].join("\n");
 }
 
+/**
+ * La comparación de estilo MEDIDA, o `undefined` si no hay con qué (sin decodificador, sin árbol, o la imagen no se
+ * pudo leer). `completa`: hubo maqueta con cajas y la comparación es control a control; si no, solo los recortes de
+ * la captura. Nunca lanza.
+ */
+function medirEstilo(
+  captura: CapturaDePantalla,
+  referencia: CapturaDePantalla | undefined,
+  geometria: GeometriaDeLaCritica | undefined,
+  deps: DependenciasDeCritica
+): { comparacion: ComparacionDeDescripciones; completa: boolean } | undefined {
+  if (deps.decodificar === undefined || geometria?.aparato === undefined) return undefined;
+  try {
+    const comoMedir = (fila: readonly { texto?: string; nombre?: string; caja: ControlAMedir["caja"] }[]): ControlAMedir[] =>
+      fila.map((c) => ({ texto: c.texto ?? `[${c.nombre ?? "sin nombre"}]`, caja: c.caja }));
+    const vista = pantallaMedida(deps.decodificar(Buffer.from(captura.base64, "base64")), filasDelAparato(geometria.aparato).map(comoMedir));
+    if (referencia === undefined || geometria.maqueta === undefined) {
+      const sola = compararDescripciones({ filas: [], extras: [] }, vista);
+      return { comparacion: { diferencias: [], faltan: [], recortes: sola.recortes, extras: { maqueta: [], captura: [] } }, completa: false };
+    }
+    // Las cajas del `code.html` están en el viewport de la maqueta; la imagen puede estar a 2x o 3x.
+    const imagen = deps.decodificar(Buffer.from(referencia.base64, "base64"));
+    const escala = imagen.ancho / geometria.maqueta.ancho;
+    const m = geometria.maqueta;
+    const indice = filasDeCajas(m.elementos.map((e) => e.caja));
+    const porFila = new Map<number, ControlAMedir[]>();
+    m.elementos.forEach((e, i) => {
+      const caja = { x: e.caja.x * escala, y: e.caja.y * escala, ancho: e.caja.ancho * escala, alto: e.caja.alto * escala };
+      porFila.set(indice[i]!, [...(porFila.get(indice[i]!) ?? []), { texto: e.texto, caja }]);
+    });
+    const filasDeLaMaqueta = [...porFila.entries()].sort((a, b) => a[0] - b[0]).map(([, f]) => f.sort((a, b) => a.caja.x - b.caja.x));
+    return { comparacion: compararDescripciones(pantallaMedida(imagen, filasDeLaMaqueta), vista), completa: true };
+  } catch {
+    return undefined;
+  }
+}
+
 export function crearCriticaVisual(deps: DependenciasDeCritica) {
   return tool(
     async (entrada: Entrada) => {
@@ -351,19 +403,23 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
       const geometria = await geometriaDe(entrada, referida, referencia, deps, descrita);
 
       /**
-       * La comparación control a control (`compararDescripciones`) necesita la captura en el MISMO esquema. Describirla
-       * con el modelo NO vale, medido sobre la calculadora: la misma imagen descrita dos veces salía con diecisiete
-       * teclas de otra forma y otros colores, y ninguna de dos pasadas vio el texto recortado. Hasta medirla en píxeles,
-       * no hay comparación y el veredicto es el del crítico.
+       * **El estilo se MIDE en los píxeles de cada control**, con el MISMO esquema para la maqueta y para la captura
+       * (`core/estiloMedido.ts`): en la captura, en las cajas del árbol; en la maqueta, en las de su `code.html`.
+       * Describirlo con el modelo no valía —medido sobre la calculadora: la misma imagen descrita dos veces difería en
+       * diecisiete teclas, y ninguna pasada vio el texto recortado—; medido, cada vez sale lo mismo, en milisegundos.
+       * Sin `code.html` no hay cajas en la maqueta: se mide solo lo que se ve mal en el propio aparato (el recorte).
        */
-      const comparacion: ComparacionDeDescripciones | undefined = undefined;
+      const estilo = medirEstilo(abierta, referencia, geometria, deps);
+      const comparacion: ComparacionDeDescripciones | undefined = estilo?.comparacion;
 
       let veredicto;
       try {
+        // Con la comparación MEDIDA contra la maqueta, decide ella; sin maqueta que medir, el crítico opina y los
+        // recortes medidos le llegan como hechos.
         veredicto =
-          comparacion !== undefined
+          comparacion !== undefined && estilo?.completa === true
             ? { veredicto: hayQueArreglar(comparacion) ? ("rojo" as const) : ("verde" as const), observaciones: [], necesito: [] }
-            : await juzgarPantalla(abierta, { pantalla: entrada.pantalla }, deps.invocar, referencia, geometria?.hechos ?? []);
+            : await juzgarPantalla(abierta, { pantalla: entrada.pantalla }, deps.invocar, referencia, [...(geometria?.hechos ?? []), ...(comparacion?.recortes ?? [])]);
       } catch (error) {
         // Fallo del ENTORNO —sin modelo, sin clave, sin red—: se dice, y no se convierte en un
         // veredicto. Un rojo inventado culparía al trabajo de un problema de la máquina.
@@ -382,12 +438,23 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
        * diga verde: lo saca el árbol de controles, no una opinión — y medido, el modelo no vio la «=»
        * tapada de la calculadora.
        */
-      const final = geometria?.bloqueante === true ? "rojo" : veredicto.veredicto;
+      const medidoEnRojo = geometria?.bloqueante === true || (comparacion !== undefined && comparacion.recortes.length > 0);
+      const final = medidoEnRojo ? "rojo" : veredicto.veredicto;
       const lineas = [
-        `Veredicto visual de «${entrada.pantalla}»${comparado}: ${final}${geometria?.bloqueante === true && veredicto.veredicto !== "rojo" ? " (lo decide la geometría medida)" : ""}.`,
+        `Veredicto visual de «${entrada.pantalla}»${comparado}: ${final}${medidoEnRojo && veredicto.veredicto !== "rojo" ? " (lo decide lo medido)" : ""}.`,
       ];
       if (geometria !== undefined) lineas.push("", ...geometria.lineas, "");
-      if (comparacion !== undefined) lineas.push(...informeDeComparacion(comparacion), "");
+      if (comparacion !== undefined) {
+        lineas.push(
+          ...(estilo?.completa === true
+            ? informeDeComparacion(comparacion, "medida")
+            : [
+                "MEDIDO en los píxeles de la captura (sin cajas de la maqueta que medir, solo lo que se ve mal en el aparato):",
+                ...(comparacion.recortes.length === 0 ? ["- Ningún texto recortado."] : comparacion.recortes.map((r) => `- ${r}`)),
+              ]),
+          ""
+        );
+      }
       if (veredicto.observaciones.length > 0) {
         /**
          * **El aviso no es cortesía: está medido.** Seis vueltas sobre la misma captura

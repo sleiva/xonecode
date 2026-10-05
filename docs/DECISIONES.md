@@ -8276,3 +8276,27 @@ veces el ancho, sin `code.html`. Una de ellas añadió el «±» en otra fila �
 uno es el de otra fila—. Los textos de ejemplo de un visor («1,240 × 15%…») no son «falta»: solo cuentan si
 su fila existe en el aparato. Precio: describir tarda 77–90 s la primera vez (luego, caché); el crítico pasa
 de unos 20 s a unos 115 s en esa primera ronda.
+
+### Y el estilo se MIDE en los píxeles, no se describe (05-10-2026)
+
+Iteración desde cero de la calculadora con la geometría ya cableada (38 min, terminó sola): la estructura salió bien
+—nada tapado, filas y anchos correctos— y la pantalla siguió mal: el visor con cajas de borde fino, «12 + 3» y «RAD»
+recortados, teclas en círculo donde la maqueta las tiene cuadradas y redondeadas. El crítico lo vio y dio rojo, pero
+en la misma lista afirmó que el «0» de la maqueta era una píldora ancha y que la «=» era más grande, las dos cosas
+falsas: prosa libre, sin forma de separar lo cierto de lo inventado. El agente cerró diciendo «nada cortado».
+
+Se probó primero lo que pidió la persona —un descriptor de pantalla COMÚN, el mismo esquema para maqueta y captura,
+y comparar por código— con el modelo rellenando el esquema (`deepseek-flash`, el único configurado). Medido, no vale:
+la misma maqueta descrita dos veces salía con diecisiete teclas de otra forma y colores a más de cien puntos; la
+captura, en ninguna de dos pasadas, marcó el texto recortado; y cada descripción tardaba casi un minuto.
+
+Se quedó el esquema y la comparación, y se cambió quién lo rellena: **el estilo se MIDE en los píxeles de cada
+control** (`core/estiloMedido.ts`), en las cajas del árbol (captura) y del `code.html` renderizado (maqueta). Sobre
+la captura final: «12 + 3» y «RAD» recortados, bordes en «12 + 3» y «15» que la maqueta no tiene, las teclas
+«redondeada (1,2:1) → círculo (1,0:1)», los operadores con otro cian, «Tape» que falta, y el DEG que está en RAD
+dicho como estado y no como falta; la maqueta contra sí misma, nada. En unos 250 ms y siempre igual. Tres trampas
+medidas por el camino: el contorno de una caja cuenta como «tinta» (se mide el borde primero y su franja se
+excluye); un degradado de fondo llega al borde (el recorte solo se mide en lo que no pinta fondo); y una tecla poco
+contrastada con su panel salía recta (el umbral del relleno es la mitad de ese contraste). **Límites declarados**: el
+color es el más repetido, así que un icono de dos tintas da una; la letra se compara solo en textos con letras o
+cifras; y sin `code.html` no hay cajas en la maqueta y solo se mide el recorte de la captura.

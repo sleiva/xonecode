@@ -129,7 +129,7 @@ describe("compararDescripciones: maqueta y captura con el MISMO esquema", () => 
     const parecido = compararDescripciones(descrita, { ...descrita, filas: descrita.filas.map((f) => ({ ...f, controles: f.controles.map((x) => ({ ...x, fondo: "#33333A" })) })) });
     expect(parecido.diferencias).toEqual([]);
     const otro = compararDescripciones(descrita, { ...descrita, filas: [{ controles: [tecla("÷", { colorTexto: "#00E5FF" })] }] });
-    expect(otro.diferencias).toContain("color del texto #FFFFFF → #00E5FF en «÷».");
+    expect(otro.diferencias).toContain("color del texto #FFFFFF → #00E0FF en «÷».");
   });
 
   it("el informe pone lo recortado PRIMERO y enseña los extras de los dos lados, sin contarlos", () => {

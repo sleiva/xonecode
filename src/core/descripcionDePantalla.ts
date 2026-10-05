@@ -44,6 +44,15 @@ export interface ControlVisto {
   /** Su texto se ve CORTADO por algún borde. */
   recortado?: boolean;
   alineacion?: Alineacion;
+  // Las CIFRAS, cuando el control se MIDE en los píxeles (`estiloMedido.ts`) en vez de describirse.
+  /** Radio de las esquinas del fondo entre el lado corto (0 recto … 0,5 extremo redondo). */
+  radio?: number;
+  /** Ancho entre alto de su fondo. */
+  proporcion?: number;
+  /** Altura de la tinta en fracción del ANCHO de la pantalla. */
+  alturaDeLetra?: number;
+  /** Su centro en fracción de la pantalla: con él se empareja, en vez de con la fila y la columna. */
+  centro?: { x: number; y: number };
 }
 
 export interface FilaVista {
@@ -207,17 +216,28 @@ const NOMBRE_DE_LETRA: Record<Letra, string> = { pequena: "pequeña", normal: "n
  */
 const DISTANCIA_DE_COLOR = 90;
 
+/** Un color redondeado a pasos de 16 por canal: para AGRUPAR, que «#BDF3FE» y «#BDF4FF» son la misma tinta. */
+const redondo = (h: string): string =>
+  `#${[1, 3, 5].map((i) => Math.min(255, Math.round(parseInt(h.slice(i, i + 2), 16) / 16) * 16).toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+
 function distanciaDeColor(a: string, b: string): number {
   const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
   const [x, y] = [rgb(a), rgb(b)];
   return Math.sqrt(x.reduce((s, v, i) => s + (v - y[i]!) ** 2, 0));
 }
 
-/** La clave con que se emparejan: el texto (con sus alias), o el nombre del icono. */
+const ICONO = "\u0000icono";
+/** La clave con que se emparejan: el texto (con sus alias). Todos los iconos comparten clave y se emparejan por cercanía. */
 function clave(c: ControlVisto): string {
   const t = textoParaEmparejar(c.texto);
-  return t !== "" ? t : c.texto.trim().toLowerCase();
+  return t !== "" ? t : ICONO;
 }
+/** Hasta dónde se busca pareja a un icono, o a un texto que en la captura dice otra cosa (un DEG que está en RAD). */
+const CERCA = 0.12;
+const MUY_CERCA = 0.06;
+/** Un texto con letras o cifras: en uno solo de signos («−», «.»), la altura de la tinta no es el tamaño de la letra. */
+const conLetras = (t: string): boolean => /[0-9A-Za-zÁÉÍÓÚáéíóúÑñ]/.test(textoParaEmparejar(t));
+const decimal = (x: number, d = 1): string => x.toFixed(d).replace(".", ",");
 
 export interface ComparacionDeDescripciones {
   /** «forma píldora → círculo en «7», «8»…»: una línea por diferencia, con los controles que la tienen. */
@@ -243,28 +263,50 @@ const nombrar = (c: ControlVisto): string => `«${c.texto}»`;
  */
 export function compararDescripciones(maqueta: PantallaDescrita, captura: PantallaDescrita): ComparacionDeDescripciones {
   /**
-   * Cada control con su sitio RELATIVO (fila y columna, de 0 a 1). Se empareja por TEXTO y, entre los del mismo
-   * texto, por cercanía: por texto solo, el «0» del visor de la maqueta se emparejaba con la tecla «0» de la captura
-   * —el mismo fallo que `emparejar` ya resolvió con las cajas—.
+   * Cada control con su SITIO: su centro medido si lo trae (fracción de la pantalla), o su fila y columna relativas
+   * si viene descrito. Se empareja por TEXTO y, entre los del mismo texto, por cercanía: por texto solo, el «0» del
+   * visor de la maqueta se emparejaba con la tecla «0» de la captura.
    */
   const situar = (d: PantallaDescrita) =>
     d.filas.flatMap((f, i) =>
-      f.controles.map((c, j) => ({ c, fila: i, y: d.filas.length > 1 ? i / (d.filas.length - 1) : 0, x: f.controles.length > 1 ? j / (f.controles.length - 1) : 0.5 }))
+      f.controles.map((c, j) => ({
+        c,
+        fila: i,
+        y: c.centro?.y ?? (d.filas.length > 1 ? i / (d.filas.length - 1) : 0),
+        x: c.centro?.x ?? (f.controles.length > 1 ? j / (f.controles.length - 1) : 0.5),
+      }))
     );
   const ms = situar(maqueta);
   const as = situar(captura);
-  const candidatas: { i: number; j: number; d: number }[] = [];
-  ms.forEach((m, i) => as.forEach((a, j) => clave(m.c) === clave(a.c) && candidatas.push({ i, j, d: Math.abs(m.y - a.y) + Math.abs(m.x - a.x) / 4 })));
+  const lejania = (i: number, j: number) => Math.abs(ms[i]!.y - as[j]!.y) + Math.abs(ms[i]!.x - as[j]!.x) / 4;
   const pareja = new Map<number, number>();
   const usadas = new Set<number>();
-  for (const { i, j } of candidatas.sort((x, y) => x.d - y.d)) {
-    if (pareja.has(i) || usadas.has(j)) continue;
-    pareja.set(i, j);
-    usadas.add(j);
-  }
+  const emparejar = (candidatas: { i: number; j: number; d: number }[]) => {
+    for (const { i, j } of candidatas.sort((x, y) => x.d - y.d)) {
+      if (pareja.has(i) || usadas.has(j)) continue;
+      pareja.set(i, j);
+      usadas.add(j);
+    }
+  };
+  const todas: { i: number; j: number; d: number }[] = [];
+  ms.forEach((m, i) => as.forEach((a, j) => clave(m.c) === clave(a.c) && todas.push({ i, j, d: lejania(i, j) })));
+  emparejar(todas.filter(({ i, d }) => clave(ms[i]!.c) !== ICONO || d <= CERCA));
 
   const grupos = new Map<string, string[]>();
   const anotar = (que: string, quien: ControlVisto) => grupos.set(que, [...(grupos.get(que) ?? []), nombrar(quien)]);
+
+  // Un texto que en la captura dice OTRA cosa en el mismo sitio (un interruptor DEG que está en RAD): no falta. Solo
+  // con los dos sitios MEDIDOS: con la fila y la columna de una descripción, el «0» de muestra del visor «estaba en
+  // el mismo sitio» que el «12 + 3» de la captura.
+  const otroTexto: { i: number; j: number; d: number }[] = [];
+  ms.forEach((m, i) => {
+    if (pareja.has(i) || clave(m.c) === ICONO || m.c.centro === undefined) return;
+    as.forEach((a, j) => !usadas.has(j) && clave(a.c) !== ICONO && a.c.centro !== undefined && lejania(i, j) <= MUY_CERCA && otroTexto.push({ i, j, d: lejania(i, j) }));
+  });
+  const antes = new Set(pareja.keys());
+  emparejar(otroTexto);
+  for (const i of pareja.keys()) if (!antes.has(i)) anotar(`dice «${as[pareja.get(i)!]!.c.texto}» donde la maqueta dice`, ms[i]!.c);
+
   // Lo que no está solo es noticia si su FILA existe en la captura (algún vecino se emparejó): los datos de ejemplo
   // de un visor («1,240 × 15%…», un «0» de muestra) no tienen por qué estar.
   const filasConPareja = new Set([...pareja.keys()].map((i) => ms[i]!.fila));
@@ -272,22 +314,43 @@ export function compararDescripciones(maqueta: PantallaDescrita, captura: Pantal
   ms.forEach(({ c: m, fila }, i) => {
     const j = pareja.get(i);
     if (j === undefined) {
-      if (filasConPareja.has(fila)) faltan.push(nombrar(m));
+      if (filasConPareja.has(fila) && clave(m) !== ICONO) faltan.push(nombrar(m));
       return;
     }
     const a = as[j]!.c;
-    if (m.forma !== undefined && a.forma !== undefined && m.forma !== a.forma) anotar(`forma ${NOMBRE_DE_FORMA[m.forma]} → ${NOMBRE_DE_FORMA[a.forma]}`, m);
-    if (m.letra !== undefined && a.letra !== undefined && m.letra !== a.letra) anotar(`letra ${NOMBRE_DE_LETRA[m.letra]} → ${NOMBRE_DE_LETRA[a.letra]}`, m);
+    if (m.forma !== undefined && a.forma !== undefined && m.forma !== a.forma) {
+      const cifra = (c: ControlVisto) => (c.proporcion === undefined ? "" : ` (${decimal(c.proporcion)}:1)`);
+      anotar(`forma ${NOMBRE_DE_FORMA[m.forma]}${cifra(m)} → ${NOMBRE_DE_FORMA[a.forma]}${cifra(a)}`, m);
+    }
+    if (conLetras(m.texto)) {
+      if (m.alturaDeLetra !== undefined && a.alturaDeLetra !== undefined) {
+        const veces = a.alturaDeLetra / m.alturaDeLetra;
+        if (veces > 1.3 || veces < 0.77) anotar(`letra ${decimal(veces)} veces la de la maqueta`, m);
+      } else if (m.letra !== undefined && a.letra !== undefined && m.letra !== a.letra) {
+        anotar(`letra ${NOMBRE_DE_LETRA[m.letra]} → ${NOMBRE_DE_LETRA[a.letra]}`, m);
+      }
+    }
     if (m.borde !== undefined && a.borde !== undefined && m.borde !== a.borde) anotar(a.borde ? "lleva un BORDE que la maqueta no tiene" : "le falta el borde de la maqueta", m);
     if (m.alineacion !== undefined && a.alineacion !== undefined && m.alineacion !== a.alineacion) anotar(`texto alineado a ${m.alineacion} → a ${a.alineacion}`, m);
-    if (m.fondo !== undefined && a.fondo !== undefined && distanciaDeColor(m.fondo, a.fondo) > DISTANCIA_DE_COLOR) anotar(`fondo ${m.fondo} → ${a.fondo}`, m);
+    if (m.fondo !== undefined && a.fondo !== undefined && distanciaDeColor(m.fondo, a.fondo) > DISTANCIA_DE_COLOR) anotar(`fondo ${redondo(m.fondo)} → ${redondo(a.fondo)}`, m);
     if (m.colorTexto !== undefined && a.colorTexto !== undefined && distanciaDeColor(m.colorTexto, a.colorTexto) > DISTANCIA_DE_COLOR) {
-      anotar(`color del texto ${m.colorTexto} → ${a.colorTexto}`, m);
+      anotar(`color del texto ${redondo(m.colorTexto)} → ${redondo(a.colorTexto)}`, m);
     }
   });
+  // Un BORDE en la captura cuando la maqueta no tiene ninguno: también en lo que no tiene pareja (el visor).
+  if (!ms.some(({ c }) => c.borde === true)) {
+    as.forEach(({ c }, j) => {
+      if (!usadas.has(j) && c.borde === true) anotar("lleva un BORDE, y en la maqueta nada lo lleva", c);
+    });
+  }
+
   const diferencias = [...grupos.entries()]
     .sort((x, y) => y[1].length - x[1].length)
-    .map(([que, quienes]) => `${que} en ${quienes.join(", ")}${quienes.length > 3 ? ` (${quienes.length} controles)` : ""}.`);
+    .map(([que, quienes]) =>
+      que.endsWith("donde la maqueta dice")
+        ? `${que.replace(" donde la maqueta dice", "")} donde la maqueta dice ${quienes.join(", ")} (¿un estado distinto?).`
+        : `${que} en ${quienes.join(", ")}${quienes.length > 3 ? ` (${quienes.length} controles)` : ""}.`
+    );
   const recortes = as
     .map((x) => x.c)
     .filter((c) => c.recortado === true)
@@ -295,10 +358,12 @@ export function compararDescripciones(maqueta: PantallaDescrita, captura: Pantal
   return { diferencias, faltan, recortes, extras: { maqueta: maqueta.extras, captura: captura.extras } };
 }
 
-/** El bloque que ve el agente. */
-export function informeDeComparacion(c: ComparacionDeDescripciones): string[] {
+/** El bloque que ve el agente. `medida`: las dos salen de los píxeles de cada control, no de un modelo. */
+export function informeDeComparacion(c: ComparacionDeDescripciones, como: "medida" | "descrita" = "descrita"): string[] {
   const lineas = [
-    "COMPARACIÓN CONTROL A CONTROL (la maqueta y la captura descritas POR SEPARADO, con el mismo esquema; en cada línea, maqueta → aparato):",
+    como === "medida"
+      ? "COMPARACIÓN CONTROL A CONTROL, MEDIDA en los píxeles de cada control (la caja del árbol en la captura, la del code.html en la maqueta; en cada línea, maqueta → aparato):"
+      : "COMPARACIÓN CONTROL A CONTROL (la maqueta y la captura descritas POR SEPARADO, con el mismo esquema; en cada línea, maqueta → aparato):",
   ];
   for (const r of c.recortes) lineas.push(`- ${r}`);
   if (c.faltan.length > 0) lineas.push(`- No los encuentro en la captura: ${c.faltan.join(", ")}.`);
