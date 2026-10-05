@@ -297,7 +297,14 @@ export function clienteCloudStudio(
       } catch (error) {
         throw new Error(`el servidor no aceptó la subida troceada: ${(error as Error).message}`);
       }
-      const uploadId = registro(inicio).uploadId;
+      // El servidor real contesta `begin` con TEXTO, no JSON (medido): «OK: Upload session
+      // started. uploadId=dde5… expiresAt=…». Se prefiere el dato estructurado si algún día
+      // llega, y si no se saca del texto.
+      const estructurado = registro(inicio).uploadId;
+      const uploadId =
+        typeof estructurado === "string" && estructurado !== ""
+          ? estructurado
+          : /uploadId=([0-9a-f]+)/i.exec(texto(inicio) || (typeof inicio === "string" ? inicio : ""))?.[1];
       if (typeof uploadId !== "string" || uploadId === "") {
         const dicho = texto(inicio) || JSON.stringify(inicio ?? "");
         throw new Error(`el servidor no aceptó la subida troceada de «${ruta}» (sin uploadId): «${muestra(dicho)}»`);

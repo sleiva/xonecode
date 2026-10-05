@@ -1356,7 +1356,8 @@ escrito a mano lo da de alta una persona desde la misma ventana.
   `TOPE_BINARIO` y el borrado de un binario (el borrado es una tool de TEXTO).
 - **Nada se da por subido sin COMPROBARLO** (`agent/cloudstudio/subida.ts`,
   `core/verificacionDeSubida.ts`): hay ficheros que se cortan al subir, sin causa encontrada. Cada
-  texto se RELEE y se compara EXACTO, sin normalizar; distinto o sin poder releer es un FALLO con
+  texto se RELEE y se compara normalizando SOLO lo medido (el salto de línea final que Studio
+  quita y CRLF → LF); distinto o sin poder releer es un FALLO con
   cifras, a `sync.log` y al diálogo, y ese fichero no avanza la ref. Un binario va SIEMPRE por el
   modo `chunked` con `expectedSha256` (`cloudstudioClient.ts#subirBinario`, `BYTES_POR_TROZO`), que
   el servidor comprueba en el `commit`; a mitad se ABORTA, y sin troceado no se cae a base64. Y tras

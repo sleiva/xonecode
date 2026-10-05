@@ -253,6 +253,23 @@ describe("clienteCloudStudio", () => {
       expect(falso.llamadas[3]!.argumentos).toEqual({ source: "chunked", action: "commit", uploadId: "u-1" });
     });
 
+    it("lee el `uploadId` del TEXTO con que contesta `begin` el servidor real", async () => {
+      const inicio = { content: [{ type: "text", text: "OK: Upload session started. uploadId=dde573bbea5d4b34bea6cc647cfb9b63 expiresAt=2026-10-05T06:17:44.9024212Z. Send 3 chunks via action='chunk' then call action='commit'." }] };
+      const ok = { content: [{ type: "text", text: "OK" }] };
+      const falso = clienteFalso([inicio, ok, ok]);
+      await clienteCloudStudio(falso.invocar, "AppForTest").subirBinario("logo.png", Buffer.from([1, 2]));
+      expect(falso.llamadas[1]!.argumentos).toMatchObject({ action: "chunk", uploadId: "dde573bbea5d4b34bea6cc647cfb9b63", index: 0 });
+      expect(falso.llamadas[2]!.argumentos).toEqual({ source: "chunked", action: "commit", uploadId: "dde573bbea5d4b34bea6cc647cfb9b63" });
+    });
+
+    it("un `Error:` en texto del servidor real en un trozo es un fallo, y se aborta", async () => {
+      const inicio = { content: [{ type: "text", text: "OK: Upload session started. uploadId=abc123 expiresAt=x." }] };
+      const falso = clienteFalso([inicio, { content: [{ type: "text", text: "Error: uploadId is required for action=chunk." }] }, "OK"]);
+      await expect(clienteCloudStudio(falso.invocar, "AppForTest").subirBinario("logo.png", Buffer.from([1])))
+        .rejects.toThrow(/uploadId is required for action=chunk/);
+      expect(falso.llamadas.map((l) => l.argumentos.action)).toEqual(["begin", "chunk", "abort"]);
+    });
+
     it("un fichero vacío va en UN trozo vacío", async () => {
       const falso = clienteFalso([comoTexto({ uploadId: "u-0" }), comoTexto({ ok: true }), comoTexto({ ok: true })]);
       await clienteCloudStudio(falso.invocar, "AppForTest").subirBinario("vacio.bin", new Uint8Array());

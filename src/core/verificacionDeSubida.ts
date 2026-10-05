@@ -7,9 +7,16 @@
  * con cifras que se puedan medir —cuánto había, cuánto llegó, desde dónde difiere—, no como un
  * «subido» que miente.
  *
- * La comparación es EXACTA, sin normalizar nada: no hay medida de que Studio cambie un texto
- * de forma legítima (finales de línea, BOM…), y normalizar a ciegas es justo cómo se esconde
- * un corte. Si algún día se mide una transformación legítima, se añade aquí con su medida.
+ * La comparación normaliza SOLO dos transformaciones MEDIDAS contra el servidor real (una rama
+ * desechable de AppDemo), aplicadas a los dos lados:
+ * - **Studio quita el salto de línea FINAL** (o `studio_get_file` no lo devuelve): un
+ *   «…'añadir';\n» de 76 B vuelve con 75 B, y un fichero de 457.890 B vuelve con 457.889 B,
+ *   idéntico en todo lo demás. Un fichero SIN salto final vuelve idéntico.
+ * - **Studio convierte CRLF en LF** («\r\n» → «\n»).
+ * Nada más: el BOM se conserva, y tildes, emoji y «» llegan intactos, así que no se tocan.
+ * Normalizar a ciegas es justo cómo se esconde un corte; un corte de verdad (falta una línea,
+ * cambia algo en medio) sigue saliendo distinto. El motivo y los hashes se calculan sobre los
+ * textos EN CRUDO: son lo que hay de verdad a cada lado.
  */
 import { createHash } from "node:crypto";
 
@@ -30,9 +37,14 @@ export interface DiferenciaDeTexto {
   sha256Studio: string;
 }
 
+/** Las dos transformaciones medidas de Studio (ver cabecera), y ninguna más. */
+function comoLoGuardaStudio(texto: string): string {
+  return texto.replace(/\r\n/g, "\n").replace(/\n+$/, "");
+}
+
 /** `undefined` = llegó igual. Si no, el motivo con las cifras y los dos hashes. */
 export function diferenciaDeTexto(local: string, studio: string): DiferenciaDeTexto | undefined {
-  if (local === studio) return undefined;
+  if (comoLoGuardaStudio(local) === comoLoGuardaStudio(studio)) return undefined;
   let desde = 0;
   const tope = Math.min(local.length, studio.length);
   while (desde < tope && local[desde] === studio[desde]) desde++;
