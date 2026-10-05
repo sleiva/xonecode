@@ -642,3 +642,132 @@ describe("subir se niega con ficheros ilegibles (IXCODE-16)", () => {
     expect(informe.ok).toEqual(["app.xml"]);
   });
 });
+
+/**
+ * La subida COMPRUEBA lo que dejó y la rama a la que escribe. Hay ficheros que se cortan al
+ * subirlos a Studio y la causa no se ha encontrado: mientras tanto, un corte no puede pasar en
+ * silencio ni la ref puede afirmar que está arriba algo que llegó distinto.
+ */
+describe("subir verifica lo que deja en Studio", () => {
+  /** Dos ficheros de texto modificados y commiteados sobre la ref de la bajada. */
+  async function dosTextos() {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-sub-ver-"));
+    writeFileSync(join(raiz, "app.xml"), "<app/>");
+    writeFileSync(join(raiz, "a.xne"), "<a/>");
+    await prepararRepo(raiz, "master");
+    writeFileSync(join(raiz, "app.xml"), "<app cambiada='si'/>");
+    writeFileSync(join(raiz, "a.xne"), `<a>${"x".repeat(5000)}</a>`);
+    execFileSync("git", ["add", "-A"], { cwd: raiz });
+    execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "cambio"], { cwd: raiz });
+    return raiz;
+  }
+  const proyecto = { id: "1", nombre: "AppForTest" };
+
+  it("un texto que vuelve CORTADO es un fallo con las cifras, y la ref avanza solo por el que llegó bien", async () => {
+    const raiz = await dosTextos();
+    const puerto = new CloudStudioEnMemoria({
+      rama: "master",
+      textos: { "app.xml": "<app/>", "a.xne": "<a/>" },
+      textoRecortadoA: { "a.xne": 1200 },
+    });
+    const dicho: string[] = [];
+
+    const informe = await subir({ puerto, raiz, ramaOrigen: "master", proyecto, politicaDeAprobacion: autorizaSiempre, informar: (t) => dicho.push(t) });
+
+    expect(informe.ok).toEqual(["app.xml"]);
+    expect(informe.fallos).toHaveLength(1);
+    expect(informe.fallos[0]!.ruta).toBe("a.xne");
+    expect(informe.fallos[0]!.motivo).toBe(
+      "llegó distinto a Studio: 5.007 B en local, 1.200 B en Studio (difieren desde el carácter 1.200)"
+    );
+    // El motivo se DICE, no solo se cuenta: el diálogo enseña las últimas líneas del recorrido.
+    expect(dicho.join("")).toContain("a.xne: llegó distinto a Studio");
+    // Lo cortado sigue pendiente; lo que llegó bien ya no.
+    expect(await cambiosPendientes(raiz, "master")).toEqual([{ clase: "modificado", ruta: "a.xne" }]);
+    // Y en sync.log, con los hashes para poder mirarlo después.
+    const lineas = readFileSync(rutaSyncLog(raiz), "utf8").trim().split("\n");
+    const ultima = JSON.parse(lineas[lineas.length - 1]!);
+    expect(ultima.fallos[0].ruta).toBe("a.xne");
+    expect(ultima.fallos[0].sha256Local).toMatch(/^[0-9a-f]{64}$/);
+    expect(ultima.fallos[0].sha256Studio).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("si la relectura FALLA, no se da por bueno: fallo «subido pero no se pudo comprobar»", async () => {
+    const raiz = await proyectoConCambios();
+    const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" }, relecturaFalla: "Empty response from server" });
+
+    const informe = await subir({ puerto, raiz, ramaOrigen: "master", proyecto, politicaDeAprobacion: autorizaSiempre });
+
+    expect(informe.ok).toEqual([]);
+    expect(informe.fallos).toEqual([{ ruta: "app.xml", motivo: "subido pero no se pudo comprobar: Empty response from server" }]);
+    expect(await cambiosPendientes(raiz, "master")).toHaveLength(1);
+  });
+
+  it("un binario que el servidor rechaza (hash que no casa) es un fallo con su motivo", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-sub-bin-"));
+    writeFileSync(join(raiz, "app.xml"), "<app/>");
+    await prepararRepo(raiz, "master");
+    mkdirSync(join(raiz, "icons"));
+    writeFileSync(join(raiz, "icons", "logo.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]));
+    execFileSync("git", ["add", "-A"], { cwd: raiz });
+    execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "icono"], { cwd: raiz });
+    const puerto = new CloudStudioEnMemoria({ rama: "master", binarioFalla: "studio_upload_file rechazó el commit: SHA-256 mismatch" });
+
+    const informe = await subir({ puerto, raiz, ramaOrigen: "master", proyecto, politicaDeAprobacion: autorizaSiempre });
+
+    expect(informe.ok).toEqual([]);
+    expect(informe.fallos).toEqual([{ ruta: "icons/logo.png", motivo: "studio_upload_file rechazó el commit: SHA-256 mismatch" }]);
+    expect(await cambiosPendientes(raiz, "master")).toHaveLength(1);
+  });
+
+  it("si Studio sigue en OTRA rama tras el switch, no se sube NADA, se registra y se restaura", async () => {
+    const raiz = await proyectoConCambios();
+    const base = new CloudStudioEnMemoria({ rama: "otra", textos: { "app.xml": "<app/>" }, cambiarRamaNoSurteEfecto: true });
+    const { puerto, cambios } = conCambiosDeRama(base);
+
+    await expect(subir({ puerto, raiz, ramaOrigen: "master", proyecto, politicaDeAprobacion: autorizaSiempre }))
+      .rejects.toThrow("Studio está en la rama «otra» y el proyecto es de la rama «master»: no se ha subido nada");
+
+    expect(base.escrituras).toEqual([]);
+    // El `finally` restaura como siempre: a la que estaba.
+    expect(cambios).toEqual(["master", "otra"]);
+    const lineas = readFileSync(rutaSyncLog(raiz), "utf8").trim().split("\n");
+    expect(JSON.parse(lineas[lineas.length - 1]!).error).toContain("no se ha subido nada");
+    expect(await cambiosPendientes(raiz, "master")).toHaveLength(1);
+  });
+
+  it("si la rama activa no se puede leer, sube, y el informe lleva el AVISO (también en sync.log)", async () => {
+    const raiz = await proyectoConCambios();
+    const puerto = new CloudStudioEnMemoria({ rama: "otra", contextoFalla: "An error occurred invoking 'studio_get_context'.", textos: { "app.xml": "<app/>" } });
+    const dicho: string[] = [];
+
+    const informe = await subir({ puerto, raiz, ramaOrigen: "master", proyecto, politicaDeAprobacion: autorizaSiempre, informar: (t) => dicho.push(t) });
+
+    expect(informe.ok).toEqual(["app.xml"]);
+    expect(informe.avisoDeRama).toBe("no se pudo confirmar la rama activa de Studio antes de subir");
+    expect(dicho.join("")).toContain("no se pudo confirmar la rama activa de Studio antes de subir");
+    const lineas = readFileSync(rutaSyncLog(raiz), "utf8").trim().split("\n");
+    expect(JSON.parse(lineas[lineas.length - 1]!).avisoDeRama).toBe("no se pudo confirmar la rama activa de Studio antes de subir");
+  });
+
+  it("una rama activa VACÍA (el servidor no la dice) cuenta como no confirmada, no como otra rama", async () => {
+    const raiz = await proyectoConCambios();
+    const base = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
+    const prototipo = Object.getPrototypeOf(base) as CloudStudioPort;
+    const puerto = Object.assign(Object.create(prototipo), base) as CloudStudioPort;
+    puerto.contexto = async () => ({ proyecto: "AppForTest", rama: "" });
+
+    const informe = await subir({ puerto, raiz, ramaOrigen: "master", proyecto, politicaDeAprobacion: autorizaSiempre });
+
+    expect(informe.ok).toEqual(["app.xml"]);
+    expect(informe.avisoDeRama).toBe("no se pudo confirmar la rama activa de Studio antes de subir");
+  });
+
+  it("con la rama confirmada no hay aviso", async () => {
+    const raiz = await proyectoConCambios();
+    const puerto = new CloudStudioEnMemoria({ rama: "otra", textos: { "app.xml": "<app/>" } });
+    const informe = await subir({ puerto, raiz, ramaOrigen: "master", proyecto, politicaDeAprobacion: autorizaSiempre });
+    expect(informe.ok).toEqual(["app.xml"]);
+    expect(informe.avisoDeRama).toBeUndefined();
+  });
+});

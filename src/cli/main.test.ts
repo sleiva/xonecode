@@ -929,6 +929,23 @@ describe("crearSincronizador", () => {
     expect(avisos.join("")).toContain("2 ficheros no subieron");
   });
 
+  it("el AVISO de rama sin confirmar viaja como DATO de la subida, no solo en el recorrido", async () => {
+    // El diálogo de la subida esconde el recorrido cuando todo subió: sin el dato, el aviso
+    // de que no se pudo confirmar la rama no lo vería nadie justo cuando importa.
+    const raiz = raizConProyectoCloud();
+    const subirProyecto = vi.fn(async () => ({
+      ok: ["a.xne"], fallos: [], omitidas: [], avisoDeRama: "no se pudo confirmar la rama activa de Studio antes de subir",
+    }));
+    const resultado = await crearSincronizador(piezasFalsas({ subirProyecto }))("subir", raiz, async () => true);
+    expect(resultado).toMatchObject({
+      subida: { subidos: 1, fallidos: 0, avisos: ["no se pudo confirmar la rama activa de Studio antes de subir"] },
+    });
+    // Y sin aviso, el campo NO está (ausente ≠ vacío).
+    const sinAviso = await crearSincronizador(piezasFalsas({ subirProyecto: async () => ({ ok: ["a.xne"], fallos: [], omitidas: [] }) }))("subir", raiz, async () => true);
+    expect(sinAviso).toMatchObject({ subida: { subidos: 1, fallidos: 0 } });
+    expect((sinAviso as { subida?: object }).subida).not.toHaveProperty("avisos");
+  });
+
   it("«bajar» descarga y DESPUÉS prepara el repo — nunca al revés", async () => {
     const raiz = raizConProyectoCloud();
     const orden: string[] = [];

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { clienteCloudStudio, PAUSAS_DE_REAPERTURA_MS, type LlamadaMcp } from "./cloudstudioClient.js";
+import { createHash } from "node:crypto";
+import { BYTES_POR_TROZO, clienteCloudStudio, PAUSAS_DE_REAPERTURA_MS, type LlamadaMcp } from "./cloudstudioClient.js";
 
 /** Sin esperas de verdad, y apuntando cuáles se pidieron. */
 function reloj() {
@@ -219,5 +220,71 @@ describe("clienteCloudStudio", () => {
     await expect(clienteCloudStudio(falso.invocar, "AppForTest").escribirTexto("a.js", contenidoSecreto))
       .rejects.toSatisfy((error: unknown) =>
         error instanceof Error && error.message === "boom" && !error.message.includes(contenidoSecreto));
+  });
+
+  /**
+   * Los binarios van por el modo TROCEADO de `studio_upload_file` con `expectedSha256`: el
+   * servidor comprueba el hash en el `commit`, y un fichero que llegue cortado se rechaza en vez
+   * de quedarse a medias en Studio sin que nadie lo sepa.
+   */
+  describe("subirBinario (troceado y con hash)", () => {
+    const comoTexto = (o: unknown) => ({ content: [{ type: "text", text: JSON.stringify(o) }] });
+
+    it("begin con tamaño, trozos y sha256 → un chunk por trozo, en orden → commit", async () => {
+      const datos = Buffer.alloc(BYTES_POR_TROZO + 1, 7);
+      const falso = clienteFalso([comoTexto({ uploadId: "u-1" }), comoTexto({ ok: true }), comoTexto({ ok: true }), comoTexto({ success: true })]);
+      await clienteCloudStudio(falso.invocar, "AppForTest").subirBinario("bd/gestion.db", datos);
+
+      expect(falso.llamadas.map((l) => [l.nombre, l.argumentos.action])).toEqual([
+        ["studio_upload_file", "begin"], ["studio_upload_file", "chunk"], ["studio_upload_file", "chunk"], ["studio_upload_file", "commit"],
+      ]);
+      expect(falso.llamadas[0]!.argumentos).toEqual({
+        source: "chunked", action: "begin", filePath: "bd/gestion.db",
+        totalSize: datos.byteLength, totalChunks: 2,
+        expectedSha256: createHash("sha256").update(datos).digest("hex"),
+      });
+      expect(falso.llamadas[1]!.argumentos).toMatchObject({ source: "chunked", uploadId: "u-1", index: 0 });
+      expect(falso.llamadas[2]!.argumentos).toMatchObject({ source: "chunked", uploadId: "u-1", index: 1 });
+      // Los trozos, juntos, son EXACTAMENTE los bytes.
+      const juntos = Buffer.concat([1, 2].map((i) => Buffer.from(falso.llamadas[i]!.argumentos.base64Chunk as string, "base64")));
+      expect(juntos.equals(datos)).toBe(true);
+      // Cada trozo cabe en el tope del servidor (5 MB) aun medido en base64.
+      for (const i of [1, 2]) expect((falso.llamadas[i]!.argumentos.base64Chunk as string).length).toBeLessThanOrEqual(5 * 1024 * 1024);
+      expect(falso.llamadas[3]!.argumentos).toEqual({ source: "chunked", action: "commit", uploadId: "u-1" });
+    });
+
+    it("un fichero vacío va en UN trozo vacío", async () => {
+      const falso = clienteFalso([comoTexto({ uploadId: "u-0" }), comoTexto({ ok: true }), comoTexto({ ok: true })]);
+      await clienteCloudStudio(falso.invocar, "AppForTest").subirBinario("vacio.bin", new Uint8Array());
+      expect(falso.llamadas[0]!.argumentos).toMatchObject({ totalSize: 0, totalChunks: 1 });
+      expect(falso.llamadas[1]!.argumentos).toMatchObject({ index: 0, base64Chunk: "" });
+    });
+
+    it("un commit RECHAZADO (hash que no casa, dicho como texto) es un fallo, y se aborta", async () => {
+      const falso = clienteFalso([comoTexto({ uploadId: "u-2" }), comoTexto({ ok: true }), "Error: SHA-256 mismatch", comoTexto({ ok: true })]);
+      await expect(clienteCloudStudio(falso.invocar, "AppForTest").subirBinario("logo.png", Buffer.from([1, 2, 3])))
+        .rejects.toThrow(/commit.*SHA-256 mismatch/);
+      expect(falso.llamadas[3]!.argumentos).toEqual({ source: "chunked", action: "abort", uploadId: "u-2" });
+    });
+
+    it("un commit con `success: false` también es un fallo", async () => {
+      const falso = clienteFalso([comoTexto({ uploadId: "u-3" }), comoTexto({ ok: true }), comoTexto({ success: false, error: "hash mismatch" }), comoTexto({})]);
+      await expect(clienteCloudStudio(falso.invocar, "AppForTest").subirBinario("logo.png", Buffer.from([1])))
+        .rejects.toThrow(/hash mismatch/);
+    });
+
+    it("si un trozo falla a mitad, se aborta y se lanza el error ORIGINAL aunque el abort falle", async () => {
+      const falso = clienteFalso([comoTexto({ uploadId: "u-4" }), new Error("timeout"), new Error("abort también falla")]);
+      await expect(clienteCloudStudio(falso.invocar, "AppForTest").subirBinario("logo.png", Buffer.from([1, 2])))
+        .rejects.toThrow("timeout");
+      expect(falso.llamadas.map((l) => l.argumentos.action)).toEqual(["begin", "chunk", "abort"]);
+    });
+
+    it("si el servidor no da `uploadId` (no conoce el modo troceado) es un fallo, y NO cae a base64", async () => {
+      const falso = clienteFalso([comoTexto({ error: "Unknown source: chunked" })]);
+      await expect(clienteCloudStudio(falso.invocar, "AppForTest").subirBinario("logo.png", Buffer.from([1])))
+        .rejects.toThrow(/troceada.*Unknown source: chunked/);
+      expect(falso.llamadas).toHaveLength(1);
+    });
   });
 });

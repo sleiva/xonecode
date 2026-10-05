@@ -8,16 +8,18 @@
  * —un proyecto cuyo `config.rama` nombra una rama que aún no está en el servidor—, pero con
  * su propio nombre.
  *
- * Dos propiedades que no son negociables:
- * - La ref se mueve SOLO si todo terminó, y SOLO por lo que se autorizó: una subida PARCIAL
- *   (la persona eligió qué ficheros) la mueve con `marcarSubidoParcial`, no a HEAD. Con
- *   fallos parciales se queda donde estaba, así que el siguiente `/sync` vuelve a calcular
- *   el plan ENTERO contra esa misma ref sin mover —no solo lo que
- *   falló— y lo reenvía completo, incluidas las operaciones que la
- *   vez anterior SÍ funcionaron. Eso NO es «idempotente por construcción»: es seguro
- *   únicamente si escribir/borrar dos veces la misma ruta en CloudStudio no tiene efecto
- *   observable la segunda vez. Esta función no lo garantiza ni lo comprueba, solo lo
- *   asume del servidor.
+ * Tres propiedades que no son negociables:
+ * - La ref se mueve SOLO por lo que se autorizó Y se subió COMPROBADO: con todo bien, a HEAD;
+ *   con una selección o con fallos, con `marcarSubidoParcial` y solo por `ok`. Lo que falló
+ *   —también lo que llegó distinto a Studio o no se pudo releer— no avanza, y el siguiente
+ *   `/sync` lo vuelve a intentar. Reintentar es seguro únicamente si escribir dos veces la
+ *   misma ruta en CloudStudio no tiene efecto observable la segunda vez; esta función no lo
+ *   garantiza, lo asume del servidor.
+ * - Nada se da por subido sin COMPROBARLO: hay ficheros que se cortan al subirlos y la causa
+ *   no se ha encontrado. Cada texto se RELEE y se compara exacto (`core/verificacionDeSubida.ts`);
+ *   un binario va troceado con su sha256, que comprueba el servidor (`cloudstudioClient.ts`).
+ *   Y antes de tocar un fichero se mira que Studio esté de verdad en la rama del proyecto: si
+ *   dice otra, no se sube nada; si no se puede leer, se sube con un AVISO (`avisoDeRama`).
  * - La rama activa del servidor se restaura al terminar (incluso si falló al posicionar
  *   la rama, antes de tocar un solo fichero): `switch` le mueve el suelo a quien tenga
  *   Studio abierto en el navegador. Salvo que no se haya podido LEER cuál era —medido:
@@ -31,6 +33,7 @@ import type { CloudStudioPort } from "../../core/ports.js";
 import type { EstadoDeSync, OperacionOmitida, PoliticaDeAprobacion } from "../../core/cloudstudio.js";
 import { planAutorizado } from "../../core/cloudstudio.js";
 import { planDeSubida } from "../../core/planDeSubida.js";
+import { diferenciaDeTexto, motivoSinComprobar } from "../../core/verificacionDeSubida.js";
 import { NOMBRE_CARPETA } from "../config/configEnDisco.js";
 import { cambiosPendientes, marcarSubido, marcarSubidoParcial } from "../sesiones/gitSync.js";
 import { rutaSyncJson } from "./descarga.js";
@@ -60,13 +63,31 @@ export interface OpcionesDeSubida {
   informar?: (texto: string) => void;
 }
 
+/** El aviso cuando la rama activa de Studio no se pudo leer justo antes de subir. */
+export const AVISO_RAMA_SIN_CONFIRMAR = "no se pudo confirmar la rama activa de Studio antes de subir";
+
+export interface FalloDeSubida {
+  ruta: string;
+  motivo: string;
+  /** Solo cuando el texto llegó DISTINTO: los dos hashes, para mirarlo después en `sync.log`. */
+  sha256Local?: string;
+  sha256Studio?: string;
+}
+
 export interface InformeDeSubida {
+  /** Lo subido Y comprobado. */
   ok: string[];
-  fallos: Array<{ ruta: string; motivo: string }>;
+  fallos: FalloDeSubida[];
+  /**
+   * Presente = la rama activa de Studio NO se pudo leer tras posicionarla (la tool se cae para
+   * algunos proyectos), y se subió igual. No es un fallo: es lo que no se pudo confirmar, y se
+   * dice para que no pase en silencio.
+   */
+  avisoDeRama?: string;
   /**
    * Lo que NO se puede sincronizar, con el porqué (`core/planDeSubida.ts`). No son
    * fallos: no bloquean la ref. Son el camino de escape para que una operación imposible
-   * —el borrado de un binario, un fichero de más de 5 MB— no atasque la subida entera.
+   * —el borrado de un binario, un binario por encima de `TOPE_BINARIO`— no atasque la subida.
    */
   omitidas: OperacionOmitida[];
   /**
@@ -175,6 +196,7 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
       rama: ramaOrigen,
       ok: informe.ok,
       fallos: informe.fallos,
+      ...(informe.avisoDeRama === undefined ? {} : { avisoDeRama: informe.avisoDeRama }),
       // Lo IMPOSIBLE queda por escrito igual que lo fallido: el usuario tiene que poder
       // volver mañana y saber qué se quedó sin subir y por qué, no solo verlo pasar.
       omitidas: informe.omitidas,
@@ -250,17 +272,57 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
       // arreglaría nada y firmaría un linaje falso.
       await puerto.cambiarRama(ramaOrigen);
 
+      // Y COMPROBAR que el `switch` surtió efecto antes de tocar un solo fichero: un `switch`
+      // que contesta bien no prueba en qué rama acaba escribiendo `studio_edit_file`. Si Studio
+      // dice OTRA rama, no se sube nada (error estructural, el camino de hoy: `sync.log` y el
+      // `finally` restaura). Si no se puede leer —la tool se cae en algunos proyectos, y una
+      // rama vacía es «el servidor no la dijo», no «está en la rama ''»—, se sube con AVISO:
+      // tumbar toda subida de esos proyectos por una lectura rota sería peor que decirlo.
+      let activa: string | undefined;
+      try {
+        activa = (await puerto.contexto()).rama;
+      } catch {
+        activa = undefined;
+      }
+      if (activa === undefined || activa === "") {
+        informe.avisoDeRama = AVISO_RAMA_SIN_CONFIRMAR;
+        informar(`aviso: ${AVISO_RAMA_SIN_CONFIRMAR}\n`);
+      } else if (activa !== ramaOrigen) {
+        throw new Error(`Studio está en la rama «${activa}» y el proyecto es de la rama «${ramaOrigen}»: no se ha subido nada`);
+      }
+
       for (const operacion of autorizado) {
         try {
           if (operacion.tipo === "borrado") await puerto.borrarTexto(operacion.ruta);
           else if (operacion.tipo === "texto") {
-            await puerto.escribirTexto(operacion.ruta, readFileSync(join(raiz, operacion.ruta), "utf8"));
+            const contenido = readFileSync(join(raiz, operacion.ruta), "utf8");
+            await puerto.escribirTexto(operacion.ruta, contenido);
+            // Releer lo escrito: es la única prueba de que llegó entero. Una relectura que
+            // falla NO es un «ok»: el fichero puede estar cortado y no lo sabríamos.
+            let enStudio: string;
+            try {
+              enStudio = await puerto.leerTexto(operacion.ruta);
+            } catch (error) {
+              throw new Error(motivoSinComprobar((error as Error).message));
+            }
+            const diferencia = diferenciaDeTexto(contenido, enStudio);
+            if (diferencia !== undefined) {
+              informe.fallos.push({ ruta: operacion.ruta, ...diferencia });
+              informar(`${operacion.ruta}: ${diferencia.motivo}\n`);
+              continue;
+            }
           } else {
+            // El hash lo comprueba el SERVIDOR en el `commit` del modo troceado
+            // (`cloudstudioClient.ts#subirBinario`): si no casa, esto lanza.
             await puerto.subirBinario(operacion.ruta, readFileSync(join(raiz, operacion.ruta)));
           }
           informe.ok.push(operacion.ruta);
         } catch (error) {
-          informe.fallos.push({ ruta: operacion.ruta, motivo: (error as Error).message });
+          const motivo = (error as Error).message;
+          informe.fallos.push({ ruta: operacion.ruta, motivo });
+          // Dicho, no solo contado: el diálogo de la subida enseña las últimas líneas del
+          // recorrido, y «fallaron 1» sin el porqué no deja ver un corte.
+          informar(`${operacion.ruta}: ${motivo}\n`);
         }
       }
     } finally {
@@ -283,8 +345,8 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
 
   if (informe.fallos.length === 0 && !parcial) {
     await marcarSubido(raiz, ramaOrigen, `sync: ${informe.ok.length} ficheros a ${ramaOrigen}`);
-  } else if (informe.fallos.length === 0) {
-    // Solo lo ELEGIDO avanza: la ref no puede ir a HEAD, o afirmaría que está arriba lo que
+  } else if (informe.fallos.length === 0 || informe.ok.length > 0) {
+    // Solo lo ELEGIDO y COMPROBADO avanza: la ref no puede ir a HEAD, o afirmaría que está arriba lo que
     // la persona dejó sin marcar. Lo omitido tampoco avanza: se sigue declarando.
     await marcarSubidoParcial(
       raiz,
@@ -292,13 +354,17 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
       informe.ok,
       `sync: ${informe.ok.length} de ${plan.length} ficheros a ${ramaOrigen}`
     );
-    const resto = plan.length - autorizado.length;
-    informar(
-      `subidos ${autorizado.length} de ${plan.length}; ${resto === 1 ? "el otro sigue" : `los otros ${resto} siguen`} pendiente${resto === 1 ? "" : "s"}\n`
-    );
+    // Lo que FALLÓ no avanza: el próximo `/sync` lo vuelve a calcular y a intentar.
+    const resto = plan.length - informe.ok.length;
+    if (informe.fallos.length > 0) {
+      informar(`${informe.fallos.length} ficheros no subieron bien; siguen pendientes y el próximo /sync los reintenta\n`);
+    } else {
+      informar(
+        `subidos ${informe.ok.length} de ${plan.length}; ${resto === 1 ? "el otro sigue" : `los otros ${resto} siguen`} pendiente${resto === 1 ? "" : "s"}\n`
+      );
+    }
   } else {
-    // La ref no se mueve: el siguiente `/sync` recalcula el plan entero desde ahí y lo
-    // reenvía completo, incluido lo que sí subió esta vez (ver la nota de cabecera).
+    // Nada subió bien: la ref no se mueve y el siguiente `/sync` lo reintenta todo.
     informar(`${informe.fallos.length} ficheros no subieron; la ref no se mueve y el próximo /sync reintenta\n`);
   }
 

@@ -7,6 +7,7 @@
  * este módulo no abre nada por su cuenta.
  */
 import type { CloudStudioPort } from "../../core/ports.js";
+import { sha256Hex } from "../../core/verificacionDeSubida.js";
 import type { ContextoRemoto, EstructuraRemota, ManifiestoRemoto } from "../../core/cloudstudio.js";
 
 export interface LlamadaMcp {
@@ -84,6 +85,31 @@ const TOPE_DE_MUESTRA = 120;
 /** Un texto del servidor, acotado: para un mensaje de error, no para volcarlo entero. */
 function muestra(bruto: string): string {
   return bruto.length > TOPE_DE_MUESTRA ? `${bruto.slice(0, TOPE_DE_MUESTRA)}…` : bruto;
+}
+
+/**
+ * Los bytes de cada trozo de una subida troceada (`studio_upload_file` con `source: "chunked"`).
+ *
+ * El servidor admite trozos de hasta 5 MB y no dice si mide el trozo DECODIFICADO o la cadena
+ * base64 que viaja. Con 3 MB de bytes la cadena son 4 MB: cabe con margen en las dos lecturas
+ * del tope. Múltiplo de 3 a propósito, para que ningún trozo intermedio lleve relleno `=`.
+ */
+export const BYTES_POR_TROZO = 3 * 1024 * 1024;
+
+/**
+ * Una respuesta del servidor que dice que algo FALLÓ aunque llegue como respuesta correcta: el
+ * texto empieza por «Error», o el JSON trae `success: false` / `ok: false` / un `error`. Medido
+ * en otras tools (`abrirComprobando`, `conSesion`): el servidor dice los errores de las dos
+ * formas, y no mirar la segunda es cómo un hash rechazado pasaría por un «subido».
+ */
+function falloEnRespuesta(valor: unknown): string | undefined {
+  const dicho = texto(valor) || (typeof valor === "string" ? valor : "");
+  if (/^\s*error\b/i.test(dicho)) return muestra(dicho);
+  const r = registro(valor);
+  if (r.success === false || r.ok === false || (r.error !== undefined && r.error !== null && r.error !== false)) {
+    return muestra(typeof r.error === "string" ? r.error : dicho || JSON.stringify(r));
+  }
+  return undefined;
 }
 
 /**
@@ -245,16 +271,54 @@ export function clienteCloudStudio(
       await conSesion("studio_edit_file", { filePath: ruta, editMode: "delete" });
     },
     async subirBinario(ruta, datos) {
-      // `base64` es el ÚNICO modo que xonecode implementa, y el puerto ni siquiera lleva
-      // el campo: el `chunked` del servidor no está enchufado. Por eso `planDeSubida`
-      // declara IMPOSIBLE —y saca del plan— cualquier binario por encima de
-      // `TOPE_BASE64`, en vez de mandarlo aquí a fallar. Si algún día se implementa el
-      // troceado, este es el sitio, y `OperacionDeSubida` vuelve a tener dos modos.
-      await conSesion("studio_upload_file", {
-        filePath: ruta,
-        source: "base64",
-        base64Content: Buffer.from(datos).toString("base64"),
-      });
+      // Modo TROCEADO con `expectedSha256`, siempre: es el único en que el SERVIDOR comprueba
+      // que llegó entero —rechaza el `commit` si el hash no casa—, y hay ficheros que se cortan
+      // al subir sin causa encontrada. El base64 de una llamada no comprueba nada, así que si
+      // el servidor no conoce el troceado esto FALLA con motivo; no se cae a base64 a ciegas.
+      // El tope (`TOPE_BINARIO`) lo aplica `planDeSubida`, que no manda aquí lo que no cabe.
+      const bytes = Buffer.from(datos);
+      const totalChunks = Math.max(1, Math.ceil(bytes.byteLength / BYTES_POR_TROZO));
+      const llamar = async (paso: string, argumentos: Record<string, unknown>): Promise<unknown> => {
+        const respuesta = await conSesion("studio_upload_file", { source: "chunked", ...argumentos });
+        const fallo = falloEnRespuesta(respuesta);
+        if (fallo !== undefined) throw new Error(`studio_upload_file (${paso}) de «${ruta}»: ${fallo}`);
+        return respuesta;
+      };
+
+      let inicio: unknown;
+      try {
+        inicio = await llamar("begin", {
+          action: "begin",
+          filePath: ruta,
+          totalSize: bytes.byteLength,
+          totalChunks,
+          expectedSha256: sha256Hex(bytes),
+        });
+      } catch (error) {
+        throw new Error(`el servidor no aceptó la subida troceada: ${(error as Error).message}`);
+      }
+      const uploadId = registro(inicio).uploadId;
+      if (typeof uploadId !== "string" || uploadId === "") {
+        const dicho = texto(inicio) || JSON.stringify(inicio ?? "");
+        throw new Error(`el servidor no aceptó la subida troceada de «${ruta}» (sin uploadId): «${muestra(dicho)}»`);
+      }
+
+      try {
+        for (let index = 0; index < totalChunks; index++) {
+          const trozo = bytes.subarray(index * BYTES_POR_TROZO, (index + 1) * BYTES_POR_TROZO);
+          await llamar(`trozo ${index + 1} de ${totalChunks}`, { action: "chunk", uploadId, index, base64Chunk: trozo.toString("base64") });
+        }
+        await llamar("commit", { action: "commit", uploadId });
+      } catch (error) {
+        // Abortar es limpieza de buena fe: si también falla, lo que importa es el error de
+        // verdad, que es el que se devuelve.
+        try {
+          await conSesion("studio_upload_file", { source: "chunked", action: "abort", uploadId });
+        } catch {
+          /* el error que cuenta es el de arriba */
+        }
+        throw error;
+      }
     },
     async ramas() {
       const bruto = await conSesion("studio_manage_branches", { operation: "list" });

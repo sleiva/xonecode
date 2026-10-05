@@ -3356,8 +3356,9 @@ ningún aviso; forzando borrado + alta por separado, el borrado de `A` sí pasa 
 candado.
 
 **Lo IMPOSIBLE sale del plan y se declara** (`core/planDeSubida.ts`, que devuelve
-`{ operaciones, omitidas }`). El modo `chunked` NO está implementado —`subirBinario` del
-puerto ni recibe el modo y el adaptador manda siempre `base64`—, y el borrado
+`{ operaciones, omitidas }`). Un binario por encima del tope del servidor no cabe —hoy
+`TOPE_BINARIO`, el del modo `chunked`, que es el que se usa desde que la subida se verifica:
+el `base64` de una llamada tenía un tope más bajo y no comprobaba nada—, y el borrado
 (`borrarTexto`, sobre `studio_edit_file` con `editMode: "delete"`) es una tool de TEXTO,
 así que un binario borrado no se puede propagar. Las dos cosas eran operaciones que
 fallaban SIEMPRE, y como la ref solo avanza con `fallos` vacío, el siguiente `/sync`

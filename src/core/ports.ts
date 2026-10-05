@@ -737,6 +737,21 @@ export interface OpcionesCloudStudioEnMemoria {
   topeEstructura?: number;
   /** ZIP ya fabricado (por el test, fuera de la frontera) para que `descargarZip` lo devuelva. */
   zipBase64?: string;
+  /**
+   * Lo que el servidor GUARDA de un texto escrito, por ruta: los N primeros caracteres. Es el
+   * corte que se ha visto en ficheros subidos a Studio (sin reproducir todavía), y sin poder
+   * fabricarlo aquí la relectura de `agent/cloudstudio/subida.ts` no tendría qué detectar.
+   */
+  textoRecortadoA?: Record<string, number>;
+  /** Motivo con el que `leerTexto` rechaza DESPUÉS de una escritura (la relectura que comprueba). */
+  relecturaFalla?: string;
+  /** Motivo con el que `subirBinario` rechaza: p. ej. el hash que el servidor no casa en el `commit`. */
+  binarioFalla?: string;
+  /**
+   * El `switch` contesta bien pero la rama activa NO cambia: `contexto` sigue diciendo la de
+   * antes. Es la razón de comprobar la rama antes de subir, en vez de fiarse del `switch`.
+   */
+  cambiarRamaNoSurteEfecto?: boolean;
 }
 
 /** El proyecto remoto en memoria: recorre el flujo entero sin red ni credenciales. */
@@ -750,9 +765,19 @@ export class CloudStudioEnMemoria implements CloudStudioPort {
   > = [];
   private abierto: string | undefined;
   private ramaActual: string;
+  /**
+   * Los textos del servidor, que las escrituras MODIFICAN: la subida relee lo que escribió, y
+   * un doble que no guardara lo escrito haría fallar esa relectura en todos los tests. Campo
+   * PROPIO (no del prototipo), para que los envoltorios `Object.create` + `Object.assign` de
+   * los tests compartan el mismo mapa por referencia.
+   */
+  readonly textos: Record<string, string>;
+  /** Las rutas escritas en esta vida del doble: solo esas relee con `relecturaFalla`. */
+  private readonly escritas = new Set<string>();
 
   constructor(private readonly opciones: OpcionesCloudStudioEnMemoria = {}) {
     this.ramaActual = opciones.rama ?? "master";
+    this.textos = { ...(opciones.textos ?? {}) };
   }
 
   async abrir(nombre: string): Promise<void> {
@@ -783,7 +808,7 @@ export class CloudStudioEnMemoria implements CloudStudioPort {
   async estructura(directorio = ""): Promise<EstructuraRemota> {
     this.exigirAbierto();
     const todas: EntradaRemota[] = [
-      ...Object.entries(this.opciones.textos ?? {}).map(([ruta, texto]) => ({ ruta, bytes: texto.length })),
+      ...Object.entries(this.textos).map(([ruta, texto]) => ({ ruta, bytes: texto.length })),
       ...Object.entries(this.opciones.binarios ?? {}).map(([ruta, bytes]) => ({ ruta, bytes })),
     ].filter((e) => directorio === "" || e.ruta.startsWith(`${directorio}/`));
     const tope = this.opciones.topeEstructura;
@@ -793,7 +818,8 @@ export class CloudStudioEnMemoria implements CloudStudioPort {
 
   async leerTexto(ruta: string): Promise<string> {
     this.exigirAbierto();
-    const texto = this.opciones.textos?.[ruta];
+    if (this.opciones.relecturaFalla !== undefined && this.escritas.has(ruta)) throw new Error(this.opciones.relecturaFalla);
+    const texto = this.textos[ruta];
     // El servidor rechaza por EXTENSIÓN, no por ausencia: el mensaje se replica para que
     // la vía degradada aprenda a distinguir «no existe» de «no se puede bajar así».
     if (texto === undefined) throw new Error(`File extension not allowed or missing: ${ruta}`);
@@ -803,15 +829,20 @@ export class CloudStudioEnMemoria implements CloudStudioPort {
   async escribirTexto(ruta: string, contenido: string): Promise<void> {
     this.exigirAbierto();
     this.escrituras.push({ tipo: "texto", ruta, bytes: contenido.length });
+    const corte = this.opciones.textoRecortadoA?.[ruta];
+    this.textos[ruta] = corte === undefined ? contenido : contenido.slice(0, corte);
+    this.escritas.add(ruta);
   }
 
   async borrarTexto(ruta: string): Promise<void> {
     this.exigirAbierto();
     this.escrituras.push({ tipo: "borrado", ruta });
+    delete this.textos[ruta];
   }
 
   async subirBinario(ruta: string, datos: Uint8Array): Promise<void> {
     this.exigirAbierto();
+    if (this.opciones.binarioFalla !== undefined) throw new Error(this.opciones.binarioFalla);
     this.escrituras.push({ tipo: "binario", ruta, bytes: datos.byteLength });
   }
 
@@ -822,6 +853,7 @@ export class CloudStudioEnMemoria implements CloudStudioPort {
 
   async cambiarRama(nombre: string): Promise<void> {
     this.exigirAbierto();
+    if (this.opciones.cambiarRamaNoSurteEfecto === true) return;
     this.ramaActual = nombre;
   }
 }

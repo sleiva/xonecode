@@ -34,7 +34,7 @@ export type ProgresoDeOperacion =
   | {
       fase: "terminada";
       operacion: "subir" | "bajar";
-      resultado?: { subidos: number; fallidos: number };
+      resultado?: { subidos: number; fallidos: number; avisos?: string[] };
       bajados?: number;
       error?: string;
       lineas: readonly string[];
@@ -487,6 +487,9 @@ function FinDeLaOperacion({
   }
   // Lo que contó la operación, solo cuando no fue bien: con todo subido sobra.
   const lineas = bien ? [] : progreso.lineas.slice(-12);
+  // Lo que no se pudo CONFIRMAR se enseña SIEMPRE, también con todo subido: es justo cuando
+  // el recorrido se esconde, y un aviso que no se ve es un aviso que no existe.
+  const avisos = subir && error === undefined ? (resultado?.avisos ?? []) : [];
 
   return (
     <Modal open onClose={SIN_CERRAR} title={texto} headless className={estilos.capa}>
@@ -498,6 +501,11 @@ function FinDeLaOperacion({
             </span>
             <p className={estilos.titulo}>{titulo}</p>
             <p className={estilos.detalle}>{detalle}</p>
+            {avisos.map((aviso) => (
+              <p key={aviso} className={estilos.detalle} data-aviso="">
+                Aviso: {aviso}.
+              </p>
+            ))}
           </div>
           {lineas.length === 0 ? null : <pre className={estilos.plan}>{lineas.join("\n")}</pre>}
           <div className={estilos.decisiones}>

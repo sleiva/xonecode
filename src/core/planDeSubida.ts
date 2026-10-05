@@ -6,8 +6,13 @@
  */
 import type { OperacionDeSubida, OperacionOmitida } from "./cloudstudio.js";
 
-/** Medido: `studio_upload_file` en modo base64 admite hasta 5 MB decodificados. */
-export const TOPE_BASE64 = 5 * 1024 * 1024;
+/**
+ * Lo más que sube un binario: el tope que declara `studio_upload_file` para su modo TROCEADO
+ * (`source: "chunked"`), que es el que usa xonecode (`cloudstudioClient.ts#subirBinario`)
+ * porque el servidor comprueba su sha256. El base64 de una sola llamada se quedaba en 5 MB y
+ * no comprobaba nada; con el troceado ese tope deja de aplicar.
+ */
+export const TOPE_BINARIO = 50 * 1024 * 1024;
 
 /**
  * Medido contra el servidor: `studio_get_file` (y por tanto `studio_edit_file`) solo
@@ -88,7 +93,7 @@ const esVistaAplanada = (ruta: string, fuentes: ReadonlySet<string>): boolean =>
  * El plan: lo que SE PUEDE hacer y lo que NO, por separado.
  *
  * Separarlos es el camino de escape de la subida. Antes, una operación imposible (un
- * binario de más de 5 MB, el borrado de un binario) se quedaba en el plan, fallaba contra
+ * binario por encima de `TOPE_BINARIO`, el borrado de un binario) se quedaba en el plan, fallaba contra
  * el servidor, y como la ref solo avanza con `fallos` vacío, el siguiente `/sync`
  * recalculaba el MISMO plan y volvía a fallar: `/sync subir` quedaba inútil para siempre
  * a partir de la primera imagen borrada. Ahora sale del plan, se declara, y la ref avanza
@@ -162,17 +167,16 @@ export function planDeSubida(entrada: EntradaDelPlan): Plan {
       omitidas.push({ ruta: cambio.ruta, motivo: "no se pudo leer su tamaño en disco" });
       continue;
     }
-    // 5. El modo `chunked` del servidor NO está implementado en xonecode: el puerto ni
-    //    lleva el modo y el adaptador manda siempre base64 (ver `core/cloudstudio.ts`).
-    //    Así que por encima del tope es imposible, no pendiente.
-    if (bytes > TOPE_BASE64) {
+    // 5. Por encima del tope del modo troceado el servidor no lo acepta: imposible, no
+    //    pendiente — dejarlo en el plan lo haría fallar en cada `/sync`.
+    if (bytes > TOPE_BINARIO) {
       omitidas.push({
         ruta: cambio.ruta,
-        motivo: `pesa ${bytes} bytes y la subida en base64 admite hasta ${TOPE_BASE64}; el modo troceado no está implementado: súbelo desde Studio`,
+        motivo: `pesa ${bytes} bytes y la subida de binarios admite hasta ${TOPE_BINARIO}: súbelo desde Studio`,
       });
       continue;
     }
-    plan.push({ tipo: "binario", ruta: cambio.ruta, bytes, modo: "base64", clase: cambio.clase });
+    plan.push({ tipo: "binario", ruta: cambio.ruta, bytes, modo: "chunked", clase: cambio.clase });
   }
 
   return { operaciones: plan, omitidas };

@@ -469,7 +469,7 @@ export type Acto =
       lineas: string[];
       /** El recuento de una subida que corrió (`core/actos.ts#ResultadoDeSubida`). Ausente =
        *  no terminó con informe: el diálogo de la subida lo dice así, no como «todo bien». */
-      resultado?: { subidos: number; fallidos: number };
+      resultado?: { subidos: number; fallidos: number; avisos?: string[] };
       /** Cuántos trajo una bajada que terminó (`core/actos.ts`). */
       bajados?: number;
       /** La operación lanzó: el mismo texto que se dijo en el hilo. */

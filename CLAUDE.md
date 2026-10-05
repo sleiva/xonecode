@@ -1340,8 +1340,7 @@ escrito a mano lo da de alta una persona desde la misma ventana.
   `undefined` en vez de lanzar; `CloudStudioPort.contexto()` sigue LANZANDO.
 - **El `switch` de rama CIERRA el proyecto en el servidor** (`action: "closeandopenproject"`), así
   que `cambiarRama` REABRE después del `switch`.
-- **La ref se mueve solo si la subida terminó entera, y solo por lo SUBIDO**: una subida parcial
-  no la lleva a `HEAD` (afirmaría que está arriba lo no elegido); `marcarSubidoParcial` compone
+- **La ref se mueve solo por lo SUBIDO Y COMPROBADO**: con fallos o con una selección no la lleva a `HEAD` (afirmaría que está arriba lo no elegido); `marcarSubidoParcial` compone
   en un índice PRIVADO el árbol de la ref con las rutas subidas tomadas de `HEAD`, y la ref pasa
   a ese commit —que ya no es antepasado de `HEAD`: nada lo exige, la ref solo se usa en `git
   diff`—.
@@ -1353,8 +1352,17 @@ escrito a mano lo da de alta una persona desde la misma ventana.
   la propia carpeta (`prepararRepo(…, { propio: true })`).
 - **La autorización de la subida es un hueco de política, fail-closed por TIPO**
   (`core/cloudstudio.ts#PoliticaDeAprobacion`).
-- **Lo IMPOSIBLE sale del plan y se declara** (`{operaciones, omitidas}`): `chunked` no está
-  implementado y el borrado es una tool de TEXTO.
+- **Lo IMPOSIBLE sale del plan y se declara** (`{operaciones, omitidas}`): un binario por encima de
+  `TOPE_BINARIO` y el borrado de un binario (el borrado es una tool de TEXTO).
+- **Nada se da por subido sin COMPROBARLO** (`agent/cloudstudio/subida.ts`,
+  `core/verificacionDeSubida.ts`): hay ficheros que se cortan al subir, sin causa encontrada. Cada
+  texto se RELEE y se compara EXACTO, sin normalizar; distinto o sin poder releer es un FALLO con
+  cifras, a `sync.log` y al diálogo, y ese fichero no avanza la ref. Un binario va SIEMPRE por el
+  modo `chunked` con `expectedSha256` (`cloudstudioClient.ts#subirBinario`, `BYTES_POR_TROZO`), que
+  el servidor comprueba en el `commit`; a mitad se ABORTA, y sin troceado no se cae a base64. Y tras
+  `cambiarRama` y ANTES de tocar un fichero se lee la rama activa: otra rama es error estructural
+  (no se sube nada); ilegible o vacía sube con AVISO (`avisoDeRama`), que viaja como dato
+  (`ResultadoDeSubida.avisos`) porque el diálogo esconde el recorrido cuando todo subió.
 - Dos trampas: `core.quotePath` (omisión `true`) cita en octal rutas con bytes ≥ 0x80
   (`cambiosPendientes` fuerza `false`), y sin `--no-renames` un renombrado deja el origen huérfano
   en Studio.

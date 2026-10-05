@@ -1117,7 +1117,13 @@ export function crearSincronizador(
         return {
           tipo: "texto",
           texto: `subidos ${informe.ok.length}, fallaron ${informe.fallos.length}\n`,
-          subida: { subidos: informe.ok.length, fallidos: informe.fallos.length },
+          subida: {
+            subidos: informe.ok.length,
+            fallidos: informe.fallos.length,
+            // Lo que no se pudo CONFIRMAR viaja como dato: el diálogo esconde el recorrido
+            // cuando todo subió, y el aviso tiene que verse justo entonces.
+            ...(informe.avisoDeRama === undefined ? {} : { avisos: [informe.avisoDeRama] }),
+          },
         };
       }
       const pendientes = await piezas.pendientes(raiz, config.rama);

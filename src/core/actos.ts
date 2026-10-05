@@ -217,6 +217,11 @@ export type Acto =
 export interface ResultadoDeSubida {
   subidos: number;
   fallidos: number;
+  /**
+   * Lo que no falló pero no se pudo CONFIRMAR (hoy: la rama activa de Studio antes de subir).
+   * Ausente = nada que avisar; nunca un array vacío.
+   */
+  avisos?: string[];
 }
 
 /**

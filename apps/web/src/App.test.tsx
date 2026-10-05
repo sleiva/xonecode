@@ -3466,6 +3466,33 @@ describe("App: «Subir» y la subida con selección", () => {
     expect(screen.queryByText("Todo subido correctamente")).toBeNull();
   });
 
+  it("con todo subido pero la rama SIN CONFIRMAR, el aviso se ve en el diálogo", async () => {
+    const { store } = montar();
+    act(() =>
+      store.aplicar({
+        clase: "pregunta",
+        texto: "¿Subir a CloudStudio?",
+        decision: { lineas: [{ texto: "x", cambio: "nuevo", ruta: "a.xne" }], seleccionable: true },
+      })
+    );
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
+    await screen.findByRole("button", { name: /subiendo/i });
+    act(() =>
+      store.aplicar({
+        clase: "acto",
+        acto: {
+          tipo: "sincronizacion",
+          accion: "subir",
+          cuando: "2026-10-02T11:00:00.000Z",
+          lineas: ["aviso: no se pudo confirmar la rama activa de Studio antes de subir", "subidos 1, fallaron 0"],
+          resultado: { subidos: 1, fallidos: 0, avisos: ["no se pudo confirmar la rama activa de Studio antes de subir"] },
+        },
+      })
+    );
+    expect(screen.getByText("Todo subido correctamente")).toBeTruthy();
+    expect(screen.getByText(/Aviso: no se pudo confirmar la rama activa de Studio antes de subir/)).toBeTruthy();
+  });
+
   it("Cancelar sí cierra en el acto: no hay nada que esperar", async () => {
     const { store } = montar();
     act(() =>
