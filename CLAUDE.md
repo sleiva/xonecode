@@ -313,6 +313,18 @@ Y las guardas del proyecto:
   Va al conductor y no al orquestador porque comprueba una ACCIÓN suya (¿mi toque tuvo efecto?), no
   juzga una pantalla. Con las mismas guardas de ruta, y un «igual» da las DOS explicaciones posibles
   (no se repinta, o la captura fue antes del repintado) sin decidir entre ellas.
+- **El crítico visual MIDE la geometría antes de opinar** (`core/geometriaDePantalla.ts` puro,
+  `agent/dispositivos/cajasDeMaqueta.ts`, dentro de `xone_critica_visual`): compara CAJAS, no píxeles.
+  Las del aparato las guarda la captura en el MISMO comando (`skills/xone-hotswap/lib/geometria.mjs`,
+  `<captura>.geometria.json` en `/hotswap/`, árbol + barras de `dumpsys window`), emparejadas por
+  NOMBRE y nunca por fecha (`geometriaEnDisco.ts`, la regla del nombre atada por test a la del
+  script). Las de la maqueta salen de renderizar su `code.html` en un Chrome sin ventana, dentro de un
+  iframe de su tamaño EXACTO (no baja de 500 px) y sin `--allow-file-access-from-files` (el medidor va
+  dentro de la copia y devuelve por `postMessage`); una maqueta sin sus estilos NO da cajas. Un
+  BLOQUEANTE (tapado por una barra, fuera de pantalla) fuerza el rojo aunque el modelo diga verde. Lo
+  medido y lo opinado van SEPARADOS, y al modelo se le pasan los hechos para que se centre en lo que
+  solo se VE. **Una maqueta que es solo un PNG** mide solo el aparato y lo dice. **Límites
+  declarados**: solo Android, y `medidaAutomatica.ts` no la usa.
 - **Y una séptima, de lectura, pura y sin llamar a nadie: `validar_fichero_xone`**
   (`agent/grafo/validarFicheroXone.ts`), solo en TrueForge y a TODOS, el raíz incluido. Comprueba un
   fichero —o todos los de una carpeta— con el comprobador puro de su extensión: `.xne`/`.xml` bien formado

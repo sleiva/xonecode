@@ -124,7 +124,9 @@ import { crearCriticaVisual } from "../../grafo/criticaVisual.js";
 import { crearCompararCapturas } from "../../grafo/compararCapturas.js";
 import { crearAtributosXone, NOMBRE_ATRIBUTOS_XONE } from "../../grafo/atributosXone.js";
 import { crearDiferenciaDeCapturas } from "../../grafo/diferenciaDeCapturas.js";
-import { crearLectorDeReferencias } from "../../grafo/lectorDeReferencias.js";
+import { crearLectorDeReferencias, crearLocalizadorDeHtmlDeMaqueta } from "../../grafo/lectorDeReferencias.js";
+import { cajasDeMaqueta, medidasDeImagen, viewportDeMaqueta } from "../../dispositivos/cajasDeMaqueta.js";
+import { geometriaDeCaptura } from "../../dispositivos/geometriaEnDisco.js";
 import { crearDescribirImagen } from "../../grafo/describirImagen.js";
 import { crearTraerDeLaMaquina } from "../../grafo/traerDeLaMaquina.js";
 import { invocarVisualConModelos } from "../../dispositivos/juezVisual.js";
@@ -812,6 +814,11 @@ export async function abrirSesionTrueforge(
     ...(carpeta === undefined ? {} : { artefactos: carpeta }),
     ...(opciones.adjuntos === undefined ? {} : { adjuntos: opciones.adjuntos }),
   });
+  const localizadorDeHtml = crearLocalizadorDeHtmlDeMaqueta({
+    raiz,
+    ...(carpeta === undefined ? {} : { artefactos: carpeta }),
+    ...(opciones.adjuntos === undefined ? {} : { adjuntos: opciones.adjuntos }),
+  });
   /** El crítico y la medida, con las MISMAS piezas para quien las tenga: el raíz, y con el bucle encendido el desarrollador. */
   const herramientasDeJuicio = (): ToolDeLangchain[] =>
     carpeta === undefined
@@ -822,6 +829,15 @@ export async function abrirSesionTrueforge(
             invocar: invocarVisualConModelos({ paraPapel: (p) => modelos.paraPapel(p) }),
             // La maqueta casi nunca está en /artefactos/: la trae la persona (/adjuntos/) o vive en /diseno/.
             leerReferencia: lectorDeReferencias,
+            // La GEOMETRÍA: el árbol guardado con la captura, y las cajas de la maqueta si trae `code.html`.
+            leerGeometria: async (nombre) => geometriaDeCaptura(carpetaDeHotswap(carpeta), nombre),
+            cajasDeMaqueta: async (imagen, bytes) => {
+              const html = localizadorDeHtml(imagen);
+              const medidas = medidasDeImagen(bytes);
+              if (html === undefined || medidas === undefined) return undefined;
+              const { ancho, alto } = viewportDeMaqueta(medidas.ancho, medidas.alto);
+              return cajasDeMaqueta(html, ancho, alto);
+            },
           }),
           // Medir la estructura contra la maqueta: la otra mitad del crítico, con el raíz como él.
           crearCompararCapturas({ leerArtefacto: async (nombre) => readFileSync(join(carpeta, nombre)), leerReferencia: lectorDeReferencias }),

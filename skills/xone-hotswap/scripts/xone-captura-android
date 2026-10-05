@@ -26,6 +26,7 @@ import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join, basename } from "node:path";
 import { serieAndroid, rutaDeAdb, NODE } from "../lib/dispositivo.mjs";
+import { guardarGeometria } from "../lib/geometria.mjs";
 
 const args = process.argv.slice(2);
 if (args.includes("--help") || args.includes("-h")) {
@@ -183,3 +184,8 @@ try {
 }
 
 console.log(`captura guardada como ${nombre} (${bytes.length} bytes). Es de la vía nativa: enseña lo que el SISTEMA pinta, no lo que la app host dice.`);
+
+// Y su GEOMETRÍA, en el mismo momento: el árbol de controles y las barras del sistema, para que el
+// crítico visual compare tecla a tecla con la pantalla que ESTA captura enseña (`../lib/geometria.mjs`).
+const geometria = guardarGeometria({ nombreDeCaptura: nombre, bytes, serie });
+if (geometria !== undefined) console.log(`(con su geometría para el crítico: /hotswap/${geometria})`);

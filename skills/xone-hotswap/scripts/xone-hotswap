@@ -55,6 +55,7 @@ process.on("warning", (aviso) => {
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { guardarGeometria } from "../lib/geometria.mjs";
 import { dispositivoDeLaSesion, puertoConMotivo, retirarOpciones, serieAndroid, PUERTO_DEL_HOTSWAP } from "../lib/dispositivo.mjs";
 
 /**
@@ -320,6 +321,13 @@ function sinBinarios(respuesta) {
     const bytes = imagen === undefined ? Buffer.from(valor, "utf8") : Buffer.from(valor, "base64");
     mkdirSync(destino, { recursive: true });
     writeFileSync(join(destino, nombre), bytes);
+    // Una captura se guarda con su GEOMETRÍA (árbol de controles y barras del sistema) del mismo
+    // momento, para el crítico visual (`../lib/geometria.mjs`). La llamada de dentro pide un árbol, no
+    // una imagen, así que no vuelve a entrar aquí.
+    if (imagen !== undefined) {
+      const geometria = guardarGeometria({ nombreDeCaptura: nombre, bytes, serie: seriePedida });
+      if (geometria !== undefined) process.stderr.write(`(con su geometría para el crítico: /hotswap/${geometria})\n`);
+    }
     // Con la ruta VIRTUAL delante, que es la que se puede volver a abrir. Una captura sigue
     // diciendo `/artefactos/`, que es donde está y donde la tarjeta del hilo la enseña.
     const virtual = imagen === undefined ? RUTA_VIRTUAL : "/artefactos/";

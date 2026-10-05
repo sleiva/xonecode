@@ -39,3 +39,23 @@ export function crearLectorDeReferencias(carpetas: CarpetasDeReferencia): (image
     return readFileSync(real);
   };
 }
+
+/**
+ * El `code.html` que acompaña a una maqueta —el de Stitch: `screen.png` y `code.html` en la misma carpeta—,
+ * con su ruta en disco, o `undefined` si no hay. Con la MISMA comprobación que la lectura: por el texto de
+ * la carpeta y por el `realpath`, para que un enlace no lleve a renderizar un HTML de fuera.
+ */
+export function crearLocalizadorDeHtmlDeMaqueta(carpetas: CarpetasDeReferencia): (imagen: ImagenReferida) => string | undefined {
+  return (imagen) => {
+    const base = imagen.origen === "artefactos" ? carpetas.artefactos : imagen.origen === "adjuntos" ? carpetas.adjuntos : carpetas.raiz;
+    if (base === undefined) return undefined;
+    const carpetaRelativa = imagen.relativa.includes("/") ? imagen.relativa.slice(0, imagen.relativa.lastIndexOf("/")) : "";
+    try {
+      const real = realpathSync(join(base, carpetaRelativa, "code.html"));
+      const baseReal = realpathSync(base);
+      return real.startsWith(baseReal.endsWith(sep) ? baseReal : baseReal + sep) ? real : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+}

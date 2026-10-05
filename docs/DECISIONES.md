@@ -8219,3 +8219,44 @@ comprobaba solo sobre el `path` de `ls`/`glob`/`grep` —la raíz por omisión�
 /.xonecode/**/*` listaba la traza y la memoria de la sesión, y `**/.env*` decía que había un `.env`. Leerlos
 ya estaba denegado y `grep` no devolvía su contenido (el backend se los salta, comprobado). Ahora lo que
 devuelven los tres se filtra con la misma regla de leer.
+
+## El crítico visual MIDE la geometría antes de opinar (05-10-2026)
+
+La calculadora de MyAllXOne (maqueta de Stitch) se llevó más de diez rondas del desarrollador sin quedar bien,
+y no por falta de herramientas: el crítico no sabía decir QUÉ estaba mal. Pasado sobre `calc_08` contra
+`screen.png` no vio que la «=» quedaba debajo de la barra de navegación ni que el «0» medía casi el doble que
+sus vecinas, inventó diferencias de color, y su observación se cortaba a 200 caracteres a media frase.
+
+**Comparar píxeles no sirve aquí**, se miró antes: una maqueta y un render real nunca coinciden píxel a píxel
+(fuentes, antialias, barras del sistema), y SSIM o un pHash dan una cifra sin decir qué tecla falla. Lo
+accionable es comparar CAJAS: el aparato las da en su árbol de controles (`getAllElements`, con `bounds`) y la
+maqueta, si trae su `code.html`, renderizándola.
+
+Cómo quedó (`core/geometriaDePantalla.ts`, puro; `agent/dispositivos/cajasDeMaqueta.ts`; dentro de
+`xone_critica_visual`):
+
+- **La geometría se guarda CON la captura, en el mismo comando** (`skills/xone-hotswap/lib/geometria.mjs`,
+  `<captura>.geometria.json` en `/hotswap/`): árbol y barras del sistema del mismo instante. Se empareja por el
+  NOMBRE, nunca por la fecha de los ficheros. Nunca hace fallar la captura.
+- **Las barras se MIDEN** (`dumpsys window`, `InsetsSource … frame=[…]`): Android dibuja de borde a borde y la
+  barra de navegación de un pixel8 con gestos mide 63 px, no los 126 que supuse al principio.
+- **La maqueta se renderiza en un iframe de su tamaño EXACTO**: Chrome sin ventana no baja de 500 px de ancho.
+  Sin `--allow-file-access-from-files` (la red va abierta por el CDN de Tailwind): el medidor va dentro de una
+  copia de la maqueta y devuelve las cajas por `postMessage`. Una maqueta que pide Tailwind y no lo cargó NO da
+  cajas (serían las de una página sin estilos). Unos 5 s por render, guardado por huella.
+- **Emparejar por texto Y posición**: alias de signos (− -, × x), las ligaduras de iconos de Material no son
+  texto, los adornos («• DEG») se quitan, y lo que no casa por texto se busca por posición entre los controles
+  sin texto (la «√» es una imagen en el aparato).
+- **Dos clases de hallazgo**: BLOQUEANTE (tapado por una barra, fuera de pantalla, falta) fuerza el rojo
+  aunque el modelo diga verde; DIFERENCIA (otra fila, otro orden, otro ancho relativo entre botones —no entre
+  etiquetas, que miden su texto—, solapes). Con la maqueta contra sí misma: cero hallazgos.
+- **Lo medido y lo opinado van SEPARADOS en el informe**, y al modelo se le pasan los hechos medidos para que no
+  los contradiga ni los repita: su trabajo queda en lo que solo se VE (formas, colores, tamaño de letra). Tope de
+  su observación a 500, cortado en frase.
+- **Sin `code.html` (una maqueta que es solo un PNG) se mide solo el aparato** —barras, fuera de pantalla,
+  solapes— y el informe lo dice.
+
+Sobre la calculadora real, el informe dice exactamente lo que costó diez rondas: la «=» tapada 47 px por la
+barra, la «=» en otra fila que «0» y «.», y el «0» a 1,9 veces el ancho de su fila. **Límites declarados**: solo
+Android (iOS no tiene el sidecar todavía); la medida automática tras cada prueba (`medidaAutomatica.ts`) sigue
+con la aritmética de franjas y NO usa esta geometría; y sin `code.html` no hay comparación caja a caja.

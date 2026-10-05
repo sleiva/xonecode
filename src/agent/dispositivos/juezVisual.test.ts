@@ -63,7 +63,7 @@ describe("juzgarPantalla", () => {
    * quepa en una tarjeta, no para compararlo.
    */
   it("acota cuántas observaciones y cuánto ocupa cada una", async () => {
-    const muchas = Array.from({ length: 30 }, (_, i) => `observación ${i} ${"x".repeat(500)}`);
+    const muchas = Array.from({ length: 30 }, (_, i) => `observación ${i} ${"x".repeat(900)}`);
     const v = await juzgarPantalla(
       PANTALLA,
       { pantalla: "X" },
@@ -71,7 +71,23 @@ describe("juzgarPantalla", () => {
     );
 
     expect(v.observaciones).toHaveLength(TOPE_DE_OBSERVACIONES);
-    for (const o of v.observaciones) expect(o.length).toBeLessThanOrEqual(200);
+    for (const o of v.observaciones) expect(o.length).toBeLessThanOrEqual(500);
+  });
+
+  it("una observación normal NO se corta a media frase (a 200 se cortaba: «…aparece una flech…»)", async () => {
+    const larga = "Cabecera: en la maqueta hay un icono de menú (tres líneas) a la izquierda y un icono de historial más un avatar circular a la derecha; en la captura esos tres no están y en su lugar aparece una flecha de volver.";
+    const v = await juzgarPantalla(PANTALLA, { pantalla: "X" }, contesta(JSON.stringify({ veredicto: "rojo", hallazgos: [larga] })));
+    expect(v.observaciones).toEqual([larga]);
+  });
+
+  it("los HECHOS medidos van en el prompt, para que el modelo no los contradiga ni tenga que adivinarlos", async () => {
+    let visto = "";
+    await juzgarPantalla(PANTALLA, { pantalla: "X" }, async (_papel, prompt) => {
+      visto = prompt;
+      return JSON.stringify({ veredicto: "verde", hallazgos: [] });
+    }, undefined, ["«=» queda TAPADO por la barra de navegación."]);
+    expect(visto).toContain("HECHOS YA MEDIDOS");
+    expect(visto).toContain("- «=» queda TAPADO por la barra de navegación.");
   });
 
   /**

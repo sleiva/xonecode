@@ -43,7 +43,11 @@ export const PAPEL_DEL_JUEZ_VISUAL: Papel = "afilado";
  * ver la cabecera— sino para que quepa.
  */
 export const TOPE_DE_OBSERVACIONES = 8;
-const TOPE_DE_OBSERVACION = 200;
+/**
+ * Cuánto ocupa cada una. Era 200, y medido sobre la calculadora de MyAllXOne cortaba la primera
+ * observación a media frase («…en su lugar aparece una flech…»): quien la leía no sabía qué faltaba.
+ */
+const TOPE_DE_OBSERVACION = 500;
 
 /**
  * Cuántas pantallas puede pedir de una vez.
@@ -215,10 +219,28 @@ export async function juzgarPantalla(
    * `cli/` no cambian: lo que hace un `xonecode` de diagnóstico es mirar una pantalla, no
    * compararla contra nada.
    */
-  referencia?: CapturaDePantalla
+  referencia?: CapturaDePantalla,
+  /**
+   * HECHOS MEDIDOS de la geometría (`core/geometriaDePantalla.ts`): qué está tapado, qué falta, filas y
+   * tamaños, sacados del árbol de controles y no de mirar. Van en el prompt para que el modelo no tenga
+   * que adivinar la estructura —medido: no vio una «=» tapada y se inventó colores— y para que su
+   * texto no los contradiga. Él se queda con lo que solo se ve: formas, colores, jerarquía.
+   */
+  hechos: readonly string[] = []
 ): Promise<VeredictoVisual> {
   const base = referencia === undefined ? PROMPT_VISUAL : PROMPT_VISUAL_CON_REFERENCIA;
-  const prompt = `${base}\n\nLa captura es de la pantalla «${contexto.pantalla}».`;
+  const conHechos =
+    hechos.length === 0
+      ? ""
+      : [
+          "",
+          "",
+          "HECHOS YA MEDIDOS del árbol de controles del aparato (exactos: NO los contradigas ni los",
+          "repitas, ya se le dicen a quien te lee). Céntrate en lo que solo se VE: formas, colores,",
+          "tamaño del texto, jerarquía, iconos.",
+          ...hechos.map((h) => `- ${h}`),
+        ].join("\n");
+  const prompt = `${base}${conHechos}\n\nLa captura es de la pantalla «${contexto.pantalla}».`;
   let texto: string;
   try {
     texto = await invocar(PAPEL_DEL_JUEZ_VISUAL, prompt, imagen, referencia);

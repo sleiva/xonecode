@@ -8,6 +8,13 @@ import {
 } from "../../core/artefactos.js";
 import { imagenReferida, type ImagenReferida } from "../../core/referenciasDeImagen.js";
 import {
+  controlesDelArbol,
+  hallazgosDeGeometria,
+  informeDeGeometria,
+  type GeometriaDelAparato,
+  type MaquetaMedida,
+} from "../../core/geometriaDePantalla.js";
+import {
   juzgarPantalla,
   TOPE_DE_PETICIONES,
   type CapturaDePantalla,
@@ -78,6 +85,75 @@ export interface DependenciasDeCritica {
    * `/diseno/`, y sin esto el crítico corría a ciegas y su verde significaba solo «nada roto».
    */
   leerReferencia?: (imagen: ImagenReferida) => Promise<Buffer>;
+  /**
+   * La GEOMETRÍA guardada con la captura (`<captura>.geometria.json`, que deja `xone-captura-android`
+   * o `xone-hotswap shot` en `/hotswap/` en el MISMO momento): el árbol de controles y las barras del
+   * sistema. `undefined` = no hay. Ausente la dependencia, el crítico trabaja como antes.
+   */
+  leerGeometria?: (nombreDeCaptura: string) => Promise<unknown>;
+  /**
+   * Las cajas de la maqueta, si trae `code.html` al lado (la de Stitch): `undefined` = no hay HTML (una
+   * maqueta que es solo un PNG); `{motivo}` = lo hay y no se pudo medir.
+   */
+  cajasDeMaqueta?: (imagen: ImagenReferida, bytes: Buffer) => Promise<MaquetaMedida | { motivo: string } | undefined>;
+}
+
+/** Lo que la geometría le añade al crítico: el bloque para el agente, los hechos para el modelo y si hay algo bloqueante. */
+interface GeometriaDeLaCritica {
+  lineas: string[];
+  hechos: string[];
+  bloqueante: boolean;
+}
+
+/**
+ * La geometría de esta captura (`core/geometriaDePantalla.ts`), o `undefined` si este montaje no la tiene.
+ * Nunca lanza: lo que no se puede medir se dice en el bloque, y el crítico sigue con su opinión.
+ */
+async function geometriaDe(
+  entrada: Entrada,
+  referida: ImagenReferida | undefined,
+  referencia: CapturaDePantalla | undefined,
+  deps: DependenciasDeCritica
+): Promise<GeometriaDeLaCritica | undefined> {
+  if (deps.leerGeometria === undefined) return undefined;
+  let crudo: unknown;
+  try {
+    crudo = await deps.leerGeometria(nombreDeArtefacto(entrada.captura));
+  } catch {
+    crudo = undefined;
+  }
+  const g = crudo as { pantalla?: { ancho: number; alto: number }; barras?: GeometriaDelAparato["barras"]; arbol?: unknown } | undefined;
+  if (g === undefined || g.arbol === undefined || g.pantalla === undefined) {
+    return {
+      lineas: [
+        "GEOMETRÍA: esta captura no trae su árbol de controles, así que no hay nada MEDIDO (qué está tapado, qué",
+        "falta, filas, tamaños). Sácala con `xone-captura-android` o `xone-hotswap shot`, que lo guardan a la vez.",
+      ],
+      hechos: [],
+      bloqueante: false,
+    };
+  }
+  const aparato: GeometriaDelAparato = {
+    pantalla: g.pantalla,
+    ...(g.barras === undefined ? {} : { barras: g.barras }),
+    controles: controlesDelArbol(g.arbol),
+  };
+  let maqueta: MaquetaMedida | undefined;
+  const notas: string[] = [];
+  if (referida !== undefined && referencia !== undefined && deps.cajasDeMaqueta !== undefined) {
+    let medida: MaquetaMedida | { motivo: string } | undefined;
+    try {
+      medida = await deps.cajasDeMaqueta(referida, Buffer.from(referencia.base64, "base64"));
+    } catch {
+      medida = { motivo: "no se pudo medir" };
+    }
+    if (medida === undefined) notas.push("la maqueta es solo una imagen (sin code.html al lado): comparo solo lo que se ve en el propio aparato.");
+    else if ("motivo" in medida) notas.push(`no pude medir las cajas de la maqueta: ${medida.motivo}. Comparo solo lo del propio aparato.`);
+    else maqueta = medida;
+  }
+  const h = hallazgosDeGeometria(aparato, maqueta);
+  const lineas = informeDeGeometria({ ...h, notas: [...h.notas, ...notas] }, maqueta !== undefined);
+  return { lineas, hechos: [...h.bloqueantes, ...h.diferencias], bloqueante: h.bloqueantes.length > 0 };
 }
 
 /**
@@ -204,13 +280,17 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
         referencia = abiertaRef;
       }
 
+      // Lo MEDIDO primero: el modelo lo recibe como hechos y no tiene que adivinar la estructura.
+      const geometria = await geometriaDe(entrada, referida, referencia, deps);
+
       let veredicto;
       try {
         veredicto = await juzgarPantalla(
           abierta,
           { pantalla: entrada.pantalla },
           deps.invocar,
-          referencia
+          referencia,
+          geometria?.hechos ?? []
         );
       } catch (error) {
         // Fallo del ENTORNO —sin modelo, sin clave, sin red—: se dice, y no se convierte en un
@@ -225,9 +305,16 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
        * quien llama: devolvérselo entero es el eco que ya paga el campo `pantalla`.
        */
       const comparado = referencia === undefined ? "" : " (comparado con la referencia)";
+      /**
+       * **Lo medido decide.** Un control tapado, fuera de la pantalla o que falta es rojo aunque el modelo
+       * diga verde: lo saca el árbol de controles, no una opinión — y medido, el modelo no vio la «=»
+       * tapada de la calculadora.
+       */
+      const final = geometria?.bloqueante === true ? "rojo" : veredicto.veredicto;
       const lineas = [
-        `Veredicto visual de «${entrada.pantalla}»${comparado}: ${veredicto.veredicto}.`,
+        `Veredicto visual de «${entrada.pantalla}»${comparado}: ${final}${geometria?.bloqueante === true && veredicto.veredicto !== "rojo" ? " (lo decide la geometría medida)" : ""}.`,
       ];
+      if (geometria !== undefined) lineas.push("", ...geometria.lineas, "");
       if (veredicto.observaciones.length > 0) {
         /**
          * **El aviso no es cortesía: está medido.** Seis vueltas sobre la misma captura
@@ -236,7 +323,9 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
          * el desarrollador se pone a buscar una rotación que no existe.
          */
         lineas.push(
-          "Lo que dice que ve (la REDACCIÓN no es fiable: describe mal la causa. Fíate de QUÉ",
+          geometria === undefined
+            ? "Lo que dice que ve (la REDACCIÓN no es fiable: describe mal la causa. Fíate de QUÉ"
+            : "ESTILO, lo que dice el modelo que ve (una OPINIÓN; la redacción no es fiable: fíate de QUÉ",
           "control señala, no de su explicación, y míralo tú):"
         );
         for (const o of veredicto.observaciones) lineas.push(`- ${o}`);
@@ -272,7 +361,7 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
        * (`conVerificacion`), y eso pide conducir el aparato desde código — medido: no se
        * puede, porque llegar a una pantalla necesita abrir cajones y mirar el árbol.
        */
-      if (veredicto.veredicto === "rojo") {
+      if (final === "rojo") {
         /**
          * **Con referencia, el arreglo es de `designer-xone`.** No es un cambio de criterio:
          * una diferencia contra una maqueta es visual por definición —forma, tamaño,

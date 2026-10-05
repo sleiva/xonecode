@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { crearCriticaVisual } from "./criticaVisual.js";
 import type { InvocarVisual } from "../dispositivos/juezVisual.js";
@@ -293,5 +294,68 @@ describe("xone_critica_visual con una maqueta delante", () => {
       referencia: "/artefactos/m.png",
     });
     expect(salida).toMatch(/MISMA `referencia`/);
+  });
+});
+
+describe("xone_critica_visual con la GEOMETRÍA medida (MyAllXOne, la calculadora)", () => {
+  const geo = JSON.parse(readFileSync(new URL("../../core/__oro__/geometria/calculadora.geometria.json", import.meta.url), "utf8"));
+  const maqueta = JSON.parse(readFileSync(new URL("../../core/__oro__/geometria/calculadora.maqueta.json", import.meta.url), "utf8"));
+  const png = async () => Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0x86, 0, 0, 2, 0xea]);
+
+  const conGeometria = (respuesta: string, vista: { prompt?: string } = {}, opciones: { sinHtml?: true; sinArbol?: true } = {}) =>
+    crearCriticaVisual({
+      leerArtefacto: unosBytes,
+      invocar: async (_papel, prompt) => {
+        vista.prompt = prompt;
+        return respuesta;
+      },
+      leerReferencia: png,
+      leerGeometria: async () => (opciones.sinArbol ? undefined : geo),
+      cajasDeMaqueta: async () => (opciones.sinHtml ? undefined : maqueta),
+    });
+
+  it("lo MEDIDO decide: con la «=» tapada es ROJO aunque el modelo diga verde, y lo dice", async () => {
+    const vista: { prompt?: string } = {};
+    const salida = await conGeometria('{"veredicto":"verde","hallazgos":[]}', vista).invoke({
+      captura: "/artefactos/calc_ronda9.jpg",
+      pantalla: "DemoCalculadora",
+      referencia: "/adjuntos/stitch/screen.png",
+    });
+    expect(salida).toMatch(/: rojo \(lo decide la geometría medida\)/);
+    expect(salida).toContain("GEOMETRÍA, MEDIDA");
+    expect(salida).toContain("«=» (MAP_T_IGUAL) queda TAPADO por la barra de navegación");
+    expect(salida).toContain("«0» mide 1,9 veces el ancho de las de su fila");
+    // Y el modelo los recibió como hechos.
+    expect(vista.prompt).toContain("HECHOS YA MEDIDOS");
+    expect(vista.prompt).toContain("queda TAPADO por la barra de navegación");
+  });
+
+  it("separa lo medido de la OPINIÓN del modelo sobre el estilo", async () => {
+    const salida = await conGeometria('{"veredicto":"rojo","hallazgos":["el número grande es gris donde la maqueta lo pone blanco"]}').invoke({
+      captura: "/artefactos/calc_ronda9.jpg",
+      pantalla: "DemoCalculadora",
+      referencia: "/adjuntos/stitch/screen.png",
+    });
+    expect(salida.indexOf("GEOMETRÍA, MEDIDA")).toBeLessThan(salida.indexOf("ESTILO, lo que dice el modelo"));
+  });
+
+  it("una maqueta que es SOLO un PNG: comprueba lo del aparato y lo dice", async () => {
+    const salida = await conGeometria('{"veredicto":"verde","hallazgos":[]}', {}, { sinHtml: true }).invoke({
+      captura: "/artefactos/calc_ronda9.jpg",
+      pantalla: "DemoCalculadora",
+      referencia: "/adjuntos/diseno.png",
+    });
+    expect(salida).toContain("la maqueta es solo una imagen");
+    expect(salida).toContain("queda TAPADO por la barra de navegación");
+    expect(salida).not.toContain("veces el ancho");
+  });
+
+  it("una captura SIN su árbol lo dice, y el crítico sigue con su opinión", async () => {
+    const salida = await conGeometria('{"veredicto":"verde","hallazgos":[]}', {}, { sinArbol: true }).invoke({
+      captura: "/artefactos/otra.jpg",
+      pantalla: "X",
+    });
+    expect(salida).toContain("no trae su árbol de controles");
+    expect(salida).toMatch(/: verde\./);
   });
 });
