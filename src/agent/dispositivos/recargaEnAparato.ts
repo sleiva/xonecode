@@ -15,9 +15,10 @@
  *   reintento de un minuto de `lanzarYComprobar` es para un framework que ARRANCA, no para uno que
  *   no está.
  * - **`result:true` no es «aplicado»**: lo que se afirma es que la app CONTESTA su árbol después.
- * - **Relanzar es `lanzarYComprobar`, y solo a petición**: un `launchApplication` suelto sobre una
- *   app viva la TUMBA (medido), y `lanzarYComprobar` solo reenvía detrás de una lectura que dice
- *   «no está».
+ * - **Lo que solo se lee al cargar la app (CSS, `app.ini`, `app.xml`) RELANZA la app**, por
+ *   `lanzarYComprobar`: un `launchApplication` suelto sobre una app viva la TUMBA (medido), y
+ *   `lanzarYComprobar` solo reenvía detrás de una lectura que dice «no está». Se probó todo lo del
+ *   canal para hacerlo sin relanzar y nada cambia el estilo (ver `docs/DECISIONES.md`).
  */
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -92,7 +93,21 @@ export async function recargarEnAparato(
     });
     if (subida.result !== true) return { estado: "fallo", clase, motivo: `uploadFile: ${decirDe(subida)}` };
 
-    if (clase === "relanzar") return { estado: "relanzar", clase };
+    if (clase === "relanzar") {
+      // El CSS (y `app.ini`, `app.xml`, los mappings) solo se lee al CARGAR la app. MEDIDO en el
+      // emulador: `setCssAttribute`, `relayout`, `refresh`, `loadCollection` de la pantalla y
+      // `uploadFile` + `loadCollection`, sueltos y combinados, contestan `result:true` y el color no
+      // cambia; relanzando, sí (≈1,3 s). Así que se relanza, por el camino que no tumba una app viva.
+      cliente.cerrar();
+      cliente = undefined;
+      const arranque = await lanzarYComprobar(peticion.app, {
+        destino: destinoDe(peticion.puerto),
+        ...(deps.abrirSocket === undefined ? {} : { abrirSocket: deps.abrirSocket }),
+      });
+      return arranque.viva
+        ? { estado: "relanzada", clase }
+        : { estado: "fallo", clase, motivo: `se relanzó y no volvió: ${arranque.motivo ?? "sin motivo"}` };
+    }
 
     // 2. Aplicar. Una colección va a memoria en UTF-8 con su prólogo diciéndolo (medido: con los
     //    bytes Latin-1 cada tilde salía doble); un include se lee del DISCO, en la tabla de sus bytes.

@@ -8077,3 +8077,25 @@ está viva», y «Probar» desde el editor en «proyecto desplegado y la app viv
 con `getAllElements` (con el framework vivo contesta aunque no haya app; sin servidor el cliente sale con
 error), y si no contesta arranca la `SetupActivity` y espera hasta 60 s. Medido igual, con el framework
 parado y con él en marcha (en ese caso no añade ni una línea).
+
+## Guardar un CSS relanza la app (05-10-2026)
+
+La primera versión, al guardar un CSS, lo subía y OFRECÍA «Relanzar la app», para no sacar a nadie de
+su pantalla. Probándolo, lo pidió al revés: guardar un CSS tiene que verse en el aparato, como un `.xne`.
+Antes de relanzar se buscó cómo aplicarlo SIN relanzar, solo con el canal hotswap, midiendo el color de
+un píxel del botón «Aceptar» de AppDemo en el emulador (rojo → azul):
+
+| lo que se hizo | el botón |
+|---|---|
+| sondear `reloadCss`, `loadCss`, `loadStyleSheet`, `reloadStyles`, `applyCss`, `refreshCss`, `reloadCollection`, `refreshCollection`… | todos `Unknown command` |
+| `setCssAttribute` (fichero, clase, `bgcolor`) | sigue rojo |
+| `setCssAttribute` + `relayout` | sigue rojo |
+| `setCssAttribute` + `refresh` | sigue rojo (la pantalla se recoloca) |
+| `setCssAttribute` + `loadCollection` de la pantalla | sigue rojo |
+| `uploadFile` del CSS + `loadCollection` + `relayout` + `refresh` | sigue rojo |
+| relanzar (`lanzarYComprobar`) | azul, en ≈1,3 s |
+
+Así que un CSS, `app.ini`, `app.xml` o unos mappings se suben y RELANZAN la app solos
+(`recargaEnAparato.ts`), por `lanzarYComprobar` (un `launchApplication` suelto sobre una app viva la
+tumba). La frase lo dice: «estilos aplicados relanzando la app (vuelve a su pantalla de inicio)». Medido
+con `recargarFicheroDelProyecto`: azul → verde en ≈1,4 s.

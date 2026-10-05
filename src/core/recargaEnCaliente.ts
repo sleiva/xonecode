@@ -10,13 +10,14 @@
  *                                      relanzar la app la devuelve a la versión anterior.
  *   JavaScript (`.js`)              →  `uploadFile` + `loadIncludeFile` con `compile: true`.
  *   CSS, `.ini`, `app.xml`, un `.xne` sin colección (mappings)
- *                                   →  `uploadFile`, y hace falta RELANZAR la app. Medido:
- *                                      `setCssAttribute`, `relayout` y `refresh` contestan
+ *                                   →  `uploadFile` y se RELANZA la app, que es lo único que los
+ *                                      relee. Medido: `setCssAttribute`, `relayout`, `refresh` y
+ *                                      `loadCollection`, sueltos y combinados, contestan
  *                                      `result:true` y no cambian nada.
  *   todo lo demás (iconos, `bd/`, `files/`)  →  no se recarga: lo lleva el despliegue entero.
  *
- * **Relanzar no se hace solo**: se pierde el estado de la pantalla en que está la persona, así
- * que lo que se devuelve es «hace falta relanzar» y la pantalla lo OFRECE.
+ * **Relanzar SÍ se hace solo** (lo pidió así: guardar un CSS tiene que verse): el precio, que la app
+ * vuelve a su pantalla de inicio, lo dice la frase.
  */
 import { decodificarComoTexto, esUtf8Valido, tablaDeLosBytes } from "./codificacion.js";
 
@@ -135,7 +136,9 @@ export function textoDeRecarga(r: ResultadoDeRecarga): string {
     case "relanzar":
       return "Aparato: subido; para verlo hay que relanzar la app";
     case "relanzada":
-      return "Aparato: app relanzada y viva";
+      return r.clase === "relanzar"
+        ? "Aparato: estilos aplicados relanzando la app (vuelve a su pantalla de inicio)"
+        : "Aparato: app relanzada y viva";
     case "sin-app":
       // El motivo, si se sabe: «no hay aparato elegido» y «no está en la medida» no se arreglan
       // en el mismo sitio que «la app no corre».

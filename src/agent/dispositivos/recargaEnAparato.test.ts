@@ -90,12 +90,13 @@ describe("recargarEnAparato", () => {
     expect(f.enviados[2]).toMatchObject({ command: "loadIncludeFile", file: "js/funciones.js", compile: true });
   });
 
-  it("un CSS: sube y dice que hace falta relanzar, SIN relanzar", async () => {
+  it("un CSS: sube y RELANZA la app, porque es lo único que relee los estilos (medido)", async () => {
     const f = framework(vivaYAcepta);
     const r = await recargarEnAparato(peticion("estilos.css", "a{}"), { abrirSocket: f.abrirSocket, aplicarTunel: tunelBueno });
-    expect(r).toEqual({ estado: "relanzar", clase: "relanzar" });
-    expect(f.nombres()).toEqual(["getAllElements", "uploadFile"]);
+    expect(r).toEqual({ estado: "relanzada", clase: "relanzar" });
+    expect(f.nombres()).toEqual(["getAllElements", "uploadFile", "launchApplication", "getAllElements"]);
   });
+
 
   it("sin la app corriendo no toca NADA: ni sube ni aplica", async () => {
     const f = framework(() => SIN_APP);
