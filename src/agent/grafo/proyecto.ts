@@ -5,6 +5,7 @@ import { CompositeBackend, FilesystemBackend, LocalShellBackend } from "deepagen
 import { RUTA_MEMORIA_INTERNA, RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
 import { sinContenidoInvalido, validarConXoneLinter, type ValidarContenido } from "./validacionXone.js";
 import { escriturasEnSerie } from "./escriturasEnSerie.js";
+import { conCodificacionDelFichero } from "./codificacionDelProyecto.js";
 import { crearExecuteCancelable } from "./ejecucionCancelable.js";
 import { RAIZ_SKILLS, skillsConRuta, skillsMontables, type Montaje } from "./skills.js";
 import {
@@ -597,7 +598,10 @@ export function backendDeAgente(opciones: {
   const delProyecto = sinDescargasEnElProyecto(
     sinArtefactosEnElProyecto(
       sinVistasAplanadas(
-        sinContenidoInvalido(exponerMemoriaDeProyecto(base), opciones.validar ?? validarConXoneLinter()),
+        // La codificación, la MÁS interna de todas, pegada a quien toca bytes: un `.xne` Latin-1 se
+        // lee y se escribe en Latin-1 (`codificacionDelProyecto.ts`), y `sinContenidoInvalido`
+        // valida el texto bien decodificado. Sigue DENTRO de `enSerie`, que va por fuera de todo.
+        sinContenidoInvalido(exponerMemoriaDeProyecto(conCodificacionDelFichero(base)), opciones.validar ?? validarConXoneLinter()),
         opciones.ficheros
       )
     )
