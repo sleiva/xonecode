@@ -41,3 +41,27 @@ describe("la calculadora real, medida en sus píxeles", () => {
     expect(hayQueArreglar(compararDescripciones(maqueta, maqueta))).toBe(false);
   });
 });
+
+/**
+ * Otra pasada de la misma calculadora: teclas cuadradas con un CONTORNO fino y claro. Con la primera versión del
+ * medidor el contorno contaba como tinta: casi todas las teclas salían «recortadas», con la letra cuatro veces mayor y
+ * los dígitos grises. Es la que fija las reglas del borde.
+ */
+describe("teclas con contorno fino, medidas sin confundir el contorno con el texto", () => {
+  const geo2 = JSON.parse(oro("calculadora.teclas-con-borde.geometria.json").toString("utf8"));
+  const vista = pantallaMedida(
+    decodificarImagen(oro("calculadora.teclas-con-borde.jpg")),
+    filasDelAparato({ pantalla: geo2.pantalla, controles: controlesDelArbol(geo2.arbol) }).map((f) => f.map((x) => ({ texto: x.texto ?? `[${x.nombre}]`, caja: x.caja })))
+  );
+  const c2 = compararDescripciones(maqueta, vista);
+
+  it("ve el contorno que la maqueta no tiene, y ni un recorte ni una letra gigante", () => {
+    expect(c2.diferencias.find((d) => d.startsWith("lleva un BORDE que la maqueta no tiene"))).toMatch(/«7», «8», «9»/);
+    expect(c2.recortes).toEqual([]);
+    expect(c2.diferencias.join("\n")).not.toMatch(/letra [2-9],\d veces la de la maqueta en .*«[0-9]»/);
+  });
+
+  it("los dígitos son del color de la maqueta (blancos), no el gris de un contorno", () => {
+    expect(c2.diferencias.join("\n")).not.toMatch(/color del texto .* en .*«7»/);
+  });
+});

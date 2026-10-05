@@ -28,6 +28,11 @@ type Rgb = [number, number, number];
 
 /** Dos colores «iguales» a efectos de qué es fondo: compresión JPEG y antialias incluidos. */
 const MISMO_COLOR = 28;
+/**
+ * Un fondo PROPIO se distingue de lo de fuera con poco: una tecla #26292E sobre un panel #1C1E22 (medido en la
+ * calculadora) se separa unos 17 puntos, y con el umbral de «mismo color» la tecla pasaba por etiqueta sin fondo.
+ */
+const FONDO_PROPIO = 10;
 /** Lo que se aparta del fondo lo bastante para ser tinta (texto, icono). */
 const TINTA = 70;
 
@@ -95,7 +100,7 @@ export function medirControl(img: ImagenRgba, caja: Caja): EstiloMedido {
 
   // El FONDO propio: el color más repetido, si no es lo de fuera.
   const masRepetido = moda(dentro)!;
-  const conFondo = distancia(masRepetido, fuera) > MISMO_COLOR;
+  const conFondo = distancia(masRepetido, fuera) > FONDO_PROPIO;
   const fondo = conFondo ? masRepetido : fuera;
   if (conFondo) medido.fondo = hex(fondo);
 
@@ -143,43 +148,84 @@ export function medirControl(img: ImagenRgba, caja: Caja): EstiloMedido {
 
   // El BORDE: los lados de la caja son una línea de otro color que lo de dentro, en tres de los cuatro lados.
   /** Un lado es una LÍNEA si, en alguna de las tres primeras filas hacia dentro, casi todo es de un color distinto. */
-  const lado = (puntos: [number, number][]): boolean => {
+  /**
+   * Un lado es una LÍNEA FINA: casi todo de un color distinto del fondo y de lo de fuera, y tres píxeles más afuera
+   * (`afuera`: hacia dónde es fuera, en x e y) vuelve a verse lo de fuera. Sin esto último, el halo de un botón con
+   * resplandor contaba como borde (medido: la «=» de la maqueta).
+   */
+  const lado = (puntos: [number, number][], afuera: [number, number]): boolean => {
     const colores = puntos.map(([x, y]) => pixel(img, x, y));
     const linea = moda(colores)!;
     const iguales = colores.filter((c) => distancia(c, linea) <= MISMO_COLOR).length / colores.length;
-    return iguales > 0.7 && distancia(linea, fondo) > MISMO_COLOR && distancia(linea, fuera) > MISMO_COLOR;
+    if (iguales <= 0.7 || distancia(linea, fondo) <= MISMO_COLOR || distancia(linea, fuera) <= MISMO_COLOR) return false;
+    const masAfuera = puntos.filter(([x, y]) => distancia(pixel(img, x + 3 * afuera[0], y + 3 * afuera[1]), fuera) <= MISMO_COLOR).length;
+    return masAfuera / puntos.length > 0.7;
   };
   const tramo = (a: number, b: number) => Array.from({ length: Math.max(1, Math.floor((b - a) * 0.6)) }, (_, i) => Math.round(a + (b - a) * 0.2 + i));
   const [bx0, by0, bx1, by1] = conFondo ? [fx0, fy0, fx1, fy1] : [x0, y0, x1, y1];
   const lados = [0, 1, 2, 3].filter((cual) =>
-    [0, 1, 2].some((hacia) => {
-      if (cual === 0) return lado(tramo(bx0, bx1).map((x): [number, number] => [x, by0 + hacia]));
-      if (cual === 1) return lado(tramo(bx0, bx1).map((x): [number, number] => [x, by1 - hacia]));
-      if (cual === 2) return lado(tramo(by0, by1).map((y): [number, number] => [bx0 + hacia, y]));
-      return lado(tramo(by0, by1).map((y): [number, number] => [bx1 - hacia, y]));
+    // La línea puede caer justo FUERA del rectángulo del relleno (este se mide por el color del fondo, y el contorno es
+    // de otro color) o justo dentro: se busca a los dos lados.
+    [-3, -2, -1, 0, 1, 2].some((hacia) => {
+      if (cual === 0) return lado(tramo(bx0, bx1).map((x): [number, number] => [x, by0 + hacia]), [0, -1]);
+      if (cual === 1) return lado(tramo(bx0, bx1).map((x): [number, number] => [x, by1 - hacia]), [0, 1]);
+      if (cual === 2) return lado(tramo(by0, by1).map((y): [number, number] => [bx0 + hacia, y]), [-1, 0]);
+      return lado(tramo(by0, by1).map((y): [number, number] => [bx1 - hacia, y]), [1, 0]);
     })
   ).length;
-  medido.borde = lados >= 3;
+  // En una píldora los lados cortos son arcos enteros: basta con los dos largos.
+  medido.borde = lados >= ((medido.radio ?? 0) >= 0.38 ? 2 : 3);
 
   // La TINTA: lejos del fondo y de lo de fuera. Con borde, su franja no es tinta.
-  const margen = medido.borde ? 3 : 0;
-  const [ix0, iy0, ix1, iy1] = [x0 + margen, y0 + margen, x1 - margen, y1 - margen];
-  const tinta: Rgb[] = [];
-  let [tx0, ty0, tx1, ty1] = [ix1, iy1, ix0, iy0];
-  let tocaArriba = false;
-  let tocaAbajo = false;
+  /**
+   * Con borde, su franja no es tinta; y si las esquinas son redondeadas, tampoco su ARCO: los píxeles suavizados de
+   * una línea curva no se parecen al color de la línea y entraban como texto que medía todo el alto (medido en las
+   * teclas de la calculadora). Todo punto del arco cae a menos de r·(1 − 1/√2) ≈ 0,3·r de algún lado.
+   */
+  const arco = medido.radio === undefined ? 0 : Math.ceil(0.3 * medido.radio * Math.min(x1 - x0, y1 - y0));
+  // En un control con fondo, 6 px más el arco: la compresión JPEG deja un halo junto a una línea fina y brillante. En
+  // una etiqueta sin fondo —donde se mide el recorte— basta la línea: un texto cortado justo encima de su borde
+  // inferior tiene que seguir llegando al límite (medido: el «12 + 3» del visor).
+  const margen = !medido.borde ? 0 : conFondo ? 6 + arco : 1;
+  // Desde el rectángulo del FONDO si lo hay: la caja del árbol puede ser mayor que lo dibujado.
+  const [ix0, iy0, ix1, iy1] = [bx0 + margen, by0 + margen, bx1 - margen, by1 - margen];
+  // La tinta, fila a fila.
+  const porFila = new Map<number, { colores: Rgb[]; x0: number; x1: number }>();
   for (let y = iy0; y <= iy1; y += 1)
     for (let x = ix0; x <= ix1; x += 1) {
       const p = pixel(img, x, y);
       if (distancia(p, fondo) <= TINTA || distancia(p, fuera) <= TINTA) continue;
-      tinta.push(p);
-      tx0 = Math.min(tx0, x);
-      tx1 = Math.max(tx1, x);
-      ty0 = Math.min(ty0, y);
-      ty1 = Math.max(ty1, y);
-      if (y <= iy0 + 1) tocaArriba = true;
-      if (y >= iy1 - 1) tocaAbajo = true;
+      const fila = porFila.get(y) ?? { colores: [], x0: x, x1: x };
+      fila.colores.push(p);
+      fila.x1 = x;
+      porFila.set(y, fila);
     }
+  /**
+   * El TEXTO es el bloque continuo de filas con más tinta (huecos de hasta 3 filas: la «i», el «=»). Lo que sobra de un
+   * contorno, unos pocos píxeles sueltos lejos del texto, forma bloques aparte y no estira la altura de la letra
+   * (medido: una tecla «8» con borde redondeado medía cuatro veces su letra).
+   */
+  const bloques: { y0: number; y1: number; n: number }[] = [];
+  for (const y of [...porFila.keys()].sort((a, b) => a - b)) {
+    const ultimo = bloques[bloques.length - 1];
+    const n = porFila.get(y)!.colores.length;
+    if (ultimo !== undefined && y - ultimo.y1 <= 4) {
+      ultimo.y1 = y;
+      ultimo.n += n;
+    } else bloques.push({ y0: y, y1: y, n });
+  }
+  const texto = bloques.sort((a, b) => b.n - a.n)[0];
+  const tinta: Rgb[] = [];
+  let [tx0, ty0, tx1, ty1] = [ix1, iy1, ix0, iy0];
+  if (texto !== undefined)
+    for (let y = texto.y0; y <= texto.y1; y += 1) {
+      const fila = porFila.get(y);
+      if (fila === undefined) continue;
+      tinta.push(...fila.colores);
+      [tx0, tx1, ty0, ty1] = [Math.min(tx0, fila.x0), Math.max(tx1, fila.x1), Math.min(ty0, y), Math.max(ty1, y)];
+    }
+  const tocaArriba = texto !== undefined && texto.y0 <= iy0 + 1;
+  const tocaAbajo = texto !== undefined && texto.y1 >= iy1 - 1;
   if (tinta.length >= 6) {
     /**
      * El color del texto es el de la tinta MÁS lejana del fondo: en un botón con degradado, el propio degradado se
