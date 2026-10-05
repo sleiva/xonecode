@@ -234,6 +234,21 @@ export function motivoDeComandoRechazado(comando: string): string | undefined {
   // Mac (abre uno en el aparato) y tiene usos legítimos.
   const adb = String.raw`(?:adb|"?\$\{?XONECODE_ADB\}?"?)`;
   const tunelAMano = new RegExp(String.raw`${inicio}${adb}\s+(?:-[de]\s+|-\S+\s+\S+\s+)*forward\s+(?!--list${fin})`);
+  /**
+   * La captura a mano (`adb exec-out screencap -p > x.png`). El prompt del conductor ya lo prohibía y, medido en la
+   * calculadora de MyAllXOne, la compuso a mano en las cuatro capturas: sin el script no se guarda el árbol de controles
+   * del mismo instante, y el crítico no puede MEDIR nada (qué está tapado, qué fila, qué ancho). Se rechaza `screencap`
+   * por `adb`, sea `exec-out` o `shell`.
+   */
+  const capturaAMano = new RegExp(String.raw`${inicio}${adb}\s+(?:-[de]\s+|-\S+\s+\S+\s+)*(?:exec-out|shell)\s+(?:\S+\s+)*?screencap\b`);
+  if (capturaAMano.test(comando)) {
+    return (
+      "No se lanza: captura con `xone-captura-android --nombre <nombre>.png` (o `xone-hotswap shot`), no con `adb … screencap`. " +
+      "El script la deja en `/artefactos/` y guarda a la vez el árbol de controles de ESE instante, que es lo que deja al " +
+      "crítico visual medir qué está tapado, en qué fila va cada control y cuánto mide. Para comparar dos capturas usa " +
+      "`diferencia_de_capturas`, no `md5` ni scripts de imagen."
+    );
+  }
   if (tunelAMano.test(comando)) {
     return (
       "No se lanza: el túnel al aparato lo ponen `xone-desplegar-android` y `xone-reiniciar-android`, con el puerto que " +

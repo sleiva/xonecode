@@ -294,3 +294,21 @@ describe("el aparato de la sesión manda también en la shell (IXCODE-32)", () =
     expect(motivoDeOtroAparato("emulator -avd pixel8", undefined)).toBeUndefined();
   });
 });
+
+describe("una captura a mano (`adb … screencap`) no se lanza: sin el script no hay geometría para el crítico", () => {
+  it.each([
+    // Las cuatro capturas de la calculadora de MyAllXOne, tal cual.
+    'mkdir -p "$XONECODE_ARTEFACTOS"; adb -s emulator-5554 exec-out screencap -p > "$XONECODE_ARTEFACTOS/calc-01.png" 2>/dev/null',
+    'adb -s emulator-5554 exec-out screencap -p > "$XONECODE_ARTEFACTOS/calc-02.png" 2>/dev/null; md5 "$XONECODE_ARTEFACTOS/calc-02.png"',
+    "adb shell screencap -p /sdcard/x.png && adb pull /sdcard/x.png",
+    '"$XONECODE_ADB" exec-out screencap -p > a.png',
+  ])("se rechaza: %s", (c) => {
+    const m = motivoDeComandoRechazado(c);
+    expect(m, c).toContain("xone-captura-android");
+    expect(m, c).toContain("árbol de controles");
+  });
+
+  it.each(["xone-captura-android --nombre calc-01.png", "xone-hotswap shot", "adb shell dumpsys window", 'echo "screencap"'])("pasa: %s", (c) => {
+    expect(motivoDeComandoRechazado(c), c).toBeUndefined();
+  });
+});
