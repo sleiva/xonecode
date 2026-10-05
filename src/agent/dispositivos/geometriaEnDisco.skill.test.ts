@@ -15,6 +15,7 @@ const skill = (): Promise<{
   nombreDeGeometria: (n: string) => string;
   barrasDeDumpsys: (s: string) => unknown;
   medidasDeImagen: (b: Buffer) => unknown;
+  esCapturaDeUnControl: (pantalla: { ancho: number; alto: number }, arbol: unknown) => boolean;
 }> => import(pathToFileURL(resolve(__dirname, "../../../skills/xone-hotswap/lib/geometria.mjs")).href);
 
 describe("la geometría guardada con cada captura", () => {
@@ -46,5 +47,16 @@ describe("la geometría guardada con cada captura", () => {
     expect(await geometriaDeCaptura(carpeta, "calc_08.jpg")).toMatchObject({ captura: "calc_08.jpg" });
     expect(await geometriaDeCaptura(carpeta, "vieja.jpg")).toBeUndefined();
     expect(await geometriaDeCaptura(carpeta, "no-existe.jpg")).toBeUndefined();
+  });
+});
+
+describe("una captura de UN CONTROL no lleva la geometría de la pantalla", () => {
+  it("se distingue porque la imagen es claramente más pequeña que lo que ocupa el árbol", async () => {
+    const s = await skill();
+    const arbol = [{ bounds: { left: 0, top: 0, width: 1080, height: 2400 } }, { bounds: { left: 66, top: 421, width: 948, height: 48 } }];
+    expect(s.esCapturaDeUnControl({ ancho: 1080, alto: 2400 }, arbol)).toBe(false);
+    // `shot name=MAP_DSH` (medido: 1080×1998 y 993×110 en la calculadora).
+    expect(s.esCapturaDeUnControl({ ancho: 1080, alto: 1998 }, arbol)).toBe(true);
+    expect(s.esCapturaDeUnControl({ ancho: 993, alto: 110 }, arbol)).toBe(true);
   });
 });

@@ -166,10 +166,24 @@ async function geometriaDe(
       bloqueante: false,
     };
   }
+  const controles = controlesDelArbol(g.arbol);
+  // Una captura de UN CONTROL (`shot name=…`) es más pequeña que lo que ocupa el árbol: sus cajas son de la pantalla
+  // entera y medirían píxeles que no son. El script ya no la guarda así; esto cubre las de antes.
+  const extension = controles.reduce((e, c) => ({ ancho: Math.max(e.ancho, c.caja.x + c.caja.ancho), alto: Math.max(e.alto, c.caja.y + c.caja.alto) }), { ancho: 0, alto: 0 });
+  if (g.pantalla.alto < extension.alto * 0.95 || g.pantalla.ancho < extension.ancho * 0.95) {
+    return {
+      lineas: [
+        "GEOMETRÍA: esta captura es de una PARTE de la pantalla (un control), no de la pantalla entera, así que no hay nada",
+        "MEDIDO. Para comparar con la maqueta, captura la pantalla entera (`xone-hotswap shot` sin `name=`).",
+      ],
+      hechos: [],
+      bloqueante: false,
+    };
+  }
   const aparato: GeometriaDelAparato = {
     pantalla: g.pantalla,
     ...(g.barras === undefined ? {} : { barras: g.barras }),
-    controles: controlesDelArbol(g.arbol),
+    controles,
   };
   let maqueta: MaquetaMedida | undefined;
   const notas: string[] = [];

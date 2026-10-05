@@ -464,3 +464,19 @@ describe("xone_critica_visual MIDE el estilo en los píxeles (la calculadora rea
     expect(llamadas[0]).toContain("«12 + 3» se ve RECORTADO");
   });
 });
+
+describe("xone_critica_visual con la captura de UN CONTROL", () => {
+  it("no mide con la geometría de la pantalla entera: lo dice y manda a capturar la pantalla", async () => {
+    const geo = JSON.parse(readFileSync(new URL("../../core/__oro__/geometria/calculadora.captura-final.geometria.json", import.meta.url), "utf8"));
+    const salida = await crearCriticaVisual({
+      leerArtefacto: unosBytes,
+      invocar: async () => '{"veredicto":"verde","hallazgos":[]}',
+      leerGeometria: async () => ({ ...geo, pantalla: { ancho: 993, alto: 110 } }),
+      decodificar: () => {
+        throw new Error("no debería medir píxeles de un control con cajas de la pantalla");
+      },
+    }).invoke({ captura: "/artefactos/visor.jpg", pantalla: "X" });
+    expect(salida).toContain("es de una PARTE de la pantalla");
+    expect(salida).not.toContain("RECORTADO");
+  });
+});

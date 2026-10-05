@@ -39,6 +39,34 @@ export function barrasDeDumpsys(salida) {
   return { ...(estado === undefined ? {} : { estado }), ...(navegacion === undefined ? {} : { navegacion }) };
 }
 
+/** Hasta dónde llegan los controles del árbol (el borde derecho y el inferior más lejanos). Pura. */
+export function extensionDelArbol(arbol) {
+  let ancho = 0;
+  let alto = 0;
+  const visitar = (n) => {
+    if (Array.isArray(n)) return n.forEach(visitar);
+    if (n === null || typeof n !== "object") return;
+    const b = n.bounds;
+    if (b && typeof b.left === "number" && typeof b.width === "number" && typeof b.top === "number" && typeof b.height === "number") {
+      ancho = Math.max(ancho, b.left + b.width);
+      alto = Math.max(alto, b.top + b.height);
+    }
+    for (const v of Object.values(n)) if (v !== null && typeof v === "object") visitar(v);
+  };
+  visitar(arbol);
+  return { ancho, alto };
+}
+
+/**
+ * La imagen es de UN CONTROL y no de la pantalla entera (`xone-hotswap shot name=…`): es claramente más pequeña que
+ * lo que ocupa el árbol. Su geometría no le corresponde —las cajas son de la pantalla— y el crítico mediría píxeles
+ * que no son (medido: una foto del visor salía con siete textos «recortados»). Pura.
+ */
+export function esCapturaDeUnControl(pantalla, arbol) {
+  const e = extensionDelArbol(arbol);
+  return pantalla !== undefined && e.alto > 0 && (pantalla.alto < e.alto * 0.95 || pantalla.ancho < e.ancho * 0.95);
+}
+
 /** El ancho y el alto de un PNG o un JPEG, leídos de su cabecera. `undefined` si no se sabe. Pura. */
 export function medidasDeImagen(bytes) {
   if (bytes.length >= 24 && bytes[0] === 0x89 && bytes[1] === 0x50) return { ancho: bytes.readUInt32BE(16), alto: bytes.readUInt32BE(20) };
@@ -102,6 +130,10 @@ export function guardarGeometria({ nombreDeCaptura, bytes, serie, entorno = proc
   }
   const nombre = nombreDeGeometria(nombreDeCaptura);
   const pantalla = medidasDeImagen(bytes);
+  if (esCapturaDeUnControl(pantalla, arbol)) {
+    process.stderr.write("(captura de un control, no de la pantalla entera: sin geometría para el crítico)\n");
+    return undefined;
+  }
   mkdirSync(destino, { recursive: true });
   writeFileSync(
     join(destino, nombre),
