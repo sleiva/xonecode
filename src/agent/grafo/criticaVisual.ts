@@ -10,17 +10,22 @@ import { imagenReferida, type ImagenReferida } from "../../core/referenciasDeIma
 import {
   compararConMaqueta,
   controlesDelArbol,
+  filasDelAparato,
   hallazgosDeGeometria,
   informeDeGeometria,
   type GeometriaDelAparato,
   type MaquetaMedida,
 } from "../../core/geometriaDePantalla.js";
 import {
+  compararDescripciones,
+  filasParaElDescriptor,
+  hayQueArreglar,
   htmlComoAparato,
-  lineasDeEstilo,
+  informeDeComparacion,
   maquetaDeLaDescripcion,
-  type MaquetaDescrita,
-} from "../../core/maquetaDescrita.js";
+  type ComparacionDeDescripciones,
+  type PantallaDescrita,
+} from "../../core/descripcionDePantalla.js";
 import {
   juzgarPantalla,
   TOPE_DE_PETICIONES,
@@ -104,11 +109,14 @@ export interface DependenciasDeCritica {
    */
   cajasDeMaqueta?: (imagen: ImagenReferida, bytes: Buffer) => Promise<MaquetaMedida | { motivo: string } | undefined>;
   /**
-   * La maqueta DESCRITA por el modelo mirándola SOLA, primero su geometría y después su estilo
-   * (`core/maquetaDescrita.ts`, `juezVisual.ts#describirMaqueta`). `undefined` = no se entendió. Ausente la
-   * dependencia, el crítico trabaja como antes.
+   * Una pantalla DESCRITA por el modelo mirándola SOLA, primero su geometría y después el estilo de cada control,
+   * con el MISMO esquema para la maqueta y para la captura (`core/descripcionDePantalla.ts`,
+   * `juezVisual.ts#describirPantalla`). A la captura se le pasan los controles que existen, del árbol.
+   * `undefined` = no se entendió. Ausente la dependencia, el crítico trabaja como antes.
    */
-  describirMaqueta?: (referencia: CapturaDePantalla) => Promise<MaquetaDescrita | undefined>;
+  describirPantalla?: (imagen: CapturaDePantalla, controlesQueExisten?: readonly string[]) => Promise<PantallaDescrita | undefined>;
+  /** Guarda el informe junto a la captura (`<captura>.critica.txt` en `/hotswap/`), para poder auditar qué se dijo. */
+  guardarInforme?: (nombreDeCaptura: string, informe: string) => Promise<void>;
 }
 
 /** Lo que la geometría le añade al crítico: el bloque para el agente, los hechos para el modelo y si hay algo bloqueante. */
@@ -116,6 +124,8 @@ interface GeometriaDeLaCritica {
   lineas: string[];
   hechos: string[];
   bloqueante: boolean;
+  /** El aparato medido, si la captura trae su árbol: da la estructura a quien describe la captura. */
+  aparato?: GeometriaDelAparato;
 }
 
 /**
@@ -127,7 +137,7 @@ async function geometriaDe(
   referida: ImagenReferida | undefined,
   referencia: CapturaDePantalla | undefined,
   deps: DependenciasDeCritica,
-  descrita: MaquetaDescrita | undefined
+  descrita: PantallaDescrita | undefined
 ): Promise<GeometriaDeLaCritica | undefined> {
   if (deps.leerGeometria === undefined) return undefined;
   let crudo: unknown;
@@ -169,7 +179,7 @@ async function geometriaDe(
   const h = hallazgosDeGeometria(aparato, maqueta);
   const lineas = informeDeGeometria({ ...h, notas: [...h.notas, ...notas] }, maqueta !== undefined);
   if (descrita !== undefined) lineas.push(...estructuraDescrita(descrita, aparato, maqueta));
-  return { lineas, hechos: [...h.bloqueantes, ...h.diferencias], bloqueante: h.bloqueantes.length > 0 };
+  return { lineas, hechos: [...h.bloqueantes, ...h.diferencias], bloqueante: h.bloqueantes.length > 0, aparato };
 }
 
 /**
@@ -181,7 +191,7 @@ async function geometriaDe(
  *   y el HTML cuenten lo mismo: la imagen es lo que se aprobó, y si el HTML se aparta, alguien tiene que
  *   decirlo.
  */
-function estructuraDescrita(descrita: MaquetaDescrita, aparato: GeometriaDelAparato, maqueta: MaquetaMedida | undefined): string[] {
+function estructuraDescrita(descrita: PantallaDescrita, aparato: GeometriaDelAparato, maqueta: MaquetaMedida | undefined): string[] {
   if (maqueta !== undefined) {
     const h = compararConMaqueta(maquetaDeLaDescripcion(descrita, false), htmlComoAparato(maqueta), {
       aproximada: true,
@@ -330,26 +340,30 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
       // Lo MEDIDO primero: el modelo lo recibe como hechos y no tiene que adivinar la estructura.
       // La maqueta, DESCRITA aparte y antes —geometría y luego estilo—: sin ella, el estilo queda a la memoria
       // del modelo y una maqueta sin code.html no tiene estructura. No poder describirla no impide juzgar.
-      let descrita: MaquetaDescrita | undefined;
-      if (referencia !== undefined && deps.describirMaqueta !== undefined) {
+      let descrita: PantallaDescrita | undefined;
+      if (referencia !== undefined && deps.describirPantalla !== undefined) {
         try {
-          descrita = await deps.describirMaqueta(referencia);
+          descrita = await deps.describirPantalla(referencia);
         } catch {
           descrita = undefined;
         }
       }
       const geometria = await geometriaDe(entrada, referida, referencia, deps, descrita);
 
+      /**
+       * La comparación control a control (`compararDescripciones`) necesita la captura en el MISMO esquema. Describirla
+       * con el modelo NO vale, medido sobre la calculadora: la misma imagen descrita dos veces salía con diecisiete
+       * teclas de otra forma y otros colores, y ninguna de dos pasadas vio el texto recortado. Hasta medirla en píxeles,
+       * no hay comparación y el veredicto es el del crítico.
+       */
+      const comparacion: ComparacionDeDescripciones | undefined = undefined;
+
       let veredicto;
       try {
-        veredicto = await juzgarPantalla(
-          abierta,
-          { pantalla: entrada.pantalla },
-          deps.invocar,
-          referencia,
-          geometria?.hechos ?? [],
-          descrita === undefined ? [] : lineasDeEstilo(descrita)
-        );
+        veredicto =
+          comparacion !== undefined
+            ? { veredicto: hayQueArreglar(comparacion) ? ("rojo" as const) : ("verde" as const), observaciones: [], necesito: [] }
+            : await juzgarPantalla(abierta, { pantalla: entrada.pantalla }, deps.invocar, referencia, geometria?.hechos ?? []);
       } catch (error) {
         // Fallo del ENTORNO —sin modelo, sin clave, sin red—: se dice, y no se convierte en un
         // veredicto. Un rojo inventado culparía al trabajo de un problema de la máquina.
@@ -373,6 +387,7 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
         `Veredicto visual de «${entrada.pantalla}»${comparado}: ${final}${geometria?.bloqueante === true && veredicto.veredicto !== "rojo" ? " (lo decide la geometría medida)" : ""}.`,
       ];
       if (geometria !== undefined) lineas.push("", ...geometria.lineas, "");
+      if (comparacion !== undefined) lineas.push(...informeDeComparacion(comparacion), "");
       if (veredicto.observaciones.length > 0) {
         /**
          * **El aviso no es cortesía: está medido.** Seis vueltas sobre la misma captura
@@ -421,13 +436,11 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
        */
       if (final === "rojo") {
         /**
-         * **Con referencia, el arreglo es de `designer-xone`.** No es un cambio de criterio:
-         * una diferencia contra una maqueta es visual por definición —forma, tamaño,
-         * colocación, color— y eso es literalmente lo que su `.md` reclama («del color o del
-         * tamaño equivocado… también cuando se arregle en un `.xne`»). Sin referencia el
-         * hallazgo puede ser cualquier cosa, así que esa rama se queda como estaba.
+         * **El arreglo es de `developer-xone`, haya maqueta o no.** Mandaba a `designer-xone` con referencia, y el
+         * diseñador ya solo escribe en `icons/`: el layout y el CSS, también lo que se ve mal, son del desarrollador.
+         * Un rojo dirigido a quien no puede tocar el `.xne` era un arreglo sin dueño.
          */
-        const aQuien = referencia === undefined ? "developer-xone" : "designer-xone";
+        const aQuien = "developer-xone";
         lineas.push(
           "Esto es un defecto del proyecto SIN ARREGLAR, y qué hacer con él depende de TU",
           "encargo — que lo sabes tú y no yo:",
@@ -449,7 +462,15 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
           `Encarga al conductor que llegue ahí y capture, y vuelve a llamarme con esa captura (como mucho ${TOPE_DE_PETICIONES} veces).`
         );
       }
-      return lineas.join("\n");
+      const informe = lineas.join("\n");
+      if (deps.guardarInforme !== undefined) {
+        try {
+          await deps.guardarInforme(nombreDeArtefacto(entrada.captura), informe);
+        } catch {
+          // Guardarlo es para auditar: que falle no cambia lo que se contesta.
+        }
+      }
+      return informe;
     },
     {
       name: "xone_critica_visual",

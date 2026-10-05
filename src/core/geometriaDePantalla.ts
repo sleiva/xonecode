@@ -268,7 +268,7 @@ export function emparejar(
 }
 
 /** Agrupa en FILAS: dos van en la misma si sus centros verticales están a menos de medio alto. Devuelve el índice de fila de cada uno. */
-function filas(cajas: readonly Caja[]): number[] {
+export function filas(cajas: readonly Caja[]): number[] {
   const orden = cajas.map((c, i) => ({ i, cy: c.y + c.alto / 2, alto: c.alto })).sort((a, b) => a.cy - b.cy);
   const fila = new Array<number>(cajas.length).fill(0);
   let actual = -1;
@@ -429,4 +429,17 @@ export function informeDeGeometria(h: HallazgosDeGeometria, conMaqueta: boolean)
   for (const d of h.diferencias) lineas.push(`- ${d}`);
   for (const n of h.notas) lineas.push(`- (nota) ${n}`);
   return lineas;
+}
+
+/**
+ * Los controles que SE VEN en el aparato, en filas de arriba abajo y cada fila de izquierda a derecha: los que
+ * tienen texto, y los botones e imágenes sin él. Es la ESTRUCTURA que se le da a quien describe la captura
+ * (`descripcionDePantalla.ts`), para que describa estos controles y no se invente otros.
+ */
+export function filasDelAparato(g: GeometriaDelAparato): ControlDelAparato[][] {
+  const visibles = g.controles.filter((c) => c.texto !== undefined || c.clase === "B" || c.clase === "IMG");
+  const indice = filas(visibles.map((c) => c.caja));
+  const porFila = new Map<number, ControlDelAparato[]>();
+  visibles.forEach((c, i) => porFila.set(indice[i]!, [...(porFila.get(indice[i]!) ?? []), c]));
+  return [...porFila.entries()].sort((a, b) => a[0] - b[0]).map(([, fila]) => fila.sort((a, b) => a.caja.x - b.caja.x));
 }

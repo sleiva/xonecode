@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import type { MaquetaDescrita } from "../../core/maquetaDescrita.js";
+import type { PantallaDescrita } from "../../core/descripcionDePantalla.js";
 import { describe, expect, it } from "vitest";
 import { crearCriticaVisual } from "./criticaVisual.js";
 import type { InvocarVisual } from "../dispositivos/juezVisual.js";
@@ -267,18 +267,17 @@ describe("xone_critica_visual con una maqueta delante", () => {
   });
 
   /**
-   * Una diferencia contra una maqueta es VISUAL por definición, y eso es lo que el `.md` de
-   * `designer-xone` reclama. Sin referencia el hallazgo puede ser cualquier cosa, así que esa
-   * rama se queda como estaba.
+   * El diseñador ya solo escribe en `icons/`: lo que se ve mal en una pantalla lo arregla quien escribe su `.xne`,
+   * haya maqueta o no. Un rojo mandado a `designer-xone` era un arreglo sin dueño.
    */
-  it("un ROJO comparado manda a designer-xone; sin comparar, a developer-xone", async () => {
+  it("un ROJO manda a developer-xone, con maqueta y sin ella", async () => {
     const con = await tool('{"veredicto":"rojo","hallazgos":["las teclas son rectas"]}').invoke({
       captura: "/artefactos/c.jpg",
       pantalla: "X",
       referencia: "/artefactos/m.png",
     });
-    expect(con).toContain("designer-xone");
-    expect(con).not.toContain("developer-xone");
+    expect(con).toContain("developer-xone");
+    expect(con).not.toContain("designer-xone");
 
     const sin = await tool('{"veredicto":"rojo","hallazgos":["texto cortado"]}').invoke({
       captura: "/artefactos/c.jpg",
@@ -305,10 +304,11 @@ describe("xone_critica_visual con la GEOMETRÍA medida (MyAllXOne, la calculador
 
   const conGeometria = (
     respuesta: string,
-    vista: { prompt?: string } = {},
-    opciones: { sinHtml?: true; sinArbol?: true; descrita?: MaquetaDescrita } = {}
-  ) =>
-    crearCriticaVisual({
+    vista: { prompt?: string; existen?: readonly string[]; informe?: string } = {},
+    opciones: { sinHtml?: true; sinArbol?: true; descrita?: PantallaDescrita; captura?: PantallaDescrita } = {}
+  ) => {
+    let descripciones = 0;
+    return crearCriticaVisual({
       leerArtefacto: unosBytes,
       invocar: async (_papel, prompt) => {
         vista.prompt = prompt;
@@ -317,35 +317,54 @@ describe("xone_critica_visual con la GEOMETRÍA medida (MyAllXOne, la calculador
       leerReferencia: png,
       leerGeometria: async () => (opciones.sinArbol ? undefined : geo),
       cajasDeMaqueta: async () => (opciones.sinHtml ? undefined : maqueta),
-      ...(opciones.descrita === undefined ? {} : { describirMaqueta: async () => opciones.descrita }),
+      guardarInforme: async (nombre, informe) => {
+        vista.informe = `${nombre}\n${informe}`;
+      },
+      ...(opciones.descrita === undefined
+        ? {}
+        : {
+            // La primera llamada es la maqueta (sin estructura); la segunda, la captura (con la del árbol, si la hay).
+            describirPantalla: async (_imagen: unknown, existen?: readonly string[]) => {
+              descripciones += 1;
+              if (descripciones === 1) return opciones.descrita;
+              vista.existen = existen ?? [];
+              return opciones.captura ?? opciones.descrita;
+            },
+          }),
     });
-
-  /** Lo que un modelo cuenta de `screen.png` mirándola sola. */
-  const fila = (...textos: string[]) => textos.map((texto) => ({ texto, unidades: 1 }));
-  const descrita: MaquetaDescrita = {
-    filas: [fila("AC", "±", "%", "÷"), fila("7", "8", "9", "×"), fila("4", "5", "6", "−"), fila("1", "2", "3", "+"), fila("0", ".", "[borrar]", "=")],
-    estilo: [{ texto: "=", forma: "pildora", relleno: "#FF7A59", letra: "grande" }],
   };
 
-  it("SOLO un PNG, pero descrito: la estructura sale contra la descripción, aparte y sin decidir el rojo", async () => {
-    const vista: { prompt?: string } = {};
-    const salida = await conGeometria('{"veredicto":"verde","hallazgos":[]}', vista, { sinHtml: true, descrita }).invoke({
+  /** Lo que un modelo cuenta de `screen.png` mirándola sola. */
+  const tecla = (texto: string) => ({ texto, unidades: 1, forma: "pildora" as const, borde: false, recortado: false });
+  const fila = (...textos: string[]) => ({ controles: textos.map(tecla) });
+  const descrita: PantallaDescrita = {
+    filas: [fila("AC", "±", "%", "÷"), fila("7", "8", "9", "×"), fila("4", "5", "6", "−"), fila("1", "2", "3", "+"), fila("0", ".", "[borrar]", "=")],
+    extras: [],
+  };
+  /** La captura, descrita con el mismo esquema: teclas en círculo y el «0» recortado. */
+  const vistaDeLaCaptura: PantallaDescrita = {
+    filas: descrita.filas.map((f) => ({ controles: f.controles.map((c) => ({ ...c, forma: "circulo" as const, recortado: c.texto === "0" })) })),
+    extras: [],
+  };
+
+  it("SOLO un PNG: la estructura de la maqueta DESCRITA contra el árbol, aparte y sin decidir el rojo; el informe se guarda", async () => {
+    const vista: { prompt?: string; existen?: readonly string[]; informe?: string } = {};
+    const salida = await conGeometria('{"veredicto":"verde","hallazgos":[]}', vista, { sinHtml: true, descrita, captura: vistaDeLaCaptura }).invoke({
       captura: "/artefactos/calc_ronda9.jpg",
       pantalla: "DemoCalculadora",
       referencia: "/adjuntos/diseno.png",
     });
     expect(salida).toContain("ESTRUCTURA CONTRA LA MAQUETA DESCRITA");
     expect(salida).toContain("en el aparato «=» va en otra");
-    expect(salida).toContain("«0» mide 1,9 veces el ancho de las de su fila");
-    // Va DESPUÉS del bloque medido, y lo de la descripción no entra en los hechos del modelo.
-    expect(salida.indexOf("GEOMETRÍA, MEDIDA")).toBeLessThan(salida.indexOf("ESTRUCTURA CONTRA LA MAQUETA DESCRITA"));
-    expect(vista.prompt).not.toContain("va en otra");
-    // El estilo descrito sí: es la especificación.
-    expect(vista.prompt).toContain("ESTILO DE LA MAQUETA");
-    expect(vista.prompt).toContain("«=»: forma píldora, fondo #FF7A59, letra grande");
+    // La captura NO se describe con el modelo (medido: ruidoso y ciego al recorte): no hay comparación control a control.
+    expect(vista.existen).toBeUndefined();
+    expect(salida).not.toContain("COMPARACIÓN CONTROL A CONTROL");
+    // Y el informe se guarda junto a la captura, para auditar qué se dijo.
+    expect(vista.informe?.split("\n")[0]).toBe("calc_ronda9.jpg");
+    expect(vista.informe).toContain("ESTRUCTURA CONTRA LA MAQUETA DESCRITA");
   });
 
-  it("con code.html, la descripción solo vigila que la imagen y el HTML cuenten lo mismo", async () => {
+  it("con code.html, la descripción de la maqueta solo vigila que la imagen y el HTML cuenten lo mismo", async () => {
     const igual = await conGeometria('{"veredicto":"verde","hallazgos":[]}', {}, { descrita }).invoke({
       captura: "/artefactos/calc_ronda9.jpg",
       pantalla: "DemoCalculadora",
@@ -354,7 +373,7 @@ describe("xone_critica_visual con la GEOMETRÍA medida (MyAllXOne, la calculador
     expect(igual).not.toContain("NO CUENTAN LO MISMO");
     expect(igual).not.toContain("ESTRUCTURA CONTRA LA MAQUETA DESCRITA");
 
-    const distinta: MaquetaDescrita = { ...descrita, filas: [...descrita.filas.slice(0, -2), fila("1", "2", "3", "+", "="), fila("0", ".")] };
+    const distinta: PantallaDescrita = { ...descrita, filas: [...descrita.filas.slice(0, -2), fila("1", "2", "3", "+", "="), fila("0", ".")] };
     const salida = await conGeometria('{"veredicto":"verde","hallazgos":[]}', {}, { descrita: distinta }).invoke({
       captura: "/artefactos/calc_ronda9.jpg",
       pantalla: "DemoCalculadora",

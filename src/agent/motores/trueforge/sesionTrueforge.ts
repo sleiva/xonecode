@@ -25,7 +25,7 @@
  */
 import { TOPE_DE_PREGUNTAS_CONTESTADAS_SOLAS, opcionRecomendada } from "../../../core/modoDeEscritura.js";
 import { claseDeTrabajo } from "../../../core/esfuerzo.js";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import winston from "winston";
 import { AgentThread, AgentThreadOrchestrator, EventType, NOOP_AGENT_TRACING, askUserQuestion, contextCompaction, dynamicSubAgents } from "./trueforge.js";
@@ -129,7 +129,7 @@ import { cajasDeMaqueta, medidasDeImagen, viewportDeMaqueta } from "../../dispos
 import { geometriaDeCaptura } from "../../dispositivos/geometriaEnDisco.js";
 import { crearDescribirImagen } from "../../grafo/describirImagen.js";
 import { crearTraerDeLaMaquina } from "../../grafo/traerDeLaMaquina.js";
-import { describirMaqueta, invocarVisualConModelos } from "../../dispositivos/juezVisual.js";
+import { describirPantalla, invocarVisualConModelos } from "../../dispositivos/juezVisual.js";
 import { estilosDeDisco, indiceEnDisco, type CargarIndice } from "../../navegacion/indiceEnDisco.js";
 
 /** El hilo raíz de TrueForge. Se llama así en la librería y no se elige. */
@@ -827,8 +827,13 @@ export async function abrirSesionTrueforge(
           crearCriticaVisual({
             leerArtefacto: async (nombre) => readFileSync(join(carpeta, nombre)),
             invocar: invocarVisualConModelos({ paraPapel: (p) => modelos.paraPapel(p) }),
-            // La maqueta, descrita SOLA y una vez por imagen: geometría y luego estilo.
-            describirMaqueta: (referencia) => describirMaqueta(referencia, invocarVisualConModelos({ paraPapel: (p) => modelos.paraPapel(p) })),
+            // La maqueta y la captura, cada una descrita SOLA con el mismo esquema: geometría y luego estilo.
+            describirPantalla: (imagen, existen) => describirPantalla(imagen, invocarVisualConModelos({ paraPapel: (p) => modelos.paraPapel(p) }), existen),
+            // El informe se queda junto a la captura, para poder auditar qué se le dijo al agente.
+            guardarInforme: async (nombre, informe) => {
+              mkdirSync(carpetaDeHotswap(carpeta), { recursive: true });
+              writeFileSync(join(carpetaDeHotswap(carpeta), `${nombre.replace(/\.[A-Za-z0-9]{2,4}$/, "")}.critica.txt`), informe, "utf8");
+            },
             // La maqueta casi nunca está en /artefactos/: la trae la persona (/adjuntos/) o vive en /diseno/.
             leerReferencia: lectorDeReferencias,
             // La GEOMETRÍA: el árbol guardado con la captura, y las cajas de la maqueta si trae `code.html`.

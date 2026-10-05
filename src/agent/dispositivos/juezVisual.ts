@@ -31,7 +31,7 @@
  */
 import { createHash } from "node:crypto";
 import type { Papel } from "../../core/ports.js";
-import { interpretarDescripcion, PROMPT_DESCRIBIR_MAQUETA, type MaquetaDescrita } from "../../core/maquetaDescrita.js";
+import { interpretarDescripcion, promptDescribirPantalla, type PantallaDescrita } from "../../core/descripcionDePantalla.js";
 import { objetoDe } from "../tareas/juezDeTarea.js";
 
 /** El papel del juez, el mismo que el de tareas. `core/modelos.ts` lo reserva para esto. */
@@ -228,12 +228,7 @@ export async function juzgarPantalla(
    * que adivinar la estructura —medido: no vio una «=» tapada y se inventó colores— y para que su
    * texto no los contradiga. Él se queda con lo que solo se ve: formas, colores, jerarquía.
    */
-  hechos: readonly string[] = [],
-  /**
-   * El ESTILO de la maqueta, descrito antes y POR SEPARADO (`describirMaqueta`): forma, fondo y letra de cada
-   * control. Es la especificación contra la que se mira la captura, la misma en cada ronda.
-   */
-  estiloDeLaMaqueta: readonly string[] = []
+  hechos: readonly string[] = []
 ): Promise<VeredictoVisual> {
   const base = referencia === undefined ? PROMPT_VISUAL : PROMPT_VISUAL_CON_REFERENCIA;
   const conHechos =
@@ -247,17 +242,7 @@ export async function juzgarPantalla(
           "tamaño del texto, jerarquía, iconos.",
           ...hechos.map((h) => `- ${h}`),
         ].join("\n");
-  const conEstilo =
-    estiloDeLaMaqueta.length === 0
-      ? ""
-      : [
-          "",
-          "",
-          "ESTILO DE LA MAQUETA, descrito antes mirándola SOLA (la especificación: comprueba la captura contra",
-          "esto control a control, y di dónde la captura NO lo cumple):",
-          ...estiloDeLaMaqueta.map((e) => `- ${e}`),
-        ].join("\n");
-  const prompt = `${base}${conHechos}${conEstilo}\n\nLa captura es de la pantalla «${contexto.pantalla}».`;
+  const prompt = `${base}${conHechos}\n\nLa captura es de la pantalla «${contexto.pantalla}».`;
   let texto: string;
   try {
     texto = await invocar(PAPEL_DEL_JUEZ_VISUAL, prompt, imagen, referencia);
@@ -298,22 +283,28 @@ export async function juzgarPantalla(
   return { veredicto: "indeterminado", observaciones, necesito };
 }
 
-/** Las maquetas ya descritas, por la huella de la imagen: una maqueta no cambia entre rondas. */
-const descritas = new Map<string, MaquetaDescrita>();
+/** Las pantallas ya descritas, por la huella de la imagen y de la estructura dada: una maqueta no cambia entre rondas. */
+const descritas = new Map<string, PantallaDescrita>();
 
 /**
- * La maqueta DESCRITA (`core/maquetaDescrita.ts`): el modelo la mira SOLA y cuenta primero su geometría y
- * después su estilo. Se pide una vez por imagen y se guarda: cada ronda se compara contra la MISMA
- * descripción, no contra una nueva —la salida de un modelo varía de una vez a otra—. Lo que no se entiende
- * es `undefined` (y no se guarda); no poder preguntar LANZA, como `juzgarPantalla`.
+ * Una pantalla DESCRITA (`core/descripcionDePantalla.ts`): el modelo mira UNA imagen sola y cuenta primero su
+ * geometría y después el estilo de cada control, con el mismo esquema para la maqueta y para la captura. A la
+ * captura se le pasan los controles que EXISTEN (`controlesQueExisten`, del árbol), para que no invente estructura.
+ *
+ * Se guarda por huella: cada ronda compara contra la MISMA descripción de la maqueta, no contra una nueva que varía.
+ * Lo que no se entiende es `undefined` (y no se guarda); no poder preguntar LANZA, como `juzgarPantalla`.
  */
-export async function describirMaqueta(referencia: CapturaDePantalla, invocar: InvocarVisual): Promise<MaquetaDescrita | undefined> {
-  const huella = createHash("sha256").update(referencia.base64).digest("hex");
+export async function describirPantalla(
+  imagen: CapturaDePantalla,
+  invocar: InvocarVisual,
+  controlesQueExisten?: readonly string[]
+): Promise<PantallaDescrita | undefined> {
+  const huella = createHash("sha256").update(imagen.base64).update(JSON.stringify(controlesQueExisten ?? [])).digest("hex");
   const guardada = descritas.get(huella);
   if (guardada !== undefined) return guardada;
   let texto: string;
   try {
-    texto = await invocar(PAPEL_DEL_JUEZ_VISUAL, PROMPT_DESCRIBIR_MAQUETA, referencia);
+    texto = await invocar(PAPEL_DEL_JUEZ_VISUAL, promptDescribirPantalla(controlesQueExisten), imagen);
   } catch (error) {
     throw new ErrorDelJuezVisual(error instanceof Error ? error.message : String(error));
   }

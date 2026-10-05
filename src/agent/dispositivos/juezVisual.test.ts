@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  describirMaqueta,
+  describirPantalla,
   ErrorDelJuezVisual,
   juzgarPantalla,
   invocarVisualConModelos,
@@ -293,8 +293,8 @@ describe("el crítico con una maqueta delante", () => {
   });
 });
 
-describe("describirMaqueta", () => {
-  it("la mira SOLA, una vez por imagen, y lo que no entiende no lo guarda", async () => {
+describe("describirPantalla", () => {
+  it("mira la imagen SOLA, una vez por imagen, y lo que no entiende no lo guarda", async () => {
     const llamadas: { prompt: string; referencia: unknown }[] = [];
     let respuesta = "no es json";
     const invocar: InvocarVisual = async (_papel, prompt, _imagen, referencia) => {
@@ -302,16 +302,30 @@ describe("describirMaqueta", () => {
       return respuesta;
     };
     const maqueta = { base64: "bWFxdWV0YS11bmljYQ==", mime: "image/png" };
-    expect(await describirMaqueta(maqueta, invocar)).toBeUndefined();
-    respuesta = '{"filas":[[{"texto":"=","unidades":1}]],"estilo":[]}';
-    expect(await describirMaqueta(maqueta, invocar)).toEqual({ filas: [[{ texto: "=", unidades: 1 }]], estilo: [] });
-    expect(await describirMaqueta(maqueta, invocar)).toEqual({ filas: [[{ texto: "=", unidades: 1 }]], estilo: [] });
+    expect(await describirPantalla(maqueta, invocar)).toBeUndefined();
+    respuesta = '{"filas":[{"zona":"teclado","controles":[{"texto":"=","unidades":1,"forma":"circulo"}]}],"extras":[]}';
+    const esperada = { filas: [{ zona: "teclado", controles: [{ texto: "=", unidades: 1, forma: "circulo" }] }], extras: [] };
+    expect(await describirPantalla(maqueta, invocar)).toEqual(esperada);
+    expect(await describirPantalla(maqueta, invocar)).toEqual(esperada);
     expect(llamadas).toHaveLength(2);
     expect(llamadas[0]!.referencia).toBeUndefined();
     expect(llamadas[0]!.prompt).toMatch(/FASE 1, GEOMETRÍA[\s\S]*FASE 2, ESTILO/);
   });
 
+  it("a la captura le pasa los controles que EXISTEN, y con otra estructura vuelve a preguntar", async () => {
+    const prompts: string[] = [];
+    const invocar: InvocarVisual = async (_papel, prompt) => {
+      prompts.push(prompt);
+      return '{"filas":[{"controles":[{"texto":"7"}]}],"extras":[]}';
+    };
+    const captura = { base64: "Y2FwdHVyYQ==", mime: "image/png" };
+    await describirPantalla(captura, invocar, ["fila 1: «7» «8»"]);
+    await describirPantalla(captura, invocar, ["fila 1: «7» «8» «9»"]);
+    expect(prompts).toHaveLength(2);
+    expect(prompts[0]).toContain("fila 1: «7» «8»");
+  });
+
   it("no poder preguntar LANZA, como juzgarPantalla", async () => {
-    await expect(describirMaqueta({ base64: "b3RyYQ==", mime: "image/png" }, async () => { throw new Error("sin red"); })).rejects.toThrow(ErrorDelJuezVisual);
+    await expect(describirPantalla({ base64: "b3RyYQ==", mime: "image/png" }, async () => { throw new Error("sin red"); })).rejects.toThrow(ErrorDelJuezVisual);
   });
 });
