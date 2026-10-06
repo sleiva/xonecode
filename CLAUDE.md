@@ -561,6 +561,30 @@ ejecuta si es Claude Code, con la shell ESTRECHA (ver abajo). Reglas duras:
   montada por la AUTÓNOMA de `consolaDeTarea.aprobacionesTui` — por eso NO se hizo con
   `workspace-write`, para que las guardas de ruta sigan enteras.
 
+- **Ajustes → Motores locales dice si cada motor externo está listo, y deja iniciar la sesión de
+  Claude Code y PROBARLOS** (`core/motoresLocales.ts`, `agent/motores/motoresLocales.ts`,
+  `componentes/MotoresLocales.tsx`, mensajes `motorLocal`/`motoresLocales`). Se mide el binario que
+  LANZA el SDK, no el del PATH. La prueba va por el MISMO puerto que un subagente, y con una clave de
+  Anthropic heredada son DOS caminos (sin ejecución factura a la clave, con ejecución usa el login),
+  que se dicen por separado. `auth login` corre sin TTY y el código pegado va a su `stdin`. **Ni el
+  correo de la cuenta ni el enlace de autorización cruzan el cable**: el navegador lo reabre el
+  servidor. **El código que la web enseña SÍ cruza** (`motorLocal` con `codigo`, segundo secreto
+  del cable tras `leerSecreto`): es de un solo uso y está atado al reto PKCE, cuyo verificador no
+  sale del hijo. Sin «Cerrar sesión» ni login con sesión ya iniciada: los dos tocarían todos los
+  Claude Code de la máquina. Codex y OpenCode:
+  medir, probar y guía; su login sigue sin medir. **En Windows se lanza el NATIVO que hay detrás del
+  `.cmd` de npm** (`agent/subagentes/ejecutableEnWindows.ts`): sin shell, `spawn` no ve un `.cmd`
+  (`ENOENT` con «Listo» en la medida), y con shell Parar mataría a `cmd.exe` y no al hijo. OpenCode
+  apunta a un `.exe`; Codex a un `codex.js` que lanza el `codex.exe` de su paquete de plataforma, y se
+  busca ese con la misma regla (lanzar `node` tampoco: matarlo no alcanza al nieto). Medidos los dos.
+  **El modelo de OpenCode se ELIGE en su tarjeta y lo guarda el servidor**
+  (`settings.modeloDeOpencode`, acción `modelo` de `motorLocal`): con nuestra configuración cerrada y
+  sin modelo, OpenCode coge uno de su tier gratuito, que no contesta fuera de su consola. Lo usan la
+  prueba y todo subagente sin `modelo:` en su `.md` (que manda), leído en CADA encargo dentro de
+  `correrOpencode`, así que la prueba y el subagente van por el mismo camino. La lista es la de
+  `opencode models`, sin filtrar por nombre: lo que falla es el PROVEEDOR `opencode` sin credencial,
+  no el sufijo `-free`.
+
 ### El segundo motor: TrueForge (rama `xonecode-trueforge`)
 
 **deepagents es LEGACY** (`core/motor.ts`): corre las sesiones que nacieron con él, pero lo nuevo va

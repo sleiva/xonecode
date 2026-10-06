@@ -6,6 +6,7 @@ import { afterEach, describe, it, expect, vi } from "vitest";
 import { Chat, MS_DEL_AVISO_AUTONOMO, peticionDeCorreccion } from "./Chat.js";
 import { Transcript } from "./Transcript.js";
 import type { Acto } from "../tipos.js";
+import { textoDeConsulta } from "../textoDeConsulta.js";
 
 // Mismo motivo que `Compositor.test.tsx`: sin `globals` en `vitest.config.ts`, un
 // segundo `render()` en este fichero deja montado el primero y `container.querySelector`
@@ -1224,5 +1225,70 @@ describe("la hora de cada mensaje (IXCODE-24)", () => {
   it("sin `cuando` —una sesión de antes— no se pinta ninguna hora", () => {
     const { container } = render(<Chat actos={[{ tipo: "usuario", texto: "hola" }, asistente("qué tal")]} />);
     expect(container.querySelector("time")).toBeNull();
+  });
+});
+
+describe("«Ir al final», flotando sobre la caja", () => {
+  it("solo sale cuando NO se está al final, y pulsarlo baja y lo quita", () => {
+    const { container } = render(<Chat actos={[asistente("uno"), asistente("dos")]} />);
+    // Abajo (jsdom no hace layout: todo mide 0, que es «al final»): no hay botón.
+    expect(screen.queryByRole("button", { name: "Ir al final de la conversación" })).toBeNull();
+    const scroller = container.querySelector("[class*='scroll']") as HTMLDivElement;
+    Object.defineProperty(scroller, "scrollHeight", { value: 2000, configurable: true });
+    Object.defineProperty(scroller, "clientHeight", { value: 500, configurable: true });
+    scroller.scrollTop = 200;
+    fireEvent.scroll(scroller);
+    fireEvent.click(screen.getByRole("button", { name: "Ir al final de la conversación" }));
+    expect(scroller.scrollTop).toBe(2000);
+    expect(screen.queryByRole("button", { name: "Ir al final de la conversación" })).toBeNull();
+  });
+});
+
+describe("la bola de mensajes nuevos en «Ir al final»", () => {
+  /** Sube a leer: el scroller lejos del fondo y su evento de scroll. */
+  function subir(container: HTMLElement): void {
+    const scroller = container.querySelector("[class*='scroll']") as HTMLDivElement;
+    Object.defineProperty(scroller, "scrollHeight", { value: 2000, configurable: true });
+    Object.defineProperty(scroller, "clientHeight", { value: 500, configurable: true });
+    scroller.scrollTop = 200;
+    fireEvent.scroll(scroller);
+  }
+  const boton = () => screen.queryByRole("button", { name: /^Ir al final de la conversación/ });
+  const herramientas: Acto = { tipo: "herramientas", lineas: ["lee x.xne"] };
+
+  it("cuenta respuestas y no el trabajo interno, y al bajar se van botón y bola", () => {
+    const inicio = [asistente("hola")];
+    const { container, rerender } = render(<Chat actos={inicio} sesion="s1" />);
+    subir(container);
+    expect(boton()!.getAttribute("aria-label")).toBe("Ir al final de la conversación");
+    rerender(<Chat actos={[...inicio, herramientas, asistente("uno"), asistente("dos")]} sesion="s1" />);
+    expect(boton()!.getAttribute("aria-label")).toBe("Ir al final de la conversación · 2 mensajes nuevos");
+    expect(boton()!.textContent).toBe("2");
+    fireEvent.click(boton()!);
+    expect(boton()).toBeNull();
+  });
+
+  it("una pregunta (su texto en la respuesta + su tarjeta) cuenta UNA, y un error cuenta", () => {
+    const inicio = [asistente("hola")];
+    const { container, rerender } = render(<Chat actos={inicio} sesion="s1" />);
+    subir(container);
+    const pregunta: Acto[] = [
+      asistente(textoDeConsulta("¿Seguimos?", ["Sí", "No"])),
+      { tipo: "consulta", pregunta: "¿Seguimos?", opciones: ["Sí", "No"] },
+    ];
+    rerender(<Chat actos={[...inicio, ...pregunta]} sesion="s1" />);
+    expect(boton()!.getAttribute("aria-label")).toBe("Ir al final de la conversación · 1 mensaje nuevo");
+    rerender(<Chat actos={[...inicio, ...pregunta, { tipo: "error", texto: "falló" }]} sesion="s1" />);
+    expect(boton()!.textContent).toBe("2");
+  });
+
+  it("por encima de 99 dice «99+»", () => {
+    const inicio = [asistente("hola")];
+    const { container, rerender } = render(<Chat actos={inicio} sesion="s1" />);
+    subir(container);
+    const muchos = Array.from({ length: 120 }, (_, i) => asistente(`m${i}`));
+    rerender(<Chat actos={[...inicio, ...muchos]} sesion="s1" />);
+    expect(boton()!.textContent).toBe("99+");
+    expect(boton()!.getAttribute("aria-label")).toBe("Ir al final de la conversación · 120 mensajes nuevos");
   });
 });

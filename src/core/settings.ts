@@ -13,6 +13,7 @@ import { posix, win32 } from "node:path";
 import { type Aviso, CLAVES_DENEGADAS } from "./config.js";
 import { FORMA_DE_NOMBRE_DE_AVD } from "./puertosDeAvd.js";
 import { esModoDeEscritura, type ModoDeEscritura } from "./modoDeEscritura.js";
+import { motivoDeModeloDeMotorInaceptable } from "./motoresLocales.js";
 
 export interface Entorno {
   id: string;
@@ -157,6 +158,12 @@ export interface Settings {
    * supervisado BORRA la clave en vez de escribirla.
    */
   modoDeEscritura?: ModoDeEscritura;
+  /**
+   * El modelo de OpenCode (`proveedor/modelo`) para la prueba de Ajustes → Motores locales y para
+   * todo subagente de OpenCode sin `modelo:` en su `.md`, que manda sobre este. Sin él, OpenCode
+   * elige solo uno de su tier gratuito, que no contesta fuera de su consola (medido).
+   */
+  modeloDeOpencode?: string;
 }
 
 
@@ -251,6 +258,10 @@ export function validarSettings(bruto: unknown): { settings: Settings; avisos: A
   const concurrenciaDeTareas = validarConcurrenciaDeTareas(objeto.concurrenciaDeTareas);
   const depurar = typeof objeto.depurar === "boolean" ? objeto.depurar : undefined;
   const modoDeEscritura = esModoDeEscritura(objeto.modoDeEscritura) ? objeto.modoDeEscritura : undefined;
+  const modeloDeOpencode =
+    typeof objeto.modeloDeOpencode === "string" && motivoDeModeloDeMotorInaceptable(objeto.modeloDeOpencode) === undefined
+      ? objeto.modeloDeOpencode
+      : undefined;
   return {
     settings: {
       entornos,
@@ -259,6 +270,7 @@ export function validarSettings(bruto: unknown): { settings: Settings; avisos: A
       ...(concurrenciaDeTareas === undefined ? {} : { concurrenciaDeTareas }),
       ...(depurar === undefined ? {} : { depurar }),
       ...(modoDeEscritura === undefined ? {} : { modoDeEscritura }),
+      ...(modeloDeOpencode === undefined ? {} : { modeloDeOpencode }),
     },
     avisos,
   };

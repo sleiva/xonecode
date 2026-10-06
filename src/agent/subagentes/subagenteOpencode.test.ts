@@ -184,6 +184,21 @@ describe("cómo se lanza el hijo", () => {
     expect(existsSync(join(carpetaDeConfigDeOpencode(casa), "opencode.json"))).toBe(true);
   });
 
+  it("sin `modelo:` en el `.md` va el de Motores locales; con él, manda el del `.md`", async () => {
+    // Medido: sin modelo, con nuestra configuración cerrada, opencode elige solo uno de su tier
+    // gratuito, que no contesta fuera de su consola. La configuración se escribe ANTES de lanzar.
+    const config = () => JSON.parse(readFileSync(join(carpetaDeConfigDeOpencode(casa), "opencode.json"), "utf8")) as { model?: string };
+    guion({ toolCall: edicion(join(raiz, "x.js"), "", "hola") });
+    await correrOpencode(peticionDe(true), { casa, ficheros: () => new Set(), aprobar: async () => true, modeloPorOmision: () => "opencode-go/glm-5.3" }).catch(() => {});
+    expect(config().model).toBe("opencode-go/glm-5.3");
+    guion({ toolCall: edicion(join(raiz, "x.js"), "", "hola") });
+    await correrOpencode(peticionDe(true, "opencode-go/kimi-k3"), { casa, ficheros: () => new Set(), aprobar: async () => true, modeloPorOmision: () => "opencode-go/glm-5.3" }).catch(() => {});
+    expect(config().model).toBe("opencode-go/kimi-k3");
+    guion({ toolCall: edicion(join(raiz, "x.js"), "", "hola") });
+    await correrOpencode(peticionDe(true), { casa, ficheros: () => new Set(), aprobar: async () => true, modeloPorOmision: () => undefined }).catch(() => {});
+    expect(config().model).toBeUndefined();
+  });
+
   it("las instrucciones van DELANTE de la tarea, en el mismo turno", async () => {
     guion({ toolCall: edicion(join(raiz, "x.js"), "", "hola") });
     await correrOpencode(peticionDe(true), { casa, ficheros: () => new Set(), aprobar: async () => true });
@@ -381,6 +396,8 @@ describe("el error del motor, con el siguiente paso detrás", () => {
     const dicho = conRemedio("Error from provider (Console): OpenCode's free tier can only be used from within OpenCode");
     expect(dicho).toContain("OpenCode's free tier can only be used from within OpenCode");
     expect(dicho).toMatch(/Ajustes → Subagentes/);
+    // Y el sitio que lo arregla para todos: sin `modelo:` en el `.md`, manda el de Motores locales.
+    expect(dicho).toMatch(/Ajustes → Motores locales → OpenCode/);
   });
 
   it("y no nombra un modelo concreto: cuál vale depende de las credenciales de cada uno", () => {

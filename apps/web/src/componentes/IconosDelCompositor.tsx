@@ -90,6 +90,15 @@ export function IconoDeEnviar() {
   );
 }
 
+/** La de enviar, hacia abajo: «Ir al final» de la conversación, flotando sobre la caja. */
+export function IconoDeBajar() {
+  return (
+    <Trazo lado={16}>
+      <path d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+    </Trazo>
+  );
+}
+
 /**
  * Anexar un fichero (Task 6, IXCODE-7). La maqueta de Stitch NO trae este glifo —no había
  * botón de adjuntar en `code.html`—, así que se dibuja con el MISMO trazo que sus vecinos

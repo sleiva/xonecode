@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { ejecutableParaLanzar } from "./ejecutableEnWindows.js";
 import { crearSubagenteExterno, decisionDeTool, escritoresEnSerie, MOTORES_CABLEADOS } from "./subagenteExterno.js";
 import { binarioDeCodex } from "./subagenteCodex.js";
 
@@ -258,13 +259,14 @@ describe("los tres motores externos", () => {
     const previo = process.env["CODEX_BIN"];
     try {
       delete process.env["CODEX_BIN"];
-      expect(binarioDeCodex()).toBe("codex");
+      // Sin variable, el `codex` del PATH, resuelto a su nativo en Windows (`ejecutableParaLanzar`).
+      expect(binarioDeCodex()).toBe(ejecutableParaLanzar("codex"));
       process.env["CODEX_BIN"] = "/ruta/a/otro/codex";
       expect(binarioDeCodex()).toBe("/ruta/a/otro/codex");
       // Una variable vacía no cuenta como puesta: dejaría el binario en cadena vacía y el
       // `spawn` fallaría con un error que no dice nada.
       process.env["CODEX_BIN"] = "   ";
-      expect(binarioDeCodex()).toBe("codex");
+      expect(binarioDeCodex()).toBe(ejecutableParaLanzar("codex"));
     } finally {
       if (previo === undefined) delete process.env["CODEX_BIN"];
       else process.env["CODEX_BIN"] = previo;

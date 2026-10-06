@@ -19,6 +19,7 @@ const RUTA_TAREAS = join(aqui, "..", "..", "..", "src", "core", "tareas.ts");
 const RUTA_APROBAR = join(aqui, "..", "..", "..", "src", "cli", "aprobar.ts");
 const RUTA_STORE = join(aqui, "store.ts");
 const RUTA_CONECTORES = join(aqui, "..", "..", "..", "src", "core", "conectores.ts");
+const RUTA_MOTORES = join(aqui, "..", "..", "..", "src", "core", "motoresLocales.ts");
 
 /**
  * `[A-Za-z0-9_-]+` y no `[a-z0-9_-]+`: la primera versión de este detector (la del brief) no
@@ -332,6 +333,23 @@ describe("tipos del cliente", () => {
    * fila; se quitó al ver que el catálogo ya lleva los tres datos para todos, también para un
    * conector propio, así que duplicarlos era un segundo sitio donde podían divergir.
    */
+  it("los campos de un motor local (y de su prueba y su login) del cliente y del host no divergen", () => {
+    for (const nombre of ["EstadoDeMotorLocal", "PruebaDeMotorLocal", "LoginDeMotorLocal"]) {
+      expect(camposDeInterfaz(RUTA_TIPOS, nombre)).toEqual(camposDeInterfaz(RUTA_MOTORES, nombre));
+    }
+  });
+
+  it("la lista blanca del store no se come ningún campo declarado de un motor local", async () => {
+    const { crearStoreDelCliente } = await import("./store.js");
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "motoresLocales", motores: [MOTOR_COMPLETO] });
+    const fila = s.leer().motoresLocales![0]!;
+    expect(Object.keys(fila).sort()).toEqual(camposDeInterfaz(RUTA_TIPOS, "EstadoDeMotorLocal"));
+    expect(fila).toEqual(MOTOR_COMPLETO);
+    expect(Object.keys(fila.pruebas![0]!).sort()).toEqual(camposDeInterfaz(RUTA_TIPOS, "PruebaDeMotorLocal"));
+    expect(Object.keys(fila.login!).sort()).toEqual(camposDeInterfaz(RUTA_TIPOS, "LoginDeMotorLocal"));
+  });
+
   it("los campos de ConectorDelCable del cliente y del host no divergen", () => {
     expect(camposDeInterfaz(RUTA_TIPOS, "ConectorDelCable")).toEqual(
       camposDeInterfaz(RUTA_CONECTORES, "ConectorDelCable")
@@ -399,6 +417,25 @@ const FILA_COMPLETA_DE_SESION = {
   consumo: { modelo: { entrada: 11_000, salida: 200, cache: 9_000 }, externo: { entrada: 7, salida: 3, cache: 0 } },
   ticket: "IXCODE-12",
   ticketConector: "jira",
+};
+
+/** Un motor local con TODOS sus campos, para la lista blanca del store. */
+const MOTOR_COMPLETO = {
+  motor: "claude-code" as const,
+  instalado: "ok" as const,
+  version: "2.1.263",
+  detalle: "no se pudo leer la sesión",
+  conSesion: true,
+  sesion: "Cuenta de Claude · Team · XOne",
+  conClave: true as const,
+  pruebas: [{ camino: "sin-ejecucion" as const, ok: true, detalle: "contestó «OK»", ms: 1800, medido: "2026-10-03T10:00:00.000Z" }],
+  probando: true as const,
+  login: { fase: "esperando" as const, pideCodigo: true as const, detalle: "—", desde: "2026-10-03T10:00:00.000Z" },
+  admiteLogin: true as const,
+  admiteConsola: true as const,
+  admiteModelo: true as const,
+  modelo: "opencode-go/glm-5.3",
+  medido: "2026-10-03T10:00:00.000Z",
 };
 
 /**

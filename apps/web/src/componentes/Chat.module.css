@@ -753,3 +753,56 @@
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
 }
+
+/* «Ir al final»: flota al pie de la conversación —encima de la caja de escribir, que es la
+   hermana de abajo de `.root`— y solo se monta cuando NO se está al final. Va sobre el
+   scroller (`.root` es `position: relative` en ChatView), centrado con la columna. */
+.irAlFinal {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 50%;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  box-shadow: var(--xonecode-sombra-caja);
+  cursor: pointer;
+}
+
+.irAlFinal:hover {
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+}
+
+.irAlFinal:focus-visible {
+  outline: 2px solid var(--xonecode-azul);
+  outline-offset: 2px;
+}
+
+/* La bola de mensajes nuevos, en la esquina del botón: los colores del botón de enviar, y un
+   borde del color de la caja que la separa del círculo. */
+.irAlFinalCuenta {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  box-sizing: border-box;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border: 2px solid var(--dsw-alias-bg-layer-1);
+  border-radius: 9px;
+  background: var(--xonecode-azul);
+  color: var(--xonecode-sobre-azul);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  text-align: center;
+}

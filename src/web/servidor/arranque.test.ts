@@ -25,6 +25,7 @@ import { MS_DE_PREPARACION,
   emuladoresCableados,
   recargaCableada,
   ficherosCableados,
+  motoresLocalesCableados,
   ajusteDeConectoresCableado,
   ajusteDeGestorCableado,
   banderaDeEjecutor,
@@ -5559,6 +5560,75 @@ describe("los modelos de un motor externo, por el cable", () => {
     await enviarMensaje(accion, { clase: "modelosDeMotor", motor: "claude-code" });
     await asentar();
     expect(ultimo(cliente)).toMatchObject({ modelos: [], error: expect.stringContaining("no puede") });
+  });
+});
+
+describe("los motores locales, por el cable", () => {
+  const conectar = async (opciones: Parameters<typeof montarRutas>[2]) => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), opciones);
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    return { cliente, accion: servidor.rutas.get(`POST ${RUTA_ACCION}`)! };
+  };
+  const ultimo = (cliente: ReturnType<typeof clienteDeMentira>) =>
+    cliente.recibidos.filter((m) => m.clase === "motoresLocales").at(-1) as
+      | Extract<MensajeAlCliente, { clase: "motoresLocales" }>
+      | undefined;
+
+  it("se miden al pedirlo (no al conectar) y la foto llega entera", async () => {
+    const servicio = {
+      foto: vi.fn(() => [{ motor: "claude-code" as const, instalado: "ok" as const, conSesion: true, medido: "2026-10-03T10:00:00.000Z" }]),
+      medir: vi.fn(async () => avisar()),
+      probar: vi.fn(async () => {}),
+      iniciarSesion: vi.fn(() => true),
+      enviarCodigo: vi.fn(() => true),
+      cancelarSesion: vi.fn(() => true),
+      abrirNavegador: vi.fn(() => true),
+      abrirConsola: vi.fn(() => true),
+      elegirModelo: vi.fn(() => true),
+    };
+    let avisar = (): void => {};
+    const { cliente, accion } = await conectar({
+      motoresLocales: (alCambiar) => {
+        avisar = alCambiar;
+        return servicio;
+      },
+    });
+    expect(ultimo(cliente)).toBeUndefined();
+
+    await enviarMensaje(accion, { clase: "motorLocal", accion: "medir" });
+    await asentar();
+    expect(servicio.medir).toHaveBeenCalledTimes(1);
+    expect(ultimo(cliente)?.motores).toEqual([expect.objectContaining({ motor: "claude-code", conSesion: true })]);
+
+    await enviarMensaje(accion, { clase: "motorLocal", accion: "login", motor: "claude-code", modo: "console" });
+    await enviarMensaje(accion, { clase: "motorLocal", accion: "codigo", motor: "claude-code", codigo: "abc" });
+    await enviarMensaje(accion, { clase: "motorLocal", accion: "probar", motor: "codex" });
+    await asentar();
+    expect(servicio.iniciarSesion).toHaveBeenCalledWith("claude-code", "console");
+    expect(servicio.enviarCodigo).toHaveBeenCalledWith("claude-code", "abc");
+    expect(servicio.probar).toHaveBeenCalledWith("codex");
+
+    // El modelo de OpenCode: el nombre llega tal cual, y sin él es «quitarlo».
+    await enviarMensaje(accion, { clase: "motorLocal", accion: "modelo", motor: "opencode", modelo: "opencode-go/glm-5.3" });
+    await enviarMensaje(accion, { clase: "motorLocal", accion: "modelo", motor: "opencode" });
+    await asentar();
+    expect(servicio.elegirModelo).toHaveBeenNthCalledWith(1, "opencode", "opencode-go/glm-5.3");
+    expect(servicio.elegirModelo).toHaveBeenNthCalledWith(2, "opencode", undefined);
+
+    // Un motor que no es de los tres no llega al servicio.
+    await enviarMensaje(accion, { clase: "motorLocal", accion: "probar", motor: "../../bin/sh" });
+    await asentar();
+    expect(servicio.probar).toHaveBeenCalledTimes(1);
+  });
+
+  it("sin el servicio llega una lista VACÍA, que la sección lee como «esta ejecución no puede»", async () => {
+    const { cliente, accion } = await conectar({});
+    await enviarMensaje(accion, { clase: "motorLocal", accion: "medir" });
+    await asentar();
+    expect(ultimo(cliente)?.motores).toEqual([]);
   });
 });
 
@@ -12596,6 +12666,19 @@ describe("recargaCableada — la composición de producción, no un doble", () =
     // Lo que el lector no enseña no viaja: misma guarda que Ficheros.
     expect(await recargarEnAparato(raiz, ".env", { serie: "X", puerto: 8443, app: "A" })).toEqual({ estado: "no-aplica" });
     rmSync(raiz, { recursive: true, force: true });
+  });
+});
+
+describe("motoresLocalesCableados — la composición de producción, no un doble", () => {
+  it("monta el servicio de VERDAD: con todas sus acciones y sin medir nada al crearse", () => {
+    const servicio = motoresLocalesCableados().motoresLocales(() => {});
+    expect(servicio.foto()).toBeUndefined();
+    for (const accion of ["medir", "probar", "iniciarSesion", "enviarCodigo", "cancelarSesion", "abrirNavegador", "abrirConsola"] as const) {
+      expect(typeof servicio[accion]).toBe("function");
+    }
+    // Sin login en curso no hay nada que cancelar ni que abrir: el real, no un doble que diga «sí».
+    expect(servicio.cancelarSesion("claude-code")).toBe(false);
+    expect(servicio.abrirNavegador("claude-code")).toBe(false);
   });
 });
 

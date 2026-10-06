@@ -8346,3 +8346,81 @@ píxeles» y que «`border` es una máscara de bits». Se comprobó con una cole
 Corregido en la skill (`buenas-practicas-y-parser.md`, `selectores-unidades-colores.md`, los patrones Material), en
 el núcleo, y una tabla nueva, `css/de-una-maqueta-a-xone.md`, clase a clase y cada fila con su origen: medido,
 documentado o sin medir. El crítico la nombra cuando la comparación medida encuentra algo que arreglar.
+
+## Motores locales en Ajustes: iniciar sesión y probar Claude Code desde un botón (03-10-2026)
+
+**El problema.** Un subagente con `motor: claude-code` corre el producto de la máquina con el login
+del usuario, y la guía que circulaba entre usuarios era: PowerShell como administrador, `claude`,
+`/login`, copiar el enlace al navegador, pegar el código de vuelta y «dejar la consola abierta en
+segundo plano». Además nada en xonecode decía si ese login estaba: `disponible()` solo comprobaba
+que el SDK se importa.
+
+**Lo medido, que cambia la guía:**
+
+- El SDK trae su PROPIO binario (`@anthropic-ai/claude-agent-sdk-win32-x64/claude.exe`, 2.1.263 en
+  esta máquina, frente al 2.1.287 del `claude` del PATH). **No hace falta instalar Claude Code**, y
+  lo que hay que medir es ESE binario: el del PATH es otro programa. Se resuelve con la misma regla
+  que usa el SDK (`sdk.mjs`: paquete por plataforma y arquitectura, y en Linux las dos libc).
+- Ese binario lee el mismo login que el CLI (`~/.claude`) y respeta `CLAUDE_CONFIG_DIR`: con una
+  carpeta vacía, `auth status --json` da `loggedIn: false`. Así se probó el login sin tocar la sesión
+  real.
+- `auth status --json` sin sesión **sale con 1** e imprime igualmente su JSON: hay que leer la salida
+  también en el fallo.
+- Con `ANTHROPIC_API_KEY` en el entorno, `auth status` contesta `apiKeySource: "ANTHROPIC_API_KEY"`
+  y la clave MANDA sobre el login. Como `guardarCredencial` deja la clave de xonecode en
+  `process.env` y un subagente sin `ejecucion` hereda ese entorno, hay DOS caminos: sin ejecución
+  factura a la clave, con ejecución (entorno limpio) usa el login. Con clave se miden y prueban los
+  dos y la tarjeta lo dice.
+- `claude auth login` **funciona sin TTY**: abre el navegador solo, imprime un enlace de respaldo y
+  espera «Paste code here if prompted >» en `stdin`. Un código malo sale con «Login failed: Request
+  failed with status code 400», en la MISMA línea que el prompt. Por eso el botón lanza el proceso
+  y pasa el código por `stdin`; no hace falta abrir ninguna consola.
+- «Dejar la consola abierta» es falso: la credencial queda en disco y el SDK lanza su propio proceso
+  en cada encargo.
+
+**Decisiones.** La prueba sale por el MISMO puerto que un subagente (`crearSubagenteExterno().correr`)
+y no por un `query()` montado aparte, que mediría otra cosa. El enlace de autorización no cruza el
+cable (la regla de los conectores): si el navegador no se abrió, lo vuelve a abrir el servidor; por
+un túnel no sirve. No hay «Cerrar sesión»: `claude auth logout` saca a todos los Claude Code de la
+máquina. Codex y OpenCode se quedan en medir, probar y guía: ninguno estaba instalado donde se
+escribió, así que su login sin TTY no está medido.
+La sesión de OpenCode no se lee (su `auth list` es una tabla para personas); lo dice la prueba.
+
+**El `spawn` en Windows, medido después con OpenCode 1.18.34.** La tarjeta decía «Listo · versión
+1.18.34» y «Probar» fallaba con `spawn opencode ENOENT`. La medida (`ejecutarReal`) pasa por la shell
+en Windows y encuentra el `opencode.cmd` que instala npm; el lanzamiento de verdad
+(`opencodeDisponible`, `acp`, `opencode models`) es `spawn` sin shell, que solo busca `opencode.exe`.
+Medida y lanzamiento iban por caminos distintos. El shim es una línea
+(`"%dp0%\node_modules\opencode-ai\bin\opencode.exe" %*`), así que se lee y se lanza ese `.exe`
+directo (`agent/subagentes/ejecutableEnWindows.ts`, dentro de `binarioDeOpencode`/`binarioDeCodex`,
+de modo que la medida también lo usa). No se usa `shell: true` ni `cmd.exe /c`: Parar mata al hijo, y
+el hijo sería `cmd.exe`, con el `opencode.exe` nieto vivo. Solo se busca en PATH × PATHEXT, porque npm
+deja también un `opencode` sin extensión (el shim de sh para Git Bash).
+
+**Y luego con Codex 0.160.0**, mismo síntoma (`spawn codex ENOENT`). Su shim no apunta a un `.exe`:
+lanza `node …\@openai\codex\bin\codex.js`, y ese script lanza el `codex.exe` de
+`@openai/codex-win32-<arch>/vendor/<triple>/bin/`. Lanzar `node codex.js` tendría el mismo problema
+que `cmd.exe`: en Windows, matar a `node` no reenvía la señal y el `codex.exe` nieto sobrevive. Así
+que se busca ese `codex.exe` con la MISMA regla que el script (paquete anidado, subido al
+`node_modules` de al lado, o `vendor/` del propio paquete), igual que el binario del SDK de Claude.
+El script solo añade al entorno `CODEX_MANAGED_*`, que deciden cómo sugiere actualizarse, y no se
+replica. El shim nombra `"%dp0%\node.exe"` ANTES que el script (en el `IF EXIST`), así que el destino
+es la ÚLTIMA ruta del shim. Con esto la prueba de Ajustes contesta «OK» con la sesión de ChatGPT. Un
+shim de cualquier otro script de Node no se persigue.
+
+**El modelo de OpenCode se elige en su tarjeta.** Con el `spawn` arreglado, «Probar» con una cuenta
+de OpenCode Go falló con «OpenCode's free tier can only be used from within OpenCode». Medido con
+nuestra misma configuración (`OPENCODE_CONFIG_DIR` y `OPENCODE_DISABLE_PROJECT_CONFIG`): sin modelo,
+`opencode run` elige `nemotron-3-ultra-free` y falla; con `-m opencode-go/deepseek-v4-flash` contesta.
+La prueba no pasaba modelo, y nuestra configuración cerrada no hereda el del usuario (que además no
+tenía ninguno). Un subagente de OpenCode sin `modelo:` en su `.md` fallaba igual. Se eligió un
+selector explícito (`settings.modeloDeOpencode`) en vez de escoger uno solo o de leer la clave `model`
+de la configuración global de OpenCode, que es una puerta que se cierra entera. El `.md` sigue
+mandando, y el de Ajustes se lee en cada encargo dentro de `correrOpencode`: la prueba sale por el
+mismo puerto que un subagente, así que no hay una regla para cada uno.
+
+**No se filtra la lista por nombre**, aunque fue lo primero que se propuso: `opencode/big-pickle` (sin
+`-free`) falla igual, y `opencode-go/longcat-2.5-preview-free` contesta. Lo que no vale es el
+proveedor `opencode` (Zen) sin credencial suya, y eso no se puede leer sin abrir el `auth.json` de
+OpenCode, que lleva las claves. El desplegable agrupa por proveedor, lo dice debajo, y «Probar» lo
+confirma. Elegir otro modelo quita la prueba anterior: un «✓» de otro modelo ya no dice nada.

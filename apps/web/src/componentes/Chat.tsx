@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from "react";
 import type { Acto, ConsumoDeTurno, HallazgoDelTurno, MemoriaDelTurno } from "../tipos.js";
 import { dondeDe, lineasDeVerificacion, marcaDe } from "../lineasDeVerificacion.js";
 import { usarPegadoAbajo } from "../pegadoAbajo.js";
+import { contarMensajesNuevos, usarMarcaDeLeido } from "../mensajesNuevos.js";
 import { partirPorOrigen, rotuloDeOrigen, toolsFallidas, type TrozoPorOrigen } from "../porOrigen.js";
 import { useCronometro } from "../cronometro.js";
 import { protegerDolares } from "../protegerDolares.js";
@@ -11,6 +12,7 @@ import { fechaCompleta, horaDelMensaje } from "../selloDeFecha.js";
 import { CierreDelTurno } from "./CierreDelTurno.js";
 import { urlDeArtefacto } from "./Artefactos.js";
 import { IconoDeAbrir, IconoDeArtefacto } from "./IconosDelVisor.js";
+import { IconoDeBajar } from "./IconosDelCompositor.js";
 import { tipoDeArtefacto } from "../tipoDeArtefacto.js";
 import { consultaPendiente } from "../consultaPendiente.js";
 import { sinTextoDeConsulta } from "../textoDeConsulta.js";
@@ -931,7 +933,21 @@ export function Chat({
   }
   // El scroller sigue lo que llega, salvo que hayas subido a leer. Sin esto el texto crecía
   // fuera de la vista: el modelo escribía y la pantalla se quedaba donde estaba.
-  const { nodo, alDesplazar } = usarPegadoAbajo(actos);
+  const { nodo, alDesplazar, alFinal, bajar } = usarPegadoAbajo(actos, { vigilarTamano: true });
+  // Lo que ha llegado mientras se leía arriba: la bola de «Ir al final». Cuenta lo que se PINTA
+  // suelto —respuestas, preguntas, errores— con las MISMAS decisiones de abajo: una respuesta
+  // que solo era la pregunta de su tarjeta no se pinta, y entonces tampoco suma.
+  const nuevos = contarMensajesNuevos(actos, usarMarcaDeLeido(actos.length, alFinal, sesion), (acto, indice) => {
+    if (acto.tipo === "error") return true;
+    if (acto.tipo === "consulta") return consultaPintable(acto);
+    if (acto.tipo !== "asistente") return false;
+    const repetida = repetidaEn.get(indice);
+    return (repetida === undefined ? acto.texto : sinTextoDeConsulta(acto.texto, repetida.pregunta, repetida.opciones)) !== "";
+  });
+  const etiquetaDeBajar =
+    nuevos === 0
+      ? "Ir al final de la conversación"
+      : `Ir al final de la conversación · ${nuevos} ${nuevos === 1 ? "mensaje nuevo" : "mensajes nuevos"}`;
   return (
     <div className={vista.root}>
       <div className={vista.scroll} ref={nodo} onScroll={alDesplazar}>
@@ -1255,6 +1271,25 @@ export function Chat({
           })}
         </div>
       </div>
+      {/* Flota al pie de la conversación, justo encima de la caja de escribir, y solo cuando
+          NO se está al final: abajo no hay a dónde ir. Lo que no se ve se DESMONTA. */}
+      {alFinal ? null : (
+        <button
+          type="button"
+          className={estilos.irAlFinal}
+          aria-label={etiquetaDeBajar}
+          title={etiquetaDeBajar}
+          onClick={bajar}
+        >
+          <IconoDeBajar />
+          {/* El número ya va en la etiqueta: la bola es para la vista. */}
+          {nuevos === 0 ? null : (
+            <span className={estilos.irAlFinalCuenta} aria-hidden="true">
+              {nuevos > 99 ? "99+" : nuevos}
+            </span>
+          )}
+        </button>
+      )}
     </div>
   );
 }

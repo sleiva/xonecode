@@ -19,6 +19,7 @@ import { leerPlanesDelCable } from "./planesDelCable.js";
 import { leerGestorDelCable, type LecturaDelGestor } from "./gestorDelCable.js";
 import { leerCambiosDelModelo } from "./cambiosDelModelo.js";
 import { leerFotoDeColecciones } from "./fotoDeColecciones.js";
+import { leerMotoresLocales } from "./motoresLocalesDelCable.js";
 import type {
   Receta,
   FotoDeColecciones,
@@ -55,6 +56,7 @@ import type {
   EsfuerzoDelCable,
   ModoDeEscritura,
   BaseDelFichero,
+  EstadoDeMotorLocal,
 } from "./tipos.js";
 import { FORMA_DE_NOMBRE_DE_AVD } from "./reglasDeAvd.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, FASES_DEL_LANZAMIENTO, ESTADOS_DEL_LANZAMIENTO, ESFUERZOS, esAutenticacionDeConector } from "./tipos.js";
@@ -377,6 +379,8 @@ export interface EstadoDelCliente {
    * con `error`, se preguntó y no se pudo saber — que es distinto de «no tiene ninguno».
    */
   modelosDeMotor?: Record<string, { modelos: { id: string; nombre: string }[]; error?: string }>;
+  /** Ajustes → Motores locales. Ausente = todavía no ha llegado ninguna medida. */
+  motoresLocales?: EstadoDeMotorLocal[];
   /**
    * El paso de receta que se está ejecutando, o cómo acabó el último.
    *
@@ -1932,6 +1936,12 @@ export function crearStoreDelCliente(): {
               },
             },
           });
+          return;
+        }
+        case "motoresLocales": {
+          const motores = leerMotoresLocales((mensaje as Record<string, unknown>)["motores"]);
+          if (motores === undefined) return;
+          mutar({ motoresLocales: motores });
           return;
         }
         case "modelosDeMotor": {

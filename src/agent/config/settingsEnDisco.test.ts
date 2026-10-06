@@ -4,22 +4,41 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 import {
+
   cargarSettings,
+
   guardarConcurrenciaDeTareas,
+
   guardarDepurar,
+
+  guardarModeloDeOpencode,
   guardarModoPorDefecto,
+  modeloDeOpencodeGuardado,
+
   guardarAjusteDeAvd,
+
   quitarAjustesDeAvd,
+
   guardarDispositivos,
+
   guardarPuertosAsignados,
+
   guardarEntorno,
+
   guardarWorkspace,
+
   olvidarEntornoDeSettings,
+
   borrarCopiaDeProyecto,
+
   borrarCopiasDeEntorno,
+
   copiasDeEntorno,
+
   rutaSettings,
+
   SettingsRotosEnDisco,
+
 } from "./settingsEnDisco.js";
 
 /** Cada test recibe su propia «casa» temporal: nunca toca el ~/.xonecode real. */
@@ -256,6 +275,18 @@ describe("settingsEnDisco", () => {
     guardarModoPorDefecto(c, "supervisado");
     const crudo = JSON.parse(readFileSync(join(c, ".xonecode", "settings.json"), "utf8")) as Record<string, unknown>;
     expect("modoDeEscritura" in crudo).toBe(false);
+  });
+
+  it("guardarModeloDeOpencode lo escribe sin tocar nada más, y `undefined` BORRA la clave", () => {
+    const c = casa();
+    guardarEntorno(c, { id: "a", nombre: "A", url: "https://a/mcp" });
+    guardarModeloDeOpencode(c, "opencode-go/glm-5.3");
+    expect(modeloDeOpencodeGuardado(c)).toBe("opencode-go/glm-5.3");
+    expect(cargarSettings(c).settings.entornos.map((e) => e.id)).toEqual(["a"]);
+    guardarModeloDeOpencode(c, undefined);
+    const crudo = JSON.parse(readFileSync(join(c, ".xonecode", "settings.json"), "utf8")) as Record<string, unknown>;
+    expect("modeloDeOpencode" in crudo).toBe(false);
+    expect(modeloDeOpencodeGuardado(c)).toBeUndefined();
   });
 
   it("guardarWorkspace fija la base sin tocar los entornos ya guardados", () => {

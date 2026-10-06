@@ -38,6 +38,7 @@ import type { OpcionDeEntorno, PasoDelVestibulo } from "./vestibulo.js";
 import type { DispositivoElegido } from "./sesiones.js";
 import type { Esfuerzo } from "../../core/esfuerzo.js";
 import type { AutenticacionDeConector, ConectorDelCable, DefinicionDeConector, FilaDeCatalogo } from "../../core/conectores.js";
+import type { EstadoDeMotorLocal } from "../../core/motoresLocales.js";
 
 /** El vínculo del proyecto con su gestor, tal como cruza el cable: el del `config.json` más el
  *  nombre del sitio si esta ejecución ya lo sabe (lo dijo `sitios()`), y el del PROYECTO si ya
@@ -785,6 +786,12 @@ export type MensajeAlCliente =
   /** Lo que ofrece un motor externo. `error` en vez de una lista vacía muda: un desplegable
    *  vacío sin motivo se lee como que la ventana está rota. */
   | { clase: "modelosDeMotor"; motor: string; modelos: { id: string; nombre: string }[]; error?: string }
+  /**
+   * La foto de los motores locales (Claude Code, Codex, OpenCode) para Ajustes → Motores locales:
+   * si están, con qué sesión, la última prueba y el login en curso. Entera en cada cambio, como
+   * `dispositivos`. Ni rutas, ni el correo de la cuenta, ni el enlace de autorización.
+   */
+  | { clase: "motoresLocales"; motores: EstadoDeMotorLocal[] }
   | { clase: "secreto"; pregunta: string }
   /**
    * El alta que FALTA, para el wizard del navegador. `pasos` sale de
@@ -1755,6 +1762,21 @@ export type MensajeDelCliente =
   /** Los modelos que ofrece un MOTOR externo, para el desplegable de un subagente. Se pide
    *  bajo demanda: el de Codex se le pregunta a él, y eso arranca un proceso. */
   | { clase: "modelosDeMotor"; motor: string }
+  /**
+   * Una acción sobre un motor local. La INTENCIÓN, no el comando: qué binario y con qué
+   * argumentos lo decide el servidor (`agent/motores/motoresLocales.ts`). `codigo` es el que la
+   * web de Claude enseña al terminar cuando el navegador no pudo volver solo: va al `stdin` del
+   * `auth login` en curso y a ningún otro sitio.
+   */
+  | {
+      clase: "motorLocal";
+      accion: "medir" | "probar" | "login" | "codigo" | "cancelar" | "navegador" | "consola" | "modelo";
+      motor?: string;
+      modo?: "claudeai" | "console";
+      codigo?: string;
+      /** Con `accion: "modelo"`: el elegido (`proveedor/modelo`); ausente o vacío lo quita. */
+      modelo?: string;
+    }
   /**
    * Las acciones sobre una tarea. Viaja el ID del proyecto y su nombre, NUNCA su raíz: es
    * una ruta de la máquina, y el cable puede ir por un túnel.

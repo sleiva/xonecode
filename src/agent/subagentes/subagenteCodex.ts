@@ -51,11 +51,16 @@ import { consumoDeCodex } from "./consumoExterno.js";
 import { decisionDeEscrituraDeCodex } from "./escrituraDeCodex.js";
 import { MOTIVO_DE_CANCELACION_EXTERNA } from "./escrituraExterna.js";
 import { actividadDeItemDeCodex } from "./actividadDeCodex.js";
+import { ejecutableParaLanzar } from "./ejecutableEnWindows.js";
 
-/** El binario. `CODEX_BIN` gana, para poder apuntar a una versión concreta o a un envoltorio. */
+/**
+ * El binario. `CODEX_BIN` gana, para poder apuntar a una versión concreta o a un envoltorio. En
+ * Windows, el `codex.exe` nativo que lanzaría el `codex.js` del shim de npm
+ * (`ejecutableParaLanzar`): ni el `.cmd` ni `node` se pueden matar con el nieto dentro.
+ */
 export function binarioDeCodex(): string {
   const puesto = process.env["CODEX_BIN"];
-  return puesto !== undefined && puesto.trim() !== "" ? puesto : "codex";
+  return ejecutableParaLanzar(puesto !== undefined && puesto.trim() !== "" ? puesto : "codex");
 }
 
 /**
