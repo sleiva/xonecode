@@ -91,6 +91,8 @@ import {
 } from "./capacidades.js";
 import { crearConectoresDeSesion, tarjetaDeRemota } from "./toolsDeConectores.js";
 import { CONECTOR_STITCH, crearTraerDeStitch } from "./traerDeStitch.js";
+import { crearProponerTareas, REPARTIR_EN_TAREAS } from "./proponerTareas.js";
+import type { PropuestaDeTareas } from "../../../core/repartoDeEncargo.js";
 import { esDeLaMaqueta } from "../../../core/stitch.js";
 import { recibeConectores } from "../../../core/conectores.js";
 import { buscarMaqueta, medirContraMaqueta, resumenDeMedida, textoDeMedidaAutomatica, ultimaCaptura } from "./medidaAutomatica.js";
@@ -534,6 +536,13 @@ export interface OpcionesDeSesionTrueforge {
   /** De dónde salen las fuentes (Google Fonts). Ausente = `buscar_fuente`/`traer_fuente` no se montan. */
   fuentes?: FuentesPort;
   /**
+   * El raíz puede PROPONER repartir un encargo grande en tareas de fondo encadenadas (`proponer_tareas`,
+   * `core/repartoDeEncargo.ts`). Solo una sesión de PERSONA de la web, que es la que tiene la cola de tareas y la
+   * tarjeta para encolarlas: nunca una consola de tarea (encadenaría trabajo sin nadie), ni el terminal, `run` o los
+   * evals. Ausente es no.
+   */
+  puedeProponerTareas?: boolean;
+  /**
    * Los conectores MCP del proyecto (Stitch…). El MISMO servicio de Ajustes, que solo tiene la
    * web: ausente —el terminal, `run`, los evals— es que ningún agente recibe sus tools.
    */
@@ -690,9 +699,17 @@ export async function abrirSesionTrueforge(
   /** Lo que el agente dejó en `/artefactos/` y aún no se ha anunciado: un artefacto se escribe
    *  SIN aprobación, así que tiene que ANUNCIARSE, como en deepagents. */
   const artefactosPorAnunciar: Artefacto[] = [];
+  /** Las propuestas de reparto (`proponer_tareas`) que aún no se han anunciado: van a la persona como evento. */
+  const propuestasPorAnunciar: PropuestaDeTareas[] = [];
   /** Las IMÁGENES que dejó el turno en curso, para el crítico de pantalla. Se vacía al empezar
    *  cada turno: una captura de antes enseña la pantalla de antes. */
   let capturasDelTurno: Artefacto[] = [];
+  function* propuestasPendientes(): Generator<DomainEvent> {
+    while (propuestasPorAnunciar.length > 0) {
+      const p = propuestasPorAnunciar.shift()!;
+      yield { tipo: "propuesta-de-tareas", motivo: p.motivo, tareas: p.tareas };
+    }
+  }
   const anotarArtefacto = (a: Artefacto): void => {
     artefactosPorAnunciar.push(a);
     // La MAQUETA traída (`/artefactos/diseno/`) no es una captura del aparato: el crítico de pantalla
@@ -915,6 +932,9 @@ export async function abrirSesionTrueforge(
     ...herramientasDeJuicio(),
     ...(carpeta === undefined ? [] : ([crearTraerDeLaMaquina({ carpeta, alEscribir: anotarArtefacto })] as unknown as ToolDeLangchain[])),
     ...traerDeStitch(),
+    ...(opciones.puedeProponerTareas === true
+      ? [crearProponerTareas((p) => void propuestasPorAnunciar.push(p)) as unknown as ToolDeLangchain]
+      : []),
   ];
   const propiasDe = (agente: Agente): ToolDeLangchain[] => [
     crearBusquedaRegex(backend as never) as unknown as ToolDeLangchain,
@@ -1266,7 +1286,7 @@ export async function abrirSesionTrueforge(
     hijosConMemoria.clear();
     const definicion = {
       modelClient: llm,
-      instruction: [IDIOMA_DE_LA_RESPUESTA, SIN_HABLAR_DEL_HARNESS, promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conFuentes: opciones.fuentes !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas, conBucle: conBucleDelDesarrollador, conEsperas })].filter((l) => l !== "").join("\n\n"),
+      instruction: [IDIOMA_DE_LA_RESPUESTA, SIN_HABLAR_DEL_HARNESS, promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conFuentes: opciones.fuentes !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas, conBucle: conBucleDelDesarrollador, conEsperas }), opciones.puedeProponerTareas === true ? REPARTIR_EN_TAREAS : ""].filter((l) => l !== "").join("\n\n"),
       // Por TURNO, porque el raíz se rehace desde su foto al final de cada uno (ver `turno`).
       iterationLimit: LIMITE_DE_LLAMADAS_DEL_RAIZ,
     };
@@ -1521,8 +1541,10 @@ export async function abrirSesionTrueforge(
       }
       yield* eventos;
       while (artefactosPorAnunciar.length > 0) yield { tipo: "artefacto", artefacto: artefactosPorAnunciar.shift()! };
+      yield* propuestasPendientes();
       r = await it.next();
     }
+    yield* propuestasPendientes();
     const resultado = r.value as { required_actions?: { type?: string; thread_id?: string; tool_calls?: { id: string }[] }[] };
     for (const accion of resultado.required_actions ?? []) {
       // Dos interrupciones distintas, y no se mezclan: una APROBACIÓN decide sobre una escritura

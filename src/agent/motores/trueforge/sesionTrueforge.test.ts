@@ -264,6 +264,49 @@ describe("una sesión con el motor TrueForge", () => {
     expect(de("write_file")).toEqual([{ rol: "especialista", nombre: "developer-xone" }]);
   }, 20_000);
 
+  it("con puedeProponerTareas el raíz propone el reparto y la piel lo recibe; un hijo nunca tiene la tool", async () => {
+    const propuesta = {
+      motivo: "son dos ventanas",
+      tareas: [
+        { titulo: "Ventana A", peticion: "Crea la ventana A", adjuntos: ["/adjuntos/a.png"] },
+        { titulo: "Ventana B", peticion: "Crea la ventana B" },
+      ],
+    };
+    const { m, toolsPorLlamada, vistos } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "p1", name: "proponer_tareas", args: JSON.stringify(propuesta) }] })],
+      [new AIMessageChunk({ content: "Te propongo dos tareas." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, puedeProponerTareas: true });
+    const recibidas: unknown[] = [];
+    const { p } = piel();
+    await s.turno("diseña dos ventanas", { ...p, propuestaDeTareas: (x) => void recibidas.push(x) });
+    expect(toolsPorLlamada[0]).toContain("proponer_tareas");
+    expect(vistos[0]![0]).toContain("REPARTIR UN ENCARGO GRANDE");
+    expect(recibidas).toEqual([propuesta]);
+    // Lo que el agente ve tras proponer: que no lo haga en este turno.
+    expect(vistos[1]!.join("\n")).toContain("NO las hagas en este turno");
+  }, 20_000);
+
+  it("sin puedeProponerTareas el raíz no tiene la tool ni su párrafo, y un hijo tampoco con ella", async () => {
+    const sin = modelosConGuion([[new AIMessageChunk({ content: "Hola." })]]);
+    const s1 = await abrirSesionTrueforge({ raiz: proyecto(), modelos: sin.m, entorno: ENTORNO, skills: CATALOGO });
+    await s1.turno("hola", piel().p);
+    expect(sin.toolsPorLlamada[0]).not.toContain("proponer_tareas");
+    expect(sin.vistos[0]![0]).not.toContain("REPARTIR UN ENCARGO GRANDE");
+    const con = modelosConGuion(guionDeEscritura());
+    const s2 = await abrirSesionTrueforge({
+      raiz: proyecto(),
+      modelos: con.m,
+      entorno: ENTORNO,
+      skills: CATALOGO,
+      puedeProponerTareas: true,
+      pedirAprobacion: async (ps) => new Map(ps.map((x) => [x.id, { type: "approve" as const }])),
+    });
+    await s2.turno("escribe una nota", piel().p);
+    expect(con.toolsPorLlamada[0]).toContain("proponer_tareas");
+    expect(con.toolsPorLlamada[1]).not.toContain("proponer_tareas");
+  }, 20_000);
+
   it("un especialista que hace artefactos recibe OpenUI montado de verdad; el orquestador, no", async () => {
     const { m, toolsPorLlamada, vistos } = modelosConGuion(guionDeEscritura());
     const s = await abrirSesionTrueforge({
