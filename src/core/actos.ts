@@ -142,10 +142,10 @@ export type Acto =
   | { tipo: "propuesta-de-tareas"; id: string; motivo: string; tareas: TareaPropuesta[] }
   /**
    * Cómo acabó una propuesta: `encoladas` son los ids de las tareas creadas, en orden; ausente es
-   * que se DESCARTÓ. Es un acto aparte y no una marca en el de la propuesta porque el `.jsonl` solo
+   * que se DESCARTÓ, y `enChat` que se descartó para hacerlo en la propia conversación. Es un acto aparte y no una marca en el de la propuesta porque el `.jsonl` solo
    * crece, y la propuesta puede venir de lo releído. Con él la tarjeta no se encola dos veces.
    */
-  | { tipo: "propuesta-resuelta"; propuesta: string; encoladas?: string[] }
+  | { tipo: "propuesta-resuelta"; propuesta: string; encoladas?: string[]; enChat?: true }
   /**
    * `fase` es el valor del enum (`core/events.ts#Fase`), que el acto tiraba al quedarse
    * solo con su texto en español. Opcional por lo mismo que `detalles`: las sesiones

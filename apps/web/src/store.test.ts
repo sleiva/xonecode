@@ -1664,16 +1664,10 @@ describe("la cola de tareas", () => {
       expect(s.leer().encargoPropuesto).toEqual({ encargo: "E" });
     });
 
-    it("el encargo de una PROPUESTA va a su sitio, por propuesta e índice, y no a la ventana de «Nueva tarea»", () => {
+    it("solo la `accion` «augmentado» rellena la ventana: otra variante de la clase no la toca", () => {
       const s = crearStoreDelCliente();
-      s.aplicar({ clase: "tarea", accion: "propuestaAumentada", propuesta: "p1", indice: 0, encargo: "E0" });
-      s.aplicar({ clase: "tarea", accion: "propuestaAumentada", propuesta: "p1", indice: 1, error: "sin modelo" });
+      s.aplicar({ clase: "tarea", accion: "otra", encargo: "X" } as never);
       expect(s.leer().encargoPropuesto).toBeUndefined();
-      expect(s.leer().propuestasAumentadas).toEqual({ p1: { 0: { encargo: "E0" }, 1: { error: "sin modelo" } } });
-      // Un índice que no es un entero no se cree.
-      s.aplicar({ clase: "tarea", accion: "propuestaAumentada", propuesta: "p1", indice: -1, encargo: "X" });
-      s.aplicar({ clase: "tarea", accion: "propuestaAumentada", propuesta: "p1", indice: 1.5, encargo: "X" } as never);
-      expect(Object.keys(s.leer().propuestasAumentadas!["p1"]!)).toEqual(["0", "1"]);
     });
   });
 });

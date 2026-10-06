@@ -488,13 +488,6 @@ export type MensajeAlCliente =
   | { clase: "tarea"; accion: "augmentado"; encargo: string }
   | { clase: "tarea"; accion: "augmentado"; error: string }
   /**
-   * El encargo aumentado de la tarea `indice` de una propuesta de tareas encadenadas
-   * (`accion: "aumentarPropuesta"`), o por qué no se pudo. Llega UNO por tarea, en orden, según se
-   * redactan: la tarjeta pinta cada uno al llegar. No se guarda: la persona lo edita y lo manda.
-   */
-  | { clase: "tarea"; accion: "propuestaAumentada"; propuesta: string; indice: number; encargo: string }
-  | { clase: "tarea"; accion: "propuestaAumentada"; propuesta: string; indice: number; error: string }
-  /**
    * Un trozo del transcript de la sesión de una TAREA que alguien está mirando en vivo.
    *
    * **No es un segundo registro** (decisión 3 del diseño): son los MISMOS actos que se
@@ -1801,14 +1794,14 @@ export type MensajeDelCliente =
   | { clase: "tarea"; accion: "crear"; proyecto: string; peticion: string; encargo: string; borrador?: string }
   | { clase: "tarea"; accion: "augmentar"; proyecto: string; peticion: string; borrador?: string }
   /**
-   * Una PROPUESTA de tareas encadenadas (el acto `propuesta-de-tareas`): aumentar sus encargos,
-   * encolarla en orden o descartarla. Viaja el id de la propuesta y, al encolar, los encargos que la
-   * persona revisó, UNO por tarea y en orden; títulos, peticiones y adjuntos los saca el servidor del
+   * Una PROPUESTA de tareas encadenadas (el acto `propuesta-de-tareas`): encolarla en orden o
+   * descartarla. Viaja el id de la propuesta y, al encolar, los encargos que la persona revisó (la
+   * petición del orquestador, que no se vuelve a redactar), UNO por tarea y en orden; títulos, peticiones y adjuntos los saca el servidor del
    * acto, nunca del cliente. Encolar contesta en la propia respuesta: `{encoladas, faltan?}` o 409
    * con `{motivo}`.
    */
-  | { clase: "tarea"; accion: "aumentarPropuesta"; proyecto: string; propuesta: string }
-  | { clase: "tarea"; accion: "descartarPropuesta"; proyecto: string; propuesta: string }
+  /** `enChat`: se descarta para hacerlo en ESTA conversación; el cliente manda luego la prosa que lo pide. */
+  | { clase: "tarea"; accion: "descartarPropuesta"; proyecto: string; propuesta: string; enChat?: true }
   | { clase: "tarea"; accion: "crearEncadenadas"; proyecto: string; propuesta: string; encargos: string[] }
   /**
    * «Se edita la tarea y se agrega el feedback del usuario» (§0 del diseño): la respuesta a

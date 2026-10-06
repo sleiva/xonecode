@@ -64,7 +64,9 @@ export function motivoDePropuestaInaceptable(p: PropuestaDeTareas): string | und
  */
 export function tareasEncadenadas(opciones: {
   proyecto: Tarea["proyecto"];
-  tareas: readonly { peticion: string; encargo: string }[];
+  /** `titulo` es el que puso el agente en la propuesta: deducirlo de la petición daba «Proyecto XOne
+   *  (app Android de…» en las dos (medido en la prueba real). Vacío cae a la petición. */
+  tareas: readonly { titulo: string; peticion: string; encargo: string }[];
   ahora: Date;
   id: () => string;
 }): Tarea[] {
@@ -73,7 +75,7 @@ export function tareasEncadenadas(opciones: {
     salida.push({
       id: opciones.id(),
       proyecto: opciones.proyecto,
-      titulo: tituloDeTarea(t.peticion),
+      titulo: tituloDeTarea(t.titulo.trim() === "" ? t.peticion : t.titulo),
       peticion: t.peticion,
       // Vacío cae a la petición, como el «Encolar» de Nueva tarea.
       encargo: t.encargo.trim() === "" ? t.peticion : t.encargo,

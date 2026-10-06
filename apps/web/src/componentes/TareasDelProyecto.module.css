@@ -153,3 +153,33 @@
   flex-shrink: 0;
   gap: 6px;
 }
+
+/* «espera a: …» de una tarea encadenada: un dato, no un aviso. */
+.espera {
+  margin: 2px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+/* El encargo, plegado bajo la fila. */
+.contenido {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.contenido summary {
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.adjuntosDeTarea {
+  margin: 6px 0 0;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.encargo {
+  margin: 6px 0 0;
+  color: var(--dsw-alias-label-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

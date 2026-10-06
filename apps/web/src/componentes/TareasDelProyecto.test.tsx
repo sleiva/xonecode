@@ -12,6 +12,23 @@ const tarea = (extra: Partial<TareaDelCable> = {}): TareaDelCable => ({
 });
 
 describe("TareasDelProyecto", () => {
+  it("una tarea se abre para leer su encargo y sus adjuntos, plegados", () => {
+    const { container } = render(
+      <TareasDelProyecto
+        tareas={[tarea({ encargo: "## Objetivo\nHaz la ventana", adjuntos: [{ nombre: "maqueta.png", bytes: 10 }] })]}
+      />
+    );
+    const plegable = container.querySelector("details")!;
+    expect(plegable.open).toBe(false);
+    expect(plegable.querySelector("summary")!.textContent).toBe("Ver el encargo");
+    // Plegado no está montado; al abrirlo, sí.
+    expect(plegable.textContent).not.toContain("Haz la ventana");
+    plegable.open = true;
+    fireEvent(plegable, new Event("toggle"));
+    expect(plegable.textContent).toContain("Adjuntos: maqueta.png");
+    expect(plegable.textContent).toContain("Haz la ventana");
+  });
+
   it("una tarea encadenada dice a quién espera mientras la anterior no termine", () => {
     const { rerender } = render(
       <TareasDelProyecto

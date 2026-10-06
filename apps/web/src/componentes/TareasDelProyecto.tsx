@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Acto, TareaDelCable } from "../tipos.js";
 import { AccionesDeTarea } from "./AccionesDeTarea.js";
 import { EntregaDeTarea } from "./EntregaDeTarea.js";
@@ -213,6 +214,7 @@ function Fila({
   mirando?: string;
   mirada?: { tarea: string; actos: readonly Acto[] };
 }) {
+  const [verEncargo, setVerEncargo] = useState(false);
   return (
     <li className={estilos.fila} data-estado={t.estado}>
       <span className={estilos.punto} aria-hidden="true" />
@@ -230,8 +232,22 @@ function Fila({
             {t.motivo === undefined ? null : <p className={estilos.motivo}>{t.motivo}</p>}
             {/* Encadenada: no arranca hasta que la anterior termine (`core/tareas.ts#siguientesAEjecutar`). */}
             {t.estado === "nuevo" && anterior !== undefined && anterior.estado !== "terminada" ? (
-              <p className={estilos.motivo}>{`espera a: ${anterior.titulo}`}</p>
+              <p className={estilos.espera}>{`espera a: ${anterior.titulo}`}</p>
             ) : null}
+            {/* Lo que se le encargó, para poder leerlo antes de que arranque: plegado, porque un
+                encargo son párrafos y la lista tiene que seguir siendo una lista. */}
+            <details className={estilos.contenido} onToggle={(e) => setVerEncargo((e.currentTarget as HTMLDetailsElement).open)}>
+              <summary>Ver el encargo</summary>
+              {/* Lo plegado se DESMONTA (regla del cliente): el encargo solo existe abierto. */}
+              {verEncargo ? (
+                <>
+                  {t.adjuntos.length > 0 ? (
+                    <p className={estilos.adjuntosDeTarea}>{`Adjuntos: ${t.adjuntos.map((a) => a.nombre).join(", ")}`}</p>
+                  ) : null}
+                  <p className={estilos.encargo}>{t.encargo}</p>
+                </>
+              ) : null}
+            </details>
             {/* Y cómo llegó a «Terminada», que es donde el motivo ya no existe: la MISMA
                 pieza que monta `Kanban.tsx`, para que las dos vistas no puedan afirmar cosas
                 distintas de la misma tarea. */}

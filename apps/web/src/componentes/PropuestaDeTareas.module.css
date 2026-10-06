@@ -44,10 +44,14 @@
   white-space: pre-wrap;
 }
 
-.aviso {
-  margin: 0;
-  color: var(--dsw-alias-state-error-primary);
+.plegable summary {
+  color: var(--dsw-alias-label-secondary);
   font-size: 12px;
+  cursor: pointer;
+}
+
+.plegable .peticion {
+  margin-top: 6px;
 }
 
 .advertencia {

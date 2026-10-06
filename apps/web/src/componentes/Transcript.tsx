@@ -31,6 +31,9 @@ export function Transcript({
   alAbrirFichero,
   alPedirCorreccion,
   alResponderConsulta,
+  alEncolarPropuesta,
+  alHacerPropuestaEnChat,
+  alDescartarPropuesta,
 }: {
   actos: readonly Acto[];
   /** Van al Chat tal cual: la relectura, el cronómetro del turno en vuelo, y el proyecto y
@@ -54,6 +57,12 @@ export function Transcript({
   alPedirCorreccion?: (texto: string) => void;
   /** Contestar la pregunta pendiente del agente desde su tarjeta del hilo. Ver `Chat`. */
   alResponderConsulta?: (texto: string) => void | Promise<unknown>;
+  /** La propuesta de tareas encadenadas: sus tres acciones. Van al Chat tal cual;
+   *  sin reenviarlas, la tarjeta salía sin botones (medido en el navegador: `App` las pasaba en un
+   *  spread, donde TypeScript no avisa de un prop que nadie recibe). */
+  alEncolarPropuesta?: (propuesta: string, encargos: string[]) => Promise<string | undefined>;
+  alDescartarPropuesta?: (propuesta: string) => Promise<string | undefined>;
+  alHacerPropuestaEnChat?: (propuesta: string) => Promise<string | undefined>;
   /** Hay turno corriendo. Lo usa el Chat, para saber si el último mensaje sigue llegando —y
    *  con él, si toca resaltar el código o esperar al cierre. */
   turnoEnVuelo?: boolean;
@@ -75,6 +84,9 @@ export function Transcript({
           {...(alAbrirFichero === undefined ? {} : { alAbrirFichero })}
           {...(alPedirCorreccion === undefined ? {} : { alPedirCorreccion })}
           {...(alResponderConsulta === undefined ? {} : { alResponderConsulta })}
+          {...(alEncolarPropuesta === undefined ? {} : { alEncolarPropuesta })}
+          {...(alDescartarPropuesta === undefined ? {} : { alDescartarPropuesta })}
+          {...(alHacerPropuestaEnChat === undefined ? {} : { alHacerPropuestaEnChat })}
         />
       </div>
     </div>

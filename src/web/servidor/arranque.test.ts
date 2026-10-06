@@ -5836,7 +5836,7 @@ describe("las tareas en background, por el cable", () => {
   describe("una propuesta de tareas encadenadas", () => {
     /** El proyecto «Tienda» abierto con una sesión cuya propuesta sigue pendiente, una cola de tareas de
      *  verdad en disco y los adjuntos de la sesión puestos. */
-    async function conPropuesta(opciones: { aumentar?: (texto: string) => Promise<string> } = {}) {
+    async function conPropuesta() {
       const base = mkdtempSync(join(tmpdir(), "xonecode-encadenadas-"));
       const propuesta: Acto = {
         tipo: "propuesta-de-tareas",
@@ -5861,18 +5861,9 @@ describe("las tareas en background, por el cable", () => {
       const cola = crearTareasEnDisco({ base: join(base, "cola") });
       const servidor = servidorDeMentira();
       let revisado = 0;
-      const pedidas: string[] = [];
       montarRutas(servidor, vestibulo, {
         colaDeTareas: cola,
         revisarTareas: () => void (revisado += 1),
-        ...(opciones.aumentar === undefined
-          ? {}
-          : {
-              augmentar: async ({ texto }: { texto: string }) => {
-                pedidas.push(texto);
-                return opciones.aumentar!(texto);
-              },
-            }),
       });
       const cliente = clienteDeMentira();
       await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
@@ -5885,7 +5876,7 @@ describe("las tareas en background, por el cable", () => {
       writeFileSync(join(adjuntos, "salidas.png"), "S");
       await vestibulo.abrirProyecto({ raiz, sesion: "s1" });
       const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
-      return { base, cola, cliente, accion, guardados, revisado: () => revisado, pedidas, vestibulo };
+      return { base, cola, cliente, accion, guardados, revisado: () => revisado, vestibulo };
     }
 
     it("encolarla crea las tareas EN ORDEN (tras), con SUS adjuntos y el encargo revisado, y la deja resuelta", async () => {
@@ -5901,6 +5892,7 @@ describe("las tareas en background, por el cable", () => {
       expect(tareas[0]!.tras).toBeUndefined();
       expect(tareas[1]!.tras).toBe(tareas[0]!.id);
       expect(tareas.map((t) => t.encargo)).toEqual(["E revisado", "Haz la ventana de salidas"]);
+      expect(tareas.map((t) => t.titulo)).toEqual(["Entradas", "Salidas"]);
       // Cada una con los suyos, leídos del disco de SU carpeta.
       expect(tareas[0]!.adjuntos.map((a) => a.nombre)).toEqual(["entradas.png"]);
       expect(tareas[1]!.adjuntos.map((a) => a.nombre)).toEqual(["salidas.png"]);
@@ -5947,21 +5939,12 @@ describe("las tareas en background, por el cable", () => {
       rmSync(base, { recursive: true, force: true });
     });
 
-    it("aumentarla redacta cada tarea en serie, y un fallo en una no para la otra", async () => {
-      const { base, cliente, accion, pedidas, vestibulo } = await conPropuesta({
-        aumentar: async (texto) => {
-          if (texto.includes("salidas")) throw new ErrorDelAumentador("el modelo no contestó");
-          return `## ${texto}`;
-        },
-      });
-      expect(await enviarMensaje(accion, { clase: "tarea", accion: "aumentarPropuesta", proyecto: "p1", propuesta: "p1" })).toBe(204);
-      await asentar();
-      await asentar();
-      expect(pedidas).toEqual(["Haz la ventana de entradas", "Haz la ventana de salidas"]);
-      expect(cliente.recibidos.filter((m) => m.clase === "tarea" && m.accion === "propuestaAumentada")).toEqual([
-        { clase: "tarea", accion: "propuestaAumentada", propuesta: "p1", indice: 0, encargo: "## Haz la ventana de entradas" },
-        { clase: "tarea", accion: "propuestaAumentada", propuesta: "p1", indice: 1, error: expect.stringContaining("el modelo no contestó") },
-      ]);
+    it("descartarla para hacerlo en el chat lo deja dicho en el acto", async () => {
+      const { base, accion, vestibulo } = await conPropuesta();
+      expect(
+        await enviarMensaje(accion, { clase: "tarea", accion: "descartarPropuesta", proyecto: "p1", propuesta: "p1", enChat: true })
+      ).toBe(204);
+      expect(vestibulo.proyectoAbierto()!.actos().at(-1)).toEqual({ tipo: "propuesta-resuelta", propuesta: "p1", enChat: true });
       await vestibulo.cerrar();
       rmSync(base, { recursive: true, force: true });
     });

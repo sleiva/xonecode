@@ -646,7 +646,12 @@ memoria y se APARTA con otro nombre. **El prompt de un hijo va en su prompt de S
 ni tools, ni nombres internos, ni el HANDOFF, ni la foto del arranque. **Y el idioma de la SALIDA lo dice el código** (`IDIOMA_DE_LA_RESPUESTA` al raíz,
 `IDIOMA_DEL_ESPECIALISTA` a cada hijo): la identidad que añade TrueForge y las descripciones de las tools están en
 inglés, y sin decirlo el texto entre herramientas salía en inglés. Es el idioma del USUARIO, no uno fijo —el raíz lo lee
-de su mensaje; un hijo, que no lo ve, sigue el de su encargo—, y solo de lo que la persona LEE: el razonamiento queda libre. **El raíz puede PREGUNTAR** (`ask_user_question`, solo él): con opciones
+de su mensaje; un hijo, que no lo ve, sigue el de su encargo—, y solo de lo que la persona LEE: el razonamiento queda libre. **El raíz puede PROPONER tareas encadenadas** (`proponer_tareas`, solo en la web; ver «Las tareas en background»).
+**Una llamada con los argumentos rotos no se pierde ni se ejecuta a medias** (`modeloLangchain.ts`): la que LangChain no
+pudo leer (`invalid_tool_calls`) y, con `finish_reason: "length"`, la que «reparó» cerrando un JSON cortado, van al núcleo
+con sus argumentos CRUDOS, y el núcleo le devuelve al modelo el error del JSON. Antes la primera se tiraba en silencio y
+la segunda se ejecutaba con el valor cortado.
+**El raíz puede PREGUNTAR** (`ask_user_question`, solo él): con opciones
 sale además como tarjeta con un botón por opción (`Piel.consulta?` opcional), y lo pendiente lo
 decide el hilo. **Solo se compacta el raíz**: en un hijo, resumir un encargo corto y ya cacheado
 costaba más que reenviarlo. **Y a un umbral que sale de la ventana de SU modelo**
@@ -885,6 +890,22 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   motor externo no le llegan tools propias.
 - **El encargo se AUMENTA y se enseña EDITABLE antes de encolar** (`AumentadorPort`, papel
   `trabajo`): ocupa el sitio del diff; su fallo encola el texto original y se DICE.
+- **Un encargo GRANDE se reparte en tareas ENCADENADAS, y el agente solo PROPONE**
+  (`core/repartoDeEncargo.ts`, `agent/motores/trueforge/proponerTareas.ts`, `componentes/PropuestaDeTareas.tsx`): la
+  tool `proponer_tareas` valida y anuncia el acto `propuesta-de-tareas`, nunca crea nada; las tareas las crea el clic de
+  la persona en «Encolar en orden», TAMBIÉN en modo autónomo, porque crear una tarea es la autorización. Solo el raíz de
+  TrueForge y solo en una consola de PERSONA de la web (`Consola.proponeTareas`, que la consola de una tarea no hereda),
+  y su prompt le pide preguntar antes con `ask_user_question` lo que falte. **Lo que se encola sale del ACTO, no del
+  cliente** (`propuestaPendiente`): el cliente manda el id y los encargos revisados; títulos, peticiones y adjuntos los
+  pone el servidor, que copia a cada tarea SUS adjuntos de la sesión ANTES de guardarla (`copiarAdjuntosDeSesion`).
+  **Una propuesta NO pasa por el aumentador**: el encargo es la petición del orquestador, editable —él la escribió con la
+  conversación delante, y el aumentador la alargaba hasta su tope y la cortaba—. Tres salidas: encolar, descartar, o
+  «Hacerlo aquí en el chat» (resuelta con `enChat` y una prosa al agente). **Resuelta es OTRO acto** (`propuesta-resuelta`), apuntado y guardado al momento
+  (`ConsolaDeProyecto.anotarActo`): el `.jsonl` solo crece, y sin él una reabierta volvía a ofrecer encolar.
+  **`Tarea.tras` es el orden**: el corredor no despacha una tarea cuya anterior existe y no está `terminada`
+  (`siguientesAEjecutar`). Hacía falta porque el FIFO por `creada` no basta: `requiere-atencion` deja de ocupar el
+  proyecto y la segunda arrancaría sobre trabajo sin aceptar. Una anterior DESCARTADA ya no retiene. Y como todas, no
+  arrancan mientras la consola de persona de ese proyecto esté abierta.
 
 ### La consola web
 

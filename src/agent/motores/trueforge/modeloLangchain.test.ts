@@ -93,6 +93,86 @@ describe("el modelo de TrueForge hecho con nuestro modelo de LangChain", () => {
   }, 20_000);
 });
 
+describe("una llamada con los argumentos ROTOS no se pierde", () => {
+  /**
+   * Medido en la prueba real de las tareas encadenadas: el modelo emitió `proponer_tareas` con unos
+   * 3.000 tokens de argumentos que no eran un JSON leíble; LangChain la dejó en `invalid_tool_calls`,
+   * este adaptador solo miraba `tool_calls`, y el turno cerró como si el modelo no hubiera llamado a
+   * nada. Ahora la llamada sigue, con sus argumentos tal cual: la librería no los puede leer y le
+   * contesta al modelo con el error, y el modelo puede repetirla.
+   */
+  /** Un turno contra el orquestador real con UNA llamada a `read_file` cuyos trozos son `trozos`; devuelve
+   *  lo que la tool llegó a recibir y lo que vio el modelo en su segunda llamada. */
+  async function turnoConLlamada(trozos: AIMessageChunk[]) {
+    const { modelo, recibidos } = modeloGuionizado([trozos, [new AIMessageChunk({ content: "Lo repito." })]]);
+    const leidos: unknown[] = [];
+    const source = {
+      name: "xone",
+      id: "xone",
+      listTools: async () => ({
+        result: { tools: [{ name: "read_file", description: "lee", inputSchema: { type: "object", properties: { file_path: { type: "string" } } }, preload: true }] },
+        wasInitialized: undefined,
+      }),
+      callTool: async (p: { arguments?: unknown }) => {
+        leidos.push(p.arguments);
+        return toolResultResponse({ text: "<app/>" });
+      },
+      toolCallInfo: async () => ({ type: "mcp", mcp_server_id: "xone", mcp_server_name: "xone", original_tool_name: "read_file" }),
+    };
+    const logger = winston.createLogger({ silent: true, transports: [] });
+    const toolSet = new ToolSet({ source: source as never, selectors: { enableTools: ["@all"], disableTools: [], preloadTools: [], requireApprovalForTools: [] }, preload: true });
+    const raiz = new AgentThread({
+      definition: { modelClient: modeloParaTrueforge({ modelo: () => modelo }), instruction: "reglas" },
+      threadId: "main",
+      title: "main",
+      capabilities: [{ systemToolSets: [toolSet] }] as never,
+      tracing: NOOP_AGENT_TRACING,
+      logger,
+    });
+    const orq = new AgentThreadOrchestrator({
+      agentThreads: new Map([["main", raiz]]),
+      createDynamicSubAgentThread: async () => {
+        throw new Error("sin subagentes");
+      },
+      tracing: NOOP_AGENT_TRACING,
+      logger,
+    });
+    for await (const _ of orq.send([{ type: EventType.USER_MESSAGE, content: "lee" }] as never)) void _;
+    const it2 = orq.execute({ signal: new AbortController().signal });
+    let r = await it2.next();
+    while (!r.done) r = await it2.next();
+    const respuesta = recibidos[1]?.find((x) => x.getType() === "tool");
+    return { leidos, llamadasAlModelo: recibidos.length, respuesta: String(respuesta?.content) };
+  }
+
+  it("un JSON que LangChain no puede leer llega al modelo como error de la tool, sin ejecutarse", async () => {
+    const r = await turnoConLlamada([
+      new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "c1", name: "read_file", args: '{"file_path": /app}' }] }),
+    ]);
+    expect(r.leidos).toEqual([]);
+    expect(r.llamadasAlModelo).toBe(2);
+    expect(r.respuesta).toMatch(/JSON|Unexpected/i);
+  }, 20_000);
+
+  it("cortada por el TOPE de salida no se ejecuta reparada: falla con su JSON cortado", async () => {
+    // Sin el tope, LangChain la «repara» a {file_path:"/app"} y la tool se ejecutaría con el valor cortado.
+    const r = await turnoConLlamada([
+      new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "c1", name: "read_file", args: '{"file_path":"/app' }] }),
+      new AIMessageChunk({ content: "", response_metadata: { finish_reason: "length" } }),
+    ]);
+    expect(r.leidos).toEqual([]);
+    expect(r.respuesta).toMatch(/JSON|Unterminated/i);
+  }, 20_000);
+
+  it("y una llamada sana en una respuesta que acabó bien sigue igual", async () => {
+    const r = await turnoConLlamada([
+      new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "c1", name: "read_file", args: '{"file_path":"/app.xml"}' }] }),
+      new AIMessageChunk({ content: "", response_metadata: { finish_reason: "tool_calls" } }),
+    ]);
+    expect(r.leidos).toEqual([{ file_path: "/app.xml" }]);
+  }, 20_000);
+});
+
 describe("el uso de una llamada lleva el razonamiento, cuando el proveedor lo dice (IXCODE-18)", () => {
   const cuerpo = { messages: [{ role: "user", content: "hola" }] } as never;
   const usoDe = async (chunk: AIMessageChunk) => {

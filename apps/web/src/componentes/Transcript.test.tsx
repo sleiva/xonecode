@@ -1,5 +1,5 @@
-import { render, screen, cleanup } from "@testing-library/react";
-import { afterEach, describe, it, expect } from "vitest";
+import { render, screen, cleanup, act, fireEvent } from "@testing-library/react";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { Transcript } from "./Transcript.js";
 
 // `globals` no está activado: sin `cleanup` explícito el segundo `render()` de este
@@ -101,5 +101,26 @@ describe("Transcript", () => {
     render(<Transcript actos={[...ACTOS]} />);
     expect(screen.queryByRole("tablist")).toBeNull();
     expect(screen.queryByRole("tab")).toBeNull();
+  });
+});
+
+describe("Transcript: la propuesta de tareas llega al Chat con sus acciones", () => {
+  // Medido en el navegador: `App` pasaba las acciones y `Transcript` no las reenviaba, así que la
+  // tarjeta salía sin encargos ni botones. Las pruebas del Chat no lo veían: montan el Chat directo.
+  it("con las acciones, la tarjeta ofrece encolar y hacerlo en el chat", async () => {
+    const encolar = vi.fn(async () => undefined);
+    render(
+      <Transcript
+        actos={[{ tipo: "propuesta-de-tareas", id: "p1", motivo: "dos", tareas: [{ titulo: "A", peticion: "haz A" }, { titulo: "B", peticion: "haz B" }] }]}
+        alEncolarPropuesta={encolar}
+        alHacerPropuestaEnChat={vi.fn(async () => undefined)}
+        alDescartarPropuesta={vi.fn(async () => undefined)}
+      />
+    );
+    expect(screen.getByRole("button", { name: "Hacerlo aquí en el chat" })).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Encolar en orden" }));
+    });
+    expect(encolar).toHaveBeenCalledWith("p1", ["haz A", "haz B"]);
   });
 });

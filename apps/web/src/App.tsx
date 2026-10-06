@@ -106,6 +106,10 @@ function modoDelProyectoDe(valor: unknown): { proyecto?: ModoDeEscritura } | und
  * acción cuyo «sí» importa —encolar tareas que escriben solas—, un 400 o un 500 no puede leerse
  * como hecho. Una respuesta sin `status` (un doble de test) cuenta como correcta.
  */
+/** Lo que se le dice al agente al elegir «Hacerlo aquí en el chat» en una propuesta de tareas. */
+export const TEXTO_DE_HACERLO_EN_EL_CHAT =
+  "No encoles las tareas: hazlo aquí, en esta conversación, siguiendo el plan y las decisiones que ya cerramos.";
+
 async function negativaOFalloDe(respuesta: unknown): Promise<string | undefined> {
   const motivo = await negativaDe(respuesta);
   if (motivo !== undefined) return motivo;
@@ -2844,23 +2848,26 @@ export function App({
               alResponderConsulta={async (texto) => {
                 await enviar({ clase: "prosa", texto });
               }}
-              // La propuesta de tareas encadenadas: redactar, encolar en orden o descartar, siempre
-              // del proyecto ABIERTO (la conversación que la propuso). Sin proyecto deducido no se
-              // ofrece encolar: la tarjeta queda como registro.
-              {...(estado.propuestasAumentadas === undefined ? {} : { propuestasAumentadas: estado.propuestasAumentadas })}
+              // La propuesta de tareas encadenadas: encolar en orden, hacerlo aquí o descartar,
+              // siempre del proyecto ABIERTO (la conversación que la propuso). Sin proyecto deducido
+              // no se ofrece nada: la tarjeta queda como registro.
               {...(proyectoActivoId === undefined
                 ? {}
                 : {
-                    // Solo si no ha llegado nada de ella: volver a montar la tarjeta (cambiar de
-                    // pestaña) no puede pagar otra redacción entera.
-                    alPedirAumentoDePropuesta: (propuesta: string) => {
-                      if (estado.propuestasAumentadas?.[propuesta] !== undefined) return;
-                      void enviar({ clase: "tarea", accion: "aumentarPropuesta", proyecto: proyectoActivoId, propuesta });
-                    },
                     alEncolarPropuesta: async (propuesta: string, encargos: string[]) =>
                       negativaOFalloDe(await enviar({ clase: "tarea", accion: "crearEncadenadas", proyecto: proyectoActivoId, propuesta, encargos })),
                     alDescartarPropuesta: async (propuesta: string) =>
                       negativaOFalloDe(await enviar({ clase: "tarea", accion: "descartarPropuesta", proyecto: proyectoActivoId, propuesta })),
+                    // Primero se RESUELVE la propuesta (para que no se pueda encolar después) y luego
+                    // se le pide al agente, como un mensaje de la persona: el motor ya lee la prosa.
+                    alHacerPropuestaEnChat: async (propuesta: string) => {
+                      const motivo = await negativaOFalloDe(
+                        await enviar({ clase: "tarea", accion: "descartarPropuesta", proyecto: proyectoActivoId, propuesta, enChat: true })
+                      );
+                      if (motivo !== undefined) return motivo;
+                      await enviar({ clase: "prosa", texto: TEXTO_DE_HACERLO_EN_EL_CHAT });
+                      return undefined;
+                    },
                   })}
             />
             )}

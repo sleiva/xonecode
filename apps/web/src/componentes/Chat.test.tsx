@@ -1173,23 +1173,30 @@ describe("Chat: la propuesta de tareas en el hilo", () => {
     ],
   };
 
-  it("pendiente: su tarjeta pide redactar, usa lo redactado y encola por el id de la propuesta", async () => {
-    const pedir = vi.fn();
+  it("pendiente: su tarjeta encola y lo hace en el chat por el id de la propuesta", async () => {
     const encolar = vi.fn(async () => undefined);
+    const enChat = vi.fn(async () => undefined);
     render(
       <Chat
         actos={[{ tipo: "usuario", texto: "diseña dos ventanas" }, propuesta, { tipo: "fin", ms: 1 }]}
-        propuestasAumentadas={{ p1: { 1: { encargo: "## Salidas" } } }}
-        alPedirAumentoDePropuesta={pedir}
         alEncolarPropuesta={encolar}
+        alHacerPropuestaEnChat={enChat}
         alDescartarPropuesta={vi.fn(async () => undefined)}
       />
     );
-    expect(pedir).toHaveBeenCalledWith("p1");
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Encolar en orden" }));
     });
-    expect(encolar).toHaveBeenCalledWith("p1", ["haz entradas", "## Salidas"]);
+    expect(encolar).toHaveBeenCalledWith("p1", ["haz entradas", "haz salidas"]);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Hacerlo aquí en el chat" }));
+    });
+    expect(enChat).toHaveBeenCalledWith("p1");
+  });
+
+  it("resuelta para hacerlo en el chat, lo dice", () => {
+    const { container } = render(<Chat actos={[propuesta, { tipo: "propuesta-resuelta", propuesta: "p1", enChat: true }]} alEncolarPropuesta={vi.fn()} />);
+    expect(container.textContent).toContain("se hace en esta conversación");
   });
 
   it("resuelta: sin botones, aunque haya con qué encolar; y el acto de resuelta no se pinta aparte", () => {

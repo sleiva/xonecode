@@ -42,9 +42,9 @@ describe("tareasEncadenadas", () => {
     return tareasEncadenadas({
       proyecto: { id: "p", raiz: "/r", nombre: "P" },
       tareas: [
-        { peticion: "haz A", encargo: "A aumentado" },
-        { peticion: "haz B", encargo: "  " },
-        { peticion: "haz C", encargo: "C aumentado" },
+        { titulo: "Ventana A", peticion: "haz A", encargo: "A aumentado" },
+        { titulo: "", peticion: "haz B", encargo: "  " },
+        { titulo: "Ventana C", peticion: "haz C", encargo: "C aumentado" },
       ],
       ahora: new Date("2026-10-06T10:00:00.000Z"),
       id: () => `t${++n}`,
@@ -66,6 +66,10 @@ describe("tareasEncadenadas", () => {
 
   it("un encargo vacío cae a la petición, como «Encolar» de Nueva tarea", () => {
     expect(crear().map((t) => t.encargo)).toEqual(["A aumentado", "haz B", "C aumentado"]);
+  });
+
+  it("el título es el que propuso el agente; vacío, el de la petición", () => {
+    expect(crear().map((t) => t.titulo)).toEqual(["Ventana A", "haz B", "Ventana C"]);
   });
 
   it("la primera no lleva la clave tras: ausente, no undefined", () => {

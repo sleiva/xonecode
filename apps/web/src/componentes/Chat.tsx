@@ -17,7 +17,7 @@ import { tipoDeArtefacto } from "../tipoDeArtefacto.js";
 import { consultaPendiente } from "../consultaPendiente.js";
 import { sinTextoDeConsulta } from "../textoDeConsulta.js";
 import { ConsultaDelAgente } from "./ConsultaDelAgente.js";
-import { PropuestaDeTareas, type AumentoDeTarea } from "./PropuestaDeTareas.js";
+import { PropuestaDeTareas, type PropuestaResuelta } from "./PropuestaDeTareas.js";
 import { VisorDeImagen } from "./VisorDeImagen.js";
 import { hayCosteQueEnsenar } from "./CosteDelTurno.js";
 import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
@@ -670,9 +670,8 @@ export function Chat({
   alAbrirFichero,
   alPedirCorreccion,
   alResponderConsulta,
-  propuestasAumentadas,
-  alPedirAumentoDePropuesta,
   alEncolarPropuesta,
+  alHacerPropuestaEnChat,
   alDescartarPropuesta,
 }: {
   actos: readonly Acto[];
@@ -731,14 +730,12 @@ export function Chat({
    *  el mensaje siguiente. Se espera, para decir si el envío falló. Sin él, la tarjeta es solo
    *  el registro de la pregunta. */
   alResponderConsulta?: (texto: string) => void | Promise<unknown>;
-  /** Lo redactado de cada propuesta de tareas, por id y por índice (`store.propuestasAumentadas`). */
-  propuestasAumentadas?: Readonly<Record<string, Readonly<Record<number, AumentoDeTarea>>>>;
-  /** Pedir al servidor que redacte los encargos de una propuesta pendiente. */
-  alPedirAumentoDePropuesta?: (propuesta: string) => void;
   /** Encolar una propuesta EN ORDEN con los encargos revisados. Devuelve el motivo si se negó.
    *  Sin él, ninguna tarjeta de propuesta ofrece encolar: es el registro de lo propuesto. */
   alEncolarPropuesta?: (propuesta: string, encargos: string[]) => Promise<string | undefined>;
   alDescartarPropuesta?: (propuesta: string) => Promise<string | undefined>;
+  /** No encolar: que el agente lo haga en ESTA conversación. Resuelve la propuesta y lo pide. */
+  alHacerPropuestaEnChat?: (propuesta: string) => Promise<string | undefined>;
 }) {
   /**
    * Las preguntas del agente, que se pintan como TARJETA en su sitio del hilo: cuál está
@@ -748,10 +745,13 @@ export function Chat({
    */
   const pendiente = consultaPendiente(actos, turnoEnVuelo);
   /** Cómo acabó cada propuesta de tareas, por su id: la tarjeta pinta sin controles las resueltas. */
-  const resueltas = new Map<string, { encoladas?: string[] }>();
+  const resueltas = new Map<string, PropuestaResuelta>();
   for (const a of actos) {
     if (a.tipo !== "propuesta-resuelta" || typeof a.propuesta !== "string") continue;
-    resueltas.set(a.propuesta, Array.isArray(a.encoladas) ? { encoladas: a.encoladas } : {});
+    resueltas.set(
+      a.propuesta,
+      Array.isArray(a.encoladas) ? { encoladas: a.encoladas } : a.enChat === true ? { enChat: true } : {}
+    );
   }
   const repetidaEn = new Map<number, { pregunta: string; opciones: string[] }>();
   const respuestaA = new Map<number, string>();
@@ -1244,13 +1244,12 @@ export function Chat({
                   <PropuestaDeTareas
                     motivo={acto.motivo}
                     tareas={acto.tareas}
-                    {...(propuestasAumentadas?.[id] === undefined ? {} : { aumentos: propuestasAumentadas[id] })}
                     {...(resuelta === undefined ? {} : { resuelta })}
                     {...(resuelta === undefined && alEncolarPropuesta !== undefined
                       ? {
                           alEncolar: (encargos: string[]) => alEncolarPropuesta(id, encargos),
                           ...(alDescartarPropuesta === undefined ? {} : { alDescartar: () => alDescartarPropuesta(id) }),
-                          ...(alPedirAumentoDePropuesta === undefined ? {} : { alPedirAumento: () => alPedirAumentoDePropuesta(id) }),
+                          ...(alHacerPropuestaEnChat === undefined ? {} : { alHacerEnChat: () => alHacerPropuestaEnChat(id) }),
                         }
                       : {})}
                   />

@@ -228,12 +228,6 @@ export interface EstadoDelCliente {
    */
   encargoPropuesto?: { encargo?: string; error?: string };
   /**
-   * Los encargos AUMENTADOS de cada propuesta de tareas encadenadas, por id de propuesta y por
-   * índice de tarea, según llegan (`{accion:"propuestaAumentada"}`). Ausente una propuesta o un
-   * índice = todavía no llegó. No se guarda en ningún sitio: al reabrir, la tarjeta lo vuelve a pedir.
-   */
-  propuestasAumentadas?: Record<string, Record<number, { encargo: string } | { error: string }>>;
-  /**
    * Qué hay en la máquina para probar la app (`core/dispositivos.ts`), tal como lo midió el
    * servidor. Ausente = todavía no llegó: el escritorio dice «consultando…». NO se tira al
    * caerse el cable como `modelos`: es una foto con hora de la máquina, no un estado que el
@@ -1528,20 +1522,12 @@ export function crearStoreDelCliente(): {
           return;
         }
         case "tarea": {
-          // Dos variantes llegan por esta clase: la respuesta a `augmentar` («Nueva tarea») y el
-          // encargo de una tarea de una PROPUESTA. Se separan por `accion`: sin eso, el encargo de
-          // una propuesta rellenaría la ventana de «Nueva tarea».
-          const m = mensaje as { accion?: unknown; encargo?: unknown; error?: unknown; propuesta?: unknown; indice?: unknown };
-          if (m.accion === "propuestaAumentada") {
-            if (typeof m.propuesta !== "string" || typeof m.indice !== "number" || !Number.isInteger(m.indice) || m.indice < 0) return;
-            const valor = typeof m.encargo === "string" ? { encargo: m.encargo } : typeof m.error === "string" ? { error: m.error } : undefined;
-            if (valor === undefined) return;
-            const todas = estado.propuestasAumentadas ?? {};
-            mutar({ propuestasAumentadas: { ...todas, [m.propuesta]: { ...(todas[m.propuesta] ?? {}), [m.indice]: valor } } });
-            return;
-          }
-          // Un campo a la vez y uno de los dos: un mensaje sin ninguno no cambia nada, en vez de
-          // borrar lo que había.
+          // La única variante que el cliente recibe por esta clase es la respuesta a `augmentar`
+          // («Nueva tarea»); se exige su `accion` para que otra que llegue mañana no rellene esa
+          // ventana. Un campo a la vez y uno de los dos: un mensaje sin ninguno no cambia nada, en
+          // vez de borrar lo que había.
+          const m = mensaje as { accion?: unknown; encargo?: unknown; error?: unknown };
+          if (m.accion !== "augmentado") return;
           if (typeof m.encargo === "string") mutar({ encargoPropuesto: { encargo: m.encargo } });
           else if (typeof m.error === "string") mutar({ encargoPropuesto: { error: m.error } });
           return;

@@ -56,7 +56,8 @@ export function crearProponerTareas(proponer: (p: PropuestaDeTareas) => void) {
       proponer(propuesta);
       return (
         `Propuesta enviada a la persona: ${propuesta.tareas.length} tareas en orden. NO las hagas en este turno: ella revisa cada ` +
-        "encargo y decide si se encolan. Termina el turno diciéndoselo en una frase."
+        "encargo y decide si se encolan, si las descarta o si te pide hacerlo aquí, en la conversación (entonces te llegará como " +
+        "un mensaje suyo). Termina el turno diciéndoselo en una frase."
       );
     },
     {

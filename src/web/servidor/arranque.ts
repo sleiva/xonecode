@@ -240,7 +240,6 @@ import { nombreDeAdjuntoAceptable } from "../../core/adjuntos.js";
 import {
   copiarAdjuntosDeSesion,
   guardarAdjuntoDeSesion,
-  listarAdjuntosDeSesion,
   TOPE_DE_ADJUNTO_DE_SESION,
 } from "../../agent/sesiones/adjuntosDeSesion.js";
 import {
@@ -2261,38 +2260,6 @@ export function montarRutas(
   };
 
   /**
-   * Redacta el encargo de cada tarea de una propuesta, EN SERIE y con el mismo aumentador que
-   * «Nueva tarea», y lo manda tarea a tarea según llega. Cada tarea con SUS adjuntos de la sesión
-   * (por nombre y tipo, del disco). Un fallo en una no para las demás: esa llega con su `error` y la
-   * tarjeta deja la petición como encargo, como «Nueva tarea».
-   */
-  const atenderAumentarPropuesta = async (
-    augmentar: NonNullable<OpcionesDeMontaje["augmentar"]>,
-    proyectoId: string,
-    propuestaId: string
-  ): Promise<void> => {
-    const hallada = propuestaDelFoco(proyectoId, propuestaId);
-    if ("motivo" in hallada) {
-      emitir({ clase: "tarea", accion: "propuestaAumentada", propuesta: propuestaId, indice: 0, error: hallada.motivo });
-      return;
-    }
-    const { proyecto, abierta, propuesta } = hallada;
-    for (const [indice, tarea] of propuesta.tareas.entries()) {
-      const adjuntos = listarAdjuntosDeSesion(
-        abierta.raiz,
-        abierta.idDeHilo,
-        (tarea.adjuntos ?? []).map(nombreDeAdjuntoPropuesto)
-      ).map((a) => ({ nombre: a.nombre, ...(a.mime === undefined ? {} : { mime: a.mime }) }));
-      try {
-        const encargo = await augmentar({ texto: tarea.peticion, proyecto, adjuntos });
-        emitir({ clase: "tarea", accion: "propuestaAumentada", propuesta: propuestaId, indice, encargo });
-      } catch (error) {
-        emitir({ clase: "tarea", accion: "propuestaAumentada", propuesta: propuestaId, indice, error: motivoLegible(error) });
-      }
-    }
-  };
-
-  /**
    * Encola una propuesta EN ORDEN: una tarea por cada una de la propuesta, encadenadas por `tras`
    * (`core/repartoDeEncargo.ts#tareasEncadenadas`), con el encargo que la persona revisó.
    *
@@ -2322,7 +2289,7 @@ export function montarRutas(
     }
     const nuevas = tareasEncadenadas({
       proyecto,
-      tareas: propuesta.tareas.map((t, i) => ({ peticion: t.peticion, encargo: encargos[i]! })),
+      tareas: propuesta.tareas.map((t, i) => ({ titulo: t.titulo, peticion: t.peticion, encargo: encargos[i]! })),
       ahora: new Date(),
       id: randomUUID,
     });
@@ -2345,11 +2312,12 @@ export function montarRutas(
     return { encoladas, faltan };
   };
 
-  /** Descarta una propuesta pendiente: queda RESUELTA sin tareas, y la tarjeta deja de ofrecerla. */
-  const atenderDescartarPropuesta = (proyectoId: string, propuestaId: string): string | undefined => {
+  /** Descarta una propuesta pendiente: queda RESUELTA sin tareas, y la tarjeta deja de ofrecerla.
+   *  `enChat` = se descartó para hacerlo en esta conversación, y la tarjeta lo dice así. */
+  const atenderDescartarPropuesta = (proyectoId: string, propuestaId: string, enChat: boolean): string | undefined => {
     const hallada = propuestaDelFoco(proyectoId, propuestaId);
     if ("motivo" in hallada) return hallada.motivo;
-    hallada.abierta.anotarActo?.({ tipo: "propuesta-resuelta", propuesta: propuestaId });
+    hallada.abierta.anotarActo?.({ tipo: "propuesta-resuelta", propuesta: propuestaId, ...(enChat ? { enChat: true as const } : {}) });
     return undefined;
   };
 
@@ -6530,18 +6498,12 @@ export function montarRutas(
         return;
       }
       if (mensaje.accion === "descartarPropuesta") {
-        const motivo = atenderDescartarPropuesta(mensaje.proyecto, mensaje.propuesta);
+        const motivo = atenderDescartarPropuesta(mensaje.proyecto, mensaje.propuesta, mensaje.enChat === true);
         if (motivo !== undefined) {
           respuesta.writeHead(409, { "content-type": "application/json" });
           respuesta.end(JSON.stringify({ motivo }));
           return;
         }
-        respuesta.writeHead(204);
-        respuesta.end();
-        return;
-      }
-      if (mensaje.accion === "aumentarPropuesta") {
-        if (opciones.augmentar !== undefined) void atenderAumentarPropuesta(opciones.augmentar, mensaje.proyecto, mensaje.propuesta).catch(contar);
         respuesta.writeHead(204);
         respuesta.end();
         return;

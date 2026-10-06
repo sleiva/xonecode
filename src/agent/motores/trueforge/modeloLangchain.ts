@@ -184,8 +184,30 @@ export function modeloParaTrueforge(opciones: {
     }
 
     const pedidas = acumulado?.tool_calls ?? [];
-    const llamadas = relleno === undefined ? pedidas : [];
-    if (relleno !== undefined && pedidas.length > 0) opciones.alTirarLlamadas?.(pedidas.length);
+    /**
+     * **Una llamada con los argumentos rotos no se pierde, ni se ejecuta a medias.** Dos casos, medidos:
+     * - LangChain no pudo leer el JSON y la dejó en `invalid_tool_calls`. Solo se miraba `tool_calls`, y
+     *   en la prueba real de las tareas encadenadas el turno cerró como si `proponer_tareas` no se
+     *   hubiera llamado. Ahora sigue con sus argumentos TAL CUAL: el núcleo de TrueForge no los puede
+     *   leer y le contesta al modelo con el error del JSON (`executeToolCalls`), que puede repetirla.
+     * - La respuesta acabó por TOPE de salida (`finish_reason: "length"`): LangChain «repara» un JSON
+     *   cortado —cierra comillas y llaves— y lo da por bueno, así que un `write_file` cortado escribiría
+     *   medio fichero sin avisar. Ahí van los argumentos CRUDOS, sin reparar, y fallan igual.
+     */
+    const cortadaPorTope = (acumulado?.response_metadata as { finish_reason?: unknown } | undefined)?.finish_reason === "length";
+    const crudos = new Map<string, string>();
+    for (const t of acumulado?.tool_call_chunks ?? []) if (t.id !== undefined) crudos.set(t.id, t.args ?? "");
+    const ilegibles = (acumulado?.invalid_tool_calls ?? []).filter((t) => t.name !== undefined);
+    const todas: { id?: string | undefined; name: string; argumentos: string }[] = [
+      ...pedidas.map((t) => ({
+        id: t.id,
+        name: t.name,
+        argumentos: cortadaPorTope && t.id !== undefined && crudos.has(t.id) ? crudos.get(t.id)! : JSON.stringify(t.args ?? {}),
+      })),
+      ...ilegibles.map((t) => ({ id: t.id, name: t.name!, argumentos: t.args ?? "" })),
+    ];
+    const llamadas = relleno === undefined ? todas : [];
+    if (relleno !== undefined && todas.length > 0) opciones.alTirarLlamadas?.(todas.length);
     const uso = acumulado?.usage_metadata;
     const razonamiento = acumulado === undefined ? "" : razonamientoDe(acumulado);
     const contenido = acumulado === undefined ? "" : textoDe(acumulado);
@@ -200,7 +222,7 @@ export function modeloParaTrueforge(opciones: {
               tool_calls: llamadas.map((t, i) => ({
                 id: t.id ?? `${id}-${i}`,
                 type: "function" as const,
-                function: { name: t.name, arguments: JSON.stringify(t.args ?? {}) },
+                function: { name: t.name, arguments: t.argumentos },
               })),
             }),
         ...(razonamiento === "" ? {} : { reasoning_content: razonamiento }),
