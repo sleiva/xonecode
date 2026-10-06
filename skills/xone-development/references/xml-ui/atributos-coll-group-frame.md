@@ -211,10 +211,10 @@ Contenedor visual dentro de un grupo. Puede anidarse.
 |---|---|---|---|
 | `bgcolor` | color | heredado | Color de fondo del frame. |
 | `forecolor` | color | heredado | Color de texto del frame. |
-| `border` | int (mask) | `0` | Bordes activos: top=1, right=2, bottom=4, left=8. Sumar para combinar. |
-| `border-color` | color | — | Color del borde. |
-| `border-width` | medida | `0` | Grosor del borde. |
-| `border-corner-radius` | medida | `0` | Radio de esquinas redondeadas. |
+| `border` | int (mask) | `0` | Bordes activos: top=1, right=2, bottom=4, left=8. **Medido en Android: en un `<frame>` no pinta borde** (ni `border="15"` ni con `border-width`/`border-color`); el borde de un frame es `framebox="true"` + `forecolor`. |
+| `border-color` | color | — | Color del borde. En un frame no pinta (ver `border`). |
+| `border-width` | medida | `0` | Grosor del borde. En un frame no pinta (ver `border`). |
+| `border-corner-radius` | medida | `0` | Radio de esquinas redondeadas, en píxeles del aparato. **En un frame sale al DOBLE** que en un botón (`"20"` → unos 40 px; en un botón, unos 20): medido en Android. |
 | `tmargin` / `bmargin` / `lmargin` / `rmargin` | medida | `0` | Margenes externos. |
 | `tpadding` / `bpadding` / `lpadding` / `rpadding` | medida | `0` | Padding interno. |
 | `class` | string | `""` | Clase CSS. |

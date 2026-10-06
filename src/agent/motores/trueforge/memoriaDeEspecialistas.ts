@@ -45,19 +45,35 @@ export const MAX_CARACTERES_DE_RESULTADO = 500;
 /** Tokens por carácter: la misma aproximación que usa el resto del harness donde no hay medida. */
 const CARACTERES_POR_TOKEN = 4;
 
-/** Lo que se conserva de cada argumento largo de una llamada a tool (el contenido de un `write_file`, el texto de un `edit_file`). */
+/** A partir de cuántos caracteres un argumento de una llamada a tool (el contenido de un `write_file`, el texto de un `edit_file`) se omite. */
 export const MAX_CARACTERES_DE_ARGUMENTO = 300;
+
+/**
+ * Los ENCARGOS que un especialista hizo a otro (`create_sub_agent`) se conservan enteros hasta aquí. Son cortos y son
+ * lo que necesita recordar; y recortados le enseñaban a cortar los nuevos (ver `recortarArgumentos`).
+ */
+export const MAX_CARACTERES_DE_ENCARGO = 8_000;
+
+/** La nota que sustituye a un argumento omitido. Dice lo que es y que NO se copie: no puede parecer el final de un texto. */
+export const notaDeArgumentoOmitido = (caracteres: number): string =>
+  `[el harness omitió este valor al guardar tu memoria (${String(caracteres)} caracteres). No es lo que escribiste: no lo copies; en una llamada nueva escribe el texto ENTERO]`;
 
 type LlamadaAMensaje = { function?: { arguments?: unknown; [k: string]: unknown }; [k: string]: unknown };
 type Mensaje = { role?: string; content?: unknown; reasoning_content?: unknown; tool_calls?: LlamadaAMensaje[]; [k: string]: unknown };
 
 /**
- * Los argumentos de una llamada con los valores de texto largos recortados. Un escritor que produce cien mil
+ * Los argumentos de una llamada con los valores de texto largos OMITIDOS. Un escritor que produce cien mil
  * tokens de salida los lleva ahí (el código entero de cada `edit_file` y `write_file`), y con solo recortar lo que
  * devuelven las tools su historial seguía sin caber: la segunda prueba real lo perdió a 211 mil tokens. La ruta y
  * el resto de campos cortos se conservan, que es lo que dice QUÉ hizo. Si no se entiende el JSON, se deja.
+ *
+ * **No se deja el principio con una marca detrás.** Antes quedaba «…los primeros 300 caracteres… [recortado: eran 741
+ * caracteres]», y medido en Maset el desarrollador, al ver así sus propios encargos al de pruebas, escribió los NUEVOS
+ * igual: con la marca inventada («eran 173» en uno de 311) y el encargo partido; el de pruebas no supo qué comprobar.
+ * Ahora el valor entero se cambia por una nota que dice que no se copie, y los encargos (`create_sub_agent`) se guardan
+ * enteros: son lo que hay que recordar.
  */
-function recortarArgumentos(argumentos: unknown, max: number): unknown {
+function recortarArgumentos(argumentos: unknown, max: number, tool?: unknown): unknown {
   if (typeof argumentos !== "string") return argumentos;
   try {
     const valor = JSON.parse(argumentos) as Record<string, unknown>;
@@ -65,9 +81,10 @@ function recortarArgumentos(argumentos: unknown, max: number): unknown {
     let cambio = false;
     const recortado = Object.fromEntries(
       Object.entries(valor).map(([k, v]) => {
-        if (typeof v === "string" && v.length > max) {
+        const tope = tool === "create_sub_agent" ? MAX_CARACTERES_DE_ENCARGO : max;
+        if (typeof v === "string" && v.length > tope) {
           cambio = true;
-          return [k, `${v.slice(0, max)}… [recortado: eran ${String(v.length)} caracteres]`];
+          return [k, notaDeArgumentoOmitido(v.length)];
         }
         return [k, v];
       })
@@ -102,7 +119,7 @@ export function reducirHistorial(
       return {
         ...resto,
         tool_calls: resto.tool_calls.map((t) =>
-          t.function === undefined ? t : { ...t, function: { ...t.function, arguments: recortarArgumentos(t.function.arguments, maxArgumento) } }
+          t.function === undefined ? t : { ...t, function: { ...t.function, arguments: recortarArgumentos(t.function.arguments, maxArgumento, t.function.name) } }
         ),
       };
     }

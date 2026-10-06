@@ -124,3 +124,31 @@ describe("la memoria de cada especialista en la sesión", () => {
     expect([TOPE_COMPLETA_TOKENS, TOPE_REDUCIDA_TOKENS]).toEqual([48_000, 40_000]);
   });
 });
+
+describe("los argumentos largos de sus llamadas, en la memoria reducida (Maset: el desarrollador imitaba la marca)", () => {
+  const llamada = (name: string, args: Record<string, unknown>) => ({
+    role: "assistant",
+    content: "",
+    tool_calls: [{ id: "c1", function: { name, arguments: JSON.stringify(args) } }],
+  });
+  const argsDe = (m: unknown) =>
+    JSON.parse((m as { tool_calls: { function: { arguments: string } }[] }).tool_calls[0]!.function.arguments) as Record<string, string>;
+
+  it("un ENCARGO a otro especialista se guarda entero", () => {
+    const encargo = "Maset, emulador 1080x2400. Comprueba los tres bordes: ".repeat(15);
+    const [m] = reducirHistorial([llamada("create_sub_agent", { name: "device-controller", input: encargo })]);
+    expect(argsDe(m).input).toBe(encargo);
+  });
+
+  it("lo demás largo se omite ENTERO con una nota que dice que no se copie: nada de principio + marca de recorte", () => {
+    const contenido = "<coll name='X'>".repeat(100);
+    const [m] = reducirHistorial([llamada("write_file", { file_path: "/X.xne", content: contenido })]);
+    const a = argsDe(m);
+    expect(a.file_path).toBe("/X.xne");
+    expect(a.content).not.toContain("<coll");
+    expect(a.content).not.toContain("[recortado");
+    expect(a.content).toContain(`${String(contenido.length)} caracteres`);
+    expect(a.content).toContain("no lo copies");
+    expect(MAX_CARACTERES_DE_ARGUMENTO).toBe(300);
+  });
+});

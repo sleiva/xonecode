@@ -8520,3 +8520,32 @@ ayudante no existe y la medida no volvía («el navegador no devolvió la medida
 En la misma pasada, el conductor usó rutas virtuales en la shell cinco veces (`grep … /hotswap/…json 2>/dev/null`,
 `base64 /EntryPoint.xne`), que salían vacías sin error; y lanzó un `UPDATE GEN_LIQUIDACIONES SET ACTIVO=0` para que un
 contador cambiara. Las dos se devuelven ahora como error desde `motivoDeComandoRechazado`.
+
+## Radio y borde de un `<frame>`, medidos; y la memoria reducida que enseñaba a cortar encargos (06-10-2026)
+
+Dos cosas que en Maset costaron vueltas, medidas en el emulador `pixel8` con una colección de prueba (rojo sobre
+blanco, el radio ajustando un círculo al perfil de la esquina fila a fila):
+
+| | radio 10 | radio 20 | radio 60 |
+|---|---|---|---|
+| botón (`type="B"`) | — | 22,4 px | 62,6 px |
+| `<frame>` | 18,9 px | 38,7 px | píldora (alto 137) |
+
+El mismo valor da el DOBLE de radio en un frame que en un botón. Igual con la app a `resolution-width` 384 que a 768,
+e igual con el emulador a densidad 320 que a 420: no es `p` ni dp, son píxeles del aparato, ×1 en un botón y ×2 en un
+frame. Cuadra con lo de Maset: 33 en un cuadro de 132 px son 66 px de radio, la mitad: un círculo. La skill decía
+«píxeles del aparato» medido sobre un botón y se aplicaba igual a los frames.
+
+El borde: en un BOTÓN pinta `border-width` + `border-color` (con o sin la máscara). En un FRAME no pinta nada de eso —ni
+`border="15"`, ni `border="true"`, ni `border-width`/`border-color` sueltos—; lo que pinta es `framebox="true"` con
+`forecolor` de color (unos 2 px). La skill daba dos versiones contradictorias (booleano en un fichero, máscara en otro) y
+el desarrollador de Maset gastó dos vueltas en ellas hasta que el orquestador le mandó probarlas todas a la vez.
+
+Y de rebote: un `<frame>` sin nada dentro NO se pinta (no llega al árbol de controles).
+
+**La memoria reducida de un especialista enseñaba a cortar los encargos.** Al volver a llamar al desarrollador, su
+historial no cabía entero y se guardó reducido: los argumentos largos de sus llamadas como «los primeros 300
+caracteres… [recortado: eran 741 caracteres]». Entre ellos, sus encargos al de pruebas. Escribió los nuevos igual, con
+la marca INVENTADA —uno de 311 caracteres decía «eran 173»—, y el de pruebas contestó que el encargo le llegaba cortado.
+Ahora los encargos (`create_sub_agent`) se guardan enteros (hasta `MAX_CARACTERES_DE_ENCARGO`), y lo demás largo se
+cambia por una nota que dice lo que es y que no se copie.

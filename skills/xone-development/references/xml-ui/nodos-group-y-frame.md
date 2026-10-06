@@ -422,10 +422,10 @@ XOne posiciona los elementos en **flujo lineal de arriba a abajo**: por defecto 
 | `bgcolor` | color | Color de fondo | `bgcolor="#FFFFFF"` |
 | `forecolor` | color | Color del borde (en combinacion con `framebox`) | `forecolor="#666666"` |
 | `elevation` | integer | Elevacion / sombra (estilo Material Design) | `elevation="5"` |
-| `border-corner-radius` | string | Radio de esquinas redondeadas | `border-corner-radius="10"` |
-| `framebox` | boolean | Muestra un borde visible alrededor del frame | `framebox="true"` |
-| `border` | boolean | Muestra el borde del frame | `border="true"` |
-| `border-width` | integer | Ancho del borde en puntos | `border-width="2"` |
+| `border-corner-radius` | string | Radio de esquinas redondeadas. **Medido en Android: en un frame sale al DOBLE en píxeles del aparato** (`"20"` → unos 40 px), sin depender de la densidad ni de la resolución de la app | `border-corner-radius="10"` |
+| `framebox` | boolean | Muestra un borde visible alrededor del frame. **Es lo que pinta el borde de un frame** (medido), con `forecolor` de color | `framebox="true"` |
+| `border` | boolean | Muestra el borde del frame. **Medido en Android: en un frame NO pinta** (tampoco como máscara `border="15"`): usa `framebox` | `border="true"` |
+| `border-width` | integer | Ancho del borde en puntos. En un frame no pinta (ver `border`) | `border-width="2"` |
 | `border-left` | boolean | Muestra solo el borde izquierdo | `border-left="false"` |
 | `border-top` | boolean | Muestra solo el borde superior | `border-top="false"` |
 | `border-right` | boolean | Muestra solo el borde derecho | `border-right="false"` |

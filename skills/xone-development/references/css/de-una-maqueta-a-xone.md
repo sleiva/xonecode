@@ -37,13 +37,14 @@ dos valores en el `app.xml` del proyecto.
 | En la maqueta | En XOne | De dónde |
 |---|---|---|
 | `rounded-full` (píldora o círculo) | `border-corner-radius: 999` | medido |
-| `rounded-lg`, `rounded-xl`, `rounded-[Npx]` | `border-corner-radius` en **píxeles del aparato**, no en `p`: `px_maqueta × ancho_real / ancho_de_la_maqueta` (32 px en una maqueta de 390 son unos 89 en un aparato de 1080). El radio se recorta a la mitad del alto | medido (la unidad) |
+| `rounded-lg`, `rounded-xl`, `rounded-[Npx]` | `border-corner-radius` en **píxeles del aparato**, no en `p`, calculados como `px_maqueta × ancho_real / ancho_de_la_maqueta` (32 px en una maqueta de 390 son unos 89 en un aparato de 1080). **En un BOTÓN ese número es el radio; en un `<frame>` el radio sale al DOBLE**, así que en un frame se escribe la MITAD (esos 89 px son `border-corner-radius="44"` en un botón y `"22"` en un frame). Ni uno ni otro dependen de la densidad del aparato ni de la `resolution-width` de la app. El radio se recorta a la mitad del alto: en un frame, un valor de la mitad del alto o más ya es una píldora (o un círculo, si es cuadrado) | medido |
 | un botón sin borde | `border-width: 0`. Un `type="B"` pinta un contorno fino por omisión; `border: false`, `border: 0`, `framebox: false` y `labelbox: false` NO lo quitan | medido |
-| `border`, `border-COLOR` | `border-width: 1; border-color: #RRGGBB` | documentado |
+| `border`, `border-COLOR` | **en un botón**: `border-width: 1; border-color: #RRGGBB`. **En un `<frame>` eso no pinta nada** (ni con `border="15"` ni con `border="true"`): el borde de un frame es `framebox="true"` y su color `forecolor="#RRGGBB"` (sale de unos 2 px) | medido |
 | `bg-gradient-to-br from-A to-B` | un SVG con `generar_fondo_svg` (tipo degradado, ángulo 45 para `to-br`): en un BOTÓN va en `img`, en un frame en `imgbk` (en un botón `imgbk` se ignora) | medido |
 | `shadow-[0_6px_14px_…]` (sombra exterior) | un SVG con `generar_fondo_svg` (tipo sombra). **No** `elevation` en algo redondeado: recorta el fondo por abajo | medido |
 | `shadow-[inset_…]` (brillo interior) | no hay equivalente; si importa, dibújalo en el mismo SVG del fondo | sin medir |
 | `border-corner-radius` sobre una imagen de fondo | no la recorta: la esquina se dibuja DENTRO del SVG | medido |
+| un `<frame>` sin nada dentro (una barra de color, un punto) | **no se pinta**: no llega ni al árbol de controles. Dentro tiene que haber al menos un control (una etiqueta `TL` con `title=" "` vale) | medido |
 
 ## 4. Color
 
