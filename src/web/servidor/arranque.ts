@@ -31,6 +31,7 @@
 import { hayMemoriaDeHilo, olvidarMemoriaDeHilo } from "../../agent/sesiones/memoriaDeHilo.js";
 import { existsSync, readFileSync } from "node:fs";
 import { lineaDeVersion, type VersionEnMarcha } from "../../core/version.js";
+import { esperarInterrupcion } from "./interrupcion.js";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
@@ -8427,7 +8428,13 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     }
   }
 
-  await (opciones.esperarCierre ?? esperarInterrupcion)();
+  /**
+   * La espera por omisión: hasta que alguien interrumpa. Sin ella `arrancarConsolaWeb`
+   * devolvería en cuanto el servidor está en pie, y `bin.ts` hace `process.exit(codigo)` —
+   * o sea que el servidor recién levantado moriría antes de servir una sola petición. Y una
+   * señal repetida no puede matar el cierre que sigue: ver `interrupcion.ts`.
+   */
+  await (opciones.esperarCierre ?? (() => esperarInterrupcion({ avisar: escribir })))();
   /**
    * El corredor PRIMERO, y el orden es load-bearing: `parar()` corta los turnos en vuelo y
    * los deja aparcados diciendo que la consola se cerró a mitad. Al revés, el
@@ -8469,18 +8476,6 @@ export function modoDeProyecto(raiz: string): "offline" | "cloud" | undefined {
  *  es un proyecto offline: no se afirma sobre lo que no se sabe. */
 function esProyectoOffline(cwd: string): boolean {
   return modoDeProyecto(cwd) === "offline";
-}
-
-/**
- * La espera por omisión: hasta que alguien interrumpa. Sin ella `arrancarConsolaWeb`
- * devolvería en cuanto el servidor está en pie, y `bin.ts` hace `process.exit(codigo)` —
- * o sea que el servidor recién levantado moriría antes de servir una sola petición.
- */
-function esperarInterrupcion(): Promise<void> {
-  return new Promise<void>((resolver) => {
-    process.once("SIGINT", () => resolver());
-    process.once("SIGTERM", () => resolver());
-  });
 }
 
 /** El vestíbulo con todas sus piezas reales. Se construye DESPUÉS del servidor porque el
