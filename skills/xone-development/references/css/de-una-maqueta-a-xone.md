@@ -63,6 +63,7 @@ dos valores en el `app.xml` del proyecto.
 | `uppercase` | escribe el texto ya en mayúsculas | sin medir |
 | `tracking-*` (espaciado entre letras), `leading-*` (interlineado) | sin equivalente conocido | sin medir |
 | un texto que no cabe | `auto-fontsize="true"`, o una caja más alta: un `height` menor que la letra la corta por abajo | medido |
+| cambiar la fuente de un control (`fontname`) | **revisa la altura de su caja**: con el mismo `fontsize`, otra fuente coloca la letra a otra altura dentro de ella. Space Grotesk queda más abajo que Roboto, así que en una tecla con la altura justa se corta más por abajo (el `-` y el `+` casi desaparecen). Sube el `height` o baja el `fontsize`, y compruébalo con una captura | medido |
 | iconos `material-symbols-outlined` | `buscar_icono` → `icons/ic_<nombre>.svg`, en un `type="IMG"` (en el `img` de un botón se estira) | medido |
 
 ## 6. Composición
