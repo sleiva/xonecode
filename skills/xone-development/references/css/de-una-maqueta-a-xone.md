@@ -58,7 +58,7 @@ dos valores en el `app.xml` del proyecto.
 | En la maqueta | En XOne | De dónde |
 |---|---|---|
 | una fuente de Google Fonts (`fontFamily` en la configuración, `fonts.googleapis.com` en el `<head>`) | su `.ttf` en `fonts/` y `fontname: Nombre.ttf` (`buscar_fuente` → `traer_fuente` lo trae: un `.ttf` estático por peso, `Inter-Bold.ttf`). El `.ttf` variable que da Google Fonts vale tal cual (sale con su peso por omisión). **Se sube desplegando entero**: la recarga en caliente no lleva `fonts/`. Un `fontname` que no está en el aparato saca un diálogo de error y el control no se pinta | medido |
-| `text-[Npx]`, `fontSize` de la configuración | `fontsize` / `textfont-size`. La relación con los px de la maqueta **no está medida**: `fontsize: 40` salió de unos 100 px de alto en un aparato de 1080. Ajusta midiendo la captura | sin medir |
+| `text-[Npx]`, `fontSize` de la configuración | `fontsize: N−8`. En Android la letra sale de **`fontsize` + 8 dp**: `fontsize: 20` pinta una letra de 28 dp, y `fontsize: 40` una de 48. Un píxel de la maqueta (viewport de unos 390 de ancho) es casi un dp del teléfono, así que `text-[48px]` → `fontsize: 40` y `text-[16px]` → `fontsize: 8`. Ese +8 es fijo: no escala con el tamaño ni depende de la `resolution-width` de `app.xml`. Medido con la fuente del sistema; con otra `fontname` el tamaño es el mismo, pero el alto de las mayúsculas cambia con la fuente. `textfont-size` y iOS, sin medir | medido (Android) |
 | `font-medium`, `font-semibold`, `font-bold` | la variante de la fuente con ese peso (`Roboto-Bold.ttf`) o `fontbold` | documentado |
 | `uppercase` | escribe el texto ya en mayúsculas | sin medir |
 | `tracking-*` (espaciado entre letras), `leading-*` (interlineado) | sin equivalente conocido | sin medir |

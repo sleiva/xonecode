@@ -8469,3 +8469,23 @@ El bloque «LA IMAGEN DE LA MAQUETA Y SU code.html NO CUENTAN LO MISMO» se quit
 hecha por un modelo, no decidía el veredicto, costaba una llamada por crítica y se equivocaba («DEC de la imagen no está
 en su code.html», y estaba). Con `code.html` la maqueta ya no se describe; sin él, la descripción sigue siendo su única
 estructura.
+
+## `fontsize` en Android: la letra mide `fontsize` + 8 dp (06-10-2026)
+
+La tabla de la skill decía «la relación con los px de la maqueta no está medida». Medido en el emulador `pixel8`
+(1080×2400, densidad 420 = 2,625 px/dp, escala de letra 1,0, framework 5.0.5.7dev) con una colección de prueba:
+etiquetas `TL` con «HH<n>», letra del sistema (Roboto), negro sobre blanco, y la altura de la tinta medida en la
+captura sin los bordes de cada etiqueta.
+
+| `fontsize` | 6 | 10 | 14 | 18 | 20 | 28 | 40 | 56 | 72 |
+|---|---|---|---|---|---|---|---|---|---|
+| tinta (px) | 26 | 34 | 41 | 49 | 53 | 69 | 92 | 120 | 151 |
+
+No es proporcional (3,4 px por unidad en 10 y 2,1 en 72). Pasada a tamaño de letra con la altura de las mayúsculas de
+Roboto (0,711 em) y la densidad, sale una recta de pendiente 1,00 y término 8,2: **la letra mide `fontsize` + 8 dp**.
+Se ajustó con 10–56 y se VALIDÓ con tamaños que no estaban: con la regla, 6→26, 18→49 y 72→149 px; medidos, 26, 49 y 151.
+Con `resolution-width="384"` en vez de 768 salen exactamente los mismos píxeles: el `fontsize` no escala con la
+resolución que declara la app (las cajas en `p` sí).
+
+Para una maqueta: un px de su viewport (unos 390 de ancho) es casi un dp de un teléfono (411 dp en este), así que
+`text-[Npx]` → `fontsize: N−8`. Sin medir: `textfont-size`, iOS, y otra escala de letra del sistema.
