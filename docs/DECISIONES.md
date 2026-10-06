@@ -8317,3 +8317,32 @@ una foto del visor). Se reconoce porque la imagen es claramente más pequeña qu
 la guarda y el crítico lo dice. Esa iteración corrió además con el medidor de ANTES de arreglar el contorno de las
 teclas: el agente acabó llamando «falso positivo» a lo que le decía el crítico, y tenía razón. Un crítico que se
 equivoca enseña al agente a no hacerle caso.
+
+### De Tailwind a XOne: lo que la skill decía mal, medido en el aparato (06-10-2026)
+
+En cinco iteraciones de la calculadora el agente buscó lo MISMO cada vez, desde cero: cómo se hace en XOne una
+esquina redondeada, un degradado, una sombra, una fuente (`border-corner-radius` dos veces por iteración, `font-face`,
+`gradient`, `shadow`, `imgbk`). Y la quinta acabó con el agente descubriendo a mitad del bucle que «el radio va en
+píxeles» y que «`border` es una máscara de bits». Se comprobó con una colección de prueba en un emulador Android de
+1080×2400 y una app de `resolution-width="720"`, `resolution-height="1280"`:
+
+- **`border-corner-radius` va en píxeles REALES del aparato, no en `p`**: un radio 50 en un botón de `100p` (172 px
+  de alto) sale de ~48 px; 75, 100 y 150 dan la misma píldora porque el radio se recorta a la mitad del alto. La
+  receta de la skill («`height: 56p; border-corner-radius: 28`», la mitad del alto) solo da una píldora en el
+  aparato de referencia. Ahora: `border-corner-radius: 999`, comprobado.
+- **Un `type="B"` pinta un contorno fino por omisión, y solo lo quita `border-width: 0`**: `border="0"`,
+  `border="false"`, `framebox="false"`, `labelbox="false"` y los tres juntos lo dejan. El agente de la quinta
+  iteración se convenció de lo contrario y descartó como falso positivo el borde que el crítico le señalaba: el
+  crítico tenía razón.
+- **`p` escala por EJE**: `width: 421p` → 631 px (×1,5 = 1080/720) y `height: 120p` → 206 px (×1,72 = alto útil
+  2205 / 1280). La skill daba una sola fórmula, la del ancho, y el núcleo una cifra fija («1 p ≈ 1,14 px») que era
+  de otra app.
+- **Una fuente de Google Fonts funciona tal cual** (el `.ttf` variable de `google/fonts`) en `fonts/` con
+  `fontname`; **la recarga en caliente no sube `fonts/`** (ahora lo dice, solo para las nuevas o cambiadas), y un
+  `fontname` que falta saca un diálogo de error, no un fallo mudo. Las cinco iteraciones acabaron en Roboto porque
+  el agente no tiene red para bajarlas: un hueco del harness, todavía abierto.
+- **`fontsize` también escala** (40 → unos 100 px de alto): la relación con los px de la maqueta queda sin medir.
+
+Corregido en la skill (`buenas-practicas-y-parser.md`, `selectores-unidades-colores.md`, los patrones Material), en
+el núcleo, y una tabla nueva, `css/de-una-maqueta-a-xone.md`, clase a clase y cada fila con su origen: medido,
+documentado o sin medir. El crítico la nombra cuando la comparación medida encuentra algo que arreglar.

@@ -30,7 +30,7 @@ Contenido: §17 top 15 buenas prácticas, anti-patrones y checklist · §18 func
 
 10. **Preferir `text-border-bottom: true` para inputs** - Es el patron Material Design más limpio y común.
 
-11. **Usar `border-corner-radius` como mitad del `height` para botones pill** - Ejemplo: `height: 56p; border-corner-radius: 28;`.
+11. **Para un botón pill, `border-corner-radius: 999`** - El radio va en **píxeles reales del aparato**, no en `p`, y se recorta a la mitad del alto. «La mitad del `height`» (`height: 56p; border-corner-radius: 28;`) solo da una píldora en el aparato de referencia: en uno de más resolución sale un rectángulo redondeado (medido en un emulador Android).
 
 12. **Recordar que alpha va PRIMERO en ARGB** - `#80FFFFFF` = blanco 50%, no `#FFFFFF80`.
 
@@ -395,6 +395,7 @@ Recomendado durante el desarrollo para detectar typos y referencias rotas; opcio
 | `padding-left: 20px` | `lpadding: 20p` |
 | `border-radius: 8px` | `border-corner-radius: 8` |
 | `border: 1px solid #ccc` | `border: true; border-width: 1; border-color: #CCCCCC;` |
+| `border: none` en un botón | `border-width: 0;` — un `type="B"` pinta un contorno fino por omisión, y `border: false`, `border: 0`, `framebox: false` o `labelbox: false` NO lo quitan (medido en un emulador Android) |
 | `text-align: center` | `text-align: center` |
 | `height: 50px` | `height: 50p` |
 | `width: 100%` | `width: 100%` |

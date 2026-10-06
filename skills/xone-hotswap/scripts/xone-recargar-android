@@ -198,6 +198,21 @@ if (cambiados.length === 0) {
   console.log("nada que recargar: los ficheros del proyecto ya son los del aparato.");
   if (otros.length > 0 && posicionales.length === 0) {
     console.log(`(no se comparan ${otros.length} fichero(s) que no son xne/js/css/ini/xml: iconos, bd, files…)`);
+    // Una FUENTE no se queda en «no se compara»: un `fontname` que no está en el aparato saca un diálogo de error y el
+    // control no se pinta (medido). Se dice con el remedio.
+    // Solo las NUEVAS o cambiadas (git: cada turno commitea lo que dejó, así que una recién añadida está sin
+    // commitear); sin git no se dice nada, mejor que avisar de todas en cada recarga.
+    let fuentes = [];
+    try {
+      fuentes = execFileSync("git", ["status", "--porcelain", "--", "fonts"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
+        .split("\n")
+        .filter((l) => l.trim() !== "");
+    } catch {
+      fuentes = [];
+    }
+    if (fuentes.length > 0) {
+      console.log(`(hay ${fuentes.length} fuente(s) nueva(s) o cambiada(s) en fonts/ y la recarga NO las sube: despliega entero con xone-desplegar-android)`);
+    }
   }
   process.exit(0);
 }

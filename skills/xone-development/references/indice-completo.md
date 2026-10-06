@@ -60,6 +60,7 @@ Lee el fichero que corresponda antes de responder sobre atributos concretos, val
 - [css/dinamicos-cascada-y-componentes.md](references/css/dinamicos-cascada-y-componentes.md) — `##FLD_CAMPO##`, cascada de dispositivo, `strict-mode`, animaciones y tokens, gráficos, calendario y mapa
 - [css/patrones-material-y-temas.md](references/css/patrones-material-y-temas.md) — Patrones Material (header/body/footer, botones, inputs, tarjetas, FAB, toolbar, item de lista), temas light/dark y un `default.css` + `colors.css` completos y comentados
 - [css/buenas-practicas-y-parser.md](references/css/buenas-practicas-y-parser.md) — Buenas prácticas, anti-patrones, checklist de validación y detalle de las funciones del parser (`@import`, variables, `calc()`, `!important`, `!default`, `@extend`, modo estricto)
+- [css/de-una-maqueta-a-xone.md](references/css/de-una-maqueta-a-xone.md) — De una maqueta HTML de Stitch (Tailwind) a XOne, clase a clase: forma, bordes, fondos, color, tipografías y composición, con lo MEDIDO en el aparato separado de lo documentado
 
 ### Datos e integración
 - [datos/appdata.md](references/datos/appdata.md) — `appData` completo: colecciones, login/logout, paso de datos entre pantallas, macros globales, SQL directo, detección de dispositivo, `loadIncludeFile` y `loadCssFile`

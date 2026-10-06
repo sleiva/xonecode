@@ -12,7 +12,8 @@ Consulta estos ficheros según lo que busques:
 
 | Qué buscas | Dónde |
 |---|---|
-| **El índice COMPLETO** de las 55 referencias, por familia | [references/indice-completo.md](references/indice-completo.md) |
+| **El índice COMPLETO** de las 56 referencias, por familia | [references/indice-completo.md](references/indice-completo.md) |
+| **Traducir una maqueta HTML** (el `code.html` de Stitch, Tailwind) a XOne, clase a clase | [references/css/de-una-maqueta-a-xone.md](references/css/de-una-maqueta-a-xone.md) |
 | **Tipos de `prop` válidos** (la tabla) | [references/tipos-de-prop.md](references/tipos-de-prop.md) |
 | **Anti-patrones**: lo que NO hay que hacer, con el porqué | [references/anti-patrones.md](references/anti-patrones.md) |
 | Resumen de la capa XML y de la capa CSS | [references/resumen-xml-y-css.md](references/resumen-xml-y-css.md) |

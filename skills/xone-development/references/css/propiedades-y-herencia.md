@@ -499,7 +499,7 @@ El atributo `visible` usa un sistema de mascara de bits que controla en que modo
     height: 56p;
     bgcolor: #1565C0;
     forecolor: #FFFFFF;
-    border-corner-radius: 28;
+    border-corner-radius: 999;   /* píldora: el radio va en píxeles del aparato */
     ripple-effect: true;
     elevation: 4;
 }
@@ -573,7 +573,7 @@ El caso más común: una clase hereda de otra y sobreescribe algunos atributos.
     height: 56p;
     bgcolor: #1565C0;
     forecolor: #FFFFFF;
-    border-corner-radius: 28;
+    border-corner-radius: 999;   /* píldora: el radio va en píxeles del aparato */
     text-align: center;
     fontsize: 16;
     fontname: Roboto-Bold.ttf;

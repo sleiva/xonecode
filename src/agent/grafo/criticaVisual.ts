@@ -387,6 +387,9 @@ function medirEstilo(
   }
 }
 
+/** La tabla de traducción de Tailwind a XOne de la skill, por su ruta virtual. */
+export const TABLA_DE_TRADUCCION = "`read_file /skills/xone-development/references/css/de-una-maqueta-a-xone.md`";
+
 export function crearCriticaVisual(deps: DependenciasDeCritica) {
   return tool(
     async (entrada: Entrada) => {
@@ -497,7 +500,12 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
       if (comparacion !== undefined) {
         lineas.push(
           ...(estilo?.completa === true
-            ? informeDeComparacion(comparacion, "medida")
+            ? [
+                ...informeDeComparacion(comparacion, "medida"),
+                // Lo que falla aquí es casi siempre CÓMO se escribe en XOne una clase de Tailwind (una píldora, un
+                // botón sin contorno, una fuente): la tabla está medida en el aparato. Se nombra donde hace falta.
+                ...(hayQueArreglar(comparacion) ? [`Cómo se escribe en XOne cada clase de la maqueta (medido en el aparato): ${TABLA_DE_TRADUCCION}`] : []),
+              ]
             : [
                 "MEDIDO en los píxeles de la captura (sin cajas de la maqueta que medir, solo lo que se ve mal en el aparato):",
                 ...(comparacion.recortes.length === 0 ? ["- Ningún texto recortado."] : comparacion.recortes.map((r) => `- ${r}`)),

@@ -1,7 +1,7 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import type { PantallaDescrita } from "../../core/descripcionDePantalla.js";
 import { describe, expect, it } from "vitest";
-import { crearCriticaVisual } from "./criticaVisual.js";
+import { crearCriticaVisual, TABLA_DE_TRADUCCION } from "./criticaVisual.js";
 import { decodificarImagen } from "../dispositivos/decodificarImagen.js";
 import type { InvocarVisual } from "../dispositivos/juezVisual.js";
 
@@ -453,6 +453,9 @@ describe("xone_critica_visual MIDE el estilo en los píxeles (la calculadora rea
     expect(salida).toContain("«12 + 3» se ve RECORTADO");
     expect(salida).toMatch(/forma redondeada \(1,2:1\) → círculo \(1,0:1\)/);
     expect(llamadas).toEqual([]);
+    // Y nombra la tabla de traducción, que EXISTE en la skill.
+    expect(salida).toContain(TABLA_DE_TRADUCCION);
+    expect(existsSync(new URL("../../../skills/xone-development/references/css/de-una-maqueta-a-xone.md", import.meta.url))).toBe(true);
   });
 
   it("solo un PNG: mide los recortes del aparato, el modelo opina con ellos delante, y lo medido manda en el rojo", async () => {

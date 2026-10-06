@@ -50,6 +50,10 @@ describe("el núcleo de trabajo", () => {
     ["las skills desde la shell", /\$XONECODE_SKILL_<NOMBRE>/],
     ["el apartado «lo más usado» con bgcolor, img y labelwidth", /LO MÁS USADO\n- `bgcolor`[\s\S]*- `img`[\s\S]*- `labelwidth`/],
     ["quien escribe no puntúa su trabajo", /Quien escribe no puntúa su propio trabajo/],
+    ["el radio va en píxeles y la píldora es 999", /PÍXELES, no en `p`[\s\S]*radio `999`/],
+    ["el contorno de un botón solo se quita con border-width 0", /SOLO quita `border-width="0"`/],
+    ["la p escala por eje", /escala por EJE/],
+    ["una fuente se sube desplegando entero", /DESPLEGANDO entero: la recarga no lleva `fonts\/`/],
   ])("sigue diciendo: %s", (_nombre, patron) => {
     expect(NUCLEO_XONE).toMatch(patron);
   });

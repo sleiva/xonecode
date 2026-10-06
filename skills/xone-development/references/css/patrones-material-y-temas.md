@@ -126,13 +126,15 @@ El footer es el frame inferior, normalmente con botones de acción.
 Los botones siguen el patron de Material Design con esquinas redondeadas y colores por estado:
 
 ```css
+/* Píldora: border-corner-radius: 999 (el radio va en PÍXELES del aparato y se recorta a la mitad del alto;
+   «28 = la mitad de 56p» solo vale en el aparato de referencia — medido en un emulador Android) */
 /* Boton primario - Accion principal */
 .btnPrimario {
     width: 90%;
     height: 56p;
     bgcolor: #1565C0;
     forecolor: #FFFFFF;
-    border-corner-radius: 28;
+    border-corner-radius: 999;
     text-align: center;
     fontsize: 16;
     fontname: Roboto-Bold.ttf;
@@ -146,7 +148,7 @@ Los botones siguen el patron de Material Design con esquinas redondeadas y color
     forecolor: #1565C0;
     border: true;
     border-color: #1565C0;
-    border-corner-radius: 28;
+    border-corner-radius: 999;
     text-align: center;
     fontsize: 16;
 }
@@ -157,7 +159,7 @@ Los botones siguen el patron de Material Design con esquinas redondeadas y color
     height: 56p;
     bgcolor: #F44336;
     forecolor: #FFFFFF;
-    border-corner-radius: 28;
+    border-corner-radius: 999;
     text-align: center;
     fontsize: 16;
 }
@@ -168,7 +170,7 @@ Los botones siguen el patron de Material Design con esquinas redondeadas y color
     height: 56p;
     bgcolor: #4CAF50;
     forecolor: #FFFFFF;
-    border-corner-radius: 28;
+    border-corner-radius: 999;
     text-align: center;
     fontsize: 16;
     fontname: Roboto-Bold.ttf;
@@ -180,7 +182,7 @@ Los botones siguen el patron de Material Design con esquinas redondeadas y color
     height: 56p;
     bgcolor: #00BCD4;
     forecolor: #FFFFFF;
-    border-corner-radius: 28;
+    border-corner-radius: 999;
     text-align: center;
     fontsize: 16;
     fontname: Roboto-Bold.ttf;
@@ -226,7 +228,7 @@ Los botones siguen el patron de Material Design con esquinas redondeadas y color
     width: 95%;
     height: 56p;
     bgcolor: #FFFFFF;
-    border-corner-radius: 28;
+    border-corner-radius: 999;
     border: true;
     border-color: #E0E0E0;
     lmargin: 15p;
@@ -306,7 +308,7 @@ El FAB es un botón circular flotante que representa la acción principal de la 
     width: 56p;
     height: 56p;
     bgcolor: #1565C0;
-    border-corner-radius: 28;
+    border-corner-radius: 999;
 }
 
 /* FAB grande (64p) */
@@ -699,7 +701,7 @@ prop {
     height: 56p;
     bgcolor: #1565C0;
     forecolor: #FFFFFF;
-    border-corner-radius: 28;
+    border-corner-radius: 999;
     text-align: center;
     fontsize: 16;
     fontname: Roboto-Bold.ttf;
@@ -713,7 +715,7 @@ prop {
     forecolor: #1565C0;
     border: true;
     border-color: #1565C0;
-    border-corner-radius: 28;
+    border-corner-radius: 999;
     text-align: center;
     fontsize: 16;
 }
@@ -724,7 +726,7 @@ prop {
     height: 56p;
     bgcolor: #F44336;
     forecolor: #FFFFFF;
-    border-corner-radius: 28;
+    border-corner-radius: 999;
     text-align: center;
     fontsize: 16;
 }
@@ -735,7 +737,7 @@ prop {
     height: 56p;
     bgcolor: #4CAF50;
     forecolor: #FFFFFF;
-    border-corner-radius: 28;
+    border-corner-radius: 999;
     text-align: center;
     fontsize: 16;
     fontname: Roboto-Bold.ttf;
@@ -746,7 +748,7 @@ prop {
     width: 56p;
     height: 56p;
     bgcolor: #FFFFFF;
-    border-corner-radius: 28;
+    border-corner-radius: 999;
 }
 
 /* FAB */
@@ -818,7 +820,7 @@ prop {
     width: 95%;
     height: 56p;
     bgcolor: #FFFFFF;
-    border-corner-radius: 28;
+    border-corner-radius: 999;
     border: true;
     border-color: #E0E0E0;
     lmargin: 15p;

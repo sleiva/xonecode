@@ -492,7 +492,12 @@ frame {
 
 ### 3.1 `p` (puntos) - Unidad absoluta
 
-La unidad `p` representa **pixels en el dispositivo de referencia** definido por `resolution-width` y `resolution-height` en `app.xml`. En el dispositivo de referencia, `1p = 1px` real. En cualquier otro dispositivo, XOne escala automáticamente con la fórmula `tamaño_real_px = valor_p × (resolucion_real / resolution-width)`.
+La unidad `p` representa **pixels en el dispositivo de referencia** definido por `resolution-width` y `resolution-height` en `app.xml`. En el dispositivo de referencia, `1p = 1px` real. En cualquier otro dispositivo, XOne escala **cada eje por separado**:
+
+- un **ancho** en `p`: `px_reales = valor_p × (ancho_real / resolution-width)`;
+- un **alto** en `p`: `px_reales = valor_p × (alto_útil / resolution-height)`, donde el alto útil es la pantalla sin las barras de estado y de navegación.
+
+> **Medido** en un emulador Android de 1080×2400 con una app de `resolution-width="720"` y `resolution-height="1280"`: `width: 421p` → 631 px (×1,5) y `height: 120p` → 206 px (×1,72, porque el alto útil son 2205 px). Así que **la proporción de un control declarado en `p` cambia de un aparato a otro**: un cuadrado de `100p × 100p` sale más alto que ancho en un teléfono alargado.
 
 > **CRÍTICO: `p` ≠ Material `dp`.** Es un error común asumir que `p` equivale a `dp` (density-independent pixels) de Android. **NO lo es.** Para el dispositivo de referencia por defecto de XOne (1080×1920, xxhdpi, density 3×), Material `56dp` ≈ `168p`, NO `56p`. Aplicar valores Material directamente como `p` produce barras/botones ~3× más pequeños de lo necesario.
 
@@ -517,7 +522,7 @@ La unidad `p` representa **pixels en el dispositivo de referencia** definido por
 .btnPrimario {
     width: 90%;
     height: 124p;        /* Workflow "pill" CTA */
-    border-corner-radius: 62;
+    border-corner-radius: 999;   /* píldora en CUALQUIER aparato: el radio va en píxeles y se recorta a la mitad del alto */
 }
 ```
 
@@ -526,7 +531,7 @@ La unidad `p` representa **pixels en el dispositivo de referencia** definido por
 - Alturas fijas de headers, footers, botones
 - Tamaños de iconos y avatares
 - Margenes y paddings fijos
-- Radios de bordes (aunque estos van sin unidad)
+- **Los radios NO**: `border-corner-radius` va en **píxeles reales del aparato** y no escala con `p` (medido: un radio `50` en un botón de `100p` sale de ~48 px, un tercio de su alto real de 172 px). Para una píldora usa `border-corner-radius: 999`: el radio se recorta a la mitad del alto, sea cual sea el aparato
 - Dimensiones de componentes que no deben cambiar con el tamaño de pantalla
 
 ### 3.2 `%` (porcentaje) - Unidad relativa
