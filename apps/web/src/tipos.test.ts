@@ -455,6 +455,7 @@ const FILA_COMPLETA = {
   estado: "requiere-atencion" as const,
   motivo: "el juez de QA dijo «rojo»: falta el campo",
   sesion: "s1",
+  tras: "t0",
   creada: "2026-09-08T10:00:00.000Z",
   empezada: "2026-09-08T10:01:00.000Z",
   acabada: "2026-09-08T10:09:00.000Z",

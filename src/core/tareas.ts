@@ -91,6 +91,13 @@ export interface Tarea {
   motivo?: string;
   /** La sesión donde corre, en cuanto existe: es lo que hace que atenderla sea abrirla. */
   sesion?: string;
+  /**
+   * La tarea ANTERIOR de su cadena: esta no arranca hasta que aquella esté `terminada`. Existe porque un encargo grande
+   * se reparte en tareas que van EN ORDEN (`docs/superpowers/plans/2026-10-06-tareas-encadenadas.md`), y la regla de
+   * «nunca dos del mismo proyecto» no basta: deja de bloquear cuando la anterior queda en `requiere-atencion`, y la
+   * siguiente arrancaría sobre un trabajo a medias. Si la anterior ya no existe (la persona la borró), esta queda libre.
+   */
+  tras?: string;
   creada: string;
   empezada?: string;
   acabada?: string;
@@ -228,6 +235,8 @@ export const TOPE_DE_RONDAS_DE_TAREA = 20;
  *    misma pasada: comparten disco, índice de git, checkpointer y `sync`, y dos turnos a la
  *    vez sobre eso es una carrera con escrituras de por medio.
  *  - **Y GANA LA PERSONA**: ver `bloqueados`.
+ *  - **Y las ENCADENADAS esperan a su anterior** (`Tarea.tras`) hasta que esté `terminada`, también si quedó en
+ *    `requiere-atencion`. Igual que un bloqueado: no gasta hueco ni para la cola.
  */
 export function siguientesAEjecutar(
   tareas: readonly Tarea[],
@@ -266,6 +275,10 @@ export function siguientesAEjecutar(
     .sort((a, b) => (a.creada < b.creada ? -1 : a.creada > b.creada ? 1 : 0));
   for (const t of candidatas) {
     if (elegidas.length >= huecos) break;
+    if (t.tras !== undefined) {
+      const anterior = tareas.find((x) => x.id === t.tras);
+      if (anterior !== undefined && anterior.estado !== "terminada") continue;
+    }
     if (ocupados.has(t.proyecto.raiz)) continue;
     ocupados.add(t.proyecto.raiz);
     elegidas.push(t);

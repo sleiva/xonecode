@@ -72,6 +72,8 @@ const DECISIONES: Readonly<Record<string, readonly string[]>> = {
   estado: ["estado"],
   motivo: ["motivo"],
   sesion: ["sesion"],
+  // Viaja: la pestaña Tareas dice «espera a: <título de la anterior>» de una encadenada.
+  tras: ["tras"],
   creada: ["creada"],
   empezada: ["empezada"],
   acabada: ["acabada"],
@@ -94,6 +96,7 @@ const TAREA_COMPLETA: Required<Tarea> = {
   estado: "terminada",
   motivo: "un motivo",
   sesion: "s1",
+  tras: "t0",
   creada: "2026-09-08T10:00:00.000Z",
   empezada: "2026-09-08T10:01:00.000Z",
   acabada: "2026-09-08T10:09:00.000Z",

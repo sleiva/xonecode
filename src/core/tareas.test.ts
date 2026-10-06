@@ -330,3 +330,40 @@ describe("darPorBuenaAMano", () => {
     expect(() => darPorBuenaAMano(tarea({ estado: "nuevo" }))).toThrow(/no puede pasar/);
   });
 });
+
+describe("siguientesAEjecutar: las tareas ENCADENADAS (tras) van en orden", () => {
+  const base = (id: string, creada: string, extra: Partial<Tarea> = {}): Tarea => ({
+    id,
+    proyecto: { id: "p", raiz: `/r/${id}`, nombre: "P" },
+    titulo: id,
+    peticion: id,
+    encargo: id,
+    adjuntos: [],
+    estado: "nuevo",
+    creada,
+    ...extra,
+  });
+  // Raíces distintas a propósito: se prueba `tras`, no la regla de «nunca dos del mismo proyecto».
+  it("la segunda no arranca mientras la primera no esté terminada", () => {
+    const a = base("a", "2026-10-06T10:00:00Z", { estado: "en-proceso" });
+    const b = base("b", "2026-10-06T10:00:01Z", { tras: "a" });
+    expect(siguientesAEjecutar([a, b], { concurrencia: 2 }).map((t) => t.id)).toEqual([]);
+  });
+  it("si la primera quedó en requiere-atencion, la segunda ESPERA", () => {
+    const a = base("a", "2026-10-06T10:00:00Z", { estado: "requiere-atencion", motivo: "x" });
+    const b = base("b", "2026-10-06T10:00:01Z", { tras: "a" });
+    expect(siguientesAEjecutar([a, b], { concurrencia: 2 })).toEqual([]);
+  });
+  it("con la primera terminada (o borrada), la segunda arranca", () => {
+    const a = base("a", "2026-10-06T10:00:00Z", { estado: "terminada" });
+    const b = base("b", "2026-10-06T10:00:01Z", { tras: "a" });
+    expect(siguientesAEjecutar([a, b], { concurrencia: 2 }).map((t) => t.id)).toEqual(["b"]);
+    expect(siguientesAEjecutar([b], { concurrencia: 2 }).map((t) => t.id)).toEqual(["b"]);
+  });
+  it("una encadenada que espera no quita el hueco a otra de otro proyecto", () => {
+    const a = base("a", "2026-10-06T10:00:00Z", { estado: "requiere-atencion", motivo: "x" });
+    const b = base("b", "2026-10-06T10:00:01Z", { tras: "a" });
+    const c = base("c", "2026-10-06T10:00:02Z");
+    expect(siguientesAEjecutar([a, b, c], { concurrencia: 1 }).map((t) => t.id)).toEqual(["c"]);
+  });
+});

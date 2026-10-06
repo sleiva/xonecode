@@ -1620,6 +1620,7 @@ export function crearStoreDelCliente(): {
                     : [],
                   ...(typeof t["motivo"] === "string" ? { motivo: t["motivo"] } : {}),
                   ...(typeof t["sesion"] === "string" ? { sesion: t["sesion"] } : {}),
+                  ...(typeof t["tras"] === "string" ? { tras: t["tras"] } : {}),
                   ...(typeof t["empezada"] === "string" ? { empezada: t["empezada"] } : {}),
                   ...(typeof t["acabada"] === "string" ? { acabada: t["acabada"] } : {}),
                   // Ausente = no consta (no llegó a correr); `[]` = corrió y no autorizó

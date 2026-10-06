@@ -1196,6 +1196,8 @@ export interface TareaDelCable {
   estado: "nuevo" | "en-proceso" | "requiere-atencion" | "terminada";
   motivo?: string;
   sesion?: string;
+  /** El id de la tarea ANTERIOR de su cadena (`Tarea.tras`): esta no arranca hasta que aquella termine. */
+  tras?: string;
   creada: string;
   empezada?: string;
   acabada?: string;
@@ -1274,6 +1276,7 @@ export function filaDeTarea(t: Tarea): TareaDelCable {
     creada: t.creada,
     ...(t.motivo === undefined ? {} : { motivo: t.motivo }),
     ...(t.sesion === undefined ? {} : { sesion: t.sesion }),
+    ...(t.tras === undefined ? {} : { tras: t.tras }),
     ...(t.empezada === undefined ? {} : { empezada: t.empezada }),
     ...(t.acabada === undefined ? {} : { acabada: t.acabada }),
     ...(t.autorizadas === undefined ? {} : { autorizadas: t.autorizadas }),

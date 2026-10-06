@@ -1209,6 +1209,8 @@ export interface TareaDelCable {
   estado: "nuevo" | "en-proceso" | "requiere-atencion" | "terminada";
   motivo?: string;
   sesion?: string;
+  /** El id de la tarea ANTERIOR de su cadena (`Tarea.tras`): esta no arranca hasta que aquella termine. */
+  tras?: string;
   creada: string;
   empezada?: string;
   acabada?: string;
