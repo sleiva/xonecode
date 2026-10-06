@@ -11,6 +11,18 @@
  * camino que los avisos de vueltas: la respuesta del hijo ya la entregó la librería y no se reescribe.
  */
 import type { Capacidad } from "./capacidades.js";
+import { NOMBRE_INCORPORAR_ADJUNTO } from "../../../core/adjuntos.js";
+import { NOMBRE_TRAER_FUENTE } from "../../../core/fuentes.js";
+
+/**
+ * Las tools PROPIAS que escriben un BINARIO en el proyecto, con el principio de su texto de éxito. Sin contarlas, el
+ * informe decía «SIN escribir ningún fichero» de un diseñador que había traído siete fuentes, y el orquestador fue a
+ * comprobarlo al disco y mandó al de pruebas a mirar si estaban sanas (pasada real con la maqueta de la calculadora).
+ */
+export const ESCRITURAS_BINARIAS: Readonly<Record<string, string>> = {
+  [NOMBRE_TRAER_FUENTE]: "Escrito ",
+  [NOMBRE_INCORPORAR_ADJUNTO]: "Incorporado ",
+};
 
 export interface CambioDeFichero {
   ediciones: number;
@@ -18,9 +30,16 @@ export interface CambioDeFichero {
   nuevo: boolean;
   mas: number;
   menos: number;
+  /** Lo escribió una tool de BINARIOS (`ESCRITURAS_BINARIAS`): no hay líneas que contar. */
+  binario?: boolean;
 }
 
 const lineas = (t: unknown): number => (typeof t === "string" && t !== "" ? t.replace(/\n$/, "").split("\n").length : 0);
+
+/** ¿Es `nombre` una tool de binarios? Por clave PROPIA: `in` daría por buena `constructor`. */
+export function esEscrituraBinaria(nombre: string): boolean {
+  return Object.hasOwn(ESCRITURAS_BINARIAS, nombre);
+}
 
 /** Lo que suma UNA escritura que salió bien, por sus argumentos (los de la tool, que nunca salen de aquí). */
 export function anotarEscritura(
@@ -29,8 +48,16 @@ export function anotarEscritura(
   args: Record<string, unknown>
 ): void {
   const ruta = typeof args["file_path"] === "string" ? args["file_path"] : undefined;
-  if (ruta === undefined || (nombre !== "write_file" && nombre !== "edit_file")) return;
+  if (ruta === undefined) return;
+  if (esEscrituraBinaria(nombre)) {
+    // El destino se normaliza como lo escribe la tool (`/fonts/…`): el modelo puede pasarlo sin la barra.
+    const virtual = ruta.startsWith("/") ? ruta : `/${ruta}`;
+    const antes = cambios.get(virtual) ?? { ediciones: 0, nuevo: false, mas: 0, menos: 0 };
+    cambios.set(virtual, { ...antes, ediciones: antes.ediciones + 1, binario: true });
+    return;
+  }
   const previo = cambios.get(ruta) ?? { ediciones: 0, nuevo: false, mas: 0, menos: 0 };
+  if (nombre !== "write_file" && nombre !== "edit_file") return;
   if (nombre === "write_file") {
     cambios.set(ruta, { ediciones: previo.ediciones + 1, nuevo: previo.ediciones === 0 ? true : previo.nuevo, mas: previo.mas + lineas(args["content"]), menos: previo.menos });
   } else {
@@ -38,9 +65,14 @@ export function anotarEscritura(
   }
 }
 
-/** ¿Salió bien? El texto de éxito es el de `toolsDeFichero.ts#ejecutar`; un rechazo o un error no cuenta. */
-export function escrituraConExito(contenido: unknown): boolean {
-  return typeof contenido === "string" && contenido.startsWith("Successfully");
+/**
+ * ¿Salió bien? El texto de éxito es el de `toolsDeFichero.ts#ejecutar`, o el de la tool de binarios
+ * (`ESCRITURAS_BINARIAS`); un rechazo o un error no cuenta.
+ */
+export function escrituraConExito(contenido: unknown, nombre?: string): boolean {
+  if (typeof contenido !== "string") return false;
+  const binaria = nombre !== undefined && esEscrituraBinaria(nombre) ? ESCRITURAS_BINARIAS[nombre] : undefined;
+  return contenido.startsWith(binaria ?? "Successfully");
 }
 
 /**
@@ -56,7 +88,9 @@ export function textoDelInforme(quien: string, cambios: ReadonlyMap<string, Camb
   const filas = [...cambios.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([ruta, c]) =>
-      c.nuevo
+      c.binario === true
+        ? `- ${ruta}: fichero binario${c.ediciones > 1 ? `, escrito ${c.ediciones} veces` : ""}`
+        : c.nuevo
         ? `- ${ruta}: nuevo${c.ediciones > 1 ? ` y ${c.ediciones - 1} edición(es) después` : ""}, +${c.mas} −${c.menos} líneas`
         : `- ${ruta}: ${c.ediciones} edición(es), +${c.mas} −${c.menos} líneas`
     );

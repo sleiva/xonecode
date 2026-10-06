@@ -32,6 +32,21 @@ describe("lo que escribió un hijo, contado por el harness", () => {
     expect(escrituraConExito(undefined)).toBe(false);
   });
 
+  it("una fuente traída o un adjunto incorporado cuentan, como fichero binario (antes salía «SIN escribir»)", () => {
+    const cambios = new Map<string, CambioDeFichero>();
+    expect(escrituraConExito("Escrito /fonts/Inter-Bold.ttf (69308 bytes). En el CSS: …", "traer_fuente")).toBe(true);
+    expect(escrituraConExito("No se pudo traer la fuente: …", "traer_fuente")).toBe(false);
+    expect(escrituraConExito("Incorporado /adjuntos/a.png → /icons/a.png (7 bytes).", "incorporar_adjunto")).toBe(true);
+    expect(escrituraConExito("Escrito algo", "constructor")).toBe(false);
+    anotarEscritura(cambios, "traer_fuente", { familia: "Inter", peso: 700, file_path: "/fonts/Inter-Bold.ttf" });
+    anotarEscritura(cambios, "traer_fuente", { familia: "Inter", peso: 700, file_path: "fonts/Inter-Bold.ttf" });
+    anotarEscritura(cambios, "incorporar_adjunto", { adjunto: "a.png", file_path: "/icons/a.png" });
+    const texto = textoDelInforme("designer-xone", cambios, true)!;
+    expect(texto).toContain("- /fonts/Inter-Bold.ttf: fichero binario, escrito 2 veces");
+    expect(texto).toContain("- /icons/a.png: fichero binario");
+    expect(texto).not.toContain("SIN escribir");
+  });
+
   it("la capacidad entrega los pendientes de ESE hilo una sola vez", async () => {
     const cola = new Map([["padre", ["uno", "dos"]]]);
     const cap = capacidadDeInformesDeHijos((h) => {

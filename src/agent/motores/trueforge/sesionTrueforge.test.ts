@@ -2750,6 +2750,9 @@ describe("las fuentes de Google Fonts en TrueForge: el diseñador las trae a fon
     expect(toolsPorLlamada[0]).not.toContain("traer_fuente");
     // El orquestador sabe a quién encargar la tipografía: la ficha del diseñador lo dice.
     expect(vistos[0]!.join("\n")).toContain("trae las fuentes de la maqueta");
+    // Y al volver el diseñador, el informe del harness cuenta la fuente (antes decía «SIN escribir ningún fichero»).
+    const delRaiz = vistos.map((v) => v.join("\n")).find((t) => t.includes("Lo que ESCRIBIÓ designer-xone"));
+    expect(delRaiz).toContain("/fonts/Inter-Bold.ttf: fichero binario");
   }, 20_000);
 
   it("rechazada: no se escribe", async () => {

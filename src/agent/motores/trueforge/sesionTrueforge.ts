@@ -94,7 +94,7 @@ import { CONECTOR_STITCH, crearTraerDeStitch } from "./traerDeStitch.js";
 import { esDeLaMaqueta } from "../../../core/stitch.js";
 import { recibeConectores } from "../../../core/conectores.js";
 import { buscarMaqueta, medirContraMaqueta, resumenDeMedida, textoDeMedidaAutomatica, ultimaCaptura } from "./medidaAutomatica.js";
-import { anotarEscritura, capacidadDeInformesDeHijos, escrituraConExito, textoDelInforme, type CambioDeFichero } from "./informesDeHijos.js";
+import { anotarEscritura, capacidadDeInformesDeHijos, esEscrituraBinaria, escrituraConExito, textoDelInforme, type CambioDeFichero } from "./informesDeHijos.js";
 import { crearDiagnosticoDeTools, type DiagnosticoDeTools } from "../../turno/diagnosticoDeTools.js";
 import { encenderTrazaDeErrores } from "../../trazaDeErroresEnDisco.js";
 import { anotarPaso } from "../../../core/trazaDeErrores.js";
@@ -1408,7 +1408,9 @@ export async function abrirSesionTrueforge(
               args = {};
             }
             llamadas.set(claveDe(deHilo, t.id), { nombre: t.function.name, args });
-            if (t.function.name === "write_file" || t.function.name === "edit_file") escriturasEnVuelo.set(claveDe(deHilo, t.id), { nombre: t.function.name, args });
+            if (t.function.name === "write_file" || t.function.name === "edit_file" || esEscrituraBinaria(t.function.name)) {
+              escriturasEnVuelo.set(claveDe(deHilo, t.id), { nombre: t.function.name, args });
+            }
             if (t.function.name === "xone_critica_visual") ultimaCriticaDeHilo.set(deHilo, Date.now());
             // La traza: la MISMA lista blanca que el evento (`detalleDe`, `parametrosDe`), nunca
             // los argumentos crudos.
@@ -1443,7 +1445,7 @@ export async function abrirSesionTrueforge(
         const escritura = escriturasEnVuelo.get(claveDe(deHilo, evento.tool_call_id));
         if (escritura !== undefined) {
           escriturasEnVuelo.delete(claveDe(deHilo, evento.tool_call_id));
-          if (deHilo !== HILO_RAIZ && escrituraConExito(evento.content)) {
+          if (deHilo !== HILO_RAIZ && escrituraConExito(evento.content, escritura.nombre)) {
             const cambios = escritosDeCadaHilo.get(deHilo) ?? new Map<string, CambioDeFichero>();
             anotarEscritura(cambios, escritura.nombre, escritura.args);
             escritosDeCadaHilo.set(deHilo, cambios);

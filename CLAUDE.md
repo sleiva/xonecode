@@ -681,7 +681,8 @@ log; la captura es para lo visual, una por cosa que se comprueba—. Vale para q
 `edit_file` por ancla— porque reescribir entero es volver a teclear lo que puso el otro; un SVG, un plan o un
 artefacto se siguen regenerando. `read_file` devuelve hasta `LINEAS_POR_LECTURA` acotado por
 `CARACTERES_POR_LECTURA` y dice por dónde seguir. Y al terminar un hijo, quien lo llamó recibe en UN mensaje lo que
-ESCRIBIÓ, contado por el harness (ficheros, ediciones, líneas; nunca contenido): el padre releía para saberlo. **Límite
+ESCRIBIÓ, contado por el harness (ficheros, ediciones, líneas; nunca contenido; un `.ttf` traído o un adjunto incorporado, como
+fichero binario —sin contarlos, el informe decía «SIN escribir» y el orquestador iba al disco a comprobarlo—): el padre releía para saberlo. **Límite
 declarado**: el rechazo de la reescritura llega DESPUÉS de la aprobación, porque la pone la librería antes de correr la tool.
 **La pantalla la MIDE el harness tras cada prueba** (`medidaAutomatica.ts`): cuando vuelve quien ejecuta, su última
 captura nueva de `/artefactos/` se mide contra la maqueta (`/diseno/screen.png`, otra imagen de `/diseno/` o de
