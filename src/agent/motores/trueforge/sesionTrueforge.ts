@@ -856,7 +856,8 @@ export async function abrirSesionTrueforge(
             // La maqueta casi nunca está en /artefactos/: la trae la persona (/adjuntos/) o vive en /diseno/.
             leerReferencia: lectorDeReferencias,
             // La GEOMETRÍA: el árbol guardado con la captura, y las cajas de la maqueta si trae `code.html`.
-            leerGeometria: async (nombre) => geometriaDeCaptura(carpetaDeHotswap(carpeta), nombre),
+            // Por nombre y, si se renombró o convirtió (`sips … --out menu.png`), por los PÍXELES de la original (`geometriaEnDisco.ts`).
+            leerGeometria: async (nombre) => geometriaDeCaptura(carpetaDeHotswap(carpeta), nombre, { carpetaDeArtefactos: carpeta, decodificar: decodificarImagen }),
             cajasDeMaqueta: async (imagen, bytes) => {
               const html = localizadorDeHtml(imagen);
               const medidas = medidasDeImagen(bytes);

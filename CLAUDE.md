@@ -330,7 +330,8 @@ Y las guardas del proyecto:
   Las del aparato las guarda la captura en el MISMO comando (`skills/xone-hotswap/lib/geometria.mjs`,
   `<captura>.geometria.json` en `/hotswap/`, árbol + barras de `dumpsys window`), emparejadas por
   NOMBRE y nunca por fecha (`geometriaEnDisco.ts`, la regla del nombre atada por test a la del
-  script). Las de la maqueta salen de renderizar su `code.html` en un Chrome sin ventana, dentro de un
+  script); **y si se renombró o convirtió** (`sips … --out menu.png`), por los PÍXELES de la captura original que
+  nombra cada geometría (`geometriaPorContenido`: casi idénticos, y la más parecida), nunca por la fecha. Las de la maqueta salen de renderizar su `code.html` en un Chrome sin ventana, dentro de un
   iframe de su tamaño EXACTO (no baja de 500 px) y sin `--allow-file-access-from-files` (el medidor va
   dentro de la copia y devuelve por `postMessage`); una maqueta sin sus estilos NO da cajas. **Lo que se mide son los
   TEXTOS, no los botones** (`cajasDeMaqueta.ts#medirElementos`): un botón de un solo texto es un elemento con su caja

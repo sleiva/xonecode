@@ -8549,3 +8549,22 @@ caracteres… [recortado: eran 741 caracteres]». Entre ellos, sus encargos al d
 la marca INVENTADA —uno de 311 caracteres decía «eran 173»—, y el de pruebas contestó que el encargo le llegaba cortado.
 Ahora los encargos (`create_sub_agent`) se guardan enteros (hasta `MAX_CARACTERES_DE_ENCARGO`), y lo demás largo se
 cambia por una nota que dice lo que es y que no se copie.
+
+## La geometría de una captura renombrada se encuentra por sus píxeles (06-10-2026)
+
+En la tercera pasada de Maset el crítico se quedó dos rondas sin medir («esta captura no trae su árbol de controles») y
+cayó en la opinión del modelo, que se equivocó. No fallaba la lectura del árbol: el conductor sacó `xone-hotswap shot`
+(`captura-1791288505460.jpg`, CON su `.geometria.json`) y la convirtió con `sips` a `menu_ronda7.png`, y la geometría se
+empareja por NOMBRE.
+
+Emparejar por fecha sigue descartado (cruzó una vez rondas). Ahora, si el nombre no la encuentra, se busca por
+CONTENIDO: entre las geometrías más recientes de `/hotswap/`, la cuya captura ORIGINAL siga en `/artefactos/` con los
+mismos píxeles. Medido con las capturas reales: la misma captura reconvertida difiere en un 0,02 % de los píxeles (con
+un umbral de 40 por canal: dos decodificadores de JPEG no redondean igual en los bordes), y la ronda anterior de la
+misma pantalla en un 0,72 %. El tope va en 0,1 %, y de las que pasan se toma la MÁS parecida. Una diferencia MEDIA no
+valía: la ronda 6 pasaba por la 7 con una media por debajo de 2. Límite declarado: si la original se borró y otra ronda
+difiere en menos de un 0,1 %, se tomaría esa.
+
+Con la geometría encontrada, el crítico de la ronda 7 volvió a medir. Queda un falso que se ve ahí: un botón de la
+maqueta (SALIR) se compara con la ETIQUETA del aparato que lleva su texto, cuya caja no tiene el borde ni el fondo del
+frame que la contiene («le falta el borde»).
