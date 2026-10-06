@@ -136,9 +136,10 @@ export function promptDelAumentador(peticion: PeticionDeTarea): string {
       : [
           `Ha anexado ${adjuntos.length} fichero(s), que el agente verá en «/adjuntos/» de solo lectura:`,
           ...adjuntos.map((a) => `- ${a.nombre}${a.mime === undefined ? "" : ` (${a.mime})`}`),
-          "Di para qué sirve cada uno. Y AVISO que tienes que trasladarle: el agente puede LEER",
-          "una imagen como fichero, pero no la VE — no hay visión en este harness. No escribas un",
-          "criterio que dependa de mirar una captura.",
+          "Di para qué sirve cada uno. Si una imagen es una MAQUETA, di que es la referencia: el agente",
+          "la VE con `describe_image`, y compara una captura del aparato contra ella con",
+          "`comparar_capturas` y `xone_critica_visual`. Escribe el criterio visual MEDIBLE contra",
+          "esa maqueta («comparada con /adjuntos/x.png, sin diferencias de forma»), no «que se vea bien».",
           "",
         ]),
     "CÓMO SE EJECUTA ESTE ENCARGO, y esto cambia cómo hay que redactarlo:",

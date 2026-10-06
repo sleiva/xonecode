@@ -8592,3 +8592,45 @@ texto dentro de la llamada no lo frena, aunque diga que no lo haga.
 Ahora una llamada con un argumento largo no se guarda como llamada: se cuenta en el texto del mensaje del asistente
 («(Memoria del harness: aquí hiciste write_file sobre /planes/x/PLAN.md (content: 15507 caracteres)…)») y su respuesta
 se quita. Las llamadas cortas del mismo mensaje se quedan con la suya. Sin una llamada que imitar, no hay qué copiar.
+
+## Un encargo grande se reparte en tareas encadenadas, y el agente solo propone (06-10-2026)
+
+Petición de la persona: «cuando le doy una tarea grande, por ejemplo el diseño de dos ventanas», que el orquestador lo
+reparta en tareas de fondo que corran una detrás de otra, cada una con sus diseños, preguntando antes lo que le falte.
+
+- **Proponer, no crear.** Crear una tarea es la autorización para que escriba sin preguntar (§ tareas en background),
+  así que `proponer_tareas` solo valida y anuncia; las crea el clic en «Encolar en orden», también en modo autónomo. El
+  modo gobierna las escrituras locales, y encolar es autorizar escrituras futuras de otra conversación.
+- **`Tarea.tras`, no el FIFO.** El corredor ya despacha por `creada` y una tarea por proyecto, pero una tarea en
+  `requiere-atencion` deja de ocupar el proyecto: sin `tras`, la segunda arrancaría sobre trabajo que nadie aceptó. Una
+  anterior descartada ya no retiene: la persona la quitó a propósito.
+- **Lo que se encola sale del acto, no del cliente.** El cliente manda el id de la propuesta y los encargos revisados;
+  títulos, peticiones y adjuntos los pone el servidor desde el acto `propuesta-de-tareas`, y copia a cada tarea SUS
+  adjuntos de la sesión antes de guardarla (guardar dispara el corredor). Resolverla es OTRO acto, guardado al momento:
+  el `.jsonl` solo crece y sin él una sesión reabierta volvía a ofrecer encolar lo encolado.
+
+Medido en la prueba real (Maset, dos maquetas, «crea las ventanas de listado y ficha de albaranes»):
+
+- El orquestador preguntó antes de proponer, como pide su prompt: cuatro preguntas en la primera pasada (encaje con las
+  pantallas que ya existían, solo consulta, filtro del listado, banda inferior) y seis en la segunda.
+- **La primera propuesta no llegó.** El modelo escribió «te lo reparto en dos tareas» y cerró el turno con una sola
+  llamada al modelo y CERO tools (traza: `tools: 0`, 14.637 tokens de salida, 11.634 de razonamiento). El adaptador
+  `modeloLangchain.ts` solo miraba `tool_calls`; una llamada cuyo JSON LangChain no puede leer va a `invalid_tool_calls`
+  y se tiraba. Al reproducirlo apareció algo peor: con un JSON CORTADO, LangChain lo «repara» (cierra comillas y llaves)
+  y la tool se ejecutaba con el valor a medias — `{"file_path":"/app` llegaba como `/app`. Ahora las dos van al núcleo
+  con los argumentos crudos (las cortadas, cuando `finish_reason` es `length`), y el núcleo le devuelve al modelo el
+  error del JSON (`executeToolCalls`), que puede repetir.
+- **El aumentador cortaba los encargos.** Las peticiones del orquestador ya traían unos 5.000 caracteres; aumentadas
+  salieron las dos en 8.057 — el tope de 8.000 más el aviso de recorte —, cortadas a mitad de frase, y una añadía que
+  el agente «NO tiene visión», falso desde `describe_image`. Se quitó el aumentador de la propuesta: la petición la
+  escribió el orquestador con la conversación delante, que el aumentador no ve. Y se corrigió su texto sobre la visión
+  para «Nueva tarea».
+- La tarjeta salía SIN botones: `App` pasaba las acciones a `Transcript` dentro de un spread, donde TypeScript no avisa
+  de un prop que nadie recibe, y `Transcript` no las reenviaba. Las pruebas del Chat lo montaban directo. Es el patrón
+  de fallo de siempre; ahora hay una prueba que pasa por `Transcript`.
+- Los títulos salían del principio de la petición («Proyecto XOne (app Android…»): ahora, el que propuso el agente.
+
+Con los arreglos, la segunda pasada propuso a la primera tres tareas (recursos y ficha, listado, conexión al menú), cada
+una con sus maquetas, encargos de unos 2.800 caracteres enteros, y al encolarlas quedaron en cadena con «espera a». Se
+descartaron sin ejecutarse. A petición de la persona, la tarjeta tiene una tercera salida, «Hacerlo aquí en el chat», y
+cada tarea de la pestaña Tareas se abre para leer su encargo.
