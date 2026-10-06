@@ -163,6 +163,7 @@ export function TareasDelProyecto({
             <Fila
               key={t.id}
               tarea={t}
+              {...(t.tras === undefined ? {} : { anterior: tareas.find((x) => x.id === t.tras) })}
               conectado={conectado}
               corriendoAqui={corriendoAqui}
               {...(alReintentar === undefined ? {} : { alReintentar })}
@@ -183,6 +184,7 @@ export function TareasDelProyecto({
 
 function Fila({
   tarea: t,
+  anterior,
   alReintentar,
   alDescartar,
   alTerminar,
@@ -195,6 +197,9 @@ function Fila({
   mirada,
 }: {
   tarea: TareaDelCable;
+  /** La tarea a la que ESPERA (`tras`), si sigue en la cola. Una que ya no está —descartada— no
+   *  la retiene: el corredor la deja correr, y aquí no se dice nada. */
+  anterior?: TareaDelCable | undefined;
   alReintentar?: (id: string) => void;
   alDescartar?: (id: string) => void;
   alTerminar?: (id: string) => void;
@@ -223,6 +228,10 @@ function Fila({
           <>
             {/* Ausente = no consta ningún motivo; nunca se inventa uno para rellenar la fila. */}
             {t.motivo === undefined ? null : <p className={estilos.motivo}>{t.motivo}</p>}
+            {/* Encadenada: no arranca hasta que la anterior termine (`core/tareas.ts#siguientesAEjecutar`). */}
+            {t.estado === "nuevo" && anterior !== undefined && anterior.estado !== "terminada" ? (
+              <p className={estilos.motivo}>{`espera a: ${anterior.titulo}`}</p>
+            ) : null}
             {/* Y cómo llegó a «Terminada», que es donde el motivo ya no existe: la MISMA
                 pieza que monta `Kanban.tsx`, para que las dos vistas no puedan afirmar cosas
                 distintas de la misma tarea. */}

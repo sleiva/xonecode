@@ -1,0 +1,57 @@
+/* La tarjeta y sus controles son los de `ConsultaDelAgente.module.css` y `Pregunta.module.css`:
+   aquí solo lo propio de una lista de tareas. Sin colores literales: alias del tema. */
+.motivo {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  white-space: pre-wrap;
+}
+
+.tareas {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tarea {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  border-radius: 0 8px 8px 0;
+}
+
+.titulo {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.adjuntos,
+.etiqueta {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.peticion {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  white-space: pre-wrap;
+}
+
+.aviso {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+}
+
+.advertencia {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}

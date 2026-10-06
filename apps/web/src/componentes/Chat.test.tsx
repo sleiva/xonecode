@@ -1162,6 +1162,53 @@ describe("Chat: la pregunta del agente en el hilo", () => {
   });
 });
 
+describe("Chat: la propuesta de tareas en el hilo", () => {
+  const propuesta: Acto = {
+    tipo: "propuesta-de-tareas",
+    id: "p1",
+    motivo: "son dos ventanas",
+    tareas: [
+      { titulo: "Entradas", peticion: "haz entradas" },
+      { titulo: "Salidas", peticion: "haz salidas" },
+    ],
+  };
+
+  it("pendiente: su tarjeta pide redactar, usa lo redactado y encola por el id de la propuesta", async () => {
+    const pedir = vi.fn();
+    const encolar = vi.fn(async () => undefined);
+    render(
+      <Chat
+        actos={[{ tipo: "usuario", texto: "diseña dos ventanas" }, propuesta, { tipo: "fin", ms: 1 }]}
+        propuestasAumentadas={{ p1: { 1: { encargo: "## Salidas" } } }}
+        alPedirAumentoDePropuesta={pedir}
+        alEncolarPropuesta={encolar}
+        alDescartarPropuesta={vi.fn(async () => undefined)}
+      />
+    );
+    expect(pedir).toHaveBeenCalledWith("p1");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Encolar en orden" }));
+    });
+    expect(encolar).toHaveBeenCalledWith("p1", ["haz entradas", "## Salidas"]);
+  });
+
+  it("resuelta: sin botones, aunque haya con qué encolar; y el acto de resuelta no se pinta aparte", () => {
+    const { container } = render(
+      <Chat
+        actos={[propuesta, { tipo: "propuesta-resuelta", propuesta: "p1", encoladas: ["a", "b"] }]}
+        alEncolarPropuesta={vi.fn(async () => undefined)}
+      />
+    );
+    expect(screen.queryByRole("button", { name: "Encolar en orden" })).toBeNull();
+    expect(container.textContent).toContain("encoladas en orden");
+  });
+
+  it("una propuesta mal formada (de otra versión) no se pinta", () => {
+    const { container } = render(<Chat actos={[{ ...propuesta, tareas: [{ titulo: 1 }] } as never]} alEncolarPropuesta={vi.fn()} />);
+    expect(container.textContent).not.toContain("tareas de fondo");
+  });
+});
+
 describe("Chat: la captura ampliada", () => {
   const captura: Acto = { tipo: "artefacto", ruta: "/artefactos/c.png", nombre: "c.png", bytes: 2048, mime: "image/png" };
 

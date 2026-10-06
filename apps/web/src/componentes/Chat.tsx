@@ -17,6 +17,7 @@ import { tipoDeArtefacto } from "../tipoDeArtefacto.js";
 import { consultaPendiente } from "../consultaPendiente.js";
 import { sinTextoDeConsulta } from "../textoDeConsulta.js";
 import { ConsultaDelAgente } from "./ConsultaDelAgente.js";
+import { PropuestaDeTareas, type AumentoDeTarea } from "./PropuestaDeTareas.js";
 import { VisorDeImagen } from "./VisorDeImagen.js";
 import { hayCosteQueEnsenar } from "./CosteDelTurno.js";
 import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
@@ -94,6 +95,25 @@ function consultaPintable(a: Extract<Acto, { tipo: "consulta" }>): boolean {
     Array.isArray(a.opciones) &&
     a.opciones.length > 0 &&
     a.opciones.every((o) => typeof o === "string" && o.trim() !== "")
+  );
+}
+
+/** ¿Se puede pintar la tarjeta de esta propuesta de tareas? Con id, motivo y tareas con título y
+ *  petición de texto: como la consulta, llega de otro proceso y el store solo valida su `tipo`. */
+function propuestaPintable(a: Extract<Acto, { tipo: "propuesta-de-tareas" }>): boolean {
+  return (
+    typeof a.id === "string" &&
+    typeof a.motivo === "string" &&
+    Array.isArray(a.tareas) &&
+    a.tareas.length > 0 &&
+    a.tareas.every(
+      (t) =>
+        typeof t === "object" &&
+        t !== null &&
+        typeof t.titulo === "string" &&
+        typeof t.peticion === "string" &&
+        (t.adjuntos === undefined || (Array.isArray(t.adjuntos) && t.adjuntos.every((x) => typeof x === "string")))
+    )
   );
 }
 
@@ -650,6 +670,10 @@ export function Chat({
   alAbrirFichero,
   alPedirCorreccion,
   alResponderConsulta,
+  propuestasAumentadas,
+  alPedirAumentoDePropuesta,
+  alEncolarPropuesta,
+  alDescartarPropuesta,
 }: {
   actos: readonly Acto[];
   turnoEnVuelo?: boolean;
@@ -707,6 +731,14 @@ export function Chat({
    *  el mensaje siguiente. Se espera, para decir si el envío falló. Sin él, la tarjeta es solo
    *  el registro de la pregunta. */
   alResponderConsulta?: (texto: string) => void | Promise<unknown>;
+  /** Lo redactado de cada propuesta de tareas, por id y por índice (`store.propuestasAumentadas`). */
+  propuestasAumentadas?: Readonly<Record<string, Readonly<Record<number, AumentoDeTarea>>>>;
+  /** Pedir al servidor que redacte los encargos de una propuesta pendiente. */
+  alPedirAumentoDePropuesta?: (propuesta: string) => void;
+  /** Encolar una propuesta EN ORDEN con los encargos revisados. Devuelve el motivo si se negó.
+   *  Sin él, ninguna tarjeta de propuesta ofrece encolar: es el registro de lo propuesto. */
+  alEncolarPropuesta?: (propuesta: string, encargos: string[]) => Promise<string | undefined>;
+  alDescartarPropuesta?: (propuesta: string) => Promise<string | undefined>;
 }) {
   /**
    * Las preguntas del agente, que se pintan como TARJETA en su sitio del hilo: cuál está
@@ -715,6 +747,12 @@ export function Chat({
    * (`textoDeConsulta.ts`), que se quita al pintar porque la tarjeta ya lo dice.
    */
   const pendiente = consultaPendiente(actos, turnoEnVuelo);
+  /** Cómo acabó cada propuesta de tareas, por su id: la tarjeta pinta sin controles las resueltas. */
+  const resueltas = new Map<string, { encoladas?: string[] }>();
+  for (const a of actos) {
+    if (a.tipo !== "propuesta-resuelta" || typeof a.propuesta !== "string") continue;
+    resueltas.set(a.propuesta, Array.isArray(a.encoladas) ? { encoladas: a.encoladas } : {});
+  }
   const repetidaEn = new Map<number, { pregunta: string; opciones: string[] }>();
   const respuestaA = new Map<number, string>();
   for (const [k, a] of actos.entries()) {
@@ -831,6 +869,13 @@ export function Chat({
      */
     if (acto.tipo === "consulta" && !consultaPintable(acto)) continue;
     /**
+     * La propuesta de tareas es su TARJETA, en su sitio, como la consulta; cómo acabó
+     * (`propuesta-resuelta`) no se pinta aparte: lo dice la propia tarjeta, así que pasa de largo
+     * sin tocar el tramo, como la sincronización.
+     */
+    if (acto.tipo === "propuesta-resuelta") continue;
+    if (acto.tipo === "propuesta-de-tareas" && !propuestaPintable(acto)) continue;
+    /**
      * **Un artefacto tiene UNA tarjeta, en su último anuncio.** Cada `write` y cada `edit` sobre
      * `/artefactos/` se anuncia —una escritura sin aprobación tiene que decirse, y esa línea sigue
      * en el tramo—, pero es el MISMO fichero: medido en pantalla, un diseñador que editó su HTML
@@ -940,6 +985,7 @@ export function Chat({
   const nuevos = contarMensajesNuevos(actos, usarMarcaDeLeido(actos.length, alFinal, sesion), (acto, indice) => {
     if (acto.tipo === "error") return true;
     if (acto.tipo === "consulta") return consultaPintable(acto);
+    if (acto.tipo === "propuesta-de-tareas") return propuestaPintable(acto);
     if (acto.tipo !== "asistente") return false;
     const repetida = repetidaEn.get(indice);
     return (repetida === undefined ? acto.texto : sinTextoDeConsulta(acto.texto, repetida.pregunta, repetida.opciones)) !== "";
@@ -1187,6 +1233,27 @@ export function Chat({
                     <HoraDelMensaje cuando={acto.cuando} clase={estilos.hora} />
                     {acto.texto === "" ? null : <BotonDeCopiar texto={acto.texto} etiqueta="Copiar el mensaje" />}
                   </div>
+                </div>
+              );
+            }
+            if (acto.tipo === "propuesta-de-tareas") {
+              const resuelta = resueltas.get(acto.id);
+              const id = acto.id;
+              return (
+                <div key={indice} className={vista.flowItem}>
+                  <PropuestaDeTareas
+                    motivo={acto.motivo}
+                    tareas={acto.tareas}
+                    {...(propuestasAumentadas?.[id] === undefined ? {} : { aumentos: propuestasAumentadas[id] })}
+                    {...(resuelta === undefined ? {} : { resuelta })}
+                    {...(resuelta === undefined && alEncolarPropuesta !== undefined
+                      ? {
+                          alEncolar: (encargos: string[]) => alEncolarPropuesta(id, encargos),
+                          ...(alDescartarPropuesta === undefined ? {} : { alDescartar: () => alDescartarPropuesta(id) }),
+                          ...(alPedirAumentoDePropuesta === undefined ? {} : { alPedirAumento: () => alPedirAumentoDePropuesta(id) }),
+                        }
+                      : {})}
+                  />
                 </div>
               );
             }

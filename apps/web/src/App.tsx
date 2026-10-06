@@ -101,6 +101,18 @@ function modoDelProyectoDe(valor: unknown): { proyecto?: ModoDeEscritura } | und
   return proyecto === "supervisado" || proyecto === "autonomo" ? { proyecto } : undefined;
 }
 
+/**
+ * Como `negativaDe`, y además cualquier otra respuesta que no sea correcta es un fallo: para una
+ * acción cuyo «sí» importa —encolar tareas que escriben solas—, un 400 o un 500 no puede leerse
+ * como hecho. Una respuesta sin `status` (un doble de test) cuenta como correcta.
+ */
+async function negativaOFalloDe(respuesta: unknown): Promise<string | undefined> {
+  const motivo = await negativaDe(respuesta);
+  if (motivo !== undefined) return motivo;
+  const r = respuesta as { ok?: unknown; status?: unknown } | undefined;
+  return r?.ok === false ? `el servidor contestó ${String(r.status)}` : undefined;
+}
+
 async function negativaDe(respuesta: unknown): Promise<string | undefined> {
   const r = respuesta as Response | undefined;
   if (r?.status !== 409) return undefined;
@@ -2832,6 +2844,24 @@ export function App({
               alResponderConsulta={async (texto) => {
                 await enviar({ clase: "prosa", texto });
               }}
+              // La propuesta de tareas encadenadas: redactar, encolar en orden o descartar, siempre
+              // del proyecto ABIERTO (la conversación que la propuso). Sin proyecto deducido no se
+              // ofrece encolar: la tarjeta queda como registro.
+              {...(estado.propuestasAumentadas === undefined ? {} : { propuestasAumentadas: estado.propuestasAumentadas })}
+              {...(proyectoActivoId === undefined
+                ? {}
+                : {
+                    // Solo si no ha llegado nada de ella: volver a montar la tarjeta (cambiar de
+                    // pestaña) no puede pagar otra redacción entera.
+                    alPedirAumentoDePropuesta: (propuesta: string) => {
+                      if (estado.propuestasAumentadas?.[propuesta] !== undefined) return;
+                      void enviar({ clase: "tarea", accion: "aumentarPropuesta", proyecto: proyectoActivoId, propuesta });
+                    },
+                    alEncolarPropuesta: async (propuesta: string, encargos: string[]) =>
+                      negativaOFalloDe(await enviar({ clase: "tarea", accion: "crearEncadenadas", proyecto: proyectoActivoId, propuesta, encargos })),
+                    alDescartarPropuesta: async (propuesta: string) =>
+                      negativaOFalloDe(await enviar({ clase: "tarea", accion: "descartarPropuesta", proyecto: proyectoActivoId, propuesta })),
+                  })}
             />
             )}
             {/*

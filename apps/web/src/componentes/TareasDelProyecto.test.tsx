@@ -12,6 +12,30 @@ const tarea = (extra: Partial<TareaDelCable> = {}): TareaDelCable => ({
 });
 
 describe("TareasDelProyecto", () => {
+  it("una tarea encadenada dice a quién espera mientras la anterior no termine", () => {
+    const { rerender } = render(
+      <TareasDelProyecto
+        tareas={[
+          tarea({ id: "a", titulo: "Ventana de entradas", estado: "en-proceso" }),
+          tarea({ id: "b", titulo: "Ventana de salidas", tras: "a" }),
+        ]}
+      />
+    );
+    expect(screen.getByText("espera a: Ventana de entradas")).toBeTruthy();
+    rerender(
+      <TareasDelProyecto
+        tareas={[
+          tarea({ id: "a", titulo: "Ventana de entradas", estado: "terminada" }),
+          tarea({ id: "b", titulo: "Ventana de salidas", tras: "a" }),
+        ]}
+      />
+    );
+    expect(screen.queryByText(/espera a:/)).toBeNull();
+    // Si la anterior ya no está (descartada), no la retiene y no se dice nada.
+    rerender(<TareasDelProyecto tareas={[tarea({ id: "b", titulo: "Ventana de salidas", tras: "a" })]} />);
+    expect(screen.queryByText(/espera a:/)).toBeNull();
+  });
+
   it("enseña el estado y, cuando lo hay, el motivo", () => {
     render(<TareasDelProyecto tareas={[tarea({ estado: "requiere-atencion", motivo: "sin aprobar src/app.xne" })]} />);
     // El brief dictaba «/requiere atención/i», pero `Kanban.tsx` (§0 del diseño, ya en
