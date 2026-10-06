@@ -8579,3 +8579,16 @@ del canal es plano; el botón en la maqueta) y la LETRA —recorte, tamaño, col
 recorte en el frame dejaba de ver el «RAD» recortado de la calculadora. Tras el cambio, lo que queda en la ronda 7 es
 real: el borde del chip «ID» casi invisible (dorado al 20 %), su texto blanco donde la maqueta lo tiene ámbar, y «Al día»
 como píldora donde la maqueta tiene un rectángulo redondeado.
+
+### La nota que había que no copiar, copiada (06-10-2026)
+
+El arreglo de `3263ca6` cambiaba cada argumento largo de la memoria reducida por una nota: «el harness omitió este valor
+al guardar tu memoria (15507 caracteres). No es lo que escribiste: no lo copies; en una llamada nueva escribe el texto
+ENTERO». Horas después, en otra sesión de Maset, el analista —vuelto a llamar, con su memoria reducida— escribió un
+`PLAN.md` cuyo contenido era EXACTAMENTE esa nota (157 bytes en vez de 15.507). Se corrigió solo un par de llamadas
+después, pero la lección es la misma de antes, más fuerte: el modelo repite la FORMA de sus llamadas anteriores, y un
+texto dentro de la llamada no lo frena, aunque diga que no lo haga.
+
+Ahora una llamada con un argumento largo no se guarda como llamada: se cuenta en el texto del mensaje del asistente
+(«(Memoria del harness: aquí hiciste write_file sobre /planes/x/PLAN.md (content: 15507 caracteres)…)») y su respuesta
+se quita. Las llamadas cortas del mismo mensaje se quedan con la suya. Sin una llamada que imitar, no hay qué copiar.

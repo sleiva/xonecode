@@ -140,15 +140,37 @@ describe("los argumentos largos de sus llamadas, en la memoria reducida (Maset: 
     expect(argsDe(m).input).toBe(encargo);
   });
 
-  it("lo demás largo se omite ENTERO con una nota que dice que no se copie: nada de principio + marca de recorte", () => {
-    const contenido = "<coll name='X'>".repeat(100);
-    const [m] = reducirHistorial([llamada("write_file", { file_path: "/X.xne", content: contenido })]);
-    const a = argsDe(m);
-    expect(a.file_path).toBe("/X.xne");
-    expect(a.content).not.toContain("<coll");
-    expect(a.content).not.toContain("[recortado");
-    expect(a.content).toContain(`${String(contenido.length)} caracteres`);
-    expect(a.content).toContain("no lo copies");
+  it("una escritura larga NO se guarda como llamada: se CUENTA en el texto y su respuesta se quita (Maset: el analista copió la nota en PLAN.md)", () => {
+    const contenido = "# PLAN\n".repeat(400);
+    const ms = reducirHistorial([
+      { role: "user", content: "haz el plan" },
+      { ...llamada("write_file", { file_path: "/planes/x/PLAN.md", content: contenido }), content: "Escribo el plan." },
+      { role: "tool", tool_call_id: "c1", content: "Successfully wrote" },
+      { role: "assistant", content: "hecho" },
+    ]) as { role: string; content?: string; tool_calls?: unknown[] }[];
+    expect(ms.map((m) => m.role)).toEqual(["user", "assistant", "assistant"]);
+    expect(ms[1]!.tool_calls).toBeUndefined();
+    expect(ms[1]!.content).toContain("Escribo el plan.");
+    expect(ms[1]!.content).toContain(`write_file sobre /planes/x/PLAN.md (content: ${String(contenido.length)} caracteres)`);
+    expect(JSON.stringify(ms)).not.toContain("# PLAN");
     expect(MAX_CARACTERES_DE_ARGUMENTO).toBe(300);
+  });
+
+  it("y las llamadas cortas del mismo mensaje se quedan, con su respuesta", () => {
+    const ms = reducirHistorial([
+      {
+        role: "assistant",
+        content: "",
+        tool_calls: [
+          { id: "a", function: { name: "read_file", arguments: JSON.stringify({ file_path: "/x.xne" }) } },
+          { id: "b", function: { name: "edit_file", arguments: JSON.stringify({ file_path: "/x.xne", old_string: "o".repeat(400), new_string: "n".repeat(400) }) } },
+        ],
+      },
+      { role: "tool", tool_call_id: "a", content: "contenido" },
+      { role: "tool", tool_call_id: "b", content: "Successfully" },
+    ]) as { role: string; content?: string; tool_calls?: { id: string }[]; tool_call_id?: string }[];
+    expect(ms[0]!.tool_calls!.map((t) => t.id)).toEqual(["a"]);
+    expect(ms[0]!.content).toContain("edit_file sobre /x.xne");
+    expect(ms.filter((m) => m.role === "tool").map((m) => m.tool_call_id)).toEqual(["a"]);
   });
 });

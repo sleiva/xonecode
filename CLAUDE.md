@@ -662,9 +662,11 @@ lo que devolvió cada tool recortado, `TOPE_REDUCIDA_TOKENS`), y olvidado si ni 
 viva por especialista, y un hijo que falló o al que se cortó con «Detener» no deja memoria (su historial
 lleva la orden de parar).
 Si ni reducido cabe, se guarda la VENTANA de lo más reciente (`ventanaDeHistorial`), no nada.
-**En la reducida, sus propios ENCARGOS a otro especialista van enteros, y un argumento largo se cambia ENTERO por una nota
-que dice que no se copie** (`notaDeArgumentoOmitido`), nunca «principio… [recortado]»: medido en Maset, el desarrollador
-imitaba esa marca en sus encargos nuevos y el de pruebas los recibía partidos.
+**En la reducida, sus propios ENCARGOS a otro especialista van enteros, y una llamada con un argumento largo (un
+`write_file`, un `edit_file`) NO se guarda como llamada: se CUENTA en el texto («hiciste write_file sobre /x, N
+caracteres») y su respuesta se quita.** El modelo repite la FORMA de sus llamadas anteriores, diga lo que diga su texto:
+medido en Maset, con «principio… [recortado]» cortaba sus encargos nuevos, y con una nota de «no lo copies» la copió como
+contenido de un `PLAN.md`.
 Solo en memoria y por sesión; `XONECODE_SIN_MEMORIA_DE_ESPECIALISTAS=1` la apaga para comparar.
 **El BUCLE del desarrollador** (encendido por omisión; `XONECODE_BUCLE_DEL_DEVELOPER=0` lo apaga): quien declara `llama` en
 su `.md` recibe `create_sub_agent` y puede llamar SOLO a esos especialistas (hoy `device-controller` y `designer-xone`), y con

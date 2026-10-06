@@ -45,55 +45,17 @@ export const MAX_CARACTERES_DE_RESULTADO = 500;
 /** Tokens por carácter: la misma aproximación que usa el resto del harness donde no hay medida. */
 const CARACTERES_POR_TOKEN = 4;
 
-/** A partir de cuántos caracteres un argumento de una llamada a tool (el contenido de un `write_file`, el texto de un `edit_file`) se omite. */
+/** A partir de cuántos caracteres un argumento de una llamada a tool (el contenido de un `write_file`, el texto de un `edit_file`) hace que esa llamada se CUENTE en vez de guardarse (`reducirHistorial`). */
 export const MAX_CARACTERES_DE_ARGUMENTO = 300;
 
 /**
  * Los ENCARGOS que un especialista hizo a otro (`create_sub_agent`) se conservan enteros hasta aquí. Son cortos y son
- * lo que necesita recordar; y recortados le enseñaban a cortar los nuevos (ver `recortarArgumentos`).
+ * lo que necesita recordar; y recortados le enseñaban a cortar los nuevos (ver `reducirHistorial`).
  */
 export const MAX_CARACTERES_DE_ENCARGO = 8_000;
 
-/** La nota que sustituye a un argumento omitido. Dice lo que es y que NO se copie: no puede parecer el final de un texto. */
-export const notaDeArgumentoOmitido = (caracteres: number): string =>
-  `[el harness omitió este valor al guardar tu memoria (${String(caracteres)} caracteres). No es lo que escribiste: no lo copies; en una llamada nueva escribe el texto ENTERO]`;
-
 type LlamadaAMensaje = { function?: { arguments?: unknown; [k: string]: unknown }; [k: string]: unknown };
 type Mensaje = { role?: string; content?: unknown; reasoning_content?: unknown; tool_calls?: LlamadaAMensaje[]; [k: string]: unknown };
-
-/**
- * Los argumentos de una llamada con los valores de texto largos OMITIDOS. Un escritor que produce cien mil
- * tokens de salida los lleva ahí (el código entero de cada `edit_file` y `write_file`), y con solo recortar lo que
- * devuelven las tools su historial seguía sin caber: la segunda prueba real lo perdió a 211 mil tokens. La ruta y
- * el resto de campos cortos se conservan, que es lo que dice QUÉ hizo. Si no se entiende el JSON, se deja.
- *
- * **No se deja el principio con una marca detrás.** Antes quedaba «…los primeros 300 caracteres… [recortado: eran 741
- * caracteres]», y medido en Maset el desarrollador, al ver así sus propios encargos al de pruebas, escribió los NUEVOS
- * igual: con la marca inventada («eran 173» en uno de 311) y el encargo partido; el de pruebas no supo qué comprobar.
- * Ahora el valor entero se cambia por una nota que dice que no se copie, y los encargos (`create_sub_agent`) se guardan
- * enteros: son lo que hay que recordar.
- */
-function recortarArgumentos(argumentos: unknown, max: number, tool?: unknown): unknown {
-  if (typeof argumentos !== "string") return argumentos;
-  try {
-    const valor = JSON.parse(argumentos) as Record<string, unknown>;
-    if (valor === null || typeof valor !== "object" || Array.isArray(valor)) return argumentos;
-    let cambio = false;
-    const recortado = Object.fromEntries(
-      Object.entries(valor).map(([k, v]) => {
-        const tope = tool === "create_sub_agent" ? MAX_CARACTERES_DE_ENCARGO : max;
-        if (typeof v === "string" && v.length > tope) {
-          cambio = true;
-          return [k, notaDeArgumentoOmitido(v.length)];
-        }
-        return [k, v];
-      })
-    );
-    return cambio ? JSON.stringify(recortado) : argumentos;
-  } catch {
-    return argumentos;
-  }
-}
 
 const tokensDe = (mensajes: readonly unknown[]): number => Math.ceil(JSON.stringify(mensajes).length / CARACTERES_POR_TOKEN);
 
@@ -108,23 +70,75 @@ export function reducirHistorial(
   maxResultado: number = MAX_CARACTERES_DE_RESULTADO,
   maxArgumento: number = MAX_CARACTERES_DE_ARGUMENTO
 ): unknown[] {
-  return (mensajes as readonly Mensaje[]).map((m) => {
-    if (m.role === "tool" && typeof m.content === "string" && m.content.length > maxResultado) {
-      return { ...m, content: `${m.content.slice(0, maxResultado)}\n[recortado: eran ${String(m.content.length)} caracteres; vuelve a leerlo si lo necesitas]` };
+  /**
+   * Las llamadas con un argumento LARGO (el contenido de un `write_file`, el texto de un `edit_file`) NO se guardan como
+   * llamadas: se CUENTAN en el texto del mensaje («escribiste /planes/x/PLAN.md, 15507 caracteres») y su respuesta se
+   * quita. Ni recortadas ni con una nota en su lugar: medido en Maset, con la marca «[recortado…]» el desarrollador cortaba
+   * sus encargos nuevos, y con una nota que decía «no lo copies» el analista la COPIÓ como contenido de un `PLAN.md`. El
+   * modelo repite la FORMA de sus llamadas anteriores, diga lo que diga su texto: una llamada que no está no se imita.
+   */
+  const contadas = new Set<string>();
+  const contar = (t: LlamadaAMensaje): string | undefined => {
+    const nombre = t.function?.name;
+    const args = t.function?.arguments;
+    if (typeof args !== "string") return undefined;
+    let valor: Record<string, unknown>;
+    try {
+      valor = JSON.parse(args) as Record<string, unknown>;
+    } catch {
+      return undefined;
+    }
+    if (valor === null || typeof valor !== "object" || Array.isArray(valor)) return undefined;
+    const tope = nombre === "create_sub_agent" ? MAX_CARACTERES_DE_ENCARGO : maxArgumento;
+    const largos = Object.entries(valor).filter(([, v]) => typeof v === "string" && v.length > tope);
+    if (largos.length === 0) return undefined;
+    const ruta = typeof valor["file_path"] === "string" ? ` sobre ${valor["file_path"]}` : typeof valor["name"] === "string" ? ` a ${valor["name"]}` : "";
+    const cuanto = largos.map(([k, v]) => `${k}: ${String((v as string).length)} caracteres`).join(", ");
+    return `${String(nombre)}${ruta} (${cuanto})`;
+  };
+  const salida: unknown[] = [];
+  for (const m of mensajes as readonly Mensaje[]) {
+    if (m.role === "tool") {
+      const id = (m as { tool_call_id?: unknown }).tool_call_id;
+      if (typeof id === "string" && contadas.has(id)) continue;
+      if (typeof m.content === "string" && m.content.length > maxResultado) {
+        salida.push({ ...m, content: `${m.content.slice(0, maxResultado)}\n[recortado: eran ${String(m.content.length)} caracteres; vuelve a leerlo si lo necesitas]` });
+        continue;
+      }
+      salida.push(m);
+      continue;
     }
     if (m.role === "assistant") {
       const { reasoning_content: _r, ...resto } = m;
       void _r;
-      if (resto.tool_calls === undefined) return resto;
-      return {
-        ...resto,
-        tool_calls: resto.tool_calls.map((t) =>
-          t.function === undefined ? t : { ...t, function: { ...t.function, arguments: recortarArgumentos(t.function.arguments, maxArgumento, t.function.name) } }
-        ),
-      };
+      if (resto.tool_calls === undefined) {
+        salida.push(resto);
+        continue;
+      }
+      const quedan: LlamadaAMensaje[] = [];
+      const hechas: string[] = [];
+      for (const t of resto.tool_calls) {
+        const contada = contar(t);
+        if (contada === undefined) quedan.push(t);
+        else {
+          hechas.push(contada);
+          if (typeof t["id"] === "string") contadas.add(t["id"]);
+        }
+      }
+      if (hechas.length === 0) {
+        salida.push(resto);
+        continue;
+      }
+      const texto = typeof resto.content === "string" ? resto.content : "";
+      const nota = `(Memoria del harness: aquí hiciste ${hechas.join("; ")}. El texto entero no se guarda en la memoria; si lo necesitas, vuelve a leer el fichero.)`;
+      const { tool_calls: _t, ...sinLlamadas } = resto;
+      void _t;
+      salida.push(quedan.length === 0 ? { ...sinLlamadas, content: texto === "" ? nota : `${texto}\n${nota}` } : { ...resto, content: texto === "" ? nota : `${texto}\n${nota}`, tool_calls: quedan });
+      continue;
     }
-    return m;
-  });
+    salida.push(m);
+  }
+  return salida;
 }
 
 /**
