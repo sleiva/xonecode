@@ -17,6 +17,7 @@ import type { EstadoDeVerificador, VeredictoDeTarea } from "./entrega.js";
 import type { HallazgoDelTurno } from "./events.js";
 import type { LineaDeDiff } from "./diff.js";
 import type { ConectorParaElAgente, ToolConEsquema } from "./conectores.js";
+import { buscarEnCatalogo, claveDeEstilo, type FamiliaDeFuente, type Peso } from "./fuentes.js";
 import type {
   ContextoRemoto, EntradaRemota, EstructuraRemota, ManifiestoRemoto,
 } from "./cloudstudio.js";
@@ -956,6 +957,52 @@ export class IconosEnMemoria implements IconosPort {
     this.peticiones.push({ id, ...opciones });
     const { color, tamano } = opciones;
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${tamano}" height="${tamano}" viewBox="0 0 24 24"><path fill="${color}" d="M0 0h24v24H0z"/></svg>`;
+  }
+}
+
+/**
+ * De dónde salen las fuentes: Google Fonts, por la red. Un puerto por lo mismo que `IconosPort`:
+ * `npm test` no puede necesitar una conexión, y la tool (`agent/grafo/fuentesDeGoogle.ts`) no
+ * puede saber si hay red.
+ *
+ * **Lanza ante cualquier fallo**, con un mensaje sin URL ni cuerpo remoto; la tool lo DEVUELVE
+ * como texto. Ninguna operación inventa una familia ni un fichero cuando la red falta.
+ */
+export interface FuentesPort {
+  /** Las familias que encajan (`core/fuentes.ts#buscarEnCatalogo`). Vacío es «no hay», no un fallo. */
+  buscar(consulta: string, limite: number): Promise<FamiliaDeFuente[]>;
+  /** La familia con ese nombre EXACTO, o `undefined` si el catálogo no la tiene. */
+  familia(nombre: string): Promise<FamiliaDeFuente | undefined>;
+  /** Los bytes del `.ttf` estático de ese estilo, ya comprobados (`esTrueType`, tope de tamaño). */
+  ttf(familia: string, peso: Peso, cursiva: boolean): Promise<Uint8Array>;
+}
+
+/**
+ * El doble: un catálogo fijo, sin red. El `.ttf` son 16 bytes con la firma TrueType y el nombre del
+ * estilo detrás, así que un test ve qué se pidió. `fallo` simula la red caída.
+ */
+export class FuentesEnMemoria implements FuentesPort {
+  readonly [ES_DOBLE] = true;
+  readonly peticiones: Array<{ familia: string; peso: Peso; cursiva: boolean }> = [];
+  constructor(
+    private readonly familias: readonly FamiliaDeFuente[] = [],
+    private readonly fallo?: string
+  ) {}
+  async buscar(consulta: string, limite: number): Promise<FamiliaDeFuente[]> {
+    if (this.fallo !== undefined) throw new Error(this.fallo);
+    return buscarEnCatalogo(this.familias.map((f, i) => ({ ...f, popularidad: i })), consulta, limite);
+  }
+  async familia(nombre: string): Promise<FamiliaDeFuente | undefined> {
+    if (this.fallo !== undefined) throw new Error(this.fallo);
+    return this.familias.find((f) => f.familia === nombre);
+  }
+  async ttf(familia: string, peso: Peso, cursiva: boolean): Promise<Uint8Array> {
+    if (this.fallo !== undefined) throw new Error(this.fallo);
+    const f = this.familias.find((x) => x.familia === familia);
+    if (f === undefined || !f.estilos.includes(claveDeEstilo(peso, cursiva))) throw new Error("Google Fonts contestó 400");
+    this.peticiones.push({ familia, peso, cursiva });
+    const cola = new TextEncoder().encode(`${familia}:${claveDeEstilo(peso, cursiva)}`.padEnd(12, " "));
+    return new Uint8Array([0x00, 0x01, 0x00, 0x00, ...cola]);
   }
 }
 

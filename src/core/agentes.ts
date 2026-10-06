@@ -18,6 +18,7 @@
 
 import { esEsfuerzo, esPensamiento, type Esfuerzo, type Pensamiento } from "./esfuerzo.js";
 import { recibeBuscarIcono } from "./iconos.js";
+import { recibeFuentes } from "./fuentes.js";
 import { NUCLEO_XONE } from "./nucleoXone.js";
 
 /** De qué está hecho un subagente. Los tres van al MISMO sitio: la lista de deepagents. */
@@ -459,7 +460,7 @@ export interface Lectura {
  */
 export const SKILL_DE_OPENUI = "openui-builder";
 
-export function fichaDeAgente(agente: Agente, opciones: { conIconos?: boolean } = {}): string {
+export function fichaDeAgente(agente: Agente, opciones: { conIconos?: boolean; conFuentes?: boolean } = {}): string {
   const capacidades: string[] = [];
   /**
    * **Quien EJECUTA es su propio caso, y confundirlo con «escribe» miente dos veces.**
@@ -506,6 +507,18 @@ export function fichaDeAgente(agente: Agente, opciones: { conIconos?: boolean } 
   if (opciones.conIconos === true && agente.motor === "modelo" && recibeBuscarIcono(agente)) {
     capacidades.push(
       "consigue él los iconos que falten (SVG de Iconify) para botones y menús: encárgale los iconos a él, no a quien ejecuta comandos"
+    );
+  }
+
+  /**
+   * Las fuentes de la maqueta, por lo mismo que los iconos: el orquestador no ve la tool del
+   * especialista. Solo con el puerto montado (`conFuentes`), y solo a quien ESCRIBE en `fonts/`
+   * con `escribeEn` —el diseñador—: el desarrollador también la tiene, pero la ficha dice a quién
+   * ENCARGARLA, y los recursos son del diseñador.
+   */
+  if (opciones.conFuentes === true && agente.motor === "modelo" && recibeFuentes(agente) && (agente.escribeEn ?? []).length > 0) {
+    capacidades.push(
+      "trae las fuentes de la maqueta (los .ttf de Google Fonts, a fonts/): encárgale la tipografía con la familia y los pesos que se usan"
     );
   }
 

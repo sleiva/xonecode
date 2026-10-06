@@ -12,6 +12,7 @@
  */
 
 import { NOMBRE_INCORPORAR_ADJUNTO } from "../../core/adjuntos.js";
+import { NOMBRE_BUSCAR_FUENTE, NOMBRE_TRAER_FUENTE } from "../../core/fuentes.js";
 
 /** Valores escalares que una traza local puede conservar sin volcar contenido. */
 export type ParametrosSeguros = Record<string, string | number | boolean>;
@@ -30,6 +31,9 @@ export const CAMPOS_SEGUROS: Record<string, readonly string[]> = {
   // El destino y nada más; el ORIGEN (`adjunto`) es un nombre que la persona subió, y la línea
   // dice adónde va, que es lo que se aprueba.
   [NOMBRE_INCORPORAR_ADJUNTO]: ["file_path"],
+  // De las fuentes, la consulta y el destino: nombres de familia públicos y una ruta virtual.
+  [NOMBRE_BUSCAR_FUENTE]: ["consulta"],
+  [NOMBRE_TRAER_FUENTE]: ["file_path"],
   ls: ["path"],
   glob: ["pattern", "path"],
   grep: ["pattern", "path", "glob", "max_count", "output_mode"],

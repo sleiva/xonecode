@@ -57,7 +57,7 @@ dos valores en el `app.xml` del proyecto.
 
 | En la maqueta | En XOne | De dónde |
 |---|---|---|
-| una fuente de Google Fonts (`fontFamily` en la configuración, `fonts.googleapis.com` en el `<head>`) | su `.ttf` en `fonts/` y `fontname: Nombre.ttf`. El `.ttf` variable que da Google Fonts vale tal cual (sale con su peso por omisión). **Se sube desplegando entero**: la recarga en caliente no lleva `fonts/`. Un `fontname` que no está en el aparato saca un diálogo de error y el control no se pinta | medido |
+| una fuente de Google Fonts (`fontFamily` en la configuración, `fonts.googleapis.com` en el `<head>`) | su `.ttf` en `fonts/` y `fontname: Nombre.ttf` (`buscar_fuente` → `traer_fuente` lo trae: un `.ttf` estático por peso, `Inter-Bold.ttf`). El `.ttf` variable que da Google Fonts vale tal cual (sale con su peso por omisión). **Se sube desplegando entero**: la recarga en caliente no lleva `fonts/`. Un `fontname` que no está en el aparato saca un diálogo de error y el control no se pinta | medido |
 | `text-[Npx]`, `fontSize` de la configuración | `fontsize` / `textfont-size`. La relación con los px de la maqueta **no está medida**: `fontsize: 40` salió de unos 100 px de alto en un aparato de 1080. Ajusta midiendo la captura | sin medir |
 | `font-medium`, `font-semibold`, `font-bold` | la variante de la fuente con ese peso (`Roboto-Bold.ttf`) o `fontbold` | documentado |
 | `uppercase` | escribe el texto ya en mayúsculas | sin medir |

@@ -9,7 +9,7 @@ import type { DetalleDeLinea } from "../../../core/actos.js";
 import type { ModelosPort, PeticionExterna } from "../../../core/ports.js";
 import { ConectoresEnMemoria } from "../../../core/ports.js";
 import { TOPE_DE_LLAMADA_MS } from "../../../core/conectores.js";
-import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ } from "./sesionTrueforge.js";
+import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ, notaDeDelegacion, textoDelBucle } from "./sesionTrueforge.js";
 import { TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
 import { topeAgotadoDe, traducirEvento } from "./eventosTrueforge.js";
 import { cargarMemoria, rutaDeMemoria } from "./memoriaTrueforge.js";
@@ -2704,6 +2704,93 @@ describe("`incorporar_adjunto` en TrueForge (IXCODE-7): pide aprobación y solo 
     await s.turno("pon el icono adjunto", piel().p);
     expect(toolsPorLlamada[1]).not.toContain("incorporar_adjunto");
     expect(existsSync(join(raiz, "icons"))).toBe(false);
+  }, 20_000);
+});
+
+/**
+ * Las fuentes de Google Fonts en TrueForge, con el orquestador REAL: el diseñador busca y trae, y
+ * `traer_fuente` para el turno como `write_file` —está en `PROPIAS_QUE_ESCRIBEN`— con su tarjeta
+ * de fichero binario. Compuesto dentro de `propiasDe` y `capacidadesDelEspecialista`: sin esto el
+ * reparto y la aprobación quedarían escritos y sin probar.
+ */
+describe("las fuentes de Google Fonts en TrueForge: el diseñador las trae a fonts/ con aprobación", () => {
+  const CATALOGO_DE_FUENTES = [{ familia: "Inter", categoria: "Sans Serif", estilos: ["400", "700"] }];
+  const guion = (quien = "designer-xone"): AIMessageChunk[][] => [
+    [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: quien, input: "trae Inter 700" }) }] })],
+    [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "f1", name: "traer_fuente", args: JSON.stringify({ familia: "Inter", peso: 700, file_path: "/fonts/Inter-Bold.ttf" }) }] })],
+    [new AIMessageChunk({ content: "Hecho." })],
+    [new AIMessageChunk({ content: "Listo." })],
+  ];
+
+  it("supervisado: la tarjeta dice qué se descarga y adónde; con «allow» se escribe; el raíz no la tiene", async () => {
+    const { FuentesEnMemoria } = await import("../../../core/ports.js");
+    const raiz = proyecto();
+    const vistas: { fichero?: string; lineas?: { texto: string }[]; descripcion: string; origen: string }[] = [];
+    const { m, toolsPorLlamada, vistos } = modelosConGuion(guion());
+    const s = await abrirSesionTrueforge({
+      raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, fuentes: new FuentesEnMemoria(CATALOGO_DE_FUENTES),
+      pedirAprobacion: async (pendientes, ficheros, diffs) => {
+        for (const p of pendientes) {
+          const fichero = ficheros.get(p.id);
+          const lineas = diffs?.get(p.id);
+          vistas.push({ origen: p.origen, descripcion: p.descripcion, ...(fichero === undefined ? {} : { fichero }), ...(lineas === undefined ? {} : { lineas }) });
+        }
+        return new Map(pendientes.map((p) => [p.id, { type: "approve" as const }]));
+      },
+    });
+    const pi = piel();
+    await s.turno("usa la tipografía de la maqueta", pi.p);
+    expect(pi.pausas()).toBe(1);
+    expect(vistas[0]!.fichero).toBe("/fonts/Inter-Bold.ttf");
+    expect(vistas[0]!.origen).toBe("designer-xone");
+    expect(vistas[0]!.descripcion).toBe("quiere traer una fuente de Google Fonts al proyecto");
+    expect(vistas[0]!.lineas![0]!.texto).toMatch(/^\[fichero binario\] se descarga Inter 700 de Google Fonts/);
+    expect(Array.from(readFileSync(join(raiz, "fonts", "Inter-Bold.ttf")).subarray(0, 4))).toEqual([0, 1, 0, 0]);
+    expect(toolsPorLlamada[1]).toEqual(expect.arrayContaining(["buscar_fuente", "traer_fuente"]));
+    expect(toolsPorLlamada[0]).not.toContain("traer_fuente");
+    // El orquestador sabe a quién encargar la tipografía: la ficha del diseñador lo dice.
+    expect(vistos[0]!.join("\n")).toContain("trae las fuentes de la maqueta");
+  }, 20_000);
+
+  it("rechazada: no se escribe", async () => {
+    const { FuentesEnMemoria } = await import("../../../core/ports.js");
+    const raiz = proyecto();
+    const s = await abrirSesionTrueforge({
+      raiz, modelos: modelosConGuion(guion()).m, entorno: ENTORNO, skills: CATALOGO, fuentes: new FuentesEnMemoria(CATALOGO_DE_FUENTES),
+      pedirAprobacion: async (pendientes) => new Map(pendientes.map((p) => [p.id, { type: "reject" as const }])),
+    });
+    await s.turno("usa la tipografía", piel().p);
+    expect(existsSync(join(raiz, "fonts"))).toBe(false);
+  }, 20_000);
+
+  it("el desarrollador también la tiene; quien ejecuta, no", async () => {
+    const { FuentesEnMemoria } = await import("../../../core/ports.js");
+    const dev = modelosConGuion(guion("developer-xone"));
+    await (await abrirSesionTrueforge({ raiz: proyecto(), modelos: dev.m, entorno: ENTORNO, skills: CATALOGO, fuentes: new FuentesEnMemoria(CATALOGO_DE_FUENTES), sinAprobacion: () => true }))
+      .turno("x", piel().p);
+    expect(dev.toolsPorLlamada[1]).toContain("traer_fuente");
+    const con = modelosConGuion(guion("device-controller"));
+    await (await abrirSesionTrueforge({ raiz: proyecto(), modelos: con.m, entorno: ENTORNO, skills: CATALOGO, fuentes: new FuentesEnMemoria(CATALOGO_DE_FUENTES), sinAprobacion: () => true }))
+      .turno("x", piel().p).catch(() => undefined);
+    expect(con.toolsPorLlamada[1]).not.toContain("traer_fuente");
+  }, 30_000);
+
+  it("con el puerto, los textos del bucle ya no dan la tipografía por irreproducible; sin él, sí", () => {
+    const con = textoDelBucle(["designer-xone"], { conFuentes: true });
+    expect(con).toContain("La TIPOGRAFÍA del diseño sí");
+    expect(con).not.toContain("no hay .ttf");
+    expect(textoDelBucle(["designer-xone"])).toContain("las tipografías del diseño (no hay .ttf)");
+    const agentes = [{ nombre: "developer-xone", descripcion: "d", motor: "modelo", soloLectura: false, skills: [], instrucciones: "", origen: "semilla" }] as never;
+    expect(notaDeDelegacion(agentes, { conBucle: true, conFuentes: true })).toContain("la tipografía del diseño sí");
+    expect(notaDeDelegacion(agentes, { conBucle: true })).toContain("las tipografías del diseño, el desenfoque");
+  });
+
+  it("sin el puerto, nadie la tiene ni la ficha la promete", async () => {
+    const { m, toolsPorLlamada, vistos } = modelosConGuion(guion());
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true });
+    await s.turno("x", piel().p).catch(() => undefined);
+    expect(toolsPorLlamada[1]).not.toContain("traer_fuente");
+    expect(vistos[0]!.join("\n")).not.toContain("trae las fuentes de la maqueta");
   }, 20_000);
 });
 

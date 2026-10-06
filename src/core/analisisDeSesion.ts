@@ -75,7 +75,7 @@ export const LLAMADAS_IGUALES_PARA_BUCLE = 4;
 /** A partir de qué fracción del tope la ventana está «cerca»: queda poco antes de resumir. */
 export const FRACCION_DE_CONTEXTO_CERCA = 0.9;
 /** Las tools que ESCRIBEN en el proyecto (las que llevan HITL, `CLAUDE.md`). */
-export const TOOLS_QUE_ESCRIBEN: ReadonlySet<string> = new Set(["write_file", "edit_file", "incorporar_adjunto"]);
+export const TOOLS_QUE_ESCRIBEN: ReadonlySet<string> = new Set(["write_file", "edit_file", "incorporar_adjunto", "traer_fuente"]);
 /** Lo que cabe de un mensaje de error en un hallazgo: se reconoce, no se reproduce. */
 export const TOPE_DE_MENSAJE = 200;
 

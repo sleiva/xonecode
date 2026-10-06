@@ -938,6 +938,11 @@ const DEVOLVER_RECURSOS = [
   "| fichero | control(es) del `.xne` | atributo (`img`, `imgbk`, `imgsel`) | tamaño en px | ¿lleva el símbolo dentro? |",
   "Es lo que necesita quien cablea la pantalla: con ella no abre los SVG. Si un fichero sirve a varios controles, dilos todos;",
   "si no sabes el nombre del control, di la pieza del diseño («tecla de operador», «pill DEG»).",
+  "",
+  "FUENTES: si la maqueta declara una tipografía (`fontFamily` en su `code.html` o su `DESIGN.md`) y tienes `buscar_fuente`,",
+  "trae a `fonts/` los pesos que use la pantalla —uno por estilo, con `traer_fuente`—, no solo el normal.",
+  "Si trajiste FUENTES a `fonts/`, añade debajo una línea por fichero: `fontname` (el nombre a secas) → peso → qué textos la",
+  "usan (títulos, el display, las teclas). La fuente solo llega al aparato DESPLEGANDO la app entera: dilo.",
 ].join("\n");
 
 const HANDOFF_MOCKUP = [
@@ -1224,18 +1229,21 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     nombre: "designer-xone",
     descripcion:
       "Para los RECURSOS visuales que XOne no trae: busca iconos en una biblioteca y genera fondos SVG " +
-      "(degradados, sombras, brillos, esquinas) y los deja en `icons/`; y hace los diagramas de la app. " +
+      "(degradados, sombras, brillos, esquinas) y los deja en `icons/`; trae a `fonts/` las fuentes de la maqueta " +
+      "(Google Fonts, un .ttf por peso); y hace los diagramas de la app. " +
       "NO maqueta pantallas ni toca un `.xne`, el CSS ni los scripts: el layout, el CSS y todo lo que se ve " +
       "mal en una pantalla son de developer-xone. Dale la lista de recursos —para qué control, tamaño en " +
       "píxeles, colores— o la maqueta de la que sacarla. Devuelve una TABLA de lo que dejó en `icons/`: " +
       "fichero → control(es) del `.xne` → atributo (`img`, `imgbk`, `imgsel`) → tamaño en píxeles → si lleva el " +
-      "símbolo dibujado dentro. Pásasela TAL CUAL a quien cablee la pantalla: con ella no tiene que abrir los SVG. " +
+      "símbolo dibujado dentro, y el `fontname` de cada fuente con su peso. Pásasela TAL CUAL a quien cablee la pantalla: con " +
+      "ella no tiene que abrir los SVG. " +
       "**Si el encargo es DOCUMENTAR, es document-writer.**",
     motor: "modelo",
     soloLectura: false,
     // **Lo que lo confina es `escribeEn`, no el prompt**: medido en calc10, el diseñador rehízo `MenuPrincipal.xne` entero
-    // dos veces sobre la lógica del desarrollador. Un recurso es un fichero de `icons/`; la pantalla es de quien la cablea.
-    escribeEn: ["/icons/"],
+    // dos veces sobre la lógica del desarrollador. Un recurso es un fichero de `icons/` o una fuente de `fonts/`; la
+    // pantalla es de quien la cablea.
+    escribeEn: ["/icons/", "/fonts/"],
     skills: ["xone-development", "archify", "artifacts-builder", "openui-builder"],
     instrucciones: `${TRABAJAR_CON_PLAN}\n\n${HANDOFF_MOCKUP}\n\n${DEVOLVER_RECURSOS}\n\n${MEMORIA_LEER_CON_HANDOFF}\n\n${MEMORIA_ESCRIBIR}`,
     origen: "semilla",

@@ -16,6 +16,7 @@ import type { Agente } from "../../../core/agentes.js";
 import type { DispositivoDeLaSesion } from "../../../core/dispositivoDeSesion.js";
 import { permisosDe } from "../../grafo/perfiles.js";
 import { NOMBRE_INCORPORAR_ADJUNTO } from "../../../core/adjuntos.js";
+import { NOMBRE_TRAER_FUENTE } from "../../../core/fuentes.js";
 import {
   fuenteDeEjecucion,
   fuenteDeFicheros,
@@ -68,10 +69,13 @@ export function capacidadDeFicheros(opciones: {
 /**
  * Las tools propias de xonecode (`xone_navegacion`, `regex_search`…), adaptadas.
  *
- * `conAprobacion`: las de ESTE conjunto que paran el turno como `write_file` —hoy solo
- * `incorporar_adjunto`, que escribe el proyecto por su cuenta y tras el «sí» copia ella—. Omitido
+ * `conAprobacion`: las de ESTE conjunto que paran el turno como `write_file` —`incorporar_adjunto` y
+ * `traer_fuente` (`PROPIAS_QUE_ESCRIBEN`), que escriben el proyecto por su cuenta tras el «sí»—. Omitido
  * es «ninguna», que es lo de siempre para las que solo leen.
  */
+/** Las tools PROPIAS que escriben el proyecto por su cuenta, y por eso paran el turno a preguntar. */
+export const PROPIAS_QUE_ESCRIBEN: readonly string[] = [NOMBRE_INCORPORAR_ADJUNTO, NOMBRE_TRAER_FUENTE];
+
 export function capacidadDePropias(
   tools: readonly ToolDeLangchain[],
   backend: EscritorDeDesalojo,
@@ -379,11 +383,11 @@ export function capacidadesDelEspecialista(
       tools: clase === "ejecuta" ? TOOLS_DE_LECTURA : TOOLS_DE_FICHERO,
       conAprobacion: clase === "escribe",
     }),
-    // `incorporar_adjunto` ESCRIBE el proyecto: si está entre las propias, pide aprobación como
-    // `write_file` (el HITL de deepagents la tiene por NOMBRE, `perfiles.ts#hitlDe`). Sin esto la
-    // tool copiaría en cuanto el modelo la pidiera.
+    // `incorporar_adjunto` y `traer_fuente` ESCRIBEN el proyecto: si están entre las propias, piden
+    // aprobación como `write_file` (el HITL de deepagents tiene la primera por NOMBRE,
+    // `perfiles.ts#hitlDe`). Sin esto escribirían en cuanto el modelo las pidiera.
     ...(propias.length > 0
-      ? [capacidadDePropias(propias, deps.backend, propias.some((t) => t.name === NOMBRE_INCORPORAR_ADJUNTO) ? [NOMBRE_INCORPORAR_ADJUNTO] : [])]
+      ? [capacidadDePropias(propias, deps.backend, PROPIAS_QUE_ESCRIBEN.filter((n) => propias.some((t) => t.name === n)))]
       : []),
     ...(clase === "ejecuta" ? [capacidadDeEjecucion(deps.conShell(), deps.dispositivo)] : []),
     ...(deps.conectores?.(agente) ?? []),

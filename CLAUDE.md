@@ -138,7 +138,8 @@ Cinco cosas no son negociables:
 - **El HITL va en `write_file`, `edit_file` e `incorporar_adjunto`**: las tres escriben. La
   tercera copia un adjunto del chat dentro del proyecto (IXCODE-7) y entra en la MISMA aprobación
   por NOMBRE de tool, en los dos motores — la tarjeta lo muestra con la línea `[fichero binario]`
-  en vez de un diff, porque no hay texto que comparar.
+  en vez de un diff, porque no hay texto que comparar. En TrueForge hay una cuarta, `traer_fuente`, por la misma
+  puerta (`PROPIAS_QUE_ESCRIBEN`) y con la misma línea.
 
 Y las guardas del proyecto:
 
@@ -279,6 +280,17 @@ Y las guardas del proyecto:
   devuelve `currentColor` y `1em`, que XOne no documenta, y un icono mal tintado no da error. **Sin
   red la tool lo dice y no devuelve un SVG**; el rechazo se DEVUELVE, nunca se lanza. Límite
   declarado: el modelo reteclea el `path` al escribirlo.
+- **Y las FUENTES de la maqueta, de Google Fonts y sin clave: `buscar_fuente` y `traer_fuente`**
+  (`agent/grafo/fuentesDeGoogle.ts`, `core/fuentes.ts`, `FuentesPort` con su doble `FuentesEnMemoria`), solo en TrueForge
+  y a quien puede dejar el `.ttf` en `fonts/` (`recibeFuentes`: el desarrollador y el diseñador; la ficha se la encarga al
+  diseñador, que hace los recursos). La primera LEE el catálogo, pedido una vez por puerto (es AJENO; «no cachear» habla del
+  modelo del proyecto). La segunda **ESCRIBE un binario y pasa por la aprobación por NOMBRE** (`PROPIAS_QUE_ESCRIBEN`), con
+  la tarjeta de `[fichero binario]`, como `incorporar_adjunto`, cuyas guardas de disco reutiliza (`motivoDeDestinoEnDisco`).
+  **El destino lo decide el CÓDIGO**: `file_path` va en la entrada porque es la clave de la tarjeta y del modo autónomo,
+  pero solo vale `rutaDeFuente(familia, peso, cursiva)`, la convención de los estáticos de Google (`Inter-Bold.ttf`).
+  El fichero es el `.ttf` ESTÁTICO de un peso que da la API `css2` a un cliente sin navegador, solo de `fonts.gstatic.com`,
+  con la firma TrueType comprobada y tope. Con el puerto, los textos del bucle dejan de dar la tipografía por
+  irreproducible. **Límite declarado**: llega al aparato DESPLEGANDO entero (la recarga no lleva `fonts/`), y la tool lo dice.
 - **Y una cuarta, pura y sin red: `generar_fondo_svg`** (`agent/grafo/generarFondoSvg.ts`,
   `core/fondosSvg.ts`): fondos SVG de degradado, sombra y resplandor para `imgbk`, porque XOne no
   los trae. Va a los mismos especialistas que `buscar_icono` y, al no tener puerto, se monta siempre.
@@ -334,7 +346,7 @@ Y las guardas del proyecto:
   el modelo**: medido, la misma imagen descrita otra vez difería y no vio el recorte.
   Un texto distinto en el mismo sitio MEDIDO es «otro estado», no «falta». El recorte solo se mide
   en lo que no pinta fondo propio. El informe se guarda junto a la captura (`.critica.txt`), y un
-  rojo va a `developer-xone`: el diseñador solo escribe en `icons/`. **Y el ENCAJE y los BLOQUES**:
+  rojo va a `developer-xone`: el diseñador solo escribe en `icons/` y `fonts/`. **Y el ENCAJE y los BLOQUES**:
   dónde empieza y acaba cada fila en fracción del ancho (`ENCAJE`), y el color y la forma de los
   bloques anchos —cabecera, visor, panel— emparejados por altura relativa (`compararBloques`, solo
   lo emparejado: el aparato puede partir en filas lo que la maqueta tiene en un panel). **La foto de
@@ -680,8 +692,8 @@ era texto, y quien menos lo seguía era quien más rediseños acababa necesitand
 (`TOLERANCIA_DE_ENCAJE`, `compararCapturas.ts#desajusteDeEncaje`): cada borde del contenido —arriba, abajo, y a los lados
 la MEDIANA de las franjas, no el recuadro de la pantalla entera, que lo fija la barra de arriba— cerca del de la maqueta.
 Las distancias por franjas PROMEDIAN, y un teclado que no llega al borde las pasaba.
-**El diseñador hace RECURSOS, no pantallas** (`designer-xone`, `escribeEn: [/icons/]`): iconos y fondos SVG, y los
-diagramas. El layout del `.xne` y el CSS son del desarrollador, también lo que se ve mal: lo confina el PERMISO, no el
+**El diseñador hace RECURSOS, no pantallas** (`designer-xone`, `escribeEn: [/icons/, /fonts/]`): iconos y fondos SVG,
+las fuentes de la maqueta, y los diagramas. El layout del `.xne` y el CSS son del desarrollador, también lo que se ve mal: lo confina el PERMISO, no el
 prompt, porque dos agentes turnándose en el mismo `.xne` se pisaban. `recibeBuscarIcono` admite un `escribeEn` que cubra
 `icons/`; el documentador (`/doc/`) sigue sin esas tools. **Y devuelve una TABLA** (`DEVOLVER_RECURSOS`): fichero → control → atributo → tamaño →
 si lleva el símbolo dentro, que el orquestador pasa tal cual al desarrollador; sin ella el orquestador revisaba los SVG y el
@@ -852,7 +864,7 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   lista BLANCA, topes contra un zip bomba decididos con lo DECLARADO antes de inflar), más el tope por
   sesión, que cuenta lo descomprimido. Un zip que no se puede extraer se guarda igual y se dice por qué.
   Meterlos en el PROYECTO es la tool `incorporar_adjunto`, con su propia fila
-  de aprobación; solo `developer-xone` de motor `"modelo"` la recibe —el diseñador está confinado a `icons/`— y a un
+  de aprobación; solo `developer-xone` de motor `"modelo"` la recibe —el diseñador está confinado a `icons/` y `fonts/`— y a un
   motor externo no le llegan tools propias.
 - **El encargo se AUMENTA y se enseña EDITABLE antes de encolar** (`AumentadorPort`, papel
   `trabajo`): ocupa el sitio del diff; su fallo encola el texto original y se DICE.

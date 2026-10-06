@@ -113,7 +113,7 @@ const MONTAJES = [
  * Se aplica dos veces: a lo que escribió el modelo y a la ruta que sale del `realpath`.
  * Todo se compara también sin mayúsculas (APFS: `/Adjuntos/` es la misma carpeta en disco).
  */
-function motivoDeDestino(perfil: QuienDecidePermisos, ruta: string): string | undefined {
+export function motivoDeDestino(perfil: QuienDecidePermisos, ruta: string): string | undefined {
   // Y en MINÚSCULAS: `puedeEscribirRuta` distingue mayúsculas y APFS no, así que `/.ENV` pasaba el
   // texto y, sin `.env` en disco, tampoco lo paraba el `realpath` (no hay nombre que corregir):
   // el `.ENV` que se creaba ES el `.env`. Medido: `/.ENV`, `/.Env.local` y `/.GIT/config` contestaban
@@ -179,6 +179,51 @@ function aplanadaEnDisco(raiz: string, virtual: string): boolean {
   return esVistaAplanada(virtual, new Set(existsSync(resolve(raiz, fuente.slice(1))) ? [fuente] : []));
 }
 
+/**
+ * (5b) ¿Por qué no vale `destinoVirtual` mirando el DISCO? `undefined` = vale. ANTES de crear nada:
+ * el primer ancestro que existe tiene que caer dentro de la raíz, y lo que resulta se vuelve a
+ * juzgar como ruta virtual (un enlace `/icons` → `.xonecode/` pasa el texto y no esto). El
+ * fichero final, si ya está, no puede ser un enlace (se seguiría) ni una carpeta. Exportada
+ * porque `traer_fuente` escribe un binario al proyecto con las MISMAS guardas. Nunca lanza.
+ */
+export function motivoDeDestinoEnDisco(
+  donde: Pick<DondeIncorporar, "raiz" | "perfil">,
+  destinoVirtual: string
+): string | undefined {
+  const destinoReal = resolve(donde.raiz, destinoVirtual.slice(1));
+  try {
+    const raizReal = realpathSync.native(donde.raiz);
+    let ancestro = dirname(destinoReal);
+    const faltan: string[] = [];
+    while (!existeSinSeguir(ancestro)) {
+      const padre = dirname(ancestro);
+      if (padre === ancestro) return `«${destinoVirtual}» apunta fuera del proyecto.`;
+      faltan.unshift(ancestro.slice(padre.length).replace(/^[\\/]+/, ""));
+      ancestro = padre;
+    }
+    const ancestroReal = realpathSync.native(ancestro);
+    if (!dentroDe(ancestroReal, raizReal) || !statSync(ancestroReal).isDirectory()) {
+      return `«${destinoVirtual}» apunta fuera del proyecto.`;
+    }
+    let finalReal = resolve(ancestroReal, ...faltan, basename(destinoReal));
+    if (existeSinSeguir(destinoReal)) {
+      const st = lstatSync(destinoReal);
+      if (st.isSymbolicLink() || !st.isFile()) return `«${destinoVirtual}» ya existe y no es un fichero normal: no se reemplaza.`;
+      finalReal = realpathSync.native(destinoReal);
+    }
+    if (!dentroDe(finalReal, raizReal)) return `«${destinoVirtual}» apunta fuera del proyecto.`;
+    const virtualReal = comoVirtual(finalReal, raizReal);
+    const porCamino = motivoDeDestino(donde.perfil, virtualReal);
+    if (porCamino !== undefined) return porCamino;
+    // Y la vista aplanada, también sobre el camino REAL: un enlace `/v` → `/pantallas`
+    // convierte `/v/menu.xml` en `/pantallas/menu.xml`, que el texto no ve.
+    if (aplanadaEnDisco(raizReal, virtualReal)) return porQueNo(virtualReal);
+    return undefined;
+  } catch (error) {
+    return `No se pudo comprobar la ruta «${destinoVirtual}» (${codigoDe(error)}).`;
+  }
+}
+
 export function crearIncorporarAdjunto(donde: DondeIncorporar) {
   return tool(
     async ({ adjunto, file_path }: z.infer<typeof Entrada>) => {
@@ -223,41 +268,9 @@ export function crearIncorporarAdjunto(donde: DondeIncorporar) {
         return `No existe el adjunto «${origenVirtual}». Lista ${RUTA_ADJUNTOS} para ver cuáles hay.`;
       }
 
-      // (5b) El destino, por su CAMINO real, ANTES de crear nada: el primer ancestro que existe
-      // tiene que caer dentro de la raíz, y lo que resulta se vuelve a juzgar como ruta virtual
-      // (un enlace `/icons` → `.xonecode/` pasa el texto y no esto).
-      let raizReal: string;
-      try {
-        raizReal = realpathSync.native(donde.raiz);
-        let ancestro = dirname(destinoReal);
-        const faltan: string[] = [];
-        while (!existeSinSeguir(ancestro)) {
-          const padre = dirname(ancestro);
-          if (padre === ancestro) return `«${destinoVirtual}» apunta fuera del proyecto.`;
-          faltan.unshift(ancestro.slice(padre.length).replace(/^[\\/]+/, ""));
-          ancestro = padre;
-        }
-        const ancestroReal = realpathSync.native(ancestro);
-        if (!dentroDe(ancestroReal, raizReal) || !statSync(ancestroReal).isDirectory()) {
-          return `«${destinoVirtual}» apunta fuera del proyecto.`;
-        }
-        // El fichero final, si ya está, no puede ser un enlace (se seguiría) ni una carpeta.
-        let finalReal = resolve(ancestroReal, ...faltan, basename(destinoReal));
-        if (existeSinSeguir(destinoReal)) {
-          const st = lstatSync(destinoReal);
-          if (st.isSymbolicLink() || !st.isFile()) return `«${destinoVirtual}» ya existe y no es un fichero normal: no se reemplaza.`;
-          finalReal = realpathSync.native(destinoReal);
-        }
-        if (!dentroDe(finalReal, raizReal)) return `«${destinoVirtual}» apunta fuera del proyecto.`;
-        const virtualReal = comoVirtual(finalReal, raizReal);
-        const porCamino = motivoDeDestino(donde.perfil, virtualReal);
-        if (porCamino !== undefined) return porCamino;
-        // Y la vista aplanada, también sobre el camino REAL: un enlace `/v` → `/pantallas`
-        // convierte `/v/menu.xml` en `/pantallas/menu.xml`, que el texto no ve.
-        if (aplanadaEnDisco(raizReal, virtualReal)) return porQueNo(virtualReal);
-      } catch (error) {
-        return `No se pudo comprobar la ruta «${destinoVirtual}» (${codigoDe(error)}).`;
-      }
+      // (5b) El destino, por su CAMINO real (`motivoDeDestinoEnDisco`).
+      const porCamino = motivoDeDestinoEnDisco(donde, destinoVirtual);
+      if (porCamino !== undefined) return porCamino;
 
       try {
         mkdirSync(dirname(destinoReal), { recursive: true });

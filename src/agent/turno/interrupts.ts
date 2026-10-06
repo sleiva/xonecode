@@ -2,6 +2,7 @@ import { collectPending, buildResume, type Decision, type PendingInterrupt } fro
 import type { PendienteDeAprobacion } from "../../core/events.js";
 import { diffDeLineas, type LineaDeDiff } from "../../core/diff.js";
 import { NOMBRE_INCORPORAR_ADJUNTO } from "../../core/adjuntos.js";
+import { NOMBRE_TRAER_FUENTE } from "../../core/fuentes.js";
 
 export { buildResume, type Decision, type PendingInterrupt };
 
@@ -111,6 +112,17 @@ export function cambioDe(
     return {
       ruta,
       lineas: [{ tipo: "anadido", texto: `[fichero binario] se copia ${adjunto} a ${ruta} (si ya existe, se reemplaza)` }],
+    };
+  }
+
+  if (p.tool === NOMBRE_TRAER_FUENTE) {
+    const familia = p.args.familia;
+    if (typeof familia !== "string") return undefined;
+    // Como el adjunto: un binario sin diff. Se dice QUÉ se descarga y de dónde, que es lo que se aprueba.
+    const estilo = `${String(p.args.peso)}${p.args.cursiva === true ? " cursiva" : ""}`;
+    return {
+      ruta,
+      lineas: [{ tipo: "anadido", texto: `[fichero binario] se descarga ${familia} ${estilo} de Google Fonts a ${ruta} (si ya existe, se reemplaza)` }],
     };
   }
 

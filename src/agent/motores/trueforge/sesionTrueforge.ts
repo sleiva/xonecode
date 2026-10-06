@@ -35,6 +35,7 @@ import type {
   ConsumoDeSesion,
   ConsumoDeSesionPorCuenta,
   IconosPort,
+  FuentesPort,
   ConectoresPort,
   Papel,
   ModelosPort,
@@ -115,6 +116,7 @@ import { hechosDelProyectoDe } from "../../navegacion/hechosEnDisco.js";
 import { conHechosDelProyecto } from "../../../core/hechosDelProyecto.js";
 import { crearBusquedaRegex } from "../../grafo/busquedaRegex.js";
 import { crearBuscarIcono, recibeBuscarIcono } from "../../grafo/buscarIcono.js";
+import { crearBuscarFuente, crearTraerFuente, recibeFuentes } from "../../grafo/fuentesDeGoogle.js";
 import { crearGenerarFondoSvg, recibeGenerarFondo } from "../../grafo/generarFondoSvg.js";
 import { crearCopiarArtefacto } from "../../grafo/copiarArtefacto.js";
 import { crearMarcarCriteriosDelPlan } from "../../grafo/marcarCriteriosDelPlan.js";
@@ -303,7 +305,7 @@ export function textoDeLoQueDejaronLosEsperados(raiz: string, esperadas: readonl
  * escribas (aunque recuerde sus encargos anteriores de la sesión), y lo que te devuelve es lo que vio, no un
  * veredicto: decidir si lo que escribiste funciona sigue siendo cosa tuya, con lo que ese hijo te traiga.
  */
-export function textoDelBucle(llama: readonly string[], opciones: { conCritica?: boolean } = {}): string {
+export function textoDelBucle(llama: readonly string[], opciones: { conCritica?: boolean; conFuentes?: boolean } = {}): string {
   const puedeDiseñar = llama.includes("designer-xone");
   return [
     `PUEDES LLAMAR A: ${llama.join(", ")}, con \`create_sub_agent\` (\`name\` exacto y \`input\` autosuficiente).`,
@@ -327,7 +329,7 @@ export function textoDelBucle(llama: readonly string[], opciones: { conCritica?:
     ...(puedeDiseñar
       ? [
           "El LAYOUT y el CSS son TUYOS: si la pantalla se ve mal, lo arreglas tú, no se lo pasas a nadie ni lo devuelves al que te",
-          "encargó. `designer-xone` solo hace RECURSOS —iconos de una biblioteca y fondos SVG en `icons/`—: pídeselos juntos, con para",
+          "encargó. `designer-xone` solo hace RECURSOS —iconos de una biblioteca y fondos SVG en `icons/`, y las fuentes en `fonts/`—: pídeselos juntos, con para",
           "qué control, tamaño en píxeles y colores, y usa los nombres que te devuelva. No le pidas que toque el `.xne` ni el CSS: no puede.",
           "Los recursos te llegan con una TABLA (fichero → control → atributo → tamaño → si lleva el símbolo dentro): úsala y no abras",
           "los SVG para enterarte de lo que ya dice.",
@@ -349,8 +351,18 @@ export function textoDelBucle(llama: readonly string[], opciones: { conCritica?:
     "de la tarea en el `TASKS.md` comprobadas, (2) la app arranca y hace lo que pide, y (3) con diseño, la distancia que mide",
     "`comparar_capturas` por debajo del 10 % en vertical y en horizontal, que ENCAJE en la pantalla (cada borde del contenido a",
     "un 3 % o menos del de la maqueta: que llegue a los lados y abajo como ella), y el crítico sin diferencias de forma ni de estructura.",
-    "Lo que XOne NO puede reproducir no cuenta y no lo persigas: las tipografías del diseño (no hay .ttf), el desenfoque de fondo y",
-    "las animaciones; una sombra o un degradado se aproximan con un SVG. Tienes TRES vueltas de corregir y volver a comprobar para",
+    // Con el puerto de fuentes la tipografía SÍ se reproduce: se trae a `fonts/` (`fuentesDeGoogle.ts`). Sin él, sigue fuera.
+    ...(opciones.conFuentes === true
+      ? [
+          "Lo que XOne NO puede reproducir no cuenta y no lo persigas: el desenfoque de fondo y las animaciones; una sombra o un",
+          "degradado se aproximan con un SVG. La TIPOGRAFÍA del diseño sí: si la maqueta declara una fuente, sus .ttf van a `fonts/`",
+          "(pídeselos a designer-xone con los recursos, o tráelos tú con `buscar_fuente`/`traer_fuente`) y se usa con `fontname`;",
+          "para verla en el aparato hay que DESPLEGAR entero. Tienes TRES vueltas de corregir y volver a comprobar para",
+        ]
+      : [
+          "Lo que XOne NO puede reproducir no cuenta y no lo persigas: las tipografías del diseño (no hay .ttf), el desenfoque de fondo y",
+          "las animaciones; una sombra o un degradado se aproximan con un SVG. Tienes TRES vueltas de corregir y volver a comprobar para",
+        ]),
     "llegar; si al agotarlas algo",
     "sigue sin cumplirse, devuelve el trabajo diciendo QUÉ falta, con lo que midieron el crítico y la medida tal cual. Devolver antes",
     "porque «ya funciona» es dejar el trabajo a medias. Al devolver cuenta lo que se midió: el juicio final no es tuyo, y el arnés",
@@ -360,7 +372,7 @@ export function textoDelBucle(llama: readonly string[], opciones: { conCritica?:
 
 export function notaDeDelegacion(
   agentes: readonly Agente[],
-  opciones: { conIconos?: boolean; conComparacion?: boolean; conMemoria?: boolean; conBucle?: boolean; conEsperas?: boolean } = {}
+  opciones: { conIconos?: boolean; conFuentes?: boolean; conComparacion?: boolean; conMemoria?: boolean; conBucle?: boolean; conEsperas?: boolean } = {}
 ): string {
   if (agentes.length === 0) return "";
   return [
@@ -387,7 +399,9 @@ export function notaDeDelegacion(
           "cada encargo a developer-xone lleva el CRITERIO ESCRITO y MEDIBLE: qué casillas del plan tiene que dejar comprobadas, qué",
           "tiene que hacer la app, y, si hay diseño, que la distancia de `comparar_capturas` quede por debajo del 10 % en vertical y en",
           "horizontal, que ENCAJE en la pantalla (cada borde a un 3 % o menos del de la maqueta) y que el crítico no señale diferencias de forma o de estructura (di dónde está la maqueta). No se puede pedir",
-          "lo que XOne no reproduce —las tipografías del diseño, el desenfoque de fondo, las animaciones—. Sin criterio, devolverá el",
+          opciones.conFuentes === true
+            ? "lo que XOne no reproduce —el desenfoque de fondo, las animaciones—; la tipografía del diseño sí (sus .ttf a `fonts/`). Sin criterio, devolverá el"
+            : "lo que XOne no reproduce —las tipografías del diseño, el desenfoque de fondo, las animaciones—. Sin criterio, devolverá el",
           "trabajo en cuanto funcione. No le encargues a device-controller comprobar SU",
           "trabajo, ni a designer-xone lo visual de su pantalla (designer-xone no puede tocar un `.xne` ni el CSS): llama tú al diseñador",
           "para los RECURSOS que la pantalla necesite, antes del desarrollador. Lo que developer-xone te devuelva es lo que él vio y midió, no un veredicto: el juicio final es tuyo y del arnés.",
@@ -517,6 +531,8 @@ export interface OpcionesDeSesionTrueforge {
   adjuntos?: string;
   /** De dónde salen los iconos (IXCODE-18). Ausente = `buscar_icono` no se monta. */
   iconos?: IconosPort;
+  /** De dónde salen las fuentes (Google Fonts). Ausente = `buscar_fuente`/`traer_fuente` no se montan. */
+  fuentes?: FuentesPort;
   /**
    * Los conectores MCP del proyecto (Stitch…). El MISMO servicio de Ajustes, que solo tiene la
    * web: ausente —el terminal, `run`, los evals— es que ningún agente recibe sus tools.
@@ -922,6 +938,14 @@ export async function abrirSesionTrueforge(
     ...(opciones.iconos !== undefined && recibeBuscarIcono(agente)
       ? [crearBuscarIcono(opciones.iconos) as unknown as ToolDeLangchain]
       : []),
+    // Las fuentes de la maqueta (Google Fonts) a `fonts/`: al desarrollador y al diseñador (`recibeFuentes`), con el
+    // puerto. `traer_fuente` ESCRIBE un binario: `capacidadesDelEspecialista` la pone en `requireApprovalForTools`.
+    ...(opciones.fuentes !== undefined && recibeFuentes(agente)
+      ? [
+          crearBuscarFuente(opciones.fuentes) as unknown as ToolDeLangchain,
+          crearTraerFuente(opciones.fuentes, { raiz, perfil: agente }) as unknown as ToolDeLangchain,
+        ]
+      : []),
     // Fondos SVG: pura y sin red, sin puerto; a quien escribe el proyecto, como deepagents.
     ...(recibeGenerarFondo(agente) ? [crearGenerarFondoSvg() as unknown as ToolDeLangchain] : []),
     // ¿Cambió la zona tras el toque? Al conductor, que es quien saca las capturas: comprueba una
@@ -1145,7 +1169,7 @@ export async function abrirSesionTrueforge(
             "",
             nota,
             anuncioDeSkills(agente, catalogo),
-            ...(conBucleDelDesarrollador && (agente.llama?.length ?? 0) > 0 ? ["", textoDelBucle(agente.llama ?? [], { conCritica: carpeta !== undefined })] : []),
+            ...(conBucleDelDesarrollador && (agente.llama?.length ?? 0) > 0 ? ["", textoDelBucle(agente.llama ?? [], { conCritica: carpeta !== undefined, conFuentes: opciones.fuentes !== undefined })] : []),
           ]
             .filter((l) => l !== undefined)
             .join("\n")
@@ -1241,7 +1265,7 @@ export async function abrirSesionTrueforge(
     hijosConMemoria.clear();
     const definicion = {
       modelClient: llm,
-      instruction: [IDIOMA_DE_LA_RESPUESTA, SIN_HABLAR_DEL_HARNESS, promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas, conBucle: conBucleDelDesarrollador, conEsperas })].filter((l) => l !== "").join("\n\n"),
+      instruction: [IDIOMA_DE_LA_RESPUESTA, SIN_HABLAR_DEL_HARNESS, promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conFuentes: opciones.fuentes !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas, conBucle: conBucleDelDesarrollador, conEsperas })].filter((l) => l !== "").join("\n\n"),
       // Por TURNO, porque el raíz se rehace desde su foto al final de cada uno (ver `turno`).
       iterationLimit: LIMITE_DE_LLAMADAS_DEL_RAIZ,
     };

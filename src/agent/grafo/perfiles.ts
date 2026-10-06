@@ -16,6 +16,7 @@ import {
 import { esRutaDePlan, RUTA_PLANES } from "../../core/planes.js";
 import { artefactoFueraDeSitio } from "../../core/artefactos.js";
 import { NOMBRE_INCORPORAR_ADJUNTO } from "../../core/adjuntos.js";
+import { NOMBRE_TRAER_FUENTE } from "../../core/fuentes.js";
 /** Las tools de fichero que monta deepagents sobre el backend. */
 export const TOOLS_LECTURA = ["ls", "read_file", "glob", "grep"] as const;
 export const TOOLS_ESCRITURA = ["write_file", "edit_file"] as const;
@@ -306,6 +307,7 @@ export const TEXTO_HITL: Record<string, string> = {
   write_file: "escribir un fichero del proyecto",
   edit_file: "modificar un fichero del proyecto",
   [NOMBRE_INCORPORAR_ADJUNTO]: "copiar un adjunto al proyecto",
+  [NOMBRE_TRAER_FUENTE]: "traer una fuente de Google Fonts al proyecto",
 };
 
 /**

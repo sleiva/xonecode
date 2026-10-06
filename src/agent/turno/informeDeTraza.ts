@@ -17,6 +17,7 @@
  */
 
 import { NOMBRE_INCORPORAR_ADJUNTO } from "../../core/adjuntos.js";
+import { NOMBRE_TRAER_FUENTE } from "../../core/fuentes.js";
 import type { ConsumoDeSesion, ConsumoDeSesionPorCuenta } from "../../core/ports.js";
 
 /** Lo que gastó un origen: el orquestador, o un especialista por su nombre. */
@@ -422,7 +423,7 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
 }
 
 /** Las escrituras, que son las unicas tools donde coincidir en el mismo fichero pierde datos. */
-const ESCRIBE = new Set(["write_file", "edit_file", NOMBRE_INCORPORAR_ADJUNTO]);
+const ESCRIBE = new Set(["write_file", "edit_file", NOMBRE_INCORPORAR_ADJUNTO, NOMBRE_TRAER_FUENTE]);
 
 function resumirParalelismo(
   porRespuesta: Map<string, Array<{ nombre: string; detalle?: string }>>,

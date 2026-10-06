@@ -8424,3 +8424,26 @@ mismo puerto que un subagente, así que no hay una regla para cada uno.
 proveedor `opencode` (Zen) sin credencial suya, y eso no se puede leer sin abrir el `auth.json` de
 OpenCode, que lleva las claves. El desplegable agrupa por proveedor, lo dice debajo, y «Probar» lo
 confirma. Elegir otro modelo quita la prueba anterior: un «✓» de otro modelo ya no dice nada.
+
+## Las fuentes de la maqueta, de Google Fonts (06-10-2026)
+
+Las maquetas de Stitch declaran `fontFamily` y el agente no tenía con qué traer el `.ttf`: en las iteraciones de la
+calculadora la tipografía era de lo que quedaba distinto, y los textos del bucle la daban por irreproducible («no hay
+.ttf»). Medido contra la red, sin clave:
+
+- El catálogo es `fonts.google.com/metadata/fonts`: JSON de 2,7 MB, ~1.950 familias, sin el prefijo `)]}'` de antes
+  (se tolera igual). Cada familia trae sus estilos como claves (`"400"`, `"700i"`); alguna variable trae `1` y `1000`,
+  que se descartan. Ninguna familia lleva otra cosa que letras, cifras y espacios, la más larga 32, y quitar los
+  espacios no junta dos en un mismo nombre.
+- La API `css2` (`?family=Inter:wght@700`, `ital,wght@1,700` para la cursiva), pedida con el `fetch` de Node sin
+  cambiar el User-Agent, contesta un `@font-face` con un `.ttf` ESTÁTICO de `fonts.gstatic.com` (`font/ttf`, firma
+  `00 01 00 00`). Un peso que la familia no tiene da 400 (Lobster 700); una familia inventada, también. Inter 700:
+  326 KB; Roboto Mono 700 cursiva: 86 KB; Noto Sans JP 400: 5,7 MB (de ahí el tope de 10 MB).
+- Se descartó el repo `google/fonts` de GitHub: da el `.ttf` VARIABLE (sale con su peso por omisión en XOne), su
+  nombre (`Inter[opsz,wght].ttf`) no se deduce sin listar la carpeta, y su API limita a 60 peticiones por hora sin
+  token. El estático por peso encaja con la convención que la skill ya documentaba (`fontname: Roboto-Bold.ttf`).
+
+Reparto: primero se propuso solo para el desarrollador; se decidió que la tengan los DOS, porque una fuente es un
+RECURSO como un icono (el diseñador, con `fonts/` en su `escribeEn`) y el desarrollador escribe el proyecto entero. La
+ficha del orquestador se la encarga al diseñador, que la devuelve en su tabla con el `fontname`. Se descartó también
+escribir en `/artefactos/` sin aprobación y ampliar `incorporar_adjunto`: dos pasos y dos tarjetas para lo mismo.

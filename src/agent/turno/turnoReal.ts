@@ -27,8 +27,9 @@ import { rutaRealDeVirtual } from "../../core/rutaVirtual.js";
 import type { Piel } from "../../core/turno.js";
 import { Bitacora } from "../../core/bitacora.js";
 import { correrTurno } from "../../core/turno.js";
-import type { ConectoresPort, IconosPort, ModelosPort, SkillsPort, VerifierPort } from "../../core/ports.js";
+import type { ConectoresPort, FuentesPort, IconosPort, ModelosPort, SkillsPort, VerifierPort } from "../../core/ports.js";
 import { iconosEnRed } from "../config/iconosEnRed.js";
+import { fuentesEnRed } from "../config/fuentesEnRed.js";
 import type { EstadoDeVerificador, ResultadoDeTurno } from "../../core/entrega.js";
 import type { DomainEvent, HallazgoDelTurno } from "../../core/events.js";
 import { relative, resolve as resolverRuta } from "node:path";
@@ -255,6 +256,11 @@ export async function abrirSesionReal(opciones: {
    */
   iconos?: IconosPort;
   /**
+   * De dónde salen las fuentes. Ausente = Google Fonts por la red, la composición de PRODUCCIÓN,
+   * por lo mismo que `iconos`. Solo la usa TrueForge (deepagents es legacy y no se toca).
+   */
+  fuentes?: FuentesPort;
+  /**
    * Los conectores MCP del proyecto, el MISMO servicio de Ajustes. Solo lo pasa la web (el único
    * proceso que lo tiene); ausente, ningún agente recibe sus tools. Solo TrueForge los monta:
    * deepagents es legacy.
@@ -300,6 +306,7 @@ export async function abrirSesionReal(opciones: {
       entorno: opciones.entorno,
       skills: opciones.skills.catalogo(),
       iconos,
+      fuentes: opciones.fuentes ?? fuentesEnRed(),
       ...(opciones.conectores === undefined ? {} : { conectores: opciones.conectores }),
       ...(opciones.verifier === undefined ? {} : { verifier: opciones.verifier }),
       ...(opciones.pedirAprobacion === undefined ? {} : { pedirAprobacion: opciones.pedirAprobacion }),
