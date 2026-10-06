@@ -284,6 +284,12 @@ export interface ControlAMedir {
    * así que su alineación no se mide. Medido en Maset: cada título salía «centrado» y el del aparato «a la izquierda».
    */
   ajustado?: true;
+  /**
+   * La caja de su ENVOLTORIO (`geometriaDePantalla.ts#cajaParaElEstilo`: el frame que hace de botón o de píldora). De
+   * ella salen la forma, el fondo y el borde; de la propia, lo de la LETRA —recorte, tamaño, color, alineación—, que es
+   * de la etiqueta: medido sobre el frame, el «RAD» recortado de la calculadora dejaba de verse.
+   */
+  envoltorio?: Caja;
 }
 
 /**
@@ -296,13 +302,25 @@ const sinAlineacionSi = <T extends { alineacion?: unknown }>(quitar: boolean, me
   return resto as T;
 };
 
+/** Lo de la CAJA (forma, fondo, borde) del envoltorio, y lo de la LETRA de la etiqueta. */
+const DE_LA_CAJA = ["forma", "radio", "proporcion", "fondo", "borde"] as const;
+const conEnvoltorio = (propio: EstiloMedido, delMarco: EstiloMedido | undefined): EstiloMedido => {
+  if (delMarco === undefined) return propio;
+  const salida: Record<string, unknown> = { ...propio };
+  for (const k of DE_LA_CAJA) {
+    if (delMarco[k] === undefined) delete salida[k];
+    else salida[k] = delMarco[k];
+  }
+  return salida as EstiloMedido;
+};
+
 export function pantallaMedida(img: ImagenRgba, filas: readonly (readonly ControlAMedir[])[]): PantallaDescrita {
   return {
     filas: filas.map((fila) => ({
       controles: fila.map((c) => ({
         texto: c.texto,
         centro: { x: (c.caja.x + c.caja.ancho / 2) / img.ancho, y: (c.caja.y + c.caja.alto / 2) / img.alto },
-        ...sinAlineacionSi(c.ajustado === true, medirControl(img, c.caja)),
+        ...sinAlineacionSi(c.ajustado === true, conEnvoltorio(medirControl(img, c.caja), c.envoltorio === undefined ? undefined : medirControl(img, c.envoltorio))),
       })),
     })),
     extras: [],

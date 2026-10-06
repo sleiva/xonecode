@@ -8568,3 +8568,14 @@ difiere en menos de un 0,1 %, se tomaría esa.
 Con la geometría encontrada, el crítico de la ronda 7 volvió a medir. Queda un falso que se ve ahí: un botón de la
 maqueta (SALIR) se compara con la ETIQUETA del aparato que lleva su texto, cuya caja no tiene el borde ni el fondo del
 frame que la contiene («le falta el borde»).
+
+### Y el estilo de un botón se mide en su caja, y su letra en la de su texto (06-10-2026)
+
+Con la geometría de la ronda 7 de Maset encontrada, el crítico medido daba «le falta el borde» y otro color de texto en
+SALIR: en el aparato medía la ETIQUETA (sin el borde ni el fondo del frame que hace de botón) y en la maqueta el BOTÓN
+entero (con el cuadro gris del icono, que salía como «color del texto»). Ahora cada lado mide la forma, el fondo y el
+borde en la caja del control (el frame envoltorio en el aparato, `cajaParaElEstilo`, deducido por cajas porque el árbol
+del canal es plano; el botón en la maqueta) y la LETRA —recorte, tamaño, color, alineación— en la del texto. Medir el
+recorte en el frame dejaba de ver el «RAD» recortado de la calculadora. Tras el cambio, lo que queda en la ronda 7 es
+real: el borde del chip «ID» casi invisible (dorado al 20 %), su texto blanco donde la maqueta lo tiene ámbar, y «Al día»
+como píldora donde la maqueta tiene un rectángulo redondeado.

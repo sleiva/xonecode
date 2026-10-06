@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  cajaParaElEstilo,
   compararConMaqueta,
   controlesDelArbol,
   emparejar,
@@ -228,5 +229,31 @@ describe("una pantalla de tarjetas (Maset): datos de ejemplo, texto dentro de un
 
   it("pero una TECLA que falta sigue siendo bloqueante", () => {
     expect(h.bloqueantes).toContain("«7» de la maqueta NO está en el aparato (ningún control con ese texto).");
+  });
+});
+
+describe("cajaParaElEstilo: el estilo de un texto se mide en su ENVOLTORIO (el frame que hace de botón o de píldora)", () => {
+  const caja = (x: number, y: number, ancho: number, alto: number) => ({ x, y, ancho, alto });
+  const g: GeometriaDelAparato = {
+    pantalla: { ancho: 1080, alto: 2400 },
+    controles: [
+      // SALIR: un frame con un icono y una etiqueta dentro
+      { nombre: "frmSalir", tipo: "frame", caja: caja(55, 2100, 968, 138) },
+      { nombre: "IMGSALIR", tipo: "prop", clase: "IMG", caja: caja(270, 2140, 55, 55) },
+      { nombre: "MAP_TLSALIR", tipo: "prop", clase: "L", texto: "SALIR / CERRAR SESIÓN", caja: caja(348, 2140, 493, 58) },
+      // Una tarjeta: un frame con varios textos dentro
+      { nombre: "card", tipo: "frame", caja: caja(55, 600, 968, 220) },
+      { nombre: "MAP_TIT", tipo: "prop", clase: "L", texto: "ENTREGAS", caja: caja(250, 630, 300, 60) },
+      { nombre: "MAP_SUB", tipo: "prop", clase: "L", texto: "Reparto", caja: caja(250, 700, 500, 50) },
+    ],
+  };
+  const de = (nombre: string) => cajaParaElEstilo(g.controles.find((c) => c.nombre === nombre)!, g);
+
+  it("la etiqueta de un botón hecho con un frame se mide en el frame (Maset: «le falta el borde» falso en SALIR)", () => {
+    expect(de("MAP_TLSALIR")).toEqual(caja(55, 2100, 968, 138));
+  });
+
+  it("un texto de una tarjeta (con más textos al lado) se mide en su propia caja", () => {
+    expect(de("MAP_TIT")).toEqual(caja(250, 630, 300, 60));
   });
 });

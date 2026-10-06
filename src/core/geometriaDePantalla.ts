@@ -67,6 +67,8 @@ export interface ElementoDeMaqueta {
    * ejemplo («12 pend.», el reloj «09:41» de una barra de iOS simulada): que falte en el aparato no es un defecto.
    */
   boton?: true;
+  /** La caja de su TEXTO, si es un botón con el texto en un elemento propio: ahí se mide la letra; en `caja`, la forma. */
+  cajaDelTexto?: Caja;
 }
 
 export interface MaquetaMedida {
@@ -579,6 +581,27 @@ export function informeDeGeometria(h: HallazgosDeGeometria, conMaqueta: boolean)
  * tienen texto, y los botones e imágenes sin él. Es la ESTRUCTURA que se le da a quien describe la captura
  * (`descripcionDePantalla.ts`), para que describa estos controles y no se invente otros.
  */
+/**
+ * La caja con la que se mide el ESTILO de un texto del aparato: la suya o la de su ENVOLTORIO. En XOne un botón o una
+ * píldora se hace a menudo con un `<frame>` (fondo, borde, radio) y una etiqueta dentro; la maqueta lo tiene como un
+ * botón o un `<span>` con su borde. Medida la etiqueta, salía «le falta el borde» y otro color de fondo (Maset: SALIR y
+ * el chip «ID»). El envoltorio es el frame MÁS PEQUEÑO que contiene la etiqueta, sin otro texto dentro y con un control
+ * más como mucho (el icono del botón). Una tarjeta, con varios textos, no lo es. El árbol del canal es PLANO: la
+ * contención se deduce de las cajas. Pura.
+ */
+export function cajaParaElEstilo(c: ControlDelAparato, g: GeometriaDelAparato): Caja {
+  if (c.texto === undefined || c.tipo === "frame") return c.caja;
+  const contiene = (a: Caja, b: Caja) => a.x <= b.x + 1 && a.y <= b.y + 1 && a.x + a.ancho >= b.x + b.ancho - 1 && a.y + a.alto >= b.y + b.alto - 1;
+  const area = (a: Caja) => a.ancho * a.alto;
+  const marco = g.controles
+    .filter((f) => f.tipo === "frame" && f !== c && contiene(f.caja, c.caja) && area(f.caja) > area(c.caja))
+    .sort((a, b) => area(a.caja) - area(b.caja))[0];
+  if (marco === undefined) return c.caja;
+  const dentro = g.controles.filter((o) => o !== marco && o !== c && o.tipo !== "frame" && contiene(marco.caja, o.caja));
+  if (dentro.length > 1 || dentro.some((o) => o.texto !== undefined)) return c.caja;
+  return marco.caja;
+}
+
 export function filasDelAparato(g: GeometriaDelAparato): ControlDelAparato[][] {
   const visibles = g.controles.filter((c) => c.texto !== undefined || c.clase === "B" || c.clase === "IMG");
   const indice = filas(visibles.map((c) => c.caja));

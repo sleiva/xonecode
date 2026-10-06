@@ -8,12 +8,14 @@ import {
 } from "../../core/artefactos.js";
 import { imagenReferida, type ImagenReferida } from "../../core/referenciasDeImagen.js";
 import {
+  cajaParaElEstilo,
   compararConMaqueta,
   controlesDelArbol,
   filas as filasDeCajas,
   filasDelAparato,
   hallazgosDeGeometria,
   informeDeGeometria,
+  type ControlDelAparato,
   type GeometriaDelAparato,
   type MaquetaMedida,
 } from "../../core/geometriaDePantalla.js";
@@ -343,8 +345,13 @@ function medirEstilo(
 ): { comparacion: ComparacionDeDescripciones; completa: boolean } | undefined {
   if (deps.decodificar === undefined || geometria?.aparato === undefined) return undefined;
   try {
-    const comoMedir = (fila: readonly { texto?: string; nombre?: string; caja: ControlAMedir["caja"] }[]): ControlAMedir[] =>
-      fila.map((c) => ({ texto: c.texto ?? `[${c.nombre ?? "sin nombre"}]`, caja: c.caja }));
+    // El estilo de un texto se mide en la caja de su ENVOLTORIO si lo tiene (`cajaParaElEstilo`): el frame que hace de
+    // botón o de píldora, que es donde están el borde y el fondo.
+    const comoMedir = (fila: readonly ControlDelAparato[]): ControlAMedir[] =>
+      fila.map((c) => {
+        const envoltorio = cajaParaElEstilo(c, geometria.aparato!);
+        return { texto: c.texto ?? `[${c.nombre ?? "sin nombre"}]`, caja: c.caja, ...(envoltorio === c.caja ? {} : { envoltorio }) };
+      });
     const imagenDeLaCaptura = deps.decodificar(Buffer.from(captura.base64, "base64"));
     const vista = pantallaMedida(imagenDeLaCaptura, filasDelAparato(geometria.aparato).map(comoMedir));
     if (referencia === undefined || geometria.maqueta === undefined) {
@@ -358,8 +365,15 @@ function medirEstilo(
     const indice = filasDeCajas(m.elementos.map((e) => e.caja));
     const porFila = new Map<number, ControlAMedir[]>();
     m.elementos.forEach((e, i) => {
-      const caja = { x: e.caja.x * escala, y: e.caja.y * escala, ancho: e.caja.ancho * escala, alto: e.caja.alto * escala };
-      porFila.set(indice[i]!, [...(porFila.get(indice[i]!) ?? []), { texto: e.texto, caja, ...(e.boton === true ? {} : { ajustado: true as const }) }]);
+      const aEscala = (c: { x: number; y: number; ancho: number; alto: number }) => ({ x: c.x * escala, y: c.y * escala, ancho: c.ancho * escala, alto: c.alto * escala });
+      const caja = aEscala(e.caja);
+      // Un botón con su texto en un elemento propio: la letra en la caja del texto y la forma en la del botón, como el
+      // envoltorio del lado del aparato. Una caja que abraza su texto no dice nada de su alineación.
+      const control: ControlAMedir =
+        e.cajaDelTexto !== undefined
+          ? { texto: e.texto, caja: aEscala(e.cajaDelTexto), envoltorio: caja, ajustado: true }
+          : { texto: e.texto, caja, ...(e.boton === true ? {} : { ajustado: true as const }) };
+      porFila.set(indice[i]!, [...(porFila.get(indice[i]!) ?? []), control]);
     });
     const filasDeLaMaqueta = [...porFila.entries()].sort((a, b) => a[0] - b[0]).map(([, f]) => f.sort((a, b) => a.caja.x - b.caja.x));
     const comparacion = compararDescripciones(pantallaMedida(imagen, filasDeLaMaqueta), vista);

@@ -37,6 +37,13 @@ describe("medirElementos: los textos de la maqueta, no los botones con todo pega
     ]);
   });
 
+  it("un botón con su texto en un elemento propio lleva la caja de ESE texto (ahí se mide la letra; en la del botón, la forma)", () => {
+    d.body.innerHTML = `<button>7</button><button><span>SALIR</span></button>`;
+    const [siete, salir] = medirElementos(d);
+    expect(siete!.cajaDelTexto).toBeUndefined();
+    expect(salir!.cajaDelTexto).toBeDefined();
+  });
+
   it("el icono de Material no cuenta como otro texto: «content_copy COPY» sigue siendo un botón", () => {
     expect(medir(`<button><span class="material-symbols-outlined">content_copy</span>COPY</button>`)).toEqual([
       { texto: "content_copy COPY", boton: true },

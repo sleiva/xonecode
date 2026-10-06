@@ -47,7 +47,12 @@ const MARCA = "__xonecode_cajas";
  * - fuera de los botones, cada elemento con texto propio es uno.
  * Cada uno dice si es un botón (`boton`): lo que no lo es y no tiene letras es un dato de ejemplo («12», «09:41»).
  */
-export function medirElementos(doc: any): Array<{ texto: string; caja: { x: number; y: number; ancho: number; alto: number }; boton?: true }> {
+export function medirElementos(doc: any): Array<{
+  texto: string;
+  caja: { x: number; y: number; ancho: number; alto: number };
+  boton?: true;
+  cajaDelTexto?: { x: number; y: number; ancho: number; alto: number };
+}> {
   var ICONO = /material-(symbols|icons)/;
   var FUERA = /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|TITLE|HEAD)$/;
   var limpio = function (t: string): string {
@@ -80,7 +85,12 @@ export function medirElementos(doc: any): Array<{ texto: string; caja: { x: numb
   var hojas: any[] = [];
   var todos = doc.body.querySelectorAll("*");
   for (var i = 0; i < todos.length; i++) if (!FUERA.test(todos[i].tagName) && propio(todos[i]) !== "") hojas.push(todos[i]);
-  var salida: Array<{ texto: string; caja: { x: number; y: number; ancho: number; alto: number }; boton?: true }> = [];
+  var salida: Array<{
+    texto: string;
+    caja: { x: number; y: number; ancho: number; alto: number };
+    boton?: true;
+    cajaDelTexto?: { x: number; y: number; ancho: number; alto: number };
+  }> = [];
   var cubiertas: any[] = [];
   var botones = doc.querySelectorAll("button,[role=button]");
   for (var j = 0; j < botones.length; j++) {
@@ -93,7 +103,10 @@ export function medirElementos(doc: any): Array<{ texto: string; caja: { x: numb
     });
     if (textos.length > 1) continue;
     var cb = cajaDe(b);
-    if (cb !== undefined) salida.push({ texto: todoElTexto(b), caja: cb, boton: true });
+    // La caja de SU texto, si va en un elemento propio: la letra (color, tamaño, recorte) se mide ahí, no en el botón
+    // entero, donde también está el icono (medido en Maset: el gris del cuadro del icono salía como color del texto).
+    var ct = textos.length === 1 && textos[0] !== b ? cajaDe(textos[0]) : undefined;
+    if (cb !== undefined) salida.push(ct === undefined ? { texto: todoElTexto(b), caja: cb, boton: true } : { texto: todoElTexto(b), caja: cb, boton: true, cajaDelTexto: ct });
     for (var k = 0; k < dentro.length; k++) cubiertas.push(dentro[k]);
   }
   for (var m = 0; m < hojas.length; m++) {
