@@ -1,3 +1,4 @@
+import type { Acto } from "./actos.js";
 import { nombreDeAdjuntoAceptable } from "./adjuntos.js";
 import { tituloDeTarea, type Tarea } from "./tareas.js";
 
@@ -83,4 +84,23 @@ export function tareasEncadenadas(opciones: {
     });
   });
   return salida;
+}
+
+/**
+ * La propuesta `id` si está en el transcript y nadie la ha resuelto todavía; si no, `undefined`.
+ *
+ * Es la guarda del servidor antes de encolar o descartar: lo que se encola sale de AQUÍ —el acto
+ * que escribió la piel—, no de lo que mande el cliente, y una propuesta ya resuelta no se encola
+ * otra vez (dos pestañas, un doble clic).
+ */
+export function propuestaPendiente(
+  actos: readonly Acto[],
+  id: string
+): Extract<Acto, { tipo: "propuesta-de-tareas" }> | undefined {
+  let propuesta: Extract<Acto, { tipo: "propuesta-de-tareas" }> | undefined;
+  for (const a of actos) {
+    if (a.tipo === "propuesta-de-tareas" && a.id === id) propuesta = a;
+    if (a.tipo === "propuesta-resuelta" && a.propuesta === id) return undefined;
+  }
+  return propuesta;
 }

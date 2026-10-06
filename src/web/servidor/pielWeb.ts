@@ -17,6 +17,7 @@
  * `PendienteDeAprobacion` no trae más, y el diff en sí viaja únicamente en el mensaje de
  * aprobación (`transporte.ts`, clase `aprobacion`), nunca por este canal de actos.
  */
+import { randomUUID } from "node:crypto";
 import type { Piel } from "../../core/turno.js";
 import type { Acto } from "../../core/actos.js";
 import { conLlamadaDeTool, restarPorModelo } from "../../core/actos.js";
@@ -396,6 +397,23 @@ export function crearPielWeb(
       // pregunta sigue pendiente mientras no llegue un acto de usuario detrás.
       cerrarFase();
       empujar({ tipo: "consulta", pregunta: c.pregunta, opciones: [...c.opciones] });
+    },
+
+    propuestaDeTareas(p) {
+      // Acto propio, con las tareas como DATO y un id: la tarjeta las encola o las descarta por él, y
+      // el servidor encola lo que dice ESTE acto, no lo que mande el cliente. Lista blanca campo a
+      // campo, como el artefacto.
+      cerrarFase();
+      empujar({
+        tipo: "propuesta-de-tareas",
+        id: randomUUID(),
+        motivo: p.motivo,
+        tareas: p.tareas.map((t) => ({
+          titulo: t.titulo,
+          peticion: t.peticion,
+          ...(t.adjuntos === undefined ? {} : { adjuntos: [...t.adjuntos] }),
+        })),
+      });
     },
 
     pausa(pendientes: PendienteDeAprobacion[]) {

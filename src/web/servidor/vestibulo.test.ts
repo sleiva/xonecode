@@ -526,6 +526,26 @@ describe("vestíbulo", () => {
     await v.cerrar();
   });
 
+  it("`anotarActo` apunta lo que resolvió el servidor y lo GUARDA sin esperar a un turno", async () => {
+    // Una propuesta de tareas se encola con un botón, fuera de un turno: si el acto de «resuelta» solo
+    // viviera en memoria, al reabrir la tarjeta volvería a ofrecer encolar lo ya encolado.
+    const s = sesionesEnMemoria();
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      // Un ejecutor REAL: `volcar` no persiste nada de un agente de pega.
+      crearEjecutor: () => async () => {},
+    });
+    const id = s.puerto.crear("/w/a");
+    s.puerto.anotar("/w/a", id, { tipo: "propuesta-de-tareas", id: "p1", motivo: "dos", tareas: [] });
+    const abierta = await v.abrirProyecto({ raiz: "/w/a", sesion: id });
+    abierta.anotarActo!({ tipo: "propuesta-resuelta", propuesta: "p1", encoladas: ["t1", "t2"] });
+    expect(abierta.actos().at(-1)).toEqual({ tipo: "propuesta-resuelta", propuesta: "p1", encoladas: ["t1", "t2"] });
+    expect(s.jsonl.get(`/w/a|${id}`)!.at(-1)).toEqual({ tipo: "propuesta-resuelta", propuesta: "p1", encoladas: ["t1", "t2"] });
+    await v.cerrar();
+  });
+
   describe("el dispositivo preferido de la sesión", () => {
     const GALAXY = { id: "R58", nombre: "Galaxy S21", plataforma: "android" as const, clase: "fisico" as const };
 

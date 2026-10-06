@@ -428,6 +428,18 @@ En `sesionTrueforge.ts`: opción nueva `puedeProponerTareas?: boolean` con su co
 
 ---
 
+> **Hecho (tarea 5), con tres cambios sobre lo escrito arriba:**
+> - **El aumentado no lo hace la piel**: `Piel.propuestaDeTareas` es síncrona y aumentar es una llamada al modelo por
+>   tarea. La piel solo emite el acto (con `id`); la tarjeta pide `{accion:"aumentarPropuesta", proyecto, propuesta}` y
+>   el servidor manda un `{accion:"propuestaAumentada", propuesta, indice, encargo|error}` por tarea, en serie. No se
+>   guarda: al reabrir, la tarjeta pendiente lo vuelve a pedir.
+> - **`crearEncadenadas` lleva solo `{proyecto, propuesta, encargos: string[]}`**: títulos, peticiones y adjuntos los
+>   saca el servidor del ACTO (`propuestaPendiente`), nunca del cliente. Contesta en la propia respuesta:
+>   `200 {encoladas, faltan?}` o `409 {motivo}`.
+> - **Resuelta es OTRO acto** (`propuesta-resuelta`, con `encoladas` o sin ellas si se descartó), apuntado por
+>   `ConsolaDeProyecto.anotarActo` y guardado en el acto: el `.jsonl` solo crece y la propuesta puede venir de lo releído.
+> - La bandera es `Consola.proponeTareas` (la declara `consolaWeb`; la consola de una tarea no la hereda).
+
 ### Task 6: La tarjeta en el cliente
 
 **Goal:** En el chat, una tarjeta muestra el motivo y las tareas en orden con su encargo aumentado EDITABLE, y dos botones: «Encolar en orden» y «Descartar».

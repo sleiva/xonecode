@@ -24,6 +24,10 @@ describe("consolaWeb: lo que declara de sí misma", () => {
     // centímetros más arriba — la duplicación que esto vino a quitar, y con todo en verde.
     expect(crearConsolaWeb().consola.modoALaVista).toBe(true);
   });
+
+  it("dice que una persona puede recibir propuestas de tareas encadenadas", () => {
+    expect(crearConsolaWeb().consola.proponeTareas).toBe(true);
+  });
 });
 
 describe("consolaWeb: la entrada", () => {

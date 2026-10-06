@@ -207,6 +207,12 @@ function Linea({ acto }: { acto: Acto }) {
       // Una tarea de fondo no tiene a quien preguntar, y su texto ya va en el mensaje del
       // asistente. Se pintan las opciones, sin botones: mirar no es contestar.
       return <p className={estilos.sistema}>{`Opciones: ${acto.opciones.join(" · ")}`}</p>;
+    case "propuesta-de-tareas":
+      // Una tarea de fondo no propone (no tiene la tool); si una sesión reabierta lo trae, se cuenta
+      // sin botones: mirar no es encolar.
+      return <p className={estilos.sistema}>{`Propuso ${acto.tareas.length} tareas: ${acto.tareas.map((t) => t.titulo).join(" · ")}`}</p>;
+    case "propuesta-resuelta":
+      return null;
     case "verificacion":
       // Como pulso, igual que las líneas que traía antes: mirar una tarea no es arreglarla,
       // así que aquí no hay botones.

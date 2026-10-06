@@ -147,6 +147,9 @@ export interface ConsolaWeb {
   /** Agota `lineas` (EOF) para que el lazo de `correrConsola` RETORNE, y corta el cliente. */
   cerrar(): void;
   actos(): readonly Acto[];
+  /** Apunta un acto que no viene ni de la piel ni de un comando: lo que el SERVIDOR resolvió por un
+   *  botón (una propuesta de tareas encolada o descartada). Se emite y entra en el transcript. */
+  anotar(acto: Acto): void;
   eventosEmitidos(): readonly MensajeAlCliente[];
   /**
    * Las aprobaciones EN VUELO, y solo esas. Es el único sitio con contenido de fichero y
@@ -279,6 +282,9 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
      * `Consola.modoALaVista`; en el terminal no se declara y la explicación sale entera.
      */
     modoALaVista: true,
+    /** Una persona con la cola de tareas a mano: el agente puede proponerle tareas encadenadas. La
+     *  consola de una TAREA no hereda esto: corre con la suya (`corredorDeTareas.ts#consolaParaTarea`). */
+    proponeTareas: true,
 
     lineas: {
       [Symbol.asyncIterator]() {
@@ -625,6 +631,7 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
       while (esperandoLinea.length > 0) esperandoLinea.shift()!({ value: undefined, done: true });
     },
     actos: () => actos,
+    anotar,
     eventosEmitidos: () => transporte.emitidos(),
     mensajesDeAprobacion: () => (aprobacionEnVuelo === undefined ? [] : [aprobacionEnVuelo.mensaje]),
   };

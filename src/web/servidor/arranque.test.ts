@@ -69,7 +69,7 @@ import type { AjustesDeDispositivos, Entorno } from "../../core/settings.js";
 import { cargarSettings } from "../../agent/config/settingsEnDisco.js";
 import type { Dispositivo } from "../../core/dispositivos.js";
 import type { AdjuntoDeTarea, Tarea } from "../../core/tareas.js";
-import { TOPE_DE_ADJUNTO } from "../../agent/tareas/tareasEnDisco.js";
+import { crearTareasEnDisco, TOPE_DE_ADJUNTO } from "../../agent/tareas/tareasEnDisco.js";
 import { carpetaDeAdjuntosDeSesion } from "../../core/adjuntos.js";
 import { TOPE_DE_ADJUNTO_DE_SESION } from "../../agent/sesiones/adjuntosDeSesion.js";
 import type { ManejadorRuta } from "./servidor.js";
@@ -5831,6 +5831,140 @@ describe("las tareas en background, por el cable", () => {
     await asentar();
     expect(cola.verTareas()).toEqual([]);
     expect(avisos.some((a) => a.includes("fantasma"))).toBe(true);
+  });
+
+  describe("una propuesta de tareas encadenadas", () => {
+    /** El proyecto «Tienda» abierto con una sesión cuya propuesta sigue pendiente, una cola de tareas de
+     *  verdad en disco y los adjuntos de la sesión puestos. */
+    async function conPropuesta(opciones: { aumentar?: (texto: string) => Promise<string> } = {}) {
+      const base = mkdtempSync(join(tmpdir(), "xonecode-encadenadas-"));
+      const propuesta: Acto = {
+        tipo: "propuesta-de-tareas",
+        id: "p1",
+        motivo: "dos ventanas",
+        tareas: [
+          { titulo: "Entradas", peticion: "Haz la ventana de entradas", adjuntos: ["/adjuntos/entradas.png"] },
+          { titulo: "Salidas", peticion: "Haz la ventana de salidas", adjuntos: ["salidas.png", "no-subido.png"] },
+        ],
+      };
+      const guardados: Acto[] = [];
+      const vestibulo = vestibuloDePrueba({
+        baseDeWorkspace: () => join(base, "w"),
+        sesiones: {
+          crear: () => "s1",
+          listar: () => [],
+          anotar: (_r, _id, acto) => void guardados.push(acto),
+          reabrir: (_r, id) => ({ id, actos: [propuesta], historica: true }),
+        },
+        crearEjecutor: () => async () => {},
+      });
+      const cola = crearTareasEnDisco({ base: join(base, "cola") });
+      const servidor = servidorDeMentira();
+      let revisado = 0;
+      const pedidas: string[] = [];
+      montarRutas(servidor, vestibulo, {
+        colaDeTareas: cola,
+        revisarTareas: () => void (revisado += 1),
+        ...(opciones.aumentar === undefined
+          ? {}
+          : {
+              augmentar: async ({ texto }: { texto: string }) => {
+                pedidas.push(texto);
+                return opciones.aumentar!(texto);
+              },
+            }),
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+      const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      mkdirSync(raiz, { recursive: true });
+      const adjuntos = carpetaDeAdjuntosDeSesion(raiz, "s1");
+      mkdirSync(adjuntos, { recursive: true });
+      writeFileSync(join(adjuntos, "entradas.png"), "E");
+      writeFileSync(join(adjuntos, "salidas.png"), "S");
+      await vestibulo.abrirProyecto({ raiz, sesion: "s1" });
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      return { base, cola, cliente, accion, guardados, revisado: () => revisado, pedidas, vestibulo };
+    }
+
+    it("encolarla crea las tareas EN ORDEN (tras), con SUS adjuntos y el encargo revisado, y la deja resuelta", async () => {
+      const { base, cola, accion, guardados, revisado, vestibulo } = await conPropuesta();
+      const r = await postearConCuerpo(
+        accion,
+        JSON.stringify({ clase: "tarea", accion: "crearEncadenadas", proyecto: "p1", propuesta: "p1", encargos: ["E revisado", ""] })
+      );
+      expect(r.estado).toBe(200);
+      const tareas = cola.listar();
+      expect(tareas).toHaveLength(2);
+      expect(tareas.map((t) => t.estado)).toEqual(["nuevo", "nuevo"]);
+      expect(tareas[0]!.tras).toBeUndefined();
+      expect(tareas[1]!.tras).toBe(tareas[0]!.id);
+      expect(tareas.map((t) => t.encargo)).toEqual(["E revisado", "Haz la ventana de salidas"]);
+      // Cada una con los suyos, leídos del disco de SU carpeta.
+      expect(tareas[0]!.adjuntos.map((a) => a.nombre)).toEqual(["entradas.png"]);
+      expect(tareas[1]!.adjuntos.map((a) => a.nombre)).toEqual(["salidas.png"]);
+      expect(JSON.parse(r.cuerpo)).toEqual({ encoladas: tareas.map((t) => t.id), faltan: ["no-subido.png"] });
+      expect(revisado()).toBe(1);
+      // Resuelta, guardada en la sesión, y no se encola dos veces.
+      const resuelta = { tipo: "propuesta-resuelta", propuesta: "p1", encoladas: tareas.map((t) => t.id) };
+      expect(vestibulo.proyectoAbierto()!.actos().at(-1)).toEqual(resuelta);
+      expect(guardados.at(-1)).toEqual(resuelta);
+      const otra = await postearConCuerpo(
+        accion,
+        JSON.stringify({ clase: "tarea", accion: "crearEncadenadas", proyecto: "p1", propuesta: "p1", encargos: ["a", "b"] })
+      );
+      expect(otra.estado).toBe(409);
+      expect(cola.listar()).toHaveLength(2);
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("con un encargo de menos, o una propuesta que no existe, no crea nada y lo dice", async () => {
+      const { base, cola, accion, vestibulo } = await conPropuesta();
+      const corta = await postearConCuerpo(
+        accion,
+        JSON.stringify({ clase: "tarea", accion: "crearEncadenadas", proyecto: "p1", propuesta: "p1", encargos: ["solo uno"] })
+      );
+      expect(corta.estado).toBe(409);
+      const inventada = await postearConCuerpo(
+        accion,
+        JSON.stringify({ clase: "tarea", accion: "crearEncadenadas", proyecto: "p1", propuesta: "otra", encargos: ["a", "b"] })
+      );
+      expect(inventada.estado).toBe(409);
+      expect(JSON.parse(inventada.cuerpo).motivo).toContain("ya no está pendiente");
+      expect(cola.listar()).toEqual([]);
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("descartarla la deja resuelta sin tareas", async () => {
+      const { base, cola, accion, vestibulo } = await conPropuesta();
+      expect(await enviarMensaje(accion, { clase: "tarea", accion: "descartarPropuesta", proyecto: "p1", propuesta: "p1" })).toBe(204);
+      expect(vestibulo.proyectoAbierto()!.actos().at(-1)).toEqual({ tipo: "propuesta-resuelta", propuesta: "p1" });
+      expect(cola.listar()).toEqual([]);
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("aumentarla redacta cada tarea en serie, y un fallo en una no para la otra", async () => {
+      const { base, cliente, accion, pedidas, vestibulo } = await conPropuesta({
+        aumentar: async (texto) => {
+          if (texto.includes("salidas")) throw new ErrorDelAumentador("el modelo no contestó");
+          return `## ${texto}`;
+        },
+      });
+      expect(await enviarMensaje(accion, { clase: "tarea", accion: "aumentarPropuesta", proyecto: "p1", propuesta: "p1" })).toBe(204);
+      await asentar();
+      await asentar();
+      expect(pedidas).toEqual(["Haz la ventana de entradas", "Haz la ventana de salidas"]);
+      expect(cliente.recibidos.filter((m) => m.clase === "tarea" && m.accion === "propuestaAumentada")).toEqual([
+        { clase: "tarea", accion: "propuestaAumentada", propuesta: "p1", indice: 0, encargo: "## Haz la ventana de entradas" },
+        { clase: "tarea", accion: "propuestaAumentada", propuesta: "p1", indice: 1, error: expect.stringContaining("el modelo no contestó") },
+      ]);
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
   });
 
   it("reintentar y terminar transicionan la tarea; descartar la BORRA sin mirar el estado", async () => {

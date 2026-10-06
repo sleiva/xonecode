@@ -276,7 +276,15 @@ describe("una sesión con el motor TrueForge", () => {
       [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "p1", name: "proponer_tareas", args: JSON.stringify(propuesta) }] })],
       [new AIMessageChunk({ content: "Te propongo dos tareas." })],
     ]);
-    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, puedeProponerTareas: true });
+    // En modo AUTÓNOMO también: el modo gobierna las escrituras locales; encolar es de la persona.
+    const s = await abrirSesionTrueforge({
+      raiz: proyecto(),
+      modelos: m,
+      entorno: ENTORNO,
+      skills: CATALOGO,
+      puedeProponerTareas: true,
+      sinAprobacion: () => true,
+    });
     const recibidas: unknown[] = [];
     const { p } = piel();
     await s.turno("diseña dos ventanas", { ...p, propuestaDeTareas: (x) => void recibidas.push(x) });

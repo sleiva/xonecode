@@ -168,6 +168,13 @@ export interface Consola {
    */
   modoALaVista?: boolean;
   /**
+   * El agente puede PROPONER repartir un encargo en tareas de fondo encadenadas (`proponer_tareas`).
+   * Ausente = no. Lo declara solo la consola de una PERSONA en la web, que es la que tiene la cola de
+   * tareas y la tarjeta para encolarlas: la de una tarea de fondo no (encadenaría trabajo sin nadie
+   * delante), ni el terminal, `run` o los evals. Lo lee `crearEjecutorReal` al abrir la sesión.
+   */
+  proponeTareas?: boolean;
+  /**
    * El estado de sesión ACABA de cambiar (un comando devolvió uno nuevo).
    *
    * Existe porque el modelo en vigor vive dentro del lazo: `/modelo` y `/modelos` cambian

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { ConsumoDeTurno } from "../../core/actos.js";
+import type { Acto, ConsumoDeTurno } from "../../core/actos.js";
 import { crearPielWeb } from "./pielWeb.js";
 import { correrTurno } from "../../core/turno.js";
 import type { DomainEvent } from "../../core/events.js";
@@ -407,6 +407,34 @@ describe("pielWeb: el coste del turno en el `fin`", () => {
       { tipo: "asistente", texto: "¿Qué pantalla?\n1. Login\n2. Menú", cuando: "1970-01-01T00:00:00.000Z" },
       { tipo: "consulta", pregunta: "¿Qué pantalla?", opciones: ["Login", "Menú"] },
     ]);
+  });
+
+  it("la propuesta de tareas es un acto PROPIO con un id y las tareas como dato, por el turno entero", async () => {
+    const { actos, piel } = crearPielWeb(() => 0);
+    async function* eventos(): AsyncIterable<DomainEvent> {
+      yield { tipo: "token", texto: "Lo reparto en dos." };
+      yield {
+        tipo: "propuesta-de-tareas",
+        motivo: "dos ventanas",
+        tareas: [
+          { titulo: "A", peticion: "haz A", adjuntos: ["a.png"] },
+          { titulo: "B", peticion: "haz B" },
+        ],
+      };
+    }
+    await correrTurno(eventos(), piel);
+    expect(actos().map((a) => a.tipo)).toEqual(["asistente", "propuesta-de-tareas", "fin"]);
+    const p = actos()[1] as Extract<Acto, { tipo: "propuesta-de-tareas" }>;
+    expect(p.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(p).toEqual({
+      tipo: "propuesta-de-tareas",
+      id: p.id,
+      motivo: "dos ventanas",
+      tareas: [
+        { titulo: "A", peticion: "haz A", adjuntos: ["a.png"] },
+        { titulo: "B", peticion: "haz B" },
+      ],
+    });
   });
 
   it("por el turno ENTERO, la pregunta del agente queda UNA vez: el acto no reabre el mensaje", async () => {

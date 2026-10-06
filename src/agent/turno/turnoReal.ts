@@ -222,6 +222,8 @@ export async function abrirSesionReal(opciones: {
    * agentes, y un modo que solo gobierna una mitad miente sobre lo que hace.
    */
   sinAprobacion?: () => boolean;
+  /** El raíz puede proponer tareas encadenadas (`proponer_tareas`). Solo TrueForge; ver `Consola.proponeTareas`. */
+  puedeProponerTareas?: boolean;
   /**
    * Cuántas RONDAS de aprobación admite un turno. Ausente = `MAX_APPROVAL_ROUNDS`, el de
    * siempre.
@@ -311,6 +313,7 @@ export async function abrirSesionReal(opciones: {
       ...(opciones.verifier === undefined ? {} : { verifier: opciones.verifier }),
       ...(opciones.pedirAprobacion === undefined ? {} : { pedirAprobacion: opciones.pedirAprobacion }),
       ...(opciones.sinAprobacion === undefined ? {} : { sinAprobacion: opciones.sinAprobacion }),
+      ...(opciones.puedeProponerTareas === true ? { puedeProponerTareas: true } : {}),
       // SIEMPRE con carpeta, con la MISMA caída que deepagents. Sin ella `/artefactos/` no se
       // montaba en la consola de terminal ni en `run --real`, y la escritura caía en la raíz del
       // proyecto sin aprobación (medido: `artefactos/panel.html` en la app del cliente).

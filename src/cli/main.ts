@@ -656,6 +656,8 @@ export function crearEjecutorReal(
          * mismo rechazo, y ahí el tope bajo sí es lo que corta un bucle que nadie puede
          * parar.
          */
+        // Solo la consola de una persona en la web lo declara: ver `Consola.proponeTareas`.
+        ...(consolaReal.proponeTareas === true ? { puedeProponerTareas: true } : {}),
         topeDeRondas:
           consolaReal.topeDeAprobaciones
           ?? (consolaReal.interactivo ? TOPE_DE_RONDAS_DE_CONSOLA : MAX_APPROVAL_ROUNDS),

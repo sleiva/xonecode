@@ -237,7 +237,18 @@ import {
 } from "../../core/tareas.js";
 import { aplicarFeedback, TOPE_DE_ADJUNTO, type TareasEnDisco } from "../../agent/tareas/tareasEnDisco.js";
 import { nombreDeAdjuntoAceptable } from "../../core/adjuntos.js";
-import { guardarAdjuntoDeSesion, TOPE_DE_ADJUNTO_DE_SESION } from "../../agent/sesiones/adjuntosDeSesion.js";
+import {
+  copiarAdjuntosDeSesion,
+  guardarAdjuntoDeSesion,
+  listarAdjuntosDeSesion,
+  TOPE_DE_ADJUNTO_DE_SESION,
+} from "../../agent/sesiones/adjuntosDeSesion.js";
+import {
+  motivoDePropuestaInaceptable,
+  nombreDeAdjuntoPropuesto,
+  propuestaPendiente,
+  tareasEncadenadas,
+} from "../../core/repartoDeEncargo.js";
 import { rutaMemoriaDeProyecto } from "../../agent/grafo/memoriaDeProyecto.js";
 import { crearAumentador, invocarParaAumentar } from "../../agent/tareas/aumentador.js";
 import {
@@ -2221,6 +2232,125 @@ export function montarRutas(
       // un error de Node sí las lleva, y de ese solo sale el `code`.
       emitir({ clase: "tarea", accion: "augmentado", error: motivoLegible(error) });
     }
+  };
+
+  /**
+   * La propuesta de tareas `propuestaId` del proyecto `proyectoId`, PENDIENTE, con la consola que la
+   * tiene delante —la abierta en el foco, de ESE proyecto—, o el motivo de que no. Lo que se aumenta
+   * y se encola sale de este acto, nunca del cliente: el cliente solo dice cuál.
+   */
+  const propuestaDelFoco = (
+    proyectoId: string,
+    propuestaId: string
+  ):
+    | {
+        proyecto: { id: string; raiz: string; nombre: string };
+        abierta: ConsolaDeProyecto;
+        propuesta: Extract<Acto, { tipo: "propuesta-de-tareas" }>;
+      }
+    | { motivo: string } => {
+    const proyecto = proyectoParaTarea(proyectoId);
+    if (proyecto === undefined) return { motivo: `el proyecto «${proyectoId}» no se pudo resolver` };
+    const abierta = vestibulo.proyectoAbierto();
+    if (abierta === undefined || !mismaRuta(abierta.raiz, proyecto.raiz)) {
+      return { motivo: "la conversación de esa propuesta ya no está abierta" };
+    }
+    const propuesta = propuestaPendiente(abierta.actos(), propuestaId);
+    if (propuesta === undefined) return { motivo: "esa propuesta ya no está pendiente (se encoló o se descartó)" };
+    return { proyecto, abierta, propuesta };
+  };
+
+  /**
+   * Redacta el encargo de cada tarea de una propuesta, EN SERIE y con el mismo aumentador que
+   * «Nueva tarea», y lo manda tarea a tarea según llega. Cada tarea con SUS adjuntos de la sesión
+   * (por nombre y tipo, del disco). Un fallo en una no para las demás: esa llega con su `error` y la
+   * tarjeta deja la petición como encargo, como «Nueva tarea».
+   */
+  const atenderAumentarPropuesta = async (
+    augmentar: NonNullable<OpcionesDeMontaje["augmentar"]>,
+    proyectoId: string,
+    propuestaId: string
+  ): Promise<void> => {
+    const hallada = propuestaDelFoco(proyectoId, propuestaId);
+    if ("motivo" in hallada) {
+      emitir({ clase: "tarea", accion: "propuestaAumentada", propuesta: propuestaId, indice: 0, error: hallada.motivo });
+      return;
+    }
+    const { proyecto, abierta, propuesta } = hallada;
+    for (const [indice, tarea] of propuesta.tareas.entries()) {
+      const adjuntos = listarAdjuntosDeSesion(
+        abierta.raiz,
+        abierta.idDeHilo,
+        (tarea.adjuntos ?? []).map(nombreDeAdjuntoPropuesto)
+      ).map((a) => ({ nombre: a.nombre, ...(a.mime === undefined ? {} : { mime: a.mime }) }));
+      try {
+        const encargo = await augmentar({ texto: tarea.peticion, proyecto, adjuntos });
+        emitir({ clase: "tarea", accion: "propuestaAumentada", propuesta: propuestaId, indice, encargo });
+      } catch (error) {
+        emitir({ clase: "tarea", accion: "propuestaAumentada", propuesta: propuestaId, indice, error: motivoLegible(error) });
+      }
+    }
+  };
+
+  /**
+   * Encola una propuesta EN ORDEN: una tarea por cada una de la propuesta, encadenadas por `tras`
+   * (`core/repartoDeEncargo.ts#tareasEncadenadas`), con el encargo que la persona revisó.
+   *
+   * **Crear las tareas es la autorización** para que escriban sin preguntar, y por eso solo pasa por
+   * aquí —el clic de la persona—, también en modo autónomo: la sesión solo PROPONE.
+   *
+   * **Los adjuntos se copian ANTES de guardar**, por lo mismo que el borrador de `atenderCrearTarea`:
+   * guardar dispara `revisarTareas()` y el corredor puede arrancar la primera en el acto. Cada tarea
+   * se lleva los suyos de la carpeta de la SESIÓN que propuso; un nombre que no está no tumba el
+   * encolado, vuelve en `faltan`. Y la propuesta queda RESUELTA con los ids, para no encolarla dos
+   * veces.
+   */
+  const atenderCrearEncadenadas = (
+    proyectoId: string,
+    propuestaId: string,
+    encargos: readonly string[]
+  ): { encoladas: string[]; faltan: string[] } | { motivo: string } => {
+    const cola = opciones.colaDeTareas;
+    if (cola === undefined) return { motivo: "no hay cola de tareas" };
+    const hallada = propuestaDelFoco(proyectoId, propuestaId);
+    if ("motivo" in hallada) return hallada;
+    const { proyecto, abierta, propuesta } = hallada;
+    const motivo = motivoDePropuestaInaceptable(propuesta);
+    if (motivo !== undefined) return { motivo };
+    if (encargos.length !== propuesta.tareas.length || encargos.some((e) => typeof e !== "string")) {
+      return { motivo: `hacen falta ${propuesta.tareas.length} encargos, uno por tarea` };
+    }
+    const nuevas = tareasEncadenadas({
+      proyecto,
+      tareas: propuesta.tareas.map((t, i) => ({ peticion: t.peticion, encargo: encargos[i]! })),
+      ahora: new Date(),
+      id: randomUUID,
+    });
+    const faltan: string[] = [];
+    for (const [i, nueva] of nuevas.entries()) {
+      const nombres = (propuesta.tareas[i]!.adjuntos ?? []).map(nombreDeAdjuntoPropuesto);
+      if (nombres.length === 0) continue;
+      const carpeta = cola.carpetaDeAdjuntos?.(nueva.id);
+      if (carpeta === undefined) {
+        faltan.push(...nombres);
+        continue;
+      }
+      faltan.push(...copiarAdjuntosDeSesion(abierta.raiz, abierta.idDeHilo, nombres, carpeta).faltan);
+      // Del DISCO, como al crear una a mano.
+      nueva.adjuntos = cola.listarAdjuntos(nueva.id);
+    }
+    cola.guardar([...cola.listar(), ...nuevas]);
+    const encoladas = nuevas.map((t) => t.id);
+    abierta.anotarActo?.({ tipo: "propuesta-resuelta", propuesta: propuestaId, encoladas });
+    return { encoladas, faltan };
+  };
+
+  /** Descarta una propuesta pendiente: queda RESUELTA sin tareas, y la tarjeta deja de ofrecerla. */
+  const atenderDescartarPropuesta = (proyectoId: string, propuestaId: string): string | undefined => {
+    const hallada = propuestaDelFoco(proyectoId, propuestaId);
+    if ("motivo" in hallada) return hallada.motivo;
+    hallada.abierta.anotarActo?.({ tipo: "propuesta-resuelta", propuesta: propuestaId });
+    return undefined;
   };
 
   /**
@@ -6382,6 +6512,40 @@ export function montarRutas(
       return;
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "tarea") {
+      if (mensaje.accion === "crearEncadenadas") {
+        // Contesta en la PROPIA respuesta: la tarjeta tiene que saber si se encoló para cerrarse, y
+        // un 409 con motivo es la negativa de siempre del cable.
+        const resultado = mudandoWorkspace
+          ? { motivo: "se está cambiando la carpeta de los proyectos: encola las tareas cuando termine" }
+          : atenderCrearEncadenadas(mensaje.proyecto, mensaje.propuesta, Array.isArray(mensaje.encargos) ? mensaje.encargos : []);
+        if ("motivo" in resultado) {
+          respuesta.writeHead(409, { "content-type": "application/json" });
+          respuesta.end(JSON.stringify({ motivo: resultado.motivo }));
+          return;
+        }
+        opciones.revisarTareas?.();
+        emitirTareas();
+        respuesta.writeHead(200, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify(resultado.faltan.length === 0 ? { encoladas: resultado.encoladas } : resultado));
+        return;
+      }
+      if (mensaje.accion === "descartarPropuesta") {
+        const motivo = atenderDescartarPropuesta(mensaje.proyecto, mensaje.propuesta);
+        if (motivo !== undefined) {
+          respuesta.writeHead(409, { "content-type": "application/json" });
+          respuesta.end(JSON.stringify({ motivo }));
+          return;
+        }
+        respuesta.writeHead(204);
+        respuesta.end();
+        return;
+      }
+      if (mensaje.accion === "aumentarPropuesta") {
+        if (opciones.augmentar !== undefined) void atenderAumentarPropuesta(opciones.augmentar, mensaje.proyecto, mensaje.propuesta).catch(contar);
+        respuesta.writeHead(204);
+        respuesta.end();
+        return;
+      }
       if (mensaje.accion === "crear" && mudandoWorkspace) {
         // Una tarea creada a mitad de la mudanza guardaría la raíz VIEJA, que está a punto de
         // borrarse. Se niega con motivo, como cualquier otra negativa del cable.

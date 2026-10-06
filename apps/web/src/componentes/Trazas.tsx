@@ -174,6 +174,16 @@ function filasDe(acto: Acto): FilaCruda[] {
     case "consulta":
       // Color de sistema y etiqueta propia: es lo que dijo el HARNESS por el agente, no una tool.
       return [cruda("sistema", "CONSULTA", `${acto.pregunta} · ${acto.opciones.join(" · ")}`)];
+    case "propuesta-de-tareas":
+      return [cruda("sistema", "PROPUESTA", `${acto.motivo} · ${acto.tareas.map((t) => t.titulo).join(" · ")}`)];
+    case "propuesta-resuelta":
+      return [
+        cruda(
+          "sistema",
+          "PROPUESTA",
+          acto.encoladas === undefined ? "descartada" : `encoladas ${acto.encoladas.length} tareas`
+        ),
+      ];
     case "verificacion":
       // Las mismas líneas que antes llegaban como pasos del motor, y con la misma etiqueta:
       // el veredicto viaja ahora como dato, pero el registro lo cuenta igual.

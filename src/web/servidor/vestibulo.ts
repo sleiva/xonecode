@@ -616,6 +616,13 @@ export interface ConsolaDeProyecto {
    *  `ConsolaWeb.mensajesDeAprobacion`. */
   mensajesDeAprobacion(): readonly MensajeAlCliente[];
   actos(): readonly Acto[];
+  /**
+   * Apunta un acto que resolvió el SERVIDOR (una propuesta de tareas encolada o descartada) y lo
+   * GUARDA en el acto si no hay turno en vuelo —con turno, lo guarda su `volcar` al acabar—. Sin
+   * esto, encolar fuera de un turno se pintaba y se olvidaba al reabrir: la tarjeta volvía a
+   * ofrecer encolar lo ya encolado. Opcional para los dobles; la consola de verdad lo tiene.
+   */
+  anotarActo?(acto: Acto): void;
   cerrar(): Promise<void>;
   /**
    * Corre UN turno sobre esta consola con la `Consola` que se le pase.
@@ -1884,6 +1891,10 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       soltar: (enviar) => consolaWeb.soltar(enviar),
       mensajesDeAprobacion: () => consolaWeb.mensajesDeAprobacion(),
       actos: () => [...(reabierta?.actos ?? []), ...consolaWeb.actos()],
+      anotarActo: (acto) => {
+        consolaWeb.anotar(acto);
+        if (!turnoEnVuelo) volcar();
+      },
       cerrar: async () => {
         // El orden es el que evita que cerrar cuelgue: `consolaWeb.cerrar()` pone el EOF,
         // pero `correrConsola` no lo mira hasta que el turno en vuelo devuelve, y un turno

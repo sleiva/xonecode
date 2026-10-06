@@ -485,6 +485,11 @@ export type Acto =
   /** El agente pregunta, con las opciones como DATO (`core/actos.ts#consulta`). Pendiente
    *  mientras no haya un acto de usuario detrás: así vuelve la tarjeta al reabrir. */
   | { tipo: "consulta"; pregunta: string; opciones: string[] }
+  /** El agente propone repartir el encargo en tareas de fondo encadenadas (`core/actos.ts`). La tarjeta
+   *  sigue ofreciendo encolarla mientras no haya un `propuesta-resuelta` con su id detrás. */
+  | { tipo: "propuesta-de-tareas"; id: string; motivo: string; tareas: { titulo: string; peticion: string; adjuntos?: string[] }[] }
+  /** Cómo acabó una propuesta: `encoladas` son los ids de sus tareas; ausente, se descartó. */
+  | { tipo: "propuesta-resuelta"; propuesta: string; encoladas?: string[] }
   /** `fase` es la CATEGORÍA (el enum de `core/events.ts`), aparte de su texto en español:
    *  filtrar por la prosa se rompería el día que alguien la reescriba. Opcional por lo
    *  mismo que `detalles` — las sesiones viejas no lo traen. */
@@ -786,6 +791,13 @@ export type MensajeAlCliente =
    */
   | { clase: "tarea"; accion: "augmentado"; encargo: string }
   | { clase: "tarea"; accion: "augmentado"; error: string }
+  /**
+   * El encargo aumentado de la tarea `indice` de una propuesta de tareas encadenadas
+   * (`accion: "aumentarPropuesta"`), o por qué no se pudo. Llega UNO por tarea, en orden, según se
+   * redactan: la tarjeta pinta cada uno al llegar. No se guarda: la persona lo edita y lo manda.
+   */
+  | { clase: "tarea"; accion: "propuestaAumentada"; propuesta: string; indice: number; encargo: string }
+  | { clase: "tarea"; accion: "propuestaAumentada"; propuesta: string; indice: number; error: string }
   /**
    * Un trozo del transcript de la sesión de una TAREA que se está mirando en vivo.
    *
@@ -1606,6 +1618,16 @@ export type MensajeDelCliente =
    */
   | { clase: "tarea"; accion: "crear"; proyecto: string; peticion: string; encargo: string; borrador?: string }
   | { clase: "tarea"; accion: "augmentar"; proyecto: string; peticion: string; borrador?: string }
+  /**
+   * Una PROPUESTA de tareas encadenadas (el acto `propuesta-de-tareas`): aumentar sus encargos,
+   * encolarla en orden o descartarla. Viaja el id de la propuesta y, al encolar, los encargos que la
+   * persona revisó, UNO por tarea y en orden; títulos, peticiones y adjuntos los saca el servidor del
+   * acto, nunca del cliente. Encolar contesta en la propia respuesta: `{encoladas, faltan?}` o 409
+   * con `{motivo}`.
+   */
+  | { clase: "tarea"; accion: "aumentarPropuesta"; proyecto: string; propuesta: string }
+  | { clase: "tarea"; accion: "descartarPropuesta"; proyecto: string; propuesta: string }
+  | { clase: "tarea"; accion: "crearEncadenadas"; proyecto: string; propuesta: string; encargos: string[] }
   /** «Se edita la tarea y se agrega el feedback del usuario»: la respuesta a una tarea
    *  «esperando feedback», que la devuelve al lazo en su MISMO hilo. */
   | { clase: "tarea"; accion: "feedback"; id: string; texto: string }

@@ -318,6 +318,11 @@ function ActoVista({
       // Tampoco llega: `Piel.verificacion` es opcional y la TUI no la implementa, así que aquí
       // el veredicto llega como las líneas de siempre.
       return null;
+    case "propuesta-de-tareas":
+    case "propuesta-resuelta":
+      // Tampoco llegan: `Piel.propuestaDeTareas` es opcional y la TUI no la implementa —le llega la
+      // línea de `textoDePropuesta`—, y resolverla solo se puede desde la web.
+      return null;
     default:
       // sistema: mudo e indentado — un aviso, no la conversación.
       return <Text color={temaInk.mudo}>{`  ${acto.texto}`}</Text>;

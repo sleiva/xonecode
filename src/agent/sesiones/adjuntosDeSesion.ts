@@ -14,7 +14,7 @@
  * `lstatSync` (que no necesita que exista nada) y, si la carpeta YA existe, compara su camino
  * REAL contra el de `.xonecode/sesiones`. Solo si esa comprobación pasa se llama a `mkdirSync`.
  */
-import { existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { unzipSync } from "fflate";
 import { carpetaDeAdjuntosDeSesion, mimeDeAdjunto, nombreDeAdjuntoAceptable, type AdjuntoNombrable } from "../../core/adjuntos.js";
@@ -343,4 +343,69 @@ export function listarAdjuntosDeSesion(raiz: string, id: string, nombres?: reado
     if (a !== undefined) salida.push(a);
     return salida;
   }, []);
+}
+
+/**
+ * Copia unos adjuntos de la sesión `id` a otra carpeta —la de una TAREA—, con el árbol extraído de
+ * cada `.zip` si lo hay. Lo usa encolar una propuesta de tareas encadenadas: cada tarea se lleva SUS
+ * diseños y nada más, y se copian ANTES de guardar la tarea, porque el corredor puede arrancarla en
+ * el acto.
+ *
+ * Las guardas son las de leer: la carpeta de la sesión por `carpetaComprobada`, cada nombre por
+ * `nombreDeAdjuntoAceptable`, y solo ficheros y carpetas de verdad —un enlace no se sigue ni se
+ * copia—. El destino lo da quien llama, ya comprobado (`TareasEnDisco.carpetaDeAdjuntos`).
+ * Devuelve qué se copió y qué no estaba: un nombre que el agente escribió mal no tumba el encolado,
+ * se DICE.
+ */
+export function copiarAdjuntosDeSesion(
+  raiz: string,
+  id: string,
+  nombres: readonly string[],
+  destino: string
+): { copiados: string[]; faltan: string[] } {
+  const origen = carpetaComprobada(raiz, id);
+  const copiados: string[] = [];
+  const faltan: string[] = [];
+  for (const nombre of nombres) {
+    const fichero = origen === undefined || !nombreDeAdjuntoAceptable(nombre) ? undefined : join(origen, nombre);
+    let esFichero = false;
+    try {
+      esFichero = fichero !== undefined && lstatSync(fichero).isFile();
+    } catch {
+      esFichero = false;
+    }
+    if (!esFichero) {
+      faltan.push(nombre);
+      continue;
+    }
+    mkdirSync(destino, { recursive: true, mode: 0o700 });
+    copyFileSync(fichero!, join(destino, nombre));
+    if (esZip(nombre)) copiarArbol(join(origen!, carpetaDeExtraccion(nombre)), join(destino, carpetaDeExtraccion(nombre)));
+    copiados.push(nombre);
+  }
+  return { copiados, faltan };
+}
+
+/** Copia una carpeta extraída sin seguir enlaces, con la misma profundidad máxima que `extraidoDe`. */
+function copiarArbol(desde: string, hasta: string, profundidad = 0): void {
+  if (profundidad > 8) return;
+  let nombres: string[];
+  try {
+    if (!lstatSync(desde).isDirectory()) return;
+    nombres = readdirSync(desde);
+  } catch {
+    return;
+  }
+  mkdirSync(hasta, { recursive: true, mode: 0o700 });
+  for (const n of nombres) {
+    if (!nombreDeAdjuntoAceptable(n)) continue;
+    const de = join(desde, n);
+    try {
+      const info = lstatSync(de);
+      if (info.isDirectory()) copiarArbol(de, join(hasta, n), profundidad + 1);
+      else if (info.isFile()) copyFileSync(de, join(hasta, n));
+    } catch {
+      // Lo que no se pudo leer no se copia: la tarea lo verá faltar, no un fichero a medias.
+    }
+  }
 }

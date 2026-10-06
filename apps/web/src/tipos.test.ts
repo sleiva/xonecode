@@ -481,7 +481,8 @@ function clavesDeLaListaBlanca(ruta: string): string[] {
   const fuente = readFileSync(ruta, "utf8");
   const bloque = /const TIPOS_DE_ACTO = \{([\s\S]*?)\}\s*satisfies/.exec(fuente);
   if (bloque === null) throw new Error(`no se encontró TIPOS_DE_ACTO en ${ruta}`);
-  return [...bloque[1].matchAll(/^\s*([a-z0-9_-]+):\s*true,\s*$/gm)].map((m) => m[1]).sort();
+  // Una clave con guion va entre comillas («"propuesta-de-tareas": true»).
+  return [...bloque[1].matchAll(/^\s*"?([a-z0-9_-]+)"?:\s*true,\s*$/gm)].map((m) => m[1]).sort();
 }
 
 /**

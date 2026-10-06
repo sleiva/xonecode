@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { motivoDePropuestaInaceptable, tareasEncadenadas, TOPE_DE_TAREAS_PROPUESTAS } from "./repartoDeEncargo.js";
+import type { Acto } from "./actos.js";
+import { motivoDePropuestaInaceptable, propuestaPendiente, tareasEncadenadas, TOPE_DE_TAREAS_PROPUESTAS } from "./repartoDeEncargo.js";
 
 const dos = {
   motivo: "son dos pantallas independientes",
@@ -69,5 +70,17 @@ describe("tareasEncadenadas", () => {
 
   it("la primera no lleva la clave tras: ausente, no undefined", () => {
     expect("tras" in crear()[0]!).toBe(false);
+  });
+});
+
+describe("propuestaPendiente", () => {
+  const propuesta: Acto = { tipo: "propuesta-de-tareas", id: "p1", motivo: "dos", tareas: dos.tareas };
+  it("la encuentra mientras nadie la resuelve", () => {
+    expect(propuestaPendiente([{ tipo: "usuario", texto: "x" }, propuesta, { tipo: "asistente", texto: "y" }], "p1")).toEqual(propuesta);
+  });
+  it("encolada o descartada, ya no; y una que no existe tampoco", () => {
+    expect(propuestaPendiente([propuesta, { tipo: "propuesta-resuelta", propuesta: "p1", encoladas: ["a", "b"] }], "p1")).toBeUndefined();
+    expect(propuestaPendiente([propuesta, { tipo: "propuesta-resuelta", propuesta: "p1" }], "p1")).toBeUndefined();
+    expect(propuestaPendiente([propuesta], "otra")).toBeUndefined();
   });
 });

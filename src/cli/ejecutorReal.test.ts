@@ -223,6 +223,20 @@ describe("la depuración global (Ajustes > General) llega a abrirSesionReal", ()
   });
 });
 
+describe("proponer tareas llega hasta la sesión solo si la consola lo declara", () => {
+  it("con `proponeTareas` (una persona en la web) la sesión abre con `puedeProponerTareas`; sin él, sin la clave", async () => {
+    dobles.abrirSesionReal.mockImplementation(async () => ({
+      turno: async () => ({ bitacora: { todo: [] }, cambios: [], cortadoPorTope: false, verificador: "verde" as const, pendientes: 0 }),
+    }));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await crearEjecutorReal(() => {})("haz algo", ESTADO, consolaDeMentira({ proponeTareas: true }) as any);
+    expect(dobles.abrirSesionReal.mock.calls.at(-1)![0]).toMatchObject({ puedeProponerTareas: true });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await crearEjecutorReal(() => {})("haz algo", ESTADO, consolaDeMentira({}) as any);
+    expect(dobles.abrirSesionReal.mock.calls.at(-1)![0]).not.toHaveProperty("puedeProponerTareas");
+  });
+});
+
 describe("el tope de rondas de la consola llega hasta la sesión", () => {
   /**
    * `Consola.topeDeAprobaciones` es la costura por la que una tarea de fondo pide su propio

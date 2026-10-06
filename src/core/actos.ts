@@ -13,6 +13,7 @@
 
 import type { AccionDeSincronizacion } from "./cloudstudio.js";
 import type { HallazgoDelTurno, OrigenDeLaTool } from "./events.js";
+import type { TareaPropuesta } from "./repartoDeEncargo.js";
 
 /**
  * Lo que se sabe de la línea i-ésima de un acto de herramientas.
@@ -131,6 +132,20 @@ export type Acto =
    * asistente.
    */
   | { tipo: "consulta"; pregunta: string; opciones: string[] }
+  /**
+   * El agente PROPONE repartir el encargo en tareas de fondo encadenadas (`proponer_tareas`,
+   * `core/repartoDeEncargo.ts`). `id` lo pone la piel web: es con lo que la tarjeta se encola o se
+   * descarta, y con lo que el servidor comprueba que la propuesta existe y sigue pendiente. Las
+   * tareas van como las escribió el agente —título, petición, adjuntos por nombre—; el encargo
+   * AUMENTADO no se guarda aquí: se pide al pintar la tarjeta y lo edita la persona.
+   */
+  | { tipo: "propuesta-de-tareas"; id: string; motivo: string; tareas: TareaPropuesta[] }
+  /**
+   * Cómo acabó una propuesta: `encoladas` son los ids de las tareas creadas, en orden; ausente es
+   * que se DESCARTÓ. Es un acto aparte y no una marca en el de la propuesta porque el `.jsonl` solo
+   * crece, y la propuesta puede venir de lo releído. Con él la tarjeta no se encola dos veces.
+   */
+  | { tipo: "propuesta-resuelta"; propuesta: string; encoladas?: string[] }
   /**
    * `fase` es el valor del enum (`core/events.ts#Fase`), que el acto tiraba al quedarse
    * solo con su texto en español. Opcional por lo mismo que `detalles`: las sesiones

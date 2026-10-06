@@ -2817,6 +2817,8 @@ describe("consolaParaTarea monta la consola con la que corre una tarea", () => {
     expect(recibidas).toHaveLength(1);
     expect(recibidas[0]!.topeDeAprobaciones).toBe(TOPE_DE_RONDAS_DE_TAREA);
     expect(TOPE_DE_RONDAS_DE_TAREA).not.toBe(MAX_APPROVAL_ROUNDS);
+    // Y no puede proponer tareas encadenadas: no hay nadie delante que las encole.
+    expect(recibidas[0]!.proponeTareas).toBeUndefined();
   });
 
   it("y DEVUELVE lo que el turno informó: es con lo que se mide la entrega", async () => {

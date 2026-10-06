@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { zipSync } from "fflate";
-import { guardarAdjuntoDeSesion, listarAdjuntosDeSesion, TOPE_DE_ADJUNTO_DE_SESION, TOPE_DE_ADJUNTOS_POR_SESION } from "./adjuntosDeSesion.js";
+import { copiarAdjuntosDeSesion, guardarAdjuntoDeSesion, listarAdjuntosDeSesion, TOPE_DE_ADJUNTO_DE_SESION, TOPE_DE_ADJUNTOS_POR_SESION } from "./adjuntosDeSesion.js";
 
 const carpetas: string[] = [];
 
@@ -306,5 +306,32 @@ describe("un .zip adjunto se DESCOMPRIME al guardarlo (MyAllXOne: nadie podía a
     guardarAdjuntoDeSesion(raiz, "s1", "a.zip", Buffer.from(zipSync({ "grande.bin": new Uint8Array(600_000) })), { porFichero: 1_000_000, porSesion: 1_000_000 });
     const r = guardarAdjuntoDeSesion(raiz, "s1", "b.png", Buffer.alloc(500_000), { porFichero: 1_000_000, porSesion: 1_000_000 });
     expect(r).toMatchObject({ ok: false });
+  });
+});
+
+describe("copiarAdjuntosDeSesion", () => {
+  it("copia los pedidos —con el árbol extraído de un zip— y dice los que no estaban", () => {
+    const raiz = proyectoTemporal();
+    guardarAdjuntoDeSesion(raiz, "s1", "a.png", Buffer.from("A"));
+    guardarAdjuntoDeSesion(raiz, "s1", "otra.png", Buffer.from("O"));
+    guardarAdjuntoDeSesion(raiz, "s1", "menu.zip", Buffer.from(zipSync({ "code.html": Buffer.from("<html></html>") })));
+    const destino = join(proyectoTemporal(), "tarea", "adjuntos");
+    const r = copiarAdjuntosDeSesion(raiz, "s1", ["a.png", "menu.zip", "no-existe.png", "../fuera"], destino);
+    expect(r).toEqual({ copiados: ["a.png", "menu.zip"], faltan: ["no-existe.png", "../fuera"] });
+    expect(readFileSync(join(destino, "a.png"), "utf8")).toBe("A");
+    expect(readFileSync(join(destino, "menu", "code.html"), "utf8")).toBe("<html></html>");
+    // Solo lo pedido: cada tarea se lleva SUS diseños.
+    expect(existsSync(join(destino, "otra.png"))).toBe(false);
+  });
+
+  it("un enlace en la carpeta de la sesión no se sigue", () => {
+    const raiz = proyectoTemporal();
+    guardarAdjuntoDeSesion(raiz, "s1", "a.png", Buffer.from("A"));
+    const fuera = join(proyectoTemporal(), "secreto.txt");
+    writeFileSync(fuera, "no");
+    symlinkSync(fuera, join(raiz, ".xonecode", "sesiones", "s1", "adjuntos", "enlace.png"));
+    const destino = join(proyectoTemporal(), "t");
+    expect(copiarAdjuntosDeSesion(raiz, "s1", ["enlace.png"], destino)).toEqual({ copiados: [], faltan: ["enlace.png"] });
+    expect(existsSync(join(destino, "enlace.png"))).toBe(false);
   });
 });
