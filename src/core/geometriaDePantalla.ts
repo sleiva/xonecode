@@ -62,6 +62,11 @@ export interface ElementoDeMaqueta {
   caja: Caja;
   /** Su ancho no se conoce (una maqueta DESCRITA sin unidades): no entra en la comparación de anchos. */
   sinAncho?: true;
+  /**
+   * Es un BOTÓN de la maqueta (`cajasDeMaqueta.ts#medirElementos`). Lo que no lo es y no tiene letras es un DATO de
+   * ejemplo («12 pend.», el reloj «09:41» de una barra de iOS simulada): que falte en el aparato no es un defecto.
+   */
+  boton?: true;
 }
 
 export interface MaquetaMedida {
@@ -332,6 +337,10 @@ export function emparejar(
   // controles SIN texto que nadie ha cogido.
   m.elementos.forEach((e, i) => {
     if (soloTexto || usadosM.has(i)) return;
+    // Un DATO de ejemplo (sin letras y que no es botón: «0», «12») no es una imagen en su sitio: medido en Maset, el «0»
+    // del contador se emparejaba con el chevron de al lado.
+    const t = textoParaEmparejar(e.texto);
+    if (e.boton !== true && t !== "" && !tieneLetras(t)) return;
     let mejor: { j: number; d: number } | undefined;
     hojas.forEach((c, j) => {
       if (usadosA.has(j) || c.texto !== undefined) return;
@@ -407,13 +416,38 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
    */
   const filasConPareja = new Set(parejas.map((p) => p.maqueta.caja.y));
   const sinFila: string[] = [];
+  const datos: string[] = [];
+  const enImagen: string[] = [];
+  /**
+   * ¿Cae el centro de este texto de la maqueta DENTRO de una imagen del aparato? Entonces está dibujado en ella (un
+   * logo SVG con su lema): medido en Maset, «VINS & CAVES • 1777» salía como BLOQUEANTE y está dentro del logo.
+   */
+  const dentroDeUnaImagen = (e: ElementoDeMaqueta): boolean => {
+    const [cx, cy] = centro(e.caja, m.ancho, m.alto);
+    return g.controles.some((c) => {
+      if (c.clase !== "IMG" && c.tipo !== "img") return false;
+      const [x0, y0] = [c.caja.x / g.pantalla.ancho, c.caja.y / g.pantalla.alto];
+      const [x1, y1] = [(c.caja.x + c.caja.ancho) / g.pantalla.ancho, (c.caja.y + c.caja.alto) / g.pantalla.alto];
+      return cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1;
+    });
+  };
   for (const e of sinPareja) {
-    if (textoParaEmparejar(e.texto) === "") {
+    if (!aproximada && e.boton !== true && textoParaEmparejar(e.texto) !== "" && !tieneLetras(textoParaEmparejar(e.texto))) {
+      datos.push(etiqueta(e));
+    } else if (!aproximada && textoParaEmparejar(e.texto) !== "" && dentroDeUnaImagen(e)) {
+      enImagen.push(etiqueta(e));
+    } else if (textoParaEmparejar(e.texto) === "") {
       if (!aproximada) notas.push(`${etiqueta(e)} de ${laMaqueta} no lo puedo emparejar: no tiene texto y nada de ${elAparato} cae cerca de su sitio.`);
     } else if (aproximada) {
       if (filasConPareja.has(e.caja.y)) diferencias.push(`${etiqueta(e)} de ${laMaqueta} no lo encuentro en ${elAparato} con ese texto (puede ser una imagen en su sitio: míralo).`);
       else sinFila.push(etiqueta(e));
     } else bloqueantes.push(`${etiqueta(e)} de ${laMaqueta} NO está en ${elAparato} (ningún control con ese texto).`);
+  }
+  if (enImagen.length > 0) {
+    notas.push(`dibujado dentro de una imagen (no falta): ${enImagen.slice(0, 5).join(", ")}${enImagen.length > 5 ? "…" : ""}.`);
+  }
+  if (datos.length > 0) {
+    notas.push(`datos de ejemplo de ${laMaqueta} que no están en ${elAparato}: ${datos.slice(0, 5).join(", ")}${datos.length > 5 ? "…" : ""} (cifras de muestra, no controles: no faltan).`);
   }
   if (sinFila.length > 0) {
     notas.push(`sin el mismo texto en ${elAparato}, ni en su fila: ${sinFila.slice(0, 5).join(", ")}${sinFila.length > 5 ? "…" : ""} (si son datos de ejemplo de un visor, es normal).`);

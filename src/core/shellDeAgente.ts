@@ -249,6 +249,33 @@ export function motivoDeComandoRechazado(comando: string): string | undefined {
       "`diferencia_de_capturas`, no `md5` ni scripts de imagen."
     );
   }
+  /**
+   * Una ruta VIRTUAL en la shell. Las tools de fichero ven `/hotswap/x` o `/EntryPoint.xne`; la shell ve el disco de verdad,
+   * donde esas rutas no existen. Medido en Maset: cinco comandos así en un turno (`grep … /hotswap/…json 2>/dev/null`,
+   * `base64 /EntryPoint.xne`), que salían VACÍOS sin error y el conductor sacaba conclusiones de la nada.
+   */
+  const MONTAJES = "hotswap|artefactos|adjuntos|planes|skills|diseno|large_tool_results|conversation_history";
+  const rutaVirtual = new RegExp(String.raw`(?:^|[\s"'=(:])\/(?:${MONTAJES})\/|(?:^|[\s"'=(:])\/[\w.-]+\.(?:xne|xml|js|css|ini)(?=[\s"')]|$)`);
+  if (rutaVirtual.test(comando)) {
+    return (
+      "No se lanza: en la shell las rutas son las del DISCO, y esa es una ruta virtual de las tools de fichero (allí no existe; " +
+      `el comando saldría vacío sin error). \`/hotswap/x\` es \`"$${VARIABLE_DE_HOTSWAP}/x"\`, \`/artefactos/x\` es ` +
+      `\`"$${VARIABLE_DE_ARTEFACTOS}/x"\`, y un fichero del proyecto va SIN la barra (\`EntryPoint.xne\`): la shell arranca en ` +
+      "la raíz del proyecto. Para leer o buscar en ficheros, mejor las tools `read_file`, `grep` y `glob`."
+    );
+  }
+  /**
+   * SQL que ESCRIBE en la base de la app del aparato. Medido en Maset: el conductor hizo un `UPDATE … SET ACTIVO=0` para
+   * que un contador saliera distinto. Son los datos de la app —y con la replicación activa, los del servidor—, y cambiarlos
+   * no es probar: es decidir por alguien. Consultar (`SELECT`) sí se puede.
+   */
+  const sqlQueEscribe = /\bxone-hotswap\b[^|;&]*\b(?:sql|runSql)\b[^|;&]*\b(?:insert|update|delete|replace|drop|alter|create|truncate)\b/i;
+  if (sqlQueEscribe.test(comando)) {
+    return (
+      "No se lanza: ese SQL CAMBIA los datos de la app en el aparato (y, si la app replica, los del servidor). Probar es mirar: " +
+      "consulta con `SELECT`. Si para probar algo hace falta otro dato, dilo en tu informe y que lo decida quien te lo encargó."
+    );
+  }
   if (tunelAMano.test(comando)) {
     return (
       "No se lanza: el túnel al aparato lo ponen `xone-desplegar-android` y `xone-reiniciar-android`, con el puerto que " +

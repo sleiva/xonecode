@@ -3,6 +3,7 @@
  "alto": 746,
  "elementos": [
   {
+   "boton": true,
    "texto": "drag_handle",
    "caja": {
     "x": 16,
@@ -12,6 +13,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "history",
    "caja": {
     "x": 294,
@@ -21,6 +23,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "DEG",
    "caja": {
     "x": 28,
@@ -30,6 +33,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "content_copy COPY",
    "caja": {
     "x": 230.15625,
@@ -39,6 +43,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "receipt_long Tape",
    "caja": {
     "x": 298.078125,
@@ -48,6 +53,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "(",
    "caja": {
     "x": 18,
@@ -57,6 +63,7 @@
    }
   },
   {
+   "boton": true,
    "texto": ")",
    "caja": {
     "x": 77.65625,
@@ -66,6 +73,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "√",
    "caja": {
     "x": 137.328125,
@@ -75,6 +83,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "x²",
    "caja": {
     "x": 196.984375,
@@ -84,6 +93,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "π",
    "caja": {
     "x": 256.65625,
@@ -93,6 +103,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "±",
    "caja": {
     "x": 316.328125,
@@ -102,6 +113,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "AC",
    "caja": {
     "x": 24,
@@ -111,6 +123,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "±",
    "caja": {
     "x": 112.5,
@@ -120,6 +133,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "%",
    "caja": {
     "x": 201,
@@ -129,6 +143,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "÷",
    "caja": {
     "x": 289.5,
@@ -138,6 +153,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "7",
    "caja": {
     "x": 24,
@@ -147,6 +163,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "8",
    "caja": {
     "x": 112.5,
@@ -156,6 +173,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "9",
    "caja": {
     "x": 201,
@@ -165,6 +183,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "×",
    "caja": {
     "x": 289.5,
@@ -174,6 +193,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "4",
    "caja": {
     "x": 24,
@@ -183,6 +203,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "5",
    "caja": {
     "x": 112.5,
@@ -192,6 +213,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "6",
    "caja": {
     "x": 201,
@@ -201,6 +223,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "−",
    "caja": {
     "x": 289.5,
@@ -210,6 +233,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "1",
    "caja": {
     "x": 24,
@@ -219,6 +243,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "2",
    "caja": {
     "x": 112.5,
@@ -228,6 +253,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "3",
    "caja": {
     "x": 201,
@@ -237,6 +263,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "+",
    "caja": {
     "x": 289.5,
@@ -246,6 +273,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "0",
    "caja": {
     "x": 24,
@@ -255,6 +283,7 @@
    }
   },
   {
+   "boton": true,
    "texto": ".",
    "caja": {
     "x": 112.5,
@@ -264,6 +293,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "backspace",
    "caja": {
     "x": 201,
@@ -273,6 +303,7 @@
    }
   },
   {
+   "boton": true,
    "texto": "=",
    "caja": {
     "x": 289.5,

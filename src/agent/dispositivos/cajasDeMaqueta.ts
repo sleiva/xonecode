@@ -31,8 +31,83 @@ export const TOPE_DE_RENDER_MS = 45_000;
 
 const MARCA = "__xonecode_cajas";
 
-/** El script que mide, DENTRO de la maqueta: mira sus propios botones y se lo pasa al envoltorio. */
-const MEDIDOR = `<script>addEventListener("load",function(){setTimeout(function(){var o=[];var es=document.querySelectorAll("button,[role=button]");for(var i=0;i<es.length;i++){var r=es[i].getBoundingClientRect();if(r.width>0&&r.height>0)o.push({texto:(es[i].innerText||"").trim().replace(/\\s+/g," "),caja:{x:r.left,y:r.top,ancho:r.width,alto:r.height}});}var b=[];var cs=document.querySelectorAll("header,nav,section,main,footer,div");for(var j=0;j<cs.length;j++){var q=cs[j].getBoundingClientRect();if(q.width<innerWidth*0.85||q.height<24||q.height>innerHeight*0.6)continue;var rep=false;for(var k=0;k<b.length;k++){if(Math.abs(b[k].y-q.top)<3&&Math.abs(b[k].alto-q.height)<3)rep=true;}if(!rep)b.push({x:q.left,y:q.top,ancho:q.width,alto:q.height});}parent.postMessage(JSON.stringify({ancho:innerWidth,alto:innerHeight,tailwind:typeof tailwind!=="undefined",pideTailwind:!!document.querySelector('script[src*="tailwindcss"]'),elementos:o,bloques:b}),"*");},1200);});</script>`;
+/**
+ * Qué se mide de la maqueta: los TEXTOS que se ven, cada uno con su caja. Se ejecuta DENTRO de la página (se
+ * inyecta con `toString()`), así que es JavaScript que el navegador entiende tal cual y no puede usar nada de fuera.
+ * Exportada para probarla con un DOM de pruebas.
+ *
+ * Antes se medían solo los `<button>`, cada uno con TODO su texto pegado. En la calculadora valía —cada tecla es un
+ * botón con un texto—, pero en una pantalla de tarjetas (Maset) cada tarjeta es un botón con título, badge,
+ * subtítulo y contador dentro: salía UN elemento «ENTREGAS PRIORIDAD Reparto de pedidos… 12 pend.» que no coincide
+ * con ningún control del aparato (BLOQUEANTE falso), y todo lo que no es botón —cabecera, banda, sección, pie— no se
+ * veía. Ahora:
+ * - un botón con UN texto (sin contar los iconos de Material) es un elemento, con la caja del BOTÓN: su forma es la
+ *   de la tecla, no la de las letras;
+ * - un botón con VARIOS textos se parte en ellos;
+ * - fuera de los botones, cada elemento con texto propio es uno.
+ * Cada uno dice si es un botón (`boton`): lo que no lo es y no tiene letras es un dato de ejemplo («12», «09:41»).
+ */
+export function medirElementos(doc: any): Array<{ texto: string; caja: { x: number; y: number; ancho: number; alto: number }; boton?: true }> {
+  var ICONO = /material-(symbols|icons)/;
+  var FUERA = /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|TITLE|HEAD)$/;
+  var limpio = function (t: string): string {
+    return (t || "").replace(/\s+/g, " ").trim();
+  };
+  var cajaDe = function (el: any): { x: number; y: number; ancho: number; alto: number } | undefined {
+    var r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 ? { x: r.left, y: r.top, ancho: r.width, alto: r.height } : undefined;
+  };
+  var propio = function (el: any): string {
+    var t = "";
+    for (var n = el.firstChild; n; n = n.nextSibling) if (n.nodeType === 3) t += n.nodeValue;
+    return limpio(t);
+  };
+  // Todos sus textos, unidos con un espacio: `innerText` pegaría «content_copyCOPY» si el HTML no deja hueco entre ellos.
+  var todoElTexto = function (el: any): string {
+    var partes: string[] = [];
+    var recorrer = function (n: any): void {
+      for (var c = n.firstChild; c; c = c.nextSibling) {
+        if (c.nodeType === 3) partes.push(c.nodeValue);
+        else if (c.nodeType === 1 && !FUERA.test(c.tagName)) recorrer(c);
+      }
+    };
+    recorrer(el);
+    return limpio(partes.join(" "));
+  };
+  var esIcono = function (el: any): boolean {
+    return typeof el.className === "string" && ICONO.test(el.className);
+  };
+  var hojas: any[] = [];
+  var todos = doc.body.querySelectorAll("*");
+  for (var i = 0; i < todos.length; i++) if (!FUERA.test(todos[i].tagName) && propio(todos[i]) !== "") hojas.push(todos[i]);
+  var salida: Array<{ texto: string; caja: { x: number; y: number; ancho: number; alto: number }; boton?: true }> = [];
+  var cubiertas: any[] = [];
+  var botones = doc.querySelectorAll("button,[role=button]");
+  for (var j = 0; j < botones.length; j++) {
+    var b = botones[j];
+    var dentro = hojas.filter(function (h) {
+      return b === h || b.contains(h);
+    });
+    var textos = dentro.filter(function (h) {
+      return !esIcono(h);
+    });
+    if (textos.length > 1) continue;
+    var cb = cajaDe(b);
+    if (cb !== undefined) salida.push({ texto: todoElTexto(b), caja: cb, boton: true });
+    for (var k = 0; k < dentro.length; k++) cubiertas.push(dentro[k]);
+  }
+  for (var m = 0; m < hojas.length; m++) {
+    if (cubiertas.indexOf(hojas[m]) >= 0) continue;
+    var ch = cajaDe(hojas[m]);
+    if (ch !== undefined) salida.push({ texto: propio(hojas[m]), caja: ch });
+  }
+  return salida;
+}
+
+/** El script que mide, DENTRO de la maqueta: sus textos (`medirElementos`) y sus bloques anchos, al envoltorio. */
+// `var __name`: bajo `tsx`, esbuild envuelve cada función con `__name(fn, "nombre")` (keepNames), y ese ayudante no existe
+// dentro de la página: sin él la medida no volvía nunca, en silencio. Con el build de `tsc` no aparece y esto no estorba.
+const MEDIDOR = `<script>var __name=function(f){return f};addEventListener("load",function(){setTimeout(function(){var o=(${medirElementos.toString()})(document);var b=[];var cs=document.querySelectorAll("header,nav,section,main,footer,div");for(var j=0;j<cs.length;j++){var q=cs[j].getBoundingClientRect();if(q.width<innerWidth*0.85||q.height<24||q.height>innerHeight*0.6)continue;var rep=false;for(var k=0;k<b.length;k++){if(Math.abs(b[k].y-q.top)<3&&Math.abs(b[k].alto-q.height)<3)rep=true;}if(!rep)b.push({x:q.left,y:q.top,ancho:q.width,alto:q.height});}parent.postMessage(JSON.stringify({ancho:innerWidth,alto:innerHeight,tailwind:typeof tailwind!=="undefined",pideTailwind:!!document.querySelector('script[src*="tailwindcss"]'),elementos:o,bloques:b}),"*");},1200);});</script>`;
 
 function envoltorio(ancho: number, alto: number): string {
   return `<!doctype html><html><body style="margin:0"><iframe src="maqueta.html" style="border:0;width:${ancho}px;height:${alto}px"></iframe><script>addEventListener("message",function(e){var p=document.createElement("pre");p.id="${MARCA}";p.textContent=e.data;document.body.appendChild(p);});</script></body></html>`;

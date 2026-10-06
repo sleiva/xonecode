@@ -8489,3 +8489,34 @@ resolución que declara la app (las cajas en `p` sí).
 
 Para una maqueta: un px de su viewport (unos 390 de ancho) es casi un dp de un teléfono (411 dp en este), así que
 `text-[Npx]` → `fontsize: N−8`. Sin medir: `textfont-size`, iOS, y otra escala de letra del sistema.
+
+## El crítico mide los TEXTOS de la maqueta, no sus botones; y la shell no acepta rutas virtuales ni SQL que escribe (06-10-2026)
+
+Pasada real en Maset (menú de tarjetas, maqueta de Stitch). El crítico dio un rojo casi todo falso porque el medidor del
+`code.html` solo recogía `<button>`, cada uno con TODO su `innerText`. En la calculadora valía (cada tecla, un botón y un
+texto); en Maset cada tarjeta es un botón con título, badge, subtítulo y contador, y salía UN elemento «ENTREGAS
+PRIORIDAD Reparto de pedidos y albaranes 12 pend.»: BLOQUEANTE («NO está en el aparato»), «letra 0,3 veces» comparando
+una tarjeta con una etiqueta, y lo que no era botón (cabecera, banda, sección, pie) no existía para el crítico. El
+emparejado por sitio de la mañana, con esos elementos compuestos y una tarjeta menos en la app, emparejaba cosas sin
+relación.
+
+Ahora `medirElementos`: botón de un texto → un elemento con la caja del botón; botón de varios → sus textos; fuera de
+botones, cada texto. Medido con Chrome sobre la maqueta de Maset: 24 elementos donde antes había 5 tarjetas pegadas. Con
+la captura real del aparato quedaron cuatro falsos, cada uno con su regla:
+
+- «VINS & CAVES • 1777» estaba DIBUJADO dentro del SVG del logo → un texto que cae dentro de una imagen del aparato no falta;
+- «12:56» (el reloj de una barra de iOS simulada), «12», «0» → sin letras y no botón: DATO de ejemplo, y no entra al
+  emparejado de iconos (el «0» se emparejaba con el chevron de al lado);
+- «alineado a centro → a izquierda» en cada título → la caja de un `<span>` abraza su texto: la alineación solo con caja
+  propia (`ControlAMedir.ajustado`).
+
+El oro de la calculadora se midió con el medidor viejo (todos botones): se le añadió la marca. Queda como bloqueante la
+cuarta tarjeta (ENTRADAS/SALIDAS) que se decidió no hacer: es una diferencia real con la maqueta, y no es el crítico quien
+sabe que se descartó.
+
+**La trampa de `toString()`**: bajo `tsx`, esbuild envuelve cada función con `__name(fn, "x")`; inyectada en la página, ese
+ayudante no existe y la medida no volvía («el navegador no devolvió la medida»). El script define `__name`.
+
+En la misma pasada, el conductor usó rutas virtuales en la shell cinco veces (`grep … /hotswap/…json 2>/dev/null`,
+`base64 /EntryPoint.xne`), que salían vacías sin error; y lanzó un `UPDATE GEN_LIQUIDACIONES SET ACTIVO=0` para que un
+contador cambiara. Las dos se devuelven ahora como error desde `motivoDeComandoRechazado`.

@@ -352,7 +352,9 @@ export function compararDescripciones(maqueta: PantallaDescrita, captura: Pantal
   ms.forEach(({ c: m, fila }, i) => {
     const j = pareja.get(i);
     if (j === undefined) {
-      if (filasConPareja.has(fila) && clave(m) !== ICONO) faltan.push(nombrar(m));
+      // Una cifra o un signo suelto de la maqueta («12», «09:41») es un dato de ejemplo: que falte no es un defecto. Un
+      // BOTÓN que falta (una tecla) ya lo dice la geometría, que sí sabe si es un botón.
+      if (filasConPareja.has(fila) && clave(m) !== ICONO && tieneLetras(clave(m))) faltan.push(nombrar(m));
       return;
     }
     const a = as[j]!.c;

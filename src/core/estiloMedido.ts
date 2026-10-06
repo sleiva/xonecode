@@ -279,19 +279,30 @@ export function medirControl(img: ImagenRgba, caja: Caja): EstiloMedido {
 export interface ControlAMedir {
   texto: string;
   caja: Caja;
+  /**
+   * Su caja ABRAZA su texto (un `<span>` de la maqueta, no un botón): dónde cae el texto dentro de ella no dice nada,
+   * así que su alineación no se mide. Medido en Maset: cada título salía «centrado» y el del aparato «a la izquierda».
+   */
+  ajustado?: true;
 }
 
 /**
  * Una pantalla entera MEDIDA, en el mismo esquema que `compararDescripciones` entiende: las filas que se le dan, y
  * cada control con su estilo medido y su centro en fracción de la pantalla (con eso se empareja).
  */
+const sinAlineacionSi = <T extends { alineacion?: unknown }>(quitar: boolean, medido: T): T => {
+  if (!quitar) return medido;
+  const { alineacion: _a, ...resto } = medido;
+  return resto as T;
+};
+
 export function pantallaMedida(img: ImagenRgba, filas: readonly (readonly ControlAMedir[])[]): PantallaDescrita {
   return {
     filas: filas.map((fila) => ({
       controles: fila.map((c) => ({
         texto: c.texto,
         centro: { x: (c.caja.x + c.caja.ancho / 2) / img.ancho, y: (c.caja.y + c.caja.alto / 2) / img.alto },
-        ...medirControl(img, c.caja),
+        ...sinAlineacionSi(c.ajustado === true, medirControl(img, c.caja)),
       })),
     })),
     extras: [],

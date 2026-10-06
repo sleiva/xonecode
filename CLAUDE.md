@@ -332,7 +332,12 @@ Y las guardas del proyecto:
   NOMBRE y nunca por fecha (`geometriaEnDisco.ts`, la regla del nombre atada por test a la del
   script). Las de la maqueta salen de renderizar su `code.html` en un Chrome sin ventana, dentro de un
   iframe de su tamaño EXACTO (no baja de 500 px) y sin `--allow-file-access-from-files` (el medidor va
-  dentro de la copia y devuelve por `postMessage`); una maqueta sin sus estilos NO da cajas. Un
+  dentro de la copia y devuelve por `postMessage`); una maqueta sin sus estilos NO da cajas. **Lo que se mide son los
+  TEXTOS, no los botones** (`cajasDeMaqueta.ts#medirElementos`): un botón de un solo texto es un elemento con su caja
+  (una tecla), uno con varios (una tarjeta) se parte, y lo de fuera de los botones también entra; cada uno dice si es
+  botón. Lo que no lo es y no tiene letras es un DATO de ejemplo y no falta; un texto que cae dentro de una imagen del
+  aparato está DIBUJADO en ella (un logo) y no falta; y la alineación solo se compara con caja propia. La función se
+  inyecta con `toString()`, y bajo `tsx` esbuild mete `__name(…)`: el script lo define, o la medida no vuelve. Un
   BLOQUEANTE (tapado por una barra, fuera de pantalla) fuerza el rojo aunque el modelo diga verde. Lo
   medido y lo opinado van SEPARADOS, y al modelo se le pasan los hechos para que se centre en lo que
   solo se VE. **Una maqueta que es solo un PNG** mide solo el aparato y lo dice. **Límites
@@ -722,8 +727,10 @@ plan viejo sin casillas sigue valiendo.
 **Quien ejecuta no busca ficheros con la shell** (`core/shellDeAgente.ts#motivoDeComandoRechazado`, en el `execute` de
 TrueForge): un `find`, un `grep -r` o un `ls -R` se DEVUELVE como error que manda a las tools `glob`, `grep` y `ls`, que
 son lo mismo confinado a las rutas virtuales; si además arrancaba en la raíz, la casa o una carpeta del sistema, el aviso
-lo dice. Un `grep` que filtra la salida de otro comando pasa. Es una lista de lo visto, no un filtro de shell: un límite
-declarado.
+lo dice. Un `grep` que filtra la salida de otro comando pasa. **Ni una ruta VIRTUAL** (`/hotswap/x`, `/EntryPoint.xne`): en
+el disco no existe y el comando sale vacío sin error; se devuelve con la de verdad (`"$XONECODE_HOTSWAP/x"`, el fichero sin
+barra). **Ni SQL que escribe** por `xone-hotswap` (`UPDATE`, `DELETE`, `INSERT`…): son los datos de la app y, con
+replicación, del servidor; `SELECT` pasa. Es una lista de lo visto, no un filtro de shell: un límite declarado.
 **Escribir con el turno en marcha es UN gesto** (IXCODE-4, solo la web): el Enter, que en
 TrueForge viaja como **detener y replanificar** (`detener: true`, solo con `turnoDetenible`); el
 botón aparte se quitó a petición suya. La NOTA sigue siendo el camino de lo que llega sin

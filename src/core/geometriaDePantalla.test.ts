@@ -189,3 +189,44 @@ describe("un texto TRADUCIDO en su sitio no falta (la maqueta de Stitch viene en
     expect(h.bloqueantes).toContain("«History» de la maqueta NO está en el aparato (ningún control con ese texto).");
   });
 });
+
+describe("una pantalla de tarjetas (Maset): datos de ejemplo, texto dentro de una imagen", () => {
+  // Maqueta 400×800; aparato 1000×2000.
+  const maqueta: MaquetaMedida = {
+    ancho: 400,
+    alto: 800,
+    elementos: [
+      { texto: "MASET", caja: { x: 150, y: 40, ancho: 100, alto: 20 } },
+      { texto: "VINS & CAVES • 1777", caja: { x: 120, y: 70, ancho: 160, alto: 14 } },
+      { texto: "09:41", caja: { x: 20, y: 10, ancho: 30, alto: 14 } },
+      { texto: "INCIDENCIAS", caja: { x: 100, y: 400, ancho: 100, alto: 20 } },
+      { texto: "0", caja: { x: 300, y: 400, ancho: 20, alto: 20 } },
+      { texto: "7", caja: { x: 20, y: 600, ancho: 80, alto: 60 }, boton: true },
+    ],
+  };
+  const aparato: GeometriaDelAparato = {
+    pantalla: { ancho: 1000, alto: 2000 },
+    controles: [
+      { nombre: "IMGLOGO", tipo: "prop", clase: "IMG", caja: { x: 300, y: 80, ancho: 400, alto: 150 } },
+      { nombre: "MAP_TIT", texto: "INCIDENCIAS", tipo: "prop", clase: "L", caja: { x: 250, y: 1000, ancho: 250, alto: 50 } },
+      { nombre: "MAP_CONT", texto: "--", tipo: "prop", clase: "T", caja: { x: 760, y: 1000, ancho: 40, alto: 50 } },
+      { nombre: "IMGCHEV", tipo: "prop", clase: "IMG", caja: { x: 820, y: 1000, ancho: 40, alto: 50 } },
+    ],
+  };
+  const h = compararConMaqueta(maqueta, aparato);
+
+  it("un texto de la maqueta dibujado dentro de una imagen del aparato no falta", () => {
+    expect(h.bloqueantes.join("\n")).not.toContain("VINS");
+    expect(h.notas).toContain("dibujado dentro de una imagen (no falta): «VINS & CAVES • 1777».");
+  });
+
+  it("una cifra que no es botón es un dato de ejemplo: no falta, y no se empareja con la imagen de al lado", () => {
+    expect(h.bloqueantes.join("\n")).not.toMatch(/«0»|09:41/);
+    expect(h.notas.some((n) => n.startsWith("datos de ejemplo") && n.includes("«09:41»") && n.includes("«0»"))).toBe(true);
+    expect(emparejar(maqueta, aparato).parejas.some((p) => p.maqueta.texto === "0")).toBe(false);
+  });
+
+  it("pero una TECLA que falta sigue siendo bloqueante", () => {
+    expect(h.bloqueantes).toContain("«7» de la maqueta NO está en el aparato (ningún control con ese texto).");
+  });
+});

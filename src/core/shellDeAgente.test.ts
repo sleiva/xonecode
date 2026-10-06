@@ -211,6 +211,49 @@ describe("las búsquedas por el disco entero no se lanzan", () => {
     }
   });
 
+  it("una ruta VIRTUAL en la shell se devuelve con la del disco (Maset: cinco comandos salían vacíos sin error)", () => {
+    for (const c of [
+      `grep -o '"name":"[^"]*"' /hotswap/respuesta-status-1791283681304.json 2>/dev/null | tail -20`,
+      "B64=$(base64 -i /EntryPoint.xne 2>/dev/null || base64 /EntryPoint.xne)",
+      `grep -n "loginLocal\\|PWD" /funciones.js | head -40`,
+      `python3 - <<'EOF'\nimport json\ndata=json.load(open("/hotswap/respuesta-status-1791284014152.json"))\nEOF`,
+      "ls /artefactos/",
+    ]) {
+      const m = motivoDeComandoRechazado(c);
+      expect(m, c).toContain("ruta virtual");
+      expect(m, c).toContain("$XONECODE_HOTSWAP/x");
+    }
+  });
+
+  it("y las rutas de verdad, los scripts y una URL pasan", () => {
+    for (const c of [
+      `grep -o '"name"' "$XONECODE_HOTSWAP"/respuesta-status-1.json`,
+      "base64 EntryPoint.xne",
+      "xone-recargar-android EntryPoint.xne",
+      "ls /usr/bin/node",
+      "curl -s http://127.0.0.1:8443/hotswap/x",
+      "adb shell ls /sdcard/Download",
+    ]) {
+      expect(motivoDeComandoRechazado(c), c).toBeUndefined();
+    }
+  });
+
+  it("SQL que ESCRIBE en la base de la app no se lanza; consultar sí (Maset: un UPDATE para cambiar un contador)", () => {
+    for (const c of [
+      `xone-hotswap sql maset "UPDATE GEN_LIQUIDACIONES SET ACTIVO=0 WHERE ID IN (50,51,52,53)" 2>&1 | tail -2`,
+      `xone-hotswap runSql app=maset query="delete from gen_usuarios"`,
+      `xone-hotswap sql maset "insert into x values (1)"`,
+    ]) {
+      expect(motivoDeComandoRechazado(c), c).toContain("CAMBIA los datos de la app");
+    }
+    for (const c of [
+      `xone-hotswap sql maset "select ID, ACTIVO, IDUSUARIO from GEN_LIQUIDACIONES WHERE ACTIVO=1" 2>&1 | tail -2`,
+      `xone-hotswap sql maset "select name from sqlite_master where type='table'"`,
+    ]) {
+      expect(motivoDeComandoRechazado(c), c).toBeUndefined();
+    }
+  });
+
   it("lo que no busca ficheros pasa: scripts, filtros de su salida, listar una carpeta", () => {
     for (const c of [
       'ls -t $XONECODE_HOTSWAP/ | head',

@@ -359,7 +359,7 @@ function medirEstilo(
     const porFila = new Map<number, ControlAMedir[]>();
     m.elementos.forEach((e, i) => {
       const caja = { x: e.caja.x * escala, y: e.caja.y * escala, ancho: e.caja.ancho * escala, alto: e.caja.alto * escala };
-      porFila.set(indice[i]!, [...(porFila.get(indice[i]!) ?? []), { texto: e.texto, caja }]);
+      porFila.set(indice[i]!, [...(porFila.get(indice[i]!) ?? []), { texto: e.texto, caja, ...(e.boton === true ? {} : { ajustado: true as const }) }]);
     });
     const filasDeLaMaqueta = [...porFila.entries()].sort((a, b) => a[0] - b[0]).map(([, f]) => f.sort((a, b) => a.caja.x - b.caja.x));
     const comparacion = compararDescripciones(pantallaMedida(imagen, filasDeLaMaqueta), vista);
