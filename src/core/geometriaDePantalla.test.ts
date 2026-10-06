@@ -153,3 +153,39 @@ describe("una lista con scroll y un panel encima no son errores de maqueta", () 
     expect(h.diferencias).toEqual(["«7» (BT_7) y «8» (BT_8) se SOLAPAN."]);
   });
 });
+
+describe("un texto TRADUCIDO en su sitio no falta (la maqueta de Stitch viene en inglés)", () => {
+  // Maqueta 400×800; aparato 1000×2000: el mismo sitio en fracción.
+  const maqueta: MaquetaMedida = {
+    ancho: 400,
+    alto: 800,
+    elementos: [
+      { texto: "content_copy COPY", caja: { x: 300, y: 100, ancho: 80, alto: 30 } },
+      { texto: "receipt_long Tape", caja: { x: 20, y: 100, ancho: 80, alto: 30 } },
+      { texto: "History", caja: { x: 160, y: 700, ancho: 80, alto: 30 } },
+    ],
+  };
+  const aparato: GeometriaDelAparato = {
+    pantalla: { ancho: 1000, alto: 2000 },
+    controles: [
+      { nombre: "MAP_COPIAR", texto: "COPIAR", tipo: "prop", clase: "B", caja: { x: 750, y: 250, ancho: 200, alto: 75 } },
+      // Una IMAGEN al lado y el texto traducido en el sitio: gana el texto.
+      { nombre: "IMG_CURSOR", tipo: "prop", clase: "IMG", caja: { x: 60, y: 260, ancho: 40, alto: 40 } },
+      { nombre: "MAP_HISTORIAL", texto: "HISTORIAL", tipo: "prop", clase: "B", caja: { x: 50, y: 250, ancho: 200, alto: 75 } },
+      // Una CIFRA donde la maqueta tiene una palabra: no es una traducción.
+      { nombre: "VISOR", texto: "19", tipo: "prop", clase: "T", caja: { x: 400, y: 1750, ancho: 200, alto: 75 } },
+    ],
+  };
+  const h = compararConMaqueta(maqueta, aparato);
+
+  it("se empareja por su sitio y va como NOTA, no como bloqueante", () => {
+    expect(h.bloqueantes.join("\n")).not.toMatch(/COPY|Tape/);
+    expect(h.notas).toContain("«COPY» de la maqueta dice «COPIAR» en el aparato: otro texto en su sitio (traducido o cambiado), no falta. Comparo su caja igual.");
+    expect(h.notas.some((n) => n.startsWith("«Tape» de la maqueta dice «HISTORIAL»"))).toBe(true);
+    expect(emparejar(maqueta, aparato).parejas.find((p) => p.maqueta.texto.endsWith("Tape"))?.aparato.nombre).toBe("MAP_HISTORIAL");
+  });
+
+  it("una cifra en el sitio de una palabra no es su traducción: sigue faltando", () => {
+    expect(h.bloqueantes).toContain("«History» de la maqueta NO está en el aparato (ningún control con ese texto).");
+  });
+});

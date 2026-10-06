@@ -344,7 +344,10 @@ Y las guardas del proyecto:
   y agrupado por diferencia. Con `code.html` decide ella y no se pregunta al modelo; sin él, se miden
   los recortes de la captura y el crítico opina con ellos delante. **No se describe la captura con
   el modelo**: medido, la misma imagen descrita otra vez difería y no vio el recorte.
-  Un texto distinto en el mismo sitio MEDIDO es «otro estado», no «falta». El recorte solo se mide
+  Un texto distinto en el mismo sitio MEDIDO —palabra con palabra, nunca una cifra— es otro estado o una TRADUCCIÓN
+  (la maqueta de Stitch viene en inglés): va como NOTA y no pone el rojo, ni en el estilo ni en la geometría, donde antes
+  era BLOQUEANTE («NO está en el aparato»); su caja y su estilo se siguen comparando. **Con `code.html` la maqueta no se
+  describe con un modelo**: el bloque que vigilaba imagen contra HTML no decidía nada, costaba una llamada y se equivocaba. El recorte solo se mide
   en lo que no pinta fondo propio. El informe se guarda junto a la captura (`.critica.txt`), y un
   rojo va a `developer-xone`: el diseñador solo escribe en `icons/` y `fonts/`. **Y el ENCAJE y los BLOQUES**:
   dónde empieza y acaba cada fila en fracción del ancho (`ENCAJE`), y el color y la forma de los

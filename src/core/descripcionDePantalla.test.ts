@@ -109,7 +109,7 @@ describe("compararDescripciones: maqueta y captura con el MISMO esquema", () => 
     expect(c.recortes).toEqual(["«12 + 3» se ve RECORTADO (le falta un trozo de las letras).", "«RAD» se ve RECORTADO (le falta un trozo de las letras)."]);
     expect(c.diferencias).toContain("lleva un BORDE que la maqueta no tiene en «COPY».");
     // Su fila existe en la captura (COPY se emparejó): lo que falta de ella SÍ se dice.
-    expect(c.faltan).toEqual(["«• DEG»", "«Tape»"]);
+    expect(c.faltan).toEqual(["«DEG»", "«Tape»"]);
     expect(hayQueArreglar(c)).toBe(true);
   });
 
@@ -191,4 +191,30 @@ describe("lo MENOR no pone el rojo", () => {
     expect(hayQueArreglar(compararDescripciones(fila([0.05, 0.05, 0.05]), fila([0.09, 0.05, 0.05])))).toBe(false);
     expect(hayQueArreglar(compararDescripciones(fila([0.05, 0.05, 0.05]), fila([0.035, 0.035, 0.035])))).toBe(true);
   });
+
+  it("un texto TRADUCIDO en su sitio va como nota y no pone el rojo; su estilo sí se compara", () => {
+    const en = (texto: string, colorTexto: string): ControlVisto => ({ ...medido(texto, "redondeada", 2.5, 0.3), colorTexto });
+    const traducido = compararDescripciones(
+      { filas: [{ controles: [en("content_copy COPY", "#E0C0B0")] }], extras: [] },
+      { filas: [{ controles: [en("COPIAR", "#E0C0B0")] }], extras: [] }
+    );
+    expect(traducido.notas).toEqual(["«COPIAR» donde la maqueta dice «COPY»: otro texto en su sitio (traducido, u otro estado). No cuenta; su estilo sí se compara."]);
+    expect(traducido.faltan).toEqual([]);
+    expect(hayQueArreglar(traducido)).toBe(false);
+    const otroColor = compararDescripciones(
+      { filas: [{ controles: [en("COPY", "#E0C0B0")] }], extras: [] },
+      { filas: [{ controles: [en("COPIAR", "#202020")] }], extras: [] }
+    );
+    expect(otroColor.diferencias.join("\n")).toContain("color del texto");
+  });
+
+  it("una cifra no es la traducción de una palabra: «19» no empareja con «COPY»", () => {
+    const c = compararDescripciones(
+      { filas: [{ controles: [medido("COPY", "redondeada", 2.5, 0.3), medido("7", "redondeada", 1.2, 0.3)] }], extras: [] },
+      { filas: [{ controles: [medido("19", "redondeada", 2.5, 0.3), medido("7", "redondeada", 1.2, 0.3)] }], extras: [] }
+    );
+    expect(c.notas).toBeUndefined();
+    expect(c.faltan).toEqual(["«COPY»"]);
+  });
 });
+

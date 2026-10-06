@@ -31,8 +31,10 @@ describe("la calculadora real, medida en sus píxeles", () => {
 
   it("las teclas: cuadrados redondeados en la maqueta, círculos en el aparato; y el DEG que está en RAD no «falta»", () => {
     expect(c.diferencias.find((d) => d.startsWith("forma redondeada"))).toMatch(/→ círculo \(1,0:1\) en «AC».*\(1\d controles\)\.$/);
-    expect(c.diferencias).toContain("dice «RAD» donde la maqueta dice «DEG» (¿un estado distinto?).");
-    expect(c.faltan).toEqual(["«receipt_long Tape»"]);
+    // Otro estado (o una traducción) en su sitio se DICE, pero no pone el rojo.
+    expect(c.notas?.join("\n")).toContain("«RAD» donde la maqueta dice «DEG»: otro texto en su sitio");
+    expect(c.diferencias.join("\n")).not.toContain("«RAD»");
+    expect(c.faltan).toEqual(["«Tape»"]); // sin el nombre de la ligadura de su icono
   });
 
   it("sin inventar: los dígitos tienen la letra y el color de la maqueta, y la maqueta contra sí misma está bien", () => {

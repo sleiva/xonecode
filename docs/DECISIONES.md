@@ -8447,3 +8447,25 @@ Reparto: primero se propuso solo para el desarrollador; se decidió que la tenga
 RECURSO como un icono (el diseñador, con `fonts/` en su `escribeEn`) y el desarrollador escribe el proyecto entero. La
 ficha del orquestador se la encarga al diseñador, que la devuelve en su tabla con el `fontname`. Se descartó también
 escribir en `/artefactos/` sin aprobación y ampliar `incorporar_adjunto`: dos pasos y dos tarjetas para lo mismo.
+
+## El crítico: un texto traducido no falta, y la maqueta con `code.html` no se describe (06-10-2026)
+
+Medido sobre los informes reales del crítico en la calculadora de MyAllXOne (`.critica.txt` de la sesión): los
+hallazgos que más se repetían eran «dice «HISTORIAL» donde la maqueta dice «receipt_long Tape» (¿un estado
+distinto?)» (8 informes) y «dice «COPIAR» donde la maqueta dice «content_copy COPY»» (7). Las dos son la maqueta de
+Stitch en inglés y la app en español. Y las dos ponían el rojo por dos vías:
+
+- en la GEOMETRÍA, un texto de la maqueta sin igual en el aparato era BLOQUEANTE (««COPY» de la maqueta NO está en el
+  aparato»), y además el paso de iconos emparejaba «Tape» con la imagen de al lado (`IMG_CURSOR`), no con «HISTORIAL»;
+- en el ESTILO, «dice X donde la maqueta dice Y» era una diferencia, y `hayQueArreglar` la contaba. Y el emparejado por
+  sitio había cogido una vez el «19» del visor como pareja de «COPY».
+
+Ahora, palabra con palabra (`tieneLetras`, nunca una cifra) y en el mismo sitio, es una NOTA en los dos: «otro texto en
+su sitio (traducido o cambiado), no falta». La pareja se sigue comparando —caja, forma, color, letra—, que es lo que se
+quería ver. En la geometría ese paso va ANTES que el de iconos. Los nombres de los hallazgos salen sin la ligadura del
+icono (`textoVisible`: «COPY», no «content_copy COPY»).
+
+El bloque «LA IMAGEN DE LA MAQUETA Y SU code.html NO CUENTAN LO MISMO» se quitó: lo decía la descripción de la imagen
+hecha por un modelo, no decidía el veredicto, costaba una llamada por crítica y se equivocaba («DEC de la imagen no está
+en su code.html», y estaba). Con `code.html` la maqueta ya no se describe; sin él, la descripción sigue siendo su única
+estructura.

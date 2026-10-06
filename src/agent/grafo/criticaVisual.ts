@@ -148,7 +148,11 @@ async function geometriaDe(
   referida: ImagenReferida | undefined,
   referencia: CapturaDePantalla | undefined,
   deps: DependenciasDeCritica,
-  descrita: PantallaDescrita | undefined
+  /**
+   * Describir la maqueta con un modelo, SOLO si hace falta: cuando no trae `code.html` medible es su única
+   * estructura. Con `code.html` ya no se pide (ver `estructuraDescrita`).
+   */
+  describir: () => Promise<PantallaDescrita | undefined>
 ): Promise<GeometriaDeLaCritica | undefined> {
   if (deps.leerGeometria === undefined) return undefined;
   let crudo: unknown;
@@ -194,7 +198,7 @@ async function geometriaDe(
     controles,
   };
   let maqueta: MaquetaMedida | undefined;
-  const notas: string[] = [];
+  let sinCajas: string | undefined;
   if (referida !== undefined && referencia !== undefined && deps.cajasDeMaqueta !== undefined) {
     let medida: MaquetaMedida | { motivo: string } | undefined;
     try {
@@ -202,14 +206,17 @@ async function geometriaDe(
     } catch {
       medida = { motivo: "no se pudo medir" };
     }
-    const conDescripcion = descrita === undefined ? "" : " (la estructura de la maqueta va abajo, según su descripción)";
-    if (medida === undefined) notas.push(`la maqueta es solo una imagen (sin code.html al lado): aquí, solo lo que se ve en el propio aparato${conDescripcion}.`);
-    else if ("motivo" in medida) notas.push(`no pude medir las cajas de la maqueta: ${medida.motivo}. Aquí, solo lo del propio aparato${conDescripcion}.`);
+    if (medida === undefined) sinCajas = "la maqueta es solo una imagen (sin code.html al lado): aquí, solo lo que se ve en el propio aparato";
+    else if ("motivo" in medida) sinCajas = `no pude medir las cajas de la maqueta: ${medida.motivo}. Aquí, solo lo del propio aparato`;
     else maqueta = medida;
   }
+  // Sin cajas medidas, la descripción es la única estructura de la maqueta; con ellas no se pide (`estructuraDescrita`).
+  const descrita = maqueta === undefined ? await describir() : undefined;
+  const notas =
+    sinCajas === undefined ? [] : [`${sinCajas}${descrita === undefined ? "" : " (la estructura de la maqueta va abajo, según su descripción)"}.`];
   const h = hallazgosDeGeometria(aparato, maqueta);
   const lineas = informeDeGeometria({ ...h, notas: [...h.notas, ...notas] }, maqueta !== undefined);
-  if (descrita !== undefined) lineas.push(...estructuraDescrita(descrita, aparato, maqueta));
+  if (descrita !== undefined) lineas.push(...estructuraDescrita(descrita, aparato));
   return {
     lineas,
     hechos: [...h.bloqueantes, ...h.diferencias],
@@ -220,27 +227,15 @@ async function geometriaDe(
 }
 
 /**
- * Lo que aporta la maqueta DESCRITA, en un bloque APARTE del medido: nunca decide el rojo.
+ * Lo que aporta la maqueta DESCRITA, en un bloque APARTE del medido: nunca decide el rojo. Solo existe **sin
+ * `code.html`**: es la única estructura de la maqueta que hay, sus filas, orden y anchos contra el árbol medido. Así
+ * una maqueta que es solo un PNG también dice «la = va en otra fila».
  *
- * - **Sin `code.html`**, es la única estructura de la maqueta que hay: sus filas, orden y anchos contra el
- *   árbol medido. Así una maqueta que es solo un PNG también dice «la = va en otra fila».
- * - **Con `code.html`**, la estructura la dan las cajas medidas, y la descripción solo VIGILA que la imagen
- *   y el HTML cuenten lo mismo: la imagen es lo que se aprobó, y si el HTML se aparta, alguien tiene que
- *   decirlo.
+ * **Con `code.html` la maqueta ya no se describe.** Antes la descripción vigilaba que la imagen y el HTML contaran lo
+ * mismo, en un bloque que no decidía nada y costaba una llamada a un modelo por crítica; y como lo decía un modelo,
+ * se equivocaba: en la calculadora daba «DEC de la imagen no está en su code.html», y sí estaba.
  */
-function estructuraDescrita(descrita: PantallaDescrita, aparato: GeometriaDelAparato, maqueta: MaquetaMedida | undefined): string[] {
-  if (maqueta !== undefined) {
-    const h = compararConMaqueta(maquetaDeLaDescripcion(descrita, false), htmlComoAparato(maqueta), {
-      aproximada: true,
-      nombres: { maqueta: "la imagen de la maqueta", aparato: "su code.html" },
-    });
-    if (h.diferencias.length === 0) return [];
-    return [
-      "",
-      "LA IMAGEN DE LA MAQUETA Y SU code.html NO CUENTAN LO MISMO (según la descripción de la imagen, que hizo un modelo; míralo):",
-      ...h.diferencias.map((d) => `- ${d}`),
-    ];
-  }
+function estructuraDescrita(descrita: PantallaDescrita, aparato: GeometriaDelAparato): string[] {
   const h = compararConMaqueta(maquetaDeLaDescripcion(descrita), aparato, { aproximada: true });
   return [
     "",
@@ -432,15 +427,15 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
       // Lo MEDIDO primero: el modelo lo recibe como hechos y no tiene que adivinar la estructura.
       // La maqueta, DESCRITA aparte y antes —geometría y luego estilo—: sin ella, el estilo queda a la memoria
       // del modelo y una maqueta sin code.html no tiene estructura. No poder describirla no impide juzgar.
-      let descrita: PantallaDescrita | undefined;
-      if (referencia !== undefined && deps.describirPantalla !== undefined) {
+      const describir = async (): Promise<PantallaDescrita | undefined> => {
+        if (referencia === undefined || deps.describirPantalla === undefined) return undefined;
         try {
-          descrita = await deps.describirPantalla(referencia);
+          return await deps.describirPantalla(referencia);
         } catch {
-          descrita = undefined;
+          return undefined;
         }
-      }
-      const geometria = await geometriaDe(entrada, referida, referencia, deps, descrita);
+      };
+      const geometria = await geometriaDe(entrada, referida, referencia, deps, describir);
       /**
        * **Con maqueta, la foto de UN CONTROL no se juzga**: la maqueta es la pantalla entera, y comparar contra un
        * trozo es la opinión de un modelo sobre lo que falta alrededor. Medido en la calculadora: el desarrollador pasaba

@@ -245,6 +245,23 @@ interface Pareja {
   aparato: ControlDelAparato;
   /** Tenía texto en la maqueta y se emparejó por POSICIÓN con un control sin texto (una imagen). */
   porPosicion?: true;
+  /** Los dos tienen PALABRAS y dicen otra cosa, en el mismo sitio: un texto traducido o cambiado. */
+  otroTexto?: true;
+}
+
+/**
+ * ¿Lleva LETRAS el texto (ya pasado por `textoParaEmparejar`)? Una cifra o un signo no se empareja por sitio con una
+ * palabra: medido en la calculadora, el «19» del visor salía como pareja de «COPY».
+ */
+export function tieneLetras(texto: string): boolean {
+  return /[a-záéíóúüñ]/i.test(texto);
+}
+
+/** Lo que se VE de un texto: sin el nombre de la ligadura de un icono (`content_copy COPY` → `COPY`). */
+export function textoVisible(texto: string): string {
+  const palabras = texto.replace(ADORNOS, " ").trim().split(/\s+/).filter((p) => p !== "");
+  const visibles = palabras.filter((p) => !/^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(p));
+  return (visibles.length > 0 ? visibles : palabras).join(" ");
 }
 
 /** El centro de una caja en fracción de su pantalla. */
@@ -284,6 +301,31 @@ export function emparejar(
     usadosM.add(i);
     usadosA.add(j);
     parejas.push({ maqueta: m.elementos[i]!, aparato: hojas[j]! });
+  }
+
+  /**
+   * Palabras que dicen OTRA cosa en el mismo sitio: la maqueta de Stitch viene en inglés y el agente escribe en el
+   * idioma de la app («COPY» → «COPIAR», «Tape» → «HISTORIAL»). Medido en la calculadora: sin este paso, cada texto
+   * traducido salía como BLOQUEANTE («NO está en el aparato») y la pantalla no daba verde nunca; y el paso de iconos
+   * de abajo emparejaba «Tape» con la imagen de al lado. Va ANTES que los iconos y solo entre controles con letras.
+   */
+  if (!soloTexto) {
+    const porSitio: { i: number; j: number; d: number }[] = [];
+    m.elementos.forEach((e, i) => {
+      const t = textoParaEmparejar(e.texto);
+      if (usadosM.has(i) || !tieneLetras(t)) return;
+      hojas.forEach((c, j) => {
+        if (usadosA.has(j) || c.texto === undefined || !tieneLetras(textoParaEmparejar(c.texto))) return;
+        const d = distancia(e, c);
+        if (d <= DISTANCIA_PARA_ICONOS) porSitio.push({ i, j, d });
+      });
+    });
+    for (const { i, j } of porSitio.sort((a, b) => a.d - b.d)) {
+      if (usadosM.has(i) || usadosA.has(j)) continue;
+      usadosM.add(i);
+      usadosA.add(j);
+      parejas.push({ maqueta: m.elementos[i]!, aparato: hojas[j]!, otroTexto: true });
+    }
   }
 
   // Iconos —y lo que en la maqueta es texto y en el aparato una IMAGEN («√»)—: por posición, contra
@@ -352,6 +394,9 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
   const { maqueta: laMaqueta, aparato: elAparato } = modo.nombres ?? { maqueta: "la maqueta", aparato: "el aparato" };
   const { parejas, sinPareja } = emparejar(m, g, aproximada);
   for (const p of parejas) {
+    if (p.otroTexto === true) {
+      notas.push(`${etiqueta(p.maqueta)} de ${laMaqueta} dice «${textoVisible(p.aparato.texto ?? "")}» en ${elAparato}: otro texto en su sitio (traducido o cambiado), no falta. Comparo su caja igual.`);
+    }
     if (p.porPosicion === true) notas.push(`${etiqueta(p.maqueta)} de ${laMaqueta} es en ${elAparato} un control SIN texto (${p.aparato.nombre ?? "sin nombre"}): una imagen en su sitio. Comparo su caja igual.`);
   }
 

@@ -365,23 +365,24 @@ describe("xone_critica_visual con la GEOMETRÍA medida (MyAllXOne, la calculador
     expect(vista.informe).toContain("ESTRUCTURA CONTRA LA MAQUETA DESCRITA");
   });
 
-  it("con code.html, la descripción de la maqueta solo vigila que la imagen y el HTML cuenten lo mismo", async () => {
-    const igual = await conGeometria('{"veredicto":"verde","hallazgos":[]}', {}, { descrita }).invoke({
-      captura: "/artefactos/calc_ronda9.jpg",
-      pantalla: "DemoCalculadora",
-      referencia: "/adjuntos/stitch/screen.png",
-    });
-    expect(igual).not.toContain("NO CUENTAN LO MISMO");
-    expect(igual).not.toContain("ESTRUCTURA CONTRA LA MAQUETA DESCRITA");
-
+  it("con code.html la maqueta NO se describe: el bloque imagen/HTML lo decía un modelo, no decidía nada y se equivocaba", async () => {
+    let llamadas = 0;
     const distinta: PantallaDescrita = { ...descrita, filas: [...descrita.filas.slice(0, -2), fila("1", "2", "3", "+", "="), fila("0", ".")] };
-    const salida = await conGeometria('{"veredicto":"verde","hallazgos":[]}', {}, { descrita: distinta }).invoke({
-      captura: "/artefactos/calc_ronda9.jpg",
-      pantalla: "DemoCalculadora",
-      referencia: "/adjuntos/stitch/screen.png",
+    const critica = crearCriticaVisual({
+      leerArtefacto: unosBytes,
+      invocar: async () => '{"veredicto":"verde","hallazgos":[]}',
+      leerReferencia: png,
+      leerGeometria: async () => geo,
+      cajasDeMaqueta: async () => maqueta,
+      describirPantalla: async () => {
+        llamadas += 1;
+        return distinta;
+      },
     });
-    expect(salida).toContain("LA IMAGEN DE LA MAQUETA Y SU code.html NO CUENTAN LO MISMO");
-    expect(salida).toContain("en su code.html «=» va en otra");
+    const salida = await critica.invoke({ captura: "/artefactos/calc_ronda9.jpg", pantalla: "DemoCalculadora", referencia: "/adjuntos/stitch/screen.png" });
+    expect(llamadas).toBe(0);
+    expect(salida).not.toContain("NO CUENTAN LO MISMO");
+    expect(salida).not.toContain("ESTRUCTURA CONTRA LA MAQUETA DESCRITA");
   });
 
   it("lo MEDIDO decide: con la «=» tapada es ROJO aunque el modelo diga verde, y lo dice", async () => {

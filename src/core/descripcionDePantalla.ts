@@ -21,7 +21,7 @@
  * Las filas descritas de una maqueta sin `code.html` se comparan además contra el árbol medido
  * (`compararConMaqueta` en modo `aproximada`, vía `maquetaDeLaDescripcion`).
  */
-import { textoParaEmparejar, type ControlDelAparato, type GeometriaDelAparato, type MaquetaMedida } from "./geometriaDePantalla.js";
+import { tieneLetras, textoParaEmparejar, textoVisible, type ControlDelAparato, type GeometriaDelAparato, type MaquetaMedida } from "./geometriaDePantalla.js";
 
 export const FORMAS = ["pildora", "redondeada", "recta", "circulo"] as const;
 export const LETRAS = ["pequena", "normal", "grande", "enorme"] as const;
@@ -250,6 +250,11 @@ export interface ComparacionDeDescripciones {
   menores?: string[];
   /** Lo de la maqueta que no está en la captura. */
   faltan: string[];
+  /**
+   * Lo que se DICE y no pone el rojo: un texto que en la captura dice otra cosa en el mismo sitio (traducido, u otro
+   * estado: un DEG que está en RAD). Antes era una diferencia, y una maqueta en inglés no daba verde nunca.
+   */
+  notas?: string[];
   /** Texto RECORTADO en la captura: se dice siempre, haya maqueta o no. */
   recortes: string[];
   /**
@@ -272,8 +277,8 @@ function formaVecina(m: ControlVisto, a: ControlVisto): boolean {
   return Math.abs(nivel(m.forma!) - nivel(a.forma!)) === 1;
 }
 
-/** El texto de un control en un hallazgo. */
-const nombrar = (c: ControlVisto): string => `«${c.texto}»`;
+/** El texto de un control en un hallazgo, como se VE: sin el nombre de la ligadura de su icono. */
+const nombrar = (c: ControlVisto): string => `«${textoVisible(c.texto)}»`;
 
 /**
  * La comparación, control a control y con la misma frase siempre. Se empareja por TEXTO en orden de lectura
@@ -324,13 +329,21 @@ export function compararDescripciones(maqueta: PantallaDescrita, captura: Pantal
   // con los dos sitios MEDIDOS: con la fila y la columna de una descripción, el «0» de muestra del visor «estaba en
   // el mismo sitio» que el «12 + 3» de la captura.
   const otroTexto: { i: number; j: number; d: number }[] = [];
+  // Palabra con palabra: una cifra no es la traducción de nada (medido: el «19» del visor salía como pareja de «COPY»).
   ms.forEach((m, i) => {
-    if (pareja.has(i) || clave(m.c) === ICONO || m.c.centro === undefined) return;
-    as.forEach((a, j) => !usadas.has(j) && clave(a.c) !== ICONO && a.c.centro !== undefined && lejania(i, j) <= MUY_CERCA && otroTexto.push({ i, j, d: lejania(i, j) }));
+    if (pareja.has(i) || clave(m.c) === ICONO || m.c.centro === undefined || !tieneLetras(clave(m.c))) return;
+    as.forEach(
+      (a, j) =>
+        !usadas.has(j) && clave(a.c) !== ICONO && tieneLetras(clave(a.c)) && a.c.centro !== undefined && lejania(i, j) <= MUY_CERCA && otroTexto.push({ i, j, d: lejania(i, j) })
+    );
   });
   const antes = new Set(pareja.keys());
   emparejar(otroTexto);
-  for (const i of pareja.keys()) if (!antes.has(i)) anotar(`dice «${as[pareja.get(i)!]!.c.texto}» donde la maqueta dice`, ms[i]!.c);
+  const notas: string[] = [];
+  for (const i of pareja.keys()) {
+    if (antes.has(i)) continue;
+    notas.push(`${nombrar(as[pareja.get(i)!]!.c)} donde la maqueta dice ${nombrar(ms[i]!.c)}: otro texto en su sitio (traducido, u otro estado). No cuenta; su estilo sí se compara.`);
+  }
 
   // Lo que no está solo es noticia si su FILA existe en la captura (algún vecino se emparejó): los datos de ejemplo
   // de un visor («1,240 × 15%…», un «0» de muestra) no tienen por qué estar.
@@ -379,15 +392,20 @@ export function compararDescripciones(maqueta: PantallaDescrita, captura: Pantal
   const diferencias = [...grupos.entries()]
     .sort((x, y) => y[1].length - x[1].length)
     .map(([que, quienes]) =>
-      que.endsWith("donde la maqueta dice")
-        ? `${que.replace(" donde la maqueta dice", "")} donde la maqueta dice ${quienes.join(", ")} (¿un estado distinto?).`
-        : `${que} en ${quienes.join(", ")}${quienes.length > 3 ? ` (${quienes.length} controles)` : ""}.`
+      `${que} en ${quienes.join(", ")}${quienes.length > 3 ? ` (${quienes.length} controles)` : ""}.`
     );
   const recortes = as
     .map((x) => x.c)
     .filter((c) => c.recortado === true)
     .map((c) => `${nombrar(c)} se ve RECORTADO (le falta un trozo de las letras).`);
-  return { diferencias, faltan, recortes, extras: { maqueta: maqueta.extras, captura: captura.extras }, ...(menores.length === 0 ? {} : { menores }) };
+  return {
+    diferencias,
+    faltan,
+    recortes,
+    extras: { maqueta: maqueta.extras, captura: captura.extras },
+    ...(menores.length === 0 ? {} : { menores }),
+    ...(notas.length === 0 ? {} : { notas }),
+  };
 }
 
 /** El bloque que ve el agente. `medida`: las dos salen de los píxeles de cada control, no de un modelo. */
@@ -408,6 +426,7 @@ export function informeDeComparacion(c: ComparacionDeDescripciones, como: "medid
   }
   if (lineas.length === 1) lineas.push(c.menores === undefined ? "- Nada: cada control se ve como en la maqueta." : "- Nada que arreglar.");
   for (const m of c.menores ?? []) lineas.push(`- (menor, no hace falta arreglarlo) ${m}`);
+  for (const n of c.notas ?? []) lineas.push(`- (nota) ${n}`);
   return lineas;
 }
 
