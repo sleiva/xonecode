@@ -8634,3 +8634,41 @@ Con los arreglos, la segunda pasada propuso a la primera tres tareas (recursos y
 una con sus maquetas, encargos de unos 2.800 caracteres enteros, y al encolarlas quedaron en cadena con «espera a». Se
 descartaron sin ejecutarse. A petición de la persona, la tarjeta tiene una tercera salida, «Hacerlo aquí en el chat», y
 cada tarea de la pestaña Tareas se abre para leer su encargo.
+
+## La foto y el chat se guardan A MITAD de turno (06-10-2026)
+
+Un proceso que murió en mitad de un turno (Maset, hacia las 14:36Z) se llevó DOS turnos que corrían a la vez: uno de unos
+45 minutos —237 llamadas al modelo, 10 delegaciones— en una sesión nueva, que se reabrió sin chat ni memoria, y otro que
+perdió el mensaje de la persona y todo lo hecho. De 92 turnos de la web fue la única interrupción (los otros tres «sin
+`fin`» eran mensajes escritos con el turno en marcha, IXCODE-4). La causa: las DOS capas solo se escribían en la
+frontera del turno —la foto del raíz en el `finally` de `sesionTrueforge.ts`, el chat en `volcar()` de `vestibulo.ts`—,
+y un corte duro no pasa por ahí. deepagents no lo sufre: su checkpointer guarda cada paso. Era una regresión de TrueForge.
+
+- **La foto**, en cada añadido del raíz (el primero es el mensaje) y en cada escritura que completa un hijo, porque lo
+  escrito no toca el contexto del raíz y la foto lo nombra. `toSnapshot()` es seguro a mitad: la librería SUSTITUYE el
+  contexto (`concat`), no lo muta; y guardar ya era atómico. Las llamadas abiertas se saldan con `textoDeInterrupcion`,
+  no con `RESPUESTA_A_UNA_COLGADA`: su «vuelve a pedirlo» invitaba a repetir un encargo cuyo especialista ya pudo dejar
+  ediciones, y las duplicaría. Lo escrito se da como «al menos»: se cuenta por hilo y un nieto que ya devolvió no consta.
+- **El chat**, cada `INTERVALO_DE_VOLCADO_MS`, solo hasta `ConsolaWeb.estables()`: lo de antes del último acto de la
+  PIEL. Ese es el único que se sustituye, y no siempre es el último de la lista (un `escribir` puede caer detrás), así
+  que «todos menos el último» habría escrito dos versiones del mismo acto o desordenado el `.jsonl`.
+
+Medido de punta a punta con `npm run web:trazas`, AppDemo y un SIGKILL al grupo con el turno activo: sin el cambio
+quedaron el acto `usuario` y ninguna foto (lo mismo que en el incidente); con él, el chat hasta el corte y la foto con el
+mensaje y las tres `glob` en vuelo saldadas como interrupción. Reabierta, la sesión contestó sin error que «el turno se
+interrumpió y ninguno llegó a terminar… No se ha tocado ningún fichero».
+
+**Lo que se descartó por el camino, medido.** La primera hipótesis fue un Ctrl-C de `npm run web`: un `npm run` cuyo
+comando es `tsx …` a secas hace llegar a node DOS SIGINT (~30 ms de diferencia) y con `process.once` un cierre más largo
+moría con 130. Pero el `web` real es `npm run build:web && tsx …`, y el `sh` del `&&` se queda el reenvío: un cierre de
+3 s sobrevive, y 4 de 4 Ctrl-C reales a mitad de turno guardaron `fin` y foto (uno con 232 ms de cierre dentro de node).
+El cierre ordenado ya funcionaba; lo que faltaba era cubrir el que no es ordenado. Y la `#875` de TrueForge (cancelar
+los hijos al llegar un mensaje) no aplica: rehacemos el orquestador desde la foto en cada turno.
+
+**Límites declarados**: la memoria de los especialistas sigue solo en memoria; el commit del turno no se hace, y sus
+cambios caen en el del turno siguiente; un acto de la piel a medias (una respuesta que llegaba) se pierde; la sesión
+reabierta no DICE en el chat que el turno anterior se cortó (lo sabe el modelo por la foto). Las tareas de fondo pasan
+por el MISMO cuerpo (`construirConsolaDeProyecto`), así que también vuelcan a mitad; lo que no se ha mirado es qué hace el
+corredor al rearrancar con una tarea que estaba en curso cuando murió el proceso. Y el corte duro medido pilló al raíz
+en sus propias `glob`, sin un hijo vivo: el cierre de una delegación nombrando lo escrito lo prueba el test de
+integración (`sesionTrueforge.test.ts`, «A MITAD de turno»), no la pasada real.

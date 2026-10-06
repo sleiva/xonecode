@@ -641,7 +641,10 @@ puertos, con las reglas SACADAS del cierre de deepagents a `agent/turno/verifica
 memoria en disco es la FOTO del raíz** (`memoriaTrueforge.ts`, `AgentThread.toSnapshot()`, 0600) y
 **no** la capa `agent-session` de la librería. **La foto lleva VERSIÓN y se lee ESTRICTA**
 (`MIGRACIONES`, `interpretarFoto`): la que no se entiende no se carga a medias — se abre sin
-memoria y se APARTA con otro nombre. **El prompt de un hijo va en su prompt de SISTEMA por
+memoria y se APARTA con otro nombre. **Y se guarda también A MITAD de turno** (`guardarAMitad`), en
+cada añadido del raíz y en cada escritura de un hijo: un corte duro no pasa por el `finally`. Lo
+abierto se salda como INTERRUPCIÓN (`textoDeInterrupcion`: nombra lo escrito y manda mirar el disco),
+nunca con el «vuelve a pedirlo» de un turno cortado, que duplicaría lo ya escrito. **El prompt de un hijo va en su prompt de SISTEMA por
 `instructionBuilders`**. **Y al desarrollador no se le cuenta la maquinaria** (`SIN_HABLAR_DEL_HARNESS`, solo al raíz, que es quien le habla):
 ni tools, ni nombres internos, ni el HANDOFF, ni la foto del arranque. **Y el idioma de la SALIDA lo dice el código** (`IDIOMA_DE_LA_RESPUESTA` al raíz,
 `IDIOMA_DEL_ESPECIALISTA` a cada hijo): la identidad que añade TrueForge y las descripciones de las tools están en
@@ -1039,6 +1042,9 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
 - **De quién es una sesión se GUARDA, no se deduce** (`EntradaIndice.tarea`): siembra monotónica al
   arrancar el corredor (`marcarTareaDeSesion`) que solo AÑADE. Por el cable viaja un BOOLEANO.
 - **La sesión entra en el índice con el MENSAJE**, no cuando el asistente contesta.
+- **Y el chat se vuelca también A MITAD de turno** (`INTERVALO_DE_VOLCADO_MS`, 5 s): solo hasta
+  `ConsolaWeb.estables()`, lo de antes del último acto de la PIEL —el único que se sustituye, y no
+  siempre el último de la lista—, porque el `.jsonl` solo sabe anexar.
 - **La hora de cada mensaje la estampa el SERVIDOR, en el acto** (IXCODE-24, `cuando` en `usuario` y
   `asistente`): la de mandarlo, y la de EMPEZAR a llegar la respuesta (los parciales la conservan). Va
   al disco con el acto, así que una sesión reabierta enseña la real; sin `cuando` no se pinta. La de la

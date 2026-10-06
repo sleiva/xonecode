@@ -71,14 +71,40 @@ export const RESPUESTA_A_UNA_COLGADA =
   "No se completó: el turno se cortó antes (quedó sin aprobar, se canceló o se agotó el tope). " +
   "Si sigue haciendo falta, vuelve a pedirlo.";
 
-type MensajeDelContexto = { role?: string; tool_calls?: { id?: string }[]; tool_call_id?: string };
+/**
+ * El texto con que se salda una tool call que una INTERRUPCIÓN dejó sin respuesta: el proceso se
+ * paró a mitad de turno (un corte duro, sin cierre ordenado) y la foto que se reabre es la que se
+ * guardó A MITAD. No puede ser `RESPUESTA_A_UNA_COLGADA`: su «vuelve a pedirlo» invita a repetir
+ * un encargo cuyo especialista ya pudo dejar ediciones en el disco, y repetirlo las duplicaría.
+ * Lo escrito es «al menos»: se cuenta por hilo y un nieto que ya devolvió no siempre consta.
+ */
+export function textoDeInterrupcion(llamada: { especialista?: string; escritos: readonly string[] }): string {
+  if (llamada.especialista === undefined) {
+    return "Se interrumpió antes de terminar: el proceso se paró a mitad del turno. Si sigue haciendo falta, repítela.";
+  }
+  const escrito =
+    llamada.escritos.length > 0
+      ? `Dejó escritos al menos: ${llamada.escritos.join(", ")}.`
+      : "Puede haber dejado ficheros escritos o a medias.";
+  return (
+    `El encargo a ${llamada.especialista} se interrumpió: el proceso se paró mientras trabajaba y no llegó a devolver su informe. ` +
+    `${escrito} Antes de repetirlo, comprueba en el disco qué quedó hecho y encarga solo lo que falte.`
+  );
+}
+
+type MensajeDelContexto = { role?: string; tool_calls?: { id?: string; function?: { name?: string } }[]; tool_call_id?: string };
 
 /**
  * El contexto con las tool calls del ÚLTIMO mensaje del asistente que no tienen respuesta,
  * saldadas. Solo el último: una anterior sin respuesta ya habría roto la conversación antes.
- * Puro: no toca el contexto que recibe.
+ * Puro: no toca el contexto que recibe. `textoDe` da el texto de cada una (por omisión,
+ * `RESPUESTA_A_UNA_COLGADA`): la foto a mitad de turno salda con el de una interrupción.
  */
-export function saldarColgadas(context: readonly unknown[], excepto?: string): unknown[] {
+export function saldarColgadas(
+  context: readonly unknown[],
+  excepto?: string,
+  textoDe: (id: string, nombre: string | undefined) => string = () => RESPUESTA_A_UNA_COLGADA
+): unknown[] {
   const mensajes = context as readonly MensajeDelContexto[];
   let ultimo = -1;
   for (let i = mensajes.length - 1; i >= 0; i -= 1) {
@@ -89,11 +115,13 @@ export function saldarColgadas(context: readonly unknown[], excepto?: string): u
     }
   }
   if (ultimo === -1) return [...context];
-  const pedidas = new Set((mensajes[ultimo]!.tool_calls ?? []).map((t) => t.id).filter((id): id is string => typeof id === "string"));
+  const llamadas = mensajes[ultimo]!.tool_calls ?? [];
+  const pedidas = new Set(llamadas.map((t) => t.id).filter((id): id is string => typeof id === "string"));
   for (const m of mensajes.slice(ultimo + 1)) if (m?.role === "tool" && m.tool_call_id !== undefined) pedidas.delete(m.tool_call_id);
   // La que espera la respuesta de la persona no está colgada: está esperando, y saldarla la mataría.
   if (excepto !== undefined) pedidas.delete(excepto);
-  return [...context, ...[...pedidas].map((id) => ({ role: "tool", tool_call_id: id, content: RESPUESTA_A_UNA_COLGADA }))];
+  const nombreDe = (id: string): string | undefined => llamadas.find((t) => t.id === id)?.function?.name;
+  return [...context, ...[...pedidas].map((id) => ({ role: "tool", tool_call_id: id, content: textoDe(id, nombreDe(id)) }))];
 }
 
 /** La foto lista para guardar o para rehacer el hilo: con las colgadas saldadas. */

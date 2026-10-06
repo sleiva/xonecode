@@ -128,6 +128,13 @@ export const ENTORNOS_OFICIALES: readonly OpcionDeEntorno[] = [
  * como los otros dos, y presentarlo al mismo nivel es lo que evita que la web tenga dos
  * caminos distintos para registrar lo mismo.
  */
+/**
+ * Cada cuánto se vuelca el chat A MITAD de turno (`volcar` hasta `ConsolaWeb.estables`). Sin esto
+ * el `.jsonl` solo se escribía en la frontera del turno, y un proceso que murió en mitad de uno de
+ * 45 minutos dejó el mensaje de la persona y nada más. Lo que se pierde ahora es, como mucho, esto.
+ */
+export const INTERVALO_DE_VOLCADO_MS = 5_000;
+
 export const ENTORNO_OTRO: OpcionDeEntorno = { id: "otro", nombre: "Otro (on-premise)", url: "" };
 
 /**
@@ -1509,9 +1516,14 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
      * repartida en cada llamador — `ejecutarTurno` de abajo y el `cerrar()` de más abajo
      * comparten la misma `volcar`, así que ninguno de los dos puede colarse sin ella.
      */
-    const volcar = (): void => {
+    /**
+     * `hasta`: cuántos actos del principio volcar como mucho. Sin él, todos —la frontera del turno—;
+     * a mitad de turno, los que ya no pueden cambiar (`consolaWeb.estables()`), porque el `.jsonl`
+     * solo sabe anexar y un acto que se sustituye después quedaría escrito dos veces.
+     */
+    const volcar = (hasta?: number): void => {
       if (esDoble(ejecutorEfectivo)) return;
-      const todos = consolaWeb.actos();
+      const todos = consolaWeb.actos().slice(0, hasta);
       if (todos.length <= volcados) return;
       if (!anotada) {
         sesiones.crear(raiz, idSesion, tarea);
@@ -1593,6 +1605,16 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       turnoEnVuelo = true;
       consolaWeb.turno(true, sesionReal?.detener !== undefined);
       alFlancoDeTurno?.(true);
+      // El chat, a disco también A MITAD (`INTERVALO_DE_VOLCADO_MS`): un proceso que muere no pasa
+      // por el `finally`. Un volcado que falla no puede tumbar el turno; el del final lo reintenta.
+      const volcadoAMitad = setInterval(() => {
+        try {
+          volcar(consolaWeb.estables());
+        } catch {
+          // El índice o el disco no dejaron: lo intenta el siguiente, y el del `finally`.
+        }
+      }, INTERVALO_DE_VOLCADO_MS);
+      volcadoAMitad.unref?.();
       // Guardado fuera del `try` para que el `finally` pueda mirar `notasSobrantes` una vez
       // liberado `turnoEnVuelo` (IXCODE-4): el `return` de abajo ya entrega ESTE resultado a
       // quien llamó, y esta variable es solo lo que decide si hace falta OTRO turno.
@@ -1610,6 +1632,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         // En el `finally`: un turno que revienta o que se cancela también TERMINA, y dejar
         // el compositor apagado para siempre sería peor que no haberlo apagado nunca.
         turnoEnVuelo = false;
+        clearInterval(volcadoAMitad);
         consolaWeb.turno(false);
         alFlancoDeTurno?.(false);
         volcar();

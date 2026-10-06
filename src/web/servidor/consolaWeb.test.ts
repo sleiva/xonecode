@@ -858,6 +858,29 @@ describe("consolaWeb: los actos de la piel no son solo altas", () => {
     expect(c.actos()).toHaveLength(2);
     expect(c.eventosEmitidos().map((m) => m.clase)).toEqual(["acto", "acto", "reemision"]);
   });
+
+  /**
+   * Lo que el vestíbulo vuelca A MITAD de turno: solo lo que ya no puede cambiar. El que cambia es
+   * el último acto DE LA PIEL, que no siempre es el último de la lista —un `escribir` puede caer
+   * detrás—, y lo de detrás no se vuelca antes que él o el `.jsonl` quedaría desordenado.
+   */
+  it("estables() cuenta lo de ANTES del último acto de la piel, aunque haya algo escrito detrás", () => {
+    const c = crearConsolaWeb();
+    c.conectar();
+    expect(c.estables()).toBe(0);
+    c.consola.escribir("antes de la piel\n");
+    expect(c.estables()).toBe(1);
+    const piel = c.consola.piel!();
+    piel.linea("→ lee src/app.xne");
+    expect(c.estables()).toBe(1);
+    c.consola.escribir("aviso del sistema\n");
+    expect(c.estables()).toBe(1);
+    piel.token("respuesta");
+    piel.cerrarLinea();
+    // La racha de tools ya no es la última de la piel: no puede cambiar.
+    expect(c.estables()).toBe(3);
+    expect(c.actos()).toHaveLength(4);
+  });
 });
 
 /**

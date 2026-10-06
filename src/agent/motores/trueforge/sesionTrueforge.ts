@@ -102,7 +102,7 @@ import { encenderTrazaDeErrores } from "../../trazaDeErroresEnDisco.js";
 import { anotarPaso } from "../../../core/trazaDeErrores.js";
 import { entornoConDepuracion } from "../../turno/depuracion.js";
 import { detalleDe, parametrosDe } from "../../turno/resumenDeTool.js";
-import { apartarMemoria, cargarMemoria, fotoSaneada, guardarMemoria, textoDeMemoriaDescartada, type FotoDeHilo } from "./memoriaTrueforge.js";
+import { apartarMemoria, cargarMemoria, fotoSaneada, guardarMemoria, saldarColgadas, textoDeInterrupcion, textoDeMemoriaDescartada, type FotoDeHilo } from "./memoriaTrueforge.js";
 import { crearNota, sobrantes, type Nota } from "./notas.js";
 import { crearMemoriaDeEspecialistas } from "./memoriaDeEspecialistas.js";
 import { crearEsperas } from "./esperas.js";
@@ -676,6 +676,8 @@ export async function abrirSesionTrueforge(
   /** Lo que escribió cada hijo en su encargo, quién lo llamó, y los informes que esperan a ese padre (`informesDeHijos.ts`). */
   const escritosDeCadaHilo = new Map<string, Map<string, CambioDeFichero>>();
   const padreDeHilo = new Map<string, string>();
+  /** Qué hijo nació de cada `create_sub_agent` del raíz (id de la llamada → hilo): la foto a mitad de turno lo nombra. */
+  const hiloDeLlamadaDelRaiz = new Map<string, string>();
   const informesPendientes = new Map<string, string[]>();
   /** Las escrituras pedidas y aún sin respuesta, por hilo e id: la respuesta de una aprobada llega en OTRO `paso`. */
   const escriturasEnVuelo = new Map<string, { nombre: string; args: Record<string, unknown> }>();
@@ -1142,6 +1144,8 @@ export async function abrirSesionTrueforge(
     esperas.nacio(agente?.nombre ?? params.request.name, params.threadId);
     const hiloDelPadre = (params.parent as { thread_id?: string } | undefined)?.thread_id;
     if (hiloDelPadre !== undefined && hiloDelPadre !== "") padreDeHilo.set(params.threadId, hiloDelPadre);
+    const llamadaDelPadre = (params.parent as { tool_call_id?: string } | undefined)?.tool_call_id;
+    if (hiloDelPadre === HILO_RAIZ && llamadaDelPadre !== undefined) hiloDeLlamadaDelRaiz.set(llamadaDelPadre, params.threadId);
     nacimientoDeHilo.set(params.threadId, Date.now());
     quienEs.set(params.threadId, agente?.nombre ?? params.request.name);
     if (agente !== undefined) especialistaDeHilo.set(params.threadId, agente.nombre);
@@ -1348,6 +1352,45 @@ export async function abrirSesionTrueforge(
    * de terminal no lo pasa, la misma regla que el checkpoint de deepagents.
    */
   const persistir = opciones.hilo !== undefined;
+  /**
+   * **La foto A MITAD de turno.** La del `finally` no basta: un corte DURO —el proceso muere, sin
+   * cierre ordenado— no pasa por él, y medido en el incidente que lo motiva, un turno de 45 minutos
+   * se perdió entero, mensaje de la persona incluido, aunque los ficheros sí habían cambiado.
+   * deepagents no lo sufre: su checkpointer guarda cada paso.
+   *
+   * Se guarda en cada añadido del RAÍZ —el primero es el mensaje de la persona— y cada vez que un
+   * hijo completa una escritura, porque lo escrito no toca el contexto del raíz y la foto lo nombra.
+   * `toSnapshot()` es seguro aquí: la librería SUSTITUYE el contexto (`concat`), nunca lo muta, y
+   * guardar es atómico. Las tool calls abiertas se saldan con el texto de una INTERRUPCIÓN
+   * (`textoDeInterrupcion`), no con el de un turno cortado: tras un corte, «vuelve a pedirlo»
+   * duplicaría lo que el especialista ya dejó en el disco. El turno que acaba bien la PISA con la
+   * del `finally`, así que esta foto solo se lee si el proceso murió. Nunca tumba un turno.
+   */
+  let ultimaAMitad: { context: unknown; escritos: number } | undefined;
+  const escritosDeLaRama = (hijo: string): string[] => {
+    const deLaRama = (h: string): boolean => {
+      for (let actual: string | undefined = h; actual !== undefined; actual = padreDeHilo.get(actual)) if (actual === hijo) return true;
+      return false;
+    };
+    return [...new Set([...escritosDeCadaHilo].filter(([h]) => deLaRama(h)).flatMap(([, cambios]) => [...cambios.keys()]))];
+  };
+  const guardarAMitad = (): void => {
+    if (!persistir || raizActual === undefined) return;
+    const foto = raizActual.toSnapshot() as unknown as FotoDeHilo;
+    const escritos = [...escritosDeCadaHilo.values()].reduce((n, cambios) => n + cambios.size, 0);
+    if (ultimaAMitad?.context === foto.context && ultimaAMitad.escritos === escritos) return;
+    ultimaAMitad = { context: foto.context, escritos };
+    const textoDe = (id: string): string => {
+      const hijo = hiloDeLlamadaDelRaiz.get(id);
+      if (hijo === undefined) return textoDeInterrupcion({ escritos: [] });
+      return textoDeInterrupcion({ especialista: especialistaDeHilo.get(hijo) ?? quienEs.get(hijo) ?? hijo, escritos: escritosDeLaRama(hijo) });
+    };
+    try {
+      guardarMemoria(raiz, hilo, { ...foto, context: saldarColgadas(foto.context, undefined, textoDe) });
+    } catch {
+      // Sin la foto de a mitad el turno sigue: lo peor es lo de antes, perderlo si el proceso muere.
+    }
+  };
   /** El aviso de una memoria que existía y no se entendió: sale en el PRIMER turno y se gasta. */
   let avisoDeMemoria: string | undefined;
   /**
@@ -1411,6 +1454,9 @@ export async function abrirSesionTrueforge(
 
   async function* paso(lote: unknown[], senal: AbortSignal, pendientes: Pendiente[], preguntas: Pendiente[] = []): AsyncGenerator<DomainEvent> {
     for await (const _ of orquestador.send(lote as never)) void _;
+    // Lo que acaba de entrar en el raíz —el mensaje de la persona, una aprobación, una reparación—
+    // ya está a salvo antes de la primera llamada al modelo.
+    guardarAMitad();
     const llamadas = new Map<string, { nombre: string; args: Record<string, unknown> }>();
     // El razonamiento de los especialistas, juntado por hilo hasta que su mensaje se completa.
     const pensamientos: PensamientoPorHilo = new Map();
@@ -1419,6 +1465,7 @@ export async function abrirSesionTrueforge(
     while (!r.done) {
       const evento = r.value as { type?: string; thread_id?: string; output?: unknown; tool_call_id?: string; content?: unknown };
       const deHilo = evento.thread_id ?? HILO_RAIZ;
+      if (deHilo === HILO_RAIZ && evento.type === "internal.agent.context.append") guardarAMitad();
       if (evento.type === "internal.agent.context.append" && Array.isArray(evento.output)) {
         for (const m of evento.output) {
           for (const t of (m as { tool_calls?: { id: string; function: { name: string; arguments: string } }[] }).tool_calls ?? []) {
@@ -1471,6 +1518,7 @@ export async function abrirSesionTrueforge(
             anotarEscritura(cambios, escritura.nombre, escritura.args);
             escritosDeCadaHilo.set(deHilo, cambios);
             ultimaEscrituraDeHilo.set(deHilo, Date.now());
+            guardarAMitad();
           }
         }
       }

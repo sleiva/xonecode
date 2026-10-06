@@ -147,6 +147,13 @@ export interface ConsolaWeb {
   /** Agota `lineas` (EOF) para que el lazo de `correrConsola` RETORNE, y corta el cliente. */
   cerrar(): void;
   actos(): readonly Acto[];
+  /**
+   * Cuántos actos del principio de `actos()` ya NO pueden cambiar: los de antes del último acto de
+   * la PIEL, que es el único que se sustituye (el cierre de una racha de tools, un parcial). Es lo
+   * que se puede volcar a disco A MITAD de turno sin escribir dos versiones del mismo acto ni
+   * desordenar el `.jsonl`.
+   */
+  estables(): number;
   /** Apunta un acto que no viene ni de la piel ni de un comando: lo que el SERVIDOR resolvió por un
    *  botón (una propuesta de tareas encolada o descartada). Se emite y entra en el transcript. */
   anotar(acto: Acto): void;
@@ -631,6 +638,7 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
       while (esperandoLinea.length > 0) esperandoLinea.shift()!({ value: undefined, done: true });
     },
     actos: () => actos,
+    estables: () => (indiceDelUltimoDePiel < 0 ? actos.length : indiceDelUltimoDePiel),
     anotar,
     eventosEmitidos: () => transporte.emitidos(),
     mensajesDeAprobacion: () => (aprobacionEnVuelo === undefined ? [] : [aprobacionEnVuelo.mensaje]),

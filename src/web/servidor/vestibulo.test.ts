@@ -10,11 +10,11 @@
  * registrados y el escritor de `config.json`: sin ellos, `completarProyecto` escribiría en
  * el workspace de verdad del usuario que corre los tests.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { crearVestibulo, ENTORNOS_OFICIALES, escribirProyectoEnDisco, esProyectoEnDisco } from "./vestibulo.js";
+import { crearVestibulo, ENTORNOS_OFICIALES, escribirProyectoEnDisco, esProyectoEnDisco, INTERVALO_DE_VOLCADO_MS } from "./vestibulo.js";
 import { crearSesion, listarSesiones } from "./sesiones.js";
 import { ficheroDeDispositivoDeSesion } from "../../core/dispositivoDeSesion.js";
 import { guardarAdjuntoDeSesion } from "../../agent/sesiones/adjuntosDeSesion.js";
@@ -2494,6 +2494,70 @@ describe("abrirParaTarea — la segunda puerta", () => {
     expect(v.motivoParaNoEditar(raizB)).toBeUndefined();
     await v.cerrar();
     rmSync(base, { recursive: true, force: true });
+  });
+});
+
+/**
+ * **El chat se vuelca A MITAD de turno, no solo al acabar.** Medido en el incidente que lo
+ * motiva: un proceso que murió en mitad de un turno de 45 minutos dejó en el `.jsonl` el mensaje
+ * de la persona y NADA más, porque `volcar()` solo corría en la frontera del turno. Se mira con un
+ * ejecutor que NO es doble —el doble salta el volcado entero (`esDoble`), y con él este test
+ * pasaría sin probar nada— y DESDE DENTRO del turno: al acabar, el volcado final lo taparía todo.
+ */
+describe("el chat se vuelca a mitad de turno", () => {
+  it("lo que ya no puede cambiar llega al disco mientras el turno sigue; lo que cambia, no; y al acabar nada se repite", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const s = sesionesEnMemoria();
+      let soltar!: () => void;
+      const bloqueado = new Promise<void>((r) => {
+        soltar = r;
+      });
+      let dentro!: () => void;
+      const aMitad = new Promise<void>((r) => {
+        dentro = r;
+      });
+      const v = crearVestibulo({
+        ...dobles(),
+        origenDeTrabajo: "global",
+        sesiones: s.puerto,
+        crearEjecutor: () => async (_peticion, _estado, consola) => {
+          const piel = consola.piel!();
+          piel.linea("→ lee /a.xne");
+          piel.linea("→ lee ×2 — /a.xne");
+          // Una respuesta a medias: ahora la racha de tools ya no es la última de la piel.
+          piel.token("Voy por la mitad");
+          dentro();
+          await bloqueado;
+          piel.cerrarLinea();
+        },
+      });
+      const abierta = await v.abrirProyecto({ raiz: "/w/a" });
+      abierta.recibir({ clase: "prosa", texto: "hazlo" });
+      await aMitad;
+      const id = abierta.sesion!;
+      const enDisco = () => s.jsonl.get(`/w/a|${id}`) ?? [];
+      // Antes del intervalo: solo el mensaje, que se vuelca al llegar.
+      expect(enDisco().map((a) => a.tipo)).toEqual(["usuario"]);
+
+      vi.advanceTimersByTime(INTERVALO_DE_VOLCADO_MS);
+      // La racha de tools ya no cambia y entra; la respuesta a medias SÍ cambia y espera.
+      expect(enDisco().map((a) => a.tipo)).toEqual(["usuario", "herramientas"]);
+      expect((enDisco()[1] as { lineas: string[] }).lineas).toEqual(["→ lee ×2 — /a.xne"]);
+
+      soltar();
+      await abierta.cerrar();
+      const tipos = enDisco().map((a) => a.tipo);
+      expect(tipos.filter((t) => t === "herramientas")).toHaveLength(1);
+      expect(tipos).toContain("asistente");
+      // Y el intervalo murió con el turno: avanzar el reloj ya no escribe nada.
+      const largo = enDisco().length;
+      vi.advanceTimersByTime(INTERVALO_DE_VOLCADO_MS * 3);
+      expect(enDisco()).toHaveLength(largo);
+      await v.cerrar();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

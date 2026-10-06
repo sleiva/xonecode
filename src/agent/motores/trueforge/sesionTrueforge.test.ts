@@ -12,7 +12,7 @@ import { TOPE_DE_LLAMADA_MS } from "../../../core/conectores.js";
 import { abrirSesionTrueforge, LIMITE_DE_LLAMADAS_DEL_RAIZ, notaDeDelegacion, textoDelBucle } from "./sesionTrueforge.js";
 import { TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto.js";
 import { topeAgotadoDe, traducirEvento } from "./eventosTrueforge.js";
-import { cargarMemoria, rutaDeMemoria } from "./memoriaTrueforge.js";
+import { cargarMemoria, interpretarFoto, rutaDeMemoria } from "./memoriaTrueforge.js";
 import { RESUMEN_DE_RELLENO, textoDeDetencionParaHijo, textoDeDetencionParaRaiz } from "./detencion.js";
 import { textoDeNota, textoDeNotaParaHijo, textoDeNotaYaEntregada } from "./notas.js";
 import { abrirSesionReal } from "../../turno/turnoReal.js";
@@ -818,6 +818,45 @@ describe("una sesión con el motor TrueForge", () => {
     expect(visto).toContain("¿cómo te llamas?");
     expect(visto).toContain("Me llamo XOneCode.");
     expect(visto).toContain("¿qué me dijiste?");
+  }, 30_000);
+
+  /**
+   * Un corte DURO (el proceso muere) no pasa por el `finally` del turno: lo único que queda es lo
+   * que se guardó A MITAD. Medido en el incidente que lo motiva: un turno de 45 minutos se perdió
+   * entero, mensaje de la persona incluido. Por eso el disco se mira DESDE DENTRO del turno —en la
+   * llamada del desarrollador que sigue a su escritura—: mirarlo al acabar vería la foto del
+   * `finally`, y aprobaría aunque a mitad no se guardara nada.
+   */
+  it("A MITAD de turno el disco ya tiene el mensaje, la delegación cerrada como INTERRUPCIÓN y lo que escribió el hijo", async () => {
+    const raiz = proyecto();
+    let aMitad: string | undefined;
+    const { m } = modelosConGuion(guionDeEscritura(), (n) => {
+      // La 3.ª llamada es la del desarrollador DESPUÉS de su `write_file`: el hijo sigue vivo.
+      if (n === 3) aMitad = readFileSync(rutaDeMemoria(raiz, "sesion-a-mitad")!, "utf8");
+    });
+    const sesion = await abrirSesionReal({
+      raiz,
+      modelos: m,
+      skills: { catalogo: () => [], cargar: async () => [] } as never,
+      entorno: ENTORNO,
+      motor: "trueforge",
+      hilo: "sesion-a-mitad",
+      pedirAprobacion: async (pendientes) => new Map(pendientes.map((p) => [p.id, { type: "approve" as const }])),
+    });
+    await sesion.turno("escribe una nota", piel().p);
+    sesion.cerrar();
+
+    expect(aMitad).toBeDefined();
+    const foto = interpretarFoto(aMitad!);
+    expect(foto.estado).toBe("ok");
+    const contexto = (foto as { foto: { context: { role?: string; content?: unknown; tool_call_id?: string }[] } }).foto.context;
+    expect(contexto.some((c) => c.role === "user" && String(c.content).includes("escribe una nota"))).toBe(true);
+    const cierre = contexto.find((c) => c.role === "tool" && c.tool_call_id === "d1");
+    expect(String(cierre?.content)).toMatch(/developer-xone se interrumpió/);
+    expect(String(cierre?.content)).toMatch(/\/nota\.txt/);
+    expect(String(cierre?.content)).not.toMatch(/vuelve a pedirlo/);
+    // Y el turno que acaba bien PISA la de a mitad: lo de después es la conversación normal.
+    expect(JSON.stringify(cargarMemoria(raiz, "sesion-a-mitad"))).not.toMatch(/se interrumpió/);
   }, 30_000);
 
   it("una conversación CON aprobación y delegación se guarda, pasa la lectura estricta y se reabre", async () => {

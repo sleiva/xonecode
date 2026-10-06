@@ -14,6 +14,7 @@ import {
   RESPUESTA_A_UNA_COLGADA,
   rutaDeMemoria,
   saldarColgadas,
+  textoDeInterrupcion,
   textoDeMemoriaDescartada,
   VERSION_DE_MEMORIA,
 } from "./memoriaTrueforge.js";
@@ -64,6 +65,28 @@ describe("la memoria de TrueForge en disco", () => {
     // Puro: no toca lo que recibe.
     expect(contexto).toHaveLength(3);
     expect(saldarColgadas(saldado)).toHaveLength(4);
+  });
+
+  it("con un texto por llamada, cada colgada se salda con SU texto", () => {
+    const contexto = [{ role: "assistant", content: "", tool_calls: [{ id: "a", function: { name: "create_sub_agent" } }, { id: "b", function: { name: "read_file" } }] }];
+    const saldado = saldarColgadas(contexto, undefined, (id, nombre) => `${id}:${nombre ?? "?"}`);
+    expect(saldado.slice(1)).toEqual([
+      { role: "tool", tool_call_id: "a", content: "a:create_sub_agent" },
+      { role: "tool", tool_call_id: "b", content: "b:read_file" },
+    ]);
+  });
+
+  it("el texto de una INTERRUPCIÓN no manda repetir: manda mirar el disco, y nombra lo que se sabe escrito", () => {
+    const delegacion = textoDeInterrupcion({ especialista: "developer-xone", escritos: ["/Menu.xne", "/estilos.css"] });
+    expect(delegacion).toMatch(/developer-xone/);
+    expect(delegacion).toMatch(/\/Menu\.xne, \/estilos\.css/);
+    expect(delegacion).toMatch(/al menos/);
+    expect(delegacion).toMatch(/comprueba/i);
+    expect(delegacion).not.toMatch(/vuelve a pedirlo/);
+    // Sin escritos conocidos no afirma que no escribiera nada.
+    expect(textoDeInterrupcion({ especialista: "developer-xone", escritos: [] })).toMatch(/puede haber dejado/i);
+    // Una tool propia del raíz: se repite si hace falta, no hay nada que comprobar.
+    expect(textoDeInterrupcion({ escritos: [] })).toMatch(/interrumpi/);
   });
 
   it("guardar ya sanea: lo que llega a disco nunca tiene una colgada", () => {
