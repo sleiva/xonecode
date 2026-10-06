@@ -13,6 +13,7 @@
  * argumentos.
  */
 import type { Artefacto } from "./artefactos.js";
+import type { TareaPropuesta } from "./repartoDeEncargo.js";
 export type { Artefacto };
 
 export type DomainEvent =
@@ -86,6 +87,12 @@ export type DomainEvent =
    * emite con opciones: sin ellas no hay botón que pintar y el texto basta.
    */
   | { tipo: "consulta"; pregunta: string; opciones: string[] }
+  /**
+   * El agente PROPONE repartir un encargo grande en tareas de fondo encadenadas (`proponer_tareas`,
+   * `core/repartoDeEncargo.ts`). No crea nada: la persona revisa cada tarea y decide si se encolan. A diferencia de
+   * `consulta`, esto NO ha salido antes por `token`, así que una piel que no lo pinte recibe una línea de texto.
+   */
+  | { tipo: "propuesta-de-tareas"; motivo: string; tareas: TareaPropuesta[] }
   | { tipo: "bloqueado"; motivo: MotivoBloqueo; explicacion: string }
   | { tipo: "pausa"; pendientes: PendienteDeAprobacion[] }
   | { tipo: "aviso"; texto: string; severidad: "info" | "aviso" | "grave" }

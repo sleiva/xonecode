@@ -324,3 +324,34 @@ describe("el veredicto del verificador, como dato", () => {
     ]);
   });
 });
+
+describe("la propuesta de tareas (repartir un encargo grande)", () => {
+  const propuesta: DomainEvent = {
+    tipo: "propuesta-de-tareas",
+    motivo: "son dos pantallas independientes",
+    tareas: [
+      { titulo: "Ventana A", peticion: "haz A", adjuntos: ["/adjuntos/a.zip"] },
+      { titulo: "Ventana B", peticion: "haz B" },
+    ],
+  };
+
+  it("una piel que la sabe pintar la recibe como DATO, sin línea de texto", async () => {
+    const { piel, actos } = pielDePrueba();
+    const recibidas: unknown[] = [];
+    piel.propuestaDeTareas = (p) => recibidas.push(p);
+    await correrTurno(flujo({ tipo: "token", texto: "Lo reparto.", msgId: "r1" }, propuesta), piel);
+    expect(recibidas).toEqual([{ motivo: "son dos pantallas independientes", tareas: (propuesta as { tareas: unknown }).tareas }]);
+    expect(actos.some((a) => a.includes("propone repartir"))).toBe(false);
+    // La respuesta abierta se cierra ANTES, como con `consulta`: la tarjeta no queda pegada a ella.
+    expect(actos.slice(0, 2)).toEqual(["token:Lo reparto.", "cerrar"]);
+  });
+
+  it("una piel sin el método (stdio, TUI) la ve como línea, con las tareas numeradas", async () => {
+    const { piel, actos } = pielDePrueba();
+    await correrTurno(flujo(propuesta), piel);
+    const linea = actos.find((a) => a.startsWith("linea:"))!;
+    expect(linea).toContain("propone repartir el encargo en 2 tareas");
+    expect(linea).toContain("1. Ventana A");
+    expect(linea).toContain("2. Ventana B");
+  });
+});

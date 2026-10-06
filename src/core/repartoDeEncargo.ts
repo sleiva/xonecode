@@ -31,6 +31,12 @@ export interface PropuestaDeTareas {
   tareas: TareaPropuesta[];
 }
 
+/** La propuesta en una línea, para la piel que no la pinta como tarjeta (stdio, la TUI). */
+export function textoDePropuesta(p: PropuestaDeTareas): string {
+  const lista = p.tareas.map((t, i) => `${i + 1}. ${t.titulo}`).join(" · ");
+  return `🗂  El agente propone repartir el encargo en ${p.tareas.length} tareas de fondo, en orden (${p.motivo}): ${lista}. Encolarlas solo se puede desde la consola web.`;
+}
+
 /** El nombre de un adjunto sin el prefijo de su ruta virtual. */
 export const nombreDeAdjuntoPropuesto = (a: string): string => a.trim().replace(/^\/adjuntos\//, "");
 

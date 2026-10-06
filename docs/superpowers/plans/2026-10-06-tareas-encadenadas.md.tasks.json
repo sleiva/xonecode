@@ -19,7 +19,7 @@
     {
       "id": 2,
       "subject": "Task 3: El evento y la piel (`propuesta-de-tareas`)",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Un evento de dominio nuevo que el turno reenvía a un método OPCIONAL de la piel.\n\n**Files:**\n- Modify: `src/core/events.ts` (junto a `consulta`, l.~88), `src/core/turno.ts` (interface `Piel`, l.~102; despacho de eventos, l.~307-315)\n- Test: `src/core/turno.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `DomainEvent` incluye `{tipo:\"propuesta-de-tareas\"; motivo: string; tareas: TareaPropuesta[]}`.\n- [ ] `Piel.propuestaDeTareas?(p: PropuestaDeTareas): void` opcional; el turno la llama si existe.\n- [ ] Sin el método (stdio, TUI) el evento se pinta como una línea de texto («El agente propone repartir el encargo en N tareas: …») y no rompe nada.\n- [ ] `src/core/imports.test.ts` y los tests de `turno` en verde.\n\n**Verify:** `FORCE_COLOR=0 npx vitest run src/core/turno.test.ts src/core/imports.test.ts` → verde.\n\n**Steps:**\n- [ ] **Step 1:** test en `turno.test.ts`: un `SesionReal` doble que emite `{tipo:\"propuesta-de-tareas\", …}` → con una piel que implementa `propuestaDeTareas` se llama con la propuesta; con una piel sin el método, `linea` recibe el texto con los títulos numerados.\n- [ ] **Step 2:** ver que falla.\n- [ ] **Step 3:** añadir la variante al tipo `DomainEvent` (importando `TareaPropuesta` de `./repartoDeEncargo.js`), el método opcional en `Piel` con su comentario («opcional, como `consulta?`: stdio y la TUI no cambian»), y el `case` en el despacho del turno: `if (piel.propuestaDeTareas) piel.propuestaDeTareas({motivo, tareas}); else piel.linea(textoDePropuesta(e))`, con `textoDePropuesta` en `repartoDeEncargo.ts` (numera títulos).\n- [ ] **Step 4:** verde.\n- [ ] **Step 5: Commit** — `feat(turno): evento propuesta-de-tareas y su método opcional de la piel`\n\n```json:metadata\n{\"files\": [\"src/core/events.ts\", \"src/core/turno.ts\", \"src/core/repartoDeEncargo.ts\", \"src/core/turno.test.ts\"], \"verifyCommand\": \"FORCE_COLOR=0 npx vitest run src/core/turno.test.ts src/core/imports.test.ts\", \"acceptanceCriteria\": [\"evento en DomainEvent\", \"Piel.propuestaDeTareas? opcional y llamado\", \"sin método: línea de texto con los títulos\", \"imports en verde\"], \"modelTier\": \"mechanical\"}\n```",
       "blockedBy": [
         1
@@ -62,5 +62,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-10-06T17:10:00+02:00"
+  "lastUpdated": "2026-10-06T17:20:00+02:00"
 }

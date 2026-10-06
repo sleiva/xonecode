@@ -2,6 +2,7 @@ import { Bitacora } from "./bitacora.js";
 import { Colapsador } from "./notify.js";
 import type { LineaDeTool } from "./notify.js";
 import type { Artefacto, DomainEvent, Fase, OrigenDeLaTool, PendienteDeAprobacion } from "./events.js";
+import { textoDePropuesta, type PropuestaDeTareas } from "./repartoDeEncargo.js";
 import type { VeredictoDelTurno } from "./actos.js";
 import { pideLeerLaMemoria } from "./memoria.js";
 import type { DetalleDeLinea } from "./actos.js";
@@ -100,6 +101,12 @@ export interface Piel {
    * igual, byte-idéntica. Hoy solo la web lo implementa, con un botón por opción.
    */
   consulta?(consulta: { pregunta: string; opciones: string[] }): void;
+  /**
+   * El agente propone repartir el encargo en tareas de fondo encadenadas (`events.ts#propuesta-de-tareas`). OPCIONAL:
+   * quien no lo implemente —stdio, la TUI— recibe una línea con las tareas numeradas; encolarlas solo se puede en la
+   * web, que es la que tiene la cola de tareas.
+   */
+  propuestaDeTareas?(propuesta: PropuestaDeTareas): void;
 }
 
 /** Cómo se le cuenta cada fase al usuario. En un solo sitio, no repartido por el motor. */
@@ -313,6 +320,20 @@ export async function correrTurno(
             abierta = false;
           }
           piel.consulta?.({ pregunta: ev.pregunta, opciones: ev.opciones });
+          break;
+
+        case "propuesta-de-tareas":
+          // No ha salido por `token`: sin el método, una línea; con él, la tarjeta (y la respuesta abierta se cierra
+          // antes, como con `consulta`, para que no quede pegada a ella).
+          if (piel.propuestaDeTareas !== undefined) {
+            if (abierta) {
+              piel.cerrarLinea();
+              abierta = false;
+            }
+            piel.propuestaDeTareas({ motivo: ev.motivo, tareas: ev.tareas });
+          } else {
+            escribirLinea(textoDePropuesta({ motivo: ev.motivo, tareas: ev.tareas }));
+          }
           break;
 
         case "bloqueado":
