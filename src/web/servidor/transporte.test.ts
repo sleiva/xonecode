@@ -80,6 +80,8 @@ const DECISIONES: Readonly<Record<string, readonly string[]>> = {
   // El pid es del proceso, no de la tarea: en la pantalla no se puede hacer nada con él, y
   // ya se dice con palabras cuándo la ejecuta otro proceso (`corriendoAqui`).
   pid: [],
+  // Del corredor: frena el bucle de reanudar. En la pantalla no sirve de nada.
+  reanudaciones: [],
   autorizadas: ["autorizadas"],
   feedback: ["feedback"],
   veredicto: ["veredicto"],
@@ -101,6 +103,7 @@ const TAREA_COMPLETA: Required<Tarea> = {
   empezada: "2026-09-08T10:01:00.000Z",
   acabada: "2026-09-08T10:09:00.000Z",
   pid: 4242,
+  reanudaciones: 1,
   autorizadas: ["app.xne"],
   feedback: [{ texto: "sí, con histórico", creado: "2026-09-08T10:05:00.000Z", consumido: true }],
   veredicto: {

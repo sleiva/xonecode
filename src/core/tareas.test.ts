@@ -5,9 +5,13 @@ import {
   conFeedback,
   conVeredicto,
   darPorBuenaAMano,
+  motivoTrasReanudar,
+  reanudadaTrasCorte,
   rutaRelativaDeTarea,
   siguientesAEjecutar,
   tituloDeTarea,
+  TEXTO_DE_REANUDACION,
+  TOPE_DE_REANUDACIONES,
   TOPE_DE_RONDAS_DE_TAREA,
   type Tarea,
 } from "./tareas.js";
@@ -365,5 +369,39 @@ describe("siguientesAEjecutar: las tareas ENCADENADAS (tras) van en orden", () =
     const b = base("b", "2026-10-06T10:00:01Z", { tras: "a" });
     const c = base("c", "2026-10-06T10:00:02Z");
     expect(siguientesAEjecutar([a, b, c], { concurrencia: 1 }).map((t) => t.id)).toEqual(["c"]);
+  });
+});
+
+describe("reanudar SOLA una tarea cortada a mitad", () => {
+  const corriendo = (extra: Partial<Tarea> = {}): Tarea => ({
+    id: "t1",
+    proyecto: { id: "p1", raiz: "/w/a", nombre: "A" },
+    titulo: "T",
+    peticion: "p",
+    encargo: "e",
+    adjuntos: [],
+    estado: "en-proceso",
+    creada: "2026-10-07T10:00:00.000Z",
+    sesion: "s1",
+    pid: 99,
+    ...extra,
+  });
+
+  it("vuelve a la cola, en su hilo, con el aviso de reanudación como feedback pendiente", () => {
+    const r = reanudadaTrasCorte(corriendo(), "se cortó", "2026-10-07T11:00:00.000Z")!;
+    expect(r.estado).toBe("nuevo");
+    expect(r.sesion).toBe("s1");
+    expect(r.reanudaciones).toBe(1);
+    expect(r.feedback).toEqual([{ texto: TEXTO_DE_REANUDACION, creado: "2026-10-07T11:00:00.000Z", consumido: false }]);
+    expect("pid" in r).toBe(false);
+    // Y el planificador la vuelve a elegir.
+    expect(siguientesAEjecutar([r], { concurrencia: 1 }).map((t) => t.id)).toEqual(["t1"]);
+  });
+
+  it("sin hilo que reabrir, o con el tope gastado, no se reanuda: se aparca como siempre", () => {
+    expect(reanudadaTrasCorte(corriendo({ sesion: undefined }), "se cortó")).toBeUndefined();
+    expect(reanudadaTrasCorte(corriendo({ reanudaciones: TOPE_DE_REANUDACIONES }), "se cortó")).toBeUndefined();
+    expect(reanudadaTrasCorte(corriendo({ estado: "nuevo" }), "se cortó")).toBeUndefined();
+    expect(motivoTrasReanudar("se cortó")).toMatch(/^se cortó; ya se reanudó sola una vez/);
   });
 });

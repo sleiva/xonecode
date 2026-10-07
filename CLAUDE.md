@@ -858,6 +858,12 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   `sigoSiendoDueño()`, preguntado antes de despachar cada tarea. La cuarentena del cerrojo lleva el
   **pid** en el nombre.
 - **Gana la persona**: una tarea no arranca en un proyecto cuya consola humana está ABIERTA.
+- **Una tarea cortada a mitad se REANUDA sola, una vez** (`core/tareas.ts#reanudadaTrasCorte`, en la reconciliación del
+  arranque): si el proceso murió con ella «en proceso» y su hilo se puede reabrir, vuelve a la cola con
+  `TEXTO_DE_REANUDACION` como feedback pendiente, que entra en SU hilo —la foto del raíz y el chat se guardan a mitad de
+  turno— y manda mirar el disco antes de rehacer. Pasa por las transiciones de siempre (aparcada y devuelta con
+  feedback). Sin hilo, o ya reanudada (`TOPE_DE_REANUDACIONES`, `Tarea.reanudaciones`, que no viaja), se aparca como
+  antes: una tarea que tumba el proceso cada vez sería un bucle.
 - **La tarea abre por su PROPIA puerta** (`vestibulo.ts#abrirParaTarea`), que comparte **un solo
   cuerpo de función** con la puerta humana, y tiene que REENVIAR `tarea.sesion` y el id de la
   tarea.

@@ -104,6 +104,11 @@ export interface Tarea {
   /** El proceso que la tiene. Se usa para reconciliar al arrancar; se va al parar. */
   pid?: number;
   /**
+   * Cuántas veces el harness la REANUDÓ solo tras cortarse el proceso a mitad (`reanudadaTrasCorte`). Ausente = ninguna.
+   * Es lo que frena el bucle de una tarea que tumba el proceso cada vez. No viaja: en la pantalla no sirve de nada.
+   */
+  reanudaciones?: number;
+  /**
    * Las escrituras que la tarea AUTORIZÓ sin que ninguna persona las aprobara, con la ruta
    * RELATIVA a la raíz del proyecto.
    *
@@ -420,3 +425,39 @@ export function conVeredicto(tarea: Tarea, veredicto: VeredictoDeTarea | undefin
 export function darPorBuenaAMano(tarea: Tarea, ahora?: string): Tarea {
   return { ...conEstado(tarea, "terminada", undefined, ahora === undefined ? {} : { ahora }), terminadaAMano: true };
 }
+
+/**
+ * Cuántas veces se reanuda SOLA una tarea cortada a mitad. Una: si vuelve a cortarse, puede ser ella la que tumba el
+ * proceso, y reanudarla siempre sería un bucle; entonces se aparca y espera a una persona.
+ */
+export const TOPE_DE_REANUDACIONES = 1;
+
+/**
+ * Lo que recibe el agente al reanudar, como un mensaje más en SU hilo. El trabajo de antes del corte está en el disco
+ * (las tareas escriben sin aprobación) y en su memoria hasta el último paso guardado, pero la llamada en curso se perdió:
+ * por eso manda MIRAR antes de rehacer.
+ */
+export const TEXTO_DE_REANUDACION =
+  "[harness] El proceso se cortó a mitad de tu turno anterior y se ha vuelto a arrancar. Sigue el encargo donde lo " +
+  "dejaste: lo que ya escribiste está en el disco, así que mira el estado de los ficheros (y del plan, si lo hay) antes " +
+  "de rehacer nada, y no repitas lo que ya está hecho.";
+
+/**
+ * Una tarea que el proceso dejó «en proceso» al morir, REANUDADA: vuelve a la cola con `TEXTO_DE_REANUDACION` como
+ * feedback pendiente, que el corredor manda en su MISMO hilo (`peticionDeFeedback` con `reanudando`). Pasa por las
+ * transiciones de siempre —aparcada con su motivo y devuelta con un feedback—, así que no hay un atajo nuevo que vigilar.
+ *
+ * `undefined` = NO se reanuda y se aparca como hasta ahora: sin hilo que reabrir (empezar de cero sin decírselo a nadie
+ * podría rehacer o pisar lo escrito) o con el tope gastado.
+ */
+export function reanudadaTrasCorte(tarea: Tarea, motivo: string, ahora?: string): Tarea | undefined {
+  if (tarea.estado !== "en-proceso" || tarea.sesion === undefined) return undefined;
+  const hechas = tarea.reanudaciones ?? 0;
+  if (hechas >= TOPE_DE_REANUDACIONES) return undefined;
+  const aparcada = conEstado(tarea, "requiere-atencion", motivo, ahora === undefined ? {} : { ahora });
+  return conFeedback({ ...aparcada, reanudaciones: hechas + 1 }, TEXTO_DE_REANUDACION, ahora);
+}
+
+/** El motivo de aparcar una cortada que YA se reanudó sola: lo de siempre, más por qué esta vez no sigue. */
+export const motivoTrasReanudar = (motivo: string): string =>
+  `${motivo}; ya se reanudó sola una vez y volvió a cortarse, así que espera a que la mires`;

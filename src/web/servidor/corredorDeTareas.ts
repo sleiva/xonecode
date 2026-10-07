@@ -24,7 +24,10 @@ import {
   conAutorizadas,
   conEstado,
   conVeredicto,
+  motivoTrasReanudar,
+  reanudadaTrasCorte,
   siguientesAEjecutar,
+  TOPE_DE_REANUDACIONES,
   TOPE_DE_RONDAS_DE_TAREA,
   type Tarea,
 } from "../../core/tareas.js";
@@ -1283,8 +1286,18 @@ export function crearCorredorDeTareas(opciones: {
       const limpiar = await olvidarSiNoSePuedeAbrir(t.proyecto.raiz, t.sesion);
       // El motivo se compone CON lo que acaba de decidirse: si el hilo se olvidó, decir que
       // el agente lo recuerda sería falso justo en la rama que lo borró.
+      const base = limpiar ? sinSesion(t) : t;
+      const motivo = motivoDeReconciliacion(t.pid, limpiar);
+      /**
+       * **Y si se puede, se REANUDA sola** (`core/tareas.ts#reanudadaTrasCorte`): vuelve a la cola con un aviso que entra
+       * en SU hilo —la foto del raíz y el chat se guardan a mitad de turno, así que lleva lo hecho hasta el último paso—,
+       * y como cualquier tarea no arranca con la consola de la persona abierta. Una vez: si vuelve a cortarse, se aparca
+       * diciendo por qué. Sin hilo que reabrir, se aparca como siempre.
+       */
+      const reanudada = reanudadaTrasCorte(base, motivo);
       reconciliada.push(
-        conEstado(limpiar ? sinSesion(t) : t, "requiere-atencion", motivoDeReconciliacion(t.pid, limpiar))
+        reanudada ??
+          conEstado(base, "requiere-atencion", base.sesion !== undefined && (t.reanudaciones ?? 0) >= TOPE_DE_REANUDACIONES ? motivoTrasReanudar(motivo) : motivo)
       );
     }
     if (reconciliada.some((t, i) => t !== lista[i])) {

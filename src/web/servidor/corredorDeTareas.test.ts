@@ -26,7 +26,7 @@ import { CatalogoModelosEnMemoria } from "../../core/ports.js";
 import type { Consola } from "../../cli/consola.js";
 import type { Acto } from "../../core/actos.js";
 import type { MensajeAlCliente } from "./transporte.js";
-import { TOPE_DE_RONDAS_DE_TAREA, type Tarea } from "../../core/tareas.js";
+import { motivoTrasReanudar, TEXTO_DE_REANUDACION, TOPE_DE_RONDAS_DE_TAREA, type Tarea } from "../../core/tareas.js";
 import { MAX_APPROVAL_ROUNDS } from "../../vendor/hitl.js";
 import { SALVEDAD_SIN_ESCRITURAS, type ResultadoDeTurno, type VeredictoDeTarea } from "../../core/entrega.js";
 import type { CasoDeJuez, JuezDeTareaPort } from "../../core/ports.js";
@@ -784,7 +784,8 @@ describe("crearCorredorDeTareas", () => {
   });
 
   it("la reconciliación deja el motivo ACCIONABLE y con el pid, no un «Error:» de Node", async () => {
-    const { disco, estado } = discoDeMentira([TAREA({ estado: "en-proceso", pid: 999, sesion: "s7" })]);
+    // Ya reanudada una vez: se APARCA (la reanudación tiene su propio test, más abajo).
+    const { disco, estado } = discoDeMentira([TAREA({ estado: "en-proceso", pid: 999, sesion: "s7", reanudaciones: 1 })]);
     const p = proyectoDeMentira();
     const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
     await corredor.arrancar();
@@ -794,9 +795,37 @@ describe("crearCorredorDeTareas", () => {
     // El motivo tiene que decir las dos cosas, que es lo que hace accionable la tarjeta.
     expect(motivo).toMatch(/pid 999/);
     expect(motivo).toMatch(/reintenta/i);
+    expect(motivo).toMatch(/ya se reanudó sola una vez/);
     expect(motivo).not.toMatch(/^Error/);
     // La sesión sobrevive al aparcado: sin ella no se puede abrir el hilo a medias.
     expect(estado()[0]!.sesion).toBe("s7");
+    await corredor.parar();
+  });
+
+  it("una tarea cortada a mitad CON hilo se REANUDA sola: vuelve a correr en su hilo con el aviso de reanudación", async () => {
+    // Matar la app a mitad de una tarea y volver a arrancarla: la foto del raíz y el chat se guardan a mitad de turno,
+    // así que su hilo lleva lo hecho. Se reanuda UNA vez (ver el test del motivo, que ya la trae reanudada).
+    const { disco, estado } = discoDeMentira([TAREA({ estado: "en-proceso", pid: 999, sesion: "s7" })]);
+    const p = proyectoDeMentira();
+    const sesiones: (string | undefined)[] = [];
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
+      disco,
+      abrirParaTarea: async (raiz, sesion) => {
+        sesiones.push(sesion);
+        return p.abrir(raiz);
+      },
+      pid: 1,
+      concurrencia: () => 1,
+      sesionAbrible: () => true,
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    expect(sesiones).toEqual(["s7"]);
+    // En su hilo se manda SOLO el aviso, no el encargo entero otra vez.
+    expect(p.encargos).toEqual([TEXTO_DE_REANUDACION]);
+    expect(estado()[0]).toMatchObject({ estado: "en-proceso", reanudaciones: 1 });
+    p.acabar();
+    await corredor.asentar();
     await corredor.parar();
   });
 
@@ -830,7 +859,7 @@ describe("crearCorredorDeTareas", () => {
   it("y si la conversación SÍ se puede abrir, no se toca ni el hilo ni el campo", async () => {
     // Es la mitad que hace que la regla no sea «borra siempre»: con transcript volcado, la
     // sesión está en el índice del proyecto y se lee desde la barra lateral.
-    const { disco, estado } = discoDeMentira([TAREA({ estado: "en-proceso", pid: 999, sesion: "s9" })]);
+    const { disco, estado } = discoDeMentira([TAREA({ estado: "en-proceso", pid: 999, sesion: "s9", reanudaciones: 1 })]);
     const olvidados: string[] = [];
     const p = proyectoDeMentira();
     const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
@@ -883,7 +912,7 @@ describe("crearCorredorDeTareas", () => {
   it("y si el hilo SOBREVIVIÓ, sigue diciendo que el agente lo recuerda", async () => {
     // La otra mitad: aquí el texto viejo es la verdad, y por eso no se cambió por uno
     // genérico — un texto que valga para las dos situaciones no diría ninguna de las dos.
-    const { disco, estado } = discoDeMentira([TAREA({ estado: "en-proceso", pid: 999, sesion: "s9" })]);
+    const { disco, estado } = discoDeMentira([TAREA({ estado: "en-proceso", pid: 999, sesion: "s9", reanudaciones: 1 })]);
     const p = proyectoDeMentira();
     const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco,
@@ -894,7 +923,7 @@ describe("crearCorredorDeTareas", () => {
     });
     await corredor.arrancar();
     await corredor.asentar();
-    expect(estado()[0]!.motivo).toBe(MOTIVO_CORTADA_POR_CIERRE + " (era el pid 999)");
+    expect(estado()[0]!.motivo).toBe(motivoTrasReanudar(MOTIVO_CORTADA_POR_CIERRE + " (era el pid 999)"));
     await corredor.parar();
   });
 
@@ -925,7 +954,7 @@ describe("crearCorredorDeTareas", () => {
     // Quitar la `sesion` y olvidar un hilo son destructivos, así que sin nadie que pueda
     // afirmar que no hay nada abrible se conserva — la misma dirección conservadora que
     // `historica` cuando no se puede preguntar al checkpointer.
-    const { disco, estado } = discoDeMentira([TAREA({ estado: "en-proceso", pid: 999, sesion: "s9" })]);
+    const { disco, estado } = discoDeMentira([TAREA({ estado: "en-proceso", pid: 999, sesion: "s9", reanudaciones: 1 })]);
     const p = proyectoDeMentira();
     const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
     await corredor.arrancar();
