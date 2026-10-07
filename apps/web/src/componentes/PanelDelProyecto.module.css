@@ -550,3 +550,10 @@
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 10px;
 }
+
+/* «· 1 en curso» en la pestaña Tareas: una tarea de fondo trabajando. El acento como en las marcas de actividad de la
+   barra; no sostiene texto largo. */
+.enCurso {
+  color: var(--dsw-alias-label-secondary);
+  font-weight: 600;
+}

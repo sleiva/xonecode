@@ -293,6 +293,15 @@ function FilaDeProyecto({
             <span className={estilos.actividad} title="El agente está trabajando en este proyecto…">
               trabajando…
             </span>
+          ) : p.tareasEnCurso !== undefined && p.tareasEnCurso > 0 ? (
+            // Una tarea de fondo trabajando, con la misma marca que una conversación y otras palabras: no hay chat que
+            // abrir, está en la pestaña Tareas del proyecto.
+            <span
+              className={estilos.actividad}
+              title={p.tareasEnCurso === 1 ? "Una tarea de fondo está trabajando en este proyecto" : `${p.tareasEnCurso} tareas de fondo están trabajando en este proyecto`}
+            >
+              {p.tareasEnCurso === 1 ? "tarea en curso…" : `${p.tareasEnCurso} tareas en curso…`}
+            </span>
           ) : null}
           {/*
             De quién es, con un ICONO y solo cuando es de OTRA persona. Lo propio no lleva
@@ -503,6 +512,12 @@ export interface Proyecto {
    * el botón muerto.
    */
   trabajando?: true;
+  /**
+   * Cuántas tareas de FONDO de este proyecto están ejecutándose ahora (`en-proceso` en la cola). Ausente = ninguna, o la
+   * cola no ha llegado. Se dice en la fila porque una tarea corre sola y sin consola abierta: sin esto, solo se veía
+   * entrando en el panel del proyecto.
+   */
+  tareasEnCurso?: number;
 }
 
 /**

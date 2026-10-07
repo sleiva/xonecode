@@ -110,6 +110,7 @@ export function PanelDelProyecto({
   planes,
   copia,
   tareasEnFondo,
+  tareasEnCurso,
   sincronizacion,
   gestor,
   conectores,
@@ -135,6 +136,9 @@ export function PanelDelProyecto({
   copia?: CopiaDelPanel;
   /** Las tareas en background del proyecto: la ranura que `App` ya monta para el panel lateral. */
   tareasEnFondo?: ReactNode;
+  /** Cuántas tareas de fondo del proyecto se están ejecutando: la pestaña Tareas lo dice sin tener que abrirla.
+   *  Ausente o cero = no se pinta nada. */
+  tareasEnCurso?: number;
   /**
    * La pestaña «Sincronización»: Subir / Actualizar repo local, las últimas subidas y TODO lo
    * pendiente de subir con su diff contra CloudStudio. Subir es del PROYECTO, no de un chat, así
@@ -325,6 +329,11 @@ export function PanelDelProyecto({
               onClick={() => setPestana(p.id)}
             >
               {p.etiqueta}
+              {p.id === "tareas" && tareasEnCurso !== undefined && tareasEnCurso > 0 ? (
+                <span className={estilos.enCurso} title={tareasEnCurso === 1 ? "Una tarea de fondo se está ejecutando" : `${tareasEnCurso} tareas de fondo se están ejecutando`}>
+                  {` · ${tareasEnCurso} en curso`}
+                </span>
+              ) : null}
             </button>
           ))}
         </div>

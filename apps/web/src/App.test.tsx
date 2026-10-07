@@ -2818,6 +2818,22 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
       expect(screen.queryByText(/otro|Otra/)).toBeNull();
     });
 
+    it("una tarea de fondo EN CURSO se ve en la fila del proyecto de la barra y en la pestaña Tareas", () => {
+      const { store } = conProyectoAbierto();
+      const barra = () => screen.getAllByRole("navigation").find((n) => !n.hasAttribute("aria-label"))!;
+      act(() => store.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [TAREA()] }));
+      // Nueva, todavía no: la marca es de lo que se EJECUTA.
+      expect(within(barra()).queryByText(/en curso/)).toBeNull();
+      act(() => store.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [TAREA({ estado: "en-proceso" })] }));
+      expect(within(barra()).getByText("tarea en curso…")).toBeTruthy();
+      fireEvent.click(enBarra(/^AppDemo/));
+      expect(screen.getByRole("tab", { name: /Tareas · 1 en curso/ })).toBeTruthy();
+      // Al terminar, las dos marcas se van.
+      act(() => store.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [TAREA({ estado: "terminada" })] }));
+      expect(within(barra()).queryByText(/en curso/)).toBeNull();
+      expect(screen.getByRole("tab", { name: "Tareas" })).toBeTruthy();
+    });
+
     it("pinta el estado y el motivo, y reintentar/dar-por-bueno/descartar mandan la acción sobre el cable", () => {
       const { store, enviar } = conProyectoAbierto();
       act(() =>

@@ -634,6 +634,12 @@ export function App({
    * llegado del servidor sería la misma mentira que `Revision` evita con `via`. `undefined`
    * se propaga tal cual hasta `TareasDelProyecto`, que es quien decide qué decir.
    */
+  /** Cuántas tareas de fondo hay `en-proceso` por proyecto: la fila de la barra y la pestaña Tareas lo dicen. */
+  const tareasEnCursoPorProyecto = useMemo(() => {
+    const cuenta = new Map<string, number>();
+    for (const t of estado.tareas?.lista ?? []) if (t.estado === "en-proceso") cuenta.set(t.proyecto, (cuenta.get(t.proyecto) ?? 0) + 1);
+    return cuenta;
+  }, [estado.tareas]);
   const tareasDelProyecto = useMemo(
     () =>
       estado.tareas === undefined
@@ -3050,6 +3056,9 @@ export function App({
               // el estado de SU gestor, en vez de quedarse con la pestaña y la búsqueda del otro.
               key={proyectoActivoId ?? ""}
               nombre={nombreDelProyectoActivo ?? "Proyecto"}
+              {...((tareasEnCursoPorProyecto.get(proyectoActivoId ?? "") ?? 0) > 0
+                ? { tareasEnCurso: tareasEnCursoPorProyecto.get(proyectoActivoId ?? "")! }
+                : {})}
               {...(entornoDelEscritorio === undefined ? {} : { entorno: entornoDelEscritorio.nombre })}
               // La rama solo si ya se midió (`sync`): no se pide aquí una medida para pintarla.
               {...(estado.sync?.rama === undefined ? {} : { rama: estado.sync.rama })}
@@ -3164,6 +3173,8 @@ export function App({
           proyectos={(estado.alta?.proyectos ?? []).map((p) => ({
             ...p,
             sesiones: (p.sesiones ?? []).map((s) => ({ ...s, historica: true })),
+            // Las tareas de fondo que corren ahora en este proyecto, de la cola que ya está en el store.
+            ...((tareasEnCursoPorProyecto.get(p.id) ?? 0) > 0 ? { tareasEnCurso: tareasEnCursoPorProyecto.get(p.id)! } : {}),
           }))}
           // Cambiar de entorno trae SUS proyectos: es una conexión con CloudStudio, así
           // que la hace el servidor y contesta con la lista nueva.
