@@ -898,7 +898,10 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   tool `proponer_tareas` valida y anuncia el acto `propuesta-de-tareas`, nunca crea nada; las tareas las crea el clic de
   la persona en «Encolar en orden», TAMBIÉN en modo autónomo, porque crear una tarea es la autorización. Solo el raíz de
   TrueForge y solo en una consola de PERSONA de la web (`Consola.proponeTareas`, que la consola de una tarea no hereda),
-  y su prompt le pide preguntar antes con `ask_user_question` lo que falte. **Lo que se encola sale del ACTO, no del
+  y su prompt le pide preguntar antes con `ask_user_question` lo que falte. **Y el harness se lo RECUERDA**: cuando un
+  hijo del raíz deja un `TASKS.md` con varias tareas (`TAREAS_PARA_RECORDAR_EL_REPARTO`), su informe lleva
+  `avisoDeReparto`, una vez por plan —medido, con el plan de seis tareas escrito el orquestador siguió preguntando sin
+  volver sobre el reparto; la frase del prompt no bastaba—. **Lo que se encola sale del ACTO, no del
   cliente** (`propuestaPendiente`): el cliente manda el id y los encargos revisados; títulos, peticiones y adjuntos los
   pone el servidor, que copia a cada tarea SUS adjuntos de la sesión ANTES de guardarla (`copiarAdjuntosDeSesion`).
   **Una propuesta NO pasa por el aumentador**: el encargo es la petición del orquestador, editable —él la escribió con la

@@ -295,6 +295,28 @@ describe("una sesión con el motor TrueForge", () => {
     expect(vistos[1]!.join("\n")).toContain("NO las hagas en este turno");
   }, 20_000);
 
+  it("cuando un hijo deja un plan GRANDE, el harness le recuerda al raíz que puede repartirlo; solo si la sesión puede proponer", async () => {
+    // Sesión real (Maset): con el plan de seis tareas ya escrito, el orquestador siguió preguntando sin volver sobre el
+    // reparto. El recordatorio va en el informe del hijo, en código, justo cuando el plan existe.
+    const PLAN = "# Plan\n\n## T1 — Datos\n\n- [ ] tabla\n\n## T2 — Pantalla\n\n- [ ] lista\n\n## T3 — Menú\n\n- [ ] tarjeta\n";
+    const guion = () => [
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "c1", name: "create_sub_agent", args: JSON.stringify({ name: "consultant-xone", input: "planifica" }) }] })],
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "e1", name: "write_file", args: JSON.stringify({ file_path: "/planes/menu/TASKS.md", content: PLAN }) }] })],
+      [new AIMessageChunk({ content: "Plan escrito." })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ];
+    const con = modelosConGuion(guion());
+    const s1 = await abrirSesionTrueforge({ raiz: proyecto(), modelos: con.m, entorno: ENTORNO, skills: CATALOGO, puedeProponerTareas: true });
+    await s1.turno("rediseña el menú y crea la pantalla", piel().p);
+    const delRaiz = con.vistos[3]!.join("\n");
+    expect(delRaiz).toContain("/planes/menu/TASKS.md (3 tareas)");
+    expect(delRaiz).toContain("proponer_tareas");
+    const sin = modelosConGuion(guion());
+    const s2 = await abrirSesionTrueforge({ raiz: proyecto(), modelos: sin.m, entorno: ENTORNO, skills: CATALOGO });
+    await s2.turno("rediseña el menú y crea la pantalla", piel().p);
+    expect(sin.vistos[3]!.join("\n")).not.toContain("El plan que acaba de quedar escrito es grande");
+  }, 30_000);
+
   it("sin puedeProponerTareas el raíz no tiene la tool ni su párrafo, y un hijo tampoco con ella", async () => {
     const sin = modelosConGuion([[new AIMessageChunk({ content: "Hola." })]]);
     const s1 = await abrirSesionTrueforge({ raiz: proyecto(), modelos: sin.m, entorno: ENTORNO, skills: CATALOGO });

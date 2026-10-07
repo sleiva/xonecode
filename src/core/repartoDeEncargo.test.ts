@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Acto } from "./actos.js";
-import { motivoDePropuestaInaceptable, propuestaPendiente, tareasEncadenadas, TOPE_DE_TAREAS_PROPUESTAS } from "./repartoDeEncargo.js";
+import { avisoDeReparto, motivoDePropuestaInaceptable, propuestaPendiente, tareasEncadenadas, TAREAS_PARA_RECORDAR_EL_REPARTO, TOPE_DE_TAREAS_PROPUESTAS } from "./repartoDeEncargo.js";
 
 const dos = {
   motivo: "son dos pantallas independientes",
@@ -86,5 +86,18 @@ describe("propuestaPendiente", () => {
     expect(propuestaPendiente([propuesta, { tipo: "propuesta-resuelta", propuesta: "p1", encoladas: ["a", "b"] }], "p1")).toBeUndefined();
     expect(propuestaPendiente([propuesta, { tipo: "propuesta-resuelta", propuesta: "p1" }], "p1")).toBeUndefined();
     expect(propuestaPendiente([propuesta], "otra")).toBeUndefined();
+  });
+});
+
+describe("avisoDeReparto", () => {
+  it("un plan con varias tareas recuerda proponer el reparto, nombrando el plan y la tool", () => {
+    const aviso = avisoDeReparto([{ ruta: "/planes/menu/TASKS.md", tareas: 6 }]);
+    expect(aviso).toContain("/planes/menu/TASKS.md (6 tareas)");
+    expect(aviso).toContain("proponer_tareas");
+    expect(aviso).toContain("Si cabe en este turno, sigue");
+  });
+  it("uno pequeño, o ninguno, no dice nada", () => {
+    expect(avisoDeReparto([{ ruta: "/planes/x/TASKS.md", tareas: TAREAS_PARA_RECORDAR_EL_REPARTO - 1 }])).toBeUndefined();
+    expect(avisoDeReparto([])).toBeUndefined();
   });
 });

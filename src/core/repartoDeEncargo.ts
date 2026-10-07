@@ -106,3 +106,29 @@ export function propuestaPendiente(
   }
   return propuesta;
 }
+
+/**
+ * Desde cuántas tareas un plan se RECUERDA al orquestador que puede repartirlo. Tres porque dos son a menudo «el cambio
+ * y su prueba», que caben en un turno; los planes medidos que no cabían traían seis y siete.
+ */
+export const TAREAS_PARA_RECORDAR_EL_REPARTO = 3;
+
+/**
+ * El aviso del HARNESS al orquestador cuando un especialista le deja un plan grande (`/planes/<slug>/TASKS.md`).
+ *
+ * Existe por una sesión real (Maset, rediseño del menú y pantalla de Entradas/Salidas): el orquestador vio que el encargo
+ * era «candidate for proponer_tareas», decidió esperar al plan del analista para saberlo, y con el plan ya escrito —seis
+ * tareas— siguió preguntando detalles sin volver sobre ello. La regla estaba en su prompt; un prompt no es un contador,
+ * así que el recordatorio va en código, en el informe del hijo, justo cuando el plan existe. No decide por él: si cabe en
+ * el turno, sigue.
+ */
+export function avisoDeReparto(planes: readonly { ruta: string; tareas: number }[]): string | undefined {
+  const grandes = planes.filter((p) => p.tareas >= TAREAS_PARA_RECORDAR_EL_REPARTO);
+  if (grandes.length === 0) return undefined;
+  const cuales = grandes.map((p) => `${p.ruta} (${p.tareas} tareas)`).join(", ");
+  return (
+    `[harness] El plan que acaba de quedar escrito es grande: ${cuales}. Si no cabe en este turno, no lo hagas aquí: ` +
+    `pregunta lo que te falte y propón repartirlo con ${NOMBRE_PROPONER_TAREAS}, en tareas de fondo que corren en orden, ` +
+    "cada una con sus maquetas y su parte del plan. Si cabe en este turno, sigue."
+  );
+}

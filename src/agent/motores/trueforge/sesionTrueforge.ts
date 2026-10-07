@@ -92,7 +92,8 @@ import {
 import { crearConectoresDeSesion, tarjetaDeRemota } from "./toolsDeConectores.js";
 import { CONECTOR_STITCH, crearTraerDeStitch } from "./traerDeStitch.js";
 import { crearProponerTareas, REPARTIR_EN_TAREAS } from "./proponerTareas.js";
-import type { PropuestaDeTareas } from "../../../core/repartoDeEncargo.js";
+import { avisoDeReparto, type PropuestaDeTareas } from "../../../core/repartoDeEncargo.js";
+import { leerTareasDelPlan, RUTA_DE_TASKS } from "../../../core/tareasDelPlan.js";
 import { esDeLaMaqueta } from "../../../core/stitch.js";
 import { recibeConectores } from "../../../core/conectores.js";
 import { buscarMaqueta, medirContraMaqueta, resumenDeMedida, textoDeMedidaAutomatica, ultimaCaptura } from "./medidaAutomatica.js";
@@ -703,6 +704,30 @@ export async function abrirSesionTrueforge(
   const artefactosPorAnunciar: Artefacto[] = [];
   /** Las propuestas de reparto (`proponer_tareas`) que aún no se han anunciado: van a la persona como evento. */
   const propuestasPorAnunciar: PropuestaDeTareas[] = [];
+  /** Los planes por los que ya se recordó el reparto: una vez por plan, no en cada vuelta del analista. */
+  const planesRecordados = new Set<string>();
+  /**
+   * El recordatorio de repartir (`core/repartoDeEncargo.ts#avisoDeReparto`) cuando un hijo del raíz deja escrito un
+   * `TASKS.md` grande, y solo si esta sesión puede proponer. Se lee el plan por el MISMO backend del agente; si no se
+   * puede leer, no se recuerda nada (es un recordatorio, no una regla).
+   */
+  const avisoDeRepartoTras = async (escritos: ReadonlyMap<string, CambioDeFichero>): Promise<string | undefined> => {
+    if (opciones.puedeProponerTareas !== true) return undefined;
+    const planes: { ruta: string; tareas: number }[] = [];
+    for (const ruta of escritos.keys()) {
+      if (!RUTA_DE_TASKS.test(ruta) || planesRecordados.has(ruta)) continue;
+      try {
+        const r = (await (backend as unknown as { read: (r: string, o: number, l: number) => Promise<{ content?: unknown }> }).read(ruta, 0, 100_000));
+        if (typeof r.content !== "string") continue;
+        planes.push({ ruta, tareas: leerTareasDelPlan(r.content).tareas.length });
+      } catch {
+        // Sin plan legible no hay recordatorio.
+      }
+    }
+    const aviso = avisoDeReparto(planes);
+    if (aviso !== undefined) for (const p of planes) planesRecordados.add(p.ruta);
+    return aviso;
+  };
   /** Las IMÁGENES que dejó el turno en curso, para el crítico de pantalla. Se vacía al empezar
    *  cada turno: una captura de antes enseña la pantalla de antes. */
   let capturasDelTurno: Artefacto[] = [];
@@ -1537,9 +1562,12 @@ export async function abrirSesionTrueforge(
           const nombre = especialistaDeHilo.get(deHilo);
           const quien = especialistas().find((a) => a.nombre === nombre);
           const medida = medidaTrasProbar(deHilo, hiloPadre, quien);
-          const texto =
+          const escritos = escritosDeCadaHilo.get(deHilo) ?? new Map<string, CambioDeFichero>();
+          const informe =
             medida ??
-            textoDelInforme(quienEs.get(deHilo) ?? deHilo, escritosDeCadaHilo.get(deHilo) ?? new Map(), quien !== undefined && quien.motor === "modelo" && clasesDeTools(quien) === "escribe", ultimaMedidaDeHilo.get(deHilo));
+            textoDelInforme(quienEs.get(deHilo) ?? deHilo, escritos, quien !== undefined && quien.motor === "modelo" && clasesDeTools(quien) === "escribe", ultimaMedidaDeHilo.get(deHilo));
+          const reparto = hiloPadre === HILO_RAIZ ? await avisoDeRepartoTras(escritos) : undefined;
+          const texto = reparto === undefined ? informe : [informe, reparto].filter((t) => t !== undefined).join("\n\n");
           escritosDeCadaHilo.delete(deHilo);
           nacimientoDeHilo.delete(deHilo);
           if (texto !== undefined) informesPendientes.set(hiloPadre, [...(informesPendientes.get(hiloPadre) ?? []), texto]);
