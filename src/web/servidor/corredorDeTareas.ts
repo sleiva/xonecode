@@ -826,6 +826,9 @@ export function crearCorredorDeTareas(opciones: {
          */
         ...(medida.preexistentes === undefined ? {} : { preexistentes: medida.preexistentes }),
         ...(medida.cambiados === undefined ? {} : { cambiados: medida.cambiados }),
+        // Y lo que midieron las comprobaciones visuales: sin ellas, un criterio que pide validar contra la maqueta era
+        // un rojo seguro aunque se hubiera validado (medido en Maset).
+        ...(medida.comprobacionesVisuales === undefined ? {} : { comprobacionesVisuales: medida.comprobacionesVisuales }),
       })
       .then((v) => void (veredicto = v))
       .catch((error: unknown) => {

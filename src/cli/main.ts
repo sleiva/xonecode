@@ -755,6 +755,7 @@ export function crearEjecutorReal(
       verificador: resultado.verificador,
       pendientes: resultado.pendientes,
       ...(resultado.topeAgotado === undefined ? {} : { topeAgotado: resultado.topeAgotado }),
+      ...(resultado.comprobacionesVisuales === undefined ? {} : { comprobacionesVisuales: resultado.comprobacionesVisuales }),
       ...(resultado.hallazgos === undefined ? {} : { hallazgos: resultado.hallazgos }),
       ...(resultado.motivoSinVerificar === undefined
         ? {}

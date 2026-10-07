@@ -156,6 +156,7 @@ describe("el ejecutor real DEVUELVE lo que el turno informó", () => {
       verificador: "rojo",
       pendientes: 3,
       topeAgotado: 50,
+      comprobacionesVisuales: ["comparar_capturas sobre /artefactos/c.png: distancia vertical 4%"],
       hallazgos: [{ code: "COLL_MISSING_PROGID", severidad: "error" as const, mensaje: "falta progid" }],
       preexistentes: 2,
       motivoSinVerificar: "no está xone-simulator en el PATH",

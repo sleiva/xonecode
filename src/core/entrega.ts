@@ -75,6 +75,13 @@ export interface ResultadoDeTurno {
    */
   topeAgotado?: number;
   /**
+   * Las comprobaciones VISUALES del turno, una línea cada una y medidas por el harness: lo que dio cada
+   * `comparar_capturas` y `xone_critica_visual`, y el crítico de pantalla del cierre. Van al juez de QA como HECHO:
+   * medido en una tarea real (Maset), el juez dictó rojo porque «no consta la validación visual» que el criterio pedía,
+   * con seis comparaciones y seis críticas hechas en ese turno — no recibía nada de eso. Ausente = no hubo ninguna.
+   */
+  comprobacionesVisuales?: string[];
+  /**
    * Los hallazgos del turno, si el verificador corrió. Es lo que el informe del verificador
    * ya declara que viaja «al ejecutor como brief, al juez como hecho»
    * (`core/ports.ts#InformeVerificacion`).
@@ -370,3 +377,22 @@ export const motivoDeTopeAgotado = (tope: number, pendientes: number): string =>
   `agotó el tope de ${tope} rondas de escritura de una tarea` +
   (pendientes > 0 ? `; las últimas ${pendientes} escritura(s) no se aplicaron` : "") +
   ", y el verificador no llegó a correr. Pulsa «Continuar» para que siga donde lo dejó";
+
+/** Cuántas comprobaciones visuales llegan al juez: las ÚLTIMAS, que son las que describen cómo quedó. */
+export const TOPE_DE_COMPROBACIONES_AL_JUEZ = 8;
+
+/**
+ * Una comprobación visual en UNA línea para el juez: la herramienta, sobre qué captura, y lo primero que dijo, recortado.
+ * Sin saltos de línea: acaba en un prompt y en una lista que se lee de un vistazo.
+ */
+export function lineaDeComprobacion(quien: string, sobre: string | undefined, texto: string, tope = 300): string {
+  const dicho = texto
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l !== "")
+    .slice(0, 3)
+    .join(" · ")
+    .replace(/\s+/g, " ");
+  const cuerpo = dicho.length > tope ? `${dicho.slice(0, tope)}…` : dicho;
+  return `${quien}${sobre === undefined ? "" : ` sobre ${sobre}`}: ${cuerpo === "" ? "(sin texto)" : cuerpo}`;
+}

@@ -497,6 +497,9 @@ export interface CasoDeJuez {
    *  **Ausente y vacía no son lo mismo**: ausente es «no se pudo preguntar a git» y `[]` es
    *  «git dice que no cambió nada». Colapsarlas inventaría un cargo o lo taparía. */
   cambiados?: readonly string[];
+  /** Lo que dieron las comprobaciones VISUALES del turno, medido por el harness (`ResultadoDeTurno.comprobacionesVisuales`).
+   *  Ausente = no hubo ninguna: y entonces «no consta» sí es la verdad. */
+  comprobacionesVisuales?: readonly string[];
 }
 
 /**

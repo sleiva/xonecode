@@ -168,6 +168,21 @@ const COMO_SE_LEEN_LOS_HALLAZGOS = [
 ];
 
 /** Cómo se le cuenta al juez lo que hizo el verificador. `no-corrio` se DICE. */
+/**
+ * Las comprobaciones VISUALES del turno, medidas por el harness. Sin este párrafo, un criterio de aceptación que pedía
+ * validar contra la maqueta era un rojo seguro: medido en una tarea real (Maset), el juez dijo «no consta» de seis
+ * comparaciones y seis críticas hechas. Y sin ninguna, se le DICE que no hubo, para que «no consta» sea la verdad.
+ */
+const parrafoDeLoVisual = (caso: CasoDeJuez): string[] =>
+  caso.comprobacionesVisuales === undefined || caso.comprobacionesVisuales.length === 0
+    ? ["Comprobaciones visuales en este turno: NINGUNA (ni comparación con la maqueta ni crítica de pantalla).", ""]
+    : [
+        "Comprobaciones visuales que se HICIERON en este turno, medidas por el harness (no contadas por el agente; las",
+        "últimas, en orden). Cuentan como constancia de la validación visual; juzga por lo que DIJERON, no por si existen:",
+        ...caso.comprobacionesVisuales.map((c) => `- ${c}`),
+        "",
+      ];
+
 const parrafoDelVerificador = (caso: CasoDeJuez): string[] => {
   if (caso.verificador === undefined) return [];
   if (caso.verificador === "no-corrio") {
@@ -300,6 +315,7 @@ function promptDelJuez(caso: CasoDeJuez): string {
     "",
     ...parrafoDelVerificador(caso),
     "",
+    ...parrafoDeLoVisual(caso),
     /**
      * Los dos límites, y la frontera entre ellos DICHA.
      *

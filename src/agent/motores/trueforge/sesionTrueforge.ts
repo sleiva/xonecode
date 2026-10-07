@@ -103,6 +103,7 @@ import { encenderTrazaDeErrores } from "../../trazaDeErroresEnDisco.js";
 import { anotarPaso } from "../../../core/trazaDeErrores.js";
 import { entornoConDepuracion } from "../../turno/depuracion.js";
 import { detalleDe, parametrosDe } from "../../turno/resumenDeTool.js";
+import { lineaDeComprobacion, TOPE_DE_COMPROBACIONES_AL_JUEZ } from "../../../core/entrega.js";
 import { apartarMemoria, cargarMemoria, fotoSaneada, guardarMemoria, saldarColgadas, textoDeInterrupcion, textoDeMemoriaDescartada, type FotoDeHilo } from "./memoriaTrueforge.js";
 import { crearNota, sobrantes, type Nota } from "./notas.js";
 import { crearMemoriaDeEspecialistas } from "./memoriaDeEspecialistas.js";
@@ -126,7 +127,7 @@ import { crearMarcarCriteriosDelPlan } from "../../grafo/marcarCriteriosDelPlan.
 import { crearUnirSecciones } from "../../grafo/unirSecciones.js";
 import { crearIncorporarAdjunto, recibeIncorporarAdjunto } from "../../grafo/incorporarAdjunto.js";
 import { crearCriticaVisual } from "../../grafo/criticaVisual.js";
-import { crearCompararCapturas } from "../../grafo/compararCapturas.js";
+import { crearCompararCapturas, NOMBRE_COMPARAR_CAPTURAS } from "../../grafo/compararCapturas.js";
 import { crearAtributosXone, NOMBRE_ATRIBUTOS_XONE } from "../../grafo/atributosXone.js";
 import { crearDiferenciaDeCapturas } from "../../grafo/diferenciaDeCapturas.js";
 import { crearLectorDeReferencias, crearLocalizadorDeHtmlDeMaqueta } from "../../grafo/lectorDeReferencias.js";
@@ -731,6 +732,11 @@ export async function abrirSesionTrueforge(
   /** Las IMÁGENES que dejó el turno en curso, para el crítico de pantalla. Se vacía al empezar
    *  cada turno: una captura de antes enseña la pantalla de antes. */
   let capturasDelTurno: Artefacto[] = [];
+  /** Lo que dieron las comprobaciones visuales del turno, una línea cada una, para el juez de QA (`ResultadoDeTurno`). */
+  let comprobacionesDelTurno: string[] = [];
+  const anotarComprobacion = (linea: string): void => {
+    comprobacionesDelTurno = [...comprobacionesDelTurno, linea].slice(-TOPE_DE_COMPROBACIONES_AL_JUEZ);
+  };
   function* propuestasPendientes(): Generator<DomainEvent> {
     while (propuestasPorAnunciar.length > 0) {
       const p = propuestasPorAnunciar.shift()!;
@@ -1532,6 +1538,10 @@ export async function abrirSesionTrueforge(
       if (evento.type === "tool.response" && evento.tool_call_id !== undefined) {
         // Cuánto METIÓ en el contexto lo que devolvió: los caracteres, nunca el contenido.
         const llamada = llamadas.get(claveDe(deHilo, evento.tool_call_id));
+        // Las comprobaciones VISUALES, para el juez: lo que dijeron, medido aquí y no contado por el agente.
+        if (llamada !== undefined && (llamada.nombre === NOMBRE_COMPARAR_CAPTURAS || llamada.nombre === "xone_critica_visual") && typeof evento.content === "string") {
+          anotarComprobacion(lineaDeComprobacion(llamada.nombre, detalleDe(llamada.nombre, llamada.args), evento.content));
+        }
         const chars = typeof evento.content === "string" ? evento.content.length : 0;
         diagnostico?.resultado?.(llamada?.nombre, llamada === undefined ? undefined : detalleDe(llamada.nombre, llamada.args), chars);
         // Lo que ESCRIBIÓ este hilo, para decírselo a quien lo llamó al terminar (`informesDeHijos.ts`).
@@ -1656,6 +1666,7 @@ export async function abrirSesionTrueforge(
       const trackerAlEmpezar = { input: tracker.input, output: tracker.output, cache: tracker.cache, calls: tracker.calls };
       externosDelTurno = 0;
       capturasDelTurno = [];
+      comprobacionesDelTurno = [];
       /** El encargo de ESTE turno tal cual se pidió, y el mismo con la última pregunta y su
        *  respuesta al lado, que es lo que se juzga y se repara (ver `flujo`). Ausente = no consta. */
       let encargoDelTurno: string | undefined;
@@ -1937,6 +1948,15 @@ export async function abrirSesionTrueforge(
             try {
               const bytes = readFileSync(join(carpeta, captura.nombre));
               const visual = await opciones.criticaVisual!({ base64: bytes.toString("base64"), mime: captura.mime ?? "image/png" }, captura.nombre);
+              anotarComprobacion(
+                lineaDeComprobacion(
+                  "crítico de pantalla del harness, al cerrar",
+                  captura.nombre,
+                  visual.veredicto === "rojo" && visual.observaciones.length > 0
+                    ? `rojo, ${visual.observaciones.length} defecto(s): ${visual.observaciones.join("; ")}`
+                    : visual.veredicto
+                )
+              );
               if (visual.veredicto === "rojo" && visual.observaciones.length > 0) {
                 observacionesVisuales = visual.observaciones;
                 yield {
@@ -2111,6 +2131,7 @@ export async function abrirSesionTrueforge(
         verificador: veredicto,
         pendientes: sinResolver,
         ...(cortadoPorTope ? { topeAgotado: tope } : {}),
+        ...(comprobacionesDelTurno.length === 0 ? {} : { comprobacionesVisuales: comprobacionesDelTurno }),
         ...(hallazgosDelTurno.length === 0 ? {} : { hallazgos: hallazgosDelTurno }),
         ...(preexistentesDelTurno === undefined ? {} : { preexistentes: preexistentesDelTurno }),
         ...(motivoSinVerificar === undefined ? {} : { motivoSinVerificar }),

@@ -438,6 +438,19 @@ describe("una sesión con el motor TrueForge", () => {
     expect(sinNadie.topeAgotado).toBeUndefined();
   }, 20_000);
 
+  it("lo que dice cada comparar_capturas del turno vuelve en el resultado, para el juez de QA", async () => {
+    const raiz = proyecto();
+    const artefactos = mkdtempSync(join(tmpdir(), "xonecode-artefactos-"));
+    const { m } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "k1", name: "comparar_capturas", args: JSON.stringify({ captura: "/artefactos/c.png", referencia: "/artefactos/m.png" }) }] })],
+      [new AIMessageChunk({ content: "Comparado." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, artefactos });
+    const r = await s.turno("compara", piel().p);
+    expect(r.comprobacionesVisuales).toHaveLength(1);
+    expect(r.comprobacionesVisuales![0]).toMatch(/^comparar_capturas/);
+  }, 20_000);
+
   it("cancelar MIENTRAS se decide una aprobación no aplica nada", async () => {
     const raiz = proyecto();
     let sesion: Awaited<ReturnType<typeof abrirSesionTrueforge>> | undefined;

@@ -53,6 +53,22 @@ describe("el juez entra por PUERTO y usa el papel afilado", () => {
     ]);
   });
 
+  it("el juez RECIBE las comprobaciones visuales medidas por el harness, y si no hubo, se le dice", async () => {
+    // Medido en Maset: rojo por «no consta la validación visual» con seis comparaciones hechas que el juez no veía.
+    const prompts: string[] = [];
+    const juez = crearJuezDeTarea({
+      invocar: async (_papel, prompt) => {
+        prompts.push(prompt);
+        return JSON.stringify({ veredicto: "verde", resumen: "bien" });
+      },
+    });
+    await juez.juzgar({ encargo: "x", raiz: RAIZ, autorizadas: [], comprobacionesVisuales: ["comparar_capturas sobre /artefactos/c.png: distancia vertical 4%"] });
+    await juez.juzgar({ encargo: "x", raiz: RAIZ, autorizadas: [] });
+    expect(prompts[0]).toContain("- comparar_capturas sobre /artefactos/c.png: distancia vertical 4%");
+    expect(prompts[0]).toContain("Cuentan como constancia de la validación visual");
+    expect(prompts[1]).toContain("Comprobaciones visuales en este turno: NINGUNA");
+  });
+
   it("un veredicto que no es ninguno de los dos tampoco es verde", async () => {
     const juez = crearJuezDeTarea({
       invocar: async () => JSON.stringify({ veredicto: "quizá", resumen: "pues no sé" }),

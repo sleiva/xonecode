@@ -857,6 +857,10 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   `core/entrega.ts#motivoDeTopeAgotado`): «agotó el tope de N rondas… Pulsa «Continuar»», y no «quedaron escrituras
   esperando aprobación», que en una tarea sin nadie a quien preguntar no decía que se había cortado. Y una respuesta del
   juez sin el JSON pedido se apunta recortada en la traza de errores (`juezDeTarea#juzgar`).
+- **El juez recibe las comprobaciones VISUALES del turno, medidas por el harness** (`ResultadoDeTurno.comprobacionesVisuales`,
+  `CasoDeJuez`, `lineaDeComprobacion`): una línea por `comparar_capturas`, `xone_critica_visual` y el crítico del cierre,
+  las últimas `TOPE_DE_COMPROBACIONES_AL_JUEZ`. Sin ellas, un criterio que pedía validar contra la maqueta era rojo seguro
+  —«no consta»— aunque se hubiera validado; sin ninguna, el prompt dice que no hubo.
 - **`Tarea.autorizadas` guarda lo AUTORIZADO, no lo escrito.** La verdad de lo que cambió está en
   la ref de git de la sesión.
 - **Un solo corredor por máquina, y el cerrojo no lo garantiza solo**: lo hace verdad
