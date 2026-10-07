@@ -69,6 +69,12 @@ export interface ResultadoDeTurno {
    */
   pendientes: number;
   /**
+   * El tope de rondas de escritura que el turno AGOTÓ, si se cortó por eso. Ausente = no se cortó por el tope (o el
+   * motor no lo dice). Con él, el motivo dice la verdad: «agotó el tope de N rondas», no «quedaron escrituras esperando
+   * aprobación», que en una tarea —sin nadie a quien preguntar— hacía pensar que faltaba aprobar algo.
+   */
+  topeAgotado?: number;
+  /**
    * Los hallazgos del turno, si el verificador corrió. Es lo que el informe del verificador
    * ya declara que viaja «al ejecutor como brief, al juez como hecho»
    * (`core/ports.ts#InformeVerificacion`).
@@ -297,14 +303,17 @@ export function condicionesDeEntrega(medida: MedidaDeEntrega): Entrega {
         ? `el verificador dejó ${errores} error(es) sin corregir`
         : "el verificador acabó en rojo"
     );
-  } else if (medida.verificador === "no-corrio") {
+  } else if (medida.verificador === "no-corrio" && medida.topeAgotado === undefined) {
+    // Cortado por el tope, el «no corrió» es consecuencia del corte y se dice con él, abajo.
     fallos.push(
       `el verificador no corrió en este turno${
         medida.motivoSinVerificar === undefined ? "" : ` (${medida.motivoSinVerificar})`
       }`
     );
   }
-  if (medida.pendientes > 0) {
+  if (medida.topeAgotado !== undefined) {
+    fallos.push(motivoDeTopeAgotado(medida.topeAgotado, medida.pendientes));
+  } else if (medida.pendientes > 0) {
     fallos.push(`quedaron ${medida.pendientes} escritura(s) esperando aprobación, y no se aplicaron`);
   }
   if (!medida.revisable) {
@@ -351,3 +360,13 @@ export function decisionDeEntrega(
   // es la única condición de CONTENIDO que quedaba, y eso es lo que dice.
   return { entregable: true, ...(condiciones.salvedad === undefined ? {} : { salvedad: condiciones.salvedad }) };
 }
+
+/**
+ * El motivo de una tarea que agotó su tope de rondas de escritura: qué pasó, qué no se aplicó y cómo seguir. Medido en una
+ * tarea real (Maset), el motivo de antes —«quedaron 3 escritura(s) esperando aprobación»— no decía que el turno se había
+ * cortado ni qué hacer con una ventana casi lista.
+ */
+export const motivoDeTopeAgotado = (tope: number, pendientes: number): string =>
+  `agotó el tope de ${tope} rondas de escritura de una tarea` +
+  (pendientes > 0 ? `; las últimas ${pendientes} escritura(s) no se aplicaron` : "") +
+  ", y el verificador no llegó a correr. Pulsa «Continuar» para que siga donde lo dejó";

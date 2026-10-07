@@ -21,6 +21,7 @@
  *    convertido en «rojo» culparía al trabajo del agente de un problema de la máquina; y
  *    convertido en «verde» entregaría sin haber preguntado.
  */
+import { anotarError } from "../../core/trazaDeErrores.js";
 import type { CasoDeJuez, JuezDeTareaPort, ModelosPort, Papel } from "../../core/ports.js";
 import type { HallazgoDelTurno } from "../../core/events.js";
 import type { VeredictoDeTarea } from "../../core/entrega.js";
@@ -402,7 +403,25 @@ export function crearJuezDeTarea(opciones: { invocar: InvocarModelo }): JuezDeTa
         if (error instanceof ErrorDelJuezDeTarea) throw error;
         throw new ErrorDelJuezDeTarea(error instanceof Error ? error.name : "error al preguntar");
       }
-      return veredictoDeTexto(texto);
+      const veredicto = veredictoDeTexto(texto);
+      /**
+       * Una respuesta sin el JSON pedido se APUNTA, recortada: medido en una tarea real (Maset), la tarjeta decía «el juez
+       * no contestó con el JSON que se le pidió» y no había forma de saber qué contestó. Va al registro de errores (la
+       * casilla «Depurar»), que quita las rutas de la máquina; es texto del modelo sobre nombres de ficheros, nunca su
+       * contenido.
+       */
+      if (veredicto.veredicto === "indeterminado") {
+        anotarError(
+          "juezDeTarea#juzgar",
+          Object.assign(new Error(`${veredicto.resumen}. Contestó (${texto.length} caracteres): ${texto.trim() === "" ? "(vacío)" : unaFrase(texto, TOPE_DE_RESPUESTA_APUNTADA)}`), {
+            name: "RespuestaDelJuez",
+          })
+        );
+      }
+      return veredicto;
     },
   };
 }
+
+/** Cuánto de una respuesta del juez sin JSON se apunta: lo justo para ver qué hizo en vez de contestar. */
+export const TOPE_DE_RESPUESTA_APUNTADA = 600;

@@ -3,6 +3,7 @@ import {
   condicionesDeEntrega,
   decisionDeEntrega,
   medidaDeEntrega,
+  motivoDeTopeAgotado,
   SALVEDAD_SIN_ESCRITURAS,
   type MedidaDeEntrega,
 } from "./entrega.js";
@@ -32,6 +33,22 @@ describe("condicionesDeEntrega: lo que comprueba el CÓDIGO", () => {
   it("nada pendiente de aprobar y trabajo revisable son condiciones, no detalles", () => {
     expect(condicionesDeEntrega({ ...VERDE, pendientes: 2 }).entregable).toBe(false);
     expect(condicionesDeEntrega({ ...VERDE, revisable: false }).entregable).toBe(false);
+  });
+
+  it("cortada por el TOPE de rondas, el motivo lo dice y dice cómo seguir, no «esperando aprobación»", () => {
+    // Medido en una tarea real: «quedaron 3 escritura(s) esperando aprobación» en una tarea —sin nadie a quien
+    // preguntar— no decía que el turno se había cortado.
+    const r = condicionesDeEntrega({
+      ...VERDE,
+      verificador: "no-corrio",
+      motivoSinVerificar: "se agotó el tope de 50 rondas de escritura",
+      pendientes: 3,
+      topeAgotado: 50,
+    });
+    expect(r).toEqual({ entregable: false, motivo: motivoDeTopeAgotado(50, 3) });
+    expect(motivoDeTopeAgotado(50, 3)).toBe(
+      "agotó el tope de 50 rondas de escritura de una tarea; las últimas 3 escritura(s) no se aplicaron, y el verificador no llegó a correr. Pulsa «Continuar» para que siga donde lo dejó"
+    );
   });
 
   it("un verificador que NO CORRIÓ no es verde", () => {

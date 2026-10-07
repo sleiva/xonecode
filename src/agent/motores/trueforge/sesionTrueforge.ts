@@ -1883,7 +1883,7 @@ export async function abrirSesionTrueforge(
           const cambios = cambiosQueSeVerifican(await instantanea.cambios());
           escribioProyecto = cambios.length > 0;
           if (!salida.limpia) {
-            if (sinResolver > 0) motivoSinVerificar = "quedaron escrituras sin resolver";
+            if (sinResolver > 0) motivoSinVerificar = cortadoPorTope ? `se agotó el tope de ${tope} rondas de escritura` : "quedaron escrituras sin resolver";
             return;
           }
           veredicto = "no-corrio";
@@ -2110,6 +2110,7 @@ export async function abrirSesionTrueforge(
         cortadoPorTope,
         verificador: veredicto,
         pendientes: sinResolver,
+        ...(cortadoPorTope ? { topeAgotado: tope } : {}),
         ...(hallazgosDelTurno.length === 0 ? {} : { hallazgos: hallazgosDelTurno }),
         ...(preexistentesDelTurno === undefined ? {} : { preexistentes: preexistentesDelTurno }),
         ...(motivoSinVerificar === undefined ? {} : { motivoSinVerificar }),

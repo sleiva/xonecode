@@ -422,6 +422,22 @@ describe("una sesión con el motor TrueForge", () => {
     expect(r.pendientes).toBe(1);
   }, 20_000);
 
+  it("agotado el tope de rondas, el resultado dice CUÁL (topeAgotado) para que el motivo sea verdad; sin aprobador, no", async () => {
+    const raiz = proyecto();
+    const s = await abrirSesionTrueforge({
+      raiz,
+      modelos: modelos(),
+      entorno: ENTORNO,
+      skills: CATALOGO,
+      topeDeRondas: 0,
+      pedirAprobacion: async (ps) => new Map(ps.map((p) => [p.id, { type: "approve" as const }])),
+    });
+    const r = await s.turno("escribe una nota", piel().p);
+    expect(r).toMatchObject({ pendientes: 1, topeAgotado: 0, motivoSinVerificar: "se agotó el tope de 0 rondas de escritura" });
+    const sinNadie = await (await abrirSesionTrueforge({ raiz: proyecto(), modelos: modelos(), entorno: ENTORNO, skills: CATALOGO })).turno("escribe una nota", piel().p);
+    expect(sinNadie.topeAgotado).toBeUndefined();
+  }, 20_000);
+
   it("cancelar MIENTRAS se decide una aprobación no aplica nada", async () => {
     const raiz = proyecto();
     let sesion: Awaited<ReturnType<typeof abrirSesionTrueforge>> | undefined;

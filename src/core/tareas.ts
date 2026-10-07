@@ -226,8 +226,13 @@ export const CONCURRENCIA_POR_OMISION = 2;
  * — o sea que un tope corto aparca con un motivo VERDADERO en vez de dar por bueno un
  * trabajo a medias. Un número provisional con un fallo honesto se afina luego; lo que no se
  * puede es que al agotarse mienta.
+ *
+ * **Subido a 50 por una medida**: una tarea que ajustaba una pantalla contra su maqueta (Maset, Entradas/Salidas) gastó
+ * las 20 en un solo turno —editar, desplegar, capturar, criticar, volver a editar, una edición por fichero y ronda— y se
+ * cortó con tres ediciones sin aplicar y el simulador sin correr, con la ventana casi lista. Ese ciclo de diseño es el
+ * trabajo normal de una tarea, no un bucle; a petición de la persona, el mismo 50 que el chat.
  */
-export const TOPE_DE_RONDAS_DE_TAREA = 20;
+export const TOPE_DE_RONDAS_DE_TAREA = 50;
 
 /**
  * Qué tareas pueden arrancar AHORA.

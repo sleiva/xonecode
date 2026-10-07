@@ -155,6 +155,7 @@ describe("el ejecutor real DEVUELVE lo que el turno informó", () => {
     const informeCompleto: Required<ResultadoDeTurno> = {
       verificador: "rojo",
       pendientes: 3,
+      topeAgotado: 50,
       hallazgos: [{ code: "COLL_MISSING_PROGID", severidad: "error" as const, mensaje: "falta progid" }],
       preexistentes: 2,
       motivoSinVerificar: "no está xone-simulator en el PATH",

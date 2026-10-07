@@ -7,6 +7,7 @@ import {
   invocarConModelos,
 } from "./juezDeTarea.js";
 import type { JuezDeTareaPort, Papel } from "../../core/ports.js";
+import { ponerSumideroDeErrores, type ErrorAnotado, type PasoAnotado } from "../../core/trazaDeErrores.js";
 
 /** Una raíz cualquiera: `CasoDeJuez.raiz` existe para que el papel `afilado` se resuelva con
  *  el `config.json` del PROYECTO además del global, y aquí el `invocar` está doblado y no
@@ -36,6 +37,20 @@ describe("el juez entra por PUERTO y usa el papel afilado", () => {
     expect(v.veredicto).toBe("indeterminado");
     // Y lo dice, porque de aquí sale lo que se lee en la tarjeta.
     expect(v.resumen).not.toBe("");
+  });
+
+  it("y lo que contestó se APUNTA, recortado, en el registro de errores: sin eso no había forma de saber qué dijo", async () => {
+    const apuntados: (ErrorAnotado | PasoAnotado)[] = [];
+    ponerSumideroDeErrores((a) => void apuntados.push(a));
+    try {
+      await crearJuezDeTarea({ invocar: async () => "Pensándolo bien, el trabajo parece correcto." }).juzgar({ encargo: "x", raiz: RAIZ, autorizadas: [] });
+      await crearJuezDeTarea({ invocar: async () => JSON.stringify({ veredicto: "verde", resumen: "bien" }) }).juzgar({ encargo: "x", raiz: RAIZ, autorizadas: [] });
+    } finally {
+      ponerSumideroDeErrores(undefined);
+    }
+    expect(apuntados).toEqual([
+      expect.objectContaining({ donde: "juezDeTarea#juzgar", nombre: "RespuestaDelJuez", mensaje: expect.stringContaining("Pensándolo bien, el trabajo parece correcto.") }),
+    ]);
   });
 
   it("un veredicto que no es ninguno de los dos tampoco es verde", async () => {

@@ -806,8 +806,9 @@ detiene.
   con UNA opción `(Recommended)` se contesta con ella (`opcionRecomendada`), una sin marca vuelve al agente pidiéndole
   que decida y lo diga (`RESPUESTA_AUTONOMA_SIN_RECOMENDADA`), cada una POR SEPARADO —varias a la vez no son «todas o
   ninguna»— y con tope (`TOPE_DE_PREGUNTAS_CONTESTADAS_SOLAS`); todo se DICE en el chat. En supervisado llegan a la persona.
-  El tope de rondas de la consola es el MISMO 20 que el de una tarea
-  (`TOPE_DE_RONDAS_DE_CONSOLA`); sin nadie delante se queda el cinco de `MAX_APPROVAL_ROUNDS`. Lo
+  El tope de rondas de la consola vale lo MISMO que el de una tarea
+  (`TOPE_DE_RONDAS_DE_CONSOLA`, `TOPE_DE_RONDAS_DE_TAREA`; subidos juntos cuando el ajuste de una pantalla contra su
+  maqueta los agotaba en un turno); sin nadie delante se queda el cinco de `MAX_APPROVAL_ROUNDS`. Lo
   que `/aprobacion` EXPLICA lo decide el destino, no la línea (`Consola.modoALaVista`): donde el
   modo está siempre a la vista (la web) sale una línea; donde no (el terminal) salen los tres
   detalles.
@@ -852,6 +853,10 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   condiciones las comprueba el CÓDIGO (`core/entrega.ts#condicionesDeEntrega`) — verificador en
   VERDE (no correr **no es** verde), nada pendiente de aprobar, `revisable`, y autorizó escrituras
   y git no ve ningún cambio. `escribio` solo se afirma **con marca** de git.
+- **Una tarea cortada por el tope de rondas lo DICE** (`ResultadoDeTurno.topeAgotado`, puesto por TrueForge;
+  `core/entrega.ts#motivoDeTopeAgotado`): «agotó el tope de N rondas… Pulsa «Continuar»», y no «quedaron escrituras
+  esperando aprobación», que en una tarea sin nadie a quien preguntar no decía que se había cortado. Y una respuesta del
+  juez sin el JSON pedido se apunta recortada en la traza de errores (`juezDeTarea#juzgar`).
 - **`Tarea.autorizadas` guarda lo AUTORIZADO, no lo escrito.** La verdad de lo que cambió está en
   la ref de git de la sesión.
 - **Un solo corredor por máquina, y el cerrojo no lo garantiza solo**: lo hace verdad

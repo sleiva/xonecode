@@ -84,8 +84,11 @@ export function modoParaSesionNueva(valores: {
  * **Vive aparte del de la tarea aunque hoy valgan lo mismo**: son dos situaciones y no una
  * —aquí hay alguien que puede rechazar o pulsar parar, allí no hay nadie mirando—, así que
  * fundirlos ataría dos decisiones que se van a afinar por separado.
+ *
+ * **Subido a 50 junto con el de la tarea**, a petición de la persona: el ciclo de ajustar una pantalla contra su maqueta
+ * gastaba las 20 en un turno (medido en una tarea; el chat en autónomo trabaja igual). Siguen separados.
  */
-export const TOPE_DE_RONDAS_DE_CONSOLA = 20;
+export const TOPE_DE_RONDAS_DE_CONSOLA = 50;
 
 /**
  * El tope de rondas de `xonecode run --real` que se puede subir por ENTORNO, para medir.
