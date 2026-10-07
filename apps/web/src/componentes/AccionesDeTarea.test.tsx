@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { AccionesDeTarea } from "./AccionesDeTarea.js";
 import { Kanban } from "./Kanban.js";
 import { TareasDelProyecto } from "./TareasDelProyecto.js";
@@ -62,7 +62,7 @@ describe("AccionesDeTarea", () => {
     );
     const { container: enLista } = render(<TareasDelProyecto tareas={[tarea]} conectado {...manejadores} />);
     expect(accionesVisibles(enKanban)).toEqual(accionesVisibles(enLista));
-    expect(accionesVisibles(enKanban)).toContain("Enviar feedback");
+    expect(accionesVisibles(enKanban)).toContain("Enviar y continuar");
   });
 
   it("las dos vistas también coinciden en una tarea recién creada: solo descartar", () => {
@@ -205,7 +205,7 @@ describe("AccionesDeTarea", () => {
     const alEnviarFeedback = vi.fn();
     render(<AccionesDeTarea tarea={TAREA({ id: "t9" })} conectado alEnviarFeedback={alEnviarFeedback} />);
     const campo = screen.getByRole("textbox", { name: /tu feedback/i });
-    const boton = screen.getByRole("button", { name: /enviar feedback/i });
+    const boton = screen.getByRole("button", { name: /enviar y continuar/i });
     expect(boton).toHaveProperty("disabled", true);
     fireEvent.change(campo, { target: { value: "   " } });
     expect(boton).toHaveProperty("disabled", true);
@@ -223,5 +223,35 @@ describe("AccionesDeTarea", () => {
     render(<AccionesDeTarea tarea={TAREA()} conectado alReintentar={vi.fn()} />);
     expect(screen.getByText(/editando la tarea/i)).toBeTruthy();
     expect(screen.queryByRole("textbox")).toBeNull();
+  });
+});
+
+describe("AccionesDeTarea: continuar y arrancar ahora", () => {
+  const base = {
+    id: "t1", proyecto: "p1", proyectoNombre: "A", titulo: "T", peticion: "p", encargo: "e", adjuntos: [],
+    creada: "2026-10-07T10:00:00.000Z",
+  };
+  it("una aparcada ofrece «Continuar» sin texto; una nueva que puede arrancar ofrece «Arrancar ahora» y dice por qué espera", async () => {
+    const alContinuar = vi.fn(async () => undefined);
+    const alArrancarAhora = vi.fn(async () => "tu conversación en este proyecto está trabajando");
+    const { rerender } = render(<AccionesDeTarea tarea={{ ...base, estado: "requiere-atencion", motivo: "m" }} alContinuar={alContinuar} alArrancarAhora={alArrancarAhora} puedeArrancar />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    });
+    expect(alContinuar).toHaveBeenCalledWith("t1");
+    expect(screen.queryByRole("button", { name: "Arrancar ahora" })).toBeNull();
+    rerender(<AccionesDeTarea tarea={{ ...base, estado: "nuevo" }} alContinuar={alContinuar} alArrancarAhora={alArrancarAhora} puedeArrancar esperaPorTuConsola />);
+    expect(screen.getByText(/no arranca mientras tengas abierta la consola/)).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Arrancar ahora" }));
+    });
+    expect(alArrancarAhora).toHaveBeenCalledWith("t1");
+    expect(screen.getByRole("alert").textContent).toContain("está trabajando");
+  });
+
+  it("una encadenada que espera a la anterior no ofrece arrancar ni dice que espera a tu consola", () => {
+    render(<AccionesDeTarea tarea={{ ...base, estado: "nuevo", tras: "t0" }} alArrancarAhora={vi.fn()} puedeArrancar={false} esperaPorTuConsola />);
+    expect(screen.queryByRole("button", { name: "Arrancar ahora" })).toBeNull();
+    expect(screen.queryByText(/consola/)).toBeNull();
   });
 });

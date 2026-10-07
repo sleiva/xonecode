@@ -461,3 +461,20 @@ export function reanudadaTrasCorte(tarea: Tarea, motivo: string, ahora?: string)
 /** El motivo de aparcar una cortada que YA se reanudó sola: lo de siempre, más por qué esta vez no sigue. */
 export const motivoTrasReanudar = (motivo: string): string =>
   `${motivo}; ya se reanudó sola una vez y volvió a cortarse, así que espera a que la mires`;
+
+/**
+ * «Continuar» en una tarea aparcada sin escribir nada: lo que entra en SU hilo como feedback. Sin esto, seguir sin
+ * añadir nada era «Reintentar», que vuelve a mandar el encargo entero.
+ */
+export const TEXTO_DE_CONTINUAR = "Continúa donde lo dejaste.";
+
+/**
+ * ¿Se puede «Arrancar ahora»? Una tarea `nuevo` que no espera a ninguna anterior (`tras`): las encadenadas esperan a
+ * que la suya termine, y saltárselo sería arrancar sobre trabajo sin aceptar. La MISMA regla que `siguientesAEjecutar`.
+ */
+export function puedeArrancarYa(tarea: Pick<Tarea, "estado" | "tras">, lista: readonly Pick<Tarea, "id" | "estado">[]): boolean {
+  if (tarea.estado !== "nuevo") return false;
+  if (tarea.tras === undefined) return true;
+  const anterior = lista.find((x) => x.id === tarea.tras);
+  return anterior === undefined || anterior.estado === "terminada";
+}

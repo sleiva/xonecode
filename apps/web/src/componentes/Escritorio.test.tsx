@@ -310,7 +310,7 @@ describe("Escritorio: el kanban de tareas", () => {
       />
     );
     fireEvent.change(screen.getByRole("textbox", { name: /tu feedback/i }), { target: { value: "sí, con histórico" } });
-    fireEvent.click(screen.getByRole("button", { name: /enviar feedback/i }));
+    fireEvent.click(screen.getByRole("button", { name: /enviar y continuar/i }));
     expect(alEnviarFeedback).toHaveBeenCalledWith("t1", "sí, con histórico");
   });
 

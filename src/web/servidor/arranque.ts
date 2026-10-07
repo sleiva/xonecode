@@ -233,6 +233,8 @@ import {
   CONCURRENCIA_POR_OMISION,
   conEstado,
   darPorBuenaAMano,
+  puedeArrancarYa,
+  TEXTO_DE_CONTINUAR,
   tituloDeTarea,
   type Tarea,
 } from "../../core/tareas.js";
@@ -6498,6 +6500,53 @@ export function montarRutas(
         respuesta.end(JSON.stringify(resultado.faltan.length === 0 ? { encoladas: resultado.encoladas } : resultado));
         return;
       }
+      if (mensaje.accion === "continuar" && opciones.colaDeTareas !== undefined) {
+        // Lo mismo que un feedback, con el texto de «sigue» del núcleo: entra en SU hilo, no repite el encargo.
+        const actual = opciones.colaDeTareas.listar().find((t) => t.id === mensaje.id);
+        if (actual === undefined || actual.estado !== "requiere-atencion") {
+          respuesta.writeHead(409, { "content-type": "application/json" });
+          respuesta.end(JSON.stringify({ motivo: "esa tarea ya no está esperando feedback" }));
+          return;
+        }
+        atenderFeedbackDeTarea(mensaje.id, TEXTO_DE_CONTINUAR);
+        opciones.revisarTareas?.();
+        emitirTareas();
+        respuesta.writeHead(204);
+        respuesta.end();
+        return;
+      }
+      if (mensaje.accion === "arrancarAhora" && opciones.colaDeTareas !== undefined) {
+        /**
+         * La persona CEDE el proyecto: se cierra su consola de ahí (si no está trabajando) y la tarea arranca, porque lo
+         * único que la frenaba era «gana la persona». Se niega con motivo si no es la primera de su cadena o si la
+         * conversación de la persona tiene un turno en marcha. Si cerró la del foco, el cable se muda al vestíbulo.
+         */
+        const lista = opciones.colaDeTareas.listar();
+        const tarea = lista.find((t) => t.id === mensaje.id);
+        const negar = (motivo: string): void => {
+          respuesta.writeHead(409, { "content-type": "application/json" });
+          respuesta.end(JSON.stringify({ motivo }));
+        };
+        if (tarea === undefined) return negar("esa tarea ya no existe");
+        if (!puedeArrancarYa(tarea, lista)) {
+          return negar(tarea.estado === "nuevo" ? "espera a que termine la tarea anterior de su cadena" : "esa tarea no está en la cola");
+        }
+        let cedido: { cerroLaAbierta: boolean; motivo?: string };
+        try {
+          cedido = await vestibulo.cederProyecto(tarea.proyecto.raiz);
+        } catch (error) {
+          contar(error);
+          return negar("no se pudo cerrar tu conversación en ese proyecto");
+        }
+        if (cedido.motivo !== undefined) return negar(cedido.motivo);
+        if (cedido.cerroLaAbierta) adjuntar();
+        opciones.revisarTareas?.();
+        await anunciarAlta().catch(contar);
+        emitirTareas();
+        respuesta.writeHead(204);
+        respuesta.end();
+        return;
+      }
       if (mensaje.accion === "descartarPropuesta") {
         const motivo = atenderDescartarPropuesta(mensaje.proyecto, mensaje.propuesta, mensaje.enChat === true);
         if (motivo !== undefined) {
@@ -6532,6 +6581,8 @@ export function montarRutas(
         mensaje.accion !== "crear" &&
         mensaje.accion !== "augmentar" &&
         mensaje.accion !== "feedback" &&
+        mensaje.accion !== "continuar" &&
+        mensaje.accion !== "arrancarAhora" &&
         opciones.colaDeTareas !== undefined
       ) {
         /**

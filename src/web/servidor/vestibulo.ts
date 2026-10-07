@@ -780,6 +780,13 @@ export interface Vestibulo {
     tareas: readonly { estado: string; raiz: string }[]
   ): Promise<{ borrada: boolean; cerroLaAbierta: boolean; motivo?: string }>;
   /**
+   * La persona CEDE un proyecto a sus tareas de fondo («Arrancar ahora»): se cierra SU consola de esa raíz, si la hay,
+   * para que la regla de «gana la persona» deje de aplicar ahí. La conversación queda guardada y se reabre como
+   * cualquier otra. Se DECLINA con motivo si esa consola tiene un turno en marcha: cerrarla lo cortaría. Por la cola,
+   * como todo lo que abre o cierra consolas. `cerroLaAbierta` dice si era la del foco (el cable se muda).
+   */
+  cederProyecto(raiz: string): Promise<{ cerroLaAbierta: boolean; motivo?: string }>;
+  /**
    * Lo que se MUDARÍA al cambiar el workspace a `hacia`, o por qué no se puede ahora — sin
    * tocar nada. La misma decisión que `mudarWorkspace` vuelve a tomar dentro de la cola: entre
    * esta foto y el «Aceptar» de la persona el estado puede cambiar.
@@ -2423,6 +2430,20 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       await opciones.olvidarMemoriaDeHilo?.(raiz, id);
       return { borrada, cerroLaAbierta };
     },
+
+    cederProyecto: (raiz) =>
+      enCola(async () => {
+        const suya = abiertas.get(raiz);
+        if (suya === undefined) return { cerroLaAbierta: false };
+        if (!suya.cerrada && suya.turnoEnVuelo) {
+          return { cerroLaAbierta: false, motivo: "tu conversación en este proyecto está trabajando: espera a que termine o párala" };
+        }
+        const cerroLaAbierta = enFoco === raiz;
+        await cerrarConsolaDeProyecto(raiz);
+        // La raíz queda LIBRE: de eso cuelgan la barra y la cola de tareas.
+        avisarDeLasAbiertas();
+        return { cerroLaAbierta };
+      }),
 
     async borrarCopia(entorno, proyecto, tareas) {
       const registrado = entornoPorId(entorno);

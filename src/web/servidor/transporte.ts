@@ -1811,6 +1811,13 @@ export type MensajeDelCliente =
    * misma mentira por omisión que una lista vacía rellenada.
    */
   | { clase: "tarea"; accion: "feedback"; id: string; texto: string }
+  /**
+   * «Continuar» una tarea aparcada sin escribir nada (entra en su hilo `TEXTO_DE_CONTINUAR`), y «Arrancar ahora» una
+   * `nuevo` que no espera a ninguna anterior: la persona CEDE el proyecto —se cierra su consola de ahí si no está
+   * trabajando— y la tarea arranca. Las dos contestan 409 con `{motivo}` si no se puede.
+   */
+  | { clase: "tarea"; accion: "continuar"; id: string }
+  | { clase: "tarea"; accion: "arrancarAhora"; id: string }
   | { clase: "tarea"; accion: "reintentar" | "descartar" | "terminar"; id: string }
   /** Cambia el tope de concurrencia de la cola de tareas. */
   | { clase: "tareas"; concurrencia: number }

@@ -1277,6 +1277,17 @@ export const TRANSICIONES: Readonly<Record<TareaDelCable["estado"], readonly Tar
 };
 
 /**
+ * Copia DECLARADA de `core/tareas.ts#puedeArrancarYa`: una `nuevo` que no espera a ninguna anterior de su cadena. Es
+ * lo que decide si se ofrece «Arrancar ahora»; el servidor la vuelve a aplicar y contesta 409 si no vale.
+ */
+export function puedeArrancarYa(tarea: Pick<TareaDelCable, "estado" | "tras">, lista: readonly Pick<TareaDelCable, "id" | "estado">[]): boolean {
+  if (tarea.estado !== "nuevo") return false;
+  if (tarea.tras === undefined) return true;
+  const anterior = lista.find((x) => x.id === tarea.tras);
+  return anterior === undefined || anterior.estado === "terminada";
+}
+
+/**
  * Copia DECLARADA de `core/esfuerzo.ts#Esfuerzo`, como la de la URL de un entorno y la del
  * slug de un subagente: la frontera prohíbe que el cliente importe de `src/`, y sin una
  * copia aquí el desplegable tendría que tipar sus valores como `string`.
@@ -1625,6 +1636,13 @@ export type MensajeDelCliente =
   /** «Se edita la tarea y se agrega el feedback del usuario»: la respuesta a una tarea
    *  «esperando feedback», que la devuelve al lazo en su MISMO hilo. */
   | { clase: "tarea"; accion: "feedback"; id: string; texto: string }
+  /**
+   * «Continuar» una tarea aparcada sin escribir nada (entra en su hilo `TEXTO_DE_CONTINUAR`), y «Arrancar ahora» una
+   * `nuevo` que no espera a ninguna anterior: la persona CEDE el proyecto —se cierra su consola de ahí si no está
+   * trabajando— y la tarea arranca. Las dos contestan 409 con `{motivo}` si no se puede.
+   */
+  | { clase: "tarea"; accion: "continuar"; id: string }
+  | { clase: "tarea"; accion: "arrancarAhora"; id: string }
   | { clase: "tarea"; accion: "reintentar" | "descartar" | "terminar"; id: string }
   /** Cambia el tope de concurrencia de la cola de tareas. */
   | { clase: "tareas"; concurrencia: number }

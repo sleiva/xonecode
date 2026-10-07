@@ -1674,7 +1674,7 @@ describe("App: la tarjeta de tarea «esperando feedback» abre Revisión", () =>
     fireEvent.change(screen.getByRole("textbox", { name: /tu feedback/i }), {
       target: { value: "sí, con histórico" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /enviar feedback/i }));
+    fireEvent.click(screen.getByRole("button", { name: /enviar y continuar/i }));
     expect(enviar).toHaveBeenCalledWith({ clase: "tarea", accion: "feedback", id: "t1", texto: "sí, con histórico" });
   });
 });
@@ -2816,6 +2816,39 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
       );
       expect(screen.getByText("Arregla el login")).toBeTruthy();
       expect(screen.queryByText(/otro|Otra/)).toBeNull();
+    });
+
+    it("en el chat de una tarea que ESPERA feedback, enviar deja elegir: a la tarea (feedback + arrancar) o seguir aquí", async () => {
+      const { store, enviar } = conProyectoAbierto();
+      act(() =>
+        store.aplicar({
+          clase: "tareas",
+          concurrencia: 2,
+          corriendoAqui: true,
+          lista: [TAREA({ estado: "requiere-atencion", motivo: "esperando", sesion: "s1" })],
+        })
+      );
+      expect(screen.getByRole("note").textContent).toMatch(/es de la tarea «Arregla el login», que espera tu feedback/);
+      const campo = () => screen.getByPlaceholderText(/pregunta sobre xone/i);
+      fireEvent.change(campo(), { target: { value: "usa la tabla nueva" } });
+      fireEvent.keyDown(campo(), { key: "Enter" });
+      // No se manda como prosa: primero se elige.
+      expect(enviar.mock.calls.some(([m]) => (m as { clase?: string }).clase === "prosa")).toBe(false);
+      enviar.mockClear();
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Enviar y continuar la tarea" }));
+      });
+      expect(enviar.mock.calls.map(([m]) => m)).toEqual([
+        { clase: "tarea", accion: "feedback", id: "t1", texto: "usa la tabla nueva" },
+        { clase: "tarea", accion: "arrancarAhora", id: "t1" },
+      ]);
+      expect(screen.queryByRole("button", { name: "Enviar y continuar la tarea" })).toBeNull();
+      // Y «Seguir aquí» lo manda como siempre.
+      fireEvent.change(campo(), { target: { value: "otra cosa" } });
+      fireEvent.keyDown(campo(), { key: "Enter" });
+      enviar.mockClear();
+      fireEvent.click(screen.getByRole("button", { name: "Seguir aquí en el chat" }));
+      expect(enviar.mock.calls.map(([m]) => m)).toEqual([{ clase: "prosa", texto: "otra cosa" }]);
     });
 
     it("una tarea de fondo EN CURSO se ve en la fila del proyecto de la barra y en la pestaña Tareas", () => {

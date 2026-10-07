@@ -72,6 +72,10 @@ export function AccionesDeTarea({
   alDescartar,
   alTerminar,
   alEnviarFeedback,
+  alContinuar,
+  alArrancarAhora,
+  puedeArrancar,
+  esperaPorTuConsola,
 }: {
   tarea: TareaDelCable;
   /** Si el cable está vivo. Ausente = se asume conectado — es lo que vale hoy para quien
@@ -88,8 +92,29 @@ export function AccionesDeTarea({
   /** «Se edita la tarea y se agrega el feedback del usuario»: la devuelve al lazo, en su
    *  mismo hilo. Ausente = no se ofrece — la aparcada cae a la pista de siempre. */
   alEnviarFeedback?: (id: string, texto: string) => void;
+  /** Seguir una aparcada SIN escribir nada: entra en su hilo un «continúa». Devuelve el motivo si el servidor se negó. */
+  alContinuar?: (id: string) => Promise<string | undefined>;
+  /** «Arrancar ahora» una `nuevo`: la persona cede el proyecto (se cierra su consola de ahí) y la tarea arranca. */
+  alArrancarAhora?: (id: string) => Promise<string | undefined>;
+  /** Es la primera de su cadena (`puedeArrancarYa`): las encadenadas esperan a la anterior y no ofrecen arrancar. */
+  puedeArrancar?: boolean;
+  /** Lo que la frena es que la consola de su proyecto está ABIERTA (la tuya): se dice, en vez de quedarse muda en «Nuevo». */
+  esperaPorTuConsola?: boolean;
 }) {
   const [confirmando, setConfirmando] = useState(false);
+  const [negativa, setNegativa] = useState<string | undefined>(undefined);
+  const [enviando, setEnviando] = useState(false);
+  const pedir = (accion: (id: string) => Promise<string | undefined>): void => {
+    if (enviando) return;
+    setEnviando(true);
+    setNegativa(undefined);
+    void accion(t.id)
+      .catch(() => "el envío falló")
+      .then((motivo) => {
+        setEnviando(false);
+        if (motivo !== undefined) setNegativa(motivo);
+      });
+  };
   const apagado = conectado === false;
 
   const destinos = TRANSICIONES[t.estado];
@@ -99,8 +124,11 @@ export function AccionesDeTarea({
   const ofrecerFeedback = aparcada && destinos.includes("nuevo") && alEnviarFeedback !== undefined;
   const pistaDeFeedback = aparcada && destinos.includes("nuevo") && alEnviarFeedback === undefined;
   const ofrecerDescartar = alDescartar !== undefined;
+  const ofrecerContinuar = aparcada && destinos.includes("nuevo") && alContinuar !== undefined;
+  const ofrecerArrancar = t.estado === "nuevo" && puedeArrancar === true && alArrancarAhora !== undefined;
+  const avisoDeEspera = t.estado === "nuevo" && puedeArrancar === true && esperaPorTuConsola === true;
 
-  if (!ofrecerReintentar && !ofrecerTerminar && !ofrecerFeedback && !pistaDeFeedback && !ofrecerDescartar) {
+  if (!ofrecerReintentar && !ofrecerTerminar && !ofrecerFeedback && !pistaDeFeedback && !ofrecerDescartar && !ofrecerContinuar && !ofrecerArrancar) {
     return null;
   }
 
@@ -108,6 +136,25 @@ export function AccionesDeTarea({
     <div className={estilos.acciones} role="group" aria-label="Acciones de la tarea">
       {apagado ? (
         <p className={estilos.avisoConexion}>Sin conexión: no se puede mandar nada hasta reconectar.</p>
+      ) : null}
+      {avisoDeEspera ? (
+        <p className={estilos.pista}>Esperando: no arranca mientras tengas abierta la consola de este proyecto.</p>
+      ) : null}
+      {ofrecerArrancar ? (
+        <button
+          type="button"
+          className={estilos.boton}
+          disabled={apagado || enviando}
+          title="Cierra tu conversación en este proyecto (queda guardada) y arranca la tarea"
+          onClick={() => pedir(alArrancarAhora!)}
+        >
+          Arrancar ahora
+        </button>
+      ) : null}
+      {ofrecerContinuar ? (
+        <button type="button" className={estilos.boton} disabled={apagado || enviando} onClick={() => pedir(alContinuar!)}>
+          Continuar
+        </button>
       ) : null}
       {ofrecerReintentar ? (
         <button type="button" className={estilos.boton} disabled={apagado} onClick={() => alReintentar!(t.id)}>
@@ -140,6 +187,9 @@ export function AccionesDeTarea({
         <FormularioDeFeedback id={t.id} apagado={apagado} alEnviar={alEnviarFeedback!} />
       ) : pistaDeFeedback ? (
         <p className={estilos.pista}>Se resuelve editando la tarea para añadir tu feedback: sigue desde ahí.</p>
+      ) : null}
+      {negativa !== undefined ? (
+        <p className={estilos.pista} role="alert">{`No se pudo: ${negativa}`}</p>
       ) : null}
     </div>
   );
@@ -241,7 +291,7 @@ function FormularioDeFeedback({
         placeholder="Se manda al agente en el mismo hilo…"
       />
       <button type="submit" className={estilos.botonFeedback} disabled={limpio === "" || apagado}>
-        Enviar feedback
+        Enviar y continuar
       </button>
     </form>
   );

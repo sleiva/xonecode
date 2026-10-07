@@ -1,0 +1,15 @@
+/* El aviso encima del compositor y la negativa del diálogo. Sin colores literales: alias del tema. */
+.aviso {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.negativa {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+}

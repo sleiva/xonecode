@@ -168,7 +168,7 @@ describe("TareasDelProyecto", () => {
     );
     const campo = screen.getByRole("textbox", { name: /tu feedback/i });
     fireEvent.change(campo, { target: { value: "sí" } });
-    fireEvent.click(screen.getByRole("button", { name: /enviar feedback/i }));
+    fireEvent.click(screen.getByRole("button", { name: /enviar y continuar/i }));
     expect(alEnviarFeedback).toHaveBeenCalledWith("t1", "sí");
   });
 

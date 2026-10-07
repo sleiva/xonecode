@@ -857,7 +857,13 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
 - **Un solo corredor por máquina, y el cerrojo no lo garantiza solo**: lo hace verdad
   `sigoSiendoDueño()`, preguntado antes de despachar cada tarea. La cuarentena del cerrojo lleva el
   **pid** en el nombre.
-- **Gana la persona**: una tarea no arranca en un proyecto cuya consola humana está ABIERTA.
+- **Gana la persona**: una tarea no arranca en un proyecto cuya consola humana está ABIERTA. **Salvo que la persona
+  CEDA el proyecto** («Arrancar ahora», `vestibulo.cederProyecto`, acción `arrancarAhora`): se cierra su consola de ahí
+  —la conversación queda guardada— y la tarea arranca; se niega con motivo si esa consola tiene un turno en marcha o si la
+  tarea espera a la anterior de su cadena (`puedeArrancarYa`). La lista de Tareas lo dice («no arranca mientras tengas
+  abierta la consola…»), y una aparcada se sigue con «Continuar» (`TEXTO_DE_CONTINUAR`) o «Enviar y continuar». **En el
+  chat de una conversación de tarea que espera feedback**, enviar deja ELEGIR (`MensajeATarea.tsx`): a la tarea —feedback
+  y `arrancarAhora`— o seguir aquí; antes, lo escrito ahí era un turno de la persona y la tarea seguía aparcada.
 - **Una tarea cortada a mitad se REANUDA sola, una vez** (`core/tareas.ts#reanudadaTrasCorte`, en la reconciliación del
   arranque): si el proceso murió con ella «en proceso» y su hilo se puede reabrir, vuelve a la cola con
   `TEXTO_DE_REANUDACION` como feedback pendiente, que entra en SU hilo —la foto del raíz y el chat se guardan a mitad de

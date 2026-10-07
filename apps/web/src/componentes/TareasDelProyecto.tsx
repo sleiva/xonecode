@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Acto, TareaDelCable } from "../tipos.js";
+import { puedeArrancarYa, type Acto, type TareaDelCable } from "../tipos.js";
 import { AccionesDeTarea } from "./AccionesDeTarea.js";
 import { EntregaDeTarea } from "./EntregaDeTarea.js";
 import { MirarTarea } from "./MirarTarea.js";
@@ -55,6 +55,9 @@ export function TareasDelProyecto({
   alDescartar,
   alTerminar,
   alEnviarFeedback,
+  alContinuar,
+  alArrancarAhora,
+  consolaAbierta,
   alMirar,
   alDejarDeMirar,
   mirando,
@@ -85,6 +88,11 @@ export function TareasDelProyecto({
   /** «Se edita la tarea y se agrega el feedback del usuario»: la devuelve al lazo, en su
    *  mismo hilo. Ausente = no se ofrece — la aparcada cae a la pista de siempre. */
   alEnviarFeedback?: (id: string, texto: string) => void;
+  /** Seguir una aparcada sin escribir nada, y «Arrancar ahora» la primera de su cadena. Ver `AccionesDeTarea`. */
+  alContinuar?: (id: string) => Promise<string | undefined>;
+  alArrancarAhora?: (id: string) => Promise<string | undefined>;
+  /** La consola de la persona de ESTE proyecto está abierta: es lo que frena sus tareas nuevas, y se dice. */
+  consolaAbierta?: boolean;
   /** Si el cable está vivo: apaga en `AccionesDeTarea` (y el botón «Nueva tarea» de aquí)
    *  lo que manda algo al servidor, y lo dice. Ausente = se asume conectado. */
   conectado?: boolean;
@@ -171,6 +179,10 @@ export function TareasDelProyecto({
               {...(alDescartar === undefined ? {} : { alDescartar })}
               {...(alTerminar === undefined ? {} : { alTerminar })}
               {...(alEnviarFeedback === undefined ? {} : { alEnviarFeedback })}
+              {...(alContinuar === undefined ? {} : { alContinuar })}
+              {...(alArrancarAhora === undefined ? {} : { alArrancarAhora })}
+              puedeArrancar={puedeArrancarYa(t, tareas)}
+              esperaPorTuConsola={consolaAbierta === true}
               {...(alMirar === undefined ? {} : { alMirar })}
               {...(alDejarDeMirar === undefined ? {} : { alDejarDeMirar })}
               {...(mirando === undefined ? {} : { mirando })}
@@ -190,6 +202,10 @@ function Fila({
   alDescartar,
   alTerminar,
   alEnviarFeedback,
+  alContinuar,
+  alArrancarAhora,
+  puedeArrancar,
+  esperaPorTuConsola,
   conectado,
   corriendoAqui,
   alMirar,
@@ -205,6 +221,10 @@ function Fila({
   alDescartar?: (id: string) => void;
   alTerminar?: (id: string) => void;
   alEnviarFeedback?: (id: string, texto: string) => void;
+  alContinuar?: (id: string) => Promise<string | undefined>;
+  alArrancarAhora?: (id: string) => Promise<string | undefined>;
+  puedeArrancar?: boolean;
+  esperaPorTuConsola?: boolean;
   conectado?: boolean;
   /** Si ESTE proceso ejecuta las tareas: de la pestaña entera, no de la fila —se le pasa
    *  tal cual a `MirarTarea`, que es quien decide con esto si ofrece el despliegue. */
@@ -274,6 +294,10 @@ function Fila({
           alDescartar={alDescartar}
           alTerminar={alTerminar}
           alEnviarFeedback={alEnviarFeedback}
+          {...(alContinuar === undefined ? {} : { alContinuar })}
+          {...(alArrancarAhora === undefined ? {} : { alArrancarAhora })}
+          {...(puedeArrancar === undefined ? {} : { puedeArrancar })}
+          {...(esperaPorTuConsola === undefined ? {} : { esperaPorTuConsola })}
         />
       </div>
     </li>

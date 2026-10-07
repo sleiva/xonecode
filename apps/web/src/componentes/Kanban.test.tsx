@@ -350,7 +350,7 @@ describe("Kanban", () => {
     // Ya no hace falta la pista de texto: hay un campo de verdad.
     expect(screen.queryByText(/editando la tarea/i)).toBeNull();
     const campo = screen.getByRole("textbox", { name: /tu feedback/i });
-    const boton = screen.getByRole("button", { name: /enviar feedback/i });
+    const boton = screen.getByRole("button", { name: /enviar y continuar/i });
     expect(boton).toHaveProperty("disabled", true);
 
     fireEvent.change(campo, { target: { value: "  sí, con histórico  " } });
@@ -375,7 +375,7 @@ describe("Kanban", () => {
         alEnviarFeedback={alEnviarFeedback}
       />
     );
-    const boton = screen.getByRole("button", { name: /enviar feedback/i });
+    const boton = screen.getByRole("button", { name: /enviar y continuar/i });
     expect(boton).toHaveProperty("disabled", true);
     fireEvent.change(screen.getByRole("textbox", { name: /tu feedback/i }), { target: { value: "   " } });
     expect(boton).toHaveProperty("disabled", true);

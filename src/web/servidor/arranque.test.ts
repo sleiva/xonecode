@@ -5930,6 +5930,39 @@ describe("las tareas en background, por el cable", () => {
       rmSync(base, { recursive: true, force: true });
     });
 
+    it("«Arrancar ahora» cede el proyecto (cierra la consola de la persona) y hace revisar; encadenada pendiente, no", async () => {
+      const { base, cola, accion, revisado, vestibulo } = await conPropuesta();
+      const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      const tarea = (id: string, extra: Partial<Tarea> = {}): Tarea => ({
+        id, proyecto: { id: "p1", raiz, nombre: "Tienda" }, titulo: id, peticion: "p", encargo: "e", adjuntos: [],
+        estado: "nuevo", creada: "2026-10-07T10:00:00.000Z", ...extra,
+      });
+      cola.guardar([tarea("a", { estado: "en-proceso" }), tarea("b", { tras: "a" }), tarea("c")]);
+      const encadenada = await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "arrancarAhora", id: "b" }));
+      expect(encadenada.estado).toBe(409);
+      expect(JSON.parse(encadenada.cuerpo).motivo).toMatch(/tarea anterior/);
+      expect(vestibulo.proyectoAbierto()).toBeDefined();
+      const antes = revisado();
+      expect(await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "arrancarAhora", id: "c" }))).toMatchObject({ estado: 204 });
+      expect(vestibulo.proyectoAbierto()).toBeUndefined();
+      expect(revisado()).toBeGreaterThan(antes);
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("«Continuar» devuelve una aparcada a la cola con el texto de seguir; una que no espera feedback, no", async () => {
+      const { base, cola, accion, vestibulo } = await conPropuesta();
+      const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      cola.guardar([
+        { id: "a", proyecto: { id: "p1", raiz, nombre: "Tienda" }, titulo: "a", peticion: "p", encargo: "e", adjuntos: [], estado: "requiere-atencion", motivo: "se cortó", sesion: "s1", creada: "2026-10-07T10:00:00.000Z" },
+      ]);
+      expect(await enviarMensaje(accion, { clase: "tarea", accion: "continuar", id: "a" })).toBe(204);
+      expect(cola.listar()[0]).toMatchObject({ estado: "nuevo", feedback: [{ texto: "Continúa donde lo dejaste.", consumido: false }] });
+      expect(await enviarMensaje(accion, { clase: "tarea", accion: "continuar", id: "a" })).toBe(409);
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
     it("descartarla la deja resuelta sin tareas", async () => {
       const { base, cola, accion, vestibulo } = await conPropuesta();
       expect(await enviarMensaje(accion, { clase: "tarea", accion: "descartarPropuesta", proyecto: "p1", propuesta: "p1" })).toBe(204);

@@ -6,6 +6,7 @@ import type { ActoDeSincronizacion, FotoDelResumen, ListadoDeSoporte, MensajeDel
 import type { Conexion } from "./conexion.js";
 import { ANCHO_BARRA_POR_OMISION, Maqueta } from "./componentes/Maqueta.js";
 import { Barra } from "./componentes/Barra.js";
+import { AvisoDeTareaEnEspera, ElegirDestinoDelMensaje } from "./componentes/MensajeATarea.js";
 import { Cabecera } from "./componentes/Cabecera.js";
 import { Panel } from "./componentes/Panel.js";
 import type { Pestana } from "./componentes/Pestanas.js";
@@ -640,6 +641,20 @@ export function App({
     for (const t of estado.tareas?.lista ?? []) if (t.estado === "en-proceso") cuenta.set(t.proyecto, (cuenta.get(t.proyecto) ?? 0) + 1);
     return cuenta;
   }, [estado.tareas]);
+  /**
+   * La TAREA de la conversación abierta, si la conversación es de una (`Tarea.sesion`). Solo importa cuando espera
+   * feedback: entonces el chat lo dice y, al enviar, deja elegir entre mandárselo a la tarea o seguir aquí.
+   */
+  const tareaDeLaSesion = useMemo(
+    () =>
+      estado.alta?.sesionActiva === undefined
+        ? undefined
+        : estado.tareas?.lista.find((t) => t.sesion !== undefined && t.sesion === estado.alta?.sesionActiva),
+    [estado.tareas, estado.alta?.sesionActiva]
+  );
+  const tareaEnEsperaDeLaSesion = tareaDeLaSesion?.estado === "requiere-atencion" ? tareaDeLaSesion : undefined;
+  /** El mensaje escrito en el chat de esa tarea, mientras se elige a dónde va. */
+  const [mensajeEnEspera, setMensajeEnEspera] = useState<{ texto: string; adjuntos: string[] } | undefined>(undefined);
   const tareasDelProyecto = useMemo(
     () =>
       estado.tareas === undefined
@@ -2482,6 +2497,12 @@ export function App({
       // kanban del escritorio, así que una tarea aparcada solo se podía atender
       // desde ahí (Task 13). `AccionesDeTarea` ya la ofrece en las dos vistas.
       alEnviarFeedback={alEnviarFeedbackTarea}
+      // Seguir una aparcada sin escribir nada, y «Arrancar ahora» la primera de su cadena (cede el proyecto: cierra tu
+      // conversación de aquí, que queda guardada). Las dos dicen por qué si el servidor se niega.
+      alContinuar={async (id: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "continuar", id }))}
+      alArrancarAhora={async (id: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "arrancarAhora", id }))}
+      // Esta lista es la del proyecto ABIERTO: su consola es la tuya, y es lo que frena sus tareas nuevas.
+      consolaAbierta={proyectoActivoId !== undefined}
       conectado={estado.conectado}
       // Si las ejecuta OTRO proceso, esta pestaña lo dice — y aquí importa más
       // que en el kanban, porque aquí vive «Nueva tarea»: la que se cree se
@@ -2935,6 +2956,7 @@ export function App({
               aquí no pintaría nunca — dos sitios para la misma condición es cómo uno de los
               dos se queda mintiendo el día que el otro cambie.
             */}
+            {tareaEnEsperaDeLaSesion === undefined ? null : <AvisoDeTareaEnEspera titulo={tareaEnEsperaDeLaSesion.titulo} />}
             <Compositor
               conectado={estado.conectado}
               // Apaga la caja: una aprobación, pregunta, selector o secreto EN PANTALLA
@@ -3013,15 +3035,49 @@ export function App({
               // servidor dice que ESTE turno lo admite: los especialistas cierran con su resumen y
               // el orquestador replanifica con lo escrito. Sin eso (deepagents) viaja como prosa y
               // el servidor la encola o la apunta como nota.
-              alEnviar={(texto, adjuntos) =>
+              alEnviar={(texto, adjuntos) => {
+                // En el chat de una tarea que espera feedback, se ELIGE a dónde va (`ElegirDestinoDelMensaje`).
+                if (tareaEnEsperaDeLaSesion !== undefined && !turnoEnVuelo) {
+                  setMensajeEnEspera({ texto, adjuntos });
+                  return;
+                }
                 void enviar({
                   clase: "prosa",
                   texto,
                   ...(adjuntos.length === 0 ? {} : { adjuntos }),
                   ...(turnoEnVuelo && estado.turnoDetenible === true ? { detener: true } : {}),
-                })
-              }
+                });
+              }}
             />
+            {mensajeEnEspera !== undefined && tareaEnEsperaDeLaSesion !== undefined ? (
+              <ElegirDestinoDelMensaje
+                titulo={tareaEnEsperaDeLaSesion.titulo}
+                conAdjuntos={mensajeEnEspera.adjuntos.length > 0}
+                alCancelar={() => {
+                  // Lo escrito vuelve al compositor: al enviar se vació, y cancelar no puede perderlo. Los adjuntos ya
+                  // subidos siguen en la carpeta de la sesión; solo se quita su mención de este mensaje.
+                  const texto = mensajeEnEspera.texto;
+                  setMensajeEnEspera(undefined);
+                  setBorradorDelCompositor((b) => ({ texto, id: (b?.id ?? 0) + 1 }));
+                }}
+                alSeguirAqui={() => {
+                  const { texto, adjuntos } = mensajeEnEspera;
+                  setMensajeEnEspera(undefined);
+                  void enviar({ clase: "prosa", texto, ...(adjuntos.length === 0 ? {} : { adjuntos }) });
+                }}
+                alContinuarLaTarea={async () => {
+                  // El feedback la devuelve a la cola; «Arrancar ahora» cede el proyecto (cierra esta conversación) para
+                  // que arranque ya. Si lo segundo se niega, el feedback ya está puesto y arrancará al cerrar.
+                  const id = tareaEnEsperaDeLaSesion.id;
+                  const sinFeedback = await negativaOFalloDe(await enviar({ clase: "tarea", accion: "feedback", id, texto: mensajeEnEspera.texto }));
+                  if (sinFeedback !== undefined) return sinFeedback;
+                  const sinArrancar = await negativaOFalloDe(await enviar({ clase: "tarea", accion: "arrancarAhora", id }));
+                  if (sinArrancar !== undefined) return `tu mensaje ya está en la tarea, pero ${sinArrancar}`;
+                  setMensajeEnEspera(undefined);
+                  return undefined;
+                }}
+              />
+            ) : null}
             <BarraDeEstado
               turnos={turnos}
               pasos={pasos}

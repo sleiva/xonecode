@@ -6,6 +6,7 @@ import {
   conVeredicto,
   darPorBuenaAMano,
   motivoTrasReanudar,
+  puedeArrancarYa,
   reanudadaTrasCorte,
   rutaRelativaDeTarea,
   siguientesAEjecutar,
@@ -403,5 +404,15 @@ describe("reanudar SOLA una tarea cortada a mitad", () => {
     expect(reanudadaTrasCorte(corriendo({ reanudaciones: TOPE_DE_REANUDACIONES }), "se cortó")).toBeUndefined();
     expect(reanudadaTrasCorte(corriendo({ estado: "nuevo" }), "se cortó")).toBeUndefined();
     expect(motivoTrasReanudar("se cortó")).toMatch(/^se cortó; ya se reanudó sola una vez/);
+  });
+});
+
+describe("puedeArrancarYa", () => {
+  it("una nueva sin anterior sí; encadenada, solo con la anterior terminada o quitada; otra que no es nueva, no", () => {
+    expect(puedeArrancarYa({ estado: "nuevo" }, [])).toBe(true);
+    expect(puedeArrancarYa({ estado: "nuevo", tras: "a" }, [{ id: "a", estado: "en-proceso" }])).toBe(false);
+    expect(puedeArrancarYa({ estado: "nuevo", tras: "a" }, [{ id: "a", estado: "terminada" }])).toBe(true);
+    expect(puedeArrancarYa({ estado: "nuevo", tras: "a" }, [])).toBe(true);
+    expect(puedeArrancarYa({ estado: "requiere-atencion" }, [])).toBe(false);
   });
 });

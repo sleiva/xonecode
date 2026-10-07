@@ -854,6 +854,33 @@ describe("vestíbulo", () => {
    * La costura es un turno que se queda esperando: sin eso no hay «turno en vuelo» que
    * medir, y con un ejecutor que devuelve en el acto el caso no existe.
    */
+  it("ceder un proyecto («Arrancar ahora») cierra la consola de la persona; con un turno en marcha se niega", async () => {
+    const s = sesionesEnMemoria();
+    let soltarElTurno: (() => void) | undefined;
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      crearEjecutor: () => async () => {
+        await new Promise<void>((resuelto) => {
+          soltarElTurno = resuelto;
+        });
+      },
+    });
+    const a = await v.abrirProyecto({ raiz: "/w/a" });
+    const turno = a.ejecutarTurno("arregla el login", a.estadoDeSesion, a.consola.consola);
+    expect(await v.cederProyecto("/w/a")).toEqual({ cerroLaAbierta: false, motivo: expect.stringMatching(/trabajando/) });
+    expect(a.cerrada).toBe(false);
+    soltarElTurno!();
+    await turno;
+    expect(await v.cederProyecto("/w/a")).toEqual({ cerroLaAbierta: true });
+    expect(a.cerrada).toBe(true);
+    expect(v.proyectosAbiertos()).toEqual([]);
+    // Sin consola en esa raíz no hay nada que ceder.
+    expect(await v.cederProyecto("/w/otra")).toEqual({ cerroLaAbierta: false });
+    await v.cerrar();
+  });
+
   it("cambiar de proyecto NO mata el turno que estaba corriendo en el anterior", async () => {
     const s = sesionesEnMemoria();
     let soltarElTurno: (() => void) | undefined;
