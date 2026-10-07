@@ -35,7 +35,8 @@ export function ConsultaDelAgente({
 }: {
   pregunta: string;
   opciones: readonly string[];
-  /** Se ESPERA: dar la pregunta por contestada con el envío fallido dejaría creer que se contestó.
+  /** Se ESPERA: dar la pregunta por contestada con el envío fallido dejaría creer que se contestó. Si resuelve con
+   *  `false`, NO se mandó (la persona canceló a dónde iba) y la tarjeta vuelve a dejar contestar, sin decir que falló.
    *  Ausente = ya no se puede contestar aquí (contestada, o sin cable). */
   alElegir?: (opcion: string) => void | Promise<unknown>;
   /** Lo que se contestó, si consta: el mensaje de la persona que vino detrás. */
@@ -92,12 +93,19 @@ export function ConsultaDelAgente({
     enVuelo.current = true;
     setEnviando(true);
     setFalloDeEnvio(false);
-    void Promise.resolve(alElegir(respuesta)).catch(() => {
-      enVuelo.current = false;
-      if (!montado.current) return;
-      setEnviando(false);
-      setFalloDeEnvio(true);
-    });
+    void Promise.resolve(alElegir(respuesta)).then(
+      (resultado) => {
+        if (resultado !== false) return;
+        enVuelo.current = false;
+        if (montado.current) setEnviando(false);
+      },
+      () => {
+        enVuelo.current = false;
+        if (!montado.current) return;
+        setEnviando(false);
+        setFalloDeEnvio(true);
+      }
+    );
   };
 
   return (

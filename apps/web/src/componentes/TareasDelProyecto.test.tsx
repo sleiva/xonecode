@@ -29,6 +29,16 @@ describe("TareasDelProyecto", () => {
     expect(plegable.textContent).toContain("Haz la ventana");
   });
 
+  it("una aparcada cuya conversación tienes abierta en el chat lo dice, y si trabaja ahí, que la atiendes tú", () => {
+    const aparcada = tarea({ estado: "requiere-atencion", motivo: "m", sesion: "s1" });
+    const { rerender } = render(<TareasDelProyecto tareas={[aparcada]} sesionAbierta="s1" />);
+    expect(screen.getByText(/Su conversación está abierta en tu chat/)).toBeTruthy();
+    rerender(<TareasDelProyecto tareas={[aparcada]} sesionAbierta="s1" trabajandoEnElChat />);
+    expect(screen.getByText(/La estás atendiendo tú en el chat/)).toBeTruthy();
+    rerender(<TareasDelProyecto tareas={[aparcada]} sesionAbierta="otra" trabajandoEnElChat />);
+    expect(screen.queryByText(/en el chat/)).toBeNull();
+  });
+
   it("una tarea encadenada dice a quién espera mientras la anterior no termine", () => {
     const { rerender } = render(
       <TareasDelProyecto

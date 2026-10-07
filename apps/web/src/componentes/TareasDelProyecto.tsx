@@ -58,6 +58,8 @@ export function TareasDelProyecto({
   alContinuar,
   alArrancarAhora,
   consolaAbierta,
+  sesionAbierta,
+  trabajandoEnElChat,
   alMirar,
   alDejarDeMirar,
   mirando,
@@ -93,6 +95,13 @@ export function TareasDelProyecto({
   alArrancarAhora?: (id: string) => Promise<string | undefined>;
   /** La consola de la persona de ESTE proyecto está abierta: es lo que frena sus tareas nuevas, y se dice. */
   consolaAbierta?: boolean;
+  /**
+   * La conversación abierta en el chat y si tiene un turno en marcha. Una aparcada cuya conversación es ESA la estás
+   * atendiendo tú: la fila lo dice, porque su estado en la cola («Esperando feedback») no cambia mientras trabajas en el
+   * chat, y sin decirlo parecía que la tarea seguía parada (medido: «pero la tarea sigue en otro estado»).
+   */
+  sesionAbierta?: string;
+  trabajandoEnElChat?: boolean;
   /** Si el cable está vivo: apaga en `AccionesDeTarea` (y el botón «Nueva tarea» de aquí)
    *  lo que manda algo al servidor, y lo dice. Ausente = se asume conectado. */
   conectado?: boolean;
@@ -183,6 +192,7 @@ export function TareasDelProyecto({
               {...(alArrancarAhora === undefined ? {} : { alArrancarAhora })}
               puedeArrancar={puedeArrancarYa(t, tareas)}
               esperaPorTuConsola={consolaAbierta === true}
+              {...(t.sesion !== undefined && t.sesion === sesionAbierta ? { enTuChat: trabajandoEnElChat === true ? "trabajando" : "abierta" } : {})}
               {...(alMirar === undefined ? {} : { alMirar })}
               {...(alDejarDeMirar === undefined ? {} : { alDejarDeMirar })}
               {...(mirando === undefined ? {} : { mirando })}
@@ -198,6 +208,7 @@ export function TareasDelProyecto({
 function Fila({
   tarea: t,
   anterior,
+  enTuChat,
   alReintentar,
   alDescartar,
   alTerminar,
@@ -217,6 +228,8 @@ function Fila({
   /** La tarea a la que ESPERA (`tras`), si sigue en la cola. Una que ya no está —descartada— no
    *  la retiene: el corredor la deja correr, y aquí no se dice nada. */
   anterior?: TareaDelCable | undefined;
+  /** Su conversación es la que tienes abierta en el chat: `trabajando` con un turno tuyo en marcha. */
+  enTuChat?: "abierta" | "trabajando";
   alReintentar?: (id: string) => void;
   alDescartar?: (id: string) => void;
   alTerminar?: (id: string) => void;
@@ -250,6 +263,13 @@ function Fila({
           <>
             {/* Ausente = no consta ningún motivo; nunca se inventa uno para rellenar la fila. */}
             {t.motivo === undefined ? null : <p className={estilos.motivo}>{t.motivo}</p>}
+            {t.estado === "requiere-atencion" && enTuChat !== undefined ? (
+              <p className={estilos.espera}>
+                {enTuChat === "trabajando"
+                  ? "La estás atendiendo tú en el chat: el agente trabaja ahí, con cada escritura aprobada. Sigue aparcada como tarea."
+                  : "Su conversación está abierta en tu chat: puedes seguirla ahí o mandarla a continuar sola."}
+              </p>
+            ) : null}
             {/* Encadenada: no arranca hasta que la anterior termine (`core/tareas.ts#siguientesAEjecutar`). */}
             {t.estado === "nuevo" && anterior !== undefined && anterior.estado !== "terminada" ? (
               <p className={estilos.espera}>{`espera a: ${anterior.titulo}`}</p>

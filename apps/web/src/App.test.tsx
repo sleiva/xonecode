@@ -2851,6 +2851,36 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
       expect(enviar.mock.calls.map(([m]) => m)).toEqual([{ clase: "prosa", texto: "otra cosa" }]);
     });
 
+    it("contestar la TARJETA de una pregunta en el chat de esa tarea también deja elegir; cancelar la vuelve a dejar contestar", async () => {
+      const { store, enviar } = conProyectoAbierto();
+      act(() =>
+        store.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [TAREA({ estado: "requiere-atencion", motivo: "m", sesion: "s1" })] })
+      );
+      act(() => store.aplicar({ clase: "acto", acto: { tipo: "consulta", pregunta: "¿Qué alcance?", opciones: ["Todo", "Solo lo mío"] } }));
+      enviar.mockClear();
+      fireEvent.click(screen.getByRole("radio", { name: "Solo lo mío" }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Responder" }));
+      });
+      expect(enviar.mock.calls.some(([m]) => (m as { clase?: string }).clase === "prosa")).toBe(false);
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+      });
+      // La tarjeta vuelve a dejar contestar, sin decir que el envío falló.
+      expect((screen.getByRole("button", { name: "Responder" }) as HTMLButtonElement).disabled).toBe(false);
+      expect(screen.queryByText(/el envío falló/)).toBeNull();
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Responder" }));
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Enviar y continuar la tarea" }));
+      });
+      expect(enviar.mock.calls.map(([m]) => m)).toEqual([
+        { clase: "tarea", accion: "feedback", id: "t1", texto: "Solo lo mío" },
+        { clase: "tarea", accion: "arrancarAhora", id: "t1" },
+      ]);
+    });
+
     it("una tarea de fondo EN CURSO se ve en la fila del proyecto de la barra y en la pestaña Tareas", () => {
       const { store } = conProyectoAbierto();
       const barra = () => screen.getAllByRole("navigation").find((n) => !n.hasAttribute("aria-label"))!;

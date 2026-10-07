@@ -654,7 +654,9 @@ export function App({
   );
   const tareaEnEsperaDeLaSesion = tareaDeLaSesion?.estado === "requiere-atencion" ? tareaDeLaSesion : undefined;
   /** El mensaje escrito en el chat de esa tarea, mientras se elige a dónde va. */
-  const [mensajeEnEspera, setMensajeEnEspera] = useState<{ texto: string; adjuntos: string[] } | undefined>(undefined);
+  const [mensajeEnEspera, setMensajeEnEspera] = useState<
+    { texto: string; adjuntos: string[]; desdeConsulta?: (enviado: boolean) => void } | undefined
+  >(undefined);
   const tareasDelProyecto = useMemo(
     () =>
       estado.tareas === undefined
@@ -2503,6 +2505,8 @@ export function App({
       alArrancarAhora={async (id: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "arrancarAhora", id }))}
       // Esta lista es la del proyecto ABIERTO: su consola es la tuya, y es lo que frena sus tareas nuevas.
       consolaAbierta={proyectoActivoId !== undefined}
+      {...(estado.alta?.sesionActiva === undefined ? {} : { sesionAbierta: estado.alta.sesionActiva })}
+      trabajandoEnElChat={estado.turnoEnVuelo === true}
       conectado={estado.conectado}
       // Si las ejecuta OTRO proceso, esta pestaña lo dice — y aquí importa más
       // que en el kanban, porque aquí vive «Nueva tarea»: la que se cree se
@@ -2873,7 +2877,13 @@ export function App({
               // viaja como PROSA, lo mismo que si la persona la hubiera tecleado: es el mensaje
               // siguiente, y el motor ya sabe leerlo como la respuesta.
               alResponderConsulta={async (texto) => {
+                // En el chat de una tarea que espera feedback, contestar desde la tarjeta también deja ELEGIR a dónde va:
+                // sin esto la respuesta salía como prosa y la tarea seguía aparcada mientras el chat trabajaba (medido).
+                if (tareaEnEsperaDeLaSesion !== undefined && !turnoEnVuelo) {
+                  return await new Promise<boolean>((decidir) => setMensajeEnEspera({ texto, adjuntos: [], desdeConsulta: decidir }));
+                }
                 await enviar({ clase: "prosa", texto });
+                return true;
               }}
               // La propuesta de tareas encadenadas: encolar en orden, hacerlo aquí o descartar,
               // siempre del proyecto ABIERTO (la conversación que la propuso). Sin proyecto deducido
@@ -3056,14 +3066,20 @@ export function App({
                 alCancelar={() => {
                   // Lo escrito vuelve al compositor: al enviar se vació, y cancelar no puede perderlo. Los adjuntos ya
                   // subidos siguen en la carpeta de la sesión; solo se quita su mención de este mensaje.
-                  const texto = mensajeEnEspera.texto;
+                  const { texto, desdeConsulta } = mensajeEnEspera;
                   setMensajeEnEspera(undefined);
-                  setBorradorDelCompositor((b) => ({ texto, id: (b?.id ?? 0) + 1 }));
+                  // Si venía de la tarjeta de la pregunta, la tarjeta vuelve a dejar contestar; si del compositor, lo
+                  // escrito vuelve a él.
+                  if (desdeConsulta !== undefined) desdeConsulta(false);
+                  else setBorradorDelCompositor((b) => ({ texto, id: (b?.id ?? 0) + 1 }));
                 }}
                 alSeguirAqui={() => {
-                  const { texto, adjuntos } = mensajeEnEspera;
+                  const { texto, adjuntos, desdeConsulta } = mensajeEnEspera;
                   setMensajeEnEspera(undefined);
-                  void enviar({ clase: "prosa", texto, ...(adjuntos.length === 0 ? {} : { adjuntos }) });
+                  void enviar({ clase: "prosa", texto, ...(adjuntos.length === 0 ? {} : { adjuntos }) }).then(
+                    () => desdeConsulta?.(true),
+                    () => desdeConsulta?.(false)
+                  );
                 }}
                 alContinuarLaTarea={async () => {
                   // El feedback la devuelve a la cola; «Arrancar ahora» cede el proyecto (cierra esta conversación) para
@@ -3073,6 +3089,7 @@ export function App({
                   if (sinFeedback !== undefined) return sinFeedback;
                   const sinArrancar = await negativaOFalloDe(await enviar({ clase: "tarea", accion: "arrancarAhora", id }));
                   if (sinArrancar !== undefined) return `tu mensaje ya está en la tarea, pero ${sinArrancar}`;
+                  mensajeEnEspera.desdeConsulta?.(true);
                   setMensajeEnEspera(undefined);
                   return undefined;
                 }}
