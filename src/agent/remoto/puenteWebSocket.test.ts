@@ -152,4 +152,36 @@ describe("el puente WebSocket", () => {
     await new Promise((r) => setTimeout(r, 40));
     expect(mensajes).toEqual([]);
   });
+
+  it("procesa los mensajes del relé en orden de llegada, aunque descifrar tarde distinto", async () => {
+    const s = levantar();
+    const orden: string[] = [];
+    // Como el paquete real: por origen, un mensaje solo vale si su secuencia supera la última vista.
+    let ultima = 0;
+    const modulo: ModuloRemoto = {
+      ...moduloFalso,
+      crearCanal: async () => ({
+        cifrar: async (m) => JSON.stringify(m),
+        descifrar: async (c) => {
+          const m = JSON.parse(c) as { n: number };
+          await new Promise((r) => setTimeout(r, m.n === 1 ? 50 : 0));
+          if (m.n <= ultima) throw new Error("secuencia vieja");
+          ultima = m.n;
+          return m;
+        },
+      }),
+    };
+    await crearPuenteWebSocket(modulo).abrir(s.url, {
+      alEstado: () => {},
+      alPresencia: () => void orden.push("presencia"),
+      alMensaje: (_d, m) => void orden.push(`dato${(m as { n: number }).n}`),
+    });
+    await expect.poll(() => s.conexiones.length).toBe(1);
+    const ws = s.conexiones[0]!;
+    ws.send(JSON.stringify({ t: "dato", de: "m1", carga: JSON.stringify({ n: 1 }) }));
+    ws.send(JSON.stringify({ t: "dato", de: "m1", carga: JSON.stringify({ n: 2 }) }));
+    ws.send(JSON.stringify({ t: "presencia", moviles: ["m1"] }));
+    await expect.poll(() => orden.length).toBe(3);
+    expect(orden).toEqual(["dato1", "dato2", "presencia"]);
+  });
 });

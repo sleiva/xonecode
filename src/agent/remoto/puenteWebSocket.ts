@@ -57,6 +57,7 @@ export function crearPuenteWebSocket(
       let ws: WebSocket | undefined;
       let cerrado = false;
       let intento = 0;
+      let cola: Promise<void> = Promise.resolve();
       let temporizador: ReturnType<typeof setTimeout> | undefined;
 
       const acabar = (motivo: string) => {
@@ -71,7 +72,7 @@ export function crearPuenteWebSocket(
           intento = 0;
           socket.send(JSON.stringify({ t: "abrir", sala, v: modulo.VERSION_DEL_PROTOCOLO }));
         };
-        socket.onmessage = async (ev) => {
+        const procesar = async (ev: MessageEvent) => {
           if (cerrado || ws !== socket) return;
           let s: Record<string, unknown>;
           try {
@@ -93,6 +94,11 @@ export function crearPuenteWebSocket(
             acabar(MOTIVOS[s.motivo]!);
             socket.close();
           }
+        };
+        // En orden de llegada: el canal real descarta lo que no supera la última secuencia vista,
+        // y descifrar en paralelo desordenaría los mensajes legítimos del móvil.
+        socket.onmessage = (ev) => {
+          cola = cola.then(() => procesar(ev)).catch(() => {});
         };
         socket.onclose = (ev) => {
           if (cerrado || ws !== socket) return;
