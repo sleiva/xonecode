@@ -946,6 +946,23 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   opción `version`), antes que la URL. El cliente se lee del DISCO en cada petición
   (`servidor.ts`, `readFileSync`); el SERVIDOR es el proceso y solo cambia parándolo y
   arrancándolo. El árbol SUCIO se dice.
+- **La sesión remota (EXPERIMENTAL, detrás de un interruptor)** (`web/servidor/puenteRemoto.ts`, `core/remoto.ts`,
+  `agent/remoto/puenteWebSocket.ts`; el relé y la web móvil viven en `xonecode-server`). Apagada por omisión:
+  `settings.remoto.habilitado` o `XONECODE_REMOTO=1`, leído en CADA uso; apagada no se anuncia, no se atiende y **no se
+  carga el paquete** `@xone/xonecode-remoto`, que entra por `import()` dinámico de un nombre en variable en UN fichero y
+  no es dependencia de xonecode. `apagar` se atiende AUNQUE el interruptor esté apagado: apagarlo en `settings.json` con
+  el puente abierto no puede dejarlo abierto. **Cada móvil es un sumidero más** enganchado por la MISMA puerta que una
+  pestaña (`engancharCliente`/`soltarCliente`): la ráfaga de `adjuntar`, se muda con el foco, cuenta como «hay alguien
+  delante». **Límite declarado**: el `alta` NO va en esa ráfaga (la ruta SSE lo manda después de enganchar), así que un
+  móvil que entra no sabe proyecto ni sesión hasta el siguiente `alta` que se difunda.
+  Lo que sale pasa `filtrarSalida` (el `alta` sale TRANSFORMADO en `remoto.estado`, y `remoto` no sale nunca) y no pasa
+  de `TOPE_DE_SALIDA_BYTES` (una `reemision` pierde los actos más viejos; otro mensaje que no quepa se descarta y se
+  informa); lo que entra pasa `validarEntradaDelMovil` y se despacha por `cancelarTurno`/`recibirEnLaConsola`, el código
+  de `POST /accion`. **UN canal cifrado por encendido, conservado en las reconexiones**: uno nuevo al reconectar dejaría
+  al relé repetir mensajes viejos del móvil; y lo que llega del relé se procesa EN ORDEN (el canal tira toda secuencia no
+  mayor que la última). Un error cruza el cable solo como `code` de Node o texto FIJO nuestro, nunca lo que diga el relé.
+  La `url` con el secreto en el fragmento es el segundo secreto del cable, junto a `leerSecreto`. **Límite declarado**:
+  quien tiene la URL controla la sesión hasta «Revocar» o «Apagar».
 - **`arrancarConsolaWeb`** (`web/servidor/arranque.ts`) comprueba en orden: existe
   `apps/web/dist/index.html` (si no, salida **70**), avisa si el cwd es offline y sigue, y levanta.
   `abrirEnSistema` escucha el `error` del `spawn`.

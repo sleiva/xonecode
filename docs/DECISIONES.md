@@ -8672,3 +8672,63 @@ por el MISMO cuerpo (`construirConsolaDeProyecto`), así que también vuelcan a 
 corredor al rearrancar con una tarea que estaba en curso cuando murió el proceso. Y el corte duro medido pilló al raíz
 en sus propias `glob`, sin un hijo vivo: el cierre de una delegación nombrando lo escrito lo prueba el test de
 integración (`sesionTrueforge.test.ts`, «A MITAD de turno»), no la pasada real.
+
+## La sesión remota: el lado de xonecode (09-10-2026)
+
+Seguir una sesión desde el móvil y contestarle (aprobar, rechazar, escribir, parar) sin abrir la consola al mundo: la
+consola sigue en loopback y el móvil le habla a través de un relé de `xonecode-server` que solo ve sobres cifrados.
+
+**Por qué un interruptor y un `import()` dinámico.** Es experimental y no puede frenar las releases: `@xone/xonecode-remoto`
+no es dependencia de xonecode, entra por `import()` de un nombre en variable en UN fichero (`agent/remoto/puenteWebSocket.ts`),
+y `npm test` usa `PuenteRemotoEnMemoria`. Apagado (`settings.remoto.habilitado`, `XONECODE_REMOTO=1`, leído en cada uso) no
+sale ningún mensaje `remoto`, no se pinta el botón y no se carga el paquete. `apagar` se atiende aun con el interruptor
+apagado: quien lo apaga en `settings.json` con el puente abierto no puede quedarse con el puente abierto.
+
+**Por qué cada móvil es un sumidero de la MISMA puerta que una pestaña** (`engancharCliente`/`soltarCliente`): así se muda
+con el foco, cuenta como «hay alguien delante» (una aprobación no se rechaza sola mientras el móvil mira) y lo que manda
+entra por el mismo despacho que `POST /accion` (`cancelarTurno`/`recibirEnLaConsola`). Un segundo camino sería una segunda
+regla de qué se puede hacer desde fuera. Las dos listas blancas viven en `core/remoto.ts`: salen `acto`, `sustitucion`,
+`reemision`, `aprobacion`, `turno` y la `pregunta` sin `decision`; entran `prosa`, `decision`, `respuesta` y `cancelar`.
+
+**Por qué el `alta` sale TRANSFORMADO** en `remoto.estado {proyecto?, sesion?}`: el `alta` lleva entornos, rutas del
+workspace, la lista de proyectos de la cuenta. Al móvil solo le hace falta saber dónde está. Y `remoto` no sale nunca: su
+`url` lleva el secreto en el fragmento.
+
+**Lo que cambiaron las revisiones**: un `Canal` cifrado por encendido, conservado en las reconexiones (uno nuevo al
+reconectar dejaría al relé repetir mensajes viejos del móvil); lo que llega del relé se descifra EN ORDEN, porque el canal
+tira toda secuencia no mayor que la última y descifrar en paralelo podía tirar una `decision` legítima; lo que sale no pasa
+de `TOPE_DE_SALIDA_BYTES` (el relé cierra con 1009 por encima de su tope tras base64+GCM), una `reemision` pierde sus actos
+más viejos y otro mensaje que no quepa se descarta y se informa; y un error cruza el cable como `code` de Node o texto
+fijo nuestro, nunca lo que diga el relé.
+
+**La prueba cruzada, de punta a punta.** El relé real (`PUERTO=8787 node servidor/dist/principal.js` en `xonecode-server`),
+el paquete enlazado con un enlace simbólico temporal en `node_modules` (no `npm link`, que escribe el `package.json`), la
+consola web de esta rama en otro puerto con `remoto.servidor = ws://127.0.0.1:8787/ws`, una sesión NUEVA en AppDemo pasada a
+supervisado por el cable, «Sesión remota» encendida por el cable, y la URL abierta con Playwright en WebKit con el perfil
+«iPhone 13». Modelo: `deepseek/deepseek-flash`, motor TrueForge. Lo observado:
+
+- **Al entrar, la cabecera del móvil decía «sin sesión» con el punto en «conectado».** No es lentitud: `adjuntar` (la
+  ráfaga de `engancharCliente`) no lleva el `alta`, que la ruta SSE manda DESPUÉS de enganchar. El móvil no supo dónde
+  estaba hasta el primer `alta` difundido, que llegó con el primer mensaje (la sesión entra en el índice con él): entonces
+  la cabecera pasó a «AppDemo · crea el fichero prueba-remota.txt con el texto hola» (el título de la sesión es su primer
+  mensaje). Queda como límite declarado en `CLAUDE.md`; el arreglo es mandar el `alta` transformado al sumidero recién
+  enganchado.
+- **La URL quedó sin fragmento** en la barra del móvil tras leer el secreto.
+- **Aceptar escribe.** «crea el fichero prueba-remota.txt con el texto hola»: el raíz delegó en `developer-xone` y en el
+  móvil salió la tarjeta «Esperan tu aprobación · /prueba-remota.txt · developer-xone · + hola». Antes de pulsar, el fichero
+  no existía; tras «Aceptar», `prueba-remota.txt` contenía `hola`.
+- **Rechazar no escribe.** «crea el fichero prueba-remota-2.txt con el texto adios»: tarjeta «/prueba-remota-2.txt · + adios»,
+  «Rechazar», y el fichero no existía al acabar el turno. El agente lo dijo («El fichero no se ha creado… No lo he vuelto a
+  intentar por mi cuenta») y cerró con una pregunta de opciones, que el móvil pintó como texto.
+- **Tras «Rechazar», la tarjeta desapareció y VOLVIÓ, pulsable, hasta el fin del turno**: el corredor la vio y la pulsó
+  otras veces. La web móvil la quita al enviar la decisión (`aprobacion-contestada`) y solo la vuelve a poner un mensaje
+  `aprobacion`, así que al móvil le llegó otro que la pestaña de la prueba no vio (su SSE recibió UNO por escritura). La
+  causa no se midió; nada más se escribió y el turno cerró al rato.
+- **Una carrera del propio corredor, no del producto**: en una pasada anterior el corredor comprobó el modo antes de que la
+  sesión nueva terminara de abrir; la sesión nació con la omisión de esta máquina (autónomo) y la escritura se aplicó sin
+  tarjeta, como debe en autónomo. Esa pasada no cuenta; la buena espera al fin de `abriendo` antes de pedir supervisado.
+
+Lo que se limpió: los ficheros, las sesiones de prueba (`borrarSesion`, `olvidarSesion`, `olvidarMemoriaDeHilo`), el
+enlace simbólico y el `settings.json`, restaurado byte a byte. Lo que NO: los commits de turno que la consola hizo en AppDemo
+(`commitDeTurno`) movieron su `master`, y el árbol tiene sin commitear el borrado de `prueba-remota.txt`; desde la sesión
+de la prueba no se podía ejecutar git sobre AppDemo, y queda para mirarlo a mano.
