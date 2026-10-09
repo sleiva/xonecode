@@ -8681,14 +8681,34 @@ consola sigue en loopback y el móvil le habla a través de un relé de `xonecod
 **Por qué un interruptor y un `import()` dinámico.** Es experimental y no puede frenar las releases: `@xone/xonecode-remoto`
 no es dependencia de xonecode, entra por `import()` de un nombre en variable en UN fichero (`agent/remoto/puenteWebSocket.ts`),
 y `npm test` usa `PuenteRemotoEnMemoria`. Apagado (`settings.remoto.habilitado`, `XONECODE_REMOTO=1`, leído en cada uso) no
-sale ningún mensaje `remoto`, no se pinta el botón y no se carga el paquete. `apagar` se atiende aun con el interruptor
-apagado: quien lo apaga en `settings.json` con el puente abierto no puede quedarse con el puente abierto.
+sale ningún mensaje `remoto`, no se pinta el botón y no se carga el paquete. Con una excepción: mientras el puente NO esté
+apagado, la ráfaga lo anuncia aunque el interruptor esté apagado, y `apagar` se atiende siempre. Quien apaga el interruptor
+en `settings.json` con el puente abierto no puede quedarse con un puente abierto que ninguna pestaña nueva ve ni puede
+apagar (la primera versión solo miraba el interruptor, y eso pasaba).
 
 **Por qué cada móvil es un sumidero de la MISMA puerta que una pestaña** (`engancharCliente`/`soltarCliente`): así se muda
 con el foco, cuenta como «hay alguien delante» (una aprobación no se rechaza sola mientras el móvil mira) y lo que manda
 entra por el mismo despacho que `POST /accion` (`cancelarTurno`/`recibirEnLaConsola`). Un segundo camino sería una segunda
 regla de qué se puede hacer desde fuera. Las dos listas blancas viven en `core/remoto.ts`: salen `acto`, `sustitucion`,
 `reemision`, `aprobacion`, `turno` y la `pregunta` sin `decision`; entran `prosa`, `decision`, `respuesta` y `cancelar`.
+
+**Por qué la `respuesta` del móvil NO va por `recibir`.** `recibir` contesta primero la decisión con selección en espera
+(la subida a CloudStudio) y después la primera espera de texto, que puede ser una `pregunta` CON `decision` («¿Vaciar la
+copia…?» de «Actualizar repo local»). El móvil no ve ninguna de las dos (`filtrarSalida` solo deja salir la `pregunta` sin
+`decision`), pero un `{clase:"respuesta", texto:"s"}` suyo las resolvía: la subida sin `seleccion` se lee como el plan
+ENTERO aprobado. Ahora va por `responderDesdeElMovil`, que solo contesta una espera de texto cuya pregunta NO llevaba
+`decision` (se marcan al encolar); si no hay ninguna, se descarta y se informa. El escritorio no cambia.
+
+**Por qué lo que SALE también va en cola.** El canal del paquete toma la secuencia al llamar a `cifrar` y termina de
+cifrar cuando termina: dos envíos seguidos podían salir al revés (uno grande adelantado por uno pequeño), y el móvil tira
+toda secuencia no mayor que la última. Cifrar y mandar van en el orden de llamada, y un paso que falla no bloquea a los
+siguientes.
+
+**Lo que sale de la máquina.** Con la sesión encendida, al relé y al móvil salen los actos y las aprobaciones tal cual los
+ve la pestaña: el contenido de los ficheros y los diffs de las tarjetas, y las rutas que el modelo escriba en ellos (la
+disciplina `sinRutas` es del anfitrión, y TrueForge pone el `file_path` del modelo tal cual). Va cifrado de punta a punta
+—el relé solo ve sobres—, pero sale; es un límite declarado. Y la `url` es el TERCER secreto del cable, tras `leerSecreto`
+y el `codigo` de `motorLocal`.
 
 **Por qué el `alta` sale TRANSFORMADO** en `remoto.estado {proyecto?, sesion?}`: el `alta` lleva entornos, rutas del
 workspace, la lista de proyectos de la cuenta. Al móvil solo le hace falta saber dónde está. Y `remoto` no sale nunca: su
@@ -8699,7 +8719,11 @@ reconectar dejaría al relé repetir mensajes viejos del móvil); lo que llega d
 tira toda secuencia no mayor que la última y descifrar en paralelo podía tirar una `decision` legítima; lo que sale no pasa
 de `TOPE_DE_SALIDA_BYTES` (el relé cierra con 1009 por encima de su tope tras base64+GCM), una `reemision` pierde sus actos
 más viejos y otro mensaje que no quepa se descarta y se informa; y un error cruza el cable como `code` de Node o texto
-fijo nuestro, nunca lo que diga el relé.
+fijo nuestro, nunca lo que diga el relé. La revisión final de la rama añadió: un relé inalcanzable ya no deja la sesión
+en `abriendo` para siempre —el primer `reconectando` sin `abierta` se anuncia sin `url` y el diálogo ofrece «Apagar»
+también en `abriendo`—; la clase de un mensaje rechazado del móvil, que va al terminal de quien desarrolla, solo se
+escribe si es `/^[a-zA-Z.]{1,32}$/` (una secuencia de escape como OSC 52 escribiría su portapapeles); y «Revocar» no
+anuncia el `apagada` de en medio, que cerraba el diálogo justo cuando iba a enseñar el enlace nuevo.
 
 **La prueba cruzada, de punta a punta.** El relé real (`PUERTO=8787 node servidor/dist/principal.js` en `xonecode-server`),
 el paquete enlazado con un enlace simbólico temporal en `node_modules` (no `npm link`, que escribe el `package.json`), la

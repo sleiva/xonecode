@@ -418,7 +418,8 @@ export interface OpcionesDeMontaje {
   /**
    * La sesión remota (`puenteRemoto.ts`). Ausente o `ajustes().habilitado === false` = no
    * existe: ni se anuncia, ni se atiende, ni se llama a `puerto` (que es lo que cargaría el
-   * paquete del puente). `ajustes` se lee en cada uso, no al montar: el
+   * paquete del puente). Con una excepción: un puente que sigue abierto al apagar el
+   * interruptor se sigue anunciando hasta que se apague. `ajustes` se lee en cada uso, no al montar: el
    * interruptor vive en `settings.json` y leerlo una vez lo congelaría.
    */
   remoto?: {

@@ -627,7 +627,7 @@ export type MensajeAlCliente =
   | { clase: "reemision"; actos: Acto[] }
   /**
    * La sesión remota, solo si el interruptor está encendido (`settings.remoto`). La `url` lleva
-   * el SECRETO en el fragmento: es el segundo secreto del cable, junto a `leerSecreto`, y por eso
+   * el SECRETO en el fragmento: es el TERCER secreto del cable, tras `leerSecreto` y el `codigo` de `motorLocal`, y por eso
    * `remoto` no está en la lista de salida del puente (`core/remoto.ts`).
    */
   | {
