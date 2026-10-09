@@ -196,6 +196,9 @@ export interface EstadoDelCliente {
    * detrás no se pinta.
    */
   depuracionActiva?: boolean;
+  /** La sesión remota; ausente = el interruptor está apagado y no se pinta nada. Se tira al
+   *  caerse el cable: la ráfaga de reconexión lo vuelve a traer. */
+  remoto?: EstadoRemoto;
   /** El modo con que nacen las sesiones nuevas (IXCODE-31, Ajustes > General). Ausente = el
    *  servidor no lo dice, y el control no se pinta. */
   modoPorDefecto?: ModoDeEscritura;
@@ -607,6 +610,11 @@ function esTrabajoAlAbrir(v: unknown): v is { ficheros: string[]; total: number 
     typeof t.total === "number"
   );
 }
+
+export type EstadoRemoto =
+  | { estado: "apagada" | "abriendo" }
+  | { estado: "activa" | "reconectando"; url: string; moviles: number }
+  | { estado: "error"; motivo: string };
 
 const ESTADO_INICIAL: EstadoDelCliente = { actos: [], conectado: false };
 
@@ -1539,6 +1547,17 @@ export function crearStoreDelCliente(): {
           mutar({ workspace: m["ruta"], puedeElegirCarpeta: m["puedeElegir"] === true });
           return;
         }
+        case "remoto": {
+          const m = mensaje as Record<string, unknown>;
+          if (m["estado"] === "apagada" || m["estado"] === "abriendo") {
+            mutar({ remoto: { estado: m["estado"] } });
+          } else if ((m["estado"] === "activa" || m["estado"] === "reconectando") && typeof m["url"] === "string") {
+            mutar({ remoto: { estado: m["estado"], url: m["url"], moviles: typeof m["moviles"] === "number" ? m["moviles"] : 0 } });
+          } else if (m["estado"] === "error" && typeof m["motivo"] === "string") {
+            mutar({ remoto: { estado: "error", motivo: m["motivo"] } });
+          }
+          return;
+        }
         case "depuracion": {
           const m = mensaje as Record<string, unknown>;
           if (typeof m["activa"] !== "boolean") return;
@@ -2373,6 +2392,7 @@ export function crearStoreDelCliente(): {
         secreto: undefined,
         aprobacion: undefined,
         modelos: undefined,
+        remoto: undefined,
         // Y las listas de proyectos por entorno: cada una es una conexión con CloudStudio
         // que este proceso pudo no llegar a hacer, y al reconectar la pestaña las vuelve a
         // pedir si le faltan. Guardarlas entre conexiones dejaría casillas de una consulta

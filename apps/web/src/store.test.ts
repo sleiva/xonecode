@@ -2188,4 +2188,14 @@ describe("store: lo pendiente de subir (la pestaña Sincronización)", () => {
     expect(s.leer().pendientesDeSubida).toBeUndefined();
     expect(s.leer().parchesDeSubida).toBeUndefined();
   });
+
+  it("guarda el estado de la sesión remota y descarta uno desconocido", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "remoto", estado: "activa", url: "https://r/r/S#K", moviles: 1 });
+    expect(s.leer().remoto).toEqual({ estado: "activa", url: "https://r/r/S#K", moviles: 1 });
+    s.aplicar({ clase: "remoto", estado: "inventado" } as never);
+    expect(s.leer().remoto).toEqual({ estado: "activa", url: "https://r/r/S#K", moviles: 1 });
+    s.marcarDesconectado();
+    expect(s.leer().remoto).toBeUndefined();
+  });
 });
