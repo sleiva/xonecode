@@ -95,12 +95,14 @@ function conRemoto(habilitado: boolean, extra: Parameters<typeof vestibuloDePrue
   const puerto = new PuenteRemotoEnMemoria();
   const cargar = vi.fn(async () => puerto);
   const vestibulo = vestibuloDePrueba(extra);
+  const informados: string[] = [];
   const montado = montarRutas(servidor, vestibulo, {
     remoto: { ajustes: () => ({ habilitado, servidor: "ws://127.0.0.1:8787/ws" }), puerto: cargar },
+    informar: (t) => void informados.push(t),
   });
   const sse = servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!;
   const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
-  return { servidor, puerto, cargar, vestibulo, montado, sse, accion };
+  return { servidor, puerto, cargar, vestibulo, montado, sse, accion, informados };
 }
 
 describe("la sesión remota en el cable", () => {
@@ -297,6 +299,77 @@ describe("la sesión remota en el cable", () => {
       expect(m.puerto.enviados.filter((e) => e.para === "m1" && (e.mensaje as { clase: string }).clase === "aprobacion")).toHaveLength(1);
       m.puerto.delMovil("m1", { clase: "decision", decisiones: { "1": "approve" } });
       expect((await decidido).get("1")?.type).toBe("approve");
+      await m.vestibulo.cerrar();
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Al móvil solo le llega una `pregunta` SIN `decision` (`filtrarSalida`): su `respuesta` no
+   * puede contestar lo que nunca vio. Con «¿Vaciar la copia…?» o la subida con casillas abiertas
+   * en el escritorio, un «s» del móvil las APROBABA (la subida sin `seleccion` es el plan entero).
+   */
+  it("una `respuesta` del móvil no contesta una decisión del escritorio, y la pestaña sí", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xonecode-remoto-"));
+    try {
+      const { m } = await abiertoConPestanaYPuente(base);
+      m.puerto.presencia("m1");
+      for (let i = 0; i < 10; i++) await asentar();
+      const consola = m.vestibulo.proyectoAbierto()!.consola.consola;
+
+      let vaciar: string | undefined;
+      void consola.preguntar("¿Vaciar la copia local?", { lineas: [{ texto: "- a.xne", cambio: "borrado" }], operacion: "bajar" }).then((r) => {
+        vaciar = r;
+      });
+      let subir: { respuesta: string; seleccion?: readonly string[] } | undefined;
+      void consola.decidirConSeleccion!("¿Subir a CloudStudio?", { lineas: [{ texto: "~ a.xne", cambio: "modificado", ruta: "a.xne" }], seleccionable: true, operacion: "subir" }).then((r) => {
+        subir = r;
+      });
+      await asentar();
+
+      m.puerto.delMovil("m1", { clase: "respuesta", texto: "s" });
+      m.puerto.delMovil("m1", { clase: "respuesta", texto: "s" });
+      for (let i = 0; i < 5; i++) await asentar();
+      expect(subir).toBeUndefined();
+      expect(vaciar).toBeUndefined();
+      expect(m.informados.filter((t) => t.includes("una respuesta del móvil no tenía pregunta a la que contestar"))).toHaveLength(2);
+
+      // Las dos siguen vivas para el escritorio, en su orden de siempre.
+      await enviarMensaje(m.accion, { clase: "respuesta", texto: "n", seleccion: [] });
+      await enviarMensaje(m.accion, { clase: "respuesta", texto: "n" });
+      await vi.waitFor(() => expect(subir).toEqual({ respuesta: "n", seleccion: [] }));
+      await vi.waitFor(() => expect(vaciar).toBe("n"));
+      await m.vestibulo.cerrar();
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  it("una `respuesta` del móvil SÍ contesta una pregunta de texto libre, aunque haya una decisión antes", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xonecode-remoto-"));
+    try {
+      const { m } = await abiertoConPestanaYPuente(base);
+      m.puerto.presencia("m1");
+      for (let i = 0; i < 10; i++) await asentar();
+      const consola = m.vestibulo.proyectoAbierto()!.consola.consola;
+
+      let vaciar: string | undefined;
+      void consola.preguntar("¿Vaciar la copia local?", { lineas: [{ texto: "- a.xne", cambio: "borrado" }], operacion: "bajar" }).then((r) => {
+        vaciar = r;
+      });
+      let url: string | undefined;
+      void consola.preguntar("¿URL del servidor?").then((r) => {
+        url = r;
+      });
+      await asentar();
+      expect(m.puerto.enviados.filter((e) => e.para === "m1").map((e) => e.mensaje)).toContainEqual({ clase: "pregunta", texto: "¿URL del servidor?" });
+
+      m.puerto.delMovil("m1", { clase: "respuesta", texto: "https://x" });
+      await vi.waitFor(() => expect(url).toBe("https://x"));
+      expect(vaciar).toBeUndefined();
+      await enviarMensaje(m.accion, { clase: "respuesta", texto: "n" });
+      await vi.waitFor(() => expect(vaciar).toBe("n"));
       await m.vestibulo.cerrar();
     } finally {
       rmSync(base, { recursive: true, force: true });

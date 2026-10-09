@@ -400,6 +400,8 @@ const TOPE_DE_CUERPO = 1_000_000;
 /** Lo mínimo que el cable necesita de una consola, la del vestíbulo o la del proyecto. */
 interface DestinoDelCable {
   recibir(mensaje: MensajeDelCliente): void;
+  /** La `respuesta` de un móvil: solo contesta una pregunta SIN `decision` (`ConsolaWeb`). */
+  responderDesdeElMovil(texto: string): boolean;
   conectar(enviar?: Sumidero): readonly Acto[];
   /** Con sumidero se va ESE cliente; sin él, todos. Lo llama el `close` del SSE. */
   desconectar(enviar?: Sumidero): void;
@@ -6095,7 +6097,15 @@ export function montarRutas(
           servidor: () => opciones.remoto!.ajustes().servidor,
           engancharCliente: engancharMovil,
           soltarCliente,
-          despachar: (m) => (m.clase === "cancelar" ? cancelarTurno() : recibirEnLaConsola(m)),
+          // La `respuesta` es la excepción, y por SEGURIDAD: por `recibir` contestaría también la
+          // subida con casillas o «¿Vaciar la copia…?» del escritorio, que el móvil nunca ve.
+          despachar: (m) => {
+            if (m.clase === "cancelar") cancelarTurno();
+            else if (m.clase === "respuesta") {
+              if (!destinoActual().responderDesdeElMovil(m.texto))
+                informar("sesión remota: una respuesta del móvil no tenía pregunta a la que contestar");
+            } else recibirEnLaConsola(m);
+          },
           informar,
           // A las pestañas: el diálogo de la consola. `clientes` contiene también los sumideros
           // de los móviles, y no pasa nada: su filtro descarta `remoto`.
