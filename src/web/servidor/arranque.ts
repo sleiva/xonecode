@@ -1170,7 +1170,7 @@ export function montarRutas(
    * hace que se elija TAMBIÉN el modelo. El wizard sigue sabiendo pintarlo por si otra
    * piel se lo manda; esta no.
    */
-  const anunciarAlta = async (): Promise<void> => {
+  const componerAlta = async (): Promise<Extract<MensajeAlCliente, { clase: "alta" }>> => {
     const abierto = vestibulo.proyectoAbierto();
     const proyectoAbierto = abierto !== undefined;
     // Se lee del disco EN CADA anuncio y no se cachea al abrir: `configurarModoInicial`
@@ -1232,7 +1232,7 @@ export function montarRutas(
         })
       );
     }
-    emitir({
+    return {
       clase: "alta",
       pasos,
       proveedores: PROVEEDORES.map((p) => ({ id: p, nombre: nombreDeProveedor(p) })),
@@ -1341,7 +1341,12 @@ export function montarRutas(
       // en cada anuncio en vez de pasarse por parámetro: los anuncios de los flancos del
       // turno no preparan nada y tienen que decir lo que hay, no lo que había.
       ...(preparando === undefined ? {} : { preparando }),
-    });
+    };
+  };
+  /** El alta a TODOS los clientes vivos. Compuesto aparte (`componerAlta`) para poder dárselo a
+   *  UNO solo: el móvil que entra por la sesión remota (ver `engancharMovil`). */
+  const anunciarAlta = async (): Promise<void> => {
+    emitir(await componerAlta());
   };
 
   /**
@@ -6060,6 +6065,24 @@ export function montarRutas(
   };
 
   /**
+   * La puerta de un MÓVIL: la de una pestaña y, detrás, el `alta` SOLO para él. Una pestaña lo
+   * recibe porque la ruta SSE anuncia después de enganchar (`conducirCuenta().then(anunciarAlta)`);
+   * un móvil no pasa por esa ruta, y sin esto su cabecera decía «sin sesión» hasta el siguiente
+   * `alta` difundido. No va en `adjuntar` porque las pestañas recibirían uno de más, ni se difunde
+   * a todos por lo mismo. Sale por su sumidero, así que cruza transformado por `filtrarSalida`
+   * (`remoto.estado`: proyecto y título de la sesión). Se compone asíncrono: si el móvil se fue
+   * entre medias, no se le escribe.
+   */
+  const engancharMovil = (sumidero: Sumidero): void => {
+    engancharCliente(sumidero);
+    void componerAlta()
+      .then((alta) => {
+        if (clientes.has(sumidero)) sumidero(alta);
+      })
+      .catch(contar);
+  };
+
+  /**
    * El móvil entra por la MISMA puerta que una pestaña (`engancharCliente`) y lo que manda va a
    * la consola por el MISMO despacho que `POST /accion` (`cancelarTurno`/`recibirEnLaConsola`):
    * un segundo camino sería una segunda regla de qué se puede hacer desde fuera.
@@ -6070,7 +6093,7 @@ export function montarRutas(
       : crearSesionRemota({
           puerto: opciones.remoto.puerto,
           servidor: () => opciones.remoto!.ajustes().servidor,
-          engancharCliente,
+          engancharCliente: engancharMovil,
           soltarCliente,
           despachar: (m) => (m.clase === "cancelar" ? cancelarTurno() : recibirEnLaConsola(m)),
           informar,

@@ -953,8 +953,8 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   no es dependencia de xonecode. `apagar` se atiende AUNQUE el interruptor esté apagado: apagarlo en `settings.json` con
   el puente abierto no puede dejarlo abierto. **Cada móvil es un sumidero más** enganchado por la MISMA puerta que una
   pestaña (`engancharCliente`/`soltarCliente`): la ráfaga de `adjuntar`, se muda con el foco, cuenta como «hay alguien
-  delante». **Límite declarado**: el `alta` NO va en esa ráfaga (la ruta SSE lo manda después de enganchar), así que un
-  móvil que entra no sabe proyecto ni sesión hasta el siguiente `alta` que se difunda.
+  delante». El `alta` no va en esa ráfaga (la pestaña lo recibe de la ruta SSE, después de enganchar), así que el móvil
+  entra por `engancharMovil`, que le compone uno SOLO a él: difundirlo daría uno de más a cada pestaña.
   Lo que sale pasa `filtrarSalida` (el `alta` sale TRANSFORMADO en `remoto.estado`, y `remoto` no sale nunca) y no pasa
   de `TOPE_DE_SALIDA_BYTES` (una `reemision` pierde los actos más viejos; otro mensaje que no quepa se descarta y se
   informa); lo que entra pasa `validarEntradaDelMovil` y se despacha por `cancelarTurno`/`recibirEnLaConsola`, el código

@@ -193,6 +193,116 @@ describe("la sesión remota en el cable", () => {
     }
   });
 
+  /**
+   * Abre «Tienda» (offline, con copia) con el lazo de consola REAL y una pestaña conectada, y
+   * enciende el puente. Deja todo ASENTADO: la ruta SSE deja anuncios de `alta` en vuelo
+   * (`conducirCuenta().then(anunciarAlta)` y su `finally`), y si llegaran después de enganchar
+   * el móvil, el test pasaría sin que el móvil recibiera nada suyo.
+   */
+  async function abiertoConPestanaYPuente(base: string) {
+    const m = conRemoto(true, { baseDeWorkspace: () => base, crearEjecutor: () => async () => {}, correr: undefined });
+    const raiz = m.vestibulo.raizDeProyecto("webstudio", "Tienda");
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
+    const pestana = clienteDeMentira();
+    await m.sse(pestana.peticion, pestana.respuesta);
+    await enviarMensaje(m.accion, { clase: "sesion", proyecto: "p1" });
+    await vi.waitFor(() => expect(m.vestibulo.proyectoAbierto()).toBeDefined());
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" });
+    for (let i = 0; i < 10; i++) await asentar();
+    m.puerto.abierta();
+    for (let i = 0; i < 10; i++) await asentar();
+    return { m, pestana };
+  }
+
+  it("un móvil que entra recibe el `alta` (como `remoto.estado`) solo él, y la pestaña nada de más", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xonecode-remoto-"));
+    try {
+      const { m, pestana } = await abiertoConPestanaYPuente(base);
+      const altasDeLaPestana = pestana.recibidos.filter((x) => x.clase === "alta").length;
+      // La pestaña SÍ sabe dónde está: el dato existe y lo que falta es dárselo al móvil.
+      expect(pestana.recibidos.filter((x) => x.clase === "alta").at(-1)).toMatchObject({ proyectoActivo: "p1" });
+
+      m.puerto.presencia("m1");
+      await vi.waitFor(() =>
+        expect(m.puerto.enviados.filter((e) => e.para === "m1").map((e) => e.mensaje)).toContainEqual({ clase: "remoto.estado", proyecto: "Tienda" })
+      );
+      expect(pestana.recibidos.filter((x) => x.clase === "alta").length).toBe(altasDeLaPestana);
+      await m.vestibulo.cerrar();
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * La tarjeta que VOLVÍA al móvil tras decidir (prueba cruzada). El anfitrión le manda UNA
+   * `aprobacion` por escritura y ninguna después de la decisión, pase lo que pase en el cable:
+   * actos, un `alta` reanunciado, presencia repetida y otro móvil que entra. La causa estaba en
+   * la web móvil (dos copias de su estado), y esto es lo que la descarta en este lado.
+   */
+  it("a un móvil le llega UNA `aprobacion` por escritura, y ninguna tras decidir", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xonecode-remoto-"));
+    try {
+      const { m, pestana } = await abiertoConPestanaYPuente(base);
+      m.puerto.presencia("m1");
+      for (let i = 0; i < 10; i++) await asentar();
+
+      const abierto = m.vestibulo.proyectoAbierto()!;
+      const pendiente = { id: "1", origen: "dev", descripcion: "escribir /a.txt", decisionesPermitidas: ["approve", "reject"] as const };
+      const decidido = abierto.consola.consola.aprobacionesTui!([{ ...pendiente, decisionesPermitidas: [...pendiente.decisionesPermitidas] }], new Map([["1", "/a.txt"]]), new Map());
+      await asentar();
+      const aprobacionesA = (para: string) => m.puerto.enviados.filter((e) => e.para === para && (e.mensaje as { clase: string }).clase === "aprobacion").length;
+      expect(aprobacionesA("m1")).toBe(1);
+
+      m.puerto.delMovil("m1", { clase: "decision", decisiones: { "1": "reject" } });
+      const decisiones = await decidido;
+      expect(decisiones.get("1")?.type).toBe("reject");
+
+      // El tráfico que había en la prueba cruzada mientras el turno seguía.
+      const clasesTrasDecidir = (desde: number) =>
+        m.puerto.enviados.slice(desde).filter((e) => e.para === "m1").map((e) => (e.mensaje as { clase: string }).clase);
+      const desde = m.puerto.enviados.length;
+      // Una prosa de la pestaña: reanuncia el `alta` y corre un turno (sus dos flancos).
+      await enviarMensaje(m.accion, { clase: "prosa", texto: "otra cosa" });
+      m.puerto.presencia("m1");
+      m.puerto.presencia("m1", "m2");
+      m.puerto.delMovil("m1", { clase: "decision", decisiones: { "1": "reject" } });
+      for (let i = 0; i < 10; i++) await asentar();
+
+      // Y el tráfico llegó de verdad al móvil: sin esto, «ninguna más» no diría nada.
+      expect(clasesTrasDecidir(desde)).toEqual(expect.arrayContaining(["acto", "remoto.estado", "turno"]));
+      expect(aprobacionesA("m1")).toBe(1);
+      // El que entra DESPUÉS de decidir tampoco la recibe: ya no está en vuelo.
+      expect(aprobacionesA("m2")).toBe(0);
+      expect(pestana.recibidos.filter((x) => x.clase === "aprobacion")).toHaveLength(1);
+      await m.vestibulo.cerrar();
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  it("la aprobación en vuelo SÍ se reemite al móvil que entra mientras espera", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xonecode-remoto-"));
+    try {
+      const { m } = await abiertoConPestanaYPuente(base);
+      const abierto = m.vestibulo.proyectoAbierto()!;
+      const decidido = abierto.consola.consola.aprobacionesTui!(
+        [{ id: "1", origen: "dev", descripcion: "escribir /a.txt", decisionesPermitidas: ["approve", "reject"] }],
+        new Map([["1", "/a.txt"]]),
+        new Map()
+      );
+      m.puerto.presencia("m1");
+      for (let i = 0; i < 10; i++) await asentar();
+      expect(m.puerto.enviados.filter((e) => e.para === "m1" && (e.mensaje as { clase: string }).clase === "aprobacion")).toHaveLength(1);
+      m.puerto.delMovil("m1", { clase: "decision", decisiones: { "1": "approve" } });
+      expect((await decidido).get("1")?.type).toBe("approve");
+      await m.vestibulo.cerrar();
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
   it("cerrarRemoto apaga el puente", async () => {
     const m = conRemoto(true);
     await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" });

@@ -8711,8 +8711,9 @@ supervisado por el cable, «Sesión remota» encendida por el cable, y la URL ab
   ráfaga de `engancharCliente`) no lleva el `alta`, que la ruta SSE manda DESPUÉS de enganchar. El móvil no supo dónde
   estaba hasta el primer `alta` difundido, que llegó con el primer mensaje (la sesión entra en el índice con él): entonces
   la cabecera pasó a «AppDemo · crea el fichero prueba-remota.txt con el texto hola» (el título de la sesión es su primer
-  mensaje). Queda como límite declarado en `CLAUDE.md`; el arreglo es mandar el `alta` transformado al sumidero recién
-  enganchado.
+  mensaje). Arreglado después: el móvil entra por `engancharMovil` (`arranque.ts`), que le compone el `alta` solo a él
+  (difundirlo daría uno de más a cada pestaña); `arranque.remoto.test.ts` lo exige y comprueba que la pestaña no recibe
+  ninguno más.
 - **La URL quedó sin fragmento** en la barra del móvil tras leer el secreto.
 - **Aceptar escribe.** «crea el fichero prueba-remota.txt con el texto hola»: el raíz delegó en `developer-xone` y en el
   móvil salió la tarjeta «Esperan tu aprobación · /prueba-remota.txt · developer-xone · + hola». Antes de pulsar, el fichero
@@ -8722,8 +8723,14 @@ supervisado por el cable, «Sesión remota» encendida por el cable, y la URL ab
   intentar por mi cuenta») y cerró con una pregunta de opciones, que el móvil pintó como texto.
 - **Tras «Rechazar», la tarjeta desapareció y VOLVIÓ, pulsable, hasta el fin del turno**: el corredor la vio y la pulsó
   otras veces. La web móvil la quita al enviar la decisión (`aprobacion-contestada`) y solo la vuelve a poner un mensaje
-  `aprobacion`, así que al móvil le llegó otro que la pestaña de la prueba no vio (su SSE recibió UNO por escritura). La
-  causa no se midió; nada más se escribió y el turno cerró al rato.
+  `aprobacion`… o eso parecía. Medido después: el anfitrión NO manda otra. La web móvil guarda su estado DOS veces —la
+  variable `estado` de `conectar` (`web/src/conexion.ts`) y el `useState` de `App.tsx`, que se SUSTITUYE por la primera
+  en cada mensaje (`alCambiar: setEstado`)—, y `aprobacion-contestada` solo se aplica a la de React. El siguiente mensaje
+  del anfitrión, el que sea (un `acto`, una `sustitucion` del texto que llega), repone la copia interna con la
+  `aprobacion` dentro, hasta que `turno {activo:false}` la limpia también ahí. Lo mismo vale para `pregunta-contestada`.
+  El arreglo es de `xonecode-server/web` (aplicar lo local por el `aplicar` de la conexión); en este lado,
+  `arranque.remoto.test.ts` fija que al móvil le llega UNA `aprobacion` por escritura y ninguna tras decidir, con actos,
+  `alta` reanunciado y presencia repetida de por medio.
 - **Una carrera del propio corredor, no del producto**: en una pasada anterior el corredor comprobó el modo antes de que la
   sesión nueva terminara de abrir; la sesión nació con la omisión de esta máquina (autónomo) y la escritura se aplicó sin
   tarjeta, como debe en autónomo. Esa pasada no cuenta; la buena espera al fin de `abriendo` antes de pedir supervisado.
