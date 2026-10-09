@@ -1,0 +1,201 @@
+/**
+ * La sesión remota en el CABLE: el mensaje `remoto` en los dos sentidos y el móvil entrando por
+ * la MISMA puerta que una pestaña. Se prueba contra el `montarRutas` REAL —y en la prosa, con el
+ * lazo de consola real y un ejecutor que no es un doble del despacho—: el despacho del móvil se
+ * compone dentro de `montarRutas`, y una composición de producción que solo ven tests que la
+ * doblan no está probada, está escrita.
+ *
+ * Los ayudantes de arriba son COPIA de los de `arranque.test.ts` (no están exportados y aquí solo
+ * hacen falta cinco): son código de prueba, no de producción.
+ */
+import { describe, expect, it, vi } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Readable } from "node:stream";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import { CatalogoModelosEnMemoria, PuenteRemotoEnMemoria } from "../../core/ports.js";
+import type { Entorno } from "../../core/settings.js";
+import { montarRutas, RUTA_ACCION, RUTA_EVENTOS } from "./arranque.js";
+import type { ManejadorRuta } from "./servidor.js";
+import type { MensajeAlCliente, MensajeDelCliente } from "./transporte.js";
+import { crearVestibulo, type Vestibulo } from "./vestibulo.js";
+
+function servidorDeMentira() {
+  const rutas = new Map<string, ManejadorRuta>();
+  return {
+    rutas,
+    puerto: 4173,
+    registrarRuta: (metodo: string, ruta: string, manejador: ManejadorRuta) => {
+      rutas.set(`${metodo} ${ruta}`, manejador);
+    },
+    registrarRutaPublica: () => {},
+  };
+}
+
+function clienteDeMentira() {
+  const recibidos: MensajeAlCliente[] = [];
+  const peticion = { url: "/eventos", on: () => {} } as unknown as IncomingMessage;
+  const respuesta = {
+    writeHead: () => respuesta,
+    write: (trozo: string) => {
+      if (trozo.startsWith("data: ")) recibidos.push(JSON.parse(trozo.slice(6)) as MensajeAlCliente);
+      return true;
+    },
+    end: () => respuesta,
+  } as unknown as ServerResponse;
+  return { peticion, respuesta, recibidos };
+}
+
+async function enviarMensaje(manejador: ManejadorRuta, mensaje: MensajeDelCliente): Promise<number> {
+  const peticion = Readable.from([Buffer.from(JSON.stringify(mensaje))]) as unknown as IncomingMessage;
+  let estado = 0;
+  const respuesta = {
+    writeHead: (codigo: number) => {
+      estado = codigo;
+      return respuesta;
+    },
+    end: () => respuesta,
+  } as unknown as ServerResponse;
+  await manejador(peticion, respuesta);
+  return estado;
+}
+
+const asentar = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+
+function vestibuloDePrueba(extra: Partial<Parameters<typeof crearVestibulo>[0]> = {}): Vestibulo {
+  const entornos: Entorno[] = [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" }];
+  return crearVestibulo({
+    origenDeTrabajo: "global",
+    catalogoModelos: new CatalogoModelosEnMemoria(),
+    guardarCredencial: () => ({ ruta: "/casa/.xonecode/auth.json" }),
+    guardarEntorno: () => ({ ruta: "/casa/.xonecode/settings.json" }),
+    olvidarEntorno: () => ({ ruta: "/casa/.xonecode/settings.json" }),
+    guardarConfigDeProyecto: (raiz: string) => ({ ruta: `${raiz}/.xonecode/config.json` }),
+    guardarModeloGlobal: (_papel, id) => ({ ruta: "/casa/.xonecode/config.json", id }),
+    descargar: async () => {},
+    adoptarLegado: () => {},
+    entornos,
+    baseDeWorkspace: () => "/w",
+    proyectosDeEntorno: async () => ({ proyectos: [{ id: "p1", nombre: "Tienda" }] }),
+    ramasDeProyecto: async () => ["master"],
+    sesiones: {
+      crear: () => "s1",
+      listar: () => [],
+      anotar: () => {},
+      reabrir: (_r, id) => ({ id, actos: [], historica: true }),
+    },
+    correr: async () => 0,
+    ...extra,
+  });
+}
+
+function conRemoto(habilitado: boolean, extra: Parameters<typeof vestibuloDePrueba>[0] = {}) {
+  const servidor = servidorDeMentira();
+  const puerto = new PuenteRemotoEnMemoria();
+  const cargar = vi.fn(async () => puerto);
+  const vestibulo = vestibuloDePrueba(extra);
+  const montado = montarRutas(servidor, vestibulo, {
+    remoto: { ajustes: () => ({ habilitado, servidor: "ws://127.0.0.1:8787/ws" }), puerto: cargar },
+  });
+  const sse = servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!;
+  const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+  return { servidor, puerto, cargar, vestibulo, montado, sse, accion };
+}
+
+describe("la sesión remota en el cable", () => {
+  it("apagada: ni se anuncia, ni se atiende, ni se carga el paquete", async () => {
+    const m = conRemoto(false);
+    const c = clienteDeMentira();
+    await m.sse(c.peticion, c.respuesta);
+    await asentar();
+    expect(c.recibidos.some((x) => x.clase === "remoto")).toBe(false);
+    expect(await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" })).toBe(204);
+    await asentar();
+    expect(m.cargar).not.toHaveBeenCalled();
+    expect(c.recibidos.some((x) => x.clase === "remoto")).toBe(false);
+  });
+
+  it("sin la opción `remoto` tampoco existe: la acción contesta 204 y no hace nada", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba());
+    const c = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(c.peticion, c.respuesta);
+    await asentar();
+    expect(await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "remoto", accion: "encender" })).toBe(204);
+    await asentar();
+    expect(c.recibidos.some((x) => x.clase === "remoto")).toBe(false);
+  });
+
+  it("encendida: se anuncia, se enciende y un móvil recibe la ráfaga FILTRADA", async () => {
+    const m = conRemoto(true);
+    const c = clienteDeMentira();
+    await m.sse(c.peticion, c.respuesta);
+    await asentar();
+    expect(c.recibidos).toContainEqual({ clase: "remoto", estado: "apagada" });
+
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" });
+    await asentar();
+    expect(m.cargar).toHaveBeenCalledTimes(1);
+    expect(m.puerto.aperturas).toEqual(["ws://127.0.0.1:8787/ws"]);
+    m.puerto.abierta("https://r/r/S#K");
+    expect(c.recibidos.at(-1)).toEqual({ clase: "remoto", estado: "activa", url: "https://r/r/S#K", moviles: 0 });
+
+    m.puerto.presencia("m1");
+    await asentar();
+    const alMovil = m.puerto.enviados.filter((e) => e.para === "m1").map((e) => (e.mensaje as { clase: string }).clase);
+    expect(alMovil).toContain("reemision");
+    for (const prohibida of ["modelos", "agentes", "workspace", "skills", "bienvenida", "remoto"]) {
+      expect(alMovil).not.toContain(prohibida);
+    }
+    // Y la pestaña se entera de que hay un móvil: el diálogo lo pinta.
+    expect(c.recibidos.at(-1)).toEqual({ clase: "remoto", estado: "activa", url: "https://r/r/S#K", moviles: 1 });
+  });
+
+  it("una prosa del móvil llega al turno de la consola en foco por el despachador real", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xonecode-remoto-"));
+    try {
+      const peticiones: string[] = [];
+      const m = conRemoto(true, {
+        baseDeWorkspace: () => base,
+        crearEjecutor: () => async (peticion) => {
+          peticiones.push(peticion);
+        },
+        // El lazo de consola REAL (`correrConsola`): el de `vestibuloDePrueba` no lee líneas,
+        // y entonces la prosa no llegaría a ningún ejecutor por mucho que el despacho fuera bien.
+        correr: undefined,
+      });
+      const raiz = m.vestibulo.raizDeProyecto("webstudio", "Tienda");
+      mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
+
+      const c = clienteDeMentira();
+      await m.sse(c.peticion, c.respuesta);
+      await enviarMensaje(m.accion, { clase: "sesion", proyecto: "p1" });
+      for (let i = 0; i < 5; i++) await asentar();
+      expect(m.vestibulo.proyectoAbierto()).toBeDefined();
+
+      await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" });
+      await asentar();
+      m.puerto.abierta();
+      m.puerto.presencia("m1");
+      m.puerto.delMovil("m1", { clase: "prosa", texto: "desde el móvil" });
+      await vi.waitFor(() => expect(peticiones.join("\n")).toContain("desde el móvil"));
+      await m.vestibulo.cerrar();
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  it("cerrarRemoto apaga el puente", async () => {
+    const m = conRemoto(true);
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" });
+    await asentar();
+    m.puerto.abierta();
+    expect(m.puerto.canales.at(-1)?.cerrado).toBe(false);
+    m.montado.cerrarRemoto();
+    expect(m.puerto.canales.at(-1)?.cerrado).toBe(true);
+    expect(m.puerto.cerrados).toBe(1);
+  });
+});

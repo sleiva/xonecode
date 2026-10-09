@@ -171,6 +171,18 @@ export type MensajeAlCliente =
   /** El transcript completo: lo que recibe quien (re)conecta, y el arreglo de cualquier desajuste. */
   | { clase: "reemision"; actos: Acto[] }
   /**
+   * La sesión remota, solo si el interruptor está encendido (`settings.remoto`). La `url` lleva
+   * el SECRETO en el fragmento: es el segundo secreto del cable, junto a `leerSecreto`, y por eso
+   * `remoto` no está en la lista de salida del puente (`core/remoto.ts`).
+   */
+  | {
+      clase: "remoto";
+      estado: "apagada" | "abriendo" | "activa" | "reconectando" | "error";
+      url?: string;
+      moviles?: number;
+      motivo?: string;
+    }
+  /**
    * El saludo, SUELTO del `alta`. `agent/config/persona.ts#nombreDePersona` no depende de
    * ninguna cuenta ni de ningún login —es `git config`/`os.userInfo()`, local y ya
    * resuelto al construir el vestíbulo—, pero el `alta` solo se manda DESPUÉS de que
@@ -1676,6 +1688,8 @@ export type MensajeDelCliente =
   /** Parar el turno en vuelo. Aborta el `stream` del grafo (`SesionReal.cancelar`) y deja
    *  la sesión viva: es parar ESTO, no cerrar la conversación. */
   | { clase: "cancelar" }
+  /** La sesión remota: encenderla, revocar su enlace (apagar y volver a encender) o apagarla. */
+  | { clase: "remoto"; accion: "encender" | "revocar" | "apagar" }
   /** Pide lo que la sesión abierta ha tocado, o el parche de un fichero concreto. */
   | { clase: "revision"; ruta?: string }
   /** Lo pendiente de subir (sin `ruta`) o el diff de uno (con `ruta`). */

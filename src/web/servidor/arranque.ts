@@ -84,7 +84,7 @@ import {
 } from "../../core/puedeLanzarse.js";
 
 import type { Dispositivo, Herramienta, InformeDeDispositivos } from "../../core/dispositivos.js";
-import { PLATAFORMAS_DE_DISPOSITIVO, type AjustesDeDispositivos } from "../../core/settings.js";
+import { PLATAFORMAS_DE_DISPOSITIVO, remotoEnVigor, type AjustesDeDispositivos } from "../../core/settings.js";
 import type { NombreDeHerramienta } from "../../core/dispositivos.js";
 import { instalarHerramientaDeDispositivos, verificarDispositivo } from "../../agent/dispositivos/dispositivosEnMaquina.js";
 import { arrancarEmulador, pararEmulador } from "../../agent/dispositivos/arranqueDeEmulador.js";
@@ -218,7 +218,7 @@ import {
 import { Modelos } from "../../agent/config/modelos.js";
 import { crearJuezDeTarea, invocarConModelos } from "../../agent/tareas/juezDeTarea.js";
 import { SIN_CONSUMO } from "../../agent/subagentes/consumoExterno.js";
-import type { AumentadorPort, ConectoresPort, JuezDeTareaPort } from "../../core/ports.js";
+import type { AumentadorPort, ConectoresPort, JuezDeTareaPort, PuenteRemotoPort } from "../../core/ports.js";
 import { AumentadorGuionizado } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
 import { arrancarServidor, type ServidorWeb } from "./servidor.js";
@@ -286,6 +286,7 @@ import type {
 // documentado cinco veces: una composición de producción dentro de algo que los tests
 // doblan.
 import { filaDeTarea } from "./transporte.js";
+import { crearSesionRemota, type EstadoDeSesionRemota } from "./puenteRemoto.js";
 import { esEsfuerzo, nivelesDeEsfuerzo, type Esfuerzo } from "../../core/esfuerzo.js";
 import { CATALOGO_DE_CONECTORES, conectoresParaElAgente, definicionDelCable, RUTA_CALLBACK_MCP, type AccionDeConector } from "../../core/conectores.js";
 import { servicioDeConectoresCableado, type ServicioDeConectores } from "../../agent/conectores/servicioDeConectores.js";
@@ -412,6 +413,16 @@ interface DestinoDelCable {
 export interface OpcionesDeMontaje {
   /** A dónde van los avisos que no caben en el transcript. Por omisión, a ningún sitio. */
   informar?: (texto: string) => void;
+  /**
+   * La sesión remota (`puenteRemoto.ts`). Ausente o `ajustes().habilitado === false` = no
+   * existe: ni se anuncia, ni se atiende, ni se llama a `puerto` (que es lo que cargaría el
+   * paquete `@xone/xonecode-remoto`). `ajustes` se lee en cada uso, no al montar: el
+   * interruptor vive en `settings.json` y leerlo una vez lo congelaría.
+   */
+  remoto?: {
+    ajustes: () => { habilitado: boolean; servidor: string };
+    puerto: () => Promise<PuenteRemotoPort | undefined>;
+  };
   /**
    * El tope de la ventana del modelo, para el contador de contexto. Ver la opción del mismo
    * nombre en `OpcionesDeArranque`: es la MISMA función que la barra del terminal, y entra
@@ -953,7 +964,7 @@ export function montarRutas(
   servidor: Pick<ServidorWeb, "registrarRuta" | "registrarRutaPublica" | "puerto">,
   vestibulo: Vestibulo,
   opciones: OpcionesDeMontaje = {}
-): { emitirTareas: () => void } {
+): { emitirTareas: () => void; cerrarRemoto: () => void } {
   const informar = opciones.informar ?? (() => {});
   const hayCredencialDe = opciones.hayCredencial ?? (() => false);
   // Se llama UNA vez, aquí: no cambia mientras el proceso vive, y es el mismo dato que ya se
@@ -988,6 +999,20 @@ export function montarRutas(
    * Emitir es escribirle a todos; el transporte hace lo mismo por su lado.
    */
   const clientes = new Set<Sumidero>();
+  /**
+   * La sesión remota, si esta ejecución la monta. Se ASIGNA más abajo, en cuanto existen
+   * `engancharCliente`/`soltarCliente`/`cancelarTurno`/`recibirEnLaConsola`, que son su puerta y
+   * su despacho; se declara aquí porque la ráfaga (`adjuntar`) también la lee.
+   */
+  let sesionRemota: ReturnType<typeof crearSesionRemota> | undefined;
+  const remotoHabilitado = (): boolean => opciones.remoto?.ajustes().habilitado === true;
+  const mensajeDeRemoto = (e: EstadoDeSesionRemota): MensajeAlCliente => ({
+    clase: "remoto",
+    estado: e.estado,
+    ...("url" in e ? { url: e.url } : {}),
+    ...("moviles" in e ? { moviles: e.moviles } : {}),
+    ...("motivo" in e ? { motivo: e.motivo } : {}),
+  });
   /**
    * Los clientes por su IDENTIFICADOR, y qué tareas está mirando cada uno.
    *
@@ -1840,6 +1865,9 @@ export function montarRutas(
       if (ultimoProgresoDeMudanza !== undefined) cliente({ clase: "mudanzaDeWorkspace", progreso: ultimoProgresoDeMudanza });
       if (depuracion !== undefined) cliente(depuracion);
       if (modoPorDefecto !== undefined) cliente(modoPorDefecto);
+      // La sesión remota, solo con el interruptor encendido: apagado no existe ni en la ráfaga.
+      // A un móvil no le llega: `remoto` no pasa `filtrarSalida` (lleva el secreto en la `url`).
+      if (sesionRemota !== undefined && remotoHabilitado()) cliente(mensajeDeRemoto(sesionRemota.estado()));
       if (conectores !== undefined) cliente(conectores);
       if (consumoDeLaSesion !== undefined) {
         cliente({
@@ -6031,6 +6059,28 @@ export function montarRutas(
     }
   };
 
+  /**
+   * El móvil entra por la MISMA puerta que una pestaña (`engancharCliente`) y lo que manda va a
+   * la consola por el MISMO despacho que `POST /accion` (`cancelarTurno`/`recibirEnLaConsola`):
+   * un segundo camino sería una segunda regla de qué se puede hacer desde fuera.
+   */
+  sesionRemota =
+    opciones.remoto === undefined
+      ? undefined
+      : crearSesionRemota({
+          puerto: opciones.remoto.puerto,
+          servidor: () => opciones.remoto!.ajustes().servidor,
+          engancharCliente,
+          soltarCliente,
+          despachar: (m) => (m.clase === "cancelar" ? cancelarTurno() : recibirEnLaConsola(m)),
+          informar,
+          // A las pestañas: el diálogo de la consola. `clientes` contiene también los sumideros
+          // de los móviles, y no pasa nada: su filtro descarta `remoto`.
+          alCambiar: (e) => {
+            for (const cliente of clientes) cliente(mensajeDeRemoto(e));
+          },
+        });
+
   servidor.registrarRuta("POST", RUTA_ACCION, async (peticion, respuesta) => {
     let mensaje: MensajeDelCliente;
     try {
@@ -6892,6 +6942,17 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "remoto") {
+      // Con el interruptor apagado se contesta igual y no se hace NADA: ni se carga el paquete.
+      if (sesionRemota !== undefined && remotoHabilitado()) {
+        if (mensaje.accion === "encender") void sesionRemota.encender().catch(contar);
+        else if (mensaje.accion === "revocar") void sesionRemota.revocar().catch(contar);
+        else if (mensaje.accion === "apagar") sesionRemota.apagar();
+      }
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "cancelar") {
       cancelarTurno();
       respuesta.writeHead(204);
@@ -7134,7 +7195,7 @@ export function montarRutas(
     respuesta.end();
   });
 
-  return { emitirTareas };
+  return { emitirTareas, cerrarRemoto: () => sesionRemota?.apagar() };
 }
 
 export interface CorredorDeTareasCableado {
@@ -8290,6 +8351,12 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
 
   const cable = montarRutas(servidor, vestibulo, {
     informar,
+    // El interruptor se lee de `settings.json` (o `XONECODE_REMOTO=1`) en cada uso. El puerto
+    // real llega con el paquete; mientras tanto, encender dice que no está disponible.
+    remoto: {
+      ajustes: () => remotoEnVigor(cargarSettings().settings.remoto, process.env),
+      puerto: async () => undefined,
+    },
     // El tope de ventana, tal cual llega: es la misma función que la barra del terminal, y
     // dos resoluciones serían dos porcentajes distintos para el mismo modelo.
     ...(opciones.topeDeContexto === undefined ? {} : { topeDeContexto: opciones.topeDeContexto }),
@@ -8526,6 +8593,9 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
    * pasó es que alguien paró el proceso. El motivo se lee en el kanban, así que la
    * diferencia no es interna.
    */
+  // La sesión remota antes que nada: un móvil no puede seguir mandando prosa a una consola que
+  // se está cerrando, y el socket del puente no puede quedarse abierto tras el proceso.
+  cable.cerrarRemoto();
   await corredor?.parar();
   await vestibulo.cerrar();
   await servidor.cerrar();
