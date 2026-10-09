@@ -1046,3 +1046,61 @@ export class ConectoresEnMemoria implements ConectoresPort {
     return this.conectores[id]?.respuesta ?? "";
   }
 }
+
+/**
+ * El puente de la sesión remota: un WebSocket SALIENTE y cifrado hacia `xonecode-server`.
+ * Mensajes en CLARO por esta interfaz: el cifrado vive en la implementación real
+ * (`agent/remoto/puenteWebSocket.ts`), que es la única que carga `@xone/xonecode-remoto`.
+ */
+export type EstadoDelPuente =
+  | { estado: "abierta"; url: string }
+  | { estado: "reconectando" }
+  | { estado: "cerrada"; motivo?: string };
+
+export interface EscuchasDelPuente {
+  alEstado(estado: EstadoDelPuente): void;
+  alPresencia(moviles: readonly string[]): void;
+  alMensaje(de: string, mensaje: unknown): void;
+}
+
+export interface CanalRemoto {
+  /** `para` ausente = a todos los móviles. */
+  enviar(para: string | undefined, mensaje: unknown): Promise<void>;
+  cerrar(): void;
+}
+
+export interface PuenteRemotoPort {
+  abrir(servidor: string, escuchas: EscuchasDelPuente): Promise<CanalRemoto>;
+}
+
+/** El doble: deja al test hacer de servidor y de móviles, y apunta lo enviado. */
+export class PuenteRemotoEnMemoria implements PuenteRemotoPort {
+  readonly [ES_DOBLE] = true;
+  readonly aperturas: string[] = [];
+  readonly enviados: { para: string | undefined; mensaje: unknown }[] = [];
+  cerrados = 0;
+  private escuchas: EscuchasDelPuente | undefined;
+
+  async abrir(servidor: string, escuchas: EscuchasDelPuente): Promise<CanalRemoto> {
+    this.aperturas.push(servidor);
+    this.escuchas = escuchas;
+    return {
+      enviar: async (para, mensaje) => void this.enviados.push({ para, mensaje }),
+      cerrar: () => void (this.cerrados += 1),
+    };
+  }
+
+  /** Lo que haría el servidor real. */
+  abierta(url = "https://remoto.example/r/SALA#SECRETO"): void {
+    this.escuchas?.alEstado({ estado: "abierta", url });
+  }
+  presencia(...moviles: string[]): void {
+    this.escuchas?.alPresencia(moviles);
+  }
+  delMovil(de: string, mensaje: unknown): void {
+    this.escuchas?.alMensaje(de, mensaje);
+  }
+  cerrada(motivo?: string): void {
+    this.escuchas?.alEstado(motivo === undefined ? { estado: "cerrada" } : { estado: "cerrada", motivo });
+  }
+}
