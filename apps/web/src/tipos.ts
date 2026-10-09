@@ -626,6 +626,18 @@ export type MensajeAlCliente =
   /** El transcript completo: lo que trae (re)conectar, y el arreglo de cualquier desajuste. */
   | { clase: "reemision"; actos: Acto[] }
   /**
+   * La sesión remota, solo si el interruptor está encendido (`settings.remoto`). La `url` lleva
+   * el SECRETO en el fragmento: es el TERCER secreto del cable, tras `leerSecreto` y el `codigo` de `motorLocal`, y por eso
+   * `remoto` no está en la lista de salida del puente (`core/remoto.ts`).
+   */
+  | {
+      clase: "remoto";
+      estado: "apagada" | "abriendo" | "activa" | "reconectando" | "error";
+      url?: string;
+      moviles?: number;
+      motivo?: string;
+    }
+  /**
    * El saludo, SUELTO del `alta` — llega al conectar, ANTES de que el paso de cuenta
    * resuelva (`web/servidor/arranque.ts` lo manda antes de `conducirCuenta()`), porque el
    * nombre no depende de ninguna cuenta: es local (`agent/persona.ts#nombreDePersona`).
@@ -1547,6 +1559,8 @@ export type MensajeDelCliente =
   | { clase: "cuerpoDeSkill"; nombre: string }
   /** Parar el turno en vuelo, dejando la sesión viva. */
   | { clase: "cancelar" }
+  /** La sesión remota: encenderla, revocar su enlace (apagar y volver a encender) o apagarla. */
+  | { clase: "remoto"; accion: "encender" | "revocar" | "apagar" }
   /** Pide lo que la sesión abierta ha tocado, o el parche de un fichero concreto. */
   | { clase: "revision"; ruta?: string }
   /** Lo pendiente de subir (sin `ruta`) o el diff de uno (con `ruta`). */

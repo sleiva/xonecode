@@ -1,0 +1,187 @@
+/**
+ * La sesión remota: cada MÓVIL conectado por el puente es un sumidero más del cable, enganchado
+ * por la MISMA puerta que una pestaña SSE (`engancharCliente`/`soltarCliente`). Así recibe la
+ * misma ráfaga al entrar, sigue a la consola en foco cuando se muda y cuenta como «hay alguien
+ * delante» igual que una pestaña. Lo que sale pasa `filtrarSalida`; lo que entra,
+ * `validarEntradaDelMovil`, y se despacha por las mismas funciones que `POST /accion`.
+ */
+import type { CanalRemoto, PuenteRemotoPort } from "../../core/ports.js";
+import { ajustarATope, filtrarSalida, TOPE_DE_SALIDA_BYTES, validarEntradaDelMovil, type EntradaDelMovil } from "../../core/remoto.js";
+import type { Sumidero } from "./transporte.js";
+
+export type EstadoDeSesionRemota =
+  | { estado: "apagada" }
+  | { estado: "abriendo" }
+  | { estado: "activa"; url: string; moviles: number }
+  /** Sin `url`: el relé no contestó nunca (inalcanzable) y se sigue intentando. Se puede apagar. */
+  | { estado: "reconectando"; url?: string; moviles: number }
+  | { estado: "error"; motivo: string };
+
+export interface OpcionesDeSesionRemota {
+  /** `undefined` = el paquete no está instalado. Solo se llama al encender. */
+  puerto: () => Promise<PuenteRemotoPort | undefined>;
+  servidor: () => string;
+  engancharCliente(sumidero: Sumidero): void;
+  soltarCliente(sumidero: Sumidero): void;
+  despachar(mensaje: EntradaDelMovil): void;
+  informar(texto: string): void;
+  alCambiar(estado: EstadoDeSesionRemota): void;
+  /** Solo para los tests, que no quieren fabricar 700 kB: por omisión `TOPE_DE_SALIDA_BYTES`. */
+  topeDeSalida?: number;
+}
+
+export interface SesionRemota {
+  encender(): Promise<void>;
+  revocar(): Promise<void>;
+  apagar(): void;
+  estado(): EstadoDeSesionRemota;
+}
+
+export const MOTIVO_NO_ABRIO = "no se pudo abrir la sesión remota";
+/** Lo que puede llegar al terminal de la clase de un mensaje rechazado del móvil. */
+const CLASE_LEGIBLE = /^[a-zA-Z.]{1,32}$/;
+export const SIN_PAQUETE = "la sesión remota no está disponible en esta instalación";
+
+export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
+  let estado: EstadoDeSesionRemota = { estado: "apagada" };
+  let canal: CanalRemoto | undefined;
+  let url: string | undefined;
+  let reconectando = false;
+  const moviles = new Map<string, Sumidero>();
+
+  const poner = (e: EstadoDeSesionRemota) => {
+    estado = e;
+    o.alCambiar(e);
+  };
+  const ponerActiva = () => {
+    if (url !== undefined) poner({ estado: reconectando ? "reconectando" : "activa", url, moviles: moviles.size });
+    // Antes de la primera `abierta` no hay enlace que enseñar, pero sí un intento que se repite:
+    // quedarse en «abriendo» para siempre escondía que el relé no contesta.
+    else if (reconectando) poner({ estado: "reconectando", moviles: moviles.size });
+  };
+  const soltarTodos = () => {
+    for (const s of moviles.values()) o.soltarCliente(s);
+    moviles.clear();
+  };
+
+  // Cada encendido es una GENERACIÓN: un canal viejo (apagado, revocado o aún abriéndose) puede
+  // seguir hablando, y sin esta marca su `cerrada` borraría el estado del canal nuevo.
+  let generacion = 0;
+  let abriendo = false;
+
+  /** `anunciar: false` solo para revocar: el apagado de en medio no es un estado que la consola
+   *  deba ver (su diálogo se cierra al pasar a «apagada»), y le sigue «abriendo» en el acto. */
+  const apagar = (anunciar = true) => {
+    generacion += 1;
+    abriendo = false;
+    soltarTodos();
+    canal?.cerrar();
+    canal = undefined;
+    url = undefined;
+    reconectando = false;
+    if (anunciar) poner({ estado: "apagada" });
+    else estado = { estado: "apagada" };
+  };
+
+  const encender = async () => {
+    // Idempotente también MIENTRAS abre: un segundo clic abriría un canal que nadie cerraría.
+    if (canal !== undefined || abriendo) return;
+    const mia = ++generacion;
+    abriendo = true;
+    poner({ estado: "abriendo" });
+    try {
+      const puerto = await o.puerto();
+      if (mia !== generacion) return;
+      if (puerto === undefined) {
+        abriendo = false;
+        poner({ estado: "error", motivo: SIN_PAQUETE });
+        return;
+      }
+      const abierto = await puerto.abrir(o.servidor(), {
+        alEstado: (e) => {
+          if (mia !== generacion) return;
+          if (e.estado === "abierta") {
+            url = e.url;
+            reconectando = false;
+            ponerActiva();
+          } else if (e.estado === "reconectando") {
+            reconectando = true;
+            ponerActiva();
+          } else {
+            // Un canal que se cierra por su cuenta es de una generación acabada, también si aún
+            // no había terminado de abrir (entonces se cierra al resolver).
+            generacion += 1;
+            abriendo = false;
+            soltarTodos();
+            canal = undefined;
+            url = undefined;
+            poner(e.motivo === undefined ? { estado: "apagada" } : { estado: "error", motivo: e.motivo });
+          }
+        },
+        alPresencia: (ids) => {
+          if (mia !== generacion) return;
+          for (const [id, s] of moviles) {
+            if (!ids.includes(id)) {
+              moviles.delete(id);
+              o.soltarCliente(s);
+            }
+          }
+          for (const id of ids) {
+            if (moviles.has(id)) continue;
+            const sumidero: Sumidero = (mensaje) => {
+              const filtrado = filtrarSalida(mensaje);
+              if (filtrado === undefined) return;
+              // Pasarse del tope no da un error legible: el relé cierra la conexión. Se ajusta aquí.
+              const salida = ajustarATope(filtrado, o.topeDeSalida ?? TOPE_DE_SALIDA_BYTES);
+              if (salida === undefined) {
+                o.informar(`sesión remota: un mensaje no cabe en el tope y no se envía (clase ${(filtrado as { clase: string }).clase})`);
+                return;
+              }
+              void canal?.enviar(id, salida).catch(() => {});
+            };
+            moviles.set(id, sumidero);
+            o.engancharCliente(sumidero);
+          }
+          ponerActiva();
+        },
+        alMensaje: (de, mensaje) => {
+          if (mia !== generacion || !moviles.has(de)) return;
+          const entrada = validarEntradaDelMovil(mensaje);
+          if (entrada === undefined) {
+            // La clase la escribe el MÓVIL y va al terminal de quien desarrolla: solo un nombre
+            // limpio, o una secuencia de escape (OSC 52, que escribe el portapapeles) llegaría tal cual.
+            const bruta = typeof mensaje === "object" && mensaje !== null ? (mensaje as { clase?: unknown }).clase : undefined;
+            const clase = typeof bruta === "string" && CLASE_LEGIBLE.test(bruta) ? bruta : "desconocida";
+            o.informar(`sesión remota: se rechazó un mensaje del móvil (clase ${clase})`);
+            return;
+          }
+          o.despachar(entrada);
+        },
+      });
+      if (mia !== generacion) {
+        // Se apagó (o revocó) mientras abría: este canal ya no es de nadie.
+        abierto.cerrar();
+        return;
+      }
+      abriendo = false;
+      canal = abierto;
+    } catch (error) {
+      if (mia !== generacion) return;
+      abriendo = false;
+      canal = undefined;
+      // Al cable no cruza un mensaje de Node (lleva rutas de la máquina): solo su `code`.
+      const codigo = (error as { code?: unknown } | null)?.code;
+      poner({ estado: "error", motivo: typeof codigo === "string" ? codigo : MOTIVO_NO_ABRIO });
+    }
+  };
+
+  return {
+    encender,
+    apagar: () => apagar(),
+    async revocar() {
+      apagar(false);
+      await encender();
+    },
+    estado: () => estado,
+  };
+}

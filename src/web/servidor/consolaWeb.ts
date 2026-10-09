@@ -122,6 +122,14 @@ export interface ConsolaWeb {
   consola: Consola;
   /** Un mensaje del navegador, tal cual llega por `POST /accion`. */
   recibir(mensaje: MensajeDelCliente): void;
+  /**
+   * La `respuesta` de un MÓVIL de la sesión remota. No es `recibir`: al móvil solo le llega una
+   * `pregunta` SIN `decision` (`core/remoto.ts#filtrarSalida`), así que su respuesta solo puede
+   * contestar una de ésas — nunca la subida con casillas ni «¿Vaciar la copia…?», que el
+   * escritorio tiene abiertas y el móvil no ha visto. `false` = no había ninguna que contestar
+   * y no se ha tocado nada.
+   */
+  responderDesdeElMovil(texto: string): boolean;
   /** El cliente abre el SSE; devuelve los actos con los que hay que reemitirle el transcript. */
   conectar(enviar?: Sumidero): readonly Acto[];
   /**
@@ -193,7 +201,12 @@ function comoRegistro<V>(mapa: Map<string, V>): Record<string, V> {
  * en cabeza se comería la respuesta de la espera SIGUIENTE —que sí está viva— y la dejaría
  * colgada hasta su propio plazo.
  */
-function esperarAUnHumano<T>(cola: ((valor: T) => void)[], alVencer: T, ms: number): Promise<T> {
+function esperarAUnHumano<T>(
+  cola: ((valor: T) => void)[],
+  alVencer: T,
+  ms: number,
+  alEncolar?: (responder: (valor: T) => void) => void
+): Promise<T> {
   return new Promise<T>((resuelto) => {
     const responder = (valor: T): void => {
       clearTimeout(temporizador);
@@ -205,6 +218,7 @@ function esperarAUnHumano<T>(cola: ((valor: T) => void)[], alVencer: T, ms: numb
       resuelto(alVencer);
     }, ms);
     cola.push(responder);
+    alEncolar?.(responder);
   });
 }
 
@@ -258,6 +272,11 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
   // Colas FIFO de quien espera respuesta. Son colas y no una ranura única porque dos
   // preguntas encadenadas (el alta de proyecto las hace) no pueden pisarse.
   const esperandoTexto: ((texto: string) => void)[] = [];
+  /**
+   * Las esperas de `esperandoTexto` cuya `pregunta` llevaba una `decision`. El escritorio las
+   * contesta como siempre; un móvil NUNCA (`responderDesdeElMovil`), porque no las ha visto.
+   */
+  const esperasConDecision = new WeakSet<(texto: string) => void>();
   const esperandoSecreto: ((texto: string) => void)[] = [];
   const esperandoSeleccion: ((id: string | undefined) => void)[] = [];
   /**
@@ -359,7 +378,12 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
       // texto libre la ponen `politicaInteractiva` antes de subir y `/connect-studio` sin
       // URL, y sin plazo colgaban la sesión web entera. Cadena vacía al vencer, que es lo
       // que `interpretAnswer` trata como rechazo.
-      const espera = esperarAUnHumano(esperandoTexto, "", msDeEspera);
+      const espera = esperarAUnHumano<string>(
+        esperandoTexto,
+        "",
+        msDeEspera,
+        decision === undefined ? undefined : (responder) => esperasConDecision.add(responder)
+      );
       // La FORMA viaja con la pregunta, o no viaja: `decision` ausente es una pregunta de
       // texto libre y el cliente le pone su campo. No se manda un `{lineas: []}` — una
       // decisión sin plan no es una pregunta abierta, y una pregunta abierta con una lista
@@ -573,9 +597,20 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
     }
   };
 
+  const responderDesdeElMovil = (texto: string): boolean => {
+    // Ni `esperandoDecision` ni una espera con `decision`: la PRIMERA de texto libre, aunque
+    // haya una decisión delante en la cola (esa sigue esperando al escritorio).
+    const indice = esperandoTexto.findIndex((espera) => !esperasConDecision.has(espera));
+    if (indice < 0) return false;
+    const [espera] = esperandoTexto.splice(indice, 1);
+    espera!(texto);
+    return true;
+  };
+
   return {
     consola,
     recibir,
+    responderDesdeElMovil,
     turno: (activo, detenible) => transporte.emitir({ clase: "turno", activo, ...(activo && detenible === true ? { detenible: true } : {}) }),
     encolar: (linea, sustituye) => {
       if (cerrada) return;

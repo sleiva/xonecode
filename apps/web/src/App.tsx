@@ -12,6 +12,7 @@ import { Panel } from "./componentes/Panel.js";
 import type { Pestana } from "./componentes/Pestanas.js";
 import { Compositor } from "./componentes/Compositor.js";
 import { Transcript } from "./componentes/Transcript.js";
+import { SesionRemota } from "./componentes/SesionRemota.js";
 import { BarraDeEstado } from "./componentes/BarraDeEstado.js";
 import { AvisoDeConexion } from "./componentes/AvisoDeConexion.js";
 import { useCronometro } from "./cronometro.js";
@@ -3095,6 +3096,7 @@ export function App({
                 }}
               />
             ) : null}
+            <SesionRemota remoto={estado.remoto} enviar={(m) => enviar(m)} />
             <BarraDeEstado
               turnos={turnos}
               pasos={pasos}

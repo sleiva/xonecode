@@ -946,6 +946,31 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   opción `version`), antes que la URL. El cliente se lee del DISCO en cada petición
   (`servidor.ts`, `readFileSync`); el SERVIDOR es el proceso y solo cambia parándolo y
   arrancándolo. El árbol SUCIO se dice.
+- **La sesión remota (EXPERIMENTAL, detrás de un interruptor)** (`web/servidor/puenteRemoto.ts`, `core/remoto.ts`,
+  `agent/remoto/puenteWebSocket.ts`; el relé y la web móvil viven en `xonecode-server`). Apagada por omisión:
+  `settings.remoto.habilitado` o `XONECODE_REMOTO=1`, leído en CADA uso; apagada no se anuncia, no se atiende y **no se
+  carga el paquete** `@xone/xonecode-remoto`, que entra por `import()` dinámico de un nombre en variable en UN fichero y
+  no es dependencia de xonecode. **Mientras el puente no esté apagado, la ráfaga lo anuncia AUNQUE el interruptor esté
+  apagado**, y `apagar` se atiende siempre: apagar el interruptor en `settings.json` con el puente abierto no puede dejarlo
+  abierto e invisible. Un relé que no contesta pasa de `abriendo` a `reconectando` sin `url`, y se puede apagar en los
+  dos. **Cada móvil es un sumidero más** enganchado por la MISMA puerta que una
+  pestaña (`engancharCliente`/`soltarCliente`): la ráfaga de `adjuntar`, se muda con el foco, cuenta como «hay alguien
+  delante». El `alta` no va en esa ráfaga (la pestaña lo recibe de la ruta SSE, después de enganchar), así que el móvil
+  entra por `engancharMovil`, que le compone uno SOLO a él: difundirlo daría uno de más a cada pestaña.
+  Lo que sale pasa `filtrarSalida` (el `alta` sale TRANSFORMADO en `remoto.estado`, y `remoto` no sale nunca) y no pasa
+  de `TOPE_DE_SALIDA_BYTES` (una `reemision` pierde los actos más viejos; otro mensaje que no quepa se descarta y se
+  informa); lo que entra pasa `validarEntradaDelMovil` y se despacha por `cancelarTurno`/`recibirEnLaConsola`, el código
+  de `POST /accion`. **Salvo la `respuesta`, que va por `responderDesdeElMovil`**: al móvil solo le llega la `pregunta`
+  SIN `decision`, así que solo contesta una de ésas, nunca la subida con casillas ni «¿Vaciar la copia…?» del escritorio
+  (por `recibir`, un «s» del móvil las aprobaba); sin ninguna que contestar se descarta y se informa. La clase de un
+  mensaje rechazado solo llega al terminal si es un nombre limpio. **UN canal cifrado por encendido, conservado en las reconexiones**: uno nuevo al reconectar dejaría
+  al relé repetir mensajes viejos del móvil; y lo que llega del relé se procesa EN ORDEN (el canal tira toda secuencia no
+  mayor que la última); lo que SALE se cifra y se manda también en cola, en el orden de llamada, por la misma razón vista
+  desde el móvil. Revocar no anuncia el apagado de en medio. Un error cruza el cable solo como `code` de Node o texto FIJO nuestro, nunca lo que diga el relé.
+  La `url` con el secreto en el fragmento es el TERCER secreto del cable, tras `leerSecreto` y el `codigo` de
+  `motorLocal`. **Límites declarados**: quien tiene la URL controla la sesión hasta «Revocar» o «Apagar»; y con la sesión
+  encendida, los actos y las aprobaciones —contenido de ficheros y diffs incluidos, y las rutas que el modelo escriba—
+  SALEN de la máquina, cifrados de punta a punta, hacia el relé y el móvil.
 - **`arrancarConsolaWeb`** (`web/servidor/arranque.ts`) comprueba en orden: existe
   `apps/web/dist/index.html` (si no, salida **70**), avisa si el cwd es offline y sigue, y levanta.
   `abrirEnSistema` escucha el `error` del `spawn`.

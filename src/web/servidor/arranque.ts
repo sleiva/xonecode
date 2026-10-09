@@ -84,7 +84,7 @@ import {
 } from "../../core/puedeLanzarse.js";
 
 import type { Dispositivo, Herramienta, InformeDeDispositivos } from "../../core/dispositivos.js";
-import { PLATAFORMAS_DE_DISPOSITIVO, type AjustesDeDispositivos } from "../../core/settings.js";
+import { PLATAFORMAS_DE_DISPOSITIVO, remotoEnVigor, type AjustesDeDispositivos } from "../../core/settings.js";
 import type { NombreDeHerramienta } from "../../core/dispositivos.js";
 import { instalarHerramientaDeDispositivos, verificarDispositivo } from "../../agent/dispositivos/dispositivosEnMaquina.js";
 import { arrancarEmulador, pararEmulador } from "../../agent/dispositivos/arranqueDeEmulador.js";
@@ -218,7 +218,7 @@ import {
 import { Modelos } from "../../agent/config/modelos.js";
 import { crearJuezDeTarea, invocarConModelos } from "../../agent/tareas/juezDeTarea.js";
 import { SIN_CONSUMO } from "../../agent/subagentes/consumoExterno.js";
-import type { AumentadorPort, ConectoresPort, JuezDeTareaPort } from "../../core/ports.js";
+import type { AumentadorPort, ConectoresPort, JuezDeTareaPort, PuenteRemotoPort } from "../../core/ports.js";
 import { AumentadorGuionizado } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
 import { arrancarServidor, type ServidorWeb } from "./servidor.js";
@@ -286,6 +286,7 @@ import type {
 // documentado cinco veces: una composición de producción dentro de algo que los tests
 // doblan.
 import { filaDeTarea } from "./transporte.js";
+import { crearSesionRemota, type EstadoDeSesionRemota } from "./puenteRemoto.js";
 import { esEsfuerzo, nivelesDeEsfuerzo, type Esfuerzo } from "../../core/esfuerzo.js";
 import { CATALOGO_DE_CONECTORES, conectoresParaElAgente, definicionDelCable, RUTA_CALLBACK_MCP, type AccionDeConector } from "../../core/conectores.js";
 import { servicioDeConectoresCableado, type ServicioDeConectores } from "../../agent/conectores/servicioDeConectores.js";
@@ -399,6 +400,8 @@ const TOPE_DE_CUERPO = 1_000_000;
 /** Lo mínimo que el cable necesita de una consola, la del vestíbulo o la del proyecto. */
 interface DestinoDelCable {
   recibir(mensaje: MensajeDelCliente): void;
+  /** La `respuesta` de un móvil: solo contesta una pregunta SIN `decision` (`ConsolaWeb`). */
+  responderDesdeElMovil(texto: string): boolean;
   conectar(enviar?: Sumidero): readonly Acto[];
   /** Con sumidero se va ESE cliente; sin él, todos. Lo llama el `close` del SSE. */
   desconectar(enviar?: Sumidero): void;
@@ -412,6 +415,17 @@ interface DestinoDelCable {
 export interface OpcionesDeMontaje {
   /** A dónde van los avisos que no caben en el transcript. Por omisión, a ningún sitio. */
   informar?: (texto: string) => void;
+  /**
+   * La sesión remota (`puenteRemoto.ts`). Ausente o `ajustes().habilitado === false` = no
+   * existe: ni se anuncia, ni se atiende, ni se llama a `puerto` (que es lo que cargaría el
+   * paquete del puente). Con una excepción: un puente que sigue abierto al apagar el
+   * interruptor se sigue anunciando hasta que se apague. `ajustes` se lee en cada uso, no al montar: el
+   * interruptor vive en `settings.json` y leerlo una vez lo congelaría.
+   */
+  remoto?: {
+    ajustes: () => { habilitado: boolean; servidor: string };
+    puerto: () => Promise<PuenteRemotoPort | undefined>;
+  };
   /**
    * El tope de la ventana del modelo, para el contador de contexto. Ver la opción del mismo
    * nombre en `OpcionesDeArranque`: es la MISMA función que la barra del terminal, y entra
@@ -953,7 +967,7 @@ export function montarRutas(
   servidor: Pick<ServidorWeb, "registrarRuta" | "registrarRutaPublica" | "puerto">,
   vestibulo: Vestibulo,
   opciones: OpcionesDeMontaje = {}
-): { emitirTareas: () => void } {
+): { emitirTareas: () => void; cerrarRemoto: () => void } {
   const informar = opciones.informar ?? (() => {});
   const hayCredencialDe = opciones.hayCredencial ?? (() => false);
   // Se llama UNA vez, aquí: no cambia mientras el proceso vive, y es el mismo dato que ya se
@@ -988,6 +1002,20 @@ export function montarRutas(
    * Emitir es escribirle a todos; el transporte hace lo mismo por su lado.
    */
   const clientes = new Set<Sumidero>();
+  /**
+   * La sesión remota, si esta ejecución la monta. Se ASIGNA más abajo, en cuanto existen
+   * `engancharCliente`/`soltarCliente`/`cancelarTurno`/`recibirEnLaConsola`, que son su puerta y
+   * su despacho; se declara aquí porque la ráfaga (`adjuntar`) también la lee.
+   */
+  let sesionRemota: ReturnType<typeof crearSesionRemota> | undefined;
+  const remotoHabilitado = (): boolean => opciones.remoto?.ajustes().habilitado === true;
+  const mensajeDeRemoto = (e: EstadoDeSesionRemota): MensajeAlCliente => ({
+    clase: "remoto",
+    estado: e.estado,
+    ...("url" in e ? { url: e.url } : {}),
+    ...("moviles" in e ? { moviles: e.moviles } : {}),
+    ...("motivo" in e ? { motivo: e.motivo } : {}),
+  });
   /**
    * Los clientes por su IDENTIFICADOR, y qué tareas está mirando cada uno.
    *
@@ -1145,7 +1173,7 @@ export function montarRutas(
    * hace que se elija TAMBIÉN el modelo. El wizard sigue sabiendo pintarlo por si otra
    * piel se lo manda; esta no.
    */
-  const anunciarAlta = async (): Promise<void> => {
+  const componerAlta = async (): Promise<Extract<MensajeAlCliente, { clase: "alta" }>> => {
     const abierto = vestibulo.proyectoAbierto();
     const proyectoAbierto = abierto !== undefined;
     // Se lee del disco EN CADA anuncio y no se cachea al abrir: `configurarModoInicial`
@@ -1207,7 +1235,7 @@ export function montarRutas(
         })
       );
     }
-    emitir({
+    return {
       clase: "alta",
       pasos,
       proveedores: PROVEEDORES.map((p) => ({ id: p, nombre: nombreDeProveedor(p) })),
@@ -1316,7 +1344,12 @@ export function montarRutas(
       // en cada anuncio en vez de pasarse por parámetro: los anuncios de los flancos del
       // turno no preparan nada y tienen que decir lo que hay, no lo que había.
       ...(preparando === undefined ? {} : { preparando }),
-    });
+    };
+  };
+  /** El alta a TODOS los clientes vivos. Compuesto aparte (`componerAlta`) para poder dárselo a
+   *  UNO solo: el móvil que entra por la sesión remota (ver `engancharMovil`). */
+  const anunciarAlta = async (): Promise<void> => {
+    emitir(await componerAlta());
   };
 
   /**
@@ -1840,6 +1873,12 @@ export function montarRutas(
       if (ultimoProgresoDeMudanza !== undefined) cliente({ clase: "mudanzaDeWorkspace", progreso: ultimoProgresoDeMudanza });
       if (depuracion !== undefined) cliente(depuracion);
       if (modoPorDefecto !== undefined) cliente(modoPorDefecto);
+      // La sesión remota, con el interruptor encendido O con el puente sin apagar: si alguien
+      // apaga el interruptor en `settings.json` con el puente abierto, una pestaña nueva tiene
+      // que verlo para poder apagarlo (abierto e invisible sería lo peor de los dos mundos).
+      // A un móvil no le llega: `remoto` no pasa `filtrarSalida` (lleva el secreto en la `url`).
+      if (sesionRemota !== undefined && (remotoHabilitado() || sesionRemota.estado().estado !== "apagada"))
+        cliente(mensajeDeRemoto(sesionRemota.estado()));
       if (conectores !== undefined) cliente(conectores);
       if (consumoDeLaSesion !== undefined) {
         cliente({
@@ -5305,6 +5344,54 @@ export function montarRutas(
       .catch(contar);
   });
 
+  /**
+   * Engancha un cliente del cable: una pestaña SSE o un MÓVIL de la sesión remota
+   * (`puenteRemoto.ts`). Es la misma puerta para los dos a propósito: así el móvil recibe la
+   * misma ráfaga, se muda con el foco y cuenta como «hay alguien delante» igual que una pestaña.
+   */
+  const engancharCliente = (sumidero: Sumidero): void => {
+    clientes.add(sumidero);
+    adjuntar(sumidero);
+    // ANTES de `conducirCuenta()`, no después: el nombre ya está resuelto (es local, no
+    // depende de ninguna cuenta) y el paso de cuenta puede tardar lo que tarde un humano
+    // en elegir modelo y teclear una clave. Mandarlo solo dentro de `alta` —al final de
+    // TODO esto— dejaba el saludo en «Hola» a secas mientras tanto (`transporte.ts`
+    // documenta la medida).
+    // Solo al recién llegado: los demás ya recibieron su saludo al conectar.
+    sumidero({ clase: "bienvenida", ...(vestibulo.nombre === undefined ? {} : { nombre: vestibulo.nombre }) });
+  };
+
+  /**
+   * Lo contrario, con la regla de «el ÚLTIMO en irse deja la consola sola» (ver el `close` de la
+   * ruta SSE).
+   *
+   * Se va ESTE cliente, no «el cliente». La guarda de antes (`enviar !== sumidero`)
+   * existía porque el `close` de una pestaña recargada puede llegar DESPUÉS de que el
+   * SSE nuevo se enganche, y con una sola ranura eso desconectaba al recién llegado;
+   * con un conjunto, quitar el suyo es exacto y esa carrera desaparece.
+   */
+  const soltarCliente = (sumidero: Sumidero): void => {
+    clientes.delete(sumidero);
+    // La consola solo se da por sola cuando se va el ÚLTIMO: el transporte lo decide
+    // mirando sus sumideros. Cortar a la primera baja rechazaría la aprobación que otra
+    // pestaña todavía tiene delante.
+    adjunto?.desconectar(sumidero);
+    if (clientes.size === 0) {
+      /**
+       * Y las de SEGUNDO PLANO también, que es lo que `soltar` deja pendiente a
+       * propósito: mudarse de consola no da por ido al humano, pero cerrarse el último
+       * SSE sí. Sin esto, una consola que se quedó detrás con un turno en marcha seguiría
+       * creyendo que hay alguien a quien preguntar y su aprobación esperaría el plazo
+       * entero antes de rechazarse. Se les dice a todas menos a la que ya se acaba de
+       * cortar arriba.
+       */
+      for (const consola of vestibulo.proyectosAbiertos()) {
+        if (consola !== adjunto) consola.desconectar();
+      }
+      adjunto = undefined;
+    }
+  };
+
   servidor.registrarRuta("GET", RUTA_EVENTOS, (peticion, respuesta) => {
     respuesta.writeHead(200, {
       "Content-Type": "text/event-stream; charset=utf-8",
@@ -5322,7 +5409,6 @@ export function montarRutas(
         /* el cliente se fue; el `close` de abajo ya desconecta */
       }
     };
-    clientes.add(sumidero);
     /**
      * El identificador que el navegador eligió para ESTA conexión, si lo mandó. Es lo que
      * después le permite decir «engánchame a la tarea t1» por `POST /accion`, que es otra
@@ -5358,14 +5444,7 @@ export function montarRutas(
     // Un comentario SSE abre el stream de verdad: sin nada escrito, algunos navegadores no
     // disparan `onopen` hasta el primer dato.
     respuesta.write(": xonecode\n\n");
-    adjuntar(sumidero);
-    // ANTES de `conducirCuenta()`, no después: el nombre ya está resuelto (es local, no
-    // depende de ninguna cuenta) y el paso de cuenta puede tardar lo que tarde un humano
-    // en elegir modelo y teclear una clave. Mandarlo solo dentro de `alta` —al final de
-    // TODO esto— dejaba el saludo en «Hola» a secas mientras tanto (`transporte.ts`
-    // documenta la medida).
-    // Solo al recién llegado: los demás ya recibieron su saludo al conectar.
-    sumidero({ clase: "bienvenida", ...(vestibulo.nombre === undefined ? {} : { nombre: vestibulo.nombre }) });
+    engancharCliente(sumidero);
     /**
      * **Dos anuncios, y el primero va ANTES de preguntar a CloudStudio.**
      *
@@ -5410,11 +5489,6 @@ export function montarRutas(
       });
 
     peticion.on("close", () => {
-      // Se va ESTE cliente, no «el cliente». La guarda de antes (`enviar !== sumidero`)
-      // existía porque el `close` de una pestaña recargada puede llegar DESPUÉS de que el
-      // SSE nuevo se enganche, y con una sola ranura eso desconectaba al recién llegado;
-      // con un conjunto, quitar el suyo es exacto y esa carrera desaparece.
-      clientes.delete(sumidero);
       /**
        * Y se desenganchan sus MIRADAS. Sin esto, el envoltorio de una pestaña cerrada se
        * queda enganchado al turno de la tarea para siempre, escribiendo en un socket que ya
@@ -5432,24 +5506,7 @@ export function montarRutas(
           porIdDeCliente.delete(idDeCliente);
         }
       }
-      // Y la consola solo se da por sola cuando se va el ÚLTIMO: el transporte lo decide
-      // mirando sus sumideros. Cortar a la primera baja rechazaría la aprobación que otra
-      // pestaña todavía tiene delante.
-      adjunto?.desconectar(sumidero);
-      if (clientes.size === 0) {
-        /**
-         * Y las de SEGUNDO PLANO también, que es lo que `soltar` deja pendiente a
-         * propósito: mudarse de consola no da por ido al humano, pero cerrarse el último
-         * SSE sí. Sin esto, una consola que se quedó detrás con un turno en marcha seguiría
-         * creyendo que hay alguien a quien preguntar y su aprobación esperaría el plazo
-         * entero antes de rechazarse. Se les dice a todas menos a la que ya se acaba de
-         * cortar arriba.
-         */
-        for (const consola of vestibulo.proyectosAbiertos()) {
-          if (consola !== adjunto) consola.desconectar();
-        }
-        adjunto = undefined;
-      }
+      soltarCliente(sumidero);
     });
   });
 
@@ -5978,6 +6035,99 @@ export function montarRutas(
     respuesta.writeHead(204);
     respuesta.end();
   });
+
+  /**
+   * Parar ESTE turno, no cerrar la conversación. Sin proyecto abierto no hay turno que
+   * parar y se dice: un botón que no puede cumplir no puede callar. Lo usan `POST /accion`
+   * y el móvil.
+   */
+  const cancelarTurno = (): void => {
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined || !abierto.cancelarTurno()) {
+      informar("no hay ningún turno en vuelo que parar");
+    }
+  };
+
+  /**
+   * Lo que va a la consola en foco: prosa, respuestas, decisiones… Lo usan `POST /accion` y
+   * el móvil.
+   *
+   * Y si fue una PROSA, se reanuncia el alta: la sesión acaba de darse de alta en el
+   * índice (`ConsolaDeProyecto.recibir`), así que hay una fila nueva que la barra tiene
+   * que enseñar YA — con su título y marcada como la activa.
+   *
+   * Diferido por lo mismo que el reanuncio de los flancos: el lazo coge la línea en una
+   * microtarea, y anunciar en el acto contaría el turno como no empezado. No sustituye a
+   * los flancos —de ellos sale la marca de «trabajando»—, cubre el caso en que no hay
+   * flanco ninguno: un `/comando`, que no corre turno.
+   */
+  const recibirEnLaConsola = (mensaje: MensajeDelCliente): void => {
+    destinoActual().recibir(mensaje);
+    if (mensaje.clase === "prosa") {
+      void Promise.resolve()
+        .then(() => anunciarAlta())
+        .catch(contar);
+    }
+  };
+
+  /**
+   * La puerta de un MÓVIL: la de una pestaña y, detrás, el `alta` SOLO para él. Una pestaña lo
+   * recibe porque la ruta SSE anuncia después de enganchar (`conducirCuenta().then(anunciarAlta)`);
+   * un móvil no pasa por esa ruta, y sin esto su cabecera decía «sin sesión» hasta el siguiente
+   * `alta` difundido. No va en `adjuntar` porque las pestañas recibirían uno de más, ni se difunde
+   * a todos por lo mismo. Sale por su sumidero, así que cruza transformado por `filtrarSalida`
+   * (`remoto.estado`: proyecto y título de la sesión). Se compone asíncrono: si el móvil se fue
+   * entre medias, no se le escribe.
+   */
+  const engancharMovil = (sumidero: Sumidero): void => {
+    engancharCliente(sumidero);
+    void componerAlta()
+      .then((alta) => {
+        if (clientes.has(sumidero)) sumidero(alta);
+      })
+      .catch(contar);
+  };
+
+  /**
+   * El móvil entra por la MISMA puerta que una pestaña (`engancharCliente`) y lo que manda va a
+   * la consola por el MISMO despacho que `POST /accion` (`cancelarTurno`/`recibirEnLaConsola`):
+   * un segundo camino sería una segunda regla de qué se puede hacer desde fuera.
+   */
+  sesionRemota =
+    opciones.remoto === undefined
+      ? undefined
+      : crearSesionRemota({
+          puerto: opciones.remoto.puerto,
+          servidor: () => opciones.remoto!.ajustes().servidor,
+          engancharCliente: engancharMovil,
+          soltarCliente,
+          // La `respuesta` es la excepción, y por SEGURIDAD: por `recibir` contestaría también la
+          // subida con casillas o «¿Vaciar la copia…?» del escritorio, que el móvil nunca ve.
+          despachar: (m) => {
+            if (m.clase === "cancelar") cancelarTurno();
+            else if (m.clase === "respuesta") {
+              if (!destinoActual().responderDesdeElMovil(m.texto))
+                informar("sesión remota: una respuesta del móvil no tenía pregunta a la que contestar");
+            } else recibirEnLaConsola(m);
+          },
+          informar,
+          // A las pestañas: el diálogo de la consola. `clientes` contiene también los sumideros
+          // de los móviles, y no pasa nada: su filtro descarta `remoto`.
+          alCambiar: (e) => {
+            for (const cliente of clientes) cliente(mensajeDeRemoto(e));
+          },
+        });
+
+  /**
+   * Apagar solo si hay algo ENCENDIDO. `apagar()` anuncia `{estado:"apagada"}` a todas las
+   * pestañas, y `arrancarConsolaWeb` monta la opción SIEMPRE: con el interruptor apagado, un
+   * apagado a ciegas en el cierre emitiría un mensaje `remoto` que no debe existir. Y no mira el
+   * interruptor: si alguien lo apaga en `settings.json` con el puente abierto, cerrarlo sigue
+   * siendo posible (y es lo único seguro).
+   */
+  const apagarRemoto = (): void => {
+    if (sesionRemota !== undefined && sesionRemota.estado().estado !== "apagada") sesionRemota.apagar();
+  };
 
   servidor.registrarRuta("POST", RUTA_ACCION, async (peticion, respuesta) => {
     let mensaje: MensajeDelCliente;
@@ -6840,13 +6990,20 @@ export function montarRutas(
       respuesta.end();
       return;
     }
-    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "cancelar") {
-      // Parar ESTE turno, no cerrar la conversación. Sin proyecto abierto no hay turno que
-      // parar y se dice: un botón que no puede cumplir no puede callar.
-      const abierto = vestibulo.proyectoAbierto();
-      if (abierto === undefined || !abierto.cancelarTurno()) {
-        informar("no hay ningún turno en vuelo que parar");
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "remoto") {
+      // Con el interruptor apagado se contesta igual y no se ENCIENDE nada: ni se carga el
+      // paquete. Apagar sí se atiende siempre, pero solo actúa si hay algo encendido.
+      if (mensaje.accion === "apagar") apagarRemoto();
+      else if (sesionRemota !== undefined && remotoHabilitado()) {
+        if (mensaje.accion === "encender") void sesionRemota.encender().catch(contar);
+        else if (mensaje.accion === "revocar") void sesionRemota.revocar().catch(contar);
       }
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "cancelar") {
+      cancelarTurno();
       respuesta.writeHead(204);
       respuesta.end();
       return;
@@ -7081,28 +7238,13 @@ export function montarRutas(
       // y el `POST` no puede quedarse abierto minutos. Lo que pase se cuenta por el cable.
       void atenderAlta(mensaje);
     } else {
-      destinoActual().recibir(mensaje);
-      /**
-       * Y si fue una PROSA, se reanuncia el alta: la sesión acaba de darse de alta en el
-       * índice (`ConsolaDeProyecto.recibir`), así que hay una fila nueva que la barra tiene
-       * que enseñar YA — con su título y marcada como la activa.
-       *
-       * Diferido por lo mismo que el reanuncio de los flancos: el lazo coge la línea en una
-       * microtarea, y anunciar en el acto contaría el turno como no empezado. No sustituye a
-       * los flancos —de ellos sale la marca de «trabajando»—, cubre el caso en que no hay
-       * flanco ninguno: un `/comando`, que no corre turno.
-       */
-      if (mensaje.clase === "prosa") {
-        void Promise.resolve()
-          .then(() => anunciarAlta())
-          .catch(contar);
-      }
+      recibirEnLaConsola(mensaje);
     }
     respuesta.writeHead(204);
     respuesta.end();
   });
 
-  return { emitirTareas };
+  return { emitirTareas, cerrarRemoto: apagarRemoto };
 }
 
 export interface CorredorDeTareasCableado {
@@ -8029,6 +8171,8 @@ async function leerCuerpo(peticion: IncomingMessage): Promise<string> {
 }
 
 export interface OpcionesDeArranque {
+  /** El puente de la sesión remota; por omisión el real. Los tests pasan el doble. */
+  puertoRemoto?: () => Promise<PuenteRemotoPort | undefined>;
   puerto: number;
   abrir: boolean;
   cwd: string;
@@ -8258,6 +8402,19 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
 
   const cable = montarRutas(servidor, vestibulo, {
     informar,
+    // El interruptor se lee de `settings.json` (o `XONECODE_REMOTO=1`) en cada uso. Sin el
+    // paquete del puente instalado, encender dice que no está disponible.
+    remoto: {
+      ajustes: () => remotoEnVigor(cargarSettings().settings.remoto, process.env),
+      puerto:
+        opciones.puertoRemoto ??
+        (async () => {
+          // `import()` dinámico también aquí: con el interruptor apagado ni se carga el adaptador.
+          const { cargarModuloRemoto, crearPuenteWebSocket } = await import("../../agent/remoto/puenteWebSocket.js");
+          const modulo = await cargarModuloRemoto();
+          return modulo === undefined ? undefined : crearPuenteWebSocket(modulo);
+        }),
+    },
     // El tope de ventana, tal cual llega: es la misma función que la barra del terminal, y
     // dos resoluciones serían dos porcentajes distintos para el mismo modelo.
     ...(opciones.topeDeContexto === undefined ? {} : { topeDeContexto: opciones.topeDeContexto }),
@@ -8486,6 +8643,9 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
    * señal repetida no puede matar el cierre que sigue: ver `interrupcion.ts`.
    */
   await (opciones.esperarCierre ?? (() => esperarInterrupcion({ avisar: escribir })))();
+  // La sesión remota antes que nada: un móvil no puede seguir mandando prosa a una consola que
+  // se está cerrando, y el socket del puente no puede quedarse abierto tras el proceso.
+  cable.cerrarRemoto();
   /**
    * El corredor PRIMERO, y el orden es load-bearing: `parar()` corta los turnos en vuelo y
    * los deja aparcados diciendo que la consola se cerró a mitad. Al revés, el

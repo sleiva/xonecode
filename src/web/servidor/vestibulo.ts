@@ -602,6 +602,8 @@ export interface ConsolaDeProyecto {
    *  el que hablar; quien decide el fin de la marca histórica es el envoltorio del
    *  ejecutor, no esto — una prosa que llega a mitad de turno solo entra en la cola. */
   recibir(mensaje: MensajeDelCliente): void;
+  /** La `respuesta` de un móvil de la sesión remota: ver `ConsolaWeb.responderDesdeElMovil`. */
+  responderDesdeElMovil(texto: string): boolean;
   conectar(enviar?: Sumidero): readonly Acto[];
   /** Se va UN cliente (el suyo) o todos. Ver `Transporte`: la consola solo da por perdido
    *  al humano cuando se va el ÚLTIMO. */
@@ -1889,6 +1891,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         sesionReal.cancelar();
         return true;
       },
+      responderDesdeElMovil: (texto) => consolaWeb.responderDesdeElMovil(texto),
       recibir: (mensaje) => {
         consolaWeb.recibir(mensaje);
         /**

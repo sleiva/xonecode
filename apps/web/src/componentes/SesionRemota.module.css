@@ -1,0 +1,29 @@
+.boton {
+  composes: secundario from "./Boton.module.css";
+}
+.secundario {
+  composes: secundario from "./Boton.module.css";
+}
+.peligro {
+  composes: peligro from "./Boton.module.css";
+}
+/* La coraza (capa, velo, ventana) es la de `NuevaSesion.module.css`. */
+.ventana {
+  width: min(340px, 100%);
+}
+.qr {
+  width: 100%;
+  aspect-ratio: 1;
+  background: var(--xonecode-barra-placa);
+}
+.url {
+  word-break: break-all;
+  font-size: 12px;
+}
+.aviso {
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+.error {
+  color: var(--xonecode-rojo);
+}

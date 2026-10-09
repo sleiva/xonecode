@@ -1046,3 +1046,89 @@ export class ConectoresEnMemoria implements ConectoresPort {
     return this.conectores[id]?.respuesta ?? "";
   }
 }
+
+/**
+ * El puente de la sesión remota: un WebSocket SALIENTE y cifrado hacia `xonecode-server`.
+ * Mensajes en CLARO por esta interfaz: el cifrado vive en la implementación real
+ * (`agent/remoto/puenteWebSocket.ts`), que es la única que carga el paquete del puente.
+ */
+export type EstadoDelPuente =
+  | { estado: "abierta"; url: string }
+  | { estado: "reconectando" }
+  | { estado: "cerrada"; motivo?: string };
+
+export interface EscuchasDelPuente {
+  alEstado(estado: EstadoDelPuente): void;
+  alPresencia(moviles: readonly string[]): void;
+  alMensaje(de: string, mensaje: unknown): void;
+}
+
+export interface CanalRemoto {
+  /** `para` ausente = a todos los móviles. */
+  enviar(para: string | undefined, mensaje: unknown): Promise<void>;
+  cerrar(): void;
+}
+
+export interface PuenteRemotoPort {
+  abrir(servidor: string, escuchas: EscuchasDelPuente): Promise<CanalRemoto>;
+}
+
+/** El doble: deja al test hacer de servidor y de móviles, y apunta lo enviado. */
+export class PuenteRemotoEnMemoria implements PuenteRemotoPort {
+  readonly [ES_DOBLE] = true;
+  readonly aperturas: string[] = [];
+  readonly enviados: { para: string | undefined; mensaje: unknown }[] = [];
+  cerrados = 0;
+  /**
+   * Un registro POR canal abierto: el real tiene sockets viejos que aún pueden hablar tras
+   * cerrarse o reemplazarse, y sin poder disparar eventos de uno viejo ese fallo no se probaría.
+   */
+  readonly canales: {
+    servidor: string;
+    escuchas: EscuchasDelPuente;
+    cerrado: boolean;
+    enviados: { para: string | undefined; mensaje: unknown }[];
+  }[] = [];
+
+  async abrir(servidor: string, escuchas: EscuchasDelPuente): Promise<CanalRemoto> {
+    this.aperturas.push(servidor);
+    const registro = { servidor, escuchas, cerrado: false, enviados: [] as { para: string | undefined; mensaje: unknown }[] };
+    this.canales.push(registro);
+    return {
+      enviar: async (para, mensaje) => {
+        this.enviados.push({ para, mensaje });
+        registro.enviados.push({ para, mensaje });
+      },
+      cerrar: () => {
+        registro.cerrado = true;
+        this.cerrados += 1;
+      },
+    };
+  }
+
+  private ultimo(): EscuchasDelPuente | undefined {
+    return this.canales.at(-1)?.escuchas;
+  }
+
+  /** Lo que haría el servidor real; sin índice, sobre el canal MÁS RECIENTE. */
+  abierta(url = "https://remoto.example/r/SALA#SECRETO", canal?: number): void {
+    (canal === undefined ? this.ultimo() : this.canales[canal]?.escuchas)?.alEstado({ estado: "abierta", url });
+  }
+  presencia(...moviles: string[]): void {
+    this.ultimo()?.alPresencia(moviles);
+  }
+  presenciaDe(canal: number, ...moviles: string[]): void {
+    this.canales[canal]?.escuchas.alPresencia(moviles);
+  }
+  delMovil(de: string, mensaje: unknown): void {
+    this.ultimo()?.alMensaje(de, mensaje);
+  }
+  cerrada(motivo?: string, canal?: number): void {
+    (canal === undefined ? this.ultimo() : this.canales[canal]?.escuchas)?.alEstado(
+      motivo === undefined ? { estado: "cerrada" } : { estado: "cerrada", motivo }
+    );
+  }
+  reconectando(canal?: number): void {
+    (canal === undefined ? this.ultimo() : this.canales[canal]?.escuchas)?.alEstado({ estado: "reconectando" });
+  }
+}
