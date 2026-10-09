@@ -36,6 +36,7 @@ export interface SesionRemota {
   estado(): EstadoDeSesionRemota;
 }
 
+export const MOTIVO_NO_ABRIO = "no se pudo abrir la sesión remota";
 export const SIN_PAQUETE = "la sesión remota no está disponible en esta instalación";
 
 export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
@@ -156,7 +157,9 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
       if (mia !== generacion) return;
       abriendo = false;
       canal = undefined;
-      poner({ estado: "error", motivo: error instanceof Error ? error.message : String(error) });
+      // Al cable no cruza un mensaje de Node (lleva rutas de la máquina): solo su `code`.
+      const codigo = (error as { code?: unknown } | null)?.code;
+      poner({ estado: "error", motivo: typeof codigo === "string" ? codigo : MOTIVO_NO_ABRIO });
     }
   };
 

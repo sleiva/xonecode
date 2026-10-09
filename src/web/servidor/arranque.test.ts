@@ -62,7 +62,7 @@ import { crearConsolaWeb, type ConsolaWeb, type OpcionesDeConsolaWeb } from "./c
 import { PAPELES } from "../../core/modelos.js";
 import { anotarActo, crearSesion, listarSesiones } from "./sesiones.js";
 import { COMANDOS } from "../../cli/consola.js";
-import { CatalogoModelosEnMemoria, GestorDeTareasEnMemoria } from "../../core/ports.js";
+import { CatalogoModelosEnMemoria, GestorDeTareasEnMemoria, PuenteRemotoEnMemoria } from "../../core/ports.js";
 import type { FichaDelGestor, GestorDeTareasPort, TransicionDelGestor, Vinculo } from "../../core/gestorDeTareas.js";
 import { crearGestorJira } from "../../agent/conectores/gestorJira.js";
 import type { AjustesDeDispositivos, Entorno } from "../../core/settings.js";
@@ -4451,6 +4451,44 @@ describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
         .actos()
         .some((a) => a.tipo === "sistema" && a.texto.includes("de pega"))
     ).toBe(true);
+  });
+
+  it("al cerrar, la sesión remota encendida se CIERRA (cerrarRemoto cableado en el arranque real)", async () => {
+    const previo = process.env.XONECODE_REMOTO;
+    process.env.XONECODE_REMOTO = "1";
+    try {
+      const puente = new PuenteRemotoEnMemoria();
+      const rutas = new Map<string, ManejadorRuta>();
+      const servidor = {
+        ...servidorLevantado(),
+        registrarRuta: (metodo: string, ruta: string, manejador: ManejadorRuta) => {
+          rutas.set(`${metodo} ${ruta}`, manejador);
+        },
+      };
+      let cerradoAntes: boolean | undefined;
+      const codigo = await arrancarConsolaWeb({
+        puerto: 0,
+        abrir: false,
+        cwd: mkdtempSync(join(tmpdir(), "xonecode-cwd-")),
+        raizDelCliente: conBuild(),
+        crearServidor: async () => servidor,
+        vestibulo: vestibuloDePrueba(),
+        escribir: () => {},
+        puertoRemoto: async () => puente,
+        esperarCierre: async () => {
+          expect(await enviarMensaje(rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "remoto", accion: "encender" })).toBe(204);
+          await vi.waitFor(() => expect(puente.canales.length).toBe(1));
+          await new Promise((r) => setTimeout(r, 0));
+          cerradoAntes = puente.canales[0]!.cerrado;
+        },
+      });
+      expect(codigo).toBe(0);
+      expect(cerradoAntes).toBe(false);
+      expect(puente.canales[0]!.cerrado).toBe(true);
+    } finally {
+      if (previo === undefined) delete process.env.XONECODE_REMOTO;
+      else process.env.XONECODE_REMOTO = previo;
+    }
   });
 
   it("con --no-abrir no se toca el navegador; con abrir, un fallo al abrirlo no tumba nada", async () => {

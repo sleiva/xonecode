@@ -1050,7 +1050,7 @@ export class ConectoresEnMemoria implements ConectoresPort {
 /**
  * El puente de la sesión remota: un WebSocket SALIENTE y cifrado hacia `xonecode-server`.
  * Mensajes en CLARO por esta interfaz: el cifrado vive en la implementación real
- * (`agent/remoto/puenteWebSocket.ts`), que es la única que carga `@xone/xonecode-remoto`.
+ * (`agent/remoto/puenteWebSocket.ts`), que es la única que carga el paquete del puente.
  */
 export type EstadoDelPuente =
   | { estado: "abierta"; url: string }

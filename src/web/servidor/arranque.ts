@@ -416,7 +416,7 @@ export interface OpcionesDeMontaje {
   /**
    * La sesión remota (`puenteRemoto.ts`). Ausente o `ajustes().habilitado === false` = no
    * existe: ni se anuncia, ni se atiende, ni se llama a `puerto` (que es lo que cargaría el
-   * paquete `@xone/xonecode-remoto`). `ajustes` se lee en cada uso, no al montar: el
+   * paquete del puente). `ajustes` se lee en cada uso, no al montar: el
    * interruptor vive en `settings.json` y leerlo una vez lo congelaría.
    */
   remoto?: {
@@ -8134,6 +8134,8 @@ async function leerCuerpo(peticion: IncomingMessage): Promise<string> {
 }
 
 export interface OpcionesDeArranque {
+  /** El puente de la sesión remota; por omisión el real. Los tests pasan el doble. */
+  puertoRemoto?: () => Promise<PuenteRemotoPort | undefined>;
   puerto: number;
   abrir: boolean;
   cwd: string;
@@ -8363,11 +8365,18 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
 
   const cable = montarRutas(servidor, vestibulo, {
     informar,
-    // El interruptor se lee de `settings.json` (o `XONECODE_REMOTO=1`) en cada uso. El puerto
-    // real llega con el paquete; mientras tanto, encender dice que no está disponible.
+    // El interruptor se lee de `settings.json` (o `XONECODE_REMOTO=1`) en cada uso. Sin el
+    // paquete del puente instalado, encender dice que no está disponible.
     remoto: {
       ajustes: () => remotoEnVigor(cargarSettings().settings.remoto, process.env),
-      puerto: async () => undefined,
+      puerto:
+        opciones.puertoRemoto ??
+        (async () => {
+          // `import()` dinámico también aquí: con el interruptor apagado ni se carga el adaptador.
+          const { cargarModuloRemoto, crearPuenteWebSocket } = await import("../../agent/remoto/puenteWebSocket.js");
+          const modulo = await cargarModuloRemoto();
+          return modulo === undefined ? undefined : crearPuenteWebSocket(modulo);
+        }),
     },
     // El tope de ventana, tal cual llega: es la misma función que la barra del terminal, y
     // dos resoluciones serían dos porcentajes distintos para el mismo modelo.
@@ -8597,6 +8606,9 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
    * señal repetida no puede matar el cierre que sigue: ver `interrupcion.ts`.
    */
   await (opciones.esperarCierre ?? (() => esperarInterrupcion({ avisar: escribir })))();
+  // La sesión remota antes que nada: un móvil no puede seguir mandando prosa a una consola que
+  // se está cerrando, y el socket del puente no puede quedarse abierto tras el proceso.
+  cable.cerrarRemoto();
   /**
    * El corredor PRIMERO, y el orden es load-bearing: `parar()` corta los turnos en vuelo y
    * los deja aparcados diciendo que la consola se cerró a mitad. Al revés, el
@@ -8605,9 +8617,6 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
    * pasó es que alguien paró el proceso. El motivo se lee en el kanban, así que la
    * diferencia no es interna.
    */
-  // La sesión remota antes que nada: un móvil no puede seguir mandando prosa a una consola que
-  // se está cerrando, y el socket del puente no puede quedarse abierto tras el proceso.
-  cable.cerrarRemoto();
   await corredor?.parar();
   await vestibulo.cerrar();
   await servidor.cerrar();

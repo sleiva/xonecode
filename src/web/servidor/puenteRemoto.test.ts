@@ -101,10 +101,18 @@ describe("la sesión remota", () => {
 
     const p = montar();
     p.puerto.abrir = async () => {
-      throw new Error("ECONNREFUSED");
+      throw Object.assign(new Error("connect ECONNREFUSED /Users/x/ruta"), { code: "ECONNREFUSED" });
     };
     await p.sesion.encender();
     expect(p.sesion.estado()).toEqual({ estado: "error", motivo: "ECONNREFUSED" });
+
+    // Sin `code` no cruza el mensaje (puede llevar rutas): texto fijo.
+    const q = montar();
+    q.puerto.abrir = async () => {
+      throw new Error("ENOENT /Users/x/secreto");
+    };
+    await q.sesion.encender();
+    expect(q.sesion.estado()).toEqual({ estado: "error", motivo: "no se pudo abrir la sesión remota" });
   });
 
   /** Hace que `abrir` no resuelva hasta que el test lo diga. */

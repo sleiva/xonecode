@@ -1,7 +1,7 @@
 /**
  * Qué cruza el puente de la sesión remota, en las dos direcciones. Es la FRONTERA de seguridad
  * del lado de xonecode: lo que no está aquí no sale de la máquina ni entra en la consola, aunque
- * el móvil lo pida. Puro y sin dependencias (`core/`); el paquete `@xone/xonecode-remoto` tiene
+ * el móvil lo pida. Puro y sin dependencias (`core/`); el paquete del puente (`xonecode-remoto`) tiene
  * su propia validación para la web, pero quien decide aquí es xonecode.
  */
 
