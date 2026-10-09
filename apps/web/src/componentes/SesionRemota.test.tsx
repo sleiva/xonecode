@@ -1,6 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { SesionRemota } from "./SesionRemota";
+
+afterEach(cleanup);
 
 describe("la sesión remota en la consola", () => {
   it("sin estado no pinta nada", () => {
@@ -31,5 +33,45 @@ describe("la sesión remota en la consola", () => {
   it("error: enseña el motivo", () => {
     render(<SesionRemota remoto={{ estado: "error", motivo: "la sesión remota no está disponible en esta instalación" }} enviar={vi.fn()} abierto />);
     expect(screen.getByText("la sesión remota no está disponible en esta instalación")).toBeTruthy();
+  });
+
+  it("Escape cierra el diálogo sin mandar nada, y el foco vuelve al botón", () => {
+    const enviar = vi.fn(async () => {});
+    render(<SesionRemota remoto={{ estado: "activa", url: "https://r/r/S#K", moviles: 1 }} enviar={enviar} />);
+    const boton = screen.getByRole("button", { name: "Sesión remota" });
+    boton.focus();
+    fireEvent.click(boton);
+    expect(screen.getByRole("dialog", { name: "Sesión remota" })).toBeTruthy();
+    expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(boton);
+    expect(enviar).not.toHaveBeenCalled();
+  });
+
+  it("el clic en el velo cierra sin mandar nada", () => {
+    const enviar = vi.fn(async () => {});
+    const { baseElement } = render(<SesionRemota remoto={{ estado: "activa", url: "https://r/r/S#K", moviles: 1 }} enviar={enviar} abierto />);
+    const ventana = screen.getByRole("dialog");
+    fireEvent.click(ventana.firstElementChild as HTMLElement);
+    expect(baseElement.querySelector("[role=dialog]")).toBeNull();
+    expect(enviar).not.toHaveBeenCalled();
+  });
+
+  it("cerrado, la URL no está en el DOM", () => {
+    render(<SesionRemota remoto={{ estado: "activa", url: "https://r/r/S#K", moviles: 1 }} enviar={vi.fn()} />);
+    expect(screen.queryByText("https://r/r/S#K")).toBeNull();
+  });
+
+  it("al pasar a apagada el diálogo se va; al perder el estado y volver no reaparece", () => {
+    const activa = { estado: "activa", url: "https://r/r/S#K", moviles: 1 } as const;
+    const { rerender } = render(<SesionRemota remoto={activa} enviar={vi.fn()} abierto />);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    rerender(<SesionRemota remoto={{ estado: "apagada" }} enviar={vi.fn()} />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    rerender(<SesionRemota remoto={activa} enviar={vi.fn()} abierto />);
+    rerender(<SesionRemota remoto={undefined} enviar={vi.fn()} />);
+    rerender(<SesionRemota remoto={activa} enviar={vi.fn()} />);
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
