@@ -209,6 +209,42 @@ describe("la sesión remota", () => {
     expect(p.sesion.estado()).toEqual({ estado: "reconectando", url: "https://r/r/S#K", moviles: 1 });
   });
 
+  it("un relé inalcanzable: reconectando ANTES de abrirse se anuncia, sin url, y se puede apagar", async () => {
+    const p = montar();
+    await p.sesion.encender();
+    p.puerto.reconectando();
+    expect(p.sesion.estado()).toEqual({ estado: "reconectando", moviles: 0 });
+    expect(p.estados.at(-1)).toEqual({ estado: "reconectando", moviles: 0 });
+    p.sesion.apagar();
+    expect(p.sesion.estado()).toEqual({ estado: "apagada" });
+    expect(p.puerto.cerrados).toBe(1);
+  });
+
+  it("la clase de un mensaje rechazado solo llega al terminal si es un nombre limpio", async () => {
+    const p = montar();
+    await p.sesion.encender();
+    p.puerto.abierta();
+    p.puerto.presencia("m1");
+    p.puerto.delMovil("m1", { clase: "\u001b]52;c;cGlzdA==\u0007" });
+    p.puerto.delMovil("m1", { clase: "x".repeat(33) });
+    p.puerto.delMovil("m1", { clase: "remoto.estado" });
+    expect(p.informados).toHaveLength(3);
+    expect(p.informados[0]).toContain("desconocida");
+    expect(p.informados[0]).not.toContain("\u001b");
+    expect(p.informados[1]).toContain("desconocida");
+    expect(p.informados[2]).toContain("clase remoto.estado");
+  });
+
+  it("revocar no anuncia el apagado de en medio: el diálogo de la consola sigue abierto", async () => {
+    const p = montar();
+    await p.sesion.encender();
+    p.puerto.abierta("https://r/r/S#K");
+    const desde = p.estados.length;
+    await p.sesion.revocar();
+    p.puerto.abierta("https://r/r/T#L");
+    expect(p.estados.slice(desde).map((e) => e.estado)).toEqual(["abriendo", "activa"]);
+  });
+
   it("el tope de salida: una aprobación enorme no sale y se informa; una reemisión se recorta", async () => {
     const p = montar(600);
     await p.sesion.encender();

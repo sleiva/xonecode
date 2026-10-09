@@ -13,7 +13,8 @@ export type EstadoDeSesionRemota =
   | { estado: "apagada" }
   | { estado: "abriendo" }
   | { estado: "activa"; url: string; moviles: number }
-  | { estado: "reconectando"; url: string; moviles: number }
+  /** Sin `url`: el relé no contestó nunca (inalcanzable) y se sigue intentando. Se puede apagar. */
+  | { estado: "reconectando"; url?: string; moviles: number }
   | { estado: "error"; motivo: string };
 
 export interface OpcionesDeSesionRemota {
@@ -37,6 +38,8 @@ export interface SesionRemota {
 }
 
 export const MOTIVO_NO_ABRIO = "no se pudo abrir la sesión remota";
+/** Lo que puede llegar al terminal de la clase de un mensaje rechazado del móvil. */
+const CLASE_LEGIBLE = /^[a-zA-Z.]{1,32}$/;
 export const SIN_PAQUETE = "la sesión remota no está disponible en esta instalación";
 
 export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
@@ -52,6 +55,9 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
   };
   const ponerActiva = () => {
     if (url !== undefined) poner({ estado: reconectando ? "reconectando" : "activa", url, moviles: moviles.size });
+    // Antes de la primera `abierta` no hay enlace que enseñar, pero sí un intento que se repite:
+    // quedarse en «abriendo» para siempre escondía que el relé no contesta.
+    else if (reconectando) poner({ estado: "reconectando", moviles: moviles.size });
   };
   const soltarTodos = () => {
     for (const s of moviles.values()) o.soltarCliente(s);
@@ -63,7 +69,9 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
   let generacion = 0;
   let abriendo = false;
 
-  const apagar = () => {
+  /** `anunciar: false` solo para revocar: el apagado de en medio no es un estado que la consola
+   *  deba ver (su diálogo se cierra al pasar a «apagada»), y le sigue «abriendo» en el acto. */
+  const apagar = (anunciar = true) => {
     generacion += 1;
     abriendo = false;
     soltarTodos();
@@ -71,7 +79,8 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
     canal = undefined;
     url = undefined;
     reconectando = false;
-    poner({ estado: "apagada" });
+    if (anunciar) poner({ estado: "apagada" });
+    else estado = { estado: "apagada" };
   };
 
   const encender = async () => {
@@ -139,7 +148,10 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
           if (mia !== generacion || !moviles.has(de)) return;
           const entrada = validarEntradaDelMovil(mensaje);
           if (entrada === undefined) {
-            const clase = typeof mensaje === "object" && mensaje !== null ? String((mensaje as { clase?: unknown }).clase) : typeof mensaje;
+            // La clase la escribe el MÓVIL y va al terminal de quien desarrolla: solo un nombre
+            // limpio, o una secuencia de escape (OSC 52, que escribe el portapapeles) llegaría tal cual.
+            const bruta = typeof mensaje === "object" && mensaje !== null ? (mensaje as { clase?: unknown }).clase : undefined;
+            const clase = typeof bruta === "string" && CLASE_LEGIBLE.test(bruta) ? bruta : "desconocida";
             o.informar(`sesión remota: se rechazó un mensaje del móvil (clase ${clase})`);
             return;
           }
@@ -165,9 +177,9 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
 
   return {
     encender,
-    apagar,
+    apagar: () => apagar(),
     async revocar() {
-      apagar();
+      apagar(false);
       await encender();
     },
     estado: () => estado,
