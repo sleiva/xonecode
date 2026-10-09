@@ -5305,6 +5305,54 @@ export function montarRutas(
       .catch(contar);
   });
 
+  /**
+   * Engancha un cliente del cable: una pestaña SSE o un MÓVIL de la sesión remota
+   * (`puenteRemoto.ts`). Es la misma puerta para los dos a propósito: así el móvil recibe la
+   * misma ráfaga, se muda con el foco y cuenta como «hay alguien delante» igual que una pestaña.
+   */
+  const engancharCliente = (sumidero: Sumidero): void => {
+    clientes.add(sumidero);
+    adjuntar(sumidero);
+    // ANTES de `conducirCuenta()`, no después: el nombre ya está resuelto (es local, no
+    // depende de ninguna cuenta) y el paso de cuenta puede tardar lo que tarde un humano
+    // en elegir modelo y teclear una clave. Mandarlo solo dentro de `alta` —al final de
+    // TODO esto— dejaba el saludo en «Hola» a secas mientras tanto (`transporte.ts`
+    // documenta la medida).
+    // Solo al recién llegado: los demás ya recibieron su saludo al conectar.
+    sumidero({ clase: "bienvenida", ...(vestibulo.nombre === undefined ? {} : { nombre: vestibulo.nombre }) });
+  };
+
+  /**
+   * Lo contrario, con la regla de «el ÚLTIMO en irse deja la consola sola» (ver el `close` de la
+   * ruta SSE).
+   *
+   * Se va ESTE cliente, no «el cliente». La guarda de antes (`enviar !== sumidero`)
+   * existía porque el `close` de una pestaña recargada puede llegar DESPUÉS de que el
+   * SSE nuevo se enganche, y con una sola ranura eso desconectaba al recién llegado;
+   * con un conjunto, quitar el suyo es exacto y esa carrera desaparece.
+   */
+  const soltarCliente = (sumidero: Sumidero): void => {
+    clientes.delete(sumidero);
+    // La consola solo se da por sola cuando se va el ÚLTIMO: el transporte lo decide
+    // mirando sus sumideros. Cortar a la primera baja rechazaría la aprobación que otra
+    // pestaña todavía tiene delante.
+    adjunto?.desconectar(sumidero);
+    if (clientes.size === 0) {
+      /**
+       * Y las de SEGUNDO PLANO también, que es lo que `soltar` deja pendiente a
+       * propósito: mudarse de consola no da por ido al humano, pero cerrarse el último
+       * SSE sí. Sin esto, una consola que se quedó detrás con un turno en marcha seguiría
+       * creyendo que hay alguien a quien preguntar y su aprobación esperaría el plazo
+       * entero antes de rechazarse. Se les dice a todas menos a la que ya se acaba de
+       * cortar arriba.
+       */
+      for (const consola of vestibulo.proyectosAbiertos()) {
+        if (consola !== adjunto) consola.desconectar();
+      }
+      adjunto = undefined;
+    }
+  };
+
   servidor.registrarRuta("GET", RUTA_EVENTOS, (peticion, respuesta) => {
     respuesta.writeHead(200, {
       "Content-Type": "text/event-stream; charset=utf-8",
@@ -5322,7 +5370,6 @@ export function montarRutas(
         /* el cliente se fue; el `close` de abajo ya desconecta */
       }
     };
-    clientes.add(sumidero);
     /**
      * El identificador que el navegador eligió para ESTA conexión, si lo mandó. Es lo que
      * después le permite decir «engánchame a la tarea t1» por `POST /accion`, que es otra
@@ -5358,14 +5405,7 @@ export function montarRutas(
     // Un comentario SSE abre el stream de verdad: sin nada escrito, algunos navegadores no
     // disparan `onopen` hasta el primer dato.
     respuesta.write(": xonecode\n\n");
-    adjuntar(sumidero);
-    // ANTES de `conducirCuenta()`, no después: el nombre ya está resuelto (es local, no
-    // depende de ninguna cuenta) y el paso de cuenta puede tardar lo que tarde un humano
-    // en elegir modelo y teclear una clave. Mandarlo solo dentro de `alta` —al final de
-    // TODO esto— dejaba el saludo en «Hola» a secas mientras tanto (`transporte.ts`
-    // documenta la medida).
-    // Solo al recién llegado: los demás ya recibieron su saludo al conectar.
-    sumidero({ clase: "bienvenida", ...(vestibulo.nombre === undefined ? {} : { nombre: vestibulo.nombre }) });
+    engancharCliente(sumidero);
     /**
      * **Dos anuncios, y el primero va ANTES de preguntar a CloudStudio.**
      *
@@ -5410,11 +5450,6 @@ export function montarRutas(
       });
 
     peticion.on("close", () => {
-      // Se va ESTE cliente, no «el cliente». La guarda de antes (`enviar !== sumidero`)
-      // existía porque el `close` de una pestaña recargada puede llegar DESPUÉS de que el
-      // SSE nuevo se enganche, y con una sola ranura eso desconectaba al recién llegado;
-      // con un conjunto, quitar el suyo es exacto y esa carrera desaparece.
-      clientes.delete(sumidero);
       /**
        * Y se desenganchan sus MIRADAS. Sin esto, el envoltorio de una pestaña cerrada se
        * queda enganchado al turno de la tarea para siempre, escribiendo en un socket que ya
@@ -5432,24 +5467,7 @@ export function montarRutas(
           porIdDeCliente.delete(idDeCliente);
         }
       }
-      // Y la consola solo se da por sola cuando se va el ÚLTIMO: el transporte lo decide
-      // mirando sus sumideros. Cortar a la primera baja rechazaría la aprobación que otra
-      // pestaña todavía tiene delante.
-      adjunto?.desconectar(sumidero);
-      if (clientes.size === 0) {
-        /**
-         * Y las de SEGUNDO PLANO también, que es lo que `soltar` deja pendiente a
-         * propósito: mudarse de consola no da por ido al humano, pero cerrarse el último
-         * SSE sí. Sin esto, una consola que se quedó detrás con un turno en marcha seguiría
-         * creyendo que hay alguien a quien preguntar y su aprobación esperaría el plazo
-         * entero antes de rechazarse. Se les dice a todas menos a la que ya se acaba de
-         * cortar arriba.
-         */
-        for (const consola of vestibulo.proyectosAbiertos()) {
-          if (consola !== adjunto) consola.desconectar();
-        }
-        adjunto = undefined;
-      }
+      soltarCliente(sumidero);
     });
   });
 
@@ -5978,6 +5996,40 @@ export function montarRutas(
     respuesta.writeHead(204);
     respuesta.end();
   });
+
+  /**
+   * Parar ESTE turno, no cerrar la conversación. Sin proyecto abierto no hay turno que
+   * parar y se dice: un botón que no puede cumplir no puede callar. Lo usan `POST /accion`
+   * y el móvil.
+   */
+  const cancelarTurno = (): void => {
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined || !abierto.cancelarTurno()) {
+      informar("no hay ningún turno en vuelo que parar");
+    }
+  };
+
+  /**
+   * Lo que va a la consola en foco: prosa, respuestas, decisiones… Lo usan `POST /accion` y
+   * el móvil.
+   *
+   * Y si fue una PROSA, se reanuncia el alta: la sesión acaba de darse de alta en el
+   * índice (`ConsolaDeProyecto.recibir`), así que hay una fila nueva que la barra tiene
+   * que enseñar YA — con su título y marcada como la activa.
+   *
+   * Diferido por lo mismo que el reanuncio de los flancos: el lazo coge la línea en una
+   * microtarea, y anunciar en el acto contaría el turno como no empezado. No sustituye a
+   * los flancos —de ellos sale la marca de «trabajando»—, cubre el caso en que no hay
+   * flanco ninguno: un `/comando`, que no corre turno.
+   */
+  const recibirEnLaConsola = (mensaje: MensajeDelCliente): void => {
+    destinoActual().recibir(mensaje);
+    if (mensaje.clase === "prosa") {
+      void Promise.resolve()
+        .then(() => anunciarAlta())
+        .catch(contar);
+    }
+  };
 
   servidor.registrarRuta("POST", RUTA_ACCION, async (peticion, respuesta) => {
     let mensaje: MensajeDelCliente;
@@ -6841,12 +6893,7 @@ export function montarRutas(
       return;
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "cancelar") {
-      // Parar ESTE turno, no cerrar la conversación. Sin proyecto abierto no hay turno que
-      // parar y se dice: un botón que no puede cumplir no puede callar.
-      const abierto = vestibulo.proyectoAbierto();
-      if (abierto === undefined || !abierto.cancelarTurno()) {
-        informar("no hay ningún turno en vuelo que parar");
-      }
+      cancelarTurno();
       respuesta.writeHead(204);
       respuesta.end();
       return;
@@ -7081,22 +7128,7 @@ export function montarRutas(
       // y el `POST` no puede quedarse abierto minutos. Lo que pase se cuenta por el cable.
       void atenderAlta(mensaje);
     } else {
-      destinoActual().recibir(mensaje);
-      /**
-       * Y si fue una PROSA, se reanuncia el alta: la sesión acaba de darse de alta en el
-       * índice (`ConsolaDeProyecto.recibir`), así que hay una fila nueva que la barra tiene
-       * que enseñar YA — con su título y marcada como la activa.
-       *
-       * Diferido por lo mismo que el reanuncio de los flancos: el lazo coge la línea en una
-       * microtarea, y anunciar en el acto contaría el turno como no empezado. No sustituye a
-       * los flancos —de ellos sale la marca de «trabajando»—, cubre el caso en que no hay
-       * flanco ninguno: un `/comando`, que no corre turno.
-       */
-      if (mensaje.clase === "prosa") {
-        void Promise.resolve()
-          .then(() => anunciarAlta())
-          .catch(contar);
-      }
+      recibirEnLaConsola(mensaje);
     }
     respuesta.writeHead(204);
     respuesta.end();
