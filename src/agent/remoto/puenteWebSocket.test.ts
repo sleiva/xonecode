@@ -184,4 +184,36 @@ describe("el puente WebSocket", () => {
     await expect.poll(() => orden.length).toBe(3);
     expect(orden).toEqual(["dato1", "dato2", "presencia"]);
   });
+
+  it("envía en el ORDEN de llamada aunque cifrar termine al revés, y un fallo no bloquea a los siguientes", async () => {
+    const s = levantar();
+    // Como el paquete real: la secuencia se toma AL LLAMAR, y el cifrado termina cuando termina.
+    let secuencia = 0;
+    const modulo: ModuloRemoto = {
+      ...moduloFalso,
+      crearCanal: async () => ({
+        cifrar: async (m) => {
+          const n = ++secuencia;
+          if ((m as { falla?: boolean }).falla === true) throw new Error("no cifra");
+          await new Promise((r) => setTimeout(r, n === 1 ? 60 : 0));
+          return JSON.stringify({ n, m });
+        },
+        descifrar: async (c) => JSON.parse(c) as unknown,
+      }),
+    };
+    const canal = await crearPuenteWebSocket(modulo).abrir(s.url, { ...escuchasVacias, alEstado: () => {} });
+    await expect.poll(() => s.conexiones.length).toBe(1);
+    await expect.poll(() => s.recibidos.length).toBe(1);
+    const envios = [
+      canal.enviar("m1", { a: 1 }),
+      canal.enviar("m1", { falla: true }),
+      canal.enviar("m1", { a: 3 }),
+      canal.enviar("m1", { a: 4 }),
+    ];
+    await Promise.allSettled(envios);
+    await expect.poll(() => s.recibidos.filter((r) => r.t === "dato").length).toBe(3);
+    const ns = s.recibidos.filter((r) => r.t === "dato").map((r) => (JSON.parse(r.carga as string) as { n: number }).n);
+    expect(ns).toEqual([1, 3, 4]);
+    canal.cerrar();
+  });
 });

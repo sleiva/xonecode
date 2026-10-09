@@ -58,6 +58,13 @@ export function crearPuenteWebSocket(
       let cerrado = false;
       let intento = 0;
       let cola: Promise<void> = Promise.resolve();
+      /**
+       * Lo que SALE, también en cola: el canal toma la secuencia al llamar a `cifrar` y el móvil
+       * descarta toda secuencia que no supere la última, así que cifrar en paralelo y mandar al
+       * terminar perdía un mensaje (una `reemision` o una `aprobacion` grandes, adelantadas por
+       * uno pequeño). Cifrar Y mandar van en el orden de llamada; un paso que falla no bloquea.
+       */
+      let envios: Promise<void> = Promise.resolve();
       let temporizador: ReturnType<typeof setTimeout> | undefined;
 
       const acabar = (motivo: string) => {
@@ -119,12 +126,16 @@ export function crearPuenteWebSocket(
       conectar();
 
       return {
-        async enviar(para, mensaje) {
-          const socket = ws;
-          if (cerrado || socket?.readyState !== WebSocket.OPEN) return;
-          const carga = await canal.cifrar(mensaje);
-          if (socket.readyState !== WebSocket.OPEN) return;
-          socket.send(JSON.stringify(para === undefined ? { t: "dato", carga } : { t: "dato", para, carga }));
+        enviar(para, mensaje) {
+          const paso = envios.then(async () => {
+            const socket = ws;
+            if (cerrado || socket?.readyState !== WebSocket.OPEN) return;
+            const carga = await canal.cifrar(mensaje);
+            if (cerrado || socket.readyState !== WebSocket.OPEN) return;
+            socket.send(JSON.stringify(para === undefined ? { t: "dato", carga } : { t: "dato", para, carga }));
+          });
+          envios = paso.catch(() => {});
+          return paso;
         },
         cerrar() {
           cerrado = true;
