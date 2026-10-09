@@ -57,7 +57,14 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
     moviles.clear();
   };
 
+  // Cada encendido es una GENERACIÓN: un canal viejo (apagado, revocado o aún abriéndose) puede
+  // seguir hablando, y sin esta marca su `cerrada` borraría el estado del canal nuevo.
+  let generacion = 0;
+  let abriendo = false;
+
   const apagar = () => {
+    generacion += 1;
+    abriendo = false;
     soltarTodos();
     canal?.cerrar();
     canal = undefined;
@@ -67,16 +74,22 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
   };
 
   const encender = async () => {
-    if (canal !== undefined) return;
+    // Idempotente también MIENTRAS abre: un segundo clic abriría un canal que nadie cerraría.
+    if (canal !== undefined || abriendo) return;
+    const mia = ++generacion;
+    abriendo = true;
     poner({ estado: "abriendo" });
     try {
       const puerto = await o.puerto();
+      if (mia !== generacion) return;
       if (puerto === undefined) {
+        abriendo = false;
         poner({ estado: "error", motivo: SIN_PAQUETE });
         return;
       }
-      canal = await puerto.abrir(o.servidor(), {
+      const abierto = await puerto.abrir(o.servidor(), {
         alEstado: (e) => {
+          if (mia !== generacion) return;
           if (e.estado === "abierta") {
             url = e.url;
             reconectando = false;
@@ -85,6 +98,10 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
             reconectando = true;
             ponerActiva();
           } else {
+            // Un canal que se cierra por su cuenta es de una generación acabada, también si aún
+            // no había terminado de abrir (entonces se cierra al resolver).
+            generacion += 1;
+            abriendo = false;
             soltarTodos();
             canal = undefined;
             url = undefined;
@@ -92,6 +109,7 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
           }
         },
         alPresencia: (ids) => {
+          if (mia !== generacion) return;
           for (const [id, s] of moviles) {
             if (!ids.includes(id)) {
               moviles.delete(id);
@@ -117,7 +135,7 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
           ponerActiva();
         },
         alMensaje: (de, mensaje) => {
-          if (!moviles.has(de)) return;
+          if (mia !== generacion || !moviles.has(de)) return;
           const entrada = validarEntradaDelMovil(mensaje);
           if (entrada === undefined) {
             const clase = typeof mensaje === "object" && mensaje !== null ? String((mensaje as { clase?: unknown }).clase) : typeof mensaje;
@@ -127,7 +145,16 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
           o.despachar(entrada);
         },
       });
+      if (mia !== generacion) {
+        // Se apagó (o revocó) mientras abría: este canal ya no es de nadie.
+        abierto.cerrar();
+        return;
+      }
+      abriendo = false;
+      canal = abierto;
     } catch (error) {
+      if (mia !== generacion) return;
+      abriendo = false;
       canal = undefined;
       poner({ estado: "error", motivo: error instanceof Error ? error.message : String(error) });
     }

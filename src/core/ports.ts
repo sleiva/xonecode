@@ -1079,28 +1079,56 @@ export class PuenteRemotoEnMemoria implements PuenteRemotoPort {
   readonly aperturas: string[] = [];
   readonly enviados: { para: string | undefined; mensaje: unknown }[] = [];
   cerrados = 0;
-  private escuchas: EscuchasDelPuente | undefined;
+  /**
+   * Un registro POR canal abierto: el real tiene sockets viejos que aún pueden hablar tras
+   * cerrarse o reemplazarse, y sin poder disparar eventos de uno viejo ese fallo no se probaría.
+   */
+  readonly canales: {
+    servidor: string;
+    escuchas: EscuchasDelPuente;
+    cerrado: boolean;
+    enviados: { para: string | undefined; mensaje: unknown }[];
+  }[] = [];
 
   async abrir(servidor: string, escuchas: EscuchasDelPuente): Promise<CanalRemoto> {
     this.aperturas.push(servidor);
-    this.escuchas = escuchas;
+    const registro = { servidor, escuchas, cerrado: false, enviados: [] as { para: string | undefined; mensaje: unknown }[] };
+    this.canales.push(registro);
     return {
-      enviar: async (para, mensaje) => void this.enviados.push({ para, mensaje }),
-      cerrar: () => void (this.cerrados += 1),
+      enviar: async (para, mensaje) => {
+        this.enviados.push({ para, mensaje });
+        registro.enviados.push({ para, mensaje });
+      },
+      cerrar: () => {
+        registro.cerrado = true;
+        this.cerrados += 1;
+      },
     };
   }
 
-  /** Lo que haría el servidor real. */
-  abierta(url = "https://remoto.example/r/SALA#SECRETO"): void {
-    this.escuchas?.alEstado({ estado: "abierta", url });
+  private ultimo(): EscuchasDelPuente | undefined {
+    return this.canales.at(-1)?.escuchas;
+  }
+
+  /** Lo que haría el servidor real; sin índice, sobre el canal MÁS RECIENTE. */
+  abierta(url = "https://remoto.example/r/SALA#SECRETO", canal?: number): void {
+    (canal === undefined ? this.ultimo() : this.canales[canal]?.escuchas)?.alEstado({ estado: "abierta", url });
   }
   presencia(...moviles: string[]): void {
-    this.escuchas?.alPresencia(moviles);
+    this.ultimo()?.alPresencia(moviles);
+  }
+  presenciaDe(canal: number, ...moviles: string[]): void {
+    this.canales[canal]?.escuchas.alPresencia(moviles);
   }
   delMovil(de: string, mensaje: unknown): void {
-    this.escuchas?.alMensaje(de, mensaje);
+    this.ultimo()?.alMensaje(de, mensaje);
   }
-  cerrada(motivo?: string): void {
-    this.escuchas?.alEstado(motivo === undefined ? { estado: "cerrada" } : { estado: "cerrada", motivo });
+  cerrada(motivo?: string, canal?: number): void {
+    (canal === undefined ? this.ultimo() : this.canales[canal]?.escuchas)?.alEstado(
+      motivo === undefined ? { estado: "cerrada" } : { estado: "cerrada", motivo }
+    );
+  }
+  reconectando(canal?: number): void {
+    (canal === undefined ? this.ultimo() : this.canales[canal]?.escuchas)?.alEstado({ estado: "reconectando" });
   }
 }

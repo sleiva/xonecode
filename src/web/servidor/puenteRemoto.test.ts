@@ -107,6 +107,100 @@ describe("la sesión remota", () => {
     expect(p.sesion.estado()).toEqual({ estado: "error", motivo: "ECONNREFUSED" });
   });
 
+  /** Hace que `abrir` no resuelva hasta que el test lo diga. */
+  function abrirPendiente(p: ReturnType<typeof montar>) {
+    const original = p.puerto.abrir.bind(p.puerto);
+    let soltar!: () => void;
+    const puerta = new Promise<void>((r) => (soltar = r));
+    p.puerto.abrir = async (servidor, escuchas) => {
+      const canal = await original(servidor, escuchas);
+      await puerta;
+      return canal;
+    };
+    return soltar;
+  }
+
+  it("encender dos veces mientras abre abre UN solo canal", async () => {
+    const p = montar();
+    const soltar = abrirPendiente(p);
+    const a = p.sesion.encender();
+    const b = p.sesion.encender();
+    soltar();
+    await Promise.all([a, b]);
+    expect(p.puerto.canales).toHaveLength(1);
+  });
+
+  it("lo que dice un canal tras apagar no cambia nada", async () => {
+    const p = montar();
+    await p.sesion.encender();
+    p.puerto.abierta();
+    p.sesion.apagar();
+    p.puerto.abierta("https://tarde/r/S#K", 0);
+    p.puerto.presenciaDe(0, "m1");
+    expect(p.sesion.estado()).toEqual({ estado: "apagada" });
+    expect(p.enganchados.size).toBe(0);
+  });
+
+  it("tras revocar, un cerrada del canal VIEJO no toca al nuevo", async () => {
+    const p = montar();
+    await p.sesion.encender();
+    p.puerto.abierta();
+    await p.sesion.revocar();
+    p.puerto.abierta("https://nuevo/r/S#K");
+    p.puerto.presencia("m1");
+    p.puerto.cerrada("viejo muere", 0);
+    p.puerto.presenciaDe(0, "m9");
+    expect(p.sesion.estado()).toEqual({ estado: "activa", url: "https://nuevo/r/S#K", moviles: 1 });
+    expect(p.enganchados.size).toBe(1);
+  });
+
+  it("apagar con la apertura pendiente cierra ese canal al resolver y sigue apagada", async () => {
+    const p = montar();
+    const soltar = abrirPendiente(p);
+    const e = p.sesion.encender();
+    await Promise.resolve();
+    p.sesion.apagar();
+    soltar();
+    await e;
+    expect(p.puerto.canales[0]!.cerrado).toBe(true);
+    expect(p.sesion.estado()).toEqual({ estado: "apagada" });
+  });
+
+  it("un fallo de apertura de una generación vieja no pisa el estado", async () => {
+    const p = montar();
+    let fallar!: () => void;
+    const puerta = new Promise<void>((_, rej) => (fallar = () => rej(new Error("tarde"))));
+    p.puerto.abrir = async () => {
+      await puerta;
+      throw new Error("no llega");
+    };
+    const e = p.sesion.encender();
+    await Promise.resolve();
+    p.sesion.apagar();
+    fallar();
+    await e;
+    expect(p.sesion.estado()).toEqual({ estado: "apagada" });
+  });
+
+  it("cerrada con motivo: error y móviles soltados", async () => {
+    const p = montar();
+    await p.sesion.encender();
+    p.puerto.abierta();
+    p.puerto.presencia("m1");
+    p.puerto.cerrada("sala caducada");
+    expect(p.sesion.estado()).toEqual({ estado: "error", motivo: "sala caducada" });
+    expect(p.enganchados.size).toBe(0);
+  });
+
+  it("reconectando conserva la url y los móviles", async () => {
+    const p = montar();
+    await p.sesion.encender();
+    p.puerto.abierta("https://r/r/S#K");
+    p.puerto.presencia("m1");
+    p.puerto.reconectando();
+    expect(p.sesion.estado()).toEqual({ estado: "reconectando", url: "https://r/r/S#K", moviles: 1 });
+  });
+
   it("el tope de salida: una aprobación enorme no sale y se informa; una reemisión se recorta", async () => {
     const p = montar(600);
     await p.sesion.encender();
