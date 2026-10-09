@@ -90,14 +90,14 @@ function vestibuloDePrueba(extra: Partial<Parameters<typeof crearVestibulo>[0]> 
   });
 }
 
-function conRemoto(habilitado: boolean, extra: Parameters<typeof vestibuloDePrueba>[0] = {}) {
+function conRemoto(habilitado: boolean | (() => boolean), extra: Parameters<typeof vestibuloDePrueba>[0] = {}) {
   const servidor = servidorDeMentira();
   const puerto = new PuenteRemotoEnMemoria();
   const cargar = vi.fn(async () => puerto);
   const vestibulo = vestibuloDePrueba(extra);
   const informados: string[] = [];
   const montado = montarRutas(servidor, vestibulo, {
-    remoto: { ajustes: () => ({ habilitado, servidor: "ws://127.0.0.1:8787/ws" }), puerto: cargar },
+    remoto: { ajustes: () => ({ habilitado: typeof habilitado === "function" ? habilitado() : habilitado, servidor: "ws://127.0.0.1:8787/ws" }), puerto: cargar },
     informar: (t) => void informados.push(t),
   });
   const sse = servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!;
@@ -374,6 +374,27 @@ describe("la sesión remota en el cable", () => {
     } finally {
       rmSync(base, { recursive: true, force: true });
     }
+  });
+
+  it("con el interruptor apagado EN CALIENTE y el puente abierto, una pestaña nueva lo ve y lo puede apagar", async () => {
+    let encendido = true;
+    const m = conRemoto(() => encendido);
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" });
+    await asentar();
+    m.puerto.abierta("https://r/r/S#K");
+    encendido = false;
+    const c = clienteDeMentira();
+    await m.sse(c.peticion, c.respuesta);
+    await asentar();
+    expect(c.recibidos).toContainEqual({ clase: "remoto", estado: "activa", url: "https://r/r/S#K", moviles: 0 });
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "apagar" });
+    expect(m.puerto.canales.at(-1)?.cerrado).toBe(true);
+    expect(c.recibidos.at(-1)).toEqual({ clase: "remoto", estado: "apagada" });
+    // Y ya apagado, con el interruptor apagado, la siguiente pestaña no lo ve.
+    const d = clienteDeMentira();
+    await m.sse(d.peticion, d.respuesta);
+    await asentar();
+    expect(d.recibidos.some((x) => x.clase === "remoto")).toBe(false);
   });
 
   it("cerrarRemoto apaga el puente", async () => {

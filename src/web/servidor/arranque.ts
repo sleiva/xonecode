@@ -1872,9 +1872,12 @@ export function montarRutas(
       if (ultimoProgresoDeMudanza !== undefined) cliente({ clase: "mudanzaDeWorkspace", progreso: ultimoProgresoDeMudanza });
       if (depuracion !== undefined) cliente(depuracion);
       if (modoPorDefecto !== undefined) cliente(modoPorDefecto);
-      // La sesión remota, solo con el interruptor encendido: apagado no existe ni en la ráfaga.
+      // La sesión remota, con el interruptor encendido O con el puente sin apagar: si alguien
+      // apaga el interruptor en `settings.json` con el puente abierto, una pestaña nueva tiene
+      // que verlo para poder apagarlo (abierto e invisible sería lo peor de los dos mundos).
       // A un móvil no le llega: `remoto` no pasa `filtrarSalida` (lleva el secreto en la `url`).
-      if (sesionRemota !== undefined && remotoHabilitado()) cliente(mensajeDeRemoto(sesionRemota.estado()));
+      if (sesionRemota !== undefined && (remotoHabilitado() || sesionRemota.estado().estado !== "apagada"))
+        cliente(mensajeDeRemoto(sesionRemota.estado()));
       if (conectores !== undefined) cliente(conectores);
       if (consumoDeLaSesion !== undefined) {
         cliente({
