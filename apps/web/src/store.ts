@@ -613,7 +613,9 @@ function esTrabajoAlAbrir(v: unknown): v is { ficheros: string[]; total: number 
 
 export type EstadoRemoto =
   | { estado: "apagada" | "abriendo" }
-  | { estado: "activa" | "reconectando"; url: string; moviles: number }
+  | { estado: "activa"; url: string; moviles: number }
+  /** Sin `url`: el relé no ha contestado nunca y el servidor sigue intentándolo. */
+  | { estado: "reconectando"; url?: string; moviles: number }
   | { estado: "error"; motivo: string };
 
 const ESTADO_INICIAL: EstadoDelCliente = { actos: [], conectado: false };
@@ -1553,6 +1555,8 @@ export function crearStoreDelCliente(): {
             mutar({ remoto: { estado: m["estado"] } });
           } else if ((m["estado"] === "activa" || m["estado"] === "reconectando") && typeof m["url"] === "string") {
             mutar({ remoto: { estado: m["estado"], url: m["url"], moviles: typeof m["moviles"] === "number" ? m["moviles"] : 0 } });
+          } else if (m["estado"] === "reconectando" && m["url"] === undefined) {
+            mutar({ remoto: { estado: "reconectando", moviles: typeof m["moviles"] === "number" ? m["moviles"] : 0 } });
           } else if (m["estado"] === "error" && typeof m["motivo"] === "string") {
             mutar({ remoto: { estado: "error", motivo: m["motivo"] } });
           }

@@ -74,4 +74,29 @@ describe("la sesión remota en la consola", () => {
     rerender(<SesionRemota remoto={activa} enviar={vi.fn()} />);
     expect(screen.queryByRole("dialog")).toBeNull();
   });
+
+  it.each([
+    ["abriendo", { estado: "abriendo" } as const],
+    ["reconectando sin url", { estado: "reconectando", moviles: 0 } as const],
+  ])("%s: se puede apagar, sin enlace que enseñar", (_n, remoto) => {
+    const enviar = vi.fn(async () => {});
+    render(<SesionRemota remoto={remoto} enviar={enviar} abierto />);
+    expect(screen.queryByRole("button", { name: "Revocar enlace" })).toBeNull();
+    expect(screen.queryByAltText("Código QR de la sesión remota")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Apagar" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "remoto", accion: "apagar" });
+  });
+
+  it("reconectando sin url dice que el puente no contesta", () => {
+    render(<SesionRemota remoto={{ estado: "reconectando", moviles: 0 }} enviar={vi.fn()} abierto />);
+    expect(screen.getByText("No se puede llegar al puente; se sigue intentando…")).toBeTruthy();
+  });
+
+  it("revocar (activa → abriendo → activa) no cierra el diálogo", () => {
+    const { rerender } = render(<SesionRemota remoto={{ estado: "activa", url: "https://r/r/S#K", moviles: 1 }} enviar={vi.fn()} abierto />);
+    rerender(<SesionRemota remoto={{ estado: "abriendo" }} enviar={vi.fn()} />);
+    rerender(<SesionRemota remoto={{ estado: "activa", url: "https://r/r/T#L", moviles: 0 }} enviar={vi.fn()} />);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(screen.getByText("https://r/r/T#L")).toBeTruthy();
+  });
 });

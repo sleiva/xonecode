@@ -2198,4 +2198,12 @@ describe("store: lo pendiente de subir (la pestaña Sincronización)", () => {
     s.marcarDesconectado();
     expect(s.leer().remoto).toBeUndefined();
   });
+
+  it("acepta reconectando SIN url (el relé no contestó nunca)", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "remoto", estado: "reconectando", moviles: 0 });
+    expect(s.leer().remoto).toEqual({ estado: "reconectando", moviles: 0 });
+    s.aplicar({ clase: "remoto", estado: "reconectando", url: "https://r/r/S#K", moviles: 2 });
+    expect(s.leer().remoto).toEqual({ estado: "reconectando", url: "https://r/r/S#K", moviles: 2 });
+  });
 });

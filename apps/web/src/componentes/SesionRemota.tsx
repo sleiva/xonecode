@@ -81,9 +81,20 @@ export function SesionRemota({ remoto, enviar, abierto: abiertoInicial = false }
             <div className={`${coraza.ventana} ${estilos.ventana}`}>
               <h2 className={coraza.titulo}>Sesión remota</h2>
               {remoto.estado === "abriendo" ? <p className={coraza.nota}>Abriendo la sesión remota…</p> : null}
+              {remoto.estado === "reconectando" && remoto.url === undefined ? (
+                <p className={coraza.nota}>No se puede llegar al puente; se sigue intentando…</p>
+              ) : null}
               {remoto.estado === "apagada" ? <p className={coraza.nota}>La sesión remota está apagada.</p> : null}
               {remoto.estado === "error" ? <p className={estilos.error}>{remoto.motivo}</p> : null}
-              {remoto.estado === "activa" || remoto.estado === "reconectando" ? (
+              {/* Sin enlace todavía, lo único que se puede hacer es dejar de intentarlo. */}
+              {remoto.estado === "abriendo" || (remoto.estado === "reconectando" && remoto.url === undefined) ? (
+                <div className={coraza.acciones}>
+                  <button type="button" className={estilos.peligro} onClick={() => void enviar({ clase: "remoto", accion: "apagar" })}>
+                    Apagar
+                  </button>
+                </div>
+              ) : null}
+              {(remoto.estado === "activa" || remoto.estado === "reconectando") && remoto.url !== undefined ? (
                 <>
                   {qr !== undefined ? <img className={estilos.qr} src={qr} alt="Código QR de la sesión remota" /> : null}
                   <p className={estilos.url}>{remoto.url}</p>
