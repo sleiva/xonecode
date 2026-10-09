@@ -113,7 +113,12 @@ describe("la sesión remota en el cable", () => {
     expect(await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" })).toBe(204);
     await asentar();
     expect(m.cargar).not.toHaveBeenCalled();
+    // Y el cierre ordenado tampoco la anuncia: `arrancarConsolaWeb` monta SIEMPRE la opción, y
+    // un `apagar()` a ciegas mandaría `{clase:"remoto", estado:"apagada"}` a cada pestaña.
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "apagar" });
+    m.montado.cerrarRemoto();
     expect(c.recibidos.some((x) => x.clase === "remoto")).toBe(false);
+    expect(m.puerto.cerrados).toBe(0);
   });
 
   it("sin la opción `remoto` tampoco existe: la acción contesta 204 y no hace nada", async () => {

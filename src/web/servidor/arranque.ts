@@ -6081,6 +6081,17 @@ export function montarRutas(
           },
         });
 
+  /**
+   * Apagar solo si hay algo ENCENDIDO. `apagar()` anuncia `{estado:"apagada"}` a todas las
+   * pestañas, y `arrancarConsolaWeb` monta la opción SIEMPRE: con el interruptor apagado, un
+   * apagado a ciegas en el cierre emitiría un mensaje `remoto` que no debe existir. Y no mira el
+   * interruptor: si alguien lo apaga en `settings.json` con el puente abierto, cerrarlo sigue
+   * siendo posible (y es lo único seguro).
+   */
+  const apagarRemoto = (): void => {
+    if (sesionRemota !== undefined && sesionRemota.estado().estado !== "apagada") sesionRemota.apagar();
+  };
+
   servidor.registrarRuta("POST", RUTA_ACCION, async (peticion, respuesta) => {
     let mensaje: MensajeDelCliente;
     try {
@@ -6943,11 +6954,12 @@ export function montarRutas(
       return;
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "remoto") {
-      // Con el interruptor apagado se contesta igual y no se hace NADA: ni se carga el paquete.
-      if (sesionRemota !== undefined && remotoHabilitado()) {
+      // Con el interruptor apagado se contesta igual y no se ENCIENDE nada: ni se carga el
+      // paquete. Apagar sí se atiende siempre, pero solo actúa si hay algo encendido.
+      if (mensaje.accion === "apagar") apagarRemoto();
+      else if (sesionRemota !== undefined && remotoHabilitado()) {
         if (mensaje.accion === "encender") void sesionRemota.encender().catch(contar);
         else if (mensaje.accion === "revocar") void sesionRemota.revocar().catch(contar);
-        else if (mensaje.accion === "apagar") sesionRemota.apagar();
       }
       respuesta.writeHead(204);
       respuesta.end();
@@ -7195,7 +7207,7 @@ export function montarRutas(
     respuesta.end();
   });
 
-  return { emitirTareas, cerrarRemoto: () => sesionRemota?.apagar() };
+  return { emitirTareas, cerrarRemoto: apagarRemoto };
 }
 
 export interface CorredorDeTareasCableado {
