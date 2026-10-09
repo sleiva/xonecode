@@ -119,6 +119,44 @@ export function depuracionActiva(depurar: boolean | undefined): boolean {
  */
 export const TOPE_DE_CONCURRENCIA_DE_TAREAS = 8;
 
+/**
+ * La sesión remota (móvil → esta consola por el puente de `xonecode-server`). EXPERIMENTAL y
+ * apagada por omisión: ausente o `habilitado` distinto de `true` = la función no existe. Así se
+ * siguen publicando releases mientras madura (`docs/superpowers/specs/2026-10-09-sesion-remota-xonecode-design.md`).
+ */
+export interface AjustesDeRemoto {
+  habilitado?: boolean;
+  /** `wss://` a cualquier host, o `ws://` solo a loopback. Ausente = `SERVIDOR_REMOTO_POR_OMISION`. */
+  servidor?: string;
+}
+
+export const SERVIDOR_REMOTO_POR_OMISION = "wss://remoto.xone.dev/ws";
+
+const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+/** Un `ws://` en claro solo es aceptable sin salir de la máquina; fuera de ella, TLS. */
+function servidorRemotoAceptable(candidato: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(candidato);
+  } catch {
+    return false;
+  }
+  if (url.protocol === "wss:") return true;
+  return url.protocol === "ws:" && LOOPBACK.has(url.hostname);
+}
+
+/** Lo que manda: `XONECODE_REMOTO=1` enciende para un arranque; si no, el `settings.json`. */
+export function remotoEnVigor(
+  ajustes: AjustesDeRemoto | undefined,
+  entorno: Record<string, string | undefined>
+): { habilitado: boolean; servidor: string } {
+  return {
+    habilitado: entorno.XONECODE_REMOTO === "1" || ajustes?.habilitado === true,
+    servidor: ajustes?.servidor ?? SERVIDOR_REMOTO_POR_OMISION,
+  };
+}
+
 export interface Settings {
   entornos: Entorno[];
   /** La carpeta donde se bajan las copias locales. La disposición de DENTRO la fija
@@ -164,6 +202,8 @@ export interface Settings {
    * elige solo uno de su tier gratuito, que no contesta fuera de su consola (medido).
    */
   modeloDeOpencode?: string;
+  /** Ver `AjustesDeRemoto`. Ausente = la sesión remota no existe. */
+  remoto?: AjustesDeRemoto;
 }
 
 
@@ -262,6 +302,7 @@ export function validarSettings(bruto: unknown): { settings: Settings; avisos: A
     typeof objeto.modeloDeOpencode === "string" && motivoDeModeloDeMotorInaceptable(objeto.modeloDeOpencode) === undefined
       ? objeto.modeloDeOpencode
       : undefined;
+  const remoto = validarRemoto(objeto.remoto, avisos);
   return {
     settings: {
       entornos,
@@ -271,6 +312,7 @@ export function validarSettings(bruto: unknown): { settings: Settings; avisos: A
       ...(depurar === undefined ? {} : { depurar }),
       ...(modoDeEscritura === undefined ? {} : { modoDeEscritura }),
       ...(modeloDeOpencode === undefined ? {} : { modeloDeOpencode }),
+      ...(remoto === undefined ? {} : { remoto }),
     },
     avisos,
   };
@@ -334,6 +376,26 @@ function validarConcurrenciaDeTareas(candidato: unknown): number | undefined {
   if (typeof candidato !== "number" || !Number.isInteger(candidato)) return undefined;
   if (candidato < 0 || candidato > TOPE_DE_CONCURRENCIA_DE_TAREAS) return undefined;
   return candidato;
+}
+
+/**
+ * Un `habilitado` que no es booleano descarta el bloque entero (un `"false"` de cadena sería
+ * verdadero: la trampa de siempre). Un `servidor` inaceptable se descarta CON aviso y deja el
+ * interruptor, porque apuntar a un relé en claro fuera de la máquina es un fallo que hay que ver.
+ */
+function validarRemoto(candidato: unknown, avisos: Aviso[]): AjustesDeRemoto | undefined {
+  if (typeof candidato !== "object" || candidato === null || Array.isArray(candidato)) return undefined;
+  const o = candidato as Record<string, unknown>;
+  if (typeof o.habilitado !== "boolean") return undefined;
+  if (o.servidor === undefined) return { habilitado: o.habilitado };
+  if (typeof o.servidor === "string" && servidorRemotoAceptable(o.servidor)) {
+    return { habilitado: o.habilitado, servidor: o.servidor };
+  }
+  avisos.push({
+    texto: "settings.json: remoto.servidor tiene que ser wss://…, o ws:// a loopback; se ignora",
+    severidad: "aviso",
+  });
+  return { habilitado: o.habilitado };
 }
 
 /**
