@@ -86,6 +86,9 @@ import {
 import type { Dispositivo, Herramienta, InformeDeDispositivos } from "../../core/dispositivos.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, remotoEnVigor, type AjustesDeDispositivos } from "../../core/settings.js";
 import type { NombreDeHerramienta } from "../../core/dispositivos.js";
+import { recetaDeNgrok } from "../../core/dispositivos.js";
+import type { ViaRemota } from "../../core/settings.js";
+import { motivoDeDominioInaceptable } from "../../core/tunel.js";
 import { instalarHerramientaDeDispositivos, verificarDispositivo } from "../../agent/dispositivos/dispositivosEnMaquina.js";
 import { arrancarEmulador, pararEmulador } from "../../agent/dispositivos/arranqueDeEmulador.js";
 import { borrarAvd, clonarAvd, correrPasoDeReceta, crearAvd } from "../../agent/dispositivos/instalacionEnMaquina.js";
@@ -147,6 +150,7 @@ import {
   guardarConcurrenciaDeTareas,
   guardarDepurar,
   guardarModoPorDefecto,
+  guardarAjustesDeRemoto as guardarAjustesDeRemotoEnDisco,
   guardarWorkspace as guardarWorkspaceEnDisco,
   guardarDispositivos,
   guardarAjusteDeAvd,
@@ -218,7 +222,7 @@ import {
 import { Modelos } from "../../agent/config/modelos.js";
 import { crearJuezDeTarea, invocarConModelos } from "../../agent/tareas/juezDeTarea.js";
 import { SIN_CONSUMO } from "../../agent/subagentes/consumoExterno.js";
-import type { AumentadorPort, ConectoresPort, JuezDeTareaPort, PuenteRemotoPort } from "../../core/ports.js";
+import type { AumentadorPort, ConectoresPort, JuezDeTareaPort, PuenteRemotoPort, TunelPort } from "../../core/ports.js";
 import { AumentadorGuionizado } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
 import { arrancarServidor, type ServidorWeb } from "./servidor.js";
@@ -286,7 +290,7 @@ import type {
 // documentado cinco veces: una composición de producción dentro de algo que los tests
 // doblan.
 import { filaDeTarea } from "./transporte.js";
-import { crearSesionRemota, type EstadoDeSesionRemota } from "./puenteRemoto.js";
+import { crearSesionRemota, motivoFijoDelTunel, type EstadoDeSesionRemota } from "./puenteRemoto.js";
 import { esEsfuerzo, nivelesDeEsfuerzo, type Esfuerzo } from "../../core/esfuerzo.js";
 import { CATALOGO_DE_CONECTORES, conectoresParaElAgente, definicionDelCable, RUTA_CALLBACK_MCP, type AccionDeConector } from "../../core/conectores.js";
 import { servicioDeConectoresCableado, type ServicioDeConectores } from "../../agent/conectores/servicioDeConectores.js";
@@ -423,8 +427,24 @@ export interface OpcionesDeMontaje {
    * interruptor vive en `settings.json` y leerlo una vez lo congelaría.
    */
   remoto?: {
-    ajustes: () => { habilitado: boolean; servidor: string };
+    ajustes: () => { habilitado: boolean; servidor: string; via?: ViaRemota; dominio?: string };
     puerto: () => Promise<PuenteRemotoPort | undefined>;
+    /**
+     * La vía «ngrok» (`agent/remoto/tunelNgrok.ts`): se abre al encender solo si `ajustes().via`
+     * es `ngrok`. Ausente con esa vía = encender da error con texto fijo.
+     */
+    tunel?: TunelPort;
+    /**
+     * La FOTO de ngrok para el diálogo (`agent/remoto/ngrokEnMaquina.ts#medirNgrok`, más si hay
+     * `brew`, que decide si el paso de macOS de su receta tiene botón). Se mide al conectar la
+     * primera pestaña, tras cada acción suya y al acabar su receta; nunca en sondeo, y nunca con
+     * el interruptor apagado. Ausente = el mensaje no lleva `ngrok`.
+     */
+    medirNgrok?: () => Promise<{ instalado: boolean; cuenta: boolean; hayBrew?: boolean }>;
+    /** `ngrok config add-authtoken`. Un fallo es un texto de `MOTIVOS_DEL_TUNEL`. */
+    guardarAuthtoken?: (token: string) => Promise<{ ok: true } | { ok: false; motivo: string }>;
+    /** Escribe la vía o el dominio en `settings.json`; `dominio: null` lo quita. Puede lanzar. */
+    guardarAjustes?: (cambio: { via?: ViaRemota; dominio?: string | null }) => void;
   };
   /**
    * El tope de la ventana del modelo, para el contador de contexto. Ver la opción del mismo
@@ -967,7 +987,7 @@ export function montarRutas(
   servidor: Pick<ServidorWeb, "registrarRuta" | "registrarRutaPublica" | "puerto">,
   vestibulo: Vestibulo,
   opciones: OpcionesDeMontaje = {}
-): { emitirTareas: () => void; cerrarRemoto: () => void } {
+): { emitirTareas: () => void; cerrarRemoto: () => Promise<void> } {
   const informar = opciones.informar ?? (() => {});
   const hayCredencialDe = opciones.hayCredencial ?? (() => false);
   // Se llama UNA vez, aquí: no cambia mientras el proceso vive, y es el mismo dato que ya se
@@ -1009,13 +1029,30 @@ export function montarRutas(
    */
   let sesionRemota: ReturnType<typeof crearSesionRemota> | undefined;
   const remotoHabilitado = (): boolean => opciones.remoto?.ajustes().habilitado === true;
-  const mensajeDeRemoto = (e: EstadoDeSesionRemota): MensajeAlCliente => ({
-    clase: "remoto",
-    estado: e.estado,
-    ...("url" in e ? { url: e.url } : {}),
-    ...("moviles" in e ? { moviles: e.moviles } : {}),
-    ...("motivo" in e ? { motivo: e.motivo } : {}),
-  });
+  /** La última foto de ngrok (`OpcionesDeMontaje.remoto.medirNgrok`); `undefined` = aún no medida. */
+  let fotoDeNgrok: { instalado: boolean; cuenta: boolean; hayBrew?: boolean } | undefined;
+  const mensajeDeRemoto = (e: EstadoDeSesionRemota): MensajeAlCliente => {
+    const ajustes = opciones.remoto?.ajustes();
+    return {
+      clase: "remoto",
+      estado: e.estado,
+      ...("url" in e ? { url: e.url } : {}),
+      ...("moviles" in e ? { moviles: e.moviles } : {}),
+      ...("motivo" in e ? { motivo: e.motivo } : {}),
+      // Ausente es «servidor»: así un mensaje de la vía de siempre no cambia de forma.
+      ...(ajustes?.via === "ngrok" ? { via: "ngrok" as const } : {}),
+      ...(fotoDeNgrok === undefined
+        ? {}
+        : {
+            ngrok: {
+              instalado: fotoDeNgrok.instalado,
+              cuenta: fotoDeNgrok.cuenta,
+              ...(ajustes?.dominio === undefined ? {} : { dominio: ajustes.dominio }),
+              ...(fotoDeNgrok.instalado ? {} : { receta: recetaDeNgrok(process.platform, fotoDeNgrok) }),
+            },
+          }),
+    };
+  };
   /**
    * Los clientes por su IDENTIFICADOR, y qué tareas está mirando cada uno.
    *
@@ -1879,6 +1916,9 @@ export function montarRutas(
       // A un móvil no le llega: `remoto` no pasa `filtrarSalida` (lleva el secreto en la `url`).
       if (sesionRemota !== undefined && (remotoHabilitado() || sesionRemota.estado().estado !== "apagada"))
         cliente(mensajeDeRemoto(sesionRemota.estado()));
+      // La foto de ngrok, la PRIMERA vez que alguien mira: lanza `ngrok version`, que no se hace
+      // con el interruptor apagado ni en sondeo.
+      if (sesionRemota !== undefined && fotoDeNgrok === undefined && remotoHabilitado()) void medirNgrokYAnunciar().catch(contar);
       if (conectores !== undefined) cliente(conectores);
       if (consumoDeLaSesion !== undefined) {
         cliente({
@@ -4903,6 +4943,7 @@ export function montarRutas(
       trabajo = undefined;
       // Y la foto nueva es la que dice si el paso quedó hecho, no el código de salida.
       informeDeDispositivos = undefined;
+      if (receta === "ngrok") await medirNgrokYAnunciar().catch(contar);
       await atenderDispositivos().catch(contar);
     })();
   };
@@ -4924,6 +4965,8 @@ export function montarRutas(
       trabajo?.cancelar();
       return;
     }
+    // La receta de ngrok es de la sesión remota: con el interruptor apagado no existe.
+    if (mensaje.id === "ngrok" && !remotoHabilitado()) return;
     if (trabajo !== undefined) {
       // Ya hay uno: se reenvía su estado en vez de lanzar otro.
       emitirProgreso("corriendo");
@@ -6099,6 +6142,18 @@ export function montarRutas(
       : crearSesionRemota({
           puerto: opciones.remoto.puerto,
           servidor: () => opciones.remoto!.ajustes().servidor,
+          // La vía se lee en CADA encendido (vive en `settings.json`), y el dominio con ella.
+          tunel: () => {
+            const { via, dominio } = opciones.remoto!.ajustes();
+            if (via !== "ngrok") return undefined;
+            const tunel = opciones.remoto!.tunel;
+            return {
+              abrir: () =>
+                tunel === undefined
+                  ? Promise.reject(new Error("esta ejecución no tiene túnel"))
+                  : tunel.abrir(dominio === undefined ? {} : { dominio }),
+            };
+          },
           engancharCliente: engancharMovil,
           soltarCliente,
           // La `respuesta` es la excepción, y por SEGURIDAD: por `recibir` contestaría también la
@@ -6125,8 +6180,106 @@ export function montarRutas(
    * interruptor: si alguien lo apaga en `settings.json` con el puente abierto, cerrarlo sigue
    * siendo posible (y es lo único seguro).
    */
-  const apagarRemoto = (): void => {
-    if (sesionRemota !== undefined && sesionRemota.estado().estado !== "apagada") sesionRemota.apagar();
+  const apagarRemoto = (): Promise<void> => {
+    if (sesionRemota !== undefined && sesionRemota.estado().estado !== "apagada") return sesionRemota.apagar();
+    return Promise.resolve();
+  };
+
+  /** El estado de la sesión remota, otra vez, a cada pestaña: tras cambiar algo que el mensaje lleva. */
+  const anunciarRemoto = (): void => {
+    if (sesionRemota === undefined) return;
+    const mensaje = mensajeDeRemoto(sesionRemota.estado());
+    for (const cliente of clientes) cliente(mensaje);
+  };
+
+  /** Una medida a la vez: dos pestañas que llegan juntas no lanzan dos `ngrok version`. */
+  let midiendoNgrok: Promise<void> | undefined;
+  const medirNgrokYAnunciar = (): Promise<void> => {
+    const medir = opciones.remoto?.medirNgrok;
+    if (medir === undefined || !remotoHabilitado()) return Promise.resolve();
+    midiendoNgrok ??= medir()
+      .then((foto) => {
+        fotoDeNgrok = { instalado: foto.instalado, cuenta: foto.cuenta, ...(foto.hayBrew === undefined ? {} : { hayBrew: foto.hayBrew }) };
+        anunciarRemoto();
+      })
+      .finally(() => {
+        midiendoNgrok = undefined;
+      });
+    return midiendoNgrok;
+  };
+
+  /**
+   * Las acciones de la vía ngrok. Lo que se dice de vuelta es SIEMPRE texto nuestro: ni lo que
+   * llegó por el cable, ni lo que contestó ngrok, ni —sobre todo— el authtoken.
+   */
+  const atenderViaRemota = (via: unknown): void => {
+    if (via !== "servidor" && via !== "ngrok") return;
+    const estado = sesionRemota?.estado().estado;
+    // La vía se lee al encender: cambiarla encendida no haría nada hasta apagar, y un revocar
+    // la aplicaría a medias. El diálogo solo la ofrece apagada o en error.
+    if (estado !== "apagada" && estado !== "error") {
+      informar("sesión remota: la vía se cambia con la sesión apagada");
+      return;
+    }
+    if (!guardarAjustesDeRemoto({ via })) return;
+    anunciarRemoto();
+    void medirNgrokYAnunciar().catch(contar);
+  };
+
+  const atenderDominioRemoto = (bruto: unknown): void => {
+    if (typeof bruto !== "string") return;
+    const dominio = bruto.trim();
+    if (dominio !== "") {
+      const motivo = motivoDeDominioInaceptable(dominio);
+      if (motivo !== undefined) {
+        informar(`sesión remota: ${motivo}`);
+        return;
+      }
+    }
+    // Vacío QUITA el dominio: sin esto, uno puesto no se podría borrar desde el diálogo.
+    if (!guardarAjustesDeRemoto({ dominio: dominio === "" ? null : dominio })) return;
+    anunciarRemoto();
+    void medirNgrokYAnunciar().catch(contar);
+  };
+
+  /** `true` si quedó escrito. El error de disco lleva la ruta de `settings.json`: solo su `code`. */
+  const guardarAjustesDeRemoto = (cambio: { via?: ViaRemota; dominio?: string | null }): boolean => {
+    const guardar = opciones.remoto?.guardarAjustes;
+    if (guardar === undefined) {
+      informar("sesión remota: esta ejecución no puede guardar sus ajustes");
+      return false;
+    }
+    try {
+      guardar(cambio);
+      return true;
+    } catch (error) {
+      informar(`sesión remota: no se pudo guardar en settings.json (${codigoDe(error)})`);
+      return false;
+    }
+  };
+
+  /**
+   * El authtoken entra por `leerSecreto` —la MISMA puerta que una clave de API— y sale solo hacia
+   * `ngrok config add-authtoken`. Vacío es cancelar: no se llama a nadie ni se dice nada.
+   */
+  const pedirAuthtoken = async (): Promise<void> => {
+    const guardar = opciones.remoto?.guardarAuthtoken;
+    if (guardar === undefined) {
+      informar("sesión remota: esta ejecución no puede guardar el authtoken de ngrok");
+      return;
+    }
+    const consola = vestibulo.proyectoAbierto()?.consola.consola ?? vestibulo.consola.consola;
+    const token = (await consola.leerSecreto("authtoken de ngrok: ")).trim();
+    if (token === "") return;
+    let resultado: { ok: true } | { ok: false; motivo: string };
+    try {
+      resultado = await guardar(token);
+    } catch {
+      resultado = { ok: false, motivo: "" };
+    }
+    if (!resultado.ok) informar(`sesión remota: ${motivoFijoDelTunel(resultado.motivo)}`);
+    // La medida dice si quedó con cuenta, no lo que contestó el comando.
+    await medirNgrokYAnunciar();
   };
 
   servidor.registrarRuta("POST", RUTA_ACCION, async (peticion, respuesta) => {
@@ -6993,10 +7146,13 @@ export function montarRutas(
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "remoto") {
       // Con el interruptor apagado se contesta igual y no se ENCIENDE nada: ni se carga el
       // paquete. Apagar sí se atiende siempre, pero solo actúa si hay algo encendido.
-      if (mensaje.accion === "apagar") apagarRemoto();
+      if (mensaje.accion === "apagar") void apagarRemoto().catch(contar);
       else if (sesionRemota !== undefined && remotoHabilitado()) {
         if (mensaje.accion === "encender") void sesionRemota.encender().catch(contar);
         else if (mensaje.accion === "revocar") void sesionRemota.revocar().catch(contar);
+        else if (mensaje.accion === "via") atenderViaRemota(mensaje.via);
+        else if (mensaje.accion === "dominio") atenderDominioRemoto(mensaje.dominio);
+        else if (mensaje.accion === "authtoken") void pedirAuthtoken().catch(contar);
       }
       respuesta.writeHead(204);
       respuesta.end();
@@ -8173,6 +8329,12 @@ async function leerCuerpo(peticion: IncomingMessage): Promise<string> {
 export interface OpcionesDeArranque {
   /** El puente de la sesión remota; por omisión el real. Los tests pasan el doble. */
   puertoRemoto?: () => Promise<PuenteRemotoPort | undefined>;
+  /** El túnel de la vía ngrok; por omisión el real (`agent/remoto/tunelNgrok.ts`). Los tests pasan el doble. */
+  tunelRemoto?: TunelPort;
+  /** La foto de ngrok; por omisión la real (`agent/remoto/ngrokEnMaquina.ts`), que lanza `ngrok version`. */
+  medirNgrok?: () => Promise<{ instalado: boolean; cuenta: boolean; hayBrew?: boolean }>;
+  /** `ngrok config add-authtoken`; por omisión el real. */
+  guardarAuthtoken?: (token: string) => Promise<{ ok: true } | { ok: false; motivo: string }>;
   puerto: number;
   abrir: boolean;
   cwd: string;
@@ -8414,6 +8576,24 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
           const modulo = await cargarModuloRemoto();
           return modulo === undefined ? undefined : crearPuenteWebSocket(modulo);
         }),
+      // La vía ngrok, también por `import()` dinámico: ni el túnel ni la medida se cargan hasta
+      // que alguien los usa, y los dos solo se usan con el interruptor encendido.
+      tunel: opciones.tunelRemoto ?? {
+        abrir: async (o) => {
+          const { crearTunelNgrok } = await import("../../agent/remoto/tunelNgrok.js");
+          return crearTunelNgrok().abrir(o);
+        },
+      },
+      medirNgrok:
+        opciones.medirNgrok ??
+        (async () => {
+          const ngrok = await import("../../agent/remoto/ngrokEnMaquina.js");
+          return { ...(await ngrok.medirNgrok()), hayBrew: ngrok.hayBrew() };
+        }),
+      guardarAuthtoken:
+        opciones.guardarAuthtoken ??
+        (async (token) => (await import("../../agent/remoto/ngrokEnMaquina.js")).guardarAuthtoken(token)),
+      guardarAjustes: (cambio) => void guardarAjustesDeRemotoEnDisco(undefined, cambio),
     },
     // El tope de ventana, tal cual llega: es la misma función que la barra del terminal, y
     // dos resoluciones serían dos porcentajes distintos para el mismo modelo.
@@ -8645,7 +8825,9 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
   await (opciones.esperarCierre ?? (() => esperarInterrupcion({ avisar: escribir })))();
   // La sesión remota antes que nada: un móvil no puede seguir mandando prosa a una consola que
   // se está cerrando, y el socket del puente no puede quedarse abierto tras el proceso.
-  cable.cerrarRemoto();
+  // Se ESPERA: con la vía ngrok, cerrar mata ngrok y el puente local, y sin esperar el proceso
+  // saldría antes y dejaría a ngrok huérfano del `SIGKILL` de rescate.
+  await cable.cerrarRemoto().catch(() => {});
   /**
    * El corredor PRIMERO, y el orden es load-bearing: `parar()` corta los turnos en vuelo y
    * los deja aparcados diciendo que la consola se cerró a mitad. Al revés, el

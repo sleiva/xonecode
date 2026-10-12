@@ -62,11 +62,11 @@ import { crearConsolaWeb, type ConsolaWeb, type OpcionesDeConsolaWeb } from "./c
 import { PAPELES } from "../../core/modelos.js";
 import { anotarActo, crearSesion, listarSesiones } from "./sesiones.js";
 import { COMANDOS } from "../../cli/consola.js";
-import { CatalogoModelosEnMemoria, GestorDeTareasEnMemoria, PuenteRemotoEnMemoria } from "../../core/ports.js";
+import { CatalogoModelosEnMemoria, GestorDeTareasEnMemoria, PuenteRemotoEnMemoria, TunelEnMemoria } from "../../core/ports.js";
 import type { FichaDelGestor, GestorDeTareasPort, TransicionDelGestor, Vinculo } from "../../core/gestorDeTareas.js";
 import { crearGestorJira } from "../../agent/conectores/gestorJira.js";
 import type { AjustesDeDispositivos, Entorno } from "../../core/settings.js";
-import { cargarSettings } from "../../agent/config/settingsEnDisco.js";
+import { cargarSettings, rutaSettings } from "../../agent/config/settingsEnDisco.js";
 import type { Dispositivo } from "../../core/dispositivos.js";
 import type { AdjuntoDeTarea, Tarea } from "../../core/tareas.js";
 import { crearTareasEnDisco, TOPE_DE_ADJUNTO } from "../../agent/tareas/tareasEnDisco.js";
@@ -4488,6 +4488,66 @@ describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
     } finally {
       if (previo === undefined) delete process.env.XONECODE_REMOTO;
       else process.env.XONECODE_REMOTO = previo;
+    }
+  });
+
+  /**
+   * La vía ngrok por el arranque REAL: la vía se ESCRIBE en el `settings.json` de la casa de
+   * pruebas (el escritor cableado, no un doble), se LEE al encender (el túnel se abre), y el
+   * cierre del proceso cierra el túnel. Lo que solo se compone en `arrancarConsolaWeb` y ningún
+   * test de `montarRutas` ve.
+   */
+  it("vía ngrok: se guarda en settings.json, el túnel se abre al encender y el cierre lo cierra", async () => {
+    const previo = process.env.XONECODE_REMOTO;
+    process.env.XONECODE_REMOTO = "1";
+    const ruta = rutaSettings();
+    const settingsPrevios = existsSync(ruta) ? readFileSync(ruta, "utf8") : undefined;
+    try {
+      const puente = new PuenteRemotoEnMemoria();
+      const tunel = new TunelEnMemoria();
+      const rutas = new Map<string, ManejadorRuta>();
+      const servidor = {
+        ...servidorLevantado(),
+        registrarRuta: (metodo: string, ruta: string, manejador: ManejadorRuta) => {
+          rutas.set(`${metodo} ${ruta}`, manejador);
+        },
+      };
+      let abiertosAntes: number | undefined;
+      let cerradosAntes: number | undefined;
+      const codigo = await arrancarConsolaWeb({
+        puerto: 0,
+        abrir: false,
+        cwd: mkdtempSync(join(tmpdir(), "xonecode-cwd-")),
+        raizDelCliente: conBuild(),
+        crearServidor: async () => servidor,
+        vestibulo: vestibuloDePrueba(),
+        escribir: () => {},
+        puertoRemoto: async () => puente,
+        tunelRemoto: tunel,
+        medirNgrok: async () => ({ instalado: true, cuenta: true }),
+        guardarAuthtoken: async () => ({ ok: true }),
+        esperarCierre: async () => {
+          const accion = rutas.get(`POST ${RUTA_ACCION}`)!;
+          expect(await enviarMensaje(accion, { clase: "remoto", accion: "via", via: "ngrok" })).toBe(204);
+          expect(await enviarMensaje(accion, { clase: "remoto", accion: "dominio", dominio: "mi-app.ngrok.app" })).toBe(204);
+          expect(cargarSettings().settings.remoto).toMatchObject({ via: "ngrok", ngrok: { dominio: "mi-app.ngrok.app" } });
+          await enviarMensaje(accion, { clase: "remoto", accion: "encender" });
+          await vi.waitFor(() => expect(puente.canales.length).toBe(1));
+          abiertosAntes = tunel.aperturas.length;
+          cerradosAntes = tunel.cerrados;
+        },
+      });
+      expect(codigo).toBe(0);
+      expect(abiertosAntes).toBe(1);
+      expect(tunel.aperturas).toEqual([{ dominio: "mi-app.ngrok.app" }]);
+      expect(puente.aperturas).toEqual(["wss://tunel.example/ws"]);
+      expect(cerradosAntes).toBe(0);
+      expect(tunel.cerrados).toBe(1);
+    } finally {
+      if (previo === undefined) delete process.env.XONECODE_REMOTO;
+      else process.env.XONECODE_REMOTO = previo;
+      if (settingsPrevios === undefined) rmSync(ruta, { force: true });
+      else writeFileSync(ruta, settingsPrevios);
     }
   });
 

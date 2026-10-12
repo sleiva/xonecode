@@ -14,8 +14,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { CatalogoModelosEnMemoria, PuenteRemotoEnMemoria } from "../../core/ports.js";
-import type { Entorno } from "../../core/settings.js";
+import { CatalogoModelosEnMemoria, PuenteRemotoEnMemoria, TunelEnMemoria, type TunelPort } from "../../core/ports.js";
+import type { Entorno, ViaRemota } from "../../core/settings.js";
+import { MOTIVOS_DEL_TUNEL } from "../../core/tunel.js";
 import { montarRutas, RUTA_ACCION, RUTA_EVENTOS } from "./arranque.js";
 import type { ManejadorRuta } from "./servidor.js";
 import type { MensajeAlCliente, MensajeDelCliente } from "./transporte.js";
@@ -406,5 +407,248 @@ describe("la sesión remota en el cable", () => {
     m.montado.cerrarRemoto();
     expect(m.puerto.canales.at(-1)?.cerrado).toBe(true);
     expect(m.puerto.cerrados).toBe(1);
+  });
+});
+
+/**
+ * La vía ngrok: el túnel (`TunelEnMemoria`), la foto de ngrok y las acciones nuevas, por el
+ * `montarRutas` REAL. Los ajustes viven en un objeto que `guardarAjustes` actualiza, igual que
+ * `settings.json` se relee en cada uso.
+ */
+describe("la sesión remota por el túnel de ngrok", () => {
+  function conTunel(o: { via?: ViaRemota; dominio?: string; habilitado?: () => boolean; instalado?: boolean; tunel?: TunelPort } = {}) {
+    const servidor = servidorDeMentira();
+    const puerto = new PuenteRemotoEnMemoria();
+    const tunel = new TunelEnMemoria();
+    const ajustes: { via?: ViaRemota; dominio?: string } = {
+      via: o.via ?? "ngrok",
+      ...(o.dominio === undefined ? {} : { dominio: o.dominio }),
+    };
+    const medir = vi.fn(async () => ({ instalado: o.instalado ?? true, cuenta: false, hayBrew: true }));
+    const tokens: string[] = [];
+    let resultadoDelToken: { ok: true } | { ok: false; motivo: string } = { ok: true };
+    const guardados: unknown[] = [];
+    const pasos: string[] = [];
+    let terminarPaso: (() => void) | undefined;
+    const informados: string[] = [];
+    const montado = montarRutas(servidor, vestibuloDePrueba(), {
+      remoto: {
+        ajustes: () => ({ habilitado: o.habilitado?.() ?? true, servidor: "ws://127.0.0.1:8787/ws", ...ajustes }),
+        puerto: async () => puerto,
+        tunel: o.tunel ?? tunel,
+        medirNgrok: medir,
+        guardarAuthtoken: async (t) => {
+          tokens.push(t);
+          return resultadoDelToken;
+        },
+        guardarAjustes: (c) => {
+          guardados.push(c);
+          if (c.via !== undefined) ajustes.via = c.via;
+          if (c.dominio === null) delete ajustes.dominio;
+          else if (c.dominio !== undefined) ajustes.dominio = c.dominio;
+        },
+      },
+      correrPasoDeReceta: (receta, paso) => {
+        pasos.push(`${receta}:${paso}`);
+        return {
+          titulo: "Instalando ngrok",
+          cancelar: () => {},
+          terminado: new Promise((r) => (terminarPaso = () => r({ estado: "ok", ms: 1 }))),
+        };
+      },
+      informar: (t) => void informados.push(t),
+    });
+    const sse = servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!;
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    return {
+      puerto, tunel, medir, tokens, guardados, pasos, informados, montado, sse, accion,
+      terminarPaso: () => terminarPaso?.(),
+      fallarToken: (motivo: string) => void (resultadoDelToken = { ok: false, motivo }),
+    };
+  }
+  const remotos = (recibidos: MensajeAlCliente[]) =>
+    recibidos.filter((x): x is Extract<MensajeAlCliente, { clase: "remoto" }> => x.clase === "remoto");
+
+  it("vía ngrok + encender: el puente va a la dirección del túnel y la sesión queda activa", async () => {
+    const m = conTunel({ dominio: "mi-app.ngrok.app" });
+    const c = clienteDeMentira();
+    await m.sse(c.peticion, c.respuesta);
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" });
+    await vi.waitFor(() => expect(m.puerto.aperturas).toEqual(["wss://tunel.example/ws"]));
+    expect(m.tunel.aperturas).toEqual([{ dominio: "mi-app.ngrok.app" }]);
+    m.puerto.abierta("https://tunel.example/r/S#K");
+    expect(remotos(c.recibidos).at(-1)).toMatchObject({ estado: "activa", url: "https://tunel.example/r/S#K", via: "ngrok" });
+  });
+
+  it("apagar cierra el túnel", async () => {
+    const m = conTunel();
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" });
+    await vi.waitFor(() => expect(m.puerto.canales).toHaveLength(1));
+    m.puerto.abierta();
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "apagar" });
+    await vi.waitFor(() => expect(m.tunel.cerrados).toBe(1));
+  });
+
+  it("la caída del túnel deja la sesión en error con el motivo FIJO", async () => {
+    const m = conTunel();
+    const c = clienteDeMentira();
+    await m.sse(c.peticion, c.respuesta);
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" });
+    await vi.waitFor(() => expect(m.puerto.canales).toHaveLength(1));
+    m.puerto.abierta();
+    m.tunel.caer(MOTIVOS_DEL_TUNEL.seCerro);
+    expect(remotos(c.recibidos).at(-1)).toMatchObject({ estado: "error", motivo: MOTIVOS_DEL_TUNEL.seCerro });
+    expect(m.puerto.canales.at(-1)?.cerrado).toBe(true);
+  });
+
+  it("vía servidor: el túnel ni se toca, y el mensaje no dice vía", async () => {
+    const m = conTunel({ via: "servidor" });
+    const c = clienteDeMentira();
+    await m.sse(c.peticion, c.respuesta);
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" });
+    await vi.waitFor(() => expect(m.puerto.aperturas).toEqual(["ws://127.0.0.1:8787/ws"]));
+    expect(m.tunel.aperturas).toEqual([]);
+    expect(remotos(c.recibidos).some((x) => "via" in x)).toBe(false);
+  });
+
+  it("un túnel que llega TARDE, tras apagar, se cierra", async () => {
+    let soltar: (() => void) | undefined;
+    const real = new TunelEnMemoria();
+    const lento: TunelPort = {
+      abrir: async (o) => {
+        await new Promise<void>((r) => (soltar = r));
+        return real.abrir(o);
+      },
+    };
+    const m = conTunel({ tunel: lento });
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" });
+    await vi.waitFor(() => expect(soltar).toBeDefined());
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "apagar" });
+    soltar!();
+    await vi.waitFor(() => expect(real.cerrados).toBe(1));
+    expect(m.puerto.aperturas).toEqual([]);
+  });
+
+  it("cerrarRemoto cierra el túnel, y su promesa espera a que esté cerrado", async () => {
+    const m = conTunel();
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" });
+    await vi.waitFor(() => expect(m.puerto.canales).toHaveLength(1));
+    await m.montado.cerrarRemoto();
+    expect(m.tunel.cerrados).toBe(1);
+  });
+
+  it("la foto de ngrok se mide al conectar la primera pestaña y viaja con el mensaje; sin instalar, con su receta", async () => {
+    const m = conTunel({ instalado: false });
+    const c = clienteDeMentira();
+    await m.sse(c.peticion, c.respuesta);
+    await vi.waitFor(() => expect(remotos(c.recibidos).some((x) => x.ngrok !== undefined)).toBe(true));
+    expect(m.medir).toHaveBeenCalledTimes(1);
+    const ngrok = remotos(c.recibidos).filter((x) => x.ngrok !== undefined).at(-1)!.ngrok!;
+    expect(ngrok).toMatchObject({ instalado: false, cuenta: false });
+    expect(ngrok.receta?.id).toBe("ngrok");
+    // Una segunda pestaña no vuelve a medir: es una foto, no un sondeo.
+    const d = clienteDeMentira();
+    await m.sse(d.peticion, d.respuesta);
+    await asentar();
+    expect(m.medir).toHaveBeenCalledTimes(1);
+    expect(remotos(d.recibidos).at(-1)).toMatchObject({ ngrok: { instalado: false } });
+  });
+
+  it("con el interruptor apagado no se mide ngrok, ni se atienden sus acciones, ni corre su receta", async () => {
+    const m = conTunel({ habilitado: () => false });
+    const c = clienteDeMentira();
+    await m.sse(c.peticion, c.respuesta);
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "via", via: "servidor" });
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "authtoken" });
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "dominio", dominio: "mi-app.ngrok.app" });
+    await enviarMensaje(m.accion, { clase: "receta", id: "ngrok", paso: 1, accion: "ejecutar" });
+    for (let i = 0; i < 5; i++) await asentar();
+    expect(m.medir).not.toHaveBeenCalled();
+    expect(m.guardados).toEqual([]);
+    expect(c.recibidos.some((x) => x.clase === "secreto")).toBe(false);
+    expect(m.pasos).toEqual([]);
+  });
+
+  it("la receta de ngrok corre por el corredor de siempre y, al acabar, se vuelve a medir", async () => {
+    const m = conTunel({ instalado: false });
+    const c = clienteDeMentira();
+    await m.sse(c.peticion, c.respuesta);
+    await vi.waitFor(() => expect(m.medir).toHaveBeenCalledTimes(1));
+    await enviarMensaje(m.accion, { clase: "receta", id: "ngrok", paso: 1, accion: "ejecutar" });
+    expect(m.pasos).toEqual(["ngrok:1"]);
+    m.terminarPaso();
+    await vi.waitFor(() => expect(m.medir).toHaveBeenCalledTimes(2));
+  });
+
+  it("vía: se valida, se guarda y se anuncia; con la sesión encendida no se cambia", async () => {
+    const m = conTunel({ via: "servidor" });
+    const c = clienteDeMentira();
+    await m.sse(c.peticion, c.respuesta);
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "via", via: "inventada" } as unknown as MensajeDelCliente);
+    expect(m.guardados).toEqual([]);
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "via", via: "ngrok" });
+    expect(m.guardados).toEqual([{ via: "ngrok" }]);
+    await vi.waitFor(() => expect(remotos(c.recibidos).at(-1)).toMatchObject({ estado: "apagada", via: "ngrok" }));
+
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" });
+    await vi.waitFor(() => expect(m.puerto.canales).toHaveLength(1));
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "via", via: "servidor" });
+    expect(m.guardados).toEqual([{ via: "ngrok" }]);
+    expect(m.informados.some((t) => t.includes("la vía se cambia con la sesión apagada"))).toBe(true);
+  });
+
+  it("dominio: uno con esquema se rechaza con texto fijo; uno bueno se guarda; vacío lo quita", async () => {
+    const m = conTunel();
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "dominio", dominio: "https://mi-app.ngrok.app/x" });
+    expect(m.guardados).toEqual([]);
+    expect(m.informados.at(-1)).toContain("sin https://");
+    expect(m.informados.at(-1)).not.toContain("mi-app");
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "dominio", dominio: "mi-app.ngrok.app" });
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "dominio", dominio: "  " });
+    expect(m.guardados).toEqual([{ dominio: "mi-app.ngrok.app" }, { dominio: null }]);
+  });
+
+  it("authtoken: vacío no llama a nadie; uno de verdad se guarda, se vuelve a medir y NO aparece en ningún sitio", async () => {
+    const TOKEN = "2abcDEFghiJKLmno_pqrSTU-vwx";
+    const m = conTunel();
+    const c = clienteDeMentira();
+    await m.sse(c.peticion, c.respuesta);
+    await vi.waitFor(() => expect(m.medir).toHaveBeenCalledTimes(1));
+    // Con un móvil enganchado, para que lo que sale al relé también cuente.
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" });
+    await vi.waitFor(() => expect(m.puerto.canales).toHaveLength(1));
+    m.puerto.abierta();
+    m.puerto.presencia("m1");
+
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "authtoken" });
+    await vi.waitFor(() => expect(c.recibidos.some((x) => x.clase === "secreto")).toBe(true));
+    await enviarMensaje(m.accion, { clase: "secreto", valor: "" });
+    for (let i = 0; i < 5; i++) await asentar();
+    expect(m.tokens).toEqual([]);
+
+    m.fallarToken(MOTIVOS_DEL_TUNEL.authtokenNoGuardado);
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "authtoken" });
+    await asentar();
+    await enviarMensaje(m.accion, { clase: "secreto", valor: ` ${TOKEN} ` });
+    await vi.waitFor(() => expect(m.tokens).toEqual([TOKEN]));
+    await vi.waitFor(() => expect(m.medir).toHaveBeenCalledTimes(2));
+    expect(m.informados).toContain(`sesión remota: ${MOTIVOS_DEL_TUNEL.authtokenNoGuardado}`);
+
+    expect(JSON.stringify(c.recibidos)).not.toContain(TOKEN);
+    expect(JSON.stringify(m.puerto.enviados)).not.toContain(TOKEN);
+    expect(m.informados.join("\n")).not.toContain(TOKEN);
+  });
+
+  it("authtoken: un motivo de fallo que no es nuestro no cruza tal cual", async () => {
+    const m = conTunel();
+    const c = clienteDeMentira();
+    await m.sse(c.peticion, c.respuesta);
+    m.fallarToken("ngrok: /Users/alguien/.config/ngrok/ngrok.yml no se puede escribir");
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "authtoken" });
+    await asentar();
+    await enviarMensaje(m.accion, { clase: "secreto", valor: "2abcDEFghiJKLmno_pqrSTU" });
+    await vi.waitFor(() => expect(m.tokens).toHaveLength(1));
+    await vi.waitFor(() => expect(m.informados.some((t) => t.startsWith("sesión remota:"))).toBe(true));
+    expect(m.informados.join("\n")).not.toContain("/Users/");
   });
 });

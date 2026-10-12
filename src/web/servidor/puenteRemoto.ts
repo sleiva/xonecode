@@ -58,7 +58,7 @@ export const SIN_PAQUETE = "la sesión remota no está disponible en esta instal
 
 const MOTIVOS_FIJOS_DEL_TUNEL: ReadonlySet<string> = new Set(Object.values(MOTIVOS_DEL_TUNEL));
 /** Lo que ngrok o el sistema digan no cruza: solo un texto nuestro, o el genérico. */
-const motivoFijoDelTunel = (texto: unknown): string =>
+export const motivoFijoDelTunel = (texto: unknown): string =>
   typeof texto === "string" && MOTIVOS_FIJOS_DEL_TUNEL.has(texto) ? texto : MOTIVOS_DEL_TUNEL.otro;
 
 export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
