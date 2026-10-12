@@ -13,7 +13,7 @@
 /** Texto fijo por causa. Es lo ÚNICO que sale de un fallo del túnel hacia el cable. */
 export const MOTIVOS_DEL_TUNEL = {
   noInstalado: "ngrok no está instalado en esta máquina.",
-  autenticacion: "ngrok no acepta el authtoken: falta o no es válido.",
+  autenticacion: "ngrok no acepta el authtoken (falta o no es válido).",
   dominio: "ngrok no deja usar ese dominio: no es de tu cuenta, o tu plan no admite dominios propios.",
   sinDireccion: "ngrok no dio una dirección pública a tiempo.",
   seCerro: "ngrok se cerró.",
