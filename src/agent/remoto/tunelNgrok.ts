@@ -9,8 +9,10 @@
  *   de las líneas vistas (`motivoDeSalidaDeNgrok`). Lo que ngrok escribe se queda aquí: lleva la
  *   ruta de su configuración, el correo de la cuenta y, en un error de autenticación, el token.
  * - **ngrok va `detached` y se mata el GRUPO** (`matarGrupoReal`), con `SIGTERM`, una espera, y
- *   `SIGKILL` si no salió; y también al salir este proceso. Su stdout y stderr se consumen
- *   siempre: una tubería llena lo bloquearía.
+ *   `SIGKILL` si no salió; y también en el `exit` de este proceso (medido: con SIGINT y SIGTERM
+ *   bajo `tsx` no queda ngrok; con un SIGKILL a este proceso, que no deja correr nada, sí queda
+ *   huérfano). El cierre ordenado de la consola tiene que llamar a `cerrar()`. Su stdout y su
+ *   stderr se consumen siempre: una tubería llena lo bloquearía.
  * - **Cerrar: ngrok PRIMERO y luego el puente**, para que el móvil no vea un puente vivo detrás
  *   de un túnel ya muerto ni al revés un túnel que apunta a nada.
  */
