@@ -69,7 +69,18 @@ describe("MOTIVOS_DEL_TUNEL", () => {
       expect(t).not.toMatch(/\/Users\/|@|authtoken: /);
     }
     expect(Object.keys(MOTIVOS_DEL_TUNEL).sort()).toEqual(
-      ["autenticacion", "dominio", "noInstalado", "otro", "paqueteViejo", "seCerro", "sinDireccion"]
+      [
+        "autenticacion",
+        "authtokenNoGuardado",
+        "authtokenSinForma",
+        "dominio",
+        "noInstalado",
+        "otro",
+        "paqueteViejo",
+        "puente",
+        "seCerro",
+        "sinDireccion",
+      ]
     );
   });
 });

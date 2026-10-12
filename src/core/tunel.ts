@@ -19,6 +19,9 @@ export const MOTIVOS_DEL_TUNEL = {
   seCerro: "ngrok se cerró.",
   paqueteViejo: "El paquete de la sesión remota instalado no trae el puente: actualízalo.",
   otro: "ngrok falló y no se pudo abrir el túnel.",
+  puente: "No se pudo arrancar el puente local de la sesión remota.",
+  authtokenSinForma: "Eso no tiene la forma de un authtoken de ngrok.",
+  authtokenNoGuardado: "ngrok no pudo guardar el authtoken.",
 } as const;
 
 export type ClaveDeMotivoDelTunel = keyof typeof MOTIVOS_DEL_TUNEL;

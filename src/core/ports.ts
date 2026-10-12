@@ -1132,3 +1132,62 @@ export class PuenteRemotoEnMemoria implements PuenteRemotoPort {
     (canal === undefined ? this.ultimo() : this.canales[canal]?.escuchas)?.alEstado({ estado: "reconectando" });
   }
 }
+
+/**
+ * El túnel de la vía «ngrok» de la sesión remota: un puente LOCAL más un ngrok que lo publica.
+ * La implementación real (`agent/remoto/tunelNgrok.ts`) entra por opción, como el puente; aquí
+ * solo la forma. Un fallo LANZA con un texto de `core/tunel.ts#MOTIVOS_DEL_TUNEL`, nunca con lo
+ * que diga ngrok.
+ */
+export interface TunelAbierto {
+  /** La dirección del puente por el túnel: `wss://<publica>/ws`. */
+  servidor: string;
+  /** Mata ngrok y cierra el puente local. Idempotente. */
+  cerrar(): Promise<void>;
+  /** Si el túnel se cae solo (ngrok sale): una vez, con un texto fijo. */
+  alCaer(f: (motivo: string) => void): void;
+}
+
+export interface TunelPort {
+  abrir(o: { dominio?: string }): Promise<TunelAbierto>;
+}
+
+/** El doble: apunta aperturas y cierres, y deja al test elegir la dirección, un fallo o la caída. */
+export class TunelEnMemoria implements TunelPort {
+  readonly [ES_DOBLE] = true;
+  readonly aperturas: { dominio?: string }[] = [];
+  cerrados = 0;
+  /** El `servidor` que devuelve la próxima apertura. */
+  servidor = "wss://tunel.example/ws";
+  /** Con valor, la próxima apertura LANZA con este motivo (y se consume). */
+  fallo: string | undefined;
+  private readonly caidas: ((motivo: string) => void)[][] = [];
+
+  async abrir(o: { dominio?: string }): Promise<TunelAbierto> {
+    this.aperturas.push({ ...o });
+    if (this.fallo !== undefined) {
+      const motivo = this.fallo;
+      this.fallo = undefined;
+      throw new Error(motivo);
+    }
+    const escuchas: ((motivo: string) => void)[] = [];
+    this.caidas.push(escuchas);
+    let cerrado = false;
+    return {
+      servidor: this.servidor,
+      cerrar: async () => {
+        if (cerrado) return;
+        cerrado = true;
+        this.cerrados += 1;
+      },
+      alCaer: (f) => {
+        escuchas.push(f);
+      },
+    };
+  }
+
+  /** Lo que haría ngrok al salir solo; sin índice, el túnel MÁS RECIENTE. */
+  caer(motivo: string, tunel?: number): void {
+    for (const f of (tunel === undefined ? this.caidas.at(-1) : this.caidas[tunel]) ?? []) f(motivo);
+  }
+}
