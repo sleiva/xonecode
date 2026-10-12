@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { join, sep } from "node:path";
 import { WebSocketServer, type WebSocket as Socket } from "ws";
 import { cargarModuloRemoto, cargarServidorRemoto, crearPuenteWebSocket, NOMBRE_DEL_PAQUETE, NOMBRE_DEL_SERVIDOR, type ModuloRemoto } from "./puenteWebSocket.js";
 import type { EstadoDelPuente } from "../../core/ports.js";
@@ -57,19 +57,14 @@ describe("cargar el paquete bajo demanda", () => {
     ).toBeUndefined();
   });
 
-  it("solo este fichero nombra el paquete", () => {
-    const raiz = join(import.meta.dirname, "..", "..");
-    for (const f of [
-      "web/servidor/arranque.ts",
-      "web/servidor/puenteRemoto.ts",
-      "core/remoto.ts",
-      "core/ports.ts",
-      "core/tunel.ts",
-      "agent/remoto/tunelNgrok.ts",
-      "agent/remoto/ngrokEnMaquina.ts",
-    ]) {
-      expect(readFileSync(join(raiz, f), "utf8")).not.toContain(NOMBRE_DEL_PAQUETE);
-    }
+  it("solo este fichero nombra el paquete (recorre todo src/, sin los tests)", () => {
+    const src = join(import.meta.dirname, "..", "..");
+    const ficheros = (readdirSync(src, { recursive: true }) as string[]).filter(
+      (f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f) && !f.split(sep).includes("node_modules")
+    );
+    expect(ficheros.length).toBeGreaterThan(100);
+    const queLoNombran = ficheros.filter((f) => readFileSync(join(src, f), "utf8").includes(NOMBRE_DEL_PAQUETE));
+    expect(queLoNombran).toEqual([join("agent", "remoto", "puenteWebSocket.ts")]);
   });
 });
 
