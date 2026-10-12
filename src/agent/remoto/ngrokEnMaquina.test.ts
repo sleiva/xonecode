@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MOTIVOS_DEL_TUNEL } from "../../core/tunel.js";
-import { configTieneAuthtoken, guardarAuthtoken, localizarNgrok, medirNgrok, type ResultadoDeEjecucion } from "./ngrokEnMaquina.js";
+import { configTieneAuthtoken, guardarAuthtoken, hayBrew, localizarNgrok, medirNgrok, type ResultadoDeEjecucion } from "./ngrokEnMaquina.js";
 
 /** Un ngrok de mentira: contesta por argumentos y apunta lo que se le pidió. */
 function ngrokFalso(respuestas: Record<string, ResultadoDeEjecucion>) {
@@ -37,6 +37,13 @@ describe("localizarNgrok", () => {
     expect(localizarNgrok({ plataforma: "win32", entorno: { Path: "C:\\ngrok" }, existe: (r) => r === "C:\\ngrok\\ngrok.exe" })).toBe(
       "C:\\ngrok\\ngrok.exe"
     );
+  });
+});
+
+describe("hayBrew", () => {
+  it("es `brew` en el PATH: decide si el paso de macOS de la receta tiene botón", () => {
+    expect(hayBrew({ plataforma: "darwin", entorno: { PATH: "/a:/opt/homebrew/bin" }, existe: (r) => r === "/opt/homebrew/bin/brew" })).toBe(true);
+    expect(hayBrew({ plataforma: "darwin", entorno: { PATH: "/a" }, existe: () => false })).toBe(false);
   });
 });
 

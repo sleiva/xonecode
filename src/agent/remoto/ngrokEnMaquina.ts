@@ -45,6 +45,19 @@ export function localizarNgrok(
   return enPath("ngrok");
 }
 
+/** ¿Hay `brew` en el PATH? Es lo que decide si el paso de macOS de `recetaDeNgrok` tiene botón. */
+export function hayBrew(
+  deps: { plataforma?: string; entorno?: Record<string, string | undefined>; existe?: (ruta: string) => boolean } = {}
+): boolean {
+  const { enPath } = localizadorDeAndroid({
+    plataforma: deps.plataforma ?? process.platform,
+    entorno: deps.entorno ?? process.env,
+    home: homedir(),
+    existe: deps.existe ?? existsSync,
+  });
+  return enPath("brew") !== undefined;
+}
+
 /**
  * El `execFile` de verdad. Sin shell, y el error NO se propaga: su `message` y su `cmd` llevan
  * los argumentos, y en `config add-authtoken` uno de ellos es el token.
