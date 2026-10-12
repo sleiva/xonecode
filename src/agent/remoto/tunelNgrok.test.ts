@@ -10,6 +10,7 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MOTIVOS_DEL_TUNEL } from "../../core/tunel.js";
+import { matarGrupoReal } from "../dispositivos/procesosEnMaquina.js";
 import type { ModuloServidorRemoto } from "./puenteWebSocket.js";
 import { crearTunelNgrok, type DependenciasDelTunel } from "./tunelNgrok.js";
 
@@ -114,7 +115,7 @@ describe.skipIf(process.platform === "win32")("el túnel de ngrok, con un ngrok 
     tunel.alCaer((m) => caidas.push(m));
 
     await tunel.cerrar();
-    expect(vivo(nieto)).toBe(false);
+    await expect.poll(() => vivo(nieto)).toBe(false);
     expect(registro.cerrados).toBe(1);
     await tunel.cerrar();
     expect(registro.cerrados).toBe(1);
@@ -170,7 +171,7 @@ describe.skipIf(process.platform === "win32")("el túnel de ngrok, con un ngrok 
     const { binario, carpeta } = ngrokFalso(QUEDARSE_VIVO);
     const { registro, modulo } = puenteFalso();
     await expect(crearTunelNgrok(deps(binario, modulo, { topeMs: 400 })).abrir({})).rejects.toThrow(MOTIVOS_DEL_TUNEL.sinDireccion);
-    expect(vivo(Number(readFileSync(join(carpeta, "nieto"), "utf8")))).toBe(false);
+    await expect.poll(() => vivo(Number(readFileSync(join(carpeta, "nieto"), "utf8")))).toBe(false);
     expect(registro.cerrados).toBe(1);
   });
 
@@ -200,6 +201,118 @@ describe.skipIf(process.platform === "win32")("el túnel de ngrok, con un ngrok 
     const { registro, modulo } = puenteFalso();
     await expect(crearTunelNgrok(deps("/no/existe/ngrok", modulo)).abrir({})).rejects.toThrow(MOTIVOS_DEL_TUNEL.noInstalado);
     expect(registro.cerrados).toBe(1);
+  });
+});
+
+describe.skipIf(process.platform === "win32")("el túnel de ngrok: orden, señales, entorno y avisos", () => {
+  /** Un `ngrok` falso que da la dirección y se queda vivo con su nieto. */
+  function conDireccion(antes = ""): { binario: string; carpeta: string } {
+    const f = ngrokFalso("");
+    const log = fichero(f.carpeta, "log", linea("ngrok-v3.jsonl", "started tunnel") + "\n");
+    writeFileSync(f.binario, readFileSync(f.binario, "utf8") + `${antes}\n${NIETO}\ncat ${log}\nwait\n`);
+    return f;
+  }
+
+  it("cerrar mata ngrok ANTES de cerrar el puente", async () => {
+    const { binario } = conDireccion();
+    const orden: string[] = [];
+    const modulo: ModuloServidorRemoto = {
+      arrancarServidor: async () => ({
+        urlHttp: "http://127.0.0.1:45678",
+        urlWs: "ws://127.0.0.1:45678/ws",
+        cerrar: async () => void orden.push("puente"),
+      }),
+    };
+    const matarGrupo = (pid: number, senal: string) => {
+      orden.push(senal);
+      matarGrupoReal(pid, senal);
+    };
+    const tunel = await crearTunelNgrok(deps(binario, modulo, { matarGrupo })).abrir({});
+    await tunel.cerrar();
+    expect(orden).toEqual(["SIGTERM", "puente"]);
+  });
+
+  it("un ngrok que ignora SIGTERM recibe SIGKILL tras la espera, y el grupo muere", async () => {
+    // `trap '' TERM` se hereda: el `sleep` nieto también lo ignora.
+    const { binario, carpeta } = conDireccion("trap '' TERM");
+    const senales: string[] = [];
+    const matarGrupo = (pid: number, senal: string) => {
+      senales.push(senal);
+      matarGrupoReal(pid, senal);
+    };
+    const tunel = await crearTunelNgrok(deps(binario, puenteFalso().modulo, { matarGrupo, esperaAlMatarMs: 300 })).abrir({});
+    await tunel.cerrar();
+    expect(senales).toEqual(["SIGTERM", "SIGKILL"]);
+    // Con poll: el nieto muerto por SIGKILL puede seguir un instante como zombi hasta que lo recoja init.
+    await expect.poll(() => vivo(Number(readFileSync(join(carpeta, "nieto"), "utf8")))).toBe(false);
+  });
+
+  it("ngrok NO hereda las claves de los proveedores; sí NGROK_* y PATH", async () => {
+    const { binario, carpeta } = conDireccion('/usr/bin/env > "$D/env"');
+    const entorno = {
+      PATH: process.env.PATH,
+      HOME: "/casa",
+      ANTHROPIC_API_KEY: "sk-ant-secreta",
+      DEEPSEEK_API_KEY: "sk-ds-secreta",
+      XONECODE_CLAVE_MIO: "personalizada",
+      NGROK_AUTHTOKEN: "2abc_token",
+    };
+    const tunel = await crearTunelNgrok(deps(binario, puenteFalso().modulo, { entorno })).abrir({});
+    await tunel.cerrar();
+    const env = readFileSync(join(carpeta, "env"), "utf8");
+    expect(env).not.toMatch(/ANTHROPIC_API_KEY|DEEPSEEK_API_KEY|XONECODE_CLAVE_MIO|secreta/);
+    expect(env).toContain("NGROK_AUTHTOKEN=2abc_token");
+    expect(env).toContain("HOME=/casa");
+    expect(env).toMatch(/^PATH=/m);
+  });
+
+  it("el fallo se clasifica por las ÚLTIMAS líneas, aunque antes haya habido muchas", async () => {
+    const { binario, carpeta } = ngrokFalso("");
+    const ruido = Array.from({ length: 500 }, (_, i) => `{"lvl":"info","msg":"ruido ${i}"}`).join("\n");
+    const oro = readFileSync(join(ORO, "ngrok-v3-authtoken-invalido.jsonl"), "utf8").split("\n").filter((l) => l.startsWith("{"));
+    const log = fichero(carpeta, "log", `${ruido}\n${oro.join("\n")}\n`);
+    writeFileSync(binario, readFileSync(binario, "utf8") + `cat ${log}\nexit 1\n`);
+    await expect(crearTunelNgrok(deps(binario, puenteFalso().modulo)).abrir({})).rejects.toThrow(MOTIVOS_DEL_TUNEL.autenticacion);
+  });
+
+  it("al caer: el puente ya está cerrado al avisar, y un aviso que lanza no tumba a los demás", async () => {
+    const { binario, carpeta } = ngrokFalso("");
+    const log = fichero(carpeta, "log", linea("ngrok-v3.jsonl", "started tunnel") + "\n");
+    writeFileSync(binario, readFileSync(binario, "utf8") + `cat ${log}\nsleep 0.3\nexit 1\n`);
+    const { registro, modulo } = puenteFalso();
+    const tunel = await crearTunelNgrok(deps(binario, modulo)).abrir({});
+    const cerradosAlAvisar: number[] = [];
+    tunel.alCaer(() => {
+      throw new Error("un oyente roto");
+    });
+    const segundo = new Promise<string>((r) =>
+      tunel.alCaer((m) => {
+        cerradosAlAvisar.push(registro.cerrados);
+        r(m);
+      })
+    );
+    expect(await segundo).toBe(MOTIVOS_DEL_TUNEL.seCerro);
+    expect(cerradosAlAvisar).toEqual([1]);
+  });
+
+  it("engancha UN aviso de salida del proceso, que mata el grupo, y lo suelta cuando ngrok sale", async () => {
+    const { binario, carpeta } = conDireccion();
+    const enganchados: (() => void)[] = [];
+    let soltados = 0;
+    const alSalirDelProceso = (f: () => void) => {
+      enganchados.push(f);
+      return () => void (soltados += 1);
+    };
+    const tunel = await crearTunelNgrok(deps(binario, puenteFalso().modulo, { alSalirDelProceso })).abrir({});
+    expect(enganchados).toHaveLength(1);
+    expect(soltados).toBe(0);
+    // Lo que haría el `exit` del proceso: matar el grupo en el acto.
+    enganchados[0]!();
+    const nieto = Number(readFileSync(join(carpeta, "nieto"), "utf8"));
+    await expect.poll(() => vivo(nieto)).toBe(false);
+    await expect.poll(() => soltados).toBe(1);
+    await tunel.cerrar();
+    expect(soltados).toBe(1);
   });
 });
 

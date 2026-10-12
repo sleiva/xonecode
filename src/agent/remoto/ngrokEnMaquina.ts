@@ -3,13 +3,14 @@
  *
  * **La medida manda, nunca un flag recordado**: «instalado» es que `ngrok version` contesta;
  * «con cuenta» es que la configuración que `ngrok config check` NOMBRA tiene un `authtoken`, o
- * que el entorno trae `NGROK_AUTHTOKEN` (ngrok la lee, y el túnel le pasa el entorno sin
- * filtrar). La ruta de esa configuración no sale de aquí, ni la salida de ngrok: un fallo es un
+ * que el entorno trae `NGROK_AUTHTOKEN` (ngrok la lee, y el túnel se la pasa: del entorno solo
+ * le quita las claves de los proveedores, `core/shellDeAgente.ts#entornoDeShell`). La ruta de esa configuración no sale de aquí, ni la salida de ngrok: un fallo es un
  * texto de `core/tunel.ts#MOTIVOS_DEL_TUNEL`.
  */
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { entornoDeShell } from "../../core/shellDeAgente.js";
 import { MOTIVOS_DEL_TUNEL } from "../../core/tunel.js";
 import { localizadorDeAndroid } from "../dispositivos/dispositivosEnMaquina.js";
 
@@ -54,7 +55,7 @@ export const ejecutarReal = (binario: string, args: string[]): Promise<Resultado
       execFile(
         binario,
         args,
-        { timeout: TOPE_DE_PREGUNTA_A_NGROK_MS, windowsHide: true, encoding: "utf8" },
+        { timeout: TOPE_DE_PREGUNTA_A_NGROK_MS, windowsHide: true, encoding: "utf8", env: entornoDeShell({ entorno: process.env }) },
         (error, stdout) => resolver({ ok: error === null, salida: typeof stdout === "string" ? stdout : "" })
       );
     } catch {

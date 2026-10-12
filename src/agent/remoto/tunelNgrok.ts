@@ -16,7 +16,9 @@
  * - **Cerrar: ngrok PRIMERO y luego el puente**, para que el móvil no vea un puente vivo detrás
  *   de un túnel ya muerto ni al revés un túnel que apunta a nada.
  */
+import { StringDecoder } from "node:string_decoder";
 import type { TunelAbierto, TunelPort } from "../../core/ports.js";
+import { entornoDeShell } from "../../core/shellDeAgente.js";
 import { MOTIVOS_DEL_TUNEL, motivoDeDominioInaceptable, motivoDeSalidaDeNgrok, servidorDeTunel, urlPublicaDeLinea } from "../../core/tunel.js";
 import { lanzarReal, matarGrupoReal, type Lanzar, type ProcesoHijo } from "../dispositivos/procesosEnMaquina.js";
 import { localizarNgrok } from "./ngrokEnMaquina.js";
@@ -26,7 +28,10 @@ import { cargarServidorRemoto, type ModuloServidorRemoto } from "./puenteWebSock
 export const TOPE_DE_TUNEL_MS = 30_000;
 /** Lo que se espera a que ngrok salga tras `SIGTERM` antes del `SIGKILL`. */
 export const ESPERA_AL_MATAR_MS = 3_000;
-/** Las líneas que se guardan para clasificar un fallo; después de la dirección, ninguna. */
+/**
+ * Las ÚLTIMAS líneas que se guardan para clasificar un fallo (el `ERR_NGROK_xxx` llega al final);
+ * después de la dirección, ninguna.
+ */
 const LINEAS_QUE_SE_GUARDAN = 200;
 
 export interface DependenciasDelTunel {
@@ -49,11 +54,15 @@ const alSalirReal = (f: () => void): (() => void) => {
 
 class FalloDelTunel extends Error {}
 
-/** Parte en líneas lo que llega por un flujo, guardando el trozo sin salto para el siguiente. */
+/**
+ * Parte en líneas lo que llega por un flujo, guardando el trozo sin salto para el siguiente. Con
+ * un `StringDecoder`: un carácter de varios bytes partido entre dos trozos no se rompe.
+ */
 function porLineas(alLinea: (linea: string) => void): (dato: unknown) => void {
   let resto = "";
+  const decodificador = new StringDecoder("utf8");
   return (dato) => {
-    resto += typeof dato === "string" ? dato : String(dato);
+    resto += typeof dato === "string" ? dato : Buffer.isBuffer(dato) ? decodificador.write(dato) : String(dato);
     const partes = resto.split(/\r?\n/);
     resto = partes.pop() ?? "";
     for (const p of partes) if (p !== "") alLinea(p);
@@ -96,7 +105,10 @@ export function crearTunelNgrok(deps: DependenciasDelTunel = {}): TunelPort {
 
       let hijo: ProcesoHijo;
       try {
-        hijo = lanzar(binario, args, { env: entorno });
+        // Sin las claves de los proveedores, con la MISMA regla que la shell del agente: ngrok no
+        // las necesita, y `guardarCredencial` las escribe en `process.env`. `NGROK_*`, `PATH` y
+        // `HOME` siguen (el authtoken puede venir de `NGROK_AUTHTOKEN`).
+        hijo = lanzar(binario, args, { env: entornoDeShell({ entorno }) });
       } catch {
         await cerrarPuente();
         throw new FalloDelTunel(MOTIVOS_DEL_TUNEL.noInstalado);
@@ -149,13 +161,24 @@ export function crearTunelNgrok(deps: DependenciasDelTunel = {}): TunelPort {
           alUrl(publica);
           return;
         }
-        if (lineas.length < LINEAS_QUE_SE_GUARDAN) lineas.push(linea);
+        lineas.push(linea);
+        if (lineas.length > LINEAS_QUE_SE_GUARDAN) lineas.shift();
       };
       hijo.stdout.on("data", porLineas(alLinea));
       hijo.stderr.on("data", porLineas(alLinea));
 
-      let caido: string | undefined;
+      /** Resuelve con el motivo cuando el puente YA está cerrado: se avisa después, nunca antes. */
+      let caida: Promise<string> | undefined;
       const caidas: ((motivo: string) => void)[] = [];
+      /** Un oyente que lanza no tumba la consola ni deja sin aviso a los demás. */
+      const avisar = (f: (motivo: string) => void, motivo: string) => {
+        if (cerrando) return;
+        try {
+          f(motivo);
+        } catch {
+          // es de quien escucha
+        }
+      };
       let cerrando = false;
       hijo.on("error", ((e: NodeJS.ErrnoException) => {
         alFallo(e?.code === "ENOENT" || e?.code === "EACCES" ? MOTIVOS_DEL_TUNEL.noInstalado : MOTIVOS_DEL_TUNEL.otro);
@@ -174,10 +197,12 @@ export function crearTunelNgrok(deps: DependenciasDelTunel = {}): TunelPort {
           alFallo(MOTIVOS_DEL_TUNEL[motivoDeSalidaDeNgrok(lineas)]);
           return;
         }
-        if (cerrando || caido !== undefined) return;
-        caido = MOTIVOS_DEL_TUNEL.seCerro;
-        for (const f of caidas.splice(0)) f(caido);
-        void cerrarPuente();
+        if (cerrando || caida !== undefined) return;
+        const motivo = MOTIVOS_DEL_TUNEL.seCerro;
+        caida = cerrarPuente().then(() => motivo);
+        void caida.then((m) => {
+          for (const f of caidas.splice(0)) avisar(f, m);
+        });
       }) as (valor: never) => void);
 
       const tope = setTimeout(() => alFallo(MOTIVOS_DEL_TUNEL.sinDireccion), topeMs);
@@ -217,9 +242,8 @@ export function crearTunelNgrok(deps: DependenciasDelTunel = {}): TunelPort {
           })()),
         alCaer: (f) => {
           if (cerrando) return;
-          if (caido !== undefined) {
-            const motivo = caido;
-            queueMicrotask(() => f(motivo));
+          if (caida !== undefined) {
+            void caida.then((m) => avisar(f, m));
             return;
           }
           caidas.push(f);
