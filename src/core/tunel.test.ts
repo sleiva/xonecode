@@ -55,6 +55,12 @@ describe("motivoDeSalidaDeNgrok, por CÓDIGO y nunca por texto", () => {
   it("un dominio que no es tuyo es dominio", () => {
     expect(motivoDeSalidaDeNgrok(oro("ngrok-v3-dominio-ajeno.jsonl"))).toBe("dominio");
   });
+  it("108 (límite de sesiones simultáneas) es otra sesión, no autenticación", () => {
+    expect(motivoDeSalidaDeNgrok(["ERROR:  ERR_NGROK_108"])).toBe("otraSesion");
+  });
+  it("334 (el endpoint ya está en línea en otra sesión) es otra sesión, no dominio", () => {
+    expect(motivoDeSalidaDeNgrok(['{"err":"failed to start tunnel\\r\\n\\r\\nERR_NGROK_334\\r\\n","lvl":"crit"}'])).toBe("otraSesion");
+  });
   it("lo demás es otro", () => {
     expect(motivoDeSalidaDeNgrok(oro("ngrok-v3.jsonl"))).toBe("otro");
     expect(motivoDeSalidaDeNgrok([])).toBe("otro");
@@ -75,6 +81,7 @@ describe("MOTIVOS_DEL_TUNEL", () => {
         "authtokenSinForma",
         "dominio",
         "noInstalado",
+        "otraSesion",
         "otro",
         "paqueteViejo",
         "puente",

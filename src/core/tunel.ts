@@ -15,6 +15,7 @@ export const MOTIVOS_DEL_TUNEL = {
   noInstalado: "ngrok no está instalado en esta máquina.",
   autenticacion: "ngrok no acepta el authtoken (falta o no es válido).",
   dominio: "ngrok no deja usar ese dominio: no es de tu cuenta, o tu plan no admite dominios propios.",
+  otraSesion: "Ya hay otro ngrok de tu cuenta abierto (en esta máquina o en otra): ciérralo y vuelve a encender.",
   sinDireccion: "ngrok no dio una dirección pública a tiempo.",
   seCerro: "ngrok se cerró.",
   paqueteViejo: "El paquete de la sesión remota instalado no trae el puente: actualízalo.",
@@ -69,15 +70,19 @@ export function motivoDeDominioInaceptable(dominio: unknown): string | undefined
 
 // Medido: 105 es el authtoken que no parece uno, 313 el dominio que el plan o la cuenta no
 // permite. Los demás de cada grupo son los de la documentación de ngrok para el mismo fallo.
-const CODIGOS_DE_AUTENTICACION = new Set(["105", "106", "107", "108", "4018"]);
-const CODIGOS_DE_DOMINIO = new Set(["313", "314", "334", "337"]);
+// 108 (límite de sesiones simultáneas) y 334 (el endpoint ya está en línea) NO son ni token ni
+// dominio: es otro ngrok de la cuenta abierto —un huérfano de un cierre en seco, por ejemplo—.
+const CODIGOS_DE_AUTENTICACION = new Set(["105", "106", "107", "4018"]);
+const CODIGOS_DE_DOMINIO = new Set(["313", "314", "337"]);
+const CODIGOS_DE_OTRA_SESION = new Set(["108", "334"]);
 
 /** Por qué se cerró ngrok, mirando solo el CÓDIGO `ERR_NGROK_xxx` de sus líneas, nunca su texto. */
-export function motivoDeSalidaDeNgrok(lineas: readonly string[]): "autenticacion" | "dominio" | "otro" {
+export function motivoDeSalidaDeNgrok(lineas: readonly string[]): "autenticacion" | "dominio" | "otraSesion" | "otro" {
   for (const linea of lineas) {
     for (const m of linea.matchAll(/ERR_NGROK_(\d+)/g)) {
       if (CODIGOS_DE_AUTENTICACION.has(m[1]!)) return "autenticacion";
       if (CODIGOS_DE_DOMINIO.has(m[1]!)) return "dominio";
+      if (CODIGOS_DE_OTRA_SESION.has(m[1]!)) return "otraSesion";
     }
   }
   return "otro";
