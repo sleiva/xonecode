@@ -33,6 +33,7 @@ import {
   Entorno,
   Settings,
   TOPE_DE_CONCURRENCIA_DE_TAREAS,
+  type ViaRemota,
   dentroDelWorkspace,
   rutaDeWorkspace,
   segmentoSeguro,
@@ -293,6 +294,37 @@ export function guardarModoPorDefecto(casa: string | undefined, modo: ModoDeEscr
     ? Object.fromEntries(Object.entries(crudo).filter(([k]) => k !== "modoDeEscritura"))
     : { ...crudo, modoDeEscritura: modo };
   escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta };
+}
+
+/**
+ * Guarda la vía de la sesión remota y el dominio de ngrok, fundidos en el `remoto` que ya hay
+ * (interruptor y servidor intactos). `dominio: null` lo QUITA. La forma la comprueba quien llama
+ * (`motivoDeDominioInaceptable`) y la vuelve a comprobar `validarSettings` al leer.
+ *
+ * **Sin `habilitado` en el fichero se escribe `false`**: `validarRemoto` tira el bloque entero si
+ * no es un booleano, así que con el interruptor puesto por `XONECODE_REMOTO=1` la vía se perdería
+ * en la siguiente lectura sin decirlo. `false` es lo mismo que ausente para `remotoEnVigor`, que
+ * suma la variable de entorno.
+ */
+export function guardarAjustesDeRemoto(
+  casa: string | undefined,
+  cambio: { via?: ViaRemota; dominio?: string | null }
+): { ruta: string } {
+  const ruta = rutaSettings(casa ?? homedir());
+  const crudo = leerCrudoOAbortar(ruta);
+  const previo = crudo.remoto;
+  const remoto: Record<string, unknown> = esObjeto(previo) ? { ...previo } : {};
+  if (typeof remoto.habilitado !== "boolean") remoto.habilitado = false;
+  if (cambio.via !== undefined) remoto.via = cambio.via;
+  if (cambio.dominio !== undefined) {
+    const ngrok: Record<string, unknown> = esObjeto(remoto.ngrok) ? { ...remoto.ngrok } : {};
+    if (cambio.dominio === null) delete ngrok.dominio;
+    else ngrok.dominio = cambio.dominio;
+    if (Object.keys(ngrok).length === 0) delete remoto.ngrok;
+    else remoto.ngrok = ngrok;
+  }
+  escribirAtomico(ruta, JSON.stringify({ ...crudo, remoto }, null, 2) + "\n");
   return { ruta };
 }
 
