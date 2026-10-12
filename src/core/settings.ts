@@ -14,6 +14,7 @@ import { type Aviso, CLAVES_DENEGADAS } from "./config.js";
 import { FORMA_DE_NOMBRE_DE_AVD } from "./puertosDeAvd.js";
 import { esModoDeEscritura, type ModoDeEscritura } from "./modoDeEscritura.js";
 import { motivoDeModeloDeMotorInaceptable } from "./motoresLocales.js";
+import { motivoDeDominioInaceptable } from "./tunel.js";
 
 export interface Entorno {
   id: string;
@@ -128,7 +129,13 @@ export interface AjustesDeRemoto {
   habilitado?: boolean;
   /** `wss://` a cualquier host, o `ws://` solo a loopback. Ausente = `SERVIDOR_REMOTO_POR_OMISION`. */
   servidor?: string;
+  /** Por dónde sale la sesión: el servidor de XOne o un túnel de ngrok. Ausente = `servidor`. */
+  via?: ViaRemota;
+  /** Solo con la vía `ngrok`: un dominio reservado en la cuenta (opcional). */
+  ngrok?: { dominio?: string };
 }
+
+export type ViaRemota = "servidor" | "ngrok";
 
 export const SERVIDOR_REMOTO_POR_OMISION = "wss://remoto.xone.dev/ws";
 
@@ -150,10 +157,13 @@ function servidorRemotoAceptable(candidato: string): boolean {
 export function remotoEnVigor(
   ajustes: AjustesDeRemoto | undefined,
   entorno: Record<string, string | undefined>
-): { habilitado: boolean; servidor: string } {
+): { habilitado: boolean; servidor: string; via: ViaRemota; dominio?: string } {
+  const dominio = ajustes?.ngrok?.dominio;
   return {
     habilitado: entorno.XONECODE_REMOTO === "1" || ajustes?.habilitado === true,
     servidor: ajustes?.servidor ?? SERVIDOR_REMOTO_POR_OMISION,
+    via: ajustes?.via ?? "servidor",
+    ...(dominio !== undefined ? { dominio } : {}),
   };
 }
 
@@ -387,15 +397,39 @@ function validarRemoto(candidato: unknown, avisos: Aviso[]): AjustesDeRemoto | u
   if (typeof candidato !== "object" || candidato === null || Array.isArray(candidato)) return undefined;
   const o = candidato as Record<string, unknown>;
   if (typeof o.habilitado !== "boolean") return undefined;
-  if (o.servidor === undefined) return { habilitado: o.habilitado };
-  if (typeof o.servidor === "string" && servidorRemotoAceptable(o.servidor)) {
-    return { habilitado: o.habilitado, servidor: o.servidor };
+  const remoto: AjustesDeRemoto = { habilitado: o.habilitado };
+  if (o.servidor !== undefined) {
+    if (typeof o.servidor === "string" && servidorRemotoAceptable(o.servidor)) {
+      remoto.servidor = o.servidor;
+    } else {
+      avisos.push({
+        texto: "settings.json: remoto.servidor tiene que ser wss://…, o ws:// a loopback; se ignora",
+        severidad: "aviso",
+      });
+    }
   }
-  avisos.push({
-    texto: "settings.json: remoto.servidor tiene que ser wss://…, o ws:// a loopback; se ignora",
-    severidad: "aviso",
-  });
-  return { habilitado: o.habilitado };
+  if (o.via !== undefined) {
+    if (o.via === "servidor" || o.via === "ngrok") {
+      remoto.via = o.via;
+    } else {
+      avisos.push({ texto: "settings.json: remoto.via tiene que ser «servidor» o «ngrok»; se ignora", severidad: "aviso" });
+    }
+  }
+  const ngrok = o.ngrok;
+  if (typeof ngrok === "object" && ngrok !== null && !Array.isArray(ngrok)) {
+    const dominio = (ngrok as Record<string, unknown>).dominio;
+    if (dominio !== undefined) {
+      if (motivoDeDominioInaceptable(dominio) === undefined) {
+        remoto.ngrok = { dominio: dominio as string };
+      } else {
+        avisos.push({
+          texto: "settings.json: remoto.ngrok.dominio tiene que ser un nombre de host (sin https:// ni ruta); se ignora",
+          severidad: "aviso",
+        });
+      }
+    }
+  }
+  return remoto;
 }
 
 /**

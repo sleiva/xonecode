@@ -1,0 +1,4 @@
+{"lvl":"info","msg":"tunnel session started","obj":"tunnels.session","t":"2026-10-12T09:30:39.407931+02:00"}
+{"err":"failed to start tunnel: Only paid plans may create endpoints with custom subdomains.\nFailed to create an endpoint with the custom subdomain 'ngrok-free.app' for the account 'usuario@ejemplo.com'.\nThis account is on the 'Free' plan.\n\nUpgrade to a paid plan at: https://dashboard.ngrok.com/billing/choose-a-plan\r\n\r\nERR_NGROK_313\r\n","lvl":"crit","msg":"command failed","t":"2026-10-12T09:30:39.455149+02:00"}
+ERROR:  failed to start tunnel: Only paid plans may create endpoints with custom subdomains.
+ERROR:  ERR_NGROK_313

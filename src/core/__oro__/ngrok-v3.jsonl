@@ -1,0 +1,8 @@
+{"lvl":"info","msg":"no configuration paths supplied","t":"2026-10-12T09:28:36.176186+02:00"}
+{"lvl":"info","msg":"using configuration at default config path","path":"/Users/usuario/Library/Application Support/ngrok/ngrok.yml","t":"2026-10-12T09:28:36.176983+02:00"}
+{"addr":"127.0.0.1:4040","allow_hosts":null,"lvl":"info","msg":"starting web service","obj":"web","t":"2026-10-12T09:28:36.213453+02:00"}
+{"lvl":"info","msg":"client session established","obj":"tunnels.session","t":"2026-10-12T09:28:36.475346+02:00"}
+{"lvl":"info","msg":"tunnel session started","obj":"tunnels.session","t":"2026-10-12T09:28:36.475414+02:00"}
+{"addr":"http://localhost:9","lvl":"info","msg":"started tunnel","name":"command_line","obj":"tunnels","t":"2026-10-12T09:28:36.686952+02:00","url":"https://1a2b-203-0-113-7.ngrok-free.app"}
+{"lvl":"info","msg":"update available","obj":"updater","t":"2026-10-12T09:28:36.704266+02:00"}
+{"lvl":"info","msg":"received stop request","obj":"app","stopReq":{},"t":"2026-10-12T09:30:38.920605+02:00"}

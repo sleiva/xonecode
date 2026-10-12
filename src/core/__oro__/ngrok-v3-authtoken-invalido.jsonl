@@ -1,0 +1,6 @@
+{"lvl":"info","msg":"no configuration paths supplied","t":"2026-10-12T09:30:38.946239+02:00"}
+{"err":"authentication failed: The authtoken you specified does not look like a proper ngrok authtoken.\nYour authtoken: <redactado>\nInstructions to install your authtoken are on your ngrok dashboard:\nhttps://dashboard.ngrok.com/get-started/your-authtoken\r\n\r\nERR_NGROK_105\r\n","lvl":"eror","msg":"failed to reconnect session","obj":"tunnels.session","t":"2026-10-12T09:30:39.177203+02:00"}
+{"err":"authentication failed: The authtoken you specified does not look like a proper ngrok authtoken.\nYour authtoken: <redactado>\nInstructions to install your authtoken are on your ngrok dashboard:\nhttps://dashboard.ngrok.com/get-started/your-authtoken\r\n\r\nERR_NGROK_105\r\n","lvl":"crit","msg":"command failed","t":"2026-10-12T09:30:39.177531+02:00"}
+ERROR:  authentication failed: The authtoken you specified does not look like a proper ngrok authtoken.
+ERROR:  ERR_NGROK_105
+ERROR:  https://ngrok.com/docs/errors/err_ngrok_105
