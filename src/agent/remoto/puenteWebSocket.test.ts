@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { WebSocketServer, type WebSocket as Socket } from "ws";
-import { cargarModuloRemoto, crearPuenteWebSocket, NOMBRE_DEL_PAQUETE, type ModuloRemoto } from "./puenteWebSocket.js";
+import { cargarModuloRemoto, cargarServidorRemoto, crearPuenteWebSocket, NOMBRE_DEL_PAQUETE, NOMBRE_DEL_SERVIDOR, type ModuloRemoto } from "./puenteWebSocket.js";
 import type { EstadoDelPuente } from "../../core/ports.js";
 
 /** Un módulo FALSO: misma forma que el paquete, cifrado identidad. Los vectores reales se prueban en xonecode-server. */
@@ -44,9 +44,30 @@ describe("cargar el paquete bajo demanda", () => {
     ).toBeUndefined();
   });
 
+  it("el puente local (subruta /servidor), o undefined si no está o no lo trae", async () => {
+    const pedidos: string[] = [];
+    const conPuente = { arrancarServidor: async () => ({ urlHttp: "", urlWs: "", cerrar: async () => {} }) };
+    expect(await cargarServidorRemoto(async (n) => (pedidos.push(n), conPuente))).toBe(conPuente);
+    expect(pedidos).toEqual([NOMBRE_DEL_SERVIDOR]);
+    expect(await cargarServidorRemoto(async () => ({}))).toBeUndefined();
+    expect(
+      await cargarServidorRemoto(async () => {
+        throw new Error("Package subpath './servidor' is not defined");
+      })
+    ).toBeUndefined();
+  });
+
   it("solo este fichero nombra el paquete", () => {
     const raiz = join(import.meta.dirname, "..", "..");
-    for (const f of ["web/servidor/arranque.ts", "web/servidor/puenteRemoto.ts", "core/remoto.ts", "core/ports.ts"]) {
+    for (const f of [
+      "web/servidor/arranque.ts",
+      "web/servidor/puenteRemoto.ts",
+      "core/remoto.ts",
+      "core/ports.ts",
+      "core/tunel.ts",
+      "agent/remoto/tunelNgrok.ts",
+      "agent/remoto/ngrokEnMaquina.ts",
+    ]) {
       expect(readFileSync(join(raiz, f), "utf8")).not.toContain(NOMBRE_DEL_PAQUETE);
     }
   });

@@ -31,6 +31,34 @@ export async function cargarModuloRemoto(importar: (nombre: string) => Promise<u
   }
 }
 
+/**
+ * La subruta del paquete con el PUENTE (el relé que `xonecode-server` corre en la nube), para la
+ * vía «túnel local»: xonecode lo arranca en loopback y ngrok lo publica (`tunelNgrok.ts`). Vive
+ * aquí para que el nombre del paquete siga en UN fichero.
+ */
+export const NOMBRE_DEL_SERVIDOR = `${NOMBRE_DEL_PAQUETE}/servidor`;
+
+/** La parte de `@xone/xonecode-remoto/servidor` que se usa. */
+export interface ModuloServidorRemoto {
+  arrancarServidor(o: { puerto: number; host?: string }): Promise<{ urlHttp: string; urlWs: string; cerrar(): Promise<void> }>;
+}
+
+/**
+ * `undefined` = el paquete no está, o es una versión sin el puente (sin la subruta, o sin
+ * `arrancarServidor`): quien llama lo dice con su texto fijo.
+ */
+export async function cargarServidorRemoto(
+  importar: (nombre: string) => Promise<unknown> = (n) => import(n)
+): Promise<ModuloServidorRemoto | undefined> {
+  const nombre: string = NOMBRE_DEL_SERVIDOR;
+  try {
+    const m = (await importar(nombre)) as Partial<ModuloServidorRemoto> | null;
+    return m !== null && typeof m === "object" && typeof m.arrancarServidor === "function" ? (m as ModuloServidorRemoto) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Motivos del relé que acaban la sesión, con texto FIJO: lo que el relé diga no cruza el cable. */
 const MOTIVOS: Record<string, string> = {
   version: "la versión del protocolo no casa: actualiza xonecode",
