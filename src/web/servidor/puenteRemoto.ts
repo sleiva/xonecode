@@ -4,8 +4,15 @@
  * misma ráfaga al entrar, sigue a la consola en foco cuando se muda y cuenta como «hay alguien
  * delante» igual que una pestaña. Lo que sale pasa `filtrarSalida`; lo que entra,
  * `validarEntradaDelMovil`, y se despacha por las mismas funciones que `POST /accion`.
+ *
+ * **Por la vía ngrok, el puente va a la dirección de un TÚNEL** (`tunel`), que se abre al
+ * encender y se cierra en todo final —apagar, un canal que se cierra solo, la caída del propio
+ * túnel—, salvo al REVOCAR: la sala y el secreto son nuevos y la dirección pública la misma, y
+ * un segundo ngrok de la misma cuenta lo rechazaría el propio ngrok. Su caída se escucha por
+ * IDENTIDAD del túnel y no por generación, porque sobrevive a la generación que lo abrió.
  */
-import type { CanalRemoto, PuenteRemotoPort } from "../../core/ports.js";
+import type { CanalRemoto, PuenteRemotoPort, TunelAbierto } from "../../core/ports.js";
+import { MOTIVOS_DEL_TUNEL } from "../../core/tunel.js";
 import { ajustarATope, filtrarSalida, TOPE_DE_SALIDA_BYTES, validarEntradaDelMovil, type EntradaDelMovil } from "../../core/remoto.js";
 import type { Sumidero } from "./transporte.js";
 
@@ -21,6 +28,12 @@ export interface OpcionesDeSesionRemota {
   /** `undefined` = el paquete no está instalado. Solo se llama al encender. */
   puerto: () => Promise<PuenteRemotoPort | undefined>;
   servidor: () => string;
+  /**
+   * El túnel de ESTE encendido, preguntado en cada `encender`: `undefined` = vía servidor
+   * (`servidor()`), y con valor el puente va a `TunelAbierto.servidor`. Un fallo suyo cruza solo
+   * si su texto es de `MOTIVOS_DEL_TUNEL`.
+   */
+  tunel?: () => { abrir(): Promise<TunelAbierto> } | undefined;
   engancharCliente(sumidero: Sumidero): void;
   soltarCliente(sumidero: Sumidero): void;
   despachar(mensaje: EntradaDelMovil): void;
@@ -33,7 +46,8 @@ export interface OpcionesDeSesionRemota {
 export interface SesionRemota {
   encender(): Promise<void>;
   revocar(): Promise<void>;
-  apagar(): void;
+  /** Resuelve cuando el túnel, si lo había, está cerrado: el cierre de la consola lo espera. */
+  apagar(): Promise<void>;
   estado(): EstadoDeSesionRemota;
 }
 
@@ -42,12 +56,26 @@ export const MOTIVO_NO_ABRIO = "no se pudo abrir la sesión remota";
 const CLASE_LEGIBLE = /^[a-zA-Z.]{1,32}$/;
 export const SIN_PAQUETE = "la sesión remota no está disponible en esta instalación";
 
+const MOTIVOS_FIJOS_DEL_TUNEL: ReadonlySet<string> = new Set(Object.values(MOTIVOS_DEL_TUNEL));
+/** Lo que ngrok o el sistema digan no cruza: solo un texto nuestro, o el genérico. */
+const motivoFijoDelTunel = (texto: unknown): string =>
+  typeof texto === "string" && MOTIVOS_FIJOS_DEL_TUNEL.has(texto) ? texto : MOTIVOS_DEL_TUNEL.otro;
+
 export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
   let estado: EstadoDeSesionRemota = { estado: "apagada" };
   let canal: CanalRemoto | undefined;
   let url: string | undefined;
   let reconectando = false;
   const moviles = new Map<string, Sumidero>();
+  /** El túnel abierto, si lo hay. Es de la SESIÓN y no de una generación: revocar lo conserva. */
+  let tunel: TunelAbierto | undefined;
+  let cierreDelTunel: Promise<void> = Promise.resolve();
+  const cerrarTunel = (): Promise<void> => {
+    const t = tunel;
+    tunel = undefined;
+    if (t !== undefined) cierreDelTunel = t.cerrar().catch(() => {});
+    return cierreDelTunel;
+  };
 
   const poner = (e: EstadoDeSesionRemota) => {
     estado = e;
@@ -71,7 +99,7 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
 
   /** `anunciar: false` solo para revocar: el apagado de en medio no es un estado que la consola
    *  deba ver (su diálogo se cierra al pasar a «apagada»), y le sigue «abriendo» en el acto. */
-  const apagar = (anunciar = true) => {
+  const apagar = (anunciar = true): Promise<void> => {
     generacion += 1;
     abriendo = false;
     soltarTodos();
@@ -81,6 +109,22 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
     reconectando = false;
     if (anunciar) poner({ estado: "apagada" });
     else estado = { estado: "apagada" };
+    // Revocar (`anunciar: false`) conserva el túnel: el `encender` que le sigue lo reutiliza.
+    return anunciar ? cerrarTunel() : cierreDelTunel;
+  };
+
+  /** Lo que hace la caída de ESTE túnel, si sigue siendo el de la sesión. */
+  const alCaerDe = (este: TunelAbierto) => (motivo: string) => {
+    if (tunel !== este) return;
+    tunel = undefined;
+    generacion += 1;
+    abriendo = false;
+    soltarTodos();
+    canal?.cerrar();
+    canal = undefined;
+    url = undefined;
+    reconectando = false;
+    poner({ estado: "error", motivo: motivoFijoDelTunel(motivo) });
   };
 
   const encender = async () => {
@@ -94,10 +138,38 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
       if (mia !== generacion) return;
       if (puerto === undefined) {
         abriendo = false;
+        void cerrarTunel();
         poner({ estado: "error", motivo: SIN_PAQUETE });
         return;
       }
-      const abierto = await puerto.abrir(o.servidor(), {
+      let servidor: string;
+      const conTunel = o.tunel?.();
+      if (conTunel === undefined) {
+        // La vía cambió desde que se abrió el que quedaba de un revocar: ya no es de nadie.
+        void cerrarTunel();
+        servidor = o.servidor();
+      } else {
+        if (tunel === undefined) {
+          let nuevo: TunelAbierto;
+          try {
+            nuevo = await conTunel.abrir();
+          } catch (error) {
+            if (mia !== generacion) return;
+            abriendo = false;
+            poner({ estado: "error", motivo: motivoFijoDelTunel((error as { message?: unknown } | null)?.message) });
+            return;
+          }
+          if (mia !== generacion) {
+            // Se apagó (o revocó) mientras ngrok arrancaba: este túnel ya no es de nadie.
+            void nuevo.cerrar().catch(() => {});
+            return;
+          }
+          tunel = nuevo;
+          nuevo.alCaer(alCaerDe(nuevo));
+        }
+        servidor = tunel.servidor;
+      }
+      const abierto = await puerto.abrir(servidor, {
         alEstado: (e) => {
           if (mia !== generacion) return;
           if (e.estado === "abierta") {
@@ -115,6 +187,7 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
             soltarTodos();
             canal = undefined;
             url = undefined;
+            void cerrarTunel();
             poner(e.motivo === undefined ? { estado: "apagada" } : { estado: "error", motivo: e.motivo });
           }
         },
@@ -169,6 +242,7 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
       if (mia !== generacion) return;
       abriendo = false;
       canal = undefined;
+      void cerrarTunel();
       // Al cable no cruza un mensaje de Node (lleva rutas de la máquina): solo su `code`.
       const codigo = (error as { code?: unknown } | null)?.code;
       poner({ estado: "error", motivo: typeof codigo === "string" ? codigo : MOTIVO_NO_ABRIO });

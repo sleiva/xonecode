@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { PuenteRemotoEnMemoria } from "../../core/ports.js";
+import { PuenteRemotoEnMemoria, TunelEnMemoria, type TunelPort } from "../../core/ports.js";
+import { MOTIVOS_DEL_TUNEL } from "../../core/tunel.js";
 import { crearSesionRemota, type EstadoDeSesionRemota } from "./puenteRemoto.js";
 import type { Sumidero } from "./transporte.js";
 
-function montar(topeDeSalida?: number) {
+function montar(topeDeSalida?: number, tunel?: () => TunelPort | undefined) {
   const puerto = new PuenteRemotoEnMemoria();
   const enganchados = new Set<Sumidero>();
   const despachados: unknown[] = [];
@@ -18,6 +19,14 @@ function montar(topeDeSalida?: number) {
     informar: (t) => void informados.push(t),
     alCambiar: (e) => void estados.push(e),
     ...(topeDeSalida === undefined ? {} : { topeDeSalida }),
+    ...(tunel === undefined
+      ? {}
+      : {
+          tunel: () => {
+            const t = tunel();
+            return t === undefined ? undefined : { abrir: () => t.abrir({}) };
+          },
+        }),
   });
   return { puerto, enganchados, despachados, informados, estados, sesion };
 }
@@ -263,5 +272,148 @@ describe("la sesión remota", () => {
     expect(enviado.actos.length).toBeGreaterThan(0);
     expect(enviado.actos.length).toBeLessThan(50);
     expect(enviado.actos.at(-1)!.texto).toBe("mensaje 49");
+  });
+
+  describe("por el túnel (vía ngrok)", () => {
+    function conTunel(via: () => "ngrok" | "servidor" = () => "ngrok") {
+      const tunel = new TunelEnMemoria();
+      const p = montar(undefined, () => (via() === "ngrok" ? tunel : undefined));
+      return { ...p, tunel };
+    }
+
+    it("encender abre el túnel y el puente va a SU dirección", async () => {
+      const p = conTunel();
+      await p.sesion.encender();
+      expect(p.tunel.aperturas).toHaveLength(1);
+      expect(p.puerto.aperturas).toEqual(["wss://tunel.example/ws"]);
+      p.puerto.abierta("https://tunel.example/r/S#K");
+      expect(p.sesion.estado()).toEqual({ estado: "activa", url: "https://tunel.example/r/S#K", moviles: 0 });
+    });
+
+    it("sin túnel (vía servidor) no se toca: el puente va al servidor de siempre", async () => {
+      const p = conTunel(() => "servidor");
+      await p.sesion.encender();
+      expect(p.tunel.aperturas).toHaveLength(0);
+      expect(p.puerto.aperturas).toEqual(["ws://127.0.0.1:8787/ws"]);
+    });
+
+    it("apagar cierra el túnel, y la promesa espera a que esté cerrado", async () => {
+      const p = conTunel();
+      await p.sesion.encender();
+      p.puerto.abierta();
+      await p.sesion.apagar();
+      expect(p.tunel.cerrados).toBe(1);
+      expect(p.puerto.cerrados).toBe(1);
+      expect(p.sesion.estado()).toEqual({ estado: "apagada" });
+    });
+
+    it("revocar CONSERVA el túnel: no se abre otro ngrok, la sala sí es nueva", async () => {
+      const p = conTunel();
+      await p.sesion.encender();
+      p.puerto.abierta("https://tunel.example/r/S#K");
+      await p.sesion.revocar();
+      expect(p.tunel.aperturas).toHaveLength(1);
+      expect(p.tunel.cerrados).toBe(0);
+      expect(p.puerto.aperturas).toEqual(["wss://tunel.example/ws", "wss://tunel.example/ws"]);
+      p.puerto.abierta("https://tunel.example/r/T#L");
+      expect(p.sesion.estado()).toMatchObject({ estado: "activa", url: "https://tunel.example/r/T#L" });
+    });
+
+    it("tras revocar, la caída del túnel (que es el MISMO) sigue llegando", async () => {
+      const p = conTunel();
+      await p.sesion.encender();
+      p.puerto.abierta();
+      await p.sesion.revocar();
+      p.puerto.abierta();
+      p.puerto.presencia("m1");
+      p.tunel.caer(MOTIVOS_DEL_TUNEL.seCerro);
+      expect(p.sesion.estado()).toEqual({ estado: "error", motivo: MOTIVOS_DEL_TUNEL.seCerro });
+      expect(p.enganchados.size).toBe(0);
+      expect(p.puerto.canales.at(-1)?.cerrado).toBe(true);
+    });
+
+    it("la caída del túnel cierra el canal y deja el error con el motivo fijo", async () => {
+      const p = conTunel();
+      await p.sesion.encender();
+      p.puerto.abierta();
+      p.puerto.presencia("m1");
+      p.tunel.caer(MOTIVOS_DEL_TUNEL.seCerro);
+      expect(p.sesion.estado()).toEqual({ estado: "error", motivo: MOTIVOS_DEL_TUNEL.seCerro });
+      expect(p.puerto.canales.at(-1)?.cerrado).toBe(true);
+      expect(p.enganchados.size).toBe(0);
+    });
+
+    it("una caída con un texto que NO es nuestro no cruza: sale el genérico", async () => {
+      const p = conTunel();
+      await p.sesion.encender();
+      p.puerto.abierta();
+      p.tunel.caer("ERR_NGROK_4018 authtoken 2abcDEF… en /Users/x/.config/ngrok/ngrok.yml");
+      expect(p.sesion.estado()).toEqual({ estado: "error", motivo: MOTIVOS_DEL_TUNEL.otro });
+    });
+
+    it("un fallo al abrir el túnel: error con su motivo si es nuestro, y el puente ni se abre", async () => {
+      const p = conTunel();
+      p.tunel.fallo = MOTIVOS_DEL_TUNEL.autenticacion;
+      await p.sesion.encender();
+      expect(p.sesion.estado()).toEqual({ estado: "error", motivo: MOTIVOS_DEL_TUNEL.autenticacion });
+      expect(p.puerto.aperturas).toEqual([]);
+      p.tunel.fallo = "spawn /opt/homebrew/bin/ngrok EACCES";
+      await p.sesion.encender();
+      expect(p.sesion.estado()).toEqual({ estado: "error", motivo: MOTIVOS_DEL_TUNEL.otro });
+    });
+
+    it("un túnel que llega TARDE (se apagó mientras abría) se cierra y no abre el puente", async () => {
+      let soltar!: () => void;
+      const real = new TunelEnMemoria();
+      const lento: TunelPort = {
+        abrir: async (o) => {
+          await new Promise<void>((r) => (soltar = r));
+          return real.abrir(o);
+        },
+      };
+      const p = montar(undefined, () => lento);
+      const encendido = p.sesion.encender();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(p.sesion.estado()).toEqual({ estado: "abriendo" });
+      void p.sesion.apagar();
+      soltar();
+      await encendido;
+      await Promise.resolve();
+      expect(real.cerrados).toBe(1);
+      expect(p.puerto.aperturas).toEqual([]);
+      expect(p.sesion.estado()).toEqual({ estado: "apagada" });
+    });
+
+    it("si el puente falla tras abrir el túnel, el túnel se cierra", async () => {
+      const tunel = new TunelEnMemoria();
+      const p = montar(undefined, () => tunel);
+      p.puerto.abrir = async () => {
+        throw Object.assign(new Error("connect ECONNREFUSED 127.0.0.1"), { code: "ECONNREFUSED" });
+      };
+      await p.sesion.encender();
+      expect(p.sesion.estado()).toEqual({ estado: "error", motivo: "ECONNREFUSED" });
+      expect(tunel.cerrados).toBe(1);
+    });
+
+    it("un canal que se cierra solo también cierra el túnel", async () => {
+      const p = conTunel();
+      await p.sesion.encender();
+      p.puerto.abierta();
+      p.puerto.cerrada("sala caducada");
+      await Promise.resolve();
+      expect(p.tunel.cerrados).toBe(1);
+    });
+
+    it("si al encender ya no toca túnel (la vía cambió), el que quedaba de un revocar se cierra", async () => {
+      let via: "ngrok" | "servidor" = "ngrok";
+      const p = conTunel(() => via);
+      await p.sesion.encender();
+      p.puerto.abierta();
+      via = "servidor";
+      await p.sesion.revocar();
+      expect(p.tunel.cerrados).toBe(1);
+      expect(p.puerto.aperturas.at(-1)).toBe("ws://127.0.0.1:8787/ws");
+    });
   });
 });
