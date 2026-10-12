@@ -1161,7 +1161,8 @@ export class TunelEnMemoria implements TunelPort {
   servidor = "wss://tunel.example/ws";
   /** Con valor, la próxima apertura LANZA con este motivo (y se consume). */
   fallo: string | undefined;
-  private readonly caidas: ((motivo: string) => void)[][] = [];
+  /** Un registro por túnel abierto: cerrado o caído ya no avisa, como el real. */
+  private readonly tuneles: { escuchas: ((motivo: string) => void)[]; cerrado: boolean; caido: string | undefined }[] = [];
 
   async abrir(o: { dominio?: string }): Promise<TunelAbierto> {
     this.aperturas.push({ ...o });
@@ -1170,24 +1171,33 @@ export class TunelEnMemoria implements TunelPort {
       this.fallo = undefined;
       throw new Error(motivo);
     }
-    const escuchas: ((motivo: string) => void)[] = [];
-    this.caidas.push(escuchas);
-    let cerrado = false;
+    const registro = { escuchas: [] as ((motivo: string) => void)[], cerrado: false, caido: undefined as string | undefined };
+    this.tuneles.push(registro);
     return {
       servidor: this.servidor,
       cerrar: async () => {
-        if (cerrado) return;
-        cerrado = true;
+        if (registro.cerrado) return;
+        registro.cerrado = true;
+        registro.escuchas.length = 0;
         this.cerrados += 1;
       },
       alCaer: (f) => {
-        escuchas.push(f);
+        if (registro.cerrado) return;
+        if (registro.caido !== undefined) {
+          const motivo = registro.caido;
+          queueMicrotask(() => f(motivo));
+          return;
+        }
+        registro.escuchas.push(f);
       },
     };
   }
 
-  /** Lo que haría ngrok al salir solo; sin índice, el túnel MÁS RECIENTE. */
+  /** Lo que haría ngrok al salir solo; sin índice, el túnel MÁS RECIENTE. Una vez por túnel. */
   caer(motivo: string, tunel?: number): void {
-    for (const f of (tunel === undefined ? this.caidas.at(-1) : this.caidas[tunel]) ?? []) f(motivo);
+    const registro = tunel === undefined ? this.tuneles.at(-1) : this.tuneles[tunel];
+    if (registro === undefined || registro.cerrado || registro.caido !== undefined) return;
+    registro.caido = motivo;
+    for (const f of registro.escuchas.splice(0)) f(motivo);
   }
 }

@@ -233,4 +233,21 @@ describe("TunelEnMemoria", () => {
     await expect(t.abrir({})).rejects.toThrow("no instalado");
     await expect(t.abrir({})).resolves.toBeDefined();
   });
+
+  it("como el real: caer avisa UNA vez, y nunca después de cerrar", async () => {
+    const t = new TunelEnMemoria();
+    const a = await t.abrir({});
+    const vistas: string[] = [];
+    a.alCaer((m) => vistas.push(m));
+    t.caer("uno");
+    t.caer("dos");
+    expect(vistas).toEqual(["uno"]);
+
+    const b = await t.abrir({});
+    const deB: string[] = [];
+    b.alCaer((m) => deB.push(m));
+    await b.cerrar();
+    t.caer("tras cerrar");
+    expect(deB).toEqual([]);
+  });
 });
