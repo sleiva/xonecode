@@ -8899,3 +8899,56 @@ WebKit con el perfil «iPhone 13». Modelo `deepseek/deepseek-flash`, motor True
 Lo que se limpió: el enlace simbólico, los dos proyectos de prueba, la tarea sembrada (descartada por el cable y el
 índice restaurado byte a byte) y el `settings.json`, restaurado byte a byte; el relé, la consola y los navegadores,
 parados. Lo único que cambió en la casa: `cloudstudio-oauth.json`, que el vestíbulo refresca al traer el listado.
+
+## El relé y la web móvil viajan dentro de xonecode, y la vía por omisión es ngrok (13-10-2026)
+
+Lo pedido: que quien instala xonecode pueda encender la sesión remota sin nada más que ngrok. Diseño en
+`docs/superpowers/specs/2026-10-13-rele-dentro-de-xonecode-design.md`.
+
+**El hueco.** `@xone/xonecode-remoto` (el relé, subruta `./servidor`, y la web móvil en `web/`) vive en `xonecode-server`
+y no está publicado (404 en npm, `publishConfig.access: restricted`). xonecode lo cargaba por `import()` dinámico de un
+nombre, así que solo funcionaba con un enlace simbólico a mano: el xonecode de npm, público, no podía encender la sesión
+remota. Y la vía por omisión, «servidor», apuntaba a `wss://remoto.xone.dev/ws`, que no contesta.
+
+**Por qué una copia construida en el repo y no otra cosa.** Tres opciones: (1) la copia en `vendor/xonecode-remoto/`,
+declarada `file:` y nombrada en `bundleDependencies`; (2) publicar el paquete aparte y que Ajustes ofrezca instalarlo;
+(3) dependencia opcional. La 2 y la 3 dependen de publicar en npm con los permisos de la organización, y la 3 además
+falla en silencio: una opcional que no se instala no da error, y la sesión remota diría «no instalado» sin saber por qué.
+Copiar el paquete a `dist/` en el build e importarlo por ruta relativa también se descartó: toca el cargador y la regla
+de que el nombre vive en UN fichero. Con la 1 el cargador no cambia (sigue perezoso: apagada la sesión, no se carga) y lo
+único que cambia es que el paquete está. El precio, aceptado: el código del relé y de la web móvil sale publicado con
+xonecode.
+
+**La medida que la hace posible (npm 10.9).** Una dependencia `file:` que en desarrollo es un ENLACE SIMBÓLICO en
+`node_modules` entra ENTERA en el tarball si está en `bundleDependencies`: `npm pack` listó
+`node_modules/@xone/xonecode-remoto/{package.json,dist/…,web/index.html,web/assets/…}`, y también `node_modules/ws`
+(8.21.3, el de xonecode): npm empaqueta las dependencias de lo empaquetado. `npm i -g` del tarball deja una carpeta de
+verdad, no un enlace, en `lib/node_modules/xonecode/node_modules/@xone/xonecode-remoto`. `origen.json` no viaja en el
+tarball (no está en los `files` del paquete): se queda en el repo, que es donde sirve.
+
+**Cómo se renueva, y su límite.** `npm run remoto:traer` corre `npm test` de `xonecode-server` (que compila el paquete y
+copia la web) y, solo si pasa, sustituye la copia ENTERA y escribe `origen.json` con el commit y si el árbol estaba sucio.
+`src/vendorRemoto.test.ts` comprueba la forma sin red ni el otro repo. Lo que no se puede comprobar en `npm test` es que la
+copia esté AL DÍA: eso exige el otro repo, y lo dice `origen.json`.
+
+**Por qué la vía por omisión pasa a ngrok.** Con el servidor de XOne sin desplegar, la omisión no llevaba a ninguna
+parte. Sin `via` en `settings.json` ahora es «ngrok», salvo que haya un `remoto.servidor` escrito a mano: quien lo
+escribió quiere su servidor. Un `via` explícito manda siempre, y el servidor manda la vía EN VIGOR en cada mensaje
+`remoto` (callarla dejaba al cliente pintar como ngrok una vía «servidor»). Ajustes pone «Túnel local (ngrok)» primero y
+el texto de «Servidor de XOne» ya no dice «no necesitas instalar nada».
+
+**La prueba real, desde el tarball.** `npm pack` en la rama (su `prepack` construye: 6,5 MB, «bundled deps: 2») e
+instalado con `npm i -g --prefix <temporal>`. Desde la carpeta del xonecode INSTALADO, `import("@xone/xonecode-remoto")` y
+`import("@xone/xonecode-remoto/servidor")` resolvieron dentro de su `node_modules`, y `ws` resuelto desde el paquete fue el
+`node_modules/ws` de xonecode. `settings.json` respaldado con su sha256; no tenía `remoto`, así que no hubo que quitar
+nada: el interruptor se puso con `XONECODE_REMOTO=1`. La consola web del binario instalado (`--web --no-abrir --puerto`,
+cwd en un temporal) recibió `POST /accion {clase:"remoto", accion:"encender"}` como lo manda el escritorio: por `/eventos`
+llegaron `apagada` → `abriendo` → `activa` con `via: "ngrok"` y la URL `https://<…>.ngrok-free.app/r/<sala>#<secreto>`
+en 1,26 s desde el `POST`; ngrok 3.36.1 corría como hijo de la consola en su propio grupo, publicando el puente en un
+puerto de loopback. Un navegador con perfil de iPhone abrió la URL: el aviso de ngrok (`ERR_NGROK_6024`, «Visit Site»),
+y tras pulsarlo la web móvil («xonecode remoto») conectada —punto verde, «sin sesión» porque el vestíbulo no tenía
+proyecto abierto— y el escritorio contó `moviles: 1`. La web borra el fragmento con `replaceState` tras leerlo, así que la
+URL sin `#` al final no es pérdida del secreto. «Apagar» por el mismo camino: `activa` → `apagada`, el móvil pasó a «la
+sesión remota se cerró», y sin proceso ngrok ni el puerto del puente. La consola cerró con `SIGINT`. Limpio: prefijo y
+tarball borrados, `settings.json` idéntico (`cmp` y el mismo sha256). Lo que tocó en la casa es lo de cualquier arranque:
+`cloudstudio-oauth.json` (el vestíbulo refresca el listado) y la marca `agentes/.semilla.json` (ningún `.md` cambió).
