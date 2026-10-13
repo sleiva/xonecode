@@ -12,8 +12,8 @@ type Enviar = (
 ) => Promise<unknown> | void;
 
 const VIAS: readonly { via: Via; etiqueta: string; que: string }[] = [
-  { via: "servidor", etiqueta: "Servidor de XOne", que: "La sesión pasa por el servidor de XOne: no necesitas instalar nada" },
   { via: "ngrok", etiqueta: "Túnel local (ngrok)", que: "La sesión sale por un túnel de ngrok de esta máquina: necesita ngrok instalado y su authtoken" },
+  { via: "servidor", etiqueta: "Servidor de XOne", que: "La sesión pasa por un servidor del relé publicado (`remoto.servidor`); hoy no hay uno de XOne en marcha" },
 ];
 
 /** Qué le falta a ngrok para encender, o `undefined` si está listo (o no se sabe y no se bloquea). */
@@ -118,7 +118,7 @@ export function SesionRemota({
                 <>
                   <div className={estilos.pista} role="group" aria-label="vía de la sesión remota">
                     {VIAS.map(({ via, etiqueta, que }) => {
-                      const puesta = (remoto.via ?? "servidor") === via;
+                      const puesta = (remoto.via ?? "ngrok") === via;
                       return (
                         <button
                           key={via}

@@ -23,10 +23,10 @@ describe("la sesión remota en la consola", () => {
   describe("la vía", () => {
     const LISTO = { instalado: true, cuenta: true };
 
-    it("el conmutador pone aria-pressed en las dos mitades y por omisión rige el servidor", () => {
+    it("el conmutador pone aria-pressed en las dos mitades y por omisión rige ngrok", () => {
       render(<SesionRemota remoto={{ estado: "apagada" }} enviar={vi.fn()} abierto />);
-      expect(screen.getByRole("button", { name: "Servidor de XOne" }).getAttribute("aria-pressed")).toBe("true");
-      expect(screen.getByRole("button", { name: "Túnel local (ngrok)" }).getAttribute("aria-pressed")).toBe("false");
+      expect(screen.getByRole("button", { name: "Servidor de XOne" }).getAttribute("aria-pressed")).toBe("false");
+      expect(screen.getByRole("button", { name: "Túnel local (ngrok)" }).getAttribute("aria-pressed")).toBe("true");
     });
 
     it("pulsar la otra manda la vía; pulsar la puesta no manda nada", () => {

@@ -162,7 +162,8 @@ export function remotoEnVigor(
   return {
     habilitado: entorno.XONECODE_REMOTO === "1" || ajustes?.habilitado === true,
     servidor: ajustes?.servidor ?? SERVIDOR_REMOTO_POR_OMISION,
-    via: ajustes?.via ?? "servidor",
+    // Sin `via`: ngrok (no hay aún un relé de XOne en marcha), salvo que se haya escrito `servidor` a mano.
+    via: ajustes?.via ?? (ajustes?.servidor !== undefined ? "servidor" : "ngrok"),
     ...(dominio !== undefined ? { dominio } : {}),
   };
 }

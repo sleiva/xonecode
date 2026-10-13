@@ -4457,6 +4457,11 @@ describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
   it("al cerrar, la sesión remota encendida se CIERRA (cerrarRemoto cableado en el arranque real)", async () => {
     const previo = process.env.XONECODE_REMOTO;
     process.env.XONECODE_REMOTO = "1";
+    // La vía por omisión es ngrok: este test prueba el cierre del puente del SERVIDOR, así que la dice.
+    const ruta = rutaSettings();
+    const settingsPrevios = existsSync(ruta) ? readFileSync(ruta, "utf8") : undefined;
+    mkdirSync(dirname(ruta), { recursive: true });
+    writeFileSync(ruta, JSON.stringify({ entornos: [], remoto: { via: "servidor" } }));
     try {
       const puente = new PuenteRemotoEnMemoria();
       const rutas = new Map<string, ManejadorRuta>();
@@ -4489,6 +4494,8 @@ describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
     } finally {
       if (previo === undefined) delete process.env.XONECODE_REMOTO;
       else process.env.XONECODE_REMOTO = previo;
+      if (settingsPrevios === undefined) rmSync(ruta, { force: true });
+      else writeFileSync(ruta, settingsPrevios);
     }
   });
 
