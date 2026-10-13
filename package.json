@@ -21,6 +21,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "remoto:traer": "node scripts/traerRemoto.mjs",
     "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/bin.js && npm run build:web",
     "build:web": "npm run build --workspace apps/web",
     "prepack": "npm run build",
@@ -46,6 +47,7 @@
     "@langchain/openai": "1.5.5",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@truefoundry/trueforge-core": "0.2.1",
+    "@xone/xonecode-remoto": "file:vendor/xonecode-remoto",
     "acorn": "^8.19.0",
     "better-sqlite3": "13.0.3",
     "deepagents": "^1.14.0",
@@ -63,6 +65,9 @@
     "xone-linter": "^1.5.0",
     "zod": "4.5.4"
   },
+  "bundleDependencies": [
+    "@xone/xonecode-remoto"
+  ],
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
     "@types/micromatch": "4.0.10",

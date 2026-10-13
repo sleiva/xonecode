@@ -1,0 +1,41 @@
+{
+  "name": "@xone/xonecode-remoto",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./servidor": {
+      "types": "./dist/servidor/servidor.d.ts",
+      "import": "./dist/servidor/servidor.js"
+    }
+  },
+  "files": [
+    "dist",
+    "web"
+  ],
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.12"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "copiar-web": "node scripts/copiar-web.mjs",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "publishConfig": {
+    "access": "restricted"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sleiva/xonecode-server.git",
+    "directory": "packages/remoto"
+  }
+}
