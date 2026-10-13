@@ -12,7 +12,7 @@ describe("la sesión remota en la consola", () => {
 
   it("apagada: el botón solo abre el diálogo y «Encender» la enciende", () => {
     const enviar = vi.fn(async () => {});
-    render(<SesionRemota remoto={{ estado: "apagada" }} enviar={enviar} />);
+    render(<SesionRemota remoto={{ estado: "apagada", via: "servidor" }} enviar={enviar} />);
     fireEvent.click(screen.getByRole("button", { name: "Sesión remota" }));
     expect(enviar).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeTruthy();
@@ -27,6 +27,12 @@ describe("la sesión remota en la consola", () => {
       render(<SesionRemota remoto={{ estado: "apagada" }} enviar={vi.fn()} abierto />);
       expect(screen.getByRole("button", { name: "Servidor de XOne" }).getAttribute("aria-pressed")).toBe("false");
       expect(screen.getByRole("button", { name: "Túnel local (ngrok)" }).getAttribute("aria-pressed")).toBe("true");
+    });
+
+    it("una vía ausente se pinta como ngrok y aplica sus comprobaciones", () => {
+      render(<SesionRemota remoto={{ estado: "apagada" }} enviar={vi.fn()} abierto />);
+      expect(screen.getByRole("button", { name: "Túnel local (ngrok)" }).getAttribute("aria-pressed")).toBe("true");
+      expect(screen.queryByText(/hoy no hay uno de XOne en marcha/)).toBeNull();
     });
 
     it("pulsar la otra manda la vía; pulsar la puesta no manda nada", () => {
@@ -73,7 +79,7 @@ describe("la sesión remota en la consola", () => {
       );
       expect(screen.getByText(/Sale por un túnel de ngrok/)).toBeTruthy();
       expect(screen.getByText(/Visit Site/)).toBeTruthy();
-      rerender(<SesionRemota remoto={{ estado: "activa", url: "https://x/#K", moviles: 1 }} enviar={vi.fn()} abierto />);
+      rerender(<SesionRemota remoto={{ estado: "activa", url: "https://x/#K", moviles: 1, via: "servidor" }} enviar={vi.fn()} abierto />);
       expect(screen.getByText(/Sale por el servidor de XOne/)).toBeTruthy();
       expect(screen.queryByText(/Visit Site/)).toBeNull();
     });
@@ -154,7 +160,7 @@ describe("la sesión remota en la consola", () => {
   });
 
   it("revocar (activa → abriendo → activa) no cierra el diálogo", () => {
-    const { rerender } = render(<SesionRemota remoto={{ estado: "activa", url: "https://r/r/S#K", moviles: 1 }} enviar={vi.fn()} abierto />);
+    const { rerender } = render(<SesionRemota remoto={{ estado: "activa", url: "https://r/r/S#K", moviles: 1, via: "servidor" }} enviar={vi.fn()} abierto />);
     rerender(<SesionRemota remoto={{ estado: "abriendo" }} enviar={vi.fn()} />);
     rerender(<SesionRemota remoto={{ estado: "activa", url: "https://r/r/T#L", moviles: 0 }} enviar={vi.fn()} />);
     expect(screen.getByRole("dialog")).toBeTruthy();

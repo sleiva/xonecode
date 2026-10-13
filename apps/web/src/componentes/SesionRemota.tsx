@@ -18,7 +18,7 @@ const VIAS: readonly { via: Via; etiqueta: string; que: string }[] = [
 
 /** Qué le falta a ngrok para encender, o `undefined` si está listo (o no se sabe y no se bloquea). */
 function faltaDeNgrok(remoto: EstadoRemoto): string | undefined {
-  if (remoto.via !== "ngrok") return undefined;
+  if ((remoto.via ?? "ngrok") !== "ngrok") return undefined;
   if (remoto.ngrok === undefined) return "ngrok todavía no se ha medido en esta máquina.";
   if (!remoto.ngrok.instalado) return "ngrok no está instalado en esta máquina.";
   if (!remoto.ngrok.cuenta) return "A ngrok le falta el authtoken de tu cuenta.";
@@ -182,9 +182,9 @@ export function SesionRemota({
                   </p>
                   {remoto.estado === "reconectando" ? <p>Reconectando…</p> : null}
                   <p className={estilos.aviso}>
-                    {remoto.via === "ngrok" ? "Sale por un túnel de ngrok de esta máquina." : "Sale por el servidor de XOne."}
+                    {(remoto.via ?? "ngrok") === "ngrok" ? "Sale por un túnel de ngrok de esta máquina." : "Sale por el servidor de XOne."}
                   </p>
-                  {remoto.via === "ngrok" ? (
+                  {(remoto.via ?? "ngrok") === "ngrok" ? (
                     <p className={estilos.aviso}>
                       La primera vez, el móvil enseña un aviso de ngrok: pulsa «Visit Site» para continuar.
                     </p>
