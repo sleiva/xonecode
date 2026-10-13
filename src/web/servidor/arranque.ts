@@ -1042,8 +1042,9 @@ export function montarRutas(
       ...("url" in e ? { url: e.url } : {}),
       ...("moviles" in e ? { moviles: e.moviles } : {}),
       ...("motivo" in e ? { motivo: e.motivo } : {}),
-      // Ausente es «servidor»: así un mensaje de la vía de siempre no cambia de forma.
-      ...(ajustes?.via === "ngrok" ? { via: "ngrok" as const } : {}),
+      // La vía EN VIGOR, siempre (`remotoEnVigor` ya resolvió la omisión): el cliente toma una
+      // ausente por ngrok, así que callarla con «servidor» lo pintaría como ngrok.
+      ...(ajustes?.via !== undefined ? { via: ajustes.via } : {}),
       ...(fotoDeNgrok === undefined
         ? {}
         : {

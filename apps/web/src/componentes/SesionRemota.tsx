@@ -12,13 +12,13 @@ type Enviar = (
 ) => Promise<unknown> | void;
 
 const VIAS: readonly { via: Via; etiqueta: string; que: string }[] = [
-  { via: "servidor", etiqueta: "Servidor de XOne", que: "La sesión pasa por el servidor de XOne: no necesitas instalar nada" },
   { via: "ngrok", etiqueta: "Túnel local (ngrok)", que: "La sesión sale por un túnel de ngrok de esta máquina: necesita ngrok instalado y su authtoken" },
+  { via: "servidor", etiqueta: "Servidor de XOne", que: "La sesión pasa por un servidor del relé publicado: necesita uno configurado en settings.json como remoto.servidor" },
 ];
 
 /** Qué le falta a ngrok para encender, o `undefined` si está listo (o no se sabe y no se bloquea). */
 function faltaDeNgrok(remoto: EstadoRemoto): string | undefined {
-  if (remoto.via !== "ngrok") return undefined;
+  if ((remoto.via ?? "ngrok") !== "ngrok") return undefined;
   if (remoto.ngrok === undefined) return "ngrok todavía no se ha medido en esta máquina.";
   if (!remoto.ngrok.instalado) return "ngrok no está instalado en esta máquina.";
   if (!remoto.ngrok.cuenta) return "A ngrok le falta el authtoken de tu cuenta.";
@@ -118,7 +118,7 @@ export function SesionRemota({
                 <>
                   <div className={estilos.pista} role="group" aria-label="vía de la sesión remota">
                     {VIAS.map(({ via, etiqueta, que }) => {
-                      const puesta = (remoto.via ?? "servidor") === via;
+                      const puesta = (remoto.via ?? "ngrok") === via;
                       return (
                         <button
                           key={via}
@@ -182,9 +182,9 @@ export function SesionRemota({
                   </p>
                   {remoto.estado === "reconectando" ? <p>Reconectando…</p> : null}
                   <p className={estilos.aviso}>
-                    {remoto.via === "ngrok" ? "Sale por un túnel de ngrok de esta máquina." : "Sale por el servidor de XOne."}
+                    {(remoto.via ?? "ngrok") === "ngrok" ? "Sale por un túnel de ngrok de esta máquina." : "Sale por el servidor de XOne."}
                   </p>
-                  {remoto.via === "ngrok" ? (
+                  {(remoto.via ?? "ngrok") === "ngrok" ? (
                     <p className={estilos.aviso}>
                       La primera vez, el móvil enseña un aviso de ngrok: pulsa «Visit Site» para continuar.
                     </p>

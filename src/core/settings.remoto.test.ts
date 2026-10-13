@@ -24,11 +24,13 @@ describe("el interruptor de la sesión remota", () => {
   });
 
   it("apagado por omisión, y XONECODE_REMOTO=1 lo enciende para un arranque", () => {
-    expect(remotoEnVigor(undefined, {})).toEqual({ habilitado: false, servidor: SERVIDOR_REMOTO_POR_OMISION, via: "servidor" });
+    expect(remotoEnVigor(undefined, {})).toEqual({ habilitado: false, servidor: SERVIDOR_REMOTO_POR_OMISION, via: "ngrok" });
     expect(SERVIDOR_REMOTO_POR_OMISION).toBe("wss://remoto.xone.dev/ws");
     expect(remotoEnVigor(undefined, { XONECODE_REMOTO: "1" }).habilitado).toBe(true);
     expect(remotoEnVigor(undefined, { XONECODE_REMOTO: "0" }).habilitado).toBe(false);
     expect(remotoEnVigor({ habilitado: true, servidor: "ws://localhost:9/ws" }, {})).toEqual({ habilitado: true, servidor: "ws://localhost:9/ws", via: "servidor" });
+    expect(remotoEnVigor({ habilitado: true, via: "servidor" }, {})).toMatchObject({ via: "servidor" });
+    expect(remotoEnVigor({ habilitado: true, via: "ngrok", servidor: "ws://localhost:9/ws" }, {})).toMatchObject({ via: "ngrok" });
   });
 
   it("la vía y el dominio de ngrok se guardan y se leen", () => {

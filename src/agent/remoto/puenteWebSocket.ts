@@ -1,8 +1,8 @@
 /**
  * El puente REAL de la sesión remota. Es el ÚNICO fichero que nombra `@xone/xonecode-remoto`,
- * y lo carga con `import()` dinámico de un nombre en variable: mientras sea experimental no es
- * dependencia de xonecode, así que una release sin él instala y arranca igual, y `npm test` no
- * lo necesita (usa `PuenteRemotoEnMemoria`).
+ * y lo carga con `import()` dinámico de un nombre en variable: el paquete viaja DENTRO de xonecode
+ * (`vendor/xonecode-remoto/` + `bundleDependencies`), pero se carga perezoso, así que con la sesión
+ * apagada no se toca, y `npm test` no lo necesita (usa `PuenteRemotoEnMemoria`).
  */
 import type { CanalRemoto, EscuchasDelPuente, PuenteRemotoPort } from "../../core/ports.js";
 

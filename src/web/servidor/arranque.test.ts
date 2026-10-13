@@ -4457,6 +4457,11 @@ describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
   it("al cerrar, la sesión remota encendida se CIERRA (cerrarRemoto cableado en el arranque real)", async () => {
     const previo = process.env.XONECODE_REMOTO;
     process.env.XONECODE_REMOTO = "1";
+    // La vía por omisión es ngrok: este test prueba el cierre del puente del SERVIDOR, así que la dice.
+    const ruta = rutaSettings();
+    const settingsPrevios = existsSync(ruta) ? readFileSync(ruta, "utf8") : undefined;
+    mkdirSync(dirname(ruta), { recursive: true });
+    writeFileSync(ruta, JSON.stringify({ entornos: [], remoto: { via: "servidor" } }));
     try {
       const puente = new PuenteRemotoEnMemoria();
       const rutas = new Map<string, ManejadorRuta>();
@@ -4489,6 +4494,54 @@ describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
     } finally {
       if (previo === undefined) delete process.env.XONECODE_REMOTO;
       else process.env.XONECODE_REMOTO = previo;
+      if (settingsPrevios === undefined) rmSync(ruta, { force: true });
+      else writeFileSync(ruta, settingsPrevios);
+    }
+  });
+
+  it.each([
+    ["sin ajustes", undefined, "ngrok"],
+    ["con `servidor` a mano y sin `via`", { servidor: "ws://127.0.0.1:9/ws" }, "servidor"],
+    ["con `via: servidor` explícito", { via: "servidor" }, "servidor"],
+  ])("el mensaje `remoto` lleva la vía EN VIGOR siempre: %s", async (_caso, remoto, esperada) => {
+    const previo = process.env.XONECODE_REMOTO;
+    process.env.XONECODE_REMOTO = "1";
+    const ruta = rutaSettings();
+    const settingsPrevios = existsSync(ruta) ? readFileSync(ruta, "utf8") : undefined;
+    mkdirSync(dirname(ruta), { recursive: true });
+    if (remoto === undefined) rmSync(ruta, { force: true });
+    else writeFileSync(ruta, JSON.stringify({ entornos: [], remoto }));
+    try {
+      const rutas = new Map<string, ManejadorRuta>();
+      const servidor = {
+        ...servidorLevantado(),
+        registrarRuta: (metodo: string, r: string, manejador: ManejadorRuta) => {
+          rutas.set(`${metodo} ${r}`, manejador);
+        },
+      };
+      const pestana = clienteDeMentira();
+      const codigo = await arrancarConsolaWeb({
+        puerto: 0,
+        abrir: false,
+        cwd: mkdtempSync(join(tmpdir(), "xonecode-cwd-")),
+        raizDelCliente: conBuild(),
+        crearServidor: async () => servidor,
+        vestibulo: vestibuloDePrueba(),
+        escribir: () => {},
+        puertoRemoto: async () => new PuenteRemotoEnMemoria(),
+        esperarCierre: async () => {
+          await rutas.get(`GET ${RUTA_EVENTOS}`)!(pestana.peticion, pestana.respuesta);
+          const remotos = () => pestana.recibidos.filter((x): x is Extract<MensajeAlCliente, { clase: "remoto" }> => x.clase === "remoto");
+          await vi.waitFor(() => expect(remotos().length).toBeGreaterThan(0));
+          expect(remotos().at(-1)!.via).toBe(esperada);
+        },
+      });
+      expect(codigo).toBe(0);
+    } finally {
+      if (previo === undefined) delete process.env.XONECODE_REMOTO;
+      else process.env.XONECODE_REMOTO = previo;
+      if (settingsPrevios === undefined) rmSync(ruta, { force: true });
+      else writeFileSync(ruta, settingsPrevios);
     }
   });
 

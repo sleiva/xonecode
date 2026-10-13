@@ -522,14 +522,17 @@ describe("la sesión remota por el túnel de ngrok", () => {
     expect(m.puerto.canales.at(-1)?.cerrado).toBe(true);
   });
 
-  it("vía servidor: el túnel ni se toca, y el mensaje no dice vía", async () => {
+  it("vía servidor: el túnel ni se toca, y el mensaje dice la vía en vigor", async () => {
     const m = conTunel({ via: "servidor" });
     const c = clienteDeMentira();
     await m.sse(c.peticion, c.respuesta);
     await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" });
     await vi.waitFor(() => expect(m.puerto.aperturas).toEqual(["ws://127.0.0.1:8787/ws"]));
     expect(m.tunel.aperturas).toEqual([]);
-    expect(remotos(c.recibidos).some((x) => "via" in x)).toBe(false);
+    // El servidor manda SIEMPRE la vía en vigor: el cliente toma una ausente por ngrok.
+    const recibidos = remotos(c.recibidos);
+    expect(recibidos.length).toBeGreaterThan(0);
+    expect(recibidos.every((x) => x.via === "servidor")).toBe(true);
   });
 
   it("un túnel que llega TARDE, tras apagar, se cierra", async () => {
