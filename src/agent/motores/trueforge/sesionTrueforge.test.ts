@@ -1103,6 +1103,41 @@ describe("una sesión con el motor TrueForge", () => {
     expect(dos.tokens.join("")).toBe("Vale, el menú.");
   }, 30_000);
 
+  it("una respuesta final en CHINO a una petición en español se devuelve UNA vez para reescribirla, y el aviso lo dice", async () => {
+    const raiz = proyecto();
+    const chino = "已封闭。主菜单已重新制作，入口保持不变。重新制作了界面，未改动它下面的任何内容：卡片仍然使用原来的方法和名称。";
+    const { m, vistos, toolsPorLlamada } = modelosConGuion([
+      [new AIMessageChunk({ content: chino })],
+      [new AIMessageChunk({ content: "Cerrado. El menú principal está rehecho y la entrada no cambia." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    const uno = piel();
+    const r = await s.turno("rediseña el menú principal", uno.p);
+    expect(vistos).toHaveLength(2);
+    // La orden de reescribir llega como mensaje de usuario, con el principio del encargo citado.
+    expect(vistos[1]!.join("\n")).toMatch(/salió escrita en chino[\s\S]*«rediseña el menú principal»/);
+    expect(toolsPorLlamada).toHaveLength(2);
+    expect(uno.tokens.join("")).toContain("Cerrado. El menú principal está rehecho");
+    expect(uno.lineas.join("\n")).toMatch(/la respuesta salió en chino/);
+    expect(r).toBeDefined();
+  }, 30_000);
+
+  it("si quien escribe lo hace en chino, la respuesta en chino NO se toca; y una reescrita que sigue en chino no se insiste", async () => {
+    const raiz = proyecto();
+    const chino = "已封闭。主菜单已重新制作，入口保持不变。重新制作了界面，未改动它下面的任何内容：卡片仍然使用原来的方法和名称。";
+    const enChino = modelosConGuion([[new AIMessageChunk({ content: chino })]]);
+    const a = await abrirSesionTrueforge({ raiz, modelos: enChino.m, entorno: ENTORNO, skills: CATALOGO });
+    await a.turno("请重新设计主菜单", piel().p);
+    expect(enChino.vistos).toHaveLength(1);
+
+    const terco = modelosConGuion([[new AIMessageChunk({ content: chino })], [new AIMessageChunk({ content: chino })]]);
+    const b = await abrirSesionTrueforge({ raiz: proyecto(), modelos: terco.m, entorno: ENTORNO, skills: CATALOGO });
+    const dos = piel();
+    await b.turno("rediseña el menú", dos.p);
+    expect(terco.vistos).toHaveLength(2);
+    expect(dos.lineas.join("\n")).toMatch(/la respuesta reescrita sigue en chino/);
+  }, 30_000);
+
   describe("en modo autónomo, lo que el agente ya recomendó se contesta solo", () => {
     const pregunta = (id: string, question: string, options: string[]) =>
       new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "ask_user_question", args: JSON.stringify({ question, options }) }] });

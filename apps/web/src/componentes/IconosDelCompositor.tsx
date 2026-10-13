@@ -112,3 +112,13 @@ export function IconoDeAnexar() {
     </Trazo>
   );
 }
+
+/** La sesión remota: un móvil con ondas a su lado (el chat va al teléfono). */
+export function IconoDeSesionRemota() {
+  return (
+    <Trazo>
+      <rect x="5" y="3" width="10" height="18" rx="2" />
+      <path d="M9 18h2M18 9a4 4 0 0 1 0 6M20.5 6.5a8 8 0 0 1 0 11" />
+    </Trazo>
+  );
+}

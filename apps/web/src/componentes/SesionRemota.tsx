@@ -3,6 +3,7 @@ import { Modal } from "@deepseek-ai/dsh-client-ui-primitives";
 import QRCode from "qrcode";
 import type { EstadoRemoto } from "../store.js";
 import { BotonDeCopiar } from "./BotonDeCopiar.js";
+import { IconoDeSesionRemota } from "./IconosDelCompositor.js";
 import estilos from "./SesionRemota.module.css";
 import coraza from "./NuevaSesion.module.css";
 
@@ -25,8 +26,17 @@ function faltaDeNgrok(remoto: EstadoRemoto): string | undefined {
   return undefined;
 }
 
+/** Lo que dice el icono al posarse: el nombre y, si no está apagada, en qué está. */
+function tituloDelBoton(remoto: EstadoRemoto): string {
+  if (remoto.estado === "activa") return `Sesión remota: activa (${remoto.moviles} aparato${remoto.moviles === 1 ? "" : "s"})`;
+  if (remoto.estado === "abriendo") return "Sesión remota: abriendo…";
+  if (remoto.estado === "reconectando") return "Sesión remota: reconectando…";
+  if (remoto.estado === "error") return "Sesión remota: error";
+  return "Sesión remota";
+}
+
 /**
- * El botón «Sesión remota» y su diálogo. Sin `remoto` (el interruptor está apagado y el
+ * El botón «Sesión remota» —un icono en la banda de abajo del compositor— y su diálogo. Sin `remoto` (el interruptor está apagado y el
  * servidor no lo dice) no se pinta nada. El QR es un SVG en un `<img>` de data URL: nunca
  * marcado inyectado. El diálogo se pliega DESMONTANDO, y se cierra solo al apagarse la
  * sesión o perderse el estado, para no reaparecer tras una reconexión.
@@ -93,11 +103,14 @@ export function SesionRemota({
         ref={boton}
         type="button"
         className={estilos.boton}
+        aria-label="Sesión remota"
+        title={tituloDelBoton(remoto)}
+        data-estado={remoto.estado}
         // Abrir el diálogo NO enciende: la vía solo se puede elegir mientras está apagada, y
         // encender al abrir la dejaba ya en «abriendo» cuando la persona llegaba al conmutador.
         onClick={() => setAbierto(true)}
       >
-        Sesión remota
+        <IconoDeSesionRemota />
       </button>
       {abierto ? (
         <Modal open onClose={cerrar} title="Sesión remota" headless className={coraza.capa}>

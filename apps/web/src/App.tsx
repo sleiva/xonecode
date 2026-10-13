@@ -2972,6 +2972,7 @@ export function App({
             */}
             {tareaEnEsperaDeLaSesion === undefined ? null : <AvisoDeTareaEnEspera titulo={tareaEnEsperaDeLaSesion.titulo} />}
             <Compositor
+              extraAbajo={<SesionRemota remoto={estado.remoto} enviar={(m) => enviar(m)} alAbrirAjustes={() => abrirAjustes("remoto")} />}
               conectado={estado.conectado}
               // Apaga la caja: una aprobación, pregunta, selector o secreto EN PANTALLA
               // compite por la misma respuesta. El turno en vuelo a secas ya NO la apaga
@@ -3099,7 +3100,6 @@ export function App({
                 }}
               />
             ) : null}
-            <SesionRemota remoto={estado.remoto} enviar={(m) => enviar(m)} alAbrirAjustes={() => abrirAjustes("remoto")} />
             <BarraDeEstado
               turnos={turnos}
               pasos={pasos}

@@ -1,6 +1,11 @@
-/* El aviso encima del compositor y la negativa del diálogo. Sin colores literales: alias del tema. */
+/* El aviso encima del compositor y la negativa del diálogo. Sin colores literales: alias del tema.
+   El aviso va en el MISMO eje y ancho que la tarjeta del compositor (`Compositor.module.css#envoltura`):
+   su ancho máximo menos el margen lateral de la envoltura, centrado. */
 .aviso {
-  margin: 0 0 8px;
+  box-sizing: border-box;
+  width: calc(100% - 2 * var(--dsh-composer-side-clearance));
+  max-width: calc(var(--dsh-composer-card-max-width) - 2 * var(--dsh-composer-side-clearance));
+  margin: 0 auto 8px;
   padding: 8px 12px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 8px;

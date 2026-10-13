@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
 import type {
   DispositivoElegido, Esfuerzo, EsfuerzoDelCable, InformeDeDispositivos, ModoDeEscritura,
   ProveedorDeModelos,
@@ -83,6 +83,7 @@ export function Compositor({
   hayPendiente = false,
   consumo,
   oculto = false,
+  extraAbajo,
   alParar,
   modelos,
   alPedirCatalogo,
@@ -137,6 +138,11 @@ export function Compositor({
    * visible.
    */
   oculto?: boolean;
+  /**
+   * Lo que se monta al final del lado IZQUIERDO de la banda de abajo, tras el modo: hoy, el icono de la sesión remota.
+   * Va por ranura porque es un control del CHAT, no del compositor; ausente no se pinta nada.
+   */
+  extraAbajo?: ReactNode;
   /** Parar el turno en vuelo. Ausente = no se ofrece el botón. */
   alParar?: () => void;
   /** El estado de modelos del cable. Ausente = todavía no llegó: no se pinta pastilla, en
@@ -570,6 +576,7 @@ export function Compositor({
               alElegir={alElegirModoDeEscritura}
             />
           )}
+          {extraAbajo}
           {/*
             **El motor, abajo a la derecha, pegado al botón.** Modelo y esfuerzo son lo que
             va a CORRER con lo próximo que mandes, así que se leen justo antes de pulsar —

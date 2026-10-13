@@ -1,5 +1,20 @@
 .boton {
   composes: secundario from "./Boton.module.css";
+  /* Un icono en la banda de abajo del compositor, con la forma del «+» de anexar. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+/* Encendida (o intentándolo) se nota sin abrir el diálogo: el acento, no un color nuevo. */
+.boton[data-estado="activa"],
+.boton[data-estado="abriendo"],
+.boton[data-estado="reconectando"] {
+  color: var(--xonecode-azul);
+  border-color: var(--xonecode-azul);
+}
+.boton[data-estado="error"] {
+  color: var(--xonecode-rojo);
 }
 .secundario {
   composes: secundario from "./Boton.module.css";

@@ -51,6 +51,7 @@ import { sumarPorModelo, type ConsumoPorModelo } from "../../../core/actos.js";
 import { ColaDeEventos, entrelazar } from "../../../core/entrelazar.js";
 import { modeloExternoParaTrueforge } from "./modeloExterno.js";
 import { diferenciasDelContraste, metricasDeTrueforge } from "./metricasTrueforge.js";
+import { respuestaEnChinoSinPedirlo, textoDeReescritura } from "../../../core/idiomaDeLaRespuesta.js";
 import { cambiosQueSeVerifican, huellaDeErrores, repartirHallazgos, textoDeReparacion, tocaCriticarPantalla, TOPE_REPARACIONES } from "../../turno/verificacion.js";
 import { correrTurno, type Piel } from "../../../core/turno.js";
 import type { Artefacto } from "../../../core/artefactos.js";
@@ -1872,6 +1873,8 @@ export async function abrirSesionTrueforge(
 
       /** Lo que el turno CONTESTÓ en su última pasada: es lo que lee el juez. */
       let respuestaDeLaPasada = "";
+      /** Si ya se pidió reescribir una respuesta por el idioma en este turno: una vez, nunca en bucle. */
+      let reescritaPorIdioma = false;
 
       /**
        * Las PASADAS del turno: la de la petición y las de reparación. Cada `return` de aquí es un
@@ -1887,9 +1890,40 @@ export async function abrirSesionTrueforge(
           if (intento > 0) yield { tipo: "reparacion", intento, tope: TOPE_REPARACIONES };
           const salida = { limpia: false };
           respuestaDeLaPasada = "";
+          // El ÚLTIMO mensaje de la pasada, aparte: lo que la cierra es lo que se mira por el idioma. Un mensaje acaba
+          // cuando llega cualquier otra cosa que no sea razonamiento (una tool, un aviso), y el siguiente token abre otro.
+          let ultimoMensaje = "";
+          let mensajeCerrado = false;
           for await (const evento of rondasDe(lote, salida)) {
-            if (evento.tipo === "token") respuestaDeLaPasada += evento.texto;
+            if (evento.tipo === "token") {
+              respuestaDeLaPasada += evento.texto;
+              if (mensajeCerrado) ultimoMensaje = "";
+              mensajeCerrado = false;
+              ultimoMensaje += evento.texto;
+            } else if (evento.tipo !== "razonamiento") mensajeCerrado = true;
             yield evento;
+          }
+          /**
+           * **Una respuesta que se fue al chino se devuelve UNA vez para reescribirla** (`core/idiomaDeLaRespuesta.ts`):
+           * deriva medida de DeepSeek al final de un turno largo, con su razonamiento diciendo «in Spanish». Solo la que
+           * cierra la pasada, solo si acabó limpia y sin pregunta en el aire, y una vez por turno; la de antes se queda en
+           * el chat y el aviso lo dice. Si la reescrita sigue en chino, se dice y no se insiste.
+           */
+          const encargo = encargoDelTurno ?? peticion;
+          if (salida.limpia && !reescritaPorIdioma && !cancelado && !cerrada && preguntaEnEspera === undefined && respuestaEnChinoSinPedirlo(ultimoMensaje, encargo)) {
+            reescritaPorIdioma = true;
+            yield { tipo: "aviso", texto: "⚠ la respuesta salió en chino: se le pide que la reescriba en tu idioma", severidad: "aviso" };
+            const otra = { limpia: false };
+            let reescrita = "";
+            for await (const evento of rondasDe([{ type: EventType.USER_MESSAGE, content: textoDeReescritura(encargo) }], otra)) {
+              if (evento.tipo === "token") reescrita += evento.texto;
+              yield evento;
+            }
+            salida.limpia = otra.limpia;
+            if (reescrita.trim() !== "") respuestaDeLaPasada = respuestaDeLaPasada.slice(0, respuestaDeLaPasada.length - ultimoMensaje.length) + reescrita;
+            if (respuestaEnChinoSinPedirlo(reescrita, encargo)) {
+              yield { tipo: "aviso", texto: "⚠ la respuesta reescrita sigue en chino", severidad: "aviso" };
+            }
           }
           const cambios = cambiosQueSeVerifican(await instantanea.cambios());
           escribioProyecto = cambios.length > 0;
