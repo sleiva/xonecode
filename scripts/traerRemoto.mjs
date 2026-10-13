@@ -73,17 +73,36 @@ try {
 }
 
 // El intercambio: viejo aparte, nuevo dentro, y solo entonces se borra el viejo. Si falla, se restaura.
+// `apartado` dice si el viejo ya salió de `destino`: mientras no, `destino` ES la copia buena y no se toca.
 const viejo = `${destino}.viejo`;
 rmSync(viejo, { recursive: true, force: true });
 const habiaViejo = existsSync(destino);
+let apartado = false;
 try {
-  if (habiaViejo) renameSync(destino, viejo);
+  if (habiaViejo) {
+    renameSync(destino, viejo);
+    apartado = true;
+  }
   renameSync(temporal, destino);
 } catch (e) {
-  rmSync(destino, { recursive: true, force: true });
-  if (habiaViejo && existsSync(viejo)) renameSync(viejo, destino);
+  const motivo = e instanceof Error ? e.message : String(e);
   rmSync(temporal, { recursive: true, force: true });
-  fallar(`no se pudo sustituir la copia (se conserva la anterior): ${e instanceof Error ? e.message : String(e)}`);
+  if (apartado) {
+    try {
+      rmSync(destino, { recursive: true, force: true });
+      renameSync(viejo, destino);
+    } catch (e2) {
+      fallar(
+        `no se pudo sustituir la copia (${motivo}) ni devolver la anterior a su sitio ` +
+          `(${e2 instanceof Error ? e2.message : String(e2)}): está en ${viejo}, o recupérala con «git checkout vendor/»`,
+      );
+    }
+  }
+  fallar(`no se pudo sustituir la copia (se conserva la anterior): ${motivo}`);
 }
-rmSync(viejo, { recursive: true, force: true });
+try {
+  rmSync(viejo, { recursive: true, force: true });
+} catch (e) {
+  console.warn(`remoto:traer: la copia nueva está en su sitio, pero no se pudo borrar ${viejo}: ${e instanceof Error ? e.message : String(e)}`);
+}
 console.log(`remoto:traer: vendor/xonecode-remoto ← ${origen.commit.slice(0, 7)}${origen.sucio ? " (árbol sucio)" : ""}`);
