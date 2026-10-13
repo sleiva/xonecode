@@ -611,12 +611,100 @@ function esTrabajoAlAbrir(v: unknown): v is { ficheros: string[]; total: number 
   );
 }
 
-export type EstadoRemoto =
+export type EstadoRemoto = (
   | { estado: "apagada" | "abriendo" }
   | { estado: "activa"; url: string; moviles: number }
   /** Sin `url`: el relé no ha contestado nunca y el servidor sigue intentándolo. */
   | { estado: "reconectando"; url?: string; moviles: number }
-  | { estado: "error"; motivo: string };
+  | { estado: "error"; motivo: string }
+) & {
+  /** Por dónde sale. Ausente = el servidor de XOne. */
+  via?: "servidor" | "ngrok";
+  /** Lo medido de ngrok; ausente = el servidor no lo dijo (y no se pinta). */
+  ngrok?: NgrokDelCable;
+};
+
+export type NgrokDelCable = {
+  instalado: boolean;
+  cuenta: boolean;
+  dominio?: string;
+  receta?: Receta;
+  motivo?: string;
+};
+
+/** Una receta del cable, campo a campo: la de Dispositivos y la de ngrok pasan por aquí. */
+function recetaDe(r: Receta): Receta {
+  return {
+    id: r.id,
+    // Su pestaña. Se copia como `Dispositivo.plataforma`: es un dato del
+    // servidor y la ventana agrupa por él sin deducirlo del `id`.
+    plataforma: r.plataforma,
+    titulo: String(r.titulo ?? ""),
+    descripcion: String(r.descripcion ?? ""),
+    completa: r.completa === true,
+    // El consejo que no es un paso, AUSENTE si no lo hay: la receta de iOS no
+    // tiene ninguno, y un `aparte` inventado le pintaría una sección vacía.
+    ...(typeof r.aparte === "object" &&
+    r.aparte !== null &&
+    typeof r.aparte.titulo === "string" &&
+    Array.isArray(r.aparte.comandos)
+      ? {
+          aparte: {
+            titulo: r.aparte.titulo,
+            comandos: r.aparte.comandos.filter((c): c is string => typeof c === "string"),
+            ...(typeof r.aparte.nota === "string" ? { nota: r.aparte.nota } : {}),
+          },
+        }
+      : {}),
+    despues: String(r.despues ?? ""),
+    pasos: r.pasos
+      .filter(
+        (p): p is PasoDeReceta =>
+          typeof p === "object" && p !== null && typeof p.titulo === "string" && Array.isArray(p.comandos)
+      )
+      .map((p) => ({
+        titulo: p.titulo,
+        comandos: p.comandos.filter((c): c is string => typeof c === "string"),
+        // `hecho` y `ejecutable`, solo con el booleano de verdad: la trampa del
+        // `"false"` de cadena, que es verdadero en JavaScript — marcaría como
+        // hecho un paso que no lo está, y ofrecería un botón que no se puede
+        // cumplir.
+        hecho: p.hecho === true,
+        ejecutable: p.ejecutable === true,
+        ...(typeof p.nota === "string" ? { nota: p.nota } : {}),
+        ...(typeof p.porQueNo === "string" ? { porQueNo: p.porQueNo } : {}),
+        ...(typeof p.acepta === "string" ? { acepta: p.acepta } : {}),
+        // Si repetir un paso ya hecho sirve para algo, y con qué nombre. Sin
+        // esto, el paso se quedaría sin botón cuando ya está — que es lo
+        // correcto por omisión y falso para el que actualiza.
+        ...(typeof p.repetir === "object" &&
+        p.repetir !== null &&
+        typeof p.repetir.etiqueta === "string" &&
+        typeof p.repetir.porQue === "string"
+          ? { repetir: { etiqueta: p.repetir.etiqueta, porQue: p.repetir.porQue } }
+          : {}),
+      })),
+  };
+}
+
+/** Lo de ngrok que llega por el cable, campo a campo. `receta` se acepta entera: es la del host. */
+function ngrokDe(v: unknown): NgrokDelCable | undefined {
+  if (typeof v !== "object" || v === null) return undefined;
+  const n = v as Record<string, unknown>;
+  if (typeof n["instalado"] !== "boolean" || typeof n["cuenta"] !== "boolean") return undefined;
+  return {
+    instalado: n["instalado"],
+    cuenta: n["cuenta"],
+    ...(typeof n["dominio"] === "string" ? { dominio: n["dominio"] } : {}),
+    ...(typeof n["motivo"] === "string" ? { motivo: n["motivo"] } : {}),
+    ...(typeof n["receta"] === "object" &&
+    n["receta"] !== null &&
+    typeof (n["receta"] as Receta).id === "string" &&
+    Array.isArray((n["receta"] as Receta).pasos)
+      ? { receta: recetaDe(n["receta"] as Receta) }
+      : {}),
+  };
+}
 
 const ESTADO_INICIAL: EstadoDelCliente = { actos: [], conectado: false };
 
@@ -1288,57 +1376,7 @@ export function crearStoreDelCliente(): {
                   (r): r is Receta =>
                     typeof r === "object" && r !== null && typeof r.id === "string" && Array.isArray(r.pasos)
                 )
-                .map((r) => ({
-                  id: r.id,
-                  // Su pestaña. Se copia como `Dispositivo.plataforma`: es un dato del
-                  // servidor y la ventana agrupa por él sin deducirlo del `id`.
-                  plataforma: r.plataforma,
-                  titulo: String(r.titulo ?? ""),
-                  descripcion: String(r.descripcion ?? ""),
-                  completa: r.completa === true,
-                  // El consejo que no es un paso, AUSENTE si no lo hay: la receta de iOS no
-                  // tiene ninguno, y un `aparte` inventado le pintaría una sección vacía.
-                  ...(typeof r.aparte === "object" &&
-                  r.aparte !== null &&
-                  typeof r.aparte.titulo === "string" &&
-                  Array.isArray(r.aparte.comandos)
-                    ? {
-                        aparte: {
-                          titulo: r.aparte.titulo,
-                          comandos: r.aparte.comandos.filter((c): c is string => typeof c === "string"),
-                          ...(typeof r.aparte.nota === "string" ? { nota: r.aparte.nota } : {}),
-                        },
-                      }
-                    : {}),
-                  despues: String(r.despues ?? ""),
-                  pasos: r.pasos
-                    .filter(
-                      (p): p is PasoDeReceta =>
-                        typeof p === "object" && p !== null && typeof p.titulo === "string" && Array.isArray(p.comandos)
-                    )
-                    .map((p) => ({
-                      titulo: p.titulo,
-                      comandos: p.comandos.filter((c): c is string => typeof c === "string"),
-                      // `hecho` y `ejecutable`, solo con el booleano de verdad: la trampa del
-                      // `"false"` de cadena, que es verdadero en JavaScript — marcaría como
-                      // hecho un paso que no lo está, y ofrecería un botón que no se puede
-                      // cumplir.
-                      hecho: p.hecho === true,
-                      ejecutable: p.ejecutable === true,
-                      ...(typeof p.nota === "string" ? { nota: p.nota } : {}),
-                      ...(typeof p.porQueNo === "string" ? { porQueNo: p.porQueNo } : {}),
-                      ...(typeof p.acepta === "string" ? { acepta: p.acepta } : {}),
-                      // Si repetir un paso ya hecho sirve para algo, y con qué nombre. Sin
-                      // esto, el paso se quedaría sin botón cuando ya está — que es lo
-                      // correcto por omisión y falso para el que actualiza.
-                      ...(typeof p.repetir === "object" &&
-                      p.repetir !== null &&
-                      typeof p.repetir.etiqueta === "string" &&
-                      typeof p.repetir.porQue === "string"
-                        ? { repetir: { etiqueta: p.repetir.etiqueta, porQue: p.repetir.porQue } }
-                        : {}),
-                    })),
-                })),
+                .map(recetaDe),
               herramientas: informe.herramientas
                 .filter((h): h is Herramienta => typeof h === "object" && h !== null && typeof h.nombre === "string" && typeof h.estado === "string")
                 .map((h) => ({
@@ -1551,14 +1589,20 @@ export function crearStoreDelCliente(): {
         }
         case "remoto": {
           const m = mensaje as Record<string, unknown>;
-          if (m["estado"] === "apagada" || m["estado"] === "abriendo") {
-            mutar({ remoto: { estado: m["estado"] } });
-          } else if ((m["estado"] === "activa" || m["estado"] === "reconectando") && typeof m["url"] === "string") {
-            mutar({ remoto: { estado: m["estado"], url: m["url"], moviles: typeof m["moviles"] === "number" ? m["moviles"] : 0 } });
-          } else if (m["estado"] === "reconectando" && m["url"] === undefined) {
-            mutar({ remoto: { estado: "reconectando", moviles: typeof m["moviles"] === "number" ? m["moviles"] : 0 } });
-          } else if (m["estado"] === "error" && typeof m["motivo"] === "string") {
-            mutar({ remoto: { estado: "error", motivo: m["motivo"] } });
+          // Lista blanca por campo, también de lo de ngrok: lo que no se nombra aquí no llega.
+          const v = m["via"];
+          const via: { via?: "servidor" | "ngrok" } = v === "servidor" || v === "ngrok" ? { via: v } : {};
+          const ngrok = ngrokDe(m["ngrok"]);
+          const extra = { ...via, ...(ngrok === undefined ? {} : { ngrok }) };
+          const e = m["estado"];
+          if (e === "apagada" || e === "abriendo") {
+            mutar({ remoto: { estado: e, ...extra } });
+          } else if ((e === "activa" || e === "reconectando") && typeof m["url"] === "string") {
+            mutar({ remoto: { estado: e, url: m["url"], moviles: typeof m["moviles"] === "number" ? m["moviles"] : 0, ...extra } });
+          } else if (e === "reconectando" && m["url"] === undefined) {
+            mutar({ remoto: { estado: "reconectando", moviles: typeof m["moviles"] === "number" ? m["moviles"] : 0, ...extra } });
+          } else if (e === "error" && typeof m["motivo"] === "string") {
+            mutar({ remoto: { estado: "error", motivo: m["motivo"], ...extra } });
           }
           return;
         }

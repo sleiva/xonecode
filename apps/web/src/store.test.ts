@@ -2189,6 +2189,25 @@ describe("store: lo pendiente de subir (la pestaña Sincronización)", () => {
     expect(s.leer().parchesDeSubida).toBeUndefined();
   });
 
+  it("remoto: la vía y lo de ngrok pasan por lista blanca, campo a campo", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "remoto",
+      estado: "apagada",
+      via: "ngrok",
+      ngrok: { instalado: true, cuenta: true, dominio: "d.ngrok-free.app", motivo: "m", ruta: "/secreto", token: "t" },
+    } as never);
+    expect(s.leer().remoto).toEqual({
+      estado: "apagada",
+      via: "ngrok",
+      ngrok: { instalado: true, cuenta: true, dominio: "d.ngrok-free.app", motivo: "m" },
+    });
+    s.aplicar({ clase: "remoto", estado: "apagada", via: "otra", ngrok: { instalado: "sí" } } as never);
+    expect(s.leer().remoto).toEqual({ estado: "apagada" });
+    s.aplicar({ clase: "remoto", estado: "activa", url: "https://r/r/S#K", moviles: 2, via: "servidor" });
+    expect(s.leer().remoto).toEqual({ estado: "activa", url: "https://r/r/S#K", moviles: 2, via: "servidor" });
+  });
+
   it("guarda el estado de la sesión remota y descarta uno desconocido", () => {
     const s = crearStoreDelCliente();
     s.aplicar({ clase: "remoto", estado: "activa", url: "https://r/r/S#K", moviles: 1 });
