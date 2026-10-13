@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CARACTERES_DE_FEEDBACK } from "./panorama.js";
 import { ajustarATope, filtrarSalida, TOPE_DE_SALIDA_BYTES, validarEntradaDelMovil } from "./remoto.js";
 
 describe("lo que sale hacia el móvil", () => {
@@ -96,5 +97,54 @@ describe("el tope de tamaño de lo que sale", () => {
   it("cualquier otro mensaje que no cabe se descarta", () => {
     const m = { clase: "aprobacion", pendientes: [], ficheros: {}, diffs: { a: "x".repeat(500) } };
     expect(ajustarATope(m, 100)).toBeUndefined();
+  });
+});
+
+describe("el panel en el móvil", () => {
+  it("el panorama sale tal cual", () => {
+    const m = { clase: "panorama", consolas: [], tareas: [], esperando: 0 };
+    expect(filtrarSalida(m)).toEqual(m);
+  });
+
+  it("decision con consola: la reconstruye; vacía o no string se rechaza", () => {
+    const d = { a: "approve" as const };
+    expect(validarEntradaDelMovil({ clase: "decision", decisiones: d, consola: "c1", otro: 1 })).toEqual({ clase: "decision", decisiones: d, consola: "c1" });
+    expect(validarEntradaDelMovil({ clase: "decision", decisiones: d })).toEqual({ clase: "decision", decisiones: d });
+    expect(validarEntradaDelMovil({ clase: "decision", decisiones: d, consola: "" })).toBeUndefined();
+    expect(validarEntradaDelMovil({ clase: "decision", decisiones: d, consola: 3 })).toBeUndefined();
+  });
+
+  it("feedback y continuar", () => {
+    expect(validarEntradaDelMovil({ clase: "feedback", tarea: "t1", texto: "hazlo", x: 1 })).toEqual({ clase: "feedback", tarea: "t1", texto: "hazlo" });
+    expect(validarEntradaDelMovil({ clase: "feedback", tarea: "t1", texto: "   " })).toBeUndefined();
+    expect(validarEntradaDelMovil({ clase: "feedback", tarea: "", texto: "a" })).toBeUndefined();
+    const largo = validarEntradaDelMovil({ clase: "feedback", tarea: "t1", texto: "a".repeat(CARACTERES_DE_FEEDBACK + 50) });
+    expect(largo).toMatchObject({ clase: "feedback" });
+    expect((largo as { texto: string }).texto).toHaveLength(CARACTERES_DE_FEEDBACK);
+    expect(validarEntradaDelMovil({ clase: "continuar", tarea: "t1", y: 2 })).toEqual({ clase: "continuar", tarea: "t1" });
+    expect(validarEntradaDelMovil({ clase: "continuar" })).toBeUndefined();
+  });
+
+  it("ajustarATope de un panorama: quita diffs, luego terminadas, y si no cabe nada", () => {
+    const diff = Array.from({ length: 200 }, () => ({ tipo: "igual", texto: "x".repeat(50) }));
+    const p = {
+      clase: "panorama",
+      consolas: [{ id: "a", aprobacion: { pendientes: [], ficheros: {}, diffs: { f: diff } } }],
+      tareas: [
+        { id: "t", estado: "terminada", titulo: "y".repeat(5000) },
+        { id: "u", estado: "nuevo", titulo: "z" },
+      ],
+      esperando: 0,
+    };
+    const tam = (m: unknown) => JSON.stringify(m).length;
+    const r1 = ajustarATope(p, tam(p) - 100) as typeof p & { consolas: { aprobacion: { diffs: object; recortada?: true } }[] };
+    expect(r1.consolas[0].aprobacion.diffs).toEqual({});
+    expect(r1.consolas[0].aprobacion.recortada).toBe(true);
+    expect(r1.tareas).toHaveLength(2);
+    const sinDiffs = ajustarATope(p, 1)!;
+    expect(sinDiffs).toBeUndefined();
+    const medio = tam({ ...p, consolas: [{ id: "a", aprobacion: { pendientes: [], ficheros: {}, diffs: {}, recortada: true } }] }) - 100;
+    const r2 = ajustarATope(p, medio) as typeof p;
+    expect(r2.tareas.map((t) => t.id)).toEqual(["u"]);
   });
 });

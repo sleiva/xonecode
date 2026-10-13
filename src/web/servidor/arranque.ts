@@ -6171,6 +6171,10 @@ export function montarRutas(
             else if (m.clase === "respuesta") {
               if (!destinoActual().responderDesdeElMovil(m.texto))
                 informar("sesión remota: una respuesta del móvil no tenía pregunta a la que contestar");
+            } else if (m.clase === "feedback" || m.clase === "continuar" || (m.clase === "decision" && m.consola !== undefined)) {
+              // Una decisión con `consola` NUNCA cae a la del foco.
+              // Del panel del móvil: se cablea con el panorama (tarea siguiente del plan).
+              informar("sesión remota: el panel del móvil aún no está cableado en este anfitrión");
             } else recibirEnLaConsola(m);
           },
           informar,

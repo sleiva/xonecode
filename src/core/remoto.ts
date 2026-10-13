@@ -1,3 +1,5 @@
+import { CARACTERES_DE_FEEDBACK } from "./panorama.js";
+
 /**
  * Qué cruza el puente de la sesión remota, en las dos direcciones. Es la FRONTERA de seguridad
  * del lado de xonecode: lo que no está aquí no sale de la máquina ni entra en la consola, aunque
@@ -7,12 +9,14 @@
 
 export type EntradaDelMovil =
   | { clase: "prosa"; texto: string; detener?: true }
-  | { clase: "decision"; decisiones: Record<string, "approve" | "reject"> }
+  | { clase: "decision"; decisiones: Record<string, "approve" | "reject">; consola?: string }
   | { clase: "respuesta"; texto: string }
+  | { clase: "feedback"; tarea: string; texto: string }
+  | { clase: "continuar"; tarea: string }
   | { clase: "cancelar" };
 
 const objeto = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
-const PASAN_TAL_CUAL = new Set(["acto", "sustitucion", "reemision", "aprobacion", "turno"]);
+const PASAN_TAL_CUAL = new Set(["acto", "sustitucion", "reemision", "aprobacion", "turno", "panorama"]);
 
 /** Lo que se manda al móvil, ya en su forma de salida; `undefined` = no sale. */
 export function filtrarSalida(mensaje: unknown): unknown | undefined {
@@ -53,8 +57,15 @@ export function validarEntradaDelMovil(m: unknown): EntradaDelMovil | undefined 
         if (valor !== "approve" && valor !== "reject") return undefined;
         decisiones[id] = valor;
       }
-      return { clase: "decision", decisiones };
+      if (m.consola === undefined) return { clase: "decision", decisiones };
+      return typeof m.consola === "string" && m.consola !== "" ? { clase: "decision", decisiones, consola: m.consola } : undefined;
     }
+    case "feedback": {
+      if (typeof m.tarea !== "string" || m.tarea === "" || typeof m.texto !== "string" || m.texto.trim() === "") return undefined;
+      return { clase: "feedback", tarea: m.tarea, texto: m.texto.slice(0, CARACTERES_DE_FEEDBACK) };
+    }
+    case "continuar":
+      return typeof m.tarea === "string" && m.tarea !== "" ? { clase: "continuar", tarea: m.tarea } : undefined;
     case "respuesta":
       return typeof m.texto === "string" && m.seleccion === undefined ? { clase: "respuesta", texto: m.texto } : undefined;
     case "cancelar":
@@ -80,6 +91,7 @@ const bytesDe = (m: unknown): number => new TextEncoder().encode(JSON.stringify(
  */
 export function ajustarATope(mensaje: unknown, tope: number = TOPE_DE_SALIDA_BYTES): unknown | undefined {
   if (bytesDe(mensaje) <= tope) return mensaje;
+  if (objeto(mensaje) && mensaje.clase === "panorama") return ajustarPanorama(mensaje, tope);
   if (!objeto(mensaje) || mensaje.clase !== "reemision" || !Array.isArray(mensaje.actos)) return undefined;
   const actos = mensaje.actos;
   if (bytesDe({ ...mensaje, actos: [] }) > tope) return undefined;
@@ -92,4 +104,19 @@ export function ajustarATope(mensaje: unknown, tope: number = TOPE_DE_SALIDA_BYT
     else desde = medio + 1;
   }
   return { ...mensaje, actos: actos.slice(hasta) };
+}
+
+/** Un panorama que no cabe: primero fuera los diffs (con `recortada`), luego las tareas terminadas; si ni así, no sale. */
+function ajustarPanorama(p: Record<string, unknown>, tope: number): unknown | undefined {
+  const consolas = Array.isArray(p.consolas) ? p.consolas : [];
+  const sinDiffs = {
+    ...p,
+    consolas: consolas.map((c) =>
+      objeto(c) && objeto(c.aprobacion) ? { ...c, aprobacion: { ...c.aprobacion, diffs: {}, recortada: true } } : c,
+    ),
+  };
+  if (bytesDe(sinDiffs) <= tope) return sinDiffs;
+  const tareas = Array.isArray(p.tareas) ? p.tareas : [];
+  const sinTerminadas = { ...sinDiffs, tareas: tareas.filter((t) => !(objeto(t) && t.estado === "terminada")) };
+  return bytesDe(sinTerminadas) <= tope ? sinTerminadas : undefined;
 }
