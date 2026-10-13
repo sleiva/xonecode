@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { CARACTERES_DE_FEEDBACK } from "./panorama.js";
+import { ENTRADA_DEL_CONTRATO, type ContratoDelPanorama } from "./__oro__/panoramaContrato.js";
+import { CARACTERES_DE_FEEDBACK, componerPanorama } from "./panorama.js";
 import { ajustarATope, filtrarSalida, TOPE_DE_SALIDA_BYTES, validarEntradaDelMovil } from "./remoto.js";
 
 describe("lo que sale hacia el móvil", () => {
@@ -146,5 +148,27 @@ describe("el panel en el móvil", () => {
     const medio = tam({ ...p, consolas: [{ id: "a", aprobacion: { pendientes: [], ficheros: {}, diffs: {}, recortada: true } }] }) - 100;
     const r2 = ajustarATope(p, medio) as typeof p;
     expect(r2.tareas.map((t) => t.id)).toEqual(["u"]);
+  });
+});
+
+describe("el contrato del panorama con la web móvil", () => {
+  // Hay OTRA copia de este JSON en `xonecode-server/packages/remoto/test/panorama-contrato.json`, que el validador del
+  // paquete debe aceptar: las dos se actualizan JUNTAS (se regenera con `componerPanorama → filtrarSalida → ajustarATope`
+  // sobre `ENTRADA_DEL_CONTRATO`), o una de las dos suites se pone roja.
+  const oro = JSON.parse(readFileSync(new URL("./__oro__/panorama-contrato.json", import.meta.url), "utf8")) as ContratoDelPanorama;
+
+  it("lo que sale hoy es el oro: cuando cabe y cuando se quitan los diffs", () => {
+    const salida = filtrarSalida(componerPanorama(ENTRADA_DEL_CONTRATO));
+    expect(ajustarATope(salida)).toEqual(oro.cabe);
+    expect(ajustarATope(salida, oro.tope)).toEqual(oro.sinDiffs);
+  });
+});
+
+describe("una decisión del móvil con clave __proto__", () => {
+  it("se salta, como en el paquete, y no contamina el objeto", () => {
+    const m = JSON.parse('{"clase":"decision","decisiones":{"__proto__":"approve","a":"reject"}}');
+    const r = validarEntradaDelMovil(m);
+    expect(r).toEqual({ clase: "decision", decisiones: { a: "reject" } });
+    expect(Object.getPrototypeOf((r as { decisiones: object }).decisiones)).toBe(Object.prototype);
   });
 });

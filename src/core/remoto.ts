@@ -54,6 +54,7 @@ export function validarEntradaDelMovil(m: unknown): EntradaDelMovil | undefined 
       if (!objeto(m.decisiones)) return undefined;
       const decisiones: Record<string, "approve" | "reject"> = {};
       for (const [id, valor] of Object.entries(m.decisiones)) {
+        if (id === "__proto__") continue;
         if (valor !== "approve" && valor !== "reject") return undefined;
         decisiones[id] = valor;
       }

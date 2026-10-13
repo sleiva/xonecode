@@ -1,0 +1,1058 @@
+{
+ "cabe": {
+  "clase": "panorama",
+  "consolas": [
+   {
+    "id": "c1",
+    "proyecto": "AppDemo",
+    "sesion": "Prueba",
+    "foco": true,
+    "estado": "esperando-aprobacion",
+    "ultimaActividad": "2026-10-13T11:55:00Z",
+    "aprobacion": {
+     "pendientes": [
+      {
+       "id": "q1",
+       "origen": "developer-xone",
+       "descripcion": "edit_file /a.xne",
+       "decisionesPermitidas": [
+        "approve",
+        "reject"
+       ]
+      }
+     ],
+     "ficheros": {
+      "q1": "/a.xne"
+     },
+     "diffs": {
+      "q1": [
+       {
+        "tipo": "quitado",
+        "texto": "<viejo/>"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "<nuevo/>"
+       },
+       {
+        "tipo": "igual",
+        "texto": "</x>"
+       }
+      ]
+     }
+    }
+   },
+   {
+    "id": "c2",
+    "proyecto": "Otra",
+    "foco": false,
+    "estado": "esperando-aprobacion",
+    "aprobacion": {
+     "pendientes": [
+      {
+       "id": "q2",
+       "origen": "developer-xone",
+       "descripcion": "write_file /grande.js",
+       "decisionesPermitidas": [
+        "approve",
+        "reject"
+       ]
+      },
+      {
+       "id": "q3",
+       "origen": "developer-xone",
+       "descripcion": "incorporar_adjunto /i.png",
+       "decisionesPermitidas": [
+        "approve",
+        "reject"
+       ],
+       "remota": true
+      }
+     ],
+     "ficheros": {
+      "q2": "/grande.js"
+     },
+     "diffs": {
+      "q2": [
+       {
+        "tipo": "anadido",
+        "texto": "línea 0"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 1"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 2"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 3"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 4"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 5"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 6"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 7"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 8"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 9"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 10"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 11"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 12"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 13"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 14"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 15"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 16"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 17"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 18"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 19"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 20"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 21"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 22"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 23"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 24"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 25"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 26"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 27"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 28"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 29"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 30"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 31"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 32"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 33"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 34"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 35"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 36"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 37"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 38"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 39"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 40"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 41"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 42"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 43"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 44"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 45"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 46"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 47"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 48"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 49"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 50"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 51"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 52"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 53"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 54"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 55"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 56"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 57"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 58"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 59"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 60"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 61"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 62"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 63"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 64"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 65"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 66"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 67"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 68"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 69"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 70"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 71"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 72"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 73"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 74"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 75"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 76"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 77"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 78"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 79"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 80"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 81"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 82"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 83"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 84"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 85"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 86"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 87"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 88"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 89"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 90"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 91"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 92"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 93"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 94"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 95"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 96"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 97"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 98"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 99"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 100"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 101"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 102"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 103"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 104"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 105"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 106"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 107"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 108"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 109"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 110"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 111"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 112"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 113"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 114"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 115"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 116"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 117"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 118"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 119"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 120"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 121"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 122"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 123"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 124"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 125"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 126"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 127"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 128"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 129"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 130"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 131"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 132"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 133"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 134"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 135"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 136"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 137"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 138"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 139"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 140"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 141"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 142"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 143"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 144"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 145"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 146"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 147"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 148"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 149"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 150"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 151"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 152"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 153"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 154"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 155"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 156"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 157"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 158"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 159"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 160"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 161"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 162"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 163"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 164"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 165"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 166"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 167"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 168"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 169"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 170"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 171"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 172"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 173"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 174"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 175"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 176"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 177"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 178"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 179"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 180"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 181"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 182"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 183"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 184"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 185"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 186"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 187"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 188"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 189"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 190"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 191"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 192"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 193"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 194"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 195"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 196"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 197"
+       },
+       {
+        "tipo": "anadido",
+        "texto": "línea 198"
+       },
+       {
+        "tipo": "igual",
+        "texto": "línea 199"
+       }
+      ]
+     },
+     "recortada": true
+    }
+   },
+   {
+    "id": "c3",
+    "proyecto": "Tercera",
+    "sesion": "Menú",
+    "foco": false,
+    "estado": "esperando-respuesta"
+   },
+   {
+    "id": "c4",
+    "proyecto": "Cuarta",
+    "foco": false,
+    "estado": "parada"
+   }
+  ],
+  "tareas": [
+   {
+    "id": "t1",
+    "titulo": "Rehacer login",
+    "proyecto": "AppDemo",
+    "estado": "requiere-atencion",
+    "creada": "2026-10-13T10:00:00Z",
+    "motivo": "no encuentro el campo"
+   },
+   {
+    "id": "t3",
+    "titulo": "Migrar datos",
+    "proyecto": "AppDemo",
+    "estado": "en-proceso",
+    "creada": "2026-10-13T10:06:00Z"
+   },
+   {
+    "id": "t2",
+    "titulo": "Pulir iconos",
+    "proyecto": "AppDemo",
+    "estado": "nuevo",
+    "tras": "t1",
+    "creada": "2026-10-13T10:05:00Z"
+   },
+   {
+    "id": "t4",
+    "titulo": "Hecha ayer",
+    "proyecto": "AppDemo",
+    "estado": "terminada",
+    "creada": "2026-10-12T10:00:00Z",
+    "acabada": "2026-10-13T09:00:00Z"
+   },
+   {
+    "id": "t5",
+    "titulo": "Hecha sin fecha",
+    "proyecto": "Otra",
+    "estado": "terminada",
+    "creada": "2026-10-11T10:00:00Z"
+   }
+  ],
+  "esperando": 4
+ },
+ "tope": 1605,
+ "sinDiffs": {
+  "clase": "panorama",
+  "consolas": [
+   {
+    "id": "c1",
+    "proyecto": "AppDemo",
+    "sesion": "Prueba",
+    "foco": true,
+    "estado": "esperando-aprobacion",
+    "ultimaActividad": "2026-10-13T11:55:00Z",
+    "aprobacion": {
+     "pendientes": [
+      {
+       "id": "q1",
+       "origen": "developer-xone",
+       "descripcion": "edit_file /a.xne",
+       "decisionesPermitidas": [
+        "approve",
+        "reject"
+       ]
+      }
+     ],
+     "ficheros": {
+      "q1": "/a.xne"
+     },
+     "diffs": {},
+     "recortada": true
+    }
+   },
+   {
+    "id": "c2",
+    "proyecto": "Otra",
+    "foco": false,
+    "estado": "esperando-aprobacion",
+    "aprobacion": {
+     "pendientes": [
+      {
+       "id": "q2",
+       "origen": "developer-xone",
+       "descripcion": "write_file /grande.js",
+       "decisionesPermitidas": [
+        "approve",
+        "reject"
+       ]
+      },
+      {
+       "id": "q3",
+       "origen": "developer-xone",
+       "descripcion": "incorporar_adjunto /i.png",
+       "decisionesPermitidas": [
+        "approve",
+        "reject"
+       ],
+       "remota": true
+      }
+     ],
+     "ficheros": {
+      "q2": "/grande.js"
+     },
+     "diffs": {},
+     "recortada": true
+    }
+   },
+   {
+    "id": "c3",
+    "proyecto": "Tercera",
+    "sesion": "Menú",
+    "foco": false,
+    "estado": "esperando-respuesta"
+   },
+   {
+    "id": "c4",
+    "proyecto": "Cuarta",
+    "foco": false,
+    "estado": "parada"
+   }
+  ],
+  "tareas": [
+   {
+    "id": "t1",
+    "titulo": "Rehacer login",
+    "proyecto": "AppDemo",
+    "estado": "requiere-atencion",
+    "creada": "2026-10-13T10:00:00Z",
+    "motivo": "no encuentro el campo"
+   },
+   {
+    "id": "t3",
+    "titulo": "Migrar datos",
+    "proyecto": "AppDemo",
+    "estado": "en-proceso",
+    "creada": "2026-10-13T10:06:00Z"
+   },
+   {
+    "id": "t2",
+    "titulo": "Pulir iconos",
+    "proyecto": "AppDemo",
+    "estado": "nuevo",
+    "tras": "t1",
+    "creada": "2026-10-13T10:05:00Z"
+   },
+   {
+    "id": "t4",
+    "titulo": "Hecha ayer",
+    "proyecto": "AppDemo",
+    "estado": "terminada",
+    "creada": "2026-10-12T10:00:00Z",
+    "acabada": "2026-10-13T09:00:00Z"
+   },
+   {
+    "id": "t5",
+    "titulo": "Hecha sin fecha",
+    "proyecto": "Otra",
+    "estado": "terminada",
+    "creada": "2026-10-11T10:00:00Z"
+   }
+  ],
+  "esperando": 4
+ }
+}

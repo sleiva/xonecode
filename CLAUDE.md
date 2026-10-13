@@ -986,8 +986,9 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   pero se contesta en el escritorio, y las consolas de tarea se ven como tareas. **Límites declarados del panel**: la
   URL aprueba escrituras de CUALQUIER consola abierta y da feedback a las tareas; salen de la máquina, cifrados, los
   nombres de proyecto, los títulos de sesión, los títulos y motivos de las tareas (un motivo es texto del anfitrión y
-  puede nombrar una ruta: se recorta) y los diffs de las consolas fuera de foco; y el proyecto es el `basename` de la
-  raíz, así que el mismo nombre en dos entornos se confunde.
+  puede nombrar una ruta: se recorta) y los diffs de las consolas fuera de foco; el proyecto es el `basename` de la
+  raíz, así que el mismo nombre en dos entornos se confunde; y una tarjeta del panel con `recortada` (diffs cortados o
+  quitados para caber) solo se RECHAZA desde el móvil —sin «Aceptar»—, porque no se aprueba lo que no se ha visto entero.
   **Y una SEGUNDA vía, el túnel local por ngrok** (`agent/remoto/tunelNgrok.ts`, `ngrokEnMaquina.ts`, `core/tunel.ts`):
   el relé viaja EN el paquete (subruta `./servidor`, con la web móvil dentro), xonecode lo arranca en loopback y ngrok lo
   publica; el QR lleva la dirección de ngrok. La vía (`settings.remoto.via`) y el dominio fijo opcional
