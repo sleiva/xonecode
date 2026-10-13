@@ -1031,6 +1031,8 @@ export function montarRutas(
   const remotoHabilitado = (): boolean => opciones.remoto?.ajustes().habilitado === true;
   /** La última foto de ngrok (`OpcionesDeMontaje.remoto.medirNgrok`); `undefined` = aún no medida. */
   let fotoDeNgrok: { instalado: boolean; cuenta: boolean; hayBrew?: boolean } | undefined;
+  /** Por qué falló la última acción de ngrok: SOLO un texto fijo nuestro. Viaja en la foto. */
+  let motivoDeNgrok: string | undefined;
   const mensajeDeRemoto = (e: EstadoDeSesionRemota): MensajeAlCliente => {
     const ajustes = opciones.remoto?.ajustes();
     return {
@@ -1049,6 +1051,7 @@ export function montarRutas(
               cuenta: fotoDeNgrok.cuenta,
               ...(ajustes?.dominio === undefined ? {} : { dominio: ajustes.dominio }),
               ...(fotoDeNgrok.instalado ? {} : { receta: recetaDeNgrok(process.platform, fotoDeNgrok) }),
+              ...(motivoDeNgrok === undefined ? {} : { motivo: motivoDeNgrok }),
             },
           }),
     };
@@ -1918,7 +1921,8 @@ export function montarRutas(
         cliente(mensajeDeRemoto(sesionRemota.estado()));
       // La foto de ngrok, la PRIMERA vez que alguien mira: lanza `ngrok version`, que no se hace
       // con el interruptor apagado ni en sondeo.
-      if (sesionRemota !== undefined && fotoDeNgrok === undefined && remotoHabilitado()) void medirNgrokYAnunciar().catch(contar);
+      if (sesionRemota !== undefined && fotoDeNgrok === undefined && midiendoNgrok === undefined && remotoHabilitado())
+        void medirNgrokYAnunciar().catch(contar);
       if (conectores !== undefined) cliente(conectores);
       if (consumoDeLaSesion !== undefined) {
         cliente({
@@ -6192,20 +6196,37 @@ export function montarRutas(
     for (const cliente of clientes) cliente(mensaje);
   };
 
-  /** Una medida a la vez: dos pestañas que llegan juntas no lanzan dos `ngrok version`. */
+  /**
+   * Una medida a la vez, y la pedida con otra en vuelo se ENCADENA detrás (una sola, compartida
+   * por quien la pida mientras espera): la que está en vuelo pudo empezar ANTES de guardar el
+   * authtoken o de acabar la receta, y reutilizarla dejaría una foto vieja.
+   */
   let midiendoNgrok: Promise<void> | undefined;
-  const medirNgrokYAnunciar = (): Promise<void> => {
-    const medir = opciones.remoto?.medirNgrok;
-    if (medir === undefined || !remotoHabilitado()) return Promise.resolve();
-    midiendoNgrok ??= medir()
+  let siguienteMedidaDeNgrok: Promise<void> | undefined;
+  const medirNgrokAhora = (medir: () => Promise<{ instalado: boolean; cuenta: boolean; hayBrew?: boolean }>): Promise<void> => {
+    const esta: Promise<void> = medir()
       .then((foto) => {
         fotoDeNgrok = { instalado: foto.instalado, cuenta: foto.cuenta, ...(foto.hayBrew === undefined ? {} : { hayBrew: foto.hayBrew }) };
         anunciarRemoto();
       })
       .finally(() => {
-        midiendoNgrok = undefined;
+        if (midiendoNgrok === esta) midiendoNgrok = undefined;
       });
-    return midiendoNgrok;
+    midiendoNgrok = esta;
+    return esta;
+  };
+  const medirNgrokYAnunciar = (): Promise<void> => {
+    const medir = opciones.remoto?.medirNgrok;
+    if (medir === undefined || !remotoHabilitado()) return Promise.resolve();
+    const enVuelo = midiendoNgrok;
+    if (enVuelo === undefined) return medirNgrokAhora(medir);
+    siguienteMedidaDeNgrok ??= enVuelo
+      .catch(() => {})
+      .then(() => {
+        siguienteMedidaDeNgrok = undefined;
+        return medirNgrokAhora(medir);
+      });
+    return siguienteMedidaDeNgrok;
   };
 
   /**
@@ -6222,6 +6243,7 @@ export function montarRutas(
       return;
     }
     if (!guardarAjustesDeRemoto({ via })) return;
+    motivoDeNgrok = undefined;
     anunciarRemoto();
     void medirNgrokYAnunciar().catch(contar);
   };
@@ -6232,12 +6254,17 @@ export function montarRutas(
     if (dominio !== "") {
       const motivo = motivoDeDominioInaceptable(dominio);
       if (motivo !== undefined) {
+        // El texto del rechazo es fijo (`core/tunel.ts`): no repite lo tecleado.
         informar(`sesión remota: ${motivo}`);
+        motivoDeNgrok = motivo;
+        anunciarRemoto();
+        if (fotoDeNgrok === undefined) void medirNgrokYAnunciar().catch(contar);
         return;
       }
     }
     // Vacío QUITA el dominio: sin esto, uno puesto no se podría borrar desde el diálogo.
     if (!guardarAjustesDeRemoto({ dominio: dominio === "" ? null : dominio })) return;
+    motivoDeNgrok = undefined;
     anunciarRemoto();
     void medirNgrokYAnunciar().catch(contar);
   };
@@ -6277,7 +6304,11 @@ export function montarRutas(
     } catch {
       resultado = { ok: false, motivo: "" };
     }
-    if (!resultado.ok) informar(`sesión remota: ${motivoFijoDelTunel(resultado.motivo)}`);
+    if (resultado.ok) motivoDeNgrok = undefined;
+    else {
+      motivoDeNgrok = motivoFijoDelTunel(resultado.motivo);
+      informar(`sesión remota: ${motivoDeNgrok}`);
+    }
     // La medida dice si quedó con cuenta, no lo que contestó el comando.
     await medirNgrokYAnunciar();
   };

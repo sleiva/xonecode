@@ -416,7 +416,10 @@ describe("la sesión remota en el cable", () => {
  * `settings.json` se relee en cada uso.
  */
 describe("la sesión remota por el túnel de ngrok", () => {
-  function conTunel(o: { via?: ViaRemota; dominio?: string; habilitado?: () => boolean; instalado?: boolean; tunel?: TunelPort } = {}) {
+  type Foto = { instalado: boolean; cuenta: boolean; hayBrew?: boolean };
+  function conTunel(
+    o: { via?: ViaRemota; dominio?: string; habilitado?: () => boolean; instalado?: boolean; tunel?: TunelPort; medir?: () => Promise<Foto> } = {}
+  ) {
     const servidor = servidorDeMentira();
     const puerto = new PuenteRemotoEnMemoria();
     const tunel = new TunelEnMemoria();
@@ -424,7 +427,7 @@ describe("la sesión remota por el túnel de ngrok", () => {
       via: o.via ?? "ngrok",
       ...(o.dominio === undefined ? {} : { dominio: o.dominio }),
     };
-    const medir = vi.fn(async () => ({ instalado: o.instalado ?? true, cuenta: false, hayBrew: true }));
+    const medir = vi.fn(o.medir ?? (async (): Promise<Foto> => ({ instalado: o.instalado ?? true, cuenta: false, hayBrew: true })));
     const tokens: string[] = [];
     let resultadoDelToken: { ok: true } | { ok: false; motivo: string } = { ok: true };
     const guardados: unknown[] = [];
@@ -463,7 +466,7 @@ describe("la sesión remota por el túnel de ngrok", () => {
     return {
       puerto, tunel, medir, tokens, guardados, pasos, informados, montado, sse, accion,
       terminarPaso: () => terminarPaso?.(),
-      fallarToken: (motivo: string) => void (resultadoDelToken = { ok: false, motivo }),
+      fallarToken: (motivo: string | undefined) => void (resultadoDelToken = motivo === undefined ? { ok: true } : { ok: false, motivo }),
     };
   }
   const remotos = (recibidos: MensajeAlCliente[]) =>
@@ -650,5 +653,60 @@ describe("la sesión remota por el túnel de ngrok", () => {
     await vi.waitFor(() => expect(m.tokens).toHaveLength(1));
     await vi.waitFor(() => expect(m.informados.some((t) => t.startsWith("sesión remota:"))).toBe(true));
     expect(m.informados.join("\n")).not.toContain("/Users/");
+  });
+
+  it("un authtoken que no vale lleva su motivo FIJO al navegador, en la foto; el siguiente bueno lo quita", async () => {
+    const TOKEN = "esto no es un token";
+    const m = conTunel();
+    const c = clienteDeMentira();
+    await m.sse(c.peticion, c.respuesta);
+    await vi.waitFor(() => expect(m.medir).toHaveBeenCalledTimes(1));
+    m.fallarToken(MOTIVOS_DEL_TUNEL.authtokenSinForma);
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "authtoken" });
+    await asentar();
+    await enviarMensaje(m.accion, { clase: "secreto", valor: TOKEN });
+    await vi.waitFor(() => expect(remotos(c.recibidos).at(-1)?.ngrok?.motivo).toBe(MOTIVOS_DEL_TUNEL.authtokenSinForma));
+    expect(JSON.stringify(c.recibidos)).not.toContain(TOKEN);
+    expect(m.informados.join("\n")).not.toContain(TOKEN);
+
+    m.fallarToken(undefined);
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "authtoken" });
+    await asentar();
+    await enviarMensaje(m.accion, { clase: "secreto", valor: "2abcDEFghiJKLmno_pqrSTU" });
+    await vi.waitFor(() => expect(m.tokens).toHaveLength(2));
+    await vi.waitFor(() => expect(remotos(c.recibidos).at(-1)?.ngrok).toBeDefined());
+    await vi.waitFor(() => expect(remotos(c.recibidos).at(-1)?.ngrok?.motivo).toBeUndefined());
+  });
+
+  it("un dominio rechazado lleva el texto fijo del rechazo en la foto; uno bueno lo quita", async () => {
+    const m = conTunel();
+    const c = clienteDeMentira();
+    await m.sse(c.peticion, c.respuesta);
+    await vi.waitFor(() => expect(m.medir).toHaveBeenCalledTimes(1));
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "dominio", dominio: "https://mi-app.ngrok.app/x" });
+    await vi.waitFor(() => expect(remotos(c.recibidos).at(-1)?.ngrok?.motivo).toContain("sin https://"));
+    expect(remotos(c.recibidos).at(-1)?.ngrok?.motivo).not.toContain("mi-app");
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "dominio", dominio: "mi-app.ngrok.app" });
+    await vi.waitFor(() => expect(remotos(c.recibidos).at(-1)?.ngrok).toMatchObject({ dominio: "mi-app.ngrok.app" }));
+    expect(remotos(c.recibidos).at(-1)?.ngrok?.motivo).toBeUndefined();
+  });
+
+  it("una medida pedida con otra en vuelo se ENCADENA: la foto final es la de después de guardar el authtoken", async () => {
+    const sueltas: ((f: Foto) => void)[] = [];
+    const m = conTunel({ medir: () => new Promise<Foto>((r) => sueltas.push(r)) });
+    const c = clienteDeMentira();
+    await m.sse(c.peticion, c.respuesta);
+    await vi.waitFor(() => expect(sueltas).toHaveLength(1));
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "authtoken" });
+    await asentar();
+    await enviarMensaje(m.accion, { clase: "secreto", valor: "2abcDEFghiJKLmno_pqrSTU" });
+    await vi.waitFor(() => expect(m.tokens).toHaveLength(1));
+    for (let i = 0; i < 5; i++) await asentar();
+    // La medida en vuelo empezó ANTES de guardar: no vale, y la nueva no arranca hasta que acabe.
+    expect(sueltas).toHaveLength(1);
+    sueltas[0]!({ instalado: true, cuenta: false });
+    await vi.waitFor(() => expect(sueltas).toHaveLength(2));
+    sueltas[1]!({ instalado: true, cuenta: true });
+    await vi.waitFor(() => expect(remotos(c.recibidos).at(-1)?.ngrok).toMatchObject({ cuenta: true }));
   });
 });
