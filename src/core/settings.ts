@@ -396,8 +396,11 @@ function validarConcurrenciaDeTareas(candidato: unknown): number | undefined {
 function validarRemoto(candidato: unknown, avisos: Aviso[]): AjustesDeRemoto | undefined {
   if (typeof candidato !== "object" || candidato === null || Array.isArray(candidato)) return undefined;
   const o = candidato as Record<string, unknown>;
-  if (typeof o.habilitado !== "boolean") return undefined;
-  const remoto: AjustesDeRemoto = { habilitado: o.habilitado };
+  // Ausente es «no lo he dicho» (el interruptor puede venir de `XONECODE_REMOTO=1`) y el bloque
+  // se queda: la vía y el dominio elegidos sin tocar el interruptor no se pueden perder al leer.
+  // Uno que no es booleano sí tira el bloque: el fichero dice algo que no se entiende.
+  if (o.habilitado !== undefined && typeof o.habilitado !== "boolean") return undefined;
+  const remoto: AjustesDeRemoto = typeof o.habilitado === "boolean" ? { habilitado: o.habilitado } : {};
   if (o.servidor !== undefined) {
     if (typeof o.servidor === "string" && servidorRemotoAceptable(o.servidor)) {
       remoto.servidor = o.servidor;

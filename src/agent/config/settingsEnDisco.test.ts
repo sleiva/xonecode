@@ -290,11 +290,12 @@ describe("settingsEnDisco", () => {
     expect(cargarSettings(c).settings.remoto).toEqual({ habilitado: true, servidor: "ws://127.0.0.1:8787/ws", via: "ngrok" });
   });
 
-  it("guardarAjustesDeRemoto sin `remoto` previo (interruptor por XONECODE_REMOTO) deja algo que se LEE", () => {
-    // Sin `habilitado`, `validarRemoto` tira el bloque entero: la vía se perdería sin decirlo.
+  it("guardarAjustesDeRemoto sin `remoto` previo (interruptor por XONECODE_REMOTO) deja algo que se LEE, sin inventar `habilitado`", () => {
     const c = casa();
     guardarAjustesDeRemoto(c, { via: "ngrok" });
-    expect(cargarSettings(c).settings.remoto).toEqual({ habilitado: false, via: "ngrok" });
+    expect(cargarSettings(c).settings.remoto).toEqual({ via: "ngrok" });
+    const crudo = JSON.parse(readFileSync(join(c, ".xonecode", "settings.json"), "utf8")) as { remoto: Record<string, unknown> };
+    expect("habilitado" in crudo.remoto).toBe(false);
   });
 
   it("guardarModoPorDefecto(supervisado) BORRA la clave: es la omisión", () => {

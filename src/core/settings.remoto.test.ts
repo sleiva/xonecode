@@ -16,6 +16,13 @@ describe("el interruptor de la sesión remota", () => {
     expect(validarSettings({ entornos: [], remoto: { habilitado: "sí" } }).settings.remoto).toBeUndefined();
   });
 
+  it("un bloque SIN habilitado se conserva: la vía elegida con XONECODE_REMOTO=1 no se pierde", () => {
+    const { settings } = validarSettings({ entornos: [], remoto: { via: "ngrok", ngrok: { dominio: "mi-app.ngrok.app" } } });
+    expect(settings.remoto).toEqual({ via: "ngrok", ngrok: { dominio: "mi-app.ngrok.app" } });
+    expect(remotoEnVigor(settings.remoto, {}).habilitado).toBe(false);
+    expect(remotoEnVigor(settings.remoto, { XONECODE_REMOTO: "1" })).toMatchObject({ habilitado: true, via: "ngrok", dominio: "mi-app.ngrok.app" });
+  });
+
   it("apagado por omisión, y XONECODE_REMOTO=1 lo enciende para un arranque", () => {
     expect(remotoEnVigor(undefined, {})).toEqual({ habilitado: false, servidor: SERVIDOR_REMOTO_POR_OMISION, via: "servidor" });
     expect(SERVIDOR_REMOTO_POR_OMISION).toBe("wss://remoto.xone.dev/ws");

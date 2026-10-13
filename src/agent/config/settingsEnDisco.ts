@@ -301,11 +301,8 @@ export function guardarModoPorDefecto(casa: string | undefined, modo: ModoDeEscr
  * Guarda la vía de la sesión remota y el dominio de ngrok, fundidos en el `remoto` que ya hay
  * (interruptor y servidor intactos). `dominio: null` lo QUITA. La forma la comprueba quien llama
  * (`motivoDeDominioInaceptable`) y la vuelve a comprobar `validarSettings` al leer.
- *
- * **Sin `habilitado` en el fichero se escribe `false`**: `validarRemoto` tira el bloque entero si
- * no es un booleano, así que con el interruptor puesto por `XONECODE_REMOTO=1` la vía se perdería
- * en la siguiente lectura sin decirlo. `false` es lo mismo que ausente para `remotoEnVigor`, que
- * suma la variable de entorno.
+ * Sin `habilitado` en el fichero no se escribe ninguno: `validarRemoto` conserva el bloque, y el
+ * interruptor puede venir de `XONECODE_REMOTO=1`.
  */
 export function guardarAjustesDeRemoto(
   casa: string | undefined,
@@ -315,7 +312,6 @@ export function guardarAjustesDeRemoto(
   const crudo = leerCrudoOAbortar(ruta);
   const previo = crudo.remoto;
   const remoto: Record<string, unknown> = esObjeto(previo) ? { ...previo } : {};
-  if (typeof remoto.habilitado !== "boolean") remoto.habilitado = false;
   if (cambio.via !== undefined) remoto.via = cambio.via;
   if (cambio.dominio !== undefined) {
     const ngrok: Record<string, unknown> = esObjeto(remoto.ngrok) ? { ...remoto.ngrok } : {};
