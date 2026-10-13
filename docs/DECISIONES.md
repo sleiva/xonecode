@@ -8952,3 +8952,32 @@ URL sin `#` al final no es pérdida del secreto. «Apagar» por el mismo camino:
 sesión remota se cerró», y sin proceso ngrok ni el puerto del puente. La consola cerró con `SIGINT`. Limpio: prefijo y
 tarball borrados, `settings.json` idéntico (`cmp` y el mismo sha256). Lo que tocó en la casa es lo de cualquier arranque:
 `cloudstudio-oauth.json` (el vestíbulo refresca el listado) y la marca `agentes/.semilla.json` (ningún `.md` cambió).
+
+## ngrok viene con xonecode: el SDK en vez del programa (13-10-2026)
+
+La sesión remota por túnel necesitaba el programa `ngrok` instalado aparte (una receta: `brew install ngrok` con botón en
+macOS, `winget` y la página de descarga como guía en Windows y Linux). Se cambió por el SDK oficial, `@ngrok/ngrok` (MIT o
+Apache-2.0): npm instala solo el binario nativo de la plataforma (unos 9 MB en macOS ARM, unos 10 MB en Windows x64) por
+`optionalDependencies`, sin paso posterior a la instalación. Se descartaron el paquete `ngrok` de npm, que no es oficial y
+descarga el binario en un `postinstall` (falla detrás de proxies y sin red), y que la instalación de xonecode lanzara
+`brew`/`winget` (cambiar el sistema sin preguntar; en Windows puede pedir administrador).
+
+Lo que cambia:
+
+- **«Instalado» es que el SDK carga.** La receta de instalación desaparece entera, con su paso ejecutable y la plataforma
+  `herramienta`, que solo usaba ella.
+- **El túnel vive dentro del proceso**: ni programa que lanzar, ni log que leer, ni grupo que matar. Se acabó el ngrok
+  huérfano tras un cierre en seco.
+- **El authtoken, por orden**: `NGROK_AUTHTOKEN`, un fichero nuestro (`~/.xonecode/ngrok.json`, 0600, donde lo escribe
+  Ajustes) y la configuración del programa `ngrok` si ya se usaba, para no volver a pedirlo. Guardarlo ya no pasa por
+  `ngrok config add-authtoken`, así que el token no aparece en la línea de órdenes de ningún proceso.
+- **Una pérdida de conexión no es caída todavía**: el SDK reconecta solo (`onStatusChange`: `closed` y `connected`); solo
+  si no vuelve en `ESPERA_DE_RECONEXION_MS` se avisa de la caída.
+
+Medido en la máquina, contra ngrok de verdad: el SDK carga; el authtoken sale de la configuración que ya había; un túnel
+hacia un servidor local que contesta «hola» abre y, pedido desde fuera, contesta `200 hola` al primer intento; un authtoken
+inventado, en un proceso limpio, falla con `ERR_NGROK_105`, que se clasifica como autenticación.
+
+**Límite declarado, medido**: dentro de un mismo proceso, el SDK reutiliza la sesión ya abierta aunque se le pase otro
+authtoken (el inventado «abrió» detrás de uno bueno). Cambiar el authtoken con la consola en marcha no se aplica hasta
+reiniciarla. Sin medir: el dominio propio (`domain`), que esta cuenta no tiene.

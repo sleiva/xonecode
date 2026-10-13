@@ -601,7 +601,7 @@ describe("la sesión remota por el túnel de ngrok", () => {
     expect(m.tunel.cerrados).toBe(1);
   });
 
-  it("la foto de ngrok se mide al conectar la primera pestaña y viaja con el mensaje; sin instalar, con su receta", async () => {
+  it("la foto de ngrok se mide al conectar la primera pestaña y viaja con el mensaje; sin cargar, SIN receta (viene con xonecode)", async () => {
     const m = conTunel({ instalado: false });
     const c = clienteDeMentira();
     await m.sse(c.peticion, c.respuesta);
@@ -609,7 +609,8 @@ describe("la sesión remota por el túnel de ngrok", () => {
     expect(m.medir).toHaveBeenCalledTimes(1);
     const ngrok = remotos(c.recibidos).filter((x) => x.ngrok !== undefined).at(-1)!.ngrok!;
     expect(ngrok).toMatchObject({ instalado: false, cuenta: false });
-    expect(ngrok.receta?.id).toBe("ngrok");
+    // ngrok viene con xonecode (el SDK): no hay nada que instalar aparte, así que no se ofrece receta.
+    expect("receta" in ngrok).toBe(false);
     // Una segunda pestaña no vuelve a medir: es una foto, no un sondeo.
     const d = clienteDeMentira();
     await m.sse(d.peticion, d.respuesta);
@@ -618,43 +619,18 @@ describe("la sesión remota por el túnel de ngrok", () => {
     expect(remotos(d.recibidos).at(-1)).toMatchObject({ ngrok: { instalado: false } });
   });
 
-  it("con el interruptor apagado no se mide ngrok, ni se atienden sus acciones, ni corre su receta", async () => {
+  it("con el interruptor apagado no se mide ngrok ni se atienden sus acciones", async () => {
     const m = conTunel({ habilitado: () => false });
     const c = clienteDeMentira();
     await m.sse(c.peticion, c.respuesta);
     await enviarMensaje(m.accion, { clase: "remoto", accion: "via", via: "servidor" });
     await enviarMensaje(m.accion, { clase: "remoto", accion: "authtoken" });
     await enviarMensaje(m.accion, { clase: "remoto", accion: "dominio", dominio: "mi-app.ngrok.app" });
-    await enviarMensaje(m.accion, { clase: "receta", id: "ngrok", paso: 1, accion: "ejecutar" });
     for (let i = 0; i < 5; i++) await asentar();
     expect(m.medir).not.toHaveBeenCalled();
     expect(m.guardados).toEqual([]);
     expect(c.recibidos.some((x) => x.clase === "secreto")).toBe(false);
     expect(m.pasos).toEqual([]);
-  });
-
-  it("la receta de ngrok corre por el corredor de siempre y, al acabar, se vuelve a medir", async () => {
-    const m = conTunel({ instalado: false });
-    const c = clienteDeMentira();
-    await m.sse(c.peticion, c.respuesta);
-    await vi.waitFor(() => expect(m.medir).toHaveBeenCalledTimes(1));
-    await enviarMensaje(m.accion, { clase: "receta", id: "ngrok", paso: 1, accion: "ejecutar" });
-    expect(m.pasos).toEqual(["ngrok:1"]);
-    m.terminarPaso();
-    await vi.waitFor(() => expect(m.medir).toHaveBeenCalledTimes(2));
-  });
-
-  it("al acabar la receta de ngrok se vuelve a medir SOLO ngrok: Android e iOS no", async () => {
-    const m = conTunel({ instalado: false });
-    const c = clienteDeMentira();
-    await m.sse(c.peticion, c.respuesta);
-    await vi.waitFor(() => expect(m.medir).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(m.detectar).toHaveBeenCalledTimes(1));
-    await enviarMensaje(m.accion, { clase: "receta", id: "ngrok", paso: 1, accion: "ejecutar" });
-    m.terminarPaso();
-    await vi.waitFor(() => expect(m.medir).toHaveBeenCalledTimes(2));
-    for (let i = 0; i < 5; i++) await asentar();
-    expect(m.detectar).toHaveBeenCalledTimes(1);
   });
 
   it("una receta de APARATO sí vuelve a medir los aparatos (y no ngrok)", async () => {

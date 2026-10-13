@@ -1,147 +1,125 @@
 /**
- * ngrok en ESTA máquina: dónde está, si contesta, si tiene cuenta, y guardar el authtoken.
+ * ngrok en ESTA máquina: si el SDK carga, si hay cuenta (authtoken), y guardar el authtoken.
  *
- * **La medida manda, nunca un flag recordado**: «instalado» es que `ngrok version` contesta;
- * «con cuenta» es que la configuración que `ngrok config check` NOMBRA tiene un `authtoken`, o
- * que el entorno trae `NGROK_AUTHTOKEN` (ngrok la lee, y el túnel se la pasa: del entorno solo
- * le quita las claves de los proveedores, `core/shellDeAgente.ts#entornoDeShell`). La ruta de esa configuración no sale de aquí, ni la salida de ngrok: un fallo es un
- * texto de `core/tunel.ts#MOTIVOS_DEL_TUNEL`.
+ * **ngrok viene con xonecode** (`@ngrok/ngrok`, el SDK oficial: npm instala solo el binario nativo de la plataforma, sin
+ * pasos posteriores a la instalación), así que «instalado» es que el SDK CARGA —falla solo en una plataforma sin binario
+ * del SDK—, y no que haya un programa `ngrok` en el PATH. Ya no hay receta para instalarlo.
+ *
+ * **El authtoken, por orden**: `NGROK_AUTHTOKEN` del entorno; el fichero nuestro (`~/.xonecode/ngrok.json`, 0600), que es
+ * donde lo escribe Ajustes; y la configuración del programa `ngrok` si ya lo usabas (`core/tunel.ts#rutasDeConfigDeNgrok`),
+ * para no pedírtelo otra vez. Ni el token ni las rutas salen de aquí: un fallo es un texto de `MOTIVOS_DEL_TUNEL`.
  */
-import { execFile } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { closeSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { entornoDeShell } from "../../core/shellDeAgente.js";
-import { MOTIVOS_DEL_TUNEL } from "../../core/tunel.js";
-import { localizadorDeAndroid } from "../dispositivos/dispositivosEnMaquina.js";
+import { dirname, join } from "node:path";
+import { authtokenDeConfig, FORMA_DE_AUTHTOKEN, MOTIVOS_DEL_TUNEL, rutasDeConfigDeNgrok } from "../../core/tunel.js";
+import { renombrarSobreSync } from "../renombrarSobre.js";
 
-/** Lo que tarda como mucho una pregunta corta a ngrok (`version`, `config …`). */
-export const TOPE_DE_PREGUNTA_A_NGROK_MS = 15_000;
-
-export interface ResultadoDeEjecucion {
-  ok: boolean;
-  salida: string;
+/** Lo que se usa del SDK. `forward` abre el túnel; el resto de su API no hace falta. */
+export interface SdkDeNgrok {
+  forward(config: {
+    addr: string;
+    authtoken?: string;
+    domain?: string;
+    onStatusChange?: (estado: string) => void;
+  }): Promise<{ url(): string | null; close(): Promise<void> }>;
 }
+
+/** El SDK de verdad, o `undefined` si su binario nativo no carga en esta plataforma. Por `import()`: solo se carga al usarlo. */
+export async function cargarSdkReal(): Promise<SdkDeNgrok | undefined> {
+  try {
+    const modulo = (await import("@ngrok/ngrok")) as unknown as { default?: SdkDeNgrok } & SdkDeNgrok;
+    const sdk = modulo.default ?? modulo;
+    return typeof sdk.forward === "function" ? sdk : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Donde Ajustes guarda el authtoken: un fichero NUESTRO, 0600, nunca el proyecto. */
+export const rutaDeAuthtoken = (casa: string): string => join(casa, ".xonecode", "ngrok.json");
 
 export interface DependenciasDeNgrok {
-  /** El binario de ngrok, o `undefined` si no está en el PATH. */
-  localizar?: () => string | undefined;
-  /** Corre un binario SIN shell y devuelve si salió con 0 y su stdout. Nunca lanza. */
-  ejecutar?: (binario: string, args: string[]) => Promise<ResultadoDeEjecucion>;
+  cargarSdk?: () => Promise<SdkDeNgrok | undefined>;
+  entorno?: Record<string, string | undefined>;
+  casa?: string;
+  plataforma?: string;
   /** Lee un fichero de texto; lanza si no se puede. */
   leer?: (ruta: string) => string;
-  entorno?: Record<string, string | undefined>;
+  /** Escribe el fichero del authtoken. */
+  escribir?: (ruta: string, contenido: string) => void;
 }
 
-/** ngrok en el PATH, con la misma búsqueda que los binarios de las recetas (`.exe` en Windows). */
-export function localizarNgrok(
-  deps: { plataforma?: string; entorno?: Record<string, string | undefined>; existe?: (ruta: string) => boolean } = {}
-): string | undefined {
-  const { enPath } = localizadorDeAndroid({
-    plataforma: deps.plataforma ?? process.platform,
-    entorno: deps.entorno ?? process.env,
-    home: homedir(),
-    existe: deps.existe ?? existsSync,
-  });
-  return enPath("ngrok");
-}
-
-/** ¿Hay `brew` en el PATH? Es lo que decide si el paso de macOS de `recetaDeNgrok` tiene botón. */
-export function hayBrew(
-  deps: { plataforma?: string; entorno?: Record<string, string | undefined>; existe?: (ruta: string) => boolean } = {}
-): boolean {
-  const { enPath } = localizadorDeAndroid({
-    plataforma: deps.plataforma ?? process.platform,
-    entorno: deps.entorno ?? process.env,
-    home: homedir(),
-    existe: deps.existe ?? existsSync,
-  });
-  return enPath("brew") !== undefined;
-}
-
-/**
- * El `execFile` de verdad. Sin shell, y el error NO se propaga: su `message` y su `cmd` llevan
- * los argumentos, y en `config add-authtoken` uno de ellos es el token.
- */
-export const ejecutarReal = (binario: string, args: string[]): Promise<ResultadoDeEjecucion> =>
-  new Promise((resolver) => {
-    try {
-      execFile(
-        binario,
-        args,
-        { timeout: TOPE_DE_PREGUNTA_A_NGROK_MS, windowsHide: true, encoding: "utf8", env: entornoDeShell({ entorno: process.env }) },
-        (error, stdout) => resolver({ ok: error === null, salida: typeof stdout === "string" ? stdout : "" })
-      );
-    } catch {
-      resolver({ ok: false, salida: "" });
-    }
-  });
-
-/**
- * Una línea `authtoken:` con un valor no vacío, arriba (formato v2) o dentro de `agent:` (v3).
- * `authtoken: ""` o sin valor no es una cuenta.
- */
-export function configTieneAuthtoken(texto: string): boolean {
-  for (const linea of texto.split(/\r?\n/)) {
-    const m = /^\s*authtoken:(.*)$/.exec(linea);
-    if (m === null) continue;
-    const valor = m[1]!.replace(/\s+#.*$/, "").trim().replace(/^(["'])(.*)\1$/, "$2").trim();
-    if (valor !== "" && !valor.startsWith("#")) return true;
+/** El authtoken que se usará, por el orden de la cabecera, o `undefined` si no hay ninguno. */
+export function authtokenDeNgrok(deps: DependenciasDeNgrok = {}): string | undefined {
+  const entorno = deps.entorno ?? process.env;
+  const casa = deps.casa ?? homedir();
+  const leer = deps.leer ?? ((ruta: string) => readFileSync(ruta, "utf8"));
+  const delEntorno = (entorno.NGROK_AUTHTOKEN ?? "").trim();
+  if (delEntorno !== "") return delEntorno;
+  try {
+    const nuestro = JSON.parse(leer(rutaDeAuthtoken(casa))) as { authtoken?: unknown };
+    if (typeof nuestro.authtoken === "string" && FORMA_DE_AUTHTOKEN.test(nuestro.authtoken)) return nuestro.authtoken;
+  } catch {
+    // No hay fichero nuestro, o no se entiende: se sigue buscando.
   }
-  return false;
+  for (const ruta of rutasDeConfigDeNgrok(deps.plataforma ?? process.platform, entorno, casa)) {
+    try {
+      const token = authtokenDeConfig(leer(ruta));
+      if (token !== undefined) return token;
+    } catch {
+      // Esa configuración no está.
+    }
+  }
+  return undefined;
 }
 
 export interface MedidaDeNgrok {
   instalado: boolean;
-  version?: string;
   cuenta: boolean;
 }
 
 export async function medirNgrok(deps: DependenciasDeNgrok = {}): Promise<MedidaDeNgrok> {
-  const entorno = deps.entorno ?? process.env;
-  const localizar = deps.localizar ?? (() => localizarNgrok({ entorno }));
-  const ejecutar = deps.ejecutar ?? ejecutarReal;
-  const leer = deps.leer ?? ((ruta: string) => readFileSync(ruta, "utf8"));
-
-  const binario = localizar();
-  if (binario === undefined) return { instalado: false, cuenta: false };
-  const v = await ejecutar(binario, ["version"]);
-  if (!v.ok) return { instalado: false, cuenta: false };
-  const version = /ngrok version (\S+)/.exec(v.salida)?.[1];
-  const conVersion = version === undefined ? {} : { version };
-
-  if ((entorno.NGROK_AUTHTOKEN ?? "").trim() !== "") return { instalado: true, ...conVersion, cuenta: true };
-
-  const c = await ejecutar(binario, ["config", "check"]);
-  const ruta = c.ok ? /Valid configuration file at (.+)/.exec(c.salida)?.[1]?.trim() : undefined;
-  let cuenta = false;
-  if (ruta !== undefined && ruta !== "") {
-    try {
-      cuenta = configTieneAuthtoken(leer(ruta));
-    } catch {
-      cuenta = false;
-    }
-  }
-  return { instalado: true, ...conVersion, cuenta };
+  const sdk = await (deps.cargarSdk ?? cargarSdkReal)();
+  return { instalado: sdk !== undefined, cuenta: authtokenDeNgrok(deps) !== undefined };
 }
-
-/** Lo que tiene un authtoken de ngrok: alfanumérico con `_`/`-`, sin espacios. */
-// Empieza por letra o cifra: un valor que empiece por «-» lo leería ngrok como una opción.
-const FORMA_DE_AUTHTOKEN = /^[A-Za-z0-9][A-Za-z0-9_-]{9,199}$/;
 
 export type ResultadoDeGuardarAuthtoken = { ok: true } | { ok: false; motivo: string };
 
+/** Temporal + rename, 0600 desde el principio: el token nunca está en un fichero legible por otros. */
+function escribirAtomicoReal(ruta: string, contenido: string): void {
+  mkdirSync(dirname(ruta), { recursive: true, mode: 0o700 });
+  const temporal = `${ruta}.${randomUUID()}.tmp`;
+  let fd: number | undefined;
+  try {
+    fd = openSync(temporal, "wx", 0o600);
+    writeFileSync(fd, contenido, "utf8");
+    closeSync(fd);
+    fd = undefined;
+    renombrarSobreSync(temporal, ruta);
+  } catch (error) {
+    if (fd !== undefined) closeSync(fd);
+    try {
+      unlinkSync(temporal);
+    } catch {
+      // no llegó a crearse
+    }
+    throw error;
+  }
+}
+
 /**
- * `ngrok config add-authtoken <token>`, por `execFile` y sin shell. El token no se escribe en
- * ningún fichero nuestro ni en un log, y un fallo devuelve un texto FIJO. **Límite declarado**:
- * mientras corre, el token está en la línea de órdenes del proceso (lo ve `ps`): es como ngrok lo
- * recibe, y dura lo que tarda en escribir su configuración.
+ * Guarda el authtoken en `~/.xonecode/ngrok.json` (0600). Ya no pasa por `ngrok config add-authtoken`, así que el token no
+ * aparece en la línea de órdenes de ningún proceso. Un fallo devuelve un texto FIJO.
  */
 export async function guardarAuthtoken(token: string, deps: DependenciasDeNgrok = {}): Promise<ResultadoDeGuardarAuthtoken> {
   const limpio = token.trim();
   if (!FORMA_DE_AUTHTOKEN.test(limpio)) return { ok: false, motivo: MOTIVOS_DEL_TUNEL.authtokenSinForma };
-  const entorno = deps.entorno ?? process.env;
-  const binario = (deps.localizar ?? (() => localizarNgrok({ entorno })))();
-  if (binario === undefined) return { ok: false, motivo: MOTIVOS_DEL_TUNEL.noInstalado };
-  const r = await (deps.ejecutar ?? ejecutarReal)(binario, ["config", "add-authtoken", limpio]);
-  return r.ok ? { ok: true } : { ok: false, motivo: MOTIVOS_DEL_TUNEL.authtokenNoGuardado };
+  try {
+    (deps.escribir ?? escribirAtomicoReal)(rutaDeAuthtoken(deps.casa ?? homedir()), JSON.stringify({ version: 1, authtoken: limpio }, null, 2) + "\n");
+    return { ok: true };
+  } catch {
+    return { ok: false, motivo: MOTIVOS_DEL_TUNEL.authtokenNoGuardado };
+  }
 }

@@ -632,11 +632,10 @@ export type NgrokDelCable = {
   instalado: boolean;
   cuenta: boolean;
   dominio?: string;
-  receta?: Receta;
   motivo?: string;
 };
 
-/** Una receta del cable, campo a campo: la de Dispositivos y la de ngrok pasan por aquí. */
+/** Una receta del cable, campo a campo: la de Dispositivos pasa por aquí. */
 function recetaDe(r: Receta): Receta {
   return {
     id: r.id,
@@ -691,7 +690,7 @@ function recetaDe(r: Receta): Receta {
   };
 }
 
-/** Lo de ngrok que llega por el cable, campo a campo. `receta` se acepta entera: es la del host. */
+/** Lo de ngrok que llega por el cable, campo a campo. */
 function ngrokDe(v: unknown): NgrokDelCable | undefined {
   if (typeof v !== "object" || v === null) return undefined;
   const n = v as Record<string, unknown>;
@@ -701,12 +700,6 @@ function ngrokDe(v: unknown): NgrokDelCable | undefined {
     cuenta: n["cuenta"],
     ...(typeof n["dominio"] === "string" ? { dominio: n["dominio"] } : {}),
     ...(typeof n["motivo"] === "string" ? { motivo: n["motivo"] } : {}),
-    ...(typeof n["receta"] === "object" &&
-    n["receta"] !== null &&
-    typeof (n["receta"] as Receta).id === "string" &&
-    Array.isArray((n["receta"] as Receta).pasos)
-      ? { receta: recetaDe(n["receta"] as Receta) }
-      : {}),
   };
 }
 

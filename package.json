@@ -46,6 +46,7 @@
     "@langchain/ollama": "1.3.0",
     "@langchain/openai": "1.5.5",
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "@ngrok/ngrok": "^1.7.0",
     "@truefoundry/trueforge-core": "0.2.1",
     "@xone/xonecode-remoto": "file:vendor/xonecode-remoto",
     "acorn": "^8.19.0",

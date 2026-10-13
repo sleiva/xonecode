@@ -4546,15 +4546,17 @@ describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
   });
 
   /**
-   * La rama POR OMISIÓN del cableado (sin `tunelRemoto`, `medirNgrok` ni `guardarAuthtoken`): con
-   * un PATH vacío no hay ngrok que encontrar, así que la medida real dice «no instalado» sin
-   * lanzar nada, y el túnel real falla con `noInstalado` antes de cargar el paquete o lanzar un
-   * proceso. Es la composición que ningún test con dobles ve.
+   * La rama POR OMISIÓN del cableado (sin `tunelRemoto`, `medirNgrok` ni `guardarAuthtoken`), con el PATH vacío: ngrok
+   * viene con xonecode (el SDK), así que la medida real dice «instalado» aunque no haya ningún `ngrok` en el PATH, y sin
+   * authtoken (la casa de las pruebas está vacía) «sin cuenta»; encender falla por la autenticación, antes de abrir nada.
+   * Es la composición que ningún test con dobles ve.
    */
-  it("sin dobles y sin ngrok en el PATH: la foto dice no instalado con su receta, y encender da noInstalado", async () => {
-    const previos = { remoto: process.env.XONECODE_REMOTO, path: process.env.PATH };
+  it("sin dobles y sin ngrok en el PATH: el SDK viene con xonecode (instalado, sin receta), y sin authtoken encender da autenticación", async () => {
+    const previos = { remoto: process.env.XONECODE_REMOTO, path: process.env.PATH, authtoken: process.env.NGROK_AUTHTOKEN };
     process.env.XONECODE_REMOTO = "1";
     process.env.PATH = mkdtempSync(join(tmpdir(), "xonecode-path-vacio-"));
+    // Un authtoken en el entorno de quien corre la suite daría «con cuenta»: esta prueba no depende de su máquina.
+    delete process.env.NGROK_AUTHTOKEN;
     const ruta = rutaSettings();
     const settingsPrevios = existsSync(ruta) ? readFileSync(ruta, "utf8") : undefined;
     try {
@@ -4580,13 +4582,13 @@ describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
           await rutas.get(`GET ${RUTA_EVENTOS}`)!(pestana.peticion, pestana.respuesta);
           const remotos = () => pestana.recibidos.filter((x): x is Extract<MensajeAlCliente, { clase: "remoto" }> => x.clase === "remoto");
           await vi.waitFor(() => expect(remotos().at(-1)?.ngrok).toBeDefined());
-          expect(remotos().at(-1)!.ngrok).toMatchObject({ instalado: false, cuenta: false });
-          expect(remotos().at(-1)!.ngrok!.receta?.id).toBe("ngrok");
+          expect(remotos().at(-1)!.ngrok).toMatchObject({ instalado: true, cuenta: false });
+          expect("receta" in remotos().at(-1)!.ngrok!).toBe(false);
 
           const accion = rutas.get(`POST ${RUTA_ACCION}`)!;
           await enviarMensaje(accion, { clase: "remoto", accion: "via", via: "ngrok" });
           await enviarMensaje(accion, { clase: "remoto", accion: "encender" });
-          await vi.waitFor(() => expect(remotos().at(-1)).toMatchObject({ estado: "error", motivo: MOTIVOS_DEL_TUNEL.noInstalado }));
+          await vi.waitFor(() => expect(remotos().at(-1)).toMatchObject({ estado: "error", motivo: MOTIVOS_DEL_TUNEL.autenticacion }));
           // El túnel falló antes de abrir el puente.
           expect(puente.aperturas).toEqual([]);
         },
@@ -4596,6 +4598,7 @@ describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
       if (previos.remoto === undefined) delete process.env.XONECODE_REMOTO;
       else process.env.XONECODE_REMOTO = previos.remoto;
       process.env.PATH = previos.path;
+      if (previos.authtoken !== undefined) process.env.NGROK_AUTHTOKEN = previos.authtoken;
       if (settingsPrevios === undefined) rmSync(ruta, { force: true });
       else writeFileSync(ruta, settingsPrevios);
     }

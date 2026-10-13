@@ -86,7 +86,6 @@ import {
 import type { Dispositivo, Herramienta, InformeDeDispositivos } from "../../core/dispositivos.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, remotoEnVigor, type AjustesDeDispositivos } from "../../core/settings.js";
 import type { NombreDeHerramienta } from "../../core/dispositivos.js";
-import { recetaDeNgrok } from "../../core/dispositivos.js";
 import type { ViaRemota } from "../../core/settings.js";
 import { motivoDeDominioInaceptable } from "../../core/tunel.js";
 import { instalarHerramientaDeDispositivos, verificarDispositivo } from "../../agent/dispositivos/dispositivosEnMaquina.js";
@@ -441,7 +440,7 @@ export interface OpcionesDeMontaje {
      * primera pestaña, tras cada acción suya y al acabar su receta; nunca en sondeo, y nunca con
      * el interruptor apagado. Ausente = el mensaje no lleva `ngrok`.
      */
-    medirNgrok?: () => Promise<{ instalado: boolean; cuenta: boolean; hayBrew?: boolean }>;
+    medirNgrok?: () => Promise<{ instalado: boolean; cuenta: boolean }>;
     /** `ngrok config add-authtoken`. Un fallo es un texto de `MOTIVOS_DEL_TUNEL`. */
     guardarAuthtoken?: (token: string) => Promise<{ ok: true } | { ok: false; motivo: string }>;
     /** Escribe el interruptor, la vía o el dominio en `settings.json`; `dominio: null` lo quita. Puede lanzar. */
@@ -1031,7 +1030,7 @@ export function montarRutas(
   let sesionRemota: ReturnType<typeof crearSesionRemota> | undefined;
   const remotoHabilitado = (): boolean => opciones.remoto?.ajustes().habilitado === true;
   /** La última foto de ngrok (`OpcionesDeMontaje.remoto.medirNgrok`); `undefined` = aún no medida. */
-  let fotoDeNgrok: { instalado: boolean; cuenta: boolean; hayBrew?: boolean } | undefined;
+  let fotoDeNgrok: { instalado: boolean; cuenta: boolean } | undefined;
   /** Por qué falló la última acción de ngrok: SOLO un texto fijo nuestro. Viaja en la foto. */
   let motivoDeNgrok: string | undefined;
   const mensajeDeRemoto = (e: EstadoDeSesionRemota): MensajeAlCliente => {
@@ -1055,7 +1054,6 @@ export function montarRutas(
               instalado: fotoDeNgrok.instalado,
               cuenta: fotoDeNgrok.cuenta,
               ...(ajustes?.dominio === undefined ? {} : { dominio: ajustes.dominio }),
-              ...(fotoDeNgrok.instalado ? {} : { receta: recetaDeNgrok(process.platform, fotoDeNgrok) }),
               ...(motivoDeNgrok === undefined ? {} : { motivo: motivoDeNgrok }),
             },
           }),
@@ -5058,12 +5056,7 @@ export function montarRutas(
       ultimoProgreso = 0;
       emitirProgreso(resultado.estado as "ok" | "fallo" | "cancelada" | "colgada", resultado.motivo);
       trabajo = undefined;
-      // Y la foto nueva es la que dice si el paso quedó hecho, no el código de salida. Instalar
-      // ngrok no cambia los aparatos: su foto se queda, y solo se vuelve a medir ngrok.
-      if (receta === "ngrok") {
-        await medirNgrokYAnunciar().catch(contar);
-        return;
-      }
+      // Y la foto nueva es la que dice si el paso quedó hecho, no el código de salida.
       informeDeDispositivos = undefined;
       await atenderDispositivos().catch(contar);
     })();
@@ -5086,8 +5079,6 @@ export function montarRutas(
       trabajo?.cancelar();
       return;
     }
-    // La receta de ngrok es de la sesión remota: con el interruptor apagado no existe.
-    if (mensaje.id === "ngrok" && !remotoHabilitado()) return;
     if (trabajo !== undefined) {
       // Ya hay uno: se reenvía su estado en vez de lanzar otro.
       emitirProgreso("corriendo");
@@ -6358,10 +6349,10 @@ export function montarRutas(
    */
   let midiendoNgrok: Promise<void> | undefined;
   let siguienteMedidaDeNgrok: Promise<void> | undefined;
-  const medirNgrokAhora = (medir: () => Promise<{ instalado: boolean; cuenta: boolean; hayBrew?: boolean }>): Promise<void> => {
+  const medirNgrokAhora = (medir: () => Promise<{ instalado: boolean; cuenta: boolean }>): Promise<void> => {
     const esta: Promise<void> = medir()
       .then((foto) => {
-        fotoDeNgrok = { instalado: foto.instalado, cuenta: foto.cuenta, ...(foto.hayBrew === undefined ? {} : { hayBrew: foto.hayBrew }) };
+        fotoDeNgrok = { instalado: foto.instalado, cuenta: foto.cuenta };
         anunciarRemoto();
       })
       .finally(() => {
@@ -8529,7 +8520,7 @@ export interface OpcionesDeArranque {
   /** El túnel de la vía ngrok; por omisión el real (`agent/remoto/tunelNgrok.ts`). Los tests pasan el doble. */
   tunelRemoto?: TunelPort;
   /** La foto de ngrok; por omisión la real (`agent/remoto/ngrokEnMaquina.ts`), que lanza `ngrok version`. */
-  medirNgrok?: () => Promise<{ instalado: boolean; cuenta: boolean; hayBrew?: boolean }>;
+  medirNgrok?: () => Promise<{ instalado: boolean; cuenta: boolean }>;
   /** `ngrok config add-authtoken`; por omisión el real. */
   guardarAuthtoken?: (token: string) => Promise<{ ok: true } | { ok: false; motivo: string }>;
   puerto: number;
@@ -8784,8 +8775,9 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
       medirNgrok:
         opciones.medirNgrok ??
         (async () => {
+          // ngrok viene con xonecode (el SDK): no hay receta de instalación que medir.
           const ngrok = await import("../../agent/remoto/ngrokEnMaquina.js");
-          return { ...(await ngrok.medirNgrok()), hayBrew: ngrok.hayBrew() };
+          return ngrok.medirNgrok();
         }),
       guardarAuthtoken:
         opciones.guardarAuthtoken ??

@@ -644,13 +644,13 @@ export type MensajeAlCliente =
       via?: "servidor" | "ngrok";
       /**
        * Lo medido de ngrok, solo si el diálogo lo necesita. `cuenta` = hay authtoken en SU
-       * configuración (nunca el token ni la ruta, que no cruzan); `receta` = cómo instalarlo,
-       * aparte de `InformeDeDispositivos.recetas` para que la pestaña de Dispositivos no la pinte.
+       * configuración (nunca el token ni la ruta, que no cruzan). `instalado` = el SDK de ngrok, que viene con
+       * xonecode, CARGA: no hay receta para instalarlo aparte.
        * `motivo` = por qué falló la última acción de ngrok (authtoken o dominio): SOLO un texto
        * fijo nuestro (`MOTIVOS_DEL_TUNEL` o el rechazo del dominio), nunca lo tecleado ni lo que
        * contestó ngrok. Lo quita la siguiente acción que sale bien.
        */
-      ngrok?: { instalado: boolean; cuenta: boolean; dominio?: string; receta?: Receta; motivo?: string };
+      ngrok?: { instalado: boolean; cuenta: boolean; dominio?: string; motivo?: string };
     }
   /**
    * El saludo, SUELTO del `alta` — llega al conectar, ANTES de que el paso de cuenta
@@ -1836,7 +1836,7 @@ export interface Aparte {
 export interface Receta {
   id: "android-emulador" | "ios-simulador" | "ngrok";
   /** Su pestaña. Ver `Herramienta.plataforma`. */
-  plataforma: "android" | "ios" | "herramienta";
+  plataforma: "android" | "ios";
   titulo: string;
   descripcion: string;
   pasos: PasoDeReceta[];

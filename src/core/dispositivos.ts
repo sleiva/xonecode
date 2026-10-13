@@ -241,13 +241,9 @@ export interface Aparte {
  * qué se copia.
  */
 export interface Receta {
-  id: "android-emulador" | "ios-simulador" | "ngrok";
-  /**
-   * A qué plataforma sirve. Dato, como en `Herramienta`: de aquí sale su pestaña. `herramienta`
-   * es la de una receta que no es de ningún aparato (la de ngrok): ninguna pestaña de
-   * Dispositivos la recoge, y viaja aparte, no en `InformeDeDispositivos.recetas`.
-   */
-  plataforma: "android" | "ios" | "herramienta";
+  id: "android-emulador" | "ios-simulador";
+  /** A qué plataforma sirve. Dato, como en `Herramienta`: de aquí sale su pestaña. */
+  plataforma: "android" | "ios";
   titulo: string;
   descripcion: string;
   pasos: PasoDeReceta[];
@@ -621,58 +617,6 @@ export function recetaDeSimuladorIos(plataforma: string, estado: EstadoDeIos): R
       estado.runtimes.length === 0
         ? "Con el runtime instalado, Xcode ya deja una lista de simuladores hecha: aparecerán aquí. Para arrancar uno, `xcrun simctl boot <UDID>`; arrancarlo desde esta ventana todavía no está cableado."
         : `Runtime de iOS instalados: ${estado.runtimes.join(", ")}. Para arrancar un simulador, \`xcrun simctl boot <UDID>\`; arrancarlo desde esta ventana todavía no está cableado.`,
-  };
-}
-
-/**
- * La receta para instalar ngrok, que es lo que necesita la sesión remota por túnel. NO es de un
- * aparato: su `plataforma` es `herramienta` y no entra en `InformeDeDispositivos.recetas`; la
- * lleva el mensaje `remoto`. Un solo paso. En macOS lo lanza xonecode (`ngrok:darwin:1` en
- * `PASOS_EJECUTABLES`, solo con `brew`); en Windows y Linux es una guía sin botón, porque un
- * instalador de esos sistemas puede pedir elevación o abrir una ventana.
- *
- * `hecho` sale de la medida (`ngrok version` contesta), nunca de un flag recordado.
- */
-export function recetaDeNgrok(plataforma: string, medida: { instalado: boolean; hayBrew?: boolean }): Receta {
-  const hecho = medida.instalado;
-  let paso: PasoDeReceta;
-  if (plataforma === "darwin") {
-    const hayBrew = medida.hayBrew === true;
-    paso = {
-      titulo: "Instalar ngrok",
-      comandos: ["brew install ngrok"],
-      nota: "Se instala con Homebrew y no pide contraseña de administrador.",
-      hecho,
-      ejecutable: hayBrew,
-      ...(hayBrew ? {} : { porQueNo: "hace falta Homebrew (brew.sh)" }),
-    };
-  } else if (plataforma === "win32") {
-    paso = {
-      titulo: "Instalar ngrok",
-      comandos: ["winget install ngrok.ngrok"],
-      nota: "Pégalo en una terminal; después, abre una terminal nueva para que ngrok esté en el PATH.",
-      hecho,
-      ejecutable: false,
-      porQueNo: "en Windows el instalador se lanza desde tu terminal",
-    };
-  } else {
-    paso = {
-      titulo: "Instalar ngrok",
-      comandos: ["# descarga ngrok de https://ngrok.com/download e instálalo con el gestor de tu distribución"],
-      nota: "Cada distribución lo instala distinto; la página de descarga trae el comando de la tuya.",
-      hecho,
-      ejecutable: false,
-      porQueNo: "depende de tu distribución y puede pedir administrador",
-    };
-  }
-  return {
-    id: "ngrok",
-    plataforma: "herramienta",
-    titulo: "Instalar ngrok",
-    descripcion: "ngrok abre el túnel por el que el móvil llega a esta consola. Un paso, una vez por máquina.",
-    pasos: [paso],
-    completa: hecho,
-    despues: "Con ngrok instalado, falta tu authtoken (dashboard.ngrok.com): se pega desde la ventana de la sesión remota.",
   };
 }
 

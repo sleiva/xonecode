@@ -229,19 +229,6 @@ export const PASOS_EJECUTABLES = new Map<string, PasoEjecutable>([
     pasoDeCrearAvd("pixel8", IMAGEN_DARWIN),
   ],
   [
-    // ngrok, para la vía «túnel local» de la sesión remota (`core/dispositivos.ts#recetaDeNgrok`).
-    // ngrok viene como cask de Homebrew y no pide contraseña; el mismo entorno que el paso 1 de Android.
-    "ngrok:darwin:1",
-    {
-      tipo: "proceso",
-      binario: "brew",
-      conSdk: false,
-      invocaciones: [{ args: ["install", "ngrok"], teclear: [] }],
-      entornoExtra: { NONINTERACTIVE: "1", HOMEBREW_NO_AUTO_UPDATE: "1", HOMEBREW_NO_ENV_HINTS: "1" },
-      titulo: "Instalando ngrok",
-    },
-  ],
-  [
     "android-emulador:win32:1",
     {
       tipo: "descarga",

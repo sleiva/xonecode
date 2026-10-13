@@ -2672,14 +2672,7 @@ export function Ajustes({
               {remoto.habilitado === false ? null : remoto.ngrok === undefined ? (
                 <p>El servidor todavía no ha medido ngrok en esta máquina.</p>
               ) : (
-                <TunelNgrok
-                  ngrok={remoto.ngrok}
-                  {...(instalacion === undefined ? {} : { instalacion })}
-                  conectado={conectado}
-                  alEnviar={(m) => alRemoto?.(m)}
-                  {...(alEjecutarPaso !== undefined ? { alEjecutarPaso: (n: number) => alEjecutarPaso("ngrok", n) } : {})}
-                  {...(alCancelarPaso !== undefined ? { alCancelarPaso: () => alCancelarPaso("ngrok") } : {})}
-                />
+                <TunelNgrok ngrok={remoto.ngrok} conectado={conectado} alEnviar={(m) => alRemoto?.(m)} />
               )}
             </>
           ) : null}

@@ -5,25 +5,12 @@ import {
   motivoDeDominioInaceptable,
   motivoDeSalidaDeNgrok,
   servidorDeTunel,
-  urlPublicaDeLinea,
+  authtokenDeConfig,
+  rutasDeConfigDeNgrok,
 } from "./tunel.js";
 
 const oro = (n: string): string[] =>
   readFileSync(new URL(`./__oro__/${n}`, import.meta.url), "utf8").split("\n").filter(Boolean);
-
-describe("urlPublicaDeLinea, sobre el log real de ngrok v3", () => {
-  it("saca la URL de la línea «started tunnel» y de ninguna otra", () => {
-    const urls = oro("ngrok-v3.jsonl").map(urlPublicaDeLinea).filter(Boolean);
-    expect(urls).toEqual(["https://1a2b-203-0-113-7.ngrok-free.app"]);
-  });
-  it("ignora lo que no es JSON, un túnel no https y un url que no es de túnel iniciado", () => {
-    expect(urlPublicaDeLinea("ERROR:  ERR_NGROK_105")).toBeUndefined();
-    expect(urlPublicaDeLinea("")).toBeUndefined();
-    expect(urlPublicaDeLinea('{"msg":"started tunnel","url":"tcp://0.tcp.ngrok.io:1234"}')).toBeUndefined();
-    expect(urlPublicaDeLinea('{"msg":"update available","url":"https://x.ngrok-free.app"}')).toBeUndefined();
-    expect(urlPublicaDeLinea('{"msg":"started tunnel","url":42}')).toBeUndefined();
-  });
-});
 
 describe("servidorDeTunel", () => {
   it("compone wss://host/ws, sin puerto ni ruta de más", () => {
@@ -89,5 +76,23 @@ describe("MOTIVOS_DEL_TUNEL", () => {
         "sinDireccion",
       ]
     );
+  });
+});
+
+describe("la configuración del programa ngrok, por si ya lo usabas", () => {
+  it("rutas v3 por plataforma y la v2 de siempre", () => {
+    expect(rutasDeConfigDeNgrok("darwin", {}, "/Users/a")).toEqual([
+      "/Users/a/Library/Application Support/ngrok/ngrok.yml",
+      "/Users/a/.ngrok2/ngrok.yml",
+    ]);
+    expect(rutasDeConfigDeNgrok("linux", { XDG_CONFIG_HOME: "/x" }, "/home/a")[0]).toBe("/x/ngrok/ngrok.yml");
+    expect(rutasDeConfigDeNgrok("linux", {}, "/home/a")[0]).toBe("/home/a/.config/ngrok/ngrok.yml");
+    expect(rutasDeConfigDeNgrok("win32", { LOCALAPPDATA: "C:\\U\\AppData\\Local" }, "C:\\U")[0]).toBe("C:\\U\\AppData\\Local\\ngrok\\ngrok.yml");
+  });
+  it("saca el authtoken de v2 y de v3, y un valor vacío no es cuenta", () => {
+    expect(authtokenDeConfig('version: "3"\nagent:\n    authtoken: abc123def456\n')).toBe("abc123def456");
+    expect(authtokenDeConfig("authtoken: 'xyz789xyz789' # mío\n")).toBe("xyz789xyz789");
+    expect(authtokenDeConfig('agent:\n  authtoken: ""\n')).toBeUndefined();
+    expect(authtokenDeConfig("region: eu\n")).toBeUndefined();
   });
 });

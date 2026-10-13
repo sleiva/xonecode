@@ -1,32 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { TunelNgrok } from "./TunelNgrok";
-import type { Receta } from "../tipos.js";
 
 afterEach(cleanup);
 
-const RECETA = {
-  id: "ngrok",
-  plataforma: "herramienta",
-  titulo: "Instalar ngrok",
-  descripcion: "Un paso.",
-  pasos: [{ titulo: "Instalar ngrok con brew", comandos: ["brew install ngrok"], hecho: false, ejecutable: true }],
-  despues: "",
-  completa: false,
-} as Receta;
 
 describe("la tarjeta de ngrok", () => {
-  it("sin instalar: la receta, con ejecutar", () => {
-    const alEjecutarPaso = vi.fn();
-    render(<TunelNgrok ngrok={{ instalado: false, cuenta: false, receta: RECETA }} alEnviar={vi.fn()} alEjecutarPaso={alEjecutarPaso} />);
-    expect(screen.getByRole("region", { name: "Instalar ngrok" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /Ejecutar|Instalar/ }));
-    expect(alEjecutarPaso).toHaveBeenCalledWith(1);
-  });
-
-  it("sin instalar y sin receta, lo dice y no inventa un botón", () => {
+  it("si el SDK no carga, lo dice y no inventa un botón: viene con xonecode, no hay nada que instalar aparte", () => {
     render(<TunelNgrok ngrok={{ instalado: false, cuenta: false }} alEnviar={vi.fn()} />);
-    expect(screen.getByText(/no está instalado/)).toBeTruthy();
+    expect(screen.getByText(/no carga en esta máquina: reinstala xonecode/)).toBeTruthy();
     expect(screen.queryByRole("button")).toBeNull();
   });
 

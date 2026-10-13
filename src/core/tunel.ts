@@ -12,7 +12,7 @@
 
 /** Texto fijo por causa. Es lo ÚNICO que sale de un fallo del túnel hacia el cable. */
 export const MOTIVOS_DEL_TUNEL = {
-  noInstalado: "ngrok no está instalado en esta máquina.",
+  noInstalado: "El componente de ngrok que trae xonecode no carga en esta máquina: reinstala xonecode.",
   autenticacion: "ngrok no acepta el authtoken (falta o no es válido).",
   dominio: "ngrok no deja usar ese dominio: no es de tu cuenta, o tu plan no admite dominios propios.",
   otraSesion: "Ya hay otro ngrok de tu cuenta abierto (en esta máquina o en otra): ciérralo y vuelve a encender.",
@@ -22,30 +22,10 @@ export const MOTIVOS_DEL_TUNEL = {
   otro: "ngrok falló y no se pudo abrir el túnel.",
   puente: "No se pudo arrancar el puente local de la sesión remota.",
   authtokenSinForma: "Eso no tiene la forma de un authtoken de ngrok.",
-  authtokenNoGuardado: "ngrok no pudo guardar el authtoken.",
+  authtokenNoGuardado: "No se pudo guardar el authtoken.",
 } as const;
 
 export type ClaveDeMotivoDelTunel = keyof typeof MOTIVOS_DEL_TUNEL;
-
-/**
- * La dirección pública que ngrok anuncia al levantar el túnel: la línea JSON de `msg:
- * "started tunnel"` (con `--log stdout --log-format json`) trae un `url`. Cualquier otra línea,
- * o un túnel que no sea https, es `undefined`. No se lee de la API local (4040), que se mueve
- * si el puerto está ocupado.
- */
-export function urlPublicaDeLinea(linea: string): string | undefined {
-  if (!linea.startsWith("{")) return undefined;
-  let o: unknown;
-  try {
-    o = JSON.parse(linea);
-  } catch {
-    return undefined;
-  }
-  if (typeof o !== "object" || o === null) return undefined;
-  const { msg, url } = o as { msg?: unknown; url?: unknown };
-  if (msg !== "started tunnel" || typeof url !== "string") return undefined;
-  return url.startsWith("https://") ? url : undefined;
-}
 
 /** `https://host` → `wss://host/ws`: el puente de la sesión remota atiende el WebSocket en `/ws`. */
 export function servidorDeTunel(https: string): string {
@@ -87,3 +67,37 @@ export function motivoDeSalidaDeNgrok(lineas: readonly string[]): "autenticacion
   }
   return "otro";
 }
+
+/**
+ * Dónde guarda el authtoken el programa `ngrok`, por si ya lo usabas: el SDK no lee esa configuración, y sin mirarla
+ * habría que volver a pedirte el token. v3 por plataforma y la v2 de siempre (`~/.ngrok2`). Puro: la casa y el entorno
+ * entran por parámetro.
+ */
+export function rutasDeConfigDeNgrok(plataforma: string, entorno: Record<string, string | undefined>, casa: string): string[] {
+  const sep = plataforma === "win32" ? "\\" : "/";
+  const unir = (...partes: string[]) => partes.join(sep);
+  const v3 =
+    plataforma === "darwin"
+      ? unir(casa, "Library", "Application Support", "ngrok", "ngrok.yml")
+      : plataforma === "win32"
+        ? unir(entorno.LOCALAPPDATA ?? unir(casa, "AppData", "Local"), "ngrok", "ngrok.yml")
+        : unir(entorno.XDG_CONFIG_HOME ?? unir(casa, ".config"), "ngrok", "ngrok.yml");
+  return [v3, unir(casa, ".ngrok2", "ngrok.yml")];
+}
+
+/**
+ * El valor de una línea `authtoken:` no vacía, arriba (formato v2) o dentro de `agent:` (v3). `authtoken: ""` o sin
+ * valor no es una cuenta.
+ */
+export function authtokenDeConfig(texto: string): string | undefined {
+  for (const linea of texto.split(/\r?\n/)) {
+    const m = /^\s*authtoken:(.*)$/.exec(linea);
+    if (m === null) continue;
+    const valor = m[1]!.replace(/\s+#.*$/, "").trim().replace(/^(["'])(.*)\1$/, "$2").trim();
+    if (valor !== "" && !valor.startsWith("#")) return valor;
+  }
+  return undefined;
+}
+
+/** Lo que tiene un authtoken de ngrok: alfanumérico con `_`/`-`, sin espacios, empezando por letra o cifra. */
+export const FORMA_DE_AUTHTOKEN = /^[A-Za-z0-9][A-Za-z0-9_-]{9,199}$/;
