@@ -7,7 +7,7 @@ afterEach(cleanup);
 
 const RECETA = {
   id: "ngrok",
-  plataforma: "macos",
+  plataforma: "herramienta",
   titulo: "Instalar ngrok",
   descripcion: "Un paso.",
   pasos: [{ titulo: "Instalar ngrok con brew", comandos: ["brew install ngrok"], hecho: false, ejecutable: true }],
