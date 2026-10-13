@@ -1066,7 +1066,11 @@ export interface EscuchasDelPuente {
 export interface CanalRemoto {
   /** `para` ausente = a todos los móviles. */
   enviar(para: string | undefined, mensaje: unknown): Promise<void>;
-  cerrar(): void;
+  /**
+   * Cierra la sala. La promesa se resuelve cuando el relé ya cerró el socket (con tope): por la
+   * vía ngrok el «cerrada» al móvil viaja por el MISMO túnel, y matarlo antes lo perdía.
+   */
+  cerrar(): Promise<void>;
 }
 
 export interface PuenteRemotoPort {
@@ -1099,7 +1103,7 @@ export class PuenteRemotoEnMemoria implements PuenteRemotoPort {
         this.enviados.push({ para, mensaje });
         registro.enviados.push({ para, mensaje });
       },
-      cerrar: () => {
+      cerrar: async () => {
         registro.cerrado = true;
         this.cerrados += 1;
       },

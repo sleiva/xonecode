@@ -92,6 +92,36 @@ describe("el puente WebSocket", () => {
     canal.cerrar();
   });
 
+  it("cerrar manda «cerrar» y su promesa espera a que el relé cierre el socket", async () => {
+    const s = levantar();
+    const canal = await crearPuenteWebSocket(moduloFalso).abrir(s.url, { ...escuchasVacias, alEstado: () => {} });
+    await expect.poll(() => s.conexiones.length).toBe(1);
+    await expect.poll(() => s.recibidos.length).toBe(1);
+    let resuelta = false;
+    const cierre = canal.cerrar().then(() => void (resuelta = true));
+    await expect.poll(() => s.recibidos.at(-1)).toEqual({ t: "cerrar" });
+    await cierre;
+    expect(resuelta).toBe(true);
+    expect(s.conexiones[0]!.readyState).not.toBe(1);
+  });
+
+  it("cerrar no se queda colgado si el socket no llega a cerrarse: hay un tope", async () => {
+    const s = levantar();
+    // Un relé que no contesta al cierre: el socket del servidor se queda sin leer.
+    servidor!.on("connection", (ws) => ws.pause());
+    const canal = await crearPuenteWebSocket(moduloFalso, { topeDeCierreMs: 50 }).abrir(s.url, { ...escuchasVacias, alEstado: () => {} });
+    await expect.poll(() => s.conexiones.length).toBe(1);
+    const t0 = Date.now();
+    await canal.cerrar();
+    expect(Date.now() - t0).toBeLessThan(2_000);
+  });
+
+  it("cerrar sin socket abierto resuelve en el acto", async () => {
+    const canal = await crearPuenteWebSocket(moduloFalso, { esperasMs: [60_000] }).abrir("ws://127.0.0.1:9/ws", { ...escuchasVacias, alEstado: () => {} });
+    await new Promise((r) => setTimeout(r, 50));
+    await canal.cerrar();
+  });
+
   it("si se cae, reconecta a la MISMA sala y con el MISMO canal cifrado", async () => {
     const s = levantar();
     const estados: EstadoDelPuente[] = [];

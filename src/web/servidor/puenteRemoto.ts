@@ -105,14 +105,22 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
     generacion += 1;
     abriendo = false;
     soltarTodos();
-    canal?.cerrar();
+    const cierreDelCanal = canal?.cerrar().catch(() => {});
     canal = undefined;
     url = undefined;
     reconectando = false;
     if (anunciar) poner({ estado: "apagada" });
     else estado = { estado: "apagada" };
     // Revocar (`anunciar: false`) conserva el túnel: el `encender` que le sigue lo reutiliza.
-    return anunciar ? cerrarTunel() : cierreDelTunel;
+    if (!anunciar) return cierreDelTunel;
+    // Por la vía ngrok el «cerrada» que el relé manda a los móviles viaja por el túnel: se mata
+    // cuando el canal ya cerró, no en el mismo instante. El túnel deja de ser de la sesión YA,
+    // así que un `encender` de justo después espera a este cierre (y no abre un segundo ngrok).
+    const t = tunel;
+    if (t === undefined || cierreDelCanal === undefined) return cerrarTunel();
+    tunel = undefined;
+    cierreDelTunel = cierreDelCanal.then(() => t.cerrar()).catch(() => {});
+    return cierreDelTunel;
   };
 
   /** Lo que hace la caída de ESTE túnel, si sigue siendo el de la sesión. */
@@ -122,7 +130,7 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
     generacion += 1;
     abriendo = false;
     soltarTodos();
-    canal?.cerrar();
+    void canal?.cerrar().catch(() => {});
     canal = undefined;
     url = undefined;
     reconectando = false;
@@ -257,7 +265,7 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
       });
       if (mia !== generacion) {
         // Se apagó (o revocó) mientras abría: este canal ya no es de nadie.
-        abierto.cerrar();
+        void abierto.cerrar().catch(() => {});
         return;
       }
       abriendo = false;

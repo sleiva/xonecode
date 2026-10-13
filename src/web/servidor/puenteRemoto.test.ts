@@ -307,6 +307,33 @@ describe("la sesión remota", () => {
       expect(p.sesion.estado()).toEqual({ estado: "apagada" });
     });
 
+    it("apagar deja que el canal termine de cerrarse ANTES de matar el túnel: el «cerrada» llega al móvil por él", async () => {
+      const p = conTunel();
+      let soltar!: () => void;
+      const abrirReal = p.puerto.abrir.bind(p.puerto);
+      p.puerto.abrir = async (servidor, escuchas) => {
+        const c = await abrirReal(servidor, escuchas);
+        return {
+          ...c,
+          cerrar: () => {
+            void c.cerrar();
+            return new Promise<void>((r) => (soltar = r));
+          },
+        };
+      };
+      await p.sesion.encender();
+      p.puerto.abierta();
+      let apagada = false;
+      const apagado = p.sesion.apagar().then(() => void (apagada = true));
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+      expect(p.sesion.estado()).toEqual({ estado: "apagada" });
+      expect(p.tunel.cerrados).toBe(0);
+      expect(apagada).toBe(false);
+      soltar();
+      await apagado;
+      expect(p.tunel.cerrados).toBe(1);
+    });
+
     it("revocar CONSERVA el túnel: no se abre otro ngrok, la sala sí es nueva", async () => {
       const p = conTunel();
       await p.sesion.encender();

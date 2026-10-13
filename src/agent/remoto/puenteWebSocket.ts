@@ -67,14 +67,20 @@ const MOTIVOS: Record<string, string> = {
   "mensaje-ilegible": "el puente no entendió un mensaje",
 };
 const MOTIVO_DE_TAMANO = "un mensaje superó el tamaño máximo del puente";
+/**
+ * Lo que `cerrar` espera, como mucho, a que el relé cierre el socket tras el «cerrar». Sin tope,
+ * un relé que no contesta colgaría el apagado; con él, lo peor es el comportamiento de antes.
+ */
+export const TOPE_DE_CIERRE_MS = 2_000;
 /** Código de cierre WebSocket de «mensaje demasiado grande»: el relé cierra así, sin `error`. */
 const CIERRE_MENSAJE_GRANDE = 1009;
 
 export function crearPuenteWebSocket(
   modulo: ModuloRemoto,
-  opciones: { esperasMs?: readonly number[] } = {}
+  opciones: { esperasMs?: readonly number[]; topeDeCierreMs?: number } = {}
 ): PuenteRemotoPort {
   const esperas = opciones.esperasMs ?? [1_000, 2_000, 5_000, 10_000, 30_000];
+  const topeDeCierre = opciones.topeDeCierreMs ?? TOPE_DE_CIERRE_MS;
   return {
     async abrir(servidor: string, escuchas: EscuchasDelPuente): Promise<CanalRemoto> {
       const { sala, secreto } = modulo.generarCredenciales();
@@ -168,8 +174,20 @@ export function crearPuenteWebSocket(
         cerrar() {
           cerrado = true;
           if (temporizador !== undefined) clearTimeout(temporizador);
-          if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ t: "cerrar" }));
-          ws?.close();
+          const socket = ws;
+          if (socket === undefined || socket.readyState === WebSocket.CLOSED) return Promise.resolve();
+          // El relé contesta al «cerrar» avisando a los móviles y cortando: cuando el socket se
+          // cierra, ese aviso ya salió. Quien mate después lo que hay en medio (ngrok) no lo pierde.
+          const cerrandose = new Promise<void>((resolver) => {
+            const tope = setTimeout(resolver, topeDeCierre);
+            socket.addEventListener("close", () => {
+              clearTimeout(tope);
+              resolver();
+            });
+          });
+          if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ t: "cerrar" }));
+          socket.close();
+          return cerrandose;
         },
       };
     },
