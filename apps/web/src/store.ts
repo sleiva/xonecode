@@ -618,7 +618,7 @@ export type EstadoRemoto = (
   | { estado: "reconectando"; url?: string; moviles: number }
   | { estado: "error"; motivo: string }
 ) & {
-  /** Por dónde sale. Ausente = el servidor de XOne. */
+  /** Por dónde sale. El servidor manda siempre la vía en vigor; ausente (servidor antiguo) se lee como ngrok. */
   via?: "servidor" | "ngrok";
   /** Lo medido de ngrok; ausente = el servidor no lo dijo (y no se pinta). */
   ngrok?: NgrokDelCable;

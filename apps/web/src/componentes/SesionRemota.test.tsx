@@ -29,6 +29,15 @@ describe("la sesión remota en la consola", () => {
       expect(screen.getByRole("button", { name: "Túnel local (ngrok)" }).getAttribute("aria-pressed")).toBe("true");
     });
 
+    it("ngrok es la PRIMERA opción y el texto del servidor pide uno configurado, sin comillas de código", () => {
+      render(<SesionRemota remoto={{ estado: "apagada" }} enviar={vi.fn()} abierto />);
+      const botones = screen.getAllByRole("button").filter((b) => b.hasAttribute("aria-pressed"));
+      expect(botones[0]?.textContent).toBe("Túnel local (ngrok)");
+      const texto = botones[1]?.getAttribute("title") ?? "";
+      expect(texto).toContain("remoto.servidor");
+      expect(texto).not.toContain("`");
+    });
+
     it("una vía ausente se pinta como ngrok y aplica sus comprobaciones", () => {
       render(<SesionRemota remoto={{ estado: "apagada" }} enviar={vi.fn()} abierto />);
       expect(screen.getByRole("button", { name: "Túnel local (ngrok)" }).getAttribute("aria-pressed")).toBe("true");

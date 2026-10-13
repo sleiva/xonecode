@@ -8922,7 +8922,7 @@ xonecode.
 **La medida que la hace posible (npm 10.9).** Una dependencia `file:` que en desarrollo es un ENLACE SIMBÓLICO en
 `node_modules` entra ENTERA en el tarball si está en `bundleDependencies`: `npm pack` listó
 `node_modules/@xone/xonecode-remoto/{package.json,dist/…,web/index.html,web/assets/…}`, y también `node_modules/ws`
-(8.21.3, el de xonecode): npm empaqueta las dependencias de lo empaquetado. `npm i -g` del tarball deja una carpeta de
+(8.21.3, el de xonecode): npm empaqueta las dependencias de lo empaquetado. Eso significa que `ws` también viaja empaquetado: un arreglo de `ws` solo llega a quien instala con una release NUEVA de xonecode (`npm audit fix` en el equipo de un usuario no puede tocarlo). `npm i -g` del tarball deja una carpeta de
 verdad, no un enlace, en `lib/node_modules/xonecode/node_modules/@xone/xonecode-remoto`. `origen.json` no viaja en el
 tarball (no está en los `files` del paquete): se queda en el repo, que es donde sirve.
 

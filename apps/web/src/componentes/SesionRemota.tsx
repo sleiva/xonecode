@@ -13,7 +13,7 @@ type Enviar = (
 
 const VIAS: readonly { via: Via; etiqueta: string; que: string }[] = [
   { via: "ngrok", etiqueta: "Túnel local (ngrok)", que: "La sesión sale por un túnel de ngrok de esta máquina: necesita ngrok instalado y su authtoken" },
-  { via: "servidor", etiqueta: "Servidor de XOne", que: "La sesión pasa por un servidor del relé publicado (`remoto.servidor`); hoy no hay uno de XOne en marcha" },
+  { via: "servidor", etiqueta: "Servidor de XOne", que: "La sesión pasa por un servidor del relé publicado: necesita uno configurado en settings.json como remoto.servidor" },
 ];
 
 /** Qué le falta a ngrok para encender, o `undefined` si está listo (o no se sabe y no se bloquea). */

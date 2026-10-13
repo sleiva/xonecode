@@ -636,7 +636,7 @@ export type MensajeAlCliente =
       url?: string;
       moviles?: number;
       motivo?: string;
-      /** Por dónde sale: ausente = el servidor de XOne. */
+      /** Por dónde sale: el servidor manda siempre la vía en vigor; un cliente que no la reciba (servidor antiguo) la lee como ngrok. */
       via?: "servidor" | "ngrok";
       /**
        * Lo medido de ngrok, solo si el diálogo lo necesita. `cuenta` = hay authtoken en SU

@@ -5,12 +5,15 @@
  * Esa carpeta ES el artefacto que viaja en el npm de xonecode (`bundleDependencies`), así que se
  * COMMITEA. Pasos: corre el `npm test` de xonecode-server (construye el paquete y copia la web a
  * `packages/remoto/web`), copia `package.json`, `dist` y `web` a un temporal junto al destino, y solo
- * entonces lo cambia por el anterior: un fallo no deja nunca una copia a medias. `origen.json` apunta
+ * entonces lo cambia por el anterior: aparta el viejo a `.viejo`, mete el nuevo y borra el viejo; si
+ * algo falla restaura el viejo, así que un fallo no deja nunca una copia a medias ni sin copia. Antes
+ * de los tests borra `packages/remoto/dist`: el build de xonecode-server es un `tsc` sin limpiar y
+ * se llevaría a la copia la salida de módulos ya borrados. `origen.json` apunta
  * al commit de xonecode-server del que salió (y dice si su árbol estaba sucio).
  *
  * Carpeta de xonecode-server: `XONECODE_SERVER_DIR`, y por omisión la hermana de este repo.
  */
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,10 +31,15 @@ if (!existsSync(join(servidor, "packages", "remoto", "package.json"))) {
   fallar(`no encuentro xonecode-server en ${servidor} (usa XONECODE_SERVER_DIR)`);
 }
 
-try {
-  execFileSync("npm", ["test"], { cwd: servidor, stdio: "inherit" });
-} catch {
-  fallar("los tests de xonecode-server fallan: no se toca vendor/");
+// Sin esto el `dist` conserva la salida de módulos borrados (el `npm test` de la raíz reconstruye, pero no limpia).
+rmSync(join(servidor, "packages", "remoto", "dist"), { recursive: true, force: true });
+
+const resultado = spawnSync("npm", ["test"], { cwd: servidor, stdio: "inherit", shell: process.platform === "win32" });
+if (resultado.error) {
+  fallar(`no se pudo lanzar npm: ${resultado.error.code ?? resultado.error.message}`);
+}
+if (resultado.status !== 0) {
+  fallar(`los tests de xonecode-server fallan (código ${resultado.status ?? resultado.signal}): no se toca vendor/`);
 }
 
 const paquete = join(servidor, "packages", "remoto");
@@ -59,10 +67,23 @@ try {
   if (!statSync(join(temporal, "web", "index.html")).isFile() || readdirSync(join(temporal, "dist")).length === 0) {
     throw new Error("la copia está incompleta");
   }
-  rmSync(destino, { recursive: true, force: true });
-  renameSync(temporal, destino);
 } catch (e) {
   rmSync(temporal, { recursive: true, force: true });
   fallar(`no se pudo copiar: ${e instanceof Error ? e.message : String(e)}`);
 }
+
+// El intercambio: viejo aparte, nuevo dentro, y solo entonces se borra el viejo. Si falla, se restaura.
+const viejo = `${destino}.viejo`;
+rmSync(viejo, { recursive: true, force: true });
+const habiaViejo = existsSync(destino);
+try {
+  if (habiaViejo) renameSync(destino, viejo);
+  renameSync(temporal, destino);
+} catch (e) {
+  rmSync(destino, { recursive: true, force: true });
+  if (habiaViejo && existsSync(viejo)) renameSync(viejo, destino);
+  rmSync(temporal, { recursive: true, force: true });
+  fallar(`no se pudo sustituir la copia (se conserva la anterior): ${e instanceof Error ? e.message : String(e)}`);
+}
+rmSync(viejo, { recursive: true, force: true });
 console.log(`remoto:traer: vendor/xonecode-remoto ← ${origen.commit.slice(0, 7)}${origen.sucio ? " (árbol sucio)" : ""}`);
