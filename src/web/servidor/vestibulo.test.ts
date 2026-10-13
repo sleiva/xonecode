@@ -3136,3 +3136,132 @@ describe("mudarWorkspace: cambiar la base con copias dentro", () => {
     await v.cerrar();
   });
 });
+
+/**
+ * El aviso que el panel de la sesión remota necesita: nace o termina una aprobación o una
+ * pregunta en CUALQUIER consola de persona —la del foco o una de segundo plano, que es la que
+ * nadie mira—, se mueve el foco, o un volcado deja título y última actividad nuevos.
+ *
+ * Se mide sobre el vestíbulo DE VERDAD y su consola web de verdad, no sobre un doble: el
+ * cableado (`alCambiarParaElPanel` en la puerta de las personas) vive dentro de
+ * `construirConsolaDeProyecto`, que es justo lo que un doble se saltaría.
+ */
+describe("el aviso de las esperas llega al vestíbulo (panel remoto)", () => {
+  const PENDIENTE = { id: "1", origen: "dev", descripcion: "escribir src/app.xne", decisionesPermitidas: ["approve", "reject"] };
+
+  it("una aprobación y una pregunta de una consola que NO está en foco avisan, y `preguntaPendiente` lo dice", async () => {
+    const s = sesionesEnMemoria();
+    let empezar!: () => void;
+    const puedeEmpezar = new Promise<void>((r) => {
+      empezar = r;
+    });
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      crearEjecutor: () => async (_peticion, _estado, consola) => {
+        await puedeEmpezar;
+        await consola.aprobacionesTui!([PENDIENTE], new Map(), new Map());
+        await consola.preguntar("¿URL del servidor?");
+      },
+    });
+    const a = await v.abrirProyecto({ raiz: "/w/a" });
+    a.conectar(() => {});
+    const turno = a.ejecutarTurno("arregla el login", a.estadoDeSesion, a.consola.consola);
+    await v.abrirProyecto({ raiz: "/w/b" });
+    // A trabaja en segundo plano: el foco es de B.
+    expect(v.proyectoAbierto()?.raiz).toBe("/w/b");
+    expect(a.preguntaPendiente).toBe(false);
+
+    const estados: string[] = [];
+    v.alCambiarEsperas(() => {
+      const estado = `aprobacion=${a.mensajesDeAprobacion().length} pregunta=${a.preguntaPendiente}`;
+      if (estados.at(-1) !== estado) estados.push(estado);
+    });
+
+    empezar();
+    await vi.waitFor(() => expect(a.mensajesDeAprobacion()).toHaveLength(1));
+    a.recibir({ clase: "decision", decisiones: { "1": "approve" } });
+    await vi.waitFor(() => expect(a.preguntaPendiente).toBe(true));
+    a.recibir({ clase: "respuesta", texto: "https://x" });
+    await turno;
+    expect(a.preguntaPendiente).toBe(false);
+
+    expect(estados).toEqual([
+      "aprobacion=1 pregunta=false",
+      "aprobacion=0 pregunta=false",
+      "aprobacion=0 pregunta=true",
+      "aprobacion=0 pregunta=false",
+    ]);
+    await v.cerrar();
+  });
+
+  it("mover el foco avisa, y también un volcado que deja actos nuevos; darse de baja lo calla", async () => {
+    const s = sesionesEnMemoria();
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      // Un ejecutor REAL (no el doble): `volcar` no persiste nada de un agente de pega.
+      crearEjecutor: () => async () => {},
+    });
+    let avisos = 0;
+    const baja = v.alCambiarEsperas(() => (avisos += 1));
+    const a = await v.abrirProyecto({ raiz: "/w/a" });
+    expect(avisos).toBeGreaterThan(0);
+
+    avisos = 0;
+    // La prosa con el turno parado vuelca en el acto: título y última actividad nuevos.
+    a.recibir({ clase: "prosa", texto: "arregla el login" });
+    expect(a.sesion).toBe(a.idDeHilo);
+    expect(avisos).toBeGreaterThan(0);
+
+    avisos = 0;
+    // Otro proyecto: una consola nueva y el foco en ella.
+    const b = await v.abrirProyecto({ raiz: "/w/b" });
+    expect(avisos).toBeGreaterThan(0);
+
+    // Volver a la MISMA sesión ya abierta no construye nada: solo mueve el foco, y también avisa.
+    // La primera vuelta deja pasar por la cola el cierre de A (su turno acabó fuera de foco),
+    // que también avisa; la que se mide es la segunda, que no tiene nada más que hacer.
+    await v.abrirProyecto({ raiz: "/w/b", sesion: b.idDeHilo });
+    avisos = 0;
+    expect(await v.abrirProyecto({ raiz: "/w/b", sesion: b.idDeHilo })).toBe(b);
+    expect(avisos).toBe(1);
+
+    baja();
+    avisos = 0;
+    await v.abrirProyecto({ raiz: "/w/a" });
+    expect(avisos).toBe(0);
+    await v.cerrar();
+  });
+
+  it("la consola de una TAREA no avisa: no sale en el panel como consola", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xonecode-panel-vest-"));
+    try {
+      const raiz = join(base, "webstudio", "A");
+      mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+      writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
+      const v = crearVestibulo({
+        ...dobles(),
+        origenDeTrabajo: "global",
+        sesiones: sesionesEnMemoria().puerto,
+        baseDeWorkspace: () => base,
+      });
+      let avisos = 0;
+      v.alCambiarEsperas(() => (avisos += 1));
+      const deTarea = await v.abrirParaTarea(raiz);
+      deTarea.conectar(() => {});
+      const promesa = deTarea.consola.consola.aprobacionesTui!([PENDIENTE], new Map(), new Map());
+      expect(deTarea.mensajesDeAprobacion()).toHaveLength(1);
+      deTarea.recibir({ clase: "decision", decisiones: { "1": "approve" } });
+      await promesa;
+      expect(avisos).toBe(0);
+      await deTarea.cerrar();
+      await v.cerrar();
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+});

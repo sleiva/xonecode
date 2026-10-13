@@ -172,6 +172,21 @@ export interface ConsolaWeb {
    * miró sigue en memoria, ni se persiste, ni se reemite al reconectar.
    */
   mensajesDeAprobacion(): readonly MensajeAlCliente[];
+  /**
+   * ¿Hay una pregunta de TEXTO LIBRE esperando a alguien? Las que llevan una `decision` (la
+   * subida, «¿Vaciar la copia…?») no cuentan: son diálogos del escritorio, no una pregunta
+   * del hilo, y son las mismas que `responderDesdeElMovil` no contesta.
+   */
+  hayPreguntaDeTextoPendiente(): boolean;
+  /**
+   * Se avisa cuando NACE o TERMINA una aprobación en vuelo, y cuando nace o termina una
+   * pregunta de texto libre (las de `decision` no avisan, por lo mismo que no cuentan arriba).
+   * Termina de cualquier forma: contestada, vencida o porque se fue el último cliente. El aviso
+   * no dice qué cambió: quien escucha vuelve a preguntar (`mensajesDeAprobacion`,
+   * `hayPreguntaDeTextoPendiente`), que en el instante del aviso ya dicen lo nuevo. Devuelve
+   * con qué darse de baja.
+   */
+  alCambiarEspera(oyente: () => void): () => void;
 }
 
 interface AprobacionEnVuelo {
@@ -205,17 +220,21 @@ function esperarAUnHumano<T>(
   cola: ((valor: T) => void)[],
   alVencer: T,
   ms: number,
-  alEncolar?: (responder: (valor: T) => void) => void
+  alEncolar?: (responder: (valor: T) => void) => void,
+  /** Cuando la espera se resuelve, por la vía que sea, y ya FUERA de la cola. */
+  alTerminar?: () => void
 ): Promise<T> {
   return new Promise<T>((resuelto) => {
     const responder = (valor: T): void => {
       clearTimeout(temporizador);
       resuelto(valor);
+      alTerminar?.();
     };
     const temporizador = setTimeout(() => {
       const indice = cola.indexOf(responder);
       if (indice >= 0) cola.splice(indice, 1);
       resuelto(alVencer);
+      alTerminar?.();
     }, ms);
     cola.push(responder);
     alEncolar?.(responder);
@@ -287,6 +306,22 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
   const esperandoDecision: ((respuesta: RespuestaConSeleccion) => void)[] = [];
 
   let aprobacionEnVuelo: AprobacionEnVuelo | undefined;
+
+  /**
+   * Quien quiere enterarse de que nació o terminó una espera de humano (`alCambiarEspera`). Un
+   * oyente que lanza no puede romper la espera: el aviso va DENTRO de `terminar` y del
+   * resolutor, y un lanzamiento ahí dejaría la aprobación sin resolver.
+   */
+  const oyentesDeEspera = new Set<() => void>();
+  const avisarDeLaEspera = (): void => {
+    for (const oyente of [...oyentesDeEspera]) {
+      try {
+        oyente();
+      } catch {
+        // Lo de fuera no tumba la espera.
+      }
+    }
+  };
 
   // Sin cliente, TODO el que espera responde lo que responde un readline cerrado: cadena
   // vacía (o `undefined`, que es cancelar el selector). Medido en el e2e de un pipe que se
@@ -378,11 +413,14 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
       // texto libre la ponen `politicaInteractiva` antes de subir y `/connect-studio` sin
       // URL, y sin plazo colgaban la sesión web entera. Cadena vacía al vencer, que es lo
       // que `interpretAnswer` trata como rechazo.
+      // Solo la de texto libre AVISA de que nace y de que termina: la de `decision` es un diálogo
+      // del escritorio y no cuenta como pregunta pendiente (`hayPreguntaDeTextoPendiente`).
       const espera = esperarAUnHumano<string>(
         esperandoTexto,
         "",
         msDeEspera,
-        decision === undefined ? undefined : (responder) => esperasConDecision.add(responder)
+        decision === undefined ? undefined : (responder) => esperasConDecision.add(responder),
+        decision === undefined ? avisarDeLaEspera : undefined
       );
       // La FORMA viaja con la pregunta, o no viaja: `decision` ausente es una pregunta de
       // texto libre y el cliente le pone su campo. No se manda un `{lineas: []}` — una
@@ -393,6 +431,7 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
           ? { clase: "pregunta", texto: pregunta }
           : { clase: "pregunta", texto: pregunta, decision }
       );
+      if (decision === undefined) avisarDeLaEspera();
       return espera;
     },
 
@@ -461,11 +500,13 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
             // Soltarlo ANTES de resolver es lo que hace que una decisión tardía no tenga
             // nada que ascender, y que el contenido no sobreviva a la decisión.
             aprobacionEnVuelo = undefined;
+            avisarDeLaEspera();
             resuelto(decisiones);
           },
         };
         aprobacionEnVuelo = enVuelo;
         transporte.emitir(enVuelo.mensaje);
+        avisarDeLaEspera();
       });
     },
 
@@ -677,5 +718,12 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
     anotar,
     eventosEmitidos: () => transporte.emitidos(),
     mensajesDeAprobacion: () => (aprobacionEnVuelo === undefined ? [] : [aprobacionEnVuelo.mensaje]),
+    hayPreguntaDeTextoPendiente: () => esperandoTexto.some((espera) => !esperasConDecision.has(espera)),
+    alCambiarEspera: (oyente) => {
+      oyentesDeEspera.add(oyente);
+      return () => {
+        oyentesDeEspera.delete(oyente);
+      };
+    },
   };
 }

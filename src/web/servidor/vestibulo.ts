@@ -591,6 +591,11 @@ export interface ConsolaDeProyecto {
   readonly turnoEnVuelo: boolean;
   /** Hay turno en vuelo Y la sesión sabe DETENER y replanificar: lo que pinta el botón. */
   readonly turnoDetenible: boolean;
+  /**
+   * Hay una pregunta de TEXTO LIBRE esperando a alguien en esta consola. Las de `decision`
+   * (la subida y sus diálogos) no cuentan. Ver `ConsolaWeb.hayPreguntaDeTextoPendiente`.
+   */
+  readonly preguntaPendiente: boolean;
   readonly consola: ConsolaWeb;
   /**
    * Para el turno en vuelo sin cerrar la sesión (`SesionReal.cancelar`). Devuelve si había
@@ -883,6 +888,18 @@ export interface Vestibulo {
    */
   alCambiarConsumo(escucha: () => void): void;
   /**
+   * Se avisa cuando cambia algo de lo que el PANEL de la sesión remota enseña de las consolas de
+   * persona —esté cada una en foco o no; las de tarea, nunca—: nace o termina una aprobación o
+   * una pregunta de texto libre, empieza o acaba un turno, se abre o se cierra una consola, se
+   * mueve el foco, o un volcado deja actos nuevos en el índice (título, última actividad).
+   *
+   * No dice qué cambió: quien escucha vuelve a mirar (`proyectosAbiertos()`, cada
+   * `mensajesDeAprobacion()` y `preguntaPendiente`). Por eso puede saltar de más, y quien lo
+   * convierte en mensajes lo acota. A diferencia de las tres de arriba, aquí caben VARIAS
+   * escuchas: devuelve con qué darse de baja.
+   */
+  alCambiarEsperas(escucha: () => void): () => void;
+  /**
    * Lo que lleva consumido la sesión en foco, en sus dos cuentas. `undefined` es «no se
    * sabe» —no hay sesión abierta, o es el ejecutor de pega— y NO es cero: un contador a 0
    * donde no consta nada es la cifra inventada de siempre.
@@ -1068,6 +1085,17 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
   let escuchaDeTurno: ((activo: boolean) => void) | undefined;
   /** Y de que la sesión en foco ha consumido más tokens. */
   let escuchaDeConsumo: (() => void) | undefined;
+  /** Y de que cambió algo de lo que el panel remoto enseña. Varias: ver `alCambiarEsperas`. */
+  const escuchasDeEsperas = new Set<() => void>();
+  const avisarDeLasEsperas = (): void => {
+    for (const escucha of [...escuchasDeEsperas]) {
+      try {
+        escucha();
+      } catch {
+        // Una escucha que lanza no tumba ni el turno ni la aprobación de donde sale el aviso.
+      }
+    }
+  };
   /**
    * Avisa de que algo cambió en las consolas de persona: un turno empieza o acaba —en
    * CUALQUIERA de ellas— o una de segundo plano se cierra.
@@ -1090,6 +1118,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         ? deLaDeAhora.turnoEnVuelo
         : consolaEnFoco()?.turnoEnVuelo === true;
     escuchaDeTurno?.(enfocada);
+    // Los mismos disparadores —un flanco de turno de cualquier consola de persona, o una de
+    // segundo plano que se cierra— cambian lo que el panel remoto enseña.
+    avisarDeLasEsperas();
   };
 
   const entornoPorId = (id: string): Entorno => {
@@ -1173,6 +1204,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     await consola.cerrar();
     abiertas.delete(raiz);
     if (enFoco === raiz) enFoco = undefined;
+    avisarDeLasEsperas();
   };
 
   /** Todas: lo que hacen `cancelar()` y `cerrar()`. Un fallo al cerrar una no puede dejar a
@@ -1267,6 +1299,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     tarea,
     enElCable,
     alFlancoDeTurno,
+    alCambiarParaElPanel,
     conModoPorDefecto,
   }: {
     raiz: string;
@@ -1314,6 +1347,13 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
      * NO se pasa: un turno de tarea no puede emitir nada al cable.
      */
     alFlancoDeTurno?: (activo: boolean) => void;
+    /**
+     * Nace o termina una aprobación o una pregunta de texto en ESTA consola, o un volcado dejó
+     * actos nuevos en el índice. Como `alFlancoDeTurno`, solo la puerta de las PERSONAS lo pasa:
+     * de aquí cuelga el panel de la sesión remota (`Vestibulo.alCambiarEsperas`), y una tarea no
+     * sale en él como consola.
+     */
+    alCambiarParaElPanel?: () => void;
     /**
      * ¿Nace con el modo por defecto del proyecto o del global (IXCODE-31)? Solo la puerta de
      * las PERSONAS lo pasa: una tarea autoriza al crearse, no por el modo de una sesión.
@@ -1402,6 +1442,10 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     // `Partial<Consola>` sobre el objeto recién creado: lo que depende de la raíz (`/sync`,
     // los escritores del proyecto) no lo puede saber `consolaWeb`, que no conoce ninguna.
     Object.assign(consolaWeb.consola, opciones.dependenciasDeProyecto?.(raiz) ?? {});
+    // Una aprobación o una pregunta que nace o termina AQUÍ, en foco o no: el panel remoto la
+    // enseña. Solo si la puerta lo pide (la de las personas); la consola vive lo que vive este
+    // objeto, así que la baja no hace falta.
+    if (alCambiarParaElPanel !== undefined) consolaWeb.alCambiarEspera(alCambiarParaElPanel);
 
     // La foto del ANTES se toma AQUÍ, al abrir, no en el primer volcado: para entonces el
     // agente ya habría escrito y el «antes» incluiría su trabajo. Se nombra más abajo,
@@ -1543,6 +1587,8 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       }
       for (const acto of todos.slice(volcados)) sesiones.anotar(raiz, idSesion, acto);
       volcados = todos.length;
+      // Actos nuevos en el índice: el título y la última actividad que el panel remoto enseña.
+      alCambiarParaElPanel?.();
       // El dispositivo elegido ANTES de que la sesión estuviera en el índice se anota
       // ahora, que es la primera vez que hay una entrada a la que apuntarlo. Sin esto,
       // elegir dispositivo y hablar después perdía la elección al reabrir.
@@ -1885,6 +1931,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       get turnoDetenible() {
         return turnoEnVuelo && sesionReal?.detener !== undefined;
       },
+      get preguntaPendiente() {
+        return consolaWeb.hayPreguntaDeTextoPendiente();
+      },
       consola: consolaWeb,
       cancelarTurno: () => {
         if (sesionReal?.cancelar === undefined) return false;
@@ -2019,6 +2068,8 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       if (laMisma || volverALoQueTrabaja) {
         enFoco = apertura.raiz;
         await cerrarLasOciosasSalvo(apertura.raiz);
+        // El foco se ha movido aunque no se haya abierto nada.
+        avisarDeLasEsperas();
         return yaAbierta;
       }
       /**
@@ -2056,8 +2107,11 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         // Y al terminar, si ya no la mira nadie, se cierra. Ver `cerrarSiSobra`.
         if (!activo) cerrarSiSobra(raiz);
       },
+      alCambiarParaElPanel: avisarDeLasEsperas,
     });
     abiertas.set(raiz, consolaDeProyecto);
+    // Una consola más, y el foco en ella.
+    avisarDeLasEsperas();
     return consolaDeProyecto;
   };
 
@@ -2245,6 +2299,13 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
 
     alCambiarConsumo(escucha) {
       escuchaDeConsumo = escucha;
+    },
+
+    alCambiarEsperas(escucha) {
+      escuchasDeEsperas.add(escucha);
+      return () => {
+        escuchasDeEsperas.delete(escucha);
+      };
     },
 
     // La del FOCO, igual que `proyectoAbierto()`: es la sesión que se está mirando.
