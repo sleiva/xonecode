@@ -70,6 +70,8 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
   /** El túnel abierto, si lo hay. Es de la SESIÓN y no de una generación: revocar lo conserva. */
   let tunel: TunelAbierto | undefined;
   let cierreDelTunel: Promise<void> = Promise.resolve();
+  /** Un `abrir` de túnel que aún no ha vuelto, sea de la generación que sea. */
+  let aperturaEnVuelo: Promise<void> | undefined;
   const cerrarTunel = (): Promise<void> => {
     const t = tunel;
     tunel = undefined;
@@ -149,22 +151,41 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
         void cerrarTunel();
         servidor = o.servidor();
       } else {
+        // Un ngrok a la vez: si el de un encendido anterior (apagado a medias) aún está
+        // arrancando, se espera a que llegue y a que se cierre. Dos ngrok de la misma cuenta a la
+        // vez los rechaza el propio ngrok (ERR_NGROK_108).
+        while (tunel === undefined && aperturaEnVuelo !== undefined) {
+          await aperturaEnVuelo;
+          await cierreDelTunel;
+          if (mia !== generacion) return;
+        }
         if (tunel === undefined) {
+          let terminar!: () => void;
+          const vuelo = new Promise<void>((r) => (terminar = r));
+          aperturaEnVuelo = vuelo;
+          const acabar = () => {
+            if (aperturaEnVuelo === vuelo) aperturaEnVuelo = undefined;
+            terminar();
+          };
           let nuevo: TunelAbierto;
           try {
             nuevo = await conTunel.abrir();
           } catch (error) {
+            acabar();
             if (mia !== generacion) return;
             abriendo = false;
             poner({ estado: "error", motivo: motivoFijoDelTunel((error as { message?: unknown } | null)?.message) });
             return;
           }
           if (mia !== generacion) {
-            // Se apagó (o revocó) mientras ngrok arrancaba: este túnel ya no es de nadie.
-            void nuevo.cerrar().catch(() => {});
+            // Se apagó (o revocó) mientras ngrok arrancaba: este túnel ya no es de nadie. Su cierre
+            // queda en `cierreDelTunel` ANTES de soltar a quien espera, que lo espera también.
+            cierreDelTunel = nuevo.cerrar().catch(() => {});
+            acabar();
             return;
           }
           tunel = nuevo;
+          acabar();
           nuevo.alCaer(alCaerDe(nuevo));
         }
         servidor = tunel.servidor;

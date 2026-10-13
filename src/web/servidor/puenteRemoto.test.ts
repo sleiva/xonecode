@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { PuenteRemotoEnMemoria, TunelEnMemoria, type TunelPort } from "../../core/ports.js";
 import { MOTIVOS_DEL_TUNEL } from "../../core/tunel.js";
 import { crearSesionRemota, type EstadoDeSesionRemota } from "./puenteRemoto.js";
@@ -383,6 +383,47 @@ describe("la sesión remota", () => {
       expect(real.cerrados).toBe(1);
       expect(p.puerto.aperturas).toEqual([]);
       expect(p.sesion.estado()).toEqual({ estado: "apagada" });
+    });
+
+    it("apagar mientras ngrok arranca y volver a encender: NO hay dos ngrok a la vez", async () => {
+      const real = new TunelEnMemoria();
+      const sueltas: (() => void)[] = [];
+      const enVuelo = { ahora: 0, maximo: 0 };
+      const lento: TunelPort = {
+        abrir: async (o) => {
+          enVuelo.ahora += 1;
+          enVuelo.maximo = Math.max(enVuelo.maximo, enVuelo.ahora);
+          await new Promise<void>((r) => sueltas.push(r));
+          const t = await real.abrir(o);
+          return {
+            ...t,
+            cerrar: async () => {
+              enVuelo.ahora -= 1;
+              await t.cerrar();
+            },
+          };
+        },
+      };
+      const p = montar(undefined, () => lento);
+      const primero = p.sesion.encender();
+      await Promise.resolve();
+      await Promise.resolve();
+      void p.sesion.apagar();
+      const segundo = p.sesion.encender();
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+      // El segundo espera al primero: sigue habiendo UN arranque de ngrok.
+      expect(sueltas).toHaveLength(1);
+      expect(p.sesion.estado()).toEqual({ estado: "abriendo" });
+      sueltas[0]!();
+      await primero;
+      await vi.waitFor(() => expect(sueltas).toHaveLength(2));
+      // El del primero ya se cerró antes de lanzar el segundo.
+      expect(real.cerrados).toBe(1);
+      sueltas[1]!();
+      await segundo;
+      expect(enVuelo.maximo).toBe(1);
+      expect(p.puerto.aperturas).toEqual(["wss://tunel.example/ws"]);
+      expect(p.sesion.estado()).toEqual({ estado: "abriendo" });
     });
 
     it("si el puente falla tras abrir el túnel, el túnel se cierra", async () => {
