@@ -6,7 +6,24 @@ import { BotonDeCopiar } from "./BotonDeCopiar.js";
 import estilos from "./SesionRemota.module.css";
 import coraza from "./NuevaSesion.module.css";
 
-type Enviar = (m: { clase: "remoto"; accion: "encender" | "revocar" | "apagar" }) => Promise<unknown> | void;
+type Via = "servidor" | "ngrok";
+type Enviar = (
+  m: { clase: "remoto"; accion: "encender" | "revocar" | "apagar" } | { clase: "remoto"; accion: "via"; via: Via },
+) => Promise<unknown> | void;
+
+const VIAS: readonly { via: Via; etiqueta: string; que: string }[] = [
+  { via: "servidor", etiqueta: "Servidor de XOne", que: "La sesión pasa por el servidor de XOne: no necesitas instalar nada" },
+  { via: "ngrok", etiqueta: "Túnel local (ngrok)", que: "La sesión sale por un túnel de ngrok de esta máquina: necesita ngrok instalado y su authtoken" },
+];
+
+/** Qué le falta a ngrok para encender, o `undefined` si está listo (o no se sabe y no se bloquea). */
+function faltaDeNgrok(remoto: EstadoRemoto): string | undefined {
+  if (remoto.via !== "ngrok") return undefined;
+  if (remoto.ngrok === undefined) return "ngrok todavía no se ha medido en esta máquina.";
+  if (!remoto.ngrok.instalado) return "ngrok no está instalado en esta máquina.";
+  if (!remoto.ngrok.cuenta) return "A ngrok le falta el authtoken de tu cuenta.";
+  return undefined;
+}
 
 /**
  * El botón «Sesión remota» y su diálogo. Sin `remoto` (el interruptor está apagado y el
@@ -17,7 +34,18 @@ type Enviar = (m: { clase: "remoto"; accion: "encender" | "revocar" | "apagar" }
  * Este diálogo no decide nada: Escape y el clic en el velo lo CIERRAN y no mandan ninguna
  * `accion` (la regla de «Escape no hace nada» es de los diálogos de decisión).
  */
-export function SesionRemota({ remoto, enviar, abierto: abiertoInicial = false }: { remoto: EstadoRemoto | undefined; enviar: Enviar; abierto?: boolean }) {
+export function SesionRemota({
+  remoto,
+  enviar,
+  abierto: abiertoInicial = false,
+  alAbrirAjustes,
+}: {
+  remoto: EstadoRemoto | undefined;
+  enviar: Enviar;
+  abierto?: boolean;
+  /** Lleva a Ajustes → Sesión remota. Ausente = no se ofrece el botón. */
+  alAbrirAjustes?: () => void;
+}) {
   const [abierto, setAbierto] = useState(abiertoInicial);
   const [qr, setQr] = useState<string | undefined>(undefined);
   const boton = useRef<HTMLButtonElement>(null);
@@ -63,10 +91,9 @@ export function SesionRemota({ remoto, enviar, abierto: abiertoInicial = false }
         ref={boton}
         type="button"
         className={estilos.boton}
-        onClick={() => {
-          if (remoto.estado === "apagada" || remoto.estado === "error") void enviar({ clase: "remoto", accion: "encender" });
-          setAbierto(true);
-        }}
+        // Abrir el diálogo NO enciende: la vía solo se puede elegir mientras está apagada, y
+        // encender al abrir la dejaba ya en «abriendo» cuando la persona llegaba al conmutador.
+        onClick={() => setAbierto(true)}
       >
         Sesión remota
       </button>
@@ -86,6 +113,57 @@ export function SesionRemota({ remoto, enviar, abierto: abiertoInicial = false }
               ) : null}
               {remoto.estado === "apagada" ? <p className={coraza.nota}>La sesión remota está apagada.</p> : null}
               {remoto.estado === "error" ? <p className={estilos.error}>{remoto.motivo}</p> : null}
+              {/* La vía se elige con la sesión parada: el servidor la rechaza en cualquier otro estado. */}
+              {remoto.estado === "apagada" || remoto.estado === "error" ? (
+                <>
+                  <div className={estilos.pista} role="group" aria-label="vía de la sesión remota">
+                    {VIAS.map(({ via, etiqueta, que }) => {
+                      const puesta = (remoto.via ?? "servidor") === via;
+                      return (
+                        <button
+                          key={via}
+                          type="button"
+                          className={estilos.mitad}
+                          aria-pressed={puesta}
+                          data-puesto={puesta ? "" : undefined}
+                          title={que}
+                          onClick={() => {
+                            if (puesta) return;
+                            void enviar({ clase: "remoto", accion: "via", via });
+                          }}
+                        >
+                          {etiqueta}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {faltaDeNgrok(remoto) !== undefined ? (
+                    <>
+                      <p className={estilos.aviso}>{faltaDeNgrok(remoto)} Prepáralo en Ajustes antes de encender la sesión por este túnel.</p>
+                      {alAbrirAjustes !== undefined ? (
+                        <div className={coraza.acciones}>
+                          <button
+                            type="button"
+                            className={estilos.secundario}
+                            onClick={() => {
+                              cerrar();
+                              alAbrirAjustes();
+                            }}
+                          >
+                            Abrir Ajustes
+                          </button>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <div className={coraza.acciones}>
+                      <button type="button" className={estilos.primario} onClick={() => void enviar({ clase: "remoto", accion: "encender" })}>
+                        Encender
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : null}
               {/* Sin enlace todavía, lo único que se puede hacer es dejar de intentarlo. */}
               {remoto.estado === "abriendo" || (remoto.estado === "reconectando" && remoto.url === undefined) ? (
                 <div className={coraza.acciones}>
@@ -103,6 +181,14 @@ export function SesionRemota({ remoto, enviar, abierto: abiertoInicial = false }
                     {remoto.moviles} aparato{remoto.moviles === 1 ? "" : "s"} conectado{remoto.moviles === 1 ? "" : "s"}
                   </p>
                   {remoto.estado === "reconectando" ? <p>Reconectando…</p> : null}
+                  <p className={estilos.aviso}>
+                    {remoto.via === "ngrok" ? "Sale por un túnel de ngrok de esta máquina." : "Sale por el servidor de XOne."}
+                  </p>
+                  {remoto.via === "ngrok" ? (
+                    <p className={estilos.aviso}>
+                      La primera vez, el móvil enseña un aviso de ngrok: pulsa «Visit Site» para continuar.
+                    </p>
+                  ) : null}
                   <p className={estilos.aviso}>Quien tenga este enlace controla esta sesión hasta que lo revoques o la apagues.</p>
                   <div className={coraza.acciones}>
                     <button type="button" className={estilos.secundario} onClick={() => void enviar({ clase: "remoto", accion: "revocar" })}>

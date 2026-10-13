@@ -15,7 +15,7 @@ import type { PlanEnDisco } from "../../agent/planesEnDisco.js";
 import type { EsquemaDelProyecto, TareaDelGestor, TransicionDelGestor, Vinculo } from "../../core/gestorDeTareas.js";
 import type { CambiosDeUnaColeccion } from "../../core/diffDeColecciones.js";
 import type { FotoDeColecciones } from "../../core/fotoDeColecciones.js";
-import type { InformeDeDispositivos, NombreDeHerramienta } from "../../core/dispositivos.js";
+import type { InformeDeDispositivos, NombreDeHerramienta, Receta } from "../../core/dispositivos.js";
 import type { AjustesDeDispositivos } from "../../core/settings.js";
 import type { Acto, ConsumoDeTurno, ConsumoPorModelo } from "../../core/actos.js";
 import type { Tarea } from "../../core/tareas.js";
@@ -181,6 +181,17 @@ export type MensajeAlCliente =
       url?: string;
       moviles?: number;
       motivo?: string;
+      /** Por dónde sale: ausente = el servidor de XOne. */
+      via?: "servidor" | "ngrok";
+      /**
+       * Lo medido de ngrok, solo si el diálogo lo necesita. `cuenta` = hay authtoken en SU
+       * configuración (nunca el token ni la ruta, que no cruzan); `receta` = cómo instalarlo,
+       * aparte de `InformeDeDispositivos.recetas` para que la pestaña de Dispositivos no la pinte.
+       * `motivo` = por qué falló la última acción de ngrok (authtoken o dominio): SOLO un texto
+       * fijo nuestro (`MOTIVOS_DEL_TUNEL` o el rechazo del dominio), nunca lo tecleado ni lo que
+       * contestó ngrok. Lo quita la siguiente acción que sale bien.
+       */
+      ngrok?: { instalado: boolean; cuenta: boolean; dominio?: string; receta?: Receta; motivo?: string };
     }
   /**
    * El saludo, SUELTO del `alta`. `agent/config/persona.ts#nombreDePersona` no depende de
@@ -1690,6 +1701,10 @@ export type MensajeDelCliente =
   | { clase: "cancelar" }
   /** La sesión remota: encenderla, revocar su enlace (apagar y volver a encender) o apagarla. */
   | { clase: "remoto"; accion: "encender" | "revocar" | "apagar" }
+  /** Elegir la vía (solo apagada o en error), pedir el authtoken de ngrok (llega por `leerSecreto`) o fijar su dominio. */
+  | { clase: "remoto"; accion: "via"; via: "servidor" | "ngrok" }
+  | { clase: "remoto"; accion: "authtoken" }
+  | { clase: "remoto"; accion: "dominio"; dominio: string }
   /** Pide lo que la sesión abierta ha tocado, o el parche de un fichero concreto. */
   | { clase: "revision"; ruta?: string }
   /** Lo pendiente de subir (sin `ruta`) o el diff de uno (con `ruta`). */

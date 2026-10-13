@@ -13,6 +13,7 @@ import {
 
   guardarModeloDeOpencode,
   guardarModoPorDefecto,
+  guardarAjustesDeRemoto,
   modeloDeOpencodeGuardado,
 
   guardarAjusteDeAvd,
@@ -267,6 +268,34 @@ describe("settingsEnDisco", () => {
     const { settings } = cargarSettings(c);
     expect(settings.modoDeEscritura).toBe("autonomo");
     expect(settings.entornos.map((e) => e.id)).toEqual(["a"]);
+  });
+
+  it("guardarAjustesDeRemoto guarda la vía y el dominio sin tocar el interruptor ni el servidor", () => {
+    const c = casa();
+    mkdirSync(join(c, ".xonecode"), { recursive: true });
+    writeFileSync(
+      join(c, ".xonecode", "settings.json"),
+      JSON.stringify({ entornos: [], remoto: { habilitado: true, servidor: "ws://127.0.0.1:8787/ws" } })
+    );
+    guardarAjustesDeRemoto(c, { via: "ngrok" });
+    guardarAjustesDeRemoto(c, { dominio: "mi-app.ngrok.app" });
+    expect(cargarSettings(c).settings.remoto).toEqual({
+      habilitado: true,
+      servidor: "ws://127.0.0.1:8787/ws",
+      via: "ngrok",
+      ngrok: { dominio: "mi-app.ngrok.app" },
+    });
+    // `null` QUITA el dominio, y la vía sigue.
+    guardarAjustesDeRemoto(c, { dominio: null });
+    expect(cargarSettings(c).settings.remoto).toEqual({ habilitado: true, servidor: "ws://127.0.0.1:8787/ws", via: "ngrok" });
+  });
+
+  it("guardarAjustesDeRemoto sin `remoto` previo (interruptor por XONECODE_REMOTO) deja algo que se LEE, sin inventar `habilitado`", () => {
+    const c = casa();
+    guardarAjustesDeRemoto(c, { via: "ngrok" });
+    expect(cargarSettings(c).settings.remoto).toEqual({ via: "ngrok" });
+    const crudo = JSON.parse(readFileSync(join(c, ".xonecode", "settings.json"), "utf8")) as { remoto: Record<string, unknown> };
+    expect("habilitado" in crudo.remoto).toBe(false);
   });
 
   it("guardarModoPorDefecto(supervisado) BORRA la clave: es la omisión", () => {

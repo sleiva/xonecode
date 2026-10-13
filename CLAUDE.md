@@ -971,6 +971,24 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   `motorLocal`. **Límites declarados**: quien tiene la URL controla la sesión hasta «Revocar» o «Apagar»; y con la sesión
   encendida, los actos y las aprobaciones —contenido de ficheros y diffs incluidos, y las rutas que el modelo escriba—
   SALEN de la máquina, cifrados de punta a punta, hacia el relé y el móvil.
+  **Y una SEGUNDA vía, el túnel local por ngrok** (`agent/remoto/tunelNgrok.ts`, `ngrokEnMaquina.ts`, `core/tunel.ts`):
+  el relé viaja EN el paquete (subruta `./servidor`, con la web móvil dentro), xonecode lo arranca en loopback y ngrok lo
+  publica; el QR lleva la dirección de ngrok. La vía (`settings.remoto.via`) y el dominio fijo opcional
+  (`settings.remoto.ngrok.dominio`) son ajustes, y la vía solo se cambia con la sesión apagada. Revocar conserva el túnel.
+  **La dirección se lee del LOG JSON de ngrok, no de su API local** (`urlPublicaDeLinea`; la API se muda de puerto si el
+  suyo está ocupado), con tope (`TOPE_DE_TUNEL_MS`). **ngrok va `detached` y se mata su GRUPO** al apagar, al caerse el
+  canal y al cerrar la consola, ANTES que el puente; pero DESPUÉS de que el canal cierre (`CanalRemoto.cerrar` es una
+  promesa, con tope `TOPE_DE_CIERRE_MS`): el «cerrada» del relé al móvil viaja por el MISMO túnel. Un encender tras apagar
+  espera a que el ngrok anterior termine de cerrarse. ngrok no hereda las claves de proveedor (`entornoDeShell`). **El
+  authtoken entra por `leerSecreto` y va a `ngrok config add-authtoken`** por `execFile` sin shell: nunca en un fichero
+  nuestro ni en un log, y «con cuenta» se MIDE en la configuración que nombra `ngrok config check`. Lo que diga ngrok no
+  cruza: solo un texto de `MOTIVOS_DEL_TUNEL`, elegido por el código `ERR_NGROK_…` (108 y 334 son «otro ngrok de tu cuenta
+  abierto», no un authtoken malo). Instalarlo es una receta del corredor de Dispositivos (macOS con `brew`; Windows y
+  Linux, guía sin botón) que no sale en la pestaña de aparatos, y al acabar se vuelve a medir solo ngrok. **Límites
+  declarados**: el móvil ve el aviso de ngrok («Visit Site») la primera vez; sin dominio fijo la dirección cambia en cada
+  encendido; el authtoken se ve en `ps` mientras corre `add-authtoken`; ngrok solo se busca en el PATH; un SIGKILL a la
+  consola deja ngrok huérfano; y un móvil que no estaba delante al apagar se queda en «conectando» (ngrok contesta su
+  propia página de fuera de línea y el navegador no deja leer el estado de un WebSocket que no abre).
 - **`arrancarConsolaWeb`** (`web/servidor/arranque.ts`) comprueba en orden: existe
   `apps/web/dist/index.html` (si no, salida **70**), avisa si el cwd es offline y sigue, y levanta.
   `abrirEnSistema` escucha el `error` del `spawn`.

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { recetaDeEmuladorAndroid, recetaDeSimuladorIos } from "../../core/dispositivos.js";
+import { recetaDeEmuladorAndroid, recetaDeNgrok, recetaDeSimuladorIos } from "../../core/dispositivos.js";
 import { EventEmitter } from "node:events";
 import { join, win32 } from "node:path";
 import { zipSync } from "fflate";
@@ -77,6 +77,7 @@ describe("PASOS_EJECUTABLES", () => {
       "android-emulador:win32:3",
       "android-emulador:win32:4",
       "android-emulador:win32:5",
+      "ngrok:darwin:1",
     ]);
   });
 });
@@ -293,6 +294,10 @@ describe("la tabla y las recetas dicen lo mismo", () => {
       }),
     },
     { plataforma: "darwin", receta: recetaDeSimuladorIos("darwin", { xcode: true, licencia: true, runtimes: ["iOS 26.0"] }) },
+    // Con Homebrew: `ejecutable` depende solo de `hayBrew`. Windows y Linux son guía sin botón.
+    { plataforma: "darwin", receta: recetaDeNgrok("darwin", { instalado: true, hayBrew: true }) },
+    { plataforma: "win32", receta: recetaDeNgrok("win32", { instalado: true }) },
+    { plataforma: "linux", receta: recetaDeNgrok("linux", { instalado: true }) },
   ];
 
   it("todo paso marcado ejecutable está en la tabla", () => {

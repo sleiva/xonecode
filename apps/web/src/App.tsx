@@ -2273,6 +2273,9 @@ export function App({
       // Ausente = la sección de Conectores no se pinta en absoluto, ni la navegación ni el
       // panel — «un control sin dato detrás no se pinta».
       {...(estado.conectores === undefined ? {} : { conectores: estado.conectores })}
+      // Ausente = el interruptor de la sesión remota está apagado: la sección no se pinta.
+      {...(estado.remoto === undefined ? {} : { remoto: estado.remoto })}
+      alRemoto={(m) => void enviar(m)}
       // El resultado NO viaja en la respuesta: `probar` y `autorizar` corren en segundo
       // plano (red, o esperar al navegador) y lo que cambien llega por un `conectores`
       // NUEVO — el host lo reemite por `alCambiar` del servicio, el mismo molde que
@@ -3096,7 +3099,7 @@ export function App({
                 }}
               />
             ) : null}
-            <SesionRemota remoto={estado.remoto} enviar={(m) => enviar(m)} />
+            <SesionRemota remoto={estado.remoto} enviar={(m) => enviar(m)} alAbrirAjustes={() => abrirAjustes("remoto")} />
             <BarraDeEstado
               turnos={turnos}
               pasos={pasos}

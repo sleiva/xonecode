@@ -1066,7 +1066,11 @@ export interface EscuchasDelPuente {
 export interface CanalRemoto {
   /** `para` ausente = a todos los móviles. */
   enviar(para: string | undefined, mensaje: unknown): Promise<void>;
-  cerrar(): void;
+  /**
+   * Cierra la sala. La promesa se resuelve cuando el relé ya cerró el socket (con tope): por la
+   * vía ngrok el «cerrada» al móvil viaja por el MISMO túnel, y matarlo antes lo perdía.
+   */
+  cerrar(): Promise<void>;
 }
 
 export interface PuenteRemotoPort {
@@ -1099,7 +1103,7 @@ export class PuenteRemotoEnMemoria implements PuenteRemotoPort {
         this.enviados.push({ para, mensaje });
         registro.enviados.push({ para, mensaje });
       },
-      cerrar: () => {
+      cerrar: async () => {
         registro.cerrado = true;
         this.cerrados += 1;
       },
@@ -1130,5 +1134,74 @@ export class PuenteRemotoEnMemoria implements PuenteRemotoPort {
   }
   reconectando(canal?: number): void {
     (canal === undefined ? this.ultimo() : this.canales[canal]?.escuchas)?.alEstado({ estado: "reconectando" });
+  }
+}
+
+/**
+ * El túnel de la vía «ngrok» de la sesión remota: un puente LOCAL más un ngrok que lo publica.
+ * La implementación real (`agent/remoto/tunelNgrok.ts`) entra por opción, como el puente; aquí
+ * solo la forma. Un fallo LANZA con un texto de `core/tunel.ts#MOTIVOS_DEL_TUNEL`, nunca con lo
+ * que diga ngrok.
+ */
+export interface TunelAbierto {
+  /** La dirección del puente por el túnel: `wss://<publica>/ws`. */
+  servidor: string;
+  /** Mata ngrok y cierra el puente local. Idempotente. */
+  cerrar(): Promise<void>;
+  /** Si el túnel se cae solo (ngrok sale): una vez, con un texto fijo. */
+  alCaer(f: (motivo: string) => void): void;
+}
+
+export interface TunelPort {
+  abrir(o: { dominio?: string }): Promise<TunelAbierto>;
+}
+
+/** El doble: apunta aperturas y cierres, y deja al test elegir la dirección, un fallo o la caída. */
+export class TunelEnMemoria implements TunelPort {
+  readonly [ES_DOBLE] = true;
+  readonly aperturas: { dominio?: string }[] = [];
+  cerrados = 0;
+  /** El `servidor` que devuelve la próxima apertura. */
+  servidor = "wss://tunel.example/ws";
+  /** Con valor, la próxima apertura LANZA con este motivo (y se consume). */
+  fallo: string | undefined;
+  /** Un registro por túnel abierto: cerrado o caído ya no avisa, como el real. */
+  private readonly tuneles: { escuchas: ((motivo: string) => void)[]; cerrado: boolean; caido: string | undefined }[] = [];
+
+  async abrir(o: { dominio?: string }): Promise<TunelAbierto> {
+    this.aperturas.push({ ...o });
+    if (this.fallo !== undefined) {
+      const motivo = this.fallo;
+      this.fallo = undefined;
+      throw new Error(motivo);
+    }
+    const registro = { escuchas: [] as ((motivo: string) => void)[], cerrado: false, caido: undefined as string | undefined };
+    this.tuneles.push(registro);
+    return {
+      servidor: this.servidor,
+      cerrar: async () => {
+        if (registro.cerrado) return;
+        registro.cerrado = true;
+        registro.escuchas.length = 0;
+        this.cerrados += 1;
+      },
+      alCaer: (f) => {
+        if (registro.cerrado) return;
+        if (registro.caido !== undefined) {
+          const motivo = registro.caido;
+          queueMicrotask(() => f(motivo));
+          return;
+        }
+        registro.escuchas.push(f);
+      },
+    };
+  }
+
+  /** Lo que haría ngrok al salir solo; sin índice, el túnel MÁS RECIENTE. Una vez por túnel. */
+  caer(motivo: string, tunel?: number): void {
+    const registro = tunel === undefined ? this.tuneles.at(-1) : this.tuneles[tunel];
+    if (registro === undefined || registro.cerrado || registro.caido !== undefined) return;
+    registro.caido = motivo;
+    for (const f of registro.escuchas.splice(0)) f(motivo);
   }
 }

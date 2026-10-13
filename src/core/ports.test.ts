@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   esDoble,
+  TunelEnMemoria,
   McpVacio,
   SkillsEnMemoria,
   ModeloGuionizado,
@@ -210,5 +211,43 @@ describe("GestorDeTareasEnMemoria", () => {
     const g = new GestorDeTareasEnMemoria();
     expect(await g.sitios()).toEqual([]);
     expect(await g.proyectos("cloud-1")).toEqual([]);
+  });
+});
+
+describe("TunelEnMemoria", () => {
+  it("apunta aperturas y cierres (idempotentes), deja elegir servidor, fallo y caída", async () => {
+    const t = new TunelEnMemoria();
+    expect(esDoble(t)).toBe(true);
+    t.servidor = "wss://a.example/ws";
+    const abierto = await t.abrir({ dominio: "a.example" });
+    expect(abierto.servidor).toBe("wss://a.example/ws");
+    expect(t.aperturas).toEqual([{ dominio: "a.example" }]);
+    const caidas: string[] = [];
+    abierto.alCaer((m) => caidas.push(m));
+    t.caer("se cerró");
+    expect(caidas).toEqual(["se cerró"]);
+    await abierto.cerrar();
+    await abierto.cerrar();
+    expect(t.cerrados).toBe(1);
+    t.fallo = "no instalado";
+    await expect(t.abrir({})).rejects.toThrow("no instalado");
+    await expect(t.abrir({})).resolves.toBeDefined();
+  });
+
+  it("como el real: caer avisa UNA vez, y nunca después de cerrar", async () => {
+    const t = new TunelEnMemoria();
+    const a = await t.abrir({});
+    const vistas: string[] = [];
+    a.alCaer((m) => vistas.push(m));
+    t.caer("uno");
+    t.caer("dos");
+    expect(vistas).toEqual(["uno"]);
+
+    const b = await t.abrir({});
+    const deB: string[] = [];
+    b.alCaer((m) => deB.push(m));
+    await b.cerrar();
+    t.caer("tras cerrar");
+    expect(deB).toEqual([]);
   });
 });

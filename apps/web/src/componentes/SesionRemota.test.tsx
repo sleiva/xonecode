@@ -10,12 +10,73 @@ describe("la sesión remota en la consola", () => {
     expect(container.innerHTML).toBe("");
   });
 
-  it("apagada: el botón la enciende y abre el diálogo", () => {
+  it("apagada: el botón solo abre el diálogo y «Encender» la enciende", () => {
     const enviar = vi.fn(async () => {});
     render(<SesionRemota remoto={{ estado: "apagada" }} enviar={enviar} />);
     fireEvent.click(screen.getByRole("button", { name: "Sesión remota" }));
-    expect(enviar).toHaveBeenCalledWith({ clase: "remoto", accion: "encender" });
+    expect(enviar).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Encender" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "remoto", accion: "encender" });
+  });
+
+  describe("la vía", () => {
+    const LISTO = { instalado: true, cuenta: true };
+
+    it("el conmutador pone aria-pressed en las dos mitades y por omisión rige el servidor", () => {
+      render(<SesionRemota remoto={{ estado: "apagada" }} enviar={vi.fn()} abierto />);
+      expect(screen.getByRole("button", { name: "Servidor de XOne" }).getAttribute("aria-pressed")).toBe("true");
+      expect(screen.getByRole("button", { name: "Túnel local (ngrok)" }).getAttribute("aria-pressed")).toBe("false");
+    });
+
+    it("pulsar la otra manda la vía; pulsar la puesta no manda nada", () => {
+      const enviar = vi.fn(async () => {});
+      render(<SesionRemota remoto={{ estado: "apagada", via: "servidor", ngrok: LISTO }} enviar={enviar} abierto />);
+      fireEvent.click(screen.getByRole("button", { name: "Servidor de XOne" }));
+      expect(enviar).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: "Túnel local (ngrok)" }));
+      expect(enviar).toHaveBeenCalledWith({ clase: "remoto", accion: "via", via: "ngrok" });
+    });
+
+    it("también se elige en error, y no se pinta con la sesión en marcha", () => {
+      const { rerender } = render(<SesionRemota remoto={{ estado: "error", motivo: "x" }} enviar={vi.fn()} abierto />);
+      expect(screen.getByRole("button", { name: "Túnel local (ngrok)" })).toBeTruthy();
+      rerender(<SesionRemota remoto={{ estado: "activa", url: "https://r/r/S#K", moviles: 0 }} enviar={vi.fn()} abierto />);
+      expect(screen.queryByRole("button", { name: "Túnel local (ngrok)" })).toBeNull();
+    });
+
+    it.each([
+      ["sin instalar", { instalado: false, cuenta: false }, "ngrok no está instalado"],
+      ["sin cuenta", { instalado: true, cuenta: false }, "le falta el authtoken"],
+    ])("con ngrok %s no enciende: explica y lleva a Ajustes", (_n, ngrok, texto) => {
+      const enviar = vi.fn(async () => {});
+      const alAbrirAjustes = vi.fn();
+      render(<SesionRemota remoto={{ estado: "apagada", via: "ngrok", ngrok }} enviar={enviar} alAbrirAjustes={alAbrirAjustes} abierto />);
+      expect(screen.queryByRole("button", { name: "Encender" })).toBeNull();
+      expect(screen.getByText(new RegExp(texto))).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Abrir Ajustes" }));
+      expect(alAbrirAjustes).toHaveBeenCalledOnce();
+      expect(enviar).not.toHaveBeenCalled();
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    it("con ngrok listo enciende", () => {
+      const enviar = vi.fn(async () => {});
+      render(<SesionRemota remoto={{ estado: "apagada", via: "ngrok", ngrok: LISTO }} enviar={enviar} abierto />);
+      fireEvent.click(screen.getByRole("button", { name: "Encender" }));
+      expect(enviar).toHaveBeenCalledWith({ clase: "remoto", accion: "encender" });
+    });
+
+    it("activa por ngrok dice la vía y avisa del aviso de ngrok; por el servidor no", () => {
+      const { rerender } = render(
+        <SesionRemota remoto={{ estado: "activa", url: "https://x/#K", moviles: 1, via: "ngrok", ngrok: LISTO }} enviar={vi.fn()} abierto />,
+      );
+      expect(screen.getByText(/Sale por un túnel de ngrok/)).toBeTruthy();
+      expect(screen.getByText(/Visit Site/)).toBeTruthy();
+      rerender(<SesionRemota remoto={{ estado: "activa", url: "https://x/#K", moviles: 1 }} enviar={vi.fn()} abierto />);
+      expect(screen.getByText(/Sale por el servidor de XOne/)).toBeTruthy();
+      expect(screen.queryByText(/Visit Site/)).toBeNull();
+    });
   });
 
   it("activa: QR como imagen, URL, aparatos, revocar y apagar", async () => {

@@ -740,6 +740,29 @@ describe("Ajustes", () => {
    * navegación. Es distinto de Skills o Subagentes, que siempre están y solo cambian de
    * contenido según llegue o no el dato.
    */
+  describe("la sección Sesión remota", () => {
+    it("sin `remoto` no aparece en la navegación", () => {
+      render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} />);
+      expect(screen.queryByRole("button", { name: "Sesión remota" })).toBeNull();
+    });
+
+    it("con `remoto` aparece, y abre con la tarjeta de ngrok y su authtoken", () => {
+      const alRemoto = vi.fn();
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          remoto={{ estado: "apagada", ngrok: { instalado: true, cuenta: false } }}
+          alRemoto={alRemoto}
+          seccionInicial="remoto"
+        />
+      );
+      expect(screen.getByRole("heading", { name: "Sesión remota" })).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Poner authtoken" }));
+      expect(alRemoto).toHaveBeenCalledWith({ clase: "remoto", accion: "authtoken" });
+    });
+  });
+
   describe("la sección Conectores", () => {
     it("sin `conectores` en el estado, no aparece en la navegación", () => {
       render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} />);

@@ -14,6 +14,7 @@ import {
   type InformeDeDispositivos,
   recetaDeEmuladorAndroid,
   recetaDeSimuladorIos,
+  recetaDeNgrok,
   parsearRuntimesDeIos,
   motivoDeSimctl,
   URL_PLATFORM_TOOLS_WINDOWS,
@@ -642,5 +643,39 @@ describe("motivoDeVerificacion", () => {
 
   it("lo que no menciona el serial se queda igual", () => {
     expect(motivoDeVerificacion("no respondió en 8 s", pixel8)).toBe("no respondió en 8 s");
+  });
+});
+
+describe("recetaDeNgrok", () => {
+  it("en macOS es un paso ejecutable con brew, hecho si ngrok está", () => {
+    const r = recetaDeNgrok("darwin", { instalado: false, hayBrew: true });
+    expect(r.id).toBe("ngrok");
+    expect(r.pasos).toHaveLength(1);
+    expect(r.pasos[0]!.comandos).toEqual(["brew install ngrok"]);
+    expect(r.pasos[0]!.ejecutable).toBe(true);
+    expect(r.pasos[0]!.hecho).toBe(false);
+    expect(r.completa).toBe(false);
+    const hecha = recetaDeNgrok("darwin", { instalado: true, hayBrew: true });
+    expect(hecha.completa).toBe(true);
+    expect(hecha.pasos[0]!.hecho).toBe(true);
+  });
+  it("sin brew el paso no se ofrece y dice por qué", () => {
+    const p = recetaDeNgrok("darwin", { instalado: false, hayBrew: false }).pasos[0]!;
+    expect(p.ejecutable).toBe(false);
+    expect(p.porQueNo).toMatch(/Homebrew/);
+  });
+  it("en Windows y Linux es una guía sin botón", () => {
+    const w = recetaDeNgrok("win32", { instalado: false });
+    expect(w.pasos[0]!.comandos).toEqual(["winget install ngrok.ngrok"]);
+    const l = recetaDeNgrok("linux", { instalado: false });
+    expect(l.pasos[0]!.comandos.join(" ")).toContain("ngrok.com/download");
+    for (const r of [w, l]) {
+      expect(r.pasos.every((p) => !p.ejecutable && p.porQueNo)).toBe(true);
+    }
+  });
+  it("no es de ninguna plataforma de aparato: la pestaña de Dispositivos no la recoge", () => {
+    const r = recetaDeNgrok("darwin", { instalado: false, hayBrew: true });
+    expect(r.plataforma).not.toBe("android");
+    expect(r.plataforma).not.toBe("ios");
   });
 });

@@ -8763,3 +8763,74 @@ Lo que se limpió: los ficheros, las sesiones de prueba (`borrarSesion`, `olvida
 enlace simbólico y el `settings.json`, restaurado byte a byte. Lo que NO: los commits de turno que la consola hizo en AppDemo
 (`commitDeTurno`) movieron su `master`, y el árbol tiene sin commitear el borrado de `prueba-remota.txt`; desde la sesión
 de la prueba no se podía ejecutar git sobre AppDemo, y queda para mirarlo a mano.
+
+## La sesión remota por un túnel local de ngrok (13-10-2026)
+
+Una segunda vía para la sesión remota que no necesita el relé de XOne: el relé viaja dentro de `@xone/xonecode-remoto`
+(subruta `./servidor`, con la web móvil en `web/`), xonecode lo arranca en `127.0.0.1` con un puerto libre y lanza
+`ngrok http <host:puerto> --log stdout --log-format json`; el QR sale con la dirección de ngrok. Decisiones de la persona:
+el túnel publica el PUENTE (nunca la consola), el puente viaja en el paquete, instalar es `brew` en macOS y una guía en
+Windows/Linux, el authtoken va por `leerSecreto` a `ngrok config add-authtoken`, el dominio fijo es opcional, y la vía se
+elige en el diálogo «Sesión remota».
+
+**Por qué la dirección sale del LOG y no de la API local (4040).** Medido: con un ngrok ya abierto, el segundo escribe
+`can't bind default web address, trying alternatives` y se va a 4041; preguntar a 4040 habría dado la dirección del OTRO
+túnel. La línea `started tunnel` del log JSON trae `url` y es del proceso que lanzamos. Las líneas reales (`started
+tunnel`, `ERR_NGROK_105` de un authtoken malo, `ERR_NGROK_313` de un dominio propio en el plan gratuito) están en
+`src/core/__oro__/ngrok-v3*.jsonl`, con la ruta, el correo y el host tachados.
+
+**Cuánto tarda.** De lanzar ngrok a la línea `started tunnel`: 0,49 s (y entre 0,4 y 0,5 s en las medidas de la tarea del
+túnel). Desde el clic en «Encender» hasta que el diálogo enseña el enlace —puente, ngrok y el canal del anfitrión
+entrando por la dirección pública—: entre 0,8 y 1,2 s en la prueba de punta a punta. El tope (`TOPE_DE_TUNEL_MS`, 30 s)
+queda muy por encima. `curl` a `/salud` por el túnel contestó entre 0,15 y 0,19 s.
+
+**Los códigos de error, y lo que NO se reprodujo.** `ERR_NGROK_105` (authtoken malo) y `313` (dominio que la cuenta no
+tiene) se capturaron. `108` (límite de sesiones simultáneas del agente) y `334` (ese dominio ya está en línea en otra
+sesión) son de la documentación de ngrok y se mapean a un motivo propio, «otro ngrok de tu cuenta abierto», porque el
+caso en que aparecen es justo un ngrok huérfano: decir «el authtoken no vale» sería falso. En esta cuenta un SEGUNDO ngrok
+simultáneo NO falló (dos veces: en la tarea del túnel y con la consola encendida en la prueba final, cada uno con su
+dirección), así que el 108 no se pudo ver. Aun así, encender justo tras apagar espera a que el ngrok anterior termine de
+cerrarse: en una cuenta con una sola sesión, el viejo todavía vivo daría ese error.
+
+**Por qué se mata el GRUPO, y el orden.** ngrok va `detached` y se le manda `SIGTERM` al grupo, luego `SIGKILL` si sigue
+(`ESPERA_AL_MATAR_MS`), y solo después se cierra el puente: sin el túnel, nadie de fuera alcanza el puente. Medido: con
+`kill -INT` o `kill -TERM` a la consola, ngrok no sobrevive (la consola cierra ordenadamente y además hay un gancho en
+`exit`); con `kill -KILL`, ngrok queda HUÉRFANO — nada lo puede evitar, y es un límite declarado. La prueba final cerró la
+consola con `SIGINT` con el túnel encendido y no quedó ningún ngrok ni puerto abierto.
+
+**Lo que destapó la prueba de punta a punta: el móvil se quedaba en «conectando» al apagar.** Con la vía ngrok el canal del
+anfitrión entra por la dirección PÚBLICA (la `url` del enlace sale de esa dirección, `baseHttpDe`), así que el `cerrar` del
+anfitrión y el `cerrada` que el relé manda a cada móvil viajan por el mismo túnel que apagar mataba en el mismo tic. El
+móvil no recibía nada, reconectaba contra un ngrok que ya no estaba y se quedaba en «conectando». Arreglo:
+`CanalRemoto.cerrar()` devuelve una promesa que se resuelve cuando el relé cierra el socket del anfitrión (lo hace justo
+después de avisar a los móviles), con tope (`TOPE_DE_CIERRE_MS`, para que un relé mudo no cuelgue el apagado), y apagar
+mata el túnel después. Medido tras el arreglo: el móvil pasó a «la sesión remota se cerró» a los 0,28 s del clic en
+«Apagar». **Lo que no arregla, y queda declarado**: un móvil que NO estaba conectado al apagar (o que recarga después)
+reintenta contra la dirección muerta; ngrok contesta su propia página de fuera de línea (HTTP 404 a un `curl`) y un
+navegador no deja leer el estado HTTP de un WebSocket que no abre, así que no puede distinguir «apagada» de «caída un
+momento».
+
+**La página de aviso de ngrok.** En el plan gratuito, la primera visita de un navegador a la dirección enseña un aviso con
+«Visit Site». Medido con un perfil de iPhone: tras pulsarlo, la web móvil carga con el fragmento intacto (el secreto no se
+pierde) y entra en la sala. Con la cabecera `ngrok-skip-browser-warning` el aviso no sale; un móvil de verdad no la manda,
+así que el diálogo lo dice.
+
+**El authtoken.** Se pide por `leerSecreto`, se comprueba su forma y se pasa a `ngrok config add-authtoken` por `execFile`
+sin shell. No se escribe en ningún fichero nuestro ni en un log, y el error de `execFile` no se propaga (su `message` y su
+`cmd` lo llevan). Límite declarado: mientras corre `add-authtoken`, el token se ve en la lista de procesos (`ps`). «Con
+cuenta» se MIDE en la configuración que nombra `ngrok config check`, nunca con un flag recordado. Y ngrok corre con el
+entorno de la shell del agente (`entornoDeShell`): sin las claves de los proveedores de modelos.
+
+**Instalar.** `brew install ngrok` instala un CASK de Homebrew, no una fórmula; el botón no se ha corrido de verdad (la
+máquina ya tenía ngrok). Es una receta del corredor de Dispositivos (un trabajo a la vez para toda la máquina) que no sale
+en la pestaña de aparatos, y al acabar se vuelve a medir SOLO ngrok: medir Android e iOS tras instalar ngrok era trabajo
+(y un `adb` arrancado) sin nada que ver.
+
+**La prueba de punta a punta.** El paquete construido en la rama de `xonecode-server` enlazado con un enlace simbólico
+temporal en `node_modules`, la consola de esta rama con `XONECODE_REMOTO=1` en otro puerto, ngrok 3.36.1 con cuenta, y
+Playwright: Ajustes → «Sesión remota» decía «ngrok listo»; en una sesión de PlaemerWebTestAsync, «Túnel local (ngrok)» y
+«Encender» dieron `https://<…>.ngrok-free.app/r/<sala>#<secreto>` con su QR; un contexto de iPhone abrió el enlace, pulsó
+«Visit Site», la cabecera dijo el proyecto y el diálogo «1 aparato conectado»; una prosa desde el móvil apareció en el chat
+del escritorio y la respuesta del agente volvió al móvil. «Apagar»: sin proceso ngrok, sin el puerto del puente, y —tras el
+arreglo— el móvil en «la sesión remota se cerró». Se limpió la sesión de prueba (desde la consola), el enlace simbólico y
+el `settings.json`, restaurado byte a byte.
