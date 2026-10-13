@@ -104,16 +104,20 @@ function tareaRecortada(t: TareaDePanorama): TareaDePanorama {
 
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
-/** Pone cada tarea con `tras` justo detrás de su anterior, si esa viaja también. Tolera ciclos. */
+/**
+ * Pone cada tarea con `tras` justo detrás de su anterior, si esa viaja también. Tolera ciclos.
+ * Una anterior TERMINADA ya no retiene (`siguientesAEjecutar`): la siguiente se queda en su bloque
+ * de prioridad y no se va al de las terminadas. Y una tarea que se nombra a sí misma no se mueve.
+ */
 function respetandoTras(lista: TareaDePanorama[]): TareaDePanorama[] {
   const salida = [...lista];
   for (let pasada = 0; pasada < lista.length; pasada++) {
     let movida = false;
     for (const t of [...salida]) {
-      if (t.tras === undefined) continue;
+      if (t.tras === undefined || t.tras === t.id) continue;
       const iAnterior = salida.findIndex((x) => x.id === t.tras);
       const iT = salida.indexOf(t);
-      if (iAnterior === -1 || iT === iAnterior + 1 || iT > iAnterior) continue;
+      if (iAnterior === -1 || salida[iAnterior]!.estado === "terminada" || iT > iAnterior) continue;
       salida.splice(iT, 1);
       salida.splice(salida.findIndex((x) => x.id === t.tras) + 1, 0, t);
       movida = true;

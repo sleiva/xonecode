@@ -66,6 +66,30 @@ describe("componerPanorama", () => {
     expect(term).toEqual(["t6", "t5", "t4", "t3", "t2"]);
   });
 
+  it("una nueva cuya anterior ya terminó se queda en su bloque, no entre las terminadas", () => {
+    const p = componerPanorama({
+      consolas: [],
+      tareas: [
+        tarea("n1", "nuevo", { creada: "2026-03-01", tras: "t1" }),
+        tarea("n0", "nuevo", { creada: "2026-03-02" }),
+        tarea("t1", "terminada", { creada: "2026-01-01", acabada: "2026-02-01" }),
+      ],
+    });
+    expect(p.tareas.map((t) => t.id)).toEqual(["n1", "n0", "t1"]);
+  });
+
+  it("una tarea que se nombra a sí misma en `tras` no se mueve", () => {
+    const p = componerPanorama({
+      consolas: [],
+      tareas: [
+        tarea("ra", "requiere-atencion"),
+        tarea("n1", "nuevo", { creada: "2026-03-01" }),
+        tarea("n2", "nuevo", { creada: "2026-03-02", tras: "n2" }),
+      ],
+    });
+    expect(p.tareas.map((t) => t.id)).toEqual(["ra", "n1", "n2"]);
+  });
+
   it("recorta título, motivo (solo con requiere-atencion) y diffs por fichero", () => {
     const largo = "x".repeat(1000);
     const lineas = Array.from({ length: LINEAS_DE_DIFF_EN_PANORAMA + 10 }, (_, i) => ({ tipo: "igual" as const, texto: `l${i}` }));

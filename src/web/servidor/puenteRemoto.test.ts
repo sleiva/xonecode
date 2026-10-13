@@ -3,8 +3,9 @@ import { PuenteRemotoEnMemoria, TunelEnMemoria, type TunelPort } from "../../cor
 import { MOTIVOS_DEL_TUNEL } from "../../core/tunel.js";
 import { crearSesionRemota, type EstadoDeSesionRemota } from "./puenteRemoto.js";
 import type { Sumidero } from "./transporte.js";
+import type { Panorama } from "../../core/panorama.js";
 
-function montar(topeDeSalida?: number, tunel?: () => TunelPort | undefined) {
+function montar(topeDeSalida?: number, tunel?: () => TunelPort | undefined, alEntrarMovil?: (enviar: (m: Panorama) => void) => void) {
   const puerto = new PuenteRemotoEnMemoria();
   const enganchados = new Set<Sumidero>();
   const despachados: unknown[] = [];
@@ -18,6 +19,7 @@ function montar(topeDeSalida?: number, tunel?: () => TunelPort | undefined) {
     despachar: (m) => void despachados.push(m),
     informar: (t) => void informados.push(t),
     alCambiar: (e) => void estados.push(e),
+    ...(alEntrarMovil === undefined ? {} : { alEntrarMovil }),
     ...(topeDeSalida === undefined ? {} : { topeDeSalida }),
     ...(tunel === undefined
       ? {}
@@ -66,6 +68,35 @@ describe("la sesión remota", () => {
     p.puerto.presencia("m2");
     expect(p.enganchados.size).toBe(1);
     expect(p.sesion.estado()).toMatchObject({ moviles: 1 });
+  });
+
+  it("`difundir` llega a TODOS los móviles y a ningún sumidero de pestaña; `alEntrarMovil` solo al que entra", async () => {
+    const panorama: Panorama = { clase: "panorama", consolas: [], tareas: [], esperando: 0 };
+    const entradas: string[] = [];
+    const p = montar(undefined, undefined, (enviar) => {
+      entradas.push("entra");
+      enviar({ ...panorama, esperando: entradas.length });
+    });
+    expect(p.sesion.hayMoviles()).toBe(false);
+    await p.sesion.encender();
+    p.puerto.abierta();
+    p.puerto.presencia("m1");
+    p.puerto.presencia("m1", "m2");
+    await Promise.resolve();
+    expect(p.sesion.hayMoviles()).toBe(true);
+    // Uno por móvil al entrar, y cada uno el SUYO.
+    expect(p.puerto.enviados).toEqual([
+      { para: "m1", mensaje: { ...panorama, esperando: 1 } },
+      { para: "m2", mensaje: { ...panorama, esperando: 2 } },
+    ]);
+    p.sesion.difundir(panorama);
+    await Promise.resolve();
+    expect(p.puerto.enviados.slice(2)).toEqual([
+      { para: "m1", mensaje: panorama },
+      { para: "m2", mensaje: panorama },
+    ]);
+    await p.sesion.apagar();
+    expect(p.sesion.hayMoviles()).toBe(false);
   });
 
   it("lo que entra: lo permitido se despacha, lo demás se informa, y un desconocido se ignora", async () => {
