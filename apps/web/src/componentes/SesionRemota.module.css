@@ -4,6 +4,17 @@
 .secundario {
   composes: secundario from "./Boton.module.css";
 }
+.primario {
+  composes: primario from "./Boton.module.css";
+}
+/* El conmutador de vía: la pista y las mitades de `SelectorDeModo`, que ya traen su puesto. */
+.pista {
+  composes: pista from "./SelectorDeModo.module.css";
+  align-self: flex-start;
+}
+.mitad {
+  composes: mitad from "./SelectorDeModo.module.css";
+}
 .peligro {
   composes: peligro from "./Boton.module.css";
 }

@@ -1,0 +1,38 @@
+/* Alias comprobados contra `estilos/design-platform.css`; sin colores literales. */
+.envoltura {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.titulo {
+  composes: subsubencabezado from "./Ajustes.module.css";
+}
+
+.nota {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.listo {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.motivo {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.boton {
+  composes: secundario from "./Boton.module.css";
+  align-self: flex-start;
+}
+
+/* Campo + botón, el MISMO estilo que el del nombre de Ajustes. */
+.fila {
+  composes: campoDeNombreConBoton from "./Ajustes.module.css";
+}

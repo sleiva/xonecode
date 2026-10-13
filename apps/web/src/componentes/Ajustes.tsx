@@ -11,9 +11,10 @@ import {
   IconSkillOutline16,
   IconLinkOutline16,
   IconShareOutline16,
+  IconBrowseOutline16,
   IconSearchOutline16,
 } from "@deepseek-ai/dsh-client-ui-primitives";
-import type { EstadoDelCliente } from "../store.js";
+import type { EstadoDelCliente, EstadoRemoto } from "../store.js";
 import type {
   AgenteDelCable,
   SkillDelCable,
@@ -48,6 +49,7 @@ import { GiroDeCarga } from "./GiroDeCarga.js";
 import { Agentes } from "./Agentes.js";
 import { Skills } from "./Skills.js";
 import { Conectores } from "./Conectores.js";
+import { TunelNgrok, type AccionDeNgrok } from "./TunelNgrok.js";
 import { TITULO_DE_REFRESCAR_EQUIPO } from "./Equipo.js";
 import { Receta } from "./Receta.js";
 import { VerificarDispositivo } from "./VerificarDispositivo.js";
@@ -209,6 +211,7 @@ export type SeccionDeAjustes =
   | "agentes"
   | "skills"
   | "conectores"
+  | "remoto"
   | "dispositivos"
   | "general";
 
@@ -265,6 +268,10 @@ const SECCIONES: readonly {
   // `IconLinkOutline16`: ese ya es el de Dispositivos, y dos secciones con el mismo dibujo se
   // confunden en la navegación.
   { id: "conectores", etiqueta: "Conectores", Icono: IconShareOutline16 },
+  // «Sesión remota» es condicional como Conectores: sin `remoto` (el interruptor está apagado y
+  // el servidor no lo dice) no se pinta. `IconBrowseOutline16` SÍ lo exporta el paquete
+  // instalado (comprobado sobre `lib/index.js`).
+  { id: "remoto", etiqueta: "Sesión remota", Icono: IconBrowseOutline16 },
   // `IconLinkOutline16` y no un icono de móvil: en el paquete instalado no hay ninguno
   // —comprobado sobre sus exports, que es la lección de `IconAgentPresetOutline16`, el que
   // no existía y hacía reventar a React—. Y el enlace dice lo que esta sección es: con qué
@@ -442,6 +449,8 @@ export function Ajustes({
   alBorrarSkill,
   alInstalarSkill,
   conectores,
+  remoto,
+  alRemoto,
   alAccionDeConector,
   alCrearDeConector,
   alPedirClave,
@@ -660,6 +669,13 @@ export function Ajustes({
    *  el botón: sin cable no hay a quién pedírselo. */
   alEjecutarPaso?: (receta: string, numero: number) => void;
   alCancelarPaso?: (receta: string) => void;
+  /**
+   * La sesión remota, tal como la dice el servidor. **Ausente = el interruptor está apagado y
+   * la sección no se pinta, ni en la navegación ni el panel.**
+   */
+  remoto?: EstadoRemoto;
+  /** Las acciones de la tarjeta de ngrok (authtoken y dominio). */
+  alRemoto?: (m: AccionDeNgrok) => void;
   /** Sin cable no se manda nada: lo que escribe en el servidor se apaga. */
   conectado?: boolean;
   /** Abre la petición de clave de ese proveedor (`/provider <id>` del otro lado). */
@@ -1366,7 +1382,7 @@ export function Ajustes({
               lo mismo que las demás secciones, que siempre existen y solo cambian de
               «consultando» a su contenido — aquí ausente puede significar que esta consola
               no tiene la opción puesta. Un control sin dato detrás no se pinta. */}
-          {SECCIONES.filter((s) => s.id !== "conectores" || conectores !== undefined).map((s) => (
+          {SECCIONES.filter((s) => (s.id !== "conectores" || conectores !== undefined) && (s.id !== "remoto" || remoto !== undefined)).map((s) => (
             <button
               key={s.id}
               type="button"
@@ -2633,6 +2649,25 @@ export function Ajustes({
               `catalogo`/`conectores` de un objeto que ya no existe. Con él, el panel queda en
               blanco (ningún botón de la navegación se marca como actual, porque el filtro ya
               lo retiró de la lista) hasta que vuelva el cable con la ráfaga entera. */}
+          {/* Misma razón que Conectores: sin `remoto` el panel queda en blanco hasta que vuelva el cable. */}
+          {seccion === "remoto" && remoto !== undefined ? (
+            <>
+              <h2 className={estilos.encabezado}>Sesión remota</h2>
+              {remoto.ngrok === undefined ? (
+                <p>El servidor todavía no ha medido ngrok en esta máquina.</p>
+              ) : (
+                <TunelNgrok
+                  ngrok={remoto.ngrok}
+                  {...(instalacion === undefined ? {} : { instalacion })}
+                  conectado={conectado}
+                  alEnviar={(m) => alRemoto?.(m)}
+                  {...(alEjecutarPaso !== undefined ? { alEjecutarPaso: (n: number) => alEjecutarPaso("ngrok", n) } : {})}
+                  {...(alCancelarPaso !== undefined ? { alCancelarPaso: () => alCancelarPaso("ngrok") } : {})}
+                />
+              )}
+            </>
+          ) : null}
+
           {seccion === "conectores" && conectores !== undefined ? (
             <>
               <h2 className={estilos.encabezado}>Conectores</h2>
