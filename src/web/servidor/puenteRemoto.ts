@@ -153,11 +153,14 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
       } else {
         // Un ngrok a la vez: si el de un encendido anterior (apagado a medias) aún está
         // arrancando, se espera a que llegue y a que se cierre. Dos ngrok de la misma cuenta a la
-        // vez los rechaza el propio ngrok (ERR_NGROK_108).
-        while (tunel === undefined && aperturaEnVuelo !== undefined) {
-          await aperturaEnVuelo;
+        // vez los rechaza el propio ngrok (ERR_NGROK_108). Lo mismo si el de antes ya estaba ACTIVO
+        // y el apagado de justo antes aún no ha terminado de cerrarlo.
+        while (tunel === undefined) {
+          const vuelo = aperturaEnVuelo;
+          if (vuelo !== undefined) await vuelo;
           await cierreDelTunel;
           if (mia !== generacion) return;
+          if (vuelo === undefined) break;
         }
         if (tunel === undefined) {
           let terminar!: () => void;

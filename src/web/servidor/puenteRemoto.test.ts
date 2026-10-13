@@ -426,6 +426,42 @@ describe("la sesión remota", () => {
       expect(p.sesion.estado()).toEqual({ estado: "abriendo" });
     });
 
+    it("encender justo tras apagar un túnel ACTIVO espera a que el viejo termine de cerrarse", async () => {
+      const real = new TunelEnMemoria();
+      const cierres: (() => void)[] = [];
+      const vivos = { ahora: 0, maximo: 0 };
+      const lentoAlCerrar: TunelPort = {
+        abrir: async (o) => {
+          const t = await real.abrir(o);
+          vivos.ahora += 1;
+          vivos.maximo = Math.max(vivos.maximo, vivos.ahora);
+          return {
+            ...t,
+            cerrar: async () => {
+              await new Promise<void>((r) => cierres.push(r));
+              vivos.ahora -= 1;
+              await t.cerrar();
+            },
+          };
+        },
+      };
+      const p = montar(undefined, () => lentoAlCerrar);
+      await p.sesion.encender();
+      p.puerto.abierta("https://tunel.example/r/S#K");
+      const apagado = p.sesion.apagar();
+      const segundo = p.sesion.encender();
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+      // El ngrok viejo sigue cerrándose: el nuevo NO se lanza aún (ERR_NGROK_108).
+      expect(real.aperturas).toHaveLength(1);
+      expect(p.sesion.estado()).toEqual({ estado: "abriendo" });
+      cierres[0]!();
+      await apagado;
+      await segundo;
+      expect(real.aperturas).toHaveLength(2);
+      expect(vivos.maximo).toBe(1);
+      expect(p.puerto.aperturas).toEqual(["wss://tunel.example/ws", "wss://tunel.example/ws"]);
+    });
+
     it("si el puente falla tras abrir el túnel, el túnel se cierra", async () => {
       const tunel = new TunelEnMemoria();
       const p = montar(undefined, () => tunel);
