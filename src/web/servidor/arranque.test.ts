@@ -67,6 +67,7 @@ import type { FichaDelGestor, GestorDeTareasPort, TransicionDelGestor, Vinculo }
 import { crearGestorJira } from "../../agent/conectores/gestorJira.js";
 import type { AjustesDeDispositivos, Entorno } from "../../core/settings.js";
 import { cargarSettings, rutaSettings } from "../../agent/config/settingsEnDisco.js";
+import { MOTIVOS_DEL_TUNEL } from "../../core/tunel.js";
 import type { Dispositivo } from "../../core/dispositivos.js";
 import type { AdjuntoDeTarea, Tarea } from "../../core/tareas.js";
 import { crearTareasEnDisco, TOPE_DE_ADJUNTO } from "../../agent/tareas/tareasEnDisco.js";
@@ -4488,6 +4489,62 @@ describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
     } finally {
       if (previo === undefined) delete process.env.XONECODE_REMOTO;
       else process.env.XONECODE_REMOTO = previo;
+    }
+  });
+
+  /**
+   * La rama POR OMISIÓN del cableado (sin `tunelRemoto`, `medirNgrok` ni `guardarAuthtoken`): con
+   * un PATH vacío no hay ngrok que encontrar, así que la medida real dice «no instalado» sin
+   * lanzar nada, y el túnel real falla con `noInstalado` antes de cargar el paquete o lanzar un
+   * proceso. Es la composición que ningún test con dobles ve.
+   */
+  it("sin dobles y sin ngrok en el PATH: la foto dice no instalado con su receta, y encender da noInstalado", async () => {
+    const previos = { remoto: process.env.XONECODE_REMOTO, path: process.env.PATH };
+    process.env.XONECODE_REMOTO = "1";
+    process.env.PATH = mkdtempSync(join(tmpdir(), "xonecode-path-vacio-"));
+    const ruta = rutaSettings();
+    const settingsPrevios = existsSync(ruta) ? readFileSync(ruta, "utf8") : undefined;
+    try {
+      const puente = new PuenteRemotoEnMemoria();
+      const rutas = new Map<string, ManejadorRuta>();
+      const servidor = {
+        ...servidorLevantado(),
+        registrarRuta: (metodo: string, ruta: string, manejador: ManejadorRuta) => {
+          rutas.set(`${metodo} ${ruta}`, manejador);
+        },
+      };
+      const pestana = clienteDeMentira();
+      const codigo = await arrancarConsolaWeb({
+        puerto: 0,
+        abrir: false,
+        cwd: mkdtempSync(join(tmpdir(), "xonecode-cwd-")),
+        raizDelCliente: conBuild(),
+        crearServidor: async () => servidor,
+        vestibulo: vestibuloDePrueba(),
+        escribir: () => {},
+        puertoRemoto: async () => puente,
+        esperarCierre: async () => {
+          await rutas.get(`GET ${RUTA_EVENTOS}`)!(pestana.peticion, pestana.respuesta);
+          const remotos = () => pestana.recibidos.filter((x): x is Extract<MensajeAlCliente, { clase: "remoto" }> => x.clase === "remoto");
+          await vi.waitFor(() => expect(remotos().at(-1)?.ngrok).toBeDefined());
+          expect(remotos().at(-1)!.ngrok).toMatchObject({ instalado: false, cuenta: false });
+          expect(remotos().at(-1)!.ngrok!.receta?.id).toBe("ngrok");
+
+          const accion = rutas.get(`POST ${RUTA_ACCION}`)!;
+          await enviarMensaje(accion, { clase: "remoto", accion: "via", via: "ngrok" });
+          await enviarMensaje(accion, { clase: "remoto", accion: "encender" });
+          await vi.waitFor(() => expect(remotos().at(-1)).toMatchObject({ estado: "error", motivo: MOTIVOS_DEL_TUNEL.noInstalado }));
+          // El túnel falló antes de abrir el puente.
+          expect(puente.aperturas).toEqual([]);
+        },
+      });
+      expect(codigo).toBe(0);
+    } finally {
+      if (previos.remoto === undefined) delete process.env.XONECODE_REMOTO;
+      else process.env.XONECODE_REMOTO = previos.remoto;
+      process.env.PATH = previos.path;
+      if (settingsPrevios === undefined) rmSync(ruta, { force: true });
+      else writeFileSync(ruta, settingsPrevios);
     }
   });
 
