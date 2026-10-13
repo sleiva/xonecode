@@ -230,7 +230,7 @@ export const PASOS_EJECUTABLES = new Map<string, PasoEjecutable>([
   ],
   [
     // ngrok, para la vía «túnel local» de la sesión remota (`core/dispositivos.ts#recetaDeNgrok`).
-    // Una fórmula de Homebrew que no pide contraseña; el mismo entorno que el paso 1 de Android.
+    // ngrok viene como cask de Homebrew y no pide contraseña; el mismo entorno que el paso 1 de Android.
     "ngrok:darwin:1",
     {
       tipo: "proceso",

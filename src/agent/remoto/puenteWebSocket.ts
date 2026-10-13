@@ -180,6 +180,7 @@ export function crearPuenteWebSocket(
           // cierra, ese aviso ya salió. Quien mate después lo que hay en medio (ngrok) no lo pierde.
           const cerrandose = new Promise<void>((resolver) => {
             const tope = setTimeout(resolver, topeDeCierre);
+            tope.unref?.();
             socket.addEventListener("close", () => {
               clearTimeout(tope);
               resolver();

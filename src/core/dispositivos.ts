@@ -641,7 +641,7 @@ export function recetaDeNgrok(plataforma: string, medida: { instalado: boolean; 
     paso = {
       titulo: "Instalar ngrok",
       comandos: ["brew install ngrok"],
-      nota: "Es una fórmula de Homebrew y no pide contraseña de administrador.",
+      nota: "Se instala con Homebrew y no pide contraseña de administrador.",
       hecho,
       ejecutable: hayBrew,
       ...(hayBrew ? {} : { porQueNo: "hace falta Homebrew (brew.sh)" }),

@@ -125,7 +125,8 @@ export async function medirNgrok(deps: DependenciasDeNgrok = {}): Promise<Medida
 }
 
 /** Lo que tiene un authtoken de ngrok: alfanumérico con `_`/`-`, sin espacios. */
-const FORMA_DE_AUTHTOKEN = /^[A-Za-z0-9_-]{10,200}$/;
+// Empieza por letra o cifra: un valor que empiece por «-» lo leería ngrok como una opción.
+const FORMA_DE_AUTHTOKEN = /^[A-Za-z0-9][A-Za-z0-9_-]{9,199}$/;
 
 export type ResultadoDeGuardarAuthtoken = { ok: true } | { ok: false; motivo: string };
 
