@@ -298,20 +298,21 @@ export function guardarModoPorDefecto(casa: string | undefined, modo: ModoDeEscr
 }
 
 /**
- * Guarda la vía de la sesión remota y el dominio de ngrok, fundidos en el `remoto` que ya hay
- * (interruptor y servidor intactos). `dominio: null` lo QUITA. La forma la comprueba quien llama
- * (`motivoDeDominioInaceptable`) y la vuelve a comprobar `validarSettings` al leer.
- * Sin `habilitado` en el fichero no se escribe ninguno: `validarRemoto` conserva el bloque, y el
- * interruptor puede venir de `XONECODE_REMOTO=1`.
+ * Guarda el interruptor de la sesión remota, su vía y el dominio de ngrok, fundidos en el `remoto`
+ * que ya hay (lo que no se nombra, intacto). `dominio: null` lo QUITA. La forma la comprueba quien
+ * llama (`motivoDeDominioInaceptable`) y la vuelve a comprobar `validarSettings` al leer.
+ * `habilitado` solo se escribe si se PIDE (el interruptor de Ajustes): guardar la vía o el dominio
+ * no lo inventa, porque el interruptor puede venir de `XONECODE_REMOTO=1`.
  */
 export function guardarAjustesDeRemoto(
   casa: string | undefined,
-  cambio: { via?: ViaRemota; dominio?: string | null }
+  cambio: { habilitado?: boolean; via?: ViaRemota; dominio?: string | null }
 ): { ruta: string } {
   const ruta = rutaSettings(casa ?? homedir());
   const crudo = leerCrudoOAbortar(ruta);
   const previo = crudo.remoto;
   const remoto: Record<string, unknown> = esObjeto(previo) ? { ...previo } : {};
+  if (cambio.habilitado !== undefined) remoto.habilitado = cambio.habilitado;
   if (cambio.via !== undefined) remoto.via = cambio.via;
   if (cambio.dominio !== undefined) {
     const ngrok: Record<string, unknown> = esObjeto(remoto.ngrok) ? { ...remoto.ngrok } : {};

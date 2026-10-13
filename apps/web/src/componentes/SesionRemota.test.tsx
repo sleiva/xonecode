@@ -10,6 +10,13 @@ describe("la sesión remota en la consola", () => {
     expect(container.innerHTML).toBe("");
   });
 
+  it("con el interruptor quitado no hay botón; con el puente aún abierto, sí (para poder apagarlo)", () => {
+    const { container, rerender } = render(<SesionRemota remoto={{ estado: "apagada", habilitado: false }} enviar={vi.fn()} />);
+    expect(container.innerHTML).toBe("");
+    rerender(<SesionRemota remoto={{ estado: "activa", habilitado: false, url: "https://r/r/S#K", moviles: 0 }} enviar={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Sesión remota" })).toBeTruthy();
+  });
+
   it("apagada: el botón solo abre el diálogo y «Encender» la enciende", () => {
     const enviar = vi.fn(async () => {});
     render(<SesionRemota remoto={{ estado: "apagada", via: "servidor" }} enviar={enviar} />);

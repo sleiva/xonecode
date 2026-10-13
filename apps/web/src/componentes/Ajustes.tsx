@@ -268,8 +268,8 @@ const SECCIONES: readonly {
   // `IconLinkOutline16`: ese ya es el de Dispositivos, y dos secciones con el mismo dibujo se
   // confunden en la navegación.
   { id: "conectores", etiqueta: "Conectores", Icono: IconShareOutline16 },
-  // «Sesión remota» es condicional como Conectores: sin `remoto` (el interruptor está apagado y
-  // el servidor no lo dice) no se pinta. `IconBrowseOutline16` SÍ lo exporta el paquete
+  // «Sesión remota» es condicional como Conectores: sin `remoto` (un servidor que no la monta, o
+  // uno antiguo con el interruptor apagado) no se pinta; con él sale siempre, con su interruptor. `IconBrowseOutline16` SÍ lo exporta el paquete
   // instalado (comprobado sobre `lib/index.js`).
   { id: "remoto", etiqueta: "Sesión remota", Icono: IconBrowseOutline16 },
   // `IconLinkOutline16` y no un icono de móvil: en el paquete instalado no hay ninguno
@@ -675,7 +675,7 @@ export function Ajustes({
    */
   remoto?: EstadoRemoto;
   /** Las acciones de la tarjeta de ngrok (authtoken y dominio). */
-  alRemoto?: (m: AccionDeNgrok) => void;
+  alRemoto?: (m: AccionDeNgrok | { clase: "remoto"; accion: "habilitar"; valor: boolean }) => void;
   /** Sin cable no se manda nada: lo que escribe en el servidor se apaga. */
   conectado?: boolean;
   /** Abre la petición de clave de ese proveedor (`/provider <id>` del otro lado). */
@@ -2653,7 +2653,23 @@ export function Ajustes({
           {seccion === "remoto" && remoto !== undefined ? (
             <>
               <h2 className={estilos.encabezado}>Sesión remota</h2>
-              {remoto.ngrok === undefined ? (
+              <label className={estilos.casillaEnLinea}>
+                <input
+                  type="checkbox"
+                  // Ausente = servidor antiguo, que solo la anunciaba activa.
+                  checked={remoto.habilitado !== false}
+                  disabled={!conectado || alRemoto === undefined || remoto.porEntorno === true}
+                  onChange={() => alRemoto?.({ clase: "remoto", accion: "habilitar", valor: remoto.habilitado === false })}
+                />
+                Activar la sesión remota (experimental)
+              </label>
+              <p className={estilos.nota}>
+                Usa esta consola desde el móvil: el botón «Sesión remota» del chat da una dirección y su QR.
+                Quien tenga esa dirección controla la consola, aprobaciones incluidas, hasta que la revoques o
+                la apagues; lo que se ve sale cifrado de punta a punta. Desactivarla apaga la que esté encendida.
+                {remoto.porEntorno === true ? " Ahora la mantiene activa XONECODE_REMOTO=1 en este arranque." : ""}
+              </p>
+              {remoto.habilitado === false ? null : remoto.ngrok === undefined ? (
                 <p>El servidor todavía no ha medido ngrok en esta máquina.</p>
               ) : (
                 <TunelNgrok

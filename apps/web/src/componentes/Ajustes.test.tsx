@@ -761,6 +761,52 @@ describe("Ajustes", () => {
       fireEvent.click(screen.getByRole("button", { name: "Poner authtoken" }));
       expect(alRemoto).toHaveBeenCalledWith({ clase: "remoto", accion: "authtoken" });
     });
+
+    it("el interruptor: quitado, sin tarjeta de ngrok y marcarlo manda «habilitar»; puesto, desmarcarlo lo quita", () => {
+      const alRemoto = vi.fn();
+      const { rerender } = render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          remoto={{ estado: "apagada", habilitado: false, ngrok: { instalado: true, cuenta: false } }}
+          alRemoto={alRemoto}
+          seccionInicial="remoto"
+        />
+      );
+      const casilla = screen.getByRole("checkbox", { name: /Activar la sesión remota/ }) as HTMLInputElement;
+      expect(casilla.checked).toBe(false);
+      expect(screen.queryByRole("button", { name: "Poner authtoken" })).toBeNull();
+      fireEvent.click(casilla);
+      expect(alRemoto).toHaveBeenCalledWith({ clase: "remoto", accion: "habilitar", valor: true });
+
+      rerender(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          remoto={{ estado: "apagada", habilitado: true, ngrok: { instalado: true, cuenta: false } }}
+          alRemoto={alRemoto}
+          seccionInicial="remoto"
+        />
+      );
+      expect((screen.getByRole("checkbox", { name: /Activar la sesión remota/ }) as HTMLInputElement).checked).toBe(true);
+      expect(screen.getByRole("button", { name: "Poner authtoken" })).toBeTruthy();
+      fireEvent.click(screen.getByRole("checkbox", { name: /Activar la sesión remota/ }));
+      expect(alRemoto).toHaveBeenLastCalledWith({ clase: "remoto", accion: "habilitar", valor: false });
+    });
+
+    it("activa por XONECODE_REMOTO=1, el interruptor no se puede quitar y lo dice", () => {
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          remoto={{ estado: "apagada", habilitado: true, porEntorno: true }}
+          alRemoto={vi.fn()}
+          seccionInicial="remoto"
+        />
+      );
+      expect((screen.getByRole("checkbox", { name: /Activar la sesión remota/ }) as HTMLInputElement).disabled).toBe(true);
+      expect(screen.getByText(/XONECODE_REMOTO=1/)).toBeTruthy();
+    });
   });
 
   describe("la sección Conectores", () => {

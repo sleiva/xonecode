@@ -948,16 +948,18 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   arrancándolo. El árbol SUCIO se dice.
 - **La sesión remota (EXPERIMENTAL, detrás de un interruptor)** (`web/servidor/puenteRemoto.ts`, `core/remoto.ts`,
   `agent/remoto/puenteWebSocket.ts`; el relé y la web móvil se ESCRIBEN en `xonecode-server`). Apagada por omisión:
-  `settings.remoto.habilitado` o `XONECODE_REMOTO=1`, leído en CADA uso; apagada no se anuncia, no se atiende y **no se
-  carga el paquete** `@xone/xonecode-remoto`, que entra por `import()` dinámico de un nombre en variable en UN fichero.
+  `settings.remoto.habilitado` —lo escribe el INTERRUPTOR de Ajustes → Sesión remota (`accion: "habilitar"`)— o
+  `XONECODE_REMOTO=1` (`porEntorno`: el interruptor no la apaga en ese arranque), leído en CADA uso. El mensaje `remoto`
+  sale SIEMPRE con `habilitado`, para que Ajustes pinte la sección; apagada no hay botón en el chat, no se atiende más
+  que `habilitar`/`apagar`, **no se mide ngrok y no se carga el paquete** `@xone/xonecode-remoto`, que entra por `import()` dinámico de un nombre en variable en UN fichero.
   **El paquete VIAJA DENTRO de xonecode**: una copia CONSTRUIDA en `vendor/xonecode-remoto/`, declarada `file:` en
   `dependencies` y nombrada en `bundleDependencies`, así que `npm pack`/`npm publish` la meten entera y su `ws` es el de
   xonecode; se renueva con `npm run remoto:traer` (`scripts/traerRemoto.mjs`: corre los tests de `xonecode-server` y
   solo si pasan sustituye la copia entera), y `src/vendorRemoto.test.ts` vigila su forma. **La vía por omisión es
   ngrok** (`core/settings.ts#remotoEnVigor`), salvo un `remoto.servidor` escrito a mano; un `via` explícito manda, y el
   servidor manda siempre la vía EN VIGOR. **Límite declarado**: que la copia esté AL DÍA con `xonecode-server` no se
-  comprueba sin el otro repo; `origen.json` dice de qué commit sale y si su árbol estaba sucio. **Mientras el puente no esté apagado, la ráfaga lo anuncia AUNQUE el interruptor esté
-  apagado**, y `apagar` se atiende siempre: apagar el interruptor en `settings.json` con el puente abierto no puede dejarlo
+  comprueba sin el otro repo; `origen.json` dice de qué commit sale y si su árbol estaba sucio. **Quitar el interruptor desde Ajustes APAGA antes lo encendido**; quitado
+  a mano en `settings.json` con el puente abierto, el botón del chat sigue y `apagar` se atiende siempre: no puede quedar
   abierto e invisible. Un relé que no contesta pasa de `abriendo` a `reconectando` sin `url`, y se puede apagar en los
   dos. **Cada móvil es un sumidero más** enganchado por la MISMA puerta que una
   pestaña (`engancharCliente`/`soltarCliente`): la ráfaga de `adjuntar`, se muda con el foco, cuenta como «hay alguien

@@ -428,7 +428,7 @@ export interface OpcionesDeMontaje {
    * interruptor vive en `settings.json` y leerlo una vez lo congelaría.
    */
   remoto?: {
-    ajustes: () => { habilitado: boolean; servidor: string; via?: ViaRemota; dominio?: string };
+    ajustes: () => { habilitado: boolean; porEntorno?: true; servidor: string; via?: ViaRemota; dominio?: string };
     puerto: () => Promise<PuenteRemotoPort | undefined>;
     /**
      * La vía «ngrok» (`agent/remoto/tunelNgrok.ts`): se abre al encender solo si `ajustes().via`
@@ -444,8 +444,8 @@ export interface OpcionesDeMontaje {
     medirNgrok?: () => Promise<{ instalado: boolean; cuenta: boolean; hayBrew?: boolean }>;
     /** `ngrok config add-authtoken`. Un fallo es un texto de `MOTIVOS_DEL_TUNEL`. */
     guardarAuthtoken?: (token: string) => Promise<{ ok: true } | { ok: false; motivo: string }>;
-    /** Escribe la vía o el dominio en `settings.json`; `dominio: null` lo quita. Puede lanzar. */
-    guardarAjustes?: (cambio: { via?: ViaRemota; dominio?: string | null }) => void;
+    /** Escribe el interruptor, la vía o el dominio en `settings.json`; `dominio: null` lo quita. Puede lanzar. */
+    guardarAjustes?: (cambio: { habilitado?: boolean; via?: ViaRemota; dominio?: string | null }) => void;
   };
   /**
    * El tope de la ventana del modelo, para el contador de contexto. Ver la opción del mismo
@@ -1039,6 +1039,9 @@ export function montarRutas(
     return {
       clase: "remoto",
       estado: e.estado,
+      // El interruptor, para Ajustes: la sección se pinta siempre y el botón del chat solo encendido.
+      habilitado: remotoHabilitado(),
+      ...(ajustes?.porEntorno === true ? { porEntorno: true as const } : {}),
       ...("url" in e ? { url: e.url } : {}),
       ...("moviles" in e ? { moviles: e.moviles } : {}),
       ...("motivo" in e ? { motivo: e.motivo } : {}),
@@ -2004,12 +2007,11 @@ export function montarRutas(
       if (ultimoProgresoDeMudanza !== undefined) cliente({ clase: "mudanzaDeWorkspace", progreso: ultimoProgresoDeMudanza });
       if (depuracion !== undefined) cliente(depuracion);
       if (modoPorDefecto !== undefined) cliente(modoPorDefecto);
-      // La sesión remota, con el interruptor encendido O con el puente sin apagar: si alguien
-      // apaga el interruptor en `settings.json` con el puente abierto, una pestaña nueva tiene
-      // que verlo para poder apagarlo (abierto e invisible sería lo peor de los dos mundos).
+      // La sesión remota, SIEMPRE que esta ejecución la monta: con `habilitado`, que es lo que
+      // pinta el interruptor de Ajustes (y, apagado, no hay botón en el chat). Un puente abierto
+      // con el interruptor quitado a mano en `settings.json` sale igual, para poder apagarlo.
       // A un móvil no le llega: `remoto` no pasa `filtrarSalida` (lleva el secreto en la `url`).
-      if (sesionRemota !== undefined && (remotoHabilitado() || sesionRemota.estado().estado !== "apagada"))
-        cliente(mensajeDeRemoto(sesionRemota.estado()));
+      if (sesionRemota !== undefined) cliente(mensajeDeRemoto(sesionRemota.estado()));
       // La foto de ngrok, la PRIMERA vez que alguien mira: lanza `ngrok version`, que no se hace
       // con el interruptor apagado ni en sondeo.
       if (sesionRemota !== undefined && fotoDeNgrok === undefined && midiendoNgrok === undefined && remotoHabilitado())
@@ -6423,7 +6425,7 @@ export function montarRutas(
   };
 
   /** `true` si quedó escrito. El error de disco lleva la ruta de `settings.json`: solo su `code`. */
-  const guardarAjustesDeRemoto = (cambio: { via?: ViaRemota; dominio?: string | null }): boolean => {
+  const guardarAjustesDeRemoto = (cambio: { habilitado?: boolean; via?: ViaRemota; dominio?: string | null }): boolean => {
     const guardar = opciones.remoto?.guardarAjustes;
     if (guardar === undefined) {
       informar("sesión remota: esta ejecución no puede guardar sus ajustes");
@@ -6436,6 +6438,22 @@ export function montarRutas(
       informar(`sesión remota: no se pudo guardar en settings.json (${codigoDe(error)})`);
       return false;
     }
+  };
+
+  /**
+   * El interruptor de Ajustes → Sesión remota. Desactivar APAGA antes lo que haya encendido: un
+   * puente abierto con el interruptor quitado seguiría dando la consola a quien tenga la URL.
+   * Activar no enciende nada: solo hace aparecer el botón del chat y mide ngrok.
+   */
+  const atenderHabilitarRemoto = async (valor: unknown): Promise<void> => {
+    if (typeof valor !== "boolean") return;
+    if (!valor) await apagarRemoto();
+    if (!guardarAjustesDeRemoto({ habilitado: valor })) return;
+    if (!valor && opciones.remoto?.ajustes().porEntorno === true) {
+      informar("sesión remota: XONECODE_REMOTO=1 la mantiene activa en este arranque");
+    }
+    anunciarRemoto();
+    if (valor) await medirNgrokYAnunciar();
   };
 
   /**
@@ -7325,6 +7343,7 @@ export function montarRutas(
       // Con el interruptor apagado se contesta igual y no se ENCIENDE nada: ni se carga el
       // paquete. Apagar sí se atiende siempre, pero solo actúa si hay algo encendido.
       if (mensaje.accion === "apagar") void apagarRemoto().catch(contar);
+      else if (mensaje.accion === "habilitar") void atenderHabilitarRemoto(mensaje.valor).catch(contar);
       else if (sesionRemota !== undefined && remotoHabilitado()) {
         if (mensaje.accion === "encender") void sesionRemota.encender().catch(contar);
         else if (mensaje.accion === "revocar") void sesionRemota.revocar().catch(contar);

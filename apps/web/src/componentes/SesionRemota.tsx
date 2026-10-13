@@ -78,7 +78,9 @@ export function SesionRemota({
     };
   }, [url]);
 
-  if (remoto === undefined) return null;
+  // Sin el interruptor de Ajustes no hay botón; con el puente aún abierto (interruptor quitado a
+  // mano en `settings.json`) sí, para poder apagarlo.
+  if (remoto === undefined || (remoto.habilitado === false && remoto.estado === "apagada")) return null;
 
   const cerrar = (): void => {
     setAbierto(false);

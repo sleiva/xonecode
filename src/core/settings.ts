@@ -122,14 +122,15 @@ export const TOPE_DE_CONCURRENCIA_DE_TAREAS = 8;
 
 /**
  * La sesión remota (móvil → esta consola por el puente de `xonecode-server`). EXPERIMENTAL y
- * apagada por omisión: ausente o `habilitado` distinto de `true` = la función no existe. Así se
- * siguen publicando releases mientras madura (`docs/superpowers/specs/2026-10-09-sesion-remota-xonecode-design.md`).
+ * apagada por omisión: ausente o `habilitado` distinto de `true` = no hay botón en el chat ni se
+ * carga el paquete. Se activa con el interruptor de Ajustes → Sesión remota, que escribe
+ * `habilitado` (`docs/superpowers/specs/2026-10-09-sesion-remota-xonecode-design.md`).
  */
 export interface AjustesDeRemoto {
   habilitado?: boolean;
   /** `wss://` a cualquier host, o `ws://` solo a loopback. Ausente = `SERVIDOR_REMOTO_POR_OMISION`. */
   servidor?: string;
-  /** Por dónde sale la sesión: el servidor de XOne o un túnel de ngrok. Ausente = `servidor`. */
+  /** Por dónde sale la sesión: el servidor de XOne o un túnel de ngrok. Ausente = ngrok, salvo `servidor` escrito. */
   via?: ViaRemota;
   /** Solo con la vía `ngrok`: un dominio reservado en la cuenta (opcional). */
   ngrok?: { dominio?: string };
@@ -157,10 +158,13 @@ function servidorRemotoAceptable(candidato: string): boolean {
 export function remotoEnVigor(
   ajustes: AjustesDeRemoto | undefined,
   entorno: Record<string, string | undefined>
-): { habilitado: boolean; servidor: string; via: ViaRemota; dominio?: string } {
+): { habilitado: boolean; porEntorno?: true; servidor: string; via: ViaRemota; dominio?: string } {
   const dominio = ajustes?.ngrok?.dominio;
+  const porEntorno = entorno.XONECODE_REMOTO === "1";
   return {
-    habilitado: entorno.XONECODE_REMOTO === "1" || ajustes?.habilitado === true,
+    habilitado: porEntorno || ajustes?.habilitado === true,
+    // Encendida por la variable: el interruptor de Ajustes no la puede apagar en este arranque.
+    ...(porEntorno ? { porEntorno: true as const } : {}),
     servidor: ajustes?.servidor ?? SERVIDOR_REMOTO_POR_OMISION,
     // Sin `via`: ngrok (no hay aún un relé de XOne en marcha), salvo que se haya escrito `servidor` a mano.
     via: ajustes?.via ?? (ajustes?.servidor !== undefined ? "servidor" : "ngrok"),

@@ -2218,6 +2218,16 @@ describe("store: lo pendiente de subir (la pestaña Sincronización)", () => {
     expect(s.leer().remoto).toBeUndefined();
   });
 
+  it("remoto: el interruptor y su origen por variable, solo con su tipo", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "remoto", estado: "apagada", habilitado: false });
+    expect(s.leer().remoto).toEqual({ estado: "apagada", habilitado: false });
+    s.aplicar({ clase: "remoto", estado: "apagada", habilitado: true, porEntorno: true });
+    expect(s.leer().remoto).toEqual({ estado: "apagada", habilitado: true, porEntorno: true });
+    s.aplicar({ clase: "remoto", estado: "apagada", habilitado: "sí", porEntorno: "sí" } as never);
+    expect(s.leer().remoto).toEqual({ estado: "apagada" });
+  });
+
   it("acepta reconectando SIN url (el relé no contestó nunca)", () => {
     const s = crearStoreDelCliente();
     s.aplicar({ clase: "remoto", estado: "reconectando", moviles: 0 });

@@ -171,13 +171,16 @@ export type MensajeAlCliente =
   /** El transcript completo: lo que recibe quien (re)conecta, y el arreglo de cualquier desajuste. */
   | { clase: "reemision"; actos: Acto[] }
   /**
-   * La sesión remota, solo si el interruptor está encendido (`settings.remoto`). La `url` lleva
+   * La sesión remota: el interruptor (`habilitado`, de `settings.remoto` o `XONECODE_REMOTO=1`, que
+   * es `porEntorno` y no se apaga desde Ajustes) y el estado del puente. La `url` lleva
    * el SECRETO en el fragmento: es el TERCER secreto del cable, tras `leerSecreto` y el `codigo` de `motorLocal`, y por eso
    * `remoto` no está en la lista de salida del puente (`core/remoto.ts`).
    */
   | {
       clase: "remoto";
       estado: "apagada" | "abriendo" | "activa" | "reconectando" | "error";
+      habilitado?: boolean;
+      porEntorno?: true;
       url?: string;
       moviles?: number;
       motivo?: string;
@@ -1701,6 +1704,8 @@ export type MensajeDelCliente =
   | { clase: "cancelar" }
   /** La sesión remota: encenderla, revocar su enlace (apagar y volver a encender) o apagarla. */
   | { clase: "remoto"; accion: "encender" | "revocar" | "apagar" }
+  /** El interruptor de Ajustes: escribe `remoto.habilitado`; desactivar apaga antes lo encendido. */
+  | { clase: "remoto"; accion: "habilitar"; valor: boolean }
   /** Elegir la vía (solo apagada o en error), pedir el authtoken de ngrok (llega por `leerSecreto`) o fijar su dominio. */
   | { clase: "remoto"; accion: "via"; via: "servidor" | "ngrok" }
   | { clase: "remoto"; accion: "authtoken" }

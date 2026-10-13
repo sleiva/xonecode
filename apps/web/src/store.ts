@@ -620,6 +620,10 @@ export type EstadoRemoto = (
 ) & {
   /** Por dónde sale. El servidor manda siempre la vía en vigor; ausente (servidor antiguo) se lee como ngrok. */
   via?: "servidor" | "ngrok";
+  /** El interruptor de Ajustes; ausente (servidor antiguo, que solo lo mandaba activo) = activa. */
+  habilitado?: boolean;
+  /** Activa por `XONECODE_REMOTO=1`: el interruptor no la apaga en este arranque. */
+  porEntorno?: true;
   /** Lo medido de ngrok; ausente = el servidor no lo dijo (y no se pinta). */
   ngrok?: NgrokDelCable;
 };
@@ -1593,7 +1597,12 @@ export function crearStoreDelCliente(): {
           const v = m["via"];
           const via: { via?: "servidor" | "ngrok" } = v === "servidor" || v === "ngrok" ? { via: v } : {};
           const ngrok = ngrokDe(m["ngrok"]);
-          const extra = { ...via, ...(ngrok === undefined ? {} : { ngrok }) };
+          const extra = {
+            ...via,
+            ...(typeof m["habilitado"] === "boolean" ? { habilitado: m["habilitado"] } : {}),
+            ...(m["porEntorno"] === true ? { porEntorno: true as const } : {}),
+            ...(ngrok === undefined ? {} : { ngrok }),
+          };
           const e = m["estado"];
           if (e === "apagada" || e === "abriendo") {
             mutar({ remoto: { estado: e, ...extra } });

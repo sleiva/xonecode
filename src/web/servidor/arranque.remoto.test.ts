@@ -115,12 +115,13 @@ function conRemoto(
 }
 
 describe("la sesión remota en el cable", () => {
-  it("apagada: ni se anuncia, ni se atiende, ni se carga el paquete", async () => {
+  it("apagada: se anuncia con el interruptor quitado (para Ajustes), pero ni se atiende ni se carga el paquete", async () => {
     const m = conRemoto(false);
     const c = clienteDeMentira();
     await m.sse(c.peticion, c.respuesta);
     await asentar();
-    expect(c.recibidos.some((x) => x.clase === "remoto")).toBe(false);
+    expect(c.recibidos.filter((x) => x.clase === "remoto")).toEqual([{ clase: "remoto", estado: "apagada", habilitado: false }]);
+    const anunciados = c.recibidos.length;
     expect(await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" })).toBe(204);
     await asentar();
     expect(m.cargar).not.toHaveBeenCalled();
@@ -128,7 +129,7 @@ describe("la sesión remota en el cable", () => {
     // un `apagar()` a ciegas mandaría `{clase:"remoto", estado:"apagada"}` a cada pestaña.
     await enviarMensaje(m.accion, { clase: "remoto", accion: "apagar" });
     m.montado.cerrarRemoto();
-    expect(c.recibidos.some((x) => x.clase === "remoto")).toBe(false);
+    expect(c.recibidos.slice(anunciados).some((x) => x.clase === "remoto")).toBe(false);
     expect(m.puerto.cerrados).toBe(0);
   });
 
@@ -148,14 +149,14 @@ describe("la sesión remota en el cable", () => {
     const c = clienteDeMentira();
     await m.sse(c.peticion, c.respuesta);
     await asentar();
-    expect(c.recibidos).toContainEqual({ clase: "remoto", estado: "apagada" });
+    expect(c.recibidos).toContainEqual({ clase: "remoto", estado: "apagada", habilitado: true });
 
     await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" });
     await asentar();
     expect(m.cargar).toHaveBeenCalledTimes(1);
     expect(m.puerto.aperturas).toEqual(["ws://127.0.0.1:8787/ws"]);
     m.puerto.abierta("https://r/r/S#K");
-    expect(c.recibidos.at(-1)).toEqual({ clase: "remoto", estado: "activa", url: "https://r/r/S#K", moviles: 0 });
+    expect(c.recibidos.at(-1)).toEqual({ clase: "remoto", estado: "activa", habilitado: true, url: "https://r/r/S#K", moviles: 0 });
 
     m.puerto.presencia("m1");
     await asentar();
@@ -165,7 +166,7 @@ describe("la sesión remota en el cable", () => {
       expect(alMovil).not.toContain(prohibida);
     }
     // Y la pestaña se entera de que hay un móvil: el diálogo lo pinta.
-    expect(c.recibidos.at(-1)).toEqual({ clase: "remoto", estado: "activa", url: "https://r/r/S#K", moviles: 1 });
+    expect(c.recibidos.at(-1)).toEqual({ clase: "remoto", estado: "activa", habilitado: true, url: "https://r/r/S#K", moviles: 1 });
   });
 
   it("una prosa del móvil llega al turno de la consola en foco por el despachador real", async () => {
@@ -395,15 +396,15 @@ describe("la sesión remota en el cable", () => {
     const c = clienteDeMentira();
     await m.sse(c.peticion, c.respuesta);
     await asentar();
-    expect(c.recibidos).toContainEqual({ clase: "remoto", estado: "activa", url: "https://r/r/S#K", moviles: 0 });
+    expect(c.recibidos).toContainEqual({ clase: "remoto", estado: "activa", habilitado: false, url: "https://r/r/S#K", moviles: 0 });
     await enviarMensaje(m.accion, { clase: "remoto", accion: "apagar" });
     expect(m.puerto.canales.at(-1)?.cerrado).toBe(true);
-    expect(c.recibidos.at(-1)).toEqual({ clase: "remoto", estado: "apagada" });
-    // Y ya apagado, con el interruptor apagado, la siguiente pestaña no lo ve.
+    expect(c.recibidos.at(-1)).toEqual({ clase: "remoto", estado: "apagada", habilitado: false });
+    // Y ya apagado, la siguiente pestaña lo ve apagado y con el interruptor quitado (sin botón en el chat).
     const d = clienteDeMentira();
     await m.sse(d.peticion, d.respuesta);
     await asentar();
-    expect(d.recibidos.some((x) => x.clase === "remoto")).toBe(false);
+    expect(d.recibidos.filter((x) => x.clase === "remoto")).toEqual([{ clase: "remoto", estado: "apagada", habilitado: false }]);
   });
 
   it("cerrarRemoto apaga el puente", async () => {
@@ -431,7 +432,7 @@ describe("la sesión remota por el túnel de ngrok", () => {
     const servidor = servidorDeMentira();
     const puerto = new PuenteRemotoEnMemoria();
     const tunel = new TunelEnMemoria();
-    const ajustes: { via?: ViaRemota; dominio?: string } = {
+    const ajustes: { habilitado?: boolean; via?: ViaRemota; dominio?: string } = {
       via: o.via ?? "ngrok",
       ...(o.dominio === undefined ? {} : { dominio: o.dominio }),
     };
@@ -454,7 +455,10 @@ describe("la sesión remota por el túnel de ngrok", () => {
     const montado = montarRutas(servidor, vestibuloDePrueba(), {
       detectarDispositivos: detectar,
       remoto: {
-        ajustes: () => ({ habilitado: o.habilitado?.() ?? true, servidor: "ws://127.0.0.1:8787/ws", ...ajustes }),
+        ajustes: () => {
+          const { habilitado, ...resto } = ajustes;
+          return { habilitado: habilitado ?? o.habilitado?.() ?? true, servidor: "ws://127.0.0.1:8787/ws", ...resto };
+        },
         puerto: async () => puerto,
         tunel: o.tunel ?? tunel,
         medirNgrok: medir,
@@ -464,6 +468,7 @@ describe("la sesión remota por el túnel de ngrok", () => {
         },
         guardarAjustes: (c) => {
           guardados.push(c);
+          if (c.habilitado !== undefined) ajustes.habilitado = c.habilitado;
           if (c.via !== undefined) ajustes.via = c.via;
           if (c.dominio === null) delete ajustes.dominio;
           else if (c.dominio !== undefined) ajustes.dominio = c.dominio;
@@ -499,6 +504,41 @@ describe("la sesión remota por el túnel de ngrok", () => {
     expect(m.tunel.aperturas).toEqual([{ dominio: "mi-app.ngrok.app" }]);
     m.puerto.abierta("https://tunel.example/r/S#K");
     expect(remotos(c.recibidos).at(-1)).toMatchObject({ estado: "activa", url: "https://tunel.example/r/S#K", via: "ngrok" });
+  });
+
+  it("el interruptor de Ajustes: activar lo guarda, lo anuncia y mide ngrok; desactivar APAGA antes y lo guarda", async () => {
+    const m = conTunel({ habilitado: () => false });
+    const c = clienteDeMentira();
+    await m.sse(c.peticion, c.respuesta);
+    await asentar();
+    expect(remotos(c.recibidos).at(-1)).toMatchObject({ estado: "apagada", habilitado: false });
+    expect(m.medir).not.toHaveBeenCalled();
+
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "habilitar", valor: true });
+    await vi.waitFor(() => expect(m.medir).toHaveBeenCalled());
+    expect(m.guardados).toContainEqual({ habilitado: true });
+    await vi.waitFor(() => expect(remotos(c.recibidos).at(-1)).toMatchObject({ estado: "apagada", habilitado: true, ngrok: { instalado: true } }));
+
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" });
+    await vi.waitFor(() => expect(m.puerto.canales).toHaveLength(1));
+    m.puerto.abierta("https://tunel.example/r/S#K");
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "habilitar", valor: false });
+    await vi.waitFor(() => expect(m.guardados.at(-1)).toEqual({ habilitado: false }));
+    // Apagado ANTES de quitar el interruptor: el canal y el túnel, cerrados.
+    expect(m.puerto.canales.at(-1)?.cerrado).toBe(true);
+    await vi.waitFor(() => expect(m.tunel.cerrados).toBe(1));
+    expect(remotos(c.recibidos).at(-1)).toMatchObject({ estado: "apagada", habilitado: false });
+    // Y con el interruptor quitado, encender no hace nada.
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" });
+    await asentar();
+    expect(m.puerto.canales).toHaveLength(1);
+  });
+
+  it("un valor que no es booleano no toca el interruptor", async () => {
+    const m = conTunel({ habilitado: () => false });
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "habilitar", valor: "true" } as unknown as MensajeDelCliente);
+    await asentar();
+    expect(m.guardados).toEqual([]);
   });
 
   it("apagar cierra el túnel", async () => {

@@ -298,6 +298,15 @@ describe("settingsEnDisco", () => {
     expect("habilitado" in crudo.remoto).toBe(false);
   });
 
+  it("guardarAjustesDeRemoto con `habilitado` escribe el interruptor y conserva lo demás", () => {
+    const c = casa();
+    guardarAjustesDeRemoto(c, { via: "ngrok", dominio: "mi-app.ngrok.app" });
+    guardarAjustesDeRemoto(c, { habilitado: true });
+    expect(cargarSettings(c).settings.remoto).toEqual({ habilitado: true, via: "ngrok", ngrok: { dominio: "mi-app.ngrok.app" } });
+    guardarAjustesDeRemoto(c, { habilitado: false });
+    expect(cargarSettings(c).settings.remoto).toEqual({ habilitado: false, via: "ngrok", ngrok: { dominio: "mi-app.ngrok.app" } });
+  });
+
   it("guardarModoPorDefecto(supervisado) BORRA la clave: es la omisión", () => {
     const c = casa();
     guardarModoPorDefecto(c, "autonomo");

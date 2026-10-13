@@ -633,6 +633,10 @@ export type MensajeAlCliente =
   | {
       clase: "remoto";
       estado: "apagada" | "abriendo" | "activa" | "reconectando" | "error";
+      /** El interruptor de Ajustes; ausente (servidor antiguo, que solo lo mandaba encendido) = activa. */
+      habilitado?: boolean;
+      /** Activa por `XONECODE_REMOTO=1`: el interruptor no la apaga en este arranque. */
+      porEntorno?: true;
       url?: string;
       moviles?: number;
       motivo?: string;
@@ -1572,6 +1576,8 @@ export type MensajeDelCliente =
   | { clase: "cancelar" }
   /** La sesión remota: encenderla, revocar su enlace (apagar y volver a encender) o apagarla. */
   | { clase: "remoto"; accion: "encender" | "revocar" | "apagar" }
+  /** El interruptor de Ajustes → Sesión remota (escribe `remoto.habilitado`). */
+  | { clase: "remoto"; accion: "habilitar"; valor: boolean }
   /** Elegir la vía (solo apagada o en error), pedir el authtoken de ngrok (llega por `leerSecreto`) o fijar su dominio. */
   | { clase: "remoto"; accion: "via"; via: "servidor" | "ngrok" }
   | { clase: "remoto"; accion: "authtoken" }
