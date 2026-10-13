@@ -4945,9 +4945,13 @@ export function montarRutas(
       ultimoProgreso = 0;
       emitirProgreso(resultado.estado as "ok" | "fallo" | "cancelada" | "colgada", resultado.motivo);
       trabajo = undefined;
-      // Y la foto nueva es la que dice si el paso quedó hecho, no el código de salida.
+      // Y la foto nueva es la que dice si el paso quedó hecho, no el código de salida. Instalar
+      // ngrok no cambia los aparatos: su foto se queda, y solo se vuelve a medir ngrok.
+      if (receta === "ngrok") {
+        await medirNgrokYAnunciar().catch(contar);
+        return;
+      }
       informeDeDispositivos = undefined;
-      if (receta === "ngrok") await medirNgrokYAnunciar().catch(contar);
       await atenderDispositivos().catch(contar);
     })();
   };

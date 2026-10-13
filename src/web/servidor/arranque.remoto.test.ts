@@ -434,7 +434,17 @@ describe("la sesión remota por el túnel de ngrok", () => {
     const pasos: string[] = [];
     let terminarPaso: (() => void) | undefined;
     const informados: string[] = [];
+    // Los aparatos también se miden: la receta de ngrok no tiene por qué volver a medirlos.
+    const detectar = vi.fn(async () => ({
+      sistema: "mac" as const,
+      herramientas: [],
+      dispositivos: [],
+      avds: [],
+      recetas: [],
+      medido: "2026-10-13T08:00:00.000Z",
+    }));
     const montado = montarRutas(servidor, vestibuloDePrueba(), {
+      detectarDispositivos: detectar,
       remoto: {
         ajustes: () => ({ habilitado: o.habilitado?.() ?? true, servidor: "ws://127.0.0.1:8787/ws", ...ajustes }),
         puerto: async () => puerto,
@@ -464,7 +474,7 @@ describe("la sesión remota por el túnel de ngrok", () => {
     const sse = servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!;
     const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
     return {
-      puerto, tunel, medir, tokens, guardados, pasos, informados, montado, sse, accion,
+      puerto, tunel, medir, detectar, tokens, guardados, pasos, informados, montado, sse, accion,
       terminarPaso: () => terminarPaso?.(),
       fallarToken: (motivo: string | undefined) => void (resultadoDelToken = motivo === undefined ? { ok: true } : { ok: false, motivo }),
     };
@@ -581,6 +591,32 @@ describe("la sesión remota por el túnel de ngrok", () => {
     expect(m.pasos).toEqual(["ngrok:1"]);
     m.terminarPaso();
     await vi.waitFor(() => expect(m.medir).toHaveBeenCalledTimes(2));
+  });
+
+  it("al acabar la receta de ngrok se vuelve a medir SOLO ngrok: Android e iOS no", async () => {
+    const m = conTunel({ instalado: false });
+    const c = clienteDeMentira();
+    await m.sse(c.peticion, c.respuesta);
+    await vi.waitFor(() => expect(m.medir).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(m.detectar).toHaveBeenCalledTimes(1));
+    await enviarMensaje(m.accion, { clase: "receta", id: "ngrok", paso: 1, accion: "ejecutar" });
+    m.terminarPaso();
+    await vi.waitFor(() => expect(m.medir).toHaveBeenCalledTimes(2));
+    for (let i = 0; i < 5; i++) await asentar();
+    expect(m.detectar).toHaveBeenCalledTimes(1);
+  });
+
+  it("una receta de APARATO sí vuelve a medir los aparatos (y no ngrok)", async () => {
+    const m = conTunel();
+    const c = clienteDeMentira();
+    await m.sse(c.peticion, c.respuesta);
+    await vi.waitFor(() => expect(m.detectar).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(m.medir).toHaveBeenCalledTimes(1));
+    await enviarMensaje(m.accion, { clase: "receta", id: "android", paso: 1, accion: "ejecutar" });
+    expect(m.pasos).toEqual(["android:1"]);
+    m.terminarPaso();
+    await vi.waitFor(() => expect(m.detectar).toHaveBeenCalledTimes(2));
+    expect(m.medir).toHaveBeenCalledTimes(1);
   });
 
   it("vía: se valida, se guarda y se anuncia; con la sesión encendida no se cambia", async () => {
