@@ -13,6 +13,7 @@
  */
 import type { CanalRemoto, PuenteRemotoPort, TunelAbierto } from "../../core/ports.js";
 import { MOTIVOS_DEL_TUNEL } from "../../core/tunel.js";
+import type { Panorama } from "../../core/panorama.js";
 import { ajustarATope, filtrarSalida, TOPE_DE_SALIDA_BYTES, validarEntradaDelMovil, type EntradaDelMovil } from "../../core/remoto.js";
 import type { Sumidero } from "./transporte.js";
 
@@ -37,6 +38,11 @@ export interface OpcionesDeSesionRemota {
   engancharCliente(sumidero: Sumidero): void;
   soltarCliente(sumidero: Sumidero): void;
   despachar(mensaje: EntradaDelMovil): void;
+  /**
+   * Un móvil acaba de entrar (ya enganchado): `enviar` le escribe SOLO a él, por el mismo filtro y
+   * tope que su sumidero. Es por donde le llega su primer `panorama`, que no va a las pestañas.
+   */
+  alEntrarMovil?(enviar: (mensaje: Panorama) => void): void;
   informar(texto: string): void;
   alCambiar(estado: EstadoDeSesionRemota): void;
   /** Solo para los tests, que no quieren fabricar 700 kB: por omisión `TOPE_DE_SALIDA_BYTES`. */
@@ -49,6 +55,13 @@ export interface SesionRemota {
   /** Resuelve cuando el túnel, si lo había, está cerrado: el cierre de la consola lo espera. */
   apagar(): Promise<void>;
   estado(): EstadoDeSesionRemota;
+  /** ¿Hay algún móvil dentro? Para no componer un `panorama` que no leería nadie. */
+  hayMoviles(): boolean;
+  /**
+   * A TODOS los móviles y a nadie más: el `panorama` no es de las pestañas, así que no pasa por
+   * `clientes` sino por los móviles de esta sesión, con el filtro y el tope de siempre.
+   */
+  difundir(mensaje: Panorama): void;
 }
 
 export const MOTIVO_NO_ABRIO = "no se pudo abrir la sesión remota";
@@ -88,6 +101,18 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
     // Antes de la primera `abierta` no hay enlace que enseñar, pero sí un intento que se repite:
     // quedarse en «abriendo» para siempre escondía que el relé no contesta.
     else if (reconectando) poner({ estado: "reconectando", moviles: moviles.size });
+  };
+  /** Lo que sale hacia UN móvil: filtrado y ajustado al tope, como todo lo que cruza. */
+  const enviarA = (id: string, mensaje: unknown): void => {
+    const filtrado = filtrarSalida(mensaje);
+    if (filtrado === undefined) return;
+    // Pasarse del tope no da un error legible: el relé cierra la conexión. Se ajusta aquí.
+    const salida = ajustarATope(filtrado, o.topeDeSalida ?? TOPE_DE_SALIDA_BYTES);
+    if (salida === undefined) {
+      o.informar(`sesión remota: un mensaje no cabe en el tope y no se envía (clase ${(filtrado as { clase: string }).clase})`);
+      return;
+    }
+    void canal?.enviar(id, salida).catch(() => {});
   };
   const soltarTodos = () => {
     for (const s of moviles.values()) o.soltarCliente(s);
@@ -233,19 +258,12 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
           }
           for (const id of ids) {
             if (moviles.has(id)) continue;
-            const sumidero: Sumidero = (mensaje) => {
-              const filtrado = filtrarSalida(mensaje);
-              if (filtrado === undefined) return;
-              // Pasarse del tope no da un error legible: el relé cierra la conexión. Se ajusta aquí.
-              const salida = ajustarATope(filtrado, o.topeDeSalida ?? TOPE_DE_SALIDA_BYTES);
-              if (salida === undefined) {
-                o.informar(`sesión remota: un mensaje no cabe en el tope y no se envía (clase ${(filtrado as { clase: string }).clase})`);
-                return;
-              }
-              void canal?.enviar(id, salida).catch(() => {});
-            };
+            const sumidero: Sumidero = (mensaje) => enviarA(id, mensaje);
             moviles.set(id, sumidero);
             o.engancharCliente(sumidero);
+            o.alEntrarMovil?.((m) => {
+              if (moviles.get(id) === sumidero) enviarA(id, m);
+            });
           }
           ponerActiva();
         },
@@ -289,5 +307,9 @@ export function crearSesionRemota(o: OpcionesDeSesionRemota): SesionRemota {
       await encender();
     },
     estado: () => estado,
+    hayMoviles: () => moviles.size > 0,
+    difundir(mensaje) {
+      for (const id of moviles.keys()) enviarA(id, mensaje);
+    },
   };
 }

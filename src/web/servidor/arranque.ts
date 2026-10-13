@@ -291,6 +291,7 @@ import type {
 // doblan.
 import { filaDeTarea } from "./transporte.js";
 import { crearSesionRemota, motivoFijoDelTunel, type EstadoDeSesionRemota } from "./puenteRemoto.js";
+import { componerPanorama, INTERVALO_DE_PANORAMA_MS, type EntradaDePanorama, type Panorama } from "../../core/panorama.js";
 import { esEsfuerzo, nivelesDeEsfuerzo, type Esfuerzo } from "../../core/esfuerzo.js";
 import { CATALOGO_DE_CONECTORES, conectoresParaElAgente, definicionDelCable, RUTA_CALLBACK_MCP, type AccionDeConector } from "../../core/conectores.js";
 import { servicioDeConectoresCableado, type ServicioDeConectores } from "../../agent/conectores/servicioDeConectores.js";
@@ -1146,6 +1147,95 @@ export function montarRutas(
   const emitir = (mensaje: MensajeAlCliente): void => {
     for (const cliente of clientes) cliente(mensaje);
   };
+
+  /**
+   * El PANEL de la sesión remota (`core/panorama.ts`): las consolas de persona abiertas y la cola
+   * de tareas, compuesto AQUÍ y mandado SOLO a los móviles (`SesionRemota.difundir`), nunca a las
+   * pestañas. Cada consola cruza con un id OPACO por encendido de la sesión remota —raíz → id, que
+   * se olvida al apagar—: la raíz es una ruta de la máquina (`sinRutas`) y el proyecto viaja como
+   * su `basename`. **Límite declarado**: el mismo nombre de proyecto en dos entornos se confunde.
+   */
+  const idsDeConsola = new Map<string, string>();
+  const idDeConsola = (raiz: string): string => {
+    let id = idsDeConsola.get(raiz);
+    if (id === undefined) {
+      id = randomUUID();
+      idsDeConsola.set(raiz, id);
+    }
+    return id;
+  };
+  /** La consola de persona ABIERTA con ese id, o nada: un id de otro encendido, o de una consola
+   *  que ya se cerró, no resuelve a ninguna. */
+  const consolaDelPanel = (id: string): ConsolaDeProyecto | undefined => {
+    for (const [raiz, suyo] of idsDeConsola) {
+      if (suyo === id) return vestibulo.proyectosAbiertos().find((c) => c.raiz === raiz);
+    }
+    return undefined;
+  };
+  const aprobacionEnVueloDe = (c: ConsolaDeProyecto): Extract<MensajeAlCliente, { clase: "aprobacion" }> | undefined => {
+    for (const m of c.mensajesDeAprobacion()) if (m.clase === "aprobacion") return m;
+    return undefined;
+  };
+  const panoramaAhora = (): Panorama => {
+    const foco = vestibulo.proyectoAbierto();
+    const consolas: EntradaDePanorama["consolas"] = vestibulo.proyectosAbiertos().map((c) => {
+      const fila = c.sesion === undefined ? undefined : vestibulo.sesionesDe(c.raiz).find((s) => s.id === c.sesion);
+      const aprobacion = aprobacionEnVueloDe(c);
+      return {
+        id: idDeConsola(c.raiz),
+        proyecto: basename(c.raiz),
+        ...(fila === undefined || fila.titulo === "" ? {} : { sesion: fila.titulo }),
+        foco: c === foco,
+        turnoEnVuelo: c.turnoEnVuelo,
+        ...(aprobacion === undefined
+          ? {}
+          : { aprobacion: { pendientes: aprobacion.pendientes, ficheros: aprobacion.ficheros, diffs: aprobacion.diffs } }),
+        preguntaPendiente: c.preguntaPendiente,
+        ...(fila?.ultimoTurno === undefined ? {} : { ultimaActividad: fila.ultimoTurno }),
+      };
+    });
+    const tareas: EntradaDePanorama["tareas"] = (opciones.colaDeTareas?.listar() ?? []).map((t) => ({
+      id: t.id,
+      titulo: t.titulo,
+      // El NOMBRE, como en `filaDeTarea`: la raíz de la tarea no viaja.
+      proyecto: t.proyecto.nombre,
+      estado: t.estado,
+      creada: t.creada,
+      ...(t.tras === undefined ? {} : { tras: t.tras }),
+      ...(t.motivo === undefined ? {} : { motivo: t.motivo }),
+      ...(t.acabada === undefined ? {} : { acabada: t.acabada }),
+    }));
+    return componerPanorama({ consolas, tareas });
+  };
+  /**
+   * Un panorama nuevo a todos los móviles, como mucho uno por `INTERVALO_DE_PANORAMA_MS` y
+   * siempre DESPUÉS del último cambio. Los gatillos (`alCambiarEsperas`, `emitirTareas`) saltan a
+   * menudo y desde dentro de una resolución (una aprobación que se contesta): aquí solo se
+   * PROGRAMA, y se compone al vencer el reloj, con el estado de ese instante.
+   */
+  let relojDePanorama: ReturnType<typeof setTimeout> | undefined;
+  let ultimoPanorama = Number.NEGATIVE_INFINITY;
+  const programarPanorama = (): void => {
+    if (relojDePanorama !== undefined || sesionRemota === undefined || !sesionRemota.hayMoviles()) return;
+    const espera = Math.max(0, ultimoPanorama + INTERVALO_DE_PANORAMA_MS - Date.now());
+    relojDePanorama = setTimeout(() => {
+      relojDePanorama = undefined;
+      if (sesionRemota === undefined || !sesionRemota.hayMoviles()) return;
+      ultimoPanorama = Date.now();
+      try {
+        sesionRemota.difundir(panoramaAhora());
+      } catch (error) {
+        contar(error);
+      }
+    }, espera);
+    relojDePanorama.unref?.();
+  };
+  const olvidarPanorama = (): void => {
+    if (relojDePanorama !== undefined) clearTimeout(relojDePanorama);
+    relojDePanorama = undefined;
+    idsDeConsola.clear();
+  };
+  vestibulo.alCambiarEsperas(programarPanorama);
 
   /**
    * Lo que valga esa promesa, o nada si tarda demasiado. **No la cancela**: sigue viva y su
@@ -2187,6 +2277,7 @@ export function montarRutas(
   const emitirTareas = (): void => {
     const m = mensajeDeTareas();
     if (m !== undefined) emitir(m);
+    programarPanorama();
   };
 
   /**
@@ -2566,6 +2657,25 @@ export function montarRutas(
       // escribe nada a medias.
       informar(`no se pudo añadir el feedback: ${resultado.motivo ?? "motivo desconocido"}`);
     }
+  };
+
+  /**
+   * El feedback y «Continuar» de una tarea aparcada: los MISMOS para los botones del escritorio
+   * (`POST /accion`) y para el panel del móvil, que no es un segundo camino con su propia regla.
+   */
+  const tareaEsperandoFeedback = (id: string): boolean =>
+    opciones.colaDeTareas?.listar().find((t) => t.id === id)?.estado === "requiere-atencion";
+  const darFeedbackATarea = (id: string, texto: string): void => {
+    atenderFeedbackDeTarea(id, texto);
+    opciones.revisarTareas?.();
+    emitirTareas();
+  };
+  /** Lo mismo que un feedback, con el texto de «sigue» del núcleo: entra en SU hilo, no repite el
+   *  encargo. Devuelve por qué no, o nada si se hizo. */
+  const continuarTarea = (id: string): string | undefined => {
+    if (!tareaEsperandoFeedback(id)) return "esa tarea ya no está esperando feedback";
+    darFeedbackATarea(id, TEXTO_DE_CONTINUAR);
+    return undefined;
   };
 
   /** Los ajustes de destino, o `{}` —que es «se miran todos»— si esta ejecución no los lee. */
@@ -6140,6 +6250,29 @@ export function montarRutas(
   };
 
   /**
+   * Una decisión del PANEL del móvil: va a la consola de ESE id y nunca a la del foco. Si el id no
+   * resuelve, o esa consola no tiene aprobación en vuelo, o la decisión nombra ids que no son los
+   * de la aprobación que hay AHORA (el panel pudo quedarse viejo), se descarta y se dice: en
+   * `consolaWeb#recibir` una decisión con ids que no casan RECHAZA lo pendiente, y aquí no se
+   * rechaza nada que nadie haya visto.
+   */
+  const decidirDesdeElPanel = (id: string, decisiones: Record<string, "approve" | "reject">): void => {
+    const consola = consolaDelPanel(id);
+    const enVuelo = consola === undefined ? undefined : aprobacionEnVueloDe(consola);
+    const ids = Object.keys(decisiones);
+    if (
+      consola === undefined ||
+      enVuelo === undefined ||
+      ids.length === 0 ||
+      !ids.every((nombrado) => enVuelo.pendientes.some((p) => p.id === nombrado))
+    ) {
+      informar("sesión remota: una decisión del panel no tenía aprobación a la que contestar");
+      return;
+    }
+    consola.recibir({ clase: "decision", decisiones });
+  };
+
+  /**
    * El móvil entra por la MISMA puerta que una pestaña (`engancharCliente`) y lo que manda va a
    * la consola por el MISMO despacho que `POST /accion` (`cancelarTurno`/`recibirEnLaConsola`):
    * un segundo camino sería una segunda regla de qué se puede hacer desde fuera.
@@ -6171,12 +6304,27 @@ export function montarRutas(
             else if (m.clase === "respuesta") {
               if (!destinoActual().responderDesdeElMovil(m.texto))
                 informar("sesión remota: una respuesta del móvil no tenía pregunta a la que contestar");
+            } else if (m.clase === "decision" && m.consola !== undefined) decidirDesdeElPanel(m.consola, m.decisiones);
+            else if (m.clase === "feedback" || m.clase === "continuar") {
+              // Solo a una tarea que ESPERA feedback: el panel la enseñó así, pero pudo cambiar entre medias.
+              if (!tareaEsperandoFeedback(m.tarea)) informar("sesión remota: el panel mandó algo a una tarea que ya no espera feedback");
+              else if (m.clase === "continuar") void continuarTarea(m.tarea);
+              else darFeedbackATarea(m.tarea, m.texto);
             } else recibirEnLaConsola(m);
+          },
+          alEntrarMovil: (enviar) => {
+            try {
+              enviar(panoramaAhora());
+            } catch (error) {
+              contar(error);
+            }
           },
           informar,
           // A las pestañas: el diálogo de la consola. `clientes` contiene también los sumideros
           // de los móviles, y no pasa nada: su filtro descarta `remoto`.
           alCambiar: (e) => {
+            // Los ids del panel son de UN encendido (revocar incluido): al abrir, apagar o caer se olvidan.
+            if (e.estado === "apagada" || e.estado === "error" || e.estado === "abriendo") olvidarPanorama();
             for (const cliente of clientes) cliente(mensajeDeRemoto(e));
           },
         });
@@ -6839,16 +6987,12 @@ export function montarRutas(
         return;
       }
       if (mensaje.accion === "continuar" && opciones.colaDeTareas !== undefined) {
-        // Lo mismo que un feedback, con el texto de «sigue» del núcleo: entra en SU hilo, no repite el encargo.
-        const actual = opciones.colaDeTareas.listar().find((t) => t.id === mensaje.id);
-        if (actual === undefined || actual.estado !== "requiere-atencion") {
+        const motivo = continuarTarea(mensaje.id);
+        if (motivo !== undefined) {
           respuesta.writeHead(409, { "content-type": "application/json" });
-          respuesta.end(JSON.stringify({ motivo: "esa tarea ya no está esperando feedback" }));
+          respuesta.end(JSON.stringify({ motivo }));
           return;
         }
-        atenderFeedbackDeTarea(mensaje.id, TEXTO_DE_CONTINUAR);
-        opciones.revisarTareas?.();
-        emitirTareas();
         respuesta.writeHead(204);
         respuesta.end();
         return;
@@ -6912,9 +7056,7 @@ export function montarRutas(
       } else if (mensaje.accion === "augmentar" && opciones.augmentar !== undefined) {
         void atenderAugmentar(opciones.augmentar, mensaje.proyecto, mensaje.peticion, mensaje.borrador);
       } else if (mensaje.accion === "feedback" && opciones.colaDeTareas !== undefined) {
-        atenderFeedbackDeTarea(mensaje.id, mensaje.texto);
-        opciones.revisarTareas?.();
-        emitirTareas();
+        darFeedbackATarea(mensaje.id, mensaje.texto);
       } else if (
         mensaje.accion !== "crear" &&
         mensaje.accion !== "augmentar" &&

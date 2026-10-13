@@ -944,3 +944,96 @@ describe("consolaWeb: mirar no es conectar", () => {
     expect(otro).toHaveLength(2);
   });
 });
+
+/**
+ * El aviso de que nace o termina una espera de humano, para el panel de la sesión remota: una
+ * consola que no está en foco no tiene a nadie mirando su chat, y sin este aviso su aprobación
+ * se quedaba esperando a su plazo sin que el móvil se enterase.
+ */
+describe("consolaWeb: el aviso de las esperas (panel remoto)", () => {
+  it("salta al NACER y al TERMINAR una aprobación, y en cada aviso ya se ve lo nuevo", async () => {
+    const c = crearConsolaWeb();
+    c.conectar();
+    const vistos: number[] = [];
+    c.alCambiarEspera(() => vistos.push(c.mensajesDeAprobacion().length));
+    const promesa = c.consola.aprobacionesTui!([PENDIENTE], new Map(), new Map());
+    expect(vistos).toEqual([1]);
+    c.recibir({ clase: "decision", decisiones: { "1": "approve" } });
+    await promesa;
+    expect(vistos).toEqual([1, 0]);
+  });
+
+  it("una aprobación que VENCE también avisa de que terminó", async () => {
+    const c = crearConsolaWeb({ msDeEspera: 10 });
+    c.conectar();
+    let avisos = 0;
+    c.alCambiarEspera(() => (avisos += 1));
+    await c.consola.aprobacionesTui!([PENDIENTE], new Map(), new Map());
+    expect(avisos).toBe(2);
+    expect(c.mensajesDeAprobacion()).toEqual([]);
+  });
+
+  it("salta al NACER y al TERMINAR una pregunta de texto, y `hayPreguntaDeTextoPendiente` la cuenta", async () => {
+    const c = crearConsolaWeb();
+    c.conectar();
+    const vistos: boolean[] = [];
+    c.alCambiarEspera(() => vistos.push(c.hayPreguntaDeTextoPendiente()));
+    expect(c.hayPreguntaDeTextoPendiente()).toBe(false);
+    const respuesta = c.consola.preguntar("¿URL del servidor?");
+    expect(vistos).toEqual([true]);
+    c.recibir({ clase: "respuesta", texto: "https://x" });
+    expect(await respuesta).toBe("https://x");
+    expect(vistos).toEqual([true, false]);
+  });
+
+  it("una pregunta contestada desde el MÓVIL, una que vence y una que se queda sin cliente también terminan", async () => {
+    const c = crearConsolaWeb({ msDeEspera: 10 });
+    c.conectar();
+    const vistos: boolean[] = [];
+    c.alCambiarEspera(() => vistos.push(c.hayPreguntaDeTextoPendiente()));
+    const movil = c.consola.preguntar("¿uno?");
+    expect(c.responderDesdeElMovil("sí")).toBe(true);
+    expect(await movil).toBe("sí");
+    expect(await c.consola.preguntar("¿dos?")).toBe("");
+    const sinCliente = c.consola.preguntar("¿tres?");
+    c.desconectar();
+    expect(await sinCliente).toBe("");
+    expect(vistos).toEqual([true, false, true, false, true, false]);
+  });
+
+  it("una pregunta con `decision` NI avisa NI cuenta como pregunta de texto pendiente", async () => {
+    const c = crearConsolaWeb();
+    c.conectar();
+    let avisos = 0;
+    c.alCambiarEspera(() => (avisos += 1));
+    const respuesta = c.consola.preguntar("¿Subir a CloudStudio?", { lineas: [] });
+    expect(c.hayPreguntaDeTextoPendiente()).toBe(false);
+    c.recibir({ clase: "respuesta", texto: "s" });
+    expect(await respuesta).toBe("s");
+    expect(avisos).toBe(0);
+  });
+
+  it("con una decisión DELANTE en la cola, la de texto detrás sigue contando", async () => {
+    const c = crearConsolaWeb();
+    c.conectar();
+    void c.consola.preguntar("¿Subir?", { lineas: [] });
+    void c.consola.preguntar("¿URL?");
+    expect(c.hayPreguntaDeTextoPendiente()).toBe(true);
+    c.desconectar();
+  });
+
+  it("darse de baja deja de avisar, y un oyente que lanza no rompe la aprobación", async () => {
+    const c = crearConsolaWeb();
+    c.conectar();
+    let avisos = 0;
+    const baja = c.alCambiarEspera(() => (avisos += 1));
+    c.alCambiarEspera(() => {
+      throw new Error("oyente roto");
+    });
+    baja();
+    const promesa = c.consola.aprobacionesTui!([PENDIENTE], new Map(), new Map());
+    c.recibir({ clase: "decision", decisiones: { "1": "approve" } });
+    expect(aprobado((await promesa).get("1"))).toBe(true);
+    expect(avisos).toBe(0);
+  });
+});

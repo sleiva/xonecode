@@ -971,6 +971,24 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   `motorLocal`. **Límites declarados**: quien tiene la URL controla la sesión hasta «Revocar» o «Apagar»; y con la sesión
   encendida, los actos y las aprobaciones —contenido de ficheros y diffs incluidos, y las rutas que el modelo escriba—
   SALEN de la máquina, cifrados de punta a punta, hacia el relé y el móvil.
+  **Y un PANEL en la web móvil** (`core/panorama.ts#componerPanorama`, mensaje `panorama`): las consolas de persona
+  abiertas —la del foco y las que siguen con un turno en segundo plano— con su estado y su aprobación en vuelo, y las
+  tareas. Va SOLO a los móviles (`puenteRemoto` `difundir`/`alEntrarMovil`), nunca a una pestaña: al entrar, y cuando
+  cambia algo —flanco de turno, cola de tareas, nace o muere la espera de una consola (`consolaWeb.alCambiarEspera`,
+  agregado en `Vestibulo.alCambiarEsperas`), foco, volcado— como mucho uno por intervalo (`INTERVALO_DE_PANORAMA_MS`,
+  1 s). Con topes de tamaño: primero se van los diffs (`recortada`), luego las tareas terminadas. Una consola viaja
+  con un id OPACO por encendido, que se olvida al apagar, caer o revocar; la raíz no cruza nunca. **Una `decision` con
+  `consola` va a ESA consola y nunca cae a la del foco**: con un id que no existe, sin aprobación en vuelo o con ids que
+  no casan con los que esa consola tiene pendientes se DESCARTA y se informa —una decisión que se cayera al foco, o una
+  tarjeta vieja, rechazaría lo que la otra tiene delante—. `feedback` y `continuar` son las MISMAS funciones que los
+  botones del escritorio (extraídas de `POST /accion`), y solo con la tarea en `requiere-atencion`. El móvil no abre
+  sesiones, ni mueve el foco, ni crea, encola, descarta ni arranca tareas; una pregunta de texto fuera de foco se ENSEÑA
+  pero se contesta en el escritorio, y las consolas de tarea se ven como tareas. **Límites declarados del panel**: la
+  URL aprueba escrituras de CUALQUIER consola abierta y da feedback a las tareas; salen de la máquina, cifrados, los
+  nombres de proyecto, los títulos de sesión, los títulos y motivos de las tareas (un motivo es texto del anfitrión y
+  puede nombrar una ruta: se recorta) y los diffs de las consolas fuera de foco; el proyecto es el `basename` de la
+  raíz, así que el mismo nombre en dos entornos se confunde; y una tarjeta del panel con `recortada` (diffs cortados o
+  quitados para caber) solo se RECHAZA desde el móvil —sin «Aceptar»—, porque no se aprueba lo que no se ha visto entero.
   **Y una SEGUNDA vía, el túnel local por ngrok** (`agent/remoto/tunelNgrok.ts`, `ngrokEnMaquina.ts`, `core/tunel.ts`):
   el relé viaja EN el paquete (subruta `./servidor`, con la web móvil dentro), xonecode lo arranca en loopback y ngrok lo
   publica; el QR lleva la dirección de ngrok. La vía (`settings.remoto.via`) y el dominio fijo opcional

@@ -8834,3 +8834,68 @@ Playwright: Ajustes → «Sesión remota» decía «ngrok listo»; en una sesió
 del escritorio y la respuesta del agente volvió al móvil. «Apagar»: sin proceso ngrok, sin el puerto del puente, y —tras el
 arreglo— el móvil en «la sesión remota se cerró». Se limpió la sesión de prueba (desde la consola), el enlace simbólico y
 el `settings.json`, restaurado byte a byte.
+
+## El panel en la web móvil de la sesión remota (13-10-2026)
+
+Que el móvil no sea solo el chat de la sesión en foco: un panel con las consolas abiertas y las tareas, desde el que se
+actúa SOLO sobre lo que te espera (aprobar una escritura, dar feedback o «Continuar» a una tarea aparcada). Diseño en
+`docs/superpowers/specs/2026-10-13-panel-movil-design.md`; el paquete y la web móvil viven en `xonecode-server`.
+
+**Por qué hacía falta.** Una aprobación de una consola que no está en foco no la veía nadie: al mover el foco se sueltan
+sus sumideros y la tarjeta se emitía al vacío hasta el plazo (`MS_DE_ESPERA_POR_OMISION`). Con el panel, una consola
+que trabaja en segundo plano en supervisado ya tiene a alguien que la puede contestar.
+
+**Por qué el panorama va solo a los móviles y con intervalo.** Las pestañas ya tienen sus propios mensajes (barra,
+Tareas) y uno más por cada flanco sería ruido en el cable de todas. Los gatillos son muchos y llegan a ráfagas (flancos
+de turno, volcado a mitad de turno, la cola de tareas, el foco, las esperas que nacen y mueren), así que se compone como
+mucho uno por `INTERVALO_DE_PANORAMA_MS`; al entrar, el móvil recibe el suyo en el acto (`alEntrarMovil`).
+
+**Por qué los ids de consola son OPACOS y por encendido.** La raíz es una ruta de la máquina (`sinRutas`), y un id
+estable entre encendidos dejaría a un enlace revocado apuntar a algo. Al apagar, caer o revocar, el mapa se olvida.
+
+**Por qué una `decision` con `consola` NUNCA cae al foco, y por qué además tiene que casar con lo pendiente.** En
+`consolaWeb#recibir`, una decisión cuyos ids no casan RECHAZA lo que la consola tenga pendiente. Si una decisión del
+panel con un id desconocido cayera a la del foco, rechazaría una escritura que la persona no ha visto. Por lo mismo, la
+decisión se descarta (y se informa) si esa consola no tiene aprobación en vuelo o si sus ids no son los pendientes de
+AHORA: una tarjeta vieja en el móvil —el panorama siguiente aún no ha llegado— no puede rechazar la tarjeta nueva. Es
+más estricto que el diseño; el precio es que un móvil con una tarjeta caducada espera al siguiente panorama.
+
+**Por qué `feedback` y `continuar` reutilizan las funciones de `POST /accion`.** Una segunda regla de qué es un
+feedback válido o cuándo una tarea puede seguir sería un segundo sitio donde equivocarse. Se extrajeron del manejador y
+las llaman los dos; solo valen con la tarea en `requiere-atencion`.
+
+**Lo que el móvil NO puede.** Ni abrir sesiones, ni mover el foco, ni crear, encolar, descartar o arrancar tareas. Una
+pregunta de texto fuera de foco se enseña pero no se contesta desde el panel: su contexto es el chat de esa consola.
+
+**Límites declarados.** La URL, que ya era la llave de la sesión en foco, ahora aprueba escrituras de CUALQUIER consola
+abierta y da feedback a las tareas. Salen de la máquina, cifrados de punta a punta, los nombres de proyecto, los títulos
+de sesión, los títulos y motivos de las tareas (un motivo es texto del anfitrión y puede nombrar una ruta; se recorta) y
+los diffs de las consolas fuera de foco. El proyecto es el `basename` de la raíz: el mismo nombre en dos entornos se
+confunde, como en `enUso`.
+
+**La prueba cruzada, de punta a punta.** El paquete construido en la rama de `xonecode-server` (`npm test` construye y
+copia la web) enlazado con un enlace simbólico temporal en `node_modules/@xone/xonecode-remoto`; el relé local
+(`PUERTO=8787 node servidor/dist/principal.js`); la consola web de esta rama en otro puerto, con `settings.json`
+respaldado y con `remoto = {habilitado, via: "servidor", servidor: ws://127.0.0.1:8787/ws}` y `workspace` apuntando a
+una carpeta temporal con dos proyectos de prueba (PanelA y PanelB, con `config.json`, `sync.json`, `app.xml` y un commit
+de baseline). Escritorio: Chrome por Playwright, los mensajes por `POST /accion` como los manda el cliente. Móvil:
+WebKit con el perfil «iPhone 13». Modelo `deepseek/deepseek-flash`, motor TrueForge. Lo observado:
+
+- B abierta y pasada a supervisado por el cable; el panel la listó «parada». La prosa «crea panel-b.txt…» arrancó el
+  turno y, con él en vuelo, se abrió A: el panel pasó a enseñar A «parada» y B «trabajando», las dos.
+- Unos segundos después, en «Te esperan»: la tarjeta «PanelB · Crea el fichero panel-b.txt… · /panel-b.txt ·
+  developer-xone · + hola desde el panel», con B «esperando aprobación» en Consolas y la insignia de la pestaña Panel
+  en 3 (la aprobación y dos tareas en `requiere-atencion`). Al escritorio, ya en A, no le llegó ninguna `aprobacion`.
+  El fichero no existía; tras «Aceptar» en el panel, `panel-b.txt` contenía `hola desde el panel` en medio segundo, la
+  tarjeta se cerró, el turno de B acabó con el simulador en verde y su commit de turno, y A siguió sin tocar.
+- Una tarea sembrada en el índice en `requiere-atencion` sobre A: «Continuar» en su tarjeta la pasó a `nuevo` con el
+  feedback `TEXTO_DE_CONTINUAR` sin consumir, y la lista de Tareas del panel la enseñó «en cola». Siguió en cola: A era
+  la consola de persona abierta, y gana la persona. Otra tarea real aparcada que el panel enseñaba al lado no se tocó.
+- Dos tropiezos del montaje, no del producto: un proyecto sin `app.xml` corta el turno antes de empezar («falta algo
+  imprescindible»), y el `alta` no nombra un proyecto que no está en el listado de CloudStudio (el corredor esperó al
+  flanco de `abriendo`). Por lo segundo, la cabecera del móvil dijo «sin sesión» en toda la pasada: `remoto.estado`
+  sale del mismo sitio. Con un proyecto del listado no pasa.
+
+Lo que se limpió: el enlace simbólico, los dos proyectos de prueba, la tarea sembrada (descartada por el cable y el
+índice restaurado byte a byte) y el `settings.json`, restaurado byte a byte; el relé, la consola y los navegadores,
+parados. Lo único que cambió en la casa: `cloudstudio-oauth.json`, que el vestíbulo refresca al traer el listado.

@@ -9,7 +9,7 @@
  * hacen falta cinco): son código de prueba, no de producción.
  */
 import { describe, expect, it, vi } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -17,7 +17,10 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { CatalogoModelosEnMemoria, PuenteRemotoEnMemoria, TunelEnMemoria, type TunelPort } from "../../core/ports.js";
 import type { Entorno, ViaRemota } from "../../core/settings.js";
 import { MOTIVOS_DEL_TUNEL } from "../../core/tunel.js";
-import { montarRutas, RUTA_ACCION, RUTA_EVENTOS } from "./arranque.js";
+import { montarRutas, RUTA_ACCION, RUTA_EVENTOS, type OpcionesDeMontaje } from "./arranque.js";
+import { crearTareasEnDisco } from "../../agent/tareas/tareasEnDisco.js";
+import type { Tarea } from "../../core/tareas.js";
+import { INTERVALO_DE_PANORAMA_MS, type Panorama } from "../../core/panorama.js";
 import type { ManejadorRuta } from "./servidor.js";
 import type { MensajeAlCliente, MensajeDelCliente } from "./transporte.js";
 import { crearVestibulo, type Vestibulo } from "./vestibulo.js";
@@ -91,7 +94,11 @@ function vestibuloDePrueba(extra: Partial<Parameters<typeof crearVestibulo>[0]> 
   });
 }
 
-function conRemoto(habilitado: boolean | (() => boolean), extra: Parameters<typeof vestibuloDePrueba>[0] = {}) {
+function conRemoto(
+  habilitado: boolean | (() => boolean),
+  extra: Parameters<typeof vestibuloDePrueba>[0] = {},
+  montaje: Omit<OpcionesDeMontaje, "remoto" | "informar"> = {}
+) {
   const servidor = servidorDeMentira();
   const puerto = new PuenteRemotoEnMemoria();
   const cargar = vi.fn(async () => puerto);
@@ -100,6 +107,7 @@ function conRemoto(habilitado: boolean | (() => boolean), extra: Parameters<type
   const montado = montarRutas(servidor, vestibulo, {
     remoto: { ajustes: () => ({ habilitado: typeof habilitado === "function" ? habilitado() : habilitado, servidor: "ws://127.0.0.1:8787/ws" }), puerto: cargar },
     informar: (t) => void informados.push(t),
+    ...montaje,
   });
   const sse = servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!;
   const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
@@ -744,5 +752,228 @@ describe("la sesión remota por el túnel de ngrok", () => {
     await vi.waitFor(() => expect(sueltas).toHaveLength(2));
     sueltas[1]!({ instalado: true, cuenta: true });
     await vi.waitFor(() => expect(remotos(c.recibidos).at(-1)?.ngrok).toMatchObject({ cuenta: true }));
+  });
+});
+
+/**
+ * El PANEL del móvil (`core/panorama.ts`) por el `montarRutas` REAL: lo que se compone, a quién
+ * va, cada cuánto, y adónde va lo que el móvil contesta desde él. Una consola de SEGUNDO PLANO
+ * tiene que tener un turno en vuelo —una ociosa fuera de foco se cierra—, así que su aprobación
+ * nace dentro de un turno, como en producción.
+ */
+describe("el panel del móvil", () => {
+  const PENDIENTE = { id: "1", origen: "dev", descripcion: "escribir /a.txt", decisionesPermitidas: ["approve", "reject"] };
+  const panoramasDe = (m: ReturnType<typeof conRemoto>, para: string): Panorama[] =>
+    m.puerto.enviados.filter((e) => e.para === para && (e.mensaje as { clase: string }).clase === "panorama").map((e) => e.mensaje as Panorama);
+  const tarea = (raiz: string, id: string, extra: Partial<Tarea> = {}): Tarea => ({
+    id, proyecto: { id: "p1", raiz, nombre: "Tienda" }, titulo: `tarea ${id}`, peticion: "p", encargo: "e", adjuntos: [],
+    estado: "nuevo", creada: "2026-10-13T10:00:00.000Z", ...extra,
+  });
+
+  /** Una copia «bajada» y offline, para el lazo de consola REAL (`correr: undefined`): con el de
+   *  `vestibuloDePrueba` el lazo acaba en el acto y la consola se cierra sola. */
+  const copia = (raiz: string): string => {
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
+    return raiz;
+  };
+
+  /** Dos consolas: A («Tienda») trabajando en segundo plano y B («Almacen») en foco; una pestaña y el puente con el móvil m1. */
+  async function dosConsolas(base: string) {
+    let soltarA!: () => void;
+    const puedeA = new Promise<void>((r) => (soltarA = r));
+    let decididoA: Map<string, { type: string }> | undefined;
+    const cola = crearTareasEnDisco({ base: join(base, "cola") });
+    const m = conRemoto(
+      true,
+      {
+        baseDeWorkspace: () => join(base, "w"),
+        proyectosDeEntorno: async () => ({ proyectos: [{ id: "p1", nombre: "Tienda" }, { id: "p2", nombre: "Almacen" }] }),
+        correr: undefined,
+        crearEjecutor: () => async (peticion, _estado, consola) => {
+          // Lleva delante el aviso del dispositivo de la sesión: se mira el final.
+          if (!peticion.endsWith("trabaja A")) return;
+          await puedeA;
+          decididoA = (await consola.aprobacionesTui!([{ ...PENDIENTE, decisionesPermitidas: [...PENDIENTE.decisionesPermitidas] }], new Map([["1", "/a.txt"]]), new Map())) as never;
+        },
+      },
+      { colaDeTareas: cola }
+    );
+    const raizA = copia(m.vestibulo.raizDeProyecto("webstudio", "Tienda"));
+    const raizB = copia(m.vestibulo.raizDeProyecto("webstudio", "Almacen"));
+    // Como en el navegador: la pestaña abre A, le pide trabajo y se va a B con A trabajando.
+    const pestana = clienteDeMentira();
+    await m.sse(pestana.peticion, pestana.respuesta);
+    await enviarMensaje(m.accion, { clase: "sesion", proyecto: "p1" });
+    await vi.waitFor(() => expect(m.vestibulo.proyectoAbierto()?.raiz).toBe(raizA));
+    const a = m.vestibulo.proyectoAbierto()!;
+    await enviarMensaje(m.accion, { clase: "prosa", texto: "trabaja A" });
+    await vi.waitFor(() => expect(a.turnoEnVuelo).toBe(true));
+    await enviarMensaje(m.accion, { clase: "sesion", proyecto: "p2" });
+    await vi.waitFor(() => expect(m.vestibulo.proyectoAbierto()?.raiz).toBe(raizB));
+    const b = m.vestibulo.proyectoAbierto()!;
+    expect(a.cerrada).toBe(false);
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" });
+    for (let i = 0; i < 10; i++) await asentar();
+    m.puerto.abierta();
+    m.puerto.presencia("m1");
+    for (let i = 0; i < 10; i++) await asentar();
+    return { m, a, b, raizA, raizB, soltarA, decididoA: () => decididoA, pestana, cola };
+  }
+
+  it("una `decision` con el id de una consola de segundo plano la resuelve a ELLA, sin tocar la del foco aunque comparta id de aprobación", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xonecode-panel-"));
+    try {
+      const { m, a, b, raizA, soltarA, decididoA, pestana, cola } = await dosConsolas(base);
+      // Una tarea con la raíz de verdad: tampoco puede cruzar.
+      cola.guardar([tarea(raizA, "t1", { estado: "requiere-atencion", motivo: "se cortó", sesion: "s1" })]);
+      m.montado.emitirTareas();
+      // La del foco con una aprobación del MISMO id «1»: los ids son del hilo, no únicos entre consolas.
+      const decididoB = b.consola.consola.aprobacionesTui!([{ ...PENDIENTE, decisionesPermitidas: [...PENDIENTE.decisionesPermitidas] }], new Map([["1", "/b.txt"]]), new Map());
+      soltarA();
+      await vi.waitFor(() => expect(a.mensajesDeAprobacion()).toHaveLength(1));
+
+      // El id de A sale del panorama que recibió el móvil, no se calcula aquí.
+      await vi.waitFor(() =>
+        expect(panoramasDe(m, "m1").at(-1)?.consolas.find((c) => c.proyecto === "Tienda")?.estado).toBe("esperando-aprobacion")
+      );
+      const ultimo = panoramasDe(m, "m1").at(-1)!;
+      const idA = ultimo.consolas.find((c) => c.proyecto === "Tienda")!.id;
+      const idB = ultimo.consolas.find((c) => c.proyecto === "Almacen")!.id;
+      expect(ultimo.consolas.find((c) => c.id === idB)).toMatchObject({ foco: true, estado: "esperando-aprobacion" });
+      expect(ultimo.tareas).toEqual([expect.objectContaining({ id: "t1", proyecto: "Tienda", estado: "requiere-atencion" })]);
+      expect(ultimo.esperando).toBe(3);
+
+      // Un id que no existe: no rechaza nada en ningún sitio, y se dice.
+      m.puerto.delMovil("m1", { clase: "decision", consola: "no-existe", decisiones: { "1": "reject" } });
+      // Un id de aprobación que no es el que hay ahora en B (panel viejo): tampoco.
+      m.puerto.delMovil("m1", { clase: "decision", consola: idB, decisiones: { otro: "reject" } });
+      await asentar();
+      expect(m.informados.filter((t) => t.includes("una decisión del panel no tenía aprobación"))).toHaveLength(2);
+      expect(a.mensajesDeAprobacion()).toHaveLength(1);
+      expect(b.mensajesDeAprobacion()).toHaveLength(1);
+
+      m.puerto.delMovil("m1", { clase: "decision", consola: idA, decisiones: { "1": "approve" } });
+      await vi.waitFor(() => expect(decididoA()?.get("1")?.type).toBe("approve"));
+      expect(b.mensajesDeAprobacion()).toHaveLength(1);
+
+      // Y la de B, cuando se contesta, se contesta desde su sitio de siempre.
+      await enviarMensaje(m.accion, { clase: "decision", decisiones: { "1": "reject" } });
+      expect((await decididoB).get("1")?.type).toBe("reject");
+
+      // Ninguna raíz en nada de lo que recibió el móvil, y ningún panorama en la pestaña.
+      await vi.waitFor(() => expect(panoramasDe(m, "m1").at(-1)?.esperando).toBe(1));
+      const alMovil = JSON.stringify(m.puerto.enviados.filter((e) => e.para === "m1").map((e) => e.mensaje));
+      expect(panoramasDe(m, "m1").length).toBeGreaterThan(1);
+      expect(alMovil).not.toContain(base);
+      expect(alMovil).not.toContain(realpathSync(base));
+      expect(alMovil).not.toContain("webstudio");
+      expect(pestana.recibidos.some((x) => (x as { clase: string }).clase === "panorama")).toBe(false);
+      await m.vestibulo.cerrar();
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  it("el móvil recibe un panorama al entrar y, tras los cambios, uno como mucho por intervalo y siempre el último", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xonecode-panel-"));
+    try {
+      const cola = crearTareasEnDisco({ base: join(base, "cola") });
+      const m = conRemoto(true, { baseDeWorkspace: () => join(base, "w"), correr: undefined, crearEjecutor: () => async () => {} }, { colaDeTareas: cola });
+      const raiz = copia(join(base, "w", "webstudio", "Tienda"));
+      await m.vestibulo.abrirProyecto({ raiz });
+      const pestana = clienteDeMentira();
+      await m.sse(pestana.peticion, pestana.respuesta);
+      await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" });
+      for (let i = 0; i < 10; i++) await asentar();
+      m.puerto.abierta();
+      for (let i = 0; i < 10; i++) await asentar();
+      // Sin móviles no se compone ni se manda nada.
+      m.montado.emitirTareas();
+      for (let i = 0; i < 3; i++) await asentar();
+      expect(m.puerto.enviados).toEqual([]);
+
+      m.puerto.presencia("m1");
+      for (let i = 0; i < 10; i++) await asentar();
+      expect(panoramasDe(m, "m1")).toHaveLength(1);
+      expect(panoramasDe(m, "m1")[0]).toMatchObject({ consolas: [{ proyecto: "Tienda", foco: true, estado: "parada" }], tareas: [], esperando: 0 });
+
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+      try {
+        cola.guardar([tarea(raiz, "t1")]);
+        m.montado.emitirTareas();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(panoramasDe(m, "m1")).toHaveLength(2);
+        expect(panoramasDe(m, "m1")[1]!.tareas.map((t) => t.id)).toEqual(["t1"]);
+
+        // Dos cambios dentro del mismo intervalo: nada antes de que venza, y UNO con el último estado.
+        cola.guardar([tarea(raiz, "t1"), tarea(raiz, "t2")]);
+        m.montado.emitirTareas();
+        cola.guardar([tarea(raiz, "t1"), tarea(raiz, "t2"), tarea(raiz, "t3")]);
+        m.montado.emitirTareas();
+        await vi.advanceTimersByTimeAsync(INTERVALO_DE_PANORAMA_MS - 1);
+        expect(panoramasDe(m, "m1")).toHaveLength(2);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(panoramasDe(m, "m1")).toHaveLength(3);
+        expect(panoramasDe(m, "m1")[2]!.tareas.map((t) => t.id)).toEqual(["t1", "t2", "t3"]);
+      } finally {
+        vi.useRealTimers();
+      }
+      // Las pestañas reciben `tareas`, nunca `panorama`.
+      expect(pestana.recibidos.some((x) => x.clase === "tareas")).toBe(true);
+      expect(pestana.recibidos.some((x) => (x as { clase: string }).clase === "panorama")).toBe(false);
+      expect(JSON.stringify(m.puerto.enviados)).not.toContain(base);
+      await m.vestibulo.cerrar();
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  it("`feedback` y `continuar` del panel devuelven a la cola una tarea que espera feedback; a una que no, se descartan y se dice", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xonecode-panel-"));
+    try {
+      const cola = crearTareasEnDisco({ base: join(base, "cola") });
+      let revisadas = 0;
+      const m = conRemoto(true, {}, { colaDeTareas: cola, revisarTareas: () => void (revisadas += 1) });
+      const raiz = "/maquina/webstudio/Tienda";
+      cola.guardar([
+        tarea(raiz, "ra1", { estado: "requiere-atencion", motivo: "se cortó", sesion: "s1" }),
+        tarea(raiz, "ra2", { estado: "requiere-atencion", motivo: "duda", sesion: "s2" }),
+        tarea(raiz, "ep", { estado: "en-proceso", sesion: "s3" }),
+      ]);
+      const pestana = clienteDeMentira();
+      await m.sse(pestana.peticion, pestana.respuesta);
+      await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" });
+      await asentar();
+      m.puerto.abierta();
+      m.puerto.presencia("m1");
+      await asentar();
+      const estadoDe = (id: string) => cola.listar().find((t) => t.id === id);
+
+      m.puerto.delMovil("m1", { clase: "feedback", tarea: "ep", texto: "cambia el color" });
+      m.puerto.delMovil("m1", { clase: "continuar", tarea: "ep" });
+      m.puerto.delMovil("m1", { clase: "continuar", tarea: "no-existe" });
+      expect(estadoDe("ep")).toMatchObject({ estado: "en-proceso" });
+      expect(estadoDe("ep")?.feedback).toBeUndefined();
+      expect(m.informados.filter((t) => t.includes("ya no espera feedback"))).toHaveLength(3);
+      expect(revisadas).toBe(0);
+
+      const tareasAntes = pestana.recibidos.filter((x) => x.clase === "tareas").length;
+      m.puerto.delMovil("m1", { clase: "feedback", tarea: "ra1", texto: "usa el azul" });
+      expect(estadoDe("ra1")).toMatchObject({ estado: "nuevo", feedback: [{ texto: "usa el azul", consumido: false }] });
+      m.puerto.delMovil("m1", { clase: "continuar", tarea: "ra2" });
+      expect(estadoDe("ra2")).toMatchObject({ estado: "nuevo", feedback: [{ texto: "Continúa donde lo dejaste.", consumido: false }] });
+      expect(revisadas).toBe(2);
+      expect(pestana.recibidos.filter((x) => x.clase === "tareas").length).toBe(tareasAntes + 2);
+      // Y repetirlo ya no hace nada: la tarea ya no espera.
+      m.puerto.delMovil("m1", { clase: "continuar", tarea: "ra2" });
+      expect(estadoDe("ra2")?.feedback).toHaveLength(1);
+      await vi.waitFor(() => expect(panoramasDe(m, "m1").at(-1)?.tareas.filter((t) => t.estado === "nuevo")).toHaveLength(2));
+      expect(JSON.stringify(m.puerto.enviados)).not.toContain("/maquina");
+      expect(pestana.recibidos.some((x) => (x as { clase: string }).clase === "panorama")).toBe(false);
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
   });
 });
