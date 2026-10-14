@@ -319,3 +319,26 @@ describe("editar el encargo (IXCODE-52)", () => {
     expect(screen.getByText(/no puede quedar vacío/)).toBeTruthy();
   });
 });
+
+describe("parar una tarea en marcha (IXCODE-50)", () => {
+  it("solo «en proceso» ofrece «Parar», y llega a través de la lista del proyecto", () => {
+    const alParar = vi.fn(async () => undefined);
+    render(<TareasDelProyecto tareas={[TAREA({ estado: "en-proceso", motivo: undefined })]} conectado alParar={alParar} />);
+    fireEvent.click(screen.getByRole("button", { name: "Parar" }));
+    expect(alParar).toHaveBeenCalledWith("t1");
+    cleanup();
+    for (const estado of ["nuevo", "requiere-atencion", "terminada"] as const) {
+      const r = render(<AccionesDeTarea tarea={TAREA({ estado })} alParar={alParar} alDescartar={vi.fn()} />);
+      expect(within(r.container).queryByRole("button", { name: "Parar" })).toBeNull();
+      r.unmount();
+    }
+  });
+
+  it("una negativa del servidor se DICE", async () => {
+    render(<AccionesDeTarea tarea={TAREA({ estado: "en-proceso", motivo: undefined })} alParar={vi.fn(async () => "su turno lo ejecuta otro proceso")} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Parar" }));
+    });
+    expect(screen.getByRole("alert").textContent).toMatch(/otro proceso/);
+  });
+});

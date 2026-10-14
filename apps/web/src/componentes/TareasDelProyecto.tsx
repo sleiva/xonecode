@@ -58,6 +58,7 @@ export function TareasDelProyecto({
   alContinuar,
   alArrancarAhora,
   alEditarEncargo,
+  alParar,
   consolaAbierta,
   sesionAbierta,
   trabajandoEnElChat,
@@ -96,6 +97,8 @@ export function TareasDelProyecto({
   alArrancarAhora?: (id: string) => Promise<string | undefined>;
   /** Cambiar el encargo de una que nunca ha arrancado (IXCODE-52): devuelve el motivo si el servidor se negó. */
   alEditarEncargo?: (id: string, encargo: string) => Promise<string | undefined>;
+  /** Parar una en marcha sin borrarla (IXCODE-50): devuelve el motivo si el servidor se negó. */
+  alParar?: (id: string) => Promise<string | undefined>;
   /** La consola de la persona de ESTE proyecto está abierta: es lo que frena sus tareas nuevas, y se dice. */
   consolaAbierta?: boolean;
   /**
@@ -194,6 +197,7 @@ export function TareasDelProyecto({
               {...(alContinuar === undefined ? {} : { alContinuar })}
               {...(alArrancarAhora === undefined ? {} : { alArrancarAhora })}
               {...(alEditarEncargo === undefined ? {} : { alEditarEncargo })}
+              {...(alParar === undefined ? {} : { alParar })}
               puedeArrancar={puedeArrancarYa(t, tareas)}
               esperaPorTuConsola={consolaAbierta === true}
               {...(t.sesion !== undefined && t.sesion === sesionAbierta ? { enTuChat: trabajandoEnElChat === true ? "trabajando" : "abierta" } : {})}
@@ -220,6 +224,7 @@ function Fila({
   alContinuar,
   alArrancarAhora,
   alEditarEncargo,
+  alParar,
   puedeArrancar,
   esperaPorTuConsola,
   conectado,
@@ -243,6 +248,8 @@ function Fila({
   alArrancarAhora?: (id: string) => Promise<string | undefined>;
   /** Cambiar el encargo de una que nunca ha arrancado (IXCODE-52): devuelve el motivo si el servidor se negó. */
   alEditarEncargo?: (id: string, encargo: string) => Promise<string | undefined>;
+  /** Parar una en marcha sin borrarla (IXCODE-50): devuelve el motivo si el servidor se negó. */
+  alParar?: (id: string) => Promise<string | undefined>;
   puedeArrancar?: boolean;
   esperaPorTuConsola?: boolean;
   conectado?: boolean;
@@ -324,6 +331,7 @@ function Fila({
           {...(alContinuar === undefined ? {} : { alContinuar })}
           {...(alArrancarAhora === undefined ? {} : { alArrancarAhora })}
           {...(alEditarEncargo === undefined ? {} : { alEditarEncargo })}
+          {...(alParar === undefined ? {} : { alParar })}
           {...(puedeArrancar === undefined ? {} : { puedeArrancar })}
           {...(esperaPorTuConsola === undefined ? {} : { esperaPorTuConsola })}
         />

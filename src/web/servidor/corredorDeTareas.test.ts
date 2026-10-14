@@ -13,6 +13,7 @@ import {
   AVISO_SIN_HILO_REANUDABLE,
   MOTIVO_CORTADA_POR_CIERRE,
   motivoDeCorteAMitad,
+  motivoDePausa,
   consolaParaTarea,
   crearCorredorDeTareas,
   peticionDeFeedback,
@@ -477,6 +478,75 @@ describe("lo que una tarea AUTORIZÓ se guarda con su estado", () => {
  * la tarea desapareciera del kanban, y su carpeta de adjuntos (montada viva como
  * `/adjuntos/`) se borraba por debajo mientras el turno la seguía usando.
  */
+/**
+ * IXCODE-50: «Parar» una tarea en marcha. Es `cortar(id)` con `pausa`: el mismo corte, pero la
+ * tarea NO se borra después, así que tiene que quedar aparcada con un motivo que diga que la paró
+ * la persona y cómo seguir — nunca «terminada» porque el turno devolvió limpio al cerrarle la
+ * consola, ni atascada en «nuevo» si se paró mientras se abría.
+ */
+describe("Corredor.cortar(id, {pausa}): parar una tarea sin borrarla", () => {
+  it("en vuelo: queda aparcada con el motivo de la pausa y conserva su conversación", async () => {
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    await corredor.asentar();
+    await expect(corredor.cortar("t1", { pausa: true })).resolves.toBe(true);
+    const t = estado()[0]!;
+    expect(t.estado).toBe("requiere-atencion");
+    expect(t.motivo).toBe(motivoDePausa(false));
+    expect(t.sesion).toBeDefined();
+    await corredor.parar();
+  });
+
+  it("un turno que DEVUELVE limpio al cerrarle la consola tampoco se da por terminado", async () => {
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    let soltar: (() => void) | undefined;
+    const corredor = crearCorredorDeTareas({
+      ...ENTREGA_VERDE,
+      disco,
+      abrirParaTarea: async (raiz) => ({
+        raiz,
+        idDeHilo: "s1",
+        // Devuelve como si hubiera acabado bien en cuanto se cierra la consola.
+        correrTarea: () => new Promise((r) => void (soltar = () => r({ verificador: "verde", pendientes: 0 }))),
+        cerrar: async () => soltar?.(),
+      }),
+      pid: 1,
+      concurrencia: () => 1,
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    await expect(corredor.cortar("t1", { pausa: true })).resolves.toBe(true);
+    expect(estado()[0]).toMatchObject({ estado: "requiere-atencion", motivo: motivoDePausa(false) });
+    await corredor.parar();
+  });
+
+  it("parada MIENTRAS se abre: queda aparcada, no atascada en «nuevo» sin que nadie la coja", async () => {
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    let dejarAbrir: (() => void) | undefined;
+    const p = proyectoDeMentira();
+    const abriendo = new Promise<void>((r) => void (dejarAbrir = r));
+    const corredor = crearCorredorDeTareas({
+      ...ENTREGA_VERDE,
+      disco,
+      abrirParaTarea: async (raiz) => {
+        await abriendo;
+        return p.abrir(raiz);
+      },
+      pid: 1,
+      concurrencia: () => 1,
+    });
+    await corredor.arrancar();
+    const parando = corredor.cortar("t1", { pausa: true });
+    dejarAbrir!();
+    await expect(parando).resolves.toBe(true);
+    expect(p.encargos).toEqual([]);
+    expect(estado()[0]).toMatchObject({ estado: "requiere-atencion", motivo: motivoDePausa(true) });
+    await corredor.parar();
+  });
+});
+
 describe("Corredor.cortar(id): la salida que usa `descartar` antes de borrar", () => {
   it("sin nada en vuelo con ese id, no hay nada que cortar: resuelve `true` en el acto", async () => {
     const { disco } = discoDeMentira([TAREA({ estado: "nuevo" })]);

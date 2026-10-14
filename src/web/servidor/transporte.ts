@@ -1865,6 +1865,8 @@ export type MensajeDelCliente =
   | { clase: "tarea"; accion: "arrancarAhora"; id: string }
   /** Editar el encargo de una tarea que todavía no ha arrancado (IXCODE-52). 204, o 409 con `{motivo}`. */
   | { clase: "tarea"; accion: "encargo"; id: string; encargo: string }
+  /** PARAR una tarea en marcha sin borrarla (IXCODE-50): queda aparcada con su conversación. 204, o 409 con `{motivo}`. */
+  | { clase: "tarea"; accion: "parar"; id: string }
   | { clase: "tarea"; accion: "reintentar" | "descartar" | "terminar"; id: string }
   /** Cambia el tope de concurrencia de la cola de tareas. */
   | { clase: "tareas"; concurrencia: number }

@@ -145,6 +145,16 @@ export const MOTIVO_CORTADA_POR_CIERRE =
   "la consola se cerró a mitad del turno: no quedó respuesta guardada, aunque el agente " +
   "recuerda el hilo. Reintenta cuando quieras.";
 
+/**
+ * Por qué está aparcada una tarea que PARÓ la persona (IXCODE-50, `Corredor.cortar(id, {pausa})`).
+ * Dice quién la paró y cómo seguir, en las dos versiones de siempre: con el hilo vivo, «Continuar»
+ * lo retoma; sin él, solo queda empezar de cero.
+ */
+export const motivoDePausa = (hiloOlvidado: boolean): string =>
+  hiloOlvidado
+    ? "la paraste tú antes de que dejara conversación. «Reintentar» la empieza de cero, con el encargo entero."
+    : "la paraste tú. El agente recuerda el hilo: «Continuar» la retoma donde se quedó, y lo que ya escribió sigue en el disco.";
+
 /** El mismo corte, con el hilo ya olvidado. Ver arriba. */
 export const MOTIVO_CORTADA_SIN_HILO =
   "la consola se cerró a mitad del turno: no quedó respuesta guardada y tampoco nada que " +
@@ -287,7 +297,7 @@ export interface Corredor {
    * cosas distintas y solo la segunda dice que la consola SOLTÓ su montaje de `/adjuntos/`
    * — antes de eso, borrar esa carpeta es quitarle el suelo a un turno vivo.
    */
-  cortar(id: string): Promise<boolean>;
+  cortar(id: string, opciones?: { pausa?: boolean }): Promise<boolean>;
   /**
    * Engancha a quien quiere MIRAR en vivo lo que hace una tarea, y devuelve su transcript
    * hasta ese instante.
@@ -555,6 +565,12 @@ export function crearCorredorDeTareas(opciones: {
      * la consola termina de abrirse, en vez de perderse.
      */
     cortarPedido: boolean;
+    /**
+     * El corte es una PAUSA de la persona (IXCODE-50) y no un descarte: la tarea sigue en la cola
+     * después, así que tiene que quedar aparcada con `motivoDePausa` —también si el turno devuelve
+     * limpio al cerrarle la consola, o si el corte llegó mientras se abría—.
+     */
+    pausaPedida?: boolean;
     /**
      * Las escrituras que el turno AUTORIZÓ sin aprobación, con ruta relativa.
      *
@@ -971,7 +987,13 @@ export function crearCorredorDeTareas(opciones: {
       // verdad… y el REDESPACHO inmediato la volvía a correr entera, con su encargo y todo.
       // Solo para `cortarPedido`: con `parando`, `revisar()` ya se frena sola en su primera
       // línea (`if (!miCerrojo || parando) return;`), así que ahí no hace falta.
-      if (entrada.cortarPedido) renunciadas.add(tarea.id);
+      // Una PAUSA en esa ventana no se queda en «nuevo» renunciada —nadie la volvería a coger
+      // y su «Arrancar ahora» no haría nada—: se aparca con su motivo, como cualquier parada.
+      if (entrada.pausaPedida === true && !parando) {
+        escribirSiSigueSiendoNuestra(tarea.id, (actual) =>
+          actual.estado === "nuevo" ? conEstado(actual, "requiere-atencion", motivoDePausa(true)) : undefined
+        );
+      } else if (entrada.cortarPedido) renunciadas.add(tarea.id);
       return;
     }
 
@@ -1094,6 +1116,12 @@ export function crearCorredorDeTareas(opciones: {
       cortadaAMitad = true;
       motivo = MOTIVO_CORTADA_POR_CIERRE;
     }
+    // Una PAUSA nunca pasa por la entrega: aunque el turno devolviera limpio al cerrarle la
+    // consola, no acabó — lo pararon. Y lo que la explica es la pausa, no un corte ni un fallo.
+    if (entrada.pausaPedida === true) {
+      cortadaAMitad = true;
+      motivo = motivoDePausa(false);
+    }
     /**
      * **Y aquí «terminada» deja de significar «el turno acabó».**
      *
@@ -1134,7 +1162,7 @@ export function crearCorredorDeTareas(opciones: {
         conLoQueQuede = (t) =>
           sinSesion(conVeredicto(conAutorizadas(t, entrada.autorizadas), entrada.veredicto));
         // Y ahora sí se sabe: el hilo se ha borrado, así que reintentar no continúa nada.
-        if (cortadaAMitad) motivo = motivoDeCorteAMitad(true);
+        if (cortadaAMitad) motivo = entrada.pausaPedida === true ? motivoDePausa(true) : motivoDeCorteAMitad(true);
       }
     } catch {
       // Ni preguntar se pudo: no se sabe, y entonces no se borra nada.
@@ -1413,7 +1441,7 @@ export function crearCorredorDeTareas(opciones: {
      * `parar()` acotado a UNA tarea. Ver el docblock de `Corredor.cortar` para el contrato
      * completo; aquí solo el porqué de cada línea.
      */
-    async cortar(id) {
+    async cortar(id, opcionesDelCorte) {
       const entrada = enVuelo.get(id);
       // No corre AQUÍ: ni hueco que liberar ni consola que cerrar. Puede que no corra en
       // ningún sitio, o que corra en OTRO proceso —el dashboard de un segundo corredor no
@@ -1424,6 +1452,7 @@ export function crearCorredorDeTareas(opciones: {
       // —la tarea sigue en `nuevo`, la consola no ha terminado de abrirse—: es la ventana
       // que el docblock de `EnVuelo.cortarPedido` mide, y `correr()` la mira en cuanto abre.
       entrada.cortarPedido = true;
+      if (opcionesDelCorte?.pausa === true) entrada.pausaPedida = true;
       // Se DISPARA el corte —si la consola ya está abierta, esto es lo que aborta el turno
       // de verdad— y se espera a `trabajo` ENTERO, no solo a que el corte dispare: solo
       // cuando `trabajo` se asienta es cierto que `correr()` pasó por su `finally` y la

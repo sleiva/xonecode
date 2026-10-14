@@ -75,6 +75,7 @@ export function AccionesDeTarea({
   alContinuar,
   alArrancarAhora,
   alEditarEncargo,
+  alParar,
   puedeArrancar,
   esperaPorTuConsola,
 }: {
@@ -99,6 +100,12 @@ export function AccionesDeTarea({
   alArrancarAhora?: (id: string) => Promise<string | undefined>;
   /** Cambiar el encargo de una que nunca ha arrancado (IXCODE-52). Devuelve el motivo si el servidor se negó. */
   alEditarEncargo?: (id: string, encargo: string) => Promise<string | undefined>;
+  /**
+   * PARAR una en marcha sin borrarla (IXCODE-50): corta su turno y la deja aparcada con su
+   * conversación, de donde se sigue con «Continuar». Sin ventana de confirmación, a diferencia de
+   * «Descartar»: se deshace. Devuelve el motivo si el servidor se negó.
+   */
+  alParar?: (id: string) => Promise<string | undefined>;
   /** Es la primera de su cadena (`puedeArrancarYa`): las encadenadas esperan a la anterior y no ofrecen arrancar. */
   puedeArrancar?: boolean;
   /** Lo que la frena es que la consola de su proyecto está ABIERTA (la tuya): se dice, en vez de quedarse muda en «Nuevo». */
@@ -132,6 +139,7 @@ export function AccionesDeTarea({
   const ofrecerArrancar = t.estado === "nuevo" && puedeArrancar === true && alArrancarAhora !== undefined;
   const avisoDeEspera = t.estado === "nuevo" && puedeArrancar === true && esperaPorTuConsola === true;
   const ofrecerEditar = puedeEditarEncargo(t) && alEditarEncargo !== undefined;
+  const ofrecerParar = t.estado === "en-proceso" && alParar !== undefined;
 
   if (
     !ofrecerReintentar &&
@@ -141,7 +149,8 @@ export function AccionesDeTarea({
     !ofrecerDescartar &&
     !ofrecerContinuar &&
     !ofrecerArrancar &&
-    !ofrecerEditar
+    !ofrecerEditar &&
+    !ofrecerParar
   ) {
     return null;
   }
@@ -163,6 +172,17 @@ export function AccionesDeTarea({
           onClick={() => pedir(alArrancarAhora!)}
         >
           Arrancar ahora
+        </button>
+      ) : null}
+      {ofrecerParar ? (
+        <button
+          type="button"
+          className={estilos.boton}
+          disabled={apagado || enviando}
+          title="Corta su turno y la deja esperando, con su conversación: se sigue con «Continuar»"
+          onClick={() => pedir(alParar!)}
+        >
+          {enviando ? "Parando…" : "Parar"}
         </button>
       ) : null}
       {ofrecerEditar ? (

@@ -873,6 +873,12 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   abierta la consola…»), y una aparcada se sigue con «Continuar» (`TEXTO_DE_CONTINUAR`) o «Enviar y continuar». **En el
   chat de una conversación de tarea que espera feedback**, enviar deja ELEGIR (`MensajeATarea.tsx`): a la tarea —feedback
   y `arrancarAhora`— o seguir aquí; antes, lo escrito ahí era un turno de la persona y la tarea seguía aparcada.
+- **Una tarea en marcha se puede PARAR sin borrarla** (IXCODE-50, `{accion:"parar"}`,
+  `Corredor.cortar(id, {pausa})`): el mismo corte que «Descartar», pero la tarea queda aparcada con
+  `motivoDePausa` y su conversación, y se sigue con «Continuar». Una pausa NUNCA pasa por la entrega
+  —el turno puede devolver limpio al cerrarle la consola— y, pedida mientras la consola se abre, se
+  aparca en vez de quedarse en `nuevo` renunciada. El servidor espera al corte y contesta 409 con
+  motivo si no se pudo (otro proceso, o no soltó a tiempo).
 - **Una tarea cortada a mitad se REANUDA sola, una vez** (`core/tareas.ts#reanudadaTrasCorte`, en la reconciliación del
   arranque): si el proceso murió con ella «en proceso» y su hilo se puede reabrir, vuelve a la cola con
   `TEXTO_DE_REANUDACION` como feedback pendiente, que entra en SU hilo —la foto del raíz y el chat se guardan a mitad de

@@ -7081,6 +7081,36 @@ export function montarRutas(
         respuesta.end();
         return;
       }
+      if (mensaje.accion === "parar" && opciones.colaDeTareas !== undefined) {
+        /**
+         * PARAR una tarea en marcha sin borrarla (IXCODE-50): el mismo corte que «Descartar»
+         * (`Corredor.cortar`), con `pausa`, y la tarea queda aparcada con su conversación —se sigue
+         * con «Continuar»—. Se ESPERA al corte para poder decir por qué no, con 409.
+         */
+        const negar = (motivo: string): void => {
+          respuesta.writeHead(409, { "content-type": "application/json" });
+          respuesta.end(JSON.stringify({ motivo }));
+        };
+        const tarea = opciones.colaDeTareas.listar().find((t) => t.id === mensaje.id);
+        if (tarea === undefined) return negar("esa tarea ya no existe");
+        if (tarea.estado !== "en-proceso") return negar("esa tarea no está en marcha");
+        if (opciones.corredorDeTareas === undefined || opciones.corredorDeTareas.corriendoAqui() === false) {
+          return negar("su turno lo ejecuta otro proceso, y no se puede parar desde aquí");
+        }
+        let cortada: boolean;
+        try {
+          cortada = await opciones.corredorDeTareas.cortar(mensaje.id, { pausa: true });
+        } catch (error) {
+          contar(error);
+          return negar("no se pudo parar su turno");
+        }
+        if (!cortada) return negar("su turno no soltó el proyecto a tiempo: sigue en marcha, inténtalo otra vez");
+        opciones.revisarTareas?.();
+        emitirTareas();
+        respuesta.writeHead(204);
+        respuesta.end();
+        return;
+      }
       if (mensaje.accion === "encargo" && opciones.colaDeTareas !== undefined) {
         // Editar el encargo de una tarea que todavía no ha arrancado (IXCODE-52). La regla —solo si
         // nunca arrancó, y no vacío— es de `core/tareas.ts#conEncargo`; la negativa vuelve con motivo.
@@ -7162,6 +7192,7 @@ export function montarRutas(
         mensaje.accion !== "continuar" &&
         mensaje.accion !== "arrancarAhora" &&
         mensaje.accion !== "encargo" &&
+        mensaje.accion !== "parar" &&
         opciones.colaDeTareas !== undefined
       ) {
         /**

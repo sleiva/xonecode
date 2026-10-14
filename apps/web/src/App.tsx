@@ -2512,6 +2512,8 @@ export function App({
       alArrancarAhora={async (id: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "arrancarAhora", id }))}
       // Editar el encargo de una que todavía no ha arrancado (IXCODE-52): la ventana no se cierra si el servidor se niega.
       alEditarEncargo={async (id: string, encargo: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "encargo", id, encargo }))}
+      // Parar una en marcha sin borrarla (IXCODE-50): queda esperando con su conversación, y se sigue con «Continuar».
+      alParar={async (id: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "parar", id }))}
       // Esta lista es la del proyecto ABIERTO: su consola es la tuya, y es lo que frena sus tareas nuevas.
       consolaAbierta={proyectoActivoId !== undefined}
       {...(estado.alta?.sesionActiva === undefined ? {} : { sesionAbierta: estado.alta.sesionActiva })}

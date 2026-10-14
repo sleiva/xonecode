@@ -6371,6 +6371,41 @@ describe("las tareas en background, por el cable", () => {
       expect(colaConOrden.listar().find((t) => t.id === "t-en-curso")).toBeUndefined();
     });
 
+    /** IXCODE-50: «Parar» es el mismo corte con `pausa`, y la tarea NO se borra. */
+    it("«Parar» corta con pausa, no borra, y contesta 204; sin poder cortarla contesta 409 con motivo", async () => {
+      const servidor = servidorDeMentira();
+      const cola = colaDeMentira([tareaEnCurso]);
+      const pedidos: unknown[] = [];
+      let respuestaDelCorte = true;
+      let corriendoAqui = true;
+      montarRutas(servidor, vestibuloDePrueba(), {
+        colaDeTareas: cola,
+        corredorDeTareas: {
+          corriendoAqui: () => corriendoAqui,
+          cortar: async (id, opciones) => {
+            pedidos.push([id, opciones]);
+            return respuestaDelCorte;
+          },
+        },
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      expect(await enviarMensaje(accion, { clase: "tarea", accion: "parar", id: "t-en-curso" })).toBe(204);
+      expect(pedidos).toEqual([["t-en-curso", { pausa: true }]]);
+      expect(cola.verTareas().find((t) => t.id === "t-en-curso")).toBeDefined();
+      respuestaDelCorte = false;
+      const tarde = await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "parar", id: "t-en-curso" }));
+      expect(tarde.estado).toBe(409);
+      expect(JSON.parse(tarde.cuerpo).motivo).toMatch(/sigue en marcha/);
+      corriendoAqui = false;
+      const ajena = await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "parar", id: "t-en-curso" }));
+      expect(JSON.parse(ajena.cuerpo).motivo).toMatch(/otro proceso/);
+      const noExiste = await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "parar", id: "no" }));
+      expect(noExiste.estado).toBe(409);
+    });
+
     it("si el corte no llega a tiempo (`cortar` resuelve `false`), NO se borra, y se avisa", async () => {
       const servidor = servidorDeMentira();
       const cola = colaDeMentira([tareaEnCurso]);
