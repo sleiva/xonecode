@@ -22,6 +22,7 @@ import { VisorDeImagen } from "./VisorDeImagen.js";
 import { hayCosteQueEnsenar } from "./CosteDelTurno.js";
 import { turnosDeLaSesion, type TurnoDeLaSesion } from "../turnosDeLaSesion.js";
 import { pasoDelRail, type PasoDelRail } from "../pasoDelRail.js";
+import { pasosDe } from "../pasos.js";
 import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
 import vista from "../../estilos/ChatView.module.css";
 import estilos from "./Chat.module.css";
@@ -221,7 +222,9 @@ function TramoDeTrabajo({
       <summary className={estilos.resumen}>
         {t.terminado ? (
           <>
-            {`Trabajo del agente · ${pasos} ${pasos === 1 ? "paso" : "pasos"}`}
+            {/* Sin una sola llamada (un tramo que solo pensó) no se dice «0 pasos»: no es una
+                cifra, es que no hubo herramientas. */}
+            {pasos === 0 ? "Trabajo del agente" : `Trabajo del agente · ${pasos} ${pasos === 1 ? "paso" : "pasos"}`}
             {fallidas === 0 ? null : (
               <span className={estilos.resumenFallos}>{` · ${fallidas} ${fallidas === 1 ? "falló" : "fallaron"}`}</span>
             )}
@@ -286,7 +289,16 @@ function TramoDeTrabajo({
             return (
               <Fragment key={i}>
                 {rotulo === undefined ? null : <p className={estilos.quienTrabaja}>{rotulo}</p>}
-                <p className={`${estilos.textoTenue} ${estilos.pensado}`}>{a.texto}</p>
+                {/* PLEGADO en una línea «Pensó · …» (petición suya, rediseño del chat): con el
+                    raíl abierto, los párrafos del razonamiento iban entre los pasos y obligaban a
+                    hacer scroll para seguir lo que el agente HIZO. Se abre quien quiera leerlo. */}
+                <details className={estilos.pensadoPlegado}>
+                  <summary className={estilos.resumenPensado}>
+                    <span className={estilos.verbo}>Pensó</span>
+                    <span className={estilos.avanceDelPensado}>{` · ${a.texto.trim().replace(/\s+/gu, " ")}`}</span>
+                  </summary>
+                  <p className={`${estilos.textoTenue} ${estilos.pensado}`}>{a.texto}</p>
+                </details>
               </Fragment>
             );
           }
@@ -1236,13 +1248,10 @@ export function Chat({
             }
             if (pieza.tipo === "pulso") {
               const { tramo: t } = pieza;
-              // Los pasos NO cuentan los artefactos: un artefacto es lo que un paso produjo,
-              // no un paso más. Contarlos inflaba la cabecera —«21 pasos» habría dicho 26 en
-              // la sesión que se midió— y esa cifra es lo único que la línea plegada afirma.
-              const pasos = t.actos.reduce(
-                (n, a) => n + (a.tipo === "artefacto" ? 0 : a.tipo === "herramientas" ? a.lineas.length : 1),
-                0
-              );
+              // Los pasos con la regla ÚNICA (`pasos.ts`): llamadas a herramientas. Ni los
+              // artefactos —lo que un paso produjo— ni el razonamiento son pasos, y así la línea
+              // del tramo, la cabecera del turno, su inspector y la barra dicen la misma cifra.
+              const pasos = pasosDe(t.actos);
               // Y lo que ese trabajo PRODUJO, que se pinta después del desplegable y en su
               // orden. Se parte en dos porque son dos formas: de una imagen se enseña la
               // imagen, y de lo demás su nombre — de un `.json` no hay nada que previsualizar.

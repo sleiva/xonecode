@@ -1,3 +1,4 @@
+import { pasosDe } from "./pasos.js";
 import { toolsFallidas } from "./porOrigen.js";
 import type { Acto, ConsumoDeTurno, VeredictoDelTurno } from "./tipos.js";
 
@@ -28,8 +29,7 @@ export interface TurnoDeLaSesion {
   ms?: number;
   /** Del `fin`. Ausente = no consta. */
   consumo?: ConsumoDeTurno;
-  /** Los pasos con la MISMA regla que la cabecera del tramo de trabajo (`Chat.tsx`): una línea
-   *  de tool es un paso, un razonamiento, una fase o un veredicto otro, un artefacto ninguno. */
+  /** Las LLAMADAS a herramientas del turno, con la regla única de `pasos.ts`. */
   pasos: number;
   /** Líneas de tool que fallaron (`detalles[].error`). */
   fallidas: number;
@@ -39,18 +39,19 @@ export interface TurnoDeLaSesion {
   veredicto?: VeredictoDelTurno;
 }
 
-const PASO_DE_UNA_PIEZA = new Set(["razonamiento", "fase", "verificacion"]);
-
 export function turnosDeLaSesion(actos: readonly Acto[]): TurnoDeLaSesion[] {
   const turnos: TurnoDeLaSesion[] = [];
   let actual: TurnoDeLaSesion | undefined;
   let suyos: Acto[] = [];
-  const cerrarFallidas = () => {
-    if (actual !== undefined) actual.fallidas = toolsFallidas(suyos);
+  // Lo que se cuenta sobre el turno ENTERO (pasos y fallos) se cierra al pasar al siguiente.
+  const cerrarCuentas = () => {
+    if (actual === undefined) return;
+    actual.fallidas = toolsFallidas(suyos);
+    actual.pasos = pasosDe(suyos);
   };
   actos.forEach((acto, indice) => {
     if (acto.tipo === "usuario") {
-      cerrarFallidas();
+      cerrarCuentas();
       actual = {
         numero: turnos.length + 1,
         desde: indice,
@@ -68,8 +69,6 @@ export function turnosDeLaSesion(actos: readonly Acto[]): TurnoDeLaSesion[] {
     // (una respuesta a un comando, por ejemplo) ya no es de él.
     if (actual === undefined || !actual.abierto) return;
     suyos.push(acto);
-    if (acto.tipo === "herramientas") actual.pasos += acto.lineas.length;
-    else if (PASO_DE_UNA_PIEZA.has(acto.tipo)) actual.pasos += 1;
     if (acto.tipo === "asistente" && acto.cuando !== undefined) actual.acabo = acto.cuando;
     if (acto.tipo === "sistema" && acto.clase === "permiso") actual.permisos.push(acto.texto);
     if (acto.tipo === "verificacion") {
@@ -82,6 +81,6 @@ export function turnosDeLaSesion(actos: readonly Acto[]): TurnoDeLaSesion[] {
       if (acto.consumo !== undefined) actual.consumo = acto.consumo;
     }
   });
-  cerrarFallidas();
+  cerrarCuentas();
   return turnos;
 }

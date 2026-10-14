@@ -29,8 +29,8 @@ describe("turnosDeLaSesion", () => {
       abierto: false,
       ms: 29_600,
       consumo,
-      // Dos líneas de tool y un razonamiento; el artefacto no es un paso.
-      pasos: 3,
+      // Dos llamadas a tool; ni el razonamiento ni el artefacto son pasos (`pasos.ts`).
+      pasos: 2,
       fallidas: 1,
       permisos: ["dev: quiere modificar un fichero del proyecto"],
     });

@@ -288,6 +288,10 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.verbo {
+  color: var(--dsw-alias-label-primary);
+}
+
 .blanco {
   font-family: var(--ds-font-family-code);
   font-size: 12px;
@@ -443,6 +447,43 @@
   padding-top: 4px;
   max-height: 176px;
   overflow-y: auto;
+}
+
+/* El razonamiento DENTRO del raíl, plegado en una línea: «Pensó · el principio de lo que pensó…»,
+   recortado con puntos suspensivos. Lleva el mismo sangrado que los pasos (18 px, el relleno del
+   carril) para leerse como un hito más del turno, sin aro: no es una llamada. */
+.pensadoPlegado {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.resumenPensado {
+  display: flex;
+  gap: 0;
+  min-width: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--dsw-font-family);
+  font-size: 13px;
+  line-height: 1.6;
+  cursor: pointer;
+  list-style: none;
+}
+
+.resumenPensado::-webkit-details-marker {
+  display: none;
+}
+
+.avanceDelPensado {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-style: italic;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pensadoPlegado[open] .avanceDelPensado {
+  display: none;
 }
 
 /* El razonamiento conserva sus saltos de línea: es prosa del modelo, no una lista. */

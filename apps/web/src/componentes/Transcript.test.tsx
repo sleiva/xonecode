@@ -67,8 +67,10 @@ describe("Transcript", () => {
     );
     const detalle = document.querySelector("details")!;
     expect(detalle.hasAttribute("open")).toBe(true);
-    // Tres pasos: el razonamiento y las dos líneas de tool.
-    expect(detalle.textContent).toMatch(/3 pasos/);
+    // Dos pasos: las dos llamadas a tool. El razonamiento no es un paso (`pasos.ts`): va plegado
+    // en su propia línea «Pensó».
+    expect(detalle.textContent).toMatch(/2 pasos/);
+    expect(detalle.querySelector(":scope details summary")?.textContent).toMatch(/^Pensó · lo pienso/u);
     expect(detalle.textContent).toMatch(/12\.4s/);
     // Y la respuesta se sigue leyendo, que es lo que queda cuando se dobla el andamio.
     expect(screen.getByText("hecho")).toBeTruthy();

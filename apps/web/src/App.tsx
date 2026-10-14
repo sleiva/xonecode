@@ -70,6 +70,7 @@ import {
   leerBarraContraida,
 } from "./preferencias.js";
 import { usarAnchoDeVentana } from "./anchoDeVentana.js";
+import { pasosDe } from "./pasos.js";
 import { ANCHO_PANEL_POR_OMISION, acotarAnchoDePanel, repartoDeColumnas } from "./repartoDeColumnas.js";
 
 type Store = ReturnType<typeof crearStoreDelCliente>;
@@ -1806,9 +1807,8 @@ export function App({
     (p) => p.id === estado.alta?.proyectoActivo
   )?.nombre;
 
-  // Las piezas de `BarraDeEstado`. «Turnos» cuenta actos `usuario`; «pasos» suma las líneas
-  // de los actos `herramientas` —una racha COLAPSADA cuenta como una línea (`core/notify.ts`),
-  // así que esto cuenta rachas visibles, no llamadas reales a tool—; el tiempo es el del
+  // Las piezas de `BarraDeEstado`. «Turnos» cuenta actos `usuario`; «pasos», las llamadas a
+  // herramientas de toda la sesión (`pasos.ts`); el tiempo es el del
   // ÚLTIMO turno cerrado, no un acumulado de sesión.
   //
   // Y `contexto`/`tope` SÍ tienen mensaje detrás desde que `ctx` se mudó aquí: el mensaje
@@ -1817,9 +1817,9 @@ export function App({
   // los acumulados, y ahí se leía como si fuera otra cuenta de lo gastado. Sin tope no se
   // inventa denominador ni porcentaje: `formatearContexto` no los pinta.
   const turnos = estado.actos.filter((a) => a.tipo === "usuario").length;
-  const pasos = estado.actos
-    .filter((a) => a.tipo === "herramientas")
-    .reduce((n, a) => n + a.lineas.length, 0);
+  // Con la regla ÚNICA de `pasos.ts`: llamadas a herramientas, las mismas que dice la cabecera
+  // de cada turno y su inspector.
+  const pasos = pasosDe(estado.actos);
   const ultimoFin = estado.actos
     .slice()
     .reverse()
