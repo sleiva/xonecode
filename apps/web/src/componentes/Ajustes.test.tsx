@@ -508,6 +508,70 @@ describe("Ajustes", () => {
     });
   });
 
+  describe("el aparato de las conversaciones nuevas (IXCODE-51)", () => {
+    const MOVIL = { id: "R58M123", nombre: "Galaxy", plataforma: "android" as const, clase: "fisico" as const, estado: "conectado" as const };
+    const EMU = { id: "emulator-5554", nombre: "Pixel 8", plataforma: "android" as const, clase: "emulador" as const, estado: "arrancado" as const };
+    const informe = { sistema: "mac" as const, herramientas: [], dispositivos: [MOVIL, EMU], avds: [], recetas: [], medido: "2026-10-14T10:00:00.000Z" };
+    const combo = () => screen.getByRole("combobox", { name: /Aparato/ }) as HTMLSelectElement;
+
+    it("sin dato del servidor NO se pinta", () => {
+      render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado />);
+      expect(screen.queryByRole("combobox", { name: /Aparato/ })).toBeNull();
+    });
+
+    it("ofrece «ninguno» y lo MEDIDO, y manda solo el id (o nada, para quitarlo)", () => {
+      const vistos: (string | undefined)[] = [];
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          dispositivos={informe as never}
+          dispositivoPorDefecto={{}}
+          alCambiarDispositivoPorDefecto={(id) => void vistos.push(id)}
+        />
+      );
+      expect(combo().value).toBe("");
+      expect([...combo().options].map((o) => o.value)).toEqual(["", "R58M123", "emulator-5554"]);
+      fireEvent.change(combo(), { target: { value: "R58M123" } });
+      expect(vistos).toEqual(["R58M123"]);
+    });
+
+    it("el elegido que ya no está en la medida se sigue enseñando, marcado", () => {
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          dispositivos={{ ...informe, dispositivos: [EMU] } as never}
+          dispositivoPorDefecto={{ elegido: { id: MOVIL.id, nombre: MOVIL.nombre, plataforma: "android", clase: "fisico" } }}
+          alCambiarDispositivoPorDefecto={() => {}}
+        />
+      );
+      expect(combo().value).toBe("R58M123");
+      expect(combo().selectedOptions[0]!.textContent).toMatch(/no conectado/);
+    });
+
+    it("sin medida todavía, el elegido se enseña SIN «no conectado»: nadie lo ha medido", () => {
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          dispositivoPorDefecto={{ elegido: { id: MOVIL.id, nombre: MOVIL.nombre, plataforma: "android", clase: "fisico" } }}
+          alCambiarDispositivoPorDefecto={() => {}}
+        />
+      );
+      expect(combo().value).toBe("R58M123");
+      expect(combo().selectedOptions[0]!.textContent).not.toMatch(/no conectado/);
+    });
+
+    it("sin manejador se enseña sin poder cambiarlo", () => {
+      render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado dispositivoPorDefecto={{}} />);
+      expect(combo().disabled).toBe(true);
+    });
+  });
+
   describe("las conversaciones nuevas (IXCODE-31)", () => {
     const GRUPO = "modo de escritura de las conversaciones nuevas";
 

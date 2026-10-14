@@ -8981,3 +8981,46 @@ inventado, en un proceso limpio, falla con `ERR_NGROK_105`, que se clasifica com
 **Límite declarado, medido**: dentro de un mismo proceso, el SDK reutiliza la sesión ya abierta aunque se le pase otro
 authtoken (el inventado «abrió» detrás de uno bueno). Cambiar el authtoken con la consola en marcha no se aplica hasta
 reiniciarla. Sin medir: el dominio propio (`domain`), que esta cuenta no tiene.
+
+## El móvil físico tenía el puerto del emulador, y el aparato de las sesiones nuevas (IXCODE-32, IXCODE-51, 14-10-2026)
+
+IXCODE-32 («con un móvil físico elegido, a mitad de sesión cambió al emulador») se cerró el 01-10 por la
+SERIE: todo script y todo `adb` del agente van al aparato de la sesión. Quedaba otra puerta, que esa
+comprobación no puede ver: **el canal hotswap no habla con una serie, habla con `127.0.0.1:<puerto>`**, y a
+qué aparato lleva ese puerto lo decide `adb forward`, una tabla de TODA la máquina.
+
+Medido en esta máquina: `settings.json` tiene `pixel8 → 8443` y `adb forward --list` da
+`emulator-5554 tcp:8443 tcp:8443`. Un físico iba SIEMPRE al 8443 (no tiene AVD del que leer otro), el mismo
+que el primer AVD. Con el móvil y el emulador enchufados, basta que otra consola o una tarea hagan su
+forward al emulador para que los comandos de la sesión del móvil vayan al emulador, mientras el script sigue
+diciendo «dispositivo: el de la sesión».
+
+Lo que se hizo:
+
+- **Un físico tiene su puerto, por su serie** (`core/puertosDeAvd.ts#puertoDeFisico`,
+  `asignarPuertosDeFisicos`, `settings.json#dispositivos.fisicos`), sembrado al medir DESPUÉS de los AVD y
+  releyendo. Sin sembrar, el primero libre, que es el que la siembra le daría. La regla está tres veces
+  (`core`, `lib/dispositivo.mjs`, `reglasDeAvd.ts`) y los tests de paridad las atan.
+- **Antes de usar el túnel se mira de quién es** (`lib/dispositivo.mjs#asegurarTunel`). Si es de otro
+  aparato, el script sale con 2 y nombra a los dos, sin quitárselo: quitárselo dejaría al otro hablando con
+  éste. Si no es de nadie, `xone-hotswap` lo vuelve a poner. Probado contra el adb real con una serie
+  inventada que tenía guardado el 8443: sale con 2 y nombra `emulator-5554`; sin puerto guardado va al 8444 y
+  no toca el túnel del emulador.
+
+Y IXCODE-51, que Rafa abrió el mismo día y es la otra mitad: **una sesión nueva nacía sin aparato** y los
+scripts elegían el emulador. Ahora nace con el de `settings.json#dispositivoPorDefecto` (Ajustes > General >
+Conversaciones nuevas). A diferencia del modo (IXCODE-31), **también una tarea**: el modo autoriza
+escrituras y una tarea ya se autorizó al crearla; el aparato no autoriza nada. Una reabierta conserva el
+suyo. Se guarda la FOTO: un móvil desenchufado al abrir sigue elegido y Ejecutar dice que no está, en vez de
+pasarse a otro.
+
+**Límites declarados**:
+
+- Una serie de adb inalámbrico (`IP:puerto`) cambia en cada emparejamiento, y la siembra solo añade: cada
+  emparejamiento nuevo se queda un puerto más.
+- Cada `xone-hotswap` hace ahora un `adb forward --list`. `xone-recargar-android` lo llama varias veces por
+  recarga, y con adb colgado cada una espera hasta su tope.
+- Ejecutar y la recarga al guardar (`lanzamientoEnMaquina`, `recargaEnAparato`) siguen reponiendo el forward
+  sin mirar de quién es. Con puertos distintos solo importa ante un forward viejo.
+- Sin probar con un móvil físico y el emulador conectados a la vez: la guarda se probó con una serie
+  inventada contra el adb real.

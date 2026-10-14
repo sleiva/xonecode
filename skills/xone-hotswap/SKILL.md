@@ -217,9 +217,11 @@ adb shell am start -n com.xone.android.framework/com.xone.android.hotswap.activi
 ### Varios emuladores a la vez
 
 Cada AVD tiene SU puerto en este Mac (Ajustes → Dispositivos; con un solo AVD es el 8443 y no hay
-nada que tocar). Dentro del aparato el servidor sigue en el 8443. **El túnel lo ponen
+nada que tocar), y cada móvil físico el suyo, por su serie. Dentro del aparato el servidor sigue en el 8443. **El túnel lo ponen
 `xone-desplegar-android` y `xone-reiniciar-android`** con el puerto del aparato de tu sesión —lo
-resuelven por el AVD de la serie—, y `xone-hotswap` ya se conecta a ese puerto: no pases
+resuelven por la serie—, y `xone-hotswap` ya se conecta a ese puerto. Antes de hablar, los tres
+comprueban de quién es el túnel: si lo tiene OTRO aparato, salen con 2 y dicen cuál (no se le quita:
+díselo a la persona); si no lo tiene nadie, `xone-hotswap` lo vuelve a poner. No pases
 `--puerto N` salvo que te lo pidan (fuerza el puerto local). **Si a desplegar/reiniciar les pasas `--serie`,
 pasa EL MISMO `--serie` a `xone-hotswap`**: sin él habla con el aparato de la sesión. En iOS no hay túnel y es siempre el 8443.
 

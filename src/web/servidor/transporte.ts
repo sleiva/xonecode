@@ -487,6 +487,12 @@ export type MensajeAlCliente =
    */
   | { clase: "modoPorDefecto"; modo: "supervisado" | "autonomo" }
   /**
+   * El aparato con que NACEN las sesiones nuevas, de una persona y de una tarea (IXCODE-51,
+   * Ajustes > General). Va en la ráfaga por lo mismo que el modo. Sin `dispositivo` = ninguno
+   * elegido, que no es lo mismo que no recibir el mensaje (entonces el control no se pinta).
+   */
+  | { clase: "dispositivoPorDefecto"; dispositivo?: DispositivoElegido }
+  /**
    * El catálogo de conectores MCP y los que esta consola tiene AÑADIDOS, para la sección de
    * Ajustes. Va en la ráfaga de bienvenida por lo mismo que el workspace: Ajustes se puede
    * abrir en cuanto conecta, y solo si la opción `conectores` está puesta — «un control sin
@@ -1446,6 +1452,9 @@ export type MensajeDelCliente =
   | { clase: "copiaLocal"; accion: "modoDeEscritura"; proyecto: string; modo?: "supervisado" | "autonomo" }
   /** Fijar el modo con que nacen las sesiones nuevas en cualquier proyecto (Ajustes > General). */
   | { clase: "modoPorDefecto"; modo: "supervisado" | "autonomo" }
+  /** Fijar —o quitar, sin `id`— el aparato de las sesiones nuevas (IXCODE-51). Solo el ID: el resto
+   *  sale de la última MEDIDA, como en la pastilla. */
+  | { clase: "dispositivoPorDefecto"; id?: string }
   /** La pestaña Soporte: chats y tareas del proyecto con su análisis previo (`soporte.ts`). */
   | { clase: "soporte"; accion: "listar"; proyecto: string }
   /**

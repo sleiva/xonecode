@@ -15,17 +15,14 @@
  */
 import { dirname, join } from "node:path";
 import { carpetaDeArtefactosDeSesion } from "./artefactos.js";
+import { dispositivoDeValor, type DispositivoDeLaSesion } from "./dispositivoElegido.js";
 
 /** La variable que nombra el fichero con el dispositivo de la sesión. */
 export const VARIABLE_DE_DISPOSITIVO = "XONECODE_DISPOSITIVO";
 
-/** Lo que se guarda en el fichero: lo mismo que la pastilla, sin el estado en vivo. */
-export interface DispositivoDeLaSesion {
-  id: string;
-  nombre: string;
-  plataforma: "android" | "ios";
-  clase: "emulador" | "simulador" | "fisico";
-}
+/** Lo que se guarda en el fichero: lo mismo que la pastilla, sin el estado en vivo. Vive en un
+ *  módulo aparte porque `settings.ts` también lo lee, y desde aquí sería un ciclo. */
+export type { DispositivoDeLaSesion } from "./dispositivoElegido.js";
 
 /** El fichero, al lado de la carpeta de artefactos de la sesión y no dentro: lo de dentro se
  *  ANUNCIA como artefacto, y esto no es una salida para nadie. */
@@ -44,11 +41,7 @@ export function ficheroDeDispositivoDeSesion(raiz: string, id: string): string {
  */
 export function dispositivoDeTexto(texto: string): DispositivoDeLaSesion | undefined {
   try {
-    const d = JSON.parse(texto) as Partial<DispositivoDeLaSesion> | null;
-    if (typeof d?.id !== "string" || d.id === "") return undefined;
-    if (d.plataforma !== "android" && d.plataforma !== "ios") return undefined;
-    const clase = d.clase === "emulador" || d.clase === "simulador" || d.clase === "fisico" ? d.clase : "fisico";
-    return { id: d.id, nombre: typeof d.nombre === "string" ? d.nombre : d.id, plataforma: d.plataforma, clase };
+    return dispositivoDeValor(JSON.parse(texto));
   } catch {
     return undefined;
   }

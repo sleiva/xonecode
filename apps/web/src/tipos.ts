@@ -821,6 +821,8 @@ export type MensajeAlCliente =
   | { clase: "depuracion"; activa: boolean }
   /** El modo con que nacen las sesiones nuevas en cualquier proyecto (IXCODE-31), ya RESUELTO. */
   | { clase: "modoPorDefecto"; modo: ModoDeEscritura }
+  /** El aparato con que nacen las sesiones nuevas (IXCODE-51). Sin `dispositivo` = ninguno elegido. */
+  | { clase: "dispositivoPorDefecto"; dispositivo?: DispositivoElegido }
   /**
    * Cómo fue la última augmentación pedida (`{clase:"tarea", accion:"augmentar"}`): el
    * encargo que propone el modelo, o por qué no se pudo. Nunca los dos a la vez.
@@ -1436,6 +1438,8 @@ export type MensajeDelCliente =
   | { clase: "copiaLocal"; accion: "modoDeEscritura"; proyecto: string; modo?: ModoDeEscritura }
   /** Fijar el modo de las sesiones nuevas en cualquier proyecto (Ajustes > General). */
   | { clase: "modoPorDefecto"; modo: ModoDeEscritura }
+  /** Fijar —o quitar, sin `id`— el aparato de las sesiones nuevas (IXCODE-51). Solo el ID. */
+  | { clase: "dispositivoPorDefecto"; id?: string }
   /** La pestaña Soporte: chats y tareas del proyecto con su análisis previo. */
   | { clase: "soporte"; accion: "listar"; proyecto: string }
   /**
@@ -1757,6 +1761,8 @@ export type AjustesDeDispositivos = { [K in PlataformaDeDispositivo]?: boolean }
   /** Lo que se decide POR AVD: su puerto local del túnel y si arranca sin ventana. Redeclarado
    *  de `core/settings.ts`. Ausente = nada decidido (el 8443 de siempre, con ventana). */
   avds?: Record<string, { puerto?: number; sinVentana?: true; copiaDe?: string; clon?: true }>;
+  /** El puerto del túnel de cada móvil físico Android, por su serie (IXCODE-32). Redeclarado de `core/settings.ts`. */
+  fisicos?: Record<string, { puerto?: number }>;
 };
 
 /** ¿Se mira este destino? Ausente = sí. La misma función que el host (`core/settings.ts`). */

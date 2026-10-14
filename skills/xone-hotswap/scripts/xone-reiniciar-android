@@ -22,7 +22,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
-import { serieAndroid, rutaDeAdb, NODE, dormir, PUERTO_DEL_HOTSWAP, puertoConMotivo } from "../lib/dispositivo.mjs";
+import { serieAndroid, rutaDeAdb, NODE, dormir, PUERTO_DEL_HOTSWAP, puertoConMotivo, asegurarTunel } from "../lib/dispositivo.mjs";
 
 const PAQUETE = "com.xone.android.framework";
 const ACTIVIDAD = `${PAQUETE}/com.xone.android.hotswap.activities.SetupActivity`;
@@ -102,6 +102,8 @@ exigirAparato();
 console.log(`1/3 túnel (127.0.0.1:${PUERTO} → ${PUERTO_DEL_HOTSWAP} del aparato) y parada de ${PAQUETE}`);
 // El túnel PRIMERO y sin quitarlo después: hay que reaplicarlo tras cada reconexión del cable,
 // así que quitarlo dejaría al siguiente hablando con nadie.
+// Antes de ponerlo, que no sea de OTRO aparato (IXCODE-32): quitárselo dejaría al otro hablando con éste.
+if (serie !== undefined) asegurarTunel(serie, PUERTO, { poner: false });
 adb("forward", `tcp:${PUERTO}`, `tcp:${PUERTO_DEL_HOTSWAP}`);
 adb("shell", "am", "force-stop", PAQUETE);
 

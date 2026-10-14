@@ -23,6 +23,7 @@ import type {
   FilaDeCatalogo,
   AjustesDeDispositivos,
   Dispositivo,
+  DispositivoElegido,
   Herramienta,
   InformeDeDispositivos,
   NombreDeHerramienta,
@@ -33,6 +34,7 @@ import type {
 } from "../tipos.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, seMira, type ModoDeEscritura } from "../tipos.js";
 import { SelectorDeModo } from "./SelectorDeModo.js";
+import { DispositivoPorDefecto } from "./DispositivoPorDefecto.js";
 import { SelectorDeTema } from "./SelectorDeTema.js";
 import type { TemasElegidos } from "../apariencia.js";
 import type { ModoDeTema } from "../temas.js";
@@ -474,6 +476,8 @@ export function Ajustes({
   modoEnVigor,
   alCambiarTema,
   alCambiarModoPorDefecto,
+  dispositivoPorDefecto,
+  alCambiarDispositivoPorDefecto,
   alElegirCarpeta,
   carpetaElegida,
   alCerrar,
@@ -737,6 +741,13 @@ export function Ajustes({
   alCambiarTema?: (modo: ModoDeTema, id: string) => void;
   /** Cambia el modo por defecto. Ausente = se enseña sin poder cambiarlo. */
   alCambiarModoPorDefecto?: (modo: ModoDeEscritura) => void;
+  /**
+   * Con qué aparato NACEN las conversaciones nuevas y las tareas (IXCODE-51). Ausente = esta
+   * ejecución no lo dice y no se pinta; `{}` = ninguno elegido.
+   */
+  dispositivoPorDefecto?: { elegido?: DispositivoElegido };
+  /** Elige —o quita, con `undefined`— por ID. Ausente = se enseña sin poder cambiarlo. */
+  alCambiarDispositivoPorDefecto?: (id: string | undefined) => void;
   /**
    * Abre el selector de carpeta del sistema. **Ausente = esta máquina no tiene ninguno** —o
    * la consola se mira por un túnel, que es el límite declarado— y entonces el botón no se
@@ -2112,9 +2123,11 @@ export function Ajustes({
                 </>
               )}
 
+              {modoPorDefecto === undefined && dispositivoPorDefecto === undefined ? null : (
+                <h3 className={estilos.subencabezado}>Conversaciones nuevas</h3>
+              )}
               {modoPorDefecto === undefined ? null : (
                 <>
-                  <h3 className={estilos.subencabezado}>Conversaciones nuevas</h3>
                   <SelectorDeModo
                     actual={modoPorDefecto}
                     conectado={conectado && alCambiarModoPorDefecto !== undefined}
@@ -2129,6 +2142,14 @@ export function Ajustes({
                     se puede cambiar en la caja del chat.
                   </p>
                 </>
+              )}
+              {dispositivoPorDefecto === undefined ? null : (
+                <DispositivoPorDefecto
+                  {...(dispositivoPorDefecto.elegido === undefined ? {} : { actual: dispositivoPorDefecto.elegido })}
+                  {...(dispositivos === undefined ? {} : { medidos: dispositivos.dispositivos })}
+                  activo={conectado && alCambiarDispositivoPorDefecto !== undefined}
+                  alElegir={(id) => alCambiarDispositivoPorDefecto?.(id)}
+                />
               )}
 
               <h3 className={estilos.subencabezado}>Tareas</h3>

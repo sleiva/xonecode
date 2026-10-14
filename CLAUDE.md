@@ -1763,7 +1763,10 @@ admite (`admiteApagarElPensamiento`); apagado manda sobre el esfuerzo. Lo demás
 - **El dispositivo de la sesión guarda la FOTO, no solo el id**, y solo si NO está a mano ahora. La
   consume Ejecutar y, por un FICHERO (`core/dispositivoDeSesion.ts`, `XONECODE_DISPOSITIVO`), el
   `device-controller`: los scripts de `xone-hotswap` lo leen en CADA ejecución. Sin elección, un
-  emulador antes que un físico.
+  emulador antes que un físico. **Una sesión NUEVA nace con el aparato por defecto** (IXCODE-51,
+  `settings.json#dispositivoPorDefecto`, Ajustes → General → Conversaciones nuevas), también la de
+  una TAREA —a diferencia del modo, no autoriza nada—; una reabierta conserva el suyo. Es la FOTO: un
+  móvil desenchufado al abrir sigue elegido y Ejecutar lo dice, en vez de pasarse a otro.
 - **El puerto del túnel es del AVD, no fijo** (`core/puertosDeAvd.ts`, copia en
   `skills/xone-hotswap/lib/dispositivo.mjs` atada por test, igual que las banderas de «sin ventana»
   y las reglas de nombre y puerto del cliente, `apps/web/src/reglasDeAvd.ts`): con un solo AVD, el de
@@ -1771,7 +1774,15 @@ admite (`admiteApagarElPensamiento`); apagado manda sobre el esfuerzo. Lo demás
   `asignarPuertosPendientes` y `guardarPuertosAsignados`; `emuladoresCableados` solo la cablea),
   solo AÑADE y nunca reasigna. La siembra ocurre también con UN AVD, en silencio (la UI no enseña el
   campo con uno), para que el primero conserve el de siempre cuando llegue otro. Dentro del aparato
-  el framework escucha siempre en el mismo, y un aparato físico se queda en el de siempre. Si una
+  el framework escucha siempre en el mismo. **Un móvil FÍSICO también tiene el suyo, por su serie**
+  (IXCODE-32, `asignarPuertosDeFisicos`, `settings.json#dispositivos.fisicos`, sembrado tras los AVD y
+  releyendo): iba al de siempre, que es el del primer AVD, y la sesión del móvil acababa hablando con
+  el emulador sin error. Sin sembrar, el primero libre (`puertoDeFisico`), el mismo que la siembra le
+  daría. **Y antes de usar el túnel se comprueba DE QUIÉN es** (`lib/dispositivo.mjs#asegurarTunel`,
+  `adb forward --list`): comprobar la serie no basta, porque la tabla de forwards es de toda la
+  máquina. Si es de otro aparato, el script sale con 2 y dice cuál, sin quitárselo; si no es de nadie,
+  `xone-hotswap` lo vuelve a poner. Ejecutar y la recarga al guardar reponen el forward sin mirarlo
+  (límite declarado, con los demás en `docs/DECISIONES.md`). Si una
   serie `emulator-*` no resuelve su AVD, los scripts caen al de siempre y lo DICEN por stderr. A
   `xone-hotswap` se le pasa el MISMO `--serie` que a desplegar/reiniciar. Un `adb forward` del agente
   se RECHAZA (`motivoDeComandoRechazado`): un túnel a mano le quita el puerto al aparato de otra

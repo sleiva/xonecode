@@ -28,6 +28,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Aviso } from "../../core/config.js";
 import { MODO_POR_OMISION, type ModoDeEscritura } from "../../core/modoDeEscritura.js";
+import type { DispositivoDeLaSesion } from "../../core/dispositivoElegido.js";
 import {
   AjustesDeDispositivos,
   Entorno,
@@ -170,10 +171,15 @@ export function guardarDispositivos(casa: string | undefined, ajustes: AjustesDe
         : typeof v === "boolean",
     ),
   );
-  const enDisco = (crudo as { dispositivos?: { avds?: unknown } }).dispositivos?.avds;
-  // Los ajustes por AVD NO los manda la ventana de destinos: se guardan aparte
-  // (`guardarAjusteDeAvd`). Escribir el objeto entero sin ellos los borraría.
-  const conAvds = enDisco !== undefined ? { ...limpio, avds: enDisco } : limpio;
+  const enDisco = (crudo as { dispositivos?: { avds?: unknown; fisicos?: unknown } }).dispositivos;
+  // Los ajustes por AVD y los puertos de los físicos NO los manda la ventana de destinos: se
+  // guardan aparte (`guardarAjusteDeAvd`, `guardarPuertosDeFisicos`). Escribir el objeto entero
+  // sin ellos los borraría.
+  const conAvds = {
+    ...limpio,
+    ...(enDisco?.avds === undefined ? {} : { avds: enDisco.avds }),
+    ...(enDisco?.fisicos === undefined ? {} : { fisicos: enDisco.fisicos }),
+  };
   const fusionado =
     Object.keys(conAvds).length === 0
       ? Object.fromEntries(Object.entries(crudo).filter(([k]) => k !== "dispositivos"))
@@ -244,6 +250,26 @@ export function guardarPuertosAsignados(casa: string | undefined, asignados: Rec
   for (const [avd, puerto] of Object.entries(asignados)) {
     if (enDisco[avd]?.puerto === undefined) guardarAjusteDeAvd(casa, avd, { puerto });
   }
+  return { ruta };
+}
+
+/**
+ * La siembra de puertos de los móviles físicos (IXCODE-32, `core/puertosDeAvd.ts`): solo AÑADE,
+ * el de una serie que ya tiene uno no se mueve.
+ */
+export function guardarPuertosDeFisicos(casa: string | undefined, asignados: Record<string, number>): { ruta: string } {
+  const ruta = rutaSettings(casa ?? homedir());
+  const crudo = leerCrudoOAbortar(ruta);
+  const dispositivos = { ...((crudo as { dispositivos?: Record<string, unknown> }).dispositivos ?? {}) };
+  const fisicos = { ...((dispositivos.fisicos as Record<string, { puerto?: unknown }> | undefined) ?? {}) };
+  let cambia = false;
+  for (const [serie, puerto] of Object.entries(asignados)) {
+    if (Object.hasOwn(fisicos, serie) && fisicos[serie]?.puerto !== undefined) continue;
+    fisicos[serie] = { puerto };
+    cambia = true;
+  }
+  if (!cambia) return { ruta };
+  escribirAtomico(ruta, JSON.stringify({ ...crudo, dispositivos: { ...dispositivos, fisicos } }, null, 2) + "\n");
   return { ruta };
 }
 
@@ -350,6 +376,22 @@ export function modeloDeOpencodeGuardado(casa?: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Guarda el aparato con que nacen las sesiones nuevas (IXCODE-51), sin tocar nada más del fichero.
+ * `undefined` BORRA la clave: «ninguno» es la omisión.
+ */
+export function guardarDispositivoPorDefecto(casa: string | undefined, dispositivo: DispositivoDeLaSesion | undefined): { ruta: string } {
+  const ruta = rutaSettings(casa ?? homedir());
+  const crudo = leerCrudoOAbortar(ruta);
+  const sin = Object.fromEntries(Object.entries(crudo).filter(([k]) => k !== "dispositivoPorDefecto"));
+  const fusionado =
+    dispositivo === undefined
+      ? sin
+      : { ...sin, dispositivoPorDefecto: { id: dispositivo.id, nombre: dispositivo.nombre, plataforma: dispositivo.plataforma, clase: dispositivo.clase } };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta };
 }
 
 /** Guarda solo la base del workspace, sin tocar la lista de entornos. */

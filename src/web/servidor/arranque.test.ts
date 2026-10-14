@@ -22,6 +22,7 @@ import { MS_DE_PREPARACION,
   ajusteDeWorkspaceCableado,
   ajusteDeDepuracionCableado,
   ajusteDeModoPorDefectoCableado,
+  ajusteDeDispositivoPorDefectoCableado,
   emuladoresCableados,
   recargaCableada,
   ficherosCableados,
@@ -60,7 +61,7 @@ import { strToU8, unzipSync, zipSync } from "fflate";
 import { rutaGlobalDeSkills } from "../../agent/grafo/skills.js";
 import { crearConsolaWeb, type ConsolaWeb, type OpcionesDeConsolaWeb } from "./consolaWeb.js";
 import { PAPELES } from "../../core/modelos.js";
-import { anotarActo, crearSesion, listarSesiones } from "./sesiones.js";
+import { anotarActo, crearSesion, listarSesiones, type DispositivoElegido } from "./sesiones.js";
 import { COMANDOS } from "../../cli/consola.js";
 import { CatalogoModelosEnMemoria, GestorDeTareasEnMemoria, PuenteRemotoEnMemoria, TunelEnMemoria } from "../../core/ports.js";
 import type { FichaDelGestor, GestorDeTareasPort, TransicionDelGestor, Vinculo } from "../../core/gestorDeTareas.js";
@@ -9235,6 +9236,23 @@ describe("el modo por defecto de las sesiones nuevas, cableado (IXCODE-31)", () 
   });
 });
 
+describe("el aparato por defecto de las sesiones nuevas, cableado (IXCODE-51)", () => {
+  it("sin dobles: lo que guarda Ajustes es lo que lee el vestíbulo, en el settings.json de la casa", () => {
+    const casa = mkdtempSync(join(tmpdir(), "xc-dispositivo-"));
+    try {
+      const cableado = ajusteDeDispositivoPorDefectoCableado({ casa });
+      expect(cableado.dispositivoPorDefecto()).toBeUndefined();
+      const movil = { id: "R58M123", nombre: "Galaxy", plataforma: "android" as const, clase: "fisico" as const };
+      cableado.guardarDispositivoPorDefecto(movil);
+      expect(cableado.dispositivoPorDefecto()).toEqual(movil);
+      cableado.guardarDispositivoPorDefecto(undefined);
+      expect(cableado.dispositivoPorDefecto()).toBeUndefined();
+    } finally {
+      rmSync(casa, { recursive: true, force: true });
+    }
+  });
+});
+
 /**
  * `ajusteDeConectoresCableado` es la composición de producción que llega a `montarRutas`
  * desde `arrancarConsolaWeb`. Lo que se comprueba aquí es la COSTURA, no la regla —esa ya la
@@ -9695,8 +9713,9 @@ describe("el recorrido por el cable — el veredicto, la intención y las fases"
     await esperarA(() => dichos(m.cliente, "lanzamiento").at(-1)?.estado === "ok");
 
     // Al lanzador le llega la MEDIDA, no una preferencia del cliente: el aparato medido, la
-    // raíz del proyecto abierto y el nombre que dice su `app.ini`.
-    expect(pedido).toEqual({ dispositivo: PIXEL, raiz: m.raiz, app: "AppDemo" });
+    // raíz del proyecto abierto y el nombre que dice su `app.ini`. Y el puerto del físico, que sin
+    // nada guardado es el primero libre (IXCODE-32).
+    expect(pedido).toEqual({ dispositivo: PIXEL, raiz: m.raiz, app: "AppDemo", puerto: 8443 });
 
     const suyos = dichos(m.cliente, "lanzamiento");
     // El PRIMERO ya es `corriendo` con fase `comprobando`: el recorrido empieza ahí, así que la
@@ -9756,6 +9775,36 @@ describe("el recorrido por el cable — el veredicto, la intención y las fases"
     await enviarMensaje(m.accion, { clase: "lanzarApp" });
     await esperarA(() => dichos(m.cliente, "lanzamiento").at(-1)?.estado === "ok");
     expect(pedido).toEqual({ dispositivo: EMU, raiz: m.raiz, app: "AppDemo", puerto: 8444 });
+    await m.cerrar();
+  });
+
+  it("un móvil físico se lanza por SU puerto, no por el 8443 del primer AVD (IXCODE-32)", async () => {
+    const MOVIL = { id: "R58M123", nombre: "Galaxy", plataforma: "android" as const, clase: "fisico" as const, estado: "conectado" as const };
+    let pedido: PeticionDeLanzamiento | undefined;
+    const m = await montar({
+      xml: APP_XML,
+      conBase: true,
+      elegido: { id: MOVIL.id, nombre: MOVIL.nombre, plataforma: "android", clase: "fisico" },
+      opciones: {
+        detectarDispositivos: async () => ({
+          sistema: "mac" as const,
+          herramientas: [],
+          dispositivos: [MOVIL],
+          avds: ["pixel8"],
+          recetas: [],
+          medido: "2026-09-30T10:00:00.000Z",
+        }),
+        ajustesDeDispositivos: () => ({ avds: { pixel8: { puerto: 8443 } } }),
+        frameworkEnDispositivo: async () => ({ instalado: true }),
+        lanzarEnDispositivo: (peticion) => {
+          pedido = peticion;
+          return { cancelar: () => {}, terminado: Promise.resolve({ estado: "ok", fase: "comprobando-arranque", ms: 1 }) };
+        },
+      },
+    });
+    await enviarMensaje(m.accion, { clase: "lanzarApp" });
+    await esperarA(() => dichos(m.cliente, "lanzamiento").at(-1)?.estado === "ok");
+    expect(pedido?.puerto).toBe(8444);
     await m.cerrar();
   });
 
@@ -9943,7 +9992,7 @@ describe("el recorrido por el cable — el veredicto, la intención y las fases"
       const clases = t.cliente.recibidos.map((m) => m.clase);
       expect(clases.indexOf("ficheroGuardado")).toBeGreaterThanOrEqual(0);
       expect(clases.indexOf("ficheroGuardado")).toBeLessThan(clases.indexOf("recargaEnAparato"));
-      // El aparato es el ELEGIDO, el puerto el de fábrica (un físico no tiene AVD) y la app la de `app.ini`.
+      // El aparato es el ELEGIDO, el puerto el del físico (sin nada guardado, el primero libre) y la app la de `app.ini`.
       expect(pedidas).toEqual([{ ruta: "Inicio.xne", destino: { serie: "ABC", puerto: 8443, app: "AppDemo" } }]);
       const r = t.cliente.recibidos.find((m) => m.clase === "recargaEnAparato");
       expect(r).toMatchObject({ estado: "aplicada", tipo: "coleccion", ruta: "Inicio.xne" });
@@ -10817,6 +10866,34 @@ describe("el cable: la copia local y los fijados", () => {
     // Un modo que no existe no se guarda.
     await accion({ clase: "modoPorDefecto", modo: "a medias" });
     expect(enDisco).toBe("autonomo");
+  });
+
+  /** IXCODE-51: el aparato con que nacen las sesiones nuevas. */
+  it("el aparato por defecto viaja en la bienvenida, se elige por ID contra la MEDIDA y se quita sin id", async () => {
+    const movil = { id: "R58M123", nombre: "Galaxy", plataforma: "android", clase: "fisico", estado: "conectado" } as Dispositivo;
+    let enDisco: DispositivoElegido | undefined;
+    const { accion, cliente } = await conectado(vestibuloDePrueba(), {
+      detectarDispositivos: async () => ({ sistema: "mac" as const, herramientas: [], dispositivos: [movil], avds: [], recetas: [], medido: "2026-10-14T10:00:00.000Z" }),
+      dispositivoPorDefecto: () => enDisco,
+      guardarDispositivoPorDefecto: (d) => void (enDisco = d),
+    });
+    const ultimo = () => cliente.recibidos.filter((m) => m.clase === "dispositivoPorDefecto").at(-1);
+    // Ninguno elegido viaja SIN `dispositivo`, que no es lo mismo que no viajar.
+    expect(ultimo()).toEqual({ clase: "dispositivoPorDefecto" });
+    await asentar();
+    expect((await accion({ clase: "dispositivoPorDefecto", id: "R58M123" })).estado).toBe(204);
+    await asentar();
+    // El nombre y la clase salen de la medida, no del cliente; sin el estado en vivo.
+    expect(enDisco).toEqual({ id: "R58M123", nombre: "Galaxy", plataforma: "android", clase: "fisico" });
+    expect(ultimo()).toEqual({ clase: "dispositivoPorDefecto", dispositivo: enDisco });
+    // Un id que no está en la medida no se guarda.
+    await accion({ clase: "dispositivoPorDefecto", id: "inventado" });
+    await asentar();
+    expect(enDisco?.id).toBe("R58M123");
+    await accion({ clase: "dispositivoPorDefecto" });
+    await asentar();
+    expect(enDisco).toBeUndefined();
+    expect(ultimo()).toEqual({ clase: "dispositivoPorDefecto" });
   });
 
   it("el resumen de un proyecto CON copia trae su modo; sin copia no lo trae", async () => {
@@ -12885,6 +12962,33 @@ describe("los emuladores desde Ajustes: crear, ajustar, parar, y un puerto por A
     expect(primera!.ajustes.avds).toEqual({ alfa: { puerto: 8443 }, zeta: { puerto: 8444 } });
   });
 
+  /**
+   * IXCODE-32: un móvil físico iba al 8443 del primer AVD. Se siembra el suyo DESPUÉS de los AVD y
+   * releyendo, así que un AVD nuevo y un móvil nuevo no se llevan el mismo; un emulador o un iPhone no.
+   */
+  it("al medir, un móvil físico Android recibe un puerto que no es el de ningún AVD", async () => {
+    let ajustes: AjustesDeDispositivos = {};
+    const siembras: Record<string, number>[] = [];
+    const movil = { id: "R58M123", nombre: "Galaxy", plataforma: "android", clase: "fisico", estado: "conectado" } as Dispositivo;
+    const iphone = { id: "00008110-AA", nombre: "iPhone", plataforma: "ios", clase: "fisico", estado: "conectado" } as Dispositivo;
+    const emu = { id: "emulator-5554", nombre: "Pixel 8", plataforma: "android", clase: "emulador", estado: "arrancado", avd: "pixel8" } as Dispositivo;
+    await conectar({
+      detectarDispositivos: async () => medida(["pixel8"], [movil, iphone, emu]),
+      ajustesDeDispositivos: () => ajustes,
+      guardarPuertosAsignados: (asignados) => {
+        const avds = { ...ajustes.avds };
+        for (const [avd, puerto] of Object.entries(asignados)) avds[avd] = { ...avds[avd], puerto };
+        ajustes = { ...ajustes, avds };
+      },
+      guardarPuertosDeFisicos: (asignados) => {
+        siembras.push(asignados);
+        ajustes = { ...ajustes, fisicos: { ...ajustes.fisicos, ...Object.fromEntries(Object.entries(asignados).map(([k, p]) => [k, { puerto: p }])) } };
+      },
+    });
+    expect(siembras).toEqual([{ R58M123: 8444 }]);
+    expect(ajustes.avds).toEqual({ pixel8: { puerto: 8443 } });
+  });
+
   it("si la siembra no se puede escribir, se dice y la foto sale igual", async () => {
     const { cliente, dichos } = await conectar({
       detectarDispositivos: async () => medida(["alfa"]),
@@ -13060,6 +13164,7 @@ describe("emuladoresCableados — la composición de producción, no un doble", 
         "crearAvd",
         "guardarAjusteDeAvd",
         "guardarPuertosAsignados",
+        "guardarPuertosDeFisicos",
         "pararEmulador",
         "quitarAjustesDeAvd",
       ].sort()

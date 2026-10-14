@@ -179,9 +179,55 @@ export function ajusteDelAvd(avd, { casa = homedir(), leer = (r) => readFileSync
   }
 }
 
+/** La forma de un serial de adb. Copia de `core/puertosDeAvd.ts#FORMA_DE_SERIE`. */
+export const FORMA_DE_SERIE = /^[A-Za-z0-9._:-]{1,128}$/;
+
+const puertoValido = (p) => Number.isInteger(p) && p >= 1024 && p <= 65535;
+
+/** `dispositivos` de `~/.xonecode/settings.json`, o `{}`. Se lee en CADA ejecución, como el resto. */
+function ajustesDeDispositivos({ casa = homedir(), leer = (r) => readFileSync(r, "utf8") } = {}) {
+  try {
+    const d = JSON.parse(leer(join(casa, ".xonecode", "settings.json")))?.dispositivos;
+    return typeof d === "object" && d !== null ? d : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Los puertos ya guardados, de AVD y de físicos, con el MISMO filtro que `core/settings.ts`. */
+function puertosGuardados(d) {
+  const usados = new Set();
+  const de = (tabla, forma) => {
+    if (typeof tabla !== "object" || tabla === null) return;
+    for (const [clave, valor] of Object.entries(tabla)) {
+      if (forma.test(clave) && typeof valor === "object" && valor !== null && puertoValido(valor.puerto)) usados.add(valor.puerto);
+    }
+  };
+  de(d.avds, FORMA_DE_NOMBRE_DE_AVD);
+  de(d.fisicos, FORMA_DE_SERIE);
+  return usados;
+}
+
+/**
+ * El puerto de un móvil FÍSICO (IXCODE-32): el guardado para su serie o, sin él, el primero libre
+ * desde el 8443. Antes era siempre el 8443, el mismo que el primer AVD, y el último `adb forward`
+ * se quedaba el puerto: la sesión del móvil hablaba con el emulador sin error. Copia de
+ * `core/puertosDeAvd.ts#puertoDeFisico` (un test compara las dos).
+ */
+export function puertoDeFisico(serie, deps = {}) {
+  const d = ajustesDeDispositivos(deps);
+  const guardado = FORMA_DE_SERIE.test(serie ?? "") ? d.fisicos?.[serie]?.puerto : undefined;
+  if (puertoValido(guardado)) return guardado;
+  const usados = puertosGuardados(d);
+  let candidato = PUERTO_DEL_HOTSWAP;
+  while (usados.has(candidato)) candidato++;
+  return candidato;
+}
+
 /**
  * El puerto LOCAL del túnel. De más explícito a menos: `--puerto`, el guardado del AVD de esta
- * serie, 8443. Misma regla que `core/puertosDeAvd.ts#puertoDeAvd` (un test compara las dos).
+ * serie (o el del físico), 8443. Misma regla que `core/puertosDeAvd.ts#puertoDeDispositivo`
+ * (un test compara las dos).
  */
 export function puertoAndroid(explicito, serie, deps = {}) {
   return puertoConMotivo(explicito, serie, deps).puerto;
@@ -196,6 +242,7 @@ export function puertoAndroid(explicito, serie, deps = {}) {
 export function puertoConMotivo(explicito, serie, deps = {}) {
   const n = Number(explicito);
   if (explicito !== undefined && Number.isInteger(n) && n >= 1024 && n <= 65535) return { puerto: n };
+  if (serie !== undefined && !serie.startsWith("emulator-")) return { puerto: puertoDeFisico(serie, deps) };
   const avd = avdDeLaSerie(serie, deps);
   const guardado = ajusteDelAvd(avd, deps).puerto;
   if (guardado !== undefined) return { puerto: guardado };
@@ -203,6 +250,64 @@ export function puertoConMotivo(explicito, serie, deps = {}) {
     return { puerto: PUERTO_DEL_HOTSWAP, porque: `no pude saber qué AVD es ${serie}; uso el ${PUERTO_DEL_HOTSWAP}, que puede ser el de otro emulador` };
   }
   return { puerto: PUERTO_DEL_HOTSWAP };
+}
+
+/** De la salida de `adb forward --list`, la serie que tiene el puerto local `tcp:<puerto>`, o `undefined`. Pura. */
+export function duenoDelPuerto(salidaDeForwardList, puerto) {
+  for (const linea of String(salidaDeForwardList).split(/\r?\n/)) {
+    const [serie, local] = linea.trim().split(/\s+/);
+    if (local === `tcp:${puerto}` && serie) return serie;
+  }
+  return undefined;
+}
+
+/**
+ * ¿De quién es AHORA el túnel de este puerto? (IXCODE-32). La tabla de `adb forward` es de toda la
+ * máquina: si otra sesión, una tarea o una consola le hizo un forward a OTRO aparato en el mismo
+ * puerto, los comandos de ésta irían a ese aparato sin error y el script seguiría diciendo
+ * «dispositivo: el de la sesión». Comprobar la SERIE no basta; hay que comprobar el puerto.
+ *
+ * `propio` (es suyo), `libre` (nadie lo tiene), `ajeno` (con `dueno`) o `desconocido` (adb no
+ * contestó: no se puede afirmar nada y quien llama sigue como antes).
+ */
+export function estadoDelTunel(serie, puerto, { entorno = process.env, ejecutar = ejecutarAdb } = {}) {
+  let salida;
+  try {
+    salida = ejecutar(rutaDeAdb(entorno), ["forward", "--list"]);
+  } catch {
+    return { estado: "desconocido" };
+  }
+  const dueno = duenoDelPuerto(salida, puerto);
+  if (dueno === undefined) return { estado: "libre" };
+  return dueno === serie ? { estado: "propio" } : { estado: "ajeno", dueno };
+}
+
+/**
+ * Comprueba el túnel antes de usarlo, y lo pone si NADIE lo tiene: sale con 2 si es de otro
+ * aparato, y con adb mudo no afirma nada. Devuelve el estado que encontró. `poner` es falso para
+ * quien va a poner el túnel él mismo justo después (desplegar, reiniciar).
+ */
+export function asegurarTunel(serie, puerto, { entorno = process.env, ejecutar = ejecutarAdb, negar = negarYSalir, poner = true } = {}) {
+  const t = estadoDelTunel(serie, puerto, { entorno, ejecutar });
+  if (t.estado === "ajeno") return negar(textoDeTunelAjeno(serie, puerto, t.dueno));
+  if (t.estado === "libre" && poner) {
+    try {
+      ejecutar(rutaDeAdb(entorno), ["-s", serie, "forward", `tcp:${puerto}`, `tcp:${PUERTO_DEL_HOTSWAP}`]);
+      process.stderr.write(`túnel: no estaba puesto; ahora 127.0.0.1:${puerto} → ${serie}\n`);
+    } catch {
+      // Sin túnel la conexión fallará y lo dirá; aquí no hay nada más que afirmar.
+    }
+  }
+  return t;
+}
+
+/** Lo que se dice cuando el puerto lo tiene otro aparato: cuál, y que no se le quita. */
+export function textoDeTunelAjeno(serie, puerto, dueno) {
+  return (
+    `El túnel 127.0.0.1:${puerto} lleva a ${dueno}, no a ${serie}: otra sesión, una tarea o un adb forward a mano ` +
+    "se lo quedó. No se le quita, porque dejaría al otro hablando con este aparato. " +
+    "Comprueba los puertos en Ajustes → Dispositivos o, si ese aparato ya no se usa, desconéctalo."
+  );
 }
 
 /**

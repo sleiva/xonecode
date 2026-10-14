@@ -13,6 +13,7 @@ import {
 
   guardarModeloDeOpencode,
   guardarModoPorDefecto,
+  guardarDispositivoPorDefecto,
   guardarAjustesDeRemoto,
   modeloDeOpencodeGuardado,
 
@@ -23,6 +24,7 @@ import {
   guardarDispositivos,
 
   guardarPuertosAsignados,
+  guardarPuertosDeFisicos,
 
   guardarEntorno,
 
@@ -171,6 +173,19 @@ describe("settingsEnDisco", () => {
     expect(cargarSettings(c).settings.dispositivos?.avds).toEqual({ a: { puerto: 9000 }, b: { puerto: 8444 } });
   });
 
+  it("guardarPuertosDeFisicos solo añade, y guardarDispositivos no se los lleva (IXCODE-32)", () => {
+    const c = casa();
+    guardarPuertosDeFisicos(c, { R58M123: 8444 });
+    guardarPuertosDeFisicos(c, { R58M123: 9999, ZY22: 8445 });
+    guardarAjusteDeAvd(c, "pixel8", { puerto: 8443 });
+    guardarDispositivos(c, { android: true });
+    expect(cargarSettings(c).settings.dispositivos).toEqual({
+      android: true,
+      avds: { pixel8: { puerto: 8443 } },
+      fisicos: { R58M123: { puerto: 8444 }, ZY22: { puerto: 8445 } },
+    });
+  });
+
   it("guardarAjusteDeAvd no escribe sobre un settings.json roto", () => {
     const c = casa();
     mkdirSync(join(c, ".xonecode"), { recursive: true });
@@ -268,6 +283,17 @@ describe("settingsEnDisco", () => {
     const { settings } = cargarSettings(c);
     expect(settings.modoDeEscritura).toBe("autonomo");
     expect(settings.entornos.map((e) => e.id)).toEqual(["a"]);
+  });
+
+  it("guardarDispositivoPorDefecto lo escribe y, sin aparato, BORRA la clave (IXCODE-51)", () => {
+    const c = casa();
+    guardarEntorno(c, { id: "a", nombre: "A", url: "https://a/mcp" });
+    const movil = { id: "R58M123", nombre: "Galaxy", plataforma: "android" as const, clase: "fisico" as const };
+    guardarDispositivoPorDefecto(c, movil);
+    expect(cargarSettings(c).settings.dispositivoPorDefecto).toEqual(movil);
+    guardarDispositivoPorDefecto(c, undefined);
+    expect(readFileSync(rutaSettings(c), "utf8")).not.toContain("dispositivoPorDefecto");
+    expect(cargarSettings(c).settings.entornos.map((e) => e.id)).toEqual(["a"]);
   });
 
   it("guardarAjustesDeRemoto guarda la vía y el dominio sin tocar el interruptor ni el servidor", () => {

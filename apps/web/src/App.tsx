@@ -2356,6 +2356,8 @@ export function App({
       alCambiarDepuracion={(activa) => void enviar({ clase: "depuracion", activa })}
       {...(estado.modoPorDefecto === undefined ? {} : { modoPorDefecto: estado.modoPorDefecto })}
       alCambiarModoPorDefecto={(modo) => void enviar({ clase: "modoPorDefecto", modo })}
+      {...(estado.dispositivoPorDefecto === undefined ? {} : { dispositivoPorDefecto: estado.dispositivoPorDefecto })}
+      alCambiarDispositivoPorDefecto={(id) => void enviar({ clase: "dispositivoPorDefecto", ...(id === undefined ? {} : { id }) })}
       // El selector de carpeta, solo si el servidor dice que esta máquina tiene uno.
       {...(estado.puedeElegirCarpeta === true ? { alElegirCarpeta: () => void enviar({ clase: "elegirCarpeta" }) } : {})}
       {...(estado.carpetaElegida === undefined ? {} : { carpetaElegida: estado.carpetaElegida })}

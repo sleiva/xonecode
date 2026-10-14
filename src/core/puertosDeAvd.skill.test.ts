@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { argsDeArranque, puertoDeAvd } from "./puertosDeAvd.js";
+import { argsDeArranque, puertoDeAvd, puertoDeFisico } from "./puertosDeAvd.js";
 import { validarSettings } from "./settings.js";
 
 type Deps = { casa?: string; leer?: (ruta: string) => string; ejecutar?: (bin: string, args: string[]) => string };
@@ -13,6 +13,14 @@ type Lib = {
   BANDERAS_SIN_VENTANA: string[];
   retirarOpciones: (a: string[], n: string[]) => { opciones: Record<string, string | undefined>; resto: string[] };
   puertoAndroid: (explicito: string | undefined, serie: string | undefined, deps?: Deps) => number;
+  duenoDelPuerto: (salida: string, puerto: number) => string | undefined;
+  estadoDelTunel: (serie: string, puerto: number, deps?: { entorno?: Record<string, string>; ejecutar?: Deps["ejecutar"] }) => { estado: string; dueno?: string };
+  textoDeTunelAjeno: (serie: string, puerto: number, dueno: string) => string;
+  asegurarTunel: (
+    serie: string,
+    puerto: number,
+    deps?: { entorno?: Record<string, string>; ejecutar?: Deps["ejecutar"]; negar?: (t: string) => never; poner?: boolean },
+  ) => { estado: string; dueno?: string };
 };
 
 // La skill no puede importar TypeScript: la regla vive dos veces, y esto es lo que impide que diverjan.
@@ -35,7 +43,9 @@ describe("puerto del aparato, visto desde la skill", () => {
     ["emulator-5554", undefined, 8443],
     ["emulator-5556", undefined, 8444],
     ["emulator-5556", "9001", 9001],
-    ["R58M123", undefined, 8443],
+    // Un físico no comparte el 8443 del primer AVD (IXCODE-32): el primero libre.
+    ["R58M123", undefined, 8445],
+    ["R58M123", "9001", 9001],
     [undefined, undefined, 8443],
   ])("serie %s, --puerto %s → %s", (serie, explicito, esperado) => {
     expect(lib.puertoAndroid(explicito, serie, { casa: "/casa", leer, ejecutar })).toBe(esperado);
@@ -46,6 +56,20 @@ describe("puerto del aparato, visto desde la skill", () => {
       // La consola del emulador contesta con el nombre del AVD que se está probando.
       const ej = () => `${avd}\nOK\n`;
       expect(lib.puertoAndroid(undefined, "emulator-5554", { casa: "/casa", leer, ejecutar: ej })).toBe(puertoDeAvd(settings.dispositivos, avd));
+    }
+  });
+
+  it("un físico: el guardado, o el primero libre; lo mismo que core tras validar", () => {
+    const casos = [
+      settings,
+      { dispositivos: { ...settings.dispositivos, fisicos: { R58M123: { puerto: 9100 } } } },
+      { dispositivos: { ...settings.dispositivos, fisicos: { ZY22: { puerto: 8445 }, R58M123: { puerto: "9100" } } } },
+      { dispositivos: { avds: { "-x": { puerto: 8443 } }, fisicos: { "a b": { puerto: 8444 } } } },
+      {},
+    ];
+    for (const crudo of casos) {
+      const enCore = puertoDeFisico(validarSettings({ entornos: [], ...crudo }).settings.dispositivos, "R58M123");
+      expect(lib.puertoAndroid(undefined, "R58M123", { casa: "/casa", leer: () => JSON.stringify(crudo) }), JSON.stringify(crudo)).toBe(enCore);
     }
   });
 
@@ -66,6 +90,49 @@ describe("puerto del aparato, visto desde la skill", () => {
     expect(lib.puertoAndroid(undefined, "emulator-5554", { casa: "/casa", leer: () => JSON.stringify(crudo), ejecutar: () => "-x\nOK\n" })).toBe(8443);
   });
 
+  describe("el dueño del túnel (IXCODE-32)", () => {
+    const lista = "emulator-5554 tcp:8443 tcp:8443\nR58M123 tcp:8445 tcp:8443\n";
+    it("duenoDelPuerto lee adb forward --list", () => {
+      expect(lib.duenoDelPuerto(lista, 8443)).toBe("emulator-5554");
+      expect(lib.duenoDelPuerto(lista, 8445)).toBe("R58M123");
+      expect(lib.duenoDelPuerto(lista, 8444)).toBeUndefined();
+      // tcp:84430 no es tcp:8443.
+      expect(lib.duenoDelPuerto("X tcp:84430 tcp:8443", 8443)).toBeUndefined();
+    });
+    it("propio, libre, ajeno o desconocido", () => {
+      const ejecutar = () => lista;
+      expect(lib.estadoDelTunel("R58M123", 8445, { entorno: {}, ejecutar })).toEqual({ estado: "propio" });
+      expect(lib.estadoDelTunel("R58M123", 8444, { entorno: {}, ejecutar })).toEqual({ estado: "libre" });
+      expect(lib.estadoDelTunel("R58M123", 8443, { entorno: {}, ejecutar })).toEqual({ estado: "ajeno", dueno: "emulator-5554" });
+      expect(lib.estadoDelTunel("R58M123", 8443, { entorno: {}, ejecutar: () => { throw new Error("adb caído"); } })).toEqual({ estado: "desconocido" });
+    });
+    it("asegurarTunel: lo ajeno se niega, lo libre se pone (salvo con poner: false), lo propio no se toca", () => {
+      const llamadas: string[][] = [];
+      const ejecutar = (_bin: string, args: string[]) => {
+        llamadas.push(args);
+        return args[0] === "forward" ? lista : "";
+      };
+      const negar = (t: string): never => { throw new Error(t); };
+      expect(() => lib.asegurarTunel("R58M123", 8443, { entorno: {}, ejecutar, negar })).toThrow(/emulator-5554/);
+      llamadas.length = 0;
+      lib.asegurarTunel("R58M123", 8445, { entorno: {}, ejecutar, negar });
+      expect(llamadas).toEqual([["forward", "--list"]]);
+      llamadas.length = 0;
+      lib.asegurarTunel("R58M123", 8444, { entorno: {}, ejecutar, negar, poner: false });
+      expect(llamadas).toEqual([["forward", "--list"]]);
+      llamadas.length = 0;
+      lib.asegurarTunel("R58M123", 8444, { entorno: {}, ejecutar, negar });
+      expect(llamadas).toEqual([["forward", "--list"], ["-s", "R58M123", "forward", "tcp:8444", "tcp:8443"]]);
+    });
+
+    it("lo ajeno se dice con los dos aparatos y el puerto", () => {
+      const t = lib.textoDeTunelAjeno("R58M123", 8443, "emulator-5554");
+      expect(t).toContain("R58M123");
+      expect(t).toContain("emulator-5554");
+      expect(t).toContain("8443");
+    });
+  });
+
   it("las banderas de «sin ventana» son las de core", () => {
     expect(lib.BANDERAS_SIN_VENTANA).toEqual(argsDeArranque("x", { sinVentana: true }).slice(2));
   });
@@ -73,7 +140,7 @@ describe("puerto del aparato, visto desde la skill", () => {
   it("la vuelta a 8443 por no saber el AVD se dice; un físico o un AVD sin puerto, no", () => {
     const cae = () => { throw new Error("adb caído"); };
     expect(lib.puertoConMotivo(undefined, "emulator-5556", { casa: "/casa", leer, ejecutar: cae })).toMatchObject({ puerto: 8443, porque: expect.stringContaining("emulator-5556") });
-    expect(lib.puertoConMotivo(undefined, "R58M123", { casa: "/casa", leer, ejecutar: cae }).porque).toBeUndefined();
+    expect(lib.puertoConMotivo(undefined, "R58M123", { casa: "/casa", leer, ejecutar: cae })).toEqual({ puerto: 8445 });
     expect(lib.puertoConMotivo(undefined, "emulator-5556", { casa: "/casa", leer, ejecutar }).porque).toBeUndefined();
     expect(lib.puertoConMotivo("9001", "emulator-5556", { casa: "/casa", leer, ejecutar: cae })).toEqual({ puerto: 9001 });
   });

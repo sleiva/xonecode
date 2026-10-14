@@ -162,6 +162,22 @@ describe("los destinos de prueba en settings.json", () => {
     // `clon` sin `copiaDe` no dice de quién es clon: no se guarda nada.
     expect(settings.dispositivos?.avds).toEqual({ a: { copiaDe: "pixel8", clon: true }, b: { copiaDe: "pixel8" } });
   });
+
+  it("los físicos (IXCODE-32): por serie con forma de serial, solo el puerto entero en rango", () => {
+    const { settings } = validarSettings({
+      entornos: [],
+      dispositivos: {
+        fisicos: {
+          R58M123: { puerto: 8444 },
+          "192.168.1.5:5555": { puerto: 8445 },
+          "a b": { puerto: 8446 },
+          ZY22: { puerto: "8447" },
+          K1: { puerto: 80 },
+        },
+      },
+    });
+    expect(settings.dispositivos?.fisicos).toEqual({ R58M123: { puerto: 8444 }, "192.168.1.5:5555": { puerto: 8445 } });
+  });
 });
 
 describe("el tope de concurrencia de tareas en settings.json", () => {
@@ -432,5 +448,18 @@ describe("modoDeEscritura en settings.json (IXCODE-31)", () => {
     expect(validarSettings({ entornos: [] }).settings.modoDeEscritura).toBeUndefined();
     expect(validarSettings({ entornos: [], modoDeEscritura: "autónomo" }).settings.modoDeEscritura).toBeUndefined();
     expect(validarSettings({ entornos: [], modoDeEscritura: true }).settings.modoDeEscritura).toBeUndefined();
+  });
+});
+
+describe("dispositivoPorDefecto en settings.json (IXCODE-51)", () => {
+  it("lee la foto entera, con la misma regla que el fichero de la sesión", () => {
+    const d = { id: "R58M123", nombre: "Galaxy", plataforma: "android", clase: "fisico" };
+    expect(validarSettings({ entornos: [], dispositivoPorDefecto: d }).settings.dispositivoPorDefecto).toEqual(d);
+  });
+
+  it("sin id o sin plataforma conocida es «ninguno»", () => {
+    for (const malo of [{ nombre: "x", plataforma: "android" }, { id: "", plataforma: "android" }, { id: "x", plataforma: "web" }, "R58M123", null]) {
+      expect(validarSettings({ entornos: [], dispositivoPorDefecto: malo }).settings.dispositivoPorDefecto).toBeUndefined();
+    }
   });
 });

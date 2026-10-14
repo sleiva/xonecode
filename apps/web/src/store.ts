@@ -58,7 +58,7 @@ import type {
   BaseDelFichero,
   EstadoDeMotorLocal,
 } from "./tipos.js";
-import { FORMA_DE_NOMBRE_DE_AVD } from "./reglasDeAvd.js";
+import { FORMA_DE_NOMBRE_DE_AVD, FORMA_DE_SERIE } from "./reglasDeAvd.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, FASES_DEL_LANZAMIENTO, ESTADOS_DEL_LANZAMIENTO, ESFUERZOS, esAutenticacionDeConector } from "./tipos.js";
 
 /** En qué va una mudanza del workspace. Sin rutas: el proyecto va por nombre y entorno. */
@@ -202,6 +202,9 @@ export interface EstadoDelCliente {
   /** El modo con que nacen las sesiones nuevas (IXCODE-31, Ajustes > General). Ausente = el
    *  servidor no lo dice, y el control no se pinta. */
   modoPorDefecto?: ModoDeEscritura;
+  /** El aparato con que nacen las sesiones nuevas (IXCODE-51). Ausente = el servidor no lo dice y
+   *  el control no se pinta; `{}` = ninguno elegido. */
+  dispositivoPorDefecto?: { elegido?: DispositivoElegido };
   /**
    * La carpeta que acaba de elegir el diálogo del sistema, para que el campo la recoja.
    *
@@ -567,6 +570,18 @@ export function avdsDelCable(candidato: unknown): AjustesDeDispositivos["avds"] 
   return Object.keys(salida).length === 0 ? undefined : salida;
 }
 
+/** Los puertos de los móviles físicos, con la regla de `core/settings.ts#validarFisicos`. */
+export function fisicosDelCable(candidato: unknown): AjustesDeDispositivos["fisicos"] {
+  if (typeof candidato !== "object" || candidato === null) return undefined;
+  const salida: NonNullable<AjustesDeDispositivos["fisicos"]> = {};
+  for (const [serie, valor] of Object.entries(candidato as Record<string, unknown>)) {
+    if (!FORMA_DE_SERIE.test(serie) || typeof valor !== "object" || valor === null) continue;
+    const p = (valor as Record<string, unknown>)["puerto"];
+    if (typeof p === "number" && Number.isInteger(p) && p >= 1024 && p <= 65535) salida[serie] = { puerto: p };
+  }
+  return Object.keys(salida).length === 0 ? undefined : salida;
+}
+
 function ajustesDelCable(candidato: unknown): AjustesDeDispositivos {
   if (typeof candidato !== "object" || candidato === null) return {};
   const c = candidato as Record<string, unknown>;
@@ -578,6 +593,8 @@ function ajustesDelCable(candidato: unknown): AjustesDeDispositivos {
   // forma, puerto entero en rango, `sinVentana` solo con `true`. Lo demás se tira.
   const avds = avdsDelCable(c["avds"]);
   if (avds !== undefined) salida.avds = avds;
+  const fisicos = fisicosDelCable(c["fisicos"]);
+  if (fisicos !== undefined) salida.fisicos = fisicos;
   return salida;
 }
 
@@ -1618,6 +1635,12 @@ export function crearStoreDelCliente(): {
           const m = mensaje as Record<string, unknown>;
           if (m["modo"] !== "supervisado" && m["modo"] !== "autonomo") return;
           mutar({ modoPorDefecto: m["modo"] });
+          return;
+        }
+        case "dispositivoPorDefecto": {
+          // La foto entera o ninguna: una a medias no se pinta como elegida.
+          const d = (mensaje as Record<string, unknown>)["dispositivo"];
+          mutar({ dispositivoPorDefecto: esDispositivoElegido(d) ? { elegido: d } : {} });
           return;
         }
         case "mudanzaDeWorkspace": {

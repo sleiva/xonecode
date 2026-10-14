@@ -49,7 +49,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, join, relative, sep } from "node:path";
 import { deflateRawSync } from "node:zlib";
-import { serieAndroid, rutaDeAdb, NODE, dormir, PUERTO_DEL_HOTSWAP, puertoConMotivo } from "../lib/dispositivo.mjs";
+import { serieAndroid, rutaDeAdb, NODE, dormir, PUERTO_DEL_HOTSWAP, puertoConMotivo, asegurarTunel } from "../lib/dispositivo.mjs";
 
 const PAQUETE = "com.xone.android.framework";
 const ACTIVIDAD = `${PAQUETE}/com.xone.android.hotswap.activities.SetupActivity`;
@@ -353,6 +353,8 @@ function exigirAparato() {
 
   exigirAparato();
   console.log(`1/5 túnel: 127.0.0.1:${PUERTO} → ${PUERTO_DEL_HOTSWAP} del aparato`);
+  // Antes de ponerlo, que no sea de OTRO aparato (IXCODE-32): quitárselo dejaría al otro hablando con éste.
+  if (serie !== undefined) asegurarTunel(serie, PUERTO, { poner: false });
   adb("forward", `tcp:${PUERTO}`, `tcp:${PUERTO_DEL_HOTSWAP}`);
 
   console.log("2/5 empaquetando el proyecto (sin .xonecode ni .git)");

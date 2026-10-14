@@ -694,6 +694,26 @@ describe("vestíbulo", () => {
       await v.cerrar();
     });
 
+    /** IXCODE-51: con qué aparato NACE una sesión nueva. Sin él, ninguno, y los scripts van al emulador. */
+    const MOVIL = { id: "R58M123", nombre: "Galaxy", plataforma: "android" as const, clase: "fisico" as const };
+    it("una sesión NUEVA nace con el aparato por defecto, y se lee en cada apertura", async () => {
+      let porDefecto: typeof MOVIL | undefined = MOVIL;
+      const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", dispositivoPorDefecto: () => porDefecto });
+      expect((await v.abrirProyecto({ raiz: "/w/a" })).dispositivo).toEqual(MOVIL);
+      porDefecto = undefined;
+      expect((await v.abrirProyecto({ raiz: "/w/b" })).dispositivo).toBeUndefined();
+      await v.cerrar();
+    });
+
+    it("una REABIERTA conserva su aparato (o su falta de aparato): el de por defecto no la toca", async () => {
+      const s = sesionesEnMemoria();
+      const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto, dispositivoPorDefecto: () => MOVIL });
+      const id = s.puerto.crear("/w/a");
+      const abierta = await v.abrirProyecto({ raiz: "/w/a", sesion: id });
+      expect(abierta.dispositivo).toBeUndefined();
+      await v.cerrar();
+    });
+
     it("una sesión sin esfuerzo guardado abre SIN esfuerzo, no con uno inventado", async () => {
       const s = sesionesEnMemoria();
       const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
@@ -1777,6 +1797,22 @@ describe("abrirParaTarea — la segunda puerta", () => {
     const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", baseDeWorkspace: () => base, modoPorDefecto: () => ({ global: "autonomo" }) });
     const deTarea = await v.abrirParaTarea(proyectoEnDisco(base, "A"));
     expect(deTarea.estadoDeSesion.modo).toBeUndefined();
+    await deTarea.cerrar();
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("una consola de TAREA nueva SÍ nace con el aparato por defecto (IXCODE-51): sin él, los scripts iban al emulador", async () => {
+    const base = baseTemporal();
+    const movil = { id: "R58M123", nombre: "Galaxy", plataforma: "android" as const, clase: "fisico" as const };
+    const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", baseDeWorkspace: () => base, dispositivoPorDefecto: () => movil });
+    const raiz = proyectoEnDisco(base, "A");
+    const deTarea = await v.abrirParaTarea(raiz);
+    expect(deTarea.dispositivo).toEqual(movil);
+    // Lo que leen los scripts es el FICHERO, en la ruta que la shell recibe por su hilo
+    // (`carpetaDeArtefactosDeSesion(raiz, hilo)`): el getter solo no prueba que llegue.
+    const fichero = ficheroDeDispositivoDeSesion(raiz, deTarea.idDeHilo);
+    expect(JSON.parse(readFileSync(fichero, "utf8"))).toEqual(movil);
     await deTarea.cerrar();
     await v.cerrar();
     rmSync(base, { recursive: true, force: true });

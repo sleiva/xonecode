@@ -8,9 +8,9 @@ import { describe, expect, it } from "vitest";
 import { motivoDeNombreDeAvdInaceptable as nombreCore, motivoDePuertoInaceptable as puertoCore } from "../../../src/core/puertosDeAvd.js";
 import { validarSettings } from "../../../src/core/settings.js";
 import { motivoDeNombreDeAvdInaceptable as nombreCliente, motivoDePuertoInaceptable as puertoCliente } from "./reglasDeAvd.js";
-import { avdsDelCable } from "./store.js";
+import { avdsDelCable, fisicosDelCable } from "./store.js";
 
-const ajustes = { avds: { pixel8: { puerto: 8443 }, otro: { puerto: 8444 } } };
+const ajustes = { avds: { pixel8: { puerto: 8443 }, otro: { puerto: 8444 } }, fisicos: { R58M123: { puerto: 8445 } } };
 const existentes = ["pixel8", "otro"];
 
 describe("reglasDeAvd.ts dice lo mismo que core/puertosDeAvd.ts", () => {
@@ -26,7 +26,7 @@ describe("reglasDeAvd.ts dice lo mismo que core/puertosDeAvd.ts", () => {
     expect(nombreCliente(nombre, existentes)).toBe(nombreCore(nombre, existentes));
   });
 
-  it.each([1023, 1024, 5553, 5554, 5585, 5586, 65535, 65536, 8443.5, 8444, 8443, 9001, Number.NaN, -1])("puerto %s", (puerto) => {
+  it.each([1023, 1024, 5553, 5554, 5585, 5586, 65535, 65536, 8443.5, 8444, 8443, 8445, 9001, Number.NaN, -1])("puerto %s", (puerto) => {
     for (const avd of ["pixel8", "nuevo"]) {
       expect(puertoCliente(puerto, avd, ajustes), `${puerto} en ${avd}`).toBe(puertoCore(puerto, avd, ajustes));
     }
@@ -57,5 +57,12 @@ describe("store.ts#avdsDelCable filtra como core/settings.ts#validarAvds", () =>
     expect(avdsDelCable(entrada)).toEqual(enCore);
     expect(avdsDelCable({})).toBeUndefined();
     expect(avdsDelCable({ "-x": { puerto: 9000 } })).toBeUndefined();
+  });
+
+  it("fisicosDelCable filtra como core/settings.ts#validarFisicos (IXCODE-32)", () => {
+    const entrada = { R58M123: { puerto: 8445 }, "10.0.0.2:5555": { puerto: 8446 }, "a b": { puerto: 8447 }, Z: { puerto: "8448" }, K: { puerto: 80 }, N: null };
+    const enCore = validarSettings({ dispositivos: { fisicos: entrada } }).settings.dispositivos?.fisicos;
+    expect(fisicosDelCable(entrada)).toEqual(enCore);
+    expect(fisicosDelCable({})).toBeUndefined();
   });
 });

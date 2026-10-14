@@ -1688,6 +1688,20 @@ describe("la casilla «Depurar» de Ajustes > General", () => {
   });
 });
 
+describe("el aparato de las conversaciones nuevas (IXCODE-51)", () => {
+  it("la foto entera, o ninguno; una foto a medias es ninguno", () => {
+    const s = crearStoreDelCliente();
+    expect(s.leer().dispositivoPorDefecto).toBeUndefined();
+    const movil = { id: "R58M123", nombre: "Galaxy", plataforma: "android" as const, clase: "fisico" as const };
+    s.aplicar({ clase: "dispositivoPorDefecto", dispositivo: movil });
+    expect(s.leer().dispositivoPorDefecto).toEqual({ elegido: movil });
+    s.aplicar({ clase: "dispositivoPorDefecto" });
+    expect(s.leer().dispositivoPorDefecto).toEqual({});
+    s.aplicar({ clase: "dispositivoPorDefecto", dispositivo: { id: "x" } } as never);
+    expect(s.leer().dispositivoPorDefecto).toEqual({});
+  });
+});
+
 describe("el modo de las conversaciones nuevas de Ajustes > General (IXCODE-31)", () => {
   it("se guarda tal cual", () => {
     const s = crearStoreDelCliente();

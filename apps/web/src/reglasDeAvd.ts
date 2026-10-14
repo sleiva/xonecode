@@ -7,6 +7,8 @@
 import type { AjustesDeDispositivos } from "./tipos.js";
 
 export const FORMA_DE_NOMBRE_DE_AVD = /^[A-Za-z0-9._][A-Za-z0-9._-]*$/;
+/** La forma de un serial de adb, de `core/puertosDeAvd.ts#FORMA_DE_SERIE`. */
+export const FORMA_DE_SERIE = /^[A-Za-z0-9._:-]{1,128}$/;
 const LARGO_MAXIMO_DE_NOMBRE = 64;
 const PUERTOS_DE_EMULADOR = { desde: 5554, hasta: 5585 } as const;
 
@@ -23,6 +25,9 @@ export function motivoDePuertoInaceptable(
   }
   for (const [otro, a] of Object.entries(ajustes?.avds ?? {})) {
     if (otro !== avd && a.puerto === puerto) return `el ${puerto} ya es de ${otro}`;
+  }
+  for (const [serie, a] of Object.entries(ajustes?.fisicos ?? {})) {
+    if (a.puerto === puerto) return `el ${puerto} ya es del móvil ${serie}`;
   }
   return undefined;
 }

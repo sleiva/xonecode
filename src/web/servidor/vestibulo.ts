@@ -474,6 +474,13 @@ export interface OpcionesDelVestibulo {
    */
   modoPorDefecto?: (raiz: string) => { proyecto?: ModoDeEscritura; global?: ModoDeEscritura };
   /**
+   * El aparato con que NACE una sesión nueva, de una persona o de una TAREA (IXCODE-51,
+   * `settings.json#dispositivoPorDefecto`). Se pregunta en CADA apertura, como el modo. A
+   * diferencia del modo, sí alcanza a las tareas: no autoriza nada, y sin él sus scripts
+   * acababan en el emulador. Ausente = ninguno.
+   */
+  dispositivoPorDefecto?: () => DispositivoElegido | undefined;
+  /**
    * Lo que la consola de PROYECTO necesita y `consolaWeb` no puede saber: `/sync`, los
    * escritores de config del proyecto, el tema. Depende de la RAÍZ, que no existe hasta
    * que se abre el proyecto, así que entra como función y no como objeto.
@@ -1495,7 +1502,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
      */
     let historica = reabierta?.historica ?? false;
     if (historica && (await opciones.hayMemoriaDeHilo?.(raiz, sesion!)) === true) historica = false;
-    let dispositivo: DispositivoElegido | undefined = reabierta?.dispositivo;
+    // Una reabierta, el suyo (o ninguno); una NUEVA, el de por defecto (IXCODE-51).
+    let dispositivo: DispositivoElegido | undefined =
+      reabierta !== undefined ? reabierta.dispositivo : opciones.dispositivoPorDefecto?.();
     // El fichero que leen los scripts del `device-controller` (`core/dispositivoDeSesion.ts`)
     // queda como la pastilla DESDE QUE SE ABRE: también sin elección, que borra uno viejo.
     escribirDispositivoDeSesion(raiz, idSesion, dispositivo);

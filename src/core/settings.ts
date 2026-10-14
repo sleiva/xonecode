@@ -11,8 +11,9 @@
  */
 import { posix, win32 } from "node:path";
 import { type Aviso, CLAVES_DENEGADAS } from "./config.js";
-import { FORMA_DE_NOMBRE_DE_AVD } from "./puertosDeAvd.js";
+import { FORMA_DE_NOMBRE_DE_AVD, FORMA_DE_SERIE } from "./puertosDeAvd.js";
 import { esModoDeEscritura, type ModoDeEscritura } from "./modoDeEscritura.js";
+import { dispositivoDeValor, type DispositivoDeLaSesion } from "./dispositivoElegido.js";
 import { motivoDeModeloDeMotorInaceptable } from "./motoresLocales.js";
 import { motivoDeDominioInaceptable } from "./tunel.js";
 
@@ -95,6 +96,8 @@ export type AjustesDeDispositivos = { [K in PlataformaDeDispositivo]?: boolean }
   rutaAdb?: string;
   rutaEmulator?: string;
   avds?: Record<string, AjustesDeAvd>;
+  /** El puerto del túnel de cada móvil físico Android, por su serie (IXCODE-32, `core/puertosDeAvd.ts`). */
+  fisicos?: Record<string, { puerto?: number }>;
 };
 
 /** ¿Se mira este destino? Ausente = sí. */
@@ -219,6 +222,13 @@ export interface Settings {
   modeloDeOpencode?: string;
   /** Ver `AjustesDeRemoto`. Ausente = la sesión remota no existe. */
   remoto?: AjustesDeRemoto;
+  /**
+   * El aparato con que NACEN las sesiones nuevas —de una persona y de una tarea— en cualquier
+   * proyecto (IXCODE-51, Ajustes > General). Sin él, una sesión nueva no tiene aparato y los
+   * scripts prefieren un emulador. Es la FOTO, como la de la pastilla: un móvil desenchufado al
+   * abrir sigue siendo el elegido, y Ejecutar dice que no está en vez de cambiar a otro.
+   */
+  dispositivoPorDefecto?: DispositivoDeLaSesion;
 }
 
 
@@ -313,6 +323,7 @@ export function validarSettings(bruto: unknown): { settings: Settings; avisos: A
   const concurrenciaDeTareas = validarConcurrenciaDeTareas(objeto.concurrenciaDeTareas);
   const depurar = typeof objeto.depurar === "boolean" ? objeto.depurar : undefined;
   const modoDeEscritura = esModoDeEscritura(objeto.modoDeEscritura) ? objeto.modoDeEscritura : undefined;
+  const dispositivoPorDefecto = dispositivoDeValor(objeto.dispositivoPorDefecto);
   const modeloDeOpencode =
     typeof objeto.modeloDeOpencode === "string" && motivoDeModeloDeMotorInaceptable(objeto.modeloDeOpencode) === undefined
       ? objeto.modeloDeOpencode
@@ -326,6 +337,7 @@ export function validarSettings(bruto: unknown): { settings: Settings; avisos: A
       ...(concurrenciaDeTareas === undefined ? {} : { concurrenciaDeTareas }),
       ...(depurar === undefined ? {} : { depurar }),
       ...(modoDeEscritura === undefined ? {} : { modoDeEscritura }),
+      ...(dispositivoPorDefecto === undefined ? {} : { dispositivoPorDefecto }),
       ...(modeloDeOpencode === undefined ? {} : { modeloDeOpencode }),
       ...(remoto === undefined ? {} : { remoto }),
     },
@@ -357,6 +369,20 @@ function validarDispositivos(candidato: unknown): AjustesDeDispositivos | undefi
   }
   const avds = validarAvds(c.avds);
   if (avds !== undefined) salida.avds = avds;
+  const fisicos = validarFisicos(c.fisicos);
+  if (fisicos !== undefined) salida.fisicos = fisicos;
+  return Object.keys(salida).length === 0 ? undefined : salida;
+}
+
+/** Por serie con forma de serial de adb, solo el puerto entero en rango. Lo demás se tira. */
+function validarFisicos(candidato: unknown): Record<string, { puerto?: number }> | undefined {
+  if (typeof candidato !== "object" || candidato === null) return undefined;
+  const salida: Record<string, { puerto?: number }> = {};
+  for (const [serie, valor] of Object.entries(candidato as Record<string, unknown>)) {
+    if (!FORMA_DE_SERIE.test(serie) || typeof valor !== "object" || valor === null) continue;
+    const p = (valor as Record<string, unknown>).puerto;
+    if (typeof p === "number" && Number.isInteger(p) && p >= 1024 && p <= 65535) salida[serie] = { puerto: p };
+  }
   return Object.keys(salida).length === 0 ? undefined : salida;
 }
 

@@ -92,11 +92,11 @@ import { instalarHerramientaDeDispositivos, verificarDispositivo } from "../../a
 import { arrancarEmulador, pararEmulador } from "../../agent/dispositivos/arranqueDeEmulador.js";
 import { borrarAvd, clonarAvd, correrPasoDeReceta, crearAvd } from "../../agent/dispositivos/instalacionEnMaquina.js";
 import {
+  asignarPuertosDeFisicos,
   asignarPuertosPendientes,
   motivoDeNombreDeAvdInaceptable,
   motivoDePuertoInaceptable,
-  puertoDeAvd,
-  PUERTO_DEL_HOTSWAP,
+  puertoDeDispositivo,
 } from "../../core/puertosDeAvd.js";
 import { abrirCarpetaDelSistema, abrirDirectorioDelSistema } from "../../agent/config/selectorEnMaquina.js";
 import {
@@ -149,12 +149,14 @@ import {
   guardarConcurrenciaDeTareas,
   guardarDepurar,
   guardarModoPorDefecto,
+  guardarDispositivoPorDefecto,
   guardarAjustesDeRemoto as guardarAjustesDeRemotoEnDisco,
   guardarWorkspace as guardarWorkspaceEnDisco,
   guardarDispositivos,
   guardarAjusteDeAvd,
   quitarAjustesDeAvd,
   guardarPuertosAsignados,
+  guardarPuertosDeFisicos,
   guardarEntorno as guardarEntornoEnDisco,
   olvidarEntornoDeSettings,
   copiasDeEntorno,
@@ -684,6 +686,12 @@ export interface OpcionesDeMontaje {
    */
   guardarPuertosAsignados?: (asignados: Record<string, number>) => void;
   /**
+   * Lo mismo para los móviles físicos Android, por su serie (IXCODE-32,
+   * `settingsEnDisco.ts#guardarPuertosDeFisicos`). Ausente = no se siembran, y cada físico usa el
+   * primero libre, que es el que la siembra le daría.
+   */
+  guardarPuertosDeFisicos?: (asignados: Record<string, number>) => void;
+  /**
    * Qué se midió del framework de XOne en un dispositivo (`agent/dispositivos/dispositivosEnMaquina.ts`).
    * Lanza adb, así que entra por opción.
    *
@@ -838,6 +846,13 @@ export interface OpcionesDeMontaje {
   modoPorDefectoGlobal?: () => ModoDeEscritura;
   /** Cambia el global. Ausente = Ajustes lo enseña pero no deja cambiarlo. */
   guardarModoPorDefectoGlobal?: (modo: ModoDeEscritura) => void;
+  /**
+   * El aparato con que NACEN las sesiones nuevas (IXCODE-51). Ausente la OPCIÓN = Ajustes no
+   * pinta el control; devolver `undefined` = ninguno elegido.
+   */
+  dispositivoPorDefecto?: () => DispositivoElegido | undefined;
+  /** Cambia —o quita— el aparato por defecto. Ausente = Ajustes lo enseña sin dejar cambiarlo. */
+  guardarDispositivoPorDefecto?: (dispositivo: DispositivoElegido | undefined) => void;
   /** El modo de las sesiones nuevas de un proyecto, por su RAÍZ. Ausente = el panel no lo pinta. */
   modoDelProyecto?: (raiz: string) => ModoDeEscritura | undefined;
   /** Fija —o quita, con `undefined`— el de un proyecto. */
@@ -1983,6 +1998,8 @@ export function montarRutas(
     const depuracion = mensajeDeDepuracion();
     // El modo de las sesiones nuevas (IXCODE-31), por lo mismo: está en Ajustes > General.
     const modoPorDefecto = mensajeDeModoPorDefecto();
+    // Y el aparato de las sesiones nuevas (IXCODE-51), en la misma sección.
+    const dispositivoPorDefecto = mensajeDeDispositivoPorDefecto();
     // Y los conectores MCP, tras el workspace y por la misma regla: solo si esta ejecución
     // los monta, y entonces la ventana de Ajustes no se abre con la sección en blanco.
     const conectores = mensajeDeConectores();
@@ -2006,6 +2023,7 @@ export function montarRutas(
       if (ultimoProgresoDeMudanza !== undefined) cliente({ clase: "mudanzaDeWorkspace", progreso: ultimoProgresoDeMudanza });
       if (depuracion !== undefined) cliente(depuracion);
       if (modoPorDefecto !== undefined) cliente(modoPorDefecto);
+      if (dispositivoPorDefecto !== undefined) cliente(dispositivoPorDefecto);
       // La sesión remota, SIEMPRE que esta ejecución la monta: con `habilitado`, que es lo que
       // pinta el interruptor de Ajustes (y, apagado, no hay botón en el chat). Un puente abierto
       // con el interruptor quitado a mano en `settings.json` sale igual, para poder apagarlo.
@@ -2193,6 +2211,12 @@ export function montarRutas(
   const mensajeDeModoPorDefecto = (): MensajeAlCliente | undefined => {
     const modo = opciones.modoPorDefectoGlobal?.();
     return modo === undefined ? undefined : { clase: "modoPorDefecto", modo };
+  };
+
+  const mensajeDeDispositivoPorDefecto = (): MensajeAlCliente | undefined => {
+    if (opciones.dispositivoPorDefecto === undefined) return undefined;
+    const dispositivo = opciones.dispositivoPorDefecto();
+    return { clase: "dispositivoPorDefecto", ...(dispositivo === undefined ? {} : { dispositivo }) };
   };
 
   /**
@@ -2737,6 +2761,19 @@ export function montarRutas(
             // No impide emitir: la foto sigue siendo verdad, y sin puerto guardado el AVD usa el
             // de fábrica, que es lo que había antes. Lo que no se puede es callarlo.
             informar(`no se pudieron guardar los puertos de los emuladores (${codigoDe(error)})`);
+          }
+        }
+        // Y los móviles físicos (IXCODE-32), DESPUÉS y releyendo: un AVD recién sembrado y un móvil
+        // nuevo no pueden llevarse el mismo puerto.
+        const fisicos = asignarPuertosDeFisicos(
+          informeDeDispositivos.dispositivos.filter((d) => d.plataforma === "android" && d.clase === "fisico").map((d) => d.id),
+          ajustesDeDispositivos(),
+        );
+        if (fisicos !== undefined && opciones.guardarPuertosDeFisicos !== undefined) {
+          try {
+            opciones.guardarPuertosDeFisicos(fisicos);
+          } catch (error) {
+            informar(`no se pudieron guardar los puertos de los móviles (${codigoDe(error)})`);
           }
         }
         emitir({
@@ -4104,12 +4141,12 @@ export function montarRutas(
           dispositivo: medida.dispositivo,
           raiz: medida.abierto.raiz,
           app: medida.app,
-          // El puerto LOCAL del túnel es el de SU AVD: con dos emuladores y el mismo puerto,
-          // el `adb forward` del segundo le quita el túnel al primero sin error. Un físico no
-          // tiene AVD y va por el de fábrica, que es lo que hace el lanzador sin puerto.
-          ...(medida.dispositivo.avd === undefined
-            ? {}
-            : { puerto: puertoDeAvd(ajustesDeDispositivos(), medida.dispositivo.avd) }),
+          // El puerto LOCAL del túnel es el de SU aparato: con dos aparatos y el mismo puerto,
+          // el `adb forward` del segundo le quita el túnel al primero sin error. Un físico
+          // tiene el suyo por su serie (IXCODE-32): antes iba al 8443 del primer AVD.
+          ...(medida.dispositivo.plataforma === "android"
+            ? { puerto: puertoDeDispositivo(ajustesDeDispositivos(), medida.dispositivo) }
+            : {}),
         },
         { alFase }
       );
@@ -4822,7 +4859,7 @@ export function montarRutas(
     if (app === undefined) return { motivo: "app.ini no dice el nombre de la app (name=)" };
     return {
       serie: dispositivo.id,
-      puerto: dispositivo.avd === undefined ? PUERTO_DEL_HOTSWAP : puertoDeAvd(ajustesDeDispositivos(), dispositivo.avd),
+      puerto: puertoDeDispositivo(ajustesDeDispositivos(), dispositivo),
       app,
     };
   };
@@ -7246,6 +7283,23 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "dispositivoPorDefecto") {
+      // Como la pastilla: el cliente manda el ID y el resto sale de la última MEDIDA. Un id que no
+      // está en ella no se guarda (es una foto vieja del cliente); se reemite lo que hay.
+      const pedido = (mensaje as { id?: unknown }).id;
+      if (pedido === undefined) opciones.guardarDispositivoPorDefecto?.(undefined);
+      else if (typeof pedido === "string") {
+        const d = informeDeDispositivos?.dispositivos.find((x) => x.id === pedido);
+        if (d !== undefined) {
+          opciones.guardarDispositivoPorDefecto?.({ id: d.id, nombre: d.nombre, plataforma: d.plataforma, clase: d.clase });
+        }
+      }
+      const m = mensajeDeDispositivoPorDefecto();
+      if (m !== undefined) emitir(m);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "depuracion" && typeof mensaje.activa === "boolean") {
       opciones.guardarDepuracion?.(mensaje.activa);
       emitirDepuracion();
@@ -8207,7 +8261,7 @@ export function emuladoresCableados(opciones: {
 } = {}): Required<
   Pick<
     OpcionesDeMontaje,
-    "arrancarEmulador" | "crearAvd" | "borrarAvd" | "pararEmulador" | "guardarAjusteDeAvd" | "quitarAjustesDeAvd" | "guardarPuertosAsignados"
+    "arrancarEmulador" | "crearAvd" | "borrarAvd" | "pararEmulador" | "guardarAjusteDeAvd" | "quitarAjustesDeAvd" | "guardarPuertosAsignados" | "guardarPuertosDeFisicos"
   >
 > {
   const arrancar = opciones.arrancar ?? arrancarEmulador;
@@ -8223,6 +8277,7 @@ export function emuladoresCableados(opciones: {
     guardarAjusteDeAvd: (avd, cambio) => void guardarAjusteDeAvd(opciones.casa, avd, cambio),
     quitarAjustesDeAvd: (avd) => void quitarAjustesDeAvd(opciones.casa, avd),
     guardarPuertosAsignados: (asignados) => void guardarPuertosAsignados(opciones.casa, asignados),
+    guardarPuertosDeFisicos: (asignados) => void guardarPuertosDeFisicos(opciones.casa, asignados),
   };
 }
 
@@ -8282,6 +8337,21 @@ export function ajusteDeModoPorDefectoCableado(opciones: {
     guardarModoPorDefectoGlobal: (modo) => guardarGlobal(modo),
     modoDelProyecto: (raiz) => leerProyecto(raiz),
     guardarModoDelProyecto: (raiz, modo) => guardarProyecto(raiz, modo),
+  };
+}
+
+/**
+ * El aparato con que NACEN las sesiones nuevas (IXCODE-51), cableado contra `settings.json`.
+ * Extraída por el patrón de fallo de siempre: la lectura va al vestíbulo (cada apertura) y a
+ * Ajustes, y las dos tienen que leer el MISMO fichero que escribe el guardado.
+ */
+export function ajusteDeDispositivoPorDefectoCableado(opciones: { casa?: string } = {}): {
+  dispositivoPorDefecto: () => DispositivoElegido | undefined;
+  guardarDispositivoPorDefecto: (dispositivo: DispositivoElegido | undefined) => void;
+} {
+  return {
+    dispositivoPorDefecto: () => cargarSettings(opciones.casa).settings.dispositivoPorDefecto,
+    guardarDispositivoPorDefecto: (dispositivo) => void guardarDispositivoPorDefecto(opciones.casa, dispositivo),
   };
 }
 
@@ -8845,6 +8915,8 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     // El modo con que nacen las sesiones nuevas (IXCODE-31), con la MISMA disciplina. El
     // lector por raíz va al vestíbulo (`vestibuloReal`); aquí, los de Ajustes y del panel.
     ...(({ modoPorDefecto: _paraElVestibulo, ...resto }) => resto)(ajusteDeModoPorDefectoCableado()),
+    // El aparato de las sesiones nuevas (IXCODE-51), con la MISMA disciplina.
+    ...ajusteDeDispositivoPorDefectoCableado(),
     // Los conectores MCP, con la MISMA disciplina: la composición extraída y probada
     // (`ajusteDeConectoresCableado`), nunca un literal aquí dentro.
     // Y el gestor de tareas (IXCODE-11) llama por ESE mismo servicio: los dos salen de
@@ -9124,6 +9196,8 @@ function vestibuloReal(
     fuentes,
     // Con qué modo nace una sesión nueva (IXCODE-31): el del proyecto de ESA raíz, si no el global.
     modoPorDefecto: ajusteDeModoPorDefectoCableado().modoPorDefecto,
+    // Y con qué aparato (IXCODE-51): también una tarea, que sin él iba al emulador.
+    dispositivoPorDefecto: ajusteDeDispositivoPorDefectoCableado().dispositivoPorDefecto,
     // Se resuelve UNA vez, aquí, y no en cada `anunciarAlta`: `git config`/`os.userInfo`
     // no cambian a media conexión, y repetir el subproceso en cada anuncio del alta sería
     // gastar sin motivo. Nunca viaja hacia CloudStudio ni hacia ningún acto —
