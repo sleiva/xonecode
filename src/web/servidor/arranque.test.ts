@@ -6048,7 +6048,7 @@ describe("las tareas en background, por el cable", () => {
   describe("una propuesta de tareas encadenadas", () => {
     /** El proyecto «Tienda» abierto con una sesión cuya propuesta sigue pendiente, una cola de tareas de
      *  verdad en disco y los adjuntos de la sesión puestos. */
-    async function conPropuesta() {
+    async function conPropuesta(extra: Partial<NonNullable<Parameters<typeof montarRutas>[2]>> = {}) {
       const base = mkdtempSync(join(tmpdir(), "xonecode-encadenadas-"));
       const propuesta: Acto = {
         tipo: "propuesta-de-tareas",
@@ -6076,6 +6076,7 @@ describe("las tareas en background, por el cable", () => {
       montarRutas(servidor, vestibulo, {
         colaDeTareas: cola,
         revisarTareas: () => void (revisado += 1),
+        ...extra,
       });
       const cliente = clienteDeMentira();
       await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
@@ -6189,6 +6190,38 @@ describe("las tareas en background, por el cable", () => {
       expect(negada.estado).toBe(409);
       expect(JSON.parse(negada.cuerpo).motivo).toBeTypeOf("string");
       expect(cola.listar().find((t) => t.id === "b")!.encargo).toBe("e");
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("«Regenerar el encargo» lo prepara desde la petición editada, con SUS adjuntos, y no guarda nada (IXCODE-53)", async () => {
+      const pedidos: unknown[] = [];
+      const { base, cola, accion, vestibulo } = await conPropuesta({
+        augmentar: async (entrada) => {
+          pedidos.push(entrada);
+          return `ENCARGO PARA: ${entrada.texto}`;
+        },
+      });
+      const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      cola.guardar([
+        {
+          id: "a", proyecto: { id: "p1", raiz, nombre: "Tienda" }, titulo: "p", peticion: "p", encargo: "e",
+          adjuntos: [{ nombre: "logo.png", bytes: 3, mime: "image/png" }], estado: "nuevo", creada: "2026-10-07T10:00:00.000Z",
+        },
+      ]);
+      const r = await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "regenerarEncargo", id: "a", peticion: "  pon la versión  " }));
+      expect(r.estado).toBe(200);
+      expect(JSON.parse(r.cuerpo)).toEqual({ encargo: "ENCARGO PARA: pon la versión" });
+      expect(pedidos).toEqual([{ texto: "pon la versión", proyecto: { id: "p1", raiz, nombre: "Tienda" }, adjuntos: [{ nombre: "logo.png", mime: "image/png" }] }]);
+      // No guarda nada: eso es «Guardar».
+      expect(cola.listar()[0]).toMatchObject({ peticion: "p", encargo: "e" });
+      // Y guardar con la petición la cambia, con su título.
+      expect(await enviarMensaje(accion, { clase: "tarea", accion: "encargo", id: "a", encargo: "ENCARGO", peticion: "Pon la versión" })).toBe(204);
+      expect(cola.listar()[0]).toMatchObject({ peticion: "Pon la versión", titulo: "Pon la versión", encargo: "ENCARGO" });
+      // Vacía, o de una que ya arrancó: 409 con motivo.
+      expect((await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "regenerarEncargo", id: "a", peticion: " " }))).estado).toBe(409);
+      cola.guardar([{ ...cola.listar()[0]!, estado: "en-proceso", empezada: "2026-10-07T10:01:00.000Z" }]);
+      expect((await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "regenerarEncargo", id: "a", peticion: "x" }))).estado).toBe(409);
       await vestibulo.cerrar();
       rmSync(base, { recursive: true, force: true });
     });

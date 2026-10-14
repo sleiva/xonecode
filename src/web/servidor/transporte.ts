@@ -1866,7 +1866,9 @@ export type MensajeDelCliente =
   | { clase: "tarea"; accion: "continuar"; id: string }
   | { clase: "tarea"; accion: "arrancarAhora"; id: string }
   /** Editar el encargo de una tarea que todavía no ha arrancado (IXCODE-52). 204, o 409 con `{motivo}`. */
-  | { clase: "tarea"; accion: "encargo"; id: string; encargo: string }
+  | { clase: "tarea"; accion: "encargo"; id: string; encargo: string; peticion?: string }
+  /** Volver a preparar el encargo desde la petición editada, SIN guardarlo (IXCODE-53). 200 con `{encargo}`, o 409 con `{motivo}`. */
+  | { clase: "tarea"; accion: "regenerarEncargo"; id: string; peticion: string }
   /** PARAR una tarea en marcha sin borrarla (IXCODE-50): queda aparcada con su conversación. 204, o 409 con `{motivo}`. */
   | { clase: "tarea"; accion: "parar"; id: string }
   | { clase: "tarea"; accion: "reintentar" | "descartar" | "terminar"; id: string }

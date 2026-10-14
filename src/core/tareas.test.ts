@@ -309,6 +309,13 @@ describe("conEncargo", () => {
     expect(() => conEncargo(tarea({ estado: "nuevo" }), "   ")).toThrow(/vacío/);
   });
 
+  it("con la PETICIÓN también (IXCODE-53): se cambia, y el título sale de ella", () => {
+    const editada = conEncargo(tarea({ estado: "nuevo" }), "el encargo nuevo", "  Pon la versión en el login. Y el copyright  ");
+    expect(editada.peticion).toBe("Pon la versión en el login. Y el copyright");
+    expect(editada.titulo).toBe(tituloDeTarea("Pon la versión en el login. Y el copyright"));
+    expect(() => conEncargo(tarea({ estado: "nuevo" }), "el encargo", "   ")).toThrow(/petición/);
+  });
+
   it("una que ya arrancó alguna vez no se edita, aunque haya vuelto a «nuevo»", () => {
     for (const estado of ["en-proceso", "requiere-atencion", "terminada"] as const) {
       expect(() => conEncargo(tarea({ estado }), "otro")).toThrow();

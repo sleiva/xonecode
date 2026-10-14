@@ -573,14 +573,16 @@ export function aplicarFeedback(
 export function aplicarEncargo(
   disco: Pick<TareasEnDisco, "listar" | "guardar">,
   id: string,
-  encargo: string
+  encargo: string,
+  /** También la petición, de la que sale el título (IXCODE-53). Ausente = no se toca. */
+  peticion?: string
 ): ResultadoDeFeedback {
   const tareas = disco.listar();
   const actual = tareas.find((t) => t.id === id);
   if (actual === undefined) return { hecho: false, motivo: "la tarea ya no está en la cola" };
   let siguiente: Tarea;
   try {
-    siguiente = conEncargo(actual, encargo);
+    siguiente = conEncargo(actual, encargo, peticion);
   } catch (error) {
     return { hecho: false, motivo: error instanceof Error ? error.message : String(error) };
   }

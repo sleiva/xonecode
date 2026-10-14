@@ -58,6 +58,7 @@ export function TareasDelProyecto({
   alContinuar,
   alArrancarAhora,
   alEditarEncargo,
+  alRegenerarEncargo,
   alParar,
   consolaAbierta,
   sesionAbierta,
@@ -97,7 +98,9 @@ export function TareasDelProyecto({
   alContinuar?: (id: string) => Promise<string | undefined>;
   alArrancarAhora?: (id: string) => Promise<string | undefined>;
   /** Cambiar el encargo de una que nunca ha arrancado (IXCODE-52): devuelve el motivo si el servidor se negó. */
-  alEditarEncargo?: (id: string, encargo: string) => Promise<string | undefined>;
+  alEditarEncargo?: (id: string, encargo: string, peticion: string) => Promise<string | undefined>;
+  /** Volver a preparar el encargo desde la petición, sin guardarlo (IXCODE-53). */
+  alRegenerarEncargo?: (id: string, peticion: string) => Promise<{ encargo: string } | { motivo: string }>;
   /** Parar una en marcha sin borrarla (IXCODE-50): devuelve el motivo si el servidor se negó. */
   alParar?: (id: string) => Promise<string | undefined>;
   /** La consola de la persona de ESTE proyecto está abierta: es lo que frena sus tareas nuevas, y se dice. */
@@ -200,6 +203,7 @@ export function TareasDelProyecto({
               {...(alContinuar === undefined ? {} : { alContinuar })}
               {...(alArrancarAhora === undefined ? {} : { alArrancarAhora })}
               {...(alEditarEncargo === undefined ? {} : { alEditarEncargo })}
+              {...(alRegenerarEncargo === undefined ? {} : { alRegenerarEncargo })}
               {...(alParar === undefined ? {} : { alParar })}
               puedeArrancar={puedeArrancarYa(t, tareas)}
               esperaPorTuConsola={consolaAbierta === true}
@@ -228,6 +232,7 @@ function Fila({
   alContinuar,
   alArrancarAhora,
   alEditarEncargo,
+  alRegenerarEncargo,
   alParar,
   puedeArrancar,
   esperaPorTuConsola,
@@ -252,7 +257,9 @@ function Fila({
   alContinuar?: (id: string) => Promise<string | undefined>;
   alArrancarAhora?: (id: string) => Promise<string | undefined>;
   /** Cambiar el encargo de una que nunca ha arrancado (IXCODE-52): devuelve el motivo si el servidor se negó. */
-  alEditarEncargo?: (id: string, encargo: string) => Promise<string | undefined>;
+  alEditarEncargo?: (id: string, encargo: string, peticion: string) => Promise<string | undefined>;
+  /** Volver a preparar el encargo desde la petición, sin guardarlo (IXCODE-53). */
+  alRegenerarEncargo?: (id: string, peticion: string) => Promise<{ encargo: string } | { motivo: string }>;
   /** Parar una en marcha sin borrarla (IXCODE-50): devuelve el motivo si el servidor se negó. */
   alParar?: (id: string) => Promise<string | undefined>;
   puedeArrancar?: boolean;
@@ -339,6 +346,7 @@ function Fila({
           {...(alContinuar === undefined ? {} : { alContinuar })}
           {...(alArrancarAhora === undefined ? {} : { alArrancarAhora })}
           {...(alEditarEncargo === undefined ? {} : { alEditarEncargo })}
+          {...(alRegenerarEncargo === undefined ? {} : { alRegenerarEncargo })}
           {...(alParar === undefined ? {} : { alParar })}
           {...(puedeArrancar === undefined ? {} : { puedeArrancar })}
           {...(esperaPorTuConsola === undefined ? {} : { esperaPorTuConsola })}

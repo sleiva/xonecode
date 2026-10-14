@@ -924,6 +924,10 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   `puedeEditarEncargo`: `nuevo` y sin `empezada`; una reintentada vuelve a `nuevo`, pero lo que se le manda
   es su hilo). La `peticion` no se toca. El corredor manda el encargo RELEÍDO en la escritura que la
   marca «en proceso», no el de la lectura que la eligió: una edición entre medias no se pierde.
+  **Y la PETICIÓN también** (IXCODE-53): se edita con el encargo (el título sale de ella) y
+  «Regenerar el encargo» (`{accion:"regenerarEncargo"}`) lo vuelve a preparar con el aumentador, con
+  SUS adjuntos, contestando en la propia respuesta y SIN guardar. No va por `augmentado`, que llega a
+  todas las pestañas y es de «Nueva tarea»: las dos ventanas se pisarían.
 - **Un encargo GRANDE se reparte en tareas ENCADENADAS, y el agente solo PROPONE**
   (`core/repartoDeEncargo.ts`, `agent/motores/trueforge/proponerTareas.ts`, `componentes/PropuestaDeTareas.tsx`): la
   tool `proponer_tareas` valida y anuncia el acto `propuesta-de-tareas`, nunca crea nada; las tareas las crea el clic de

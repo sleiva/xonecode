@@ -127,3 +127,22 @@
   resize: vertical;
   line-height: 1.45;
 }
+
+/* Lo que pidió la persona (IXCODE-53): más corto que el encargo, es una o dos frases. */
+.campoPeticion {
+  min-height: 72px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.regenerar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin: 2px 0 6px;
+}
+
+.regenerar > span {
+  margin: 0;
+}

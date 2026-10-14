@@ -240,6 +240,7 @@ import {
   conEstado,
   darPorBuenaAMano,
   puedeArrancarYa,
+  puedeEditarEncargo,
   TEXTO_DE_CONTINUAR,
   tituloDeTarea,
   type Tarea,
@@ -7143,10 +7144,48 @@ export function montarRutas(
         respuesta.end();
         return;
       }
+      if (mensaje.accion === "regenerarEncargo" && opciones.colaDeTareas !== undefined) {
+        /**
+         * Volver a PREPARAR el encargo de una tarea que no ha arrancado, desde su petición editada
+         * (IXCODE-53). El mismo aumentador que al crearla, con SU proyecto y SUS adjuntos (del disco).
+         * Contesta en la PROPIA respuesta y no guarda nada: rellena el campo de la ventana, y se
+         * guarda con «Guardar». No va por el mensaje `augmentado`, que llega a todas las pestañas y es
+         * de la ventana «Nueva tarea»: las dos se pisarían.
+         */
+        const negar = (motivo: string): void => {
+          respuesta.writeHead(409, { "content-type": "application/json" });
+          respuesta.end(JSON.stringify({ motivo }));
+        };
+        const tarea = opciones.colaDeTareas.listar().find((t) => t.id === mensaje.id);
+        const peticion = typeof mensaje.peticion === "string" ? mensaje.peticion.trim() : "";
+        if (tarea === undefined) return negar("esa tarea ya no existe");
+        if (!puedeEditarEncargo(tarea)) return negar("esa tarea ya arrancó: su encargo ya no se edita");
+        if (peticion === "") return negar("escribe qué quieres que haga antes de preparar el encargo");
+        if (opciones.augmentar === undefined) return negar("esta ejecución no puede preparar encargos");
+        try {
+          const encargo = await opciones.augmentar({
+            texto: peticion,
+            proyecto: tarea.proyecto,
+            adjuntos: tarea.adjuntos.map((a) => ({ nombre: a.nombre, ...(a.mime === undefined ? {} : { mime: a.mime }) })),
+          });
+          respuesta.writeHead(200, { "content-type": "application/json" });
+          respuesta.end(JSON.stringify({ encargo }));
+        } catch (error) {
+          contar(error);
+          negar(`no se pudo preparar el encargo: ${motivoLegible(error)}`);
+        }
+        return;
+      }
       if (mensaje.accion === "encargo" && opciones.colaDeTareas !== undefined) {
         // Editar el encargo de una tarea que todavía no ha arrancado (IXCODE-52). La regla —solo si
         // nunca arrancó, y no vacío— es de `core/tareas.ts#conEncargo`; la negativa vuelve con motivo.
-        const resultado = aplicarEncargo(opciones.colaDeTareas, mensaje.id, typeof mensaje.encargo === "string" ? mensaje.encargo : "");
+        const peticion = (mensaje as { peticion?: unknown }).peticion;
+        const resultado = aplicarEncargo(
+          opciones.colaDeTareas,
+          mensaje.id,
+          typeof mensaje.encargo === "string" ? mensaje.encargo : "",
+          typeof peticion === "string" ? peticion : undefined
+        );
         if (!resultado.hecho) {
           respuesta.writeHead(409, { "content-type": "application/json" });
           respuesta.end(JSON.stringify({ motivo: resultado.motivo }));
@@ -7224,6 +7263,7 @@ export function montarRutas(
         mensaje.accion !== "continuar" &&
         mensaje.accion !== "arrancarAhora" &&
         mensaje.accion !== "encargo" &&
+        mensaje.accion !== "regenerarEncargo" &&
         mensaje.accion !== "parar" &&
         opciones.colaDeTareas !== undefined
       ) {

@@ -411,10 +411,11 @@ export function puedeEditarEncargo(tarea: Pick<Tarea, "estado" | "empezada">): b
 }
 
 /**
- * La tarea con otro encargo, o una excepción con el motivo. La `peticion` y el `titulo` no se
- * tocan: la petición es lo que escribió la persona y se conserva aunque el encargo se edite.
+ * La tarea con otro encargo, o una excepción con el motivo. Sin `peticion`, la petición y el título
+ * no se tocan; con ella (IXCODE-53: se edita lo que escribió la persona y se vuelve a preparar el
+ * encargo) se cambia, y el título sale de ella como al crear.
  */
-export function conEncargo(tarea: Tarea, encargo: string): Tarea {
+export function conEncargo(tarea: Tarea, encargo: string, peticion?: string): Tarea {
   if (!puedeEditarEncargo(tarea)) {
     throw new Error(
       tarea.estado === "nuevo" ? "esa tarea ya arrancó alguna vez: lo que se le manda ahora es su conversación" : "esa tarea ya no está esperando a arrancar"
@@ -422,7 +423,11 @@ export function conEncargo(tarea: Tarea, encargo: string): Tarea {
   }
   const limpio = encargo.trim();
   if (limpio === "") throw new Error("un encargo vacío dejaría la tarea sin nada que hacer");
-  return { ...tarea, encargo: limpio };
+  if (peticion === undefined) return { ...tarea, encargo: limpio };
+  // Con la PETICIÓN también (IXCODE-53): el texto que escribió la persona, del que sale el título.
+  const pedido = peticion.trim();
+  if (pedido === "") throw new Error("una petición vacía dejaría la tarea sin título ni de dónde volver a preparar el encargo");
+  return { ...tarea, encargo: limpio, peticion: pedido, titulo: tituloDeTarea(pedido) };
 }
 
 /**

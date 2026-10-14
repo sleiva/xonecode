@@ -480,6 +480,13 @@ describe("aplicarEncargo (IXCODE-52)", () => {
     expect(disco.listar()[0]).toMatchObject({ encargo: "hazlo así", peticion: TAREA.peticion, estado: "nuevo" });
   });
 
+  it("con la petición también (IXCODE-53): la guarda y recalcula el título", () => {
+    const disco = crearTareasEnDisco({ base });
+    disco.guardar([{ ...TAREA, estado: "nuevo" }]);
+    expect(aplicarEncargo(disco, "t1", "el encargo", "Pon la versión en el login")).toEqual({ hecho: true });
+    expect(disco.listar()[0]).toMatchObject({ encargo: "el encargo", peticion: "Pon la versión en el login", titulo: "Pon la versión en el login" });
+  });
+
   it("una en marcha, una que ya no existe o un encargo vacío se rechazan y se DICEN, sin escribir", () => {
     const disco = crearTareasEnDisco({ base });
     disco.guardar([{ ...TAREA, estado: "en-proceso", empezada: "2026-10-14T10:00:00.000Z" }]);

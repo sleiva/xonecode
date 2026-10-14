@@ -2617,7 +2617,19 @@ export function App({
       alContinuar={async (id: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "continuar", id }))}
       alArrancarAhora={async (id: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "arrancarAhora", id }))}
       // Editar el encargo de una que todavía no ha arrancado (IXCODE-52): la ventana no se cierra si el servidor se niega.
-      alEditarEncargo={async (id: string, encargo: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "encargo", id, encargo }))}
+      alEditarEncargo={async (id: string, encargo: string, peticion: string) =>
+        negativaOFalloDe(await enviar({ clase: "tarea", accion: "encargo", id, encargo, peticion }))
+      }
+      // Volver a preparar el encargo desde la petición editada (IXCODE-53): contesta en la propia
+      // respuesta y no guarda nada; lo guarda «Guardar».
+      alRegenerarEncargo={async (id: string, peticion: string) => {
+        const r = (await enviar({ clase: "tarea", accion: "regenerarEncargo", id, peticion })) as Response | undefined;
+        if (r?.status === 200) {
+          const cuerpo = (await r.json()) as { encargo?: unknown };
+          if (typeof cuerpo.encargo === "string") return { encargo: cuerpo.encargo };
+        }
+        return { motivo: (await negativaOFalloDe(r)) ?? "el servidor no contestó" };
+      }}
       // Parar una en marcha sin borrarla (IXCODE-50): queda esperando con su conversación, y se sigue con «Continuar».
       alParar={async (id: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "parar", id }))}
       // Esta lista es la del proyecto ABIERTO: su consola es la tuya, y es lo que frena sus tareas nuevas.
