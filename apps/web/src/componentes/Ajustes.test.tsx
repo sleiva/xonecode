@@ -510,16 +510,18 @@ describe("Ajustes", () => {
 
   describe("el aparato de las conversaciones nuevas (IXCODE-51)", () => {
     const MOVIL = { id: "R58M123", nombre: "Galaxy", plataforma: "android" as const, clase: "fisico" as const, estado: "conectado" as const };
-    const EMU = { id: "emulator-5554", nombre: "Pixel 8", plataforma: "android" as const, clase: "emulador" as const, estado: "arrancado" as const };
+    const EMU = { id: "emulator-5554", nombre: "Pixel 8", plataforma: "android" as const, clase: "emulador" as const, estado: "apagado" as const };
     const informe = { sistema: "mac" as const, herramientas: [], dispositivos: [MOVIL, EMU], avds: [], recetas: [], medido: "2026-10-14T10:00:00.000Z" };
-    const combo = () => screen.getByRole("combobox", { name: /Aparato/ }) as HTMLSelectElement;
+    const MENU = "Aparato de las conversaciones nuevas";
+    const abrir = () => fireEvent.click(screen.getByRole("button", { name: /Sin dispositivo|Galaxy|Pixel/ }));
 
     it("sin dato del servidor NO se pinta", () => {
       render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado />);
-      expect(screen.queryByRole("combobox", { name: /Aparato/ })).toBeNull();
+      expect(screen.queryByRole("heading", { name: "Aparato por omisión" })).toBeNull();
+      expect(screen.queryByRole("button", { name: /Sin dispositivo/ })).toBeNull();
     });
 
-    it("ofrece «ninguno» y lo MEDIDO, y manda solo el id (o nada, para quitarlo)", () => {
+    it("es la pastilla del chat: lo que está a mano va con punto VERDE, y manda solo el id", () => {
       const vistos: (string | undefined)[] = [];
       render(
         <Ajustes
@@ -531,44 +533,41 @@ describe("Ajustes", () => {
           alCambiarDispositivoPorDefecto={(id) => void vistos.push(id)}
         />
       );
-      expect(combo().value).toBe("");
-      expect([...combo().options].map((o) => o.value)).toEqual(["", "R58M123", "emulator-5554"]);
-      fireEvent.change(combo(), { target: { value: "R58M123" } });
+      abrir();
+      const menu = screen.getByRole("menu", { name: MENU });
+      const movil = within(menu).getByRole("menuitem", { name: /Galaxy/ });
+      const emu = within(menu).getByRole("menuitem", { name: /Pixel 8/ });
+      expect(movil.querySelector("[data-vivo]")).not.toBeNull();
+      expect(emu.querySelector("[data-vivo]")).toBeNull();
+      fireEvent.click(movil);
       expect(vistos).toEqual(["R58M123"]);
     });
 
-    it("el elegido que ya no está en la medida se sigue enseñando, marcado", () => {
+    it("«Ninguno» quita la elección", () => {
+      const vistos: (string | undefined)[] = [];
       render(
         <Ajustes
           {...MANEJADORES}
           proveedores={PROVEEDORES}
           conectado
-          dispositivos={{ ...informe, dispositivos: [EMU] } as never}
+          dispositivos={informe as never}
           dispositivoPorDefecto={{ elegido: { id: MOVIL.id, nombre: MOVIL.nombre, plataforma: "android", clase: "fisico" } }}
-          alCambiarDispositivoPorDefecto={() => {}}
+          alCambiarDispositivoPorDefecto={(id) => void vistos.push(id)}
         />
       );
-      expect(combo().value).toBe("R58M123");
-      expect(combo().selectedOptions[0]!.textContent).toMatch(/no conectado/);
+      abrir();
+      fireEvent.click(within(screen.getByRole("menu", { name: MENU })).getByRole("menuitem", { name: "Ninguno" }));
+      expect(vistos).toEqual([undefined]);
     });
 
-    it("sin medida todavía, el elegido se enseña SIN «no conectado»: nadie lo ha medido", () => {
-      render(
-        <Ajustes
-          {...MANEJADORES}
-          proveedores={PROVEEDORES}
-          conectado
-          dispositivoPorDefecto={{ elegido: { id: MOVIL.id, nombre: MOVIL.nombre, plataforma: "android", clase: "fisico" } }}
-          alCambiarDispositivoPorDefecto={() => {}}
-        />
-      );
-      expect(combo().value).toBe("R58M123");
-      expect(combo().selectedOptions[0]!.textContent).not.toMatch(/no conectado/);
+    it("lleva su propio encabezado, como las demás secciones", () => {
+      render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado dispositivoPorDefecto={{}} />);
+      expect(screen.getByRole("heading", { name: "Aparato por omisión" })).toBeTruthy();
     });
 
     it("sin manejador se enseña sin poder cambiarlo", () => {
       render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado dispositivoPorDefecto={{}} />);
-      expect(combo().disabled).toBe(true);
+      expect((screen.getByRole("button", { name: /Sin dispositivo/ }) as HTMLButtonElement).disabled).toBe(true);
     });
   });
 

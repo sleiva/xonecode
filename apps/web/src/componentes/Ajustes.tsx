@@ -2123,11 +2123,9 @@ export function Ajustes({
                 </>
               )}
 
-              {modoPorDefecto === undefined && dispositivoPorDefecto === undefined ? null : (
-                <h3 className={estilos.subencabezado}>Conversaciones nuevas</h3>
-              )}
               {modoPorDefecto === undefined ? null : (
                 <>
+                  <h3 className={estilos.subencabezado}>Conversaciones nuevas</h3>
                   <SelectorDeModo
                     actual={modoPorDefecto}
                     conectado={conectado && alCambiarModoPorDefecto !== undefined}
@@ -2146,7 +2144,8 @@ export function Ajustes({
               {dispositivoPorDefecto === undefined ? null : (
                 <DispositivoPorDefecto
                   {...(dispositivoPorDefecto.elegido === undefined ? {} : { actual: dispositivoPorDefecto.elegido })}
-                  {...(dispositivos === undefined ? {} : { medidos: dispositivos.dispositivos })}
+                  {...(dispositivos === undefined ? {} : { informe: dispositivos })}
+                  {...(alActualizarDispositivos === undefined ? {} : { alMedir: alActualizarDispositivos })}
                   activo={conectado && alCambiarDispositivoPorDefecto !== undefined}
                   alElegir={(id) => alCambiarDispositivoPorDefecto?.(id)}
                 />

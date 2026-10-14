@@ -40,6 +40,9 @@ export function PastillaDeDispositivo({
   alMedir,
   enUso,
   proyectoActual,
+  titulo = "Dispositivo de esta sesión",
+  pie = "Se guarda con la sesión. La usan la pestaña Ejecutar para lanzar la app y el agente cuando prueba en un aparato; sin elegir ninguno, prefiere un emulador.",
+  enLinea = false,
 }: {
   /** El de la sesión, tal como lo cuenta el servidor. Ausente = ninguno elegido. */
   elegido?: DispositivoElegido;
@@ -63,6 +66,15 @@ export function PastillaDeDispositivo({
   enUso?: { id: string; proyecto: string }[];
   /** El proyecto de ESTA consola, con la forma que usa el servidor en `enUso`: la propia no cuenta como «otra». */
   proyectoActual?: string;
+  /** De qué pregunta habla el menú. En Ajustes es el aparato de las sesiones NUEVAS (IXCODE-51), no el de ésta. */
+  titulo?: string;
+  /** La nota del pie del menú, por lo mismo. */
+  pie?: string;
+  /**
+   * En línea y no flotando, como `PastillaDeModelo#enLinea`: dentro del panel de Ajustes, que ya se
+   * desplaza, un menú en absoluto lo recortaría el borde. La lista y sus reglas son las MISMAS.
+   */
+  enLinea?: boolean;
 }) {
   const [abierta, setAbierta] = useState(false);
   const envoltura = useRef<HTMLDivElement>(null);
@@ -173,9 +185,9 @@ export function PastillaDeDispositivo({
         <IconoDeChevron />
       </button>
       {abierta ? (
-        <div className={estilos.menu} role="menu" aria-label="dispositivo de la sesión">
+        <div className={estilos.menu} role="menu" aria-label={titulo} data-en-linea={enLinea ? "" : undefined}>
           <div className={estilos.titulo} role="presentation">
-            Dispositivo de esta sesión
+            {titulo}
           </div>
           <div className={estilos.modelos}>
             <button
@@ -212,10 +224,7 @@ export function PastillaDeDispositivo({
               </button>
             </div>
           )}
-          <p className={estilos.espera}>
-            Se guarda con la sesión. La usan la pestaña Ejecutar para lanzar la app y el agente
-            cuando prueba en un aparato; sin elegir ninguno, prefiere un emulador.
-          </p>
+          <p className={estilos.espera}>{pie}</p>
         </div>
       ) : null}
     </div>
