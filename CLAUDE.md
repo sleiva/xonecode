@@ -1155,8 +1155,9 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   `--xonecode-*` con color y a `--shiki-*`. **XOneCode no
   tiene semillas**: aplicarlo QUITA `data-tema`, así que se ve como siempre por construcción. Se
   recuerda en ESTE navegador (`xonecode.tema.claro`/`.oscuro`), y un id desconocido —o ninguno— es
-  el PRIMERO de su modo: XOneCode en claro, **Azul noche** en oscuro (superficies escalonadas teñidas
-  del navy, petición suya); el XOneCode oscuro de siempre y Grafito siguen en la lista.
+  el PRIMERO de su modo: XOneCode en claro y, en oscuro, el tema `azul-noche` —que se LLAMA
+  «XOneCode»: superficies escalonadas teñidas del navy, petición suya—; el oscuro de siempre
+  (`xonecode-oscuro`, «XOneCode clásico») y Grafito siguen en la lista.
   **Elegir un tema lo ENSEÑA** (`App.tsx#alCambiarTema`): uno del otro modo pasa la consola a
   ese modo y la fija (saca de «sistema»); uno del modo en vigor no toca la apariencia.
   Los tests: el contraste WCAG de cada tema (`temas.test.ts`, un fallo se arregla en la semilla,

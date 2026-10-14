@@ -57,7 +57,9 @@ export const TEMAS: readonly Tema[] = [
    */
   {
     id: "azul-noche",
-    nombre: "Azul noche",
+    // Se LLAMA XOneCode (petición suya): es el oscuro de la marca. El id se queda en `azul-noche`
+    // para no confundirlo con el de antes, que sigue guardado como `xonecode-oscuro`.
+    nombre: "XOneCode",
     modo: "oscuro",
     semillas: {
       fondo: "#0a1520", capa1: "#0f1d2b", capa2: "#142536", capa3: "#1b3045",
@@ -85,8 +87,9 @@ export const TEMAS: readonly Tema[] = [
       expresionDeCadena: "#86efac",
     },
   },
-  // El oscuro de SIEMPRE, sin semillas: ya no es el de omisión, pero se puede volver a él.
-  { id: "xonecode-oscuro", nombre: "XOneCode", modo: "oscuro", muestra: { fondo: "#151517", texto: "#cfd3d6", acento: "#00a3e0" } },
+  // El oscuro de SIEMPRE, sin semillas: ya no es el de omisión, pero se puede volver a él. «Clásico»
+  // para no llamarse igual que el de omisión, que ahora es el XOneCode del modo oscuro.
+  { id: "xonecode-oscuro", nombre: "XOneCode clásico", modo: "oscuro", muestra: { fondo: "#151517", texto: "#cfd3d6", acento: "#00a3e0" } },
   {
     id: "github-oscuro",
     nombre: "GitHub Dark",
