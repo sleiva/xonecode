@@ -11,8 +11,8 @@
  * en CLARO; en OSCURO el XOneCode es el de semillas `azul-noche` (ver su comentario), y el oscuro
  * de antes, sin semillas, se retiró.
  *
- * Los de fuera salen de su paleta oficial publicada (GitHub Primer, One Light, Dracula,
- * Ayu). Donde la oficial no llega al contraste que exige `temas.test.ts`, la semilla va
+ * Los de fuera salen de su paleta oficial publicada (GitHub Primer, Ayu, Catppuccin, Quiet Light,
+ * Winter is Coming, Dracula, SynthWave), revisada en el lienzo de diseño. Donde la oficial no llega al contraste que exige `temas.test.ts`, la semilla va
  * ajustada y lo dice su comentario. El juego lo eligieron las instalaciones del Marketplace de
  * VS Code (medido el 02-10-2026, ver el spec).
  *
@@ -136,7 +136,7 @@ export const TEMAS: readonly Tema[] = [
       expresionDeCadena: "#a5d6ff",
     },
   },
-  // One Dark se RETIRÓ de la lista (petición suya); One Light, el claro, se queda. Quien lo tuviera
+  // One Dark se RETIRÓ de la lista (petición suya), y luego también One Light. Quien lo tuviera
   // guardado cae en el de omisión (`temaPorId`).
   /**
    * Dracula REDISEÑADO (petición suya, tablero F del lienzo): la paleta oficial con el texto subido
@@ -177,33 +177,20 @@ export const TEMAS: readonly Tema[] = [
     },
   },
   { id: "xonecode-claro", nombre: "XOneCode", modo: "claro", muestra: { fondo: "#ffffff", texto: "#61666b", acento: "#00a3e0" } },
+  // Los claros, del lienzo (tableros G, elegidos por él): GitHub Light y Ayu Light con la paleta
+  // revisada del lienzo, y tres nuevos. One Light se RETIRÓ: guardado, cae en XOneCode.
   {
     id: "github-claro",
     nombre: "GitHub Light",
     modo: "claro",
     semillas: {
       fondo: "#ffffff", capa1: "#f6f8fa", capa2: "#ffffff", capa3: "#eaeef2",
-      texto: "#1f2328", texto2: "#59636e", texto3: "#6e7781", borde: "#d0d7de",
+      texto: "#1f2328", texto2: "#424a53", texto3: "#59636e", borde: "#d0d7de",
       acento: "#0969da", sobreAcento: "#ffffff",
-      peligro: "#d1242f", exito: "#1a7f37", aviso: "#9a6700", negocio: "#8250df", sombra: "#1f2328", cambio: "#0969da",
-      palabraClave: "#cf222e", cadena: "#0a3069", funcion: "#8250df", comentario: "#6e7781",
-      constante: "#0550ae", parametro: "#953800", puntuacion: "#1f2328", enlace: "#0969da",
+      peligro: "#cf222e", exito: "#1a7f37", aviso: "#bc4c00", negocio: "#8250df", sombra: "#1f2328", cambio: "#0969da",
+      palabraClave: "#cf222e", cadena: "#0a3069", funcion: "#8250df", comentario: "#59636e",
+      constante: "#0550ae", parametro: "#0550ae", puntuacion: "#424a53", enlace: "#0969da",
       expresionDeCadena: "#0a3069",
-    },
-  },
-  {
-    id: "one-claro",
-    nombre: "One Light",
-    modo: "claro",
-    semillas: {
-      fondo: "#fafafa", capa1: "#f0f0f1", capa2: "#ffffff", capa3: "#e5e5e6",
-      texto: "#383a42", texto2: "#50525c", texto3: "#696c77", borde: "#dbdbdc",
-      // El azul oficial (#4078f2) da 4,05 con letra blanca: oscurecido lo justo para 4,5.
-      acento: "#3a6fe0", sobreAcento: "#ffffff",
-      peligro: "#e45649", exito: "#50a14f", aviso: "#c18401", negocio: "#a626a4", sombra: "#383a42", cambio: "#4078f2",
-      palabraClave: "#a626a4", cadena: "#50a14f", funcion: "#4078f2", comentario: "#a0a1a7",
-      constante: "#986801", parametro: "#e45649", puntuacion: "#383a42", enlace: "#0184bc",
-      expresionDeCadena: "#50a14f",
     },
   },
   {
@@ -211,17 +198,59 @@ export const TEMAS: readonly Tema[] = [
     nombre: "Ayu Light",
     modo: "claro",
     semillas: {
-      fondo: "#fcfcfc", capa1: "#f3f4f5", capa2: "#ffffff", capa3: "#e7eaed",
-      texto: "#5c6166", texto2: "#646a71", texto3: "#828a92", borde: "#d8dce0",
+      fondo: "#fcfcfc", capa1: "#f3f4f5", capa2: "#ffffff", capa3: "#e9eaec",
+      texto: "#5c6166", texto2: "#646a70", texto3: "#737980", borde: "#e1e3e6",
       // El naranja de Ayu es claro: la letra encima es oscura.
-      acento: "#ffaa33", sobreAcento: "#1f2328",
-      // Verde y ámbar oficiales (#6cbf43, #f2ae49) no llegan a 3:1 sobre el fondo: oscurecidos.
-      peligro: "#e65050", exito: "#4c9a2a", aviso: "#c27c10", negocio: "#a37acc", sombra: "#3d424d", cambio: "#399ee6",
-      palabraClave: "#fa8d3e", cadena: "#86b300", funcion: "#f2ae49", comentario: "#787b80",
-      constante: "#a37acc", parametro: "#f07171", puntuacion: "#5c6166", enlace: "#399ee6",
-      expresionDeCadena: "#4cbf99",
+      acento: "#fa8d3e", sobreAcento: "#2b1700",
+      peligro: "#d9363e", exito: "#4f7d00", aviso: "#c45f12", negocio: "#8a5cc0", sombra: "#3d424d", cambio: "#399ee6",
+      palabraClave: "#d9731f", cadena: "#5f8500", funcion: "#a86a0c", comentario: "#81868d",
+      constante: "#8a5cc0", parametro: "#a86a0c", puntuacion: "#5c6166", enlace: "#2f8fb0",
+      expresionDeCadena: "#5f8500",
     },
   },
+  {
+    id: "catppuccin-latte",
+    nombre: "Catppuccin Latte",
+    modo: "claro",
+    semillas: {
+      fondo: "#eff1f5", capa1: "#e6e9ef", capa2: "#f5f6f9", capa3: "#dce0e8",
+      texto: "#4c4f69", texto2: "#5c5f77", texto3: "#6c6f85", borde: "#ccd0da",
+      acento: "#8839ef", sobreAcento: "#ffffff",
+      peligro: "#d20f39", exito: "#2f8020", aviso: "#c94f08", negocio: "#8839ef", sombra: "#4c4f69", cambio: "#1e66f5",
+      palabraClave: "#8839ef", cadena: "#2f8020", funcion: "#1e66f5", comentario: "#6c6f85",
+      constante: "#c94f08", parametro: "#a66408", puntuacion: "#5c5f77", enlace: "#1e66f5",
+      expresionDeCadena: "#2f8020",
+    },
+  },
+  {
+    id: "quiet-light",
+    nombre: "Quiet Light",
+    modo: "claro",
+    semillas: {
+      fondo: "#f5f5f5", capa1: "#f2f2f2", capa2: "#ffffff", capa3: "#e4e6f1",
+      texto: "#333333", texto2: "#4a4a4a", texto3: "#6a6a6a", borde: "#dcdcdc",
+      acento: "#705697", sobreAcento: "#ffffff",
+      peligro: "#aa3731", exito: "#3f7f22", aviso: "#9c5d27", negocio: "#705697", sombra: "#333333", cambio: "#4b69c6",
+      palabraClave: "#4b69c6", cadena: "#448c27", funcion: "#aa3731", comentario: "#7f7f7f",
+      constante: "#9c5d27", parametro: "#66788a", puntuacion: "#4a4a4a", enlace: "#4b69c6",
+      expresionDeCadena: "#448c27",
+    },
+  },
+  {
+    id: "winter-is-coming-claro",
+    nombre: "Winter is Coming",
+    modo: "claro",
+    semillas: {
+      fondo: "#ffffff", capa1: "#f3f6f9", capa2: "#ffffff", capa3: "#e6edf4",
+      texto: "#0e2a4d", texto2: "#2b4a6e", texto3: "#52708f", borde: "#d5dfe9",
+      acento: "#1769c2", sobreAcento: "#ffffff",
+      peligro: "#c62f3a", exito: "#2e7a3d", aviso: "#b5561a", negocio: "#7a3e9d", sombra: "#0e2a4d", cambio: "#1769c2",
+      palabraClave: "#087a9a", cadena: "#9a3a7c", funcion: "#1769c2", comentario: "#6a8499",
+      constante: "#174781", parametro: "#2f6bb8", puntuacion: "#2b4a6e", enlace: "#1769c2",
+      expresionDeCadena: "#9a3a7c",
+    },
+  },
+
 ];
 
 /** Los temas de un modo, en el orden del catálogo: el de omisión primero (XOneCode en claro, Azul

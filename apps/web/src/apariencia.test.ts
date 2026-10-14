@@ -112,9 +112,9 @@ describe("temas por modo", () => {
   });
 
   it("cambiar de modo cambia de tema: cada modo tiene el suyo", () => {
-    const temas = { claro: "one-claro", oscuro: "github-oscuro" };
+    const temas = { claro: "catppuccin-latte", oscuro: "github-oscuro" };
     aplicarApariencia("claro", temas);
-    expect(document.body.getAttribute("data-tema")).toBe("one-claro");
+    expect(document.body.getAttribute("data-tema")).toBe("catppuccin-latte");
     aplicarApariencia("oscuro", temas);
     expect(document.body.getAttribute("data-tema")).toBe("github-oscuro");
   });

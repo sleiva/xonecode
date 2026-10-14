@@ -7,7 +7,7 @@ import { NOMBRES_DE_SEMILLA, TEMAS, contraste, temaPorId, temasDe, type Semillas
 describe("el catálogo de temas", () => {
   it("el de omisión primero: XOneCode en claro, Azul noche en oscuro (con el resto de oscuros detrás)", () => {
     expect(temasDe("oscuro").map((t) => t.id)).toEqual(["azul-noche", "grafito", "pizarra", "tinta-calida", "github-oscuro", "dracula", "synthwave-84"]);
-    expect(temasDe("claro").map((t) => t.id)).toEqual(["xonecode-claro", "github-claro", "one-claro", "ayu-claro"]);
+    expect(temasDe("claro").map((t) => t.id)).toEqual(["xonecode-claro", "github-claro", "ayu-claro", "catppuccin-latte", "quiet-light", "winter-is-coming-claro"]);
   });
 
   it("solo el XOneCode claro trae `muestra`: es el único sin semillas", () => {
@@ -48,7 +48,7 @@ describe("el catálogo de temas", () => {
 
 /**
  * El contraste se COMPRUEBA, no se confía en que la paleta oficial lo cumpla: varias no lo
- * cumplen tal cual (el azul de One Light con letra blanca, el verde y el ámbar de Ayu sobre su
+ * cumplen tal cual (el azul de One Light, ya retirado, con letra blanca; el verde y el ámbar de Ayu sobre su
  * fondo), y sus semillas van oscurecidas. Si un tema no llega, se corrige su semilla; el umbral
  * no se toca.
  */
@@ -94,8 +94,10 @@ describe("la marca «cambiada», azul en todos los temas", () => {
       dracula: "#8be9fd",
       "synthwave-84": "#36f9f6",
       "github-claro": "#0969da",
-      "one-claro": "#4078f2",
       "ayu-claro": "#399ee6",
+      "catppuccin-latte": "#1e66f5",
+      "quiet-light": "#4b69c6",
+      "winter-is-coming-claro": "#1769c2",
     });
   });
 
