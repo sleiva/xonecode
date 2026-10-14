@@ -1121,6 +1121,29 @@ describe("vestíbulo", () => {
     await v.cerrar();
   });
 
+  /**
+   * Un AVISO del servidor en una conversación vacía —una negativa a abrir otra, que se dice en la que
+   * tienes delante— no la da de alta: salía en la barra como una fila «Sin título» que solo tenía el
+   * aviso. Entra con el primer acto que no es un aviso, y entonces con el aviso incluido.
+   */
+  it("un aviso del sistema en una conversación vacía no la mete en el índice; un mensaje tuyo, sí", async () => {
+    const s = sesionesEnMemoria();
+    const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto, crearEjecutor: () => async () => {} });
+    const a = await v.abrirProyecto({ raiz: "/w/a" });
+    a.consola.consola.escribir("esa conversación es la de una tarea en curso\n");
+    expect(a.actos().map((x) => x.tipo)).toEqual(["sistema"]);
+    await a.cerrar();
+    expect(s.puerto.listar("/w/a")).toEqual([]);
+
+    const b = await v.abrirProyecto({ raiz: "/w/b" });
+    b.consola.consola.escribir("un aviso\n");
+    b.recibir({ clase: "prosa", texto: "arregla el login" });
+    await b.cerrar();
+    expect(s.puerto.listar("/w/b")).toHaveLength(1);
+    expect(s.jsonl.get(`/w/b|${b.idDeHilo}`)?.map((x) => x.tipo)).toContain("sistema");
+    await v.cerrar();
+  });
+
   it("una prosa del usuario da de alta la sesión en el ACTO, con su título", async () => {
     const s = sesionesEnMemoria();
     const v = crearVestibulo({

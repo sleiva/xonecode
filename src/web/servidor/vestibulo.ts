@@ -1593,10 +1593,17 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
      * a mitad de turno, los que ya no pueden cambiar (`consolaWeb.estables()`), porque el `.jsonl`
      * solo sabe anexar y un acto que se sustituye después quedaría escrito dos veces.
      */
+    /** Ya corrió algún turno en esta consola: desde entonces, lo que haya se vuelca (ver abajo). */
+    let huboTurno = false;
     const volcar = (hasta?: number): void => {
       if (esDoble(ejecutorEfectivo)) return;
       const todos = consolaWeb.actos().slice(0, hasta);
       if (todos.length <= volcados) return;
+      // Una conversación de PERSONA no entra en el índice por un aviso del sistema: una negativa a
+      // abrir otra se dice en la que tienes delante, y si estaba vacía salía en la barra como una
+      // fila «Sin título» que solo tenía el aviso. Mientras no haya corrido ningún turno y todo sean
+      // avisos, no; con el primer acto de verdad entra, aviso incluido.
+      if (!anotada && conModoPorDefecto === true && !huboTurno && todos.every((acto) => acto.tipo === "sistema")) return;
       if (!anotada) {
         sesiones.crear(raiz, idSesion, tarea);
         anotada = true;
@@ -1676,6 +1683,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         consola.escribir(`No se ha enviado: ${MOTIVO_PROYECTO_CON_TAREA}\n`);
         return undefined;
       }
+      huboTurno = true;
       // El primer turno NUEVO es lo que deja de ser histórica una sesión reabierta.
       // `sesiones.ts` no puede hacerlo —`reabrirSesion` es una lectura pura sin estado
       // entre llamadas—, así que lo hace quien es dueño de la sesión viva, que es esto.
