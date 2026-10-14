@@ -2818,7 +2818,7 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
       expect(screen.queryByText(/otro|Otra/)).toBeNull();
     });
 
-    it("en el chat de una tarea que ESPERA feedback, enviar deja elegir: a la tarea (feedback + arrancar) o seguir aquí", async () => {
+    it("en el chat de una tarea que ESPERA feedback, en el sitio de la caja van sus acciones; el feedback la devuelve y cede el proyecto", async () => {
       const { store, enviar } = conProyectoAbierto();
       act(() =>
         store.aplicar({
@@ -2828,27 +2828,19 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
           lista: [TAREA({ estado: "requiere-atencion", motivo: "esperando", sesion: "s1" })],
         })
       );
-      expect(screen.getByRole("note").textContent).toMatch(/es de la tarea «Arregla el login», que espera tu feedback/);
-      const campo = () => screen.getByPlaceholderText(/pregunta sobre xone/i);
-      fireEvent.change(campo(), { target: { value: "usa la tabla nueva" } });
-      fireEvent.keyDown(campo(), { key: "Enter" });
-      // No se manda como prosa: primero se elige.
-      expect(enviar.mock.calls.some(([m]) => (m as { clase?: string }).clase === "prosa")).toBe(false);
+      const tarjeta = screen.getByRole("region", { name: "La tarea espera tu respuesta" });
+      expect(tarjeta.textContent).toMatch(/«Arregla el login» espera tu respuesta/);
+      // La caja normal no está: un solo sitio donde escribir, sin preguntar a dónde va.
+      expect(screen.queryByPlaceholderText(/pregunta sobre xone/i)).toBeNull();
       enviar.mockClear();
+      fireEvent.change(within(tarjeta).getByLabelText("Tu feedback"), { target: { value: "usa la tabla nueva" } });
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Enviar y continuar la tarea" }));
+        fireEvent.click(within(tarjeta).getByRole("button", { name: "Enviar y continuar" }));
       });
       expect(enviar.mock.calls.map(([m]) => m)).toEqual([
         { clase: "tarea", accion: "feedback", id: "t1", texto: "usa la tabla nueva" },
         { clase: "tarea", accion: "arrancarAhora", id: "t1" },
       ]);
-      expect(screen.queryByRole("button", { name: "Enviar y continuar la tarea" })).toBeNull();
-      // Y «Seguir aquí» lo manda como siempre.
-      fireEvent.change(campo(), { target: { value: "otra cosa" } });
-      fireEvent.keyDown(campo(), { key: "Enter" });
-      enviar.mockClear();
-      fireEvent.click(screen.getByRole("button", { name: "Seguir aquí en el chat" }));
-      expect(enviar.mock.calls.map(([m]) => m)).toEqual([{ clase: "prosa", texto: "otra cosa" }]);
     });
 
     it("contestar la TARJETA de una pregunta en el chat de esa tarea también deja elegir; cancelar la vuelve a dejar contestar", async () => {
@@ -3921,5 +3913,85 @@ describe("leer las conversaciones de un proyecto donde trabaja una tarea (IXCODE
     );
     expect(screen.getByText(/Solo lectura: una tarea está trabajando en este proyecto/)).toBeTruthy();
     expect((screen.getByRole("textbox") as HTMLTextAreaElement).disabled).toBe(true);
+  });
+});
+
+/**
+ * Una tarea aparcada que espera tu respuesta (la evaluación final): en su chat, en el sitio de la
+ * caja, sus acciones —las mismas que la lista de Tareas—. Las que la devuelven a la cola ceden el
+ * proyecto, porque con su conversación abierta no arrancaría.
+ */
+describe("la tarea que espera respuesta, en su chat", () => {
+  function montarTareaEnEspera() {
+    const store = crearStoreDelCliente();
+    const enviar: Mock<(mensaje: unknown) => Promise<unknown>> = vi.fn(() => Promise.resolve({ status: 204, ok: true } as unknown));
+    render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} instalarSkill={instalarSkillDeMentira} />);
+    act(() => store.marcarConectado());
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }],
+        proyectos: [{ id: "p1", nombre: "Tienda", local: true, sesiones: [{ id: "s-tarea", titulo: "", deTarea: true }] }],
+        ramas: [],
+        proyectoAbierto: true,
+        proyectoActivo: "p1",
+        sesionActiva: "s-tarea",
+      })
+    );
+    act(() =>
+      store.aplicar({
+        clase: "tareas",
+        lista: [
+          {
+            id: "t1",
+            proyecto: "p1",
+            proyectoNombre: "Tienda",
+            titulo: "Arregla el login",
+            peticion: "p",
+            encargo: "e",
+            adjuntos: [],
+            estado: "requiere-atencion",
+            motivo: "¿Doy por buena la versión en el login?",
+            sesion: "s-tarea",
+            creada: "2026-10-14T10:00:00.000Z",
+            empezada: "2026-10-14T10:01:00.000Z",
+          },
+        ],
+        concurrencia: 2,
+        corriendoAqui: true,
+      })
+    );
+    return { store, enviar };
+  }
+
+  it("en el sitio de la caja: el motivo y sus acciones, sin la caja normal", () => {
+    montarTareaEnEspera();
+    const tarjeta = screen.getByRole("region", { name: "La tarea espera tu respuesta" });
+    expect(tarjeta.textContent).toMatch(/Doy por buena la versión/);
+    for (const nombre of ["Continuar", "Reintentar", "Dar por bueno", "Descartar", "Enviar y continuar"]) {
+      expect(within(tarjeta).getByRole("button", { name: nombre })).toBeTruthy();
+    }
+    expect(screen.queryByPlaceholderText(/Pregunta sobre XOne/)).toBeNull();
+  });
+
+  it("«Continuar» la devuelve a la cola y cede el proyecto; «Dar por bueno» la termina", async () => {
+    const { enviar } = montarTareaEnEspera();
+    const tarjeta = screen.getByRole("region", { name: "La tarea espera tu respuesta" });
+    await act(async () => {
+      fireEvent.click(within(tarjeta).getByRole("button", { name: "Continuar" }));
+    });
+    expect(enviar).toHaveBeenCalledWith({ clase: "tarea", accion: "continuar", id: "t1" });
+    expect(enviar).toHaveBeenCalledWith({ clase: "tarea", accion: "arrancarAhora", id: "t1" });
+    fireEvent.click(within(tarjeta).getByRole("button", { name: "Dar por bueno" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "tarea", accion: "terminar", id: "t1" });
+  });
+
+  it("cuando deja de esperar, vuelve la caja", () => {
+    const { store } = montarTareaEnEspera();
+    act(() => store.aplicar({ clase: "tareas", lista: [], concurrencia: 2, corriendoAqui: true }));
+    expect(screen.queryByRole("region", { name: "La tarea espera tu respuesta" })).toBeNull();
+    expect(screen.getByPlaceholderText(/Pregunta sobre XOne/)).toBeTruthy();
   });
 });

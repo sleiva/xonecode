@@ -18,3 +18,33 @@
   margin: 0;
   color: var(--dsw-alias-state-error-primary);
 }
+
+/* La tarjeta de una tarea que espera respuesta, en el sitio de la caja del chat: el mismo eje y
+   ancho que la tarjeta del compositor, y su mismo borde, porque ocupa su lugar. */
+.enEspera {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: calc(100% - 2 * var(--dsh-composer-side-clearance));
+  max-width: calc(var(--dsh-composer-card-max-width) - 2 * var(--dsh-composer-side-clearance));
+  margin: 0 auto 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.tituloEnEspera {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.motivoEnEspera {
+  margin: 0 0 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  white-space: pre-wrap;
+}

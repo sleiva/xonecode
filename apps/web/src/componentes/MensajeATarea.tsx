@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Modal, Button } from "@deepseek-ai/dsh-client-ui-primitives";
 import modal from "./NuevaSesion.module.css";
 import estilos from "./MensajeATarea.module.css";
+import { AccionesDeTarea } from "./AccionesDeTarea.js";
+import type { TareaDelCable } from "../tipos.js";
 
 /**
  * La conversación abierta es la de una TAREA que espera feedback: el aviso que va encima del compositor.
@@ -14,6 +16,51 @@ export function AvisoDeTareaEnEspera({ titulo }: { titulo: string }) {
     <p className={estilos.aviso} role="note">
       {`Esta conversación es de la tarea «${titulo}», que espera tu feedback. Lo que escribas puedes mandárselo para que siga en segundo plano, o seguir aquí tú.`}
     </p>
+  );
+}
+
+/**
+ * La conversación abierta es la de una TAREA que espera tu respuesta —p. ej. la evaluación final—: en
+ * el sitio de la caja del chat, lo que se puede hacer con ella. Pedido mirando la pantalla: esas
+ * acciones solo estaban en la lista de Tareas, y en el chat salía la caja normal, que al enviar
+ * preguntaba a dónde iba el mensaje.
+ *
+ * Es la MISMA pieza que la lista y el kanban (`AccionesDeTarea`): motivo, «Continuar», «Reintentar»,
+ * «Dar por bueno», «Descartar» y «Tu feedback». Quien la monta decide qué hace cada una; en el chat,
+ * las que la devuelven a la cola ceden además el proyecto, porque con su conversación abierta no
+ * arrancaría (gana la persona).
+ */
+export function TareaEnEsperaEnElChat({
+  tarea,
+  conectado,
+  alContinuar,
+  alReintentar,
+  alTerminar,
+  alDescartar,
+  alEnviarFeedback,
+}: {
+  tarea: TareaDelCable;
+  conectado: boolean;
+  alContinuar: (id: string) => Promise<string | undefined>;
+  alReintentar: (id: string) => void;
+  alTerminar: (id: string) => void;
+  alDescartar: (id: string) => void;
+  alEnviarFeedback: (id: string, texto: string) => void;
+}) {
+  return (
+    <section className={estilos.enEspera} aria-label="La tarea espera tu respuesta">
+      <p className={estilos.tituloEnEspera}>{`La tarea «${tarea.titulo}» espera tu respuesta`}</p>
+      {tarea.motivo === undefined ? null : <p className={estilos.motivoEnEspera}>{tarea.motivo}</p>}
+      <AccionesDeTarea
+        tarea={tarea}
+        conectado={conectado}
+        alContinuar={alContinuar}
+        alReintentar={alReintentar}
+        alTerminar={alTerminar}
+        alDescartar={alDescartar}
+        alEnviarFeedback={alEnviarFeedback}
+      />
+    </section>
   );
 }
 

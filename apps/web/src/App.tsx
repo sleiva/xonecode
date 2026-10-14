@@ -6,7 +6,7 @@ import type { Acto, TareaDelCable, ActoDeSincronizacion, FotoDelResumen, Listado
 import type { Conexion } from "./conexion.js";
 import { ANCHO_BARRA_POR_OMISION, Maqueta } from "./componentes/Maqueta.js";
 import { Barra } from "./componentes/Barra.js";
-import { AvisoDeProyectoConTarea, AvisoDeTareaEnEspera, ElegirDestinoDelMensaje } from "./componentes/MensajeATarea.js";
+import { AvisoDeProyectoConTarea, ElegirDestinoDelMensaje, TareaEnEsperaEnElChat } from "./componentes/MensajeATarea.js";
 import { LecturaDeSesion, type MotivoDeLectura } from "./componentes/LecturaDeSesion.js";
 import { Cabecera } from "./componentes/Cabecera.js";
 import { Panel } from "./componentes/Panel.js";
@@ -726,6 +726,15 @@ export function App({
     [estado.tareas, estado.alta?.sesionActiva]
   );
   const tareaEnEsperaDeLaSesion = tareaDeLaSesion?.estado === "requiere-atencion" ? tareaDeLaSesion : undefined;
+  /**
+   * «Arrancar ahora» tras devolver a la cola la tarea de la conversación ABIERTA: con ella abierta no
+   * arrancaría (gana la persona), así que se cede el proyecto —se cierra esta conversación, que queda
+   * guardada—. Devuelve el motivo si no se pudo; la tarea ya está en la cola y arrancará al cerrar.
+   */
+  const cederParaLaTarea = async (id: string): Promise<string | undefined> => {
+    const sinArrancar = await negativaOFalloDe(await enviar({ clase: "tarea", accion: "arrancarAhora", id }));
+    return sinArrancar === undefined ? undefined : `ya está en la cola, pero ${sinArrancar}`;
+  };
   /** El mensaje escrito en el chat de esa tarea, mientras se elige a dónde va. */
   const [mensajeEnEspera, setMensajeEnEspera] = useState<
     { texto: string; adjuntos: string[]; desdeConsulta?: (enviado: boolean) => void } | undefined
@@ -3136,7 +3145,36 @@ export function App({
               aquí no pintaría nunca — dos sitios para la misma condición es cómo uno de los
               dos se queda mintiendo el día que el otro cambie.
             */}
-            {tareaEnEsperaDeLaSesion === undefined ? null : <AvisoDeTareaEnEspera titulo={tareaEnEsperaDeLaSesion.titulo} />}
+            {/*
+              Una TAREA que espera tu respuesta (la evaluación final, una duda): en el sitio de la caja, lo
+              que se puede hacer con ella —la misma pieza que la lista de Tareas—. La caja vuelve cuando
+              deja de esperar. Las que la devuelven a la cola ceden el proyecto: con su conversación
+              abierta no arrancaría.
+            */}
+            {tareaEnEsperaDeLaSesion !== undefined && !turnoEnVuelo && reparto.panel !== "centro" ? (
+              <TareaEnEsperaEnElChat
+                tarea={tareaEnEsperaDeLaSesion}
+                conectado={estado.conectado}
+                alContinuar={async (id) => {
+                  const sinSeguir = await negativaOFalloDe(await enviar({ clase: "tarea", accion: "continuar", id }));
+                  return sinSeguir ?? (await cederParaLaTarea(id));
+                }}
+                alReintentar={(id) => {
+                  alReintentarTarea(id);
+                  void cederParaLaTarea(id);
+                }}
+                alTerminar={alTerminarTarea}
+                alDescartar={alDescartarTarea}
+                alEnviarFeedback={(id, texto) => {
+                  void (async () => {
+                    if ((await negativaOFalloDe(await enviar({ clase: "tarea", accion: "feedback", id, texto }))) === undefined) {
+                      await cederParaLaTarea(id);
+                    }
+                  })();
+                }}
+              />
+            ) : (
+              <>
             {proyectoAbiertoConTarea ? <AvisoDeProyectoConTarea /> : null}
             <Compositor
               extraAbajo={<SesionRemota remoto={estado.remoto} enviar={(m) => enviar(m)} alAbrirAjustes={() => abrirAjustes("remoto")} />}
@@ -3233,6 +3271,8 @@ export function App({
                 });
               }}
             />
+              </>
+            )}
             {mensajeEnEspera !== undefined && tareaEnEsperaDeLaSesion !== undefined ? (
               <ElegirDestinoDelMensaje
                 titulo={tareaEnEsperaDeLaSesion.titulo}

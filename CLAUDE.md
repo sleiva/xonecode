@@ -871,8 +871,11 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   —la conversación queda guardada— y la tarea arranca; se niega con motivo si esa consola tiene un turno en marcha o si la
   tarea espera a la anterior de su cadena (`puedeArrancarYa`). La lista de Tareas lo dice («no arranca mientras tengas
   abierta la consola…»), y una aparcada se sigue con «Continuar» (`TEXTO_DE_CONTINUAR`) o «Enviar y continuar». **En el
-  chat de una conversación de tarea que espera feedback**, enviar deja ELEGIR (`MensajeATarea.tsx`): a la tarea —feedback
-  y `arrancarAhora`— o seguir aquí; antes, lo escrito ahí era un turno de la persona y la tarea seguía aparcada.
+  chat de una conversación de tarea que espera feedback**, en el sitio de la caja va la tarjeta de la tarea
+  (`MensajeATarea.tsx#TareaEnEsperaEnElChat`, la MISMA `AccionesDeTarea` de la lista): motivo, «Continuar», «Reintentar»,
+  «Dar por bueno», «Descartar» y su feedback; las que la devuelven a la cola ceden el proyecto (`arrancarAhora`), porque con
+  su conversación abierta no arrancaría. La caja vuelve cuando deja de esperar. Contestar la tarjeta de una PREGUNTA del
+  agente ahí sigue dejando elegir (a la tarea o seguir aquí).
 - **Una tarea en marcha se puede PARAR sin borrarla** (IXCODE-50, `{accion:"parar"}`,
   `Corredor.cortar(id, {pausa})`): el mismo corte que «Descartar», pero la tarea queda aparcada con
   `motivoDePausa` y su conversación, y se sigue con «Continuar». Una pausa NUNCA pasa por la entrega
