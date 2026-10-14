@@ -63,14 +63,28 @@ describe("TareasDelProyecto", () => {
     expect(screen.queryByText(/espera a:/)).toBeNull();
   });
 
+  it("con chat al que ir, una en pausa no repite el campo de feedback: se escribe en el chat", () => {
+    render(
+      <TareasDelProyecto
+        tareas={[tarea({ estado: "requiere-atencion", motivo: "¿la doy por buena?", sesion: "s1" })]}
+        conectado
+        alEnviarFeedback={vi.fn()}
+        alContinuar={vi.fn(async () => undefined)}
+        alIrAlChat={vi.fn()}
+      />
+    );
+    expect(screen.getByRole("button", { name: "Ir al chat para responder" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeTruthy();
+    expect(screen.queryByLabelText("Tu feedback")).toBeNull();
+    expect(screen.queryByText(/editando la tarea para añadir tu feedback/)).toBeNull();
+  });
+
   it("enseña el estado y, cuando lo hay, el motivo", () => {
     render(<TareasDelProyecto tareas={[tarea({ estado: "requiere-atencion", motivo: "sin aprobar src/app.xne" })]} />);
-    // El brief dictaba «/requiere atención/i», pero `Kanban.tsx` (§0 del diseño, ya en
-    // producción) rotula la MISMA columna «Esperando feedback» y lo dice explícito: «el
-    // identificador del enum no se toca... lo que dice la interfaz sí es lo que el usuario
-    // pidió». Dos etiquetas para el mismo estado en dos pestañas de la misma app sería la
-    // misma mentira que un color repetido a mano: se alinea con lo que ya existe.
-    expect(screen.getByText(/esperando feedback/i)).toBeTruthy();
+    // «En pausa», como la columna del kanban (`Kanban.tsx`): dos etiquetas distintas para el mismo
+    // estado en dos pestañas de la misma app sería la misma mentira que un color repetido a mano. Y
+    // dice qué espera: tu respuesta.
+    expect(screen.getByText(/en pausa · esperando tu respuesta/i)).toBeTruthy();
     expect(screen.getByText(/sin aprobar src\/app\.xne/)).toBeTruthy();
   });
 

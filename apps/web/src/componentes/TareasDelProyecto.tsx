@@ -13,7 +13,8 @@ const ETIQUETA_DE_ESTADO: Record<TareaDelCable["estado"], string> = {
   // documenta ahí: el identificador del enum no se toca, pero lo que la interfaz DICE es
   // «esperando feedback» desde §0 del diseño, y dos etiquetas para el mismo estado en dos
   // pestañas de la misma app sería la misma mentira que un color repetido a mano.
-  "requiere-atencion": "Esperando feedback",
+  // «En pausa» y no «Esperando feedback»: lo que importa es que NO avanza hasta que contestes.
+  "requiere-atencion": "En pausa · esperando tu respuesta",
   terminada: "Terminada",
 };
 
@@ -343,6 +344,8 @@ function Fila({
           alDescartar={alDescartar}
           alTerminar={alTerminar}
           alEnviarFeedback={alEnviarFeedback}
+          // Con chat al que ir, se escribe ahí («Ir al chat para responder»): el campo aquí sería el mismo dos veces.
+          {...(alIrAlChat !== undefined && t.sesion !== undefined ? { sinFeedback: true } : {})}
           {...(alContinuar === undefined ? {} : { alContinuar })}
           {...(alArrancarAhora === undefined ? {} : { alArrancarAhora })}
           {...(alEditarEncargo === undefined ? {} : { alEditarEncargo })}

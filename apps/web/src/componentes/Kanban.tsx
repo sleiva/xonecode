@@ -51,7 +51,7 @@ const COLUMNAS: readonly { estado: TareaDelCable["estado"]; etiqueta: string }[]
   // El identificador del enum no se toca —está en disco, en el cable y en el store—; lo que
   // cambió es lo que SIGNIFICA: ya no es donde cae toda escritura, es donde cae una decisión
   // que el desarrollador tiene que tomar de verdad.
-  { estado: "requiere-atencion", etiqueta: "Esperando feedback" },
+  { estado: "requiere-atencion", etiqueta: "En pausa" },
   { estado: "terminada", etiqueta: "Terminada" },
 ];
 

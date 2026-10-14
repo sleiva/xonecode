@@ -21,7 +21,7 @@ const tarea = (extra: Partial<TareaDelCable> = {}): TareaDelCable => ({
 describe("Kanban", () => {
   it("cuatro columnas, una por estado", () => {
     render(<Kanban cola={{ lista: [tarea()], concurrencia: 2, corriendoAqui: true }} />);
-    for (const c of ["Nuevo", "En proceso", "Esperando feedback", "Terminada"]) {
+    for (const c of ["Nuevo", "En proceso", "En pausa", "Terminada"]) {
       expect(screen.getByRole("heading", { name: new RegExp(c, "i") })).toBeTruthy();
     }
   });

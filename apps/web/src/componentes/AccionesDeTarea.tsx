@@ -79,6 +79,7 @@ export function AccionesDeTarea({
   alParar,
   puedeArrancar,
   esperaPorTuConsola,
+  sinFeedback,
 }: {
   tarea: TareaDelCable;
   /** Si el cable está vivo. Ausente = se asume conectado — es lo que vale hoy para quien
@@ -113,6 +114,11 @@ export function AccionesDeTarea({
   puedeArrancar?: boolean;
   /** Lo que la frena es que la consola de su proyecto está ABIERTA (la tuya): se dice, en vez de quedarse muda en «Nuevo». */
   esperaPorTuConsola?: boolean;
+  /**
+   * Sin campo de feedback ni su pista: escribir se hace en el CHAT de la tarea («Ir al chat para
+   * responder»), y repetirlo en la lista era el mismo campo dos veces. Los botones rápidos siguen.
+   */
+  sinFeedback?: boolean;
 }) {
   const [confirmando, setConfirmando] = useState(false);
   const [editando, setEditando] = useState(false);
@@ -135,8 +141,8 @@ export function AccionesDeTarea({
   const aparcada = t.estado === "requiere-atencion";
   const ofrecerReintentar = aparcada && destinos.includes("nuevo") && alReintentar !== undefined;
   const ofrecerTerminar = aparcada && destinos.includes("terminada") && alTerminar !== undefined;
-  const ofrecerFeedback = aparcada && destinos.includes("nuevo") && alEnviarFeedback !== undefined;
-  const pistaDeFeedback = aparcada && destinos.includes("nuevo") && alEnviarFeedback === undefined;
+  const ofrecerFeedback = aparcada && destinos.includes("nuevo") && alEnviarFeedback !== undefined && sinFeedback !== true;
+  const pistaDeFeedback = aparcada && destinos.includes("nuevo") && alEnviarFeedback === undefined && sinFeedback !== true;
   const ofrecerDescartar = alDescartar !== undefined;
   const ofrecerContinuar = aparcada && destinos.includes("nuevo") && alContinuar !== undefined;
   const ofrecerArrancar = t.estado === "nuevo" && puedeArrancar === true && alArrancarAhora !== undefined;
