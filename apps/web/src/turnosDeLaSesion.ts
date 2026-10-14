@@ -33,8 +33,6 @@ export interface TurnoDeLaSesion {
   pasos: number;
   /** Líneas de tool que fallaron (`detalles[].error`). */
   fallidas: number;
-  /** Lo que el harness dijo de PERMISOS en el turno (`sistema` de clase `permiso`), tal cual. */
-  permisos: string[];
   /** El ÚLTIMO veredicto del verificador en el turno. Ausente = no corrió (o no consta). */
   veredicto?: VeredictoDelTurno;
 }
@@ -58,7 +56,6 @@ export function turnosDeLaSesion(actos: readonly Acto[]): TurnoDeLaSesion[] {
         abierto: true,
         pasos: 0,
         fallidas: 0,
-        permisos: [],
         ...(acto.cuando === undefined ? {} : { empezo: acto.cuando }),
       };
       suyos = [];
@@ -70,7 +67,6 @@ export function turnosDeLaSesion(actos: readonly Acto[]): TurnoDeLaSesion[] {
     if (actual === undefined || !actual.abierto) return;
     suyos.push(acto);
     if (acto.tipo === "asistente" && acto.cuando !== undefined) actual.acabo = acto.cuando;
-    if (acto.tipo === "sistema" && acto.clase === "permiso") actual.permisos.push(acto.texto);
     if (acto.tipo === "verificacion") {
       const { tipo: _tipo, ...veredicto } = acto;
       actual.veredicto = veredicto;

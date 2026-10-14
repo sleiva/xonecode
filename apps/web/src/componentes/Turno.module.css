@@ -180,23 +180,6 @@
   background: var(--xonecode-azul);
 }
 
-.permisos {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.permiso {
-  padding: 8px 10px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
-  line-height: 18px;
-}
-
 .verificador {
   display: flex;
   align-items: center;

@@ -32,7 +32,6 @@ describe("turnosDeLaSesion", () => {
       // Dos llamadas a tool; ni el razonamiento ni el artefacto son pasos (`pasos.ts`).
       pasos: 2,
       fallidas: 1,
-      permisos: ["dev: quiere modificar un fichero del proyecto"],
     });
     expect(primero?.veredicto).toBeUndefined();
     // El segundo no ha cerrado: sin fin no hay duración ni consumo, y no se rellenan con ceros.
@@ -62,7 +61,7 @@ describe("turnosDeLaSesion", () => {
     ];
     const turnos = turnosDeLaSesion(actos);
     expect(turnos).toHaveLength(1);
-    expect(turnos[0]).toMatchObject({ pasos: 0, permisos: [] });
+    expect(turnos[0]).toMatchObject({ pasos: 0 });
   });
 
   it("sin mensajes no hay turnos", () => {

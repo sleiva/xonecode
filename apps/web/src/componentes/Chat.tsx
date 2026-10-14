@@ -987,6 +987,14 @@ export function Chat({
     // `tipo`. Una clase que este cliente no conozca dejaba `CLASES_DE_SISTEMA[clase]` en
     // `undefined` y el destructuring del render LANZABA — o sea que se llevaba el transcript
     // entero. Se cae al camino suelto, que es el lado conservador: se ve, sin agrupar.
+    /**
+     * Los PERMISOS no se pintan en el hilo (petición suya, rediseño del chat: «no quiero que salga
+     * lo de los permisos»). Eran una línea por escritura —«developer-xone: quiere modificar un
+     * fichero del proyecto»— que repetía lo que la tarjeta de aprobación ya enseña con su diff, y
+     * en autónomo lo que el turno escribió ya lo dice su aviso. Siguen en el acto y en Trazas.
+     * Con `continue`, como la sincronización: no abren ni cierran ningún tramo.
+     */
+    if (acto.tipo === "sistema" && acto.clase === "permiso") continue;
     if (acto.tipo === "sistema" && acto.clase !== undefined && acto.clase in CLASES_DE_SISTEMA) {
       const clase = acto.clase;
       if (deHarness === undefined || deHarness.clase !== clase) {

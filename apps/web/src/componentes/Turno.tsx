@@ -9,6 +9,9 @@ import estilos from "./Turno.module.css";
 /**
  * El inspector de UN turno: lo que costó y lo que pasó, al lado del hilo.
  *
+ * Los permisos NO van aquí (petición suya): repetían, una línea por escritura, lo que la tarjeta
+ * de aprobación enseña con su diff.
+ *
  * El hilo cuenta QUÉ hizo el agente; esto se queda con las CIFRAS, para no decir lo mismo en dos
  * sitios. Todo sale de los actos que ya viajan (`turnosDeLaSesion`), igual que las Trazas: no pide
  * nada al servidor y por eso no tiene nada que medir al montarse.
@@ -64,19 +67,6 @@ export function Turno({ actos, topeDeContexto }: { actos: readonly Acto[]; topeD
       <Cifras turno={turno} />
       <PorModelo turno={turno} />
       <Contexto turno={turno} {...(esElUltimo && topeDeContexto !== undefined ? { tope: topeDeContexto } : {})} />
-
-      {turno.permisos.length === 0 ? null : (
-        <section className={estilos.seccion} aria-label="Permisos">
-          <h3 className={estilos.titulo}>Permisos</h3>
-          <ul className={estilos.permisos}>
-            {turno.permisos.map((texto, i) => (
-              <li key={i} className={estilos.permiso}>
-                {texto}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
 
       <p className={estilos.verificador} data-estado={estadoDelVeredicto(turno.veredicto)}>
         <span aria-hidden="true" className={estilos.punto} />

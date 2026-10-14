@@ -1118,8 +1118,9 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   `margin-top: var(--dsh-chat-flow-gap, 16px)` llevado por el HIJO). Dos valores y no tres: dentro
   de un turno, y al empezar otro.
 - **Los actos de `sistema` se ven en el chat**, y **se reparten por CLASE, que viaja con el acto y
-  no se deduce del texto**: `aviso` (bitácora, juez, crítico de pantalla) bajo «Verificaciones» y
-  `permiso` bajo «Permisos», cada clase en SU tramo. Ausente sigue suelto y a la vista. Lo que se
+  no se deduce del texto**: `aviso` (bitácora, juez, crítico de pantalla) bajo «Verificaciones», en SU tramo. **`permiso`
+  NO se pinta** (ni en el hilo ni en el inspector «Turno», petición suya): repetía lo que la
+  tarjeta de aprobación enseña con su diff; sigue en el acto y en Trazas. Ausente sigue suelto y a la vista. Lo que se
   pliega es el párrafo, nunca el hecho de que lo hay. `pausa` emite un acto POR pendiente.
   `razonamiento` es su propio evento y acto (`textoDe` lo EXCLUYE del texto). El texto del
   asistente se enseña mientras llega, a `MS_ENTRE_PARCIALES` (80 ms).

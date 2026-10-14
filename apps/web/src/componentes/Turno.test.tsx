@@ -41,7 +41,7 @@ describe("Turno", () => {
     expect(screen.getByText("Verificador: en rojo · 2 errores")).not.toBeNull();
   });
 
-  it("las flechas llevan al anterior, con sus cifras, permisos y modelos", () => {
+  it("las flechas llevan al anterior, con sus cifras y modelos; los permisos no salen", () => {
     render(<Turno actos={ACTOS} topeDeContexto={128_000} />);
     fireEvent.click(screen.getByRole("button", { name: "Turno anterior" }));
     expect(screen.getByText("Turno 1 de 2")).not.toBeNull();
@@ -51,7 +51,7 @@ describe("Turno", () => {
     expect(screen.getByText(/1 falló/)).not.toBeNull();
     expect(screen.getByText("deepseek/deepseek-pro")).not.toBeNull();
     expect(screen.getByText("De ellos, 9,1k salieron de caché.")).not.toBeNull();
-    expect(screen.getByText("dev: quiere modificar un fichero del proyecto")).not.toBeNull();
+    expect(screen.queryByText("dev: quiere modificar un fichero del proyecto")).toBeNull();
     // El tope es del modelo EN VIGOR: en un turno que no es el último no se inventa el porcentaje.
     expect(screen.getByText("11,6k al cerrar el turno")).not.toBeNull();
     expect(screen.getByText("Verificador: no corrió en este turno")).not.toBeNull();

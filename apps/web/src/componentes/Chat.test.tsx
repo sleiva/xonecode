@@ -854,7 +854,8 @@ describe("Chat: lo que dice el harness", () => {
     expect(d!.textContent).toContain("5 defectos de pantalla");
   });
 
-  it("y los permisos bajo «Permisos», con su propio tramo: son dos preguntas distintas", () => {
+  it("los PERMISOS no salen en el hilo: la tarjeta de aprobación ya enseña cada escritura", () => {
+    // Petición suya (rediseño del chat): una línea por escritura repetía lo que la tarjeta dice.
     const { container } = render(
       <Chat
         actos={[
@@ -865,10 +866,8 @@ describe("Chat: lo que dice el harness", () => {
       />
     );
     const resumenes = [...container.querySelectorAll("summary")].map((s) => s.textContent);
-    expect(resumenes).toEqual([
-      expect.stringMatching(/Permisos · 2 escrituras/u),
-      expect.stringMatching(/Verificaciones · 1 aviso\b/u),
-    ]);
+    expect(resumenes).toEqual([expect.stringMatching(/Verificaciones · 1 aviso\b/u)]);
+    expect(container.textContent).not.toMatch(/quiere (escribir|modificar)/u);
   });
 
   it("el resumen de contexto se pliega en su propio tramo y se lee como MARKDOWN", () => {
@@ -891,8 +890,8 @@ describe("Chat: lo que dice el harness", () => {
   });
 
   it("uno solo se dice en SINGULAR: un plural mentido es una cifra que nadie midió", () => {
-    const { container } = render(<Chat actos={[permiso("developer-xone: quiere escribir")]} />);
-    expect(container.querySelector("summary")!.textContent).toMatch(/Permisos · 1 escritura\b/u);
+    const { container } = render(<Chat actos={[aviso("no cumple lo que pediste")]} />);
+    expect(container.querySelector("summary")!.textContent).toMatch(/Verificaciones · 1 aviso\b/u);
   });
 
   it("una respuesta a un COMANDO no se pliega: es el acuse de algo que acabas de pulsar", () => {
