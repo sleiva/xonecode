@@ -1810,11 +1810,16 @@ export function App({
   /** Por qué esa conversación se LEE ahora, decidido con lo de AHORA: si ya nada lo impide, se ofrece abrirla. */
   const proyectoDeLaLectura = lectura === undefined ? undefined : estado.alta?.proyectos.find((p) => p.id === lectura.proyecto);
   const laQueTrabajaEnLaLectura = proyectoDeLaLectura?.sesiones?.find((s) => s.trabajando === true && s.id !== lectura?.sesion);
+  /** La tarea de la conversación que se lee, tal como está AHORA en la cola. */
+  const tareaDeLaLectura = lectura?.tarea === undefined ? undefined : estado.tareas?.lista.find((t) => t.id === lectura.tarea);
   const motivoDeLectura: MotivoDeLectura =
     lectura === undefined
       ? "libre"
       : tareaQueEscribeLaSesion.has(lectura.sesion)
         ? "tarea"
+        // Se ha parado a esperar TU respuesta: el único momento en que hace falta la caja.
+        : tareaDeLaLectura?.estado === "requiere-atencion"
+          ? "atencion"
         : laQueTrabajaEnLaLectura !== undefined || (proyectoDeLaLectura?.trabajando === true && !proyectoDeLaLectura.sesiones?.some((s) => s.id === lectura.sesion && s.trabajando === true))
           ? "trabajando"
           : "libre";
@@ -2762,7 +2767,8 @@ export function App({
     // Una conversación abierta para LEER (IXCODE-36): su título y su proyecto, sin las pestañas de una
     // sesión —no hay consola detrás a la que lleven—.
     <Cabecera
-      titulo={lectura.titulo !== "" ? lectura.titulo : "Sin título"}
+      // La de una tarea no tiene título (sale del primer mensaje de una persona): el de la tarea.
+      titulo={lectura.titulo !== "" ? lectura.titulo : (tareaDeLaLectura?.titulo ?? "Sin título")}
       {...(proyectoDeLaLectura === undefined ? {} : { proyecto: proyectoDeLaLectura.nombre })}
       conectado={estado.conectado}
       barraContraida={reparto.barra === "plegada"}
@@ -2890,6 +2896,7 @@ export function App({
               // Y solo mientras la tarea siga en marcha: el store no suelta `mirada` cuando acaba.
               vivo={lectura.tarea !== undefined && tareaQueEscribeLaSesion.has(lectura.sesion) && estado.mirada?.tarea === lectura.tarea}
               motivo={motivoDeLectura}
+              {...(tareaDeLaLectura?.motivo === undefined ? {} : { pregunta: tareaDeLaLectura.motivo })}
               alAbrirParaEscribir={() => abrirSesion(lectura.proyecto, lectura.sesion)}
               {...(laQueTrabajaEnLaLectura === undefined
                 ? {}

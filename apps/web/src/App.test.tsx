@@ -3765,6 +3765,44 @@ describe("leer las conversaciones de un proyecto donde trabaja una tarea (IXCODE
     expect(screen.queryByText("arregla el login")).toBeNull();
   });
 
+  it("la caja solo aparece cuando la tarea NECESITA respuesta: «Responder» abre su conversación", async () => {
+    const { store, enviar, barra } = montarConTarea();
+    fireEvent.click(within(barra).getByRole("button", { name: /Tarea de fondo/ }));
+    expect(await screen.findByText("arregla el login")).toBeTruthy();
+    // La cabecera lleva el título de la TAREA: su conversación no tiene uno propio.
+    expect(screen.getAllByRole("banner")[0]!.textContent).toMatch(/Tienda.*Arregla el login/);
+    expect(screen.queryByRole("button", { name: "Responder" })).toBeNull();
+    // La tarea se para a preguntar.
+    act(() =>
+      store.aplicar({
+        clase: "tareas",
+        lista: [
+          {
+            id: "t1",
+            proyecto: "p1",
+            proyectoNombre: "Tienda",
+            titulo: "Arregla el login",
+            peticion: "p",
+            encargo: "e",
+            adjuntos: [],
+            estado: "requiere-atencion",
+            motivo: "¿La versión va arriba o abajo del logo?",
+            sesion: "s-tarea",
+            creada: "2026-10-14T10:00:00.000Z",
+            empezada: "2026-10-14T10:01:00.000Z",
+          },
+        ],
+        concurrencia: 2,
+        corriendoAqui: true,
+      })
+    );
+    expect(screen.getByRole("note").textContent).toMatch(/necesita tu respuesta.*arriba o abajo/);
+    expect(screen.queryByRole("textbox")).toBeNull();
+    enviar.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Responder" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "sesion", proyecto: "p1", sesion: "s-tarea" });
+  });
+
   it("la de la tarea va EN VIVO: se mira al abrir y se deja de mirar UNA vez al cerrar", async () => {
     const mirar = vi.fn(async () => {});
     const { store, barra } = montarConTarea(mirar);

@@ -62,3 +62,10 @@
 .error {
   color: var(--dsw-alias-state-error-primary);
 }
+
+/* Lo que la tarea pregunta, en su propia línea y en el color del texto: es lo que hay que contestar. */
+.pregunta {
+  display: block;
+  margin-top: 4px;
+  color: var(--dsw-alias-label-primary);
+}
