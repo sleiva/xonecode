@@ -5,8 +5,8 @@ import { describe, expect, it } from "vitest";
 import { NOMBRES_DE_SEMILLA, TEMAS, contraste, temaPorId, temasDe, type Semillas } from "./temas.js";
 
 describe("el catálogo de temas", () => {
-  it("el de omisión primero: XOneCode en claro, Azul noche en oscuro (con Grafito y XOneCode detrás)", () => {
-    expect(temasDe("oscuro").map((t) => t.id)).toEqual(["azul-noche", "grafito", "xonecode-oscuro", "github-oscuro", "one-oscuro", "dracula"]);
+  it("el de omisión primero: XOneCode en claro, Azul noche en oscuro (con el resto de oscuros detrás)", () => {
+    expect(temasDe("oscuro").map((t) => t.id)).toEqual(["azul-noche", "grafito", "pizarra", "tinta-calida", "xonecode-oscuro", "github-oscuro", "one-oscuro", "dracula"]);
     expect(temasDe("claro").map((t) => t.id)).toEqual(["xonecode-claro", "github-claro", "one-claro", "ayu-claro"]);
   });
 
@@ -87,6 +87,8 @@ describe("la marca «cambiada», azul en todos los temas", () => {
     expect(azules).toEqual({
       "azul-noche": "#60a5fa",
       grafito: "#60a5fa",
+      pizarra: "#60a5fa",
+      "tinta-calida": "#60a5fa",
       "github-oscuro": "#1f6feb",
       "one-oscuro": "#61afef",
       dracula: "#8be9fd",

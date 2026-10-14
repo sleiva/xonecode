@@ -87,6 +87,37 @@ export const TEMAS: readonly Tema[] = [
       expresionDeCadena: "#86efac",
     },
   },
+  /** Pizarra: un oscuro más SUAVE —gris azulado, no casi negro— con acento turquesa, para sesiones
+   *  largas o con luz ambiente (tablero F del lienzo). */
+  {
+    id: "pizarra",
+    nombre: "Pizarra",
+    modo: "oscuro",
+    semillas: {
+      fondo: "#1c2430", capa1: "#222b38", capa2: "#283342", capa3: "#303d4f",
+      texto: "#f3f6fa", texto2: "#cbd5e1", texto3: "#a3b1c2", borde: "#46566c",
+      acento: "#5eead4", sobreAcento: "#05261f",
+      peligro: "#fca5a5", exito: "#4ade80", aviso: "#fdba74", negocio: "#d8b4fe", sombra: "#0b0f15", cambio: "#60a5fa",
+      palabraClave: "#fbcfe8", cadena: "#a7f3d0", funcion: "#7dd3fc", comentario: "#9fb0c3",
+      constante: "#fed7aa", parametro: "#d8b4fe", puntuacion: "#cbd5e1", enlace: "#5eead4",
+      expresionDeCadena: "#a7f3d0",
+    },
+  },
+  /** Tinta cálida: marrón muy oscuro, texto crema y acento ámbar — cansa menos de noche (tablero F). */
+  {
+    id: "tinta-calida",
+    nombre: "Tinta cálida",
+    modo: "oscuro",
+    semillas: {
+      fondo: "#15120e", capa1: "#1c1813", capa2: "#231e18", capa3: "#2d2720",
+      texto: "#f5efe6", texto2: "#d8cdbd", texto3: "#b0a28e", borde: "#4a3f33",
+      acento: "#fbbf24", sobreAcento: "#231700",
+      peligro: "#fca5a5", exito: "#86efac", aviso: "#fdba74", negocio: "#f9a8d4", sombra: "#000000", cambio: "#60a5fa",
+      palabraClave: "#f9a8d4", cadena: "#bef264", funcion: "#fdba74", comentario: "#a8998a",
+      constante: "#fca5a5", parametro: "#fde68a", puntuacion: "#d8cdbd", enlace: "#fbbf24",
+      expresionDeCadena: "#bef264",
+    },
+  },
   // El oscuro de SIEMPRE, sin semillas: ya no es el de omisión, pero se puede volver a él. «Clásico»
   // para no llamarse igual que el de omisión, que ahora es el XOneCode del modo oscuro.
   { id: "xonecode-oscuro", nombre: "XOneCode clásico", modo: "oscuro", muestra: { fondo: "#151517", texto: "#cfd3d6", acento: "#00a3e0" } },
