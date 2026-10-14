@@ -190,7 +190,8 @@ import {
   trabajoSinCommitear,
 } from "../../agent/sesiones/gitSync.js";
 import { marcarTareaDeSesion, sembrarConsumosPendientes, type DispositivoElegido } from "./sesiones.js";
-import { RUTA_ARTEFACTOS, esRutaDeArtefacto } from "../../core/artefactos.js";
+import { RUTA_ARTEFACTOS, esRutaDeArtefacto, rutaRelativaDeArtefacto } from "../../core/artefactos.js";
+import { MIMES_DE_ARTEFACTO_AL_MOVIL, TOPE_DE_ARTEFACTO_AL_MOVIL, trozosDeArtefacto } from "../../core/remoto.js";
 import {
   arbolDeProyecto,
   escribirFicheroDeProyecto,
@@ -6304,7 +6305,8 @@ export function montarRutas(
               if (!tareaEsperandoFeedback(m.tarea)) informar("sesión remota: el panel mandó algo a una tarea que ya no espera feedback");
               else if (m.clase === "continuar") void continuarTarea(m.tarea);
               else darFeedbackATarea(m.tarea, m.texto);
-            } else recibirEnLaConsola(m);
+            } else if (m.clase === "artefacto") void enviarArtefactoAlMovil(m.ruta);
+            else recibirEnLaConsola(m);
           },
           alEntrarMovil: (enviar) => {
             try {
@@ -6322,6 +6324,39 @@ export function montarRutas(
             for (const cliente of clientes) cliente(mensajeDeRemoto(e));
           },
         });
+
+  /**
+   * Un artefacto del hilo, al MÓVIL que lo pidió (petición suya: ver las capturas desde la web móvil).
+   *
+   * Las MISMAS barreras que `GET /artefacto`: la ruta por `esRutaDeArtefacto` y el lector, que la
+   * comprueba contra el disco (texto y `realpath`), sobre la conversación del FOCO —que es la que el
+   * móvil sigue—. Y dos más, propias del móvil: solo IMÁGENES (un HTML se sirve en el escritorio dentro
+   * de dos capas de sandbox, y en la web móvil no hay con qué aislarlo) y con tope de tamaño. Va en
+   * trozos porque una captura no cabe en un solo mensaje del puente (`trozosDeArtefacto`), y a todos los
+   * móviles: siguen la misma conversación, y un id de quién lo pidió no viaja hasta aquí.
+   *
+   * Un fallo se DEVUELVE al móvil como `artefacto.error` con un texto FIJO nuestro, nunca el de Node.
+   */
+  const enviarArtefactoAlMovil = async (ruta: string): Promise<void> => {
+    const fallo = (motivo: string): void => sesionRemota?.difundir({ clase: "artefacto.error", ruta, motivo });
+    if (!esRutaDeArtefacto(ruta)) return fallo("esa ruta no es de un artefacto");
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined || opciones.leerArtefactoCrudo === undefined) return fallo("no hay ninguna conversación abierta");
+    let leido: LecturaCruda;
+    try {
+      leido = await opciones.leerArtefactoCrudo(abierto.raiz, abierto.idDeHilo, rutaRelativaDeArtefacto(ruta));
+    } catch (error) {
+      informar(`sesión remota: no se pudo leer un artefacto para el móvil (${codigoDe(error)})`);
+      return fallo("no se pudo leer");
+    }
+    if (!leido.ok) {
+      const textos = { rechazado: "esa ruta no es de un artefacto", "no-existe": "ya no está", "demasiado-grande": "es demasiado grande" } as const;
+      return fallo(textos[leido.motivo]);
+    }
+    if (leido.mime === undefined || !MIMES_DE_ARTEFACTO_AL_MOVIL.has(leido.mime)) return fallo("en el móvil solo se ven imágenes");
+    if (leido.datos.length > TOPE_DE_ARTEFACTO_AL_MOVIL) return fallo("es demasiado grande para el móvil");
+    for (const trozo of trozosDeArtefacto(ruta, leido.mime, leido.datos)) sesionRemota?.difundir(trozo);
+  };
 
   /**
    * Apagar solo si hay algo ENCENDIDO. `apagar()` anuncia `{estado:"apagada"}` a todas las

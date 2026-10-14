@@ -971,7 +971,10 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   de `POST /accion`. **Salvo la `respuesta`, que va por `responderDesdeElMovil`**: al móvil solo le llega la `pregunta`
   SIN `decision`, así que solo contesta una de ésas, nunca la subida con casillas ni «¿Vaciar la copia…?» del escritorio
   (por `recibir`, un «s» del móvil las aprobaba); sin ninguna que contestar se descarta y se informa. La clase de un
-  mensaje rechazado solo llega al terminal si es un nombre limpio. **UN canal cifrado por encendido, conservado en las reconexiones**: uno nuevo al reconectar dejaría
+  mensaje rechazado solo llega al terminal si es un nombre limpio. **Las capturas del hilo se VEN en el móvil, a
+  petición** (`artefacto` con su ruta virtual): el anfitrión la lee con las MISMAS barreras que `GET /artefacto` sobre la
+  conversación del foco, solo IMÁGENES (`MIMES_DE_ARTEFACTO_AL_MOVIL`: un HTML no tiene en la web móvil con qué
+  aislarse) y con tope, y la manda en trozos numerados (`trozosDeArtefacto`) porque no cabe en un mensaje. **UN canal cifrado por encendido, conservado en las reconexiones**: uno nuevo al reconectar dejaría
   al relé repetir mensajes viejos del móvil; y lo que llega del relé se procesa EN ORDEN (el canal tira toda secuencia no
   mayor que la última); lo que SALE se cifra y se manda también en cola, en el orden de llamada, por la misma razón vista
   desde el móvil. Revocar no anuncia el apagado de en medio. Un error cruza el cable solo como `code` de Node o texto FIJO nuestro, nunca lo que diga el relé.

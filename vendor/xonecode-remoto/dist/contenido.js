@@ -7,6 +7,8 @@ const objeto = (x) => typeof x === "object" && x !== null && !Array.isArray(x);
 const texto = (x) => typeof x === "string";
 const noVacio = (x) => texto(x) && x.length > 0;
 const esActo = (x) => objeto(x) && texto(x.tipo);
+/** Los tipos de artefacto que la web móvil enseña: imágenes (la misma lista que el anfitrión). */
+export const MIMES_DE_ARTEFACTO = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 export function validarDelMovil(m) {
     if (!objeto(m))
         return undefined;
@@ -40,6 +42,8 @@ export function validarDelMovil(m) {
             return noVacio(m.tarea) && texto(m.texto) && m.texto.trim() !== "" ? { clase: "feedback", tarea: m.tarea, texto: m.texto } : undefined;
         case "continuar":
             return noVacio(m.tarea) ? { clase: "continuar", tarea: m.tarea } : undefined;
+        case "artefacto":
+            return noVacio(m.ruta) && m.ruta.length <= 300 ? { clase: "artefacto", ruta: m.ruta } : undefined;
         default:
             return undefined;
     }
@@ -164,6 +168,17 @@ export function validarDelAnfitrion(m) {
                 ...(texto(m.proyecto) ? { proyecto: m.proyecto } : {}),
                 ...(texto(m.sesion) ? { sesion: m.sesion } : {}),
             };
+        case "artefacto.trozo": {
+            const entero = (x) => typeof x === "number" && Number.isInteger(x) && x >= 0;
+            if (!noVacio(m.ruta) || !texto(m.datos) || !entero(m.indice) || !entero(m.total) || m.indice >= m.total)
+                return undefined;
+            // Solo imágenes: lo que se pinta con este trozo es un `<img>`, nunca un documento.
+            if (!texto(m.mime) || !MIMES_DE_ARTEFACTO.has(m.mime))
+                return undefined;
+            return { clase: "artefacto.trozo", ruta: m.ruta, mime: m.mime, indice: m.indice, total: m.total, datos: m.datos };
+        }
+        case "artefacto.error":
+            return noVacio(m.ruta) && texto(m.motivo) ? { clase: "artefacto.error", ruta: m.ruta, motivo: m.motivo } : undefined;
         case "panorama": {
             if (!Array.isArray(m.consolas) || !Array.isArray(m.tareas))
                 return undefined;

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ENTRADA_DEL_CONTRATO, type ContratoDelPanorama } from "./__oro__/panoramaContrato.js";
 import { CARACTERES_DE_FEEDBACK, componerPanorama } from "./panorama.js";
-import { ajustarATope, filtrarSalida, TOPE_DE_SALIDA_BYTES, validarEntradaDelMovil } from "./remoto.js";
+import { ajustarATope, filtrarSalida, MIMES_DE_ARTEFACTO_AL_MOVIL, TOPE_DE_SALIDA_BYTES, trozosDeArtefacto, validarEntradaDelMovil } from "./remoto.js";
 
 describe("lo que sale hacia el móvil", () => {
   it("el chat, la aprobación y el turno pasan tal cual", () => {
@@ -170,5 +170,32 @@ describe("una decisión del móvil con clave __proto__", () => {
     const r = validarEntradaDelMovil(m);
     expect(r).toEqual({ clase: "decision", decisiones: { a: "reject" } });
     expect(Object.getPrototypeOf((r as { decisiones: object }).decisiones)).toBe(Object.prototype);
+  });
+});
+
+describe("artefactos al móvil", () => {
+  it("el móvil pide un artefacto por su ruta; vacía o larguísima no entra", () => {
+    expect(validarEntradaDelMovil({ clase: "artefacto", ruta: "/artefactos/a.png" })).toEqual({ clase: "artefacto", ruta: "/artefactos/a.png" });
+    expect(validarEntradaDelMovil({ clase: "artefacto", ruta: "" })).toBeUndefined();
+    expect(validarEntradaDelMovil({ clase: "artefacto", ruta: "x".repeat(301) })).toBeUndefined();
+    expect(validarEntradaDelMovil({ clase: "artefacto" })).toBeUndefined();
+  });
+
+  it("los trozos caben en el tope de salida, salen en orden y juntos son el fichero", () => {
+    const datos = new Uint8Array(1_200_000).map((_, i) => i % 251);
+    const trozos = trozosDeArtefacto("/artefactos/a.png", "image/png", datos);
+    expect(trozos.length).toBeGreaterThan(1);
+    for (const t of trozos) {
+      expect(filtrarSalida(t)).toEqual(t);
+      expect(ajustarATope(t)).toEqual(t);
+    }
+    const juntos = trozos.map((t) => (t.clase === "artefacto.trozo" ? t.datos : "")).join("");
+    expect(Buffer.from(juntos, "base64").equals(Buffer.from(datos))).toBe(true);
+    expect(trozos.map((t) => (t.clase === "artefacto.trozo" ? t.indice : -1))).toEqual(trozos.map((_, i) => i));
+  });
+
+  it("solo imágenes", () => {
+    expect([...MIMES_DE_ARTEFACTO_AL_MOVIL].every((m) => m.startsWith("image/"))).toBe(true);
+    expect(MIMES_DE_ARTEFACTO_AL_MOVIL.has("text/html")).toBe(false);
   });
 });

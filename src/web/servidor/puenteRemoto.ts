@@ -14,7 +14,14 @@
 import type { CanalRemoto, PuenteRemotoPort, TunelAbierto } from "../../core/ports.js";
 import { MOTIVOS_DEL_TUNEL } from "../../core/tunel.js";
 import type { Panorama } from "../../core/panorama.js";
-import { ajustarATope, filtrarSalida, TOPE_DE_SALIDA_BYTES, validarEntradaDelMovil, type EntradaDelMovil } from "../../core/remoto.js";
+import {
+  ajustarATope,
+  filtrarSalida,
+  TOPE_DE_SALIDA_BYTES,
+  validarEntradaDelMovil,
+  type EntradaDelMovil,
+  type MensajeDeArtefactoAlMovil,
+} from "../../core/remoto.js";
 import type { Sumidero } from "./transporte.js";
 
 export type EstadoDeSesionRemota =
@@ -58,10 +65,11 @@ export interface SesionRemota {
   /** ¿Hay algún móvil dentro? Para no componer un `panorama` que no leería nadie. */
   hayMoviles(): boolean;
   /**
-   * A TODOS los móviles y a nadie más: el `panorama` no es de las pestañas, así que no pasa por
-   * `clientes` sino por los móviles de esta sesión, con el filtro y el tope de siempre.
+   * A TODOS los móviles y a nadie más: el `panorama` y los trozos de un artefacto pedido desde el
+   * móvil no son de las pestañas, así que no pasan por `clientes` sino por los móviles de esta
+   * sesión, con el filtro y el tope de siempre.
    */
-  difundir(mensaje: Panorama): void;
+  difundir(mensaje: Panorama | MensajeDeArtefactoAlMovil): void;
 }
 
 export const MOTIVO_NO_ABRIO = "no se pudo abrir la sesión remota";

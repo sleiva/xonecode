@@ -94,6 +94,20 @@ export type MensajeDelAnfitrion = {
     consolas: ConsolaDelPanorama[];
     tareas: TareaDelPanorama[];
     esperando: number;
+}
+/** Un trozo de un artefacto pedido desde el móvil (una captura): base64 partido para caber en un
+ *  sobre, numerado para juntarlo. Solo imágenes: el anfitrión no manda otra cosa, y esto lo vuelve a exigir. */
+ | {
+    clase: "artefacto.trozo";
+    ruta: string;
+    mime: string;
+    indice: number;
+    total: number;
+    datos: string;
+} | {
+    clase: "artefacto.error";
+    ruta: string;
+    motivo: string;
 };
 export type Decision = "approve" | "reject";
 export type MensajeDelMovil = {
@@ -116,6 +130,13 @@ export type MensajeDelMovil = {
 } | {
     clase: "continuar";
     tarea: string;
+}
+/** Ver un artefacto del hilo: su ruta virtual, la del acto `artefacto`. */
+ | {
+    clase: "artefacto";
+    ruta: string;
 };
+/** Los tipos de artefacto que la web móvil enseña: imágenes (la misma lista que el anfitrión). */
+export declare const MIMES_DE_ARTEFACTO: ReadonlySet<string>;
 export declare function validarDelMovil(m: unknown): MensajeDelMovil | undefined;
 export declare function validarDelAnfitrion(m: unknown): MensajeDelAnfitrion | undefined;

@@ -211,8 +211,8 @@ describe("la sesión remota en el cable", () => {
    * (`conducirCuenta().then(anunciarAlta)` y su `finally`), y si llegaran después de enganchar
    * el móvil, el test pasaría sin que el móvil recibiera nada suyo.
    */
-  async function abiertoConPestanaYPuente(base: string) {
-    const m = conRemoto(true, { baseDeWorkspace: () => base, crearEjecutor: () => async () => {}, correr: undefined });
+  async function abiertoConPestanaYPuente(base: string, montaje: Parameters<typeof conRemoto>[2] = {}) {
+    const m = conRemoto(true, { baseDeWorkspace: () => base, crearEjecutor: () => async () => {}, correr: undefined }, montaje);
     const raiz = m.vestibulo.raizDeProyecto("webstudio", "Tienda");
     mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
     writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
@@ -227,6 +227,45 @@ describe("la sesión remota en el cable", () => {
     for (let i = 0; i < 10; i++) await asentar();
     return { m, pestana };
   }
+
+  it("el móvil pide una captura y le llega EN TROZOS por el despachador real; lo que no es imagen, no", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xonecode-remoto-"));
+    try {
+      // Una «captura» de 1 MB: más que un solo mensaje del puente, así que tiene que ir partida.
+      const png = Buffer.alloc(1_000_000, 7);
+      const pedidos: string[] = [];
+      const { m } = await abiertoConPestanaYPuente(base, {
+        leerArtefactoCrudo: async (_raiz, _hilo, nombre) => {
+          pedidos.push(nombre);
+          if (nombre === "captura.png") return { ok: true, nombre, datos: png, mime: "image/png" };
+          if (nombre === "panel.html") return { ok: true, nombre, datos: Buffer.from("<p>x</p>"), mime: "text/html" };
+          return { ok: false, motivo: "no-existe" };
+        },
+      });
+      m.puerto.presencia("m1");
+      const alMovil = (clase: string) =>
+        m.puerto.enviados.filter((e) => e.para === "m1" && (e.mensaje as { clase: string }).clase === clase).map((e) => e.mensaje as Record<string, unknown>);
+
+      m.puerto.delMovil("m1", { clase: "artefacto", ruta: "/artefactos/captura.png" });
+      await vi.waitFor(() => expect(alMovil("artefacto.trozo").length).toBeGreaterThan(1));
+      const trozos = alMovil("artefacto.trozo");
+      // El lector recibe la ruta RELATIVA a la carpeta de artefactos, como `GET /artefacto`.
+      expect(pedidos).toEqual(["captura.png"]);
+      expect(trozos.every((t) => t.total === trozos.length && t.mime === "image/png")).toBe(true);
+      expect(Buffer.from(trozos.map((t) => t.datos as string).join(""), "base64").equals(png)).toBe(true);
+
+      // Un HTML no se manda al móvil, y una ruta que no es de un artefacto no llega ni al lector.
+      m.puerto.delMovil("m1", { clase: "artefacto", ruta: "/artefactos/panel.html" });
+      m.puerto.delMovil("m1", { clase: "artefacto", ruta: "/.env" });
+      await vi.waitFor(() => expect(alMovil("artefacto.error")).toHaveLength(2));
+      // El de la ruta mala sale antes (no espera al disco): se comparan sin orden.
+      expect(alMovil("artefacto.error").map((e) => e.motivo).sort()).toEqual(["en el móvil solo se ven imágenes", "esa ruta no es de un artefacto"].sort());
+      expect(pedidos).toEqual(["captura.png", "panel.html"]);
+      await m.vestibulo.cerrar();
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
 
   it("un móvil que entra recibe el `alta` (como `remoto.estado`) solo él, y la pestaña nada de más", async () => {
     const base = mkdtempSync(join(tmpdir(), "xonecode-remoto-"));

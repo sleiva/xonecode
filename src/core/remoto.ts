@@ -13,10 +13,13 @@ export type EntradaDelMovil =
   | { clase: "respuesta"; texto: string }
   | { clase: "feedback"; tarea: string; texto: string }
   | { clase: "continuar"; tarea: string }
-  | { clase: "cancelar" };
+  | { clase: "cancelar" }
+  /** Ver un artefacto del hilo (una captura): su ruta VIRTUAL, la del acto `artefacto`. Quien lo
+   *  sirve vuelve a pasarla por `esRutaDeArtefacto` y el lector la comprueba contra el disco. */
+  | { clase: "artefacto"; ruta: string };
 
 const objeto = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
-const PASAN_TAL_CUAL = new Set(["acto", "sustitucion", "reemision", "aprobacion", "turno", "panorama"]);
+const PASAN_TAL_CUAL = new Set(["acto", "sustitucion", "reemision", "aprobacion", "turno", "panorama", "artefacto.trozo", "artefacto.error"]);
 
 /** Lo que se manda al móvil, ya en su forma de salida; `undefined` = no sale. */
 export function filtrarSalida(mensaje: unknown): unknown | undefined {
@@ -71,6 +74,10 @@ export function validarEntradaDelMovil(m: unknown): EntradaDelMovil | undefined 
       return typeof m.texto === "string" && m.seleccion === undefined ? { clase: "respuesta", texto: m.texto } : undefined;
     case "cancelar":
       return { clase: "cancelar" };
+    case "artefacto":
+      return typeof m.ruta === "string" && m.ruta !== "" && m.ruta.length <= LARGO_DE_RUTA_DE_ARTEFACTO
+        ? { clase: "artefacto", ruta: m.ruta }
+        : undefined;
     default:
       return undefined;
   }
@@ -120,4 +127,46 @@ function ajustarPanorama(p: Record<string, unknown>, tope: number): unknown | un
   const tareas = Array.isArray(p.tareas) ? p.tareas : [];
   const sinTerminadas = { ...sinDiffs, tareas: tareas.filter((t) => !(objeto(t) && t.estado === "terminada")) };
   return bytesDe(sinTerminadas) <= tope ? sinTerminadas : undefined;
+}
+
+/** Una ruta de artefacto más larga que esto no es de un artefacto: se descarta sin mirar más. */
+const LARGO_DE_RUTA_DE_ARTEFACTO = 300;
+
+/**
+ * Los artefactos que el móvil puede VER: imágenes, que son lo que pide quien sigue un turno desde el
+ * teléfono (las capturas del aparato). Un HTML o un `.openui` no: en el escritorio se sirven dentro de un
+ * iframe con dos capas de sandbox, y en la web móvil no hay con qué aislarlos.
+ */
+export const MIMES_DE_ARTEFACTO_AL_MOVIL: ReadonlySet<string> = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+
+/** Lo máximo que se manda de UN artefacto al móvil, en bytes del fichero: una captura cabe de sobra. */
+export const TOPE_DE_ARTEFACTO_AL_MOVIL = 6_000_000;
+
+/** Caracteres de base64 por trozo: con su sobre JSON queda por debajo de `TOPE_DE_SALIDA_BYTES`. */
+export const CARACTERES_POR_TROZO = 450_000;
+
+export type MensajeDeArtefactoAlMovil =
+  | { clase: "artefacto.trozo"; ruta: string; mime: string; indice: number; total: number; datos: string }
+  | { clase: "artefacto.error"; ruta: string; motivo: string };
+
+/**
+ * Un artefacto partido en los mensajes que cruzan el puente: base64 en trozos que caben en el tope de
+ * salida (una captura pasa de él entera), en ORDEN —el canal cifrado los manda en cola, en el orden de
+ * llamada— y numerados para que el móvil los junte y sepa cuándo tiene todos.
+ */
+export function trozosDeArtefacto(ruta: string, mime: string, datos: Uint8Array): MensajeDeArtefactoAlMovil[] {
+  const base64 = Buffer.from(datos).toString("base64");
+  const total = Math.max(1, Math.ceil(base64.length / CARACTERES_POR_TROZO));
+  const trozos: MensajeDeArtefactoAlMovil[] = [];
+  for (let indice = 0; indice < total; indice++) {
+    trozos.push({
+      clase: "artefacto.trozo",
+      ruta,
+      mime,
+      indice,
+      total,
+      datos: base64.slice(indice * CARACTERES_POR_TROZO, (indice + 1) * CARACTERES_POR_TROZO),
+    });
+  }
+  return trozos;
 }
