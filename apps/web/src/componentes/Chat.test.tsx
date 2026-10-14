@@ -1375,3 +1375,37 @@ describe("quién habla (rediseño del chat, tablero D)", () => {
     expect([...container.querySelectorAll("p")].some((p) => (p.textContent ?? "").startsWith("XOneCode"))).toBe(false);
   });
 });
+
+describe("el raíl con verbos", () => {
+  it("con blanco en el dato, cada paso dice su verbo en pasado y su ruta; sin él, la línea de siempre", () => {
+    const { container } = render(
+      <Chat
+        actos={[
+          { tipo: "usuario", texto: "hola" },
+          {
+            tipo: "herramientas",
+            lineas: ["⊙ delega en developer-xone", "→ lee ×6 — a, b, c y 2 ficheros más", "✱ busca", "✗ edita /x: rechazada"],
+            detalles: [
+              { nombre: "task", blanco: "developer-xone" },
+              { nombre: "read_file", veces: 6, blancos: ["a", "b", "c"], masBlancos: 2 },
+              // Una sesión de antes: nombre sin blanco. Se queda su línea.
+              { nombre: "grep" },
+              { nombre: "edit_file", blanco: "/x", error: "rechazada" },
+            ],
+          },
+          { tipo: "fin", ms: 1 },
+        ]}
+      />
+    );
+    const pasos = [...container.querySelectorAll("details li")];
+    expect(pasos.map((li) => li.textContent)).toEqual([
+      "Delegó en developer-xone",
+      "Leyó 6 veces · a, b, c y 2 más",
+      "✱ busca",
+      "Editó /x: rechazada",
+    ]);
+    // La delegación lleva su marca (otro color de aro) y el fallo la suya.
+    expect(pasos[0]!.hasAttribute("data-delegacion")).toBe(true);
+    expect(pasos[3]!.hasAttribute("data-fallo")).toBe(true);
+  });
+});

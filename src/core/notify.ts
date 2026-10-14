@@ -95,6 +95,19 @@ export interface LineaDeTool {
   error?: string;
   /** El origen de la RACHA, que es uno solo: dos orígenes son dos rachas. */
   origen?: OrigenDeLaTool;
+  /**
+   * El `detalle` del evento —la ruta o el patrón que eligió la lista blanca de
+   * `resumenDeTool.ts`— cuando la línea cuenta UNA llamada. Es lo mismo que ya va dentro de
+   * `texto`, como DATO: quien pinta lo necesita aparte para poner el verbo a su manera sin
+   * re-parsear la frase. Ausente = la tool no tiene detalle en la lista blanca.
+   */
+  blanco?: string;
+  /** En el CIERRE de una racha: cuántas llamadas cuenta (≥ 2). */
+  veces?: number;
+  /** En el cierre: los blancos DISTINTOS de la racha, los tres primeros (los de `listaDe`). */
+  blancos?: string[];
+  /** En el cierre: cuántos blancos distintos más hubo, aparte de `blancos`. */
+  masBlancos?: number;
 }
 
 /** `→ lee app.xne` para una conocida; `⚙ studio_edit_file` para el resto. */
@@ -139,6 +152,10 @@ function conOrigen(origen: OrigenDeLaTool | undefined): { origen?: OrigenDeLaToo
   return origen === undefined ? {} : { origen };
 }
 
+function conBlanco(detalle: string | undefined): { blanco?: string } {
+  return detalle === undefined || detalle === "" ? {} : { blanco: detalle };
+}
+
 export class Colapsador {
   private nombre = "";
   private origen: OrigenDeLaTool | undefined = undefined;
@@ -158,6 +175,7 @@ export class Colapsador {
         nombre: evento.nombre,
         error: evento.error,
         ...conOrigen(evento.origen),
+        ...conBlanco(evento.detalle),
       });
       return salida;
     }
@@ -174,7 +192,12 @@ export class Colapsador {
     this.origen = evento.origen;
     this.cuenta = 1;
     this.detalles = evento.detalle === undefined ? [] : [evento.detalle];
-    salida.push({ texto: frase(evento.nombre, evento.detalle), nombre: evento.nombre, ...conOrigen(evento.origen) });
+    salida.push({
+      texto: frase(evento.nombre, evento.detalle),
+      nombre: evento.nombre,
+      ...conOrigen(evento.origen),
+      ...conBlanco(evento.detalle),
+    });
     return salida;
   }
 
@@ -194,7 +217,15 @@ export class Colapsador {
       this.detalles.length > 0 ? `${base} ×${this.cuenta} — ${listaDe(this.detalles)}` : `${base} ×${this.cuenta}`;
     // El nombre y el origen se leen ANTES de reiniciar: son los de la racha que se cierra, no
     // los de la que viene.
-    const cierre: LineaDeTool = { texto, nombre: this.nombre, ...conOrigen(this.origen) };
+    const unicos = [...new Set(this.detalles)];
+    const cierre: LineaDeTool = {
+      texto,
+      nombre: this.nombre,
+      ...conOrigen(this.origen),
+      veces: this.cuenta,
+      ...(unicos.length === 0 ? {} : { blancos: unicos.slice(0, 3) }),
+      ...(unicos.length > 3 ? { masBlancos: unicos.length - 3 } : {}),
+    };
     this.reiniciar();
     return cierre;
   }

@@ -278,6 +278,36 @@
 }
 
 /* Una tool que FALLÓ: nodo y texto en el rojo del estado. */
+/* Un paso con su VERBO (`pasoDelRail.ts`): el verbo en la letra de la interfaz, legible como una
+   frase; la ruta o el patrón en la de código, que es lo que es; el especialista en negrita. La
+   línea de antes —sin dato— sigue entera en código, como siempre. */
+.pasoConVerbo {
+  font-family: var(--dsw-font-family);
+  font-size: 13px;
+  white-space: normal;
+  color: var(--dsw-alias-label-primary);
+}
+
+.blanco {
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.blancoNombre {
+  font-weight: 600;
+}
+
+.errorDelPaso {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* Una DELEGACIÓN: otro agente se pone a trabajar. Su aro en el naranja de la marca, el mismo
+   que distingue el gasto de un agente externo. */
+.paso[data-delegacion]::before {
+  border-color: var(--xonecode-naranja);
+}
+
 /* Los pasos llevan `textoTenue` por el tono, pero NO el filete que `.pensando .textoTenue` pone al
    razonamiento: en el raíl la línea es el carril del `ul`, y un filete por paso salía como una
    segunda línea al lado de los aros. */

@@ -142,7 +142,7 @@ describe("el ORIGEN de una tool viaja con su racha", () => {
     // atribuía entero al primero: un origen que miente sobre dos de tres llamadas.
     const c = new Colapsador();
     expect(c.lineas({ nombre: "read_file", detalle: "a.xne", origen: dev })).toEqual([
-      { texto: "→ lee a.xne", nombre: "read_file", origen: dev },
+      { texto: "→ lee a.xne", nombre: "read_file", origen: dev, blanco: "a.xne" },
     ]);
     c.lineas({ nombre: "read_file", detalle: "b.xne", origen: dev });
     const cambio = c.lineas({ nombre: "read_file", detalle: "c.css", origen: disenio });
@@ -156,16 +156,33 @@ describe("el ORIGEN de una tool viaja con su racha", () => {
     const c = new Colapsador();
     c.lineas({ nombre: "grep", origen: dev });
     c.lineas({ nombre: "grep", origen: dev });
-    expect(c.cierre()).toEqual({ texto: "✱ busca ×2", nombre: "grep", origen: dev });
+    expect(c.cierre()).toEqual({ texto: "✱ busca ×2", nombre: "grep", origen: dev, veces: 2 });
     expect(c.lineas({ nombre: "read_file", error: "ENOENT", origen: { rol: "orquestador" } })[0]!.origen).toEqual({
       rol: "orquestador",
     });
   });
 
   it("sin origen es lo de antes, byte a byte: la tubería no cambia", () => {
+    // El TEXTO es el de siempre; los datos de la racha van aparte, para la web.
     const c = new Colapsador();
     c.lineas(ok("read_file", "a"));
     expect(c.lineas(ok("read_file", "b"))).toEqual([]);
-    expect(c.cierre()).toEqual({ texto: "→ lee ×2 — a, b", nombre: "read_file" });
+    expect(c.cierre()).toEqual({ texto: "→ lee ×2 — a, b", nombre: "read_file", veces: 2, blancos: ["a", "b"] });
+  });
+});
+
+describe("el blanco de cada línea, como dato (raíl con verbos de la web)", () => {
+  it("una llamada lleva su blanco; el cierre, las veces, los tres primeros distintos y cuántos más", () => {
+    const c = new Colapsador();
+    expect(c.lineas(ok("read_file", "a"))[0]).toMatchObject({ blanco: "a" });
+    for (const f of ["b", "a", "c", "d", "e"]) c.lineas(ok("read_file", f));
+    expect(c.cierre()).toMatchObject({ veces: 6, blancos: ["a", "b", "c"], masBlancos: 2 });
+  });
+
+  it("sin detalle no hay blanco, ni en la llamada ni en el cierre", () => {
+    const c = new Colapsador();
+    expect(c.lineas(ok("grep"))[0]).not.toHaveProperty("blanco");
+    c.lineas(ok("grep"));
+    expect(c.cierre()).not.toHaveProperty("blancos");
   });
 });

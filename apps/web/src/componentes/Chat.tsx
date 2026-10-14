@@ -21,6 +21,7 @@ import { PropuestaDeTareas, type PropuestaResuelta } from "./PropuestaDeTareas.j
 import { VisorDeImagen } from "./VisorDeImagen.js";
 import { hayCosteQueEnsenar } from "./CosteDelTurno.js";
 import { turnosDeLaSesion, type TurnoDeLaSesion } from "../turnosDeLaSesion.js";
+import { pasoDelRail, type PasoDelRail } from "../pasoDelRail.js";
 import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
 import vista from "../../estilos/ChatView.module.css";
 import estilos from "./Chat.module.css";
@@ -131,6 +132,33 @@ function cabeceraDelTurno(turno: TurnoDeLaSesion): React.ReactNode {
       <span className={estilos.nombreDelAutor}>XOneCode</span>
       {cifras.length === 0 ? null : <span className={estilos.cifrasDelAutor}>{` · ${cifras.join(" · ")}`}</span>}
     </>
+  );
+}
+
+/**
+ * Un paso del raíl: «Leyó /login.js», «Delegó en developer-xone», «Leyó 6 veces · a, b, c y 2
+ * más». El verbo en la letra de la interfaz; las rutas y patrones en la de código, que es lo que
+ * son; el nombre de un especialista en negrita, que no es una ruta.
+ */
+function PasoConVerbo({ paso }: { paso: PasoDelRail }) {
+  const blancos = paso.blancos ?? (paso.blanco === undefined ? [] : [paso.blanco]);
+  return (
+    <span className={estilos.pasoConVerbo}>
+      <span className={estilos.verbo}>{paso.veces === undefined ? paso.verbo : `${paso.verbo} ${paso.veces} veces`}</span>
+      {blancos.length === 0 ? null : (
+        <>
+          {paso.veces === undefined ? " " : " · "}
+          {blancos.map((b, i) => (
+            <Fragment key={i}>
+              {i === 0 ? null : ", "}
+              <span className={paso.esNombre ? estilos.blancoNombre : estilos.blanco}>{b}</span>
+            </Fragment>
+          ))}
+          {paso.masBlancos === undefined ? null : ` y ${paso.masBlancos} más`}
+        </>
+      )}
+      {paso.error === undefined ? null : <span className={estilos.errorDelPaso}>{`: ${paso.error}`}</span>}
+    </span>
   );
 }
 
@@ -273,15 +301,21 @@ function TramoDeTrabajo({
                     línea exista no dice que terminara bien, y un icono de «hecho» sin dato
                     detrás es una cifra inventada con forma de dibujo. */}
                 <ul className={estilos.trabajo}>
-                  {trozo.lineas.map((linea, j) => (
-                    <li
-                      key={j}
-                      className={`${estilos.textoTenue} ${estilos.paso}`}
-                      data-fallo={trozo.fallidas?.includes(j) ? "" : undefined}
-                    >
-                      {linea}
-                    </li>
-                  ))}
+                  {trozo.lineas.map((linea, j) => {
+                    // El paso con su VERBO en pasado y su blanco, del dato (`pasoDelRail`); sin
+                    // dato —una sesión vieja, una tool fuera de la tabla— la línea de siempre.
+                    const paso = pasoDelRail(trozo.detalles?.[j]);
+                    return (
+                      <li
+                        key={j}
+                        className={`${estilos.textoTenue} ${estilos.paso}`}
+                        data-fallo={trozo.fallidas?.includes(j) ? "" : undefined}
+                        data-delegacion={paso?.delegacion === true ? "" : undefined}
+                      >
+                        {paso === undefined ? linea : <PasoConVerbo paso={paso} />}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             ));

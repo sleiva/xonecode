@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { partirPorOrigen, toolsFallidas, rotuloDeOrigen } from "./porOrigen.js";
+import { partirPorOrigen, toolsFallidas, rotuloDeOrigen, type TrozoPorOrigen } from "./porOrigen.js";
 
 const dev = { nombre: "read_file", origen: { rol: "especialista", nombre: "developer-xone" } } as const;
 const dis = { nombre: "read_file", origen: { rol: "especialista", nombre: "designer-xone" } } as const;
@@ -15,10 +15,14 @@ describe("rotuloDeOrigen", () => {
   });
 });
 
+/** Las comparaciones de FORMA de abajo son de rótulos, líneas y fallos: los `detalles` en paralelo
+ *  tienen su propio test, y aquí se quitan para que cada uno diga una sola cosa. */
+const sinDetalles = (trozos: readonly TrozoPorOrigen[]) => trozos.map(({ detalles: _d, ...resto }) => resto);
+
 describe("partirPorOrigen", () => {
   it("conserva el ORDEN: dos especialistas que se alternan son tres trozos, no dos bloques", () => {
     const { trozos, ultimo } = partirPorOrigen(["a", "b", "c", "d"], [orq, dev, dis, dev], undefined);
-    expect(trozos).toEqual([
+    expect(sinDetalles(trozos)).toEqual([
       { rotulo: "orquestador", lineas: ["a"] },
       { rotulo: "developer-xone", lineas: ["b"] },
       { rotulo: "designer-xone", lineas: ["c"] },
@@ -29,10 +33,20 @@ describe("partirPorOrigen", () => {
 
   it("las seguidas del mismo origen van juntas, y el rótulo no se repite en el acto siguiente", () => {
     const primero = partirPorOrigen(["a", "b"], [dev, dev], undefined);
-    expect(primero.trozos).toEqual([{ rotulo: "developer-xone", lineas: ["a", "b"] }]);
+    expect(sinDetalles(primero.trozos)).toEqual([{ rotulo: "developer-xone", lineas: ["a", "b"] }]);
     // Un razonamiento en medio parte el acto, pero no cambia quién trabaja.
     const segundo = partirPorOrigen(["c"], [dev], primero.ultimo);
-    expect(segundo.trozos).toEqual([{ lineas: ["c"] }]);
+    expect(sinDetalles(segundo.trozos)).toEqual([{ lineas: ["c"] }]);
+  });
+
+  it("cada trozo lleva el detalle de SUS líneas, en paralelo (el raíl con verbos lo lee)", () => {
+    const dev = { rol: "especialista", nombre: "developer-xone" } as const;
+    const { trozos } = partirPorOrigen(
+      ["a", "b"],
+      [{ nombre: "task", blanco: "developer-xone", origen: { rol: "orquestador" } }, { nombre: "read_file", blanco: "/x", origen: dev }],
+      undefined
+    );
+    expect(trozos.map((t) => t.detalles?.map((d) => d.blanco))).toEqual([["developer-xone"], ["/x"]]);
   });
 
   it("una sesión anterior —sin `detalles`— es un solo trozo sin rótulo, como se pintaba", () => {
@@ -41,7 +55,7 @@ describe("partirPorOrigen", () => {
 
   it("una línea sin origen no se rotula, y lo que viene después vuelve a decir quién", () => {
     const { trozos } = partirPorOrigen(["a", "plan", "b"], [dev, {}, dev], undefined);
-    expect(trozos).toEqual([
+    expect(sinDetalles(trozos)).toEqual([
       { rotulo: "developer-xone", lineas: ["a"] },
       { lineas: ["plan"] },
       { rotulo: "developer-xone", lineas: ["b"] },
@@ -60,14 +74,14 @@ describe("las tools que fallaron", () => {
       ],
       undefined
     );
-    expect(trozos).toEqual([
+    expect(sinDetalles(trozos)).toEqual([
       { rotulo: "orquestador", lineas: ["a"] },
       { rotulo: "developer-xone", lineas: ["✗ b: no existe", "c"], fallidas: [0] },
     ]);
   });
 
   it("el `✗` del TEXTO no decide nada: sin error en el dato, no hay fallo", () => {
-    expect(partirPorOrigen(["✗ parece un fallo"], [{}], undefined).trozos).toEqual([{ lineas: ["✗ parece un fallo"] }]);
+    expect(sinDetalles(partirPorOrigen(["✗ parece un fallo"], [{}], undefined).trozos)).toEqual([{ lineas: ["✗ parece un fallo"] }]);
   });
 
   it("se cuentan en todo el tramo, y solo en actos de herramientas", () => {

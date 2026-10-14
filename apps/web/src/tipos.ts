@@ -288,6 +288,14 @@ export interface DetalleDeLinea {
   error?: string;
   /** Ausente = no consta: una sesión anterior, o una línea que no es de ninguna tool. */
   origen?: OrigenDeLaTool;
+  /** La ruta o el patrón de UNA llamada, el mismo que ya iba en el texto (`core/actos.ts`). */
+  blanco?: string;
+  /** En la línea que cierra una racha: cuántas llamadas cuenta. */
+  veces?: number;
+  /** En el cierre: los tres primeros blancos distintos. */
+  blancos?: string[];
+  /** En el cierre: cuántos blancos distintos más hubo. */
+  masBlancos?: number;
 }
 
 /** Que alguien pidió leer la memoria del proyecto en el turno (`core/actos.ts#MemoriaDelTurno`). */

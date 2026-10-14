@@ -17,6 +17,10 @@ function detalleDeLineaDeTool(l: LineaDeTool): DetalleDeLinea {
     nombre: l.nombre,
     ...(l.error === undefined ? {} : { error: l.error }),
     ...(l.origen === undefined ? {} : { origen: l.origen }),
+    ...(l.blanco === undefined ? {} : { blanco: l.blanco }),
+    ...(l.veces === undefined ? {} : { veces: l.veces }),
+    ...(l.blancos === undefined ? {} : { blancos: l.blancos }),
+    ...(l.masBlancos === undefined ? {} : { masBlancos: l.masBlancos }),
   };
 }
 

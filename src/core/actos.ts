@@ -7,8 +7,9 @@
  *
  * Ningún acto lleva argumentos de tool: `herramientas.lineas` son líneas YA resumidas por
  * `agent/turno/resumenDeTool.ts`, con la lista blanca de campos por nombre de tool. Lo que se
- * añadió después (`detalles`) tampoco los lleva: es el NOMBRE de la tool y su error, que
- * el evento ya traía y el acto tiraba al componer la línea.
+ * añadió después (`detalles`) tampoco los lleva: es el NOMBRE de la tool, su error y su blanco
+ * (la ruta o el patrón de esa misma lista blanca, que ya iba dentro de la línea), que el evento
+ * ya traía y el acto tiraba al componer la línea.
  */
 
 import type { AccionDeSincronizacion } from "./cloudstudio.js";
@@ -21,7 +22,8 @@ import type { TareaPropuesta } from "./repartoDeEncargo.js";
  * Existe porque el evento `tool` lleva `{nombre, detalle, error}` y hasta ahora llegaba al
  * cliente como UNA cadena ya compuesta: la piel podía pintarla, pero no distinguir una
  * lectura de una escritura ni una llamada que falló de una que fue bien. No expone nada
- * nuevo — `detalle` sigue sin viajar aquí, y el nombre de la tool ya iba dentro del texto.
+ * nuevo: el nombre de la tool y su blanco (la ruta o el patrón de la lista blanca) ya iban
+ * dentro del texto, y aquí van como dato.
  *
  * `nombre` es OPCIONAL y su ausencia significa algo: por `Piel.linea` no llegan solo tools.
  * También pasan por ahí las líneas de plan, de tarea y de verificación (`core/turno.ts` las
@@ -40,6 +42,19 @@ export interface DetalleDeLinea {
    * guardada antes de que existiera y de una línea que no es de ninguna tool.
    */
   origen?: OrigenDeLaTool;
+  /**
+   * La ruta o el patrón de UNA llamada (`core/notify.ts#LineaDeTool.blanco`): el `detalle` de la
+   * lista blanca de `resumenDeTool.ts`, que YA iba dentro del texto de la línea. Viaja aparte para
+   * que la web pinte el verbo a su manera («Leyó /login.js») sin re-parsear la frase. No es una
+   * ruta nueva por el cable: es la misma, como dato. Ausente = no consta o la tool no tiene.
+   */
+  blanco?: string;
+  /** En la línea que CIERRA una racha: cuántas llamadas cuenta (≥ 2). */
+  veces?: number;
+  /** En el cierre: los tres primeros blancos distintos de la racha. */
+  blancos?: string[];
+  /** En el cierre: cuántos blancos distintos más hubo. */
+  masBlancos?: number;
 }
 /**
  * La memoria del proyecto en un turno: que alguien PIDIÓ leerla, y quién si consta

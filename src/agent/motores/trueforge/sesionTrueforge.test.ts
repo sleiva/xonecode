@@ -2097,6 +2097,8 @@ describe("Claude Code, Codex y OpenCode como hijos de TrueForge", () => {
     expect(detalles[lineas.findIndex((l) => l.includes("/menu.xne"))]).toEqual({
       nombre: "read_file",
       origen: { rol: "especialista", nombre: "refactor-ext" },
+      // Y su blanco, como dato, para el raíl con verbos de la web.
+      blanco: "/menu.xne",
     });
     expect(s.consumo().externo).toEqual({ entrada: 900, salida: 40, cache: 300 });
     expect(s.consumo().modelo.entrada).toBeLessThan(900);

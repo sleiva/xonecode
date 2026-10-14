@@ -23,6 +23,8 @@ export interface TrozoPorOrigen {
    * `detalle.error` — el dato, no el `✗` del texto. Ausente = ninguna que conste.
    */
   fallidas?: number[];
+  /** El detalle de cada línea, en paralelo a `lineas`. Ausente = la sesión no lo trae. */
+  detalles?: DetalleDeLinea[];
 }
 
 /**
@@ -52,6 +54,7 @@ export function partirPorOrigen(
     }
     if (detalles?.[i]?.error !== undefined) (abierto.fallidas ??= []).push(abierto.lineas.length);
     abierto.lineas.push(linea);
+    if (detalles !== undefined) (abierto.detalles ??= []).push(detalles[i] ?? {});
   });
   return { trozos, ultimo: actual };
 }
