@@ -14,7 +14,7 @@
 import { chmodSync, existsSync, linkSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { conFeedback, type AdjuntoDeTarea, type Tarea } from "../../core/tareas.js";
+import { conEncargo, conFeedback, type AdjuntoDeTarea, type Tarea } from "../../core/tareas.js";
 import { mimeDeAdjunto, nombreDeAdjuntoAceptable } from "../../core/adjuntos.js";
 
 /** Bytes que se aceptan por adjunto y por tarea. */
@@ -558,6 +558,29 @@ export function aplicarFeedback(
   let siguiente: Tarea;
   try {
     siguiente = conFeedback(actual, texto);
+  } catch (error) {
+    return { hecho: false, motivo: error instanceof Error ? error.message : String(error) };
+  }
+  disco.guardar(tareas.map((t) => (t.id === id ? siguiente : t)));
+  return { hecho: true };
+}
+
+/**
+ * Cambia el encargo de una tarea que todavía no ha arrancado (IXCODE-52). La regla es la de
+ * `core/tareas.ts#conEncargo`; aquí solo se relee, se aplica y se guarda, y una negativa se
+ * DEVUELVE con su motivo, igual que el feedback.
+ */
+export function aplicarEncargo(
+  disco: Pick<TareasEnDisco, "listar" | "guardar">,
+  id: string,
+  encargo: string
+): ResultadoDeFeedback {
+  const tareas = disco.listar();
+  const actual = tareas.find((t) => t.id === id);
+  if (actual === undefined) return { hecho: false, motivo: "la tarea ya no está en la cola" };
+  let siguiente: Tarea;
+  try {
+    siguiente = conEncargo(actual, encargo);
   } catch (error) {
     return { hecho: false, motivo: error instanceof Error ? error.message : String(error) };
   }

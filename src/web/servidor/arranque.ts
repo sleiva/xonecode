@@ -244,7 +244,7 @@ import {
   tituloDeTarea,
   type Tarea,
 } from "../../core/tareas.js";
-import { aplicarFeedback, TOPE_DE_ADJUNTO, type TareasEnDisco } from "../../agent/tareas/tareasEnDisco.js";
+import { aplicarEncargo, aplicarFeedback, TOPE_DE_ADJUNTO, type TareasEnDisco } from "../../agent/tareas/tareasEnDisco.js";
 import { nombreDeAdjuntoAceptable } from "../../core/adjuntos.js";
 import {
   copiarAdjuntosDeSesion,
@@ -7081,6 +7081,20 @@ export function montarRutas(
         respuesta.end();
         return;
       }
+      if (mensaje.accion === "encargo" && opciones.colaDeTareas !== undefined) {
+        // Editar el encargo de una tarea que todavía no ha arrancado (IXCODE-52). La regla —solo si
+        // nunca arrancó, y no vacío— es de `core/tareas.ts#conEncargo`; la negativa vuelve con motivo.
+        const resultado = aplicarEncargo(opciones.colaDeTareas, mensaje.id, typeof mensaje.encargo === "string" ? mensaje.encargo : "");
+        if (!resultado.hecho) {
+          respuesta.writeHead(409, { "content-type": "application/json" });
+          respuesta.end(JSON.stringify({ motivo: resultado.motivo }));
+          return;
+        }
+        emitirTareas();
+        respuesta.writeHead(204);
+        respuesta.end();
+        return;
+      }
       if (mensaje.accion === "arrancarAhora" && opciones.colaDeTareas !== undefined) {
         /**
          * La persona CEDE el proyecto: se cierra su consola de ahí (si no está trabajando) y la tarea arranca, porque lo
@@ -7147,6 +7161,7 @@ export function montarRutas(
         mensaje.accion !== "feedback" &&
         mensaje.accion !== "continuar" &&
         mensaje.accion !== "arrancarAhora" &&
+        mensaje.accion !== "encargo" &&
         opciones.colaDeTareas !== undefined
       ) {
         /**

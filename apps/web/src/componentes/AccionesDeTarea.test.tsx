@@ -3,7 +3,8 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { AccionesDeTarea } from "./AccionesDeTarea.js";
 import { Kanban } from "./Kanban.js";
 import { TareasDelProyecto } from "./TareasDelProyecto.js";
-import { TRANSICIONES, type TareaDelCable } from "../tipos.js";
+import { TRANSICIONES, puedeEditarEncargo, type TareaDelCable } from "../tipos.js";
+import { puedeEditarEncargo as puedeEditarEncargoEnCore } from "../../../../src/core/tareas.js";
 
 afterEach(cleanup);
 
@@ -253,5 +254,68 @@ describe("AccionesDeTarea: continuar y arrancar ahora", () => {
     render(<AccionesDeTarea tarea={{ ...base, estado: "nuevo", tras: "t0" }} alArrancarAhora={vi.fn()} puedeArrancar={false} esperaPorTuConsola />);
     expect(screen.queryByRole("button", { name: "Arrancar ahora" })).toBeNull();
     expect(screen.queryByText(/consola/)).toBeNull();
+  });
+});
+
+describe("editar el encargo (IXCODE-52)", () => {
+  it("una que nunca arrancó lo ofrece; una que ya arrancó, aunque vuelva a «nuevo», no", () => {
+    const alEditarEncargo = vi.fn(async () => undefined);
+    const { container, unmount } = render(<AccionesDeTarea tarea={TAREA({ estado: "nuevo", motivo: undefined })} alEditarEncargo={alEditarEncargo} />);
+    expect(within(container).getByRole("button", { name: "Editar el encargo" })).toBeTruthy();
+    unmount();
+    for (const extra of [{ estado: "en-proceso" as const }, { estado: "nuevo" as const, empezada: "2026-10-14T10:00:00.000Z" }]) {
+      const r = render(<AccionesDeTarea tarea={TAREA({ ...extra, motivo: undefined })} alEditarEncargo={alEditarEncargo} alDescartar={vi.fn()} />);
+      expect(within(r.container).queryByRole("button", { name: "Editar el encargo" })).toBeNull();
+      r.unmount();
+    }
+  });
+
+  it("guarda lo editado y cierra; una negativa se enseña dentro con lo escrito intacto", async () => {
+    let respuesta: string | undefined = "esa tarea ya no está esperando a arrancar";
+    const alEditarEncargo = vi.fn(async () => respuesta);
+    render(<AccionesDeTarea tarea={TAREA({ estado: "nuevo", motivo: undefined, encargo: "el de antes" })} alEditarEncargo={alEditarEncargo} />);
+    fireEvent.click(screen.getByRole("button", { name: "Editar el encargo" }));
+    const campo = screen.getByLabelText("Encargo") as HTMLTextAreaElement;
+    expect(campo.value).toBe("el de antes");
+    // Sin cambios no se manda nada.
+    expect((screen.getByRole("button", { name: "Guardar" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(campo, { target: { value: "el de ahora" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    });
+    expect(alEditarEncargo).toHaveBeenCalledWith("t1", "el de ahora");
+    expect(screen.getByRole("alert").textContent).toMatch(/ya no está esperando/);
+    expect((screen.getByLabelText("Encargo") as HTMLTextAreaElement).value).toBe("el de ahora");
+    respuesta = undefined;
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    });
+    expect(screen.queryByLabelText("Encargo")).toBeNull();
+  });
+
+  it("la lista del proyecto lo hace llegar hasta la fila: una prop opcional olvidada por el camino no da error", () => {
+    const alEditarEncargo = vi.fn(async () => undefined);
+    render(<TareasDelProyecto tareas={[TAREA({ estado: "nuevo", motivo: undefined })]} conectado alEditarEncargo={alEditarEncargo} />);
+    expect(screen.getByRole("button", { name: "Editar el encargo" })).toBeTruthy();
+  });
+
+  it("la regla del cliente es la de core", () => {
+    for (const t of [
+      { estado: "nuevo" as const },
+      { estado: "nuevo" as const, empezada: "2026-10-14T10:00:00.000Z" },
+      { estado: "en-proceso" as const },
+      { estado: "requiere-atencion" as const },
+      { estado: "terminada" as const },
+    ]) {
+      expect(puedeEditarEncargo(t), JSON.stringify(t)).toBe(puedeEditarEncargoEnCore(t));
+    }
+  });
+
+  it("vacío no se puede guardar, y lo dice", () => {
+    render(<AccionesDeTarea tarea={TAREA({ estado: "nuevo", motivo: undefined })} alEditarEncargo={vi.fn(async () => undefined)} />);
+    fireEvent.click(screen.getByRole("button", { name: "Editar el encargo" }));
+    fireEvent.change(screen.getByLabelText("Encargo"), { target: { value: "   " } });
+    expect((screen.getByRole("button", { name: "Guardar" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/no puede quedar vacío/)).toBeTruthy();
   });
 });

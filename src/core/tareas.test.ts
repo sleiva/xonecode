@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   conAutorizadas,
   conEstado,
+  conEncargo,
   conFeedback,
   conVeredicto,
   darPorBuenaAMano,
   motivoTrasReanudar,
   puedeArrancarYa,
+  puedeEditarEncargo,
   reanudadaTrasCorte,
   rutaRelativaDeTarea,
   siguientesAEjecutar,
@@ -289,6 +291,33 @@ describe("conFeedback", () => {
     expect(siguiente.feedback).toEqual([
       { texto: "con espacios alrededor", creado: "2026-09-08T11:00:00.000Z", consumido: false },
     ]);
+  });
+});
+
+/** IXCODE-52: el encargo de una tarea que NUNCA ha arrancado se puede cambiar; el de una que ya corrió, no. */
+describe("conEncargo", () => {
+  it("cambia el encargo de una nueva, y conserva la petición y el título", () => {
+    const t = tarea({ estado: "nuevo" });
+    const editada = conEncargo(t, "  el encargo nuevo  ");
+    expect(editada.encargo).toBe("el encargo nuevo");
+    expect(editada.peticion).toBe(t.peticion);
+    expect(editada.titulo).toBe(t.titulo);
+    expect(editada.estado).toBe("nuevo");
+  });
+
+  it("vacío se rechaza: la tarea correría sin nada que hacer", () => {
+    expect(() => conEncargo(tarea({ estado: "nuevo" }), "   ")).toThrow(/vacío/);
+  });
+
+  it("una que ya arrancó alguna vez no se edita, aunque haya vuelto a «nuevo»", () => {
+    for (const estado of ["en-proceso", "requiere-atencion", "terminada"] as const) {
+      expect(() => conEncargo(tarea({ estado }), "otro")).toThrow();
+    }
+    // Reintentada o con feedback: vuelve a «nuevo», pero lo que se le manda es su hilo, no el encargo.
+    const reintentada = tarea({ estado: "nuevo", empezada: "2026-10-14T10:00:00.000Z" });
+    expect(puedeEditarEncargo(reintentada)).toBe(false);
+    expect(() => conEncargo(reintentada, "otro")).toThrow(/ya arrancó/);
+    expect(puedeEditarEncargo(tarea({ estado: "nuevo" }))).toBe(true);
   });
 });
 

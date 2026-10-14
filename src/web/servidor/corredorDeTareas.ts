@@ -1026,7 +1026,9 @@ export function crearCorredorDeTareas(opciones: {
           pendiente === undefined
             ? actual
             : { ...actual, feedback: actual.feedback!.map((f) => (f === pendiente ? { ...f, consumido: true } : f)) };
-        if (pendiente !== undefined) peticion = peticionDeFeedback(actual.encargo, pendiente.texto, reanudando);
+        // Y sin feedback, el encargo RELEÍDO: se puede editar mientras espera (IXCODE-52), y una
+        // edición entre elegirla y marcarla se perdería con el de la lectura que la eligió.
+        peticion = pendiente === undefined ? actual.encargo : peticionDeFeedback(actual.encargo, pendiente.texto, reanudando);
         // El inventario de los adjuntos va DETRÁS de lo que se manda esta pasada, sea el
         // encargo o el feedback: montar `/adjuntos/` no basta, porque es una raíz virtual
         // que ninguna instrucción del agente nombra. Ver `core/adjuntos.ts#conAdjuntos`.

@@ -401,6 +401,31 @@ export function conFeedback(tarea: Tarea, texto: string, ahora?: string): Tarea 
 }
 
 /**
+ * ¿Se puede cambiar su encargo? (IXCODE-52). Solo una que NUNCA ha arrancado: `nuevo` y sin
+ * `empezada`. Una reintentada o con feedback también vuelve a `nuevo`, pero lo que se le manda
+ * entonces es su hilo y el feedback, no el encargo: dejar editarlo sería cambiar un texto que el
+ * agente no va a volver a leer.
+ */
+export function puedeEditarEncargo(tarea: Pick<Tarea, "estado" | "empezada">): boolean {
+  return tarea.estado === "nuevo" && tarea.empezada === undefined;
+}
+
+/**
+ * La tarea con otro encargo, o una excepción con el motivo. La `peticion` y el `titulo` no se
+ * tocan: la petición es lo que escribió la persona y se conserva aunque el encargo se edite.
+ */
+export function conEncargo(tarea: Tarea, encargo: string): Tarea {
+  if (!puedeEditarEncargo(tarea)) {
+    throw new Error(
+      tarea.estado === "nuevo" ? "esa tarea ya arrancó alguna vez: lo que se le manda ahora es su conversación" : "esa tarea ya no está esperando a arrancar"
+    );
+  }
+  const limpio = encargo.trim();
+  if (limpio === "") throw new Error("un encargo vacío dejaría la tarea sin nada que hacer");
+  return { ...tarea, encargo: limpio };
+}
+
+/**
  * La tarea con el veredicto del juez, si es que hay uno.
  *
  * `undefined` significa «no se le preguntó» y entonces no se toca el campo: se llega aquí

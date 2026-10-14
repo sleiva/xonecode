@@ -2510,6 +2510,8 @@ export function App({
       // conversación de aquí, que queda guardada). Las dos dicen por qué si el servidor se niega.
       alContinuar={async (id: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "continuar", id }))}
       alArrancarAhora={async (id: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "arrancarAhora", id }))}
+      // Editar el encargo de una que todavía no ha arrancado (IXCODE-52): la ventana no se cierra si el servidor se niega.
+      alEditarEncargo={async (id: string, encargo: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "encargo", id, encargo }))}
       // Esta lista es la del proyecto ABIERTO: su consola es la tuya, y es lo que frena sus tareas nuevas.
       consolaAbierta={proyectoActivoId !== undefined}
       {...(estado.alta?.sesionActiva === undefined ? {} : { sesionAbierta: estado.alta.sesionActiva })}

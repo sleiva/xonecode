@@ -114,3 +114,16 @@
   font-size: 11px;
   font-style: italic;
 }
+
+/* La ventana de editar el encargo (IXCODE-52): la coraza de `NuevaSesion.module.css`, más ancha,
+   porque un encargo son párrafos y en 420 px no se lee. */
+.ventanaAncha {
+  width: min(720px, 100%);
+}
+
+.campoEncargo {
+  min-height: 280px;
+  max-height: 60vh;
+  resize: vertical;
+  line-height: 1.45;
+}

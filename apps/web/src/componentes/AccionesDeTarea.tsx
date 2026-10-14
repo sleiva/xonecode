@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Modal, Button } from "@deepseek-ai/dsh-client-ui-primitives";
-import { TRANSICIONES, type TareaDelCable } from "../tipos.js";
+import { TRANSICIONES, puedeEditarEncargo, type TareaDelCable } from "../tipos.js";
 import estilos from "./AccionesDeTarea.module.css";
 // La coraza del modal —capa, velo, ventana, título, nota, acciones, el botón primario— es
 // la de `NuevaSesion.module.css`, la MISMA que reutiliza `AccionDeSesion.tsx` para
@@ -74,6 +74,7 @@ export function AccionesDeTarea({
   alEnviarFeedback,
   alContinuar,
   alArrancarAhora,
+  alEditarEncargo,
   puedeArrancar,
   esperaPorTuConsola,
 }: {
@@ -96,12 +97,15 @@ export function AccionesDeTarea({
   alContinuar?: (id: string) => Promise<string | undefined>;
   /** «Arrancar ahora» una `nuevo`: la persona cede el proyecto (se cierra su consola de ahí) y la tarea arranca. */
   alArrancarAhora?: (id: string) => Promise<string | undefined>;
+  /** Cambiar el encargo de una que nunca ha arrancado (IXCODE-52). Devuelve el motivo si el servidor se negó. */
+  alEditarEncargo?: (id: string, encargo: string) => Promise<string | undefined>;
   /** Es la primera de su cadena (`puedeArrancarYa`): las encadenadas esperan a la anterior y no ofrecen arrancar. */
   puedeArrancar?: boolean;
   /** Lo que la frena es que la consola de su proyecto está ABIERTA (la tuya): se dice, en vez de quedarse muda en «Nuevo». */
   esperaPorTuConsola?: boolean;
 }) {
   const [confirmando, setConfirmando] = useState(false);
+  const [editando, setEditando] = useState(false);
   const [negativa, setNegativa] = useState<string | undefined>(undefined);
   const [enviando, setEnviando] = useState(false);
   const pedir = (accion: (id: string) => Promise<string | undefined>): void => {
@@ -127,8 +131,18 @@ export function AccionesDeTarea({
   const ofrecerContinuar = aparcada && destinos.includes("nuevo") && alContinuar !== undefined;
   const ofrecerArrancar = t.estado === "nuevo" && puedeArrancar === true && alArrancarAhora !== undefined;
   const avisoDeEspera = t.estado === "nuevo" && puedeArrancar === true && esperaPorTuConsola === true;
+  const ofrecerEditar = puedeEditarEncargo(t) && alEditarEncargo !== undefined;
 
-  if (!ofrecerReintentar && !ofrecerTerminar && !ofrecerFeedback && !pistaDeFeedback && !ofrecerDescartar && !ofrecerContinuar && !ofrecerArrancar) {
+  if (
+    !ofrecerReintentar &&
+    !ofrecerTerminar &&
+    !ofrecerFeedback &&
+    !pistaDeFeedback &&
+    !ofrecerDescartar &&
+    !ofrecerContinuar &&
+    !ofrecerArrancar &&
+    !ofrecerEditar
+  ) {
     return null;
   }
 
@@ -150,6 +164,25 @@ export function AccionesDeTarea({
         >
           Arrancar ahora
         </button>
+      ) : null}
+      {ofrecerEditar ? (
+        <>
+          <button type="button" className={estilos.boton} disabled={apagado} onClick={() => setEditando(true)}>
+            Editar el encargo
+          </button>
+          {editando ? (
+            <EditarEncargo
+              tarea={t}
+              apagado={apagado}
+              onCancelar={() => setEditando(false)}
+              onGuardar={async (encargo) => {
+                const motivo = await alEditarEncargo!(t.id, encargo).catch(() => "el envío falló");
+                if (motivo === undefined) setEditando(false);
+                return motivo;
+              }}
+            />
+          ) : null}
+        </>
       ) : null}
       {ofrecerContinuar ? (
         <button type="button" className={estilos.boton} disabled={apagado || enviando} onClick={() => pedir(alContinuar!)}>
@@ -243,6 +276,87 @@ function ConfirmarDescarte({
             </Button>
           </div>
         </div>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * La ventana que edita el encargo de una tarea que todavía no ha arrancado (IXCODE-52). Antes
+ * solo se podía verlo, arrancarla o descartarla, y corregir una frase obligaba a descartar y
+ * volver a crearla (con sus adjuntos). La misma coraza que confirmar el descarte, más ancha: un
+ * encargo son párrafos. Guardar NO cierra hasta que el servidor dice que sí; una negativa (la tarea
+ * arrancó entre medias) se enseña dentro, con lo escrito intacto.
+ */
+function EditarEncargo({
+  tarea: t,
+  apagado,
+  onCancelar,
+  onGuardar,
+}: {
+  tarea: TareaDelCable;
+  apagado: boolean;
+  onCancelar: () => void;
+  onGuardar: (encargo: string) => Promise<string | undefined>;
+}) {
+  const [texto, setTexto] = useState(t.encargo);
+  const [guardando, setGuardando] = useState(false);
+  const [negativa, setNegativa] = useState<string | undefined>(undefined);
+  const limpio = texto.trim();
+  const sinCambios = limpio === t.encargo.trim();
+  return (
+    <Modal open onClose={onCancelar} title="Editar el encargo" headless className={modal.capa}>
+      <div
+        className={modal.velo}
+        onClick={(evento) => {
+          if (evento.target === evento.currentTarget && !guardando) onCancelar();
+        }}
+      >
+        <form
+          className={`${modal.ventana} ${estilos.ventanaAncha}`}
+          onSubmit={(evento) => {
+            evento.preventDefault();
+            if (limpio === "" || sinCambios || apagado || guardando) return;
+            setGuardando(true);
+            setNegativa(undefined);
+            void onGuardar(limpio).then((motivo) => {
+              setGuardando(false);
+              if (motivo !== undefined) setNegativa(motivo);
+            });
+          }}
+        >
+          <h2 className={modal.titulo}>Editar el encargo</h2>
+          <p className={modal.nota}>
+            {`Es lo que se le mandará al agente cuando «${t.titulo}» arranque. Tu petición original se conserva.`}
+          </p>
+          <label className={modal.etiqueta} htmlFor={`encargo-${t.id}`}>
+            Encargo
+          </label>
+          <textarea
+            id={`encargo-${t.id}`}
+            className={`${modal.campo} ${estilos.campoEncargo}`}
+            value={texto}
+            disabled={apagado || guardando}
+            onChange={(evento) => setTexto(evento.target.value)}
+          />
+          {limpio === "" ? <p className={modal.fallo}>El encargo no puede quedar vacío.</p> : null}
+          {negativa === undefined ? null : (
+            <p className={modal.fallo} role="alert">{`No se pudo guardar: ${negativa}`}</p>
+          )}
+          <div className={modal.acciones}>
+            <Button type="button" variant="outline" className={modal.accion} disabled={guardando} onClick={onCancelar}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              className={`${modal.accion} ${modal.principal}`}
+              disabled={limpio === "" || sinCambios || apagado || guardando}
+            >
+              {guardando ? "Guardando…" : "Guardar"}
+            </Button>
+          </div>
+        </form>
       </div>
     </Modal>
   );

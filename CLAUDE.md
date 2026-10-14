@@ -914,6 +914,10 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   motor externo no le llegan tools propias.
 - **El encargo se AUMENTA y se enseña EDITABLE antes de encolar** (`AumentadorPort`, papel
   `trabajo`): ocupa el sitio del diff; su fallo encola el texto original y se DICE.
+  **Y se puede EDITAR mientras la tarea no ha arrancado NUNCA** (IXCODE-52, `core/tareas.ts#conEncargo`,
+  `puedeEditarEncargo`: `nuevo` y sin `empezada`; una reintentada vuelve a `nuevo`, pero lo que se le manda
+  es su hilo). La `peticion` no se toca. El corredor manda el encargo RELEÍDO en la escritura que la
+  marca «en proceso», no el de la lectura que la eligió: una edición entre medias no se pierde.
 - **Un encargo GRANDE se reparte en tareas ENCADENADAS, y el agente solo PROPONE**
   (`core/repartoDeEncargo.ts`, `agent/motores/trueforge/proponerTareas.ts`, `componentes/PropuestaDeTareas.tsx`): la
   tool `proponer_tareas` valida y anuncia el acto `propuesta-de-tareas`, nunca crea nada; las tareas las crea el clic de

@@ -6175,6 +6175,24 @@ describe("las tareas en background, por el cable", () => {
       rmSync(base, { recursive: true, force: true });
     });
 
+    it("«Editar el encargo» cambia el de una que no ha arrancado; con una que ya arrancó contesta 409 con motivo (IXCODE-52)", async () => {
+      const { base, cola, accion, vestibulo } = await conPropuesta();
+      const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      const tarea = (id: string, extra: Partial<Tarea> = {}): Tarea => ({
+        id, proyecto: { id: "p1", raiz, nombre: "Tienda" }, titulo: id, peticion: "p", encargo: "e",
+        adjuntos: [], estado: "nuevo", creada: "2026-10-07T10:00:00.000Z", ...extra,
+      });
+      cola.guardar([tarea("a"), tarea("b", { estado: "en-proceso", empezada: "2026-10-07T10:01:00.000Z" })]);
+      expect(await enviarMensaje(accion, { clase: "tarea", accion: "encargo", id: "a", encargo: "hazlo así" })).toBe(204);
+      expect(cola.listar().find((t) => t.id === "a")).toMatchObject({ encargo: "hazlo así", peticion: "p" });
+      const negada = await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "encargo", id: "b", encargo: "otro" }));
+      expect(negada.estado).toBe(409);
+      expect(JSON.parse(negada.cuerpo).motivo).toBeTypeOf("string");
+      expect(cola.listar().find((t) => t.id === "b")!.encargo).toBe("e");
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
     it("descartarla la deja resuelta sin tareas", async () => {
       const { base, cola, accion, vestibulo } = await conPropuesta();
       expect(await enviarMensaje(accion, { clase: "tarea", accion: "descartarPropuesta", proyecto: "p1", propuesta: "p1" })).toBe(204);

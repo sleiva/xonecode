@@ -3,7 +3,7 @@ import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync, renameSync, statSync, linkSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { aplicarFeedback, crearTareasEnDisco } from "./tareasEnDisco.js";
+import { aplicarEncargo, aplicarFeedback, crearTareasEnDisco } from "./tareasEnDisco.js";
 import type { Tarea } from "../../core/tareas.js";
 
 /**
@@ -462,6 +462,33 @@ describe("tareasEnDisco", () => {
       expect(modo(join(base, "tareas", "t1", "adjuntos", "doc.pdf"))).toBe(0o600);
     }
   );
+});
+
+describe("aplicarEncargo (IXCODE-52)", () => {
+  let base: string;
+  beforeEach(() => {
+    base = mkdtempSync(join(tmpdir(), "xonecode-encargo-"));
+  });
+  afterEach(() => {
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("cambia el encargo de una que no ha arrancado, sin tocar la petición", () => {
+    const disco = crearTareasEnDisco({ base });
+    disco.guardar([{ ...TAREA, estado: "nuevo" }]);
+    expect(aplicarEncargo(disco, "t1", "hazlo así")).toEqual({ hecho: true });
+    expect(disco.listar()[0]).toMatchObject({ encargo: "hazlo así", peticion: TAREA.peticion, estado: "nuevo" });
+  });
+
+  it("una en marcha, una que ya no existe o un encargo vacío se rechazan y se DICEN, sin escribir", () => {
+    const disco = crearTareasEnDisco({ base });
+    disco.guardar([{ ...TAREA, estado: "en-proceso", empezada: "2026-10-14T10:00:00.000Z" }]);
+    expect(aplicarEncargo(disco, "t1", "otro")).toEqual({ hecho: false, motivo: expect.any(String) });
+    expect(aplicarEncargo(disco, "fantasma", "otro")).toEqual({ hecho: false, motivo: "la tarea ya no está en la cola" });
+    disco.guardar([{ ...TAREA, estado: "nuevo" }]);
+    expect(aplicarEncargo(disco, "t1", "  ")).toEqual({ hecho: false, motivo: expect.any(String) });
+    expect(disco.listar()[0]!.encargo).toBe(TAREA.encargo);
+  });
 });
 
 describe("aplicarFeedback", () => {

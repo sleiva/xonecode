@@ -601,6 +601,54 @@ describe("Corredor.cortar(id): la salida que usa `descartar` antes de borrar", (
  * punta —que la conversación de verdad continúa, no solo que el id coincide— vive en
  * `describe("el volcado de la sesión de una tarea", …)`, con git y el vestíbulo reales.
  */
+/**
+ * IXCODE-52: el encargo se puede editar mientras la tarea espera. Si la edición cae entre que el
+ * corredor ELIGE la tarea y la MARCA «en proceso», lo que se manda es lo releído en esa marca, no
+ * el texto de cuando se eligió.
+ */
+describe("el encargo que se manda es el del disco al marcarla", () => {
+  it("una edición entre elegirla y marcarla no se pierde", async () => {
+    const d = discoDeMentira([TAREA({ encargo: "el viejo" })]);
+    const recibidos: string[] = [];
+    const corredor = crearCorredorDeTareas({
+      ...ENTREGA_VERDE,
+      disco: d.disco,
+      abrirParaTarea: async (raiz) => ({
+        raiz,
+        idDeHilo: "s1",
+        correrTarea: async (p) => {
+          recibidos.push(p);
+          return { verificador: "verde", pendientes: 0 };
+        },
+        cerrar: async () => {},
+      }),
+      pid: 1,
+      // En pausa al arrancar, para que la tarea no salga antes de poner la trampa.
+      concurrencia: () => concurrencia,
+    });
+    let concurrencia = 0;
+    await corredor.arrancar();
+    concurrencia = 1;
+    // La primera lectura tras abrir la cola es la que ELIGE; justo después, alguien edita.
+    const listar = d.disco.listar;
+    let trampa = true;
+    d.disco.listar = () => {
+      const foto = listar();
+      if (trampa) {
+        trampa = false;
+        d.poner([TAREA({ encargo: "el nuevo" })]);
+      }
+      return foto;
+    };
+    corredor.revisar();
+    await corredor.asentar();
+    expect(recibidos).toHaveLength(1);
+    expect(recibidos[0]).toContain("el nuevo");
+    expect(recibidos[0]).not.toContain("el viejo");
+    await corredor.parar();
+  });
+});
+
 describe("el feedback reanuda una tarea, en su mismo hilo", () => {
   it("añadir feedback devuelve la tarea al lazo, en su mismo hilo", async () => {
     // `requiere-atencion` dejó de ser terminal: es una pregunta al desarrollador. Y la
