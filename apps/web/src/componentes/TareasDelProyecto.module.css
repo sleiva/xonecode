@@ -154,6 +154,15 @@
   gap: 6px;
 }
 
+/* El grupo de `AccionesDeTarea`, pegado al borde DERECHO de la fila, como «Nueva tarea» encima.
+   Sin esto, el aviso «Esperando…» ocupaba su propia línea, fijaba el ancho del grupo y dejaba
+   los botones a la izquierda debajo de él, flotando a mitad de la fila (visto en pantalla). Solo
+   aquí: en el kanban la misma pieza vive en una tarjeta estrecha y se lee de izquierda a derecha. */
+.acciones > [role="group"] {
+  justify-content: flex-end;
+  text-align: right;
+}
+
 /* «espera a: …» de una tarea encadenada: un dato, no un aviso. */
 .espera {
   margin: 2px 0 0;
