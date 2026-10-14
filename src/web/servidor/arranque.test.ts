@@ -11109,6 +11109,25 @@ describe("el cable: la pestaña Soporte", () => {
     rmSync(base, { recursive: true, force: true });
   });
 
+  /** IXCODE-36: leer una conversación sin abrirle consola, para cuando no se puede escribir en ella. */
+  it("leerSesion devuelve los actos guardados SIN abrir ninguna consola; un id fuera del índice es 409", async () => {
+    const { base, vestibulo, chat } = tiendaConUnChat();
+    const { accion } = await montado(vestibulo);
+    const r = await accion({ clase: "leerSesion", proyecto: "p1", sesion: chat });
+    expect(r.estado).toBe(200);
+    const cuerpo = JSON.parse(r.cuerpo) as { actos: { tipo: string; texto?: string }[] };
+    expect(cuerpo.actos.map((a) => [a.tipo, a.texto])).toEqual([["usuario", "hola"], ["error", "se cayó"]]);
+    expect(vestibulo.proyectoAbierto()).toBeUndefined();
+    for (const malo of [
+      { proyecto: "p1", sesion: "no-esta" },
+      { proyecto: "p1", sesion: "../x" },
+      { proyecto: "no-existe", sesion: chat },
+    ]) {
+      expect((await accion({ clase: "leerSesion", ...malo })).estado).toBe(409);
+    }
+    rmSync(base, { recursive: true, force: true });
+  });
+
   it("el del proyecto lleva el código y nunca el .env", async () => {
     const { base, vestibulo } = tiendaConUnChat();
     const { descargar } = await montado(vestibulo);

@@ -1,0 +1,64 @@
+/* La conversación abierta para LEER (IXCODE-36). Sin colores literales: alias del tema y de marca.
+   La banda va en el MISMO eje y ancho que la tarjeta del compositor, en su sitio
+   (`MensajeATarea.module.css#aviso`, `Compositor.module.css#envoltura`). */
+.banda {
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  width: calc(100% - 2 * var(--dsh-composer-side-clearance));
+  max-width: calc(var(--dsh-composer-card-max-width) - 2 * var(--dsh-composer-side-clearance));
+  margin: 0 auto 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.texto {
+  flex: 1 1 280px;
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+.acciones {
+  display: flex;
+  gap: 6px;
+}
+
+.boton,
+.principal {
+  padding: 5px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.boton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.principal {
+  border-color: var(--xonecode-azul);
+  background: var(--xonecode-azul);
+  color: var(--xonecode-sobre-azul);
+}
+
+.cargando,
+.error {
+  flex: 1;
+  margin: 24px auto;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+}
+
+.error {
+  color: var(--dsw-alias-state-error-primary);
+}

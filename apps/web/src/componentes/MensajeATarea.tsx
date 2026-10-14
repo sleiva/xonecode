@@ -18,6 +18,19 @@ export function AvisoDeTareaEnEspera({ titulo }: { titulo: string }) {
 }
 
 /**
+ * Una TAREA está trabajando en el proyecto de esta conversación (IXCODE-36): se lee, pero no se envía
+ * nada —sería un segundo escritor sobre la misma copia de trabajo—. Va encima de la caja apagada.
+ */
+export function AvisoDeProyectoConTarea() {
+  return (
+    <p className={estilos.aviso} role="note">
+      Solo lectura: una tarea está trabajando en este proyecto. No se puede enviar nada ni empezar otra conversación
+      hasta que termine o la pares (pestaña Tareas del proyecto).
+    </p>
+  );
+}
+
+/**
  * Al ENVIAR desde el chat de esa tarea, se elige a dónde va el mensaje:
  * - «Enviar y continuar la tarea»: el texto va a la tarea como feedback y la tarea arranca (cede el proyecto: se cierra
  *   esta conversación, que queda guardada). Devuelve el motivo si no se pudo.

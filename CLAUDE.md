@@ -1041,6 +1041,16 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   vivas a la vez, con clave por RAÍZ y un foco. `proyectoAbierto()` es la del FOCO,
   `proyectosAbiertos()` la lista. Mudarse SUELTA los sumideros (`Transporte.soltar`), no los
   desconecta. La aprobación en vuelo se REEMITE al volver (`mensajesDeAprobacion()`).
+- **Lo que no se puede ESCRIBIR se puede LEER** (IXCODE-36). Con una tarea escribiendo en un
+  proyecto, una persona no ENVÍA nada en él: el turno no corre (`vestibulo.ts#MOTIVO_PROYECTO_CON_TAREA`,
+  solo la puerta de personas) y el cliente apaga la caja con su banda y el «+». Sus conversaciones SÍ
+  se abren (el panel del proyecto necesita consola). **Límite declarado**: que no nazca una
+  conversación nueva lo sostiene el CLIENTE (caja apagada, «+» apagado); si llega un mensaje igual
+  —una pestaña vieja, el móvil—, el turno no corre pero el acto de la persona ya está apuntado y al
+  cerrar se vuelca. Lo que no se puede ABRIR —la conversación de la propia tarea, o otra del
+  proyecto que trabaja en una tuya— se LEE sin consola (`{clase:"leerSesion"}`, del índice del
+  DISCO; en vivo por `mirar` si es la de la tarea), en `LecturaDeSesion.tsx`. La barra mira las DOS
+  marcas de «trabajando»: la del proyecto solo viaja cuando ninguna fila lleva la suya.
 - **El cable habla con TODOS los clientes** (`transporte.ts` es un `Set`): la ráfaga de bienvenida
   va SOLO al recién llegado.
 - **El turno en vuelo lo DICE el servidor** (`clase: "turno"`); el aviso de fin va en un `finally`.

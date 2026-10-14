@@ -518,6 +518,16 @@ export const MOTIVO_SESION_DE_TAREA_EN_CURSO =
   "esa conversación es la de una tarea en curso: el agente está escribiendo en ella ahora " +
   "mismo. Pulsa «Ver lo que hace» en su tarjeta para mirarla, y ábrela cuando termine.";
 
+/**
+ * Por qué no corre un turno de persona en un proyecto donde ESCRIBE una tarea (IXCODE-36): sería un
+ * segundo escritor sobre la misma copia de trabajo. La conversación se puede abrir y leer; lo que no
+ * se puede es enviar —y por eso tampoco nace una conversación nueva: entra en el índice con su
+ * primer mensaje—.
+ */
+export const MOTIVO_PROYECTO_CON_TAREA =
+  "una tarea está trabajando en este proyecto: puedes leer sus conversaciones, pero no enviar nada " +
+  "hasta que termine o la pares (pestaña Tareas del proyecto).";
+
 /** Una consola de proyecto viva. Solo hay una a la vez. */
 export interface ConsolaDeProyecto {
   readonly raiz: string;
@@ -1658,6 +1668,13 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
        */
       if (estado.raiz !== raiz) {
         throw new Error("ese turno trae la raíz de otro proyecto: esta consola solo corre turnos sobre la suya");
+      }
+      // Una PERSONA no envía nada mientras una tarea escribe en este proyecto (IXCODE-36). El
+      // cliente ya apaga la caja; esto es la guarda que manda si llega igual. Se dice en el chat
+      // y no corre nada: ni turno, ni volcado, ni commit.
+      if (conModoPorDefecto === true && [...deTareas].some((c) => c.raiz === raiz && !c.cerrada)) {
+        consola.escribir(`No se ha enviado: ${MOTIVO_PROYECTO_CON_TAREA}\n`);
+        return undefined;
       }
       // El primer turno NUEVO es lo que deja de ser histórica una sesión reabierta.
       // `sesiones.ts` no puede hacerlo —`reabrirSesion` es una lectura pura sin estado

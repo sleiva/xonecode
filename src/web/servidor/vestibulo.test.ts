@@ -2432,6 +2432,41 @@ describe("abrirParaTarea — la segunda puerta", () => {
    * Y el motivo DICE qué sí se puede hacer. Un «no puedes» a secas, con la vista en vivo
    * existiendo justo al lado, es la clase de mensaje que hace que alguien insista.
    */
+  /**
+   * IXCODE-36: con una tarea escribiendo en un proyecto, sus conversaciones se ABREN —para leerlas y
+   * para llegar a su panel— pero una persona no ENVÍA nada: sería un segundo escritor sobre la misma
+   * copia de trabajo. Y como una conversación entra en el índice con su primer mensaje, tampoco nace
+   * ninguna nueva.
+   */
+  it("con una tarea escribiendo en el proyecto, el turno de una persona no corre y se dice", async () => {
+    const base = baseTemporal();
+    let turnos = 0;
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      baseDeWorkspace: () => base,
+      crearEjecutor: () => async (_peticion, _estado, consola) => {
+        turnos += 1;
+        consola.escribir("hecho\n");
+      },
+    });
+    const raiz = proyectoEnDisco(base, "B");
+    const deTarea = await v.abrirParaTarea(raiz);
+    const humana = await v.abrirProyecto({ raiz });
+    await humana.ejecutarTurno("hazme otra cosa", humana.estadoDeSesion, humana.consola.consola);
+    expect(turnos).toBe(0);
+    expect(JSON.stringify(humana.actos())).toMatch(/tarea está trabajando/);
+    // La de la TAREA sí corre: la guarda es de la puerta de las personas.
+    await deTarea.ejecutarTurno("sigue", deTarea.estadoDeSesion, deTarea.consola.consola);
+    expect(turnos).toBe(1);
+    // Y cerrada la tarea, la persona ya puede.
+    await deTarea.cerrar();
+    await humana.ejecutarTurno("ahora sí", humana.estadoDeSesion, humana.consola.consola);
+    expect(turnos).toBe(2);
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
   it("abrir la sesión de una tarea en curso se DECLINA, y no cierra la que estaba abierta", async () => {
     const base = baseTemporal();
     const s = sesionesEnMemoria();

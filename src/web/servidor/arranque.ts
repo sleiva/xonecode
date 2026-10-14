@@ -191,7 +191,7 @@ import {
   sinSeguir,
   trabajoSinCommitear,
 } from "../../agent/sesiones/gitSync.js";
-import { marcarTareaDeSesion, sembrarConsumosPendientes, type DispositivoElegido } from "./sesiones.js";
+import { listarSesiones, marcarTareaDeSesion, reabrirSesion, sembrarConsumosPendientes, type DispositivoElegido } from "./sesiones.js";
 import { RUTA_ARTEFACTOS, esRutaDeArtefacto, rutaRelativaDeArtefacto } from "../../core/artefactos.js";
 import { MIMES_DE_ARTEFACTO_AL_MOVIL, TOPE_DE_ARTEFACTO_AL_MOVIL, trozosDeArtefacto } from "../../core/remoto.js";
 import {
@@ -6686,6 +6686,38 @@ export function montarRutas(
       const proyecto = opciones.modoDelProyecto?.(raiz);
       respuesta.writeHead(200, { "content-type": "application/json" });
       respuesta.end(JSON.stringify(proyecto === undefined ? {} : { proyecto }));
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "leerSesion") {
+      /**
+       * LEER una conversación sin abrirle consola (IXCODE-36): para cuando no se puede escribir en
+       * ella —una tarea escribe en su proyecto, o el proyecto trabaja en otra conversación—. Del
+       * cable llegan los IDS; el nombre sale del listado del servidor, la raíz la compone el
+       * vestíbulo y la sesión tiene que estar en el ÍNDICE de ese proyecto: nunca se lee un fichero
+       * que el cliente nombre. Contesta los actos en la propia respuesta.
+       */
+      const negar = (motivo: string): void => {
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ motivo }));
+      };
+      const identidad = proyectos.find((p) => p.id === (mensaje as { proyecto?: unknown }).proyecto);
+      const sesion = (mensaje as { sesion?: unknown }).sesion;
+      if (entornoElegido === undefined || identidad === undefined) return negar("ese proyecto no está en el listado del entorno activo");
+      const raiz = vestibulo.raizDeProyecto(entornoElegido, identidad.nombre);
+      if (!esProyectoEnDisco(raiz)) return negar("ese proyecto no está descargado en este equipo");
+      // El índice del DISCO, la misma fuente que lee `reabrirSesion` justo debajo.
+      if (typeof sesion !== "string" || !listarSesiones(raiz).some((s) => s.id === sesion)) {
+        return negar("esa conversación no está en el proyecto");
+      }
+      let actos: readonly Acto[];
+      try {
+        actos = reabrirSesion(raiz, sesion).actos;
+      } catch (error) {
+        contar(error);
+        return negar("no se pudo leer esa conversación");
+      }
+      respuesta.writeHead(200, { "content-type": "application/json" });
+      respuesta.end(JSON.stringify({ actos }));
       return;
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "soporte" && mensaje.accion === "listar") {

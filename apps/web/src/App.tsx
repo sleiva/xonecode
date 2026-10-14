@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { Planes } from "./componentes/Planes.js";
 import { Colecciones } from "./componentes/Colecciones.js";
 import type { crearStoreDelCliente } from "./store.js";
-import type { ActoDeSincronizacion, FotoDelResumen, ListadoDeSoporte, MensajeDelCliente, ModoDeEscritura } from "./tipos.js";
+import type { Acto, ActoDeSincronizacion, FotoDelResumen, ListadoDeSoporte, MensajeDelCliente, ModoDeEscritura } from "./tipos.js";
 import type { Conexion } from "./conexion.js";
 import { ANCHO_BARRA_POR_OMISION, Maqueta } from "./componentes/Maqueta.js";
 import { Barra } from "./componentes/Barra.js";
-import { AvisoDeTareaEnEspera, ElegirDestinoDelMensaje } from "./componentes/MensajeATarea.js";
+import { AvisoDeProyectoConTarea, AvisoDeTareaEnEspera, ElegirDestinoDelMensaje } from "./componentes/MensajeATarea.js";
+import { LecturaDeSesion, type MotivoDeLectura } from "./componentes/LecturaDeSesion.js";
 import { Cabecera } from "./componentes/Cabecera.js";
 import { Panel } from "./componentes/Panel.js";
 import type { Pestana } from "./componentes/Pestanas.js";
@@ -564,6 +565,63 @@ export function App({
     if (estado.mirada?.tarea === mirandoTarea) return;
     void mirar?.(mirandoTarea, true);
   }, [mirandoTarea, estado.conectado, estado.mirada?.tarea, mirar]);
+
+  /**
+   * Las conversaciones de las tareas que trabajan AHORA, por id de sesión → id de tarea (IXCODE-36):
+   * no se abren como consola —el agente las está escribiendo—, se LEEN en vivo.
+   */
+  const tareaQueEscribeLaSesion = useMemo(() => {
+    const deSesion = new Map<string, string>();
+    for (const t of estado.tareas?.lista ?? []) if (t.estado === "en-proceso" && t.sesion !== undefined) deSesion.set(t.sesion, t.id);
+    return deSesion;
+  }, [estado.tareas]);
+  /**
+   * Una conversación abierta para LEER (IXCODE-36): la de una tarea que trabaja ahora, o una del
+   * proyecto que trabaja en OTRA. No abre ninguna consola: los actos vienen del disco (`leerSesion`)
+   * y, si es la de una tarea, en vivo por el mismo canal que «Ver lo que hace» (`tarea`). Es de esta
+   * ventana, como `mirandoTarea`.
+   */
+  const [lectura, setLectura] = useState<
+    { proyecto: string; sesion: string; titulo: string; tarea?: string; actos?: Acto[]; error?: string } | undefined
+  >(undefined);
+  /**
+   * La lectura de AHORA, para cerrar o cambiar sin meter efectos dentro de un `setLectura`: dejar de
+   * mirar toca el store y la red, y un actualizador de React tiene que ser puro (se puede repetir).
+   */
+  const lecturaActual = useRef(lectura);
+  lecturaActual.current = lectura;
+  const cerrarLectura = useCallback(() => {
+    const tarea = lecturaActual.current?.tarea;
+    if (lecturaActual.current === undefined) return;
+    lecturaActual.current = undefined;
+    setLectura(undefined);
+    if (tarea !== undefined) alDejarDeMirarTarea(tarea);
+  }, [alDejarDeMirarTarea]);
+  const leerSesion = useCallback(
+    (proyecto: string, sesion: string, titulo: string) => {
+      const tarea = tareaQueEscribeLaSesion.get(sesion);
+      const anterior = lecturaActual.current?.tarea;
+      const nueva = { proyecto, sesion, titulo, ...(tarea === undefined ? {} : { tarea }) };
+      lecturaActual.current = nueva;
+      setLectura(nueva);
+      if (anterior !== undefined && anterior !== tarea) alDejarDeMirarTarea(anterior);
+      // En vivo si es la de una tarea que corre AQUÍ; el disco da lo que ya quedó volcado mientras llega.
+      if (tarea !== undefined && tarea !== anterior && estado.tareas?.corriendoAqui === true) alMirarTarea(tarea);
+      void (async () => {
+        let resultado: { actos?: Acto[]; error?: string };
+        try {
+          const r = (await enviar({ clase: "leerSesion", proyecto, sesion })) as Response | undefined;
+          if (r?.status === 200) resultado = { actos: ((await r.json()) as { actos: Acto[] }).actos };
+          else resultado = { error: (await negativaOFalloDe(r)) ?? "el servidor no contestó" };
+        } catch {
+          resultado = { error: "el envío falló" };
+        }
+        // Una respuesta de OTRA lectura (se pulsó otra fila entre medias) se tira.
+        setLectura((actual) => (actual?.sesion === sesion && actual.proyecto === proyecto ? { ...actual, ...resultado } : actual));
+      })();
+    },
+    [enviar, tareaQueEscribeLaSesion, estado.tareas?.corriendoAqui, alMirarTarea, alDejarDeMirarTarea]
+  );
 
   /**
    * Los ARTEFACTOS de la sesión, sacados de los actos.
@@ -1485,6 +1543,16 @@ export function App({
    */
   const [sesionNueva, setSesionNueva] = useState<string | undefined>(undefined);
   /**
+   * Leer una conversación (IXCODE-36) se deja al navegar a cualquier otra cosa: abrir una sesión,
+   * el panel de un proyecto, el escritorio o la ventana de una sesión nueva. Por efecto y no en cada
+   * función que navega: están declaradas antes que la lectura, y así ninguna puede olvidarlo.
+   */
+  useEffect(() => {
+    if (pedidoDeApertura !== undefined || enEscritorio || enPanel || panelSinCopia !== undefined || sesionNueva !== undefined) {
+      cerrarLectura();
+    }
+  }, [pedidoDeApertura, enEscritorio, enPanel, panelSinCopia, sesionNueva, cerrarLectura]);
+  /**
    * El alta que había al ABRIR la ventana de sesión nueva. Un `aviso` de ese alta es de un
    * paso anterior —de otro proyecto, quizá—, y la ventana solo enseña los que llegan después.
    */
@@ -1735,6 +1803,23 @@ export function App({
       : estado.alta?.proyectos?.find((p) => p.id === panelSinCopia && p.local !== true);
   /** Se pidió ver un panel de proyecto —el del abierto o el de uno sin copia— en vez del chat. */
   const panelPedido = enPanel || proyectoSinCopia !== undefined;
+  /** Una TAREA trabaja en el proyecto de la conversación abierta (IXCODE-36): su caja se apaga. */
+  const proyectoAbiertoConTarea = proyectoActivoId !== undefined && (tareasEnCursoPorProyecto.get(proyectoActivoId) ?? 0) > 0;
+  /** Se está leyendo una conversación: va por delante de todo, salvo de alguien esperando una respuesta en el chat. */
+  const enLectura = lectura !== undefined && !hayEsperaDeHumano;
+  /** Por qué esa conversación se LEE ahora, decidido con lo de AHORA: si ya nada lo impide, se ofrece abrirla. */
+  const proyectoDeLaLectura = lectura === undefined ? undefined : estado.alta?.proyectos.find((p) => p.id === lectura.proyecto);
+  const laQueTrabajaEnLaLectura = proyectoDeLaLectura?.sesiones?.find((s) => s.trabajando === true && s.id !== lectura?.sesion);
+  const motivoDeLectura: MotivoDeLectura =
+    lectura === undefined
+      ? "libre"
+      : tareaQueEscribeLaSesion.has(lectura.sesion)
+        ? "tarea"
+        : laQueTrabajaEnLaLectura !== undefined || (proyectoDeLaLectura?.trabajando === true && !proyectoDeLaLectura.sesiones?.some((s) => s.id === lectura.sesion && s.trabajando === true))
+          ? "trabajando"
+          : "libre";
+  const actosDeLaLectura =
+    lectura?.tarea !== undefined && estado.mirada?.tarea === lectura.tarea ? estado.mirada.actos : lectura?.actos;
   const enSesion = proyectoAbierto && !enEscritorio && !(panelPedido && !hayEsperaDeHumano);
   /** El panel del proyecto ocupa el centro: hay proyecto, no se mira el escritorio, se pidió, y
    *  no hay nadie esperando una respuesta en el chat (ver `hayEsperaDeHumano`). */
@@ -1844,6 +1929,7 @@ export function App({
    * cada clic en un proyecto que ya está en el equipo.
    */
   const abrirVentanaDeSesion = (proyecto: string): void => {
+    cerrarLectura();
     const identidad = estado.alta?.proyectos.find((p) => p.id === proyecto);
     // Con copia local NO hay ventana: se abre y ya. La ventana existía para no descargar
     // un proyecto entero por un «+» pulsado sin querer; con la copia en el equipo no se
@@ -1878,6 +1964,8 @@ export function App({
    * el camino de siempre, la ventana que descarga: no hay panel de algo que no está en el equipo.
    */
   const abrirProyecto = (proyecto: string): void => {
+    // Explícito y no solo por el efecto: con su panel ya delante, `setEnPanel(true)` no cambia nada.
+    cerrarLectura();
     const identidad = estado.alta?.proyectos.find((p) => p.id === proyecto);
     setEnEscritorio(false);
     if (identidad?.local !== true) {
@@ -2670,7 +2758,25 @@ export function App({
     trazas a los que llevar, y unas pestañas que no llevan a ningún sitio son el mismo
     botón muerto que este repo no consiente. `Cabecera` las omite cuando no se las pasan.
   */
-  const cabecera = enProyecto || enProyectoSinCopia ? (
+  const cabecera = enLectura ? (
+    // Una conversación abierta para LEER (IXCODE-36): su título y su proyecto, sin las pestañas de una
+    // sesión —no hay consola detrás a la que lleven—.
+    <Cabecera
+      titulo={lectura.titulo !== "" ? lectura.titulo : "Sin título"}
+      {...(proyectoDeLaLectura === undefined ? {} : { proyecto: proyectoDeLaLectura.nombre })}
+      conectado={estado.conectado}
+      barraContraida={reparto.barra === "plegada"}
+      alAlternarBarra={alternarBarra}
+      alAbrirAjustes={() => abrirAjustes()}
+      apariencia={apariencia}
+      alCambiarApariencia={alCambiarApariencia}
+      // Explícito: desde el escritorio `enEscritorio` ya es cierto y el efecto no se volvería a disparar.
+      alIrAlEscritorio={() => {
+        cerrarLectura();
+        setEnEscritorio(true);
+      }}
+    />
+  ) : enProyecto || enProyectoSinCopia ? (
     // El panel del proyecto: su nombre arriba y la marca que lleva al escritorio. Sin el botón
     // del panel lateral —ese panel es de una SESIÓN, y aquí no hay ninguna delante—.
     <Cabecera
@@ -2774,7 +2880,24 @@ export function App({
         // La rama ya NO se elige aquí: la pregunta de «qué proyecto abro y desde qué rama»
         // vive entera en `NuevaSesion`, que además dice que va a descargar. Un selector
         // suelto en mitad del centro no decía ni de qué proyecto era.
-        enProyectoSinCopia ? (
+        enLectura ? (
+          <>
+            <AvisoDeConexion conectado={estado.conectado} />
+            <LecturaDeSesion
+              key={`${lectura.proyecto}/${lectura.sesion}`}
+              {...(actosDeLaLectura === undefined ? {} : { actos: actosDeLaLectura })}
+              {...(lectura.error === undefined ? {} : { error: lectura.error })}
+              // Y solo mientras la tarea siga en marcha: el store no suelta `mirada` cuando acaba.
+              vivo={lectura.tarea !== undefined && tareaQueEscribeLaSesion.has(lectura.sesion) && estado.mirada?.tarea === lectura.tarea}
+              motivo={motivoDeLectura}
+              alAbrirParaEscribir={() => abrirSesion(lectura.proyecto, lectura.sesion)}
+              {...(laQueTrabajaEnLaLectura === undefined
+                ? {}
+                : { alIrALaQueTrabaja: () => abrirSesion(lectura.proyecto, laQueTrabajaEnLaLectura.id) })}
+              alCerrar={cerrarLectura}
+            />
+          </>
+        ) : enProyectoSinCopia ? (
           // El panel de un proyecto que NO está en el equipo: solo su Resumen, con «Descargar».
           // Va PRIMERO: se pide desde una sesión abierta igual que desde el escritorio, y en los
           // dos casos es lo que el usuario acaba de pedir mirar. Sin gestor ni planes: los dos
@@ -2979,6 +3102,7 @@ export function App({
               dos se queda mintiendo el día que el otro cambie.
             */}
             {tareaEnEsperaDeLaSesion === undefined ? null : <AvisoDeTareaEnEspera titulo={tareaEnEsperaDeLaSesion.titulo} />}
+            {proyectoAbiertoConTarea ? <AvisoDeProyectoConTarea /> : null}
             <Compositor
               extraAbajo={<SesionRemota remoto={estado.remoto} enviar={(m) => enviar(m)} alAbrirAjustes={() => abrirAjustes("remoto")} />}
               conectado={estado.conectado}
@@ -2990,7 +3114,9 @@ export function App({
                 estado.aprobacion !== undefined ||
                 estado.pregunta !== undefined ||
                 estado.selector !== undefined ||
-                estado.secreto !== undefined
+                estado.secreto !== undefined ||
+                // Una tarea escribe en este proyecto (IXCODE-36): se lee, no se envía.
+                proyectoAbiertoConTarea
               }
               {...(borradorDelCompositor === undefined ? {} : { borrador: borradorDelCompositor })}
               // El estado de modelos, tal cual lo manda el servidor: la pastilla lo pinta
@@ -3258,7 +3384,12 @@ export function App({
             : { visibles: estado.alta.registrados.find((e) => e.id === entornoActivo)!.proyectos })}
           proyectos={(estado.alta?.proyectos ?? []).map((p) => ({
             ...p,
-            sesiones: (p.sesiones ?? []).map((s) => ({ ...s, historica: true })),
+            sesiones: (p.sesiones ?? []).map((s) => ({
+              ...s,
+              historica: true,
+              // La de una tarea que trabaja ahora se LEE, en vivo (IXCODE-36).
+              ...(tareaQueEscribeLaSesion.has(s.id) ? { tareaEnCurso: true as const } : {}),
+            })),
             // Las tareas de fondo que corren ahora en este proyecto, de la cola que ya está en el store.
             ...((tareasEnCursoPorProyecto.get(p.id) ?? 0) > 0 ? { tareasEnCurso: tareasEnCursoPorProyecto.get(p.id)! } : {}),
           }))}
@@ -3275,6 +3406,9 @@ export function App({
           }
           // Reabrir una sesión guardada: el servidor abre esa copia local con ese hilo.
           alAbrirSesion={(proyecto, sesion) => abrirSesion(proyecto, sesion)}
+          // Leer la que no se puede abrir ahora (IXCODE-36): la de una tarea en marcha, o una del
+          // proyecto que trabaja en otra.
+          alLeerSesion={(proyecto, sesion, titulo) => leerSesion(proyecto, sesion, titulo)}
           // Pide la rama del proyecto elegido (`vestibulo.ts#completarProyecto` la
           // necesita) sin abrir nada todavía: el `useEffect` de arriba decide, en cuanto
           // `estado.alta.ramas` responda, si la manda sola (una) o pinta el `Selector`

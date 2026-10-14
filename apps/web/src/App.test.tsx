@@ -3678,3 +3678,202 @@ describe("App: «Subir» y la subida con selección", () => {
     expect(screen.queryByRole("button", { name: "Actualizar repo local" })).toBeNull();
   });
 });
+
+/**
+ * IXCODE-36: con una tarea trabajando en un proyecto, sus conversaciones se LEEN. La de la propia
+ * tarea se abre en la vista de lectura (sin consola); las demás se abren normal, con la caja del
+ * chat apagada; y el «+» no deja empezar otra.
+ */
+describe("leer las conversaciones de un proyecto donde trabaja una tarea (IXCODE-36)", () => {
+  function montarConTarea(mirar?: (tarea: string, ver: boolean) => Promise<void>) {
+    const store = crearStoreDelCliente();
+    const enviar: Mock<(mensaje: unknown) => Promise<unknown>> = vi.fn((mensaje: unknown) =>
+      Promise.resolve(
+        (mensaje as { clase?: string }).clase === "leerSesion"
+          ? ({ status: 200, ok: true, json: async () => ({ actos: [{ tipo: "usuario", texto: "arregla el login" }] }) } as unknown)
+          : (undefined as unknown)
+      )
+    );
+    render(
+      <App
+        store={store}
+        enviar={enviar}
+        subirAdjunto={subirAdjuntoDeMentira}
+        instalarSkill={instalarSkillDeMentira}
+        {...(mirar === undefined ? {} : { mirar })}
+      />
+    );
+    act(() => store.marcarConectado());
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }],
+        proyectos: [
+          {
+            id: "p1",
+            nombre: "Tienda",
+            local: true,
+            sesiones: [
+              { id: "s-tarea", titulo: "", deTarea: true },
+              { id: "s-mia", titulo: "Mi conversación" },
+            ],
+          },
+        ],
+        ramas: [],
+        proyectoAbierto: false,
+      })
+    );
+    act(() =>
+      store.aplicar({
+        clase: "tareas",
+        lista: [
+          {
+            id: "t1",
+            proyecto: "p1",
+            proyectoNombre: "Tienda",
+            titulo: "Arregla el login",
+            peticion: "p",
+            encargo: "e",
+            adjuntos: [],
+            estado: "en-proceso",
+            sesion: "s-tarea",
+            creada: "2026-10-14T10:00:00.000Z",
+            empezada: "2026-10-14T10:01:00.000Z",
+          },
+        ],
+        concurrencia: 2,
+        corriendoAqui: true,
+      })
+    );
+    const barra = screen.getAllByRole("navigation").find((n) => n.getAttribute("aria-label") === null)!;
+    fireEvent.click(within(barra).getByRole("button", { name: "desplegar las sesiones de Tienda" }));
+    return { store, enviar, barra };
+  }
+
+  it("la conversación de la tarea se abre para LEER, sin consola y sin caja de chat", async () => {
+    const { enviar, barra } = montarConTarea();
+    fireEvent.click(within(barra).getByRole("button", { name: /Tarea de fondo/ }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "leerSesion", proyecto: "p1", sesion: "s-tarea" });
+    expect(enviar).not.toHaveBeenCalledWith(expect.objectContaining({ clase: "sesion" }));
+    expect(await screen.findByText("arregla el login")).toBeTruthy();
+    expect(screen.getByRole("note").textContent).toMatch(/una tarea está trabajando/);
+    expect(screen.queryByRole("textbox")).toBeNull();
+    // «Cerrar» vuelve a donde estaba.
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+    expect(screen.queryByText("arregla el login")).toBeNull();
+  });
+
+  it("la de la tarea va EN VIVO: se mira al abrir y se deja de mirar UNA vez al cerrar", async () => {
+    const mirar = vi.fn(async () => {});
+    const { store, barra } = montarConTarea(mirar);
+    fireEvent.click(within(barra).getByRole("button", { name: /Tarea de fondo/ }));
+    expect(mirar).toHaveBeenCalledWith("t1", true);
+    // Lo que llega en vivo manda sobre lo leído del disco.
+    act(() => store.aplicar({ clase: "mirada", tarea: "t1", via: "todos", actos: [{ tipo: "asistente", texto: "ya casi está" }] }));
+    expect(await screen.findByText("ya casi está")).toBeTruthy();
+    mirar.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+    expect(mirar.mock.calls).toEqual([["t1", false]]);
+  });
+
+  it("desde el escritorio, volver al escritorio cierra la lectura (su estado no cambia, ya estaba en él)", async () => {
+    const { store } = montarConTarea();
+    // Una sesión abierta en OTRO proyecto, desde la que se va al escritorio: así `enEscritorio` ya es cierto.
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }],
+        proyectos: [
+          { id: "p1", nombre: "Tienda", local: true, sesiones: [{ id: "s-tarea", titulo: "", deTarea: true }] },
+          { id: "p2", nombre: "Almacén", local: true, sesiones: [{ id: "s2", titulo: "Inventario" }] },
+        ],
+        ramas: [],
+        proyectoAbierto: true,
+        proyectoActivo: "p2",
+        sesionActiva: "s2",
+      })
+    );
+    const barra = screen.getAllByRole("navigation").find((n) => n.getAttribute("aria-label") === null)!;
+    const desplegar = within(barra).queryByRole("button", { name: "desplegar las sesiones de Tienda" });
+    if (desplegar !== null) fireEvent.click(desplegar);
+    const alEscritorio = () => {
+      const marca = screen.getAllByRole("button").find((b) => /escritorio/i.test(b.getAttribute("aria-label") ?? b.title ?? ""));
+      expect(marca).toBeDefined();
+      fireEvent.click(marca!);
+    };
+    // Primero AL escritorio, para que `enEscritorio` ya sea cierto: es el caso que no cambiaba nada.
+    alEscritorio();
+    fireEvent.click(within(barra).getByRole("button", { name: /Tarea de fondo/ }));
+    expect(await screen.findByText("arregla el login")).toBeTruthy();
+    alEscritorio();
+    expect(screen.queryByText("arregla el login")).toBeNull();
+  });
+
+  it("las demás se abren normal, y el «+» no deja empezar otra", () => {
+    const { enviar, barra } = montarConTarea();
+    // El primero es la fila; el segundo, su menú «…», que también lleva el título.
+    fireEvent.click(within(barra).getAllByRole("button", { name: /Mi conversación/ })[0]!);
+    expect(enviar).toHaveBeenCalledWith({ clase: "sesion", proyecto: "p1", sesion: "s-mia" });
+    const mas = within(barra).getByRole("button", { name: "nueva sesión en Tienda" }) as HTMLButtonElement;
+    expect(mas.disabled).toBe(true);
+    expect(mas.title).toMatch(/tarea está trabajando/);
+  });
+
+  it("con el proyecto trabajando en OTRA conversación tuya, la otra se lee y se ofrece ir a la que trabaja", async () => {
+    const { store, enviar } = montarConTarea();
+    act(() => store.aplicar({ clase: "tareas", lista: [], concurrencia: 2, corriendoAqui: true }));
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }],
+        proyectos: [
+          {
+            id: "p1",
+            nombre: "Tienda",
+            local: true,
+            sesiones: [
+              { id: "s-trabaja", titulo: "La que trabaja", trabajando: true },
+              { id: "s-otra", titulo: "Otra" },
+            ],
+          },
+        ],
+        ramas: [],
+        proyectoAbierto: true,
+        proyectoActivo: "p1",
+        sesionActiva: "s-trabaja",
+      })
+    );
+    const barra = screen.getAllByRole("navigation").find((n) => n.getAttribute("aria-label") === null)!;
+    fireEvent.click(within(barra).getAllByRole("button", { name: /^Otra/ })[0]!);
+    expect(enviar).toHaveBeenCalledWith({ clase: "leerSesion", proyecto: "p1", sesion: "s-otra" });
+    expect(await screen.findByText(/trabajando en otra conversación/)).toBeTruthy();
+    enviar.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Ir a la que trabaja" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "sesion", proyecto: "p1", sesion: "s-trabaja" });
+  });
+
+  it("con la conversación abierta, la caja se apaga y la banda dice por qué", () => {
+    const { store } = montarConTarea();
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }],
+        proyectos: [{ id: "p1", nombre: "Tienda", local: true, sesiones: [{ id: "s-mia", titulo: "Mi conversación" }] }],
+        ramas: [],
+        proyectoAbierto: true,
+        proyectoActivo: "p1",
+        sesionActiva: "s-mia",
+      })
+    );
+    expect(screen.getByText(/Solo lectura: una tarea está trabajando en este proyecto/)).toBeTruthy();
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).disabled).toBe(true);
+  });
+});

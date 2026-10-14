@@ -52,7 +52,11 @@ export function ordenarPorUltimoTurno<T extends { ultimoTurno?: string }>(sesion
  * Lo único que se le AÑADE es `historica`, que no viaja por el cable: la marca `App.tsx` al
  * armar la lista, porque toda sesión de la barra es una relectura de un índice.
  */
-export type FilaDeSesion = SesionDelCable & { historica?: boolean };
+/**
+ * `tareaEnCurso`: es la conversación de una TAREA que está trabajando ahora (IXCODE-36). No se
+ * puede abrir como consola —el agente la está escribiendo—, así que se abre para LEER, en vivo.
+ */
+export type FilaDeSesion = SesionDelCable & { historica?: boolean; tareaEnCurso?: true };
 
 /**
  * Lo que va a la derecha del título de una fila, que es UNA de dos cosas y nunca las dos.
@@ -124,6 +128,7 @@ function FilaDeProyecto({
   alAbrirProyecto,
   alNuevaSesion,
   alAbrirSesion,
+  alLeerSesion,
   alAccionDeSesion,
 }: {
   p: Proyecto;
@@ -140,6 +145,7 @@ function FilaDeProyecto({
   alAbrirProyecto: (proyecto: string) => void;
   alNuevaSesion: (proyecto: string) => void;
   alAbrirSesion: (proyecto: string, sesion: string) => void;
+  alLeerSesion?: (proyecto: string, sesion: string, titulo: string) => void;
   alAccionDeSesion: (proyecto: string, sesion: string, titulo: string, accion: "renombrar" | "borrar") => void;
 }): React.ReactElement {
   /*
@@ -151,6 +157,22 @@ function FilaDeProyecto({
   const abriendoProyecto = (id: string): boolean =>
     abriendo !== undefined && abriendo.proyecto === id && abriendo.sesion === undefined;
   const abriendoSesion = (id: string): boolean => abriendo !== undefined && abriendo.sesion === id;
+  /**
+   * El proyecto trabaja en alguna conversación tuya. Con las DOS marcas: el servidor pone la del
+   * proyecto solo cuando ninguna fila lleva la suya (`arranque.ts`, «se calla si alguna de sus
+   * sesiones ya lleva la marca»), así que mirando solo `p.trabajando` el caso normal —la que trabaja
+   * tiene fila— dejaba pulsar las otras, y el servidor las rechazaba.
+   */
+  const proyectoTrabaja = p.trabajando === true || p.sesiones.some((se) => se.trabajando === true);
+  /** Una TAREA escribe en este proyecto (IXCODE-36): ni conversación nueva, ni escribir en las suyas. */
+  const conTarea = (p.tareasEnCurso ?? 0) > 0;
+  /**
+   * Esa fila no se puede ABRIR ahora y se abre para leer: es la conversación de la tarea que trabaja,
+   * o el proyecto trabaja en OTRA conversación tuya (abrirla cerraría la que trabaja). Las demás de un
+   * proyecto con tarea se abren normal: se leen, y la caja del chat dice que no se puede enviar.
+   */
+  const soloLectura = (s: { trabajando?: true; tareaEnCurso?: true }): boolean =>
+    s.tareaEnCurso === true || (proyectoTrabaja && s.trabajando !== true);
   /*
    * **Una sola fila marcada en toda la barra**, esté en el grupo que esté. Con el resumen
    * delante manda el del resumen —es de él de quien habla el centro— y la sesión abierta
@@ -353,13 +375,16 @@ function FilaDeProyecto({
             className={filas.iconButton}
             // Y una sesión NUEVA aquí tampoco: sería la segunda sobre la
             // misma copia de trabajo, o sea el mismo rechazo.
-            disabled={apagado || abriendoAlgo || p.trabajando === true}
-            {...(p.trabajando === true
-              ? {
-                  title:
-                    "este proyecto está trabajando: pulsa su nombre para ver qué hace, y abre otra cuando termine",
-                }
-              : {})}
+            // Ni con una TAREA escribiendo en el proyecto (IXCODE-36): el servidor también la declina.
+            disabled={apagado || abriendoAlgo || p.trabajando === true || conTarea}
+            {...(conTarea
+              ? { title: "una tarea está trabajando en este proyecto: abre otra conversación cuando termine o la pares" }
+              : p.trabajando === true
+                ? {
+                    title:
+                      "este proyecto está trabajando: pulsa su nombre para ver qué hace, y abre otra cuando termine",
+                  }
+                : {})}
             onClick={() => alNuevaSesion(p.id)}
             aria-label={`nueva sesión en ${p.nombre}`}
           >
@@ -423,14 +448,27 @@ function FilaDeProyecto({
                 se apagan todas — que es exactamente lo que el servidor
                 contestaría.
               */
-              disabled={apagado || abriendoAlgo || (p.trabajando === true && s.trabajando !== true)}
-              {...(p.trabajando === true && s.trabajando !== true
+              /*
+                IXCODE-36: si se puede LEER (`alLeerSesion`), la fila que no se puede abrir para
+                escribir no se apaga: abre la conversación en solo lectura. Son dos casos: es la
+                de una TAREA que trabaja ahora (el agente la está escribiendo), o el proyecto
+                trabaja en OTRA conversación tuya (abrirla cerraría la que trabaja).
+              */
+              disabled={apagado || abriendoAlgo || (soloLectura(s) && alLeerSesion === undefined)}
+              {...(soloLectura(s)
                 ? {
-                    title:
-                      "este proyecto está trabajando en otra conversación: pulsa su nombre para verla",
+                    title: s.tareaEnCurso === true
+                      ? "una tarea está trabajando en esta conversación: se abre para leer, en vivo"
+                      : alLeerSesion === undefined
+                        ? "este proyecto está trabajando en otra conversación: pulsa su nombre para verla"
+                        : "este proyecto está trabajando en otra conversación: se abre para leer, sin poder escribir",
                   }
                 : {})}
-              onClick={() => alAbrirSesion(p.id, s.id)}
+              onClick={() =>
+                soloLectura(s) && alLeerSesion !== undefined
+                  ? alLeerSesion(p.id, s.id, s.titulo)
+                  : alAbrirSesion(p.id, s.id)
+              }
             >
               <span className={filas.slot} aria-hidden="true" />
               <span className={filas.title}>
@@ -565,7 +603,7 @@ export interface Proyecto {
  */
 export const PROYECTOS_POR_OMISION = 4;
 
-export function Barra({ entornos, entornoActivo, proyectos, visibles, fijados, proyectoActivo, proyectoEnResumen, sesionActiva, abriendo, alElegirEntorno, alAbrirSesion, alAbrirProyecto, alNuevaSesion, alAccionDeSesion, alFijar, alAbrirAjustes, alAbrirAjustesEnEntornos, conectado, version }: {
+export function Barra({ entornos, entornoActivo, proyectos, visibles, fijados, proyectoActivo, proyectoEnResumen, sesionActiva, abriendo, alElegirEntorno, alAbrirSesion, alLeerSesion, alAbrirProyecto, alNuevaSesion, alAccionDeSesion, alFijar, alAbrirAjustes, alAbrirAjustesEnEntornos, conectado, version }: {
   entornos: { id: string; nombre: string }[];
   entornoActivo: string;
   proyectos: Proyecto[];
@@ -607,6 +645,11 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, fijados, p
   abriendo?: { proyecto?: string; sesion?: string; entorno?: string; descargando?: true };
   alElegirEntorno: (id: string) => void;
   alAbrirSesion: (proyecto: string, sesion: string) => void;
+  /**
+   * LEER una conversación en la que no se puede escribir ahora (IXCODE-36): la de un proyecto donde
+   * escribe una tarea, o una que no es la que trabaja. Ausente = esas filas se apagan, como antes.
+   */
+  alLeerSesion?: (proyecto: string, sesion: string, titulo: string) => void;
   /**
    * El nombre del proyecto es un botón: abre su PANEL en el centro (`App.tsx#abrirProyecto`).
    * Empezar a trabajar es el «+».
@@ -730,6 +773,7 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, fijados, p
     alAbrirProyecto,
     alNuevaSesion,
     alAbrirSesion,
+    ...(alLeerSesion === undefined ? {} : { alLeerSesion }),
     alAccionDeSesion,
   });
 

@@ -1448,6 +1448,8 @@ export type MensajeDelCliente =
   | { clase: "modoPorDefecto"; modo: ModoDeEscritura }
   /** Fijar —o quitar, sin `id`— el aparato de las sesiones nuevas (IXCODE-51). Solo el ID. */
   | { clase: "dispositivoPorDefecto"; id?: string }
+  /** LEER una conversación sin abrirle consola (IXCODE-36): 200 con `{actos}`, o 409 con `{motivo}`. */
+  | { clase: "leerSesion"; proyecto: string; sesion: string }
   /** La pestaña Soporte: chats y tareas del proyecto con su análisis previo. */
   | { clase: "soporte"; accion: "listar"; proyecto: string }
   /**
