@@ -15,6 +15,7 @@ import type { CambioLocal } from "../../core/planDeSubida.js";
 import { indicePrivado, claseDeCambio } from "./git.js";
 import { NOMBRE_CARPETA } from "../config/configEnDisco.js";
 import { selloDeSesion } from "./sesionGit.js";
+import { parcheEnTexto } from "./parcheEnTexto.js";
 
 const ejecutar = promisify(execFile);
 
@@ -429,22 +430,28 @@ export async function parcheDeSubida(
   sinCommitear: boolean
 ): Promise<{ texto: string; recortado: boolean } | undefined> {
   let texto: string;
+  // En BYTES y decodificado con la codificación del fichero (`parcheEnTexto.ts`): leído como UTF-8,
+  // un `.xne` Latin-1 salía con «�» en cada tilde.
+  const enBytes = (args: string[]) =>
+    ejecutar("git", args, { cwd: raiz, env: process.env, maxBuffer: 32 * 1024 * 1024, encoding: "buffer" });
   try {
+    let bytes: Buffer;
     if (sinCommitear) {
       // `--no-index` sale con código 1 cuando HAY diferencias: el diff viene en el error.
-      texto = await git(raiz, ["--literal-pathspecs", "diff", "--no-index", "--", "/dev/null", ruta])
+      bytes = await enBytes(["--literal-pathspecs", "diff", "--no-index", "--", "/dev/null", ruta])
         .then((r) => r.stdout)
-        .catch((error: { stdout?: string; code?: number }) => {
-          if (error.code === 1 && typeof error.stdout === "string") return error.stdout;
+        .catch((error: { stdout?: unknown; code?: number }) => {
+          if (error.code === 1 && Buffer.isBuffer(error.stdout)) return error.stdout;
           throw error;
         });
     } else {
-      const { stdout } = await git(raiz, [
+      const { stdout } = await enBytes([
         "--literal-pathspecs", "-c", "core.quotePath=false",
         "diff", "--no-renames", "--relative", `refs/remotes/${REMOTO}/${rama}`, "--", ruta,
       ]);
-      texto = stdout;
+      bytes = stdout;
     }
+    texto = parcheEnTexto(bytes, raiz, ruta);
   } catch {
     return undefined;
   }

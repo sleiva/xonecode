@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  decodificarParche,
   codificacionDeclarada,
   codificacionParaEscribir,
   codificar8Bits,
@@ -109,5 +110,21 @@ describe("decodificarComoTexto", () => {
     expect(decodificarComoTexto(new TextEncoder().encode("Año €"))).toBe("Año €");
     expect(decodificarComoTexto(Uint8Array.of(0x41, 0xf1, 0x6f, 0x20, 0x80))).toBe("Año €");
     expect(decodificarComoTexto(Uint8Array.from([...ascii('<?xml encoding="iso-8859-15"?>'), 0xa4]))).toBe('<?xml encoding="iso-8859-15"?>€');
+  });
+});
+
+describe("decodificarParche: un diff de git, línea a línea", () => {
+  it("las líneas en 8 bits con su tabla, las UTF-8 como UTF-8, en el MISMO diff", () => {
+    const bytes = new Uint8Array([
+      ...Buffer.from("@@ -1 +1 @@\n-"),
+      ...Buffer.from("Aplicación", "latin1"),
+      ...Buffer.from("\n+"),
+      ...Buffer.from("Aplicación", "utf8"),
+    ]);
+    expect(decodificarParche(bytes, "windows-1252")).toBe("@@ -1 +1 @@\n-Aplicación\n+Aplicación");
+  });
+
+  it("con ISO-8859-15 el € está en 0xA4", () => {
+    expect(decodificarParche(new Uint8Array([0x2b, 0xa4]), "iso-8859-15")).toBe("+€");
   });
 });

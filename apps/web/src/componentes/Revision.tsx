@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef } from "react";
+import { Fragment, useEffect, useMemo, useRef } from "react";
+import { resaltesDelTramo } from "../cambioEnLinea.js";
 import type { ReactNode } from "react";
 import type { CambiosDeUnaColeccion, FicheroTocado } from "../tipos.js";
 import { numerarParche } from "../numerarParche.js";
@@ -546,6 +547,15 @@ function hoja(ruta: string): string {
  */
 function ParcheNumerado({ texto, recortado }: { texto: string; recortado: boolean }) {
   const lineas = useMemo(() => numerarParche(texto), [texto]);
+  // Lo que cambió DENTRO de cada línea modificada, con la misma regla que la tarjeta de aprobación
+  // (`cambioEnLinea.ts`): un atributo cambiado al final de una línea larga no se encontraba.
+  const resaltes = useMemo(
+    () =>
+      resaltesDelTramo(
+        lineas.map((l) => ({ tipo: l.tipo === "mas" ? "anadido" : l.tipo === "menos" ? "quitado" : "igual", texto: l.texto }))
+      ),
+    [lineas]
+  );
   return (
     <div className={estilos.parche}>
       {lineas.map((linea, i) => (
@@ -556,7 +566,19 @@ function ParcheNumerado({ texto, recortado }: { texto: string; recortado: boolea
           <span className={estilos.numero} data-nuevo="">
             {linea.nuevo ?? ""}
           </span>
-          <span className={estilos.texto}>{linea.texto === "" ? " " : linea.texto}</span>
+          <span className={estilos.texto}>
+            {linea.texto === ""
+              ? " "
+              : (resaltes.get(i) ?? [{ texto: linea.texto, cambia: false }]).map((t, k) =>
+                  t.cambia ? (
+                    <mark key={k} className={estilos.cambio}>
+                      {t.texto}
+                    </mark>
+                  ) : (
+                    <Fragment key={k}>{t.texto}</Fragment>
+                  )
+                )}
+          </span>
         </div>
       ))}
       {recortado ? (

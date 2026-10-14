@@ -269,8 +269,28 @@
   user-select: none;
 }
 
+/* Las líneas largas se PARTEN conservando la sangría (rediseño, como la tarjeta de aprobación):
+   con `pre` el cambio al final de una línea de un `.xne` quedaba fuera de la vista. */
 .texto {
-  white-space: pre;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Lo que cambió DENTRO de una línea modificada (`cambioEnLinea.ts`), más fuerte que su fondo. */
+.cambio {
+  border-radius: 3px;
+  color: inherit;
+}
+
+.linea[data-tipo="mas"] .cambio {
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 32%, var(--dsw-alias-bg-layer-1));
+}
+
+.linea[data-tipo="menos"] .cambio {
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 28%, var(--dsw-alias-bg-layer-1));
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 60%, var(--dsw-alias-label-primary));
 }
 
 .linea[data-tipo="tramo"] {
@@ -283,16 +303,17 @@
   font-style: italic;
 }
 
-/* Texto en `label-primary` sobre el fondo de estado al 45 %, mezclado contra `bg-layer-1`:
-   la misma medición que documenta `Aprobacion.module.css`. */
+/* Fondos SUAVES, los mismos que la tarjeta de aprobación (`Aprobacion.module.css`): con los de
+   antes el texto se leía mal y las dos líneas de un cambio parecían iguales. Lo fuerte es el
+   trozo que cambió (`.cambio`). */
 .linea[data-tipo="mas"] {
   color: var(--dsw-alias-label-primary);
-  background: color-mix(in srgb, var(--dsw-alias-state-success-secondary) 45%, var(--dsw-alias-bg-layer-1));
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, var(--dsw-alias-bg-layer-1));
 }
 
 .linea[data-tipo="menos"] {
   color: var(--dsw-alias-label-primary);
-  background: color-mix(in srgb, var(--dsw-alias-state-error-secondary) 45%, var(--dsw-alias-bg-layer-1));
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, var(--dsw-alias-bg-layer-1));
 }
 
 /* La nota que explica CÓMO se ha medido lo de abajo: el respaldo sin atribución, y los

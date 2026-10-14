@@ -91,6 +91,25 @@ describe("los ficheros de una sesión", () => {
     rmSync(raiz, { recursive: true, force: true });
   });
 
+  it("el parche de un fichero LATIN-1 trae sus tildes, no «�»", async () => {
+    // Captura suya: el diff de los cambios de la sesión enseñaba «Aplicaci�n» en un `.xne`
+    // Latin-1 porque leía la salida de git como UTF-8. El fichero estaba bien.
+    const raiz = repo();
+    const latin1 = (texto: string) => Buffer.from(texto, "latin1");
+    const prologo = '<?xml version="1.0" encoding="iso-8859-15"?>\n';
+    writeFileSync(join(raiz, "app.xne"), latin1(`${prologo}<prop title="Aplicación vieja"/>\n`));
+    execFileSync("git", ["add", "-A"], { cwd: raiz });
+    execFileSync("git", ["commit", "-qm", "base"], { cwd: raiz });
+    await marcarSesion(raiz, "s1");
+    writeFileSync(join(raiz, "app.xne"), latin1(`${prologo}<prop title="Aplicación nueva"/>\n`));
+
+    const parche = await parcheDeSesion(raiz, "s1", "app.xne");
+    expect(parche?.texto).toContain('-<prop title="Aplicación vieja"/>');
+    expect(parche?.texto).toContain('+<prop title="Aplicación nueva"/>');
+    expect(parche?.texto).not.toContain("\uFFFD");
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
   it("el parche de un fichero trae su contenido, y olvidar la sesión borra la ref", async () => {
     const raiz = repo();
     writeFileSync(join(raiz, "a.txt"), "antes\n");

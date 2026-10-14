@@ -22,6 +22,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { claseDeCambio, indicePrivado, sacarXonecodeDelIndice } from "./git.js";
+import { parcheEnTexto } from "./parcheEnTexto.js";
 import type { Cambio } from "../turno/instantanea.js";
 
 const ejecutar = promisify(execFile);
@@ -482,13 +483,16 @@ export async function parcheDeSesion(
   try {
     const extremos = await extremosDelParche(raiz, id, ruta);
     if (extremos === undefined) return undefined;
-    const { stdout } = await ejecutar(
+    const { stdout: bytes } = await ejecutar(
       "git",
       // `FUERA` también aquí: nadie debe poder pedir el parche de un fichero interno
       // nombrándolo a mano, ni siquiera si se cuela en la lista por una ref antigua.
       ["diff", "--relative", "--no-renames", extremos.antes, extremos.despues, "--", ruta, FUERA],
-      { cwd: raiz, maxBuffer: 32 * 1024 * 1024 }
+      // En BYTES: leído como UTF-8, un fichero Latin-1 salía con «�» en cada tilde. Se decodifica
+      // con la codificación del propio fichero (`parcheEnTexto.ts`).
+      { cwd: raiz, maxBuffer: 32 * 1024 * 1024, encoding: "buffer" }
     );
+    const stdout = parcheEnTexto(bytes, raiz, ruta);
     if (stdout.length <= TOPE_DE_PARCHE) return { texto: stdout, recortado: false };
     return { texto: stdout.slice(0, TOPE_DE_PARCHE), recortado: true };
   } catch {

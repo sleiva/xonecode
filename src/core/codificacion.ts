@@ -150,3 +150,27 @@ export function decodificarComoTexto(bytes: Uint8Array): string {
     ? new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes)
     : decodificar8Bits(bytes, tablaDeLosBytes(bytes));
 }
+
+/**
+ * Un diff de git, en BYTES, → el texto que se enseña. LÍNEA A LÍNEA con la regla de siempre: la que
+ * es UTF-8 válido se lee como UTF-8, y la que no, con la tabla de 8 bits del fichero (`tabla`, que
+ * decide quien llama mirando el fichero: la de su prólogo, o windows-1252).
+ *
+ * Existe por una captura suya: el diff de los cambios de la sesión leía la salida de git como
+ * UTF-8, y en un `.xne` Latin-1 cada tilde salía «Aplicaci�n» — el fichero estaba bien, el diff lo
+ * enseñaba roto. Línea a línea y no el diff entero porque las cabeceras de git van en ASCII y un
+ * fichero que CAMBIÓ de codificación trae una mitad en cada una: decidir una sola para todo
+ * rompería la otra mitad.
+ */
+export function decodificarParche(bytes: Uint8Array, tabla: Tabla8Bits): string {
+  const utf8 = new TextDecoder("utf-8", { ignoreBOM: true });
+  const lineas: string[] = [];
+  let desde = 0;
+  for (let i = 0; i <= bytes.length; i++) {
+    if (i < bytes.length && bytes[i] !== 0x0a) continue;
+    const linea = bytes.subarray(desde, i);
+    lineas.push(esUtf8Valido(linea) ? utf8.decode(linea) : decodificar8Bits(linea, tabla));
+    desde = i + 1;
+  }
+  return lineas.join("\n");
+}
