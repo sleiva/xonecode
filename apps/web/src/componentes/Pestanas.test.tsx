@@ -34,7 +34,7 @@ describe("Pestanas", () => {
     expect(screen.queryByRole("tab", { name: "Chat" })).toBeNull();
   });
 
-  it("son cinco por omisión, en este orden: Ejecutar · Ficheros · Revisión · Colecciones · Trazas", () => {
+  it("son seis por omisión, en este orden: Ejecutar · Turno · Ficheros · Revisión · Colecciones · Trazas", () => {
     // Ejecutar es la única pestaña de ACCIÓN que queda aquí —lanza la app en un aparato— y
     // abre la tira. Ficheros, Revisión (y Artefactos, si lo hay) son de REGISTRO: enseñan lo
     // que ya pasó, y Trazas —de otro destinatario, quien depura el harness— cierra la tira.
@@ -50,6 +50,8 @@ describe("Pestanas", () => {
     expect(screen.getByRole("tablist")).not.toBeNull();
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
       "Ejecutar",
+      // Las cifras del turno, al lado del hilo: de REGISTRO, la primera porque es de la conversación.
+      "Turno",
       "Ficheros",
       "Revisión",
       // El modelo XOne: de REGISTRO, y siempre presente porque todo proyecto XOne lo tiene.
@@ -76,6 +78,7 @@ describe("Pestanas", () => {
     // la tira, y Artefactos va entre Colecciones y Trazas, con el resto de las de registro.
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
       "Ejecutar",
+      "Turno",
       "Ficheros",
       "Revisión",
       "Colecciones",

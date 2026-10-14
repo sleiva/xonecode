@@ -49,10 +49,11 @@ describe("Transcript", () => {
   });
 
   /**
-   * Al terminar el turno, el andamio se dobla: la conversación se lee sin él y sigue a un
-   * clic. No se borra — lo que pasó, pasó.
+   * Al terminar el turno, un andamio CORTO se queda abierto —es la explicación de lo que hizo el
+   * agente, y plegar tres líneas obligaba a un clic— y uno LARGO se dobla en su línea con la
+   * cuenta (rediseño del chat, «abierto hasta 8 pasos», `PASOS_ABIERTOS`). No se borra nunca.
    */
-  it("cuando el turno TERMINA, el pulso se pliega en una línea con su cuenta", () => {
+  it("cuando el turno TERMINA con pocos pasos, el pulso se queda ABIERTO con su cuenta", () => {
     render(
       <Transcript
         actos={[
@@ -65,12 +66,28 @@ describe("Transcript", () => {
       />
     );
     const detalle = document.querySelector("details")!;
-    expect(detalle.hasAttribute("open")).toBe(false);
+    expect(detalle.hasAttribute("open")).toBe(true);
     // Tres pasos: el razonamiento y las dos líneas de tool.
     expect(detalle.textContent).toMatch(/3 pasos/);
     expect(detalle.textContent).toMatch(/12\.4s/);
     // Y la respuesta se sigue leyendo, que es lo que queda cuando se dobla el andamio.
     expect(screen.getByText("hecho")).toBeTruthy();
+  });
+
+  it("y con MÁS de 8 pasos se pliega en su línea", () => {
+    render(
+      <Transcript
+        actos={[
+          { tipo: "usuario", texto: "hola" },
+          { tipo: "herramientas", lineas: Array.from({ length: 9 }, (_, i) => `read_file f${i}`) },
+          { tipo: "asistente", texto: "hecho" },
+          { tipo: "fin", ms: 1000 },
+        ]}
+      />
+    );
+    const detalle = document.querySelector("details")!;
+    expect(detalle.hasAttribute("open")).toBe(false);
+    expect(detalle.textContent).toMatch(/9 pasos/);
   });
 
   /**

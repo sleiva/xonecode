@@ -53,43 +53,123 @@
    y `pre-wrap` ahí pintaría filas en blanco visibles y convertiría un salto de línea
    suave dentro de un párrafo en un corte duro, justo lo contrario de lo que dice el
    markdown. */
-.usuario,
+.textoDeLaPersona,
 .error {
   white-space: pre-wrap;
 }
 
-/* Pastilla redondeada, SOLO para el usuario — MEDIDO contra la referencia: el mensaje
-   del usuario es la única burbuja de verdad, con un fondo de acento azul clarísimo.
-   `bg-layer-2` (blanco sobre blanco en claro) no se veía como burbuja; se probó también
-   `interactive-bg-hover-accent`, pero en pantalla salía gris, no azul (es un gris-azulado
-   translúcido pensado para un HOVER, no para un fondo permanente). `state-business-
-   tertiary` es el alias que de verdad resuelve a un azul pastel en claro
-   (`--dsw-static-deepseek-100`, la escala de marca que ya usan `button-info-*`) — el
-   nombre es de negocio, no de chat, pero es lo que hay: no hay un alias «bubble» en el
-   tema copiado, y esto es el que da el color correcto sin inventar uno. `max-width`
-   propio (no 70ch, que era el de las dos): una pastilla de una frase corta no necesita
-   ancho de párrafo. */
+/* El mensaje de la persona, COMO EN UN REGISTRO (rediseño del chat, tablero D del lienzo
+   «XOneCode · propuesta visual», petición suya): avatar a la izquierda, «Tú · hora» encima y el
+   texto debajo, sin burbuja. Antes era la única burbuja de la pantalla, a la derecha; ahora la
+   persona y el agente se leen en la MISMA columna, y quién habla lo dice el autor, no el lado.
+   `margin-bottom: 0` se queda por lo de siempre: el ÚNICO mecanismo del hueco es la variable. */
 .usuario {
-  /* El globo del usuario traía 14 px de margen inferior de la hoja base —de cuando era un
-     `<p>`; con adjuntos pasó a `<div>` (Task 6, IXCODE-7) porque un `<ul>` dentro de un `<p>`
-     es HTML inválido, pero la regla se queda: un `<div>` normal no trae ese margen solo, así
-     que anularlo aquí sigue sin sobrar—. El de ARRIBA sí lo gana la regla de la columna, el
-     de abajo no lo tocaba nadie. Medido: el hueco entre la pregunta y la respuesta salía
-     24 px cuando la hoja declara 10, o sea que ese valor no lo decidía nadie. Se anula para
-     que el ÚNICO mecanismo del hueco sea la variable, que es lo que hace que estos números
-     se puedan leer aquí y sean ciertos. */
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  column-gap: 12px;
   margin-bottom: 0;
-  align-self: flex-end;
-  max-width: 70ch;
-  border-radius: 18px;
-  background: var(--dsw-alias-state-business-tertiary);
+  align-self: stretch;
   color: var(--dsw-alias-label-primary);
+}
+
+/* El bloque del agente: la misma rejilla, con el avatar solo en la primera pieza del turno. */
+.delAgente {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  column-gap: 12px;
+  align-self: stretch;
+}
+
+.columnaDelAvatar {
+  display: flex;
+  justify-content: center;
+}
+
+/* El avatar se alinea con la línea del AUTOR, que es la primera del bloque: el margen de arriba
+   de la pieza lo pone la propia pieza dentro de su columna, así que aquí se iguala con
+   `--dsh-chat-flow-gap`, la misma variable que lo decide. */
+.avatarDelAgente,
+.avatarDeLaPersona {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+
+/* En el agente, la pieza lleva su margen DENTRO de la columna, así que el avatar baja lo mismo
+   para quedar a la altura de la línea del autor. En la persona el margen lo lleva el propio
+   bloque (`inicioDeTurno`), y el avatar ya nace en su sitio. */
+.avatarDelAgente {
+  margin-top: calc(var(--dsh-chat-flow-gap, 10px) - 4px);
+}
+
+.avatarDelAgente {
+  box-shadow: 0 0 0 0.5px var(--dsw-alias-border-l2);
+}
+
+.avatarDeLaPersona {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--dsw-alias-bg-layer-3);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.cuerpoDelAgente,
+.cuerpoDeLaPersona {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.cuerpoDeLaPersona {
+  gap: 2px;
+}
+
+/* Dentro del bloque del agente todo arranca en la MISMA vertical que su nombre: la respuesta y
+   el tramo traían su propia sangría de cuando iban sueltos en la columna. */
+.cuerpoDelAgente > .globo,
+.cuerpoDelAgente > .pensando {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* La línea de quién habla: el nombre en primario y las cifras apagadas, en una fila. */
+.autor {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 20px;
+  white-space: normal;
+}
+
+.cuerpoDelAgente > .autor {
+  margin-top: calc(var(--dsh-chat-flow-gap, 10px) - 4px);
+}
+
+.nombreDelAutor {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.cifrasDelAutor {
+  white-space: pre;
+  font-variant-numeric: tabular-nums;
+}
+
+.copiarDelAutor {
+  margin-left: auto;
+}
+
+.textoDeLaPersona {
+  font-size: 15px;
+  line-height: 1.6;
 }
 
 /* Las fichas de lo ANEXADO (Task 6, IXCODE-7): solo el NOMBRE, en su propia línea bajo el
    texto —nunca la ruta, que es lo que `Chat.tsx` ya filtra al leer `acto.adjuntos`—. Sin
-   fondo propio: ya están dentro de la burbuja del usuario, y una pastilla sobre una pastilla
-   es ruido. `border-top` las separa del texto cuando hay los dos, con el MISMO alias que ya
+   fondo propio: van bajo el texto de la persona, y una pastilla más sería ruido. `border-top` las separa del texto cuando hay los dos, con el MISMO alias que ya
    usa `NuevaTarea` para la misma clase de filete; con SOLO adjuntos (prosa vacía) esta regla
    no tiene con qué chocar porque el `:first-child` la quita. */
 .adjuntosDelMensaje {
@@ -163,39 +243,55 @@
   line-height: 1.6;
 }
 
+/* El carril se DIBUJA con un fondo y no con `border-left`: con `overflow-x: auto` el recorte es
+   el de la caja de relleno, y un aro centrado sobre un borde quedaba cortado por la mitad. Así la
+   línea vive DENTRO del relleno (x = 5–7 px) y el aro de cada paso cabe entero encima. */
 .trabajo {
   margin: 2px 0;
-  padding: 0 0 0 12px;
+  padding: 0 0 0 18px;
   list-style: none;
-  border-left: 2px solid var(--dsw-alias-border-l2);
+  background: linear-gradient(var(--dsw-alias-border-l2), var(--dsw-alias-border-l2)) no-repeat 5px 0 / 2px 100%;
   font-family: var(--ds-font-family-code);
   overflow-x: auto;
 }
 
 /* Cada paso, un NODO sobre el carril: la línea de tiempo del ToolGroup de assistant-ui. El
-   punto va sobre el borde del `ul` (−12 px de relleno, −2 de borde, centrado en él). */
+   aro (8 px) se centra en la línea del carril: x = 6 px del `ul`, o sea −16 desde el `li` (18 de relleno). */
 .paso {
   position: relative;
 }
 
+/* Un aro con el acento de la marca, hueco sobre el fondo (rediseño del chat, tablero D): el
+   carril se lee como una línea de tiempo y no como una lista con viñetas grises. */
 .paso::before {
   content: "";
   position: absolute;
   left: -16px;
   top: 0.8em;
-  width: 6px;
-  height: 6px;
-  margin-top: -3px;
+  box-sizing: border-box;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border: 2px solid var(--xonecode-cian);
   border-radius: 50%;
-  background: var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
 }
 
 /* Una tool que FALLÓ: nodo y texto en el rojo del estado. */
+/* Los pasos llevan `textoTenue` por el tono, pero NO el filete que `.pensando .textoTenue` pone al
+   razonamiento: en el raíl la línea es el carril del `ul`, y un filete por paso salía como una
+   segunda línea al lado de los aros. */
+.pensando .trabajo .paso {
+  border-left: 0;
+  padding-left: 0;
+}
+
 .paso[data-fallo] {
   color: var(--dsw-alias-state-error-primary);
 }
 
 .paso[data-fallo]::before {
+  border-color: var(--dsw-alias-state-error-primary);
   background: var(--dsw-alias-state-error-primary);
 }
 
@@ -304,8 +400,10 @@
    El trabajo de un turno de aparato son decenas de líneas, y volcarlas enteras convierte un
    clic de curiosidad en perder el sitio de la conversación — medido en pantalla con un tramo
    de cuarenta pasos, que empuja la respuesta fuera de la vista.
-   Seis renglones: una línea son `12px × 1.6` = 19,2 px (`.textoTenue`), más los 2 px de `gap`
-   de este contenedor; 6 × 21,2 ≈ 127, y los 4 px de `padding-top` dan 131. Se redondea a 132.
+   Ocho renglones, los mismos pasos con que un tramo terminado nace ABIERTO (`PASOS_ABIERTOS`,
+   `Chat.tsx`): una línea son `12px × 1.6` = 19,2 px (`.textoTenue`), más los 2 px de `gap` de
+   este contenedor; 8 × 21,2 ≈ 170, y los 4 px de `padding-top` dan 174. Se redondea a 176. Con
+   menos, un tramo de ocho pasos nacía abierto y con barra de scroll.
    El tope alcanza también a «Verificaciones» y «Permisos», que reusan esta clase, y ahí vale
    por lo mismo: quince permisos tampoco son algo que se lea de un vistazo. */
 .detalleDePulso {
@@ -313,7 +411,7 @@
   flex-direction: column;
   gap: 2px;
   padding-top: 4px;
-  max-height: 132px;
+  max-height: 176px;
   overflow-y: auto;
 }
 
@@ -341,12 +439,6 @@
   color: var(--dsw-alias-label-tertiary);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-/* En el globo de la persona la fila va debajo del texto, y sin la prosa heredada del globo
-   (`white-space: pre-wrap`), que separaría la hora del botón con el salto del JSX. */
-.accionesDelUsuario {
-  white-space: normal;
 }
 
 /* El botón de copiar de las vallas de código NO se pinta aquí. Estuvo en esta hoja,

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { Acto } from "../tipos.js";
 import { Pestanas, type Pestana } from "./Pestanas.js";
 import { Trazas } from "./Trazas.js";
+import { Turno } from "./Turno.js";
 import conversacion from "../../estilos/ConversationRoot.module.css";
 
 /**
@@ -32,6 +33,7 @@ export function Panel({
   hayArtefactos,
   hayPlanes,
   actos,
+  topeDeContexto,
   ficheros,
   revision,
   colecciones,
@@ -48,6 +50,9 @@ export function Panel({
   /** Solo para las Trazas, que se calculan de los actos y no llegan por ranura: es la única
    *  vista que no habla con el servidor, así que no tiene nada que medir al montarse. */
   actos: readonly Acto[];
+  /** El tope de la ventana del modelo en vigor (mensaje `consumo`), para el porcentaje de
+   *  contexto del último turno en la pestaña Turno. Ausente = no se sabe, y no hay porcentaje. */
+  topeDeContexto?: number;
   ficheros?: ReactNode;
   /** Lleva DENTRO la banda de CloudStudio, que ya no tiene pestaña propia (`Pestanas.tsx`
    *  dice por qué): aquí no se nota, es una ranura como las demás. */
@@ -85,6 +90,8 @@ export function Panel({
       <div className={conversacion.viewArea}>
         {pestana === "trazas" ? (
           <Trazas actos={actos} />
+        ) : pestana === "turno" ? (
+          <Turno actos={actos} {...(topeDeContexto === undefined ? {} : { topeDeContexto })} />
         ) : pestana === "revision" ? (
           revision
         ) : pestana === "colecciones" ? (

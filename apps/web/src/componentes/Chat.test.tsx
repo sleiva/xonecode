@@ -492,7 +492,8 @@ describe("Chat: el artefacto", () => {
     // Las cinco siguen a la VISTA y en ORDEN. Son imágenes, así que se leen por su `alt`:
     // el nombre ya no se pinta como texto (ver el test de la miniatura), pero el orden en
     // que se produjeron es lo que esto fija.
-    expect([...container.querySelectorAll("img")].map((i) => i.getAttribute("alt"))).toEqual([
+    // (El avatar del agente es una imagen DECORATIVA, dentro de una columna `aria-hidden`: no cuenta.)
+    expect([...container.querySelectorAll("img")].filter((i) => i.closest("[aria-hidden]") === null).map((i) => i.getAttribute("alt"))).toEqual([
       "captura-1.jpg",
       "captura-2.jpg",
       "captura-3.jpg",
@@ -1271,9 +1272,12 @@ describe("la hora de cada mensaje (IXCODE-24)", () => {
     expect(horas).toEqual([cuandoUsuario, cuandoRespuesta]);
     const copiar = screen.getByRole("button", { name: "Copiar la respuesta" });
     expect(copiar.parentElement?.querySelector("time")?.getAttribute("datetime")).toBe(cuandoRespuesta);
-    // Y el mensaje de la persona también se copia, con su hora al lado.
+    // Y el mensaje de la persona también se copia, con su hora en la MISMA línea: la del autor,
+    // «Tú · hoy a las…» (rediseño del chat, tablero D).
     const copiarMensaje = screen.getByRole("button", { name: "Copiar el mensaje" });
-    expect(copiarMensaje.parentElement?.querySelector("time")?.getAttribute("datetime")).toBe(cuandoUsuario);
+    const autor = copiarMensaje.closest("p");
+    expect(autor?.textContent).toMatch(/^Tú · /u);
+    expect(autor?.querySelector("time")?.getAttribute("datetime")).toBe(cuandoUsuario);
   });
 
   it("sin `cuando` —una sesión de antes— no se pinta ninguna hora", () => {
@@ -1344,5 +1348,30 @@ describe("la bola de mensajes nuevos en «Ir al final»", () => {
     rerender(<Chat actos={[...inicio, ...muchos]} sesion="s1" />);
     expect(boton()!.textContent).toBe("99+");
     expect(boton()!.getAttribute("aria-label")).toBe("Ir al final de la conversación · 120 mensajes nuevos");
+  });
+});
+
+describe("quién habla (rediseño del chat, tablero D)", () => {
+  it("el bloque del agente lleva su cabecera UNA vez por turno, con los pasos y la duración del turno", () => {
+    const { container } = render(
+      <Chat
+        actos={[
+          { tipo: "usuario", texto: "hola" },
+          { tipo: "herramientas", lineas: ["→ lee /a", "→ lee /b"] },
+          { tipo: "asistente", texto: "hecho" },
+          { tipo: "fin", ms: 29_600 },
+          { tipo: "usuario", texto: "otra" },
+          { tipo: "asistente", texto: "vale" },
+        ]}
+      />
+    );
+    const autores = [...container.querySelectorAll("p")].map((p) => p.textContent ?? "").filter((t) => t.startsWith("XOneCode"));
+    // El primero cerró: sus cifras. El segundo sigue abierto: solo el nombre.
+    expect(autores).toEqual(["XOneCode · 2 pasos · 29,6 s", "XOneCode"]);
+  });
+
+  it("lo de antes del primer mensaje no es de ningún turno: sin cabecera", () => {
+    const { container } = render(<Chat actos={[{ tipo: "sistema", texto: "acuse" }]} />);
+    expect([...container.querySelectorAll("p")].some((p) => (p.textContent ?? "").startsWith("XOneCode"))).toBe(false);
   });
 });

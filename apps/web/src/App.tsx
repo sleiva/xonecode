@@ -2549,6 +2549,7 @@ export function App({
         // La pestaña Planes solo existe con algún plan: una lista MEDIDA y no vacía.
         hayPlanes={(estado.planes?.lista?.length ?? 0) > 0}
         actos={estado.actos}
+        {...(estado.consumo?.ventana.tope === undefined ? {} : { topeDeContexto: estado.consumo.ventana.tope })}
       revision={
         <Revision
           historica={estado.alta?.historica === true}

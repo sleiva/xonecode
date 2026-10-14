@@ -20,6 +20,7 @@ import { ConsultaDelAgente } from "./ConsultaDelAgente.js";
 import { PropuestaDeTareas, type PropuestaResuelta } from "./PropuestaDeTareas.js";
 import { VisorDeImagen } from "./VisorDeImagen.js";
 import { hayCosteQueEnsenar } from "./CosteDelTurno.js";
+import { turnosDeLaSesion, type TurnoDeLaSesion } from "../turnosDeLaSesion.js";
 import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
 import vista from "../../estilos/ChatView.module.css";
 import estilos from "./Chat.module.css";
@@ -117,6 +118,25 @@ function propuestaPintable(a: Extract<Acto, { tipo: "propuesta-de-tareas" }>): b
   );
 }
 
+/**
+ * La cabecera del bloque del agente: quién y, si el turno cerró, sus pasos y su duración. En vuelo
+ * solo el nombre: lo que está haciendo ya lo dice la línea del tramo, con su cronómetro.
+ */
+function cabeceraDelTurno(turno: TurnoDeLaSesion): React.ReactNode {
+  const cifras: string[] = [];
+  if (!turno.abierto && turno.pasos > 0) cifras.push(`${turno.pasos} ${turno.pasos === 1 ? "paso" : "pasos"}`);
+  if (turno.ms !== undefined) cifras.push(`${(Math.round(turno.ms / 100) / 10).toLocaleString("es")} s`);
+  return (
+    <>
+      <span className={estilos.nombreDelAutor}>XOneCode</span>
+      {cifras.length === 0 ? null : <span className={estilos.cifrasDelAutor}>{` · ${cifras.join(" · ")}`}</span>}
+    </>
+  );
+}
+
+/** Hasta cuántos pasos un tramo de trabajo TERMINADO se enseña abierto (`TramoDeTrabajo`). */
+export const PASOS_ABIERTOS = 8;
+
 /** El paso actual cuando lo último que llegó del turno es razonamiento del modelo. */
 const PENSANDO = "Pensando…";
 
@@ -139,12 +159,34 @@ function TramoDeTrabajo({
   // Lo que FALLÓ se cuenta en la línea plegada: es lo único del andamio que puede pedir que
   // alguien lo abra. Sale del `detalle.error` de cada línea, no de buscar `✗` en el texto.
   const fallidas = toolsFallidas(t.actos);
+  /**
+   * **Un tramo CORTO se ve abierto, y uno largo nace plegado** (rediseño del chat, petición suya:
+   * «abierto hasta 8 pasos»). Con pocos pasos el raíl ES la explicación de lo que hizo el agente
+   * y plegarlo obligaba a un clic para leer tres líneas; con muchos, abierto empujaba la respuesta
+   * fuera de la pantalla, que es por lo que se plegó (medido al limpiar el chat).
+   *
+   * Solo al TERMINAR: en vuelo sigue plegado, porque su línea ya dice en qué paso está y un tramo
+   * vivo crece. Y lo que la persona haya hecho manda: si lo plegó o lo abrió a mano, terminar no
+   * se lo cambia.
+   */
+  const corto = pasos <= PASOS_ABIERTOS;
+  const [abierto, setAbierto] = useState(t.terminado && corto);
+  const [tocado, setTocado] = useState(false);
+  useEffect(() => {
+    if (!tocado && t.terminado && corto) setAbierto(true);
+  }, [tocado, t.terminado, corto]);
   return (
     <details
       className={`${vista.flowItem} ${estilos.pensando}`}
+      open={abierto}
       // Al abrirlo, al FINAL: lo último es lo que está pasando, y es lo que se viene a ver.
       onToggle={(e) => {
-        if (!e.currentTarget.open || nodo.current === null) return;
+        const ahora = e.currentTarget.open;
+        if (ahora !== abierto) {
+          setAbierto(ahora);
+          setTocado(true);
+        }
+        if (!ahora || nodo.current === null) return;
         nodo.current.scrollTop = nodo.current.scrollHeight;
       }}
     >
@@ -976,6 +1018,43 @@ export function Chat({
     }
     piezas.push({ tipo: "acto", acto, indice });
   }
+  /**
+   * **Quién habla, como en un registro** (rediseño del chat, tablero D del lienzo): lo que hace y
+   * dice el agente tras un mensaje de la persona va en UN bloque, con su avatar a la izquierda y,
+   * encima de lo primero que se pinta, «XOneCode · N pasos · X s» — las cifras del turno ENTERO,
+   * de `turnosDeLaSesion`, la misma frontera que usa el inspector «Turno».
+   *
+   * Es un envoltorio y no una rama más del render, a propósito: cada pieza se sigue pintando
+   * exactamente como antes, y lo único que se añade es la columna del avatar. La cabecera va con
+   * la primera pieza que SE PINTA (una respuesta que solo era la pregunta de su tarjeta devuelve
+   * `null`), por eso se decide aquí, en el orden del render, y no al construir las piezas.
+   * Lo de antes del primer mensaje (la bienvenida, un acuse) no es de ningún turno y va suelto.
+   */
+  const turnos = turnosDeLaSesion(actos);
+  const turnoQueEmpiezaEn = new Map(turnos.map((t) => [t.desde, t]));
+  let turnoDelBloque: TurnoDeLaSesion | undefined;
+  let cabeceraPendiente = false;
+  const conAutor = (numero: number, pieza: (typeof piezas)[number], pintado: React.ReactNode): React.ReactNode => {
+    if (pieza.tipo === "acto" && pieza.acto.tipo === "usuario") {
+      turnoDelBloque = turnoQueEmpiezaEn.get(pieza.indice);
+      cabeceraPendiente = turnoDelBloque !== undefined;
+      return pintado;
+    }
+    if (turnoDelBloque === undefined || pintado === null || pintado === undefined || pintado === false) return pintado;
+    const conCabecera = cabeceraPendiente;
+    cabeceraPendiente = false;
+    return (
+      <div key={`agente-${numero}`} className={estilos.delAgente}>
+        <span className={estilos.columnaDelAvatar} aria-hidden="true">
+          {conCabecera ? <img className={estilos.avatarDelAgente} src="/iconos/xonecode.png" alt="" width={28} height={28} /> : null}
+        </span>
+        <div className={estilos.cuerpoDelAgente}>
+          {conCabecera ? <p className={estilos.autor}>{cabeceraDelTurno(turnoDelBloque)}</p> : null}
+          {pintado}
+        </div>
+      </div>
+    );
+  };
   // El scroller sigue lo que llega, salvo que hayas subido a leer. Sin esto el texto crecía
   // fuera de la vista: el modelo escribía y la pantalla se quedaba donde estaba.
   const { nodo, alDesplazar, alFinal, bajar } = usarPegadoAbajo(actos, { vigilarTamano: true });
@@ -1081,7 +1160,7 @@ export function Chat({
               nuevo sobre este proyecto, con esta conversación a la vista pero no en su memoria.
             </p>
           ) : null}
-          {piezas.map((pieza) => {
+          {piezas.map((pieza, numero) => conAutor(numero, pieza, (() => {
             if (pieza.tipo === "cierre") {
               return (
                 // Sin `<details>`: un turno sin actos de trabajo no tiene nada que desplegar,
@@ -1210,11 +1289,37 @@ export function Chat({
                 // este es el único sitio donde el hueco significa «aquí empieza otra cosa».
                 <div
                   key={indice}
-                  className={`${vista.flowItem} ${estilos.globo} ${estilos.usuario} ${estilos.inicioDeTurno}`}
+                  className={`${vista.flowItem} ${estilos.usuario} ${estilos.inicioDeTurno}`}
                 >
+                  {/* El rediseño del chat (tablero D): la persona habla como en un registro, con
+                      su avatar y «Tú · hora» encima, y no en una burbuja a la derecha. El avatar
+                      es un icono y no una inicial: el nombre de quien escribe no viaja aquí. */}
+                  <span className={estilos.columnaDelAvatar} aria-hidden="true">
+                    <span className={estilos.avatarDeLaPersona}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="8" r="4" />
+                        <path d="M4 21a8 8 0 0 1 16 0" />
+                      </svg>
+                    </span>
+                  </span>
+                  <div className={estilos.cuerpoDeLaPersona}>
+                  <p className={estilos.autor}>
+                    <span className={estilos.nombreDelAutor}>Tú</span>
+                    {acto.cuando === undefined || horaDelMensaje(acto.cuando) === undefined ? null : (
+                      <span className={estilos.cifrasDelAutor}>
+                        {" · "}
+                        <HoraDelMensaje cuando={acto.cuando} clase={undefined} />
+                      </span>
+                    )}
+                    {acto.texto === "" ? null : (
+                      <span className={estilos.copiarDelAutor}>
+                        <BotonDeCopiar texto={acto.texto} etiqueta="Copiar el mensaje" />
+                      </span>
+                    )}
+                  </p>
                   {/* Una prosa vacía CON adjuntos se acepta (Task 6, IXCODE-7): sin texto no
                       hay nada que pintar aquí, y las fichas de abajo bastan. */}
-                  {acto.texto === "" ? null : acto.texto}
+                  {acto.texto === "" ? null : <div className={estilos.textoDeLaPersona}>{acto.texto}</div>}
                   {/* Solo el NOMBRE, nunca la ruta: es lo único que el servidor puso en el
                       acto (`acto.adjuntos`), y lo único que hace falta ver aquí — abrirlo
                       es cosa de Ficheros, no de este globo. */}
@@ -1227,11 +1332,6 @@ export function Chat({
                       ))}
                     </ul>
                   )}
-                  {/* Su hora y su botón de copiar, con la misma fila que la respuesta y siempre a
-                      la vista. Copia lo TECLEADO, no los nombres de los adjuntos. */}
-                  <div className={`${estilos.acciones} ${estilos.accionesDelUsuario}`}>
-                    <HoraDelMensaje cuando={acto.cuando} clase={estilos.hora} />
-                    {acto.texto === "" ? null : <BotonDeCopiar texto={acto.texto} etiqueta="Copiar el mensaje" />}
                   </div>
                 </div>
               );
@@ -1334,7 +1434,7 @@ export function Chat({
               );
             }
             return null;
-          })}
+          })()))}
         </div>
       </div>
       {/* Flota al pie de la conversación, justo encima de la caja de escribir, y solo cuando
