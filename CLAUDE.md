@@ -1156,8 +1156,8 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   tiene semillas**: aplicarlo QUITA `data-tema`, así que se ve como siempre por construcción. Se
   recuerda en ESTE navegador (`xonecode.tema.claro`/`.oscuro`), y un id desconocido —o ninguno— es
   el PRIMERO de su modo: XOneCode en claro y, en oscuro, el tema `azul-noche` —que se LLAMA
-  «XOneCode»: superficies escalonadas teñidas del navy, petición suya—, con Grafito, Pizarra y Tinta
-  cálida. El oscuro de antes (`xonecode-oscuro`, sin semillas) y One Dark se retiraron: guardados,
+  «XOneCode»: superficies escalonadas teñidas del navy, petición suya—, con Grafito, Pizarra, Tinta
+  cálida y SynthWave '84 (y Dracula con el texto subido). El oscuro de antes (`xonecode-oscuro`, sin semillas) y One Dark se retiraron: guardados,
   caen en el de omisión.
   **Elegir un tema lo ENSEÑA** (`App.tsx#alCambiarTema`): uno del otro modo pasa la consola a
   ese modo y la fija (saca de «sistema»); uno del modo en vigor no toca la apariencia.

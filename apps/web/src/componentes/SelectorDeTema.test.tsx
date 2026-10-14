@@ -16,7 +16,7 @@ describe("SelectorDeTema", () => {
   it("un botón por tema del modo, con su nombre", () => {
     const { grupo } = montar();
     expect(within(grupo).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([
-      "XOneCode", "Grafito", "Pizarra", "Tinta cálida", "GitHub Dark", "Dracula",
+      "XOneCode", "Grafito", "Pizarra", "Tinta cálida", "GitHub Dark", "Dracula", "SynthWave '84",
     ]);
   });
 

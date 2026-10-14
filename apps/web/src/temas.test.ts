@@ -6,7 +6,7 @@ import { NOMBRES_DE_SEMILLA, TEMAS, contraste, temaPorId, temasDe, type Semillas
 
 describe("el catálogo de temas", () => {
   it("el de omisión primero: XOneCode en claro, Azul noche en oscuro (con el resto de oscuros detrás)", () => {
-    expect(temasDe("oscuro").map((t) => t.id)).toEqual(["azul-noche", "grafito", "pizarra", "tinta-calida", "github-oscuro", "dracula"]);
+    expect(temasDe("oscuro").map((t) => t.id)).toEqual(["azul-noche", "grafito", "pizarra", "tinta-calida", "github-oscuro", "dracula", "synthwave-84"]);
     expect(temasDe("claro").map((t) => t.id)).toEqual(["xonecode-claro", "github-claro", "one-claro", "ayu-claro"]);
   });
 
@@ -92,6 +92,7 @@ describe("la marca «cambiada», azul en todos los temas", () => {
       "tinta-calida": "#60a5fa",
       "github-oscuro": "#1f6feb",
       dracula: "#8be9fd",
+      "synthwave-84": "#36f9f6",
       "github-claro": "#0969da",
       "one-claro": "#4078f2",
       "ayu-claro": "#399ee6",

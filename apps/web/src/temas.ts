@@ -138,20 +138,42 @@ export const TEMAS: readonly Tema[] = [
   },
   // One Dark se RETIRÓ de la lista (petición suya); One Light, el claro, se queda. Quien lo tuviera
   // guardado cae en el de omisión (`temaPorId`).
+  /**
+   * Dracula REDISEÑADO (petición suya, tablero F del lienzo): la paleta oficial con el texto subido
+   * —`texto2` y `texto3` más claros, el comentario de #6272a4 a #8592c4— para que se lea igual de
+   * bien que los nuestros. Superficies, acento y colores de estado, los oficiales.
+   */
   {
     id: "dracula",
     nombre: "Dracula",
     modo: "oscuro",
     semillas: {
       fondo: "#282a36", capa1: "#21222c", capa2: "#343746", capa3: "#44475a",
-      // Dracula publica un solo gris de texto (`comment`, #6272a4) y no llega a 3:1 sobre
-      // `current line`: `texto2` y `texto3` son derivados entre `foreground` y `comment`.
-      texto: "#f8f8f2", texto2: "#c9c9d1", texto3: "#8c94b8", borde: "#44475a",
-      acento: "#bd93f9", sobreAcento: "#282a36",
-      peligro: "#ff5555", exito: "#50fa7b", aviso: "#f1fa8c", negocio: "#ff79c6", sombra: "#191a21", cambio: "#8be9fd",
-      palabraClave: "#ff79c6", cadena: "#f1fa8c", funcion: "#50fa7b", comentario: "#6272a4",
+      texto: "#f8f8f2", texto2: "#d4d6e4", texto3: "#9aa3cc", borde: "#44475a",
+      acento: "#bd93f9", sobreAcento: "#21222c",
+      peligro: "#ff5555", exito: "#50fa7b", aviso: "#ffb86c", negocio: "#ff79c6", sombra: "#191a21", cambio: "#8be9fd",
+      palabraClave: "#ff79c6", cadena: "#f1fa8c", funcion: "#50fa7b", comentario: "#8592c4",
       constante: "#bd93f9", parametro: "#ffb86c", puntuacion: "#f8f8f2", enlace: "#8be9fd",
       expresionDeCadena: "#f1fa8c",
+    },
+  },
+  /**
+   * SynthWave '84 (diseñado por él, tablero F del lienzo): violeta profundo con acento rosa neón y el
+   * resaltado de la paleta oficial del tema de VS Code. El texto va en blanco y los grises suben para
+   * pasar el contraste; el resplandor del botón del lienzo no se lleva (sería un color fuera del puente).
+   */
+  {
+    id: "synthwave-84",
+    nombre: "SynthWave '84",
+    modo: "oscuro",
+    semillas: {
+      fondo: "#262335", capa1: "#1e1a2e", capa2: "#2f2a47", capa3: "#3b3358",
+      texto: "#ffffff", texto2: "#d7d2ee", texto3: "#a39dc9", borde: "#3f3660",
+      acento: "#ff7edb", sobreAcento: "#2a0a24",
+      peligro: "#fe4450", exito: "#72f1b8", aviso: "#ff8b39", negocio: "#fede5d", sombra: "#171520", cambio: "#36f9f6",
+      palabraClave: "#fede5d", cadena: "#ff8b39", funcion: "#36f9f6", comentario: "#848bbd",
+      constante: "#f97e72", parametro: "#fede5d", puntuacion: "#d7d2ee", enlace: "#36f9f6",
+      expresionDeCadena: "#72f1b8",
     },
   },
   { id: "xonecode-claro", nombre: "XOneCode", modo: "claro", muestra: { fondo: "#ffffff", texto: "#61666b", acento: "#00a3e0" } },
