@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { Modal, Button } from "@deepseek-ai/dsh-client-ui-primitives";
+import { Modal } from "@deepseek-ai/dsh-client-ui-primitives";
 import clsx from "clsx";
 import estilos from "./Aprobacion.module.css";
 import { plegarIguales } from "../plegarIguales.js";
@@ -142,6 +142,63 @@ function Diff({ lineas }: { lineas: readonly LineaDeDiff[] }) {
   );
 }
 
+/** Lo que la tarjeta enseña de UN pendiente, ya con forma: su ruta, su diff y sus cuentas. */
+interface Ficha {
+  id: string;
+  origen: string;
+  descripcion: string;
+  ruta?: string;
+  /** Lo que se lee en la lista: la ruta, o la descripción si la ruta no viajó. */
+  etiqueta: string;
+  lineas: LineaDeDiff[];
+  mas: number;
+  menos: number;
+  /** Nuevo si el diff solo AÑADE (no hay nada antes); si no, modificado. */
+  clase: "nuevo" | "modificado";
+}
+
+function fichaDe(p: PendienteDeAprobacion, ruta: string | undefined, diff: readonly unknown[] | undefined): Ficha {
+  const lineas = (diff ?? []).filter(esLineaDeDiff);
+  const mas = lineas.filter((l) => l.tipo === "anadido").length;
+  const menos = lineas.filter((l) => l.tipo === "quitado").length;
+  const conRuta = typeof ruta === "string" && ruta !== "";
+  return {
+    id: p.id,
+    origen: typeof p.origen === "string" ? p.origen : "",
+    descripcion: p.descripcion,
+    ...(conRuta ? { ruta } : {}),
+    etiqueta: conRuta ? ruta : p.descripcion,
+    lineas,
+    mas,
+    menos,
+    clase: mas > 0 && menos === 0 && !lineas.some((l) => l.tipo === "igual") ? "nuevo" : "modificado",
+  };
+}
+
+/**
+ * «developer-xone quiere modificar 2 ficheros». Quién solo si es UNO para todos (dos orígenes
+ * distintos en una ronda no tienen un sujeto honesto: «El agente»); el verbo, crear solo si todo
+ * es nuevo; y con un solo fichero, su ruta.
+ */
+function tituloDeLaAprobacion(fichas: readonly Ficha[]): string {
+  const origenes = new Set(fichas.map((f) => f.origen).filter((o) => o !== ""));
+  const quien = origenes.size === 1 ? [...origenes][0]! : "El agente";
+  const verbo = fichas.length > 0 && fichas.every((f) => f.clase === "nuevo") ? "crear" : "modificar";
+  if (fichas.length === 1) return `${quien} quiere ${verbo} ${fichas[0]!.ruta ?? "un fichero"}`;
+  return `${quien} quiere ${verbo} ${fichas.length} ficheros`;
+}
+
+/** «+6 −1», con cada mitad solo si no es cero. */
+function Cuenta({ mas, menos }: { mas: number; menos: number }) {
+  if (mas === 0 && menos === 0) return null;
+  return (
+    <span className={estilos.cuenta}>
+      {mas === 0 ? null : <span className={estilos.mas}>{`+${mas}`}</span>}
+      {menos === 0 ? null : <span className={estilos.menos}>{`−${menos}`}</span>}
+    </span>
+  );
+}
+
 export function Aprobacion({
   pendientes,
   ficheros,
@@ -167,6 +224,9 @@ export function Aprobacion({
   alDecidir: (decisiones: Record<string, string>) => void | Promise<unknown>;
 }) {
   const lista = useMemo(() => pendientes.filter(esPendiente), [pendientes]);
+  const fichas = useMemo(() => lista.map((p) => fichaDe(p, ficheros[p.id], diffs[p.id])), [lista, ficheros, diffs]);
+  const [elegido, setElegido] = useState<string | undefined>(undefined);
+  const elegida = fichas.find((f) => f.id === elegido) ?? fichas[0];
 
   // `decidido` es lo que hace que haya UNA sola decisión por aprobación: aprobar y que
   // después el desmontaje mandara un rechazo sería peor que no tener rechazo al desmontar.
@@ -243,24 +303,66 @@ export function Aprobacion({
         }}
       >
       <div className={estilos.tarjeta} ref={tarjeta}>
-        <h2 className={estilos.titulo}>
-          {lista.length === 1 ? "1 escritura pide aprobación" : `${lista.length} escrituras piden aprobación`}
-        </h2>
+        {/*
+          La cabecera dice QUIÉN quiere hacer QUÉ y sobre cuántos ficheros (rediseño, tablero
+          «Aprobar una escritura» del lienzo): antes un «2 escrituras piden aprobación» genérico, y
+          el quién y el qué repetidos en cada bloque.
+        */}
+        <header className={estilos.cabecera}>
+          <span className={estilos.iconoDeCabecera} aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+            </svg>
+          </span>
+          <div>
+            <h2 className={estilos.titulo}>{tituloDeLaAprobacion(fichas)}</h2>
+            <p className={estilos.subtitulo}>Nada se escribe hasta que lo apruebes.</p>
+          </div>
+        </header>
         <div className={estilos.cuerpo}>
-          {lista.map((p) => {
-            const ruta = ficheros[p.id];
-            const lineas = (diffs[p.id] ?? []).filter(esLineaDeDiff);
-            return (
-              <section key={p.id} className={estilos.pendiente}>
-                <p className={estilos.descripcion}>{p.descripcion}</p>
-                {typeof ruta === "string" && ruta !== "" ? <p className={estilos.ruta}>{ruta}</p> : null}
-                <p className={estilos.origen}>quién: {p.origen}</p>
-                <div className={estilos.diff}>
-                  <Diff lineas={lineas} />
-                </div>
-              </section>
-            );
-          })}
+          {/*
+            Con VARIOS ficheros, la lista a la izquierda: cada uno con su clase y su cuenta de
+            líneas, y el diff del elegido a la derecha. Con uno solo la lista no dice nada que la
+            cabecera del diff no diga, y se quita para darle el ancho al diff.
+          */}
+          {fichas.length <= 1 ? null : (
+            <ul className={estilos.lista} aria-label="Ficheros">
+              {fichas.map((f) => (
+                <li key={f.id}>
+                  <button
+                    type="button"
+                    className={estilos.ficha}
+                    aria-pressed={f.id === elegida?.id}
+                    onClick={() => setElegido(f.id)}
+                  >
+                    <span className={estilos.claseDeFicha} data-clase={f.clase} title={f.clase === "nuevo" ? "nuevo" : "modificado"}>
+                      {f.clase === "nuevo" ? "A" : "M"}
+                    </span>
+                    <span className={estilos.nombreDeFicha}>{f.etiqueta}</span>
+                    <Cuenta mas={f.mas} menos={f.menos} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {elegida === undefined ? null : (
+            <section key={elegida.id} className={estilos.pendiente} aria-label={`Cambios en ${elegida.etiqueta}`}>
+              <p className={estilos.cabeceraDelDiff}>
+                {/* La ruta si viajó; si no —una escritura que no es un fichero, la de un conector—,
+                    lo que el pendiente dice de sí mismo. Las dos a la vez repetían la cabecera
+                    («quiere modificar un fichero del proyecto»). */}
+                {elegida.ruta === undefined ? (
+                  <span className={estilos.descripcion}>{elegida.descripcion}</span>
+                ) : (
+                  <span className={estilos.ruta}>{elegida.ruta}</span>
+                )}
+                <Cuenta mas={elegida.mas} menos={elegida.menos} />
+              </p>
+              <div className={estilos.diff}>
+                <Diff lineas={elegida.lineas} />
+              </div>
+            </section>
+          )}
         </div>
         {falloDeEnvio ? (
           <p className={estilos.fallo} role="alert">
@@ -269,12 +371,13 @@ export function Aprobacion({
           </p>
         ) : null}
         <div className={estilos.acciones}>
-          <Button variant="outline" className={estilos.accion} onClick={() => decidir(RECHAZAR)}>
+          <button type="button" className={estilos.rechazar} onClick={() => decidir(RECHAZAR)}>
             Rechazar
-          </Button>
-          <Button variant="primary" className={estilos.accion} onClick={() => decidir(APROBAR)}>
-            Aprobar
-          </Button>
+          </button>
+          {/* Dice CUÁNTO aprueba: es una decisión sobre todos a la vez (ver `decidir`). */}
+          <button type="button" className={estilos.aprobar} onClick={() => decidir(APROBAR)}>
+            {fichas.length === 1 ? "Aprobar" : `Aprobar los ${fichas.length} ficheros`}
+          </button>
         </div>
       </div>
       </div>

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { StrictMode } from "react";
-import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, waitFor, within } from "@testing-library/react";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { Aprobacion } from "./Aprobacion.js";
 
@@ -238,6 +238,53 @@ describe("Aprobacion", () => {
       />
     );
     expect(screen.getByText("src/app.xne")).toBeTruthy();
+  });
+});
+
+describe("la tarjeta dice quién, qué y cuántos (rediseño)", () => {
+  const dos = [
+    { id: "1", origen: "developer-xone", descripcion: "escribir Menu.xne", decisionesPermitidas: ["approve", "reject"] },
+    { id: "2", origen: "developer-xone", descripcion: "escribir default.css", decisionesPermitidas: ["approve", "reject"] },
+  ];
+  const diffs = {
+    "1": [
+      { tipo: "igual", texto: "<frame>" },
+      { tipo: "quitado", texto: "</frame>" },
+      { tipo: "anadido", texto: '<prop name="SALIR"/>' },
+    ],
+    "2": [{ tipo: "anadido", texto: ".boton-icono {}" }],
+  };
+
+  it("con varios ficheros: quién y cuántos en la cabecera, una lista con su cuenta, y el botón dice cuántos aprueba", () => {
+    render(<Aprobacion pendientes={dos} ficheros={{ "1": "Menu.xne", "2": "default.css" }} diffs={diffs} alDecidir={() => {}} />);
+    expect(screen.getByRole("heading").textContent).toBe("developer-xone quiere modificar 2 ficheros");
+    // Cada ficha: su clase (A nuevo, M modificado), su ruta y su cuenta de líneas.
+    const fichas = within(screen.getByRole("list", { name: "Ficheros" })).getAllByRole("button");
+    expect(fichas.map((b) => b.textContent)).toEqual(["MMenu.xne+1−1", "Adefault.css+1"]);
+    expect(fichas[0]!.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Aprobar los 2 ficheros" })).toBeTruthy();
+  });
+
+  it("la lista elige qué diff se ve, y elegir no decide nada", () => {
+    const alDecidir = vi.fn();
+    render(<Aprobacion pendientes={dos} ficheros={{ "1": "Menu.xne", "2": "default.css" }} diffs={diffs} alDecidir={alDecidir} />);
+    expect(screen.getByText('<prop name="SALIR"/>')).toBeTruthy();
+    expect(screen.queryByText(".boton-icono {}")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /default\.css/ }));
+    expect(screen.getByText(".boton-icono {}")).toBeTruthy();
+    expect(alDecidir).not.toHaveBeenCalled();
+  });
+
+  it("dos orígenes distintos no tienen un sujeto honesto: «El agente»; y todo nuevo es «crear»", () => {
+    render(
+      <Aprobacion
+        pendientes={[dos[0]!, { ...dos[1]!, origen: "designer-xone" }]}
+        ficheros={{}}
+        diffs={{ "1": [{ tipo: "anadido", texto: "a" }], "2": [{ tipo: "anadido", texto: "b" }] }}
+        alDecidir={() => {}}
+      />
+    );
+    expect(screen.getByRole("heading").textContent).toBe("El agente quiere crear 2 ficheros");
   });
 });
 

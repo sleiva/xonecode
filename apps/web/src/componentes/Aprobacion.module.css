@@ -62,12 +62,39 @@
   background: var(--dsw-alias-bg-layer-1);
 }
 
+/* La cabecera: un icono de edición, QUIÉN quiere hacer QUÉ, y debajo la regla del modal. */
+.cabecera {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 22px 16px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.iconoDeCabecera {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-state-warn-label);
+}
+
 .titulo {
   margin: 0;
-  padding: 16px 20px;
-  font-size: 15px;
+  font-size: 16px;
+  font-weight: 600;
   color: var(--dsw-alias-label-primary);
-  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  overflow-wrap: anywhere;
+}
+
+.subtitulo {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--dsw-alias-label-secondary);
 }
 
 /* El diff se ve ENTERO: el que cede es el cuerpo, con su propio scroll. Recortar aquí
@@ -77,32 +104,115 @@
    auto` estaba puesto y era decorativo. Medido: `scrollHeight` y `clientHeight` valían
    los dos 1480, o sea que no había nada que desplazar porque nadie lo había encogido. */
 .cuerpo {
+  display: flex;
+  align-items: flex-start;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 12px 20px;
 }
 
-.pendiente + .pendiente {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 0.5px solid var(--dsw-alias-border-l3);
+/* La lista de ficheros, a la izquierda y PEGADA arriba mientras el diff se desplaza: es el
+   índice de lo que se aprueba, y tiene que verse entera mientras se lee cualquiera. */
+.lista {
+  position: sticky;
+  top: 0;
+  flex: none;
+  box-sizing: border-box;
+  width: 240px;
+  margin: 0;
+  padding: 10px;
+  list-style: none;
+  align-self: stretch;
+  border-right: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.ficha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 10px;
+  /* El borde del color del fondo de la lista: invisible hasta que se elige, sin que la fila
+     salte medio píxel al elegirla (y sin `transparent`, que aquí es un color literal). */
+  border: 0.5px solid var(--dsw-alias-bg-layer-2);
+  border-radius: 8px;
+  background: none;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ficha[aria-pressed="true"] {
+  border-color: var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.claseDeFicha {
+  flex: none;
+  width: 14px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--xonecode-cian-oscuro);
+}
+
+.claseDeFicha[data-clase="nuevo"] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.nombreDeFicha {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cuenta {
+  display: inline-flex;
+  flex: none;
+  gap: 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mas {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.menos {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.pendiente {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 12px 18px 16px;
+}
+
+/* Encima del diff: la ruta, lo que dice el pendiente y la cuenta, en una fila. */
+.cabeceraDelDiff {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0 0 8px;
+  font-size: 13px;
 }
 
 .descripcion {
-  margin: 0;
-  color: var(--dsw-alias-label-primary);
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .ruta {
-  margin: 2px 0 0;
   font-family: var(--ds-font-family-code);
-  color: var(--dsw-alias-label-secondary);
-}
-
-.origen {
-  margin: 2px 0 8px;
-  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  color: var(--dsw-alias-label-primary);
 }
 
 .diff {
@@ -203,23 +313,13 @@
   background: var(--dsw-alias-bg-layer-3);
 }
 
-/* `Button` llega sin estilo propio (mismo stub vacío), así que la variante la pinta esta
-   clase: lo que el paquete aporta es el elemento y el paso de atributos nativos. */
-/* `.grande`: es el pie de un diálogo (una acción por línea), no una fila apretada. */
-.accion {
-  composes: secundario grande from "./Boton.module.css";
+/* Los dos botones del pie, a la derecha: «Rechazar» con el rojo de marca en contorno —no toca
+   nada, pero es la otra decisión y tiene que leerse como tal— y «Aprobar» con el relleno azul,
+   porque es la que ESCRIBE. Los dos de `Boton.module.css`, como el resto de la app. */
+.rechazar {
+  composes: peligro grande from "./Boton.module.css";
 }
 
-/* El primario se distingue por el relleno de marca, no por el orden: «Aprobar» es la
-   acción que ESCRIBE, y tiene que leerse distinta de la que no toca nada. El azul de marca,
-   el MISMO que `Boton.module.css#primario` y el botón de enviar. */
-.acciones .accion:last-child {
-  background: var(--xonecode-azul);
-  color: var(--xonecode-sobre-azul);
-  border-color: var(--xonecode-azul);
-}
-
-.acciones .accion:last-child:hover {
-  background: var(--xonecode-cian);
-  border-color: var(--xonecode-cian);
+.aprobar {
+  composes: primario grande from "./Boton.module.css";
 }
