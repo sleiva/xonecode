@@ -7,7 +7,7 @@ import { NOMBRES_DE_SEMILLA, TEMAS, contraste, temaPorId, temasDe, type Semillas
 describe("el catálogo de temas", () => {
   it("el de omisión primero: XOneCode en claro, Azul noche en oscuro (con el resto de oscuros detrás)", () => {
     expect(temasDe("oscuro").map((t) => t.id)).toEqual(["azul-noche", "grafito", "pizarra", "tinta-calida", "github-oscuro", "dracula", "synthwave-84"]);
-    expect(temasDe("claro").map((t) => t.id)).toEqual(["xonecode-claro", "github-claro", "ayu-claro", "catppuccin-latte", "quiet-light", "winter-is-coming-claro"]);
+    expect(temasDe("claro").map((t) => t.id)).toEqual(["xonecode-claro", "github-claro", "ayu-claro", "solarized-claro", "catppuccin-latte", "quiet-light", "winter-is-coming-claro"]);
   });
 
   it("solo el XOneCode claro trae `muestra`: es el único sin semillas", () => {
@@ -95,6 +95,7 @@ describe("la marca «cambiada», azul en todos los temas", () => {
       "synthwave-84": "#36f9f6",
       "github-claro": "#0969da",
       "ayu-claro": "#399ee6",
+      "solarized-claro": "#1f74b0",
       "catppuccin-latte": "#1e66f5",
       "quiet-light": "#4b69c6",
       "winter-is-coming-claro": "#1769c2",

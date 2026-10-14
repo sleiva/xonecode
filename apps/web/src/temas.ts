@@ -11,7 +11,7 @@
  * en CLARO; en OSCURO el XOneCode es el de semillas `azul-noche` (ver su comentario), y el oscuro
  * de antes, sin semillas, se retiró.
  *
- * Los de fuera salen de su paleta oficial publicada (GitHub Primer, Ayu, Catppuccin, Quiet Light,
+ * Los de fuera salen de su paleta oficial publicada (GitHub Primer, Ayu, Solarized, Catppuccin, Quiet Light,
  * Winter is Coming, Dracula, SynthWave), revisada en el lienzo de diseño. Donde la oficial no llega al contraste que exige `temas.test.ts`, la semilla va
  * ajustada y lo dice su comentario. El juego lo eligieron las instalaciones del Marketplace de
  * VS Code (medido el 02-10-2026, ver el spec).
@@ -178,7 +178,7 @@ export const TEMAS: readonly Tema[] = [
   },
   { id: "xonecode-claro", nombre: "XOneCode", modo: "claro", muestra: { fondo: "#ffffff", texto: "#61666b", acento: "#00a3e0" } },
   // Los claros, del lienzo (tableros G, elegidos por él): GitHub Light y Ayu Light con la paleta
-  // revisada del lienzo, y tres nuevos. One Light se RETIRÓ: guardado, cae en XOneCode.
+  // revisada del lienzo, y cuatro nuevos. One Light se RETIRÓ: guardado, cae en XOneCode.
   {
     id: "github-claro",
     nombre: "GitHub Light",
@@ -206,6 +206,21 @@ export const TEMAS: readonly Tema[] = [
       palabraClave: "#d9731f", cadena: "#5f8500", funcion: "#a86a0c", comentario: "#81868d",
       constante: "#8a5cc0", parametro: "#a86a0c", puntuacion: "#5c6166", enlace: "#2f8fb0",
       expresionDeCadena: "#5f8500",
+    },
+  },
+  {
+    id: "solarized-claro",
+    nombre: "Solarized Light",
+    modo: "claro",
+    semillas: {
+      fondo: "#fdf6e3", capa1: "#eee8d5", capa2: "#fffbf0", capa3: "#e4ddc6",
+      texto: "#073642", texto2: "#4d6168", texto3: "#5b6f77", borde: "#ddd6bf",
+      // El azul oficial (#268bd2) no llega a 4,5 con letra blanca: oscurecido, como en el lienzo.
+      acento: "#1f74b0", sobreAcento: "#ffffff",
+      peligro: "#c62a27", exito: "#5f6e00", aviso: "#b5420f", negocio: "#6c71c4", sombra: "#073642", cambio: "#1f74b0",
+      palabraClave: "#687a00", cadena: "#1f8a83", funcion: "#1f74b0", comentario: "#7c8c8c",
+      constante: "#c42b78", parametro: "#8a6800", puntuacion: "#4d6168", enlace: "#1f74b0",
+      expresionDeCadena: "#1f8a83",
     },
   },
   {
