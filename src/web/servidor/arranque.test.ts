@@ -10040,6 +10040,11 @@ describe("el recorrido por el cable — el veredicto, la intención y las fases"
     await enviarMensaje(m.accion, { clase: "revisarLanzamiento" });
     await enviarMensaje(m.accion, { clase: "lanzarApp" });
     await esperarA(() => dichos(m.cliente, "lanzamiento").at(-1)?.estado === "ok");
+    // Y el `lanzable`, que va SUELTO (`revisarLanzamiento` lee app.xml y app.ini del disco y no lo
+    // espera nadie): sin esperarlo, con la máquina cargada por el suite entero llegaba DESPUÉS de
+    // la comprobación y el test fallaba de vez en cuando. Con más vueltas, por lo mismo: el disco
+    // bajo carga tarda más que las 200 de omisión.
+    await esperarA(() => dichos(m.cliente, "lanzable").length > 0, 2000);
     expect(dichos(m.cliente, "lanzable").length).toBeGreaterThan(0);
     expect(JSON.stringify(m.cliente.recibidos)).not.toContain(m.raiz);
     await m.cerrar();

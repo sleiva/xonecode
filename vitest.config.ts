@@ -24,6 +24,11 @@ export default defineConfig({
           exclude: ["**/node_modules/**", "**/dist/**", "**/.worktrees/**"],
           environment: "node",
           setupFiles: ["./src/casaDePruebas.ts"],
+          // `expect.poll` se rinde por omisión al SEGUNDO, y con el suite entero cargando la máquina
+          // el viaje por un WebSocket local de `puenteWebSocket.test.ts` (abrir, recibir el error,
+          // cerrar) lo pasaba de vez en cuando: medido, un fallo a los 1019 ms que pasaba aislado.
+          // Más plazo solo cuesta tiempo cuando el test ya iba a fallar.
+          expect: { poll: { timeout: 5000 } },
         },
       },
       {

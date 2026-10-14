@@ -1136,7 +1136,11 @@ describe("el cierre del turno cuando la aprobación revienta", () => {
     const piel = pielFalsa();
     await sesion.turno("añade un campo", piel);
     const [ms] = (piel.fin as ReturnType<typeof vi.fn>).mock.calls[0] as [number];
-    expect(ms).toBeGreaterThanOrEqual(120);
+    // Con margen, y no `>= 120` exacto: Node programa un temporizador desde la hora CACHEADA del
+    // bucle, que con el suite entero cargando la máquina va por detrás de la real, y el `setTimeout`
+    // disparaba unos ms antes de 120 contados desde `t0` (fallo raro, solo bajo carga). Lo que se
+    // prueba sigue en pie: la última pasada sola dura unos ms, y esto mide la espera de la primera.
+    expect(ms).toBeGreaterThanOrEqual(100);
   });
 });
 
