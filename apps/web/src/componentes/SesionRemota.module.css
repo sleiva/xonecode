@@ -42,9 +42,32 @@
   aspect-ratio: 1;
   background: var(--xonecode-barra-placa);
 }
+/* Color EXPLÍCITO en todo el texto del diálogo: un `<p>` sin clase no recibe el del tema y se pintaba
+   con el texto oscuro por omisión — en un tema oscuro, «0 aparatos conectados» no se veía. */
+.enlace {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.enlace > :last-child {
+  flex: none;
+}
+
 .url {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
   word-break: break-all;
   font-size: 12px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.estado {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
 }
 .aviso {
   font-size: 12px;

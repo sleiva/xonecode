@@ -190,12 +190,16 @@ export function SesionRemota({
               {(remoto.estado === "activa" || remoto.estado === "reconectando") && remoto.url !== undefined ? (
                 <>
                   {qr !== undefined ? <img className={estilos.qr} src={qr} alt="Código QR de la sesión remota" /> : null}
-                  <p className={estilos.url}>{remoto.url}</p>
-                  <BotonDeCopiar texto={remoto.url} etiqueta="Copiar enlace" />
-                  <p>
+                  {/* El enlace y su botón de copiar en UNA fila: el botón es de icono, y suelto en la
+                      columna se estiraba a todo el ancho como una caja vacía. */}
+                  <div className={estilos.enlace}>
+                    <p className={estilos.url}>{remoto.url}</p>
+                    <BotonDeCopiar texto={remoto.url} etiqueta="Copiar enlace" />
+                  </div>
+                  <p className={estilos.estado}>
                     {remoto.moviles} aparato{remoto.moviles === 1 ? "" : "s"} conectado{remoto.moviles === 1 ? "" : "s"}
                   </p>
-                  {remoto.estado === "reconectando" ? <p>Reconectando…</p> : null}
+                  {remoto.estado === "reconectando" ? <p className={estilos.estado}>Reconectando…</p> : null}
                   <p className={estilos.aviso}>
                     {(remoto.via ?? "ngrok") === "ngrok" ? "Sale por un túnel de ngrok de esta máquina." : "Sale por el servidor de XOne."}
                   </p>
