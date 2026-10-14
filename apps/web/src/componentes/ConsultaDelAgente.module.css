@@ -40,6 +40,13 @@
   color: var(--dsw-alias-label-primary);
 }
 
+/* Lo que dice la tarjeta de una pregunta contestada sola: secundario, como la cabecera. */
+.nota {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
 .respuestaPropia {
   margin: 0;
   color: var(--dsw-alias-label-primary);

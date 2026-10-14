@@ -399,6 +399,18 @@ export function crearPielWeb(
       empujar({ tipo: "consulta", pregunta: c.pregunta, opciones: [...c.opciones] });
     },
 
+    consultaAutonoma(c) {
+      // La pregunta contestada sola en modo autónomo, como su tarjeta a la vista en el hilo (IXCODE-47): como aviso
+      // caía plegada en «Verificaciones». Acto propio, no una `consulta`: esta no espera respuesta.
+      cerrarFase();
+      empujar({
+        tipo: "consulta-autonoma",
+        pregunta: c.pregunta,
+        opciones: [...c.opciones],
+        ...(c.elegida === undefined ? {} : { elegida: c.elegida }),
+      });
+    },
+
     propuestaDeTareas(p) {
       // Acto propio, con las tareas como DATO y un id: la tarjeta las encola o las descarta por él, y
       // el servidor encola lo que dice ESTE acto, no lo que mande el cliente. Lista blanca campo a

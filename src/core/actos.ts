@@ -148,6 +148,12 @@ export type Acto =
    */
   | { tipo: "consulta"; pregunta: string; opciones: string[] }
   /**
+   * Una pregunta que el harness contestó solo en modo autónomo (`events.ts#consulta-autonoma`): la misma tarjeta que una
+   * `consulta` contestada, a la vista en el hilo y no plegada entre los avisos, con lo que se eligió marcado. Nunca está
+   * pendiente: no espera a nadie.
+   */
+  | { tipo: "consulta-autonoma"; pregunta: string; opciones: string[]; elegida?: string }
+  /**
    * El agente PROPONE repartir el encargo en tareas de fondo encadenadas (`proponer_tareas`,
    * `core/repartoDeEncargo.ts`). `id` lo pone la piel web: es con lo que la tarjeta se encola o se
    * descarta, y con lo que el servidor comprueba que la propuesta existe y sigue pendiente. Las

@@ -493,6 +493,8 @@ export type Acto =
   /** El agente pregunta, con las opciones como DATO (`core/actos.ts#consulta`). Pendiente
    *  mientras no haya un acto de usuario detrás: así vuelve la tarjeta al reabrir. */
   | { tipo: "consulta"; pregunta: string; opciones: string[] }
+  /** Una pregunta que el harness contestó solo en modo autónomo (`core/actos.ts#consulta-autonoma`): nunca pendiente. */
+  | { tipo: "consulta-autonoma"; pregunta: string; opciones: string[]; elegida?: string }
   /** El agente propone repartir el encargo en tareas de fondo encadenadas (`core/actos.ts`). La tarjeta
    *  sigue ofreciendo encolarla mientras no haya un `propuesta-resuelta` con su id detrás. */
   | { tipo: "propuesta-de-tareas"; id: string; motivo: string; tareas: { titulo: string; peticion: string; adjuntos?: string[] }[] }

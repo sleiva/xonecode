@@ -224,6 +224,15 @@ function Linea({ acto }: { acto: Acto }) {
       // Una tarea de fondo no tiene a quien preguntar, y su texto ya va en el mensaje del
       // asistente. Se pintan las opciones, sin botones: mirar no es contestar.
       return <p className={estilos.sistema}>{`Opciones: ${acto.opciones.join(" · ")}`}</p>;
+    case "consulta-autonoma":
+      // Una tarea de fondo no pregunta a nadie, pero sí decide: lo que se eligió, a la vista.
+      return (
+        <p className={estilos.sistema}>
+          {acto.elegida !== undefined
+            ? `Modo autónomo · «${acto.pregunta}» → ${acto.elegida}`
+            : `Modo autónomo · «${acto.pregunta}»: sin opción recomendada, lo decide el agente`}
+        </p>
+      );
     case "propuesta-de-tareas":
       // Una tarea de fondo no propone (no tiene la tool); si una sesión reabierta lo trae, se cuenta
       // sin botones: mirar no es encolar.

@@ -409,6 +409,23 @@ describe("pielWeb: el coste del turno en el `fin`", () => {
     ]);
   });
 
+  it("la pregunta contestada sola en modo autónomo es un acto PROPIO, no un aviso (IXCODE-47)", async () => {
+    const { piel, actos } = crearPielWeb(() => 0);
+    async function* eventos(): AsyncIterable<DomainEvent> {
+      yield { tipo: "token", texto: "Sigo." };
+      yield { tipo: "consulta-autonoma", pregunta: "¿Bluetooth?", opciones: ["Real (Recommended)", "Simulado"], elegida: "Real (Recommended)" };
+    }
+    await correrTurno(eventos(), piel);
+    expect(actos().map((a) => a.tipo)).toEqual(["asistente", "consulta-autonoma", "fin"]);
+    expect(actos()[1]).toEqual({
+      tipo: "consulta-autonoma",
+      pregunta: "¿Bluetooth?",
+      opciones: ["Real (Recommended)", "Simulado"],
+      elegida: "Real (Recommended)",
+    });
+    expect(actos().some((a) => a.tipo === "sistema")).toBe(false);
+  });
+
   it("la propuesta de tareas es un acto PROPIO con un id y las tareas como dato, por el turno entero", async () => {
     const { actos, piel } = crearPielWeb(() => 0);
     async function* eventos(): AsyncIterable<DomainEvent> {

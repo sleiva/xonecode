@@ -174,6 +174,15 @@ function filasDe(acto: Acto): FilaCruda[] {
     case "consulta":
       // Color de sistema y etiqueta propia: es lo que dijo el HARNESS por el agente, no una tool.
       return [cruda("sistema", "CONSULTA", `${acto.pregunta} · ${acto.opciones.join(" · ")}`)];
+    case "consulta-autonoma":
+      // Contestada sola en modo autónomo: la pregunta y lo que se eligió, o que lo decide el agente.
+      return [
+        cruda(
+          "sistema",
+          "CONSULTA AUTÓNOMA",
+          `${acto.pregunta} → ${acto.elegida ?? "sin recomendada: lo decide el agente"}`
+        ),
+      ];
     case "propuesta-de-tareas":
       return [cruda("sistema", "PROPUESTA", `${acto.motivo} · ${acto.tareas.map((t) => t.titulo).join(" · ")}`)];
     case "propuesta-resuelta":

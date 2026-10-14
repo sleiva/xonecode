@@ -1162,6 +1162,36 @@ describe("Chat: la pregunta del agente en el hilo", () => {
   });
 });
 
+describe("Chat: la pregunta contestada sola en modo autónomo (IXCODE-47)", () => {
+  it("sale a la vista como su tarjeta, con la elegida marcada, fuera de «Verificaciones» y del trabajo plegado", () => {
+    const { container } = render(
+      <Chat
+        actos={[
+          { tipo: "usuario", texto: "haz la medición" },
+          { tipo: "herramientas", lineas: ["leyó Medicion.xne"] },
+          { tipo: "consulta-autonoma", pregunta: "¿Qué guarda el botón?", opciones: ["Todo", "Lo relleno (Recommended)"], elegida: "Lo relleno (Recommended)" },
+          { tipo: "herramientas", lineas: ["editó Medicion.xne"] },
+        ]}
+        alResponderConsulta={vi.fn()}
+      />
+    );
+    const tarjeta = screen.getByRole("region", { name: /contestada en modo autónomo: ¿Qué guarda el botón\?/ });
+    expect(tarjeta.closest("details")).toBeNull();
+    expect(tarjeta.textContent).toContain("contestada sola (modo autónomo)");
+    expect(tarjeta.querySelector("li[data-elegida]")?.textContent).toBe("Lo relleno (Recommended)");
+    // Nunca se contesta: no espera a nadie, aunque el chat sepa responder consultas.
+    expect(screen.queryByRole("button", { name: "Responder" })).toBeNull();
+    expect(container.textContent).not.toContain("Verificaciones");
+  });
+
+  it("sin recomendada lo dice, sin marcar ninguna", () => {
+    render(<Chat actos={[{ tipo: "consulta-autonoma", pregunta: "¿Qué pantalla?", opciones: ["Login", "Menú"] }]} />);
+    const tarjeta = screen.getByRole("region", { name: /contestada en modo autónomo/ });
+    expect(tarjeta.querySelector("li[data-elegida]")).toBeNull();
+    expect(tarjeta.textContent).toContain("No había opción recomendada");
+  });
+});
+
 describe("Chat: la propuesta de tareas en el hilo", () => {
   const propuesta: Acto = {
     tipo: "propuesta-de-tareas",

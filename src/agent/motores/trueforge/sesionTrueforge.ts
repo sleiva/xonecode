@@ -1715,14 +1715,8 @@ export async function abrirSesionTrueforge(
               for (const q of preguntas) {
                 const { pregunta, opciones: posibles } = consultaDe(q.args);
                 const elegida = opcionRecomendada(posibles);
-                yield {
-                  tipo: "aviso",
-                  texto:
-                    elegida !== undefined
-                      ? `modo autónomo: a «${pregunta}» contesto la recomendada: ${elegida}`
-                      : `modo autónomo: «${pregunta}» no se pregunta; lo decide el agente y lo dirá`,
-                  severidad: "aviso",
-                };
+                // Un evento propio y no un `aviso` (IXCODE-47): como aviso caía plegado en «Verificaciones».
+                yield { tipo: "consulta-autonoma", pregunta, opciones: posibles, ...(elegida === undefined ? {} : { elegida }) };
                 respuestas.push({
                   type: "user.tool_response",
                   thread_id: q.hilo,

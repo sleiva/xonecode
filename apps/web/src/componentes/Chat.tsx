@@ -92,7 +92,7 @@ import estilos from "./Chat.module.css";
  */
 /** ¿Se puede pintar la tarjeta de esta consulta? Con pregunta y alguna opción de texto: el acto
  *  llega por el cable de otro proceso y el store solo valida su `tipo`. */
-function consultaPintable(a: Extract<Acto, { tipo: "consulta" }>): boolean {
+function consultaPintable(a: Extract<Acto, { tipo: "consulta" | "consulta-autonoma" }>): boolean {
   return (
     typeof a.pregunta === "string" &&
     Array.isArray(a.opciones) &&
@@ -956,6 +956,9 @@ export function Chat({
      * solo pierde la pregunta repetida cuando la tarjeta la dice.
      */
     if (acto.tipo === "consulta" && !consultaPintable(acto)) continue;
+    // La contestada sola en modo autónomo es la MISMA tarjeta (IXCODE-47): se pinta suelta y cierra el tramo de trabajo,
+    // que es lo que la saca del plegable. Sin opciones válidas pasa de largo, como la consulta.
+    if (acto.tipo === "consulta-autonoma" && !consultaPintable(acto)) continue;
     /**
      * La propuesta de tareas es su TARJETA, en su sitio, como la consulta; cómo acabó
      * (`propuesta-resuelta`) no se pinta aparte: lo dice la propia tarjeta, así que pasa de largo
@@ -1117,7 +1120,7 @@ export function Chat({
   // que solo era la pregunta de su tarjeta no se pinta, y entonces tampoco suma.
   const nuevos = contarMensajesNuevos(actos, usarMarcaDeLeido(actos.length, alFinal, sesion), (acto, indice) => {
     if (acto.tipo === "error") return true;
-    if (acto.tipo === "consulta") return consultaPintable(acto);
+    if (acto.tipo === "consulta" || acto.tipo === "consulta-autonoma") return consultaPintable(acto);
     if (acto.tipo === "propuesta-de-tareas") return propuestaPintable(acto);
     if (acto.tipo !== "asistente") return false;
     const repetida = repetidaEn.get(indice);
@@ -1403,6 +1406,17 @@ export function Chat({
                           ...(alHacerPropuestaEnChat === undefined ? {} : { alHacerEnChat: () => alHacerPropuestaEnChat(id) }),
                         }
                       : {})}
+                  />
+                </div>
+              );
+            }
+            if (acto.tipo === "consulta-autonoma") {
+              return (
+                <div key={indice} className={vista.flowItem}>
+                  <ConsultaDelAgente
+                    pregunta={acto.pregunta}
+                    opciones={acto.opciones}
+                    autonoma={typeof acto.elegida === "string" ? { elegida: acto.elegida } : {}}
                   />
                 </div>
               );

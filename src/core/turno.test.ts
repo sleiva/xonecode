@@ -355,3 +355,45 @@ describe("la propuesta de tareas (repartir un encargo grande)", () => {
     expect(linea).toContain("2. Ventana B");
   });
 });
+
+describe("la pregunta contestada sola en modo autónomo (IXCODE-47)", () => {
+  const decidida: DomainEvent = {
+    tipo: "consulta-autonoma",
+    pregunta: "¿Qué guarda el botón?",
+    opciones: ["Todo", "Lo relleno (Recommended)"],
+    elegida: "Lo relleno (Recommended)",
+  };
+
+  it("una piel que la sabe pintar la recibe como DATO, sin la línea de aviso, y la bitácora la apunta igual", async () => {
+    const { piel, actos } = pielDePrueba();
+    const recibidas: unknown[] = [];
+    const notificadas: string[] = [];
+    piel.consultaAutonoma = (c) => recibidas.push(c);
+    piel.notificacion = (t) => notificadas.push(t);
+    const bitacora = await correrTurno(flujo({ tipo: "token", texto: "Lo miro.", msgId: "r1" }, decidida), piel);
+    expect(recibidas).toEqual([
+      { pregunta: "¿Qué guarda el botón?", opciones: ["Todo", "Lo relleno (Recommended)"], elegida: "Lo relleno (Recommended)" },
+    ]);
+    // No va a los avisos: ahí caía plegada en «Verificaciones».
+    expect(notificadas).toEqual([]);
+    expect(actos.slice(0, 2)).toEqual(["token:Lo miro.", "cerrar"]);
+    expect(bitacora.todo.join("\n")).toContain("contesto la recomendada: Lo relleno (Recommended)");
+  });
+
+  it("una piel sin el método (stdio, TUI) recibe la línea de siempre, sin cambiar", async () => {
+    const { piel, actos } = pielDePrueba();
+    await correrTurno(flujo(decidida), piel);
+    expect(actos).toContain("linea:modo autónomo: a «¿Qué guarda el botón?» contesto la recomendada: Lo relleno (Recommended)");
+  });
+
+  it("sin opciones no hay tarjeta: va por el camino del aviso aunque la piel la sepa pintar", async () => {
+    const { piel } = pielDePrueba();
+    const recibidas: unknown[] = [];
+    const notificadas: string[] = [];
+    piel.consultaAutonoma = (c) => recibidas.push(c);
+    piel.notificacion = (t) => notificadas.push(t);
+    await correrTurno(flujo({ tipo: "consulta-autonoma", pregunta: "¿Cuál?", opciones: [] }), piel);
+    expect(recibidas).toEqual([]);
+    expect(notificadas).toEqual(["modo autónomo: «¿Cuál?» no se pregunta; lo decide el agente y lo dirá"]);
+  });
+});

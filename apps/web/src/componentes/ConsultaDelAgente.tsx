@@ -26,12 +26,18 @@ import estilos from "./ConsultaDelAgente.module.css";
  *
  * Lo pendiente lo decide el HILO (`consultaPendiente.ts`), no este componente: por eso vuelve al
  * reabrir una sesión que se quedó esperando.
+ *
+ * - **Con `autonoma` es una pregunta que el harness contestó SOLO** (modo autónomo,
+ *   `core/actos.ts#consulta-autonoma`), y lo DICE en la cabecera: la misma tarjeta a la vista en el hilo, con lo
+ *   elegido marcado, en vez del aviso plegado en «Verificaciones» (IXCODE-47). Sin `elegida` no había recomendada y lo
+ *   decide el agente. Siempre es registro: no espera a nadie, y otra cosa se le dice en el chat.
  */
 export function ConsultaDelAgente({
   pregunta,
   opciones,
   alElegir,
   respondida,
+  autonoma,
 }: {
   pregunta: string;
   opciones: readonly string[];
@@ -41,6 +47,8 @@ export function ConsultaDelAgente({
   alElegir?: (opcion: string) => void | Promise<unknown>;
   /** Lo que se contestó, si consta: el mensaje de la persona que vino detrás. */
   respondida?: string;
+  /** Contestada sola en modo autónomo, con la opción elegida (ausente: no había recomendada). Gana sobre `alElegir`. */
+  autonoma?: { elegida?: string };
 }) {
   // Qué está elegido: el índice de una opción, «otra» (la respuesta libre) o nada todavía.
   const [eleccion, setEleccion] = useState<number | "otra" | undefined>(undefined);
@@ -59,6 +67,37 @@ export function ConsultaDelAgente({
     };
   }, []);
   const nombreDelGrupo = useId();
+
+  if (autonoma !== undefined) {
+    const elegida = autonoma.elegida === undefined ? -1 : opciones.indexOf(autonoma.elegida);
+    return (
+      <section
+        className={estilos.tarjeta}
+        data-autonoma=""
+        aria-label={`Pregunta del agente contestada en modo autónomo: ${pregunta}`}
+      >
+        <p className={estilos.cabecera}>
+          <span aria-hidden="true" className={estilos.marca}>
+            ?
+          </span>
+          Pregunta del agente · contestada sola (modo autónomo)
+        </p>
+        <p className={estilos.enunciado}>{pregunta}</p>
+        <ul className={estilos.registro}>
+          {opciones.map((opcion, i) => (
+            <li key={i} data-elegida={i === elegida ? "" : undefined}>
+              {opcion}
+            </li>
+          ))}
+        </ul>
+        <p className={estilos.nota}>
+          {elegida === -1
+            ? "No había opción recomendada: la decide el agente y lo dice en su respuesta. Si quieres otra cosa, escríbelo en el chat."
+            : "Se eligió la opción recomendada sin preguntarte. Si quieres otra cosa, escríbelo en el chat."}
+        </p>
+      </section>
+    );
+  }
 
   if (alElegir === undefined) {
     const elegida = respondida === undefined ? -1 : opciones.indexOf(respondida.trim());

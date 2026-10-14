@@ -805,7 +805,10 @@ detiene.
   fail-closed en los dos modos. **En TrueForge, además, en autónomo no se le pregunta a nadie**: una pregunta del agente
   con UNA opción `(Recommended)` se contesta con ella (`opcionRecomendada`), una sin marca vuelve al agente pidiéndole
   que decida y lo diga (`RESPUESTA_AUTONOMA_SIN_RECOMENDADA`), cada una POR SEPARADO —varias a la vez no son «todas o
-  ninguna»— y con tope (`TOPE_DE_PREGUNTAS_CONTESTADAS_SOLAS`); todo se DICE en el chat. En supervisado llegan a la persona.
+  ninguna»— y con tope (`TOPE_DE_PREGUNTAS_CONTESTADAS_SOLAS`); todo se DICE en el chat, **como la tarjeta de la pregunta con
+  lo elegido marcado** (evento y acto `consulta-autonoma`, `Piel.consultaAutonoma?`), no como aviso: plegada en
+  «Verificaciones», la persona contestaba después sin saber que ya estaba decidido (IXCODE-47). No es una `consulta` con
+  marca: todo lo que lee una `consulta` la toma por pendiente. En supervisado llegan a la persona.
   El tope de rondas de la consola vale lo MISMO que el de una tarea
   (`TOPE_DE_RONDAS_DE_CONSOLA`, `TOPE_DE_RONDAS_DE_TAREA`; subidos juntos cuando el ajuste de una pantalla contra su
   maqueta los agotaba en un turno); sin nadie delante se queda el cinco de `MAX_APPROVAL_ROUNDS`. Lo

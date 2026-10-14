@@ -88,6 +88,16 @@ export type DomainEvent =
    */
   | { tipo: "consulta"; pregunta: string; opciones: string[] }
   /**
+   * Una pregunta del agente que el HARNESS contestó solo porque la sesión está en modo autónomo
+   * (`sesionTrueforge.ts`, `opcionRecomendada`): `elegida` es la opción `(Recommended)`, y ausente es que no había
+   * ninguna y lo decide el agente. Es un evento propio y no un `aviso` porque es una DECISIÓN que la persona tiene que
+   * ver (IXCODE-47): como aviso caía plegada en «Verificaciones» y quien la había pedido contestaba después en el chat
+   * sin saber que el agente ya había seguido. No es una `consulta` con una marca: todo lo que lee una `consulta` la toma
+   * por pendiente —la tarjeta para contestar, el análisis de soporte, la web móvil— y esta no espera a nadie. A
+   * diferencia de `consulta`, no ha salido antes por `token`: quien no la pinte recibe la línea de siempre.
+   */
+  | { tipo: "consulta-autonoma"; pregunta: string; opciones: string[]; elegida?: string }
+  /**
    * El agente PROPONE repartir un encargo grande en tareas de fondo encadenadas (`proponer_tareas`,
    * `core/repartoDeEncargo.ts`). No crea nada: la persona revisa cada tarea y decide si se encolan. A diferencia de
    * `consulta`, esto NO ha salido antes por `token`, así que una piel que no lo pinte recibe una línea de texto.

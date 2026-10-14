@@ -25,6 +25,16 @@ function detalleDeLineaDeTool(l: LineaDeTool): DetalleDeLinea {
 }
 
 /**
+ * La línea de una pregunta contestada sola en modo autónomo, para la piel que no pinta la tarjeta. Es el texto que
+ * salía antes como aviso, sin cambiar: stdio y la TUI siguen igual.
+ */
+export function textoDeConsultaAutonoma(c: { pregunta: string; elegida?: string }): string {
+  return c.elegida !== undefined
+    ? `modo autónomo: a «${c.pregunta}» contesto la recomendada: ${c.elegida}`
+    : `modo autónomo: «${c.pregunta}» no se pregunta; lo decide el agente y lo dirá`;
+}
+
+/**
  * Lo que hace falta para pintar un turno. La implementan el renderizador de stdio y la TUI.
  *
  * `cerrarLinea` existe porque los tokens se escriben SIN salto —son la misma frase
@@ -105,6 +115,12 @@ export interface Piel {
    * igual, byte-idéntica. Hoy solo la web lo implementa, con un botón por opción.
    */
   consulta?(consulta: { pregunta: string; opciones: string[] }): void;
+  /**
+   * Una pregunta que el harness contestó solo en modo autónomo (`events.ts#consulta-autonoma`). OPCIONAL: quien no lo
+   * implemente —stdio, la TUI— recibe el aviso de siempre (`textoDeConsultaAutonoma`), así que la salida por una
+   * tubería no cambia. Hoy solo la web lo implementa, con la tarjeta de la pregunta a la vista en el hilo.
+   */
+  consultaAutonoma?(consulta: { pregunta: string; opciones: string[]; elegida?: string }): void;
   /**
    * El agente propone repartir el encargo en tareas de fondo encadenadas (`events.ts#propuesta-de-tareas`). OPCIONAL:
    * quien no lo implemente —stdio, la TUI— recibe una línea con las tareas numeradas; encolarlas solo se puede en la
@@ -325,6 +341,29 @@ export async function correrTurno(
           }
           piel.consulta?.({ pregunta: ev.pregunta, opciones: ev.opciones });
           break;
+
+        case "consulta-autonoma": {
+          const texto = textoDeConsultaAutonoma(ev);
+          // A la bitácora como aviso, igual que antes: el juez y el informe del turno lo siguen viendo.
+          bitacora.anota("aviso", texto);
+          if (abierta) {
+            piel.cerrarLinea();
+            abierta = false;
+          }
+          // Sin opciones no hay tarjeta que pintar, y va por el camino del aviso.
+          if (piel.consultaAutonoma !== undefined && ev.opciones.length > 0) {
+            piel.consultaAutonoma({
+              pregunta: ev.pregunta,
+              opciones: ev.opciones,
+              ...(ev.elegida === undefined ? {} : { elegida: ev.elegida }),
+            });
+          } else if (piel.notificacion) {
+            piel.notificacion(texto);
+          } else {
+            escribirLinea(texto);
+          }
+          break;
+        }
 
         case "propuesta-de-tareas":
           // No ha salido por `token`: sin el método, una línea; con él, la tarjeta (y la respuesta abierta se cierra
