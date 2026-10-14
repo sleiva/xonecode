@@ -8,9 +8,10 @@
  * **XOneCode no lleva semillas, a propósito.** Aplicarlo es QUITAR `data-tema` del `body`: queda
  * la cascada de siempre (`design-platform.css` + `marca.css` + `shiki.css`). Así «se ve exactamente
  * como antes» es verdad por construcción, no por haber copiado bien unos valores. Es el de omisión
- * en CLARO; en OSCURO lo es Azul noche (ver su comentario), y XOneCode sigue en la lista.
+ * en CLARO; en OSCURO el XOneCode es el de semillas `azul-noche` (ver su comentario), y el oscuro
+ * de antes, sin semillas, se retiró.
  *
- * Los otros seis salen de su paleta oficial publicada (GitHub Primer, One Dark/Light, Dracula,
+ * Los de fuera salen de su paleta oficial publicada (GitHub Primer, One Light, Dracula,
  * Ayu). Donde la oficial no llega al contraste que exige `temas.test.ts`, la semilla va
  * ajustada y lo dice su comentario. El juego lo eligieron las instalaciones del Marketplace de
  * VS Code (medido el 02-10-2026, ver el spec).
@@ -58,7 +59,7 @@ export const TEMAS: readonly Tema[] = [
   {
     id: "azul-noche",
     // Se LLAMA XOneCode (petición suya): es el oscuro de la marca. El id se queda en `azul-noche`
-    // para no confundirlo con el de antes, que sigue guardado como `xonecode-oscuro`.
+    // para no confundirlo con el de antes, `xonecode-oscuro`, retirado (ver abajo).
     nombre: "XOneCode",
     modo: "oscuro",
     semillas: {
@@ -118,9 +119,8 @@ export const TEMAS: readonly Tema[] = [
       expresionDeCadena: "#bef264",
     },
   },
-  // El oscuro de SIEMPRE, sin semillas: ya no es el de omisión, pero se puede volver a él. «Clásico»
-  // para no llamarse igual que el de omisión, que ahora es el XOneCode del modo oscuro.
-  { id: "xonecode-oscuro", nombre: "XOneCode clásico", modo: "oscuro", muestra: { fondo: "#151517", texto: "#cfd3d6", acento: "#00a3e0" } },
+  // El oscuro de antes (`xonecode-oscuro`, sin semillas) se RETIRÓ de la lista (petición suya): quien
+  // lo tuviera guardado cae en el de omisión, que es el XOneCode de arriba (`temaPorId`).
   {
     id: "github-oscuro",
     nombre: "GitHub Dark",
@@ -136,21 +136,8 @@ export const TEMAS: readonly Tema[] = [
       expresionDeCadena: "#a5d6ff",
     },
   },
-  {
-    id: "one-oscuro",
-    nombre: "One Dark",
-    modo: "oscuro",
-    semillas: {
-      fondo: "#282c34", capa1: "#21252b", capa2: "#2c313a", capa3: "#333842",
-      texto: "#abb2bf", texto2: "#9da5b4", texto3: "#7f848e", borde: "#3e4451",
-      // El azul de One Dark es claro: la letra encima es el fondo del tema, no el blanco.
-      acento: "#61afef", sobreAcento: "#282c34",
-      peligro: "#e06c75", exito: "#98c379", aviso: "#e5c07b", negocio: "#c678dd", sombra: "#181a1f", cambio: "#61afef",
-      palabraClave: "#c678dd", cadena: "#98c379", funcion: "#61afef", comentario: "#7f848e",
-      constante: "#d19a66", parametro: "#e06c75", puntuacion: "#abb2bf", enlace: "#56b6c2",
-      expresionDeCadena: "#98c379",
-    },
-  },
+  // One Dark se RETIRÓ de la lista (petición suya); One Light, el claro, se queda. Quien lo tuviera
+  // guardado cae en el de omisión (`temaPorId`).
   {
     id: "dracula",
     nombre: "Dracula",

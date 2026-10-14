@@ -503,8 +503,8 @@ describe("Ajustes", () => {
       expect(within(oscuro).getByRole("button", { name: "Dracula" }).getAttribute("aria-pressed")).toBe("true");
       expect(screen.getByText("Elegirlo pone la consola en claro.")).toBeTruthy();
       expect(screen.queryByText("Elegirlo pone la consola en oscuro.")).toBeNull();
-      fireEvent.click(within(oscuro).getByRole("button", { name: "One Dark" }));
-      expect(vistos).toEqual([["oscuro", "one-oscuro"]]);
+      fireEvent.click(within(oscuro).getByRole("button", { name: "GitHub Dark" }));
+      expect(vistos).toEqual([["oscuro", "github-oscuro"]]);
     });
   });
 

@@ -634,8 +634,8 @@ describe("App: el tema del modo en vigor", () => {
     try {
       montar();
       fireEvent.click(screen.getAllByRole("button", { name: "Ajustes" })[0]!);
-      fireEvent.click(within(screen.getByRole("group", { name: "Tema oscuro" })).getByRole("button", { name: "One Dark" }));
-      expect(document.body.getAttribute("data-tema")).toBe("one-oscuro");
+      fireEvent.click(within(screen.getByRole("group", { name: "Tema oscuro" })).getByRole("button", { name: "GitHub Dark" }));
+      expect(document.body.getAttribute("data-tema")).toBe("github-oscuro");
       expect(window.localStorage.getItem("xonecode.apariencia")).toBe("sistema");
     } finally {
       vi.unstubAllGlobals();

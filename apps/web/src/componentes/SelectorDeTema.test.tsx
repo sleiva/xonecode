@@ -16,16 +16,16 @@ describe("SelectorDeTema", () => {
   it("un botón por tema del modo, con su nombre", () => {
     const { grupo } = montar();
     expect(within(grupo).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([
-      "XOneCode", "Grafito", "Pizarra", "Tinta cálida", "XOneCode clásico", "GitHub Dark", "One Dark", "Dracula",
+      "XOneCode", "Grafito", "Pizarra", "Tinta cálida", "GitHub Dark", "Dracula",
     ]);
   });
 
   it("el elegido va marcado, y elegir otro avisa", () => {
     const { grupo, vistos } = montar();
     expect(within(grupo).getByRole("button", { name: "Dracula" }).getAttribute("aria-pressed")).toBe("true");
-    expect(within(grupo).getByRole("button", { name: "One Dark" }).getAttribute("aria-pressed")).toBe("false");
-    fireEvent.click(within(grupo).getByRole("button", { name: "One Dark" }));
-    expect(vistos).toEqual(["one-oscuro"]);
+    expect(within(grupo).getByRole("button", { name: "GitHub Dark" }).getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(within(grupo).getByRole("button", { name: "GitHub Dark" }));
+    expect(vistos).toEqual(["github-oscuro"]);
   });
 
   it("pulsar el que ya está no manda nada", () => {
@@ -50,9 +50,6 @@ describe("SelectorDeTema", () => {
     // El XOneCode del modo oscuro es el de semillas (`azul-noche`): su muestra, su fondo navy.
     const xone = within(grupo).getByRole("button", { name: "XOneCode" }).querySelector("[data-muestra]") as HTMLElement;
     expect(xone.style.getPropertyValue("--muestra-fondo")).toBe("#0a1520");
-    // Y el de siempre, sin semillas, lleva los colores fijos de su `muestra`.
-    const clasico = within(grupo).getByRole("button", { name: "XOneCode clásico" }).querySelector("[data-muestra]") as HTMLElement;
-    expect(clasico.style.getPropertyValue("--muestra-fondo")).toBe("#151517");
   });
 
   it("la muestra de XOneCode claro es blanca", () => {
