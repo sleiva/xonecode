@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { TunelNgrok } from "./TunelNgrok";
+import { TunelNgrok, URL_DEL_AUTHTOKEN } from "./TunelNgrok";
 
 afterEach(cleanup);
 
@@ -25,6 +25,14 @@ describe("la tarjeta de ngrok", () => {
     fireEvent.click(guardar);
     expect(alEnviar).toHaveBeenCalledWith({ clase: "remoto", accion: "authtoken", authtoken: "2abcDEF_123" });
     expect(campo.value).toBe("");
+  });
+
+  it("sin cuenta, dice CÓMO conseguir el authtoken, con el enlace a su página en el panel de ngrok", () => {
+    render(<TunelNgrok ngrok={{ instalado: true, cuenta: false }} alEnviar={vi.fn()} />);
+    const enlace = screen.getByRole("link", { name: "Your Authtoken" }) as HTMLAnchorElement;
+    expect(enlace.href).toBe(URL_DEL_AUTHTOKEN);
+    expect(enlace.rel).toContain("noopener");
+    expect(screen.getByRole("link", { name: "ngrok.com" })).toBeTruthy();
   });
 
   it("listo: el mismo campo sirve para CAMBIAR el authtoken, sin enseñar el de ahora", () => {

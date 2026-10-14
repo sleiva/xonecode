@@ -52,6 +52,11 @@ html {
 body {
   margin: 0;
   background: var(--dsw-alias-bg-base);
+  /* Y el TEXTO del tema, aquí también: sin esto, todo lo que no lleva clase propia —una etiqueta
+     de casilla, un `<p>` suelto de un diálogo— heredaba el negro del navegador, y en un tema oscuro
+     no se veía (capturas suyas: «Activar la sesión remota», «0 aparatos conectados»). En `body` y
+     no en `#root` porque los diálogos se montan en un portal, fuera de la app. */
+  color: var(--dsw-alias-label-primary);
 }
 
 /* Los formularios NO heredan la tipografía del documento por omisión: es de las pocas

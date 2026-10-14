@@ -36,3 +36,20 @@
 .fila {
   composes: campoDeNombreConBoton from "./Ajustes.module.css";
 }
+
+/* Los pasos para conseguir el authtoken: lista numerada, en el tono de la nota. */
+.pasos {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.pasos a,
+.nota a {
+  color: var(--xonecode-cian-oscuro);
+}

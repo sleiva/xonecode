@@ -142,3 +142,12 @@ describe("el puente de temas", () => {
     expect([...usadas].filter((u) => !nombres.has(u))).toEqual([]);
   });
 });
+
+describe("el texto del tema llega a todo", () => {
+  it("el `body` declara el color del texto del tema, no solo el fondo: lo heredan los portales y lo que no lleva clase", () => {
+    const hoja = readFileSync(join(AQUI, "..", "estilos", "tipografia.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const body = /(^|\n)body\s*\{([^}]*)\}/.exec(hoja)?.[2] ?? "";
+    expect(body).toMatch(/background:\s*var\(--dsw-alias-bg-base\)/);
+    expect(body).toMatch(/(^|\s|;)color:\s*var\(--dsw-alias-label-primary\)/);
+  });
+});

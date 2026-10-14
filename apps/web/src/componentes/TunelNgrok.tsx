@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import type { NgrokDelCable } from "../store.js";
 import estilos from "./TunelNgrok.module.css";
 
+/** La página del panel de ngrok donde está el authtoken de la cuenta (con la sesión iniciada). */
+export const URL_DEL_AUTHTOKEN = "https://dashboard.ngrok.com/get-started/your-authtoken";
+
 export type AccionDeNgrok =
   | { clase: "remoto"; accion: "authtoken"; authtoken: string }
   | { clase: "remoto"; accion: "dominio"; dominio: string };
@@ -71,7 +74,26 @@ export function TunelNgrok({
         <p className={estilos.nota}>El componente de ngrok que trae xonecode no carga en esta máquina: reinstala xonecode.</p>
       ) : !ngrok.cuenta ? (
         <>
-          <p className={estilos.nota}>ngrok viene con xonecode; falta tu authtoken (lo da tu cuenta gratuita de ngrok, en dashboard.ngrok.com).</p>
+          <p className={estilos.nota}>ngrok viene con xonecode; falta el authtoken de tu cuenta. Cómo conseguirlo:</p>
+          {/* Los pasos, porque «falta el authtoken» no dice de dónde sale: es la llave de TU cuenta de ngrok
+              (gratuita), y sin ella ngrok no abre el túnel. */}
+          <ol className={estilos.pasos}>
+            <li>
+              Crea una cuenta gratuita en{" "}
+              <a href="https://dashboard.ngrok.com/signup" target="_blank" rel="noopener noreferrer">
+                ngrok.com
+              </a>{" "}
+              (o entra con la tuya).
+            </li>
+            <li>
+              Abre{" "}
+              <a href={URL_DEL_AUTHTOKEN} target="_blank" rel="noopener noreferrer">
+                Your Authtoken
+              </a>{" "}
+              en el panel de ngrok y pulsa «Copy».
+            </li>
+            <li>Pégalo aquí y pulsa «Guardar authtoken». Se guarda solo en esta máquina.</li>
+          </ol>
           {campoDeAuthtoken("Pega aquí tu authtoken")}
         </>
       ) : (
@@ -98,6 +120,13 @@ export function TunelNgrok({
           </div>
           {/* Con uno puesto, el mismo campo lo CAMBIA: el de ahora no se enseña (no vuelve del servidor). */}
           {campoDeAuthtoken("Cambiar authtoken")}
+          <p className={estilos.nota}>
+            El authtoken está en{" "}
+            <a href={URL_DEL_AUTHTOKEN} target="_blank" rel="noopener noreferrer">
+              Your Authtoken
+            </a>
+            , en el panel de tu cuenta de ngrok.
+          </p>
         </>
       )}
       {ngrok.motivo === undefined ? null : <p className={estilos.motivo}>{ngrok.motivo}</p>}
