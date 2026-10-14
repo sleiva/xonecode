@@ -5,8 +5,8 @@ import { describe, expect, it } from "vitest";
 import { NOMBRES_DE_SEMILLA, TEMAS, contraste, temaPorId, temasDe, type Semillas } from "./temas.js";
 
 describe("el catálogo de temas", () => {
-  it("cuatro por modo, XOneCode primero", () => {
-    expect(temasDe("oscuro").map((t) => t.id)).toEqual(["xonecode-oscuro", "github-oscuro", "one-oscuro", "dracula"]);
+  it("el de omisión primero: XOneCode en claro, Azul noche en oscuro (con Grafito y XOneCode detrás)", () => {
+    expect(temasDe("oscuro").map((t) => t.id)).toEqual(["azul-noche", "grafito", "xonecode-oscuro", "github-oscuro", "one-oscuro", "dracula"]);
     expect(temasDe("claro").map((t) => t.id)).toEqual(["xonecode-claro", "github-claro", "one-claro", "ayu-claro"]);
   });
 
@@ -19,7 +19,7 @@ describe("el catálogo de temas", () => {
   });
 
   it("XOneCode no lleva semillas: se ve como hoy por construcción", () => {
-    for (const modo of ["claro", "oscuro"] as const) expect(temasDe(modo)[0]!.semillas).toBeUndefined();
+    for (const id of ["xonecode-claro", "xonecode-oscuro"]) expect(TEMAS.find((t) => t.id === id)!.semillas).toBeUndefined();
   });
 
   it("cada tema con semillas trae TODAS las semillas, todas #rrggbb", () => {
@@ -30,10 +30,12 @@ describe("el catálogo de temas", () => {
     }
   });
 
-  it("un id desconocido, o de otro modo, cae en el XOneCode de ese modo", () => {
+  it("un id desconocido, o de otro modo, cae en el de omisión de ese modo", () => {
     expect(temaPorId("dracula", "claro").id).toBe("xonecode-claro");
-    expect(temaPorId("no-existe", "oscuro").id).toBe("xonecode-oscuro");
-    expect(temaPorId(undefined, "oscuro").id).toBe("xonecode-oscuro");
+    expect(temaPorId("no-existe", "oscuro").id).toBe("azul-noche");
+    expect(temaPorId(undefined, "oscuro").id).toBe("azul-noche");
+    // El XOneCode oscuro de siempre se sigue pudiendo elegir.
+    expect(temaPorId("xonecode-oscuro", "oscuro").id).toBe("xonecode-oscuro");
     expect(temaPorId("dracula", "oscuro").id).toBe("dracula");
   });
 
@@ -83,6 +85,8 @@ describe("la marca «cambiada», azul en todos los temas", () => {
   it("cada tema con semillas trae su azul en `cambio`", () => {
     const azules = Object.fromEntries(TEMAS.filter((t) => t.semillas !== undefined).map((t) => [t.id, t.semillas!.cambio]));
     expect(azules).toEqual({
+      "azul-noche": "#60a5fa",
+      grafito: "#60a5fa",
       "github-oscuro": "#1f6feb",
       "one-oscuro": "#61afef",
       dracula: "#8be9fd",

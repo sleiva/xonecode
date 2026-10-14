@@ -5,10 +5,10 @@
  * qué temas se elige. Un tema es la familia ENTERA de superficies, texto y acento, no solo un
  * color: por eso son veinticinco semillas y no una.
  *
- * **XOneCode no lleva semillas, a propósito.** Es el de omisión en los dos modos, y aplicarlo es
- * QUITAR `data-tema` del `body`: queda la cascada de siempre (`design-platform.css` +
- * `marca.css` + `shiki.css`). Así «se ve exactamente como antes» es verdad por construcción, no
- * por haber copiado bien unos valores.
+ * **XOneCode no lleva semillas, a propósito.** Aplicarlo es QUITAR `data-tema` del `body`: queda
+ * la cascada de siempre (`design-platform.css` + `marca.css` + `shiki.css`). Así «se ve exactamente
+ * como antes» es verdad por construcción, no por haber copiado bien unos valores. Es el de omisión
+ * en CLARO; en OSCURO lo es Azul noche (ver su comentario), y XOneCode sigue en la lista.
  *
  * Los otros seis salen de su paleta oficial publicada (GitHub Primer, One Dark/Light, Dracula,
  * Ayu). Donde la oficial no llega al contraste que exige `temas.test.ts`, la semilla va
@@ -47,6 +47,45 @@ export interface Tema {
 }
 
 export const TEMAS: readonly Tema[] = [
+  /**
+   * **Azul noche, el oscuro por OMISIÓN** (petición suya, tablero E del lienzo «XOneCode · propuesta
+   * visual»). El de antes se leía apagado aunque sus cifras de contraste pasaban: las tres superficies
+   * iban de RGB 21 a 44 y casi no se distinguían, los bordes eran blanco al 12 %, y el código iba
+   * apagado. Aquí las superficies van ESCALONADAS y teñidas del navy de la marca, el borde es opaco y
+   * se ve, el texto sube (principal ~17:1, secundario ~12:1, terciario ~7,7:1 sobre el fondo) y el
+   * resaltado es vivo. Es el primero de su modo, que es lo que `temaPorId` toma por omisión.
+   */
+  {
+    id: "azul-noche",
+    nombre: "Azul noche",
+    modo: "oscuro",
+    semillas: {
+      fondo: "#0a1520", capa1: "#0f1d2b", capa2: "#142536", capa3: "#1b3045",
+      texto: "#eef5fa", texto2: "#bfd0de", texto3: "#93abc0", borde: "#2a4a68",
+      // El cian de la marca, aclarado para leerse sobre el navy; la letra encima es oscura (8,5:1).
+      acento: "#4cc6f2", sobreAcento: "#03202e",
+      peligro: "#f87171", exito: "#4ade80", aviso: "#fbbf24", negocio: "#c4b5fd", sombra: "#050b11", cambio: "#60a5fa",
+      palabraClave: "#f9a8d4", cadena: "#86efac", funcion: "#7dd3fc", comentario: "#8fa6ba",
+      constante: "#fdba74", parametro: "#fca5a5", puntuacion: "#bfd0de", enlace: "#4cc6f2",
+      expresionDeCadena: "#86efac",
+    },
+  },
+  /** Grafito: el mismo esquema que Azul noche sobre un negro NEUTRO, sin tinte — el más sobrio. */
+  {
+    id: "grafito",
+    nombre: "Grafito",
+    modo: "oscuro",
+    semillas: {
+      fondo: "#0e1013", capa1: "#15181c", capa2: "#1b1f24", capa3: "#232830",
+      texto: "#f1f4f7", texto2: "#c6cdd5", texto3: "#9ba6b2", borde: "#363e47",
+      acento: "#38bdf8", sobreAcento: "#04202f",
+      peligro: "#f87171", exito: "#4ade80", aviso: "#fbbf24", negocio: "#c4b5fd", sombra: "#000000", cambio: "#60a5fa",
+      palabraClave: "#f9a8d4", cadena: "#86efac", funcion: "#7dd3fc", comentario: "#8b98a5",
+      constante: "#fdba74", parametro: "#fca5a5", puntuacion: "#c6cdd5", enlace: "#38bdf8",
+      expresionDeCadena: "#86efac",
+    },
+  },
+  // El oscuro de SIEMPRE, sin semillas: ya no es el de omisión, pero se puede volver a él.
   { id: "xonecode-oscuro", nombre: "XOneCode", modo: "oscuro", muestra: { fondo: "#151517", texto: "#cfd3d6", acento: "#00a3e0" } },
   {
     id: "github-oscuro",
@@ -142,12 +181,14 @@ export const TEMAS: readonly Tema[] = [
   },
 ];
 
-/** Los temas de un modo, en el orden del catálogo (XOneCode primero). */
+/** Los temas de un modo, en el orden del catálogo: el de omisión primero (XOneCode en claro, Azul
+ *  noche en oscuro). */
 export function temasDe(modo: ModoDeTema): readonly Tema[] {
   return TEMAS.filter((t) => t.modo === modo);
 }
 
-/** El tema con ese id SI es de ese modo; si no —desconocido, retirado, o del otro modo—, XOneCode. */
+/** El tema con ese id SI es de ese modo; si no —desconocido, retirado, o del otro modo—, el de
+ *  omisión de ese modo (el primero). */
 export function temaPorId(id: string | undefined, modo: ModoDeTema): Tema {
   return TEMAS.find((t) => t.id === id && t.modo === modo) ?? temasDe(modo)[0]!;
 }

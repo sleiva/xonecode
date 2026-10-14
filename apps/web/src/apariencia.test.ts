@@ -71,7 +71,7 @@ describe("apariencia", () => {
 
 describe("temas por modo", () => {
   it("sin nada guardado, XOneCode en los dos modos", () => {
-    expect(leerTemas()).toEqual({ claro: "xonecode-claro", oscuro: "xonecode-oscuro" });
+    expect(leerTemas()).toEqual({ claro: "xonecode-claro", oscuro: "azul-noche" });
   });
 
   it("lo guardado se lee, y un id de otro modo o desconocido cae en XOneCode", () => {
@@ -80,7 +80,7 @@ describe("temas por modo", () => {
     expect(leerTemas()).toEqual({ claro: "github-claro", oscuro: "dracula" });
     window.localStorage.setItem("xonecode.tema.claro", "dracula");
     window.localStorage.setItem("xonecode.tema.oscuro", "fucsia");
-    expect(leerTemas()).toEqual({ claro: "xonecode-claro", oscuro: "xonecode-oscuro" });
+    expect(leerTemas()).toEqual({ claro: "xonecode-claro", oscuro: "azul-noche" });
   });
 
   it("un `localStorage` que lanza no rompe nada", () => {
@@ -92,7 +92,7 @@ describe("temas por modo", () => {
         throw new Error("bloqueado");
       },
     });
-    expect(leerTemas()).toEqual({ claro: "xonecode-claro", oscuro: "xonecode-oscuro" });
+    expect(leerTemas()).toEqual({ claro: "xonecode-claro", oscuro: "azul-noche" });
     expect(() => guardarTema("oscuro", "dracula")).not.toThrow();
   });
 
@@ -119,9 +119,11 @@ describe("temas por modo", () => {
     expect(document.body.getAttribute("data-tema")).toBe("github-oscuro");
   });
 
-  it("sin temas, como antes: solo el modo", () => {
+  it("sin temas elegidos: en claro, XOneCode (solo el modo); en oscuro, Azul noche", () => {
+    aplicarApariencia("claro");
+    expect(document.body.hasAttribute("data-tema")).toBe(false);
     aplicarApariencia("oscuro");
     expect(document.body.hasAttribute("data-ds-dark-theme")).toBe(true);
-    expect(document.body.hasAttribute("data-tema")).toBe(false);
+    expect(document.body.getAttribute("data-tema")).toBe("azul-noche");
   });
 });

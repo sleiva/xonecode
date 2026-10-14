@@ -1154,7 +1154,9 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   `--tema-*` en el `body` junto a `data-tema`; el puente las reparte a los alias `--dsw-alias-*`, a los `--dsw-specific-*` con color, a los
   `--xonecode-*` con color y a `--shiki-*`. **XOneCode no
   tiene semillas**: aplicarlo QUITA `data-tema`, así que se ve como siempre por construcción. Se
-  recuerda en ESTE navegador (`xonecode.tema.claro`/`.oscuro`) y un id desconocido es XOneCode.
+  recuerda en ESTE navegador (`xonecode.tema.claro`/`.oscuro`), y un id desconocido —o ninguno— es
+  el PRIMERO de su modo: XOneCode en claro, **Azul noche** en oscuro (superficies escalonadas teñidas
+  del navy, petición suya); el XOneCode oscuro de siempre y Grafito siguen en la lista.
   **Elegir un tema lo ENSEÑA** (`App.tsx#alCambiarTema`): uno del otro modo pasa la consola a
   ese modo y la fija (saca de «sistema»); uno del modo en vigor no toca la apariencia.
   Los tests: el contraste WCAG de cada tema (`temas.test.ts`, un fallo se arregla en la semilla,

@@ -47,13 +47,14 @@ export interface TemasElegidos {
   oscuro: string;
 }
 
-export const TEMAS_POR_OMISION: TemasElegidos = { claro: "xonecode-claro", oscuro: "xonecode-oscuro" };
+// El primero de cada modo en `TEMAS` (`temaPorId` cae ahí): en oscuro, Azul noche.
+export const TEMAS_POR_OMISION: TemasElegidos = { claro: "xonecode-claro", oscuro: "azul-noche" };
 
 const CLAVE_DE_TEMA: Record<ModoDeTema, string> = { claro: "xonecode.tema.claro", oscuro: "xonecode.tema.oscuro" };
 
 /**
  * Los dos temas guardados, ya RESUELTOS: un id que no está en el catálogo, o que es del otro
- * modo, se lee como XOneCode — nunca como un hueco que deje la pantalla a medias.
+ * modo, se lee como el de omisión de ese modo — nunca como un hueco que deje la pantalla a medias.
  */
 export function leerTemas(): TemasElegidos {
   const leer = (modo: ModoDeTema): string => {
