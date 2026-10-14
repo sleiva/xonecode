@@ -3803,6 +3803,14 @@ describe("leer las conversaciones de un proyecto donde trabaja una tarea (IXCODE
     expect(enviar).toHaveBeenCalledWith({ clase: "sesion", proyecto: "p1", sesion: "s-tarea" });
   });
 
+  it("en el kanban del escritorio, «Ver lo que hace» lleva al chat de la tarea en solo lectura", async () => {
+    const { enviar } = montarConTarea(vi.fn(async () => {}));
+    fireEvent.click(screen.getByRole("button", { name: "Ver lo que hace" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "leerSesion", proyecto: "p1", sesion: "s-tarea" });
+    expect(await screen.findByText("arregla el login")).toBeTruthy();
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
   it("la de la tarea va EN VIVO: se mira al abrir y se deja de mirar UNA vez al cerrar", async () => {
     const mirar = vi.fn(async () => {});
     const { store, barra } = montarConTarea(mirar);

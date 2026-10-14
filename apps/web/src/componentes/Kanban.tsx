@@ -72,6 +72,7 @@ export function Kanban({
   alTerminar,
   alEnviarFeedback,
   alMirar,
+  alIrAlChat,
   alDejarDeMirar,
   mirando,
   mirada,
@@ -115,6 +116,8 @@ export function Kanban({
    * viven en `MirarTarea.tsx`, no aquí: esta pieza solo reenvía lo que la cola sabe.
    */
   alMirar?: (id: string) => void;
+  /** Ir al chat de la tarea (en marcha o esperando respuesta) en vez del detalle en la fila. Ausente = el detalle. */
+  alIrAlChat?: (tarea: TareaDelCable) => void;
   /** Cerrar esa vista, desenganchando SOLO ese mirón. Ausente = no se ofrece cerrarla desde
    *  aquí. */
   alDejarDeMirar?: (id: string) => void;
@@ -178,6 +181,7 @@ export function Kanban({
                       conectado={conectado}
                       corriendoAqui={cola.corriendoAqui}
                       {...(alMirar === undefined ? {} : { alMirar })}
+                      {...(alIrAlChat === undefined ? {} : { alIrAlChat })}
                       {...(alDejarDeMirar === undefined ? {} : { alDejarDeMirar })}
                       {...(mirando === undefined ? {} : { mirando })}
                       {...(mirada === undefined ? {} : { mirada })}
@@ -195,6 +199,7 @@ export function Kanban({
                       // pase).
                       corriendoAqui={cola.corriendoAqui}
                       {...(alMirar === undefined ? {} : { alMirar })}
+                      {...(alIrAlChat === undefined ? {} : { alIrAlChat })}
                       {...(alDejarDeMirar === undefined ? {} : { alDejarDeMirar })}
                       {...(mirando === undefined ? {} : { mirando })}
                       {...(mirada === undefined ? {} : { mirada })}
@@ -233,6 +238,7 @@ function TarjetaSimple({
   conectado,
   corriendoAqui,
   alMirar,
+  alIrAlChat,
   alDejarDeMirar,
   mirando,
   mirada,
@@ -246,6 +252,8 @@ function TarjetaSimple({
    *  no lo puede saber sin que se le pase. */
   corriendoAqui?: boolean;
   alMirar?: (id: string) => void;
+  /** Ir al chat de la tarea (en marcha o esperando respuesta) en vez del detalle en la fila. Ausente = el detalle. */
+  alIrAlChat?: (tarea: TareaDelCable) => void;
   alDejarDeMirar?: (id: string) => void;
   mirando?: string;
   mirada?: { tarea: string; actos: readonly Acto[] };
@@ -284,6 +292,7 @@ function TarjetaSimple({
           conectado={conectado}
           corriendoAqui={corriendoAqui}
           {...(alMirar === undefined ? {} : { alMirar })}
+          {...(alIrAlChat === undefined ? {} : { alIrAlChat })}
           {...(alDejarDeMirar === undefined ? {} : { alDejarDeMirar })}
           {...(mirando === undefined ? {} : { mirando })}
           {...(mirada === undefined ? {} : { mirada })}
@@ -314,6 +323,7 @@ function TarjetaDeAtencion({
   conectado,
   corriendoAqui,
   alMirar,
+  alIrAlChat,
   alDejarDeMirar,
   mirando,
   mirada,
@@ -330,6 +340,8 @@ function TarjetaDeAtencion({
    *  se queda abierto para poder plegarlo, aunque esta columna ya no ofrezca abrirlo. */
   corriendoAqui?: boolean;
   alMirar?: (id: string) => void;
+  /** Ir al chat de la tarea (en marcha o esperando respuesta) en vez del detalle en la fila. Ausente = el detalle. */
+  alIrAlChat?: (tarea: TareaDelCable) => void;
   alDejarDeMirar?: (id: string) => void;
   mirando?: string;
   mirada?: { tarea: string; actos: readonly Acto[] };
@@ -402,6 +414,7 @@ function TarjetaDeAtencion({
           conectado={conectado}
           corriendoAqui={corriendoAqui}
           {...(alMirar === undefined ? {} : { alMirar })}
+          {...(alIrAlChat === undefined ? {} : { alIrAlChat })}
           {...(alDejarDeMirar === undefined ? {} : { alDejarDeMirar })}
           {...(mirando === undefined ? {} : { mirando })}
           {...(mirada === undefined ? {} : { mirada })}

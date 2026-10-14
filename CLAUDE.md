@@ -1049,7 +1049,9 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   —una pestaña vieja, el móvil—, el turno no corre pero el acto de la persona ya está apuntado y al
   cerrar se vuelca. Lo que no se puede ABRIR —la conversación de la propia tarea, o otra del
   proyecto que trabaja en una tuya— se LEE sin consola (`{clase:"leerSesion"}`, del índice del
-  DISCO; en vivo por `mirar` si es la de la tarea), en `LecturaDeSesion.tsx`. La barra mira las DOS
+  DISCO; en vivo por `mirar` si es la de la tarea), en `LecturaDeSesion.tsx`. «Ver lo que hace» de una tarea
+  lleva a esa vista (`MirarTarea#alIrAlChat`), y una aparcada ofrece «Ir al chat para responder»: la
+  caja solo sale cuando la tarea necesita respuesta. La barra mira las DOS
   marcas de «trabajando»: la del proyecto solo viaja cuando ninguna fila lleva la suya.
 - **El cable habla con TODOS los clientes** (`transporte.ts` es un `Set`): la ráfaga de bienvenida
   va SOLO al recién llegado.

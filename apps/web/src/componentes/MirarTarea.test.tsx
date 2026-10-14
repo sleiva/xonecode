@@ -233,3 +233,29 @@ describe("MirarTarea: el detalle expandido", () => {
     expect(screen.queryByText(/autorizó escribir|no autorizó ninguna/i)).toBeNull();
   });
 });
+
+/** Con `alIrAlChat`, el botón lleva al CHAT de la tarea en vez de desplegar aquí. */
+describe("MirarTarea: ir al chat de la tarea", () => {
+  it("en marcha, «Ver lo que hace» va al chat; esperando respuesta, «Ir al chat para responder»", () => {
+    const alIrAlChat = vi.fn();
+    const alMirar = vi.fn();
+    const enMarcha = tarea({ sesion: "s1" });
+    const { unmount } = render(<MirarTarea tarea={enMarcha} corriendoAqui alMirar={alMirar} alDejarDeMirar={vi.fn()} alIrAlChat={alIrAlChat} />);
+    fireEvent.click(screen.getByRole("button", { name: "Ver lo que hace" }));
+    expect(alIrAlChat).toHaveBeenCalledWith(enMarcha);
+    expect(alMirar).not.toHaveBeenCalled();
+    unmount();
+    const aparcada = tarea({ estado: "requiere-atencion", motivo: "¿arriba o abajo?", sesion: "s1" });
+    render(<MirarTarea tarea={aparcada} alIrAlChat={alIrAlChat} />);
+    fireEvent.click(screen.getByRole("button", { name: "Ir al chat para responder" }));
+    expect(alIrAlChat).toHaveBeenLastCalledWith(aparcada);
+  });
+
+  it("sin conversación todavía, o terminada, no lo ofrece", () => {
+    const { unmount } = render(<MirarTarea tarea={tarea({ estado: "terminada", sesion: "s1" })} alIrAlChat={vi.fn()} />);
+    expect(screen.queryByRole("button")).toBeNull();
+    unmount();
+    render(<MirarTarea tarea={tarea({ estado: "requiere-atencion", motivo: "?" })} alIrAlChat={vi.fn()} />);
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+});

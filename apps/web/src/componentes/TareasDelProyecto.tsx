@@ -63,6 +63,7 @@ export function TareasDelProyecto({
   sesionAbierta,
   trabajandoEnElChat,
   alMirar,
+  alIrAlChat,
   alDejarDeMirar,
   mirando,
   mirada,
@@ -135,6 +136,8 @@ export function TareasDelProyecto({
    * quién puede mirar y cuándo viven ahí, no aquí. Ausentes = no se ofrece.
    */
   alMirar?: (id: string) => void;
+  /** Ir al chat de la tarea (en marcha o esperando respuesta) en vez del detalle en la fila. Ausente = el detalle. */
+  alIrAlChat?: (tarea: TareaDelCable) => void;
   alDejarDeMirar?: (id: string) => void;
   /** Cuál se está mirando ahora, si alguna. */
   mirando?: string;
@@ -202,6 +205,7 @@ export function TareasDelProyecto({
               esperaPorTuConsola={consolaAbierta === true}
               {...(t.sesion !== undefined && t.sesion === sesionAbierta ? { enTuChat: trabajandoEnElChat === true ? "trabajando" : "abierta" } : {})}
               {...(alMirar === undefined ? {} : { alMirar })}
+              {...(alIrAlChat === undefined ? {} : { alIrAlChat })}
               {...(alDejarDeMirar === undefined ? {} : { alDejarDeMirar })}
               {...(mirando === undefined ? {} : { mirando })}
               {...(mirada === undefined ? {} : { mirada })}
@@ -230,6 +234,7 @@ function Fila({
   conectado,
   corriendoAqui,
   alMirar,
+  alIrAlChat,
   alDejarDeMirar,
   mirando,
   mirada,
@@ -257,6 +262,8 @@ function Fila({
    *  tal cual a `MirarTarea`, que es quien decide con esto si ofrece el despliegue. */
   corriendoAqui?: boolean;
   alMirar?: (id: string) => void;
+  /** Ir al chat de la tarea (en marcha o esperando respuesta) en vez del detalle en la fila. Ausente = el detalle. */
+  alIrAlChat?: (tarea: TareaDelCable) => void;
   alDejarDeMirar?: (id: string) => void;
   mirando?: string;
   mirada?: { tarea: string; actos: readonly Acto[] };
@@ -315,6 +322,7 @@ function Fila({
           conectado={conectado}
           corriendoAqui={corriendoAqui}
           {...(alMirar === undefined ? {} : { alMirar })}
+          {...(alIrAlChat === undefined ? {} : { alIrAlChat })}
           {...(alDejarDeMirar === undefined ? {} : { alDejarDeMirar })}
           {...(mirando === undefined ? {} : { mirando })}
           {...(mirada === undefined ? {} : { mirada })}

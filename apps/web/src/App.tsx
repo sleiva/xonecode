@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { Planes } from "./componentes/Planes.js";
 import { Colecciones } from "./componentes/Colecciones.js";
 import type { crearStoreDelCliente } from "./store.js";
-import type { Acto, ActoDeSincronizacion, FotoDelResumen, ListadoDeSoporte, MensajeDelCliente, ModoDeEscritura } from "./tipos.js";
+import type { Acto, TareaDelCable, ActoDeSincronizacion, FotoDelResumen, ListadoDeSoporte, MensajeDelCliente, ModoDeEscritura } from "./tipos.js";
 import type { Conexion } from "./conexion.js";
 import { ANCHO_BARRA_POR_OMISION, Maqueta } from "./componentes/Maqueta.js";
 import { Barra } from "./componentes/Barra.js";
@@ -621,6 +621,19 @@ export function App({
       })();
     },
     [enviar, tareaQueEscribeLaSesion, estado.tareas?.corriendoAqui, alMirarTarea, alDejarDeMirarTarea]
+  );
+  /**
+   * «Ver lo que hace» / «Ir al chat para responder» de una tarea: a SU chat. En marcha, la vista de
+   * lectura (en vivo, sin caja, por el final); esperando respuesta, su conversación de verdad, con
+   * la caja para contestar.
+   */
+  const alIrAlChatDeTarea = useCallback(
+    (t: TareaDelCable) => {
+      if (t.sesion === undefined) return;
+      if (t.estado === "en-proceso") leerSesion(t.proyecto, t.sesion, "");
+      else abrirSesion(t.proyecto, t.sesion);
+    },
+    [leerSesion, abrirSesion]
   );
 
   /**
@@ -2634,6 +2647,7 @@ export function App({
       // vía `Kanban.tsx`/`TareasDelProyecto.tsx`) que monta el escritorio — antes
       // esta pestaña no la ofrecía en absoluto.
       {...(mirar === undefined ? {} : { alMirar: alMirarTarea, alDejarDeMirar: alDejarDeMirarTarea })}
+      alIrAlChat={alIrAlChatDeTarea}
       {...(mirandoTarea === undefined ? {} : { mirando: mirandoTarea })}
       {...(estado.mirada === undefined ? {} : { mirada: estado.mirada })}
     />
@@ -2892,7 +2906,9 @@ export function App({
             <LecturaDeSesion
               key={`${lectura.proyecto}/${lectura.sesion}`}
               {...(actosDeLaLectura === undefined ? {} : { actos: actosDeLaLectura })}
-              {...(lectura.error === undefined ? {} : { error: lectura.error })}
+              // El error del disco solo si tampoco hay nada en vivo: la conversación de una tarea que acaba
+              // de arrancar todavía no está en el índice, pero ya se está viendo por `mirar`.
+              {...(lectura.error === undefined || actosDeLaLectura !== undefined ? {} : { error: lectura.error })}
               // Y solo mientras la tarea siga en marcha: el store no suelta `mirada` cuando acaba.
               vivo={lectura.tarea !== undefined && tareaQueEscribeLaSesion.has(lectura.sesion) && estado.mirada?.tarea === lectura.tarea}
               motivo={motivoDeLectura}
@@ -3354,6 +3370,7 @@ export function App({
               // Ver en vivo lo que hace una tarea. Solo se ofrece si esta ventana tiene el
               // canal: sin `mirar` inyectado el botón no llevaría a ninguna parte.
               {...(mirar === undefined ? {} : { alMirarTarea, alDejarDeMirarTarea })}
+              alIrAlChatDeTarea={alIrAlChatDeTarea}
               {...(mirandoTarea === undefined ? {} : { mirandoTarea })}
               {...(estado.mirada === undefined ? {} : { mirada: estado.mirada })}
               // «Se edita la tarea y se agrega el feedback del usuario»: el servidor decide

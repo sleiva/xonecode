@@ -43,6 +43,7 @@ export function MirarTarea({
   mirada,
   alMirar,
   alDejarDeMirar,
+  alIrAlChat,
 }: {
   tarea: TareaDelCable;
   /** Si ESTE proceso ejecuta las tareas. Ausente = no se sabe, y entonces no se ofrece
@@ -61,7 +62,23 @@ export function MirarTarea({
    *  se ofrece plegar (y por tanto tampoco abrir: un botón que no se puede cerrar no se
    *  abre). */
   alDejarDeMirar?: (id: string) => void;
+  /**
+   * Ir al CHAT de la tarea en vez de desplegar el detalle aquí: en marcha, para verlo en vivo y
+   * sin caja (la vista de lectura, que abre por el final); aparcada esperando tu respuesta, para
+   * contestar. Pedido mirando la pantalla: el detalle dentro de la fila era estrecho y se perdía al
+   * cambiar de vista. Ausente = el despliegue de siempre.
+   */
+  alIrAlChat?: (tarea: TareaDelCable) => void;
 }) {
+  if (alIrAlChat !== undefined && t.sesion !== undefined && (t.estado === "en-proceso" || t.estado === "requiere-atencion")) {
+    return (
+      <div className={estilos.envoltura}>
+        <button type="button" className={estilos.boton} disabled={conectado === false} onClick={() => alIrAlChat(t)}>
+          {t.estado === "en-proceso" ? "Ver lo que hace" : "Ir al chat para responder"}
+        </button>
+      </div>
+    );
+  }
   const expandida = mirando === t.id;
   const puedeAbrir =
     alMirar !== undefined &&

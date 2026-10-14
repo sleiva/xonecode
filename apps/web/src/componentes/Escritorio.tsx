@@ -56,6 +56,7 @@ export function Escritorio({
   alEnviarFeedback,
   alMirarTarea,
   alDejarDeMirarTarea,
+  alIrAlChatDeTarea,
   mirandoTarea,
   mirada,
   proyectoActivo,
@@ -151,6 +152,8 @@ export function Escritorio({
    */
   alMirarTarea?: (id: string) => void;
   alDejarDeMirarTarea?: (id: string) => void;
+  /** Ir al chat de una tarea (en marcha o esperando respuesta). Reenviado a `Kanban` → `MirarTarea`. */
+  alIrAlChatDeTarea?: (tarea: TareaDelCable) => void;
   /** Cuál se está mirando: lo elige esta ventana, y es lo que hace que su tarjeta lo diga. */
   mirandoTarea?: string;
   /**
@@ -317,6 +320,7 @@ export function Escritorio({
             // `MirarTarea` lo monta `Kanban`, aquí solo se reenvía con sus nombres.
             {...(alMirarTarea === undefined ? {} : { alMirar: alMirarTarea })}
             {...(alDejarDeMirarTarea === undefined ? {} : { alDejarDeMirar: alDejarDeMirarTarea })}
+            {...(alIrAlChatDeTarea === undefined ? {} : { alIrAlChat: alIrAlChatDeTarea })}
             {...(mirandoTarea === undefined ? {} : { mirando: mirandoTarea })}
             {...(mirada === undefined ? {} : { mirada })}
             {...(proyectoActivo === undefined ? {} : { proyectoActivo })}
