@@ -2,10 +2,10 @@ import clsx from "clsx";
 import conversacion from "../../estilos/ConversationRoot.module.css";
 import estilos from "./Pestanas.module.css";
 
-export type Pestana = "turno" | "ficheros" | "revision" | "colecciones" | "planes" | "artefactos" | "ejecutar" | "trazas";
+export type Pestana = "turno" | "ficheros" | "colecciones" | "planes" | "artefactos" | "ejecutar" | "trazas";
 
 /**
- * La tira de pestañas del PANEL: Ejecutar, Turno, Ficheros, Revisión, Colecciones y Trazas — más
+ * La tira de pestañas del PANEL: Ejecutar, Turno, Ficheros, Colecciones y Trazas — más
  * Planes y Artefactos, si el proyecto o la sesión dejaron alguno —, con la salida del panel
  * delante.
  *
@@ -87,17 +87,14 @@ export function Pestanas({
     // (Las tareas en background del proyecto ya NO van aquí: son del PANEL DEL PROYECTO, pestaña
     // Tareas, encima de las del gestor — a petición suya, «son del proyecto, no de la sesión».)
     { id: "ejecutar", etiqueta: "Ejecutar" },
-    // Lo que costó y lo que pasó en UN turno (`Turno.tsx`): duración, tokens por modelo, contexto,
-    // permisos y verificador. El hilo cuenta qué hizo el agente; esto, las cifras. De REGISTRO, y
-    // la primera de ellas porque es de la conversación que está al lado. Siempre presente: sin
-    // turnos, su estado vacío lo dice.
+    // Lo que costó y lo que pasó en UN turno (`Turno.tsx`): duración, tokens por modelo, contexto y
+    // verificador; y debajo, lo que la SESIÓN ha cambiado y falta por subir, con su diff — que era
+    // la pestaña Revisión y se mudó aquí (petición suya): «qué ha hecho el agente» se mira en un
+    // solo sitio. De REGISTRO, y la primera de ellas porque es de la conversación de al lado.
+    // Siempre presente: sin turnos, su estado vacío lo dice.
     { id: "turno", etiqueta: "Turno" },
     // El árbol del proyecto en el que se trabaja, con visor de solo lectura.
     { id: "ficheros", etiqueta: "Ficheros" },
-    // Lo que ESTA sesión ha tocado, con su diff: la única vista que responde a «¿qué me ha
-    // cambiado el agente?» sin salir a un terminal. Y lleva dentro la banda de CloudStudio
-    // —cuánto queda por subir—, que es la misma pregunta contra otra referencia.
-    { id: "revision", etiqueta: "Revisión" },
     // El MODELO XOne del proyecto —colecciones, campos y quién apunta a quién—, del mismo
     // índice que `xone_navegacion`: lo que ve el agente, para que lo vea una persona. De
     // REGISTRO como Ficheros, y como ella SIEMPRE presente: todo proyecto XOne tiene modelo, y

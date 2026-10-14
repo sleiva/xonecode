@@ -30,15 +30,12 @@ describe("Panel", () => {
   /**
    * **La ranura, no el contenido**: cada vista se monta al elegir su pestaña y solo entonces
    * —`{pestana === … ? … : …}`—, que es lo que hace que la petición que cada una lleva dentro
-   * no salga hasta que alguien abre la suya. Si Revisión se cayera del despacho, la pestaña se
-   * pintaría VACÍA, y eso es un control sin dato detrás con su botón ya pulsado.
-   *
-   * Revisión es además la que lleva DENTRO la banda de CloudStudio, así que este es el test
-   * que vigila que la mudanza no dejara sus dos botones sin montar en ninguna pestaña.
+   * no salga hasta que alguien abre la suya. Revisión ya no tiene pestaña: va DENTRO de «Turno»,
+   * debajo de las cifras, y si se cayera de ahí no se vería en ningún sitio.
    */
-  it("la pestaña «revision» pinta SU vista, y no la de al lado", () => {
+  it("la pestaña «turno» lleva dentro la revisión de la sesión, y no la vista de al lado", () => {
     render(
-      <Panel {...base} pestana="revision" revision={<p>lo de revisión</p>} ficheros={<p>lo de ficheros</p>} />
+      <Panel {...base} pestana="turno" revision={<p>lo de revisión</p>} ficheros={<p>lo de ficheros</p>} />
     );
     expect(screen.getByText("lo de revisión")).toBeTruthy();
     expect(screen.queryByText("lo de ficheros")).toBeNull();

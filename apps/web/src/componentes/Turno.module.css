@@ -203,3 +203,11 @@
 .verificador[data-estado="rojo"] .punto {
   background: var(--xonecode-rojo);
 }
+
+/* Lo que la sesión cambió (la antigua pestaña Revisión), debajo de las cifras y separado por un
+   filete: es de la SESIÓN, no del turno elegido. Sin el relleno lateral del inspector, porque la
+   vista de Revisión trae el suyo; con los márgenes negativos llega a los bordes como antes. */
+.cambios {
+  margin: 4px -20px 0;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}

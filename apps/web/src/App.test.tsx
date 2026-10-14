@@ -1653,7 +1653,7 @@ describe("App: la tarjeta de tarea «esperando feedback» abre Revisión", () =>
         sesionActiva: "s1",
       })
     );
-    expect(screen.getByRole("tab", { name: "Revisión", selected: true })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Turno", selected: true })).toBeTruthy();
     // Y Revisión pide su foto sola, sin que nadie más la pulse.
     expect(enviar).toHaveBeenCalledWith({ clase: "revision" });
   });
@@ -1698,7 +1698,7 @@ describe("App: Revisión arranca PLEGADA", () => {
    */
   it("al llegar la lista no se despliega ningún bloque ni se pide ningún parche", () => {
     const { store, enviar } = montar();
-    abrirPestana("Revisión");
+    abrirPestana("Turno");
     act(() => store.aplicar({ clase: "revision", via: "sin-empezar", ficheros: [] }));
     act(() => store.aplicar({ clase: "revision", via: "git", ficheros: diez() }));
 
@@ -1720,7 +1720,7 @@ describe("App: Revisión arranca PLEGADA", () => {
 
   it("pulsar una cabecera despliega ESE bloque y pide SU parche", () => {
     const { store, enviar } = montar();
-    abrirPestana("Revisión");
+    abrirPestana("Turno");
     act(() => store.aplicar({ clase: "revision", via: "git", ficheros: diez() }));
 
     const indice = screen.getByRole("complementary", { name: "Ficheros cambiados" });
@@ -2273,11 +2273,11 @@ describe("App: el panel a la derecha del chat", () => {
 
   it("y lo reabre por donde se dejó", () => {
     montar();
-    abrirPestana("Revisión");
+    abrirPestana("Turno");
     fireEvent.click(screen.getByRole("button", { name: "Cerrar el panel" }));
     expect(screen.queryByRole("tablist")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Mostrar el panel" }));
-    expect(screen.getByRole("tab", { name: "Revisión" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: "Turno" }).getAttribute("aria-selected")).toBe("true");
   });
 
   it("con sitio de sobra, el chat SE QUEDA: es la mitad de lo que se gana partiendo la pantalla", () => {
@@ -3313,7 +3313,7 @@ describe("App: «Editar» desde Revisión", () => {
     act(() =>
       montado.store.aplicar({ clase: "alta", pasos: [], proveedores: [], entornos: [], proyectos: [], ramas: [], proyectoAbierto: true, proyectoActivo: "p1" })
     );
-    abrirPestana("Revisión");
+    abrirPestana("Turno");
     act(() => montado.store.aplicar({ clase: "revision", via: "git", ficheros }));
     return montado;
   };
@@ -3412,7 +3412,7 @@ describe("App: «Editar» desde Revisión", () => {
   });
 
   it("lo pendiente se olvida al dejar la pestaña Ficheros: no se abre un editor a escondidas", async () => {
-    await noAbreTras(() => abrirPestana("Revisión"));
+    await noAbreTras(() => abrirPestana("Turno"));
   });
 
   it("ni un borrado ni un binario ofrecen «Editar»", () => {
@@ -3672,7 +3672,7 @@ describe("App: «Subir» y la subida con selección", () => {
 
   it("la Revisión del CHAT ya no ofrece Subir ni Actualizar repo local", () => {
     const { store } = montar();
-    abrirPestana("Revisión");
+    abrirPestana("Turno");
     act(() => store.aplicar({ clase: "sync", proyecto: "AppDemo", rama: "main", pendientes: 2 }));
     expect(screen.queryByRole("button", { name: /^subir$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: "Actualizar repo local" })).toBeNull();

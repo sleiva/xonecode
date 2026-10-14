@@ -54,8 +54,8 @@ export function Panel({
    *  contexto del último turno en la pestaña Turno. Ausente = no se sabe, y no hay porcentaje. */
   topeDeContexto?: number;
   ficheros?: ReactNode;
-  /** Lleva DENTRO la banda de CloudStudio, que ya no tiene pestaña propia (`Pestanas.tsx`
-   *  dice por qué): aquí no se nota, es una ranura como las demás. */
+  /** Lo que la sesión cambió y falta por subir (`Revision.tsx`). Ya no tiene pestaña propia: se
+   *  pinta dentro de «Turno», debajo de las cifras del turno. */
   revision?: ReactNode;
   /** El modelo XOne del proyecto (`Colecciones.tsx`). Una ranura más, con su rama EXPLÍCITA. */
   colecciones?: ReactNode;
@@ -91,9 +91,11 @@ export function Panel({
         {pestana === "trazas" ? (
           <Trazas actos={actos} />
         ) : pestana === "turno" ? (
-          <Turno actos={actos} {...(topeDeContexto === undefined ? {} : { topeDeContexto })} />
-        ) : pestana === "revision" ? (
-          revision
+          // Lo que era la pestaña Revisión va DENTRO del inspector, debajo de las cifras: sigue
+          // siendo una ranura, así que solo se monta —y solo pide la lista— con la pestaña abierta.
+          <Turno actos={actos} {...(topeDeContexto === undefined ? {} : { topeDeContexto })}>
+            {revision}
+          </Turno>
         ) : pestana === "colecciones" ? (
           colecciones
         ) : pestana === "planes" ? (

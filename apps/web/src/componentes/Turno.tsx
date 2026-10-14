@@ -23,7 +23,17 @@ import estilos from "./Turno.module.css";
  * `topeDeContexto` es el de la ventana del modelo EN VIGOR (mensaje `consumo`): vale para el
  * último turno y solo para él, porque un turno viejo pudo correr con otro modelo.
  */
-export function Turno({ actos, topeDeContexto }: { actos: readonly Acto[]; topeDeContexto?: number }): React.ReactElement {
+export function Turno({
+  actos,
+  topeDeContexto,
+  children,
+}: {
+  actos: readonly Acto[];
+  topeDeContexto?: number;
+  /** Lo que la SESIÓN cambió y falta por subir (la antigua pestaña Revisión), debajo de las
+   *  cifras. Es de la sesión y no del turno elegido, y lo dice su propio título. */
+  children?: React.ReactNode;
+}): React.ReactElement {
   const turnos = turnosDeLaSesion(actos);
   // `undefined` es «el último»: así un turno nuevo se enseña solo, sin que nadie mueva nada.
   const [elegido, setElegido] = useState<number | undefined>(undefined);
@@ -31,6 +41,7 @@ export function Turno({ actos, topeDeContexto }: { actos: readonly Acto[]; topeD
     return (
       <div className={estilos.raiz}>
         <p className={estilos.vacio}>Todavía no hay ningún turno en esta conversación.</p>
+        {children === undefined ? null : <div className={estilos.cambios}>{children}</div>}
       </div>
     );
   }
@@ -72,6 +83,8 @@ export function Turno({ actos, topeDeContexto }: { actos: readonly Acto[]; topeD
         <span aria-hidden="true" className={estilos.punto} />
         {textoDelVeredicto(turno)}
       </p>
+
+      {children === undefined ? null : <div className={estilos.cambios}>{children}</div>}
     </div>
   );
 }

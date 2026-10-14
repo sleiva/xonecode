@@ -15,7 +15,7 @@ describe("Pestanas", () => {
     expect(screen.getByRole("tab", { name: "Ficheros" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("tab", { name: "Trazas" }).getAttribute("aria-selected")).toBe("false");
     expect(screen.getByRole("tab", { name: "Ejecutar" }).getAttribute("aria-selected")).toBe("false");
-    expect(screen.getByRole("tab", { name: "Revisión" }).getAttribute("aria-selected")).toBe("false");
+    expect(screen.getByRole("tab", { name: "Turno" }).getAttribute("aria-selected")).toBe("false");
   });
 
   it("pulsar una lo pide hacia arriba: quien recuerda la elección es `App`, no esto", () => {
@@ -34,7 +34,7 @@ describe("Pestanas", () => {
     expect(screen.queryByRole("tab", { name: "Chat" })).toBeNull();
   });
 
-  it("son seis por omisión, en este orden: Ejecutar · Turno · Ficheros · Revisión · Colecciones · Trazas", () => {
+  it("son cinco por omisión, en este orden: Ejecutar · Turno · Ficheros · Colecciones · Trazas", () => {
     // Ejecutar es la única pestaña de ACCIÓN que queda aquí —lanza la app en un aparato— y
     // abre la tira. Ficheros, Revisión (y Artefactos, si lo hay) son de REGISTRO: enseñan lo
     // que ya pasó, y Trazas —de otro destinatario, quien depura el harness— cierra la tira.
@@ -46,19 +46,20 @@ describe("Pestanas", () => {
     //
     // CloudStudio tampoco: su banda vive dentro de Revisión (`Pestanas.tsx` dice por qué). Si
     // alguien le devolviera su pestaña, esta lista es la que lo tiene que pillar.
-    render(<Pestanas pestana="revision" alElegirPestana={vi.fn()} alCerrar={vi.fn()} />);
+    render(<Pestanas pestana="turno" alElegirPestana={vi.fn()} alCerrar={vi.fn()} />);
     expect(screen.getByRole("tablist")).not.toBeNull();
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
       "Ejecutar",
       // Las cifras del turno, al lado del hilo: de REGISTRO, la primera porque es de la conversación.
       "Turno",
       "Ficheros",
-      "Revisión",
       // El modelo XOne: de REGISTRO, y siempre presente porque todo proyecto XOne lo tiene.
       "Colecciones",
       "Trazas",
     ]);
-    expect(screen.getByRole("tab", { name: "Revisión" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: "Turno" }).getAttribute("aria-selected")).toBe("true");
+    // Revisión ya no es pestaña: lo que la sesión cambió va dentro de Turno (petición suya).
+    expect(screen.queryByRole("tab", { name: "Revisión" })).toBeNull();
   });
 
   it("lleva la salida del panel, y no está dentro del `tablist`", () => {
@@ -80,7 +81,6 @@ describe("Pestanas", () => {
       "Ejecutar",
       "Turno",
       "Ficheros",
-      "Revisión",
       "Colecciones",
       "Artefactos",
       "Trazas",
@@ -120,11 +120,11 @@ describe("Pestanas", () => {
     expect(screen.queryByRole("tab", { name: /cloudstudio/i })).toBeNull();
   });
 
-  it("pulsar Revisión reporta «revision»", () => {
+  it("pulsar Turno reporta «turno»", () => {
     const alElegirPestana = vi.fn();
     render(<Pestanas pestana="ficheros" alElegirPestana={alElegirPestana} alCerrar={vi.fn()} />);
-    fireEvent.click(screen.getByRole("tab", { name: "Revisión" }));
-    expect(alElegirPestana).toHaveBeenCalledWith("revision");
+    fireEvent.click(screen.getByRole("tab", { name: "Turno" }));
+    expect(alElegirPestana).toHaveBeenCalledWith("turno");
   });
 
   it("la tira no se pinta sobre el azul: ese acento se lo quedó la barra superior", () => {

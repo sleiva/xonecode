@@ -1373,7 +1373,8 @@ export function App({
     // Solo el FLANCO de fin. Sin esto, abrir la pestaña dispararía este efecto además del
     // que `Revision` lleva dentro para pedir al montar, y saldrían dos peticiones iguales.
     if (!acabaDeTerminar) return;
-    if (vistaDelPanel === "revision") {
+    // La revisión vive dentro de la pestaña Turno (`Panel.tsx`).
+    if (vistaDelPanel === "turno") {
       pedirRevision();
       // Los desplegados se vuelven a pedir: si no, seguirían enseñando el diff viejo del
       // fichero que el turno acaba de cambiar.
@@ -3204,7 +3205,7 @@ export function App({
               alAbrirSesionDeTarea={(proyecto, sesion) => abrirSesion(proyecto, sesion)}
               // La verdad sobre lo que la tarea escribió vive en Revisión, no en el chat:
               // sin aprobación previa, esa pestaña es la única forma de mirar.
-              alAbrirRevisionDeTarea={(proyecto, sesion) => abrirSesion(proyecto, sesion, "revision")}
+              alAbrirRevisionDeTarea={(proyecto, sesion) => abrirSesion(proyecto, sesion, "turno")}
               // Antes el escritorio solo reenviaba feedback — reintentar, descartar y
               // terminar eran solo de `TareasDelProyecto.tsx`, así que una tarea bloqueada
               // solo se desbloqueaba desde la pestaña del proyecto (Task 13).
