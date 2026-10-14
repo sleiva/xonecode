@@ -260,9 +260,11 @@ export function Revision({
                 </span>
               ) : null}
             </span>
-            {/* El `title` dice QUÉ se refresca: el nombre del botón ya no lo hace —se llamaba
-                «Volver a mirar»— y en esta pantalla hay dos, éste y el de la banda de arriba,
-                que miden cosas distintas contra referencias distintas. */}
+            {/* Solo en lo PENDIENTE DE SUBIR (la pestaña Sincronización): mide contra CloudStudio, y
+                eso no lo vuelve a pedir ningún turno. En los cambios de la SESIÓN sobraba (petición
+                suya): se piden solos al abrir, al terminar cada turno y al guardar desde el editor.
+                El `title` dice QUÉ se refresca. */}
+            {!pendientes ? null : (
             <button
               type="button"
               className={estilos.recargar}
@@ -277,6 +279,7 @@ export function Revision({
               {refresco.esperando ? <GiroDeCarga /> : null}
               Refrescar
             </button>
+            )}
           </div>
 
           {!pendientes && via === "desde-apertura" ? (

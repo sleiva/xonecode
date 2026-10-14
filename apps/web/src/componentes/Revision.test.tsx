@@ -587,9 +587,17 @@ describe("Revision: solo lo pendiente de la sesión", () => {
 describe("Revision: «Refrescar» dice que está en ello", () => {
   afterEach(cleanup);
 
-  it("gira y se apaga hasta que llega la lista nueva", () => {
+  it("en los cambios de la SESIÓN no hay «Refrescar»: se piden solos (al abrir, al acabar un turno, al guardar)", () => {
     cleanup();
-    const props = { via: "git" as const, parches: {}, desplegados: VACIO, alDesplegar: NADA, alPlegar: NADA, alRecargar: NADA };
+    render(
+      <Revision via="git" parches={{}} desplegados={VACIO} alDesplegar={NADA} alPlegar={NADA} alRecargar={NADA} ficheros={[{ ruta: "a.xne", clase: "nuevo", mas: 1, menos: 0 }]} />
+    );
+    expect(screen.queryByRole("button", { name: "Refrescar" })).toBeNull();
+  });
+
+  it("en lo pendiente de subir, gira y se apaga hasta que llega la lista nueva", () => {
+    cleanup();
+    const props = { via: "git" as const, parches: {}, desplegados: VACIO, alDesplegar: NADA, alPlegar: NADA, alRecargar: NADA, modo: "pendientes" as const };
     const { rerender } = render(<Revision {...props} ficheros={[{ ruta: "a.xne", clase: "nuevo", mas: 1, menos: 0 }]} />);
     const boton = (): HTMLButtonElement => screen.getByRole("button", { name: "Refrescar" });
     fireEvent.click(boton());
