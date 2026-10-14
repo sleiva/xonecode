@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { Modal } from "@deepseek-ai/dsh-client-ui-primitives";
 import clsx from "clsx";
 import estilos from "./Aprobacion.module.css";
 import { plegarIguales } from "../plegarIguales.js";
+import { resaltesDelTramo, type TrozoDeLinea } from "../cambioEnLinea.js";
 
 /**
  * El modal de aprobación: fail-closed, igual que el de la TUI lo es por TECLA.
@@ -88,13 +89,27 @@ function esLineaDeDiff(valor: unknown): valor is LineaDeDiff {
 const SIGNO = { anadido: "+", quitado: "-", igual: " " };
 
 /** Una línea del diff, con su signo en su propio nodo para no ensuciar el texto. */
-function Linea({ linea }: { linea: LineaDeDiff }) {
+function Linea({ linea, trozos }: { linea: LineaDeDiff; trozos?: readonly TrozoDeLinea[] }) {
   return (
     <div className={clsx(estilos.linea, estilos[linea.tipo])}>
       <span className={estilos.signo} aria-hidden="true">
         {SIGNO[linea.tipo]}
       </span>
-      <span>{linea.texto}</span>
+      {/* En una línea MODIFICADA, lo que cambió va resaltado (`cambioEnLinea.ts`): sin eso, un
+          atributo cambiado al final de una línea larga no se encontraba. */}
+      <span className={estilos.textoDeLinea}>
+        {trozos === undefined
+          ? linea.texto
+          : trozos.map((t, i) =>
+              t.cambia ? (
+                <mark key={i} className={estilos.cambio}>
+                  {t.texto}
+                </mark>
+              ) : (
+                <Fragment key={i}>{t.texto}</Fragment>
+              )
+            )}
+      </span>
     </div>
   );
 }
@@ -115,7 +130,11 @@ function Diff({ lineas }: { lineas: readonly LineaDeDiff[] }) {
     <>
       {tramos.map((tramo, indice) => {
         if (tramo.clase === "lineas") {
-          return tramo.lineas.map((l, i) => <Linea key={`${indice}-${i}`} linea={l} />);
+          const resaltes = resaltesDelTramo(tramo.lineas);
+          return tramo.lineas.map((l, i) => {
+            const trozos = resaltes.get(i);
+            return <Linea key={`${indice}-${i}`} linea={l} {...(trozos === undefined ? {} : { trozos })} />;
+          });
         }
         if (abiertos.includes(indice)) {
           return tramo.lineas.map((l, i) => <Linea key={`${indice}-${i}`} linea={l} />);

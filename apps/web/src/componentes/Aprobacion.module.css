@@ -220,8 +220,9 @@
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-2);
   font-family: var(--ds-font-family-code);
-  /* Sin `pre` envolvente: cada línea es su propio nodo y el desbordamiento horizontal se
-     queda DENTRO del diff, para que la tarjeta no crezca a lo ancho por una línea larga. */
+  /* Las líneas largas se PARTEN (`.textoDeLinea`) en vez de desbordar: medido en una captura
+     suya, el cambio estaba al final de una línea de un `.xne` y quedaba fuera de la vista, tras
+     una barra de scroll horizontal. `overflow-x` se queda por si una sola palabra no cabe. */
   overflow-x: auto;
 }
 
@@ -229,8 +230,15 @@
   display: flex;
   gap: 8px;
   padding: 0 12px;
-  white-space: pre;
   color: var(--dsw-alias-label-secondary);
+}
+
+/* `pre-wrap` conserva la sangría del código y parte la línea donde no cabe. */
+.textoDeLinea {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .signo {
@@ -282,14 +290,41 @@
    «añadida» y una «quitada» del diff deben leerse igual de bien, de ahí el mismo alias en
    las dos. `.fallo`, más abajo, no lo necesita: ahí `state-error-primary` es texto SOLO
    sobre el fondo normal de la tarjeta, no sobre `state-error-secondary`. */
+/* Fondos SUAVES y el trozo que cambió más fuerte: con los fondos llenos de antes (los
+   `state-*-secondary`), el texto se leía mal y las dos líneas parecían iguales. La mezcla es con
+   el fondo de la tarjeta, así que se adapta al modo y al tema sin un color propio. */
 .anadido {
   color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-state-success-secondary);
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, var(--dsw-alias-bg-layer-1));
+}
+
+.anadido .signo {
+  color: var(--dsw-alias-state-success-primary);
 }
 
 .quitado {
   color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-state-error-secondary);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, var(--dsw-alias-bg-layer-1));
+}
+
+.quitado .signo {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* Lo que cambió DENTRO de una línea modificada (`cambioEnLinea.ts`). */
+.cambio {
+  border-radius: 3px;
+  color: inherit;
+}
+
+.anadido .cambio {
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 32%, var(--dsw-alias-bg-layer-1));
+}
+
+.quitado .cambio {
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 28%, var(--dsw-alias-bg-layer-1));
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 60%, var(--dsw-alias-label-primary));
 }
 
 .igual {
