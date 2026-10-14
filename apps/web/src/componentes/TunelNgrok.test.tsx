@@ -12,12 +12,30 @@ describe("la tarjeta de ngrok", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
-  it("instalado sin cuenta: «Poner authtoken» manda la acción, sin campo de clave", () => {
+  it("instalado sin cuenta: el authtoken se TECLEA en un campo de contraseña, se manda y el campo se vacía", () => {
     const alEnviar = vi.fn();
     render(<TunelNgrok ngrok={{ instalado: true, cuenta: false }} alEnviar={alEnviar} />);
+    const campo = screen.getByLabelText("Authtoken de ngrok") as HTMLInputElement;
+    // Contraseña: no se ve lo tecleado, y no es un `textbox` que el navegador vaya a autocompletar.
+    expect(campo.type).toBe("password");
     expect(screen.queryByRole("textbox")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Poner authtoken" }));
-    expect(alEnviar).toHaveBeenCalledWith({ clase: "remoto", accion: "authtoken" });
+    const guardar = screen.getByRole("button", { name: "Guardar authtoken" }) as HTMLButtonElement;
+    expect(guardar.disabled).toBe(true);
+    fireEvent.change(campo, { target: { value: "  2abcDEF_123  " } });
+    fireEvent.click(guardar);
+    expect(alEnviar).toHaveBeenCalledWith({ clase: "remoto", accion: "authtoken", authtoken: "2abcDEF_123" });
+    expect(campo.value).toBe("");
+  });
+
+  it("listo: el mismo campo sirve para CAMBIAR el authtoken, sin enseñar el de ahora", () => {
+    const alEnviar = vi.fn();
+    render(<TunelNgrok ngrok={{ instalado: true, cuenta: true }} alEnviar={alEnviar} />);
+    const campo = screen.getByLabelText("Authtoken de ngrok") as HTMLInputElement;
+    expect(campo.value).toBe("");
+    expect(campo.placeholder).toBe("Cambiar authtoken");
+    fireEvent.change(campo, { target: { value: "otro" } });
+    fireEvent.submit(campo.form!);
+    expect(alEnviar).toHaveBeenCalledWith({ clase: "remoto", accion: "authtoken", authtoken: "otro" });
   });
 
   it("listo: «ngrok listo», su dominio, y Guardar manda el dominio (vacío lo quita)", () => {
@@ -47,6 +65,7 @@ describe("la tarjeta de ngrok", () => {
 
   it("sin cable no se manda nada", () => {
     render(<TunelNgrok ngrok={{ instalado: true, cuenta: false }} alEnviar={vi.fn()} conectado={false} />);
-    expect((screen.getByRole("button", { name: "Poner authtoken" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Guardar authtoken" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText("Authtoken de ngrok") as HTMLInputElement).disabled).toBe(true);
   });
 });

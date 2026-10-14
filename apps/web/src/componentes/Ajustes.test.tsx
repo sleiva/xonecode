@@ -758,8 +758,9 @@ describe("Ajustes", () => {
         />
       );
       expect(screen.getByRole("heading", { name: "Sesión remota" })).toBeTruthy();
-      fireEvent.click(screen.getByRole("button", { name: "Poner authtoken" }));
-      expect(alRemoto).toHaveBeenCalledWith({ clase: "remoto", accion: "authtoken" });
+      fireEvent.change(screen.getByLabelText("Authtoken de ngrok"), { target: { value: "tok" } });
+      fireEvent.click(screen.getByRole("button", { name: "Guardar authtoken" }));
+      expect(alRemoto).toHaveBeenCalledWith({ clase: "remoto", accion: "authtoken", authtoken: "tok" });
     });
 
     it("el interruptor: quitado, sin tarjeta de ngrok y marcarlo manda «habilitar»; puesto, desmarcarlo lo quita", () => {
@@ -775,7 +776,7 @@ describe("Ajustes", () => {
       );
       const casilla = screen.getByRole("checkbox", { name: /Activar la sesión remota/ }) as HTMLInputElement;
       expect(casilla.checked).toBe(false);
-      expect(screen.queryByRole("button", { name: "Poner authtoken" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Guardar authtoken" })).toBeNull();
       fireEvent.click(casilla);
       expect(alRemoto).toHaveBeenCalledWith({ clase: "remoto", accion: "habilitar", valor: true });
 
@@ -789,7 +790,7 @@ describe("Ajustes", () => {
         />
       );
       expect((screen.getByRole("checkbox", { name: /Activar la sesión remota/ }) as HTMLInputElement).checked).toBe(true);
-      expect(screen.getByRole("button", { name: "Poner authtoken" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Guardar authtoken" })).toBeTruthy();
       fireEvent.click(screen.getByRole("checkbox", { name: /Activar la sesión remota/ }));
       expect(alRemoto).toHaveBeenLastCalledWith({ clase: "remoto", accion: "habilitar", valor: false });
     });

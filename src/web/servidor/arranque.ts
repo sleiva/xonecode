@@ -6483,17 +6483,19 @@ export function montarRutas(
   };
 
   /**
-   * El authtoken entra por `leerSecreto` —la MISMA puerta que una clave de API— y sale solo hacia
-   * `ngrok config add-authtoken`. Vacío es cancelar: no se llama a nadie ni se dice nada.
+   * El authtoken entra TECLEADO en Ajustes (campo de contraseña, petición suya) o, sin él, por
+   * `leerSecreto` —la MISMA puerta que una clave de API—, y sale solo hacia `guardarAuthtoken`
+   * (`~/.xonecode/ngrok.json`, 0600). Nunca se apunta, ni en `informar` ni en un error, y nunca vuelve
+   * al cliente: lo que vuelve es la MEDIDA (`cuenta`). Vacío es cancelar: no se llama a nadie.
    */
-  const pedirAuthtoken = async (): Promise<void> => {
+  const pedirAuthtoken = async (tecleado?: string): Promise<void> => {
     const guardar = opciones.remoto?.guardarAuthtoken;
     if (guardar === undefined) {
       informar("sesión remota: esta ejecución no puede guardar el authtoken de ngrok");
       return;
     }
     const consola = vestibulo.proyectoAbierto()?.consola.consola ?? vestibulo.consola.consola;
-    const token = (await consola.leerSecreto("authtoken de ngrok: ")).trim();
+    const token = (tecleado ?? (await consola.leerSecreto("authtoken de ngrok: "))).trim();
     if (token === "") return;
     let resultado: { ok: true } | { ok: false; motivo: string };
     try {
@@ -7375,7 +7377,8 @@ export function montarRutas(
         else if (mensaje.accion === "revocar") void sesionRemota.revocar().catch(contar);
         else if (mensaje.accion === "via") atenderViaRemota(mensaje.via);
         else if (mensaje.accion === "dominio") atenderDominioRemoto(mensaje.dominio);
-        else if (mensaje.accion === "authtoken") void pedirAuthtoken().catch(contar);
+        else if (mensaje.accion === "authtoken")
+          void pedirAuthtoken(typeof mensaje.authtoken === "string" ? mensaje.authtoken : undefined).catch(contar);
       }
       respuesta.writeHead(204);
       respuesta.end();

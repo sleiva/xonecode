@@ -1708,7 +1708,9 @@ export type MensajeDelCliente =
   | { clase: "remoto"; accion: "habilitar"; valor: boolean }
   /** Elegir la vía (solo apagada o en error), pedir el authtoken de ngrok (llega por `leerSecreto`) o fijar su dominio. */
   | { clase: "remoto"; accion: "via"; via: "servidor" | "ngrok" }
-  | { clase: "remoto"; accion: "authtoken" }
+  /** Con `authtoken`, el tecleado en Ajustes; sin él, se pide por `leerSecreto`. Es un SECRETO del cable:
+   *  no se apunta, no se devuelve y no sale más que hacia `guardarAuthtoken`. */
+  | { clase: "remoto"; accion: "authtoken"; authtoken?: string }
   | { clase: "remoto"; accion: "dominio"; dominio: string }
   /** Pide lo que la sesión abierta ha tocado, o el parche de un fichero concreto. */
   | { clase: "revision"; ruta?: string }

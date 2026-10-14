@@ -744,6 +744,32 @@ describe("la sesión remota por el túnel de ngrok", () => {
     expect(m.informados.join("\n")).not.toContain(TOKEN);
   });
 
+  it("authtoken TECLEADO en Ajustes: se guarda SIN abrir el diálogo de secreto, se vuelve a medir y no aparece en ningún sitio", async () => {
+    const TOKEN = "2abcDEFghiJKLmno_pqrSTU-tecleado";
+    const m = conTunel();
+    const c = clienteDeMentira();
+    await m.sse(c.peticion, c.respuesta);
+    await vi.waitFor(() => expect(m.medir).toHaveBeenCalledTimes(1));
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "encender" });
+    await vi.waitFor(() => expect(m.puerto.canales).toHaveLength(1));
+    m.puerto.abierta();
+    m.puerto.presencia("m1");
+
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "authtoken", authtoken: ` ${TOKEN} ` });
+    await vi.waitFor(() => expect(m.tokens).toEqual([TOKEN]));
+    await vi.waitFor(() => expect(m.medir).toHaveBeenCalledTimes(2));
+    expect(c.recibidos.some((x) => x.clase === "secreto")).toBe(false);
+
+    // Vacío es cancelar, también tecleado: no se llama a nadie.
+    await enviarMensaje(m.accion, { clase: "remoto", accion: "authtoken", authtoken: "   " });
+    for (let i = 0; i < 5; i++) await asentar();
+    expect(m.tokens).toEqual([TOKEN]);
+
+    expect(JSON.stringify(c.recibidos)).not.toContain(TOKEN);
+    expect(JSON.stringify(m.puerto.enviados)).not.toContain(TOKEN);
+    expect(m.informados.join("\n")).not.toContain(TOKEN);
+  });
+
   it("authtoken: un motivo de fallo que no es nuestro no cruza tal cual", async () => {
     const m = conTunel();
     const c = clienteDeMentira();

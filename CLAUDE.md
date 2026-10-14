@@ -979,7 +979,7 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   mayor que la última); lo que SALE se cifra y se manda también en cola, en el orden de llamada, por la misma razón vista
   desde el móvil. Revocar no anuncia el apagado de en medio. Un error cruza el cable solo como `code` de Node o texto FIJO nuestro, nunca lo que diga el relé.
   La `url` con el secreto en el fragmento es el TERCER secreto del cable, tras `leerSecreto` y el `codigo` de
-  `motorLocal`. **Límites declarados**: quien tiene la URL controla la sesión hasta «Revocar» o «Apagar»; y con la sesión
+  `motorLocal`; el cuarto es el authtoken de ngrok tecleado en Ajustes. **Límites declarados**: quien tiene la URL controla la sesión hasta «Revocar» o «Apagar»; y con la sesión
   encendida, los actos y las aprobaciones —contenido de ficheros y diffs incluidos, y las rutas que el modelo escriba—
   SALEN de la máquina, cifrados de punta a punta, hacia el relé y el móvil.
   **Y un PANEL en la web móvil** (`core/panorama.ts#componerPanorama`, mensaje `panorama`): las consolas de persona
@@ -1009,8 +1009,10 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   canal y al cerrar la consola, ANTES que el puente; pero DESPUÉS de que el canal cierre (`CanalRemoto.cerrar` es una
   promesa, con tope `TOPE_DE_CIERRE_MS`): el «cerrada» del relé al móvil viaja por el MISMO túnel. Un encender tras apagar
   espera a que el ngrok anterior termine de cerrarse. ngrok no hereda las claves de proveedor (`entornoDeShell`). **El
-  authtoken entra por `leerSecreto` y va a `ngrok config add-authtoken`** por `execFile` sin shell: nunca en un fichero
-  nuestro ni en un log, y «con cuenta» se MIDE en la configuración que nombra `ngrok config check`. Lo que diga ngrok no
+  authtoken se TECLEA en Ajustes → Sesión remota** (campo de contraseña; la acción `authtoken` lo lleva en `authtoken`,
+  CUARTO secreto del cable) o, sin él, por `leerSecreto`, y se guarda en `~/.xonecode/ngrok.json` (0600,
+  `guardarAuthtoken`): nunca en un log, nunca de vuelta al cliente —vuelve la MEDIDA, `cuenta`— y el campo se vacía al
+  mandarlo. Lo que diga ngrok no
   cruza: solo un texto de `MOTIVOS_DEL_TUNEL`, elegido por el código `ERR_NGROK_…` (108 y 334 son «otro ngrok de tu cuenta
   abierto», no un authtoken malo). Instalarlo es una receta del corredor de Dispositivos (macOS con `brew`; Windows y
   Linux, guía sin botón) que no sale en la pestaña de aparatos, y al acabar se vuelve a medir solo ngrok. **Límites
