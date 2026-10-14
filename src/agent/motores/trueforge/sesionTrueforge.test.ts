@@ -830,6 +830,66 @@ describe("una sesión con el motor TrueForge", () => {
     expect(lineas.join("\n")).toMatch(/el verificador no ha corrido en este turno \(esta ejecución no tiene verificador\)/);
   }, 30_000);
 
+  it("un turno que solo escribió DOCUMENTACIÓN no se verifica ni avisa de que no se verificó (IXCODE-27)", async () => {
+    const raiz = proyecto();
+    const { m } = modelosConGuion(
+      guionDeEscritura().map((g) =>
+        g.map((c) =>
+          c.tool_call_chunks?.[0]?.name === "write_file"
+            ? new AIMessageChunk({
+                content: "Escribo la nota.",
+                tool_call_chunks: [{ index: 0, id: "w1", name: "write_file", args: JSON.stringify({ file_path: "/doc/NOTA.md", content: "# Nota\n" }) }],
+              })
+            : c
+        )
+      )
+    );
+    let verificaciones = 0;
+    const s = await abrirSesionTrueforge({
+      raiz,
+      modelos: m,
+      entorno: ENTORNO,
+      skills: CATALOGO,
+      sinAprobacion: () => true,
+      verifier: {
+        verificar: async () => {
+          verificaciones++;
+          throw new Error("xone-simulator no está instalado en esta máquina (ENOENT)");
+        },
+      },
+    });
+    const lineas: string[] = [];
+    const r = await s.turno("documenta la app", { ...piel().p, linea: (t) => void lineas.push(t) });
+    expect(readFileSync(join(raiz, "doc", "NOTA.md"), "utf8")).toBe("# Nota\n");
+    expect(verificaciones).toBe(0);
+    expect(r.verificador).toBe("no-corrio");
+    expect(r.motivoSinVerificar).toMatch(/solo escribió documentación/);
+    expect(lineas.join("\n")).not.toMatch(/verificar|verificador/);
+  }, 30_000);
+
+  it("sin el simulador, el aviso dice que lo escrito SÍ está en el disco, y no se repite al cerrar (IXCODE-27)", async () => {
+    const raiz = proyecto();
+    const s = await abrirSesionTrueforge({
+      raiz,
+      modelos: modelos(),
+      entorno: ENTORNO,
+      skills: CATALOGO,
+      sinAprobacion: () => true,
+      verifier: {
+        verificar: async () => {
+          throw new Error("xone-simulator no está instalado en esta máquina (ENOENT)");
+        },
+      },
+    });
+    const lineas: string[] = [];
+    const r = await s.turno("escribe una nota", { ...piel().p, linea: (t) => void lineas.push(t) });
+    expect(r.verificador).toBe("no-corrio");
+    const todo = lineas.join("\n");
+    expect(todo).toContain("no se pudo verificar el proyecto: xone-simulator no está instalado en esta máquina (ENOENT)");
+    expect(todo).toContain("Lo escrito sí está en el disco");
+    expect(todo).not.toMatch(/el verificador no ha corrido/);
+  }, 30_000);
+
   it("`abrirSesionReal` le PASA el verificador a TrueForge: es la puerta de todas las pieles", async () => {
     const raiz = proyecto();
     let verificaciones = 0;

@@ -33,6 +33,7 @@
  * `Tarea.autorizadas`, así que se llama `revisable`.
  */
 import type { HallazgoDelTurno } from "./events.js";
+import { extensionDe } from "./planDeSubida.js";
 
 /**
  * Cómo acabó el verificador en el turno, con TRES valores y no un booleano.
@@ -42,6 +43,19 @@ import type { HallazgoDelTurno } from "./events.js";
  * encuentra en el PATH y otro se cortó antes de llegar — y ninguno de los tres es verde.
  */
 export type EstadoDeVerificador = "verde" | "rojo" | "no-corrio";
+
+/**
+ * Lo que el simulador NO comprueba: documentación. Un `.md` no es parte de la app XOne y `xone-simulator validate`
+ * mira la app, así que verificar un turno que solo dejó documentación ni dice nada de lo escrito ni puede fallar por
+ * ello — y sin el binario en la máquina tumbaba un turno que había escrito bien (IXCODE-27). LISTA BLANCA y corta a
+ * propósito: lo que no esté aquí se sigue verificando, que es el lado seguro.
+ */
+export const EXTENSIONES_DE_DOCUMENTACION: ReadonlySet<string> = new Set([".md", ".markdown"]);
+
+/** ¿Son TODAS las rutas documentación? Con alguna ruta: una lista vacía no es «solo documentación», es nada. */
+export function soloDocumentacion(rutas: readonly string[]): boolean {
+  return rutas.length > 0 && rutas.every((r) => EXTENSIONES_DE_DOCUMENTACION.has(extensionDe(r)));
+}
 
 /**
  * Lo que un TURNO puede decir de sí mismo, y que hasta ahora se tiraba.
@@ -185,7 +199,7 @@ export interface VeredictoDeTarea {
    * «el motivo vive SOLO en el estado que lo explica») y este es el único sitio que
    * sobrevive a una entrega.
    *
-   * Hoy la única es `SALVEDAD_SIN_ESCRITURAS`. Una entrega con una condición menos no puede
+   * Hoy son `SALVEDAD_SIN_ESCRITURAS` y `SALVEDAD_SOLO_DOCUMENTACION`. Una entrega con una condición menos no puede
    * parecer una entrega normal — y eso solo es cierto porque este campo VIAJA: el veredicto
    * entero sale por el cable (`web/servidor/transporte.ts#filaDeTarea`) y lo pinta
    * `apps/web/src/componentes/EntregaDeTarea.tsx`. Estuvo un tiempo sin cablearse, y
@@ -254,6 +268,10 @@ export const SALVEDAD_SIN_ESCRITURAS =
   "el turno no cambió ningún fichero, así que no había nada que verificar: la entrega va " +
   "solo con la valoración del juez";
 
+export const SALVEDAD_SOLO_DOCUMENTACION =
+  "el turno solo cambió documentación, que el verificador de XOne no comprueba: la entrega va " +
+  "solo con la valoración del juez";
+
 /**
  * Las tres condiciones que comprueba el CÓDIGO. Pura.
  *
@@ -299,7 +317,14 @@ export function condicionesDeEntrega(medida: MedidaDeEntrega): Entrega {
     );
   }
   const nadaQueVerificar = medida.escribio === false && !nadaAterrizo;
-  if (nadaQueVerificar) {
+  /**
+   * **Ni cuando solo se escribió DOCUMENTACIÓN, según git** (`soloDocumentacion` sobre `cambiados`, IXCODE-27): el
+   * simulador mira la app y un `.md` no es de la app, así que su veredicto —o que no corriera— no dice nada de lo que
+   * hizo la tarea. Se DICE con su propia salvedad. Sale del diff de git y no del turno: es el hecho, no la intención.
+   */
+  const soloDocs =
+    !nadaQueVerificar && medida.escribio === true && medida.cambiados !== undefined && soloDocumentacion(medida.cambiados);
+  if (nadaQueVerificar || soloDocs) {
     // Nada. Las otras dos condiciones siguen enteras: unas escrituras que quedaron
     // esperando aprobación son escrituras que el turno quiso hacer y no hizo, y sin marca de
     // git no se puede afirmar que no escribiera nada — ese caso no llega aquí.
@@ -327,7 +352,10 @@ export function condicionesDeEntrega(medida: MedidaDeEntrega): Entrega {
     fallos.push("no se puede revisar lo que ha escrito: la sesión no dejó marca de git con la que comparar");
   }
   if (fallos.length === 0) {
-    return { entregable: true, ...(nadaQueVerificar ? { salvedad: SALVEDAD_SIN_ESCRITURAS } : {}) };
+    return {
+      entregable: true,
+      ...(nadaQueVerificar ? { salvedad: SALVEDAD_SIN_ESCRITURAS } : soloDocs ? { salvedad: SALVEDAD_SOLO_DOCUMENTACION } : {}),
+    };
   }
   return { entregable: false, motivo: fallos.join("; ") };
 }

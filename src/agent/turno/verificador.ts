@@ -70,8 +70,13 @@ export class SimuladorVerifier implements VerifierPort {
     try {
       ({ stdout } = await ejecutar(this.binario, ["validate", rutaProyecto, "--json"]));
     } catch (e) {
-      const conSalida = e as { stdout?: string };
-      if (!conSalida.stdout) throw e; // el binario no está, o reventó de verdad
+      const conSalida = e as { stdout?: string; code?: unknown };
+      // Que el binario no esté se dice con su nombre y su `code`, nunca con el mensaje de Node, que lleva rutas: lo que
+      // llegaba al chat era «spawn xone-simulator ENOENT», que no dice que falta un programa (IXCODE-27).
+      if (!conSalida.stdout && conSalida.code === "ENOENT") {
+        throw new ErrorDelSimulador(`${this.binario} no está instalado en esta máquina (ENOENT)`);
+      }
+      if (!conSalida.stdout) throw e; // reventó de verdad
       stdout = conSalida.stdout;      // salió != 0 porque HAY hallazgos: es el resultado
     }
     return aInforme(JSON.parse(stdout) as SalidaDelSimulador);

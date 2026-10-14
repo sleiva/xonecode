@@ -824,7 +824,11 @@ detiene.
 
 - **Cosido al FINAL del flujo, no después del turno** (`correrTurno` cierra en su `finally`).
 - **Solo la ronda FINAL**, la que termina sin escrituras pendientes.
-- **Solo si el turno tocó ficheros del PROYECTO** — `.xonecode/` no cuenta. El aviso «no ha
+- **Solo si el turno tocó ficheros del PROYECTO** — `.xonecode/` no cuenta. **En TrueForge, tampoco un turno que solo
+  dejó documentación** (`core/entrega.ts#soloDocumentacion`, `.md`, lista BLANCA): el simulador mira la app, y sin él en
+  la máquina un `.md` bien escrito cerraba con «no se pudo verificar» (IXCODE-27). La entrega de una tarea lo decide con
+  el diff de git (`cambiados`) y lo DICE con `SALVEDAD_SOLO_DOCUMENTACION`; el juez lo sabe. Y que falte el binario se
+  dice como «no está instalado» y que lo escrito SÍ está en el disco, una vez. El aviso «no ha
   corrido» solo sale si escribió y aun así no se verificó, con el motivo.
 - **Los hallazgos se REPARTEN** entre los ficheros del turno (fichero RELATIVO y línea, nunca
   contenido) y `preexistentes`. Uno sin fichero va con los del turno. Un hallazgo no atribuye

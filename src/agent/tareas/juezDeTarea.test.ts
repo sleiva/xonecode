@@ -329,6 +329,12 @@ describe("el prompt lleva los HECHOS y nunca contenido de ficheros", () => {
     await juez.juzgar({ encargo: "x", raiz: RAIZ, autorizadas: [], verificador: "no-corrio" });
     expect(prompt).toContain("NO HA CORRIDO");
   });
+
+  it("si solo cambió documentación, que no corriera NO es una sospecha, y se le dice (IXCODE-27)", async () => {
+    const prompt = await promptDe({ encargo: "documenta", raiz: RAIZ, autorizadas: ["doc/LEEME.md"], cambiados: ["doc/LEEME.md"], verificador: "no-corrio" });
+    expect(prompt).not.toContain("NO HA CORRIDO");
+    expect(prompt).toContain("solo cambió documentación");
+  });
 });
 
 describe("el texto del modelo se ACOTA antes de guardarse", () => {

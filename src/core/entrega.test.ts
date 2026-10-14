@@ -5,6 +5,8 @@ import {
   medidaDeEntrega,
   motivoDeTopeAgotado,
   SALVEDAD_SIN_ESCRITURAS,
+  SALVEDAD_SOLO_DOCUMENTACION,
+  soloDocumentacion,
   type MedidaDeEntrega,
 } from "./entrega.js";
 
@@ -175,6 +177,43 @@ describe("medidaDeEntrega: ausente NO es vacío", () => {
  * aplica** en vez de fallar. Lo que sostiene que esto no sea un agujero son tres cosas, y
  * las tres tienen test aquí.
  */
+describe("solo documentación: el verificador no APLICA (IXCODE-27)", () => {
+  it("soloDocumentacion: todas .md, con alguna ruta; lo demás se sigue verificando", () => {
+    expect(soloDocumentacion(["doc/LEEME.md", "doc/Guia.MARKDOWN"])).toBe(true);
+    expect(soloDocumentacion(["doc/LEEME.md", "Inicio.xne"])).toBe(false);
+    expect(soloDocumentacion(["notas.txt"])).toBe(false);
+    expect(soloDocumentacion([])).toBe(false);
+  });
+
+  it("una tarea que solo cambió documentación, según git, se entrega sin verificador y lo DICE", () => {
+    const medida: MedidaDeEntrega = {
+      verificador: "no-corrio",
+      pendientes: 0,
+      revisable: true,
+      escribio: true,
+      cambiados: ["doc/LEEME.md"],
+      motivoSinVerificar: "el turno solo escribió documentación, que el verificador de XOne no comprueba",
+    };
+    expect(condicionesDeEntrega(medida)).toEqual({ entregable: true, salvedad: SALVEDAD_SOLO_DOCUMENTACION });
+  });
+
+  it("con un fichero de la app entre los cambiados, el verificador se exige como siempre", () => {
+    const medida: MedidaDeEntrega = {
+      verificador: "no-corrio",
+      pendientes: 0,
+      revisable: true,
+      escribio: true,
+      cambiados: ["doc/LEEME.md", "Inicio.xne"],
+    };
+    expect(condicionesDeEntrega(medida).entregable).toBe(false);
+  });
+
+  it("sin saber QUÉ cambió (sin `cambiados`), tampoco se relaja", () => {
+    const medida: MedidaDeEntrega = { verificador: "no-corrio", pendientes: 0, revisable: true, escribio: true };
+    expect(condicionesDeEntrega(medida).entregable).toBe(false);
+  });
+});
+
 describe("cuando el turno no escribió nada, el verificador no APLICA", () => {
   it("un turno sin escrituras se entrega aunque el verificador no corriera", () => {
     const medida: MedidaDeEntrega = {

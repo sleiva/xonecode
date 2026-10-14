@@ -80,3 +80,15 @@ describe("la forma de FALLO del simulador", () => {
     expect(r).toEqual({ verde: true, hallazgos: [] });
   });
 });
+
+describe("SimuladorVerifier sin el binario (IXCODE-27)", () => {
+  it("dice que el programa no está instalado, con su nombre y el `code`, sin el mensaje de Node", async () => {
+    const v = new SimuladorVerifier("xone-simulator-que-no-existe-ixcode-27");
+    const fallo = await v.verificar("/no/importa").then(
+      () => undefined,
+      (e: unknown) => e
+    );
+    expect(fallo).toBeInstanceOf(ErrorDelSimulador);
+    expect((fallo as Error).message).toBe("xone-simulator-que-no-existe-ixcode-27 no está instalado en esta máquina (ENOENT)");
+  });
+});

@@ -23,6 +23,7 @@
  */
 import { anotarError } from "../../core/trazaDeErrores.js";
 import type { CasoDeJuez, JuezDeTareaPort, ModelosPort, Papel } from "../../core/ports.js";
+import { soloDocumentacion } from "../../core/entrega.js";
 import type { HallazgoDelTurno } from "../../core/events.js";
 import type { VeredictoDeTarea } from "../../core/entrega.js";
 import { textoDe } from "../turno/puente.js";
@@ -185,6 +186,13 @@ const parrafoDeLoVisual = (caso: CasoDeJuez): string[] =>
 
 const parrafoDelVerificador = (caso: CasoDeJuez): string[] => {
   if (caso.verificador === undefined) return [];
+  if (caso.verificador === "no-corrio" && caso.cambiados !== undefined && soloDocumentacion(caso.cambiados)) {
+    // Solo documentación, según git (IXCODE-27): el simulador no la comprueba, así que no correr no es una sospecha.
+    return [
+      "El verificador de XOne (xone-simulator) no ha corrido porque este turno solo cambió documentación, que no",
+      "comprueba. No es un fallo: juzga la documentación por lo que dice.",
+    ];
+  }
   if (caso.verificador === "no-corrio") {
     return [
       "El verificador de XOne (xone-simulator) NO HA CORRIDO en este turno, así que nadie ha",

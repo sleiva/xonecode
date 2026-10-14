@@ -104,7 +104,7 @@ import { encenderTrazaDeErrores } from "../../trazaDeErroresEnDisco.js";
 import { anotarPaso } from "../../../core/trazaDeErrores.js";
 import { entornoConDepuracion } from "../../turno/depuracion.js";
 import { detalleDe, parametrosDe } from "../../turno/resumenDeTool.js";
-import { lineaDeComprobacion, TOPE_DE_COMPROBACIONES_AL_JUEZ } from "../../../core/entrega.js";
+import { lineaDeComprobacion, soloDocumentacion, TOPE_DE_COMPROBACIONES_AL_JUEZ } from "../../../core/entrega.js";
 import { apartarMemoria, cargarMemoria, fotoSaneada, guardarMemoria, saldarColgadas, textoDeInterrupcion, textoDeMemoriaDescartada, type FotoDeHilo } from "./memoriaTrueforge.js";
 import { crearNota, sobrantes, type Nota } from "./notas.js";
 import { crearMemoriaDeEspecialistas } from "./memoriaDeEspecialistas.js";
@@ -1684,6 +1684,10 @@ export async function abrirSesionTrueforge(
       let preexistentesDelTurno: number | undefined;
       let motivoSinVerificar: string | undefined;
       let escribioProyecto = false;
+      /** El turno solo dejó documentación (`core/entrega.ts#soloDocumentacion`): el simulador no tiene nada que mirar. */
+      let soloDocs = false;
+      /** El fallo del simulador ya se dijo al cerrar: el aviso del final no lo repite. */
+      let sinVerificarDicho = false;
 
       /**
        * Las RONDAS de una petición: una pausa termina la ronda y se reanuda con las decisiones.
@@ -1930,6 +1934,13 @@ export async function abrirSesionTrueforge(
             motivoSinVerificar = "el turno no escribió ningún fichero del proyecto";
             return;
           }
+          // Un turno que solo escribió documentación no se verifica (IXCODE-27): el simulador mira la app, no un `.md`,
+          // y sin el binario en la máquina un turno que había escrito bien cerraba con «no se pudo verificar».
+          if (soloDocumentacion(cambios.map((c) => c.ruta))) {
+            soloDocs = true;
+            motivoSinVerificar = "el turno solo escribió documentación, que el verificador de XOne no comprueba";
+            return;
+          }
           if (opciones.verifier === undefined) {
             motivoSinVerificar = "esta ejecución no tiene verificador";
             return;
@@ -1941,7 +1952,14 @@ export async function abrirSesionTrueforge(
           } catch (e) {
             // Que no esté el binario NO es un fallo del proyecto, y se dice como tal.
             motivoSinVerificar = e instanceof Error ? e.message : String(e);
-            yield { tipo: "aviso", texto: `⚠ no se pudo verificar: ${motivoSinVerificar}`, severidad: "aviso" };
+            sinVerificarDicho = true;
+            // Lo escrito SÍ está en el disco, y se dice: sin eso «no se pudo verificar» se leía como que la escritura
+            // había fallado (IXCODE-27), y la persona pedía repetirla.
+            yield {
+              tipo: "aviso",
+              texto: `⚠ no se pudo verificar el proyecto: ${motivoSinVerificar}. Lo escrito sí está en el disco; lo que falta es comprobarlo`,
+              severidad: "aviso",
+            };
             return;
           }
           motivoSinVerificar = undefined;
@@ -2069,7 +2087,7 @@ export async function abrirSesionTrueforge(
                   // hacía—, pero tampoco se pierde en silencio: se dice, con su texto, para copiarlo.
                   [`⏹ turno parado: no se manda lo que escribiste mientras trabajaba — «${sinLeerDelTurno()}»`]
                 : [`⚠ una nota no se pudo entregar a tiempo: se manda como el turno siguiente`]),
-            ...(b.corrio("verify") || !escribioProyecto
+            ...(b.corrio("verify") || !escribioProyecto || soloDocs || sinVerificarDicho
               ? []
               : [`⚠ el verificador no ha corrido en este turno${motivoSinVerificar === undefined ? "" : ` (${motivoSinVerificar})`}`]),
             ...(aplicadasSinPreguntar.length === 0
