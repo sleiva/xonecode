@@ -60,16 +60,32 @@
 
 /* El mensaje de la persona, COMO EN UN REGISTRO (rediseño del chat, tablero D del lienzo
    «XOneCode · propuesta visual», petición suya): avatar a la izquierda, «Tú · hora» encima y el
-   texto debajo, sin burbuja. Antes era la única burbuja de la pantalla, a la derecha; ahora la
-   persona y el agente se leen en la MISMA columna, y quién habla lo dice el autor, no el lado.
+   texto debajo. Antes era una burbuja a la derecha; ahora la persona y el agente se leen en la
+   MISMA columna, y quién habla lo dice el autor, no el lado.
+   Y en una TARJETA a todo el ancho de la columna (tablero H2, elegido por él): avatar, «Tú ·
+   hora», copiar y el texto, todo dentro, sobre una capa por encima del chat y con el borde que se
+   ve. La petición es lo que manda en el turno, y sin recinto se leía como una línea más entre las
+   del agente. Sin filete de color: la separa la superficie, no un acento. El texto cae bajo «Tú»,
+   a la sangría que pone la propia rejilla (avatar + hueco).
    `margin-bottom: 0` se queda por lo de siempre: el ÚNICO mecanismo del hueco es la variable. */
 .usuario {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);
-  column-gap: 12px;
+  column-gap: 10px;
   margin-bottom: 0;
   align-self: stretch;
+  box-sizing: border-box;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
+}
+
+/* La cabecera dentro de la tarjeta mide lo que el avatar, para que «Tú · hora» y el botón de
+   copiar queden centrados con él en la misma fila. */
+.usuario .autor {
+  min-height: 28px;
 }
 
 /* El bloque del agente: la misma rejilla, con el avatar solo en la primera pieza del turno. */

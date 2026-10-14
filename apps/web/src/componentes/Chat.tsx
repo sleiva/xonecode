@@ -1347,7 +1347,9 @@ export function Chat({
                 >
                   {/* El rediseño del chat (tablero D): la persona habla como en un registro, con
                       su avatar y «Tú · hora» encima, y no en una burbuja a la derecha. El avatar
-                      es un icono y no una inicial: el nombre de quien escribe no viaja aquí. */}
+                      es un icono y no una inicial: el nombre de quien escribe no viaja aquí. Y el
+                      bloque entero es una TARJETA (tablero H2): la petición es lo que manda en el
+                      turno, y sin recinto se leía como una línea más entre las del agente. */}
                   <span className={estilos.columnaDelAvatar} aria-hidden="true">
                     <span className={estilos.avatarDeLaPersona}>
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
