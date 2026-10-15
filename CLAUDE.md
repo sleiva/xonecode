@@ -912,7 +912,10 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   (`agent/tareas/sondeoDelGestor.ts`, decisión pura en `accionesDelSondeo`) corre SOLO en el proceso que ejecuta las
   tareas, cada `INTERVALO_DE_SONDEO_MS` (5 min) y con «Mirar ahora». Preparar sube el encargo ampliado como comentario
   con `CABECERA_DEL_ENCARGO`; lanzar usa el ÚLTIMO de esos comentarios tal como esté y lo comentado debajo
-  (`encargoDeLosComentarios`). Volver a vincular el MISMO proyecto conserva el mapeo.
+  (`encargoDeLosComentarios`). **Revisar el encargo es OPCIONAL y viene apagado** (`revisarEncargo`, decisión suya):
+  apagado, el ticket de preparar se prepara y se LANZA en la misma pasada con el encargo recién subido, y es xonecode
+  quien lo mueve al empezar; encendido, espera a que la persona lo mueva al de lanzar. Volver a vincular el MISMO
+  proyecto conserva el mapeo.
 - **«En curso» y «Finalizadas»: las terminadas son un HISTÓRICO de solo lectura** (`TareasDelProyecto.tsx#FilaFinalizada`):
   sin acciones, FUERA de la barra de sesiones (salvo la abierta), la más reciente arriba, «empezó … · acabó …» (nunca «tardó»: cuenta la pausa), lo último que contestó
   el agente —pedido al desplegar con `leerSesion`, nunca en la cola— y su conversación abierta para LEER con el motivo

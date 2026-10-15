@@ -166,15 +166,29 @@ describe("accionesDelSondeo", () => {
       estados,
       conEncargo: new Set(["MAS-2"]),
       conTarea: new Set(["MAS-4"]),
+      revisarEncargo: true,
     });
     expect(acciones.map((a) => [a.tipo, a.ticket.clave])).toEqual([
       ["preparar", "MAS-1"],
       ["lanzar", "MAS-3"],
     ]);
   });
+
+  it("SIN revisar (lo de omisión), el de preparar se LANZA, preparándolo antes si no tiene encargo", () => {
+    const acciones = accionesDelSondeo({
+      tickets: [t("MAS-1", "Por hacer"), t("MAS-2", "Por hacer"), t("MAS-4", "Por hacer")],
+      estados,
+      conEncargo: new Set(["MAS-2"]),
+      conTarea: new Set(["MAS-4"]),
+    });
+    expect(acciones.map((a) => [a.tipo, a.ticket.clave, a.tipo === "lanzar" ? a.preparar === true : undefined])).toEqual([
+      ["lanzar", "MAS-1", true],
+      ["lanzar", "MAS-2", false],
+    ]);
+  });
   it("sin estado de lanzar no lanza nada; sin el de preparar no prepara", () => {
     expect(accionesDelSondeo({ tickets: [t("A-1", "En curso")], estados: { preparar: "Por hacer" }, conEncargo: new Set(), conTarea: new Set() })).toEqual([]);
-    expect(accionesDelSondeo({ tickets: [t("A-1", "Por hacer")], estados: { lanzar: "En curso" }, conEncargo: new Set(), conTarea: new Set() })).toEqual([]);
+    expect(accionesDelSondeo({ tickets: [t("A-1", "Por hacer")], estados: { lanzar: "En curso" }, conEncargo: new Set(), conTarea: new Set(), revisarEncargo: true })).toEqual([]);
   });
 });
 

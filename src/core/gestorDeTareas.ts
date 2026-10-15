@@ -39,6 +39,12 @@ export interface VinculoGuardado extends Vinculo {
   estados?: MapeoDeEstados;
   /** Si los tickets de este proyecto DISPARAN tareas solos (la puerta 2). Ausente o `false`: no. Apagado por omisión. */
   automatico?: boolean;
+  /**
+   * Si, con el disparo encendido, el encargo ampliado ESPERA a que la persona lo revise y mueva el ticket al estado de
+   * lanzar. Ausente o `false` (lo de omisión, decisión suya): se prepara y se lanza en la MISMA pasada, y es xonecode
+   * quien mueve el ticket al empezar.
+   */
+  revisarEncargo?: boolean;
 }
 
 /** El mapeo de estados: el NOMBRE del estado, tal como lo da el gestor. Cada papel es opcional. */

@@ -3475,7 +3475,8 @@ export function App({
                   if (r?.status === 200) return (await r.json()) as { lista: EstadoDelGestor[]; propuesto: MapeoDeEstados; actual?: MapeoDeEstados };
                   return { motivo: (await negativaOFalloDe(r)) ?? "el servidor no contestó" };
                 },
-                alGuardar: async (estados, automatico) => negativaOFalloDe(await enviar({ clase: "gestor", accion: "ajustarVinculo", estados, automatico })),
+                alGuardar: async (estados, automatico, revisarEncargo) =>
+                  negativaOFalloDe(await enviar({ clase: "gestor", accion: "ajustarVinculo", estados, automatico, revisarEncargo })),
               }}
               // La pestaña Sincronización: solo con copia, que es el proyecto que sincroniza.
               {...(identidadDelActivo === undefined ? {} : { sincronizacion: pestanaDeSincronizacion })}

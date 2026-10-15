@@ -41,8 +41,10 @@ function montar(o: { tickets: FichaDelGestor[]; copia?: CopiaConGestor; comentar
 }
 
 describe("el sondeo del gestor (puerta 2)", () => {
-  it("PREPARA el que está en preparar sin encargo: amplía con su texto y lo sube con la cabecera, sin moverlo", async () => {
-    const { gestor, sondeo, cola, aumentadas } = montar({ tickets: [ficha("MAS-2", "Por hacer")] });
+  const REVISANDO: CopiaConGestor = { ...COPIA, vinculo: { ...COPIA.vinculo, revisarEncargo: true } };
+
+  it("con «revisar el encargo», PREPARA el de preparar: amplía, lo sube con la cabecera y NO lo lanza ni lo mueve", async () => {
+    const { gestor, sondeo, cola, aumentadas } = montar({ tickets: [ficha("MAS-2", "Por hacer")], copia: REVISANDO });
     const r = await sondeo.mirar();
     expect(r.preparadas).toEqual(["MAS-2"]);
     expect(aumentadas[0]).toBe("Título de MAS-2\n\nDescripción de MAS-2");
@@ -51,8 +53,31 @@ describe("el sondeo del gestor (puerta 2)", () => {
     expect(cola()).toEqual([]);
   });
 
+  it("SIN revisar (lo de omisión): prepara Y lanza en la misma pasada, con el encargo recién subido", async () => {
+    const { gestor, sondeo, cola } = montar({ tickets: [ficha("MAS-2", "Por hacer")] });
+    const r = await sondeo.mirar();
+    expect(r.preparadas).toEqual(["MAS-2"]);
+    expect(r.lanzadas).toEqual(["MAS-2"]);
+    expect(gestor.comentariosAplicados).toHaveLength(1);
+    expect(cola()[0]!.encargo).toBe("ENCARGO AMPLIADO de: Título de MAS-2");
+    // Y no lo vuelve a preparar ni a lanzar en la siguiente.
+    const otra = await sondeo.mirar();
+    expect([otra.preparadas, otra.lanzadas]).toEqual([[], []]);
+  });
+
+  it("SIN revisar, uno de preparar que YA tiene encargo se lanza con él, sin subir otro", async () => {
+    const { gestor, sondeo, cola } = montar({
+      tickets: [ficha("MAS-2", "Por hacer")],
+      comentarios: { "MAS-2": [{ texto: comentarioDeEncargo("El de antes"), creado: "2026-10-15T10:00:00Z" }] },
+    });
+    expect((await sondeo.mirar()).lanzadas).toEqual(["MAS-2"]);
+    expect(gestor.comentariosAplicados).toEqual([]);
+    expect(cola()[0]!.encargo).toBe("El de antes");
+  });
+
   it("no vuelve a preparar uno que ya tiene encargo", async () => {
     const { gestor, sondeo } = montar({
+      copia: REVISANDO,
       tickets: [ficha("MAS-2", "Por hacer")],
       comentarios: { "MAS-2": [{ texto: comentarioDeEncargo("ya está"), creado: "2026-10-15T10:00:00Z" }] },
     });
@@ -101,7 +126,7 @@ describe("el sondeo del gestor (puerta 2)", () => {
   });
 
   it("un ticket que falla no para a los demás, y se cuenta", async () => {
-    const { gestor, sondeo } = montar({ tickets: [ficha("MAS-2", "Por hacer"), ficha("MAS-3", "En curso")] });
+    const { gestor, sondeo } = montar({ tickets: [ficha("MAS-2", "Por hacer"), ficha("MAS-3", "En curso")], copia: REVISANDO });
     gestor.comentar = async () => {
       throw new Error("comentarios cerrados");
     };

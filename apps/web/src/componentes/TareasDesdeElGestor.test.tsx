@@ -16,7 +16,7 @@ describe("TareasDesdeElGestor", () => {
   it("plegado es UNA línea con lo guardado, y no pide nada a la red", () => {
     const alPedirEstados = vi.fn();
     render(<TareasDesdeElGestor vinculo={{ ...VINCULO, estados: { lanzar: "En curso", terminar: "Listo" }, automatico: true }} nombre="Jira" conectado alPedirEstados={alPedirEstados} alGuardar={vi.fn()} />);
-    expect(screen.getByText("Encendido · lanzar en «En curso» · al terminar, «Listo»")).toBeTruthy();
+    expect(screen.getByText("Encendido · lanzar en «En curso» · al terminar, «Listo» · sin revisar el encargo")).toBeTruthy();
     expect(alPedirEstados).not.toHaveBeenCalled();
   });
 
@@ -28,9 +28,11 @@ describe("TareasDesdeElGestor", () => {
     const lanzar = (await screen.findByLabelText(/Lanzar la tarea en/)) as HTMLSelectElement;
     expect(lanzar.value).toBe("En curso");
     fireEvent.change(screen.getByLabelText(/Al terminar, pasar a/), { target: { value: "" } });
-    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("checkbox", { name: /lancen tareas solos/ }));
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
-    await vi.waitFor(() => expect(alGuardar).toHaveBeenCalledWith({ preparar: "Por hacer", lanzar: "En curso" }, true));
+    // La casilla de revisar viene DESMARCADA por omisión.
+    expect((screen.getByRole("checkbox", { name: /Revisar el encargo/ }) as HTMLInputElement).checked).toBe(false);
+    await vi.waitFor(() => expect(alGuardar).toHaveBeenCalledWith({ preparar: "Por hacer", lanzar: "En curso" }, true, false));
   });
 
   it("encender sin estado de lanzar no se puede guardar; y un rechazo del servidor se dice", async () => {
@@ -45,7 +47,7 @@ describe("TareasDesdeElGestor", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Configurar" }));
     await screen.findByLabelText(/Lanzar la tarea en/);
-    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("checkbox", { name: /lancen tareas solos/ }));
     expect((screen.getByRole("button", { name: "Guardar" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(screen.getByLabelText(/Lanzar la tarea en/), { target: { value: "En curso" } });
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));

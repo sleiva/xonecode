@@ -299,6 +299,10 @@ describe("validar", () => {
     expect(malo.avisos.map((a) => a.texto).join(" ")).toMatch(/estados\.preparar.*estados\.terminar|automatico/);
     expect(malo.avisos).toHaveLength(3);
     expect(validar({ gestorDeTareas: { ...v, automatico: false } }, RUTA, "proyecto").config.gestorDeTareas).toEqual(v);
+    expect(validar({ gestorDeTareas: { ...v, revisarEncargo: true } }, RUTA, "proyecto").config.gestorDeTareas).toEqual({ ...v, revisarEncargo: true });
+    const r = validar({ gestorDeTareas: { ...v, revisarEncargo: "sí" } }, RUTA, "proyecto");
+    expect(r.config.gestorDeTareas).toEqual(v);
+    expect(r.avisos[0]!.texto).toContain("revisarEncargo");
   });
 
   it("IXCODE-15: «nombreDelProyecto» se conserva solo como texto no vacío; otra cosa se ignora SIN tirar el vínculo", () => {

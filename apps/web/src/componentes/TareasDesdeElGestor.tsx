@@ -30,7 +30,7 @@ export function TareasDesdeElGestor({
   conectado: boolean;
   alPedirEstados: () => Promise<EstadosDelFlujo>;
   /** Devuelve el motivo si el servidor se negó. */
-  alGuardar: (estados: MapeoDeEstados, automatico: boolean) => Promise<string | undefined>;
+  alGuardar: (estados: MapeoDeEstados, automatico: boolean, revisarEncargo: boolean) => Promise<string | undefined>;
 }) {
   const [abierto, setAbierto] = useState(false);
   const resumen =
@@ -38,7 +38,8 @@ export function TareasDesdeElGestor({
       ? "Sin configurar: los tickets no lanzan tareas."
       : `${vinculo.automatico === true ? "Encendido" : "Apagado"} · lanzar en «${vinculo.estados.lanzar}»` +
         (vinculo.estados.preparar === undefined ? "" : ` · preparar en «${vinculo.estados.preparar}»`) +
-        (vinculo.estados.terminar === undefined ? "" : ` · al terminar, «${vinculo.estados.terminar}»`);
+        (vinculo.estados.terminar === undefined ? "" : ` · al terminar, «${vinculo.estados.terminar}»`) +
+        (vinculo.revisarEncargo === true ? " · revisas el encargo" : " · sin revisar el encargo");
   return (
     <section className={estilos.caja} aria-label={`Tareas en background desde ${nombre}`}>
       <div className={estilos.cabecera}>
@@ -68,12 +69,14 @@ function Editor({
   nombre: string;
   conectado: boolean;
   alPedirEstados: () => Promise<EstadosDelFlujo>;
-  alGuardar: (estados: MapeoDeEstados, automatico: boolean) => Promise<string | undefined>;
+  alGuardar: (estados: MapeoDeEstados, automatico: boolean, revisarEncargo: boolean) => Promise<string | undefined>;
   alCerrar: () => void;
 }) {
   const [flujo, setFlujo] = useState<EstadosDelFlujo | undefined>(undefined);
   const [mapeo, setMapeo] = useState<MapeoDeEstados>(vinculo.estados ?? {});
   const [automatico, setAutomatico] = useState(vinculo.automatico === true);
+  // Desmarcada por omisión (decisión suya): se prepara y se lanza a la vez.
+  const [revisar, setRevisar] = useState(vinculo.revisarEncargo === true);
   const [guardando, setGuardando] = useState(false);
   const [motivo, setMotivo] = useState<string | undefined>(undefined);
 
@@ -105,7 +108,7 @@ function Editor({
   const guardar = async (): Promise<void> => {
     setGuardando(true);
     setMotivo(undefined);
-    const m = await alGuardar(mapeo, automatico).catch(() => "el envío falló");
+    const m = await alGuardar(mapeo, automatico, revisar).catch(() => "el envío falló");
     setGuardando(false);
     if (m === undefined) alCerrar();
     else setMotivo(m);
@@ -139,6 +142,14 @@ function Editor({
           <span className={estilos.ayuda}>{ayuda}</span>
         </label>
       ))}
+      <label className={estilos.interruptor}>
+        <input type="checkbox" checked={revisar} onChange={(e) => setRevisar(e.currentTarget.checked)} />
+        <span>
+          {revisar
+            ? "Revisar el encargo antes de lanzar: se sube como comentario y la tarea arranca cuando muevas el ticket al estado de lanzar."
+            : "Revisar el encargo antes de lanzar (desmarcada: se sube el encargo y la tarea arranca a la vez; xonecode mueve el ticket)."}
+        </span>
+      </label>
       <label className={estilos.interruptor}>
         <input type="checkbox" checked={automatico} onChange={(e) => setAutomatico(e.currentTarget.checked)} />
         <span>{`Que los tickets lancen tareas solos (se mira ${nombre} cada 5 minutos)`}</span>

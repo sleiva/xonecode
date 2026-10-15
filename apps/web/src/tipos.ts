@@ -402,6 +402,8 @@ export interface VinculoDelCable {
   estados?: MapeoDeEstados;
   /** Si los tickets disparan tareas solos (la puerta 2). Ausente = apagado. */
   automatico?: boolean;
+  /** Si el encargo espera a que la persona lo revise y mueva el ticket. Ausente = no: se prepara y se lanza a la vez. */
+  revisarEncargo?: boolean;
 }
 
 /** Redeclarado de `core/gestorDeTareas.ts#MapeoDeEstados`: el nombre del estado de cada papel. */
@@ -1649,7 +1651,7 @@ export type MensajeDelCliente =
   /** Los estados del flujo del proyecto vinculado y el mapeo propuesto, contestados en la respuesta (la puerta 2). */
   | { clase: "gestor"; accion: "estadosDelFlujo" }
   /** Guardar el mapeo de estados y el interruptor del disparo del vínculo (la puerta 2). */
-  | { clase: "gestor"; accion: "ajustarVinculo"; estados: MapeoDeEstados; automatico: boolean }
+  | { clase: "gestor"; accion: "ajustarVinculo"; estados: MapeoDeEstados; automatico: boolean; revisarEncargo?: boolean }
   | { clase: "gestor"; accion: "usarConector"; conector: string; usar: boolean }
   | { clase: "gestor"; accion: "pendientes"; texto?: string; mias?: boolean }
   /** La descripción de una tarea (fila desplegada). De solo LECTURA. */

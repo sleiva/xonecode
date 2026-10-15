@@ -112,7 +112,10 @@ por conector, porque cada proyecto del gestor tiene su flujo).
 | **lanzar** | Un ticket asignado entra aquí y no tiene tarea → crea la tarea en background con el ÚLTIMO comentario de encargo tal como esté (editado por la persona si lo cambió), más lo comentado debajo; sin encargo, con el texto del ticket. | En curso |
 | **terminar** | Al terminar la tarea, comentario de cierre y transición a este estado. | Listo |
 
-Revisar el encargo es moverlo de preparar a lanzar: el gesto que la persona ya hace en su tablero es la orden.
+Revisar el encargo es moverlo de preparar a lanzar: el gesto que la persona ya hace en su tablero es la orden. **Y es
+OPCIONAL, apagado por omisión** (decisión suya, `VinculoGuardado.revisarEncargo`): apagado, el ticket de preparar se
+prepara y se lanza en la MISMA pasada con el encargo recién subido, y xonecode lo mueve al estado de lanzar al
+empezar. Lo que se pierde es leer el encargo antes de que el agente escriba; queda «Parar» en Tareas.
 
 - **El mapeo manda también en la puerta 1**: al empezar, el estado de lanzar; al terminar, el de terminar. Se COPIA al
   ticket de la tarea al crearla (`TicketDeTarea.estados`), la misma regla que el resto del ticket. Sin mapeo, la regla

@@ -48,7 +48,7 @@ export type PestanaDelProyecto = "resumen" | "sincronizacion" | "tareas" | "cone
 /** Lo que el panel necesita para el mapeo de estados y el disparo del vínculo (la puerta 2). Lo resuelve `App`. */
 export interface AjusteDeTareasDesdeElGestor {
   alPedirEstados: () => Promise<EstadosDelFlujo>;
-  alGuardar: (estados: MapeoDeEstados, automatico: boolean) => Promise<string | undefined>;
+  alGuardar: (estados: MapeoDeEstados, automatico: boolean, revisarEncargo: boolean) => Promise<string | undefined>;
 }
 
 /**

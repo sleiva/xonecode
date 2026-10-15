@@ -112,12 +112,20 @@ export function crearSondeoDelGestor(o: OpcionesDelSondeo): SondeoDelGestor {
       // Sin poder leer comentarios no se sabe si ya se preparó: no se prepara (se subiría otra vez en cada pasada).
       for (const t of tickets) conEncargo.add(t.clave);
     }
-    for (const accion of accionesDelSondeo({ tickets, estados, conEncargo, conTarea })) {
+    for (const accion of accionesDelSondeo({ tickets, estados, conEncargo, conTarea, revisarEncargo: v.revisarEncargo === true })) {
       try {
         if (accion.tipo === "preparar") {
-          if (await preparar(proyecto, v, g, accion.ticket)) resultado.preparadas.push(accion.ticket.clave);
+          await preparar(proyecto, v, g, accion.ticket);
+          resultado.preparadas.push(accion.ticket.clave);
         } else {
-          await lanzar(proyecto, v, g, accion.ticket);
+          // Sin revisión: se prepara y se lanza en la misma pasada CON ese encargo (sin releerlo del gestor, que podría no
+          // devolver todavía el comentario recién creado).
+          let recien: string | undefined;
+          if (accion.preparar === true) {
+            recien = await preparar(proyecto, v, g, accion.ticket);
+            resultado.preparadas.push(accion.ticket.clave);
+          }
+          await lanzar(proyecto, v, g, accion.ticket, recien);
           resultado.lanzadas.push(accion.ticket.clave);
         }
       } catch (error) {
@@ -127,21 +135,28 @@ export function crearSondeoDelGestor(o: OpcionesDelSondeo): SondeoDelGestor {
   };
 
   /** Ampliar el encargo y subirlo. Sin aumentador no se prepara (y se dice una vez por pasada en el resultado). */
-  const preparar = async (proyecto: CopiaConGestor["proyecto"], v: VinculoGuardado, g: GestorDeTareasPort, t: TareaDelGestor): Promise<boolean> => {
+  const preparar = async (proyecto: CopiaConGestor["proyecto"], v: VinculoGuardado, g: GestorDeTareasPort, t: TareaDelGestor): Promise<string> => {
     if (o.augmentar === undefined) throw new Error("esta ejecución no puede preparar encargos");
     const ficha = await g.ficha(v, t.clave);
     const encargo = await o.augmentar({ texto: peticionDelTicket(ficha.titulo, ficha.descripcion), proyecto, adjuntos: [] });
     await g.comentar(v, t.clave, comentarioDeEncargo(encargo));
-    o.informar?.(`${t.clave}: encargo preparado y subido para revisar`);
-    return true;
+    o.informar?.(`${t.clave}: encargo preparado y subido`);
+    return encargo;
   };
 
   /** Crear la tarea ligada al ticket, con el último encargo tal como esté en el gestor. */
-  const lanzar = async (proyecto: CopiaConGestor["proyecto"], v: VinculoGuardado, g: GestorDeTareasPort, t: TareaDelGestor): Promise<void> => {
+  const lanzar = async (
+    proyecto: CopiaConGestor["proyecto"],
+    v: VinculoGuardado,
+    g: GestorDeTareasPort,
+    t: TareaDelGestor,
+    /** El encargo recién subido en esta misma pasada (sin revisión): se usa tal cual. */
+    recien?: string
+  ): Promise<void> => {
     const ficha = await g.ficha(v, t.clave);
     const peticion = peticionDelTicket(ficha.titulo, ficha.descripcion);
-    const leido = g.comentarios === undefined ? undefined : encargoDeLosComentarios(await g.comentarios(v, t.clave));
-    const encargo = leido === undefined ? peticion : encargoConAñadidos(leido.encargo, leido.añadidos);
+    const leido = recien !== undefined || g.comentarios === undefined ? undefined : encargoDeLosComentarios(await g.comentarios(v, t.clave));
+    const encargo = recien ?? (leido === undefined ? peticion : encargoConAñadidos(leido.encargo, leido.añadidos));
     const ticket: TicketDeTarea = {
       conector: v.conector,
       sitio: v.sitio,

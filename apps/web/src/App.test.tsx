@@ -2524,7 +2524,7 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Conectores" }));
     fireEvent.click(screen.getByRole("button", { name: "Configurar" }));
     expect(((await screen.findByLabelText(/Lanzar la tarea en/)) as HTMLSelectElement).value).toBe("En curso");
-    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("checkbox", { name: /lancen tareas solos/ }));
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
     await waitFor(() =>
       expect(enviar).toHaveBeenCalledWith({
@@ -2532,6 +2532,7 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
         accion: "ajustarVinculo",
         estados: { preparar: "Por hacer", lanzar: "En curso", terminar: "Listo" },
         automatico: true,
+        revisarEncargo: false,
       })
     );
   });

@@ -11946,6 +11946,11 @@ describe("el gestor de tareas, por el cable", () => {
       // Y lo dice por el cable, para que el panel lo pinte.
       for (let i = 0; i < 50; i++) await asentar();
       expect(t.cliente.recibidos.filter((x) => x.clase === "gestor").at(-1)).toMatchObject({ estado: { vinculo: { estados: { lanzar: "En curso" }, automatico: true } } });
+      // «Revisar el encargo» solo se guarda marcada; desmarcada (lo de omisión) no deja campo.
+      await responder(t.accion, { clase: "gestor", accion: "ajustarVinculo", estados: { lanzar: "En curso" }, automatico: true, revisarEncargo: true });
+      expect(JSON.parse(t.leerConfig()).gestorDeTareas.revisarEncargo).toBe(true);
+      await responder(t.accion, { clase: "gestor", accion: "ajustarVinculo", estados: { lanzar: "En curso" }, automatico: true, revisarEncargo: false });
+      expect(JSON.parse(t.leerConfig()).gestorDeTareas).not.toHaveProperty("revisarEncargo");
       await t.limpiar();
     });
 

@@ -135,8 +135,11 @@ export function esEstado(estado: string, mapeado: string | undefined): boolean {
   return mapeado !== undefined && estado.trim().toLowerCase() === mapeado.trim().toLowerCase();
 }
 
-/** Lo que el sondeo tiene que hacer con un ticket. */
-export type AccionDelSondeo = { tipo: "preparar"; ticket: TareaDelGestor } | { tipo: "lanzar"; ticket: TareaDelGestor };
+/**
+ * Lo que el sondeo tiene que hacer con un ticket. `lanzar` con `preparar` es la casilla «revisar el encargo» APAGADA:
+ * se amplía y se sube el encargo, y en la misma pasada se crea la tarea con él.
+ */
+export type AccionDelSondeo = { tipo: "preparar"; ticket: TareaDelGestor } | { tipo: "lanzar"; ticket: TareaDelGestor; preparar?: true };
 
 /**
  * Qué hacer en una pasada del sondeo, PURO: con los tickets ASIGNADOS a la cuenta del conector, el mapeo, qué tickets
@@ -150,12 +153,21 @@ export function accionesDelSondeo(o: {
   estados: MapeoDeEstados;
   conEncargo: ReadonlySet<string>;
   conTarea: ReadonlySet<string>;
+  /** La casilla «revisar el encargo antes de lanzar». Apagada (lo de omisión): el de preparar se prepara Y se lanza. */
+  revisarEncargo?: boolean;
 }): AccionDelSondeo[] {
   const acciones: AccionDelSondeo[] = [];
   for (const ticket of o.tickets) {
     if (o.conTarea.has(ticket.clave)) continue;
     if (esEstado(ticket.estado, o.estados.lanzar)) acciones.push({ tipo: "lanzar", ticket });
-    else if (esEstado(ticket.estado, o.estados.preparar) && !o.conEncargo.has(ticket.clave)) acciones.push({ tipo: "preparar", ticket });
+    else if (esEstado(ticket.estado, o.estados.preparar)) {
+      const sinEncargo = !o.conEncargo.has(ticket.clave);
+      if (o.revisarEncargo === true) {
+        if (sinEncargo) acciones.push({ tipo: "preparar", ticket });
+      } else {
+        acciones.push({ tipo: "lanzar", ticket, ...(sinEncargo ? { preparar: true as const } : {}) });
+      }
+    }
   }
   return acciones;
 }

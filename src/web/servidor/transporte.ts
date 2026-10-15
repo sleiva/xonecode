@@ -45,7 +45,7 @@ import type { EstadoDeMotorLocal } from "../../core/motoresLocales.js";
  *  lo nombró el gestor (IXCODE-15: en Notion `proyecto` es un `collection://…` que no se lee).
  *  Ausente = no consta. */
 /** El vínculo tal como cruza: con su mapeo de estados y el interruptor del disparo (la puerta 2), que se editan en el panel. */
-export type VinculoDelCable = Vinculo & { nombreDelSitio?: string; nombreDelProyecto?: string; estados?: MapeoDeEstados; automatico?: boolean };
+export type VinculoDelCable = Vinculo & { nombreDelSitio?: string; nombreDelProyecto?: string; estados?: MapeoDeEstados; automatico?: boolean; revisarEncargo?: boolean };
 
 /**
  * El informe de `core/dispositivos.ts`. **La `ruta` de cada herramienta solo cruza para
@@ -1770,7 +1770,7 @@ export type MensajeDelCliente =
   /** Los estados del flujo del proyecto vinculado y el mapeo propuesto, contestados en la respuesta (la puerta 2). */
   | { clase: "gestor"; accion: "estadosDelFlujo" }
   /** Guardar el mapeo de estados y el interruptor del disparo del vínculo (la puerta 2). */
-  | { clase: "gestor"; accion: "ajustarVinculo"; estados: MapeoDeEstados; automatico: boolean }
+  | { clase: "gestor"; accion: "ajustarVinculo"; estados: MapeoDeEstados; automatico: boolean; revisarEncargo?: boolean }
   | { clase: "gestor"; accion: "usarConector"; conector: string; usar: boolean }
   | { clase: "gestor"; accion: "pendientes"; texto?: string; mias?: boolean }
   /** La descripción de una tarea (la fila desplegada del panel). De solo LECTURA. */

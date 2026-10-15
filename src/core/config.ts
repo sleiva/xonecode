@@ -422,6 +422,9 @@ export function validar(
       if (valor.automatico !== undefined && typeof valor.automatico !== "boolean") {
         avisos.push({ texto: `«${ruta}»: «gestorDeTareas.automatico» debe ser true o false; se ignora (queda apagado).`, severidad: "aviso" });
       }
+      if (valor.revisarEncargo !== undefined && typeof valor.revisarEncargo !== "boolean") {
+        avisos.push({ texto: `«${ruta}»: «gestorDeTareas.revisarEncargo» debe ser true o false; se ignora.`, severidad: "aviso" });
+      }
       // `estados`: cada papel, solo si es un texto no vacío. Lo demás se descarta papel a papel, sin el valor.
       const estados: MapeoDeEstados = {};
       if (valor.estados !== undefined) {
@@ -444,6 +447,7 @@ export function validar(
         ...(nombreValido ? { nombreDelProyecto: valor.nombreDelProyecto as string } : {}),
         ...(Object.keys(estados).length > 0 ? { estados } : {}),
         ...(valor.automatico === true ? { automatico: true } : {}),
+        ...(valor.revisarEncargo === true ? { revisarEncargo: true } : {}),
       };
       continue;
     }

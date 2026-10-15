@@ -4560,6 +4560,7 @@ export function montarRutas(
                   ...(nombreProyecto === undefined ? {} : { nombreDelProyecto: nombreProyecto }),
                   ...(vinculo.estados === undefined ? {} : { estados: vinculo.estados }),
                   ...(vinculo.automatico === true ? { automatico: true } : {}),
+                  ...(vinculo.revisarEncargo === true ? { revisarEncargo: true } : {}),
                 },
               }),
           ...(admiteMias === undefined ? {} : { admiteMias }),
@@ -4690,7 +4691,11 @@ export function montarRutas(
             // Volver a vincular el MISMO proyecto del gestor conserva su mapeo de estados y su disparo; otro proyecto
             // tiene otro flujo, y empieza sin ellos (apagado).
             ...(anterior !== undefined && anterior.conector === m.conector && anterior.sitio === m.sitio && anterior.proyecto === m.proyecto
-              ? { ...(anterior.estados === undefined ? {} : { estados: anterior.estados }), ...(anterior.automatico === true ? { automatico: true } : {}) }
+              ? {
+                  ...(anterior.estados === undefined ? {} : { estados: anterior.estados }),
+                  ...(anterior.automatico === true ? { automatico: true } : {}),
+                  ...(anterior.revisarEncargo === true ? { revisarEncargo: true } : {}),
+                }
               : {}),
           };
           if (!guardar(() => guardarGestorDeProyecto(raiz, vinculo))) return;
@@ -7118,7 +7123,8 @@ export function montarRutas(
         respuesta.end(JSON.stringify({ lista, propuesto: mapeoPropuesto(lista), ...(vinculo.estados === undefined ? {} : { actual: vinculo.estados }) }));
         return;
       }
-      const pedido = mensaje as { estados?: unknown; automatico?: unknown };
+      const pedido = mensaje as { estados?: unknown; automatico?: unknown; revisarEncargo?: unknown };
+      if (pedido.revisarEncargo !== undefined && typeof pedido.revisarEncargo !== "boolean") return negar("petición mal formada");
       if (typeof pedido.automatico !== "boolean" || typeof pedido.estados !== "object" || pedido.estados === null) {
         return negar("petición mal formada");
       }
@@ -7131,12 +7137,13 @@ export function montarRutas(
       }
       // Encender el disparo pide saber cuándo LANZAR: sin ese estado no haría nada y parecería roto.
       if (pedido.automatico && estados.lanzar === undefined) return negar("para encender el disparo, elige el estado que lanza la tarea");
-      const { estados: _antes, automatico: _a, ...resto } = vinculo;
+      const { estados: _antes, automatico: _a, revisarEncargo: _r, ...resto } = vinculo;
       try {
         guardarGestorDeProyecto(abierto.raiz, {
           ...resto,
           ...(Object.keys(estados).length === 0 ? {} : { estados }),
           ...(pedido.automatico ? { automatico: true } : {}),
+          ...(pedido.revisarEncargo === true ? { revisarEncargo: true } : {}),
         });
       } catch (error) {
         return negar(`no se pudo guardar en la configuración del proyecto (${codigoDe(error) ?? "su config.json no se puede leer"})`);
