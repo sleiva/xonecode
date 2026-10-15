@@ -18,8 +18,8 @@
  */
 import {
   categoriaDeEstado, jqlDePendientes, motivoDeClaveDeProyecto,
-  type FichaDelGestor, type GestorDeTareasPort, type NuevaTareaEnElGestor, type OpcionesDePendientes, type TareaDelGestor,
-  type TransicionDelGestor, type Vinculo,
+  type ComentarioDelGestor, type EstadoDelGestor, type FichaDelGestor, type GestorDeTareasPort, type NuevaTareaEnElGestor,
+  type OpcionesDePendientes, type TareaDelGestor, type TransicionDelGestor, type Vinculo,
 } from "../../core/gestorDeTareas.js";
 
 type Llamar = (nombre: string, args: Record<string, unknown>) => Promise<string>;
@@ -273,5 +273,62 @@ export function crearGestorJira(llamar: Llamar): GestorDeTareasPort {
     };
   }
 
-  return { sitios, proyectos, pendientes, ficha, transiciones, transicionar, comentar, crear };
+  /**
+   * Los comentarios de un ticket, del más viejo al más nuevo. Medido: `getJiraIssue` con `fields: ["comment"]` los da en
+   * `fields.comment.comments[]`, con el `body` en MARKDOWN y `created` con zona horaria (`+0200`), que se pasa a ISO
+   * para poder ordenar. Del autor no sale nada (lleva `accountId`).
+   */
+  async function comentarios(v: Vinculo, clave: string): Promise<ComentarioDelGestor[]> {
+    const cuerpo = objeto("getJiraIssue", json("getJiraIssue", await llamar("getJiraIssue", { cloudId: v.sitio, issueIdOrKey: clave, fields: ["comment"] })));
+    const fields = objeto("getJiraIssue", cuerpo.fields);
+    const comment = fields.comment === undefined || fields.comment === null ? { comments: [] } : objeto("getJiraIssue", fields.comment);
+    return lista("getJiraIssue", comment.comments)
+      .map((c) => objeto("getJiraIssue", c))
+      .filter((c) => typeof c.body === "string")
+      .map((c) => {
+        const fecha = typeof c.created === "string" ? new Date(c.created) : undefined;
+        return { texto: c.body as string, creado: fecha !== undefined && !Number.isNaN(fecha.getTime()) ? fecha.toISOString() : "" };
+      })
+      .sort((a, b) => a.creado.localeCompare(b.creado));
+  }
+
+  /**
+   * Los estados del flujo del proyecto, para elegir el mapeo. El conector no tiene una tool de estados (medido: 32 tools,
+   * ninguna), así que salen de los TICKETS: el estado de cada uno y los destinos de las transiciones de unos pocos de
+   * estados distintos. Un estado sin tickets y al que ninguna transición vista lleva no sale (límite declarado).
+   */
+  async function estados(v: Vinculo): Promise<EstadoDelGestor[]> {
+    const cuerpo = objeto(
+      "searchJiraIssuesUsingJql",
+      json(
+        "searchJiraIssuesUsingJql",
+        await llamar("searchJiraIssuesUsingJql", {
+          cloudId: v.sitio,
+          jql: `project = ${v.proyecto} ORDER BY updated DESC`,
+          maxResults: PENDIENTES_POR_CONSULTA,
+          fields: ["status"],
+        })
+      )
+    );
+    const vistos = new Map<string, EstadoDelGestor>();
+    const unoPorEstado = new Map<string, string>();
+    for (const issue of lista("searchJiraIssuesUsingJql", cuerpo.issues).map((i) => objeto("searchJiraIssuesUsingJql", i))) {
+      const status = objeto("searchJiraIssuesUsingJql", objeto("searchJiraIssuesUsingJql", issue.fields).status);
+      const nombre = texto("searchJiraIssuesUsingJql", status.name);
+      const categoria = typeof status.statusCategory === "object" && status.statusCategory !== null ? (status.statusCategory as Record<string, unknown>).key : undefined;
+      if (!vistos.has(nombre)) vistos.set(nombre, { nombre, categoria: categoriaDeEstado(typeof categoria === "string" ? categoria : undefined) });
+      if (!unoPorEstado.has(nombre) && typeof issue.key === "string") unoPorEstado.set(nombre, issue.key);
+    }
+    // Las transiciones de un ticket por estado (como mucho TICKETS_PARA_ESTADOS): enseñan los estados a los que se va.
+    for (const clave of [...unoPorEstado.values()].slice(0, TICKETS_PARA_ESTADOS)) {
+      for (const t of await transiciones(v, clave)) if (!vistos.has(t.destino)) vistos.set(t.destino, { nombre: t.destino, categoria: t.categoria });
+    }
+    const orden = { "por-hacer": 0, "en-curso": 1, terminada: 2 } as const;
+    return [...vistos.values()].sort((a, b) => orden[a.categoria] - orden[b.categoria]);
+  }
+
+  return { sitios, proyectos, pendientes, ficha, transiciones, transicionar, comentar, crear, comentarios, estados };
 }
+
+/** Cuántos tickets se miran para conocer los estados a los que llevan sus transiciones: uno por estado, hasta este tope. */
+const TICKETS_PARA_ESTADOS = 5;

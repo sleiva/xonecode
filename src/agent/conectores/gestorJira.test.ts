@@ -299,6 +299,56 @@ describe("crear", () => {
   });
 });
 
+describe("comentarios y estados (puerta 2)", () => {
+  it("comentarios: el body en markdown, ordenados por fecha pasada a ISO; del autor nada", async () => {
+    const { llamar } = llamarDoble({
+      getJiraIssue: {
+        fields: {
+          comment: {
+            comments: [
+              { id: "2", body: "después", created: "2026-10-15T11:05:00.000+0200", author: { accountId: "acc", displayName: "S" } },
+              { id: "1", body: "**🤖 Encargo para el agente (xonecode)**\n\nHaz X", created: "2026-10-15T11:01:21.021+0200", author: { accountId: "acc" } },
+            ],
+          },
+        },
+      },
+    });
+    const c = await crearGestorJira(llamar).comentarios!(V, "MAS-1");
+    expect(c).toEqual([
+      { texto: "**🤖 Encargo para el agente (xonecode)**\n\nHaz X", creado: "2026-10-15T09:01:21.021Z" },
+      { texto: "después", creado: "2026-10-15T09:05:00.000Z" },
+    ]);
+    expect(JSON.stringify(c)).not.toContain("acc");
+  });
+
+  it("estados: de los tickets y de los destinos de sus transiciones, ordenados por categoría", async () => {
+    const { llamar, llamadas } = llamarDoble({
+      searchJiraIssuesUsingJql: {
+        issues: [
+          { key: "KAN-2", fields: { status: { name: "En curso", statusCategory: { key: "indeterminate" } } } },
+          { key: "KAN-1", fields: { status: { name: "Tareas por hacer", statusCategory: { key: "new" } } } },
+          { key: "KAN-3", fields: { status: { name: "Tareas por hacer", statusCategory: { key: "new" } } } },
+        ],
+      },
+      getTransitionsForJiraIssue: {
+        transitions: [
+          { id: "31", name: "In Review", to: { name: "En revisión", statusCategory: { key: "indeterminate" } } },
+          { id: "41", name: "Listo", to: { name: "Finalizada", statusCategory: { key: "done" } } },
+        ],
+      },
+    });
+    const e = await crearGestorJira(llamar).estados!(V);
+    expect(e).toEqual([
+      { nombre: "Tareas por hacer", categoria: "por-hacer" },
+      { nombre: "En curso", categoria: "en-curso" },
+      { nombre: "En revisión", categoria: "en-curso" },
+      { nombre: "Finalizada", categoria: "terminada" },
+    ]);
+    // Un ticket por estado distinto, no uno por ticket.
+    expect(llamadas.filter((l) => l.nombre === "getTransitionsForJiraIssue")).toHaveLength(2);
+  });
+});
+
 describe("respuestas raras", () => {
   it("un texto que no es JSON lanza con el nombre de la tool, nunca una lista vacía", async () => {
     const llamar = vi.fn(async () => "no es json");
