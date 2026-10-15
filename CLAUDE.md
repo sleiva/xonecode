@@ -365,7 +365,8 @@ Y las guardas del proyecto:
   pintan, flechas desalineadas, tarjetas más altas y el icono pegado al texto, y una sola pasada variaba de 4 a 8
   diferencias. Lo que dice va aparte, como OPINIÓN; el mismo método se le da al desarrollador en Claude Code que compara él
   (`textoDeTrabajoSinLlamar`). **Y una cifra junto a una etiqueta que SÍ está en el aparato es un CONTADOR que no se
-  pinta**, no un dato de ejemplo (`geometriaDePantalla.ts`, `VECINDAD_DE_CONTADOR`). **No se describe la captura con
+  pinta**, no un dato de ejemplo (`geometriaDePantalla.ts`, `VECINDAD_DE_CONTADOR`). Salvo que junto a la pareja de esa etiqueta en el aparato
+  haya OTRA cifra: se pinta con otro valor (medido: «51» sobre «pend.» salía como «no se pinta» y costó una comprobación). **No se describe la captura con
   el modelo**: medido, la misma imagen descrita otra vez difería y no vio el recorte.
   Un texto distinto en el mismo sitio MEDIDO —palabra con palabra, nunca una cifra— es otro estado o una TRADUCCIÓN
   (la maqueta de Stitch viene en inglés): va como NOTA y no pone el rojo, ni en el estilo ni en la geometría, donde antes

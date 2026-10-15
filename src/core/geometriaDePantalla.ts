@@ -457,9 +457,27 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
       .filter(({ dx, dy }) => dx <= VECINDAD_DE_CONTADOR * m.ancho && dy <= Math.max(2 * e.caja.alto, VECINDAD_DE_CONTADOR * m.ancho))
       .sort((a, b) => a.dx + a.dy - (b.dx + b.dy))[0]?.o;
   };
+  /**
+   * ¿Hay en el aparato una CIFRA junto a la pareja de esa etiqueta? Entonces el contador SÍ se pinta, con otro valor:
+   * medido en Maset, «12» de la maqueta junto a «pend.» salía como «no se pinta» con «51» encima de «pend.» en el
+   * aparato, y el orquestador encargó comprobarlo en otra vuelta.
+   */
+  const cifraJuntoA = (vecina: ElementoDeMaqueta): boolean => {
+    const suya = parejas.find((p) => p.maqueta === vecina)?.aparato;
+    if (suya === undefined) return false;
+    const [cx, cy] = [suya.caja.x + suya.caja.ancho / 2, suya.caja.y + suya.caja.alto / 2];
+    return g.controles.some((c) => {
+      const t = textoParaEmparejar(c.texto ?? "");
+      if (c === suya || t === "" || tieneLetras(t)) return false;
+      const dx = Math.abs(c.caja.x + c.caja.ancho / 2 - cx);
+      const dy = Math.abs(c.caja.y + c.caja.alto / 2 - cy);
+      return dx <= VECINDAD_DE_CONTADOR * g.pantalla.ancho && dy <= Math.max(2 * suya.caja.alto, VECINDAD_DE_CONTADOR * g.pantalla.ancho);
+    });
+  };
   for (const e of sinPareja) {
-    const vecina =
+    const candidata =
       !aproximada && e.boton !== true && textoParaEmparejar(e.texto) !== "" && !tieneLetras(textoParaEmparejar(e.texto)) ? etiquetaVecina(e) : undefined;
+    const vecina = candidata !== undefined && !cifraJuntoA(candidata) ? candidata : undefined;
     if (vecina !== undefined) {
       diferencias.push(
         `${etiqueta(e)} de ${laMaqueta}, junto a ${etiqueta(vecina)}, no se pinta en ${elAparato}: su etiqueta está y el número no (su valor puede ser de ejemplo; que su sitio quede vacío, no).`

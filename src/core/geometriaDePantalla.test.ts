@@ -301,6 +301,14 @@ describe("un CONTADOR que no se pinta no es un dato de ejemplo (Maset: «12» so
   it("una cifra suelta (el reloj de una barra simulada) sigue siendo un dato de ejemplo", () => {
     expect(h.notas.some((n) => n.startsWith("datos de ejemplo") && n.includes("«09:41»"))).toBe(true);
   });
+  it("pintado con OTRO valor no es que falte: «51» encima de «pend.» en el aparato (medido en Maset)", () => {
+    const conValor = compararConMaqueta(maqueta, {
+      ...aparato,
+      controles: [...aparato.controles, { nombre: "MAP_CNT1", texto: "51", tipo: "prop", clase: "T", caja: { x: 838, y: 567, ancho: 67, alto: 45 } }],
+    });
+    expect(conValor.diferencias.join("\n")).not.toContain("no se pinta");
+    expect(conValor.notas.join("\n")).toContain("«12»");
+  });
 });
 
 describe("cajaParaElEstilo: el estilo de un texto se mide en su ENVOLTORIO (el frame que hace de botón o de píldora)", () => {
