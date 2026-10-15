@@ -47,3 +47,21 @@ describe("traer una pantalla de Stitch: las reglas", () => {
     expect(esDeLaMaqueta("/artefactos/captura-1.png")).toBe(false);
   });
 });
+
+describe("buscar en Stitch por título", () => {
+  it("compara sin tildes, mayúsculas ni espacios de más; igual gana a contener", async () => {
+    const { casanConTitulo, tituloComparable } = await import("./stitch.js");
+    expect(tituloComparable("  Menú   Principal ")).toBe("menu principal");
+    const e = [{ name: "a", title: "Menú" }, { name: "b", title: "Menú principal" }];
+    expect(casanConTitulo(e, "menu").map((x) => x.name)).toEqual(["a"]);
+    expect(casanConTitulo(e, "princ").map((x) => x.name)).toEqual(["b"]);
+    expect(casanConTitulo(e, undefined)).toHaveLength(2);
+  });
+
+  it("lee la lista aunque lleve detrás la nota de recorte del harness, y tira lo que no tiene forma", async () => {
+    const { entradasDeStitch } = await import("./stitch.js");
+    const texto = JSON.stringify({ projects: [{ name: "projects/1", title: "A" }, { name: 3 }] }) + "\n(recortado por el harness)";
+    expect(entradasDeStitch(texto, "projects")).toEqual([{ name: "projects/1", title: "A" }]);
+    expect(entradasDeStitch("no es json", "screens")).toEqual([]);
+  });
+});

@@ -123,3 +123,59 @@ export function designMdDeProyecto(texto: string): string | undefined {
     return undefined;
   }
 }
+
+/**
+ * Buscar una pantalla por su TÍTULO, y no por su `name`. Medido en Maset: con solo el `name`, el orquestador listaba las
+ * pantallas de TODOS los proyectos de Stitch (diecinueve llamadas) para dar con la que la persona había nombrado, y esos
+ * listados se quedaban en su contexto el turno entero. Puro: las respuestas entran como texto.
+ */
+export interface EntradaDeStitch {
+  name: string;
+  title: string;
+}
+
+/** Un título comparable: sin mayúsculas, sin tildes y con los espacios reducidos. */
+export function tituloComparable(titulo: string): string {
+  return titulo.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+/** El JSON de una respuesta de Stitch, aunque el harness le haya añadido su nota de recorte detrás. */
+function jsonDe(texto: string): unknown {
+  try {
+    return JSON.parse(texto);
+  } catch {
+    const fin = texto.lastIndexOf("}");
+    try {
+      return fin < 0 ? undefined : JSON.parse(texto.slice(0, fin + 1));
+    } catch {
+      return undefined;
+    }
+  }
+}
+
+/** Las entradas `{name, title}` de la lista `clave` (`projects` o `screens`) de una respuesta. Lo que no tiene forma, fuera. */
+export function entradasDeStitch(texto: string, clave: "projects" | "screens"): EntradaDeStitch[] {
+  const lista = (jsonDe(texto) as Record<string, unknown> | undefined)?.[clave];
+  if (!Array.isArray(lista)) return [];
+  return lista.flatMap((e) =>
+    typeof e === "object" && e !== null && typeof (e as EntradaDeStitch).name === "string" && typeof (e as EntradaDeStitch).title === "string"
+      ? [{ name: (e as EntradaDeStitch).name, title: (e as EntradaDeStitch).title }]
+      : []
+  );
+}
+
+/**
+ * Las que casan con el título: las de título IGUAL si hay alguna (comparable), y si no las que lo CONTIENEN. Sin título,
+ * todas. Una pantalla con el título exacto no se ensucia con las que solo lo contienen.
+ */
+export function casanConTitulo<T extends EntradaDeStitch>(entradas: readonly T[], titulo: string | undefined): T[] {
+  if (titulo === undefined || titulo.trim() === "") return [...entradas];
+  const buscado = tituloComparable(titulo);
+  const iguales = entradas.filter((e) => tituloComparable(e.title) === buscado);
+  return iguales.length > 0 ? iguales : entradas.filter((e) => tituloComparable(e.title).includes(buscado));
+}
+
+/** El id de un proyecto (`projects/<id>` → `<id>`), que es lo que pide `list_screens`. */
+export function idDeProyecto(name: string): string {
+  return name.replace(/^projects\//, "");
+}

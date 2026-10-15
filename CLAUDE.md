@@ -1605,7 +1605,10 @@ escrito a mano lo da de alta una persona desde la misma ventana.
   comprobado (la extensión la decide el tipo), y la imagen a tamaño real (`=s0`). Destino FIJO,
   `/artefactos/diseno/` (imagen, `code.html`, `DESIGN.md`), que `buscarMaqueta` prefiere y que
   `ultimaCaptura` y el crítico de pantalla NO toman por capturas del aparato. Dice los BYTES, no
-  las medidas que declara Stitch (no son las de la imagen bajada).
+  las medidas que declara Stitch (no son las de la imagen bajada). **Y la busca por TÍTULO** (`titulo`, `proyecto`; `core/stitch.ts#casanConTitulo`,
+  `entradasDeStitch`): en los proyectos propios y en los COMPARTIDOS (`view=shared`), sin tildes ni mayúsculas, igual antes
+  que contener; con una la trae y si no da una lista CORTA con su `name`. Medido en Maset: con solo el `name`, el orquestador
+  listaba las pantallas de todos los proyectos y esos listados se le quedaban en el contexto el turno entero.
 - **Una llamada de agente lleva su propio tope** (`TOPE_DE_LLAMADA_MS`, 10 min), que se pasa
   también como `timeout` al SDK: el suyo corta cada petición antes y una generación de Stitch
   pasa de él. Solo se REPITE una de lectura (`PAUSA_ANTES_DE_REPETIR_MS`); repetir una que

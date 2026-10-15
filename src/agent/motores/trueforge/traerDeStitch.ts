@@ -19,7 +19,7 @@ import type { Artefacto } from "../../../core/artefactos.js";
 import type { ConectoresPort } from "../../../core/ports.js";
 import { TOPE_DE_LLAMADA_MS } from "../../../core/conectores.js";
 import {
-  CARPETA_DE_DISENO, designMdDeProyecto, leerPantalla, motivoDeDescargaInaceptable, motivoDePantallaInaceptable, proyectoDePantalla,
+  CARPETA_DE_DISENO, casanConTitulo, designMdDeProyecto, entradasDeStitch, idDeProyecto, type EntradaDeStitch, leerPantalla, motivoDeDescargaInaceptable, motivoDePantallaInaceptable, proyectoDePantalla,
   RUTA_DE_DISENO, TIPOS_DE_IMAGEN, TOPE_DE_HTML, TOPE_DE_IMAGEN, urlDeImagenCompleta,
 } from "../../../core/stitch.js";
 
@@ -50,8 +50,17 @@ export const descargarEnRed: Descargar = async (url, tope) => {
 const Entrada = z.object({
   pantalla: z
     .string()
-    .describe("El `name` de la pantalla en Stitch, TAL CUAL: projects/<id>/screens/<id> (lo dan list_screens y get_screen, y el resultado de generarla)."),
+    .optional()
+    .describe("El `name` de la pantalla en Stitch, TAL CUAL: projects/<id>/screens/<id>, si ya lo tienes (lo da el resultado de generarla). Si no, usa `titulo`."),
+  titulo: z
+    .string()
+    .optional()
+    .describe("El TÍTULO de la pantalla tal como lo nombra la persona («Menú Principal - Maset Logística»). La tool la busca: no listes antes."),
+  proyecto: z.string().optional().describe("El título del proyecto de Stitch que la contiene («Maset»), si se sabe: acota la búsqueda."),
 });
+
+/** Cuántas candidatas se enseñan cuando la búsqueda no da UNA. */
+const CANDIDATAS_A_LA_VISTA = 12;
 
 export interface DependenciasDeTraerDeStitch {
   conectores: ConectoresPort;
@@ -61,13 +70,59 @@ export interface DependenciasDeTraerDeStitch {
   descargar?: Descargar;
 }
 
+/**
+ * El `name` de la pantalla con ese título, o el texto que se le devuelve al agente si no hay UNA: los proyectos se buscan
+ * en los suyos y en los COMPARTIDOS (medido: Maset es de otro y solo sale con `view=shared`), y las pantallas solo en los
+ * que casan con `proyecto`. Lo que se devuelve es corto: nunca el listado entero.
+ */
+async function buscarPantalla(conectores: ConectoresPort, titulo: string, proyecto: string | undefined): Promise<string | { texto: string }> {
+  const llamar = (tool: string, args: Record<string, unknown>) => conectores.llamar(CONECTOR_STITCH, tool, args, { topeMs: TOPE_DE_LLAMADA_MS });
+  let proyectos: EntradaDeStitch[] = [];
+  for (const args of [{}, { filter: "view=shared" }]) {
+    try {
+      proyectos.push(...entradasDeStitch(await llamar("list_projects", args), "projects"));
+    } catch {
+      // Una de las dos vistas puede fallar sin que la otra deje de valer.
+    }
+  }
+  proyectos = proyectos.filter((p, i) => proyectos.findIndex((q) => q.name === p.name) === i);
+  if (proyectos.length === 0) return { texto: "Stitch no dio ningún proyecto: comprueba el conector." };
+  const donde = casanConTitulo(proyectos, proyecto);
+  if (donde.length === 0) {
+    return { texto: `Ningún proyecto de Stitch se llama «${proyecto}». Hay: ${proyectos.slice(0, CANDIDATAS_A_LA_VISTA).map((p) => `«${p.title}»`).join(", ")}.` };
+  }
+  const pantallas: (EntradaDeStitch & { deProyecto: string })[] = [];
+  for (const p of donde) {
+    try {
+      for (const s of entradasDeStitch(await llamar("list_screens", { projectId: idDeProyecto(p.name) }), "screens")) pantallas.push({ ...s, deProyecto: p.title });
+    } catch {
+      // Un proyecto que no se deja listar no tumba la búsqueda en los demás.
+    }
+  }
+  const casan = casanConTitulo(pantallas, titulo);
+  if (casan.length === 1) return casan[0]!.name;
+  const lista = (casan.length === 0 ? pantallas : casan).slice(0, CANDIDATAS_A_LA_VISTA).map((s) => `- «${s.title}» (${s.deProyecto}): ${s.name}`);
+  return {
+    texto:
+      casan.length === 0
+        ? `Ninguna pantalla se titula «${titulo}»${proyecto === undefined ? "" : ` en «${proyecto}»`}. Hay estas; vuelve a llamarme con el \`name\` de la buena:\n${lista.join("\n")}`
+        : `Hay ${casan.length} pantallas con ese título; vuelve a llamarme con el \`name\` de la buena:\n${lista.join("\n")}`,
+  };
+}
+
 export function crearTraerDeStitch(deps: DependenciasDeTraerDeStitch) {
   const descargar = deps.descargar ?? descargarEnRed;
   return tool(
-    async ({ pantalla }: z.infer<typeof Entrada>) => {
-      const motivo = motivoDePantallaInaceptable(pantalla.trim());
+    async ({ pantalla, titulo, proyecto }: z.infer<typeof Entrada>) => {
+      let nombre = pantalla?.trim() ?? "";
+      if (nombre === "") {
+        if ((titulo ?? "").trim() === "") return "Dime la pantalla: su `titulo` (y el `proyecto` si lo sabes), o su `name`.";
+        const encontrada = await buscarPantalla(deps.conectores, titulo!, proyecto);
+        if (typeof encontrada !== "string") return encontrada.texto;
+        nombre = encontrada;
+      }
+      const motivo = motivoDePantallaInaceptable(nombre);
       if (motivo !== undefined) return motivo;
-      const nombre = pantalla.trim();
       let datos;
       try {
         datos = leerPantalla(await deps.conectores.llamar(CONECTOR_STITCH, "get_screen", { name: nombre }, { topeMs: TOPE_DE_LLAMADA_MS }));
@@ -144,6 +199,7 @@ export function crearTraerDeStitch(deps: DependenciasDeTraerDeStitch) {
       description:
         `Baja una pantalla de Stitch a ${RUTA_DE_DISENO}: la imagen a tamaño real, su code.html y el DESIGN.md del proyecto. ` +
         "Úsala después de generar o editar una pantalla, o cuando te digan cuál construir: Stitch solo da enlaces y así el diseño queda donde se mide. " +
+        "Si te nombran la pantalla por su título, pásale `titulo` (y `proyecto` si lo sabes): la busca ella, sin que listes proyectos ni pantallas. " +
         "Cada traída reemplaza la anterior.",
       schema: Entrada,
     }

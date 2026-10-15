@@ -96,3 +96,64 @@ describe("traer_pantalla_de_stitch", () => {
     expect(ultimaCaptura(carpeta, antes)).toBe("captura-1.png");
   });
 });
+
+/**
+ * Buscar por TÍTULO. Medido en Maset: con solo el `name`, el orquestador listaba las pantallas de todos los proyectos
+ * (diecinueve llamadas) y esos listados se quedaban en su contexto. La búsqueda va dentro de la tool, y solo contesta corto.
+ */
+describe("traer_pantalla_de_stitch por título", () => {
+  const PROYECTOS_PROPIOS = JSON.stringify({ projects: [{ name: "projects/1", title: "Otro" }] });
+  // Maset es de otra cuenta: solo sale con `view=shared` (medido).
+  const COMPARTIDOS = JSON.stringify({ projects: [{ name: "projects/8393", title: "Maset" }] }) + "\n(recortado por el harness: sin metadata)";
+  const PANTALLAS: Record<string, string> = {
+    "1": JSON.stringify({ screens: [{ name: "projects/1/screens/aa", title: "Menú Principal" }] }),
+    "8393": JSON.stringify({
+      screens: [
+        { name: "projects/8393/screens/bb", title: "Menú Principal - Maset Logística (Rediseño Profesional)" },
+        { name: "projects/8393/screens/cc", title: "Login" },
+      ],
+    }),
+  };
+  function montarBusqueda() {
+    const carpeta = mkdtempSync(join(tmpdir(), "xc-stitch-titulo-"));
+    const llamadas: { nombre: string; args: Record<string, unknown> }[] = [];
+    const conectores: ConectoresPort = {
+      delProyecto: () => [],
+      tools: async () => [],
+      llamar: async (_id, nombre, args) => {
+        llamadas.push({ nombre, args });
+        if (nombre === "list_projects") return args["filter"] === "view=shared" ? COMPARTIDOS : PROYECTOS_PROPIOS;
+        if (nombre === "list_screens") return PANTALLAS[String(args["projectId"])] ?? "{}";
+        if (nombre === "get_screen") return JSON.stringify({ title: "Menú", screenshot: { downloadUrl: IMG } });
+        return "{}";
+      },
+    };
+    const t = crearTraerDeStitch({ conectores, carpeta, descargar: async () => ({ bytes: Buffer.from([1]), tipo: "image/png" }) });
+    return { t, llamadas, carpeta };
+  }
+
+  it("con proyecto y título (sin tildes ni mayúsculas exactas), encuentra la pantalla en un proyecto COMPARTIDO y la trae", async () => {
+    const { t, llamadas, carpeta } = montarBusqueda();
+    const r = String(await t.invoke({ proyecto: "maset", titulo: "menu principal - maset logistica (rediseño profesional)" }));
+    expect(llamadas.filter((l) => l.nombre === "list_screens")).toEqual([{ nombre: "list_screens", args: { projectId: "8393" } }]);
+    expect(llamadas.find((l) => l.nombre === "get_screen")?.args).toEqual({ name: "projects/8393/screens/bb" });
+    expect(existsSync(join(carpeta, "diseno", "screen.png"))).toBe(true);
+    expect(r).toContain("Traída");
+  });
+
+  it("varias que casan: no trae ninguna y da la lista CORTA con su `name`", async () => {
+    const { t, llamadas } = montarBusqueda();
+    // «principal» no es el título de ninguna, y lo CONTIENEN dos.
+    const r = String(await t.invoke({ titulo: "principal" }));
+    expect(llamadas.some((l) => l.nombre === "get_screen")).toBe(false);
+    expect(r).toMatch(/Hay 2 pantallas/);
+    expect(r).toContain("projects/8393/screens/bb");
+    expect(r).toContain("projects/1/screens/aa");
+  });
+
+  it("un proyecto que no existe lo dice con los que hay; sin título ni name, pide uno", async () => {
+    const { t } = montarBusqueda();
+    expect(String(await t.invoke({ proyecto: "Nada", titulo: "Login" }))).toMatch(/Ningún proyecto de Stitch se llama «Nada»[\s\S]*«Maset»/);
+    expect(String(await t.invoke({}))).toMatch(/Dime la pantalla/);
+  });
+});
