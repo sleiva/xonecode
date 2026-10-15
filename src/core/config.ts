@@ -24,7 +24,7 @@ import {
   esProveedorPersonalizado, motivoDeEndpointInaceptable, motivoDeSlugInaceptable,
   type Proveedor, type ProveedorDeclarado,
 } from "./modelos.js";
-import { formaDeProyecto, motivoDeProyectoInaceptable, type VinculoGuardado } from "./gestorDeTareas.js";
+import { formaDeProyecto, motivoDeProyectoInaceptable, type MapeoDeEstados, type VinculoGuardado } from "./gestorDeTareas.js";
 import type { Papel } from "./ports.js";
 import { esModoDeEscritura, type ModoDeEscritura } from "./modoDeEscritura.js";
 
@@ -417,12 +417,33 @@ export function validar(
       if (valor.nombreDelProyecto !== undefined && !nombreValido) {
         avisos.push({ texto: `«${ruta}»: «gestorDeTareas.nombreDelProyecto» debe ser un texto; se ignora.`, severidad: "aviso" });
       }
+      // `automatico` (la puerta 2): solo un booleano; otra cosa se ignora y se dice. Activa algo que ESCRIBE en esta
+      // máquina, así que la duda cae del lado de apagado.
+      if (valor.automatico !== undefined && typeof valor.automatico !== "boolean") {
+        avisos.push({ texto: `«${ruta}»: «gestorDeTareas.automatico» debe ser true o false; se ignora (queda apagado).`, severidad: "aviso" });
+      }
+      // `estados`: cada papel, solo si es un texto no vacío. Lo demás se descarta papel a papel, sin el valor.
+      const estados: MapeoDeEstados = {};
+      if (valor.estados !== undefined) {
+        if (!esObjeto(valor.estados)) {
+          avisos.push({ texto: `«${ruta}»: «gestorDeTareas.estados» debe ser un objeto; se ignora.`, severidad: "aviso" });
+        } else {
+          for (const papel of ["preparar", "lanzar", "terminar"] as const) {
+            const e = valor.estados[papel];
+            if (e === undefined) continue;
+            if (typeof e === "string" && e.trim() !== "") estados[papel] = e;
+            else avisos.push({ texto: `«${ruta}»: «gestorDeTareas.estados.${papel}» debe ser el nombre de un estado; se ignora.`, severidad: "aviso" });
+          }
+        }
+      }
       config.gestorDeTareas = {
         conector: valor.conector,
         sitio: valor.sitio,
         proyecto: valor.proyecto,
         ...(typeof valor.admiteMias === "boolean" ? { admiteMias: valor.admiteMias } : {}),
         ...(nombreValido ? { nombreDelProyecto: valor.nombreDelProyecto as string } : {}),
+        ...(Object.keys(estados).length > 0 ? { estados } : {}),
+        ...(valor.automatico === true ? { automatico: true } : {}),
       };
       continue;
     }

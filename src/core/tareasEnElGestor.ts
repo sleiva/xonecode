@@ -5,7 +5,10 @@
  * Nada de aquí sabe de qué gestor se trata: escribe a través de `GestorDeTareasPort`, y los destinos los propone
  * `transicionPropuesta` sobre las transiciones que da cada ticket.
  */
-import type { CategoriaDeTarea, GestorDeTareasPort, Vinculo } from "./gestorDeTareas.js";
+import { transicionPropuesta } from "./gestorDeTareas.js";
+import type {
+  CategoriaDeTarea, ComentarioDelGestor, EstadoDelGestor, GestorDeTareasPort, MapeoDeEstados, TareaDelGestor, TransicionDelGestor, Vinculo,
+} from "./gestorDeTareas.js";
 import type { EstadoDeTarea, Tarea, TicketDeTarea } from "./tareas.js";
 
 /**
@@ -91,4 +94,101 @@ export async function cerrarTicket(
   } catch (error) {
     return { falloDeTransicion: motivoDe(error) };
   }
+}
+
+/** Cada cuánto mira el gestor el proceso que ejecuta las tareas (la puerta 2). Más «Mirar ahora». */
+export const INTERVALO_DE_SONDEO_MS = 5 * 60 * 1000;
+
+/**
+ * El mapeo que se PROPONE para un flujo, por categoría: preparar = el primero «por hacer», lanzar = el primero «en
+ * curso», terminar = PROBAR si existe (el flujo de IXCODE) o el primero «terminada». La persona lo confirma o lo cambia.
+ */
+export function mapeoPropuesto(estados: readonly EstadoDelGestor[]): MapeoDeEstados {
+  const preparar = estados.find((e) => e.categoria === "por-hacer")?.nombre;
+  const lanzar = estados.find((e) => e.categoria === "en-curso")?.nombre;
+  const terminar = (estados.find((e) => /^probar$/i.test(e.nombre)) ?? estados.find((e) => e.categoria === "terminada"))?.nombre;
+  return {
+    ...(preparar === undefined ? {} : { preparar }),
+    ...(lanzar === undefined ? {} : { lanzar }),
+    ...(terminar === undefined ? {} : { terminar }),
+  };
+}
+
+/**
+ * La transición que lleva un ticket al estado del MAPEO para ese momento (empezar → lanzar, cerrar → terminar), por el
+ * nombre de su destino sin mayúsculas. Sin estado mapeado, la regla de antes (`transicionPropuesta`). Con estado mapeado
+ * y sin transición que lleve a él, `undefined`: no se adivina otra.
+ */
+export function transicionHacia(
+  ts: readonly TransicionDelGestor[],
+  para: "empezar" | "cerrar",
+  estados: MapeoDeEstados | undefined
+): TransicionDelGestor | undefined {
+  const destino = para === "empezar" ? estados?.lanzar : estados?.terminar;
+  if (destino === undefined) return transicionPropuesta(ts, para);
+  return ts.find((t) => t.destino.trim().toLowerCase() === destino.trim().toLowerCase());
+}
+
+/** Si un estado del gestor es el del mapeo (sin mayúsculas ni espacios de más). */
+export function esEstado(estado: string, mapeado: string | undefined): boolean {
+  return mapeado !== undefined && estado.trim().toLowerCase() === mapeado.trim().toLowerCase();
+}
+
+/** Lo que el sondeo tiene que hacer con un ticket. */
+export type AccionDelSondeo = { tipo: "preparar"; ticket: TareaDelGestor } | { tipo: "lanzar"; ticket: TareaDelGestor };
+
+/**
+ * Qué hacer en una pasada del sondeo, PURO: con los tickets ASIGNADOS a la cuenta del conector, el mapeo, qué tickets
+ * ya tienen encargo subido y cuáles ya tienen tarea (no descartada).
+ *  - En el estado de PREPARAR y sin encargo → preparar.
+ *  - En el estado de LANZAR y sin tarea → lanzar (con o sin encargo: sin él se usa el texto del ticket).
+ * Un ticket ya preparado no se vuelve a preparar; uno con tarea no lanza otra. Sin estado de lanzar no se lanza nada.
+ */
+export function accionesDelSondeo(o: {
+  tickets: readonly TareaDelGestor[];
+  estados: MapeoDeEstados;
+  conEncargo: ReadonlySet<string>;
+  conTarea: ReadonlySet<string>;
+}): AccionDelSondeo[] {
+  const acciones: AccionDelSondeo[] = [];
+  for (const ticket of o.tickets) {
+    if (o.conTarea.has(ticket.clave)) continue;
+    if (esEstado(ticket.estado, o.estados.lanzar)) acciones.push({ tipo: "lanzar", ticket });
+    else if (esEstado(ticket.estado, o.estados.preparar) && !o.conEncargo.has(ticket.clave)) acciones.push({ tipo: "preparar", ticket });
+  }
+  return acciones;
+}
+
+/** Si un comentario es un encargo subido por xonecode: empieza por la cabecera fija (con o sin negrita). */
+export function esComentarioDeEncargo(texto: string): boolean {
+  return texto.trimStart().replace(/^\*\*/, "").startsWith(CABECERA_DEL_ENCARGO);
+}
+
+/**
+ * El encargo que se ejecuta al LANZAR, leído de los comentarios del ticket: el ÚLTIMO con la cabecera, tal como esté
+ * (si la persona lo editó, su versión), sin la cabecera ni la firma; y lo comentado DEBAJO de él, como indicaciones
+ * añadidas. Sin encargo, `undefined` (se usará el texto del ticket).
+ */
+export function encargoDeLosComentarios(comentarios: readonly ComentarioDelGestor[]): { encargo: string; añadidos: string[] } | undefined {
+  const ordenados = [...comentarios].sort((a, b) => a.creado.localeCompare(b.creado));
+  let i = -1;
+  for (let k = ordenados.length - 1; k >= 0; k--) {
+    if (esComentarioDeEncargo(ordenados[k]!.texto)) {
+      i = k;
+      break;
+    }
+  }
+  if (i === -1) return undefined;
+  const encargo = ordenados[i]!.texto
+    .trimStart()
+    .replace(/^\*\*[^\n]*\*\*\s*|^[^\n]*\n+/, "")
+    .replace(/\n*— escrito por xonecode\s*$/, "")
+    .trim();
+  return { encargo, añadidos: ordenados.slice(i + 1).map((c) => c.texto.trim()).filter((t) => t !== "") };
+}
+
+/** El encargo final de una tarea lanzada desde el gestor: el encargo, y debajo lo que se comentó después, dicho como tal. */
+export function encargoConAñadidos(encargo: string, añadidos: readonly string[]): string {
+  if (añadidos.length === 0) return encargo;
+  return `${encargo}\n\n## Indicaciones añadidas en el ticket\n\n${añadidos.map((a) => `- ${a.replace(/\n+/g, " ")}`).join("\n")}`;
 }

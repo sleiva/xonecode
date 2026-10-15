@@ -2474,6 +2474,8 @@ export function montarRutas(
       clave: creada.clave,
       ...(creada.url === undefined ? {} : { url: creada.url }),
       ...(aviso === undefined ? {} : { aviso }),
+      // El mapeo de estados del vínculo, COPIADO: a qué estado pasa al empezar y al terminar.
+      ...((vinculo as VinculoGuardado).estados === undefined ? {} : { estados: (vinculo as VinculoGuardado).estados! }),
     };
     const nueva = atenderCrearTarea(destino.proyecto.id, peticion, encargo, borrador, ticket);
     if (nueva === undefined) {

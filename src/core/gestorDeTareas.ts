@@ -32,6 +32,36 @@ export interface VinculoGuardado extends Vinculo {
    * vínculo de antes), y entonces no se inventa.
    */
   nombreDelProyecto?: string;
+  /**
+   * Qué estado DEL PROYECTO cumple cada papel de una tarea en background (`core/tareasEnElGestor.ts`): xonecode no
+   * impone estados, se adapta a los del flujo. Ausente = la regla por categoría (`transicionPropuesta`).
+   */
+  estados?: MapeoDeEstados;
+  /** Si los tickets de este proyecto DISPARAN tareas solos (la puerta 2). Ausente o `false`: no. Apagado por omisión. */
+  automatico?: boolean;
+}
+
+/** El mapeo de estados: el NOMBRE del estado, tal como lo da el gestor. Cada papel es opcional. */
+export interface MapeoDeEstados {
+  /** Un ticket asignado que entra aquí sin encargo: se amplía y se sube el encargo. */
+  preparar?: string;
+  /** Un ticket asignado que entra aquí sin tarea: se crea la tarea. Y a él pasa una tarea al empezar. */
+  lanzar?: string;
+  /** A él pasa el ticket al terminar la tarea. */
+  terminar?: string;
+}
+
+/** Un estado del flujo de un proyecto, con su categoría (para proponer el mapeo). */
+export interface EstadoDelGestor {
+  nombre: string;
+  categoria: CategoriaDeTarea;
+}
+
+/** Un comentario de un ticket: lo que hace falta para leer el último encargo y lo añadido debajo. */
+export interface ComentarioDelGestor {
+  texto: string;
+  /** ISO. Ordena. */
+  creado: string;
 }
 
 /**
@@ -131,6 +161,10 @@ export interface GestorDeTareasPort {
    * aquí no entra nada que no tengan todos.
    */
   crear?(v: Vinculo, nueva: NuevaTareaEnElGestor): Promise<TareaDelGestor>;
+  /** Los estados del flujo del proyecto, para elegir el mapeo. Opcional: sin él, el mapeo no se ofrece. */
+  estados?(v: Vinculo): Promise<EstadoDelGestor[]>;
+  /** Los comentarios de un ticket, del más viejo al más nuevo. Opcional: sin él, lanzar usa el texto del ticket. */
+  comentarios?(v: Vinculo, clave: string): Promise<ComentarioDelGestor[]>;
 }
 
 /** Lo que se le da al gestor para crear una tarea: lo que tienen TODOS. La descripción va en markdown. */

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  accionesDelSondeo,
+  encargoConAñadidos,
+  encargoDeLosComentarios,
+  mapeoPropuesto,
+  transicionHacia,
   CABECERA_DEL_ENCARGO,
   cerrarTicket,
   comentarioDeEncargo,
@@ -113,5 +118,79 @@ describe("GestorDeTareasEnMemoria.crear", () => {
     const creada = await g.crear!(v, { titulo: "Versión", descripcion: "en el login" });
     expect(creada).toMatchObject({ clave: "KAN-1", categoria: "por-hacer" });
     expect((await g.ficha(v, "KAN-1")).descripcion).toBe("en el login");
+  });
+});
+
+/** Medidos: MAS (Por hacer → En curso → Listo), KAN (… En revisión → Finalizada) y el flujo de IXCODE (con PROBAR). */
+describe("mapeoPropuesto", () => {
+  it("por categoría, y PROBAR antes que cualquier «terminada»", () => {
+    const mas = [
+      { nombre: "Por hacer", categoria: "por-hacer" as const },
+      { nombre: "En curso", categoria: "en-curso" as const },
+      { nombre: "Listo", categoria: "terminada" as const },
+    ];
+    expect(mapeoPropuesto(mas)).toEqual({ preparar: "Por hacer", lanzar: "En curso", terminar: "Listo" });
+    const ixcode = [
+      { nombre: "PROBLEMA", categoria: "por-hacer" as const },
+      { nombre: "EN CURSO", categoria: "en-curso" as const },
+      { nombre: "PROBAR", categoria: "en-curso" as const },
+      { nombre: "TERMINADO", categoria: "terminada" as const },
+    ];
+    expect(mapeoPropuesto(ixcode).terminar).toBe("PROBAR");
+    expect(mapeoPropuesto([])).toEqual({});
+  });
+});
+
+describe("transicionHacia", () => {
+  const ts = [
+    { id: "21", nombre: "Empezar", destino: "En curso", categoria: "en-curso" as const },
+    { id: "31", nombre: "In Review", destino: "En revisión", categoria: "en-curso" as const },
+    { id: "41", nombre: "Listo", destino: "Finalizada", categoria: "terminada" as const },
+  ];
+  it("va al estado del MAPEO, por su destino y sin mayúsculas", () => {
+    expect(transicionHacia(ts, "cerrar", { terminar: "en revisión" })?.id).toBe("31");
+    expect(transicionHacia(ts, "empezar", { lanzar: "En curso" })?.id).toBe("21");
+  });
+  it("sin mapeo, la regla de siempre; con mapeo y sin transición a él, ninguna (no se adivina otra)", () => {
+    expect(transicionHacia(ts, "cerrar", undefined)?.id).toBe("41");
+    expect(transicionHacia(ts, "cerrar", { terminar: "PROBAR" })).toBeUndefined();
+  });
+});
+
+describe("accionesDelSondeo", () => {
+  const t = (clave: string, estado: string) => ({ clave, titulo: clave, estado, categoria: "por-hacer" as const });
+  const estados = { preparar: "Por hacer", lanzar: "En curso" };
+  it("prepara lo que está en preparar sin encargo, y lanza lo que está en lanzar sin tarea", () => {
+    const acciones = accionesDelSondeo({
+      tickets: [t("MAS-1", "Por hacer"), t("MAS-2", "Por hacer"), t("MAS-3", "En curso"), t("MAS-4", "En curso"), t("MAS-5", "Listo")],
+      estados,
+      conEncargo: new Set(["MAS-2"]),
+      conTarea: new Set(["MAS-4"]),
+    });
+    expect(acciones.map((a) => [a.tipo, a.ticket.clave])).toEqual([
+      ["preparar", "MAS-1"],
+      ["lanzar", "MAS-3"],
+    ]);
+  });
+  it("sin estado de lanzar no lanza nada; sin el de preparar no prepara", () => {
+    expect(accionesDelSondeo({ tickets: [t("A-1", "En curso")], estados: { preparar: "Por hacer" }, conEncargo: new Set(), conTarea: new Set() })).toEqual([]);
+    expect(accionesDelSondeo({ tickets: [t("A-1", "Por hacer")], estados: { lanzar: "En curso" }, conEncargo: new Set(), conTarea: new Set() })).toEqual([]);
+  });
+});
+
+describe("encargoDeLosComentarios", () => {
+  it("el ÚLTIMO encargo, sin cabecera ni firma, y lo comentado debajo como añadido", () => {
+    const comentarios = [
+      { texto: "una nota de antes", creado: "2026-10-15T09:00:00Z" },
+      { texto: comentarioDeEncargo("Primer encargo"), creado: "2026-10-15T10:00:00Z" },
+      { texto: comentarioDeEncargo("Encargo REVISADO por la persona"), creado: "2026-10-15T11:00:00Z" },
+      { texto: "Y que el texto vaya en gris", creado: "2026-10-15T12:00:00Z" },
+    ];
+    expect(encargoDeLosComentarios(comentarios)).toEqual({ encargo: "Encargo REVISADO por la persona", añadidos: ["Y que el texto vaya en gris"] });
+    expect(encargoDeLosComentarios([{ texto: "sin encargo", creado: "x" }])).toBeUndefined();
+  });
+  it("el encargo final dice que lo de debajo son indicaciones del ticket", () => {
+    expect(encargoConAñadidos("Haz X", [])).toBe("Haz X");
+    expect(encargoConAñadidos("Haz X", ["y en gris"])).toMatch(/Haz X\n\n## Indicaciones añadidas en el ticket\n\n- y en gris/);
   });
 });

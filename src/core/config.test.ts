@@ -290,6 +290,17 @@ describe("validar", () => {
     expect(r.avisos[0]!.texto).not.toContain("sí");
   });
 
+  it("la puerta 2: el mapeo de estados papel a papel, y «automatico» solo con true (la duda cae en apagado)", () => {
+    const v = { conector: "jira", sitio: "cloud-1", proyecto: "MAS" };
+    const bueno = validar({ gestorDeTareas: { ...v, estados: { preparar: "Por hacer", lanzar: "En curso", terminar: "Listo" }, automatico: true } }, RUTA, "proyecto");
+    expect(bueno).toEqual({ config: { gestorDeTareas: { ...v, estados: { preparar: "Por hacer", lanzar: "En curso", terminar: "Listo" }, automatico: true } }, avisos: [] });
+    const malo = validar({ gestorDeTareas: { ...v, estados: { preparar: "", lanzar: "En curso", terminar: 3 }, automatico: "sí" } }, RUTA, "proyecto");
+    expect(malo.config.gestorDeTareas).toEqual({ ...v, estados: { lanzar: "En curso" } });
+    expect(malo.avisos.map((a) => a.texto).join(" ")).toMatch(/estados\.preparar.*estados\.terminar|automatico/);
+    expect(malo.avisos).toHaveLength(3);
+    expect(validar({ gestorDeTareas: { ...v, automatico: false } }, RUTA, "proyecto").config.gestorDeTareas).toEqual(v);
+  });
+
   it("IXCODE-15: «nombreDelProyecto» se conserva solo como texto no vacío; otra cosa se ignora SIN tirar el vínculo", () => {
     const v = { conector: "notion", sitio: "notion", proyecto: "collection://ea517d0b-bf30-4b08-8681-dc9c30f5e783" };
     expect(validar({ gestorDeTareas: { ...v, nombreDelProyecto: "Tasks" } }, RUTA, "proyecto")).toEqual({

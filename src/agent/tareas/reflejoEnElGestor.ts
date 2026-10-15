@@ -13,9 +13,11 @@
  * borra el aviso anterior. Los reflejos de un MISMO ticket van en cola: «empezar» y «cerrar» no se adelantan.
  */
 import type { DatosDeCierre, GestorDeTareasPort } from "../../core/gestorDeTareas.js";
-import { comentarioDeCierre, transicionPropuesta } from "../../core/gestorDeTareas.js";
+import { comentarioDeCierre } from "../../core/gestorDeTareas.js";
 import type { Tarea } from "../../core/tareas.js";
-import { cerrarTicket, hayQueTransicionar, reflejosPendientes, vinculoDelTicket, type ReflejoPendiente } from "../../core/tareasEnElGestor.js";
+import {
+  cerrarTicket, esEstado, hayQueTransicionar, reflejosPendientes, transicionHacia, vinculoDelTicket, type ReflejoPendiente,
+} from "../../core/tareasEnElGestor.js";
 import type { TareasEnDisco } from "./tareasEnDisco.js";
 
 /** El almacén con el `guardar` vigilado: lo demás pasa tal cual. */
@@ -59,22 +61,23 @@ export function crearReflejoEnElGestor(o: OpcionesDelReflejo): ((pendientes: Ref
     try {
       if (escritura === "empezar") {
         const ficha = await g.ficha(v, ticket.clave);
-        if (!hayQueTransicionar("empezar", ficha.categoria)) return limpiar(tarea);
-        const t = transicionPropuesta(await g.transiciones(v, ticket.clave), "empezar");
+        // Ya está donde tiene que estar: la movió la persona (es lo que la LANZA, en la puerta 2) o es una reanudación.
+        if (esEstado(ficha.estado, ticket.estados?.lanzar) || !hayQueTransicionar("empezar", ficha.categoria)) return limpiar(tarea);
+        const t = transicionHacia(await g.transiciones(v, ticket.clave), "empezar", ticket.estados);
         if (t === undefined) {
-          o.anotarAviso(tarea.id, `no se pudo pasar ${ticket.clave} a EN CURSO: su flujo no ofrece esa transición ahora`);
+          o.anotarAviso(tarea.id, `no se pudo pasar ${ticket.clave} a ${ticket.estados?.lanzar ?? "EN CURSO"}: su flujo no ofrece esa transición ahora`);
           return;
         }
         await g.transicionar(v, ticket.clave, t.id);
         return limpiar(tarea);
       }
       const comentario = comentarioDeCierre(await o.datosDeCierre(tarea));
-      const t = transicionPropuesta(await g.transiciones(v, ticket.clave), "cerrar");
+      const t = transicionHacia(await g.transiciones(v, ticket.clave), "cerrar", ticket.estados);
       const { falloDeTransicion } = await cerrarTicket(g, v, ticket.clave, comentario, t?.id, o.motivoDe);
       if (falloDeTransicion !== undefined) {
         o.anotarAviso(tarea.id, `se comentó el cierre en ${ticket.clave}, pero no se pudo pasar a ${t?.destino ?? "su estado final"}: ${falloDeTransicion}`);
       } else if (t === undefined) {
-        o.anotarAviso(tarea.id, `se comentó el cierre en ${ticket.clave}, pero su flujo no ofrece una transición para cerrarla`);
+        o.anotarAviso(tarea.id, `se comentó el cierre en ${ticket.clave}, pero su flujo no ofrece una transición a ${ticket.estados?.terminar ?? "un estado de terminada"}`);
       } else {
         limpiar(tarea);
       }

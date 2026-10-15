@@ -7,6 +7,7 @@
  */
 import { tituloDesde } from "./textos.js";
 import type { VeredictoDeTarea } from "./entrega.js";
+import type { MapeoDeEstados } from "./gestorDeTareas.js";
 
 /**
  * Los cuatro estados, y ninguno más.
@@ -202,6 +203,8 @@ export interface TicketDeTarea {
   url?: string;
   /** Lo que no se pudo escribir en el gestor la última vez («no se pudo pasar a PROBAR: …»). Ausente = nada pendiente. */
   aviso?: string;
+  /** El mapeo de estados del vínculo AL CREARLA (copiado, como el resto): a qué estado pasa al empezar y al terminar. */
+  estados?: MapeoDeEstados;
 }
 
 /**
