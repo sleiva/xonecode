@@ -31,6 +31,7 @@ import { MS_DE_PREPARACION,
   ajusteDeGestorCableado,
   banderaDeEjecutor,
   construirCorredorDeTareasCableado,
+  construirSondeoCableado,
   copiasConGestor,
   FALTA_EL_BUILD,
   RUTA_ACCION,
@@ -8526,6 +8527,55 @@ describe("las tareas en background, el cableado del corredor con el cable — no
     expect(gestor.comentariosAplicados[0]!.texto).toContain("LoginColl.xne");
     expect(gestor.transicionesAplicadas.at(-1)).toEqual({ clave: "KAN-1", transicion: "41" });
     expect(cola.listar()[0]!.ticket?.aviso).toBeUndefined();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  /**
+   * La puerta 2, cosida: el sondeo sobre la cola ENVUELTA del corredor cableado. Una tarea lanzada por el gestor tiene
+   * que llegar a la PANTALLA aunque no pueda arrancar (gana la persona), y ser una tarea que se refleja como las demás.
+   */
+  it("una tarea que dispara el gestor se emite al cable aunque no arranque, y se refleja como las demás", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xc-sondeo-"));
+    const gestor = new GestorDeTareasEnMemoria({
+      yo: "Sergio",
+      tareas: [{ clave: "MAS-3", titulo: "Versión en el login", descripcion: "Añádela", estado: "En curso", categoria: "en-curso", asignado: "Sergio" }],
+      transiciones: { "MAS-3": [{ id: "31", nombre: "Listo", destino: "Listo", categoria: "terminada" }] },
+      comentarios: {},
+    });
+    const { opcionesDeMontaje, corredor, arrancarConectado } = construirCorredorDeTareasCableado({
+      vestibulo: vestibuloSinAbrir,
+      tareasFabrica: (informar) => crearTareasEnDisco({ base, informar }),
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
+      gestorDeTareas: () => gestor,
+      datosDeCierreDeTarea: async () => ({ ficheros: [], commits: [] }),
+    });
+    let emitidas = 0;
+    await arrancarConectado({ emitirTareas: () => {} });
+    const sondeo = construirSondeoCableado({
+      corredor: { revisar: () => {}, corriendoAqui: () => true },
+      cola: opcionesDeMontaje.colaDeTareas!,
+      copias: () => [
+        {
+          proyecto: { id: "p1", raiz: "/w/Maset", nombre: "Maset" },
+          vinculo: { conector: "jira", sitio: "cloud-1", proyecto: "MAS", automatico: true, estados: { lanzar: "En curso", terminar: "Listo" } },
+        },
+      ],
+      gestorDe: () => gestor,
+      emitirTareas: () => void (emitidas += 1),
+      informar: () => {},
+    });
+    expect((await sondeo.mirar()).lanzadas).toEqual(["MAS-3"]);
+    const cola = opcionesDeMontaje.colaDeTareas!;
+    expect(cola.listar()[0]).toMatchObject({ estado: "nuevo", ticket: { clave: "MAS-3", estados: { terminar: "Listo" } } });
+    expect(emitidas).toBeGreaterThan(0);
+    // Y es una tarea como las demás: al terminar, su ticket se cierra hacia el estado mapeado.
+    cola.guardar(cola.listar().map((t) => ({ ...t, estado: "en-proceso" as const })));
+    cola.guardar(cola.listar().map((t) => ({ ...t, estado: "terminada" as const })));
+    for (let i = 0; i < 20; i++) await asentar();
+    expect(gestor.transicionesAplicadas.at(-1)).toEqual({ clave: "MAS-3", transicion: "31" });
+    await corredor!.parar();
     rmSync(base, { recursive: true, force: true });
   });
 

@@ -1,6 +1,6 @@
 # Tareas en background que viven en el gestor de tareas (Jira, Notion, …)
 
-Fecha: 15-10-2026. Estado: fase 1 (puerta 1) HECHA y medida contra Jira real (MAS-1). Fase 2 pendiente.
+Fecha: 15-10-2026. Estado: fase 1 (puerta 1) HECHA y medida contra Jira real (MAS-1). Fase 2 (puerta 2) HECHA en código y probada con dobles; estados y comentarios medidos en MAS y KAN; falta verla correr de punta a punta.
 
 ## Qué se quiere
 
@@ -132,8 +132,17 @@ Revisar el encargo es moverlo de preparar a lanzar: el gesto que la persona ya h
 - **La decisión es PURA** (`core/tareasEnElGestor.ts#accionesDelSondeo`): tickets, mapeo, qué tiene encargo y qué tiene
   tarea → qué preparar y qué lanzar. La red y el disco, fuera.
 
+- **DESCARTAR devuelve el ticket** al estado de preparar (o al primero «por hacer») con un comentario: si se quedara en
+  el de lanzar, el sondeo la crearía otra vez. Va por el mismo punto único: el almacén envuelto vigila también
+  `borrarTarea`.
+- Lo que el sondeo guarda se EMITE al cable: una tarea que no puede arrancar todavía (la persona tiene abierta la
+  consola de ese proyecto: gana la persona) tiene que verse igual (`construirSondeoCableado`).
+
 Límites declarados de la fase 2: al aparcar sigue sin escribirse nada; un ticket movido a lanzar mientras el proceso
-estaba apagado se recoge en el primer sondeo; el aumentador de preparar no ve los adjuntos del ticket.
+estaba apagado se recoge en el primer sondeo; el aumentador de preparar no ve los adjuntos del ticket; un proyecto sin
+tickets no enseña su flujo (el editor pide crear uno); devolver a «lanzar» el ticket de una tarea TERMINADA no la
+relanza (la terminada sigue en la cola); Notion no tiene todavía `estados` ni `comentarios`, así que la puerta 2 es
+solo de Jira.
 
 ## Medido (15-10-2026, conector Jira de xonecode, solo lectura)
 

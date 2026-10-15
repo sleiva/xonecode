@@ -57,4 +57,10 @@ describe("TareasDesdeElGestor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Configurar" }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/no sabe decir los estados/);
   });
+
+  it("un proyecto sin tickets no enseña su flujo: dice que se cree uno", async () => {
+    render(<TareasDesdeElGestor vinculo={VINCULO} nombre="Jira" conectado alPedirEstados={async () => ({ lista: [], propuesto: {} })} alGuardar={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Configurar" }));
+    expect(await screen.findByText(/crea un ticket allí para que xonecode vea su flujo/)).toBeTruthy();
+  });
 });

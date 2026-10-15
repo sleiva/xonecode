@@ -16,7 +16,8 @@ import type { DatosDeCierre, GestorDeTareasPort } from "../../core/gestorDeTarea
 import { comentarioDeCierre } from "../../core/gestorDeTareas.js";
 import type { Tarea } from "../../core/tareas.js";
 import {
-  cerrarTicket, esEstado, hayQueTransicionar, reflejosPendientes, transicionHacia, vinculoDelTicket, type ReflejoPendiente,
+  cerrarTicket, esEstado, hayQueTransicionar, reflejosPendientes, transicionDeDescarte, transicionHacia, vinculoDelTicket,
+  type ReflejoPendiente,
 } from "../../core/tareasEnElGestor.js";
 import type { TareasEnDisco } from "./tareasEnDisco.js";
 
@@ -29,6 +30,18 @@ export function conReflejoAlGuardar(disco: TareasEnDisco, reflejar: (pendientes:
       disco.guardar(tareas);
       const pendientes = reflejosPendientes(antes, tareas);
       if (pendientes.length > 0) reflejar(pendientes);
+    },
+    /**
+     * DESCARTAR borra, y no pasa por `guardar`: sin vigilarlo aquí, el ticket se quedaba en el estado de lanzar y el
+     * sondeo creaba la tarea otra vez. Una terminada no se toca (su ticket ya está cerrado); un borrador de adjuntos
+     * (sin tarea en la cola) tampoco.
+     */
+    borrarTarea(id) {
+      const tarea = disco.listar().find((t) => t.id === id);
+      disco.borrarTarea(id);
+      if (tarea?.ticket !== undefined && tarea.estado !== "terminada") {
+        reflejar([{ tarea: tarea as ReflejoPendiente["tarea"], escritura: "descartar" }]);
+      }
     },
   };
 }
@@ -71,6 +84,16 @@ export function crearReflejoEnElGestor(o: OpcionesDelReflejo): ((pendientes: Ref
         await g.transicionar(v, ticket.clave, t.id);
         return limpiar(tarea);
       }
+      if (escritura === "descartar") {
+        const t = transicionDeDescarte(await g.transiciones(v, ticket.clave), ticket.estados);
+        await g.comentar(
+          v,
+          ticket.clave,
+          `Tarea descartada en xonecode${t === undefined ? "." : `: el ticket vuelve a «${t.destino}». Muévelo otra vez para pedirla de nuevo.`}\n\n— escrito por xonecode`
+        );
+        if (t !== undefined) await g.transicionar(v, ticket.clave, t.id);
+        return;
+      }
       const comentario = comentarioDeCierre(await o.datosDeCierre(tarea));
       const t = transicionHacia(await g.transiciones(v, ticket.clave), "cerrar", ticket.estados);
       const { falloDeTransicion } = await cerrarTicket(g, v, ticket.clave, comentario, t?.id, o.motivoDe);
@@ -82,8 +105,11 @@ export function crearReflejoEnElGestor(o: OpcionesDelReflejo): ((pendientes: Ref
         limpiar(tarea);
       }
     } catch (error) {
-      const que = escritura === "empezar" ? `pasar ${ticket.clave} a EN CURSO` : `cerrar ${ticket.clave}`;
+      const que =
+        escritura === "empezar" ? `pasar ${ticket.clave} a EN CURSO` : escritura === "descartar" ? `devolver ${ticket.clave} al descartarla` : `cerrar ${ticket.clave}`;
       o.anotarAviso(tarea.id, `no se pudo ${que}: ${o.motivoDe(error)}`);
+      // Una descartada ya no está en la cola: el aviso no tiene fila donde quedarse, así que se dice.
+      if (escritura === "descartar") o.informar?.(`no se pudo ${que}: ${o.motivoDe(error)}`);
     }
   };
 

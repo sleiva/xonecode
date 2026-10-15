@@ -39,7 +39,8 @@ export function escrituraEnElGestor(antes: EstadoDeTarea | undefined, despues: E
 /** Un cambio que hay que reflejar: la tarea tal como quedó y qué escribir. */
 export interface ReflejoPendiente {
   tarea: Tarea & { ticket: TicketDeTarea };
-  escritura: "empezar" | "cerrar";
+  /** `descartar` no sale de un cambio de estado sino de BORRAR la tarea (ver `conReflejoAlGuardar`). */
+  escritura: "empezar" | "cerrar" | "descartar";
 }
 
 /**
@@ -191,4 +192,15 @@ export function encargoDeLosComentarios(comentarios: readonly ComentarioDelGesto
 export function encargoConAñadidos(encargo: string, añadidos: readonly string[]): string {
   if (añadidos.length === 0) return encargo;
   return `${encargo}\n\n## Indicaciones añadidas en el ticket\n\n${añadidos.map((a) => `- ${a.replace(/\n+/g, " ")}`).join("\n")}`;
+}
+
+/**
+ * A dónde vuelve el ticket de una tarea DESCARTADA: al estado de preparar del mapeo o, sin él, al primero «por hacer».
+ * Si se quedara en el de lanzar, el sondeo la crearía otra vez en la pasada siguiente: descartar la resucitaba. Volver
+ * a moverlo es volver a pedirla, el mismo gesto que la lanzó.
+ */
+export function transicionDeDescarte(ts: readonly TransicionDelGestor[], estados: MapeoDeEstados | undefined): TransicionDelGestor | undefined {
+  const destino = estados?.preparar;
+  if (destino !== undefined) return ts.find((t) => esEstado(t.destino, destino));
+  return ts.find((t) => t.categoria === "por-hacer");
 }

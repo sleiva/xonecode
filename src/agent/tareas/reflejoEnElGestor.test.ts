@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { crearReflejoEnElGestor } from "./reflejoEnElGestor.js";
+import { conReflejoAlGuardar, crearReflejoEnElGestor } from "./reflejoEnElGestor.js";
+import type { TareasEnDisco } from "./tareasEnDisco.js";
 import { GestorDeTareasEnMemoria } from "../../core/ports.js";
 import type { Tarea, TicketDeTarea } from "../../core/tareas.js";
 
@@ -58,5 +59,41 @@ describe("el reflejo con el MAPEO de estados", () => {
     expect(gestor.transicionesAplicadas).toEqual([]);
     expect(gestor.comentariosAplicados).toHaveLength(1);
     expect(avisos.at(-1)).toMatch(/no ofrece una transición a PROBAR/);
+  });
+});
+
+describe("descartar una tarea con ticket", () => {
+  /** Un almacén en memoria con la forma de `TareasEnDisco` (solo lo que el envoltorio toca). */
+  const almacen = (tareas: Tarea[]): TareasEnDisco => {
+    let lista = tareas;
+    return {
+      listar: () => lista,
+      guardar: (t: readonly Tarea[]) => void (lista = [...t]),
+      borrarTarea: (id: string) => void (lista = lista.filter((x) => x.id !== id)),
+    } as unknown as TareasEnDisco;
+  };
+
+  it("devuelve el ticket al estado de PREPARAR y lo comenta: si no, el sondeo la resucitaría", async () => {
+    const gestor = new GestorDeTareasEnMemoria({
+      tareas: [{ clave: "KAN-1", titulo: "t", descripcion: "", estado: "En curso", categoria: "en-curso" }],
+      transiciones: { "KAN-1": [{ id: "11", nombre: "Por hacer", destino: "Tareas por hacer", categoria: "por-hacer" }, ...TRANSICIONES] },
+    });
+    const reflejar = crearReflejoEnElGestor({ gestorDe: () => gestor, datosDeCierre: async () => ({ ficheros: [], commits: [] }), anotarAviso: () => {}, motivoDe: String });
+    const disco = conReflejoAlGuardar(almacen([tarea("en-proceso", { estados: { preparar: "Tareas por hacer", lanzar: "En curso" } })]), reflejar);
+    disco.borrarTarea("t1");
+    await reflejar.enCurso();
+    expect(gestor.transicionesAplicadas).toEqual([{ clave: "KAN-1", transicion: "11" }]);
+    expect(gestor.comentariosAplicados[0]!.texto).toMatch(/descartada en xonecode: el ticket vuelve a «Tareas por hacer»/);
+  });
+
+  it("una TERMINADA, o un borrador sin tarea, no tocan el gestor", async () => {
+    const gestor = new GestorDeTareasEnMemoria({ transiciones: { "KAN-1": TRANSICIONES } });
+    const reflejar = crearReflejoEnElGestor({ gestorDe: () => gestor, datosDeCierre: async () => ({ ficheros: [], commits: [] }), anotarAviso: () => {}, motivoDe: String });
+    const disco = conReflejoAlGuardar(almacen([tarea("terminada")]), reflejar);
+    disco.borrarTarea("t1");
+    disco.borrarTarea("borrador-sin-tarea");
+    await reflejar.enCurso();
+    expect(gestor.comentariosAplicados).toEqual([]);
+    expect(gestor.transicionesAplicadas).toEqual([]);
   });
 });

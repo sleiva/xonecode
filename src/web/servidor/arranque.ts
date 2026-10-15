@@ -8106,6 +8106,48 @@ export function montarRutas(
   return { emitirTareas, cerrarRemoto: apagarRemoto };
 }
 
+/**
+ * El sondeo de la puerta 2 CABLEADO: extraído de `arrancarConsolaWeb` para poder probar la composición de verdad (el
+ * patrón de fallo de siempre: una regla de producción en un cierre que todos los tests doblan). Dos cosas que solo se
+ * ven aquí: lo que el sondeo guarda va por la cola ENVUELTA (así el reflejo en el gestor dispara), y tras guardar se
+ * EMITE la cola —el corredor solo emite en sus propias escrituras, y una tarea que no puede arrancar todavía (la
+ * persona tiene la consola de ese proyecto abierta) no salía en la pantalla—. Lo que falla en una pasada, también la
+ * primera, se dice.
+ */
+export function construirSondeoCableado(o: {
+  corredor: Pick<Omit<Corredor, "arrancar">, "revisar" | "corriendoAqui">;
+  cola: Pick<TareasEnDisco, "listar" | "guardar">;
+  copias: () => CopiaConGestor[];
+  gestorDe: (conector: string) => GestorDeTareasPort | undefined;
+  augmentar?: OpcionesDelSondeoCableado["augmentar"];
+  emitirTareas: () => void;
+  informar: (texto: string) => void;
+}): SondeoDelGestor {
+  const sondeo = crearSondeoDelGestor({
+    copias: o.copias,
+    gestorDe: o.gestorDe,
+    ...(o.augmentar === undefined ? {} : { augmentar: o.augmentar }),
+    cola: o.cola,
+    revisar: () => {
+      o.corredor.revisar();
+      o.emitirTareas();
+    },
+    esDueño: () => o.corredor.corriendoAqui(),
+    motivoDe: motivoDeGestorParaElCable,
+    informar: o.informar,
+  });
+  const decir = (r: ResultadoDelSondeo): void => {
+    for (const f of r.fallos) o.informar(`el gestor de ${f.proyecto}${f.clave === undefined ? "" : ` (${f.clave})`}: ${f.motivo}`);
+    if (r.preparadas.length > 0) o.emitirTareas();
+  };
+  return {
+    ...sondeo,
+    // «Mirar ahora» y la pasada del arranque dicen sus fallos igual que el reloj.
+    mirar: () => sondeo.mirar().then((r) => (decir(r), r)),
+  };
+}
+type OpcionesDelSondeoCableado = Parameters<typeof crearSondeoDelGestor>[0];
+
 export interface CorredorDeTareasCableado {
   /** `undefined` si esta ejecución no tiene cola (`tareasFabrica` ausente): entonces no
    *  hay nada que revisar. Sin `arrancar`: la única forma de arrancar el corredor devuelto
@@ -9551,19 +9593,17 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
    * solo hace algo en el proceso que EJECUTA las tareas. Una pasada al arrancar recoge lo que se movió con esto parado.
    */
   if (corredor !== undefined && opcionesDeTareas.colaDeTareas !== undefined) {
-    const conCorredor = corredor;
-    sondeo = crearSondeoDelGestor({
+    sondeo = construirSondeoCableado({
+      corredor,
+      cola: opcionesDeTareas.colaDeTareas,
       copias: () => copiasConGestor(espacioDeTrabajo.workspace()),
       gestorDe: conectoresYGestor.gestorDeTareas,
       augmentar,
-      cola: opcionesDeTareas.colaDeTareas,
-      revisar: () => conCorredor.revisar(),
-      esDueño: () => conCorredor.corriendoAqui(),
-      motivoDe: motivoDeGestorParaElCable,
+      emitirTareas: () => cable.emitirTareas(),
       informar,
     });
     sondeo.arrancar();
-    void sondeo.mirar().then(() => cable.emitirTareas(), () => {});
+    void sondeo.mirar();
   }
 
   /**

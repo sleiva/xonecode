@@ -97,6 +97,10 @@ function Editor({
 
   if (flujo === undefined) return <p className={estilos.resumen}>{`Leyendo los estados del flujo en ${nombre}…`}</p>;
   if ("motivo" in flujo) return <p className={estilos.error} role="alert">{`No se pudieron leer los estados: ${flujo.motivo}`}</p>;
+  // El flujo se ve a través de los tickets (el conector no tiene una tool de estados): sin ninguno, no hay qué elegir.
+  if (flujo.lista.length === 0) {
+    return <p className={estilos.resumen}>{`No veo estados en este proyecto de ${nombre}: crea un ticket allí para que xonecode vea su flujo, y vuelve a configurarlo.`}</p>;
+  }
 
   const guardar = async (): Promise<void> => {
     setGuardando(true);
