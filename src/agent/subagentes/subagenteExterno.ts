@@ -481,10 +481,12 @@ export function crearSubagenteExterno(opciones: {
          * `config.json` del proyecto. Con las tres fuentes cargadas, quien te pasa un proyecto decidía si
          * tus barreras se aplican.
          *
-         * Se queda `"user"`: son los ajustes del dueño de la máquina —su autenticación,
-         * sus MCP, su modelo—, que es la misma confianza que ya se declara para Codex («el
-         * hijo es el Codex DEL USUARIO, con sus MCP, sus plugins y sus hooks»). Lo que se
-         * va es lo que puede venir en un zip.
+         * **Y tampoco los del USUARIO: ninguno** (`[]`, el «modo aislado» del SDK). Se quedaba `"user"` con la
+         * confianza de Codex —«el hijo es el Claude Code del usuario»—, y medido contra un hijo real eso le metía
+         * TODO lo suyo: su hook de inicio (superpowers, que le inyecta «debes invocar skills» y choca con nuestras
+         * instrucciones), sus plugins con sus skills, sus MCP y sus reglas `allow`. El login NO depende de esto:
+         * medido, con `[]` contesta autenticado con la cuenta y sin clave. **Límite declarado**: quien autentique
+         * con un `apiKeyHelper` o con variables puestas en su `settings.json` deja de poder lanzar el hijo.
          *
          * Coste dicho: sin `"project"` el hijo tampoco carga el `CLAUDE.md` del proyecto
          * (lo dice su propia documentación de esta opción). No se pierde el papel: sus
@@ -495,7 +497,7 @@ export function crearSubagenteExterno(opciones: {
          * ensombreciendo el callback— lo cierra el hook `PreToolUse` de más arriba, que es el
          * cierre robusto que el propio SDK nombra: un hook no se ensombrece.
          */
-        settingSources: ["user"],
+        settingSources: [],
         /**
          * **Nuestras skills, como PLUGIN LOCAL — que es la única palanca que funciona.**
          *
@@ -514,7 +516,7 @@ export function crearSubagenteExterno(opciones: {
         ...(pluginDeSkills === undefined ? {} : { plugins: [{ type: "local" as const, path: pluginDeSkills }] }),
         /**
          * **Y SOLO esas skills, y ningún MCP.** Sin `skills` el hijo veía también las del usuario (`~/.claude`, sus
-         * plugins), y con `settingSources: ["user"]` arrancaba sus MCP —medido en una tarea de Maset: un Playwright y el
+         * plugins), y con sus ajustes cargados arrancaba sus MCP —medido en una tarea de Maset: un Playwright y el
          * de XOne, que escribe en CloudStudio—. Las tools MCP ya las denegaba el hook (no están en ninguna lista), pero
          * se arrancaban y ocupaban su contexto. `strictMcpConfig` con ningún `mcpServers` deja fuera todos.
          */

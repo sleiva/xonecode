@@ -558,8 +558,10 @@ ejecuta si es Claude Code, con la shell ESTRECHA (ver abajo). Reglas duras:
 - **La denegación de verdad vive en un hook `PreToolUse`, no en `canUseTool`**: contesta las TRES
   clases —`allow`/`deny`/`ask`—. `permissionMode` es `default` (el único donde el `ask` del hook
   llega al callback). `canUseTool` conserva las MISMAS comprobaciones como segunda llave.
-- **`settingSources: ["user"]`**: por omisión se carga el `.claude/settings.json` del proyecto
-  (viene de CloudStudio); el coste es que el hijo no carga el `CLAUDE.md` del proyecto.
+- **`settingSources: []`, ni los del proyecto ni los del usuario**: por omisión se carga el
+  `.claude/settings.json` del proyecto (viene de CloudStudio), y los del usuario le metían al hijo su hook de inicio,
+  sus plugins, sus MCP y sus reglas `allow`. El login no depende de ellos (medido). Coste: el hijo no carga el
+  `CLAUDE.md` del proyecto, y un `apiKeyHelper` en los ajustes del usuario deja de valer.
 - **LEER también lleva guarda de ruta**: `.env`, `.git`, `.xonecode` (con `checkpoint.sqlite`) y lo
   de FUERA del proyecto se deniegan; `/skills/`, `/adjuntos/` y un artefacto mal puesto SÍ se leen.
   `Glob`/`Grep` llevan `path` OPCIONAL (ausente es la raíz). **Límite declarado**: un `Grep` sobre

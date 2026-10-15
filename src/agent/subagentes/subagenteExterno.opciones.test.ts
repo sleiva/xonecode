@@ -33,6 +33,8 @@ describe("con qué se lanza un hijo de Claude Code", () => {
     expect(await correr(["xone-development"])).toBe("hecho");
     const opciones = lanzados.at(-1)!.options;
     expect(opciones.strictMcpConfig).toBe(true);
+    // Ni los ajustes del proyecto ni los del usuario: ni sus hooks, ni sus plugins, ni sus `allow`.
+    expect(opciones.settingSources).toEqual([]);
     expect(opciones.mcpServers).toBeUndefined();
     expect(opciones.plugins).toBeDefined();
     expect(opciones.skills).toEqual(["xonecode:xone-development"]);

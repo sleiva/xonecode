@@ -5438,6 +5438,12 @@ por el mismo hook. La confianza que asume es la que el fichero ya declaraba con
 `settingSources: ["user"]`: el hijo es el Claude Code del usuario, con sus MCP y sus hooks —que
 ejecutan código—, así que negarle unas instrucciones suyas no defendía nada.
 
+**Revisado después (tarea de Maset, MAS-3): esa confianza era demasiada.** Con `["user"]` el hijo arrancaba los MCP
+del usuario (un Playwright y el de XOne, que escribe en CloudStudio), ejecutaba su hook de inicio (superpowers, que le
+inyecta «debes invocar skills») y veía y nombraba todas sus skills. Medido contra un hijo real: con `skills` = las de
+su `.md` solo nombra esas; con `strictMcpConfig` no tiene ningún MCP; y con `settingSources: []` no corre ningún hook
+ni carga más plugin que el nuestro, y sigue autenticando con la cuenta del usuario, sin clave.
+
 ### Paso 2: OpenCode, por `skills.paths`
 
 Su configuración tiene `skills: { paths: [...] }` («Additional paths to skill folders»), y esa
