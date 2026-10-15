@@ -286,6 +286,12 @@ export interface PeticionExterna {
    */
   lecturas?: readonly string[];
   /**
+   * Cuánto razona el hijo: el `esfuerzo` de su `.md`, que Claude Code recibe como `effort`. Medido en Maset: el
+   * desarrollador en Opus pasaba 17 de sus 18 minutos generando (razonamiento incluido) y uno usando herramientas.
+   * Ausente = el que use Claude Code por su cuenta. Codex y OpenCode no lo reciben.
+   */
+  esfuerzo?: Esfuerzo;
+  /**
    * Las skills de su `.md` que EXISTEN (`repartirSkills(...).suyas`), por su nombre a secas. Claude Code solo ve y usa
    * éstas (`skills` del SDK, con el prefijo del plugin): sin la lista veía también las del usuario. Ausente = ninguna.
    */

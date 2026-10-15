@@ -1257,6 +1257,8 @@ export async function abrirSesionTrueforge(
             skills: repartirSkills(delHijo, disponibles).suyas,
             ...(ejecucion === undefined ? {} : { ejecucion }),
             ...(lecturasDeSesion === undefined ? {} : { lecturas: lecturasDeSesion }),
+            // El esfuerzo de su `.md`, que Claude Code aplica como `effort`; los otros dos no tienen dónde recibirlo.
+            ...(motor === "claude-code" && agente.esfuerzo !== undefined ? { esfuerzo: agente.esfuerzo } : {}),
           }),
           senal: () => aborto?.signal,
         }),

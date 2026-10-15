@@ -529,6 +529,8 @@ export function crearSubagenteExterno(opciones: {
         // los que su propio SDK documenta, y se prefieren a un id pinchado: sobreviven a
         // la siguiente versión, que es justo para lo que el producto los ofrece.
         ...(peticion.modelo === undefined ? {} : { model: peticion.modelo }),
+        // Cuánto razona: el `esfuerzo` de su `.md` (`PeticionExterna.esfuerzo`). Ausente, el suyo por omisión.
+        ...(peticion.esfuerzo === undefined ? {} : { effort: peticion.esfuerzo }),
         /**
          * Con ejecución, el entorno del hijo es el de NUESTRA shell: sin nuestras claves de API
          * (heredaría las que `guardarCredencial` pone en `process.env`), con los `scripts/` de sus

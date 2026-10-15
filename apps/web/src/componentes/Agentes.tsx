@@ -8,6 +8,7 @@ import {
 } from "@deepseek-ai/dsh-client-ui-primitives";
 import type {
   ProveedorDeModelos, AgenteDelCable, SkillDelCable, Esfuerzo } from "../tipos.js";
+import { ESFUERZOS } from "../tipos.js";
 import { abreviar } from "../cifras.js";
 import { Desplegable } from "./Desplegable.js";
 import estilos from "./Agentes.module.css";
@@ -669,7 +670,8 @@ export function Agentes({
             ) : null}
           </label>
           {/*
-            El esfuerzo, PEGADO al modelo y solo con motor propio.
+            El esfuerzo, PEGADO al modelo y solo con motor propio… y con Claude Code, que lo recibe como `effort`
+            (`PeticionExterna.esfuerzo`): sus cinco niveles, los de su SDK.
             
             Pegado a él porque es un ajuste DE ese modelo y no una elección independiente: los
             niveles que se ofrecen salen del modelo elegido justo arriba, y la mitad de los
@@ -681,7 +683,7 @@ export function Agentes({
             configuración, y un campo nuestro no llega hasta allí. Quien tenga un `.md` con
             `esfuerzo` y un motor externo ve el aviso de abajo, no un control que miente.
           */}
-          {editando.motor === "modelo" && nivelesDelModelo.length > 0 ? (
+          {(editando.motor === "modelo" && nivelesDelModelo.length > 0) || editando.motor === "claude-code" ? (
             <label className={estilos.campo}>
               <span className={estilos.rotulo}>
                 Esfuerzo{" "}
@@ -701,7 +703,7 @@ export function Agentes({
                 }
               >
                 <option value="">Sin fijar — decide el modelo</option>
-                {nivelesDelModelo.map((n) => (
+                {(editando.motor === "claude-code" ? ESFUERZOS : nivelesDelModelo).map((n) => (
                   <option key={n} value={n}>
                     {n}
                   </option>
@@ -760,7 +762,7 @@ export function Agentes({
               {editando.ejecucion === true && !admiteEjecucion(editando.motor)
                 ? " Y «ejecuta comandos» no se aplica con este motor: el hijo corre en otro proceso, con la shell cerrada."
                 : ""}
-              {editando.esfuerzo !== undefined
+              {editando.esfuerzo !== undefined && editando.motor !== "claude-code"
                 ? " El «esfuerzo» tampoco se aplica: el modelo lo construye el hijo, con su propia configuración."
                 : ""}
             </p>

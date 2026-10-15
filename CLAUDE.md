@@ -1879,7 +1879,8 @@ escrito a mano lo da de alta una persona desde la misma ventana.
   **Ollama se PREGUNTA en vez de tabularse** (`/api/show`), por eso las capacidades entran por
   PARÁMETRO. En Anthropic va ACOPLADO al `thinking` (`aceptaThinkingAdaptativo` junto a
   `pideThinkingAdaptativo`). Se elige en DOS sitios que PERSISTEN: el `.md` de un subagente (gana
-  sobre la sesión) y la sesión (vive en el ÍNDICE). No hay defecto global. **El PENSAMIENTO es otro interruptor, aparte del esfuerzo** (`pensamiento: apagado|activo` en el `.md`,
+  sobre la sesión) y la sesión (vive en el ÍNDICE). No hay defecto global. **Y un hijo de Claude Code lo recibe como `effort`** (`PeticionExterna.esfuerzo`, selector en Ajustes con los
+  cinco niveles del SDK): medido en Maset, el desarrollador en Opus pasaba casi todo su tiempo generando, y muy poco en herramientas. **El PENSAMIENTO es otro interruptor, aparte del esfuerzo** (`pensamiento: apagado|activo` en el `.md`,
 `core/esfuerzo.ts#pensamientoAplicable`): «cuánto» y «si» son preguntas distintas, y en DeepSeek un nivel `low` no
 frena el razonamiento (medido). Ausente decide la familia del proveedor y la clase de trabajo derivada de los
 datos del agente —quien ejecuta comandos va sin pensar en DeepSeek, `claseDeTrabajo`—; solo donde el modelo lo

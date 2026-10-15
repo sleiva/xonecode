@@ -65,11 +65,10 @@ export interface Agente {
    * tiene la tabla y lo medido). Ausente = no se manda el parámetro, que es lo que hacía
    * este harness entero hasta ahora.
    *
-   * **Solo tiene efecto con `motor: "modelo"`**, igual que `ejecucion` y por una razón del
-   * mismo tipo: en los tres motores externos el modelo lo construye el hijo en SU proceso,
-   * con su propia configuración, y un campo nuestro no llega hasta allí. Los tres tienen su
-   * propia palanca de esfuerzo y ésta no es. Declararlo con otro motor no rompe nada, pero
-   * no hace nada, y la ventana de Ajustes lo dice.
+   * **Tiene efecto con `motor: "modelo"` y con `claude-code`**, que lo recibe como `effort` de su SDK
+   * (`PeticionExterna.esfuerzo`; medido en Maset, el desarrollador en Opus pasaba casi todo su tiempo
+   * generando). En Codex y OpenCode el modelo lo construye el hijo con su configuración y un campo
+   * nuestro no llega: declararlo ahí no rompe nada, pero no hace nada, y la ventana de Ajustes lo dice.
    *
    * Se valida al APLICARLO y no al leerlo: un nivel que el modelo no admite se omite
    * (`esfuerzoAplicable`), porque rechazar el `.md` haría desaparecer un subagente que

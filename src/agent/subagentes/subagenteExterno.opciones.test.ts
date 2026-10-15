@@ -54,4 +54,12 @@ describe("con qué se lanza un hijo de Claude Code", () => {
     expect(append).toContain("Eres el desarrollador.");
     expect(append).toContain("SHELL: `Bash` solo para estos scripts de tus skills, uno por llamada, por su NOMBRE y sin ruta: `xone-captura-android`");
   });
+
+  it("el `esfuerzo` de su `.md` llega como `effort`; sin él, no se manda", async () => {
+    const base = { motor: "claude-code" as const, cwd: process.cwd(), instrucciones: "", tarea: "x", agente: "dev", permitirEscritura: false };
+    await crearSubagenteExterno({}).correr({ ...base, esfuerzo: "medium" });
+    expect(lanzados.at(-1)!.options.effort).toBe("medium");
+    await crearSubagenteExterno({}).correr(base);
+    expect(lanzados.at(-1)!.options.effort).toBeUndefined();
+  });
 });
