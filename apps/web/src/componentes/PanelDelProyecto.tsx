@@ -41,7 +41,7 @@ export type PeticionAlGestor = MensajeDelGestor extends infer M ? (M extends { c
  */
 export type ContextoDeGestor = { destino?: string };
 
-type PestanaDelProyecto = "resumen" | "sincronizacion" | "tareas" | "conectores" | "soporte";
+export type PestanaDelProyecto = "resumen" | "sincronizacion" | "tareas" | "conectores" | "soporte";
 
 /**
  * El NOMBRE para mostrar de un conector (IXCODE-15): el del catálogo que el cliente ya tiene
@@ -123,6 +123,7 @@ export function PanelDelProyecto({
   alProbarConector,
   alAbrirAjustesDeConectores,
   alPedirSoporte,
+  pestanaInicial,
 }: {
   nombre: string;
   /** El NOMBRE del entorno del proyecto. Ausente = no consta, y no se pinta. */
@@ -186,8 +187,11 @@ export function PanelDelProyecto({
    * pestaña no se pinta: un control sin dato detrás no existe.
    */
   alPedirSoporte?: (proyecto: string) => Promise<ListadoDeSoporte | undefined>;
+  /** Dónde se monta, si no es el Resumen: al VOLVER de leer una tarea finalizada, a Tareas, que es de donde se fue
+   *  (el panel se desmonta mientras se lee). Solo cuenta al montar. */
+  pestanaInicial?: PestanaDelProyecto;
 }) {
-  const [pestana, setPestana] = useState<PestanaDelProyecto>("resumen");
+  const [pestana, setPestana] = useState<PestanaDelProyecto>(pestanaInicial ?? "resumen");
   /** Sin copia en el equipo no hay consola de ESTE proyecto: solo su Resumen. */
   const sinCopia = copia !== undefined && copia.proyecto.local !== true;
   /** Soporte exporta la copia: sin copia, sin el id del proyecto o sin quien pida, no hay pestaña. */

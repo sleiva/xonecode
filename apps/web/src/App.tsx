@@ -575,6 +575,11 @@ export function App({
     for (const t of estado.tareas?.lista ?? []) if (t.estado === "en-proceso" && t.sesion !== undefined) deSesion.set(t.sesion, t.id);
     return deSesion;
   }, [estado.tareas]);
+  /**
+   * Se abrió la lectura de una tarea desde «Finalizadas»: al cerrarla, el panel vuelve a Tareas → Finalizadas, no al
+   * Resumen (los dos se DESMONTAN mientras se lee y nacerían en su pestaña por omisión). Se gasta al volver.
+   */
+  const [volverAFinalizadas, setVolverAFinalizadas] = useState(false);
   /** Las conversaciones de las tareas TERMINADAS: son histórico (Tareas → Finalizadas), y la barra no las lista. */
   const sesionesDeFinalizadas = useMemo(() => {
     const ids = new Set<string>();
@@ -594,6 +599,13 @@ export function App({
    * La lectura de AHORA, para cerrar o cambiar sin meter efectos dentro de un `setLectura`: dejar de
    * mirar toca el store y la red, y un actualizador de React tiene que ser puro (se puede repetir).
    */
+  /**
+   * La vuelta a «Finalizadas» se GASTA en cuanto el panel ha vuelto a montarse con ella (el efecto corre después de ese
+   * render): abrir luego el proyecto desde la barra tiene que seguir llevando al Resumen.
+   */
+  useEffect(() => {
+    if (lectura === undefined && volverAFinalizadas) setVolverAFinalizadas(false);
+  }, [lectura, volverAFinalizadas]);
   const lecturaActual = useRef(lectura);
   lecturaActual.current = lectura;
   const cerrarLectura = useCallback(() => {
@@ -2659,8 +2671,12 @@ export function App({
       // El HISTÓRICO: la conversación de una finalizada se LEE, con sus artefactos —nunca `alIrAlChatDeTarea`, que la
       // abriría para escribir—. Y lo que contestó al final, del mismo `leerSesion`, pedido al desplegar su fila.
       alLeerFinalizada={(t: TareaDelCable) => {
-        if (t.sesion !== undefined) leerSesion(t.proyecto, t.sesion, t.titulo);
+        if (t.sesion === undefined) return;
+        // Al cerrar se vuelve a donde se estaba: el panel y esta lista se desmontan mientras se lee.
+        setVolverAFinalizadas(true);
+        leerSesion(t.proyecto, t.sesion, t.titulo);
       }}
+      {...(volverAFinalizadas ? { pestanaInicial: "finalizadas" as const } : {})}
       alPedirUltimaRespuesta={async (t: TareaDelCable) => {
         if (t.sesion === undefined) return {};
         const r = (await enviar({ clase: "leerSesion", proyecto: t.proyecto, sesion: t.sesion })) as Response | undefined;
@@ -3398,6 +3414,7 @@ export function App({
                     },
                   })}
               tareasEnFondo={tareasEnFondo}
+              {...(volverAFinalizadas ? { pestanaInicial: "tareas" as const } : {})}
               // La pestaña Sincronización: solo con copia, que es el proyecto que sincroniza.
               {...(identidadDelActivo === undefined ? {} : { sincronizacion: pestanaDeSincronizacion })}
               {...(estado.gestor === undefined ? {} : { gestor: estado.gestor })}

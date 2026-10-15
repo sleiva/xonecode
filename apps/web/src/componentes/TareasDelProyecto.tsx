@@ -75,6 +75,7 @@ export function TareasDelProyecto({
   mirada,
   alLeerFinalizada,
   alPedirUltimaRespuesta,
+  pestanaInicial,
   conectado,
 }: {
   /** Ausente = la cola todavía no ha llegado del servidor. `[]` = llegó, y este proyecto no
@@ -161,6 +162,8 @@ export function TareasDelProyecto({
   /** Lo último que contestó el agente en la conversación de una finalizada: su resumen de lo que hizo. Se pide al
    *  desplegar (nunca viaja con la cola). `undefined` = no consta; un texto que empieza por «No se pudo» es un fallo. */
   alPedirUltimaRespuesta?: (tarea: TareaDelCable) => Promise<{ texto?: string; error?: string }>;
+  /** Dónde se monta: «Finalizadas» al volver de leer una (la lista se desmonta mientras se lee). Solo cuenta al montar. */
+  pestanaInicial?: "curso" | "finalizadas";
 }) {
   const apagado = conectado === false;
   /**
@@ -169,7 +172,7 @@ export function TareasDelProyecto({
    * reciente arriba, y lo que hizo cada una. Antes iban mezcladas en una lista, y las terminadas, que solo crecen,
    * acababan tapando las que esperaban algo de ti. La vacía lo dice con palabras; la cuenta solo se pinta con algo.
    */
-  const [pestana, setPestana] = useState<"curso" | "finalizadas">("curso");
+  const [pestana, setPestana] = useState<"curso" | "finalizadas">(pestanaInicial ?? "curso");
   const enCurso = tareas?.filter((t) => t.estado !== "terminada");
   const finalizadas = tareas
     ?.filter((t) => t.estado === "terminada")

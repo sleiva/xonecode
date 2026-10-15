@@ -4108,4 +4108,33 @@ describe("App: una tarea finalizada se lee con su conversación y sus artefactos
     // Las sesiones del proyecto SÍ están desplegadas: la de la tarea falta por el filtro, no porque no se listen.
     expect(within(barra).getAllByRole("button", { name: /Mi chat/ }).length).toBeGreaterThan(0);
   });
+
+  it("«Cerrar» vuelve a Tareas → Finalizadas, no al Resumen; y eso se gasta al volver", async () => {
+    const { store } = conUnaFinalizada();
+    fireEvent.click(screen.getByRole("button", { name: "Ver la conversación y sus artefactos" }));
+    expect(await screen.findByText("añade la versión al login")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+    expect(screen.getByRole("tab", { name: "Tareas" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: /Finalizadas/ }).getAttribute("aria-selected")).toBe("true");
+    // Se sale al chat (el servidor contesta con su alta) y se vuelve al proyecto desde la barra: el Resumen de siempre.
+    const barra = screen.getAllByRole("navigation").find((n) => !n.hasAttribute("aria-label"))!;
+    fireEvent.click(within(barra).getAllByRole("button", { name: /Mi chat/ })[0]!);
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        registrados: [{ id: "webstudio", nombre: "WebStudio", url: "https://x/mcp" }],
+        entornoActivo: "webstudio",
+        proyectos: [{ id: "p1", nombre: "AppDemo", local: true, sesiones: [{ id: "s1", titulo: "Mi chat" }] }],
+        ramas: [],
+        proyectoAbierto: true,
+        proyectoActivo: "p1",
+        sesionActiva: "s1",
+      } as never)
+    );
+    fireEvent.click(within(barra).getByRole("button", { name: "AppDemo" }));
+    expect(screen.getByRole("tab", { name: "Resumen" }).getAttribute("aria-selected")).toBe("true");
+  });
 });
