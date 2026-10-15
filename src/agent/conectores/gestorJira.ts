@@ -18,7 +18,8 @@
  */
 import {
   categoriaDeEstado, jqlDePendientes, motivoDeClaveDeProyecto,
-  type FichaDelGestor, type GestorDeTareasPort, type OpcionesDePendientes, type TareaDelGestor, type TransicionDelGestor, type Vinculo,
+  type FichaDelGestor, type GestorDeTareasPort, type NuevaTareaEnElGestor, type OpcionesDePendientes, type TareaDelGestor,
+  type TransicionDelGestor, type Vinculo,
 } from "../../core/gestorDeTareas.js";
 
 type Llamar = (nombre: string, args: Record<string, unknown>) => Promise<string>;
@@ -70,6 +71,35 @@ function tareaDesdeIssue(tool: string, issue: Record<string, unknown>, urlDelSit
     ...(asignado !== undefined ? { asignado } : {}),
     ...(urlDelSitio !== undefined ? { url: `${urlDelSitio}/browse/${clave}` } : {}),
   };
+}
+
+/**
+ * El tipo de incidencia con el que se CREA una tarea, elegido de lo que el proyecto declara
+ * (`getJiraProjectIssueTypesMetadata`). Medido sobre un Jira en español: `name` viene TRADUCIDO («Tarea») y
+ * `untranslatedName` es el de siempre («Task»), así que escribir «Task» a fuego no vale. Regla: un tipo de nivel 0
+ * (ni épica ni subtarea), con «Task» primero, y si no el primero de nivel 0; se devuelve su `name`, que es como el
+ * proyecto lo llama. Sin ninguno de nivel 0, `undefined` (y crear lo dice).
+ */
+export function tipoParaCrear(respuesta: unknown): string | undefined {
+  if (typeof respuesta !== "object" || respuesta === null) return undefined;
+  const tipos = (respuesta as Record<string, unknown>).issueTypes;
+  if (!Array.isArray(tipos)) return undefined;
+  const validos = tipos
+    .filter((t): t is Record<string, unknown> => typeof t === "object" && t !== null)
+    .filter((t) => typeof t.name === "string" && t.subtask !== true && (t.hierarchyLevel === undefined || t.hierarchyLevel === 0));
+  const tarea = validos.find((t) => t.untranslatedName === "Task" || t.name === "Task");
+  return (tarea ?? validos[0])?.name as string | undefined;
+}
+
+/**
+ * La clave de la incidencia recién creada. La respuesta de `createJiraIssue` es la de la API de Jira (`{id, key,
+ * self}`) o la incidencia entera; en las dos, `key` en la raíz. Sin ella se LANZA: el ticket puede existir, pero sin
+ * clave no hay a qué ligar la tarea, y quien llama lo dice.
+ */
+export function claveCreada(respuesta: unknown): string {
+  const clave = typeof respuesta === "object" && respuesta !== null ? (respuesta as Record<string, unknown>).key : undefined;
+  if (typeof clave !== "string" || clave === "") throw new Error("Jira creó la tarea pero no dijo su clave (createJiraIssue)");
+  return clave;
 }
 
 /**
@@ -196,5 +226,52 @@ export function crearGestorJira(llamar: Llamar): GestorDeTareasPort {
     await llamar("addCommentToJiraIssue", { cloudId: v.sitio, issueIdOrKey: clave, commentBody: cuerpo, contentFormat: "markdown" });
   }
 
-  return { sitios, proyectos, pendientes, ficha, transiciones, transicionar, comentar };
+  /** El `account_id` de quien tiene la sesión del conector, preguntado una vez por instancia. El correo que viene al
+   *  lado en `atlassianUserInfo` no sale de esta función. */
+  let cuentaPropia: Promise<string | undefined> | undefined;
+  const miCuenta = (): Promise<string | undefined> =>
+    (cuentaPropia ??= llamar("atlassianUserInfo", {}).then(
+      (t) => {
+        const id = (json("atlassianUserInfo", t) as Record<string, unknown> | null)?.account_id;
+        return typeof id === "string" && id !== "" ? id : undefined;
+      },
+      () => {
+        cuentaPropia = undefined;
+        return undefined;
+      }
+    ));
+
+  async function crear(v: Vinculo, nueva: NuevaTareaEnElGestor): Promise<TareaDelGestor> {
+    const tipo = tipoParaCrear(
+      json("getJiraProjectIssueTypesMetadata", await llamar("getJiraProjectIssueTypesMetadata", { cloudId: v.sitio, projectIdOrKey: v.proyecto }))
+    );
+    if (tipo === undefined) throw new Error(`el proyecto ${v.proyecto} de Jira no tiene un tipo de incidencia con el que crear una tarea`);
+    // Asignada a quien tiene la sesión: es quien la encarga. Sin cuenta (no se pudo preguntar), se crea sin asignar.
+    const cuenta = await miCuenta();
+    const clave = claveCreada(
+      json(
+        "createJiraIssue",
+        await llamar("createJiraIssue", {
+          cloudId: v.sitio,
+          projectKey: v.proyecto,
+          issueTypeName: tipo,
+          summary: nueva.titulo,
+          description: nueva.descripcion,
+          contentFormat: "markdown",
+          ...(cuenta === undefined ? {} : { assignee_account_id: cuenta }),
+        })
+      )
+    );
+    const urlDelSitio = urlPorSitio.get(v.sitio);
+    return {
+      clave,
+      titulo: nueva.titulo,
+      // Recién creada: lo que se sabe sin volver a preguntar. Quien necesite el estado exacto pide la ficha.
+      estado: "",
+      categoria: "por-hacer",
+      ...(urlDelSitio !== undefined ? { url: `${urlDelSitio}/browse/${clave}` } : {}),
+    };
+  }
+
+  return { sitios, proyectos, pendientes, ficha, transiciones, transicionar, comentar, crear };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { crearGestorJira } from "./gestorJira.js";
+import { claveCreada, crearGestorJira, tipoParaCrear } from "./gestorJira.js";
 import type { Vinculo } from "../../core/gestorDeTareas.js";
 
 /** Las formas MEDIDAS contra `https://mcp.atlassian.com/v1/mcp` (28-09-2026, ver `restricciones.md`). */
@@ -239,6 +239,63 @@ describe("escrituras", () => {
       nombre: "addCommentToJiraIssue",
       args: { cloudId: "cloud-1", issueIdOrKey: "IXCODE-11", commentBody: "hola", contentFormat: "markdown" },
     });
+  });
+});
+
+/** Medido 15-10-2026 en KAN (Jira en español): `name` traducido, `untranslatedName` el de siempre. */
+const TIPOS = {
+  issueTypes: [
+    { id: "10001", name: "Epic", untranslatedName: "Epic", subtask: false, hierarchyLevel: 1 },
+    { id: "10003", name: "Subtask", untranslatedName: "Subtask", subtask: true, hierarchyLevel: -1 },
+    { id: "10006", name: "Historia", untranslatedName: "Story", subtask: false, hierarchyLevel: 0 },
+    { id: "10004", name: "Tarea", untranslatedName: "Task", subtask: false, hierarchyLevel: 0 },
+  ],
+};
+
+describe("crear", () => {
+  it("elige el tipo por los metadatos: «Task» aunque se llame «Tarea»; nunca épica ni subtarea", () => {
+    expect(tipoParaCrear(TIPOS)).toBe("Tarea");
+    expect(tipoParaCrear({ issueTypes: [TIPOS.issueTypes[0], TIPOS.issueTypes[2]] })).toBe("Historia");
+    expect(tipoParaCrear({ issueTypes: [TIPOS.issueTypes[0], TIPOS.issueTypes[1]] })).toBeUndefined();
+    expect(tipoParaCrear("raro")).toBeUndefined();
+  });
+
+  it("crea con el tipo del proyecto, en markdown y asignada a quien tiene la sesión; el correo no sale", async () => {
+    const { llamar, llamadas } = llamarDoble({
+      getAccessibleAtlassianResources: SITIOS,
+      getJiraProjectIssueTypesMetadata: TIPOS,
+      atlassianUserInfo: { account_id: "acc-1", email: "sleiva@xone.es", name: "Sergio" },
+      createJiraIssue: { id: "30001", key: "IXCODE-57", self: "https://x/rest/api/3/issue/30001" },
+    });
+    const g = crearGestorJira(llamar);
+    await g.sitios();
+    const creada = await g.crear!(V, { titulo: "Versión en el login", descripcion: "Añade la versión" });
+    expect(creada).toEqual({ clave: "IXCODE-57", titulo: "Versión en el login", estado: "", categoria: "por-hacer", url: "https://xone.atlassian.net/browse/IXCODE-57" });
+    expect(llamadas.find((l) => l.nombre === "createJiraIssue")!.args).toEqual({
+      cloudId: "cloud-1",
+      projectKey: "IXCODE",
+      issueTypeName: "Tarea",
+      summary: "Versión en el login",
+      description: "Añade la versión",
+      contentFormat: "markdown",
+      assignee_account_id: "acc-1",
+    });
+    expect(JSON.stringify(creada)).not.toContain("sleiva");
+  });
+
+  it("sin cuenta propia se crea sin asignar; sin tipo válido o sin clave en la respuesta, LANZA", async () => {
+    const sinCuenta = llamarDoble({ getJiraProjectIssueTypesMetadata: TIPOS, createJiraIssue: { key: "IXCODE-58" } });
+    sinCuenta.llamar.mockImplementationOnce(async (nombre, args) => {
+      sinCuenta.llamadas.push({ nombre, args });
+      return JSON.stringify(TIPOS);
+    });
+    const g = crearGestorJira(sinCuenta.llamar);
+    await g.crear!(V, { titulo: "t", descripcion: "d" });
+    expect(sinCuenta.llamadas.find((l) => l.nombre === "createJiraIssue")!.args).not.toHaveProperty("assignee_account_id");
+
+    const sinTipo = crearGestorJira(llamarDoble({ getJiraProjectIssueTypesMetadata: { issueTypes: [] } }).llamar);
+    await expect(sinTipo.crear!(V, { titulo: "t", descripcion: "d" })).rejects.toThrow(/tipo de incidencia/);
+    expect(() => claveCreada({ id: "1" })).toThrow(/no dijo su clave/);
   });
 });
 
