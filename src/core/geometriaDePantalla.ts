@@ -630,7 +630,9 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
     const pm = p.maqueta.caja.alto / p.maqueta.caja.ancho;
     const pa = p.aparato.caja.alto / p.aparato.caja.ancho;
     if (pm > 0 && Math.abs(pa / pm - 1) > CAMBIO_DE_TAMAÑO && (pa < pm ? pm / pa : pa / pm) > 1.4) {
-      diferencias.push(`${etiqueta(p.maqueta)} tiene otra PROPORCIÓN: alto/ancho ${veces(pa)} en el aparato y ${veces(pm)} en la maqueta (${pa < pm ? "más aplastado" : "más estirado"}).`);
+      // Con un decimal dos proporciones distintas pueden salir iguales («0,2 y 0,2, más estirado»): entonces, con dos.
+      const fmt = (x: number) => (veces(pa) === veces(pm) ? x.toFixed(2).replace(".", ",") : veces(x));
+      diferencias.push(`${etiqueta(p.maqueta)} tiene otra PROPORCIÓN: alto/ancho ${fmt(pa)} en el aparato y ${fmt(pm)} en la maqueta (${pa < pm ? "más aplastado" : "más estirado"}).`);
     }
   });
   return { bloqueantes, diferencias, notas };

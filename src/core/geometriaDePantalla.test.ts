@@ -376,3 +376,27 @@ describe("la proporción de un control se compara solo si en la maqueta es un BO
     expect(todo).toMatch(/«SALIR» tiene otra PROPORCIÓN/);
   });
 });
+
+describe("una proporción que al redondear sale igual se dice con dos decimales", () => {
+  it("0,24 frente a 0,17, no «0,2 y 0,2»", () => {
+    const h = compararConMaqueta(
+      {
+        ancho: 400,
+        alto: 800,
+        elementos: [
+          { texto: "ENTREGAS", caja: { x: 100, y: 200, ancho: 80, alto: 20 } },
+          { texto: "SALIR", caja: { x: 20, y: 700, ancho: 360, alto: 61 }, boton: true },
+        ],
+      },
+      {
+        pantalla: { ancho: 1000, alto: 2000 },
+        controles: [
+          { nombre: "MAP_TIT", texto: "ENTREGAS", tipo: "prop", clase: "L", caja: { x: 250, y: 500, ancho: 200, alto: 50 } },
+          { nombre: "BT6", texto: "SALIR", tipo: "prop", clase: "B", caja: { x: 50, y: 1750, ancho: 900, alto: 216 } },
+        ],
+      }
+    );
+    const linea = h.diferencias.find((d) => d.includes("PROPORCIÓN"))!;
+    expect(linea).toMatch(/0,24 en el aparato y 0,17 en la maqueta/);
+  });
+});
