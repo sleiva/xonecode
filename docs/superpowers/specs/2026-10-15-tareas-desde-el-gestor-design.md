@@ -1,6 +1,6 @@
 # Tareas en background que viven en el gestor de tareas (Jira, Notion, …)
 
-Fecha: 15-10-2026. Estado: fase 1 (puerta 1) HECHA en código y probada con dobles; falta medir `createJiraIssue` de verdad. Fase 2 pendiente.
+Fecha: 15-10-2026. Estado: fase 1 (puerta 1) HECHA y medida contra Jira real (MAS-1). Fase 2 pendiente.
 
 ## Qué se quiere
 
@@ -119,5 +119,8 @@ pinta en su fila.
   («Tarea», «Historia») y `untranslatedName` («Task», «Story»), `subtask` y `hierarchyLevel`. Regla del adaptador: el
   de `hierarchyLevel 0` y no subtarea, `untranslatedName` «Task» primero; se manda su `name`.
 - `atlassianUserInfo` da `account_id` y también el correo: el correo no sale del adaptador.
-- Pendiente de medir con permiso de la persona: crear un ticket de verdad (si `issueTypeName` acepta el nombre
-  traducido) y borrarlo después.
+- **Medido creando de verdad** (MAS-1 en el proyecto MAS, con permiso de la persona, por el `crear` del adaptador):
+  `createJiraIssue` contesta `{id, key, self}` (la clave en la raíz, lo que lee `claveCreada`); acepta `issueTypeName`
+  con el nombre TRADUCIDO («Tarea»); queda asignado a quien tiene la sesión y en «Por hacer»; el comentario con el
+  encargo se sube. El flujo de MAS es Por hacer → En curso → Listo: al terminar, el ticket pasa a Listo. El conector no
+  tiene tool de borrar: el ticket de prueba lo borra la persona.
