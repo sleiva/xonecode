@@ -69,7 +69,7 @@ import { carpetaDeHotswap } from "../../../core/hotswap.js";
 import { cargarAgentes } from "../../subagentes/agentesEnDisco.js";
 import { bloqueDeAprendido, NOMBRE_APUNTAR_APRENDIZAJE, USO_DE_APRENDIDO_EXTERNO, USO_DE_APUNTAR_APRENDIZAJE } from "../../../core/aprendido.js";
 import { crearApuntarAprendizaje, leerAprendido } from "../../grafo/aprendido.js";
-import { fichaDeAgente, promptDeAgente, recibeMarcarCriterios, recibeNucleoDeTrabajo, repartirSkills, skillsConLasDeQuienLlama, textoDeTrabajoSinLlamar, type Agente } from "../../../core/agentes.js";
+import { fichaDeAgente, promptDeAgente, recibeMarcarCriterios, recibeNucleoDeTrabajo, repartirSkills, skillsConLasDeQuienLlama, textoDeCarpetasDeLaSesion, textoDeTrabajoSinLlamar, type Agente } from "../../../core/agentes.js";
 import { PERFIL_DEL_ORQUESTADOR, promptOrquestador } from "../../grafo/xoneAgent.js";
 import { permisosDe, seDetieneEn, TEXTO_HITL } from "../../grafo/perfiles.js";
 import { cambioDe } from "../../turno/interrupts.js";
@@ -1179,6 +1179,8 @@ export async function abrirSesionTrueforge(
             lecturas: [carpeta, carpetaDeHotswap(carpeta)],
           }
         : undefined;
+    // Las carpetas de la sesión se LEEN aunque no ejecute: es donde el orquestador le deja la maqueta y las capturas.
+    const lecturasDeSesion = motor === "claude-code" && carpeta !== undefined ? [carpeta, carpetaDeHotswap(carpeta)] : undefined;
     /**
      * Lo que sus comandos dejen en `/artefactos/` se ANUNCIA al volver, con la MISMA foto que nuestra
      * shell (`fotoDeArtefactos`): por nuestra shell se anunciaba y por la suya no, y una captura
@@ -1212,6 +1214,7 @@ export async function abrirSesionTrueforge(
             instrucciones: [
               promptDeAgente(delHijo, repartirSkills(delHijo, disponibles)),
               ...(conEjecucion && (agente.llama ?? []).length > 0 ? [textoDeTrabajoSinLlamar(agente.llama ?? [], carpeta!)] : []),
+              ...(lecturasDeSesion === undefined ? [] : [textoDeCarpetasDeLaSesion(lecturasDeSesion[0]!, lecturasDeSesion[1]!)]),
               ...[bloqueDeAprendido(leerAprendido(raiz))].filter((b): b is string => b !== undefined),
               USO_DE_APRENDIDO_EXTERNO,
               inventarioDelProyecto(ficherosDelProyecto(raiz)),
@@ -1222,6 +1225,7 @@ export async function abrirSesionTrueforge(
             agente: agente.nombre,
             skills: repartirSkills(delHijo, disponibles).suyas,
             ...(ejecucion === undefined ? {} : { ejecucion }),
+            ...(lecturasDeSesion === undefined ? {} : { lecturas: lecturasDeSesion }),
           }),
           senal: () => aborto?.signal,
         }),

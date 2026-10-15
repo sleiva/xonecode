@@ -111,3 +111,47 @@ export const NUCLEO_XONE = [
   "- No afirmes «sin recorte», «funciona» ni «igual que la maqueta» sin la captura que lo sostiene, y termina",
   "  diciendo qué NO comprobaste y qué sigue distinto.",
 ].join("\n");
+
+/**
+ * El núcleo para un hijo de motor EXTERNO (Claude Code, Codex, OpenCode): las MISMAS reglas, sin nombrar las tools de
+ * xonecode, que en su proceso no existen. Medido en Maset: el desarrollador en Claude Code leyó «compruébalo con
+ * `comparar_capturas`», la buscó con `ToolSearch` y contestó «no existe en mi proceso». Cada línea se sustituye por su
+ * texto EXACTO: si el núcleo cambia y una deja de casar, `nucleoXoneExterno` LANZA (y su test lo ve), en vez de
+ * colarse con el nombre de la tool.
+ */
+const SUSTITUCIONES_EXTERNAS: readonly (readonly [string, readonly string[]])[] = [
+  ["- Si tienes `diferencia_de_capturas`, pregunta «¿cambió esta zona?» con ella, no con `md5` ni con un script.", []],
+  [
+    "- Con un diseño delante, «fiel» se comprueba con `comparar_capturas` y `xone_critica_visual`, pasando la",
+    ["- Con un diseño delante, «fiel» se comprueba MIRANDO: abre con Read la captura y la maqueta (las ves) y"],
+  ],
+  [
+    "  maqueta como `referencia` (vale /diseno/, /adjuntos/ o /artefactos/). Sin ella el crítico solo dice «nada",
+    ["  compáralas pieza a pieza: está, texto, posición, tamaño, forma y color. Sin la maqueta solo sabes «nada"],
+  ],
+  [
+    "- Degradados, sombras y resplandores NO se escriben a mano: `generar_fondo_svg`, con el ancho y el alto del",
+    ["- Degradados, sombras y resplandores van en un SVG sin filtros, hecho con el ancho y el alto del"],
+  ],
+  [
+    "- Un icono suelto se busca con `buscar_icono` (color en hexadecimal y altura en píxeles, nunca `currentColor`),",
+    ["- Un icono suelto es un SVG con su color en hexadecimal y su tamaño en píxeles (nunca `currentColor`),"],
+  ],
+  [
+    "- La documentación de una skill se lee con `read_file /skills/<skill>/...`; desde la shell, con la ruta que",
+    ["- La documentación de una skill se lee con Read en la carpeta de la skill, la de su `SKILL.md`."],
+  ],
+  ["  trae `$XONECODE_SKILL_<NOMBRE>`. `/skills/` no existe en el disco: no la busques con `find`.", []],
+];
+
+export function nucleoXoneExterno(nucleo: string = NUCLEO_XONE): string {
+  const lineas = nucleo.split("\n");
+  for (const [original, nuevas] of SUSTITUCIONES_EXTERNAS) {
+    const i = lineas.indexOf(original);
+    if (i < 0) throw new Error(`nucleoXoneExterno: el núcleo ya no tiene la línea «${original.slice(0, 60)}…»`);
+    lineas.splice(i, 1, ...nuevas);
+  }
+  return lineas.join("\n");
+}
+
+export const NUCLEO_XONE_EXTERNO = nucleoXoneExterno();

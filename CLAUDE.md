@@ -539,6 +539,13 @@ ejecuta si es Claude Code, con la shell ESTRECHA (ver abajo). Reglas duras:
   Trampa: `it.next()` se pide UNA vez y se guarda.
 - **Un hijo de Claude Code NO puede enumerar la carpeta, así que se le DICE**
   (`escrituraExterna.ts#inventarioDelProyecto`): sus rutas virtuales van en las instrucciones.
+  **Y se le dice dónde están `/artefactos/` y `/hotswap/` en el disco, que LEE aunque no ejecute**
+  (`textoDeCarpetasDeLaSesion`, `PeticionExterna.lecturas`, sumadas por `lecturasDelHijo` en las DOS llaves): el
+  orquestador le pasa la maqueta por su ruta virtual, y medido en Maset el analista contestó «no he podido leerla».
+- **A un motor externo no se le nombran tools de xonecode** (`nucleoXoneExterno`, `HERRAMIENTAS_DEL_EXTERNO`): recibe
+  el núcleo con esas líneas reescritas por texto EXACTO —si el núcleo cambia y una no casa, LANZA— y una línea que dice
+  qué hacer con una tool que su `.md` o su encargo nombren y él no tiene. Medido: el desarrollador en Claude Code
+  buscaba `comparar_capturas` y `validar_fichero_xone` con `ToolSearch`.
 - **`ToolSearch` es de LECTURA** y **listar la RAÍZ se permite** (`rutaVirtualDeEscritura` la
   descarta porque no es un fichero que escribir).
 - **Motores externos**: `claude-code` (`agent/subagentes/subagenteExterno.ts`) **escribe, y cada

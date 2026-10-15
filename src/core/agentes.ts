@@ -20,7 +20,7 @@ import { esEsfuerzo, esPensamiento, type Esfuerzo, type Pensamiento } from "./es
 import { recibeBuscarIcono } from "./iconos.js";
 import { METODO_DE_COMPARACION_VISUAL } from "./metodoDeComparacionVisual.js";
 import { recibeFuentes } from "./fuentes.js";
-import { NUCLEO_XONE } from "./nucleoXone.js";
+import { NUCLEO_XONE, NUCLEO_XONE_EXTERNO } from "./nucleoXone.js";
 
 /** De qué está hecho un subagente. Los tres van al MISMO sitio: la lista de deepagents. */
 export type Motor = "modelo" | "claude-code" | "codex" | "opencode";
@@ -257,7 +257,8 @@ export function promptDeAgente(agente: Agente, skills?: EstadoDeSkills): string 
     "",
     // El núcleo de trabajo, solo a quien ESCRIBE el proyecto o CONDUCE el aparato (ver `nucleoXone.ts`):
     // el consultor y el analista leen, y el documentador escribe documentos, no pantallas.
-    ...(recibeNucleoDeTrabajo(agente) ? [NUCLEO_XONE, ""] : []),
+    // A un motor EXTERNO, sin nombres de tools de xonecode, que en su proceso no existen (`nucleoXoneExterno`).
+    ...(recibeNucleoDeTrabajo(agente) ? [agente.motor === "modelo" ? NUCLEO_XONE : NUCLEO_XONE_EXTERNO, ""] : []),
     MAPA_DEL_PROYECTO,
     "",
     agente.descripcion,
@@ -330,6 +331,8 @@ export function promptDeAgente(agente: Agente, skills?: EstadoDeSkills): string 
           "RUTAS: trabajas sobre la carpeta del proyecto directamente, así que una ruta que " +
             "empiece por «/» es la raíz del SISTEMA y está fuera del proyecto. Escribe las rutas " +
             "relativas a la carpeta del proyecto («doc/GUIA.md»), nunca «/doc/GUIA.md».",
+          // Su `.md` y su encargo se escriben también para el motor `modelo`, y nombran tools que él no tiene.
+          HERRAMIENTAS_DEL_EXTERNO,
         ]),
   ]
     .join("\n")
@@ -363,6 +366,31 @@ export function textoDeTrabajoSinLlamar(llama: readonly string[], carpeta: strin
     "",
     // El MISMO método que el crítico visual: dos que comparan distinto dan veredictos que no se pueden contrastar.
     `Para comparar, recorre las dos imágenes así. ${METODO_DE_COMPARACION_VISUAL}`,
+  ].join("\n");
+}
+
+/**
+ * Para un hijo de motor EXTERNO: lo que hacer con una tool de xonecode que su `.md` o su encargo nombren. Medido en Maset:
+ * el desarrollador en Claude Code buscó `validar_fichero_xone` y `comparar_capturas` con `ToolSearch`, y el orquestador
+ * le pedía abrir la maqueta «con describe_image».
+ */
+export const HERRAMIENTAS_DEL_EXTERNO =
+  "HERRAMIENTAS: tienes las de tu motor (Read, Edit, Write, Glob, Grep y, si se te concede, Bash con tus scripts). " +
+  "Si este texto o tu encargo nombran una que no tienes —`describe_image`, `comparar_capturas`, " +
+  "`marcar_criterios_del_plan`, `validar_fichero_xone`…—, es de otro proceso: no la busques. Haz lo equivalente " +
+  "con las tuyas (una imagen la VES abriéndola con Read; un plan se marca editando su `TASKS.md`) o di qué no pudiste hacer.";
+
+/**
+ * Dónde están EN EL DISCO las carpetas de la sesión que un encargo nombra por su ruta virtual. Para un hijo de Claude
+ * Code: él ve el disco, y `/artefactos/diseno/screen.jpg` es para él una ruta del sistema, fuera del proyecto. Medido en
+ * Maset: el analista recibió esa ruta y contestó «no he podido leer la maqueta». Las dos carpetas se pueden LEER
+ * aunque no ejecute (`PeticionExterna.lecturas`).
+ */
+export function textoDeCarpetasDeLaSesion(artefactos: string, hotswap: string): string {
+  return [
+    "CARPETAS DE LA SESIÓN: cuando tu encargo nombre una ruta que empieza por `/artefactos/` o `/hotswap/`, no es del",
+    `sistema: \`/artefactos/\` es ${artefactos}/ y \`/hotswap/\` es ${hotswap}/. Ábrela con Read y esa ruta completa`,
+    "(`/artefactos/diseno/screen.jpg` → la misma ruta bajo la primera). Una imagen la VES al abrirla con Read.",
   ].join("\n");
 }
 

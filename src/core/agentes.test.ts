@@ -14,6 +14,7 @@ import {
   REGLAS_XONE,
   type Agente,
 } from "./agentes.js";
+import { textoDeCarpetasDeLaSesion as carpetasDeSesion } from "./agentes.js";
 import { generarEsqueleto } from "./esqueleto.js";
 
 const FICHERO = [
@@ -529,5 +530,14 @@ describe("un hijo externo que no puede llamar a quien llamaría", () => {
     expect(t).toContain("xone-captura-android");
     // Y el MISMO método que el crítico visual.
     expect(t).toContain("1. INVENTARIO");
+  });
+});
+
+describe("textoDeCarpetasDeLaSesion", () => {
+  it("traduce las dos rutas virtuales a las del disco y dice que se abren con Read", () => {
+    const t = carpetasDeSesion("/w/P/.xonecode/sesiones/s/artefactos", "/w/P/.xonecode/sesiones/s/hotswap");
+    expect(t).toContain("`/artefactos/` es /w/P/.xonecode/sesiones/s/artefactos/");
+    expect(t).toContain("`/hotswap/` es /w/P/.xonecode/sesiones/s/hotswap/");
+    expect(t).toMatch(/Read/);
   });
 });

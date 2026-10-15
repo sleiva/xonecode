@@ -3468,6 +3468,27 @@ describe("un device-controller en Claude Code: la shell ESTRECHA llega al hijo",
     }
   }, 20_000);
 
+  it("un hijo de Claude Code SIN ejecución también LEE las carpetas de la sesión, y se le dice dónde están", async () => {
+    const raiz = proyecto();
+    mkdirSync(join(raiz, ".xonecode", "agentes"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "agentes", "analista-ext.md"), "---\ndescripcion: Analiza\nmotor: claude-code\nsoloLectura: true\n---\nAnaliza.\n");
+    const artefactos = mkdtempSync(join(tmpdir(), "xc-art-"));
+    const peticiones: PeticionExterna[] = [];
+    const { m } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "analista-ext", input: "mira /artefactos/diseno/screen.jpg" }) }] })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({
+      raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, artefactos,
+      subagenteExterno: () => ({ disponible: async () => true, correr: async (p: PeticionExterna) => (peticiones.push(p), "hecho") }),
+    });
+    await s.turno("analiza", piel().p);
+    const p = peticiones[0]!;
+    expect(p.ejecucion).toBeUndefined();
+    expect(p.lecturas).toEqual([artefactos, expect.stringContaining("hotswap")]);
+    expect(p.instrucciones).toContain(`\`/artefactos/\` es ${artefactos}/`);
+  }, 20_000);
+
   it("lo que el hijo deja en /artefactos/ se ANUNCIA al volver, como con nuestra shell", async () => {
     const artefactos = mkdtempSync(join(tmpdir(), "xc-art-"));
     const { artefactosAnunciados } = await abrir("claude-code", artefactos, async () => {

@@ -12,6 +12,7 @@ import {
   opcionesDeSubagenteExterno,
   eventoDeToolExterna,
   dentroDeUnaLectura,
+  lecturasDelHijo,
   motivoDeBashExterno,
   inventarioDelProyecto,
   diffDeEscrituraExterna,
@@ -742,6 +743,38 @@ describe("las carpetas de la SESIÓN que un externo con ejecución puede leer", 
     expect(dentro(join(artefactos, "enlace.png"))).toBe(false);
     expect(dentro("artefactos/captura.png")).toBe(false);
     expect(dentro(`${artefactos}-otra/x.png`)).toBe(false);
+  });
+});
+
+describe("las carpetas de la sesión se LEEN aunque el hijo no ejecute", () => {
+  const base = realpathSync(mkdtempSync(join(tmpdir(), "xc-lecturas-sesion-")));
+  const proyecto = join(base, "proyecto");
+  const artefactos = join(proyecto, ".xonecode", "sesiones", "s1", "artefactos");
+  mkdirSync(join(artefactos, "diseno"), { recursive: true });
+  writeFileSync(join(artefactos, "diseno", "screen.jpg"), "x");
+  writeFileSync(join(proyecto, ".xonecode", "config.json"), "{}");
+  afterAll(() => rmSync(base, { recursive: true, force: true }));
+  const leer = (ruta: string, lecturasDeSesion?: string[]) =>
+    decisionDePreToolUse({
+      nombre: "Read",
+      entrada: { file_path: ruta },
+      cwd: proyecto,
+      ficheros: new Set<string>(),
+      ...(lecturasDeSesion === undefined ? {} : { lecturasDeSesion }),
+    }).permissionDecision;
+
+  it("con las carpetas de la sesión, la maqueta se lee; sin ellas, no (medido: el analista no pudo)", () => {
+    expect(leer(join(artefactos, "diseno", "screen.jpg"), [artefactos])).toBe("allow");
+    expect(leer(join(artefactos, "diseno", "screen.jpg"))).toBe("deny");
+  });
+
+  it("y el resto de `.xonecode/` sigue cerrado", () => {
+    expect(leer(join(proyecto, ".xonecode", "config.json"), [artefactos])).toBe("deny");
+  });
+
+  it("`lecturasDelHijo` suma las tres fuentes", () => {
+    expect(lecturasDelHijo({ lecturas: ["/a"] }, ["/s"], ["/x"])).toEqual(["/a", "/s", "/x"]);
+    expect(lecturasDelHijo(undefined, undefined, ["/x"])).toEqual(["/x"]);
   });
 });
 

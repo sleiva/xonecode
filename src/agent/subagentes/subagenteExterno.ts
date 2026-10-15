@@ -119,7 +119,7 @@ export async function decisionDeTool(opciones: {
       entrada,
       ficheros,
       ...(opciones.real === undefined ? {} : { real: opciones.real }),
-      lecturas: lecturasDelHijo(peticion.ejecucion, opciones.lecturasDeSkills),
+      lecturas: lecturasDelHijo(peticion.ejecucion, opciones.lecturasDeSkills, peticion.lecturas),
     });
     return v.admitida ? { behavior: "allow" } : { behavior: "deny", message: v.motivo };
   }
@@ -453,6 +453,7 @@ export function crearSubagenteExterno(opciones: {
                     ficheros: opciones.ficherosDelProyecto?.() ?? new Set<string>(),
                     ...(peticion.ejecucion === undefined ? {} : { ejecucion: peticion.ejecucion }),
                     lecturasDeSkills,
+                    ...(peticion.lecturas === undefined ? {} : { lecturasDeSesion: peticion.lecturas }),
                   });
                   /**
                    * **Solo se cuenta lo que va a ocurrir.** Una tool DENEGADA no se

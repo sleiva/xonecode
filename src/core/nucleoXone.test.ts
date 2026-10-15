@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { promptDeAgente, recibeNucleoDeTrabajo, REGLAS_XONE, type Agente } from "./agentes.js";
-import { NUCLEO_XONE, TOPE_DE_LINEAS_DEL_ENCABEZADO } from "./nucleoXone.js";
+import { HERRAMIENTAS_DEL_EXTERNO, promptDeAgente, recibeNucleoDeTrabajo, REGLAS_XONE, type Agente } from "./agentes.js";
+import { NUCLEO_XONE, NUCLEO_XONE_EXTERNO, nucleoXoneExterno, TOPE_DE_LINEAS_DEL_ENCABEZADO } from "./nucleoXone.js";
 
 const agente = (c: Partial<Agente> = {}): Agente => ({
   nombre: "x-xone", descripcion: "Hace cosas.", motor: "modelo", soloLectura: false, skills: [], instrucciones: "", origen: "semilla", ...c,
@@ -96,5 +96,36 @@ describe("a quién llega el núcleo", () => {
     expect(NUCLEO_XONE).toContain("`<create>`");
     expect(NUCLEO_XONE).toContain("frame OCULTO");
     expect(NUCLEO_XONE).toContain("ui.getView(self)");
+  });
+});
+
+describe("el núcleo para un motor EXTERNO", () => {
+  /** Las tools de xonecode: en el proceso de Claude Code no existen, y el hijo las buscaba con `ToolSearch`. */
+  const TOOLS_PROPIAS = /diferencia_de_capturas|comparar_capturas|xone_critica_visual|generar_fondo_svg|buscar_icono|read_file|\/skills\//;
+
+  it("no nombra ninguna tool de xonecode", () => {
+    expect(NUCLEO_XONE_EXTERNO).not.toMatch(TOOLS_PROPIAS);
+  });
+
+  it("conserva las reglas medidas: solo cambian las líneas de las tools", () => {
+    for (const regla of [/comentario XML no puede llevar `--`/, /`imgbk` se ignora/, /alfa PRIMERO/, /FILTROS[\s\S]*se ignoran/]) {
+      expect(NUCLEO_XONE_EXTERNO).toMatch(regla);
+    }
+    expect(NUCLEO_XONE_EXTERNO).toMatch(/abre con Read la captura y la maqueta/);
+  });
+
+  it("si el núcleo cambia y una línea a sustituir ya no casa, LANZA en vez de colar la tool", () => {
+    expect(() => nucleoXoneExterno(NUCLEO_XONE.replace("`comparar_capturas`", "`otra`"))).toThrow(/ya no tiene la línea/);
+  });
+
+  it("promptDeAgente da a cada motor el suyo, y al externo la línea de qué hacer con una tool que no tiene", () => {
+    const quien = { ejecucion: true } as const;
+    const deModelo = promptDeAgente(agente(quien));
+    const externo = promptDeAgente(agente({ ...quien, motor: "claude-code" }));
+    expect(deModelo).toContain("`comparar_capturas`");
+    expect(deModelo).not.toContain(HERRAMIENTAS_DEL_EXTERNO);
+    expect(externo).toContain(NUCLEO_XONE_EXTERNO);
+    expect(externo).not.toContain("`comparar_capturas` y `xone_critica_visual`");
+    expect(externo).toContain(HERRAMIENTAS_DEL_EXTERNO);
   });
 });
