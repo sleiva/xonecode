@@ -265,7 +265,12 @@ const parrafoDeLoEscrito = (caso: CasoDeJuez): string[] => {
    *  estaba. Callarlo dejaría al juez creyendo que aterrizó algo que no aterrizó. */
   const sinAterrizar = cambiados === undefined ? [] : caso.autorizadas.filter((r) => !cambiados.includes(r));
   return [
-    ...(caso.autorizadas.length === 0
+    // Con git delante, la lista de lo AUTORIZADO no añade nada y despista: en una tarea las escrituras locales de un
+    // especialista ya no pasan por autorizar (`escribeSinPreguntar`), y medido en Maset el juez leyó «10 autorizadas y
+    // 30 cambiadas» como ficheros escritos «sin constancia de su procedencia». Solo se dice lo que no aterrizó (abajo).
+    ...(cambiados !== undefined
+      ? []
+      : caso.autorizadas.length === 0
       ? ["El turno no autorizó escribir ningún fichero: no consta ninguna ruta."]
       : [
           `LO QUE EL TURNO AUTORIZÓ ESCRIBIR (${caso.autorizadas.length} ruta(s)):`,

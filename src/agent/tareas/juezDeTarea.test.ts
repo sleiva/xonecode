@@ -223,27 +223,22 @@ describe("el prompt lleva los HECHOS y nunca contenido de ficheros", () => {
       expect(prompt).toMatch(/22 hallazgo\(s\) más[^\n]*no tocó/);
     });
 
-    it("`autorizadas` se explica, y al lado va el HECHO de git fichero a fichero", async () => {
+    it("con git delante solo va el HECHO de git, fichero a fichero; la lista de lo autorizado, no", async () => {
+      // En una tarea las escrituras locales ya no pasan por autorizar (`escribeSinPreguntar`): medido en Maset, el juez
+      // leyó «10 autorizadas y 30 cambiadas» como ficheros escritos «sin constancia de su procedencia».
       const prompt = await promptDe(CASO_MEDIDO);
       expect(prompt).toContain("DOCUMENTACION.md");
-      expect(prompt).toContain("MEMORIA_PROYECTO.md");
-      // Lo que `autorizadas` es de verdad: el registro de las escrituras que la tarea aplicó
-      // sin que nadie las aprobara. No se promete más (`core/tareas.ts#Tarea.autorizadas`:
-      // es una PISTA, la verdad sobre el disco la tiene git).
-      expect(prompt).toContain("escribió sin que ninguna persona las aprobara");
-      // Y el HECHO, que es lo que quita de raíz el «no puedo comprobar si existe»: la lista
-      // de lo que cambió según git, con su nombre y presentada como diff contra el «antes».
       expect(prompt).toContain("según git");
       expect(prompt).toContain("un HECHO sobre el disco");
       expect(prompt).toContain("no es una respuesta válida");
+      expect(prompt).not.toContain("LO QUE EL TURNO AUTORIZÓ ESCRIBIR");
     });
 
-    it("las dos listas no se confunden: una es intención y la otra es lo medido", async () => {
-      const prompt = await promptDe(CASO_MEDIDO);
-      const autorizadas = prompt.indexOf("LO QUE EL TURNO AUTORIZÓ ESCRIBIR");
-      const git = prompt.indexOf("LO QUE CAMBIÓ EN EL PROYECTO");
-      expect(autorizadas).toBeGreaterThan(-1);
-      expect(git).toBeGreaterThan(autorizadas);
+    it("sin git, lo autorizado sí se dice, como registro y no como permiso", async () => {
+      const { cambiados: _, ...sinGit } = CASO_MEDIDO as typeof CASO_MEDIDO & { cambiados?: string[] };
+      const prompt = await promptDe(sinGit as typeof CASO_MEDIDO);
+      expect(prompt).toContain("LO QUE EL TURNO AUTORIZÓ ESCRIBIR");
+      expect(prompt).toContain("escribió sin que ninguna persona las aprobara");
     });
 
     it("una ruta autorizada que git no ve cambiada se DICE, con su nombre", async () => {

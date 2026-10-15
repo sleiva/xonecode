@@ -900,6 +900,8 @@ detiene.
 - **Los hallazgos se REPARTEN** entre los ficheros del turno (fichero RELATIVO y línea, nunca
   contenido) y `preexistentes`. Uno sin fichero va con los del turno. Un hallazgo no atribuye
   autoría: el simulador mira el proyecto entero.
+- **El crítico de pantalla del cierre no corre si el turno ya pasó `xone_critica_visual`** (TrueForge): mira la captura
+  SOLA, sin la maqueta, y medido en Maset tomó por defecto una franja del diseño, contradiciendo al que sí la tenía.
 - **Que falte el binario es fallo del ENTORNO** y se dice en un `aviso`, sin tumbar el turno. El
   verificador entra por parámetro (`verifier?: VerifierPort`), así que `npm test` sigue sin él.
 
@@ -948,7 +950,8 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   `capacidadesDelEspecialista`, puesto con `trabajoSinPersona`): una aprobación solo se atiende cuando la librería devuelve
   el control, y medido en Maset las del diseñador esperaron todo lo que tardó el analista de Claude Code (una sola llamada
   larga), aunque en una tarea se aprueban solas. Las guardas de ruta siguen enteras, lo que cambió lo sigue diciendo git, y
-  las escrituras de un CONECTOR siguen parando (y en una tarea se rechazan). **Límite**: `Tarea.autorizadas` ya no las cuenta.
+  las escrituras de un CONECTOR siguen parando (y en una tarea se rechazan). **Límite**: `Tarea.autorizadas` ya no las cuenta. Por eso el juez, con git delante, ya no recibe la lista de lo autorizado (`juezDeTarea.ts#parrafoDeLoEscrito`):
+  medido, leyó «10 autorizadas y 30 cambiadas» como ficheros escritos sin constancia.
 - **Una tarea cortada por el tope de rondas lo DICE** (`ResultadoDeTurno.topeAgotado`, puesto por TrueForge;
   `core/entrega.ts#motivoDeTopeAgotado`): «agotó el tope de N rondas… Pulsa «Continuar»», y no «quedaron escrituras
   esperando aprobación», que en una tarea sin nadie a quien preguntar no decía que se había cortado. Y una respuesta del

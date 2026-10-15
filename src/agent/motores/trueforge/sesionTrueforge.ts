@@ -2155,6 +2155,9 @@ export async function abrirSesionTrueforge(
           let observacionesVisuales: string[] = [];
           if (
             carpeta !== undefined &&
+            // Si el turno ya pasó `xone_critica_visual` (con la maqueta), este, que mira la captura SOLA, sobra y la
+            // contradice: medido en Maset, tomó por defecto la franja granate con su punto verde, que ES del diseño.
+            horaDeLaUltimaCritica === undefined &&
             tocaCriticarPantalla({ hayCritico: opciones.criticaVisual !== undefined, capturas: capturasDelTurno.length, yaDisparo: visualYaDisparo, intento })
           ) {
             visualYaDisparo = true;

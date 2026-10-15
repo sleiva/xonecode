@@ -2025,6 +2025,22 @@ describe("el juez del turno y el crítico de pantalla, enganchados en TrueForge"
     expect(criticas).toBe(1);
   }, 30_000);
 
+  it("si el turno ya pasó `xone_critica_visual` (con la maqueta), el crítico del cierre no corre", async () => {
+    const carpeta = mkdtempSync(join(tmpdir(), "xc-tf-art-"));
+    const criticaDelAgente = new AIMessageChunk({
+      content: "",
+      tool_call_chunks: [{ index: 0, id: "cv1", name: "xone_critica_visual", args: JSON.stringify({ captura: "/artefactos/pantalla.png", pantalla: "menú" }) }],
+    });
+    const { m } = modelosConGuion([[delegar("d1")], [escribir("w1", "hola\n", true)], [new AIMessageChunk({ content: "Escrita." })], [criticaDelAgente], [new AIMessageChunk({ content: "Listo." })]]);
+    let criticas = 0;
+    const s = await abrirSesionTrueforge({
+      raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO, sinAprobacion: () => true, artefactos: carpeta, verifier: verde,
+      criticaVisual: async () => (criticas++, { veredicto: "rojo", observaciones: ["una franja granate vacía"] }),
+    });
+    await s.turno("rediseña el menú", piel().p);
+    expect(criticas).toBe(0);
+  }, 30_000);
+
   it("el crítico mira la CAPTURA del turno: con el simulador en VERDE solo AVISA y no repara", async () => {
     const carpeta = mkdtempSync(join(tmpdir(), "xc-tf-art-"));
     const { m } = modelosConGuion([[delegar("d1")], [escribir("w1", "hola\n", true)], [new AIMessageChunk({ content: "Escrita." })], [new AIMessageChunk({ content: "Listo." })]]);
