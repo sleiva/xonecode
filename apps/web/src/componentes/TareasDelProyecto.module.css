@@ -305,3 +305,11 @@
   align-self: flex-start;
   margin-top: 8px;
 }
+
+/* Lo último que contestó el agente, en markdown: el mismo texto del chat, a la medida de la fila. */
+.respuesta {
+  margin-top: 6px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 1.6;
+}

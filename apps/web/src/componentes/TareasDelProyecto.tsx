@@ -5,6 +5,9 @@ import { EntregaDeTarea } from "./EntregaDeTarea.js";
 import { MirarTarea } from "./MirarTarea.js";
 import { QuienEjecutaTareas } from "./QuienEjecutaTareas.js";
 import { selloDeFecha } from "../selloDeFecha.js";
+import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
+import { protegerDolares } from "../protegerDolares.js";
+import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
 import estilos from "./TareasDelProyecto.module.css";
 
 const ETIQUETA_DE_ESTADO: Record<TareaDelCable["estado"], string> = {
@@ -339,7 +342,10 @@ function FilaFinalizada({
             ) : respuesta.texto === undefined ? (
               <p className={estilos.aviso}>No consta ninguna respuesta del agente en su conversación.</p>
             ) : (
-              <p className={estilos.encargo}>{respuesta.texto}</p>
+              // Es la respuesta del agente: markdown, como en el chat (con los dólares protegidos).
+              <div className={estilos.respuesta}>
+                <MarkdownText text={protegerDolares(respuesta.texto)} codeLabels={ETIQUETAS_DE_CODIGO} />
+              </div>
             )}
           </details>
         ) : null}

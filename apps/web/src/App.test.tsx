@@ -3995,3 +3995,109 @@ describe("la tarea que espera respuesta, en su chat", () => {
     expect(screen.getByPlaceholderText(/Pregunta sobre XOne/)).toBeTruthy();
   });
 });
+
+/**
+ * El HISTÓRICO de tareas, cosido de punta a punta en `App`: los componentes se prueban con las props puestas a mano,
+ * y lo que ata «Finalizadas» a la lectura (con su motivo, su título y los artefactos de SU conversación) vive aquí.
+ */
+describe("App: una tarea finalizada se lee con su conversación y sus artefactos", () => {
+  function conUnaFinalizada() {
+    const store = crearStoreDelCliente();
+    const enviar: Mock<(mensaje: unknown) => Promise<unknown>> = vi.fn((mensaje: unknown) => {
+      const m = mensaje as { clase?: string; nombre?: string };
+      if (m.clase === "leerSesion") {
+        return Promise.resolve({
+          status: 200,
+          ok: true,
+          json: async () => ({
+            actos: [
+              { tipo: "usuario", texto: "añade la versión al login" },
+              { tipo: "artefacto", ruta: "/artefactos/captura.png", nombre: "captura.png", bytes: 2048, mime: "image/png" },
+              { tipo: "artefacto", ruta: "/artefactos/informe.md", nombre: "informe.md", bytes: 9, mime: "text/markdown" },
+              { tipo: "asistente", texto: "Hecho: la versión sale bajo el logo." },
+            ],
+          }),
+        } as unknown);
+      }
+      if (m.clase === "artefacto") {
+        return Promise.resolve({
+          status: 200,
+          ok: true,
+          json: async () => ({ ruta: `/artefactos/${m.nombre}`, texto: "# Informe", recortado: false, binario: false, bytes: 9 }),
+        } as unknown);
+      }
+      return Promise.resolve(undefined as unknown);
+    });
+    render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} instalarSkill={instalarSkillDeMentira} />);
+    act(() => store.marcarConectado());
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        registrados: [{ id: "webstudio", nombre: "WebStudio", url: "https://x/mcp" }],
+        entornoActivo: "webstudio",
+        proyectos: [{ id: "p1", nombre: "AppDemo", local: true, sesiones: [{ id: "s1", titulo: "Mi chat" }, { id: "s-tarea", titulo: "", deTarea: true }] }],
+        ramas: [],
+        proyectoAbierto: true,
+        proyectoActivo: "p1",
+        sesionActiva: "s1",
+      } as never)
+    );
+    act(() =>
+      store.aplicar({
+        clase: "tareas",
+        lista: [
+          {
+            id: "t1",
+            proyecto: "p1",
+            proyectoNombre: "AppDemo",
+            titulo: "Versión en el login",
+            peticion: "p",
+            encargo: "e",
+            adjuntos: [],
+            estado: "terminada",
+            sesion: "s-tarea",
+            creada: "2026-10-14T10:00:00.000Z",
+            empezada: "2026-10-14T10:01:00.000Z",
+            acabada: "2026-10-14T10:30:00.000Z",
+          },
+        ],
+        concurrencia: 1,
+        corriendoAqui: true,
+      })
+    );
+    const barra = screen.getAllByRole("navigation").find((n) => !n.hasAttribute("aria-label"))!;
+    fireEvent.click(within(barra).getByRole("button", { name: "AppDemo" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Tareas" }));
+    fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
+    return { store, enviar };
+  }
+
+  it("«Ver la conversación y sus artefactos» la LEE: sin escribir, con su título y los artefactos de SU carpeta", async () => {
+    const { enviar } = conUnaFinalizada();
+    enviar.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Ver la conversación y sus artefactos" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "leerSesion", proyecto: "p1", sesion: "s-tarea" });
+    // Nunca se abre para escribir: eso soltaría la conversación abierta por la de la tarea.
+    expect(enviar).not.toHaveBeenCalledWith(expect.objectContaining({ clase: "sesion" }));
+    expect(await screen.findByText("añade la versión al login")).toBeTruthy();
+    expect(screen.getByRole("note").textContent).toMatch(/Tarea finalizada/);
+    expect(screen.queryByRole("button", { name: "Abrir para escribir" })).toBeNull();
+    expect(screen.getAllByRole("banner")[0]!.textContent).toMatch(/Versión en el login/);
+    // La miniatura pide la captura a SU conversación.
+    expect(document.querySelector('img[alt="captura.png"]')?.getAttribute("src")).toBe("/artefacto?n=captura.png&p=p1&s=s-tarea");
+    fireEvent.click(screen.getByRole("button", { name: "Artefactos (2)" }));
+    expect(await screen.findByText("Informe")).toBeTruthy();
+    expect(enviar).toHaveBeenCalledWith({ clase: "artefacto", nombre: "informe.md", proyecto: "p1", sesion: "s-tarea" });
+  });
+
+  it("«Qué hizo» enseña la última respuesta del agente, como markdown", async () => {
+    conUnaFinalizada();
+    const detalles = screen.getByText("Qué hizo").closest("details")!;
+    detalles.open = true;
+    fireEvent(detalles, new Event("toggle"));
+    expect(await screen.findByText(/Hecho: la versión sale bajo el logo/)).toBeTruthy();
+  });
+});
