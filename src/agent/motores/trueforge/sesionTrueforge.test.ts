@@ -3536,3 +3536,20 @@ describe("un device-controller en Claude Code: la shell ESTRECHA llega al hijo",
     expect(peticiones[0]).not.toHaveProperty("ejecucion");
   }, 30_000);
 });
+
+describe("cambioDespuesDe: ¿cambió el proyecto tras la última crítica?", () => {
+  it("un fichero del proyecto tocado después sí; uno de .xonecode no; nada tocado, no", async () => {
+    const { cambioDespuesDe } = await import("./sesionTrueforge.js");
+    const { utimesSync } = await import("node:fs");
+    const raiz = mkdtempSync(join(tmpdir(), "xc-desfase-"));
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(join(raiz, "EntryPoint.xne"), "<coll/>");
+    writeFileSync(join(raiz, ".xonecode", "aprendido.json"), "{}");
+    const antes = new Date(Date.now() - 60_000);
+    utimesSync(join(raiz, "EntryPoint.xne"), antes, antes);
+    const critica = Date.now() - 30_000;
+    expect(cambioDespuesDe(raiz, critica)).toBe(false);
+    writeFileSync(join(raiz, "default.css"), "x");
+    expect(cambioDespuesDe(raiz, critica)).toBe(true);
+  });
+});

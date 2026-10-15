@@ -949,7 +949,9 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
 - **`## CRITICAL` es para lo que NO se hizo, no para lo que se hizo con detalles** (`core/entrega.ts`): una tarea que no
   cambió ningún fichero (git) con el juez en contra es crítica (`CRITICO_SIN_HACER`); un bloqueante visual que la respuesta
   final NOMBRA —todo lo que cita entre «»— es una omisión explicada y va a observaciones (`omisionExplicada`,
-  `ResultadoDeTurno.omisionesExplicadas`).
+  `ResultadoDeTurno.omisionesExplicadas`). Y tampoco el de una crítica ANTERIOR a los últimos cambios del proyecto
+  (`cambioDespuesDe`, por la hora del disco: un hijo externo escribe con sus tools): va a observaciones como «sin
+  comprobar después» (`bloqueantesDesfasados`).
 - **El juez recibe las comprobaciones VISUALES del turno, medidas por el harness** (`ResultadoDeTurno.comprobacionesVisuales`,
   `CasoDeJuez`, `lineaDeComprobacion`): una línea por `comparar_capturas`, `xone_critica_visual` y el crítico del cierre,
   las últimas `TOPE_DE_COMPROBACIONES_AL_JUEZ`. Sin ellas, un criterio que pedía validar contra la maqueta era rojo seguro

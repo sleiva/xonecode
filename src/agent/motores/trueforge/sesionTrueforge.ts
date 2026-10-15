@@ -25,7 +25,7 @@
  */
 import { TOPE_DE_PREGUNTAS_CONTESTADAS_SOLAS, opcionRecomendada } from "../../../core/modoDeEscritura.js";
 import { claseDeTrabajo } from "../../../core/esfuerzo.js";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import winston from "winston";
 import { AgentThread, AgentThreadOrchestrator, EventType, NOOP_AGENT_TRACING, askUserQuestion, contextCompaction, dynamicSubAgents } from "./trueforge.js";
@@ -675,6 +675,23 @@ interface Pendiente {
 const claveDe = (hilo: string, id: string): string => `${hilo}:${id}`;
 
 /**
+ * ¿Cambió algún fichero del proyecto (fuera de `.xonecode/`) después de `desde`? Por la hora de modificación del disco,
+ * que es lo que vale para los dos motores: un hijo de Claude Code escribe con sus tools y no pasa por las nuestras. Lo
+ * que no se puede mirar no cuenta como cambio.
+ */
+export function cambioDespuesDe(raiz: string, desde: number): boolean {
+  for (const virtual of ficherosDelProyecto(raiz)) {
+    if (virtual.startsWith("/.xonecode/")) continue;
+    try {
+      if (statSync(join(raiz, virtual)).mtimeMs > desde) return true;
+    } catch {
+      // Borrado entre medias, o sin permiso: no se afirma nada.
+    }
+  }
+  return false;
+}
+
+/**
  * `agregarNota` no vive todavía en `SesionReal` (IXCODE-4, Task 6 se la añade ahí como opcional,
  * compartida con deepagents): se ensancha el tipo de retorno AQUÍ, en vez de esperar a esa task,
  * porque una sesión sin ella tipado como `SesionReal` a secas dejaría `s.agregarNota(...)` en
@@ -789,6 +806,8 @@ export async function abrirSesionTrueforge(
   /** Lo que dieron las comprobaciones visuales del turno, una línea cada una, para el juez de QA (`ResultadoDeTurno`). */
   let comprobacionesDelTurno: string[] = [];
   let bloqueantesVisualesDelTurno: string[] = [];
+  // Cuándo llegó esa crítica: si el proyecto cambia DESPUÉS, sus bloqueantes ya no son la pantalla final (`cambioDespuesDe`).
+  let horaDeLaUltimaCritica: number | undefined;
   const anotarComprobacion = (linea: string): void => {
     comprobacionesDelTurno = [...comprobacionesDelTurno, linea].slice(-TOPE_DE_COMPROBACIONES_AL_JUEZ);
   };
@@ -1655,7 +1674,10 @@ export async function abrirSesionTrueforge(
           anotarComprobacion(lineaDeComprobacion(llamada.nombre, detalleDe(llamada.nombre, llamada.args), evento.content));
           // Lo BLOQUEANTE de la ÚLTIMA crítica: es el estado final de la pantalla, y el cierre de una tarea lo pone en
           // su `## CRITICAL` (`bloqueantesDelInforme`).
-          if (llamada.nombre === "xone_critica_visual") bloqueantesVisualesDelTurno = bloqueantesDelInforme(evento.content);
+          if (llamada.nombre === "xone_critica_visual") {
+            bloqueantesVisualesDelTurno = bloqueantesDelInforme(evento.content);
+            horaDeLaUltimaCritica = Date.now();
+          }
         }
         const chars = typeof evento.content === "string" ? evento.content.length : 0;
         diagnostico?.resultado?.(llamada?.nombre, llamada === undefined ? undefined : detalleDe(llamada.nombre, llamada.args), chars);
@@ -1785,6 +1807,7 @@ export async function abrirSesionTrueforge(
       capturasDelTurno = [];
       comprobacionesDelTurno = [];
       bloqueantesVisualesDelTurno = [];
+      horaDeLaUltimaCritica = undefined;
       /** El encargo de ESTE turno tal cual se pidió, y el mismo con la última pregunta y su
        *  respuesta al lado, que es lo que se juzga y se repara (ver `flujo`). Ausente = no consta. */
       let encargoDelTurno: string | undefined;
@@ -2313,8 +2336,10 @@ export async function abrirSesionTrueforge(
         ...(() => {
           const explicadas = bloqueantesVisualesDelTurno.filter((b) => omisionExplicada(b, respuestaDeLaPasada));
           const sinExplicar = bloqueantesVisualesDelTurno.filter((b) => !explicadas.includes(b));
+          // Si el proyecto cambió DESPUÉS de esa crítica, lo que vio ya no es la pantalla final: no es crítico.
+          const desfasada = sinExplicar.length > 0 && horaDeLaUltimaCritica !== undefined && cambioDespuesDe(raiz, horaDeLaUltimaCritica);
           return {
-            ...(sinExplicar.length === 0 ? {} : { bloqueantesVisuales: sinExplicar }),
+            ...(sinExplicar.length === 0 ? {} : desfasada ? { bloqueantesDesfasados: sinExplicar } : { bloqueantesVisuales: sinExplicar }),
             ...(explicadas.length === 0 ? {} : { omisionesExplicadas: explicadas }),
           };
         })(),

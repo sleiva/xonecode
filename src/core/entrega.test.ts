@@ -468,3 +468,11 @@ describe("una tarea SIN HACER es crítica; una omisión explicada, no", () => {
     expect(omisionExplicada("el botón queda TAPADO por la barra", "todo lo del botón está bien")).toBe(false);
   });
 });
+
+describe("los bloqueantes de una crítica ANTERIOR a los últimos cambios", () => {
+  it("no son críticos: van a observaciones, diciendo que no se comprobaron después", () => {
+    const e = condicionesDeEntrega({ ...VERDE, bloqueantesDesfasados: ["«pend.» de la maqueta NO está en el aparato"] });
+    expect(e.criticos).toBeUndefined();
+    expect(e.observaciones).toEqual([expect.stringMatching(/ANTERIOR a los últimos cambios[\s\S]*«pend\.»/)]);
+  });
+});

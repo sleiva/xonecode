@@ -118,6 +118,12 @@ export interface ResultadoDeTurno {
    */
   omisionesExplicadas?: string[];
   /**
+   * Bloqueantes de una crítica ANTERIOR a los últimos cambios del proyecto: no describen la pantalla final, así que no son
+   * críticos —se dicen como observación, sin comprobar—. Medido en Maset: el desarrollador cambió la pantalla tras la
+   * última crítica y el cierre puso en `## CRITICAL` lo que esa crítica había visto antes.
+   */
+  bloqueantesDesfasados?: string[];
+  /**
    * Las comprobaciones VISUALES del turno, una línea cada una y medidas por el harness: lo que dio cada
    * `comparar_capturas` y `xone_critica_visual`, y el crítico de pantalla del cierre. Van al juez de QA como HECHO:
    * medido en una tarea real (Maset), el juez dictó rojo porque «no consta la validación visual» que el criterio pedía,
@@ -399,6 +405,7 @@ export function condicionesDeEntrega(medida: MedidaDeEntrega): Entrega {
   }
   for (const b of medida.bloqueantesVisuales ?? []) criticos.push(`pantalla: ${b}`);
   for (const b of medida.omisionesExplicadas ?? []) observaciones.push(`pantalla, omitido y explicado en su resumen: ${b}`);
+  for (const b of medida.bloqueantesDesfasados ?? []) observaciones.push(`pantalla, de una crítica ANTERIOR a los últimos cambios (sin comprobar después): ${b}`);
   const conCriticos = { ...(criticos.length === 0 ? {} : { criticos }), ...(observaciones.length === 0 ? {} : { observaciones }) };
   if (fallos.length === 0) {
     return {
