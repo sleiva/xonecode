@@ -41,6 +41,7 @@ export function NuevaTarea({
   alAugmentar,
   alSubirAdjunto,
   alEncolar,
+  destino,
   alCerrar,
 }: {
   proyecto: { id: string; nombre: string };
@@ -95,10 +96,24 @@ export function NuevaTarea({
    * `nombreDeAdjuntoSeguro`; quien decide si vale es el servidor, dos veces.
    */
   alSubirAdjunto: (fichero: File, nombre: string) => Promise<{ ok: boolean; motivo?: string }>;
-  alEncolar: (tarea: { peticion: string; encargo: string }) => void;
+  /**
+   * Encolar. Si devuelve una promesa, la ventana ESPERA: gira, y con un motivo se queda abierta enseñándolo (un gestor
+   * que no deja crear el ticket no puede perder lo escrito). Sin promesa, el camino de antes.
+   */
+  alEncolar: (tarea: { peticion: string; encargo: string }) => void | Promise<string | undefined>;
+  /**
+   * Dónde vivirá la tarea, preguntado al servidor al abrir (`{clase:"tarea", accion:"destino"}`): `"consultando"`
+   * mientras llega; `{gestor}` si el proyecto la crea en su gestor (Jira, Notion…), y entonces la ventana DICE antes del
+   * clic lo que se va a escribir allí —crear es la autorización—; `{}` si es solo local. Ausente = solo local.
+   */
+  destino?: "consultando" | { gestor?: { nombre: string; proyecto: string } };
   alCerrar: () => void;
 }) {
   const [peticion, setPeticion] = useState("");
+  /** Crear en el gestor tarda una ida y vuelta: mientras, gira; si se niega, el motivo y la ventana sigue abierta. */
+  const [creando, setCreando] = useState(false);
+  const [motivoDeCrear, setMotivoDeCrear] = useState<string | undefined>(undefined);
+  const gestor = destino !== undefined && destino !== "consultando" ? destino.gestor : undefined;
   /**
    * El encargo EDITADO a mano, si lo hay. `undefined` significa «lo que diga el propuesto»,
    * y esa distinción es la que hace que un `augmentado` que llegue de otra pestaña no borre
@@ -132,7 +147,7 @@ export function NuevaTarea({
   // Sin petición no hay nada que encolar; con un adjunto a medias o roto tampoco: los bytes
   // tienen que estar en disco ANTES, porque crear la tarea dispara la revisión de la cola y
   // el corredor puede arrancarla en el acto — leería un `/adjuntos/` incompleto.
-  const sePuedeEncolar = peticion.trim() !== "" && !enVuelo && !algunoFalló;
+  const sePuedeEncolar = peticion.trim() !== "" && !enVuelo && !algunoFalló && !creando && destino !== "consultando";
 
   const añadir = async (elegidos: FileList | null): Promise<void> => {
     /**
@@ -340,8 +355,20 @@ export function NuevaTarea({
             </ul>
           )}
 
+          {/* Crear es la AUTORIZACIÓN: con gestor, se dice ANTES del clic todo lo que se va a escribir allí. */}
+          {gestor === undefined ? null : (
+            <p className={estilos.nota} data-gestor="">
+              {`Se creará en ${gestor.nombre} (${gestor.proyecto}) con tu petición como descripción y el encargo como comentario, asignada a ti. `}
+              {`Al empezar pasará a EN CURSO, y al terminar se comentará lo hecho y pasará a PROBAR.`}
+            </p>
+          )}
+          {motivoDeCrear === undefined ? null : (
+            <p className={estilos.nota} role="alert" data-error="">
+              {motivoDeCrear}
+            </p>
+          )}
           <div className={estilos.acciones}>
-            <Button variant="outline" className={estilos.accion} onClick={alCerrar}>
+            <Button variant="outline" className={estilos.accion} onClick={alCerrar} disabled={creando}>
               Cancelar
             </Button>
             <Button
@@ -352,10 +379,23 @@ export function NuevaTarea({
                 if (!sePuedeEncolar) return;
                 // Sin encargo escrito se manda la petición TAL CUAL: es lo que hace que un
                 // aumentador caído no impida apuntar el trabajo.
-                alEncolar({ peticion: peticion.trim(), encargo: encargo.trim() === "" ? peticion.trim() : encargo });
+                const enviado = alEncolar({ peticion: peticion.trim(), encargo: encargo.trim() === "" ? peticion.trim() : encargo });
+                if (enviado === undefined) return;
+                setCreando(true);
+                setMotivoDeCrear(undefined);
+                void enviado.then(
+                  (motivo) => {
+                    setCreando(false);
+                    if (motivo !== undefined) setMotivoDeCrear(motivo);
+                  },
+                  () => {
+                    setCreando(false);
+                    setMotivoDeCrear("el envío falló");
+                  }
+                );
               }}
             >
-              Encolar
+              {creando ? `Creando en ${gestor?.nombre ?? "la cola"}…` : gestor === undefined ? "Encolar" : `Crear en ${gestor.nombre}`}
             </Button>
           </div>
             </>

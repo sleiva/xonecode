@@ -7296,6 +7296,24 @@ export function montarRutas(
         respuesta.end();
         return;
       }
+      if (mensaje.accion === "destino") {
+        /**
+         * Dónde vivirá una tarea NUEVA de ese proyecto: con qué gestor, si lo tiene vinculado y sabe crear. Lo pregunta la
+         * ventana «Nueva tarea» al abrirse para decir ANTES del clic qué se va a escribir —crear es la autorización—, y se
+         * decide con la MISMA función que `crear`, así que lo dicho y lo hecho no pueden divergir. Ni red ni gestor: lee el
+         * `config.json` del proyecto. Del vínculo cruza el conector y el nombre del proyecto del gestor, nunca el sitio.
+         */
+        const destino = gestorParaTareaNueva(mensaje.proyecto);
+        respuesta.writeHead(200, { "content-type": "application/json" });
+        respuesta.end(
+          JSON.stringify(
+            destino === undefined
+              ? {}
+              : { gestor: { conector: destino.vinculo.conector, proyecto: (destino.vinculo as VinculoGuardado).nombreDelProyecto ?? destino.vinculo.proyecto } }
+          )
+        );
+        return;
+      }
       if (mensaje.accion === "regenerarEncargo" && opciones.colaDeTareas !== undefined) {
         /**
          * Volver a PREPARAR el encargo de una tarea que no ha arrancado, desde su petición editada

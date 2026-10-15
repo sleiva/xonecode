@@ -435,4 +435,15 @@ describe("TareasDelProyecto: ver lo que hace una tarea en proceso", () => {
       expect(screen.getByText(/Todavía no ha terminado ninguna tarea/)).toBeTruthy();
     });
   });
+
+  it("una tarea que vive en el gestor lleva su clave con enlace, y el aviso si algo no se escribió allí", () => {
+    render(
+      <TareasDelProyecto
+        tareas={[tarea({ id: "j", estado: "en-proceso", ticket: { clave: "KAN-7", conector: "jira", url: "https://x.atlassian.net/browse/KAN-7", aviso: "no se pudo pasar KAN-7 a EN CURSO: sin permiso" } })]}
+      />
+    );
+    const enlace = screen.getByRole("link", { name: "KAN-7" });
+    expect(enlace.getAttribute("href")).toBe("https://x.atlassian.net/browse/KAN-7");
+    expect(screen.getByText(/no se pudo pasar KAN-7 a EN CURSO/)).toBeTruthy();
+  });
 });

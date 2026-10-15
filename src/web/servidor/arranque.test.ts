@@ -6055,6 +6055,17 @@ describe("las tareas en background, por el cable", () => {
       rmSync(base, { recursive: true, force: true });
     });
 
+    it("«destino» dice ANTES de crear con qué gestor vivirá, con la MISMA regla que crear; sin el sitio", async () => {
+      const conGestor = await montarVinculado(new GestorDeTareasEnMemoria({ creaConPrefijo: "KAN" }));
+      const r = await conGestor.accion({ clase: "tarea", accion: "destino", proyecto: "p1" });
+      expect(JSON.parse(r.cuerpo)).toEqual({ gestor: { conector: "jira", proyecto: "KAN" } });
+      expect(r.cuerpo).not.toContain("cloud-1");
+      rmSync(conGestor.base, { recursive: true, force: true });
+      const sinCrear = await montarVinculado(new GestorDeTareasEnMemoria());
+      expect(JSON.parse((await sinCrear.accion({ clase: "tarea", accion: "destino", proyecto: "p1" })).cuerpo)).toEqual({});
+      rmSync(sinCrear.base, { recursive: true, force: true });
+    });
+
     it("sin vínculo, o con un gestor que no sabe crear, el camino de siempre: 204 y tarea local", async () => {
       for (const [gestor, conVinculo] of [
         [new GestorDeTareasEnMemoria({ creaConPrefijo: "KAN" }), false],

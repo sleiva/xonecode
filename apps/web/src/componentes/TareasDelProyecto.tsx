@@ -331,6 +331,7 @@ function FilaFinalizada({
       <div className={estilos.lineaFinalizada}>
         <span className={estilos.punto} aria-hidden="true" />
         <span className={estilos.tituloFinalizada}>{t.titulo}</span>
+        <ClaveDelTicket tarea={t} />
         <div className={estilos.meta}>
           {fechas.length === 0 ? null : <span>{fechas.join(" · ")}</span>}
           <EntregaDeTarea tarea={t} />
@@ -353,6 +354,7 @@ function FilaFinalizada({
           )}
         </div>
       </div>
+      <AvisoDelTicket tarea={t} />
       {abierto === "hizo" ? (
         <div className={estilos.desplegado}>
           {respuesta === undefined || respuesta === "pidiendo" ? (
@@ -439,8 +441,10 @@ function Fila({
       <div className={estilos.cuerpo}>
         <div className={estilos.cabecera}>
           <span className={estilos.titulo}>{t.titulo}</span>
+          <ClaveDelTicket tarea={t} />
           <span className={estilos.etiquetaEstado}>{ETIQUETA_DE_ESTADO[t.estado]}</span>
         </div>
+        <AvisoDelTicket tarea={t} />
         {/* Motivo y veredicto van aquí solo si la fila NO está desplegada: expandida,
             `MirarTarea` ya los enseña dentro del detalle (Task 17), y pintarlos dos veces
             sería la misma información repetida. */}
@@ -513,4 +517,25 @@ function Fila({
       </div>
     </li>
   );
+}
+
+/**
+ * La clave del ticket en el gestor (Jira, Notion…) en el que vive la tarea, con su enlace si lo hay. Ausente = tarea
+ * solo local, y no se pinta nada.
+ */
+function ClaveDelTicket({ tarea: t }: { tarea: TareaDelCable }) {
+  if (t.ticket === undefined) return null;
+  return t.ticket.url === undefined ? (
+    <span className={estilos.ticket}>{t.ticket.clave}</span>
+  ) : (
+    <a className={estilos.ticket} href={t.ticket.url} target="_blank" rel="noreferrer" title="Abrir en el gestor de tareas">
+      {t.ticket.clave}
+    </a>
+  );
+}
+
+/** Lo último que no se pudo escribir en el gestor (pasar a EN CURSO, cerrar…): la tarea siguió, el ticket no. */
+function AvisoDelTicket({ tarea: t }: { tarea: TareaDelCable }) {
+  if (t.ticket?.aviso === undefined) return null;
+  return <p className={estilos.motivo}>{t.ticket.aviso}</p>;
 }

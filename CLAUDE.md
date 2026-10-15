@@ -889,6 +889,19 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   —el turno puede devolver limpio al cerrarle la consola— y, pedida mientras la consola se abre, se
   aparca en vez de quedarse en `nuevo` renunciada. El servidor espera al corte y contesta 409 con
   motivo si no se pudo (otro proceso, o no soltó a tiempo).
+- **Con gestor de tareas vinculado, una tarea VIVE en él** (su diseño en `docs/superpowers/specs/`, «tareas desde el gestor»;
+  `core/tareasEnElGestor.ts`, `agent/tareas/reflejoEnElGestor.ts`): sin vínculo, todo como antes. **El modo lo decide el
+  SERVIDOR** con el `config.json` del proyecto (`arranque.ts#gestorParaTareaNueva`, la MISMA para `destino` —que la
+  ventana pregunta al abrirse para decir ANTES del clic qué escribirá allí— y para `crear`). `crear` hace el ticket
+  (`GestorDeTareasPort.crear?`, opcional como `buscarProyectos?`), sube el encargo como comentario con
+  `CABECERA_DEL_ENCARGO`, y SOLO después guarda la tarea con `Tarea.ticket` —copiado, nunca recalculado del vínculo
+  de ahora— y hace revisar; si el gestor se niega, 409 y NO hay tarea local. **El reflejo entra por UN punto, el
+  `guardar` del almacén envuelto donde nace** (`construirCorredorDeTareasCableado`): EN CURSO al empezar (no si ya lo
+  está: pasa tras cada feedback), `cerrarTicket` al terminar —la MISMA secuencia que el «Cerrar en …» de un chat—;
+  fire-and-forget, en cola por ticket, y lo que falla queda en `ticket.aviso` (sin correos). Nada de un gestor concreto
+  en el puerto: el tipo de incidencia de Jira lo elige su adaptador (`tipoParaCrear`; medido, en español «Task» se
+  llama «Tarea»). **Límites declarados**: encadenadas solo en local, al aparcar no se escribe, los adjuntos no suben,
+  destinos de `transicionPropuesta` sin tabla, Notion sin `crear` todavía.
 - **«En curso» y «Finalizadas»: las terminadas son un HISTÓRICO de solo lectura** (`TareasDelProyecto.tsx#FilaFinalizada`):
   sin acciones, FUERA de la barra de sesiones (salvo la abierta), la más reciente arriba, «empezó … · acabó …» (nunca «tardó»: cuenta la pausa), lo último que contestó
   el agente —pedido al desplegar con `leerSesion`, nunca en la cola— y su conversación abierta para LEER con el motivo

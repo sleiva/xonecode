@@ -1639,6 +1639,35 @@ export function App({
   /** ¿Se subió algún adjunto bajo este borrador? Sin ninguno, el `crear` no lo menciona: no
    *  se nombra una carpeta que no existe. */
   const [conAdjuntos, setConAdjuntos] = useState(false);
+  /**
+   * Dónde vivirá la tarea de la ventana: lo PREGUNTA al servidor al abrirse (`accion:"destino"`, la misma regla que
+   * `crear`), porque la ventana se abre también desde el escritorio para un proyecto que no es el abierto, y del vínculo
+   * el cliente solo conoce el del abierto. Con gestor, la ventana dice antes del clic lo que escribirá allí.
+   */
+  const [destinoDeTarea, setDestinoDeTarea] = useState<
+    { borrador: string; destino: "consultando" | { gestor?: { nombre: string; proyecto: string } } } | undefined
+  >(undefined);
+  useEffect(() => {
+    if (tareaNueva === undefined) return;
+    const { borrador, proyecto } = tareaNueva;
+    setDestinoDeTarea({ borrador, destino: "consultando" });
+    void (async () => {
+      let destino: { gestor?: { nombre: string; proyecto: string } } = {};
+      try {
+        const r = (await enviar({ clase: "tarea", accion: "destino", proyecto })) as Response | undefined;
+        if (r?.status === 200) {
+          const g = ((await r.json()) as { gestor?: { conector?: unknown; proyecto?: unknown } }).gestor;
+          if (typeof g?.conector === "string" && typeof g.proyecto === "string") {
+            destino = { gestor: { nombre: nombreDelConector(store.leer().conectores, g.conector) ?? g.conector, proyecto: g.proyecto } };
+          }
+        }
+      } catch {
+        // Sin respuesta se queda en «solo local»: el servidor decide igual al crear, y si crea en el gestor lo dice al volver.
+      }
+      // Una respuesta de una ventana ANTERIOR (se cerró y se abrió otra entre medias) se tira.
+      setDestinoDeTarea((actual) => (actual?.borrador === borrador ? { borrador, destino } : actual));
+    })();
+  }, [tareaNueva, enviar, store]);
 
   // El alta es lo ÚNICO que se enseña mientras falte cuenta o entorno — nada de armazón
   // vacío alrededor esperando datos que todavía no llegan (la barra sin entornos, las
@@ -2268,10 +2297,11 @@ export function App({
           if (r.ok) setConAdjuntos(true);
           return r;
         }}
-        alEncolar={({ peticion, encargo }) => {
+        // Se ESPERA la respuesta: con gestor, crear el ticket puede negarse (409 con motivo) y la ventana no puede
+        // perder lo escrito. Con 200 (creada en el gestor) o 204 (en local) se cierra.
+        alEncolar={async ({ peticion, encargo }) => {
           const { proyecto, borrador } = tareaNueva;
-          setTareaNueva(undefined);
-          void enviar({
+          const r = await enviar({
             clase: "tarea",
             accion: "crear",
             proyecto,
@@ -2279,7 +2309,13 @@ export function App({
             encargo,
             ...(conAdjuntos ? { borrador } : {}),
           });
+          const motivo = await negativaOFalloDe(r);
+          if (motivo !== undefined) return motivo;
+          // Ya es una tarea: su carpeta de adjuntos no se borra al cerrar (no se pasa por `cerrarVentanaDeTarea`).
+          setTareaNueva(undefined);
+          return undefined;
         }}
+        {...(destinoDeTarea?.borrador === tareaNueva.borrador ? { destino: destinoDeTarea.destino } : { destino: "consultando" as const })}
         // Sin copia local la ventana RECHAZA crear la tarea —se aparcaría y ahí se
         // quedaría— y ofrece el camino que sí funciona: abrir el proyecto, que es donde se
         // descarga. Se cede a `NuevaSesion` en vez de encolar y bajar de rebote, porque esa

@@ -5,6 +5,19 @@ import { App, MS_ENTRE_LECTURAS_DE_PLANES } from "./App.js";
 import { crearStoreDelCliente } from "./store.js";
 import { prepararJsdomParaElEditor } from "./editor/jsdomParaElEditor.js";
 
+/**
+ * «Encolar» se activa cuando la ventana sabe DÓNDE vivirá la tarea (la pregunta `destino` al servidor, que en estos
+ * tests contesta en una microtarea): se espera a eso, como espera quien todavía está escribiendo la petición.
+ */
+async function pulsarEncolar(): Promise<void> {
+  const boton = await waitFor(() => {
+    const b = screen.getByRole("button", { name: /encolar/i }) as HTMLButtonElement;
+    if (b.disabled) throw new Error("todavía consultando el destino");
+    return b;
+  });
+  fireEvent.click(boton);
+}
+
 /** El `<input type="file">` de «Nueva tarea» está ESCONDIDO —lo dispara un botón nuestro,
  *  porque el nativo se pinta como la cromo del navegador—, así que no hay etiqueta que lo
  *  nombre: se llega por su tipo. */
@@ -2066,7 +2079,7 @@ describe("App: crear una tarea en background", () => {
     const { enviar } = conEscritorio();
     fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
     fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "Arregla el login" } });
-    fireEvent.click(screen.getByRole("button", { name: /encolar/i }));
+    await pulsarEncolar();
     await waitFor(() =>
       expect(enviar).toHaveBeenCalledWith({
         clase: "tarea",
@@ -2100,7 +2113,7 @@ describe("App: crear una tarea en background", () => {
     // una carpeta vacía y la tarea nacería sin sus adjuntos.
     expect(borrador).toBe(subidas[0]!.tarea);
 
-    fireEvent.click(screen.getByRole("button", { name: /encolar/i }));
+    await pulsarEncolar();
     await waitFor(() =>
       expect(enviar).toHaveBeenCalledWith(expect.objectContaining({ accion: "crear", borrador }))
     );
@@ -2110,10 +2123,30 @@ describe("App: crear una tarea en background", () => {
     const { enviar } = conEscritorio();
     fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
     fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "Arregla" } });
-    fireEvent.click(screen.getByRole("button", { name: /encolar/i }));
+    await pulsarEncolar();
     await waitFor(() => expect(enviar).toHaveBeenCalled());
     const crear = enviar.mock.calls.map((c) => c[0]).find((m) => (m as { accion?: string }).accion === "crear");
     expect(crear).not.toHaveProperty("borrador");
+  });
+
+  /** La puerta 1 del gestor, cosida en `App`: el destino se PREGUNTA al abrir y la respuesta de `crear` se ESPERA. */
+  it("con el proyecto en Jira: dice dónde se creará ANTES del clic, y si Jira se niega la ventana sigue abierta", async () => {
+    const enviar: Mock<(mensaje: unknown) => Promise<unknown>> = vi.fn((m: unknown) => {
+      const accion = (m as { accion?: string }).accion;
+      if (accion === "destino") return Promise.resolve({ status: 200, ok: true, json: async () => ({ gestor: { conector: "jira", proyecto: "Personal" } }) } as unknown);
+      if (accion === "crear") return Promise.resolve({ status: 409, ok: false, json: async () => ({ motivo: "no se pudo crear la tarea en el gestor: sin permiso" }) } as unknown);
+      return Promise.resolve(undefined as unknown);
+    });
+    const { store } = conEscritorio(enviar);
+    act(() => store.aplicar(CONECTORES_CON_JIRA as never));
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "tarea", accion: "destino", proyecto: "p1" });
+    expect(await screen.findByText(/Se creará en Jira \(Personal\)/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "Versión en el login" } });
+    fireEvent.click(screen.getByRole("button", { name: "Crear en Jira" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/sin permiso/);
+    // Sigue abierta, con lo escrito.
+    expect((screen.getByLabelText(/qué hay que hacer/i) as HTMLTextAreaElement).value).toBe("Versión en el login");
   });
 
   it("al abrir la ventana se TIRA el encargo propuesto de antes: ese mensaje va a todas las pestañas", () => {
@@ -2936,7 +2969,7 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
       // Si el punto de entrada abriera la ventana SIN proyecto resuelto, `App` no encontraría
       // con qué pintarla (`proyectoDeLaTarea` no resolvería) y este campo no aparecería.
       fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "Arregla el login" } });
-      fireEvent.click(screen.getByRole("button", { name: /encolar/i }));
+      await pulsarEncolar();
       await waitFor(() =>
         expect(enviar).toHaveBeenCalledWith({
           clase: "tarea",

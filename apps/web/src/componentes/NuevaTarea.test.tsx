@@ -337,4 +337,38 @@ describe("NuevaTarea: un modal de verdad, y «Preparar el encargo» dice que est
     rerender(<NuevaTarea {...base} encargoPropuesto={{ encargo: "Añade la búsqueda por NIF" }} />);
     expect(boton().getAttribute("aria-busy")).toBe("false");
   });
+
+  /** La puerta 1 de las tareas que viven en el gestor: crear es la autorización, y se dice ANTES del clic. */
+  describe("con el proyecto vinculado a un gestor", () => {
+    const peticion = () => document.getElementById("nueva-tarea-peticion") as HTMLTextAreaElement;
+
+    it("mientras se consulta el destino no deja encolar; con gestor dice lo que escribirá y el botón lo nombra", () => {
+      const { rerender } = render(<NuevaTarea {...base} destino="consultando" />);
+      fireEvent.change(peticion(), { target: { value: "Versión en el login" } });
+      expect((screen.getByRole("button", { name: "Encolar" }) as HTMLButtonElement).disabled).toBe(true);
+      rerender(<NuevaTarea {...base} destino={{ gestor: { nombre: "Jira", proyecto: "Personal" } }} />);
+      expect(screen.getByText(/Se creará en Jira \(Personal\)/)).toBeTruthy();
+      expect(screen.getByText(/EN CURSO.*PROBAR/)).toBeTruthy();
+      expect((screen.getByRole("button", { name: "Crear en Jira" }) as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it("espera la respuesta; si el gestor se niega, se queda abierta con el motivo y lo escrito", async () => {
+      let soltar: (m: string | undefined) => void = () => {};
+      const alEncolar = vi.fn(() => new Promise<string | undefined>((r) => (soltar = r)));
+      render(<NuevaTarea {...base} alEncolar={alEncolar} destino={{ gestor: { nombre: "Jira", proyecto: "Personal" } }} />);
+      fireEvent.change(peticion(), { target: { value: "Versión en el login" } });
+      fireEvent.click(screen.getByRole("button", { name: "Crear en Jira" }));
+      expect(screen.getByRole("button", { name: "Creando en Jira…" })).toBeTruthy();
+      soltar("no se pudo crear la tarea en el gestor: sin permiso");
+      expect((await screen.findByRole("alert")).textContent).toMatch(/sin permiso/);
+      expect(peticion().value).toBe("Versión en el login");
+      expect(screen.getByRole("button", { name: "Crear en Jira" })).toBeTruthy();
+    });
+
+    it("sin gestor, la ventana de siempre: «Encolar» y ninguna línea del gestor", () => {
+      render(<NuevaTarea {...base} destino={{}} />);
+      expect(screen.getByRole("button", { name: "Encolar" })).toBeTruthy();
+      expect(screen.queryByText(/Se creará en/)).toBeNull();
+    });
+  });
 });

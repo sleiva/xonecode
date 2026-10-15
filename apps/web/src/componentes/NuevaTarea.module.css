@@ -188,3 +188,13 @@
   color: var(--dsw-alias-state-error-primary);
   font-size: 12px;
 }
+
+/* Lo que se escribirá en el gestor: un dato que autoriza, en el color del texto y no en el de una nota al margen. */
+.nota[data-gestor] {
+  color: var(--dsw-alias-label-primary);
+}
+
+/* El gestor no dejó crear: el motivo, en el color de error, y la ventana sigue abierta. */
+.nota[data-error] {
+  color: var(--dsw-alias-state-error-primary);
+}

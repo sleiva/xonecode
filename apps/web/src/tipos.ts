@@ -1711,6 +1711,8 @@ export type MensajeDelCliente =
   | { clase: "tarea"; accion: "encargo"; id: string; encargo: string; peticion?: string }
   /** Volver a preparar el encargo desde la petición editada, SIN guardarlo (IXCODE-53). 200 con `{encargo}`, o 409 con `{motivo}`. */
   | { clase: "tarea"; accion: "regenerarEncargo"; id: string; peticion: string }
+  /** Con qué gestor vivirá una tarea nueva de ese proyecto: contestado en la propia respuesta, `{gestor?: {conector, proyecto}}`. */
+  | { clase: "tarea"; accion: "destino"; proyecto: string }
   /** PARAR una tarea en marcha sin borrarla (IXCODE-50): queda aparcada con su conversación. 204, o 409 con `{motivo}`. */
   | { clase: "tarea"; accion: "parar"; id: string }
   | { clase: "tarea"; accion: "reintentar" | "descartar" | "terminar"; id: string }

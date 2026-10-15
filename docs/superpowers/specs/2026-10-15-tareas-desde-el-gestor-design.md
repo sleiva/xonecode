@@ -1,6 +1,6 @@
 # Tareas en background que viven en el gestor de tareas (Jira, Notion, …)
 
-Fecha: 15-10-2026. Estado: diseño aprobado en conversación; fase 1 (puerta 1) en curso.
+Fecha: 15-10-2026. Estado: fase 1 (puerta 1) HECHA en código y probada con dobles; falta medir `createJiraIssue` de verdad. Fase 2 pendiente.
 
 ## Qué se quiere
 
