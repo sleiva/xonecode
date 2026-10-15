@@ -303,9 +303,10 @@ import { crearGestorJira } from "../../agent/conectores/gestorJira.js";
 import { crearGestorNotion } from "../../agent/conectores/gestorNotion.js";
 import {
   admiteMiasDelVinculo, motivoDeProyectoInaceptable, transicionPropuesta, comentarioDeCierre,
-  type FichaDelGestor, type GestorDeTareasPort, type TareaDelGestor, type TransicionDelGestor, type Vinculo, type VinculoGuardado,
+  type DatosDeCierre, type FichaDelGestor, type GestorDeTareasPort, type TareaDelGestor, type TransicionDelGestor, type Vinculo, type VinculoGuardado,
 } from "../../core/gestorDeTareas.js";
 import { cerrarTicket, comentarioDeEncargo } from "../../core/tareasEnElGestor.js";
+import { anotarAvisoEnElDisco, conReflejoAlGuardar, crearReflejoEnElGestor } from "../../agent/tareas/reflejoEnElGestor.js";
 import { datosDeCierre } from "./datosDeCierre.js";
 import { ErrorDeDescargaCortada, escribirPaquete, listarSoporte, motivoParaNoExportar, type FuenteDeSoporte, type PedidoDeSoporte } from "./soporte.js";
 import { nombreDelPaquete } from "../../core/paqueteDeSoporte.js";
@@ -920,6 +921,28 @@ function escaparHtml(texto: string): string {
  */
 export function sinCorreos(texto: string): string {
   return texto.replace(/[^\s@<>()"'«»]+@[^\s@<>()"'«»]+\.[^\s@<>()"'«»]+/g, "[correo]");
+}
+
+/** Un error de un gestor de tareas como texto que puede cruzar el cable y quedarse en una tarea: de Node solo el
+ *  `code`, y del resto la primera línea con los correos TACHADOS y recortada (la regla de `motivoDelGestor`). */
+export function motivoDeGestorParaElCable(error: unknown): string {
+  return typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
+    ? error.code
+    : sinCorreos((error instanceof Error ? error.message : String(error)).split(/\r?\n/)[0]!).slice(0, 200);
+}
+
+/**
+ * Lo que lleva el comentario de cierre de una tarea: lo mismo que el «Cerrar en …» de un chat sobre SU conversación
+ * (ficheros y commits de la sesión, el último veredicto del verificador, la última respuesta). Sin conversación, o si
+ * no se puede leer, un cierre sin datos —«no corrió», nunca un «verde» inventado—.
+ */
+export async function datosDeCierreDeTarea(tarea: Tarea): Promise<DatosDeCierre> {
+  if (tarea.sesion === undefined) return { ficheros: [], commits: [] };
+  try {
+    return await datosDeCierre(tarea.proyecto.raiz, tarea.sesion);
+  } catch {
+    return { ficheros: [], commits: [] };
+  }
 }
 
 /**
@@ -8713,8 +8736,32 @@ export function construirCorredorDeTareasCableado(opciones: {
    */
   juez: JuezDeTareaPort;
   revisable: (raiz: string, sesion: string) => Promise<RevisionDeSesion>;
+  /**
+   * El gestor de tareas de un conector (la MISMA fábrica memoizada del panel, `ajusteDeGestorCableado`). Con él, una
+   * tarea con ticket se REFLEJA en su gestor al cambiar de estado (`agent/tareas/reflejoEnElGestor.ts`). Ausente = no
+   * se refleja nada (los tests que no lo piden, y una ejecución sin conectores).
+   */
+  gestorDeTareas?: (conector: string) => GestorDeTareasPort | undefined;
+  /** Lo que lleva el comentario de cierre de una tarea. Por omisión, `datosDeCierre` sobre su conversación. */
+  datosDeCierreDeTarea?: (tarea: Tarea) => Promise<DatosDeCierre>;
 }): CorredorDeTareasCableado {
-  const disco = opciones.tareasFabrica === undefined ? undefined : opciones.tareasFabrica(opciones.informar);
+  const crudo = opciones.tareasFabrica === undefined ? undefined : opciones.tareasFabrica(opciones.informar);
+  /**
+   * El almacén con el `guardar` VIGILADO: un único punto por el que pasan todos los cambios de estado (corredor,
+   * reconciliación, rutas, feedback), y de ahí el reflejo en el gestor. Envuelto AQUÍ, donde nace, para que el
+   * corredor y las rutas (`opcionesDeMontaje.colaDeTareas`) compartan el mismo.
+   */
+  const reflejo =
+    crudo === undefined || opciones.gestorDeTareas === undefined
+      ? undefined
+      : crearReflejoEnElGestor({
+          gestorDe: opciones.gestorDeTareas,
+          datosDeCierre: opciones.datosDeCierreDeTarea ?? datosDeCierreDeTarea,
+          anotarAviso: anotarAvisoEnElDisco(crudo),
+          motivoDe: motivoDeGestorParaElCable,
+          informar: opciones.informar,
+        });
+  const disco = crudo === undefined ? undefined : reflejo === undefined ? crudo : conReflejoAlGuardar(crudo, reflejo);
 
   /**
    * El tope de concurrencia se LEE de `settings.json` en cada llamada, nunca se cachea —la
@@ -9056,6 +9103,8 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     vestibulo: conVestibulo,
     tareasFabrica: opciones.tareas,
     informar,
+    // El MISMO gestor memoizado que el panel: con él, una tarea con ticket se refleja en su gestor al cambiar de estado.
+    gestorDeTareas: conectoresYGestor.gestorDeTareas,
     olvidarHiloDeSesion: olvidarMemoriaDeHilo,
     /**
      * El juez de QA de las tareas, con el papel `afilado` — el que `core/modelos.ts` le

@@ -8464,6 +8464,88 @@ describe("las tareas en background, el cableado del corredor con el cable — no
    * Se mide por el ÚNICO camino observable desde fuera: si la raíz está bloqueada, el
    * corredor no despacha, así que `abrirParaTarea` no se llama.
    */
+  /**
+   * El REFLEJO en el gestor, cosido de verdad: el almacén real en disco, envuelto donde nace, y los cambios de estado
+   * llegando por el MISMO `colaDeTareas` que usan las rutas. Si el envoltorio se cablea en otro sitio (o no se cablea),
+   * esto se pone rojo: es la composición de producción, no una pieza suelta.
+   */
+  it("una tarea con ticket se refleja en su gestor: EN CURSO al empezar, comentario y PROBAR al terminar", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xc-reflejo-"));
+    const gestor = new GestorDeTareasEnMemoria({
+      tareas: [{ clave: "KAN-1", titulo: "t", descripcion: "", estado: "Por hacer", categoria: "por-hacer" }],
+      transiciones: {
+        "KAN-1": [
+          { id: "21", nombre: "Empezar", destino: "En curso", categoria: "en-curso" },
+          { id: "41", nombre: "Probar", destino: "PROBAR", categoria: "en-curso" },
+        ],
+      },
+    });
+    const { opcionesDeMontaje } = construirCorredorDeTareasCableado({
+      vestibulo: vestibuloSinAbrir,
+      tareasFabrica: (informar) => crearTareasEnDisco({ base, informar }),
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
+      gestorDeTareas: (c) => (c === "jira" ? gestor : undefined),
+      datosDeCierreDeTarea: async () => ({ ficheros: [{ ruta: "LoginColl.xne", clase: "modificado" }], commits: ["abc1234 versión"] }),
+    });
+    const cola = opcionesDeMontaje.colaDeTareas!;
+    const ticket = { conector: "jira", sitio: "cloud-1", proyecto: "KAN", clave: "KAN-1" };
+    const nueva: Tarea = { ...tareaEnProceso("t1"), estado: "nuevo", ticket };
+    const conEstado = (estado: Tarea["estado"]): Tarea[] => cola.listar().map((t) => ({ ...t, estado }));
+    const asentarReflejo = async () => {
+      for (let i = 0; i < 20; i++) await asentar();
+    };
+
+    cola.guardar([nueva]);
+    cola.guardar(conEstado("en-proceso"));
+    await asentarReflejo();
+    expect(gestor.transicionesAplicadas).toEqual([{ clave: "KAN-1", transicion: "21" }]);
+    // Una reanudación (vuelve a la cola y arranca otra vez) NO mueve otra vez un ticket que ya está en curso.
+    cola.guardar(conEstado("requiere-atencion").map((t) => ({ ...t, motivo: "pregunta" })));
+    cola.guardar(conEstado("nuevo").map(({ motivo: _m, ...t }) => t));
+    cola.guardar(conEstado("en-proceso"));
+    await asentarReflejo();
+    expect(gestor.transicionesAplicadas).toHaveLength(1);
+
+    cola.guardar(conEstado("terminada"));
+    await asentarReflejo();
+    expect(gestor.comentariosAplicados[0]).toMatchObject({ clave: "KAN-1" });
+    expect(gestor.comentariosAplicados[0]!.texto).toContain("LoginColl.xne");
+    expect(gestor.transicionesAplicadas.at(-1)).toEqual({ clave: "KAN-1", transicion: "41" });
+    expect(cola.listar()[0]!.ticket?.aviso).toBeUndefined();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("si el gestor falla, la tarea sigue su curso y el aviso queda en su ticket", async () => {
+    const base = mkdtempSync(join(tmpdir(), "xc-reflejo-"));
+    const gestor = new GestorDeTareasEnMemoria({
+      tareas: [{ clave: "KAN-1", titulo: "t", descripcion: "", estado: "Por hacer", categoria: "por-hacer" }],
+      transiciones: { "KAN-1": [{ id: "21", nombre: "Empezar", destino: "En curso", categoria: "en-curso" }] },
+    });
+    gestor.transicionar = async () => {
+      throw new Error("Jira dijo que no (sleiva@xone.es sin permiso)");
+    };
+    const { opcionesDeMontaje } = construirCorredorDeTareasCableado({
+      vestibulo: vestibuloSinAbrir,
+      tareasFabrica: (informar) => crearTareasEnDisco({ base, informar }),
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
+      gestorDeTareas: () => gestor,
+    });
+    const cola = opcionesDeMontaje.colaDeTareas!;
+    cola.guardar([{ ...tareaEnProceso("t1"), estado: "nuevo", ticket: { conector: "jira", sitio: "cloud-1", proyecto: "KAN", clave: "KAN-1" } }]);
+    cola.guardar(cola.listar().map((t) => ({ ...t, estado: "en-proceso" as const })));
+    for (let i = 0; i < 20; i++) await asentar();
+    const [t] = cola.listar();
+    expect(t!.estado).toBe("en-proceso");
+    expect(t!.ticket?.aviso).toMatch(/no se pudo pasar KAN-1 a EN CURSO: Jira dijo que no/);
+    // El correo de la persona no se queda en la tarea (y por tanto no cruza el cable).
+    expect(t!.ticket?.aviso).not.toContain("sleiva@xone.es");
+    rmSync(base, { recursive: true, force: true });
+  });
+
   it("una consola humana en SEGUNDO PLANO también bloquea su proyecto para las tareas", async () => {
     const aperturas: string[] = [];
     const cola = colaDeMentira([{ ...tareaEnProceso("t1"), estado: "nuevo" }]);
