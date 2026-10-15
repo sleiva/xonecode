@@ -658,6 +658,7 @@ export function crearEjecutorReal(
          */
         // Solo la consola de una persona en la web lo declara: ver `Consola.proponeTareas`.
         ...(consolaReal.proponeTareas === true ? { puedeProponerTareas: true } : {}),
+        ...(consolaReal.tareaDeFondo === true ? { trabajoSinPersona: true } : {}),
         topeDeRondas:
           consolaReal.topeDeAprobaciones
           ?? (consolaReal.interactivo ? TOPE_DE_RONDAS_DE_CONSOLA : MAX_APPROVAL_ROUNDS),
@@ -755,6 +756,7 @@ export function crearEjecutorReal(
       verificador: resultado.verificador,
       pendientes: resultado.pendientes,
       ...(resultado.topeAgotado === undefined ? {} : { topeAgotado: resultado.topeAgotado }),
+      ...(resultado.preguntaPendiente === undefined ? {} : { preguntaPendiente: resultado.preguntaPendiente }),
       ...(resultado.comprobacionesVisuales === undefined ? {} : { comprobacionesVisuales: resultado.comprobacionesVisuales }),
       ...(resultado.hallazgos === undefined ? {} : { hallazgos: resultado.hallazgos }),
       ...(resultado.motivoSinVerificar === undefined

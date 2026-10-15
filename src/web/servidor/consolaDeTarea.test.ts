@@ -258,6 +258,8 @@ describe("crearConsolaDeTarea", () => {
     const { consola } = montar();
     expect(consola.eof!()).toBe(true);
     expect(consola.interactivo).toBe(false);
+    // Y lo DECLARA, para que el agente resuelva sus dudas solo (`trabajoSinPersona`).
+    expect(consola.tareaDeFondo).toBe(true);
   });
 
   it("lo que se escribe va al transcript", async () => {

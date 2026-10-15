@@ -204,6 +204,21 @@ export const SIN_HABLAR_DEL_HARNESS =
   "lo que hiciste en su proyecto y lo que necesitas de él. Si pregunta cómo trabajas, entonces sí.";
 
 /** Lo que recibe el agente en modo autónomo cuando pregunta sin marcar ninguna opción como recomendada. */
+/**
+ * Al raíz de una TAREA DE FONDO (`trabajoSinPersona`). Preguntar no está prohibido —la pregunta se contesta sola con su
+ * recomendada, y pasado el tope aparca la tarea—, pero cada una es una parada: se le pide decidir antes. Y como nadie
+ * ha visto el trabajo, la respuesta final es lo que la persona leerá: un resumen con lo que decidió sin preguntar.
+ */
+export const TRABAJO_SIN_PERSONA = [
+  "TAREA DE FONDO: trabajas SIN nadie delante; la persona leerá el resultado cuando acabes.",
+  "- Resuelve tú las dudas: elige la opción más razonable con lo que dicen el encargo, el plan y el proyecto, y sigue.",
+  "  Pregunta solo si sin la respuesta no puedes hacer nada útil; si preguntas, marca tu opción recomendada con",
+  "  `(Recommended)`: se contestará sola con ella.",
+  "- Tu RESPUESTA FINAL es el resumen de la tarea, en tres apartados: lo que cambiaste (cada fichero y para qué), las",
+  "  DECISIONES que tomaste tú sin preguntar (cada duda, lo que elegiste y por qué) y lo que no pudiste comprobar o",
+  "  queda pendiente.",
+].join("\n");
+
 export const RESPUESTA_AUTONOMA_SIN_RECOMENDADA =
   "Modo autónomo: no hay nadie a quien preguntar. Decide tú con lo que dicen el encargo y el plan, sigue, y di en tu respuesta final qué elegiste y por qué.";
 
@@ -555,6 +570,12 @@ export interface OpcionesDeSesionTrueforge {
    * evals. Ausente es no.
    */
   puedeProponerTareas?: boolean;
+  /**
+   * Una TAREA DE FONDO: nadie delante. El raíz resuelve sus dudas solo, como en modo autónomo (la opción recomendada, o
+   * «decide tú»), con el mismo tope por turno, y su prompt le pide cerrar con un resumen (`TRABAJO_SIN_PERSONA`).
+   * Medido en Maset: cada duda paraba la tarea a preguntar, y la persona contestaba «Continúa donde lo dejaste».
+   */
+  trabajoSinPersona?: boolean;
   /**
    * Los conectores MCP del proyecto (Stitch…). El MISMO servicio de Ajustes, que solo tiene la
    * web: ausente —el terminal, `run`, los evals— es que ningún agente recibe sus tools.
@@ -1343,7 +1364,7 @@ export async function abrirSesionTrueforge(
     hijosConMemoria.clear();
     const definicion = {
       modelClient: llm,
-      instruction: [IDIOMA_DE_LA_RESPUESTA, SIN_HABLAR_DEL_HARNESS, promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conFuentes: opciones.fuentes !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas, conBucle: conBucleDelDesarrollador, conEsperas }), opciones.puedeProponerTareas === true ? REPARTIR_EN_TAREAS : ""].filter((l) => l !== "").join("\n\n"),
+      instruction: [IDIOMA_DE_LA_RESPUESTA, SIN_HABLAR_DEL_HARNESS, promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conFuentes: opciones.fuentes !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas, conBucle: conBucleDelDesarrollador, conEsperas }), opciones.puedeProponerTareas === true ? REPARTIR_EN_TAREAS : "", opciones.trabajoSinPersona === true ? TRABAJO_SIN_PERSONA : ""].filter((l) => l !== "").join("\n\n"),
       // Por TURNO, porque el raíz se rehace desde su foto al final de cada uno (ver `turno`).
       iterationLimit: LIMITE_DE_LLAMADAS_DEL_RAIZ,
     };
@@ -1734,7 +1755,7 @@ export async function abrirSesionTrueforge(
              * recomendada, la otra no— y no se contestó ninguna, se enseñó solo la primera y la segunda se perdió. Con
              * tope, para que no dé vueltas.
              */
-            if (preguntas.length > 0 && opciones.sinAprobacion?.() === true && preguntasSolas + preguntas.length <= TOPE_DE_PREGUNTAS_CONTESTADAS_SOLAS) {
+            if (preguntas.length > 0 && (opciones.trabajoSinPersona === true || opciones.sinAprobacion?.() === true) && preguntasSolas + preguntas.length <= TOPE_DE_PREGUNTAS_CONTESTADAS_SOLAS) {
               preguntasSolas += preguntas.length;
               const respuestas: unknown[] = [];
               for (const q of preguntas) {
@@ -2198,6 +2219,8 @@ export async function abrirSesionTrueforge(
         verificador: veredicto,
         pendientes: sinResolver,
         ...(cortadoPorTope ? { topeAgotado: tope } : {}),
+        // La pregunta que deja ESTE turno: la de un turno anterior se consume al empezar (`enEspera`).
+        ...(preguntaEnEspera === undefined ? {} : { preguntaPendiente: consultaDe(preguntaEnEspera.args).pregunta }),
         ...(comprobacionesDelTurno.length === 0 ? {} : { comprobacionesVisuales: comprobacionesDelTurno }),
         ...(hallazgosDelTurno.length === 0 ? {} : { hallazgos: hallazgosDelTurno }),
         ...(preexistentesDelTurno === undefined ? {} : { preexistentes: preexistentesDelTurno }),

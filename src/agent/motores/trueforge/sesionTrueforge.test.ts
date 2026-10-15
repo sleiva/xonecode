@@ -1217,14 +1217,38 @@ describe("una sesión con el motor TrueForge", () => {
       expect(uno.tokens.join("")).not.toContain("1. Básica");
     }, 30_000);
 
-    it("en supervisado la pregunta llega a la persona, aunque lleve recomendada", async () => {
+    it("en supervisado la pregunta llega a la persona, aunque lleve recomendada, y el resultado lo DICE", async () => {
       const raiz = proyecto();
       const { m, vistos } = modelosConGuion([[pregunta("q1", "¿Qué alcance?", ["Básica", "Científica (Recommended)"])]]);
       const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
       const uno = piel();
-      await s.turno("haz la calculadora", uno.p);
+      const r = await s.turno("haz la calculadora", uno.p);
       expect(vistos).toHaveLength(1);
       expect(uno.tokens.join("")).toMatch(/1\. Básica/);
+      // Una tarea lo aparca con la pregunta en vez de pasar por el juez (`corredorDeTareas.ts`).
+      expect(r.preguntaPendiente).toBe("¿Qué alcance?");
+    }, 30_000);
+
+    it("en una TAREA DE FONDO (`trabajoSinPersona`) se contesta sola aunque no esté en modo autónomo, y su prompt pide el resumen", async () => {
+      const raiz = proyecto();
+      const { m, vistos } = modelosConGuion([
+        [pregunta("q1", "¿Qué alcance?", ["Básica", "Científica (Recommended)"])],
+        [new AIMessageChunk({ content: "Hecho, científica." })],
+      ]);
+      const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, trabajoSinPersona: true });
+      const r = await s.turno("haz la calculadora", piel().p);
+      expect(vistos).toHaveLength(2);
+      expect(vistos[1]!.join("\n")).toContain("Científica (Recommended)");
+      expect(r.preguntaPendiente).toBeUndefined();
+      expect(vistos[0]![0]).toContain("TAREA DE FONDO");
+      expect(vistos[0]![0]).toContain("DECISIONES que tomaste tú sin preguntar");
+    }, 30_000);
+
+    it("sin tarea de fondo, el prompt del raíz no habla de ella", async () => {
+      const { m, vistos } = modelosConGuion([[new AIMessageChunk({ content: "Hola." })]]);
+      const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+      await s.turno("hola", piel().p);
+      expect(vistos[0]![0]).not.toContain("TAREA DE FONDO");
     }, 30_000);
 
     it("sin recomendada NO llega a la persona: vuelve al agente pidiéndole que decida él, y se dice en el chat", async () => {

@@ -35,6 +35,7 @@ import {
   condicionesDeEntrega,
   decisionDeEntrega,
   medidaDeEntrega,
+  motivoDePreguntaPendiente,
   type ResultadoDeTurno,
   type VeredictoDeTarea,
 } from "../../core/entrega.js";
@@ -1055,7 +1056,13 @@ export function crearCorredorDeTareas(opciones: {
         // encargo o el feedback: montar `/adjuntos/` no basta, porque es una raíz virtual
         // que ninguna instrucción del agente nombra. Ver `core/adjuntos.ts#conAdjuntos`.
         peticion = conAdjuntos(peticion, actual.adjuntos);
-        return conEstado({ ...conPendienteConsumido, sesion: hilo }, "en-proceso", undefined, { pid });
+        /**
+         * El veredicto de un ciclo ANTERIOR se retira al empezar otro: es de un trabajo que ya no es el que hay. Medido
+         * en Maset: el rojo «la sesión no escribió ningún fichero» del primer ciclo —el agente solo preguntó— siguió en
+         * la tarea durante los siguientes, con cinco commits ya hechos. El de este ciclo lo pondrá su entrega.
+         */
+        const { veredicto: _anterior, ...sinVeredicto } = conPendienteConsumido;
+        return conEstado({ ...sinVeredicto, sesion: hilo }, "en-proceso", undefined, { pid });
       });
       if (marcada) {
         // La lista nace AQUÍ, cuando ya se sabe que el turno va a correr: hasta este punto
@@ -1130,6 +1137,11 @@ export function crearCorredorDeTareas(opciones: {
      * motivo que explica de verdad qué pasó, y preguntarle al juez sobre un trabajo que se
      * cortó a mitad gastaría una llamada del modelo más caro para taparlo.
      */
+    /**
+     * Un turno que acaba con el agente PREGUNTANDO no ha terminado: espera una respuesta. Se aparca con la pregunta y no
+     * se le pasa al juez, que dictaba «no escribió nada» (Maset). La respuesta llega como feedback, en su hilo.
+     */
+    if (motivo === undefined && resultado?.preguntaPendiente !== undefined) motivo = motivoDePreguntaPendiente(resultado.preguntaPendiente);
     if (motivo === undefined) {
       const entrega = await puertaDeEntrega(tarea, hilo, entrada, resultado, consola.esperarMarca?.bind(consola));
       motivo = entrega.motivo;

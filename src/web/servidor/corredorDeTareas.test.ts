@@ -3150,3 +3150,36 @@ describe("consolaParaTarea: el mirar se reenvía a la consola web, y no como cli
     expect(llamadas).toEqual(["mirar", "dejarDeMirar"]);
   });
 });
+
+/**
+ * Maset: el agente PREGUNTÓ en el primer ciclo, el turno acabó «limpio», y el juez dictó «la sesión no escribió ningún
+ * fichero». Ese rojo siguió pegado a la tarea en los ciclos siguientes, con cinco commits ya hechos.
+ */
+describe("un turno que acaba PREGUNTANDO no es una entrega", () => {
+  it("se aparca con la pregunta y no se le pasa al juez", async () => {
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira();
+    const juez = juezQueDice({ veredicto: "rojo", resumen: "la sesión no escribió ningún fichero" });
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, juez, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabar({ verificador: "no-corrio", pendientes: 0, preguntaPendiente: "¿Rehago la pantalla entera o solo la lista?" });
+    await corredor.asentar();
+    expect(juez.casos).toEqual([]);
+    expect(estado()[0]).toMatchObject({ estado: "requiere-atencion" });
+    expect(estado()[0]!.motivo).toBe("el agente pregunta: «¿Rehago la pantalla entera o solo la lista?». Contéstale con tu respuesta como feedback");
+    expect(estado()[0]!.veredicto).toBeUndefined();
+    await corredor.parar();
+  });
+
+  it("el veredicto de un ciclo ANTERIOR se retira al empezar otro", async () => {
+    const viejo: VeredictoDeTarea = { veredicto: "rojo", resumen: "la sesión no escribió ningún fichero" };
+    const { disco, estado } = discoDeMentira([TAREA({ veredicto: viejo })]);
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: proyectoDeMentira().abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    await corredor.asentar();
+    expect(estado()[0]).toMatchObject({ estado: "en-proceso" });
+    expect(estado()[0]!.veredicto).toBeUndefined();
+    await corredor.parar();
+  });
+});

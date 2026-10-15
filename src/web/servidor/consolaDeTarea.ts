@@ -208,6 +208,8 @@ export function crearConsolaDeTarea(opciones: {
     // ajuste es «el humano que está aquí ha decidido no pulsar».
     interactivo: false,
     eof: () => true,
+    // Y que no la hay se DECLARA, para que el agente resuelva sus dudas solo en vez de parar la tarea a preguntar.
+    tareaDeFondo: true,
     preguntar: async (pregunta: string) => {
       aparcar(`el agente preguntó y no había nadie: «${pregunta}»`);
       // El `catch` de `turnoReal.ts` envuelve solo `pedirAprobacion`: si algún día un

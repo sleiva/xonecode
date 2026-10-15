@@ -883,6 +883,14 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   condiciones las comprueba el CÓDIGO (`core/entrega.ts#condicionesDeEntrega`) — verificador en
   VERDE (no correr **no es** verde), nada pendiente de aprobar, `revisable`, y autorizó escrituras
   y git no ve ningún cambio. `escribio` solo se afirma **con marca** de git.
+- **Una tarea resuelve sus dudas SOLA y cierra con un resumen** (`Consola.tareaDeFondo`, `trabajoSinPersona` en
+  TrueForge, `TRABAJO_SIN_PERSONA`): su consola declara que no hay nadie, y el raíz contesta sus preguntas como en
+  modo autónomo —la opción `(Recommended)`, o «decide tú»—, con el mismo `TOPE_DE_PREGUNTAS_CONTESTADAS_SOLAS`; su
+  prompt le pide decidir antes que preguntar y una respuesta final con lo cambiado, las decisiones tomadas sin
+  preguntar y lo que no se pudo comprobar. Medido en Maset: cada duda paraba la tarea. **Y un turno que acaba con una
+  pregunta en espera NO es una entrega** (`ResultadoDeTurno.preguntaPendiente`, `motivoDePreguntaPendiente`): se aparca
+  con la pregunta, sin juez —dictaba «no escribió nada»—; y **el veredicto de un ciclo anterior se retira al empezar
+  otro**, porque se quedaba pegado a la tarea mientras trabajaba.
 - **Una tarea cortada por el tope de rondas lo DICE** (`ResultadoDeTurno.topeAgotado`, puesto por TrueForge;
   `core/entrega.ts#motivoDeTopeAgotado`): «agotó el tope de N rondas… Pulsa «Continuar»», y no «quedaron escrituras
   esperando aprobación», que en una tarea sin nadie a quien preguntar no decía que se había cortado. Y una respuesta del

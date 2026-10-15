@@ -72,6 +72,16 @@ export function soloDocumentacion(rutas: readonly string[]): boolean {
  * quedaron colgando, y los hallazgos en la misma forma que ya viaja en el evento
  * `verificacion` —código, severidad, mensaje, fichero RELATIVO y línea—.
  */
+/** Cuánto de la pregunta entra en el motivo: se pinta en el kanban, y la pregunta entera se ve en su chat. */
+export const TOPE_DE_PREGUNTA_EN_EL_MOTIVO = 300;
+
+/** El motivo de una tarea aparcada porque el agente pregunta. Se contesta con el feedback de la tarea. */
+export function motivoDePreguntaPendiente(pregunta: string): string {
+  const limpia = pregunta.replace(/\s+/g, " ").trim();
+  const corta = limpia.length <= TOPE_DE_PREGUNTA_EN_EL_MOTIVO ? limpia : `${limpia.slice(0, TOPE_DE_PREGUNTA_EN_EL_MOTIVO - 1)}…`;
+  return `el agente pregunta: «${corta}». Contéstale con tu respuesta como feedback`;
+}
+
 export interface ResultadoDeTurno {
   verificador: EstadoDeVerificador;
   /**
@@ -88,6 +98,13 @@ export interface ResultadoDeTurno {
    * aprobación», que en una tarea —sin nadie a quien preguntar— hacía pensar que faltaba aprobar algo.
    */
   topeAgotado?: number;
+  /**
+   * El turno acabó con una pregunta del agente en espera (TrueForge, `ask_user_question`): su enunciado. Un turno así
+   * acaba «limpio», pero no ha terminado nada —espera una respuesta—, así que no pasa por la entrega: se aparca con la
+   * pregunta (`motivoDePreguntaPendiente`). Medido en Maset: pasaba por el juez, que dictaba «la sesión no escribió
+   * ningún fichero», y ese rojo se quedaba en la tarea mientras trabajaba después. Ausente = no quedó ninguna.
+   */
+  preguntaPendiente?: string;
   /**
    * Las comprobaciones VISUALES del turno, una línea cada una y medidas por el harness: lo que dio cada
    * `comparar_capturas` y `xone_critica_visual`, y el crítico de pantalla del cierre. Van al juez de QA como HECHO:

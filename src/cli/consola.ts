@@ -175,6 +175,12 @@ export interface Consola {
    */
   proponeTareas?: boolean;
   /**
+   * Es la consola de una TAREA DE FONDO: nadie delante que conteste. Ausente = no. Con ella el agente resuelve sus dudas
+   * solo —su opción recomendada, o la que decida— y cierra con un resumen de lo que hizo (`trabajoSinPersona` en
+   * TrueForge). Lo declara solo `consolaDeTarea.ts`; lo lee `crearEjecutorReal` al abrir la sesión.
+   */
+  tareaDeFondo?: boolean;
+  /**
    * El estado de sesión ACABA de cambiar (un comando devolvió uno nuevo).
    *
    * Existe porque el modelo en vigor vive dentro del lazo: `/modelo` y `/modelos` cambian

@@ -156,6 +156,7 @@ describe("el ejecutor real DEVUELVE lo que el turno informó", () => {
       verificador: "rojo",
       pendientes: 3,
       topeAgotado: 50,
+      preguntaPendiente: "¿Rehago la pantalla entera o solo la lista?",
       comprobacionesVisuales: ["comparar_capturas sobre /artefactos/c.png: distancia vertical 4%"],
       hallazgos: [{ code: "COLL_MISSING_PROGID", severidad: "error" as const, mensaje: "falta progid" }],
       preexistentes: 2,
@@ -222,6 +223,20 @@ describe("la depuración global (Ajustes > General) llega a abrirSesionReal", ()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await ejecutor("haz algo", ESTADO, consolaDeMentira() as any);
     expect(dobles.abrirSesionReal.mock.calls[0]![0]).toMatchObject({ depurar: false });
+  });
+});
+
+describe("una consola de TAREA DE FONDO llega a la sesión como `trabajoSinPersona`", () => {
+  it("con `tareaDeFondo` la sesión abre con `trabajoSinPersona`; sin él, sin la clave", async () => {
+    dobles.abrirSesionReal.mockImplementation(async () => ({
+      turno: async () => ({ bitacora: { todo: [] }, cambios: [], cortadoPorTope: false, verificador: "verde" as const, pendientes: 0 }),
+    }));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await crearEjecutorReal(() => {})("haz algo", ESTADO, consolaDeMentira({ tareaDeFondo: true }) as any);
+    expect(dobles.abrirSesionReal.mock.calls.at(-1)![0]).toMatchObject({ trabajoSinPersona: true });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await crearEjecutorReal(() => {})("haz algo", ESTADO, consolaDeMentira({}) as any);
+    expect(dobles.abrirSesionReal.mock.calls.at(-1)![0]).not.toHaveProperty("trabajoSinPersona");
   });
 });
 
