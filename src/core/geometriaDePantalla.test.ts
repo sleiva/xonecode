@@ -271,6 +271,38 @@ describe("el TAMAÑO de una imagen respecto a su pantalla (Maset: px de la maque
   });
 });
 
+describe("un CONTADOR que no se pinta no es un dato de ejemplo (Maset: «12» sobre «pend.»)", () => {
+  const maqueta: MaquetaMedida = {
+    ancho: 420,
+    alto: 900,
+    elementos: [
+      { texto: "ENTREGAS", caja: { x: 100, y: 220, ancho: 120, alto: 20 } },
+      { texto: "12", caja: { x: 330, y: 220, ancho: 16, alto: 16 } },
+      { texto: "pend.", caja: { x: 326, y: 238, ancho: 26, alto: 10 } },
+      { texto: "09:41", caja: { x: 20, y: 10, ancho: 30, alto: 14 } },
+    ],
+  };
+  const aparato: GeometriaDelAparato = {
+    pantalla: { ancho: 1080, alto: 2314 },
+    controles: [
+      { nombre: "MAP_TIT", texto: "ENTREGAS", tipo: "prop", clase: "L", caja: { x: 257, y: 566, ancho: 309, alto: 51 } },
+      { nombre: "MAP_PEND", texto: "pend.", tipo: "prop", clase: "L", caja: { x: 838, y: 612, ancho: 67, alto: 26 } },
+    ],
+  };
+  const h = compararConMaqueta(maqueta, aparato);
+
+  it("la cifra junto a una etiqueta que SÍ está se dice: falta el número", () => {
+    expect(h.diferencias).toContain(
+      "«12» de la maqueta, junto a «pend.», no se pinta en el aparato: su etiqueta está y el número no (su valor puede ser de ejemplo; que su sitio quede vacío, no)."
+    );
+    expect(h.notas.join("\n")).not.toContain("«12»");
+  });
+
+  it("una cifra suelta (el reloj de una barra simulada) sigue siendo un dato de ejemplo", () => {
+    expect(h.notas.some((n) => n.startsWith("datos de ejemplo") && n.includes("«09:41»"))).toBe(true);
+  });
+});
+
 describe("cajaParaElEstilo: el estilo de un texto se mide en su ENVOLTORIO (el frame que hace de botón o de píldora)", () => {
   const caja = (x: number, y: number, ancho: number, alto: number) => ({ x, y, ancho, alto });
   const g: GeometriaDelAparato = {

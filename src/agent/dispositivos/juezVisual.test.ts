@@ -64,7 +64,8 @@ describe("juzgarPantalla", () => {
    * quepa en una tarjeta, no para compararlo.
    */
   it("acota cuántas observaciones y cuánto ocupa cada una", async () => {
-    const muchas = Array.from({ length: 30 }, (_, i) => `observación ${i} ${"x".repeat(900)}`);
+    // Cada una DISTINTA: dos casi iguales son la misma dicha dos veces y se juntan (`unirObservaciones`).
+    const muchas = Array.from({ length: 30 }, (_, i) => `control${i} texto${i} medida${i} ${"x".repeat(900)}`);
     const v = await juzgarPantalla(
       PANTALLA,
       { pantalla: "X" },
@@ -234,14 +235,17 @@ describe("el crítico con una maqueta delante", () => {
    * maqueta, mientras que el gusto sigue fuera — sin referencia no se pueden distinguir, y
    * por eso allí se excluyen los dos.
    */
-  it("el prompt con referencia pide forma, tamaños y colocación, y conserva lo medido", () => {
-    for (const q of ["FORMA", "TAMAÑOS Y JERARQUÍA", "COLOR", "COLOCACIÓN"]) {
+  it("el prompt con referencia lleva el MÉTODO (inventario y comparación pieza a pieza), y conserva lo medido", () => {
+    // El recorrido que no le deja resumir: medido en Maset, con él DeepSeek flash vio las flechas desalineadas.
+    for (const q of ["INVENTARIO", "COMPARACIÓN", "SOBRANTES", "POSICIÓN", "ALINEADO", "TAMAÑO", "FORMA", "SOMBRAS", "COLOR"]) {
       expect(PROMPT_VISUAL_CON_REFERENCIA).toContain(q);
     }
+    // Un número de muestra puede variar, pero su sitio vacío es una diferencia.
+    expect(PROMPT_VISUAL_CON_REFERENCIA).toContain("que su SITIO esté");
     // Lo medido seis veces: acierta DÓNDE y falla en el PORQUÉ. Sigue vigente con maqueta.
-    expect(PROMPT_VISUAL_CON_REFERENCIA).toMatch(/no la causa/);
+    expect(PROMPT_VISUAL_CON_REFERENCIA).toMatch(/No diagnostiques la causa/);
     // El gusto sigue fuera.
-    expect(PROMPT_VISUAL_CON_REFERENCIA).toMatch(/NO\s+opines de si la paleta/);
+    expect(PROMPT_VISUAL_CON_REFERENCIA).toMatch(/de gustos, nada/);
     // Y el mismo contrato de salida que sin ella: `objetoDe` lee lo mismo.
     expect(PROMPT_VISUAL_CON_REFERENCIA).toContain('"hallazgos"');
     expect(PROMPT_VISUAL_CON_REFERENCIA).toContain('"necesito"');
@@ -253,6 +257,28 @@ describe("el crítico con una maqueta delante", () => {
    * proveedor las numere, y eso es una suposición, no un contrato. Si se invirtieran, el
    * crítico contaría las diferencias al revés y se leerían igual de bien.
    */
+  it("con maqueta mira DOS veces a la vez y junta lo visto: lo que vio una pasada no lo tapa un verde de la otra", async () => {
+    let n = 0;
+    const v = await juzgarPantalla(PANTALLA, { pantalla: "X" }, async () =>
+      ++n === 1
+        ? JSON.stringify({ veredicto: "verde", hallazgos: [] })
+        : JSON.stringify({ veredicto: "rojo", hallazgos: ["Las flechas de ENTREGAS e INCIDENCIAS no están en la misma vertical que las demás."] }),
+      PANTALLA,
+    );
+    expect(n).toBe(2);
+    expect(v.veredicto).toBe("rojo");
+    expect(v.observaciones).toHaveLength(1);
+  });
+
+  it("con maqueta, si una pasada falla y la otra contesta, vale la que contestó", async () => {
+    let n = 0;
+    const v = await juzgarPantalla(PANTALLA, { pantalla: "X" }, async () => {
+      if (++n === 1) throw new Error("caída");
+      return JSON.stringify({ veredicto: "verde", hallazgos: [] });
+    }, PANTALLA);
+    expect(v.veredicto).toBe("verde");
+  });
+
   it("manda DOS imágenes, en orden y cada una rotulada", async () => {
     let contenido: { type: string; text?: string; image_url?: { url: string } }[] = [];
     const modelos = {

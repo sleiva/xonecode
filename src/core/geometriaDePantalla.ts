@@ -112,6 +112,9 @@ const ENCAJE = 0.04;
  * fila, y con todos los iconos igual de pequeños (o solos junto a un texto) no había vecina distinta.
  */
 const FACTOR_DE_TAMAÑO_DE_IMAGEN = 1.5;
+/** Cuánto (en fracción del ancho de la maqueta) puede separarse una cifra de su etiqueta para ser su CONTADOR. */
+const VECINDAD_DE_CONTADOR = 0.12;
+
 
 // ---------------------------------------------------------------- el árbol del aparato
 
@@ -440,8 +443,28 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
       return cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1;
     });
   };
+  /**
+   * ¿Va esta cifra JUNTO a una etiqueta que sí está en el aparato? Entonces es un CONTADOR («12» sobre «pend.») y su
+   * sitio no puede quedar vacío, aunque el número sea de ejemplo. Medido en Maset (MAS-3): «12» y «0» salían como «datos
+   * de ejemplo, no faltan» con sus etiquetas («pend.», la píldora de INCIDENCIAS) en el aparato y el número sin pintar.
+   */
+  const emparejadas = new Set(parejas.map((p) => p.maqueta));
+  const etiquetaVecina = (e: ElementoDeMaqueta): ElementoDeMaqueta | undefined => {
+    const [cx, cy] = [e.caja.x + e.caja.ancho / 2, e.caja.y + e.caja.alto / 2];
+    return [...emparejadas]
+      .filter((o) => tieneLetras(textoParaEmparejar(o.texto)))
+      .map((o) => ({ o, dx: Math.abs(o.caja.x + o.caja.ancho / 2 - cx), dy: Math.abs(o.caja.y + o.caja.alto / 2 - cy) }))
+      .filter(({ dx, dy }) => dx <= VECINDAD_DE_CONTADOR * m.ancho && dy <= Math.max(2 * e.caja.alto, VECINDAD_DE_CONTADOR * m.ancho))
+      .sort((a, b) => a.dx + a.dy - (b.dx + b.dy))[0]?.o;
+  };
   for (const e of sinPareja) {
-    if (!aproximada && e.boton !== true && textoParaEmparejar(e.texto) !== "" && !tieneLetras(textoParaEmparejar(e.texto))) {
+    const vecina =
+      !aproximada && e.boton !== true && textoParaEmparejar(e.texto) !== "" && !tieneLetras(textoParaEmparejar(e.texto)) ? etiquetaVecina(e) : undefined;
+    if (vecina !== undefined) {
+      diferencias.push(
+        `${etiqueta(e)} de ${laMaqueta}, junto a ${etiqueta(vecina)}, no se pinta en ${elAparato}: su etiqueta está y el número no (su valor puede ser de ejemplo; que su sitio quede vacío, no).`
+      );
+    } else if (!aproximada && e.boton !== true && textoParaEmparejar(e.texto) !== "" && !tieneLetras(textoParaEmparejar(e.texto))) {
       datos.push(etiqueta(e));
     } else if (!aproximada && textoParaEmparejar(e.texto) !== "" && dentroDeUnaImagen(e)) {
       enImagen.push(etiqueta(e));
@@ -467,6 +490,8 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
   if (!aproximada) {
     const porFactor = new Map<string, { nombres: string[]; enAparato: number; enMaqueta: number }>();
     for (const p of parejas) {
+      // Solo IMÁGENES: las dos cajas son lo que se pinta. Medido en Maset, con los botones no valía: la caja del aparato
+      // era la de la tarjeta entera y la de la maqueta la de su título («ENTREGAS sale 2,3 veces mayor», y no).
       if (p.aparato.clase !== "IMG" || p.maqueta.sinAncho === true || p.maqueta.caja.ancho <= 0 || p.aparato.caja.ancho <= 0) continue;
       const rm = p.maqueta.caja.ancho / m.ancho;
       const ra = p.aparato.caja.ancho / g.pantalla.ancho;
@@ -566,6 +591,14 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
         diferencias.push(`${etiqueta(parejas[i]!.maqueta)} mide ${veces(ra)} veces el ancho de las de su fila; en ${laMaqueta}, ${veces(rm)}.`);
       }
     });
+  }
+  // El tamaño frente a la PANTALLA de un control cuyo ancho frente a su FILA ya se dijo es la misma noticia: fuera.
+  if (!aproximada) {
+    const yaDichos = new Set(diferencias.filter((d) => d.includes("veces el ancho")).map((d) => d.split(" mide ")[0]));
+    for (let k = diferencias.length - 1; k >= 0; k--) {
+      const d = diferencias[k]!;
+      if (/^.+ sale a un tamaño unas /.test(d) && [...yaDichos].some((n) => d.toLowerCase().startsWith(n!.toLowerCase()))) diferencias.splice(k, 1);
+    }
   }
   // PROPORCIÓN de cada control (alto entre ancho): una tecla aplastada o estirada. Si su ANCHO ya se ha
   // dicho, la proporción es la misma noticia contada otra vez.

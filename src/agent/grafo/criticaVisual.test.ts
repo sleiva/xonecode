@@ -446,14 +446,17 @@ describe("xone_critica_visual MIDE el estilo en los píxeles (la calculadora rea
       decodificar: decodificarImagen,
     });
 
-  it("con code.html: la comparación MEDIDA decide, control a control, y no se le pregunta al modelo", async () => {
+  it("con code.html: la comparación MEDIDA decide el rojo, control a control, y el modelo MIRA además (dos pasadas)", async () => {
     const llamadas: string[] = [];
     const salida = await crear(llamadas).invoke({ captura: "/artefactos/calc_final.png", pantalla: "DemoCalculadora", referencia: "/adjuntos/stitch/screen.png" });
     expect(salida).toMatch(/: rojo/);
     expect(salida).toContain("COMPARACIÓN CONTROL A CONTROL, MEDIDA en los píxeles");
     expect(salida).toContain("«12 + 3» se ve RECORTADO");
     expect(salida).toMatch(/forma redondeada \(1,2:1\) → círculo \(1,0:1\)/);
-    expect(llamadas).toEqual([]);
+    // Antes no se le preguntaba a nadie, y lo que no se mide (un contador que falta, una flecha desalineada) no lo veía
+    // nadie (Maset). Ahora mira, con el método y en `PASADAS_DE_COMPARACION` pasadas.
+    expect(llamadas).toHaveLength(2);
+    expect(llamadas[0]).toContain("INVENTARIO");
     // Y nombra la tabla de traducción, que EXISTE en la skill.
     expect(salida).toContain(TABLA_DE_TRADUCCION);
     expect(existsSync(new URL("../../../skills/xone-development/references/css/de-una-maqueta-a-xone.md", import.meta.url))).toBe(true);

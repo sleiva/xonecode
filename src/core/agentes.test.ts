@@ -527,5 +527,7 @@ describe("un hijo externo que no puede llamar a quien llamaría", () => {
     expect(t).toContain("(device-controller)");
     expect(t).toContain("/art/diseno/ (`screen.png` o `screen.jpg`)");
     expect(t).toContain("xone-captura-android");
+    // Y el MISMO método que el crítico visual.
+    expect(t).toContain("1. INVENTARIO");
   });
 });

@@ -355,8 +355,16 @@ Y las guardas del proyecto:
   comparación en `core/descripcionDePantalla.ts`): forma (radio y proporción), fondo, color del texto,
   altura de la letra, borde, alineación y texto RECORTADO, en las cajas del árbol (captura) y del
   `code.html` (maqueta), con el MISMO esquema para las dos y comparado por CÓDIGO, control a control
-  y agrupado por diferencia. Con `code.html` decide ella y no se pregunta al modelo; sin él, se miden
-  los recortes de la captura y el crítico opina con ellos delante. **No se describe la captura con
+  y agrupado por diferencia. Con `code.html` su rojo es rojo; sin él, se miden los recortes de la captura.
+  **Y con maqueta el modelo MIRA siempre, las dos imágenes juntas, con un MÉTODO** (`core/metodoDeComparacionVisual.ts`:
+  inventario de la maqueta pieza a pieza, cada una comparada en un orden fijo —está, texto, posición y alineación,
+  tamaño, forma y sombras, color y letra—, y lo que sobra), en `PASADAS_DE_COMPARACION` pasadas a la vez cuyas
+  observaciones se JUNTAN sin repetidas (`unirObservaciones`, regla de código). Medido en Maset (MAS-3): con `code.html`
+  no se le preguntaba y el crítico solo vio la tarjeta que faltaba; con el método, DeepSeek flash vio contadores que no se
+  pintan, flechas desalineadas, tarjetas más altas y el icono pegado al texto, y una sola pasada variaba de 4 a 8
+  diferencias. Lo que dice va aparte, como OPINIÓN; el mismo método se le da al desarrollador en Claude Code que compara él
+  (`textoDeTrabajoSinLlamar`). **Y una cifra junto a una etiqueta que SÍ está en el aparato es un CONTADOR que no se
+  pinta**, no un dato de ejemplo (`geometriaDePantalla.ts`, `VECINDAD_DE_CONTADOR`). **No se describe la captura con
   el modelo**: medido, la misma imagen descrita otra vez difería y no vio el recorte.
   Un texto distinto en el mismo sitio MEDIDO —palabra con palabra, nunca una cifra— es otro estado o una TRADUCCIÓN
   (la maqueta de Stitch viene en inglés): va como NOTA y no pone el rojo, ni en el estilo ni en la geometría, donde antes

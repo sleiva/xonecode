@@ -33,6 +33,7 @@ import { createHash } from "node:crypto";
 import type { Papel } from "../../core/ports.js";
 import { interpretarDescripcion, promptDescribirPantalla, type PantallaDescrita } from "../../core/descripcionDePantalla.js";
 import { objetoDe } from "../tareas/juezDeTarea.js";
+import { METODO_DE_COMPARACION_VISUAL, PASADAS_DE_COMPARACION, unirObservaciones } from "../../core/metodoDeComparacionVisual.js";
 
 /** El papel del juez, el mismo que el de tareas. `core/modelos.ts` lo reserva para esto. */
 export const PAPEL_DEL_JUEZ_VISUAL: Papel = "afilado";
@@ -44,7 +45,7 @@ export const PAPEL_DEL_JUEZ_VISUAL: Papel = "afilado";
  * un mensaje de reparación, no en un informe. No se acota para poder compararlo —no se puede,
  * ver la cabecera— sino para que quepa.
  */
-export const TOPE_DE_OBSERVACIONES = 8;
+export const TOPE_DE_OBSERVACIONES = 15;
 /**
  * Cuánto ocupa cada una. Era 200, y medido sobre la calculadora de MyAllXOne cortaba la primera
  * observación a media frase («…en su lugar aparece una flech…»): quien la leía no sabía qué faltaba.
@@ -174,23 +175,16 @@ export const PROMPT_VISUAL = [
  */
 export const PROMPT_VISUAL_CON_REFERENCIA = [
   "Eres un revisor VISUAL de la pantalla de una app móvil. Te doy DOS imágenes:",
-  "1) la MAQUETA: cómo tendría que verse.",
+  "1) la MAQUETA: cómo tiene que verse.",
   "2) la CAPTURA del aparato: cómo se ve de verdad.",
   "",
-  "Di en qué se DIFERENCIAN, sin diagnosticar: describe lo que se ve, no la causa ni cómo",
-  "arreglarlo. Quien lo lea tiene el código delante y tú no.",
+  "Tu trabajo es encontrar TODAS las diferencias que se ven.",
+  METODO_DE_COMPARACION_VISUAL,
   "",
-  "Compara, y nombra el control concreto en cada diferencia:",
-  "- FORMA: esquinas (redondeadas, en píldora, en círculo o rectas), bordes, sombras.",
-  "- TAMAÑOS Y JERARQUÍA: qué es más grande que qué, y cuánto. Si en la maqueta un texto es",
-  "  el doble que otro y en la captura son casi iguales, eso es una diferencia.",
-  "- COLOR: solo comparado con la maqueta —«es gris donde la maqueta lo pone coral»—. NO",
-  "  opines de si la paleta te gusta.",
-  "- COLOCACIÓN: alineación, márgenes, huecos, orden de los elementos, qué falta y qué sobra.",
-  "- Y lo de siempre: texto cortado, ilegible, solapado o fuera de la pantalla.",
-  "",
-  "No toda diferencia es un error: una app nativa no puede dar todo lo que da un navegador.",
-  "Di lo que VES distinto y deja que lo valore quien lee.",
+  "No diagnostiques la causa ni digas cómo arreglarlo: describe lo que se ve. Una frase por diferencia, nombrando el",
+  "elemento y dónde está, y comparando con la maqueta («la flecha de ENTREGAS queda más a la izquierda que la de",
+  "LIQUIDACIÓN; en la maqueta están en la misma vertical»). El COLOR se compara con la maqueta; de gustos, nada.",
+  "No toda diferencia es un error —una app nativa no da todo lo que da un navegador—: di lo que VES distinto.",
   "",
   "Si no ves ninguna diferencia que merezca contarse, dilo con la lista vacía.",
   "",
@@ -243,44 +237,57 @@ export async function juzgarPantalla(
           ...hechos.map((h) => `- ${h}`),
         ].join("\n");
   const prompt = `${base}${conHechos}\n\nLa captura es de la pantalla «${contexto.pantalla}».`;
-  let texto: string;
-  try {
-    texto = await invocar(PAPEL_DEL_JUEZ_VISUAL, prompt, imagen, referencia);
-  } catch (error) {
-    throw new ErrorDelJuezVisual(error instanceof Error ? error.message : String(error));
-  }
-
-  const objeto = objetoDe(texto);
-  if (objeto === undefined) return { veredicto: "indeterminado", observaciones: [], necesito: [] };
-
-  const observaciones = (Array.isArray(objeto["hallazgos"]) ? objeto["hallazgos"] : [])
-    .filter((o): o is string => typeof o === "string" && o.trim() !== "")
-    .slice(0, TOPE_DE_OBSERVACIONES)
-    .map((o) => (o.length > TOPE_DE_OBSERVACION ? `${o.slice(0, TOPE_DE_OBSERVACION - 1)}…` : o));
-
-  const necesito = (Array.isArray(objeto["necesito"]) ? objeto["necesito"] : [])
-    .filter((n): n is string => typeof n === "string" && NOMBRE_DE_PANTALLA.test(n.trim()))
-    .map((n) => n.trim())
-    .slice(0, TOPE_DE_PETICIONES);
-
-  const dicho = objeto["veredicto"];
   /**
-   * **Un VERDE que todavía pide pantallas no es un verde.** Misma dirección que «un
-   * verificador que no corrió no es verde» (`core/entrega.ts`): lo que deja pasar algo no se
-   * puede decir sobre lo que no se ha mirado. Lo que pide NO se tira, que es justo lo que hay
-   * que ir a buscar.
+   * **Con maqueta, `PASADAS_DE_COMPARACION` pasadas a la vez, y se juntan.** Medido en Maset con DeepSeek flash: cada
+   * pasada devolvía de 4 a 8 diferencias, y las de tamaño y alineación salían unas veces sí y otras no. A la vez, no
+   * cuesta tiempo. Si una falla y otra contesta, vale la que contestó; si fallan todas, LANZA (fallo del entorno).
    */
-  if (dicho === "verde") {
-    return necesito.length === 0
-      ? { veredicto: "verde", observaciones, necesito }
-      : { veredicto: "indeterminado", observaciones, necesito };
+  const pasadas = referencia === undefined ? 1 : PASADAS_DE_COMPARACION;
+  const respuestas = await Promise.allSettled(Array.from({ length: pasadas }, () => invocar(PAPEL_DEL_JUEZ_VISUAL, prompt, imagen, referencia)));
+  const textos = respuestas.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+  if (textos.length === 0) {
+    const fallo = respuestas.find((r): r is PromiseRejectedResult => r.status === "rejected")?.reason;
+    throw new ErrorDelJuezVisual(fallo instanceof Error ? fallo.message : String(fallo));
+  }
+  const leidos = textos.map(leerVeredicto).filter((v): v is VeredictoLeido => v !== undefined);
+  if (leidos.length === 0) return { veredicto: "indeterminado", observaciones: [], necesito: [] };
+  const observaciones = unirObservaciones(...leidos.map((l) => l.observaciones)).slice(0, TOPE_DE_OBSERVACIONES);
+  const necesito = [...new Set(leidos.flatMap((l) => l.necesito))].slice(0, TOPE_DE_PETICIONES);
+  /**
+   * **Un VERDE que todavía pide pantallas no es un verde**, y con varias pasadas tampoco lo es si alguna vio algo: lo
+   * que deja pasar algo no se puede decir sobre lo que una de las miradas sí vio mal. Misma dirección que «un
+   * verificador que no corrió no es verde» (`core/entrega.ts`).
+   */
+  if (leidos.every((l) => l.dicho === "verde") && observaciones.length === 0) {
+    return necesito.length === 0 ? { veredicto: "verde", observaciones, necesito } : { veredicto: "indeterminado", observaciones, necesito };
   }
   /**
    * Un rojo sin nada que enseñar no se puede actuar: quien lo reciba no sabe qué mirar. Es la
    * misma regla que «un verde sin resumen» del juez de tareas, por el otro lado.
    */
-  if (dicho === "rojo" && observaciones.length > 0) return { veredicto: "rojo", observaciones, necesito };
+  if (leidos.some((l) => l.dicho === "rojo") && observaciones.length > 0) return { veredicto: "rojo", observaciones, necesito };
   return { veredicto: "indeterminado", observaciones, necesito };
+}
+
+/** Lo que dice UNA pasada, leído y acotado, o `undefined` si no contestó el JSON. */
+interface VeredictoLeido {
+  dicho: unknown;
+  observaciones: string[];
+  necesito: string[];
+}
+
+function leerVeredicto(texto: string): VeredictoLeido | undefined {
+  const objeto = objetoDe(texto);
+  if (objeto === undefined) return undefined;
+  const observaciones = (Array.isArray(objeto["hallazgos"]) ? objeto["hallazgos"] : [])
+    .filter((o): o is string => typeof o === "string" && o.trim() !== "")
+    .slice(0, TOPE_DE_OBSERVACIONES)
+    .map((o) => (o.length > TOPE_DE_OBSERVACION ? `${o.slice(0, TOPE_DE_OBSERVACION - 1)}…` : o));
+  const necesito = (Array.isArray(objeto["necesito"]) ? objeto["necesito"] : [])
+    .filter((n): n is string => typeof n === "string" && NOMBRE_DE_PANTALLA.test(n.trim()))
+    .map((n) => n.trim())
+    .slice(0, TOPE_DE_PETICIONES);
+  return { dicho: objeto["veredicto"], observaciones, necesito };
 }
 
 /** Las pantallas ya descritas, por la huella de la imagen y de la estructura dada: una maqueta no cambia entre rondas. */

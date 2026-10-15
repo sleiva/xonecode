@@ -476,12 +476,25 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
 
       let veredicto;
       try {
-        // Con la comparación MEDIDA contra la maqueta, decide ella; sin maqueta que medir, el crítico opina y los
-        // recortes medidos le llegan como hechos.
+        /**
+         * **Con maqueta, el modelo MIRA siempre, también con la comparación medida completa.** Antes, con `code.html`
+         * decidía solo lo medido y no se le preguntaba a nadie, y lo que no se mide —un contador que falta, una flecha
+         * desalineada, un icono pegado al texto, sombras, tamaños— no lo veía nadie: medido en Maset (MAS-3), el crítico
+         * solo dijo que faltaba una tarjeta y la proporción de otra. Lo medido sigue mandando en lo bloqueante, y un
+         * rojo de la comparación medida es rojo aunque el modelo diga verde; lo que ve el modelo va aparte, como opinión.
+         */
+        const medida = comparacion !== undefined && estilo?.completa === true ? (hayQueArreglar(comparacion) ? ("rojo" as const) : ("verde" as const)) : undefined;
+        const mirada =
+          medida === undefined || referencia !== undefined
+            ? await juzgarPantalla(abierta, { pantalla: entrada.pantalla }, deps.invocar, referencia, [...(geometria?.hechos ?? []), ...(comparacion?.recortes ?? [])])
+            : { veredicto: medida, observaciones: [], necesito: [] };
+        // Una mirada que no dijo nada legible no tumba lo medido: queda lo que dijo la medida.
         veredicto =
-          comparacion !== undefined && estilo?.completa === true
-            ? { veredicto: hayQueArreglar(comparacion) ? ("rojo" as const) : ("verde" as const), observaciones: [], necesito: [] }
-            : await juzgarPantalla(abierta, { pantalla: entrada.pantalla }, deps.invocar, referencia, [...(geometria?.hechos ?? []), ...(comparacion?.recortes ?? [])]);
+          medida !== undefined && mirada.veredicto === "indeterminado" && mirada.observaciones.length === 0
+            ? { ...mirada, veredicto: medida }
+            : medida === "rojo" && mirada.veredicto !== "rojo"
+              ? { ...mirada, veredicto: medida }
+              : mirada;
       } catch (error) {
         // Fallo del ENTORNO —sin modelo, sin clave, sin red—: se dice, y no se convierte en un
         // veredicto. Un rojo inventado culparía al trabajo de un problema de la máquina.

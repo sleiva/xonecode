@@ -18,6 +18,7 @@
 
 import { esEsfuerzo, esPensamiento, type Esfuerzo, type Pensamiento } from "./esfuerzo.js";
 import { recibeBuscarIcono } from "./iconos.js";
+import { METODO_DE_COMPARACION_VISUAL } from "./metodoDeComparacionVisual.js";
 import { recibeFuentes } from "./fuentes.js";
 import { NUCLEO_XONE } from "./nucleoXone.js";
 
@@ -358,7 +359,10 @@ export function textoDeTrabajoSinLlamar(llama: readonly string[], carpeta: strin
   return [
     `NO PUEDES LLAMAR A OTROS ESPECIALISTAS (${llama.join(", ")}): corres en otro proceso. Lo que harían ellos con el aparato lo haces tú, con los scripts de tu shell.`,
     "- Para comprobar un cambio: despliega o recarga, y lee el log para saber qué pasó. Para lo VISUAL, saca UNA captura con `xone-captura-android`.",
-    `- Compara tú con la maqueta: abre con Read la captura y la maqueta —están en ${carpeta}; la de Stitch, en ${carpeta}/diseno/ (\`screen.png\` o \`screen.jpg\`)— y las VES. Mira disposición, tamaños, colores y textos, corrige y repite. Como mucho tres vueltas, y di qué quedó distinto.`,
+    `- Compara tú con la maqueta: abre con Read la captura y la maqueta —están en ${carpeta}; la de Stitch, en ${carpeta}/diseno/ (\`screen.png\` o \`screen.jpg\`)— y las VES. Corrige y repite; como mucho tres vueltas, y di qué quedó distinto.`,
+    "",
+    // El MISMO método que el crítico visual: dos que comparan distinto dan veredictos que no se pueden contrastar.
+    `Para comparar, recorre las dos imágenes así. ${METODO_DE_COMPARACION_VISUAL}`,
   ].join("\n");
 }
 
