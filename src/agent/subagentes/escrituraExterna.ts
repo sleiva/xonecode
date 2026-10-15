@@ -402,6 +402,8 @@ export function decisionDePreToolUse(opciones: {
   real?: (ruta: string) => string;
   /** La ejecución concedida a ESTE hijo (`PeticionExterna.ejecucion`). Ausente: `Bash` se deniega. */
   ejecucion?: Pick<EjecucionExterna, "scripts" | "lecturas">;
+  /** Las carpetas de las skills montadas (`pluginDeSkills.ts#carpetasDeLecturaDeSkills`): se pueden LEER enteras. */
+  lecturasDeSkills?: readonly string[];
 }): {
   hookEventName: "PreToolUse";
   permissionDecision: "allow" | "deny" | "ask";
@@ -433,7 +435,7 @@ export function decisionDePreToolUse(opciones: {
      * `deny` con el motivo. `canUseTool` mantiene la MISMA comprobación como segunda llave
      * para el día que el hook no corra.
      */
-    const v = veredictoDeLectura({ ...opciones, ...(opciones.ejecucion === undefined ? {} : { lecturas: opciones.ejecucion.lecturas }) });
+    const v = veredictoDeLectura({ ...opciones, lecturas: lecturasDelHijo(opciones.ejecucion, opciones.lecturasDeSkills) });
     return v.admitida
       ? {
           hookEventName: "PreToolUse",
@@ -516,6 +518,14 @@ export function motivoDeBashExterno(entrada: Record<string, unknown>, scripts: r
   const comando = entrada["command"];
   if (typeof comando !== "string") return "ese comando no se entiende, así que no se corre";
   return motivoDeComandoExternoInaceptable(comando, scripts);
+}
+
+/**
+ * Todo lo de FUERA del proyecto que un hijo puede leer: las carpetas de su sesión si ejecuta (capturas, hotswap) y las de
+ * las skills montadas. Una sola función para el hook y para `canUseTool`: las dos llaves tienen que decir lo mismo.
+ */
+export function lecturasDelHijo(ejecucion: Pick<EjecucionExterna, "lecturas"> | undefined, lecturasDeSkills: readonly string[] | undefined): string[] {
+  return [...(ejecucion?.lecturas ?? []), ...(lecturasDeSkills ?? [])];
 }
 
 /**

@@ -37,7 +37,7 @@ import { codexDisponible, correrCodex } from "./subagenteCodex.js";
 import { correrOpencode, opencodeDisponible } from "./subagenteOpencode.js";
 import { consumoDeClaude } from "./consumoExterno.js";
 import { mensajeSeguro } from "../../core/trazaDeErrores.js";
-import { montarPluginDeSkills } from "./pluginDeSkills.js";
+import { carpetasDeLecturaDeSkills, montarPluginDeSkills } from "./pluginDeSkills.js";
 import {
   claseDeToolExterna,
   decisionDePreToolUse,
@@ -45,6 +45,7 @@ import {
   diffDeEscrituraExterna,
   eventoDeToolExterna,
   veredictoDeLectura,
+  lecturasDelHijo,
   motivoDeToolDenegada,
   veredictoDeRuta,
   MOTIVO_DE_ESCRITURA_RECHAZADA,
@@ -91,6 +92,8 @@ export async function decisionDeTool(opciones: {
   signal?: AbortSignal;
   real?: (ruta: string) => string;
   leer?: (ruta: string) => string;
+  /** Las carpetas de las skills montadas: la MISMA lista que recibe el hook (`decisionDePreToolUse`). */
+  lecturasDeSkills?: readonly string[];
 }): Promise<PermisoDeTool> {
   const { nombre, entrada, peticion, ficheros, politica, signal } = opciones;
   // Abortado antes de empezar: no se pregunta a nadie por una escritura que ya no va a
@@ -115,7 +118,7 @@ export async function decisionDeTool(opciones: {
       entrada,
       ficheros,
       ...(opciones.real === undefined ? {} : { real: opciones.real }),
-      ...(peticion.ejecucion === undefined ? {} : { lecturas: peticion.ejecucion.lecturas }),
+      lecturas: lecturasDelHijo(peticion.ejecucion, opciones.lecturasDeSkills),
     });
     return v.admitida ? { behavior: "allow" } : { behavior: "deny", message: v.motivo };
   }
@@ -373,6 +376,9 @@ export function crearSubagenteExterno(opciones: {
     // consola vive tiene que alcanzar al siguiente subagente, que es justo lo que el
     // montaje del agente interno no consigue (ver `backendConSkills`).
     const pluginDeSkills = montarPluginDeSkills({ raiz: peticion.cwd });
+    // Y lo que el hijo puede LEER de ellas: la carpeta entera de cada skill montada (sus `references/`), no solo el
+    // `SKILL.md`. Solo si el plugin se montó: sin él no le llega ninguna skill que leer.
+    const lecturasDeSkills = pluginDeSkills === undefined ? [] : carpetasDeLecturaDeSkills({ raiz: peticion.cwd });
 
     // Parar el turno aborta el SDK, que mata a su proceso hijo (`PeticionExterna.senal`). Un
     // controlador PROPIO atado a la señal, y no la señal a pelo: el SDK pide un controlador.
@@ -445,6 +451,7 @@ export function crearSubagenteExterno(opciones: {
                     cwd: peticion.cwd,
                     ficheros: opciones.ficherosDelProyecto?.() ?? new Set<string>(),
                     ...(peticion.ejecucion === undefined ? {} : { ejecucion: peticion.ejecucion }),
+                    lecturasDeSkills,
                   });
                   /**
                    * **Solo se cuenta lo que va a ocurrir.** Una tool DENEGADA no se
@@ -537,6 +544,7 @@ export function crearSubagenteExterno(opciones: {
               peticion,
               signal: contexto.signal,
               ficheros: opciones.ficherosDelProyecto?.() ?? new Set<string>(),
+              lecturasDeSkills,
               ...(opciones.aprobarEscritura === undefined
                 ? {}
                 : { politica: opciones.aprobarEscritura }),

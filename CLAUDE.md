@@ -240,9 +240,14 @@ Y las guardas del proyecto:
   plugins.
 - **La tool `Skill` está en la lista de LECTURA de los motores externos**: no pasamos la opción
   `skills` del SDK (omitirla no es skills off). Entra como lectura porque mete instrucciones en el
-  contexto, y lo que MANDE hacer vuelve a pasar por el mismo hook. **Dos límites declarados**: un
-  `Bash` que pida una skill se sigue denegando (salvo uno de SUS scripts con la shell estrecha), y un `Read` a otro fichero de su carpeta también
-  (cae fuera del proyecto). El nombre le llega PREFIJADO (`xonecode:<nombre>`), como Claude Code
+  contexto, y lo que MANDE hacer vuelve a pasar por el mismo hook. **Y el hijo de Claude Code LEE la carpeta entera
+  de cada skill montada** (sus `references/`), no solo el `SKILL.md` (`pluginDeSkills.ts#carpetasDeLecturaDeSkills`,
+  sumadas a las lecturas de las DOS llaves por `lecturasDelHijo`): por el enlace del plugin y por la ruta real,
+  comprobado por texto y por camino real, y nada más de fuera. Antes se negaba a propósito y salió caro: medido en
+  Maset, el developer y el consultor escribieron atributos de XOne a ciegas (`img=` donde la referencia dice `path=`).
+  **Límites declarados**: un `Bash` que pida una skill se sigue denegando (salvo uno de SUS scripts con la shell
+  estrecha), y en OpenCode leer la carpeta de una skill sigue cerrado por su `external_directory: "deny"` (sin medir
+  si admite excepciones por carpeta). El nombre le llega PREFIJADO (`xonecode:<nombre>`), como Claude Code
   nombra un plugin; `promptDeAgente` lo nombra a secas.
 - **Las skills de un subagente se MARCAN de una lista, no se teclean**
   (`componentes/Agentes.tsx#SkillsDelAgente`): `repartirSkills` mete un nombre mal escrito en

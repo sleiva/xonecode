@@ -23,6 +23,15 @@ describe("decisionDeTool — la regla de seguridad de los agentes externos", () 
   const decidir = (nombre: string, extra: Partial<Parameters<typeof decisionDeTool>[0]> = {}) =>
     decisionDeTool({ nombre, entrada: {}, peticion: PETICION, ...SIN_DISCO, ...extra });
 
+  it("la SEGUNDA llave deja leer las referencias de una skill montada igual que el hook, y nada más fuera", async () => {
+    const lecturasDeSkills = ["/casa/motores/claude/skills/xone-development", "/paquete/skills/xone-development"];
+    const leer = (file_path: string) => decidir("Read", { entrada: { file_path }, lecturasDeSkills });
+    expect((await leer("/casa/motores/claude/skills/xone-development/references/xml-ui/prop-tipos-basicos.md")).behavior).toBe("allow");
+    expect((await leer("/paquete/skills/xone-development/references/xml-ui/prop-tipos-basicos.md")).behavior).toBe("allow");
+    expect((await leer("/paquete/skills/otra/SKILL.md")).behavior).toBe("deny");
+    expect((await decidir("Read", { entrada: { file_path: "/paquete/skills/xone-development/SKILL.md" } })).behavior).toBe("deny");
+  });
+
   it("permite leer y buscar, que es para lo que se llama a uno de estos", async () => {
     for (const tool of ["Read", "Glob", "Grep", "NotebookRead", "TodoWrite"]) {
       expect((await decidir(tool)).behavior, tool).toBe("allow");

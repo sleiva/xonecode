@@ -744,3 +744,49 @@ describe("las carpetas de la SESIÓN que un externo con ejecución puede leer", 
     expect(dentro(`${artefactos}-otra/x.png`)).toBe(false);
   });
 });
+
+/**
+ * Las REFERENCIAS de las skills, leídas por un hijo de Claude Code. Medido en Maset (15-10-2026): el developer y el
+ * consultor no podían leer `references/xml-ui/…` y escribieron atributos de XOne a ciegas. Se abren las carpetas de
+ * las skills montadas, por el ENLACE del plugin (la ruta que enseña el motor) y por la real; nada más.
+ */
+describe("leer las referencias de una skill montada (Claude Code)", () => {
+  const base = realpathSync(mkdtempSync(join(tmpdir(), "xc-skills-lectura-")));
+  afterAll(() => rmSync(base, { recursive: true, force: true }));
+  const proyecto = join(base, "proyecto");
+  const skillReal = join(base, "paquete", "skills", "xone-development");
+  const plugin = join(base, "casa", "motores", "claude", "skills");
+  mkdirSync(proyecto, { recursive: true });
+  mkdirSync(join(skillReal, "references", "xml-ui"), { recursive: true });
+  writeFileSync(join(skillReal, "references", "xml-ui", "prop-tipos-basicos.md"), "#### 5.9.8 Imagen (IMG) — usa `path`");
+  writeFileSync(join(base, "secreto.txt"), "no");
+  // Un enlace DENTRO de la skill que apunta fuera: por el camino real no pasa.
+  symlinkSync(join(base, "secreto.txt"), join(skillReal, "trampa.md"));
+  mkdirSync(plugin, { recursive: true });
+  symlinkSync(skillReal, join(plugin, "xone-development"), "dir");
+  const lecturasDeSkills = [join(plugin, "xone-development"), skillReal];
+  const leer = (file_path: string, conSkills = true) =>
+    decisionDePreToolUse({ nombre: "Read", entrada: { file_path }, cwd: proyecto, ficheros: new Set(), ...(conSkills ? { lecturasDeSkills } : {}) })
+      .permissionDecision;
+
+  it("se lee la referencia por el enlace del plugin y por la ruta real", () => {
+    expect(leer(join(plugin, "xone-development", "references", "xml-ui", "prop-tipos-basicos.md"))).toBe("allow");
+    expect(leer(join(skillReal, "references", "xml-ui", "prop-tipos-basicos.md"))).toBe("allow");
+    // Y buscar dentro, que es como se encuentra la sección que hace falta.
+    expect(
+      decisionDePreToolUse({ nombre: "Grep", entrada: { pattern: "IMG", path: join(plugin, "xone-development", "references") }, cwd: proyecto, ficheros: new Set(), lecturasDeSkills })
+        .permissionDecision
+    ).toBe("allow");
+  });
+
+  it("sin las carpetas de las skills, como antes: denegado (fuera del proyecto)", () => {
+    expect(leer(join(skillReal, "references", "xml-ui", "prop-tipos-basicos.md"), false)).toBe("deny");
+  });
+
+  it("lo de FUERA de la skill sigue cerrado: un `..` que se escapa, un enlace que apunta fuera, la casa", () => {
+    expect(leer(join(plugin, "xone-development", "..", "..", "..", "..", "secreto.txt"))).toBe("deny");
+    expect(leer(join(skillReal, "trampa.md"))).toBe("deny");
+    expect(leer(join(base, "secreto.txt"))).toBe("deny");
+    expect(leer(join(base, "casa", "motores", "claude", "otra-cosa.json"))).toBe("deny");
+  });
+});

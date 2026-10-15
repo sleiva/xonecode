@@ -19,12 +19,15 @@
  * **Enlaces y no copias**: las de serie pesan megas —una sola son 77 ficheros— y esto se
  * monta en cada arranque de un subagente externo.
  *
- * **Límite declarado, y es el mismo que en opencode**: lo que carga el motor por su cuenta
- * son las INSTRUCCIONES del `SKILL.md`. Si una skill manda leer otro fichero de su carpeta,
- * ese `Read` cae fuera del proyecto y `veredictoDeLectura` lo deniega. No se ensancha esa
- * guarda para arreglarlo: abrir la lectura a una carpeta de fuera por comodidad es
- * exactamente el agujero que esa función existe para cerrar, y el precio —una skill de varios
- * ficheros que se queda en su `SKILL.md`— se dice en vez de pagarse a escondidas.
+ * **Y el hijo puede LEER la carpeta entera de cada skill montada, no solo su `SKILL.md`**
+ * (`carpetasDeLecturaDeSkills`, sumadas a las lecturas de `veredictoDeLectura`). Antes se negaba, a
+ * propósito, y el precio resultó demasiado alto: medido en una tarea de Maset (15-10-2026), el
+ * developer y el consultor en Claude Code no pudieron leer `references/xml-ui/…` y escribieron
+ * atributos de XOne a ciegas —`img=` en un `type="IMG"`, donde la documentación dice `path=`—; el
+ * consultor lo dijo: «mi sandbox bloquea Read fuera del proyecto… No puedo confirmar si es `img` o
+ * `path`». No se abre «una carpeta de fuera por comodidad»: se abren SOLO las carpetas de las skills
+ * que este mismo montaje sirve, una a una, en LECTURA, comprobadas por texto y por camino real
+ * (`dentroDeUnaLectura`). La casa, `.xonecode/` y el resto de la máquina siguen cerrados.
  *
  * **Segundo límite**: el nombre le llega PREFIJADO (`xonecode:<nombre>`), que es como Claude
  * Code nombra lo que viene de un plugin, mientras que el `.md` de un subagente y
@@ -109,4 +112,17 @@ export function montarPluginDeSkills(opciones: { casa?: string; raiz?: string } 
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Las carpetas que un hijo de Claude Code puede LEER de las skills montadas: de cada una, su enlace dentro del plugin
+ * (`<plugin>/skills/<nombre>`, que es la ruta que el motor le enseña) y su carpeta REAL. Las dos hacen falta:
+ * `dentroDeUnaLectura` compara el texto de la ruta Y su camino real, y el plugin usa ENLACES, así que una lectura por el
+ * enlace tiene el texto bajo el plugin y el camino real bajo la skill. Solo las que están en disco.
+ */
+export function carpetasDeLecturaDeSkills(opciones: { casa?: string; raiz?: string } = {}): string[] {
+  const enlaces = join(carpetaDelPluginDeSkills(opciones.casa), "skills");
+  return skillsConRuta(opciones.raiz)
+    .filter((s) => existsSync(s.dir))
+    .flatMap((s) => [join(enlaces, s.nombre), s.dir]);
 }
