@@ -468,6 +468,7 @@ const FILA_COMPLETA = {
     salvedad: "el turno no cambió ningún fichero",
   },
   terminadaAMano: true,
+  ticket: { clave: "KAN-7", conector: "jira", url: "https://x.atlassian.net/browse/KAN-7", aviso: "no se pudo pasar a PROBAR" },
 };
 
 /**

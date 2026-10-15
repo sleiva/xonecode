@@ -123,6 +123,20 @@ export interface GestorDeTareasPort {
   transiciones(v: Vinculo, clave: string): Promise<TransicionDelGestor[]>;
   transicionar(v: Vinculo, clave: string, transicion: string): Promise<void>;
   comentar(v: Vinculo, clave: string, texto: string): Promise<void>;
+  /**
+   * Crear una tarea EN el gestor (una tarea en background de un proyecto vinculado vive ahí, ver
+   * `docs/superpowers/specs/2026-10-15-tareas-desde-el-gestor-design.md`), asignada a quien tiene la sesión del
+   * conector. **Opcional**: quien no lo implementa no ofrece crear en el gestor, y la tarea se encola en local diciéndolo.
+   * Lo propio de cada gestor (el tipo de incidencia de Jira, la propiedad de título de Notion) lo resuelve su adaptador:
+   * aquí no entra nada que no tengan todos.
+   */
+  crear?(v: Vinculo, nueva: NuevaTareaEnElGestor): Promise<TareaDelGestor>;
+}
+
+/** Lo que se le da al gestor para crear una tarea: lo que tienen TODOS. La descripción va en markdown. */
+export interface NuevaTareaEnElGestor {
+  titulo: string;
+  descripcion: string;
 }
 
 /** Una clave de proyecto de Jira: MAYÚSCULAS, dígitos y `_`, empezando por letra. Entra en una JQL. */

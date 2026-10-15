@@ -184,6 +184,24 @@ export interface Tarea {
    * de que esto existiera—, que no es lo mismo que `false`.
    */
   terminadaAMano?: boolean;
+  /**
+   * El ticket del GESTOR de tareas en el que vive esta tarea (Jira, Notion…), si su proyecto tenía uno vinculado al
+   * crearla. Se COPIA al crear y no se recalcula nunca desde el vínculo de ahora —la regla de `TicketDeSesion`—: si la
+   * persona revincula el proyecto, lo que se escribe sigue yendo a ESTE ticket. Ausente = tarea solo local.
+   */
+  ticket?: TicketDeTarea;
+}
+
+/** El ticket de una tarea en su gestor. `sitio` no sale del host; `aviso` es el último reflejo que FALLÓ. */
+export interface TicketDeTarea {
+  conector: string;
+  sitio: string;
+  /** El proyecto del gestor (clave de Jira, data source de Notion): lo que el adaptador necesita en el `Vinculo`. */
+  proyecto: string;
+  clave: string;
+  url?: string;
+  /** Lo que no se pudo escribir en el gestor la última vez («no se pudo pasar a PROBAR: …»). Ausente = nada pendiente. */
+  aviso?: string;
 }
 
 /**

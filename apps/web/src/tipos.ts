@@ -1296,6 +1296,8 @@ export interface TareaDelCable {
    * consta — que no es lo mismo que `false`.
    */
   terminadaAMano?: boolean;
+  /** El ticket del gestor en el que vive (redeclarado de `transporte.ts`): clave, conector, enlace y el último aviso. */
+  ticket?: { clave: string; conector: string; url?: string; aviso?: string };
 }
 
 /**

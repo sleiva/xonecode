@@ -304,6 +304,7 @@ import {
   admiteMiasDelVinculo, motivoDeProyectoInaceptable, transicionPropuesta, comentarioDeCierre,
   type FichaDelGestor, type GestorDeTareasPort, type TransicionDelGestor, type Vinculo, type VinculoGuardado,
 } from "../../core/gestorDeTareas.js";
+import { cerrarTicket } from "../../core/tareasEnElGestor.js";
 import { datosDeCierre } from "./datosDeCierre.js";
 import { ErrorDeDescargaCortada, escribirPaquete, listarSoporte, motivoParaNoExportar, type FuenteDeSoporte, type PedidoDeSoporte } from "./soporte.js";
 import { nombreDelPaquete } from "../../core/paqueteDeSoporte.js";
@@ -4695,19 +4696,10 @@ export function montarRutas(
           // TICKET no hace falta para escribir, así que basta con lo que la sesión guardó al
           // abrirse. Se completa con el del proyecto por si acaso; vacío si ya no hay vínculo.
           const vinculo: Vinculo = { conector: ticket.conector, sitio: ticket.sitio, proyecto: delProyecto().vinculo?.proyecto ?? "" };
-          // Si `comentar` falla, la excepción sale al `catch` de fuera: NO se transiciona.
-          await g.comentar(vinculo, ticket.clave, m.comentario);
-          // El comentario YA está en Jira: si la transición falla, contestar `error{cerrar}`
-          // invitaría a repetir el cierre entero —y a comentar DOS veces—. Sale `cerrado`, sin
-          // `transicion` y con el motivo en `falloDeTransicion`.
-          let falloDeTransicion: string | undefined;
-          if (m.transicion !== undefined) {
-            try {
-              await g.transicionar(vinculo, ticket.clave, m.transicion);
-            } catch (error) {
-              falloDeTransicion = motivoDelGestor(error);
-            }
-          }
+          // La secuencia de `core/tareasEnElGestor.ts#cerrarTicket`, la MISMA que cierra una tarea en background: si
+          // `comentar` falla, sale al `catch` de fuera y NO se transiciona; si falla la transición, el comentario YA está
+          // y sale `cerrado` sin `transicion` y con el motivo (contestar `error{cerrar}` invitaría a comentar DOS veces).
+          const { falloDeTransicion } = await cerrarTicket(g, vinculo, ticket.clave, m.comentario, m.transicion, motivoDelGestor);
           emitir({
             clase: "gestor",
             cerrado: {

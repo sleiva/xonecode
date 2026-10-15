@@ -22,7 +22,7 @@ import type {
   ContextoRemoto, EntradaRemota, EstructuraRemota, ManifiestoRemoto,
 } from "./cloudstudio.js";
 import type {
-  DescripcionDelProyecto, FichaDelGestor, GestorDeTareasPort, OpcionesDePendientes, ProyectoEncontrado, TransicionDelGestor, Vinculo,
+  DescripcionDelProyecto, FichaDelGestor, GestorDeTareasPort, NuevaTareaEnElGestor, OpcionesDePendientes, ProyectoEncontrado, TareaDelGestor, TransicionDelGestor, Vinculo,
 } from "./gestorDeTareas.js";
 
 /**
@@ -867,6 +867,8 @@ export class GestorDeTareasEnMemoria implements GestorDeTareasPort {
   readonly [ES_DOBLE] = true;
   readonly transicionesAplicadas: { clave: string; transicion: string }[] = [];
   readonly comentariosAplicados: { clave: string; texto: string }[] = [];
+  /** Lo que se le pidió CREAR, en orden. */
+  readonly creadas: { proyecto: string; titulo: string; descripcion: string }[] = [];
   constructor(
     private readonly datos: {
       sitios?: { id: string; nombre: string; url?: string }[];
@@ -883,9 +885,33 @@ export class GestorDeTareasEnMemoria implements GestorDeTareasPort {
        */
       encontrados?: ProyectoEncontrado[];
       descripciones?: Record<string, DescripcionDelProyecto>;
+      /**
+       * Con él, el doble CREA tareas: cada una con clave `<prefijo>-<n>` (n empieza en 1), que entra en `tareas` en
+       * la categoría `por-hacer` para que `ficha` la encuentre. Sin él no tiene el método, como un gestor que no crea.
+       * `crearFalla` hace que crear lance con ese motivo.
+       */
+      creaConPrefijo?: string;
+      crearFalla?: string;
     } = {}
   ) {
-    const { encontrados, descripciones } = datos;
+    const { encontrados, descripciones, creaConPrefijo, crearFalla } = datos;
+    if (creaConPrefijo !== undefined) {
+      this.crear = async (v: Vinculo, nueva: NuevaTareaEnElGestor) => {
+        if (crearFalla !== undefined) throw new Error(crearFalla);
+        this.creadas.push({ proyecto: v.proyecto, ...nueva });
+        const ficha: FichaDelGestor = {
+          clave: `${creaConPrefijo}-${this.creadas.length}`,
+          titulo: nueva.titulo,
+          descripcion: nueva.descripcion,
+          estado: "Tareas por hacer",
+          categoria: "por-hacer",
+          url: `https://gestor.example/${creaConPrefijo}-${this.creadas.length}`,
+        };
+        (this.datos.tareas ??= []).push(ficha);
+        const { descripcion: _d, ...fila } = ficha;
+        return fila;
+      };
+    }
     if (encontrados !== undefined) {
       this.buscarProyectos = async (texto: string) => encontrados.filter((p) => p.nombre.toLowerCase().includes(texto.trim().toLowerCase()));
     }
@@ -896,6 +922,7 @@ export class GestorDeTareasEnMemoria implements GestorDeTareasPort {
   /** Solo existen si los datos los piden: su AUSENCIA es la forma de Jira, y el servidor la mira. */
   readonly buscarProyectos?: (texto: string) => Promise<ProyectoEncontrado[]>;
   readonly describirProyecto?: (v: Vinculo) => Promise<DescripcionDelProyecto>;
+  readonly crear?: (v: Vinculo, nueva: NuevaTareaEnElGestor) => Promise<TareaDelGestor>;
   async sitios() { return this.datos.sitios ?? []; }
   async proyectos(sitio: string) { return this.datos.proyectos?.[sitio] ?? []; }
   async pendientes(_v: Vinculo, texto?: string, opciones?: OpcionesDePendientes) {
@@ -916,7 +943,13 @@ export class GestorDeTareasEnMemoria implements GestorDeTareasPort {
     return f;
   }
   async transiciones(_v: Vinculo, clave: string) { return this.datos.transiciones?.[clave] ?? []; }
-  async transicionar(_v: Vinculo, clave: string, transicion: string) { this.transicionesAplicadas.push({ clave, transicion }); }
+  async transicionar(_v: Vinculo, clave: string, transicion: string) {
+    this.transicionesAplicadas.push({ clave, transicion });
+    // Como el gestor de verdad: la ficha pasa al destino de la transición (si el doble la conoce).
+    const t = (this.datos.transiciones?.[clave] ?? []).find((x) => x.id === transicion);
+    const f = (this.datos.tareas ?? []).find((x) => x.clave === clave);
+    if (t !== undefined && f !== undefined) Object.assign(f, { estado: t.destino, categoria: t.categoria });
+  }
   async comentar(_v: Vinculo, clave: string, texto: string) { this.comentariosAplicados.push({ clave, texto }); }
 }
 

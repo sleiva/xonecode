@@ -86,6 +86,8 @@ const DECISIONES: Readonly<Record<string, readonly string[]>> = {
   feedback: ["feedback"],
   veredicto: ["veredicto"],
   terminadaAMano: ["terminadaAMano"],
+  // Viaja RECORTADO: clave, conector, enlace y aviso; el `sitio` y el `proyecto` del gestor se quedan en el host.
+  ticket: ["ticket"],
 };
 
 const TAREA_COMPLETA: Required<Tarea> = {
@@ -113,6 +115,7 @@ const TAREA_COMPLETA: Required<Tarea> = {
     salvedad: "el turno no cambió ningún fichero",
   },
   terminadaAMano: true,
+  ticket: { conector: "jira", sitio: "cloud-1", proyecto: "KAN", clave: "KAN-7", url: "https://x.atlassian.net/browse/KAN-7", aviso: "no se pudo pasar a PROBAR" },
 };
 
 describe("filaDeTarea", () => {
@@ -126,6 +129,11 @@ describe("filaDeTarea", () => {
     // Y de verdad los produce, no solo los declara: con una tarea que trae TODOS los campos
     // puestos, la fila no puede quedarse ninguno por el camino.
     expect(Object.keys(filaDeTarea(TAREA_COMPLETA)).sort()).toEqual(producidos);
+  });
+
+  it("del ticket NO viajan el sitio ni el proyecto del gestor", () => {
+    expect(filaDeTarea(TAREA_COMPLETA).ticket).toEqual({ clave: "KAN-7", conector: "jira", url: "https://x.atlassian.net/browse/KAN-7", aviso: "no se pudo pasar a PROBAR" });
+    expect(JSON.stringify(filaDeTarea(TAREA_COMPLETA))).not.toContain("cloud-1");
   });
 
   it("la raíz del proyecto NO viaja, ni suelta ni dentro de nada", () => {

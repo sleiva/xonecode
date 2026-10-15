@@ -959,6 +959,21 @@ function esFicheroTocado(valor: unknown): valor is FicheroTocado {
   return true;
 }
 
+/** El ticket de una tarea, campo a campo como el resto de la lista blanca. Ver `TareaDelCable.ticket`. */
+function ticketDeTarea(valor: unknown): { ticket?: NonNullable<TareaDelCable["ticket"]> } {
+  if (typeof valor !== "object" || valor === null) return {};
+  const v = valor as Record<string, unknown>;
+  if (typeof v["clave"] !== "string" || v["clave"] === "" || typeof v["conector"] !== "string") return {};
+  return {
+    ticket: {
+      clave: v["clave"],
+      conector: v["conector"],
+      ...(typeof v["url"] === "string" && /^https?:\/\//.test(v["url"]) ? { url: v["url"] } : {}),
+      ...(typeof v["aviso"] === "string" && v["aviso"] !== "" ? { aviso: v["aviso"] } : {}),
+    },
+  };
+}
+
 /**
  * El veredicto del juez de una tarea, campo a campo, o `{}` si no vino uno usable.
  *
@@ -1754,6 +1769,9 @@ export function crearStoreDelCliente(): {
                   // JavaScript y marcaría como dada por buena a mano una entrega del
                   // corredor. La trampa de siempre.
                   ...(t["terminadaAMano"] === true ? { terminadaAMano: true } : {}),
+                  // El ticket del gestor: solo con clave Y conector de texto (sin ellos no hay ni qué enseñar ni a quién
+                  // nombrar). Un `url` se queda solo si es http(s): va a un `href`.
+                  ...ticketDeTarea(t["ticket"]),
                 }))
                 .filter((t) => t.id !== ""),
             },
