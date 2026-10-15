@@ -3432,6 +3432,32 @@ describe("un device-controller en Claude Code: la shell ESTRECHA llega al hijo",
     expect(artefactosAnunciados).toContain("/artefactos/captura-1.png");
   }, 20_000);
 
+  it("un desarrollador en Claude Code que LLAMA al de pruebas recibe sus skills y scripts, y se le dice que lo haga él", async () => {
+    const raiz = proyecto();
+    mkdirSync(join(raiz, ".xonecode", "agentes"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "agentes", "conductor-ext.md"), "---\ndescripcion: Maneja el aparato\nmotor: modelo\nsoloLectura: false\nejecucion: true\nskills: [xone-hotswap]\n---\nPrueba.\n");
+    writeFileSync(
+      join(raiz, ".xonecode", "agentes", "dev-ext.md"),
+      "---\ndescripcion: Escribe la app\nmotor: claude-code\nsoloLectura: false\nejecucion: true\nllama: [conductor-ext]\nskills: [xone-development]\n---\nDesarrolla.\n"
+    );
+    const artefactos = mkdtempSync(join(tmpdir(), "xc-art-"));
+    const peticiones: PeticionExterna[] = [];
+    const { m } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "dev-ext", input: "haz el menú" }) }] })],
+      [new AIMessageChunk({ content: "Hecho." })],
+    ]);
+    const s = await abrirSesionTrueforge({
+      raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, artefactos,
+      subagenteExterno: () => ({ disponible: async () => true, correr: async (p: PeticionExterna) => (peticiones.push(p), "hecho") }),
+    });
+    await s.turno("haz el menú", piel().p);
+    const p = peticiones[0]!;
+    expect(p.skills).toEqual(expect.arrayContaining(["xone-development", "xone-hotswap"]));
+    expect(p.ejecucion?.scripts).toEqual(expect.arrayContaining(["xone-desplegar-android", "xone-captura-android"]));
+    expect(p.instrucciones).toContain("NO PUEDES LLAMAR A OTROS ESPECIALISTAS (conductor-ext)");
+    expect(p.instrucciones).toContain(`${artefactos}/diseno/screen.png`);
+  }, 20_000);
+
   it("Codex y OpenCode siguen SIN shell, y sin carpeta de artefactos tampoco se concede", async () => {
     const artefactos = mkdtempSync(join(tmpdir(), "xc-art-"));
     for (const motor of ["codex", "opencode"]) {

@@ -338,6 +338,30 @@ export function promptDeAgente(agente: Agente, skills?: EstadoDeSkills): string 
     .replace(/\n{3,}/g, "\n\n");
 }
 
+/**
+ * Las skills de un agente MÁS las de los agentes a los que llama (`llama`). Para un hijo de Claude Code con ejecución:
+ * corre en otro proceso y no puede llamar a nuestros especialistas, así que lo que haría el de pruebas —desplegar,
+ * recargar, capturar— lo hace él, con las skills y los scripts de ese agente (medido en una tarea de Maset: el
+ * desarrollador en Claude Code no tenía ningún script y no pudo probar nada). Sin repetidos, las suyas primero.
+ */
+export function skillsConLasDeQuienLlama(agente: Pick<Agente, "skills" | "llama">, todos: readonly Pick<Agente, "nombre" | "skills">[]): string[] {
+  const deLlamados = (agente.llama ?? []).flatMap((n) => todos.find((a) => a.nombre === n)?.skills ?? []);
+  return [...new Set([...agente.skills, ...deLlamados])];
+}
+
+/**
+ * Lo que se le dice a un hijo de Claude Code CON ejecución que tenía a quién llamar: no puede, y lo hace él, con su visión
+ * para comparar con la maqueta (al abrir una imagen con `Read`, Claude la ve). `carpeta` es la de artefactos de la
+ * sesión, en disco: ahí guardan sus capturas los scripts y ahí está la maqueta traída de Stitch.
+ */
+export function textoDeTrabajoSinLlamar(llama: readonly string[], carpeta: string): string {
+  return [
+    `NO PUEDES LLAMAR A OTROS ESPECIALISTAS (${llama.join(", ")}): corres en otro proceso. Lo que harían ellos con el aparato lo haces tú, con los scripts de tu shell.`,
+    "- Para comprobar un cambio: despliega o recarga, y lee el log para saber qué pasó. Para lo VISUAL, saca UNA captura con `xone-captura-android`.",
+    `- Compara tú con la maqueta: abre con Read la captura y la maqueta —están en ${carpeta}; la de Stitch, en ${carpeta}/diseno/screen.png— y las VES. Mira disposición, tamaños, colores y textos, corrige y repite. Como mucho tres vueltas, y di qué quedó distinto.`,
+  ].join("\n");
+}
+
 /** Qué skills de las que el agente declara existen de verdad en el catálogo, y cuáles no. */
 export interface EstadoDeSkills {
   suyas: string[];

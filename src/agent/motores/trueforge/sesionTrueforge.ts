@@ -61,7 +61,7 @@ import { MAX_APPROVAL_ROUNDS, type Decision } from "../../../vendor/hitl.js";
 import { artefactosNuevos, backendDeAgente, entornoDeLaShellDelProyecto, fotoDeArtefactos, lectorDelDispositivoDeSesion, scriptsDeLasSkills } from "../../grafo/proyecto.js";
 import { carpetaDeHotswap } from "../../../core/hotswap.js";
 import { cargarAgentes } from "../../subagentes/agentesEnDisco.js";
-import { fichaDeAgente, promptDeAgente, recibeMarcarCriterios, repartirSkills, type Agente } from "../../../core/agentes.js";
+import { fichaDeAgente, promptDeAgente, recibeMarcarCriterios, repartirSkills, skillsConLasDeQuienLlama, textoDeTrabajoSinLlamar, type Agente } from "../../../core/agentes.js";
 import { PERFIL_DEL_ORQUESTADOR, promptOrquestador } from "../../grafo/xoneAgent.js";
 import { permisosDe, seDetieneEn, TEXTO_HITL } from "../../grafo/perfiles.js";
 import { cambioDe } from "../../turno/interrupts.js";
@@ -1118,10 +1118,13 @@ export async function abrirSesionTrueforge(
      * su nombre; el entorno de NUESTRA shell; y la lectura de ESTAS dos carpetas de la sesión, que
      * es donde sus scripts dejan las capturas. Codex y OpenCode siguen sin shell.
      */
+    const conEjecucion = agente.ejecucion === true && motor === "claude-code" && carpeta !== undefined;
+    // Con ejecución, también las skills de a quien llamaría: no puede llamarlo, así que lo hace él (`skillsConLasDeQuienLlama`).
+    const delHijo: Agente = conEjecucion ? { ...agente, skills: skillsConLasDeQuienLlama(agente, especialistas()) } : agente;
     const ejecucion =
-      agente.ejecucion === true && motor === "claude-code" && carpeta !== undefined
+      conEjecucion
         ? {
-            scripts: scriptsDeLasSkills(raiz, agente.skills),
+            scripts: scriptsDeLasSkills(raiz, delHijo.skills),
             entorno: entornoDeLaShellDelProyecto(raiz, carpeta),
             lecturas: [carpeta, carpetaDeHotswap(carpeta)],
           }
@@ -1156,12 +1159,16 @@ export async function abrirSesionTrueforge(
           peticion: () => ({
             motor,
             cwd: raiz,
-            instrucciones: `${promptDeAgente(agente, repartirSkills(agente, disponibles))}\n\n${inventarioDelProyecto(ficherosDelProyecto(raiz))}`,
+            instrucciones: [
+              promptDeAgente(delHijo, repartirSkills(delHijo, disponibles)),
+              ...(conEjecucion && (agente.llama ?? []).length > 0 ? [textoDeTrabajoSinLlamar(agente.llama ?? [], carpeta!)] : []),
+              inventarioDelProyecto(ficherosDelProyecto(raiz)),
+            ].join("\n\n"),
             tarea: params.request.input,
             ...(agente.modelo === undefined ? {} : { modelo: agente.modelo }),
             permitirEscritura: !agente.soloLectura,
             agente: agente.nombre,
-            skills: repartirSkills(agente, disponibles).suyas,
+            skills: repartirSkills(delHijo, disponibles).suyas,
             ...(ejecucion === undefined ? {} : { ejecucion }),
           }),
           senal: () => aborto?.signal,

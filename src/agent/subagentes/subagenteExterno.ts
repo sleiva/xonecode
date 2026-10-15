@@ -37,6 +37,7 @@ import { codexDisponible, correrCodex } from "./subagenteCodex.js";
 import { correrOpencode, opencodeDisponible } from "./subagenteOpencode.js";
 import { consumoDeClaude } from "./consumoExterno.js";
 import { mensajeSeguro } from "../../core/trazaDeErrores.js";
+import { textoDeLaShellExterna } from "../../core/comandoExterno.js";
 import { carpetasDeLecturaDeSkills, montarPluginDeSkills, skillsVisiblesDelHijo } from "./pluginDeSkills.js";
 import {
   claseDeToolExterna,
@@ -399,7 +400,7 @@ export function crearSubagenteExterno(opciones: {
         // que sabe hacer como producto —leer código, buscar, razonar sobre un repo— es la
         // razón de llamarlo, y reemplazar su prompt entero lo dejaría sin ello. Lo que
         // añadimos son las reglas de XOne y su papel, que es lo que no puede saber.
-        systemPrompt: { type: "preset", preset: "claude_code", append: peticion.instrucciones },
+        systemPrompt: { type: "preset", preset: "claude_code", append: [peticion.instrucciones, textoDeLaShellExterna(peticion.ejecucion?.scripts)].filter((t) => t !== undefined && t !== "").join("\n\n") },
         // Doble llave. `permissionMode` es la política del propio hijo y `canUseTool` es
         // la nuestra: la primera puede cambiar de significado con una versión del SDK, la
         // segunda la decidimos aquí y es la que manda.

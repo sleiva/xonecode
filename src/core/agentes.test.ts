@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  skillsConLasDeQuienLlama,
+  textoDeTrabajoSinLlamar,
   avisoDeEjecucionConCarpetas,
   conLoQueLaVentanaNoEdita,
   escribirAgente,
@@ -510,5 +512,20 @@ describe("shell con `escribeEn`: un límite que la shell no respeta", () => {
     expect(avisoDeEjecucionConCarpetas({ ejecucion: true, escribeEn: ["/icons/", "/fonts/"] })).toContain("limitado a /icons/, /fonts/");
     expect(avisoDeEjecucionConCarpetas({ ejecucion: true })).toBeUndefined();
     expect(avisoDeEjecucionConCarpetas({ escribeEn: ["/icons/"] })).toBeUndefined();
+  });
+});
+
+describe("un hijo externo que no puede llamar a quien llamaría", () => {
+  it("recibe también las skills de los agentes de su `llama`, sin repetidos y las suyas primero", () => {
+    const todos = [{ nombre: "device-controller", skills: ["xone-hotswap"] }, { nombre: "designer-xone", skills: ["xone-development"] }];
+    expect(skillsConLasDeQuienLlama({ skills: ["xone-development"], llama: ["device-controller", "designer-xone", "no-existe"] }, todos)).toEqual(["xone-development", "xone-hotswap"]);
+    expect(skillsConLasDeQuienLlama({ skills: ["a"] }, todos)).toEqual(["a"]);
+  });
+
+  it("se le dice que lo haga él y dónde están la captura y la maqueta", () => {
+    const t = textoDeTrabajoSinLlamar(["device-controller"], "/art");
+    expect(t).toContain("(device-controller)");
+    expect(t).toContain("/art/diseno/screen.png");
+    expect(t).toContain("xone-captura-android");
   });
 });

@@ -44,4 +44,14 @@ describe("con qué se lanza un hijo de Claude Code", () => {
     await correr();
     expect(lanzados.at(-1)!.options.skills).toEqual([]);
   });
+
+  it("con ejecución, su prompt DICE qué shell tiene: sus scripts y cómo llamarlos", async () => {
+    await crearSubagenteExterno({}).correr({
+      motor: "claude-code", cwd: process.cwd(), instrucciones: "Eres el desarrollador.", tarea: "x", agente: "dev", permitirEscritura: false,
+      ejecucion: { scripts: ["xone-captura-android"], entorno: {}, lecturas: [] },
+    });
+    const append = (lanzados.at(-1)!.options.systemPrompt as { append: string }).append;
+    expect(append).toContain("Eres el desarrollador.");
+    expect(append).toContain("SHELL: `Bash` solo para estos scripts de tus skills, uno por llamada, por su NOMBRE y sin ruta: `xone-captura-android`");
+  });
 });

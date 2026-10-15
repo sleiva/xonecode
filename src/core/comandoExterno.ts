@@ -62,3 +62,20 @@ export function motivoDeComandoExternoInaceptable(comando: string, scripts: read
   }
   return undefined;
 }
+
+/**
+ * Lo que se le DICE al hijo de su shell, sacado de lo que de verdad se le concede. Sin esto lo descubría a base de
+ * denegaciones: medido en una tarea de Maset, el desarrollador en Claude Code (con «Ejecuta comandos» marcado y skills
+ * sin ningún script) probó `Bash` y concluyó que «solo admite un script que el sandbox también rechaza». Sin ejecución
+ * concedida no se dice nada: el SDK ya le enseña `Bash`, y el hook la deniega con su motivo.
+ */
+export function textoDeLaShellExterna(scripts: readonly string[] | undefined): string | undefined {
+  if (scripts === undefined) return undefined;
+  if (scripts.length === 0) {
+    return "SHELL: no tienes ninguna. Tu `.md` concede ejecutar comandos, pero solo los scripts de tus skills, y ninguna trae scripts: no intentes `Bash`.";
+  }
+  return (
+    `SHELL: \`Bash\` solo para estos scripts de tus skills, uno por llamada, por su NOMBRE y sin ruta: ${scripts.map((s) => `\`${s}\``).join(", ")}. ` +
+    "Argumentos sueltos o entre comillas simples; nada de `;`, `|`, `>`, `$`, comillas dobles ni segundo plano. Cualquier otro comando se deniega."
+  );
+}

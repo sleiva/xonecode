@@ -49,3 +49,14 @@ describe("el Bash que se le deja a un agente externo con ejecución", () => {
     expect(motivoDeComandoExternoInaceptable("xone-hotswap shot", [])).toBeDefined();
   });
 });
+
+describe("lo que se le DICE al hijo de su shell", () => {
+  it("sin ejecución, nada; concedida sin scripts, que no tiene; con scripts, cuáles y cómo", async () => {
+    const { textoDeLaShellExterna } = await import("./comandoExterno.js");
+    expect(textoDeLaShellExterna(undefined)).toBeUndefined();
+    expect(textoDeLaShellExterna([])).toContain("no tienes ninguna");
+    const t = textoDeLaShellExterna(["xone-log-android", "xone-captura-android"])!;
+    expect(t).toContain("`xone-log-android`, `xone-captura-android`");
+    expect(t).toContain("sin ruta");
+  });
+});

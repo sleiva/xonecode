@@ -547,6 +547,13 @@ ejecuta si es Claude Code, con la shell ESTRECHA (ver abajo). Reglas duras:
 - **En TrueForge, `ls`, `glob` y `grep` FILTRAN lo que devuelven con la regla de leer**
   (`toolsDeFichero.ts#ejecutar`, `puedeLeer`): el permiso se comprobaba solo sobre su `path` —la raíz por
   omisión— y un `glob` de `/.xonecode/**` listaba los nombres de lo denegado. Leer ya estaba denegado.
+- **Y se le DICE qué shell tiene, y lo que no puede delegar lo hace él** (`core/comandoExterno.ts#textoDeLaShellExterna`,
+  `core/agentes.ts#skillsConLasDeQuienLlama`, `#textoDeTrabajoSinLlamar`): su prompt lleva la línea «SHELL:» con sus scripts
+  exactos (o «no tienes ninguna» si su `.md` concede ejecutar y sus skills no traen scripts), y como corre en otro proceso
+  y no puede llamar a nuestros especialistas, recibe también las skills —y los scripts— de los agentes de su `llama`, con
+  la instrucción de desplegar, capturar y comparar él mismo la captura con la maqueta abriéndolas con `Read` (las VE).
+  Medido en Maset: el desarrollador en Claude Code no tenía ningún script ni sabía de su shell, y no pudo probar nada.
+  **Límites declarados**: ni el tope de vueltas ni la medida automática le alcanzan, y `validar_fichero_xone` tampoco.
 - **Las guardas de ruta hay que REAPLICARLAS** (`agent/subagentes/escrituraExterna.ts`): el
   `file_path` del hijo es ABSOLUTO y va al disco directo, sin pasar por `permisosDe`,
   `virtualMode`, vistas aplanadas ni guardas de artefactos/descargas. Las MISMAS funciones, **dos
