@@ -353,6 +353,13 @@ export interface DependenciasDelEspecialista {
   informes?: Capacidad;
   /** Las tools de los conectores MCP que le tocan a ESTE agente (el reparto vive en la sesión). */
   conectores?: (agente: Agente) => readonly Capacidad[];
+  /**
+   * Sin nadie a quien preguntar (una TAREA de fondo): sus escrituras LOCALES no paran el turno a pedir aprobación. Una
+   * aprobación solo se atiende cuando la librería devuelve el control, y medido en Maset las del diseñador esperaron
+   * todo lo que tardó el analista (un Claude Code de una sola llamada larga) aunque en una tarea se aprueban solas. Las
+   * guardas de ruta siguen enteras; las escrituras de los CONECTORES siguen parando (en una tarea se rechazan).
+   */
+  escribeSinPreguntar?: boolean;
 }
 
 /**
@@ -381,13 +388,19 @@ export function capacidadesDelEspecialista(
       backend: deps.backend,
       reglas,
       tools: clase === "ejecuta" ? TOOLS_DE_LECTURA : TOOLS_DE_FICHERO,
-      conAprobacion: clase === "escribe",
+      conAprobacion: clase === "escribe" && deps.escribeSinPreguntar !== true,
     }),
     // `incorporar_adjunto` y `traer_fuente` ESCRIBEN el proyecto: si están entre las propias, piden
     // aprobación como `write_file` (el HITL de deepagents tiene la primera por NOMBRE,
     // `perfiles.ts#hitlDe`). Sin esto escribirían en cuanto el modelo las pidiera.
     ...(propias.length > 0
-      ? [capacidadDePropias(propias, deps.backend, PROPIAS_QUE_ESCRIBEN.filter((n) => propias.some((t) => t.name === n)))]
+      ? [
+          capacidadDePropias(
+            propias,
+            deps.backend,
+            deps.escribeSinPreguntar === true ? [] : PROPIAS_QUE_ESCRIBEN.filter((n) => propias.some((t) => t.name === n))
+          ),
+        ]
       : []),
     ...(clase === "ejecuta" ? [capacidadDeEjecucion(deps.conShell(), deps.dispositivo)] : []),
     ...(deps.conectores?.(agente) ?? []),

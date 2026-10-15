@@ -254,3 +254,18 @@ describe("capacidadDeNotas contra el orquestador real: la entrega ocurre de verd
     expect(recibidosHijo[0]!.some((m) => String(m.content).includes("nota compartida"))).toBe(true);
   });
 });
+
+/**
+ * En una TAREA de fondo las escrituras locales no paran el turno: una aprobación solo se atiende cuando la librería
+ * devuelve el control, y medido en Maset las del diseñador esperaron lo que tardó el analista de Claude Code.
+ */
+describe("escribeSinPreguntar (tarea de fondo)", () => {
+  const aprobacionDe = (piezas: ReturnType<typeof capacidadesDelEspecialista>, nombre: string): unknown => {
+    const ts = (piezas.find((c) => c.nombre === nombre)!.capability.systemToolSets as unknown[])[0] as Record<string, unknown>;
+    return (ts["policy"] as { requireApprovalForTools: unknown }).requireApprovalForTools;
+  };
+  it("con persona delante, write_file pide aprobación; en una tarea, no", () => {
+    expect(aprobacionDe(capacidadesDelEspecialista(agente({}), "x", deps()), "ficheros")).toEqual(expect.arrayContaining(["write_file", "edit_file"]));
+    expect(aprobacionDe(capacidadesDelEspecialista(agente({}), "x", { ...deps(), escribeSinPreguntar: true }), "ficheros")).toEqual([]);
+  });
+});

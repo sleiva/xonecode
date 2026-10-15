@@ -1327,6 +1327,8 @@ export async function abrirSesionTrueforge(
       notas: capacidadDeNotasDeLaSesion,
       puedeLlamar: (a) => conBucleDelDesarrollador && (a.llama?.length ?? 0) > 0,
       informes: capacidadDeInformes,
+      // Una tarea de fondo no tiene a quién preguntar: sus escrituras locales no esperan al control de la librería.
+      ...(opciones.trabajoSinPersona === true ? { escribeSinPreguntar: true } : {}),
       vueltas: (a) =>
         a.ejecucion === true
           ? capacidadDeAvisoDeVueltas({ vueltasDe: (hilo) => capturasDeCadaHilo.get(hilo) ?? 0, umbrales: UMBRALES_DE_CAPTURAS, texto: textoDeCapturas })

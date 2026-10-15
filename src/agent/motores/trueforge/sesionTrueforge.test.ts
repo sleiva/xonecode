@@ -422,6 +422,19 @@ describe("una sesión con el motor TrueForge", () => {
     expect(r.pendientes).toBe(1);
   }, 20_000);
 
+  it("en una TAREA de fondo (`trabajoSinPersona`) el hijo escribe sin parar el turno ni preguntar a nadie", async () => {
+    const raiz = proyecto();
+    let preguntas = 0;
+    const s = await abrirSesionTrueforge({
+      raiz, modelos: modelos(), entorno: ENTORNO, skills: CATALOGO, trabajoSinPersona: true,
+      pedirAprobacion: async () => ((preguntas += 1), new Map()),
+    });
+    const r = await s.turno("escribe una nota", piel().p);
+    expect(preguntas).toBe(0);
+    expect(r.pendientes).toBe(0);
+    expect(readFileSync(join(raiz, "nota.txt"), "utf8")).toBe("hola\n");
+  }, 20_000);
+
   it("agotado el tope de rondas, el resultado dice CUÁL (topeAgotado) para que el motivo sea verdad; sin aprobador, no", async () => {
     const raiz = proyecto();
     const s = await abrirSesionTrueforge({

@@ -942,6 +942,11 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   pregunta en espera NO es una entrega** (`ResultadoDeTurno.preguntaPendiente`, `motivoDePreguntaPendiente`): se aparca
   con la pregunta, sin juez —dictaba «no escribió nada»—; y **el veredicto de un ciclo anterior se retira al empezar
   otro**, porque se quedaba pegado a la tarea mientras trabajaba.
+- **En una tarea, las escrituras LOCALES de un especialista no paran el turno** (`escribeSinPreguntar`, en
+  `capacidadesDelEspecialista`, puesto con `trabajoSinPersona`): una aprobación solo se atiende cuando la librería devuelve
+  el control, y medido en Maset las del diseñador esperaron todo lo que tardó el analista de Claude Code (una sola llamada
+  larga), aunque en una tarea se aprueban solas. Las guardas de ruta siguen enteras, lo que cambió lo sigue diciendo git, y
+  las escrituras de un CONECTOR siguen parando (y en una tarea se rechazan). **Límite**: `Tarea.autorizadas` ya no las cuenta.
 - **Una tarea cortada por el tope de rondas lo DICE** (`ResultadoDeTurno.topeAgotado`, puesto por TrueForge;
   `core/entrega.ts#motivoDeTopeAgotado`): «agotó el tope de N rondas… Pulsa «Continuar»», y no «quedaron escrituras
   esperando aprobación», que en una tarea sin nadie a quien preguntar no decía que se había cortado. Y una respuesta del
