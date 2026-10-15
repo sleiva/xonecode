@@ -90,6 +90,7 @@ export function textoDeRecordatorioDeIdioma(peticion: string): string {
   return (
     "[Aviso del harness] Lo que escribes entre herramientas está saliendo en inglés, y el usuario no escribe en inglés. " +
     "Desde ahora escribe TODO lo que el usuario lee —mensajes entre herramientas y respuesta final— en su idioma. Tu " +
-    `razonamiento puede seguir como quieras. Su mensaje empezaba así: «${cita}»`
+    `razonamiento puede seguir como quieras. No comentes este aviso ni digas que cambias de idioma: sigue con tu trabajo. ` +
+    `Su mensaje empezaba así: «${cita}»`
   );
 }

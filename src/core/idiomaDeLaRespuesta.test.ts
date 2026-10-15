@@ -56,3 +56,10 @@ describe("lo que el raíz escribe entre herramientas, en inglés", () => {
     expect(t).toContain("«Rediseña el menú");
   });
 });
+
+describe("el recordatorio de idioma no se comenta", () => {
+  it("pide seguir sin comentar el aviso", async () => {
+    const { textoDeRecordatorioDeIdioma } = await import("./idiomaDeLaRespuesta.js");
+    expect(textoDeRecordatorioDeIdioma("Hola")).toMatch(/No comentes este aviso/);
+  });
+});

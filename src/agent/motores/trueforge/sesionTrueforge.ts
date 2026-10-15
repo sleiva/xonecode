@@ -241,6 +241,18 @@ export function textoDeAprendidoDelRaiz(lista: Parameters<typeof bloqueDeAprendi
     .join("\n");
 }
 
+/**
+ * La respuesta a una pregunta del agente cuando nadie la contesta y tenía opción recomendada. No es la opción a secas:
+ * medido en Maset, con solo «Opción A (Recommended)» el agente cerraba diciendo «lo decidiste tú», como si la hubiera
+ * elegido la persona. Es SU recomendación aplicada, y así tiene que contarla.
+ */
+export function respuestaAutonomaRecomendada(elegida: string): string {
+  return (
+    `Nadie ha contestado (modo autónomo): se aplica TU opción recomendada, «${elegida}». No la eligió el usuario: ` +
+    "cuéntala en tu respuesta final entre las decisiones que tomaste tú sin preguntar."
+  );
+}
+
 export const RESPUESTA_AUTONOMA_SIN_RECOMENDADA =
   "Modo autónomo: no hay nadie a quien preguntar. Decide tú con lo que dicen el encargo y el plan, sigue, y di en tu respuesta final qué elegiste y por qué.";
 
@@ -1865,7 +1877,7 @@ export async function abrirSesionTrueforge(
                   type: "user.tool_response",
                   thread_id: q.hilo,
                   tool_call_id: q.id,
-                  content: elegida ?? RESPUESTA_AUTONOMA_SIN_RECOMENDADA,
+                  content: elegida === undefined ? RESPUESTA_AUTONOMA_SIN_RECOMENDADA : respuestaAutonomaRecomendada(elegida),
                 });
               }
               lote = respuestas;

@@ -1239,6 +1239,8 @@ describe("una sesión con el motor TrueForge", () => {
       await s.turno("haz la calculadora", uno.p);
       expect(vistos).toHaveLength(2);
       expect(vistos[1]!.join("\n")).toContain("Científica (Recommended)");
+      // Y dicha como SU recomendación aplicada, no como algo que eligió la persona (medido: «lo decidiste tú»).
+      expect(vistos[1]!.join("\n")).toContain("No la eligió el usuario");
       expect(uno.tokens.join("")).toContain("Hecho, científica.");
       expect(uno.tokens.join("")).not.toContain("1. Básica");
     }, 30_000);
