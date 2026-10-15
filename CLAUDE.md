@@ -890,7 +890,7 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   aparca en vez de quedarse en `nuevo` renunciada. El servidor espera al corte y contesta 409 con
   motivo si no se pudo (otro proceso, o no soltó a tiempo).
 - **«En curso» y «Finalizadas»: las terminadas son un HISTÓRICO de solo lectura** (`TareasDelProyecto.tsx#FilaFinalizada`):
-  sin acciones, la más reciente arriba, «empezó … · acabó …» (nunca «tardó»: cuenta la pausa), lo último que contestó
+  sin acciones, FUERA de la barra de sesiones (salvo la abierta), la más reciente arriba, «empezó … · acabó …» (nunca «tardó»: cuenta la pausa), lo último que contestó
   el agente —pedido al desplegar con `leerSesion`, nunca en la cola— y su conversación abierta para LEER con el motivo
   `finalizada`, que no ofrece escribir. **Sus artefactos salen de SU carpeta, no de la abierta**: `GET /artefacto` y el
   mensaje `artefacto` aceptan `p`/`s` (proyecto y sesión) resueltos por el SERVIDOR con la MISMA barrera que

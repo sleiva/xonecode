@@ -575,6 +575,12 @@ export function App({
     for (const t of estado.tareas?.lista ?? []) if (t.estado === "en-proceso" && t.sesion !== undefined) deSesion.set(t.sesion, t.id);
     return deSesion;
   }, [estado.tareas]);
+  /** Las conversaciones de las tareas TERMINADAS: son histórico (Tareas → Finalizadas), y la barra no las lista. */
+  const sesionesDeFinalizadas = useMemo(() => {
+    const ids = new Set<string>();
+    for (const t of estado.tareas?.lista ?? []) if (t.estado === "terminada" && t.sesion !== undefined) ids.add(t.sesion);
+    return ids;
+  }, [estado.tareas]);
   /**
    * Una conversación abierta para LEER (IXCODE-36): la de una tarea que trabaja ahora, o una del
    * proyecto que trabaja en OTRA. No abre ninguna consola: los actos vienen del disco (`leerSesion`)
@@ -3489,7 +3495,9 @@ export function App({
             : { visibles: estado.alta.registrados.find((e) => e.id === entornoActivo)!.proyectos })}
           proyectos={(estado.alta?.proyectos ?? []).map((p) => ({
             ...p,
-            sesiones: (p.sesiones ?? []).map((s) => ({
+            // La conversación de una tarea TERMINADA no va en la barra: es histórico y vive en Tareas → Finalizadas, con
+            // sus artefactos. Salvo la que está abierta: quitar la fila en la que estás dejaría la barra sin marcar nada.
+            sesiones: (p.sesiones ?? []).filter((s) => !sesionesDeFinalizadas.has(s.id) || s.id === estado.alta?.sesionActiva).map((s) => ({
               ...s,
               historica: true,
               // La de una tarea que trabaja ahora se LEE, en vivo (IXCODE-36).

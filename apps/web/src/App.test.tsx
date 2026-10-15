@@ -4100,4 +4100,12 @@ describe("App: una tarea finalizada se lee con su conversación y sus artefactos
     fireEvent(detalles, new Event("toggle"));
     expect(await screen.findByText(/Hecho: la versión sale bajo el logo/)).toBeTruthy();
   });
+
+  it("su conversación ya no sale en la barra: vive en Finalizadas", () => {
+    conUnaFinalizada();
+    const barra = screen.getAllByRole("navigation").find((n) => !n.hasAttribute("aria-label"))!;
+    expect(within(barra).queryByRole("button", { name: /Tarea de fondo/ })).toBeNull();
+    // Las sesiones del proyecto SÍ están desplegadas: la de la tarea falta por el filtro, no porque no se listen.
+    expect(within(barra).getAllByRole("button", { name: /Mi chat/ }).length).toBeGreaterThan(0);
+  });
 });
