@@ -43,7 +43,7 @@ export interface OpcionesDelSondeo {
   copias: () => CopiaConGestor[];
   gestorDe: (conector: string) => GestorDeTareasPort | undefined;
   /** El aumentador de «Nueva tarea»: amplía el encargo con el proyecto delante. Sin él, preparar no se hace. */
-  augmentar?: (p: PeticionDeTarea) => Promise<string>;
+  augmentar?: (p: { texto: string; proyecto: CopiaConGestor["proyecto"]; adjuntos: PeticionDeTarea["adjuntos"] }) => Promise<string>;
   /** La cola (la ENVUELTA: lo que se guarda aquí también se refleja en el gestor). */
   cola: Pick<TareasEnDisco, "listar" | "guardar">;
   /** Que el corredor mire la cola: una tarea lanzada arranca en el acto si puede. */
@@ -130,7 +130,7 @@ export function crearSondeoDelGestor(o: OpcionesDelSondeo): SondeoDelGestor {
   const preparar = async (proyecto: CopiaConGestor["proyecto"], v: VinculoGuardado, g: GestorDeTareasPort, t: TareaDelGestor): Promise<boolean> => {
     if (o.augmentar === undefined) throw new Error("esta ejecución no puede preparar encargos");
     const ficha = await g.ficha(v, t.clave);
-    const encargo = await o.augmentar({ texto: peticionDelTicket(ficha.titulo, ficha.descripcion), proyecto: { nombre: proyecto.nombre, raiz: proyecto.raiz }, adjuntos: [] });
+    const encargo = await o.augmentar({ texto: peticionDelTicket(ficha.titulo, ficha.descripcion), proyecto, adjuntos: [] });
     await g.comentar(v, t.clave, comentarioDeEncargo(encargo));
     o.informar?.(`${t.clave}: encargo preparado y subido para revisar`);
     return true;

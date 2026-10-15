@@ -12,7 +12,7 @@
  * guarda quien lo tiene en vuelo, que lo suelta en cuanto hay decisión.
  */
 import type { PlanEnDisco } from "../../agent/planesEnDisco.js";
-import type { EsquemaDelProyecto, TareaDelGestor, TransicionDelGestor, Vinculo } from "../../core/gestorDeTareas.js";
+import type { EsquemaDelProyecto, EstadoDelGestor, MapeoDeEstados, TareaDelGestor, TransicionDelGestor, Vinculo } from "../../core/gestorDeTareas.js";
 import type { CambiosDeUnaColeccion } from "../../core/diffDeColecciones.js";
 import type { FotoDeColecciones } from "../../core/fotoDeColecciones.js";
 import type { InformeDeDispositivos, NombreDeHerramienta, Receta } from "../../core/dispositivos.js";
@@ -44,7 +44,8 @@ import type { EstadoDeMotorLocal } from "../../core/motoresLocales.js";
  *  nombre del sitio si esta ejecución ya lo sabe (lo dijo `sitios()`), y el del PROYECTO si ya
  *  lo nombró el gestor (IXCODE-15: en Notion `proyecto` es un `collection://…` que no se lee).
  *  Ausente = no consta. */
-export type VinculoDelCable = Vinculo & { nombreDelSitio?: string; nombreDelProyecto?: string };
+/** El vínculo tal como cruza: con su mapeo de estados y el interruptor del disparo (la puerta 2), que se editan en el panel. */
+export type VinculoDelCable = Vinculo & { nombreDelSitio?: string; nombreDelProyecto?: string; estados?: MapeoDeEstados; automatico?: boolean };
 
 /**
  * El informe de `core/dispositivos.ts`. **La `ruta` de cada herramienta solo cruza para
@@ -1766,6 +1767,10 @@ export type MensajeDelCliente =
   | { clase: "gestor"; accion: "describir"; conector: string; proyecto: string }
   | { clase: "gestor"; accion: "vincular"; conector: string; sitio: string; proyecto: string }
   | { clase: "gestor"; accion: "desvincular" }
+  /** Los estados del flujo del proyecto vinculado y el mapeo propuesto, contestados en la respuesta (la puerta 2). */
+  | { clase: "gestor"; accion: "estadosDelFlujo" }
+  /** Guardar el mapeo de estados y el interruptor del disparo del vínculo (la puerta 2). */
+  | { clase: "gestor"; accion: "ajustarVinculo"; estados: MapeoDeEstados; automatico: boolean }
   | { clase: "gestor"; accion: "usarConector"; conector: string; usar: boolean }
   | { clase: "gestor"; accion: "pendientes"; texto?: string; mias?: boolean }
   /** La descripción de una tarea (la fila desplegada del panel). De solo LECTURA. */
@@ -1888,6 +1893,8 @@ export type MensajeDelCliente =
   | { clase: "tarea"; accion: "regenerarEncargo"; id: string; peticion: string }
   /** Con qué gestor vivirá una tarea nueva de ese proyecto: contestado en la propia respuesta, `{gestor?: {conector, proyecto}}`. */
   | { clase: "tarea"; accion: "destino"; proyecto: string }
+  /** «Mirar ahora»: una pasada del sondeo del gestor (la puerta 2), contestada con lo que hizo. */
+  | { clase: "tarea"; accion: "mirarGestor" }
   /** PARAR una tarea en marcha sin borrarla (IXCODE-50): queda aparcada con su conversación. 204, o 409 con `{motivo}`. */
   | { clase: "tarea"; accion: "parar"; id: string }
   | { clase: "tarea"; accion: "reintentar" | "descartar" | "terminar"; id: string }

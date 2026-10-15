@@ -398,6 +398,23 @@ export interface VinculoDelCable {
   nombreDelSitio?: string;
   /** IXCODE-15: el nombre para mostrar del proyecto, si el gestor ya lo nombró (en Notion `proyecto` es un `collection://…`). */
   nombreDelProyecto?: string;
+  /** Qué estado DEL PROYECTO cumple cada papel de una tarea en background (`core/gestorDeTareas.ts#MapeoDeEstados`). */
+  estados?: MapeoDeEstados;
+  /** Si los tickets disparan tareas solos (la puerta 2). Ausente = apagado. */
+  automatico?: boolean;
+}
+
+/** Redeclarado de `core/gestorDeTareas.ts#MapeoDeEstados`: el nombre del estado de cada papel. */
+export interface MapeoDeEstados {
+  preparar?: string;
+  lanzar?: string;
+  terminar?: string;
+}
+
+/** Un estado del flujo del proyecto con su categoría (`core/gestorDeTareas.ts#EstadoDelGestor`). */
+export interface EstadoDelGestor {
+  nombre: string;
+  categoria: "por-hacer" | "en-curso" | "terminada";
 }
 
 /** Lo que el gestor ENTENDIÓ del esquema de un proyecto (`core/gestorDeTareas.ts#EsquemaDelProyecto`, IXCODE-15). */
@@ -1629,6 +1646,10 @@ export type MensajeDelCliente =
   | { clase: "gestor"; accion: "describir"; conector: string; proyecto: string }
   | { clase: "gestor"; accion: "vincular"; conector: string; sitio: string; proyecto: string }
   | { clase: "gestor"; accion: "desvincular" }
+  /** Los estados del flujo del proyecto vinculado y el mapeo propuesto, contestados en la respuesta (la puerta 2). */
+  | { clase: "gestor"; accion: "estadosDelFlujo" }
+  /** Guardar el mapeo de estados y el interruptor del disparo del vínculo (la puerta 2). */
+  | { clase: "gestor"; accion: "ajustarVinculo"; estados: MapeoDeEstados; automatico: boolean }
   | { clase: "gestor"; accion: "usarConector"; conector: string; usar: boolean }
   | { clase: "gestor"; accion: "pendientes"; texto?: string; mias?: boolean }
   /** La descripción de una tarea (fila desplegada). De solo LECTURA. */
@@ -1713,6 +1734,8 @@ export type MensajeDelCliente =
   | { clase: "tarea"; accion: "regenerarEncargo"; id: string; peticion: string }
   /** Con qué gestor vivirá una tarea nueva de ese proyecto: contestado en la propia respuesta, `{gestor?: {conector, proyecto}}`. */
   | { clase: "tarea"; accion: "destino"; proyecto: string }
+  /** «Mirar ahora»: una pasada del sondeo del gestor (la puerta 2), contestada con lo que hizo. */
+  | { clase: "tarea"; accion: "mirarGestor" }
   /** PARAR una tarea en marcha sin borrarla (IXCODE-50): queda aparcada con su conversación. 204, o 409 con `{motivo}`. */
   | { clase: "tarea"; accion: "parar"; id: string }
   | { clase: "tarea"; accion: "reintentar" | "descartar" | "terminar"; id: string }

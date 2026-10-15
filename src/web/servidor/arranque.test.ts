@@ -31,6 +31,7 @@ import { MS_DE_PREPARACION,
   ajusteDeGestorCableado,
   banderaDeEjecutor,
   construirCorredorDeTareasCableado,
+  copiasConGestor,
   FALTA_EL_BUILD,
   RUTA_ACCION,
   RUTA_ADJUNTO,
@@ -11868,6 +11869,62 @@ describe("el gestor de tareas, por el cable", () => {
     await vestibulo.cerrar();
   });
 
+  /** La puerta 2: el mapeo de estados y el disparo del vínculo, desde el panel. */
+  describe("el mapeo de estados y el disparo", () => {
+    const ESTADOS = [
+      { nombre: "Por hacer", categoria: "por-hacer" as const },
+      { nombre: "En curso", categoria: "en-curso" as const },
+      { nombre: "Listo", categoria: "terminada" as const },
+    ];
+    const VINCULO = { conector: "jira", sitio: "c1", proyecto: "MAS" };
+    const conGestor = () =>
+      abrir({ gestorDeTareas: () => new GestorDeTareasEnMemoria({ ...datos(), estados: ESTADOS }) }, { modo: "offline", conectores: ["jira"], gestorDeTareas: VINCULO });
+    const responder = (accion: ManejadorRuta, m: unknown) => postearConCuerpo(accion, JSON.stringify(m));
+
+    it("«estadosDelFlujo» da los estados del gestor y el mapeo PROPUESTO por categoría", async () => {
+      const t = await conGestor();
+      const r = await responder(t.accion, { clase: "gestor", accion: "estadosDelFlujo" });
+      expect(JSON.parse(r.cuerpo)).toEqual({ lista: ESTADOS, propuesto: { preparar: "Por hacer", lanzar: "En curso", terminar: "Listo" } });
+      await t.limpiar();
+    });
+
+    it("«ajustarVinculo» guarda el mapeo con el nombre del FLUJO y el disparo; el resto del vínculo intacto", async () => {
+      const t = await conGestor();
+      const r = await responder(t.accion, { clase: "gestor", accion: "ajustarVinculo", estados: { preparar: "por hacer", lanzar: "En curso", terminar: "" }, automatico: true });
+      expect(r.estado).toBe(204);
+      expect(JSON.parse(t.leerConfig()).gestorDeTareas).toEqual({ ...VINCULO, estados: { preparar: "Por hacer", lanzar: "En curso" }, automatico: true });
+      // Y lo dice por el cable, para que el panel lo pinte.
+      for (let i = 0; i < 50; i++) await asentar();
+      expect(t.cliente.recibidos.filter((x) => x.clase === "gestor").at(-1)).toMatchObject({ estado: { vinculo: { estados: { lanzar: "En curso" }, automatico: true } } });
+      await t.limpiar();
+    });
+
+    it("un estado que no está en el flujo, o encender sin estado de lanzar, se NIEGA sin escribir", async () => {
+      const t = await conGestor();
+      const antes = t.leerConfig();
+      const r1 = await responder(t.accion, { clase: "gestor", accion: "ajustarVinculo", estados: { lanzar: "PARA EL AGENTE" }, automatico: true });
+      expect(r1.estado).toBe(409);
+      expect(JSON.parse(r1.cuerpo).motivo).toMatch(/no es un estado del flujo/);
+      const r2 = await responder(t.accion, { clase: "gestor", accion: "ajustarVinculo", estados: { preparar: "Por hacer" }, automatico: true });
+      expect(JSON.parse(r2.cuerpo).motivo).toMatch(/elige el estado que lanza/);
+      expect(t.leerConfig()).toBe(antes);
+      await t.limpiar();
+    });
+
+    it("volver a vincular el MISMO proyecto conserva el mapeo; otro proyecto lo pierde", async () => {
+      const t = await abrir(
+        { gestorDeTareas: () => new GestorDeTareasEnMemoria({ ...datos(), proyectos: { c1: [{ clave: "MAS", nombre: "MASET" }, { clave: "IXCODE", nombre: "XOneCode" }] } }) },
+        { modo: "offline", conectores: ["jira"], gestorDeTareas: { ...VINCULO, estados: { lanzar: "En curso" }, automatico: true } }
+      );
+      await t.pedir({ clase: "gestor", accion: "vincular", conector: "jira", sitio: "c1", proyecto: "MAS" });
+      expect(JSON.parse(t.leerConfig()).gestorDeTareas).toMatchObject({ estados: { lanzar: "En curso" }, automatico: true });
+      await t.pedir({ clase: "gestor", accion: "vincular", conector: "jira", sitio: "c1", proyecto: "IXCODE" });
+      expect(JSON.parse(t.leerConfig()).gestorDeTareas.estados).toBeUndefined();
+      expect(JSON.parse(t.leerConfig()).gestorDeTareas.automatico).toBeUndefined();
+      await t.limpiar();
+    });
+  });
+
   it("«estado» lee el config.json del PROYECTO: conectores y vínculo", async () => {
     const t = await abrir(
       { gestorDeTareas: () => new GestorDeTareasEnMemoria(datos()) },
@@ -13617,5 +13674,25 @@ describe("ficherosCableados — la composición de producción, no un doble", ()
     } finally {
       rmSync(raiz, { recursive: true, force: true });
     }
+  });
+});
+
+describe("copiasConGestor", () => {
+  it("las copias con el disparo ENCENDIDO, con la identidad de su config.json; lo roto se salta", () => {
+    const base = mkdtempSync(join(tmpdir(), "xc-copias-"));
+    const escribir = (entorno: string, nombre: string, config: unknown) => {
+      mkdirSync(join(base, entorno, nombre, ".xonecode"), { recursive: true });
+      writeFileSync(join(base, entorno, nombre, ".xonecode", "config.json"), typeof config === "string" ? config : JSON.stringify(config));
+    };
+    const vinculo = { conector: "jira", sitio: "c1", proyecto: "MAS", estados: { lanzar: "En curso" } };
+    escribir("manager", "Maset", { cloudstudio: { url: "https://mcp.example/mcp", proyecto: { id: "id-maset", nombre: "Maset" } }, gestorDeTareas: { ...vinculo, automatico: true } });
+    escribir("manager", "Apagado", { cloudstudio: { url: "https://mcp.example/mcp", proyecto: { id: "id-2", nombre: "Apagado" } }, gestorDeTareas: vinculo });
+    escribir("manager", "Roto", "{ no es json");
+    escribir("otro", "SinGestor", { cloudstudio: { url: "https://mcp.example/mcp", proyecto: { id: "id-3", nombre: "SinGestor" } } });
+    expect(copiasConGestor(base)).toEqual([
+      { proyecto: { id: "id-maset", raiz: join(base, "manager", "Maset"), nombre: "Maset" }, vinculo: { ...vinculo, automatico: true } },
+    ]);
+    expect(copiasConGestor(join(base, "no-existe"))).toEqual([]);
+    rmSync(base, { recursive: true, force: true });
   });
 });

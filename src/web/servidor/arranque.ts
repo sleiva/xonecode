@@ -29,7 +29,7 @@
  */
 
 import { hayMemoriaDeHilo, olvidarMemoriaDeHilo } from "../../agent/sesiones/memoriaDeHilo.js";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { lineaDeVersion, type VersionEnMarcha } from "../../core/version.js";
 import { esperarInterrupcion } from "./interrupcion.js";
 import { basename, dirname, join } from "node:path";
@@ -303,9 +303,10 @@ import { crearGestorJira } from "../../agent/conectores/gestorJira.js";
 import { crearGestorNotion } from "../../agent/conectores/gestorNotion.js";
 import {
   admiteMiasDelVinculo, motivoDeProyectoInaceptable, transicionPropuesta, comentarioDeCierre,
-  type DatosDeCierre, type FichaDelGestor, type GestorDeTareasPort, type TareaDelGestor, type TransicionDelGestor, type Vinculo, type VinculoGuardado,
+  type DatosDeCierre, type EstadoDelGestor, type FichaDelGestor, type MapeoDeEstados, type GestorDeTareasPort, type TareaDelGestor, type TransicionDelGestor, type Vinculo, type VinculoGuardado,
 } from "../../core/gestorDeTareas.js";
-import { cerrarTicket, comentarioDeEncargo } from "../../core/tareasEnElGestor.js";
+import { cerrarTicket, comentarioDeEncargo, esEstado, mapeoPropuesto } from "../../core/tareasEnElGestor.js";
+import { crearSondeoDelGestor, type CopiaConGestor, type ResultadoDelSondeo, type SondeoDelGestor } from "../../agent/tareas/sondeoDelGestor.js";
 import { anotarAvisoEnElDisco, conReflejoAlGuardar, crearReflejoEnElGestor } from "../../agent/tareas/reflejoEnElGestor.js";
 import { datosDeCierre } from "./datosDeCierre.js";
 import { ErrorDeDescargaCortada, escribirPaquete, listarSoporte, motivoParaNoExportar, type FuenteDeSoporte, type PedidoDeSoporte } from "./soporte.js";
@@ -892,6 +893,8 @@ export interface OpcionesDeMontaje {
    * la fábrica puede construir en cada llamada. Ausente = esta ejecución no tiene gestor, y el
    * mensaje `gestor` se contesta con ese error. En producción sale de `ajusteDeGestorCableado`.
    */
+  /** «Mirar ahora» del sondeo de la puerta 2 (`agent/tareas/sondeoDelGestor.ts`). Ausente = esta ejecución no mira. */
+  mirarGestor?: () => Promise<ResultadoDelSondeo>;
   gestorDeTareas?: (conector: string) => GestorDeTareasPort | undefined;
 }
 
@@ -936,6 +939,40 @@ export function motivoDeGestorParaElCable(error: unknown): string {
  * (ficheros y commits de la sesión, el último veredicto del verificador, la última respuesta). Sin conversación, o si
  * no se puede leer, un cierre sin datos —«no corrió», nunca un «verde» inventado—.
  */
+/**
+ * Las copias locales con el DISPARO del gestor encendido (la puerta 2): `<workspace>/<entorno>/<proyecto>` con su
+ * `config.json`, de donde salen su identidad (`cloudstudio.proyecto`: el id con el que la pestaña Tareas filtra) y su
+ * vínculo. Se relee en cada pasada: el interruptor se cambia con todo en marcha. Lo que no se puede leer se salta.
+ */
+export function copiasConGestor(base: string): CopiaConGestor[] {
+  const copias: CopiaConGestor[] = [];
+  const carpetas = (ruta: string): string[] => {
+    try {
+      return readdirSync(ruta, { withFileTypes: true })
+        .filter((e) => e.isDirectory() && !e.name.startsWith("."))
+        .map((e) => e.name);
+    } catch {
+      return [];
+    }
+  };
+  for (const entorno of carpetas(base)) {
+    for (const nombre of carpetas(join(base, entorno))) {
+      const raiz = join(base, entorno, nombre);
+      if (!existsSync(join(raiz, ".xonecode", "config.json"))) continue;
+      try {
+        const c = cargar(raiz).config.proyecto;
+        const vinculo = c?.gestorDeTareas;
+        const identidad = c?.cloudstudio?.proyecto;
+        if (vinculo?.automatico !== true || identidad === undefined) continue;
+        copias.push({ proyecto: { id: identidad.id, raiz, nombre: identidad.nombre }, vinculo });
+      } catch {
+        // Un config.json roto no para a los demás proyectos.
+      }
+    }
+  }
+  return copias;
+}
+
 export async function datosDeCierreDeTarea(tarea: Tarea): Promise<DatosDeCierre> {
   if (tarea.sesion === undefined) return { ficheros: [], commits: [] };
   try {
@@ -4521,6 +4558,8 @@ export function montarRutas(
                   proyecto: vinculo.proyecto,
                   ...(nombre === undefined ? {} : { nombreDelSitio: nombre }),
                   ...(nombreProyecto === undefined ? {} : { nombreDelProyecto: nombreProyecto }),
+                  ...(vinculo.estados === undefined ? {} : { estados: vinculo.estados }),
+                  ...(vinculo.automatico === true ? { automatico: true } : {}),
                 },
               }),
           ...(admiteMias === undefined ? {} : { admiteMias }),
@@ -4648,6 +4687,11 @@ export function montarRutas(
             proyecto: m.proyecto,
             admiteMias,
             ...(nombreVisto.trim() === "" ? {} : { nombreDelProyecto: nombreVisto }),
+            // Volver a vincular el MISMO proyecto del gestor conserva su mapeo de estados y su disparo; otro proyecto
+            // tiene otro flujo, y empieza sin ellos (apagado).
+            ...(anterior !== undefined && anterior.conector === m.conector && anterior.sitio === m.sitio && anterior.proyecto === m.proyecto
+              ? { ...(anterior.estados === undefined ? {} : { estados: anterior.estados }), ...(anterior.automatico === true ? { automatico: true } : {}) }
+              : {}),
           };
           if (!guardar(() => guardarGestorDeProyecto(raiz, vinculo))) return;
           const sinAnterior = anterior !== undefined && anterior.conector !== m.conector ? conectores.filter((c) => c !== anterior.conector) : conectores;
@@ -7036,6 +7080,72 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "gestor" &&
+      ((mensaje as { accion?: unknown }).accion === "estadosDelFlujo" || (mensaje as { accion?: unknown }).accion === "ajustarVinculo")
+    ) {
+      /**
+       * El MAPEO de estados y el disparo del vínculo del proyecto ABIERTO (la puerta 2), contestados en la propia
+       * respuesta. `estadosDelFlujo` lee del gestor los estados de su flujo y propone el mapeo por categoría;
+       * `ajustarVinculo` lo guarda, comprobando que cada estado elegido EXISTE en ese flujo —un nombre que no está
+       * dejaría el disparo mudo—, y vuelve a emitir el estado del gestor.
+       */
+      const negar = (motivo: string): void => {
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ motivo }));
+      };
+      const abierto = vestibulo.proyectoAbierto();
+      if (abierto === undefined) return negar("no hay ningún proyecto abierto");
+      let vinculo: VinculoGuardado | undefined;
+      try {
+        vinculo = cargar(abierto.raiz).config.proyecto?.gestorDeTareas;
+      } catch {
+        return negar("no se pudo leer la configuración del proyecto");
+      }
+      if (vinculo === undefined) return negar("este proyecto no tiene un gestor de tareas vinculado");
+      const g = gestorDe(vinculo.conector);
+      if (g?.estados === undefined) return negar("este gestor no sabe decir los estados de su flujo");
+      let lista: EstadoDelGestor[];
+      try {
+        lista = await g.estados(vinculo);
+      } catch (error) {
+        return negar(`no se pudieron leer los estados: ${motivoDelGestor(error)}`);
+      }
+      if ((mensaje as { accion: string }).accion === "estadosDelFlujo") {
+        respuesta.writeHead(200, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ lista, propuesto: mapeoPropuesto(lista), ...(vinculo.estados === undefined ? {} : { actual: vinculo.estados }) }));
+        return;
+      }
+      const pedido = mensaje as { estados?: unknown; automatico?: unknown };
+      if (typeof pedido.automatico !== "boolean" || typeof pedido.estados !== "object" || pedido.estados === null) {
+        return negar("petición mal formada");
+      }
+      const estados: MapeoDeEstados = {};
+      for (const papel of ["preparar", "lanzar", "terminar"] as const) {
+        const e = (pedido.estados as Record<string, unknown>)[papel];
+        if (e === undefined || e === "") continue;
+        if (typeof e !== "string" || !lista.some((x) => esEstado(x.nombre, e))) return negar(`«${String(e)}» no es un estado del flujo de este proyecto`);
+        estados[papel] = lista.find((x) => esEstado(x.nombre, e))!.nombre;
+      }
+      // Encender el disparo pide saber cuándo LANZAR: sin ese estado no haría nada y parecería roto.
+      if (pedido.automatico && estados.lanzar === undefined) return negar("para encender el disparo, elige el estado que lanza la tarea");
+      const { estados: _antes, automatico: _a, ...resto } = vinculo;
+      try {
+        guardarGestorDeProyecto(abierto.raiz, {
+          ...resto,
+          ...(Object.keys(estados).length === 0 ? {} : { estados }),
+          ...(pedido.automatico ? { automatico: true } : {}),
+        });
+      } catch (error) {
+        return negar(`no se pudo guardar en la configuración del proyecto (${codigoDe(error) ?? "su config.json no se puede leer"})`);
+      }
+      void atenderGestor({ clase: "gestor", accion: "estado" }).catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "gestor") {
       // Los campos se comprueban por ACCIÓN, como `modeloDelCambio`: un mensaje mal formado
       // se contesta con su error, no revienta dentro de `atenderGestor`.
@@ -7296,6 +7406,20 @@ export function montarRutas(
         emitirTareas();
         respuesta.writeHead(204);
         respuesta.end();
+        return;
+      }
+      if (mensaje.accion === "mirarGestor") {
+        // «Mirar ahora»: una pasada del sondeo de la puerta 2, contestada con lo que hizo. Solo lo hace el proceso que
+        // ejecuta las tareas; en otro, el sondeo no hace nada y lo dice el resultado vacío.
+        if (opciones.mirarGestor === undefined) {
+          respuesta.writeHead(409, { "content-type": "application/json" });
+          respuesta.end(JSON.stringify({ motivo: "esta ejecución no mira el gestor de tareas" }));
+          return;
+        }
+        const r = await opciones.mirarGestor();
+        emitirTareas();
+        respuesta.writeHead(200, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify(r));
         return;
       }
       if (mensaje.accion === "destino") {
@@ -9188,6 +9312,22 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     abierto.consola.consola.escribir(`${aviso}\n`);
   }
 
+  /** El aumentador: el de «Nueva tarea» (por las rutas) y el de preparar encargos del sondeo del gestor. Ver su
+   *  comentario en las opciones de `montarRutas`. */
+  const augmentar = augmentacionCableada({
+    aumentador:
+      opciones.guion === true
+        ? new AumentadorGuionizado()
+        : crearAumentador({
+            invocar: (papel, prompt, raiz) =>
+              invocarParaAumentar(new Modelos(fuentesDelJuez(raiz), proveedoresPersonalizados))(papel, prompt, raiz),
+          }),
+    contexto: contextoDelProyecto,
+  });
+  /** El sondeo de la puerta 2: nace con el corredor (más abajo); «Mirar ahora» llega por las rutas, montadas antes. */
+  let sondeo: SondeoDelGestor | undefined;
+  const espacioDeTrabajo = ajusteDeWorkspaceCableado({ casa: homedir() });
+
   const cable = montarRutas(servidor, vestibulo, {
     informar,
     // El interruptor se lee de `settings.json` (o `XONECODE_REMOTO=1`) en cada uso. Sin el
@@ -9395,16 +9535,8 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
      * - **Con `--guion` se monta el DOBLE**, no el real: esa bandera significa «sin gastar
      *   ni conectar», y el doble dice en el propio encargo que es de pega (`[DOBLE]`).
      */
-    augmentar: augmentacionCableada({
-      aumentador:
-        opciones.guion === true
-          ? new AumentadorGuionizado()
-          : crearAumentador({
-              invocar: (papel, prompt, raiz) =>
-                invocarParaAumentar(new Modelos(fuentesDelJuez(raiz), proveedoresPersonalizados))(papel, prompt, raiz),
-            }),
-      contexto: contextoDelProyecto,
-    }),
+    augmentar,
+    mirarGestor: async () => sondeo?.mirar() ?? { preparadas: [], lanzadas: [], fallos: [] },
   });
 
   // Con las rutas ya montadas: la reconciliación y el primer despacho cambian la cola, y
@@ -9413,6 +9545,26 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
   // `cable.emitirTareas` y arranca en el orden correcto, así que no hay manera de llamarlo
   // mal desde aquí.
   await arrancarCorredorConectado(cable);
+
+  /**
+   * La puerta 2: el gestor de tareas DISPARA tareas (`agent/tareas/sondeoDelGestor.ts`). Solo con cola y corredor, y
+   * solo hace algo en el proceso que EJECUTA las tareas. Una pasada al arrancar recoge lo que se movió con esto parado.
+   */
+  if (corredor !== undefined && opcionesDeTareas.colaDeTareas !== undefined) {
+    const conCorredor = corredor;
+    sondeo = crearSondeoDelGestor({
+      copias: () => copiasConGestor(espacioDeTrabajo.workspace()),
+      gestorDe: conectoresYGestor.gestorDeTareas,
+      augmentar,
+      cola: opcionesDeTareas.colaDeTareas,
+      revisar: () => conCorredor.revisar(),
+      esDueño: () => conCorredor.corriendoAqui(),
+      motivoDe: motivoDeGestorParaElCable,
+      informar,
+    });
+    sondeo.arrancar();
+    void sondeo.mirar().then(() => cable.emitirTareas(), () => {});
+  }
 
   /**
    * Con qué código corre ESTE proceso, antes que la URL.
