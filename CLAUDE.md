@@ -1263,7 +1263,8 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   `rmSync` en Windows revienta a medias y deja una copia rota; el renombrado falla antes de
   tocar nada, así que «no se ha tocado nada» es verdad. Se niega con 409 y motivo
   (`motivoParaNoBorrarCopia`) con un turno en vuelo o una tarea sin terminar ahí; una consola
-  abierta no es motivo.
+  abierta no es motivo. **Y se lleva su HISTÓRICO de tareas** (decisión suya): al borrarse de verdad, las terminadas de esa
+  raíz salen de la cola con sus adjuntos (`borrarTarea`, en el manejador de `copiaLocal`), sin tocar su ticket, ya cerrado.
 - **Una copia «bajada» es `config.json` Y `sync.json`** (`vestibulo.ts#esProyectoEnDisco`): el
   alta escribe `config.json` ANTES de bajar. Un fallo de descarga se APUNTA en `fallos.jsonl`.
 - **La clave de API viaja por el ÚNICO mensaje del cable que la lleva** (`leerSecreto`), y se

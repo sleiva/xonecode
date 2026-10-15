@@ -54,7 +54,8 @@ export function BorrarCopiaLocal({
           <h2 className={estilos.titulo}>Borrar copia local</h2>
           <p className={estilos.nota}>
             Se borra la copia de «{nombre}» en este equipo, entera: <strong>todas sus sesiones</strong>, su
-            historial de conversación, los artefactos y <strong>los cambios que no hayas subido a CloudStudio</strong>.
+            historial de conversación, los artefactos, <strong>el histórico de tareas finalizadas</strong>, lo que el agente
+            aprendió del proyecto y <strong>los cambios que no hayas subido a CloudStudio</strong>.
             No hay papelera.
           </p>
           <p className={estilos.nota}>

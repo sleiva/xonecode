@@ -6959,7 +6959,7 @@ export function montarRutas(
         respuesta.end(JSON.stringify({ motivo: "ese proyecto no está en el listado del entorno activo" }));
         return;
       }
-      let resultado: { cerroLaAbierta: boolean; motivo?: string };
+      let resultado: { borrada?: boolean; cerroLaAbierta: boolean; motivo?: string };
       try {
         resultado = await vestibulo.borrarCopia(
           entornoElegido,
@@ -6969,6 +6969,21 @@ export function montarRutas(
       } catch (error) {
         contar(error);
         resultado = { cerroLaAbierta: false, motivo: "no se pudo borrar la copia local" };
+      }
+      // **Borrar la copia se lleva también su HISTÓRICO de tareas** (decisión suya): las terminadas de esa raíz,
+      // con su carpeta de adjuntos. Las que no lo están ya han negado el borrado (`motivoParaNoBorrarCopia`), y
+      // su ticket, si lo tenían, se cerró al terminar: aquí no se toca el gestor.
+      if (resultado.borrada === true && opciones.colaDeTareas !== undefined) {
+        const raiz = vestibulo.raizDeProyecto(entornoElegido, identidad.nombre);
+        const suyas = opciones.colaDeTareas
+          .listar()
+          .filter((t) => t.estado === "terminada" && mismaRuta(t.proyecto.raiz, raiz));
+        try {
+          for (const t of suyas) opciones.colaDeTareas.borrarTarea(t.id);
+        } catch (error) {
+          contar(error);
+        }
+        if (suyas.length > 0) emitirTareas();
       }
       // Lo mismo que al borrar la sesión abierta: el cable se quedaría enganchado a una
       // consola muerta, así que se muda al vestíbulo —el cliente pinta el escritorio—, y la

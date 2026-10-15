@@ -11086,6 +11086,32 @@ describe("el cable: la copia local y los fijados", () => {
     expect(pedidos).toEqual([{ entorno: "webstudio", proyecto: "Tienda" }]);
   });
 
+  it("borrar la copia se lleva el histórico de tareas TERMINADAS de ese proyecto, y solo ese", async () => {
+    const tarea = (id: string, estado: string, raiz: string) =>
+      ({ id, estado, proyecto: { id: "p1", nombre: "Tienda", raiz } }) as unknown as Tarea;
+    const vestibulo = vestibuloDePrueba();
+    const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+    const cola = colaDeMentira([tarea("a", "terminada", raiz), tarea("b", "terminada", "/otra/Raiz"), tarea("c", "terminada", raiz)]);
+    const { accion } = await conectado(
+      { ...vestibulo, borrarCopia: async () => ({ borrada: true, cerroLaAbierta: false }) },
+      { colaDeTareas: cola }
+    );
+    expect((await accion({ clase: "copiaLocal", accion: "borrar", proyecto: "p1" })).estado).toBe(204);
+    expect(cola.verTareas().map((t) => t.id)).toEqual(["b"]);
+  });
+
+  it("si la copia NO se borró, el histórico se queda", async () => {
+    const vestibulo = vestibuloDePrueba();
+    const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+    const cola = colaDeMentira([{ id: "a", estado: "terminada", proyecto: { id: "p1", nombre: "Tienda", raiz } } as unknown as Tarea]);
+    const { accion } = await conectado(
+      { ...vestibulo, borrarCopia: async () => ({ borrada: false, cerroLaAbierta: false, motivo: "algo abierto" }) },
+      { colaDeTareas: cola }
+    );
+    expect((await accion({ clase: "copiaLocal", accion: "borrar", proyecto: "p1" })).estado).toBe(409);
+    expect(cola.verTareas().map((t) => t.id)).toEqual(["a"]);
+  });
+
   it("un id que no está en el listado es 409, y no se borra nada", async () => {
     const pedidos: string[] = [];
     const { accion } = await conectado({
