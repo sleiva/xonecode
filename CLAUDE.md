@@ -775,7 +775,11 @@ captura nueva de `/artefactos/` se mide contra la maqueta (`/diseno/screen.png`,
 era texto, y quien menos lo seguía era quien más rediseños acababa necesitando. **Y el criterio incluye el ENCAJE**
 (`TOLERANCIA_DE_ENCAJE`, `compararCapturas.ts#desajusteDeEncaje`): cada borde del contenido —arriba, abajo, y a los lados
 la MEDIANA de las franjas, no el recuadro de la pantalla entera, que lo fija la barra de arriba— cerca del de la maqueta.
-Las distancias por franjas PROMEDIAN, y un teclado que no llega al borde las pasaba.
+Las distancias por franjas PROMEDIAN, y un teclado que no llega al borde las pasaba. **Y antes de medir se quita el MARCO lateral de la
+maqueta** (`sinMarcoLateral`): una tira de columnas de un solo color, de menos de `ANCHO_MAXIMO_DEL_MARCO` y distinta de
+lo de dentro. Medido en Maset: la imagen de Stitch trae unos píxeles oscuros a cada lado, la maqueta «iba de borde a
+borde» y la medida mandó ensanchar a sangre una pantalla que ya lo estaba. Una captura no lo tiene: su primera columna
+cruza la barra de estado y la cabecera.
 **El diseñador hace RECURSOS, no pantallas** (`designer-xone`, `escribeEn: [/icons/, /fonts/]`): iconos y fondos SVG,
 las fuentes de la maqueta, y los diagramas. El layout del `.xne` y el CSS son del desarrollador, también lo que se ve mal: lo confina el PERMISO, no el
 prompt, porque dos agentes turnándose en el mismo `.xne` se pisaban. `recibeBuscarIcono` admite un `escribeEn` que cubra

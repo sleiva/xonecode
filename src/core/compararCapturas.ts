@@ -151,15 +151,71 @@ function colorDeFondo(img: ImagenRgba, desde: number, hasta: number): [number, n
   return modaDeColor(img, desde, hasta, () => true).color;
 }
 
+/** Lo más que puede ocupar un MARCO a cada lado, en fracción del ancho. */
+export const ANCHO_MAXIMO_DEL_MARCO = 0.03;
+/** Una columna es de UN color si al menos esta fracción de sus píxeles está a menos del umbral de su color más frecuente. */
+const UNIFORMIDAD_DEL_MARCO = 0.95;
+
+/**
+ * Cuántas columnas de MARCO hay en un lado: una tira de columnas desde el borde, cada una de un solo color de arriba abajo,
+ * que acaba antes de `ANCHO_MAXIMO_DEL_MARCO` y cuyo color no es el de lo que hay justo dentro. Medido en Maset: la imagen
+ * de Stitch trae un marco oscuro de 4 px a la izquierda y 3 a la derecha (más uno de transición), presente en TODAS las
+ * filas, así que el contenido de la maqueta «iba de borde a borde» y la medida pedía ensanchar a sangre una pantalla que ya
+ * lo estaba —dos pasadas del desarrollador perdidas—. Una captura no tiene marco: su primera columna cruza la barra de
+ * estado, la cabecera y el fondo. Y un fondo liso a sangre tampoco se recorta: la tira llegaría al tope sin cambiar.
+ */
+function columnasDeMarco(img: ImagenRgba, desde: number, hasta: number, lado: "izquierda" | "derecha"): number {
+  const { ancho, datos } = img;
+  const tope = Math.floor(ancho * ANCHO_MAXIMO_DEL_MARCO);
+  const columna = (k: number) => (lado === "izquierda" ? k : ancho - 1 - k);
+  const colorUniforme = (x: number): [number, number, number] | undefined => {
+    const m = modaDeColor(img, desde, hasta, (c) => c === x).color;
+    let dentro = 0;
+    let total = 0;
+    for (let y = desde; y < hasta; y += PASO_DE_MUESTREO) {
+      const i = (y * ancho + x) * 4;
+      total++;
+      if (Math.abs(datos[i]! - m[0]) + Math.abs(datos[i + 1]! - m[1]) + Math.abs(datos[i + 2]! - m[2]) <= UMBRAL_DE_CONTENIDO) dentro++;
+    }
+    return total > 0 && dentro / total >= UNIFORMIDAD_DEL_MARCO ? m : undefined;
+  };
+  const primero = colorUniforme(columna(0));
+  if (primero === undefined) return 0;
+  let k = 1;
+  while (k <= tope && colorUniforme(columna(k)) !== undefined) k++;
+  if (k > tope) return 0;
+  // Lo de dentro tiene que ser OTRA cosa: si el color más frecuente de la primera columna no uniforme es el del marco, no hay marco.
+  const interior = modaDeColor(img, desde, hasta, (c) => c === columna(k)).color;
+  const d = Math.abs(primero[0] - interior[0]) + Math.abs(primero[1] - interior[1]) + Math.abs(primero[2] - interior[2]);
+  return d > UMBRAL_DE_CONTENIDO ? k : 0;
+}
+
+/** La imagen sin su marco lateral, si lo tiene (`columnasDeMarco`). Sin marco, la MISMA imagen. */
+export function sinMarcoLateral(img: ImagenRgba, recorte: number = RECORTE_DE_BARRAS): ImagenRgba {
+  const desde = Math.floor(img.alto * recorte);
+  const hasta = img.alto - Math.floor(img.alto * recorte);
+  const izquierda = columnasDeMarco(img, desde, hasta, "izquierda");
+  const derecha = columnasDeMarco(img, desde, hasta, "derecha");
+  if (izquierda === 0 && derecha === 0) return img;
+  const ancho = img.ancho - izquierda - derecha;
+  const datos = new Uint8ClampedArray(ancho * img.alto * 4);
+  for (let y = 0; y < img.alto; y++) {
+    const origen = (y * img.ancho + izquierda) * 4;
+    datos.set(img.datos.subarray(origen, origen + ancho * 4), y * ancho * 4);
+  }
+  return { ancho, alto: img.alto, datos };
+}
+
 /**
  * La ocupación de una imagen. **Lanza si no se puede medir** (vacía o diminuta): quien llama lo
- * convierte en texto.
+ * convierte en texto. Lo primero, sin el marco lateral que trae una maqueta (`sinMarcoLateral`).
  */
-export function medirPantalla(img: ImagenRgba, recorte: number = RECORTE_DE_BARRAS): MedidaDePantalla {
-  if (img.ancho < FRANJAS_DE_COLUMNAS || img.alto < FRANJAS_DE_FILAS * 4) {
+export function medirPantalla(entrada: ImagenRgba, recorte: number = RECORTE_DE_BARRAS): MedidaDePantalla {
+  if (entrada.ancho < FRANJAS_DE_COLUMNAS || entrada.alto < FRANJAS_DE_FILAS * 4) {
     throw new Error("la imagen es demasiado pequeña para medirla");
   }
-  if (img.datos.length < img.ancho * img.alto * 4) throw new Error("la imagen está incompleta");
+  if (entrada.datos.length < entrada.ancho * entrada.alto * 4) throw new Error("la imagen está incompleta");
+  const img = sinMarcoLateral(entrada, recorte);
   const desde = Math.floor(img.alto * recorte);
   const hasta = img.alto - Math.floor(img.alto * recorte);
   const alto = hasta - desde;

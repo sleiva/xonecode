@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  compararPantallas, informeDeCambio, informeDeComparacion, medirCambio, medirPantalla, FRANJAS_DE_COLUMNAS, FRANJAS_DE_FILAS,
+  compararPantallas, informeDeCambio, sinMarcoLateral, informeDeComparacion, medirCambio, medirPantalla, FRANJAS_DE_COLUMNAS, FRANJAS_DE_FILAS,
   type ImagenRgba,
 } from "./compararCapturas.js";
 
@@ -166,5 +166,40 @@ describe("medirCambio: ¿cambió esta zona?", () => {
     for (const mala of [{ x: -0.1, y: 0, ancho: 1, alto: 1 }, { x: 0, y: 0, ancho: 0, alto: 1 }, { x: 0.5, y: 0, ancho: 0.8, alto: 1 }, { x: NaN, y: 0, ancho: 1, alto: 1 }]) {
       expect(() => medirCambio(base(), base(), mala)).toThrow(/fracciones/);
     }
+  });
+});
+
+/**
+ * El MARCO de una maqueta. Medido en Maset: la imagen de Stitch trae una tira oscura de unos píxeles a cada lado, en TODAS
+ * las filas, y la medida daba el contenido de la maqueta de borde a borde: pedía ensanchar a sangre una pantalla que ya lo
+ * estaba (distancia 27 %/23 % y «no encaja»; sin el marco, 7 %/3 % y encaja).
+ */
+describe("el marco lateral de una maqueta", () => {
+  const CLARO: [number, number, number] = [242, 244, 248];
+  const OSCURO: [number, number, number] = [3, 6, 18];
+  const BLANCO: [number, number, number] = [255, 255, 255];
+  /** Tarjetas blancas del 5 % al 95 % del ancho sobre fondo claro, y una cabecera oscura a sangre arriba. */
+  const tarjetas: Caja[] = [
+    { x0: 0, x1: 1, y0: 0.06, y1: 0.15, color: OSCURO },
+    ...[0.2, 0.35, 0.5, 0.65].map((y0) => ({ x0: 0.05, x1: 0.95, y0, y1: y0 + 0.1, color: BLANCO })),
+  ];
+  const conMarco: Caja[] = [{ x0: 0, x1: 0.01, y0: 0, y1: 1, color: OSCURO }, { x0: 0.99, x1: 1, y0: 0, y1: 1, color: OSCURO }, ...tarjetas];
+
+  it("se recorta, y la maqueta con marco mide lo mismo que sin él", () => {
+    const maqueta = pantalla(400, 400, conMarco, CLARO);
+    expect(sinMarcoLateral(maqueta).ancho).toBe(392);
+    const c = compararPantallas(maqueta, pantalla(400, 400, tarjetas, CLARO));
+    expect(c.veredicto).toBe("parecida");
+    expect(informeDeComparacion(c).join("\n")).toContain("ENCAJA");
+  });
+
+  it("una captura no tiene marco: su primera columna cruza la cabecera y el fondo", () => {
+    const captura = pantalla(400, 400, tarjetas, CLARO);
+    expect(sinMarcoLateral(captura)).toBe(captura);
+  });
+
+  it("un fondo liso a sangre tampoco es un marco", () => {
+    const lisa = pantalla(400, 400, [{ x0: 0.1, x1: 0.9, y0: 0.2, y1: 0.8, color: BLANCO }], CLARO);
+    expect(sinMarcoLateral(lisa)).toBe(lisa);
   });
 });
