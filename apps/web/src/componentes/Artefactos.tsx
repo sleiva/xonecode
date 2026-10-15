@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { IconoDeDescarga, IconoDeFuente, IconoDePantallaCompleta, IconoDeVista } from "./IconosDelVisor";
 import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
-import type { FicheroDelProyecto } from "../tipos.js";
+import type { Acto, FicheroDelProyecto } from "../tipos.js";
 import { protegerDolares } from "../protegerDolares.js";
 import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
 import { lenguajeDe } from "../lenguajeDe.js";
@@ -33,10 +33,51 @@ export interface ArtefactoEnLista {
 const parametroDe = (ruta: string): string =>
   ruta.startsWith(PREFIJO) ? ruta.slice(PREFIJO.length) : ruta;
 
+/**
+ * De QUÉ conversación son los artefactos que se pintan, cuando no es la abierta: la de una tarea finalizada que se
+ * LEE sin consola. Sin él, la ruta HTTP sirve los de la conversación abierta —que es otra—, y una miniatura con el
+ * mismo nombre enseñaría la captura equivocada sin decirlo. Los ids viajan tal cual: la carpeta la decide el SERVIDOR.
+ */
+export interface OrigenDeArtefactos {
+  proyecto: string;
+  sesion: string;
+}
+
+/** Lo pone quien monta una conversación LEÍDA (`LecturaDeSesion`); ausente es la abierta. Llega a través de los
+ *  portales, así que también al visor ampliado de una captura. */
+export const OrigenDeArtefactosContexto = createContext<OrigenDeArtefactos | undefined>(undefined);
+
 /** La URL de la ruta HTTP. El nombre va escapado: un `+` en una query se lee como espacio,
  *  así que sin escapar se pediría otro fichero. */
-export function urlDeArtefacto(ruta: string, descargar = false, tema?: "claro" | "oscuro"): string {
-  return `/artefacto?n=${encodeURIComponent(parametroDe(ruta))}${descargar ? "&descargar=1" : ""}${tema === undefined ? "" : `&tema=${tema}`}`;
+export function urlDeArtefacto(ruta: string, descargar = false, tema?: "claro" | "oscuro", origen?: OrigenDeArtefactos): string {
+  const de = origen === undefined ? "" : `&p=${encodeURIComponent(origen.proyecto)}&s=${encodeURIComponent(origen.sesion)}`;
+  return `/artefacto?n=${encodeURIComponent(parametroDe(ruta))}${de}${descargar ? "&descargar=1" : ""}${tema === undefined ? "" : `&tema=${tema}`}`;
+}
+
+/** `urlDeArtefacto` con el origen del contexto: lo que usa todo lo que pinta un artefacto. */
+export function useUrlDeArtefacto(): (ruta: string, descargar?: boolean, tema?: "claro" | "oscuro") => string {
+  const origen = useContext(OrigenDeArtefactosContexto);
+  return useCallback((ruta, descargar = false, tema) => urlDeArtefacto(ruta, descargar, tema, origen), [origen]);
+}
+
+/**
+ * Los artefactos de una conversación, sacados de SUS actos: uno por ruta, y el reescrito se mueve al final —es el
+ * que se acaba de dibujar, y el último es el que se abre solo—. La comparten la conversación abierta (`App`) y una
+ * leída (`LecturaDeSesion`): dos copias de la regla acabarían enseñando listas distintas.
+ */
+export function artefactosDeLosActos(actos: readonly Acto[]): ArtefactoEnLista[] {
+  const porRuta = new Map<string, ArtefactoEnLista>();
+  for (const acto of actos) {
+    if (acto.tipo !== "artefacto") continue;
+    porRuta.delete(acto.ruta);
+    porRuta.set(acto.ruta, {
+      ruta: acto.ruta,
+      nombre: acto.nombre,
+      bytes: acto.bytes,
+      ...(acto.mime === undefined ? {} : { mime: acto.mime }),
+    });
+  }
+  return [...porRuta.values()];
 }
 
 /**
@@ -112,6 +153,7 @@ export function Artefactos({
   const [cara, setCara] = useState<"vista" | "fuente">("vista");
 
   const actual = lista.find((a) => a.ruta === elegido);
+  const urlDe = useUrlDeArtefacto();
 
   /**
    * Sin elegido, se abre el ÚLTIMO: es el que se acaba de dibujar, y es lo que se viene a
@@ -229,7 +271,7 @@ export function Artefactos({
                     `Content-Disposition: attachment` y sin adivinar el tipo. */}
                 <a
                   className={estilos.descargar}
-                  href={urlDeArtefacto(actual.ruta, true)}
+                  href={urlDe(actual.ruta, true)}
                   download={actual.nombre}
                   aria-label="Descargar"
                   title={`Descargar ${actual.nombre}`}
@@ -246,7 +288,7 @@ export function Artefactos({
                   className={estilos.iframe}
                   // Un `.openui` con el tema de la consola (su visor no lo ve solo); un HTML, tal
                   // cual: su documento es el del agente y no se le toca.
-                  src={esOpenui ? urlDeArtefacto(actual.ruta, false, tema) : urlDeArtefacto(actual.ruta)}
+                  src={esOpenui ? urlDe(actual.ruta, false, tema) : urlDe(actual.ruta)}
                   title={actual.nombre}
                   sandbox="allow-scripts"
                 />

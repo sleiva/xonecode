@@ -1656,7 +1656,8 @@ export type MensajeDelCliente =
   | { clase: "sync"; accion: "estado" | "subir" | "bajar" }
   /** El contenido de un artefacto de la sesión abierta, por su NOMBRE: la carpeta la compone
    *  el servidor con el id del hilo, y una ruta del cliente sería negociar la barrera. */
-  | { clase: "artefacto"; nombre: string }
+  /** Con `proyecto` y `sesion`: el de esa conversación, que se LEE sin consola, contestado en la propia respuesta. */
+  | { clase: "artefacto"; nombre: string; proyecto?: string; sesion?: string }
   /** Ejecuta o cancela un paso de receta. Viajan el nombre y el número, nunca un comando. */
   | { clase: "receta"; id: string; paso: number; accion: "ejecutar" | "cancelar" }
   /** Los modelos de un motor externo, bajo demanda: el de Codex arranca un proceso. */

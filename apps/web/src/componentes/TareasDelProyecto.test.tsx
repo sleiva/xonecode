@@ -107,6 +107,8 @@ describe("TareasDelProyecto", () => {
         ]}
       />
     );
+    // Las terminadas son el HISTÓRICO: viven en su pestaña.
+    fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
     expect(screen.getAllByText(/El juez de QA la aprobó/)).toHaveLength(2);
     expect(screen.getByText(/una condición menos/i)).toBeTruthy();
     expect(screen.getByText(/La dio por buena una persona/)).toBeTruthy();
@@ -360,5 +362,66 @@ describe("TareasDelProyecto: ver lo que hace una tarea en proceso", () => {
     );
     expect(screen.getByText(/falta el manejador de error/)).toBeTruthy();
     expect(screen.getByText("app.xne")).toBeTruthy();
+  });
+
+  /** El histórico: «En curso» es donde se actúa y «Finalizadas» donde se consulta lo que hizo cada una. */
+  describe("las pestañas En curso y Finalizadas", () => {
+    const cola = (): TareaDelCable[] => [
+      tarea({ id: "viva", titulo: "La que trabaja", estado: "en-proceso" }),
+      tarea({ id: "vieja", titulo: "La de ayer", estado: "terminada", sesion: "s-vieja", empezada: "2026-10-13T09:00:00.000Z", acabada: "2026-10-13T10:00:00.000Z" }),
+      tarea({ id: "nueva", titulo: "La de hoy", estado: "terminada", sesion: "s-nueva", acabada: "2026-10-14T10:00:00.000Z" }),
+      tarea({ id: "sin", titulo: "Sin conversación", estado: "terminada", acabada: "2026-10-12T10:00:00.000Z" }),
+    ];
+
+    it("separa las vivas de las terminadas, y cada pestaña dice cuántas tiene", () => {
+      render(<TareasDelProyecto tareas={cola()} />);
+      const curso = screen.getByRole("tab", { name: /En curso/ });
+      expect(curso.getAttribute("aria-selected")).toBe("true");
+      expect(curso.textContent).toContain("1");
+      expect(screen.getByRole("tab", { name: /Finalizadas/ }).textContent).toContain("3");
+      expect(screen.getByText("La que trabaja")).toBeTruthy();
+      expect(screen.queryByText("La de hoy")).toBeNull();
+    });
+
+    it("las finalizadas van la más reciente arriba, sin acciones, y abren su conversación para LEER", () => {
+      const leidas: string[] = [];
+      render(<TareasDelProyecto tareas={cola()} alDescartar={() => {}} alReintentar={() => {}} alLeerFinalizada={(t) => leidas.push(t.id)} />);
+      fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
+      const filas = screen.getAllByRole("listitem").map((li) => li.textContent ?? "");
+      expect(filas.findIndex((t) => t.includes("La de hoy"))).toBe(0);
+      expect(filas.findIndex((t) => t.includes("La de ayer"))).toBe(1);
+      expect(screen.queryByRole("button", { name: /Descartar|Reintentar/ })).toBeNull();
+      // «empezó … · acabó …», nunca un «tardó» que contaría también la pausa.
+      expect(screen.getByText(/empezó .* · acabó /)).toBeTruthy();
+      expect(screen.queryByText(/tardó/)).toBeNull();
+      const botones = screen.getAllByRole("button", { name: "Ver la conversación y sus artefactos" });
+      expect(botones).toHaveLength(2);
+      fireEvent.click(botones[0]!);
+      expect(leidas).toEqual(["nueva"]);
+      // La que no guardó conversación lo dice, en vez de un botón que no abre nada.
+      expect(screen.getByText(/Su conversación no se guardó/)).toBeTruthy();
+    });
+
+    it("«Qué hizo» pide la última respuesta al desplegar, y una sola vez", async () => {
+      const pedida = vi.fn(async () => ({ texto: "Añadí la versión al Login." }));
+      render(<TareasDelProyecto tareas={cola()} alPedirUltimaRespuesta={pedida} />);
+      fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
+      expect(pedida).not.toHaveBeenCalled();
+      const detalles = screen.getAllByText("Qué hizo")[0]!.closest("details")!;
+      detalles.open = true;
+      fireEvent(detalles, new Event("toggle"));
+      expect(await screen.findByText("Añadí la versión al Login.")).toBeTruthy();
+      detalles.open = false;
+      fireEvent(detalles, new Event("toggle"));
+      detalles.open = true;
+      fireEvent(detalles, new Event("toggle"));
+      expect(pedida).toHaveBeenCalledTimes(1);
+    });
+
+    it("sin ninguna terminada, «Finalizadas» lo dice con palabras", () => {
+      render(<TareasDelProyecto tareas={[tarea({ estado: "nuevo" })]} />);
+      fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
+      expect(screen.getByText(/Todavía no ha terminado ninguna tarea/)).toBeTruthy();
+    });
   });
 });

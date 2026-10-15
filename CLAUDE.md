@@ -889,6 +889,16 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   —el turno puede devolver limpio al cerrarle la consola— y, pedida mientras la consola se abre, se
   aparca en vez de quedarse en `nuevo` renunciada. El servidor espera al corte y contesta 409 con
   motivo si no se pudo (otro proceso, o no soltó a tiempo).
+- **«En curso» y «Finalizadas»: las terminadas son un HISTÓRICO de solo lectura** (`TareasDelProyecto.tsx#FilaFinalizada`):
+  sin acciones, la más reciente arriba, «empezó … · acabó …» (nunca «tardó»: cuenta la pausa), lo último que contestó
+  el agente —pedido al desplegar con `leerSesion`, nunca en la cola— y su conversación abierta para LEER con el motivo
+  `finalizada`, que no ofrece escribir. **Sus artefactos salen de SU carpeta, no de la abierta**: `GET /artefacto` y el
+  mensaje `artefacto` aceptan `p`/`s` (proyecto y sesión) resueltos por el SERVIDOR con la MISMA barrera que
+  `leerSesion` (`arranque.ts#sesionDelDisco`), y el contenido vuelve en la propia respuesta, nunca al store, que va por
+  ruta y pisaría el de la abierta. En el cliente, el origen llega por contexto (`OrigenDeArtefactosContexto`,
+  `useUrlDeArtefacto`) a las miniaturas y al visor, y la lista es `artefactosDeLosActos`, la misma de `App`. **Límite
+  declarado**: la carpeta va por el id de la SESIÓN; en un chat donde `/nuevo` abrió otro hilo no coincide (en una
+  tarea sí).
 - **Una tarea cortada a mitad se REANUDA sola, una vez** (`core/tareas.ts#reanudadaTrasCorte`, en la reconciliación del
   arranque): si el proceso murió con ella «en proceso» y su hilo se puede reabrir, vuelve a la cola con
   `TEXTO_DE_REANUDACION` como feedback pendiente, que entra en SU hilo —la foto del raíz y el chat se guardan a mitad de

@@ -52,6 +52,7 @@ import { MS_DE_PREPARACION,
 } from "./arranque.js";
 import { ErrorDelAumentador } from "../../agent/tareas/aumentador.js";
 import { iconoDelProyecto, leerFicheroDeProyecto, motivoDeRutaInaceptable } from "../../agent/grafo/arbolDeProyecto.js";
+import { leerArtefactoCrudo, leerArtefactoDeSesion } from "../../agent/grafo/artefactosEnDisco.js";
 import { RUTA_ICONO_DEL_PROYECTO, RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
 import { CLAVE_DE_SELLO, cambiosDeSesion, fotoDeApertura } from "../../agent/sesiones/sesionGit.js";
 import type { PeticionDeTarea } from "../../core/ports.js";
@@ -11163,6 +11164,61 @@ describe("el cable: la pestaña Soporte", () => {
     ]) {
       expect((await accion({ clase: "leerSesion", ...malo })).estado).toBe(409);
     }
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  /** Una tarea FINALIZADA se lee con sus artefactos: los de SU conversación, no los de la abierta. */
+  it("el artefacto de una conversación que se LEE sale de SU carpeta, por la ruta HTTP y por el mensaje", async () => {
+    const { base, raiz, vestibulo, chat } = tiendaConUnChat();
+    mkdirSync(join(raiz, ".xonecode", "sesiones", chat, "artefactos"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "sesiones", chat, "artefactos", "informe.md"), "# hecho");
+    const servidor = servidorDeMentira();
+    // Los lectores REALES: la regla de qué carpeta es la de esa conversación vive en ellos.
+    montarRutas(servidor, vestibulo, { leerArtefactoCrudo, leerArtefacto: leerArtefactoDeSesion });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const get = async (url: string) => {
+      let estado = 0;
+      let cuerpo: Buffer | string | undefined;
+      const cabeceras: Record<string, string | number> = {};
+      const respuesta = {
+        writeHead: (codigo: number, extra?: Record<string, string | number>) => {
+          estado = codigo;
+          Object.assign(cabeceras, extra ?? {});
+          return respuesta;
+        },
+        end: (trozo?: Buffer | string) => {
+          cuerpo = trozo;
+          return respuesta;
+        },
+      } as unknown as ServerResponse;
+      await servidor.rutas.get(`GET ${RUTA_ARTEFACTO}`)!({ method: "GET", url, headers: {} } as unknown as IncomingMessage, respuesta);
+      return { estado, cabeceras, cuerpo: cuerpo === undefined ? "" : String(cuerpo) };
+    };
+
+    const r = await get(`${RUTA_ARTEFACTO}?n=informe.md&p=p1&s=${chat}`);
+    expect(r.estado).toBe(200);
+    expect(r.cuerpo).toBe("# hecho");
+    // El sandbox es el MISMO código que el de la conversación abierta, no una copia.
+    expect(r.cabeceras["Content-Security-Policy"]).toBe("sandbox allow-scripts");
+    expect(vestibulo.proyectoAbierto()).toBeUndefined();
+    // Una conversación fuera del índice, un id con `..` o un proyecto ajeno no componen ninguna ruta.
+    for (const malo of [`p=p1&s=no-esta`, `p=p1&s=..%2F..%2F.env`, `p=no-existe&s=${chat}`, `s=${chat}`]) {
+      expect((await get(`${RUTA_ARTEFACTO}?n=informe.md&${malo}`)).estado).toBe(404);
+    }
+    // Sin `p` ni `s`, lo de siempre: el de la conversación ABIERTA, y aquí no hay ninguna.
+    expect((await get(`${RUTA_ARTEFACTO}?n=informe.md`)).estado).toBe(404);
+
+    const accion = (mensaje: unknown) => postearConCuerpo(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, JSON.stringify(mensaje));
+    const m = await accion({ clase: "artefacto", nombre: "informe.md", proyecto: "p1", sesion: chat });
+    expect(m.estado).toBe(200);
+    expect(JSON.parse(m.cuerpo)).toMatchObject({ ruta: "/artefactos/informe.md", texto: "# hecho" });
+    // Se contesta en la respuesta, NUNCA por el cable: el store lo guardaría por ruta y pisaría el de la abierta.
+    expect(cliente.recibidos.filter((x) => x.clase === "artefacto")).toEqual([]);
+    expect((await accion({ clase: "artefacto", nombre: "informe.md", proyecto: "p1", sesion: "no-esta" })).estado).toBe(409);
+    expect((await accion({ clase: "artefacto", nombre: "../x", proyecto: "p1", sesion: chat })).estado).toBe(409);
+    await vestibulo.cerrar();
     rmSync(base, { recursive: true, force: true });
   });
 

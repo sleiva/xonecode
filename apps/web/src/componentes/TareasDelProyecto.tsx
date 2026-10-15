@@ -4,6 +4,7 @@ import { AccionesDeTarea } from "./AccionesDeTarea.js";
 import { EntregaDeTarea } from "./EntregaDeTarea.js";
 import { MirarTarea } from "./MirarTarea.js";
 import { QuienEjecutaTareas } from "./QuienEjecutaTareas.js";
+import { selloDeFecha } from "../selloDeFecha.js";
 import estilos from "./TareasDelProyecto.module.css";
 
 const ETIQUETA_DE_ESTADO: Record<TareaDelCable["estado"], string> = {
@@ -69,6 +70,8 @@ export function TareasDelProyecto({
   alDejarDeMirar,
   mirando,
   mirada,
+  alLeerFinalizada,
+  alPedirUltimaRespuesta,
   conectado,
 }: {
   /** Ausente = la cola todavía no ha llegado del servidor. `[]` = llegó, y este proyecto no
@@ -147,8 +150,28 @@ export function TareasDelProyecto({
   mirando?: string;
   /** El transcript que el servidor está mandando de la tarea mirada. */
   mirada?: { tarea: string; actos: readonly Acto[] };
+  /**
+   * Abrir la conversación de una tarea FINALIZADA para leerla, con sus artefactos (`LecturaDeSesion`, motivo
+   * `finalizada`). Nunca `alIrAlChat`: ese abre para ESCRIBIR todo lo que no está en marcha. Ausente = no se ofrece.
+   */
+  alLeerFinalizada?: (tarea: TareaDelCable) => void;
+  /** Lo último que contestó el agente en la conversación de una finalizada: su resumen de lo que hizo. Se pide al
+   *  desplegar (nunca viaja con la cola). `undefined` = no consta; un texto que empieza por «No se pudo» es un fallo. */
+  alPedirUltimaRespuesta?: (tarea: TareaDelCable) => Promise<{ texto?: string; error?: string }>;
 }) {
   const apagado = conectado === false;
+  /**
+   * Dos pestañas, y SIEMPRE las dos (como las de Agentes): «En curso» es donde se ACTÚA —nuevas, en marcha y en
+   * pausa, con sus acciones de siempre— y «Finalizadas» es el HISTÓRICO, de solo lectura: sin acciones, la más
+   * reciente arriba, y lo que hizo cada una. Antes iban mezcladas en una lista, y las terminadas, que solo crecen,
+   * acababan tapando las que esperaban algo de ti. La vacía lo dice con palabras; la cuenta solo se pinta con algo.
+   */
+  const [pestana, setPestana] = useState<"curso" | "finalizadas">("curso");
+  const enCurso = tareas?.filter((t) => t.estado !== "terminada");
+  const finalizadas = tareas
+    ?.filter((t) => t.estado === "terminada")
+    // La más reciente arriba: por `acabada`, y sin ella (de antes del sello) al final.
+    .sort((a, b) => (b.acabada ?? "").localeCompare(a.acabada ?? ""));
   return (
     <section className={estilos.lista} aria-label="Tareas del proyecto">
       <div className={estilos.encabezado}>
@@ -180,7 +203,7 @@ export function TareasDelProyecto({
           donde="esta lista"
         />
       )}
-      {tareas === undefined ? (
+      {tareas === undefined || enCurso === undefined || finalizadas === undefined ? (
         <p className={estilos.aviso}>Consultando la cola de tareas de este proyecto…</p>
       ) : tareas.length === 0 ? (
         <p className={estilos.aviso}>
@@ -189,8 +212,48 @@ export function TareasDelProyecto({
           aplica sin pedir aprobación, porque la autorización es crearla.
         </p>
       ) : (
+        <>
+        <div className={estilos.pestanas} role="tablist" aria-label="Tareas por estado">
+          {(
+            [
+              ["curso", "En curso", enCurso.length],
+              ["finalizadas", "Finalizadas", finalizadas.length],
+            ] as const
+          ).map(([clave, rotulo, cuantas]) => (
+            <button
+              key={clave}
+              type="button"
+              role="tab"
+              className={estilos.pestana}
+              aria-selected={pestana === clave}
+              data-actual={pestana === clave ? "" : undefined}
+              onClick={() => setPestana(clave)}
+            >
+              {rotulo}
+              {cuantas > 0 ? <span className={estilos.cuenta}>{cuantas}</span> : null}
+            </button>
+          ))}
+        </div>
+        {pestana === "finalizadas" ? (
+          finalizadas.length === 0 ? (
+            <p className={estilos.aviso}>Todavía no ha terminado ninguna tarea de este proyecto. Aquí quedan las que se entregan, con lo que hizo cada una.</p>
+          ) : (
+            <ul className={estilos.filas}>
+              {finalizadas.map((t) => (
+                <FilaFinalizada
+                  key={t.id}
+                  tarea={t}
+                  {...(alLeerFinalizada === undefined ? {} : { alLeer: alLeerFinalizada })}
+                  {...(alPedirUltimaRespuesta === undefined ? {} : { alPedirUltimaRespuesta })}
+                />
+              ))}
+            </ul>
+          )
+        ) : enCurso.length === 0 ? (
+          <p className={estilos.aviso}>No hay ninguna tarea en curso. Las terminadas están en «Finalizadas».</p>
+        ) : (
         <ul className={estilos.filas}>
-          {tareas.map((t) => (
+          {enCurso.map((t) => (
             <Fila
               key={t.id}
               tarea={t}
@@ -217,8 +280,87 @@ export function TareasDelProyecto({
             />
           ))}
         </ul>
+        )}
+        </>
       )}
     </section>
+  );
+}
+
+/**
+ * Una tarea del HISTÓRICO: sin acciones —ya se entregó—, solo lo que hizo. Cuándo empezó y cuándo acabó (no
+ * «cuánto tardó»: entre las dos cuenta también el tiempo que pasó en pausa esperando una respuesta), cómo se
+ * entregó (la MISMA `EntregaDeTarea` de la otra pestaña), lo último que contestó el agente —su resumen, pedido al
+ * desplegar— y la puerta a su conversación entera con sus artefactos, de solo lectura.
+ */
+function FilaFinalizada({
+  tarea: t,
+  alLeer,
+  alPedirUltimaRespuesta,
+}: {
+  tarea: TareaDelCable;
+  alLeer?: (tarea: TareaDelCable) => void;
+  alPedirUltimaRespuesta?: (tarea: TareaDelCable) => Promise<{ texto?: string; error?: string }>;
+}) {
+  const [verEncargo, setVerEncargo] = useState(false);
+  /** Lo que contestó: ausente = sin pedir, `pidiendo` mientras llega. */
+  const [respuesta, setRespuesta] = useState<{ texto?: string; error?: string } | "pidiendo" | undefined>(undefined);
+  const empezo = t.empezada === undefined ? undefined : selloDeFecha(t.empezada);
+  const acabo = t.acabada === undefined ? undefined : selloDeFecha(t.acabada);
+  const fechas = [empezo === undefined ? undefined : `empezó ${empezo}`, acabo === undefined ? undefined : `acabó ${acabo}`].filter(
+    (x): x is string => x !== undefined
+  );
+  // Sin conversación no hay nada que releer: la sesión solo sobrevive si quedó algo abrible.
+  const conConversacion = t.sesion !== undefined;
+  return (
+    <li className={estilos.fila} data-estado={t.estado}>
+      <span className={estilos.punto} aria-hidden="true" />
+      <div className={estilos.cuerpo}>
+        <div className={estilos.cabecera}>
+          <span className={estilos.titulo}>{t.titulo}</span>
+          <span className={estilos.etiquetaEstado}>{ETIQUETA_DE_ESTADO[t.estado]}</span>
+        </div>
+        {fechas.length === 0 ? null : <p className={estilos.fechas}>{fechas.join(" · ")}</p>}
+        <EntregaDeTarea tarea={t} />
+        {conConversacion && alPedirUltimaRespuesta !== undefined ? (
+          <details
+            className={estilos.contenido}
+            onToggle={(e) => {
+              if (!(e.currentTarget as HTMLDetailsElement).open || respuesta !== undefined) return;
+              setRespuesta("pidiendo");
+              void alPedirUltimaRespuesta(t).then(setRespuesta, () => setRespuesta({ error: "el envío falló" }));
+            }}
+          >
+            <summary>Qué hizo</summary>
+            {respuesta === undefined ? null : respuesta === "pidiendo" ? (
+              <p className={estilos.aviso}>Leyendo su conversación…</p>
+            ) : respuesta.error !== undefined ? (
+              <p className={estilos.motivo}>{`No se pudo leer su conversación: ${respuesta.error}`}</p>
+            ) : respuesta.texto === undefined ? (
+              <p className={estilos.aviso}>No consta ninguna respuesta del agente en su conversación.</p>
+            ) : (
+              <p className={estilos.encargo}>{respuesta.texto}</p>
+            )}
+          </details>
+        ) : null}
+        <details className={estilos.contenido} onToggle={(e) => setVerEncargo((e.currentTarget as HTMLDetailsElement).open)}>
+          <summary>Ver el encargo</summary>
+          {verEncargo ? (
+            <>
+              {t.adjuntos.length > 0 ? <p className={estilos.adjuntosDeTarea}>{`Adjuntos: ${t.adjuntos.map((a) => a.nombre).join(", ")}`}</p> : null}
+              <p className={estilos.encargo}>{t.encargo}</p>
+            </>
+          ) : null}
+        </details>
+        {!conConversacion ? (
+          <p className={estilos.aviso}>Su conversación no se guardó: no hay historial ni artefactos que abrir.</p>
+        ) : alLeer === undefined ? null : (
+          <button type="button" className={estilos.leer} onClick={() => alLeer(t)}>
+            Ver la conversación y sus artefactos
+          </button>
+        )}
+      </div>
+    </li>
   );
 }
 

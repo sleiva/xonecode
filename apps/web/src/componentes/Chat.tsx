@@ -10,7 +10,7 @@ import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
 import { BotonDeCopiar } from "./BotonDeCopiar.js";
 import { fechaCompleta, horaDelMensaje } from "../selloDeFecha.js";
 import { CierreDelTurno } from "./CierreDelTurno.js";
-import { urlDeArtefacto } from "./Artefactos.js";
+import { useUrlDeArtefacto } from "./Artefactos.js";
 import { IconoDeAbrir, IconoDeArtefacto } from "./IconosDelVisor.js";
 import { IconoDeBajar } from "./IconosDelCompositor.js";
 import { tipoDeArtefacto } from "../tipoDeArtefacto.js";
@@ -495,6 +495,8 @@ function CapturasDelTramo({
   // `Image.Zoom` de assistant-ui) en vez de mandarte a otra pestaña; ir a Artefactos queda
   // como un botón del visor. Por eso ahora es un botón siempre: ampliar funciona sin manejador.
   const [ampliada, setAmpliada] = useState<Extract<Acto, { tipo: "artefacto" }> | undefined>(undefined);
+  // De la conversación que se LEE, si es otra que la abierta (`OrigenDeArtefactos`).
+  const urlDeArtefacto = useUrlDeArtefacto();
   // Una captura SOLA sale más grande: sin vecinas con las que compartir la fila, a 112 px de
   // alto una pantalla de móvil no se lee.
   const sola = actos.length === 1;

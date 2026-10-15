@@ -69,3 +69,11 @@
   margin-top: 4px;
   color: var(--dsw-alias-label-primary);
 }
+
+/* Los artefactos de la conversación leída, en el sitio del hilo: ocupan lo que él ocupaba y se desplazan solos. */
+.artefactos {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 16px;
+}

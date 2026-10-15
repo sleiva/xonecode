@@ -5754,15 +5754,34 @@ export function montarRutas(
       return;
     }
 
-    const abierto = vestibulo.proyectoAbierto();
-    if (abierto === undefined || opciones.leerArtefactoCrudo === undefined) {
+    // Sin `p` y `s`, el de la conversación ABIERTA. Con ellos, el de ESA conversación, que se está LEYENDO sin
+    // consola (una tarea finalizada, IXCODE-36): resuelta por el servidor como `leerSesion`, nunca por el texto.
+    let origen: { raiz: string; sesion: string };
+    const pedidoProyecto = query.get("p");
+    const pedidaSesion = query.get("s");
+    if (pedidoProyecto !== null || pedidaSesion !== null) {
+      const resuelta = sesionDelDisco(pedidoProyecto, pedidaSesion);
+      if ("motivo" in resuelta) {
+        responder(404, "no hay artefacto");
+        return;
+      }
+      origen = resuelta;
+    } else {
+      const abierto = vestibulo.proyectoAbierto();
+      if (abierto === undefined) {
+        responder(404, "no hay artefacto");
+        return;
+      }
+      origen = { raiz: abierto.raiz, sesion: abierto.idDeHilo };
+    }
+    if (opciones.leerArtefactoCrudo === undefined) {
       responder(404, "no hay artefacto");
       return;
     }
 
     let leido: LecturaCruda;
     try {
-      leido = await opciones.leerArtefactoCrudo(abierto.raiz, abierto.idDeHilo, nombre);
+      leido = await opciones.leerArtefactoCrudo(origen.raiz, origen.sesion, nombre);
     } catch (error) {
       // El mensaje de Node lleva la ruta absoluta: al cliente solo le llega el código, y a
       // `informar` tampoco más, que escribe en el transcript y por tanto viaja.
@@ -5820,6 +5839,21 @@ export function montarRutas(
     });
     respuesta.end(leido.datos);
   });
+
+  /**
+   * Una conversación de un proyecto, resuelta por el SERVIDOR a partir de los IDS que llegan del cable: el nombre
+   * sale del listado del entorno activo, la raíz la compone el vestíbulo y la sesión tiene que estar en el ÍNDICE
+   * del DISCO de ese proyecto. Nunca se lee nada que el cliente nombre. La comparten `leerSesion` y los artefactos
+   * de una conversación que se LEE sin consola (una tarea finalizada): dos copias de esta barrera divergirían.
+   */
+  const sesionDelDisco = (proyecto: unknown, sesion: unknown): { raiz: string; sesion: string } | { motivo: string } => {
+    const identidad = proyectos.find((p) => p.id === proyecto);
+    if (entornoElegido === undefined || identidad === undefined) return { motivo: "ese proyecto no está en el listado del entorno activo" };
+    const raiz = vestibulo.raizDeProyecto(entornoElegido, identidad.nombre);
+    if (!esProyectoEnDisco(raiz)) return { motivo: "ese proyecto no está descargado en este equipo" };
+    if (typeof sesion !== "string" || !listarSesiones(raiz).some((s) => s.id === sesion)) return { motivo: "esa conversación no está en el proyecto" };
+    return { raiz, sesion };
+  };
 
   /**
    * Lo que la pestaña Soporte necesita de UN proyecto, compuesto por el SERVIDOR a partir del
@@ -6701,18 +6735,12 @@ export function montarRutas(
         respuesta.writeHead(409, { "content-type": "application/json" });
         respuesta.end(JSON.stringify({ motivo }));
       };
-      const identidad = proyectos.find((p) => p.id === (mensaje as { proyecto?: unknown }).proyecto);
-      const sesion = (mensaje as { sesion?: unknown }).sesion;
-      if (entornoElegido === undefined || identidad === undefined) return negar("ese proyecto no está en el listado del entorno activo");
-      const raiz = vestibulo.raizDeProyecto(entornoElegido, identidad.nombre);
-      if (!esProyectoEnDisco(raiz)) return negar("ese proyecto no está descargado en este equipo");
       // El índice del DISCO, la misma fuente que lee `reabrirSesion` justo debajo.
-      if (typeof sesion !== "string" || !listarSesiones(raiz).some((s) => s.id === sesion)) {
-        return negar("esa conversación no está en el proyecto");
-      }
+      const resuelta = sesionDelDisco((mensaje as { proyecto?: unknown }).proyecto, (mensaje as { sesion?: unknown }).sesion);
+      if ("motivo" in resuelta) return negar(resuelta.motivo);
       let actos: readonly Acto[];
       try {
-        actos = reabrirSesion(raiz, sesion).actos;
+        actos = reabrirSesion(resuelta.raiz, resuelta.sesion).actos;
       } catch (error) {
         contar(error);
         return negar("no se pudo leer esa conversación");
@@ -6981,6 +7009,34 @@ export function montarRutas(
       void atenderBaseDeFichero(mensaje.ruta, mensaje.base).catch(contar);
       respuesta.writeHead(204);
       respuesta.end();
+      return;
+    }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "artefacto" &&
+      typeof mensaje.nombre === "string" &&
+      (mensaje.proyecto !== undefined || mensaje.sesion !== undefined)
+    ) {
+      // El artefacto de una conversación que se LEE sin consola: se contesta en la PROPIA respuesta y no por el cable,
+      // donde el store lo guardaría por ruta y pisaría el de la conversación abierta con el mismo nombre.
+      const resuelta = sesionDelDisco(mensaje.proyecto, mensaje.sesion);
+      const negar = (motivo: string): void => {
+        respuesta.writeHead(409, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify({ motivo }));
+      };
+      if ("motivo" in resuelta) return negar(resuelta.motivo);
+      if (!esRutaDeArtefacto(`${RUTA_ARTEFACTOS}${mensaje.nombre}`)) return negar("ese nombre no es de un artefacto");
+      if (opciones.leerArtefacto === undefined) return negar("esta ejecución no puede leer los artefactos");
+      let fichero: FicheroDelProyecto;
+      try {
+        fichero = await opciones.leerArtefacto(resuelta.raiz, resuelta.sesion, mensaje.nombre);
+      } catch (error) {
+        informar(`no se pudo leer el artefacto «${mensaje.nombre}» (${codigoDe(error)})`);
+        return negar("no se pudo leer el artefacto");
+      }
+      respuesta.writeHead(200, { "content-type": "application/json" });
+      respuesta.end(JSON.stringify(fichero));
       return;
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "artefacto" && typeof mensaje.nombre === "string") {

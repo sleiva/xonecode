@@ -1800,7 +1800,8 @@ export type MensajeDelCliente =
    * carpeta la compone el servidor con el id del hilo, y aceptar una ruta del cliente sería
    * abrir a negociación justo la parte que es una barrera.
    */
-  | { clase: "artefacto"; nombre: string }
+  /** Con `proyecto` y `sesion`: el de esa conversación, que se LEE sin consola, contestado en la propia respuesta. */
+  | { clase: "artefacto"; nombre: string; proyecto?: string; sesion?: string }
   /**
    * Ejecuta —o cancela— un paso de una receta de instalación.
    *

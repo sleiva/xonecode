@@ -249,3 +249,59 @@
     background: var(--xonecode-cian);
   }
 }
+
+/* «En curso» / «Finalizadas»: la MISMA tira que las pestañas de Agentes (`Agentes.module.css#pestanas`), con el
+   mismo subrayado de acento y la misma píldora de cuenta. */
+.pestanas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  margin-bottom: 12px;
+}
+
+.pestana {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: none;
+  margin-bottom: -1px;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pestana:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.pestana[data-actual] {
+  box-shadow: inset 0 -2px 0 var(--xonecode-cian);
+  color: var(--xonecode-cian);
+}
+
+.cuenta {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-state-business-primary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Cuándo empezó y acabó una finalizada: dato secundario, debajo del título. */
+.fechas {
+  margin: 4px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+/* La puerta a su conversación y artefactos: el botón secundario de siempre. */
+.leer {
+  composes: secundario from "./Boton.module.css";
+  align-self: flex-start;
+  margin-top: 8px;
+}

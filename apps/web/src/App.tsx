@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { Planes } from "./componentes/Planes.js";
 import { Colecciones } from "./componentes/Colecciones.js";
 import type { crearStoreDelCliente } from "./store.js";
-import type { Acto, TareaDelCable, ActoDeSincronizacion, FotoDelResumen, ListadoDeSoporte, MensajeDelCliente, ModoDeEscritura } from "./tipos.js";
+import type { Acto, FicheroDelProyecto, TareaDelCable, ActoDeSincronizacion, FotoDelResumen, ListadoDeSoporte, MensajeDelCliente, ModoDeEscritura } from "./tipos.js";
 import type { Conexion } from "./conexion.js";
 import { ANCHO_BARRA_POR_OMISION, Maqueta } from "./componentes/Maqueta.js";
 import { Barra } from "./componentes/Barra.js";
@@ -40,7 +40,7 @@ import { esEditable } from "./edicion.js";
 import { CloudStudio, Registro } from "./componentes/CloudStudio.js";
 import type { EstadoDeSubida } from "./componentes/BotonSubir.js";
 import type { ProgresoDeOperacion } from "./componentes/Pregunta.js";
-import { Artefactos, type ArtefactoEnLista } from "./componentes/Artefactos.js";
+import { Artefactos, artefactosDeLosActos, type ArtefactoEnLista } from "./componentes/Artefactos.js";
 import { TareasDelProyecto } from "./componentes/TareasDelProyecto.js";
 import {
   PanelDelProyecto,
@@ -648,20 +648,7 @@ export function App({
    * se indexa por ruta, y el repetido se mueve al final —`delete` antes del `set`— porque el
    * orden es lo que decide cuál se abre solo, y el que se acaba de dibujar es el último.
    */
-  const artefactos: ArtefactoEnLista[] = useMemo(() => {
-    const porRuta = new Map<string, ArtefactoEnLista>();
-    for (const acto of estado.actos) {
-      if (acto.tipo !== "artefacto") continue;
-      porRuta.delete(acto.ruta);
-      porRuta.set(acto.ruta, {
-        ruta: acto.ruta,
-        nombre: acto.nombre,
-        bytes: acto.bytes,
-        ...(acto.mime === undefined ? {} : { mime: acto.mime }),
-      });
-    }
-    return [...porRuta.values()];
-  }, [estado.actos]);
+  const artefactos: ArtefactoEnLista[] = useMemo(() => artefactosDeLosActos(estado.actos), [estado.actos]);
 
   /**
    * Las operaciones de sincronización de esta sesión, **la más reciente primero**.
@@ -762,6 +749,23 @@ export function App({
   const pedirArtefacto = useCallback(
     (nombre: string) => {
       void enviar({ clase: "artefacto", nombre });
+    },
+    [enviar]
+  );
+
+  /**
+   * El contenido de un artefacto de la conversación que se LEE: contestado en la propia respuesta y guardado por
+   * `LecturaDeSesion`, nunca en `estado.artefactos`, que va por ruta y pisaría el de la abierta con el mismo nombre.
+   */
+  const pedirArtefactoDeLectura = useCallback(
+    async (nombre: string): Promise<FicheroDelProyecto> => {
+      const actual = lecturaActual.current;
+      const ruta = `/artefactos/${nombre}`;
+      const fallo = (error: string): FicheroDelProyecto => ({ ruta, recortado: false, binario: false, bytes: 0, error });
+      if (actual === undefined) return fallo("no hay ninguna conversación abierta para leer");
+      const r = (await enviar({ clase: "artefacto", nombre, proyecto: actual.proyecto, sesion: actual.sesion })) as Response | undefined;
+      if (r?.status === 200) return (await r.json()) as FicheroDelProyecto;
+      return fallo((await negativaOFalloDe(r)) ?? "el servidor no contestó");
     },
     [enviar]
   );
@@ -1834,11 +1838,16 @@ export function App({
   const laQueTrabajaEnLaLectura = proyectoDeLaLectura?.sesiones?.find((s) => s.trabajando === true && s.id !== lectura?.sesion);
   /** La tarea de la conversación que se lee, tal como está AHORA en la cola. */
   const tareaDeLaLectura = lectura?.tarea === undefined ? undefined : estado.tareas?.lista.find((t) => t.id === lectura.tarea);
+  /** La conversación que se lee es la de una tarea ya TERMINADA: un registro, abierto desde «Finalizadas». */
+  const leeUnaFinalizada =
+    lectura !== undefined && estado.tareas?.lista.some((t) => t.sesion === lectura.sesion && t.estado === "terminada") === true;
   const motivoDeLectura: MotivoDeLectura =
     lectura === undefined
       ? "libre"
       : tareaQueEscribeLaSesion.has(lectura.sesion)
         ? "tarea"
+        : leeUnaFinalizada
+          ? "finalizada"
         // Se ha parado a esperar TU respuesta: el único momento en que hace falta la caja.
         : tareaDeLaLectura?.estado === "requiere-atencion"
           ? "atencion"
@@ -2641,6 +2650,22 @@ export function App({
       }}
       // Parar una en marcha sin borrarla (IXCODE-50): queda esperando con su conversación, y se sigue con «Continuar».
       alParar={async (id: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "parar", id }))}
+      // El HISTÓRICO: la conversación de una finalizada se LEE, con sus artefactos —nunca `alIrAlChatDeTarea`, que la
+      // abriría para escribir—. Y lo que contestó al final, del mismo `leerSesion`, pedido al desplegar su fila.
+      alLeerFinalizada={(t: TareaDelCable) => {
+        if (t.sesion !== undefined) leerSesion(t.proyecto, t.sesion, t.titulo);
+      }}
+      alPedirUltimaRespuesta={async (t: TareaDelCable) => {
+        if (t.sesion === undefined) return {};
+        const r = (await enviar({ clase: "leerSesion", proyecto: t.proyecto, sesion: t.sesion })) as Response | undefined;
+        if (r?.status !== 200) return { error: (await negativaOFalloDe(r)) ?? "el servidor no contestó" };
+        const { actos } = (await r.json()) as { actos: Acto[] };
+        for (let i = actos.length - 1; i >= 0; i--) {
+          const a = actos[i]!;
+          if (a.tipo === "asistente" && a.texto.trim() !== "") return { texto: a.texto };
+        }
+        return {};
+      }}
       // Esta lista es la del proyecto ABIERTO: su consola es la tuya, y es lo que frena sus tareas nuevas.
       consolaAbierta={proyectoActivoId !== undefined}
       {...(estado.alta?.sesionActiva === undefined ? {} : { sesionAbierta: estado.alta.sesionActiva })}
@@ -2934,6 +2959,10 @@ export function App({
               vivo={lectura.tarea !== undefined && tareaQueEscribeLaSesion.has(lectura.sesion) && estado.mirada?.tarea === lectura.tarea}
               motivo={motivoDeLectura}
               {...(tareaDeLaLectura?.motivo === undefined ? {} : { pregunta: tareaDeLaLectura.motivo })}
+              // Sus artefactos, de SU carpeta y vistos aquí dentro: el panel de al lado es el de la conversación abierta.
+              origen={{ proyecto: lectura.proyecto, sesion: lectura.sesion }}
+              pedirArtefacto={pedirArtefactoDeLectura}
+              conectado={estado.conectado}
               alAbrirParaEscribir={() => abrirSesion(lectura.proyecto, lectura.sesion)}
               {...(laQueTrabajaEnLaLectura === undefined
                 ? {}

@@ -2,7 +2,7 @@ import { useEffect, useRef, type MouseEvent } from "react";
 import { Button, Modal } from "@deepseek-ai/dsh-client-ui-primitives";
 import coraza from "./Pregunta.module.css";
 import estilos from "./VisorDeImagen.module.css";
-import { urlDeArtefacto } from "./Artefactos.js";
+import { useUrlDeArtefacto } from "./Artefactos.js";
 
 /**
  * Una captura AMPLIADA, sobre la aplicación: el `Image.Zoom` de assistant-ui, sin su runtime.
@@ -35,6 +35,7 @@ export function VisorDeImagen({
   // El foco entra en la ventana al abrirse —si no, `Escape` y el tabulador seguirían en la
   // miniatura de detrás— y vuelve a ella al cerrarse, que es donde estaba quien la abrió.
   const cerrar = useRef<HTMLButtonElement>(null);
+  const urlDeArtefacto = useUrlDeArtefacto();
   useEffect(() => {
     const antes = document.activeElement as HTMLElement | null;
     cerrar.current?.focus();
