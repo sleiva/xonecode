@@ -244,6 +244,7 @@ import {
   TEXTO_DE_CONTINUAR,
   tituloDeTarea,
   type Tarea,
+  type TicketDeTarea,
 } from "../../core/tareas.js";
 import { aplicarEncargo, aplicarFeedback, TOPE_DE_ADJUNTO, type TareasEnDisco } from "../../agent/tareas/tareasEnDisco.js";
 import { nombreDeAdjuntoAceptable } from "../../core/adjuntos.js";
@@ -302,9 +303,9 @@ import { crearGestorJira } from "../../agent/conectores/gestorJira.js";
 import { crearGestorNotion } from "../../agent/conectores/gestorNotion.js";
 import {
   admiteMiasDelVinculo, motivoDeProyectoInaceptable, transicionPropuesta, comentarioDeCierre,
-  type FichaDelGestor, type GestorDeTareasPort, type TransicionDelGestor, type Vinculo, type VinculoGuardado,
+  type FichaDelGestor, type GestorDeTareasPort, type TareaDelGestor, type TransicionDelGestor, type Vinculo, type VinculoGuardado,
 } from "../../core/gestorDeTareas.js";
-import { cerrarTicket } from "../../core/tareasEnElGestor.js";
+import { cerrarTicket, comentarioDeEncargo } from "../../core/tareasEnElGestor.js";
 import { datosDeCierre } from "./datosDeCierre.js";
 import { ErrorDeDescargaCortada, escribirPaquete, listarSoporte, motivoParaNoExportar, type FuenteDeSoporte, type PedidoDeSoporte } from "./soporte.js";
 import { nombreDelPaquete } from "../../core/paqueteDeSoporte.js";
@@ -2350,7 +2351,10 @@ export function montarRutas(
      * que la propia ruta de subida aplica: forma de segmento llano, y que no sea ya una
      * tarea.
      */
-    borrador?: string
+    borrador?: string,
+    /** El ticket del gestor YA creado (`atenderCrearTareaEnGestor`): se copia a la tarea antes de guardarla, porque
+     *  guardar dispara al corredor y el reflejo de «empezar» tiene que encontrarlo. */
+    ticket?: TicketDeTarea
   ): { id: string } | undefined => {
     if (opciones.colaDeTareas === undefined) return undefined;
     const proyecto = proyectoParaTarea(proyectoId);
@@ -2378,9 +2382,86 @@ export function montarRutas(
       adjuntos: opciones.colaDeTareas.listarAdjuntos(id),
       estado: "nuevo",
       creada: new Date().toISOString(),
+      ...(ticket === undefined ? {} : { ticket }),
     };
     opciones.colaDeTareas.guardar([...lista, nueva]);
     return { id: nueva.id };
+  };
+
+  /**
+   * El gestor en el que vivirá una tarea NUEVA de ese proyecto, si lo tiene: su vínculo (del `config.json` del PROYECTO,
+   * leído aquí y no dicho por el cliente: la ventana se abre también desde el escritorio para otro proyecto) y un
+   * gestor que sabe CREAR. Sin vínculo, o con un gestor sin `crear`, `undefined` y la tarea se encola en local como
+   * siempre (límite declarado: lo dice la ventana).
+   */
+  const gestorParaTareaNueva = (
+    proyectoId: string
+  ): { proyecto: { id: string; raiz: string; nombre: string }; vinculo: Vinculo; gestor: GestorDeTareasPort & Required<Pick<GestorDeTareasPort, "crear">> } | undefined => {
+    const proyecto = proyectoParaTarea(proyectoId);
+    if (proyecto === undefined) return undefined;
+    let vinculo: Vinculo | undefined;
+    try {
+      vinculo = cargar(proyecto.raiz).config.proyecto?.gestorDeTareas;
+    } catch {
+      return undefined;
+    }
+    if (vinculo === undefined) return undefined;
+    const gestor = gestorDe(vinculo.conector);
+    if (gestor?.crear === undefined) return undefined;
+    return { proyecto, vinculo, gestor: gestor as GestorDeTareasPort & Required<Pick<GestorDeTareasPort, "crear">> };
+  };
+
+  /**
+   * Crear una tarea EN el gestor (`docs/superpowers/specs/2026-10-15-tareas-desde-el-gestor-design.md`, puerta 1): el
+   * ticket primero, luego el encargo como comentario, y SOLO entonces la tarea local con el ticket puesto. Si el gestor
+   * no deja crear, NO se crea la tarea local —con vínculo, una tarea que no está en el gestor es justo lo que se
+   * pierde— y se contesta 409 con el motivo. Si el ticket se creó pero el comentario no, la tarea se crea igual y se
+   * dice: el ticket ya existe.
+   */
+  const atenderCrearTareaEnGestor = async (
+    destino: NonNullable<ReturnType<typeof gestorParaTareaNueva>>,
+    peticion: string,
+    encargo: string,
+    borrador?: string
+  ): Promise<{ estado: number; cuerpo: Record<string, unknown> }> => {
+    if (opciones.colaDeTareas === undefined) return { estado: 409, cuerpo: { motivo: "esta ejecución no tiene cola de tareas" } };
+    // El borrador se comprueba ANTES de tocar el gestor: un ticket creado para una tarea que luego no se guarda quedaría huérfano.
+    if (borrador !== undefined && !esBorradorLibre(borrador, opciones.colaDeTareas.listar())) {
+      return { estado: 409, cuerpo: { motivo: "ese borrador de adjuntos no vale (o ya es una tarea)" } };
+    }
+    const { gestor, vinculo } = destino;
+    // Solo para que el ticket llegue con su enlace: sin la url del sitio se crea igual, sin `url`.
+    await asegurarSitios(gestor).catch(() => {});
+    let creada: TareaDelGestor;
+    try {
+      creada = await gestor.crear(vinculo, { titulo: tituloDeTarea(peticion), descripcion: peticion });
+    } catch (error) {
+      return { estado: 409, cuerpo: { motivo: `no se pudo crear la tarea en el gestor: ${motivoDelGestor(error)}` } };
+    }
+    let aviso: string | undefined;
+    try {
+      await gestor.comentar(vinculo, creada.clave, comentarioDeEncargo(encargo));
+    } catch (error) {
+      aviso = `se creó ${creada.clave}, pero no se pudo subir el encargo: ${motivoDelGestor(error)}`;
+    }
+    const ticket: TicketDeTarea = {
+      conector: vinculo.conector,
+      sitio: vinculo.sitio,
+      proyecto: vinculo.proyecto,
+      clave: creada.clave,
+      ...(creada.url === undefined ? {} : { url: creada.url }),
+      ...(aviso === undefined ? {} : { aviso }),
+    };
+    const nueva = atenderCrearTarea(destino.proyecto.id, peticion, encargo, borrador, ticket);
+    if (nueva === undefined) {
+      return { estado: 409, cuerpo: { motivo: `se creó ${creada.clave} en el gestor, pero no la tarea local: créala de nuevo o bórrala allí` } };
+    }
+    opciones.revisarTareas?.();
+    emitirTareas();
+    return {
+      estado: 200,
+      cuerpo: { id: nueva.id, ticket: { clave: creada.clave, ...(creada.url === undefined ? {} : { url: creada.url }) }, ...(aviso === undefined ? {} : { aviso }) },
+    };
   };
 
   /**
@@ -7292,6 +7373,15 @@ export function montarRutas(
         // borrarse. Se niega con motivo, como cualquier otra negativa del cable.
         respuesta.writeHead(409, { "content-type": "application/json" });
         respuesta.end(JSON.stringify({ motivo: "se está cambiando la carpeta de los proyectos: crea la tarea cuando termine" }));
+        return;
+      }
+      // Con gestor vinculado, la tarea vive en él: se contesta en la propia respuesta (la ventana no se cierra hasta saber
+      // si el gestor la creó). Sin él, el camino de siempre.
+      const enGestor = mensaje.accion === "crear" ? gestorParaTareaNueva(mensaje.proyecto) : undefined;
+      if (mensaje.accion === "crear" && enGestor !== undefined) {
+        const r = await atenderCrearTareaEnGestor(enGestor, mensaje.peticion, mensaje.encargo, mensaje.borrador);
+        respuesta.writeHead(r.estado, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify(r.cuerpo));
         return;
       }
       if (mensaje.accion === "crear" && opciones.colaDeTareas !== undefined) {

@@ -53,6 +53,7 @@ import { MS_DE_PREPARACION,
 import { ErrorDelAumentador } from "../../agent/tareas/aumentador.js";
 import { iconoDelProyecto, leerFicheroDeProyecto, motivoDeRutaInaceptable } from "../../agent/grafo/arbolDeProyecto.js";
 import { leerArtefactoCrudo, leerArtefactoDeSesion } from "../../agent/grafo/artefactosEnDisco.js";
+import { CABECERA_DEL_ENCARGO } from "../../core/tareasEnElGestor.js";
 import { RUTA_ICONO_DEL_PROYECTO, RUTA_IMAGEN_DEL_PROYECTO } from "../../core/imagenesDeDocumento.js";
 import { CLAVE_DE_SELLO, cambiosDeSesion, fotoDeApertura } from "../../agent/sesiones/sesionGit.js";
 import type { PeticionDeTarea } from "../../core/ports.js";
@@ -5987,6 +5988,84 @@ describe("las tareas en background, por el cable", () => {
       { texto: "segundo", creado: "2026-09-08T11:00:00.000Z", consumido: false },
     ]);
     expect(mensaje.lista.find((t) => t.id === "t2")?.feedback).toBeUndefined();
+  });
+
+  /** La puerta 1 de `docs/superpowers/specs/2026-10-15-tareas-desde-el-gestor-design.md`: con gestor vinculado, la tarea vive en él. */
+  describe("crear con el proyecto vinculado a un gestor", () => {
+    async function montarVinculado(gestor: GestorDeTareasEnMemoria, conVinculo = true) {
+      const base = mkdtempSync(join(tmpdir(), "xc-tarea-gestor-"));
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
+      const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+      writeFileSync(
+        join(raiz, ".xonecode", "config.json"),
+        JSON.stringify(conVinculo ? { gestorDeTareas: { conector: "jira", sitio: "cloud-1", proyecto: "KAN" } } : {})
+      );
+      let revisado = 0;
+      const servidor = servidorDeMentira();
+      const cola = colaDeMentira();
+      montarRutas(servidor, vestibulo, {
+        colaDeTareas: cola,
+        revisarTareas: () => void (revisado += 1),
+        gestorDeTareas: (c) => (c === "jira" ? gestor : undefined),
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+      const accion = (m: unknown) => postearConCuerpo(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, JSON.stringify(m));
+      return { base, cola, accion, revisado: () => revisado };
+    }
+
+    it("crea el ticket, sube el encargo y liga la tarea ANTES de hacer revisar; contesta con la clave", async () => {
+      const gestor = new GestorDeTareasEnMemoria({ creaConPrefijo: "KAN" });
+      const { base, cola, accion, revisado } = await montarVinculado(gestor);
+      const r = await accion({ clase: "tarea", accion: "crear", proyecto: "p1", peticion: "Versión en el login", encargo: "Añade la versión bajo el logo" });
+      expect(r.estado).toBe(200);
+      expect(JSON.parse(r.cuerpo)).toMatchObject({ ticket: { clave: "KAN-1" } });
+      expect(gestor.creadas).toEqual([{ proyecto: "KAN", titulo: "Versión en el login", descripcion: "Versión en el login" }]);
+      expect(gestor.comentariosAplicados[0]!.texto).toContain("Añade la versión bajo el logo");
+      expect(gestor.comentariosAplicados[0]!.texto).toContain(CABECERA_DEL_ENCARGO);
+      const [tarea] = cola.verTareas();
+      // El ticket copiado ENTERO a la tarea (con sitio y proyecto, que no cruzan el cable), y ya puesto al revisar.
+      expect(tarea!.ticket).toMatchObject({ conector: "jira", sitio: "cloud-1", proyecto: "KAN", clave: "KAN-1" });
+      expect(revisado()).toBe(1);
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("si el gestor no deja crear, NO hay tarea local y se contesta 409 con el motivo", async () => {
+      const gestor = new GestorDeTareasEnMemoria({ creaConPrefijo: "KAN", crearFalla: "no tienes permiso para crear en KAN" });
+      const { base, cola, accion, revisado } = await montarVinculado(gestor);
+      const r = await accion({ clase: "tarea", accion: "crear", proyecto: "p1", peticion: "x", encargo: "y" });
+      expect(r.estado).toBe(409);
+      expect(JSON.parse(r.cuerpo).motivo).toMatch(/no tienes permiso para crear en KAN/);
+      expect(cola.verTareas()).toEqual([]);
+      expect(revisado()).toBe(0);
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("si el encargo no sube, la tarea se crea igual con el aviso: el ticket ya existe", async () => {
+      const gestor = new GestorDeTareasEnMemoria({ creaConPrefijo: "KAN" });
+      gestor.comentar = async () => {
+        throw new Error("comentarios cerrados");
+      };
+      const { base, cola, accion } = await montarVinculado(gestor);
+      const r = await accion({ clase: "tarea", accion: "crear", proyecto: "p1", peticion: "x", encargo: "y" });
+      expect(r.estado).toBe(200);
+      expect(cola.verTareas()[0]!.ticket?.aviso).toMatch(/KAN-1.*no se pudo subir el encargo.*comentarios cerrados/);
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("sin vínculo, o con un gestor que no sabe crear, el camino de siempre: 204 y tarea local", async () => {
+      for (const [gestor, conVinculo] of [
+        [new GestorDeTareasEnMemoria({ creaConPrefijo: "KAN" }), false],
+        [new GestorDeTareasEnMemoria(), true],
+      ] as const) {
+        const { base, cola, accion } = await montarVinculado(gestor, conVinculo);
+        expect((await accion({ clase: "tarea", accion: "crear", proyecto: "p1", peticion: "x", encargo: "y" })).estado).toBe(204);
+        expect(cola.verTareas()[0]!.ticket).toBeUndefined();
+        rmSync(base, { recursive: true, force: true });
+      }
+    });
   });
 
   it("crear una tarea RESUELVE el proyecto con el estado del propio cierre, la encola y hace revisar", async () => {
