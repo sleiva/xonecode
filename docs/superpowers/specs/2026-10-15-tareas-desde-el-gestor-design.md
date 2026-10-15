@@ -100,15 +100,40 @@ pinta en su fila.
 - Notion: `crear` se implementa después de medir `notion-create-pages`; hasta entonces, un proyecto con Notion
   encola en local y la ventana lo dice.
 
-## Fase 2 — la puerta 2 (después)
+## Fase 2 — la puerta 2: el gestor DISPARA
 
-- Tabla por vínculo: estado de DISPARO, REFINAR → REVISAR ENCARGO, y destinos al empezar, aparcar y terminar; más un
-  interruptor de activado, apagado por omisión.
-- Sondeo por el proceso que tiene el cerrojo del corredor, con «Mirar ahora»; sin duplicar (un ticket con tarea viva
-  no crea otra).
-- Solo disparan los tickets asignados a la cuenta del conector: quien mueve un ticket lanza un agente que escribe en
-  esta máquina.
-- El puerto gana `comentarios?` para leer el último encargo revisado (el de la cabecera fija) y lo añadido debajo.
+**xonecode no impone estados: se ADAPTA a los del proyecto.** Lo que necesita son PAPELES, y en cada vínculo la persona
+dice qué estado SUYO cumple cada uno (el MAPEO, en Conectores → «Gestor de tareas», junto al vínculo: por vínculo y no
+por conector, porque cada proyecto del gestor tiene su flujo).
+
+| Papel | Qué hace xonecode | En MAS (Por hacer → En curso → Listo) |
+|---|---|---|
+| **preparar** (opcional) | Un ticket ASIGNADO a la cuenta del conector entra aquí y no tiene encargo → lo amplía (el aumentador, con el proyecto delante) y lo sube como comentario con `CABECERA_DEL_ENCARGO`. No lo mueve. | Por hacer |
+| **lanzar** | Un ticket asignado entra aquí y no tiene tarea → crea la tarea en background con el ÚLTIMO comentario de encargo tal como esté (editado por la persona si lo cambió), más lo comentado debajo; sin encargo, con el texto del ticket. | En curso |
+| **terminar** | Al terminar la tarea, comentario de cierre y transición a este estado. | Listo |
+
+Revisar el encargo es moverlo de preparar a lanzar: el gesto que la persona ya hace en su tablero es la orden.
+
+- **El mapeo manda también en la puerta 1**: al empezar, el estado de lanzar; al terminar, el de terminar. Se COPIA al
+  ticket de la tarea al crearla (`TicketDeTarea.estados`), la misma regla que el resto del ticket. Sin mapeo, la regla
+  de antes (`transicionPropuesta`).
+- **Se PROPONE desde las categorías** (`mapeoPropuesto`): preparar = el primero «por hacer», lanzar = el primero «en
+  curso», terminar = PROBAR si existe o el primero «terminada». La persona lo confirma o lo cambia; nada se escribe a
+  mano.
+- **La lista de estados sale del gestor** (`GestorDeTareasPort.estados?`, opcional): en Jira no hay tool de estados en
+  el conector, así que sale de los estados de sus tickets y de los destinos de sus transiciones; en Notion, de las
+  opciones de su propiedad de estado.
+- **Leer el encargo** pide `GestorDeTareasPort.comentarios?` (opcional): sin él, lanzar usa el texto del ticket.
+- **El disparo es un INTERRUPTOR por vínculo, apagado por omisión** (`VinculoGuardado.automatico`): quien mueve un
+  ticket lanza un agente que escribe en esta máquina. Y solo cuentan los tickets asignados a la cuenta del conector.
+- **Sondeo** cada `INTERVALO_DE_SONDEO_MS` (5 min) y con «Mirar ahora», SOLO en el proceso que tiene el cerrojo del
+  corredor (dos consolas no crean la misma tarea dos veces). Sin duplicar: un ticket con una tarea que no está
+  descartada no lanza otra; uno con encargo no se vuelve a preparar.
+- **La decisión es PURA** (`core/tareasEnElGestor.ts#accionesDelSondeo`): tickets, mapeo, qué tiene encargo y qué tiene
+  tarea → qué preparar y qué lanzar. La red y el disco, fuera.
+
+Límites declarados de la fase 2: al aparcar sigue sin escribirse nada; un ticket movido a lanzar mientras el proceso
+estaba apagado se recoge en el primer sondeo; el aumentador de preparar no ve los adjuntos del ticket.
 
 ## Medido (15-10-2026, conector Jira de xonecode, solo lectura)
 
