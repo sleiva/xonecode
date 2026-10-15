@@ -1198,6 +1198,32 @@ describe("una sesión con el motor TrueForge", () => {
     expect(dos.lineas.join("\n")).toMatch(/la respuesta reescrita sigue en chino/);
   }, 30_000);
 
+  it("si el raíz escribe en INGLÉS entre herramientas, su siguiente llamada lleva el recordatorio del idioma (una vez)", async () => {
+    const ingles = "Round 2 written. Let me validate the files myself and read what changed, then I will drive the device for a fresh capture.";
+    const { m, vistos } = modelosConGuion([
+      [new AIMessageChunk({ content: ingles, tool_call_chunks: [{ index: 0, id: "l1", name: "ls", args: JSON.stringify({ path: "/" }) }] })],
+      [new AIMessageChunk({ content: "Now let me check the styles and then I will read the other screens of the app.", tool_call_chunks: [{ index: 0, id: "l2", name: "ls", args: JSON.stringify({ path: "/" }) }] })],
+      [new AIMessageChunk({ content: "Listo: el menú está rediseñado." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("Rediseña el menú principal de la app con la maqueta de Stitch del ticket", piel().p);
+    const aviso = "Lo que escribes entre herramientas está saliendo en inglés";
+    expect(vistos[0]!.join("\n")).not.toContain(aviso);
+    expect(vistos[1]!.join("\n")).toContain(aviso);
+    // Una vez por detección: la tercera llamada lleva el SEGUNDO (otro mensaje en inglés), y ahí se acaba el tope.
+    expect(vistos[2]!.join("\n").split(aviso).length - 1).toBe(2);
+  }, 30_000);
+
+  it("en español no se le recuerda nada", async () => {
+    const { m, vistos } = modelosConGuion([
+      [new AIMessageChunk({ content: "Ya tengo el menú localizado. Ahora voy a leer los estilos de la app para ver qué clases usa.", tool_call_chunks: [{ index: 0, id: "l1", name: "ls", args: JSON.stringify({ path: "/" }) }] })],
+      [new AIMessageChunk({ content: "Listo." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz: proyecto(), modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("Rediseña el menú principal de la app con la maqueta de Stitch del ticket", piel().p);
+    expect(vistos[1]!.join("\n")).not.toContain("está saliendo en inglés");
+  }, 30_000);
+
   describe("en modo autónomo, lo que el agente ya recomendó se contesta solo", () => {
     const pregunta = (id: string, question: string, options: string[]) =>
       new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id, name: "ask_user_question", args: JSON.stringify({ question, options }) }] });

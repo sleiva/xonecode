@@ -51,7 +51,13 @@ import { sumarPorModelo, type ConsumoPorModelo } from "../../../core/actos.js";
 import { ColaDeEventos, entrelazar } from "../../../core/entrelazar.js";
 import { modeloExternoParaTrueforge } from "./modeloExterno.js";
 import { diferenciasDelContraste, metricasDeTrueforge } from "./metricasTrueforge.js";
-import { respuestaEnChinoSinPedirlo, textoDeReescritura } from "../../../core/idiomaDeLaRespuesta.js";
+import {
+  respuestaEnChinoSinPedirlo,
+  TOPE_DE_RECORDATORIOS_DE_IDIOMA,
+  textoDeReescritura,
+  textoDeRecordatorioDeIdioma,
+  textoEnInglesSinPedirlo,
+} from "../../../core/idiomaDeLaRespuesta.js";
 import { cambiosQueSeVerifican, huellaDeErrores, repartirHallazgos, textoDeReparacion, tocaCriticarPantalla, TOPE_REPARACIONES } from "../../turno/verificacion.js";
 import { correrTurno, type Piel } from "../../../core/turno.js";
 import type { Artefacto } from "../../../core/artefactos.js";
@@ -788,6 +794,29 @@ export async function abrirSesionTrueforge(
   const detencion = crearControlDeDetencion(HILO_RAIZ);
   /** Tool calls tiradas por DETENER en la sesión: si se queda en cero, el filtro es solo red. */
   let llamadasTiradasPorDetener = 0;
+  /**
+   * **El recordatorio del idioma**, para el raíz que escribe en INGLÉS entre herramientas (`textoEnInglesSinPedirlo`,
+   * medido en Maset). Lo pone el turno al cerrarse un mensaje suyo, y entra como mensaje de usuario antes de su siguiente
+   * llamada —la del raíz, no la de un hijo—; como mucho `TOPE_DE_RECORDATORIOS_DE_IDIOMA` por turno.
+   */
+  let recordatorioDeIdioma: string | undefined;
+  let recordatoriosEnElTurno = 0;
+  const capacidadDeIdioma = {
+    nombre: "idioma",
+    tools: [] as string[],
+    capability: {
+      preLLMProcessors: [
+        {
+          async *processPreLLM() {
+            const texto = recordatorioDeIdioma;
+            if (texto === undefined) return;
+            recordatorioDeIdioma = undefined;
+            yield { type: "internal.agent.context.append", context: [{ role: "user", content: texto }], output: [] };
+          },
+        },
+      ],
+    },
+  };
   const capacidadDeNotasDeLaSesion = capacidadDeNotas(notas, {
     detencion,
     nombreDe: (h) => quienEs.get(h) ?? h,
@@ -1391,6 +1420,7 @@ export async function abrirSesionTrueforge(
           capacidadDeFecha(),
           capacidadDeNotasDeLaSesion,
           capacidadDeInformes,
+          capacidadDeIdioma as never,
         ]),
         /**
          * **La conversación se RESUME a un umbral que depende de la ventana del modelo**
@@ -1708,6 +1738,8 @@ export async function abrirSesionTrueforge(
       if (cerrada) throw new Error("la sesión está cerrada");
       const t0 = Date.now();
       cancelado = false;
+      recordatoriosEnElTurno = 0;
+      recordatorioDeIdioma = undefined;
       detencion.reiniciar();
       const instantanea = await tomarInstantanea(raiz, opciones.entorno.git);
       const tope = opciones.topeDeRondas ?? MAX_APPROVAL_ROUNDS;
@@ -1948,7 +1980,19 @@ export async function abrirSesionTrueforge(
               if (mensajeCerrado) ultimoMensaje = "";
               mensajeCerrado = false;
               ultimoMensaje += evento.texto;
-            } else if (evento.tipo !== "razonamiento") mensajeCerrado = true;
+            } else if (evento.tipo !== "razonamiento") {
+              // Un mensaje del raíz se CIERRA aquí: si salió en inglés y el usuario no escribe en inglés, su siguiente
+              // llamada lleva el recordatorio (`capacidadDeIdioma`). Sin reescribir lo dicho.
+              if (
+                !mensajeCerrado &&
+                recordatoriosEnElTurno < TOPE_DE_RECORDATORIOS_DE_IDIOMA &&
+                textoEnInglesSinPedirlo(ultimoMensaje, encargoDelTurno ?? peticion)
+              ) {
+                recordatoriosEnElTurno += 1;
+                recordatorioDeIdioma = textoDeRecordatorioDeIdioma(encargoDelTurno ?? peticion);
+              }
+              mensajeCerrado = true;
+            }
             yield evento;
           }
           /**

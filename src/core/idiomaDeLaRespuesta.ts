@@ -42,3 +42,54 @@ export function textoDeReescritura(peticion: string): string {
     `Su mensaje empezaba así: «${cita}»`
   );
 }
+
+/**
+ * **Lo que el raíz escribe ENTRE herramientas, en INGLÉS cuando el usuario no escribe en inglés.** Medido en Maset
+ * (MAS-3): en una tarea larga `deepseek-flash` pasó a escribir en inglés lo que la persona lee («Round 2 written. Let
+ * me validate…»), con `IDIOMA_DE_LA_RESPUESTA` en su prompt. Como con el chino, es una deriva y el arreglo es código:
+ * se DETECTA por palabras vacías —las más frecuentes de cada idioma, que no dependen del tema— y se le recuerda el
+ * idioma antes de su siguiente llamada. No se reescribe lo ya dicho: entre herramientas no hay respuesta que rehacer.
+ */
+const VACIAS_EN = new Set(
+  "the and to of is it that this with for now let me i i'll let's will then so we what on in are be have has was not can should".split(" ")
+);
+const VACIAS_ES = new Set(
+  "el la los las de del que y en un una es lo se por para con no al como más pero sus su ya voy ahora esto este esta hay".split(" ")
+);
+
+/** Cuántas palabras vacías de un idioma hacen falta para decir nada: un mensaje de una línea no se juzga. */
+export const MINIMO_DE_VACIAS = 6;
+
+function cuentaVacias(texto: string): { en: number; es: number } {
+  // Fuera el código y las rutas: un `the_value` o un `/de/` no son el idioma de quien escribe.
+  const limpio = texto.replace(/```[\s\S]*?```/g, " ").replace(/`[^`]*`/g, " ").toLowerCase();
+  const palabras = limpio.match(/[a-záéíóúñü']+/g) ?? [];
+  let en = 0;
+  let es = 0;
+  for (const p of palabras) {
+    if (VACIAS_EN.has(p)) en++;
+    if (VACIAS_ES.has(p)) es++;
+  }
+  return { en, es };
+}
+
+/** ¿Está este texto en inglés y quien pide NO escribe en inglés? Las dos medidas, con margen: dudoso es «no». */
+export function textoEnInglesSinPedirlo(texto: string, peticion: string): boolean {
+  const t = cuentaVacias(texto);
+  if (t.en < MINIMO_DE_VACIAS || t.en < 2 * t.es) return false;
+  const p = cuentaVacias(peticion);
+  return p.es > p.en;
+}
+
+/** Cuántas veces por turno se le recuerda: si no hace caso, insistir no lo arregla y gasta. */
+export const TOPE_DE_RECORDATORIOS_DE_IDIOMA = 2;
+
+/** El recordatorio, como mensaje de usuario antes de su siguiente llamada. */
+export function textoDeRecordatorioDeIdioma(peticion: string): string {
+  const cita = peticion.trim().slice(0, TOPE_DE_CITA_DEL_USUARIO);
+  return (
+    "[Aviso del harness] Lo que escribes entre herramientas está saliendo en inglés, y el usuario no escribe en inglés. " +
+    "Desde ahora escribe TODO lo que el usuario lee —mensajes entre herramientas y respuesta final— en su idioma. Tu " +
+    `razonamiento puede seguir como quieras. Su mensaje empezaba así: «${cita}»`
+  );
+}
