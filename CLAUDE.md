@@ -759,6 +759,10 @@ era un contador. La regla del ciclo de vida de `getControl` vive en `NUCLEO_XONE
 `capacidadDeAvisoDeVueltas`): su prompt ya decía que una captura no es una herramienta de diagnóstico y no bastó;
 al llegar a cada umbral recibe UN mensaje —para un valor, un estado o una excepción, `getText`, `elements` y el
 log; la captura es para lo visual, una por cosa que se comprueba—. Vale para quien ejecuta, con o sin el bucle.
+**Y si quien maqueta es Claude Code con su shell, el bucle es SUYO** (`textoDeMaquetadorExterno`, en la nota de
+delegación): compara y corrige él, así que el orquestador le da todo en un encargo, pasa el crítico una vez y solo le
+encarga otra vuelta por algo bloqueante; un recurso mal hecho lo corrige él en esa vuelta. Medido en Maset: cada vuelta
+nueva era un Claude Code que releía todo, con las piezas ya bien.
 **Sale del bucle cuando cumple el CRITERIO DE ACEPTACIÓN de su encargo**, que el orquestador escribe medible
 (casillas del plan, lo que hace la app, fidelidad al diseño), con tres vueltas como tope; devolver antes porque
 «ya funciona» dejaba lo visual sin hacer. **Los traspasos de código entre agentes, acotados por el harness** (`toolsDeFichero.ts`, `informesDeHijos.ts`):

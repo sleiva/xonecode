@@ -3601,3 +3601,14 @@ describe("cambioDespuesDe: ¿cambió el proyecto tras la última crítica?", () 
     expect(cambioDespuesDe(raiz, critica)).toBe(true);
   });
 });
+
+describe("con un maquetador de Claude Code con shell, el bucle es SUYO", () => {
+  it("la nota de delegación lo dice solo cuando lo hay", async () => {
+    const { notaDeDelegacion } = await import("./sesionTrueforge.js");
+    const base = { descripcion: "Escribe", skills: [], instrucciones: "", origen: "semilla" } as const;
+    const externo = { ...base, nombre: "developer-xone", motor: "claude-code" as const, soloLectura: false, ejecucion: true };
+    const propio = { ...base, nombre: "developer-xone", motor: "modelo" as const, soloLectura: false };
+    expect(notaDeDelegacion([externo as never], { conComparacion: true })).toMatch(/developer-xone corre en Claude Code[\s\S]*UNA vez/);
+    expect(notaDeDelegacion([propio as never], { conComparacion: true })).not.toContain("corre en Claude Code");
+  });
+});

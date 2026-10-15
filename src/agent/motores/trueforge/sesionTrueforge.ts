@@ -173,6 +173,23 @@ const BUCLE_DE_CALIDAD = [
 ].join("\n");
 
 /**
+ * Cuando quien MAQUETA es un hijo de Claude Code con ejecución, el bucle lo hace ÉL: despliega, captura, compara con la
+ * maqueta y corrige (`textoDeTrabajoSinLlamar`). Medido en Maset: el orquestador, con `BUCLE_DE_CALIDAD`, volvía a pasar el
+ * crítico y le encargaba otra vuelta —y otra al diseñador por un SVG—, y cada vuelta era un Claude Code NUEVO que releía
+ * todo: unos quince minutos cada una, con las piezas ya bien. Dos bucles uno encima de otro.
+ */
+export function textoDeMaquetadorExterno(nombres: readonly string[]): string {
+  return [
+    `${nombres.join(", ")} corre en Claude Code con su shell: despliega, captura, COMPARA con la maqueta y CORRIGE él mismo hasta`,
+    "cumplir. Con él: dale en UN encargo el diseño, la tabla de recursos y el criterio; a su vuelta pasa el crítico UNA vez, y solo",
+    "vuelve a encargarle si queda algo BLOQUEANTE (una pieza que falta, algo tapado o fuera de pantalla) o que él no comprobó. Las",
+    "diferencias de detalle van en tu resumen final, no en otra vuelta: cada vuelta suya empieza de cero. Si un recurso del",
+    "diseñador está mal (proporción, color, un icono equivocado), díselo a él y que lo corrija en esa misma vuelta: puede escribir en",
+    "`icons/`, y otra ronda diseñador → desarrollador cuesta dos arranques.",
+  ].join("\n");
+}
+
+/**
  * Lo que el orquestador tiene que saber para DELEGAR en ESTE motor. Su prompt es el de siempre
  * (`promptOrquestador`), que habla de `task` y de la ficha que va en su descripción: aquí la
  * delegación es `create_sub_agent` y no tiene descripción por especialista, así que se traduce
@@ -437,6 +454,11 @@ export function notaDeDelegacion(
     "entiende `create_sub_agent` y `name`. Las fichas de los especialistas:",
     ...agentes.map((a) => `- ${a.nombre}: ${fichaDeAgente(a, opciones)}`),
     ...(opciones.conComparacion === true ? ["", BUCLE_DE_CALIDAD] : []),
+    // Si quien maqueta corre en Claude Code con su shell, el bucle es SUYO: el orquestador no lo repite encima.
+    ...(() => {
+      const externos = agentes.filter((a) => a.motor === "claude-code" && a.ejecucion === true && !a.soloLectura).map((a) => a.nombre);
+      return opciones.conComparacion === true && externos.length > 0 ? ["", textoDeMaquetadorExterno(externos)] : [];
+    })(),
     ...(opciones.conEsperas === true
       ? [
           "",
