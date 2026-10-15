@@ -2161,11 +2161,10 @@ describe("el volcado de la sesión de una tarea", () => {
     await esperarAQueAcabe(estado);
 
     expect(estado()[0]).toMatchObject({ estado: "terminada", autorizadas: ["Clientes.xne"] });
-    // Y en el transcript, con el nombre: es lo que lee quien abra la sesión después.
+    // Y en el transcript NO sale la línea «✎ … autorizadas sin aprobación»: era ruido (se apunta en la tarea, arriba).
     const sesion = estado()[0]!.sesion!;
     const jsonl = readFileSync(join(raiz, ".xonecode", "sesiones", `${sesion}.jsonl`), "utf8");
-    expect(jsonl).toMatch(/Clientes\.xne/);
-    expect(jsonl).toMatch(/sin aprobaci/i);
+    expect(jsonl).not.toMatch(/sin aprobaci/i);
 
     await corredor.parar();
     await v.cerrar();

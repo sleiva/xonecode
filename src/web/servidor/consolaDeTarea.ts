@@ -264,15 +264,9 @@ export function crearConsolaDeTarea(opciones: {
         autorizadas.push(nombreDe(p));
       }
 
-      if (autorizadas.length > 0) {
-        // Con los NOMBRES, y diciendo POR QUÉ no hubo aprobación: sin la palabra «tarea»
-        // esto se lee como que la aprobación se rompió.
-        opciones.escribir(
-          `\n✎ ${autorizadas.length} escritura(s) autorizadas sin aprobación —es una tarea de fondo, ` +
-            `y la autorización fue crearla—: ${autorizadas.join(", ")}\n`
-        );
-        opciones.autorizado?.(autorizadas);
-      }
+      // Se APUNTA (`Tarea.autorizadas`) y no se escribe en el chat: una línea «✎ 1 escritura(s) autorizadas…» por cada
+      // fichero, repetida en cada ronda, era ruido (petición suya). Lo escrito ya se ve en la línea de su tool y en Revisión.
+      if (autorizadas.length > 0) opciones.autorizado?.(autorizadas);
       /**
        * Y lo que no se pudo resolver aparca la tarea, con los nombres y sin leerse como un
        * rechazo: la escritura está propuesta y espera a alguien, que es lo accionable.

@@ -169,8 +169,8 @@ describe("crearConsolaDeTarea", () => {
     const { consola, escrito, autorizado } = montar();
     await consola.aprobacionesTui!([PENDIENTE], new Map([["1", "/app.xne"]]), new Map());
     expect(autorizado).toEqual([["app.xne"]]);
-    expect(escrito.join("")).toMatch(/\bapp\.xne\b/);
-    expect(escrito.join("")).not.toMatch(/\/app\.xne/);
+    // Y no se escribe en el chat: se apunta (la línea «✎ … autorizadas» era ruido, una por fichero).
+    expect(escrito.join("")).toBe("");
   });
 
   it("sin ruta conocida se dice la DESCRIPCIÓN, no un hueco", async () => {
@@ -180,7 +180,7 @@ describe("crearConsolaDeTarea", () => {
     const { consola, autorizado, escrito } = montar();
     await consola.aprobacionesTui!([PENDIENTE], new Map(), new Map());
     expect(autorizado).toEqual([["[dev] quiere escribir un fichero del proyecto"]]);
-    expect(escrito.join("")).toContain("[dev] quiere escribir un fichero del proyecto");
+    expect(escrito.join("")).toBe("");
   });
 
   it("una pregunta APARCA y CORTA: cualquier cadena sería una respuesta inventada", async () => {
@@ -278,14 +278,14 @@ describe("crearConsolaDeTarea", () => {
     expect(escrito.join("")).toMatch(/aparcad/i);
   });
 
-  it("autorizar TAMPOCO es mudo, y es lo que más falta hace decir", async () => {
+  it("autorizar se APUNTA con los nombres, y no se escribe en el chat", async () => {
     /**
-     * Una escritura que nadie aprueba no puede ser además muda — es la regla del evento
-     * `artefacto` y la del aviso de honestidad del modo autónomo, y aquí es el
-     * único aviso que hay: el de `turnoReal.ts` solo sale por la rama `todoAutomatico`, que
-     * este camino no toma. Con los NOMBRES, no con un contador.
+     * Antes salía una línea «✎ N escritura(s) autorizadas sin aprobación —es una tarea de fondo…—» en el chat, una por
+     * ronda y casi siempre por fichero: ruido, y se quitó a petición suya. Lo que sostiene la regla «una escritura que
+     * nadie aprueba no es muda» es lo APUNTADO (`Tarea.autorizadas`, lo que lee el juez y la tarjeta) y la línea de la
+     * propia tool de escritura en el chat.
      */
-    const { consola, escrito } = montar();
+    const { consola, escrito, autorizado } = montar();
     await consola.aprobacionesTui!(
       [PENDIENTE, OTRO],
       new Map([
@@ -294,12 +294,8 @@ describe("crearConsolaDeTarea", () => {
       ]),
       new Map()
     );
-    const texto = escrito.join("");
-    expect(texto).toMatch(/app\.xne/);
-    expect(texto).toMatch(/Clientes\.xne/);
-    expect(texto).toMatch(/sin aprobaci/i);
-    // Y dice que es porque es una TAREA: sin eso se lee como que la aprobación se rompió.
-    expect(texto).toMatch(/tarea/i);
+    expect(autorizado).toEqual([["app.xne", "Clientes.xne"]]);
+    expect(escrito.join("")).toBe("");
   });
 
   it("la piel se REENVÍA si se le da, y no está si no", () => {
@@ -462,9 +458,8 @@ describe("una tarea de fondo y un agente externo que escribe VARIOS ficheros", (
     ).resolves.toBe(true);
     // `Tarea.autorizadas` guarda lo AUTORIZADO, y con los dos nombres: una tarea que escribe
     // dos ficheros y solo apunta uno deja al juez leyendo una cuenta que no es.
-    expect(autorizado[0]).toHaveLength(2);
-    expect(escrito.join("")).toMatch(/uno\.xne/);
-    expect(escrito.join("")).toMatch(/dos\.xne/);
+    expect(autorizado[0]).toEqual(["app/uno.xne", "app/dos.xne"]);
+    expect(escrito.join("")).toBe("");
   });
 
   it("y una que no admite aprobación tumba el conjunto, que es lo que Codex sabe expresar", async () => {
