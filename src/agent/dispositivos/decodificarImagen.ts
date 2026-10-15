@@ -39,6 +39,13 @@ function dimensionesJpeg(b: Buffer): { ancho: number; alto: number } {
   throw new Error("JPEG sin tamaño declarado");
 }
 
+/** Solo el tamaño, de la cabecera y sin decodificar nada (`convertir_a_p` necesita el ancho de la maqueta). */
+export function dimensionesDeImagen(bytes: Buffer): { ancho: number; alto: number } {
+  if (bytes.length >= 8 && bytes.subarray(0, 8).equals(FIRMA_PNG)) return dimensionesPng(bytes);
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return dimensionesJpeg(bytes);
+  throw new Error("no es un PNG ni un JPEG");
+}
+
 export function decodificarImagen(bytes: Buffer): ImagenRgba {
   if (bytes.length > MAX_BYTES) throw new Error("la imagen es demasiado grande");
   const esPng = bytes.length >= 8 && bytes.subarray(0, 8).equals(FIRMA_PNG);

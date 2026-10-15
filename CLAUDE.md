@@ -364,7 +364,10 @@ Y las guardas del proyecto:
   dónde empieza y acaba cada fila en fracción del ancho (`ENCAJE`), y el color y la forma de los
   bloques anchos —cabecera, visor, panel— emparejados por altura relativa (`compararBloques`, solo
   lo emparejado: el aparato puede partir en filas lo que la maqueta tiene en un panel). **La foto de
-  UN control no lleva geometría** (`esCapturaDeUnControl`): sus cajas serían las de la pantalla.
+  UN control no lleva geometría** (`esCapturaDeUnControl`): sus cajas serían las de la pantalla. **Y el TAMAÑO de cada IMAGEN
+  respecto a su pantalla** (`geometriaDePantalla.ts`, `FACTOR_DE_TAMAÑO_DE_IMAGEN`): el tamaño relativo a las vecinas de
+  fila no veía unos iconos todos igual de pequeños (Maset); las que cambian lo mismo salen en UNA diferencia, nunca
+  bloqueante.
 - **Y una séptima, de lectura, pura y sin llamar a nadie: `validar_fichero_xone`**
   (`agent/grafo/validarFicheroXone.ts`), solo en TrueForge y a TODOS, el raíz incluido. Comprueba un
   fichero —o todos los de una carpeta— con el comprobador puro de su extensión: `.xne`/`.xml` bien formado
@@ -376,6 +379,15 @@ Y las guardas del proyecto:
   viene de OTRA copia (Studio tras una subida, el aparato). **Es prudente a propósito**: solo marca lo que
   rompe el parser; qué atributos o propiedades existen es de `xone_atributos`. Lee por el backend y reaplica
   `puedeLeerRuta` a mano.
+- **Y una octava, pura y de LECTURA, solo en TrueForge: `convertir_a_p`** (`agent/motores/trueforge/convertirAP.ts`,
+  `core/convertirAP.ts`): las medidas de una maqueta (px CSS) a la `p` de XOne, con la cuenta de la skill
+  (`px × resolution-width / ancho de la maqueta`). Existe porque, medido en Maset, el agente copió los px como `p` y los
+  iconos salieron unas 2,6 veces menores, con la regla escrita en la skill. **Los dos datos de la cuenta no los pone el
+  modelo**: el `resolution-width` se lee del `app.xml` de la RAÍZ (fijada al construir) y el ancho de la maqueta, de su
+  imagen (`buscarMaqueta`), y solo cuando la imagen no lo deja claro lo da él (`ancho_maqueta`). **Lo que no se sabe no
+  se adivina**: sin `resolution-width`, o con `-1`, no convierte y lo dice; una imagen que no mide un ancho de móvil en
+  px CSS (una a 2×) tampoco, y da sus divisiones. Va a quien recibe `buscar_icono`, con la línea de CUÁNDO usarla junto
+  a su lista de tools (`USO_DE_CONVERTIR_A_P`), por lo mismo que `xone_atributos`.
 - **Lo que quien ESCRIBE tiene que saber va en el cuerpo del developer y del designer, no en
   `REGLAS_XONE`** (`ESCRIBIR_XONE_SIN_ROMPER`, `agent/subagentes/agentesEnDisco.ts`): un comentario
   XML no admite `--`, un `L`/`TL` pinta su `title`, `elevation` recorta un fondo redondeado, un botón

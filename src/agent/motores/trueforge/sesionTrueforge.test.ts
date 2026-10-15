@@ -3123,6 +3123,39 @@ describe("`buscar_icono` en TrueForge (IXCODE-18): el mismo reparto que deepagen
   }, 20_000);
 });
 
+describe("`convertir_a_p` en TrueForge: las medidas de la maqueta, con la resolución del app.xml", () => {
+  const guion = () => [
+    [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "pinta la fila de la maqueta" }) }] })],
+    [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "c1", name: "convertir_a_p", args: JSON.stringify({ medidas: [{ nombre: "icono de la fila", px: 24 }], ancho_maqueta: 420 }) }] })],
+    [new AIMessageChunk({ content: "Convertido." })],
+    [new AIMessageChunk({ content: "Listo." })],
+  ];
+
+  it("quien escribe la recibe y sabe cuándo usarla; la cuenta usa el resolution-width del app.xml del proyecto", async () => {
+    const raiz = proyecto();
+    writeFileSync(join(raiz, "app.xml"), '<app prefix="gen" resolution-width="1080" resolution-height="1920">\n</app>\n');
+    const { m, vistos, toolsPorLlamada } = modelosConGuion(guion());
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("haz la pantalla de la maqueta", piel().p);
+    expect(toolsPorLlamada[0]).not.toContain("convertir_a_p");
+    expect(toolsPorLlamada[1]).toContain("convertir_a_p");
+    expect(vistos[1]![0]).toContain("Los px de una maqueta");
+    // El icono de Maset: 24 px de una maqueta de 420 con 1080 son 62p, no 24p.
+    expect(vistos[2]!.join("\n")).toContain("| icono de la fila | 24 px | 62p |");
+  }, 20_000);
+
+  it("con resolution-width=\"-1\" no convierte: lo dice", async () => {
+    const raiz = proyecto();
+    writeFileSync(join(raiz, "app.xml"), '<app resolution-width="-1" resolution-height="-1"/>\n');
+    const { m, vistos } = modelosConGuion(guion());
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("haz la pantalla de la maqueta", piel().p);
+    const visto = vistos[2]!.join("\n");
+    expect(visto).toContain("No convierto");
+    expect(visto).not.toContain("62p");
+  }, 20_000);
+});
+
 describe("`comparar_capturas` en TrueForge (IXCODE-18): con el raíz, como la crítica visual", () => {
   const guion = () => [[new AIMessageChunk({ content: "Listo." })]];
 

@@ -105,6 +105,13 @@ const DISTANCIA_PARA_ICONOS = 0.08;
  * una franja vacía a la derecha que ni las filas ni los anchos relativos veían.
  */
 const ENCAJE = 0.04;
+/**
+ * Cuántas veces puede cambiar el TAMAÑO de una imagen respecto a la pantalla (su ancho entre el de la pantalla, en la
+ * maqueta y en el aparato) antes de decirlo. Medido en Maset: los iconos salieron unas 2,6 veces más pequeños —se
+ * copiaron los px de la maqueta como `p`— y nada lo dijo, porque el tamaño solo se comparaba RELATIVO a las vecinas de
+ * fila, y con todos los iconos igual de pequeños (o solos junto a un texto) no había vecina distinta.
+ */
+const FACTOR_DE_TAMAÑO_DE_IMAGEN = 1.5;
 
 // ---------------------------------------------------------------- el árbol del aparato
 
@@ -454,6 +461,33 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
   if (sinFila.length > 0) {
     notas.push(`sin el mismo texto en ${elAparato}, ni en su fila: ${sinFila.slice(0, 5).join(", ")}${sinFila.length > 5 ? "…" : ""} (si son datos de ejemplo de un visor, es normal).`);
   }
+  // TAMAÑO de cada IMAGEN respecto a su pantalla: no necesita vecinas, así que va antes del corte de «menos de dos».
+  // Solo con las dos medidas (una maqueta descrita no tiene un ancho de pantalla de verdad) y solo imágenes: la caja
+  // de un texto es el hueco del layout, no lo que se pinta. Las que cambian lo mismo van en UNA línea.
+  if (!aproximada) {
+    const porFactor = new Map<string, { nombres: string[]; enAparato: number; enMaqueta: number }>();
+    for (const p of parejas) {
+      if (p.aparato.clase !== "IMG" || p.maqueta.sinAncho === true || p.maqueta.caja.ancho <= 0 || p.aparato.caja.ancho <= 0) continue;
+      const rm = p.maqueta.caja.ancho / m.ancho;
+      const ra = p.aparato.caja.ancho / g.pantalla.ancho;
+      const factor = ra / rm;
+      if (factor >= 1 / FACTOR_DE_TAMAÑO_DE_IMAGEN && factor <= FACTOR_DE_TAMAÑO_DE_IMAGEN) continue;
+      const como = factor < 1 ? `${veces(1 / factor)} veces MENOR` : `${veces(factor)} veces MAYOR`;
+      const grupo = porFactor.get(como) ?? { nombres: [], enAparato: ra, enMaqueta: rm };
+      grupo.nombres.push(etiqueta(p.maqueta));
+      porFactor.set(como, grupo);
+    }
+    const porcentaje = (x: number) => `${(x * 100).toFixed(1).replace(".", ",")} %`;
+    for (const [como, { nombres, enAparato, enMaqueta }] of porFactor) {
+      const varias = nombres.length > 1;
+      diferencias.push(
+        `${varias ? `${nombres.length} imágenes (${nombres.slice(0, 5).join(", ")}${nombres.length > 5 ? "…" : ""}) salen` : `${mayuscula(nombres[0]!)} sale`} ` +
+          `a un tamaño unas ${como} que en ${laMaqueta}: ${varias ? "la primera ocupa" : "ocupa"} el ${porcentaje(enAparato)} del ancho de la pantalla en ${elAparato} ` +
+          `y el ${porcentaje(enMaqueta)} en ${laMaqueta}.`
+      );
+    }
+  }
+
   if (parejas.length < 2) {
     notas.push("con menos de dos controles emparejados no hay filas ni tamaños que comparar.");
     return { bloqueantes, diferencias, notas };

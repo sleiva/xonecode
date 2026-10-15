@@ -512,6 +512,8 @@ La unidad `p` representa **pixels en el dispositivo de referencia** definido por
 | FAB | 56 | **168p** |
 | Touch target mínimo | 48 | **144p** |
 
+Esta tabla es para medidas de **Material Design** (`dp`). Las de una **maqueta** (px CSS de un `code.html` o de su imagen) no son `dp` ni `p`: `p = px_maqueta × resolution-width / ancho_de_la_maqueta`, con los dos valores leídos del `app.xml` y de la maqueta (`de-una-maqueta-a-xone.md`, §2).
+
 ```css
 /* CORRECTO — calibrado para 1080×1920 */
 .frameHeader {

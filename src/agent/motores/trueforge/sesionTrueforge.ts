@@ -97,6 +97,7 @@ import { avisoDeReparto, type PropuestaDeTareas } from "../../../core/repartoDeE
 import { leerTareasDelPlan, RUTA_DE_TASKS } from "../../../core/tareasDelPlan.js";
 import { esDeLaMaqueta } from "../../../core/stitch.js";
 import { recibeConectores } from "../../../core/conectores.js";
+import { crearConvertirAP, NOMBRE_CONVERTIR_A_P, recibeConvertirAP } from "./convertirAP.js";
 import { buscarMaqueta, medirContraMaqueta, resumenDeMedida, textoDeMedidaAutomatica, ultimaCaptura } from "./medidaAutomatica.js";
 import { anotarEscritura, capacidadDeInformesDeHijos, esEscrituraBinaria, escrituraConExito, textoDelInforme, type CambioDeFichero } from "./informesDeHijos.js";
 import { crearDiagnosticoDeTools, type DiagnosticoDeTools } from "../../turno/diagnosticoDeTools.js";
@@ -442,6 +443,15 @@ const LIMITES_DE: Record<ReturnType<typeof clasesDeTools>, string> = {
 export const USO_DE_XONE_ATRIBUTOS =
   "Para saber si un atributo XML existe en un nodo (coll, group, frame, prop) y qué hace, pregunta PRIMERO a `xone_atributos`: " +
   "contesta en una línea desde las tablas de la skill. Lee la referencia de la skill solo si no lo encuentra, o si necesitas ejemplos o matices.";
+
+/**
+ * CUÁNDO convertir las medidas de una maqueta, por lo mismo que `USO_DE_XONE_ATRIBUTOS`: una tool nombrada solo en la
+ * lista no se usa. Medido en Maset: con la regla en la skill, el desarrollador copió los px de la maqueta como `p` y los
+ * iconos salieron unas 2,6 veces más pequeños.
+ */
+export const USO_DE_CONVERTIR_A_P =
+  "Los px de una maqueta (su code.html, su imagen) NO son p: toda medida que copies de ella —anchos, altos, márgenes, " +
+  "paddings, tamaño de iconos— pasa ANTES por `convertir_a_p`, todas de una vez, y escribes lo que devuelve.";
 
 export function notaDeTools(nombres: readonly string[], limite: string): string {
   return `NOTA DEL HARNESS: aunque tu identidad diga lo contrario, NO tienes las mismas tools que quien te delega. Tienes ${nombres
@@ -1003,6 +1013,16 @@ export async function abrirSesionTrueforge(
       : []),
     // Fondos SVG: pura y sin red, sin puerto; a quien escribe el proyecto, como deepagents.
     ...(recibeGenerarFondo(agente) ? [crearGenerarFondoSvg() as unknown as ToolDeLangchain] : []),
+    // Las medidas de una maqueta a `p`: pura, a quien escribe el proyecto. La resolución la lee del app.xml de la raíz.
+    ...(recibeConvertirAP(agente)
+      ? [
+          crearConvertirAP({
+            raiz,
+            ...(carpeta === undefined ? {} : { artefactos: carpeta }),
+            ...(opciones.adjuntos === undefined ? {} : { adjuntos: opciones.adjuntos }),
+          }) as unknown as ToolDeLangchain,
+        ]
+      : []),
     // ¿Cambió la zona tras el toque? Al conductor, que es quien saca las capturas: comprueba una
     // ACCIÓN suya, no juzga la pantalla (eso sigue siendo del crítico y de `comparar_capturas`).
     ...(carpeta !== undefined && agente.ejecucion === true
@@ -1215,6 +1235,7 @@ export async function abrirSesionTrueforge(
     const nota = [
       notaDeTools(nombres, agente === undefined ? LIMITE_DEL_GENERICO : LIMITES_DE[clase]),
       ...(nombres.includes(NOMBRE_ATRIBUTOS_XONE) ? [USO_DE_XONE_ATRIBUTOS] : []),
+      ...(nombres.includes(NOMBRE_CONVERTIR_A_P) ? [USO_DE_CONVERTIR_A_P] : []),
     ].join("\n");
     const instrucciones =
       agente === undefined

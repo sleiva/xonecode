@@ -232,6 +232,45 @@ describe("una pantalla de tarjetas (Maset): datos de ejemplo, texto dentro de un
   });
 });
 
+describe("el TAMAÑO de una imagen respecto a su pantalla (Maset: px de la maqueta copiados como p)", () => {
+  // Maqueta 420 de ancho; aparato 1080. Tres iconos de 24 px en la maqueta (5,7 % del ancho); en el aparato, de 24 px
+  // (2,2 %): unas 2,6 veces menores. Ninguno tiene vecina distinta, así que lo relativo no lo veía.
+  const maqueta: MaquetaMedida = {
+    ancho: 420,
+    alto: 900,
+    elementos: [
+      { texto: "phone", caja: { x: 20, y: 200, ancho: 24, alto: 24 } },
+      { texto: "schedule", caja: { x: 20, y: 400, ancho: 24, alto: 24 } },
+      { texto: "chevron_right", caja: { x: 370, y: 600, ancho: 24, alto: 24 } },
+      { texto: "ALBARANES", caja: { x: 60, y: 200, ancho: 200, alto: 24 } },
+    ],
+  };
+  const aparato = (ladoDelIcono: number): GeometriaDelAparato => ({
+    pantalla: { ancho: 1080, alto: 2314 },
+    controles: [
+      { nombre: "IMG_TEL", tipo: "prop", clase: "IMG", caja: { x: 51, y: 514, ancho: ladoDelIcono, alto: ladoDelIcono } },
+      { nombre: "IMG_HORA", tipo: "prop", clase: "IMG", caja: { x: 51, y: 1028, ancho: ladoDelIcono, alto: ladoDelIcono } },
+      { nombre: "IMG_CHEV", tipo: "prop", clase: "IMG", caja: { x: 951, y: 1543, ancho: ladoDelIcono, alto: ladoDelIcono } },
+      { nombre: "MAP_TIT", texto: "ALBARANES", tipo: "prop", clase: "L", caja: { x: 154, y: 514, ancho: 514, alto: 62 } },
+    ],
+  });
+
+  it("iconos 2,6 veces menores: UNA línea con los tres, y su porcentaje del ancho en cada lado", () => {
+    const tamaño = compararConMaqueta(maqueta, aparato(24)).diferencias.filter((d) => d.includes("veces MENOR"));
+    expect(tamaño).toEqual([
+      "3 imágenes (el icono «phone», el icono «schedule», el icono «chevron_right») salen a un tamaño unas 2,6 veces MENOR que en la maqueta: la primera ocupa el 2,2 % del ancho de la pantalla en el aparato y el 5,7 % en la maqueta.",
+    ]);
+  });
+
+  it("convertidos con convertir_a_p (62p ≈ 62 px en un aparato de 1080) no dicen nada", () => {
+    expect(compararConMaqueta(maqueta, aparato(62)).diferencias.join("\n")).not.toMatch(/veces (MENOR|MAYOR)/);
+  });
+
+  it("una maqueta DESCRITA (aproximada) no tiene un ancho de pantalla de verdad: no se compara", () => {
+    expect(compararConMaqueta(maqueta, aparato(24), { aproximada: true }).diferencias.join("\n")).not.toContain("veces MENOR");
+  });
+});
+
 describe("cajaParaElEstilo: el estilo de un texto se mide en su ENVOLTORIO (el frame que hace de botón o de píldora)", () => {
   const caja = (x: number, y: number, ancho: number, alto: number) => ({ x, y, ancho, alto });
   const g: GeometriaDelAparato = {
