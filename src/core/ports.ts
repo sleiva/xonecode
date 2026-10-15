@@ -22,7 +22,7 @@ import type {
   ContextoRemoto, EntradaRemota, EstructuraRemota, ManifiestoRemoto,
 } from "./cloudstudio.js";
 import type {
-  DescripcionDelProyecto, FichaDelGestor, GestorDeTareasPort, NuevaTareaEnElGestor, OpcionesDePendientes, ProyectoEncontrado, TareaDelGestor, TransicionDelGestor, Vinculo,
+  ComentarioDelGestor, DescripcionDelProyecto, EstadoDelGestor, FichaDelGestor, GestorDeTareasPort, NuevaTareaEnElGestor, OpcionesDePendientes, ProyectoEncontrado, TareaDelGestor, TransicionDelGestor, Vinculo,
 } from "./gestorDeTareas.js";
 
 /**
@@ -892,9 +892,15 @@ export class GestorDeTareasEnMemoria implements GestorDeTareasPort {
        */
       creaConPrefijo?: string;
       crearFalla?: string;
+      /** Con él, el doble LEE comentarios (por clave; una clave ausente no tiene ninguno). Sin él no tiene el método. */
+      comentarios?: Record<string, ComentarioDelGestor[]>;
+      /** Con él, el doble da los estados del flujo. Sin él no tiene el método. */
+      estados?: EstadoDelGestor[];
     } = {}
   ) {
-    const { encontrados, descripciones, creaConPrefijo, crearFalla } = datos;
+    const { encontrados, descripciones, creaConPrefijo, crearFalla, comentarios, estados } = datos;
+    if (comentarios !== undefined) this.comentarios = async (_v: Vinculo, clave: string) => comentarios[clave] ?? [];
+    if (estados !== undefined) this.estados = async () => estados;
     if (creaConPrefijo !== undefined) {
       this.crear = async (v: Vinculo, nueva: NuevaTareaEnElGestor) => {
         if (crearFalla !== undefined) throw new Error(crearFalla);
@@ -923,6 +929,8 @@ export class GestorDeTareasEnMemoria implements GestorDeTareasPort {
   readonly buscarProyectos?: (texto: string) => Promise<ProyectoEncontrado[]>;
   readonly describirProyecto?: (v: Vinculo) => Promise<DescripcionDelProyecto>;
   readonly crear?: (v: Vinculo, nueva: NuevaTareaEnElGestor) => Promise<TareaDelGestor>;
+  readonly comentarios?: (v: Vinculo, clave: string) => Promise<ComentarioDelGestor[]>;
+  readonly estados?: (v: Vinculo) => Promise<EstadoDelGestor[]>;
   async sitios() { return this.datos.sitios ?? []; }
   async proyectos(sitio: string) { return this.datos.proyectos?.[sitio] ?? []; }
   async pendientes(_v: Vinculo, texto?: string, opciones?: OpcionesDePendientes) {
