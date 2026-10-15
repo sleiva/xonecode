@@ -337,3 +337,34 @@ describe("los bloqueantes van MARCADOS en el informe, y se leen de vuelta", () =
     expect(bloqueantesDelInforme(lineas.join("\n"))).toEqual(["«=» queda TAPADO"]);
   });
 });
+
+/**
+ * La PROPORCIÓN, solo de un botón. Medido en Maset: la caja de «ENTREGAS» en la maqueta es lo que ocupan sus letras y
+ * en el aparato la etiqueta ocupa su ancho asignado: salía «aplastado» y costó otra vuelta al desarrollador.
+ */
+describe("la proporción de un control se compara solo si en la maqueta es un BOTÓN", () => {
+  const maqueta: MaquetaMedida = {
+    ancho: 400,
+    alto: 800,
+    elementos: [
+      { texto: "ENTREGAS", caja: { x: 100, y: 200, ancho: 80, alto: 20 } },
+      { texto: "SALIR", caja: { x: 20, y: 700, ancho: 360, alto: 40 }, boton: true },
+    ],
+  };
+  const aparato: GeometriaDelAparato = {
+    pantalla: { ancho: 1000, alto: 2000 },
+    controles: [
+      // La etiqueta ocupa su ancho asignado: proporción 0,1 frente a 0,25 de las letras de la maqueta.
+      { nombre: "MAP_TIT", texto: "ENTREGAS", tipo: "prop", clase: "L", caja: { x: 250, y: 500, ancho: 600, alto: 50 } },
+      // El botón, en cambio, sale el doble de alto: 0,22 frente a 0,11.
+      { nombre: "BT6", texto: "SALIR", tipo: "prop", clase: "B", caja: { x: 50, y: 1750, ancho: 900, alto: 200 } },
+    ],
+  };
+  const h = compararConMaqueta(maqueta, aparato);
+
+  it("un texto suelto no sale «aplastado»; el botón estirado sí", () => {
+    const todo = h.diferencias.join("\n");
+    expect(todo).not.toMatch(/«ENTREGAS» tiene otra PROPORCIÓN/);
+    expect(todo).toMatch(/«SALIR» tiene otra PROPORCIÓN/);
+  });
+});

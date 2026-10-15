@@ -601,11 +601,14 @@ export function compararConMaqueta(m: MaquetaMedida, g: GeometriaDelAparato, mod
     }
   }
   // PROPORCIÓN de cada control (alto entre ancho): una tecla aplastada o estirada. Si su ANCHO ya se ha
-  // dicho, la proporción es la misma noticia contada otra vez.
+  // dicho, la proporción es la misma noticia contada otra vez. **Solo de un BOTÓN de la maqueta**: la caja de un texto
+  // suelto —o de los de una tarjeta, que se parte— es lo que ocupan sus letras, y en XOne la etiqueta ocupa el ancho
+  // que se le da. Medido en Maset: «ENTREGAS», «LIQUIDACIÓN» e «INCIDENCIAS» salían «aplastados» y el orquestador
+  // mandó otra vuelta al desarrollador por ello.
   if (aproximada) return { bloqueantes, diferencias, notas };
   const yaDichos = new Set(diferencias.filter((d) => d.includes("veces el ancho")).map((d) => d.split(" mide ")[0]));
   parejas.forEach((p, i) => {
-    if (!comparable(i) || yaDichos.has(etiqueta(p.maqueta))) return;
+    if (!comparable(i) || yaDichos.has(etiqueta(p.maqueta)) || p.maqueta.boton !== true) return;
     const pm = p.maqueta.caja.alto / p.maqueta.caja.ancho;
     const pa = p.aparato.caja.alto / p.aparato.caja.ancho;
     if (pm > 0 && Math.abs(pa / pm - 1) > CAMBIO_DE_TAMAÑO && (pa < pm ? pm / pa : pa / pm) > 1.4) {

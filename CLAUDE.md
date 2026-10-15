@@ -345,7 +345,8 @@ Y las guardas del proyecto:
   TEXTOS, no los botones** (`cajasDeMaqueta.ts#medirElementos`): un botón de un solo texto es un elemento con su caja
   (una tecla), uno con varios (una tarjeta) se parte, y lo de fuera de los botones también entra; cada uno dice si es
   botón. Lo que no lo es y no tiene letras es un DATO de ejemplo y no falta; un texto que cae dentro de una imagen del
-  aparato está DIBUJADO en ella (un logo) y no falta; y la alineación solo se compara con caja propia. La función se
+  aparato está DIBUJADO en ella (un logo) y no falta; y la alineación solo se compara con caja propia. **Y la PROPORCIÓN, solo de un botón**: la caja de un texto suelto o de una tarjeta es lo que ocupan
+  sus letras, y en XOne la etiqueta ocupa su ancho asignado (medido en Maset: tres títulos «aplastados» costaron otra vuelta). La función se
   inyecta con `toString()`, y bajo `tsx` esbuild mete `__name(…)`: el script lo define, o la medida no vuelve. Un
   BLOQUEANTE (tapado por una barra, fuera de pantalla) fuerza el rojo aunque el modelo diga verde. Lo
   medido y lo opinado van SEPARADOS, y al modelo se le pasan los hechos para que se centre en lo que
