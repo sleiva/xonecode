@@ -294,10 +294,10 @@ export function TareasDelProyecto({
 }
 
 /**
- * Una tarea del HISTÓRICO: sin acciones —ya se entregó—, solo lo que hizo. Cuándo empezó y cuándo acabó (no
- * «cuánto tardó»: entre las dos cuenta también el tiempo que pasó en pausa esperando una respuesta), cómo se
- * entregó (la MISMA `EntregaDeTarea` de la otra pestaña), lo último que contestó el agente —su resumen, pedido al
- * desplegar— y la puerta a su conversación entera con sus artefactos, de solo lectura.
+ * Una tarea del HISTÓRICO, en UNA línea: punto, título, cuándo empezó y acabó (no «cuánto tardó»: entre las dos cuenta
+ * también la pausa esperando respuesta) y cómo se entregó (la MISMA `EntregaDeTarea` de la otra pestaña), y a la
+ * derecha lo que se puede MIRAR —qué hizo, el encargo, su conversación con los artefactos—. Sin acciones: ya se
+ * entregó. Lo desplegado va debajo, a todo el ancho, y uno a la vez; lo plegado se DESMONTA.
  */
 function FilaFinalizada({
   tarea: t,
@@ -308,8 +308,8 @@ function FilaFinalizada({
   alLeer?: (tarea: TareaDelCable) => void;
   alPedirUltimaRespuesta?: (tarea: TareaDelCable) => Promise<{ texto?: string; error?: string }>;
 }) {
-  const [verEncargo, setVerEncargo] = useState(false);
-  /** Lo que contestó: ausente = sin pedir, `pidiendo` mientras llega. */
+  const [abierto, setAbierto] = useState<"hizo" | "encargo" | undefined>(undefined);
+  /** Lo que contestó: ausente = sin pedir, `pidiendo` mientras llega. Se pide UNA vez, al desplegarlo. */
   const [respuesta, setRespuesta] = useState<{ texto?: string; error?: string } | "pidiendo" | undefined>(undefined);
   const empezo = t.empezada === undefined ? undefined : selloDeFecha(t.empezada);
   const acabo = t.acabada === undefined ? undefined : selloDeFecha(t.acabada);
@@ -318,57 +318,62 @@ function FilaFinalizada({
   );
   // Sin conversación no hay nada que releer: la sesión solo sobrevive si quedó algo abrible.
   const conConversacion = t.sesion !== undefined;
+  const alternar = (cual: "hizo" | "encargo"): void => {
+    const abrir = abierto !== cual;
+    setAbierto(abrir ? cual : undefined);
+    if (abrir && cual === "hizo" && respuesta === undefined && alPedirUltimaRespuesta !== undefined) {
+      setRespuesta("pidiendo");
+      void alPedirUltimaRespuesta(t).then(setRespuesta, () => setRespuesta({ error: "el envío falló" }));
+    }
+  };
   return (
-    <li className={estilos.fila} data-estado={t.estado}>
-      <span className={estilos.punto} aria-hidden="true" />
-      <div className={estilos.cuerpo}>
-        <div className={estilos.cabecera}>
-          <span className={estilos.titulo}>{t.titulo}</span>
-          <span className={estilos.etiquetaEstado}>{ETIQUETA_DE_ESTADO[t.estado]}</span>
+    <li className={estilos.finalizada} data-estado={t.estado}>
+      <div className={estilos.lineaFinalizada}>
+        <span className={estilos.punto} aria-hidden="true" />
+        <span className={estilos.tituloFinalizada}>{t.titulo}</span>
+        <div className={estilos.meta}>
+          {fechas.length === 0 ? null : <span>{fechas.join(" · ")}</span>}
+          <EntregaDeTarea tarea={t} />
         </div>
-        {fechas.length === 0 ? null : <p className={estilos.fechas}>{fechas.join(" · ")}</p>}
-        <EntregaDeTarea tarea={t} />
-        {conConversacion && alPedirUltimaRespuesta !== undefined ? (
-          <details
-            className={estilos.contenido}
-            onToggle={(e) => {
-              if (!(e.currentTarget as HTMLDetailsElement).open || respuesta !== undefined) return;
-              setRespuesta("pidiendo");
-              void alPedirUltimaRespuesta(t).then(setRespuesta, () => setRespuesta({ error: "el envío falló" }));
-            }}
-          >
-            <summary>Qué hizo</summary>
-            {respuesta === undefined ? null : respuesta === "pidiendo" ? (
-              <p className={estilos.aviso}>Leyendo su conversación…</p>
-            ) : respuesta.error !== undefined ? (
-              <p className={estilos.motivo}>{`No se pudo leer su conversación: ${respuesta.error}`}</p>
-            ) : respuesta.texto === undefined ? (
-              <p className={estilos.aviso}>No consta ninguna respuesta del agente en su conversación.</p>
-            ) : (
-              // Es la respuesta del agente: markdown, como en el chat (con los dólares protegidos).
-              <div className={estilos.respuesta}>
-                <MarkdownText text={protegerDolares(respuesta.texto)} codeLabels={ETIQUETAS_DE_CODIGO} />
-              </div>
-            )}
-          </details>
-        ) : null}
-        <details className={estilos.contenido} onToggle={(e) => setVerEncargo((e.currentTarget as HTMLDetailsElement).open)}>
-          <summary>Ver el encargo</summary>
-          {verEncargo ? (
-            <>
-              {t.adjuntos.length > 0 ? <p className={estilos.adjuntosDeTarea}>{`Adjuntos: ${t.adjuntos.map((a) => a.nombre).join(", ")}`}</p> : null}
-              <p className={estilos.encargo}>{t.encargo}</p>
-            </>
+        <div className={estilos.mirar}>
+          {conConversacion && alPedirUltimaRespuesta !== undefined ? (
+            <button type="button" className={estilos.plegable} aria-expanded={abierto === "hizo"} onClick={() => alternar("hizo")}>
+              Qué hizo
+            </button>
           ) : null}
-        </details>
-        {!conConversacion ? (
-          <p className={estilos.aviso}>Su conversación no se guardó: no hay historial ni artefactos que abrir.</p>
-        ) : alLeer === undefined ? null : (
-          <button type="button" className={estilos.leer} onClick={() => alLeer(t)}>
-            Ver la conversación y sus artefactos
+          <button type="button" className={estilos.plegable} aria-expanded={abierto === "encargo"} onClick={() => alternar("encargo")}>
+            Encargo
           </button>
-        )}
+          {!conConversacion ? (
+            <span className={estilos.sinConversacion}>Sin conversación guardada</span>
+          ) : alLeer === undefined ? null : (
+            <button type="button" className={estilos.leer} onClick={() => alLeer(t)}>
+              Conversación y artefactos
+            </button>
+          )}
+        </div>
       </div>
+      {abierto === "hizo" ? (
+        <div className={estilos.desplegado}>
+          {respuesta === undefined || respuesta === "pidiendo" ? (
+            <p className={estilos.aviso}>Leyendo su conversación…</p>
+          ) : respuesta.error !== undefined ? (
+            <p className={estilos.motivo}>{`No se pudo leer su conversación: ${respuesta.error}`}</p>
+          ) : respuesta.texto === undefined ? (
+            <p className={estilos.aviso}>No consta ninguna respuesta del agente en su conversación.</p>
+          ) : (
+            // Es la respuesta del agente: markdown, como en el chat (con los dólares protegidos).
+            <div className={estilos.respuesta}>
+              <MarkdownText text={protegerDolares(respuesta.texto)} codeLabels={ETIQUETAS_DE_CODIGO} />
+            </div>
+          )}
+        </div>
+      ) : abierto === "encargo" ? (
+        <div className={estilos.desplegado}>
+          {t.adjuntos.length > 0 ? <p className={estilos.adjuntosDeTarea}>{`Adjuntos: ${t.adjuntos.map((a) => a.nombre).join(", ")}`}</p> : null}
+          <p className={estilos.encargo}>{t.encargo}</p>
+        </div>
+      ) : null}
     </li>
   );
 }

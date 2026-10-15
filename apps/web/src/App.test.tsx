@@ -4078,7 +4078,7 @@ describe("App: una tarea finalizada se lee con su conversación y sus artefactos
   it("«Ver la conversación y sus artefactos» la LEE: sin escribir, con su título y los artefactos de SU carpeta", async () => {
     const { enviar } = conUnaFinalizada();
     enviar.mockClear();
-    fireEvent.click(screen.getByRole("button", { name: "Ver la conversación y sus artefactos" }));
+    fireEvent.click(screen.getByRole("button", { name: "Conversación y artefactos" }));
     expect(enviar).toHaveBeenCalledWith({ clase: "leerSesion", proyecto: "p1", sesion: "s-tarea" });
     // Nunca se abre para escribir: eso soltaría la conversación abierta por la de la tarea.
     expect(enviar).not.toHaveBeenCalledWith(expect.objectContaining({ clase: "sesion" }));
@@ -4095,9 +4095,7 @@ describe("App: una tarea finalizada se lee con su conversación y sus artefactos
 
   it("«Qué hizo» enseña la última respuesta del agente, como markdown", async () => {
     conUnaFinalizada();
-    const detalles = screen.getByText("Qué hizo").closest("details")!;
-    detalles.open = true;
-    fireEvent(detalles, new Event("toggle"));
+    fireEvent.click(screen.getByRole("button", { name: "Qué hizo" }));
     expect(await screen.findByText(/Hecho: la versión sale bajo el logo/)).toBeTruthy();
   });
 
@@ -4111,7 +4109,7 @@ describe("App: una tarea finalizada se lee con su conversación y sus artefactos
 
   it("«Cerrar» vuelve a Tareas → Finalizadas, no al Resumen; y eso se gasta al volver", async () => {
     const { store } = conUnaFinalizada();
-    fireEvent.click(screen.getByRole("button", { name: "Ver la conversación y sus artefactos" }));
+    fireEvent.click(screen.getByRole("button", { name: "Conversación y artefactos" }));
     expect(await screen.findByText("añade la versión al login")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
     expect(screen.getByRole("tab", { name: "Tareas" }).getAttribute("aria-selected")).toBe("true");

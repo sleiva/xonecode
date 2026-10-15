@@ -394,12 +394,12 @@ describe("TareasDelProyecto: ver lo que hace una tarea en proceso", () => {
       // «empezó … · acabó …», nunca un «tardó» que contaría también la pausa.
       expect(screen.getByText(/empezó .* · acabó /)).toBeTruthy();
       expect(screen.queryByText(/tardó/)).toBeNull();
-      const botones = screen.getAllByRole("button", { name: "Ver la conversación y sus artefactos" });
+      const botones = screen.getAllByRole("button", { name: "Conversación y artefactos" });
       expect(botones).toHaveLength(2);
       fireEvent.click(botones[0]!);
       expect(leidas).toEqual(["nueva"]);
       // La que no guardó conversación lo dice, en vez de un botón que no abre nada.
-      expect(screen.getByText(/Su conversación no se guardó/)).toBeTruthy();
+      expect(screen.getByText("Sin conversación guardada")).toBeTruthy();
     });
 
     it("«Qué hizo» pide la última respuesta al desplegar, y una sola vez", async () => {
@@ -407,15 +407,26 @@ describe("TareasDelProyecto: ver lo que hace una tarea en proceso", () => {
       render(<TareasDelProyecto tareas={cola()} alPedirUltimaRespuesta={pedida} />);
       fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
       expect(pedida).not.toHaveBeenCalled();
-      const detalles = screen.getAllByText("Qué hizo")[0]!.closest("details")!;
-      detalles.open = true;
-      fireEvent(detalles, new Event("toggle"));
+      const boton = screen.getAllByRole("button", { name: "Qué hizo" })[0]!;
+      fireEvent.click(boton);
+      expect(boton.getAttribute("aria-expanded")).toBe("true");
       expect(await screen.findByText("Añadí la versión al Login.")).toBeTruthy();
-      detalles.open = false;
-      fireEvent(detalles, new Event("toggle"));
-      detalles.open = true;
-      fireEvent(detalles, new Event("toggle"));
+      // Plegado se desmonta, y volver a abrirlo no lo pide otra vez.
+      fireEvent.click(boton);
+      expect(screen.queryByText("Añadí la versión al Login.")).toBeNull();
+      fireEvent.click(boton);
+      expect(screen.getByText("Añadí la versión al Login.")).toBeTruthy();
       expect(pedida).toHaveBeenCalledTimes(1);
+    });
+
+    it("el encargo se despliega debajo, uno a la vez con «Qué hizo»", () => {
+      render(<TareasDelProyecto tareas={[tarea({ id: "x", estado: "terminada", sesion: "s", encargo: "El encargo entero" })]} alPedirUltimaRespuesta={async () => ({})} />);
+      fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
+      expect(screen.queryByText("El encargo entero")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Encargo" }));
+      expect(screen.getByText("El encargo entero")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Qué hizo" }));
+      expect(screen.queryByText("El encargo entero")).toBeNull();
     });
 
     it("sin ninguna terminada, «Finalizadas» lo dice con palabras", () => {

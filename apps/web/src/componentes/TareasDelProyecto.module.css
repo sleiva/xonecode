@@ -292,24 +292,117 @@
   font-weight: 600;
 }
 
-/* Cuándo empezó y acabó una finalizada: dato secundario, debajo del título. */
-.fechas {
-  margin: 4px 0 0;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
-}
-
-/* La puerta a su conversación y artefactos: el botón secundario de siempre. */
-.leer {
-  composes: secundario from "./Boton.module.css";
-  align-self: flex-start;
-  margin-top: 8px;
-}
-
 /* Lo último que contestó el agente, en markdown: el mismo texto del chat, a la medida de la fila. */
 .respuesta {
   margin-top: 6px;
   color: var(--dsw-alias-label-primary);
   font-size: 12px;
   line-height: 1.6;
+}
+
+/* Una FINALIZADA: una línea fina que aprovecha el ancho —punto, título, fechas y entrega, y lo que se puede mirar a
+   la derecha—; en un panel estrecho se parte sola. Lo desplegado, debajo y a todo el ancho. */
+.finalizada {
+  padding: 7px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.lineaFinalizada {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.finalizada .punto {
+  margin-top: 0;
+  border-color: var(--dsw-alias-state-success-primary);
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.tituloFinalizada {
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Fechas y entrega, en la misma línea y en segundo plano. Lo de `EntregaDeTarea` se aplana aquí: en la otra pestaña
+   va en bloque bajo el título. */
+.meta {
+  display: flex;
+  flex: 1 1 280px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+  min-width: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.meta > div {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin: 0;
+}
+
+.mirar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+/* «Qué hizo» / «Encargo»: texto con un triángulo que gira, el mismo gesto que un `<summary>`. */
+.plegable {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.plegable::before {
+  content: "▸";
+  transition: transform 120ms;
+}
+
+.plegable[aria-expanded="true"]::before {
+  transform: rotate(90deg);
+}
+
+.plegable:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* La puerta a su conversación y artefactos: el botón secundario de siempre. */
+.leer {
+  composes: secundario from "./Boton.module.css";
+}
+
+.sinConversacion {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.desplegado {
+  margin: 6px 0 2px 18px;
+  padding-top: 6px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  font-size: 12px;
+}
+
+.desplegado .encargo,
+.desplegado .adjuntosDeTarea {
+  margin-top: 0;
 }
