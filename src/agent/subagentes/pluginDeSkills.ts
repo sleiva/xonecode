@@ -115,6 +115,17 @@ export function montarPluginDeSkills(opciones: { casa?: string; raiz?: string } 
 }
 
 /**
+ * Las skills que el hijo de Claude Code puede VER y usar (la opción `skills` del SDK): las de su `.md`, con el nombre que
+ * les da el plugin (`xonecode:<nombre>`). Sin plugin montado, ninguna. Omitir la opción «no es skills off» (su propia
+ * documentación): el hijo veía TODAS las que descubre, también las del usuario en `~/.claude` y las de sus plugins.
+ * Es un filtro de contexto, no un candado: los ficheros de las demás siguen en el disco, y leerlos lo niega
+ * `veredictoDeLectura` (fuera del proyecto y de las carpetas de las skills montadas).
+ */
+export function skillsVisiblesDelHijo(skills: readonly string[] | undefined, conPlugin: boolean): string[] {
+  return conPlugin ? (skills ?? []).map((s) => `${NOMBRE_DEL_PLUGIN}:${s}`) : [];
+}
+
+/**
  * Las carpetas que un hijo de Claude Code puede LEER de las skills montadas: de cada una, su enlace dentro del plugin
  * (`<plugin>/skills/<nombre>`, que es la ruta que el motor le enseña) y su carpeta REAL. Las dos hacen falta:
  * `dentroDeUnaLectura` compara el texto de la ruta Y su camino real, y el plugin usa ENLACES, así que una lectura por el

@@ -238,9 +238,12 @@ Y las guardas del proyecto:
   `skills.paths` de la configuración que ya reescribimos en cada arranque. Ninguna de las dos
   escribe dentro del PROYECTO. **Codex se queda fuera**: sus skills vienen de su propio sistema de
   plugins.
-- **La tool `Skill` está en la lista de LECTURA de los motores externos**: no pasamos la opción
-  `skills` del SDK (omitirla no es skills off). Entra como lectura porque mete instrucciones en el
-  contexto, y lo que MANDE hacer vuelve a pasar por el mismo hook. **Y el hijo de Claude Code LEE la carpeta entera
+- **La tool `Skill` está en la lista de LECTURA de los motores externos**: entra como lectura porque mete
+  instrucciones en el contexto, y lo que MANDE hacer vuelve a pasar por el mismo hook. **Y el hijo de Claude Code ve
+  SOLO las skills de su `.md`, y ningún MCP** (`skills` del SDK con `skillsVisiblesDelHijo`, `xonecode:<nombre>`;
+  `strictMcpConfig`): omitir `skills` no es «skills off» —medido, el hijo veía y nombraba las del usuario y las de sus
+  plugins—, y con sus ajustes cargados arrancaba sus MCP (en Maset, un Playwright y el de XOne). Es un filtro de
+  contexto: los ficheros de las demás los cierra `veredictoDeLectura`. **Y el hijo de Claude Code LEE la carpeta entera
   de cada skill montada** (sus `references/`), no solo el `SKILL.md` (`pluginDeSkills.ts#carpetasDeLecturaDeSkills`,
   sumadas a las lecturas de las DOS llaves por `lecturasDelHijo`): por el enlace del plugin y por la ruta real,
   comprobado por texto y por camino real, y nada más de fuera. Antes se negaba a propósito y salió caro: medido en

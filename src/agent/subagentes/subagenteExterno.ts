@@ -37,7 +37,7 @@ import { codexDisponible, correrCodex } from "./subagenteCodex.js";
 import { correrOpencode, opencodeDisponible } from "./subagenteOpencode.js";
 import { consumoDeClaude } from "./consumoExterno.js";
 import { mensajeSeguro } from "../../core/trazaDeErrores.js";
-import { carpetasDeLecturaDeSkills, montarPluginDeSkills } from "./pluginDeSkills.js";
+import { carpetasDeLecturaDeSkills, montarPluginDeSkills, skillsVisiblesDelHijo } from "./pluginDeSkills.js";
 import {
   claseDeToolExterna,
   decisionDePreToolUse,
@@ -512,6 +512,14 @@ export function crearSubagenteExterno(opciones: {
          * al escribir en la casa del usuario no puede llevarse por delante el turno.
          */
         ...(pluginDeSkills === undefined ? {} : { plugins: [{ type: "local" as const, path: pluginDeSkills }] }),
+        /**
+         * **Y SOLO esas skills, y ningún MCP.** Sin `skills` el hijo veía también las del usuario (`~/.claude`, sus
+         * plugins), y con `settingSources: ["user"]` arrancaba sus MCP —medido en una tarea de Maset: un Playwright y el
+         * de XOne, que escribe en CloudStudio—. Las tools MCP ya las denegaba el hook (no están en ninguna lista), pero
+         * se arrancaban y ocupaban su contexto. `strictMcpConfig` con ningún `mcpServers` deja fuera todos.
+         */
+        skills: skillsVisiblesDelHijo(peticion.skills, pluginDeSkills !== undefined),
+        strictMcpConfig: true,
         // El modelo del PRODUCTO, si el `.md` lo pide. Ausente = el que Claude Code use
         // por su cuenta, que es lo que hacía siempre. Los alias (`opus`, `sonnet`…) son
         // los que su propio SDK documenta, y se prefieren a un id pinchado: sobreviven a

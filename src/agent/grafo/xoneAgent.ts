@@ -484,6 +484,8 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
             // «alguien quiere escribir». Es el papel del `[dev]` que `hitlDe` mete en la
             // descripción de un interrupt del grafo.
             agente: agente.nombre,
+            // Las skills de su `.md` que existen: Claude Code solo verá éstas (`subagenteExterno.ts`).
+            skills: repartirSkills(agente, catalogoDeSkills).suyas,
             // La cancelación del turno, si la librería la propaga hasta aquí: con ella, Parar MATA
             // al hijo en vez de dejarlo escribiendo con el turno cerrado. Sin ella, lo de antes.
             ...(config?.signal === undefined ? {} : { senal: config.signal }),

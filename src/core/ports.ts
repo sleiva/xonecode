@@ -280,6 +280,11 @@ export interface PeticionExterna {
    * Claude Code (`core/comandoExterno.ts`). Ausente —cualquier otro— es que `Bash` se deniega.
    */
   ejecucion?: EjecucionExterna;
+  /**
+   * Las skills de su `.md` que EXISTEN (`repartirSkills(...).suyas`), por su nombre a secas. Claude Code solo ve y usa
+   * éstas (`skills` del SDK, con el prefijo del plugin): sin la lista veía también las del usuario. Ausente = ninguna.
+   */
+  skills?: readonly string[];
 }
 
 /** Lo que un agente externo con ejecución puede correr y leer, y con qué entorno. */

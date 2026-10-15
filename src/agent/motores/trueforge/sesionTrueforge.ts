@@ -1161,6 +1161,7 @@ export async function abrirSesionTrueforge(
             ...(agente.modelo === undefined ? {} : { modelo: agente.modelo }),
             permitirEscritura: !agente.soloLectura,
             agente: agente.nombre,
+            skills: repartirSkills(agente, disponibles).suyas,
             ...(ejecucion === undefined ? {} : { ejecucion }),
           }),
           senal: () => aborto?.signal,
