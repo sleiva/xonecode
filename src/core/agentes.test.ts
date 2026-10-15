@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  avisoDeEjecucionConCarpetas,
+  conLoQueLaVentanaNoEdita,
   escribirAgente,
   fusionarAgentes,
   leerAgente,
@@ -481,5 +483,32 @@ describe("el campo `espera` de un subagente", () => {
       const r = con(l);
       expect("agente" in r && r.agente.espera).toBeUndefined();
     }
+  });
+});
+
+describe("lo que la ventana de Ajustes no edita se conserva al guardar", () => {
+  const previo = { escribeEn: ["/icons/"], llama: ["device-controller"], espera: ["designer-xone"], pensamiento: "apagado" as const, descripcion: "vieja" };
+
+  it("toma del agente de antes los campos que el cable no trae", () => {
+    expect(conLoQueLaVentanaNoEdita(previo, { descripcion: "nueva" })).toEqual({
+      escribeEn: ["/icons/"], llama: ["device-controller"], espera: ["designer-xone"], pensamiento: "apagado", descripcion: "nueva",
+    });
+  });
+
+  it("lo que SÍ trae el cable manda, y un alta va tal cual", () => {
+    expect(conLoQueLaVentanaNoEdita(previo, { llama: ["otro"] }).llama).toEqual(["otro"]);
+    expect(conLoQueLaVentanaNoEdita(undefined, { descripcion: "x" })).toEqual({ descripcion: "x" });
+  });
+
+  it("solo esos campos: nada más del agente de antes se cuela", () => {
+    expect(conLoQueLaVentanaNoEdita({ ejecucion: true, skills: ["a"] }, {})).toEqual({});
+  });
+});
+
+describe("shell con `escribeEn`: un límite que la shell no respeta", () => {
+  it("se dice solo con las dos cosas", () => {
+    expect(avisoDeEjecucionConCarpetas({ ejecucion: true, escribeEn: ["/icons/", "/fonts/"] })).toContain("limitado a /icons/, /fonts/");
+    expect(avisoDeEjecucionConCarpetas({ ejecucion: true })).toBeUndefined();
+    expect(avisoDeEjecucionConCarpetas({ escribeEn: ["/icons/"] })).toBeUndefined();
   });
 });

@@ -31,6 +31,7 @@ import {
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
+  avisoDeEjecucionConCarpetas,
   escribirAgente,
   fusionarAgentes,
   leerAgente,
@@ -102,6 +103,8 @@ export function leerCarpetaDeAgentes(carpeta: string, origen: Agente["origen"]):
           (sugerido === undefined ? ". Renómbralo." : `. Renómbralo a \`${sugerido}\`.`)
       );
     }
+    const shellSinLimite = avisoDeEjecucionConCarpetas(r.agente);
+    if (shellSinLimite !== undefined) problemas.push(`${fichero}: ${shellSinLimite}`);
     agentes.push(r.agente);
   }
   return { agentes, problemas };
@@ -145,10 +148,33 @@ export function cargarAgentes(raizDelProyecto?: string): Carga {
       ? `${nombre}.md: se ha retirado —ese agente se llama ahora \`${ahoraSeLlama}\`— y el nuevo ya está sembrado.`
       : `${nombre}.md: ese agente se llama ahora \`${ahoraSeLlama}\`, y el tuyo se respeta. Bórralo si quieres quedarte solo con el de serie.`
   );
+  const agentes = marcarSemilla(fusionarAgentes(global.agentes, proyecto.agentes), desactualizados);
   return {
-    agentes: marcarSemilla(fusionarAgentes(global.agentes, proyecto.agentes), desactualizados),
-    problemas: [...renombrados, ...global.problemas, ...proyecto.problemas],
+    agentes,
+    problemas: [...renombrados, ...global.problemas, ...proyecto.problemas, ...camposPerdidos(agentes)],
   };
+}
+
+/**
+ * Un de serie EDITADO al que le faltan campos que el de serie trae y la ventana no edita: los borraba el guardado de
+ * Ajustes antes de que los conservara (`core/agentes.ts#CAMPOS_FUERA_DE_LA_VENTANA`). Un `.md` así sigue cargando y su
+ * tarjeta solo dice «editado», pero ha perdido su límite de carpetas o su bucle: se dice con el arreglo, restaurarlo.
+ */
+function camposPerdidos(agentes: readonly AgenteCargado[]): string[] {
+  return agentes.flatMap((a) => {
+    if (a.semilla !== "modificada") return [];
+    const deSerie = AGENTES_DE_SERIE.find((s) => s.nombre === a.nombre);
+    if (deSerie === undefined) return [];
+    const faltan = (["escribeEn", "llama", "espera"] as const).filter(
+      (campo) => (deSerie[campo] ?? []).length > 0 && (a[campo] ?? []).length === 0
+    );
+    return faltan.length === 0
+      ? []
+      : [
+          `${a.nombre}.md: le falta ${faltan.map((c) => `\`${c}\``).join(" y ")}, que el de serie trae y la ventana de Ajustes ` +
+            "borraba al guardar. Restáuralo y vuelve a hacer tus cambios.",
+        ];
+  });
 }
 
 /** ¿Es uno de los que trae xonecode? La guarda del `borrar`, y la lista de la pantalla. */

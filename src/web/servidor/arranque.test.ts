@@ -4156,6 +4156,54 @@ describe("los subagentes, por el cable", () => {
     expect(lista.find((a) => a.nombre === "consultant-xone")?.semilla).toBe("intacta");
   });
 
+  /**
+   * Lo que la ventana NO edita no viaja, y el guardado lo BORRABA (Maset): el diseñador perdió `escribeEn` y cualquier
+   * edición del desarrollador le quitaba `llama` y `espera`. Por el cable de verdad, contra la siembra de verdad.
+   */
+  it("guardar desde Ajustes conserva `llama`, `espera` y `escribeEn`, que la ventana no enseña", async () => {
+    const dir = carpeta();
+    if (dir === undefined) return;
+    const { accion } = await conectar();
+    const antes = readFileSync(join(dir, "developer-xone.md"), "utf8");
+    expect(antes).toMatch(/^llama: \[.+\]$/m);
+    expect(antes).toMatch(/^espera: \[.+\]$/m);
+
+    await enviarMensaje(accion, {
+      clase: "agente",
+      accion: "guardar",
+      ambito: "global",
+      agente: { ...deSerie(), nombre: "developer-xone", soloLectura: false, descripcion: "afinado desde Ajustes" },
+    });
+    await enviarMensaje(accion, {
+      clase: "agente",
+      accion: "guardar",
+      ambito: "global",
+      agente: { ...deSerie(), nombre: "designer-xone", soloLectura: false, ejecucion: true },
+    });
+    await asentar();
+
+    const despues = readFileSync(join(dir, "developer-xone.md"), "utf8");
+    expect(despues).toContain("afinado desde Ajustes");
+    expect(despues.match(/^llama: .*$/m)?.[0]).toBe(antes.match(/^llama: .*$/m)?.[0]);
+    expect(despues.match(/^espera: .*$/m)?.[0]).toBe(antes.match(/^espera: .*$/m)?.[0]);
+    expect(readFileSync(join(dir, "designer-xone.md"), "utf8")).toMatch(/^escribeEn: \[\/icons\/, \/fonts\/\]$/m);
+  });
+
+  it("un agente con shell y con `escribeEn` se DICE en la lista: la shell no respeta ese límite", async () => {
+    const dir = carpeta();
+    if (dir === undefined) return;
+    const { accion, cliente } = await conectar();
+    await enviarMensaje(accion, {
+      clase: "agente",
+      accion: "guardar",
+      ambito: "global",
+      agente: { ...deSerie(), nombre: "designer-xone", soloLectura: false, ejecucion: true },
+    });
+    await asentar();
+    const ultimo = cliente.recibidos.filter((m) => m.clase === "agentes").at(-1) as { problemas: string[] };
+    expect(ultimo.problemas.join("\n")).toMatch(/designer-xone\.md: ejecuta comandos y además está limitado a \/icons\/, \/fonts\//);
+  });
+
   it("un `borrar` de uno de serie se RECHAZA, y su `.md` sigue ahí", async () => {
     // La guarda vive en el servidor y no solo en el cliente, que le esconde el icono:
     // esconderlo es presentación, y este mensaje lo puede mandar cualquiera que hable por el

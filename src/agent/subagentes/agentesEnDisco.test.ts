@@ -1074,3 +1074,18 @@ describe("la ficha de device-controller no encarga capturas de oficio", () => {
     if (/captura/i.test(d)) expect(d).toMatch(/captura[\s\S]*?(solo si|VISUAL)/i);
   });
 });
+
+describe("un de serie que perdió campos al guardarse desde Ajustes", () => {
+  it("se dice con el arreglo; intacto, no", async () => {
+    const { cargarAgentes } = await import("./agentesEnDisco.js");
+    const { homedir } = await import("node:os");
+    const carpeta = join(homedir(), ".xonecode", "agentes");
+    cargarAgentes();
+    expect(cargarAgentes().problemas.join("\n")).not.toContain("le falta");
+    const fichero = join(carpeta, "designer-xone.md");
+    writeFileSync(fichero, readFileSync(fichero, "utf8").replace(/^escribeEn: .*\n/m, "ejecucion: true\n"), "utf8");
+    expect(cargarAgentes().problemas).toContain(
+      "designer-xone.md: le falta `escribeEn`, que el de serie trae y la ventana de Ajustes borraba al guardar. Restáuralo y vuelve a hacer tus cambios."
+    );
+  });
+});

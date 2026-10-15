@@ -708,6 +708,42 @@ export function fusionarAgentes<T extends Agente>(global: readonly T[], proyecto
   return [...porNombre.values()].sort((a, b) => a.nombre.localeCompare(b.nombre));
 }
 
+/**
+ * Los campos del `.md` que la ventana de Ajustes NO enseña ni edita: no viajan por el cable, así que un guardado desde
+ * allí llegaba sin ellos y `escribirAgente` los BORRABA en silencio. Medido en Maset: el diseñador perdió `escribeEn`
+ * —lo único que lo confina a `icons/` y `fonts/`— y cualquier edición del desarrollador le quitaba `llama` y `espera`,
+ * el bucle con el de pruebas. El guardado los toma del agente que ya había (`conLoQueLaVentanaNoEdita`).
+ */
+export const CAMPOS_FUERA_DE_LA_VENTANA = ["escribeEn", "llama", "espera", "pensamiento"] as const;
+
+/**
+ * El agente que llega de la ventana, con los campos que ella no edita tomados del que ya había. Lo que SÍ trae el
+ * cable manda: el día que la ventana edite uno de ellos, su valor gana sin tocar esto. Sin `previo` (un alta), tal cual.
+ */
+export function conLoQueLaVentanaNoEdita<T extends Partial<Agente>>(previo: Partial<Agente> | undefined, nuevo: T): T {
+  if (previo === undefined) return nuevo;
+  const conservados: Partial<Agente> = {};
+  for (const campo of CAMPOS_FUERA_DE_LA_VENTANA) {
+    if (previo[campo] !== undefined && !(campo in nuevo)) (conservados as Record<string, unknown>)[campo] = previo[campo];
+  }
+  return { ...conservados, ...nuevo };
+}
+
+/**
+ * Un agente con SHELL y con `escribeEn` promete un confinamiento que no tiene: la shell no pasa por `permisosDe`, y a
+ * quien ejecuta se le quitan `write_file`/`edit_file`, así que lo que escriba lo escribe por la shell, en cualquier
+ * carpeta y sin aprobación. Medido en Maset: el diseñador con la casilla marcada escribió sus SVG con `echo` en cmd.exe.
+ * Se DICE al cargar (no se rechaza: haría desaparecer un subagente que funciona).
+ */
+export function avisoDeEjecucionConCarpetas(a: Pick<Agente, "ejecucion" | "escribeEn">): string | undefined {
+  if (a.ejecucion !== true || (a.escribeEn ?? []).length === 0) return undefined;
+  return (
+    `ejecuta comandos y además está limitado a ${a.escribeEn!.join(", ")}: la shell no respeta ese límite, y a quien ` +
+    "ejecuta se le quitan las tools de escribir ficheros, así que escribirá por la shell, en cualquier carpeta y sin " +
+    "aprobación. Quita «Ejecuta comandos» o, si es uno de serie, restáuralo."
+  );
+}
+
 /** El `.md` de un agente, para escribirlo. Lo inverso de `leerAgente`. */
 export function escribirAgente(agente: Agente): string {
   const campos = [

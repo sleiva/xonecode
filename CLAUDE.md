@@ -484,6 +484,12 @@ ejecuta si es Claude Code, con la shell ESTRECHA (ver abajo). Reglas duras:
 - **De QUIÉN es un `.md` viaja por el cable, y no es su carpeta** (`AgenteCargado.semilla`): tres
   estados —ausente, `intacta`, `modificada`—, porque `origen` (la carpeta) no basta: un subagente
   propio también vive en la global. La regla es «de serie Y del GLOBAL».
+- **Guardar desde Ajustes CONSERVA lo que la ventana no edita** (`core/agentes.ts#conLoQueLaVentanaNoEdita`,
+  `CAMPOS_FUERA_DE_LA_VENTANA`: `escribeEn`, `llama`, `espera`, `pensamiento`). No viajan por el cable, y el guardado los
+  BORRABA: medido en Maset, el diseñador perdió su límite de carpetas y, con «Ejecuta comandos» marcado, escribió sus
+  SVG por la shell. El servidor los toma del agente que la persona tenía delante. Dos avisos en la lista, por
+  `problemas`: un agente con shell y `escribeEn` (`avisoDeEjecucionConCarpetas`: la shell no respeta ese límite y se le
+  quitan las tools de escribir), y un de serie editado al que ya le faltan (`camposPerdidos`), con el arreglo, restaurarlo.
 - **Un de serie no se BORRA: se RESTAURA** (`restaurarAgente`, `accion: "restaurar"`). Borrarlo no
   devolvía el de serie (la marca recuerda que se entregó). `restaurarAgente` no escribe la marca:
   la reanota la siembra siguiente. «Este de serie está editado» ya no va por `problemas` (que

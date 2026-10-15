@@ -38,7 +38,7 @@ import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { homedir } from "node:os";
 import type { Acto } from "../../core/actos.js";
-import { escribirAgente, leerAgente, motivoDeNombreInaceptable, type Agente } from "../../core/agentes.js";
+import { conLoQueLaVentanaNoEdita, escribirAgente, leerAgente, motivoDeNombreInaceptable, type Agente } from "../../core/agentes.js";
 import {
   motivoDeNombreDeSkillInaceptable,
   nombreDeSkillSugerido,
@@ -1714,11 +1714,17 @@ export function montarRutas(
         // mismo fichero que se puede editar a mano, así que el cargador es la única
         // autoridad sobre si vale. Si no pasara, el agente desaparecería al siguiente
         // arranque sin que nadie hubiera hecho nada raro.
-        const candidato = {
+        /**
+         * Los campos que la ventana no edita (`escribeEn`, `llama`, `espera`, `pensamiento`) no viajan por el cable: se
+         * toman del agente que la persona tenía DELANTE —el en vigor con ese nombre, o el de antes en un renombrado—, o
+         * el guardado los borraría (`core/agentes.ts#conLoQueLaVentanaNoEdita`).
+         */
+        const previo = cargarAgentes(abierto?.raiz).agentes.find((a) => a.nombre === (renombrandoDe ?? mensaje.agente.nombre));
+        const candidato = conLoQueLaVentanaNoEdita(previo, {
           ...mensaje.agente,
           motor: mensaje.agente.motor as Agente["motor"],
           origen: mensaje.ambito,
-        } as Agente;
+        } as Agente);
         const comprobado = leerAgente(candidato.nombre, escribirAgente(candidato), mensaje.ambito);
         if ("error" in comprobado) {
           informar(`no se guarda «${candidato.nombre}»: ${comprobado.error}`);
