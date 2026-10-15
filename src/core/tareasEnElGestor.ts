@@ -10,6 +10,7 @@ import type {
   CategoriaDeTarea, ComentarioDelGestor, EstadoDelGestor, GestorDeTareasPort, MapeoDeEstados, TareaDelGestor, TransicionDelGestor, Vinculo,
 } from "./gestorDeTareas.js";
 import type { EstadoDeTarea, Tarea, TicketDeTarea } from "./tareas.js";
+import { CATALOGO_DE_CONECTORES } from "./conectores.js";
 
 /**
  * La cabecera FIJA del comentario con el encargo ampliado. Es una constante porque la fase 2 la BUSCARÁ entre los
@@ -207,12 +208,30 @@ export function encargoConAñadidos(encargo: string, añadidos: readonly string[
 }
 
 /**
- * A dónde vuelve el ticket de una tarea DESCARTADA: al estado de preparar del mapeo o, sin él, al primero «por hacer».
- * Si se quedara en el de lanzar, el sondeo la crearía otra vez en la pasada siguiente: descartar la resucitaba. Volver
- * a moverlo es volver a pedirla, el mismo gesto que la lanzó.
+ * A dónde va el ticket de una tarea DESCARTADA: al primer estado de la categoría «terminada» del flujo (en MAS, «Listo»;
+ * en KAN, «Finalizada»), decisión suya. Así sale de las pendientes y el sondeo no la vuelve a crear. No es el estado
+ * de «terminar» del mapeo: ese puede ser PROBAR, que diría que hay algo que probar.
  */
-export function transicionDeDescarte(ts: readonly TransicionDelGestor[], estados: MapeoDeEstados | undefined): TransicionDelGestor | undefined {
-  const destino = estados?.preparar;
-  if (destino !== undefined) return ts.find((t) => esEstado(t.destino, destino));
-  return ts.find((t) => t.categoria === "por-hacer");
+export function transicionDeDescarte(ts: readonly TransicionDelGestor[]): TransicionDelGestor | undefined {
+  return ts.find((t) => t.categoria === "terminada");
+}
+
+/** El comentario que deja en el ticket una tarea descartada. */
+export function comentarioDeDescarte(): string {
+  return "Descartada en xonecode.\n\n— escrito por xonecode";
+}
+
+/** La línea que encabeza el encargo de una tarea que vive en el gestor: el ticket, con su enlace si se conoce. */
+export function lineaDelTicket(nombreDelGestor: string, clave: string, url: string | undefined): string {
+  return `Ticket de ${nombreDelGestor}: ${url === undefined ? clave : `[${clave}](${url})`}`;
+}
+
+/** El nombre para enseñar de un gestor, del catálogo de conectores («Jira»); uno que no está, por su id. */
+export function nombreDelGestor(conector: string): string {
+  return CATALOGO_DE_CONECTORES.find((c) => c.id === conector)?.nombre ?? conector;
+}
+
+/** El encargo con la línea del ticket delante: así el agente y la conversación saben de qué ticket es y dónde está. */
+export function encargoConTicket(encargo: string, ticket: Pick<TicketDeTarea, "conector" | "clave" | "url">): string {
+  return `${lineaDelTicket(nombreDelGestor(ticket.conector), ticket.clave, ticket.url)}\n\n${encargo}`;
 }

@@ -16,7 +16,8 @@ import type { DatosDeCierre, GestorDeTareasPort } from "../../core/gestorDeTarea
 import { comentarioDeCierre } from "../../core/gestorDeTareas.js";
 import type { Tarea } from "../../core/tareas.js";
 import {
-  cerrarTicket, esEstado, hayQueTransicionar, reflejosPendientes, transicionDeDescarte, transicionHacia, vinculoDelTicket,
+  cerrarTicket, comentarioDeDescarte, esEstado, hayQueTransicionar, reflejosPendientes, transicionDeDescarte, transicionHacia,
+  vinculoDelTicket,
   type ReflejoPendiente,
 } from "../../core/tareasEnElGestor.js";
 import type { TareasEnDisco } from "./tareasEnDisco.js";
@@ -33,7 +34,7 @@ export function conReflejoAlGuardar(disco: TareasEnDisco, reflejar: (pendientes:
     },
     /**
      * DESCARTAR borra, y no pasa por `guardar`: sin vigilarlo aquí, el ticket se quedaba en el estado de lanzar y el
-     * sondeo creaba la tarea otra vez. Una terminada no se toca (su ticket ya está cerrado); un borrador de adjuntos
+     * sondeo creaba la tarea otra vez. Se cierra en el gestor como descartada (estado de terminada). Una terminada no se toca (su ticket ya está cerrado); un borrador de adjuntos
      * (sin tarea en la cola) tampoco.
      */
     borrarTarea(id) {
@@ -85,13 +86,12 @@ export function crearReflejoEnElGestor(o: OpcionesDelReflejo): ((pendientes: Ref
         return limpiar(tarea);
       }
       if (escritura === "descartar") {
-        const t = transicionDeDescarte(await g.transiciones(v, ticket.clave), ticket.estados);
-        await g.comentar(
-          v,
-          ticket.clave,
-          `Tarea descartada en xonecode${t === undefined ? "." : `: el ticket vuelve a «${t.destino}». Muévelo otra vez para pedirla de nuevo.`}\n\n— escrito por xonecode`
-        );
-        if (t !== undefined) await g.transicionar(v, ticket.clave, t.id);
+        // Comentario y LUEGO el estado de terminada, la misma secuencia que cerrar.
+        const t = transicionDeDescarte(await g.transiciones(v, ticket.clave));
+        const { falloDeTransicion } = await cerrarTicket(g, v, ticket.clave, comentarioDeDescarte(), t?.id, o.motivoDe);
+        if (t === undefined || falloDeTransicion !== undefined) {
+          o.informar?.(`se comentó el descarte en ${ticket.clave}, pero no se pudo pasar a un estado de terminada${falloDeTransicion === undefined ? "" : `: ${falloDeTransicion}`}`);
+        }
         return;
       }
       const comentario = comentarioDeCierre(await o.datosDeCierre(tarea));

@@ -305,7 +305,7 @@ import {
   admiteMiasDelVinculo, motivoDeProyectoInaceptable, transicionPropuesta, comentarioDeCierre,
   type DatosDeCierre, type EstadoDelGestor, type FichaDelGestor, type MapeoDeEstados, type GestorDeTareasPort, type TareaDelGestor, type TransicionDelGestor, type Vinculo, type VinculoGuardado,
 } from "../../core/gestorDeTareas.js";
-import { cerrarTicket, comentarioDeEncargo, esEstado, mapeoPropuesto } from "../../core/tareasEnElGestor.js";
+import { cerrarTicket, comentarioDeEncargo, encargoConTicket, esEstado, mapeoPropuesto } from "../../core/tareasEnElGestor.js";
 import { crearSondeoDelGestor, type CopiaConGestor, type ResultadoDelSondeo, type SondeoDelGestor } from "../../agent/tareas/sondeoDelGestor.js";
 import { anotarAvisoEnElDisco, conReflejoAlGuardar, crearReflejoEnElGestor } from "../../agent/tareas/reflejoEnElGestor.js";
 import { datosDeCierre } from "./datosDeCierre.js";
@@ -2514,7 +2514,8 @@ export function montarRutas(
       // El mapeo de estados del vínculo, COPIADO: a qué estado pasa al empezar y al terminar.
       ...((vinculo as VinculoGuardado).estados === undefined ? {} : { estados: (vinculo as VinculoGuardado).estados! }),
     };
-    const nueva = atenderCrearTarea(destino.proyecto.id, peticion, encargo, borrador, ticket);
+    // Con la línea del ticket delante (`encargoConTicket`): en Jira el comentario lleva el encargo SIN ella —ya está en el ticket—.
+    const nueva = atenderCrearTarea(destino.proyecto.id, peticion, encargoConTicket(encargo, ticket), borrador, ticket);
     if (nueva === undefined) {
       return { estado: 409, cuerpo: { motivo: `se creó ${creada.clave} en el gestor, pero no la tarea local: créala de nuevo o bórrala allí` } };
     }

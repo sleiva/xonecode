@@ -6030,6 +6030,9 @@ describe("las tareas en background, por el cable", () => {
       const [tarea] = cola.verTareas();
       // El ticket copiado ENTERO a la tarea (con sitio y proyecto, que no cruzan el cable), y ya puesto al revisar.
       expect(tarea!.ticket).toMatchObject({ conector: "jira", sitio: "cloud-1", proyecto: "KAN", clave: "KAN-1" });
+      // El encargo de la tarea lleva delante el ticket CON su enlace; el comentario de Jira, no (ya está en el ticket).
+      expect(tarea!.encargo).toBe("Ticket de Jira: [KAN-1](https://gestor.example/KAN-1)\n\nAñade la versión bajo el logo");
+      expect(gestor.comentariosAplicados[0]!.texto).not.toContain("Ticket de Jira");
       expect(revisado()).toBe(1);
       rmSync(base, { recursive: true, force: true });
     });

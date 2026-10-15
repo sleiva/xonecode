@@ -135,9 +135,12 @@ empezar. Lo que se pierde es leer el encargo antes de que el agente escriba; que
 - **La decisión es PURA** (`core/tareasEnElGestor.ts#accionesDelSondeo`): tickets, mapeo, qué tiene encargo y qué tiene
   tarea → qué preparar y qué lanzar. La red y el disco, fuera.
 
-- **DESCARTAR devuelve el ticket** al estado de preparar (o al primero «por hacer») con un comentario: si se quedara en
-  el de lanzar, el sondeo la crearía otra vez. Va por el mismo punto único: el almacén envuelto vigila también
-  `borrarTarea`.
+- **DESCARTAR cierra el ticket** (decisión suya): comentario «Descartada en xonecode» y el primer estado de la
+  categoría terminada del flujo (en MAS, «Listo»). Si se quedara en el de lanzar, el sondeo la crearía otra vez. Va
+  por el mismo punto único: el almacén envuelto vigila también `borrarTarea`.
+- **El encargo lleva delante el ticket con su enlace** («Ticket de Jira: [MAS-2](…)»), en las dos puertas. El sondeo
+  pregunta los sitios del gestor antes de lanzar (medido: sin eso, la tarea de MAS-2 se guardó sin enlace) y rellena
+  el de las tareas de la cola que no lo tienen.
 - Lo que el sondeo guarda se EMITE al cable: una tarea que no puede arrancar todavía (la persona tiene abierta la
   consola de ese proyecto: gana la persona) tiene que verse igual (`construirSondeoCableado`).
 

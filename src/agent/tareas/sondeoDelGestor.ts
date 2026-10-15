@@ -19,6 +19,7 @@ import {
   accionesDelSondeo,
   comentarioDeEncargo,
   encargoConAñadidos,
+  encargoConTicket,
   encargoDeLosComentarios,
   esComentarioDeEncargo,
   esEstado,
@@ -69,6 +70,16 @@ function peticionDelTicket(titulo: string, descripcion: string): string {
 
 export function crearSondeoDelGestor(o: OpcionesDelSondeo): SondeoDelGestor {
   let enMarcha: Promise<ResultadoDelSondeo> | undefined;
+  /**
+   * Las instancias de gestor a las que ya se preguntaron los sitios. Sin esa pregunta el adaptador de Jira no sabe la url
+   * del sitio y el ticket se guardaba SIN enlace (medido: la tarea de MAS-2 nació así). Se marca solo lo que contestó.
+   */
+  const conSitios = new WeakSet<GestorDeTareasPort>();
+  const asegurarSitios = async (g: GestorDeTareasPort): Promise<void> => {
+    if (conSitios.has(g)) return;
+    await g.sitios();
+    conSitios.add(g);
+  };
   let reloj: ReturnType<typeof setInterval> | undefined;
 
   const pasada = async (): Promise<ResultadoDelSondeo> => {
@@ -91,6 +102,8 @@ export function crearSondeoDelGestor(o: OpcionesDelSondeo): SondeoDelGestor {
 
   const pasadaDeUnProyecto = async ({ proyecto, vinculo: v }: CopiaConGestor, g: GestorDeTareasPort, resultado: ResultadoDelSondeo): Promise<void> => {
     const estados = v.estados ?? {};
+    await asegurarSitios(g).catch(() => {});
+    rellenarEnlaces(v, g);
     // Solo los ASIGNADOS a la cuenta del conector: quien mueve un ticket lanza un agente que escribe en esta máquina.
     const tickets = await g.pendientes(v, undefined, { mias: true });
     // Con tarea (no descartada: descartar la borra) en ESTE gestor y ESTE proyecto del gestor.
@@ -134,6 +147,29 @@ export function crearSondeoDelGestor(o: OpcionesDelSondeo): SondeoDelGestor {
     }
   };
 
+  /**
+   * Las tareas de ESTE vínculo cuyo ticket se guardó sin enlace (antes de este arreglo, o con el sitio sin preguntar):
+   * se le pide la ficha al gestor y se completa SOLO `ticket.url`, releyendo la cola (el estado no cambia: no dispara
+   * ningún reflejo). En segundo plano y sin parar la pasada.
+   */
+  const rellenarEnlaces = (v: VinculoGuardado, g: GestorDeTareasPort): void => {
+    const sinEnlace = o.cola
+      .listar()
+      .filter((t) => t.ticket !== undefined && t.ticket.url === undefined && t.ticket.conector === v.conector && t.ticket.sitio === v.sitio);
+    for (const t of sinEnlace) {
+      void g.ficha(v, t.ticket!.clave).then(
+        (f) => {
+          if (f.url === undefined) return;
+          const lista = o.cola.listar();
+          if (!lista.some((x) => x.id === t.id && x.ticket !== undefined && x.ticket.url === undefined)) return;
+          o.cola.guardar(lista.map((x) => (x.id === t.id && x.ticket !== undefined ? { ...x, ticket: { ...x.ticket, url: f.url! } } : x)));
+          o.revisar();
+        },
+        () => {}
+      );
+    }
+  };
+
   /** Ampliar el encargo y subirlo. Sin aumentador no se prepara (y se dice una vez por pasada en el resultado). */
   const preparar = async (proyecto: CopiaConGestor["proyecto"], v: VinculoGuardado, g: GestorDeTareasPort, t: TareaDelGestor): Promise<string> => {
     if (o.augmentar === undefined) throw new Error("esta ejecución no puede preparar encargos");
@@ -156,7 +192,7 @@ export function crearSondeoDelGestor(o: OpcionesDelSondeo): SondeoDelGestor {
     const ficha = await g.ficha(v, t.clave);
     const peticion = peticionDelTicket(ficha.titulo, ficha.descripcion);
     const leido = recien !== undefined || g.comentarios === undefined ? undefined : encargoDeLosComentarios(await g.comentarios(v, t.clave));
-    const encargo = recien ?? (leido === undefined ? peticion : encargoConAñadidos(leido.encargo, leido.añadidos));
+    const sinTicket = recien ?? (leido === undefined ? peticion : encargoConAñadidos(leido.encargo, leido.añadidos));
     const ticket: TicketDeTarea = {
       conector: v.conector,
       sitio: v.sitio,
@@ -173,7 +209,8 @@ export function crearSondeoDelGestor(o: OpcionesDelSondeo): SondeoDelGestor {
       proyecto,
       titulo: tituloDeTarea(ficha.titulo),
       peticion,
-      encargo,
+      // Con la línea del ticket delante: el agente y la conversación saben de qué ticket es y dónde abrirlo.
+      encargo: encargoConTicket(sinTicket, ticket),
       adjuntos: [],
       estado: "nuevo",
       creada: (o.ahora?.() ?? new Date()).toISOString(),

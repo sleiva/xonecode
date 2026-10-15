@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { crearSondeoDelGestor, type CopiaConGestor } from "./sondeoDelGestor.js";
 import { GestorDeTareasEnMemoria } from "../../core/ports.js";
 import type { FichaDelGestor } from "../../core/gestorDeTareas.js";
@@ -59,7 +59,7 @@ describe("el sondeo del gestor (puerta 2)", () => {
     expect(r.preparadas).toEqual(["MAS-2"]);
     expect(r.lanzadas).toEqual(["MAS-2"]);
     expect(gestor.comentariosAplicados).toHaveLength(1);
-    expect(cola()[0]!.encargo).toBe("ENCARGO AMPLIADO de: Título de MAS-2");
+    expect(cola()[0]!.encargo).toBe("Ticket de Jira: MAS-2\n\nENCARGO AMPLIADO de: Título de MAS-2");
     // Y no lo vuelve a preparar ni a lanzar en la siguiente.
     const otra = await sondeo.mirar();
     expect([otra.preparadas, otra.lanzadas]).toEqual([[], []]);
@@ -72,7 +72,7 @@ describe("el sondeo del gestor (puerta 2)", () => {
     });
     expect((await sondeo.mirar()).lanzadas).toEqual(["MAS-2"]);
     expect(gestor.comentariosAplicados).toEqual([]);
-    expect(cola()[0]!.encargo).toBe("El de antes");
+    expect(cola()[0]!.encargo).toBe("Ticket de Jira: MAS-2\n\nEl de antes");
   });
 
   it("no vuelve a preparar uno que ya tiene encargo", async () => {
@@ -99,7 +99,10 @@ describe("el sondeo del gestor (puerta 2)", () => {
     expect(r.lanzadas).toEqual(["MAS-3"]);
     const [t] = cola();
     expect(t).toMatchObject({ estado: "nuevo", proyecto: COPIA.proyecto, peticion: "Título de MAS-3\n\nDescripción de MAS-3" });
-    expect(t!.encargo).toMatch(/^Encargo revisado por la persona\n\n## Indicaciones añadidas en el ticket\n\n- Que el texto vaya en gris$/);
+    // Con la línea del ticket delante, con su ENLACE: el agente y la conversación saben de qué ticket es y dónde está.
+    expect(t!.encargo).toBe(
+      "Ticket de Jira: [MAS-3](https://x/browse/MAS-3)\n\nEncargo revisado por la persona\n\n## Indicaciones añadidas en el ticket\n\n- Que el texto vaya en gris"
+    );
     expect(t!.ticket).toEqual({ conector: "jira", sitio: "cloud-1", proyecto: "MAS", clave: "MAS-3", url: "https://x/browse/MAS-3", estados: COPIA.vinculo.estados });
     expect(revisadas()).toBe(1);
   });
@@ -107,7 +110,7 @@ describe("el sondeo del gestor (puerta 2)", () => {
   it("sin encargo, lanza con el texto del ticket; y no lanza otra si ya tiene tarea", async () => {
     const { sondeo, cola } = montar({ tickets: [ficha("MAS-3", "En curso")] });
     await sondeo.mirar();
-    expect(cola()[0]!.encargo).toBe("Título de MAS-3\n\nDescripción de MAS-3");
+    expect(cola()[0]!.encargo).toBe("Ticket de Jira: MAS-3\n\nTítulo de MAS-3\n\nDescripción de MAS-3");
     expect((await sondeo.mirar()).lanzadas).toEqual([]);
     expect(cola()).toHaveLength(1);
   });
@@ -139,6 +142,38 @@ describe("el sondeo del gestor (puerta 2)", () => {
     const { sondeo, cola } = montar({ tickets: [ficha("MAS-3", "En curso")] });
     const [a, b] = await Promise.all([sondeo.mirar(), sondeo.mirar()]);
     expect(a).toBe(b);
+    expect(cola()).toHaveLength(1);
+  });
+
+  it("pregunta los SITIOS antes de lanzar (sin ellos Jira no da el enlace), una vez por gestor", async () => {
+    const { gestor, sondeo } = montar({ tickets: [ficha("MAS-3", "En curso")] });
+    let preguntas = 0;
+    const original = gestor.sitios.bind(gestor);
+    gestor.sitios = async () => {
+      preguntas += 1;
+      return original();
+    };
+    await sondeo.mirar();
+    await sondeo.mirar();
+    expect(preguntas).toBe(1);
+  });
+
+  it("rellena el ENLACE de una tarea cuyo ticket se guardó sin él, sin tocar nada más", async () => {
+    const sinEnlace: Tarea = {
+      id: "vieja",
+      proyecto: COPIA.proyecto,
+      titulo: "t",
+      peticion: "p",
+      encargo: "e",
+      adjuntos: [],
+      estado: "en-proceso",
+      creada: "2026-10-15T10:00:00Z",
+      ticket: { conector: "jira", sitio: "cloud-1", proyecto: "MAS", clave: "MAS-2" },
+    };
+    const { sondeo, cola } = montar({ tickets: [ficha("MAS-2", "En curso", { url: "https://x/browse/MAS-2" })], cola: [sinEnlace] });
+    await sondeo.mirar();
+    await vi.waitFor(() => expect(cola()[0]!.ticket?.url).toBe("https://x/browse/MAS-2"));
+    expect(cola()[0]!.estado).toBe("en-proceso");
     expect(cola()).toHaveLength(1);
   });
 });

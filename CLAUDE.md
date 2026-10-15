@@ -915,7 +915,11 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   (`encargoDeLosComentarios`). **Revisar el encargo es OPCIONAL y viene apagado** (`revisarEncargo`, decisión suya):
   apagado, el ticket de preparar se prepara y se LANZA en la misma pasada con el encargo recién subido, y es xonecode
   quien lo mueve al empezar; encendido, espera a que la persona lo mueva al de lanzar. Volver a vincular el MISMO
-  proyecto conserva el mapeo.
+  proyecto conserva el mapeo. **El encargo de toda tarea con ticket lleva delante el ticket con su ENLACE**
+  (`encargoConTicket`), y el sondeo pregunta los sitios antes de lanzar (sin ellos Jira no da la url: medido, la
+  tarea de MAS-2 nació sin enlace) y rellena el de las tareas que no lo tienen. **DESCARTAR la cierra en el gestor**:
+  comentario «Descartada en xonecode» y el primer estado de la categoría terminada (no el «terminar» del mapeo, que
+  puede ser PROBAR), por `cerrarTicket`.
 - **«En curso» y «Finalizadas»: las terminadas son un HISTÓRICO de solo lectura** (`TareasDelProyecto.tsx#FilaFinalizada`):
   sin acciones, FUERA de la barra de sesiones (salvo la abierta), la más reciente arriba, «empezó … · acabó …» (nunca «tardó»: cuenta la pausa), lo último que contestó
   el agente —pedido al desplegar con `leerSesion`, nunca en la cola— y su conversación abierta para LEER con el motivo

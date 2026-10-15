@@ -73,17 +73,18 @@ describe("descartar una tarea con ticket", () => {
     } as unknown as TareasEnDisco;
   };
 
-  it("devuelve el ticket al estado de PREPARAR y lo comenta: si no, el sondeo la resucitaría", async () => {
+  it("lo comenta como DESCARTADA y lo pasa al estado de terminada del flujo: si no, el sondeo la resucitaría", async () => {
     const gestor = new GestorDeTareasEnMemoria({
       tareas: [{ clave: "KAN-1", titulo: "t", descripcion: "", estado: "En curso", categoria: "en-curso" }],
       transiciones: { "KAN-1": [{ id: "11", nombre: "Por hacer", destino: "Tareas por hacer", categoria: "por-hacer" }, ...TRANSICIONES] },
     });
     const reflejar = crearReflejoEnElGestor({ gestorDe: () => gestor, datosDeCierre: async () => ({ ficheros: [], commits: [] }), anotarAviso: () => {}, motivoDe: String });
-    const disco = conReflejoAlGuardar(almacen([tarea("en-proceso", { estados: { preparar: "Tareas por hacer", lanzar: "En curso" } })]), reflejar);
+    const disco = conReflejoAlGuardar(almacen([tarea("en-proceso", { estados: { preparar: "Tareas por hacer", lanzar: "En curso", terminar: "En revisión" } })]), reflejar);
     disco.borrarTarea("t1");
     await reflejar.enCurso();
-    expect(gestor.transicionesAplicadas).toEqual([{ clave: "KAN-1", transicion: "11" }]);
-    expect(gestor.comentariosAplicados[0]!.texto).toMatch(/descartada en xonecode: el ticket vuelve a «Tareas por hacer»/);
+    // «Finalizada» (la primera de categoría terminada), NO el «terminar» del mapeo, que podría ser PROBAR.
+    expect(gestor.transicionesAplicadas).toEqual([{ clave: "KAN-1", transicion: "41" }]);
+    expect(gestor.comentariosAplicados[0]!.texto).toMatch(/^Descartada en xonecode\./);
   });
 
   it("una TERMINADA, o un borrador sin tarea, no tocan el gestor", async () => {
