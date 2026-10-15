@@ -391,6 +391,14 @@ Y las guardas del proyecto:
   se adivina**: sin `resolution-width`, o con `-1`, no convierte y lo dice; una imagen que no mide un ancho de móvil en
   px CSS (una a 2×) tampoco, y da sus divisiones. Va a quien recibe `buscar_icono`, con la línea de CUÁNDO usarla junto
   a su lista de tools (`USO_DE_CONVERTIR_A_P`), por lo mismo que `xone_atributos`.
+- **Y lo APRENDIDO de un encargo llega a los siguientes** (`core/aprendido.ts`, `agent/grafo/aprendido.ts`, tool
+  `apuntar_aprendizaje`): cómo entrar en la app, qué pulsar para llegar a una pantalla, una trampa. Lo apuntan el
+  orquestador y quien trabaja (`recibeNucleoDeTrabajo`) en `.xonecode/aprendido.json`, **sin aprobación** (memoria del
+  agente, no un fichero de la app; el mismo tema se sustituye, con tope), y **el harness lo pone delante** de cada encargo
+  —el prompt del raíz, el de cada hijo y las instrucciones de un hijo externo, que en lugar de la tool lo cuenta en un
+  apartado «Aprendido:» para que lo apunte el orquestador—. Medido en Maset: cada encargo redescubría el usuario con que
+  se entra. **Puede llevar una contraseña**: el fichero es 0600, de la línea del chat solo sale el tema, y no viaja en un
+  paquete de soporte (`SECRETOS_QUE_NO_VIAJAN`). Límite declarado: el raíz lo lee al abrir la sesión.
 - **Lo que quien ESCRIBE tiene que saber va en el cuerpo del developer y del designer, no en
   `REGLAS_XONE`** (`ESCRIBIR_XONE_SIN_ROMPER`, `agent/subagentes/agentesEnDisco.ts`): un comentario
   XML no admite `--`, un `L`/`TL` pinta su `title`, `elevation` recorta un fondo redondeado, un botón

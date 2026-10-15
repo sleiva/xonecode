@@ -3173,6 +3173,25 @@ describe("`buscar_icono` en TrueForge (IXCODE-18): el mismo reparto que deepagen
   }, 20_000);
 });
 
+describe("lo APRENDIDO del proyecto llega delante de cada encargo, y quien trabaja puede apuntar", () => {
+  it("el orquestador y el desarrollador lo ven y tienen la tool; el consultor, que no trabaja, solo lo ve", async () => {
+    const raiz = proyecto();
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "aprendido.json"), JSON.stringify([{ tema: "cómo entrar en la app", texto: "usuario 08006, pulsar Entrar", cuando: "2026-10-15T10:00:00.000Z" }]));
+    const { m, vistos, toolsPorLlamada } = modelosConGuion([
+      [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "pinta el menú" }) }] })],
+      [new AIMessageChunk({ content: "Hecho." })],
+      [new AIMessageChunk({ content: "Listo." })],
+    ]);
+    const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO });
+    await s.turno("pinta el menú", piel().p);
+    expect(vistos[0]![0]).toContain("- cómo entrar en la app: usuario 08006, pulsar Entrar");
+    expect(vistos[1]![0]).toContain("- cómo entrar en la app: usuario 08006, pulsar Entrar");
+    expect(toolsPorLlamada[0]).toContain("apuntar_aprendizaje");
+    expect(toolsPorLlamada[1]).toContain("apuntar_aprendizaje");
+  }, 20_000);
+});
+
 describe("`convertir_a_p` en TrueForge: las medidas de la maqueta, con la resolución del app.xml", () => {
   const guion = () => [
     [new AIMessageChunk({ content: "", tool_call_chunks: [{ index: 0, id: "d1", name: "create_sub_agent", args: JSON.stringify({ name: "developer-xone", input: "pinta la fila de la maqueta" }) }] })],
@@ -3482,6 +3501,8 @@ describe("un device-controller en Claude Code: la shell ESTRECHA llega al hijo",
     expect(p.ejecucion?.scripts).toEqual(expect.arrayContaining(["xone-desplegar-android", "xone-captura-android"]));
     expect(p.instrucciones).toContain("NO PUEDES LLAMAR A OTROS ESPECIALISTAS (conductor-ext)");
     expect(p.instrucciones).toContain(`${artefactos}/diseno/`);
+    // No tiene la tool de apuntar: lo cuenta al volver, en su apartado, y el orquestador lo apunta.
+    expect(p.instrucciones).toContain("en un apartado «Aprendido:»");
   }, 20_000);
 
   it("Codex y OpenCode siguen SIN shell, y sin carpeta de artefactos tampoco se concede", async () => {

@@ -43,6 +43,8 @@ export const SECRETOS_QUE_NO_VIAJAN: ReadonlySet<string> = new Set([
   "auth.json",
   "cloudstudio-oauth.json",
   "conectores-oauth.json",
+  // Lo aprendido de un proyecto (`core/aprendido.ts`): puede llevar el usuario y la clave de la app.
+  "aprendido.json",
 ]);
 
 /**

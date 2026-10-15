@@ -48,6 +48,7 @@ const ICONO: Record<string, string> = {
   diferencia_de_capturas: "✱",
   generar_fondo_svg: "✱",
   convertir_a_p: "✱",
+  apuntar_aprendizaje: "✎",
   validar_fichero_xone: "✓",
   task: "⊙",
   // Un icono PROPIO, y no el genérico `⚙`: en un turno donde se lanza una app, la línea del
@@ -72,6 +73,7 @@ const VERBO: Record<string, string> = {
   diferencia_de_capturas: "mide cambio",
   generar_fondo_svg: "fondo",
   convertir_a_p: "convierte a p",
+  apuntar_aprendizaje: "apunta",
   validar_fichero_xone: "valida",
   task: "delega en",
   execute: "corre",

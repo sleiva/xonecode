@@ -67,7 +67,9 @@ import { MAX_APPROVAL_ROUNDS, type Decision } from "../../../vendor/hitl.js";
 import { artefactosNuevos, backendDeAgente, entornoDeLaShellDelProyecto, fotoDeArtefactos, lectorDelDispositivoDeSesion, scriptsDeLasSkills } from "../../grafo/proyecto.js";
 import { carpetaDeHotswap } from "../../../core/hotswap.js";
 import { cargarAgentes } from "../../subagentes/agentesEnDisco.js";
-import { fichaDeAgente, promptDeAgente, recibeMarcarCriterios, repartirSkills, skillsConLasDeQuienLlama, textoDeTrabajoSinLlamar, type Agente } from "../../../core/agentes.js";
+import { bloqueDeAprendido, NOMBRE_APUNTAR_APRENDIZAJE, USO_DE_APRENDIDO_EXTERNO, USO_DE_APUNTAR_APRENDIZAJE } from "../../../core/aprendido.js";
+import { crearApuntarAprendizaje, leerAprendido } from "../../grafo/aprendido.js";
+import { fichaDeAgente, promptDeAgente, recibeMarcarCriterios, recibeNucleoDeTrabajo, repartirSkills, skillsConLasDeQuienLlama, textoDeTrabajoSinLlamar, type Agente } from "../../../core/agentes.js";
 import { PERFIL_DEL_ORQUESTADOR, promptOrquestador } from "../../grafo/xoneAgent.js";
 import { permisosDe, seDetieneEn, TEXTO_HITL } from "../../grafo/perfiles.js";
 import { cambioDe } from "../../turno/interrupts.js";
@@ -224,6 +226,19 @@ export const TRABAJO_SIN_PERSONA = [
   "  DECISIONES que tomaste tú sin preguntar (cada duda, lo que elegiste y por qué) y lo que no pudiste comprobar o",
   "  queda pendiente.",
 ].join("\n");
+
+/**
+ * Lo aprendido, para el ORQUESTADOR: lo que hay apuntado y cuándo apuntar él. Le toca sobre todo lo que le cuente un
+ * hijo de motor externo en su apartado «Aprendido:» (ese hijo no tiene la tool).
+ */
+export function textoDeAprendidoDelRaiz(lista: Parameters<typeof bloqueDeAprendido>[0]): string {
+  return [
+    bloqueDeAprendido(lista),
+    `${USO_DE_APUNTAR_APRENDIZAJE} Y si un especialista te devuelve un apartado «Aprendido:», apúntalo tú.`,
+  ]
+    .filter((l): l is string => l !== undefined)
+    .join("\n");
+}
 
 export const RESPUESTA_AUTONOMA_SIN_RECOMENDADA =
   "Modo autónomo: no hay nadie a quien preguntar. Decide tú con lo que dicen el encargo y el plan, sigue, y di en tu respuesta final qué elegiste y por qué.";
@@ -1026,6 +1041,8 @@ export async function abrirSesionTrueforge(
     ...herramientasDeJuicio(),
     ...(carpeta === undefined ? [] : ([crearTraerDeLaMaquina({ carpeta, alEscribir: anotarArtefacto })] as unknown as ToolDeLangchain[])),
     ...traerDeStitch(),
+    // Lo aprendido: el orquestador también apunta, sobre todo lo que le cuenta un hijo de motor externo (que no tiene la tool).
+    crearApuntarAprendizaje({ raiz, quien: "orquestador" }) as unknown as ToolDeLangchain,
     ...(opciones.puedeProponerTareas === true
       ? [crearProponerTareas((p) => void propuestasPorAnunciar.push(p)) as unknown as ToolDeLangchain]
       : []),
@@ -1078,6 +1095,8 @@ export async function abrirSesionTrueforge(
     ...(carpeta !== undefined && agente.ejecucion === true
       ? [crearDiferenciaDeCapturas({ leerArtefacto: async (nombre) => readFileSync(join(carpeta, nombre)) }) as unknown as ToolDeLangchain]
       : []),
+    // Lo aprendido del proyecto y del aparato, para los encargos siguientes: a quien trabaja (`recibeNucleoDeTrabajo`).
+    ...(recibeNucleoDeTrabajo(agente) ? [crearApuntarAprendizaje({ raiz, quien: agente.nombre }) as unknown as ToolDeLangchain] : []),
     // Y marcar en el plan lo comprobado, con el reparto de deepagents (`recibeMarcarCriterios`).
     ...(recibeMarcarCriterios(agente) ? [crearMarcarCriteriosDelPlan({ raiz }) as unknown as ToolDeLangchain] : []),
     // El BUCLE del desarrollador: quien puede llamar al de pruebas también tiene el crítico y la medida, para
@@ -1191,6 +1210,8 @@ export async function abrirSesionTrueforge(
             instrucciones: [
               promptDeAgente(delHijo, repartirSkills(delHijo, disponibles)),
               ...(conEjecucion && (agente.llama ?? []).length > 0 ? [textoDeTrabajoSinLlamar(agente.llama ?? [], carpeta!)] : []),
+              ...[bloqueDeAprendido(leerAprendido(raiz))].filter((b): b is string => b !== undefined),
+              USO_DE_APRENDIDO_EXTERNO,
               inventarioDelProyecto(ficherosDelProyecto(raiz)),
             ].join("\n\n"),
             tarea: params.request.input,
@@ -1294,7 +1315,10 @@ export async function abrirSesionTrueforge(
       notaDeTools(nombres, agente === undefined ? LIMITE_DEL_GENERICO : LIMITES_DE[clase]),
       ...(nombres.includes(NOMBRE_ATRIBUTOS_XONE) ? [USO_DE_XONE_ATRIBUTOS] : []),
       ...(nombres.includes(NOMBRE_CONVERTIR_A_P) ? [USO_DE_CONVERTIR_A_P] : []),
+      ...(nombres.includes(NOMBRE_APUNTAR_APRENDIZAJE) ? [USO_DE_APUNTAR_APRENDIZAJE] : []),
     ].join("\n");
+    // Lo aprendido en encargos anteriores, leído AHORA (otro encargo pudo apuntar algo hace un momento).
+    const aprendido = bloqueDeAprendido(leerAprendido(raiz));
     const instrucciones =
       agente === undefined
         ? `${IDIOMA_DEL_ESPECIALISTA}\n\n${nota} Contesta con lo que encuentres y dónde.`
@@ -1305,6 +1329,7 @@ export async function abrirSesionTrueforge(
             "",
             nota,
             anuncioDeSkills(agente, catalogo),
+            ...(aprendido === undefined ? [] : ["", aprendido]),
             ...(conBucleDelDesarrollador && (agente.llama?.length ?? 0) > 0 ? ["", textoDelBucle(agente.llama ?? [], { conCritica: carpeta !== undefined, conFuentes: opciones.fuentes !== undefined })] : []),
           ]
             .filter((l) => l !== undefined)
@@ -1401,7 +1426,7 @@ export async function abrirSesionTrueforge(
     hijosConMemoria.clear();
     const definicion = {
       modelClient: llm,
-      instruction: [IDIOMA_DE_LA_RESPUESTA, SIN_HABLAR_DEL_HARNESS, promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conFuentes: opciones.fuentes !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas, conBucle: conBucleDelDesarrollador, conEsperas }), opciones.puedeProponerTareas === true ? REPARTIR_EN_TAREAS : "", opciones.trabajoSinPersona === true ? TRABAJO_SIN_PERSONA : ""].filter((l) => l !== "").join("\n\n"),
+      instruction: [IDIOMA_DE_LA_RESPUESTA, SIN_HABLAR_DEL_HARNESS, promptOrquestador(especialistas()), notaDeDelegacion(especialistas(), { conIconos: opciones.iconos !== undefined, conFuentes: opciones.fuentes !== undefined, conComparacion: carpeta !== undefined, conMemoria: conMemoriaDeEspecialistas, conBucle: conBucleDelDesarrollador, conEsperas }), opciones.puedeProponerTareas === true ? REPARTIR_EN_TAREAS : "", opciones.trabajoSinPersona === true ? TRABAJO_SIN_PERSONA : "", textoDeAprendidoDelRaiz(leerAprendido(raiz))].filter((l) => l !== "").join("\n\n"),
       // Por TURNO, porque el raíz se rehace desde su foto al final de cada uno (ver `turno`).
       iterationLimit: LIMITE_DE_LLAMADAS_DEL_RAIZ,
     };
