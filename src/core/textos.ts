@@ -22,10 +22,18 @@ const LARGO_TITULO_AUTOMATICO = 60;
  * petición empieza citando, y cortar en una palabra entera con puntos suspensivos. Sigue
  * siendo lo que el usuario escribió, no un resumen: renombrar sigue estando en el «…».
  */
+/**
+ * Un ENCABEZADO de sección al empezar la petición —«Resumen», «## Contexto», «Descripción:»—: no es el título. Medido en
+ * Maset: una petición pegada de un ticket empezaba por «Resumen» y dos tareas se llamaban así. Una o dos palabras sin
+ * frase detrás (con `#` o `:` delante o detrás) se saltan, si queda otra línea con texto.
+ */
+const ENCABEZADO = /^#{0,6}\s*[\p{L}]+(\s+[\p{L}]+)?\s*:?$/u;
+
 export function tituloDesde(texto: string): string {
-  const primera = texto
-    .trim()
-    .split(/\r?\n/)[0]!
+  const lineas = texto.trim().split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== "");
+  const primeraLinea = lineas.find((l) => !ENCABEZADO.test(l)) ?? lineas[0] ?? "";
+  const primera = primeraLinea
+    .replace(/^#{1,6}\s*/u, "")
     .split(/(?<=[.!?:;])\s/)[0]!
     .replace(/[.!?:;]+$/u, "")
     .replace(/^[«"“'‘¿¡\s]+/u, "")

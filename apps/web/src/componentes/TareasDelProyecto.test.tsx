@@ -109,9 +109,14 @@ describe("TareasDelProyecto", () => {
     );
     // Las terminadas son el HISTÓRICO: viven en su pestaña.
     fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
-    expect(screen.getAllByText(/El juez de QA la aprobó/)).toHaveLength(2);
-    expect(screen.getByText(/una condición menos/i)).toBeTruthy();
+    // Cada fila dice CÓMO acabó con su punto (y su nombre accesible): dos limpias y una a mano.
+    expect(screen.getAllByLabelText("Limpia")).toHaveLength(2);
+    expect(screen.getByLabelText("Cerrada a mano")).toBeTruthy();
     expect(screen.getByText(/La dio por buena una persona/)).toBeTruthy();
+    // Y la salvedad se lee al desplegar la suya.
+    const filas = screen.getAllByRole("button", { expanded: false }).filter((b) => b.textContent?.includes("hace lo que se pedía"));
+    fireEvent.click(filas[1]!);
+    expect(screen.getByText(/una condición menos/i)).toBeTruthy();
   });
 
   /**
@@ -383,50 +388,87 @@ describe("TareasDelProyecto: ver lo que hace una tarea en proceso", () => {
       expect(screen.queryByText("La de hoy")).toBeNull();
     });
 
-    it("las finalizadas van la más reciente arriba, sin acciones, y abren su conversación para LEER", () => {
+    /** La fila de una finalizada es UN botón que la despliega; su nombre empieza por cómo acabó y su título. */
+    const filaDe = (titulo: string): HTMLElement =>
+      screen.getAllByRole("button").find((b) => b.getAttribute("aria-expanded") !== null && b.textContent?.includes(titulo))!;
+
+    it("las finalizadas van la más reciente arriba, en UNA línea, y desplegadas abren su conversación para LEER", () => {
       const leidas: string[] = [];
-      render(<TareasDelProyecto tareas={cola()} alDescartar={() => {}} alReintentar={() => {}} alLeerFinalizada={(t) => leidas.push(t.id)} />);
+      render(<TareasDelProyecto tareas={cola()} alReintentar={() => {}} alLeerFinalizada={(t) => leidas.push(t.id)} />);
       fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
       const filas = screen.getAllByRole("listitem").map((li) => li.textContent ?? "");
       expect(filas.findIndex((t) => t.includes("La de hoy"))).toBe(0);
       expect(filas.findIndex((t) => t.includes("La de ayer"))).toBe(1);
       expect(screen.queryByRole("button", { name: /Descartar|Reintentar/ })).toBeNull();
-      // «empezó … · acabó …», nunca un «tardó» que contaría también la pausa.
-      expect(screen.getByText(/empezó .* · acabó /)).toBeTruthy();
+      // «empieza → acaba», nunca un «tardó» que contaría también la pausa.
+      expect(filaDe("La de ayer").textContent).toMatch(/→/);
       expect(screen.queryByText(/tardó/)).toBeNull();
-      const botones = screen.getAllByRole("button", { name: "Conversación y artefactos" });
-      expect(botones).toHaveLength(2);
-      fireEvent.click(botones[0]!);
+      // Plegada no hay botones de acción: se despliega la fila.
+      expect(screen.queryByRole("button", { name: "Conversación y artefactos" })).toBeNull();
+      fireEvent.click(filaDe("La de hoy"));
+      fireEvent.click(screen.getByRole("button", { name: "Conversación y artefactos" }));
       expect(leidas).toEqual(["nueva"]);
       // La que no guardó conversación lo dice, en vez de un botón que no abre nada.
+      fireEvent.click(filaDe("Sin conversación"));
       expect(screen.getByText("Sin conversación guardada")).toBeTruthy();
     });
 
-    it("«Qué hizo» pide la última respuesta al desplegar, y una sola vez", async () => {
+    it("«Qué hizo» se pide al desplegar la fila, y una sola vez", async () => {
       const pedida = vi.fn(async () => ({ texto: "Añadí la versión al Login." }));
       render(<TareasDelProyecto tareas={cola()} alPedirUltimaRespuesta={pedida} />);
       fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
       expect(pedida).not.toHaveBeenCalled();
-      const boton = screen.getAllByRole("button", { name: "Qué hizo" })[0]!;
-      fireEvent.click(boton);
-      expect(boton.getAttribute("aria-expanded")).toBe("true");
+      const fila = filaDe("La de hoy");
+      fireEvent.click(fila);
+      expect(fila.getAttribute("aria-expanded")).toBe("true");
       expect(await screen.findByText("Añadí la versión al Login.")).toBeTruthy();
-      // Plegado se desmonta, y volver a abrirlo no lo pide otra vez.
-      fireEvent.click(boton);
+      // Plegada se desmonta, y volver a abrirla no lo pide otra vez.
+      fireEvent.click(fila);
       expect(screen.queryByText("Añadí la versión al Login.")).toBeNull();
-      fireEvent.click(boton);
+      fireEvent.click(fila);
       expect(screen.getByText("Añadí la versión al Login.")).toBeTruthy();
       expect(pedida).toHaveBeenCalledTimes(1);
     });
 
-    it("el encargo se despliega debajo, uno a la vez con «Qué hizo»", () => {
+    it("lo CRÍTICO de su cierre va arriba al desplegar, y su punto lo dice plegada", () => {
+      render(
+        <TareasDelProyecto
+          tareas={[tarea({ id: "x", titulo: "Menú", estado: "terminada", cierre: { criticos: ["pantalla: falta «Turno de Día»"], observaciones: ["el juez de QA dijo «rojo»"] } })]}
+        />
+      );
+      fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
+      expect(screen.getByLabelText("Con críticos")).toBeTruthy();
+      expect(filaDe("Menú").textContent).toContain("1 crítico");
+      fireEvent.click(filaDe("Menú"));
+      expect(screen.getByText("## CRITICAL")).toBeTruthy();
+      expect(screen.getByText("pantalla: falta «Turno de Día»")).toBeTruthy();
+      expect(screen.getByText("el juez de QA dijo «rojo»")).toBeTruthy();
+    });
+
+    it("el encargo se despliega dentro, a petición", () => {
       render(<TareasDelProyecto tareas={[tarea({ id: "x", estado: "terminada", sesion: "s", encargo: "El encargo entero" })]} alPedirUltimaRespuesta={async () => ({})} />);
       fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
+      fireEvent.click(screen.getAllByRole("button").find((b) => b.getAttribute("aria-expanded") === "false")!);
       expect(screen.queryByText("El encargo entero")).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Encargo" }));
       expect(screen.getByText("El encargo entero")).toBeTruthy();
-      fireEvent.click(screen.getByRole("button", { name: "Qué hizo" }));
+      fireEvent.click(screen.getByRole("button", { name: "Encargo" }));
       expect(screen.queryByText("El encargo entero")).toBeNull();
+    });
+
+    it("se ELIMINA del histórico, pidiendo confirmación antes", () => {
+      const borradas: string[] = [];
+      render(<TareasDelProyecto tareas={cola()} alDescartar={(id) => borradas.push(id)} />);
+      fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
+      fireEvent.click(filaDe("La de ayer"));
+      fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
+      expect(borradas).toEqual([]);
+      expect(screen.getByText(/Eliminarla del histórico/)).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+      expect(screen.queryByText(/Eliminarla del histórico/)).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
+      fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
+      expect(borradas).toEqual(["vieja"]);
     });
 
     it("sin ninguna terminada, «Finalizadas» lo dice con palabras", () => {

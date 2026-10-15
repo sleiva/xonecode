@@ -1278,6 +1278,11 @@ export interface TareaDelCable {
    */
   terminadaAMano?: boolean;
   /**
+   * Con qué se CERRÓ (`core/entrega.ts#cierreDeLaEntrega`): lo crítico y las observaciones, lo que dice el comentario
+   * de cierre del ticket. Ausente = se entregó sin nada que decir (o se cerró antes de que existiera).
+   */
+  cierre?: { criticos: string[]; observaciones: string[] };
+  /**
    * El ticket del gestor de tareas en el que vive (`core/tareas.ts#TicketDeTarea`). Cruzan la CLAVE, el conector (de él
    * sale el nombre que se enseña: «Jira»), el enlace y el aviso de lo último que no se pudo escribir; el `sitio` y el
    * `proyecto` del gestor se quedan en el host, como los de una sesión ligada a un ticket.
@@ -1331,6 +1336,7 @@ export function filaDeTarea(t: Tarea): TareaDelCable {
           },
         }),
     ...(t.terminadaAMano === undefined ? {} : { terminadaAMano: t.terminadaAMano }),
+    ...(t.cierre === undefined ? {} : { cierre: { criticos: [...t.cierre.criticos], observaciones: [...t.cierre.observaciones] } }),
     ...(t.ticket === undefined
       ? {}
       : {

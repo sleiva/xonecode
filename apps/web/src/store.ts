@@ -960,6 +960,16 @@ function esFicheroTocado(valor: unknown): valor is FicheroTocado {
 }
 
 /** El ticket de una tarea, campo a campo como el resto de la lista blanca. Ver `TareaDelCable.ticket`. */
+/** El cierre de una tarea, de la lista blanca: dos listas de textos, o nada. */
+function cierreDeTarea(valor: unknown): { cierre?: { criticos: string[]; observaciones: string[] } } {
+  if (typeof valor !== "object" || valor === null) return {};
+  const v = valor as Record<string, unknown>;
+  const textos = (x: unknown): string[] => (Array.isArray(x) ? x.filter((e): e is string => typeof e === "string") : []);
+  const criticos = textos(v["criticos"]);
+  const observaciones = textos(v["observaciones"]);
+  return criticos.length === 0 && observaciones.length === 0 ? {} : { cierre: { criticos, observaciones } };
+}
+
 function ticketDeTarea(valor: unknown): { ticket?: NonNullable<TareaDelCable["ticket"]> } {
   if (typeof valor !== "object" || valor === null) return {};
   const v = valor as Record<string, unknown>;
@@ -1769,6 +1779,8 @@ export function crearStoreDelCliente(): {
                   // JavaScript y marcaría como dada por buena a mano una entrega del
                   // corredor. La trampa de siempre.
                   ...(t["terminadaAMano"] === true ? { terminadaAMano: true } : {}),
+                  // Lo crítico y las observaciones del cierre: solo listas de textos; lo demás no entra.
+                  ...cierreDeTarea(t["cierre"]),
                   // El ticket del gestor: solo con clave Y conector de texto (sin ellos no hay ni qué enseñar ni a quién
                   // nombrar). Un `url` se queda solo si es http(s): va a un `href`.
                   ...ticketDeTarea(t["ticket"]),

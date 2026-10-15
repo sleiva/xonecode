@@ -86,7 +86,7 @@ const DECISIONES: Readonly<Record<string, readonly string[]>> = {
   feedback: ["feedback"],
   veredicto: ["veredicto"],
   // Va al comentario de cierre del TICKET (`## CRITICAL` y observaciones); la pantalla ya enseña el veredicto.
-  cierre: [],
+  cierre: ["cierre"],
   terminadaAMano: ["terminadaAMano"],
   // Viaja RECORTADO: clave, conector, enlace y aviso; el `sitio` y el `proyecto` del gestor se quedan en el host.
   ticket: ["ticket"],

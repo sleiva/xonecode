@@ -1315,6 +1315,8 @@ export interface TareaDelCable {
    * consta — que no es lo mismo que `false`.
    */
   terminadaAMano?: boolean;
+  /** Lo crítico y las observaciones con que se cerró: el `## CRITICAL` de su comentario de cierre. Ausente = nada. */
+  cierre?: { criticos: string[]; observaciones: string[] };
   /** El ticket del gestor en el que vive (redeclarado de `transporte.ts`): clave, conector, enlace y el último aviso. */
   ticket?: { clave: string; conector: string; url?: string; aviso?: string };
 }

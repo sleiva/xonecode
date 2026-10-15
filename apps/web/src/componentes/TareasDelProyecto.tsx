@@ -271,13 +271,14 @@ export function TareasDelProyecto({
           finalizadas.length === 0 ? (
             <p className={estilos.aviso}>Todavía no ha terminado ninguna tarea de este proyecto. Aquí quedan las que se entregan, con lo que hizo cada una.</p>
           ) : (
-            <ul className={estilos.filas}>
+            <ul className={estilos.filasFinalizadas}>
               {finalizadas.map((t) => (
                 <FilaFinalizada
                   key={t.id}
                   tarea={t}
                   {...(alLeerFinalizada === undefined ? {} : { alLeer: alLeerFinalizada })}
                   {...(alPedirUltimaRespuesta === undefined ? {} : { alPedirUltimaRespuesta })}
+                  {...(alDescartar === undefined ? {} : { alBorrar: alDescartar })}
                 />
               ))}
             </ul>
@@ -326,81 +327,170 @@ export function TareasDelProyecto({
  * derecha lo que se puede MIRAR —qué hizo, el encargo, su conversación con los artefactos—. Sin acciones: ya se
  * entregó. Lo desplegado va debajo, a todo el ancho, y uno a la vez; lo plegado se DESMONTA.
  */
+/**
+ * Cómo acabó una finalizada, para su punto de color y sus cuentas: con algo CRÍTICO en su cierre, dada por buena A MANO,
+ * con OBSERVACIONES (el cierre las trae, o el juez no la dio por buena), o LIMPIA. Pura.
+ */
+export type ResultadoDeFinalizada = "critico" | "mano" | "observaciones" | "limpia";
+
+export function resultadoDeFinalizada(t: Pick<TareaDelCable, "cierre" | "terminadaAMano" | "veredicto">): ResultadoDeFinalizada {
+  if ((t.cierre?.criticos.length ?? 0) > 0) return "critico";
+  if (t.terminadaAMano === true) return "mano";
+  if ((t.cierre?.observaciones.length ?? 0) > 0 || (t.veredicto !== undefined && t.veredicto.veredicto !== "verde")) return "observaciones";
+  return "limpia";
+}
+
+const NOMBRE_DEL_RESULTADO: Record<ResultadoDeFinalizada, string> = {
+  critico: "Con críticos",
+  mano: "Cerrada a mano",
+  observaciones: "Con observaciones",
+  limpia: "Limpia",
+};
+
+/** La frase de UNA línea de una finalizada: lo primero que la explica. */
+function lineaDeFinalizada(t: TareaDelCable): string {
+  if (t.terminadaAMano === true) return "La dio por buena una persona.";
+  const primera = (texto: string): string => texto.split(/(?<=[.:;])\s/)[0] ?? texto;
+  if (t.cierre !== undefined && t.cierre.criticos.length > 0) return primera(t.cierre.criticos[0]!);
+  if (t.veredicto !== undefined) return primera(t.veredicto.resumen);
+  return "";
+}
+
+/**
+ * Una FINALIZADA: UNA línea fina —punto de color por cómo acabó, título, ticket, una frase, las cuentas y las fechas— que
+ * se DESPLIEGA entera al pulsarla: lo `## CRITICAL` arriba, las observaciones, qué hizo, el encargo y la conversación.
+ * Diseño suyo (lienzo «Tareas finalizadas — rediseño»): las filas con el veredicto entero a la vista eran un muro de texto.
+ */
 function FilaFinalizada({
   tarea: t,
   alLeer,
   alPedirUltimaRespuesta,
+  alBorrar,
 }: {
   tarea: TareaDelCable;
   alLeer?: (tarea: TareaDelCable) => void;
   alPedirUltimaRespuesta?: (tarea: TareaDelCable) => Promise<{ texto?: string; error?: string }>;
+  /** Quitarla del histórico (la acción `descartar`: a su ticket, ya cerrado, no le hace nada). Pide confirmación antes. */
+  alBorrar?: (id: string) => void;
 }) {
-  const [abierto, setAbierto] = useState<"hizo" | "encargo" | undefined>(undefined);
-  /** Lo que contestó: ausente = sin pedir, `pidiendo` mientras llega. Se pide UNA vez, al desplegarlo. */
+  const [abierta, setAbierta] = useState(false);
+  const [confirmarBorrado, setConfirmarBorrado] = useState(false);
+  const [verEncargo, setVerEncargo] = useState(false);
+  /** Lo que contestó: ausente = sin pedir, `pidiendo` mientras llega. Se pide UNA vez, al desplegarla. */
   const [respuesta, setRespuesta] = useState<{ texto?: string; error?: string } | "pidiendo" | undefined>(undefined);
   const empezo = t.empezada === undefined ? undefined : selloDeFecha(t.empezada);
   const acabo = t.acabada === undefined ? undefined : selloDeFecha(t.acabada);
-  const fechas = [empezo === undefined ? undefined : `empezó ${empezo}`, acabo === undefined ? undefined : `acabó ${acabo}`].filter(
-    (x): x is string => x !== undefined
-  );
+  const fechas = empezo !== undefined && acabo !== undefined ? `${empezo} → ${acabo}` : (acabo ?? empezo ?? "");
   // Sin conversación no hay nada que releer: la sesión solo sobrevive si quedó algo abrible.
   const conConversacion = t.sesion !== undefined;
-  const alternar = (cual: "hizo" | "encargo"): void => {
-    const abrir = abierto !== cual;
-    setAbierto(abrir ? cual : undefined);
-    if (abrir && cual === "hizo" && respuesta === undefined && alPedirUltimaRespuesta !== undefined) {
+  const resultado = resultadoDeFinalizada(t);
+  const criticos = t.cierre?.criticos ?? [];
+  // Sin cierre (una tarea de antes de que existiera), lo que dijo el juez hace de observaciones.
+  const observaciones =
+    t.cierre?.observaciones ??
+    (t.veredicto !== undefined && t.veredicto.veredicto !== "verde" ? [t.veredicto.resumen, ...(t.veredicto.hallazgos ?? [])] : []);
+  const salvedad = t.veredicto?.salvedad;
+  const alternar = (): void => {
+    const abrir = !abierta;
+    setAbierta(abrir);
+    if (abrir && conConversacion && respuesta === undefined && alPedirUltimaRespuesta !== undefined) {
       setRespuesta("pidiendo");
       void alPedirUltimaRespuesta(t).then(setRespuesta, () => setRespuesta({ error: "el envío falló" }));
     }
   };
   return (
-    <li className={estilos.finalizada} data-estado={t.estado}>
-      <div className={estilos.lineaFinalizada}>
-        <span className={estilos.punto} aria-hidden="true" />
+    <li className={estilos.finalizada} data-estado={t.estado} data-resultado={resultado} data-abierta={abierta ? "" : undefined}>
+      <button type="button" className={estilos.lineaFinalizada} aria-expanded={abierta} onClick={alternar}>
+        <span className={estilos.puntoDeResultado} title={NOMBRE_DEL_RESULTADO[resultado]} aria-label={NOMBRE_DEL_RESULTADO[resultado]} />
         <span className={estilos.tituloFinalizada}>{t.titulo}</span>
-        <ClaveDelTicket tarea={t} />
-        <div className={estilos.meta}>
-          {fechas.length === 0 ? null : <span>{fechas.join(" · ")}</span>}
-          <EntregaDeTarea tarea={t} />
-        </div>
-        <div className={estilos.mirar}>
-          {conConversacion && alPedirUltimaRespuesta !== undefined ? (
-            <button type="button" className={estilos.plegable} aria-expanded={abierto === "hizo"} onClick={() => alternar("hizo")}>
-              Qué hizo
-            </button>
-          ) : null}
-          <button type="button" className={estilos.plegable} aria-expanded={abierto === "encargo"} onClick={() => alternar("encargo")}>
-            Encargo
-          </button>
-          {!conConversacion ? (
-            <span className={estilos.sinConversacion}>Sin conversación guardada</span>
-          ) : alLeer === undefined ? null : (
-            <button type="button" className={estilos.leer} onClick={() => alLeer(t)}>
-              Conversación y artefactos
-            </button>
-          )}
-        </div>
-      </div>
+        {t.ticket === undefined ? null : <span className={estilos.ticket}>{t.ticket.clave}</span>}
+        <span className={estilos.lineaResumen}>{lineaDeFinalizada(t)}</span>
+        <span className={estilos.cuentas}>
+          {criticos.length > 0 ? <span className={estilos.cuentaCritica}>{`${criticos.length} crítico${criticos.length === 1 ? "" : "s"}`}</span> : null}
+          {observaciones.length > 0 ? <span className={estilos.cuentaObservaciones}>{`${observaciones.length} obs.`}</span> : null}
+          {resultado === "limpia" ? <span className={estilos.cuentaLimpia}>limpia</span> : null}
+          {resultado === "mano" ? <span className={estilos.cuentaMano}>a mano</span> : null}
+        </span>
+        <span className={estilos.fechasFinalizada}>{fechas}</span>
+        <span className={estilos.flecha} aria-hidden="true">
+          ›
+        </span>
+      </button>
       <AvisoDelTicket tarea={t} />
-      {abierto === "hizo" ? (
+      {abierta ? (
         <div className={estilos.desplegado}>
-          {respuesta === undefined || respuesta === "pidiendo" ? (
-            <p className={estilos.aviso}>Leyendo su conversación…</p>
-          ) : respuesta.error !== undefined ? (
-            <p className={estilos.motivo}>{`No se pudo leer su conversación: ${respuesta.error}`}</p>
-          ) : respuesta.texto === undefined ? (
-            <p className={estilos.aviso}>No consta ninguna respuesta del agente en su conversación.</p>
-          ) : (
-            // Es la respuesta del agente: markdown, como en el chat (con los dólares protegidos).
-            <div className={estilos.respuesta}>
-              <MarkdownText text={protegerDolares(respuesta.texto)} codeLabels={ETIQUETAS_DE_CODIGO} />
+          {criticos.length > 0 ? (
+            <section className={estilos.critico} aria-label="Crítico">
+              <h4 className={estilos.rotuloCritico}>## CRITICAL</h4>
+              <ul>
+                {criticos.map((c, i) => (
+                  <li key={i}>{c}</li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+          {observaciones.length > 0 ? (
+            <section aria-label="Observaciones">
+              <h4 className={estilos.rotuloObservaciones}>Observaciones</h4>
+              <ul className={estilos.listaObservaciones}>
+                {observaciones.map((o, i) => (
+                  <li key={i}>{o}</li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+          {salvedad === undefined ? null : <p className={estilos.salvedad}>{`Se entregó con una condición menos: ${salvedad}`}</p>}
+          {conConversacion && alPedirUltimaRespuesta !== undefined ? (
+            <section aria-label="Qué hizo">
+              <h4 className={estilos.rotuloHizo}>Qué hizo</h4>
+              {respuesta === undefined || respuesta === "pidiendo" ? (
+                <p className={estilos.aviso}>Leyendo su conversación…</p>
+              ) : respuesta.error !== undefined ? (
+                <p className={estilos.motivo}>{`No se pudo leer su conversación: ${respuesta.error}`}</p>
+              ) : respuesta.texto === undefined ? (
+                <p className={estilos.aviso}>No consta ninguna respuesta del agente en su conversación.</p>
+              ) : (
+                // Es la respuesta del agente: markdown, como en el chat (con los dólares protegidos).
+                <div className={estilos.respuesta}>
+                  <MarkdownText text={protegerDolares(respuesta.texto)} codeLabels={ETIQUETAS_DE_CODIGO} />
+                </div>
+              )}
+            </section>
+          ) : null}
+          <div className={estilos.accionesFinalizada}>
+            {!conConversacion ? (
+              <span className={estilos.sinConversacion}>Sin conversación guardada</span>
+            ) : alLeer === undefined ? null : (
+              <button type="button" className={estilos.leer} onClick={() => alLeer(t)}>
+                Conversación y artefactos
+              </button>
+            )}
+            <button type="button" className={estilos.plegable} aria-expanded={verEncargo} onClick={() => setVerEncargo(!verEncargo)}>
+              Encargo
+            </button>
+            <ClaveDelTicket tarea={t} />
+            {alBorrar === undefined ? null : confirmarBorrado ? (
+              <span className={estilos.confirmarBorrado}>
+                ¿Eliminarla del histórico? Su conversación se queda guardada.
+                <button type="button" className={estilos.borrar} onClick={() => alBorrar(t.id)}>
+                  Eliminar
+                </button>
+                <button type="button" className={estilos.plegable} onClick={() => setConfirmarBorrado(false)}>
+                  Cancelar
+                </button>
+              </span>
+            ) : (
+              <button type="button" className={estilos.botonBorrar} onClick={() => setConfirmarBorrado(true)}>
+                Eliminar
+              </button>
+            )}
+          </div>
+          {verEncargo ? (
+            <div>
+              {t.adjuntos.length > 0 ? <p className={estilos.adjuntosDeTarea}>{`Adjuntos: ${t.adjuntos.map((a) => a.nombre).join(", ")}`}</p> : null}
+              <p className={estilos.encargo}>{t.encargo}</p>
             </div>
-          )}
-        </div>
-      ) : abierto === "encargo" ? (
-        <div className={estilos.desplegado}>
-          {t.adjuntos.length > 0 ? <p className={estilos.adjuntosDeTarea}>{`Adjuntos: ${t.adjuntos.map((a) => a.nombre).join(", ")}`}</p> : null}
-          <p className={estilos.encargo}>{t.encargo}</p>
+          ) : null}
         </div>
       ) : null}
     </li>

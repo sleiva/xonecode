@@ -921,8 +921,8 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   `MARCA_DE_BLOQUEANTE`)—, y el resto como `## Observaciones` —un rojo del juez y sus hallazgos, errores del
   verificador, que no corriera—: «si la completó con problemas o detalles, eso no es crítico». El ticket va al estado de
   terminar igual. **Siguen aparcando** solo los turnos que no ACABARON: una pregunta sin contestar, un corte, una pausa,
-  un fallo, y el proceso que se cierra antes de que el juez la mire. Límite declarado: el cierre no viaja al cliente; la
-  tarjeta de Finalizadas enseña el veredicto, no el `## CRITICAL`.
+  un fallo, y el proceso que se cierra antes de que el juez la mire. El cierre viaja al cliente (`TareaDelCable.cierre`) y la fila de
+  Finalizadas lo enseña.
 - **Una tarea resuelve sus dudas SOLA y cierra con un resumen** (`Consola.tareaDeFondo`, `trabajoSinPersona` en
   TrueForge, `TRABAJO_SIN_PERSONA`): su consola declara que no hay nadie, y el raíz contesta sus preguntas como en
   modo autónomo —la opción `(Recommended)`, o «decide tú»—, con el mismo `TOPE_DE_PREGUNTAS_CONTESTADAS_SOLAS`; su
@@ -992,7 +992,10 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   comentario «Descartada en xonecode» y el primer estado de la categoría terminada (no el «terminar» del mapeo, que
   puede ser PROBAR), por `cerrarTicket`.
 - **«En curso» y «Finalizadas»: las terminadas son un HISTÓRICO de solo lectura** (`TareasDelProyecto.tsx#FilaFinalizada`):
-  sin acciones, FUERA de la barra de sesiones (salvo la abierta), la más reciente arriba, «empezó … · acabó …» (nunca «tardó»: cuenta la pausa), lo último que contestó
+  UNA línea fina por tarea, entera un botón que la despliega (diseño suyo, lienzo «Tareas finalizadas — rediseño»): un punto
+  por cómo acabó (`resultadoDeFinalizada`: con críticos, a mano, con observaciones, limpia), título, ticket, una frase, las
+  cuentas y las fechas; desplegada, `## CRITICAL`, observaciones, qué hizo y el encargo. Su única acción es ELIMINARLA del
+  histórico, con confirmación (la acción `descartar`: a su ticket, ya cerrado, no le hace nada). Por lo demás sin acciones, FUERA de la barra de sesiones (salvo la abierta), la más reciente arriba, «empezó … · acabó …» (nunca «tardó»: cuenta la pausa), lo último que contestó
   el agente —pedido al desplegar con `leerSesion`, nunca en la cola— y su conversación abierta para LEER con el motivo
   `finalizada`, que no ofrece escribir. **Sus artefactos salen de SU carpeta, no de la abierta**: `GET /artefacto` y el
   mensaje `artefacto` aceptan `p`/`s` (proyecto y sesión) resueltos por el SERVIDOR con la MISMA barrera que

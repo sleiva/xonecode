@@ -9,6 +9,9 @@
 .lista {
   padding: 16px;
   overflow-y: auto;
+  /* El contenedor de las filas finalizadas (`@container tareas`): en un panel estrecho se quitan su frase y sus fechas. */
+  container-type: inline-size;
+  container-name: tareas;
 }
 
 /* La cabecera de la PESTAÑA (Task 15): título + «Nueva tarea». Es lo que hace que la
@@ -67,6 +70,15 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+/* Las finalizadas, pegadas en un solo marco, separadas por su raya. */
+.filasFinalizadas {
+  composes: filas;
+  gap: 0;
+  overflow: hidden;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
 }
 
 .fila {
@@ -300,32 +312,179 @@
   line-height: 1.6;
 }
 
-/* Una FINALIZADA: una línea fina que aprovecha el ancho —punto, título, fechas y entrega, y lo que se puede mirar a
-   la derecha—; en un panel estrecho se parte sola. Lo desplegado, debajo y a todo el ancho. */
+/* Una FINALIZADA (diseño «Tareas finalizadas — rediseño»): UNA línea fina, entera un botón que despliega —punto de color
+   por cómo acabó, título, ticket, una frase, las cuentas, las fechas y una flecha—. Las filas van pegadas, separadas por
+   una raya, en un solo marco. Lo desplegado, debajo y a todo el ancho. */
 .finalizada {
-  padding: 7px 12px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.finalizada:last-child {
+  border-bottom: none;
+}
+
+.finalizada[data-abierta] {
   background: var(--dsw-alias-bg-layer-1);
 }
 
 .lineaFinalizada {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 4px 12px;
+  gap: 12px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.finalizada .punto {
-  margin-top: 0;
-  border-color: var(--dsw-alias-state-success-primary);
+.lineaFinalizada:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.puntoDeResultado {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
   background: var(--dsw-alias-state-success-primary);
 }
 
-.tituloFinalizada {
-  color: var(--dsw-alias-label-primary);
-  font-size: 13px;
-  font-weight: 500;
+.finalizada[data-resultado="critico"] .puntoDeResultado {
+  background: var(--dsw-alias-state-error-primary);
+}
+
+.finalizada[data-resultado="observaciones"] .puntoDeResultado {
+  background: var(--dsw-alias-state-warn-primary);
+}
+
+.finalizada[data-resultado="mano"] .puntoDeResultado {
+  background: var(--dsw-alias-label-tertiary);
+}
+
+.lineaResumen {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cuentas {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cuentas > span {
+  padding: 1px 7px;
+  border-radius: 4px;
+}
+
+.cuentaCritica {
+  background: var(--dsw-alias-state-error-secondary);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.cuentaObservaciones {
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.cuentaLimpia {
+  background: var(--dsw-alias-state-success-tertiary);
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.cuentaMano {
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.fechasFinalizada {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.flecha {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 16px;
+  transition: transform 120ms;
+}
+
+.lineaFinalizada[aria-expanded="true"] .flecha {
+  transform: rotate(90deg);
+}
+
+/* En un panel estrecho la frase y las fechas se van antes que el título y las cuentas. */
+@container tareas (max-width: 640px) {
+  .lineaResumen,
+  .fechasFinalizada {
+    display: none;
+  }
+}
+
+.critico {
+  padding: 10px 12px;
+  border: 0.5px solid var(--dsw-alias-state-error-primary);
+  border-radius: 8px;
+  background: var(--dsw-alias-state-error-secondary);
+}
+
+.critico ul,
+.listaObservaciones {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.55;
+}
+
+.rotuloCritico,
+.rotuloObservaciones,
+.rotuloHizo {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.rotuloCritico {
+  color: var(--dsw-alias-state-error-primary);
+  font-family: var(--dsw-alias-font-mono, ui-monospace, monospace);
+}
+
+.rotuloObservaciones {
+  color: var(--dsw-alias-state-warn-label);
+  text-transform: uppercase;
+}
+
+.rotuloHizo {
+  color: var(--dsw-alias-label-tertiary);
+  text-transform: uppercase;
+}
+
+.salvedad {
+  margin: 0;
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.accionesFinalizada {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 /* Fechas y entrega, en la misma línea y en segundo plano. Lo de `EntregaDeTarea` se aplana aquí: en la otra pestaña
@@ -396,8 +555,10 @@
 }
 
 .desplegado {
-  margin: 6px 0 2px 18px;
-  padding-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 12px 14px 32px;
   border-top: 0.5px solid var(--dsw-alias-border-l2);
   font-size: 12px;
 }
@@ -427,4 +588,36 @@ a.ticket:hover {
 .botones {
   display: flex;
   gap: 6px;
+}
+
+/* Borrar una finalizada: discreto hasta pedir confirmación; entonces, el rojo de siempre. */
+.botonBorrar {
+  margin-left: auto;
+  padding: 3px 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.botonBorrar:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.confirmarBorrado {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.borrar {
+  composes: peligro from "./Boton.module.css";
 }

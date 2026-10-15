@@ -4146,8 +4146,14 @@ describe("App: una tarea finalizada se lee con su conversación y sus artefactos
     return { store, enviar };
   }
 
+  /** La fila de la finalizada se DESPLIEGA para ver lo que hizo y sus acciones (diseño de filas finas). */
+  const desplegarLaFinalizada = (): void => {
+    fireEvent.click(screen.getAllByRole("button").find((b) => b.getAttribute("aria-expanded") === "false" && b.textContent?.includes("Versión en el login"))!);
+  };
+
   it("«Ver la conversación y sus artefactos» la LEE: sin escribir, con su título y los artefactos de SU carpeta", async () => {
     const { enviar } = conUnaFinalizada();
+    desplegarLaFinalizada();
     enviar.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "Conversación y artefactos" }));
     expect(enviar).toHaveBeenCalledWith({ clase: "leerSesion", proyecto: "p1", sesion: "s-tarea" });
@@ -4166,7 +4172,8 @@ describe("App: una tarea finalizada se lee con su conversación y sus artefactos
 
   it("«Qué hizo» enseña la última respuesta del agente, como markdown", async () => {
     conUnaFinalizada();
-    fireEvent.click(screen.getByRole("button", { name: "Qué hizo" }));
+    // Se pide al desplegar la fila.
+    desplegarLaFinalizada();
     expect(await screen.findByText(/Hecho: la versión sale bajo el logo/)).toBeTruthy();
   });
 
@@ -4180,6 +4187,7 @@ describe("App: una tarea finalizada se lee con su conversación y sus artefactos
 
   it("«Cerrar» vuelve a Tareas → Finalizadas, no al Resumen; y eso se gasta al volver", async () => {
     const { store } = conUnaFinalizada();
+    desplegarLaFinalizada();
     fireEvent.click(screen.getByRole("button", { name: "Conversación y artefactos" }));
     expect(await screen.findByText("añade la versión al login")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
