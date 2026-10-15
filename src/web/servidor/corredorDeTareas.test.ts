@@ -836,9 +836,11 @@ describe("el feedback reanuda una tarea, en su mismo hilo", () => {
         idDeHilo: sesion ?? "nueva",
         correrTarea: async (p) => {
           recibidos.push(p);
-          // La primera vuelta vuelve a aparcar (verificador rojo), para poder comprobar el
-          // SEGUNDO feedback sobre una tarea que ya consumió el primero.
-          return recibidos.length === 1 ? { verificador: "rojo", pendientes: 0 } : { verificador: "verde", pendientes: 0 };
+          // La primera vuelta vuelve a aparcar (el agente PREGUNTA: lo único que, al acabar, espera a la persona), para
+          // poder comprobar el SEGUNDO feedback sobre una tarea que ya consumió el primero.
+          return recibidos.length === 1
+            ? { verificador: "verde", pendientes: 0, preguntaPendiente: "¿Con histórico?" }
+            : { verificador: "verde", pendientes: 0 };
         },
         cerrar: async () => {},
       }),
@@ -2363,10 +2365,11 @@ describe("el volcado de la sesión de una tarea", () => {
       piel?.token(`respuesta ${vuelta}`);
       piel?.cerrarLinea();
       piel?.fin(1);
-      // La PRIMERA vuelta sale en rojo A PROPÓSITO: es lo que fuerza «esperando feedback»
-      // sin tocar el juez ni `revisable`, y `sesion` se queda puesta —nadie le pasa
-      // `sesionAbrible` a este corredor, así que la regla de `sesion` nunca la limpia—.
-      return { verificador: vuelta === 1 ? "rojo" : "verde", pendientes: 0 };
+      // La PRIMERA vuelta acaba PREGUNTANDO a propósito: es lo que fuerza «esperando feedback» (una entrega en rojo ya
+      // no lo hace: se cierra y lo dice), y `sesion` se queda puesta —nadie le pasa `sesionAbrible` a este corredor—.
+      return vuelta === 1
+        ? { verificador: "verde", pendientes: 0, preguntaPendiente: "¿Con histórico?" }
+        : { verificador: "verde", pendientes: 0 };
     });
     const { disco, estado } = discoDeMentira([
       TAREA({ proyecto: { id: "pa", raiz, nombre: "A" }, encargo: "arregla el login" }),
@@ -2450,6 +2453,12 @@ describe("el volcado de la sesión de una tarea", () => {
  * (`core/cloudstudio.ts#PoliticaDeAprobacion`): **el veredicto del juez no basta solo**,
  * porque a un modelo se le puede pedir que avise y a veces no avisa.
  */
+/**
+ * Lo que dice una tarea al CERRARSE (`Tarea.cierre`): lo crítico y las observaciones. Decisión suya: una tarea que acaba
+ * ya no aparca esperando feedback si la entrega no sale verde; se cierra y lo dice en el comentario del ticket.
+ */
+const dichoAlCerrar = (t: Tarea): string => [...(t.cierre?.criticos ?? []), ...(t.cierre?.observaciones ?? [])].join("\n");
+
 describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
   /** El corredor con las dos piezas de la entrega elegidas por el test. */
   function conEntrega(
@@ -2498,8 +2507,8 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
     await corredor.asentar();
 
     const tarea = estado()[0]!;
-    expect(tarea.estado).toBe("requiere-atencion");
-    expect(tarea.motivo).toContain("aprobación");
+    expect(tarea.estado).toBe("terminada");
+    expect(dichoAlCerrar(tarea)).toContain("aprobación");
     /**
      * Y al juez NO se le pregunta: cada consulta es una llamada del modelo más caro del
      * reparto (`afilado`), y ya se sabe que no se entrega. Esta cuenta es además lo que
@@ -2517,8 +2526,8 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
     await corredor.asentar();
 
     const tarea = estado()[0]!;
-    expect(tarea.estado).toBe("requiere-atencion");
-    expect(tarea.motivo).toContain("falta el campo NOMBRE en la colección");
+    expect(tarea.estado).toBe("terminada");
+    expect(dichoAlCerrar(tarea)).toContain("falta el campo NOMBRE en la colección");
     // Y el veredicto queda guardado, que es lo que hace la tarjeta accionable al reintentar.
     expect(tarea.veredicto?.veredicto).toBe("rojo");
   });
@@ -2535,8 +2544,8 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
     });
     await corredor.asentar();
 
-    expect(estado()[0]!.estado).toBe("requiere-atencion");
-    expect(estado()[0]!.motivo).toContain("verificador");
+    expect(estado()[0]!.estado).toBe("terminada");
+    expect(dichoAlCerrar(estado()[0]!)).toContain("verificador");
     expect(juez.casos).toHaveLength(0);
   });
 
@@ -2555,8 +2564,8 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
     p.acabar({ verificador: "verde", pendientes: 0 });
     await corredor.asentar();
 
-    expect(estado()[0]!.estado).toBe("requiere-atencion");
-    expect(estado()[0]!.motivo).toContain("revisar");
+    expect(estado()[0]!.estado).toBe("terminada");
+    expect(dichoAlCerrar(estado()[0]!)).toContain("revisar");
   });
 
   it("si ni se puede preguntar por la marca, se falla CERRADO", async () => {
@@ -2573,10 +2582,10 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
     await corredor.asentar();
 
     const tarea = estado()[0]!;
-    expect(tarea.estado).toBe("requiere-atencion");
+    expect(tarea.estado).toBe("terminada");
     // Y sin la ruta absoluta del mensaje de Node: el motivo se pinta en el kanban y viaja
     // por el cable, que puede ir por un túnel.
-    expect(tarea.motivo).not.toContain("/casa");
+    expect(dichoAlCerrar(tarea)).not.toContain("/casa");
   });
 
   /**
@@ -2591,8 +2600,8 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
     p.acabarMudo();
     await corredor.asentar();
 
-    expect(estado()[0]!.estado).toBe("requiere-atencion");
-    expect(estado()[0]!.motivo).toContain("no informa");
+    expect(estado()[0]!.estado).toBe("terminada");
+    expect(dichoAlCerrar(estado()[0]!)).toContain("no informa");
   });
 
   /**
@@ -2613,10 +2622,10 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
     await corredor.asentar();
 
     const tarea = estado()[0]!;
-    expect(tarea.estado).toBe("requiere-atencion");
-    expect(tarea.motivo).toContain("juez");
+    expect(tarea.estado).toBe("terminada");
+    expect(dichoAlCerrar(tarea)).toContain("juez");
     // El mensaje del fallo de CONSTRUIR sí se conserva: es la única línea que dice qué hacer.
-    expect(tarea.motivo).toContain("NVIDIA_API_KEY");
+    expect(dichoAlCerrar(tarea)).toContain("NVIDIA_API_KEY");
     expect(tarea.veredicto).toBeUndefined();
   });
 
@@ -2695,11 +2704,11 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
     await corredor.asentar();
 
     const tarea = estado()[0]!;
-    expect(tarea.estado).toBe("requiere-atencion");
-    expect(tarea.motivo).toContain("1 escritura(s)");
-    expect(tarea.motivo).toContain("ningún cambio");
+    expect(tarea.estado).toBe("terminada");
+    expect(dichoAlCerrar(tarea)).toContain("1 escritura(s)");
+    expect(dichoAlCerrar(tarea)).toContain("ningún cambio");
     // Las dos condiciones, no una: no aterrizó nada Y por eso no se verificó nada.
-    expect(tarea.motivo).toContain("verificador");
+    expect(dichoAlCerrar(tarea)).toContain("verificador");
     // Y no se gasta una llamada del modelo más caro en tapar un hecho que ya se sabe.
     expect(juez.casos).toHaveLength(0);
   });
@@ -2744,8 +2753,8 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
     p.acabar({ verificador: "no-corrio", pendientes: 0 });
     await corredor.asentar();
 
-    expect(estado()[0]!.estado).toBe("requiere-atencion");
-    expect(estado()[0]!.motivo).toContain("verificador");
+    expect(estado()[0]!.estado).toBe("terminada");
+    expect(dichoAlCerrar(estado()[0]!)).toContain("verificador");
     expect(juez.casos).toHaveLength(0);
   });
 
@@ -2762,9 +2771,9 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
     p.acabar({ verificador: "no-corrio", pendientes: 0 });
     await corredor.asentar();
 
-    expect(estado()[0]!.estado).toBe("requiere-atencion");
-    expect(estado()[0]!.motivo).toContain("verificador");
-    expect(estado()[0]!.motivo).toContain("revisar");
+    expect(estado()[0]!.estado).toBe("terminada");
+    expect(dichoAlCerrar(estado()[0]!)).toContain("verificador");
+    expect(dichoAlCerrar(estado()[0]!)).toContain("revisar");
   });
 
   /**
@@ -2895,8 +2904,8 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
       await new Promise<void>((r) => setTimeout(r, 5));
     }
 
-    expect(estado()[0]!.estado).toBe("requiere-atencion");
-    expect(estado()[0]!.motivo).toContain("no contestó");
+    expect(estado()[0]!.estado).toBe("terminada");
+    expect(dichoAlCerrar(estado()[0]!)).toContain("no contestó");
     await corredor.parar();
   });
 
@@ -3179,6 +3188,39 @@ describe("un turno que acaba PREGUNTANDO no es una entrega", () => {
     await corredor.asentar();
     expect(estado()[0]).toMatchObject({ estado: "en-proceso" });
     expect(estado()[0]!.veredicto).toBeUndefined();
+    await corredor.parar();
+  });
+});
+
+/** Decisión suya: una tarea que acaba se CIERRA siempre y lo que quedó mal se dice en el cierre (y en el ticket). */
+describe("una tarea que acaba se cierra sin preguntar, y dice lo que quedó", () => {
+  it("con el juez en rojo: terminada, con sus hallazgos como observaciones y nada crítico", async () => {
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira();
+    const juez = juezQueDice({ veredicto: "rojo", resumen: "faltan los contadores", hallazgos: ["no se pinta el «12»"] });
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, juez, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabar({ verificador: "verde", pendientes: 0 });
+    await corredor.asentar();
+    const t = estado()[0]!;
+    expect(t.estado).toBe("terminada");
+    expect(t.cierre?.criticos).toEqual([]);
+    expect(t.cierre?.observaciones).toContain("no se pinta el «12»");
+    await corredor.parar();
+  });
+
+  it("con un bloqueante visual medido: terminada, y el bloqueante es CRÍTICO", async () => {
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabar({ verificador: "verde", pendientes: 0, bloqueantesVisuales: ["«ENTRADAS/SALIDAS» de la maqueta NO está en el aparato"] });
+    await corredor.asentar();
+    const t = estado()[0]!;
+    expect(t.estado).toBe("terminada");
+    expect(t.cierre?.criticos).toEqual(["pantalla: «ENTRADAS/SALIDAS» de la maqueta NO está en el aparato"]);
     await corredor.parar();
   });
 });

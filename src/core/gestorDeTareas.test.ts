@@ -281,3 +281,22 @@ describe("IXCODE-15: admiteMiasDelVinculo", () => {
     expect(admiteMiasDelVinculo({ conector: "notion", sitio: "notion", proyecto: "collection://x", admiteMias: true })).toBe(true);
   });
 });
+
+describe("el comentario de cierre de una tarea con algo CRÍTICO", () => {
+  it("## CRITICAL va el PRIMERO, y las observaciones después de la verificación", async () => {
+    const { comentarioDeCierre } = await import("./gestorDeTareas.js");
+    const c = comentarioDeCierre({
+      ficheros: [{ ruta: "EntryPoint.xne", clase: "modificado" }],
+      commits: [],
+      criticos: ["pantalla: «ENTRADAS/SALIDAS» de la maqueta NO está en el aparato"],
+      observaciones: ["el juez de QA dijo «rojo»: faltan los contadores"],
+    });
+    expect(c.startsWith("## CRITICAL\n\n- pantalla: «ENTRADAS/SALIDAS»")).toBe(true);
+    expect(c.indexOf("## Observaciones")).toBeGreaterThan(c.indexOf("## Verificación"));
+  });
+
+  it("sin nada crítico no hay apartado CRITICAL", async () => {
+    const { comentarioDeCierre } = await import("./gestorDeTareas.js");
+    expect(comentarioDeCierre({ ficheros: [], commits: [] })).not.toContain("CRITICAL");
+  });
+});

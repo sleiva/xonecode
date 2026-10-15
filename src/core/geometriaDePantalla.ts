@@ -629,6 +629,20 @@ export function hallazgosDeGeometria(g: GeometriaDelAparato, m?: MaquetaMedida):
   };
 }
 
+/**
+ * La marca de una línea BLOQUEANTE en el informe del crítico: la lee el cierre de una tarea (`bloqueantesDelInforme`) para
+ * su `## CRITICAL`, y le dice al agente qué es lo grave entre las diferencias.
+ */
+export const MARCA_DE_BLOQUEANTE = "BLOQUEANTE · ";
+
+/** Las líneas bloqueantes de un informe del crítico, sin la marca. Puro. */
+export function bloqueantesDelInforme(informe: string): string[] {
+  return informe
+    .split("\n")
+    .filter((l) => l.startsWith(`- ${MARCA_DE_BLOQUEANTE}`))
+    .map((l) => l.slice(2 + MARCA_DE_BLOQUEANTE.length).trim());
+}
+
 /** El bloque de texto que ve el agente (y que se le da al crítico como HECHOS). */
 export function informeDeGeometria(h: HallazgosDeGeometria, conMaqueta: boolean): string[] {
   const lineas = [
@@ -637,7 +651,8 @@ export function informeDeGeometria(h: HallazgosDeGeometria, conMaqueta: boolean)
       : "GEOMETRÍA, MEDIDA (árbol de controles del aparato; sin cajas de la maqueta, solo lo que se ve en el propio aparato):",
   ];
   if (h.bloqueantes.length === 0 && h.diferencias.length === 0) lineas.push("- Nada: ningún control tapado, fuera de la pantalla o solapado" + (conMaqueta ? ", y la estructura cuadra con la maqueta." : "."));
-  for (const b of h.bloqueantes) lineas.push(`- ${b}`);
+  // Con su marca: es lo que el cierre de una tarea lee como CRÍTICO (`MARCA_DE_BLOQUEANTE`).
+  for (const b of h.bloqueantes) lineas.push(`- ${MARCA_DE_BLOQUEANTE}${b}`);
   for (const d of h.diferencias) lineas.push(`- ${d}`);
   for (const n of h.notas) lineas.push(`- (nota) ${n}`);
   return lineas;

@@ -362,6 +362,13 @@ export interface DatosDeCierre {
    * que el comentario de cabecera de `sesionGit.ts` describe para la pestaña Revisión.
    */
   atribucion?: "git" | "desde-apertura" | "sin-marca";
+  /**
+   * Lo CRÍTICO de una tarea que se cerró (cortada, sin escribir, un bloqueante visual): va ARRIBA, bajo `## CRITICAL`,
+   * para que nadie lo pase por alto en el ticket. Ausente o vacío = nada crítico.
+   */
+  criticos?: readonly string[];
+  /** Lo que quedó con problemas o detalles (el juez, el verificador): `## Observaciones`, no crítico. */
+  observaciones?: readonly string[];
 }
 
 /** Cuánto del resumen entra en el comentario: un ticket no es el sitio del transcript entero. */
@@ -375,8 +382,10 @@ const TOPE_DEL_RESUMEN_DE_CIERRE = 1500;
  */
 export function comentarioDeCierre(datos: DatosDeCierre): string {
   const secciones = [
+    ...((datos.criticos ?? []).length > 0 ? [`## CRITICAL\n\n${datos.criticos!.map((c) => `- ${c}`).join("\n")}`] : []),
     seccionQueCambio(datos.ficheros, datos.commits, datos.atribucion),
     seccionVerificacion(datos.veredicto),
+    ...((datos.observaciones ?? []).length > 0 ? [`## Observaciones\n\n${datos.observaciones!.map((o) => `- ${o}`).join("\n")}`] : []),
   ];
   if (datos.plan !== undefined && datos.plan.trim() !== "") secciones.push(`## Plan\n\n${datos.plan.trim()}`);
   if (datos.resumen !== undefined && datos.resumen.trim() !== "") {

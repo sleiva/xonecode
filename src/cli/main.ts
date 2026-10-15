@@ -757,6 +757,7 @@ export function crearEjecutorReal(
       pendientes: resultado.pendientes,
       ...(resultado.topeAgotado === undefined ? {} : { topeAgotado: resultado.topeAgotado }),
       ...(resultado.preguntaPendiente === undefined ? {} : { preguntaPendiente: resultado.preguntaPendiente }),
+      ...(resultado.bloqueantesVisuales === undefined ? {} : { bloqueantesVisuales: resultado.bloqueantesVisuales }),
       ...(resultado.comprobacionesVisuales === undefined ? {} : { comprobacionesVisuales: resultado.comprobacionesVisuales }),
       ...(resultado.hallazgos === undefined ? {} : { hallazgos: resultado.hallazgos }),
       ...(resultado.motivoSinVerificar === undefined

@@ -114,6 +114,7 @@ import { anotarPaso } from "../../../core/trazaDeErrores.js";
 import { entornoConDepuracion } from "../../turno/depuracion.js";
 import { detalleDe, parametrosDe } from "../../turno/resumenDeTool.js";
 import { lineaDeComprobacion, soloDocumentacion, TOPE_DE_COMPROBACIONES_AL_JUEZ } from "../../../core/entrega.js";
+import { bloqueantesDelInforme } from "../../../core/geometriaDePantalla.js";
 import { apartarMemoria, cargarMemoria, fotoSaneada, guardarMemoria, saldarColgadas, textoDeInterrupcion, textoDeMemoriaDescartada, type FotoDeHilo } from "./memoriaTrueforge.js";
 import { crearNota, sobrantes, type Nota } from "./notas.js";
 import { crearMemoriaDeEspecialistas } from "./memoriaDeEspecialistas.js";
@@ -787,6 +788,7 @@ export async function abrirSesionTrueforge(
   let capturasDelTurno: Artefacto[] = [];
   /** Lo que dieron las comprobaciones visuales del turno, una línea cada una, para el juez de QA (`ResultadoDeTurno`). */
   let comprobacionesDelTurno: string[] = [];
+  let bloqueantesVisualesDelTurno: string[] = [];
   const anotarComprobacion = (linea: string): void => {
     comprobacionesDelTurno = [...comprobacionesDelTurno, linea].slice(-TOPE_DE_COMPROBACIONES_AL_JUEZ);
   };
@@ -1647,6 +1649,9 @@ export async function abrirSesionTrueforge(
         // Las comprobaciones VISUALES, para el juez: lo que dijeron, medido aquí y no contado por el agente.
         if (llamada !== undefined && (llamada.nombre === NOMBRE_COMPARAR_CAPTURAS || llamada.nombre === "xone_critica_visual") && typeof evento.content === "string") {
           anotarComprobacion(lineaDeComprobacion(llamada.nombre, detalleDe(llamada.nombre, llamada.args), evento.content));
+          // Lo BLOQUEANTE de la ÚLTIMA crítica: es el estado final de la pantalla, y el cierre de una tarea lo pone en
+          // su `## CRITICAL` (`bloqueantesDelInforme`).
+          if (llamada.nombre === "xone_critica_visual") bloqueantesVisualesDelTurno = bloqueantesDelInforme(evento.content);
         }
         const chars = typeof evento.content === "string" ? evento.content.length : 0;
         diagnostico?.resultado?.(llamada?.nombre, llamada === undefined ? undefined : detalleDe(llamada.nombre, llamada.args), chars);
@@ -1775,6 +1780,7 @@ export async function abrirSesionTrueforge(
       externosDelTurno = 0;
       capturasDelTurno = [];
       comprobacionesDelTurno = [];
+      bloqueantesVisualesDelTurno = [];
       /** El encargo de ESTE turno tal cual se pidió, y el mismo con la última pregunta y su
        *  respuesta al lado, que es lo que se juzga y se repara (ver `flujo`). Ausente = no consta. */
       let encargoDelTurno: string | undefined;
@@ -2299,6 +2305,7 @@ export async function abrirSesionTrueforge(
         // La pregunta que deja ESTE turno: la de un turno anterior se consume al empezar (`enEspera`).
         ...(preguntaEnEspera === undefined ? {} : { preguntaPendiente: consultaDe(preguntaEnEspera.args).pregunta }),
         ...(comprobacionesDelTurno.length === 0 ? {} : { comprobacionesVisuales: comprobacionesDelTurno }),
+        ...(bloqueantesVisualesDelTurno.length === 0 ? {} : { bloqueantesVisuales: bloqueantesVisualesDelTurno }),
         ...(hallazgosDelTurno.length === 0 ? {} : { hallazgos: hallazgosDelTurno }),
         ...(preexistentesDelTurno === undefined ? {} : { preexistentes: preexistentesDelTurno }),
         ...(motivoSinVerificar === undefined ? {} : { motivoSinVerificar }),

@@ -85,6 +85,8 @@ const DECISIONES: Readonly<Record<string, readonly string[]>> = {
   autorizadas: ["autorizadas"],
   feedback: ["feedback"],
   veredicto: ["veredicto"],
+  // Va al comentario de cierre del TICKET (`## CRITICAL` y observaciones); la pantalla ya enseña el veredicto.
+  cierre: [],
   terminadaAMano: ["terminadaAMano"],
   // Viaja RECORTADO: clave, conector, enlace y aviso; el `sitio` y el `proyecto` del gestor se quedan en el host.
   ticket: ["ticket"],
@@ -114,6 +116,7 @@ const TAREA_COMPLETA: Required<Tarea> = {
     hallazgos: ["falta un título en la lista"],
     salvedad: "el turno no cambió ningún fichero",
   },
+  cierre: { criticos: ["se cortó al agotar el tope"], observaciones: ["el juez de QA dijo «rojo»"] },
   terminadaAMano: true,
   ticket: { conector: "jira", sitio: "cloud-1", proyecto: "KAN", clave: "KAN-7", url: "https://x.atlassian.net/browse/KAN-7", aviso: "no se pudo pasar a PROBAR" },
 };

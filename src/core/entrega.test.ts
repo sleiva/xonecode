@@ -25,6 +25,8 @@ describe("condicionesDeEntrega: lo que comprueba el CÓDIGO", () => {
     expect(condicionesDeEntrega({ ...VERDE, verificador: "rojo" })).toEqual({
       entregable: false,
       motivo: expect.stringContaining("verificador"),
+      // Y al cierre va como OBSERVACIÓN, no como crítico: la tarea se completó con un problema.
+      observaciones: [expect.stringContaining("verificador")],
     });
   });
 
@@ -47,7 +49,12 @@ describe("condicionesDeEntrega: lo que comprueba el CÓDIGO", () => {
       pendientes: 3,
       topeAgotado: 50,
     });
-    expect(r).toEqual({ entregable: false, motivo: motivoDeTopeAgotado(50, 3) });
+    expect(r).toEqual({
+      entregable: false,
+      motivo: motivoDeTopeAgotado(50, 3),
+      // Y es CRÍTICO para el cierre: la tarea quedó a medias.
+      criticos: ["se cortó al agotar el tope de 50 rondas de escritura: el trabajo quedó a medias (las últimas 3 escritura(s) no se aplicaron)"],
+    });
     expect(motivoDeTopeAgotado(50, 3)).toBe(
       "agotó el tope de 50 rondas de escritura de una tarea; las últimas 3 escritura(s) no se aplicaron, y el verificador no llegó a correr. Pulsa «Continuar» para que siga donde lo dejó"
     );
@@ -248,6 +255,7 @@ describe("cuando el turno no escribió nada, el verificador no APLICA", () => {
     expect(decisionDeEntrega(medida, { veredicto: "rojo", resumen: "no ha hecho lo que se pedía" })).toEqual({
       entregable: false,
       motivo: expect.stringContaining("no ha hecho lo que se pedía"),
+      observaciones: [expect.stringContaining("no ha hecho lo que se pedía")],
     });
     expect(decisionDeEntrega(medida, undefined).entregable).toBe(false);
   });
@@ -397,5 +405,32 @@ describe("medidaDeEntrega conserva lo que git supo, y solo eso", () => {
       autorizadas: 0,
     });
     expect("autorizadas" in medidaDeEntrega({ verificador: "verde", pendientes: 0 }, { revisable: true })).toBe(false);
+  });
+});
+
+describe("el CIERRE de una tarea que acaba: lo crítico y las observaciones", () => {
+  it("un rojo del juez NO es crítico: va a observaciones, con lo que encontró", async () => {
+    const { cierreDeLaEntrega } = await import("./entrega.js");
+    const c = cierreDeLaEntrega(
+      { entregable: false, motivo: "el juez de QA dijo «rojo»: falta el contador" },
+      { veredicto: "rojo", resumen: "falta el contador", hallazgos: ["no se pinta el «12»"] }
+    );
+    expect(c).toEqual({ criticos: [], observaciones: ["el juez de QA dijo «rojo»: falta el contador", "no se pinta el «12»"] });
+  });
+
+  it("lo crítico no se cuenta otra vez en las observaciones", async () => {
+    const { cierreDeLaEntrega, criticoDeTopeAgotado } = await import("./entrega.js");
+    const c = cierreDeLaEntrega(
+      { entregable: false, motivo: `${motivoDeTopeAgotado(50, 3)}; el verificador no corrió en este turno`, criticos: [criticoDeTopeAgotado(50, 3)], observaciones: ["el verificador no corrió en este turno"] },
+      undefined
+    );
+    expect(c.criticos).toEqual([criticoDeTopeAgotado(50, 3)]);
+    expect(c.observaciones).toEqual(["el verificador no corrió en este turno"]);
+  });
+
+  it("un bloqueante visual medido es crítico aunque se entregue", () => {
+    const r = condicionesDeEntrega({ ...VERDE, bloqueantesVisuales: ["«=» queda TAPADO por la barra"] });
+    expect(r.entregable).toBe(true);
+    expect(r.criticos).toEqual(["pantalla: «=» queda TAPADO por la barra"]);
   });
 });

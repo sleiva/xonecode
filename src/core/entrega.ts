@@ -106,6 +106,12 @@ export interface ResultadoDeTurno {
    */
   preguntaPendiente?: string;
   /**
+   * Lo BLOQUEANTE medido por el crítico visual en su ÚLTIMA crítica del turno (el estado final de la pantalla): un
+   * control tapado, fuera de la pantalla o que falta respecto a la maqueta. Es CRÍTICO para el cierre (`## CRITICAL`);
+   * un defecto de detalle no. Ausente = no hubo crítica, o no dio nada bloqueante.
+   */
+  bloqueantesVisuales?: string[];
+  /**
    * Las comprobaciones VISUALES del turno, una línea cada una y medidas por el harness: lo que dio cada
    * `comparar_capturas` y `xone_critica_visual`, y el crítico de pantalla del cierre. Van al juez de QA como HECHO:
    * medido en una tarea real (Maset), el juez dictó rojo porque «no consta la validación visual» que el criterio pedía,
@@ -237,6 +243,14 @@ export interface Entrega {
    * juez queda como la única condición de contenido. Quien lo lea tiene derecho a saberlo.
    */
   salvedad?: string;
+  /**
+   * Lo CRÍTICO, aparte de si se entrega: una tarea cortada (el tope de rondas), que no llegó a escribir lo que autorizó,
+   * o con un bloqueante visual medido. Decisión suya: una tarea que se completó con problemas o detalles (un rojo del
+   * juez, errores del verificador) NO es crítica. Va bajo `## CRITICAL` en el comentario de cierre. Ausente = nada.
+   */
+  criticos?: string[];
+  /** Lo que falló y NO es crítico (verificador, juez, marca de git…): observaciones del cierre. Ausente = nada. */
+  observaciones?: string[];
 }
 
 /**
@@ -327,7 +341,11 @@ export function condicionesDeEntrega(medida: MedidaDeEntrega): Entrega {
    * llegaron. Tratarlo como solo lectura entregaría el caso al revés.
    */
   const nadaAterrizo = medida.escribio === false && (medida.autorizadas ?? 0) > 0;
+  const criticos: string[] = [];
+  /** Los fallos que NO son críticos: van como observaciones al cierre (`cierreDeLaEntrega`). */
+  const observaciones: string[] = [];
   if (nadaAterrizo) {
+    criticos.push(`autorizó ${medida.autorizadas} escritura(s) y git no ve ningún cambio en el proyecto`);
     fallos.push(
       `el turno autorizó ${medida.autorizadas} escritura(s) y git no ve ningún cambio en el ` +
         "proyecto: o las rechazó una guarda de ruta, o escribieron lo que ya estaba"
@@ -352,6 +370,7 @@ export function condicionesDeEntrega(medida: MedidaDeEntrega): Entrega {
         ? `el verificador dejó ${errores} error(es) sin corregir`
         : "el verificador acabó en rojo"
     );
+    observaciones.push(fallos.at(-1)!);
   } else if (medida.verificador === "no-corrio" && medida.topeAgotado === undefined) {
     // Cortado por el tope, el «no corrió» es consecuencia del corte y se dice con él, abajo.
     fallos.push(
@@ -359,22 +378,29 @@ export function condicionesDeEntrega(medida: MedidaDeEntrega): Entrega {
         medida.motivoSinVerificar === undefined ? "" : ` (${medida.motivoSinVerificar})`
       }`
     );
+    observaciones.push(fallos.at(-1)!);
   }
   if (medida.topeAgotado !== undefined) {
+    criticos.push(criticoDeTopeAgotado(medida.topeAgotado, medida.pendientes));
     fallos.push(motivoDeTopeAgotado(medida.topeAgotado, medida.pendientes));
   } else if (medida.pendientes > 0) {
     fallos.push(`quedaron ${medida.pendientes} escritura(s) esperando aprobación, y no se aplicaron`);
+    observaciones.push(fallos.at(-1)!);
   }
   if (!medida.revisable) {
     fallos.push("no se puede revisar lo que ha escrito: la sesión no dejó marca de git con la que comparar");
+    observaciones.push(fallos.at(-1)!);
   }
+  for (const b of medida.bloqueantesVisuales ?? []) criticos.push(`pantalla: ${b}`);
+  const conCriticos = { ...(criticos.length === 0 ? {} : { criticos }), ...(observaciones.length === 0 ? {} : { observaciones }) };
   if (fallos.length === 0) {
     return {
       entregable: true,
       ...(nadaQueVerificar ? { salvedad: SALVEDAD_SIN_ESCRITURAS } : soloDocs ? { salvedad: SALVEDAD_SOLO_DOCUMENTACION } : {}),
+      ...conCriticos,
     };
   }
-  return { entregable: false, motivo: fallos.join("; ") };
+  return { entregable: false, motivo: fallos.join("; "), ...conCriticos };
 }
 
 /**
@@ -395,22 +421,20 @@ export function decisionDeEntrega(
 ): Entrega {
   const condiciones = condicionesDeEntrega(medida);
   if (!condiciones.entregable) return condiciones;
+  const conCriticos = condiciones.criticos === undefined ? {} : { criticos: condiciones.criticos };
+  const conObservacion = (o: string) => ({ observaciones: [...(condiciones.observaciones ?? []), o] });
   if (veredicto === undefined) {
-    return {
-      entregable: false,
-      motivo: "no hay veredicto del juez de QA, y sin él una tarea no se entrega",
-    };
+    const motivo = "no hay veredicto del juez de QA, y sin él una tarea no se entrega";
+    return { entregable: false, motivo, ...conCriticos, ...conObservacion(motivo) };
   }
   if (veredicto.veredicto !== "verde") {
-    return {
-      entregable: false,
-      motivo: `el juez de QA dijo «${veredicto.veredicto}»: ${veredicto.resumen}`,
-    };
+    const motivo = `el juez de QA dijo «${veredicto.veredicto}»: ${veredicto.resumen}`;
+    return { entregable: false, motivo, ...conCriticos, ...conObservacion(motivo) };
   }
   // La salvedad de las condiciones viaja hasta aquí: es la entrega la que hay que poder
   // leer, no un paso intermedio. Con el verificador fuera de juego, el veredicto del juez
   // es la única condición de CONTENIDO que quedaba, y eso es lo que dice.
-  return { entregable: true, ...(condiciones.salvedad === undefined ? {} : { salvedad: condiciones.salvedad }) };
+  return { entregable: true, ...(condiciones.salvedad === undefined ? {} : { salvedad: condiciones.salvedad }), ...conCriticos };
 }
 
 /**
@@ -418,6 +442,11 @@ export function decisionDeEntrega(
  * tarea real (Maset), el motivo de antes —«quedaron 3 escritura(s) esperando aprobación»— no decía que el turno se había
  * cortado ni qué hacer con una ventana casi lista.
  */
+/** El tope agotado dicho para el `## CRITICAL` de una tarea que se CIERRA: sin «Continuar», que una cerrada no tiene. */
+export const criticoDeTopeAgotado = (tope: number, pendientes: number): string =>
+  `se cortó al agotar el tope de ${tope} rondas de escritura: el trabajo quedó a medias` +
+  (pendientes > 0 ? ` (las últimas ${pendientes} escritura(s) no se aplicaron)` : "");
+
 export const motivoDeTopeAgotado = (tope: number, pendientes: number): string =>
   `agotó el tope de ${tope} rondas de escritura de una tarea` +
   (pendientes > 0 ? `; las últimas ${pendientes} escritura(s) no se aplicaron` : "") +
@@ -440,4 +469,26 @@ export function lineaDeComprobacion(quien: string, sobre: string | undefined, te
     .replace(/\s+/g, " ");
   const cuerpo = dicho.length > tope ? `${dicho.slice(0, tope)}…` : dicho;
   return `${quien}${sobre === undefined ? "" : ` sobre ${sobre}`}: ${cuerpo === "" ? "(sin texto)" : cuerpo}`;
+}
+
+/**
+ * **El CIERRE de una tarea que acaba**: lo crítico y las observaciones, para el comentario del ticket.
+ *
+ * Decisión suya: una tarea de fondo NO se queda esperando a que la persona decida al acabar —se cierra siempre—, y lo
+ * que haya quedado mal se DICE en el comentario. Lo crítico (`Entrega.criticos`: cortada, sin escribir, un bloqueante
+ * visual) va bajo `## CRITICAL`; lo demás de la entrega —un rojo del juez, errores del verificador, que no corriera—
+ * son OBSERVACIONES: «si la completó con problemas o detalles, eso no es crítico». Del motivo se quitan los fallos que
+ * ya son críticos, para no contarlos dos veces. Puro.
+ */
+export interface CierreDeTarea {
+  criticos: string[];
+  observaciones: string[];
+}
+
+export function cierreDeLaEntrega(entrega: Entrega, veredicto: VeredictoDeTarea | undefined): CierreDeTarea {
+  const delJuez = veredicto !== undefined && veredicto.veredicto !== "verde" ? (veredicto.hallazgos ?? []) : [];
+  const criticos = entrega.criticos ?? [];
+  // Una entrega que no se pudo evaluar (el juez no contestó, o reventó) solo trae su motivo: ese ES la observación.
+  const propias = entrega.observaciones ?? (!entrega.entregable && criticos.length === 0 && entrega.motivo !== undefined ? [entrega.motivo] : []);
+  return { criticos, observaciones: [...propias, ...delJuez] };
 }

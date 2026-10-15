@@ -328,3 +328,12 @@ describe("cajaParaElEstilo: el estilo de un texto se mide en su ENVOLTORIO (el f
     expect(de("MAP_TIT")).toEqual(caja(250, 630, 300, 60));
   });
 });
+
+describe("los bloqueantes van MARCADOS en el informe, y se leen de vuelta", () => {
+  it("la marca está en la línea y `bloqueantesDelInforme` los saca sin ella", async () => {
+    const { bloqueantesDelInforme, MARCA_DE_BLOQUEANTE } = await import("./geometriaDePantalla.js");
+    const lineas = informeDeGeometria({ bloqueantes: ["«=» queda TAPADO"], diferencias: ["otra cosa"], notas: [] }, true);
+    expect(lineas).toContain(`- ${MARCA_DE_BLOQUEANTE}«=» queda TAPADO`);
+    expect(bloqueantesDelInforme(lineas.join("\n"))).toEqual(["«=» queda TAPADO"]);
+  });
+});

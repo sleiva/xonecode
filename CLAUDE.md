@@ -914,6 +914,15 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   condiciones las comprueba el CÓDIGO (`core/entrega.ts#condicionesDeEntrega`) — verificador en
   VERDE (no correr **no es** verde), nada pendiente de aprobar, `revisable`, y autorizó escrituras
   y git no ve ningún cambio. `escribio` solo se afirma **con marca** de git.
+- **Y una tarea que ACABA se cierra siempre: la entrega ya no la aparca** (decisión suya; `core/entrega.ts
+  #cierreDeLaEntrega`, `Tarea.cierre`). Lo que no salió limpio se DICE en el comentario de cierre del ticket: lo CRÍTICO
+  arriba, bajo `## CRITICAL` —cortada por el tope, autorizó y no escribió nada, o un BLOQUEANTE visual medido en la
+  última crítica del turno (`ResultadoDeTurno.bloqueantesVisuales`, las líneas que el crítico marca con
+  `MARCA_DE_BLOQUEANTE`)—, y el resto como `## Observaciones` —un rojo del juez y sus hallazgos, errores del
+  verificador, que no corriera—: «si la completó con problemas o detalles, eso no es crítico». El ticket va al estado de
+  terminar igual. **Siguen aparcando** solo los turnos que no ACABARON: una pregunta sin contestar, un corte, una pausa,
+  un fallo, y el proceso que se cierra antes de que el juez la mire. Límite declarado: el cierre no viaja al cliente; la
+  tarjeta de Finalizadas enseña el veredicto, no el `## CRITICAL`.
 - **Una tarea resuelve sus dudas SOLA y cierra con un resumen** (`Consola.tareaDeFondo`, `trabajoSinPersona` en
   TrueForge, `TRABAJO_SIN_PERSONA`): su consola declara que no hay nadie, y el raíz contesta sus preguntas como en
   modo autónomo —la opción `(Recommended)`, o «decide tú»—, con el mismo `TOPE_DE_PREGUNTAS_CONTESTADAS_SOLAS`; su

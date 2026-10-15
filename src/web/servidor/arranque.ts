@@ -974,11 +974,16 @@ export function copiasConGestor(base: string): CopiaConGestor[] {
 }
 
 export async function datosDeCierreDeTarea(tarea: Tarea): Promise<DatosDeCierre> {
-  if (tarea.sesion === undefined) return { ficheros: [], commits: [] };
+  // Lo crítico y las observaciones con que se cerró (`Tarea.cierre`): van al comentario aunque falle lo demás.
+  const delCierre = {
+    ...((tarea.cierre?.criticos ?? []).length > 0 ? { criticos: tarea.cierre!.criticos } : {}),
+    ...((tarea.cierre?.observaciones ?? []).length > 0 ? { observaciones: tarea.cierre!.observaciones } : {}),
+  };
+  if (tarea.sesion === undefined) return { ficheros: [], commits: [], ...delCierre };
   try {
-    return await datosDeCierre(tarea.proyecto.raiz, tarea.sesion);
+    return { ...(await datosDeCierre(tarea.proyecto.raiz, tarea.sesion)), ...delCierre };
   } catch {
-    return { ficheros: [], commits: [] };
+    return { ficheros: [], commits: [], ...delCierre };
   }
 }
 

@@ -32,10 +32,12 @@ import {
   type Tarea,
 } from "../../core/tareas.js";
 import {
+  cierreDeLaEntrega,
   condicionesDeEntrega,
   decisionDeEntrega,
   medidaDeEntrega,
   motivoDePreguntaPendiente,
+  type CierreDeTarea,
   type ResultadoDeTurno,
   type VeredictoDeTarea,
 } from "../../core/entrega.js";
@@ -595,6 +597,8 @@ export function crearCorredorDeTareas(opciones: {
      * más caro para volver a saber lo mismo.
      */
     veredicto?: VeredictoDeTarea;
+    /** Con qué se cierra, si la entrega no salió limpia (`cierreDeLaEntrega`): va al comentario del ticket. */
+    cierre?: CierreDeTarea;
     /**
      * La consola de esta tarea, en cuanto existe. Es lo que deja enganchar a un mirón
      * DESPUÉS de que el turno haya arrancado — el caso normal, porque la tarea se ve «en
@@ -1061,7 +1065,7 @@ export function crearCorredorDeTareas(opciones: {
          * en Maset: el rojo «la sesión no escribió ningún fichero» del primer ciclo —el agente solo preguntó— siguió en
          * la tarea durante los siguientes, con cinco commits ya hechos. El de este ciclo lo pondrá su entrega.
          */
-        const { veredicto: _anterior, ...sinVeredicto } = conPendienteConsumido;
+        const { veredicto: _anterior, cierre: _cierreAnterior, ...sinVeredicto } = conPendienteConsumido;
         return conEstado({ ...sinVeredicto, sesion: hilo }, "en-proceso", undefined, { pid });
       });
       if (marcada) {
@@ -1144,7 +1148,19 @@ export function crearCorredorDeTareas(opciones: {
     if (motivo === undefined && resultado?.preguntaPendiente !== undefined) motivo = motivoDePreguntaPendiente(resultado.preguntaPendiente);
     if (motivo === undefined) {
       const entrega = await puertaDeEntrega(tarea, hilo, entrada, resultado, consola.esperarMarca?.bind(consola));
-      motivo = entrega.motivo;
+      /**
+       * **Una tarea que ACABA se cierra, salga como salga la entrega** (decisión suya): no se queda esperando a que la
+       * persona decida. Lo que quedó mal se DICE en el comentario de cierre del ticket —lo crítico bajo `## CRITICAL`,
+       * el resto como observaciones— (`cierreDeLaEntrega`). Siguen APARCANDO solo los turnos que no acabaron: una
+       * pregunta sin contestar, un corte, una pausa, un fallo (todos ponen `motivo` antes de llegar aquí).
+       */
+      if (parando) {
+        // La única excepción: el proceso se va ANTES de que el juez la mire. No se evaluó, así que no se da por acabada.
+        motivo = entrega.motivo;
+      } else {
+        const cierre = cierreDeLaEntrega(entrega, entrada.veredicto);
+        if (cierre.criticos.length > 0 || cierre.observaciones.length > 0) entrada.cierre = cierre;
+      }
       // Con qué condición de MENOS se entregó, si fue el caso: viaja pegada al veredicto,
       // porque una entrega con una condición menos no puede parecer una entrega normal y el
       // `motivo` de una tarea terminada no existe (`conEstado` lo borra, a propósito).
@@ -1167,8 +1183,10 @@ export function crearCorredorDeTareas(opciones: {
     // puede quedarse sin registrar lo que la tarea autorizó. Va sobre la tarea RELEÍDA del
     // disco (`escribirSiSigueSiendoNuestra` le pasa la actual), no sobre la que se despachó,
     // para no pisar lo que el cable cambiara entre medias.
-    let conLoQueQuede: (t: Tarea) => Tarea = (t) =>
-      conVeredicto(conAutorizadas(t, entrada.autorizadas), entrada.veredicto);
+    let conLoQueQuede: (t: Tarea) => Tarea = (t) => {
+      const base = conVeredicto(conAutorizadas(t, entrada.autorizadas), entrada.veredicto);
+      return entrada.cierre === undefined ? base : { ...base, cierre: entrada.cierre };
+    };
     try {
       if (await olvidarSiNoSePuedeAbrir(tarea.proyecto.raiz, hilo)) {
         conLoQueQuede = (t) =>

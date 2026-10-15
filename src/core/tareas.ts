@@ -6,7 +6,7 @@
  * donde una equivocación se paga con dos turnos a la vez sobre el mismo proyecto.
  */
 import { tituloDesde } from "./textos.js";
-import type { VeredictoDeTarea } from "./entrega.js";
+import type { CierreDeTarea, VeredictoDeTarea } from "./entrega.js";
 import type { MapeoDeEstados } from "./gestorDeTareas.js";
 
 /**
@@ -167,6 +167,11 @@ export interface Tarea {
    * del nuevo enseñaría dos respuestas a una sola pregunta.
    */
   veredicto?: VeredictoDeTarea;
+  /**
+   * Con qué se CERRÓ, cuando la entrega no salió limpia (`core/entrega.ts#cierreDeLaEntrega`): lo crítico y las
+   * observaciones, que van al comentario de cierre del ticket. Ausente = se entregó sin nada que decir.
+   */
+  cierre?: CierreDeTarea;
   /**
    * La dio por buena una PERSONA, con el botón «Dar por bueno», en vez de la puerta de
    * entrega (`core/entrega.ts#decisionDeEntrega`).
