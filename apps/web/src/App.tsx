@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { Planes } from "./componentes/Planes.js";
 import { Colecciones } from "./componentes/Colecciones.js";
 import type { crearStoreDelCliente } from "./store.js";
-import type { Acto, FicheroDelProyecto, TareaDelCable, ActoDeSincronizacion, FotoDelResumen, ListadoDeSoporte, MensajeDelCliente, ModoDeEscritura } from "./tipos.js";
+import type { Acto, EstadoDelGestor, FicheroDelProyecto, MapeoDeEstados, TareaDelCable, ActoDeSincronizacion, FotoDelResumen, ListadoDeSoporte, MensajeDelCliente, ModoDeEscritura } from "./tipos.js";
 import type { Conexion } from "./conexion.js";
 import { ANCHO_BARRA_POR_OMISION, Maqueta } from "./componentes/Maqueta.js";
 import { Barra } from "./componentes/Barra.js";
@@ -2713,6 +2713,22 @@ export function App({
         leerSesion(t.proyecto, t.sesion, t.titulo);
       }}
       {...(volverAFinalizadas ? { pestanaInicial: "finalizadas" as const } : {})}
+      // «Mirar ahora» (la puerta 2): solo con el disparo ENCENDIDO en el vínculo de este proyecto.
+      {...(estado.gestor?.estado?.vinculo?.automatico === true
+        ? {
+            alMirarGestor: async () => {
+              const r = (await enviar({ clase: "tarea", accion: "mirarGestor" })) as Response | undefined;
+              if (r?.status !== 200) return (await negativaOFalloDe(r)) ?? "el servidor no contestó";
+              const { preparadas, lanzadas, fallos } = (await r.json()) as { preparadas: string[]; lanzadas: string[]; fallos: { clave?: string; motivo: string }[] };
+              const partes = [
+                lanzadas.length === 0 ? undefined : `lanzadas: ${lanzadas.join(", ")}`,
+                preparadas.length === 0 ? undefined : `encargo subido: ${preparadas.join(", ")}`,
+                ...fallos.map((f) => `${f.clave ?? "el gestor"}: ${f.motivo}`),
+              ].filter((x): x is string => x !== undefined);
+              return partes.length === 0 ? "Nada nuevo en el gestor." : partes.join(" · ");
+            },
+          }
+        : {})}
       alPedirUltimaRespuesta={async (t: TareaDelCable) => {
         if (t.sesion === undefined) return {};
         const r = (await enviar({ clase: "leerSesion", proyecto: t.proyecto, sesion: t.sesion })) as Response | undefined;
@@ -3451,6 +3467,16 @@ export function App({
                   })}
               tareasEnFondo={tareasEnFondo}
               {...(volverAFinalizadas ? { pestanaInicial: "tareas" as const } : {})}
+              // La puerta 2: el mapeo de estados y el disparo del vínculo, junto a él en Conectores. Contestado en la
+              // propia respuesta (los estados vienen de la red, y solo al abrir el editor).
+              tareasDesdeElGestor={{
+                alPedirEstados: async () => {
+                  const r = (await enviar({ clase: "gestor", accion: "estadosDelFlujo" })) as Response | undefined;
+                  if (r?.status === 200) return (await r.json()) as { lista: EstadoDelGestor[]; propuesto: MapeoDeEstados; actual?: MapeoDeEstados };
+                  return { motivo: (await negativaOFalloDe(r)) ?? "el servidor no contestó" };
+                },
+                alGuardar: async (estados, automatico) => negativaOFalloDe(await enviar({ clase: "gestor", accion: "ajustarVinculo", estados, automatico })),
+              }}
               // La pestaña Sincronización: solo con copia, que es el proyecto que sincroniza.
               {...(identidadDelActivo === undefined ? {} : { sincronizacion: pestanaDeSincronizacion })}
               {...(estado.gestor === undefined ? {} : { gestor: estado.gestor })}

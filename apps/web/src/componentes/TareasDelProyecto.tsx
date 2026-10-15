@@ -76,6 +76,7 @@ export function TareasDelProyecto({
   alLeerFinalizada,
   alPedirUltimaRespuesta,
   pestanaInicial,
+  alMirarGestor,
   conectado,
 }: {
   /** Ausente = la cola todavía no ha llegado del servidor. `[]` = llegó, y este proyecto no
@@ -164,7 +165,11 @@ export function TareasDelProyecto({
   alPedirUltimaRespuesta?: (tarea: TareaDelCable) => Promise<{ texto?: string; error?: string }>;
   /** Dónde se monta: «Finalizadas» al volver de leer una (la lista se desmonta mientras se lee). Solo cuenta al montar. */
   pestanaInicial?: "curso" | "finalizadas";
+  /** «Mirar ahora» el gestor (la puerta 2): solo con el disparo encendido. Devuelve qué pasó, en una frase. */
+  alMirarGestor?: () => Promise<string>;
 }) {
+  const [mirandoGestor, setMirandoGestor] = useState(false);
+  const [loQueVio, setLoQueVio] = useState<string | undefined>(undefined);
   const apagado = conectado === false;
   /**
    * Dos pestañas, y SIEMPRE las dos (como las de Agentes): «En curso» es donde se ACTÚA —nuevas, en marcha y en
@@ -182,12 +187,34 @@ export function TareasDelProyecto({
     <section className={estilos.lista} aria-label="Tareas del proyecto">
       <div className={estilos.encabezado}>
         <span className={estilos.rotulo}>Tareas en background</span>
-        {alNuevaTarea === undefined ? null : (
-          <button type="button" className={estilos.nueva} disabled={apagado} onClick={alNuevaTarea}>
-            Nueva tarea
-          </button>
-        )}
+        <div className={estilos.botones}>
+          {alMirarGestor === undefined ? null : (
+            <button
+              type="button"
+              className={estilos.nueva}
+              disabled={apagado || mirandoGestor}
+              title="Mira ya los tickets asignados a ti en el gestor, sin esperar a la próxima vuelta"
+              onClick={() => {
+                setMirandoGestor(true);
+                void alMirarGestor()
+                  .catch(() => "el envío falló")
+                  .then((texto) => {
+                    setMirandoGestor(false);
+                    setLoQueVio(texto);
+                  });
+              }}
+            >
+              {mirandoGestor ? "Mirando…" : "Mirar ahora"}
+            </button>
+          )}
+          {alNuevaTarea === undefined ? null : (
+            <button type="button" className={estilos.nueva} disabled={apagado} onClick={alNuevaTarea}>
+              Nueva tarea
+            </button>
+          )}
+        </div>
       </div>
+      {loQueVio === undefined ? null : <p className={estilos.aviso} role="status">{loQueVio}</p>}
       {/*
         El motivo del apagado tiene que ser texto VISIBLE, no un `title`: un `title` no se ve
         en táctil, la mayoría de navegadores no lo enseña de forma fiable con el ratón, y un

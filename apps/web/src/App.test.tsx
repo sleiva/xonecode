@@ -2499,6 +2499,43 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
     expect(enviar).toHaveBeenCalledWith({ clase: "gestor", accion: "estado" });
   });
 
+  /** La puerta 2, cosida en `App`: el editor del mapeo llega a Conectores y habla con el servidor por su acción. */
+  it("con Jira vinculado, Conectores ofrece el mapeo de estados; guardar manda «ajustarVinculo»", async () => {
+    const { store, enviar } = conProyectoAbierto();
+    enviar.mockImplementation((m: unknown) => {
+      if ((m as { accion?: string }).accion === "estadosDelFlujo") {
+        return Promise.resolve({
+          status: 200,
+          ok: true,
+          json: async () => ({
+            lista: [
+              { nombre: "Por hacer", categoria: "por-hacer" },
+              { nombre: "En curso", categoria: "en-curso" },
+              { nombre: "Listo", categoria: "terminada" },
+            ],
+            propuesto: { preparar: "Por hacer", lanzar: "En curso", terminar: "Listo" },
+          }),
+        } as unknown);
+      }
+      return Promise.resolve(undefined as unknown);
+    });
+    act(() => store.aplicar({ clase: "gestor", estado: { conectores: ["jira"], vinculo: { conector: "jira", sitio: "s", proyecto: "MAS" } } }));
+    fireEvent.click(enBarra("AppDemo"));
+    fireEvent.click(screen.getByRole("tab", { name: "Conectores" }));
+    fireEvent.click(screen.getByRole("button", { name: "Configurar" }));
+    expect(((await screen.findByLabelText(/Lanzar la tarea en/)) as HTMLSelectElement).value).toBe("En curso");
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    await waitFor(() =>
+      expect(enviar).toHaveBeenCalledWith({
+        clase: "gestor",
+        accion: "ajustarVinculo",
+        estados: { preparar: "Por hacer", lanzar: "En curso", terminar: "Listo" },
+        automatico: true,
+      })
+    );
+  });
+
   it("tras un reinicio (credencial sí, prueba no), la pestaña Conectores manda PROBAR por el cable, no autorizar", () => {
     const { store, enviar } = conProyectoAbierto();
     act(() => store.aplicar({ ...CONECTORES_CON_JIRA, conectores: [{ id: "jira", estado: "autorizado" }] } as never));

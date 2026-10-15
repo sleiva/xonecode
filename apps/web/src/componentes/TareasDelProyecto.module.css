@@ -422,3 +422,9 @@ a.ticket:hover {
   color: var(--dsw-alias-label-primary);
   background: var(--dsw-alias-interactive-bg-hover);
 }
+
+/* «Mirar ahora» y «Nueva tarea», juntos a la derecha de la cabecera. */
+.botones {
+  display: flex;
+  gap: 6px;
+}

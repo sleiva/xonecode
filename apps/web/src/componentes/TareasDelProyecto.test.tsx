@@ -446,4 +446,12 @@ describe("TareasDelProyecto: ver lo que hace una tarea en proceso", () => {
     expect(enlace.getAttribute("href")).toBe("https://x.atlassian.net/browse/KAN-7");
     expect(screen.getByText(/no se pudo pasar KAN-7 a EN CURSO/)).toBeTruthy();
   });
+
+  it("«Mirar ahora» solo con el disparo encendido, y dice lo que vio", async () => {
+    const { rerender } = render(<TareasDelProyecto tareas={[]} />);
+    expect(screen.queryByRole("button", { name: "Mirar ahora" })).toBeNull();
+    rerender(<TareasDelProyecto tareas={[]} alMirarGestor={async () => "lanzadas: MAS-3"} />);
+    fireEvent.click(screen.getByRole("button", { name: "Mirar ahora" }));
+    expect((await screen.findByRole("status")).textContent).toBe("lanzadas: MAS-3");
+  });
 });

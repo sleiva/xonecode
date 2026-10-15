@@ -902,6 +902,17 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   en el puerto: el tipo de incidencia de Jira lo elige su adaptador (`tipoParaCrear`; medido, en español «Task» se
   llama «Tarea»). **Límites declarados**: encadenadas solo en local, al aparcar no se escribe, los adjuntos no suben,
   destinos de `transicionPropuesta` sin tabla, Notion sin `crear` todavía.
+- **Y el gestor DISPARA tareas (la puerta 2), adaptándose a SUS estados**: no se imponen columnas; en el vínculo
+  (Conectores, `TareasDesdeElGestor.tsx`) la persona dice qué estado de su flujo cumple cada PAPEL —preparar, lanzar,
+  terminar— (`VinculoGuardado.estados`), elegido de los que da el gestor (`GestorDeTareasPort.estados?`; en Jira, de
+  sus tickets y transiciones: el conector no tiene tool de estados) y propuesto por categoría (`mapeoPropuesto`). El
+  servidor NIEGA un estado que no está en el flujo y encender sin «lanzar». El mapeo se COPIA al ticket de cada tarea y
+  manda también en la puerta 1 (`transicionHacia`). **El disparo es un interruptor apagado por omisión**
+  (`automatico`, solo con `true`), solo cuentan los tickets ASIGNADOS a la cuenta del conector, y el sondeo
+  (`agent/tareas/sondeoDelGestor.ts`, decisión pura en `accionesDelSondeo`) corre SOLO en el proceso que ejecuta las
+  tareas, cada `INTERVALO_DE_SONDEO_MS` (5 min) y con «Mirar ahora». Preparar sube el encargo ampliado como comentario
+  con `CABECERA_DEL_ENCARGO`; lanzar usa el ÚLTIMO de esos comentarios tal como esté y lo comentado debajo
+  (`encargoDeLosComentarios`). Volver a vincular el MISMO proyecto conserva el mapeo.
 - **«En curso» y «Finalizadas»: las terminadas son un HISTÓRICO de solo lectura** (`TareasDelProyecto.tsx#FilaFinalizada`):
   sin acciones, FUERA de la barra de sesiones (salvo la abierta), la más reciente arriba, «empezó … · acabó …» (nunca «tardó»: cuenta la pausa), lo último que contestó
   el agente —pedido al desplegar con `leerSesion`, nunca en la cola— y su conversación abierta para LEER con el motivo

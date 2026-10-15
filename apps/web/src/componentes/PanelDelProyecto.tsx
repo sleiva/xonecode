@@ -9,6 +9,7 @@ import type {
   CategoriaDeTarea,
   EsquemaDelProyecto,
   ListadoDeSoporte,
+  MapeoDeEstados,
   MensajeDelCliente,
   PlanDelCable,
   TareaDelGestor,
@@ -25,6 +26,7 @@ import { ResumenDeProyecto, type AccionesDeLaCopia, type ProyectoDelResumen } fr
 import { SoporteDelProyecto } from "./SoporteDelProyecto.js";
 import conversacion from "../../estilos/ConversationRoot.module.css";
 import pestanas from "./Pestanas.module.css";
+import { TareasDesdeElGestor, type EstadosDelFlujo } from "./TareasDesdeElGestor.js";
 import estilos from "./PanelDelProyecto.module.css";
 
 /** Lo que el panel manda por el cable: solo intención del gestor (el servidor decide cómo). */
@@ -42,6 +44,12 @@ export type PeticionAlGestor = MensajeDelGestor extends infer M ? (M extends { c
 export type ContextoDeGestor = { destino?: string };
 
 export type PestanaDelProyecto = "resumen" | "sincronizacion" | "tareas" | "conectores" | "soporte";
+
+/** Lo que el panel necesita para el mapeo de estados y el disparo del vínculo (la puerta 2). Lo resuelve `App`. */
+export interface AjusteDeTareasDesdeElGestor {
+  alPedirEstados: () => Promise<EstadosDelFlujo>;
+  alGuardar: (estados: MapeoDeEstados, automatico: boolean) => Promise<string | undefined>;
+}
 
 /**
  * El NOMBRE para mostrar de un conector (IXCODE-15): el del catálogo que el cliente ya tiene
@@ -124,6 +132,7 @@ export function PanelDelProyecto({
   alAbrirAjustesDeConectores,
   alPedirSoporte,
   pestanaInicial,
+  tareasDesdeElGestor,
 }: {
   nombre: string;
   /** El NOMBRE del entorno del proyecto. Ausente = no consta, y no se pinta. */
@@ -190,6 +199,8 @@ export function PanelDelProyecto({
   /** Dónde se monta, si no es el Resumen: al VOLVER de leer una tarea finalizada, a Tareas, que es de donde se fue
    *  (el panel se desmonta mientras se lee). Solo cuenta al montar. */
   pestanaInicial?: PestanaDelProyecto;
+  /** El mapeo de estados y el disparo del vínculo (la puerta 2), contestados por el servidor. Ausente = no se ofrecen. */
+  tareasDesdeElGestor?: AjusteDeTareasDesdeElGestor;
 }) {
   const [pestana, setPestana] = useState<PestanaDelProyecto>(pestanaInicial ?? "resumen");
   /** Sin copia en el equipo no hay consola de ESTE proyecto: solo su Resumen. */
@@ -409,6 +420,7 @@ export function PanelDelProyecto({
             alProbar={alProbarConector}
             conectorDelFallo={conectorDelFallo}
             alAbrirAjustes={alAbrirAjustesDeConectores}
+            {...(tareasDesdeElGestor === undefined ? {} : { tareasDesdeElGestor })}
           />
         )}
       </div>
@@ -1080,7 +1092,9 @@ function ConectoresDelProyecto({
   alProbar,
   conectorDelFallo,
   alAbrirAjustes,
+  tareasDesdeElGestor,
 }: {
+  tareasDesdeElGestor?: AjusteDeTareasDesdeElGestor;
   gestor?: EstadoDelCliente["gestor"];
   conectores?: EstadoDelCliente["conectores"];
   conectado: boolean;
@@ -1168,6 +1182,7 @@ function ConectoresDelProyecto({
                 alAutorizar={alAutorizar}
                 alProbar={alProbar}
                 alAbrirAjustes={alAbrirAjustes}
+                {...(tareasDesdeElGestor === undefined ? {} : { tareasDesdeElGestor })}
               />
             ))}
           </ul>
@@ -1327,7 +1342,9 @@ function FilaDeGestor({
   alAutorizar,
   alProbar,
   alAbrirAjustes,
+  tareasDesdeElGestor,
 }: {
+  tareasDesdeElGestor?: AjusteDeTareasDesdeElGestor;
   id: string;
   nombre: string;
   /** Ausente = no está añadido (solo se pinta así el VINCULADO: su vínculo sigue en el proyecto). */
@@ -1382,7 +1399,18 @@ function FilaDeGestor({
         </span>
       </div>
       {vinculado && vinculo !== undefined ? (
-        <VinculoActual vinculo={vinculo} nombre={nombre} conectado={conectado} alGestor={alGestor} />
+        <>
+          <VinculoActual vinculo={vinculo} nombre={nombre} conectado={conectado} alGestor={alGestor} />
+          {tareasDesdeElGestor === undefined ? null : (
+            <TareasDesdeElGestor
+              vinculo={vinculo}
+              nombre={nombre}
+              conectado={conectado}
+              alPedirEstados={tareasDesdeElGestor.alPedirEstados}
+              alGuardar={tareasDesdeElGestor.alGuardar}
+            />
+          )}
+        </>
       ) : !conectadoElConector ? null : otroVinculado && !cambiando ? (
         // Sin conexión no se le puede preguntar nada: solo se enseña el vínculo que ya hay.
         <div className={estilos.vinculo}>
