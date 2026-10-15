@@ -8065,6 +8065,20 @@ describe("contextoDelProyecto", () => {
     rmSync(raiz, { recursive: true, force: true });
   });
 
+  it("nombra los conectores del agente por su NOMBRE del catálogo, sin el gestor de tareas", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-ctx4-"));
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(
+      join(raiz, ".xonecode", "config.json"),
+      JSON.stringify({
+        conectores: ["stitch", "jira", "custom:mio"],
+        gestorDeTareas: { conector: "jira", sitio: "s", proyecto: "MAS" },
+      })
+    );
+    expect(contextoDelProyecto(raiz).conectores).toEqual(["Stitch", "mio"]);
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
   it("una raíz que no existe no lanza: se queda sin contexto y se redacta igual", () => {
     expect(contextoDelProyecto(join(tmpdir(), "no-existe-xonecode-ctx"))).toEqual({});
   });

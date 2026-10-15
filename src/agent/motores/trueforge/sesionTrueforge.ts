@@ -113,7 +113,7 @@ import { encenderTrazaDeErrores } from "../../trazaDeErroresEnDisco.js";
 import { anotarPaso } from "../../../core/trazaDeErrores.js";
 import { entornoConDepuracion } from "../../turno/depuracion.js";
 import { detalleDe, parametrosDe } from "../../turno/resumenDeTool.js";
-import { lineaDeComprobacion, soloDocumentacion, TOPE_DE_COMPROBACIONES_AL_JUEZ } from "../../../core/entrega.js";
+import { lineaDeComprobacion, omisionExplicada, soloDocumentacion, TOPE_DE_COMPROBACIONES_AL_JUEZ } from "../../../core/entrega.js";
 import { bloqueantesDelInforme } from "../../../core/geometriaDePantalla.js";
 import { apartarMemoria, cargarMemoria, fotoSaneada, guardarMemoria, saldarColgadas, textoDeInterrupcion, textoDeMemoriaDescartada, type FotoDeHilo } from "./memoriaTrueforge.js";
 import { crearNota, sobrantes, type Nota } from "./notas.js";
@@ -2305,7 +2305,15 @@ export async function abrirSesionTrueforge(
         // La pregunta que deja ESTE turno: la de un turno anterior se consume al empezar (`enEspera`).
         ...(preguntaEnEspera === undefined ? {} : { preguntaPendiente: consultaDe(preguntaEnEspera.args).pregunta }),
         ...(comprobacionesDelTurno.length === 0 ? {} : { comprobacionesVisuales: comprobacionesDelTurno }),
-        ...(bloqueantesVisualesDelTurno.length === 0 ? {} : { bloqueantesVisuales: bloqueantesVisualesDelTurno }),
+        // Lo que su respuesta final EXPLICA (lo nombra) no es crítico: va aparte (`omisionExplicada`).
+        ...(() => {
+          const explicadas = bloqueantesVisualesDelTurno.filter((b) => omisionExplicada(b, respuestaDeLaPasada));
+          const sinExplicar = bloqueantesVisualesDelTurno.filter((b) => !explicadas.includes(b));
+          return {
+            ...(sinExplicar.length === 0 ? {} : { bloqueantesVisuales: sinExplicar }),
+            ...(explicadas.length === 0 ? {} : { omisionesExplicadas: explicadas }),
+          };
+        })(),
         ...(hallazgosDelTurno.length === 0 ? {} : { hallazgos: hallazgosDelTurno }),
         ...(preexistentesDelTurno === undefined ? {} : { preexistentes: preexistentesDelTurno }),
         ...(motivoSinVerificar === undefined ? {} : { motivoSinVerificar }),

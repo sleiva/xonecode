@@ -935,6 +935,10 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   `core/entrega.ts#motivoDeTopeAgotado`): «agotó el tope de N rondas… Pulsa «Continuar»», y no «quedaron escrituras
   esperando aprobación», que en una tarea sin nadie a quien preguntar no decía que se había cortado. Y una respuesta del
   juez sin el JSON pedido se apunta recortada en la traza de errores (`juezDeTarea#juzgar`).
+- **`## CRITICAL` es para lo que NO se hizo, no para lo que se hizo con detalles** (`core/entrega.ts`): una tarea que no
+  cambió ningún fichero (git) con el juez en contra es crítica (`CRITICO_SIN_HACER`); un bloqueante visual que la respuesta
+  final NOMBRA —todo lo que cita entre «»— es una omisión explicada y va a observaciones (`omisionExplicada`,
+  `ResultadoDeTurno.omisionesExplicadas`).
 - **El juez recibe las comprobaciones VISUALES del turno, medidas por el harness** (`ResultadoDeTurno.comprobacionesVisuales`,
   `CasoDeJuez`, `lineaDeComprobacion`): una línea por `comparar_capturas`, `xone_critica_visual` y el crítico del cierre,
   las últimas `TOPE_DE_COMPROBACIONES_AL_JUEZ`. Sin ellas, un criterio que pedía validar contra la maqueta era rojo seguro
@@ -1045,6 +1049,9 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   motor externo no le llegan tools propias.
 - **El encargo se AUMENTA y se enseña EDITABLE antes de encolar** (`AumentadorPort`, papel
   `trabajo`): ocupa el sitio del diff; su fallo encola el texto original y se DICE.
+  **El aumentador conoce los CONECTORES del proyecto** (`PeticionDeTarea.conectores`, de
+  `arranque.ts#contextoDelProyecto`, sin el gestor de tareas): lo que la petición nombre de uno se trae de ahí,
+  nunca se busca en el repo. Y no escribe condiciones de PARADA: una duda va con su opción recomendada.
   **Y se puede EDITAR mientras la tarea no ha arrancado NUNCA** (IXCODE-52, `core/tareas.ts#conEncargo`,
   `puedeEditarEncargo`: `nuevo` y sin `empezada`; una reintentada vuelve a `nuevo`, pero lo que se le manda
   es su hilo). La `peticion` no se toca. El corredor manda el encargo RELEÍDO en la escritura que la

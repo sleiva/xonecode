@@ -8273,8 +8273,19 @@ export const TOPE_DE_MEMORIA = 4_000;
  * Nada de esto lanza. Que no haya memoria, o que el `config.json` no se pueda leer, no puede
  * impedir redactar un encargo.
  */
-export function contextoDelProyecto(raiz: string): { rama?: string; memoria?: string } {
+export function contextoDelProyecto(raiz: string): { rama?: string; memoria?: string; conectores?: string[] } {
   const rama = cloudstudioDelProyecto(raiz)?.rama;
+  // Los conectores marcados para el agente, por su nombre del catálogo; el del gestor de tareas no (en él escribe el harness).
+  let conectores: string[] = [];
+  try {
+    const p = cargar(raiz).config.proyecto;
+    const gestor = p?.gestorDeTareas?.conector;
+    conectores = (p?.conectores ?? [])
+      .filter((id) => id !== gestor)
+      .map((id) => CATALOGO_DE_CONECTORES.find((c) => c.id === id)?.nombre ?? id.replace(/^custom:/, ""));
+  } catch {
+    // Un config.json que no se lee: no se afirma ningún conector.
+  }
   let memoria: string | undefined;
   try {
     const leido = readFileSync(rutaMemoriaDeProyecto(raiz), "utf8").trim();
@@ -8285,6 +8296,7 @@ export function contextoDelProyecto(raiz: string): { rama?: string; memoria?: st
   return {
     ...(rama === undefined || rama === "" ? {} : { rama }),
     ...(memoria === undefined ? {} : { memoria }),
+    ...(conectores.length === 0 ? {} : { conectores }),
   };
 }
 
@@ -8545,7 +8557,7 @@ export function augmentacionCableada(opciones: {
   aumentador: AumentadorPort;
   /** Por parámetro para poder probar esta composición sin tocar disco. Por omisión,
    *  `contextoDelProyecto`; ausente del todo = sin rama ni memoria. */
-  contexto?: (raiz: string) => { rama?: string; memoria?: string };
+  contexto?: (raiz: string) => { rama?: string; memoria?: string; conectores?: string[] };
 }): NonNullable<OpcionesDeMontaje["augmentar"]> {
   return async ({ texto, proyecto, adjuntos }) => {
     const extra = opciones.contexto?.(proyecto.raiz) ?? {};
@@ -8556,6 +8568,7 @@ export function augmentacionCableada(opciones: {
       proyecto: { nombre: proyecto.nombre, raiz: proyecto.raiz, ...(extra.rama === undefined ? {} : { rama: extra.rama }) },
       adjuntos,
       ...(extra.memoria === undefined ? {} : { memoria: extra.memoria }),
+      ...(extra.conectores === undefined ? {} : { conectores: extra.conectores }),
     });
   };
 }

@@ -548,6 +548,11 @@ export interface PeticionDeTarea {
   /** La memoria del proyecto, si existe (`.xonecode/memoria.md`). El árbol entero sería
    *  contexto por gastar; esto son las decisiones que ya se tomaron. */
   memoria?: string;
+  /**
+   * Los CONECTORES del proyecto que llegan al agente, por su nombre («Stitch»). Medido en Maset: sin saberlo, el
+   * aumentador convirtió «la pantalla de Stish» en «búscala en el repo y, si no está, PARA», y la tarea no hizo nada.
+   */
+  conectores?: readonly string[];
 }
 
 /**

@@ -128,6 +128,15 @@ export function promptDelAumentador(peticion: PeticionDeTarea): string {
     "LO QUE HA PEDIDO, tal cual:",
     peticion.texto,
     "",
+    ...(peticion.conectores === undefined || peticion.conectores.length === 0
+      ? []
+      : [
+          `CONECTORES del proyecto, que el agente PUEDE usar: ${peticion.conectores.join(", ")}.`,
+          "Si la petición nombra uno —aunque venga mal escrito («Stish» es Stitch)—, lo que pide está EN ese",
+          "conector: el encargo dice que lo traiga de ahí (una pantalla de Stitch se trae con su nombre), nunca que",
+          "lo busque en el repo.",
+          "",
+        ]),
     ...(peticion.memoria === undefined || peticion.memoria.trim() === ""
       ? []
       : ["Memoria del proyecto: decisiones ya tomadas que el encargo no debe contradecir.", peticion.memoria, ""]),
@@ -148,8 +157,10 @@ export function promptDelAumentador(peticion: PeticionDeTarea): string {
     "hace ENTERO de una vez: una funcionalidad nueva, un refactor, un arreglo, documentación.",
     "NO escribas ningún paso que espere a una persona («cuando lo apruebes», «pide",
     "confirmación», «espera el visto bueno»): ese paso no existe y el agente se quedaría",
-    "esperando a alguien que no está. Si de verdad hace falta una decisión que solo puede tomar",
-    "el desarrollador, dile al agente que PARE y la pregunte, en vez de inventarse la respuesta.",
+    "esperando a alguien que no está. Tampoco condiciones de PARADA («si no lo encuentras, para y",
+    "pregunta»): di DÓNDE buscar lo que haga falta. Si hay una decisión que solo puede tomar el",
+    "desarrollador, el agente la pregunta con su opción recomendada —en una tarea se contesta sola",
+    "con ella— y sigue; dilo así, nunca «para».",
     "",
     "REGLAS DE XONE que el encargo no puede romper: XOne no es desarrollo web. Es XML en",
     "ficheros `.xne`, JavaScript ES5 y un CSS propio; no hay DOM, ni async/await, ni React. Los",

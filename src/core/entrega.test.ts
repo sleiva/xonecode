@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   condicionesDeEntrega,
+  CRITICO_SIN_HACER,
   decisionDeEntrega,
   medidaDeEntrega,
   motivoDeTopeAgotado,
+  omisionExplicada,
   SALVEDAD_SIN_ESCRITURAS,
   SALVEDAD_SOLO_DOCUMENTACION,
   soloDocumentacion,
@@ -255,6 +257,7 @@ describe("cuando el turno no escribió nada, el verificador no APLICA", () => {
     expect(decisionDeEntrega(medida, { veredicto: "rojo", resumen: "no ha hecho lo que se pedía" })).toEqual({
       entregable: false,
       motivo: expect.stringContaining("no ha hecho lo que se pedía"),
+      criticos: [CRITICO_SIN_HACER],
       observaciones: [expect.stringContaining("no ha hecho lo que se pedía")],
     });
     expect(decisionDeEntrega(medida, undefined).entregable).toBe(false);
@@ -432,5 +435,36 @@ describe("el CIERRE de una tarea que acaba: lo crítico y las observaciones", ()
     const r = condicionesDeEntrega({ ...VERDE, bloqueantesVisuales: ["«=» queda TAPADO por la barra"] });
     expect(r.entregable).toBe(true);
     expect(r.criticos).toEqual(["pantalla: «=» queda TAPADO por la barra"]);
+  });
+});
+
+describe("una tarea SIN HACER es crítica; una omisión explicada, no", () => {
+  it("sin escribir nada y con el juez en contra: ## CRITICAL", () => {
+    const medida: MedidaDeEntrega = { ...VERDE, escribio: false };
+    expect(decisionDeEntrega(medida, { veredicto: "rojo", resumen: "no hizo la pantalla" }).criticos).toEqual([CRITICO_SIN_HACER]);
+  });
+
+  it("escribiendo algo, el juez en contra es solo observación", () => {
+    const medida: MedidaDeEntrega = { ...VERDE, escribio: true };
+    const entrega = decisionDeEntrega(medida, { veredicto: "rojo", resumen: "faltan detalles" });
+    expect(entrega.criticos).toBeUndefined();
+    expect(entrega.observaciones).toEqual([expect.stringContaining("faltan detalles")]);
+  });
+
+  it("sin escribir y con el juez a favor no es crítico (no había nada que hacer)", () => {
+    expect(decisionDeEntrega({ ...VERDE, escribio: false }, { veredicto: "verde", resumen: "ok" }).criticos).toBeUndefined();
+  });
+
+  it("un bloqueante explicado en el resumen va a observaciones, no a críticos", () => {
+    const entrega = condicionesDeEntrega({ ...VERDE, omisionesExplicadas: ["«Turno de Día» de la maqueta NO está en el aparato"] });
+    expect(entrega.criticos).toBeUndefined();
+    expect(entrega.observaciones).toEqual([expect.stringContaining("«Turno de Día»")]);
+  });
+
+  it("omisionExplicada: todo lo citado aparece en la respuesta, sin mirar mayúsculas", () => {
+    const b = "«Turno de Día» y «Ver más» de la maqueta NO están en el aparato";
+    expect(omisionExplicada(b, "Decisiones: no puse turno de día ni ver más, la app no tiene turnos.")).toBe(true);
+    expect(omisionExplicada(b, "Decisiones: no puse Turno de Día.")).toBe(false);
+    expect(omisionExplicada("el botón queda TAPADO por la barra", "todo lo del botón está bien")).toBe(false);
   });
 });

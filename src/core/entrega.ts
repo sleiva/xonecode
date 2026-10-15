@@ -112,6 +112,12 @@ export interface ResultadoDeTurno {
    */
   bloqueantesVisuales?: string[];
   /**
+   * Bloqueantes visuales que el agente EXPLICA en su respuesta final (los nombra: los decidió no hacer, o dice por qué
+   * no pudo). No son críticos: van como observaciones (`omisionDeclarada`). Medido en Maset: «Turno de Día», los
+   * contadores y la quinta tarjeta salían en `## CRITICAL` estando en su apartado de decisiones.
+   */
+  omisionesExplicadas?: string[];
+  /**
    * Las comprobaciones VISUALES del turno, una línea cada una y medidas por el harness: lo que dio cada
    * `comparar_capturas` y `xone_critica_visual`, y el crítico de pantalla del cierre. Van al juez de QA como HECHO:
    * medido en una tarea real (Maset), el juez dictó rojo porque «no consta la validación visual» que el criterio pedía,
@@ -392,6 +398,7 @@ export function condicionesDeEntrega(medida: MedidaDeEntrega): Entrega {
     observaciones.push(fallos.at(-1)!);
   }
   for (const b of medida.bloqueantesVisuales ?? []) criticos.push(`pantalla: ${b}`);
+  for (const b of medida.omisionesExplicadas ?? []) observaciones.push(`pantalla, omitido y explicado en su resumen: ${b}`);
   const conCriticos = { ...(criticos.length === 0 ? {} : { criticos }), ...(observaciones.length === 0 ? {} : { observaciones }) };
   if (fallos.length === 0) {
     return {
@@ -429,7 +436,14 @@ export function decisionDeEntrega(
   }
   if (veredicto.veredicto !== "verde") {
     const motivo = `el juez de QA dijo «${veredicto.veredicto}»: ${veredicto.resumen}`;
-    return { entregable: false, motivo, ...conCriticos, ...conObservacion(motivo) };
+    /**
+     * **Una tarea que NO hizo el trabajo es crítica**: no cambió ningún fichero (según git) y el juez no la da por
+     * cumplida. Medido en Maset: paró sin escribir nada y se cerró con simples observaciones. «Completada con
+     * problemas» no es crítico; sin hacer, sí.
+     */
+    const sinHacer = medida.escribio === false ? [CRITICO_SIN_HACER] : [];
+    const criticos = [...(condiciones.criticos ?? []), ...sinHacer];
+    return { entregable: false, motivo, ...(criticos.length === 0 ? {} : { criticos }), ...conObservacion(motivo) };
   }
   // La salvedad de las condiciones viaja hasta aquí: es la entrega la que hay que poder
   // leer, no un paso intermedio. Con el verificador fuera de juego, el veredicto del juez
@@ -442,6 +456,20 @@ export function decisionDeEntrega(
  * tarea real (Maset), el motivo de antes —«quedaron 3 escritura(s) esperando aprobación»— no decía que el turno se había
  * cortado ni qué hacer con una ventana casi lista.
  */
+/** El crítico de una tarea que no hizo el trabajo (`decisionDeEntrega`). */
+export const CRITICO_SIN_HACER = "no hizo el trabajo: no cambió ningún fichero del proyecto y el juez no la da por cumplida";
+
+/**
+ * ¿Explica el agente este bloqueante en su respuesta final? Cuando TODO lo que el bloqueante cita entre «» aparece en
+ * ella (sin mirar mayúsculas): lo nombra, así que lo decidió o dice por qué no está. Sin nada citado, no. Puro.
+ */
+export function omisionExplicada(bloqueante: string, respuestaFinal: string): boolean {
+  const citas = [...bloqueante.matchAll(/«([^»]+)»/g)].map((m) => m[1]!.trim().toLowerCase()).filter((c) => c !== "");
+  if (citas.length === 0) return false;
+  const texto = respuestaFinal.toLowerCase();
+  return citas.every((c) => texto.includes(c));
+}
+
 /** El tope agotado dicho para el `## CRITICAL` de una tarea que se CIERRA: sin «Continuar», que una cerrada no tiene. */
 export const criticoDeTopeAgotado = (tope: number, pendientes: number): string =>
   `se cortó al agotar el tope de ${tope} rondas de escritura: el trabajo quedó a medias` +

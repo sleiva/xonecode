@@ -758,6 +758,7 @@ export function crearEjecutorReal(
       ...(resultado.topeAgotado === undefined ? {} : { topeAgotado: resultado.topeAgotado }),
       ...(resultado.preguntaPendiente === undefined ? {} : { preguntaPendiente: resultado.preguntaPendiente }),
       ...(resultado.bloqueantesVisuales === undefined ? {} : { bloqueantesVisuales: resultado.bloqueantesVisuales }),
+      ...(resultado.omisionesExplicadas === undefined ? {} : { omisionesExplicadas: resultado.omisionesExplicadas }),
       ...(resultado.comprobacionesVisuales === undefined ? {} : { comprobacionesVisuales: resultado.comprobacionesVisuales }),
       ...(resultado.hallazgos === undefined ? {} : { hallazgos: resultado.hallazgos }),
       ...(resultado.motivoSinVerificar === undefined

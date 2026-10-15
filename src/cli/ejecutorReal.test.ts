@@ -158,6 +158,7 @@ describe("el ejecutor real DEVUELVE lo que el turno informó", () => {
       topeAgotado: 50,
       preguntaPendiente: "¿Rehago la pantalla entera o solo la lista?",
       bloqueantesVisuales: ["«=» queda TAPADO por la barra de navegación"],
+      omisionesExplicadas: ["«Turno de Día» de la maqueta NO está en el aparato"],
       comprobacionesVisuales: ["comparar_capturas sobre /artefactos/c.png: distancia vertical 4%"],
       hallazgos: [{ code: "COLL_MISSING_PROGID", severidad: "error" as const, mensaje: "falta progid" }],
       preexistentes: 2,
