@@ -525,7 +525,7 @@ describe("un hijo externo que no puede llamar a quien llamaría", () => {
   it("se le dice que lo haga él y dónde están la captura y la maqueta", () => {
     const t = textoDeTrabajoSinLlamar(["device-controller"], "/art");
     expect(t).toContain("(device-controller)");
-    expect(t).toContain("/art/diseno/screen.png");
+    expect(t).toContain("/art/diseno/ (`screen.png` o `screen.jpg`)");
     expect(t).toContain("xone-captura-android");
   });
 });

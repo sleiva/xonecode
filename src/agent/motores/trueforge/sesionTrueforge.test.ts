@@ -3455,7 +3455,7 @@ describe("un device-controller en Claude Code: la shell ESTRECHA llega al hijo",
     expect(p.skills).toEqual(expect.arrayContaining(["xone-development", "xone-hotswap"]));
     expect(p.ejecucion?.scripts).toEqual(expect.arrayContaining(["xone-desplegar-android", "xone-captura-android"]));
     expect(p.instrucciones).toContain("NO PUEDES LLAMAR A OTROS ESPECIALISTAS (conductor-ext)");
-    expect(p.instrucciones).toContain(`${artefactos}/diseno/screen.png`);
+    expect(p.instrucciones).toContain(`${artefactos}/diseno/`);
   }, 20_000);
 
   it("Codex y OpenCode siguen SIN shell, y sin carpeta de artefactos tampoco se concede", async () => {

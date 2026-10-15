@@ -358,7 +358,7 @@ export function textoDeTrabajoSinLlamar(llama: readonly string[], carpeta: strin
   return [
     `NO PUEDES LLAMAR A OTROS ESPECIALISTAS (${llama.join(", ")}): corres en otro proceso. Lo que harían ellos con el aparato lo haces tú, con los scripts de tu shell.`,
     "- Para comprobar un cambio: despliega o recarga, y lee el log para saber qué pasó. Para lo VISUAL, saca UNA captura con `xone-captura-android`.",
-    `- Compara tú con la maqueta: abre con Read la captura y la maqueta —están en ${carpeta}; la de Stitch, en ${carpeta}/diseno/screen.png— y las VES. Mira disposición, tamaños, colores y textos, corrige y repite. Como mucho tres vueltas, y di qué quedó distinto.`,
+    `- Compara tú con la maqueta: abre con Read la captura y la maqueta —están en ${carpeta}; la de Stitch, en ${carpeta}/diseno/ (\`screen.png\` o \`screen.jpg\`)— y las VES. Mira disposición, tamaños, colores y textos, corrige y repite. Como mucho tres vueltas, y di qué quedó distinto.`,
   ].join("\n");
 }
 
