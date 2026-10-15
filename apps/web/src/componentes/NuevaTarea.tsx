@@ -359,7 +359,7 @@ export function NuevaTarea({
           {gestor === undefined ? null : (
             <p className={estilos.nota} data-gestor="">
               {`Se creará en ${gestor.nombre} (${gestor.proyecto}) con tu petición como descripción y el encargo como comentario, asignada a ti. `}
-              {`Al empezar pasará a EN CURSO, y al terminar se comentará lo hecho y pasará a PROBAR.`}
+              {`Al empezar pasará a «En curso»; al terminar se comentará lo hecho y pasará a PROBAR si su flujo lo tiene o, si no, a su estado de terminada.`}
             </p>
           )}
           {motivoDeCrear === undefined ? null : (

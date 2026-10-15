@@ -91,6 +91,10 @@ pinta en su fila.
 - Las tareas ENCADENADAS (`atenderCrearEncadenadas`) siguen solo en local; en la fase de subtareas serán hijas de un
   ticket padre.
 - Al aparcar no se escribe nada en el gestor.
+- DESCARTAR una tarea con ticket la borra en local y deja el ticket como esté (normalmente EN CURSO).
+- En un flujo sin PROBAR (el de omisión de Jira: Tareas por hacer → En curso → En revisión → Finalizada, medido en
+  KAN), «cerrar» pasa el ticket a su estado de terminada (Finalizada), no a «En revisión». Elegirlo es la tabla de la
+  fase 2.
 - Los adjuntos no suben al ticket.
 - Los destinos son los de `transicionPropuesta`; la tabla configurable llega con el disparo de la fase 2.
 - Notion: `crear` se implementa después de medir `notion-create-pages`; hasta entonces, un proyecto con Notion

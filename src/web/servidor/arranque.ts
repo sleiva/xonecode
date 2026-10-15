@@ -8775,7 +8775,12 @@ export function construirCorredorDeTareasCableado(opciones: {
       : crearReflejoEnElGestor({
           gestorDe: opciones.gestorDeTareas,
           datosDeCierre: opciones.datosDeCierreDeTarea ?? datosDeCierreDeTarea,
-          anotarAviso: anotarAvisoEnElDisco(crudo),
+          // Escribe en disco y AVISA al cable: el corredor solo emite en sus propias escrituras, y sin esto el aviso
+          // («no se pudo pasar KAN-1 a EN CURSO») no salía en la fila hasta que cambiara otra cosa.
+          anotarAviso: (id, aviso) => {
+            anotarAvisoEnElDisco(crudo)(id, aviso);
+            emitirCambioDeTareas?.();
+          },
           motivoDe: motivoDeGestorParaElCable,
           informar: opciones.informar,
         });

@@ -8537,7 +8537,7 @@ describe("las tareas en background, el cableado del corredor con el cable — no
     gestor.transicionar = async () => {
       throw new Error("Jira dijo que no (sleiva@xone.es sin permiso)");
     };
-    const { opcionesDeMontaje } = construirCorredorDeTareasCableado({
+    const { opcionesDeMontaje, arrancarConectado, corredor } = construirCorredorDeTareasCableado({
       vestibulo: vestibuloSinAbrir,
       tareasFabrica: (informar) => crearTareasEnDisco({ base, informar }),
       informar: () => {},
@@ -8545,6 +8545,9 @@ describe("las tareas en background, el cableado del corredor con el cable — no
       ...ENTREGA_DE_TAREAS,
       gestorDeTareas: () => gestor,
     });
+    // El aviso tiene que llegar al CABLE, no solo al disco.
+    let emitidas = 0;
+    await arrancarConectado({ emitirTareas: () => void (emitidas += 1) });
     const cola = opcionesDeMontaje.colaDeTareas!;
     cola.guardar([{ ...tareaEnProceso("t1"), estado: "nuevo", ticket: { conector: "jira", sitio: "cloud-1", proyecto: "KAN", clave: "KAN-1" } }]);
     cola.guardar(cola.listar().map((t) => ({ ...t, estado: "en-proceso" as const })));
@@ -8554,6 +8557,8 @@ describe("las tareas en background, el cableado del corredor con el cable — no
     expect(t!.ticket?.aviso).toMatch(/no se pudo pasar KAN-1 a EN CURSO: Jira dijo que no/);
     // El correo de la persona no se queda en la tarea (y por tanto no cruza el cable).
     expect(t!.ticket?.aviso).not.toContain("sleiva@xone.es");
+    expect(emitidas).toBeGreaterThan(0);
+    await corredor!.parar();
     rmSync(base, { recursive: true, force: true });
   });
 

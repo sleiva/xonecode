@@ -348,7 +348,8 @@ describe("NuevaTarea: un modal de verdad, y «Preparar el encargo» dice que est
       expect((screen.getByRole("button", { name: "Encolar" }) as HTMLButtonElement).disabled).toBe(true);
       rerender(<NuevaTarea {...base} destino={{ gestor: { nombre: "Jira", proyecto: "Personal" } }} />);
       expect(screen.getByText(/Se creará en Jira \(Personal\)/)).toBeTruthy();
-      expect(screen.getByText(/EN CURSO.*PROBAR/)).toBeTruthy();
+      // La regla REAL de `transicionPropuesta`: medido, un flujo por omisión de Jira no tiene PROBAR.
+      expect(screen.getByText(/En curso.*PROBAR si su flujo lo tiene.*estado de terminada/)).toBeTruthy();
       expect((screen.getByRole("button", { name: "Crear en Jira" }) as HTMLButtonElement).disabled).toBe(false);
     });
 
