@@ -103,7 +103,7 @@ import { CONECTOR_STITCH, crearTraerDeStitch } from "./traerDeStitch.js";
 import { crearProponerTareas, REPARTIR_EN_TAREAS } from "./proponerTareas.js";
 import { avisoDeReparto, type PropuestaDeTareas } from "../../../core/repartoDeEncargo.js";
 import { leerTareasDelPlan, RUTA_DE_TASKS } from "../../../core/tareasDelPlan.js";
-import { esDeLaMaqueta } from "../../../core/stitch.js";
+import { casanConTitulo, esDeLaMaqueta } from "../../../core/stitch.js";
 import { recibeConectores } from "../../../core/conectores.js";
 import { crearConvertirAP, NOMBRE_CONVERTIR_A_P, recibeConvertirAP } from "./convertirAP.js";
 import { buscarMaqueta, medirContraMaqueta, resumenDeMedida, textoDeMedidaAutomatica, ultimaCaptura } from "./medidaAutomatica.js";
@@ -840,6 +840,11 @@ export async function abrirSesionTrueforge(
   /** Lo que dieron las comprobaciones visuales del turno, una línea cada una, para el juez de QA (`ResultadoDeTurno`). */
   let comprobacionesDelTurno: string[] = [];
   let bloqueantesVisualesDelTurno: string[] = [];
+  /**
+   * Las pantallas de Stitch pedidas por título que NO aparecieron en este turno, menos las que una traída posterior
+   * resolvió con otras palabras: en una tarea van a `## CRITICAL` (decisión suya, `entrega.ts`).
+   */
+  let pantallasNoEncontradasDelTurno: string[] = [];
   // Cuándo llegó esa crítica: si el proyecto cambia DESPUÉS, sus bloqueantes ya no son la pantalla final (`cambioDespuesDe`).
   let horaDeLaUltimaCritica: number | undefined;
   const anotarComprobacion = (linea: string): void => {
@@ -1083,7 +1088,21 @@ export async function abrirSesionTrueforge(
    */
   const traerDeStitch = (): ToolDeLangchain[] =>
     opciones.conectores !== undefined && carpeta !== undefined && conStitch
-      ? [crearTraerDeStitch({ conectores: opciones.conectores, carpeta, alEscribir: anotarArtefacto }) as unknown as ToolDeLangchain]
+      ? [
+          crearTraerDeStitch({
+            conectores: opciones.conectores,
+            carpeta,
+            alEscribir: anotarArtefacto,
+            sinPersona: opciones.trabajoSinPersona === true,
+            alNoEncontrar: (titulo) => {
+              if (!pantallasNoEncontradasDelTurno.includes(titulo)) pantallasNoEncontradasDelTurno.push(titulo);
+            },
+            // Traída una cuyo título lleva las palabras de lo que no se encontró: ya no falta (se escribió de otra forma).
+            alTraer: (titulo) => {
+              pantallasNoEncontradasDelTurno = pantallasNoEncontradasDelTurno.filter((t) => casanConTitulo([{ name: "x", title: titulo }], t).length === 0);
+            },
+          }) as unknown as ToolDeLangchain,
+        ]
       : [];
   // ¿Está bien este .xne/.xml/.css/.js? A TODOS, el raíz incluido: es quien recibe el error que pega la persona, y
   // sin ella lo comprobaba leyendo el fichero a ojo (soporte de APPSalud). Pura y de lectura.
@@ -1850,6 +1869,7 @@ export async function abrirSesionTrueforge(
       capturasDelTurno = [];
       comprobacionesDelTurno = [];
       bloqueantesVisualesDelTurno = [];
+      pantallasNoEncontradasDelTurno = [];
       horaDeLaUltimaCritica = undefined;
       /** El encargo de ESTE turno tal cual se pidió, y el mismo con la última pregunta y su
        *  respuesta al lado, que es lo que se juzga y se repara (ver `flujo`). Ausente = no consta. */
@@ -2378,6 +2398,7 @@ export async function abrirSesionTrueforge(
         // La pregunta que deja ESTE turno: la de un turno anterior se consume al empezar (`enEspera`).
         ...(preguntaEnEspera === undefined ? {} : { preguntaPendiente: consultaDe(preguntaEnEspera.args).pregunta }),
         ...(comprobacionesDelTurno.length === 0 ? {} : { comprobacionesVisuales: comprobacionesDelTurno }),
+        ...(pantallasNoEncontradasDelTurno.length === 0 ? {} : { pantallasNoEncontradas: [...pantallasNoEncontradasDelTurno] }),
         // Lo que su respuesta final EXPLICA (lo nombra) no es crítico: va aparte (`omisionExplicada`).
         ...(() => {
           const explicadas = bloqueantesVisualesDelTurno.filter((b) => omisionExplicada(b, respuestaDeLaPasada));

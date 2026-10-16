@@ -172,7 +172,55 @@ export function casanConTitulo<T extends EntradaDeStitch>(entradas: readonly T[]
   if (titulo === undefined || titulo.trim() === "") return [...entradas];
   const buscado = tituloComparable(titulo);
   const iguales = entradas.filter((e) => tituloComparable(e.title) === buscado);
-  return iguales.length > 0 ? iguales : entradas.filter((e) => tituloComparable(e.title).includes(buscado));
+  if (iguales.length > 0) return iguales;
+  const contienen = entradas.filter((e) => tituloComparable(e.title).includes(buscado));
+  if (contienen.length > 0) return contienen;
+  // Y por PALABRAS: todas las que distinguen lo buscado están en el título (`palabrasQueDistinguen`). Medido en Maset:
+  // «Menu Listado Entregas» no CONTIENE como cadena a «Listado de Entregas - Maset Logística», y la búsqueda decía que no
+  // existía; el orquestador construyó entonces con otra pantalla.
+  const buscadas = palabrasQueDistinguen(titulo, entradas);
+  if (buscadas.length === 0) return [];
+  return entradas.filter((e) => {
+    const del = new Set(palabras(e.title));
+    return buscadas.every((p) => del.has(p));
+  });
+}
+
+/** Palabras de relleno de un título de pantalla: no distinguen una de otra. */
+const PALABRAS_VACIAS = new Set([
+  "de", "del", "la", "el", "los", "las", "y", "e", "a", "en", "con", "para", "por", "un", "una", "al",
+  "menu", "pantalla", "ventana", "vista", "screen", "the", "of",
+]);
+
+/**
+ * Las palabras de un título, comparables y por su RAÍZ, sin las vacías: singular y plural valen lo mismo (`entregas` y
+ * `entrega`, `albaranes` y `albaran`, `pendientes` y `pendiente`). Se quita `-es`/`-s` y luego una `e` final.
+ */
+export function palabras(titulo: string): string[] {
+  return tituloComparable(titulo)
+    .split(/[^a-z0-9]+/)
+    .filter((p) => p !== "" && !PALABRAS_VACIAS.has(p))
+    .map(raiz);
+}
+
+function raiz(palabra: string): string {
+  if (palabra.length <= 4) return palabra;
+  const sinPlural = palabra.replace(/(?:es|s)$/, "");
+  return sinPlural.length > 4 ? sinPlural.replace(/e$/, "") : sinPlural;
+}
+
+/**
+ * Las palabras de lo buscado que DISTINGUEN una pantalla de otra: sin las vacías y sin las que salen en la MAYORÍA de
+ * los títulos del proyecto («Maset», «Logística» en «X - Maset Logística»), que no distinguen nada.
+ */
+export function palabrasQueDistinguen(titulo: string, entradas: readonly EntradaDeStitch[]): string[] {
+  const comunes = new Set<string>();
+  if (entradas.length >= 3) {
+    const cuenta = new Map<string, number>();
+    for (const e of entradas) for (const p of new Set(palabras(e.title))) cuenta.set(p, (cuenta.get(p) ?? 0) + 1);
+    for (const [p, n] of cuenta) if (n > entradas.length / 2) comunes.add(p);
+  }
+  return [...new Set(palabras(titulo))].filter((p) => !comunes.has(p));
 }
 
 /** El id de un proyecto (`projects/<id>` → `<id>`), que es lo que pide `list_screens`. */

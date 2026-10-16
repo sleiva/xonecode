@@ -476,3 +476,13 @@ describe("los bloqueantes de una crítica ANTERIOR a los últimos cambios", () =
     expect(e.observaciones).toEqual([expect.stringMatching(/ANTERIOR a los últimos cambios[\s\S]*«pend\.»/)]);
   });
 });
+
+describe("una pantalla de Stitch pedida que no existe", () => {
+  it("es CRÍTICA, con su título y el camino (elegir el diseño), aunque todo lo demás esté en verde", async () => {
+    // Decisión suya: medido en Maset, la tarea construyó «Menu Listado Entregas» con la maqueta de otra pantalla.
+    const { criticoDePantallaNoEncontrada } = await import("./entrega.js");
+    const e = condicionesDeEntrega({ ...VERDE, pantallasNoEncontradas: ["Menu Listado Entregas"] });
+    expect(e.criticos).toEqual([criticoDePantallaNoEncontrada("Menu Listado Entregas")]);
+    expect(e.criticos?.[0]).toMatch(/«Menu Listado Entregas» no está en Stitch[\s\S]*no se construye con otra/);
+  });
+});

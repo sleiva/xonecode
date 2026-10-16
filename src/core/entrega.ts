@@ -124,6 +124,11 @@ export interface ResultadoDeTurno {
    */
   bloqueantesDesfasados?: string[];
   /**
+   * Pantallas de Stitch que el turno pidió por título y no existen (ni casan por palabras). CRÍTICO, decisión suya:
+   * medido en Maset, «Menu Listado Entregas» no estaba y la tarea construyó la ventana con otra maqueta.
+   */
+  pantallasNoEncontradas?: string[];
+  /**
    * Las comprobaciones VISUALES del turno, una línea cada una y medidas por el harness: lo que dio cada
    * `comparar_capturas` y `xone_critica_visual`, y el crítico de pantalla del cierre. Van al juez de QA como HECHO:
    * medido en una tarea real (Maset), el juez dictó rojo porque «no consta la validación visual» que el criterio pedía,
@@ -403,6 +408,7 @@ export function condicionesDeEntrega(medida: MedidaDeEntrega): Entrega {
     fallos.push("no se puede revisar lo que ha escrito: la sesión no dejó marca de git con la que comparar");
     observaciones.push(fallos.at(-1)!);
   }
+  for (const t of medida.pantallasNoEncontradas ?? []) criticos.push(criticoDePantallaNoEncontrada(t));
   for (const b of medida.bloqueantesVisuales ?? []) criticos.push(`pantalla: ${b}`);
   for (const b of medida.omisionesExplicadas ?? []) observaciones.push(`pantalla, omitido y explicado en su resumen: ${b}`);
   for (const b of medida.bloqueantesDesfasados ?? []) observaciones.push(`pantalla, de una crítica ANTERIOR a los últimos cambios (sin comprobar después): ${b}`);
@@ -464,6 +470,10 @@ export function decisionDeEntrega(
  * cortado ni qué hacer con una ventana casi lista.
  */
 /** El crítico de una tarea que no hizo el trabajo (`decisionDeEntrega`). */
+/** El crítico de una pantalla de Stitch pedida que no existe: la persona tiene que elegir el diseño. */
+export const criticoDePantallaNoEncontrada = (titulo: string): string =>
+  `diseño: la pantalla «${titulo}» no está en Stitch (ni por su título ni por sus palabras); no se construye con otra: elige su diseño y relánzala`;
+
 export const CRITICO_SIN_HACER = "no hizo el trabajo: no cambió ningún fichero del proyecto y el juez no la da por cumplida";
 
 /**

@@ -68,6 +68,15 @@ export interface DependenciasDeTraerDeStitch {
   carpeta: string;
   alEscribir?: (a: Artefacto) => void;
   descargar?: Descargar;
+  /**
+   * Una TAREA (sin nadie delante): una pantalla nombrada que no aparece NO se sustituye por una parecida (decisión suya).
+   * Medido en Maset: «Menu Listado Entregas» no salía y el orquestador construyó la ventana con «Albaranes Pendientes».
+   */
+  sinPersona?: boolean;
+  /** Se pidió una pantalla por título y no casó ninguna: el harness lo apunta para el cierre (`## CRITICAL`). */
+  alNoEncontrar?: (titulo: string) => void;
+  /** Se trajo una pantalla: su título, para dar por resuelto lo que no se encontró antes con otras palabras. */
+  alTraer?: (titulo: string) => void;
 }
 
 /**
@@ -75,7 +84,12 @@ export interface DependenciasDeTraerDeStitch {
  * en los suyos y en los COMPARTIDOS (medido: Maset es de otro y solo sale con `view=shared`), y las pantallas solo en los
  * que casan con `proyecto`. Lo que se devuelve es corto: nunca el listado entero.
  */
-async function buscarPantalla(conectores: ConectoresPort, titulo: string, proyecto: string | undefined): Promise<string | { texto: string }> {
+async function buscarPantalla(
+  conectores: ConectoresPort,
+  titulo: string,
+  proyecto: string | undefined,
+  sinPersona = false
+): Promise<string | { texto: string; ninguna?: boolean }> {
   const llamar = (tool: string, args: Record<string, unknown>) => conectores.llamar(CONECTOR_STITCH, tool, args, { topeMs: TOPE_DE_LLAMADA_MS });
   let proyectos: EntradaDeStitch[] = [];
   for (const args of [{}, { filter: "view=shared" }]) {
@@ -101,8 +115,20 @@ async function buscarPantalla(conectores: ConectoresPort, titulo: string, proyec
   }
   const casan = casanConTitulo(pantallas, titulo);
   if (casan.length === 1) return casan[0]!.name;
+  if (casan.length === 0 && sinPersona) {
+    const hay = pantallas.slice(0, CANDIDATAS_A_LA_VISTA).map((s) => `«${s.title}»`).join(", ");
+    return {
+      ninguna: true,
+      texto:
+        `Ninguna pantalla de Stitch se titula «${titulo}»${proyecto === undefined ? "" : ` en «${proyecto}»`}, ni lleva sus palabras. ` +
+        "En una tarea NO se construye con otra pantalla parecida: no la sustituyas, no construyas esa ventana con otro diseño, " +
+        `y termina diciendo en tu resumen que la pantalla «${titulo}» no está en Stitch (la tarea se cerrará como CRÍTICA para que la persona la elija). ` +
+        `Las que hay: ${hay}.`,
+    };
+  }
   const lista = (casan.length === 0 ? pantallas : casan).slice(0, CANDIDATAS_A_LA_VISTA).map((s) => `- «${s.title}» (${s.deProyecto}): ${s.name}`);
   return {
+    ...(casan.length === 0 ? { ninguna: true } : {}),
     texto:
       casan.length === 0
         ? `Ninguna pantalla se titula «${titulo}»${proyecto === undefined ? "" : ` en «${proyecto}»`}. Hay estas; vuelve a llamarme con el \`name\` de la buena:\n${lista.join("\n")}`
@@ -117,8 +143,11 @@ export function crearTraerDeStitch(deps: DependenciasDeTraerDeStitch) {
       let nombre = pantalla?.trim() ?? "";
       if (nombre === "") {
         if ((titulo ?? "").trim() === "") return "Dime la pantalla: su `titulo` (y el `proyecto` si lo sabes), o su `name`.";
-        const encontrada = await buscarPantalla(deps.conectores, titulo!, proyecto);
-        if (typeof encontrada !== "string") return encontrada.texto;
+        const encontrada = await buscarPantalla(deps.conectores, titulo!, proyecto, deps.sinPersona === true);
+        if (typeof encontrada !== "string") {
+          if (encontrada.ninguna === true) deps.alNoEncontrar?.(titulo!.trim());
+          return encontrada.texto;
+        }
         nombre = encontrada;
       }
       const motivo = motivoDePantallaInaceptable(nombre);
@@ -184,6 +213,7 @@ export function crearTraerDeStitch(deps: DependenciasDeTraerDeStitch) {
         return `No pude guardarla (${(e as { code?: string }).code ?? "error"}).`;
       }
       for (const a of escritos) deps.alEscribir?.(a);
+      deps.alTraer?.(datos.titulo);
 
       // Las medidas que DECLARA Stitch no son las de la imagen bajada (medido: dice 780×1768 y da
       // 390×746): se dicen los BYTES reales y, si hacen falta los píxeles, que se midan.

@@ -160,6 +160,7 @@ describe("el ejecutor real DEVUELVE lo que el turno informó", () => {
       bloqueantesVisuales: ["«=» queda TAPADO por la barra de navegación"],
       omisionesExplicadas: ["«Turno de Día» de la maqueta NO está en el aparato"],
       bloqueantesDesfasados: ["«pend.» de la maqueta NO está en el aparato"],
+      pantallasNoEncontradas: ["Menu Listado Entregas"],
       comprobacionesVisuales: ["comparar_capturas sobre /artefactos/c.png: distancia vertical 4%"],
       hallazgos: [{ code: "COLL_MISSING_PROGID", severidad: "error" as const, mensaje: "falta progid" }],
       preexistentes: 2,

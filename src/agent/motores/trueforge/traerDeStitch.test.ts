@@ -114,7 +114,7 @@ describe("traer_pantalla_de_stitch por título", () => {
       ],
     }),
   };
-  function montarBusqueda() {
+  function montarBusqueda(extra: Partial<Parameters<typeof crearTraerDeStitch>[0]> = {}) {
     const carpeta = mkdtempSync(join(tmpdir(), "xc-stitch-titulo-"));
     const llamadas: { nombre: string; args: Record<string, unknown> }[] = [];
     const conectores: ConectoresPort = {
@@ -128,7 +128,7 @@ describe("traer_pantalla_de_stitch por título", () => {
         return "{}";
       },
     };
-    const t = crearTraerDeStitch({ conectores, carpeta, descargar: async () => ({ bytes: Buffer.from([1]), tipo: "image/png" }) });
+    const t = crearTraerDeStitch({ conectores, carpeta, descargar: async () => ({ bytes: Buffer.from([1]), tipo: "image/png" }), ...extra });
     return { t, llamadas, carpeta };
   }
 
@@ -149,6 +149,27 @@ describe("traer_pantalla_de_stitch por título", () => {
     expect(r).toMatch(/Hay 2 pantallas/);
     expect(r).toContain("projects/8393/screens/bb");
     expect(r).toContain("projects/1/screens/aa");
+  });
+
+  it("en una TAREA, una pantalla que no existe NO se sustituye: lo dice, no trae nada y el harness lo apunta", async () => {
+    // Medido en Maset: «Menu Listado Entregas» no salía y la tarea construyó la ventana con «Albaranes Pendientes».
+    const faltan: string[] = [];
+    const { t, llamadas } = montarBusqueda({ sinPersona: true, alNoEncontrar: (x) => faltan.push(x) });
+    const r = String(await t.invoke({ proyecto: "Maset", titulo: "Menu Listado Entregas" }));
+    expect(r).toContain("NO se construye con otra pantalla parecida");
+    expect(r).toContain("«Login»");
+    expect(llamadas.some((l) => l.nombre === "get_screen")).toBe(false);
+    expect(faltan).toEqual(["Menu Listado Entregas"]);
+  });
+
+  it("con una persona delante sigue ofreciendo la lista, y lo que se TRAE se anuncia por su título", async () => {
+    const faltan: string[] = [];
+    const traidas: string[] = [];
+    const { t } = montarBusqueda({ alNoEncontrar: (x) => faltan.push(x), alTraer: (x) => traidas.push(x) });
+    expect(String(await t.invoke({ titulo: "Listado Entregas" }))).toMatch(/vuelve a llamarme con el `name`/);
+    expect(faltan).toEqual(["Listado Entregas"]);
+    await t.invoke({ pantalla: "projects/8393/screens/bb" });
+    expect(traidas).toEqual(["Menú"]);
   });
 
   it("un proyecto que no existe lo dice con los que hay; sin título ni name, pide uno", async () => {

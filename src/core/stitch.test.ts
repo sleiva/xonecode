@@ -58,6 +58,24 @@ describe("buscar en Stitch por título", () => {
     expect(casanConTitulo(e, undefined)).toHaveLength(2);
   });
 
+  it("por PALABRAS cuando no es igual ni lo contiene: «Menu Listado Entregas» encuentra «Listado de Entregas - Maset Logística»", async () => {
+    // Medido en Maset: con solo «igual» y «contiene» no la encontraba, y el orquestador construyó con otra pantalla.
+    const { casanConTitulo, palabrasQueDistinguen } = await import("./stitch.js");
+    const maset = [
+      { name: "s1", title: "Albaranes Pendientes - Maset Logística" },
+      { name: "s2", title: "Listado de Entregas - Maset Logística" },
+      { name: "s3", title: "Liquidaciones - Maset Logística" },
+      { name: "s4", title: "Menú Principal - Maset Logística (Rediseño Profesional)" },
+    ];
+    expect(casanConTitulo(maset, "Menu Listado Entregas").map((x) => x.name)).toEqual(["s2"]);
+    // «maset» y «logistica» salen en todos: no distinguen. «menu» es de relleno.
+    expect(palabrasQueDistinguen("Menu Listado Entregas Maset", maset)).toEqual(["listado", "entrega"]);
+    // Una palabra que no está en ninguna: NO casa ninguna (nada de «la más parecida»).
+    expect(casanConTitulo(maset, "Menu Listado Pedidos")).toEqual([]);
+    // Singular y plural valen igual.
+    expect(casanConTitulo(maset, "albaran pendiente").map((x) => x.name)).toEqual(["s1"]);
+  });
+
   it("lee la lista aunque lleve detrás la nota de recorte del harness, y tira lo que no tiene forma", async () => {
     const { entradasDeStitch } = await import("./stitch.js");
     const texto = JSON.stringify({ projects: [{ name: "projects/1", title: "A" }, { name: 3 }] }) + "\n(recortado por el harness)";
