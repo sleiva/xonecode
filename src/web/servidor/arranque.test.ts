@@ -6340,6 +6340,24 @@ describe("las tareas en background, por el cable", () => {
       rmSync(base, { recursive: true, force: true });
     });
 
+    it("«Editar» cambia también la pantalla, comprobada contra el vínculo; null la quita y una de otro proyecto es 409", async () => {
+      const { base, cola, accion, vestibulo } = await conPropuesta();
+      const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline", disenoVinculado: { proyecto: "projects/9", nombre: "Maset" } }));
+      cola.guardar([
+        { id: "a", proyecto: { id: "p1", raiz, nombre: "Tienda" }, titulo: "a", peticion: "p", encargo: "e", adjuntos: [], estado: "nuevo", creada: "2026-10-07T10:00:00.000Z" },
+      ]);
+      expect(await enviarMensaje(accion, { clase: "tarea", accion: "encargo", id: "a", encargo: "e", pantallaDeStitch: { name: "projects/9/screens/aa", titulo: "Listado" } })).toBe(204);
+      expect(cola.listar()[0]!.pantallaDeStitch).toEqual({ name: "projects/9/screens/aa", titulo: "Listado", proyecto: "Maset" });
+      const ajena = await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "encargo", id: "a", encargo: "e", pantallaDeStitch: { name: "projects/8/screens/aa", titulo: "X" } }));
+      expect(ajena.estado).toBe(409);
+      expect(cola.listar()[0]!.pantallaDeStitch?.name).toBe("projects/9/screens/aa");
+      expect(await enviarMensaje(accion, { clase: "tarea", accion: "encargo", id: "a", encargo: "e", pantallaDeStitch: null })).toBe(204);
+      expect(cola.listar()[0]).not.toHaveProperty("pantallaDeStitch");
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
     it("«Regenerar el encargo» lo prepara desde la petición editada, con SUS adjuntos, y no guarda nada (IXCODE-53)", async () => {
       const pedidos: unknown[] = [];
       const { base, cola, accion, vestibulo } = await conPropuesta({

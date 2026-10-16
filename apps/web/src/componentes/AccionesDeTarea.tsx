@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useContext, useEffect, useState } from "react";
+import { DisenoDeTareasContexto } from "../disenoContexto.js";
+import { SelectorDePantalla } from "./DisenoDelProyecto.js";
 import { Modal, Button } from "@deepseek-ai/dsh-client-ui-primitives";
 import { TRANSICIONES, puedeEditarEncargo, type TareaDelCable } from "../tipos.js";
 import estilos from "./AccionesDeTarea.module.css";
@@ -101,7 +103,7 @@ export function AccionesDeTarea({
   /** «Arrancar ahora» una `nuevo`: la persona cede el proyecto (se cierra su consola de ahí) y la tarea arranca. */
   alArrancarAhora?: (id: string) => Promise<string | undefined>;
   /** Cambiar el encargo de una que nunca ha arrancado (IXCODE-52). Devuelve el motivo si el servidor se negó. */
-  alEditarEncargo?: (id: string, encargo: string, peticion: string) => Promise<string | undefined>;
+  alEditarEncargo?: (id: string, encargo: string, peticion: string, pantalla?: { name: string; titulo: string } | null) => Promise<string | undefined>;
   /** Volver a preparar el encargo desde la petición, SIN guardarlo (IXCODE-53). Ausente = no se ofrece. */
   alRegenerarEncargo?: (id: string, peticion: string) => Promise<{ encargo: string } | { motivo: string }>;
   /**
@@ -204,8 +206,11 @@ export function AccionesDeTarea({
               tarea={t}
               apagado={apagado}
               onCancelar={() => setEditando(false)}
-              onGuardar={async (encargo, peticion) => {
-                const motivo = await alEditarEncargo!(t.id, encargo, peticion).catch(() => "el envío falló");
+              onGuardar={async (encargo, peticion, pantalla) => {
+                const motivo = await (pantalla === undefined
+                  ? alEditarEncargo!(t.id, encargo, peticion)
+                  : alEditarEncargo!(t.id, encargo, peticion, pantalla)
+                ).catch(() => "el envío falló");
                 if (motivo === undefined) setEditando(false);
                 return motivo;
               }}
@@ -333,7 +338,8 @@ function EditarEncargo({
   tarea: TareaDelCable;
   apagado: boolean;
   onCancelar: () => void;
-  onGuardar: (encargo: string, peticion: string) => Promise<string | undefined>;
+  /** `pantalla`: la nueva, `null` si se quitó, ausente si no cambió. */
+  onGuardar: (encargo: string, peticion: string, pantalla?: { name: string; titulo: string } | null) => Promise<string | undefined>;
   /** Vuelve a preparar el encargo desde la petición. Ausente = no se ofrece. */
   onRegenerar?: (peticion: string) => Promise<{ encargo: string } | { motivo: string }>;
 }) {
@@ -342,9 +348,26 @@ function EditarEncargo({
   const [guardando, setGuardando] = useState(false);
   const [regenerando, setRegenerando] = useState(false);
   const [negativa, setNegativa] = useState<string | undefined>(undefined);
+  /**
+   * La pantalla de Stitch, que también se CAMBIA aquí (petición suya): la misma pestaña Diseño que en «Nueva tarea», y
+   * solo con un proyecto de Stitch vinculado (lo dice el diseño del contexto, que se pide al abrir).
+   */
+  const contexto = useContext(DisenoDeTareasContexto);
+  const disenoDeLaTarea = contexto?.diseno?.proyecto === t.proyecto ? contexto.diseno : undefined;
+  const conDiseno = contexto !== undefined && disenoDeLaTarea?.vinculo !== undefined && disenoDeLaTarea.vinculo !== null;
+  const [pantalla, setPantalla] = useState<{ name: string; titulo: string } | undefined>(
+    t.pantallaDeStitch === undefined ? undefined : { name: t.pantallaDeStitch.name, titulo: t.pantallaDeStitch.titulo }
+  );
+  const [pestana, setPestana] = useState<"tarea" | "diseno">("tarea");
+  useEffect(() => {
+    contexto?.pedirPantallas(t.proyecto);
+    // Una vez al abrir el diálogo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const pantallaCambiada = (pantalla?.name ?? "") !== (t.pantallaDeStitch?.name ?? "");
   const limpio = texto.trim();
   const pedido = peticion.trim();
-  const sinCambios = limpio === t.encargo.trim() && pedido === t.peticion.trim();
+  const sinCambios = limpio === t.encargo.trim() && pedido === t.peticion.trim() && !pantallaCambiada;
   const ocupado = guardando || regenerando;
   return (
     <Modal open onClose={onCancelar} title="Editar la tarea" headless className={modal.capa}>
@@ -361,7 +384,7 @@ function EditarEncargo({
             if (limpio === "" || pedido === "" || sinCambios || apagado || ocupado) return;
             setGuardando(true);
             setNegativa(undefined);
-            void onGuardar(limpio, pedido).then((motivo) => {
+            void (pantallaCambiada ? onGuardar(limpio, pedido, pantalla ?? null) : onGuardar(limpio, pedido)).then((motivo) => {
               setGuardando(false);
               if (motivo !== undefined) setNegativa(motivo);
             });
@@ -371,6 +394,25 @@ function EditarEncargo({
           <p className={modal.nota}>
             {`«${t.titulo}» todavía no ha arrancado. Lo que pediste es de donde sale el encargo; el encargo es lo que se le mandará al agente.`}
           </p>
+          {!conDiseno ? null : (
+            <div className={estilos.pestanas} role="tablist" aria-label="Editar la tarea">
+              <button type="button" role="tab" className={estilos.pestana} aria-selected={pestana === "tarea"} {...(pestana === "tarea" ? { "data-actual": "" } : {})} onClick={() => setPestana("tarea")}>
+                Tarea
+              </button>
+              <button type="button" role="tab" className={estilos.pestana} aria-selected={pestana === "diseno"} {...(pestana === "diseno" ? { "data-actual": "" } : {})} onClick={() => setPestana("diseno")}>
+                {pantalla === undefined ? "Diseño (Stitch)" : `Diseño · «${pantalla.titulo}»`}
+              </button>
+            </div>
+          )}
+          {pestana === "diseno" && conDiseno ? (
+            <SelectorDePantalla
+              {...(disenoDeLaTarea === undefined ? {} : { diseno: disenoDeLaTarea })}
+              alPedir={() => contexto!.pedirPantallas(t.proyecto)}
+              {...(pantalla === undefined ? {} : { elegida: pantalla })}
+              alElegir={setPantalla}
+            />
+          ) : (
+            <>
           <label className={modal.etiqueta} htmlFor={`peticion-${t.id}`}>
             Lo que pediste
           </label>
@@ -415,6 +457,13 @@ function EditarEncargo({
             disabled={apagado || ocupado}
             onChange={(evento) => setTexto(evento.target.value)}
           />
+              {!conDiseno ? null : (
+                <p className={modal.nota} data-diseno="">
+                  {pantalla === undefined ? "Sin diseño de Stitch: elígelo en la pestaña Diseño." : `Diseño: «${pantalla.titulo}».`}
+                </p>
+              )}
+            </>
+          )}
           {pedido === "" ? <p className={modal.fallo}>Lo que pediste no puede quedar vacío.</p> : null}
           {limpio === "" ? <p className={modal.fallo}>El encargo no puede quedar vacío.</p> : null}
           {negativa === undefined ? null : (

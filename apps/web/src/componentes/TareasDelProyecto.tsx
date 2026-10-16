@@ -107,7 +107,7 @@ export function TareasDelProyecto({
   alContinuar?: (id: string) => Promise<string | undefined>;
   alArrancarAhora?: (id: string) => Promise<string | undefined>;
   /** Cambiar el encargo de una que nunca ha arrancado (IXCODE-52): devuelve el motivo si el servidor se negó. */
-  alEditarEncargo?: (id: string, encargo: string, peticion: string) => Promise<string | undefined>;
+  alEditarEncargo?: (id: string, encargo: string, peticion: string, pantalla?: { name: string; titulo: string } | null) => Promise<string | undefined>;
   /** Volver a preparar el encargo desde la petición, sin guardarlo (IXCODE-53). */
   alRegenerarEncargo?: (id: string, peticion: string) => Promise<{ encargo: string } | { motivo: string }>;
   /** Parar una en marcha sin borrarla (IXCODE-50): devuelve el motivo si el servidor se negó. */
@@ -532,7 +532,7 @@ function Fila({
   alContinuar?: (id: string) => Promise<string | undefined>;
   alArrancarAhora?: (id: string) => Promise<string | undefined>;
   /** Cambiar el encargo de una que nunca ha arrancado (IXCODE-52): devuelve el motivo si el servidor se negó. */
-  alEditarEncargo?: (id: string, encargo: string, peticion: string) => Promise<string | undefined>;
+  alEditarEncargo?: (id: string, encargo: string, peticion: string, pantalla?: { name: string; titulo: string } | null) => Promise<string | undefined>;
   /** Volver a preparar el encargo desde la petición, sin guardarlo (IXCODE-53). */
   alRegenerarEncargo?: (id: string, peticion: string) => Promise<{ encargo: string } | { motivo: string }>;
   /** Parar una en marcha sin borrarla (IXCODE-50): devuelve el motivo si el servidor se negó. */

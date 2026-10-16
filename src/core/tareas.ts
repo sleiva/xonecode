@@ -455,7 +455,23 @@ export function puedeEditarEncargo(tarea: Pick<Tarea, "estado" | "empezada">): b
  * no se tocan; con ella (IXCODE-53: se edita lo que escribió la persona y se vuelve a preparar el
  * encargo) se cambia, y el título sale de ella como al crear.
  */
-export function conEncargo(tarea: Tarea, encargo: string, peticion?: string): Tarea {
+export function conEncargo(
+  tarea: Tarea,
+  encargo: string,
+  peticion?: string,
+  /** La pantalla de Stitch: una nueva la sustituye, `null` la QUITA, ausente no la toca. Ya comprobada por quien llama. */
+  pantalla?: PantallaElegida | null
+): Tarea {
+  const editada = conEncargoYPeticion(tarea, encargo, peticion);
+  if (pantalla === undefined) return editada;
+  if (pantalla === null) {
+    const { pantallaDeStitch: _quitada, ...sinPantalla } = editada;
+    return sinPantalla;
+  }
+  return { ...editada, pantallaDeStitch: pantalla };
+}
+
+function conEncargoYPeticion(tarea: Tarea, encargo: string, peticion?: string): Tarea {
   if (!puedeEditarEncargo(tarea)) {
     throw new Error(
       tarea.estado === "nuevo" ? "esa tarea ya arrancó alguna vez: lo que se le manda ahora es su conversación" : "esa tarea ya no está esperando a arrancar"

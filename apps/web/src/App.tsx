@@ -1,4 +1,5 @@
 import type { PeticionDeDiseno } from "./componentes/DisenoDelProyecto.js";
+import { DisenoDeTareasContexto } from "./disenoContexto.js";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Planes } from "./componentes/Planes.js";
 import { Colecciones } from "./componentes/Colecciones.js";
@@ -2698,8 +2699,8 @@ export function App({
       alContinuar={async (id: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "continuar", id }))}
       alArrancarAhora={async (id: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "arrancarAhora", id }))}
       // Editar el encargo de una que todavía no ha arrancado (IXCODE-52): la ventana no se cierra si el servidor se niega.
-      alEditarEncargo={async (id: string, encargo: string, peticion: string) =>
-        negativaOFalloDe(await enviar({ clase: "tarea", accion: "encargo", id, encargo, peticion }))
+      alEditarEncargo={async (id: string, encargo: string, peticion: string, pantalla?: { name: string; titulo: string } | null) =>
+        negativaOFalloDe(await enviar({ clase: "tarea", accion: "encargo", id, encargo, peticion, ...(pantalla === undefined ? {} : { pantallaDeStitch: pantalla }) }))
       }
       // Volver a preparar el encargo desde la petición editada (IXCODE-53): contesta en la propia
       // respuesta y no guarda nada; lo guarda «Guardar».
@@ -3011,8 +3012,13 @@ export function App({
     />
   );
 
+  // Para «Editar la tarea», que sale en varias vistas: el diseño vinculado y la intención de pedir sus pantallas.
+  const contextoDeDiseno = {
+    ...(estado.diseno === undefined ? {} : { diseno: estado.diseno }),
+    pedirPantallas: (proyecto: string) => void enviar({ clase: "diseno", accion: "pantallas", proyecto }),
+  };
   return (
-    <>
+    <DisenoDeTareasContexto.Provider value={contextoDeDiseno}>
     <Maqueta
       // El EFECTIVO, no la preferencia: `repartoDeColumnas` la puede plegar para hacerle
       // sitio al panel, y eso no se guarda en ningún sitio.
@@ -3676,6 +3682,6 @@ export function App({
     {ventanaDeAccionDeSesion}
     {ventanaDeCambiosSinGuardar}
     {dialogoDeDecision}
-    </>
+    </DisenoDeTareasContexto.Provider>
   );
 }

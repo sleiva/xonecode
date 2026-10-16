@@ -1663,8 +1663,10 @@ escrito a mano lo da de alta una persona desde la misma ventana.
   en el menú una ventana que nadie pidió ahí). **Con pantalla elegida la tool no busca ni trae otra**: el corredor deja la
   marca `diseno/.elegida.json` (siempre, también si traerla falla) y la tool solo vuelve a traer ESA por su id; sin la
   marca, una búsqueda por el título de la petición apuntaba un CRITICAL falso o sobrescribía la elegida. **Límites
-  declarados**: «Editar la tarea» todavía no cambia la pantalla, y traerla antes del primer turno espera a Stitch (con su
-  tope de llamada) con la tarea aún en «nuevo».
+  declarados**: traerla antes del primer turno espera a Stitch (con su tope de llamada) con la tarea aún en «nuevo».
+  **«Nueva tarea» y «Editar la tarea» la eligen en una pestaña Diseño, con buscador, que solo existe con vínculo**; al
+  editar, el diálogo lee el diseño de un contexto (`disenoContexto.ts`, lo pone `App`) porque sale en varias vistas, y
+  el servidor la vuelve a comprobar contra el vínculo (`null` la quita).
 - **Una llamada de agente lleva su propio tope** (`TOPE_DE_LLAMADA_MS`, 10 min), que se pasa
   también como `timeout` al SDK: el suyo corta cada petición antes y una generación de Stitch
   pasa de él. Solo se REPITE una de lectura (`PAUSA_ANTES_DE_REPETIR_MS`); repetir una que

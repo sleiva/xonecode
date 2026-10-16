@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { DisenoDeTareasContexto } from "../disenoContexto.js";
 import { AccionesDeTarea } from "./AccionesDeTarea.js";
 import { Kanban } from "./Kanban.js";
 import { TareasDelProyecto } from "./TareasDelProyecto.js";
@@ -391,5 +392,52 @@ describe("parar una tarea en marcha (IXCODE-50)", () => {
       fireEvent.click(screen.getByRole("button", { name: "Parar" }));
     });
     expect(screen.getByRole("alert").textContent).toMatch(/otro proceso/);
+  });
+});
+
+describe("«Editar la tarea» cambia también la PANTALLA de Stitch (con proyecto vinculado)", () => {
+  const conDiseno = (vinculo: { proyecto: string; nombre: string } | null, pedir = vi.fn()) => ({
+    diseno: {
+      proyecto: "p1",
+      vinculo,
+      pantallas: [
+        { name: "projects/9/screens/aa", title: "Listado de Entregas" },
+        { name: "projects/9/screens/bb", title: "Albaranes Pendientes" },
+      ],
+    },
+    pedirPantallas: pedir,
+  });
+
+  it("la pestaña Diseño trae la actual marcada; cambiarla guarda la nueva, y quitarla manda null", async () => {
+    const alEditarEncargo = vi.fn(async () => undefined);
+    const pedir = vi.fn();
+    render(
+      <DisenoDeTareasContexto.Provider value={conDiseno({ proyecto: "projects/9", nombre: "Maset" }, pedir)}>
+        <AccionesDeTarea
+          tarea={TAREA({ estado: "nuevo", motivo: undefined, proyecto: "p1", pantallaDeStitch: { name: "projects/9/screens/bb", titulo: "Albaranes Pendientes" } })}
+          alEditarEncargo={alEditarEncargo}
+        />
+      </DisenoDeTareasContexto.Provider>
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Editar la tarea" }));
+    expect(pedir).toHaveBeenCalledWith("p1");
+    expect(screen.getByText("Diseño: «Albaranes Pendientes».")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Diseño · «Albaranes Pendientes»" }));
+    expect(screen.getByRole("button", { name: /Albaranes Pendientes/ }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: /Listado de Entregas/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    await waitFor(() => expect(alEditarEncargo).toHaveBeenCalled());
+    expect(alEditarEncargo).toHaveBeenLastCalledWith("t1", expect.any(String), expect.any(String), { name: "projects/9/screens/aa", titulo: "Listado de Entregas" });
+  });
+
+  it("sin proyecto de Stitch vinculado no hay pestañas, y guardar no toca la pantalla", async () => {
+    const alEditarEncargo = vi.fn(async () => undefined);
+    render(
+      <DisenoDeTareasContexto.Provider value={conDiseno(null)}>
+        <AccionesDeTarea tarea={TAREA({ estado: "nuevo", motivo: undefined, proyecto: "p1", encargo: "a" })} alEditarEncargo={alEditarEncargo} />
+      </DisenoDeTareasContexto.Provider>
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Editar la tarea" }));
+    expect(screen.queryByRole("tab")).toBeNull();
   });
 });

@@ -7592,11 +7592,28 @@ export function montarRutas(
         // Editar el encargo de una tarea que todavía no ha arrancado (IXCODE-52). La regla —solo si
         // nunca arrancó, y no vacío— es de `core/tareas.ts#conEncargo`; la negativa vuelve con motivo.
         const peticion = (mensaje as { peticion?: unknown }).peticion;
+        /**
+         * La pantalla de Stitch: `null` la quita; una nueva se COMPRUEBA contra el vínculo del proyecto de ESA tarea
+         * (`pantallaElegidaValida`, la misma regla que al crearla). Una que no vale es un 409 con motivo, sin tocar nada.
+         */
+        const crudo = (mensaje as { pantallaDeStitch?: unknown }).pantallaDeStitch;
+        let pantalla: PantallaElegida | null | undefined;
+        if (crudo === null) pantalla = null;
+        else if (crudo !== undefined) {
+          const tarea = opciones.colaDeTareas.listar().find((x) => x.id === mensaje.id);
+          pantalla = tarea === undefined ? undefined : pantallaElegidaValida(crudo, disenoVinculadoDe(tarea.proyecto.raiz));
+          if (pantalla === undefined) {
+            respuesta.writeHead(409, { "content-type": "application/json" });
+            respuesta.end(JSON.stringify({ motivo: "esa pantalla no es del proyecto de Stitch vinculado" }));
+            return;
+          }
+        }
         const resultado = aplicarEncargo(
           opciones.colaDeTareas,
           mensaje.id,
           typeof mensaje.encargo === "string" ? mensaje.encargo : "",
-          typeof peticion === "string" ? peticion : undefined
+          typeof peticion === "string" ? peticion : undefined,
+          pantalla
         );
         if (!resultado.hecho) {
           respuesta.writeHead(409, { "content-type": "application/json" });

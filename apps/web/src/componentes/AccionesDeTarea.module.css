@@ -146,3 +146,12 @@
 .regenerar > span {
   margin: 0;
 }
+
+/* Las pestañas Tarea / Diseño de «Editar la tarea»: las MISMAS de Ajustes y de «Nueva tarea». */
+.pestanas {
+  composes: pestanas from "./Ajustes.module.css";
+}
+
+.pestana {
+  composes: pestana from "./Ajustes.module.css";
+}

@@ -316,6 +316,13 @@ describe("conEncargo", () => {
     expect(() => conEncargo(tarea({ estado: "nuevo" }), "el encargo", "   ")).toThrow(/petición/);
   });
 
+  it("y la PANTALLA de Stitch: una nueva la sustituye, null la quita, ausente no la toca", () => {
+    const con = tarea({ estado: "nuevo", pantallaDeStitch: { name: "projects/9/screens/aa", titulo: "A", proyecto: "Maset" } });
+    expect(conEncargo(con, "e").pantallaDeStitch).toEqual({ name: "projects/9/screens/aa", titulo: "A", proyecto: "Maset" });
+    expect(conEncargo(con, "e", undefined, { name: "projects/9/screens/bb", titulo: "B", proyecto: "Maset" }).pantallaDeStitch?.name).toBe("projects/9/screens/bb");
+    expect(conEncargo(con, "e", undefined, null)).not.toHaveProperty("pantallaDeStitch");
+  });
+
   it("una que ya arrancó alguna vez no se edita, aunque haya vuelto a «nuevo»", () => {
     for (const estado of ["en-proceso", "requiere-atencion", "terminada"] as const) {
       expect(() => conEncargo(tarea({ estado }), "otro")).toThrow();

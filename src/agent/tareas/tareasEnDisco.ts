@@ -14,7 +14,7 @@
 import { chmodSync, existsSync, linkSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { conEncargo, conFeedback, type AdjuntoDeTarea, type Tarea } from "../../core/tareas.js";
+import { conEncargo, conFeedback, type AdjuntoDeTarea, type PantallaElegida, type Tarea } from "../../core/tareas.js";
 import { mimeDeAdjunto, nombreDeAdjuntoAceptable } from "../../core/adjuntos.js";
 
 /** Bytes que se aceptan por adjunto y por tarea. */
@@ -575,14 +575,16 @@ export function aplicarEncargo(
   id: string,
   encargo: string,
   /** También la petición, de la que sale el título (IXCODE-53). Ausente = no se toca. */
-  peticion?: string
+  peticion?: string,
+  /** La pantalla de Stitch (ya comprobada): nueva, `null` para quitarla, ausente = no se toca. */
+  pantalla?: PantallaElegida | null
 ): ResultadoDeFeedback {
   const tareas = disco.listar();
   const actual = tareas.find((t) => t.id === id);
   if (actual === undefined) return { hecho: false, motivo: "la tarea ya no está en la cola" };
   let siguiente: Tarea;
   try {
-    siguiente = conEncargo(actual, encargo, peticion);
+    siguiente = conEncargo(actual, encargo, peticion, pantalla);
   } catch (error) {
     return { hecho: false, motivo: error instanceof Error ? error.message : String(error) };
   }
