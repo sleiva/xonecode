@@ -34,9 +34,20 @@ function tituloDe(fila: FilaDeSoporte): string {
   return fila.titulo.trim() === "" ? "Sin título" : fila.titulo;
 }
 
+/**
+ * La fecha en HORA LOCAL, «AAAA-MM-DD HH:MM». Antes se cortaba la ISO a pelo y salía en UTC (petición suya: «la hora sale
+ * mal»; en España, dos horas antes). Una fecha que no se entiende se enseña tal cual.
+ */
+export function cuandoLocal(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const dos = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())} ${dos(d.getHours())}:${dos(d.getMinutes())}`;
+}
+
 function cuando(fila: FilaDeSoporte): string | undefined {
   const iso = fila.ultimoTurno ?? fila.creada;
-  return iso === undefined ? undefined : iso.slice(0, 16).replace("T", " ");
+  return iso === undefined ? undefined : cuandoLocal(iso);
 }
 
 const ESTADOS_DE_TAREA: Record<NonNullable<FilaDeSoporte["estado"]>, string> = {

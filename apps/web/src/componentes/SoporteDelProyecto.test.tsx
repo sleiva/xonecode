@@ -117,3 +117,14 @@ describe("SoporteDelProyecto", () => {
     expect(screen.getByRole("status").textContent).toMatch(/No se pudo/);
   });
 });
+
+describe("la fecha de cada fila, en hora LOCAL (salía en UTC)", () => {
+  it("convierte la ISO a la hora del navegador, con el mismo formato", async () => {
+    const { cuandoLocal } = await import("./SoporteDelProyecto.js");
+    const iso = "2026-10-16T05:43:00.000Z";
+    const d = new Date(iso);
+    const dos = (n: number) => String(n).padStart(2, "0");
+    expect(cuandoLocal(iso)).toBe(`${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())} ${dos(d.getHours())}:${dos(d.getMinutes())}`);
+    expect(cuandoLocal("no es una fecha")).toBe("no es una fecha");
+  });
+});
