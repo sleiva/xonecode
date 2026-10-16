@@ -1,6 +1,6 @@
 import { SelectorDePantalla } from "./DisenoDelProyecto.js";
 import type { EstadoDeDiseno } from "../disenoDelCable.js";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Modal, Button } from "@deepseek-ai/dsh-client-ui-primitives";
 import { nombreDeAdjuntoSeguro } from "../nombreDeAdjunto.js";
 import { useEsperaDeRefresco } from "../esperaDeRefresco.js";
@@ -120,6 +120,17 @@ export function NuevaTarea({
   const [peticion, setPeticion] = useState("");
   /** La pantalla de Stitch ELEGIDA (una): viaja al preparar el encargo y al encolar, con su id. */
   const [pantalla, setPantalla] = useState<{ name: string; titulo: string } | undefined>(undefined);
+  const [pestana, setPestana] = useState<"tarea" | "diseno">("tarea");
+  /**
+   * La pestaña Diseño solo EXISTE con un proyecto de Stitch vinculado (petición suya): sin vínculo la ventana es la de
+   * siempre. Se pregunta al abrir (las pantallas traen el vínculo); hasta que contesta, no se pinta.
+   */
+  const conDiseno = alPedirPantallas !== undefined && diseno?.vinculo !== undefined && diseno.vinculo !== null;
+  useEffect(() => {
+    alPedirPantallas?.();
+    // Una vez al abrir la ventana.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   /** Crear en el gestor tarda una ida y vuelta: mientras, gira; si se niega, el motivo y la ventana sigue abierta. */
   const [creando, setCreando] = useState(false);
   const [motivoDeCrear, setMotivoDeCrear] = useState<string | undefined>(undefined);
@@ -268,6 +279,28 @@ export function NuevaTarea({
                 Revisión de su sesión.
               </p>
 
+          {/* Dos pestañas (petición suya): la TAREA y su DISEÑO de Stitch. La rejilla de pantallas es grande y apartaba
+              «Encolar»; en su pestaña tiene sitio. Lo plegado se DESMONTA; lo escrito vive en el estado de la ventana. */}
+          {!conDiseno ? null : (
+            <div className={estilos.pestanas} role="tablist" aria-label="Nueva tarea">
+              <button type="button" role="tab" className={estilos.pestana} aria-selected={pestana === "tarea"} {...(pestana === "tarea" ? { "data-actual": "" } : {})} onClick={() => setPestana("tarea")}>
+                Tarea
+              </button>
+              <button type="button" role="tab" className={estilos.pestana} aria-selected={pestana === "diseno"} {...(pestana === "diseno" ? { "data-actual": "" } : {})} onClick={() => setPestana("diseno")}>
+                {pantalla === undefined ? "Diseño (Stitch)" : `Diseño · «${pantalla.titulo}»`}
+              </button>
+            </div>
+          )}
+          {pestana === "diseno" && conDiseno ? (
+            // El diseño se ELIGE con su miniatura (decisión suya): la tarea lo trae por su id, sin buscarlo por nombre.
+            <SelectorDePantalla
+              {...(diseno === undefined ? {} : { diseno })}
+              alPedir={alPedirPantallas!}
+              {...(pantalla === undefined ? {} : { elegida: pantalla })}
+              alElegir={setPantalla}
+            />
+          ) : (
+            <>
           <label className={estilos.etiqueta} htmlFor="nueva-tarea-peticion">
             Qué hay que hacer
           </label>
@@ -365,15 +398,14 @@ export function NuevaTarea({
               ))}
             </ul>
           )}
-
-          {/* El diseño se ELIGE con su miniatura (decisión suya): la tarea lo trae por su id, sin buscarlo por nombre. */}
-          {alPedirPantallas === undefined ? null : (
-            <SelectorDePantalla
-              {...(diseno === undefined ? {} : { diseno })}
-              alPedir={alPedirPantallas}
-              {...(pantalla === undefined ? {} : { elegida: pantalla })}
-              alElegir={setPantalla}
-            />
+              {!conDiseno ? null : (
+                <p className={estilos.nota} data-diseno="">
+                  {pantalla === undefined
+                    ? "Sin diseño de Stitch: elígelo en la pestaña Diseño si la tarea tiene maqueta."
+                    : `Diseño: «${pantalla.titulo}» (se trae por su id antes de empezar).`}
+                </p>
+              )}
+            </>
           )}
 
           {/* Crear es la AUTORIZACIÓN: con gestor, se dice ANTES del clic todo lo que se va a escribir allí. */}

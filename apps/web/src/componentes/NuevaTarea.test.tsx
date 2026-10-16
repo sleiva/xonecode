@@ -74,14 +74,31 @@ describe("NuevaTarea", () => {
       vinculo: { proyecto: "projects/9", nombre: "Maset" },
       pantallas: [{ name: "projects/9/screens/aa", title: "Listado de Entregas" }],
     };
-    render(<NuevaTarea {...base} alAugmentar={alAugmentar} alEncolar={alEncolar} diseno={diseno} alPedirPantallas={() => {}} />);
+    const alPedirPantallas = vi.fn();
+    render(<NuevaTarea {...base} alAugmentar={alAugmentar} alEncolar={alEncolar} diseno={diseno} alPedirPantallas={alPedirPantallas} />);
+    // Se preguntan al ABRIR: traen el vínculo, que decide si hay pestaña Diseño.
+    expect(alPedirPantallas).toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "Haz el listado" } });
+    // La rejilla vive en su PESTAÑA; lo escrito en la de Tarea no se pierde al cambiar.
+    expect(screen.queryByRole("button", { name: /Listado de Entregas/ })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Diseño (Stitch)" }));
     fireEvent.click(screen.getByRole("button", { name: /Listado de Entregas/ }));
+    expect(screen.getByRole("tab", { name: "Diseño · «Listado de Entregas»" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Tarea" }));
+    expect((screen.getByLabelText(/qué hay que hacer/i) as HTMLTextAreaElement).value).toBe("Haz el listado");
+    expect(screen.getByText(/Diseño: «Listado de Entregas»/)).toBeTruthy();
     const elegida = { name: "projects/9/screens/aa", titulo: "Listado de Entregas" };
     fireEvent.click(screen.getByRole("button", { name: /preparar el encargo/i }));
     expect(alAugmentar).toHaveBeenCalledWith("Haz el listado", elegida);
     fireEvent.click(screen.getByRole("button", { name: /encolar/i }));
     expect(alEncolar).toHaveBeenCalledWith({ peticion: "Haz el listado", encargo: "Haz el listado", pantallaDeStitch: elegida });
+  });
+
+  it("sin proyecto de Stitch vinculado NO hay pestañas: la ventana de siempre", () => {
+    render(<NuevaTarea {...base} diseno={{ proyecto: "p1", vinculo: null, pantallas: [] }} alPedirPantallas={() => {}} />);
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(screen.queryByText(/Sin diseño de Stitch/)).toBeNull();
+    expect(screen.getByLabelText(/qué hay que hacer/i)).toBeTruthy();
   });
 
   it("«Preparar el encargo» manda la petición y luego se puede EDITAR lo que conteste", () => {

@@ -198,3 +198,12 @@
 .nota[data-error] {
   color: var(--dsw-alias-state-error-primary);
 }
+
+/* Las pestañas Tarea / Diseño: las MISMAS de Ajustes (una ventana no puede tener dos pestañas distintas). */
+.pestanas {
+  composes: pestanas from "./Ajustes.module.css";
+}
+
+.pestana {
+  composes: pestana from "./Ajustes.module.css";
+}
