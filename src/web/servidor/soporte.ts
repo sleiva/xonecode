@@ -208,7 +208,14 @@ function recientes(raiz: string, limite: number): EntradaIndice[] {
 export async function listarSoporte(fuente: FuenteDeSoporte, limite: number = SESIONES_EN_SOPORTE): Promise<ListadoDeSoporte> {
   const trazas = await leerTrazas(fuente.raiz);
   const indice = new Set(listarSesiones(fuente.raiz).map((e) => e.id));
-  const chats = recientes(fuente.raiz, limite).map((e): FilaDeSoporte => ({
+  /**
+   * Las conversaciones de una TAREA van en «Tareas», no también en «Chats» (petición suya): salían dos veces, en Chats
+   * como «Sin título». Se reconocen por la marca del índice (`EntradaIndice.tarea`) o porque una tarea la nombra.
+   */
+  const deTareas = new Set(fuente.tareas.flatMap((t) => (t.sesion === undefined ? [] : [t.sesion])));
+  const chats = recientes(fuente.raiz, limite)
+    .filter((e) => e.tarea === undefined && !deTareas.has(e.id))
+    .map((e): FilaDeSoporte => ({
     id: e.id,
     titulo: e.titulo,
     creada: e.creada,

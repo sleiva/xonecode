@@ -215,13 +215,12 @@ describe("soporte: la tarea y el listado", () => {
     expect(motivoParaNoExportar(fuente, { tipo: "chat", id: "s1" })).toBeUndefined();
   });
 
-  it("el listado analiza cada chat y cada tarea", async () => {
+  it("el listado analiza cada chat y cada tarea, y la conversación de una TAREA va solo en Tareas", async () => {
+    // Petición suya: las conversaciones de las tareas salían también en «Chats», como «Sin título».
     const { fuente } = await proyecto();
     const listado = await listarSoporte(fuente);
-    expect(listado.chats.map((c) => [c.id, c.analisis.gravedad]).sort()).toEqual([
-      ["s1", "error"],
-      ["s2", "ok"],
-    ]);
-    expect(listado.tareas[0]).toMatchObject({ id: "t1", estado: "requiere-atencion", sesion: "s1" });
+    expect(listado.chats.map((c) => [c.id, c.analisis.gravedad])).toEqual([["s2", "ok"]]);
+    // Su análisis no se pierde: va con la tarea.
+    expect(listado.tareas[0]).toMatchObject({ id: "t1", estado: "requiere-atencion", sesion: "s1", analisis: { gravedad: "error" } });
   });
 });
