@@ -63,6 +63,22 @@ export function motivoDeComandoExternoInaceptable(comando: string, scripts: read
   return undefined;
 }
 
+/** El script de `xone-development` que pasa un `.xne` de 8 bits a UTF-8 (`skills/xone-development/lib/aUtf8.mjs`). */
+export const SCRIPT_A_UTF8 = "xone-a-utf8";
+
+/**
+ * Qué hacer con un `.xne` en ISO-8859-15 o windows-1252, que las tools de Claude Code no saben escribir. Medido:
+ * 2.1.301 lo rechaza ANTES del hook y de `canUseTool` (xonecode no puede escribirlo por él), y 2.1.263/2.1.280
+ * escribían UTF-8 dentro de un fichero que declara ISO-8859-15, rompiendo cada tilde sin aviso. Y todos lo LEEN con
+ * «�». Decisión suya: que lo convierta él a UTF-8, y se le dice aquí. Solo si el script está entre los suyos.
+ */
+export const TEXTO_DE_A_UTF8 =
+  `FICHEROS QUE NO SON UTF-8: si un \`.xne\` declara \`encoding="iso-8859-15"\` (o \`windows-1252\`), o \`Read\` te enseña «�» ` +
+  `donde va una tilde, NO lo edites así: tus \`Write\`/\`Edit\` solo escriben UTF-8 y o se niegan o lo rompen. Antes de ` +
+  `tocarlo, conviértelo con \`${SCRIPT_A_UTF8} <ruta relativa>\` (p. ej. \`${SCRIPT_A_UTF8} EntryPoint.xne\`): pasa el ` +
+  `fichero a UTF-8 sin perder ningún carácter y cambia su prólogo a \`encoding="UTF-8"\`. Después vuelve a leerlo con ` +
+  `\`Read\` y escribe las tildes tal cual (á, Ó, ñ), nunca «�» ni referencias \`&#211;\`. Di en tu resumen qué ficheros convertiste.`;
+
 /**
  * Lo que se le DICE al hijo de su shell, sacado de lo que de verdad se le concede. Sin esto lo descubría a base de
  * denegaciones: medido en una tarea de Maset, el desarrollador en Claude Code (con «Ejecuta comandos» marcado y skills
@@ -76,6 +92,7 @@ export function textoDeLaShellExterna(scripts: readonly string[] | undefined): s
   }
   return (
     `SHELL: \`Bash\` solo para estos scripts de tus skills, uno por llamada, por su NOMBRE y sin ruta: ${scripts.map((s) => `\`${s}\``).join(", ")}. ` +
-    "Argumentos sueltos o entre comillas simples; nada de `;`, `|`, `>`, `$`, comillas dobles ni segundo plano. Cualquier otro comando se deniega."
+    "Argumentos sueltos o entre comillas simples; nada de `;`, `|`, `>`, `$`, comillas dobles ni segundo plano. Cualquier otro comando se deniega." +
+    (scripts.includes(SCRIPT_A_UTF8) ? `\n${TEXTO_DE_A_UTF8}` : "")
   );
 }

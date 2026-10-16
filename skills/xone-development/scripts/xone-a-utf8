@@ -1,0 +1,60 @@
+#!/usr/bin/env node
+/**
+ * Pasa un `.xne` de 8 bits (ISO-8859-15 o windows-1252) a UTF-8, con el prólogo diciendo UTF-8.
+ *
+ * Para quien edita con herramientas que solo escriben UTF-8 (las de Claude Code): sin convertirlo
+ * antes, o se niegan a escribirlo o lo rompen. La conversión no pierde nada: cada carácter de la
+ * tabla de 8 bits existe en UTF-8. El porqué entero, en `../lib/aUtf8.mjs`.
+ *
+ * USO (desde la raíz del proyecto, que es donde corre el agente):
+ *   xone-a-utf8 EntryPoint.xne
+ *   xone-a-utf8 colecciones/Pedidos.xne
+ */
+import { readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, relative, resolve, sep, basename } from "node:path";
+import { aUtf8, motivoDeRuta } from "../lib/aUtf8.mjs";
+
+const args = process.argv.slice(2);
+if (args.length !== 1 || args[0] === "--help" || args[0] === "-h") {
+  console.log("USO: xone-a-utf8 <fichero.xne>   (relativo a la raíz del proyecto)");
+  process.exit(args.length === 1 ? 0 : 2);
+}
+
+function salir(motivo) {
+  console.error(`xone-a-utf8: ${motivo}`);
+  process.exit(1);
+}
+
+const motivo = motivoDeRuta(args[0]);
+if (motivo !== undefined) salir(motivo);
+
+const raiz = realpathSync(process.cwd());
+let real;
+try {
+  real = realpathSync(resolve(raiz, args[0]));
+} catch {
+  salir(`no existe «${args[0]}» en el proyecto`);
+}
+// Por el camino REAL: un enlace dentro del proyecto no puede llevar a escribir fuera.
+const rel = relative(raiz, real);
+if (rel === "" || rel.startsWith("..") || rel.startsWith(sep) || motivoDeRuta(rel.split(sep).join("/")) !== undefined) {
+  salir(`«${args[0]}» no lleva a un .xne del proyecto`);
+}
+
+const bytes = readFileSync(real);
+const r = aUtf8(bytes);
+if (r.yaUtf8) {
+  console.log(`${args[0]} ya está en UTF-8: no hay nada que convertir. Edítalo con Write/Edit.`);
+  process.exit(0);
+}
+
+// Escritura atómica que conserva los permisos: un corte a mitad no deja medio fichero.
+const temporal = join(dirname(real), `.${basename(real)}.a-utf8.tmp`);
+writeFileSync(temporal, r.texto, { encoding: "utf8", mode: statSync(real).mode });
+renameSync(temporal, real);
+
+console.log(
+  `${args[0]}: convertido de ${r.tabla.toUpperCase()} a UTF-8 (${r.noAscii} caracteres no ASCII, todos conservados)` +
+    (r.prologo ? "; el prólogo ahora dice encoding=\"UTF-8\"." : "; no tenía prólogo con encoding.") +
+    " Vuelve a leerlo con Read antes de editarlo, y escribe las tildes tal cual (á, Ó, ñ), nunca «�»."
+);

@@ -58,5 +58,22 @@ describe("lo que se le DICE al hijo de su shell", () => {
     const t = textoDeLaShellExterna(["xone-log-android", "xone-captura-android"])!;
     expect(t).toContain("`xone-log-android`, `xone-captura-android`");
     expect(t).toContain("sin ruta");
+    expect(t).not.toContain("xone-a-utf8");
+  });
+
+  it("con xone-a-utf8 entre sus scripts, se le dice que convierta antes de editar un .xne de 8 bits", async () => {
+    const { textoDeLaShellExterna, SCRIPT_A_UTF8 } = await import("./comandoExterno.js");
+    const t = textoDeLaShellExterna([SCRIPT_A_UTF8, "xone-log-android"])!;
+    expect(t).toContain("FICHEROS QUE NO SON UTF-8");
+    expect(t).toContain("`xone-a-utf8 EntryPoint.xne`");
+    expect(t).toContain("nunca «�»");
+  });
+
+  it("el script que se nombra EXISTE, es ejecutable y es de xone-development", async () => {
+    const { statSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const { SCRIPT_A_UTF8 } = await import("./comandoExterno.js");
+    const e = statSync(resolve(__dirname, "../../skills/xone-development/scripts", SCRIPT_A_UTF8));
+    expect(e.mode & 0o111).not.toBe(0);
   });
 });

@@ -161,7 +161,11 @@ Y las guardas del proyecto:
   de aprobación se lee IGUAL** (`decodificarComoTexto`, en los dos motores y en la de los motores
   externos): leído en UTF-8, el ancla con tilde no calzaba y la tarjeta enseñaba un diff que no era.
   **Límites declarados**: `grep`/`glob` y `xone_navegacion` siguen en UTF-8, y los motores externos
-  ESCRIBEN con sus propias tools, sin esta regla.
+  ESCRIBEN con sus propias tools, sin esta regla. **Claude Code, en concreto, solo escribe UTF-8**: las versiones
+  viejas metían UTF-8 en un `.xne` que declara ISO-8859-15 (rompiendo cada tilde, sin aviso) y la actual se niega
+  ANTES del hook y de `canUseTool`, así que xonecode no puede escribir por él. Decisión suya: lo convierte el HIJO,
+  con el script `xone-a-utf8` de `xone-development` (prólogo incluido, sin perder un carácter), y se le dice cuándo
+  en su prompt (`comandoExterno.ts#TEXTO_DE_A_UTF8`, solo si el script es suyo). Un `.xne` así queda en UTF-8.
 - **Un rechazo de guarda se DEVUELVE como `{error}`, nunca se lanza**: una excepción se lleva el
   turno por delante y el agente no reintenta. Vale para `sinVistasAplanadas`,
   `sinArtefactosEnElProyecto` y `sinDescargasEnElProyecto`. `proyecto.test.ts` lo ata contra la
