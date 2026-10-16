@@ -1517,6 +1517,12 @@ export function crearStoreDelCliente(): {
                 // llega al estado. El síntoma de olvidarlo sería una tarjeta sin la pastilla
                 // que avisa de que ese agente ejecuta comandos — todo en verde.
                 ...(a.ejecucion === true ? { ejecucion: true } : {}),
+                // El esfuerzo del `.md`, por la lista blanca y por su VALOR. Faltaba, y el síntoma fue el de siempre con
+                // todo en verde: al editar, el selector salía en «Sin fijar», y guardar sin tocarlo BORRABA el
+                // `esfuerzo` del fichero (el formulario manda ausente = «no escribas la línea»).
+                ...(typeof a.esfuerzo === "string" && (ESFUERZOS as readonly string[]).includes(a.esfuerzo)
+                  ? { esfuerzo: a.esfuerzo }
+                  : {}),
                 skills: [...a.skills],
                 instrucciones: a.instrucciones,
                 ...(a.origen === undefined ? {} : { origen: a.origen }),

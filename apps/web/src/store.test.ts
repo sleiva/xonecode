@@ -1959,6 +1959,17 @@ describe("store: `semilla` pasa la lista blanca de los subagentes", () => {
     expect(s.leer().agentes?.lista[0]).not.toHaveProperty("semilla");
   });
 
+  it("el `esfuerzo` del `.md` llega al estado, y uno que no es un nivel no", () => {
+    // Faltaba en la lista blanca: al editar en Ajustes salía «Sin fijar», y guardar sin tocarlo borraba el esfuerzo.
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "agentes", agentes: [uno({ motor: "claude-code", esfuerzo: "medium" })], problemas: [] } as never);
+    expect(s.leer().agentes?.lista[0]?.esfuerzo).toBe("medium");
+    s.aplicar({ clase: "agentes", agentes: [uno({ esfuerzo: "mucho" })], problemas: [] } as never);
+    expect(s.leer().agentes?.lista[0]).not.toHaveProperty("esfuerzo");
+    s.aplicar({ clase: "agentes", agentes: [uno()], problemas: [] } as never);
+    expect(s.leer().agentes?.lista[0]).not.toHaveProperty("esfuerzo");
+  });
+
   it("un valor que no es ninguno de los dos se DESCARTA, no se propaga", () => {
     // Es una unión de dos literales, y un tercero no puede decidir qué botón se pinta: sin
     // esta criba `semilla: "quien-sabe"` entraría, contaría como «de serie» al agrupar y
