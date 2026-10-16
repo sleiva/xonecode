@@ -11,7 +11,7 @@
  * Escribe en `/artefactos/`, que no es el proyecto: sin aprobación, y se ANUNCIA como cualquier
  * artefacto. Cada traída REEMPLAZA la anterior: la maqueta de la sesión es una.
  */
-import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
@@ -139,6 +139,15 @@ async function buscarPantalla(
 export function crearTraerDeStitch(deps: DependenciasDeTraerDeStitch) {
   return tool(
     async ({ pantalla, titulo, proyecto }: z.infer<typeof Entrada>) => {
+      // Con la maqueta ELEGIDA por la persona (la marca la deja el corredor): ni se busca por título ni se trae otra —se
+      // sobrescribiría la elegida, y un «no existe» sería un CRITICAL falso—. Solo vale volver a traer ESA, por su id.
+      const elegida = pantallaElegidaDeLaSesion(deps.carpeta);
+      if (elegida !== undefined && (pantalla?.trim() ?? "") !== elegida.name) {
+        return (
+          `Esta tarea ya tiene su maqueta ELEGIDA: «${elegida.titulo}» (id \`${elegida.name}\`), en ${RUTA_DE_DISENO}. Úsala: ` +
+          `no se busca ni se trae otra pantalla. Si no estuviera ahí, tráela con \`pantalla: "${elegida.name}"\`.`
+        );
+      }
       let nombre = pantalla?.trim() ?? "";
       if (nombre === "") {
         if ((titulo ?? "").trim() === "") return "Dime la pantalla: su `titulo` (y el `proyecto` si lo sabes), o su `name`.";
@@ -244,4 +253,23 @@ export async function traerPantalla(deps: DependenciasDeTraerDeStitch, nombre: s
     ...(avisos.length === 0 ? [] : [`(${avisos.join("; ")})`]),
     `Es la MAQUETA de la sesión: pásala como \`referencia\` (${RUTA_DE_DISENO}screen.${extension}) a comparar_capturas y a xone_critica_visual; el harness ya la usa al medir cada prueba. Para verla, describe_image.`,
   ].join("\n");
+}
+
+/** La marca de la pantalla ELEGIDA para la tarea, dentro de la carpeta de diseño de la sesión (la escribe el corredor). */
+export const MARCA_DE_PANTALLA_ELEGIDA = ".elegida.json";
+
+/** La pantalla elegida de esta sesión, o `undefined` (sin marca, o ilegible: entonces la tool busca como siempre). */
+export function pantallaElegidaDeLaSesion(carpeta: string): { name: string; titulo: string } | undefined {
+  try {
+    const v = JSON.parse(readFileSync(join(carpeta, CARPETA_DE_DISENO, MARCA_DE_PANTALLA_ELEGIDA), "utf8")) as Record<string, unknown>;
+    return typeof v["name"] === "string" && typeof v["titulo"] === "string" ? { name: v["name"], titulo: v["titulo"] } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Deja la marca: SIEMPRE, también si traerla falla (la tool la traerá por su id, y no buscará otra). */
+export function marcarPantallaElegida(carpeta: string, pantalla: { name: string; titulo: string }): void {
+  mkdirSync(join(carpeta, CARPETA_DE_DISENO), { recursive: true });
+  writeFileSync(join(carpeta, CARPETA_DE_DISENO, MARCA_DE_PANTALLA_ELEGIDA), JSON.stringify({ name: pantalla.name, titulo: pantalla.titulo }));
 }

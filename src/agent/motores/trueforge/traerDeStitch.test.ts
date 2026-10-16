@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { Artefacto } from "../../../core/artefactos.js";
 import type { ConectoresPort } from "../../../core/ports.js";
 import { TOPE_DE_LLAMADA_MS } from "../../../core/conectores.js";
-import { crearTraerDeStitch, type Descargar } from "./traerDeStitch.js";
+import { marcarPantallaElegida, crearTraerDeStitch, type Descargar } from "./traerDeStitch.js";
 import { buscarMaqueta, ultimaCaptura } from "./medidaAutomatica.js";
 
 const PANTALLA = "projects/142/screens/67c6ab";
@@ -170,6 +170,20 @@ describe("traer_pantalla_de_stitch por título", () => {
     expect(faltan).toEqual(["Listado Entregas"]);
     await t.invoke({ pantalla: "projects/8393/screens/bb" });
     expect(traidas).toEqual(["Menú"]);
+  });
+
+  it("con la maqueta ELEGIDA (la marca del corredor): ni busca por título ni trae otra id; solo vuelve a traer ESA", async () => {
+    // Medido el riesgo: la petición dice «Menu Listado Entregas» y la persona eligió una `image.png`. Sin esto, la búsqueda
+    // por título apuntaba un CRITICAL falso, decía «no construyas» y podía sobrescribir la elegida con otra.
+    const faltan: string[] = [];
+    const { t, llamadas, carpeta } = montarBusqueda({ sinPersona: true, alNoEncontrar: (x) => faltan.push(x) });
+    marcarPantallaElegida(carpeta, { name: "projects/8393/screens/cc", titulo: "image.png" });
+    const porTitulo = String(await t.invoke({ titulo: "Menu Listado Entregas" }));
+    expect(porTitulo).toContain("ya tiene su maqueta ELEGIDA: «image.png» (id `projects/8393/screens/cc`)");
+    expect(String(await t.invoke({ pantalla: "projects/8393/screens/bb" }))).toContain("ya tiene su maqueta ELEGIDA");
+    expect(llamadas).toEqual([]);
+    expect(faltan).toEqual([]);
+    expect(String(await t.invoke({ pantalla: "projects/8393/screens/cc" }))).toContain("Traída");
   });
 
   it("un proyecto que no existe lo dice con los que hay; sin título ni name, pide uno", async () => {

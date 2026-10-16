@@ -109,7 +109,7 @@ import { nombreDeApp } from "../../core/descriptoresDeApp.js";
 import { modelosDeMotor } from "../../agent/config/modelosDeMotor.js";
 import { crearServicioDeMotoresLocales, type ServicioDeMotoresLocales } from "../../agent/motores/motoresLocales.js";
 import { medirDiagnosticoDeNode } from "../../agent/config/diagnosticoDeNodeEnMaquina.js";
-import { CONECTOR_STITCH, traerPantalla } from "../../agent/motores/trueforge/traerDeStitch.js";
+import { CONECTOR_STITCH, marcarPantallaElegida, traerPantalla } from "../../agent/motores/trueforge/traerDeStitch.js";
 import { guardarDisenoDeProyecto } from "../../agent/config/configEnDisco.js";
 import type { DiagnosticoDeNode } from "../../core/diagnosticoDeNode.js";
 import { pantallaElegidaValida, pantallasConMiniatura, motivoDeProyectoDeStitchInaceptable, entradasDeStitch, textoDePantallaElegida, type DisenoVinculado } from "../../core/stitch.js";
@@ -9072,7 +9072,10 @@ export function prepararDisenoDeTarea(
 ): (raiz: string, sesion: string, pantalla: PantallaElegida) => Promise<string> {
   return async (raiz, sesion, pantalla) => {
     try {
-      const texto = await traer({ conectores, carpeta: carpetaDeArtefactosDeSesion(raiz, sesion) }, pantalla.name);
+      const carpeta = carpetaDeArtefactosDeSesion(raiz, sesion);
+      // La marca va SIEMPRE, antes de traerla: con ella la tool no busca por título ni trae otra (`traerDeStitch.ts`).
+      marcarPantallaElegida(carpeta, pantalla);
+      const texto = await traer({ conectores, carpeta }, pantalla.name);
       return textoDePantallaElegida(pantalla, texto.startsWith("Traída") ? { ok: true } : { ok: false, motivo: texto.split("\n")[0]!.slice(0, 160) });
     } catch {
       return textoDePantallaElegida(pantalla, { ok: false, motivo: "falló al traerla" });

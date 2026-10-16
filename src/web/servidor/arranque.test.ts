@@ -13707,25 +13707,32 @@ describe("prepararDisenoDeTarea — la pantalla elegida, traída a la carpeta de
   const conectores = { delProyecto: () => [], tools: async () => [], llamar: async () => "{}" };
   const pantalla = { name: "projects/9/screens/aa", titulo: "Listado", proyecto: "Maset" };
 
-  it("trae por su id a `<raiz>/.xonecode/sesiones/<sesion>/artefactos` y la línea dice que está, con los ids", async () => {
+  it("trae por su id a `<raiz>/.xonecode/sesiones/<sesion>/artefactos`, deja la MARCA y la línea dice que está, con los ids", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-preparar-"));
     const vistas: { carpeta: string; nombre: string }[] = [];
     const preparar = prepararDisenoDeTarea(conectores, async (deps, nombre) => {
       vistas.push({ carpeta: deps.carpeta, nombre });
       return "Traída «Listado»:\n- /artefactos/diseno/screen.png (10 bytes)";
     });
-    const linea = await preparar("/w/A", "s1", pantalla);
-    expect(vistas).toEqual([{ carpeta: "/w/A/.xonecode/sesiones/s1/artefactos", nombre: "projects/9/screens/aa" }]);
+    const linea = await preparar(raiz, "s1", pantalla);
+    const carpeta = join(raiz, ".xonecode", "sesiones", "s1", "artefactos");
+    expect(vistas).toEqual([{ carpeta, nombre: "projects/9/screens/aa" }]);
+    // La marca: con ella la tool no busca por título ni trae otra.
+    expect(JSON.parse(readFileSync(join(carpeta, "diseno", ".elegida.json"), "utf8"))).toEqual({ name: "projects/9/screens/aa", titulo: "Listado" });
+    rmSync(raiz, { recursive: true, force: true });
     expect(linea).toContain("ya está traída");
     expect(linea).toContain("`projects/9/screens/aa`");
   });
 
   it("si no se pudo traer lo dice, con el id para traerla, y nunca lanza", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-preparar-"));
     const fallo = prepararDisenoDeTarea(conectores, async () => "Stitch no dio la pantalla: falta autorizar");
-    expect(await fallo("/w/A", "s1", pantalla)).toContain("No se pudo traer antes de empezar (Stitch no dio la pantalla: falta autorizar)");
+    expect(await fallo(raiz, "s1", pantalla)).toContain("No se pudo traer antes de empezar (Stitch no dio la pantalla: falta autorizar)");
     const revienta = prepararDisenoDeTarea(conectores, async () => {
       throw new Error("/Users/x");
     });
-    const linea = await revienta("/w/A", "s1", pantalla);
+    const linea = await revienta(raiz, "s1", pantalla);
+    rmSync(raiz, { recursive: true, force: true });
     expect(linea).toContain("falló al traerla");
     expect(linea).not.toContain("/Users/x");
   });
@@ -13953,6 +13960,8 @@ describe("el diseño vinculado (Stitch), por el cable", () => {
     const conPantallas = await t.pedir({ accion: "pantallas" });
     expect(conPantallas?.pantallas).toEqual([{ name: "projects/839/screens/aa", title: "Listado de Entregas", miniatura: "https://lh3.googleusercontent.com/x" }]);
     expect(t.llamadas.at(-1)).toEqual({ tool: "list_screens", args: { projectId: "839" } });
+    // Y por el id del proyecto, que es como lo piden el panel y «Nueva tarea»: la MISMA raíz, y la respuesta lo lleva.
+    expect(await t.pedir({ accion: "estado", proyecto: "p1" })).toEqual({ clase: "diseno", proyecto: "p1", vinculo: { proyecto: "projects/839", nombre: "Maset" } });
     expect((await t.pedir({ accion: "desvincular" }))?.vinculo).toBeNull();
     expect(t.config()).not.toHaveProperty("disenoVinculado");
     await t.limpiar();
