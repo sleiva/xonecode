@@ -108,6 +108,8 @@ import { textoDeRecarga, type ResultadoDeRecarga } from "../../core/recargaEnCal
 import { nombreDeApp } from "../../core/descriptoresDeApp.js";
 import { modelosDeMotor } from "../../agent/config/modelosDeMotor.js";
 import { crearServicioDeMotoresLocales, type ServicioDeMotoresLocales } from "../../agent/motores/motoresLocales.js";
+import { medirDiagnosticoDeNode } from "../../agent/config/diagnosticoDeNodeEnMaquina.js";
+import type { DiagnosticoDeNode } from "../../core/diagnosticoDeNode.js";
 import { esMotorLocal } from "../../core/motoresLocales.js";
 import {
   parsear,
@@ -747,6 +749,8 @@ export interface OpcionesDeMontaje {
    * los toca, y la sección lo dice en vez de pintar botones muertos.
    */
   motoresLocales?: (alCambiar: () => void) => ServicioDeMotoresLocales;
+  /** El diagnóstico de Node de Ajustes → General. Ausente = esta ejecución no lo mide (tests, `run`). */
+  diagnosticoDeNode?: () => Promise<DiagnosticoDeNode>;
   /**
    * Ejecuta un paso de una receta (`agent/dispositivos/instalacionEnMaquina.ts`), con su salida en vivo.
    * Ausente = esta ejecución no lanza nada y el botón no se ofrece: el paso se copia, que es
@@ -5432,6 +5436,12 @@ export function montarRutas(
     emitirlos(r);
   };
 
+  /** Ajustes → General → Node: se mide al pulsar, sin caché (lo que se arregla en la máquina se ve al volver a pulsar). */
+  const atenderDiagnosticoDeNode = async (): Promise<void> => {
+    if (opciones.diagnosticoDeNode === undefined) return;
+    emitir({ clase: "diagnosticoNode", diagnostico: await opciones.diagnosticoDeNode() });
+  };
+
   /**
    * Ajustes → Motores locales. El servicio vive lo que vive el servidor (un login en curso es un
    * proceso suyo) y se crea al primer uso: la sección casi nunca se abre.
@@ -7872,6 +7882,12 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "diagnosticoNode") {
+      void atenderDiagnosticoDeNode().catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "modelosDeMotor" && typeof mensaje.motor === "string") {
       void atenderModelosDeMotor(mensaje.motor).catch(contar);
       respuesta.writeHead(204);
@@ -8741,6 +8757,11 @@ export function ficherosCableados(): Required<
  * —el binario del SDK, los procesos, la prueba por el mismo puerto que un subagente— son sus
  * omisiones. Compuesto aquí y no en línea para que la composición de producción tenga test.
  */
+/** El diagnóstico de Node REAL, compuesto fuera para que tenga test (el patrón de `motoresLocalesCableados`). */
+export function diagnosticoDeNodeCableado(): Required<Pick<OpcionesDeMontaje, "diagnosticoDeNode">> {
+  return { diagnosticoDeNode: () => medirDiagnosticoDeNode() };
+}
+
 export function motoresLocalesCableados(): Required<Pick<OpcionesDeMontaje, "motoresLocales">> {
   return { motoresLocales: (alCambiar) => crearServicioDeMotoresLocales({ alCambiar }) };
 }
@@ -9539,6 +9560,7 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     // Con el servicio REAL, compuesto fuera para que tenga test (`motoresLocalesCableados`):
     // olvidarlo aquí deja la sección diciendo «esta ejecución no puede» con todo en verde.
     ...motoresLocalesCableados(),
+    ...diagnosticoDeNodeCableado(),
     // La máquina de verdad: adb/emulator del PATH o del SDK, xcrun solo en macOS y solo con
     // herramientas de desarrollo. Cada proceso con su tope.
     detectarDispositivos: () => detectarDispositivos({}, cargarSettings().settings.dispositivos ?? {}),

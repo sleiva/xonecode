@@ -1015,6 +1015,7 @@ export type MensajeAlCliente =
     }
   /** Lo que ofrece un motor externo, o por qué no se pudo saber. */
   | { clase: "modelosDeMotor"; motor: string; modelos: { id: string; nombre: string }[]; error?: string }
+  | { clase: "diagnosticoNode"; diagnostico: DiagnosticoDeNode }
   /** La foto de los motores locales, entera en cada cambio. */
   | { clase: "motoresLocales"; motores: EstadoDeMotorLocal[] }
   | { clase: "secreto"; pregunta: string }
@@ -1689,6 +1690,7 @@ export type MensajeDelCliente =
   | { clase: "receta"; id: string; paso: number; accion: "ejecutar" | "cancelar" }
   /** Los modelos de un motor externo, bajo demanda: el de Codex arranca un proceso. */
   | { clase: "modelosDeMotor"; motor: string }
+  | { clase: "diagnosticoNode" }
   /** Una acción sobre un motor local: la intención; el binario lo decide el servidor. */
   | {
       clase: "motorLocal";
@@ -1919,4 +1921,23 @@ export interface InformeDeDispositivos {
   /** Cómo conseguir lo que falta. Vacío si este sistema no tiene receta todavía. */
   recetas: Receta[];
   medido: string;
+}
+
+/**
+ * El diagnóstico de Node de Ajustes → General, REDECLARADO del host (`src/core/diagnosticoDeNode.ts`): una foto con hora,
+ * sin rutas de la máquina. Cada línea dice si funciona, lo medido y, si no, por qué.
+ */
+export interface LineaDeDiagnostico {
+  ok: boolean;
+  valor?: string;
+  motivo?: string;
+}
+
+export interface DiagnosticoDeNode {
+  cuando: string;
+  servidor: { version: string; plataforma: string; arquitectura: string };
+  nodeEnPath: LineaDeDiagnostico;
+  scripts: LineaDeDiagnostico & { cuantos: number };
+  simulador: LineaDeDiagnostico;
+  claudeCode: LineaDeDiagnostico;
 }

@@ -199,7 +199,7 @@ export function scriptsDeLasSkills(raiz: string, skills: readonly string[], plat
  * con el bit como única regla la lista salía VACÍA y el desarrollador en Claude Code se quedaba sin ningún script.
  */
 export function scriptsConRuta(
-  raiz: string,
+  raiz: string | undefined,
   skills: readonly string[],
   plataforma: NodeJS.Platform = process.platform
 ): { nombre: string; ruta: string }[] {

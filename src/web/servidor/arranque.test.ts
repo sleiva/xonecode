@@ -27,6 +27,7 @@ import { MS_DE_PREPARACION,
   recargaCableada,
   ficherosCableados,
   motoresLocalesCableados,
+  diagnosticoDeNodeCableado,
   ajusteDeConectoresCableado,
   ajusteDeGestorCableado,
   banderaDeEjecutor,
@@ -13690,6 +13691,16 @@ describe("motoresLocalesCableados — la composición de producción, no un dobl
     // Sin login en curso no hay nada que cancelar ni que abrir: el real, no un doble que diga «sí».
     expect(servicio.cancelarSesion("claude-code")).toBe(false);
     expect(servicio.abrirNavegador("claude-code")).toBe(false);
+  });
+});
+
+describe("diagnosticoDeNodeCableado — montado en la consola de verdad", () => {
+  it("da la medida real y la composición del servidor la extiende junto a los motores locales", async () => {
+    expect(typeof diagnosticoDeNodeCableado().diagnosticoDeNode).toBe("function");
+    // El patrón de fallo del repo: una pieza escrita y nunca montada. Se mira que el arranque REAL la extienda.
+    const { readFileSync } = await import("node:fs");
+    const fuente = readFileSync(new URL("./arranque.ts", import.meta.url), "utf8");
+    expect(fuente).toMatch(/\.\.\.motoresLocalesCableados\(\),\n\s*\.\.\.diagnosticoDeNodeCableado\(\),/);
   });
 });
 

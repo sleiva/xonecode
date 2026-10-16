@@ -20,6 +20,7 @@ import { leerGestorDelCable, type LecturaDelGestor } from "./gestorDelCable.js";
 import { leerCambiosDelModelo } from "./cambiosDelModelo.js";
 import { leerFotoDeColecciones } from "./fotoDeColecciones.js";
 import { leerMotoresLocales } from "./motoresLocalesDelCable.js";
+import { leerDiagnosticoDeNode } from "./diagnosticoDeNodeDelCable.js";
 import type {
   Receta,
   FotoDeColecciones,
@@ -57,6 +58,7 @@ import type {
   ModoDeEscritura,
   BaseDelFichero,
   EstadoDeMotorLocal,
+  DiagnosticoDeNode,
 } from "./tipos.js";
 import { FORMA_DE_NOMBRE_DE_AVD, FORMA_DE_SERIE } from "./reglasDeAvd.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, FASES_DEL_LANZAMIENTO, ESTADOS_DEL_LANZAMIENTO, ESFUERZOS, esAutenticacionDeConector } from "./tipos.js";
@@ -387,6 +389,8 @@ export interface EstadoDelCliente {
   modelosDeMotor?: Record<string, { modelos: { id: string; nombre: string }[]; error?: string }>;
   /** Ajustes → Motores locales. Ausente = todavía no ha llegado ninguna medida. */
   motoresLocales?: EstadoDeMotorLocal[];
+  /** Ajustes → General → Node: la última foto del diagnóstico. Ausente = no se ha pedido. */
+  diagnosticoNode?: DiagnosticoDeNode;
   /**
    * El paso de receta que se está ejecutando, o cómo acabó el último.
    *
@@ -2076,6 +2080,12 @@ export function crearStoreDelCliente(): {
           const motores = leerMotoresLocales((mensaje as Record<string, unknown>)["motores"]);
           if (motores === undefined) return;
           mutar({ motoresLocales: motores });
+          return;
+        }
+        case "diagnosticoNode": {
+          const diagnostico = leerDiagnosticoDeNode((mensaje as Record<string, unknown>)["diagnostico"]);
+          if (diagnostico === undefined) return;
+          mutar({ diagnosticoNode: diagnostico });
           return;
         }
         case "modelosDeMotor": {

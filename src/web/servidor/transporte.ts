@@ -39,6 +39,7 @@ import type { DispositivoElegido } from "./sesiones.js";
 import type { Esfuerzo } from "../../core/esfuerzo.js";
 import type { AutenticacionDeConector, ConectorDelCable, DefinicionDeConector, FilaDeCatalogo } from "../../core/conectores.js";
 import type { EstadoDeMotorLocal } from "../../core/motoresLocales.js";
+import type { DiagnosticoDeNode } from "../../core/diagnosticoDeNode.js";
 
 /** El vínculo del proyecto con su gestor, tal como cruza el cable: el del `config.json` más el
  *  nombre del sitio si esta ejecución ya lo sabe (lo dijo `sitios()`), y el del PROYECTO si ya
@@ -819,6 +820,8 @@ export type MensajeAlCliente =
   /** Lo que ofrece un motor externo. `error` en vez de una lista vacía muda: un desplegable
    *  vacío sin motivo se lee como que la ventana está rota. */
   | { clase: "modelosDeMotor"; motor: string; modelos: { id: string; nombre: string }[]; error?: string }
+  /** El diagnóstico de Node de Ajustes → General (`core/diagnosticoDeNode.ts`): una foto, sin rutas de la máquina. */
+  | { clase: "diagnosticoNode"; diagnostico: DiagnosticoDeNode }
   /**
    * La foto de los motores locales (Claude Code, Codex, OpenCode) para Ajustes → Motores locales:
    * si están, con qué sesión, la última prueba y el login en curso. Entera en cada cambio, como
@@ -1840,6 +1843,8 @@ export type MensajeDelCliente =
   /** Los modelos que ofrece un MOTOR externo, para el desplegable de un subagente. Se pide
    *  bajo demanda: el de Codex se le pregunta a él, y eso arranca un proceso. */
   | { clase: "modelosDeMotor"; motor: string }
+  /** Medir el diagnóstico de Node (Ajustes → General, «Comprobar»). */
+  | { clase: "diagnosticoNode" }
   /**
    * Una acción sobre un motor local. La INTENCIÓN, no el comando: qué binario y con qué
    * argumentos lo decide el servidor (`agent/motores/motoresLocales.ts`). `codigo` es el que la

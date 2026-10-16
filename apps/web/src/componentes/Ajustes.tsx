@@ -37,6 +37,8 @@ import { SelectorDeModo } from "./SelectorDeModo.js";
 import { DispositivoPorDefecto } from "./DispositivoPorDefecto.js";
 import { SelectorDeTema } from "./SelectorDeTema.js";
 import type { TemasElegidos } from "../apariencia.js";
+import type { DiagnosticoDeNode as DiagnosticoDeNodeDelCable } from "../tipos.js";
+import { DiagnosticoDeNode } from "./DiagnosticoDeNode.js";
 import type { ModoDeTema } from "../temas.js";
 import { etiquetaDeEstado, inventario, seLlegaAlDispositivo, type FilaDeInventario } from "../inventarioDeDispositivos.js";
 import estilosDeAccion from "./VerificarDispositivo.module.css";
@@ -431,6 +433,8 @@ export function Ajustes({
   modelosDeMotor,
   alPedirModelosDeMotor,
   motoresLocales,
+  diagnosticoNode,
+  alComprobarNode,
   alMotorLocal,
   alPedirCatalogo,
   modeloPorDefecto,
@@ -643,6 +647,10 @@ export function Ajustes({
   modelosDeMotor?: Record<string, { modelos: { id: string; nombre: string }[]; error?: string }>;
   /** Ajustes → Motores locales: la foto que manda el servidor. Ausente = no ha llegado. */
   motoresLocales?: readonly EstadoDeMotorLocal[];
+  /** Ajustes → General → Node: la última foto del diagnóstico. Ausente = no se ha pedido. */
+  diagnosticoNode?: DiagnosticoDeNodeDelCable;
+  /** Pide medirlo. Ausente = no se pinta «Comprobar». */
+  alComprobarNode?: () => void;
   /** Sin él, la sección dice que esta ejecución no puede y no pinta botones. */
   alMotorLocal?: (accion: AccionDeMotorLocal) => void;
   /** Pide los de un motor. Bajo demanda: el de Codex arranca un proceso. */
@@ -2074,6 +2082,13 @@ export function Ajustes({
                   </p>
                 </>
               )}
+
+              {/* Lo que el agente necesita de esta máquina (Node, scripts, verificador, Claude Code): nació de un usuario en
+                  Windows que se quedaba sin scripts y sin verificador sin ningún sitio donde verlo. */}
+              <DiagnosticoDeNode
+                {...(diagnosticoNode === undefined ? {} : { diagnostico: diagnosticoNode })}
+                {...(alComprobarNode === undefined ? {} : { alComprobar: alComprobarNode })}
+              />
 
               {depuracionActiva === undefined ? null : (
                 <>

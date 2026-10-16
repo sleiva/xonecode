@@ -1,0 +1,74 @@
+/* Ajustes → General → Node: una tarjeta con las líneas del diagnóstico. Piezas compuestas de Ajustes y de Boton, como
+   Motores locales: la misma ventana no puede tener dos estilos de tarjeta. */
+
+.encabezado {
+  composes: subencabezado from "./Ajustes.module.css";
+}
+
+.nota {
+  composes: nota from "./Ajustes.module.css";
+}
+
+.boton {
+  composes: secundario from "./Boton.module.css";
+}
+
+.tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
+  font-size: 13px;
+}
+
+.cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cuando {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.lineas {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 12px;
+  margin: 0;
+}
+
+.lineas dt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.lineas dd {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  overflow-wrap: anywhere;
+}
+
+.motivo {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* Verde si funciona, rojo si no: aquí un fallo SÍ es un problema (el agente lo necesita). */
+.punto {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-error-primary);
+}
+
+.punto[data-ok] {
+  background: var(--dsw-alias-state-success-primary);
+}

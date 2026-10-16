@@ -2545,6 +2545,9 @@ export function App({
       // Ajustes → Motores locales: la foto y la intención; qué se lanza lo decide el servidor.
       {...(estado.motoresLocales === undefined ? {} : { motoresLocales: estado.motoresLocales })}
       alMotorLocal={(accion) => void enviar({ clase: "motorLocal", ...accion })}
+      // Ajustes → General → Node: la foto y la intención de medirla; qué se lanza lo decide el servidor.
+      {...(estado.diagnosticoNode === undefined ? {} : { diagnosticoNode: estado.diagnosticoNode })}
+      alComprobarNode={() => void enviar({ clase: "diagnosticoNode" })}
       alPedirCatalogo={(proveedor) => void enviar({ clase: "catalogo", proveedor })}
       // El modelo por DEFECTO, que es una pregunta distinta de la del compositor: allí se
       // pinta el de la sesión abierta y aquí el que usarán las nuevas. Los dos campos del

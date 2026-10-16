@@ -651,6 +651,14 @@ ejecuta si es Claude Code, con la shell ESTRECHA (ver abajo). Reglas duras:
   montada por la AUTÓNOMA de `consolaDeTarea.aprobacionesTui` — por eso NO se hizo con
   `workspace-write`, para que las guardas de ruta sigan enteras.
 
+- **Ajustes → General → «Node y herramientas del agente»** (`core/diagnosticoDeNode.ts`,
+  `agent/config/diagnosticoDeNodeEnMaquina.ts`, `componentes/DiagnosticoDeNode.tsx`, mensaje `diagnosticoNode`): una FOTO
+  pedida a mano de lo que el agente necesita en ESTA máquina —el Node del servidor, `node` en el PATH, cuántos scripts de
+  las skills se detectan y si uno arranca con la MISMA llamada que haría el agente, `xone-simulator` y el Claude Code del
+  SDK—. Ninguna ruta cruza: versiones y, si falla, el `code` o una frase fija (`motivoDeFallo`). Nació de un paquete de
+  soporte de Windows: sin scripts para el hijo y «xone-simulator no está instalado» con el programa dentro del paquete.
+  **Y el verificador usa el `xone-linter` de NUESTRA dependencia** (`verificador.ts#comoLanzarElSimulador`, su `dist/cli.js`
+  con el Node de xonecode); el del PATH solo si falta.
 - **Ajustes → Motores locales dice si cada motor externo está listo, y deja iniciar la sesión de
   Claude Code y PROBARLOS** (`core/motoresLocales.ts`, `agent/motores/motoresLocales.ts`,
   `componentes/MotoresLocales.tsx`, mensajes `motorLocal`/`motoresLocales`). Se mide el binario que
