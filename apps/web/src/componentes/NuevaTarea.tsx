@@ -108,7 +108,8 @@ export function NuevaTarea({
    * Encolar. Si devuelve una promesa, la ventana ESPERA: gira, y con un motivo se queda abierta enseñándolo (un gestor
    * que no deja crear el ticket no puede perder lo escrito). Sin promesa, el camino de antes.
    */
-  alEncolar: (tarea: { peticion: string; encargo: string; pantallaDeStitch?: { name: string; titulo: string } }) => void | Promise<string | undefined>;
+  /** `encargo` ausente = no se preparó: lo prepara el SERVIDOR al encolar (petición suya). */
+  alEncolar: (tarea: { peticion: string; encargo?: string; pantallaDeStitch?: { name: string; titulo: string } }) => void | Promise<string | undefined>;
   /**
    * Dónde vivirá la tarea, preguntado al servidor al abrir (`{clase:"tarea", accion:"destino"}`): `"consultando"`
    * mientras llega; `{gestor}` si el proyecto la crea en su gestor (Jira, Notion…), y entonces la ventana DICE antes del
@@ -351,7 +352,7 @@ export function NuevaTarea({
             rows={8}
             value={encargo}
             onChange={(e) => setEditado(e.target.value)}
-            placeholder="Se rellena con «Preparar el encargo», y se puede editar. Vacío, se manda tu texto tal cual."
+            placeholder="Se rellena con «Preparar el encargo», y se puede editar. Vacío, se prepara al encolar."
           />
 
           <div className={estilos.filaDeEncargo}>
@@ -430,9 +431,13 @@ export function NuevaTarea({
               disabled={!sePuedeEncolar}
               onClick={() => {
                 if (!sePuedeEncolar) return;
-                // Sin encargo escrito se manda la petición TAL CUAL: es lo que hace que un
-                // aumentador caído no impida apuntar el trabajo.
-                const enviado = alEncolar({ peticion: peticion.trim(), encargo: encargo.trim() === "" ? peticion.trim() : encargo, ...(pantalla === undefined ? {} : { pantallaDeStitch: pantalla }) });
+                // Sin encargo escrito NO se manda ninguno: lo prepara el servidor al encolar (petición suya), y si su
+                // aumentador está caído encola la petición tal cual y lo dice — un aumentador caído no impide apuntar.
+                const enviado = alEncolar({
+                  peticion: peticion.trim(),
+                  ...(encargo.trim() === "" ? {} : { encargo }),
+                  ...(pantalla === undefined ? {} : { pantallaDeStitch: pantalla }),
+                });
                 if (enviado === undefined) return;
                 setCreando(true);
                 setMotivoDeCrear(undefined);
@@ -448,7 +453,13 @@ export function NuevaTarea({
                 );
               }}
             >
-              {creando ? `Creando en ${gestor?.nombre ?? "la cola"}…` : gestor === undefined ? "Encolar" : `Crear en ${gestor.nombre}`}
+              {creando
+                ? encargo.trim() === "" && puedeAugmentar
+                  ? "Preparando el encargo y encolando…"
+                  : `Creando en ${gestor?.nombre ?? "la cola"}…`
+                : gestor === undefined
+                  ? "Encolar"
+                  : `Crear en ${gestor.nombre}`}
             </Button>
           </div>
             </>

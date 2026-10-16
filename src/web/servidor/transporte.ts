@@ -1889,7 +1889,7 @@ export type MensajeDelCliente =
    * id de la tarea si es un segmento llano y no es ya una tarea; los adjuntos los lee del
    * disco, nunca de lo que diga el cliente.
    */
-  | { clase: "tarea"; accion: "crear"; proyecto: string; peticion: string; encargo: string; borrador?: string; pantallaDeStitch?: { name: string; titulo: string } }
+  | { clase: "tarea"; accion: "crear"; proyecto: string; peticion: string; /** Vacío o ausente = lo prepara el servidor al encolar. */ encargo?: string; borrador?: string; pantallaDeStitch?: { name: string; titulo: string } }
   | { clase: "tarea"; accion: "augmentar"; proyecto: string; peticion: string; borrador?: string; pantallaDeStitch?: { name: string; titulo: string } }
   /**
    * Una PROPUESTA de tareas encadenadas (el acto `propuesta-de-tareas`): encolarla en orden o

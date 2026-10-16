@@ -1095,7 +1095,9 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   de aprobación; solo `developer-xone` de motor `"modelo"` la recibe —el diseñador está confinado a `icons/` y `fonts/`— y a un
   motor externo no le llegan tools propias.
 - **El encargo se AUMENTA y se enseña EDITABLE antes de encolar** (`AumentadorPort`, papel
-  `trabajo`): ocupa el sitio del diff; su fallo encola el texto original y se DICE.
+  `trabajo`): ocupa el sitio del diff; su fallo encola el texto original y se DICE. **Y si se encola SIN haberlo
+  preparado, lo prepara el SERVIDOR al crear** (`arranque.ts#encargoAlEncolar`, petición suya): la ventana no manda
+  encargo vacío, y el botón dice que lo está preparando.
   **El aumentador conoce los CONECTORES del proyecto** (`PeticionDeTarea.conectores`, de
   `arranque.ts#contextoDelProyecto`, sin el gestor de tareas): lo que la petición nombre de uno se trae de ahí,
   nunca se busca en el repo. Y no escribe condiciones de PARADA: una duda va con su opción recomendada.

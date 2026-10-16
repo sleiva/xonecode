@@ -2075,7 +2075,7 @@ describe("App: crear una tarea en background", () => {
     return { store, enviar, vista };
   }
 
-  it("desde el escritorio se abre la ventana y encolar manda `crear` con petición y encargo", async () => {
+  it("desde el escritorio se abre la ventana y encolar manda `crear` con la petición (sin encargo: lo prepara el servidor)", async () => {
     const { enviar } = conEscritorio();
     fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
     fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "Arregla el login" } });
@@ -2086,7 +2086,6 @@ describe("App: crear una tarea en background", () => {
         accion: "crear",
         proyecto: "p1",
         peticion: "Arregla el login",
-        encargo: "Arregla el login",
       })
     );
   });
@@ -3014,7 +3013,6 @@ describe("App: el panel del proyecto (IXCODE-11)", () => {
           accion: "crear",
           proyecto: "p1",
           peticion: "Arregla el login",
-          encargo: "Arregla el login",
         })
       );
     });

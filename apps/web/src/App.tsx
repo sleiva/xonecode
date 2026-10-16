@@ -2312,7 +2312,7 @@ export function App({
             accion: "crear",
             proyecto,
             peticion,
-            encargo,
+            ...(encargo === undefined ? {} : { encargo }),
             ...(conAdjuntos ? { borrador } : {}),
             ...(pantallaDeStitch === undefined ? {} : { pantallaDeStitch }),
           });

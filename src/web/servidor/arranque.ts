@@ -2585,6 +2585,30 @@ export function montarRutas(
    * manda el id. Sin proyecto resoluble no se pregunta a nadie: se contesta el error, que es
    * lo que la ventana pinta — nunca se inventa una raíz.
    */
+  /**
+   * El encargo AMPLIADO de una petición: el aumentador con los adjuntos del borrador (por NOMBRE, del disco) y la pantalla
+   * de Stitch elegida (comprobada contra el vínculo). Lanza si no se puede; lo usan «Preparar el encargo» y ENCOLAR sin él.
+   */
+  const prepararEncargo = async (
+    augmentar: NonNullable<OpcionesDeMontaje["augmentar"]>,
+    proyectoId: string,
+    texto: string,
+    borrador?: string,
+    pantallaDeStitch?: unknown
+  ): Promise<string> => {
+    const proyecto = proyectoParaTarea(proyectoId);
+    if (proyecto === undefined) throw new Error(`el proyecto «${proyectoId}» no se pudo resolver`);
+    // Los adjuntos ya subidos, por NOMBRE y tipo. Del disco, igual que al crear.
+    const adjuntos =
+      borrador === undefined || opciones.colaDeTareas === undefined || !nombreDeAdjuntoAceptable(borrador)
+        ? []
+        : opciones.colaDeTareas
+            .listarAdjuntos(borrador)
+            .map((a) => ({ nombre: a.nombre, ...(a.mime === undefined ? {} : { mime: a.mime }) }));
+    const pantalla = pantallaDeStitch === undefined ? undefined : pantallaElegidaValida(pantallaDeStitch, disenoVinculadoDe(proyecto.raiz));
+    return augmentar({ texto, proyecto, adjuntos, ...(pantalla === undefined ? {} : { pantallaDeStitch: pantalla }) });
+  };
+
   const atenderAugmentar = async (
     augmentar: NonNullable<OpcionesDeMontaje["augmentar"]>,
     proyectoId: string,
@@ -2593,25 +2617,8 @@ export function montarRutas(
     /** La pantalla de Stitch elegida en «Nueva tarea», tal como llega: se comprueba contra el vínculo del proyecto. */
     pantallaDeStitch?: unknown
   ): Promise<void> => {
-    const proyecto = proyectoParaTarea(proyectoId);
-    if (proyecto === undefined) {
-      emitir({
-        clase: "tarea",
-        accion: "augmentado",
-        error: `el proyecto «${proyectoId}» no se pudo resolver`,
-      });
-      return;
-    }
-    // Los adjuntos ya subidos, por NOMBRE y tipo. Del disco, igual que al crear.
-    const adjuntos =
-      borrador === undefined || opciones.colaDeTareas === undefined || !nombreDeAdjuntoAceptable(borrador)
-        ? []
-        : opciones.colaDeTareas
-            .listarAdjuntos(borrador)
-            .map((a) => ({ nombre: a.nombre, ...(a.mime === undefined ? {} : { mime: a.mime }) }));
     try {
-      const pantalla = pantallaDeStitch === undefined ? undefined : pantallaElegidaValida(pantallaDeStitch, disenoVinculadoDe(proyecto.raiz));
-      const encargo = await augmentar({ texto, proyecto, adjuntos, ...(pantalla === undefined ? {} : { pantallaDeStitch: pantalla }) });
+      const encargo = await prepararEncargo(augmentar, proyectoId, texto, borrador, pantallaDeStitch);
       emitir({ clase: "tarea", accion: "augmentado", encargo });
     } catch (error) {
       // **El MENSAJE si lo escribimos nosotros, el CÓDIGO si lo escribió el sistema**, que
@@ -2621,6 +2628,22 @@ export function montarRutas(
       // arreglar. El mensaje de los nuestros está escrito para leerse y no lleva rutas; el de
       // un error de Node sí las lleva, y de ese solo sale el `code`.
       emitir({ clase: "tarea", accion: "augmentado", error: motivoLegible(error) });
+    }
+  };
+
+  /**
+   * El encargo con que se ENCOLA (petición suya): el que mandó la ventana, o —si llegó vacío, porque nadie pulsó
+   * «Preparar»— el que prepara el aumentador AHORA. Sin aumentador, o si falla, va la petición tal cual y se DICE (la
+   * regla de siempre: su fallo encola el texto original).
+   */
+  const encargoAlEncolar = async (proyectoId: string, peticion: string, encargo: unknown, borrador?: string, pantallaDeStitch?: unknown): Promise<string> => {
+    if (typeof encargo === "string" && encargo.trim() !== "") return encargo;
+    if (opciones.augmentar === undefined) return peticion;
+    try {
+      return await prepararEncargo(opciones.augmentar, proyectoId, peticion, borrador, pantallaDeStitch);
+    } catch (error) {
+      informar(`no se pudo preparar el encargo al encolar (${motivoLegible(error)}): la tarea va con tu texto tal cual`);
+      return peticion;
     }
   };
 
@@ -7678,14 +7701,17 @@ export function montarRutas(
       // Con gestor vinculado, la tarea vive en él: se contesta en la propia respuesta (la ventana no se cierra hasta saber
       // si el gestor la creó). Sin él, el camino de siempre.
       const enGestor = mensaje.accion === "crear" ? gestorParaTareaNueva(mensaje.proyecto) : undefined;
+      // Sin encargo (nadie pulsó «Preparar»), se prepara aquí antes de crear la tarea (`encargoAlEncolar`).
+      const encargoDeCrear =
+        mensaje.accion === "crear" ? await encargoAlEncolar(mensaje.proyecto, mensaje.peticion, mensaje.encargo, mensaje.borrador, mensaje.pantallaDeStitch) : "";
       if (mensaje.accion === "crear" && enGestor !== undefined) {
-        const r = await atenderCrearTareaEnGestor(enGestor, mensaje.peticion, mensaje.encargo, mensaje.borrador, mensaje.pantallaDeStitch);
+        const r = await atenderCrearTareaEnGestor(enGestor, mensaje.peticion, encargoDeCrear, mensaje.borrador, mensaje.pantallaDeStitch);
         respuesta.writeHead(r.estado, { "content-type": "application/json" });
         respuesta.end(JSON.stringify(r.cuerpo));
         return;
       }
       if (mensaje.accion === "crear" && opciones.colaDeTareas !== undefined) {
-        const creada = atenderCrearTarea(mensaje.proyecto, mensaje.peticion, mensaje.encargo, mensaje.borrador, undefined, mensaje.pantallaDeStitch);
+        const creada = atenderCrearTarea(mensaje.proyecto, mensaje.peticion, encargoDeCrear, mensaje.borrador, undefined, mensaje.pantallaDeStitch);
         if (creada !== undefined) {
           opciones.revisarTareas?.();
           emitirTareas();

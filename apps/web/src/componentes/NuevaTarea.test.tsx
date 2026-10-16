@@ -63,7 +63,8 @@ describe("NuevaTarea", () => {
     render(<NuevaTarea {...base} alEncolar={alEncolar} />);
     fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "Arregla el login" } });
     fireEvent.click(screen.getByRole("button", { name: /encolar/i }));
-    expect(alEncolar).toHaveBeenCalledWith({ peticion: "Arregla el login", encargo: "Arregla el login" });
+    // Sin encargo preparado NO se manda ninguno: lo prepara el servidor al encolar (petición suya).
+    expect(alEncolar).toHaveBeenCalledWith({ peticion: "Arregla el login" });
   });
 
   it("con una pantalla de Stitch ELEGIDA, viaja al preparar y al encolar, con su id", () => {
@@ -91,7 +92,7 @@ describe("NuevaTarea", () => {
     fireEvent.click(screen.getByRole("button", { name: /preparar el encargo/i }));
     expect(alAugmentar).toHaveBeenCalledWith("Haz el listado", elegida);
     fireEvent.click(screen.getByRole("button", { name: /encolar/i }));
-    expect(alEncolar).toHaveBeenCalledWith({ peticion: "Haz el listado", encargo: "Haz el listado", pantallaDeStitch: elegida });
+    expect(alEncolar).toHaveBeenCalledWith({ peticion: "Haz el listado", pantallaDeStitch: elegida });
   });
 
   it("sin proyecto de Stitch vinculado NO hay pestañas: la ventana de siempre", () => {
@@ -155,7 +156,8 @@ describe("NuevaTarea", () => {
     expect(alerta.textContent).toMatch(/falta la credencial para openai/);
     expect(alerta.textContent).toMatch(/tal cual/i);
     fireEvent.click(screen.getByRole("button", { name: /encolar/i }));
-    expect(alEncolar).toHaveBeenCalledWith({ peticion: "Arregla el login", encargo: "Arregla el login" });
+    // Sin encargo preparado NO se manda ninguno: lo prepara el servidor al encolar (petición suya).
+    expect(alEncolar).toHaveBeenCalledWith({ peticion: "Arregla el login" });
   });
 
   it("sin aumentador en esta consola, el botón no está: no se ofrece lo que no se puede cumplir", () => {
@@ -394,7 +396,8 @@ describe("NuevaTarea: un modal de verdad, y «Preparar el encargo» dice que est
       render(<NuevaTarea {...base} alEncolar={alEncolar} destino={{ gestor: { nombre: "Jira", proyecto: "Personal" } }} />);
       fireEvent.change(peticion(), { target: { value: "Versión en el login" } });
       fireEvent.click(screen.getByRole("button", { name: "Crear en Jira" }));
-      expect(screen.getByRole("button", { name: "Creando en Jira…" })).toBeTruthy();
+      // Sin encargo preparado, mientras espera dice que lo está preparando (lo prepara el servidor al encolar).
+      expect(screen.getByRole("button", { name: "Preparando el encargo y encolando…" })).toBeTruthy();
       soltar("no se pudo crear la tarea en el gestor: sin permiso");
       expect((await screen.findByRole("alert")).textContent).toMatch(/sin permiso/);
       expect(peticion().value).toBe("Versión en el login");

@@ -6358,6 +6358,29 @@ describe("las tareas en background, por el cable", () => {
       rmSync(base, { recursive: true, force: true });
     });
 
+    it("ENCOLAR sin encargo lo prepara el servidor; con encargo lo respeta; si el aumentador falla va la petición y se dice", async () => {
+      // Petición suya: una tarea encolada sin pulsar «Preparar» salía con la frase suelta como encargo.
+      let falla = false;
+      const pedidos: string[] = [];
+      const { base, cola, accion, vestibulo } = await conPropuesta({
+        augmentar: async (entrada) => {
+          pedidos.push(entrada.texto);
+          if (falla) throw new Error("el modelo no contesta");
+          return `ENCARGO PARA: ${entrada.texto}`;
+        },
+      });
+      await enviarMensaje(accion, { clase: "tarea", accion: "crear", proyecto: "p1", peticion: "Haz el listado" });
+      expect(cola.listar().at(-1)).toMatchObject({ peticion: "Haz el listado", encargo: "ENCARGO PARA: Haz el listado" });
+      await enviarMensaje(accion, { clase: "tarea", accion: "crear", proyecto: "p1", peticion: "Otra", encargo: "el mío" });
+      expect(cola.listar().at(-1)).toMatchObject({ encargo: "el mío" });
+      expect(pedidos).toEqual(["Haz el listado"]);
+      falla = true;
+      await enviarMensaje(accion, { clase: "tarea", accion: "crear", proyecto: "p1", peticion: "La tercera", encargo: "  " });
+      expect(cola.listar().at(-1)).toMatchObject({ peticion: "La tercera", encargo: "La tercera" });
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
     it("«Regenerar el encargo» lo prepara desde la petición editada, con SUS adjuntos, y no guarda nada (IXCODE-53)", async () => {
       const pedidos: unknown[] = [];
       const { base, cola, accion, vestibulo } = await conPropuesta({
