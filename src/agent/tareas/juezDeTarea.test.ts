@@ -107,13 +107,13 @@ describe("el prompt lleva los HECHOS y nunca contenido de ficheros", () => {
       encargo: "añade una colección Clientes",
       raiz: RAIZ,
       autorizadas: ["Clientes.xne", "src/lista.js"],
-      verificador: "verde",
-      hallazgos: [{ code: "ATTR_UNKNOWN", severidad: "warning", mensaje: "atributo raro", fichero: "Clientes.xne", linea: 3 }],
+      verificador: "rojo",
+      hallazgos: [{ code: "COLL_MISSING_PROGID", severidad: "error", mensaje: "falta progid", fichero: "Clientes.xne", linea: 3 }],
     });
     expect(prompt).toContain("añade una colección Clientes");
     expect(prompt).toContain("Clientes.xne");
     expect(prompt).toContain("src/lista.js");
-    expect(prompt).toContain("ATTR_UNKNOWN");
+    expect(prompt).toContain("COLL_MISSING_PROGID");
     // La línea es un dato del hallazgo, no una ruta de la máquina.
     expect(prompt).toContain(":3");
   });
@@ -194,22 +194,25 @@ describe("el prompt lleva los HECHOS y nunca contenido de ficheros", () => {
       expect(prompt).not.toContain("sobre lo que este turno tocó");
     });
 
-    it("un hallazgo SIN fichero se dice sin fichero, que es lo que lo hace inatribuible", async () => {
-      const prompt = await promptDe(CASO_MEDIDO);
+    it("un error SIN fichero se dice sin fichero, que es lo que lo hace inatribuible", async () => {
+      const prompt = await promptDe({
+        ...CASO_MEDIDO,
+        verificador: "rojo",
+        hallazgos: CASO_MEDIDO.hallazgos.map((h) => ({ ...h, severidad: "error" as const })),
+      });
       const lineas = prompt.split("\n").filter((l) => l.includes("REF_JS_COLL_MISSING"));
       expect(lineas).toHaveLength(2);
       // Las DOS, no una: el marcador es por línea y no un párrafo suelto al final.
       for (const l of lineas) expect(l).toContain("el simulador no dijo en qué fichero");
     });
 
-    it("los avisos llegan como AVISOS, distinguibles de los errores, y sin el enum en crudo", async () => {
+    it("los AVISOS no llegan al juez: solo los errores (decisión suya)", async () => {
+      // Medido en Maset (MAS-3): cinco `REF_FUNC_MISSING` falsos (un `executeNode("irColl(…)")` leído como función)
+      // acabaron en «la navegación no está garantizada», con las seis opciones probadas en el aparato.
       const prompt = await promptDe(CASO_MEDIDO);
-      expect(prompt).toContain("AVISO");
-      // La huella de reparación del verificador usa solo errores por esta razón: un aviso
-      // que va y viene no dice nada. Aquí lo mismo: no se le esconde, se le etiqueta.
-      expect(prompt).toContain("Avisos");
+      expect(prompt).not.toContain("REF_JS_COLL_MISSING");
+      expect(prompt).not.toContain("Avisos");
       expect(prompt).not.toContain("warning");
-      // Y con el verificador en verde no hay errores que listar: el encabezado no aparece.
       expect(prompt).not.toContain("Errores");
     });
 
@@ -268,7 +271,7 @@ describe("el prompt lleva los HECHOS y nunca contenido de ficheros", () => {
     });
   });
 
-  it("en ROJO los errores y los avisos van en grupos distintos, y no hay párrafo de verde", async () => {
+  it("en ROJO van los errores, ningún aviso, y no hay párrafo de verde", async () => {
     const prompt = await promptDe({
       encargo: "crea la colección Clientes",
       raiz: RAIZ,
@@ -282,14 +285,12 @@ describe("el prompt lleva los HECHOS y nunca contenido de ficheros", () => {
       cambiados: ["Clientes.xne"],
     });
     const errores = prompt.indexOf("Errores");
-    const avisos = prompt.indexOf("Avisos");
     expect(errores).toBeGreaterThan(-1);
-    expect(avisos).toBeGreaterThan(errores);
-    // Cada uno bajo el suyo: un error contado como aviso relajaría la única condición que
-    // el código sí tumba (`core/entrega.ts#condicionesDeEntrega` cuenta ERRORES).
-    expect(prompt.slice(errores, avisos)).toContain("COLL_MISSING_PROGID");
-    expect(prompt.slice(errores, avisos)).not.toContain("ATTR_UNKNOWN");
-    expect(prompt.slice(avisos)).toContain("ATTR_UNKNOWN");
+    // El error sí, bajo su encabezado: es la única condición que el código tumba (`core/entrega.ts`
+    // #condicionesDeEntrega` cuenta ERRORES). El aviso no llega.
+    expect(prompt.slice(errores)).toContain("COLL_MISSING_PROGID");
+    expect(prompt).not.toContain("ATTR_UNKNOWN");
+    expect(prompt).not.toContain("Avisos");
     expect(prompt).not.toContain("no hay nada que reprochar");
     // Con cero preexistentes se dice cero y no se calla: «ninguno más» es un dato.
     expect(prompt).toContain("ningún otro");

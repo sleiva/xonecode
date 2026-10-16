@@ -199,30 +199,27 @@ const parrafoDelVerificador = (caso: CasoDeJuez): string[] => {
       "medido si lo escrito es XML válido. Tenlo en cuenta: no lo des por bueno.",
     ];
   }
-  const hallazgos = caso.hallazgos ?? [];
-  const errores = hallazgos.filter((h) => h.severidad === "error");
-  const avisos = hallazgos.filter((h) => h.severidad !== "error");
+  /**
+   * **Al juez solo le llegan los ERRORES** (decisión suya). Medido en Maset (MAS-3): el verificador cerró en verde con
+   * cinco avisos `REF_FUNC_MISSING` —un `self.executeNode("irColl(…)")` leído como llamada a una función que no existe,
+   * cuando `irColl` es un NODO de la colección— y el juez los convirtió en «la navegación no está garantizada», con las
+   * seis opciones probadas en el aparato. Un aviso del linter puede ser falso; la puerta de entrega ya contaba solo errores.
+   */
+  const errores = (caso.hallazgos ?? []).filter((h) => h.severidad === "error");
   return [
     caso.verificador === "verde"
       ? [
           "El verificador de XOne (xone-simulator) acabó en VERDE, así que",
           "no hay nada que reprochar por parte del verificador: no dejó ni un error.",
-          "Los avisos no lo cambian — los errores son lo único que la puerta de entrega cuenta.",
         ].join("\n")
       : `El verificador de XOne (xone-simulator) acabó en ROJO: dejó ${errores.length} error(es) sin corregir.`,
     "",
-    ...(hallazgos.length === 0 && caso.preexistentes === undefined ? [] : COMO_SE_LEEN_LOS_HALLAZGOS),
+    ...(errores.length === 0 && caso.preexistentes === undefined ? [] : COMO_SE_LEEN_LOS_HALLAZGOS),
     ...(errores.length === 0
       ? []
       : [
           `Errores que caen en algo que este turno escribió, o que no dicen en qué fichero (${errores.length}):`,
           ...errores.map(lineaDeHallazgo),
-        ]),
-    ...(avisos.length === 0
-      ? []
-      : [
-          `Avisos que caen en algo que este turno escribió, o que no dicen en qué fichero (${avisos.length}):`,
-          ...avisos.map(lineaDeHallazgo),
         ]),
     /**
      * El otro lado del reparto, CONTADO. Ausente es «no se midió» y cero es «no había

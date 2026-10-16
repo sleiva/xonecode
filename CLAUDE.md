@@ -970,6 +970,9 @@ corre solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` 
   `ResultadoDeTurno.omisionesExplicadas`). Y tampoco el de una crítica ANTERIOR a los últimos cambios del proyecto
   (`cambioDespuesDe`, por la hora del disco: un hijo externo escribe con sus tools): va a observaciones como «sin
   comprobar después» (`bloqueantesDesfasados`).
+- **Del verificador, al juez solo le llegan los ERRORES** (decisión suya, `juezDeTarea.ts#parrafoDelVerificador`): un
+  aviso del linter puede ser falso —medido en Maset, `self.executeNode("irColl(…)")` salió como `REF_FUNC_MISSING`
+  siendo `irColl` un nodo— y el juez lo convertía en rojo. La puerta de entrega ya contaba solo errores.
 - **El juez recibe las comprobaciones VISUALES del turno, medidas por el harness** (`ResultadoDeTurno.comprobacionesVisuales`,
   `CasoDeJuez`, `lineaDeComprobacion`): una línea por `comparar_capturas`, `xone_critica_visual` y el crítico del cierre,
   las últimas `TOPE_DE_COMPROBACIONES_AL_JUEZ`. Sin ellas, un criterio que pedía validar contra la maqueta era rojo seguro
