@@ -187,6 +187,10 @@ export function textoDeMaquetadorExterno(nombres: readonly string[]): string {
     "diferencias de detalle van en tu resumen final, no en otra vuelta: cada vuelta suya empieza de cero. Si un recurso del",
     "diseñador está mal (proporción, color, un icono equivocado), díselo a él y que lo corrija en esa misma vuelta: puede escribir en",
     "`icons/`, y otra ronda diseñador → desarrollador cuesta dos arranques.",
+    "En su encargo NO nombres herramientas de xonecode (`comparar_capturas`, `xone_critica_visual`, `describe_image`,",
+    "`device-controller`…): corre en otro proceso y no las tiene, así que las busca o te devuelve que no pudo usarlas. El criterio",
+    "visual se lo das como QUÉ tiene que coincidir con la maqueta (su ruta), que él compara mirando la maqueta y su captura; esas",
+    "herramientas las pasas TÚ a su vuelta.",
   ].join("\n");
 }
 
@@ -448,6 +452,10 @@ export function notaDeDelegacion(
   opciones: { conIconos?: boolean; conFuentes?: boolean; conComparacion?: boolean; conMemoria?: boolean; conBucle?: boolean; conEsperas?: boolean } = {}
 ): string {
   if (agentes.length === 0) return "";
+  const externos = agentes.filter((a) => a.motor === "claude-code" && a.ejecucion === true && !a.soloLectura).map((a) => a.nombre);
+  // Medido en Maset: con el desarrollador en Claude Code, el orquestador copiaba `comparar_capturas` y el crítico en el
+  // criterio de su encargo, y el hijo, que no los tiene, volvía diciendo que no pudo usarlos. Su criterio va sin tools.
+  const desarrolladorExterno = externos.includes("developer-xone");
   return [
     "NOTA DEL HARNESS: en este entorno NO existe la tool `task`. Se delega con `create_sub_agent`:",
     "`name` es EXACTAMENTE el nombre del especialista y `input` el encargo, autosuficiente —el",
@@ -456,10 +464,7 @@ export function notaDeDelegacion(
     ...agentes.map((a) => `- ${a.nombre}: ${fichaDeAgente(a, opciones)}`),
     ...(opciones.conComparacion === true ? ["", BUCLE_DE_CALIDAD] : []),
     // Si quien maqueta corre en Claude Code con su shell, el bucle es SUYO: el orquestador no lo repite encima.
-    ...(() => {
-      const externos = agentes.filter((a) => a.motor === "claude-code" && a.ejecucion === true && !a.soloLectura).map((a) => a.nombre);
-      return opciones.conComparacion === true && externos.length > 0 ? ["", textoDeMaquetadorExterno(externos)] : [];
-    })(),
+    ...(opciones.conComparacion === true && externos.length > 0 ? ["", textoDeMaquetadorExterno(externos)] : []),
     ...(opciones.conEsperas === true
       ? [
           "",
@@ -472,16 +477,28 @@ export function notaDeDelegacion(
     ...(opciones.conBucle === true
       ? [
           "",
-          "BUCLE DEL DESARROLLADOR: developer-xone prueba lo que escribe él mismo, llamando a device-controller (despliega, toca y lee",
-          "el log), maqueta y arregla lo visual él mismo —designer-xone solo le hace iconos y fondos SVG—, y corrige hasta cumplir el CRITERIO DE ACEPTACIÓN que le des. Por eso",
-          "cada encargo a developer-xone lleva el CRITERIO ESCRITO y MEDIBLE: qué casillas del plan tiene que dejar comprobadas, qué",
-          "tiene que hacer la app, y, si hay diseño, que la distancia de `comparar_capturas` quede por debajo del 10 % en vertical y en",
-          "horizontal, que ENCAJE en la pantalla (cada borde a un 3 % o menos del de la maqueta) y que el crítico no señale diferencias de forma o de estructura (di dónde está la maqueta). No se puede pedir",
+          ...(desarrolladorExterno
+            ? [
+                "BUCLE DEL DESARROLLADOR: developer-xone prueba lo que escribe él mismo con su shell (despliega, toca, captura y lee el",
+                "log), maqueta y arregla lo visual él mismo —designer-xone solo le hace iconos y fondos SVG—, y corrige hasta cumplir el CRITERIO DE ACEPTACIÓN que le des. Por eso",
+                "cada encargo a developer-xone lleva el CRITERIO ESCRITO y COMPROBABLE: qué casillas del plan tiene que dejar comprobadas, qué",
+                "tiene que hacer la app, y, si hay diseño, que su captura coincida con la maqueta (di su ruta): ninguna pieza que falte,",
+                "el mismo encaje en la pantalla, y sin diferencias de forma ni de estructura. Escrito así, sin nombres de herramientas. No se puede pedir",
+              ]
+            : [
+                "BUCLE DEL DESARROLLADOR: developer-xone prueba lo que escribe él mismo, llamando a device-controller (despliega, toca y lee",
+                "el log), maqueta y arregla lo visual él mismo —designer-xone solo le hace iconos y fondos SVG—, y corrige hasta cumplir el CRITERIO DE ACEPTACIÓN que le des. Por eso",
+                "cada encargo a developer-xone lleva el CRITERIO ESCRITO y MEDIBLE: qué casillas del plan tiene que dejar comprobadas, qué",
+                "tiene que hacer la app, y, si hay diseño, que la distancia de `comparar_capturas` quede por debajo del 10 % en vertical y en",
+                "horizontal, que ENCAJE en la pantalla (cada borde a un 3 % o menos del de la maqueta) y que el crítico no señale diferencias de forma o de estructura (di dónde está la maqueta). No se puede pedir",
+              ]),
           opciones.conFuentes === true
             ? "lo que XOne no reproduce —el desenfoque de fondo, las animaciones—; la tipografía del diseño sí (sus .ttf a `fonts/`). Sin criterio, devolverá el"
             : "lo que XOne no reproduce —las tipografías del diseño, el desenfoque de fondo, las animaciones—. Sin criterio, devolverá el",
-          "trabajo en cuanto funcione. No le encargues a device-controller comprobar SU",
-          "trabajo, ni a designer-xone lo visual de su pantalla (designer-xone no puede tocar un `.xne` ni el CSS): llama tú al diseñador",
+          desarrolladorExterno ? "trabajo en cuanto funcione." : "trabajo en cuanto funcione. No le encargues a device-controller comprobar SU",
+          desarrolladorExterno
+            ? "No le encargues a designer-xone lo visual de su pantalla (designer-xone no puede tocar un `.xne` ni el CSS): llama tú al diseñador"
+            : "trabajo, ni a designer-xone lo visual de su pantalla (designer-xone no puede tocar un `.xne` ni el CSS): llama tú al diseñador",
           "para los RECURSOS que la pantalla necesite, antes del desarrollador. Lo que developer-xone te devuelva es lo que él vio y midió, no un veredicto: el juicio final es tuyo y del arnés.",
         ]
       : []),

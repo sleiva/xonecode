@@ -3611,4 +3611,19 @@ describe("con un maquetador de Claude Code con shell, el bucle es SUYO", () => {
     expect(notaDeDelegacion([externo as never], { conComparacion: true })).toMatch(/developer-xone corre en Claude Code[\s\S]*UNA vez/);
     expect(notaDeDelegacion([propio as never], { conComparacion: true })).not.toContain("corre en Claude Code");
   });
+
+  it("su criterio va sin nombres de herramientas de xonecode, que él no tiene; el de uno propio, con ellas", async () => {
+    const { notaDeDelegacion } = await import("./sesionTrueforge.js");
+    const base = { descripcion: "Escribe", skills: [], instrucciones: "", origen: "semilla" } as const;
+    const externo = { ...base, nombre: "developer-xone", motor: "claude-code" as const, soloLectura: false, ejecucion: true };
+    const propio = { ...base, nombre: "developer-xone", motor: "modelo" as const, soloLectura: false };
+    const nota = notaDeDelegacion([externo as never], { conComparacion: true, conBucle: true });
+    const bucle = nota.slice(nota.indexOf("BUCLE DEL DESARROLLADOR"));
+    expect(bucle).not.toMatch(/comparar_capturas|device-controller|el crítico no señale/);
+    expect(bucle).toContain("sin nombres de herramientas");
+    expect(nota).toMatch(/NO nombres herramientas de xonecode \(`comparar_capturas`, `xone_critica_visual`/);
+    const suya = notaDeDelegacion([propio as never], { conComparacion: true, conBucle: true });
+    expect(suya.slice(suya.indexOf("BUCLE DEL DESARROLLADOR"))).toMatch(/comparar_capturas[\s\S]*device-controller comprobar SU/);
+    expect(suya).not.toContain("NO nombres herramientas de xonecode");
+  });
 });

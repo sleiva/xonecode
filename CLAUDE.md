@@ -551,7 +551,10 @@ ejecuta si es Claude Code, con la shell ESTRECHA (ver abajo). Reglas duras:
 - **A un motor externo no se le nombran tools de xonecode** (`nucleoXoneExterno`, `HERRAMIENTAS_DEL_EXTERNO`): recibe
   el núcleo con esas líneas reescritas por texto EXACTO —si el núcleo cambia y una no casa, LANZA— y una línea que dice
   qué hacer con una tool que su `.md` o su encargo nombren y él no tiene. Medido: el desarrollador en Claude Code
-  buscaba `comparar_capturas` y `validar_fichero_xone` con `ToolSearch`.
+  buscaba `comparar_capturas` y `validar_fichero_xone` con `ToolSearch`. **Y el orquestador tampoco se las pide en el
+  encargo** (`notaDeDelegacion`, `textoDeMaquetadorExterno`): con el desarrollador en Claude Code, el «BUCLE DEL
+  DESARROLLADOR» le da un criterio visual sin herramientas («que coincida con la maqueta»); medido en Maset, copiaba
+  «pásala a `comparar_capturas` y a `xone_critica_visual`» y el hijo volvía diciendo que no las tenía.
 - **`ToolSearch` es de LECTURA** y **listar la RAÍZ se permite** (`rutaVirtualDeEscritura` la
   descarta porque no es un fichero que escribir).
 - **Motores externos**: `claude-code` (`agent/subagentes/subagenteExterno.ts`) **escribe, y cada
