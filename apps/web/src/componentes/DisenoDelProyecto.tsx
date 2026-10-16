@@ -125,7 +125,9 @@ export function SelectorDePantalla({
     alPedir();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const [filtro, setFiltro] = useState("");
   const pantallas = diseno?.pantallas;
+  const visibles = pantallas?.filter((p) => casaConElFiltro(p.title, filtro));
   return (
     <section className={estilos.seccion} aria-label="Diseño de la tarea">
       <h3 className={estilos.titulo}>Diseño (pantalla de Stitch)</h3>
@@ -145,8 +147,21 @@ export function SelectorDePantalla({
               </button>
             )}
           </p>
+          {/* Con muchas pantallas, se filtran por el título (petición suya). */}
+          <div className={estilos.fila}>
+            <input
+              type="search"
+              className={estilos.buscador}
+              aria-label="Buscar pantalla"
+              placeholder="Buscar por nombre…"
+              value={filtro}
+              onChange={(e) => setFiltro(e.target.value)}
+            />
+            <span className={estilos.aviso}>{filtro.trim() === "" ? `${pantallas.length} pantallas` : `${visibles!.length} de ${pantallas.length}`}</span>
+          </div>
+          {visibles!.length === 0 ? <p className={estilos.aviso}>Ninguna pantalla lleva esas palabras.</p> : null}
           <div className={estilos.rejilla}>
-            {pantallas.map((p) => (
+            {visibles!.map((p) => (
               <button
                 key={p.name}
                 type="button"
@@ -168,4 +183,18 @@ export function SelectorDePantalla({
       )}
     </section>
   );
+}
+
+/** Sin tildes ni mayúsculas, como `core/stitch.ts#tituloComparable` (el cliente no importa del host). */
+function comparable(texto: string): string {
+  return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+/** Cada palabra del filtro está en el título, en cualquier orden. Un filtro vacío casa con todas. */
+export function casaConElFiltro(titulo: string, filtro: string): boolean {
+  const t = comparable(titulo);
+  return comparable(filtro)
+    .split(/\s+/)
+    .filter((p) => p !== "")
+    .every((p) => t.includes(p));
 }

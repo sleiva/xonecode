@@ -34,6 +34,24 @@ describe("SelectorDePantalla", () => {
     expect(alElegir).toHaveBeenLastCalledWith(undefined);
   });
 
+  it("el buscador filtra por el título, sin tildes ni mayúsculas y palabra a palabra, y dice cuántas quedan", () => {
+    const diseno = {
+      proyecto: "p1",
+      vinculo: { proyecto: "projects/9", nombre: "Maset" },
+      pantallas: [...PANTALLAS, { name: "projects/9/screens/cc", title: "Liquidación - Maset Logística" }],
+    };
+    render(<SelectorDePantalla diseno={diseno} alPedir={() => {}} alElegir={() => {}} />);
+    expect(screen.getByText("3 pantallas")).toBeTruthy();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Buscar pantalla" }), { target: { value: "entregas LISTADO" } });
+    expect(screen.getByText("1 de 3")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Listado de Entregas/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /image\.png/ })).toBeNull();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Buscar pantalla" }), { target: { value: "liquidacion" } });
+    expect(screen.getByRole("button", { name: /Liquidación/ })).toBeTruthy();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Buscar pantalla" }), { target: { value: "nada" } });
+    expect(screen.getByText("Ninguna pantalla lleva esas palabras.")).toBeTruthy();
+  });
+
   it("sin proyecto de Stitch vinculado lo DICE con el camino, no una lista vacía", () => {
     render(<SelectorDePantalla diseno={{ proyecto: "p1", vinculo: null, pantallas: [] }} alPedir={() => {}} alElegir={() => {}} />);
     expect(screen.getByText(/no tiene un proyecto de Stitch vinculado/)).toBeTruthy();
