@@ -1,3 +1,4 @@
+import { selloDeFecha } from "../selloDeFecha.js";
 import { useEffect, useRef, useState } from "react";
 import type { FilaDeSoporte, ListadoDeSoporte } from "../tipos.js";
 import { GiroDeCarga } from "./GiroDeCarga.js";
@@ -35,19 +36,15 @@ function tituloDe(fila: FilaDeSoporte): string {
 }
 
 /**
- * La fecha en HORA LOCAL, «AAAA-MM-DD HH:MM». Antes se cortaba la ISO a pelo y salía en UTC (petición suya: «la hora sale
- * mal»; en España, dos horas antes). Una fecha que no se entiende se enseña tal cual.
+ * Las fechas de una fila, con el MISMO formateador que Finalizadas (`selloDeFecha`, hora local): en una tarea, «empezó →
+ * acabó»; en un chat, su última actividad. Petición suya: Soporte cortaba la ISO (UTC) y enseñaba la hora de CREACIÓN, así
+ * que no coincidía con Finalizadas.
  */
-export function cuandoLocal(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const dos = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())} ${dos(d.getHours())}:${dos(d.getMinutes())}`;
-}
-
-function cuando(fila: FilaDeSoporte): string | undefined {
-  const iso = fila.ultimoTurno ?? fila.creada;
-  return iso === undefined ? undefined : cuandoLocal(iso);
+export function cuando(fila: FilaDeSoporte, ahora: Date = new Date()): string | undefined {
+  const sello = (iso: string): string => selloDeFecha(iso, ahora) ?? iso;
+  if (fila.empezada !== undefined && fila.acabada !== undefined) return `${sello(fila.empezada)} → ${sello(fila.acabada)}`;
+  const iso = fila.acabada ?? fila.empezada ?? fila.ultimoTurno ?? fila.creada;
+  return iso === undefined ? undefined : sello(iso);
 }
 
 const ESTADOS_DE_TAREA: Record<NonNullable<FilaDeSoporte["estado"]>, string> = {

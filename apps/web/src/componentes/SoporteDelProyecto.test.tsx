@@ -118,13 +118,14 @@ describe("SoporteDelProyecto", () => {
   });
 });
 
-describe("la fecha de cada fila, en hora LOCAL (salía en UTC)", () => {
-  it("convierte la ISO a la hora del navegador, con el mismo formato", async () => {
-    const { cuandoLocal } = await import("./SoporteDelProyecto.js");
-    const iso = "2026-10-16T05:43:00.000Z";
-    const d = new Date(iso);
-    const dos = (n: number) => String(n).padStart(2, "0");
-    expect(cuandoLocal(iso)).toBe(`${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())} ${dos(d.getHours())}:${dos(d.getMinutes())}`);
-    expect(cuandoLocal("no es una fecha")).toBe("no es una fecha");
+describe("las fechas de cada fila, las MISMAS que Finalizadas (no coincidían)", () => {
+  it("en una tarea, «empezó → acabó» con `selloDeFecha`; en un chat, su última actividad", async () => {
+    const { cuando } = await import("./SoporteDelProyecto.js");
+    const { selloDeFecha } = await import("../selloDeFecha.js");
+    const ahora = new Date("2026-10-16T12:00:00Z");
+    const tarea = { id: "t", titulo: "x", creada: "2026-10-16T05:51:00Z", empezada: "2026-10-16T07:33:00Z", acabada: "2026-10-16T07:49:00Z", analisis: { gravedad: "ok", hallazgos: [] } } as never;
+    expect(cuando(tarea, ahora)).toBe(`${selloDeFecha("2026-10-16T07:33:00Z", ahora)} → ${selloDeFecha("2026-10-16T07:49:00Z", ahora)}`);
+    const chat = { id: "c", titulo: "x", creada: "2026-10-16T05:00:00Z", ultimoTurno: "2026-10-16T06:00:00Z", analisis: { gravedad: "ok", hallazgos: [] } } as never;
+    expect(cuando(chat, ahora)).toBe(selloDeFecha("2026-10-16T06:00:00Z", ahora));
   });
 });

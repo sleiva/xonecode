@@ -1253,6 +1253,9 @@ export interface FilaDeSoporte {
   estado?: TareaDelCable["estado"];
   /** Solo en una tarea: la sesión donde corrió. */
   sesion?: string;
+  /** Solo en una tarea: cuándo empezó y acabó (lo mismo que Finalizadas). */
+  empezada?: string;
+  acabada?: string;
   enVuelo?: true;
   analisis: AnalisisDeSoporte;
 }

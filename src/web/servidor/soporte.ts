@@ -99,6 +99,9 @@ export interface FilaDeSoporte {
   estado?: Tarea["estado"];
   /** Solo en una tarea: la sesión donde corrió. */
   sesion?: string;
+  /** Solo en una tarea: cuándo empezó y acabó, lo MISMO que enseña Finalizadas (petición suya: las fechas no coincidían). */
+  empezada?: string;
+  acabada?: string;
   enVuelo?: true;
   analisis: AnalisisDeSesion;
 }
@@ -234,6 +237,8 @@ export async function listarSoporte(fuente: FuenteDeSoporte, limite: number = SE
         creada: t.creada,
         estado: t.estado,
         ...(sesion === undefined ? {} : { sesion }),
+        ...(t.empezada === undefined ? {} : { empezada: t.empezada }),
+        ...(t.acabada === undefined ? {} : { acabada: t.acabada }),
         ...(t.estado === "en-proceso" ? { enVuelo: true as const } : {}),
         analisis,
       };

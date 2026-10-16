@@ -350,7 +350,8 @@ const NOMBRE_DEL_RESULTADO: Record<ResultadoDeFinalizada, string> = {
 /** La frase de UNA línea de una finalizada: lo primero que la explica. */
 function lineaDeFinalizada(t: TareaDelCable): string {
   if (t.terminadaAMano === true) return "La dio por buena una persona.";
-  const primera = (texto: string): string => texto.split(/(?<=[.:;])\s/)[0] ?? texto;
+  // Hasta el primer «.» o «;», no los dos puntos: los críticos empiezan por «pantalla: …» y la fila se quedaba en «pantalla:».
+  const primera = (texto: string): string => texto.split(/(?<=[.;])\s/)[0] ?? texto;
   if (t.cierre !== undefined && t.cierre.criticos.length > 0) return primera(t.cierre.criticos[0]!);
   if (t.veredicto !== undefined) return primera(t.veredicto.resumen);
   return "";
