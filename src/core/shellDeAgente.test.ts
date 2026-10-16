@@ -373,3 +373,21 @@ describe("una captura a mano (`adb … screencap`) no se lanza: sin el script no
     expect(motivoDeComandoRechazado(c), c).toBeUndefined();
   });
 });
+
+describe("resumenDelEntorno: lo que la traza dice de la shell de un agente", () => {
+  it("en Windows ve las DOS claves (el fallo medido) y busca node.exe en las carpetas de la que manda", async () => {
+    const { resumenDelEntorno } = await import("./shellDeAgente.js");
+    const existe = (r: string) => r === "C:\\Program Files\\nodejs\\node.exe";
+    const r = resumenDelEntorno(
+      { Path: "C:\\Windows\\System32;C:\\Program Files\\nodejs", PATH: "C:\\x:C:\\y" },
+      { plataforma: "win32", existe, scripts: 9, nodeDelServidor: "C:\\Program Files\\nodejs\\node.exe" }
+    );
+    expect(r).toEqual({ plataforma: "win32", clavePath: "Path", clavesPath: 2, carpetas: 2, node: true, adb: false, scripts: 9, nodeDelServidor: true });
+  });
+
+  it("sin PATH lo dice, y en macOS busca el binario a secas", async () => {
+    const { resumenDelEntorno } = await import("./shellDeAgente.js");
+    expect(resumenDelEntorno({}, { plataforma: "darwin", existe: () => true })).toMatchObject({ clavePath: "(ninguna)", carpetas: 0, node: false });
+    expect(resumenDelEntorno({ PATH: "/usr/bin:/opt/bin" }, { plataforma: "darwin", existe: (r) => r === "/opt/bin/adb" })).toMatchObject({ node: false, adb: true, carpetas: 2 });
+  });
+});

@@ -119,3 +119,18 @@ describe("la traza guarda también lo que DEVUELVE cada especialista", () => {
     expect(String(d[0]!["respuesta"]).length).toBe(TOPE_DEL_ENCARGO_EN_TRAZA + 1);
   });
 });
+
+describe("la traza del ENTORNO de una shell y de lo que hace un hijo externo", () => {
+  it("escribe `entorno` y `externo`, recortando el texto largo y sin campos vacíos", async () => {
+    const { TOPE_DE_TEXTO_EXTERNO } = await import("./diagnosticoDeTools.js");
+    const raiz = mkdtempSync(join(tmpdir(), "xc-traza-"));
+    const log = crearDiagnosticoDeTools(raiz, { [VARIABLE_TRAZA_TOOLS]: "1" }, "chat-1")!;
+    log.entorno!("developer-xone", { plataforma: "win32", clavePath: "Path", node: false });
+    log.externo!("developer-xone", { accion: "fallo", tool: "Bash", error: "x".repeat(TOPE_DE_TEXTO_EXTERNO + 50), motivo: undefined });
+    const lineas = readFileSync(rutaTrazaDeTools(raiz), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(lineas[1]).toMatchObject({ tipo: "entorno", chat: "chat-1", agente: "developer-xone", plataforma: "win32", clavePath: "Path", node: false });
+    expect(lineas[2]).toMatchObject({ tipo: "externo", chat: "chat-1", agente: "developer-xone", accion: "fallo", tool: "Bash" });
+    expect(lineas[2].error).toHaveLength(TOPE_DE_TEXTO_EXTERNO + 1);
+    expect(lineas[2]).not.toHaveProperty("motivo");
+  });
+});

@@ -354,3 +354,32 @@ export function motivoDeOtroAparato(comando: string, d: DispositivoDeLaSesion | 
   }
   return undefined;
 }
+
+/**
+ * Lo que la traza dice del entorno de la shell de un agente (`DiagnosticoDeTools.entorno`), sin copiar el entorno: la
+ * clave del PATH (en Windows es `Path`), cuántas carpetas, si alguna tiene `node`/`adb` y cuántas son de scripts. `existe`
+ * mira el disco: entra por parámetro para que esto siga siendo puro.
+ */
+export function resumenDelEntorno(
+  entorno: Readonly<Record<string, string>>,
+  opciones: { plataforma: string; existe: (ruta: string) => boolean; scripts?: number; nodeDelServidor?: string }
+): Record<string, string | number | boolean> {
+  const windows = opciones.plataforma === "win32";
+  const clave = Object.keys(entorno).find((k) => k.toUpperCase() === "PATH");
+  const claves = Object.keys(entorno).filter((k) => k.toUpperCase() === "PATH");
+  const carpetas = clave === undefined ? [] : (entorno[clave] ?? "").split(windows ? ";" : ":").filter((c) => c !== "");
+  const sep = windows ? "\\" : "/";
+  const tiene = (binario: string): boolean =>
+    carpetas.some((c) => (windows ? [`${binario}.exe`, `${binario}.cmd`, binario] : [binario]).some((n) => opciones.existe(`${c.replace(/[\\/]$/, "")}${sep}${n}`)));
+  return {
+    plataforma: opciones.plataforma,
+    clavePath: clave ?? "(ninguna)",
+    // Dos claves (`Path` y `PATH`) en Windows es justo el fallo medido: el hijo hereda una de las dos sin saber cuál.
+    clavesPath: claves.length,
+    carpetas: carpetas.length,
+    node: tiene("node"),
+    adb: tiene("adb"),
+    ...(opciones.scripts === undefined ? {} : { scripts: opciones.scripts }),
+    ...(opciones.nodeDelServidor === undefined ? {} : { nodeDelServidor: opciones.existe(opciones.nodeDelServidor) }),
+  };
+}

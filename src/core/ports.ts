@@ -237,6 +237,12 @@ export interface ToolDeUnHijo {
 }
 
 export interface PeticionExterna {
+  /**
+   * Escribe en la traza de herramientas (con «Depurar»): cada `Bash` del hijo —pedido, ejecutado, permitido o denegado— y
+   * lo que salió, y cada tool denegada con su motivo. Ausente = sin traza. Medido en Windows: «node: command not found»
+   * solo se supo por lo que el hijo CONTÓ, no por la traza.
+   */
+  trazar?: (datos: Readonly<Record<string, string | number | boolean | undefined>>) => void;
   motor: MotorExterno;
   /** La carpeta del proyecto: el hijo trabaja ahí y en ningún otro sitio. */
   cwd: string;

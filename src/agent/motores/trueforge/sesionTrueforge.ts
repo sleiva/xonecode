@@ -64,6 +64,7 @@ import type { Artefacto } from "../../../core/artefactos.js";
 import type { LineaDeDiff } from "../../../core/diff.js";
 import { createTokenTracker, type TokenTracker } from "../../../vendor/tokenTracking.js";
 import { MAX_APPROVAL_ROUNDS, type Decision } from "../../../vendor/hitl.js";
+import { resumenDelEntorno } from "../../../core/shellDeAgente.js";
 import { artefactosNuevos, backendDeAgente, entornoDeLaShellDelProyecto, fotoDeArtefactos, lectorDelDispositivoDeSesion, scriptsConRuta } from "../../grafo/proyecto.js";
 import { carpetaDeHotswap } from "../../../core/hotswap.js";
 import { cargarAgentes } from "../../subagentes/agentesEnDisco.js";
@@ -747,6 +748,15 @@ export async function abrirSesionTrueforge(
   // El CHAT es la sesión con la que se abrió (`opciones.hilo`, el id del índice), no el `hilo` de
   // ahora: `/nuevo` abre otro hilo huérfano pero los actos siguen yendo a la misma sesión.
   const diagnostico = opciones.diagnostico ?? crearDiagnosticoDeTools(raiz, entornoDeDiagnostico, opciones.hilo);
+  /** La traza del entorno de NUESTRA shell (la de quien ejecuta), una vez por sesión: es la misma para todos. */
+  let entornoTrazado = false;
+  const conTrazaDelEntorno = (entorno: Record<string, string>): Record<string, string> => {
+    if (!entornoTrazado) {
+      entornoTrazado = true;
+      diagnostico?.entorno?.("shell propia", resumenDelEntorno(entorno, { plataforma: process.platform, existe: existsSync }));
+    }
+    return entorno;
+  };
   /**
    * La traza de EXCEPCIONES e HITOS, la MISMA de deepagents (`turnoReal.ts`) y que aquí
    * faltaba por completo: TrueForge nunca la encendía, ni siquiera con la variable de entorno
@@ -1256,6 +1266,18 @@ export async function abrirSesionTrueforge(
               : {}),
           }
         : undefined;
+    // La traza del ENTORNO de su shell (con «Depurar»): medido en Windows, el PATH estaba roto y la traza no decía nada.
+    if (ejecucion !== undefined) {
+      diagnostico?.entorno?.(
+        agente.nombre,
+        resumenDelEntorno(ejecucion.entorno, {
+          plataforma: process.platform,
+          existe: existsSync,
+          scripts: ejecucion.scripts.length,
+          ...("nodeDelServidor" in ejecucion && ejecucion.nodeDelServidor !== undefined ? { nodeDelServidor: ejecucion.nodeDelServidor } : {}),
+        })
+      );
+    }
     // Las carpetas de la sesión se LEEN aunque no ejecute: es donde el orquestador le deja la maqueta y las capturas.
     const lecturasDeSesion = motor === "claude-code" && carpeta !== undefined ? [carpeta, carpetaDeHotswap(carpeta)] : undefined;
     /**
@@ -1305,6 +1327,8 @@ export async function abrirSesionTrueforge(
             ...(lecturasDeSesion === undefined ? {} : { lecturas: lecturasDeSesion }),
             // El esfuerzo de su `.md`, que Claude Code aplica como `effort`; los otros dos no tienen dónde recibirlo.
             ...(motor === "claude-code" && agente.esfuerzo !== undefined ? { esfuerzo: agente.esfuerzo } : {}),
+            // Su shell y sus negativas, a la traza (con «Depurar»).
+            ...(diagnostico?.externo === undefined ? {} : { trazar: (d: Readonly<Record<string, string | number | boolean | undefined>>) => diagnostico.externo!(agente.nombre, d) }),
           }),
           senal: () => aborto?.signal,
         }),
@@ -1387,7 +1411,7 @@ export async function abrirSesionTrueforge(
       dispositivo: lectorDelDispositivoDeSesion(opciones.artefactos),
       conShell: () =>
         montarBackend({
-          entorno: entornoDeLaShellDelProyecto(raiz, opciones.artefactos),
+          entorno: conTrazaDelEntorno(entornoDeLaShellDelProyecto(raiz, opciones.artefactos)),
           // El MISMO patrón que ya usa `modeloParaTrueforge` un poco más arriba en este
           // fichero: un getter que se reevalúa en cada llamada, así siempre lee el
           // `AbortController` de la RONDA en curso y no uno capturado al construir.

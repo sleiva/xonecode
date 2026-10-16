@@ -103,16 +103,26 @@ export async function decisionDeTool(opciones: {
   // La SEGUNDA llave del Bash concedido: el hook contestó `ask`, y aquí llega el comando EXACTO
   // que el SDK va a ejecutar. La misma regla otra vez, sobre ese texto.
   if (nombre === "Bash" && peticion.ejecucion !== undefined) {
+    const pedido = String(entrada["command"] ?? "");
     const motivo = motivoDeBashExterno(entrada, peticion.ejecucion.scripts);
-    if (motivo !== undefined) return { behavior: "deny", message: motivo };
+    if (motivo !== undefined) {
+      peticion.trazar?.({ accion: "bash", pedido, decision: "denegado", motivo });
+      return { behavior: "deny", message: motivo };
+    }
     // En Windows el script no se lanza por su nombre: se REESCRIBE a `node '<ruta>' args`, compuesto por el código sobre un
     // comando que la regla ya admitió. Sin ruta para él no se ejecuta (mejor un NO que un «command not found» mudo).
     const rutas = peticion.ejecucion.rutasConNode;
-    if (rutas === undefined) return { behavior: "allow" };
-    const conNode = comandoConNode(String(entrada["command"] ?? ""), rutas, peticion.ejecucion.nodeDelServidor);
-    return conNode === undefined
-      ? { behavior: "deny", message: "XOneCode no sabe dónde está ese script en esta máquina, así que no se ejecuta." }
-      : { behavior: "allow", updatedInput: { ...entrada, command: conNode } };
+    if (rutas === undefined) {
+      peticion.trazar?.({ accion: "bash", pedido, decision: "permitido" });
+      return { behavior: "allow" };
+    }
+    const conNode = comandoConNode(pedido, rutas, peticion.ejecucion.nodeDelServidor);
+    if (conNode === undefined) {
+      peticion.trazar?.({ accion: "bash", pedido, decision: "denegado", motivo: "sin ruta para ese script" });
+      return { behavior: "deny", message: "XOneCode no sabe dónde está ese script en esta máquina, así que no se ejecuta." };
+    }
+    peticion.trazar?.({ accion: "bash", pedido, ejecutado: conNode, decision: "permitido" });
+    return { behavior: "allow", updatedInput: { ...entrada, command: conNode } };
   }
   const clase = claseDeToolExterna(nombre);
   if (clase === "lectura") {
@@ -224,6 +234,42 @@ export async function decisionDeTool(opciones: {
   // este repo—, así que no se afirma que lo ignorara: se manda la forma que su contrato
   // declara para «sin cambios».
   return { behavior: "allow" };
+}
+
+type Trazar = PeticionExterna["trazar"];
+
+/** La salida de un `Bash` del hijo, a la traza: el tamaño y el error, si lo hay. Nunca lanza. */
+export function trazarSalidaDeBash(entrada: Record<string, unknown>, trazar: Trazar): void {
+  try {
+    if (trazar === undefined || entrada["tool_name"] !== "Bash") return;
+    const r = entrada["tool_response"] as Record<string, unknown> | string | undefined;
+    const salida = typeof r === "string" ? r : String(r?.["stdout"] ?? "");
+    const error = typeof r === "string" ? "" : String(r?.["stderr"] ?? "");
+    trazar({
+      accion: "salida",
+      chars: salida.length + error.length,
+      ...(error.trim() === "" ? {} : { error: error.trim() }),
+      ...(typeof r === "object" && r !== null && r["interrupted"] === true ? { interrumpido: true } : {}),
+    });
+  } catch {
+    // Trazar no puede tumbar al hijo.
+  }
+}
+
+/** Una tool del hijo que FALLÓ (`PostToolUseFailure`), a la traza, con su `error`. Nunca lanza. */
+export function trazarFalloDeTool(entrada: Record<string, unknown>, trazar: Trazar): void {
+  try {
+    if (trazar === undefined) return;
+    const error = String(entrada["error"] ?? "").trim();
+    trazar({
+      accion: "fallo",
+      tool: String(entrada["tool_name"] ?? ""),
+      ...(error === "" ? {} : { error }),
+      ...(entrada["is_interrupt"] === true ? { interrumpido: true } : {}),
+    });
+  } catch {
+    // Trazar no puede tumbar al hijo.
+  }
 }
 
 /** Lo que `canUseTool` puede contestar. La forma la pone el SDK; se redeclara para no importarlo. */
@@ -472,8 +518,38 @@ export function crearSubagenteExterno(opciones: {
                    */
                   if (decision.permissionDecision !== "deny") {
                     opciones.alUsarTool?.({ ...eventoDeToolExterna(nombre, args, peticion.cwd), agente: peticion.agente });
+                  } else {
+                    peticion.trazar?.({ accion: "denegada", tool: nombre, motivo: decision.permissionDecisionReason, ...(nombre === "Bash" ? { pedido: String(args["command"] ?? "") } : {}) });
                   }
                   return { hookSpecificOutput: decision };
+                },
+              ],
+            },
+          ],
+          /**
+           * Lo que SALIÓ de cada `Bash` del hijo, a la traza (con «Depurar»): el tamaño y el comienzo del error. Medido en
+           * Windows: «node: command not found» solo se supo porque el hijo lo contó en su respuesta.
+           */
+          PostToolUse: [
+            {
+              hooks: [
+                async (entrada) => {
+                  trazarSalidaDeBash(entrada as unknown as Record<string, unknown>, peticion.trazar);
+                  return {};
+                },
+              ],
+            },
+          ],
+          /**
+           * Y un `Bash` que FALLA (código distinto de 0) no pasa por `PostToolUse` sino por aquí, con `error` («Exit code
+           * 127\n… command not found»): medido con el SDK 0.3.301. Es justo el caso que hay que ver.
+           */
+          PostToolUseFailure: [
+            {
+              hooks: [
+                async (entrada) => {
+                  trazarFalloDeTool(entrada as unknown as Record<string, unknown>, peticion.trazar);
+                  return {};
                 },
               ],
             },

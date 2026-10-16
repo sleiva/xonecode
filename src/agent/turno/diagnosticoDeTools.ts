@@ -91,6 +91,18 @@ export interface DiagnosticoDeTools {
    * (`motores/trueforge/metricasTrueforge.ts`). Es diagnóstico: una diferencia es una cuenta que
    * se pierde en un lado, y sin esto no había forma de verla.
    */
+  /**
+   * **El ENTORNO de la shell de un agente** al montarla (`core/shellDeAgente.ts#resumenDelEntorno`): plataforma, la clave
+   * del PATH, cuántas carpetas, si `node` y `adb` están, cuántos scripts. Opcional, como `corte`. Existe por Windows:
+   * el PATH de los agentes estaba roto («node: command not found») y la traza no decía nada del entorno.
+   */
+  entorno?(agente: string, resumen: Readonly<Record<string, string | number | boolean>>): void;
+  /**
+   * **Lo que hace la shell de un hijo EXTERNO** (Claude Code): cada `Bash` que pide —el comando, el que se ejecutó tras
+   * reescribirlo, y si se permitió o se denegó con su motivo— y lo que salió (tamaño y el comienzo del error). Opcional.
+   * Recortado a `TOPE_DE_TEXTO_EXTERNO`: un comando puede llevar rutas de la máquina, y la traza es un fichero local.
+   */
+  externo?(agente: string, datos: Readonly<Record<string, string | number | boolean | undefined>>): void;
   contraste?(contraste: {
     nuestras: { entrada: number; salida: number; cache: number; llamadas: number };
     motor: Record<string, number>;
@@ -98,6 +110,9 @@ export interface DiagnosticoDeTools {
     diferencias: string[];
   }): void;
 }
+
+/** Cuánto texto de un comando o de su salida guarda la traza de un hijo externo. */
+export const TOPE_DE_TEXTO_EXTERNO = 600;
 
 /** Ruta pública solo para comunicar al usuario dónde quedó su diagnóstico. */
 export function rutaTrazaDeTools(raiz: string): string {
@@ -157,6 +172,17 @@ export function crearDiagnosticoDeTools(
     },
     contraste(c) {
       escribir({ tipo: "contraste", ...c });
+    },
+    entorno(agente, resumen) {
+      escribir({ tipo: "entorno", agente, ...resumen });
+    },
+    externo(agente, datos) {
+      const recortado: Record<string, string | number | boolean> = {};
+      for (const [k, v] of Object.entries(datos)) {
+        if (v === undefined) continue;
+        recortado[k] = typeof v === "string" && v.length > TOPE_DE_TEXTO_EXTERNO ? `${v.slice(0, TOPE_DE_TEXTO_EXTERNO)}…` : v;
+      }
+      escribir({ tipo: "externo", agente, ...recortado });
     },
     resultado(nombre, detalle, chars) {
       escribir({

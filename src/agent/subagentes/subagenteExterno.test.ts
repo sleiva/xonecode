@@ -394,6 +394,34 @@ describe("el Bash ESTRECHO de un agente de Claude Code con ejecución", () => {
     expect((await decisionDeTool({ nombre: "Bash", entrada: { command: "xone-hotswap screen; rm -rf ~" }, peticion: enWindows, ...SIN_DISCO })).behavior).toBe("deny");
   });
 
+  it("cada Bash va a la TRAZA: pedido, ejecutado (si se reescribe) y la decisión con su motivo", async () => {
+    const trazas: Record<string, unknown>[] = [];
+    const trazar = (d: Readonly<Record<string, unknown>>) => void trazas.push({ ...d });
+    const windows = {
+      ...PETICION,
+      trazar,
+      ejecucion: { ...EJECUCION, rutasConNode: { "xone-hotswap": "C:\\s\\xone-hotswap" }, nodeDelServidor: "C:\\n\\node.exe" },
+    };
+    await decisionDeTool({ nombre: "Bash", entrada: { command: "xone-hotswap status" }, peticion: windows, ...SIN_DISCO });
+    await decisionDeTool({ nombre: "Bash", entrada: { command: "ls -la" }, peticion: windows, ...SIN_DISCO });
+    expect(trazas[0]).toEqual({ accion: "bash", pedido: "xone-hotswap status", ejecutado: "'C:/n/node.exe' 'C:/s/xone-hotswap' status", decision: "permitido" });
+    expect(trazas[1]).toMatchObject({ accion: "bash", pedido: "ls -la", decision: "denegado" });
+  });
+
+  it("lo que SALE de un Bash y lo que FALLA (medido: «Exit code 127 … command not found») va a la traza, sin lanzar nunca", async () => {
+    const { trazarSalidaDeBash, trazarFalloDeTool } = await import("./subagenteExterno.js");
+    const trazas: Record<string, unknown>[] = [];
+    const trazar = (d: Readonly<Record<string, unknown>>) => void trazas.push({ ...d });
+    trazarSalidaDeBash({ tool_name: "Bash", tool_response: { stdout: "ok", stderr: "aviso" } }, trazar);
+    trazarSalidaDeBash({ tool_name: "Read", tool_response: { stdout: "x" } }, trazar);
+    trazarFalloDeTool({ tool_name: "Bash", error: "Exit code 127\nnode: command not found", is_interrupt: false }, trazar);
+    expect(trazas).toEqual([
+      { accion: "salida", chars: 7, error: "aviso" },
+      { accion: "fallo", tool: "Bash", error: "Exit code 127\nnode: command not found" },
+    ]);
+    expect(() => trazarFalloDeTool({ tool_name: "Bash" }, () => { throw new Error("x"); })).not.toThrow();
+  });
+
   it("fuera de Windows (sin rutas) el comando corre tal cual, sin tocarlo", async () => {
     expect(await bash("xone-log-android --app")).toEqual({ behavior: "allow" });
   });
