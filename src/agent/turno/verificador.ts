@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createRequire } from "node:module";
 import { promisify } from "node:util";
 import type { Hallazgo, InformeVerificacion, VerifierPort } from "../../core/ports.js";
 
@@ -63,22 +64,41 @@ export function aInforme(salida: SalidaDelSimulador): InformeVerificacion {
  * confundir las dos cosas es el patrón «fallo del proyecto != fallo del harness».
  */
 export class SimuladorVerifier implements VerifierPort {
-  constructor(private readonly binario = "xone-simulator") {}
+  /** Con un binario explícito se usa ESE, por el PATH; sin él, el de nuestra dependencia (`comoLanzarElSimulador`). */
+  constructor(private readonly binario?: string) {}
 
   async verificar(rutaProyecto: string): Promise<InformeVerificacion> {
+    const { programa, previos, nombre } =
+      this.binario === undefined ? comoLanzarElSimulador() : { programa: this.binario, previos: [], nombre: this.binario };
     let stdout: string;
     try {
-      ({ stdout } = await ejecutar(this.binario, ["validate", rutaProyecto, "--json"]));
+      ({ stdout } = await ejecutar(programa, [...previos, "validate", rutaProyecto, "--json"]));
     } catch (e) {
       const conSalida = e as { stdout?: string; code?: unknown };
       // Que el binario no esté se dice con su nombre y su `code`, nunca con el mensaje de Node, que lleva rutas: lo que
       // llegaba al chat era «spawn xone-simulator ENOENT», que no dice que falta un programa (IXCODE-27).
       if (!conSalida.stdout && conSalida.code === "ENOENT") {
-        throw new ErrorDelSimulador(`${this.binario} no está instalado en esta máquina (ENOENT)`);
+        throw new ErrorDelSimulador(`${nombre} no está instalado en esta máquina (ENOENT)`);
       }
       if (!conSalida.stdout) throw e; // reventó de verdad
       stdout = conSalida.stdout;      // salió != 0 porque HAY hallazgos: es el resultado
     }
     return aInforme(JSON.parse(stdout) as SalidaDelSimulador);
+  }
+}
+
+/**
+ * Cómo se lanza `xone-simulator`: **el de NUESTRA dependencia** (`xone-linter`, cuyo `bin` es `dist/cli.js`), con el Node
+ * que corre xonecode; y solo si no se encuentra, `xone-simulator` por el PATH. Medido en la máquina Windows de un usuario
+ * (instalado con `npx`): el verificador lo llamaba por el PATH, donde no estaba, y cada turno cerraba con «no está
+ * instalado (ENOENT)» aunque el programa venía DENTRO del paquete. Aquí funcionaba porque estaba instalado global.
+ */
+export function comoLanzarElSimulador(
+  resolver: (id: string) => string = createRequire(import.meta.url).resolve
+): { programa: string; previos: string[]; nombre: string } {
+  try {
+    return { programa: process.execPath, previos: [resolver("xone-linter/dist/cli.js")], nombre: "xone-simulator" };
+  } catch {
+    return { programa: "xone-simulator", previos: [], nombre: "xone-simulator" };
   }
 }

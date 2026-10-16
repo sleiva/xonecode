@@ -92,3 +92,36 @@ describe("SimuladorVerifier sin el binario (IXCODE-27)", () => {
     expect((fallo as Error).message).toBe("xone-simulator-que-no-existe-ixcode-27 no está instalado en esta máquina (ENOENT)");
   });
 });
+
+describe("comoLanzarElSimulador: el xone-linter del PAQUETE, no el del PATH", () => {
+  it("usa el cli.js de nuestra dependencia con el Node que corre xonecode", async () => {
+    const { comoLanzarElSimulador } = await import("./verificador.js");
+    const c = comoLanzarElSimulador();
+    expect(c.programa).toBe(process.execPath);
+    expect(c.previos[0]).toMatch(/xone-linter[\\/]dist[\\/]cli\.js$/);
+  });
+
+  it("sin la dependencia, cae al `xone-simulator` del PATH", async () => {
+    const { comoLanzarElSimulador } = await import("./verificador.js");
+    const c = comoLanzarElSimulador(() => {
+      throw new Error("no está");
+    });
+    expect(c).toEqual({ programa: "xone-simulator", previos: [], nombre: "xone-simulator" });
+  });
+
+  it("y de verdad valida un proyecto con ese camino (sin el del PATH)", async () => {
+    // El caso medido en Windows: con el del PATH ausente, el del paquete tiene que bastar.
+    const { mkdtempSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const vacio = mkdtempSync(join(tmpdir(), "sim-"));
+    const fallo = await new SimuladorVerifier().verificar(join(vacio, "no-existe")).then(
+      () => undefined,
+      (e: unknown) => e
+    );
+    rmSync(vacio, { recursive: true, force: true });
+    // Ante una ruta que no existe el simulador contesta su forma de fallo: es que ARRANCÓ (no un ENOENT).
+    expect(fallo).toBeInstanceOf(ErrorDelSimulador);
+    expect((fallo as Error).message).not.toContain("ENOENT");
+  });
+});
