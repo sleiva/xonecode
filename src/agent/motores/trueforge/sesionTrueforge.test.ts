@@ -14,6 +14,7 @@ import { TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../../turno/resumenDeContexto
 import { topeAgotadoDe, traducirEvento } from "./eventosTrueforge.js";
 import { cargarMemoria, interpretarFoto, rutaDeMemoria } from "./memoriaTrueforge.js";
 import { RESUMEN_DE_RELLENO, textoDeDetencionParaHijo, textoDeDetencionParaRaiz } from "./detencion.js";
+import { RONDAS_VISUALES } from "./medidaAutomatica.js";
 import { textoDeNota, textoDeNotaParaHijo, textoDeNotaYaEntregada } from "./notas.js";
 import { abrirSesionReal } from "../../turno/turnoReal.js";
 import { pintarSesion, resumirTraza } from "../../turno/informeDeTraza.js";
@@ -1381,14 +1382,17 @@ describe("una sesión con el motor TrueForge", () => {
       expect(vistos[1]!.join("\n")).not.toContain("PARA JUZGAR UNA PANTALLA");
     }, 30_000);
 
-    it("el desarrollador sabe cuándo TERMINA: el criterio de aceptación, tres vueltas, y que devolver antes es dejarlo a medias", async () => {
+    it("el desarrollador sabe cuándo TERMINA: el criterio de aceptación, sus vueltas (las que cuenta el harness), y que devolver antes es dejarlo a medias", async () => {
       const raiz = proyecto();
       const { m, vistos } = modelosConGuion(guion());
       const s = await abrirSesionTrueforge({ raiz, modelos: m, entorno: ENTORNO, skills: CATALOGO, bucleDelDesarrollador: true });
       await s.turno("haz la calculadora", piel().p);
       const sistema = vistos[1]!.join("\n");
       expect(sistema).toContain("NO TERMINAS hasta que se cumpla el CRITERIO DE ACEPTACIÓN");
-      expect(sistema).toContain("TRES vueltas");
+      // El MISMO número que cuenta el harness: si el prompt dijera otro, el contador le cortaría antes (o después).
+      expect(sistema).toContain(`Tienes ${String(RONDAS_VISUALES)} vueltas`);
+      expect(sistema).toContain(`${String(RONDAS_VISUALES)} rondas como mucho`);
+      expect(sistema).not.toContain("TRES vueltas");
       expect(sistema).toContain("diciendo QUÉ falta");
       // El umbral es ALCANZABLE: mide con la herramienta y deja fuera lo que XOne no reproduce.
       expect(sistema).toContain("por debajo del 10 %");

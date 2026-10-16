@@ -831,7 +831,7 @@ quien escribe los atributos no la usaba. No va en el `SKILL.md`, que llega tambi
 **Las pruebas del aparato van por el LOG antes que por la captura** (`xone-log-android --app`, `textoDelBucle`,
 `EJECUCION_EN_LA_MAQUINA`): el desarrollador instrumenta con `console.log` —nunca `ui.showToast` ni
 `appData.writeConsoleString`, legacy y mudo en Android— y encarga las pruebas FUNCIONALES (acciones y lo esperado, sin
-captura) aparte de las VISUALES (una captura por ronda, `RONDAS_VISUALES`, y en la última se le dice que devuelva). El
+captura) aparte de las VISUALES (una captura por ronda, `RONDAS_VISUALES` —el MISMO número que dice su prompt—, y en la última se le dice que devuelva). El
 conductor lee lo que salió y saca captura solo si el log no lo decide; su aviso de capturas es `UMBRALES_DE_CAPTURAS`.
 **Un `TASKS.md` se escribe con casillas o no se escribe** (`core/tareasDelPlan.ts#motivoDeTasksInaceptable`, en el
 `write_file` de TrueForge): cada tarea reconocida tiene que traer sus criterios como `- [ ]`, que es lo único que

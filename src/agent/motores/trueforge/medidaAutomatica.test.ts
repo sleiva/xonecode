@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PNG } from "pngjs";
-import { buscarMaqueta, cumpleElCriterio, medirContraMaqueta, resumenDeMedida, textoDeMedidaAutomatica, ultimaCaptura } from "./medidaAutomatica.js";
+import { buscarMaqueta, cumpleElCriterio, medirContraMaqueta, RONDAS_VISUALES, resumenDeMedida, textoDeMedidaAutomatica, ultimaCaptura } from "./medidaAutomatica.js";
 
 /** Un PNG oscuro con un bloque claro entre `desde` y `hasta` (fracciones del alto). */
 function pngConBloque(desde: number, hasta: number, ancho = 108, alto = 240, derecha = 0.9): Buffer {
@@ -85,9 +85,10 @@ describe("la medida automática tras probar en el aparato", () => {
     writeFileSync(join(dir, "corta.png"), pngConBloque(0.1, 0.5));
     const c = medirContraMaqueta(join(dir, "corta.png"), join(dir, "maqueta.png"));
     const texto = (ronda: number) => textoDeMedidaAutomatica({ quien: "device-controller", captura: "c.png", maqueta: "/diseno/screen.png", comparacion: c, pedirCritica: false, ronda });
-    expect(texto(1)).toContain("Ronda visual 1 de 3: junta TODAS las diferencias");
-    expect(texto(3)).toContain("Es tu ronda visual 3 de 3");
-    expect(texto(3)).toContain("No pidas otra captura para retocar");
+    expect(texto(1)).toContain(`Ronda visual 1 de ${String(RONDAS_VISUALES)}: junta TODAS las diferencias`);
+    expect(texto(RONDAS_VISUALES - 1)).not.toContain("No pidas otra captura");
+    expect(texto(RONDAS_VISUALES)).toContain(`Es tu ronda visual ${String(RONDAS_VISUALES)} de ${String(RONDAS_VISUALES)}`);
+    expect(texto(RONDAS_VISUALES)).toContain("No pidas otra captura para retocar");
   });
 });
 

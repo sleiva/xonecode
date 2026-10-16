@@ -20,9 +20,11 @@ import { decodificarImagen } from "../../dispositivos/decodificarImagen.js";
 
 /**
  * Rondas VISUALES por encargo: una por captura medida. calc9, calc12 y calc13 sacaron 20-25 capturas cada una, retocando
- * una o dos cosas por despliegue. Con el aviso, la tercera se DICE la última: después se devuelve con lo que falta.
+ * una o dos cosas por despliegue. Con el aviso, la última se DICE: después se devuelve con lo que falta. Eran tres, y medido
+ * en Maset con DeepSeek flash el desarrollador devolvía a la tercera con una fila de la maqueta sin pintar: se subieron
+ * a cinco. El prompt del desarrollador dice este MISMO número (`textoDelBucle`).
  */
-export const RONDAS_VISUALES = 3;
+export const RONDAS_VISUALES = 5;
 
 /** El criterio de aceptación por omisión del bucle (`textoDelBucle`): por debajo, en vertical Y en horizontal. */
 export const CRITERIO_DE_DISTANCIA = 0.1;

@@ -107,7 +107,7 @@ import { leerTareasDelPlan, RUTA_DE_TASKS } from "../../../core/tareasDelPlan.js
 import { casanConTitulo, esDeLaMaqueta } from "../../../core/stitch.js";
 import { recibeConectores } from "../../../core/conectores.js";
 import { crearConvertirAP, NOMBRE_CONVERTIR_A_P, recibeConvertirAP } from "./convertirAP.js";
-import { buscarMaqueta, medirContraMaqueta, resumenDeMedida, textoDeMedidaAutomatica, ultimaCaptura } from "./medidaAutomatica.js";
+import { buscarMaqueta, medirContraMaqueta, RONDAS_VISUALES, resumenDeMedida, textoDeMedidaAutomatica, ultimaCaptura } from "./medidaAutomatica.js";
 import { anotarEscritura, capacidadDeInformesDeHijos, esEscrituraBinaria, escrituraConExito, textoDelInforme, type CambioDeFichero } from "./informesDeHijos.js";
 import { crearDiagnosticoDeTools, type DiagnosticoDeTools } from "../../turno/diagnosticoDeTools.js";
 import { encenderTrazaDeErrores } from "../../trazaDeErroresEnDisco.js";
@@ -397,7 +397,7 @@ export function textoDelBucle(llama: readonly string[], opciones: { conCritica?:
     "  14`, display 14»). El de pruebas los hace, lee el log con `xone-log-android --app` y te devuelve cada caso: pasa o falla",
     "  con lo que salió. SIN capturas. Corrige todos los fallos juntos y repite solo los que fallaron.",
     "- VISUAL, solo cuando lo funcional pasa: UNA captura por ronda. Con ella el harness te trae la medida contra la maqueta;",
-    "  pasa el crítico, arregla TODAS las diferencias en la misma ronda y solo entonces pide otra captura. Tres rondas como mucho.",
+    `  pasa el crítico, arregla TODAS las diferencias en la misma ronda y solo entonces pide otra captura. ${String(RONDAS_VISUALES)} rondas como mucho.`,
     "- Una pantalla que se parece a la maqueta con datos de ejemplo fijos NO está terminada: la lógica tiene que funcionar.",
     "Lo que te devuelva es lo que ha visto, no un permiso para dar el trabajo por bueno: si dice que la app se cae, se cae.",
     "EMPIEZA POR LO MÍNIMO: no escribas la pantalla entera de una vez. Primero la versión más pequeña que se pueda VER y PULSAR",
@@ -434,11 +434,11 @@ export function textoDelBucle(llama: readonly string[], opciones: { conCritica?:
           "Lo que XOne NO puede reproducir no cuenta y no lo persigas: el desenfoque de fondo y las animaciones; una sombra o un",
           "degradado se aproximan con un SVG. La TIPOGRAFÍA del diseño sí: si la maqueta declara una fuente, sus .ttf van a `fonts/`",
           "(pídeselos a designer-xone con los recursos, o tráelos tú con `buscar_fuente`/`traer_fuente`) y se usa con `fontname`;",
-          "para verla en el aparato hay que DESPLEGAR entero. Tienes TRES vueltas de corregir y volver a comprobar para",
+          `para verla en el aparato hay que DESPLEGAR entero. Tienes ${String(RONDAS_VISUALES)} vueltas de corregir y volver a comprobar para`,
         ]
       : [
           "Lo que XOne NO puede reproducir no cuenta y no lo persigas: las tipografías del diseño (no hay .ttf), el desenfoque de fondo y",
-          "las animaciones; una sombra o un degradado se aproximan con un SVG. Tienes TRES vueltas de corregir y volver a comprobar para",
+          `las animaciones; una sombra o un degradado se aproximan con un SVG. Tienes ${String(RONDAS_VISUALES)} vueltas de corregir y volver a comprobar para`,
         ]),
     "llegar; si al agotarlas algo",
     "sigue sin cumplirse, devuelve el trabajo diciendo QUÉ falta, con lo que midieron el crítico y la medida tal cual. Devolver antes",
