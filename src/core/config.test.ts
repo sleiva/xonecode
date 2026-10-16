@@ -229,6 +229,15 @@ describe("validar", () => {
     expect(avisos[0]!.texto).toMatch(/Ajustes/);
   });
 
+  it("acepta disenoVinculado con un `projects/<id>` y nombre; lo demás se descarta con aviso", () => {
+    const bueno = validar({ disenoVinculado: { proyecto: "projects/839", nombre: "Maset" } }, RUTA, "proyecto");
+    expect(bueno.config.disenoVinculado).toEqual({ proyecto: "projects/839", nombre: "Maset" });
+    expect(bueno.avisos).toHaveLength(0);
+    const malo = validar({ disenoVinculado: { proyecto: "../x", nombre: "Maset" } }, RUTA, "proyecto");
+    expect(malo.config.disenoVinculado).toBeUndefined();
+    expect(malo.avisos[0]!.texto).toMatch(/disenoVinculado/);
+  });
+
   it("acepta gestorDeTareas con los tres campos y una clave de proyecto válida", () => {
     const { config, avisos } = validar(
       { gestorDeTareas: { conector: "jira", sitio: "abc-123", proyecto: "IXCODE" } },

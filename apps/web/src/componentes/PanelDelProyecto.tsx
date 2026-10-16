@@ -1,3 +1,5 @@
+import { DisenoDelProyecto, type PeticionDeDiseno } from "./DisenoDelProyecto.js";
+import type { EstadoDeDiseno } from "../disenoDelCable.js";
 import clsx from "clsx";
 import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
@@ -130,6 +132,8 @@ export function PanelDelProyecto({
   alAutorizarConector,
   alProbarConector,
   alAbrirAjustesDeConectores,
+  diseno,
+  alDiseno,
   alPedirSoporte,
   pestanaInicial,
   tareasDesdeElGestor,
@@ -191,6 +195,10 @@ export function PanelDelProyecto({
    */
   alProbarConector: (id: string) => void;
   alAbrirAjustesDeConectores: () => void;
+  /** El diseño vinculado (Stitch) de ESTE proyecto, si ya llegó. */
+  diseno?: EstadoDeDiseno;
+  /** Pide al servidor algo del diseño vinculado (el proyecto lo añade quien envía). Ausente = no se pinta la sección. */
+  alDiseno?: (p: PeticionDeDiseno) => void;
   /**
    * Pide el listado de la pestaña Soporte (chats y tareas con su análisis previo). Ausente = la
    * pestaña no se pinta: un control sin dato detrás no existe.
@@ -421,6 +429,8 @@ export function PanelDelProyecto({
             conectorDelFallo={conectorDelFallo}
             alAbrirAjustes={alAbrirAjustesDeConectores}
             {...(tareasDesdeElGestor === undefined ? {} : { tareasDesdeElGestor })}
+            {...(diseno === undefined ? {} : { diseno })}
+            {...(alDiseno === undefined ? {} : { alDiseno })}
           />
         )}
       </div>
@@ -1093,7 +1103,11 @@ function ConectoresDelProyecto({
   conectorDelFallo,
   alAbrirAjustes,
   tareasDesdeElGestor,
+  diseno,
+  alDiseno,
 }: {
+  diseno?: EstadoDeDiseno;
+  alDiseno?: (p: PeticionDeDiseno) => void;
   tareasDesdeElGestor?: AjusteDeTareasDesdeElGestor;
   gestor?: EstadoDelCliente["gestor"];
   conectores?: EstadoDelCliente["conectores"];
@@ -1188,6 +1202,13 @@ function ConectoresDelProyecto({
           </ul>
         )}
       </section>
+      {alDiseno === undefined ? null : (
+        <DisenoDelProyecto
+          {...(diseno === undefined ? {} : { diseno })}
+          stitchAnadido={anadido("stitch") !== undefined}
+          alDiseno={alDiseno}
+        />
+      )}
       <section className={estilos.seccion} aria-label="Conectores para el chat">
         <h2 className={estilos.titulo}>Conectores para el chat</h2>
         <p className={estilos.aviso}>Los que usará el agente en el chat de este proyecto.</p>

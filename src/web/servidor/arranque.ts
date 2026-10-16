@@ -109,7 +109,10 @@ import { nombreDeApp } from "../../core/descriptoresDeApp.js";
 import { modelosDeMotor } from "../../agent/config/modelosDeMotor.js";
 import { crearServicioDeMotoresLocales, type ServicioDeMotoresLocales } from "../../agent/motores/motoresLocales.js";
 import { medirDiagnosticoDeNode } from "../../agent/config/diagnosticoDeNodeEnMaquina.js";
+import { CONECTOR_STITCH, traerPantalla } from "../../agent/motores/trueforge/traerDeStitch.js";
+import { guardarDisenoDeProyecto } from "../../agent/config/configEnDisco.js";
 import type { DiagnosticoDeNode } from "../../core/diagnosticoDeNode.js";
+import { pantallaElegidaValida, pantallasConMiniatura, motivoDeProyectoDeStitchInaceptable, entradasDeStitch, textoDePantallaElegida, type DisenoVinculado } from "../../core/stitch.js";
 import { esMotorLocal } from "../../core/motoresLocales.js";
 import {
   parsear,
@@ -194,7 +197,8 @@ import {
   trabajoSinCommitear,
 } from "../../agent/sesiones/gitSync.js";
 import { listarSesiones, marcarTareaDeSesion, reabrirSesion, sembrarConsumosPendientes, type DispositivoElegido } from "./sesiones.js";
-import { RUTA_ARTEFACTOS, esRutaDeArtefacto, rutaRelativaDeArtefacto } from "../../core/artefactos.js";
+import { RUTA_ARTEFACTOS, carpetaDeArtefactosDeSesion, esRutaDeArtefacto, rutaRelativaDeArtefacto } from "../../core/artefactos.js";
+import type { PantallaElegida } from "../../core/tareas.js";
 import { MIMES_DE_ARTEFACTO_AL_MOVIL, TOPE_DE_ARTEFACTO_AL_MOVIL, trozosDeArtefacto } from "../../core/remoto.js";
 import {
   arbolDeProyecto,
@@ -299,7 +303,7 @@ import { filaDeTarea } from "./transporte.js";
 import { crearSesionRemota, motivoFijoDelTunel, type EstadoDeSesionRemota } from "./puenteRemoto.js";
 import { componerPanorama, INTERVALO_DE_PANORAMA_MS, type EntradaDePanorama, type Panorama } from "../../core/panorama.js";
 import { esEsfuerzo, nivelesDeEsfuerzo, type Esfuerzo } from "../../core/esfuerzo.js";
-import { CATALOGO_DE_CONECTORES, conectoresParaElAgente, definicionDelCable, RUTA_CALLBACK_MCP, type AccionDeConector } from "../../core/conectores.js";
+import { CATALOGO_DE_CONECTORES, conectoresParaElAgente, definicionDelCable, RUTA_CALLBACK_MCP, TOPE_DE_LLAMADA_MS, type AccionDeConector } from "../../core/conectores.js";
 import { servicioDeConectoresCableado, type ServicioDeConectores } from "../../agent/conectores/servicioDeConectores.js";
 import { crearGestorJira } from "../../agent/conectores/gestorJira.js";
 import { crearGestorNotion } from "../../agent/conectores/gestorNotion.js";
@@ -881,6 +885,8 @@ export interface OpcionesDeMontaje {
     proyecto: { id: string; raiz: string; nombre: string };
     /** Nombres y tipos, nunca contenido: salen del DISCO, de la carpeta del borrador. */
     adjuntos: readonly { nombre: string; mime?: string }[];
+    /** La pantalla de Stitch elegida, ya comprobada contra el vínculo del proyecto. */
+    pantallaDeStitch?: { name: string; titulo: string; proyecto?: string };
   }) => Promise<string>;
   /**
    * Los conectores MCP de esta consola: una FÁBRICA, y no el servicio ya construido. El
@@ -2429,12 +2435,19 @@ export function montarRutas(
     borrador?: string,
     /** El ticket del gestor YA creado (`atenderCrearTareaEnGestor`): se copia a la tarea antes de guardarla, porque
      *  guardar dispara al corredor y el reflejo de «empezar» tiene que encontrarlo. */
-    ticket?: TicketDeTarea
+    ticket?: TicketDeTarea,
+    /** La pantalla de Stitch elegida en «Nueva tarea», tal como llega del cable: se comprueba aquí (`pantallaElegidaValida`). */
+    pantallaDeStitch?: unknown
   ): { id: string } | undefined => {
     if (opciones.colaDeTareas === undefined) return undefined;
     const proyecto = proyectoParaTarea(proyectoId);
     if (proyecto === undefined) {
       informar(`no se pudo crear la tarea: el proyecto «${proyectoId}» no se pudo resolver`);
+      return undefined;
+    }
+    const pantalla = pantallaDeStitch === undefined ? undefined : pantallaElegidaValida(pantallaDeStitch, disenoVinculadoDe(proyecto.raiz));
+    if (pantallaDeStitch !== undefined && pantalla === undefined) {
+      informar("no se pudo crear la tarea: esa pantalla no es del proyecto de Stitch vinculado");
       return undefined;
     }
     const lista = opciones.colaDeTareas.listar();
@@ -2458,6 +2471,7 @@ export function montarRutas(
       estado: "nuevo",
       creada: new Date().toISOString(),
       ...(ticket === undefined ? {} : { ticket }),
+      ...(pantalla === undefined ? {} : { pantallaDeStitch: pantalla }),
     };
     opciones.colaDeTareas.guardar([...lista, nueva]);
     return { id: nueva.id };
@@ -2469,6 +2483,15 @@ export function montarRutas(
    * gestor que sabe CREAR. Sin vínculo, o con un gestor sin `crear`, `undefined` y la tarea se encola en local como
    * siempre (límite declarado: lo dice la ventana).
    */
+  /** El proyecto de Stitch vinculado a esa raíz, o `undefined` (sin vínculo, o el config no se lee). */
+  const disenoVinculadoDe = (raiz: string): DisenoVinculado | undefined => {
+    try {
+      return cargar(raiz).config.proyecto?.disenoVinculado;
+    } catch {
+      return undefined;
+    }
+  };
+
   const gestorParaTareaNueva = (
     proyectoId: string
   ): { proyecto: { id: string; raiz: string; nombre: string }; vinculo: Vinculo; gestor: GestorDeTareasPort & Required<Pick<GestorDeTareasPort, "crear">> } | undefined => {
@@ -2497,7 +2520,8 @@ export function montarRutas(
     destino: NonNullable<ReturnType<typeof gestorParaTareaNueva>>,
     peticion: string,
     encargo: string,
-    borrador?: string
+    borrador?: string,
+    pantallaDeStitch?: unknown
   ): Promise<{ estado: number; cuerpo: Record<string, unknown> }> => {
     if (opciones.colaDeTareas === undefined) return { estado: 409, cuerpo: { motivo: "esta ejecución no tiene cola de tareas" } };
     // El borrador se comprueba ANTES de tocar el gestor: un ticket creado para una tarea que luego no se guarda quedaría huérfano.
@@ -2530,7 +2554,7 @@ export function montarRutas(
       ...((vinculo as VinculoGuardado).estados === undefined ? {} : { estados: (vinculo as VinculoGuardado).estados! }),
     };
     // Con la línea del ticket delante (`encargoConTicket`): en Jira el comentario lleva el encargo SIN ella —ya está en el ticket—.
-    const nueva = atenderCrearTarea(destino.proyecto.id, peticion, encargoConTicket(encargo, ticket), borrador, ticket);
+    const nueva = atenderCrearTarea(destino.proyecto.id, peticion, encargoConTicket(encargo, ticket), borrador, ticket, pantallaDeStitch);
     if (nueva === undefined) {
       return { estado: 409, cuerpo: { motivo: `se creó ${creada.clave} en el gestor, pero no la tarea local: créala de nuevo o bórrala allí` } };
     }
@@ -2565,7 +2589,9 @@ export function montarRutas(
     augmentar: NonNullable<OpcionesDeMontaje["augmentar"]>,
     proyectoId: string,
     texto: string,
-    borrador?: string
+    borrador?: string,
+    /** La pantalla de Stitch elegida en «Nueva tarea», tal como llega: se comprueba contra el vínculo del proyecto. */
+    pantallaDeStitch?: unknown
   ): Promise<void> => {
     const proyecto = proyectoParaTarea(proyectoId);
     if (proyecto === undefined) {
@@ -2584,7 +2610,8 @@ export function montarRutas(
             .listarAdjuntos(borrador)
             .map((a) => ({ nombre: a.nombre, ...(a.mime === undefined ? {} : { mime: a.mime }) }));
     try {
-      const encargo = await augmentar({ texto, proyecto, adjuntos });
+      const pantalla = pantallaDeStitch === undefined ? undefined : pantallaElegidaValida(pantallaDeStitch, disenoVinculadoDe(proyecto.raiz));
+      const encargo = await augmentar({ texto, proyecto, adjuntos, ...(pantalla === undefined ? {} : { pantallaDeStitch: pantalla }) });
       emitir({ clase: "tarea", accion: "augmentado", encargo });
     } catch (error) {
       // **El MENSAJE si lo escribimos nosotros, el CÓDIGO si lo escribió el sistema**, que
@@ -5436,6 +5463,51 @@ export function montarRutas(
     emitirlos(r);
   };
 
+  /**
+   * El DISEÑO vinculado de un proyecto (panel → Conectores, y el selector de «Nueva tarea»): qué proyecto de Stitch,
+   * cuáles hay para elegir y sus pantallas con miniatura. Todo pasa por el MISMO servicio de conectores; la raíz la
+   * resuelve el servidor por el id del proyecto (o la del abierto). Lo que dice Stitch al fallar va recortado.
+   */
+  const atenderDiseno = async (m: Extract<MensajeDelCliente, { clase: "diseno" }>): Promise<void> => {
+    const raiz = m.proyecto !== undefined ? proyectoParaTarea(m.proyecto)?.raiz : vestibulo.proyectoAbierto()?.raiz;
+    const responder = (cuerpo: Omit<Extract<MensajeAlCliente, { clase: "diseno" }>, "clase" | "proyecto">): void =>
+      emitir({ clase: "diseno", ...(m.proyecto === undefined ? {} : { proyecto: m.proyecto }), ...cuerpo });
+    if (raiz === undefined) return responder({ error: "no hay un proyecto abierto con copia" });
+    const vinculo = (): DisenoVinculado | null => disenoVinculadoDe(raiz) ?? null;
+    if (m.accion === "estado") return responder({ vinculo: vinculo() });
+    if (m.accion === "desvincular") {
+      guardarDisenoDeProyecto(raiz, undefined);
+      return responder({ vinculo: null });
+    }
+    if (m.accion === "vincular") {
+      if (motivoDeProyectoDeStitchInaceptable(m.vinculo.proyecto) !== undefined || typeof m.vinculo.nombre !== "string" || m.vinculo.nombre.trim() === "") {
+        return responder({ error: "ese proyecto de Stitch no vale" });
+      }
+      guardarDisenoDeProyecto(raiz, { proyecto: m.vinculo.proyecto, nombre: m.vinculo.nombre.trim().slice(0, 200) });
+      return responder({ vinculo: vinculo() });
+    }
+    if (servicioConectores === undefined) return responder({ error: "esta ejecución no tiene conectores" });
+    const llamar = (tool: string, args: Record<string, unknown>): Promise<string> =>
+      servicioConectores.llamar(CONECTOR_STITCH, tool, args, { topeMs: TOPE_DE_LLAMADA_MS });
+    try {
+      if (m.accion === "proyectos") {
+        const proyectos: { name: string; title: string }[] = [];
+        for (const args of [{}, { filter: "view=shared" }]) {
+          for (const p of entradasDeStitch(await llamar("list_projects", args), "projects")) {
+            if (!proyectos.some((q) => q.name === p.name)) proyectos.push(p);
+          }
+        }
+        return responder({ proyectos });
+      }
+      const v = disenoVinculadoDe(raiz);
+      if (v === undefined) return responder({ vinculo: null, pantallas: [] });
+      const pantallas = pantallasConMiniatura(await llamar("list_screens", { projectId: v.proyecto.replace(/^projects\//, "") }));
+      return responder({ vinculo: v, pantallas });
+    } catch (e) {
+      return responder({ error: sinCorreos(e instanceof Error ? e.message : String(e)).slice(0, 200) });
+    }
+  };
+
   /** Ajustes → General → Node: se mide al pulsar, sin caché (lo que se arregla en la máquina se ve al volver a pulsar). */
   const atenderDiagnosticoDeNode = async (): Promise<void> => {
     if (opciones.diagnosticoDeNode === undefined) return;
@@ -7590,19 +7662,19 @@ export function montarRutas(
       // si el gestor la creó). Sin él, el camino de siempre.
       const enGestor = mensaje.accion === "crear" ? gestorParaTareaNueva(mensaje.proyecto) : undefined;
       if (mensaje.accion === "crear" && enGestor !== undefined) {
-        const r = await atenderCrearTareaEnGestor(enGestor, mensaje.peticion, mensaje.encargo, mensaje.borrador);
+        const r = await atenderCrearTareaEnGestor(enGestor, mensaje.peticion, mensaje.encargo, mensaje.borrador, mensaje.pantallaDeStitch);
         respuesta.writeHead(r.estado, { "content-type": "application/json" });
         respuesta.end(JSON.stringify(r.cuerpo));
         return;
       }
       if (mensaje.accion === "crear" && opciones.colaDeTareas !== undefined) {
-        const creada = atenderCrearTarea(mensaje.proyecto, mensaje.peticion, mensaje.encargo, mensaje.borrador);
+        const creada = atenderCrearTarea(mensaje.proyecto, mensaje.peticion, mensaje.encargo, mensaje.borrador, undefined, mensaje.pantallaDeStitch);
         if (creada !== undefined) {
           opciones.revisarTareas?.();
           emitirTareas();
         }
       } else if (mensaje.accion === "augmentar" && opciones.augmentar !== undefined) {
-        void atenderAugmentar(opciones.augmentar, mensaje.proyecto, mensaje.peticion, mensaje.borrador);
+        void atenderAugmentar(opciones.augmentar, mensaje.proyecto, mensaje.peticion, mensaje.borrador, mensaje.pantallaDeStitch);
       } else if (mensaje.accion === "feedback" && opciones.colaDeTareas !== undefined) {
         darFeedbackATarea(mensaje.id, mensaje.texto);
       } else if (
@@ -7878,6 +7950,19 @@ export function montarRutas(
       ["medir", "probar", "login", "codigo", "cancelar", "navegador", "consola", "modelo"].includes(mensaje.accion)
     ) {
       void atenderMotorLocal(mensaje).catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "diseno" &&
+      ["estado", "proyectos", "vincular", "desvincular", "pantallas"].includes(mensaje.accion) &&
+      (mensaje.proyecto === undefined || typeof mensaje.proyecto === "string") &&
+      (mensaje.accion !== "vincular" || (typeof mensaje.vinculo === "object" && mensaje.vinculo !== null))
+    ) {
+      void atenderDiseno(mensaje).catch(contar);
       respuesta.writeHead(204);
       respuesta.end();
       return;
@@ -8590,7 +8675,7 @@ export function augmentacionCableada(opciones: {
    *  `contextoDelProyecto`; ausente del todo = sin rama ni memoria. */
   contexto?: (raiz: string) => { rama?: string; memoria?: string; conectores?: string[] };
 }): NonNullable<OpcionesDeMontaje["augmentar"]> {
-  return async ({ texto, proyecto, adjuntos }) => {
+  return async ({ texto, proyecto, adjuntos, pantallaDeStitch }) => {
     const extra = opciones.contexto?.(proyecto.raiz) ?? {};
     return opciones.aumentador.augmentar({
       texto,
@@ -8600,6 +8685,8 @@ export function augmentacionCableada(opciones: {
       adjuntos,
       ...(extra.memoria === undefined ? {} : { memoria: extra.memoria }),
       ...(extra.conectores === undefined ? {} : { conectores: extra.conectores }),
+      // La pantalla elegida llega al prompt con sus ids: sin esta línea se perdía aquí, con todo en verde.
+      ...(pantallaDeStitch === undefined ? {} : { pantallaDeStitch }),
     });
   };
 }
@@ -8975,6 +9062,24 @@ export function ajusteDeGestorCableado(ajuste: { conectores: (alCambiar: () => v
   };
 }
 
+/**
+ * Trae la pantalla de Stitch ELEGIDA a la carpeta de artefactos de la sesión de la tarea, con la MISMA función que la tool
+ * (`traerDeStitch.ts#traerPantalla`), y compone la línea del encargo con la pantalla y el proyecto y sus ids. Nunca lanza.
+ */
+export function prepararDisenoDeTarea(
+  conectores: ConectoresPort,
+  traer: typeof traerPantalla = traerPantalla
+): (raiz: string, sesion: string, pantalla: PantallaElegida) => Promise<string> {
+  return async (raiz, sesion, pantalla) => {
+    try {
+      const texto = await traer({ conectores, carpeta: carpetaDeArtefactosDeSesion(raiz, sesion) }, pantalla.name);
+      return textoDePantallaElegida(pantalla, texto.startsWith("Traída") ? { ok: true } : { ok: false, motivo: texto.split("\n")[0]!.slice(0, 160) });
+    } catch {
+      return textoDePantallaElegida(pantalla, { ok: false, motivo: "falló al traerla" });
+    }
+  };
+}
+
 export function construirCorredorDeTareasCableado(opciones: {
   vestibulo: Pick<Vestibulo, "abrirParaTarea" | "proyectosAbiertos" | "sesionesDe">;
   /** La fábrica de `OpcionesDeArranque.tareas`. Ausente = esta ejecución no ejecuta tareas. */
@@ -8998,6 +9103,11 @@ export function construirCorredorDeTareasCableado(opciones: {
   gestorDeTareas?: (conector: string) => GestorDeTareasPort | undefined;
   /** Lo que lleva el comentario de cierre de una tarea. Por omisión, `datosDeCierre` sobre su conversación. */
   datosDeCierreDeTarea?: (tarea: Tarea) => Promise<DatosDeCierre>;
+  /**
+   * Los conectores de las sesiones (el MISMO servicio del panel): con ellos, la pantalla de Stitch ELEGIDA para una tarea
+   * se trae a su carpeta de artefactos antes del primer turno (`prepararDisenoDeTarea`). Ausente = no se trae.
+   */
+  conectores?: ConectoresPort;
 }): CorredorDeTareasCableado {
   const crudo = opciones.tareasFabrica === undefined ? undefined : opciones.tareasFabrica(opciones.informar);
   /**
@@ -9047,6 +9157,7 @@ export function construirCorredorDeTareasCableado(opciones: {
       ? undefined
       : crearCorredorDeTareas({
           disco,
+          ...(opciones.conectores === undefined ? {} : { prepararDiseno: prepararDisenoDeTarea(opciones.conectores) }),
           // La costura de las tres piezas: la segunda puerta del vestíbulo (que no mueve el
           // cable), la consola que APARCA en vez de contestar por nadie, y el ejecutor de
           // siempre con las mismas barreras que el de una persona.
@@ -9364,6 +9475,8 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     informar,
     // El MISMO gestor memoizado que el panel: con él, una tarea con ticket se refleja en su gestor al cambiar de estado.
     gestorDeTareas: conectoresYGestor.gestorDeTareas,
+    // Los MISMOS conectores de las sesiones: con ellos, la pantalla de Stitch elegida se trae antes del primer turno.
+    conectores: conectoresYGestor.conectoresDeSesion,
     olvidarHiloDeSesion: olvidarMemoriaDeHilo,
     /**
      * El juez de QA de las tareas, con el papel `afilado` — el que `core/modelos.ts` le

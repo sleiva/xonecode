@@ -137,7 +137,6 @@ async function buscarPantalla(
 }
 
 export function crearTraerDeStitch(deps: DependenciasDeTraerDeStitch) {
-  const descargar = deps.descargar ?? descargarEnRed;
   return tool(
     async ({ pantalla, titulo, proyecto }: z.infer<typeof Entrada>) => {
       let nombre = pantalla?.trim() ?? "";
@@ -150,79 +149,7 @@ export function crearTraerDeStitch(deps: DependenciasDeTraerDeStitch) {
         }
         nombre = encontrada;
       }
-      const motivo = motivoDePantallaInaceptable(nombre);
-      if (motivo !== undefined) return motivo;
-      let datos;
-      try {
-        datos = leerPantalla(await deps.conectores.llamar(CONECTOR_STITCH, "get_screen", { name: nombre }, { topeMs: TOPE_DE_LLAMADA_MS }));
-      } catch (e) {
-        return `Stitch no dio la pantalla: ${e instanceof Error ? e.message : String(e)}`;
-      }
-      if (typeof datos === "string") return datos;
-
-      const motivoImagen = motivoDeDescargaInaceptable(datos.imagen);
-      if (motivoImagen !== undefined) return motivoImagen;
-      let imagen;
-      try {
-        imagen = await descargar(urlDeImagenCompleta(datos.imagen), TOPE_DE_IMAGEN);
-      } catch (e) {
-        return `No pude bajar la imagen de la pantalla (${e instanceof Error ? e.message : "error"}).`;
-      }
-      const extension = TIPOS_DE_IMAGEN[imagen.tipo];
-      if (extension === undefined) return `Stitch dio la imagen como «${imagen.tipo || "sin tipo"}», que no es PNG, JPEG ni WebP: no se guarda.`;
-
-      // El HTML y el DESIGN.md son la otra mitad del diseño, en texto; sin ellos la imagen vale igual.
-      let html: string | undefined;
-      const avisos: string[] = [];
-      if (datos.html !== undefined) {
-        const motivoHtml = motivoDeDescargaInaceptable(datos.html);
-        if (motivoHtml !== undefined) avisos.push(motivoHtml);
-        else {
-          try {
-            const r = await descargar(datos.html, TOPE_DE_HTML);
-            if (r.tipo === "text/html") html = r.bytes.toString("utf8");
-            else avisos.push(`el código llegó como «${r.tipo}» y no se guarda`);
-          } catch (e) {
-            avisos.push(`no pude bajar el código (${e instanceof Error ? e.message : "error"})`);
-          }
-        }
-      }
-      let designMd: string | undefined;
-      try {
-        designMd = designMdDeProyecto(await deps.conectores.llamar(CONECTOR_STITCH, "get_project", { name: proyectoDePantalla(nombre) }, { topeMs: TOPE_DE_LLAMADA_MS }));
-      } catch {
-        avisos.push("no pude leer el DESIGN.md del proyecto");
-      }
-
-      const carpeta = join(deps.carpeta, CARPETA_DE_DISENO);
-      const escritos: Artefacto[] = [];
-      try {
-        mkdirSync(carpeta, { recursive: true });
-        // La maqueta de la sesión es UNA: lo de la traída anterior se va, o una imagen vieja con
-        // otra extensión seguiría pasando por la maqueta.
-        for (const n of readdirSync(carpeta)) if (/^(screen\.(png|jpg|webp)|code\.html|DESIGN\.md)$/.test(n)) rmSync(join(carpeta, n));
-        const escribir = (fichero: string, contenido: Buffer | string, mime: string): void => {
-          writeFileSync(join(carpeta, fichero), contenido);
-          escritos.push({ ruta: `${RUTA_DE_DISENO}${fichero}`, nombre: fichero, mime, bytes: Buffer.byteLength(contenido) });
-        };
-        escribir(`screen.${extension}`, imagen.bytes, imagen.tipo);
-        if (html !== undefined) escribir("code.html", html, "text/html");
-        if (designMd !== undefined) escribir("DESIGN.md", designMd, "text/markdown");
-      } catch (e) {
-        // De un error de Node solo el código: su mensaje lleva la ruta absoluta.
-        return `No pude guardarla (${(e as { code?: string }).code ?? "error"}).`;
-      }
-      for (const a of escritos) deps.alEscribir?.(a);
-      deps.alTraer?.(datos.titulo);
-
-      // Las medidas que DECLARA Stitch no son las de la imagen bajada (medido: dice 780×1768 y da
-      // 390×746): se dicen los BYTES reales y, si hacen falta los píxeles, que se midan.
-      return [
-        `Traída «${datos.titulo}»:`,
-        ...escritos.map((a) => `- ${a.ruta} (${a.bytes} bytes)`),
-        ...(avisos.length === 0 ? [] : [`(${avisos.join("; ")})`]),
-        `Es la MAQUETA de la sesión: pásala como \`referencia\` (${RUTA_DE_DISENO}screen.${extension}) a comparar_capturas y a xone_critica_visual; el harness ya la usa al medir cada prueba. Para verla, describe_image.`,
-      ].join("\n");
+      return traerPantalla(deps, nombre);
     },
     {
       name: NOMBRE_TRAER_DE_STITCH,
@@ -234,4 +161,87 @@ export function crearTraerDeStitch(deps: DependenciasDeTraerDeStitch) {
       schema: Entrada,
     }
   );
+}
+
+/**
+ * Trae UNA pantalla por su `name` (`projects/<id>/screens/<id>`) a la carpeta de diseño de la sesión: la imagen a tamaño
+ * real, su code.html y el DESIGN.md. Es lo que hace la tool, y lo usa también el corredor de tareas para dejar puesta,
+ * ANTES del primer turno, la pantalla que la persona ELIGIÓ para la tarea (`Tarea.pantallaDeStitch`). Devuelve el texto
+ * para el agente; nunca lanza.
+ */
+export async function traerPantalla(deps: DependenciasDeTraerDeStitch, nombre: string): Promise<string> {
+  const descargar = deps.descargar ?? descargarEnRed;
+  const motivo = motivoDePantallaInaceptable(nombre);
+  if (motivo !== undefined) return motivo;
+  let datos;
+  try {
+    datos = leerPantalla(await deps.conectores.llamar(CONECTOR_STITCH, "get_screen", { name: nombre }, { topeMs: TOPE_DE_LLAMADA_MS }));
+  } catch (e) {
+    return `Stitch no dio la pantalla: ${e instanceof Error ? e.message : String(e)}`;
+  }
+  if (typeof datos === "string") return datos;
+
+  const motivoImagen = motivoDeDescargaInaceptable(datos.imagen);
+  if (motivoImagen !== undefined) return motivoImagen;
+  let imagen;
+  try {
+    imagen = await descargar(urlDeImagenCompleta(datos.imagen), TOPE_DE_IMAGEN);
+  } catch (e) {
+    return `No pude bajar la imagen de la pantalla (${e instanceof Error ? e.message : "error"}).`;
+  }
+  const extension = TIPOS_DE_IMAGEN[imagen.tipo];
+  if (extension === undefined) return `Stitch dio la imagen como «${imagen.tipo || "sin tipo"}», que no es PNG, JPEG ni WebP: no se guarda.`;
+
+  // El HTML y el DESIGN.md son la otra mitad del diseño, en texto; sin ellos la imagen vale igual.
+  let html: string | undefined;
+  const avisos: string[] = [];
+  if (datos.html !== undefined) {
+    const motivoHtml = motivoDeDescargaInaceptable(datos.html);
+    if (motivoHtml !== undefined) avisos.push(motivoHtml);
+    else {
+      try {
+        const r = await descargar(datos.html, TOPE_DE_HTML);
+        if (r.tipo === "text/html") html = r.bytes.toString("utf8");
+        else avisos.push(`el código llegó como «${r.tipo}» y no se guarda`);
+      } catch (e) {
+        avisos.push(`no pude bajar el código (${e instanceof Error ? e.message : "error"})`);
+      }
+    }
+  }
+  let designMd: string | undefined;
+  try {
+    designMd = designMdDeProyecto(await deps.conectores.llamar(CONECTOR_STITCH, "get_project", { name: proyectoDePantalla(nombre) }, { topeMs: TOPE_DE_LLAMADA_MS }));
+  } catch {
+    avisos.push("no pude leer el DESIGN.md del proyecto");
+  }
+
+  const carpeta = join(deps.carpeta, CARPETA_DE_DISENO);
+  const escritos: Artefacto[] = [];
+  try {
+    mkdirSync(carpeta, { recursive: true });
+    // La maqueta de la sesión es UNA: lo de la traída anterior se va, o una imagen vieja con
+    // otra extensión seguiría pasando por la maqueta.
+    for (const n of readdirSync(carpeta)) if (/^(screen\.(png|jpg|webp)|code\.html|DESIGN\.md)$/.test(n)) rmSync(join(carpeta, n));
+    const escribir = (fichero: string, contenido: Buffer | string, mime: string): void => {
+      writeFileSync(join(carpeta, fichero), contenido);
+      escritos.push({ ruta: `${RUTA_DE_DISENO}${fichero}`, nombre: fichero, mime, bytes: Buffer.byteLength(contenido) });
+    };
+    escribir(`screen.${extension}`, imagen.bytes, imagen.tipo);
+    if (html !== undefined) escribir("code.html", html, "text/html");
+    if (designMd !== undefined) escribir("DESIGN.md", designMd, "text/markdown");
+  } catch (e) {
+    // De un error de Node solo el código: su mensaje lleva la ruta absoluta.
+    return `No pude guardarla (${(e as { code?: string }).code ?? "error"}).`;
+  }
+  for (const a of escritos) deps.alEscribir?.(a);
+  deps.alTraer?.(datos.titulo);
+
+  // Las medidas que DECLARA Stitch no son las de la imagen bajada (medido: dice 780×1768 y da
+  // 390×746): se dicen los BYTES reales y, si hacen falta los píxeles, que se midan.
+  return [
+    `Traída «${datos.titulo}»:`,
+    ...escritos.map((a) => `- ${a.ruta} (${a.bytes} bytes)`),
+    ...(avisos.length === 0 ? [] : [`(${avisos.join("; ")})`]),
+    `Es la MAQUETA de la sesión: pásala como \`referencia\` (${RUTA_DE_DISENO}screen.${extension}) a comparar_capturas y a xone_critica_visual; el harness ya la usa al medir cada prueba. Para verla, describe_image.`,
+  ].join("\n");
 }

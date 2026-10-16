@@ -24,6 +24,7 @@
  * acaba de escribir porque un modelo no contestó sería lo peor que puede hacer esa ventana.
  */
 import type { AumentadorPort, ModelosPort, Papel, PeticionDeTarea } from "../../core/ports.js";
+import { proyectoDePantalla } from "../../core/stitch.js";
 import { textoDe } from "../turno/puente.js";
 
 /** El papel del aumentador. Redacción con el proyecto delante: `trabajo`. */
@@ -128,6 +129,17 @@ export function promptDelAumentador(peticion: PeticionDeTarea): string {
     "LO QUE HA PEDIDO, tal cual:",
     peticion.texto,
     "",
+    ...(peticion.pantallaDeStitch === undefined
+      ? []
+      : [
+          // Decisión suya: el diseño se ELIGE y va en el contexto de la tarea con sus ids. Medido en Maset: con solo el
+          // nombre, «Menu Listado Entregas» no era el título de ninguna y la tarea construyó con otra maqueta.
+          `MAQUETA ELEGIDA por el desarrollador: la pantalla de Stitch «${peticion.pantallaDeStitch.titulo}», id \`${peticion.pantallaDeStitch.name}\`, ` +
+            `del proyecto de Stitch ${peticion.pantallaDeStitch.proyecto === undefined ? "" : `«${peticion.pantallaDeStitch.proyecto}» `}(id \`${proyectoDePantalla(peticion.pantallaDeStitch.name)}\`).`,
+          "El encargo la nombra así, CON esos dos ids, como LA referencia de diseño: el harness la deja en /artefactos/diseno/",
+          "antes de empezar. No digas que se busque por su título ni propongas otra pantalla.",
+          "",
+        ]),
     ...(peticion.conectores === undefined || peticion.conectores.length === 0
       ? []
       : [
@@ -161,6 +173,12 @@ export function promptDelAumentador(peticion: PeticionDeTarea): string {
     "pregunta»): di DÓNDE buscar lo que haga falta. Si hay una decisión que solo puede tomar el",
     "desarrollador, el agente la pregunta con su opción recomendada —en una tarea se contesta sola",
     "con ella— y sigue; dilo así, nunca «para».",
+    "",
+    "NO AÑADAS lo que la petición no pide. Ampliar es concretar el CÓMO de lo pedido, no sumar funcionalidad:",
+    "ni dar de alta la ventana en el menú, ni tocar otras pantallas o colecciones compartidas, ni rediseñar lo que",
+    "ya existe, si la petición no lo dice. Medido en Maset: «Hacer -> Menu Listado Entregas» salió como «accesible",
+    "desde el menú de la aplicación», y la tarea metió otra tarjeta en el menú principal. Si algo así parece",
+    "necesario, va como decisión abierta con la recomendada «no tocarlo», nunca como requisito.",
     "",
     "REGLAS DE XONE que el encargo no puede romper: XOne no es desarrollo web. Es XML en",
     "ficheros `.xne`, JavaScript ES5 y un CSS propio; no hay DOM, ni async/await, ni React. Los",

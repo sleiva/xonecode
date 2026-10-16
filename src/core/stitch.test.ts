@@ -83,3 +83,46 @@ describe("buscar en Stitch por título", () => {
     expect(entradasDeStitch("no es json", "screens")).toEqual([]);
   });
 });
+
+describe("el diseño vinculado y la pantalla ELEGIDA", () => {
+  it("las pantallas traen su miniatura (medido: `screenshot.downloadUrl`), y una de un host no medido va sin ella", async () => {
+    const { pantallasConMiniatura } = await import("./stitch.js");
+    const texto = JSON.stringify({
+      screens: [
+        { name: "projects/9/screens/aa", title: "Listado", screenshot: { downloadUrl: "https://lh3.googleusercontent.com/aida/x" } },
+        { name: "projects/9/screens/bb", title: "image.png", screenshot: { downloadUrl: "https://malo.example/x" } },
+        { name: "no-es-una-pantalla", title: "fuera" },
+      ],
+    });
+    expect(pantallasConMiniatura(texto)).toEqual([
+      { name: "projects/9/screens/aa", title: "Listado", miniatura: "https://lh3.googleusercontent.com/aida/x" },
+      { name: "projects/9/screens/bb", title: "image.png" },
+    ]);
+  });
+
+  it("la elegida solo vale si es del proyecto VINCULADO, y el nombre del proyecto lo pone el vínculo, no el cable", async () => {
+    const { pantallaElegidaValida } = await import("./stitch.js");
+    const vinculo = { proyecto: "projects/9", nombre: "Maset" };
+    expect(pantallaElegidaValida({ name: "projects/9/screens/aa", titulo: " Listado ", proyecto: "Otro" }, vinculo)).toEqual({
+      name: "projects/9/screens/aa",
+      titulo: "Listado",
+      proyecto: "Maset",
+    });
+    expect(pantallaElegidaValida({ name: "projects/8/screens/aa", titulo: "x" }, vinculo)).toBeUndefined();
+    expect(pantallaElegidaValida({ name: "projects/9/screens/aa", titulo: "x" }, undefined)).toBeUndefined();
+    expect(pantallaElegidaValida({ name: "../x", titulo: "x" }, vinculo)).toBeUndefined();
+  });
+
+  it("la línea del encargo lleva SIEMPRE la pantalla y el proyecto con sus ids (petición suya), traída o no", async () => {
+    const { textoDePantallaElegida } = await import("./stitch.js");
+    const p = { name: "projects/9/screens/aa", titulo: "Listado de Entregas", proyecto: "Maset" };
+    const traida = textoDePantallaElegida(p, { ok: true });
+    expect(traida).toContain("«Listado de Entregas», id `projects/9/screens/aa`");
+    expect(traida).toContain("«Maset» (id `projects/9`)");
+    expect(traida).toContain("/artefactos/diseno/");
+    expect(traida).toContain("no busques otra pantalla");
+    const sinTraer = textoDePantallaElegida(p, { ok: false, motivo: "sin red" });
+    expect(sinTraer).toContain("No se pudo traer antes de empezar (sin red)");
+    expect(sinTraer).toContain('pantalla: "projects/9/screens/aa"');
+  });
+});

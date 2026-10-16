@@ -45,6 +45,8 @@ import type { JuezDeTareaPort } from "../../core/ports.js";
 import type { Entrega } from "../../core/entrega.js";
 import { crearConsolaDeTarea } from "./consolaDeTarea.js";
 import { conAdjuntos } from "../../core/adjuntos.js";
+import { textoDePantallaElegida } from "../../core/stitch.js";
+import type { PantallaElegida } from "../../core/tareas.js";
 import { ErrorDelJuezDeTarea } from "../../agent/tareas/juezDeTarea.js";
 import type { Consola } from "../../cli/consola.js";
 import type { ConsolaDeProyecto } from "./vestibulo.js";
@@ -412,6 +414,12 @@ export function consolaParaTarea(consola: ConsolaDeProyecto): ConsolaParaTarea {
 
 export function crearCorredorDeTareas(opciones: {
   disco: TareasEnDisco;
+  /**
+   * Trae la pantalla de Stitch ELEGIDA para la tarea (`Tarea.pantallaDeStitch`) a la carpeta de artefactos de su sesión,
+   * ANTES del primer turno, y devuelve la línea para el encargo (`core/stitch.ts#textoDePantallaElegida`). Nunca lanza.
+   * Ausente = esta ejecución no tiene conectores: el encargo dice con qué `name` traerla.
+   */
+  prepararDiseno?: (raiz: string, sesion: string, pantalla: PantallaElegida) => Promise<string>;
   /**
    * Abre el proyecto para una tarea — y con `sesion`, lo REABRE con esa exacta, que es lo
    * que hace que reanudar (un reintento, o un feedback) siga la MISMA conversación en vez
@@ -1034,6 +1042,18 @@ export function crearCorredorDeTareas(opciones: {
      * el que `escribirSiSigueSiendoNuestra` relee en vez de fiarse de lo que se le pasó.
      */
     let peticion = tarea.encargo;
+    /**
+     * La pantalla de Stitch ELEGIDA, traída a la carpeta de la sesión antes del primer turno (no al reanudar: ya está, y
+     * la conversación ya la nombra). Fuera de la escritura CAS de abajo porque es red; su línea se añade dentro.
+     */
+    const lineaDeDiseno =
+      reanudando || tarea.pantallaDeStitch === undefined
+        ? undefined
+        : opciones.prepararDiseno === undefined
+          ? textoDePantallaElegida(tarea.pantallaDeStitch, { ok: false, motivo: "esta ejecución no tiene el conector" })
+          : await opciones.prepararDiseno(tarea.proyecto.raiz, hilo, tarea.pantallaDeStitch).catch(() =>
+              textoDePantallaElegida(tarea.pantallaDeStitch!, { ok: false, motivo: "falló al traerla" })
+            );
     try {
       /**
        * La marca de «en proceso», y es una PUERTA: si no se puede escribir, esta tarea ya no
@@ -1060,6 +1080,7 @@ export function crearCorredorDeTareas(opciones: {
         // encargo o el feedback: montar `/adjuntos/` no basta, porque es una raíz virtual
         // que ninguna instrucción del agente nombra. Ver `core/adjuntos.ts#conAdjuntos`.
         peticion = conAdjuntos(peticion, actual.adjuntos);
+        if (lineaDeDiseno !== undefined && pendiente === undefined) peticion = `${peticion}\n\n${lineaDeDiseno}`;
         /**
          * El veredicto de un ciclo ANTERIOR se retira al empezar otro: es de un trabajo que ya no es el que hay. Medido
          * en Maset: el rojo «la sesión no escribió ningún fichero» del primer ciclo —el agente solo preguntó— siguió en

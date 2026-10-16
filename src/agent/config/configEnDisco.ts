@@ -26,6 +26,7 @@ import {
   validar,
   validarAuth,
 } from "../../core/config.js";
+import type { DisenoVinculado } from "../../core/stitch.js";
 import type { VinculoGuardado } from "../../core/gestorDeTareas.js";
 import {
   motivoDeEndpointInaceptable, motivoDeSlugInaceptable, parsear, Proveedor, PROVEEDORES,
@@ -339,6 +340,22 @@ export function guardarGestorDeProyecto(
   const fusionado = gestor === undefined ? sinGestor : { ...base, gestorDeTareas: gestor };
   escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
   return { ruta, gestorDeTareas: gestor };
+}
+
+/**
+ * El proyecto de Stitch vinculado a este proyecto (`core/stitch.ts#DisenoVinculado`). `undefined` QUITA la clave, la
+ * mecánica de `guardarGestorDeProyecto`.
+ */
+export function guardarDisenoDeProyecto(
+  raiz: string,
+  diseno: DisenoVinculado | undefined,
+): { ruta: string; disenoVinculado: DisenoVinculado | undefined } {
+  const ruta = rutaConfigDeProyecto(raiz);
+  const base = leerObjetoCrudoOAbortar(ruta);
+  const { disenoVinculado: _viejo, ...sinDiseno } = base;
+  const fusionado = diseno === undefined ? sinDiseno : { ...base, disenoVinculado: diseno };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta, disenoVinculado: diseno };
 }
 
 /**

@@ -1649,6 +1649,18 @@ escrito a mano lo da de alta una persona desde la misma ventana.
   `entradasDeStitch`): en los proyectos propios y en los COMPARTIDOS (`view=shared`), sin tildes ni mayúsculas, igual antes
   que contener; con una la trae y si no da una lista CORTA con su `name`. Medido en Maset: con solo el `name`, el orquestador
   listaba las pantallas de todos los proyectos y esos listados se le quedaban en el contexto el turno entero.
+- **El DISEÑO de una tarea se ELIGE, no se busca** (decisión suya; `core/disenoVinculado.ts`, `core/stitch.ts`,
+  `componentes/DisenoDelProyecto.tsx`, mensaje `diseno`): el proyecto XOne se VINCULA a un proyecto de Stitch (panel →
+  Conectores → «Diseño», `config.json#disenoVinculado`) y en «Nueva tarea» se elige UNA pantalla por su miniatura
+  (`list_screens` trae `screenshot.downloadUrl`, medido). Se guarda en `Tarea.pantallaDeStitch` —comprobada contra el
+  vínculo por el SERVIDOR (`pantallaElegidaValida`), con el nombre del proyecto del vínculo—, el corredor la trae por su
+  id a `/artefactos/diseno/` ANTES del primer turno (`prepararDisenoDeTarea`) y el encargo lleva SIEMPRE la pantalla y el
+  proyecto con sus ids (`textoDePantallaElegida`); el aumentador también, y no propone otra. Medido en Maset: «Menu
+  Listado Entregas» no era el título de ninguna pantalla (las de esa maqueta eran `image.png`) y la tarea construyó con
+  otra. **Sin pantalla elegida**, `traer_pantalla_de_stitch` busca por PALABRAS (`casanConTitulo`: sin relleno, sin las
+  comunes a todo el proyecto, singular y plural iguales) y, en una tarea, la que no aparece NO se sustituye: va a
+  `## CRITICAL` (`pantallasNoEncontradas`). **Y el aumentador no AÑADE lo que la petición no pide** (medido: dio de alta
+  en el menú una ventana que nadie pidió ahí). Límite declarado: «Editar la tarea» todavía no cambia la pantalla.
 - **Una llamada de agente lleva su propio tope** (`TOPE_DE_LLAMADA_MS`, 10 min), que se pasa
   también como `timeout` al SDK: el suyo corta cada petición antes y una generación de Stitch
   pasa de él. Solo se REPITE una de lectura (`PAUSA_ANTES_DE_REPETIR_MS`); repetir una que

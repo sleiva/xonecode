@@ -28,6 +28,7 @@ import { MS_DE_PREPARACION,
   ficherosCableados,
   motoresLocalesCableados,
   diagnosticoDeNodeCableado,
+  prepararDisenoDeTarea,
   ajusteDeConectoresCableado,
   ajusteDeGestorCableado,
   banderaDeEjecutor,
@@ -8021,6 +8022,14 @@ describe("augmentacionCableada", () => {
     expect(Object.keys(vistas[0]!.proyecto).sort()).toEqual(["nombre", "raiz"]);
   });
 
+  it("la pantalla de Stitch ELEGIDA llega al aumentador con su id y su proyecto", async () => {
+    const vistas: PeticionDeTarea[] = [];
+    const augmentar = augmentacionCableada({ aumentador: { augmentar: async (p) => (vistas.push(p), "E") }, contexto: () => ({}) });
+    const pantalla = { name: "projects/9/screens/ab", titulo: "Listado de Entregas", proyecto: "Maset" };
+    await augmentar({ texto: "x", proyecto: { id: "p", raiz: "/w/A", nombre: "A" }, adjuntos: [], pantallaDeStitch: pantalla });
+    expect(vistas[0]!.pantallaDeStitch).toEqual(pantalla);
+  });
+
   it("sin `contexto` no se lee el disco: la composición sigue funcionando sin él", async () => {
     const augmentar = augmentacionCableada({ aumentador: { augmentar: async () => "E" } });
     expect(await augmentar({ texto: "x", proyecto: { id: "p", raiz: "/w/A", nombre: "A" }, adjuntos: [] })).toBe("E");
@@ -13694,6 +13703,34 @@ describe("motoresLocalesCableados — la composición de producción, no un dobl
   });
 });
 
+describe("prepararDisenoDeTarea — la pantalla elegida, traída a la carpeta de la sesión", () => {
+  const conectores = { delProyecto: () => [], tools: async () => [], llamar: async () => "{}" };
+  const pantalla = { name: "projects/9/screens/aa", titulo: "Listado", proyecto: "Maset" };
+
+  it("trae por su id a `<raiz>/.xonecode/sesiones/<sesion>/artefactos` y la línea dice que está, con los ids", async () => {
+    const vistas: { carpeta: string; nombre: string }[] = [];
+    const preparar = prepararDisenoDeTarea(conectores, async (deps, nombre) => {
+      vistas.push({ carpeta: deps.carpeta, nombre });
+      return "Traída «Listado»:\n- /artefactos/diseno/screen.png (10 bytes)";
+    });
+    const linea = await preparar("/w/A", "s1", pantalla);
+    expect(vistas).toEqual([{ carpeta: "/w/A/.xonecode/sesiones/s1/artefactos", nombre: "projects/9/screens/aa" }]);
+    expect(linea).toContain("ya está traída");
+    expect(linea).toContain("`projects/9/screens/aa`");
+  });
+
+  it("si no se pudo traer lo dice, con el id para traerla, y nunca lanza", async () => {
+    const fallo = prepararDisenoDeTarea(conectores, async () => "Stitch no dio la pantalla: falta autorizar");
+    expect(await fallo("/w/A", "s1", pantalla)).toContain("No se pudo traer antes de empezar (Stitch no dio la pantalla: falta autorizar)");
+    const revienta = prepararDisenoDeTarea(conectores, async () => {
+      throw new Error("/Users/x");
+    });
+    const linea = await revienta("/w/A", "s1", pantalla);
+    expect(linea).toContain("falló al traerla");
+    expect(linea).not.toContain("/Users/x");
+  });
+});
+
 describe("diagnosticoDeNodeCableado — montado en la consola de verdad", () => {
   it("da la medida real y la composición del servidor la extiende junto a los motores locales", async () => {
     expect(typeof diagnosticoDeNodeCableado().diagnosticoDeNode).toBe("function");
@@ -13851,5 +13888,81 @@ describe("copiasConGestor", () => {
     ]);
     expect(copiasConGestor(join(base, "no-existe"))).toEqual([]);
     rmSync(base, { recursive: true, force: true });
+  });
+});
+
+describe("el diseño vinculado (Stitch), por el cable", () => {
+  const PANTALLAS = JSON.stringify({
+    screens: [{ name: "projects/839/screens/aa", title: "Listado de Entregas", screenshot: { downloadUrl: "https://lh3.googleusercontent.com/x" } }],
+  });
+  const abrir = async () => {
+    const base = mkdtempSync(join(tmpdir(), "xonecode-diseno-"));
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
+    const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+    mkdirSync(join(raiz, ".xonecode", "cloudstudio"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    writeFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "{}");
+    const llamadas: { tool: string; args: unknown }[] = [];
+    const servicio: ServicioDeConectores = {
+      lista: () => ({ catalogo: [], conectores: [], desconocidos: [] }),
+      anadir: () => {},
+      quitar: () => {},
+      desconectar: () => {},
+      autenticacionDe: () => undefined,
+      crear: () => undefined,
+      guardarClave: () => {},
+      probar: async () => {},
+      llamar: async (_id, tool, args) => {
+        llamadas.push({ tool, args });
+        if (tool === "list_projects") return JSON.stringify({ projects: args["filter"] === "view=shared" ? [{ name: "projects/839", title: "Maset" }] : [] });
+        if (tool === "list_screens") return PANTALLAS;
+        return "{}";
+      },
+      tools: async () => [],
+      autorizar: async () => {},
+      completar: async () => ({ ok: true, mensaje: "" }),
+    };
+    montarRutas(servidor, vestibulo, { informar: () => {}, conectores: () => servicio });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+    await asentar();
+    const ultimo = () => cliente.recibidos.filter((x) => x.clase === "diseno").at(-1) as Extract<MensajeAlCliente, { clase: "diseno" }> | undefined;
+    const pedir = async (m: Record<string, unknown>) => {
+      await enviarMensaje(accion, { clase: "diseno", ...m } as MensajeDelCliente);
+      for (let i = 0; i < 20; i++) await asentar();
+      return ultimo();
+    };
+    const config = () => JSON.parse(readFileSync(join(raiz, ".xonecode", "config.json"), "utf8")) as Record<string, unknown>;
+    const limpiar = async () => {
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    };
+    return { pedir, config, llamadas, limpiar };
+  };
+
+  it("lista los proyectos (propios y compartidos), vincula en el config.json, da las pantallas con miniatura y desvincula", async () => {
+    const t = await abrir();
+    expect(await t.pedir({ accion: "estado" })).toEqual({ clase: "diseno", vinculo: null });
+    expect((await t.pedir({ accion: "proyectos" }))?.proyectos).toEqual([{ name: "projects/839", title: "Maset" }]);
+    expect((await t.pedir({ accion: "vincular", vinculo: { proyecto: "projects/839", nombre: "Maset" } }))?.vinculo).toEqual({ proyecto: "projects/839", nombre: "Maset" });
+    expect(t.config()["disenoVinculado"]).toEqual({ proyecto: "projects/839", nombre: "Maset" });
+    const conPantallas = await t.pedir({ accion: "pantallas" });
+    expect(conPantallas?.pantallas).toEqual([{ name: "projects/839/screens/aa", title: "Listado de Entregas", miniatura: "https://lh3.googleusercontent.com/x" }]);
+    expect(t.llamadas.at(-1)).toEqual({ tool: "list_screens", args: { projectId: "839" } });
+    expect((await t.pedir({ accion: "desvincular" }))?.vinculo).toBeNull();
+    expect(t.config()).not.toHaveProperty("disenoVinculado");
+    await t.limpiar();
+  });
+
+  it("un proyecto de Stitch mal formado no se vincula ni toca el config", async () => {
+    const t = await abrir();
+    const antes = JSON.stringify(t.config());
+    expect((await t.pedir({ accion: "vincular", vinculo: { proyecto: "../x", nombre: "Maset" } }))?.error).toMatch(/no vale/);
+    expect(JSON.stringify(t.config())).toBe(antes);
+    await t.limpiar();
   });
 });

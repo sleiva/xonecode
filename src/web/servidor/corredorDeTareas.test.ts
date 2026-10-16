@@ -245,6 +245,45 @@ describe("los adjuntos de una tarea llegan a su turno", () => {
     await corredor.parar();
   });
 
+  it("con pantalla de Stitch ELEGIDA: se trae ANTES del primer turno y el encargo lleva su id y el del proyecto", async () => {
+    // Decisión suya: el diseño se elige y va en el contexto de la tarea con sus ids; el agente no lo busca por nombre.
+    const pantalla = { name: "projects/9/screens/aa", titulo: "Listado de Entregas", proyecto: "Maset" };
+    const { disco } = discoDeMentira([TAREA({ pantallaDeStitch: pantalla })]);
+    const p = conAperturas();
+    const traidas: { raiz: string; sesion: string; pantalla: unknown }[] = [];
+    const corredor = crearCorredorDeTareas({
+      ...ENTREGA_VERDE,
+      disco,
+      abrirParaTarea: p.abrir,
+      pid: 1,
+      concurrencia: () => 1,
+      prepararDiseno: async (raiz, sesion, pantalla) => {
+        traidas.push({ raiz, sesion, pantalla });
+        return "MAQUETA ELEGIDA: id `projects/9/screens/aa` del proyecto (id `projects/9`)";
+      },
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    expect(traidas).toEqual([{ raiz: "/w/A", sesion: expect.any(String), pantalla }]);
+    expect(p.encargos[0]).toContain("e");
+    expect(p.encargos[0]).toContain("MAQUETA ELEGIDA: id `projects/9/screens/aa`");
+    p.acabar();
+    await corredor.asentar();
+    await corredor.parar();
+  });
+
+  it("sin quien la traiga (sin conectores), el encargo dice igual qué pantalla es y con qué id traerla", async () => {
+    const { disco } = discoDeMentira([TAREA({ pantallaDeStitch: { name: "projects/9/screens/aa", titulo: "Listado" } })]);
+    const p = conAperturas();
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    await corredor.asentar();
+    expect(p.encargos[0]).toContain('pantalla: "projects/9/screens/aa"');
+    p.acabar();
+    await corredor.asentar();
+    await corredor.parar();
+  });
+
   it("sin adjuntos: no se monta nada y el encargo va tal cual", async () => {
     // La carpeta se monta solo cuando hay algo dentro: una raíz vacía mandaría al agente a
     // mirar un sitio donde no hay nada, y el encargo hablaría de ficheros que no existen.

@@ -470,6 +470,7 @@ const FILA_COMPLETA = {
   terminadaAMano: true,
   cierre: { criticos: ["pantalla: falta «Turno de Día»"], observaciones: ["el juez de QA dijo «rojo»"] },
   ticket: { clave: "KAN-7", conector: "jira", url: "https://x.atlassian.net/browse/KAN-7", aviso: "no se pudo pasar a PROBAR" },
+  pantallaDeStitch: { name: "projects/1/screens/ab", titulo: "Listado de Entregas", proyecto: "Maset" },
 };
 
 /**

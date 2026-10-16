@@ -823,6 +823,18 @@ export type MensajeAlCliente =
   /** El diagnóstico de Node de Ajustes → General (`core/diagnosticoDeNode.ts`): una foto, sin rutas de la máquina. */
   | { clase: "diagnosticoNode"; diagnostico: DiagnosticoDeNode }
   /**
+   * El diseño vinculado de un proyecto: `vinculo` (null = sin vínculo), los `proyectos` de Stitch para elegir, las
+   * `pantallas` con miniatura, o un `error`. Cada mensaje trae solo lo que se pidió. `proyecto` = de qué proyecto XOne.
+   */
+  | {
+      clase: "diseno";
+      proyecto?: string;
+      vinculo?: { proyecto: string; nombre: string } | null;
+      proyectos?: { name: string; title: string }[];
+      pantallas?: { name: string; title: string; miniatura?: string }[];
+      error?: string;
+    }
+  /**
    * La foto de los motores locales (Claude Code, Codex, OpenCode) para Ajustes → Motores locales:
    * si están, con qué sesión, la última prueba y el login en curso. Entera en cada cambio, como
    * `dispositivos`. Ni rutas, ni el correo de la cuenta, ni el enlace de autorización.
@@ -1291,6 +1303,8 @@ export interface TareaDelCable {
    * `proyecto` del gestor se quedan en el host, como los de una sesión ligada a un ticket.
    */
   ticket?: { clave: string; conector: string; url?: string; aviso?: string };
+  /** La pantalla de Stitch elegida para la tarea: su `name` y su título (no es una ruta de la máquina). */
+  pantallaDeStitch?: { name: string; titulo: string; proyecto?: string };
 }
 
 /**
@@ -1350,6 +1364,7 @@ export function filaDeTarea(t: Tarea): TareaDelCable {
             ...(t.ticket.aviso === undefined ? {} : { aviso: t.ticket.aviso }),
           },
         }),
+    ...(t.pantallaDeStitch === undefined ? {} : { pantallaDeStitch: { name: t.pantallaDeStitch.name, titulo: t.pantallaDeStitch.titulo, ...(t.pantallaDeStitch.proyecto === undefined ? {} : { proyecto: t.pantallaDeStitch.proyecto }) } }),
   };
 }
 
@@ -1845,6 +1860,9 @@ export type MensajeDelCliente =
   | { clase: "modelosDeMotor"; motor: string }
   /** Medir el diagnóstico de Node (Ajustes → General, «Comprobar»). */
   | { clase: "diagnosticoNode" }
+  /** El diseño vinculado (Stitch): leer, listar proyectos, vincular, desvincular o listar sus pantallas. */
+  | { clase: "diseno"; accion: "estado" | "proyectos" | "desvincular" | "pantallas"; proyecto?: string }
+  | { clase: "diseno"; accion: "vincular"; proyecto?: string; vinculo: { proyecto: string; nombre: string } }
   /**
    * Una acción sobre un motor local. La INTENCIÓN, no el comando: qué binario y con qué
    * argumentos lo decide el servidor (`agent/motores/motoresLocales.ts`). `codigo` es el que la
@@ -1871,8 +1889,8 @@ export type MensajeDelCliente =
    * id de la tarea si es un segmento llano y no es ya una tarea; los adjuntos los lee del
    * disco, nunca de lo que diga el cliente.
    */
-  | { clase: "tarea"; accion: "crear"; proyecto: string; peticion: string; encargo: string; borrador?: string }
-  | { clase: "tarea"; accion: "augmentar"; proyecto: string; peticion: string; borrador?: string }
+  | { clase: "tarea"; accion: "crear"; proyecto: string; peticion: string; encargo: string; borrador?: string; pantallaDeStitch?: { name: string; titulo: string } }
+  | { clase: "tarea"; accion: "augmentar"; proyecto: string; peticion: string; borrador?: string; pantallaDeStitch?: { name: string; titulo: string } }
   /**
    * Una PROPUESTA de tareas encadenadas (el acto `propuesta-de-tareas`): encolarla en orden o
    * descartarla. Viaja el id de la propuesta y, al encolar, los encargos que la persona revisó (la

@@ -649,6 +649,11 @@ function EncargoDeTarea({ tarea: t }: { tarea: TareaDelCable }) {
   return (
     <>
       {t.adjuntos.length > 0 ? <p className={estilos.adjuntosDeTarea}>{`Adjuntos: ${t.adjuntos.map((a) => a.nombre).join(", ")}`}</p> : null}
+      {t.pantallaDeStitch === undefined ? null : (
+        <p className={estilos.adjuntosDeTarea}>
+          {`Diseño: «${t.pantallaDeStitch.titulo}»${t.pantallaDeStitch.proyecto === undefined ? "" : ` del proyecto de Stitch «${t.pantallaDeStitch.proyecto}»`}`}
+        </p>
+      )}
       {igual ? (
         md(t.encargo, estilos.encargo)
       ) : (

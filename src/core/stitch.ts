@@ -13,6 +13,8 @@
  */
 
 import { RUTA_ARTEFACTOS } from "./artefactos.js";
+import type { DisenoVinculado } from "./disenoVinculado.js";
+export { motivoDeProyectoDeStitchInaceptable, type DisenoVinculado } from "./disenoVinculado.js";
 
 /** La carpeta, dentro de la de artefactos, donde vive la maqueta traída. */
 export const CARPETA_DE_DISENO = "diseno";
@@ -226,4 +228,64 @@ export function palabrasQueDistinguen(titulo: string, entradas: readonly Entrada
 /** El id de un proyecto (`projects/<id>` → `<id>`), que es lo que pide `list_screens`. */
 export function idDeProyecto(name: string): string {
   return name.replace(/^projects\//, "");
+}
+
+/** Una pantalla para el selector: su `name`, su título y la miniatura (solo de los hosts medidos). */
+export interface PantallaConMiniatura extends EntradaDeStitch {
+  miniatura?: string;
+}
+
+/**
+ * Las pantallas de una respuesta de `list_screens`, con su miniatura (`screenshot.downloadUrl`, medido: la traen todas).
+ * Una miniatura fuera de los hosts medidos no se da: la pantalla se ofrece sin imagen.
+ */
+export function pantallasConMiniatura(texto: string): PantallaConMiniatura[] {
+  const lista = (jsonDe(texto) as Record<string, unknown> | undefined)?.["screens"];
+  if (!Array.isArray(lista)) return [];
+  return lista.flatMap((e) => {
+    if (typeof e !== "object" || e === null) return [];
+    const v = e as Record<string, unknown>;
+    if (typeof v["name"] !== "string" || typeof v["title"] !== "string" || motivoDePantallaInaceptable(v["name"]) !== undefined) return [];
+    const url = (v["screenshot"] as Record<string, unknown> | undefined)?.["downloadUrl"];
+    const miniatura = typeof url === "string" && motivoDeDescargaInaceptable(url) === undefined ? url : undefined;
+    return [{ name: v["name"], title: v["title"], ...(miniatura === undefined ? {} : { miniatura }) }];
+  });
+}
+
+/**
+ * La pantalla elegida para una tarea, si vale: un `name` de pantalla bien formado, DEL proyecto de Stitch vinculado, y
+ * un título corto. Lo que llega del cable no se cree: sin vínculo, o de otro proyecto, `undefined`.
+ */
+export function pantallaElegidaValida(
+  valor: unknown,
+  vinculo: DisenoVinculado | undefined
+): { name: string; titulo: string; proyecto: string } | undefined {
+  if (vinculo === undefined || typeof valor !== "object" || valor === null) return undefined;
+  const v = valor as Record<string, unknown>;
+  const name = v["name"];
+  const titulo = v["titulo"];
+  if (typeof name !== "string" || motivoDePantallaInaceptable(name) !== undefined) return undefined;
+  if (!name.startsWith(`${vinculo.proyecto}/screens/`)) return undefined;
+  if (typeof titulo !== "string" || titulo.trim() === "" || titulo.length > 200) return undefined;
+  // El nombre del proyecto lo pone el VÍNCULO, no el cable: va en el contexto de la tarea con su id.
+  return { name, titulo: titulo.trim(), proyecto: vinculo.nombre };
+}
+
+/**
+ * La línea que se añade al encargo de una tarea con pantalla ELEGIDA: si ya está traída, dónde está y que es LA
+ * referencia; si no se pudo traer antes de empezar, con qué `name` traerla. En los dos casos, que no se busque otra por
+ * título ni se sustituya (decisión suya: el diseño lo elige la persona).
+ */
+export function textoDePantallaElegida(
+  pantalla: { name: string; titulo: string; proyecto?: string },
+  traida: { ok: true } | { ok: false; motivo: string }
+): string {
+  // Los datos van SIEMPRE en el contexto de la tarea (petición suya): la pantalla y el proyecto, con sus ids.
+  const deProyecto = `del proyecto de Stitch ${pantalla.proyecto === undefined ? "" : `«${pantalla.proyecto}» `}(id \`${proyectoDePantalla(pantalla.name)}\`)`;
+  const noOtra = "Es LA referencia de diseño de esta tarea: no busques otra pantalla en Stitch por su título ni la sustituyas por una parecida.";
+  return traida.ok
+    ? `MAQUETA ELEGIDA: la pantalla «${pantalla.titulo}», id \`${pantalla.name}\`, ${deProyecto}, ya está traída en ${RUTA_DE_DISENO} (screen, code.html y DESIGN.md). ` +
+        `Si hay que volver a traerla, por ese id: traer_pantalla_de_stitch con \`pantalla: "${pantalla.name}"\`. ${noOtra}`
+    : `MAQUETA ELEGIDA: la pantalla «${pantalla.titulo}», id \`${pantalla.name}\`, ${deProyecto}. No se pudo traer antes de empezar (${traida.motivo}): ` +
+        `tráela con traer_pantalla_de_stitch pasándole \`pantalla: "${pantalla.name}"\`. ${noOtra}`;
 }

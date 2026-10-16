@@ -27,6 +27,7 @@ import {
 import { formaDeProyecto, motivoDeProyectoInaceptable, type MapeoDeEstados, type VinculoGuardado } from "./gestorDeTareas.js";
 import type { Papel } from "./ports.js";
 import { esModoDeEscritura, type ModoDeEscritura } from "./modoDeEscritura.js";
+import { motivoDeProyectoDeStitchInaceptable, type DisenoVinculado } from "./disenoVinculado.js";
 
 /** La configuración: modelos y proveedores. Nunca claves. */
 export interface ConfigDeFichero {
@@ -75,6 +76,8 @@ export interface ConfigDeFichero {
   conectores?: string[];
   /** El gestor de tareas vinculado (IXCODE-11): a qué conector, sitio y proyecto remoto. */
   gestorDeTareas?: VinculoGuardado;
+  /** El proyecto de Stitch vinculado (`core/stitch.ts#DisenoVinculado`): de él se eligen las pantallas de una tarea. */
+  disenoVinculado?: DisenoVinculado;
   /**
    * El modo con que NACEN las sesiones nuevas de este proyecto (IXCODE-31). Pisa al global
    * (`settings.json#modoDeEscritura`); ausente = el global. **Solo en el config.json del
@@ -449,6 +452,16 @@ export function validar(
         ...(valor.automatico === true ? { automatico: true } : {}),
         ...(valor.revisarEncargo === true ? { revisarEncargo: true } : {}),
       };
+      continue;
+    }
+
+    if (clave === "disenoVinculado") {
+      const v = valor as Record<string, unknown> | null;
+      if (typeof v !== "object" || v === null || motivoDeProyectoDeStitchInaceptable(v["proyecto"]) !== undefined || typeof v["nombre"] !== "string") {
+        avisos.push({ texto: `«${ruta}»: «disenoVinculado» debe ser {proyecto: "projects/<id>", nombre}; se ignora.`, severidad: "aviso" });
+        continue;
+      }
+      config.disenoVinculado = { proyecto: v["proyecto"] as string, nombre: v["nombre"] };
       continue;
     }
 

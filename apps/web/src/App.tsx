@@ -1,3 +1,4 @@
+import type { PeticionDeDiseno } from "./componentes/DisenoDelProyecto.js";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Planes } from "./componentes/Planes.js";
 import { Colecciones } from "./componentes/Colecciones.js";
@@ -2281,15 +2282,19 @@ export function App({
         {...(estado.encargoPropuesto === undefined ? {} : { encargoPropuesto: estado.encargoPropuesto })}
         // El borrador viaja con la augmentación para que el servidor pueda LISTAR los
         // adjuntos ya subidos y decirle al modelo para qué sirve cada uno.
-        alAugmentar={(peticion) =>
+        alAugmentar={(peticion, pantalla) =>
           void enviar({
             clase: "tarea",
             accion: "augmentar",
             proyecto: tareaNueva.proyecto,
             peticion,
             borrador: tareaNueva.borrador,
+            ...(pantalla === undefined ? {} : { pantallaDeStitch: pantalla }),
           })
         }
+        // El selector de pantalla de Stitch: las del proyecto vinculado, con miniatura. Solo lo de ESTE proyecto.
+        {...(estado.diseno !== undefined && estado.diseno.proyecto === tareaNueva.proyecto ? { diseno: estado.diseno } : {})}
+        alPedirPantallas={() => void enviar({ clase: "diseno", accion: "pantallas", proyecto: tareaNueva.proyecto })}
         alSubirAdjunto={async (fichero, nombre) => {
           const r = await subirAdjunto(tareaNueva.borrador, nombre, fichero);
           // Solo si alguno LLEGÓ: el `crear` menciona el borrador para que el servidor
@@ -2299,7 +2304,7 @@ export function App({
         }}
         // Se ESPERA la respuesta: con gestor, crear el ticket puede negarse (409 con motivo) y la ventana no puede
         // perder lo escrito. Con 200 (creada en el gestor) o 204 (en local) se cierra.
-        alEncolar={async ({ peticion, encargo }) => {
+        alEncolar={async ({ peticion, encargo, pantallaDeStitch }) => {
           const { proyecto, borrador } = tareaNueva;
           const r = await enviar({
             clase: "tarea",
@@ -2308,6 +2313,7 @@ export function App({
             peticion,
             encargo,
             ...(conAdjuntos ? { borrador } : {}),
+            ...(pantallaDeStitch === undefined ? {} : { pantallaDeStitch }),
           });
           const motivo = await negativaOFalloDe(r);
           if (motivo !== undefined) return motivo;
@@ -3498,6 +3504,9 @@ export function App({
               alAutorizarConector={(id) => void enviar({ clase: "conector", accion: "autorizar", id })}
               alProbarConector={(id) => void enviar({ clase: "conector", accion: "probar", id })}
               alAbrirAjustesDeConectores={() => abrirAjustes("conectores")}
+              // El diseño vinculado (Stitch) de ESTE proyecto: lo de otro proyecto no se pinta aquí.
+              {...(estado.diseno !== undefined && estado.diseno.proyecto === proyectoActivoId ? { diseno: estado.diseno } : {})}
+              {...(proyectoActivoId === undefined ? {} : { alDiseno: (p: PeticionDeDiseno) => void enviar({ clase: "diseno", ...p, proyecto: proyectoActivoId }) })}
               alPedirSoporte={alPedirSoporte}
             />
           </>

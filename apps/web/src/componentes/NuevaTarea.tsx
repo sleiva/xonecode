@@ -1,3 +1,5 @@
+import { SelectorDePantalla } from "./DisenoDelProyecto.js";
+import type { EstadoDeDiseno } from "../disenoDelCable.js";
 import { useRef, useState } from "react";
 import { Modal, Button } from "@deepseek-ai/dsh-client-ui-primitives";
 import { nombreDeAdjuntoSeguro } from "../nombreDeAdjunto.js";
@@ -42,8 +44,14 @@ export function NuevaTarea({
   alSubirAdjunto,
   alEncolar,
   destino,
+  diseno,
+  alPedirPantallas,
   alCerrar,
 }: {
+  /** El diseño vinculado (Stitch) de este proyecto. Con `alPedirPantallas`, se elige UNA pantalla para la tarea. */
+  diseno?: EstadoDeDiseno;
+  /** Pide las pantallas del proyecto de Stitch vinculado. Ausente = sin selector (no hay conectores). */
+  alPedirPantallas?: () => void;
   proyecto: { id: string; nombre: string };
   /**
    * ¿Existe ya la copia local del proyecto? Lo dice el SERVIDOR (`proyectos[].local`), no se
@@ -90,7 +98,7 @@ export function NuevaTarea({
    * haya escrito ya**: ese mensaje va a todas las pestañas.
    */
   encargoPropuesto?: { encargo?: string; error?: string };
-  alAugmentar: (peticion: string) => void;
+  alAugmentar: (peticion: string, pantalla?: { name: string; titulo: string }) => void;
   /**
    * Sube los bytes de un adjunto. El `nombre` ya viene convertido a segmento llano por
    * `nombreDeAdjuntoSeguro`; quien decide si vale es el servidor, dos veces.
@@ -100,7 +108,7 @@ export function NuevaTarea({
    * Encolar. Si devuelve una promesa, la ventana ESPERA: gira, y con un motivo se queda abierta enseñándolo (un gestor
    * que no deja crear el ticket no puede perder lo escrito). Sin promesa, el camino de antes.
    */
-  alEncolar: (tarea: { peticion: string; encargo: string }) => void | Promise<string | undefined>;
+  alEncolar: (tarea: { peticion: string; encargo: string; pantallaDeStitch?: { name: string; titulo: string } }) => void | Promise<string | undefined>;
   /**
    * Dónde vivirá la tarea, preguntado al servidor al abrir (`{clase:"tarea", accion:"destino"}`): `"consultando"`
    * mientras llega; `{gestor}` si el proyecto la crea en su gestor (Jira, Notion…), y entonces la ventana DICE antes del
@@ -110,6 +118,8 @@ export function NuevaTarea({
   alCerrar: () => void;
 }) {
   const [peticion, setPeticion] = useState("");
+  /** La pantalla de Stitch ELEGIDA (una): viaja al preparar el encargo y al encolar, con su id. */
+  const [pantalla, setPantalla] = useState<{ name: string; titulo: string } | undefined>(undefined);
   /** Crear en el gestor tarda una ida y vuelta: mientras, gira; si se niega, el motivo y la ventana sigue abierta. */
   const [creando, setCreando] = useState(false);
   const [motivoDeCrear, setMotivoDeCrear] = useState<string | undefined>(undefined);
@@ -282,7 +292,8 @@ export function NuevaTarea({
                 aria-busy={preparando.esperando}
                 onClick={() => {
                   preparando.empezar();
-                  alAugmentar(peticion);
+                  if (pantalla === undefined) alAugmentar(peticion);
+                  else alAugmentar(peticion, pantalla);
                 }}
               >
                 {preparando.esperando ? <GiroDeCarga /> : null}
@@ -355,6 +366,16 @@ export function NuevaTarea({
             </ul>
           )}
 
+          {/* El diseño se ELIGE con su miniatura (decisión suya): la tarea lo trae por su id, sin buscarlo por nombre. */}
+          {alPedirPantallas === undefined ? null : (
+            <SelectorDePantalla
+              {...(diseno === undefined ? {} : { diseno })}
+              alPedir={alPedirPantallas}
+              {...(pantalla === undefined ? {} : { elegida: pantalla })}
+              alElegir={setPantalla}
+            />
+          )}
+
           {/* Crear es la AUTORIZACIÓN: con gestor, se dice ANTES del clic todo lo que se va a escribir allí. */}
           {gestor === undefined ? null : (
             <p className={estilos.nota} data-gestor="">
@@ -379,7 +400,7 @@ export function NuevaTarea({
                 if (!sePuedeEncolar) return;
                 // Sin encargo escrito se manda la petición TAL CUAL: es lo que hace que un
                 // aumentador caído no impida apuntar el trabajo.
-                const enviado = alEncolar({ peticion: peticion.trim(), encargo: encargo.trim() === "" ? peticion.trim() : encargo });
+                const enviado = alEncolar({ peticion: peticion.trim(), encargo: encargo.trim() === "" ? peticion.trim() : encargo, ...(pantalla === undefined ? {} : { pantallaDeStitch: pantalla }) });
                 if (enviado === undefined) return;
                 setCreando(true);
                 setMotivoDeCrear(undefined);

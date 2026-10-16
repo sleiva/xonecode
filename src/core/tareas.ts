@@ -196,6 +196,20 @@ export interface Tarea {
    * persona revincula el proyecto, lo que se escribe sigue yendo a ESTE ticket. Ausente = tarea solo local.
    */
   ticket?: TicketDeTarea;
+  /**
+   * La pantalla de Stitch ELEGIDA para la tarea (una), del proyecto de Stitch vinculado. El corredor la trae a
+   * `/artefactos/diseno/` antes del primer turno y el encargo lo dice: no se busca por nombre (decisión suya; medido en
+   * Maset, «Menu Listado Entregas» no era el título de ninguna y la tarea construyó con otra maqueta).
+   */
+  pantallaDeStitch?: PantallaElegida;
+}
+
+/** Una pantalla de Stitch elegida: su `name` (`projects/<id>/screens/<id>`) y su título, para decirlo sin preguntar. */
+export interface PantallaElegida {
+  name: string;
+  titulo: string;
+  /** El nombre del proyecto de Stitch, del vínculo al crearla; su id sale del `name`. */
+  proyecto?: string;
 }
 
 /** El ticket de una tarea en su gestor. `sitio` no sale del host; `aviso` es el último reflejo que FALLÓ. */

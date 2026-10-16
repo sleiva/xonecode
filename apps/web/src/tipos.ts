@@ -1016,6 +1016,18 @@ export type MensajeAlCliente =
   /** Lo que ofrece un motor externo, o por qué no se pudo saber. */
   | { clase: "modelosDeMotor"; motor: string; modelos: { id: string; nombre: string }[]; error?: string }
   | { clase: "diagnosticoNode"; diagnostico: DiagnosticoDeNode }
+  /**
+   * El diseño vinculado de un proyecto: `vinculo` (null = sin vínculo), los `proyectos` de Stitch para elegir, las
+   * `pantallas` con miniatura, o un `error`. Cada mensaje trae solo lo que se pidió. `proyecto` = de qué proyecto XOne.
+   */
+  | {
+      clase: "diseno";
+      proyecto?: string;
+      vinculo?: { proyecto: string; nombre: string } | null;
+      proyectos?: { name: string; title: string }[];
+      pantallas?: { name: string; title: string; miniatura?: string }[];
+      error?: string;
+    }
   /** La foto de los motores locales, entera en cada cambio. */
   | { clase: "motoresLocales"; motores: EstadoDeMotorLocal[] }
   | { clase: "secreto"; pregunta: string }
@@ -1320,6 +1332,8 @@ export interface TareaDelCable {
   cierre?: { criticos: string[]; observaciones: string[] };
   /** El ticket del gestor en el que vive (redeclarado de `transporte.ts`): clave, conector, enlace y el último aviso. */
   ticket?: { clave: string; conector: string; url?: string; aviso?: string };
+  /** La pantalla de Stitch elegida para la tarea (su `name` y su título). */
+  pantallaDeStitch?: { name: string; titulo: string; proyecto?: string };
 }
 
 /**
@@ -1691,6 +1705,9 @@ export type MensajeDelCliente =
   /** Los modelos de un motor externo, bajo demanda: el de Codex arranca un proceso. */
   | { clase: "modelosDeMotor"; motor: string }
   | { clase: "diagnosticoNode" }
+  /** El diseño vinculado (Stitch): leer, listar proyectos, vincular, desvincular o listar sus pantallas. */
+  | { clase: "diseno"; accion: "estado" | "proyectos" | "desvincular" | "pantallas"; proyecto?: string }
+  | { clase: "diseno"; accion: "vincular"; proyecto?: string; vinculo: { proyecto: string; nombre: string } }
   /** Una acción sobre un motor local: la intención; el binario lo decide el servidor. */
   | {
       clase: "motorLocal";
@@ -1712,8 +1729,8 @@ export type MensajeDelCliente =
    * id de la tarea si es un segmento llano y no es ya una tarea; los adjuntos los lee del
    * disco, nunca de lo que diga el cliente.
    */
-  | { clase: "tarea"; accion: "crear"; proyecto: string; peticion: string; encargo: string; borrador?: string }
-  | { clase: "tarea"; accion: "augmentar"; proyecto: string; peticion: string; borrador?: string }
+  | { clase: "tarea"; accion: "crear"; proyecto: string; peticion: string; encargo: string; borrador?: string; pantallaDeStitch?: { name: string; titulo: string } }
+  | { clase: "tarea"; accion: "augmentar"; proyecto: string; peticion: string; borrador?: string; pantallaDeStitch?: { name: string; titulo: string } }
   /**
    * Una PROPUESTA de tareas encadenadas (el acto `propuesta-de-tareas`): encolarla en orden o
    * descartarla. Viaja el id de la propuesta y, al encolar, los encargos que la persona revisó (la

@@ -66,6 +66,24 @@ describe("NuevaTarea", () => {
     expect(alEncolar).toHaveBeenCalledWith({ peticion: "Arregla el login", encargo: "Arregla el login" });
   });
 
+  it("con una pantalla de Stitch ELEGIDA, viaja al preparar y al encolar, con su id", () => {
+    const alAugmentar = vi.fn();
+    const alEncolar = vi.fn();
+    const diseno = {
+      proyecto: "p1",
+      vinculo: { proyecto: "projects/9", nombre: "Maset" },
+      pantallas: [{ name: "projects/9/screens/aa", title: "Listado de Entregas" }],
+    };
+    render(<NuevaTarea {...base} alAugmentar={alAugmentar} alEncolar={alEncolar} diseno={diseno} alPedirPantallas={() => {}} />);
+    fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "Haz el listado" } });
+    fireEvent.click(screen.getByRole("button", { name: /Listado de Entregas/ }));
+    const elegida = { name: "projects/9/screens/aa", titulo: "Listado de Entregas" };
+    fireEvent.click(screen.getByRole("button", { name: /preparar el encargo/i }));
+    expect(alAugmentar).toHaveBeenCalledWith("Haz el listado", elegida);
+    fireEvent.click(screen.getByRole("button", { name: /encolar/i }));
+    expect(alEncolar).toHaveBeenCalledWith({ peticion: "Haz el listado", encargo: "Haz el listado", pantallaDeStitch: elegida });
+  });
+
   it("«Preparar el encargo» manda la petición y luego se puede EDITAR lo que conteste", () => {
     const alAugmentar = vi.fn();
     const alEncolar = vi.fn();

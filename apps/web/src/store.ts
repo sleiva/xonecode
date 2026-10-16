@@ -21,6 +21,7 @@ import { leerCambiosDelModelo } from "./cambiosDelModelo.js";
 import { leerFotoDeColecciones } from "./fotoDeColecciones.js";
 import { leerMotoresLocales } from "./motoresLocalesDelCable.js";
 import { leerDiagnosticoDeNode } from "./diagnosticoDeNodeDelCable.js";
+import { fundirDiseno, type EstadoDeDiseno } from "./disenoDelCable.js";
 import type {
   Receta,
   FotoDeColecciones,
@@ -391,6 +392,8 @@ export interface EstadoDelCliente {
   motoresLocales?: EstadoDeMotorLocal[];
   /** Ajustes → General → Node: la última foto del diagnóstico. Ausente = no se ha pedido. */
   diagnosticoNode?: DiagnosticoDeNode;
+  /** El diseño vinculado (Stitch) del proyecto del último mensaje: vínculo, proyectos para elegir y pantallas. */
+  diseno?: EstadoDeDiseno;
   /**
    * El paso de receta que se está ejecutando, o cómo acabó el último.
    *
@@ -972,6 +975,13 @@ function cierreDeTarea(valor: unknown): { cierre?: { criticos: string[]; observa
   const criticos = textos(v["criticos"]);
   const observaciones = textos(v["observaciones"]);
   return criticos.length === 0 && observaciones.length === 0 ? {} : { cierre: { criticos, observaciones } };
+}
+
+function pantallaDeTarea(valor: unknown): { pantallaDeStitch?: { name: string; titulo: string; proyecto?: string } } {
+  if (typeof valor !== "object" || valor === null) return {};
+  const v = valor as Record<string, unknown>;
+  if (typeof v["name"] !== "string" || typeof v["titulo"] !== "string") return {};
+  return { pantallaDeStitch: { name: v["name"], titulo: v["titulo"], ...(typeof v["proyecto"] === "string" ? { proyecto: v["proyecto"] } : {}) } };
 }
 
 function ticketDeTarea(valor: unknown): { ticket?: NonNullable<TareaDelCable["ticket"]> } {
@@ -1794,6 +1804,8 @@ export function crearStoreDelCliente(): {
                   // El ticket del gestor: solo con clave Y conector de texto (sin ellos no hay ni qué enseñar ni a quién
                   // nombrar). Un `url` se queda solo si es http(s): va a un `href`.
                   ...ticketDeTarea(t["ticket"]),
+                  // La pantalla de Stitch elegida, por la lista blanca y con su forma: sin ella «Editar» no la traería marcada.
+                  ...pantallaDeTarea(t["pantallaDeStitch"]),
                 }))
                 .filter((t) => t.id !== ""),
             },
@@ -2080,6 +2092,11 @@ export function crearStoreDelCliente(): {
           const motores = leerMotoresLocales((mensaje as Record<string, unknown>)["motores"]);
           if (motores === undefined) return;
           mutar({ motoresLocales: motores });
+          return;
+        }
+        case "diseno": {
+          const diseno = fundirDiseno(estado.diseno, mensaje);
+          if (diseno !== undefined) mutar({ diseno });
           return;
         }
         case "diagnosticoNode": {
