@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { medirDiagnosticoDeNode, type DependenciasDelDiagnostico } from "./diagnosticoDeNodeEnMaquina.js";
 
-type Llamada = { programa: string; args: readonly string[]; shell: boolean };
+type Llamada = { programa: string; args: readonly string[]; shell: boolean; entorno?: Record<string, string> };
 
 /** Un diagnóstico con TODO doblado: nada se lanza de verdad. */
 function con(extra: Partial<DependenciasDelDiagnostico> = {}, responder?: (l: Llamada) => Promise<{ stdout: string }>) {
@@ -19,8 +19,10 @@ function con(extra: Partial<DependenciasDelDiagnostico> = {}, responder?: (l: Ll
     versionDeXoneLinter: () => "1.5.0",
     claude: () => "/sdk/claude",
     versionDelSdk: () => "2.1.301",
+    entornoDeAgente: () => ({ PATH: "/agente/bin" }),
+    nodeDelServidor: "/srv/node",
     ejecutar: async (programa, args, opciones) => {
-      const l = { programa, args, shell: opciones.shell };
+      const l = { programa, args, shell: opciones.shell, ...(opciones.entorno === undefined ? {} : { entorno: opciones.entorno }) };
       llamadas.push(l);
       if (responder !== undefined) return responder(l);
       if (programa === "node" && args[0] === "--version") return { stdout: "v22.1.0\n" };
@@ -44,14 +46,22 @@ describe("medirDiagnosticoDeNode", () => {
       simulador: { ok: true, valor: "xone-linter 1.5.0" },
       claudeCode: { ok: true, valor: "2.1.301" },
     });
-    expect(llamadas).toContainEqual({ programa: "/s/xone-hotswap", args: ["--help"], shell: false });
+    expect(llamadas).toContainEqual({ programa: "/s/xone-hotswap", args: ["--help"], shell: false, entorno: { PATH: "/agente/bin" } });
   });
 
-  it("en Windows: `node` por la shell y el script con `node <ruta>`, la misma llamada que hace el agente", async () => {
+  it("en Windows: `node` por la shell CON EL ENTORNO DE LOS AGENTES, y el script con el Node del servidor, como el agente", async () => {
     const { deps, llamadas } = con({ plataforma: "win32" });
     await medirDiagnosticoDeNode(deps);
-    expect(llamadas).toContainEqual({ programa: "node", args: ["--version"], shell: true });
-    expect(llamadas).toContainEqual({ programa: "node", args: ["/s/xone-hotswap", "--help"], shell: false });
+    expect(llamadas).toContainEqual({ programa: "node", args: ["--version"], shell: true, entorno: { PATH: "/agente/bin" } });
+    expect(llamadas).toContainEqual({ programa: "/srv/node", args: ["/s/xone-hotswap", "--help"], shell: false, entorno: { PATH: "/agente/bin" } });
+  });
+
+  it("un PATH de AGENTE roto sale en rojo aunque el del servidor esté bien (medido: verde en Windows con «node: command not found»)", async () => {
+    const { deps } = con({}, async (l) => {
+      if (l.programa === "node" && l.entorno?.["PATH"] === "/agente/bin") throw Object.assign(new Error("/x"), { code: 127 });
+      return { stdout: "v1" };
+    });
+    expect((await medirDiagnosticoDeNode(deps)).nodeEnPath).toEqual({ ok: false, motivo: "salió con código 127" });
   });
 
   it("el simulador que contesta su JSON de fallo y sale con 1 ARRANCÓ; sin JSON es un fallo, con su code y sin rutas", async () => {

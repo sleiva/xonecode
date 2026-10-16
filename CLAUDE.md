@@ -577,7 +577,11 @@ ejecuta si es Claude Code, con la shell ESTRECHA (ver abajo). Reglas duras:
   por su primera línea (`proyecto.ts#scriptsConRuta`) y la SEGUNDA llave reescribe el comando ya admitido a
   `node '<ruta>' args` con `updatedInput` (`comandoExterno.ts#comandoConNode`, `EjecucionExterna.rutasConNode`). El hijo
   sigue escribiendo `xone-hotswap screen`; la ruta la pone el código. Medido en la máquina Windows de un usuario: sin esto
-  la lista salía vacía y el desarrollador se quedaba sin shell. La reescritura, medida con el SDK en macOS; en Windows, sin medir.
+  la lista salía vacía y el desarrollador se quedaba sin shell. La reescritura, medida con el SDK en macOS. **Y se lanza
+  con el Node ABSOLUTO del servidor** (`EjecucionExterna.nodeDelServidor`): medido con 0.38.37 en Windows, el Git Bash del
+  hijo contestaba «node: command not found». **El PATH de la shell, en Windows, es `Path` y se une con `;`**
+  (`entornoDeShell`, `plataforma`): se buscaba `PATH`, se creaba otra variable solo con los scripts y unida con `:`, y el
+  device-controller acababa rehaciendo el PATH a mano en cada comando (1156 en la traza de ese usuario).
 - **En TrueForge, `ls`, `glob` y `grep` FILTRAN lo que devuelven con la regla de leer**
   (`toolsDeFichero.ts#ejecutar`, `puedeLeer`): el permiso se comprobaba solo sobre su `path` —la raíz por
   omisión— y un `glob` de `/.xonecode/**` listaba los nombres de lo denegado. Leer ya estaba denegado.
@@ -655,7 +659,9 @@ ejecuta si es Claude Code, con la shell ESTRECHA (ver abajo). Reglas duras:
   `agent/config/diagnosticoDeNodeEnMaquina.ts`, `componentes/DiagnosticoDeNode.tsx`, mensaje `diagnosticoNode`): una FOTO
   pedida a mano de lo que el agente necesita en ESTA máquina —el Node del servidor, `node` en el PATH, cuántos scripts de
   las skills se detectan y si uno arranca con la MISMA llamada que haría el agente, `xone-simulator` y el Claude Code del
-  SDK—. Ninguna ruta cruza: versiones y, si falla, el `code` o una frase fija (`motivoDeFallo`). Nació de un paquete de
+  SDK—. Ninguna ruta cruza: versiones y, si falla, el `code` o una frase fija (`motivoDeFallo`). **Se mide con el ENTORNO
+  DE LOS AGENTES** (`entornoDeShell`), no con el del servidor: medido en Windows, daba verde mientras el hijo contestaba
+  «node: command not found». Nació de un paquete de
   soporte de Windows: sin scripts para el hijo y «xone-simulator no está instalado» con el programa dentro del paquete.
   **Y el verificador usa el `xone-linter` de NUESTRA dependencia** (`verificador.ts#comoLanzarElSimulador`, su `dist/cli.js`
   con el Node de xonecode); el del PATH solo si falta.

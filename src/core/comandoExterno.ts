@@ -70,13 +70,22 @@ export function motivoDeComandoExternoInaceptable(comando: string, scripts: read
  * (el Bash de Claude Code en Windows es Git Bash) y entre comillas simples. `undefined` si el script no tiene ruta o si
  * la ruta trae una comilla simple: antes que componer un escape, no se ejecuta.
  */
-export function comandoConNode(comando: string, rutas: Readonly<Record<string, string>>): string | undefined {
+export function comandoConNode(
+  comando: string,
+  rutas: Readonly<Record<string, string>>,
+  /**
+   * El Node con que se lanza: la ruta ABSOLUTA del que corre xonecode (`process.execPath`), no `node` a secas. Medido en
+   * Windows: en el Git Bash del hijo `node` no estaba en el PATH («node: command not found»). Ausente = `node`.
+   */
+  node?: string
+): string | undefined {
   const partes = palabras(comando.trim());
   if (partes === undefined || partes.length === 0) return undefined;
   const [programa, ...argumentos] = partes;
   const ruta = programa === undefined ? undefined : rutas[programa];
-  if (ruta === undefined || ruta.includes("'")) return undefined;
-  return [`node '${ruta.replace(/\\/g, "/")}'`, ...argumentos].join(" ");
+  if (ruta === undefined || ruta.includes("'") || (node !== undefined && node.includes("'"))) return undefined;
+  const lanzador = node === undefined ? "node" : `'${node.replace(/\\/g, "/")}'`;
+  return [`${lanzador} '${ruta.replace(/\\/g, "/")}'`, ...argumentos].join(" ");
 }
 
 /** El script de `xone-development` que pasa un `.xne` de 8 bits a UTF-8 (`skills/xone-development/lib/aUtf8.mjs`). */

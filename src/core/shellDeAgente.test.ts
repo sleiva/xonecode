@@ -108,6 +108,24 @@ describe("los scripts de una skill, en el PATH", () => {
     expect(PATH!.indexOf("/usr/bin")).toBeLessThan(PATH!.indexOf("/de/una/skill"));
   });
 
+  it("en WINDOWS la variable es `Path` y se une con `;`: se escribe en la MISMA, sin crear otra `PATH`", () => {
+    // Medido en la máquina Windows de un usuario: se creaba un `PATH` aparte solo con los scripts y unido con `:`; el hijo
+    // de Claude Code daba «node: command not found» y el device-controller rehacía el PATH a mano en 1156 comandos.
+    const e = entornoDeShell({
+      entorno: { Path: "C:\\Windows\\System32;C:\\Program Files\\nodejs" },
+      binarios: ["C:\\xc\\skills\\xone-hotswap\\scripts"],
+      plataforma: "win32",
+    });
+    expect(e["Path"]).toBe("C:\\Windows\\System32;C:\\Program Files\\nodejs;C:\\xc\\skills\\xone-hotswap\\scripts");
+    expect(Object.keys(e).filter((k) => k.toUpperCase() === "PATH")).toEqual(["Path"]);
+    // Sin PATH heredado en Windows, la clave es `Path` y el separador `;`.
+    expect(entornoDeShell({ entorno: {}, binarios: ["C:\\a", "C:\\b"], plataforma: "win32" })["Path"]).toBe("C:\\a;C:\\b");
+  });
+
+  it("fuera de Windows, igual que siempre: `PATH` con `:`", () => {
+    expect(entornoDeShell({ entorno: { PATH: "/usr/bin" }, binarios: ["/a"], plataforma: "darwin" })["PATH"]).toBe("/usr/bin:/a");
+  });
+
   it("sin PATH heredado no se inventa uno: solo van los de las skills", () => {
     expect(entornoDeShell({ entorno: {}, binarios: ["/a", "/b"] })["PATH"]).toBe("/a:/b");
   });

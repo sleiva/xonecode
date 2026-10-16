@@ -377,12 +377,16 @@ describe("el Bash ESTRECHO de un agente de Claude Code con ejecución", () => {
     // Medido en la máquina Windows de un usuario: un script sin extensión no se lanza por su nombre, y `node <ruta>` sí.
     const enWindows = {
       ...PETICION,
-      ejecucion: { ...EJECUCION, rutasConNode: { "xone-hotswap": "C:\\Users\\X\\skills\\xone-hotswap\\scripts\\xone-hotswap" } },
+      ejecucion: {
+        ...EJECUCION,
+        rutasConNode: { "xone-hotswap": "C:\\Users\\X\\skills\\xone-hotswap\\scripts\\xone-hotswap" },
+        nodeDelServidor: "C:\\Program Files\\nodejs\\node.exe",
+      },
     };
     const r = await decisionDeTool({ nombre: "Bash", entrada: { command: "xone-hotswap click name=Entrar -- screen", description: "d" }, peticion: enWindows, ...SIN_DISCO });
     expect(r).toEqual({
       behavior: "allow",
-      updatedInput: { command: "node 'C:/Users/X/skills/xone-hotswap/scripts/xone-hotswap' click name=Entrar -- screen", description: "d" },
+      updatedInput: { command: "'C:/Program Files/nodejs/node.exe' 'C:/Users/X/skills/xone-hotswap/scripts/xone-hotswap' click name=Entrar -- screen", description: "d" },
     });
     // Admitido por la regla pero sin ruta conocida: un NO, no un «command not found».
     expect((await decisionDeTool({ nombre: "Bash", entrada: { command: "xone-log-android --app" }, peticion: enWindows, ...SIN_DISCO })).behavior).toBe("deny");

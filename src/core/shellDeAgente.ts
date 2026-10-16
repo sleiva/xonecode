@@ -155,6 +155,11 @@ export function entornoDeShell(opciones: {
    * localizador para que esto siga sin tocar disco.
    */
   android?: Readonly<Record<string, string>>;
+  /**
+   * El sistema: en Windows el PATH se llama `Path` y se separa con `;` (con `:` partiría `C:\…`). Por omisión, el de este
+   * proceso; por parámetro para probarlo sin estar en Windows.
+   */
+  plataforma?: string;
 }): Record<string, string> {
   const credenciales = new Set<string>(Object.values(VARIABLES_POR_PROVEEDOR));
   const limpio: Record<string, string> = {};
@@ -175,8 +180,16 @@ export function entornoDeShell(opciones: {
   if (binarios.length > 0) {
     // Sin PATH heredado no se parte de vacío: `sh` se inventaría el suyo y perderíamos el del
     // proceso, que es donde están el `adb` y el `node` del usuario.
-    const actual = limpio["PATH"];
-    limpio["PATH"] = actual === undefined || actual === "" ? binarios.join(":") : [actual, ...binarios].join(":");
+    //
+    // **En Windows la variable es `Path` y el separador `;`.** Medido en la máquina Windows de un usuario: se buscaba
+    // `PATH`, no estaba, y se creaba OTRA solo con los scripts y unida con `:` — el hijo de Claude Code contestaba
+    // «node: command not found» y el device-controller llamaba a `adb.exe` por su ruta entera. Se busca sin mayúsculas
+    // y se escribe en la MISMA clave, para que no queden dos.
+    const windows = (opciones.plataforma ?? process.platform) === "win32";
+    const separador = windows ? ";" : ":";
+    const clave = Object.keys(limpio).find((k) => k.toUpperCase() === "PATH") ?? (windows ? "Path" : "PATH");
+    const actual = limpio[clave];
+    limpio[clave] = actual === undefined || actual === "" ? binarios.join(separador) : [actual, ...binarios].join(separador);
   }
   if (opciones.artefactos !== undefined) limpio[VARIABLE_DE_ARTEFACTOS] = opciones.artefactos;
   if (opciones.hotswap !== undefined) limpio[VARIABLE_DE_HOTSWAP] = opciones.hotswap;

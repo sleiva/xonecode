@@ -321,6 +321,8 @@ export interface EjecucionExterna {
    * y el `device-controller`, con nuestra shell, sí los corría con `node.exe "<ruta>"`. Ausente fuera de Windows.
    */
   rutasConNode?: Readonly<Record<string, string>>;
+  /** Con `rutasConNode`: el Node ABSOLUTO con que se lanzan (el del servidor), porque en el Git Bash del hijo `node` puede no estar en el PATH. */
+  nodeDelServidor?: string;
 }
 
 /**

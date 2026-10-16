@@ -1252,7 +1252,7 @@ export async function abrirSesionTrueforge(
             lecturas: [carpeta, carpetaDeHotswap(carpeta)],
             // En Windows un script sin extensión no se lanza por su nombre: la segunda llave lo reescribe a `node '<ruta>'`.
             ...(process.platform === "win32"
-              ? { rutasConNode: Object.fromEntries(scriptsDelHijo.map((s) => [s.nombre, s.ruta])) }
+              ? { rutasConNode: Object.fromEntries(scriptsDelHijo.map((s) => [s.nombre, s.ruta])), nodeDelServidor: process.execPath }
               : {}),
           }
         : undefined;

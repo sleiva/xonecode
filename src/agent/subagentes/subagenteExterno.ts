@@ -109,7 +109,7 @@ export async function decisionDeTool(opciones: {
     // comando que la regla ya admitió. Sin ruta para él no se ejecuta (mejor un NO que un «command not found» mudo).
     const rutas = peticion.ejecucion.rutasConNode;
     if (rutas === undefined) return { behavior: "allow" };
-    const conNode = comandoConNode(String(entrada["command"] ?? ""), rutas);
+    const conNode = comandoConNode(String(entrada["command"] ?? ""), rutas, peticion.ejecucion.nodeDelServidor);
     return conNode === undefined
       ? { behavior: "deny", message: "XOneCode no sabe dónde está ese script en esta máquina, así que no se ejecuta." }
       : { behavior: "allow", updatedInput: { ...entrada, command: conNode } };

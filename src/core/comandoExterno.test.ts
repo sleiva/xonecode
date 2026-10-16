@@ -60,6 +60,15 @@ describe("comandoConNode: el mismo comando lanzado con node (Windows)", () => {
     );
   });
 
+  it("con el Node ABSOLUTO del servidor no depende del PATH (medido: en el Git Bash del hijo, «node: command not found»)", async () => {
+    const { comandoConNode } = await import("./comandoExterno.js");
+    const rutas = { "xone-hotswap": "C:\\x\\scripts\\xone-hotswap" };
+    expect(comandoConNode("xone-hotswap status", rutas, "C:\\Program Files\\nodejs\\node.exe")).toBe(
+      "'C:/Program Files/nodejs/node.exe' 'C:/x/scripts/xone-hotswap' status"
+    );
+    expect(comandoConNode("xone-hotswap status", rutas, "C:\\O'Neil\\node.exe")).toBeUndefined();
+  });
+
   it("sin ruta para el script, o con una comilla simple en la ruta, no compone nada", async () => {
     const { comandoConNode } = await import("./comandoExterno.js");
     expect(comandoConNode("xone-hotswap screen", { "xone-log-android": "C:/x" })).toBeUndefined();

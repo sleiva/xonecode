@@ -1,11 +1,12 @@
 import { exec, execFile } from "node:child_process";
 import { createRequire } from "node:module";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { motivoDeFallo, type DiagnosticoDeNode, type LineaDeDiagnostico } from "../../core/diagnosticoDeNode.js";
 import { versionDeSalida } from "../../core/motoresLocales.js";
+import { entornoDeShell } from "../../core/shellDeAgente.js";
 import { scriptsConRuta } from "../grafo/proyecto.js";
 import { skillsConRuta } from "../grafo/skills.js";
 import { binarioDeClaudeDelSdk } from "../motores/motoresLocales.js";
@@ -29,25 +30,44 @@ export interface DependenciasDelDiagnostico {
   versionDeNode?: string;
   ahora?: () => Date;
   /** Un proceso corto: resuelve con su salida, RECHAZA con un código distinto de 0 (como `execFile`). */
-  ejecutar?: (programa: string, args: readonly string[], opciones: { shell: boolean }) => Promise<{ stdout: string }>;
+  ejecutar?: (programa: string, args: readonly string[], opciones: { shell: boolean; entorno?: Record<string, string> }) => Promise<{ stdout: string }>;
+  /**
+   * El entorno de la shell de los AGENTES (`entornoDeShell`, con los scripts de las skills en el PATH): se mide con ÉL y no
+   * con el del servidor. Medido en Windows: el diagnóstico daba «node» en verde con el PATH del servidor mientras el de los
+   * agentes estaba roto («node: command not found»).
+   */
+  entornoDeAgente?: () => Record<string, string>;
   scripts?: () => { nombre: string; ruta: string }[];
   simulador?: () => { programa: string; previos: string[] };
   versionDeXoneLinter?: () => string | undefined;
   claude?: () => string | undefined;
   versionDelSdk?: () => string | undefined;
+  /** El Node con que se lanzan los scripts en Windows (por omisión, el del servidor). */
+  nodeDelServidor?: string;
 }
 
 const execFileP = promisify(execFile);
 const execP = promisify(exec);
 
-async function ejecutarReal(programa: string, args: readonly string[], opciones: { shell: boolean }): Promise<{ stdout: string }> {
+async function ejecutarReal(
+  programa: string,
+  args: readonly string[],
+  opciones: { shell: boolean; entorno?: Record<string, string> }
+): Promise<{ stdout: string }> {
+  const env = opciones.entorno as NodeJS.ProcessEnv | undefined;
   // `node` a secas en Windows va por la shell: es como lo encuentra quien lo teclea, y lo que el diagnóstico quiere saber.
   if (opciones.shell) {
-    const { stdout } = await execP([programa, ...args].join(" "), { timeout: TOPE_DEL_DIAGNOSTICO_MS, windowsHide: true, encoding: "utf8" });
+    const { stdout } = await execP([programa, ...args].join(" "), { timeout: TOPE_DEL_DIAGNOSTICO_MS, windowsHide: true, encoding: "utf8", ...(env === undefined ? {} : { env }) });
     return { stdout: String(stdout) };
   }
-  const { stdout } = await execFileP(programa, [...args], { timeout: TOPE_DEL_DIAGNOSTICO_MS, windowsHide: true, encoding: "utf8" });
+  const { stdout } = await execFileP(programa, [...args], { timeout: TOPE_DEL_DIAGNOSTICO_MS, windowsHide: true, encoding: "utf8", ...(env === undefined ? {} : { env }) });
   return { stdout: String(stdout) };
+}
+
+/** El entorno de la shell de los agentes, sin proyecto: el MISMO `entornoDeShell` con los scripts de todas las skills. */
+function entornoDeAgenteReal(): Record<string, string> {
+  const skills = skillsConRuta().map((m) => ({ nombre: m.nombre, dir: m.dir }));
+  return entornoDeShell({ entorno: process.env, skills, binarios: skills.map((s) => join(s.dir, "scripts")).filter((d) => existsSync(d)) });
 }
 
 function leerVersion(id: string): string | undefined {
@@ -81,7 +101,9 @@ export async function medirDiagnosticoDeNode(deps: DependenciasDelDiagnostico = 
     }
   };
 
-  const nodeEnPath = intentar(async () => versionDeSalida((await ejecutar("node", ["--version"], { shell: windows })).stdout));
+  const entorno = (deps.entornoDeAgente ?? entornoDeAgenteReal)();
+  // «node» en el PATH DE LOS AGENTES, no en el del servidor: es el que usan sus comandos.
+  const nodeEnPath = intentar(async () => versionDeSalida((await ejecutar("node", ["--version"], { shell: windows, entorno })).stdout));
 
   const lista = (deps.scripts ?? (() => scriptsConRuta(undefined, skillsConRuta().map((s) => s.nombre), plataforma)))();
   const elegido = lista.find((s) => s.nombre === SCRIPT_DE_PRUEBA) ?? lista[0];
@@ -90,7 +112,10 @@ export async function medirDiagnosticoDeNode(deps: DependenciasDelDiagnostico = 
       ? Promise.resolve({ ok: false, cuantos: 0, motivo: "no se detecta ningún script en las skills" })
       : intentar(async () => {
           // La MISMA llamada que haría el agente: por su nombre fuera de Windows, con `node <ruta>` en Windows.
-          await (windows ? ejecutar("node", [elegido.ruta, "--help"], { shell: false }) : ejecutar(elegido.ruta, ["--help"], { shell: false }));
+          // Como lo lanza el agente: por su nombre fuera de Windows; en Windows, con el Node del servidor (`comandoConNode`).
+          await (windows
+            ? ejecutar(deps.nodeDelServidor ?? process.execPath, [elegido.ruta, "--help"], { shell: false, entorno })
+            : ejecutar(elegido.ruta, ["--help"], { shell: false, entorno }));
           return `${elegido.nombre} --help`;
         }).then((l) => ({ ...l, cuantos: lista.length }));
 
