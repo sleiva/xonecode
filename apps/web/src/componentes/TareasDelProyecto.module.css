@@ -198,11 +198,29 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-.encargo {
+/* Markdown (`MarkdownText`): sin `pre-wrap`, que duplicaría los saltos que el markdown ya convierte en párrafos. */
+.encargo,
+.peticion {
   margin: 6px 0 0;
   color: var(--dsw-alias-label-primary);
-  white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.6;
   overflow-wrap: anywhere;
+}
+
+/* La petición tal cual la escribió la persona va PRIMERO y algo más marcada que el encargo ampliado que la sigue. */
+.peticion {
+  margin-bottom: 14px;
+  font-weight: 500;
+}
+
+.rotuloEncargo {
+  margin: 10px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 /*

@@ -487,8 +487,7 @@ function FilaFinalizada({
           </div>
           {verEncargo ? (
             <div>
-              {t.adjuntos.length > 0 ? <p className={estilos.adjuntosDeTarea}>{`Adjuntos: ${t.adjuntos.map((a) => a.nombre).join(", ")}`}</p> : null}
-              <p className={estilos.encargo}>{t.encargo}</p>
+              <EncargoDeTarea tarea={t} />
             </div>
           ) : null}
         </div>
@@ -585,14 +584,7 @@ function Fila({
             <details className={estilos.contenido} onToggle={(e) => setVerEncargo((e.currentTarget as HTMLDetailsElement).open)}>
               <summary>Ver el encargo</summary>
               {/* Lo plegado se DESMONTA (regla del cliente): el encargo solo existe abierto. */}
-              {verEncargo ? (
-                <>
-                  {t.adjuntos.length > 0 ? (
-                    <p className={estilos.adjuntosDeTarea}>{`Adjuntos: ${t.adjuntos.map((a) => a.nombre).join(", ")}`}</p>
-                  ) : null}
-                  <p className={estilos.encargo}>{t.encargo}</p>
-                </>
-              ) : null}
+              {verEncargo ? <EncargoDeTarea tarea={t} /> : null}
             </details>
             {/* Y cómo llegó a «Terminada», que es donde el motivo ya no existe: la MISMA
                 pieza que monta `Kanban.tsx`, para que las dos vistas no puedan afirmar cosas
@@ -640,6 +632,41 @@ function Fila({
  * La clave del ticket en el gestor (Jira, Notion…) en el que vive la tarea, con su enlace si lo hay. Ausente = tarea
  * solo local, y no se pinta nada.
  */
+/**
+ * Lo que se pidió y lo que se le mandó al agente, en ESE orden (petición suya): el encargo es la petición ENRIQUECIDA
+ * por el aumentador, párrafos de criterios y límites, y sin la petición delante no se veía qué había escrito la persona.
+ * Si son el mismo texto —una propuesta del orquestador, o el aumentador falló y se encoló la petición— va una sola vez.
+ */
+function EncargoDeTarea({ tarea: t }: { tarea: TareaDelCable }) {
+  const igual = t.peticion.trim() === t.encargo.trim();
+  // Markdown, como «Qué hizo» y el chat (petición suya): el encargo ampliado son `##`, listas y negritas, y en texto
+  // plano se leían los asteriscos. La petición también, por si la persona escribió con formato.
+  const md = (texto: string, clase: string | undefined) => (
+    <div className={clase}>
+      <MarkdownText text={protegerDolares(texto)} codeLabels={ETIQUETAS_DE_CODIGO} />
+    </div>
+  );
+  return (
+    <>
+      {t.adjuntos.length > 0 ? <p className={estilos.adjuntosDeTarea}>{`Adjuntos: ${t.adjuntos.map((a) => a.nombre).join(", ")}`}</p> : null}
+      {igual ? (
+        md(t.encargo, estilos.encargo)
+      ) : (
+        <>
+          <section aria-label="Lo que se pidió">
+            <h4 className={estilos.rotuloEncargo}>Lo que se pidió</h4>
+            {md(t.peticion, estilos.peticion)}
+          </section>
+          <section aria-label="Encargo ampliado">
+            <h4 className={estilos.rotuloEncargo}>Encargo ampliado (lo que se le mandó al agente)</h4>
+            {md(t.encargo, estilos.encargo)}
+          </section>
+        </>
+      )}
+    </>
+  );
+}
+
 function ClaveDelTicket({ tarea: t }: { tarea: TareaDelCable }) {
   if (t.ticket === undefined) return null;
   return t.ticket.url === undefined ? (

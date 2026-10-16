@@ -456,6 +456,40 @@ describe("TareasDelProyecto: ver lo que hace una tarea en proceso", () => {
       expect(screen.queryByText("El encargo entero")).toBeNull();
     });
 
+    it("la petición ORIGINAL va primero y el encargo ampliado después, cada uno con su rótulo", () => {
+      render(
+        <TareasDelProyecto
+          tareas={[tarea({ id: "x", estado: "terminada", sesion: "s", peticion: "Rediseña el menú", encargo: "## Qué hay que conseguir\nTodo" })]}
+          alPedirUltimaRespuesta={async () => ({})}
+        />
+      );
+      fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
+      fireEvent.click(screen.getAllByRole("button").find((b) => b.getAttribute("aria-expanded") === "false")!);
+      fireEvent.click(screen.getByRole("button", { name: "Encargo" }));
+      const pedido = screen.getByRole("region", { name: "Lo que se pidió" });
+      const ampliado = screen.getByRole("region", { name: "Encargo ampliado" });
+      expect(pedido.textContent).toContain("Rediseña el menú");
+      expect(ampliado.textContent).toContain("Qué hay que conseguir");
+      // Renderizado como markdown: el `##` es un encabezado, no texto con almohadillas.
+      expect(ampliado.textContent).not.toContain("##");
+      expect(ampliado.querySelector("h2")?.textContent).toBe("Qué hay que conseguir");
+      expect(pedido.compareDocumentPosition(ampliado) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("si la petición y el encargo son el mismo texto, va una sola vez y sin rótulos", () => {
+      render(
+        <TareasDelProyecto
+          tareas={[tarea({ id: "x", estado: "terminada", sesion: "s", peticion: "Igual", encargo: "Igual" })]}
+          alPedirUltimaRespuesta={async () => ({})}
+        />
+      );
+      fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
+      fireEvent.click(screen.getAllByRole("button").find((b) => b.getAttribute("aria-expanded") === "false")!);
+      fireEvent.click(screen.getByRole("button", { name: "Encargo" }));
+      expect(screen.getAllByText("Igual")).toHaveLength(1);
+      expect(screen.queryByText("Lo que se pidió")).toBeNull();
+    });
+
     it("se ELIMINA del histórico, pidiendo confirmación antes", () => {
       const borradas: string[] = [];
       render(<TareasDelProyecto tareas={cola()} alDescartar={(id) => borradas.push(id)} />);
