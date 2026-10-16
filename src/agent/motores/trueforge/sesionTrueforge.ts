@@ -64,7 +64,7 @@ import type { Artefacto } from "../../../core/artefactos.js";
 import type { LineaDeDiff } from "../../../core/diff.js";
 import { createTokenTracker, type TokenTracker } from "../../../vendor/tokenTracking.js";
 import { MAX_APPROVAL_ROUNDS, type Decision } from "../../../vendor/hitl.js";
-import { artefactosNuevos, backendDeAgente, entornoDeLaShellDelProyecto, fotoDeArtefactos, lectorDelDispositivoDeSesion, scriptsDeLasSkills } from "../../grafo/proyecto.js";
+import { artefactosNuevos, backendDeAgente, entornoDeLaShellDelProyecto, fotoDeArtefactos, lectorDelDispositivoDeSesion, scriptsConRuta } from "../../grafo/proyecto.js";
 import { carpetaDeHotswap } from "../../../core/hotswap.js";
 import { cargarAgentes } from "../../subagentes/agentesEnDisco.js";
 import { bloqueDeAprendido, NOMBRE_APUNTAR_APRENDIZAJE, USO_DE_APRENDIDO_EXTERNO, USO_DE_APUNTAR_APRENDIZAJE } from "../../../core/aprendido.js";
@@ -1224,12 +1224,17 @@ export async function abrirSesionTrueforge(
     const conEjecucion = agente.ejecucion === true && motor === "claude-code" && carpeta !== undefined;
     // Con ejecución, también las skills de a quien llamaría: no puede llamarlo, así que lo hace él (`skillsConLasDeQuienLlama`).
     const delHijo: Agente = conEjecucion ? { ...agente, skills: skillsConLasDeQuienLlama(agente, especialistas()) } : agente;
+    const scriptsDelHijo = conEjecucion ? scriptsConRuta(raiz, delHijo.skills) : [];
     const ejecucion =
       conEjecucion
         ? {
-            scripts: scriptsDeLasSkills(raiz, delHijo.skills),
+            scripts: scriptsDelHijo.map((s) => s.nombre),
             entorno: entornoDeLaShellDelProyecto(raiz, carpeta),
             lecturas: [carpeta, carpetaDeHotswap(carpeta)],
+            // En Windows un script sin extensión no se lanza por su nombre: la segunda llave lo reescribe a `node '<ruta>'`.
+            ...(process.platform === "win32"
+              ? { rutasConNode: Object.fromEntries(scriptsDelHijo.map((s) => [s.nombre, s.ruta])) }
+              : {}),
           }
         : undefined;
     // Las carpetas de la sesión se LEEN aunque no ejecute: es donde el orquestador le deja la maqueta y las capturas.

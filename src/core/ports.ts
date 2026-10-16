@@ -314,6 +314,13 @@ export interface EjecucionExterna {
    * sigue denegada entera.
    */
   lecturas: readonly string[];
+  /**
+   * SOLO en Windows: la ruta de cada script, por su nombre. Allí un script sin extensión no se lanza por su nombre (ni
+   * shebang ni bit de ejecución), así que la segunda llave REESCRIBE la llamada a `node '<ruta>' args`
+   * (`comandoExterno.ts#comandoConNode`). Medido en una máquina Windows de un usuario: el hijo no tenía ningún script
+   * y el `device-controller`, con nuestra shell, sí los corría con `node.exe "<ruta>"`. Ausente fuera de Windows.
+   */
+  rutasConNode?: Readonly<Record<string, string>>;
 }
 
 /**

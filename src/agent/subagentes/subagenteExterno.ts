@@ -37,7 +37,7 @@ import { codexDisponible, correrCodex } from "./subagenteCodex.js";
 import { correrOpencode, opencodeDisponible } from "./subagenteOpencode.js";
 import { consumoDeClaude } from "./consumoExterno.js";
 import { mensajeSeguro } from "../../core/trazaDeErrores.js";
-import { textoDeLaShellExterna } from "../../core/comandoExterno.js";
+import { comandoConNode, textoDeLaShellExterna } from "../../core/comandoExterno.js";
 import { carpetasDeLecturaDeSkills, montarPluginDeSkills, skillsVisiblesDelHijo } from "./pluginDeSkills.js";
 import {
   claseDeToolExterna,
@@ -104,7 +104,15 @@ export async function decisionDeTool(opciones: {
   // que el SDK va a ejecutar. La misma regla otra vez, sobre ese texto.
   if (nombre === "Bash" && peticion.ejecucion !== undefined) {
     const motivo = motivoDeBashExterno(entrada, peticion.ejecucion.scripts);
-    return motivo === undefined ? { behavior: "allow" } : { behavior: "deny", message: motivo };
+    if (motivo !== undefined) return { behavior: "deny", message: motivo };
+    // En Windows el script no se lanza por su nombre: se REESCRIBE a `node '<ruta>' args`, compuesto por el código sobre un
+    // comando que la regla ya admitió. Sin ruta para él no se ejecuta (mejor un NO que un «command not found» mudo).
+    const rutas = peticion.ejecucion.rutasConNode;
+    if (rutas === undefined) return { behavior: "allow" };
+    const conNode = comandoConNode(String(entrada["command"] ?? ""), rutas);
+    return conNode === undefined
+      ? { behavior: "deny", message: "XOneCode no sabe dónde está ese script en esta máquina, así que no se ejecuta." }
+      : { behavior: "allow", updatedInput: { ...entrada, command: conNode } };
   }
   const clase = claseDeToolExterna(nombre);
   if (clase === "lectura") {

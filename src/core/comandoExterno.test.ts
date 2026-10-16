@@ -50,6 +50,23 @@ describe("el Bash que se le deja a un agente externo con ejecución", () => {
   });
 });
 
+describe("comandoConNode: el mismo comando lanzado con node (Windows)", () => {
+  it("pone la ruta con / entre comillas simples y deja los argumentos como venían", async () => {
+    const { comandoConNode } = await import("./comandoExterno.js");
+    const rutas = { "xone-log-android": "C:\\Program Files\\x\\scripts\\xone-log-android" };
+    expect(comandoConNode("xone-log-android --app", rutas)).toBe("node 'C:/Program Files/x/scripts/xone-log-android' --app");
+    expect(comandoConNode("  xone-log-android --texto='hola mundo'", rutas)).toBe(
+      "node 'C:/Program Files/x/scripts/xone-log-android' --texto='hola mundo'"
+    );
+  });
+
+  it("sin ruta para el script, o con una comilla simple en la ruta, no compone nada", async () => {
+    const { comandoConNode } = await import("./comandoExterno.js");
+    expect(comandoConNode("xone-hotswap screen", { "xone-log-android": "C:/x" })).toBeUndefined();
+    expect(comandoConNode("xone-hotswap screen", { "xone-hotswap": "C:/O'Neil/xone-hotswap" })).toBeUndefined();
+  });
+});
+
 describe("lo que se le DICE al hijo de su shell", () => {
   it("sin ejecución, nada; concedida sin scripts, que no tiene; con scripts, cuáles y cómo", async () => {
     const { textoDeLaShellExterna } = await import("./comandoExterno.js");

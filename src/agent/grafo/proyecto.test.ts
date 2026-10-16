@@ -1030,3 +1030,32 @@ describe("lectorDelDispositivoDeSesion (IXCODE-32)", () => {
     rmSync(sesion, { recursive: true, force: true });
   });
 });
+
+describe("scriptsConRuta: en WINDOWS un script de Node cuenta sin bit de ejecución", async () => {
+  const { scriptsConRuta } = await import("./proyecto.js");
+  const { rutaDeSkills } = await import("./skills.js");
+  const { chmodSync } = await import("node:fs");
+  // Medido en la máquina Windows de un usuario: Node no da bit de ejecución a ningún fichero, la lista salía VACÍA y el
+  // desarrollador en Claude Code se quedaba sin un solo script.
+  const raiz = mkdtempSync(join(tmpdir(), "scripts-win-"));
+  const carpeta = join(rutaDeSkills(raiz), "mia-de-prueba");
+  mkdirSync(join(carpeta, "scripts"), { recursive: true });
+  writeFileSync(join(carpeta, "SKILL.md"), "---\nname: mia-de-prueba\ndescription: prueba de scripts\n---\n\n# x\n");
+  writeFileSync(join(carpeta, "scripts", "con-node"), "#!/usr/bin/env node\nconsole.log(1);\n");
+  writeFileSync(join(carpeta, "scripts", "sin-shebang"), "solo texto\n");
+  writeFileSync(join(carpeta, "scripts", "con-bit"), "#!/bin/sh\necho 1\n");
+  chmodSync(join(carpeta, "scripts", "con-node"), 0o644);
+  chmodSync(join(carpeta, "scripts", "sin-shebang"), 0o644);
+  chmodSync(join(carpeta, "scripts", "con-bit"), 0o755);
+
+  it("en macOS/Linux manda el bit: el de Node sin bit no cuenta", () => {
+    expect(scriptsConRuta(raiz, ["mia-de-prueba"], "darwin").map((s) => s.nombre)).toEqual(["con-bit"]);
+  });
+
+  it("en Windows cuenta también el de Node, con su ruta; un fichero sin shebang de Node no", () => {
+    const s = scriptsConRuta(raiz, ["mia-de-prueba"], "win32");
+    expect(s.map((x) => x.nombre)).toEqual(["con-bit", "con-node"]);
+    expect(s.find((x) => x.nombre === "con-node")?.ruta).toBe(join(carpeta, "scripts", "con-node"));
+    rmSync(raiz, { recursive: true, force: true });
+  });
+});

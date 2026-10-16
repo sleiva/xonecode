@@ -63,6 +63,22 @@ export function motivoDeComandoExternoInaceptable(comando: string, scripts: read
   return undefined;
 }
 
+/**
+ * El MISMO comando, lanzado con `node` y la ruta del script: lo que hace falta en Windows, donde un script sin extensión
+ * no se ejecuta por su nombre. Se llama SOLO con un comando que `motivoDeComandoExternoInaceptable` ya admitió, así que
+ * la forma es «nombre args» y los argumentos no llevan nada que la shell interprete; la ruta la pone el código, con `/`
+ * (el Bash de Claude Code en Windows es Git Bash) y entre comillas simples. `undefined` si el script no tiene ruta o si
+ * la ruta trae una comilla simple: antes que componer un escape, no se ejecuta.
+ */
+export function comandoConNode(comando: string, rutas: Readonly<Record<string, string>>): string | undefined {
+  const partes = palabras(comando.trim());
+  if (partes === undefined || partes.length === 0) return undefined;
+  const [programa, ...argumentos] = partes;
+  const ruta = programa === undefined ? undefined : rutas[programa];
+  if (ruta === undefined || ruta.includes("'")) return undefined;
+  return [`node '${ruta.replace(/\\/g, "/")}'`, ...argumentos].join(" ");
+}
+
 /** El script de `xone-development` que pasa un `.xne` de 8 bits a UTF-8 (`skills/xone-development/lib/aUtf8.mjs`). */
 export const SCRIPT_A_UTF8 = "xone-a-utf8";
 

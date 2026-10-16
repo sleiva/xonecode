@@ -573,6 +573,11 @@ ejecuta si es Claude Code, con la shell ESTRECHA (ver abajo). Reglas duras:
   `.xonecode/` sigue denegado. Lo que deja en `/artefactos/` se anuncia al volver
   (`fotoDeArtefactos`). **Límites declarados**: el aviso por número de capturas cuenta nuestro
   `execute` y no su `Bash`; Parar mata al `claude`, no a un `adb` nieto; solo en TrueForge.
+  **En Windows el script no se lanza por su nombre** (ni shebang ni bit de ejecución): la lista cuenta un script de Node
+  por su primera línea (`proyecto.ts#scriptsConRuta`) y la SEGUNDA llave reescribe el comando ya admitido a
+  `node '<ruta>' args` con `updatedInput` (`comandoExterno.ts#comandoConNode`, `EjecucionExterna.rutasConNode`). El hijo
+  sigue escribiendo `xone-hotswap screen`; la ruta la pone el código. Medido en la máquina Windows de un usuario: sin esto
+  la lista salía vacía y el desarrollador se quedaba sin shell. La reescritura, medida con el SDK en macOS; en Windows, sin medir.
 - **En TrueForge, `ls`, `glob` y `grep` FILTRAN lo que devuelven con la regla de leer**
   (`toolsDeFichero.ts#ejecutar`, `puedeLeer`): el permiso se comprobaba solo sobre su `path` —la raíz por
   omisión— y un `glob` de `/.xonecode/**` listaba los nombres de lo denegado. Leer ya estaba denegado.

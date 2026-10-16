@@ -189,8 +189,21 @@ export function entornoDeLaShellDelProyecto(
  * que un agente de Claude Code con ejecución tiene permitida (`core/comandoExterno.ts`); un
  * `.mjs` sin bit de ejecución no cuenta, porque por su nombre no correría.
  */
-export function scriptsDeLasSkills(raiz: string, skills: readonly string[]): string[] {
-  const salida: string[] = [];
+export function scriptsDeLasSkills(raiz: string, skills: readonly string[], plataforma: NodeJS.Platform = process.platform): string[] {
+  return scriptsConRuta(raiz, skills, plataforma).map((s) => s.nombre);
+}
+
+/**
+ * Los mismos scripts, con su RUTA. **En Windows no hay bit de ejecución** —Node da `mode` sin él a todo fichero—, así que
+ * allí cuenta un script de Node por su primera línea (`#!/usr/bin/env node`). Medido en la máquina Windows de un usuario:
+ * con el bit como única regla la lista salía VACÍA y el desarrollador en Claude Code se quedaba sin ningún script.
+ */
+export function scriptsConRuta(
+  raiz: string,
+  skills: readonly string[],
+  plataforma: NodeJS.Platform = process.platform
+): { nombre: string; ruta: string }[] {
+  const salida: { nombre: string; ruta: string }[] = [];
   for (const skill of skillsConRuta(raiz).filter((s) => skills.includes(s.nombre))) {
     const carpeta = join(skill.dir, "scripts");
     let nombres: string[];
@@ -200,15 +213,23 @@ export function scriptsDeLasSkills(raiz: string, skills: readonly string[]): str
       continue;
     }
     for (const n of nombres.sort()) {
+      const ruta = join(carpeta, n);
       try {
-        const e = statSync(join(carpeta, n));
-        if (e.isFile() && (e.mode & 0o111) !== 0 && !salida.includes(n)) salida.push(n);
+        const e = statSync(ruta);
+        if (!e.isFile() || salida.some((s) => s.nombre === n)) continue;
+        if ((e.mode & 0o111) !== 0 || (plataforma === "win32" && esScriptDeNode(ruta))) salida.push({ nombre: n, ruta });
       } catch {
         // Un fichero que desaparece entre el listado y la medida no es un script.
       }
     }
   }
   return salida;
+}
+
+/** Su primera línea es un shebang de Node: lo que en Windows se lanza con `node <ruta>`. */
+function esScriptDeNode(ruta: string): boolean {
+  const cabeza = readFileSync(ruta).subarray(0, 120).toString("utf8");
+  return /^#!\S*(?:\/env\s+)?node\b/.test(cabeza);
 }
 
 /**
