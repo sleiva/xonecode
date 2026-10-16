@@ -1957,4 +1957,5 @@ export interface DiagnosticoDeNode {
   scripts: LineaDeDiagnostico & { cuantos: number };
   simulador: LineaDeDiagnostico;
   claudeCode: LineaDeDiagnostico;
+  navegador?: LineaDeDiagnostico;
 }

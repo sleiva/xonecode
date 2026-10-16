@@ -661,7 +661,9 @@ ejecuta si es Claude Code, con la shell ESTRECHA (ver abajo). Reglas duras:
   las skills se detectan y si uno arranca con la MISMA llamada que haría el agente, `xone-simulator` y el Claude Code del
   SDK—. Ninguna ruta cruza: versiones y, si falla, el `code` o una frase fija (`motivoDeFallo`). **Se mide con el ENTORNO
   DE LOS AGENTES** (`entornoDeShell`), no con el del servidor: medido en Windows, daba verde mientras el hijo contestaba
-  «node: command not found». Nació de un paquete de
+  «node: command not found». **Y dice si hay NAVEGADOR para medir la maqueta**: en Windows el crítico solo conocía rutas de macOS y
+  Linux, decía «no hay Chrome ni Chromium» y comparaba contra una descripción; ahora busca Edge, Chrome, Chromium y Brave
+  en las carpetas de programas de las variables (`exportarPdf.ts#navegadoresDeWindows`). Nació de un paquete de
   soporte de Windows: sin scripts para el hijo y «xone-simulator no está instalado» con el programa dentro del paquete.
   **Y el verificador usa el `xone-linter` de NUESTRA dependencia** (`verificador.ts#comoLanzarElSimulador`, su `dist/cli.js`
   con el Node de xonecode); el del PATH solo si falta.

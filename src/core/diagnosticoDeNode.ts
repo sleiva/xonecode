@@ -30,6 +30,11 @@ export interface DiagnosticoDeNode {
   simulador: LineaDeDiagnostico;
   /** El Claude Code que trae el SDK: su versión y si su binario arranca. */
   claudeCode: LineaDeDiagnostico;
+  /**
+   * El navegador con que el crítico MIDE la maqueta (y se imprime a PDF): Chrome, Edge… Medido en Windows: sin él, el
+   * crítico comparaba contra una descripción. Ausente en una foto vieja.
+   */
+  navegador?: LineaDeDiagnostico;
 }
 
 /** Los sistemas con su nombre de persona; lo que no se reconoce va tal cual. */
@@ -52,5 +57,5 @@ export function motivoDeFallo(error: unknown): string {
 
 /** Si TODO lo que el agente necesita funciona. */
 export function todoBien(d: DiagnosticoDeNode): boolean {
-  return d.nodeEnPath.ok && d.scripts.ok && d.simulador.ok && d.claudeCode.ok;
+  return d.nodeEnPath.ok && d.scripts.ok && d.simulador.ok && d.claudeCode.ok && (d.navegador?.ok ?? true);
 }

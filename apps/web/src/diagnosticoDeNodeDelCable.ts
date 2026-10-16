@@ -26,6 +26,7 @@ export function leerDiagnosticoDeNode(valor: unknown): DiagnosticoDeNode | undef
     scripts: { ...scripts, cuantos },
     simulador,
     claudeCode,
+    ...(linea(v["navegador"]) === undefined ? {} : { navegador: linea(v["navegador"])! }),
   };
 }
 

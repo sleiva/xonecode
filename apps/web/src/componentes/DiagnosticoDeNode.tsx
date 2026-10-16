@@ -55,6 +55,7 @@ export function DiagnosticoDeNode({ diagnostico, alComprobar }: { diagnostico?: 
             />
             <Fila nombre="xone-simulator (verificador)" linea={diagnostico.simulador} />
             <Fila nombre="Claude Code" linea={diagnostico.claudeCode} />
+            {diagnostico.navegador === undefined ? null : <Fila nombre="Navegador (para medir la maqueta)" linea={diagnostico.navegador} />}
           </dl>
         )}
       </div>

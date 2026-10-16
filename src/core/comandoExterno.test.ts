@@ -84,6 +84,9 @@ describe("lo que se le DICE al hijo de su shell", () => {
     const t = textoDeLaShellExterna(["xone-log-android", "xone-captura-android"])!;
     expect(t).toContain("`xone-log-android`, `xone-captura-android`");
     expect(t).toContain("sin ruta");
+    // Medido en Windows: «no tengo shell» sin probarla. Ahora se le pide probarla y copiar el error exacto.
+    expect(t).toContain("PRUÉBALA (`xone-log-android --help`)");
+    expect(t).toContain("copia el error EXACTO");
     expect(t).not.toContain("xone-a-utf8");
   });
 

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { NAVEGADORES_CONOCIDOS, SIN_NAVEGADOR, exportarAPdf, navegadorParaImprimir } from "./exportarPdf.js";
+import { NAVEGADORES_CONOCIDOS, SIN_NAVEGADOR, exportarAPdf, navegadorParaImprimir, navegadoresDeWindows } from "./exportarPdf.js";
 import { POLITICA_SIN_SCRIPTS } from "../core/exportacion.js";
 
 let raiz: string;
@@ -28,6 +28,22 @@ beforeEach(() => {
   raiz = mkdtempSync(join(tmpdir(), "xonecode-exp-"));
   mkdirSync(join(raiz, "doc"), { recursive: true });
   writeFileSync(join(raiz, "doc", "INFORME.md"), "# Título\n\n| a | b |\n| - | - |\n| 1 | 2 |\n");
+});
+
+describe("navegadorParaImprimir en WINDOWS (medido: el crítico decía «no hay Chrome ni Chromium»)", () => {
+  const ENTORNO = { ProgramFiles: "C:\\Program Files", "ProgramFiles(x86)": "C:\\Program Files (x86)", LOCALAPPDATA: "C:\\Users\\X\\AppData\\Local" };
+
+  it("encuentra el Edge que trae Windows, por las carpetas de programas de las variables", () => {
+    const edge = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
+    expect(navegadorParaImprimir((r) => r === edge, "win32", ENTORNO)).toBe(edge);
+  });
+
+  it("y un Chrome instalado solo para el usuario (LOCALAPPDATA); nunca una ruta de macOS en Windows", () => {
+    const chrome = "C:\\Users\\X\\AppData\\Local\\Google\\Chrome\\Application\\chrome.exe";
+    expect(navegadorParaImprimir((r) => r === chrome, "win32", ENTORNO)).toBe(chrome);
+    expect(navegadoresDeWindows(ENTORNO).some((r) => r.startsWith("/"))).toBe(false);
+    expect(navegadorParaImprimir((r) => r === NAVEGADORES_CONOCIDOS[0], "win32", ENTORNO)).toBeUndefined();
+  });
 });
 
 describe("navegadorParaImprimir", () => {

@@ -46,10 +46,31 @@ export const NAVEGADORES_CONOCIDOS = [
   "/usr/bin/google-chrome-stable",
 ] as const;
 
+/**
+ * Los de WINDOWS, por sus carpetas de programas (de las variables, nunca una letra de unidad a fuego). Edge va primero: lo
+ * trae todo Windows. Medido en la máquina Windows de un usuario: con solo las rutas de macOS y Linux, el crítico de pantalla
+ * decía «no hay Chrome ni Chromium» y comparaba contra una descripción en vez de medir las cajas de la maqueta.
+ */
+export function navegadoresDeWindows(entorno: Readonly<Record<string, string | undefined>>): string[] {
+  const bases = [entorno["ProgramFiles(x86)"], entorno["ProgramFiles"], entorno["LOCALAPPDATA"]].filter((b): b is string => b !== undefined && b !== "");
+  const relativos = [
+    "Microsoft\\Edge\\Application\\msedge.exe",
+    "Google\\Chrome\\Application\\chrome.exe",
+    "Chromium\\Application\\chrome.exe",
+    "BraveSoftware\\Brave-Browser\\Application\\brave.exe",
+  ];
+  return relativos.flatMap((r) => bases.map((b) => `${b.replace(/[\\/]$/, "")}\\${r}`));
+}
+
 /** El primero que exista, o AUSENTE. Ausente = aquí no se puede imprimir, y se DICE con el
  *  remedio: no hay forma de adivinar que lo que falta es un navegador. */
-export function navegadorParaImprimir(existe: (ruta: string) => boolean = existsSync): string | undefined {
-  return NAVEGADORES_CONOCIDOS.find((ruta) => existe(ruta));
+export function navegadorParaImprimir(
+  existe: (ruta: string) => boolean = existsSync,
+  plataforma: string = process.platform,
+  entorno: Readonly<Record<string, string | undefined>> = process.env
+): string | undefined {
+  const lista = plataforma === "win32" ? navegadoresDeWindows(entorno) : [...NAVEGADORES_CONOCIDOS];
+  return lista.find((ruta) => existe(ruta));
 }
 
 /** Qué decir cuando no hay ninguno. Vive aquí y no en quien llama para que las tres pieles

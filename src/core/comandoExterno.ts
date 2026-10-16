@@ -117,7 +117,9 @@ export function textoDeLaShellExterna(scripts: readonly string[] | undefined): s
   }
   return (
     `SHELL: \`Bash\` solo para estos scripts de tus skills, uno por llamada, por su NOMBRE y sin ruta: ${scripts.map((s) => `\`${s}\``).join(", ")}. ` +
-    "Argumentos sueltos o entre comillas simples; nada de `;`, `|`, `>`, `$`, comillas dobles ni segundo plano. Cualquier otro comando se deniega." +
+    "Argumentos sueltos o entre comillas simples; nada de `;`, `|`, `>`, `$`, comillas dobles ni segundo plano. Cualquier otro comando se deniega. " +
+    // Medido en Windows: un encargo decía «ya está medido» y el hijo contestó «no tengo shell» sin probarla.
+    `Antes de decir que no tienes shell o que no puedes probar, PRUÉBALA (\`${scripts[0]} --help\`); si falla, copia el error EXACTO en tu respuesta.` +
     (scripts.includes(SCRIPT_A_UTF8) ? `\n${TEXTO_DE_A_UTF8}` : "")
   );
 }

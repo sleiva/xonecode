@@ -11,6 +11,7 @@ import { scriptsConRuta } from "../grafo/proyecto.js";
 import { skillsConRuta } from "../grafo/skills.js";
 import { binarioDeClaudeDelSdk } from "../motores/motoresLocales.js";
 import { comoLanzarElSimulador } from "../turno/verificador.js";
+import { navegadorParaImprimir } from "../exportarPdf.js";
 
 /**
  * Las medidas de `core/diagnosticoDeNode.ts` en la máquina de verdad. Cada una con su tope, y ninguna devuelve una ruta:
@@ -44,6 +45,8 @@ export interface DependenciasDelDiagnostico {
   versionDelSdk?: () => string | undefined;
   /** El Node con que se lanzan los scripts en Windows (por omisión, el del servidor). */
   nodeDelServidor?: string;
+  /** El navegador para medir la maqueta (`exportarPdf.ts#navegadorParaImprimir`). */
+  navegador?: () => string | undefined;
 }
 
 const execFileP = promisify(execFile);
@@ -154,5 +157,12 @@ export async function medirDiagnosticoDeNode(deps: DependenciasDelDiagnostico = 
     scripts: await scripts,
     simulador: await simulador,
     claudeCode: await claudeCode,
+    // Solo el NOMBRE del programa (msedge.exe, Google Chrome): la ruta no cruza.
+    navegador: ((): LineaDeDiagnostico => {
+      const n = (deps.navegador ?? (() => navegadorParaImprimir(existsSync, plataforma)))();
+      return n === undefined
+        ? { ok: false, motivo: "no hay Chrome, Edge, Chromium ni Brave: el crítico no podrá medir la maqueta" }
+        : { ok: true, valor: n.split(/[\\/]/).pop() ?? n };
+    })(),
   };
 }
