@@ -1,6 +1,6 @@
 {
   "name": "xonecode",
-  "version": "0.38.44",
+  "version": "0.39.0",
   "description": "Consola CLI y harness de agente para desarrollar aplicaciones XOne",
   "type": "module",
   "license": "MIT",
@@ -12,7 +12,10 @@
   },
   "exports": {
     ".": "./dist/bin.js",
-    "./lib": { "types": "./dist/lib.d.ts", "import": "./dist/lib.js" },
+    "./lib": {
+      "types": "./dist/lib.d.ts",
+      "import": "./dist/lib.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
