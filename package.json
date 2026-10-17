@@ -10,6 +10,11 @@
   "bin": {
     "xonecode": "./dist/bin.js"
   },
+  "exports": {
+    ".": "./dist/bin.js",
+    "./lib": { "types": "./dist/lib.d.ts", "import": "./dist/lib.js" },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist",
     "skills",
