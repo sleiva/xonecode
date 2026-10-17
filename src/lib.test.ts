@@ -69,6 +69,7 @@ describe("xonecode/lib", () => {
       "conectarStudioDeServidor", "ClientCredentialsProvider", "clienteCloudStudio", "crearRama",
       "descargarProyecto", "prepararRepo", "vaciarCopia", "cambiosPendientes", "subir",
       "ejecutarTareaAutonoma", "Modelos", "VARIABLES_POR_PROVEEDOR", "TOPE_DE_RONDAS_DE_TAREA",
+      "sembrarAgentes", "rutaDeAgentes",
     ]) {
       expect(lib, nombre).toHaveProperty(nombre);
     }

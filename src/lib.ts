@@ -25,6 +25,11 @@ export {
   type OpcionesDeTareaAutonoma,
   type ResultadoDeTareaAutonoma,
 } from "./lib/tareaAutonoma.js";
+/**
+ * Siembra los agentes de serie en una casa (`base`): copilot los deja en el `HOME` temporal de la
+ * ejecución ANTES de superponer los suyos, para que el raíz tenga a sus especialistas.
+ */
+export { sembrarAgentes, rutaDeAgentes } from "./agent/subagentes/agentesEnDisco.js";
 export { Modelos } from "./agent/config/modelos.js";
 export { VARIABLES_POR_PROVEEDOR, type FuentesDeEleccion } from "./core/modelos.js";
 export { TOPE_DE_RONDAS_DE_TAREA } from "./core/tareas.js";
