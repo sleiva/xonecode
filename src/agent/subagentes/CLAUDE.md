@@ -99,7 +99,10 @@ Un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md` (`core/agentes.ts`,
   SU zona (sin hora, `TOPE_DE_AGOTAMIENTO_MS`). Del PROCESO, no de la sesión: la cuota es de la cuenta. Mientras dure,
   `crearHijo` crea ese especialista con NUESTRO motor y su MISMO `.md` sin `modelo` ni `esfuerzo`
   (`conModeloPorDefecto`, papel por omisión). El encargo que se agotó NO se rehace solo: el orquestador lee que vuelva a
-  encargarlo (`textoDeExternoAgotado`). Las dos cosas se dicen en el chat. Otro fallo no es esto. **Límite**: solo
+  encargarlo (`textoDeExternoAgotado`). Las dos cosas se dicen en el chat. Otro fallo no es esto. **Se ve y se quita
+  en Ajustes → Motores locales**: la foto lleva `agotadoHasta` (lo añade el SERVIDOR al emitir, `arranque.ts#emitirMotores`,
+  y se reemite al cambiar, `alCambiarAgotamiento`), marca en la pestaña y «Ya está restablecido» (`accion: "restablecer"`):
+  no se prueba, el siguiente encargo vuelve al motor y, si sigue agotado, se vuelve a apuntar. **Límite**: solo
   TrueForge; deepagents (legacy) no.
 
 ## Codex

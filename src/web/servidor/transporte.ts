@@ -1877,7 +1877,7 @@ export type MensajeDelCliente =
    */
   | {
       clase: "motorLocal";
-      accion: "medir" | "probar" | "login" | "codigo" | "cancelar" | "navegador" | "consola" | "modelo";
+      accion: "medir" | "probar" | "login" | "codigo" | "cancelar" | "navegador" | "consola" | "modelo" | "restablecer";
       motor?: string;
       modo?: "claudeai" | "console";
       codigo?: string;

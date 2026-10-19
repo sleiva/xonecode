@@ -62,6 +62,8 @@ export function leerMotorLocal(crudo: unknown): EstadoDeMotorLocal | undefined {
     ...(m["admiteConsola"] === true ? { admiteConsola: true as const } : {}),
     ...(m["admiteModelo"] === true ? { admiteModelo: true as const } : {}),
     ...(typeof m["modelo"] === "string" && m["modelo"] !== "" ? { modelo: m["modelo"] } : {}),
+    // Solo una fecha que se pueda leer: un «sin cuota hasta» ilegible no se pinta.
+    ...(typeof m["agotadoHasta"] === "string" && !Number.isNaN(Date.parse(m["agotadoHasta"])) ? { agotadoHasta: m["agotadoHasta"] } : {}),
   };
 }
 

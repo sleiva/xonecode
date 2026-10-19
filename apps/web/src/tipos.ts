@@ -158,6 +158,8 @@ export interface EstadoDeMotorLocal {
   admiteConsola?: true;
   admiteModelo?: true;
   modelo?: string;
+  /** Sin cuota hasta este instante (ISO): sus especialistas trabajan con el modelo por defecto. Lo pone el servidor. */
+  agotadoHasta?: string;
   medido: string;
 }
 
@@ -1716,7 +1718,7 @@ export type MensajeDelCliente =
   /** Una acción sobre un motor local: la intención; el binario lo decide el servidor. */
   | {
       clase: "motorLocal";
-      accion: "medir" | "probar" | "login" | "codigo" | "cancelar" | "navegador" | "consola" | "modelo";
+      accion: "medir" | "probar" | "login" | "codigo" | "cancelar" | "navegador" | "consola" | "modelo" | "restablecer";
       motor?: string;
       modo?: "claudeai" | "console";
       codigo?: string;

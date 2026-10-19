@@ -108,6 +108,7 @@ import { textoDeRecarga, type ResultadoDeRecarga } from "../../core/recargaEnCal
 import { nombreDeApp } from "../../core/descriptoresDeApp.js";
 import { modelosDeMotor } from "../../agent/config/modelosDeMotor.js";
 import { crearServicioDeMotoresLocales, type ServicioDeMotoresLocales } from "../../agent/motores/motoresLocales.js";
+import { agotadoHastaAhora, alCambiarAgotamiento, restablecer } from "../../agent/subagentes/agotamiento.js";
 import { medirDiagnosticoDeNode } from "../../agent/config/diagnosticoDeNodeEnMaquina.js";
 import { CONECTOR_STITCH, marcarPantallaElegida, traerPantalla } from "../../agent/motores/trueforge/traerDeStitch.js";
 import { guardarDisenoDeProyecto } from "../../agent/config/configEnDisco.js";
@@ -5590,10 +5591,22 @@ export function montarRutas(
    * proceso suyo) y se crea al primer uso: la sección casi nunca se abre.
    */
   let servicioDeMotores: ServicioDeMotoresLocales | undefined;
+  /**
+   * La foto lleva si cada motor está SIN CUOTA (`agent/subagentes/agotamiento.ts`): lo sabe el registro del proceso, no
+   * la medida del servicio, así que se añade aquí al emitir. Y se reemite cuando se agota o se restablece.
+   */
   const emitirMotores = (): void => {
     const motores = servicioDeMotores?.foto();
-    if (motores !== undefined) emitir({ clase: "motoresLocales", motores });
+    if (motores === undefined) return;
+    emitir({
+      clase: "motoresLocales",
+      motores: motores.map((m) => {
+        const hasta = agotadoHastaAhora(m.motor);
+        return hasta === undefined ? m : { ...m, agotadoHasta: new Date(hasta).toISOString() };
+      }),
+    });
   };
+  alCambiarAgotamiento(emitirMotores);
   const atenderMotorLocal = async (mensaje: Extract<MensajeDelCliente, { clase: "motorLocal" }>): Promise<void> => {
     if (opciones.motoresLocales === undefined) {
       // Una lista VACÍA y no un `informar`: ese no llega al navegador desde el vestíbulo, y la
@@ -5613,6 +5626,10 @@ export function montarRutas(
     if (!esMotorLocal(mensaje.motor)) return;
     const motor = mensaje.motor;
     switch (mensaje.accion) {
+      case "restablecer":
+        // Lo que dice la persona manda: el siguiente encargo vuelve al motor (y si sigue agotado, se vuelve a apuntar).
+        if (!restablecer(motor)) emitirMotores();
+        return;
       case "probar":
         await servicio.probar(motor);
         return;
@@ -8085,7 +8102,7 @@ export function montarRutas(
       typeof mensaje === "object" &&
       mensaje !== null &&
       mensaje.clase === "motorLocal" &&
-      ["medir", "probar", "login", "codigo", "cancelar", "navegador", "consola", "modelo"].includes(mensaje.accion)
+      ["medir", "probar", "login", "codigo", "cancelar", "navegador", "consola", "modelo", "restablecer"].includes(mensaje.accion)
     ) {
       void atenderMotorLocal(mensaje).catch(contar);
       respuesta.writeHead(204);

@@ -228,3 +228,33 @@
   font-family: var(--ds-font-family-code);
   user-select: all;
 }
+
+/* Sin cuota (`agotadoHasta`): el aviso y su «Ya está restablecido», en el ámbar de los avisos. */
+.agotado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-state-warn-primary);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.agotado p {
+  flex: 1 1 260px;
+  margin: 0;
+}
+
+.restablecer {
+  composes: secundario from "./Boton.module.css";
+}
+
+.marcaAgotado {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 0.5px solid var(--dsw-alias-state-warn-primary);
+  color: var(--dsw-alias-state-warn-primary);
+  font-size: 10px;
+}

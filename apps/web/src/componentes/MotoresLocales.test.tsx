@@ -82,6 +82,24 @@ describe("el modelo de OpenCode", () => {
   });
 });
 
+describe("un motor SIN CUOTA", () => {
+  it("se marca en su pestaña y en su tarjeta, y «Ya está restablecido» manda la intención", () => {
+    const acciones: AccionDeMotorLocal[] = [];
+    montar([{ ...SIN_SESION, conSesion: true, agotadoHasta: "2026-10-19T14:30:00.000Z" }, CODEX_FALTA], acciones);
+    expect(screen.getByRole("tab", { name: /Claude Code/ }).textContent).toContain("sin cuota");
+    expect(screen.getByRole("tab", { name: /Codex/ }).textContent).not.toContain("sin cuota");
+    expect(screen.getByRole("status").textContent).toMatch(/Sin cuota hasta las .*modelo por defecto/);
+    fireEvent.click(screen.getByRole("button", { name: "Ya está restablecido" }));
+    expect(acciones).toContainEqual({ accion: "restablecer", motor: "claude-code" });
+  });
+
+  it("sin `agotadoHasta` no se pinta nada de esto", () => {
+    montar([{ ...SIN_SESION, conSesion: true }]);
+    expect(screen.queryByText(/sin cuota/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Ya está restablecido" })).toBeNull();
+  });
+});
+
 describe("MotoresLocales", () => {
   it("al entrar pide una medida, y sin manejador no pinta ningún botón", () => {
     const acciones: AccionDeMotorLocal[] = [];

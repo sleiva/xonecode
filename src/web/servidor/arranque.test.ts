@@ -82,6 +82,7 @@ import { carpetaDeAdjuntosDeSesion } from "../../core/adjuntos.js";
 import { TOPE_DE_ADJUNTO_DE_SESION } from "../../agent/sesiones/adjuntosDeSesion.js";
 import type { ManejadorRuta } from "./servidor.js";
 import { ESTADOS_DEL_LANZAMIENTO, FASES_DEL_LANZAMIENTO, filaDeTarea } from "./transporte.js";
+import { agotadoHastaAhora, apuntarSiSeAgoto, olvidarAgotamientos } from "../../agent/subagentes/agotamiento.js";
 import {
   FASES_DE_LANZAMIENTO,
   type EstadoDeLanzamiento,
@@ -5935,6 +5936,40 @@ describe("los motores locales, por el cable", () => {
     await enviarMensaje(accion, { clase: "motorLocal", accion: "probar", motor: "../../bin/sh" });
     await asentar();
     expect(servicio.probar).toHaveBeenCalledTimes(1);
+  });
+
+  /** Sin cuota (`agent/subagentes/agotamiento.ts`): la tarjeta lo dice, en vivo, y «Ya está restablecido» lo quita. */
+  it("un motor que se AGOTA sale marcado en la foto al momento, y «restablecer» lo quita", async () => {
+    olvidarAgotamientos();
+    try {
+      const servicio = {
+        foto: vi.fn(() => [{ motor: "claude-code" as const, instalado: "ok" as const, medido: "2026-10-19T12:00:00.000Z" }]),
+        medir: vi.fn(async () => {}),
+        probar: vi.fn(async () => {}),
+        iniciarSesion: vi.fn(() => true),
+        enviarCodigo: vi.fn(() => true),
+        cancelarSesion: vi.fn(() => true),
+        abrirNavegador: vi.fn(() => true),
+        abrirConsola: vi.fn(() => true),
+        elegirModelo: vi.fn(() => true),
+      };
+      const { cliente, accion } = await conectar({ motoresLocales: () => servicio });
+      await enviarMensaje(accion, { clase: "motorLocal", accion: "medir" });
+      await asentar();
+      expect(ultimo(cliente)?.motores[0]?.agotadoHasta).toBeUndefined();
+
+      // Se agota en un turno cualquiera: la pantalla se entera sin volver a medir.
+      const ahora = Date.now();
+      apuntarSiSeAgoto("claude-code", new Error("You've hit your session limit · resets in 30 minutes"), ahora);
+      expect(ultimo(cliente)?.motores[0]?.agotadoHasta).toBe(new Date(ahora + 30 * 60_000).toISOString());
+
+      await enviarMensaje(accion, { clase: "motorLocal", accion: "restablecer", motor: "claude-code" });
+      await asentar();
+      expect(ultimo(cliente)?.motores[0]?.agotadoHasta).toBeUndefined();
+      expect(agotadoHastaAhora("claude-code")).toBeUndefined();
+    } finally {
+      olvidarAgotamientos();
+    }
   });
 
   it("sin el servicio llega una lista VACÍA, que la sección lee como «esta ejecución no puede»", async () => {

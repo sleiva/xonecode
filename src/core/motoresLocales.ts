@@ -77,6 +77,12 @@ export interface EstadoDeMotorLocal {
   admiteModelo?: true;
   /** El elegido, `proveedor/modelo`. Ausente es que no hay ninguno. */
   modelo?: string;
+  /**
+   * Sin CUOTA hasta este instante (ISO), según su último error (`agent/subagentes/agotamiento.ts`): mientras tanto sus
+   * especialistas trabajan con el modelo por defecto. Lo pone el SERVIDOR del registro del proceso; ausente = no consta
+   * agotado. Se quita con «Ya está restablecido» (`accion: "restablecer"`).
+   */
+  agotadoHasta?: string;
   medido: string;
 }
 

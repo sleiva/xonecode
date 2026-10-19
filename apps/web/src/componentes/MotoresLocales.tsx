@@ -8,7 +8,7 @@ import estilos from "./MotoresLocales.module.css";
 
 export type AccionDeMotorLocal =
   | { accion: "medir" }
-  | { accion: "probar" | "cancelar" | "navegador" | "consola"; motor: MotorLocal }
+  | { accion: "probar" | "cancelar" | "navegador" | "consola" | "restablecer"; motor: MotorLocal }
   | { accion: "login"; motor: MotorLocal; modo: "claudeai" | "console" }
   | { accion: "codigo"; motor: MotorLocal; codigo: string }
   | { accion: "modelo"; motor: MotorLocal; modelo?: string };
@@ -86,6 +86,8 @@ export function MotoresLocales({
             >
               {NOMBRE_DE_MOTOR[m]}
               {e === undefined ? null : <span className={estilos.punto} data-listo={listo ? "" : undefined} aria-hidden="true" />}
+              {/* Sin cuota, dicho en la pestaña: con otra abierta no se vería. */}
+              {e?.agotadoHasta === undefined ? null : <span className={estilos.marcaAgotado}>sin cuota</span>}
             </button>
           );
         })}
@@ -208,6 +210,21 @@ function Tarjeta({
           {...(alPedirModelos === undefined ? {} : { alPedirModelos })}
         />
       ) : null}
+
+      {estado.agotadoHasta === undefined ? null : (
+        <div className={estilos.agotado} role="status">
+          <p>
+            <strong>Sin cuota hasta las {horaDe(estado.agotadoHasta)}.</strong> Mientras tanto, sus especialistas trabajan con
+            el modelo por defecto. Si ya tienes crédito (o se te ha reiniciado antes), dilo y el siguiente encargo vuelve a
+            este motor.
+          </p>
+          {alAccion === undefined ? null : (
+            <button type="button" className={estilos.restablecer} disabled={!conectado} onClick={() => alAccion({ accion: "restablecer", motor })}>
+              Ya está restablecido
+            </button>
+          )}
+        </div>
+      )}
 
       {estado.conClave === true ? (
         <p className={estilos.aviso}>

@@ -435,6 +435,7 @@ const MOTOR_COMPLETO = {
   admiteConsola: true as const,
   admiteModelo: true as const,
   modelo: "opencode-go/glm-5.3",
+  agotadoHasta: "2026-10-19T14:30:00.000Z",
   medido: "2026-10-03T10:00:00.000Z",
 };
 
