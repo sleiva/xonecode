@@ -9030,3 +9030,513 @@ pasarse a otro.
   sin mirar de quién es. Con puertos distintos solo importa ante un forward viejo.
 - Sin probar con un móvil físico y el emulador conectados a la vez: la guarda se probó con una serie
   inventada contra el adb real.
+
+## Lo que salió de los CLAUDE.md al condensarlos (19-10-2026)
+
+Los `CLAUDE.md` sumaban más que el tope de Claude Code y se condensaron a reglas y punteros. El porqué que se quitó y no estaba ya en este fichero queda aquí, con su texto original, por área.
+
+### Área: `web`
+
+#### Guardar en Ficheros: el `proyecto` con que se abrió la edición
+
+**Y lleva el `proyecto` con que se ABRIÓ la edición**: el servidor escribe en el del FOCO y lo
+compara con el activo calculado como el alta (`arranque.ts#proyectoActivoDe`); si no coincide o no
+se puede deducir, contesta sin escribir — la huella no lo frena con el contenido idéntico (el mismo
+proyecto en dos entornos).
+
+#### CodeMirror por `import()` y su tema
+
+(`editor/frontera.test.ts`): quien no edita no paga el peso. Su tema son variables CSS (`.tok-*` →
+`--shiki-token-*` y alias del puente), nunca `EditorView.theme`, que escaparía a `Barra.test.tsx`.
+
+#### El texto del editor vive en `App`
+
+**El texto vive en `App` (`usarEdicion.ts`), no en el editor**: el panel desmonta sus
+pestañas, y lo tecleado no se va con ellas; cambiar de fichero, cerrar el editor, salir de la
+pestaña, abrir otro proyecto o cambiar de entorno con cambios pregunta antes (`CambiosSinGuardar.tsx`),
+y una versión nueva del disco con cambios no los pisa. [...] **Un conflicto
+tiene salida**: tras un rechazo de un guardado propio se vuelve a pedir el fichero (recarga o
+banda), y «Seguir con los míos» ADOPTA la huella del disco, así que el siguiente guardado lo
+sustituye a sabiendas y la banda lo avisa.
+
+#### Revisión del chat: la marca de pendiente la pone el servidor
+
+(`arranque.ts#marcarPendientes`, `FicheroTocado.pendiente`): cruzar `revision` con `sync` en el
+cliente escondería lo recién escrito. Sin la marca (sin CloudStudio, o la medida falló) se
+enseña todo. Tras una subida se vuelven a pedir la lista y la cifra.
+
+#### Pendientes del Resumen: una sola medida
+
+Los pendientes son `lecturaDeSync`, la MISMA medida que la banda de CloudStudio —dos cuentas darían
+dos cifras—, con su límite: un fichero nuevo que git no sigue no cuenta y un renombrado cuenta dos.
+
+#### Panel de un proyecto sin copia
+
+**Un proyecto SIN copia también abre su panel, con SOLO el Resumen** (`App.tsx#panelSinCopia`): no se abre
+nada en el servidor —abrir sería descargar, y eso es «Descargar» o el «+»—, ni se pregunta al
+gestor ni se enseñan planes, porque son de la consola ABIERTA, que es la de otro proyecto.
+
+#### El proyecto ya abierto enseña el panel sin mandar `sesion`
+
+El proyecto que YA está abierto enseña el panel SIN mandar `sesion` —soltar la conversación en curso
+por una vacía es justo lo que se quería evitar—.
+
+#### Conectores: probar lo no probado
+
+«Conectar» sale SOLO cuando FALTA la credencial (`BotonDeConectar`): la prueba es una foto EN MEMORIA
+que un reinicio borra, así que un conector con credencial y sin prueba se PRUEBA solo, una vez por
+montaje (`useProbarLoSinProbar`), y una prueba fallida por otra cosa ofrece «Probar de nuevo».
+
+#### Cierre en el gestor: `falloDeTransicion`
+
+**Si al cerrar el comentario se escribe y la transición falla**, sale `cerrado` con `falloDeTransicion`
+y SIN `transicion`, la tarjeta se cierra y el aviso dice las dos mitades: un `error` a secas invitaba
+a repetir el cierre y comentar DOS veces.
+
+#### Capturas al móvil: solo imágenes
+
+solo IMÁGENES (`MIMES_DE_ARTEFACTO_AL_MOVIL`: un HTML no tiene en la web móvil con qué aislarse) y
+con tope, y la manda en trozos numerados (`trozosDeArtefacto`) porque no cabe en un mensaje.
+
+#### Temas: derivados, barra y muestras
+
+Los derivados se REDECLARAN en el puente: en `:root` un `var()` se resuelve donde se declara. **La
+BARRA superior tiene tokens propios** (`--xonecode-barra*` en `marca.css`): en un tema toma la
+SUPERFICIE del tema y no el acento, porque `--xonecode-azul`/`--xonecode-sobre-azul` se puentean al
+acento para los botones; la placa del símbolo (`--xonecode-barra-placa`) NO se puentea y se queda
+blanca (resuelve en `:root`). [...] **Las muestras de XOneCode llevan colores fijos** (`muestra` en
+`temas.ts`), porque dentro de un tema los alias del modo son los del tema.
+
+#### Temas: el catálogo oscuro
+
+en oscuro, el tema `azul-noche` —que se LLAMA «XOneCode»: superficies escalonadas teñidas del navy,
+petición suya—, con Grafito, Pizarra, Tinta cálida y SynthWave '84 (y Dracula con el texto subido).
+El oscuro de antes (`xonecode-oscuro`, sin semillas) y One Dark se retiraron: guardados, caen en el
+de omisión. **Elegir un tema lo ENSEÑA** (`App.tsx#alCambiarTema`): uno del otro modo pasa la
+consola a ese modo y la fija (saca de «sistema»); uno del modo en vigor no toca la apariencia.
+
+### Área: `grafo`
+
+#### Codificación del proyecto: por qué el agente respeta Latin-1
+
+`FilesystemBackend` lee y escribe siempre en UTF-8, y sobre un `.xne` Latin-1 un
+`edit` de una línea reescribía el fichero entero con «�» en cada tilde contestando que bien.
+
+**El ANTES de la tarjeta de aprobación se lee IGUAL** (`decodificarComoTexto`, en los dos motores y en la de los motores
+externos): leído en UTF-8, el ancla con tilde no calzaba y la tarjeta enseñaba un diff que no era.
+
+**Claude Code, en concreto, solo escribe UTF-8**: las versiones
+viejas metían UTF-8 en un `.xne` que declara ISO-8859-15 (rompiendo cada tilde, sin aviso) y la actual se niega
+ANTES del hook y de `canUseTool`, así que xonecode no puede escribir por él. Decisión suya: lo convierte el HIJO,
+con el script `xone-a-utf8` de `xone-development` (prólogo incluido, sin perder un carácter), y se le dice cuándo
+en su prompt (`comandoExterno.ts#TEXTO_DE_A_UTF8`, solo si el script es suyo). Un `.xne` así queda en UTF-8.
+
+#### Escrituras en serie: dónde va el envoltorio
+
+`write`/`edit` son leer-modificar-escribir sobre el
+fichero entero: dos a la vez se pisan y las dos contestan que bien, sin avisar. **Serializar
+BASTA**: el envoltorio va por FUERA de quien edita — al llegarle el turno se relee el fichero y
+se rebusca el ancla; si no encaja, el backend contesta que no lo encuentra y el modelo
+reintenta. **Va UNA vez, por fuera de TODO lo montado** (`backendDeAgente#enSerie`): vivía
+dentro de la pila del proyecto y `/artefactos/`/`/planes/` no la heredaban. Va por FUERA de
+`sinContenidoInvalido` para que leer, validar y escribir sean un solo turno.
+
+#### Skills de serie: por qué se copian
+
+Vive dentro del paquete instalado (una edición se la
+llevaría el siguiente `npm install`), así que aquí NO hay `.semilla.json` ni `restaurar`, a
+diferencia de los subagentes.
+
+#### El hijo de Claude Code: qué skills ve y por qué lee `references/`
+
+omitir `skills` no es «skills off» —medido, el hijo veía y nombraba las del usuario y las de sus
+plugins—, y con sus ajustes cargados arrancaba sus MCP (en Maset, un Playwright y el de XOne). Es un filtro de
+contexto: los ficheros de las demás los cierra `veredictoDeLectura`.
+
+Antes se negaba a propósito y salió caro: medido en
+Maset, el developer y el consultor escribieron atributos de XOne a ciegas (`img=` donde la referencia dice `path=`).
+
+#### Marcar criterios del plan
+
+quien ejecuta no tiene `write_file` ni `edit_file` y el
+orquestador es de solo lectura, así que lo verificado no volvía nunca al `TASKS.md`.
+
+**Se marca TAREA A TAREA, no al final** (`TRABAJAR_CON_PLAN`): medido, el
+conductor no marcaba porque el desarrollador no le nombraba el plan, y el desarrollador reescribía el
+`TASKS.md` entero al acabar.
+
+#### El crítico visual: método, contadores, proporción, tamaño de imagen
+
+**Y la PROPORCIÓN, solo de un botón**: la caja de un texto suelto o de una tarjeta es lo que ocupan
+sus letras, y en XOne la etiqueta ocupa su ancho asignado (medido en Maset: tres títulos «aplastados» costaron otra vuelta).
+
+Medido en Maset (MAS-3): con `code.html`
+no se le preguntaba y el crítico solo vio la tarjeta que faltaba; con el método, DeepSeek flash vio contadores que no se
+pintan, flechas desalineadas, tarjetas más altas y el icono pegado al texto, y una sola pasada variaba de 4 a 8
+diferencias.
+
+Salvo que junto a la pareja de esa etiqueta en el aparato
+haya OTRA cifra: se pinta con otro valor (medido: «51» sobre «pend.» salía como «no se pinta» y costó una comprobación). **No se describe la captura con
+el modelo**: medido, la misma imagen descrita otra vez difería y no vio el recorte.
+
+(la maqueta de Stitch viene en inglés): va como NOTA y no pone el rojo, ni en el estilo ni en la geometría, donde antes
+era BLOQUEANTE («NO está en el aparato»); su caja y su estilo se siguen comparando. **Con `code.html` la maqueta no se
+describe con un modelo**: el bloque que vigilaba imagen contra HTML no decidía nada, costaba una llamada y se equivocaba.
+
+**Y el TAMAÑO de cada IMAGEN
+respecto a su pantalla** (`geometriaDePantalla.ts`, `FACTOR_DE_TAMAÑO_DE_IMAGEN`): el tamaño relativo a las vecinas de
+fila no veía unos iconos todos igual de pequeños (Maset).
+
+#### `convertir_a_p`
+
+Existe porque, medido en Maset, el agente copió los px como `p` y los
+iconos salieron unas 2,6 veces menores, con la regla escrita en la skill.
+
+#### Lo aprendido entre encargos
+
+Medido en Maset: cada encargo redescubría el usuario con que
+se entra.
+
+#### `xone_navegacion`
+
+**`xone_navegacion` existe por una medida, no por completitud**: contestar «¿qué colecciones
+tiene el proyecto?» leyendo ficheros es mucho más caro que contestarla desde el modelo. [...] **no cachea** (un índice viejo que afirma que
+un campo existe es peor que no tener índice).
+
+**referencias de
+SCRIPT** — una app XOne navega con `onclick="javascript:appData.getCollection('X')…"` y no con
+`mapcol`, así que sin ellas «¿quién usa Deportes?» contestaba «nadie» con botones apuntándole. Es
+un PATRÓN con literal, no «el nombre aparece en el texto».
+
+**Hay una SEGUNDA señal, más floja, MARCADA aparte** (`por: "mencion"` frente a `por:
+"script"`): la cadena real puede tener varios saltos (`method="ExecuteNode(abrirColl('X'))"` → un
+nodo con `<param>` → `irColl(coll)` → `getCollection(collname)`), y el nombre solo aparece como
+literal en el primero. Perseguir la cadena ataría esto a los ayudantes de UN proyecto; lo que se
+reconoce es un literal que COINCIDE con una colección del inventario. Se marcan distinto porque
+la confianza es distinta.
+
+**Cuando NO sabe contestar, devuelve la llamada a `regex_search` HECHA** — no un consejo. Pasa en
+los cinco callejones sin resultado. El caso que lo justifica: «nadie la referencia» es una
+afirmación fuerte que este índice no puede sostener (no ve un nombre calculado en JavaScript), así
+que el vacío va con «NO concluyas que no se usa» y el siguiente paso ya escrito.
+
+**Lo que NO hay, y se midió antes de descartarlo: «colecciones huérfanas»**. Se implementó y se
+tiró: sobre un proyecto real la proporción de falsos positivos era tan alta que la lista no es
+un hallazgo, y con las referencias de script dentro seguía siendo la mitad del proyecto.
+
+**Va a los cinco especialistas Y al orquestador**, decidido por una MEDIDA que tumbó lo
+contrario (`xoneAgent.navegacion.test.ts`): negada al orquestador con el argumento de que
+delega, medido sobre un proyecto real **no delegó** — la contestó él con `ls`/`glob`/`grep`/
+`read_file` porque la tool no estaba disponible. No le abre nada nuevo; cambia el precio de
+orientarse. A un subagente de motor EXTERNO no puede llegar: corre en otro proceso.
+
+### Área: `subagentes`
+
+#### Guardar desde Ajustes conserva lo que la ventana no edita
+
+`CAMPOS_FUERA_DE_LA_VENTANA`: `escribeEn`, `llama`, `espera`, `pensamiento`. No viajan por el cable, y el guardado los
+BORRABA: medido en Maset, el diseñador perdió su límite de carpetas y, con «Ejecuta comandos» marcado, escribió sus
+SVG por la shell. El servidor los toma del agente que la persona tenía delante. Dos avisos en la lista, por
+`problemas`: un agente con shell y `escribeEn` (`avisoDeEjecucionConCarpetas`: la shell no respeta ese límite y se le
+quitan las tools de escribir), y un de serie editado al que ya le faltan (`camposPerdidos`), con el arreglo, restaurarlo.
+
+#### Un de serie no se borra: se restaura
+
+Borrarlo no devolvía el de serie (la marca recuerda que se entregó). `restaurarAgente` no escribe la marca:
+la reanota la siembra siguiente. «Este de serie está editado» ya no va por `problemas` (que
+pintaba rojo un agente que funciona perfectamente): lo dice su tarjeta, con el botón que lo
+arregla al lado.
+
+#### Renombrar es solo para los tuyos
+
+El nombre de un de serie lo ata a la marca por NOMBRE, así que moverlo lo vuelve un subagente del usuario.
+
+#### El prompt del orquestador se genera
+
+Lo que NO se genera es la regla del encadenado de diagramas, que nombra a dos especialistas a pelo: al
+renombrarlos hay que cambiarlos ahí.
+
+#### Al hijo de Claude Code se le dice dónde están /artefactos/ y /hotswap/
+
+Que LEE aunque no ejecute: el orquestador le pasa la maqueta por su ruta virtual, y medido en Maset el analista
+contestó «no he podido leerla».
+
+#### A un motor externo no se le nombran tools de xonecode
+
+Recibe el núcleo con esas líneas reescritas por texto EXACTO —si el núcleo cambia y una no casa, LANZA— y una línea que
+dice qué hacer con una tool que su `.md` o su encargo nombren y él no tiene. Medido: el desarrollador en Claude Code
+buscaba `comparar_capturas` y `validar_fichero_xone` con `ToolSearch`. Y el orquestador tampoco se las pide en el
+encargo (`notaDeDelegacion`, `textoDeMaquetadorExterno`): con el desarrollador en Claude Code, el «BUCLE DEL
+DESARROLLADOR» le da un criterio visual sin herramientas («que coincida con la maqueta»); medido en Maset, copiaba
+«pásala a `comparar_capturas` y a `xone_critica_visual`» y el hijo volvía diciendo que no las tenía.
+
+#### La shell estrecha: env de nuestra shell
+
+El hijo corre con el `env` de NUESTRA shell (`entornoDeLaShellDelProyecto`): medido, su Bash lo respeta —los
+`scripts/` en el PATH, ninguna `*_API_KEY`— y autentica con su login sin la clave.
+
+#### La shell estrecha en Windows
+
+En Windows el script no se lanza por su nombre (ni shebang ni bit de ejecución). El hijo sigue escribiendo
+`xone-hotswap screen`; la ruta la pone el código. Medido en la máquina Windows de un usuario: sin esto la lista salía
+vacía y el desarrollador se quedaba sin shell. La reescritura, medida con el SDK en macOS. Y se lanza con el Node
+ABSOLUTO del servidor (`EjecucionExterna.nodeDelServidor`): medido con 0.38.37 en Windows, el Git Bash del hijo
+contestaba «node: command not found». El PATH de la shell, en Windows, es `Path` y se une con `;` (`entornoDeShell`,
+`plataforma`): se buscaba `PATH`, se creaba otra variable solo con los scripts y unida con `:`, y el device-controller
+acababa rehaciendo el PATH a mano en cada comando (1156 en la traza de ese usuario).
+
+#### Al hijo se le dice qué shell tiene, y lo que no puede delegar lo hace él
+
+Su prompt lleva la línea «SHELL:» con sus scripts exactos (o «no tienes ninguna» si su `.md` concede ejecutar y sus
+skills no traen scripts), y como corre en otro proceso y no puede llamar a nuestros especialistas, recibe también las
+skills —y los scripts— de los agentes de su `llama`, con la instrucción de desplegar, capturar y comparar él mismo la
+captura con la maqueta abriéndolas con `Read` (las VE). Medido en Maset: el desarrollador en Claude Code no tenía ningún
+script ni sabía de su shell, y no pudo probar nada.
+
+#### En TrueForge, ls/glob/grep filtran con la regla de leer
+
+El permiso se comprobaba solo sobre su `path` —la raíz por omisión— y un `glob` de `/.xonecode/**` listaba los nombres
+de lo denegado. Leer ya estaba denegado.
+
+#### settingSources: []
+
+Por omisión se carga el `.claude/settings.json` del proyecto (viene de CloudStudio), y los del usuario le metían al hijo
+su hook de inicio, sus plugins, sus MCP y sus reglas `allow`. El login no depende de ellos (medido).
+
+#### Diagnóstico «Node y herramientas del agente»
+
+Una FOTO pedida a mano de lo que el agente necesita en ESTA máquina —el Node del servidor, `node` en el PATH, cuántos
+scripts de las skills se detectan y si uno arranca con la MISMA llamada que haría el agente, `xone-simulator` y el
+Claude Code del SDK—. Ninguna ruta cruza: versiones y, si falla, el `code` o una frase fija (`motivoDeFallo`). Se mide
+con el ENTORNO DE LOS AGENTES (`entornoDeShell`), no con el del servidor: medido en Windows, daba verde mientras el hijo
+contestaba «node: command not found». Y dice si hay NAVEGADOR para medir la maqueta: en Windows el crítico solo conocía
+rutas de macOS y Linux, decía «no hay Chrome ni Chromium» y comparaba contra una descripción; ahora busca Edge, Chrome,
+Chromium y Brave en las carpetas de programas de las variables (`exportarPdf.ts#navegadoresDeWindows`). Nació de un
+paquete de soporte de Windows: sin scripts para el hijo y «xone-simulator no está instalado» con el programa dentro del
+paquete. Y el verificador usa el `xone-linter` de NUESTRA dependencia (`verificador.ts#comoLanzarElSimulador`, su
+`dist/cli.js` con el Node de xonecode); el del PATH solo si falta.
+
+#### Motores locales: login y Windows
+
+Sin «Cerrar sesión» ni login con sesión ya iniciada: los dos tocarían todos los Claude Code de la máquina. Codex y
+OpenCode: medir, probar y guía; su login sigue sin medir. En Windows se lanza el NATIVO que hay detrás del `.cmd` de npm
+(`agent/subagentes/ejecutableEnWindows.ts`): sin shell, `spawn` no ve un `.cmd` (`ENOENT` con «Listo» en la medida), y
+con shell Parar mataría a `cmd.exe` y no al hijo. OpenCode apunta a un `.exe`; Codex a un `codex.js` que lanza el
+`codex.exe` de su paquete de plataforma, y se busca ese con la misma regla (lanzar `node` tampoco: matarlo no alcanza al
+nieto). Medidos los dos.
+
+### Área: `tareas`
+
+#### Cierre de la entrega
+Y una tarea que ACABA se cierra siempre: la entrega ya no la aparca (decisión suya). «si la completó con problemas o detalles, eso no es crítico». El ticket va al estado de terminar igual. La fila de Finalizadas lo enseña.
+
+#### Dudas resueltas solas
+su prompt le pide decidir antes que preguntar y una respuesta final con lo cambiado, las decisiones tomadas sin preguntar y lo que no se pudo comprobar. Medido en Maset: cada duda paraba la tarea. [pregunta en espera] se aparca con la pregunta, sin juez —dictaba «no escribió nada»—; y el veredicto de un ciclo anterior se retira al empezar otro, porque se quedaba pegado a la tarea mientras trabajaba.
+
+#### Escrituras locales del especialista en una tarea
+una aprobación solo se atiende cuando la librería devuelve el control, y medido en Maset las del diseñador esperaron todo lo que tardó el analista de Claude Code (una sola llamada larga), aunque en una tarea se aprueban solas. Las guardas de ruta siguen enteras, lo que cambió lo sigue diciendo git. Por eso el juez, con git delante, ya no recibe la lista de lo autorizado: medido, leyó «10 autorizadas y 30 cambiadas» como ficheros escritos sin constancia.
+
+#### Tope de rondas
+«agotó el tope de N rondas… Pulsa «Continuar»», y no «quedaron escrituras esperando aprobación», que en una tarea sin nadie a quien preguntar no decía que se había cortado.
+
+#### Bloqueantes desfasados
+por la hora del disco: un hijo externo escribe con sus tools.
+
+#### Solo errores del verificador al juez
+(decisión suya) un aviso del linter puede ser falso —medido en Maset, `self.executeNode("irColl(…)")` salió como `REF_FUNC_MISSING` siendo `irColl` un nodo— y el juez lo convertía en rojo.
+
+#### Comprobaciones visuales al juez
+Sin ellas, un criterio que pedía validar contra la maqueta era rojo seguro —«no consta»— aunque se hubiera validado.
+
+#### Ceder el proyecto / tarjeta en el chat
+se cierra su consola de ahí —la conversación queda guardada— y la tarea arranca. La lista de Tareas lo dice («no arranca mientras tengas abierta la consola…»), y una aparcada se sigue con «Continuar» o «Enviar y continuar». La tarjeta: motivo, «Continuar», «Reintentar», «Dar por bueno», «Descartar» y su feedback; las que la devuelven a la cola ceden el proyecto, porque con su conversación abierta no arrancaría. La caja vuelve cuando deja de esperar.
+
+#### Parar
+(IXCODE-50) el mismo corte que «Descartar», pero la tarea queda aparcada con su conversación. Una pausa NUNCA pasa por la entrega —el turno puede devolver limpio al cerrarle la consola— y, pedida mientras la consola se abre, se aparca en vez de quedarse en `nuevo` renunciada. El servidor espera al corte y contesta 409 con motivo si no se pudo (otro proceso, o no soltó a tiempo).
+
+#### Gestor: crear y reflejo
+`destino` —que la ventana pregunta al abrirse para decir ANTES del clic qué escribirá allí—. EN CURSO al empezar (no si ya lo está: pasa tras cada feedback), `cerrarTicket` al terminar —la MISMA secuencia que el «Cerrar en …» de un chat—; (sin correos). el tipo de incidencia de Jira lo elige su adaptador (medido, en español «Task» se llama «Tarea»). destinos de `transicionPropuesta` sin tabla.
+
+#### Gestor: estados y sondeo
+no se imponen columnas; en Jira, de sus tickets y transiciones: el conector no tiene tool de estados. Preparar sube el encargo ampliado como comentario con `CABECERA_DEL_ENCARGO`; lanzar usa el ÚLTIMO de esos comentarios tal como esté y lo comentado debajo. Revisar el encargo (decisión suya): apagado, el ticket de preparar se prepara y se LANZA en la misma pasada con el encargo recién subido, y es xonecode quien lo mueve al empezar; encendido, espera a que la persona lo mueva al de lanzar. el sondeo pregunta los sitios antes de lanzar (sin ellos Jira no da la url: medido, la tarea de MAS-2 nació sin enlace) y rellena el de las tareas que no lo tienen. DESCARTAR: comentario «Descartada en xonecode» y el primer estado de la categoría terminada (no el «terminar» del mapeo, que puede ser PROBAR).
+
+#### Finalizadas
+UNA línea fina por tarea, entera un botón que la despliega (diseño suyo, lienzo «Tareas finalizadas — rediseño»): un punto por cómo acabó (con críticos, a mano, con observaciones, limpia), título, ticket, una frase, las cuentas y las fechas; desplegada, `## CRITICAL`, observaciones, qué hizo y el encargo. la más reciente arriba, «empezó … · acabó …» (nunca «tardó»: cuenta la pausa), lo último que contestó el agente —pedido al desplegar con `leerSesion`, nunca en la cola—. el contenido vuelve en la propia respuesta, nunca al store, que va por ruta y pisaría el de la abierta.
+
+#### Reanudación tras corte
+la foto del raíz y el chat se guardan a mitad de turno— y manda mirar el disco antes de rehacer. Pasa por las transiciones de siempre (aparcada y devuelta con feedback). Sin hilo, o ya reanudada, se aparca como antes: una tarea que tumba el proceso cada vez sería un bucle.
+
+#### Adjuntos de sesión
+(IXCODE-7) igual que `/artefactos/` — solo en la web, porque el terminal no tiene carpeta por sesión. con el nombre ya ocupado, sufija `-2`… y lo dice en la respuesta (`{"nombre"}`), que el cliente adopta en vez del que mandó. nunca los nombres que llegaron por el cable sin comprobar. Un .zip: el zip se queda y su contenido va a `adjuntos/<nombre>/`, que el aviso del mensaje enseña colgado del zip (`AdjuntoNombrable.contenido`). Lo hace el harness: el agente no tiene con qué abrir un zip, y `read_file` de uno contesta dónde está ya extraído. Las barreras de instalar una skill desde `.zip` (forma de ruta en lista BLANCA, topes contra un zip bomba decididos con lo DECLARADO antes de inflar). `incorporar_adjunto`: solo `developer-xone` de motor `"modelo"` la recibe —el diseñador está confinado a `icons/` y `fonts/`— y a un motor externo no le llegan tools propias.
+
+#### Encargo
+ocupa el sitio del diff. (petición suya): la ventana no manda encargo vacío, y el botón dice que lo está preparando. lo que la petición nombre de un conector se trae de ahí, nunca se busca en el repo. Una duda va con su opción recomendada. (IXCODE-52) `nuevo` y sin `empezada`; una reintentada vuelve a `nuevo`, pero lo que se le manda es su hilo. La `peticion` no se toca. El corredor manda el encargo RELEÍDO en la escritura que la marca «en proceso», no el de la lectura que la eligió: una edición entre medias no se pierde. (IXCODE-53) se edita con el encargo (el título sale de ella) y «Regenerar el encargo» lo vuelve a preparar con el aumentador, con SUS adjuntos. No va por `augmentado`, que llega a todas las pestañas y es de «Nueva tarea»: las dos ventanas se pisarían.
+
+#### Tareas encadenadas
+las tareas las crea el clic de la persona en «Encolar en orden», TAMBIÉN en modo autónomo, porque crear una tarea es la autorización. que la consola de una tarea no hereda, y su prompt le pide preguntar antes con `ask_user_question` lo que falte. avisoDeReparto —medido, con el plan de seis tareas escrito el orquestador siguió preguntando sin volver sobre el reparto; la frase del prompt no bastaba—. el cliente manda el id y los encargos revisados; títulos, peticiones y adjuntos los pone el servidor. Una propuesta NO pasa por el aumentador: el encargo es la petición del orquestador, editable —él la escribió con la conversación delante, y el aumentador la alargaba hasta su tope y la cortaba—. Tres salidas: encolar, descartar, o «Hacerlo aquí en el chat» (resuelta con `enChat` y una prosa al agente). Resuelta es OTRO acto, apuntado y guardado al momento: el `.jsonl` solo crece, y sin él una reabierta volvía a ofrecer encolar. Y como todas, no arrancan mientras la consola de persona de ese proyecto esté abierta.
+
+### Área: `trueforge`
+
+#### describe_image: llamada aparte
+—en un API compatible con OpenAI el resultado de una tool es texto, y una imagen en el historial se pagaría en cada llamada—. Si el modelo no ve, lo dice la respuesta de la tool.
+
+#### La foto a mitad de turno
+un corte duro no pasa por el `finally`. [...] nunca con el «vuelve a pedirlo» de un turno cortado, que duplicaría lo ya escrito.
+
+#### El idioma de la salida
+la identidad que añade TrueForge y las descripciones de las tools están en inglés, y sin decirlo el texto entre herramientas salía en inglés. Es el idioma del USUARIO, no uno fijo —el raíz lo lee de su mensaje; un hijo, que no lo ve, sigue el de su encargo—
+
+#### La respuesta en chino
+medido, DeepSeek lo hizo al final de un turno largo con su razonamiento diciendo «in Spanish». La original se queda en el chat y un aviso lo dice; solo ve el chino.
+
+#### Recordatorio de idioma entre herramientas
+medido en Maset, en una tarea larga pasó a escribir en inglés lo que la persona lee. Al cerrarse un mensaje suyo así, su siguiente llamada lleva un mensaje de usuario con el idioma
+
+#### Argumentos rotos
+Antes la primera se tiraba en silencio y la segunda se ejecutaba con el valor cortado.
+
+#### Solo se compacta el raíz
+en un hijo, resumir un encargo corto y ya cacheado costaba más que reenviarlo. [...] la compactación SUSTITUYE el contexto entero, y con el umbral fijo de deepagents un modelo de ventana grande compactaba cada pocas lecturas y releía lo que acababa de leer.
+
+#### Memoria de especialistas
+la librería borra un hijo al terminar y no sabe reanudarlo, así que la siguiente encarnación arranca con SU historial (`definition.messages`) más el encargo nuevo —nunca lo que leyeron otros—. [...] El modelo repite la FORMA de sus llamadas anteriores, diga lo que diga su texto: medido en Maset, con «principio… [recortado]» cortaba sus encargos nuevos, y con una nota de «no lo copies» la copió como contenido de un `PLAN.md`.
+
+#### Bucle del desarrollador: el veredicto
+El veredicto sigue siendo de un modelo aparte y el juez final del arnés revisa igual: lo que le devuelva el de pruebas es lo que vio, no un permiso para dar el trabajo por bueno.
+
+#### Esperas sin bloquear
+se le devuelve al orquestador al instante diciendo que espera, y este lo llama de nuevo con el informe del otro; al arrancar sabe qué dejó (nombres de `icons/`, nunca contenido). **Nunca se espera bloqueando**: la librería no devuelve el control mientras un hilo no termine su paso, y una aprobación de escritura del otro hilo solo se atiende al devolverlo — la primera versión, que paraba al hijo antes de cada llamada, atascó una pasada real.
+
+#### Avisos de vueltas
+primero una versión que se pueda ver y pulsar, no la pantalla entera; y al llegar a cada umbral de llamadas al que ejecuta recibe UN mensaje que no dice «para» sino «cambia de procedimiento» (hipótesis, experimento mínimo, arreglo a todos los sitios parecidos). «Tres vueltas» en un prompt no era un contador.
+
+#### Capturas del conductor
+su prompt ya decía que una captura no es una herramienta de diagnóstico y no bastó; al llegar a cada umbral recibe UN mensaje —para un valor, un estado o una excepción, `getText`, `elements` y el log; la captura es para lo visual, una por cosa que se comprueba—.
+
+#### Maquetador externo
+compara y corrige él, así que el orquestador le da todo en un encargo, pasa el crítico una vez y solo le encarga otra vuelta por algo bloqueante; un recurso mal hecho lo corrige él en esa vuelta. Medido en Maset: cada vuelta nueva era un Claude Code que releía todo, con las piezas ya bien.
+
+#### Criterio de aceptación
+que el orquestador escribe medible (casillas del plan, lo que hace la app, fidelidad al diseño), con tres vueltas como tope; devolver antes porque «ya funciona» dejaba lo visual sin hacer.
+
+#### Traspasos entre agentes
+porque reescribir entero es volver a teclear lo que puso el otro; un SVG, un plan o un artefacto se siguen regenerando. [...] (ficheros, ediciones, líneas; nunca contenido; un `.ttf` traído o un adjunto incorporado, como fichero binario —sin contarlos, el informe decía «SIN escribir» y el orquestador iba al disco a comprobarlo—): el padre releía para saberlo. [...] porque la pone la librería antes de correr la tool.
+
+#### Medida automática
+El prompt del bucle ya daba las herramientas y el criterio; era texto, y quien menos lo seguía era quien más rediseños acababa necesitando. [...] cada borde del contenido —arriba, abajo, y a los lados la MEDIANA de las franjas, no el recuadro de la pantalla entera, que lo fija la barra de arriba— cerca del de la maqueta. Las distancias por franjas PROMEDIAN, y un teclado que no llega al borde las pasaba.
+
+#### Marco lateral de la maqueta
+una tira de columnas de un solo color, de menos de `ANCHO_MAXIMO_DEL_MARCO` y distinta de lo de dentro. Medido en Maset: la imagen de Stitch trae unos píxeles oscuros a cada lado, la maqueta «iba de borde a borde» y la medida mandó ensanchar a sangre una pantalla que ya lo estaba. Una captura no lo tiene: su primera columna cruza la barra de estado y la cabecera.
+
+#### El diseñador hace recursos
+iconos y fondos SVG, las fuentes de la maqueta, y los diagramas. El layout del `.xne` y el CSS son del desarrollador, también lo que se ve mal: lo confina el PERMISO, no el prompt, porque dos agentes turnándose en el mismo `.xne` se pisaban. [...] fichero → control → atributo → tamaño → si lleva el símbolo dentro, que el orquestador pasa tal cual al desarrollador; sin ella el orquestador revisaba los SVG y el desarrollador abría uno por uno.
+
+#### xone_atributos
+nombrada solo en la lista, quien escribe los atributos no la usaba. No va en el `SKILL.md`, que llega también a los motores externos.
+
+#### Pruebas por el log
+`appData.writeConsoleString`, legacy y mudo en Android [...] El conductor lee lo que salió y saca captura solo si el log no lo decide.
+
+#### TASKS.md con casillas
+cada tarea reconocida tiene que traer sus criterios como `- [ ]`, que es lo único que `marcar_criterios_del_plan` sabe marcar. El rechazo se devuelve con el formato. [...] editar un plan viejo sin casillas sigue valiendo.
+
+#### Shell que busca
+las tools `glob`, `grep` y `ls`, que son lo mismo confinado a las rutas virtuales; si además arrancaba en la raíz, la casa o una carpeta del sistema, el aviso lo dice. Un `grep` que filtra la salida de otro comando pasa. **Ni una ruta VIRTUAL** (`/hotswap/x`, `/EntryPoint.xne`): en el disco no existe y el comando sale vacío sin error; se devuelve con la de verdad (`"$XONECODE_HOTSWAP/x"`, el fichero sin barra). **Ni SQL que escribe** por `xone-hotswap` (`UPDATE`, `DELETE`, `INSERT`…): son los datos de la app y, con replicación, del servidor; `SELECT` pasa.
+
+#### Notas
+el botón aparte se quitó a petición suya. [...] `preLLMProcessors` (`capacidadDeNotas`), el único punto que corre antes de CADA llamada de cada hilo. [...] con varios en paralelo, el raíz; y el raíz la ve siempre, como INFORMACIÓN si ya tenía dueño —repartirla a todos hizo el mismo encargo dos veces—.
+
+#### Detener
+su modelo captura el corte y pide el resumen en el acto, así que a la librería le llega una respuesta de texto normal (`modeloLangchain.ts#corte`). [...] **Tras Parar, lo que nadie leyó no arranca otro turno**: se dice con su texto.
+
+### Área: `conectores`
+
+#### Conectores a TrueForge: enlazado tarde y sin el gestor
+SIN el gestor de tareas vinculado (`conectoresParaElAgente`: en Jira/Notion escribe el harness). Por el MISMO servicio de Ajustes, enlazado TARDE (`ajusteDeGestorCableado #conectoresDeSesion`: el vestíbulo nace antes que `montarRutas`) y añadido a TODA consola por `banderaDeEjecutor`.
+
+#### Lectura/escritura y la etiqueta `@write`
+lo que el servidor no declara de lectura ESCRIBE; la etiqueta `@write` de la librería exige `readOnlyHint === false` y dejaría pasar una tool sin anotar.
+
+#### Escritura remota en modo autónomo
+también en modo autónomo —el modo gobierna lo LOCAL, como `/sync subir`— y en una tarea de fondo se RECHAZA y aparca. La tarjeta dice conector y tool y enseña los argumentos enteros.
+
+#### Limpiar y recortar lo que ve el modelo
+el esquema sin `x-…` ni `$ref` (`esquemaParaElModelo`; con los de Google, Gemini rechazaba el turno entero), las tools caras fuera (`fueraDelAgente`) y los campos que sobran del resultado (`camposFueraDelResultado`: `list_projects` de Stitch, de 143 KB a 4 KB; el agente acababa lanzando scripts para contarlos).
+
+#### Traer una pantalla de Stitch
+Stitch da ENLACES y el agente no baja URLs. [...] Dice los BYTES, no las medidas que declara Stitch (no son las de la imagen bajada). **Y la busca por TÍTULO** (`titulo`, `proyecto`; `core/stitch.ts#casanConTitulo`, `entradasDeStitch`): en los proyectos propios y en los COMPARTIDOS (`view=shared`), sin tildes ni mayúsculas, igual antes que contener; con una la trae y si no da una lista CORTA con su `name`. Medido en Maset: con solo el `name`, el orquestador listaba las pantallas de todos los proyectos y esos listados se le quedaban en el contexto el turno entero.
+
+#### El diseño de una tarea se elige, no se busca
+(decisión suya) [...] en «Nueva tarea» se elige UNA pantalla por su miniatura (`list_screens` trae `screenshot.downloadUrl`, medido). [...] Medido en Maset: «Menu Listado Entregas» no era el título de ninguna pantalla (las de esa maqueta eran `image.png`) y la tarea construyó con otra. **Sin pantalla elegida**, `traer_pantalla_de_stitch` busca por PALABRAS (`casanConTitulo`: sin relleno, sin las comunes a todo el proyecto, singular y plural iguales) [...]. **Y el aumentador no AÑADE lo que la petición no pide** (medido: dio de alta en el menú una ventana que nadie pidió ahí). **Con pantalla elegida la tool no busca ni trae otra**: el corredor deja la marca `diseno/.elegida.json` (siempre, también si traerla falla) y la tool solo vuelve a traer ESA por su id; sin la marca, una búsqueda por el título de la petición apuntaba un CRITICAL falso o sobrescribía la elegida. **Límites declarados**: traerla antes del primer turno espera a Stitch (con su tope de llamada) con la tarea aún en «nuevo». [...] al editar, el diálogo lee el diseño de un contexto (`disenoContexto.ts`, lo pone `App`) porque sale en varias vistas, y el servidor la vuelve a comprobar contra el vínculo (`null` la quita).
+
+#### El tope propio de una llamada
+que se pasa también como `timeout` al SDK: el suyo corta cada petición antes y una generación de Stitch pasa de él. Solo se REPITE una de lectura (`PAUSA_ANTES_DE_REPETIR_MS`); repetir una que genera gastaría otra. Las tools se piden a la red una vez por sesión, al primer uso.
+
+#### Un solo servicio de conectores para gestor y Ajustes
+una llamada de trabajo mientras hay una autorización en curso pisaría el verificador PKCE que esa vuelta necesita. Por eso el gestor de tareas y Ajustes comparten UN solo servicio (`arranque.ts#ajusteDeGestorCableado`, que envuelve la MISMA fábrica de conectores): con dos instancias el gestor no vería el pendiente de Ajustes y la guarda no protegería nada.
+
+#### Lecturas del vínculo que se tiran, y `estado` sin red
+(`arranque.ts#delMismoVinculo`, respuesta o fallo): fundida, pintaba filas de Jira bajo la base de Notion; el fallo de `buscarProyectos`/`describir` lleva su `texto`/`pedido` y el cliente solo pinta el de lo que tiene delante. **`estado` no toca la red** —lo contestan también `usarConector` y `desvincular`, y un gestor colgado no puede colgar esa casilla—.
+
+#### Vincular marca y desvincular desmarca
+un gestor de tareas no tiene casilla «usar en este proyecto» en el panel (`GESTORES_DE_TAREAS`), así que el vínculo es su único control.
+
+#### La instancia memoizada del gestor
+el adaptador de Jira cachea la URL del sitio en su propio cierre al llamar a `sitios()`, para componer luego `<url>/browse/<clave>`; con una instancia NUEVA en cada llamada esa caché estaría siempre vacía y la URL de «Abrir en Jira» no saldría nunca en producción.
+
+### Área: `core`
+
+#### Esfuerzo de un hijo de Claude Code (`effort`)
+
+**Y un hijo de Claude Code lo recibe como `effort`** (`PeticionExterna.esfuerzo`, selector en Ajustes con los
+  cinco niveles del SDK): medido en Maset, el desarrollador en Opus pasaba casi todo su tiempo generando, y muy poco en herramientas.
+
+#### La base histórica del consumo se lee una vez
+
+**La base histórica se lee UNA vez, al abrir, y no se vuelve a mirar** (el `.jsonl` crece por
+    debajo).
+
+#### Consumo POR MODELO
+
+**Y POR MODELO** (`core/actos.ts#ConsumoPorModelo`, `porModelo` en el `fin`, el índice y el
+    mensaje `consumo`): un especialista con `modelo:` en su `.md` corre en otro modelo que el raíz.
+    [...] Cada entrada lleva su `cuenta`, porque las dos cuentan la
+    caché distinto. **Un turno sin desglose cae en `SIN_DESGLOSE` al sumar** (`desgloseDe`): las
+    filas suman el total sin inventar de quién fue; si ninguno lo trae, no hay desglose.
+
+### Área: `dispositivos`
+
+#### Eliminar un AVD: la negativa no llega al navegador
+
+la negativa del servidor no llega al
+  navegador, así que el cliente aplica las mismas (`motivoParaNoEliminarAvd`) y no deja pulsar. La confirmación es
+  la de `BorrarCopiaLocal`: escribir el nombre. Al acabar BIEN se quitan sus ajustes (`quitarAjustesDeAvd`) y su
+  puerto queda libre. La procedencia (`copiaDe`, y `clon` si se copió lo instalado) se guarda al crear desde «Copia
+  de» y se pinta en la fila; ausente es un AVD de antes o creado fuera, y no se pinta nada.
+
+#### Siembra del puerto con un solo AVD
+
+La siembra ocurre también con UN AVD, en silencio (la UI no enseña el
+  campo con uno), para que el primero conserve el de siempre cuando llegue otro. Dentro del aparato
+  el framework escucha siempre en el mismo.
+
+#### `adb reverse` no se rechaza
+
+Un `adb forward` del agente
+  se RECHAZA (`motivoDeComandoRechazado`): un túnel a mano le quita el puerto al aparato de otra
+  sesión sin error; `adb reverse` no, porque no toca puertos locales.
+
+#### «Sin ventana» y «Parar»
+
+arrancar «sin ventana» es
+  `-no-window -no-audio -no-metrics`, que es por lo que existe «Parar» (`Ajustes.tsx`,
+  `CrearEmulador.tsx`): un emulador sin ventana no se cierra con la mano.
+
+#### Límites declarados de `enUso` y del framework
+
+si
+  DENTRO del aparato el framework no está donde se espera (dos APK de framework), los scripts no lo
+  persiguen y el agente se lo dice a la persona; `enUso` lo pinta la pastilla del chat
+  (`PastillaDeDispositivo.tsx`), mira solo las consolas de persona y no se refresca al abrir o cerrar
+  una; va por `basename(raiz)`, así que el mismo nombre de proyecto en dos entornos se confunde; las
+  negativas del servidor no llegan al navegador, así que el cliente valida con las mismas reglas.
