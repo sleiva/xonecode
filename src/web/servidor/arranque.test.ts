@@ -928,6 +928,51 @@ describe("montarRutas — el cable, por fin conectado", () => {
     });
 
     /**
+     * Un fallo recordado no puede ser PERPETUO. Medido con Anthropic: la clave se arregló en
+     * su consola y la pastilla siguió diciendo «HTTP 400» hasta reiniciar el proceso, porque
+     * ni el servidor volvía a preguntar ni el cliente volvía a pedir.
+     */
+    it("un catálogo que falló se olvida al guardar la credencial, y volver a pedirlo pregunta de nuevo", async () => {
+      let falla = true;
+      const llamadas: string[] = [];
+      const servidor = servidorDeMentira();
+      montarRutas(servidor, vestibuloDePrueba(), {
+        catalogoDeModelos: async (proveedor) => {
+          llamadas.push(proveedor);
+          if (falla) throw new Error("respuesta no disponible de anthropic (HTTP 400)");
+          return [{ id: "claude-x" }];
+        },
+        guardarCredencial: () => ({ ruta: "/casa/.xonecode/auth.json" }),
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      const anthropic = () =>
+        (cliente.recibidos.filter((m) => m.clase === "modelos").at(-1) as Extract<MensajeAlCliente, { clase: "modelos" }>)
+          .proveedores.find((p) => p.id === "anthropic")!;
+
+      await enviarMensaje(accion, { clase: "catalogo", proveedor: "anthropic" });
+      await asentar();
+      expect(anthropic().error).toMatch(/HTTP 400/);
+
+      // Guardar una clave nueva borra el fallo: lo que dijo la vieja ya no es de ésta.
+      await enviarMensaje(accion, { clase: "credencial", accion: "pedir", proveedor: "anthropic" });
+      await asentar();
+      await enviarMensaje(accion, { clase: "secreto", valor: "sk-nueva" });
+      await asentar();
+      expect(anthropic().error).toBeUndefined();
+
+      // Y volver a pedirlo pregunta otra vez, en vez de servir el fallo guardado.
+      falla = false;
+      await enviarMensaje(accion, { clase: "catalogo", proveedor: "anthropic" });
+      await asentar();
+      // (Ollama se prueba solo al conectar: no es de este test.)
+      expect(llamadas.filter((p) => p === "anthropic")).toEqual(["anthropic", "anthropic"]);
+      expect(anthropic().modelos).toEqual([{ id: "claude-x" }]);
+    });
+
+    /**
      * La ventana de Ajustes y el lazo con un proyecto abierto.
      *
      * Aquí se prueba una mitad que no se ve en el navegador: `/modelo` escribe la bandera

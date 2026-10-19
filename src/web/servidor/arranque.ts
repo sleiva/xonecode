@@ -1581,7 +1581,8 @@ export function montarRutas(
   /**
    * Los catálogos ya consultados en ESTE proceso, por proveedor. Se guardan porque cada
    * uno es una llamada de red: abrir el menú dos veces no la repite. Un fallo también se
-   * recuerda —como fallo— hasta que alguien lo vuelva a pedir a propósito.
+   * recuerda —como fallo— hasta que alguien lo vuelva a pedir a propósito (desplegar ese
+   * proveedor en la pastilla) o cambie su credencial, que lo olvida.
    */
   const catalogos = new Map<string, { modelos?: { id: string; nombre?: string; esfuerzos?: Esfuerzo[] }[]; error?: string }>();
   /**
@@ -3178,6 +3179,12 @@ export function montarRutas(
       emitirModelos();
       return;
     }
+    // Volver a pedir un catálogo que FALLÓ es preguntar de nuevo, y mientras tanto el fallo
+    // viejo no se sigue enseñando: el cliente lee «consultando» hasta que llegue la respuesta.
+    if (catalogos.get(id)?.error !== undefined) {
+      catalogos.delete(id);
+      emitirModelos();
+    }
     try {
       const modelos = await opciones.catalogoDeModelos(id);
       /**
@@ -3848,6 +3855,9 @@ export function montarRutas(
     }
     try {
       const { ruta } = opciones.guardarCredencial(proveedor, clave);
+      // Lo que el catálogo dijo con la clave vieja (un fallo, o la lista de otra cuenta) ya
+      // no es de ésta: se olvida, y el próximo despliegue pregunta con la nueva.
+      catalogos.delete(proveedor);
       informar(`credencial de ${proveedor} guardada en ${ruta}`);
     } catch (error) {
       informar(error instanceof Error ? error.message : String(error));
@@ -3961,6 +3971,7 @@ export function montarRutas(
     }
     try {
       const { ruta, borrada, quedaEnEntorno } = opciones.borrarCredencial(proveedor);
+      catalogos.delete(proveedor);
       informar(
         borrada
           ? `credencial de ${proveedor} borrada de ${ruta}`

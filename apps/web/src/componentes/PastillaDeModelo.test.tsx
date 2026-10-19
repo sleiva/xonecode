@@ -56,6 +56,27 @@ describe("PastillaDeModelo", () => {
   });
 
   /**
+   * Un catálogo que FALLÓ sí se vuelve a pedir al desplegarlo: si no, arreglar la clave fuera
+   * (en la consola del proveedor) dejaba el error en pantalla hasta reiniciar el servidor.
+   */
+  it("desplegar un proveedor con error lo vuelve a pedir", () => {
+    const alPedirCatalogo = vi.fn();
+    render(
+      <PastillaDeModelo
+        proveedores={[{ id: "anthropic", nombre: "Anthropic", credencial: "puesta", error: "respuesta no disponible de anthropic (HTTP 400)" }]}
+        alPedirCatalogo={alPedirCatalogo}
+        alElegir={() => {}}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /elige modelo/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Anthropic/i }));
+    expect(alPedirCatalogo).toHaveBeenCalledWith("anthropic");
+    // Plegarlo no lo pide: solo desplegarlo.
+    fireEvent.click(screen.getByRole("menuitem", { name: /Anthropic/i }));
+    expect(alPedirCatalogo).toHaveBeenCalledTimes(1);
+  });
+
+  /**
    * Un menú que solo se cierra volviendo a pulsar su disparador tapa lo de debajo —vive en
    * la fila del compositor, justo encima de lo que se escribe— y no es lo que hace ningún
    * menú.

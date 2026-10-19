@@ -103,6 +103,15 @@ export function PastillaDeModelo({
     if (proveedor?.modelos === undefined && proveedor?.error === undefined && !pedidos.includes(id)) {
       setPedidos((previos) => [...previos, id]);
       alPedirCatalogo(id);
+      return;
+    }
+    // Un FALLO sí se vuelve a pedir al desplegar: la causa puede haberse arreglado fuera
+    // (la clave, en la consola del proveedor) y servir el error guardado lo dejaba en
+    // pantalla hasta reiniciar el servidor. El servidor quita el error al empezar a
+    // preguntar, así que mientras tanto se lee «consultando» y no hay un segundo pedido.
+    if (proveedor?.error !== undefined) {
+      if (!pedidos.includes(id)) setPedidos((previos) => [...previos, id]);
+      alPedirCatalogo(id);
     }
   };
 
