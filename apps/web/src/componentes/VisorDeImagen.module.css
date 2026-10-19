@@ -46,6 +46,22 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+/* Anterior · «2 de 5» · Siguiente: solo con más de una imagen. */
+.navegacion {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+
+.contador {
+  min-width: 52px;
+  text-align: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-secondary);
+}
+
 .acciones {
   display: flex;
   flex: none;

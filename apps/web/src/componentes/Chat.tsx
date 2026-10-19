@@ -486,9 +486,13 @@ const esImagen = (acto: Extract<Acto, { tipo: "artefacto" }>): boolean =>
  */
 function CapturasDelTramo({
   actos,
+  todas,
   alAbrir,
 }: {
   actos: Extract<Acto, { tipo: "artefacto" }>[];
+  /** Las imágenes de TODA la conversación, en orden: el visor pasa de una a otra (IXCODE-57)
+   *  sin quedarse en las de este tramo. */
+  todas: readonly Extract<Acto, { tipo: "artefacto" }>[];
   alAbrir?: (ruta: string) => void;
 }) {
   // La que está AMPLIADA, si alguna. Pulsar la miniatura la enseña entera ahí mismo (el
@@ -516,15 +520,20 @@ function CapturasDelTramo({
       ))}
       {ampliada === undefined ? null : (
         <VisorDeImagen
-          ruta={ampliada.ruta}
-          nombre={ampliada.nombre}
+          {...(() => {
+            // La ampliada está en `todas` salvo que no se le hayan pasado; entonces, las del tramo.
+            const enTodas = todas.findIndex((a) => a.ruta === ampliada.ruta);
+            return enTodas >= 0
+              ? { imagenes: todas, inicial: enTodas }
+              : { imagenes: actos, inicial: Math.max(actos.indexOf(ampliada), 0) };
+          })()}
           alCerrar={() => setAmpliada(undefined)}
           {...(alAbrir === undefined
             ? {}
             : {
-                alAbrirEnArtefactos: () => {
+                alAbrirEnArtefactos: (ruta: string) => {
                   setAmpliada(undefined);
-                  alAbrir(ampliada.ruta);
+                  alAbrir(ruta);
                 },
               })}
         />
@@ -834,6 +843,10 @@ export function Chat({
    * (`textoDeConsulta.ts`), que se quita al pintar porque la tarjeta ya lo dice.
    */
   const pendiente = consultaPendiente(actos, turnoEnVuelo);
+  // Las capturas de toda la conversación, una vez cada una y en orden: el visor navega por ellas.
+  const todasLasCapturas = actos
+    .filter((a): a is Extract<Acto, { tipo: "artefacto" }> => a.tipo === "artefacto" && esImagen(a))
+    .filter((a, i, lista) => lista.findIndex((b) => b.ruta === a.ruta) === i);
   /** Cómo acabó cada propuesta de tareas, por su id: la tarjeta pinta sin controles las resueltas. */
   const resueltas = new Map<string, PropuestaResuelta>();
   for (const a of actos) {
@@ -1318,7 +1331,7 @@ export function Chat({
                   */}
                   <div className={`${vista.flowItem} ${estilos.artefactosDelTramo}`}>
                     {capturas.length === 0 ? null : (
-                      <CapturasDelTramo actos={capturas} alAbrir={alAbrirArtefacto} />
+                      <CapturasDelTramo actos={capturas} todas={todasLasCapturas} alAbrir={alAbrirArtefacto} />
                     )}
                     {otros.map((a, i) => (
                       <TarjetaDeArtefacto

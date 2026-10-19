@@ -411,3 +411,40 @@ describe("NuevaTarea: un modal de verdad, y «Preparar el encargo» dice que est
     });
   });
 });
+
+describe("NuevaTarea: pegar una captura la adjunta (IXCODE-59)", () => {
+  const captura = () => new File([new Uint8Array([1, 2, 3])], "image.png", { type: "image/png" });
+
+  it("en «Qué hay que hacer» y en el encargo: sube «pegado-N» sin repetir nombre, y no pega texto", async () => {
+    const subidos: string[] = [];
+    render(
+      <NuevaTarea
+        {...base}
+        alSubirAdjunto={async (_f, nombre) => {
+          subidos.push(nombre);
+          return { ok: true };
+        }}
+      />
+    );
+    const peticion = screen.getByLabelText("Qué hay que hacer");
+    const noCancelado = fireEvent.paste(peticion, { clipboardData: { files: [captura()], types: ["Files"] } });
+    expect(noCancelado).toBe(false);
+    await waitFor(() => expect(subidos).toEqual(["pegado-1.png"]));
+    // El segundo pegado, en el otro campo y llegando como ITEM (sin `files`): otro nombre.
+    fireEvent.paste(screen.getByLabelText(/Encargo/), {
+      clipboardData: { files: [], items: [{ kind: "file", getAsFile: captura }], types: ["Files"] },
+    });
+    await waitFor(() => expect(subidos).toEqual(["pegado-1.png", "pegado-2.png"]));
+    expect(screen.getByText(/pegado-2\.png/)).toBeTruthy();
+  });
+
+  it("un pegado de solo texto sigue su camino y no sube nada", () => {
+    const alSubirAdjunto = vi.fn(async () => ({ ok: true }));
+    render(<NuevaTarea {...base} alSubirAdjunto={alSubirAdjunto} />);
+    const noCancelado = fireEvent.paste(screen.getByLabelText("Qué hay que hacer"), {
+      clipboardData: { files: [], items: [{ kind: "string", getAsFile: () => null }], types: ["text/plain"] },
+    });
+    expect(noCancelado).toBe(true);
+    expect(alSubirAdjunto).not.toHaveBeenCalled();
+  });
+});

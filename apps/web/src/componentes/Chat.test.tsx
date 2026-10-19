@@ -1272,6 +1272,54 @@ describe("Chat: la captura ampliada", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  it("pasa por las capturas de TODA la conversación con ←/→ y con sus botones, y se para en los extremos (IXCODE-57)", () => {
+    const d: Acto = { ...captura, ruta: "/artefactos/d.png", nombre: "d.png" };
+    const e: Acto = { ...captura, ruta: "/artefactos/e.png", nombre: "e.png" };
+    const alAbrirArtefacto = vi.fn();
+    render(
+      <Chat
+        actos={[
+          { tipo: "usuario", texto: "uno" },
+          captura,
+          d,
+          { tipo: "fin", ms: 1 },
+          { tipo: "usuario", texto: "dos" },
+          e,
+          { tipo: "fin", ms: 1 },
+        ]}
+        alAbrirArtefacto={alAbrirArtefacto}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Ampliar d.png" }));
+    const visor = () => within(screen.getByRole("dialog"));
+    const vista = () => visor().getByRole("img").getAttribute("alt");
+    expect(vista()).toBe("d.png");
+    expect(visor().getByText("2 de 3")).toBeTruthy();
+
+    // Al tramo siguiente, que es otro turno.
+    fireEvent.keyDown(document, { key: "ArrowRight" });
+    expect(vista()).toBe("e.png");
+    expect((visor().getByRole("button", { name: "Siguiente" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.keyDown(document, { key: "ArrowRight" });
+    expect(vista()).toBe("e.png");
+
+    fireEvent.click(visor().getByRole("button", { name: "Anterior" }));
+    fireEvent.click(visor().getByRole("button", { name: "Anterior" }));
+    expect(vista()).toBe("c.png");
+    expect((visor().getByRole("button", { name: "Anterior" }) as HTMLButtonElement).disabled).toBe(true);
+
+    // «Abrir en Artefactos» lleva la que se está VIENDO, no la que se pulsó.
+    fireEvent.click(visor().getByRole("button", { name: "Abrir en Artefactos" }));
+    expect(alAbrirArtefacto).toHaveBeenCalledWith("/artefactos/c.png");
+  });
+
+  it("con una sola captura no hay ni botones de pasar ni contador", () => {
+    render(<Chat actos={[captura, { tipo: "fin", ms: 1 }]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Ampliar c.png" }));
+    expect(within(screen.getByRole("dialog")).queryByRole("button", { name: "Siguiente" })).toBeNull();
+    expect(within(screen.getByRole("dialog")).queryByText(/de 1/)).toBeNull();
+  });
+
   it("una SOLA sale más grande que cuando van varias", () => {
     const { container, unmount } = render(<Chat actos={[captura, { tipo: "fin", ms: 1 }]} />);
     const sola = container.querySelector("img")!.className;

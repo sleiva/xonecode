@@ -1,8 +1,9 @@
 import { SelectorDePantalla } from "./DisenoDelProyecto.js";
 import type { EstadoDeDiseno } from "../disenoDelCable.js";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ClipboardEvent } from "react";
 import { Modal, Button } from "@deepseek-ai/dsh-client-ui-primitives";
 import { nombreDeAdjuntoSeguro } from "../nombreDeAdjunto.js";
+import { ficherosDelPegado, renombrarPegados } from "../pegado.js";
 import { useEsperaDeRefresco } from "../esperaDeRefresco.js";
 import { GiroDeCarga } from "./GiroDeCarga.js";
 import estilos from "./NuevaTarea.module.css";
@@ -171,7 +172,7 @@ export function NuevaTarea({
   // el corredor puede arrancarla en el acto — leería un `/adjuntos/` incompleto.
   const sePuedeEncolar = peticion.trim() !== "" && !enVuelo && !algunoFalló && !creando && destino !== "consultando";
 
-  const añadir = async (elegidos: FileList | null): Promise<void> => {
+  const añadir = async (elegidos: ArrayLike<File> | null): Promise<void> => {
     /**
      * Los nombres ya tomados, en una variable LOCAL y no leídos del estado.
      *
@@ -222,6 +223,18 @@ export function NuevaTarea({
         )
       );
     }
+  };
+
+  /**
+   * Pegar una captura en «Qué hay que hacer» o en el encargo la ADJUNTA (IXCODE-59), igual que
+   * en el compositor del chat: con ficheros en el portapapeles no se pega texto; sin ellos el
+   * pegado sigue su camino. El nombre, `pegado-<n>`, salta los que ya hay en la lista.
+   */
+  const alPegar = (evento: ClipboardEvent<HTMLTextAreaElement>): void => {
+    const pegados = ficherosDelPegado(evento.clipboardData);
+    if (pegados.length === 0) return;
+    evento.preventDefault();
+    void añadir(renombrarPegados(pegados, new Set(adjuntos.map((a) => a.nombre))));
   };
 
   return (
@@ -311,6 +324,7 @@ export function NuevaTarea({
             rows={3}
             value={peticion}
             onChange={(e) => setPeticion(e.target.value)}
+            onPaste={alPegar}
             placeholder="Que la lista de clientes se pueda buscar por NIF"
           />
 
@@ -352,6 +366,7 @@ export function NuevaTarea({
             rows={8}
             value={encargo}
             onChange={(e) => setEditado(e.target.value)}
+            onPaste={alPegar}
             placeholder="Se rellena con «Preparar el encargo», y se puede editar. Vacío, se prepara al encolar."
           />
 

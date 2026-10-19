@@ -12,6 +12,7 @@ import { IconoDeAnexar, IconoDeEnviar } from "./IconosDelCompositor.js";
 import pastillas from "./PastillaDeModelo.module.css";
 import { ContadorDeTokens, type ConsumoPintable } from "./ContadorDeTokens.js";
 import estilos from "./Compositor.module.css";
+import { ficherosDelPegado, renombrarPegados } from "../pegado.js";
 
 /**
  * Una ficha de adjunto EN VUELO en el compositor: lo que se ve mientras dura la subida y lo
@@ -53,14 +54,6 @@ function nombreUnicoEntreFichas(nombre: string, tomados: ReadonlySet<string>): s
   let n = 2;
   while (tomados.has(`${base}-${n}${extension}`)) n += 1;
   return `${base}-${n}${extension}`;
-}
-
-/** La extensión que se le pone a un pegado, del tipo MIME (`image/png` → `png`). Sin tipo,
- *  o con uno raro (`image/svg+xml`), se queda con la parte de antes del `+` o cae en `bin`
- *  —una extensión rara es mejor que ninguna: es lo único de lo que depende el visor. */
-function extensionDePegado(mime: string): string {
-  const parte = mime.split("/")[1]?.split("+")[0];
-  return parte === undefined || parte === "" ? "bin" : parte;
 }
 
 /**
@@ -290,13 +283,11 @@ export function Compositor({
    */
   const alPegar = (evento: ClipboardEvent<HTMLTextAreaElement>): void => {
     if (!puedeAnexar) return;
-    const pegados = Array.from(evento.clipboardData?.files ?? []);
+    const pegados = ficherosDelPegado(evento.clipboardData);
     if (pegados.length === 0) return;
     evento.preventDefault();
-    const renombrados = pegados.map(
-      (fichero, i) => new File([fichero], `pegado-${i + 1}.${extensionDePegado(fichero.type)}`, { type: fichero.type })
-    );
-    void añadirFicheros(renombrados);
+    // Numerados desde 1 en cada pegado: el que repite nombre lo numera `nombreUnicoEntreFichas`.
+    void añadirFicheros(renombrarPegados(pegados, new Set()));
   };
 
   useEffect(() => {
