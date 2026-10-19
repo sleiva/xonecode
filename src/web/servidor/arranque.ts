@@ -110,6 +110,7 @@ import { modelosDeMotor } from "../../agent/config/modelosDeMotor.js";
 import { crearServicioDeMotoresLocales, type ServicioDeMotoresLocales } from "../../agent/motores/motoresLocales.js";
 import { agotadoHastaAhora, alCambiarAgotamiento, restablecer } from "../../agent/subagentes/agotamiento.js";
 import { planDeReversion, revertirSesion } from "../../agent/sesiones/sesionGit.js";
+import { guardarRespaldoDeSesion, hayRespaldoDeSesion, restaurarRespaldoDeSesion } from "./respaldoDeSesion.js";
 import { medirDiagnosticoDeNode } from "../../agent/config/diagnosticoDeNodeEnMaquina.js";
 import { CONECTOR_STITCH, marcarPantallaElegida, traerPantalla } from "../../agent/motores/trueforge/traerDeStitch.js";
 import { guardarDisenoDeProyecto } from "../../agent/config/configEnDisco.js";
@@ -2949,6 +2950,12 @@ export function montarRutas(
         if (existsSync(ruta)) cola.guardarAdjunto(nuevoId, adjunto.nombre, readFileSync(ruta));
       }
       nueva = tareaReencolada(original, { id: nuevoId, texto, adjuntos: cola.listarAdjuntos(nuevoId) });
+      /**
+       * El RESPALDO de su conversación (`respaldoDeSesion.ts`): la continuación sigue en ESE hilo, y revertirla tiene que
+       * poder dejarlo como estaba —chat, memoria del agente y artefactos—. Sin respaldo no se reencola: revertir después
+       * dejaría su trabajo en la tarea padre sin decirlo.
+       */
+      if (original.sesion !== undefined) guardarRespaldoDeSesion(original.proyecto.raiz, original.sesion, nuevoId);
     } catch (error) {
       return { motivo: error instanceof Error ? error.message : String(error) };
     }
@@ -2972,21 +2979,44 @@ export function montarRutas(
     if (ocupado !== undefined) return { motivo: ocupado };
     return { tarea: tarea as Tarea & { sesion: string }, ...(tarea.continuaDe === undefined ? {} : { desde: tarea.creada }) };
   };
-  const revertibleDeTarea = async (id: string): Promise<{ ficheros: readonly string[]; commits: number } | { motivo: string }> => {
+  const revertibleDeTarea = async (
+    id: string
+  ): Promise<{ ficheros: readonly string[]; commits: number; conversacion?: true } | { motivo: string }> => {
     const quien = tareaParaRevertir(id);
     if ("motivo" in quien) return quien;
     const plan = await planDeReversion(quien.tarea.proyecto.raiz, quien.tarea.sesion, quien.desde);
-    return plan.ok ? { ficheros: plan.ficheros, commits: plan.commits.length } : { motivo: plan.motivo };
+    if (!plan.ok) return { motivo: plan.motivo };
+    // Y si su conversación también vuelve atrás: una continuación reencolada con respaldo (`respaldoDeSesion.ts`).
+    const conversacion = quien.tarea.continuaDe !== undefined && hayRespaldoDeSesion(quien.tarea.proyecto.raiz, quien.tarea.sesion, quien.tarea.id);
+    return { ficheros: plan.ficheros, commits: plan.commits.length, ...(conversacion ? { conversacion: true as const } : {}) };
   };
-  const revertirTarea = async (id: string): Promise<{ ficheros: readonly string[] } | { motivo: string }> => {
+  const revertirTarea = async (id: string): Promise<{ ficheros: readonly string[]; conversacion?: boolean } | { motivo: string }> => {
     const quien = tareaParaRevertir(id);
     if ("motivo" in quien) return quien;
-    const hecho = await revertirSesion(quien.tarea.proyecto.raiz, quien.tarea.sesion, quien.tarea.id, quien.desde);
+    const { raiz } = quien.tarea.proyecto;
+    const { sesion } = quien.tarea;
+    // Una CONTINUACIÓN con respaldo también devuelve su conversación a como estaba: antes se SUELTA (quien la tenga
+    // abierta la reescribiría al cerrar), y si no se puede, no se toca nada.
+    const conRespaldo = quien.tarea.continuaDe !== undefined && hayRespaldoDeSesion(raiz, sesion, quien.tarea.id);
+    if (conRespaldo) {
+      const soltada = await vestibulo.soltarSesion(raiz, sesion);
+      if (soltada.motivo !== undefined) return { motivo: soltada.motivo };
+    }
+    const hecho = await revertirSesion(raiz, sesion, quien.tarea.id, quien.desde);
     if (!hecho.ok) return { motivo: hecho.motivo };
+    let conversacion: boolean | undefined;
+    if (conRespaldo) {
+      try {
+        conversacion = restaurarRespaldoDeSesion(raiz, sesion, quien.tarea.id);
+      } catch {
+        // Los ficheros YA volvieron atrás: se dice que la conversación no, en vez de fingir que todo salió.
+        conversacion = false;
+      }
+    }
     // Revertida, sale del histórico: su conversación se queda (`borrarTarea` no la toca), y la anterior es la última.
     opciones.colaDeTareas?.borrarTarea(id);
     emitirTareas();
-    return { ficheros: hecho.ficheros };
+    return { ficheros: hecho.ficheros, ...(conversacion === undefined ? {} : { conversacion }) };
   };
 
   /** Lo mismo que un feedback, con el texto de «sigue» del núcleo: entra en SU hilo, no repite el

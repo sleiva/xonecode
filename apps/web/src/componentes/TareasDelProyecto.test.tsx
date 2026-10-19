@@ -564,10 +564,24 @@ describe("TareasDelProyecto: ver lo que hace una tarea en proceso", () => {
       expect(confirmacion.textContent).toContain("2 ficheros");
       expect(confirmacion.textContent).toContain("MenuPrincipal.xne");
       expect(confirmacion.textContent).toMatch(/CloudStudio/);
+      expect(confirmacion.textContent).toMatch(/Su conversación se queda guardada/);
       fireEvent.click(screen.getByRole("button", { name: "Revertir" }));
       // Si el servidor se niega al confirmar (alguien escribió entre medias), se dice y no se cierra.
       expect(await screen.findByText(/No se revirtió: ya no es la última/)).toBeTruthy();
       expect(hechas).toEqual(["x"]);
+    });
+
+    it("una continuación con respaldo dice que su conversación también vuelve atrás", async () => {
+      render(
+        <TareasDelProyecto
+          tareas={[tarea({ id: "x", titulo: "Menú (continuación)", estado: "terminada", sesion: "s" })]}
+          revertir={{ preguntar: async () => ({ ficheros: ["a.css"], conversacion: true as const }), hacer: async () => undefined }}
+        />
+      );
+      fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
+      fireEvent.click(filaDe("Menú (continuación)"));
+      fireEvent.click(await screen.findByRole("button", { name: "Revertir sus cambios" }));
+      expect(screen.getByRole("alertdialog", { name: "Revertir sus cambios" }).textContent).toMatch(/vuelve también a como estaba/);
     });
 
     it("si no se puede revertir (no es la última), no hay botón", async () => {

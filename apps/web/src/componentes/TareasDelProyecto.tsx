@@ -415,7 +415,9 @@ function FilaFinalizada({
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
   const [verEncargo, setVerEncargo] = useState(false);
   /** Si se puede revertir: ausente = sin preguntar; `pidiendo` mientras llega. Se pregunta UNA vez, al desplegarla. */
-  const [revertible, setRevertible] = useState<{ ficheros: readonly string[] } | { motivo: string } | "pidiendo" | undefined>(undefined);
+  const [revertible, setRevertible] = useState<
+    { ficheros: readonly string[]; conversacion?: true } | { motivo: string } | "pidiendo" | undefined
+  >(undefined);
   const [confirmarReversion, setConfirmarReversion] = useState(false);
   const [revirtiendo, setRevirtiendo] = useState(false);
   const [motivoDeReversion, setMotivoDeReversion] = useState<string | undefined>(undefined);
@@ -538,8 +540,11 @@ function FilaFinalizada({
               <p>
                 Se deshace lo que escribió esta tarea —{" "}
                 {revertible.ficheros.length === 1 ? "1 fichero" : `${revertible.ficheros.length} ficheros`}— y el proyecto vuelve a
-                como estaba antes. La tarea sale del histórico; su conversación se queda guardada. Si ya lo subiste a
-                CloudStudio, quedará pendiente de subir en Sincronización.
+                como estaba antes. La tarea sale del histórico.{" "}
+                {revertible.conversacion === true
+                  ? "Es una continuación: la conversación de su tarea vuelve también a como estaba (sin lo que dijo e hizo esta, ni sus artefactos)."
+                  : "Su conversación se queda guardada."}{" "}
+                Si ya lo subiste a CloudStudio, quedará pendiente de subir en Sincronización.
               </p>
               <ul className={estilos.listaObservaciones}>
                 {revertible.ficheros.map((f) => (
@@ -640,7 +645,8 @@ function FilaFinalizada({
 
 /** Revertir lo que hizo una finalizada: preguntar si se puede (qué ficheros) y hacerlo (el motivo si se negó). */
 export interface RevertirTarea {
-  preguntar: (id: string) => Promise<{ ficheros: readonly string[] } | { motivo: string }>;
+  /** `conversacion`: una continuación cuya conversación (chat, memoria, artefactos) también vuelve a como estaba. */
+  preguntar: (id: string) => Promise<{ ficheros: readonly string[]; conversacion?: true } | { motivo: string }>;
   hacer: (id: string) => Promise<string | undefined>;
 }
 

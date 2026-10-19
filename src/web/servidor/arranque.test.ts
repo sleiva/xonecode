@@ -6496,6 +6496,59 @@ describe("las tareas en background, por el cable", () => {
       rmSync(base, { recursive: true, force: true });
     });
 
+    /**
+     * Medido por él: revertir una continuación deshacía sus ficheros, pero su chat, la memoria del agente y sus artefactos
+     * se quedaban en la conversación de la tarea padre. Con el respaldo que se guarda al REENCOLAR, vuelven a como estaban.
+     */
+    it("revertir una CONTINUACIÓN devuelve también la conversación de su padre a como estaba", async () => {
+      const { base, cola, accion, vestibulo } = await conPropuesta();
+      const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      mkdirSync(raiz, { recursive: true });
+      execFileSync("git", ["init", "-q", "."], { cwd: raiz });
+      writeFileSync(join(raiz, "app.xml"), "<app/>");
+      execFileSync("git", ["add", "app.xml"], { cwd: raiz });
+      execFileSync("git", ["-c", "user.email=x@y.z", "-c", "user.name=x", "commit", "-qm", "base"], { cwd: raiz });
+      const sesiones = join(raiz, ".xonecode", "sesiones");
+      const carpeta = join(sesiones, "s-orig");
+      mkdirSync(join(carpeta, "artefactos"), { recursive: true });
+      const chat = join(sesiones, "s-orig.jsonl");
+      const memoria = join(carpeta, "memoria-trueforge.json");
+      try {
+        // La tarea padre trabajó HACE un rato.
+        process.env["GIT_COMMITTER_DATE"] = process.env["GIT_AUTHOR_DATE"] = "2026-10-19T08:00:00Z";
+        writeFileSync(join(raiz, "menu.xne"), "<menu/>");
+        await commitDeTurno(raiz, "xonecode: s-orig", "s-orig");
+      } finally {
+        delete process.env["GIT_COMMITTER_DATE"];
+        delete process.env["GIT_AUTHOR_DATE"];
+      }
+      writeFileSync(chat, '{"tipo":"usuario","texto":"rediseña el menú"}\n');
+      writeFileSync(memoria, '{"lo":"de la padre"}');
+      cola.guardar([
+        { id: "padre", proyecto: { id: "p1", raiz, nombre: "Tienda" }, titulo: "Menú", peticion: "p", encargo: "e", adjuntos: [], estado: "terminada", sesion: "s-orig", creada: "2026-10-19T07:00:00.000Z" },
+      ]);
+      const r = await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "reencolar", id: "padre", texto: "acaba" }));
+      const hija = JSON.parse(r.cuerpo).id as string;
+
+      // La continuación trabaja en la MISMA conversación, y termina.
+      writeFileSync(join(raiz, "estilo.css"), "a{}");
+      await commitDeTurno(raiz, "xonecode: s-orig", "s-orig");
+      writeFileSync(chat, readFileSync(chat, "utf8") + '{"tipo":"usuario","texto":"acaba"}\n');
+      writeFileSync(memoria, '{"lo":"de la hija"}');
+      writeFileSync(join(carpeta, "artefactos", "captura-hija.png"), "y");
+      cola.guardar(cola.listar().map((t) => (t.id === hija ? { ...t, estado: "terminada" as const } : t)));
+
+      const revertida = await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "revertir", id: hija }));
+      expect(JSON.parse(revertida.cuerpo)).toEqual({ ficheros: ["estilo.css"], conversacion: true });
+      expect(existsSync(join(raiz, "estilo.css"))).toBe(false);
+      expect(existsSync(join(raiz, "menu.xne"))).toBe(true);
+      expect(readFileSync(chat, "utf8")).toBe('{"tipo":"usuario","texto":"rediseña el menú"}\n');
+      expect(readFileSync(memoria, "utf8")).toContain("de la padre");
+      expect(existsSync(join(carpeta, "artefactos", "captura-hija.png"))).toBe(false);
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
     it("«Editar el encargo» cambia el de una que no ha arrancado; con una que ya arrancó contesta 409 con motivo (IXCODE-52)", async () => {
       const { base, cola, accion, vestibulo } = await conPropuesta();
       const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");

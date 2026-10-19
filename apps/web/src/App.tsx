@@ -2760,8 +2760,11 @@ export function App({
         preguntar: async (id: string) => {
           const r = (await enviar({ clase: "tarea", accion: "revertible", id })) as Response | undefined;
           if (r?.status === 200) {
-            const cuerpo = (await r.json()) as { ficheros?: unknown };
-            if (Array.isArray(cuerpo.ficheros)) return { ficheros: cuerpo.ficheros.filter((f): f is string => typeof f === "string") };
+            const cuerpo = (await r.json()) as { ficheros?: unknown; conversacion?: unknown };
+            if (Array.isArray(cuerpo.ficheros)) {
+              const ficheros = cuerpo.ficheros.filter((f): f is string => typeof f === "string");
+              return cuerpo.conversacion === true ? { ficheros, conversacion: true as const } : { ficheros };
+            }
           }
           return { motivo: (await negativaOFalloDe(r)) ?? "el servidor no contestó" };
         },

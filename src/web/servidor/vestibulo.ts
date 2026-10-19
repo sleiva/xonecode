@@ -787,6 +787,12 @@ export interface Vestibulo {
     id: string
   ): Promise<{ borrada: boolean; cerroLaAbierta: boolean; motivo?: string }>;
   /**
+   * SUELTA una sesión antes de reescribirla por debajo (revertir una continuación devuelve su chat y su memoria a como
+   * estaban): si alguien la tiene abierta se CIERRA —su `volcar()` y su memoria en memoria pisarían lo restaurado—, y
+   * si es la de una tarea en curso se DECLINA con el motivo, como `borrarSesion`.
+   */
+  soltarSesion(raiz: string, id: string): Promise<{ motivo?: string }>;
+  /**
    * Borra la COPIA LOCAL de un proyecto: `<workspace>/<entorno>/<proyecto>/` entera, con sus
    * sesiones, su historial, sus artefactos y lo que no se haya subido. Lo de CloudStudio no se
    * toca: el proyecto vuelve a «sin descargar».
@@ -2527,6 +2533,13 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       // al `borrada`, por lo mismo que la ref.
       await opciones.olvidarMemoriaDeHilo?.(raiz, id);
       return { borrada, cerroLaAbierta };
+    },
+
+    async soltarSesion(raiz, id) {
+      if (esDeUnaTareaEnCurso(raiz, id)) return { motivo: "esa conversación es la de una tarea en curso" };
+      const suya = abiertas.get(raiz);
+      if (suya !== undefined && suya.sesion === id) await cerrarConsolaDeProyecto(raiz);
+      return {};
     },
 
     cederProyecto: (raiz) =>

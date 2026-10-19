@@ -104,7 +104,11 @@ corre solo y escribe sin aprobación. Cuatro estados; `requiere-atencion` = **es
   `reset --hard`, guardando antes el HEAD en `refDeRevertida` (sin respaldo no se toca nada), y la tarea SALE del
   histórico: la anterior pasa a ser la última (una PILA). Una continuación deshace solo lo suyo (`desde`). **Se niega si
   `.xonecode/` está en la base** (el reset la pisaría). La fila PREGUNTA al desplegar y confirma con la lista de ficheros.
-  **Límite**: lo ya subido a CloudStudio queda pendiente de subir; no se deshace allí.
+  **Una CONTINUACIÓN devuelve también su conversación** (`web/servidor/respaldoDeSesion.ts`): al REENCOLAR se respalda el
+  hilo de la padre (líneas del chat, la foto `memoria-trueforge.json`, ficheros de `artefactos/` y `hotswap/`), y al
+  revertirla se SUELTA la sesión (`Vestibulo.soltarSesion`) y se restaura. Sin respaldo no se reencola. **Límites**: lo
+  ya subido a CloudStudio queda pendiente de subir; las continuaciones de antes de esto no tienen respaldo; un artefacto
+  reescrito con el mismo nombre se queda con lo de la continuación.
 - **Sus artefactos salen de SU carpeta**: `p`/`s` resueltos por el SERVIDOR
   (`arranque.ts#sesionDelDisco`), contenido en la respuesta, nunca al store
   (`OrigenDeArtefactosContexto`). **Límite**: va por id de SESIÓN; tras `/nuevo` no coincide.
