@@ -93,7 +93,11 @@ corre solo y escribe sin aprobación. Cuatro estados; `requiere-atencion` = **es
   por `continuaDe` o por el hilo). Mientras corre, su conversación vuelve a la barra (`App.tsx#sesionesDeFinalizadas`).
   **Su entrega se mide DESDE que se creó** (`revisable(…, desde)`, `sesionGit.ts#cambiosDeSesion`): con la sesión
   entera heredaba lo escrito por la original y se cerraba sin juez (medido en Maset). El texto propuesto pide HACER lo
-  pendiente de su último resumen, no resumir. **Límite**: la original enseña la conversación ya continuada.
+  pendiente de su último resumen, no resumir. Se le pueden PEGAR o adjuntar capturas (`adjuntosDeBorrador.tsx`, el mismo
+  hook que «Nueva tarea»): suben a un BORRADOR que `reencolar` adopta como id, con los de la original copiados sin pisar
+  los nuevos; cerrar sin encolar borra el borrador. En Finalizadas la continuación CUELGA de su tarea
+  (`TareaDelCable.continuaDe`, `apps/web/src/arbolDeTareas.ts`): familia ordenada por su última entrega. **Límite**: la
+  original enseña la conversación ya continuada.
 - **Sus artefactos salen de SU carpeta**: `p`/`s` resueltos por el SERVIDOR
   (`arranque.ts#sesionDelDisco`), contenido en la respuesta, nunca al store
   (`OrigenDeArtefactosContexto`). **Límite**: va por id de SESIÓN; tras `/nuevo` no coincide.

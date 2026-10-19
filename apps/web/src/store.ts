@@ -1814,6 +1814,8 @@ export function crearStoreDelCliente(): {
                   ...pantallaDeTarea(t["pantallaDeStitch"]),
                   // Si se puede reencolar (lo decide el servidor), con su texto propuesto: solo con un texto de verdad.
                   ...reencolableDeTarea(t["reencolable"]),
+                  // De qué tarea es continuación: un id de texto, o nada.
+                  ...(typeof t["continuaDe"] === "string" && t["continuaDe"] !== "" ? { continuaDe: t["continuaDe"] } : {}),
                 }))
                 .filter((t) => t.id !== ""),
             },

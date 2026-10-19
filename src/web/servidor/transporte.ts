@@ -1310,6 +1310,8 @@ export interface TareaDelCable {
    * SERVIDOR (`core/tareas.ts#puedeReencolar`, `textoParaReencolar`): ausente = no se ofrece.
    */
   reencolable?: { texto: string };
+  /** La finalizada de la que es CONTINUACIÓN (`core/tareas.ts#tareaReencolada`): Finalizadas la pinta colgando de ella. */
+  continuaDe?: string;
 }
 
 /**
@@ -1371,6 +1373,7 @@ export function filaDeTarea(t: Tarea): TareaDelCable {
         }),
     ...(t.pantallaDeStitch === undefined ? {} : { pantallaDeStitch: { name: t.pantallaDeStitch.name, titulo: t.pantallaDeStitch.titulo, ...(t.pantallaDeStitch.proyecto === undefined ? {} : { proyecto: t.pantallaDeStitch.proyecto }) } }),
     ...(puedeReencolar(t) ? { reencolable: { texto: textoParaReencolar(t) } } : {}),
+    ...(t.continuaDe === undefined ? {} : { continuaDe: t.continuaDe }),
   };
 }
 
@@ -1917,7 +1920,7 @@ export type MensajeDelCliente =
   | { clase: "tarea"; accion: "feedback"; id: string; texto: string }
   /** Reencolar una FINALIZADA sin ticket para acabar lo que no hizo: una tarea nueva en su hilo, con `texto` como
    *  feedback (`core/tareas.ts#tareaReencolada`). 200 con `{id}`, o 409 con `{motivo}`. */
-  | { clase: "tarea"; accion: "reencolar"; id: string; texto: string }
+  | { clase: "tarea"; accion: "reencolar"; id: string; texto: string; borrador?: string }
   /**
    * «Continuar» una tarea aparcada sin escribir nada (entra en su hilo `TEXTO_DE_CONTINUAR`), y «Arrancar ahora» una
    * `nuevo` que no espera a ninguna anterior: la persona CEDE el proyecto —se cierra su consola de ahí si no está

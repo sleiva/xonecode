@@ -1341,6 +1341,8 @@ export interface TareaDelCable {
   pantallaDeStitch?: { name: string; titulo: string; proyecto?: string };
   /** Si se puede reencolar para acabar lo que no hizo, con el texto propuesto. Lo decide el SERVIDOR; ausente = no se ofrece. */
   reencolable?: { texto: string };
+  /** La finalizada de la que es continuación: Finalizadas la pinta colgando de ella (`arbolDeTareas.ts`). */
+  continuaDe?: string;
 }
 
 /**
@@ -1752,7 +1754,7 @@ export type MensajeDelCliente =
    *  «esperando feedback», que la devuelve al lazo en su MISMO hilo. */
   | { clase: "tarea"; accion: "feedback"; id: string; texto: string }
   /** Reencolar una FINALIZADA sin ticket para acabar lo que no hizo. 200 con `{id}`, o 409 con `{motivo}`. */
-  | { clase: "tarea"; accion: "reencolar"; id: string; texto: string }
+  | { clase: "tarea"; accion: "reencolar"; id: string; texto: string; borrador?: string }
   /**
    * «Continuar» una tarea aparcada sin escribir nada (entra en su hilo `TEXTO_DE_CONTINUAR`), y «Arrancar ahora» una
    * `nuevo` que no espera a ninguna anterior: la persona CEDE el proyecto —se cierra su consola de ahí si no está

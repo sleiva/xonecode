@@ -636,3 +636,22 @@ a.ticket:hover {
 .borrar {
   composes: peligro from "./Boton.module.css";
 }
+
+/* Una CONTINUACIÓN (reencolada) cuelga de la tarea de arriba: sangría por nivel y su «↳». */
+.finalizada[data-profundidad="1"] .lineaFinalizada {
+  padding-left: 32px;
+}
+
+.finalizada[data-profundidad="2"] .lineaFinalizada {
+  padding-left: 52px;
+}
+
+.finalizada[data-profundidad="3"] .lineaFinalizada {
+  padding-left: 72px;
+}
+
+.rama {
+  flex: none;
+  margin-right: -6px;
+  color: var(--dsw-alias-label-tertiary);
+}

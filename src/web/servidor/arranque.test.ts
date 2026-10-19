@@ -6438,10 +6438,23 @@ describe("las tareas en background, por el cable", () => {
       expect(otra.estado).toBe(409);
       expect(JSON.parse(otra.cuerpo).motivo).toMatch(/Menú \(continuación\)/);
 
+      // Con capturas NUEVAS: el borrador se adopta como id, y una de la original con el mismo nombre no pisa la nueva.
+      cola.guardar(cola.listar().map((t) => (t.id === nueva.id ? { ...t, estado: "terminada" as const } : t)));
+      cola.guardarAdjunto("b1", "pegado-1.png", Buffer.from("nueva"));
+      cola.guardarAdjunto("b1", "maqueta.png", Buffer.from("la de ahora"));
+      const conBorrador = await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "reencolar", id: "a", texto: "mira la captura", borrador: "b1" }));
+      expect(conBorrador.estado).toBe(200);
+      expect(JSON.parse(conBorrador.cuerpo).id).toBe("b1");
+      expect(cola.listar().find((t) => t.id === "b1")!.adjuntos.map((x) => x.nombre)).toEqual(["maqueta.png", "pegado-1.png"]);
+      expect(readFileSync(join(cola.carpetaDeAdjuntos("b1")!, "maqueta.png"), "utf8")).toBe("la de ahora");
+      // Un borrador que ya es una tarea no se adopta.
+      const yaTarea = await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "reencolar", id: "a", texto: "x", borrador: "a" }));
+      expect(yaTarea.estado).toBe(409);
+
       const conTicket = await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "reencolar", id: "j", texto: "x" }));
       expect(conTicket.estado).toBe(409);
       expect(JSON.parse(conTicket.cuerpo).motivo).toMatch(/MAS-1/);
-      expect(cola.listar()).toHaveLength(3);
+      expect(cola.listar()).toHaveLength(4);
       await vestibulo.cerrar();
       rmSync(base, { recursive: true, force: true });
     });

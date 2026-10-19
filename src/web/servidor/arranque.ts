@@ -2916,14 +2916,22 @@ export function montarRutas(
    * (editado por la persona) como feedback. La regla vive en `core/tareas.ts#tareaReencolada`; aquí solo el disco: el
    * id y los adjuntos, que se COPIAN para que lo que el hilo nombra en `/adjuntos/` siga ahí. Devuelve el motivo si no.
    */
-  const reencolarTarea = (id: string, texto: unknown): { id: string } | { motivo: string } => {
+  const reencolarTarea = (
+    id: string,
+    texto: unknown,
+    /** El borrador bajo el que el navegador subió capturas NUEVAS (pegadas o elegidas): se ADOPTA como id, como al crear. */
+    borrador?: unknown
+  ): { id: string } | { motivo: string } => {
     const cola = opciones.colaDeTareas;
     if (cola === undefined) return { motivo: "esta ejecución no tiene cola de tareas" };
     if (typeof texto !== "string") return { motivo: "dile qué tiene que acabar: el texto está vacío" };
     const lista = cola.listar();
     const original = lista.find((t) => t.id === id);
     if (original === undefined) return { motivo: "esa tarea ya no está en el histórico" };
-    const nuevoId = randomUUID();
+    if (borrador !== undefined && (typeof borrador !== "string" || !esBorradorLibre(borrador, lista))) {
+      return { motivo: "ese borrador de adjuntos no vale (o ya es una tarea)" };
+    }
+    const nuevoId = typeof borrador === "string" ? borrador : randomUUID();
     let nueva: Tarea;
     try {
       // Primero la regla, y SOLO después se copia nada: una negativa no deja una carpeta de adjuntos huérfana.
@@ -2931,8 +2939,11 @@ export function montarRutas(
       const enCurso = continuacionEnCurso(original, lista);
       if (enCurso !== undefined) return { motivo: `ya está encolada su continuación, «${enCurso.titulo}»: espera a que acabe` };
       const desde = cola.carpetaDeAdjuntos?.(original.id);
+      // Lo NUEVO del borrador manda: uno de la original con el mismo nombre no lo pisa (el cliente ya evita repetirlos).
+      const nuevos = new Set(cola.listarAdjuntos(nuevoId).map((a) => a.nombre));
       for (const adjunto of original.adjuntos) {
         if (desde === undefined) break;
+        if (nuevos.has(adjunto.nombre)) continue;
         const ruta = join(desde, adjunto.nombre);
         if (existsSync(ruta)) cola.guardarAdjunto(nuevoId, adjunto.nombre, readFileSync(ruta));
       }
@@ -7612,7 +7623,7 @@ export function montarRutas(
         return;
       }
       if (mensaje.accion === "reencolar") {
-        const resultado = reencolarTarea(mensaje.id, mensaje.texto);
+        const resultado = reencolarTarea(mensaje.id, mensaje.texto, mensaje.borrador);
         const negado = "motivo" in resultado;
         respuesta.writeHead(negado ? 409 : 200, { "content-type": "application/json" });
         respuesta.end(JSON.stringify(resultado));

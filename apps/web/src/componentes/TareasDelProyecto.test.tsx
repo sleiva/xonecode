@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { TareasDelProyecto } from "./TareasDelProyecto.js";
 import type { TareaDelCable } from "../tipos.js";
 
@@ -477,6 +477,73 @@ describe("TareasDelProyecto: ver lo que hace una tarea en proceso", () => {
       reencolar.mockResolvedValueOnce(undefined);
       fireEvent.click(screen.getByRole("button", { name: "Encolar" }));
       expect(await screen.findByText(/Encolada: la tienes en «En curso»/)).toBeTruthy();
+    });
+
+    it("al reencolar se puede PEGAR una captura: sube a su borrador, sin pisar las de la original, y viaja con el encolar", async () => {
+      const subidos: [string, string][] = [];
+      const descartados: string[] = [];
+      const reencolar = vi.fn(async (_id: string, _texto: string, _borrador?: string): Promise<string | undefined> => undefined);
+      const { unmount } = render(
+        <TareasDelProyecto
+          tareas={[tarea({ id: "x", titulo: "Menú", estado: "terminada", sesion: "s", adjuntos: [{ nombre: "pegado-1.png", bytes: 3 }], reencolable: { texto: "acaba" } })]}
+          alReencolar={reencolar}
+          adjuntosDelBorrador={{
+            subir: async (b, nombre) => (subidos.push([b, nombre]), { ok: true }),
+            descartar: (b) => void descartados.push(b),
+          }}
+        />
+      );
+      fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
+      fireEvent.click(filaDe("Menú"));
+      fireEvent.click(screen.getByRole("button", { name: "Reencolar lo pendiente" }));
+      expect(screen.getByRole("button", { name: "Adjuntar imagen…" })).toBeTruthy();
+      const captura = new File([new Uint8Array([1])], "image.png", { type: "image/png" });
+      fireEvent.paste(screen.getByRole("textbox"), { clipboardData: { files: [captura], types: ["Files"] } });
+      // «pegado-1.png» ya es de la original: la nueva se llama de otra forma.
+      await waitFor(() => expect(subidos.map(([, n]) => n)).toEqual(["pegado-2.png"]));
+      fireEvent.click(screen.getByRole("button", { name: "Encolar" }));
+      await waitFor(() => expect(reencolar).toHaveBeenCalledWith("x", "acaba", subidos[0]![0]));
+      // Ya es una tarea: plegar no borra su carpeta.
+      unmount();
+      expect(descartados).toEqual([]);
+    });
+
+    it("cerrar el formulario con una captura subida y sin encolar BORRA su borrador", async () => {
+      const subidos: string[] = [];
+      const descartados: string[] = [];
+      render(
+        <TareasDelProyecto
+          tareas={[tarea({ id: "x", titulo: "Menú", estado: "terminada", sesion: "s", reencolable: { texto: "acaba" } })]}
+          alReencolar={async () => undefined}
+          adjuntosDelBorrador={{ subir: async (b) => (subidos.push(b), { ok: true }), descartar: (b) => void descartados.push(b) }}
+        />
+      );
+      fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
+      fireEvent.click(filaDe("Menú"));
+      fireEvent.click(screen.getByRole("button", { name: "Reencolar lo pendiente" }));
+      fireEvent.paste(screen.getByRole("textbox"), { clipboardData: { files: [new File([new Uint8Array([1])], "a.png", { type: "image/png" })], types: ["Files"] } });
+      await waitFor(() => expect(subidos).toHaveLength(1));
+      await waitFor(() => expect(screen.getByText("listo")).toBeTruthy());
+      fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+      expect(descartados).toEqual(subidos);
+    });
+
+    /** Idea suya: las reencoladas como HIJAS de su tarea, tipo árbol (`arbolDeTareas.ts`). */
+    it("una continuación sale justo debajo de su tarea, marcada como hija", () => {
+      render(
+        <TareasDelProyecto
+          tareas={[
+            tarea({ id: "menu", titulo: "Menú", estado: "terminada", acabada: "2026-10-19T09:00:00.000Z" }),
+            tarea({ id: "otra", titulo: "Otra", estado: "terminada", acabada: "2026-10-19T10:00:00.000Z" }),
+            tarea({ id: "menu-2", titulo: "Menú (continuación)", estado: "terminada", continuaDe: "menu", acabada: "2026-10-19T11:00:00.000Z" }),
+          ]}
+        />
+      );
+      fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
+      const filas = screen.getAllByRole("listitem");
+      expect(filas.map((li) => li.textContent?.includes("(continuación)") ? "hija" : li.textContent?.includes("Menú") ? "menu" : "otra")).toEqual(["menu", "hija", "otra"]);
+      expect(filas[1]!.getAttribute("data-profundidad")).toBe("1");
+      expect(screen.getAllByLabelText("Continuación de la tarea de arriba")).toHaveLength(1);
     });
 
     it("el encargo se despliega dentro, a petición", () => {

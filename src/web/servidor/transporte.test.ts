@@ -93,8 +93,8 @@ const DECISIONES: Readonly<Record<string, readonly string[]>> = {
   ticket: ["ticket"],
   // Viaja: la fila la enseña y «Editar la tarea» la trae marcada. Es un id de Stitch y un título, no una ruta.
   pantallaDeStitch: ["pantallaDeStitch"],
-  // De qué finalizada es continuación: solo frena un segundo «Reencolar» en el servidor. En la pantalla no sirve.
-  continuaDe: [],
+  // De qué finalizada es continuación: frena un segundo «Reencolar» y Finalizadas la cuelga de ella (un id, no una ruta).
+  continuaDe: ["continuaDe"],
 };
 
 const TAREA_COMPLETA: Required<Tarea> = {

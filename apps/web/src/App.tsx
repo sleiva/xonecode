@@ -2752,7 +2752,16 @@ export function App({
           }
         : {})}
       // Reencolar una finalizada sin ticket (otra tarea en su hilo): el formulario dice por qué si el servidor se niega.
-      alReencolar={async (id: string, texto: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "reencolar", id, texto }))}
+      alReencolar={async (id: string, texto: string, borrador?: string) =>
+        negativaOFalloDe(await enviar({ clase: "tarea", accion: "reencolar", id, texto, ...(borrador === undefined ? {} : { borrador }) }))
+      }
+      // Las capturas que se le añaden al reencolar: los MISMOS caminos que «Nueva tarea» (subir al borrador, quitar, y
+      // descartar su carpeta si se cierra sin encolar).
+      adjuntosDelBorrador={{
+        subir: (borrador: string, nombre: string, fichero: File) => subirAdjunto(borrador, nombre, fichero),
+        ...(quitarAdjunto === undefined ? {} : { quitar: (borrador: string, nombre: string) => quitarAdjunto(borrador, nombre) }),
+        descartar: (borrador: string) => void enviar({ clase: "tarea", accion: "descartar", id: borrador }),
+      }}
       alPedirUltimaRespuesta={async (t: TareaDelCable) => {
         if (t.sesion === undefined) return {};
         const r = (await enviar({ clase: "leerSesion", proyecto: t.proyecto, sesion: t.sesion })) as Response | undefined;

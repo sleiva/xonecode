@@ -1,4 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ListaDeAdjuntos, useAdjuntosDeBorrador } from "./adjuntosDeBorrador.js";
+import { arbolDeFinalizadas, type NodoDeTarea } from "../arbolDeTareas.js";
+
+/** El árbol aplanado en el orden en que se lee —cada tarea y, debajo, sus continuaciones—, con su nivel. */
+function enOrdenDeArbol(nodos: readonly NodoDeTarea[], profundidad = 0): { tarea: TareaDelCable; profundidad: number }[] {
+  return nodos.flatMap((n) => [{ tarea: n.tarea, profundidad }, ...enOrdenDeArbol(n.hijas, profundidad + 1)]);
+}
 import { puedeArrancarYa, type Acto, type TareaDelCable } from "../tipos.js";
 import { AccionesDeTarea } from "./AccionesDeTarea.js";
 import { EntregaDeTarea } from "./EntregaDeTarea.js";
@@ -76,6 +83,7 @@ export function TareasDelProyecto({
   alLeerFinalizada,
   alPedirUltimaRespuesta,
   alReencolar,
+  adjuntosDelBorrador,
   pestanaInicial,
   alMirarGestor,
   conectado,
@@ -165,7 +173,9 @@ export function TareasDelProyecto({
    *  desplegar (nunca viaja con la cola). `undefined` = no consta; un texto que empieza por «No se pudo» es un fallo. */
   alPedirUltimaRespuesta?: (tarea: TareaDelCable) => Promise<{ texto?: string; error?: string }>;
   /** Reencolar una finalizada para acabar lo que no hizo (ver `Reencolar`). Devuelve el motivo si el servidor se negó. */
-  alReencolar?: (id: string, texto: string) => Promise<string | undefined>;
+  alReencolar?: (id: string, texto: string, borrador?: string) => Promise<string | undefined>;
+  /** Las capturas que se le añaden al reencolar (pegadas o elegidas). Ausente = el formulario no ofrece adjuntar. */
+  adjuntosDelBorrador?: AdjuntosDelBorrador;
   /** Dónde se monta: «Finalizadas» al volver de leer una (la lista se desmonta mientras se lee). Solo cuenta al montar. */
   pestanaInicial?: "curso" | "finalizadas";
   /** «Mirar ahora» el gestor (la puerta 2): solo con el disparo encendido. Devuelve qué pasó, en una frase. */
@@ -275,14 +285,17 @@ export function TareasDelProyecto({
             <p className={estilos.aviso}>Todavía no ha terminado ninguna tarea de este proyecto. Aquí quedan las que se entregan, con lo que hizo cada una.</p>
           ) : (
             <ul className={estilos.filasFinalizadas}>
-              {finalizadas.map((t) => (
+              {/* Como ÁRBOL (`arbolDeTareas.ts`): cada continuación colgando de la tarea de la que sigue. */}
+              {enOrdenDeArbol(arbolDeFinalizadas(finalizadas)).map(({ tarea: t, profundidad }) => (
                 <FilaFinalizada
                   key={t.id}
                   tarea={t}
+                  profundidad={profundidad}
                   {...(alLeerFinalizada === undefined ? {} : { alLeer: alLeerFinalizada })}
                   {...(alPedirUltimaRespuesta === undefined ? {} : { alPedirUltimaRespuesta })}
                   {...(alDescartar === undefined ? {} : { alBorrar: alDescartar })}
                   {...(alReencolar === undefined ? {} : { alReencolar })}
+                  {...(adjuntosDelBorrador === undefined ? {} : { adjuntosDelBorrador })}
                 />
               ))}
             </ul>
@@ -372,15 +385,20 @@ function FilaFinalizada({
   alPedirUltimaRespuesta,
   alBorrar,
   alReencolar,
+  adjuntosDelBorrador,
+  profundidad = 0,
 }: {
   tarea: TareaDelCable;
+  /** Cuántas tareas tiene por encima en el árbol: 0 es una raíz; una continuación, 1 o más. */
+  profundidad?: number;
+  adjuntosDelBorrador?: AdjuntosDelBorrador;
   alLeer?: (tarea: TareaDelCable) => void;
   alPedirUltimaRespuesta?: (tarea: TareaDelCable) => Promise<{ texto?: string; error?: string }>;
   /** Quitarla del histórico (la acción `descartar`: a su ticket, ya cerrado, no le hace nada). Pide confirmación antes. */
   alBorrar?: (id: string) => void;
   /** Encolar otra en su hilo para acabar lo que no hizo; devuelve el motivo si el servidor se negó. Solo se ofrece si
    *  la fila trae `reencolable` (lo decide el servidor: sin ticket). */
-  alReencolar?: (id: string, texto: string) => Promise<string | undefined>;
+  alReencolar?: (id: string, texto: string, borrador?: string) => Promise<string | undefined>;
 }) {
   const [abierta, setAbierta] = useState(false);
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
@@ -410,8 +428,20 @@ function FilaFinalizada({
     }
   };
   return (
-    <li className={estilos.finalizada} data-estado={t.estado} data-resultado={resultado} data-abierta={abierta ? "" : undefined}>
+    <li
+      className={estilos.finalizada}
+      data-estado={t.estado}
+      data-resultado={resultado}
+      data-abierta={abierta ? "" : undefined}
+      // La sangría la pone el CSS por nivel (hasta tres): más hondo se quedaría sin sitio para el título.
+      data-profundidad={profundidad === 0 ? undefined : Math.min(profundidad, 3)}
+    >
       <button type="button" className={estilos.lineaFinalizada} aria-expanded={abierta} onClick={alternar}>
+        {profundidad === 0 ? null : (
+          <span className={estilos.rama} aria-label="Continuación de la tarea de arriba">
+            ↳
+          </span>
+        )}
         <span className={estilos.puntoDeResultado} title={NOMBRE_DEL_RESULTADO[resultado]} aria-label={NOMBRE_DEL_RESULTADO[resultado]} />
         <span className={estilos.tituloFinalizada}>{t.titulo}</span>
         {t.ticket === undefined ? null : <span className={estilos.ticket}>{t.ticket.clave}</span>}
@@ -476,9 +506,11 @@ function FilaFinalizada({
               id={t.id}
               textoPropuesto={t.reencolable.texto}
               conHilo={conConversacion}
+              adjuntosDeLaOriginal={t.adjuntos.map((a) => a.nombre)}
               alReencolar={alReencolar}
               alCancelar={() => setReencolar("cerrado")}
               alEncolar={() => setReencolar("hecho")}
+              {...(adjuntosDelBorrador === undefined ? {} : { adjuntosDelBorrador })}
             />
           ) : null}
           {verEncargo ? (
@@ -530,6 +562,13 @@ function FilaFinalizada({
   );
 }
 
+/** Las capturas nuevas de «Reencolar», bajo el borrador del formulario: los mismos caminos que «Nueva tarea». */
+export interface AdjuntosDelBorrador {
+  subir: (borrador: string, nombre: string, fichero: File) => Promise<{ ok: boolean; motivo?: string }>;
+  quitar?: (borrador: string, nombre: string) => Promise<{ ok: boolean; motivo?: string }>;
+  descartar: (borrador: string) => void;
+}
+
 /**
  * El texto de «Reencolar lo pendiente» (lo propone el SERVIDOR, editable) y su «Encolar»: una tarea NUEVA en el hilo de
  * esta. No se cierra si el servidor se niega: dice por qué.
@@ -538,33 +577,64 @@ function Reencolar({
   id,
   textoPropuesto,
   conHilo,
+  adjuntosDeLaOriginal,
   alReencolar,
   alCancelar,
   alEncolar,
+  adjuntosDelBorrador,
 }: {
   id: string;
   textoPropuesto: string;
   conHilo: boolean;
-  alReencolar: (id: string, texto: string) => Promise<string | undefined>;
+  /** Los que ya lleva la original (se copian): un pegado nuevo no puede llamarse igual. */
+  adjuntosDeLaOriginal: readonly string[];
+  alReencolar: (id: string, texto: string, borrador?: string) => Promise<string | undefined>;
   alCancelar: () => void;
   alEncolar: () => void;
+  /** Subir, quitar y descartar las capturas NUEVAS, bajo el borrador de este formulario. Ausente = sin adjuntos. */
+  adjuntosDelBorrador?: AdjuntosDelBorrador;
 }) {
   const [texto, setTexto] = useState(textoPropuesto);
   const [enviando, setEnviando] = useState(false);
   const [motivo, setMotivo] = useState<string | undefined>(undefined);
+  // El borrador nace con el formulario: sus capturas se suben ahí ANTES de encolar, y el servidor lo adopta.
+  const [borrador] = useState(() => crypto.randomUUID());
+  const entradaDeFicheros = useRef<HTMLInputElement>(null);
+  const { adjuntos, añadir, quitar, alPegar, enVuelo, algunoFalló, algunoListo, puedeQuitar } = useAdjuntosDeBorrador({
+    alSubir: (fichero, nombre) =>
+      adjuntosDelBorrador === undefined ? Promise.resolve({ ok: false, motivo: "aquí no se pueden adjuntar ficheros" }) : adjuntosDelBorrador.subir(borrador, nombre, fichero),
+    ...(adjuntosDelBorrador?.quitar === undefined ? {} : { alQuitar: (nombre: string) => adjuntosDelBorrador.quitar!(borrador, nombre) }),
+    ocupados: adjuntosDeLaOriginal,
+  });
+  /**
+   * Cerrar sin encolar con capturas YA subidas BORRA su carpeta —lo mismo que «Nueva tarea» al cancelar—: si no, quedan
+   * en `~/.xonecode/tareas/<borrador>/` imágenes que ninguna tarea nombra. También al PLEGAR la fila (se desmonta).
+   */
+  const pendienteDeBorrar = useRef(false);
+  pendienteDeBorrar.current = algunoListo;
+  const descartar = adjuntosDelBorrador?.descartar;
+  useEffect(
+    () => () => {
+      if (pendienteDeBorrar.current) descartar?.(borrador);
+    },
+    [borrador, descartar]
+  );
   const limpio = texto.trim();
   return (
     <form
       className={estilos.reencolar}
       onSubmit={(evento) => {
         evento.preventDefault();
-        if (limpio === "" || enviando) return;
+        if (limpio === "" || enviando || enVuelo || algunoFalló) return;
         setEnviando(true);
-        void alReencolar(id, limpio).then(
+        void (algunoListo ? alReencolar(id, limpio, borrador) : alReencolar(id, limpio)).then(
           (negado) => {
             setEnviando(false);
-            if (negado === undefined) alEncolar();
-            else setMotivo(negado);
+            if (negado === undefined) {
+              // Ya es una tarea: su carpeta es suya y no se borra al desmontar.
+              pendienteDeBorrar.current = false;
+              alEncolar();
+            } else setMotivo(negado);
           },
           () => {
             setEnviando(false);
@@ -585,10 +655,32 @@ function Reencolar({
         value={texto}
         disabled={enviando}
         onChange={(evento) => setTexto(evento.target.value)}
+        {...(adjuntosDelBorrador === undefined ? {} : { onPaste: alPegar })}
       />
+      {adjuntosDelBorrador === undefined ? null : (
+        <>
+          <div className={estilos.accionesFinalizada}>
+            <button type="button" className={estilos.accion} disabled={enviando} onClick={() => entradaDeFicheros.current?.click()}>
+              Adjuntar imagen…
+            </button>
+            <span className={estilos.etiquetaReencolar}>o pega una captura en el texto: el agente la verá en «/adjuntos/».</span>
+          </div>
+          <input
+            ref={entradaDeFicheros}
+            hidden
+            type="file"
+            multiple
+            onChange={(e) => {
+              void añadir(e.target.files);
+              e.target.value = "";
+            }}
+          />
+          <ListaDeAdjuntos adjuntos={adjuntos} quitar={quitar} puedeQuitar={puedeQuitar} />
+        </>
+      )}
       {motivo === undefined ? null : <p className={estilos.motivo}>{`No se encoló: ${motivo}`}</p>}
       <div className={estilos.accionesFinalizada}>
-        <button type="submit" className={estilos.encolar} disabled={limpio === "" || enviando}>
+        <button type="submit" className={estilos.encolar} disabled={limpio === "" || enviando || enVuelo || algunoFalló}>
           Encolar
         </button>
         <button type="button" className={estilos.accion} disabled={enviando} onClick={alCancelar}>
