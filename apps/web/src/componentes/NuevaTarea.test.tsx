@@ -448,3 +448,79 @@ describe("NuevaTarea: pegar una captura la adjunta (IXCODE-59)", () => {
     expect(alSubirAdjunto).not.toHaveBeenCalled();
   });
 });
+
+describe("NuevaTarea: quitar un adjunto y su miniatura (IXCODE-59)", () => {
+  const captura = (nombre = "a.png") => new File([new Uint8Array([1])], nombre, { type: "image/png" });
+
+  it("«Quitar» BORRA en el servidor y solo con su sí desaparece la fila", async () => {
+    const quitados: string[] = [];
+    render(
+      <NuevaTarea
+        {...base}
+        alQuitarAdjunto={async (nombre) => {
+          quitados.push(nombre);
+          return { ok: true };
+        }}
+      />
+    );
+    fireEvent.change(entradaDeFicheros(), { target: { files: [captura("uno.png"), captura("dos.png")] } });
+    await waitFor(() => expect(screen.getAllByText("listo")).toHaveLength(2));
+    fireEvent.click(screen.getByRole("button", { name: "Quitar uno.png" }));
+    await waitFor(() => expect(screen.queryByText("uno.png")).toBeNull());
+    expect(quitados).toEqual(["uno.png"]);
+    expect(screen.getByText("dos.png")).toBeTruthy();
+  });
+
+  it("si el servidor se niega, la fila se QUEDA con el motivo", async () => {
+    render(<NuevaTarea {...base} alQuitarAdjunto={async () => ({ ok: false, motivo: "no hay ningún adjunto con ese nombre" })} />);
+    fireEvent.change(entradaDeFicheros(), { target: { files: [captura()] } });
+    await waitFor(() => expect(screen.getByText("listo")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Quitar a.png" }));
+    await waitFor(() => expect(screen.getByText("no hay ningún adjunto con ese nombre")).toBeTruthy());
+    expect(screen.getByText("a.png")).toBeTruthy();
+  });
+
+  it("una fila que FALLÓ se quita sin preguntar al servidor; sin `alQuitarAdjunto` una lista no tiene «Quitar»", async () => {
+    const alQuitarAdjunto = vi.fn(async () => ({ ok: true }));
+    const { unmount } = render(
+      <NuevaTarea {...base} alSubirAdjunto={async () => ({ ok: false, motivo: "es demasiado grande" })} alQuitarAdjunto={alQuitarAdjunto} />
+    );
+    fireEvent.change(entradaDeFicheros(), { target: { files: [captura()] } });
+    await waitFor(() => expect(screen.getByText("es demasiado grande")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Quitar a.png" }));
+    await waitFor(() => expect(screen.queryByText("a.png")).toBeNull());
+    expect(alQuitarAdjunto).not.toHaveBeenCalled();
+    unmount();
+
+    render(<NuevaTarea {...base} />);
+    fireEvent.change(entradaDeFicheros(), { target: { files: [captura()] } });
+    await waitFor(() => expect(screen.getByText("listo")).toBeTruthy());
+    expect(screen.queryByRole("button", { name: "Quitar a.png" })).toBeNull();
+  });
+
+  it("una imagen lleva miniatura de sus bytes locales, que se suelta al quitarla", async () => {
+    const creadas: string[] = [];
+    const soltadas: string[] = [];
+    const antes = { crear: URL.createObjectURL, soltar: URL.revokeObjectURL };
+    URL.createObjectURL = () => {
+      const url = `blob:prueba/${creadas.length}`;
+      creadas.push(url);
+      return url;
+    };
+    URL.revokeObjectURL = (url: string) => void soltadas.push(url);
+    try {
+      render(<NuevaTarea {...base} alQuitarAdjunto={async () => ({ ok: true })} />);
+      fireEvent.change(entradaDeFicheros(), {
+        target: { files: [captura(), new File(["%PDF"], "doc.pdf", { type: "application/pdf" })] },
+      });
+      await waitFor(() => expect(screen.getAllByText("listo")).toHaveLength(2));
+      // Solo la imagen: un PDF no tiene miniatura que enseñar. En `document`: el modal va por portal.
+      expect(Array.from(document.querySelectorAll("li img")).map((i) => i.getAttribute("src"))).toEqual(["blob:prueba/0"]);
+      fireEvent.click(screen.getByRole("button", { name: "Quitar a.png" }));
+      await waitFor(() => expect(soltadas).toEqual(["blob:prueba/0"]));
+    } finally {
+      URL.createObjectURL = antes.crear;
+      URL.revokeObjectURL = antes.soltar;
+    }
+  });
+});

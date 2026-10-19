@@ -13,6 +13,7 @@ import pastillas from "./PastillaDeModelo.module.css";
 import { ContadorDeTokens, type ConsumoPintable } from "./ContadorDeTokens.js";
 import estilos from "./Compositor.module.css";
 import { ficherosDelPegado, renombrarPegados } from "../pegado.js";
+import { useVistasPrevias } from "../vistaPrevia.js";
 
 /**
  * Una ficha de adjunto EN VUELO en el compositor: lo que se ve mientras dura la subida y lo
@@ -32,6 +33,8 @@ interface FichaDeAdjunto {
   nombre: string;
   estado: "subiendo" | "listo" | "falló";
   motivo?: string;
+  /** La miniatura, de los bytes LOCALES (`useVistasPrevias`); solo imágenes. */
+  vista?: string;
 }
 
 /**
@@ -212,6 +215,7 @@ export function Compositor({
   const campo = useRef<HTMLTextAreaElement>(null);
   const entradaDeFicheros = useRef<HTMLInputElement>(null);
   const [fichas, setFichas] = useState<FichaDeAdjunto[]>([]);
+  const vistas = useVistasPrevias();
   /** El `id` de la PRÓXIMA ficha: un contador y no `crypto.randomUUID()` —no hace falta que
    *  sea imprevisible, solo que no se repita DENTRO de este componente montado (ver
    *  `FichaDeAdjunto`), la misma razón que ya documenta `idNuevoDeCliente` en `conexion.ts`. */
@@ -247,7 +251,8 @@ export function Compositor({
       }
       const nombre = nombreUnicoEntreFichas(base, tomados);
       tomados.add(nombre);
-      setFichas((ya) => [...ya, { id, nombre, estado: "subiendo" }]);
+      const vista = vistas.crear(fichero);
+      setFichas((ya) => [...ya, { id, nombre, estado: "subiendo", ...(vista === undefined ? {} : { vista }) }]);
       const r = await alSubirAdjunto(fichero, nombre);
       // Se empareja por `id`, NUNCA por nombre (Ronda de arreglo 1/5): si esta ficha se
       // QUITÓ mientras subía —y se volvió a añadir el MISMO nombre—, la ficha nueva tiene
@@ -266,7 +271,10 @@ export function Compositor({
     }
   };
 
-  const quitarFicha = (id: number): void => setFichas((ya) => ya.filter((f) => f.id !== id));
+  const quitarFicha = (id: number): void => {
+    vistas.soltar(fichas.find((f) => f.id === id)?.vista);
+    setFichas((ya) => ya.filter((f) => f.id !== id));
+  };
 
   const alSoltar = (evento: DragEvent<HTMLDivElement>): void => {
     if (!puedeAnexar) return;
@@ -345,6 +353,7 @@ export function Compositor({
     if (texto === "" && adjuntos.length === 0) return;
     alEnviar(texto, adjuntos);
     setValor("");
+    for (const f of fichas) vistas.soltar(f.vista);
     setFichas([]);
   };
 
@@ -487,6 +496,7 @@ export function Compositor({
           <ul className={estilos.fichas}>
             {fichas.map((f) => (
               <li key={f.id} className={estilos.ficha} data-estado={f.estado}>
+                {f.vista === undefined ? null : <img className={estilos.miniaturaDeFicha} src={f.vista} alt="" />}
                 <span className={estilos.nombreDeFicha}>{f.nombre}</span>
                 {/*
                   «falló» VISIBLE, con el MOTIVO en el `title` (Ronda de arreglo 3/5,

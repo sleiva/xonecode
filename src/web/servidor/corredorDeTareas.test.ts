@@ -77,6 +77,7 @@ function discoDeMentira(
     sigoSiendoDueño: () => dueño,
     soltarCerrojo: () => void (soltado += 1),
     guardarAdjunto: () => ({ ok: true }),
+    quitarAdjunto: () => ({ ok: true }),
     listarAdjuntos: () => [],
     carpetaDeAdjuntos: (id) => `/tmp/${id}/adjuntos`,
     borrarTarea: (id) => void (lista = lista.filter((t) => t.id !== id)),

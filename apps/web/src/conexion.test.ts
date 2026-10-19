@@ -218,6 +218,26 @@ describe("conexión SSE", () => {
     expect(opciones.headers).toBeUndefined();
   });
 
+  it("quitarAdjunto() hace DELETE /adjunto con el nombre en la QUERY y sin cuerpo; un 404 trae su motivo (IXCODE-59)", async () => {
+    const store = crearStoreDelCliente();
+    const llamadas: [string, RequestInit][] = [];
+    let respuesta = { ok: true, status: 204, text: async () => "" };
+    const conexion = crearConexion(store, {
+      fabricaDeEventos: () => new FuenteFalsa(),
+      fetch: async (url, opciones) => {
+        llamadas.push([url, opciones]);
+        return respuesta;
+      },
+    });
+    expect(await conexion.quitarAdjunto("b1", "pegado-1.png")).toEqual({ ok: true });
+    const [url, opciones] = llamadas[0]!;
+    expect(url).toBe("/adjunto?tarea=b1&nombre=pegado-1.png");
+    expect(opciones.method).toBe("DELETE");
+    expect(opciones.body).toBeUndefined();
+    respuesta = { ok: false, status: 404, text: async () => "no hay ningún adjunto con ese nombre" };
+    expect(await conexion.quitarAdjunto("b1", "x.png")).toEqual({ ok: false, motivo: "no hay ningún adjunto con ese nombre" });
+  });
+
   it("y devuelve el MOTIVO que contesta el servidor, que es lo que la fila del fichero pinta", async () => {
     const store = crearStoreDelCliente();
     const conexion = crearConexion(store, {

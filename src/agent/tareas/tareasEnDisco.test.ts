@@ -94,6 +94,21 @@ describe("tareasEnDisco", () => {
     }
   });
 
+  it("quitar un adjunto lo BORRA de la carpeta de su tarea, con la misma barrera de nombre (IXCODE-59)", () => {
+    const disco = crearTareasEnDisco({ base });
+    disco.guardarAdjunto("b1", "pegado-1.png", Buffer.from("x"));
+    disco.guardarAdjunto("b1", "otro.png", Buffer.from("y"));
+    expect(disco.quitarAdjunto("b1", "pegado-1.png")).toEqual({ ok: true });
+    expect(disco.listarAdjuntos("b1").map((a) => a.nombre)).toEqual(["otro.png"]);
+    // Lo que no está se DICE, no se da por quitado.
+    expect(disco.quitarAdjunto("b1", "pegado-1.png")).toMatchObject({ ok: false, motivo: expect.stringMatching(/no hay/) });
+    for (const malo of ["../fuera.png", "sub/dentro.png", "", "."]) {
+      expect(disco.quitarAdjunto("b1", malo).ok, malo).toBe(false);
+    }
+    expect(disco.quitarAdjunto("..", "otro.png").ok).toBe(false);
+    expect(existsSync(join(base, "tareas", "b1", "adjuntos", "otro.png"))).toBe(true);
+  });
+
   it("los dos topes: por fichero y por tarea", () => {
     const disco = crearTareasEnDisco({ base, topeDeAdjunto: 10, topePorTarea: 15 });
     expect(disco.guardarAdjunto("t1", "a.bin", Buffer.alloc(11))).toMatchObject({ ok: false, motivo: expect.stringMatching(/grande/) });

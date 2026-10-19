@@ -333,6 +333,25 @@ describe("adjuntar ficheros", () => {
     await waitFor(() => expect(alSubirAdjunto).toHaveBeenCalledWith(expect.any(File), "pegado-1.png"));
   });
 
+  it("una captura pegada lleva MINIATURA de sus bytes locales, que se suelta al quitarla (IXCODE-59)", async () => {
+    const soltadas: string[] = [];
+    const antes = { crear: URL.createObjectURL, soltar: URL.revokeObjectURL };
+    URL.createObjectURL = () => "blob:prueba/0";
+    URL.revokeObjectURL = (url: string) => void soltadas.push(url);
+    try {
+      const { container } = render(<Compositor {...manejadores} alSubirAdjunto={vi.fn(async () => ({ ok: true }))} />);
+      const img = new File(["x"], "imagen.png", { type: "image/png" });
+      fireEvent.paste(screen.getByRole("textbox"), { clipboardData: { files: [img], types: ["Files"] } });
+      await waitFor(() => expect(container.querySelector("li img")?.getAttribute("src")).toBe("blob:prueba/0"));
+      fireEvent.click(screen.getByRole("button", { name: "Quitar pegado-1.png" }));
+      expect(container.querySelector("li img")).toBeNull();
+      expect(soltadas).toEqual(["blob:prueba/0"]);
+    } finally {
+      URL.createObjectURL = antes.crear;
+      URL.revokeObjectURL = antes.soltar;
+    }
+  });
+
   it("`paste` SIN ficheros no interfiere: el pegado de TEXTO sigue su camino normal", () => {
     const alSubirAdjunto = vi.fn();
     render(<Compositor {...manejadores} alSubirAdjunto={alSubirAdjunto} />);

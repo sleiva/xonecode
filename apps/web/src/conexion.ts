@@ -64,6 +64,12 @@ export interface Conexion {
    */
   subirAdjunto(tarea: string, nombre: string, fichero: Blob): Promise<{ ok: boolean; motivo?: string }>;
   /**
+   * Quita un adjunto del BORRADOR de una tarea (`DELETE /adjunto`, IXCODE-59): lo pegado o
+   * elegido por error en «Nueva tarea». Misma forma que `subirAdjunto` —nombre en la query,
+   * `{ok, motivo?}` sin lanzar—; el servidor lo niega en la carpeta de una tarea ya creada.
+   */
+  quitarAdjunto(tarea: string, nombre: string): Promise<{ ok: boolean; motivo?: string }>;
+  /**
    * Sube los bytes de un adjunto de la SESIÓN abierta (`POST /adjunto?para=sesion`), desde
    * el «+» del compositor, un soltado o un pegado.
    *
@@ -135,11 +141,17 @@ function idNuevoDeCliente(): string {
 async function subirBytes(
   fetchInyectado: FuncionFetch,
   url: string,
-  cuerpo: Blob
+  cuerpo: Blob | undefined,
+  metodo: "POST" | "DELETE" = "POST"
 ): Promise<{ ok: boolean; motivo?: string; respuesta?: RespuestaDeBytes }> {
   let respuesta: unknown;
   try {
-    respuesta = await fetchInyectado(url, { method: "POST", credentials: "same-origin", body: cuerpo });
+    respuesta = await fetchInyectado(
+      url,
+      cuerpo === undefined
+        ? { method: metodo, credentials: "same-origin" }
+        : { method: metodo, credentials: "same-origin", body: cuerpo }
+    );
   } catch (error) {
     // Un fallo de red no puede tumbar la ventana: se dice en la fila del fichero.
     return { ok: false, motivo: error instanceof Error ? error.message : "no se pudo subir" };
@@ -238,6 +250,13 @@ export function crearConexion(store: Store, opciones: OpcionesDeConexion = {}): 
       // casa por coincidencia exacta (la misma razón que documenta `RUTA_ARTEFACTO`).
       const url = `/adjunto?tarea=${encodeURIComponent(tarea)}&nombre=${encodeURIComponent(nombre)}`;
       const r = await subirBytes(fetchInyectado, url, fichero);
+      return r.ok ? { ok: true } : { ok: false, motivo: r.motivo };
+    },
+    async quitarAdjunto(tarea, nombre) {
+      // El mismo post-proceso que una subida —motivo del servidor, red caída sin reventar—,
+      // sin cuerpo.
+      const url = `/adjunto?tarea=${encodeURIComponent(tarea)}&nombre=${encodeURIComponent(nombre)}`;
+      const r = await subirBytes(fetchInyectado, url, undefined, "DELETE");
       return r.ok ? { ok: true } : { ok: false, motivo: r.motivo };
     },
     async subirAdjuntoDeSesion(nombre, fichero) {

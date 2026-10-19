@@ -796,7 +796,7 @@ export interface OpcionesDeMontaje {
    */
   colaDeTareas?: Pick<
     TareasEnDisco,
-    "listar" | "guardar" | "borrarTarea" | "guardarAdjunto" | "listarAdjuntos"
+    "listar" | "guardar" | "borrarTarea" | "guardarAdjunto" | "quitarAdjunto" | "listarAdjuntos"
   > &
     // Opcional: solo la pestaña Soporte lo usa, para meter los adjuntos de una tarea en su
     // paquete; un doble que no lo tenga exporta la tarea sin ellos.
@@ -6522,6 +6522,46 @@ export function montarRutas(
       // El motivo lo escribe el puerto y no lleva ninguna ruta (su test lo vigila). 413 para
       // los dos topes —por fichero y por tarea— porque los dos son «no cabe».
       responder(413, guardado.motivo ?? "no se pudo guardar el adjunto");
+      return;
+    }
+    respuesta.writeHead(204);
+    respuesta.end();
+  });
+
+  /**
+   * `DELETE /adjunto?tarea=<id>&nombre=<fichero>` — quitar un adjunto del BORRADOR de una tarea
+   * (IXCODE-59), lo pegado o elegido por error en «Nueva tarea». Las mismas guardas que la
+   * subida y por lo mismo: el nombre y el id pasan la barrera de segmento llano, y **nunca en la
+   * carpeta de una tarea que ya existe** (409) —quitarle un adjunto a una tarea viva le cambiaría
+   * el `/adjuntos/` que el agente está leyendo—. Lo que no está, 404 con el motivo del puerto.
+   */
+  servidor.registrarRuta("DELETE", RUTA_ADJUNTO, async (peticion, respuesta) => {
+    const responder = (codigo: number, texto: string): void => {
+      respuesta.writeHead(codigo, { "Content-Type": "text/plain; charset=utf-8" });
+      respuesta.end(texto);
+    };
+    const query = new URLSearchParams((peticion.url ?? "").split("?")[1] ?? "");
+    const tarea = query.get("tarea");
+    const nombre = query.get("nombre");
+    if (tarea === null || tarea === "" || nombre === null || nombre === "") {
+      responder(400, "faltan «tarea» o «nombre»");
+      return;
+    }
+    if (!nombreDeAdjuntoAceptable(tarea) || !nombreDeAdjuntoAceptable(nombre)) {
+      responder(403, "ese nombre no vale para un adjunto");
+      return;
+    }
+    if (opciones.colaDeTareas === undefined) {
+      responder(404, "esta consola no ejecuta tareas");
+      return;
+    }
+    if (opciones.colaDeTareas.listar().some((t) => t.id === tarea)) {
+      responder(409, "ese identificador ya es de una tarea: sus adjuntos ya no se quitan");
+      return;
+    }
+    const quitado = opciones.colaDeTareas.quitarAdjunto(tarea, nombre);
+    if (!quitado.ok) {
+      responder(404, quitado.motivo ?? "no se pudo quitar el adjunto");
       return;
     }
     respuesta.writeHead(204);

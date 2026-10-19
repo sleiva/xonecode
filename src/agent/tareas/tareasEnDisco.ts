@@ -94,6 +94,13 @@ export interface TareasEnDisco {
   soltarCerrojo(): void;
   guardarAdjunto(tarea: string, nombre: string, datos: Buffer): ResultadoDeAdjunto;
   /**
+   * Quitar un adjunto del BORRADOR antes de crear la tarea (IXCODE-59): la ventana de «Nueva
+   * tarea» deja quitar lo pegado por error. Misma barrera que `guardarAdjunto` —nombre llano y
+   * carpeta con su camino real dentro de la cola— y solo un FICHERO llano: un enlace o una
+   * carpeta ahí no es un adjunto y no se toca. Lo que no está se dice (`ok: false`).
+   */
+  quitarAdjunto(tarea: string, nombre: string): ResultadoDeAdjunto;
+  /**
    * Lo que hay en la carpeta de adjuntos de una tarea, medido del DISCO.
    *
    * De aquí sale el `Tarea.adjuntos` que se guarda al crear, y por eso se lee del disco y no
@@ -473,6 +480,19 @@ export function crearTareasEnDisco(opciones: {
       // Un adjunto es un documento de la persona, no un dato de sistema: mismo 0600 que el
       // índice.
       writeFileSync(join(carpeta, nombre), datos, { mode: 0o600 });
+      return { ok: true };
+    },
+    quitarAdjunto(tarea, nombre) {
+      if (!nombreAceptable(nombre)) return { ok: false, motivo: "ese nombre no vale para un adjunto" };
+      const carpeta = carpetaDeAdjuntos(tarea);
+      if (carpeta === undefined) return { ok: false, motivo: "ese nombre no vale para un adjunto" };
+      const ruta = join(carpeta, nombre);
+      try {
+        if (!lstatSync(ruta).isFile()) return { ok: false, motivo: "no hay ningún adjunto con ese nombre" };
+      } catch {
+        return { ok: false, motivo: "no hay ningún adjunto con ese nombre" };
+      }
+      rmSync(ruta, { force: true });
       return { ok: true };
     },
     listarAdjuntos(tarea) {

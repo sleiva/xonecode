@@ -138,6 +138,7 @@ export function App({
   store,
   enviar,
   subirAdjunto,
+  quitarAdjunto,
   subirAdjuntoDeSesion,
   instalarSkill,
   mirar,
@@ -150,6 +151,11 @@ export function App({
    * ninguno y los tests no tienen que parchear el global.
    */
   subirAdjunto: Conexion["subirAdjunto"];
+  /**
+   * Quitar un adjunto del borrador de «Nueva tarea» (`DELETE /adjunto`, IXCODE-59). Opcional por
+   * lo mismo que `subirAdjuntoDeSesion`: sin él la ventana no pinta «Quitar».
+   */
+  quitarAdjunto?: Conexion["quitarAdjunto"];
   /**
    * Lo mismo, para un adjunto del CHAT de la sesión abierta (Task 6, IXCODE-7): el «+» del
    * compositor, un soltado o un pegado. **Opcional y no obligatorio como `subirAdjunto`**:
@@ -2303,6 +2309,9 @@ export function App({
           if (r.ok) setConAdjuntos(true);
           return r;
         }}
+        {...(quitarAdjunto === undefined
+          ? {}
+          : { alQuitarAdjunto: (nombre: string) => quitarAdjunto(tareaNueva.borrador, nombre) })}
         // Se ESPERA la respuesta: con gestor, crear el ticket puede negarse (409 con motivo) y la ventana no puede
         // perder lo escrito. Con 200 (creada en el gestor) o 204 (en local) se cierra.
         alEncolar={async ({ peticion, encargo, pantallaDeStitch }) => {

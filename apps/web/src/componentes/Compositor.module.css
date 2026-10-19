@@ -519,10 +519,21 @@
 
 .ficha {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
   padding: 3px 0;
   font-size: 12px;
+}
+
+/* La miniatura de una imagen anexada: para reconocer QUÉ se pegó antes de mandarlo. */
+.miniaturaDeFicha {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 4px;
+  background: var(--dsw-alias-bg-layer-1);
 }
 
 .nombreDeFicha {

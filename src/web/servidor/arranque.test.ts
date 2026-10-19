@@ -229,6 +229,8 @@ describe("montarRutas — el cable, por fin conectado", () => {
       `POST ${RUTA_ACCION}`,
       // Y la cuarta son los BYTES de un adjunto de tarea, por lo mismo: el cable lleva JSON.
       `POST ${RUTA_ADJUNTO}`,
+      // IXCODE-59: quitar del borrador lo pegado por error.
+      `DELETE ${RUTA_ADJUNTO}`,
       // Y la quinta, los de un `.zip` con una skill dentro: la misma razón y el mismo molde.
       `POST ${RUTA_SKILL}`,
       // Y la sexta, las imágenes que enlaza un `.md` del proyecto: su visor solo pinta `http(s)`.
@@ -5916,6 +5918,7 @@ function colaDeMentira(iniciales: Tarea[] = []) {
     sigoSiendoDueño: (): boolean => true,
     soltarCerrojo: (): void => {},
     guardarAdjunto: (): { ok: boolean } => ({ ok: true }),
+    quitarAdjunto: (): { ok: boolean } => ({ ok: true }),
     listarAdjuntos: (): AdjuntoDeTarea[] => [],
     carpetaDeAdjuntos: (): string => "/no-usado-en-estos-tests/adjuntos",
     // Para leer el estado en el test sin pasar por el cable.
@@ -7612,6 +7615,78 @@ describe("los conectores MCP, por el cable", () => {
     expect(estado).toBe(200);
     expect(cuerpo.length).toBeGreaterThan(0);
     expect(cuerpo).not.toContain("access_token");
+  });
+});
+
+/**
+ * `DELETE /adjunto` (IXCODE-59): quitar de un BORRADOR lo pegado por error. Mismas guardas que
+ * la subida —nombre llano, nunca en la carpeta de una tarea que ya existe—, y lo que el puerto
+ * no encuentra es 404 con su motivo.
+ */
+describe("DELETE /adjunto", () => {
+  function conRutaDeQuitar(iniciales: Tarea[] = []) {
+    const quitados: { tarea: string; nombre: string }[] = [];
+    const cola = {
+      ...colaDeMentira(iniciales),
+      quitarAdjunto: (tarea: string, nombre: string) => {
+        if (nombre === "no-esta.png") return { ok: false, motivo: "no hay ningún adjunto con ese nombre" };
+        quitados.push({ tarea, nombre });
+        return { ok: true };
+      },
+    };
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { colaDeTareas: cola });
+    return { quitados, manejador: servidor.rutas.get(`DELETE ${RUTA_ADJUNTO}`)! };
+  }
+
+  async function quitar(manejador: ManejadorRuta, query: string): Promise<{ estado: number; texto: string }> {
+    const peticion = Readable.from([]) as unknown as IncomingMessage;
+    (peticion as { url?: string }).url = `${RUTA_ADJUNTO}?${query}`;
+    let estado = 0;
+    let texto = "";
+    const respuesta = {
+      writeHead: (codigo: number) => {
+        estado = codigo;
+        return respuesta;
+      },
+      end: (cuerpo?: string) => {
+        texto = cuerpo ?? "";
+        return respuesta;
+      },
+    } as unknown as ServerResponse;
+    await manejador(peticion, respuesta);
+    return { estado, texto };
+  }
+
+  it("quita el adjunto del borrador: 204", async () => {
+    const { manejador, quitados } = conRutaDeQuitar();
+    expect((await quitar(manejador, "tarea=b1&nombre=pegado-1.png")).estado).toBe(204);
+    expect(quitados).toEqual([{ tarea: "b1", nombre: "pegado-1.png" }]);
+  });
+
+  it("sin `tarea` o `nombre` 400; un nombre que saldría de su carpeta 403; lo que no está 404", async () => {
+    const { manejador, quitados } = conRutaDeQuitar();
+    expect((await quitar(manejador, "nombre=x.png")).estado).toBe(400);
+    expect((await quitar(manejador, "tarea=b1")).estado).toBe(400);
+    for (const q of ["tarea=b1&nombre=..", "tarea=b1&nombre=a%2Fb.png", "tarea=..&nombre=x.png"]) {
+      expect((await quitar(manejador, q)).estado, q).toBe(403);
+    }
+    const r = await quitar(manejador, "tarea=b1&nombre=no-esta.png");
+    expect(r.estado).toBe(404);
+    expect(r.texto).toMatch(/no hay/);
+    expect(quitados).toEqual([]);
+  });
+
+  it("NUNCA en la carpeta de una tarea que ya existe: 409", async () => {
+    const ya: Tarea = {
+      id: "t1",
+      proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+      titulo: "t", peticion: "p", encargo: "e", adjuntos: [],
+      estado: "en-proceso", creada: "2026-09-08T10:00:00.000Z",
+    };
+    const { manejador, quitados } = conRutaDeQuitar([ya]);
+    expect((await quitar(manejador, "tarea=t1&nombre=x.png")).estado).toBe(409);
+    expect(quitados).toEqual([]);
   });
 });
 

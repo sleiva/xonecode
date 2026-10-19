@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ClipboardEvent } from "react";
 import { Modal, Button } from "@deepseek-ai/dsh-client-ui-primitives";
 import { nombreDeAdjuntoSeguro } from "../nombreDeAdjunto.js";
 import { ficherosDelPegado, renombrarPegados } from "../pegado.js";
+import { useVistasPrevias } from "../vistaPrevia.js";
 import { useEsperaDeRefresco } from "../esperaDeRefresco.js";
 import { GiroDeCarga } from "./GiroDeCarga.js";
 import estilos from "./NuevaTarea.module.css";
@@ -43,6 +44,7 @@ export function NuevaTarea({
   encargoPropuesto,
   alAugmentar,
   alSubirAdjunto,
+  alQuitarAdjunto,
   alEncolar,
   destino,
   diseno,
@@ -106,6 +108,12 @@ export function NuevaTarea({
    */
   alSubirAdjunto: (fichero: File, nombre: string) => Promise<{ ok: boolean; motivo?: string }>;
   /**
+   * Quita un adjunto ya subido del borrador (IXCODE-59): borra sus bytes en el servidor, que es
+   * lo que de verdad lo saca de la tarea —el agente ve la CARPETA, no esta lista—. Ausente =
+   * no se pinta «Quitar».
+   */
+  alQuitarAdjunto?: (nombre: string) => Promise<{ ok: boolean; motivo?: string }>;
+  /**
    * Encolar. Si devuelve una promesa, la ventana ESPERA: gira, y con un motivo se queda abierta enseñándolo (un gestor
    * que no deja crear el ticket no puede perder lo escrito). Sin promesa, el camino de antes.
    */
@@ -158,8 +166,20 @@ export function NuevaTarea({
    */
   const entradaDeFicheros = useRef<HTMLInputElement>(null);
   const [adjuntos, setAdjuntos] = useState<
-    { nombre: string; bytes: number; estado: "subiendo" | "listo" | "falló"; motivo?: string }[]
+    {
+      id: number;
+      nombre: string;
+      bytes: number;
+      estado: "subiendo" | "listo" | "falló";
+      motivo?: string;
+      /** La miniatura, de los bytes LOCALES (`useVistasPrevias`); solo imágenes. */
+      vista?: string;
+      /** Pidiendo al servidor que lo borre: el botón espera. */
+      quitando?: boolean;
+    }[]
   >([]);
+  const siguienteId = useRef(0);
+  const vistas = useVistasPrevias();
 
   const encargo = editado ?? encargoPropuesto?.encargo ?? "";
   // «Preparar el encargo» gira hasta que llega la propuesta (o su error): un `encargoPropuesto`
@@ -195,17 +215,19 @@ export function NuevaTarea({
         // No se inventa uno: se dice, y la persona elige otro fichero.
         setAdjuntos((ya) => [
           ...ya,
-          { nombre: fichero.name, bytes: fichero.size, estado: "falló", motivo: "no se puede usar ese nombre aquí" },
+          { id: siguienteId.current++, nombre: fichero.name, bytes: fichero.size, estado: "falló", motivo: "no se puede usar ese nombre aquí" },
         ]);
         continue;
       }
       const repetido = tomados.has(nombre);
       tomados.add(nombre);
+      const id = siguienteId.current++;
+      const vista = repetido ? undefined : vistas.crear(fichero);
       setAdjuntos((ya) => [
         ...ya,
         repetido
-          ? { nombre, bytes: fichero.size, estado: "falló" as const, motivo: "ya hay un adjunto con ese nombre" }
-          : { nombre, bytes: fichero.size, estado: "subiendo" as const },
+          ? { id, nombre, bytes: fichero.size, estado: "falló" as const, motivo: "ya hay un adjunto con ese nombre" }
+          : { id, nombre, bytes: fichero.size, estado: "subiendo" as const, ...(vista === undefined ? {} : { vista }) },
       ]);
       // El segundo con el mismo nombre se rechaza aquí y no se sube, porque el servidor lo
       // sobrescribiría en silencio.
@@ -213,7 +235,7 @@ export function NuevaTarea({
       const r = await alSubirAdjunto(fichero, nombre);
       setAdjuntos((ya) =>
         ya.map((a) =>
-          a.nombre === nombre && a.estado === "subiendo"
+          a.id === id
             ? {
                 ...a,
                 estado: r.ok ? "listo" : "falló",
@@ -223,6 +245,28 @@ export function NuevaTarea({
         )
       );
     }
+  };
+
+  /**
+   * Quitar una fila. Una que FALLÓ no llegó al servidor: se quita de la lista y ya. Una que
+   * llegó se BORRA allí primero —el agente ve la carpeta del borrador, no esta lista— y solo
+   * con el sí del servidor desaparece; si se niega, el motivo queda en la fila.
+   */
+  const quitar = async (id: number): Promise<void> => {
+    const fila = adjuntos.find((a) => a.id === id);
+    if (fila === undefined || fila.estado === "subiendo" || fila.quitando) return;
+    const fuera = (): void => {
+      vistas.soltar(fila.vista);
+      setAdjuntos((ya) => ya.filter((a) => a.id !== id));
+    };
+    if (fila.estado === "falló") return fuera();
+    if (alQuitarAdjunto === undefined) return;
+    setAdjuntos((ya) => ya.map((a) => (a.id === id ? { ...a, quitando: true } : a)));
+    const r = await alQuitarAdjunto(fila.nombre);
+    if (r.ok) return fuera();
+    setAdjuntos((ya) =>
+      ya.map((a) => (a.id === id ? { ...a, quitando: false, motivo: r.motivo ?? "no se pudo quitar" } : a))
+    );
   };
 
   /**
@@ -403,13 +447,31 @@ export function NuevaTarea({
           </p>
           {adjuntos.length === 0 ? null : (
             <ul className={estilos.adjuntos}>
-              {adjuntos.map((a, i) => (
-                <li key={`${a.nombre}-${i}`} className={estilos.adjunto} data-estado={a.estado}>
+              {adjuntos.map((a) => (
+                <li key={a.id} className={estilos.adjunto} data-estado={a.estado}>
+                  {a.vista === undefined ? null : <img className={estilos.miniatura} src={a.vista} alt="" />}
                   <span className={estilos.nombreDeAdjunto}>{a.nombre}</span>
                   <span className={estilos.peso}>{peso(a.bytes)}</span>
                   <span className={estilos.estado}>
-                    {a.estado === "subiendo" ? "subiendo…" : a.estado === "listo" ? "listo" : (a.motivo ?? "no se pudo subir")}
+                    {a.quitando
+                      ? "quitando…"
+                      : a.estado === "subiendo"
+                        ? "subiendo…"
+                        : a.estado === "listo"
+                          ? (a.motivo ?? "listo")
+                          : (a.motivo ?? "no se pudo subir")}
                   </span>
+                  {a.estado === "listo" && alQuitarAdjunto === undefined ? null : (
+                    <button
+                      type="button"
+                      className={estilos.quitar}
+                      aria-label={`Quitar ${a.nombre}`}
+                      disabled={a.estado === "subiendo" || a.quitando === true}
+                      onClick={() => void quitar(a.id)}
+                    >
+                      Quitar
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
