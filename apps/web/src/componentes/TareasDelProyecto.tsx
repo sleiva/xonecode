@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { ListaDeAdjuntos, useAdjuntosDeBorrador } from "./adjuntosDeBorrador.js";
+import ventana from "./NuevaTarea.module.css";
+
+/** El diálogo de «Reencolar» solo se cierra con sus botones: lo escrito y lo adjuntado no se pierden por un clic fuera. */
+const SIN_CERRAR = (): void => {};
 import { arbolDeFinalizadas, type NodoDeTarea } from "../arbolDeTareas.js";
 
 /** El árbol aplanado en el orden en que se lee —cada tarea y, debajo, sus continuaciones—, con su nivel. */
@@ -12,7 +16,7 @@ import { EntregaDeTarea } from "./EntregaDeTarea.js";
 import { MirarTarea } from "./MirarTarea.js";
 import { QuienEjecutaTareas } from "./QuienEjecutaTareas.js";
 import { selloDeFecha } from "../selloDeFecha.js";
-import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
+import { Button, MarkdownText, Modal } from "@deepseek-ai/dsh-client-ui-primitives";
 import { protegerDolares } from "../protegerDolares.js";
 import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
 import estilos from "./TareasDelProyecto.module.css";
@@ -575,6 +579,7 @@ function FilaFinalizada({
           {reencolar === "abierto" && t.reencolable !== undefined && alReencolar !== undefined ? (
             <Reencolar
               id={t.id}
+              titulo={t.titulo}
               textoPropuesto={t.reencolable.texto}
               conHilo={conConversacion}
               adjuntosDeLaOriginal={t.adjuntos.map((a) => a.nombre)}
@@ -652,6 +657,7 @@ export interface AdjuntosDelBorrador {
  */
 function Reencolar({
   id,
+  titulo,
   textoPropuesto,
   conHilo,
   adjuntosDeLaOriginal,
@@ -661,6 +667,8 @@ function Reencolar({
   adjuntosDelBorrador,
 }: {
   id: string;
+  /** El de la tarea que se reencola: el diálogo dice de cuál es. */
+  titulo: string;
   textoPropuesto: string;
   conHilo: boolean;
   /** Los que ya lleva la original (se copian): un pegado nuevo no puede llamarse igual. */
@@ -697,74 +705,87 @@ function Reencolar({
     [borrador, descartar]
   );
   const limpio = texto.trim();
+  const sePuedeEncolar = limpio !== "" && !enviando && !enVuelo && !algunoFalló;
+  const encolar = (): void => {
+    if (!sePuedeEncolar) return;
+    setEnviando(true);
+    void (algunoListo ? alReencolar(id, limpio, borrador) : alReencolar(id, limpio)).then(
+      (negado) => {
+        setEnviando(false);
+        if (negado === undefined) {
+          // Ya es una tarea: su carpeta es suya y no se borra al desmontar.
+          pendienteDeBorrar.current = false;
+          alEncolar();
+        } else setMotivo(negado);
+      },
+      () => {
+        setEnviando(false);
+        setMotivo("el envío falló");
+      }
+    );
+  };
   return (
-    <form
-      className={estilos.reencolar}
-      onSubmit={(evento) => {
-        evento.preventDefault();
-        if (limpio === "" || enviando || enVuelo || algunoFalló) return;
-        setEnviando(true);
-        void (algunoListo ? alReencolar(id, limpio, borrador) : alReencolar(id, limpio)).then(
-          (negado) => {
-            setEnviando(false);
-            if (negado === undefined) {
-              // Ya es una tarea: su carpeta es suya y no se borra al desmontar.
-              pendienteDeBorrar.current = false;
-              alEncolar();
-            } else setMotivo(negado);
-          },
-          () => {
-            setEnviando(false);
-            setMotivo("el envío falló");
-          }
-        );
-      }}
-    >
-      <label className={estilos.etiquetaReencolar} htmlFor={`reencolar-${id}`}>
-        {conHilo
-          ? "Lo que le mandarás, en la misma conversación (recuerda lo que hizo):"
-          : "Lo que le mandarás. Su conversación no se guardó: irá con el encargo original delante."}
-      </label>
-      <textarea
-        id={`reencolar-${id}`}
-        className={estilos.campoReencolar}
-        rows={6}
-        value={texto}
-        disabled={enviando}
-        onChange={(evento) => setTexto(evento.target.value)}
-        {...(adjuntosDelBorrador === undefined ? {} : { onPaste: alPegar })}
-      />
-      {adjuntosDelBorrador === undefined ? null : (
-        <>
-          <div className={estilos.accionesFinalizada}>
-            <button type="button" className={estilos.accion} disabled={enviando} onClick={() => entradaDeFicheros.current?.click()}>
-              Adjuntar imagen…
-            </button>
-            <span className={estilos.etiquetaReencolar}>o pega una captura en el texto: el agente la verá en «/adjuntos/».</span>
-          </div>
-          <input
-            ref={entradaDeFicheros}
-            hidden
-            type="file"
-            multiple
-            onChange={(e) => {
-              void añadir(e.target.files);
-              e.target.value = "";
-            }}
+    // Un DIÁLOGO (petición suya): el texto es largo y en la fila no cabía. La MISMA ventana que «Nueva tarea» —velo,
+    // tamaño, botones al pie— y modal de verdad: ni Escape ni el clic fuera la cierran, solo sus botones.
+    <Modal open onClose={SIN_CERRAR} title="Reencolar lo pendiente" headless className={ventana.capa}>
+      <div className={ventana.velo}>
+        <div className={ventana.ventana}>
+          <h2 className={ventana.titulo}>Reencolar lo pendiente de «{titulo}»</h2>
+          <p className={ventana.nota}>
+            {conHilo
+              ? "Se encola una tarea nueva que sigue en la MISMA conversación: recuerda lo que hizo. La original se queda en el histórico."
+              : "Se encola una tarea nueva. Su conversación no se guardó: irá con el encargo original delante."}
+          </p>
+          <label className={ventana.etiqueta} htmlFor={`reencolar-${id}`}>
+            Lo que le mandarás
+          </label>
+          <textarea
+            id={`reencolar-${id}`}
+            className={ventana.campo}
+            rows={12}
+            value={texto}
+            disabled={enviando}
+            onChange={(evento) => setTexto(evento.target.value)}
+            {...(adjuntosDelBorrador === undefined ? {} : { onPaste: alPegar })}
           />
-          <ListaDeAdjuntos adjuntos={adjuntos} quitar={quitar} puedeQuitar={puedeQuitar} />
-        </>
-      )}
-      {motivo === undefined ? null : <p className={estilos.motivo}>{`No se encoló: ${motivo}`}</p>}
-      <div className={estilos.accionesFinalizada}>
-        <button type="submit" className={estilos.encolar} disabled={limpio === "" || enviando || enVuelo || algunoFalló}>
-          Encolar
-        </button>
-        <button type="button" className={estilos.accion} disabled={enviando} onClick={alCancelar}>
-          Cancelar
-        </button>
+          {adjuntosDelBorrador === undefined ? null : (
+            <>
+              <div className={ventana.filaDeEncargo}>
+                <span className={ventana.etiqueta}>Imágenes (pega una captura en el texto, o elígela)</span>
+                <Button variant="outline" className={ventana.accion} disabled={enviando} onClick={() => entradaDeFicheros.current?.click()}>
+                  Adjuntar imagen…
+                </Button>
+              </div>
+              <input
+                ref={entradaDeFicheros}
+                hidden
+                type="file"
+                multiple
+                onChange={(e) => {
+                  void añadir(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+              <ListaDeAdjuntos adjuntos={adjuntos} quitar={quitar} puedeQuitar={puedeQuitar} />
+              <p className={ventana.nota}>El agente las verá en «/adjuntos/», junto a las de la tarea original.</p>
+            </>
+          )}
+          {motivo === undefined ? null : (
+            <p className={ventana.nota} role="alert" data-error="">
+              {`No se encoló: ${motivo}`}
+            </p>
+          )}
+          <div className={ventana.acciones}>
+            <Button variant="outline" className={ventana.accion} disabled={enviando} onClick={alCancelar}>
+              Cancelar
+            </Button>
+            <Button variant="primary" className={`${ventana.accion} ${ventana.principal}`} disabled={!sePuedeEncolar} onClick={encolar}>
+              {enviando ? "Encolando…" : "Encolar"}
+            </Button>
+          </div>
+        </div>
       </div>
-    </form>
+    </Modal>
   );
 }
 

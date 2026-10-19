@@ -467,6 +467,8 @@ describe("TareasDelProyecto: ver lo que hace una tarea en proceso", () => {
       expect(screen.queryByRole("button", { name: "Reencolar lo pendiente" })).toBeNull();
       fireEvent.click(filaDe("Menú"));
       fireEvent.click(screen.getByRole("button", { name: "Reencolar lo pendiente" }));
+      // Un DIÁLOGO, con el título de la tarea (petición suya: en la fila no cabía).
+      expect(screen.getByRole("dialog", { name: "Reencolar lo pendiente" }).textContent).toContain("«Menú»");
       const campo = screen.getByRole("textbox") as HTMLTextAreaElement;
       expect(campo.value).toBe("## CRITICAL\n- falta la fila");
       fireEvent.change(campo, { target: { value: "acaba la fila de totales" } });

@@ -544,37 +544,6 @@
   border-color: var(--xonecode-azul);
 }
 
-/* Reencolar lo pendiente: el texto editable y su «Encolar», el primario de siempre. */
-.reencolar {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.etiquetaReencolar {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
-}
-
-.campoReencolar {
-  padding: 6px 8px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 12px;
-  resize: vertical;
-}
-
-.campoReencolar:disabled {
-  opacity: 0.5;
-}
-
-.encolar {
-  composes: primario from "./Boton.module.css";
-}
-
 .sinConversacion {
   color: var(--dsw-alias-label-tertiary);
   font-size: 11px;
