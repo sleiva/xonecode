@@ -84,6 +84,7 @@ export function TareasDelProyecto({
   alPedirUltimaRespuesta,
   alReencolar,
   adjuntosDelBorrador,
+  revertir,
   pestanaInicial,
   alMirarGestor,
   conectado,
@@ -176,6 +177,8 @@ export function TareasDelProyecto({
   alReencolar?: (id: string, texto: string, borrador?: string) => Promise<string | undefined>;
   /** Las capturas que se le añaden al reencolar (pegadas o elegidas). Ausente = el formulario no ofrece adjuntar. */
   adjuntosDelBorrador?: AdjuntosDelBorrador;
+  /** Revertir lo que hizo una finalizada (solo la última). Ausente = no se ofrece. */
+  revertir?: RevertirTarea;
   /** Dónde se monta: «Finalizadas» al volver de leer una (la lista se desmonta mientras se lee). Solo cuenta al montar. */
   pestanaInicial?: "curso" | "finalizadas";
   /** «Mirar ahora» el gestor (la puerta 2): solo con el disparo encendido. Devuelve qué pasó, en una frase. */
@@ -296,6 +299,7 @@ export function TareasDelProyecto({
                   {...(alDescartar === undefined ? {} : { alBorrar: alDescartar })}
                   {...(alReencolar === undefined ? {} : { alReencolar })}
                   {...(adjuntosDelBorrador === undefined ? {} : { adjuntosDelBorrador })}
+                  {...(revertir === undefined ? {} : { revertir })}
                 />
               ))}
             </ul>
@@ -387,8 +391,11 @@ function FilaFinalizada({
   alReencolar,
   adjuntosDelBorrador,
   profundidad = 0,
+  revertir,
 }: {
   tarea: TareaDelCable;
+  /** Revertir lo que hizo (solo la ÚLTIMA que cambió el proyecto): se PREGUNTA al desplegar, y el servidor decide. */
+  revertir?: RevertirTarea;
   /** Cuántas tareas tiene por encima en el árbol: 0 es una raíz; una continuación, 1 o más. */
   profundidad?: number;
   adjuntosDelBorrador?: AdjuntosDelBorrador;
@@ -403,6 +410,11 @@ function FilaFinalizada({
   const [abierta, setAbierta] = useState(false);
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
   const [verEncargo, setVerEncargo] = useState(false);
+  /** Si se puede revertir: ausente = sin preguntar; `pidiendo` mientras llega. Se pregunta UNA vez, al desplegarla. */
+  const [revertible, setRevertible] = useState<{ ficheros: readonly string[] } | { motivo: string } | "pidiendo" | undefined>(undefined);
+  const [confirmarReversion, setConfirmarReversion] = useState(false);
+  const [revirtiendo, setRevirtiendo] = useState(false);
+  const [motivoDeReversion, setMotivoDeReversion] = useState<string | undefined>(undefined);
   /** «Reencolar lo pendiente»: el texto abierto debajo de la barra, o ya encolada (entonces el botón se va). */
   const [reencolar, setReencolar] = useState<"cerrado" | "abierto" | "hecho">("cerrado");
   /** Lo que contestó: ausente = sin pedir, `pidiendo` mientras llega. Se pide UNA vez, al desplegarla. */
@@ -422,6 +434,10 @@ function FilaFinalizada({
   const alternar = (): void => {
     const abrir = !abierta;
     setAbierta(abrir);
+    if (abrir && conConversacion && revertible === undefined && revertir !== undefined) {
+      setRevertible("pidiendo");
+      void revertir.preguntar(t.id).then(setRevertible, () => setRevertible({ motivo: "el envío falló" }));
+    }
     if (abrir && conConversacion && respuesta === undefined && alPedirUltimaRespuesta !== undefined) {
       setRespuesta("pidiendo");
       void alPedirUltimaRespuesta(t).then(setRespuesta, () => setRespuesta({ error: "el envío falló" }));
@@ -484,6 +500,19 @@ function FilaFinalizada({
               </button>
             )}
             <ClaveDelTicket tarea={t} />
+            {revertir === undefined || typeof revertible !== "object" || !("ficheros" in revertible) ? null : (
+              <button
+                type="button"
+                className={estilos.revertir}
+                aria-expanded={confirmarReversion}
+                onClick={() => {
+                  setMotivoDeReversion(undefined);
+                  setConfirmarReversion(!confirmarReversion);
+                }}
+              >
+                Revertir sus cambios
+              </button>
+            )}
             {alBorrar === undefined ? null : confirmarBorrado ? (
               <span className={estilos.confirmarBorrado}>
                 ¿Eliminarla del histórico? Su conversación se queda guardada.
@@ -500,6 +529,48 @@ function FilaFinalizada({
               </button>
             )}
           </div>
+          {confirmarReversion && revertir !== undefined && typeof revertible === "object" && "ficheros" in revertible ? (
+            <div className={estilos.confirmarReversion} role="alertdialog" aria-label="Revertir sus cambios">
+              <p>
+                Se deshace lo que escribió esta tarea —{" "}
+                {revertible.ficheros.length === 1 ? "1 fichero" : `${revertible.ficheros.length} ficheros`}— y el proyecto vuelve a
+                como estaba antes. La tarea sale del histórico; su conversación se queda guardada. Si ya lo subiste a
+                CloudStudio, quedará pendiente de subir en Sincronización.
+              </p>
+              <ul className={estilos.listaObservaciones}>
+                {revertible.ficheros.map((f) => (
+                  <li key={f}>{f}</li>
+                ))}
+              </ul>
+              {motivoDeReversion === undefined ? null : <p className={estilos.motivo}>{`No se revirtió: ${motivoDeReversion}`}</p>}
+              <div className={estilos.accionesFinalizada}>
+                <button
+                  type="button"
+                  className={estilos.borrar}
+                  disabled={revirtiendo}
+                  onClick={() => {
+                    setRevirtiendo(true);
+                    void revertir.hacer(t.id).then(
+                      (motivo) => {
+                        setRevirtiendo(false);
+                        // Hecho: la tarea sale de la lista sola, con la cola nueva.
+                        if (motivo !== undefined) setMotivoDeReversion(motivo);
+                      },
+                      () => {
+                        setRevirtiendo(false);
+                        setMotivoDeReversion("el envío falló");
+                      }
+                    );
+                  }}
+                >
+                  {revirtiendo ? "Revirtiendo…" : "Revertir"}
+                </button>
+                <button type="button" className={estilos.accion} disabled={revirtiendo} onClick={() => setConfirmarReversion(false)}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : null}
           {reencolar === "hecho" ? <p className={estilos.aviso}>Encolada: la tienes en «En curso».</p> : null}
           {reencolar === "abierto" && t.reencolable !== undefined && alReencolar !== undefined ? (
             <Reencolar
@@ -560,6 +631,12 @@ function FilaFinalizada({
       ) : null}
     </li>
   );
+}
+
+/** Revertir lo que hizo una finalizada: preguntar si se puede (qué ficheros) y hacerlo (el motivo si se negó). */
+export interface RevertirTarea {
+  preguntar: (id: string) => Promise<{ ficheros: readonly string[] } | { motivo: string }>;
+  hacer: (id: string) => Promise<string | undefined>;
 }
 
 /** Las capturas nuevas de «Reencolar», bajo el borrador del formulario: los mismos caminos que «Nueva tarea». */

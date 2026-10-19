@@ -655,3 +655,21 @@ a.ticket:hover {
   margin-right: -6px;
   color: var(--dsw-alias-label-tertiary);
 }
+
+/* Revertir sus cambios: destructivo, el rojo de peligro como Eliminar; su confirmación, con la lista de ficheros. */
+.revertir {
+  composes: peligro from "./Boton.module.css";
+}
+
+.confirmarReversion {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 0.5px solid var(--xonecode-rojo);
+  border-radius: 8px;
+}
+
+.confirmarReversion p {
+  margin: 0;
+}

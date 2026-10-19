@@ -580,3 +580,87 @@ export async function olvidarSesion(raiz: string, id: string): Promise<void> {
     // Borrar lo que no está no es un error.
   }
 }
+
+/**
+ * Lo que costaría REVERTIR lo que hizo una sesión (una tarea), o por qué no se puede.
+ *
+ * **Solo la ÚLTIMA** (decisión suya): sus commits tienen que ser el bloque de ARRIBA del historial —nada de otra sesión
+ * encima, ni mezclado entre los suyos—, y el árbol sin cambios sin commitear (un `reset` los pisaría). Así deshacer es
+ * volver al padre de su primer commit, y la anterior pasa a ser la última: una PILA. `desde` es el de su continuación
+ * (`cambiosDeSesion`): una reencolada solo deshace lo suyo, y la original queda para después.
+ */
+export type PlanDeReversion =
+  | { ok: true; base: string; commits: readonly string[]; ficheros: readonly string[] }
+  | { ok: false; motivo: string };
+
+export async function planDeReversion(raiz: string, id: string, desde?: string): Promise<PlanDeReversion> {
+  let commits: string[];
+  try {
+    commits = await commitsDeSesion(raiz, id, undefined, desde);
+  } catch {
+    return { ok: false, motivo: "no se pudo preguntar a git por sus cambios" };
+  }
+  if (commits.length === 0) return { ok: false, motivo: "no consta ningún cambio suyo en git que deshacer" };
+  let deArriba: string[];
+  let sucio: string;
+  try {
+    deArriba = (await ejecutar("git", ["rev-list", "--max-count", String(commits.length), "HEAD"], { cwd: raiz })).stdout
+      .split("\n")
+      .filter((l) => l !== "");
+    sucio = (await ejecutar("git", ["status", "--porcelain", "--untracked-files=no"], { cwd: raiz })).stdout.trim();
+  } catch {
+    return { ok: false, motivo: "no se pudo preguntar a git por el historial" };
+  }
+  const suyos = new Set(commits);
+  if (deArriba.length !== commits.length || !deArriba.every((sha) => suyos.has(sha))) {
+    return { ok: false, motivo: "no es lo último que cambió el proyecto: después escribió otra conversación o tarea, y eso se revierte antes" };
+  }
+  if (sucio !== "") return { ok: false, motivo: "hay cambios sin commitear en el proyecto: revertir los pisaría" };
+  const base = await padreDe(raiz, commits[0]!);
+  if (base === undefined || base === ARBOL_VACIO) return { ok: false, motivo: "sus cambios empiezan el repositorio: no hay un antes al que volver" };
+  /**
+   * **`.xonecode/` no puede estar en la base**: el `reset --hard` la RESTAURARÍA encima de la de ahora —sesiones,
+   * checkpoint, memoria—. En un proyecto bajado no pasa (se excluye al bajar, `gitSync.ts#EXCLUSION`), pero si alguien
+   * la commiteó a mano, se niega: lo que no se puede deshacer no se arriesga.
+   */
+  try {
+    const conXonecode = (await ejecutar("git", ["ls-tree", "--name-only", base, "--", ".xonecode"], { cwd: raiz })).stdout.trim();
+    if (conXonecode !== "") return { ok: false, motivo: "la carpeta .xonecode está en el historial de git: revertir la pisaría" };
+  } catch {
+    return { ok: false, motivo: "no se pudo comprobar el historial de git" };
+  }
+  let ficheros: string[];
+  try {
+    ficheros = (await ejecutar("git", ["diff", "--name-only", "--no-renames", "--relative", base, "HEAD"], { cwd: raiz })).stdout
+      .split("\n")
+      .filter((l) => l !== "");
+  } catch {
+    return { ok: false, motivo: "no se pudo preguntar a git qué ficheros tocó" };
+  }
+  return { ok: true, base, commits, ficheros };
+}
+
+/** El respaldo de lo revertido: el HEAD de antes queda alcanzable por esta ref, por si hay que volver atrás. */
+export const refDeRevertida = (tarea: string): string | undefined => (idAceptable(tarea) ? `refs/xonecode/revertida/${tarea}` : undefined);
+
+/**
+ * Revierte de verdad: se vuelve a COMPROBAR el plan —entre enseñarlo y confirmarlo pudo escribir alguien—, se guarda el
+ * HEAD de antes en `refDeRevertida` y se vuelve a la base con `reset --hard`. Sin el respaldo escrito no se toca nada.
+ */
+export async function revertirSesion(raiz: string, id: string, tarea: string, desde?: string): Promise<PlanDeReversion> {
+  const plan = await planDeReversion(raiz, id, desde);
+  if (!plan.ok) return plan;
+  const respaldo = refDeRevertida(tarea);
+  if (respaldo === undefined) return { ok: false, motivo: "esa tarea no tiene un id que git acepte" };
+  try {
+    await ejecutar("git", ["update-ref", respaldo, "HEAD"], { cwd: raiz });
+  } catch {
+    return { ok: false, motivo: "no se pudo guardar el respaldo: no se ha tocado nada" };
+  }
+  try {
+    await ejecutar("git", ["reset", "--hard", "--quiet", plan.base], { cwd: raiz });
+  } catch {
+    return { ok: false, motivo: "git no pudo volver atrás; el respaldo quedó guardado" };
+  }
+  return plan;
+}

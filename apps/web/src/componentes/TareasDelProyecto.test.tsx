@@ -546,6 +546,37 @@ describe("TareasDelProyecto: ver lo que hace una tarea en proceso", () => {
       expect(screen.getAllByLabelText("Continuación de la tarea de arriba")).toHaveLength(1);
     });
 
+    /** Revertir (petición suya): solo la ÚLTIMA que cambió el proyecto, y lo decide el servidor al desplegarla. */
+    it("«Revertir sus cambios» sale si el servidor dice que se puede, confirma con la lista de ficheros y lo hace", async () => {
+      const hechas: string[] = [];
+      render(
+        <TareasDelProyecto
+          tareas={[tarea({ id: "x", titulo: "Menú", estado: "terminada", sesion: "s" })]}
+          revertir={{ preguntar: async () => ({ ficheros: ["MenuPrincipal.xne", "icons/x.svg"] }), hacer: async (id) => (hechas.push(id), "ya no es la última") }}
+        />
+      );
+      fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
+      fireEvent.click(filaDe("Menú"));
+      fireEvent.click(await screen.findByRole("button", { name: "Revertir sus cambios" }));
+      const confirmacion = screen.getByRole("alertdialog", { name: "Revertir sus cambios" });
+      expect(confirmacion.textContent).toContain("2 ficheros");
+      expect(confirmacion.textContent).toContain("MenuPrincipal.xne");
+      expect(confirmacion.textContent).toMatch(/CloudStudio/);
+      fireEvent.click(screen.getByRole("button", { name: "Revertir" }));
+      // Si el servidor se niega al confirmar (alguien escribió entre medias), se dice y no se cierra.
+      expect(await screen.findByText(/No se revirtió: ya no es la última/)).toBeTruthy();
+      expect(hechas).toEqual(["x"]);
+    });
+
+    it("si no se puede revertir (no es la última), no hay botón", async () => {
+      const preguntar = vi.fn(async () => ({ motivo: "no es lo último que cambió el proyecto" }));
+      render(<TareasDelProyecto tareas={[tarea({ id: "x", titulo: "Menú", estado: "terminada", sesion: "s" })]} revertir={{ preguntar, hacer: async () => undefined }} />);
+      fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
+      fireEvent.click(filaDe("Menú"));
+      await waitFor(() => expect(preguntar).toHaveBeenCalledWith("x"));
+      expect(screen.queryByRole("button", { name: "Revertir sus cambios" })).toBeNull();
+    });
+
     it("el encargo se despliega dentro, a petición", () => {
       render(<TareasDelProyecto tareas={[tarea({ id: "x", estado: "terminada", sesion: "s", encargo: "El encargo entero" })]} alPedirUltimaRespuesta={async () => ({})} />);
       fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));

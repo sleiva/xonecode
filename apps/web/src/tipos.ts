@@ -1755,6 +1755,9 @@ export type MensajeDelCliente =
   | { clase: "tarea"; accion: "feedback"; id: string; texto: string }
   /** Reencolar una FINALIZADA sin ticket para acabar lo que no hizo. 200 con `{id}`, o 409 con `{motivo}`. */
   | { clase: "tarea"; accion: "reencolar"; id: string; texto: string; borrador?: string }
+  /** REVERTIR lo que hizo una finalizada, solo la última que cambió el proyecto: `revertible` dice qué ficheros (200
+   *  `{ficheros, commits}`) o por qué no (409 `{motivo}`); `revertir` lo hace y la quita del histórico. */
+  | { clase: "tarea"; accion: "revertible" | "revertir"; id: string }
   /**
    * «Continuar» una tarea aparcada sin escribir nada (entra en su hilo `TEXTO_DE_CONTINUAR`), y «Arrancar ahora» una
    * `nuevo` que no espera a ninguna anterior: la persona CEDE el proyecto —se cierra su consola de ahí si no está

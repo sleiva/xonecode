@@ -98,6 +98,13 @@ corre solo y escribe sin aprobación. Cuatro estados; `requiere-atencion` = **es
   los nuevos; cerrar sin encolar borra el borrador. En Finalizadas la continuación CUELGA de su tarea
   (`TareaDelCable.continuaDe`, `apps/web/src/arbolDeTareas.ts`): familia ordenada por su última entrega. **Límite**: la
   original enseña la conversación ya continuada.
+- **REVERTIR una finalizada: solo la ÚLTIMA que cambió el proyecto** (`sesionGit.ts#planDeReversion`, `revertirSesion`,
+  `accion: "revertible" | "revertir"`): sus commits sellados tienen que ser el bloque de ARRIBA de HEAD, sin nada sin
+  commitear, y nadie escribiendo en ese proyecto (`motivoParaNoEditar`). Se vuelve al padre de su primer commit con
+  `reset --hard`, guardando antes el HEAD en `refDeRevertida` (sin respaldo no se toca nada), y la tarea SALE del
+  histórico: la anterior pasa a ser la última (una PILA). Una continuación deshace solo lo suyo (`desde`). **Se niega si
+  `.xonecode/` está en la base** (el reset la pisaría). La fila PREGUNTA al desplegar y confirma con la lista de ficheros.
+  **Límite**: lo ya subido a CloudStudio queda pendiente de subir; no se deshace allí.
 - **Sus artefactos salen de SU carpeta**: `p`/`s` resueltos por el SERVIDOR
   (`arranque.ts#sesionDelDisco`), contenido en la respuesta, nunca al store
   (`OrigenDeArtefactosContexto`). **Límite**: va por id de SESIÓN; tras `/nuevo` no coincide.

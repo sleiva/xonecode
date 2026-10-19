@@ -4193,6 +4193,12 @@ describe("App: una tarea finalizada se lee con su conversación y sus artefactos
     expect(within(barra).getAllByRole("button", { name: /Mi chat/ }).length).toBeGreaterThan(0);
   });
 
+  it("desplegar la finalizada PREGUNTA al servidor si se puede revertir", () => {
+    const { enviar } = conUnaFinalizada();
+    desplegarLaFinalizada();
+    expect(enviar).toHaveBeenCalledWith({ clase: "tarea", accion: "revertible", id: "t1" });
+  });
+
   it("si una tarea VIVA sigue en su hilo (una reencolada), la conversación vuelve a la barra", () => {
     const { store } = conUnaFinalizada();
     const finalizada = store.leer().tareas!.lista[0]!;

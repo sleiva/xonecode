@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
@@ -10,7 +10,10 @@ import {
   marcarSesion,
   olvidarSesion,
   parcheDeSesion,
+  planDeReversion,
+  refDeRevertida,
   refDeSesion,
+  revertirSesion,
   selloDeSesion,
 } from "./sesionGit.js";
 import { commitDeTurno } from "./gitSync.js";
@@ -413,6 +416,94 @@ describe("la atribución por COMMIT", () => {
     const { via, ficheros } = await cambiosDeSesion(raiz, "vieja");
     expect(via).toBe("desde-apertura");
     expect(ficheros.map((f) => f.ruta)).toEqual(["de-otra.md"]);
+    rmSync(raiz, { recursive: true, force: true });
+  });
+});
+
+/** Revertir lo que hizo una tarea (petición suya): solo la ÚLTIMA, y la anterior pasa a serlo — una pila. */
+describe("revertir una sesión", () => {
+  async function turno(raiz: string, sesion: string, ruta: string, texto: string): Promise<void> {
+    escribir(raiz, ruta, texto);
+    expect((await commitDeTurno(raiz, `xonecode: ${sesion}`, sesion)).via).toBe("commit");
+  }
+  function base(): string {
+    const raiz = repo();
+    escribir(raiz, "app.xne", "<app/>");
+    execFileSync("git", ["add", "-A"], { cwd: raiz });
+    execFileSync("git", ["commit", "-qm", "base"], { cwd: raiz });
+    return raiz;
+  }
+
+  it("solo la última; al revertirla vuelve a su antes, guarda el respaldo, y la anterior pasa a ser la última", async () => {
+    const raiz = base();
+    await turno(raiz, "uno", "menu.xne", "<menu/>");
+    await turno(raiz, "dos", "lista.xne", "<lista/>");
+    await turno(raiz, "dos", "menu.xne", "<menu v2/>");
+
+    const deLaUno = await planDeReversion(raiz, "uno");
+    expect(deLaUno).toMatchObject({ ok: false, motivo: expect.stringMatching(/no es lo último/) });
+    const deLaDos = await planDeReversion(raiz, "dos");
+    expect(deLaDos).toMatchObject({ ok: true, ficheros: ["lista.xne", "menu.xne"] });
+
+    const hecho = await revertirSesion(raiz, "dos", "tarea-dos");
+    expect(hecho.ok).toBe(true);
+    expect(existsSync(join(raiz, "lista.xne"))).toBe(false);
+    expect(readFileSync(join(raiz, "menu.xne"), "utf8")).toBe("<menu/>");
+    // El HEAD de antes queda alcanzable: se puede volver atrás a mano.
+    expect(execFileSync("git", ["rev-parse", "--verify", refDeRevertida("tarea-dos")!], { cwd: raiz }).toString().trim()).toMatch(/^[0-9a-f]{40}$/);
+
+    // Ahora la última es la uno.
+    expect(await planDeReversion(raiz, "uno")).toMatchObject({ ok: true, ficheros: ["menu.xne"] });
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("con cambios sin commitear no se revierte: el reset los pisaría", async () => {
+    const raiz = base();
+    await turno(raiz, "uno", "menu.xne", "<menu/>");
+    escribir(raiz, "app.xne", "<app editado a mano/>");
+    expect(await revertirSesion(raiz, "uno", "t")).toMatchObject({ ok: false, motivo: expect.stringMatching(/sin commitear/) });
+    expect(readFileSync(join(raiz, "app.xne"), "utf8")).toBe("<app editado a mano/>");
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("una continuación (`desde`) deshace solo lo suyo, y lo de su original queda", async () => {
+    const raiz = base();
+    const fecha = (iso: string) => {
+      process.env["GIT_COMMITTER_DATE"] = iso;
+      process.env["GIT_AUTHOR_DATE"] = iso;
+    };
+    try {
+      fecha("2026-10-19T08:00:00Z");
+      await turno(raiz, "s", "menu.xne", "<menu/>");
+      fecha("2026-10-19T15:00:00Z");
+      await turno(raiz, "s", "estilo.css", "a{}");
+      const plan = await planDeReversion(raiz, "s", "2026-10-19T14:00:00.000Z");
+      expect(plan).toMatchObject({ ok: true, ficheros: ["estilo.css"] });
+      await revertirSesion(raiz, "s", "cont", "2026-10-19T14:00:00.000Z");
+      expect(existsSync(join(raiz, "estilo.css"))).toBe(false);
+      expect(existsSync(join(raiz, "menu.xne"))).toBe(true);
+    } finally {
+      delete process.env["GIT_COMMITTER_DATE"];
+      delete process.env["GIT_AUTHOR_DATE"];
+      rmSync(raiz, { recursive: true, force: true });
+    }
+  });
+
+  it("si `.xonecode/` está en la base se NIEGA: el reset la pisaría", async () => {
+    const raiz = repo();
+    escribir(raiz, "app.xne", "<app/>");
+    escribir(raiz, ".xonecode/sesiones/x.jsonl", "{}");
+    execFileSync("git", ["add", "-A"], { cwd: raiz });
+    execFileSync("git", ["commit", "-qm", "base con .xonecode"], { cwd: raiz });
+    await turno(raiz, "uno", "menu.xne", "<menu/>");
+    expect(await revertirSesion(raiz, "uno", "t")).toMatchObject({ ok: false, motivo: expect.stringMatching(/\.xonecode/) });
+    expect(existsSync(join(raiz, "menu.xne"))).toBe(true);
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("sin cambios suyos en git no hay nada que deshacer", async () => {
+    const raiz = base();
+    expect(await planDeReversion(raiz, "nadie")).toMatchObject({ ok: false, motivo: expect.stringMatching(/ningún cambio/) });
     rmSync(raiz, { recursive: true, force: true });
   });
 });

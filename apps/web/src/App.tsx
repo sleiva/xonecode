@@ -2755,6 +2755,18 @@ export function App({
       alReencolar={async (id: string, texto: string, borrador?: string) =>
         negativaOFalloDe(await enviar({ clase: "tarea", accion: "reencolar", id, texto, ...(borrador === undefined ? {} : { borrador }) }))
       }
+      // Revertir lo que hizo una finalizada (solo la ÚLTIMA): el servidor contesta en la propia respuesta qué ficheros o por qué no.
+      revertir={{
+        preguntar: async (id: string) => {
+          const r = (await enviar({ clase: "tarea", accion: "revertible", id })) as Response | undefined;
+          if (r?.status === 200) {
+            const cuerpo = (await r.json()) as { ficheros?: unknown };
+            if (Array.isArray(cuerpo.ficheros)) return { ficheros: cuerpo.ficheros.filter((f): f is string => typeof f === "string") };
+          }
+          return { motivo: (await negativaOFalloDe(r)) ?? "el servidor no contestó" };
+        },
+        hacer: async (id: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "revertir", id })),
+      }}
       // Las capturas que se le añaden al reencolar: los MISMOS caminos que «Nueva tarea» (subir al borrador, quitar, y
       // descartar su carpeta si se cierra sin encolar).
       adjuntosDelBorrador={{

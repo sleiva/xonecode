@@ -109,6 +109,7 @@ import { nombreDeApp } from "../../core/descriptoresDeApp.js";
 import { modelosDeMotor } from "../../agent/config/modelosDeMotor.js";
 import { crearServicioDeMotoresLocales, type ServicioDeMotoresLocales } from "../../agent/motores/motoresLocales.js";
 import { agotadoHastaAhora, alCambiarAgotamiento, restablecer } from "../../agent/subagentes/agotamiento.js";
+import { planDeReversion, revertirSesion } from "../../agent/sesiones/sesionGit.js";
 import { medirDiagnosticoDeNode } from "../../agent/config/diagnosticoDeNodeEnMaquina.js";
 import { CONECTOR_STITCH, marcarPantallaElegida, traerPantalla } from "../../agent/motores/trueforge/traerDeStitch.js";
 import { guardarDisenoDeProyecto } from "../../agent/config/configEnDisco.js";
@@ -2955,6 +2956,37 @@ export function montarRutas(
     opciones.revisarTareas?.();
     emitirTareas();
     return { id: nueva.id };
+  };
+
+  /**
+   * REVERTIR lo que hizo una finalizada (petición suya): solo la ÚLTIMA que cambió el proyecto, y al hacerlo se quita del
+   * histórico —la anterior pasa a ser la última—. La regla de git es `sesionGit.ts#planDeReversion`; aquí la tarea, su
+   * sesión, el `desde` de una continuación y que nadie esté escribiendo en ese proyecto ahora mismo.
+   */
+  const tareaParaRevertir = (id: string): { tarea: Tarea & { sesion: string }; desde?: string } | { motivo: string } => {
+    const tarea = opciones.colaDeTareas?.listar().find((t) => t.id === id);
+    if (tarea === undefined) return { motivo: "esa tarea ya no está en el histórico" };
+    if (tarea.estado !== "terminada") return { motivo: "solo se revierte una tarea finalizada" };
+    if (tarea.sesion === undefined) return { motivo: "no quedó su conversación: no consta qué cambió" };
+    const ocupado = vestibulo.motivoParaNoEditar(tarea.proyecto.raiz);
+    if (ocupado !== undefined) return { motivo: ocupado };
+    return { tarea: tarea as Tarea & { sesion: string }, ...(tarea.continuaDe === undefined ? {} : { desde: tarea.creada }) };
+  };
+  const revertibleDeTarea = async (id: string): Promise<{ ficheros: readonly string[]; commits: number } | { motivo: string }> => {
+    const quien = tareaParaRevertir(id);
+    if ("motivo" in quien) return quien;
+    const plan = await planDeReversion(quien.tarea.proyecto.raiz, quien.tarea.sesion, quien.desde);
+    return plan.ok ? { ficheros: plan.ficheros, commits: plan.commits.length } : { motivo: plan.motivo };
+  };
+  const revertirTarea = async (id: string): Promise<{ ficheros: readonly string[] } | { motivo: string }> => {
+    const quien = tareaParaRevertir(id);
+    if ("motivo" in quien) return quien;
+    const hecho = await revertirSesion(quien.tarea.proyecto.raiz, quien.tarea.sesion, quien.tarea.id, quien.desde);
+    if (!hecho.ok) return { motivo: hecho.motivo };
+    // Revertida, sale del histórico: su conversación se queda (`borrarTarea` no la toca), y la anterior es la última.
+    opciones.colaDeTareas?.borrarTarea(id);
+    emitirTareas();
+    return { ficheros: hecho.ficheros };
   };
 
   /** Lo mismo que un feedback, con el texto de «sigue» del núcleo: entra en SU hilo, no repite el
@@ -7620,6 +7652,15 @@ export function montarRutas(
         emitirTareas();
         respuesta.writeHead(200, { "content-type": "application/json" });
         respuesta.end(JSON.stringify(resultado.faltan.length === 0 ? { encoladas: resultado.encoladas } : resultado));
+        return;
+      }
+      if (mensaje.accion === "revertible" || mensaje.accion === "revertir") {
+        // Contestan en la PROPIA respuesta: la tarjeta enseña qué ficheros vuelven atrás, o por qué no se puede.
+        const resultado = await (mensaje.accion === "revertible" ? revertibleDeTarea(mensaje.id) : revertirTarea(mensaje.id)).catch(
+          (error: unknown) => ({ motivo: `no se pudo: ${codigoDe(error)}` })
+        );
+        respuesta.writeHead("motivo" in resultado ? 409 : 200, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify(resultado));
         return;
       }
       if (mensaje.accion === "reencolar") {

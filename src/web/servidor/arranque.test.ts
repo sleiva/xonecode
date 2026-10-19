@@ -7,6 +7,7 @@
  */
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import { execFileSync } from "node:child_process";
+import { commitDeTurno } from "../../agent/sesiones/gitSync.js";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -6455,6 +6456,42 @@ describe("las tareas en background, por el cable", () => {
       expect(conTicket.estado).toBe(409);
       expect(JSON.parse(conTicket.cuerpo).motivo).toMatch(/MAS-1/);
       expect(cola.listar()).toHaveLength(4);
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("«Revertir» deshace la ÚLTIMA finalizada con git de verdad y la quita; entonces la anterior es la última", async () => {
+      const { base, cola, accion, vestibulo } = await conPropuesta();
+      const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      mkdirSync(raiz, { recursive: true });
+      execFileSync("git", ["init", "-q", "."], { cwd: raiz });
+      writeFileSync(join(raiz, "app.xml"), "<app/>");
+      // Como en un proyecto bajado: `.xonecode/` no entra en git.
+      execFileSync("git", ["add", "app.xml"], { cwd: raiz });
+      execFileSync("git", ["-c", "user.email=x@y.z", "-c", "user.name=x", "commit", "-qm", "base"], { cwd: raiz });
+      const turno = async (sesion: string, ruta: string) => {
+        writeFileSync(join(raiz, ruta), "x");
+        await commitDeTurno(raiz, `xonecode: ${sesion}`, sesion);
+      };
+      await turno("s-a", "menu.xne");
+      await turno("s-b", "lista.xne");
+      const hecha = (id: string, sesion: string): Tarea => ({
+        id, proyecto: { id: "p1", raiz, nombre: "Tienda" }, titulo: id, peticion: "p", encargo: "e", adjuntos: [],
+        estado: "terminada", sesion, creada: "2026-10-07T10:00:00.000Z",
+      });
+      cola.guardar([hecha("a", "s-a"), hecha("b", "s-b")]);
+      const pedir = async (accionDeTarea: "revertible" | "revertir", id: string) => {
+        const r = await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: accionDeTarea, id }));
+        return { estado: r.estado, cuerpo: JSON.parse(r.cuerpo) as { motivo?: string; ficheros?: string[] } };
+      };
+
+      expect((await pedir("revertible", "a")).cuerpo.motivo).toMatch(/no es lo último/);
+      expect(await pedir("revertible", "b")).toEqual({ estado: 200, cuerpo: { ficheros: ["lista.xne"], commits: 1 } });
+      expect((await pedir("revertir", "b")).estado).toBe(200);
+      expect(existsSync(join(raiz, "lista.xne"))).toBe(false);
+      expect(cola.listar().map((t) => t.id)).toEqual(["a"]);
+      // Ahora la «a» es la última.
+      expect((await pedir("revertible", "a")).cuerpo.ficheros).toEqual(["menu.xne"]);
       await vestibulo.cerrar();
       rmSync(base, { recursive: true, force: true });
     });
