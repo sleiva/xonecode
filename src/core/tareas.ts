@@ -202,6 +202,11 @@ export interface Tarea {
    * Maset, «Menu Listado Entregas» no era el título de ninguna y la tarea construyó con otra maqueta).
    */
   pantallaDeStitch?: PantallaElegida;
+  /**
+   * La finalizada de la que es CONTINUACIÓN (`tareaReencolada`). Es lo que impide reencolar dos veces la misma mientras
+   * la primera no acaba —también sin hilo, donde la `sesion` compartida no la delata—. No viaja.
+   */
+  continuaDe?: string;
 }
 
 /** Una pantalla de Stitch elegida: su `name` (`projects/<id>/screens/<id>`) y su título, para decirlo sin preguntar. */
@@ -446,8 +451,9 @@ export function conFeedback(tarea: Tarea, texto: string, ahora?: string): Tarea 
  * entonces es su hilo y el feedback, no el encargo: dejar editarlo sería cambiar un texto que el
  * agente no va a volver a leer.
  */
-export function puedeEditarEncargo(tarea: Pick<Tarea, "estado" | "empezada">): boolean {
-  return tarea.estado === "nuevo" && tarea.empezada === undefined;
+export function puedeEditarEncargo(tarea: Pick<Tarea, "estado" | "empezada" | "feedback">): boolean {
+  // Con un feedback (una REENCOLADA nace con uno) lo que se le manda es el feedback, no el encargo.
+  return tarea.estado === "nuevo" && tarea.empezada === undefined && tarea.feedback === undefined;
 }
 
 /**
@@ -558,6 +564,92 @@ export const motivoTrasReanudar = (motivo: string): string =>
  * añadir nada era «Reintentar», que vuelve a mandar el encargo entero.
  */
 export const TEXTO_DE_CONTINUAR = "Continúa donde lo dejaste.";
+
+/**
+ * ¿Se puede REENCOLAR esta finalizada para acabar lo que no hizo? Cualquier terminada, salvo
+ * las que viven en un GESTOR (decisión suya): desde el ticket ya se relanza, y una segunda
+ * puerta aquí abriría otra tarea que el gestor no conoce.
+ */
+export function puedeReencolar(tarea: Pick<Tarea, "estado" | "ticket">): boolean {
+  return tarea.estado === "terminada" && tarea.ticket === undefined;
+}
+
+/**
+ * Lo que se le propone mandar a la tarea REENCOLADA, editable antes de encolar: lo que su
+ * cierre dejó sin hacer. Sin cierre (una de antes de que existiera), lo que dijo el juez si
+ * no fue verde; sin nada de eso, pedirle que lo repase contra el encargo.
+ */
+export function textoParaReencolar(tarea: Pick<Tarea, "cierre" | "veredicto">): string {
+  const criticos = tarea.cierre?.criticos ?? [];
+  const observaciones =
+    tarea.cierre?.observaciones ??
+    (tarea.veredicto !== undefined && tarea.veredicto.veredicto !== "verde"
+      ? [tarea.veredicto.resumen, ...(tarea.veredicto.hallazgos ?? [])]
+      : []);
+  const lista = (titulo: string, cosas: readonly string[]): string[] =>
+    cosas.length === 0 ? [] : [`${titulo}\n${cosas.map((c) => `- ${c}`).join("\n")}`];
+  const partes = [...lista("## CRITICAL", criticos), ...lista("## Observaciones", observaciones)];
+  if (partes.length === 0) {
+    return "Repasa lo que hiciste contra el encargo y termina lo que quedó pendiente.";
+  }
+  return [
+    "La tarea se cerró dejando esto sin hacer. Termínalo, sin rehacer lo que ya está en el disco:",
+    ...partes,
+  ].join("\n\n");
+}
+
+/**
+ * La continuación de esta finalizada que todavía NO ha acabado, si la hay: reencolarla otra vez pondría dos tareas a
+ * escribir en el mismo hilo una detrás de otra. Por `continuaDe`, o por compartir su hilo (`sesion`).
+ */
+export function continuacionEnCurso(original: Pick<Tarea, "id" | "sesion">, lista: readonly Tarea[]): Tarea | undefined {
+  return lista.find(
+    (t) =>
+      t.id !== original.id &&
+      t.estado !== "terminada" &&
+      (t.continuaDe === original.id || (original.sesion !== undefined && t.sesion === original.sesion))
+  );
+}
+
+/**
+ * La tarea NUEVA que acaba lo que dejó una finalizada. **No reabre la original**: `terminada`
+ * no tiene salida, y la original se queda en el histórico tal cual.
+ *
+ * Sigue en el HILO de la original (`sesion`), así el agente recuerda lo que hizo, y el texto
+ * le entra como un FEEDBACK pendiente: el mismo camino que «Continuar» —`peticionDeFeedback`
+ * en el corredor—, que sin hilo manda el encargo original delante y lo dice. Sin ticket, y
+ * sin veredicto ni cierre: son del trabajo de antes.
+ */
+export function tareaReencolada(
+  original: Tarea,
+  nueva: { id: string; texto: string; adjuntos: AdjuntoDeTarea[]; ahora?: string }
+): Tarea {
+  if (!puedeReencolar(original)) {
+    throw new Error(
+      original.ticket === undefined
+        ? "solo se reencola una tarea terminada"
+        : `vive en ${original.ticket.clave}: se relanza desde el gestor`
+    );
+  }
+  const ahora = nueva.ahora ?? new Date().toISOString();
+  const base: Tarea = {
+    id: nueva.id,
+    proyecto: original.proyecto,
+    // Sin apilar: reencolar una continuación no da «X (continuación) (continuación)».
+    titulo: `${original.titulo.replace(/ \(continuación\)$/, "")} (continuación)`,
+    peticion: original.peticion,
+    encargo: original.encargo,
+    adjuntos: nueva.adjuntos,
+    estado: "nuevo",
+    creada: ahora,
+    continuaDe: original.id,
+    ...(original.sesion === undefined ? {} : { sesion: original.sesion }),
+    ...(original.pantallaDeStitch === undefined ? {} : { pantallaDeStitch: original.pantallaDeStitch }),
+  };
+  const limpio = nueva.texto.trim();
+  if (limpio === "") throw new Error("dile qué tiene que acabar: el texto está vacío");
+  return { ...base, feedback: [{ texto: limpio, creado: ahora, consumido: false }] };
+}
 
 /**
  * ¿Se puede «Arrancar ahora»? Una tarea `nuevo` que no espera a ninguna anterior (`tras`): las encadenadas esperan a

@@ -9,7 +9,11 @@ import {
   motivoTrasReanudar,
   puedeArrancarYa,
   puedeEditarEncargo,
+  puedeReencolar,
   reanudadaTrasCorte,
+  tareaReencolada,
+  continuacionEnCurso,
+  textoParaReencolar,
   rutaRelativaDeTarea,
   siguientesAEjecutar,
   tituloDeTarea,
@@ -457,5 +461,61 @@ describe("puedeArrancarYa", () => {
     expect(puedeArrancarYa({ estado: "nuevo", tras: "a" }, [{ id: "a", estado: "terminada" }])).toBe(true);
     expect(puedeArrancarYa({ estado: "nuevo", tras: "a" }, [])).toBe(true);
     expect(puedeArrancarYa({ estado: "requiere-atencion" }, [])).toBe(false);
+  });
+});
+
+describe("reencolar una finalizada", () => {
+  const hecha = (extra: Partial<Tarea> = {}): Tarea =>
+    tarea({ estado: "terminada", sesion: "s-1", empezada: "2026-09-08T10:01:00.000Z", acabada: "2026-09-08T11:00:00.000Z", ...extra });
+
+  it("cualquier terminada, salvo la que vive en un gestor (desde el ticket ya se relanza)", () => {
+    expect(puedeReencolar(hecha())).toBe(true);
+    expect(puedeReencolar(hecha({ ticket: { conector: "jira", sitio: "x", proyecto: "MAS", clave: "MAS-1" } }))).toBe(false);
+    expect(puedeReencolar(tarea({ estado: "requiere-atencion", motivo: "x" }))).toBe(false);
+  });
+
+  it("el texto propuesto es lo que el cierre dejó sin hacer", () => {
+    const texto = textoParaReencolar({ cierre: { criticos: ["falta la fila de totales"], observaciones: ["el juez vio un warning"] } });
+    expect(texto).toContain("## CRITICAL\n- falta la fila de totales");
+    expect(texto).toContain("## Observaciones\n- el juez vio un warning");
+    // Sin cierre ni veredicto rojo, se le pide que lo repase: no hay lista que inventar.
+    expect(textoParaReencolar({})).toMatch(/Repasa lo que hiciste/);
+    expect(textoParaReencolar({ veredicto: { veredicto: "rojo", resumen: "no compila" } })).toContain("- no compila");
+  });
+
+  it("es una tarea NUEVA en el hilo de la original, con el texto como feedback y sin el ticket ni el veredicto de antes", () => {
+    const original = hecha({ veredicto: { veredicto: "rojo", resumen: "x" }, cierre: { criticos: ["a"], observaciones: [] }, autorizadas: ["app.xne"] });
+    const nueva = tareaReencolada(original, { id: "t2", texto: "  acaba a  ", adjuntos: [], ahora: "2026-09-09T09:00:00.000Z" });
+    expect(nueva).toMatchObject({ id: "t2", estado: "nuevo", sesion: "s-1", encargo: original.encargo, titulo: "Arregla el login (continuación)" });
+    expect(nueva.feedback).toEqual([{ texto: "acaba a", creado: "2026-09-09T09:00:00.000Z", consumido: false }]);
+    expect(nueva.veredicto).toBeUndefined();
+    expect(nueva.cierre).toBeUndefined();
+    expect(nueva.autorizadas).toBeUndefined();
+    expect(nueva.empezada).toBeUndefined();
+    // Y su encargo no se edita: lo que se le manda es el feedback.
+    expect(puedeEditarEncargo(nueva)).toBe(false);
+  });
+
+  it("no se apila el título, y una continuación sin acabar frena otra (por `continuaDe` o por el hilo)", () => {
+    const original = hecha();
+    const primera = tareaReencolada(original, { id: "t2", texto: "x", adjuntos: [] });
+    expect(primera.continuaDe).toBe("t1");
+    expect(tareaReencolada({ ...primera, estado: "terminada" }, { id: "t3", texto: "x", adjuntos: [] }).titulo).toBe("Arregla el login (continuación)");
+    expect(continuacionEnCurso(original, [original, primera])?.id).toBe("t2");
+    expect(continuacionEnCurso(original, [original, { ...primera, estado: "terminada" }])).toBeUndefined();
+    // Sin hilo, la delata `continuaDe`.
+    const { sesion: _s, ...sinHilo } = original;
+    expect(continuacionEnCurso(sinHilo, [sinHilo, { ...primera, sesion: "otra" }])?.id).toBe("t2");
+  });
+
+  it("sin hilo guardado arranca sin `sesion`, y el corredor manda el encargo delante", () => {
+    const { sesion: _s, ...sinHilo } = hecha();
+    expect(tareaReencolada(sinHilo, { id: "t2", texto: "x", adjuntos: [] }).sesion).toBeUndefined();
+  });
+
+  it("se niega con el motivo: con ticket, sin terminar o con el texto vacío", () => {
+    expect(() => tareaReencolada(hecha({ ticket: { conector: "jira", sitio: "x", proyecto: "MAS", clave: "MAS-1" } }), { id: "t2", texto: "x", adjuntos: [] })).toThrow(/MAS-1/);
+    expect(() => tareaReencolada(tarea(), { id: "t2", texto: "x", adjuntos: [] })).toThrow(/terminada/);
+    expect(() => tareaReencolada(hecha(), { id: "t2", texto: "   ", adjuntos: [] })).toThrow(/vacío/);
   });
 });

@@ -4131,6 +4131,7 @@ describe("App: una tarea finalizada se lee con su conversación y sus artefactos
             creada: "2026-10-14T10:00:00.000Z",
             empezada: "2026-10-14T10:01:00.000Z",
             acabada: "2026-10-14T10:30:00.000Z",
+            reencolable: { texto: "Termina lo pendiente." },
           },
         ],
         concurrencia: 1,
@@ -4175,12 +4176,36 @@ describe("App: una tarea finalizada se lee con su conversación y sus artefactos
     expect(await screen.findByText(/Hecho: la versión sale bajo el logo/)).toBeTruthy();
   });
 
+  it("«Reencolar lo pendiente» manda la intención al servidor, con el texto propuesto", async () => {
+    const { enviar } = conUnaFinalizada();
+    desplegarLaFinalizada();
+    fireEvent.click(screen.getByRole("button", { name: "Reencolar lo pendiente" }));
+    fireEvent.click(screen.getByRole("button", { name: "Encolar" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "tarea", accion: "reencolar", id: "t1", texto: "Termina lo pendiente." });
+    expect(await screen.findByText(/Encolada/)).toBeTruthy();
+  });
+
   it("su conversación ya no sale en la barra: vive en Finalizadas", () => {
     conUnaFinalizada();
     const barra = screen.getAllByRole("navigation").find((n) => !n.hasAttribute("aria-label"))!;
     expect(within(barra).queryByRole("button", { name: /Tarea de fondo/ })).toBeNull();
     // Las sesiones del proyecto SÍ están desplegadas: la de la tarea falta por el filtro, no porque no se listen.
     expect(within(barra).getAllByRole("button", { name: /Mi chat/ }).length).toBeGreaterThan(0);
+  });
+
+  it("si una tarea VIVA sigue en su hilo (una reencolada), la conversación vuelve a la barra", () => {
+    const { store } = conUnaFinalizada();
+    const finalizada = store.leer().tareas!.lista[0]!;
+    act(() =>
+      store.aplicar({
+        clase: "tareas",
+        lista: [finalizada, { ...finalizada, id: "t2", titulo: "Versión en el login (continuación)", estado: "en-proceso", acabada: undefined }],
+        concurrencia: 1,
+        corriendoAqui: true,
+      } as never)
+    );
+    const barra = screen.getAllByRole("navigation").find((n) => !n.hasAttribute("aria-label"))!;
+    expect(within(barra).getAllByRole("button", { name: /Tarea de fondo/ }).length).toBeGreaterThan(0);
   });
 
   it("«Cerrar» vuelve a Tareas → Finalizadas, no al Resumen; y eso se gasta al volver", async () => {

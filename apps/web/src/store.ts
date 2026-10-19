@@ -984,6 +984,12 @@ function pantallaDeTarea(valor: unknown): { pantallaDeStitch?: { name: string; t
   return { pantallaDeStitch: { name: v["name"], titulo: v["titulo"], ...(typeof v["proyecto"] === "string" ? { proyecto: v["proyecto"] } : {}) } };
 }
 
+function reencolableDeTarea(valor: unknown): { reencolable?: { texto: string } } {
+  if (typeof valor !== "object" || valor === null) return {};
+  const texto = (valor as Record<string, unknown>)["texto"];
+  return typeof texto === "string" && texto.trim() !== "" ? { reencolable: { texto } } : {};
+}
+
 function ticketDeTarea(valor: unknown): { ticket?: NonNullable<TareaDelCable["ticket"]> } {
   if (typeof valor !== "object" || valor === null) return {};
   const v = valor as Record<string, unknown>;
@@ -1806,6 +1812,8 @@ export function crearStoreDelCliente(): {
                   ...ticketDeTarea(t["ticket"]),
                   // La pantalla de Stitch elegida, por la lista blanca y con su forma: sin ella «Editar» no la traería marcada.
                   ...pantallaDeTarea(t["pantallaDeStitch"]),
+                  // Si se puede reencolar (lo decide el servidor), con su texto propuesto: solo con un texto de verdad.
+                  ...reencolableDeTarea(t["reencolable"]),
                 }))
                 .filter((t) => t.id !== ""),
             },

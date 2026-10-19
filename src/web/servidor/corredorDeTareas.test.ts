@@ -27,7 +27,7 @@ import { CatalogoModelosEnMemoria } from "../../core/ports.js";
 import type { Consola } from "../../cli/consola.js";
 import type { Acto } from "../../core/actos.js";
 import type { MensajeAlCliente } from "./transporte.js";
-import { motivoTrasReanudar, TEXTO_DE_REANUDACION, TOPE_DE_RONDAS_DE_TAREA, type Tarea } from "../../core/tareas.js";
+import { motivoTrasReanudar, tareaReencolada, TEXTO_DE_REANUDACION, TOPE_DE_RONDAS_DE_TAREA, type Tarea } from "../../core/tareas.js";
 import { MAX_APPROVAL_ROUNDS } from "../../vendor/hitl.js";
 import { SALVEDAD_SIN_ESCRITURAS, type ResultadoDeTurno, type VeredictoDeTarea } from "../../core/entrega.js";
 import type { CasoDeJuez, JuezDeTareaPort } from "../../core/ports.js";
@@ -863,6 +863,59 @@ describe("el feedback reanuda una tarea, en su mismo hilo", () => {
     // Y de verdad se abrió un hilo NUEVO — no el que ya no existía.
     expect(d.estado()[0]!.sesion).toBe("hilo-nuevo");
     await corredor.parar();
+  });
+
+  /**
+   * La REENCOLADA (`core/tareas.ts#tareaReencolada`) nace como ninguna otra: `nuevo`, sin `empezada`, con la `sesion` de
+   * su finalizada y un feedback pendiente. Lo que se compone en el servidor solo vale si el corredor la corre así.
+   */
+  it("una reencolada abre el hilo de su finalizada y recibe SOLO el texto, que queda consumido; sin hilo, con el encargo delante", async () => {
+    const original = TAREA({ id: "orig", estado: "terminada", sesion: "s-orig", encargo: "haz el menú", acabada: "2026-09-08T11:00:00.000Z" });
+    const pedidas: (string | undefined)[] = [];
+    const recibidos: string[] = [];
+    const corredorCon = (d: ReturnType<typeof discoDeMentira>) =>
+      crearCorredorDeTareas({
+        ...ENTREGA_VERDE,
+        disco: d.disco,
+        abrirParaTarea: async (raiz, sesion) => {
+          pedidas.push(sesion);
+          return {
+            raiz,
+            idDeHilo: sesion ?? "hilo-nuevo",
+            correrTarea: async (p) => {
+              recibidos.push(p);
+              return { verificador: "verde", pendientes: 0 };
+            },
+            cerrar: async () => {},
+          };
+        },
+        pid: 1,
+        concurrencia: () => 1,
+      });
+
+    const d = discoDeMentira([original, tareaReencolada(original, { id: "t2", texto: "acaba los totales", adjuntos: [] })]);
+    const corredor = corredorCon(d);
+    await corredor.arrancar();
+    await corredor.asentar();
+    expect(pedidas).toEqual(["s-orig"]);
+    expect(recibidos).toEqual(["acaba los totales"]);
+    const corrida = d.estado().find((t) => t.id === "t2")!;
+    expect(corrida.feedback).toEqual([expect.objectContaining({ texto: "acaba los totales", consumido: true })]);
+    expect(corrida.sesion).toBe("s-orig");
+    // La finalizada no se ha movido.
+    expect(d.estado().find((t) => t.id === "orig")!.estado).toBe("terminada");
+    await corredor.parar();
+
+    pedidas.length = 0;
+    recibidos.length = 0;
+    const { sesion: _s, ...sinHilo } = original;
+    const d2 = discoDeMentira([sinHilo, tareaReencolada(sinHilo, { id: "t3", texto: "acaba los totales", adjuntos: [] })]);
+    const corredor2 = corredorCon(d2);
+    await corredor2.arrancar();
+    await corredor2.asentar();
+    expect(pedidas).toEqual([undefined]);
+    expect(recibidos).toEqual([peticionDeFeedback("haz el menú", "acaba los totales", false)]);
+    await corredor2.parar();
   });
 
   it("dos feedbacks seguidos: el segundo no borra el primero, y no se REPROCESA el ya consumido", async () => {

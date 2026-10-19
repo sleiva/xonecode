@@ -588,10 +588,13 @@ export function App({
    * Resumen (los dos se DESMONTAN mientras se lee y nacerían en su pestaña por omisión). Se gasta al volver.
    */
   const [volverAFinalizadas, setVolverAFinalizadas] = useState(false);
-  /** Las conversaciones de las tareas TERMINADAS: son histórico (Tareas → Finalizadas), y la barra no las lista. */
+  /** Las conversaciones de las tareas TERMINADAS: son histórico (Tareas → Finalizadas), y la barra no las lista. Salvo
+   *  si una tarea VIVA sigue en ella (una reencolada continúa el hilo de su finalizada): entonces es de esa. */
   const sesionesDeFinalizadas = useMemo(() => {
+    const lista = estado.tareas?.lista ?? [];
+    const vivas = new Set(lista.flatMap((t) => (t.estado !== "terminada" && t.sesion !== undefined ? [t.sesion] : [])));
     const ids = new Set<string>();
-    for (const t of estado.tareas?.lista ?? []) if (t.estado === "terminada" && t.sesion !== undefined) ids.add(t.sesion);
+    for (const t of lista) if (t.estado === "terminada" && t.sesion !== undefined && !vivas.has(t.sesion)) ids.add(t.sesion);
     return ids;
   }, [estado.tareas]);
   /**
@@ -2748,6 +2751,8 @@ export function App({
             },
           }
         : {})}
+      // Reencolar una finalizada sin ticket (otra tarea en su hilo): el formulario dice por qué si el servidor se niega.
+      alReencolar={async (id: string, texto: string) => negativaOFalloDe(await enviar({ clase: "tarea", accion: "reencolar", id, texto }))}
       alPedirUltimaRespuesta={async (t: TareaDelCable) => {
         if (t.sesion === undefined) return {};
         const r = (await enviar({ clase: "leerSesion", proyecto: t.proyecto, sesion: t.sesion })) as Response | undefined;

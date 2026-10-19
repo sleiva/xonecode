@@ -1337,6 +1337,8 @@ export interface TareaDelCable {
   ticket?: { clave: string; conector: string; url?: string; aviso?: string };
   /** La pantalla de Stitch elegida para la tarea (su `name` y su título). */
   pantallaDeStitch?: { name: string; titulo: string; proyecto?: string };
+  /** Si se puede reencolar para acabar lo que no hizo, con el texto propuesto. Lo decide el SERVIDOR; ausente = no se ofrece. */
+  reencolable?: { texto: string };
 }
 
 /**
@@ -1371,8 +1373,8 @@ export function puedeArrancarYa(tarea: Pick<TareaDelCable, "estado" | "tras">, l
  * Copia DECLARADA de `core/tareas.ts#puedeEditarEncargo` (IXCODE-52): solo una que NUNCA ha arrancado. Decide si se
  * ofrece «Editar el encargo»; el servidor la vuelve a aplicar y contesta 409 si no vale.
  */
-export function puedeEditarEncargo(tarea: Pick<TareaDelCable, "estado" | "empezada">): boolean {
-  return tarea.estado === "nuevo" && tarea.empezada === undefined;
+export function puedeEditarEncargo(tarea: Pick<TareaDelCable, "estado" | "empezada" | "feedback">): boolean {
+  return tarea.estado === "nuevo" && tarea.empezada === undefined && tarea.feedback === undefined;
 }
 
 /**
@@ -1747,6 +1749,8 @@ export type MensajeDelCliente =
   /** «Se edita la tarea y se agrega el feedback del usuario»: la respuesta a una tarea
    *  «esperando feedback», que la devuelve al lazo en su MISMO hilo. */
   | { clase: "tarea"; accion: "feedback"; id: string; texto: string }
+  /** Reencolar una FINALIZADA sin ticket para acabar lo que no hizo. 200 con `{id}`, o 409 con `{motivo}`. */
+  | { clase: "tarea"; accion: "reencolar"; id: string; texto: string }
   /**
    * «Continuar» una tarea aparcada sin escribir nada (entra en su hilo `TEXTO_DE_CONTINUAR`), y «Arrancar ahora» una
    * `nuevo` que no espera a ninguna anterior: la persona CEDE el proyecto —se cierra su consola de ahí si no está

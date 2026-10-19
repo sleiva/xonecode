@@ -247,6 +247,8 @@ import {
   darPorBuenaAMano,
   puedeArrancarYa,
   puedeEditarEncargo,
+  tareaReencolada,
+  continuacionEnCurso,
   TEXTO_DE_CONTINUAR,
   tituloDeTarea,
   type Tarea,
@@ -2908,6 +2910,41 @@ export function montarRutas(
     opciones.revisarTareas?.();
     emitirTareas();
   };
+  /**
+   * Reencolar una FINALIZADA para acabar lo que no hizo: una tarea NUEVA en el hilo de la original, con el texto
+   * (editado por la persona) como feedback. La regla vive en `core/tareas.ts#tareaReencolada`; aquí solo el disco: el
+   * id y los adjuntos, que se COPIAN para que lo que el hilo nombra en `/adjuntos/` siga ahí. Devuelve el motivo si no.
+   */
+  const reencolarTarea = (id: string, texto: unknown): { id: string } | { motivo: string } => {
+    const cola = opciones.colaDeTareas;
+    if (cola === undefined) return { motivo: "esta ejecución no tiene cola de tareas" };
+    if (typeof texto !== "string") return { motivo: "dile qué tiene que acabar: el texto está vacío" };
+    const lista = cola.listar();
+    const original = lista.find((t) => t.id === id);
+    if (original === undefined) return { motivo: "esa tarea ya no está en el histórico" };
+    const nuevoId = randomUUID();
+    let nueva: Tarea;
+    try {
+      // Primero la regla, y SOLO después se copia nada: una negativa no deja una carpeta de adjuntos huérfana.
+      tareaReencolada(original, { id: nuevoId, texto, adjuntos: [] });
+      const enCurso = continuacionEnCurso(original, lista);
+      if (enCurso !== undefined) return { motivo: `ya está encolada su continuación, «${enCurso.titulo}»: espera a que acabe` };
+      const desde = cola.carpetaDeAdjuntos?.(original.id);
+      for (const adjunto of original.adjuntos) {
+        if (desde === undefined) break;
+        const ruta = join(desde, adjunto.nombre);
+        if (existsSync(ruta)) cola.guardarAdjunto(nuevoId, adjunto.nombre, readFileSync(ruta));
+      }
+      nueva = tareaReencolada(original, { id: nuevoId, texto, adjuntos: cola.listarAdjuntos(nuevoId) });
+    } catch (error) {
+      return { motivo: error instanceof Error ? error.message : String(error) };
+    }
+    cola.guardar([...cola.listar(), nueva]);
+    opciones.revisarTareas?.();
+    emitirTareas();
+    return { id: nueva.id };
+  };
+
   /** Lo mismo que un feedback, con el texto de «sigue» del núcleo: entra en SU hilo, no repite el
    *  encargo. Devuelve por qué no, o nada si se hizo. */
   const continuarTarea = (id: string): string | undefined => {
@@ -7555,6 +7592,13 @@ export function montarRutas(
         emitirTareas();
         respuesta.writeHead(200, { "content-type": "application/json" });
         respuesta.end(JSON.stringify(resultado.faltan.length === 0 ? { encoladas: resultado.encoladas } : resultado));
+        return;
+      }
+      if (mensaje.accion === "reencolar") {
+        const resultado = reencolarTarea(mensaje.id, mensaje.texto);
+        const negado = "motivo" in resultado;
+        respuesta.writeHead(negado ? 409 : 200, { "content-type": "application/json" });
+        respuesta.end(JSON.stringify(resultado));
         return;
       }
       if (mensaje.accion === "continuar" && opciones.colaDeTareas !== undefined) {

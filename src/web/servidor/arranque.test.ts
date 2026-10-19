@@ -81,7 +81,7 @@ import { crearTareasEnDisco, TOPE_DE_ADJUNTO } from "../../agent/tareas/tareasEn
 import { carpetaDeAdjuntosDeSesion } from "../../core/adjuntos.js";
 import { TOPE_DE_ADJUNTO_DE_SESION } from "../../agent/sesiones/adjuntosDeSesion.js";
 import type { ManejadorRuta } from "./servidor.js";
-import { ESTADOS_DEL_LANZAMIENTO, FASES_DEL_LANZAMIENTO } from "./transporte.js";
+import { ESTADOS_DEL_LANZAMIENTO, FASES_DEL_LANZAMIENTO, filaDeTarea } from "./transporte.js";
 import {
   FASES_DE_LANZAMIENTO,
   type EstadoDeLanzamiento,
@@ -6366,6 +6366,47 @@ describe("las tareas en background, por el cable", () => {
       expect(await enviarMensaje(accion, { clase: "tarea", accion: "continuar", id: "a" })).toBe(204);
       expect(cola.listar()[0]).toMatchObject({ estado: "nuevo", feedback: [{ texto: "Continúa donde lo dejaste.", consumido: false }] });
       expect(await enviarMensaje(accion, { clase: "tarea", accion: "continuar", id: "a" })).toBe(409);
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("«Reencolar» una finalizada sin ticket crea otra en su hilo, con sus adjuntos; con ticket contesta 409 y no crea nada", async () => {
+      const { base, cola, accion, revisado, vestibulo } = await conPropuesta();
+      const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      const hecha = (id: string, extra: Partial<Tarea> = {}): Tarea => ({
+        id, proyecto: { id: "p1", raiz, nombre: "Tienda" }, titulo: "Menú", peticion: "p", encargo: "e", adjuntos: [],
+        estado: "terminada", sesion: "s-orig", creada: "2026-10-07T10:00:00.000Z", acabada: "2026-10-07T11:00:00.000Z",
+        cierre: { criticos: ["falta la fila de totales"], observaciones: [] }, ...extra,
+      });
+      cola.guardarAdjunto("a", "maqueta.png", Buffer.from("png"));
+      cola.guardar([
+        hecha("a", { adjuntos: cola.listarAdjuntos("a") }),
+        hecha("j", { ticket: { conector: "jira", sitio: "s", proyecto: "MAS", clave: "MAS-1" } }),
+      ]);
+
+      // La fila dice si se puede y con qué texto: lo decide el servidor.
+      const fila = (id: string) => filaDeTarea(cola.listar().find((t) => t.id === id)!);
+      expect(fila("a").reencolable?.texto).toContain("- falta la fila de totales");
+      expect(fila("j").reencolable).toBeUndefined();
+
+      const antes = revisado();
+      const r = await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "reencolar", id: "a", texto: "acaba los totales" }));
+      expect(r.estado).toBe(200);
+      const nueva = cola.listar().find((t) => t.id === JSON.parse(r.cuerpo).id)!;
+      expect(nueva).toMatchObject({ estado: "nuevo", sesion: "s-orig", feedback: [{ texto: "acaba los totales", consumido: false }] });
+      expect(nueva.adjuntos.map((x) => x.nombre)).toEqual(["maqueta.png"]);
+      expect(revisado()).toBeGreaterThan(antes);
+      // La original no se toca: sigue en el histórico.
+      expect(cola.listar().find((t) => t.id === "a")).toMatchObject({ estado: "terminada" });
+      // Y mientras su continuación no acaba, un segundo «Reencolar» se niega diciendo cuál.
+      const otra = await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "reencolar", id: "a", texto: "otra vez" }));
+      expect(otra.estado).toBe(409);
+      expect(JSON.parse(otra.cuerpo).motivo).toMatch(/Menú \(continuación\)/);
+
+      const conTicket = await postearConCuerpo(accion, JSON.stringify({ clase: "tarea", accion: "reencolar", id: "j", texto: "x" }));
+      expect(conTicket.estado).toBe(409);
+      expect(JSON.parse(conTicket.cuerpo).motivo).toMatch(/MAS-1/);
+      expect(cola.listar()).toHaveLength(3);
       await vestibulo.cerrar();
       rmSync(base, { recursive: true, force: true });
     });

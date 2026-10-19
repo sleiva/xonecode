@@ -446,6 +446,36 @@ describe("TareasDelProyecto: ver lo que hace una tarea en proceso", () => {
       expect(screen.getByText("el juez de QA dijo «rojo»")).toBeTruthy();
     });
 
+    /** Reencolar lo pendiente: solo si el SERVIDOR dice que se puede (`reencolable`), con su texto editable. */
+    it("«Reencolar lo pendiente» manda el texto editado; si el servidor se niega lo dice y no se cierra", async () => {
+      const reencolar = vi.fn(async (_id: string, _texto: string): Promise<string | undefined> => "esa tarea ya no está en el histórico");
+      render(
+        <TareasDelProyecto
+          tareas={[
+            tarea({ id: "x", titulo: "Menú", estado: "terminada", sesion: "s", reencolable: { texto: "## CRITICAL\n- falta la fila" } }),
+            tarea({ id: "j", titulo: "Con ticket", estado: "terminada", sesion: "s2", acabada: "2026-10-01T10:00:00.000Z" }),
+          ]}
+          alReencolar={reencolar}
+        />
+      );
+      fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));
+      // Sin `reencolable` (p. ej. con ticket: se relanza desde el gestor) no se ofrece.
+      fireEvent.click(filaDe("Con ticket"));
+      expect(screen.queryByRole("button", { name: "Reencolar lo pendiente" })).toBeNull();
+      fireEvent.click(filaDe("Menú"));
+      fireEvent.click(screen.getByRole("button", { name: "Reencolar lo pendiente" }));
+      const campo = screen.getByRole("textbox") as HTMLTextAreaElement;
+      expect(campo.value).toBe("## CRITICAL\n- falta la fila");
+      fireEvent.change(campo, { target: { value: "acaba la fila de totales" } });
+      fireEvent.click(screen.getByRole("button", { name: "Encolar" }));
+      expect(await screen.findByText(/No se encoló: esa tarea ya no está/)).toBeTruthy();
+      expect(reencolar).toHaveBeenCalledWith("x", "acaba la fila de totales");
+      // Y cuando sí, lo dice y dónde está.
+      reencolar.mockResolvedValueOnce(undefined);
+      fireEvent.click(screen.getByRole("button", { name: "Encolar" }));
+      expect(await screen.findByText(/Encolada: la tienes en «En curso»/)).toBeTruthy();
+    });
+
     it("el encargo se despliega dentro, a petición", () => {
       render(<TareasDelProyecto tareas={[tarea({ id: "x", estado: "terminada", sesion: "s", encargo: "El encargo entero" })]} alPedirUltimaRespuesta={async () => ({})} />);
       fireEvent.click(screen.getByRole("tab", { name: /Finalizadas/ }));

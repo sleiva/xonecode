@@ -69,7 +69,8 @@ const DECISIONES: Readonly<Record<string, readonly string[]>> = {
   peticion: ["peticion"],
   encargo: ["encargo"],
   adjuntos: ["adjuntos"],
-  estado: ["estado"],
+  // `reencolable` sale del estado (y de que no tenga ticket): lo DECIDE el servidor, y la pantalla solo lo ofrece.
+  estado: ["estado", "reencolable"],
   motivo: ["motivo"],
   sesion: ["sesion"],
   // Viaja: la pestaña Tareas dice «espera a: <título de la anterior>» de una encadenada.
@@ -92,6 +93,8 @@ const DECISIONES: Readonly<Record<string, readonly string[]>> = {
   ticket: ["ticket"],
   // Viaja: la fila la enseña y «Editar la tarea» la trae marcada. Es un id de Stitch y un título, no una ruta.
   pantallaDeStitch: ["pantallaDeStitch"],
+  // De qué finalizada es continuación: solo frena un segundo «Reencolar» en el servidor. En la pantalla no sirve.
+  continuaDe: [],
 };
 
 const TAREA_COMPLETA: Required<Tarea> = {
@@ -122,6 +125,7 @@ const TAREA_COMPLETA: Required<Tarea> = {
   terminadaAMano: true,
   ticket: { conector: "jira", sitio: "cloud-1", proyecto: "KAN", clave: "KAN-7", url: "https://x.atlassian.net/browse/KAN-7", aviso: "no se pudo pasar a PROBAR" },
   pantallaDeStitch: { name: "projects/1/screens/ab", titulo: "Listado de Entregas", proyecto: "Maset" },
+  continuaDe: "t0",
 };
 
 describe("filaDeTarea", () => {
@@ -134,7 +138,10 @@ describe("filaDeTarea", () => {
     expect(camposDeInterfaz(RUTA_TRANSPORTE, "TareaDelCable")).toEqual(producidos);
     // Y de verdad los produce, no solo los declara: con una tarea que trae TODOS los campos
     // puestos, la fila no puede quedarse ninguno por el camino.
-    expect(Object.keys(filaDeTarea(TAREA_COMPLETA)).sort()).toEqual(producidos);
+    // `reencolable` es la excepción: solo sale SIN ticket, y la completa lo lleva.
+    expect(Object.keys(filaDeTarea(TAREA_COMPLETA)).sort()).toEqual(producidos.filter((c) => c !== "reencolable"));
+    const { ticket: _t, ...sinTicket } = TAREA_COMPLETA;
+    expect(filaDeTarea(sinTicket).reencolable?.texto).toMatch(/termina|Termínalo/i);
   });
 
   it("del ticket NO viajan el sitio ni el proyecto del gestor", () => {

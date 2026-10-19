@@ -75,6 +75,7 @@ export function TareasDelProyecto({
   mirada,
   alLeerFinalizada,
   alPedirUltimaRespuesta,
+  alReencolar,
   pestanaInicial,
   alMirarGestor,
   conectado,
@@ -163,6 +164,8 @@ export function TareasDelProyecto({
   /** Lo último que contestó el agente en la conversación de una finalizada: su resumen de lo que hizo. Se pide al
    *  desplegar (nunca viaja con la cola). `undefined` = no consta; un texto que empieza por «No se pudo» es un fallo. */
   alPedirUltimaRespuesta?: (tarea: TareaDelCable) => Promise<{ texto?: string; error?: string }>;
+  /** Reencolar una finalizada para acabar lo que no hizo (ver `Reencolar`). Devuelve el motivo si el servidor se negó. */
+  alReencolar?: (id: string, texto: string) => Promise<string | undefined>;
   /** Dónde se monta: «Finalizadas» al volver de leer una (la lista se desmonta mientras se lee). Solo cuenta al montar. */
   pestanaInicial?: "curso" | "finalizadas";
   /** «Mirar ahora» el gestor (la puerta 2): solo con el disparo encendido. Devuelve qué pasó, en una frase. */
@@ -279,6 +282,7 @@ export function TareasDelProyecto({
                   {...(alLeerFinalizada === undefined ? {} : { alLeer: alLeerFinalizada })}
                   {...(alPedirUltimaRespuesta === undefined ? {} : { alPedirUltimaRespuesta })}
                   {...(alDescartar === undefined ? {} : { alBorrar: alDescartar })}
+                  {...(alReencolar === undefined ? {} : { alReencolar })}
                 />
               ))}
             </ul>
@@ -367,12 +371,16 @@ function FilaFinalizada({
   alLeer,
   alPedirUltimaRespuesta,
   alBorrar,
+  alReencolar,
 }: {
   tarea: TareaDelCable;
   alLeer?: (tarea: TareaDelCable) => void;
   alPedirUltimaRespuesta?: (tarea: TareaDelCable) => Promise<{ texto?: string; error?: string }>;
   /** Quitarla del histórico (la acción `descartar`: a su ticket, ya cerrado, no le hace nada). Pide confirmación antes. */
   alBorrar?: (id: string) => void;
+  /** Encolar otra en su hilo para acabar lo que no hizo; devuelve el motivo si el servidor se negó. Solo se ofrece si
+   *  la fila trae `reencolable` (lo decide el servidor: sin ticket). */
+  alReencolar?: (id: string, texto: string) => Promise<string | undefined>;
 }) {
   const [abierta, setAbierta] = useState(false);
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
@@ -486,6 +494,9 @@ function FilaFinalizada({
               </button>
             )}
           </div>
+          {t.reencolable === undefined || alReencolar === undefined ? null : (
+            <Reencolar id={t.id} textoPropuesto={t.reencolable.texto} conHilo={conConversacion} alReencolar={alReencolar} />
+          )}
           {verEncargo ? (
             <div>
               <EncargoDeTarea tarea={t} />
@@ -494,6 +505,84 @@ function FilaFinalizada({
         </div>
       ) : null}
     </li>
+  );
+}
+
+/**
+ * «Reencolar lo pendiente»: abre el texto que se le mandará (lo que el cierre dejó sin hacer, propuesto por el SERVIDOR)
+ * para editarlo, y encola una tarea NUEVA en el hilo de esta. La original se queda en el histórico tal cual. El
+ * formulario no se cierra si el servidor se niega: dice por qué.
+ */
+function Reencolar({
+  id,
+  textoPropuesto,
+  conHilo,
+  alReencolar,
+}: {
+  id: string;
+  textoPropuesto: string;
+  conHilo: boolean;
+  alReencolar: (id: string, texto: string) => Promise<string | undefined>;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [texto, setTexto] = useState(textoPropuesto);
+  const [enviando, setEnviando] = useState(false);
+  const [resultado, setResultado] = useState<{ motivo?: string; hecho?: true } | undefined>(undefined);
+  const limpio = texto.trim();
+  if (resultado?.hecho === true) {
+    return <p className={estilos.aviso}>Encolada: la tienes en «En curso».</p>;
+  }
+  if (!abierto) {
+    return (
+      <div className={estilos.accionesFinalizada}>
+        <button type="button" className={estilos.leer} onClick={() => setAbierto(true)}>
+          Reencolar lo pendiente
+        </button>
+      </div>
+    );
+  }
+  return (
+    <form
+      className={estilos.reencolar}
+      onSubmit={(evento) => {
+        evento.preventDefault();
+        if (limpio === "" || enviando) return;
+        setEnviando(true);
+        void alReencolar(id, limpio).then(
+          (motivo) => {
+            setEnviando(false);
+            setResultado(motivo === undefined ? { hecho: true } : { motivo });
+          },
+          () => {
+            setEnviando(false);
+            setResultado({ motivo: "el envío falló" });
+          }
+        );
+      }}
+    >
+      <label className={estilos.etiquetaReencolar} htmlFor={`reencolar-${id}`}>
+        {conHilo
+          ? "Lo que le mandarás, en la misma conversación (recuerda lo que hizo):"
+          : "Lo que le mandarás. Su conversación no se guardó: irá con el encargo original delante."}
+      </label>
+      <textarea
+        id={`reencolar-${id}`}
+        className={estilos.campoReencolar}
+        rows={6}
+        value={texto}
+        disabled={enviando}
+        onChange={(evento) => setTexto(evento.target.value)}
+      />
+      {resultado?.motivo === undefined ? null : <p className={estilos.motivo}>{`No se encoló: ${resultado.motivo}`}</p>}
+      <div className={estilos.accionesFinalizada}>
+        <button type="submit" className={estilos.encolar} disabled={limpio === "" || enviando}>
+          Encolar
+        </button>
+        <button type="button" className={estilos.plegable} disabled={enviando} onClick={() => setAbierto(false)}>
+          Cancelar
+        </button>
+      </div>
+    </form>
   );
 }
 

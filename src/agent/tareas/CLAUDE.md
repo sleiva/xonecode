@@ -83,8 +83,16 @@ corre solo y escribe sin aprobación. Cuatro estados; `requiere-atencion` = **es
 ## Finalizadas, adjuntos, encargo
 
 - **Finalizadas = HISTÓRICO de solo lectura** (`TareasDelProyecto.tsx#FilaFinalizada`,
-  `resultadoDeFinalizada`), FUERA de la barra de sesiones: única acción ELIMINAR (`descartar`, no toca el ticket); fechas, nunca
+  `resultadoDeFinalizada`), FUERA de la barra de sesiones: ELIMINAR (`descartar`, no toca el ticket) y REENCOLAR; fechas, nunca
   duración; lo último del agente con `leerSesion` al desplegar; conversación con motivo `finalizada`.
+- **Reencolar lo pendiente NO reabre la finalizada** (`core/tareas.ts#tareaReencolada`, `accion: "reencolar"`): crea OTRA
+  en su HILO (`sesion`) con el texto como FEEDBACK pendiente —el camino de «Continuar»; sin hilo, `peticionDeFeedback`
+  manda el encargo delante—, adjuntos COPIADOS, sin veredicto ni cierre. **Solo sin ticket** (`puedeReencolar`): con
+  gestor se relanza desde el ticket. Lo ofrece el SERVIDOR (`TareaDelCable.reencolable`, con `textoParaReencolar`, editable).
+  Una con feedback no edita su encargo (`puedeEditarEncargo`). Una continuación sin acabar FRENA otra (`continuacionEnCurso`,
+  por `continuaDe` o por el hilo). Mientras corre, su conversación vuelve a la barra (`App.tsx#sesionesDeFinalizadas`).
+  **Límites**: la original enseña la conversación ya continuada; `escribio` mide la SESIÓN entera, así que la
+  continuación hereda lo que escribió la original (`CRITICO_SIN_HACER` no salta aunque ella no escriba).
 - **Sus artefactos salen de SU carpeta**: `p`/`s` resueltos por el SERVIDOR
   (`arranque.ts#sesionDelDisco`), contenido en la respuesta, nunca al store
   (`OrigenDeArtefactosContexto`). **Límite**: va por id de SESIÓN; tras `/nuevo` no coincide.

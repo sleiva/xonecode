@@ -18,7 +18,7 @@ import type { FotoDeColecciones } from "../../core/fotoDeColecciones.js";
 import type { InformeDeDispositivos, NombreDeHerramienta, Receta } from "../../core/dispositivos.js";
 import type { AjustesDeDispositivos } from "../../core/settings.js";
 import type { Acto, ConsumoDeTurno, ConsumoPorModelo } from "../../core/actos.js";
-import type { Tarea } from "../../core/tareas.js";
+import { puedeReencolar, textoParaReencolar, type Tarea } from "../../core/tareas.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
 import type { LineaDeDiff } from "../../core/diff.js";
 import type { SelectorDeConsola } from "../../cli/consola.js";
@@ -1305,6 +1305,11 @@ export interface TareaDelCable {
   ticket?: { clave: string; conector: string; url?: string; aviso?: string };
   /** La pantalla de Stitch elegida para la tarea: su `name` y su título (no es una ruta de la máquina). */
   pantallaDeStitch?: { name: string; titulo: string; proyecto?: string };
+  /**
+   * Si se puede REENCOLAR para acabar lo que no hizo, con el texto que se propone mandarle (editable). Lo decide el
+   * SERVIDOR (`core/tareas.ts#puedeReencolar`, `textoParaReencolar`): ausente = no se ofrece.
+   */
+  reencolable?: { texto: string };
 }
 
 /**
@@ -1365,6 +1370,7 @@ export function filaDeTarea(t: Tarea): TareaDelCable {
           },
         }),
     ...(t.pantallaDeStitch === undefined ? {} : { pantallaDeStitch: { name: t.pantallaDeStitch.name, titulo: t.pantallaDeStitch.titulo, ...(t.pantallaDeStitch.proyecto === undefined ? {} : { proyecto: t.pantallaDeStitch.proyecto }) } }),
+    ...(puedeReencolar(t) ? { reencolable: { texto: textoParaReencolar(t) } } : {}),
   };
 }
 
@@ -1909,6 +1915,9 @@ export type MensajeDelCliente =
    * misma mentira por omisión que una lista vacía rellenada.
    */
   | { clase: "tarea"; accion: "feedback"; id: string; texto: string }
+  /** Reencolar una FINALIZADA sin ticket para acabar lo que no hizo: una tarea nueva en su hilo, con `texto` como
+   *  feedback (`core/tareas.ts#tareaReencolada`). 200 con `{id}`, o 409 con `{motivo}`. */
+  | { clase: "tarea"; accion: "reencolar"; id: string; texto: string }
   /**
    * «Continuar» una tarea aparcada sin escribir nada (entra en su hilo `TEXTO_DE_CONTINUAR`), y «Arrancar ahora» una
    * `nuevo` que no espera a ninguna anterior: la persona CEDE el proyecto —se cierra su consola de ahí si no está
